@@ -27,13 +27,13 @@ type Plugin struct {
 func (c *Plugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:            "979d6363-025a-4f51-88d3-0b04e9dc56bf",
-		Name:          "files",
+		Name:          "i18n:plugin_file_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
-		Description:   "Search files in your computer",
+		Description:   "i18n:plugin_file_plugin_description",
 		Icon:          fileIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{

@@ -49,13 +49,13 @@ type EmojiPlugin struct {
 func (e *EmojiPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:            "a5c7d25d-7a3b-4c45-8bd4-6e2d2c2f9e3a",
-		Name:          "Emoji",
+		Name:          "i18n:plugin_emoji_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
-		Description:   "Search and copy emojis",
+		Description:   "i18n:plugin_emoji_plugin_description",
 		Icon:          emojiIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{

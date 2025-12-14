@@ -39,13 +39,13 @@ type AIChatPlugin struct {
 func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:              "a9cfd85a-6e53-415c-9d44-68777aa6323d",
-		Name:            "AI Chat",
+		Name:            "i18n:plugin_ai_chat_plugin_name",
 		Author:          "Wox Launcher",
 		Website:         "https://github.com/Wox-launcher/Wox",
 		Version:         "1.0.0",
 		MinWoxVersion:   "2.0.0",
 		Runtime:         "Go",
-		Description:     "Chat with AI",
+		Description:     "i18n:plugin_ai_chat_plugin_description",
 		Icon:            aiChatIcon.String(),
 		TriggerKeywords: []string{"chat"},
 		SupportedOS:     []string{"Windows", "Macos", "Linux"},

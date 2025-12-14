@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
@@ -31,13 +32,13 @@ type indicatorContextData struct {
 func (i *IndicatorPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:            "38564bf0-75ad-4b3e-8afe-a0e0a287c42e",
-		Name:          "System Plugin Indicator",
+		Name:          "i18n:plugin_indicator_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
-		Description:   "Indicator for plugin trigger keywords",
+		Description:   "i18n:plugin_indicator_plugin_description",
 		Icon:          indicatorIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{
@@ -62,43 +63,139 @@ func (i *IndicatorPlugin) Init(ctx context.Context, initParams plugin.InitParams
 }
 
 func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+	search := strings.TrimSpace(query.Search)
+	if search == "" {
+		return nil
+	}
+
 	var results []plugin.QueryResult
 	for _, pluginInstance := range plugin.GetPluginManager().GetPluginInstances() {
 		pluginName := pluginInstance.GetName(ctx)
 		pluginDescription := pluginInstance.GetDescription(ctx)
 
-		triggerKeyword, found := lo.Find(pluginInstance.GetTriggerKeywords(), func(triggerKeyword string) bool {
-			return triggerKeyword != "*" && IsStringMatchNoPinYin(ctx, triggerKeyword, query.Search)
+		primaryTriggerKeyword := lo.FindOrElse(pluginInstance.GetTriggerKeywords(), "", func(triggerKeyword string) bool {
+			return triggerKeyword != "*"
 		})
 
-		if !found {
-			// search the plugin name and description
-			if IsStringMatch(ctx, pluginDescription, query.Search) || IsStringMatch(ctx, pluginName, query.Search) {
-				triggerKeywords := pluginInstance.GetTriggerKeywords()
-				if len(triggerKeywords) > 0 {
-					// use the first trigger keyword if it's not global keyword
-					if triggerKeywords[0] != "*" {
-						found = true
-						triggerKeyword = triggerKeywords[0]
-					}
-				}
+		var matchedTriggerKeyword string
+		var triggerKeywordScore int64
+		for _, triggerKeyword := range pluginInstance.GetTriggerKeywords() {
+			if triggerKeyword == "*" {
+				continue
+			}
+			match, score := IsStringMatchScoreNoPinYin(ctx, triggerKeyword, search)
+			if match && score > triggerKeywordScore {
+				matchedTriggerKeyword = triggerKeyword
+				triggerKeywordScore = score
 			}
 		}
 
-		if found {
-			contextData := indicatorContextData{
-				TriggerKeyword: triggerKeyword,
-				PluginID:       pluginInstance.Metadata.Id,
-			}
-			contextDataJson, _ := json.Marshal(contextData)
+		pluginNameMatch, pluginNameScore := IsStringMatchScore(ctx, pluginName, search)
+		pluginDescMatch, pluginDescScore := IsStringMatchScore(ctx, pluginDescription, search)
+		pluginTextMatch := pluginNameMatch || pluginDescMatch
+		pluginTextScore := max(pluginNameScore, pluginDescScore)
 
+		type matchedCommand struct {
+			command plugin.MetadataCommand
+			score   int64
+		}
+
+		var matchedCommands []matchedCommand
+		var matchedCommandsBestScore int64
+		translatedCommands := pluginInstance.GetQueryCommands()
+		for _, metadataCommandShadow := range translatedCommands {
+			metadataCommand := metadataCommandShadow
+			cmdMatch, cmdScore := IsStringMatchScoreNoPinYin(ctx, metadataCommand.Command, search)
+			descMatch, descScore := IsStringMatchScore(ctx, metadataCommand.Description, search)
+			if !cmdMatch && !descMatch {
+				continue
+			}
+			commandBestScore := max(cmdScore, descScore)
+			matchedCommands = append(matchedCommands, matchedCommand{
+				command: metadataCommand,
+				score:   commandBestScore,
+			})
+			if commandBestScore > matchedCommandsBestScore {
+				matchedCommandsBestScore = commandBestScore
+			}
+		}
+
+		found := matchedTriggerKeyword != "" || pluginTextMatch || len(matchedCommands) > 0
+		if !found {
+			continue
+		}
+
+		triggerKeywordToUse := matchedTriggerKeyword
+		if triggerKeywordToUse == "" {
+			triggerKeywordToUse = primaryTriggerKeyword
+		}
+		if triggerKeywordToUse == "" {
+			continue
+		}
+
+		resultBaseScore := max(triggerKeywordScore, pluginTextScore, matchedCommandsBestScore)
+		if resultBaseScore <= 0 {
+			resultBaseScore = 10
+		}
+
+		contextData := indicatorContextData{
+			TriggerKeyword: triggerKeywordToUse,
+			PluginID:       pluginInstance.Metadata.Id,
+		}
+		contextDataJson, _ := json.Marshal(contextData)
+
+		triggerKeywordCopy := triggerKeywordToUse
+		results = append(results, plugin.QueryResult{
+			Id:          uuid.NewString(),
+			Title:       triggerKeywordCopy,
+			SubTitle:    fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_indicator_activate_plugin"), pluginName),
+			Score:       resultBaseScore,
+			Icon:        pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, indicatorIcon),
+			ContextData: string(contextDataJson),
+			Actions: []plugin.QueryResultAction{
+				{
+					Name:                   "i18n:plugin_indicator_activate",
+					PreventHideAfterAction: true,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						i.api.ChangeQuery(ctx, common.PlainQuery{
+							QueryType: plugin.QueryTypeInput,
+							QueryText: fmt.Sprintf("%s ", triggerKeywordCopy),
+						})
+					},
+				},
+			},
+		})
+
+		var commandsToShow []matchedCommand
+		if len(matchedCommands) > 0 {
+			commandsToShow = matchedCommands
+		} else {
+			commandsToShow = lo.Map(translatedCommands, func(cmd plugin.MetadataCommand, index int) matchedCommand {
+				return matchedCommand{command: cmd, score: resultBaseScore - 1}
+			})
+		}
+
+		for _, matchedCommandShadow := range commandsToShow {
+			// action will be executed in another go routine, so we need to copy the variable
+			matchedCommandCopy := matchedCommandShadow
+			metadataCommand := matchedCommandCopy.command
+			commandScore := matchedCommandCopy.score
+			if commandScore <= 0 {
+				commandScore = resultBaseScore - 1
+			}
+			if commandScore <= 0 {
+				commandScore = 9
+			}
+			if len(matchedCommands) > 0 {
+				commandScore = commandScore + 1
+			}
+			triggerKeywordCommandCopy := triggerKeywordCopy
 			results = append(results, plugin.QueryResult{
-				Id:          uuid.NewString(),
-				Title:       triggerKeyword,
-				SubTitle:    fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_indicator_activate_plugin"), pluginName),
-				Score:       10,
-				Icon:        pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, indicatorIcon),
-				ContextData: string(contextDataJson),
+				Id:       uuid.NewString(),
+				Title:    fmt.Sprintf("%s %s ", triggerKeywordCommandCopy, metadataCommand.Command),
+				SubTitle: metadataCommand.Description,
+				Score:    commandScore,
+				Icon:     pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, indicatorIcon),
 				Actions: []plugin.QueryResultAction{
 					{
 						Name:                   "i18n:plugin_indicator_activate",
@@ -106,35 +203,12 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							i.api.ChangeQuery(ctx, common.PlainQuery{
 								QueryType: plugin.QueryTypeInput,
-								QueryText: fmt.Sprintf("%s ", triggerKeyword),
+								QueryText: fmt.Sprintf("%s %s ", triggerKeywordCommandCopy, metadataCommand.Command),
 							})
 						},
 					},
 				},
 			})
-			for _, metadataCommandShadow := range pluginInstance.GetQueryCommands() {
-				// action will be executed in another go routine, so we need to copy the variable
-				metadataCommand := metadataCommandShadow
-				results = append(results, plugin.QueryResult{
-					Id:       uuid.NewString(),
-					Title:    fmt.Sprintf("%s %s ", triggerKeyword, metadataCommand.Command),
-					SubTitle: metadataCommand.Description,
-					Score:    10,
-					Icon:     pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, indicatorIcon),
-					Actions: []plugin.QueryResultAction{
-						{
-							Name:                   "i18n:plugin_indicator_activate",
-							PreventHideAfterAction: true,
-							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-								i.api.ChangeQuery(ctx, common.PlainQuery{
-									QueryType: plugin.QueryTypeInput,
-									QueryText: fmt.Sprintf("%s %s ", triggerKeyword, metadataCommand.Command),
-								})
-							},
-						},
-					},
-				})
-			}
 		}
 	}
 	return results

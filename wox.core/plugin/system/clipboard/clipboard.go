@@ -88,13 +88,13 @@ type ClipboardPlugin struct {
 func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:            "5f815d98-27f5-488d-a756-c317ea39935b",
-		Name:          "Clipboard History",
+		Name:          "i18n:plugin_clipboard_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
-		Description:   "Clipboard history for Wox",
+		Description:   "i18n:plugin_clipboard_plugin_description",
 		Icon:          clipboardIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{
@@ -108,7 +108,7 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 		Commands: []plugin.MetadataCommand{
 			{
 				Command:     "fav",
-				Description: "List favorite clipboard history",
+				Description: "i18n:plugin_clipboard_command_fav_description",
 			},
 		},
 		SupportedOS: []string{

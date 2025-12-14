@@ -24,13 +24,13 @@ type BackupPlugin struct {
 func (c *BackupPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:            "0feebaec-1a66-45af-9856-566343518638",
-		Name:          "Backup and restore Wox settings",
+		Name:          "i18n:plugin_backup_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
-		Description:   "Backup and restore Wox settings",
+		Description:   "i18n:plugin_backup_plugin_description",
 		Icon:          backupIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{

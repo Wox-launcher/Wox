@@ -32,13 +32,13 @@ type ThemePlugin struct {
 func (c *ThemePlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:            "58a59382-8b3a-48c2-89ac-0a9a0e12e03f",
-		Name:          "Theme manager",
+		Name:          "i18n:plugin_theme_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
-		Description:   "Theme manager",
+		Description:   "i18n:plugin_theme_plugin_description",
 		Icon:          themeIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{
@@ -214,7 +214,7 @@ func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, common.SettingWindowContext{
 								Path:  "/plugin/setting",
-								Param: c.GetMetadata().Name,
+								Param: c.api.GetTranslation(ctx, c.GetMetadata().Name),
 							})
 						},
 					},

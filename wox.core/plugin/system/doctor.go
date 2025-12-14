@@ -19,13 +19,13 @@ type DoctorPlugin struct {
 func (r *DoctorPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:              "3e7444df-e8d1-44bc-91d3-12a070efb458",
-		Name:            "Wox Doctor",
+		Name:            "i18n:plugin_doctor_plugin_name",
 		Author:          "Wox Launcher",
 		Website:         "https://github.com/Wox-launcher/Wox",
 		Version:         "1.0.0",
 		MinWoxVersion:   "2.0.0",
 		Runtime:         "Go",
-		Description:     "Check your system and Wox settings",
+		Description:     "i18n:plugin_doctor_plugin_description",
 		Icon:            doctorIcon.String(),
 		TriggerKeywords: []string{"doctor"},
 		SupportedOS:     []string{"Windows", "Macos", "Linux"},

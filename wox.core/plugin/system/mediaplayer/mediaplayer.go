@@ -37,13 +37,13 @@ type mediaContextData struct {
 func (m *MediaPlayerPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:            "b8f3d4e5-6c7a-4b9c-8d1e-2f3a4b5c6d7e",
-		Name:          "Media Player",
+		Name:          "i18n:plugin_media_player_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
-		Description:   "Get information about currently playing media",
+		Description:   "i18n:plugin_media_player_plugin_description",
 		Icon:          mediaIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{

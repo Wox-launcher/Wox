@@ -34,13 +34,13 @@ type BrowserBookmarkPlugin struct {
 func (c *BrowserBookmarkPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:            "95d041d3-be7e-4b20-8517-88dda2db280b",
-		Name:          "BrowserBookmark",
+		Name:          "i18n:plugin_browser_bookmark_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
-		Description:   "Search browser bookmarks",
+		Description:   "i18n:plugin_browser_bookmark_plugin_description",
 		Icon:          browserBookmarkIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{

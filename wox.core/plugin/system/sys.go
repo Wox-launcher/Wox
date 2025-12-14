@@ -43,13 +43,13 @@ type sysContextData struct {
 func (r *SysPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:            "227f7d64-df08-4e35-ad05-98a26d540d06",
-		Name:          "System Commands",
+		Name:          "i18n:plugin_sys_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
-		Description:   "Provide System related commands. e.g. shutdown,lock,setting etc.",
+		Description:   "i18n:plugin_sys_plugin_description",
 		Icon:          sysIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{

@@ -54,13 +54,13 @@ type browserTab struct {
 func (c *BrowserPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:            "8f68a760-86a0-46a9-b331-58dcaf091daa",
-		Name:          "Browser",
+		Name:          "i18n:plugin_browser_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
-		Description:   "Get opened browser tabs and active url",
+		Description:   "i18n:plugin_browser_plugin_description",
 		Icon:          browserIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{

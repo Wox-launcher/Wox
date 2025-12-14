@@ -48,7 +48,7 @@ type Plugin struct {
 func (c *Plugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:            "c9910664-1c28-47ae-bad6-e7332a02d471",
-		Name:          "AI Commands",
+		Name:          "i18n:plugin_ai_command_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",

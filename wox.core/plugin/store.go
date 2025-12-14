@@ -612,7 +612,7 @@ func (s *Store) InstallFromLocal(ctx context.Context, filePath string) error {
 		}
 	}
 
-	pluginDirectory := path.Join(util.GetLocation().GetPluginDirectory(), fmt.Sprintf("%s_%s@%s", pluginMetadata.Id, pluginMetadata.Name, pluginMetadata.Version))
+	pluginDirectory := path.Join(util.GetLocation().GetPluginDirectory(), fmt.Sprintf("%s@%s", pluginMetadata.Id, pluginMetadata.Version))
 	directoryErr := util.GetLocation().EnsureDirectoryExist(pluginDirectory)
 	if directoryErr != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to create plugin directory %s: %s", pluginDirectory, directoryErr.Error()))

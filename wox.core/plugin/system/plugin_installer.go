@@ -29,14 +29,14 @@ type PluginInstallerPlugin struct {
 func (i *PluginInstallerPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:            "1aee0f80-2bcd-489a-a2c6-81f9f2e54cad",
-		Name:          "Wox Plugin Installer",
+		Name:          "i18n:plugin_plugin_installer_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
-		Description:   "Install Wox plugins",
-		Icon:          common.WoxIcon.String(),
+		Description:   "i18n:plugin_plugin_installer_plugin_description",
+		Icon:          common.PluginInstallerIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{
 			"*",

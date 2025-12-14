@@ -43,13 +43,13 @@ type WebSearchPlugin struct {
 func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:            "c1e350a7-c521-4dc3-b4ff-509f720fde86",
-		Name:          "WebSearch",
+		Name:          "i18n:plugin_websearch_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
-		Description:   "Provide the web search ability",
+		Description:   "i18n:plugin_websearch_plugin_description",
 		Icon:          webSearchIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{

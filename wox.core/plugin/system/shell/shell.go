@@ -57,13 +57,13 @@ type shellExecutionState struct {
 func (s *ShellPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:            "8a4b5c6d-7e8f-9a0b-1c2d-3e4f5a6b7c8d",
-		Name:          "Shell",
+		Name:          "i18n:plugin_shell_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
-		Description:   "Execute shell commands directly from Wox",
+		Description:   "i18n:plugin_shell_plugin_description",
 		Icon:          shellIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{

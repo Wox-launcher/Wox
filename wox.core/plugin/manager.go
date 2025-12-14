@@ -804,9 +804,10 @@ func (m *Manager) GetResultForFailedQuery(ctx context.Context, pluginMetadata Me
 	overlayIcon := common.NewWoxImageEmoji("🚫")
 	pluginIcon := common.ParseWoxImageOrDefault(pluginMetadata.Icon, overlayIcon)
 	icon := pluginIcon.OverlayFullPercentage(overlayIcon, 0.6)
+	pluginName := i18n.GetI18nManager().TranslateWox(ctx, pluginMetadata.Name)
 
 	return QueryResult{
-		Title:    fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_manager_query_failed"), pluginMetadata.Name),
+		Title:    fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_manager_query_failed"), pluginName),
 		SubTitle: util.EllipsisEnd(err.Error(), 20),
 		Icon:     icon,
 		Preview: WoxPreview{

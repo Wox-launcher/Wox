@@ -93,13 +93,13 @@ func addThousandsSeparator(s string) string {
 func (c *CalculatorPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:            "bd723c38-f28d-4152-8621-76fd21d6456e",
-		Name:          "Calculator",
+		Name:          "i18n:plugin_calculator_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
-		Description:   "Calculator for Wox",
+		Description:   "i18n:plugin_calculator_plugin_description",
 		Icon:          calculatorIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{

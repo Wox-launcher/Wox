@@ -97,13 +97,13 @@ func (w *WPMPlugin) getLocalPluginDescription(ctx context.Context, metadata plug
 func (w *WPMPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:            "e2c5f005-6c73-43c8-bc53-ab04def265b2",
-		Name:          "Wox Plugin Manager",
+		Name:          "i18n:plugin_wpm_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
-		Description:   "Plugin manager for Wox",
+		Description:   "i18n:plugin_wpm_plugin_description",
 		Icon:          wpmIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{
@@ -336,7 +336,7 @@ func (w *WPMPlugin) createCommand(ctx context.Context, query plugin.Query) []plu
 		results = append(results, plugin.QueryResult{
 			Id:       uuid.NewString(),
 			Title:    fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_create_plugin"), string(template.Runtime)),
-			SubTitle: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_plugin_name"), query.Search),
+			SubTitle: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_create_plugin_name"), query.Search),
 			Icon:     wpmIcon,
 			Group:    i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_group_regular_plugins"),
 			Actions: []plugin.QueryResultAction{
@@ -400,7 +400,7 @@ func (w *WPMPlugin) createCommand(ctx context.Context, query plugin.Query) []plu
 			}
 		} else {
 			title = fmt.Sprintf("Create %s", template.Name)
-			subtitle = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_plugin_name"), query.Search)
+			subtitle = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_create_plugin_name"), query.Search)
 			actions = []plugin.QueryResultAction{
 				{
 					Name:                   "i18n:plugin_wpm_create",

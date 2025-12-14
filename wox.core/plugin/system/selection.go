@@ -25,13 +25,13 @@ type SelectionPlugin struct {
 func (i *SelectionPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:            "d9e557ed-89bd-4b8b-bd64-2a7632cf3483",
-		Name:          "Selection",
+		Name:          "i18n:plugin_selection_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
-		Description:   "Wox default actions for selection query",
+		Description:   "i18n:plugin_selection_plugin_description",
 		Icon:          selectionIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{

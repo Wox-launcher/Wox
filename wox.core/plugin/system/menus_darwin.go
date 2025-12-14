@@ -22,13 +22,13 @@ type MenusPlugin struct {
 func (i *MenusPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:            "7e17292d-9539-4ed6-b2da-44cb7c585be7",
-		Name:          "Macos Menus",
+		Name:          "i18n:plugin_menus_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
-		Description:   "Search menus for current active application",
+		Description:   "i18n:plugin_menus_plugin_description",
 		Icon:          menusIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{

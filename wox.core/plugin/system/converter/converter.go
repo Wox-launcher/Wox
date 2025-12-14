@@ -32,13 +32,13 @@ type converterContextData struct {
 func (c *Converter) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:            "a48dc5f0-dab9-4112-b883-b68129d6782b",
-		Name:          "Converter",
+		Name:          "i18n:plugin_converter_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
-		Description:   "Calculator for Wox",
+		Description:   "i18n:plugin_converter_plugin_description",
 		Icon:          common.PluginConverterIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{

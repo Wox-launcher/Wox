@@ -22,13 +22,13 @@ type QueryHistoryPlugin struct {
 func (i *QueryHistoryPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:            "fa51ecc4-e491-4e4b-b1f3-70df8a3966d8",
-		Name:          "Wox Query History",
+		Name:          "i18n:plugin_query_history_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
-		Description:   "Query histories for Wox",
+		Description:   "i18n:plugin_query_history_plugin_description",
 		Icon:          queryHistoryIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{

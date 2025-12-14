@@ -89,13 +89,13 @@ type ApplicationPlugin struct {
 func (a *ApplicationPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:            "ea2b6859-14bc-4c89-9c88-627da7379141",
-		Name:          "App",
+		Name:          "i18n:plugin_app_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
-		Description:   "Search app installed on your computer",
+		Description:   "i18n:plugin_app_plugin_description",
 		Icon:          appIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{
