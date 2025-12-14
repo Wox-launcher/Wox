@@ -1,24 +1,31 @@
 package notifier
 
 import (
-	"fmt"
-	"time"
+	"strings"
 	"wox/util"
 )
 
-var (
-	lastNotificationTime time.Time
-	throttleDuration     = 1 * time.Second
-)
+func normalizeNotificationMessage(message string) string {
+	message = strings.ReplaceAll(message, "\r\n", "\n")
+	lines := strings.Split(message, "\n")
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		out = append(out, line)
+	}
+	return strings.Join(out, "\n")
+}
 
 func Notify(message string) {
-	// throttle notification
-	now := time.Now()
-	if now.Sub(lastNotificationTime) < throttleDuration {
-		util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("notification throttled, message: %s", message))
+	msg := normalizeNotificationMessage(message)
+	if msg == "" {
 		return
 	}
-	lastNotificationTime = now
 
-	ShowNotification(message)
+	util.Go(util.NewTraceContext(), "notifier.Notify", func() {
+		ShowNotification(msg)
+	})
 }

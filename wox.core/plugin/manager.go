@@ -743,7 +743,7 @@ func (m *Manager) canOperateQuery(ctx context.Context, pluginInstance *Instance,
 }
 
 func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, query Query) (results []QueryResult) {
-	defer util.GoRecover(ctx, fmt.Sprintf("<%s> query panic", pluginInstance.Metadata.Name), func(err error) {
+	defer util.GoRecover(ctx, fmt.Sprintf("<%s> query panic", pluginInstance.GetName(ctx)), func(err error) {
 		// if plugin query panic, return error result
 		failedResult := m.GetResultForFailedQuery(ctx, pluginInstance.Metadata, query, err)
 		results = []QueryResult{
@@ -751,7 +751,7 @@ func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, 
 		}
 	})
 
-	logger.Info(ctx, fmt.Sprintf("<%s> start query: %s", pluginInstance.Metadata.Name, query.RawQuery))
+	logger.Info(ctx, fmt.Sprintf("<%s> start query: %s", pluginInstance.GetName(ctx), query.RawQuery))
 	start := util.GetSystemTimestamp()
 
 	// set query env base on plugin's feature
@@ -760,7 +760,7 @@ func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, 
 	if pluginInstance.Metadata.IsSupportFeature(MetadataFeatureQueryEnv) {
 		queryEnvParams, err := pluginInstance.Metadata.GetFeatureParamsForQueryEnv()
 		if err != nil {
-			logger.Error(ctx, fmt.Sprintf("<%s> invalid query env config: %s", pluginInstance.Metadata.Name, err))
+			logger.Error(ctx, fmt.Sprintf("<%s> invalid query env config: %s", pluginInstance.GetName(ctx), err))
 		} else {
 			if queryEnvParams.RequireActiveWindowName {
 				newEnv.ActiveWindowTitle = currentEnv.ActiveWindowTitle
@@ -779,7 +779,7 @@ func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, 
 	query.Env = newEnv
 
 	results = pluginInstance.Plugin.Query(ctx, query)
-	logger.Debug(ctx, fmt.Sprintf("<%s> finish query, result count: %d, cost: %dms", pluginInstance.Metadata.Name, len(results), util.GetSystemTimestamp()-start))
+	logger.Debug(ctx, fmt.Sprintf("<%s> finish query, result count: %d, cost: %dms", pluginInstance.GetName(ctx), len(results), util.GetSystemTimestamp()-start))
 
 	for i := range results {
 		if results[i].Group == "" {
@@ -1090,7 +1090,7 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	if !ignoreAutoScore {
 		score := m.calculateResultScore(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle, query.RawQuery)
 		if score > 0 {
-			logger.Debug(ctx, fmt.Sprintf("<%s> result(%s) add score: %d", pluginInstance.Metadata.Name, result.Title, score))
+			logger.Debug(ctx, fmt.Sprintf("<%s> result(%s) add score: %d", pluginInstance.GetName(ctx), result.Title, score))
 			result.Score += score
 		}
 	}
@@ -1099,7 +1099,7 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	isFavorite := setting.GetSettingManager().IsPinedResult(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle)
 	if isFavorite {
 		favScore := int64(100000)
-		logger.Debug(ctx, fmt.Sprintf("<%s> result(%s) is favorite result, add score: %d", pluginInstance.Metadata.Name, result.Title, favScore))
+		logger.Debug(ctx, fmt.Sprintf("<%s> result(%s) is favorite result, add score: %d", pluginInstance.GetName(ctx), result.Title, favScore))
 		result.Score += favScore
 
 		// Add favorite icon to tails if not already present
@@ -1394,7 +1394,7 @@ func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryR
 		if pluginInstance.Metadata.IsSupportFeature(MetadataFeatureDebounce) {
 			debounceParams, err := pluginInstance.Metadata.GetFeatureParamsForDebounce()
 			if err == nil {
-				logger.Debug(ctx, fmt.Sprintf("[%s] debounce query, will execute in %d ms", pluginInstance.Metadata.Name, debounceParams.IntervalMs))
+				logger.Debug(ctx, fmt.Sprintf("[%s] debounce query, will execute in %d ms", pluginInstance.GetName(ctx), debounceParams.IntervalMs))
 				if v, ok := m.debounceQueryTimer.Load(pluginInstance.Metadata.Id); ok {
 					if v.timer.Stop() {
 						v.onStop()
@@ -1405,7 +1405,7 @@ func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryR
 					m.queryParallel(ctx, pluginInstance, query, results, done, counter)
 				})
 				onStop := func() {
-					logger.Debug(ctx, fmt.Sprintf("[%s] previous debounced query cancelled", pluginInstance.Metadata.Name))
+					logger.Debug(ctx, fmt.Sprintf("[%s] previous debounced query cancelled", pluginInstance.GetName(ctx)))
 					counter.Add(-1)
 					if counter.Load() == 0 {
 						done <- true
@@ -1417,7 +1417,7 @@ func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryR
 				})
 				continue
 			} else {
-				logger.Error(ctx, fmt.Sprintf("[%s] %s, query directlly", pluginInstance.Metadata.Name, err))
+				logger.Error(ctx, fmt.Sprintf("[%s] %s, query directlly", pluginInstance.GetName(ctx), err))
 			}
 		}
 
@@ -1513,7 +1513,7 @@ func (m *Manager) QueryFallback(ctx context.Context, query Query, queryPlugin *I
 }
 
 func (m *Manager) queryParallel(ctx context.Context, pluginInstance *Instance, query Query, results chan []QueryResultUI, done chan bool, counter *atomic.Int32) {
-	util.Go(ctx, fmt.Sprintf("[%s] parallel query", pluginInstance.Metadata.Name), func() {
+	util.Go(ctx, fmt.Sprintf("[%s] parallel query", pluginInstance.GetName(ctx)), func() {
 		queryResults := m.queryForPlugin(ctx, pluginInstance, query)
 		results <- lo.Map(queryResults, func(item QueryResult, index int) QueryResultUI {
 			return item.ToUI()
@@ -1678,7 +1678,7 @@ func (m *Manager) ExecuteAction(ctx context.Context, resultId string, actionId s
 		ContextData:    resultCache.Result.ContextData,
 	})
 
-	util.Go(ctx, fmt.Sprintf("[%s] post execute action", resultCache.PluginInstance.Metadata.Name), func() {
+	util.Go(ctx, fmt.Sprintf("[%s] post execute action", resultCache.PluginInstance.GetName(ctx)), func() {
 		m.postExecuteAction(ctx, resultCache)
 	})
 
@@ -1715,7 +1715,7 @@ func (m *Manager) SubmitFormAction(ctx context.Context, resultId string, actionI
 		Values: values,
 	})
 
-	util.Go(ctx, fmt.Sprintf("[%s] post execute action", resultCache.PluginInstance.Metadata.Name), func() {
+	util.Go(ctx, fmt.Sprintf("[%s] post execute action", resultCache.PluginInstance.GetName(ctx)), func() {
 		m.postExecuteAction(ctx, resultCache)
 	})
 
@@ -1900,7 +1900,7 @@ func (m *Manager) ExecutePluginDeeplink(ctx context.Context, pluginId string, ar
 	}
 
 	for _, callback := range pluginInstance.DeepLinkCallbacks {
-		util.Go(ctx, fmt.Sprintf("[%s] execute deeplink callback", pluginInstance.Metadata.Name), func() {
+		util.Go(ctx, fmt.Sprintf("[%s] execute deeplink callback", pluginInstance.GetName(ctx)), func() {
 			callback(arguments)
 		})
 	}
@@ -1995,14 +1995,14 @@ func (m *Manager) restoreFromMRU(ctx context.Context, pluginInstance *Instance, 
 		if restored, err := pluginInstance.MRURestoreCallbacks[0](mruData); err == nil {
 			return restored
 		} else {
-			util.GetLogger().Debug(ctx, fmt.Sprintf("MRU restore failed for plugin %s: %s", pluginInstance.Metadata.Name, err.Error()))
+			util.GetLogger().Debug(ctx, fmt.Sprintf("MRU restore failed for plugin %s: %s", pluginInstance.GetName(ctx), err.Error()))
 		}
 	}
 
 	// For external plugins (Python/Node.js), MRU support will be implemented later
 	// Currently only Go plugins support MRU functionality
 	if pluginInstance.Host != nil {
-		util.GetLogger().Debug(ctx, fmt.Sprintf("External plugin MRU restore not yet implemented for plugin %s", pluginInstance.Metadata.Name))
+		util.GetLogger().Debug(ctx, fmt.Sprintf("External plugin MRU restore not yet implemented for plugin %s", pluginInstance.GetName(ctx)))
 	}
 
 	return nil

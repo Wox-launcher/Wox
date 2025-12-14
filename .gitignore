@@ -24,3 +24,4 @@ wox.core/wox
 www/docs/.vitepress/cache
 www/docs/.vitepress/dist
 placeholder
+crash.log

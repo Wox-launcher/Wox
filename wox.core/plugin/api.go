@@ -182,7 +182,7 @@ func (a *APIImpl) Notify(ctx context.Context, message string) {
 }
 
 func (a *APIImpl) Log(ctx context.Context, level LogLevel, msg string) {
-	logCtx := util.NewComponentContext(ctx, a.pluginInstance.Metadata.Name)
+	logCtx := util.NewComponentContext(ctx, a.pluginInstance.GetName(ctx))
 	if level == LogLevelError {
 		a.logger.Error(logCtx, msg)
 		logger.Error(logCtx, msg)

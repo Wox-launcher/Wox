@@ -13,6 +13,7 @@ import (
 	"wox/plugin"
 	"wox/ui"
 	"wox/util"
+	"wox/util/notifier"
 	"wox/util/shell"
 )
 
@@ -131,6 +132,26 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	}
 
 	if util.IsDev() {
+		r.commands = append(r.commands, SysCommand{
+			Title: "test notification long",
+			Icon:  common.CPUProfileIcon,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				notifier.Notify(`This is a very long notification message to test the notification system in Wox. 
+				If you see this message, the notification system is working properly. 
+				You can customize the duration, appearance, and behavior of notifications as needed.
+				Enjoy using Wox! 
+				` + time.Now().String())
+			},
+		})
+
+		r.commands = append(r.commands, SysCommand{
+			Title: "test notification short",
+			Icon:  common.CPUProfileIcon,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				notifier.Notify(`This is a very short notification.` + time.Now().String())
+			},
+		})
+
 		r.commands = append(r.commands, SysCommand{
 			ID:    "cpu_profiling",
 			Title: "i18n:plugin_sys_performance_cpu_profiling",

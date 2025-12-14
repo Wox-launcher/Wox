@@ -6,6 +6,11 @@
 #include <time.h>
 #include <dwmapi.h>
 #include <math.h>
+#include <stdlib.h>
+#include <string.h>
+#include <wchar.h>
+#include <stdio.h>
+#include <stdarg.h>
 
 #pragma comment(lib, "dwmapi.lib")
 #pragma comment(lib, "uxtheme.lib")
@@ -87,8 +92,12 @@ static BOOL TryEnableAcrylic(HWND hwnd) {
 }
 
 #define WINDOW_WIDTH 380
-#define WINDOW_HEIGHT 80
 #define CLOSE_TIMER 1
+#define MAX_TEXT_LINES 3
+#define TEXT_LEFT_PAD_DIP 20
+#define TEXT_VERT_PAD_DIP 12
+#define TEXT_RIGHT_GAP_CLOSE_DIP 10
+#define WM_WOX_NOTIFICATION_UPDATE (WM_USER + 0x510)
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
@@ -118,17 +127,93 @@ typedef enum {
 typedef struct {
     HWND hwnd;
     HFONT messageFont;
+    DWORD magic;
     WCHAR messageText[1024];
+    WCHAR* renderText;
+    BOOL renderTextOwned;
     UINT_PTR closeTimerId;
     BOOL mouseInside;
     BOOL closeHover;
     BOOL closePressed;
     UINT dpi;
+    BOOL useFallbackRgn;
+    int fallbackRgnRadius;
+    UINT paintCount;
+    UINT updateCount;
 } NotificationWindow;
+
+#define WOX_NOTIFICATION_MAGIC 0x4E584F57u /* 'WOXN' */
 
 typedef BOOL(WINAPI* pfnSetProcessDpiAwarenessContext)(HANDLE);
 typedef UINT(WINAPI* pfnGetDpiForSystem)(void);
 typedef UINT(WINAPI* pfnGetDpiForWindow)(HWND);
+
+static INIT_ONCE g_initOnce = INIT_ONCE_STATIC_INIT;
+static volatile PVOID g_activeHwndAtomic = NULL;
+static CRITICAL_SECTION g_logCs;
+static WCHAR g_logPath[MAX_PATH];
+static const WCHAR* g_notifierPropName = L"WoxNotifierWindow";
+
+static void LogLineA(const char* fmt, ...) {
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+
+    char msg[2048];
+    int off = snprintf(msg, sizeof(msg),
+                       "[%04u-%02u-%02u %02u:%02u:%02u.%03u][tid=%lu] ",
+                       st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, st.wMilliseconds,
+                       (unsigned long)GetCurrentThreadId());
+    if (off < 0) off = 0;
+    if (off > (int)sizeof(msg) - 1) off = (int)sizeof(msg) - 1;
+
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(msg + off, sizeof(msg) - (size_t)off, fmt, ap);
+    va_end(ap);
+    if (n < 0) n = 0;
+
+    size_t len = strnlen(msg, sizeof(msg));
+    if (len + 2 < sizeof(msg)) {
+        msg[len++] = '\r';
+        msg[len++] = '\n';
+        msg[len] = '\0';
+    }
+
+    if (!TryEnterCriticalSection(&g_logCs)) {
+        OutputDebugStringA(msg);
+        return;
+    }
+    FILE* f = NULL;
+    _wfopen_s(&f, g_logPath, L"ab");
+    if (f) {
+        fwrite(msg, 1, len, f);
+        fflush(f);
+        fclose(f);
+    }
+    LeaveCriticalSection(&g_logCs);
+
+    OutputDebugStringA(msg);
+}
+
+static BOOL CALLBACK InitGlobals(PINIT_ONCE InitOnce, PVOID Parameter, PVOID* Context) {
+    (void)InitOnce;
+    (void)Parameter;
+    (void)Context;
+    InitializeCriticalSection(&g_logCs);
+    BufferedPaintInit();
+    WCHAR tmp[MAX_PATH];
+    DWORD got = GetTempPathW((DWORD)(sizeof(tmp) / sizeof(tmp[0])), tmp);
+    if (got == 0 || got >= (DWORD)(sizeof(tmp) / sizeof(tmp[0]))) {
+        wcscpy_s(tmp, sizeof(tmp) / sizeof(tmp[0]), L".\\");
+    }
+    swprintf_s(g_logPath, sizeof(g_logPath) / sizeof(g_logPath[0]), L"%sWoxNotifierWindows.log", tmp);
+    LogLineA("notifier init, logPath=%ls", g_logPath);
+    return TRUE;
+}
+
+static void EnsureGlobals(void) {
+    InitOnceExecuteOnce(&g_initOnce, InitGlobals, NULL, NULL);
+}
 
 static UINT GetSystemDpiSafe(void) {
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
@@ -161,6 +246,277 @@ static RECT GetCloseRect(int width, UINT dpi) {
     int size = MulDiv(24, (int)dpi, 96);
     RECT r = {width - pad - size, pad, width - pad, pad + size};
     return r;
+}
+
+static WCHAR* DupWString(const WCHAR* s) {
+    if (!s) return NULL;
+    size_t len = wcslen(s);
+    WCHAR* out = (WCHAR*)malloc((len + 1) * sizeof(WCHAR));
+    if (!out) return NULL;
+    memcpy(out, s, (len + 1) * sizeof(WCHAR));
+    return out;
+}
+
+static int MeasureTextHeightW(HDC hdc, const WCHAR* text, int width) {
+    RECT rc = {0, 0, width, 0};
+    DrawTextW(hdc, text, -1, &rc, DT_CALCRECT | DT_WORDBREAK | DT_EDITCONTROL | DT_EXPANDTABS | DT_NOPREFIX);
+    int h = rc.bottom - rc.top;
+    return h > 0 ? h : 0;
+}
+
+static int CountNewlinesW(const WCHAR* s) {
+    if (!s) return 0;
+    int n = 0;
+    for (const WCHAR* p = s; *p; p++) {
+        if (*p == L'\n') n++;
+    }
+    return n;
+}
+
+static WCHAR* TruncateToCharBudgetW(const WCHAR* text, int budgetChars, BOOL replaceNewlines) {
+    if (!text) return NULL;
+    if (budgetChars <= 0) return DupWString(L"\x2026");
+
+    size_t len = wcslen(text);
+    if ((int)len <= budgetChars) {
+        return DupWString(text);
+    }
+
+    WCHAR* buf = (WCHAR*)malloc(((size_t)budgetChars + 2) * sizeof(WCHAR));
+    if (!buf) return DupWString(L"\x2026");
+
+    size_t out = 0;
+    for (size_t i = 0; i < len && (int)out < budgetChars; i++) {
+        WCHAR c = text[i];
+        if (c == L'\r') continue;
+        if (replaceNewlines && (c == L'\n' || c == L'\t')) c = L' ';
+        buf[out++] = c;
+    }
+
+    while (out > 0 && (buf[out - 1] == L' ' || buf[out - 1] == L'\n' || buf[out - 1] == L'\t')) {
+        out--;
+    }
+    buf[out++] = L'\x2026';
+    buf[out] = L'\0';
+    return buf;
+}
+
+static BOOL IsHighSurrogate(WCHAR c) {
+    return c >= 0xD800 && c <= 0xDBFF;
+}
+
+static BOOL IsLowSurrogate(WCHAR c) {
+    return c >= 0xDC00 && c <= 0xDFFF;
+}
+
+static WCHAR* TruncateMultilineTextToFitW(HDC hdc, const WCHAR* text, int width, int maxHeight) {
+    if (!text) return NULL;
+    if (maxHeight <= 0) return DupWString(L"\x2026");
+
+    int fullHeight = MeasureTextHeightW(hdc, text, width);
+    if (fullHeight <= maxHeight) return DupWString(text);
+
+    size_t len = wcslen(text);
+    WCHAR* buf = (WCHAR*)malloc((len + 2) * sizeof(WCHAR));
+    if (!buf) return DupWString(L"\x2026");
+
+    size_t lo = 0;
+    size_t hi = len;
+    size_t best = 0;
+
+    while (lo <= hi) {
+        size_t mid = lo + (hi - lo) / 2;
+        if (mid < len && mid > 0 && IsHighSurrogate(text[mid - 1]) && IsLowSurrogate(text[mid])) {
+            mid--;
+        }
+
+        wmemcpy(buf, text, mid);
+        while (mid > 0 && (buf[mid - 1] == L' ' || buf[mid - 1] == L'\r' || buf[mid - 1] == L'\n' || buf[mid - 1] == L'\t')) {
+            mid--;
+        }
+        buf[mid] = L'\x2026';
+        buf[mid + 1] = L'\0';
+
+        int h = MeasureTextHeightW(hdc, buf, width);
+        if (h <= maxHeight) {
+            best = mid;
+            lo = mid + 1;
+        } else {
+            if (mid == 0) break;
+            hi = mid - 1;
+        }
+    }
+
+    wmemcpy(buf, text, best);
+    while (best > 0 && (buf[best - 1] == L' ' || buf[best - 1] == L'\r' || buf[best - 1] == L'\n' || buf[best - 1] == L'\t')) {
+        best--;
+    }
+    buf[best] = L'\x2026';
+    buf[best + 1] = L'\0';
+
+    WCHAR* out = DupWString(buf);
+    free(buf);
+    return out ? out : DupWString(L"\x2026");
+}
+
+static int ComputeWindowHeightAndRenderText(NotificationWindow* nw, int windowWidth, UINT dpi) {
+    int topPad = MulDiv(TEXT_VERT_PAD_DIP, (int)dpi, 96);
+    int bottomPad = MulDiv(TEXT_VERT_PAD_DIP, (int)dpi, 96);
+    int leftPad = MulDiv(TEXT_LEFT_PAD_DIP, (int)dpi, 96);
+    RECT closeRect = GetCloseRect(windowWidth, dpi);
+    int textRight = closeRect.left - MulDiv(TEXT_RIGHT_GAP_CLOSE_DIP, (int)dpi, 96);
+    int textWidth = textRight - leftPad;
+
+    if (nw->renderTextOwned && nw->renderText) {
+        free(nw->renderText);
+    }
+    nw->renderText = nw->messageText;
+    nw->renderTextOwned = FALSE;
+
+    int windowHeight = MulDiv(52, (int)dpi, 96);
+    if (textWidth <= 0 || !nw->messageFont) return windowHeight;
+
+    HDC hdc = CreateCompatibleDC(NULL);
+    if (!hdc) return windowHeight;
+
+    HGDIOBJ old = SelectObject(hdc, nw->messageFont);
+    TEXTMETRICW tm;
+    if (GetTextMetricsW(hdc, &tm)) {
+        int lineHeight = tm.tmHeight > 0 ? tm.tmHeight : MulDiv(18, (int)dpi, 96);
+        int maxLines = MAX_TEXT_LINES;
+        if (maxLines < 1) maxLines = 1;
+
+        int newlineCount = CountNewlinesW(nw->messageText);
+        int estimatedLines = 1;
+
+        if (newlineCount > 0) {
+            estimatedLines = newlineCount + 1;
+        } else {
+            SIZE sz;
+            if (GetTextExtentPoint32W(hdc, nw->messageText, (int)wcslen(nw->messageText), &sz) && sz.cx > 0) {
+                estimatedLines = (sz.cx + textWidth - 1) / textWidth;
+            }
+        }
+        if (estimatedLines < 1) estimatedLines = 1;
+        if (estimatedLines > maxLines) estimatedLines = maxLines;
+
+        int requiredHeight = lineHeight * estimatedLines;
+
+        // If we are at max lines, apply a cheap truncation based on average char width.
+        if (estimatedLines == maxLines) {
+            int ave = tm.tmAveCharWidth > 0 ? tm.tmAveCharWidth : MulDiv(7, (int)dpi, 96);
+            int charsPerLine = textWidth / (ave > 0 ? ave : 1);
+            int budget = charsPerLine * maxLines;
+            if (budget < 24) budget = 24;
+            if (budget > 900) budget = 900;
+
+            size_t msgLen = wcslen(nw->messageText);
+            if ((int)msgLen > budget || newlineCount + 1 > maxLines) {
+                WCHAR* truncated = TruncateToCharBudgetW(nw->messageText, budget, TRUE);
+                if (truncated) {
+                    nw->renderText = truncated;
+                    nw->renderTextOwned = TRUE;
+                }
+            }
+        }
+
+        windowHeight = topPad + bottomPad + requiredHeight;
+
+        int minHeight = closeRect.bottom + MulDiv(10, (int)dpi, 96);
+        if (windowHeight < minHeight) windowHeight = minHeight;
+    }
+
+    if (old) SelectObject(hdc, old);
+    DeleteDC(hdc);
+
+    return windowHeight;
+}
+
+static void ClampWindowToWorkArea(const RECT* workArea, UINT dpi, int* xPos, int* yPos, int windowWidth, int* windowHeight) {
+    if (!workArea || !xPos || !yPos || !windowHeight) return;
+
+    int yMargin = MulDiv(60, (int)dpi, 96);
+    int minTop = workArea->top + MulDiv(10, (int)dpi, 96);
+    int maxBottom = workArea->bottom - yMargin;
+    if (maxBottom < minTop) maxBottom = workArea->bottom;
+
+    int maxHeight = maxBottom - minTop;
+    if (maxHeight < MulDiv(36, (int)dpi, 96)) {
+        maxHeight = maxBottom - workArea->top;
+        minTop = workArea->top;
+    }
+
+    if (*windowHeight > maxHeight) *windowHeight = maxHeight;
+    if (*windowHeight < MulDiv(36, (int)dpi, 96)) *windowHeight = MulDiv(36, (int)dpi, 96);
+
+    if (*xPos < workArea->left) *xPos = workArea->left;
+    if (*xPos + windowWidth > workArea->right) *xPos = workArea->right - windowWidth;
+
+    if (*yPos < minTop) *yPos = minTop;
+    if (*yPos + *windowHeight > maxBottom) *yPos = maxBottom - *windowHeight;
+    if (*yPos < workArea->top) *yPos = workArea->top;
+}
+
+static void ApplyWindowLayout(HWND hwnd, NotificationWindow* nw, int windowWidth, UINT dpi, BOOL resetTimer) {
+    if (!hwnd || !nw) return;
+
+    int newHeight = ComputeWindowHeightAndRenderText(nw, windowWidth, dpi);
+
+    RECT workArea;
+    SystemParametersInfo(SPI_GETWORKAREA, 0, &workArea, 0);
+    int workWidth = workArea.right - workArea.left;
+    int workHeight = workArea.bottom - workArea.top;
+
+    int xPos = workArea.left + (workWidth - windowWidth) / 2;
+    int yPos = workArea.top + workHeight - newHeight - MulDiv(60, (int)dpi, 96);
+    ClampWindowToWorkArea(&workArea, dpi, &xPos, &yPos, windowWidth, &newHeight);
+
+    SetWindowPos(hwnd, NULL, xPos, yPos, windowWidth, newHeight,
+                 SWP_NOACTIVATE | SWP_NOZORDER | SWP_SHOWWINDOW | SWP_ASYNCWINDOWPOS);
+
+    if (nw->useFallbackRgn) {
+        int rr = nw->fallbackRgnRadius > 0 ? nw->fallbackRgnRadius : MulDiv(20, (int)dpi, 96);
+        HRGN rgn = CreateRoundRectRgn(0, 0, windowWidth + 1, newHeight + 1, rr * 2, rr * 2);
+        if (rgn) {
+            SetWindowRgn(hwnd, rgn, TRUE);
+        }
+    }
+
+    if (resetTimer) {
+        KillTimer(hwnd, CLOSE_TIMER);
+        nw->closeTimerId = SetTimer(hwnd, CLOSE_TIMER, 3000, NULL);
+        ShowWindow(hwnd, SW_SHOWNA);
+        RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW);
+    }
+
+    LogLineA("layout hwnd=%p w=%d h=%d resetTimer=%d", hwnd, windowWidth, newHeight, resetTimer ? 1 : 0);
+}
+
+static void PaintBackground(HDC hdc, RECT clientRect, UINT dpi) {
+    int width = clientRect.right - clientRect.left;
+    int height = clientRect.bottom - clientRect.top;
+    if (width <= 0 || height <= 0) return;
+
+    int border = MulDiv(1, (int)dpi, 96);
+    if (border < 1) border = 1;
+    int rr = MulDiv(18, (int)dpi, 96);
+
+    HRGN rgn = CreateRoundRectRgn(0, 0, width + 1, height + 1, rr * 2, rr * 2);
+    if (!rgn) return;
+
+    HBRUSH bg = CreateSolidBrush(RGB(28, 28, 28));
+    if (bg) {
+        FillRgn(hdc, rgn, bg);
+        DeleteObject(bg);
+    }
+
+    HBRUSH borderBrush = CreateSolidBrush(RGB(70, 70, 70));
+    if (borderBrush) {
+        FrameRgn(hdc, rgn, borderBrush, border, border);
+        DeleteObject(borderBrush);
+    }
+
+    DeleteObject(rgn);
 }
 
 static HBITMAP Create32BitDIBSection(HDC hdc, int width, int height, void** outBits) {
@@ -364,8 +720,46 @@ static void DrawCloseButtonFlat(HDC targetHdc, RECT closeRect, UINT dpi, BOOL ho
 LRESULT CALLBACK NotificationWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 void showNotification(const char* message) {
+    EnsureGlobals();
+
+    // Defensive: clear any stale WM_QUIT on this thread so a new notification's message loop won't exit immediately.
+    MSG quitMsg;
+    while (PeekMessage(&quitMsg, NULL, WM_QUIT, WM_QUIT, PM_REMOVE)) {
+    }
+
+    LogLineA("showNotification enter, msgLen=%zu", message ? strlen(message) : 0);
+
+    HWND active = (HWND)InterlockedCompareExchangePointer((PVOID*)&g_activeHwndAtomic, NULL, NULL);
+    LogLineA("active hwnd snapshot=%p", active);
+
+    if (active && IsWindow(active)) {
+        WCHAR cls[64];
+        cls[0] = L'\0';
+        GetClassNameW(active, cls, (int)(sizeof(cls) / sizeof(cls[0])));
+        HANDLE prop = GetPropW(active, g_notifierPropName);
+        if (prop && wcscmp(cls, L"WoxNotification") == 0) {
+            int wlen = MultiByteToWideChar(CP_UTF8, 0, message, -1, NULL, 0);
+            if (wlen > 0) {
+                WCHAR* wmsg = (WCHAR*)malloc((size_t)wlen * sizeof(WCHAR));
+                if (wmsg) {
+                    MultiByteToWideChar(CP_UTF8, 0, message, -1, wmsg, wlen);
+                    if (PostMessageW(active, WM_WOX_NOTIFICATION_UPDATE, 0, (LPARAM)wmsg)) {
+                        LogLineA("update posted to active hwnd=%p", active);
+                        return;
+                    }
+                    LogLineA("PostMessageW failed hwnd=%p err=%lu", active, (unsigned long)GetLastError());
+                    free(wmsg);
+                }
+            }
+        } else {
+            InterlockedCompareExchangePointer((PVOID*)&g_activeHwndAtomic, NULL, active);
+            LogLineA("active hwnd invalidated hwnd=%p class=%ls prop=%p", active, cls, prop);
+        }
+    }
+
     TryEnablePerMonitorDpiAwareness();
     UINT dpi = GetSystemDpiSafe();
+    LogLineA("dpi=%u", dpi);
 
     WNDCLASSEXA wc = {0};
     wc.cbSize = sizeof(WNDCLASSEXA);
@@ -373,72 +767,61 @@ void showNotification(const char* message) {
     wc.hInstance = GetModuleHandle(NULL);
     wc.lpszClassName = "WoxNotification";
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-    RegisterClassExA(&wc);
+    ATOM atom = RegisterClassExA(&wc);
+    LogLineA("RegisterClassExA atom=%u err=%lu", (unsigned)atom, (unsigned long)GetLastError());
 
     RECT workArea;
-    SystemParametersInfo(SPI_GETWORKAREA, 0, &workArea, 0);
+    BOOL okWorkArea = SystemParametersInfo(SPI_GETWORKAREA, 0, &workArea, 0);
+    LogLineA("workArea ok=%d l=%ld t=%ld r=%ld b=%ld err=%lu", okWorkArea ? 1 : 0,
+             (long)workArea.left, (long)workArea.top, (long)workArea.right, (long)workArea.bottom,
+             (unsigned long)GetLastError());
     int workWidth = workArea.right - workArea.left;
     int workHeight = workArea.bottom - workArea.top;
     int windowWidth = MulDiv(WINDOW_WIDTH, (int)dpi, 96);
-    int windowHeight = MulDiv(WINDOW_HEIGHT, (int)dpi, 96);
-    int yMargin = MulDiv(60, (int)dpi, 96);
-    int xPos = workArea.left + (workWidth - windowWidth) / 2;
-    int yPos = workArea.top + workHeight - windowHeight - yMargin;
 
     NotificationWindow* nw = (NotificationWindow*)malloc(sizeof(NotificationWindow));
     memset(nw, 0, sizeof(NotificationWindow));
     nw->dpi = dpi;
-
-    nw->hwnd = CreateWindowExA(
-        WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-        "WoxNotification", "",
-        WS_POPUP,
-        xPos, yPos, windowWidth, windowHeight,
-        NULL, NULL, GetModuleHandle(NULL), NULL
-    );
-
-    SetWindowLongPtr(nw->hwnd, GWLP_USERDATA, (LONG_PTR)nw);
+    nw->magic = WOX_NOTIFICATION_MAGIC;
+    LogLineA("alloc nw=%p", nw);
 
     int fontHeight = -MulDiv(14, (int)nw->dpi, 72);
     nw->messageFont = CreateFontW(fontHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
                                   OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
                                   DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei UI");
+    LogLineA("CreateFontW font=%p err=%lu", nw->messageFont, (unsigned long)GetLastError());
 
     MultiByteToWideChar(CP_UTF8, 0, message, -1, nw->messageText, 1024);
+    int windowHeight = MulDiv(52, (int)dpi, 96);
 
-    {
-        BOOL dark = TRUE;
-        DwmSetWindowAttribute(nw->hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
+    int xPos = workArea.left + (workWidth - windowWidth) / 2;
+    int yPos = workArea.top + workHeight - windowHeight - MulDiv(60, (int)dpi, 96);
+    ClampWindowToWorkArea(&workArea, dpi, &xPos, &yPos, windowWidth, &windowHeight);
 
-        DWM_WINDOW_CORNER_PREFERENCE corner = DWMWCP_ROUND;
-        HRESULT hrCorner = DwmSetWindowAttribute(nw->hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
+    LogLineA("CreateWindowExA begin w=%d h=%d x=%d y=%d", windowWidth, windowHeight, xPos, yPos);
+    nw->hwnd = CreateWindowExA(
+        WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED,
+        "WoxNotification", "",
+        WS_POPUP,
+        xPos, yPos, windowWidth, windowHeight,
+        NULL, NULL, GetModuleHandle(NULL), nw
+    );
 
-        BOOL accentOk = TryEnableAcrylic(nw->hwnd);
-        if (!accentOk) accentOk = TryEnableHostBackdrop(nw->hwnd);
-
-        if (accentOk) {
-            MARGINS margins = {0, 0, 0, 0};
-            DwmExtendFrameIntoClientArea(nw->hwnd, &margins);
-
-            DWM_SYSTEMBACKDROP_TYPE noneBackdrop = DWMSBT_NONE;
-            DwmSetWindowAttribute(nw->hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &noneBackdrop, sizeof(noneBackdrop));
-        } else {
-            DWM_SYSTEMBACKDROP_TYPE backdrop = DWMSBT_TRANSIENTWINDOW;
-            HRESULT hrBackdrop = DwmSetWindowAttribute(nw->hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop, sizeof(backdrop));
-            if (SUCCEEDED(hrBackdrop)) {
-                MARGINS margins = {-1};
-                DwmExtendFrameIntoClientArea(nw->hwnd, &margins);
-            }
-        }
-
-        if (FAILED(hrCorner)) {
-            int rr = MulDiv(20, (int)nw->dpi, 96);
-            HRGN rgn = CreateRoundRectRgn(0, 0, windowWidth + 1, windowHeight + 1, rr * 2, rr * 2);
-            if (rgn) {
-                SetWindowRgn(nw->hwnd, rgn, TRUE);
-            }
-        }
+    if (!nw->hwnd) {
+        LogLineA("CreateWindowExA failed err=%lu", (unsigned long)GetLastError());
+        if (nw->renderTextOwned && nw->renderText) free(nw->renderText);
+        if (nw->messageFont) DeleteObject(nw->messageFont);
+        free(nw);
+        return;
     }
+
+    InterlockedExchangePointer((PVOID*)&g_activeHwndAtomic, nw->hwnd);
+    LogLineA("window created hwnd=%p w=%d h=%d x=%d y=%d dpi=%u", nw->hwnd, windowWidth, windowHeight, xPos, yPos, dpi);
+    SetLayeredWindowAttributes(nw->hwnd, 0, 240, LWA_ALPHA);
+    nw->useFallbackRgn = TRUE;
+    nw->fallbackRgnRadius = MulDiv(18, (int)nw->dpi, 96);
+
+    ApplyWindowLayout(nw->hwnd, nw, windowWidth, dpi, FALSE);
 
     ShowWindow(nw->hwnd, SW_SHOWNA);
     UpdateWindow(nw->hwnd);
@@ -446,26 +829,64 @@ void showNotification(const char* message) {
     AnimateWindow(nw->hwnd, 300, AW_BLEND);
 
     nw->closeTimerId = SetTimer(nw->hwnd, CLOSE_TIMER, 3000, NULL);
+    LogLineA("message loop start hwnd=%p timer=%p", nw->hwnd, (void*)nw->closeTimerId);
 
     MSG msg;
-    while (GetMessage(&msg, NULL, 0, 0)) {
+    int gm = 0;
+    while ((gm = GetMessage(&msg, NULL, 0, 0)) > 0) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
+    LogLineA("message loop exit hwnd=%p GetMessage=%d err=%lu", nw->hwnd, gm, (unsigned long)GetLastError());
 
     free(nw);
 }
 
 LRESULT CALLBACK NotificationWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    if (uMsg == WM_NCCREATE) {
+        CREATESTRUCT* cs = (CREATESTRUCT*)lParam;
+        if (cs && cs->lpCreateParams) {
+            SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)cs->lpCreateParams);
+            SetPropW(hwnd, g_notifierPropName, (HANDLE)1);
+            LogLineA("WM_NCCREATE hwnd=%p", hwnd);
+        }
+        return DefWindowProc(hwnd, uMsg, wParam, lParam);
+    }
+
     NotificationWindow* nw = (NotificationWindow*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
 
     switch (uMsg) {
+        case WM_WOX_NOTIFICATION_UPDATE: {
+            if (nw) nw->updateCount++;
+            WCHAR* newText = (WCHAR*)lParam;
+            if (newText) {
+                if (nw) {
+                    wcsncpy_s(nw->messageText, 1024, newText, _TRUNCATE);
+                }
+                free(newText);
+            }
+            if (!nw) return 0;
+            if (nw->magic != WOX_NOTIFICATION_MAGIC) return 0;
+
+            nw->dpi = GetWindowDpiSafe(hwnd, nw->dpi ? nw->dpi : 96);
+            nw->mouseInside = FALSE;
+            nw->closeHover = FALSE;
+            nw->closePressed = FALSE;
+
+            RECT wr;
+            GetWindowRect(hwnd, &wr);
+            int windowWidth = wr.right - wr.left;
+            ApplyWindowLayout(hwnd, nw, windowWidth, nw->dpi, TRUE);
+            LogLineA("UPDATE hwnd=%p count=%u", hwnd, nw->updateCount);
+            return 0;
+        }
+
         case WM_ERASEBKGND:
             return 1;
 
         case WM_PAINT: {
             PAINTSTRUCT ps;
-            HDC hdc = BeginPaint(hwnd, &ps);
+            HDC paintHdc = BeginPaint(hwnd, &ps);
 
             RECT clientRect;
             GetClientRect(hwnd, &clientRect);
@@ -475,36 +896,39 @@ LRESULT CALLBACK NotificationWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
             int width = clientRect.right - clientRect.left;
             int height = clientRect.bottom - clientRect.top;
 
+            HDC hdc = paintHdc;
+            HPAINTBUFFER paintBuf = BeginBufferedPaint(paintHdc, &clientRect, BPBF_TOPDOWNDIB, NULL, &hdc);
+            if (paintBuf) {
+                BufferedPaintClear(paintBuf, &clientRect);
+            }
+
             if (nw) {
+                nw->paintCount++;
+                if (nw->paintCount == 1 || (nw->paintCount % 60) == 0) {
+                    LogLineA("PAINT hwnd=%p count=%u", hwnd, nw->paintCount);
+                }
+                PaintBackground(hdc, clientRect, nw->dpi ? nw->dpi : 96);
                 RECT closeRect = GetCloseRect(width, nw->dpi ? nw->dpi : 96);
-                int leftPad = MulDiv(20, (int)nw->dpi, 96);
-                int topPad = MulDiv(18, (int)nw->dpi, 96);
-                int textRight = closeRect.left - MulDiv(10, (int)nw->dpi, 96);
-                int bottomPad = MulDiv(18, (int)nw->dpi, 96);
+                int leftPad = MulDiv(TEXT_LEFT_PAD_DIP, (int)nw->dpi, 96);
+                int topPad = MulDiv(TEXT_VERT_PAD_DIP, (int)nw->dpi, 96);
+                int textRight = closeRect.left - MulDiv(TEXT_RIGHT_GAP_CLOSE_DIP, (int)nw->dpi, 96);
+                int bottomPad = MulDiv(TEXT_VERT_PAD_DIP, (int)nw->dpi, 96);
                 RECT textRect = {leftPad, topPad, textRight, height - bottomPad};
 
                 SetBkMode(hdc, TRANSPARENT);
                 if (nw->messageFont) SelectObject(hdc, nw->messageFont);
 
-                HTHEME theme = OpenThemeData(hwnd, L"WINDOW");
-                if (theme) {
-                    DTTOPTS opts;
-                    ZeroMemory(&opts, sizeof(opts));
-                    opts.dwSize = sizeof(opts);
-                    opts.dwFlags = DTT_TEXTCOLOR | DTT_COMPOSITED;
-                    opts.crText = RGB(255, 255, 255);
-                    DrawThemeTextEx(theme, hdc, 0, 0, nw->messageText, -1,
-                                    DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS,
-                                    &textRect, &opts);
-                    CloseThemeData(theme);
-                } else {
-                    SetTextColor(hdc, RGB(255, 255, 255));
-                    DrawTextW(hdc, nw->messageText, -1, &textRect,
-                              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-                }
+                const WCHAR* text = nw->renderText ? nw->renderText : nw->messageText;
+                SetTextColor(hdc, RGB(255, 255, 255));
+                DrawTextW(hdc, text, -1, &textRect,
+                          DT_LEFT | DT_TOP | DT_WORDBREAK | DT_EDITCONTROL | DT_EXPANDTABS | DT_NOPREFIX);
 
                 BOOL pressedVisual = (nw->closePressed && nw->closeHover);
                 DrawCloseButtonFlat(hdc, closeRect, nw->dpi ? nw->dpi : 96, nw->closeHover, pressedVisual);
+            }
+
+            if (paintBuf) {
+                EndBufferedPaint(paintBuf, TRUE);
             }
 
             EndPaint(hwnd, &ps);
@@ -610,11 +1034,21 @@ LRESULT CALLBACK NotificationWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         }
 
         case WM_DESTROY: {
-            if (nw && nw->messageFont) {
-                DeleteObject(nw->messageFont);
+            if (nw) {
+                if (nw->renderTextOwned && nw->renderText) free(nw->renderText);
+                if (nw->messageFont) DeleteObject(nw->messageFont);
             }
+            EnsureGlobals();
+            InterlockedCompareExchangePointer((PVOID*)&g_activeHwndAtomic, NULL, hwnd);
+            RemovePropW(hwnd, g_notifierPropName);
+            LogLineA("WM_DESTROY hwnd=%p", hwnd);
             PostQuitMessage(0);
             return 0;
+        }
+
+        case WM_NCDESTROY: {
+            RemovePropW(hwnd, g_notifierPropName);
+            return DefWindowProc(hwnd, uMsg, wParam, lParam);
         }
     }
 
