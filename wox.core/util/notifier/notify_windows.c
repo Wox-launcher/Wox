@@ -9,8 +9,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <wchar.h>
-#include <stdio.h>
-#include <stdarg.h>
 
 #pragma comment(lib, "dwmapi.lib")
 #pragma comment(lib, "uxtheme.lib")
@@ -91,12 +89,17 @@ static BOOL TryEnableAcrylic(HWND hwnd) {
     return TryEnableAccent(hwnd, ACCENT_ENABLE_ACRYLICBLURBEHIND, 0x2A202020, 2);
 }
 
-#define WINDOW_WIDTH 380
+#define WINDOW_WIDTH 520
 #define CLOSE_TIMER 1
 #define MAX_TEXT_LINES 3
 #define TEXT_LEFT_PAD_DIP 20
 #define TEXT_VERT_PAD_DIP 12
 #define TEXT_RIGHT_GAP_CLOSE_DIP 10
+#define COPY_GAP_DIP 6
+#define COPY_HEIGHT_DIP 24
+#define COPY_WIDTH_DIP 72
+#define COPY_RIGHT_PAD_DIP 26
+#define COPY_INSET_DIP 4
 #define WM_WOX_NOTIFICATION_UPDATE (WM_USER + 0x510)
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
@@ -127,19 +130,23 @@ typedef enum {
 typedef struct {
     HWND hwnd;
     HFONT messageFont;
+    HFONT copyFont;
     DWORD magic;
     WCHAR messageText[1024];
     WCHAR* renderText;
     BOOL renderTextOwned;
+    BOOL showCopyLink;
+    RECT copyRect;
+    BOOL copyRectValid;
     UINT_PTR closeTimerId;
     BOOL mouseInside;
     BOOL closeHover;
     BOOL closePressed;
+    BOOL copyHover;
+    BOOL copyPressed;
     UINT dpi;
     BOOL useFallbackRgn;
     int fallbackRgnRadius;
-    UINT paintCount;
-    UINT updateCount;
 } NotificationWindow;
 
 #define WOX_NOTIFICATION_MAGIC 0x4E584F57u /* 'WOXN' */
@@ -150,64 +157,13 @@ typedef UINT(WINAPI* pfnGetDpiForWindow)(HWND);
 
 static INIT_ONCE g_initOnce = INIT_ONCE_STATIC_INIT;
 static volatile PVOID g_activeHwndAtomic = NULL;
-static CRITICAL_SECTION g_logCs;
-static WCHAR g_logPath[MAX_PATH];
 static const WCHAR* g_notifierPropName = L"WoxNotifierWindow";
-
-static void LogLineA(const char* fmt, ...) {
-    SYSTEMTIME st;
-    GetLocalTime(&st);
-
-    char msg[2048];
-    int off = snprintf(msg, sizeof(msg),
-                       "[%04u-%02u-%02u %02u:%02u:%02u.%03u][tid=%lu] ",
-                       st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, st.wMilliseconds,
-                       (unsigned long)GetCurrentThreadId());
-    if (off < 0) off = 0;
-    if (off > (int)sizeof(msg) - 1) off = (int)sizeof(msg) - 1;
-
-    va_list ap;
-    va_start(ap, fmt);
-    int n = vsnprintf(msg + off, sizeof(msg) - (size_t)off, fmt, ap);
-    va_end(ap);
-    if (n < 0) n = 0;
-
-    size_t len = strnlen(msg, sizeof(msg));
-    if (len + 2 < sizeof(msg)) {
-        msg[len++] = '\r';
-        msg[len++] = '\n';
-        msg[len] = '\0';
-    }
-
-    if (!TryEnterCriticalSection(&g_logCs)) {
-        OutputDebugStringA(msg);
-        return;
-    }
-    FILE* f = NULL;
-    _wfopen_s(&f, g_logPath, L"ab");
-    if (f) {
-        fwrite(msg, 1, len, f);
-        fflush(f);
-        fclose(f);
-    }
-    LeaveCriticalSection(&g_logCs);
-
-    OutputDebugStringA(msg);
-}
 
 static BOOL CALLBACK InitGlobals(PINIT_ONCE InitOnce, PVOID Parameter, PVOID* Context) {
     (void)InitOnce;
     (void)Parameter;
     (void)Context;
-    InitializeCriticalSection(&g_logCs);
     BufferedPaintInit();
-    WCHAR tmp[MAX_PATH];
-    DWORD got = GetTempPathW((DWORD)(sizeof(tmp) / sizeof(tmp[0])), tmp);
-    if (got == 0 || got >= (DWORD)(sizeof(tmp) / sizeof(tmp[0]))) {
-        wcscpy_s(tmp, sizeof(tmp) / sizeof(tmp[0]), L".\\");
-    }
-    swprintf_s(g_logPath, sizeof(g_logPath) / sizeof(g_logPath[0]), L"%sWoxNotifierWindows.log", tmp);
-    LogLineA("notifier init, logPath=%ls", g_logPath);
     return TRUE;
 }
 
@@ -248,6 +204,40 @@ static RECT GetCloseRect(int width, UINT dpi) {
     return r;
 }
 
+static void InvalidateCopyRect(NotificationWindow* nw) {
+    if (!nw) return;
+    nw->copyRectValid = FALSE;
+    RECT empty = {0, 0, 0, 0};
+    nw->copyRect = empty;
+}
+
+static void CopyTextToClipboardW(HWND hwnd, const WCHAR* text) {
+    if (!text || !*text) return;
+    size_t len = wcslen(text);
+    size_t bytes = (len + 1) * sizeof(WCHAR);
+    HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, bytes);
+    if (!hMem) return;
+    void* p = GlobalLock(hMem);
+    if (!p) {
+        GlobalFree(hMem);
+        return;
+    }
+    memcpy(p, text, bytes);
+    GlobalUnlock(hMem);
+
+    if (!OpenClipboard(hwnd)) {
+        GlobalFree(hMem);
+        return;
+    }
+    EmptyClipboard();
+    if (!SetClipboardData(CF_UNICODETEXT, hMem)) {
+        CloseClipboard();
+        GlobalFree(hMem);
+        return;
+    }
+    CloseClipboard();
+}
+
 static WCHAR* DupWString(const WCHAR* s) {
     if (!s) return NULL;
     size_t len = wcslen(s);
@@ -255,6 +245,77 @@ static WCHAR* DupWString(const WCHAR* s) {
     if (!out) return NULL;
     memcpy(out, s, (len + 1) * sizeof(WCHAR));
     return out;
+}
+
+static BOOL IsHighSurrogate(WCHAR c);
+static BOOL IsLowSurrogate(WCHAR c);
+
+static const WCHAR* SkipSpacesAndNewlinesW(const WCHAR* s) {
+    if (!s) return s;
+    const WCHAR* p = s;
+    while (*p == L' ' || *p == L'\t' || *p == L'\r' || *p == L'\n') p++;
+    return p;
+}
+
+static int NextWrappedLineLenW(HDC hdc, const WCHAR* text, int maxWidth, BOOL* outHitNewline) {
+    if (outHitNewline) *outHitNewline = FALSE;
+    if (!hdc || !text || !*text) return 0;
+    if (maxWidth <= 0) return 0;
+
+    int segmentLen = 0;
+    while (text[segmentLen] && text[segmentLen] != L'\n') segmentLen++;
+    BOOL hasNewline = (text[segmentLen] == L'\n');
+
+    if (segmentLen == 0) {
+        if (outHitNewline) *outHitNewline = hasNewline;
+        return hasNewline ? 1 : 0;
+    }
+
+    int fit = 0;
+    SIZE total = {0, 0};
+    if (!GetTextExtentExPointW(hdc, text, segmentLen, maxWidth, &fit, NULL, &total)) {
+        fit = segmentLen;
+    }
+
+    if (fit <= 0) {
+        int take = 1;
+        if (segmentLen >= 2 && IsHighSurrogate(text[0]) && IsLowSurrogate(text[1])) take = 2;
+        if (outHitNewline) *outHitNewline = (hasNewline && take >= segmentLen);
+        return take;
+    }
+
+    if (fit >= segmentLen) {
+        if (outHitNewline) *outHitNewline = hasNewline;
+        return segmentLen + (hasNewline ? 1 : 0);
+    }
+
+    int take = fit;
+    for (int i = fit - 1; i >= 0; i--) {
+        WCHAR c = text[i];
+        if (c == L' ' || c == L'\t') {
+            take = i;
+            break;
+        }
+    }
+
+    if (take <= 0) take = fit;
+    if (take < segmentLen && take > 0 && IsHighSurrogate(text[take - 1]) && IsLowSurrogate(text[take])) {
+        take--;
+    }
+
+    while (take > 0 && (text[take - 1] == L' ' || text[take - 1] == L'\t' || text[take - 1] == L'\r')) {
+        take--;
+    }
+
+    if (take <= 0) {
+        take = fit > 0 ? fit : 1;
+        if (take < segmentLen && take > 0 && IsHighSurrogate(text[take - 1]) && IsLowSurrogate(text[take])) {
+            take--;
+        }
+    }
+
+    if (outHitNewline) *outHitNewline = FALSE;
+    return take;
 }
 
 static int MeasureTextHeightW(HDC hdc, const WCHAR* text, int width) {
@@ -372,6 +433,7 @@ static int ComputeWindowHeightAndRenderText(NotificationWindow* nw, int windowWi
     }
     nw->renderText = nw->messageText;
     nw->renderTextOwned = FALSE;
+    nw->showCopyLink = FALSE;
 
     int windowHeight = MulDiv(52, (int)dpi, 96);
     if (textWidth <= 0 || !nw->messageFont) return windowHeight;
@@ -416,6 +478,7 @@ static int ComputeWindowHeightAndRenderText(NotificationWindow* nw, int windowWi
                 if (truncated) {
                     nw->renderText = truncated;
                     nw->renderTextOwned = TRUE;
+                    nw->showCopyLink = TRUE;
                 }
             }
         }
@@ -460,6 +523,7 @@ static void ClampWindowToWorkArea(const RECT* workArea, UINT dpi, int* xPos, int
 static void ApplyWindowLayout(HWND hwnd, NotificationWindow* nw, int windowWidth, UINT dpi, BOOL resetTimer) {
     if (!hwnd || !nw) return;
 
+    InvalidateCopyRect(nw);
     int newHeight = ComputeWindowHeightAndRenderText(nw, windowWidth, dpi);
 
     RECT workArea;
@@ -488,35 +552,99 @@ static void ApplyWindowLayout(HWND hwnd, NotificationWindow* nw, int windowWidth
         ShowWindow(hwnd, SW_SHOWNA);
         RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW);
     }
-
-    LogLineA("layout hwnd=%p w=%d h=%d resetTimer=%d", hwnd, windowWidth, newHeight, resetTimer ? 1 : 0);
 }
 
-static void PaintBackground(HDC hdc, RECT clientRect, UINT dpi) {
+static RECT GetCopyRectInline(HWND hwnd, NotificationWindow* nw) {
+    RECT empty = {0, 0, 0, 0};
+    if (!hwnd || !nw || !nw->showCopyLink) return empty;
+    if (nw->copyRectValid) return nw->copyRect;
+
+    RECT clientRect;
+    GetClientRect(hwnd, &clientRect);
     int width = clientRect.right - clientRect.left;
     int height = clientRect.bottom - clientRect.top;
-    if (width <= 0 || height <= 0) return;
 
-    int border = MulDiv(1, (int)dpi, 96);
-    if (border < 1) border = 1;
-    int rr = MulDiv(18, (int)dpi, 96);
+    RECT closeRect = GetCloseRect(width, nw->dpi ? nw->dpi : 96);
+    int leftPad = MulDiv(TEXT_LEFT_PAD_DIP, (int)(nw->dpi ? nw->dpi : 96), 96);
+    int topPad = MulDiv(TEXT_VERT_PAD_DIP, (int)(nw->dpi ? nw->dpi : 96), 96);
+    int textRight = closeRect.left - MulDiv(TEXT_RIGHT_GAP_CLOSE_DIP, (int)(nw->dpi ? nw->dpi : 96), 96);
+    int bottomPad = MulDiv(TEXT_VERT_PAD_DIP, (int)(nw->dpi ? nw->dpi : 96), 96);
+    RECT textRect = {leftPad, topPad, textRight, height - bottomPad};
 
-    HRGN rgn = CreateRoundRectRgn(0, 0, width + 1, height + 1, rr * 2, rr * 2);
-    if (!rgn) return;
+    HDC hdc = GetDC(hwnd);
+    if (!hdc) return empty;
 
-    HBRUSH bg = CreateSolidBrush(RGB(28, 28, 28));
-    if (bg) {
-        FillRgn(hdc, rgn, bg);
-        DeleteObject(bg);
+    HFONT oldFont = NULL;
+    if (nw->messageFont) oldFont = (HFONT)SelectObject(hdc, nw->messageFont);
+
+    TEXTMETRIC tm;
+    ZeroMemory(&tm, sizeof(tm));
+    GetTextMetrics(hdc, &tm);
+    int lineHeight = tm.tmHeight > 0 ? tm.tmHeight : MulDiv(18, (int)(nw->dpi ? nw->dpi : 96), 96);
+
+    SIZE copySize = {0, 0};
+    HFONT oldCopy = NULL;
+    if (nw->copyFont) oldCopy = (HFONT)SelectObject(hdc, nw->copyFont);
+    GetTextExtentPoint32W(hdc, L"Copy", 4, &copySize);
+    if (oldCopy) SelectObject(hdc, nw->messageFont);
+
+    int copyGap = MulDiv(COPY_GAP_DIP, (int)(nw->dpi ? nw->dpi : 96), 96);
+
+    const WCHAR* text = nw->renderText ? nw->renderText : nw->messageText;
+    const WCHAR* p = SkipSpacesAndNewlinesW(text);
+    int y = textRect.top;
+
+    RECT copyRect = empty;
+    for (int line = 0; line < MAX_TEXT_LINES && *p; line++) {
+        int maxW = (textRect.right - textRect.left);
+        if (line == MAX_TEXT_LINES - 1) {
+            maxW -= (copyGap + copySize.cx);
+            if (maxW < 0) maxW = 0;
+        }
+
+        BOOL hitNewline = FALSE;
+        int take = NextWrappedLineLenW(hdc, p, maxW, &hitNewline);
+        if (take <= 0) break;
+
+        int consume = take;
+        if (hitNewline && p[take - 1] == L'\n') consume = take - 1;
+        if (consume < 0) consume = 0;
+
+        if (line == MAX_TEXT_LINES - 1) {
+            WCHAR buf[1024];
+            int cpy = consume;
+            if (cpy > (int)(sizeof(buf) / sizeof(buf[0]) - 1)) cpy = (int)(sizeof(buf) / sizeof(buf[0]) - 1);
+            wmemcpy(buf, p, cpy);
+            buf[cpy] = L'\0';
+            SIZE lineSize = {0, 0};
+            GetTextExtentPoint32W(hdc, buf, (int)wcslen(buf), &lineSize);
+            int copyX = textRect.left + lineSize.cx + copyGap;
+            if (copyX + copySize.cx > textRect.right) copyX = textRect.right - copySize.cx;
+            copyRect.left = copyX;
+            copyRect.top = y;
+            copyRect.right = copyX + copySize.cx;
+            copyRect.bottom = y + lineHeight;
+        }
+
+        p += take;
+        p = SkipSpacesAndNewlinesW(p);
+        y += lineHeight;
     }
 
-    HBRUSH borderBrush = CreateSolidBrush(RGB(70, 70, 70));
-    if (borderBrush) {
-        FrameRgn(hdc, rgn, borderBrush, border, border);
-        DeleteObject(borderBrush);
+    if (copyRect.right > copyRect.left) {
+        int pad = MulDiv(COPY_INSET_DIP, (int)(nw->dpi ? nw->dpi : 96), 96);
+        copyRect.left -= pad;
+        copyRect.right += pad;
+        if (copyRect.left < textRect.left) copyRect.left = textRect.left;
+        if (copyRect.right > textRect.right) copyRect.right = textRect.right;
     }
 
-    DeleteObject(rgn);
+    if (oldFont) SelectObject(hdc, oldFont);
+    ReleaseDC(hwnd, hdc);
+
+    nw->copyRect = copyRect;
+    nw->copyRectValid = TRUE;
+    return copyRect;
 }
 
 static HBITMAP Create32BitDIBSection(HDC hdc, int width, int height, void** outBits) {
@@ -727,10 +855,7 @@ void showNotification(const char* message) {
     while (PeekMessage(&quitMsg, NULL, WM_QUIT, WM_QUIT, PM_REMOVE)) {
     }
 
-    LogLineA("showNotification enter, msgLen=%zu", message ? strlen(message) : 0);
-
     HWND active = (HWND)InterlockedCompareExchangePointer((PVOID*)&g_activeHwndAtomic, NULL, NULL);
-    LogLineA("active hwnd snapshot=%p", active);
 
     if (active && IsWindow(active)) {
         WCHAR cls[64];
@@ -744,22 +869,18 @@ void showNotification(const char* message) {
                 if (wmsg) {
                     MultiByteToWideChar(CP_UTF8, 0, message, -1, wmsg, wlen);
                     if (PostMessageW(active, WM_WOX_NOTIFICATION_UPDATE, 0, (LPARAM)wmsg)) {
-                        LogLineA("update posted to active hwnd=%p", active);
                         return;
                     }
-                    LogLineA("PostMessageW failed hwnd=%p err=%lu", active, (unsigned long)GetLastError());
                     free(wmsg);
                 }
             }
         } else {
             InterlockedCompareExchangePointer((PVOID*)&g_activeHwndAtomic, NULL, active);
-            LogLineA("active hwnd invalidated hwnd=%p class=%ls prop=%p", active, cls, prop);
         }
     }
 
     TryEnablePerMonitorDpiAwareness();
     UINT dpi = GetSystemDpiSafe();
-    LogLineA("dpi=%u", dpi);
 
     WNDCLASSEXA wc = {0};
     wc.cbSize = sizeof(WNDCLASSEXA);
@@ -767,29 +888,30 @@ void showNotification(const char* message) {
     wc.hInstance = GetModuleHandle(NULL);
     wc.lpszClassName = "WoxNotification";
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-    ATOM atom = RegisterClassExA(&wc);
-    LogLineA("RegisterClassExA atom=%u err=%lu", (unsigned)atom, (unsigned long)GetLastError());
+    RegisterClassExA(&wc);
 
     RECT workArea;
-    BOOL okWorkArea = SystemParametersInfo(SPI_GETWORKAREA, 0, &workArea, 0);
-    LogLineA("workArea ok=%d l=%ld t=%ld r=%ld b=%ld err=%lu", okWorkArea ? 1 : 0,
-             (long)workArea.left, (long)workArea.top, (long)workArea.right, (long)workArea.bottom,
-             (unsigned long)GetLastError());
+    SystemParametersInfo(SPI_GETWORKAREA, 0, &workArea, 0);
     int workWidth = workArea.right - workArea.left;
     int workHeight = workArea.bottom - workArea.top;
     int windowWidth = MulDiv(WINDOW_WIDTH, (int)dpi, 96);
+    int minSideMargin = MulDiv(20, (int)dpi, 96);
+    int maxWidth = workWidth - minSideMargin * 2;
+    if (maxWidth < MulDiv(260, (int)dpi, 96)) maxWidth = MulDiv(260, (int)dpi, 96);
+    if (windowWidth > maxWidth) windowWidth = maxWidth;
 
     NotificationWindow* nw = (NotificationWindow*)malloc(sizeof(NotificationWindow));
     memset(nw, 0, sizeof(NotificationWindow));
     nw->dpi = dpi;
     nw->magic = WOX_NOTIFICATION_MAGIC;
-    LogLineA("alloc nw=%p", nw);
 
     int fontHeight = -MulDiv(14, (int)nw->dpi, 72);
     nw->messageFont = CreateFontW(fontHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
                                   OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
                                   DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei UI");
-    LogLineA("CreateFontW font=%p err=%lu", nw->messageFont, (unsigned long)GetLastError());
+    nw->copyFont = CreateFontW(fontHeight, 0, 0, 0, FW_NORMAL, FALSE, TRUE, FALSE, DEFAULT_CHARSET,
+                               OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+                               DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei UI");
 
     MultiByteToWideChar(CP_UTF8, 0, message, -1, nw->messageText, 1024);
     int windowHeight = MulDiv(52, (int)dpi, 96);
@@ -798,9 +920,8 @@ void showNotification(const char* message) {
     int yPos = workArea.top + workHeight - windowHeight - MulDiv(60, (int)dpi, 96);
     ClampWindowToWorkArea(&workArea, dpi, &xPos, &yPos, windowWidth, &windowHeight);
 
-    LogLineA("CreateWindowExA begin w=%d h=%d x=%d y=%d", windowWidth, windowHeight, xPos, yPos);
     nw->hwnd = CreateWindowExA(
-        WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED,
+        WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         "WoxNotification", "",
         WS_POPUP,
         xPos, yPos, windowWidth, windowHeight,
@@ -808,18 +929,50 @@ void showNotification(const char* message) {
     );
 
     if (!nw->hwnd) {
-        LogLineA("CreateWindowExA failed err=%lu", (unsigned long)GetLastError());
         if (nw->renderTextOwned && nw->renderText) free(nw->renderText);
         if (nw->messageFont) DeleteObject(nw->messageFont);
+        if (nw->copyFont) DeleteObject(nw->copyFont);
         free(nw);
         return;
     }
 
     InterlockedExchangePointer((PVOID*)&g_activeHwndAtomic, nw->hwnd);
-    LogLineA("window created hwnd=%p w=%d h=%d x=%d y=%d dpi=%u", nw->hwnd, windowWidth, windowHeight, xPos, yPos, dpi);
-    SetLayeredWindowAttributes(nw->hwnd, 0, 240, LWA_ALPHA);
-    nw->useFallbackRgn = TRUE;
-    nw->fallbackRgnRadius = MulDiv(18, (int)nw->dpi, 96);
+
+    {
+        BOOL dark = TRUE;
+        DwmSetWindowAttribute(nw->hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
+
+        DWM_WINDOW_CORNER_PREFERENCE corner = DWMWCP_ROUND;
+        HRESULT hrCorner = DwmSetWindowAttribute(nw->hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
+
+        BOOL accentOk = TryEnableAcrylic(nw->hwnd);
+        if (!accentOk) accentOk = TryEnableHostBackdrop(nw->hwnd);
+
+        if (accentOk) {
+            MARGINS margins = {0, 0, 0, 0};
+            DwmExtendFrameIntoClientArea(nw->hwnd, &margins);
+
+            DWM_SYSTEMBACKDROP_TYPE noneBackdrop = DWMSBT_NONE;
+            DwmSetWindowAttribute(nw->hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &noneBackdrop, sizeof(noneBackdrop));
+        } else {
+            DWM_SYSTEMBACKDROP_TYPE backdrop = DWMSBT_TRANSIENTWINDOW;
+            HRESULT hrBackdrop = DwmSetWindowAttribute(nw->hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop, sizeof(backdrop));
+            if (SUCCEEDED(hrBackdrop)) {
+                MARGINS margins = {-1};
+                DwmExtendFrameIntoClientArea(nw->hwnd, &margins);
+            }
+        }
+
+        if (FAILED(hrCorner)) {
+            int rr = MulDiv(20, (int)nw->dpi, 96);
+            HRGN rgn = CreateRoundRectRgn(0, 0, windowWidth + 1, windowHeight + 1, rr * 2, rr * 2);
+            if (rgn) {
+                SetWindowRgn(nw->hwnd, rgn, TRUE);
+            }
+            nw->useFallbackRgn = TRUE;
+            nw->fallbackRgnRadius = rr;
+        }
+    }
 
     ApplyWindowLayout(nw->hwnd, nw, windowWidth, dpi, FALSE);
 
@@ -829,7 +982,6 @@ void showNotification(const char* message) {
     AnimateWindow(nw->hwnd, 300, AW_BLEND);
 
     nw->closeTimerId = SetTimer(nw->hwnd, CLOSE_TIMER, 3000, NULL);
-    LogLineA("message loop start hwnd=%p timer=%p", nw->hwnd, (void*)nw->closeTimerId);
 
     MSG msg;
     int gm = 0;
@@ -837,7 +989,6 @@ void showNotification(const char* message) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
-    LogLineA("message loop exit hwnd=%p GetMessage=%d err=%lu", nw->hwnd, gm, (unsigned long)GetLastError());
 
     free(nw);
 }
@@ -848,7 +999,6 @@ LRESULT CALLBACK NotificationWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         if (cs && cs->lpCreateParams) {
             SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)cs->lpCreateParams);
             SetPropW(hwnd, g_notifierPropName, (HANDLE)1);
-            LogLineA("WM_NCCREATE hwnd=%p", hwnd);
         }
         return DefWindowProc(hwnd, uMsg, wParam, lParam);
     }
@@ -857,7 +1007,6 @@ LRESULT CALLBACK NotificationWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
 
     switch (uMsg) {
         case WM_WOX_NOTIFICATION_UPDATE: {
-            if (nw) nw->updateCount++;
             WCHAR* newText = (WCHAR*)lParam;
             if (newText) {
                 if (nw) {
@@ -872,12 +1021,14 @@ LRESULT CALLBACK NotificationWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
             nw->mouseInside = FALSE;
             nw->closeHover = FALSE;
             nw->closePressed = FALSE;
+            nw->copyHover = FALSE;
+            nw->copyPressed = FALSE;
+            InvalidateCopyRect(nw);
 
             RECT wr;
             GetWindowRect(hwnd, &wr);
             int windowWidth = wr.right - wr.left;
             ApplyWindowLayout(hwnd, nw, windowWidth, nw->dpi, TRUE);
-            LogLineA("UPDATE hwnd=%p count=%u", hwnd, nw->updateCount);
             return 0;
         }
 
@@ -903,11 +1054,6 @@ LRESULT CALLBACK NotificationWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
             }
 
             if (nw) {
-                nw->paintCount++;
-                if (nw->paintCount == 1 || (nw->paintCount % 60) == 0) {
-                    LogLineA("PAINT hwnd=%p count=%u", hwnd, nw->paintCount);
-                }
-                PaintBackground(hdc, clientRect, nw->dpi ? nw->dpi : 96);
                 RECT closeRect = GetCloseRect(width, nw->dpi ? nw->dpi : 96);
                 int leftPad = MulDiv(TEXT_LEFT_PAD_DIP, (int)nw->dpi, 96);
                 int topPad = MulDiv(TEXT_VERT_PAD_DIP, (int)nw->dpi, 96);
@@ -919,12 +1065,87 @@ LRESULT CALLBACK NotificationWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
                 if (nw->messageFont) SelectObject(hdc, nw->messageFont);
 
                 const WCHAR* text = nw->renderText ? nw->renderText : nw->messageText;
-                SetTextColor(hdc, RGB(255, 255, 255));
-                DrawTextW(hdc, text, -1, &textRect,
-                          DT_LEFT | DT_TOP | DT_WORDBREAK | DT_EDITCONTROL | DT_EXPANDTABS | DT_NOPREFIX);
+                const WCHAR* p = SkipSpacesAndNewlinesW(text);
+
+                TEXTMETRIC tm;
+                ZeroMemory(&tm, sizeof(tm));
+                GetTextMetrics(hdc, &tm);
+                int lineHeight = tm.tmHeight > 0 ? tm.tmHeight : MulDiv(18, (int)nw->dpi, 96);
+
+                int copyGap = MulDiv(COPY_GAP_DIP, (int)nw->dpi, 96);
+                SIZE copySize = {0, 0};
+                HFONT oldFont = NULL;
+                if (nw->copyFont) oldFont = (HFONT)SelectObject(hdc, nw->copyFont);
+                GetTextExtentPoint32W(hdc, L"copy", 4, &copySize);
+                if (oldFont && nw->messageFont) SelectObject(hdc, nw->messageFont);
+
+                RECT empty = {0, 0, 0, 0};
+                RECT computedCopyRect = empty;
+
+                int y = textRect.top;
+                for (int line = 0; line < MAX_TEXT_LINES && *p; line++) {
+                    int maxW = (textRect.right - textRect.left);
+                    if (nw->showCopyLink && line == MAX_TEXT_LINES - 1) {
+                        maxW -= (copyGap + copySize.cx);
+                        if (maxW < 0) maxW = 0;
+                    }
+
+                    BOOL hitNewline = FALSE;
+                    int take = NextWrappedLineLenW(hdc, p, maxW, &hitNewline);
+                    if (take <= 0) break;
+
+                    int consume = take;
+                    if (hitNewline && p[take - 1] == L'\n') consume = take - 1;
+                    if (consume < 0) consume = 0;
+
+                    WCHAR buf[1024];
+                    int cpy = consume;
+                    if (cpy > (int)(sizeof(buf) / sizeof(buf[0]) - 1)) cpy = (int)(sizeof(buf) / sizeof(buf[0]) - 1);
+                    wmemcpy(buf, p, cpy);
+                    buf[cpy] = L'\0';
+
+                    RECT lineRect = {textRect.left, y, textRect.right, y + lineHeight};
+                    SetTextColor(hdc, RGB(255, 255, 255));
+                    DrawTextW(hdc, buf, -1, &lineRect, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX | DT_EXPANDTABS);
+
+                    if (nw->showCopyLink && line == MAX_TEXT_LINES - 1) {
+                        SIZE lineSize = {0, 0};
+                        GetTextExtentPoint32W(hdc, buf, (int)wcslen(buf), &lineSize);
+                        int copyX = textRect.left + lineSize.cx + copyGap;
+                        if (copyX + copySize.cx > textRect.right) copyX = textRect.right - copySize.cx;
+                        computedCopyRect.left = copyX;
+                        computedCopyRect.top = y;
+                        computedCopyRect.right = copyX + copySize.cx;
+                        computedCopyRect.bottom = y + lineHeight;
+                    }
+
+                    p += take;
+                    p = SkipSpacesAndNewlinesW(p);
+                    y += lineHeight;
+                }
 
                 BOOL pressedVisual = (nw->closePressed && nw->closeHover);
                 DrawCloseButtonFlat(hdc, closeRect, nw->dpi ? nw->dpi : 96, nw->closeHover, pressedVisual);
+
+                RECT hitCopyRect = computedCopyRect;
+                if (hitCopyRect.right > hitCopyRect.left) {
+                    int pad = MulDiv(COPY_INSET_DIP, (int)nw->dpi, 96);
+                    hitCopyRect.left -= pad;
+                    hitCopyRect.right += pad;
+                    if (hitCopyRect.left < textRect.left) hitCopyRect.left = textRect.left;
+                    if (hitCopyRect.right > textRect.right) hitCopyRect.right = textRect.right;
+                }
+
+                nw->copyRect = hitCopyRect;
+                nw->copyRectValid = TRUE;
+
+                if (nw->showCopyLink && (computedCopyRect.right > computedCopyRect.left)) {
+                    SetBkMode(hdc, TRANSPARENT);
+                    SetTextColor(hdc, nw->copyHover ? RGB(160, 220, 255) : RGB(200, 200, 200));
+                    if (nw->copyFont) SelectObject(hdc, nw->copyFont);
+                    DrawTextW(hdc, L"copy", -1, &computedCopyRect, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
+                    if (nw->messageFont) SelectObject(hdc, nw->messageFont);
+                }
             }
 
             if (paintBuf) {
@@ -943,8 +1164,11 @@ LRESULT CALLBACK NotificationWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
                     ScreenToClient(hwnd, &pt);
                     RECT clientRect;
                     GetClientRect(hwnd, &clientRect);
-                    RECT closeRect = GetCloseRect(clientRect.right - clientRect.left, nw->dpi ? nw->dpi : 96);
-                    if (PtInRect(&closeRect, pt)) {
+                    int width = clientRect.right - clientRect.left;
+                    int height = clientRect.bottom - clientRect.top;
+                    RECT closeRect = GetCloseRect(width, nw->dpi ? nw->dpi : 96);
+                    RECT copyRect = GetCopyRectInline(hwnd, nw);
+                    if (PtInRect(&closeRect, pt) || PtInRect(&copyRect, pt)) {
                         SetCursor(LoadCursor(NULL, IDC_HAND));
                     } else {
                         SetCursor(LoadCursor(NULL, IDC_ARROW));
@@ -967,10 +1191,18 @@ LRESULT CALLBACK NotificationWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
             POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             RECT clientRect;
             GetClientRect(hwnd, &clientRect);
-            RECT closeRect = GetCloseRect(clientRect.right - clientRect.left, nw->dpi ? nw->dpi : 96);
+            int width = clientRect.right - clientRect.left;
+            int height = clientRect.bottom - clientRect.top;
+            RECT closeRect = GetCloseRect(width, nw->dpi ? nw->dpi : 96);
+            RECT copyRect = GetCopyRectInline(hwnd, nw);
             BOOL hoverNow = PtInRect(&closeRect, pt);
             if (hoverNow != nw->closeHover) {
                 nw->closeHover = hoverNow;
+                InvalidateRect(hwnd, NULL, FALSE);
+            }
+            BOOL copyHoverNow = PtInRect(&copyRect, pt);
+            if (copyHoverNow != nw->copyHover) {
+                nw->copyHover = copyHoverNow;
                 InvalidateRect(hwnd, NULL, FALSE);
             }
             return 0;
@@ -981,6 +1213,8 @@ LRESULT CALLBACK NotificationWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
             nw->mouseInside = FALSE;
             nw->closeHover = FALSE;
             nw->closePressed = FALSE;
+            nw->copyHover = FALSE;
+            nw->copyPressed = FALSE;
             InvalidateRect(hwnd, NULL, FALSE);
             return 0;
         }
@@ -990,9 +1224,16 @@ LRESULT CALLBACK NotificationWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
             POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             RECT clientRect;
             GetClientRect(hwnd, &clientRect);
-            RECT closeRect = GetCloseRect(clientRect.right - clientRect.left, nw->dpi ? nw->dpi : 96);
+            int width = clientRect.right - clientRect.left;
+            int height = clientRect.bottom - clientRect.top;
+            RECT closeRect = GetCloseRect(width, nw->dpi ? nw->dpi : 96);
+            RECT copyRect = GetCopyRectInline(hwnd, nw);
             if (PtInRect(&closeRect, pt)) {
                 nw->closePressed = TRUE;
+                SetCapture(hwnd);
+                InvalidateRect(hwnd, NULL, FALSE);
+            } else if (PtInRect(&copyRect, pt)) {
+                nw->copyPressed = TRUE;
                 SetCapture(hwnd);
                 InvalidateRect(hwnd, NULL, FALSE);
             }
@@ -1004,12 +1245,22 @@ LRESULT CALLBACK NotificationWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
             POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             RECT clientRect;
             GetClientRect(hwnd, &clientRect);
-            RECT closeRect = GetCloseRect(clientRect.right - clientRect.left, nw->dpi ? nw->dpi : 96);
+            int width = clientRect.right - clientRect.left;
+            int height = clientRect.bottom - clientRect.top;
+            RECT closeRect = GetCloseRect(width, nw->dpi ? nw->dpi : 96);
+            RECT copyRect = GetCopyRectInline(hwnd, nw);
             BOOL pressed = nw->closePressed;
+            BOOL copyPressed = nw->copyPressed;
             nw->closePressed = FALSE;
+            nw->copyPressed = FALSE;
             if (GetCapture() == hwnd) ReleaseCapture();
             InvalidateRect(hwnd, NULL, FALSE);
             if (pressed && PtInRect(&closeRect, pt)) {
+                DestroyWindow(hwnd);
+            } else if (copyPressed && PtInRect(&copyRect, pt)) {
+                CopyTextToClipboardW(hwnd, nw->messageText);
+                KillTimer(hwnd, CLOSE_TIMER);
+                AnimateWindow(hwnd, 150, AW_BLEND | AW_HIDE);
                 DestroyWindow(hwnd);
             }
             return 0;
@@ -1019,6 +1270,10 @@ LRESULT CALLBACK NotificationWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
             if (!nw) return 0;
             if (nw->closePressed) {
                 nw->closePressed = FALSE;
+                InvalidateRect(hwnd, NULL, FALSE);
+            }
+            if (nw->copyPressed) {
+                nw->copyPressed = FALSE;
                 InvalidateRect(hwnd, NULL, FALSE);
             }
             return 0;
@@ -1037,11 +1292,11 @@ LRESULT CALLBACK NotificationWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
             if (nw) {
                 if (nw->renderTextOwned && nw->renderText) free(nw->renderText);
                 if (nw->messageFont) DeleteObject(nw->messageFont);
+                if (nw->copyFont) DeleteObject(nw->copyFont);
             }
             EnsureGlobals();
             InterlockedCompareExchangePointer((PVOID*)&g_activeHwndAtomic, NULL, hwnd);
             RemovePropW(hwnd, g_notifierPropName);
-            LogLineA("WM_DESTROY hwnd=%p", hwnd);
             PostQuitMessage(0);
             return 0;
         }
