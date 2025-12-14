@@ -26,12 +26,12 @@ type storeManifest struct {
 
 type StorePluginManifest struct {
 	Id             string
-	Name           string
+	Name           string // supported i18n
 	Author         string
 	Version        string
 	MinWoxVersion  string
 	Runtime        Runtime
-	Description    string
+	Description    string // supported i18n
 	IconUrl        string
 	IconEmoji      string
 	Website        string
@@ -40,6 +40,27 @@ type StorePluginManifest struct {
 	SupportedOS    []string
 	DateCreated    string
 	DateUpdated    string
+
+	// I18n holds inline translations for the store manifest.
+	// Map structure: langCode -> key -> translatedValue
+	// Example: {"en_US": {"plugin_name": "Hello"}, "zh_CN": {"plugin_name": "你好"}}
+	I18n map[string]map[string]string
+}
+
+func (m StorePluginManifest) translateText(ctx context.Context, text string) string {
+	if !strings.HasPrefix(text, "i18n:") {
+		return text
+	}
+
+	return i18n.GetI18nManager().TranslatePlugin(ctx, text, "", m.I18n)
+}
+
+func (m StorePluginManifest) GetName(ctx context.Context) string {
+	return m.translateText(ctx, m.Name)
+}
+
+func (m StorePluginManifest) GetDescription(ctx context.Context) string {
+	return m.translateText(ctx, m.Description)
 }
 
 var storeInstance *Store
@@ -163,7 +184,9 @@ func (s *Store) Search(ctx context.Context, keyword string) []StorePluginManifes
 			return true
 		}
 
-		return util.IsStringMatch(manifest.Name, keyword, false)
+		return util.IsStringMatch(manifest.GetName(ctx), keyword, false) ||
+			util.IsStringMatch(manifest.GetDescription(ctx), keyword, false) ||
+			util.IsStringMatch(manifest.Id, keyword, false)
 	})
 }
 

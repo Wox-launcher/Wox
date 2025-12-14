@@ -200,7 +200,7 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
       final statuses = controller.runtimeStatuses;
       final bool isLoadingStatuses = controller.isRuntimeStatusLoading.value;
       final String runtimeStatusError = controller.runtimeStatusError.value;
-      final List<WoxRuntimeStatus> visibleStatuses = statuses.where((status) => status.runtime.toUpperCase() != 'SCRIPT').toList();
+      final List<WoxRuntimeStatus> visibleStatuses = statuses.where((status) => status.runtime.toUpperCase() != 'SCRIPT' || status.loadedPluginCount > 0).toList();
 
       return form(children: [
         formField(
@@ -211,14 +211,6 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
             children: [
               Row(
                 children: [
-                  Text(
-                    controller.tr("ui_runtime_status_overview"),
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: getThemeTextColor(),
-                    ),
-                  ),
-                  const Spacer(),
                   if (isLoadingStatuses)
                     const SizedBox(
                       width: 16,

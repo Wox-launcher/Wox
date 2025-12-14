@@ -78,6 +78,22 @@ type localPlugin struct {
 	watcher  *fsnotify.Watcher
 }
 
+func (w *WPMPlugin) translateLocalPluginText(ctx context.Context, metadata plugin.MetadataWithDirectory, text string) string {
+	if !strings.HasPrefix(text, "i18n:") {
+		return text
+	}
+
+	return i18n.GetI18nManager().TranslatePlugin(ctx, text, metadata.Directory, metadata.Metadata.I18n)
+}
+
+func (w *WPMPlugin) getLocalPluginName(ctx context.Context, metadata plugin.MetadataWithDirectory) string {
+	return w.translateLocalPluginText(ctx, metadata, metadata.Metadata.Name)
+}
+
+func (w *WPMPlugin) getLocalPluginDescription(ctx context.Context, metadata plugin.MetadataWithDirectory) string {
+	return w.translateLocalPluginText(ctx, metadata, metadata.Metadata.Description)
+}
+
 func (w *WPMPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:            "e2c5f005-6c73-43c8-bc53-ab04def265b2",
@@ -424,7 +440,7 @@ func (w *WPMPlugin) uninstallCommand(ctx context.Context, query plugin.Query) []
 	})
 	if query.Search != "" {
 		plugins = lo.Filter(plugins, func(pluginInstance *plugin.Instance, _ int) bool {
-			return IsStringMatchNoPinYin(ctx, pluginInstance.Metadata.Name, query.Search)
+			return IsStringMatchNoPinYin(ctx, pluginInstance.GetName(ctx), query.Search)
 		})
 	}
 
@@ -437,8 +453,8 @@ func (w *WPMPlugin) uninstallCommand(ctx context.Context, query plugin.Query) []
 
 		return plugin.QueryResult{
 			Id:       uuid.NewString(),
-			Title:    pluginInstance.Metadata.Name,
-			SubTitle: pluginInstance.Metadata.Description,
+			Title:    pluginInstance.GetName(ctx),
+			SubTitle: pluginInstance.GetDescription(ctx),
 			Icon:     icon,
 			Actions: []plugin.QueryResultAction{
 				{
@@ -461,24 +477,25 @@ func (w *WPMPlugin) createInstallAction(pluginManifest plugin.StorePluginManifes
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			util.Go(ctx, "install plugin", func() {
+				pluginName := pluginManifest.GetName(ctx)
 				// notify starting
 				w.api.Notify(ctx, fmt.Sprintf(
 					w.api.GetTranslation(ctx, "i18n:plugin_installer_action_start"),
 					w.api.GetTranslation(ctx, "i18n:plugin_installer_install"),
-					pluginManifest.Name,
+					pluginName,
 				))
 
 				// Install with progress callback
 				installErr := plugin.GetStoreManager().InstallWithProgress(ctx, pluginManifest, func(message string) {
 					// Show progress notification
-					w.api.Notify(ctx, fmt.Sprintf("%s: %s", pluginManifest.Name, message))
+					w.api.Notify(ctx, fmt.Sprintf("%s: %s", pluginName, message))
 				})
 
 				if installErr != nil {
 					w.api.Notify(ctx, fmt.Sprintf(
 						w.api.GetTranslation(ctx, "i18n:plugin_installer_action_failed"),
 						w.api.GetTranslation(ctx, "i18n:plugin_installer_install"),
-						fmt.Sprintf("%s(%s): %s", pluginManifest.Name, pluginManifest.Version, installErr.Error()),
+						fmt.Sprintf("%s(%s): %s", pluginName, pluginManifest.Version, installErr.Error()),
 					))
 					return
 				}
@@ -521,7 +538,7 @@ func (w *WPMPlugin) createInstallAction(pluginManifest plugin.StorePluginManifes
 				// success
 				w.api.Notify(ctx, fmt.Sprintf(
 					w.api.GetTranslation(ctx, "i18n:plugin_installer_action_success"),
-					pluginManifest.Name,
+					pluginName,
 					w.api.GetTranslation(ctx, "i18n:plugin_installer_verb_install_past"),
 				))
 			})
@@ -536,6 +553,7 @@ func (w *WPMPlugin) createUninstallAction(pluginManifest plugin.StorePluginManif
 		Icon:                   common.TrashIcon,
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			pluginName := pluginManifest.GetName(ctx)
 			instances := plugin.GetPluginManager().GetPluginInstances()
 			if inst, ok := lo.Find(instances, func(it *plugin.Instance) bool { return it.Metadata.Id == pluginManifest.Id }); ok {
 				util.Go(ctx, "uninstall plugin", func() {
@@ -543,7 +561,7 @@ func (w *WPMPlugin) createUninstallAction(pluginManifest plugin.StorePluginManif
 					w.api.Notify(ctx, fmt.Sprintf(
 						w.api.GetTranslation(ctx, "i18n:plugin_installer_action_start"),
 						w.api.GetTranslation(ctx, "i18n:plugin_installer_uninstall"),
-						pluginManifest.Name,
+						pluginName,
 					))
 
 					uninstallErr := plugin.GetStoreManager().Uninstall(ctx, inst)
@@ -551,7 +569,7 @@ func (w *WPMPlugin) createUninstallAction(pluginManifest plugin.StorePluginManif
 						w.api.Notify(ctx, fmt.Sprintf(
 							w.api.GetTranslation(ctx, "i18n:plugin_installer_action_failed"),
 							w.api.GetTranslation(ctx, "i18n:plugin_installer_uninstall"),
-							fmt.Sprintf("%s(%s): %s", pluginManifest.Name, pluginManifest.Version, uninstallErr.Error()),
+							fmt.Sprintf("%s(%s): %s", pluginName, pluginManifest.Version, uninstallErr.Error()),
 						))
 						return
 					}
@@ -568,7 +586,7 @@ func (w *WPMPlugin) createUninstallAction(pluginManifest plugin.StorePluginManif
 					// success
 					w.api.Notify(ctx, fmt.Sprintf(
 						w.api.GetTranslation(ctx, "i18n:plugin_installer_action_success"),
-						pluginManifest.Name,
+						pluginName,
 						w.api.GetTranslation(ctx, "i18n:plugin_installer_verb_uninstall_past"),
 					))
 				})
@@ -625,26 +643,28 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 					Icon:                   common.UpdateIcon,
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						pluginName := pluginManifest.GetName(ctx)
 						// notify starting
 						w.api.Notify(ctx, fmt.Sprintf(
 							w.api.GetTranslation(ctx, "i18n:plugin_installer_action_start"),
 							w.api.GetTranslation(ctx, "i18n:plugin_installer_upgrade"),
-							pluginManifest.Name,
+							pluginName,
 						))
 
 						// Start installation in background, show progress via notifications
 						util.Go(ctx, "upgrade plugin", func() {
+							pluginName := pluginManifest.GetName(ctx)
 							// Install with progress callback
 							installErr := plugin.GetStoreManager().InstallWithProgress(ctx, pluginManifest, func(message string) {
 								// Show progress notification
-								w.api.Notify(ctx, fmt.Sprintf("%s: %s", pluginManifest.Name, message))
+								w.api.Notify(ctx, fmt.Sprintf("%s: %s", pluginName, message))
 							})
 
 							if installErr != nil {
 								w.api.Notify(ctx, fmt.Sprintf(
 									w.api.GetTranslation(ctx, "i18n:plugin_installer_action_failed"),
 									w.api.GetTranslation(ctx, "i18n:plugin_installer_upgrade"),
-									fmt.Sprintf("%s(%s): %s", pluginManifest.Name, pluginManifest.Version, installErr.Error()),
+									fmt.Sprintf("%s(%s): %s", pluginName, pluginManifest.Version, installErr.Error()),
 								))
 								return
 							}
@@ -687,7 +707,7 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 							// success
 							w.api.Notify(ctx, fmt.Sprintf(
 								w.api.GetTranslation(ctx, "i18n:plugin_installer_action_success"),
-								pluginManifest.Name,
+								pluginName,
 								w.api.GetTranslation(ctx, "i18n:plugin_installer_verb_upgrade_past"),
 							))
 						})
@@ -705,10 +725,12 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 		}
 
 		// Create plugin detail JSON for preview
+		pluginName := pluginManifest.GetName(ctx)
+		pluginDescription := pluginManifest.GetDescription(ctx)
 		pluginDetailData := map[string]interface{}{
 			"Id":             pluginManifest.Id,
-			"Name":           pluginManifest.Name,
-			"Description":    pluginManifest.Description,
+			"Name":           pluginName,
+			"Description":    pluginDescription,
 			"Author":         pluginManifest.Author,
 			"Version":        pluginManifest.Version,
 			"Website":        pluginManifest.Website,
@@ -729,8 +751,8 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 
 		results = append(results, plugin.QueryResult{
 			Id:       uuid.NewString(),
-			Title:    pluginManifest.Name,
-			SubTitle: pluginManifest.Description,
+			Title:    pluginName,
+			SubTitle: pluginDescription,
 			Icon:     icon,
 			Tails:    tails,
 			Preview: plugin.WoxPreview{
@@ -746,13 +768,15 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 func (w *WPMPlugin) listDevCommand(ctx context.Context) []plugin.QueryResult {
 	//list all local plugins
 	return lo.Map(w.localPlugins, func(lp localPlugin, _ int) plugin.QueryResult {
+		pluginName := w.getLocalPluginName(ctx, lp.metadata)
+		pluginDescription := w.getLocalPluginDescription(ctx, lp.metadata)
 		iconImage := common.ParseWoxImageOrDefault(lp.metadata.Metadata.Icon, wpmIcon)
 		iconImage = common.ConvertIcon(ctx, iconImage, lp.metadata.Directory)
 
 		return plugin.QueryResult{
 			Id:       uuid.NewString(),
-			Title:    lp.metadata.Metadata.Name,
-			SubTitle: lp.metadata.Metadata.Description,
+			Title:    pluginName,
+			SubTitle: pluginDescription,
 			Icon:     iconImage,
 			Preview: plugin.WoxPreview{
 				PreviewType: plugin.WoxPreviewTypeMarkdown,
@@ -770,7 +794,7 @@ func (w *WPMPlugin) listDevCommand(ctx context.Context) []plugin.QueryResult {
 - **Commands**: %s
 - **SupportedOS**: %s
 - **Features**: %s
-`, lp.metadata.Directory, lp.metadata.Metadata.Name, lp.metadata.Metadata.Description, lp.metadata.Metadata.Author,
+`, lp.metadata.Directory, pluginName, pluginDescription, lp.metadata.Metadata.Author,
 					lp.metadata.Metadata.Website, lp.metadata.Metadata.Version, lp.metadata.Metadata.MinWoxVersion,
 					lp.metadata.Metadata.Runtime, lp.metadata.Metadata.Entry, lp.metadata.Metadata.TriggerKeywords,
 					lp.metadata.Metadata.Commands, lp.metadata.Metadata.SupportedOS, lp.metadata.Metadata.Features),
@@ -997,7 +1021,8 @@ func (w *WPMPlugin) saveLocalPluginDirectories(ctx context.Context) {
 }
 
 func (w *WPMPlugin) reloadLocalDistPlugin(ctx context.Context, localPlugin plugin.MetadataWithDirectory, reason string) error {
-	w.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Reloading plugin: %s, reason: %s", localPlugin.Metadata.Name, reason))
+	localPluginName := w.getLocalPluginName(ctx, localPlugin)
+	w.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Reloading plugin: %s, reason: %s", localPluginName, reason))
 
 	// find dist directory, if not exist, prompt user to build it
 	distDirectory := path.Join(localPlugin.Directory, "dist")
@@ -1020,10 +1045,10 @@ func (w *WPMPlugin) reloadLocalDistPlugin(ctx context.Context, localPlugin plugi
 		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to reload plugin: %s", reloadErr.Error()))
 		return reloadErr
 	} else {
-		w.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Reloaded plugin: %s", localPlugin.Metadata.Name))
+		w.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Reloaded plugin: %s", localPluginName))
 	}
 
-	w.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_reload_success"), localPlugin.Metadata.Name, reason))
+	w.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_reload_success"), localPluginName, reason))
 	return nil
 }
 

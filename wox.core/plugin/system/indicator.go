@@ -64,13 +64,16 @@ func (i *IndicatorPlugin) Init(ctx context.Context, initParams plugin.InitParams
 func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	var results []plugin.QueryResult
 	for _, pluginInstance := range plugin.GetPluginManager().GetPluginInstances() {
+		pluginName := pluginInstance.GetName(ctx)
+		pluginDescription := pluginInstance.GetDescription(ctx)
+
 		triggerKeyword, found := lo.Find(pluginInstance.GetTriggerKeywords(), func(triggerKeyword string) bool {
 			return triggerKeyword != "*" && IsStringMatchNoPinYin(ctx, triggerKeyword, query.Search)
 		})
 
 		if !found {
 			// search the plugin name and description
-			if IsStringMatchNoPinYin(ctx, pluginInstance.Metadata.Description, query.Search) || IsStringMatchNoPinYin(ctx, pluginInstance.Metadata.Name, query.Search) {
+			if IsStringMatch(ctx, pluginDescription, query.Search) || IsStringMatch(ctx, pluginName, query.Search) {
 				triggerKeywords := pluginInstance.GetTriggerKeywords()
 				if len(triggerKeywords) > 0 {
 					// use the first trigger keyword if it's not global keyword
@@ -92,7 +95,7 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 			results = append(results, plugin.QueryResult{
 				Id:          uuid.NewString(),
 				Title:       triggerKeyword,
-				SubTitle:    fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_indicator_activate_plugin"), pluginInstance.Metadata.Name),
+				SubTitle:    fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_indicator_activate_plugin"), pluginName),
 				Score:       10,
 				Icon:        pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, indicatorIcon),
 				ContextData: string(contextDataJson),
@@ -170,10 +173,11 @@ func (i *IndicatorPlugin) handleMRURestore(mruData plugin.MRUData) (*plugin.Quer
 		return nil, fmt.Errorf("trigger keyword no longer exists: %s", contextData.TriggerKeyword)
 	}
 
+	translatedName := pluginInstance.GetName(context.Background())
 	result := &plugin.QueryResult{
 		Id:          uuid.NewString(),
 		Title:       contextData.TriggerKeyword,
-		SubTitle:    fmt.Sprintf(i18n.GetI18nManager().TranslateWox(context.Background(), "plugin_indicator_activate_plugin"), pluginInstance.Metadata.Name),
+		SubTitle:    fmt.Sprintf(i18n.GetI18nManager().TranslateWox(context.Background(), "plugin_indicator_activate_plugin"), translatedName),
 		Icon:        pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, indicatorIcon),
 		ContextData: mruData.ContextData,
 		Actions: []plugin.QueryResultAction{

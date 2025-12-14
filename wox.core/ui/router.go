@@ -149,6 +149,9 @@ func handlePluginStore(w http.ResponseWriter, r *http.Request) {
 			plugins[i].Icon = common.NewWoxImageUrl(manifests[i].IconUrl)
 		}
 		plugins[i].IsInstalled = isInstalled
+		plugins[i].Name = manifests[i].GetName(getCtx)
+		plugins[i].Description = manifests[i].GetDescription(getCtx)
+
 		plugins[i] = convertPluginDto(getCtx, plugins[i], pluginInstance)
 	}
 
@@ -229,16 +232,17 @@ func handlePluginInstall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger.Info(ctx, fmt.Sprintf("Installing plugin '%s' (%s)", findPlugin.Name, pluginId))
+	pluginName := findPlugin.GetName(ctx)
+	logger.Info(ctx, fmt.Sprintf("Installing plugin '%s' (%s)", pluginName, pluginId))
 	installErr := plugin.GetStoreManager().Install(ctx, findPlugin)
 	if installErr != nil {
-		errMsg := fmt.Sprintf("Failed to install plugin '%s': %s", findPlugin.Name, installErr.Error())
+		errMsg := fmt.Sprintf("Failed to install plugin '%s': %s", pluginName, installErr.Error())
 		logger.Error(ctx, errMsg)
 		writeErrorResponse(w, errMsg)
 		return
 	}
 
-	logger.Info(ctx, fmt.Sprintf("Successfully installed plugin '%s' (%s)", findPlugin.Name, pluginId))
+	logger.Info(ctx, fmt.Sprintf("Successfully installed plugin '%s' (%s)", pluginName, pluginId))
 	writeSuccessResponse(w, "")
 }
 
@@ -610,14 +614,10 @@ func handleRuntimeStatus(w http.ResponseWriter, r *http.Request) {
 	for _, host := range plugin.AllHosts {
 		runtime := string(host.GetRuntime(ctx))
 
-		if strings.EqualFold(runtime, string(plugin.PLUGIN_RUNTIME_SCRIPT)) {
-			continue
-		}
-
 		var pluginNames []string
 		for _, instance := range instances {
 			if strings.EqualFold(instance.Metadata.Runtime, runtime) {
-				pluginNames = append(pluginNames, instance.Metadata.Name)
+				pluginNames = append(pluginNames, instance.GetName(ctx))
 			}
 		}
 		sort.Strings(pluginNames)

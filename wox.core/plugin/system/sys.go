@@ -247,9 +247,10 @@ func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 	}
 
 	for _, instance := range plugin.GetPluginManager().GetPluginInstances() {
+		pluginName := instance.GetName(ctx)
 		//check if plugin has setting
 		if len(instance.Metadata.SettingDefinitions) > 0 {
-			if match, score := IsStringMatchScore(ctx, instance.Metadata.Name, query.Search); match {
+			if match, score := IsStringMatchScore(ctx, pluginName, query.Search); match {
 				// load icon
 				pluginIcon := common.SettingIcon
 				iconImg, parseErr := common.ParseWoxImage(instance.Metadata.Icon)
@@ -258,7 +259,7 @@ func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 				}
 
 				results = append(results, plugin.QueryResult{
-					Title: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_sys_open_plugin_settings"), instance.Metadata.Name),
+					Title: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_sys_open_plugin_settings"), pluginName),
 					Score: score,
 					Icon:  pluginIcon,
 					Actions: []plugin.QueryResultAction{
@@ -268,7 +269,7 @@ func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 								plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, common.SettingWindowContext{
 									Path:  "/plugin/setting",
-									Param: instance.Metadata.Name,
+									Param: pluginName,
 								})
 							},
 							PreventHideAfterAction: true,

@@ -32,6 +32,11 @@ type cacheResult struct {
 var pinyinMatchCache = util.NewHashMap[string, cacheResult]()
 var windowIconCache = util.NewHashMap[string, common.WoxImage]()
 
+func IsStringMatch(ctx context.Context, term string, subTerm string) bool {
+	IsStringMatchScore, _ := IsStringMatchScore(ctx, term, subTerm)
+	return IsStringMatchScore
+}
+
 func IsStringMatchScore(ctx context.Context, term string, subTerm string) (bool, int64) {
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	if woxSetting.UsePinYin.Get() {

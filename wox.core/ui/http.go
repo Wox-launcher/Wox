@@ -212,7 +212,7 @@ func responseUIError(ctx context.Context, request WebsocketMsg, errMsg string) {
 
 func convertPluginDto(ctx context.Context, pluginDto dto.PluginDto, pluginInstance *plugin.Instance) dto.PluginDto {
 	if pluginInstance != nil {
-		logger.Debug(ctx, fmt.Sprintf("get plugin setting: %s", pluginInstance.Metadata.Name))
+		logger.Debug(ctx, fmt.Sprintf("get plugin setting: %s", pluginInstance.GetName(ctx)))
 		pluginDto.SettingDefinitions = lo.Filter(pluginInstance.Metadata.SettingDefinitions, func(item definition.PluginSettingDefinitionItem, _ int) bool {
 			return !lo.Contains(item.DisabledInPlatforms, util.GetCurrentPlatform())
 		})
@@ -277,6 +277,15 @@ func convertPluginDto(ctx context.Context, pluginDto dto.PluginDto, pluginInstan
 		}
 		pluginDto.Features = pluginInstance.Metadata.Features
 		pluginDto.TriggerKeywords = pluginInstance.GetTriggerKeywords()
+
+		pluginDto.Name = pluginInstance.GetName(ctx)
+		pluginDto.Description = pluginInstance.GetDescription(ctx)
+		pluginDto.Commands = pluginInstance.GetQueryCommands()
+		for i := range pluginDto.Setting.QueryCommands {
+			if strings.HasPrefix(pluginDto.Setting.QueryCommands[i].Description, "i18n:") {
+				pluginDto.Setting.QueryCommands[i].Description = pluginInstance.API.GetTranslation(ctx, pluginDto.Setting.QueryCommands[i].Description)
+			}
+		}
 	}
 
 	return pluginDto

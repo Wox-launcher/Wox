@@ -1,6 +1,9 @@
 package plugin
 
 import (
+	"context"
+	"strings"
+	"wox/i18n"
 	"wox/setting"
 	"wox/setting/definition"
 )
@@ -29,6 +32,26 @@ type Instance struct {
 	InitFinishedTimestamp int64
 }
 
+func (i *Instance) translateMetadataText(ctx context.Context, text string) string {
+	if !strings.HasPrefix(text, "i18n:") {
+		return text
+	}
+
+	if i.IsSystemPlugin {
+		return i18n.GetI18nManager().TranslateWox(ctx, text)
+	}
+
+	return i18n.GetI18nManager().TranslatePlugin(ctx, text, i.PluginDirectory, i.Metadata.I18n)
+}
+
+func (i *Instance) GetName(ctx context.Context) string {
+	return i.translateMetadataText(ctx, i.Metadata.Name)
+}
+
+func (i *Instance) GetDescription(ctx context.Context) string {
+	return i.translateMetadataText(ctx, i.Metadata.Description)
+}
+
 // trigger keywords to trigger this plugin. Maybe user defined or pre-defined in plugin.json
 func (i *Instance) GetTriggerKeywords() []string {
 	var userDefinedKeywords = i.Setting.TriggerKeywords.Get()
@@ -41,16 +64,22 @@ func (i *Instance) GetTriggerKeywords() []string {
 
 // query commands to query this plugin. Maybe plugin author dynamical registered or pre-defined in plugin.json
 func (i *Instance) GetQueryCommands() []MetadataCommand {
-	commands := i.Metadata.Commands
+	commands := make([]MetadataCommand, 0, len(i.Metadata.Commands)+len(i.Setting.QueryCommands.Get()))
+	commands = append(commands, i.Metadata.Commands...)
 	for _, command := range i.Setting.QueryCommands.Get() {
 		commands = append(commands, MetadataCommand{
 			Command:     command.Command,
 			Description: command.Description,
 		})
 	}
+
+	ctx := context.Background()
+	for commandIndex := range commands {
+		commands[commandIndex].Description = i.translateMetadataText(ctx, commands[commandIndex].Description)
+	}
 	return commands
 }
 
 func (i *Instance) String() string {
-	return i.Metadata.Name
+	return i.GetName(context.Background())
 }

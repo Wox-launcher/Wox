@@ -148,6 +148,10 @@ func (m *Manager) translateFromInlineI18n(key string, langCode string, inlineI18
 
 // translateFromLangFile looks up a key in the lang file (with caching)
 func (m *Manager) translateFromLangFile(ctx context.Context, key string, pluginDirectory string, langCode string) string {
+	if pluginDirectory == "" {
+		return ""
+	}
+
 	cacheKey := fmt.Sprintf("%s:%s", pluginDirectory, langCode)
 	if v, ok := m.pluginLangJsonMap.Load(cacheKey); ok {
 		result := gjson.Get(v, key)

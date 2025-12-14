@@ -453,7 +453,7 @@ func (a *APIImpl) RefreshQuery(ctx context.Context, param RefreshQueryParam) {
 
 func NewAPI(instance *Instance) API {
 	apiImpl := &APIImpl{pluginInstance: instance}
-	logFolder := path.Join(util.GetLocation().GetLogPluginDirectory(), instance.Metadata.Name)
+	logFolder := path.Join(util.GetLocation().GetLogPluginDirectory(), instance.Metadata.Id)
 	apiImpl.logger = util.CreateLogger(logFolder)
 	apiImpl.toolCallStartTimeMap = util.NewHashMap[string, int64]()
 	return apiImpl

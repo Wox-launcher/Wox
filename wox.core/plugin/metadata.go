@@ -52,12 +52,12 @@ const (
 // All properties are immutable after initialization
 type Metadata struct {
 	Id                 string
-	Name               string
+	Name               string // support i18n: prefix, so don't use "name" directly
 	Author             string
 	Version            string
 	MinWoxVersion      string
 	Runtime            string
-	Description        string
+	Description        string // support i18n: prefix, so don't use "description" directly
 	Icon               string // should be WoxImage.String()
 	Website            string
 	Entry              string
@@ -246,7 +246,7 @@ type MetadataFeature struct {
 
 type MetadataCommand struct {
 	Command     string
-	Description string
+	Description string // support i18n: prefix
 }
 
 type MetadataWithDirectory struct {

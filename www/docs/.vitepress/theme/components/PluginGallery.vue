@@ -1,8 +1,10 @@
 <script setup>
 import { computed, ref, onMounted } from "vue";
+import { useData } from "vitepress";
 
 const plugins = ref([]);
 const searchQuery = ref("");
+const { lang } = useData();
 
 onMounted(async () => {
   try {
@@ -13,8 +15,57 @@ onMounted(async () => {
   }
 });
 
+const currentLangCode = computed(() => {
+  const l = (lang.value || "").toLowerCase();
+  if (l.startsWith("zh")) return "zh_CN";
+  if (l.startsWith("pt")) return "pt_BR";
+  if (l.startsWith("ru")) return "ru_RU";
+  return "en_US";
+});
+
+const uiText = computed(() => {
+  const l = (lang.value || "").toLowerCase();
+  if (l.startsWith("zh")) {
+    return {
+      searchPlaceholder: "搜索插件...",
+      by: "作者：",
+      install: "安装",
+    };
+  }
+
+  return {
+    searchPlaceholder: "Search plugins...",
+    by: "by",
+    install: "Install",
+  };
+});
+
+const translate = (plugin, value) => {
+  const raw = String(value || "");
+  if (!raw.startsWith("i18n:")) return raw;
+
+  const key = raw.slice(5);
+  const i18n = plugin?.I18n || {};
+  const current = i18n[currentLangCode.value]?.[key];
+  if (current) return current;
+  const fallback = i18n["en_US"]?.[key];
+  if (fallback) return fallback;
+  return raw;
+};
+
+const localizedPlugins = computed(() => {
+  return plugins.value.map((p) => {
+    return {
+      ...p,
+      LocalizedName: translate(p, p.Name),
+      LocalizedDescription: translate(p, p.Description),
+    };
+  });
+});
+
 const filteredPlugins = computed(() => {
-  return plugins.value.filter((p) => p.Name.toLowerCase().includes(searchQuery.value.toLowerCase()) || p.Description.toLowerCase().includes(searchQuery.value.toLowerCase()));
+  const q = searchQuery.value.toLowerCase();
+  return localizedPlugins.value.filter((p) => p.LocalizedName.toLowerCase().includes(q) || p.LocalizedDescription.toLowerCase().includes(q));
 });
 
 const openLink = (url) => {
@@ -25,7 +76,7 @@ const openLink = (url) => {
 <template>
   <div class="gallery-container">
     <div class="search-bar">
-      <input v-model="searchQuery" type="text" placeholder="Search plugins..." class="search-input" />
+      <input v-model="searchQuery" type="text" :placeholder="uiText.searchPlaceholder" class="search-input" />
     </div>
 
     <div class="grid">
@@ -34,14 +85,14 @@ const openLink = (url) => {
           <img v-if="plugin.IconUrl" :src="plugin.IconUrl" class="icon" alt="icon" />
           <div v-else class="icon-placeholder">{{ plugin.IconEmoji || "🧩" }}</div>
           <div class="title-area">
-            <h3 class="name">{{ plugin.Name }}</h3>
-            <span class="author">by {{ plugin.Author }}</span>
+            <h3 class="name">{{ plugin.LocalizedName }}</h3>
+            <span class="author">{{ uiText.by }} {{ plugin.Author }}</span>
           </div>
         </div>
-        <p class="description">{{ plugin.Description }}</p>
+        <p class="description">{{ plugin.LocalizedDescription }}</p>
         <div class="footer">
           <span class="version">v{{ plugin.Version }}</span>
-          <a :href="`wox://query?q=wpm install ${plugin.Name}`" class="download-btn" @click.stop>Install</a>
+          <a :href="`wox://query?q=wpm install ${plugin.Id}`" class="download-btn" @click.stop>{{ uiText.install }}</a>
         </div>
       </div>
     </div>
