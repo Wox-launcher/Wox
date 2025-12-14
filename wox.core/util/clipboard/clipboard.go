@@ -2,6 +2,7 @@ package clipboard
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"image/png"
 	"strings"
 	"time"
+	"wox/util"
 )
 
 var noDataErr = errors.New("no such data")
@@ -90,22 +92,27 @@ func Watch(cb func(Data)) {
 func watchChange() {
 	defer func() {
 		if err := recover(); err != nil {
-			fmt.Printf("failed to watch clipboard change: %s", err)
+			util.GetLogger().Error(context.Background(), fmt.Sprintf("clipboard: watchChange panic: %v", err))
 		}
 	}()
 
 	if isClipboardChanged() {
+		start := time.Now()
 		data, err := Read()
 		if err != nil {
-			fmt.Printf("clipboard changed, but failed to read clipboard data: %s", err)
+			util.GetLogger().Warn(context.Background(), fmt.Sprintf("clipboard: changed but failed to read: %v", err))
 			return
+		}
+
+		if d := time.Since(start); d > 200*time.Millisecond {
+			util.GetLogger().Warn(context.Background(), fmt.Sprintf("clipboard: Read took %s (type=%s)", d.String(), data.GetType()))
 		}
 
 		for _, cb := range watchList {
 			go func() {
 				defer func() {
 					if err1 := recover(); err1 != nil {
-						fmt.Printf("failed to execute clipboard change: %s", err1)
+						util.GetLogger().Error(context.Background(), fmt.Sprintf("clipboard: callback panic: %v", err1))
 					}
 				}()
 

@@ -9,8 +9,11 @@ import (
 	"image"
 	"image/png"
 	"syscall"
+	"time"
 	"unicode/utf16"
 	"unsafe"
+
+	"wox/util"
 
 	"golang.org/x/image/bmp"
 )
@@ -31,6 +34,7 @@ var (
 	gUnlock  = kernel32.NewProc("GlobalUnlock")
 	gAlloc   = kernel32.NewProc("GlobalAlloc")
 	gFree    = kernel32.NewProc("GlobalFree")
+	gSize    = kernel32.NewProc("GlobalSize")
 	memMove  = kernel32.NewProc("RtlMoveMemory")
 
 	shell32       = syscall.NewLazyDLL("shell32.dll")
@@ -60,6 +64,13 @@ const (
 var lastSeqNum uint32
 
 func readText() (string, error) {
+	avail, _, _ := isClipboardFormatAvailable.Call(cFmtUnicodeText)
+	if avail == 0 {
+		return "", noDataErr
+	}
+
+	start := time.Now()
+
 	r, _, err := openClipboard.Call(0)
 	if r == 0 {
 		return "", fmt.Errorf("failed to open clipboard: %w", err)
@@ -71,26 +82,47 @@ func readText() (string, error) {
 		return "", fmt.Errorf("failed to get clipboard data: %w", err)
 	}
 
+	sizeBytes, _, _ := gSize.Call(hMem)
+	if sizeBytes == 0 {
+		return "", errors.New("failed to get global memory size")
+	}
+
 	p, _, err := gLock.Call(hMem)
 	if p == 0 {
 		return "", fmt.Errorf("failed to lock global memory: %w", err)
 	}
 	defer gUnlock.Call(hMem)
 
-	var buf []uint16
-	for i := 0; ; i++ {
-		ch := *(*uint16)(unsafe.Pointer(p + uintptr(i*2)))
-		if ch == 0 {
-			buf = make([]uint16, i)
-			copy(buf, (*[1 << 20]uint16)(unsafe.Pointer(p))[:i:i])
-			break
-		}
+	const maxClipboardTextBytes = 32 * 1024 * 1024
+	toCopyBytes := sizeBytes
+	if toCopyBytes > maxClipboardTextBytes {
+		toCopyBytes = maxClipboardTextBytes
+		util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("clipboard: CF_UNICODETEXT too large (%d bytes), truncating to %d bytes", sizeBytes, maxClipboardTextBytes))
 	}
 
-	return string(utf16.Decode(buf)), nil
+	charCount := int(toCopyBytes / 2)
+	if charCount <= 0 {
+		return "", noDataErr
+	}
+
+	raw := make([]uint16, charCount)
+	copy(raw, (*[1 << 30]uint16)(unsafe.Pointer(p))[:charCount:charCount])
+
+	end := 0
+	for end < len(raw) && raw[end] != 0 {
+		end++
+	}
+
+	if d := time.Since(start); d > 200*time.Millisecond {
+		util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("clipboard: readText held clipboard for %s (size=%d bytes)", d.String(), sizeBytes))
+	}
+
+	return string(utf16.Decode(raw[:end])), nil
 }
 
 func writeTextData(text string) error {
+	start := time.Now()
+
 	r, _, err := openClipboard.Call(0)
 	if r == 0 {
 		return fmt.Errorf("failed to open clipboard: %w", err)
@@ -131,6 +163,10 @@ func writeTextData(text string) error {
 		return fmt.Errorf("failed to set clipboard data: %w", err)
 	}
 
+	if d := time.Since(start); d > 200*time.Millisecond {
+		util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("clipboard: writeTextData held clipboard for %s (chars=%d)", d.String(), len(s)))
+	}
+
 	return nil
 }
 
@@ -139,6 +175,25 @@ func writeImageData(img image.Image) error {
 		cFmtDIB       = 8
 		fileHeaderLen = 14 // BMP file header length to skip
 	)
+
+	// Encode outside clipboard lock to minimize time we hold the global clipboard mutex.
+	var pngData []byte
+	pngBuf := new(bytes.Buffer)
+	if err := png.Encode(pngBuf, img); err == nil {
+		pngData = pngBuf.Bytes()
+	}
+
+	bmpBuf := new(bytes.Buffer)
+	if err := bmp.Encode(bmpBuf, img); err != nil {
+		return fmt.Errorf("failed to encode image: %w", err)
+	}
+	bmpData := bmpBuf.Bytes()
+	if len(bmpData) <= fileHeaderLen {
+		return fmt.Errorf("invalid BMP data: too short")
+	}
+	dibData := bmpData[fileHeaderLen:]
+
+	start := time.Now()
 
 	r, _, err := openClipboard.Call(0)
 	if r == 0 {
@@ -152,38 +207,27 @@ func writeImageData(img image.Image) error {
 	}
 
 	// Write PNG format for transparency support
-	pngBuf := new(bytes.Buffer)
-	if err := png.Encode(pngBuf, img); err == nil {
+	if len(pngData) > 0 {
 		pngFormatName, _ := syscall.UTF16PtrFromString("PNG")
 		pngFormat, _, _ := registerClipboardFormat.Call(uintptr(unsafe.Pointer(pngFormatName)))
 		if pngFormat != 0 {
-			pngData := pngBuf.Bytes()
 			hMemPng, _, _ := gAlloc.Call(gmemMoveable, uintptr(len(pngData)))
 			if hMemPng != 0 {
 				pMemPng, _, _ := gLock.Call(hMemPng)
-				if pMemPng != 0 {
+				if pMemPng == 0 {
+					gFree.Call(hMemPng)
+				} else {
 					memMove.Call(pMemPng, uintptr(unsafe.Pointer(&pngData[0])), uintptr(len(pngData)))
 					gUnlock.Call(hMemPng)
-					setClipboardData.Call(pngFormat, hMemPng)
+					if v, _, _ := setClipboardData.Call(pngFormat, hMemPng); v == 0 {
+						gFree.Call(hMemPng)
+					}
 				}
 			}
 		}
 	}
 
 	// Also write DIB format for compatibility with apps that don't support PNG
-	buf := new(bytes.Buffer)
-	err = bmp.Encode(buf, img)
-	if err != nil {
-		return fmt.Errorf("failed to encode image: %w", err)
-	}
-
-	// CF_DIB format expects DIB data without the BMP file header (14 bytes)
-	bmpData := buf.Bytes()
-	if len(bmpData) <= fileHeaderLen {
-		return fmt.Errorf("invalid BMP data: too short")
-	}
-	dibData := bmpData[fileHeaderLen:]
-
 	hMem, _, err := gAlloc.Call(gmemMoveable, uintptr(len(dibData)))
 	if hMem == 0 {
 		return fmt.Errorf("failed to allocate global memory: %w", err)
@@ -204,11 +248,20 @@ func writeImageData(img image.Image) error {
 		return fmt.Errorf("failed to set clipboard data: %w", err)
 	}
 
+	if d := time.Since(start); d > 200*time.Millisecond {
+		util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("clipboard: writeImageData held clipboard for %s (pngBytes=%d dibBytes=%d)", d.String(), len(pngData), len(dibData)))
+	}
+
 	return nil
 }
 
 func readFilePaths() ([]string, error) {
 	var fileNames []string
+
+	avail, _, _ := isClipboardFormatAvailable.Call(cFmtHdrop)
+	if avail == 0 {
+		return nil, noDataErr
+	}
 
 	r, _, err := openClipboard.Call(0)
 	if r == 0 {
@@ -247,6 +300,11 @@ func readBmpImage() (image.Image, error) {
 		fileHeaderLen = 14
 		cFmtDIB       = 8
 	)
+
+	avail, _, _ := isClipboardFormatAvailable.Call(cFmtDIB)
+	if avail == 0 {
+		return nil, noDataErr
+	}
 
 	// First, quickly read clipboard data into local memory, then close clipboard immediately
 	// to avoid blocking other applications from accessing the clipboard during image processing
@@ -317,6 +375,10 @@ func readBmpImage() (image.Image, error) {
 		}
 
 		// Copy all DIB data to local memory
+		const maxClipboardDIBBytes = 128 * 1024 * 1024
+		if dibSize == 0 || dibSize > maxClipboardDIBBytes {
+			return fmt.Errorf("invalid DIB size: %d bytes", dibSize)
+		}
 		srcData := (*[1 << 30]byte)(unsafe.Pointer(pMemBlk))[:dibSize:dibSize]
 		dibDataCopy = make([]byte, dibSize)
 		copy(dibDataCopy, srcData)
