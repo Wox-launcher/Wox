@@ -131,6 +131,10 @@ func (u *uiImpl) ReloadChatResources(ctx context.Context, resouceName string) {
 	u.invokeWebsocketMethod(ctx, "ReloadChatResources", resouceName)
 }
 
+func (u *uiImpl) ReloadSettingPlugins(ctx context.Context) {
+	u.invokeWebsocketMethod(ctx, "ReloadSettingPlugins", nil)
+}
+
 func (u *uiImpl) UpdateResult(ctx context.Context, result interface{}) bool {
 	// Type assert to plugin.UpdatableResult
 	// We use interface{} in the signature to avoid circular dependency between common and plugin packages

@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -125,7 +126,7 @@ func (s *Store) Uninstall(ctx context.Context, theme common.Theme) error {
 	logger.Info(ctx, fmt.Sprintf("uninstalling theme: %s", theme.ThemeName))
 
 	if GetUIManager().IsSystemTheme(theme.ThemeId) {
-		return fmt.Errorf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_uninstall_system_forbidden"))
+		return errors.New(i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_uninstall_system_forbidden"))
 	}
 
 	themePath := path.Join(util.GetLocation().GetThemeDirectory(), fmt.Sprintf("%s.json", theme.ThemeId))

@@ -10,7 +10,6 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:uuid/v4.dart';
-import 'package:wox/components/wox_form_action_view.dart';
 import 'package:wox/controllers/query_box_text_editing_controller.dart';
 import 'package:wox/controllers/wox_ai_chat_controller.dart';
 import 'package:wox/controllers/wox_base_list_controller.dart';
@@ -18,7 +17,6 @@ import 'package:wox/controllers/wox_grid_controller.dart';
 import 'package:wox/controllers/wox_list_controller.dart';
 import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_list_item.dart';
-import 'package:wox/entity/wox_plugin_setting.dart';
 import 'package:wox/models/doctor_check_result.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/windows/window_manager.dart';
@@ -47,7 +45,6 @@ import 'package:wox/utils/log.dart';
 import 'package:wox/utils/picker.dart';
 import 'package:wox/utils/wox_setting_util.dart';
 
-import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/wox_websocket_msg_util.dart';
 import 'package:wox/enums/wox_preview_type_enum.dart';
 import 'package:wox/enums/wox_preview_scroll_position_enum.dart';
@@ -827,6 +824,9 @@ class WoxLauncherController extends GetxController {
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "ReloadChatResources") {
       Get.find<WoxAIChatController>().reloadChatResources(msg.traceId, resourceName: msg.data as String);
+      responseWoxWebsocketRequest(msg, true, null);
+    } else if (msg.method == "ReloadSettingPlugins") {
+      Get.find<WoxSettingController>().reloadPlugins(msg.traceId);
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "UpdateResult") {
       final success = updateResult(msg.traceId, UpdatableResult.fromJson(msg.data));

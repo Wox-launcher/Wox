@@ -171,6 +171,26 @@ class WoxSettingController extends GetxController {
     unawaited(loadStorePlugins(traceId));
   }
 
+  Future<void> reloadPlugins(String traceId) async {
+    final currentActivePluginId = activePlugin.value.id;
+
+    await Future.wait([
+      loadInstalledPlugins(traceId),
+      loadStorePlugins(traceId),
+    ]);
+
+    if (activeNavPath.value != 'plugins.installed' && activeNavPath.value != 'plugins.store') {
+      return;
+    }
+
+    filterPlugins();
+
+    if (currentActivePluginId.isEmpty) {
+      setFirstFilteredPluginDetailActive();
+      return;
+    }
+  }
+
   Future<void> refreshPlugin(String pluginId, String refreshType /* update / add / remove */) async {
     Logger.instance.info(const UuidV4().generate(), 'Refreshing plugin: $pluginId, refreshType: $refreshType');
     if (refreshType == "add") {
@@ -317,7 +337,7 @@ class WoxSettingController extends GetxController {
     await refreshPlugin(plugin.id, "remove");
   }
 
-  filterPlugins() {
+  void filterPlugins() {
     filteredPluginList.clear();
 
     if (filterPluginKeywordController.text.isEmpty) {
@@ -411,7 +431,7 @@ class WoxSettingController extends GetxController {
     await reloadSetting();
   }
 
-  onFilterThemes(String filter) {
+  void onFilterThemes(String filter) {
     filteredThemeList.clear();
     filteredThemeList.addAll(themeList.where((element) => element.themeName.toLowerCase().contains(filter.toLowerCase())));
   }

@@ -62,6 +62,9 @@ type UI interface {
 	FocusToChatInput(ctx context.Context)
 	SendChatResponse(ctx context.Context, chatData AIChatData)
 	ReloadChatResources(ctx context.Context, resouceName string)
+
+	// ReloadSettingPlugins asks the UI to refresh plugin lists.
+	ReloadSettingPlugins(ctx context.Context)
 }
 
 type ShowContext struct {

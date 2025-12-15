@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -69,7 +70,8 @@ var storeInstance *Store
 var storeOnce sync.Once
 
 type Store struct {
-	pluginManifests []StorePluginManifest
+	pluginManifests       []StorePluginManifest
+	lastManifestSignature string // to avoid notifying UI reload if no changes
 }
 
 func GetStoreManager() *Store {
@@ -90,23 +92,45 @@ func (s *Store) getStoreManifests(ctx context.Context) []storeManifest {
 
 // get plugin manifests from plugin stores, and update in the background every 10 minutes
 func (s *Store) Start(ctx context.Context) {
-	s.pluginManifests = s.GetStorePluginManifests(ctx)
+	s.setPluginManifests(ctx, s.GetStorePluginManifests(ctx))
 
 	util.Go(ctx, "load store plugins immediately", func() {
 		pluginManifests := s.GetStorePluginManifests(util.NewTraceContext())
 		if len(pluginManifests) > 0 {
-			s.pluginManifests = pluginManifests
+			s.setPluginManifests(util.NewTraceContext(), pluginManifests)
 		}
 	})
 
 	util.Go(ctx, "load store plugins", func() {
 		for range time.NewTicker(time.Minute * 10).C {
-			pluginManifests := s.GetStorePluginManifests(util.NewTraceContext())
+			traceCtx := util.NewTraceContext()
+			pluginManifests := s.GetStorePluginManifests(traceCtx)
 			if len(pluginManifests) > 0 {
-				s.pluginManifests = pluginManifests
+				s.setPluginManifests(traceCtx, pluginManifests)
 			}
 		}
 	})
+}
+
+func (s *Store) setPluginManifests(ctx context.Context, manifests []StorePluginManifest) {
+	s.pluginManifests = manifests
+
+	signature := s.buildManifestSignature(manifests)
+	if signature == s.lastManifestSignature {
+		return
+	}
+	s.lastManifestSignature = signature
+
+	GetPluginManager().GetUI().ReloadSettingPlugins(ctx)
+}
+
+func (s *Store) buildManifestSignature(manifests []StorePluginManifest) string {
+	items := make([]string, 0, len(manifests))
+	for _, m := range manifests {
+		items = append(items, fmt.Sprintf("%s@%s", m.Id, m.Version))
+	}
+	sort.Strings(items)
+	return strings.Join(items, ";")
 }
 
 func (s *Store) GetStorePluginManifests(ctx context.Context) []StorePluginManifest {
@@ -192,7 +216,7 @@ func (s *Store) Search(ctx context.Context, keyword string) []StorePluginManifes
 
 		return IsStringMatch(ctx, manifest.GetName(ctx), keyword) ||
 			IsStringMatch(ctx, manifest.GetDescription(ctx), keyword) ||
-			IsStringMatchNoPinYin(ctx, manifest.Id, keyword)
+			strings.EqualFold(manifest.Id, keyword)
 	})
 }
 
@@ -240,10 +264,17 @@ func (s *Store) InstallWithProgress(ctx context.Context, manifest StorePluginMan
 
 	// handle script plugins differently
 	if manifest.Runtime == PLUGIN_RUNTIME_SCRIPT {
-		return s.installScriptPluginWithProgress(ctx, manifest, progressCallback)
+		if err := s.installScriptPluginWithProgress(ctx, manifest, progressCallback); err != nil {
+			return err
+		}
 	} else {
-		return s.installNormalPluginWithProgress(ctx, manifest, progressCallback)
+		if err := s.installNormalPluginWithProgress(ctx, manifest, progressCallback); err != nil {
+			return err
+		}
 	}
+
+	GetPluginManager().GetUI().ReloadSettingPlugins(ctx)
+	return nil
 }
 
 func (s *Store) installNormalPluginWithProgress(ctx context.Context, manifest StorePluginManifest, progressCallback InstallProgressCallback) error {
@@ -693,6 +724,7 @@ func (s *Store) Uninstall(ctx context.Context, plugin *Instance) error {
 	}
 
 	GetPluginManager().UnloadPlugin(ctx, plugin)
+	GetPluginManager().GetUI().ReloadSettingPlugins(ctx)
 
 	return nil
 }

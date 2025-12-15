@@ -436,11 +436,16 @@ func (w *WPMPlugin) uninstallCommand(ctx context.Context, query plugin.Query) []
 	var results []plugin.QueryResult
 	plugins := plugin.GetPluginManager().GetPluginInstances()
 	plugins = lo.Filter(plugins, func(pluginInstance *plugin.Instance, _ int) bool {
-		return pluginInstance.IsSystemPlugin == false
+		return !pluginInstance.IsSystemPlugin
 	})
 	if query.Search != "" {
 		plugins = lo.Filter(plugins, func(pluginInstance *plugin.Instance, _ int) bool {
-			return plugin.IsStringMatchNoPinYin(ctx, pluginInstance.GetName(ctx), query.Search)
+			isNameMatch := plugin.IsStringMatch(ctx, pluginInstance.GetName(ctx), query.Search)
+			isDescriptionMatch := plugin.IsStringMatch(ctx, pluginInstance.GetDescription(ctx), query.Search)
+			isTriggerKeywordMatch := lo.SomeBy(pluginInstance.Metadata.TriggerKeywords, func(kw string) bool {
+				return plugin.IsStringMatchNoPinYin(ctx, kw, query.Search)
+			})
+			return isNameMatch || isDescriptionMatch || isTriggerKeywordMatch
 		})
 	}
 
@@ -461,7 +466,19 @@ func (w *WPMPlugin) uninstallCommand(ctx context.Context, query plugin.Query) []
 					Name:                   "i18n:plugin_wpm_uninstall",
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						plugin.GetStoreManager().Uninstall(ctx, pluginInstance)
+						if err := plugin.GetStoreManager().Uninstall(ctx, pluginInstance); err != nil {
+							w.api.Notify(ctx, fmt.Sprintf(
+								w.api.GetTranslation(ctx, "i18n:plugin_installer_action_failed"),
+								w.api.GetTranslation(ctx, "i18n:plugin_installer_uninstall"),
+								fmt.Sprintf("%s: %s", pluginInstance.GetName(ctx), err.Error()),
+							))
+						} else {
+							w.api.Notify(ctx, fmt.Sprintf(
+								w.api.GetTranslation(ctx, "i18n:plugin_installer_action_success"),
+								pluginInstance.GetName(ctx),
+								w.api.GetTranslation(ctx, "i18n:plugin_installer_verb_uninstall_past"),
+							))
+						}
 					},
 				},
 			},

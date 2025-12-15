@@ -45,8 +45,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
             return WoxTextField(
               autofocus: true,
               controller: controller.filterPluginKeywordController,
-              hintText: Strings.format(controller.tr('ui_search_plugins'),
-                  [controller.filteredPluginList.length]),
+              hintText: Strings.format(controller.tr('ui_search_plugins'), [controller.filteredPluginList.length]),
               contentPadding: const EdgeInsets.all(10),
               suffixIcon: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -55,10 +54,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                     if (_refreshing.value) {
                       return const Padding(
                         padding: EdgeInsets.symmetric(horizontal: 4.0),
-                        child: SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2)),
+                        child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
                       );
                     }
                     return GestureDetector(
@@ -66,10 +62,8 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                         _refreshing.value = true;
                         try {
                           final traceId = const UuidV4().generate();
-                          final preserveKeyword =
-                              controller.filterPluginKeywordController.text;
-                          final preserveActiveId =
-                              controller.activePlugin.value.id;
+                          final preserveKeyword = controller.filterPluginKeywordController.text;
+                          final preserveActiveId = controller.activePlugin.value.id;
                           final isStore = controller.isStorePluginList.value;
 
                           if (isStore) {
@@ -81,16 +75,13 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                           }
 
                           // restore filter keyword and re-filter
-                          controller.filterPluginKeywordController.text =
-                              preserveKeyword;
+                          controller.filterPluginKeywordController.text = preserveKeyword;
                           controller.filterPlugins();
 
                           // try restore previous active selection if still present
-                          final idx = controller.filteredPluginList
-                              .indexWhere((p) => p.id == preserveActiveId);
+                          final idx = controller.filteredPluginList.indexWhere((p) => p.id == preserveActiveId);
                           if (idx >= 0) {
-                            controller.activePlugin.value =
-                                controller.filteredPluginList[idx];
+                            controller.activePlugin.value = controller.filteredPluginList[idx];
                           } else {
                             controller.setFirstFilteredPluginDetailActive();
                           }
@@ -100,8 +91,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       },
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                        child:
-                            Icon(Icons.refresh, color: getThemeSubTextColor()),
+                        child: Icon(Icons.refresh, color: getThemeSubTextColor()),
                       ),
                     );
                   }),
@@ -137,13 +127,10 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 8.0),
                     child: Obx(() {
-                      final isActive =
-                          controller.activePlugin.value.id == plugin.id;
+                      final isActive = controller.activePlugin.value.id == plugin.id;
                       return Container(
                         decoration: BoxDecoration(
-                          color: isActive
-                              ? getThemeActiveBackgroundColor()
-                              : Colors.transparent,
+                          color: isActive ? getThemeActiveBackgroundColor() : Colors.transparent,
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: GestureDetector(
@@ -152,18 +139,14 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                             controller.activePlugin.value = plugin;
                           },
                           child: ListTile(
-                            contentPadding:
-                                const EdgeInsets.only(left: 6, right: 6),
-                            leading:
-                                WoxImageView(woxImage: plugin.icon, width: 32),
+                            contentPadding: const EdgeInsets.only(left: 6, right: 6),
+                            leading: WoxImageView(woxImage: plugin.icon, width: 32),
                             title: Text(plugin.name,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   fontSize: 15,
-                                  color: isActive
-                                      ? getThemeActionItemActiveColor()
-                                      : getThemeTextColor(),
+                                  color: isActive ? getThemeActionItemActiveColor() : getThemeTextColor(),
                                 )),
                             subtitle: Row(
                               mainAxisAlignment: MainAxisAlignment.start,
@@ -174,9 +157,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    color: isActive
-                                        ? getThemeActionItemActiveColor()
-                                        : getThemeSubTextColor(),
+                                    color: isActive ? getThemeActionItemActiveColor() : getThemeSubTextColor(),
                                     fontSize: 12,
                                   ),
                                 ),
@@ -187,9 +168,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
-                                      color: isActive
-                                          ? getThemeActionItemActiveColor()
-                                          : getThemeSubTextColor(),
+                                      color: isActive ? getThemeActionItemActiveColor() : getThemeSubTextColor(),
                                       fontSize: 12,
                                     ),
                                   ),
@@ -213,15 +192,12 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
 
   Widget pluginTrailIcon(PluginDetail plugin, bool isActive) {
     // align tags/icons to the right of the tile
-    final Color borderColor =
-        isActive ? getThemeActionItemActiveColor() : getThemeSubTextColor();
+    final Color borderColor = isActive ? getThemeActionItemActiveColor() : getThemeSubTextColor();
 
     List<Widget> rightItems = [];
 
     // Script tag (non-system script plugins)
-    if (!plugin.isSystem &&
-        WoxPluginRuntimeEnum.equals(
-            plugin.runtime, WoxPluginRuntimeEnum.SCRIPT)) {
+    if (!plugin.isSystem && WoxPluginRuntimeEnum.equals(plugin.runtime, WoxPluginRuntimeEnum.SCRIPT)) {
       rightItems.add(Container(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
         decoration: BoxDecoration(
@@ -255,9 +231,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
     if (controller.isStorePluginList.value && plugin.isInstalled) {
       rightItems.add(Padding(
         padding: const EdgeInsets.only(right: 6),
-        child: Icon(Icons.check_circle,
-            size: 20,
-            color: isActive ? getThemeActionItemActiveColor() : Colors.green),
+        child: Icon(Icons.check_circle, size: 20, color: isActive ? getThemeActionItemActiveColor() : Colors.green),
       ));
     }
 
@@ -377,16 +351,12 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                   Padding(
                     padding: const EdgeInsets.only(right: 8.0),
                     child: Obx(() => WoxButton.secondary(
-                          text: controller.isInstallingPlugin.value
-                              ? controller.tr("ui_plugin_installing")
-                              : controller.tr('ui_plugin_install'),
+                          text: controller.isInstallingPlugin.value ? controller.tr("ui_plugin_installing") : controller.tr('ui_plugin_install'),
                           icon: controller.isInstallingPlugin.value
                               ? SizedBox(
                                   width: 16,
                                   height: 16,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: getThemeActionItemActiveColor()),
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: getThemeActionItemActiveColor()),
                                 )
                               : null,
                           onPressed: controller.isInstallingPlugin.value
@@ -487,42 +457,35 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       dt.TabData(
                         index: 0,
                         title: Tab(
-                          child: Text(controller.tr('ui_plugin_tab_settings'),
-                              style: TextStyle(color: getThemeTextColor())),
+                          child: Text(controller.tr('ui_plugin_tab_settings'), style: TextStyle(color: getThemeTextColor())),
                         ),
                         content: pluginTabSetting(),
                       ),
                       dt.TabData(
                         index: 1,
                         title: Tab(
-                          child: Text(
-                              controller.tr('ui_plugin_tab_trigger_keywords'),
-                              style: TextStyle(color: getThemeTextColor())),
+                          child: Text(controller.tr('ui_plugin_tab_trigger_keywords'), style: TextStyle(color: getThemeTextColor())),
                         ),
                         content: pluginTabTriggerKeywords(),
                       ),
                       dt.TabData(
                         index: 2,
                         title: Tab(
-                          child: Text(controller.tr('ui_plugin_tab_commands'),
-                              style: TextStyle(color: getThemeTextColor())),
+                          child: Text(controller.tr('ui_plugin_tab_commands'), style: TextStyle(color: getThemeTextColor())),
                         ),
                         content: pluginTabCommand(),
                       ),
                       dt.TabData(
                         index: 3,
                         title: Tab(
-                          child: Text(
-                              controller.tr('ui_plugin_tab_description'),
-                              style: TextStyle(color: getThemeTextColor())),
+                          child: Text(controller.tr('ui_plugin_tab_description'), style: TextStyle(color: getThemeTextColor())),
                         ),
                         content: pluginTabDescription(),
                       ),
                       dt.TabData(
                         index: 4,
                         title: Tab(
-                          child: Text(controller.tr('ui_plugin_tab_privacy'),
-                              style: TextStyle(color: getThemeTextColor())),
+                          child: Text(controller.tr('ui_plugin_tab_privacy'), style: TextStyle(color: getThemeTextColor())),
                         ),
                         content: pluginTabPrivacy(),
                       ),
@@ -532,34 +495,28 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       dt.TabData(
                         index: 0,
                         title: Tab(
-                          child: Text(
-                              controller.tr('ui_plugin_tab_description'),
-                              style: TextStyle(color: getThemeTextColor())),
+                          child: Text(controller.tr('ui_plugin_tab_description'), style: TextStyle(color: getThemeTextColor())),
                         ),
                         content: pluginTabDescription(),
                       ),
                       dt.TabData(
                         index: 1,
                         title: Tab(
-                          child: Text(
-                              controller.tr('ui_plugin_tab_trigger_keywords'),
-                              style: TextStyle(color: getThemeTextColor())),
+                          child: Text(controller.tr('ui_plugin_tab_trigger_keywords'), style: TextStyle(color: getThemeTextColor())),
                         ),
                         content: pluginTabTriggerKeywords(),
                       ),
                       dt.TabData(
                         index: 2,
                         title: Tab(
-                          child: Text(controller.tr('ui_plugin_tab_commands'),
-                              style: TextStyle(color: getThemeTextColor())),
+                          child: Text(controller.tr('ui_plugin_tab_commands'), style: TextStyle(color: getThemeTextColor())),
                         ),
                         content: pluginTabCommand(),
                       ),
                       dt.TabData(
                         index: 3,
                         title: Tab(
-                          child: Text(controller.tr('ui_plugin_tab_privacy'),
-                              style: TextStyle(color: getThemeTextColor())),
+                          child: Text(controller.tr('ui_plugin_tab_privacy'), style: TextStyle(color: getThemeTextColor())),
                         ),
                         content: pluginTabPrivacy(),
                       ),
@@ -605,8 +562,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(controller.tr('ui_plugin_no_settings'),
-                  style: TextStyle(color: getThemeTextColor())),
+              Text(controller.tr('ui_plugin_no_settings'), style: TextStyle(color: getThemeTextColor())),
             ],
           ),
         );
@@ -625,8 +581,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       value: plugin.setting.settings[e.value.key] ?? "",
                       item: e.value as PluginSettingValueCheckBox,
                       onUpdate: (key, value) async {
-                        await controller.updatePluginSetting(
-                            plugin.id, key, value);
+                        await controller.updatePluginSetting(plugin.id, key, value);
                       },
                     );
                   }
@@ -635,8 +590,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       value: plugin.setting.settings[e.value.key] ?? "",
                       item: e.value as PluginSettingValueTextBox,
                       onUpdate: (key, value) async {
-                        await controller.updatePluginSetting(
-                            plugin.id, key, value);
+                        await controller.updatePluginSetting(plugin.id, key, value);
                       },
                     );
                   }
@@ -645,8 +599,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       value: "",
                       item: e.value as PluginSettingValueNewLine,
                       onUpdate: (key, value) async {
-                        await controller.updatePluginSetting(
-                            plugin.id, key, value);
+                        await controller.updatePluginSetting(plugin.id, key, value);
                       },
                     );
                   }
@@ -655,8 +608,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       value: plugin.setting.settings[e.value.key] ?? "",
                       item: e.value as PluginSettingValueSelect,
                       onUpdate: (key, value) async {
-                        await controller.updatePluginSetting(
-                            plugin.id, key, value);
+                        await controller.updatePluginSetting(plugin.id, key, value);
                       },
                     );
                   }
@@ -665,8 +617,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       value: plugin.setting.settings[e.value.key] ?? "",
                       item: e.value as PluginSettingValueSelectAIModel,
                       onUpdate: (key, value) async {
-                        await controller.updatePluginSetting(
-                            plugin.id, key, value);
+                        await controller.updatePluginSetting(plugin.id, key, value);
                       },
                     );
                   }
@@ -675,8 +626,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       value: plugin.setting.settings[e.value.key] ?? "",
                       item: e.value as PluginSettingValueHead,
                       onUpdate: (key, value) async {
-                        await controller.updatePluginSetting(
-                            plugin.id, key, value);
+                        await controller.updatePluginSetting(plugin.id, key, value);
                       },
                     );
                   }
@@ -685,8 +635,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       value: plugin.setting.settings[e.value.key] ?? "",
                       item: e.value as PluginSettingValueLabel,
                       onUpdate: (key, value) async {
-                        await controller.updatePluginSetting(
-                            plugin.id, key, value);
+                        await controller.updatePluginSetting(plugin.id, key, value);
                       },
                     );
                   }
@@ -696,8 +645,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       value: plugin.setting.settings[e.value.key] ?? "",
                       item: e.value as PluginSettingValueTable,
                       onUpdate: (key, value) async {
-                        await controller.updatePluginSetting(
-                            plugin.id, key, value);
+                        await controller.updatePluginSetting(plugin.id, key, value);
                       },
                     );
                   }
@@ -722,12 +670,10 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
           WoxHintBox(text: controller.tr('ui_plugin_trigger_keywords_tip')),
           const SizedBox(height: 12),
           if (plugin.triggerKeywords.isEmpty)
-            Text(controller.tr('ui_plugin_no_trigger_keywords'),
-                style: TextStyle(color: getThemeTextColor()))
+            Text(controller.tr('ui_plugin_no_trigger_keywords'), style: TextStyle(color: getThemeTextColor()))
           else
             WoxSettingPluginTable(
-              value: json.encode(
-                  plugin.triggerKeywords.map((e) => {"keyword": e}).toList()),
+              value: json.encode(plugin.triggerKeywords.map((e) => {"keyword": e}).toList()),
               tableWidth: 640,
               item: PluginSettingValueTable.fromJson({
                 "Key": "_triggerKeywords",
@@ -736,8 +682,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                   {
                     "Key": "keyword",
                     "Label": controller.tr('ui_plugin_trigger_keyword_column'),
-                    "Tooltip":
-                        controller.tr('ui_plugin_trigger_keyword_tooltip'),
+                    "Tooltip": controller.tr('ui_plugin_trigger_keyword_tooltip'),
                     "Type": "text",
                     "TextMaxLines": 1,
                     "Validators": [
@@ -753,8 +698,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                   triggerKeywords.add(item["keyword"]);
                 }
                 plugin.triggerKeywords = triggerKeywords;
-                await controller.updatePluginSetting(
-                    plugin.id, "TriggerKeywords", triggerKeywords.join(","));
+                await controller.updatePluginSetting(plugin.id, "TriggerKeywords", triggerKeywords.join(","));
               },
             ),
         ],
@@ -772,8 +716,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
           WoxHintBox(text: controller.tr('ui_plugin_commands_tip')),
           const SizedBox(height: 12),
           if (plugin.commands.isEmpty)
-            Text(controller.tr('ui_plugin_no_commands'),
-                style: TextStyle(color: getThemeTextColor()))
+            Text(controller.tr('ui_plugin_no_commands'), style: TextStyle(color: getThemeTextColor()))
           else
             WoxSettingPluginTable(
               value: json.encode(plugin.commands),
@@ -816,8 +759,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
     var plugin = controller.activePlugin.value;
     var noDataAccess = Padding(
       padding: const EdgeInsets.all(16),
-      child: Text(controller.tr('ui_plugin_no_data_access'),
-          style: TextStyle(color: getThemeTextColor())),
+      child: Text(controller.tr('ui_plugin_no_data_access'), style: TextStyle(color: getThemeTextColor())),
     );
 
     if (plugin.features.isEmpty) {
@@ -827,8 +769,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
     List<String> params = [];
 
     //check if "queryEnv" feature is exist and list it's params
-    var queryEnv =
-        plugin.features.where((element) => element.name == "queryEnv").toList();
+    var queryEnv = plugin.features.where((element) => element.name == "queryEnv").toList();
     if (queryEnv.isNotEmpty) {
       queryEnv.first.params.forEach((key, value) {
         if (value == "true") {
@@ -838,8 +779,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
     }
 
     // check if llmChat feature is exist
-    var llmChat =
-        plugin.features.where((element) => element.name == "llm").toList();
+    var llmChat = plugin.features.where((element) => element.name == "llm").toList();
     if (llmChat.isNotEmpty) {
       params.add("llm");
     }
@@ -854,8 +794,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(controller.tr('ui_plugin_data_access_title'),
-                style: TextStyle(color: getThemeTextColor())),
+            Text(controller.tr('ui_plugin_data_access_title'), style: TextStyle(color: getThemeTextColor())),
             ...params.map((e) {
               if (e == "requireActiveWindowName") {
                 return privacyItem(
