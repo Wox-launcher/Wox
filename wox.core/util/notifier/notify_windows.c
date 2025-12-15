@@ -1169,8 +1169,13 @@ LRESULT CALLBACK NotificationWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
                     HDC memDC = CreateCompatibleDC(hdc);
                     if (memDC) {
                         HGDIOBJ oldBmp = SelectObject(memDC, nw->iconBitmap);
+                        int oldMode = SetStretchBltMode(hdc, HALFTONE);
+                        POINT oldOrg;
+                        SetBrushOrgEx(hdc, 0, 0, &oldOrg);
                         BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
                         AlphaBlend(hdc, iconX, iconY, iconSize, iconSize, memDC, 0, 0, nw->iconWidth, nw->iconHeight, bf);
+                        SetBrushOrgEx(hdc, oldOrg.x, oldOrg.y, NULL);
+                        SetStretchBltMode(hdc, oldMode);
                         if (oldBmp) SelectObject(memDC, oldBmp);
                         DeleteDC(memDC);
                     }

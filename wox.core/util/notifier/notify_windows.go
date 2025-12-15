@@ -10,10 +10,13 @@ void showNotificationWithIcon(const char* message, const unsigned char* bgra, in
 import "C"
 import (
 	"image"
+	"image/color"
 	"unsafe"
+
+	"github.com/disintegration/imaging"
 )
 
-const notificationIconSize = 32
+const notificationIconSize = 64
 
 func ShowNotification(icon image.Image, message string) {
 	cMessage := C.CString(message)
@@ -38,25 +41,30 @@ func iconToBGRA(src image.Image, size int) ([]byte, int, int) {
 		return nil, 0, 0
 	}
 
-	b := src.Bounds()
-	if b.Dx() <= 0 || b.Dy() <= 0 {
+	resized := imaging.Resize(src, size, size, imaging.Lanczos)
+	if resized == nil {
+		return nil, 0, 0
+	}
+
+	b := resized.Bounds()
+	if b.Dx() != size || b.Dy() != size {
 		return nil, 0, 0
 	}
 
 	out := make([]byte, size*size*4)
-	srcW := b.Dx()
-	srcH := b.Dy()
-
 	for y := 0; y < size; y++ {
-		sy := b.Min.Y + (y*srcH)/size
 		for x := 0; x < size; x++ {
-			sx := b.Min.X + (x*srcW)/size
-			r, g, bl, a := src.At(sx, sy).RGBA()
+			c := color.NRGBAModel.Convert(resized.At(b.Min.X+x, b.Min.Y+y)).(color.NRGBA)
+			a := uint32(c.A)
+			r := uint32(c.R) * a / 255
+			g := uint32(c.G) * a / 255
+			bl := uint32(c.B) * a / 255
+
 			i := (y*size + x) * 4
-			out[i+0] = uint8(bl >> 8) // B
-			out[i+1] = uint8(g >> 8)  // G
-			out[i+2] = uint8(r >> 8)  // R
-			out[i+3] = uint8(a >> 8)  // A
+			out[i+0] = uint8(bl) // B (premultiplied)
+			out[i+1] = uint8(g)  // G (premultiplied)
+			out[i+2] = uint8(r)  // R (premultiplied)
+			out[i+3] = c.A       // A
 		}
 	}
 

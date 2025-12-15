@@ -87,11 +87,13 @@ func checkWoxVersion(ctx context.Context) DoctorCheckResult {
 			ActionName:  actionName,
 			Action: func(ctx context.Context) {
 				updateStatus := updater.GetUpdateInfo()
-				if updateStatus.Status == updater.UpdateStatusReady {
+				switch updateStatus.Status {
+				case updater.UpdateStatusReady:
 					updater.ApplyUpdate(ctx)
-				} else if updateStatus.Status == updater.UpdateStatusError {
+				case updater.UpdateStatusError:
 					GetPluginManager().GetUI().Notify(ctx, common.NotifyMsg{
 						Text:           updateStatus.UpdateError.Error(),
+						Icon:           common.PluginDoctorIcon.String(),
 						DisplaySeconds: 3,
 					})
 				}
@@ -159,7 +161,7 @@ func checkDatabaseHealth(ctx context.Context) DoctorCheckResult {
 		Action: func(ctx context.Context) {
 			// Show guidance: move data dir off iCloud, restore from backup, or reset affected tables (e.g., MRU)
 			msg := i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_database_fix_guidance")
-			GetPluginManager().GetUI().Notify(ctx, common.NotifyMsg{Text: msg, DisplaySeconds: 6})
+			GetPluginManager().GetUI().Notify(ctx, common.NotifyMsg{Text: msg, Icon: common.PluginDoctorIcon.String(), DisplaySeconds: 6})
 			GetPluginManager().GetUI().OpenSettingWindow(ctx, common.SettingWindowContext{Path: "/data"})
 		},
 	}
