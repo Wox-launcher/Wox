@@ -387,7 +387,14 @@ void FlutterWindow::HandleWindowManagerMethodCall(
 
           RECT rect;
           GetWindowRect(hwnd, &rect);
-          SetWindowPos(hwnd, nullptr, rect.left, rect.top, scaledWidth, scaledHeight, SWP_NOZORDER);
+          SetWindowPos(hwnd, nullptr, rect.left, rect.top, scaledWidth, scaledHeight, SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOCOPYBITS);
+
+          // Force Flutter to redraw immediately to match the new window size
+          if (flutter_controller_)
+          {
+            flutter_controller_->ForceRedraw();
+          }
+
           result->Success();
         }
         else
