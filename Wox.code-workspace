@@ -55,7 +55,8 @@
 			},
 			"editor.defaultFormatter": "charliermarsh.ruff"
 		},
-		"makefile.configureOnOpen": false
+		"makefile.configureOnOpen": false,
+		"editor.formatOnSave": true
 	},
 	"extensions": {
 		"recommendations": [

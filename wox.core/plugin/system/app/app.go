@@ -13,7 +13,6 @@ import (
 	"time"
 	"wox/common"
 	"wox/plugin"
-	"wox/plugin/system"
 	"wox/setting/definition"
 	"wox/util"
 	"wox/util/clipboard"
@@ -217,8 +216,8 @@ func (a *ApplicationPlugin) reuseAppFromCache(ctx context.Context, appPath strin
 func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	var results []plugin.QueryResult
 	for _, info := range a.apps {
-		isNameMatch, nameScore := system.IsStringMatchScore(ctx, info.Name, query.Search)
-		isPathNameMatch, pathNameScore := system.IsStringMatchScore(ctx, filepath.Base(info.Path), query.Search)
+		isNameMatch, nameScore := plugin.IsStringMatchScore(ctx, info.Name, query.Search)
+		isPathNameMatch, pathNameScore := plugin.IsStringMatchScore(ctx, filepath.Base(info.Path), query.Search)
 		if isNameMatch || isPathNameMatch {
 			displayPath := info.GetDisplayPath()
 

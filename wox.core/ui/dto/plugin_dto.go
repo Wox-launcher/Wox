@@ -17,6 +17,7 @@ type PluginDto struct {
 	Icon               common.WoxImage
 	Website            string
 	Entry              string
+	PluginDirectory    string // only available when plugin is installed
 	ScreenshotUrls     []string
 	TriggerKeywords    []string //User can add/update/delete trigger keywords
 	Commands           []plugin.MetadataCommand

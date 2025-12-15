@@ -440,7 +440,7 @@ func (w *WPMPlugin) uninstallCommand(ctx context.Context, query plugin.Query) []
 	})
 	if query.Search != "" {
 		plugins = lo.Filter(plugins, func(pluginInstance *plugin.Instance, _ int) bool {
-			return IsStringMatchNoPinYin(ctx, pluginInstance.GetName(ctx), query.Search)
+			return plugin.IsStringMatchNoPinYin(ctx, pluginInstance.GetName(ctx), query.Search)
 		})
 	}
 

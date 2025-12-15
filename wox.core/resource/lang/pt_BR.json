@@ -137,6 +137,7 @@
   "ui_plugin_author": "Autor",
   "ui_plugin_runtime": "Runtime",
   "ui_plugin_website": "Website",
+  "ui_plugin_open_directory": "Abrir diretório",
   "ui_plugin_dev_tag": "dev",
   "ui_plugin_uninstall": "Uninstall",
   "ui_plugin_installing": "Installing...",

@@ -135,7 +135,7 @@ func (c *BrowserPlugin) Query(ctx context.Context, query plugin.Query) (results 
 	}
 
 	for _, tab := range c.openedTabs {
-		isTitleMatched, titleScore := IsStringMatchScore(ctx, tab.Title, query.Search)
+		isTitleMatched, titleScore := plugin.IsStringMatchScore(ctx, tab.Title, query.Search)
 		isUrlMatched, urlScore := strings.Contains(tab.Url, query.Search), int64(1)
 		if !isTitleMatched && !isUrlMatched {
 			continue

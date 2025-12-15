@@ -229,11 +229,9 @@ func (m *Manager) loadScriptPlugins(ctx context.Context) ([]MetadataWithDirector
 			continue
 		}
 
-		// Create a virtual directory for the script plugin
-		virtualDirectory := path.Join(userScriptPluginDirectory, metadata.Id)
 		metaDataList = append(metaDataList, MetadataWithDirectory{
 			Metadata:  metadata,
-			Directory: virtualDirectory,
+			Directory: userScriptPluginDirectory,
 		})
 	}
 
@@ -245,7 +243,7 @@ func (m *Manager) ReloadPlugin(ctx context.Context, metadata MetadataWithDirecto
 	logger.Info(ctx, fmt.Sprintf("start reloading dev plugin: %s", metadata.Metadata.Name))
 
 	pluginHost, exist := lo.Find(AllHosts, func(item Host) bool {
-		return strings.ToLower(string(item.GetRuntime(ctx))) == strings.ToLower(metadata.Metadata.Runtime)
+		return strings.EqualFold(string(item.GetRuntime(ctx)), metadata.Metadata.Runtime)
 	})
 	if !exist {
 		return fmt.Errorf("unsupported runtime: %s", metadata.Metadata.Runtime)

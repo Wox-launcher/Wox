@@ -184,9 +184,9 @@ func (s *Store) Search(ctx context.Context, keyword string) []StorePluginManifes
 			return true
 		}
 
-		return util.IsStringMatch(manifest.GetName(ctx), keyword, false) ||
-			util.IsStringMatch(manifest.GetDescription(ctx), keyword, false) ||
-			util.IsStringMatch(manifest.Id, keyword, false)
+		return IsStringMatch(ctx, manifest.GetName(ctx), keyword) ||
+			IsStringMatch(ctx, manifest.GetDescription(ctx), keyword) ||
+			IsStringMatchNoPinYin(ctx, manifest.Id, keyword)
 	})
 }
 
@@ -247,7 +247,7 @@ func (s *Store) installNormalPluginWithProgress(ctx context.Context, manifest St
 		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_install_progress_starting_download"))
 	}
 
-	pluginDirectory := path.Join(util.GetLocation().GetPluginDirectory(), fmt.Sprintf("%s_%s@%s", manifest.Id, manifest.Name, manifest.Version))
+	pluginDirectory := path.Join(util.GetLocation().GetPluginDirectory(), fmt.Sprintf("%s@%s", manifest.Id, manifest.Version))
 	directoryErr := util.GetLocation().EnsureDirectoryExist(pluginDirectory)
 	if directoryErr != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to create plugin directory %s: %s", pluginDirectory, directoryErr.Error()))

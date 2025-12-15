@@ -83,15 +83,15 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 			if triggerKeyword == "*" {
 				continue
 			}
-			match, score := IsStringMatchScoreNoPinYin(ctx, triggerKeyword, search)
+			match, score := plugin.IsStringMatchScoreNoPinYin(ctx, triggerKeyword, search)
 			if match && score > triggerKeywordScore {
 				matchedTriggerKeyword = triggerKeyword
 				triggerKeywordScore = score
 			}
 		}
 
-		pluginNameMatch, pluginNameScore := IsStringMatchScore(ctx, pluginName, search)
-		pluginDescMatch, pluginDescScore := IsStringMatchScore(ctx, pluginDescription, search)
+		pluginNameMatch, pluginNameScore := plugin.IsStringMatchScore(ctx, pluginName, search)
+		pluginDescMatch, pluginDescScore := plugin.IsStringMatchScore(ctx, pluginDescription, search)
 		pluginTextMatch := pluginNameMatch || pluginDescMatch
 		pluginTextScore := max(pluginNameScore, pluginDescScore)
 
@@ -105,8 +105,8 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 		translatedCommands := pluginInstance.GetQueryCommands()
 		for _, metadataCommandShadow := range translatedCommands {
 			metadataCommand := metadataCommandShadow
-			cmdMatch, cmdScore := IsStringMatchScoreNoPinYin(ctx, metadataCommand.Command, search)
-			descMatch, descScore := IsStringMatchScore(ctx, metadataCommand.Description, search)
+			cmdMatch, cmdScore := plugin.IsStringMatchScoreNoPinYin(ctx, metadataCommand.Command, search)
+			descMatch, descScore := plugin.IsStringMatchScore(ctx, metadataCommand.Description, search)
 			if !cmdMatch && !descMatch {
 				continue
 			}

@@ -10,6 +10,7 @@ class PluginDetail {
   late WoxImage icon;
   late String website;
   late String entry;
+  late String pluginDirectory;
   late String runtime; // plugin runtime, e.g., GO/PYTHON/NODEJS/SCRIPT
   late List<String> triggerKeywords;
   late List<MetadataCommand> commands;
@@ -32,6 +33,7 @@ class PluginDetail {
     icon = WoxImage.empty();
     website = '';
     entry = '';
+    pluginDirectory = '';
     runtime = '';
     triggerKeywords = <String>[];
     commands = <MetadataCommand>[];
@@ -55,6 +57,7 @@ class PluginDetail {
     icon = WoxImage.fromJson(json['Icon']);
     website = json['Website'];
     entry = json['Entry'];
+    pluginDirectory = json['PluginDirectory'] ?? '';
     runtime = json['Runtime'] ?? '';
     isSystem = json['IsSystem'] ?? false;
     isDev = json['IsDev'] ?? false;
@@ -62,7 +65,8 @@ class PluginDetail {
     isDisable = json['IsDisable'] ?? false;
 
     if (json['TriggerKeywords'] != null) {
-      triggerKeywords = (json['TriggerKeywords'] as List).map((e) => e.toString()).toList();
+      triggerKeywords =
+          (json['TriggerKeywords'] as List).map((e) => e.toString()).toList();
     } else {
       triggerKeywords = <String>[];
     }
@@ -77,13 +81,15 @@ class PluginDetail {
     }
 
     if (json['SupportedOS'] != null) {
-      supportedOS = (json['SupportedOS'] as List).map((e) => e.toString()).toList();
+      supportedOS =
+          (json['SupportedOS'] as List).map((e) => e.toString()).toList();
     } else {
       supportedOS = <String>[];
     }
 
     if (json['ScreenshotUrls'] != null) {
-      screenshotUrls = (json['ScreenshotUrls'] as List).map((e) => e.toString()).toList();
+      screenshotUrls =
+          (json['ScreenshotUrls'] as List).map((e) => e.toString()).toList();
     } else {
       screenshotUrls = <String>[];
     }
@@ -150,7 +156,8 @@ class PluginSetting {
     if (json['TriggerKeywords'] == null) {
       triggerKeywords = <String>[];
     } else {
-      triggerKeywords = (json['TriggerKeywords'] as List).map((e) => e.toString()).toList();
+      triggerKeywords =
+          (json['TriggerKeywords'] as List).map((e) => e.toString()).toList();
     }
 
     if (json['QueryCommands'] == null) {

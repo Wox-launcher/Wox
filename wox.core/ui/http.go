@@ -213,6 +213,7 @@ func responseUIError(ctx context.Context, request WebsocketMsg, errMsg string) {
 func convertPluginDto(ctx context.Context, pluginDto dto.PluginDto, pluginInstance *plugin.Instance) dto.PluginDto {
 	if pluginInstance != nil {
 		logger.Debug(ctx, fmt.Sprintf("get plugin setting: %s", pluginInstance.GetName(ctx)))
+		pluginDto.PluginDirectory = pluginInstance.PluginDirectory
 		pluginDto.SettingDefinitions = lo.Filter(pluginInstance.Metadata.SettingDefinitions, func(item definition.PluginSettingDefinitionItem, _ int) bool {
 			return !lo.Contains(item.DisabledInPlatforms, util.GetCurrentPlatform())
 		})

@@ -139,6 +139,7 @@
   "ui_plugin_author": "作者",
   "ui_plugin_runtime": "运行时",
   "ui_plugin_website": "网站",
+  "ui_plugin_open_directory": "打开目录",
   "ui_plugin_dev_tag": "开发",
   "ui_plugin_uninstall": "卸载",
   "ui_plugin_installing": "安装中...",

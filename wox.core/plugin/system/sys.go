@@ -238,10 +238,10 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {
 	for _, command := range r.commands {
 		translatedTitle := i18n.GetI18nManager().TranslateWox(ctx, command.Title)
-		isTitleMatch, titleScore := IsStringMatchScore(ctx, translatedTitle, query.Search)
+		isTitleMatch, titleScore := plugin.IsStringMatchScore(ctx, translatedTitle, query.Search)
 		if !isTitleMatch {
 			translatedTitleEnUs := i18n.GetI18nManager().TranslateWoxEnUs(ctx, command.Title)
-			isTitleMatch, titleScore = IsStringMatchScore(ctx, translatedTitleEnUs, query.Search)
+			isTitleMatch, titleScore = plugin.IsStringMatchScore(ctx, translatedTitleEnUs, query.Search)
 		}
 
 		if isTitleMatch {
@@ -273,7 +273,7 @@ func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 		pluginName := instance.GetName(ctx)
 		//check if plugin has setting
 		if len(instance.Metadata.SettingDefinitions) > 0 {
-			if match, score := IsStringMatchScore(ctx, pluginName, query.Search); match {
+			if match, score := plugin.IsStringMatchScore(ctx, pluginName, query.Search); match {
 				// load icon
 				pluginIcon := common.SettingIcon
 				iconImg, parseErr := common.ParseWoxImage(instance.Metadata.Icon)

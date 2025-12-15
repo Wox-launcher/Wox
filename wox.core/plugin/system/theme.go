@@ -102,7 +102,7 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 	openThemeFolderText := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_open_containing_folder")
 
 	results := lo.FilterMap(installedThemes, func(theme common.Theme, _ int) (plugin.QueryResult, bool) {
-		match, _ := IsStringMatchScore(ctx, theme.ThemeName, query.Search)
+		match, _ := plugin.IsStringMatchScore(ctx, theme.ThemeName, query.Search)
 		if match {
 			themePath := filepath.Join(util.GetLocation().GetThemeDirectory(), fmt.Sprintf("%s.json", theme.ThemeId))
 			result := plugin.QueryResult{
@@ -170,7 +170,7 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 			return plugin.QueryResult{}, false
 		}
 
-		match, _ := IsStringMatchScore(ctx, theme.ThemeName, query.Search)
+		match, _ := plugin.IsStringMatchScore(ctx, theme.ThemeName, query.Search)
 		if match {
 			result := plugin.QueryResult{
 				Title: theme.ThemeName,

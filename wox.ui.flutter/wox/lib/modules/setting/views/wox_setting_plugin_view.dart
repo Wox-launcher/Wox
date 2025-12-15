@@ -385,6 +385,23 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       },
                     ),
                   ),
+                if (plugin.isInstalled && !plugin.isSystem)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: WoxButton.secondary(
+                      text: controller.tr('ui_plugin_open_directory'),
+                      icon: Icon(
+                        Icons.folder_open,
+                        size: 14,
+                        color: getThemeTextColor(),
+                      ),
+                      onPressed: plugin.pluginDirectory.isEmpty
+                          ? null
+                          : () {
+                              controller.openPluginDirectory(plugin);
+                            },
+                    ),
+                  ),
               ],
             ),
           ),
