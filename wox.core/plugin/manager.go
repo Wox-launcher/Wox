@@ -1448,7 +1448,7 @@ func (m *Manager) QuerySilent(ctx context.Context, query Query) bool {
 					}
 				}
 			} else {
-				notifier.Notify(fmt.Sprintf("Silent query failed, there shouldbe only one result, but got %d", len(results)))
+				notifier.Notify(nil, fmt.Sprintf("Silent query failed, there shouldbe only one result, but got %d", len(results)))
 			}
 
 			return false

@@ -136,11 +136,12 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 			Title: "test notification long",
 			Icon:  common.CPUProfileIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				notifier.Notify(`This is a very long notification message to test the notification system in Wox. 
+				img, _ := common.WoxIcon.ToImage()
+				notifier.Notify(img, `This is a very long notification message to test the notification system in Wox. 
 				If you see this message, the notification system is working properly. 
 				You can customize the duration, appearance, and behavior of notifications as needed.
 				Enjoy using Wox! 
-				` + time.Now().String())
+				`+time.Now().String())
 			},
 		})
 
@@ -148,7 +149,8 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 			Title: "test notification short",
 			Icon:  common.CPUProfileIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				notifier.Notify(`This is a very short notification.` + time.Now().String())
+				img, _ := common.WoxIcon.ToImage()
+				notifier.Notify(img, `This is a very short notification.`+time.Now().String())
 			},
 		})
 

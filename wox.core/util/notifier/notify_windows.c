@@ -95,6 +95,8 @@ static BOOL TryEnableAcrylic(HWND hwnd) {
 #define TEXT_LEFT_PAD_DIP 20
 #define TEXT_VERT_PAD_DIP 12
 #define TEXT_RIGHT_GAP_CLOSE_DIP 10
+#define ICON_SIZE_DIP 20
+#define ICON_GAP_DIP 12
 #define COPY_GAP_DIP 6
 #define COPY_HEIGHT_DIP 24
 #define COPY_WIDTH_DIP 72
@@ -131,6 +133,9 @@ typedef struct {
     HWND hwnd;
     HFONT messageFont;
     HFONT copyFont;
+    HBITMAP iconBitmap;
+    int iconWidth;
+    int iconHeight;
     DWORD magic;
     WCHAR messageText[1024];
     WCHAR* renderText;
@@ -201,6 +206,17 @@ static RECT GetCloseRect(int width, UINT dpi) {
     int pad = MulDiv(10, (int)dpi, 96);
     int size = MulDiv(24, (int)dpi, 96);
     RECT r = {width - pad - size, pad, width - pad, pad + size};
+    return r;
+}
+
+static RECT GetCloseRectCentered(int width, int height, UINT dpi) {
+    int pad = MulDiv(10, (int)dpi, 96);
+    int size = MulDiv(24, (int)dpi, 96);
+    int y = (height - size) / 2;
+    if (y < pad) y = pad;
+    if (y + size > height - pad) y = height - pad - size;
+    if (y < 0) y = 0;
+    RECT r = {width - pad - size, y, width - pad, y + size};
     return r;
 }
 
@@ -423,7 +439,14 @@ static WCHAR* TruncateMultilineTextToFitW(HDC hdc, const WCHAR* text, int width,
 static int ComputeWindowHeightAndRenderText(NotificationWindow* nw, int windowWidth, UINT dpi) {
     int topPad = MulDiv(TEXT_VERT_PAD_DIP, (int)dpi, 96);
     int bottomPad = MulDiv(TEXT_VERT_PAD_DIP, (int)dpi, 96);
-    int leftPad = MulDiv(TEXT_LEFT_PAD_DIP, (int)dpi, 96);
+    int baseLeftPad = MulDiv(TEXT_LEFT_PAD_DIP, (int)dpi, 96);
+    int leftPad = baseLeftPad;
+    int iconSize = 0;
+    if (nw->iconBitmap) {
+        iconSize = MulDiv(ICON_SIZE_DIP, (int)dpi, 96);
+        int iconGap = MulDiv(ICON_GAP_DIP, (int)dpi, 96);
+        leftPad += iconSize + iconGap;
+    }
     RECT closeRect = GetCloseRect(windowWidth, dpi);
     int textRight = closeRect.left - MulDiv(TEXT_RIGHT_GAP_CLOSE_DIP, (int)dpi, 96);
     int textWidth = textRight - leftPad;
@@ -463,6 +486,7 @@ static int ComputeWindowHeightAndRenderText(NotificationWindow* nw, int windowWi
         if (estimatedLines > maxLines) estimatedLines = maxLines;
 
         int requiredHeight = lineHeight * estimatedLines;
+        if (iconSize > requiredHeight) requiredHeight = iconSize;
 
         // If we are at max lines, apply a cheap truncation based on average char width.
         if (estimatedLines == maxLines) {
@@ -564,11 +588,18 @@ static RECT GetCopyRectInline(HWND hwnd, NotificationWindow* nw) {
     int width = clientRect.right - clientRect.left;
     int height = clientRect.bottom - clientRect.top;
 
-    RECT closeRect = GetCloseRect(width, nw->dpi ? nw->dpi : 96);
-    int leftPad = MulDiv(TEXT_LEFT_PAD_DIP, (int)(nw->dpi ? nw->dpi : 96), 96);
+    UINT dpi = nw->dpi ? nw->dpi : 96;
+    RECT closeRect = GetCloseRect(width, dpi);
+    int baseLeftPad = MulDiv(TEXT_LEFT_PAD_DIP, (int)dpi, 96);
+    int leftPad = baseLeftPad;
     int topPad = MulDiv(TEXT_VERT_PAD_DIP, (int)(nw->dpi ? nw->dpi : 96), 96);
-    int textRight = closeRect.left - MulDiv(TEXT_RIGHT_GAP_CLOSE_DIP, (int)(nw->dpi ? nw->dpi : 96), 96);
-    int bottomPad = MulDiv(TEXT_VERT_PAD_DIP, (int)(nw->dpi ? nw->dpi : 96), 96);
+    int textRight = closeRect.left - MulDiv(TEXT_RIGHT_GAP_CLOSE_DIP, (int)dpi, 96);
+    int bottomPad = MulDiv(TEXT_VERT_PAD_DIP, (int)dpi, 96);
+    if (nw->iconBitmap) {
+        int iconSize = MulDiv(ICON_SIZE_DIP, (int)dpi, 96);
+        int iconGap = MulDiv(ICON_GAP_DIP, (int)dpi, 96);
+        leftPad += iconSize + iconGap;
+    }
     RECT textRect = {leftPad, topPad, textRight, height - bottomPad};
 
     HDC hdc = GetDC(hwnd);
@@ -847,7 +878,27 @@ static void DrawCloseButtonFlat(HDC targetHdc, RECT closeRect, UINT dpi, BOOL ho
 
 LRESULT CALLBACK NotificationWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
-void showNotification(const char* message) {
+typedef struct {
+    WCHAR* text;
+    HBITMAP iconBitmap;
+    int iconWidth;
+    int iconHeight;
+} NotificationUpdatePayload;
+
+static HBITMAP CreateIconBitmapFromBGRA(const unsigned char* bgra, int width, int height) {
+    if (!bgra || width <= 0 || height <= 0) return NULL;
+    HDC hdc = GetDC(NULL);
+    if (!hdc) return NULL;
+    void* bits = NULL;
+    HBITMAP dib = Create32BitDIBSection(hdc, width, height, &bits);
+    if (dib && bits) {
+        memcpy(bits, bgra, (size_t)width * (size_t)height * 4);
+    }
+    ReleaseDC(NULL, hdc);
+    return dib;
+}
+
+static void ShowNotificationInternal(const char* message, const unsigned char* bgra, int iconWidth, int iconHeight) {
     EnsureGlobals();
 
     // Defensive: clear any stale WM_QUIT on this thread so a new notification's message loop won't exit immediately.
@@ -863,16 +914,30 @@ void showNotification(const char* message) {
         GetClassNameW(active, cls, (int)(sizeof(cls) / sizeof(cls[0])));
         HANDLE prop = GetPropW(active, g_notifierPropName);
         if (prop && wcscmp(cls, L"WoxNotification") == 0) {
-            int wlen = MultiByteToWideChar(CP_UTF8, 0, message, -1, NULL, 0);
-            if (wlen > 0) {
-                WCHAR* wmsg = (WCHAR*)malloc((size_t)wlen * sizeof(WCHAR));
-                if (wmsg) {
-                    MultiByteToWideChar(CP_UTF8, 0, message, -1, wmsg, wlen);
-                    if (PostMessageW(active, WM_WOX_NOTIFICATION_UPDATE, 0, (LPARAM)wmsg)) {
-                        return;
+            NotificationUpdatePayload* payload = (NotificationUpdatePayload*)malloc(sizeof(NotificationUpdatePayload));
+            if (payload) {
+                ZeroMemory(payload, sizeof(NotificationUpdatePayload));
+
+                if (message) {
+                    int wlen = MultiByteToWideChar(CP_UTF8, 0, message, -1, NULL, 0);
+                    if (wlen > 0) {
+                        payload->text = (WCHAR*)malloc((size_t)wlen * sizeof(WCHAR));
+                        if (payload->text) {
+                            MultiByteToWideChar(CP_UTF8, 0, message, -1, payload->text, wlen);
+                        }
                     }
-                    free(wmsg);
                 }
+
+                payload->iconBitmap = CreateIconBitmapFromBGRA(bgra, iconWidth, iconHeight);
+                payload->iconWidth = iconWidth;
+                payload->iconHeight = iconHeight;
+
+                if (PostMessageW(active, WM_WOX_NOTIFICATION_UPDATE, 0, (LPARAM)payload)) {
+                    return;
+                }
+                if (payload->text) free(payload->text);
+                if (payload->iconBitmap) DeleteObject(payload->iconBitmap);
+                free(payload);
             }
         } else {
             InterlockedCompareExchangePointer((PVOID*)&g_activeHwndAtomic, NULL, active);
@@ -913,6 +978,10 @@ void showNotification(const char* message) {
                                OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
                                DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei UI");
 
+    nw->iconBitmap = CreateIconBitmapFromBGRA(bgra, iconWidth, iconHeight);
+    nw->iconWidth = nw->iconBitmap ? iconWidth : 0;
+    nw->iconHeight = nw->iconBitmap ? iconHeight : 0;
+
     MultiByteToWideChar(CP_UTF8, 0, message, -1, nw->messageText, 1024);
     int windowHeight = MulDiv(52, (int)dpi, 96);
 
@@ -932,6 +1001,7 @@ void showNotification(const char* message) {
         if (nw->renderTextOwned && nw->renderText) free(nw->renderText);
         if (nw->messageFont) DeleteObject(nw->messageFont);
         if (nw->copyFont) DeleteObject(nw->copyFont);
+        if (nw->iconBitmap) DeleteObject(nw->iconBitmap);
         free(nw);
         return;
     }
@@ -993,6 +1063,14 @@ void showNotification(const char* message) {
     free(nw);
 }
 
+void showNotification(const char* message) {
+    ShowNotificationInternal(message, NULL, 0, 0);
+}
+
+void showNotificationWithIcon(const char* message, const unsigned char* bgra, int width, int height) {
+    ShowNotificationInternal(message, bgra, width, height);
+}
+
 LRESULT CALLBACK NotificationWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     if (uMsg == WM_NCCREATE) {
         CREATESTRUCT* cs = (CREATESTRUCT*)lParam;
@@ -1007,12 +1085,25 @@ LRESULT CALLBACK NotificationWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
 
     switch (uMsg) {
         case WM_WOX_NOTIFICATION_UPDATE: {
-            WCHAR* newText = (WCHAR*)lParam;
-            if (newText) {
-                if (nw) {
-                    wcsncpy_s(nw->messageText, 1024, newText, _TRUNCATE);
+            NotificationUpdatePayload* payload = (NotificationUpdatePayload*)lParam;
+            if (payload) {
+                if (payload->text) {
+                    if (nw) {
+                        wcsncpy_s(nw->messageText, 1024, payload->text, _TRUNCATE);
+                    }
+                    free(payload->text);
+                    payload->text = NULL;
                 }
-                free(newText);
+                if (nw) {
+                    if (nw->iconBitmap) DeleteObject(nw->iconBitmap);
+                    nw->iconBitmap = payload->iconBitmap;
+                    nw->iconWidth = payload->iconBitmap ? payload->iconWidth : 0;
+                    nw->iconHeight = payload->iconBitmap ? payload->iconHeight : 0;
+                    payload->iconBitmap = NULL;
+                } else {
+                    if (payload->iconBitmap) DeleteObject(payload->iconBitmap);
+                }
+                free(payload);
             }
             if (!nw) return 0;
             if (nw->magic != WOX_NOTIFICATION_MAGIC) return 0;
@@ -1054,15 +1145,39 @@ LRESULT CALLBACK NotificationWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
             }
 
             if (nw) {
-                RECT closeRect = GetCloseRect(width, nw->dpi ? nw->dpi : 96);
-                int leftPad = MulDiv(TEXT_LEFT_PAD_DIP, (int)nw->dpi, 96);
-                int topPad = MulDiv(TEXT_VERT_PAD_DIP, (int)nw->dpi, 96);
-                int textRight = closeRect.left - MulDiv(TEXT_RIGHT_GAP_CLOSE_DIP, (int)nw->dpi, 96);
-                int bottomPad = MulDiv(TEXT_VERT_PAD_DIP, (int)nw->dpi, 96);
+                UINT dpi = nw->dpi ? nw->dpi : 96;
+                RECT closeRect = GetCloseRectCentered(width, height, dpi);
+                int baseLeftPad = MulDiv(TEXT_LEFT_PAD_DIP, (int)dpi, 96);
+                int leftPad = baseLeftPad;
+                int topPad = MulDiv(TEXT_VERT_PAD_DIP, (int)dpi, 96);
+                int textRight = closeRect.left - MulDiv(TEXT_RIGHT_GAP_CLOSE_DIP, (int)dpi, 96);
+                int bottomPad = MulDiv(TEXT_VERT_PAD_DIP, (int)dpi, 96);
                 RECT textRect = {leftPad, topPad, textRight, height - bottomPad};
 
                 SetBkMode(hdc, TRANSPARENT);
                 if (nw->messageFont) SelectObject(hdc, nw->messageFont);
+
+                if (nw->iconBitmap) {
+                    int iconSize = MulDiv(ICON_SIZE_DIP, (int)dpi, 96);
+                    int iconGap = MulDiv(ICON_GAP_DIP, (int)dpi, 96);
+                    int iconX = baseLeftPad;
+                    int iconY = (height - iconSize) / 2;
+                    if (iconY < topPad) iconY = topPad;
+                    if (iconY + iconSize > height - bottomPad) iconY = height - bottomPad - iconSize;
+                    if (iconY < 0) iconY = 0;
+
+                    HDC memDC = CreateCompatibleDC(hdc);
+                    if (memDC) {
+                        HGDIOBJ oldBmp = SelectObject(memDC, nw->iconBitmap);
+                        BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+                        AlphaBlend(hdc, iconX, iconY, iconSize, iconSize, memDC, 0, 0, nw->iconWidth, nw->iconHeight, bf);
+                        if (oldBmp) SelectObject(memDC, oldBmp);
+                        DeleteDC(memDC);
+                    }
+
+                    leftPad = baseLeftPad + iconSize + iconGap;
+                    textRect.left = leftPad;
+                }
 
                 const WCHAR* text = nw->renderText ? nw->renderText : nw->messageText;
                 const WCHAR* p = SkipSpacesAndNewlinesW(text);
@@ -1070,9 +1185,9 @@ LRESULT CALLBACK NotificationWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
                 TEXTMETRIC tm;
                 ZeroMemory(&tm, sizeof(tm));
                 GetTextMetrics(hdc, &tm);
-                int lineHeight = tm.tmHeight > 0 ? tm.tmHeight : MulDiv(18, (int)nw->dpi, 96);
+                int lineHeight = tm.tmHeight > 0 ? tm.tmHeight : MulDiv(18, (int)dpi, 96);
 
-                int copyGap = MulDiv(COPY_GAP_DIP, (int)nw->dpi, 96);
+                int copyGap = MulDiv(COPY_GAP_DIP, (int)dpi, 96);
                 SIZE copySize = {0, 0};
                 HFONT oldFont = NULL;
                 if (nw->copyFont) oldFont = (HFONT)SelectObject(hdc, nw->copyFont);
@@ -1166,7 +1281,7 @@ LRESULT CALLBACK NotificationWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
                     GetClientRect(hwnd, &clientRect);
                     int width = clientRect.right - clientRect.left;
                     int height = clientRect.bottom - clientRect.top;
-                    RECT closeRect = GetCloseRect(width, nw->dpi ? nw->dpi : 96);
+                    RECT closeRect = GetCloseRectCentered(width, height, nw->dpi ? nw->dpi : 96);
                     RECT copyRect = GetCopyRectInline(hwnd, nw);
                     if (PtInRect(&closeRect, pt) || PtInRect(&copyRect, pt)) {
                         SetCursor(LoadCursor(NULL, IDC_HAND));
@@ -1193,7 +1308,7 @@ LRESULT CALLBACK NotificationWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
             GetClientRect(hwnd, &clientRect);
             int width = clientRect.right - clientRect.left;
             int height = clientRect.bottom - clientRect.top;
-            RECT closeRect = GetCloseRect(width, nw->dpi ? nw->dpi : 96);
+            RECT closeRect = GetCloseRectCentered(width, height, nw->dpi ? nw->dpi : 96);
             RECT copyRect = GetCopyRectInline(hwnd, nw);
             BOOL hoverNow = PtInRect(&closeRect, pt);
             if (hoverNow != nw->closeHover) {
@@ -1226,7 +1341,7 @@ LRESULT CALLBACK NotificationWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
             GetClientRect(hwnd, &clientRect);
             int width = clientRect.right - clientRect.left;
             int height = clientRect.bottom - clientRect.top;
-            RECT closeRect = GetCloseRect(width, nw->dpi ? nw->dpi : 96);
+            RECT closeRect = GetCloseRectCentered(width, height, nw->dpi ? nw->dpi : 96);
             RECT copyRect = GetCopyRectInline(hwnd, nw);
             if (PtInRect(&closeRect, pt)) {
                 nw->closePressed = TRUE;
@@ -1247,7 +1362,7 @@ LRESULT CALLBACK NotificationWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
             GetClientRect(hwnd, &clientRect);
             int width = clientRect.right - clientRect.left;
             int height = clientRect.bottom - clientRect.top;
-            RECT closeRect = GetCloseRect(width, nw->dpi ? nw->dpi : 96);
+            RECT closeRect = GetCloseRectCentered(width, height, nw->dpi ? nw->dpi : 96);
             RECT copyRect = GetCopyRectInline(hwnd, nw);
             BOOL pressed = nw->closePressed;
             BOOL copyPressed = nw->copyPressed;
@@ -1293,6 +1408,7 @@ LRESULT CALLBACK NotificationWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
                 if (nw->renderTextOwned && nw->renderText) free(nw->renderText);
                 if (nw->messageFont) DeleteObject(nw->messageFont);
                 if (nw->copyFont) DeleteObject(nw->copyFont);
+                if (nw->iconBitmap) DeleteObject(nw->iconBitmap);
             }
             EnsureGlobals();
             InterlockedCompareExchangePointer((PVOID*)&g_activeHwndAtomic, NULL, hwnd);

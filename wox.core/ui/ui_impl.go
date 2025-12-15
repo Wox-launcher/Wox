@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
 	"time"
 	"wox/common"
 	"wox/database"
@@ -104,7 +105,17 @@ func (u *uiImpl) Notify(ctx context.Context, msg common.NotifyMsg) {
 	if u.IsVisible(ctx) {
 		u.invokeWebsocketMethod(ctx, "ShowToolbarMsg", msg)
 	} else {
-		notifier.Notify(msg.Text)
+		var icon image.Image
+		if msg.Icon != "" {
+			wimg, parseErr := common.ParseWoxImage(msg.Icon)
+			if parseErr == nil {
+				img, imgErr := wimg.ToImage()
+				if imgErr == nil {
+					icon = img
+				}
+			}
+		}
+		notifier.Notify(icon, msg.Text)
 	}
 }
 

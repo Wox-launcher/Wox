@@ -2,9 +2,11 @@ package notifier
 
 import (
 	"github.com/godbus/dbus/v5"
+	"image"
 )
 
-func ShowNotification(message string) {
+func ShowNotification(icon image.Image, message string) {
+	_ = icon
 	conn, err := dbus.SessionBus()
 	if err != nil {
 		return
