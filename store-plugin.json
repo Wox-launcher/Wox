@@ -299,5 +299,36 @@
     ],
     "DateCreated": "2025-12-13 15:12:00",
     "DateUpdated": "2025-12-13 15:12:00"
+  },
+  {
+    "Id": "9014abc5-7a57-46c4-8961-abf3d8f1b008",
+    "Name": "i18n:plugin_name",
+    "Author": "Wox-launcher",
+    "Version": "0.0.1",
+    "MinWoxVersion": "2.0.0",
+    "Runtime": "nodejs",
+    "Description": "i18n:plugin_desc",
+    "IconEmoji": "📍",
+    "Website": "https://github.com/Wox-launcher/Wox.Plugin.ColorPicker",
+    "DownloadUrl": "https://github.com/wox-launcher/Wox.Plugin.ColorPicker/releases/latest/download/wox.plugin.colorpicker.wox",
+    "ScreenshotUrls": [
+      "https://github.com/Wox-launcher/Wox.Plugin.ColorPicker/raw/main/images/screenshot1.png"
+    ],
+    "SupportedOS": [
+      "windows",
+      "darwin"
+    ],
+    "DateCreated": "2025-12-15 16:47:00",
+    "DateUpdated": "2025-12-15 16:47:00",
+    "I18n": {
+      "en_US": {
+        "pluing_name": "Color Picker",
+        "plugin_desc": "Wox plugin to pick colors"
+      },
+      "zh_CN": {
+        "pluing_name": "取色器",
+        "plugin_desc": "Wox 取色器插件"
+      }
+    }
   }
 ]
