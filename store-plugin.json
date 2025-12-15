@@ -308,7 +308,7 @@
     "MinWoxVersion": "2.0.0",
     "Runtime": "nodejs",
     "Description": "i18n:plugin_desc",
-    "IconEmoji": "📍",
+    "IconUrl": "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.ColorPicker/refs/heads/main/images/app.png",
     "Website": "https://github.com/Wox-launcher/Wox.Plugin.ColorPicker",
     "DownloadUrl": "https://github.com/wox-launcher/Wox.Plugin.ColorPicker/releases/latest/download/wox.plugin.colorpicker.wox",
     "ScreenshotUrls": [
@@ -322,11 +322,11 @@
     "DateUpdated": "2025-12-15 16:47:00",
     "I18n": {
       "en_US": {
-        "pluing_name": "Color Picker",
+        "plugin_name": "Color Picker",
         "plugin_desc": "Wox plugin to pick colors"
       },
       "zh_CN": {
-        "pluing_name": "取色器",
+        "plugin_name": "取色器",
         "plugin_desc": "Wox 取色器插件"
       }
     }
