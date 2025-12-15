@@ -40,7 +40,7 @@ func (i *MenusPlugin) GetMetadata() plugin.Metadata {
 		Features: []plugin.MetadataFeature{
 			{
 				Name: plugin.MetadataFeatureQueryEnv,
-				Params: map[string]string{
+				Params: map[string]any{
 					"requireActiveWindowPid":  "true",
 					"requireActiveWindowIcon": "true",
 				},
