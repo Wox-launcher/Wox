@@ -905,7 +905,7 @@ void showNotification(const char* message) {
     nw->dpi = dpi;
     nw->magic = WOX_NOTIFICATION_MAGIC;
 
-    int fontHeight = -MulDiv(14, (int)nw->dpi, 72);
+    int fontHeight = -MulDiv(12, (int)nw->dpi, 72);
     nw->messageFont = CreateFontW(fontHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
                                   OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
                                   DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei UI");
