@@ -5,6 +5,12 @@ import (
 	"unicode"
 )
 
+//////////////////////////////////////////////////////////////////////////////////
+///
+///   SHOULD KEEP THIS FILE IN SYNC WITH wox_fuzzy_match_util.dart IN wox.ui.flutter
+///
+/////////////////////////////////////////////////////////////////////////////////////
+
 // FuzzyMatchResult represents the result of a fuzzy match operation
 type FuzzyMatchResult struct {
 	IsMatch bool  // Whether the pattern matches the text

@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:fuzzywuzzy/fuzzywuzzy.dart';
 import 'package:get/get.dart';
-import 'package:lpinyin/lpinyin.dart';
 import 'package:wox/entity/wox_list_item.dart';
 import 'package:wox/enums/wox_direction_enum.dart';
 import 'package:wox/utils/log.dart';
+import 'package:wox/utils/wox_fuzzy_match_util.dart';
 import 'package:wox/utils/wox_setting_util.dart';
 
 /// Base controller for list-like views (list and grid).
@@ -116,30 +115,19 @@ abstract class WoxBaseListController<T> extends GetxController {
     filterBoxFocusNode.requestFocus();
   }
 
-  bool isFuzzyMatch(String traceId, String queryText, String filterText) {
-    if (WoxSettingUtil.instance.currentSetting.usePinYin) {
-      queryText = transferChineseToPinYin(queryText).toLowerCase();
-    } else {
-      queryText = queryText.toLowerCase();
-    }
-
-    var score = weightedRatio(queryText, filterText.toLowerCase());
-    return score > 60;
-  }
-
-  String transferChineseToPinYin(String str) {
-    RegExp regExp = RegExp(r'[\u4e00-\u9fa5]');
-    if (regExp.hasMatch(str)) {
-      return PinyinHelper.getPinyin(str, separator: "", format: PinyinFormat.WITHOUT_TONE);
-    }
-    return str;
+  bool isFuzzyMatch(String queryText, String filterText) {
+    return WoxFuzzyMatchUtil.isFuzzyMatch(
+      text: queryText,
+      pattern: filterText,
+      usePinYin: WoxSettingUtil.instance.currentSetting.usePinYin,
+    );
   }
 
   void filterItems(String traceId, String filterText, {bool silent = false}) {
     if (filterText.isEmpty) {
       _items.assignAll(_originalItems.map((item) => item.obs));
     } else {
-      var matchedItems = _originalItems.where((element) => !element.isGroup && isFuzzyMatch(traceId, element.title, filterText)).toList();
+      var matchedItems = _originalItems.where((element) => !element.isGroup && isFuzzyMatch(element.title, filterText)).toList();
       var filteredItems = _findItemsToInclude(matchedItems);
       _items.assignAll(filteredItems.map((item) => item.obs));
     }

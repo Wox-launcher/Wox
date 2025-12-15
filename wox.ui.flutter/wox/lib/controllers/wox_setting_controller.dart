@@ -12,6 +12,7 @@ import 'package:wox/entity/wox_runtime_status.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/enums/wox_position_type_enum.dart';
 import 'package:wox/utils/log.dart';
+import 'package:wox/utils/wox_fuzzy_match_util.dart';
 import 'package:wox/utils/wox_setting_util.dart';
 
 class WoxSettingController extends GetxController {
@@ -343,7 +344,13 @@ class WoxSettingController extends GetxController {
     if (filterPluginKeywordController.text.isEmpty) {
       filteredPluginList.addAll(pluginList);
     } else {
-      filteredPluginList.addAll(pluginList.where((element) => element.name.toLowerCase().contains(filterPluginKeywordController.text.toLowerCase())));
+      filteredPluginList.addAll(pluginList.where((element) {
+        return WoxFuzzyMatchUtil.isFuzzyMatch(
+          text: element.name,
+          pattern: filterPluginKeywordController.text,
+          usePinYin: WoxSettingUtil.instance.currentSetting.usePinYin,
+        );
+      }));
     }
   }
 

@@ -56,7 +56,6 @@ dependencies:
   flutter_highlight: ^0.7.0
   highlight: ^0.7.0
   lottie: ^3.1.2
-  fuzzywuzzy: ^1.2.0
   extended_text_field: ^16.0.2
 
 dependency_overrides:
