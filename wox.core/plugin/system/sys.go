@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"runtime/pprof"
+	"slices"
 	"time"
 	"wox/common"
 	"wox/i18n"
@@ -271,35 +272,34 @@ func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 
 	for _, instance := range plugin.GetPluginManager().GetPluginInstances() {
 		pluginName := instance.GetName(ctx)
-		//check if plugin has setting
-		if len(instance.Metadata.SettingDefinitions) > 0 {
-			if match, score := plugin.IsStringMatchScore(ctx, pluginName, query.Search); match {
-				// load icon
-				pluginIcon := common.SettingIcon
-				iconImg, parseErr := common.ParseWoxImage(instance.Metadata.Icon)
-				if parseErr == nil {
-					pluginIcon = common.ConvertRelativePathToAbsolutePath(ctx, iconImg, instance.PluginDirectory)
-				}
-
-				results = append(results, plugin.QueryResult{
-					Title: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_sys_open_plugin_settings"), pluginName),
-					Score: score,
-					Icon:  pluginIcon,
-					Actions: []plugin.QueryResultAction{
-						{
-							Name: "i18n:plugin_sys_execute",
-							Icon: common.ExecuteRunIcon,
-							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-								plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, common.SettingWindowContext{
-									Path:  "/plugin/setting",
-									Param: pluginName,
-								})
-							},
-							PreventHideAfterAction: true,
-						},
-					},
-				})
+		title := fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_sys_open_plugin_settings"), pluginName)
+		isNameMatch, matchScore := plugin.IsStringMatchScore(ctx, title, query.Search)
+		isTriggerKeywordMatch := slices.Contains(instance.GetTriggerKeywords(), query.Search)
+		if isNameMatch || isTriggerKeywordMatch {
+			pluginIcon := common.SettingIcon
+			iconImg, parseErr := common.ParseWoxImage(instance.Metadata.Icon)
+			if parseErr == nil {
+				pluginIcon = common.ConvertRelativePathToAbsolutePath(ctx, iconImg, instance.PluginDirectory)
 			}
+
+			results = append(results, plugin.QueryResult{
+				Title: title,
+				Score: matchScore,
+				Icon:  pluginIcon,
+				Actions: []plugin.QueryResultAction{
+					{
+						Name: "i18n:plugin_sys_execute",
+						Icon: common.ExecuteRunIcon,
+						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+							plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, common.SettingWindowContext{
+								Path:  "/plugin/setting",
+								Param: pluginName,
+							})
+						},
+						PreventHideAfterAction: true,
+					},
+				},
+			})
 		}
 	}
 

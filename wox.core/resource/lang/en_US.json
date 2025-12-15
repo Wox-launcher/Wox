@@ -166,6 +166,8 @@
   "ui_plugin_privacy_llm_desc": "This plugin uses large language model to provide better results, you need to configure the model in LLM Tools plugin first",
   "ui_plugin_trigger_keyword_column": "Keyword",
   "ui_plugin_trigger_keyword_tooltip": "The keyword that triggers this plugin. * presents no keyword, any input will trigger this plugin.",
+  "ui_plugin_trigger_keywords_tip": "Trigger keywords are prefixes you type in Wox to activate this plugin. Use \"*\" to make it global (no keyword).",
+  "ui_plugin_commands_tip": "Commands are sub-commands after the trigger keyword. Type \"<trigger> <command> \" (note the trailing space) to enter command mode.",
   "ui_plugin_command_name_column": "Name",
   "ui_plugin_command_desc_column": "Description",
   "ui_setting_plugin_system_tag": "System",

@@ -13,24 +13,19 @@ const (
 	PLUGIN_OS_LINUX   OS = "LINUX"
 )
 
-func IsSupportedOS(os string) bool {
-	osUpper := strings.ToUpper(os)
-	if osUpper == string(PLUGIN_OS_WINDOWS) {
-		return util.IsWindows()
-	}
-	if osUpper == string(PLUGIN_OS_DARWIN) {
-		return util.IsMacOS()
-	}
-	if osUpper == string(PLUGIN_OS_LINUX) {
-		return util.IsLinux()
+func IsAllSupportedOS(os []string) bool {
+	for _, o := range os {
+		if !strings.EqualFold(o, string(PLUGIN_OS_WINDOWS)) && !strings.EqualFold(o, string(PLUGIN_OS_DARWIN)) && !strings.EqualFold(o, string(PLUGIN_OS_LINUX)) {
+			return false
+		}
 	}
 
-	return false
+	return true
 }
 
-func IsSupportedOSAny(os []string) bool {
-	for _, o := range os {
-		if IsSupportedOS(o) {
+func IsAnySupportedInCurrentOS(supportedOS []string) bool {
+	for _, o := range supportedOS {
+		if strings.EqualFold(o, string(util.GetCurrentPlatform())) {
 			return true
 		}
 	}

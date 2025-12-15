@@ -12,7 +12,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"wox/database"
 	"wox/i18n"
+	"wox/setting"
 	"wox/util"
 
 	"github.com/Masterminds/semver/v3"
@@ -118,18 +120,22 @@ func (s *Store) GetStorePluginManifests(ctx context.Context) []StorePluginManife
 		}
 
 		for _, manifest := range pluginManifest {
-			existingManifest, found := lo.Find(storePluginManifests, func(manifest StorePluginManifest) bool {
-				return manifest.Id == manifest.Id
+			existingManifest, found := lo.Find(s.pluginManifests, func(m StorePluginManifest) bool {
+				return manifest.Id == m.Id
 			})
 			if found {
 				existingVersion, existingErr := semver.NewVersion(existingManifest.Version)
 				currentVersion, currentErr := semver.NewVersion(manifest.Version)
 				if existingErr != nil && currentErr != nil {
 					if existingVersion.GreaterThan(currentVersion) {
-						logger.Info(ctx, fmt.Sprintf("skip %s(%s) from %s store, because it's already installed(%s)", manifest.Name, manifest.Version, store.Name, existingManifest.Version))
+						logger.Info(ctx, fmt.Sprintf("skip %s(%s) from %s store, because it's already exist(%s)", manifest.Name, manifest.Version, store.Name, existingManifest.Version))
 						continue
 					}
 				}
+			}
+
+			if !IsAnySupportedInCurrentOS(manifest.SupportedOS) {
+				continue
 			}
 
 			storePluginManifests = append(storePluginManifests, manifest)
@@ -176,7 +182,7 @@ func (s *Store) GetStorePluginManifestById(ctx context.Context, id string) (Stor
 
 func (s *Store) Search(ctx context.Context, keyword string) []StorePluginManifest {
 	return lo.Filter(s.pluginManifests, func(manifest StorePluginManifest, _ int) bool {
-		if !IsSupportedOSAny(manifest.SupportedOS) {
+		if !IsAnySupportedInCurrentOS(manifest.SupportedOS) {
 			return false
 		}
 
@@ -677,6 +683,12 @@ func (s *Store) Uninstall(ctx context.Context, plugin *Instance) error {
 				logger.Error(ctx, fmt.Sprintf("failed to remove plugin directory %s: %s", plugin.PluginDirectory, removeErr.Error()))
 				return removeErr
 			}
+		}
+	}
+
+	if db := database.GetDB(); db != nil {
+		if err := setting.NewPluginSettingStore(db, plugin.Metadata.Id).DeleteAll(); err != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to delete plugin settings %s(%s): %s", plugin.Metadata.Name, plugin.Metadata.Version, err.Error()))
 		}
 	}
 

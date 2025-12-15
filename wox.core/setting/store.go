@@ -103,6 +103,10 @@ func (s *PluginSettingStore) Delete(key string) error {
 	return s.db.Delete(&database.PluginSetting{PluginID: s.pluginId, Key: key}).Error
 }
 
+func (s *PluginSettingStore) DeleteAll() error {
+	return s.db.Where("plugin_id = ?", s.pluginId).Delete(&database.PluginSetting{}).Error
+}
+
 func serializeValue(value interface{}) (string, error) {
 	if value == nil {
 		return "", nil

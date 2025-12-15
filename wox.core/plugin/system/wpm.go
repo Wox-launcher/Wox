@@ -458,7 +458,8 @@ func (w *WPMPlugin) uninstallCommand(ctx context.Context, query plugin.Query) []
 			Icon:     icon,
 			Actions: []plugin.QueryResultAction{
 				{
-					Name: "i18n:plugin_wpm_uninstall",
+					Name:                   "i18n:plugin_wpm_uninstall",
+					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						plugin.GetStoreManager().Uninstall(ctx, pluginInstance)
 					},

@@ -164,6 +164,8 @@
   "ui_plugin_privacy_llm_desc": "This plugin uses large language model to provide better results, you need to configure the model in LLM Tools plugin first",
   "ui_plugin_trigger_keyword_column": "Keyword",
   "ui_plugin_trigger_keyword_tooltip": "The keyword that triggers this plugin. * presents no keyword, any input will trigger this plugin.",
+  "ui_plugin_trigger_keywords_tip": "As palavras-chave de gatilho são prefixos que você digita no Wox para ativar este plugin. Use \"*\" para torná-lo global (sem palavra-chave).",
+  "ui_plugin_commands_tip": "Os comandos são subcomandos após a palavra-chave de gatilho. Digite \"<gatilho> <comando> \" (observe o espaço final) para entrar no modo de comando.",
   "ui_plugin_command_name_column": "Name",
   "ui_plugin_command_desc_column": "Description",
   "ui_setting_plugin_system_tag": "Sistema",

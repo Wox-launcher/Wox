@@ -316,7 +316,7 @@ func (m *Manager) LoadPlugin(ctx context.Context, pluginDirectory string) error 
 	}
 
 	pluginHost, exist := lo.Find(AllHosts, func(item Host) bool {
-		return strings.ToLower(string(item.GetRuntime(ctx))) == strings.ToLower(metadata.Runtime)
+		return strings.EqualFold(string(item.GetRuntime(ctx)), metadata.Runtime)
 	})
 	if !exist {
 		return fmt.Errorf("unsupported runtime: %s", metadata.Runtime)
@@ -424,7 +424,7 @@ func (m *Manager) ParseMetadata(ctx context.Context, pluginDirectory string) (Me
 	if !IsSupportedRuntime(metadata.Runtime) {
 		return Metadata{}, fmt.Errorf("unsupported runtime in plugin.json file (%s), runtime=%s", pluginDirectory, metadata.Runtime)
 	}
-	if !IsSupportedOSAny(metadata.SupportedOS) {
+	if !IsAllSupportedOS(metadata.SupportedOS) {
 		return Metadata{}, fmt.Errorf("unsupported os in plugin.json file (%s), os=%s", pluginDirectory, metadata.SupportedOS)
 	}
 
