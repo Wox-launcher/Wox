@@ -30,8 +30,9 @@ var appIcon = common.PluginAppIcon
 type AppType = string
 
 const (
-	AppTypeDesktop AppType = "desktop"
-	AppTypeUWP     AppType = "uwp"
+	AppTypeDesktop        AppType = "desktop"
+	AppTypeUWP            AppType = "uwp"
+	AppTypeWindowsSetting AppType = "windows_setting"
 )
 
 type appInfo struct {
@@ -52,7 +53,7 @@ type appContextData struct {
 }
 
 func (a *appInfo) GetDisplayPath() string {
-	if a.Type == AppTypeUWP {
+	if a.Type == AppTypeUWP || a.Type == AppTypeWindowsSetting {
 		return ""
 	}
 	return a.Path
@@ -216,10 +217,18 @@ func (a *ApplicationPlugin) reuseAppFromCache(ctx context.Context, appPath strin
 func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	var results []plugin.QueryResult
 	for _, info := range a.apps {
-		isNameMatch, nameScore := plugin.IsStringMatchScore(ctx, info.Name, query.Search)
+		displayName := info.Name
+		if strings.HasPrefix(displayName, "i18n:") {
+			displayName = a.api.GetTranslation(ctx, displayName)
+		}
+
+		isNameMatch, nameScore := plugin.IsStringMatchScore(ctx, displayName, query.Search)
 		isPathNameMatch, pathNameScore := plugin.IsStringMatchScore(ctx, filepath.Base(info.Path), query.Search)
 		if isNameMatch || isPathNameMatch {
 			displayPath := info.GetDisplayPath()
+			if info.Type == AppTypeWindowsSetting {
+				displayPath = a.api.GetTranslation(ctx, "i18n:plugin_app_windows_settings_subtitle")
+			}
 
 			contextData := appContextData{
 				Name: info.Name,
@@ -228,66 +237,82 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 			}
 			contextDataJson, _ := json.Marshal(contextData)
 
+			infoCopy := info
 			result := plugin.QueryResult{
 				Id:          uuid.NewString(),
-				Title:       info.Name,
+				Title:       displayName,
 				SubTitle:    displayPath,
 				Icon:        info.Icon,
 				Score:       util.MaxInt64(nameScore, pathNameScore),
 				ContextData: string(contextDataJson),
-				Actions: []plugin.QueryResultAction{
-					{
-						Name: "i18n:plugin_app_open",
-						Icon: common.OpenIcon,
-						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							runErr := shell.Open(info.Path)
-							if runErr != nil {
-								a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error opening app %s: %s", info.Path, runErr.Error()))
-								a.api.Notify(ctx, fmt.Sprintf("i18n:plugin_app_open_failed_description: %s", runErr.Error()))
-							}
-						},
-					},
-					{
-						Name: "i18n:plugin_app_open_containing_folder",
-						Icon: common.OpenContainingFolderIcon,
-						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							if err := a.retriever.OpenAppFolder(ctx, info); err != nil {
-								a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error opening folder: %s", err.Error()))
-							}
-						},
-					},
-					{
-						Name: "i18n:plugin_app_copy_path",
-						Icon: common.CopyIcon,
-						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							clipboard.WriteText(info.Path)
-						},
-					},
-					{
-						Name: "i18n:plugin_file_show_context_menu",
-						Icon: common.PluginMenusIcon,
-						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							a.api.Log(ctx, plugin.LogLevelInfo, "Showing context menu for: "+info.Path)
-							err := nativecontextmenu.ShowContextMenu(info.Path)
-							if err != nil {
-								a.api.Log(ctx, plugin.LogLevelError, err.Error())
-								a.api.Notify(ctx, err.Error())
-							}
-						},
-						Hotkey:                 "ctrl+m",
-						PreventHideAfterAction: true,
-					},
-				},
+				Actions:     a.buildAppActions(infoCopy),
 			}
 
 			// Track this result for periodic refresh (refreshRunningApps will handle running state)
-			a.trackedResults.Store(result.Id, info)
+			a.trackedResults.Store(result.Id, infoCopy)
 
 			results = append(results, result)
 		}
 	}
 
 	return results
+}
+
+func (a *ApplicationPlugin) buildAppActions(info appInfo) []plugin.QueryResultAction {
+	infoCopy := info
+	actions := []plugin.QueryResultAction{
+		{
+			Name: "i18n:plugin_app_open",
+			Icon: common.OpenIcon,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				runErr := shell.Open(infoCopy.Path)
+				if runErr != nil {
+					a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error opening app %s: %s", infoCopy.Path, runErr.Error()))
+					a.api.Notify(ctx, fmt.Sprintf("i18n:plugin_app_open_failed_description: %s", runErr.Error()))
+				}
+			},
+		},
+	}
+
+	if infoCopy.Type != AppTypeWindowsSetting {
+		actions = append(actions, plugin.QueryResultAction{
+			Name: "i18n:plugin_app_open_containing_folder",
+			Icon: common.OpenContainingFolderIcon,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				if err := a.retriever.OpenAppFolder(ctx, infoCopy); err != nil {
+					a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error opening folder: %s", err.Error()))
+				}
+			},
+		})
+	}
+
+	actions = append(actions, plugin.QueryResultAction{
+		Name: "i18n:plugin_app_copy_path",
+		Icon: common.CopyIcon,
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			clipboard.WriteText(infoCopy.Path)
+		},
+	})
+
+	// Only desktop-style apps have a file path suitable for OS context menu.
+	if infoCopy.Type != AppTypeUWP && infoCopy.Type != AppTypeWindowsSetting {
+		actions = append(actions, plugin.QueryResultAction{
+			Name: "i18n:plugin_file_show_context_menu",
+			Icon: common.PluginMenusIcon,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				a.api.Log(ctx, plugin.LogLevelInfo, "Showing context menu for: "+infoCopy.Path)
+				err := nativecontextmenu.ShowContextMenu(infoCopy.Path)
+				if err != nil {
+					a.api.Log(ctx, plugin.LogLevelError, err.Error())
+					a.api.Notify(ctx, err.Error())
+				}
+			},
+			Hotkey:                 "ctrl+m",
+			PreventHideAfterAction: true,
+		})
+	}
+
+	return actions
 }
 
 func (a *ApplicationPlugin) getRunningProcessResult(app appInfo) (tails []plugin.QueryResultTail) {
@@ -669,6 +694,7 @@ func (a *ApplicationPlugin) removeDuplicateApps(ctx context.Context, apps []appI
 }
 
 func (a *ApplicationPlugin) handleMRURestore(mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	ctx := context.Background()
 	var contextData appContextData
 	if err := json.Unmarshal([]byte(mruData.ContextData), &contextData); err != nil {
 		return nil, fmt.Errorf("failed to parse context data: %w", err)
@@ -686,42 +712,22 @@ func (a *ApplicationPlugin) handleMRURestore(mruData plugin.MRUData) (*plugin.Qu
 		return nil, fmt.Errorf("app not found: %s", contextData.Name)
 	}
 
+	displayName := appInfo.Name
+	if strings.HasPrefix(displayName, "i18n:") {
+		displayName = a.api.GetTranslation(ctx, displayName)
+	}
+
 	displayPath := appInfo.GetDisplayPath()
+	if appInfo.Type == AppTypeWindowsSetting {
+		displayPath = a.api.GetTranslation(ctx, "i18n:plugin_app_windows_settings_subtitle")
+	}
 	result := &plugin.QueryResult{
 		Id:          uuid.NewString(),
-		Title:       appInfo.Name,
+		Title:       displayName,
 		SubTitle:    displayPath,
 		Icon:        appInfo.Icon, // Use current icon instead of cached MRU icon to handle cache invalidation
 		ContextData: mruData.ContextData,
-		Actions: []plugin.QueryResultAction{
-			{
-				Name: "i18n:plugin_app_open",
-				Icon: common.OpenIcon,
-				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					runErr := shell.Open(appInfo.Path)
-					if runErr != nil {
-						a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error opening app %s: %s", appInfo.Path, runErr.Error()))
-						a.api.Notify(ctx, fmt.Sprintf("i18n:plugin_app_open_failed_description: %s", runErr.Error()))
-					}
-				},
-			},
-			{
-				Name: "i18n:plugin_app_open_containing_folder",
-				Icon: common.OpenContainingFolderIcon,
-				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					if err := a.retriever.OpenAppFolder(ctx, *appInfo); err != nil {
-						a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error opening folder: %s", err.Error()))
-					}
-				},
-			},
-			{
-				Name: "i18n:plugin_app_copy_path",
-				Icon: common.CopyIcon,
-				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					clipboard.WriteText(appInfo.Path)
-				},
-			},
-		},
+		Actions:     a.buildAppActions(*appInfo),
 	}
 
 	// Track this result for periodic refresh (refreshRunningApps will handle running state)

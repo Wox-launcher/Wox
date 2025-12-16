@@ -533,10 +533,15 @@ func (a *WindowsRetriever) queryVersionString(ctx context.Context, buffer []byte
 }
 
 func (a *WindowsRetriever) GetExtraApps(ctx context.Context) ([]appInfo, error) {
+	settingsApps := a.getWindowsSettingsApps(ctx)
+	if len(settingsApps) > 0 {
+		util.GetLogger().Info(ctx, fmt.Sprintf("Loaded %d Windows Settings items", len(settingsApps)))
+	}
+
 	uwpApps := a.GetUWPApps(ctx)
 	util.GetLogger().Info(ctx, fmt.Sprintf("Found %d UWP apps", len(uwpApps)))
 
-	return uwpApps, nil
+	return append(settingsApps, uwpApps...), nil
 }
 
 // getPrivateWorkingSet calculates the private (non-shared) working set size for a process
