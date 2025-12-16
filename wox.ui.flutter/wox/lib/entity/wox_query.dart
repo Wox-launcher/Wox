@@ -293,10 +293,9 @@ class ShowAppParams {
   late List<QueryHistory> queryHistories;
   late String launchMode;
   late String startPage;
-  late bool autoFocusToChatInput;
+  late bool isQueryFocus;
 
-  ShowAppParams(
-      {required this.selectAll, required this.position, required this.queryHistories, required this.launchMode, required this.startPage, this.autoFocusToChatInput = false});
+  ShowAppParams({required this.selectAll, required this.position, required this.queryHistories, required this.launchMode, required this.startPage, this.isQueryFocus = false});
 
   ShowAppParams.fromJson(Map<String, dynamic> json) {
     selectAll = json['SelectAll'];
@@ -310,7 +309,7 @@ class ShowAppParams {
     }
     launchMode = json['LaunchMode'] ?? 'continue';
     startPage = json['StartPage'] ?? 'mru';
-    autoFocusToChatInput = json['AutoFocusToChatInput'] ?? false;
+    isQueryFocus = json['IsQueryFocus'] ?? false;
   }
 }
 

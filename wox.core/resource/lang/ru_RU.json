@@ -563,11 +563,11 @@
   "plugin_ai_chat_default_model": "Модель по умолчанию",
   "plugin_ai_chat_default_model_tooltip": "Модель по умолчанию для этой команды",
   "plugin_ai_chat_enable_fallback_search": "Резервный поиск",
-  "plugin_ai_chat_enable_fallback_search_tooltip": "Если включено, если результат запроса пуст, Wox вернет результат 'использовать AI Chat для %s'",
+  "plugin_ai_chat_enable_fallback_search_tooltip": "Если включено, если результат запроса пуст, Wox вернет результат 'использовать AI Chat для <query>'",
   "plugin_ai_chat_fallback_search_chat_for": "Использовать AI Chat для %s",
   "plugin_ai_chat_start_chat": "Начать чат",
-  "plugin_ai_chat_enable_auto_focus_to_chat_input": "Автоматически фокусировать на вводе чата при открытии с горячей клавишей запроса",
-  "plugin_ai_chat_enable_auto_focus_to_chat_input_tooltip": "Если включено, Wox автоматически фокусируется на вводе чата при открытии с горячей клавишей запроса, что позволяет вам ввести свой запрос немедленно",
+  "plugin_ai_chat_query_focus": "Query Focus",
+  "plugin_ai_chat_query_focus_tooltip": "When enabled, automatically focus the chat input box and collapse the sidebar when opening chat via a query.",
   "plugin_mediaplayer_toggle": "Воспроизвести/Пауза",
   "plugin_mediaplayer_copy_info": "Копировать информацию",
   "plugin_mediaplayer_no_media": "Нет медиа",
@@ -645,5 +645,7 @@
   "plugin_clipboard_edit_alias": "Редактировать псевдоним",
   "plugin_clipboard_edit_alias_label": "Псевдоним",
   "plugin_clipboard_edit_alias_hint": "Установить пользовательский псевдоним для этого элемента",
-  "ui_not_supported_field": "Тип поля не поддерживается"
+  "ui_not_supported_field": "Тип поля не поддерживается",
+  "ui_ai_chat_show_sidebar": "Show Sidebar",
+  "ui_ai_chat_hide_sidebar": "Hide Sidebar"
 }

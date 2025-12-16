@@ -204,7 +204,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
 
       // Chat view has its own layout structure with Expanded widgets, return it directly
       return Container(
-        padding: const EdgeInsets.only(top: 10.0, bottom: 10.0, left: 10.0),
+        padding: const EdgeInsets.only(top: 10.0, bottom: 10.0),
         child: const WoxAIChatView(),
       );
     }

@@ -564,11 +564,11 @@
   "plugin_ai_chat_default_model": "Modelo padrão",
   "plugin_ai_chat_default_model_tooltip": "O modelo padrão a ser usado para esta consulta",
   "plugin_ai_chat_enable_fallback_search": "Busca de fallback",
-  "plugin_ai_chat_enable_fallback_search_tooltip": "Quando selecionado, se o resultado da consulta estiver vazio, o Wox retornará um resultado de 'usar IA para %s'",
+  "plugin_ai_chat_enable_fallback_search_tooltip": "Quando selecionado, se o resultado da consulta estiver vazio, o Wox retornará um resultado de 'usar IA para pesquisar <consulta>'",
   "plugin_ai_chat_fallback_search_chat_for": "Usar IA para %s",
   "plugin_ai_chat_start_chat": "Iniciar conversa",
-  "plugin_ai_chat_enable_auto_focus_to_chat_input": "Focar automaticamente na entrada de chat ao abrir com atalho de consulta",
-  "plugin_ai_chat_enable_auto_focus_to_chat_input_tooltip": "Quando selecionado, o Wox focará automaticamente na entrada de chat ao abrir com atalho de consulta, permitindo que você digite sua consulta imediatamente",
+  "plugin_ai_chat_query_focus": "Query Focus",
+  "plugin_ai_chat_query_focus_tooltip": "When enabled, automatically focus the chat input box and collapse the sidebar when opening chat via a query.",
   "plugin_mediaplayer_toggle": "Reproduzir/Pausar",
   "plugin_mediaplayer_copy_info": "Copiar informações",
   "plugin_mediaplayer_no_media": "Nenhum mídia",
@@ -646,5 +646,7 @@
   "plugin_clipboard_edit_alias": "Editar alias",
   "plugin_clipboard_edit_alias_label": "Alias",
   "plugin_clipboard_edit_alias_hint": "Definir um alias personalizado para este item",
-  "ui_not_supported_field": "Tipo de campo não suportado"
+  "ui_not_supported_field": "Tipo de campo não suportado",
+  "ui_ai_chat_show_sidebar": "Show Sidebar",
+  "ui_ai_chat_hide_sidebar": "Hide Sidebar"
 }

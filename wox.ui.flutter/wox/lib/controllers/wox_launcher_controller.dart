@@ -371,10 +371,12 @@ class WoxLauncherController extends GetxController {
     await windowManager.focus();
     focusQueryBox(selectAll: params.selectAll);
 
-    if (params.autoFocusToChatInput) {
-      Logger.instance.debug(traceId, "need to auto focus to chat input on show app");
+    if (params.isQueryFocus) {
+      Logger.instance.debug(traceId, "need to auto focus to chat input on show app (query focus)");
       if (isShowPreviewPanel.value && currentPreview.value.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code) {
-        Get.find<WoxAIChatController>().focusToChatInput(traceId);
+        final chatController = Get.find<WoxAIChatController>();
+        chatController.focusToChatInput(traceId);
+        chatController.collapseLeftPanel();
       }
     }
 

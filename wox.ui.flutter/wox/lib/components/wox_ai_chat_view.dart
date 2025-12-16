@@ -56,6 +56,25 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                         // Model info
                         Row(
                           children: [
+                            // Sidebar toggle button
+                            Obx(() => IconButton(
+                                  tooltip: controller.isLeftPanelCollapsed.value ? tr('ui_ai_chat_show_sidebar') : tr('ui_ai_chat_hide_sidebar'),
+                                  icon: Icon(
+                                    controller.isLeftPanelCollapsed.value ? Icons.last_page : Icons.first_page, // Or any other suitable icon
+                                    size: 20,
+                                    color: safeFromCssColor(woxTheme.previewPropertyTitleColor),
+                                  ),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 32,
+                                    minHeight: 32,
+                                  ),
+                                  onPressed: () {
+                                    controller.toggleLeftPanel();
+                                  },
+                                )),
+                            const SizedBox(width: 8),
+
                             Icon(
                               Icons.model_training,
                               size: 20,

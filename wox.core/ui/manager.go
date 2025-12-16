@@ -269,15 +269,15 @@ func (m *Manager) RegisterQueryHotkey(ctx context.Context, queryHotkey setting.Q
 				logger.Info(ctx, fmt.Sprintf("silent query executed: %s", query))
 			}
 		} else {
-			autoFocusToChatInput := false
+			isQueryFocus := false
 			// check if query is chat plugin, and auto focus if enabled
 			if plugin.GetPluginManager().IsTriggerKeywordAIChat(ctx, q.TriggerKeyword) {
 				if plugin.GetPluginManager().GetAIChatPluginChater(ctx).IsAutoFocusToChatInputWhenOpenWithQueryHotkey(ctx) {
-					autoFocusToChatInput = true
+					isQueryFocus = true
 				}
 			}
 			m.ui.ChangeQuery(newCtx, plainQuery)
-			m.ui.ShowApp(newCtx, common.ShowContext{SelectAll: false, AutoFocusToChatInput: autoFocusToChatInput})
+			m.ui.ShowApp(newCtx, common.ShowContext{SelectAll: false, IsQueryFocus: isQueryFocus})
 		}
 	})
 	if err != nil {

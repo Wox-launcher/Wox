@@ -68,8 +68,8 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 				Value: &definition.PluginSettingValueCheckBox{
 					Key:          "enable_auto_focus_to_chat_input",
 					DefaultValue: "true",
-					Label:        "i18n:plugin_ai_chat_enable_auto_focus_to_chat_input",
-					Tooltip:      "i18n:plugin_ai_chat_enable_auto_focus_to_chat_input_tooltip",
+					Label:        "i18n:plugin_ai_chat_query_focus",
+					Tooltip:      "i18n:plugin_ai_chat_query_focus_tooltip",
 				},
 			},
 			{

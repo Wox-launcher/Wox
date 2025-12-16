@@ -572,11 +572,11 @@
   "plugin_ai_chat_default_model": "默认模型",
   "plugin_ai_chat_default_model_tooltip": "用于对话的默认模型",
   "plugin_ai_chat_enable_fallback_search": "回退搜索",
-  "plugin_ai_chat_enable_fallback_search_tooltip": "当查询结果为空时，Wox 将返回一个 '使用 AI Chat 查询 %s' 的结果",
+  "plugin_ai_chat_enable_fallback_search_tooltip": "当查询结果为空时，Wox 将返回一个 '使用 AI 查询 <你的搜索>' 的结果",
   "plugin_ai_chat_fallback_search_chat_for": "使用 AI Chat 查询 %s",
   "plugin_ai_chat_start_chat": "开始对话",
-  "plugin_ai_chat_enable_auto_focus_to_chat_input": "使用查询快捷键打开时自动聚焦到对话输入框",
-  "plugin_ai_chat_enable_auto_focus_to_chat_input_tooltip": "当启用时，Wox 将在使用查询快捷键打开时自动聚焦到对话输入框，这将允许您立即输入查询",
+  "plugin_ai_chat_query_focus": "查询聚焦",
+  "plugin_ai_chat_query_focus_tooltip": "启用后，通过查询进入AI对话时，自动聚焦到对话输入框并折叠侧边栏。",
   "plugin_mediaplayer_toggle": "播放/暂停",
   "plugin_mediaplayer_copy_info": "复制信息",
   "plugin_mediaplayer_no_media": "没有正在播放的媒体",
@@ -632,5 +632,7 @@
   "plugin_emoji_add_keyword": "添加关键字",
   "plugin_emoji_add_keyword_label": "关键字",
   "plugin_emoji_add_keyword_hint": "添加自定义关键字，帮助您更快搜索到该表情，多个关键字用逗号分隔。",
-  "ui_not_supported_field": "该字段类型暂不支持"
+  "ui_not_supported_field": "该字段类型暂不支持",
+  "ui_ai_chat_show_sidebar": "显示侧边栏",
+  "ui_ai_chat_hide_sidebar": "隐藏侧边栏"
 }

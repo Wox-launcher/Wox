@@ -165,10 +165,12 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
     return Obx(
       () => controller.resultListViewController.items.isNotEmpty
           ? controller.isShowPreviewPanel.value
-              ? Flexible(
-                  flex: (controller.resultPreviewRatio.value * 100).toInt(),
-                  child: getResultContainer(),
-                )
+              ? controller.resultPreviewRatio.value == 0
+                  ? SizedBox()
+                  : Flexible(
+                      flex: (controller.resultPreviewRatio.value * 100).toInt(),
+                      child: getResultContainer(),
+                    )
               : Expanded(
                   child: getResultContainer(),
                 )
