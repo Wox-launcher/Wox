@@ -87,11 +87,11 @@ func (w *WPMPlugin) translateLocalPluginText(ctx context.Context, metadata plugi
 }
 
 func (w *WPMPlugin) getLocalPluginName(ctx context.Context, metadata plugin.MetadataWithDirectory) string {
-	return w.translateLocalPluginText(ctx, metadata, metadata.Metadata.Name)
+	return w.translateLocalPluginText(ctx, metadata, string(metadata.Metadata.Name))
 }
 
 func (w *WPMPlugin) getLocalPluginDescription(ctx context.Context, metadata plugin.MetadataWithDirectory) string {
-	return w.translateLocalPluginText(ctx, metadata, metadata.Metadata.Description)
+	return w.translateLocalPluginText(ctx, metadata, string(metadata.Metadata.Description))
 }
 
 func (w *WPMPlugin) GetMetadata() plugin.Metadata {

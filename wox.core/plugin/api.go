@@ -282,7 +282,7 @@ func (a *APIImpl) RegisterQueryCommands(ctx context.Context, commands []Metadata
 	a.pluginInstance.Setting.QueryCommands.Set(lo.Map(commands, func(command MetadataCommand, _ int) setting.PluginQueryCommand {
 		return setting.PluginQueryCommand{
 			Command:     command.Command,
-			Description: command.Description,
+			Description: string(command.Description),
 		}
 	}))
 }

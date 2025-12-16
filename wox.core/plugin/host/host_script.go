@@ -282,7 +282,7 @@ func (s *ScriptPlugin) executeScriptRaw(ctx context.Context, request map[string]
 		"WOX_DIRECTORY_PLUGINS=" + util.GetLocation().GetPluginDirectory(),
 		"WOX_DIRECTORY_THEMES=" + util.GetLocation().GetThemeDirectory(),
 		"WOX_PLUGIN_ID=" + s.metadata.Id,
-		"WOX_PLUGIN_NAME=" + s.metadata.Name,
+		"WOX_PLUGIN_NAME=" + string(s.metadata.Name),
 		"PYTHONIOENCODING=utf-8",
 	}
 

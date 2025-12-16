@@ -106,7 +106,7 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 		for _, metadataCommandShadow := range translatedCommands {
 			metadataCommand := metadataCommandShadow
 			cmdMatch, cmdScore := plugin.IsStringMatchScoreNoPinYin(ctx, metadataCommand.Command, search)
-			descMatch, descScore := plugin.IsStringMatchScore(ctx, metadataCommand.Description, search)
+			descMatch, descScore := plugin.IsStringMatchScore(ctx, string(metadataCommand.Description), search)
 			if !cmdMatch && !descMatch {
 				continue
 			}
@@ -193,7 +193,7 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 			results = append(results, plugin.QueryResult{
 				Id:       uuid.NewString(),
 				Title:    fmt.Sprintf("%s %s ", triggerKeywordCommandCopy, metadataCommand.Command),
-				SubTitle: metadataCommand.Description,
+				SubTitle: string(metadataCommand.Description),
 				Score:    commandScore,
 				Icon:     pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, indicatorIcon),
 				Actions: []plugin.QueryResultAction{

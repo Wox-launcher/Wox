@@ -802,7 +802,7 @@ func (m *Manager) GetResultForFailedQuery(ctx context.Context, pluginMetadata Me
 	overlayIcon := common.NewWoxImageEmoji("🚫")
 	pluginIcon := common.ParseWoxImageOrDefault(pluginMetadata.Icon, overlayIcon)
 	icon := pluginIcon.OverlayFullPercentage(overlayIcon, 0.6)
-	pluginName := i18n.GetI18nManager().TranslateWox(ctx, pluginMetadata.Name)
+	pluginName := i18n.GetI18nManager().TranslateWox(ctx, string(pluginMetadata.Name))
 
 	return QueryResult{
 		Title:    fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_manager_query_failed"), pluginName),
@@ -1482,7 +1482,7 @@ func (m *Manager) QueryFallback(ctx context.Context, query Query, queryPlugin *I
 		queryResults = lo.Map(commands, func(item MetadataCommand, index int) QueryResult {
 			return QueryResult{
 				Title:    item.Command,
-				SubTitle: item.Description,
+				SubTitle: string(item.Description),
 				Icon:     common.ParseWoxImageOrDefault(queryPlugin.Metadata.Icon, common.NewWoxImageEmoji("🔍")),
 				Actions: []QueryResultAction{
 					{

@@ -109,7 +109,7 @@ func (w *WebsocketHost) invokeMethod(ctx context.Context, metadata plugin.Metada
 		TraceId:    util.GetContextTraceId(ctx),
 		Id:         uuid.NewString(),
 		PluginId:   metadata.Id,
-		PluginName: metadata.Name,
+		PluginName: string(metadata.Name),
 		Method:     method,
 		Type:       JsonRpcTypeRequest,
 		Params:     params,

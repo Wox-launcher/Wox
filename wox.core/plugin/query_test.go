@@ -3,6 +3,7 @@ package plugin
 import (
 	"github.com/stretchr/testify/assert"
 	"testing"
+	"wox/common"
 	"wox/setting"
 )
 
@@ -14,11 +15,11 @@ func getFakePluginInstances() []*Instance {
 				Commands: []MetadataCommand{
 					{
 						Command:     "install",
-						Description: "Install Wox plugins",
+						Description: common.I18nString("Install Wox plugins"),
 					},
 					{
 						Command:     "uninstall",
-						Description: "Uninstall Wox plugins",
+						Description: common.I18nString("Uninstall Wox plugins"),
 					},
 				},
 			},

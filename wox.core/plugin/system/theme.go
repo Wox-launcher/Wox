@@ -214,7 +214,7 @@ func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, common.SettingWindowContext{
 								Path:  "/plugin/setting",
-								Param: c.api.GetTranslation(ctx, c.GetMetadata().Name),
+								Param: c.api.GetTranslation(ctx, string(c.GetMetadata().Name)),
 							})
 						},
 					},

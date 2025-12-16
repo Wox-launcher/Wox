@@ -135,7 +135,7 @@ func (c *Plugin) Init(ctx context.Context, initParams plugin.InitParams) {
 			gjson.Parse(value).ForEach(func(_, command gjson.Result) bool {
 				commands = append(commands, plugin.MetadataCommand{
 					Command:     command.Get("command").String(),
-					Description: command.Get("name").String(),
+					Description: common.I18nString(command.Get("name").String()),
 				})
 
 				return true
