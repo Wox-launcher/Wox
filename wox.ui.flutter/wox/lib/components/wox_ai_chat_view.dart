@@ -53,110 +53,39 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                 child: Obx(() => Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        // Model info
-                        Row(
-                          children: [
-                            // Sidebar toggle button
-                            Obx(() => IconButton(
-                                  tooltip: controller.isLeftPanelCollapsed.value ? tr('ui_ai_chat_show_sidebar') : tr('ui_ai_chat_hide_sidebar'),
-                                  icon: Icon(
-                                    controller.isLeftPanelCollapsed.value ? Icons.last_page : Icons.first_page, // Or any other suitable icon
-                                    size: 20,
-                                    color: safeFromCssColor(woxTheme.previewPropertyTitleColor),
-                                  ),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(
-                                    minWidth: 32,
-                                    minHeight: 32,
-                                  ),
-                                  onPressed: () {
-                                    controller.toggleLeftPanel();
-                                  },
-                                )),
-                            const SizedBox(width: 8),
+                        // Sidebar toggle button
+                        Obx(() => IconButton(
+                              tooltip: controller.isLeftPanelCollapsed.value ? tr('ui_ai_chat_show_sidebar') : tr('ui_ai_chat_hide_sidebar'),
+                              icon: Icon(
+                                controller.isLeftPanelCollapsed.value ? Icons.last_page : Icons.first_page, // Or any other suitable icon
+                                size: 20,
+                                color: safeFromCssColor(woxTheme.previewPropertyTitleColor),
+                              ),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 32,
+                                minHeight: 32,
+                              ),
+                              onPressed: () {
+                                controller.toggleLeftPanel();
+                              },
+                            )),
 
-                            Icon(
-                              Icons.model_training,
-                              size: 20,
+                        Expanded(
+                            child: Center(
+                          child: Text(
+                            controller.aiChatData.value.title.isEmpty ? "New Chat" : controller.aiChatData.value.title,
+                            style: TextStyle(
                               color: safeFromCssColor(woxTheme.previewPropertyTitleColor),
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
                             ),
-                            const SizedBox(width: 4),
-                            Text(
-                              "${tr('ui_ai_chat_model')}: ",
-                              style: TextStyle(
-                                color: safeFromCssColor(woxTheme.previewPropertyTitleColor),
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Text(
-                              controller.aiChatData.value.model.value.name.isEmpty ? tr("ui_ai_chat_select_model") : controller.aiChatData.value.model.value.name,
-                              style: TextStyle(
-                                color: safeFromCssColor(woxTheme.previewPropertyTitleColor),
-                                fontSize: 12,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-
-                        // Tools info
-                        if (controller.selectedTools.isNotEmpty)
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.build,
-                                size: 20,
-                                color: safeFromCssColor(woxTheme.previewPropertyTitleColor),
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                "${tr('ui_ai_chat_tools')}: ",
-                                style: TextStyle(
-                                  color: safeFromCssColor(woxTheme.previewPropertyTitleColor),
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              Text(
-                                controller.selectedTools.isEmpty ? tr("ui_ai_chat_no_tools") : "${controller.selectedTools.length} ${tr('ui_ai_chat_tools_enabled')}",
-                                style: TextStyle(
-                                  color: safeFromCssColor(woxTheme.previewPropertyTitleColor),
-                                  fontSize: 12,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
+                            overflow: TextOverflow.ellipsis,
                           ),
+                        )),
 
-                        // Agent
-                        if (controller.aiChatData.value.agentName != null && controller.aiChatData.value.agentName!.isNotEmpty)
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.smart_toy_outlined,
-                                size: 20,
-                                color: safeFromCssColor(woxTheme.previewPropertyTitleColor),
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                "${tr('ui_ai_chat_agent')}: ",
-                                style: TextStyle(
-                                  color: safeFromCssColor(woxTheme.previewPropertyTitleColor),
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              Text(
-                                controller.aiChatData.value.agentName ?? tr("ui_ai_chat_select_agent"),
-                                style: TextStyle(
-                                  color: safeFromCssColor(woxTheme.previewPropertyTitleColor),
-                                  fontSize: 12,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
+                        // 占位
+                        const SizedBox(width: 32),
                       ],
                     )),
               ),
@@ -245,24 +174,6 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                             ),
                             child: Row(
                               children: [
-                                // Model selection button
-                                Obx(() => IconButton(
-                                      tooltip: tr('ui_ai_chat_select_model_title'),
-                                      icon: Icon(
-                                        Icons.model_training,
-                                        size: 18,
-                                        color: controller.aiChatData.value.model.value.name.isNotEmpty ? getThemeTextColor() : getThemeTextColor().withAlpha(128),
-                                      ),
-                                      color: safeFromCssColor(woxTheme.actionItemActiveBackgroundColor),
-                                      onPressed: () {
-                                        controller.showModelsPanel();
-                                      },
-                                      padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints(
-                                        minWidth: 32,
-                                        minHeight: 32,
-                                      ),
-                                    )),
                                 // Tool configuration button - opens chat select panel
                                 Obx(() => IconButton(
                                       tooltip: tr('ui_ai_chat_configure_tools'),
@@ -295,6 +206,33 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                                         minHeight: 32,
                                       ),
                                     )),
+                                // Model selection button
+                                Obx(() => IconButton(
+                                      tooltip: tr('ui_ai_chat_select_model_title'),
+                                      icon: Icon(
+                                        Icons.model_training,
+                                        size: 18,
+                                        color: controller.aiChatData.value.model.value.name.isNotEmpty ? getThemeTextColor() : getThemeTextColor().withAlpha(128),
+                                      ),
+                                      color: safeFromCssColor(woxTheme.actionItemActiveBackgroundColor),
+                                      onPressed: () {
+                                        controller.showModelsPanel();
+                                      },
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(
+                                        minWidth: 32,
+                                        minHeight: 32,
+                                      ),
+                                    )),
+                                // Model Name Display
+                                Obx(() => Text(
+                                      controller.aiChatData.value.model.value.name.isEmpty ? tr("ui_ai_chat_select_model") : controller.aiChatData.value.model.value.name,
+                                      style: TextStyle(
+                                        color: getThemeTextColor(),
+                                        fontSize: 12,
+                                      ),
+                                    )),
+
                                 const Spacer(),
                                 // Send button container (unchanged)
                                 InkWell(
