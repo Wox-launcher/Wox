@@ -61,7 +61,7 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/url_launcher_macos/macos
 
 SPEC CHECKSUMS:
-  desktop_drop: 69eeff437544aa619c8db7f4481b3a65f7696898
+  desktop_drop: 1eeeb9484299585770b6461e4f3d60950e99efa2
   device_info_plus: 1b14eed9bf95428983aed283a8d51cce3d8c4215
   file_picker: e716a70a9fe5fd9e09ebc922d7541464289443af
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
