@@ -13,6 +13,10 @@
 
 ## 平台特定依赖
 
+### Windows
+
+- 安装 [MinGW-w64](https://www.mingw-w64.org/) (提供 `mingw64`)，以便在运行 `go build` 时可以编译 Windows 本地通知程序。
+
 ### macOS
 
 - 安装 [create-dmg](https://github.com/create-dmg/create-dmg)

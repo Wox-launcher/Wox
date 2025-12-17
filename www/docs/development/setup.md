@@ -13,6 +13,10 @@
 
 ## Platform Specific Dependencies
 
+### Windows
+
+- Install [MinGW-w64](https://www.mingw-w64.org/) (provides `mingw64`) so the Windows native notifier can be compiled when running `go build`.
+
 ### macOS
 
 - Install [create-dmg](https://github.com/create-dmg/create-dmg)
