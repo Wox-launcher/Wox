@@ -76,3 +76,4 @@ This document guides AI coding agents working in this repository.
 - Respect existing coding standards from `.github/instructions/*.instructions.md` (Go, Python, Dart, etc.).
 - Before large refactors, scan `AGENTS.md` and relevant `README.md` files for context on intended architecture.
 - After editing code that can be tested, prefer running the narrowest relevant tests (e.g., `make test` for core, or project-specific build/lint commands) and avoid changing unrelated failing tests.
+- **No backward compatibility** - Break old formats freely
