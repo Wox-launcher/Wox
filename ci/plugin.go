@@ -11,6 +11,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/imroc/req/v3"
 	"github.com/tidwall/pretty"
+	"github.com/tidwall/sjson"
 )
 
 // should be same as StorePluginManifest in store.go
@@ -94,8 +95,22 @@ func checkPluginNewVersion() error {
 		}
 
 		if currentVersion.GreaterThan(existVersion) {
+			updatedAt := time.Now().Format("2006-01-02 15:04:05")
+
+			// Update only the fields we need, keeping the original JSON structure
+			// (avoid marshaling the whole manifest which would introduce missing optional fields).
+			updatedBytes, setErr := sjson.SetBytes(fileStr, fmt.Sprintf("%d.Version", index), currentVersion.String())
+			if setErr != nil {
+				return fmt.Errorf("set Version err: %w", setErr)
+			}
+			updatedBytes, setErr = sjson.SetBytes(updatedBytes, fmt.Sprintf("%d.DateUpdated", index), updatedAt)
+			if setErr != nil {
+				return fmt.Errorf("set DateUpdated err: %w", setErr)
+			}
+			fileStr = updatedBytes
+
 			plugins[index].Version = currentVersion.String()
-			plugins[index].DateUpdated = time.Now().Format("2006-01-02 15:04:05")
+			plugins[index].DateUpdated = updatedAt
 			hasUpdate = true
 			fmt.Printf("[%s] Exist version: %s, New version: %s, update found\n", plugin.Name, existVersion, currentVersion)
 		} else {
@@ -104,11 +119,7 @@ func checkPluginNewVersion() error {
 	}
 
 	if hasUpdate {
-		marshal, marshalErr := json.Marshal(plugins)
-		if marshalErr != nil {
-			return fmt.Errorf("marshal plugin store json err: %s", marshalErr.Error())
-		}
-		return os.WriteFile("../store-plugin.json", pretty.Pretty(marshal), 0644)
+		return os.WriteFile("../store-plugin.json", pretty.Pretty(fileStr), 0644)
 	}
 
 	return nil
