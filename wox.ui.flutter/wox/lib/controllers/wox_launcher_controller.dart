@@ -1204,6 +1204,8 @@ class WoxLauncherController extends GetxController {
   }
 
   Future<void> exitSetting(String traceId) async {
+    closeAllDialogsInSetting();
+
     if (isSettingOpenedFromHidden) {
       // For hidden-opened settings, exit means hide the window directly
       await hideApp(traceId);
@@ -1217,6 +1219,15 @@ class WoxLauncherController extends GetxController {
     await windowManager.setPosition(positionBeforeOpenSetting);
     await windowManager.focus();
     focusQueryBox(selectAll: true);
+  }
+
+  void closeAllDialogsInSetting() {
+    final navigator = Get.key.currentState;
+    if (navigator == null) {
+      return;
+    }
+
+    navigator.popUntil((route) => route.isFirst);
   }
 
   void showToolbarMsg(String traceId, ToolbarMsg msg) {

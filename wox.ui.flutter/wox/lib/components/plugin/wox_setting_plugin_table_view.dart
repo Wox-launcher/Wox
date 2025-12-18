@@ -379,7 +379,19 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                 showDialog(
                     context: context,
                     builder: (context) {
+                      final themeBackground = getThemeBackgroundColor();
+                      final isDarkTheme = themeBackground.computeLuminance() < 0.5;
+                      final baseSurface = themeBackground.withAlpha(255);
+                      final cardColor = (isDarkTheme ? baseSurface.lighter(12) : baseSurface.darker(6)).withAlpha(255);
+                      final outlineColor = getThemeActiveBackgroundColor().withOpacity(isDarkTheme ? 0.22 : 0.15);
+
                       return AlertDialog(
+                        backgroundColor: cardColor,
+                        surfaceTintColor: Colors.transparent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          side: BorderSide(color: outlineColor),
+                        ),
                         content: Text(tr("ui_delete_row_confirm"), style: TextStyle(color: getThemeTextColor())),
                         actions: [
                           Row(

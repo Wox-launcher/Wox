@@ -102,6 +102,7 @@ class MyApp extends StatelessWidget {
     );
 
     return MaterialApp(
+      navigatorKey: Get.key,
       theme: ThemeData(
         useMaterial3: true,
         textTheme: scaledTextTheme,
