@@ -385,11 +385,7 @@ func (m *Metadata) GetDescription(ctx context.Context) string {
 }
 
 func (m *Metadata) translate(ctx context.Context, text common.I18nString) string {
-	rawText := string(text)
-	if !strings.HasPrefix(rawText, "i18n:") {
-		return rawText
-	}
-
+	rawText := strings.TrimSpace(string(text))
 	if translated := i18n.GetI18nManager().TranslateI18nMap(ctx, rawText, m.I18n); translated != rawText {
 		return translated
 	}
