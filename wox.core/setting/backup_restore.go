@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -126,51 +127,65 @@ func (m *Manager) Restore(ctx context.Context, backupId string) error {
 		return fmt.Errorf("backup not found: %s", backupId)
 	}
 
-	// backup current data to temp directory
-	tempBackupName := fmt.Sprintf("temp_%d", util.GetSystemTimestamp())
-	tempBackupPath := path.Join(util.GetLocation().GetWoxDataDirectory(), tempBackupName)
-	cpErr := cp.Copy(util.GetLocation().GetUserDataDirectory(), tempBackupPath)
-	if cpErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to backup current data to temp directory: %s", cpErr.Error()))
-		return cpErr
-	}
-
-	// first remove current data
-	rmErr := os.Remove(util.GetLocation().GetUserDataDirectory())
-	if rmErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to remove user data directory: %s", rmErr.Error()))
-		return rmErr
-	}
-
 	backupPath := path.Join(util.GetLocation().GetBackupDirectory(), backupName)
-	cpErr = cp.Copy(backupPath, util.GetLocation().GetUserDataDirectory())
+	if _, statErr := os.Stat(backupPath); statErr != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to stat backup directory: %s", statErr.Error()))
+		return statErr
+	}
+
+	userDataDir := util.GetLocation().GetUserDataDirectory()
+	var userDataBackupDir string
+	if _, statErr := os.Stat(userDataDir); statErr == nil {
+		ts := util.GetSystemTimestamp()
+		candidate := fmt.Sprintf("%s.before_restore_%d", userDataDir, ts)
+		userDataBackupDir = ensureUniquePath(candidate)
+
+		renameErr := os.Rename(userDataDir, userDataBackupDir)
+		if renameErr != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to rename user data directory: %s", renameErr.Error()))
+			return renameErr
+		}
+		logger.Info(ctx, fmt.Sprintf("user data directory renamed to: %s", userDataBackupDir))
+	} else if !os.IsNotExist(statErr) {
+		logger.Error(ctx, fmt.Sprintf("failed to stat user data directory: %s", statErr.Error()))
+		return statErr
+	}
+
+	cpErr := cp.Copy(backupPath, userDataDir)
 	if cpErr != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to restore backup data to user data directory: %s", cpErr.Error()))
+		if userDataBackupDir != "" {
+			_ = os.RemoveAll(userDataDir)
+			_ = os.Rename(userDataBackupDir, userDataDir)
+		}
 		return cpErr
 	}
 
-	// remove backup info if exists
-	backupInfoPath := path.Join(backupPath, "backup.json")
-	if _, statErr := os.Stat(backupInfoPath); !os.IsNotExist(statErr) {
-		rmErr = os.Remove(backupInfoPath)
-		if rmErr != nil {
-			logger.Error(ctx, fmt.Sprintf("failed to remove backup info: %s", rmErr.Error()))
-			return rmErr
-		}
-	}
-
-	// remove temp backup data
-	rmErr = os.RemoveAll(tempBackupPath)
-	if rmErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to remove temp backup data: %s", rmErr.Error()))
+	backupInfoPath := path.Join(userDataDir, "backup.json")
+	if rmErr := os.Remove(backupInfoPath); rmErr != nil && !os.IsNotExist(rmErr) {
+		logger.Error(ctx, fmt.Sprintf("failed to remove restored backup info: %s", rmErr.Error()))
 		return rmErr
 	}
 
 	logger.Info(ctx, "backup data restored successfully")
 
-	//TODO: reload data / plugins
-
 	return nil
+}
+
+func ensureUniquePath(candidate string) string {
+	if _, err := os.Stat(candidate); os.IsNotExist(err) {
+		return candidate
+	}
+	dir := filepath.Dir(candidate)
+	base := filepath.Base(candidate)
+	ext := filepath.Ext(base)
+	name := strings.TrimSuffix(base, ext)
+	for i := 2; ; i++ {
+		p := filepath.Join(dir, fmt.Sprintf("%s_%d%s", name, i, ext))
+		if _, err := os.Stat(p); os.IsNotExist(err) {
+			return p
+		}
+	}
 }
 
 func (m *Manager) FindAllBackups(ctx context.Context) ([]Backup, error) {

@@ -4,11 +4,14 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"time"
 	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/setting"
+	"wox/ui"
 	"wox/util"
+	"wox/util/shell"
 )
 
 var backupIcon = common.PluginBackupIcon
@@ -66,7 +69,8 @@ func (c *BackupPlugin) backup(ctx context.Context, query plugin.Query) []plugin.
 			Icon:     backupIcon,
 			Actions: []plugin.QueryResultAction{
 				{
-					Name: "i18n:plugin_backup_action",
+					Name:                   "i18n:plugin_backup_action",
+					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						backupErr := setting.GetSettingManager().Backup(ctx, setting.BackupTypeManual)
 						if backupErr != nil {
@@ -106,13 +110,27 @@ func (c *BackupPlugin) restore(ctx context.Context, query plugin.Query) []plugin
 			Icon:     backupIcon,
 			Actions: []plugin.QueryResultAction{
 				{
-					Name: "i18n:plugin_backup_restore",
+					Name:                   "i18n:plugin_backup_restore",
+					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						restoreErr := setting.GetSettingManager().Restore(ctx, backup.Id)
 						if restoreErr != nil {
 							c.api.Notify(ctx, restoreErr.Error())
 						} else {
 							c.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_backup_restore_success"))
+							util.Go(ctx, "exit after restore", func() {
+								time.Sleep(2000 * time.Millisecond)
+								ui.GetUIManager().ExitApp(ctx)
+							})
+						}
+					},
+				},
+				{
+					Name: "i18n:plugin_backup_open_folder",
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						openErr := shell.Open(backup.Path)
+						if openErr != nil {
+							c.api.Notify(ctx, openErr.Error())
 						}
 					},
 				},
