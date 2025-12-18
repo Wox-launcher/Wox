@@ -13,20 +13,28 @@ import (
 	"github.com/tidwall/pretty"
 )
 
+// should be same as StorePluginManifest in store.go
 type storePluginManifest struct {
 	Id             string
-	Name           string
+	Name           string // supported i18n
 	Author         string
 	Version        string
 	MinWoxVersion  string
 	Runtime        string
-	Description    string
+	Description    string // supported i18n
 	IconUrl        string
+	IconEmoji      string
 	Website        string
 	DownloadUrl    string
 	ScreenshotUrls []string
+	SupportedOS    []string
 	DateCreated    string
 	DateUpdated    string
+
+	// I18n holds inline translations for the store manifest.
+	// Map structure: langCode -> key -> translatedValue
+	// Example: {"en_US": {"plugin_name": "Hello"}, "zh_CN": {"plugin_name": "你好"}}
+	I18n map[string]map[string]string
 }
 
 func runPlugin() {
