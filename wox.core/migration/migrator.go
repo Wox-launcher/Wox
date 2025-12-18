@@ -3,12 +3,13 @@ package migration
 import (
 	"context"
 	"fmt"
-	"gorm.io/gorm"
 	"sort"
 	"strings"
 	"time"
 	"wox/database"
 	"wox/util"
+
+	"gorm.io/gorm"
 )
 
 type Migration interface {
