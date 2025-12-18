@@ -67,6 +67,14 @@ type MRURecord struct {
 	UpdatedAt   time.Time
 }
 
+// MigrationRecord tracks one-time application migrations (data/setting compatibility upgrades).
+// IDs are managed by the migration package and are ordered lexicographically.
+type MigrationRecord struct {
+	ID        string `gorm:"primaryKey"`
+	AppliedAt int64  `gorm:"not null"`
+	Status    string `gorm:"not null"` // applied | skipped
+}
+
 func Init(ctx context.Context) error {
 	util.GetLogger().Info(ctx, "initializing database")
 
@@ -123,6 +131,7 @@ func Init(ctx context.Context) error {
 		&Oplog{},
 		&MRURecord{},
 		&ToolbarMute{},
+		&MigrationRecord{},
 	)
 	if err != nil {
 		return fmt.Errorf("failed to migrate database schema: %w", err)
