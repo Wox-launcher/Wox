@@ -3,7 +3,7 @@ from typing import Callable, Dict, List, Optional, Protocol
 from .models.ai import AIModel, ChatStreamCallback, Conversation
 from .models.context import Context
 from .models.mru import MRUData
-from .models.query import ChangeQueryParam, MetadataCommand, RefreshQueryParam
+from .models.query import ChangeQueryParam, MetadataCommand, RefreshQueryParam, CopyParams
 from .models.result import Result, UpdatableResult  # noqa: F401
 from .models.setting import PluginSettingDefinitionItem
 
@@ -190,5 +190,15 @@ class PublicAPI(Protocol):
                 delete(item)
                 # Refresh query and reset to first item
                 await api.refresh_query(ctx, RefreshQueryParam(preserve_selected_index=False))
+        """
+        ...
+
+    async def copy(self, ctx: Context, params: CopyParams) -> None:
+        """
+        Copy text or image to system clipboard.
+
+        Args:
+            ctx: Context
+            params: CopyParams containing content to copy
         """
         ...

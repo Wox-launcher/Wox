@@ -234,6 +234,8 @@ class PluginAPI(PublicAPI):
                     # Generate ID for actions that don't have one
                     if not action.id:
                         action.id = str(uuid.uuid4())
+                    if not action.type:
+                        action.type = "execute"
 
                     if action.action is not None:
                         plugin_instance.actions[action.id] = action.action
@@ -247,3 +249,15 @@ class PluginAPI(PublicAPI):
             "PreserveSelectedIndex": param.preserve_selected_index,
         }
         await self.invoke_method(ctx, "RefreshQuery", params)
+
+    async def copy(self, ctx: Context, params: Any) -> None:
+        """Copy text or image to system clipboard"""
+        await self.invoke_method(
+            ctx,
+            "Copy",
+            {
+                "type": params.type,
+                "text": params.text,
+                "woxImage": (json.dumps(params.wox_image) if params.wox_image else ""),
+            },
+        )

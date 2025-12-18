@@ -11,6 +11,7 @@ import (
 	"wox/setting"
 	"wox/setting/definition"
 	"wox/util"
+	"wox/util/clipboard"
 
 	"github.com/samber/lo"
 )
@@ -22,6 +23,13 @@ const (
 	LogLevelError   LogLevel = "Error"
 	LogLevelDebug   LogLevel = "Debug"
 	LogLevelWarning LogLevel = "Warning"
+)
+
+type CopyType string
+
+const (
+	CopyTypePlainText CopyType = "text"
+	CopyTypeImage     CopyType = "image"
 )
 
 type API interface {
@@ -150,6 +158,16 @@ type API interface {
 	//       api.RefreshQuery(ctx, RefreshQueryParam{PreserveSelectedIndex: false})
 	//   }
 	RefreshQuery(ctx context.Context, param RefreshQueryParam)
+
+	// Copy copies the given content to the system clipboard.
+	// Supports text, image, or both simultaneously.
+	Copy(ctx context.Context, params CopyParams)
+}
+
+type CopyParams struct {
+	Type     CopyType
+	Text     string
+	WoxImage *common.WoxImage
 }
 
 type APIImpl struct {
@@ -438,6 +456,31 @@ func (a *APIImpl) IsVisible(ctx context.Context) bool {
 
 func (a *APIImpl) RefreshQuery(ctx context.Context, param RefreshQueryParam) {
 	GetPluginManager().GetUI().RefreshQuery(ctx, param.PreserveSelectedIndex)
+}
+
+func (a *APIImpl) Copy(ctx context.Context, params CopyParams) {
+	if params.Type == CopyTypePlainText {
+		err := clipboard.WriteText(params.Text)
+		if err != nil {
+			a.Log(ctx, LogLevelError, fmt.Sprintf("failed to copy text to clipboard: %v", err))
+		}
+		return
+	}
+
+	if params.Type == CopyTypeImage {
+		img, err := params.WoxImage.ToImage()
+		if err != nil {
+			a.Log(ctx, LogLevelError, fmt.Sprintf("failed to convert woximage to image: %v", err))
+			return
+		}
+		err = clipboard.Write(&clipboard.ImageData{
+			Image: img,
+		})
+		if err != nil {
+			a.Log(ctx, LogLevelError, fmt.Sprintf("failed to copy image to clipboard: %v", err))
+		}
+		return
+	}
 }
 
 func NewAPI(instance *Instance) API {

@@ -27,6 +27,8 @@ from .models.query import (
     RefreshQueryParam,
     Selection,
     SelectionType,
+    CopyParams,
+    CopyType,
 )
 from .models.result import (
     ActionContext,
@@ -90,6 +92,8 @@ __all__: List[str] = [
     "QueryType",
     "Selection",
     "SelectionType",
+    "CopyParams",
+    "CopyType",
     # Exceptions
     "WoxPluginError",
     "InvalidQueryError",

@@ -268,6 +268,14 @@ export interface RefreshQueryParam {
   PreserveSelectedIndex: boolean
 }
 
+export type CopyType = "text" | "image"
+
+export interface CopyParams {
+  type: CopyType
+  text: string
+  woxImage?: WoxImage
+}
+
 export interface PublicAPI {
   /**
    * Change Wox query
@@ -453,6 +461,13 @@ export interface PublicAPI {
    * @param param RefreshQueryParam to control refresh behavior
    */
   RefreshQuery: (ctx: Context, param: RefreshQueryParam) => Promise<void>
+
+  /**
+   * Copy text or image to clipboard
+   * @param ctx Context
+   * @param params CopyParams
+   */
+  Copy: (ctx: Context, params: CopyParams) => Promise<void>
 }
 
 export type WoxImageType = "absolute" | "relative" | "base64" | "svg" | "url" | "emoji" | "lottie"

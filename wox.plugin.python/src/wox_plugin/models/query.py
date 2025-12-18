@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from dataclasses import dataclass, field
 from enum import Enum
 import json
@@ -231,3 +231,29 @@ class RefreshQueryParam:
     When True, the user's current selection index in the results list is preserved.
     When False, the selection resets to the first item (index 0).
     """
+
+
+class CopyType(str, Enum):
+    """Copy type enum"""
+
+    TEXT = "text"
+    IMAGE = "image"
+
+
+@dataclass
+class CopyParams:
+    """Parameters for copying content to clipboard"""
+
+    type: CopyType = field(default=CopyType.TEXT)
+    text: str = field(default="")
+    wox_image: Optional[dict] = field(default=None)
+
+    def to_json(self) -> str:
+        """Convert to JSON string with camelCase naming"""
+        return json.dumps(
+            {
+                "type": self.type,
+                "text": self.text,
+                "woxImage": self.wox_image,
+            }
+        )

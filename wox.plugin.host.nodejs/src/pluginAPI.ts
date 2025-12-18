@@ -1,4 +1,4 @@
-import { ChangeQueryParam, Context, MapString, PublicAPI, RefreshQueryParam, Result, ResultAction, UpdatableResult } from "@wox-launcher/wox-plugin"
+import { ChangeQueryParam, Context, CopyParams, MapString, PublicAPI, RefreshQueryParam, Result, ResultAction, UpdatableResult } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
 import * as crypto from "crypto"
 import { waitingForResponse } from "./index"
@@ -187,6 +187,9 @@ export class PluginAPI implements PublicAPI {
           if (!action.Id) {
             action.Id = crypto.randomUUID()
           }
+          if (!action.Type) {
+            action.Type = "execute"
+          }
 
           if (action.Type === "execute") {
             pluginInstance.Actions.set(action.Id, action.Action)
@@ -205,6 +208,14 @@ export class PluginAPI implements PublicAPI {
   async RefreshQuery(ctx: Context, param: RefreshQueryParam): Promise<void> {
     await this.invokeMethod(ctx, "RefreshQuery", {
       preserveSelectedIndex: param.PreserveSelectedIndex.toString()
+    })
+  }
+
+  async Copy(ctx: Context, params: CopyParams): Promise<void> {
+    await this.invokeMethod(ctx, "Copy", {
+      type: params.type,
+      text: params.text,
+      woxImage: params.woxImage ? JSON.stringify(params.woxImage) : ""
     })
   }
 }

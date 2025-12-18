@@ -278,6 +278,22 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 		})
 
 		w.sendResponseToHost(ctx, request, "")
+	case "Copy":
+		var params plugin.CopyParams
+		params.Type = plugin.CopyType(request.Params["type"])
+		params.Text = request.Params["text"]
+
+		if woxImageStr, exists := request.Params["woxImage"]; exists {
+			var woxImage common.WoxImage
+			if err := json.Unmarshal([]byte(woxImageStr), &woxImage); err != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal woxImage: %s", request.PluginName, err))
+			} else {
+				params.WoxImage = &woxImage
+			}
+		}
+
+		pluginInstance.API.Copy(ctx, params)
+		w.sendResponseToHost(ctx, request, "")
 	case "Notify":
 		message, exist := request.Params["message"]
 		if !exist {
