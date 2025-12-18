@@ -146,7 +146,7 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 
 		results = append(results, plugin.QueryResult{
 			Id:          uuid.NewString(),
-			Title:       pluginName,
+			Title:       triggerKeywordToUse,
 			SubTitle:    fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_indicator_activate_plugin"), pluginName),
 			Score:       resultBaseScore,
 			Icon:        pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, indicatorIcon),

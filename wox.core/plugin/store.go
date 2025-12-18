@@ -678,6 +678,9 @@ func (s *Store) InstallFromLocal(ctx context.Context, filePath string) error {
 		return fmt.Errorf("failed to load plugin %s(%s): %s", pluginMetadata.GetName(ctx), pluginMetadata.Version, loadErr.Error())
 	}
 
+	// notify UI to reload
+	GetPluginManager().GetUI().ReloadSettingPlugins(ctx)
+
 	return nil
 }
 
