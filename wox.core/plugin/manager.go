@@ -124,7 +124,7 @@ func (m *Manager) loadPlugins(ctx context.Context) error {
 		pluginDirectories = []os.DirEntry{}
 	}
 
-	var metaDataList []MetadataWithDirectory
+	var metaDataList []Metadata
 	for _, entry := range pluginDirectories {
 		if entry.Name() == ".DS_Store" {
 			continue
@@ -141,22 +141,22 @@ func (m *Manager) loadPlugins(ctx context.Context) error {
 		}
 
 		//check if metadata already exist, only add newer version
-		existMetadata, exist := lo.Find(metaDataList, func(item MetadataWithDirectory) bool {
-			return item.Metadata.Id == metadata.Id
+		existMetadata, exist := lo.Find(metaDataList, func(item Metadata) bool {
+			return item.Id == metadata.Id
 		})
 		if exist {
-			existVersion, existVersionErr := semver.NewVersion(existMetadata.Metadata.Version)
+			existVersion, existVersionErr := semver.NewVersion(existMetadata.Version)
 			currentVersion, currentVersionErr := semver.NewVersion(metadata.Version)
 			if existVersionErr == nil && currentVersionErr == nil {
 				if existVersion.GreaterThan(currentVersion) || existVersion.Equal(currentVersion) {
-					logger.Info(ctx, fmt.Sprintf("skip parse %s(%s) metadata, because it's already parsed(%s)", metadata.Name, metadata.Version, existMetadata.Metadata.Version))
+					logger.Info(ctx, fmt.Sprintf("skip parse %s(%s) metadata, because it's already parsed(%s)", metadata.GetName(ctx), metadata.Version, existMetadata.Version))
 					continue
 				} else {
 					// remove older version
-					logger.Info(ctx, fmt.Sprintf("remove older metadata version %s(%s)", existMetadata.Metadata.Name, existMetadata.Metadata.Version))
-					var newMetaDataList []MetadataWithDirectory
+					logger.Info(ctx, fmt.Sprintf("remove older metadata version %s(%s)", existMetadata.GetName(ctx), existMetadata.Version))
+					var newMetaDataList []Metadata
 					for _, item := range metaDataList {
-						if item.Metadata.Id != existMetadata.Metadata.Id {
+						if item.Id != existMetadata.Id {
 							newMetaDataList = append(newMetaDataList, item)
 						}
 					}
@@ -164,7 +164,7 @@ func (m *Manager) loadPlugins(ctx context.Context) error {
 				}
 			}
 		}
-		metaDataList = append(metaDataList, MetadataWithDirectory{Metadata: metadata, Directory: pluginDirectory})
+		metaDataList = append(metaDataList, metadata)
 	}
 
 	// Load script plugins
@@ -187,7 +187,7 @@ func (m *Manager) loadPlugins(ctx context.Context) error {
 			}
 
 			for _, metadata := range metaDataList {
-				if !strings.EqualFold(metadata.Metadata.Runtime, string(host.GetRuntime(newCtx))) {
+				if !strings.EqualFold(metadata.Runtime, string(host.GetRuntime(newCtx))) {
 					continue
 				}
 
@@ -204,7 +204,7 @@ func (m *Manager) loadPlugins(ctx context.Context) error {
 }
 
 // loadScriptPlugins loads script plugins from the user script plugins directory
-func (m *Manager) loadScriptPlugins(ctx context.Context) ([]MetadataWithDirectory, error) {
+func (m *Manager) loadScriptPlugins(ctx context.Context) ([]Metadata, error) {
 	logger.Debug(ctx, "start loading script plugin metadata")
 
 	userScriptPluginDirectory := util.GetLocation().GetUserScriptPluginsDirectory()
@@ -213,7 +213,7 @@ func (m *Manager) loadScriptPlugins(ctx context.Context) ([]MetadataWithDirector
 		return nil, fmt.Errorf("failed to read user script plugin directory: %w", readErr)
 	}
 
-	var metaDataList []MetadataWithDirectory
+	var metaDataList []Metadata
 	for _, entry := range scriptFiles {
 		if entry.Name() == ".DS_Store" || entry.Name() == "README.md" {
 			continue
@@ -229,34 +229,31 @@ func (m *Manager) loadScriptPlugins(ctx context.Context) ([]MetadataWithDirector
 			continue
 		}
 
-		metaDataList = append(metaDataList, MetadataWithDirectory{
-			Metadata:  metadata,
-			Directory: userScriptPluginDirectory,
-		})
+		metaDataList = append(metaDataList, metadata)
 	}
 
 	logger.Debug(ctx, fmt.Sprintf("found %d script plugins", len(metaDataList)))
 	return metaDataList, nil
 }
 
-func (m *Manager) ReloadPlugin(ctx context.Context, metadata MetadataWithDirectory) error {
-	logger.Info(ctx, fmt.Sprintf("start reloading dev plugin: %s", metadata.Metadata.Name))
+func (m *Manager) ReloadPlugin(ctx context.Context, metadata Metadata) error {
+	logger.Info(ctx, fmt.Sprintf("start reloading dev plugin: %s", metadata.GetName(ctx)))
 
 	pluginHost, exist := lo.Find(AllHosts, func(item Host) bool {
-		return strings.EqualFold(string(item.GetRuntime(ctx)), metadata.Metadata.Runtime)
+		return strings.EqualFold(string(item.GetRuntime(ctx)), metadata.Runtime)
 	})
 	if !exist {
-		return fmt.Errorf("unsupported runtime: %s", metadata.Metadata.Runtime)
+		return fmt.Errorf("unsupported runtime: %s", metadata.Runtime)
 	}
 
 	pluginInstance, pluginInstanceExist := lo.Find(m.instances, func(item *Instance) bool {
-		return item.Metadata.Id == metadata.Metadata.Id
+		return item.Metadata.Id == metadata.Id
 	})
 	if pluginInstanceExist {
-		logger.Info(ctx, fmt.Sprintf("plugin(%s) is loaded, unload first", metadata.Metadata.Name))
+		logger.Info(ctx, fmt.Sprintf("plugin(%s) is loaded, unload first", metadata.GetName(ctx)))
 		m.UnloadPlugin(ctx, pluginInstance)
 	} else {
-		logger.Info(ctx, fmt.Sprintf("plugin(%s) is not loaded, skip unload", metadata.Metadata.Name))
+		logger.Info(ctx, fmt.Sprintf("plugin(%s) is not loaded, skip unload", metadata.GetName(ctx)))
 	}
 
 	loadErr := m.loadHostPlugin(ctx, pluginHost, metadata)
@@ -267,9 +264,9 @@ func (m *Manager) ReloadPlugin(ctx context.Context, metadata MetadataWithDirecto
 	return nil
 }
 
-func (m *Manager) loadHostPlugin(ctx context.Context, host Host, metadata MetadataWithDirectory) error {
+func (m *Manager) loadHostPlugin(ctx context.Context, host Host, metadata Metadata) error {
 	loadStartTimestamp := util.GetSystemTimestamp()
-	plugin, loadErr := host.LoadPlugin(ctx, metadata.Metadata, metadata.Directory)
+	plugin, loadErr := host.LoadPlugin(ctx, metadata, metadata.Directory)
 	if loadErr != nil {
 		logger.Error(ctx, fmt.Errorf("[%s HOST] failed to load plugin: %w", host.GetRuntime(ctx), loadErr).Error())
 		return loadErr
@@ -277,7 +274,7 @@ func (m *Manager) loadHostPlugin(ctx context.Context, host Host, metadata Metada
 	loadFinishTimestamp := util.GetSystemTimestamp()
 
 	instance := &Instance{
-		Metadata:              metadata.Metadata,
+		Metadata:              metadata,
 		PluginDirectory:       metadata.Directory,
 		Plugin:                plugin,
 		Host:                  host,
@@ -287,9 +284,9 @@ func (m *Manager) loadHostPlugin(ctx context.Context, host Host, metadata Metada
 		DevPluginDirectory:    metadata.DevPluginDirectory,
 	}
 	instance.API = NewAPI(instance)
-	pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Metadata.Id, metadata.Metadata.SettingDefinitions.ToMap())
+	pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Id, metadata.SettingDefinitions.ToMap())
 	if settingErr != nil {
-		instance.API.Log(ctx, LogLevelError, fmt.Errorf("[SYS] failed to load plugin[%s] setting: %w", metadata.Metadata.Name, settingErr).Error())
+		instance.API.Log(ctx, LogLevelError, fmt.Errorf("[SYS] failed to load plugin[%s] setting: %w", metadata.GetName(ctx), settingErr).Error())
 		return settingErr
 	}
 	instance.Setting = pluginSetting
@@ -297,12 +294,12 @@ func (m *Manager) loadHostPlugin(ctx context.Context, host Host, metadata Metada
 	m.instances = append(m.instances, instance)
 
 	if pluginSetting.Disabled.Get() {
-		logger.Info(ctx, fmt.Errorf("[%s HOST] plugin is disabled by user, skip init: %s", host.GetRuntime(ctx), metadata.Metadata.Name).Error())
-		instance.API.Log(ctx, LogLevelWarning, fmt.Sprintf("[SYS] plugin is disabled by user, skip init: %s", metadata.Metadata.Name))
+		logger.Info(ctx, fmt.Errorf("[%s HOST] plugin is disabled by user, skip init: %s", host.GetRuntime(ctx), metadata.GetName(ctx)).Error())
+		instance.API.Log(ctx, LogLevelWarning, fmt.Sprintf("[SYS] plugin is disabled by user, skip init: %s", metadata.GetName(ctx)))
 		return nil
 	}
 
-	util.Go(ctx, fmt.Sprintf("[%s] init plugin", metadata.Metadata.Name), func() {
+	util.Go(ctx, fmt.Sprintf("[%s] init plugin", metadata.GetName(ctx)), func() {
 		m.initPlugin(ctx, instance)
 	})
 
@@ -329,7 +326,7 @@ func (m *Manager) LoadPlugin(ctx context.Context, pluginDirectory string) error 
 		}
 	}
 
-	loadErr := m.loadHostPlugin(ctx, pluginHost, MetadataWithDirectory{Metadata: metadata, Directory: pluginDirectory})
+	loadErr := m.loadHostPlugin(ctx, pluginHost, metadata)
 	if loadErr != nil {
 		return loadErr
 	}
@@ -356,14 +353,20 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 	start := util.GetSystemTimestamp()
 	logger.Info(ctx, fmt.Sprintf("start loading system plugins, found %d system plugins", len(AllSystemPlugin)))
 
-	for _, plugin := range AllSystemPlugin {
-		util.Go(ctx, fmt.Sprintf("load system plugin <%s>", plugin.GetMetadata().Name), func() {
+	for _, p := range AllSystemPlugin {
+		plugin := p
+		metadata := plugin.GetMetadata()
+		pluginName := metadata.GetName(ctx)
+
+		util.Go(ctx, fmt.Sprintf("load system plugin <%s>", pluginName), func() {
 			metadata := plugin.GetMetadata()
+			metadata.LoadSystemI18nFromDirectory(ctx)
 			instance := &Instance{
 				Metadata:              metadata,
 				Plugin:                plugin,
 				Host:                  nil,
 				IsSystemPlugin:        true,
+				PluginDirectory:       metadata.Directory,
 				LoadStartTimestamp:    util.GetSystemTimestamp(),
 				LoadFinishedTimestamp: util.GetSystemTimestamp(),
 			}
@@ -372,13 +375,13 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 			startTimestamp := util.GetSystemTimestamp()
 			pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Id, metadata.SettingDefinitions.ToMap())
 			if settingErr != nil {
-				logger.Error(ctx, fmt.Sprintf("failed to load system plugin[%s] setting, use default plugin setting. err: %s", metadata.Name, settingErr.Error()))
+				logger.Error(ctx, fmt.Sprintf("failed to load system plugin[%s] setting, use default plugin setting. err: %s", metadata.GetName(ctx), settingErr.Error()))
 				return
 			}
 
 			instance.Setting = pluginSetting
 			if util.GetSystemTimestamp()-startTimestamp > 100 {
-				logger.Warn(ctx, fmt.Sprintf("load system plugin[%s] setting too slow, cost %d ms", metadata.Name, util.GetSystemTimestamp()-startTimestamp))
+				logger.Warn(ctx, fmt.Sprintf("load system plugin[%s] setting too slow, cost %d ms", metadata.GetName(ctx), util.GetSystemTimestamp()-startTimestamp))
 			}
 
 			m.instances = append(m.instances, instance)
@@ -391,14 +394,14 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 }
 
 func (m *Manager) initPlugin(ctx context.Context, instance *Instance) {
-	logger.Info(ctx, fmt.Sprintf("start init plugin: %s", instance.Metadata.Name))
+	logger.Info(ctx, fmt.Sprintf("start init plugin: %s", instance.Metadata.GetName(ctx)))
 	instance.InitStartTimestamp = util.GetSystemTimestamp()
 	instance.Plugin.Init(ctx, InitParams{
 		API:             instance.API,
 		PluginDirectory: instance.PluginDirectory,
 	})
 	instance.InitFinishedTimestamp = util.GetSystemTimestamp()
-	logger.Info(ctx, fmt.Sprintf("init plugin %s finished, cost %d ms", instance.Metadata.Name, instance.InitFinishedTimestamp-instance.InitStartTimestamp))
+	logger.Info(ctx, fmt.Sprintf("init plugin %s finished, cost %d ms", instance.Metadata.GetName(ctx), instance.InitFinishedTimestamp-instance.InitStartTimestamp))
 }
 
 func (m *Manager) ParseMetadata(ctx context.Context, pluginDirectory string) (Metadata, error) {
@@ -427,6 +430,9 @@ func (m *Manager) ParseMetadata(ctx context.Context, pluginDirectory string) (Me
 	if !IsAllSupportedOS(metadata.SupportedOS) {
 		return Metadata{}, fmt.Errorf("unsupported os in plugin.json file (%s), os=%s", pluginDirectory, metadata.SupportedOS)
 	}
+
+	metadata.Directory = pluginDirectory
+	metadata.LoadPluginI18nFromDirectory(ctx)
 
 	return metadata, nil
 }
@@ -501,6 +507,8 @@ func (m *Manager) ParseScriptMetadata(ctx context.Context, scriptPath string) (M
 				// Set script-specific fields
 				metadata.Runtime = string(PLUGIN_RUNTIME_SCRIPT)
 				metadata.Entry = filepath.Base(scriptPath)
+				metadata.Directory = filepath.Dir(scriptPath)
+				metadata.LoadPluginI18nFromDirectory(ctx)
 
 				// Validate and set defaults
 				return m.validateAndSetScriptMetadataDefaults(metadata)
@@ -518,7 +526,7 @@ func (m *Manager) validateAndSetScriptMetadataDefaults(metadata Metadata) (Metad
 	if metadata.Id == "" {
 		return Metadata{}, fmt.Errorf("missing required field: Id")
 	}
-	if metadata.Name == "" {
+	if metadata.GetName(context.Background()) == "" {
 		return Metadata{}, fmt.Errorf("missing required field: Name")
 	}
 	if len(metadata.TriggerKeywords) == 0 {
@@ -529,7 +537,7 @@ func (m *Manager) validateAndSetScriptMetadataDefaults(metadata Metadata) (Metad
 	if metadata.Author == "" {
 		metadata.Author = "Unknown"
 	}
-	if metadata.Description == "" {
+	if metadata.GetDescription(context.Background()) == "" {
 		metadata.Description = "A script plugin"
 	}
 	if metadata.Icon == "" {
@@ -664,16 +672,8 @@ func (m *Manager) reloadScriptPlugin(ctx context.Context, scriptPath, reason str
 		return instance.Metadata.Id == metadata.Id
 	})
 	if exists {
-		logger.Info(ctx, fmt.Sprintf("Unloading existing script plugin instance: %s", metadata.Name))
+		logger.Info(ctx, fmt.Sprintf("Unloading existing script plugin instance: %s", metadata.GetName(ctx)))
 		m.UnloadPlugin(ctx, existingInstance)
-	}
-
-	// Create metadata with directory for loading
-	userScriptPluginDirectory := util.GetLocation().GetUserScriptPluginsDirectory()
-	virtualDirectory := path.Join(userScriptPluginDirectory, metadata.Id)
-	metadataWithDirectory := MetadataWithDirectory{
-		Metadata:  metadata,
-		Directory: virtualDirectory,
 	}
 
 	// Find script plugin host
@@ -686,13 +686,13 @@ func (m *Manager) reloadScriptPlugin(ctx context.Context, scriptPath, reason str
 	}
 
 	// Load the plugin
-	err = m.loadHostPlugin(ctx, scriptHost, metadataWithDirectory)
+	err = m.loadHostPlugin(ctx, scriptHost, metadata)
 	if err != nil {
 		logger.Error(ctx, fmt.Sprintf("Failed to reload script plugin: %s", err.Error()))
 		return
 	}
 
-	logger.Info(ctx, fmt.Sprintf("Successfully reloaded script plugin: %s", metadata.Name))
+	logger.Info(ctx, fmt.Sprintf("Successfully reloaded script plugin: %s", metadata.GetName(ctx)))
 }
 
 // unloadScriptPluginByPath unloads a script plugin by its file path
@@ -710,7 +710,7 @@ func (m *Manager) unloadScriptPluginByPath(ctx context.Context, scriptPath strin
 	}
 
 	if pluginToUnload != nil {
-		logger.Info(ctx, fmt.Sprintf("Found script plugin to unload: %s", pluginToUnload.Metadata.Name))
+		logger.Info(ctx, fmt.Sprintf("Found script plugin to unload: %s", pluginToUnload.Metadata.GetName(ctx)))
 		m.UnloadPlugin(ctx, pluginToUnload)
 	} else {
 		logger.Debug(ctx, fmt.Sprintf("No script plugin found for file: %s", fileName))
@@ -802,7 +802,7 @@ func (m *Manager) GetResultForFailedQuery(ctx context.Context, pluginMetadata Me
 	overlayIcon := common.NewWoxImageEmoji("🚫")
 	pluginIcon := common.ParseWoxImageOrDefault(pluginMetadata.Icon, overlayIcon)
 	icon := pluginIcon.OverlayFullPercentage(overlayIcon, 0.6)
-	pluginName := i18n.GetI18nManager().TranslateWox(ctx, string(pluginMetadata.Name))
+	pluginName := pluginMetadata.GetName(ctx)
 
 	return QueryResult{
 		Title:    fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_manager_query_failed"), pluginName),
@@ -1533,18 +1533,7 @@ func (m *Manager) translatePlugin(ctx context.Context, pluginInstance *Instance,
 		return key
 	}
 
-	if pluginInstance.IsSystemPlugin {
-		return i18n.GetI18nManager().TranslateWox(ctx, key)
-	} else {
-		// Try plugin translation first (with inline i18n from plugin.json)
-		translated := i18n.GetI18nManager().TranslatePlugin(ctx, key, pluginInstance.PluginDirectory, pluginInstance.Metadata.I18n)
-		// If translation failed, fallback to system translation
-		// This handles cases where third-party plugins have system actions (like "Pin to current query")
-		if key == translated {
-			translated = i18n.GetI18nManager().TranslateWox(ctx, key)
-		}
-		return translated
-	}
+	return pluginInstance.Metadata.translate(ctx, common.I18nString(key))
 }
 
 func (m *Manager) GetUI() common.UI {

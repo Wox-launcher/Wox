@@ -144,10 +144,9 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 		}
 		contextDataJson, _ := json.Marshal(contextData)
 
-		triggerKeywordCopy := triggerKeywordToUse
 		results = append(results, plugin.QueryResult{
 			Id:          uuid.NewString(),
-			Title:       triggerKeywordCopy,
+			Title:       pluginName,
 			SubTitle:    fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_indicator_activate_plugin"), pluginName),
 			Score:       resultBaseScore,
 			Icon:        pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, indicatorIcon),
@@ -159,7 +158,7 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						i.api.ChangeQuery(ctx, common.PlainQuery{
 							QueryType: plugin.QueryTypeInput,
-							QueryText: fmt.Sprintf("%s ", triggerKeywordCopy),
+							QueryText: fmt.Sprintf("%s ", triggerKeywordToUse),
 						})
 					},
 				},
@@ -189,10 +188,9 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 			if len(matchedCommands) > 0 {
 				commandScore = commandScore + 1
 			}
-			triggerKeywordCommandCopy := triggerKeywordCopy
 			results = append(results, plugin.QueryResult{
 				Id:       uuid.NewString(),
-				Title:    fmt.Sprintf("%s %s ", triggerKeywordCommandCopy, metadataCommand.Command),
+				Title:    fmt.Sprintf("%s %s ", triggerKeywordToUse, metadataCommand.Command),
 				SubTitle: string(metadataCommand.Description),
 				Score:    commandScore,
 				Icon:     pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, indicatorIcon),
@@ -203,7 +201,7 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							i.api.ChangeQuery(ctx, common.PlainQuery{
 								QueryType: plugin.QueryTypeInput,
-								QueryText: fmt.Sprintf("%s %s ", triggerKeywordCommandCopy, metadataCommand.Command),
+								QueryText: fmt.Sprintf("%s %s ", triggerKeywordToUse, metadataCommand.Command),
 							})
 						},
 					},

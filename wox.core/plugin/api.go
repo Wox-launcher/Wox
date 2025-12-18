@@ -8,7 +8,6 @@ import (
 	"time"
 	"wox/ai"
 	"wox/common"
-	"wox/i18n"
 	"wox/setting"
 	"wox/setting/definition"
 	"wox/util"
@@ -210,18 +209,7 @@ func (a *APIImpl) Log(ctx context.Context, level LogLevel, msg string) {
 }
 
 func (a *APIImpl) GetTranslation(ctx context.Context, key string) string {
-	if a.pluginInstance.IsSystemPlugin {
-		return i18n.GetI18nManager().TranslateWox(ctx, key)
-	} else {
-		// Try plugin translation first (with inline i18n from plugin.json)
-		translated := i18n.GetI18nManager().TranslatePlugin(ctx, key, a.pluginInstance.PluginDirectory, a.pluginInstance.Metadata.I18n)
-		// If translation failed, fallback to system translation
-		// This handles cases where third-party plugins use system i18n keys (like notification messages)
-		if key == translated {
-			translated = i18n.GetI18nManager().TranslateWox(ctx, key)
-		}
-		return translated
-	}
+	return a.pluginInstance.Metadata.translate(ctx, common.I18nString(key))
 }
 
 func (a *APIImpl) GetSetting(ctx context.Context, key string) string {

@@ -1,13 +1,20 @@
 package plugin
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"wox/common"
+	"wox/i18n"
+	"wox/resource"
 	"wox/setting/definition"
+	"wox/util"
 )
 
 type MetadataFeatureName = string
@@ -71,6 +78,14 @@ type Metadata struct {
 	// Map structure: langCode -> key -> translatedValue
 	// Example: {"en_US": {"title": "Hello"}, "zh_CN": {"title": "你好"}}
 	I18n map[string]map[string]string
+
+	// Directory is the absolute path to the plugin directory.
+	// It is populated during metadata initialization and not read from plugin.json.
+	Directory string `json:"-"`
+
+	//for dev plugin
+	IsDev              bool   `json:"-"` // plugins loaded from `local plugin directories` which defined in wpm settings
+	DevPluginDirectory string `json:"-"` // absolute path to dev plugin directory defined in wpm settings, only available when IsDev is true
 }
 
 func (m *Metadata) GetIconOrDefault(pluginDirectory string, defaultImage common.WoxImage) common.WoxImage {
@@ -249,15 +264,6 @@ type MetadataCommand struct {
 	Description common.I18nString // support i18n: prefix
 }
 
-type MetadataWithDirectory struct {
-	Metadata  Metadata
-	Directory string // absolute path to plugin directory
-
-	//for dev plugin
-	IsDev              bool   // plugins loaded from `local plugin directories` which defined in wpm settings
-	DevPluginDirectory string // absolute path to dev plugin directory defined in wpm settings, only available when IsDev is true
-}
-
 type MetadataFeatureParamsDebounce struct {
 	IntervalMs int
 }
@@ -368,4 +374,134 @@ func (m *Metadata) GetFeatureParamsForGridLayout() (MetadataFeatureParamsGridLay
 	}
 
 	return MetadataFeatureParamsGridLayout{}, errors.New("plugin does not support gridLayout feature")
+}
+
+func (m *Metadata) GetName(ctx context.Context) string {
+	return m.translate(ctx, m.Name)
+}
+
+func (m *Metadata) GetDescription(ctx context.Context) string {
+	return m.translate(ctx, m.Description)
+}
+
+func (m *Metadata) translate(ctx context.Context, text common.I18nString) string {
+	rawText := string(text)
+	if !strings.HasPrefix(rawText, "i18n:") {
+		return rawText
+	}
+
+	if translated := i18n.GetI18nManager().TranslateI18nMap(ctx, rawText, m.I18n); translated != rawText {
+		return translated
+	}
+
+	return i18n.GetI18nManager().TranslateWox(ctx, rawText)
+}
+
+// LoadSystemI18nFromDirectory merges translations from Wox's central lang files into Metadata.I18n.
+func (m *Metadata) LoadSystemI18nFromDirectory(ctx context.Context) {
+	// System plugins share Wox's central lang files instead of a per-plugin lang folder.
+	for _, lang := range i18n.GetSupportedLanguages() {
+		langJson, err := resource.GetLangJson(ctx, string(lang.Code))
+		if err != nil {
+			util.GetLogger().Warn(ctx, fmt.Sprintf("failed to read wox lang %s: %s", lang.Code, err.Error()))
+			continue
+		}
+
+		translations, parseErr := flattenI18nJSON(langJson)
+		if parseErr != nil {
+			util.GetLogger().Warn(ctx, fmt.Sprintf("failed to parse wox lang %s: %s", lang.Code, parseErr.Error()))
+			continue
+		}
+
+		m.mergeI18n(string(lang.Code), translations)
+	}
+}
+
+// LoadPluginI18nFromDirectory merges translations from lang files into Metadata.I18n.
+// Supported files: lang/<langCode>.json where langCode is one of supported languages.
+func (m *Metadata) LoadPluginI18nFromDirectory(ctx context.Context) {
+	langDir := path.Join(m.Directory, "lang")
+	entries, err := os.ReadDir(langDir)
+	if err != nil {
+		return
+	}
+
+	supportedLangs := make(map[string]struct{})
+	for _, lang := range i18n.GetSupportedLanguages() {
+		supportedLangs[string(lang.Code)] = struct{}{}
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		langCode := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+		if _, ok := supportedLangs[langCode]; !ok {
+			continue
+		}
+
+		content, readErr := os.ReadFile(path.Join(langDir, entry.Name()))
+		if readErr != nil {
+			util.GetLogger().Warn(ctx, fmt.Sprintf("failed to read lang file %s: %s", entry.Name(), readErr.Error()))
+			continue
+		}
+
+		translations, parseErr := flattenI18nJSON(content)
+		if parseErr != nil {
+			util.GetLogger().Warn(ctx, fmt.Sprintf("failed to parse lang file %s: %s", entry.Name(), parseErr.Error()))
+			continue
+		}
+
+		m.mergeI18n(langCode, translations)
+	}
+}
+
+func (m *Metadata) mergeI18n(langCode string, translations map[string]string) {
+	if translations == nil {
+		return
+	}
+	if m.I18n == nil {
+		m.I18n = map[string]map[string]string{}
+	}
+	if _, ok := m.I18n[langCode]; !ok {
+		m.I18n[langCode] = map[string]string{}
+	}
+
+	for k, v := range translations {
+		m.I18n[langCode][k] = v
+	}
+}
+
+func flattenI18nJSON(content []byte) (map[string]string, error) {
+	var data any
+	if err := json.Unmarshal(content, &data); err != nil {
+		return nil, err
+	}
+
+	flattened := map[string]string{}
+	var walk func(prefix string, value any)
+	walk = func(prefix string, value any) {
+		switch v := value.(type) {
+		case map[string]any:
+			for key, child := range v {
+				nextPrefix := key
+				if prefix != "" {
+					nextPrefix = prefix + "." + key
+				}
+				walk(nextPrefix, child)
+			}
+		case []any:
+			for idx, child := range v {
+				nextPrefix := fmt.Sprintf("%s.%d", prefix, idx)
+				walk(nextPrefix, child)
+			}
+		default:
+			if prefix != "" {
+				flattened[prefix] = fmt.Sprint(v)
+			}
+		}
+	}
+
+	walk("", data)
+	return flattened, nil
 }

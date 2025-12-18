@@ -36,7 +36,7 @@ func (w *WebsocketPlugin) CreateActionProxy(actionId string) func(context.Contex
 			"ContextData":    actionContext.ContextData,
 		})
 		if actionErr != nil {
-			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] action failed: %s", w.metadata.Name, actionErr.Error()))
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] action failed: %s", w.metadata.GetName(ctx), actionErr.Error()))
 		}
 	}
 }
@@ -53,7 +53,7 @@ func (w *WebsocketPlugin) CreateFormActionProxy(actionId string) func(context.Co
 			"Values":         string(valuesJson),
 		})
 		if actionErr != nil {
-			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] form action failed: %s", w.metadata.Name, actionErr.Error()))
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] form action failed: %s", w.metadata.GetName(ctx), actionErr.Error()))
 		}
 	}
 }
@@ -61,13 +61,13 @@ func (w *WebsocketPlugin) CreateFormActionProxy(actionId string) func(context.Co
 func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	selectionJson, marshalErr := json.Marshal(query.Selection)
 	if marshalErr != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal plugin query selection: %s", w.metadata.Name, marshalErr.Error()))
+		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal plugin query selection: %s", w.metadata.GetName(ctx), marshalErr.Error()))
 		return []plugin.QueryResult{}
 	}
 
 	envJson, marshalEnvErr := json.Marshal(query.Env)
 	if marshalEnvErr != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal plugin query env: %s", w.metadata.Name, marshalEnvErr.Error()))
+		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal plugin query env: %s", w.metadata.GetName(ctx), marshalEnvErr.Error()))
 		return []plugin.QueryResult{}
 	}
 
@@ -81,7 +81,7 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 		"Env":            string(envJson),
 	})
 	if queryErr != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] query failed: %s", w.metadata.Name, queryErr.Error()))
+		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] query failed: %s", w.metadata.GetName(ctx), queryErr.Error()))
 		return []plugin.QueryResult{
 			plugin.GetPluginManager().GetResultForFailedQuery(ctx, w.metadata, query, queryErr),
 		}
@@ -90,12 +90,12 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 	var results []plugin.QueryResult
 	marshalData, marshalErr := json.Marshal(rawResults)
 	if marshalErr != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal plugin query results: %s", w.metadata.Name, marshalErr.Error()))
+		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal plugin query results: %s", w.metadata.GetName(ctx), marshalErr.Error()))
 		return nil
 	}
 	unmarshalErr := json.Unmarshal(marshalData, &results)
 	if unmarshalErr != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal query results: %s", w.metadata.Name, unmarshalErr.Error()))
+		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal query results: %s", w.metadata.GetName(ctx), unmarshalErr.Error()))
 		return []plugin.QueryResult{}
 	}
 
@@ -114,7 +114,7 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 						"Values":         string(valuesJson),
 					})
 					if actionErr != nil {
-						util.GetLogger().Error(ctx, fmt.Sprintf("[%s] form action failed: %s", w.metadata.Name, actionErr.Error()))
+						util.GetLogger().Error(ctx, fmt.Sprintf("[%s] form action failed: %s", w.metadata.GetName(ctx), actionErr.Error()))
 					}
 				}
 			} else {
@@ -126,7 +126,7 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 						"ContextData":    actionContext.ContextData,
 					})
 					if actionErr != nil {
-						util.GetLogger().Error(ctx, fmt.Sprintf("[%s] action failed: %s", w.metadata.Name, actionErr.Error()))
+						util.GetLogger().Error(ctx, fmt.Sprintf("[%s] action failed: %s", w.metadata.GetName(ctx), actionErr.Error()))
 					}
 				}
 			}

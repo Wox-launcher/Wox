@@ -203,6 +203,7 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	modelStr := c.api.GetSetting(ctx, "model")
 	if modelStr == "" {
+		metadata := c.GetMetadata()
 		return []plugin.QueryResult{
 			{
 				Title: i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_select_model"),
@@ -214,7 +215,7 @@ func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, common.SettingWindowContext{
 								Path:  "/plugin/setting",
-								Param: c.api.GetTranslation(ctx, string(c.GetMetadata().Name)),
+								Param: metadata.GetName(ctx),
 							})
 						},
 					},

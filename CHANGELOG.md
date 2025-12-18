@@ -6,10 +6,12 @@
 
   - Add MCP Server for Wox plugin development (default enabled on port 29867, can be configured in settings)
   - Add thousands separator for numbers in Calculator plugin `#4299`
+  - Add windows setting searches
 
 - Improve
 
   - Improve fuzzy match based on fzf algorithm
+  - Improve app searches on windows by 
 
 - Fix
 

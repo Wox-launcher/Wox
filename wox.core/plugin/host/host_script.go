@@ -61,13 +61,13 @@ func (s *ScriptHost) LoadPlugin(ctx context.Context, metadata plugin.Metadata, p
 		util.GetLogger().Warn(ctx, fmt.Sprintf("Failed to make script executable: %s", err.Error()))
 	}
 
-	util.GetLogger().Info(ctx, fmt.Sprintf("Loaded script plugin: %s", metadata.Name))
+	util.GetLogger().Info(ctx, fmt.Sprintf("Loaded script plugin: %s", metadata.GetName(ctx)))
 	return NewScriptPlugin(metadata, scriptPath), nil
 }
 
 func (s *ScriptHost) UnloadPlugin(ctx context.Context, metadata plugin.Metadata) {
 	// Script plugins don't need explicit unloading since they're not persistent
-	util.GetLogger().Info(ctx, fmt.Sprintf("Unloaded script plugin: %s", metadata.Name))
+	util.GetLogger().Info(ctx, fmt.Sprintf("Unloaded script plugin: %s", metadata.GetName(ctx)))
 }
 
 // ScriptPlugin represents a script-based plugin
@@ -87,7 +87,7 @@ func NewScriptPlugin(metadata plugin.Metadata, scriptPath string) *ScriptPlugin 
 func (s *ScriptPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	// Save API reference for accessing settings
 	s.api = initParams.API
-	util.GetLogger().Debug(ctx, fmt.Sprintf("Script plugin %s initialized", s.metadata.Name))
+	util.GetLogger().Debug(ctx, fmt.Sprintf("Script plugin %s initialized", s.metadata.GetName(ctx)))
 }
 
 func (s *ScriptPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
@@ -108,7 +108,7 @@ func (s *ScriptPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Q
 	results, err := s.executeScript(ctx, request)
 	if err != nil {
 		requestJSON, _ := json.Marshal(request)
-		util.GetLogger().Error(ctx, fmt.Sprintf("script plugin query failed for %s: %s, raw request: %s", s.metadata.Name, err.Error(), requestJSON))
+		util.GetLogger().Error(ctx, fmt.Sprintf("script plugin query failed for %s: %s, raw request: %s", s.metadata.GetName(ctx), err.Error(), requestJSON))
 		s.api.Notify(ctx, err.Error())
 		return []plugin.QueryResult{}
 	}
@@ -162,7 +162,7 @@ func (s *ScriptPlugin) executeScript(ctx context.Context, request map[string]int
 		// Icon: WoxImage.String() format, e.g. "base64:data:image/png;base64,xxx" or "emoji:🧮"
 		if iconStr := getStringFromMap(itemMap, "icon"); iconStr != "" {
 			if img, err := common.ParseWoxImage(iconStr); err != nil {
-				util.GetLogger().Warn(ctx, fmt.Sprintf("script plugin %s returned invalid icon: %s, err: %s", s.metadata.Name, iconStr, err.Error()))
+				util.GetLogger().Warn(ctx, fmt.Sprintf("script plugin %s returned invalid icon: %s, err: %s", s.metadata.GetName(ctx), iconStr, err.Error()))
 			} else {
 				// Normalize base64 without data URI header to png
 				if img.ImageType == common.WoxImageTypeBase64 && !strings.Contains(img.ImageData, ",") {
@@ -237,7 +237,7 @@ func (s *ScriptPlugin) executeAction(ctx context.Context, actionData map[string]
 	// Execute script for custom action
 	err := s.executeScriptAction(ctx, request)
 	if err != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("Script plugin %s action failed: %s", s.metadata.Name, err.Error()))
+		util.GetLogger().Error(ctx, fmt.Sprintf("Script plugin %s action failed: %s", s.metadata.GetName(ctx), err.Error()))
 	}
 }
 
@@ -282,7 +282,7 @@ func (s *ScriptPlugin) executeScriptRaw(ctx context.Context, request map[string]
 		"WOX_DIRECTORY_PLUGINS=" + util.GetLocation().GetPluginDirectory(),
 		"WOX_DIRECTORY_THEMES=" + util.GetLocation().GetThemeDirectory(),
 		"WOX_PLUGIN_ID=" + s.metadata.Id,
-		"WOX_PLUGIN_NAME=" + string(s.metadata.Name),
+		"WOX_PLUGIN_NAME=" + s.metadata.GetName(ctx),
 		"PYTHONIOENCODING=utf-8",
 	}
 
@@ -362,9 +362,9 @@ func (s *ScriptPlugin) handleBuiltInAction(ctx context.Context, actionId string,
 		}
 		if text != "" {
 			if err := clipboard.WriteText(text); err != nil {
-				util.GetLogger().Error(ctx, fmt.Sprintf("Script plugin %s failed to copy to clipboard: %s", s.metadata.Name, err.Error()))
+				util.GetLogger().Error(ctx, fmt.Sprintf("Script plugin %s failed to copy to clipboard: %s", s.metadata.GetName(ctx), err.Error()))
 			} else {
-				util.GetLogger().Info(ctx, fmt.Sprintf("Script plugin %s copied to clipboard: %s", s.metadata.Name, text))
+				util.GetLogger().Info(ctx, fmt.Sprintf("Script plugin %s copied to clipboard: %s", s.metadata.GetName(ctx), text))
 			}
 		}
 		return true
@@ -373,7 +373,7 @@ func (s *ScriptPlugin) handleBuiltInAction(ctx context.Context, actionId string,
 		url := getStringFromMap(actionData, "url")
 		if url != "" {
 			if err := shell.Open(url); err != nil {
-				util.GetLogger().Error(ctx, fmt.Sprintf("Script plugin %s failed to open URL %s: %s", s.metadata.Name, url, err.Error()))
+				util.GetLogger().Error(ctx, fmt.Sprintf("Script plugin %s failed to open URL %s: %s", s.metadata.GetName(ctx), url, err.Error()))
 			}
 		}
 		return true
@@ -383,9 +383,9 @@ func (s *ScriptPlugin) handleBuiltInAction(ctx context.Context, actionId string,
 		if path != "" {
 			// Open directory using shell.Open
 			if err := shell.Open(path); err != nil {
-				util.GetLogger().Error(ctx, fmt.Sprintf("Script plugin %s failed to open directory %s: %s", s.metadata.Name, path, err.Error()))
+				util.GetLogger().Error(ctx, fmt.Sprintf("Script plugin %s failed to open directory %s: %s", s.metadata.GetName(ctx), path, err.Error()))
 			} else {
-				util.GetLogger().Info(ctx, fmt.Sprintf("Script plugin %s opened directory: %s", s.metadata.Name, path))
+				util.GetLogger().Info(ctx, fmt.Sprintf("Script plugin %s opened directory: %s", s.metadata.GetName(ctx), path))
 			}
 		}
 		return true
@@ -409,7 +409,7 @@ func (s *ScriptPlugin) handleActionResult(ctx context.Context, result map[string
 
 	// This is for backward compatibility - if script returns an action result, handle it
 	if actionType != "" {
-		util.GetLogger().Warn(ctx, fmt.Sprintf("Script plugin %s returned action result (deprecated): %s", s.metadata.Name, actionType))
+		util.GetLogger().Warn(ctx, fmt.Sprintf("Script plugin %s returned action result (deprecated): %s", s.metadata.GetName(ctx), actionType))
 	}
 }
 

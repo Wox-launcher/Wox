@@ -78,7 +78,7 @@ func (w *WebsocketHost) IsHostStarted(ctx context.Context) bool {
 }
 
 func (w *WebsocketHost) LoadPlugin(ctx context.Context, metadata plugin.Metadata, pluginDirectory string) (plugin.Plugin, error) {
-	util.GetLogger().Info(ctx, fmt.Sprintf("start loading %s plugin, directory: %s", metadata.Name, pluginDirectory))
+	util.GetLogger().Info(ctx, fmt.Sprintf("start loading %s plugin, directory: %s", metadata.GetName(ctx), pluginDirectory))
 	_, loadPluginErr := w.invokeMethod(ctx, metadata, "loadPlugin", map[string]string{
 		"PluginId":        metadata.Id,
 		"PluginDirectory": pluginDirectory,
@@ -96,7 +96,7 @@ func (w *WebsocketHost) UnloadPlugin(ctx context.Context, metadata plugin.Metada
 		"PluginId": metadata.Id,
 	})
 	if unloadPluginErr != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("failed to unload %s plugin: %s", metadata.Name, unloadPluginErr))
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to unload %s plugin: %s", metadata.GetName(ctx), unloadPluginErr))
 	}
 }
 
@@ -109,12 +109,12 @@ func (w *WebsocketHost) invokeMethod(ctx context.Context, metadata plugin.Metada
 		TraceId:    util.GetContextTraceId(ctx),
 		Id:         uuid.NewString(),
 		PluginId:   metadata.Id,
-		PluginName: string(metadata.Name),
+		PluginName: metadata.GetName(ctx),
 		Method:     method,
 		Type:       JsonRpcTypeRequest,
 		Params:     params,
 	}
-	util.GetLogger().Debug(ctx, fmt.Sprintf("<Wox -> %s> inovke plugin <%s> method: %s, request id: %s", w.getHostName(ctx), metadata.Name, method, request.Id))
+	util.GetLogger().Debug(ctx, fmt.Sprintf("<Wox -> %s> inovke plugin <%s> method: %s, request id: %s", w.getHostName(ctx), metadata.GetName(ctx), method, request.Id))
 
 	jsonData, marshalErr := json.Marshal(request)
 	if marshalErr != nil {
@@ -133,10 +133,10 @@ func (w *WebsocketHost) invokeMethod(ctx context.Context, metadata plugin.Metada
 
 	select {
 	case <-time.NewTimer(time.Second * 30).C:
-		util.GetLogger().Error(ctx, fmt.Sprintf("invoke %s response timeout, response time: %dms", metadata.Name, util.GetSystemTimestamp()-startTimestamp))
+		util.GetLogger().Error(ctx, fmt.Sprintf("invoke %s response timeout, response time: %dms", metadata.GetName(ctx), util.GetSystemTimestamp()-startTimestamp))
 		return "", fmt.Errorf("request timeout, request id: %s", request.Id)
 	case response := <-resultChan:
-		util.GetLogger().Debug(ctx, fmt.Sprintf("inovke plugin <%s> method: %s finished, response time: %dms", metadata.Name, method, util.GetSystemTimestamp()-startTimestamp))
+		util.GetLogger().Debug(ctx, fmt.Sprintf("inovke plugin <%s> method: %s finished, response time: %dms", metadata.GetName(ctx), method, util.GetSystemTimestamp()-startTimestamp))
 		if response.Error != "" {
 			return "", errors.New(response.Error)
 		} else {

@@ -267,7 +267,7 @@ func ensureServicesInitialized(t *testing.T) {
 		instances := plugin.GetPluginManager().GetPluginInstances()
 		t.Logf("Loaded %d plugin instances", len(instances))
 		for _, instance := range instances {
-			t.Logf("Plugin: %s (triggers: %v)", instance.Metadata.Name, instance.GetTriggerKeywords())
+			t.Logf("Plugin: %s (triggers: %v)", instance.Metadata.GetName(context.Background()), instance.GetTriggerKeywords())
 		}
 
 		t.Logf("Test services initialized successfully")

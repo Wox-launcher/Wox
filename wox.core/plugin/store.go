@@ -50,20 +50,20 @@ type StorePluginManifest struct {
 	I18n map[string]map[string]string
 }
 
-func (m StorePluginManifest) translateText(ctx context.Context, text string) string {
+func (m StorePluginManifest) translate(ctx context.Context, text string) string {
 	if !strings.HasPrefix(text, "i18n:") {
 		return text
 	}
 
-	return i18n.GetI18nManager().TranslatePlugin(ctx, text, "", m.I18n)
+	return i18n.GetI18nManager().TranslateI18nMap(ctx, text, m.I18n)
 }
 
 func (m StorePluginManifest) GetName(ctx context.Context) string {
-	return m.translateText(ctx, m.Name)
+	return m.translate(ctx, m.Name)
 }
 
 func (m StorePluginManifest) GetDescription(ctx context.Context) string {
-	return m.translateText(ctx, m.Description)
+	return m.translate(ctx, m.Description)
 }
 
 var storeInstance *Store
@@ -152,7 +152,7 @@ func (s *Store) GetStorePluginManifests(ctx context.Context) []StorePluginManife
 				currentVersion, currentErr := semver.NewVersion(manifest.Version)
 				if existingErr != nil && currentErr != nil {
 					if existingVersion.GreaterThan(currentVersion) {
-						logger.Info(ctx, fmt.Sprintf("skip %s(%s) from %s store, because it's already exist(%s)", manifest.Name, manifest.Version, store.Name, existingManifest.Version))
+						logger.Info(ctx, fmt.Sprintf("skip %s(%s) from %s store, because it's already exist(%s)", manifest.GetName(ctx), manifest.Version, store.Name, existingManifest.Version))
 						continue
 					}
 				}
@@ -229,7 +229,7 @@ func (s *Store) Install(ctx context.Context, manifest StorePluginManifest) error
 }
 
 func (s *Store) InstallWithProgress(ctx context.Context, manifest StorePluginManifest, progressCallback InstallProgressCallback) error {
-	logger.Info(ctx, fmt.Sprintf("start to install plugin %s(%s)", manifest.Name, manifest.Version))
+	logger.Info(ctx, fmt.Sprintf("start to install plugin %s(%s)", manifest.GetName(ctx), manifest.Version))
 
 	// check if plugin's runtime is started
 	if !GetPluginManager().IsHostStarted(ctx, manifest.Runtime) {
@@ -242,13 +242,13 @@ func (s *Store) InstallWithProgress(ctx context.Context, manifest StorePluginMan
 		return item.Metadata.Id == manifest.Id
 	})
 	if exist {
-		logger.Info(ctx, fmt.Sprintf("found this plugin has installed %s(%s)", installedPlugin.Metadata.Name, installedPlugin.Metadata.Version))
+		logger.Info(ctx, fmt.Sprintf("found this plugin has installed %s(%s)", installedPlugin.Metadata.GetName(ctx), installedPlugin.Metadata.Version))
 		installedVersion, installedErr := semver.NewVersion(installedPlugin.Metadata.Version)
 		currentVersion, currentErr := semver.NewVersion(manifest.Version)
 		if installedErr == nil && currentErr == nil {
 			if installedVersion.GreaterThan(currentVersion) {
-				logger.Info(ctx, fmt.Sprintf("skip %s(%s) from %s store, because it's already installed(%s)", manifest.Name, manifest.Version, manifest.Name, installedPlugin.Metadata.Version))
-				return fmt.Errorf("skip %s(%s) from %s store, because it's already installed(%s)", manifest.Name, manifest.Version, manifest.Name, installedPlugin.Metadata.Version)
+				logger.Info(ctx, fmt.Sprintf("skip %s(%s) from %s store, because it's already installed(%s)", manifest.GetName(ctx), manifest.Version, manifest.GetName(ctx), installedPlugin.Metadata.Version))
+				return fmt.Errorf("skip %s(%s) from %s store, because it's already installed(%s)", manifest.GetName(ctx), manifest.Version, manifest.GetName(ctx), installedPlugin.Metadata.Version)
 			}
 		}
 
@@ -256,8 +256,8 @@ func (s *Store) InstallWithProgress(ctx context.Context, manifest StorePluginMan
 		if manifest.Runtime != PLUGIN_RUNTIME_SCRIPT {
 			uninstallErr := s.Uninstall(ctx, installedPlugin)
 			if uninstallErr != nil {
-				logger.Error(ctx, fmt.Sprintf("failed to uninstall plugin %s(%s): %s", installedPlugin.Metadata.Name, installedPlugin.Metadata.Version, uninstallErr.Error()))
-				return fmt.Errorf("failed to uninstall plugin %s(%s): %s", installedPlugin.Metadata.Name, installedPlugin.Metadata.Version, uninstallErr.Error())
+				logger.Error(ctx, fmt.Sprintf("failed to uninstall plugin %s(%s): %s", installedPlugin.Metadata.GetName(ctx), installedPlugin.Metadata.Version, uninstallErr.Error()))
+				return fmt.Errorf("failed to uninstall plugin %s(%s): %s", installedPlugin.Metadata.GetName(ctx), installedPlugin.Metadata.Version, uninstallErr.Error())
 			}
 		}
 	}
@@ -305,12 +305,12 @@ func (s *Store) installNormalPluginWithProgress(ctx context.Context, manifest St
 		}
 	})
 	if downloadErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to download plugin %s(%s): %s", manifest.Name, manifest.Version, downloadErr.Error()))
+		logger.Error(ctx, fmt.Sprintf("failed to download plugin %s(%s): %s", manifest.GetName(ctx), manifest.Version, downloadErr.Error()))
 		removeErr := os.Remove(pluginZipPath)
 		if removeErr != nil {
 			logger.Error(ctx, fmt.Sprintf("failed to remove plugin zip %s: %s", pluginZipPath, removeErr.Error()))
 		}
-		return fmt.Errorf("failed to download plugin %s(%s): %s", manifest.Name, manifest.Version, downloadErr.Error())
+		return fmt.Errorf("failed to download plugin %s(%s): %s", manifest.GetName(ctx), manifest.Version, downloadErr.Error())
 	}
 
 	if progressCallback != nil {
@@ -318,19 +318,19 @@ func (s *Store) installNormalPluginWithProgress(ctx context.Context, manifest St
 	}
 
 	//unzip plugin
-	logger.Info(ctx, fmt.Sprintf("start to unzip plugin %s(%s)", manifest.Name, manifest.Version))
+	logger.Info(ctx, fmt.Sprintf("start to unzip plugin %s(%s)", manifest.GetName(ctx), manifest.Version))
 	if progressCallback != nil {
 		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_install_progress_extracting"))
 	}
 
 	unzipErr := util.Unzip(pluginZipPath, pluginDirectory)
 	if unzipErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to unzip plugin %s(%s): %s", manifest.Name, manifest.Version, unzipErr.Error()))
+		logger.Error(ctx, fmt.Sprintf("failed to unzip plugin %s(%s): %s", manifest.GetName(ctx), manifest.Version, unzipErr.Error()))
 		removeErr := os.Remove(pluginZipPath)
 		if removeErr != nil {
 			logger.Error(ctx, fmt.Sprintf("failed to remove plugin zip %s: %s", pluginZipPath, removeErr.Error()))
 		}
-		return fmt.Errorf("failed to unzip plugin %s(%s): %s", manifest.Name, manifest.Version, unzipErr.Error())
+		return fmt.Errorf("failed to unzip plugin %s(%s): %s", manifest.GetName(ctx), manifest.Version, unzipErr.Error())
 	}
 
 	if progressCallback != nil {
@@ -338,14 +338,14 @@ func (s *Store) installNormalPluginWithProgress(ctx context.Context, manifest St
 	}
 
 	//load plugin
-	logger.Info(ctx, fmt.Sprintf("start to load plugin %s(%s)", manifest.Name, manifest.Version))
+	logger.Info(ctx, fmt.Sprintf("start to load plugin %s(%s)", manifest.GetName(ctx), manifest.Version))
 	if progressCallback != nil {
 		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_install_progress_loading"))
 	}
 
 	loadErr := GetPluginManager().LoadPlugin(ctx, pluginDirectory)
 	if loadErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to load plugin %s(%s): %s", manifest.Name, manifest.Version, loadErr.Error()))
+		logger.Error(ctx, fmt.Sprintf("failed to load plugin %s(%s): %s", manifest.GetName(ctx), manifest.Version, loadErr.Error()))
 
 		// remove plugin zip and directory
 		removeErr := os.RemoveAll(pluginDirectory)
@@ -357,7 +357,7 @@ func (s *Store) installNormalPluginWithProgress(ctx context.Context, manifest St
 			logger.Error(ctx, fmt.Sprintf("failed to remove plugin zip %s: %s", pluginZipPath, removeErr.Error()))
 		}
 
-		return fmt.Errorf("failed to load plugin %s(%s): %s", manifest.Name, manifest.Version, loadErr.Error())
+		return fmt.Errorf("failed to load plugin %s(%s): %s", manifest.GetName(ctx), manifest.Version, loadErr.Error())
 	}
 
 	if progressCallback != nil {
@@ -383,7 +383,7 @@ func (s *Store) installScriptPlugin(ctx context.Context, manifest StorePluginMan
 }
 
 func (s *Store) installScriptPluginWithProgress(ctx context.Context, manifest StorePluginManifest, progressCallback InstallProgressCallback) error {
-	logger.Info(ctx, fmt.Sprintf("detected script plugin, use script install flow: %s", manifest.Name))
+	logger.Info(ctx, fmt.Sprintf("detected script plugin, use script install flow: %s", manifest.GetName(ctx)))
 
 	if progressCallback != nil {
 		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_install_progress_preparing"))
@@ -488,7 +488,7 @@ func (s *Store) installScriptPluginWithProgress(ctx context.Context, manifest St
 		if existingScriptPath != "" {
 			fileName = path.Base(existingScriptPath)
 		} else {
-			fileName = strings.ReplaceAll(strings.ToLower(fmt.Sprintf("%s_%s", manifest.Id, manifest.Name)), " ", "-") + ".sh"
+			fileName = strings.ReplaceAll(strings.ToLower(fmt.Sprintf("%s_%s", manifest.Id, manifest.GetName(ctx))), " ", "-") + ".sh"
 		}
 	}
 	newScriptPath := path.Join(userScriptDir, fileName)
@@ -510,14 +510,14 @@ func (s *Store) installScriptPluginWithProgress(ctx context.Context, manifest St
 		}
 	})
 	if downloadErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to download script plugin %s(%s): %s", manifest.Name, manifest.Version, downloadErr.Error()))
+		logger.Error(ctx, fmt.Sprintf("failed to download script plugin %s(%s): %s", manifest.GetName(ctx), manifest.Version, downloadErr.Error()))
 		// rollback
 		if hasBackup {
 			_ = os.Remove(newScriptPath)
 			_ = os.Rename(backupPath, existingScriptPath)
 			_ = os.RemoveAll(backupDir)
 		}
-		return fmt.Errorf("failed to download script plugin %s(%s): %s", manifest.Name, manifest.Version, downloadErr.Error())
+		return fmt.Errorf("failed to download script plugin %s(%s): %s", manifest.GetName(ctx), manifest.Version, downloadErr.Error())
 	}
 	_ = os.Chmod(newScriptPath, 0755)
 
@@ -550,17 +550,16 @@ func (s *Store) installScriptPluginWithProgress(ctx context.Context, manifest St
 		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_install_progress_loading"))
 	}
 
-	virtualDirectory := path.Join(userScriptDir, metadata.Id)
-	loadErr := GetPluginManager().ReloadPlugin(ctx, MetadataWithDirectory{Metadata: metadata, Directory: virtualDirectory})
+	loadErr := GetPluginManager().ReloadPlugin(ctx, metadata)
 	if loadErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to load script plugin %s(%s): %s", metadata.Name, metadata.Version, loadErr.Error()))
+		logger.Error(ctx, fmt.Sprintf("failed to load script plugin %s(%s): %s", metadata.GetName(ctx), metadata.Version, loadErr.Error()))
 		// rollback
 		if hasBackup {
 			_ = os.Remove(newScriptPath)
 			_ = os.Rename(backupPath, existingScriptPath)
 			_ = os.RemoveAll(backupDir)
 		}
-		return fmt.Errorf("failed to load script plugin %s(%s): %s", metadata.Name, metadata.Version, loadErr.Error())
+		return fmt.Errorf("failed to load script plugin %s(%s): %s", metadata.GetName(ctx), metadata.Version, loadErr.Error())
 	}
 
 	// 7) success - cleanup backup
@@ -572,7 +571,7 @@ func (s *Store) installScriptPluginWithProgress(ctx context.Context, manifest St
 		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_install_progress_complete"))
 	}
 
-	logger.Info(ctx, fmt.Sprintf("script plugin %s(%s) installed", metadata.Name, metadata.Version))
+	logger.Info(ctx, fmt.Sprintf("script plugin %s(%s) installed", metadata.GetName(ctx), metadata.Version))
 	return nil
 }
 
@@ -632,20 +631,20 @@ func (s *Store) InstallFromLocal(ctx context.Context, filePath string) error {
 		return item.Metadata.Id == pluginMetadata.Id
 	})
 	if exist {
-		logger.Info(ctx, fmt.Sprintf("found this plugin has installed %s(%s)", installedPlugin.Metadata.Name, installedPlugin.Metadata.Version))
+		logger.Info(ctx, fmt.Sprintf("found this plugin has installed %s(%s)", installedPlugin.Metadata.GetName(ctx), installedPlugin.Metadata.Version))
 		installedVersion, installedErr := semver.NewVersion(installedPlugin.Metadata.Version)
 		currentVersion, currentErr := semver.NewVersion(pluginMetadata.Version)
 		if installedErr == nil && currentErr == nil {
 			if installedVersion.GreaterThan(currentVersion) {
-				logger.Info(ctx, fmt.Sprintf("skip %s(%s) from %s store, because it's already installed(%s)", pluginMetadata.Name, pluginMetadata.Version, pluginMetadata.Name, installedPlugin.Metadata.Version))
-				return fmt.Errorf("skip %s(%s) from %s store, because it's already installed(%s)", pluginMetadata.Name, pluginMetadata.Version, pluginMetadata.Name, installedPlugin.Metadata.Version)
+				logger.Info(ctx, fmt.Sprintf("skip %s(%s) from %s store, because it's already installed(%s)", pluginMetadata.GetName(ctx), pluginMetadata.Version, pluginMetadata.GetName(ctx), installedPlugin.Metadata.Version))
+				return fmt.Errorf("skip %s(%s) from %s store, because it's already installed(%s)", pluginMetadata.GetName(ctx), pluginMetadata.Version, pluginMetadata.GetName(ctx), installedPlugin.Metadata.Version)
 			}
 		}
 
 		uninstallErr := s.Uninstall(ctx, installedPlugin)
 		if uninstallErr != nil {
-			logger.Error(ctx, fmt.Sprintf("failed to uninstall plugin %s(%s): %s", installedPlugin.Metadata.Name, installedPlugin.Metadata.Version, uninstallErr.Error()))
-			return fmt.Errorf("failed to uninstall plugin %s(%s): %s", installedPlugin.Metadata.Name, installedPlugin.Metadata.Version, uninstallErr.Error())
+			logger.Error(ctx, fmt.Sprintf("failed to uninstall plugin %s(%s): %s", installedPlugin.Metadata.GetName(ctx), installedPlugin.Metadata.Version, uninstallErr.Error()))
+			return fmt.Errorf("failed to uninstall plugin %s(%s): %s", installedPlugin.Metadata.GetName(ctx), installedPlugin.Metadata.Version, uninstallErr.Error())
 		}
 	}
 
@@ -657,18 +656,18 @@ func (s *Store) InstallFromLocal(ctx context.Context, filePath string) error {
 	}
 
 	//unzip plugin
-	logger.Info(ctx, fmt.Sprintf("start to unzip plugin %s(%s)", pluginMetadata.Name, pluginMetadata.Version))
+	logger.Info(ctx, fmt.Sprintf("start to unzip plugin %s(%s)", pluginMetadata.GetName(ctx), pluginMetadata.Version))
 	unzipErr := util.Unzip(filePath, pluginDirectory)
 	if unzipErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to unzip plugin %s(%s): %s", pluginMetadata.Name, pluginMetadata.Version, unzipErr.Error()))
-		return fmt.Errorf("failed to unzip plugin %s(%s): %s", pluginMetadata.Name, pluginMetadata.Version, unzipErr.Error())
+		logger.Error(ctx, fmt.Sprintf("failed to unzip plugin %s(%s): %s", pluginMetadata.GetName(ctx), pluginMetadata.Version, unzipErr.Error()))
+		return fmt.Errorf("failed to unzip plugin %s(%s): %s", pluginMetadata.GetName(ctx), pluginMetadata.Version, unzipErr.Error())
 	}
 
 	//load plugin
-	logger.Info(ctx, fmt.Sprintf("start to load plugin %s(%s)", pluginMetadata.Name, pluginMetadata.Version))
+	logger.Info(ctx, fmt.Sprintf("start to load plugin %s(%s)", pluginMetadata.GetName(ctx), pluginMetadata.Version))
 	loadErr := GetPluginManager().LoadPlugin(ctx, pluginDirectory)
 	if loadErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to load plugin %s(%s): %s", pluginMetadata.Name, pluginMetadata.Version, loadErr.Error()))
+		logger.Error(ctx, fmt.Sprintf("failed to load plugin %s(%s): %s", pluginMetadata.GetName(ctx), pluginMetadata.Version, loadErr.Error()))
 
 		// remove plugin directory
 		// removeErr := os.RemoveAll(pluginDirectory)
@@ -676,14 +675,14 @@ func (s *Store) InstallFromLocal(ctx context.Context, filePath string) error {
 		// 	logger.Error(ctx, fmt.Sprintf("failed to remove plugin directory %s: %s", pluginDirectory, removeErr.Error()))
 		// }
 
-		return fmt.Errorf("failed to load plugin %s(%s): %s", pluginMetadata.Name, pluginMetadata.Version, loadErr.Error())
+		return fmt.Errorf("failed to load plugin %s(%s): %s", pluginMetadata.GetName(ctx), pluginMetadata.Version, loadErr.Error())
 	}
 
 	return nil
 }
 
 func (s *Store) Uninstall(ctx context.Context, plugin *Instance) error {
-	logger.Info(ctx, fmt.Sprintf("start to uninstall plugin %s(%s)", plugin.Metadata.Name, plugin.Metadata.Version))
+	logger.Info(ctx, fmt.Sprintf("start to uninstall plugin %s(%s)", plugin.Metadata.GetName(ctx), plugin.Metadata.Version))
 
 	if plugin.IsDevPlugin {
 		var wpmPlugin *Instance
@@ -719,7 +718,7 @@ func (s *Store) Uninstall(ctx context.Context, plugin *Instance) error {
 
 	if db := database.GetDB(); db != nil {
 		if err := setting.NewPluginSettingStore(db, plugin.Metadata.Id).DeleteAll(); err != nil {
-			logger.Error(ctx, fmt.Sprintf("failed to delete plugin settings %s(%s): %s", plugin.Metadata.Name, plugin.Metadata.Version, err.Error()))
+			logger.Error(ctx, fmt.Sprintf("failed to delete plugin settings %s(%s): %s", plugin.Metadata.GetName(ctx), plugin.Metadata.Version, err.Error()))
 		}
 	}
 

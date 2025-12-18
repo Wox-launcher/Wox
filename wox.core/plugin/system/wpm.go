@@ -74,24 +74,16 @@ type pluginTemplate struct {
 }
 
 type localPlugin struct {
-	metadata plugin.MetadataWithDirectory
+	metadata plugin.Metadata
 	watcher  *fsnotify.Watcher
 }
 
-func (w *WPMPlugin) translateLocalPluginText(ctx context.Context, metadata plugin.MetadataWithDirectory, text string) string {
-	if !strings.HasPrefix(text, "i18n:") {
-		return text
-	}
-
-	return i18n.GetI18nManager().TranslatePlugin(ctx, text, metadata.Directory, metadata.Metadata.I18n)
+func (w *WPMPlugin) getLocalPluginName(ctx context.Context, metadata plugin.Metadata) string {
+	return metadata.GetName(ctx)
 }
 
-func (w *WPMPlugin) getLocalPluginName(ctx context.Context, metadata plugin.MetadataWithDirectory) string {
-	return w.translateLocalPluginText(ctx, metadata, string(metadata.Metadata.Name))
-}
-
-func (w *WPMPlugin) getLocalPluginDescription(ctx context.Context, metadata plugin.MetadataWithDirectory) string {
-	return w.translateLocalPluginText(ctx, metadata, string(metadata.Metadata.Description))
+func (w *WPMPlugin) getLocalPluginDescription(ctx context.Context, metadata plugin.Metadata) string {
+	return metadata.GetDescription(ctx)
 }
 
 func (w *WPMPlugin) GetMetadata() plugin.Metadata {
@@ -229,7 +221,7 @@ func (w *WPMPlugin) loadDevPlugin(ctx context.Context, pluginDirectory string) {
 
 	// check if plugin is already loaded
 	existingLocalPlugin, exist := lo.Find(w.localPlugins, func(lp localPlugin) bool {
-		return lp.metadata.Metadata.Id == metadata.Metadata.Id
+		return lp.metadata.Id == metadata.Id
 	})
 	if exist {
 		w.api.Log(ctx, plugin.LogLevelInfo, "plugin already loaded, unload first")
@@ -241,7 +233,7 @@ func (w *WPMPlugin) loadDevPlugin(ctx context.Context, pluginDirectory string) {
 		}
 
 		w.localPlugins = lo.Filter(w.localPlugins, func(lp localPlugin, _ int) bool {
-			return lp.metadata.Metadata.Id != metadata.Metadata.Id
+			return lp.metadata.Id != metadata.Id
 		})
 	}
 
@@ -251,10 +243,10 @@ func (w *WPMPlugin) loadDevPlugin(ctx context.Context, pluginDirectory string) {
 		watcher, watchErr := util.WatchDirectoryChanges(ctx, distDirectory, func(e fsnotify.Event) {
 			if e.Op != fsnotify.Chmod {
 				// debounce reload plugin to avoid reload multiple times in a short time
-				if t, ok := w.reloadPluginTimers.Load(metadata.Metadata.Id); ok {
+				if t, ok := w.reloadPluginTimers.Load(metadata.Id); ok {
 					t.Stop()
 				}
-				w.reloadPluginTimers.Store(metadata.Metadata.Id, time.AfterFunc(time.Second*2, func() {
+				w.reloadPluginTimers.Store(metadata.Id, time.AfterFunc(time.Second*2, func() {
 					w.reloadLocalDistPlugin(ctx, metadata, "dist directory changed")
 				}))
 			}
@@ -270,16 +262,13 @@ func (w *WPMPlugin) loadDevPlugin(ctx context.Context, pluginDirectory string) {
 	w.localPlugins = append(w.localPlugins, lp)
 }
 
-func (w *WPMPlugin) parseMetadata(ctx context.Context, directory string) (plugin.MetadataWithDirectory, error) {
+func (w *WPMPlugin) parseMetadata(ctx context.Context, directory string) (plugin.Metadata, error) {
 	// parse plugin.json in directory
 	metadata, metadataErr := plugin.GetPluginManager().ParseMetadata(ctx, directory)
 	if metadataErr != nil {
-		return plugin.MetadataWithDirectory{}, fmt.Errorf("failed to parse plugin.json in %s: %s", directory, metadataErr.Error())
+		return plugin.Metadata{}, fmt.Errorf("failed to parse plugin.json in %s: %s", directory, metadataErr.Error())
 	}
-	return plugin.MetadataWithDirectory{
-		Metadata:  metadata,
-		Directory: directory,
-	}, nil
+	return metadata, nil
 }
 
 func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
@@ -788,7 +777,7 @@ func (w *WPMPlugin) listDevCommand(ctx context.Context) []plugin.QueryResult {
 	return lo.Map(w.localPlugins, func(lp localPlugin, _ int) plugin.QueryResult {
 		pluginName := w.getLocalPluginName(ctx, lp.metadata)
 		pluginDescription := w.getLocalPluginDescription(ctx, lp.metadata)
-		iconImage := common.ParseWoxImageOrDefault(lp.metadata.Metadata.Icon, wpmIcon)
+		iconImage := common.ParseWoxImageOrDefault(lp.metadata.Icon, wpmIcon)
 		iconImage = common.ConvertIcon(ctx, iconImage, lp.metadata.Directory)
 
 		return plugin.QueryResult{
@@ -812,10 +801,10 @@ func (w *WPMPlugin) listDevCommand(ctx context.Context) []plugin.QueryResult {
 - **Commands**: %s
 - **SupportedOS**: %s
 - **Features**: %s
-`, lp.metadata.Directory, pluginName, pluginDescription, lp.metadata.Metadata.Author,
-					lp.metadata.Metadata.Website, lp.metadata.Metadata.Version, lp.metadata.Metadata.MinWoxVersion,
-					lp.metadata.Metadata.Runtime, lp.metadata.Metadata.Entry, lp.metadata.Metadata.TriggerKeywords,
-					lp.metadata.Metadata.Commands, lp.metadata.Metadata.SupportedOS, lp.metadata.Metadata.Features),
+`, lp.metadata.Directory, pluginName, pluginDescription, lp.metadata.Author,
+					lp.metadata.Website, lp.metadata.Version, lp.metadata.MinWoxVersion,
+					lp.metadata.Runtime, lp.metadata.Entry, lp.metadata.TriggerKeywords,
+					lp.metadata.Commands, lp.metadata.SupportedOS, lp.metadata.Features),
 			},
 			Actions: []plugin.QueryResultAction{
 				{
@@ -1038,7 +1027,7 @@ func (w *WPMPlugin) saveLocalPluginDirectories(ctx context.Context) {
 	w.api.SaveSetting(ctx, localPluginDirectoriesKey, string(data), false)
 }
 
-func (w *WPMPlugin) reloadLocalDistPlugin(ctx context.Context, localPlugin plugin.MetadataWithDirectory, reason string) error {
+func (w *WPMPlugin) reloadLocalDistPlugin(ctx context.Context, localPlugin plugin.Metadata, reason string) error {
 	localPluginName := w.getLocalPluginName(ctx, localPlugin)
 	w.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Reloading plugin: %s, reason: %s", localPluginName, reason))
 
@@ -1205,22 +1194,15 @@ func (w *WPMPlugin) createScriptPluginWithTemplate(ctx context.Context, template
 			return
 		}
 
-		// Create metadata with directory for loading
-		virtualDirectory := path.Join(userScriptPluginDirectory, metadata.Id)
-		metadataWithDirectory := plugin.MetadataWithDirectory{
-			Metadata:  metadata,
-			Directory: virtualDirectory,
-		}
-
 		// Use ReloadPlugin to load the plugin immediately
-		loadErr := pluginManager.ReloadPlugin(ctx, metadataWithDirectory)
+		loadErr := pluginManager.ReloadPlugin(ctx, metadata)
 		if loadErr != nil {
 			w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to load script plugin: %s", loadErr.Error()))
 			w.api.Notify(ctx, fmt.Sprintf("i18n:plugin_wpm_script_plugin_manual_try: %s", triggerKeyword))
 			return
 		}
 
-		w.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Successfully loaded script plugin: %s", metadata.Name))
+		w.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Successfully loaded script plugin: %s", metadata.GetName(ctx)))
 
 		// Change query to the new plugin
 		w.api.ChangeQuery(ctx, common.PlainQuery{

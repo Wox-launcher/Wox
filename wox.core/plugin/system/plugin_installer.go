@@ -111,8 +111,8 @@ func (i *PluginInstallerPlugin) queryForSelectionFile(ctx context.Context, fileP
 	// Create plugin detail JSON for preview
 	pluginDetailData := map[string]interface{}{
 		"Id":          pluginMetadata.Id,
-		"Name":        pluginMetadata.Name,
-		"Description": pluginMetadata.Description,
+		"Name":        pluginMetadata.GetName(ctx),
+		"Description": pluginMetadata.GetDescription(ctx),
 		"Author":      pluginMetadata.Author,
 		"Version":     pluginMetadata.Version,
 		"Website":     pluginMetadata.Website,
@@ -124,8 +124,8 @@ func (i *PluginInstallerPlugin) queryForSelectionFile(ctx context.Context, fileP
 
 	// create result for plugin installation
 	results = append(results, plugin.QueryResult{
-		Title:    fmt.Sprintf("%s: %s", actionTitle, pluginMetadata.Name),
-		SubTitle: fmt.Sprintf("Version: %s, Author: %s\nDescription: %s", pluginMetadata.Version, pluginMetadata.Author, pluginMetadata.Description),
+		Title:    fmt.Sprintf("%s: %s", actionTitle, pluginMetadata.GetName(ctx)),
+		SubTitle: fmt.Sprintf("Version: %s, Author: %s\nDescription: %s", pluginMetadata.Version, pluginMetadata.Author, pluginMetadata.GetDescription(ctx)),
 		Icon:     pluginIcon,
 		Actions: []plugin.QueryResultAction{
 			{
@@ -135,7 +135,7 @@ func (i *PluginInstallerPlugin) queryForSelectionFile(ctx context.Context, fileP
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					util.Go(ctx, "install plugin from local", func() {
 						// notify starting
-						i.api.Notify(ctx, fmt.Sprintf(i.api.GetTranslation(ctx, "plugin_installer_action_start"), actionButtonName, pluginMetadata.Name))
+						i.api.Notify(ctx, fmt.Sprintf(i.api.GetTranslation(ctx, "plugin_installer_action_start"), actionButtonName, pluginMetadata.GetName(ctx)))
 
 						installErr := plugin.GetStoreManager().InstallFromLocal(ctx, filePath)
 						if installErr != nil {
@@ -178,7 +178,7 @@ func (i *PluginInstallerPlugin) queryForSelectionFile(ctx context.Context, fileP
 						// success
 						actionVerbKey := fmt.Sprintf("plugin_installer_verb_%s_past", strings.ToLower(actionButtonName))
 						actionVerb := i.api.GetTranslation(ctx, actionVerbKey)
-						i.api.Notify(ctx, fmt.Sprintf(i.api.GetTranslation(ctx, "plugin_installer_action_success"), pluginMetadata.Name, actionVerb))
+						i.api.Notify(ctx, fmt.Sprintf(i.api.GetTranslation(ctx, "plugin_installer_action_success"), pluginMetadata.GetName(ctx), actionVerb))
 					})
 				},
 			},

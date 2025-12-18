@@ -2,9 +2,7 @@ package plugin
 
 import (
 	"context"
-	"strings"
 	"wox/common"
-	"wox/i18n"
 	"wox/setting"
 	"wox/setting/definition"
 )
@@ -34,24 +32,15 @@ type Instance struct {
 }
 
 func (i *Instance) translateMetadataText(ctx context.Context, text common.I18nString) string {
-	rawText := string(text)
-	if !strings.HasPrefix(rawText, "i18n:") {
-		return rawText
-	}
-
-	if i.IsSystemPlugin {
-		return i18n.GetI18nManager().TranslateWox(ctx, rawText)
-	}
-
-	return i18n.GetI18nManager().TranslatePlugin(ctx, rawText, i.PluginDirectory, i.Metadata.I18n)
+	return i.Metadata.translate(ctx, text)
 }
 
 func (i *Instance) GetName(ctx context.Context) string {
-	return i.translateMetadataText(ctx, i.Metadata.Name)
+	return i.Metadata.GetName(ctx)
 }
 
 func (i *Instance) GetDescription(ctx context.Context) string {
-	return i.translateMetadataText(ctx, i.Metadata.Description)
+	return i.Metadata.GetDescription(ctx)
 }
 
 // trigger keywords to trigger this plugin. Maybe user defined or pre-defined in plugin.json
