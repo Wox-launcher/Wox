@@ -14,7 +14,7 @@
 
 - Search for applications, folders, files and more
 - AI Chat with MCP support
-- [Plugins](https://wox-launcher.github.io/Wox/zh/store/plugins.html) and [AI Themes](https://wox-launcher.github.io/Wox/zh/guide/ai/theme.html)
+- [Plugins](https://wox-launcher.github.io/Wox/store/plugins.html) and [Themes](https://wox-launcher.github.io/Wox/store/themes.html)
 - Single executable file, no installation required
 - Develop plugins with Javascript, Python
 

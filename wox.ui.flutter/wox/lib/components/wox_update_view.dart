@@ -49,7 +49,7 @@ class WoxUpdateView extends StatelessWidget {
 
   const WoxUpdateView({super.key, required this.data});
 
-  String _tr(String key) => Get.find<WoxSettingController>().tr(key);
+  String tr(String key) => Get.find<WoxSettingController>().tr(key);
 
   Widget statusPill({required String text, required Color color}) {
     return Container(
@@ -75,19 +75,15 @@ class WoxUpdateView extends StatelessWidget {
 
   String _statusText() {
     if (!data.autoUpdateEnabled) {
-      return _tr('plugin_update_status_auto_update_disabled');
+      return tr('plugin_update_status_auto_update_disabled');
     }
 
     if (!data.hasUpdate) {
-      return _tr('plugin_update_status_none');
+      return tr('plugin_update_status_none');
     }
 
-    final current = data.currentVersion.isNotEmpty
-        ? data.currentVersion
-        : _tr('plugin_update_unknown');
-    final latest = data.latestVersion.isNotEmpty
-        ? data.latestVersion
-        : _tr('plugin_update_unknown');
+    final current = data.currentVersion.isNotEmpty ? data.currentVersion : tr('plugin_update_unknown');
+    final latest = data.latestVersion.isNotEmpty ? data.latestVersion : tr('plugin_update_unknown');
     return '$current → $latest';
   }
 
@@ -115,8 +111,7 @@ class WoxUpdateView extends StatelessWidget {
     required String label,
     required String value,
   }) {
-    final titleColor =
-        safeFromCssColor(theme.previewFontColor).withValues(alpha: 0.75);
+    final titleColor = safeFromCssColor(theme.previewFontColor).withValues(alpha: 0.75);
     final valueColor = safeFromCssColor(theme.previewFontColor);
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -141,20 +136,12 @@ class WoxUpdateView extends StatelessWidget {
   }
 
   Widget versionPanel(WoxTheme theme) {
-    final borderColor =
-        safeFromCssColor(theme.previewSplitLineColor).withValues(alpha: 0.6);
-    final bgColor =
-        safeFromCssColor(theme.appBackgroundColor).withValues(alpha: 0.25);
+    final borderColor = safeFromCssColor(theme.previewSplitLineColor).withValues(alpha: 0.6);
+    final bgColor = safeFromCssColor(theme.appBackgroundColor).withValues(alpha: 0.25);
 
-    final current = data.currentVersion.isNotEmpty
-        ? data.currentVersion
-        : _tr('plugin_update_unknown');
-    final latest = data.latestVersion.isNotEmpty
-        ? data.latestVersion
-        : _tr('plugin_update_unknown');
-    final autoUpdateText = data.autoUpdateEnabled
-        ? _tr('plugin_update_auto_update_enabled')
-        : _tr('plugin_update_auto_update_disabled');
+    final current = data.currentVersion.isNotEmpty ? data.currentVersion : tr('plugin_update_unknown');
+    final latest = data.latestVersion.isNotEmpty ? data.latestVersion : tr('plugin_update_unknown');
+    final autoUpdateText = data.autoUpdateEnabled ? tr('plugin_update_auto_update_enabled') : tr('plugin_update_auto_update_disabled');
 
     return Container(
       width: 300,
@@ -169,19 +156,19 @@ class WoxUpdateView extends StatelessWidget {
         children: [
           _infoRow(
             theme: theme,
-            label: _tr('plugin_update_current_version'),
+            label: tr('plugin_update_current_version'),
             value: current,
           ),
           const SizedBox(height: 8),
           _infoRow(
             theme: theme,
-            label: _tr('plugin_update_latest_version'),
+            label: tr('plugin_update_latest_version'),
             value: latest,
           ),
           const SizedBox(height: 8),
           _infoRow(
             theme: theme,
-            label: _tr('plugin_update_auto_update_label'),
+            label: tr('plugin_update_auto_update_label'),
             value: autoUpdateText,
           ),
         ],
@@ -195,18 +182,13 @@ class WoxUpdateView extends StatelessWidget {
     final theme = WoxThemeUtil.instance.currentTheme.value;
     final fontColor = safeFromCssColor(theme.previewFontColor);
 
-    final titleText = data.hasUpdate &&
-            data.currentVersion.isNotEmpty &&
-            data.latestVersion.isNotEmpty
-        ? Strings.format(_tr('plugin_doctor_version_update_available'),
-            [data.currentVersion, data.latestVersion])
-        : _tr('plugin_update_title');
+    final titleText = data.hasUpdate && data.currentVersion.isNotEmpty && data.latestVersion.isNotEmpty
+        ? Strings.format(tr('plugin_doctor_version_update_available'), [data.currentVersion, data.latestVersion])
+        : tr('plugin_update_title');
 
     final primaryActionText = !data.autoUpdateEnabled
-        ? _tr('plugin_update_action_enable_auto_update')
-        : (data.status.toLowerCase() == 'ready'
-            ? _tr('plugin_update_action_apply')
-            : _tr('plugin_update_action_check'));
+        ? tr('plugin_update_action_enable_auto_update')
+        : (data.status.toLowerCase() == 'ready' ? tr('plugin_update_action_apply') : tr('plugin_update_action_check'));
     final primaryHotkey = 'enter';
 
     if (!data.autoUpdateEnabled) {
@@ -220,12 +202,10 @@ class WoxUpdateView extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: safeFromCssColor(theme.appBackgroundColor)
-                    .withValues(alpha: 0.35),
+                color: safeFromCssColor(theme.appBackgroundColor).withValues(alpha: 0.35),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                  color: safeFromCssColor(theme.previewSplitLineColor)
-                      .withValues(alpha: 0.6),
+                  color: safeFromCssColor(theme.previewSplitLineColor).withValues(alpha: 0.6),
                 ),
               ),
               child: Column(
@@ -253,7 +233,7 @@ class WoxUpdateView extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              _tr('plugin_update_auto_update_disabled_title'),
+                              tr('plugin_update_auto_update_disabled_title'),
                               style: TextStyle(
                                 color: fontColor,
                                 fontSize: 18,
@@ -262,7 +242,7 @@ class WoxUpdateView extends StatelessWidget {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              _tr('plugin_update_auto_update_disabled_desc'),
+                              tr('plugin_update_auto_update_disabled_desc'),
                               style: TextStyle(
                                 color: fontColor.withValues(alpha: 0.8),
                                 fontSize: 13,
@@ -343,7 +323,7 @@ class WoxUpdateView extends StatelessWidget {
           Divider(color: safeFromCssColor(theme.previewSplitLineColor)),
           const SizedBox(height: 12),
           Text(
-            _tr('plugin_update_release_notes'),
+            tr('plugin_update_release_notes'),
             style: TextStyle(
               color: fontColor,
               fontSize: 14,
@@ -356,9 +336,7 @@ class WoxUpdateView extends StatelessWidget {
               thumbVisibility: true,
               child: SingleChildScrollView(
                 child: WoxMarkdownView(
-                  data: data.releaseNotes.isNotEmpty
-                      ? data.releaseNotes
-                      : _tr('plugin_update_no_release_notes'),
+                  data: data.releaseNotes.isNotEmpty ? data.releaseNotes : tr('plugin_update_no_release_notes'),
                   fontColor: fontColor,
                 ),
               ),
