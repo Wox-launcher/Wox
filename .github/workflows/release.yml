@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build ${{ matrix.os }} ${{ matrix.arch }}
@@ -51,7 +54,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -79,6 +82,18 @@ jobs:
           echo "$CHANGELOG" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
+      - name: Compute checksums (MD5)
+        id: checksums
+        run: |
+          set -euo pipefail
+          MAC_ARM64_MD5="$(md5sum release-files/wox-mac-arm64.dmg | awk '{print $1}')"
+          WINDOWS_MD5="$(md5sum release-files/wox-windows-amd64.exe | awk '{print $1}')"
+          LINUX_MD5="$(md5sum release-files/wox-linux-amd64 | awk '{print $1}')"
+
+          echo "MAC_ARM64_MD5=$MAC_ARM64_MD5" >> "$GITHUB_OUTPUT"
+          echo "WINDOWS_MD5=$WINDOWS_MD5" >> "$GITHUB_OUTPUT"
+          echo "LINUX_MD5=$LINUX_MD5" >> "$GITHUB_OUTPUT"
+
       - name: Create Release
         uses: ncipollo/release-action@v1
         with:
@@ -90,3 +105,61 @@ jobs:
           prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'rc') }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Checkout master to update updater.json
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+          path: repo
+
+      - name: Update updater.json in master
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+          TAG: ${{ github.ref_name }}
+          MAC_ARM64_MD5: ${{ steps.checksums.outputs.MAC_ARM64_MD5 }}
+          WINDOWS_MD5: ${{ steps.checksums.outputs.WINDOWS_MD5 }}
+          LINUX_MD5: ${{ steps.checksums.outputs.LINUX_MD5 }}
+        run: |
+          set -euo pipefail
+
+          cd repo
+
+          MAC_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/wox-mac-arm64.dmg"
+          WIN_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/wox-windows-amd64.exe"
+          LINUX_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/wox-linux-amd64"
+
+          cat > release-notes.txt <<'EOF'
+          ${{ steps.changelog.outputs.CHANGELOG }}
+          EOF
+
+          tmp="$(mktemp)"
+          jq \
+            --arg version "$VERSION" \
+            --arg macUrl "$MAC_URL" \
+            --arg macMd5 "$MAC_ARM64_MD5" \
+            --arg winUrl "$WIN_URL" \
+            --arg winMd5 "$WINDOWS_MD5" \
+            --arg linuxUrl "$LINUX_URL" \
+            --arg linuxMd5 "$LINUX_MD5" \
+            --rawfile notes release-notes.txt \
+            '.Version = $version
+            | .MacArm64DownloadUrl = $macUrl
+            | .MacArm64Checksum = $macMd5
+            | .WindowsDownloadUrl = $winUrl
+            | .WindowsChecksum = $winMd5
+            | .LinuxDownloadUrl = $linuxUrl
+            | .LinuxChecksum = $linuxMd5
+            | .ReleaseNotes = ($notes | rtrimstr("\n"))' \
+            updater.json > "$tmp"
+          mv "$tmp" updater.json
+
+          if git diff --quiet -- updater.json; then
+            echo "updater.json unchanged; skipping commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add updater.json
+          git commit -m "chore: update updater.json for ${TAG}"
+          git push origin master
