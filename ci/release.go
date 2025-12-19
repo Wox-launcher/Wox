@@ -16,6 +16,14 @@ type releaseInfo struct {
 }
 
 func runRelease() {
+	if err := ensureGitClean(); err != nil {
+		fmt.Println("Error: git working tree is not clean.")
+		fmt.Println("Please commit/stash your changes before running the release process.")
+		fmt.Println()
+		fmt.Println(strings.TrimSpace(err.Error()))
+		os.Exit(1)
+	}
+
 	// Parse latest version from CHANGELOG.md
 	info, err := parseLatestFromChangelog()
 	if err != nil {
@@ -98,6 +106,19 @@ func runRelease() {
 	fmt.Printf("Release v%s completed successfully!\n", info.Version)
 	fmt.Println("GitHub Actions will now build and publish the release.")
 	fmt.Println(strings.Repeat("=", 60))
+}
+
+func ensureGitClean() error {
+	cmd := exec.Command("git", "status", "--porcelain")
+	cmd.Dir = ".."
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git status failed: %v\n%s", err, output)
+	}
+	if strings.TrimSpace(string(output)) != "" {
+		return fmt.Errorf("Uncommitted changes detected:\n%s", output)
+	}
+	return nil
 }
 
 func parseLatestFromChangelog() (releaseInfo, error) {
