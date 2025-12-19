@@ -1,10 +1,10 @@
 {
   "Version": "2.0.0-beta.7",
   "MacArm64DownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.0.0-beta.7/wox-mac-arm64.dmg",
-  "MacArm64Checksum": "",
+  "MacArm64Checksum": "f467dfc2925aa8553c3a462434857768",
   "WindowsDownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.0.0-beta.7/wox-windows-amd64.exe",
-  "WindowsChecksum": "",
+  "WindowsChecksum": "d9e28e899a1fecbb661878ea379e0c43",
   "LinuxDownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.0.0-beta.7/wox-linux-amd64",
-  "LinuxChecksum": "",
-  "ReleaseNotes": ""
+  "LinuxChecksum": "809770c8c06d80b57a5793636086c089",
+  "ReleaseNotes": "1. Add MCP Server for Wox plugin development (default enabled on port 29867, can be configured in settings)\n 2. Add thousands separator for numbers in Calculator plugin `#4299`\n 3.Add windows setting searches\n 4.Add usage page in settings\n    ![](screenshots/usage.png)\n\n5.Improve\n\n 6.Improve fuzzy match based on fzf algorithm\n 7.Improve app searches on windows by\n\n8.Fix\n\n 9.[`AI Chat`] Fix a render issue\n 10.[`Emoji`] Fix copy large image not working on windows\n 11.[`Clipboard`] Fix clipboard image paste issue on windows\n 12.Fix a theme regression released on beta.6 that causes crash on invalid theme colors `#4302`"
 }
