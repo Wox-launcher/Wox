@@ -93,8 +93,9 @@ func (o *OpenAIBaseProvider) Models(ctx context.Context) ([]common.Model, error)
 	for pageAutoPager.Next() {
 		model := pageAutoPager.Current()
 		openaiModels = append(openaiModels, common.Model{
-			Name:     model.ID,
-			Provider: common.ProviderName(o.connectContext.Name),
+			Name:          model.ID,
+			Provider:      common.ProviderName(o.connectContext.Name),
+			ProviderAlias: o.connectContext.Alias,
 		})
 	}
 

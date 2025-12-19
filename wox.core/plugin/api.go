@@ -299,7 +299,7 @@ func (a *APIImpl) AIChatStream(ctx context.Context, model common.Model, conversa
 		return fmt.Errorf("plugin has no access to ai feature")
 	}
 
-	provider, providerErr := GetPluginManager().GetAIProvider(ctx, model.Provider)
+	provider, providerErr := GetPluginManager().GetAIProvider(ctx, model.Provider, model.ProviderAlias)
 	if providerErr != nil {
 		return providerErr
 	}

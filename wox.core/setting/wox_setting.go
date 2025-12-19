@@ -91,6 +91,7 @@ func (q *QueryShortcut) PlaceholderCount() int {
 
 type AIProvider struct {
 	Name   common.ProviderName // see ai.ProviderName
+	Alias  string              // optional, used to distinguish multiple configs for the same provider
 	ApiKey string
 	Host   string
 }

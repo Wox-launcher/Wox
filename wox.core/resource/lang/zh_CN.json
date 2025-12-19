@@ -123,6 +123,8 @@
   "ui_query_shortcuts_query_tooltip": "查询内容",
   "ui_ai_providers_name": "模型提供者",
   "ui_ai_providers_name_tooltip": "模型提供者名称",
+  "ui_ai_providers_alias": "别名",
+  "ui_ai_providers_alias_tooltip": "可选，用于区分同一提供者的多个配置",
   "ui_ai_providers_api_key": "API密钥",
   "ui_ai_providers_api_key_tooltip": "API密钥",
   "ui_ai_providers_host": "API地址",
@@ -698,5 +700,16 @@
   "plugin_emoji_add_keyword_hint": "添加自定义关键字，帮助您更快搜索到该表情，多个关键字用逗号分隔。",
   "ui_not_supported_field": "该字段类型暂不支持",
   "ui_ai_chat_show_sidebar": "显示侧边栏",
-  "ui_ai_chat_hide_sidebar": "隐藏侧边栏"
+  "ui_ai_chat_hide_sidebar": "隐藏侧边栏",
+  "ui_ai_chat_new_chat": "新对话",
+  "ui_ai_chat_start_chat": "开始对话",
+  "ui_ai_chat_create_new_chat": "开始一个新的对话",
+  "ui_ai_chat_continue_chat": "继续对话",
+  "ui_ai_chat_delete_chat": "删除对话",
+  "ui_ai_chat_summarize_chat": "总结对话",
+  "ui_ai_chat_history_today": "今天",
+  "ui_ai_chat_history_yesterday": "昨天",
+  "ui_ai_chat_history_history": "历史",
+  "ui_ai_chat_failed_to_chat": "对话失败,请重试",
+  "ui_ai_chat_error": "错误：%s"
 }

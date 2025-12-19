@@ -1582,7 +1582,7 @@ class WoxLauncherController extends GetxController {
     // Build toolbar action info list
     var toolbarActions = actionsWithHotkeys.map((action) {
       return ToolbarActionInfo(
-        name: action.name,
+        name: tr(action.name),
         hotkey: action.hotkey,
       );
     }).toList();

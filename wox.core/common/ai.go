@@ -122,8 +122,9 @@ type AIProviderInfo struct {
 }
 
 type Model struct {
-	Name     string
-	Provider ProviderName
+	Name          string
+	Provider      ProviderName
+	ProviderAlias string // optional, used to choose the correct provider config when there are multiple
 }
 
 type AIAgent struct {

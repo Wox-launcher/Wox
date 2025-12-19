@@ -236,12 +236,13 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     }
     if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeSelectAIModel) {
       var model = AIModel.fromJson(json.decode(value));
+      final providerDisplayName = model.providerAlias.isEmpty ? model.provider : "${model.provider} (${model.providerAlias})";
       return columnWidth(
         column: column,
         isHeader: false,
         isOperation: false,
         child: Text(
-          "${model.provider} - ${model.name}",
+          "$providerDisplayName - ${model.name}",
           style: TextStyle(
             overflow: TextOverflow.ellipsis,
             color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor),

@@ -121,6 +121,8 @@
   "ui_query_shortcuts_query_tooltip": "Запрос, представленный горячей клавишей",
   "ui_ai_providers_name": "Имя поставщика",
   "ui_ai_providers_name_tooltip": "Имя поставщика",
+  "ui_ai_providers_alias": "Псевдоним",
+  "ui_ai_providers_alias_tooltip": "Необязательно. Используется для различения нескольких конфигураций одного поставщика.",
   "ui_ai_providers_api_key": "API-ключ",
   "ui_ai_providers_api_key_tooltip": "API-ключ поставщика",
   "ui_ai_providers_host": "Хост",
@@ -711,5 +713,16 @@
   "plugin_clipboard_edit_alias_hint": "Установить пользовательский псевдоним для этого элемента",
   "ui_not_supported_field": "Тип поля не поддерживается",
   "ui_ai_chat_show_sidebar": "Show Sidebar",
-  "ui_ai_chat_hide_sidebar": "Hide Sidebar"
+  "ui_ai_chat_hide_sidebar": "Скрыть боковую панель",
+  "ui_ai_chat_new_chat": "Новый чат",
+  "ui_ai_chat_start_chat": "Начать чат",
+  "ui_ai_chat_create_new_chat": "Создать новый чат",
+  "ui_ai_chat_continue_chat": "Продолжить чат",
+  "ui_ai_chat_delete_chat": "Удалить чат",
+  "ui_ai_chat_summarize_chat": "Суммировать чат",
+  "ui_ai_chat_history_today": "Сегодня",
+  "ui_ai_chat_history_yesterday": "Вчера",
+  "ui_ai_chat_history_history": "История",
+  "ui_ai_chat_failed_to_chat": "Не удалось отправить сообщение, попробуйте еще раз",
+  "ui_ai_chat_error": "Ошибка: %s"
 }

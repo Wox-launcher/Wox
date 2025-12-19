@@ -23,6 +23,16 @@ class WoxAIChatController extends GetxController {
     return Get.find<WoxSettingController>().tr(key);
   }
 
+  String _makeProviderKey(String provider, String alias) {
+    return alias.isEmpty ? provider : "${provider}_$alias";
+  }
+
+  (String provider, String alias) _parseProviderKey(String providerKey) {
+    final idx = providerKey.indexOf("_");
+    if (idx <= 0) return (providerKey, "");
+    return (providerKey.substring(0, idx), providerKey.substring(idx + 1));
+  }
+
   // Controllers and focus nodes
   final TextEditingController textController = TextEditingController();
   final WoxLauncherController launcherController = Get.find<WoxLauncherController>();
@@ -113,13 +123,13 @@ class WoxAIChatController extends GetxController {
       items.add(WoxListItem<ChatSelectItem>(
         id: "agents",
         icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖"),
-        title: "Agent Selection",
+        title: tr("ui_ai_chat_select_agent"),
         subTitle: "",
         tails: [],
         isGroup: false,
         data: ChatSelectItem(
             id: "agents",
-            name: "Agent Selection",
+            name: tr("ui_ai_chat_select_agent"),
             icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖"),
             isCategory: true,
             children: [],
@@ -133,13 +143,13 @@ class WoxAIChatController extends GetxController {
       items.add(WoxListItem<ChatSelectItem>(
         id: "models",
         icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖"),
-        title: "Model Selection",
+        title: tr("ui_ai_chat_select_model"),
         subTitle: "",
         tails: [],
         isGroup: false,
         data: ChatSelectItem(
             id: "models",
-            name: "Model Selection",
+            name: tr("ui_ai_chat_select_model"),
             icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖"),
             isCategory: true,
             children: [],
@@ -153,13 +163,13 @@ class WoxAIChatController extends GetxController {
       items.add(WoxListItem<ChatSelectItem>(
         id: "tools",
         icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🔧"),
-        title: "Tool Configuration",
+        title: tr("ui_ai_chat_configure_tools"),
         subTitle: "",
         tails: [],
         isGroup: false,
         data: ChatSelectItem(
             id: "tools",
-            name: "Tool Configuration",
+            name: tr("ui_ai_chat_configure_tools"),
             icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🔧"),
             isCategory: true,
             children: [],
@@ -174,28 +184,34 @@ class WoxAIChatController extends GetxController {
       // Group models by provider
       final modelsByProvider = <String, List<AIModel>>{};
       for (final model in aiModels) {
-        modelsByProvider.putIfAbsent(model.provider, () => []).add(model);
+        final providerKey = _makeProviderKey(model.provider, model.providerAlias);
+        modelsByProvider.putIfAbsent(providerKey, () => []).add(model);
       }
 
       // Sort providers
       final providers = modelsByProvider.keys.toList()..sort();
 
       // Add groups and models
-      for (final provider in providers) {
+      for (final providerKey in providers) {
         // Skip empty groups
-        if (modelsByProvider[provider]!.isEmpty) continue;
+        if (modelsByProvider[providerKey]!.isEmpty) continue;
+
+        final providerInfo = _parseProviderKey(providerKey);
+        final provider = providerInfo.$1;
+        final alias = providerInfo.$2;
+        final providerDisplayName = alias.isEmpty ? provider : "$provider ($alias)";
 
         // Add provider group header
         items.add(WoxListItem<ChatSelectItem>(
-          id: "group_$provider",
+          id: "group_$providerKey",
           icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🏢"),
-          title: provider,
+          title: providerDisplayName,
           subTitle: "",
           tails: [],
           isGroup: true,
           data: ChatSelectItem(
-            id: "group_$provider",
-            name: provider,
+            id: "group_$providerKey",
+            name: providerDisplayName,
             icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🏢"),
             isCategory: true,
             children: [],
@@ -204,26 +220,26 @@ class WoxAIChatController extends GetxController {
         ));
 
         // Sort models within this provider
-        final models = modelsByProvider[provider]!;
+        final models = modelsByProvider[providerKey]!;
         models.sort((a, b) => a.name.compareTo(b.name));
 
         // Add models for this provider
         for (final model in models) {
           items.add(WoxListItem<ChatSelectItem>(
-            id: "${model.provider}_${model.name}",
+            id: "${providerKey}_${model.name}",
             icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖"),
             title: model.name,
             subTitle: "",
             tails: [],
             isGroup: false,
             data: ChatSelectItem(
-                id: "${model.provider}_${model.name}",
+                id: "${providerKey}_${model.name}",
                 name: model.name,
                 icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖"),
                 isCategory: false,
                 children: [],
                 onExecute: (String traceId) {
-                  aiChatData.value.model.value = AIModel(name: model.name, provider: model.provider);
+                  aiChatData.value.model.value = AIModel(name: model.name, provider: model.provider, providerAlias: model.providerAlias);
                   hideChatSelectPanel();
                 }),
           ));
@@ -289,7 +305,7 @@ class WoxAIChatController extends GetxController {
           id: agent.name,
           icon: agent.icon, // 使用agent自定义头像
           title: agent.name,
-          subTitle: "Model: ${agent.model.name}",
+          subTitle: "${tr("ui_ai_chat_model")}: ${agent.model.name}",
           tails: isSelected ? [WoxListItemTail.image(WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "✅"))] : [],
           isGroup: false,
           data: ChatSelectItem(

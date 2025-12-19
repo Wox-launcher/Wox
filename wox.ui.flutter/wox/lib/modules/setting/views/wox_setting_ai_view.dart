@@ -42,6 +42,14 @@ class WoxSettingAIView extends WoxSettingBaseView {
                         ],
                       },
                       {
+                        "Key": "Alias",
+                        "Label": "i18n:ui_ai_providers_alias",
+                        "Tooltip": "i18n:ui_ai_providers_alias_tooltip",
+                        "Width": 120,
+                        "Type": "text",
+                        "TextMaxLines": 1,
+                      },
+                      {
                         "Key": "ApiKey",
                         "Label": "i18n:ui_ai_providers_api_key",
                         "Tooltip": "i18n:ui_ai_providers_api_key_tooltip",

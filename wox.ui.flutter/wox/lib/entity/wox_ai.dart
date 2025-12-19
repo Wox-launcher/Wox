@@ -6,23 +6,26 @@ import '../enums/wox_ai_conversation_role_enum.dart';
 class AIModel {
   late String name;
   late String provider;
+  late String providerAlias;
 
-  AIModel({required this.name, required this.provider});
+  AIModel({required this.name, required this.provider, required this.providerAlias});
 
   AIModel.fromJson(Map<String, dynamic> json) {
     name = json['Name'];
     provider = json['Provider'];
+    providerAlias = json['ProviderAlias'] ?? "";
   }
 
   Map<String, dynamic> toJson() {
     final Map<String, dynamic> data = <String, dynamic>{};
     data['Name'] = name;
     data['Provider'] = provider;
+    data['ProviderAlias'] = providerAlias;
     return data;
   }
 
   static AIModel empty() {
-    return AIModel(name: "", provider: "");
+    return AIModel(name: "", provider: "", providerAlias: "");
   }
 }
 
@@ -56,7 +59,7 @@ class AIAgent {
   AIAgent.fromJson(Map<String, dynamic> json) {
     name = json['Name'] ?? "";
     prompt = json['Prompt'] ?? "";
-    model = json['Model'] != null ? AIModel.fromJson(json['Model']) : AIModel(name: "", provider: "");
+    model = json['Model'] != null ? AIModel.fromJson(json['Model']) : AIModel(name: "", provider: "", providerAlias: "");
     tools = json['Tools'] != null ? List<String>.from(json['Tools']) : [];
     icon = json['Icon'] != null ? WoxImage.fromJson(json['Icon']) : WoxImage(imageType: "emoji", imageData: "🤖");
   }
@@ -75,7 +78,7 @@ class AIAgent {
     return AIAgent(
       name: "",
       prompt: "",
-      model: AIModel(name: "", provider: ""),
+      model: AIModel(name: "", provider: "", providerAlias: ""),
       tools: [],
       icon: WoxImage(imageType: "emoji", imageData: "🤖"),
     );
@@ -134,7 +137,7 @@ class WoxAIChatData {
       id: json['Id'] ?? "",
       title: json['Title'] ?? "",
       conversations: RxList<WoxAIChatConversation>.from(conversations),
-      model: json['Model'] != null ? AIModel.fromJson(json['Model']).obs : AIModel(name: "", provider: "").obs,
+      model: json['Model'] != null ? AIModel.fromJson(json['Model']).obs : AIModel(name: "", provider: "", providerAlias: "").obs,
       createdAt: json['CreatedAt'] ?? DateTime.now().millisecondsSinceEpoch,
       updatedAt: json['UpdatedAt'] ?? DateTime.now().millisecondsSinceEpoch,
       agentName: json['AgentName'],
@@ -169,7 +172,7 @@ class WoxAIChatData {
       id: "",
       title: "",
       conversations: RxList<WoxAIChatConversation>.from([]),
-      model: AIModel(name: "", provider: "").obs,
+      model: AIModel(name: "", provider: "", providerAlias: "").obs,
       createdAt: 0,
       updatedAt: 0,
       tools: null,

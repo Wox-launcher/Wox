@@ -123,6 +123,8 @@
   "ui_query_shortcuts_query_tooltip": "The query represented by the shortcut.",
   "ui_ai_providers_name": "Provider Name",
   "ui_ai_providers_name_tooltip": "The name of the AI provider.",
+  "ui_ai_providers_alias": "Alias",
+  "ui_ai_providers_alias_tooltip": "Optional. Used to distinguish multiple configs for the same provider.",
   "ui_ai_providers_api_key": "API Key",
   "ui_ai_providers_api_key_tooltip": "The API key of the AI provider.",
   "ui_ai_providers_host": "Host",
@@ -698,5 +700,16 @@
   "plugin_emoji_add_keyword_hint": "Add custom keywords to help you find this emoji faster, separate multiple with commas.",
   "ui_not_supported_field": "Field type not supported",
   "ui_ai_chat_show_sidebar": "Show Sidebar",
-  "ui_ai_chat_hide_sidebar": "Hide Sidebar"
+  "ui_ai_chat_hide_sidebar": "Hide Sidebar",
+  "ui_ai_chat_new_chat": "New Chat",
+  "ui_ai_chat_start_chat": "Start Chat",
+  "ui_ai_chat_create_new_chat": "Create a new chat",
+  "ui_ai_chat_continue_chat": "Continue Chat",
+  "ui_ai_chat_delete_chat": "Delete Chat",
+  "ui_ai_chat_summarize_chat": "Summarize Chat",
+  "ui_ai_chat_history_today": "Today",
+  "ui_ai_chat_history_yesterday": "Yesterday",
+  "ui_ai_chat_history_history": "History",
+  "ui_ai_chat_failed_to_chat": "Failed to chat, please try again",
+  "ui_ai_chat_error": "Error: %s"
 }

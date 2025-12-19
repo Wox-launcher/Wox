@@ -361,8 +361,9 @@ func (r *AIChatPlugin) GetDefaultModel(ctx context.Context) common.Model {
 	if len(r.chats) > 0 {
 		lastChat := r.chats[0]
 		return common.Model{
-			Name:     lastChat.Model.Name,
-			Provider: lastChat.Model.Provider,
+			Name:          lastChat.Model.Name,
+			Provider:      lastChat.Model.Provider,
+			ProviderAlias: lastChat.Model.ProviderAlias,
 		}
 	}
 
@@ -459,6 +460,7 @@ func (r *AIChatPlugin) loadAgents(ctx context.Context) ([]common.AIAgent, error)
 		gModel := gjson.Parse(agent.Get("model").String())
 		modelName := gModel.Get("Name").String()
 		modelProvider := gModel.Get("Provider").String()
+		modelProviderAlias := gModel.Get("ProviderAlias").String()
 
 		// Parse icon if available
 		var icon common.WoxImage
@@ -480,7 +482,11 @@ func (r *AIChatPlugin) loadAgents(ctx context.Context) ([]common.AIAgent, error)
 		agents = append(agents, common.AIAgent{
 			Name:   agent.Get("name").String(),
 			Prompt: agent.Get("prompt").String(),
-			Model:  common.Model{Name: modelName, Provider: common.ProviderName(modelProvider)},
+			Model: common.Model{
+				Name:          modelName,
+				Provider:      common.ProviderName(modelProvider),
+				ProviderAlias: modelProviderAlias,
+			},
 			Tools: lo.Map(agent.Get("tools").Array(), func(tool gjson.Result, _ int) string {
 				return tool.String()
 			}),
@@ -596,7 +602,16 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 
 	if chatErr != nil {
 		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("AI: Failed to chat: %s", chatErr.Error()))
-		r.api.Notify(ctx, "Failed to chat, please try again")
+		r.appendOrUpdateConversation(&aiChatData, common.Conversation{
+			Id:        uuid.NewString(),
+			Role:      common.ConversationRoleAssistant,
+			Text:      fmt.Sprintf(r.api.GetTranslation(ctx, "ui_ai_chat_error"), chatErr.Error()),
+			Timestamp: util.GetSystemTimestamp(),
+		})
+		plugin.GetPluginManager().GetUI().SendChatResponse(ctx, aiChatData)
+		r.appendOrUpdateChatData(aiChatData)
+		r.saveChats(ctx)
+		r.api.Notify(ctx, r.api.GetTranslation(ctx, "ui_ai_chat_failed_to_chat"))
 	}
 }
 
@@ -659,8 +674,8 @@ func (r *AIChatPlugin) getNewChatPreviewData(ctx context.Context) plugin.QueryRe
 
 	return plugin.QueryResult{
 		Id:          resultId,
-		Title:       "New Chat",
-		SubTitle:    "Create a new chat",
+		Title:       "i18n:ui_ai_chat_new_chat",
+		SubTitle:    "i18n:ui_ai_chat_create_new_chat",
 		Icon:        aiChatIcon,
 		ContextData: chatData.Id,
 		Preview: plugin.WoxPreview{
@@ -670,14 +685,14 @@ func (r *AIChatPlugin) getNewChatPreviewData(ctx context.Context) plugin.QueryRe
 		},
 		Actions: []plugin.QueryResultAction{
 			{
-				Name:                   "Start Chat",
+				Name:                   "i18n:ui_ai_chat_start_chat",
 				PreventHideAfterAction: true,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					plugin.GetPluginManager().GetUI().FocusToChatInput(ctx)
 				},
 			},
 		},
-		Group:      "New Chat",
+		Group:      "i18n:ui_ai_chat_new_chat",
 		GroupScore: 1000,
 	}
 }
@@ -705,9 +720,9 @@ func (r *AIChatPlugin) Query(ctx context.Context, query plugin.Query) (results [
 		resultId := uuid.NewString()
 		r.resultChatIdMap.Store(chat.Id, resultId)
 
-		continueChatText := "Continue Chat"
+		continueChatText := "i18n:ui_ai_chat_continue_chat"
 		if len(chat.Conversations) == 0 {
-			continueChatText = "Start Chat"
+			continueChatText = "i18n:ui_ai_chat_start_chat"
 		}
 
 		// use agent icon
@@ -742,7 +757,7 @@ func (r *AIChatPlugin) Query(ctx context.Context, query plugin.Query) (results [
 					},
 				},
 				{
-					Name:                   "Delete Chat",
+					Name:                   "i18n:ui_ai_chat_delete_chat",
 					Icon:                   common.TrashIcon,
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -759,7 +774,7 @@ func (r *AIChatPlugin) Query(ctx context.Context, query plugin.Query) (results [
 					},
 				},
 				{
-					Name:                   "Summarize Chat",
+					Name:                   "i18n:ui_ai_chat_summarize_chat",
 					Icon:                   common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M5 5.5C5 6.33 5.67 7 6.5 7h4v10.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5V7h4c.83 0 1.5-.67 1.5-1.5S18.33 4 17.5 4h-11C5.67 4 5 4.67 5 5.5"/></svg>`),
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -832,11 +847,11 @@ func (r *AIChatPlugin) summarizeChat(ctx context.Context, chat common.AIChatData
 
 func (c *AIChatPlugin) getResultGroup(ctx context.Context, chat common.AIChatData) (string, int64) {
 	if util.GetSystemTimestamp()-chat.UpdatedAt < 1000*60*60*24 {
-		return "Today", 90
+		return "i18n:ui_ai_chat_history_today", 90
 	}
 	if util.GetSystemTimestamp()-chat.UpdatedAt < 1000*60*60*24*2 {
-		return "Yesterday", 80
+		return "i18n:ui_ai_chat_history_yesterday", 80
 	}
 
-	return "History", 10
+	return "i18n:ui_ai_chat_history_history", 10
 }

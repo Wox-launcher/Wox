@@ -203,14 +203,16 @@ class SettingWindowContext {
 
 class AIProvider {
   late String name;
+  late String alias;
   late String apiKey;
 
   late String host;
 
-  AIProvider({required this.name, required this.apiKey, required this.host});
+  AIProvider({required this.name, required this.alias, required this.apiKey, required this.host});
 
   AIProvider.fromJson(Map<String, dynamic> json) {
     name = json['Name'];
+    alias = json['Alias'] ?? '';
     apiKey = json['ApiKey'];
     host = json['Host'];
   }
@@ -218,6 +220,7 @@ class AIProvider {
   Map<String, dynamic> toJson() {
     final Map<String, dynamic> data = <String, dynamic>{};
     data['Name'] = name;
+    data['Alias'] = alias;
     data['ApiKey'] = apiKey;
     data['Host'] = host;
     return data;

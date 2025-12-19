@@ -74,7 +74,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                         Expanded(
                             child: Center(
                           child: Text(
-                            controller.aiChatData.value.title.isEmpty ? "New Chat" : controller.aiChatData.value.title,
+                            controller.aiChatData.value.title.isEmpty ? tr('ui_ai_chat_new_chat') : controller.aiChatData.value.title,
                             style: TextStyle(
                               color: safeFromCssColor(woxTheme.previewPropertyTitleColor),
                               fontSize: 14,

@@ -54,7 +54,7 @@ type Manager struct {
 	ui                 common.UI
 	resultCache        *util.HashMap[string, *QueryResultCache]
 	debounceQueryTimer *util.HashMap[string, *debounceTimer]
-	aiProviders        *util.HashMap[common.ProviderName, ai.Provider]
+	aiProviders        *util.HashMap[string, ai.Provider]
 
 	activeBrowserUrl string //active browser url before wox is activated
 
@@ -68,7 +68,7 @@ func GetPluginManager() *Manager {
 		managerInstance = &Manager{
 			resultCache:        util.NewHashMap[string, *QueryResultCache](),
 			debounceQueryTimer: util.NewHashMap[string, *debounceTimer](),
-			aiProviders:        util.NewHashMap[common.ProviderName, ai.Provider](),
+			aiProviders:        util.NewHashMap[string, ai.Provider](),
 			scriptReloadTimers: util.NewHashMap[string, *time.Timer](),
 		}
 		logger = util.GetLogger()
@@ -1862,25 +1862,29 @@ func (m *Manager) GetAIChatPluginChater(ctx context.Context) common.AIChater {
 	return nil
 }
 
-func (m *Manager) GetAIProvider(ctx context.Context, provider common.ProviderName) (ai.Provider, error) {
-	if v, exist := m.aiProviders.Load(provider); exist {
+func (m *Manager) GetAIProvider(ctx context.Context, provider common.ProviderName, alias string) (ai.Provider, error) {
+	key := string(provider)
+	if alias != "" {
+		key = fmt.Sprintf("%s_%s", provider, alias)
+	}
+	if v, exist := m.aiProviders.Load(key); exist {
 		return v, nil
 	}
 
 	//check if provider has setting
 	aiProviderSettings := setting.GetSettingManager().GetWoxSetting(ctx).AIProviders.Get()
 	providerSetting, providerSettingExist := lo.Find(aiProviderSettings, func(item setting.AIProvider) bool {
-		return item.Name == provider
+		return item.Name == provider && item.Alias == alias
 	})
 	if !providerSettingExist {
-		return nil, fmt.Errorf("ai provider setting not found: %s", provider)
+		return nil, fmt.Errorf("ai provider setting not found: %s (alias=%s)", provider, alias)
 	}
 
 	newProvider, newProviderErr := ai.NewProvider(ctx, providerSetting)
 	if newProviderErr != nil {
 		return nil, newProviderErr
 	}
-	m.aiProviders.Store(provider, newProvider)
+	m.aiProviders.Store(key, newProvider)
 	return newProvider, nil
 }
 

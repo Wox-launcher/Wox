@@ -34,14 +34,24 @@ class WoxAIModelSelectorView extends StatefulWidget {
 
 class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
   bool _isLoading = true;
-  List<AIModel> _allModels = [];
-  Set<String> _providers = {};
-  String? _selectedProvider;
-  AIModel? _selectedModel;
-  bool _isEditMode = false;
+  List<AIModel> allModels = [];
+  Set<String> providerKeys = {};
+  String? selectedProviderKey;
+  AIModel? selectedModel;
+  bool isEditMode = false;
 
   // For custom model editing
-  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController nameController = TextEditingController();
+
+  String makeProviderKey(String provider, String alias) {
+    return alias.isEmpty ? provider : "${provider}_$alias";
+  }
+
+  (String provider, String alias) parseProviderKey(String providerKey) {
+    final idx = providerKey.indexOf("_");
+    if (idx <= 0) return (providerKey, "");
+    return (providerKey.substring(0, idx), providerKey.substring(idx + 1));
+  }
 
   @override
   void initState() {
@@ -51,7 +61,7 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
 
   @override
   void dispose() {
-    _nameController.dispose();
+    nameController.dispose();
     super.dispose();
   }
 
@@ -60,39 +70,53 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
     setState(() => _isLoading = true);
 
     try {
-      _allModels = await WoxApi.instance.findAIModels();
+      allModels = await WoxApi.instance.findAIModels();
 
       // Extract unique providers
-      _providers = _allModels.map((e) => e.provider).toSet();
+      providerKeys = allModels.map((e) => makeProviderKey(e.provider, e.providerAlias)).toSet();
 
       // Set initial selection if provided
       if (widget.initialValue != null && widget.initialValue!.isNotEmpty) {
         try {
           final modelJson = jsonDecode(widget.initialValue!);
-          _selectedModel = AIModel.fromJson(modelJson);
-          _selectedProvider = _selectedModel?.provider;
+          selectedModel = AIModel.fromJson(modelJson);
+          selectedProviderKey = makeProviderKey(selectedModel?.provider ?? "", selectedModel?.providerAlias ?? "");
         } catch (e) {
           // Invalid JSON, ignore
         }
       }
 
       // Default to first provider if none selected
-      if (_selectedProvider == null && _providers.isNotEmpty) {
-        _selectedProvider = _providers.first;
+      if (selectedProviderKey == null && providerKeys.isNotEmpty) {
+        selectedProviderKey = providerKeys.first;
+      }
+
+      // If the selected provider key isn't available (e.g. old saved model without alias),
+      // try to fall back to any available config for the same provider.
+      if (selectedProviderKey != null && !providerKeys.contains(selectedProviderKey)) {
+        final providerInfo = parseProviderKey(selectedProviderKey!);
+        final provider = providerInfo.$1;
+        final candidates = providerKeys.where((k) => parseProviderKey(k).$1 == provider).toList()..sort();
+        if (candidates.isNotEmpty) {
+          selectedProviderKey = candidates.first;
+        } else if (providerKeys.isNotEmpty) {
+          selectedProviderKey = providerKeys.first;
+        }
       }
 
       // Default to first model of selected provider if none selected
-      if (_selectedModel == null && _selectedProvider != null) {
-        final providerModels = _allModels.where((m) => m.provider == _selectedProvider).toList();
+      if (selectedModel == null && selectedProviderKey != null) {
+        final providerModels = allModels.where((m) => makeProviderKey(m.provider, m.providerAlias) == selectedProviderKey).toList();
         if (providerModels.isNotEmpty) {
-          _selectedModel = providerModels.first;
+          selectedModel = providerModels.first;
         }
       }
 
       // if the initial value model is not in the list, switch to the edit mode
-      if (_selectedModel != null && !_allModels.any((m) => m.name == _selectedModel!.name)) {
-        _isEditMode = true;
-        _nameController.text = _selectedModel!.name;
+      if (selectedModel != null &&
+          !allModels.any((m) => m.name == selectedModel!.name && m.provider == selectedModel!.provider && m.providerAlias == selectedModel!.providerAlias)) {
+        isEditMode = true;
+        nameController.text = selectedModel!.name;
       }
     } catch (e) {
       // Handle error
@@ -114,7 +138,7 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
     }
 
     // When there are no models/providers available, guide user to AI settings
-    if (_providers.isEmpty || _allModels.isEmpty) {
+    if (providerKeys.isEmpty || allModels.isEmpty) {
       final bg = getThemeActiveBackgroundColor().withAlpha(70);
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -161,13 +185,20 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
     }
 
     List<AIModel> getProviderModels() {
-      if (_selectedProvider != null) {
-        final models = _allModels.where((m) => m.provider == _selectedProvider).toList();
+      if (selectedProviderKey != null) {
+        final models = allModels.where((m) => makeProviderKey(m.provider, m.providerAlias) == selectedProviderKey).toList();
         models.sort((a, b) => a.name.compareTo(b.name));
         return models;
       }
 
       return <AIModel>[];
+    }
+
+    String getProviderLabel(String providerKey) {
+      final providerInfo = parseProviderKey(providerKey);
+      final provider = providerInfo.$1;
+      final alias = providerInfo.$2;
+      return alias.isEmpty ? provider : "$provider ($alias)";
     }
 
     return Row(
@@ -176,28 +207,28 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
         Expanded(
           flex: 1,
           child: WoxDropdownButton<String>(
-            value: _selectedProvider,
+            value: selectedProviderKey,
             isExpanded: true,
-            items: _providers
-                .map((provider) => WoxDropdownItem<String>(
-                      value: provider,
-                      label: provider,
+            items: providerKeys
+                .map((providerKey) => WoxDropdownItem<String>(
+                      value: providerKey,
+                      label: getProviderLabel(providerKey),
                     ))
                 .toList(),
-            onChanged: (provider) {
-              if (provider != null) {
+            onChanged: (providerKey) {
+              if (providerKey != null) {
                 setState(() {
-                  _selectedProvider = provider;
+                  selectedProviderKey = providerKey;
                   // Default to first model of the provider
-                  final models = _allModels.where((m) => m.provider == provider).toList();
+                  final models = allModels.where((m) => makeProviderKey(m.provider, m.providerAlias) == providerKey).toList();
                   if (models.isNotEmpty) {
-                    _selectedModel = models.first;
-                    _nameController.text = models.first.name;
-                    widget.onModelSelected(jsonEncode(_selectedModel!));
+                    selectedModel = models.first;
+                    nameController.text = models.first.name;
+                    widget.onModelSelected(jsonEncode(selectedModel!));
                   } else {
-                    _selectedModel = null;
+                    selectedModel = null;
                   }
-                  _isEditMode = false;
+                  isEditMode = false;
                 });
               }
             },
@@ -209,24 +240,26 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
         // Model selector or editor
         Expanded(
           flex: 2,
-          child: _isEditMode
+          child: isEditMode
               ? WoxTextField(
-                  controller: _nameController,
+                  controller: nameController,
                   hintText: tr('ui_ai_model_selector_model_name'),
                   width: double.infinity, // fill the Expanded width
                   onChanged: (value) {
-                    if (value.isNotEmpty && _selectedProvider != null) {
+                    if (value.isNotEmpty && selectedProviderKey != null) {
+                      final providerInfo = parseProviderKey(selectedProviderKey!);
                       final updatedModel = AIModel(
-                        provider: _selectedProvider!,
                         name: value,
+                        provider: providerInfo.$1,
+                        providerAlias: providerInfo.$2,
                       );
-                      setState(() => _selectedModel = updatedModel);
+                      setState(() => this.selectedModel = updatedModel);
                       widget.onModelSelected(jsonEncode(updatedModel));
                     }
                   },
                 )
               : WoxDropdownButton<String>(
-                  value: _selectedModel?.name,
+                  value: selectedModel?.name,
                   isExpanded: true,
                   enableFilter: true,
                   items: getProviderModels()
@@ -236,18 +269,20 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
                           ))
                       .toList(),
                   onChanged: (modelName) {
-                    if (modelName != null && _selectedProvider != null) {
-                      final selectedModel = _allModels.firstWhere(
-                        (m) => m.provider == _selectedProvider && m.name == modelName,
+                    if (modelName != null && selectedProviderKey != null) {
+                      final providerInfo = parseProviderKey(selectedProviderKey!);
+                      final selectedModel = allModels.firstWhere(
+                        (m) => m.provider == providerInfo.$1 && m.providerAlias == providerInfo.$2 && m.name == modelName,
                         orElse: () => AIModel(
-                          provider: _selectedProvider!,
                           name: modelName,
+                          provider: providerInfo.$1,
+                          providerAlias: providerInfo.$2,
                         ),
                       );
 
                       setState(() {
-                        _selectedModel = selectedModel;
-                        _nameController.text = selectedModel.name;
+                        this.selectedModel = selectedModel;
+                        nameController.text = selectedModel.name;
                       });
                       widget.onModelSelected(jsonEncode(selectedModel));
                     }
@@ -256,25 +291,26 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
         ),
 
         // Toggle edit/select mode button
-        if (widget.allowEdit && _selectedModel != null)
+        if (widget.allowEdit && this.selectedModel != null)
           IconButton(
-            icon: Icon(_isEditMode ? Icons.list : Icons.edit, color: getThemeTextColor()),
+            icon: Icon(isEditMode ? Icons.list : Icons.edit, color: getThemeTextColor()),
             onPressed: () {
               setState(() {
-                _isEditMode = !_isEditMode;
-                if (_isEditMode) {
-                  _nameController.text = _selectedModel?.name ?? '';
+                isEditMode = !isEditMode;
+                if (isEditMode) {
+                  nameController.text = selectedModel?.name ?? '';
                 } else {
                   // select the model by name or first model if not found
-                  if (_selectedProvider != null) {
-                    final models = _allModels.where((m) => m.provider == _selectedProvider).toList();
+                  if (selectedProviderKey != null) {
+                    final providerInfo = parseProviderKey(selectedProviderKey!);
+                    final models = allModels.where((m) => m.provider == providerInfo.$1 && m.providerAlias == providerInfo.$2).toList();
                     if (models.isNotEmpty) {
-                      _selectedModel = models.firstWhere(
-                        (m) => m.name == _nameController.text,
+                      selectedModel = models.firstWhere(
+                        (m) => m.name == nameController.text && m.provider == providerInfo.$1 && m.providerAlias == providerInfo.$2,
                         orElse: () => models.first,
                       );
-                      _nameController.text = _selectedModel?.name ?? '';
-                      widget.onModelSelected(jsonEncode(_selectedModel!));
+                      nameController.text = selectedModel?.name ?? '';
+                      widget.onModelSelected(jsonEncode(selectedModel!));
                     }
                   }
                 }

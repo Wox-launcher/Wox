@@ -255,6 +255,7 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 									actions := []plugin.QueryResultAction{
 										{
 											Name: "i18n:plugin_ai_command_copy",
+											Icon: common.CopyIcon,
 											Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 												clipboard.WriteText(streamResult.Data)
 											},

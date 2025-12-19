@@ -121,6 +121,8 @@
   "ui_query_shortcuts_query_tooltip": "A consulta representada pelo atalho.",
   "ui_ai_providers_name": "Nome do provedor",
   "ui_ai_providers_name_tooltip": "O nome do provedor de IA.",
+  "ui_ai_providers_alias": "Alias",
+  "ui_ai_providers_alias_tooltip": "Opcional. Usado para distinguir várias configurações do mesmo provedor.",
   "ui_ai_providers_api_key": "Chave de API",
   "ui_ai_providers_api_key_tooltip": "A chave de API do provedor de IA.",
   "ui_ai_providers_host": "Host",
@@ -712,5 +714,16 @@
   "plugin_clipboard_edit_alias_hint": "Definir um alias personalizado para este item",
   "ui_not_supported_field": "Tipo de campo não suportado",
   "ui_ai_chat_show_sidebar": "Show Sidebar",
-  "ui_ai_chat_hide_sidebar": "Hide Sidebar"
+  "ui_ai_chat_hide_sidebar": "Ocultar Barra Lateral",
+  "ui_ai_chat_new_chat": "Nova Conversa",
+  "ui_ai_chat_start_chat": "Iniciar Conversa",
+  "ui_ai_chat_create_new_chat": "Criar uma nova conversa",
+  "ui_ai_chat_continue_chat": "Continuar Conversa",
+  "ui_ai_chat_delete_chat": "Excluir Conversa",
+  "ui_ai_chat_summarize_chat": "Resumir Conversa",
+  "ui_ai_chat_history_today": "Hoje",
+  "ui_ai_chat_history_yesterday": "Ontem",
+  "ui_ai_chat_history_history": "Histórico",
+  "ui_ai_chat_failed_to_chat": "Falha ao conversar, tente novamente",
+  "ui_ai_chat_error": "Erro: %s"
 }
