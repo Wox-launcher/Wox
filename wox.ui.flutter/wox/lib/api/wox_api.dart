@@ -10,6 +10,7 @@ import 'package:wox/entity/wox_query.dart';
 import 'package:wox/entity/wox_runtime_status.dart';
 import 'package:wox/entity/wox_setting.dart';
 import 'package:wox/entity/wox_theme.dart';
+import 'package:wox/entity/wox_usage_stats.dart';
 import 'package:wox/models/doctor_check_result.dart';
 import 'package:wox/utils/wox_http_util.dart';
 
@@ -25,19 +26,23 @@ class WoxApi {
   }
 
   Future<WoxSetting> loadSetting() async {
-    return await WoxHttpUtil.instance.postData<WoxSetting>("/setting/wox", null);
+    return await WoxHttpUtil.instance
+        .postData<WoxSetting>("/setting/wox", null);
   }
 
   Future<void> updateSetting(String key, String value) async {
-    await WoxHttpUtil.instance.postData("/setting/wox/update", {"Key": key, "Value": value});
+    await WoxHttpUtil.instance
+        .postData("/setting/wox/update", {"Key": key, "Value": value});
   }
 
   Future<List<WoxRuntimeStatus>> getRuntimeStatuses() async {
     return await WoxHttpUtil.instance.postData("/runtime/status", null);
   }
 
-  Future<void> updatePluginSetting(String pluginId, String key, String value) async {
-    await WoxHttpUtil.instance.postData("/setting/plugin/update", {"PluginId": pluginId, "Key": key, "Value": value});
+  Future<void> updatePluginSetting(
+      String pluginId, String key, String value) async {
+    await WoxHttpUtil.instance.postData("/setting/plugin/update",
+        {"PluginId": pluginId, "Key": key, "Value": value});
   }
 
   Future<List<PluginDetail>> findStorePlugins() async {
@@ -49,7 +54,8 @@ class WoxApi {
   }
 
   Future<PluginDetail> getPluginDetail(String pluginId) async {
-    return await WoxHttpUtil.instance.postData("/plugin/detail", {"id": pluginId});
+    return await WoxHttpUtil.instance
+        .postData("/plugin/detail", {"id": pluginId});
   }
 
   Future<void> installPlugin(String id) async {
@@ -89,7 +95,8 @@ class WoxApi {
   }
 
   Future<bool> isHotkeyAvailable(String hotkey) async {
-    return await WoxHttpUtil.instance.postData("/hotkey/available", {"hotkey": hotkey});
+    return await WoxHttpUtil.instance
+        .postData("/hotkey/available", {"hotkey": hotkey});
   }
 
   Future<void> onUIReady() async {
@@ -110,6 +117,11 @@ class WoxApi {
 
   Future<void> onHide() async {
     await WoxHttpUtil.instance.postData("/on/hide", {});
+  }
+
+  Future<WoxUsageStats> getUsageStats() async {
+    return await WoxHttpUtil.instance
+        .postData<WoxUsageStats>("/usage/stats", {});
   }
 
   Future<QueryMetadata> getQueryMetadata(PlainQuery query) async {
@@ -146,7 +158,8 @@ class WoxApi {
     return await WoxHttpUtil.instance.postData("/ai/providers", null);
   }
 
-  Future<String> pingAIModel(String providerName, String apiKey, String host) async {
+  Future<String> pingAIModel(
+      String providerName, String apiKey, String host) async {
     return await WoxHttpUtil.instance.postData("/ai/ping", {
       "name": providerName,
       "apiKey": apiKey,
@@ -177,11 +190,13 @@ class WoxApi {
   }
 
   Future<List<DoctorCheckResult>> doctorCheck() async {
-    return await WoxHttpUtil.instance.postData<List<DoctorCheckResult>>("/doctor/check", null);
+    return await WoxHttpUtil.instance
+        .postData<List<DoctorCheckResult>>("/doctor/check", null);
   }
 
   Future<List<WoxQueryResult>> queryMRU(String traceId) async {
-    final response = await WoxHttpUtil.instance.postData("/query/mru", {"traceId": traceId});
+    final response =
+        await WoxHttpUtil.instance.postData("/query/mru", {"traceId": traceId});
     if (response is List) {
       return response.map((item) => WoxQueryResult.fromJson(item)).toList();
     }
@@ -189,11 +204,13 @@ class WoxApi {
   }
 
   Future<String> getUserDataLocation() async {
-    return await WoxHttpUtil.instance.postData("/setting/userdata/location", null);
+    return await WoxHttpUtil.instance
+        .postData("/setting/userdata/location", null);
   }
 
   Future<void> updateUserDataLocation(String location) async {
-    await WoxHttpUtil.instance.postData("/setting/userdata/location/update", {"location": location});
+    await WoxHttpUtil.instance
+        .postData("/setting/userdata/location/update", {"location": location});
   }
 
   Future<void> backupNow() async {
@@ -225,6 +242,7 @@ class WoxApi {
   }
 
   Future<void> toolbarSnooze(String text, String duration) async {
-    await WoxHttpUtil.instance.postData("/toolbar/snooze", {"text": text, "duration": duration});
+    await WoxHttpUtil.instance
+        .postData("/toolbar/snooze", {"text": text, "duration": duration});
   }
 }

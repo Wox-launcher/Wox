@@ -61,6 +61,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/on/show":           handleOnShow,
 	"/on/querybox/focus": handleOnQueryBoxFocus,
 	"/on/hide":           handleOnHide,
+	"/usage/stats":       handleUsageStats,
 
 	// lang
 	"/lang/available": handleLangAvailable,

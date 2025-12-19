@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"wox/ai"
+	"wox/analytics"
 	"wox/common"
 	"wox/i18n"
 	"wox/setting"
@@ -1659,6 +1660,9 @@ func (m *Manager) ExecuteAction(ctx context.Context, resultId string, actionId s
 		return fmt.Errorf("action callback is nil for result id: %s, action id: %s", resultId, actionId)
 	}
 
+	meta := resultCache.PluginInstance.Metadata
+	analytics.TrackActionExecuted(ctx, meta.Id, resultCache.PluginInstance.GetName(ctx))
+
 	actionCache.Action(ctx, ActionContext{
 		ResultId:       resultId,
 		ResultActionId: actionId,
@@ -1692,6 +1696,9 @@ func (m *Manager) SubmitFormAction(ctx context.Context, resultId string, actionI
 	if actionCache.OnSubmit == nil {
 		return fmt.Errorf("form action callback is nil for result id: %s, action id: %s", resultId, actionId)
 	}
+
+	meta := resultCache.PluginInstance.Metadata
+	analytics.TrackActionExecuted(ctx, meta.Id, resultCache.PluginInstance.GetName(ctx))
 
 	actionCache.OnSubmit(ctx, FormActionContext{
 		ActionContext: ActionContext{

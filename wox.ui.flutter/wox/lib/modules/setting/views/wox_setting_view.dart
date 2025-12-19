@@ -9,6 +9,7 @@ import 'package:wox/modules/setting/views/wox_setting_ai_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_data_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_theme_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_about_view.dart';
+import 'package:wox/modules/setting/views/wox_setting_usage_view.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/color_util.dart';
 import 'package:wox/utils/colors.dart';
@@ -85,7 +86,9 @@ class _WoxSettingViewState extends State<WoxSettingView> {
             bottom: 10.0,
           ),
           decoration: BoxDecoration(
-            color: isSelected ? getThemeActiveBackgroundColor().withOpacity(0.15) : Colors.transparent,
+            color: isSelected
+                ? getThemeActiveBackgroundColor().withOpacity(0.15)
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(6),
           ),
           margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -99,7 +102,8 @@ class _WoxSettingViewState extends State<WoxSettingView> {
                   style: TextStyle(
                     color: getThemeTextColor(),
                     fontSize: 13,
-                    fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
+                    fontWeight:
+                        isSelected ? FontWeight.w500 : FontWeight.normal,
                   ),
                 ),
               ),
@@ -122,11 +126,31 @@ class _WoxSettingViewState extends State<WoxSettingView> {
       // Define navigation items with tree structure
       // This needs to be inside Obx so it rebuilds when language changes
       final List<_NavItem> navItems = [
-        _NavItem(id: 'general', icon: Icons.settings_outlined, title: controller.tr('ui_general'), body: const WoxSettingGeneralView()),
-        _NavItem(id: 'ui', icon: Icons.palette_outlined, title: controller.tr('ui_ui'), body: const WoxSettingUIView()),
-        _NavItem(id: 'ai', icon: Icons.psychology_outlined, title: controller.tr('ui_ai'), body: const WoxSettingAIView()),
-        _NavItem(id: 'network', icon: Icons.public_outlined, title: controller.tr('ui_network'), body: const WoxSettingNetworkView()),
-        _NavItem(id: 'data', icon: Icons.folder_outlined, title: controller.tr('ui_data'), body: const WoxSettingDataView()),
+        _NavItem(
+            id: 'general',
+            icon: Icons.settings_outlined,
+            title: controller.tr('ui_general'),
+            body: const WoxSettingGeneralView()),
+        _NavItem(
+            id: 'ui',
+            icon: Icons.palette_outlined,
+            title: controller.tr('ui_ui'),
+            body: const WoxSettingUIView()),
+        _NavItem(
+            id: 'ai',
+            icon: Icons.psychology_outlined,
+            title: controller.tr('ui_ai'),
+            body: const WoxSettingAIView()),
+        _NavItem(
+            id: 'network',
+            icon: Icons.public_outlined,
+            title: controller.tr('ui_network'),
+            body: const WoxSettingNetworkView()),
+        _NavItem(
+            id: 'data',
+            icon: Icons.folder_outlined,
+            title: controller.tr('ui_data'),
+            body: const WoxSettingDataView()),
         _NavItem(
           id: 'plugins',
           icon: Icons.extension_outlined,
@@ -139,7 +163,8 @@ class _WoxSettingViewState extends State<WoxSettingView> {
                 title: controller.tr('ui_store_plugins'),
                 body: const WoxSettingPluginView(),
                 onTap: () async {
-                  await controller.switchToPluginList(const UuidV4().generate(), true);
+                  await controller.switchToPluginList(
+                      const UuidV4().generate(), true);
                 }),
             _NavItem(
                 id: 'plugins.installed',
@@ -147,9 +172,14 @@ class _WoxSettingViewState extends State<WoxSettingView> {
                 title: controller.tr('ui_installed_plugins'),
                 body: const WoxSettingPluginView(),
                 onTap: () async {
-                  await controller.switchToPluginList(const UuidV4().generate(), false);
+                  await controller.switchToPluginList(
+                      const UuidV4().generate(), false);
                 }),
-            _NavItem(id: 'plugins.runtime', icon: Icons.terminal_outlined, title: controller.tr('ui_runtime_settings'), body: WoxSettingRuntimeView()),
+            _NavItem(
+                id: 'plugins.runtime',
+                icon: Icons.terminal_outlined,
+                title: controller.tr('ui_runtime_settings'),
+                body: WoxSettingRuntimeView()),
           ],
         ),
         _NavItem(
@@ -176,24 +206,37 @@ class _WoxSettingViewState extends State<WoxSettingView> {
                 }),
           ],
         ),
-        _NavItem(id: 'about', icon: Icons.info_outline, title: controller.tr('ui_about'), body: const WoxSettingAboutView()),
+        _NavItem(
+            id: 'usage',
+            icon: Icons.query_stats_outlined,
+            title: controller.tr('ui_usage'),
+            body: const WoxSettingUsageView()),
+        _NavItem(
+            id: 'about',
+            icon: Icons.info_outline,
+            title: controller.tr('ui_about'),
+            body: const WoxSettingAboutView()),
       ];
 
       return WoxPlatformFocus(
         focusNode: controller.settingFocusNode,
         autofocus: true,
         onKeyEvent: (FocusNode node, KeyEvent event) {
-          Logger.instance.debug(const UuidV4().generate(), "[KEYLOG][FLUTTER-SETTING] WoxPlatformFocus received key event: ${event.logicalKey.keyLabel}");
-          if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.escape) {
+          Logger.instance.debug(const UuidV4().generate(),
+              "[KEYLOG][FLUTTER-SETTING] WoxPlatformFocus received key event: ${event.logicalKey.keyLabel}");
+          if (event is KeyDownEvent &&
+              event.logicalKey == LogicalKeyboardKey.escape) {
             final traceId = const UuidV4().generate();
-            Logger.instance.info(traceId, "[KEYLOG][FLUTTER-SETTING] ESC key pressed, hiding window");
+            Logger.instance.info(traceId,
+                "[KEYLOG][FLUTTER-SETTING] ESC key pressed, hiding window");
             controller.hideWindow();
             return KeyEventResult.handled;
           }
           return KeyEventResult.ignored;
         },
         child: Scaffold(
-          backgroundColor: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.appBackgroundColor),
+          backgroundColor: safeFromCssColor(
+              WoxThemeUtil.instance.currentTheme.value.appBackgroundColor),
           body: Row(
             children: [
               // Navigation rail
@@ -222,17 +265,20 @@ class _WoxSettingViewState extends State<WoxSettingView> {
                       child: GestureDetector(
                         onTap: () => controller.hideWindow(),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 10),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Row(
                             children: [
-                              Icon(Icons.arrow_back, color: getThemeTextColor(), size: 18),
+                              Icon(Icons.arrow_back,
+                                  color: getThemeTextColor(), size: 18),
                               const SizedBox(width: 12),
                               Text(
                                 controller.tr('ui_back'),
-                                style: TextStyle(color: getThemeTextColor(), fontSize: 13),
+                                style: TextStyle(
+                                    color: getThemeTextColor(), fontSize: 13),
                               ),
                             ],
                           ),
@@ -245,7 +291,9 @@ class _WoxSettingViewState extends State<WoxSettingView> {
               ),
               // Content area
               Expanded(
-                child: _findBodyByPath(navItems, controller.activeNavPath.value) ?? navItems[0].body!,
+                child:
+                    _findBodyByPath(navItems, controller.activeNavPath.value) ??
+                        navItems[0].body!,
               ),
             ],
           ),

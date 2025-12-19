@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"wox/analytics"
 	"wox/util"
 
 	"gorm.io/driver/sqlite"
@@ -126,6 +127,7 @@ func Init(ctx context.Context) error {
 	runIntegrityChecks(ctx, sqlDB)
 
 	err = db.AutoMigrate(
+		&analytics.Event{},
 		&WoxSetting{},
 		&PluginSetting{},
 		&Oplog{},

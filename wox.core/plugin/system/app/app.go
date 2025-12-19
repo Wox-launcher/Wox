@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"wox/analytics"
 	"wox/common"
 	"wox/plugin"
 	"wox/setting/definition"
@@ -245,7 +246,7 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 				Icon:        info.Icon,
 				Score:       util.MaxInt64(nameScore, pathNameScore),
 				ContextData: string(contextDataJson),
-				Actions:     a.buildAppActions(infoCopy),
+				Actions:     a.buildAppActions(infoCopy, displayName),
 			}
 
 			// Track this result for periodic refresh (refreshRunningApps will handle running state)
@@ -258,13 +259,15 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 	return results
 }
 
-func (a *ApplicationPlugin) buildAppActions(info appInfo) []plugin.QueryResultAction {
+func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string) []plugin.QueryResultAction {
 	infoCopy := info
+	displayNameCopy := displayName
 	actions := []plugin.QueryResultAction{
 		{
 			Name: "i18n:plugin_app_open",
 			Icon: common.OpenIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				analytics.TrackAppLaunched(ctx, fmt.Sprintf("%s:%s", infoCopy.Type, infoCopy.Name), displayNameCopy)
 				runErr := shell.Open(infoCopy.Path)
 				if runErr != nil {
 					a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error opening app %s: %s", infoCopy.Path, runErr.Error()))
@@ -727,7 +730,7 @@ func (a *ApplicationPlugin) handleMRURestore(mruData plugin.MRUData) (*plugin.Qu
 		SubTitle:    displayPath,
 		Icon:        appInfo.Icon, // Use current icon instead of cached MRU icon to handle cache invalidation
 		ContextData: mruData.ContextData,
-		Actions:     a.buildAppActions(*appInfo),
+		Actions:     a.buildAppActions(*appInfo, displayName),
 	}
 
 	// Track this result for periodic refresh (refreshRunningApps will handle running state)

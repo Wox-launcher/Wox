@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"wox/ai"
+	"wox/analytics"
 	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
@@ -427,6 +428,8 @@ func (m *Manager) PostOnShow(ctx context.Context) {
 	if impl, ok := m.ui.(*uiImpl); ok {
 		impl.isVisible = true
 	}
+
+	analytics.TrackUIOpened(ctx)
 }
 
 func (m *Manager) PostOnQueryBoxFocus(ctx context.Context) {

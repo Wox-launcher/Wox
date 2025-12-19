@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"wox/ai"
+	"wox/analytics"
 	"wox/database"
 	"wox/migration"
 
@@ -69,6 +70,10 @@ func main() {
 	if err := database.Init(ctx); err != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to initialize database: %s", err.Error()))
 		return
+	}
+
+	if err := analytics.Init(ctx, database.GetDB()); err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to initialize analytics: %s", err.Error()))
 	}
 
 	if err := migration.Run(ctx); err != nil {
