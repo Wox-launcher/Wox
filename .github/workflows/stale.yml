@@ -24,7 +24,7 @@ jobs:
           exempt-all-milestones: false
           close-issue-message: "This issue was closed because it has been stale for 20 days with no activity. If you feel this issue still needs attention please feel free to reopen."
           stale-pr-label: "no-pr-activity"
-          exempt-issue-labels: "keep-fresh"
-          exempt-pr-labels: "keep-fresh,awaiting-approval,work-in-progress"
+          exempt-issue-labels: "Keep-fresh"
+          exempt-pr-labels: "Keep-fresh,Awaiting-approval,Work-in-progress"
           ascending: true
           operations-per-run: 60

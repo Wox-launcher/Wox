@@ -118,6 +118,7 @@ class WoxLauncherController extends GetxController {
   /// The result of the doctor check.
   var doctorCheckPassed = true;
   final doctorCheckInfo = DoctorCheckInfo.empty().obs;
+  String lastAppliedDoctorToolbarMessage = '';
 
   // toolbar related variables
   final toolbar = ToolbarInfo.empty().obs;
@@ -301,7 +302,59 @@ class WoxLauncherController extends GetxController {
       }
     }
 
+    updateDoctorToolbarIfNeeded(traceId);
     resizeHeight();
+  }
+
+  void clearDoctorToolbarIfApplied() {
+    final currentText = toolbar.value.text ?? '';
+    if (lastAppliedDoctorToolbarMessage.isNotEmpty && currentText == lastAppliedDoctorToolbarMessage) {
+      toolbar.value = toolbar.value.emptyLeftSide();
+    }
+    lastAppliedDoctorToolbarMessage = '';
+  }
+
+  void updateDoctorToolbarIfNeeded(String traceId) {
+    if (!currentQuery.value.isEmpty) {
+      clearDoctorToolbarIfApplied();
+      return;
+    }
+
+    if (doctorCheckInfo.value.allPassed) {
+      clearDoctorToolbarIfApplied();
+      return;
+    }
+
+    final currentText = toolbar.value.text ?? '';
+    final canOverrideLeft = currentText.isEmpty || currentText == lastAppliedDoctorToolbarMessage;
+    if (!canOverrideLeft) {
+      return;
+    }
+
+    // When there are results (e.g. MRU), keep the right-side hotkeys and only show the warning on the left.
+    // When there are no results, show a direct action to open the doctor page.
+    if (activeResultViewController.items.isEmpty) {
+      toolbar.value = ToolbarInfo(
+        text: doctorCheckInfo.value.message,
+        icon: doctorCheckInfo.value.icon,
+        actions: [
+          ToolbarActionInfo(
+            name: tr("plugin_doctor_check"),
+            hotkey: "enter",
+            action: () {
+              onQueryChanged(traceId, PlainQuery.text("doctor "), "user click doctor icon");
+            },
+          ),
+        ],
+      );
+    } else {
+      toolbar.value = toolbar.value.copyWith(
+        text: doctorCheckInfo.value.message,
+        icon: doctorCheckInfo.value.icon,
+      );
+    }
+
+    lastAppliedDoctorToolbarMessage = doctorCheckInfo.value.message;
   }
 
   Future<void> toggleApp(String traceId, ShowAppParams params) async {
@@ -914,24 +967,12 @@ class WoxLauncherController extends GetxController {
 
     if (isShowDoctorCheckInfo) {
       Logger.instance.debug(traceId, "update toolbar to doctor warning, query is empty and doctor check not passed");
-      toolbar.value = ToolbarInfo(
-        text: doctorCheckInfo.value.message,
-        icon: doctorCheckInfo.value.icon,
-        actions: [
-          ToolbarActionInfo(
-            name: tr("plugin_doctor_check"),
-            hotkey: "enter",
-            action: () {
-              onQueryChanged(traceId, PlainQuery.text("doctor "), "user click doctor icon");
-            },
-          ),
-        ],
-      );
     } else {
       Logger.instance.debug(traceId, "update toolbar to empty because of query changed and is empty");
       toolbar.value = toolbar.value.emptyRightSide();
     }
 
+    updateDoctorToolbarIfNeeded(traceId);
     await resizeHeight();
   }
 
@@ -1127,6 +1168,7 @@ class WoxLauncherController extends GetxController {
     var results = await WoxApi.instance.doctorCheck();
     final checkInfo = processDoctorCheckResults(results);
     doctorCheckInfo.value = checkInfo;
+    updateDoctorToolbarIfNeeded(const UuidV4().generate());
     Logger.instance.debug(const UuidV4().generate(), "doctor check result: ${checkInfo.allPassed}, details: ${checkInfo.results.length} items");
   }
 
@@ -1247,8 +1289,9 @@ class WoxLauncherController extends GetxController {
   void executeDefaultAction(String traceId) {
     Logger.instance.info(traceId, "execute default action");
 
-    // First check if toolbar has action callbacks (e.g., doctor check)
-    if (toolbar.value.actions != null && toolbar.value.actions!.isNotEmpty) {
+    // Only use toolbar action callbacks when there are no results.
+    // Otherwise Enter should execute the active result.
+    if (activeResultViewController.items.isEmpty && toolbar.value.actions != null && toolbar.value.actions!.isNotEmpty) {
       // Find the default action (with Enter hotkey) or use the last one
       var defaultToolbarAction = toolbar.value.actions!.firstWhereOrNull((action) => action.hotkey.toLowerCase() == "enter");
       defaultToolbarAction ??= toolbar.value.actions!.last;
