@@ -537,7 +537,7 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value strin
 			logger.Error(ctx, fmt.Sprintf("failed to set autostart: %s", err.Error()))
 		}
 	case "EnableAutoUpdate":
-		updater.CheckForUpdates(ctx)
+		updater.CheckForUpdatesWithCallback(ctx, nil)
 	case "AIProviders":
 		plugin.GetPluginManager().GetUI().ReloadChatResources(ctx, "models")
 	case "EnableMCPServer":

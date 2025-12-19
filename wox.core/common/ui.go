@@ -65,6 +65,9 @@ type UI interface {
 
 	// ReloadSettingPlugins asks the UI to refresh plugin lists.
 	ReloadSettingPlugins(ctx context.Context)
+
+	// ReloadSetting asks the UI to reload Wox settings from backend.
+	ReloadSetting(ctx context.Context)
 }
 
 type ShowContext struct {

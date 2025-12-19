@@ -63,6 +63,8 @@ type UpdateInfo struct {
 	HasUpdate      bool // Whether there is an update available
 }
 
+type UpdateInfoCallback func(info UpdateInfo)
+
 type applyUpdater interface {
 	ApplyUpdate(ctx context.Context, pid int, oldPath, newPath string) error
 }
@@ -73,14 +75,18 @@ var applyUpdaterInstance applyUpdater
 func StartAutoUpdateChecker(ctx context.Context) {
 	util.Go(ctx, "auto-update-checker", func() {
 		newCtx := util.NewTraceContext()
-		CheckForUpdates(newCtx)
+		CheckForUpdatesWithCallback(newCtx, nil)
 		for range time.NewTicker(time.Hour * 6).C {
-			CheckForUpdates(newCtx)
+			CheckForUpdatesWithCallback(newCtx, nil)
 		}
 	})
 }
 
 func CheckForUpdates(ctx context.Context) {
+	CheckForUpdatesWithCallback(ctx, nil)
+}
+
+func CheckForUpdatesWithCallback(ctx context.Context, callback UpdateInfoCallback) {
 	util.GetLogger().Info(ctx, "start checking for updates")
 
 	setting := setting.GetSettingManager().GetWoxSetting(ctx)
@@ -90,26 +96,38 @@ func CheckForUpdates(ctx context.Context) {
 		currentUpdateInfo.HasUpdate = false
 		currentUpdateInfo.DownloadedPath = ""
 		currentUpdateInfo.UpdateError = errors.New(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version_auto_update_disabled"))
+		if callback != nil {
+			callback(currentUpdateInfo)
+		}
 		return
 	}
 
 	if currentUpdateInfo.Status == UpdateStatusDownloading {
 		util.GetLogger().Info(ctx, "update is downloading, skipping")
+		if callback != nil {
+			callback(currentUpdateInfo)
+		}
 		return
 	}
 
 	if currentUpdateInfo.Status == UpdateStatusReady && currentUpdateInfo.DownloadedPath != "" {
 		util.GetLogger().Info(ctx, "update is ready to install, skipping")
+		if callback != nil {
+			callback(currentUpdateInfo)
+		}
 		return
 	}
 
 	currentUpdateInfo = parseLatestVersion(ctx)
+	if callback != nil {
+		callback(currentUpdateInfo)
+	}
 	if !currentUpdateInfo.HasUpdate {
 		util.GetLogger().Info(ctx, "no update available, skipping")
 		return
 	}
 
-	downloadUpdate(ctx)
+	downloadUpdate(ctx, callback)
 }
 
 func parseLatestVersion(ctx context.Context) UpdateInfo {
@@ -208,7 +226,7 @@ func GetUpdateInfo() UpdateInfo {
 	return currentUpdateInfo
 }
 
-func downloadUpdate(ctx context.Context) {
+func downloadUpdate(ctx context.Context, callback UpdateInfoCallback) {
 	if currentUpdateInfo.DownloadUrl == "" {
 		util.GetLogger().Error(ctx, "no download URL provided")
 		return
@@ -237,6 +255,9 @@ func downloadUpdate(ctx context.Context) {
 			currentUpdateInfo.Status = UpdateStatusReady
 			currentUpdateInfo.DownloadedPath = downloadPath
 			util.GetLogger().Info(ctx, "existing update verified and ready to install")
+			if callback != nil {
+				callback(currentUpdateInfo)
+			}
 			return
 		} else {
 			// Checksum doesn't match or verification failed, delete file and download again
@@ -246,6 +267,9 @@ func downloadUpdate(ctx context.Context) {
 	}
 
 	currentUpdateInfo.Status = UpdateStatusDownloading
+	if callback != nil {
+		callback(currentUpdateInfo)
+	}
 
 	util.Go(ctx, "download-update", func() {
 		util.GetLogger().Info(ctx, fmt.Sprintf("downloading update from %s to %s", currentUpdateInfo.DownloadUrl, downloadPath))
@@ -254,6 +278,9 @@ func downloadUpdate(ctx context.Context) {
 			currentUpdateInfo.Status = UpdateStatusError
 			currentUpdateInfo.UpdateError = fmt.Errorf("failed to download update: %w", err)
 			util.GetLogger().Error(ctx, fmt.Sprintf("failed to download update: %s", err.Error()))
+			if callback != nil {
+				callback(currentUpdateInfo)
+			}
 			return
 		}
 
@@ -262,6 +289,9 @@ func downloadUpdate(ctx context.Context) {
 		if checksumErr != nil {
 			currentUpdateInfo.Status = UpdateStatusError
 			currentUpdateInfo.UpdateError = fmt.Errorf("failed to calculate checksum: %w", checksumErr)
+			if callback != nil {
+				callback(currentUpdateInfo)
+			}
 			return
 		}
 		if fileChecksum != currentUpdateInfo.Checksum {
@@ -269,12 +299,18 @@ func downloadUpdate(ctx context.Context) {
 			currentUpdateInfo.UpdateError = fmt.Errorf("checksum verification failed: expected %s, got %s", currentUpdateInfo.Checksum, fileChecksum)
 			// Remove the invalid file
 			os.Remove(downloadPath)
+			if callback != nil {
+				callback(currentUpdateInfo)
+			}
 			return
 		}
 		util.GetLogger().Info(ctx, "checksum verification passed")
 
 		currentUpdateInfo.Status = UpdateStatusReady
 		currentUpdateInfo.DownloadedPath = downloadPath
+		if callback != nil {
+			callback(currentUpdateInfo)
+		}
 
 		util.GetLogger().Info(ctx, "update downloaded and ready to install")
 	})

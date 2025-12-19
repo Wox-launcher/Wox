@@ -74,29 +74,18 @@ func checkWoxVersion(ctx context.Context) DoctorCheckResult {
 			},
 		}
 	} else {
-		actionName := "i18n:plugin_doctor_version_download"
-		if updateInfo.Status == updater.UpdateStatusReady {
-			actionName = "i18n:plugin_doctor_version_apply_update"
-		}
-
 		return DoctorCheckResult{
-			Name:        "i18n:plugin_doctor_version",
-			Type:        DoctorCheckUpdate,
-			Passed:      false,
-			Description: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version_update_available"), updateInfo.CurrentVersion, updateInfo.LatestVersion),
-			ActionName:  actionName,
+			Name:                   "i18n:plugin_doctor_version",
+			Type:                   DoctorCheckUpdate,
+			Passed:                 false,
+			Description:            "i18n:plugin_doctor_version_update_available",
+			ActionName:             "i18n:plugin_doctor_go_to_update",
+			PreventHideAfterAction: true,
 			Action: func(ctx context.Context) {
-				updateStatus := updater.GetUpdateInfo()
-				switch updateStatus.Status {
-				case updater.UpdateStatusReady:
-					updater.ApplyUpdate(ctx)
-				case updater.UpdateStatusError:
-					GetPluginManager().GetUI().Notify(ctx, common.NotifyMsg{
-						Text:           updateStatus.UpdateError.Error(),
-						Icon:           common.PluginDoctorIcon.String(),
-						DisplaySeconds: 3,
-					})
-				}
+				GetPluginManager().GetUI().ChangeQuery(ctx, common.PlainQuery{
+					QueryType: QueryTypeInput,
+					QueryText: "update ",
+				})
 			},
 		}
 	}

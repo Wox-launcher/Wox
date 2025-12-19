@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:markdown_widget/markdown_widget.dart';
-import 'package:wox/utils/colors.dart';
 
 class WoxMarkdownView extends StatelessWidget {
   final String data;
@@ -10,13 +9,10 @@ class WoxMarkdownView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fontTextStyle = TextStyle(
-      fontSize: 14,
-      color: fontColor,
-    );
+    final fontTextStyle = TextStyle(fontSize: 14, color: fontColor);
     final bool isDarkFont = fontColor.computeLuminance() < 0.5;
-    final contrastBackgroundColor = fontColor;
-    final contrastFontStyle = isDarkFont ? fontTextStyle.copyWith(color: fontColor.lighter(90)) : fontTextStyle.copyWith(color: fontColor.darker(90));
+    final codeBackgroundColor = isDarkFont ? Colors.black.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.08);
+    final codeTextStyle = fontTextStyle.copyWith(fontSize: 13, color: fontColor);
 
     return MarkdownBlock(
       data: data,
@@ -50,23 +46,27 @@ class WoxMarkdownView extends StatelessWidget {
           bodyStyle: fontTextStyle,
         ),
         CodeConfig(
-          style: contrastFontStyle.copyWith(
-            backgroundColor: contrastBackgroundColor,
-          ),
+          style: codeTextStyle.copyWith(backgroundColor: codeBackgroundColor),
         ),
         PreConfig(
-          textStyle: contrastFontStyle,
-          styleNotMatched: contrastFontStyle,
-          decoration: BoxDecoration(
-            color: contrastBackgroundColor,
-            borderRadius: BorderRadius.circular(4),
-          ),
+          textStyle: codeTextStyle,
+          styleNotMatched: codeTextStyle,
+          decoration: BoxDecoration(color: codeBackgroundColor, borderRadius: BorderRadius.circular(4)),
         ),
         HrConfig(
           color: fontColor,
           height: 1.5,
         ),
-        ListConfig(marker: (isOrdered, depth, index) => getDefaultMarker(isOrdered, depth, fontColor, index, 8, MarkdownConfig())),
+        ListConfig(
+          marker: (isOrdered, depth, index) => getDefaultMarker(
+            isOrdered,
+            depth,
+            fontColor,
+            index,
+            8,
+            MarkdownConfig(),
+          ),
+        ),
         LinkConfig(
           style: TextStyle(
             decoration: TextDecoration.underline,

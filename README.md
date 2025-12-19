@@ -4,7 +4,7 @@
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/Wox-launcher/wox?include_prereleases)](https://github.com/Wox-launcher/Wox/releases)
 [![Github All Releases](https://img.shields.io/github/downloads/Wox-launcher/Wox/total.svg)](https://github.com/Wox-launcher/Wox/releases)
 
-**Wox** is a cross-platform launcher that simply works. It's an alternative to [Alfred](https://www.alfredapp.com/) and [Launchy](http://www.launchy.net/)
+**Wox** is a cross-platform launcher that simply works. It's an open-source alternative to [Alfred](https://www.alfredapp.com/) and [Raycast](http://www.raycast.com/)
 
 ![Snapshot](https://raw.githubusercontent.com/Wox-launcher/Wox/master/screenshots/app.png)
 

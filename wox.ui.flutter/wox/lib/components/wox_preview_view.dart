@@ -18,8 +18,8 @@ import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_ai_chat_view.dart';
 import 'package:wox/components/wox_markdown.dart';
 import 'package:wox/components/wox_plugin_detail_view.dart';
+import 'package:wox/components/wox_update_view.dart';
 import 'package:wox/controllers/wox_ai_chat_controller.dart';
-import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_preview.dart';
@@ -120,7 +120,9 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
 
   @override
   Widget build(BuildContext context) {
-    if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: preview view data");
+    if (LoggerSwitch.enablePaintLog) {
+      Logger.instance.debug(const UuidV4().generate(), "repaint: preview view data");
+    }
 
     Widget contentWidget = const SizedBox();
     if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_MARKDOWN.code) {
@@ -207,6 +209,13 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
         padding: const EdgeInsets.only(top: 10.0, bottom: 10.0),
         child: const WoxAIChatView(),
       );
+    } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_UPDATE.code) {
+      try {
+        final previewData = UpdatePreviewData.fromJson(jsonDecode(widget.woxPreview.previewData));
+        return WoxUpdateView(data: previewData);
+      } catch (e) {
+        contentWidget = buildText("Invalid update preview data: $e");
+      }
     }
 
     if (widget.woxPreview.scrollPosition == WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code) {

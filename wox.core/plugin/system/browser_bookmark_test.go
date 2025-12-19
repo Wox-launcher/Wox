@@ -288,3 +288,6 @@ func (m *mockAPI) IsVisible(ctx context.Context) bool {
 
 func (e *mockAPI) RefreshQuery(ctx context.Context, params plugin.RefreshQueryParam) {
 }
+
+func (m *mockAPI) Copy(ctx context.Context, params plugin.CopyParams) {
+}

@@ -77,6 +77,9 @@ func (e emptyAPIImpl) IsVisible(ctx context.Context) bool {
 func (e emptyAPIImpl) RefreshQuery(ctx context.Context, params plugin.RefreshQueryParam) {
 }
 
+func (e emptyAPIImpl) Copy(ctx context.Context, params plugin.CopyParams) {
+}
+
 func TestMacRetriever_ParseAppInfo(t *testing.T) {
 	if util.IsMacOS() {
 		util.GetLocation().Init()

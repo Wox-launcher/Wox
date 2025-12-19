@@ -401,9 +401,6 @@ class QueryMetadata {
 
     if (json['WidthRatio'] != null) {
       resultPreviewWidthRatio = json['WidthRatio'].toDouble();
-      if (resultPreviewWidthRatio == 0) {
-        resultPreviewWidthRatio = 0.5;
-      }
     } else {
       resultPreviewWidthRatio = 0.5;
     }
