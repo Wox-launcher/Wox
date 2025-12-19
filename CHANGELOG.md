@@ -1,17 +1,19 @@
 # Changelog
 
-## v2.0.0-beta.7 — ???
+## v2.0.0-beta.7 — 2025-12-19
 
 - Add
 
   - Add MCP Server for Wox plugin development (default enabled on port 29867, can be configured in settings)
   - Add thousands separator for numbers in Calculator plugin `#4299`
   - Add windows setting searches
+  - Add usage page in settings
+    ![](screenshots/usage.png)
 
 - Improve
 
   - Improve fuzzy match based on fzf algorithm
-  - Improve app searches on windows by 
+  - Improve app searches on windows by
 
 - Fix
 
@@ -20,6 +22,7 @@
   - [`AI Chat`] Fix a render issue
   - [`Emoji`] Fix copy large image not working on windows
   - [`Clipboard`] Fix clipboard image paste issue on windows
+  - Fix a theme regression released on beta.6 that causes crash on invalid theme colors `#4302`
 
 ---
 
