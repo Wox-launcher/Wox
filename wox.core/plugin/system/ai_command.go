@@ -199,10 +199,11 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 			})
 		}
 
+		model := command.AIModel()
 		result := plugin.QueryResult{
 			Id:       uuid.NewString(),
 			Title:    command.Name,
-			SubTitle: fmt.Sprintf("%s - %s", command.AIModel().Provider, command.AIModel().Name),
+			SubTitle: fmt.Sprintf("%s - %s", model.ProviderName(), model.Name),
 			Icon:     aiCommandIcon,
 			Preview:  plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: "i18n:plugin_ai_command_enter_to_start"},
 			Actions: []plugin.QueryResultAction{

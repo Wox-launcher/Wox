@@ -127,6 +127,14 @@ type Model struct {
 	ProviderAlias string // optional, used to choose the correct provider config when there are multiple
 }
 
+func (m *Model) ProviderName() string {
+	if m.ProviderAlias != "" {
+		return m.ProviderAlias
+	}
+
+	return string(m.Provider)
+}
+
 type AIAgent struct {
 	Name   string
 	Prompt string

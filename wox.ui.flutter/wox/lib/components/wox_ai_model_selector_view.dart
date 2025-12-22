@@ -198,7 +198,7 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
       final providerInfo = parseProviderKey(providerKey);
       final provider = providerInfo.$1;
       final alias = providerInfo.$2;
-      return alias.isEmpty ? provider : "$provider ($alias)";
+      return alias.isEmpty ? provider : alias;
     }
 
     return Row(
