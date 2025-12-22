@@ -864,6 +864,7 @@ func handleQueryMetadata(w http.ResponseWriter, r *http.Request) {
 		GridLayoutParams plugin.MetadataFeatureParamsGridLayout
 	}
 	var metadata metadataResponse
+	metadata.WidthRatio = 0.5 // default width ratio
 
 	body, _ := io.ReadAll(r.Body)
 	queryResult := gjson.GetBytes(body, "query")

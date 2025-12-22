@@ -3,10 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_image_view.dart';
-import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_list_item.dart';
 import 'package:wox/entity/wox_theme.dart';
-import 'package:wox/enums/wox_image_type_enum.dart';
 import 'package:wox/enums/wox_list_view_type_enum.dart';
 import 'package:wox/enums/wox_result_tail_type_enum.dart';
 import 'package:wox/utils/log.dart';
@@ -99,7 +97,6 @@ class WoxListItemView extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(left: 10.0),
                     child: WoxImageView(
-                      key: ValueKey('${tail.image!.imageType}_${tail.image!.imageData}'),
                       woxImage: tail.image!,
                       width: 20,
                       height: 20,
@@ -178,7 +175,6 @@ class WoxListItemView extends StatelessWidget {
                     width: 30,
                     height: 30,
                     child: WoxImageView(
-                      key: ValueKey('${item.icon.imageType}_${item.icon.imageData}'),
                       woxImage: item.icon,
                       width: 30,
                       height: 30,

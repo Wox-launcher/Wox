@@ -11,21 +11,6 @@ import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/enums/wox_image_type_enum.dart';
 import 'package:wox/utils/log.dart';
 
-// Image cache to prevent flickering during refreshes
-class _ImageCache {
-  static final Map<String, Widget> _cache = {};
-
-  static Widget? get(String key) => _cache[key];
-
-  static void put(String key, Widget widget) {
-    if (_cache.length > 100) {
-      // Limit cache size
-      _cache.clear();
-    }
-    _cache[key] = widget;
-  }
-}
-
 class WoxImageView extends StatelessWidget {
   final WoxImage woxImage;
   final double? width;
@@ -35,23 +20,13 @@ class WoxImageView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Create cache key based on image data and dimensions
-    final cacheKey = '${woxImage.imageType}_${woxImage.imageData}_${width}_$height';
-
-    // Check cache first to prevent flickering
-    final cachedWidget = _ImageCache.get(cacheKey);
-    if (cachedWidget != null) {
-      return cachedWidget;
-    }
-
-    Widget imageWidget;
-
     if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_URL.code) {
-      imageWidget = Image.network(
+      return Image.network(
         woxImage.imageData,
         width: width,
         height: height,
         fit: BoxFit.contain,
+        gaplessPlayback: true,
         errorBuilder: (context, error, stackTrace) {
           var traceId = const UuidV4().generate();
           Logger.instance.error(traceId, "Failed to load wox url image: $error");
@@ -72,27 +47,34 @@ class WoxImageView extends StatelessWidget {
           );
         },
       );
-    } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_ABSOLUTE_PATH.code) {
-      // check if file exists
+    }
+    if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_ABSOLUTE_PATH.code) {
       if (!File(woxImage.imageData).existsSync()) {
-        imageWidget = const SizedBox(width: 24, height: 24);
-      } else {
-        imageWidget = Image.file(File(woxImage.imageData), width: width, height: height, fit: BoxFit.contain);
+        return const SizedBox(width: 24, height: 24);
       }
-    } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code) {
-      imageWidget = SizedBox(
+      return Image.file(
+        File(woxImage.imageData),
+        width: width,
+        height: height,
+        fit: BoxFit.contain,
+        gaplessPlayback: true,
+      );
+    }
+    if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code) {
+      return SizedBox(
         width: width,
         height: height,
         child: SvgPicture.string(woxImage.imageData),
       );
-    } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code) {
+    }
+    if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code) {
       // on windows, the emoji has default padding, so we need to offset it a bit
       var offset = const Offset(0, 0);
       if (Platform.isWindows) {
         offset = const Offset(-6, -2);
       }
 
-      imageWidget = SizedBox(
+      return SizedBox(
         width: width,
         height: height,
         child: Transform.translate(
@@ -103,25 +85,28 @@ class WoxImageView extends StatelessWidget {
           ),
         ),
       );
-    } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_LOTTIE.code) {
+    }
+    if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_LOTTIE.code) {
       final bytes = utf8.encode(woxImage.imageData);
-      imageWidget = Lottie.memory(bytes, width: width, height: height);
-    } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_THEME.code) {
-      imageWidget = WoxThemeIconView(theme: WoxTheme.fromJson(jsonDecode(woxImage.imageData)), width: width, height: height);
-    } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_BASE64.code) {
+      return Lottie.memory(bytes, width: width, height: height);
+    }
+    if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_THEME.code) {
+      return WoxThemeIconView(theme: WoxTheme.fromJson(jsonDecode(woxImage.imageData)), width: width, height: height);
+    }
+    if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_BASE64.code) {
       if (!woxImage.imageData.contains(";base64,")) {
-        imageWidget = Text("Invalid image data: ${woxImage.imageData}", style: const TextStyle(color: Colors.red));
-      } else {
-        final imageData = woxImage.imageData.split(";base64,")[1];
-        imageWidget = Image.memory(base64Decode(imageData), width: width, height: height, fit: BoxFit.contain);
+        return Text("Invalid image data: ${woxImage.imageData}", style: const TextStyle(color: Colors.red));
       }
-    } else {
-      imageWidget = const SizedBox(width: 24, height: 24);
+      final imageData = woxImage.imageData.split(";base64,")[1];
+      return Image.memory(
+        base64Decode(imageData),
+        width: width,
+        height: height,
+        fit: BoxFit.contain,
+        gaplessPlayback: true,
+      );
     }
 
-    // Cache the widget to prevent future rebuilds
-    _ImageCache.put(cacheKey, imageWidget);
-
-    return imageWidget;
+    return const SizedBox(width: 24, height: 24);
   }
 }
