@@ -343,6 +343,7 @@ class UpdatableResult {
   late String id;
   String? title;
   String? subTitle;
+  WoxImage? icon;
   List<WoxListItemTail>? tails;
   WoxPreview? preview;
   List<WoxResultAction>? actions;
@@ -351,6 +352,7 @@ class UpdatableResult {
     required this.id,
     this.title,
     this.subTitle,
+    this.icon,
     this.tails,
     this.preview,
     this.actions,
@@ -360,6 +362,9 @@ class UpdatableResult {
     id = json['Id'];
     title = json['Title'];
     subTitle = json['SubTitle'];
+    if (json['Icon'] != null) {
+      icon = WoxImage.fromJson(json['Icon']);
+    }
 
     if (json['Tails'] != null) {
       tails = [];

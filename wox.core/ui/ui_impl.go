@@ -162,6 +162,23 @@ func (u *uiImpl) UpdateResult(ctx context.Context, result interface{}) bool {
 	return success
 }
 
+func (u *uiImpl) PushResults(ctx context.Context, payload interface{}) bool {
+	response, err := u.invokeWebsocketMethod(ctx, "PushResults", payload)
+	if err != nil {
+		logger.Error(ctx, fmt.Sprintf("PushResults error: %s", err.Error()))
+		return false
+	}
+	if response == nil {
+		return false
+	}
+	success, ok := response.(bool)
+	if !ok {
+		logger.Error(ctx, "PushResults response is not a boolean")
+		return false
+	}
+	return success
+}
+
 func (u *uiImpl) IsVisible(ctx context.Context) bool {
 	// Return cached visibility state instead of querying UI via WebSocket
 	// The state is updated by PostOnShow/PostOnHide callbacks
@@ -373,11 +390,13 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 	var changedQuery common.PlainQuery
 	if queryType == plugin.QueryTypeInput {
 		changedQuery = common.PlainQuery{
+			QueryId:   queryId,
 			QueryType: plugin.QueryTypeInput,
 			QueryText: queryText,
 		}
 	} else if queryType == plugin.QueryTypeSelection {
 		changedQuery = common.PlainQuery{
+			QueryId:        queryId,
 			QueryType:      plugin.QueryTypeSelection,
 			QueryText:      queryText,
 			QuerySelection: querySelection,

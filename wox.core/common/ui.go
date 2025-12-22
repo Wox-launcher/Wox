@@ -6,6 +6,7 @@ import (
 )
 
 type PlainQuery struct {
+	QueryId        string
 	QueryType      string
 	QueryText      string
 	QuerySelection selection.Selection
@@ -55,6 +56,10 @@ type UI interface {
 	// Returns false if the result is no longer visible (caller should stop updating).
 	// The result parameter should be plugin.UpdatableResult, but we use interface{} to avoid circular dependency.
 	UpdateResult(ctx context.Context, result interface{}) bool
+	// PushResults pushes additional results for the current query.
+	// Returns true if results were accepted by UI, false if query is no longer active.
+	// The payload should be plugin.PushResultsPayload, but we use interface{} to avoid circular dependency.
+	PushResults(ctx context.Context, payload interface{}) bool
 	// IsVisible returns true if the Wox window is currently visible
 	IsVisible(ctx context.Context) bool
 

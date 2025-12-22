@@ -1,6 +1,6 @@
 [project]
 name = "wox-plugin"
-version = "0.0.61"
+version = "0.0.62"
 description = "Python plugin SDK for Wox launcher"
 readme = "README.md"
 requires-python = ">=3.10"

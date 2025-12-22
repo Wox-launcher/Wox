@@ -534,6 +534,69 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 
 		success := pluginInstance.API.UpdateResult(ctx, result)
 		w.sendResponseToHost(ctx, request, success)
+	case "PushResults":
+		queryStr, exist := request.Params["query"]
+		if !exist {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] PushResults method must have a query parameter", request.PluginName))
+			return
+		}
+		resultsStr, exist := request.Params["results"]
+		if !exist {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] PushResults method must have a results parameter", request.PluginName))
+			return
+		}
+
+		var query plugin.Query
+		unmarshalQueryErr := json.Unmarshal([]byte(queryStr), &query)
+		if unmarshalQueryErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal query: %s", request.PluginName, unmarshalQueryErr))
+			return
+		}
+
+		var results []plugin.QueryResult
+		unmarshalResultsErr := json.Unmarshal([]byte(resultsStr), &results)
+		if unmarshalResultsErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal results: %s", request.PluginName, unmarshalResultsErr))
+			return
+		}
+
+		for i, r := range results {
+			result := r
+			for j, action := range result.Actions {
+				capturedAction := action
+				if capturedAction.Type == plugin.QueryResultActionTypeForm {
+					result.Actions[j].OnSubmit = func(ctx context.Context, actionContext plugin.FormActionContext) {
+						valuesJson, _ := json.Marshal(actionContext.Values)
+						_, actionErr := w.invokeMethod(ctx, pluginInstance.Metadata, "formAction", map[string]string{
+							"ResultId":       actionContext.ResultId,
+							"ActionId":       capturedAction.Id,
+							"ResultActionId": actionContext.ResultActionId,
+							"ContextData":    actionContext.ContextData,
+							"Values":         string(valuesJson),
+						})
+						if actionErr != nil {
+							util.GetLogger().Error(ctx, fmt.Sprintf("[%s] form action failed: %s", pluginInstance.Metadata.GetName(ctx), actionErr.Error()))
+						}
+					}
+				} else {
+					result.Actions[j].Action = func(ctx context.Context, actionContext plugin.ActionContext) {
+						_, actionErr := w.invokeMethod(ctx, pluginInstance.Metadata, "action", map[string]string{
+							"ResultId":       actionContext.ResultId,
+							"ActionId":       capturedAction.Id,
+							"ResultActionId": actionContext.ResultActionId,
+							"ContextData":    actionContext.ContextData,
+						})
+						if actionErr != nil {
+							util.GetLogger().Error(ctx, fmt.Sprintf("[%s] action failed: %s", pluginInstance.Metadata.GetName(ctx), actionErr.Error()))
+						}
+					}
+				}
+			}
+			results[i] = result
+		}
+
+		success := pluginInstance.API.PushResults(ctx, query, results)
+		w.sendResponseToHost(ctx, request, success)
 	case "AIChatStream":
 		callbackId, exist := request.Params["callbackId"]
 		if !exist {

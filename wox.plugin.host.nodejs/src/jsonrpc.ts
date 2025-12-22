@@ -205,6 +205,7 @@ async function query(ctx: Context, request: PluginJsonRpcRequest) {
   plugin.FormActions.clear()
 
   const results = await query(ctx, {
+    Id: request.Params.QueryId ?? "",
     Type: request.Params.Type,
     RawQuery: request.Params.RawQuery,
     TriggerKeyword: request.Params.TriggerKeyword,

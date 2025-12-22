@@ -38,6 +38,10 @@ const (
 
 // Query from Wox. See "Doc/Query.md" for details.
 type Query struct {
+	// Id identifies the current query session from UI.
+	// It can be used to correlate async updates with the active query.
+	Id string
+
 	// By default, Wox will only pass QueryTypeInput query to plugin.
 	// plugin author need to enable MetadataFeatureQuerySelection feature to handle QueryTypeSelection query
 	Type QueryType
@@ -250,6 +254,12 @@ type QueryResultUI struct {
 	Tails       []QueryResultTail
 	ContextData string
 	Actions     []QueryResultActionUI
+}
+
+// PushResultsPayload is used to push additional results to UI for a query.
+type PushResultsPayload struct {
+	QueryId string
+	Results []QueryResultUI
 }
 
 type QueryResultActionUI struct {

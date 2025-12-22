@@ -278,6 +278,10 @@ func (m *mockAPI) UpdateResult(ctx context.Context, result plugin.UpdatableResul
 	return false
 }
 
+func (m *mockAPI) PushResults(ctx context.Context, query plugin.Query, results []plugin.QueryResult) bool {
+	return false
+}
+
 func (m *mockAPI) GetUpdatableResult(ctx context.Context, resultId string) *plugin.UpdatableResult {
 	return nil
 }

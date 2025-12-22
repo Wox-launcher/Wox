@@ -124,6 +124,10 @@ type API interface {
 	//   }
 	UpdateResult(ctx context.Context, result UpdatableResult) bool
 
+	// PushResults pushes additional query results to UI for the given query.
+	// Returns true if results were accepted by UI (query still active), false otherwise.
+	PushResults(ctx context.Context, query Query, results []QueryResult) bool
+
 	// IsVisible returns true if the Wox window is currently visible.
 	// This is useful for plugins that perform periodic updates (e.g., CPU/memory monitoring)
 	// to avoid wasting resources when the window is hidden.
@@ -444,6 +448,27 @@ func (a *APIImpl) UpdateResult(ctx context.Context, result UpdatableResult) bool
 	polishedResult := GetPluginManager().PolishUpdatableResult(ctx, a.pluginInstance, result)
 	success := GetPluginManager().GetUI().UpdateResult(ctx, polishedResult)
 	return success
+}
+
+func (a *APIImpl) PushResults(ctx context.Context, query Query, results []QueryResult) bool {
+	if query.Id == "" {
+		a.Log(ctx, LogLevelWarning, "PushResults ignored: query id is empty")
+		return false
+	}
+
+	polishedResults := make([]QueryResultUI, 0, len(results))
+	for _, result := range results {
+		polished := GetPluginManager().PolishResult(ctx, a.pluginInstance, query, result)
+		uiResult := polished.ToUI()
+		uiResult.QueryId = query.Id
+		polishedResults = append(polishedResults, uiResult)
+	}
+
+	payload := PushResultsPayload{
+		QueryId: query.Id,
+		Results: polishedResults,
+	}
+	return GetPluginManager().GetUI().PushResults(ctx, payload)
 }
 
 func (a *APIImpl) GetUpdatableResult(ctx context.Context, resultId string) *UpdatableResult {

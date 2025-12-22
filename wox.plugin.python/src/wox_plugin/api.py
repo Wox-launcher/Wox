@@ -3,7 +3,7 @@ from typing import Callable, Dict, List, Optional, Protocol
 from .models.ai import AIModel, ChatStreamCallback, Conversation
 from .models.context import Context
 from .models.mru import MRUData
-from .models.query import ChangeQueryParam, MetadataCommand, RefreshQueryParam, CopyParams
+from .models.query import ChangeQueryParam, MetadataCommand, Query, RefreshQueryParam, CopyParams
 from .models.result import Result, UpdatableResult  # noqa: F401
 from .models.setting import PluginSettingDefinitionItem
 
@@ -167,6 +167,20 @@ class PublicAPI(Protocol):
 
         Returns:
             bool: True if updated successfully, False if result no longer visible
+        """
+        ...
+
+    async def push_results(self, ctx: Context, query: Query, results: List[Result]) -> bool:
+        """
+        Push additional results for the current query.
+
+        Returns True if UI accepted the results (query still active).
+        Returns False if query is no longer active.
+
+        Args:
+            ctx: Context
+            query: Current query
+            results: Results to append
         """
         ...
 

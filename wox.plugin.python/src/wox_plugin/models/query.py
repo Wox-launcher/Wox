@@ -135,6 +135,7 @@ class Query:
     Query model representing a user query
     """
 
+    id: str
     type: QueryType
     raw_query: str
     selection: Selection
@@ -147,6 +148,7 @@ class Query:
         """Convert to JSON string with camelCase naming"""
         return json.dumps(
             {
+                "QueryId": self.id,
                 "Type": self.type,
                 "RawQuery": self.raw_query,
                 "Selection": json.loads(self.selection.to_json()),
@@ -166,6 +168,7 @@ class Query:
             data["Type"] = QueryType.INPUT
 
         return cls(
+            id=data.get("QueryId", ""),
             type=QueryType(data.get("Type")),
             raw_query=data.get("RawQuery", ""),
             selection=Selection.from_json(data.get("Selection", Selection().to_json())),

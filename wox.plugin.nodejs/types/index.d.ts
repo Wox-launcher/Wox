@@ -41,6 +41,10 @@ export interface QueryEnv {
 
 export interface Query {
   /**
+   * Query id passed from UI to correlate async updates.
+   */
+  Id: string
+  /**
    *  By default, Wox will only pass input query to plugin.
    *  plugin author need to enable MetadataFeatureQuerySelection feature to handle selection query
    */
@@ -434,6 +438,18 @@ export interface PublicAPI {
    * @returns Promise<boolean> True if updated successfully, false if result no longer visible
    */
   UpdateResult: (ctx: Context, result: UpdatableResult) => Promise<boolean>
+
+  /**
+   * Push additional results for the current query.
+   *
+   * Returns true if UI accepted the results (query still active),
+   * false if query is no longer active.
+   *
+   * @param ctx Context
+   * @param query Current query
+   * @param results Results to append
+   */
+  PushResults: (ctx: Context, query: Query, results: Result[]) => Promise<boolean>
 
   /**
    * Re-execute the current query with the existing query text.

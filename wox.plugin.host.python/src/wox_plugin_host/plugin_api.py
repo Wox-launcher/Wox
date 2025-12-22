@@ -10,6 +10,7 @@ from wox_plugin import (
     ChatStreamCallback,
     Context,
     Conversation,
+    Query,
     MetadataCommand,
     MRUData,
     PluginSettingDefinitionItem,
@@ -241,6 +242,44 @@ class PluginAPI(PublicAPI):
                         plugin_instance.actions[action.id] = action.action
 
         response = await self.invoke_method(ctx, "UpdateResult", {"result": result.to_json()})
+        return bool(response) if response is not None else False
+
+    async def push_results(self, ctx: Context, query: Query, results: list[Result]) -> bool:
+        """Push additional results for the current query"""
+        if results:
+            from .plugin_manager import plugin_instances
+
+            plugin_instance = plugin_instances.get(self.plugin_id)
+            if plugin_instance:
+                for result in results:
+                    if not result.id:
+                        result.id = str(uuid.uuid4())
+                    if result.actions:
+                        for action in result.actions:
+                            if not action.id:
+                                action.id = str(uuid.uuid4())
+                            if not action.type:
+                                action.type = "execute"
+
+                            action_type = str(getattr(action, "type", "execute"))
+                            if action_type == "form":
+                                on_submit = getattr(action, "on_submit", None)
+                                if on_submit is not None:
+                                    plugin_instance.form_actions[action.id] = on_submit
+                            else:
+                                action_func = getattr(action, "action", None)
+                                if action_func is not None:
+                                    plugin_instance.actions[action.id] = action_func
+
+        results_payload = [json.loads(result.to_json()) for result in results]
+        response = await self.invoke_method(
+            ctx,
+            "PushResults",
+            {
+                "query": query.to_json(),
+                "results": results_payload,
+            },
+        )
         return bool(response) if response is not None else False
 
     async def refresh_query(self, ctx: Context, param: RefreshQueryParam) -> None:

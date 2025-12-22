@@ -72,6 +72,7 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 	}
 
 	rawResults, queryErr := w.websocketHost.invokeMethod(ctx, w.metadata, "query", map[string]string{
+		"Id":             query.Id,
 		"Type":           query.Type,
 		"RawQuery":       query.RawQuery,
 		"TriggerKeyword": query.TriggerKeyword,

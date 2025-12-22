@@ -66,6 +66,10 @@ func (e emptyAPIImpl) UpdateResult(ctx context.Context, result plugin.UpdatableR
 	return false
 }
 
+func (e emptyAPIImpl) PushResults(ctx context.Context, query plugin.Query, results []plugin.QueryResult) bool {
+	return false
+}
+
 func (e emptyAPIImpl) GetUpdatableResult(ctx context.Context, resultId string) *plugin.UpdatableResult {
 	return nil
 }

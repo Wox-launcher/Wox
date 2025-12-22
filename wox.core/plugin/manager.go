@@ -1554,6 +1554,7 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 			}
 		}
 		query, instance := newQueryInputWithPlugins(newQuery, GetPluginManager().GetPluginInstances())
+		query.Id = plainQuery.QueryId
 		query.Env.ActiveWindowTitle = m.GetUI().GetActiveWindowName()
 		query.Env.ActiveWindowPid = m.GetUI().GetActiveWindowPid()
 		query.Env.ActiveWindowIcon = m.GetUI().GetActiveWindowIcon()
@@ -1563,6 +1564,7 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 
 	if plainQuery.QueryType == QueryTypeSelection {
 		query := Query{
+			Id:        plainQuery.QueryId,
 			Type:      QueryTypeSelection,
 			RawQuery:  plainQuery.QueryText,
 			Search:    plainQuery.QueryText,
