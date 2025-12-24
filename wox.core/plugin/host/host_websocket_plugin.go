@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"wox/common"
 	"wox/plugin"
 	"wox/util"
 )
@@ -29,11 +30,11 @@ func (w *WebsocketPlugin) Init(ctx context.Context, initParams plugin.InitParams
 // CreateActionProxy creates a proxy callback for an action that will invoke the host's action method
 func (w *WebsocketPlugin) CreateActionProxy(actionId string) func(context.Context, plugin.ActionContext) {
 	return func(ctx context.Context, actionContext plugin.ActionContext) {
-		_, actionErr := w.websocketHost.invokeMethod(ctx, w.metadata, "action", map[string]string{
+		_, actionErr := w.websocketHost.invokeMethod(ctx, w.metadata, "action", common.ContextData{
 			"ResultId":       actionContext.ResultId,
 			"ActionId":       actionId,
 			"ResultActionId": actionContext.ResultActionId,
-			"ContextData":    actionContext.ContextData,
+			"ContextData":    actionContext.ContextData.Marshal(),
 		})
 		if actionErr != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] action failed: %s", w.metadata.GetName(ctx), actionErr.Error()))
@@ -45,11 +46,11 @@ func (w *WebsocketPlugin) CreateActionProxy(actionId string) func(context.Contex
 func (w *WebsocketPlugin) CreateFormActionProxy(actionId string) func(context.Context, plugin.FormActionContext) {
 	return func(ctx context.Context, actionContext plugin.FormActionContext) {
 		valuesJson, _ := json.Marshal(actionContext.Values)
-		_, actionErr := w.websocketHost.invokeMethod(ctx, w.metadata, "formAction", map[string]string{
+		_, actionErr := w.websocketHost.invokeMethod(ctx, w.metadata, "formAction", common.ContextData{
 			"ResultId":       actionContext.ResultId,
 			"ActionId":       actionId,
 			"ResultActionId": actionContext.ResultActionId,
-			"ContextData":    actionContext.ContextData,
+			"ContextData":    actionContext.ContextData.Marshal(),
 			"Values":         string(valuesJson),
 		})
 		if actionErr != nil {
@@ -111,7 +112,7 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 						"ResultId":       actionContext.ResultId,
 						"ActionId":       capturedAction.Id,
 						"ResultActionId": actionContext.ResultActionId,
-						"ContextData":    actionContext.ContextData,
+						"ContextData":    actionContext.ContextData.Marshal(),
 						"Values":         string(valuesJson),
 					})
 					if actionErr != nil {
@@ -124,7 +125,7 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 						"ResultId":       actionContext.ResultId,
 						"ActionId":       capturedAction.Id,
 						"ResultActionId": actionContext.ResultActionId,
-						"ContextData":    actionContext.ContextData,
+						"ContextData":    actionContext.ContextData.Marshal(),
 					})
 					if actionErr != nil {
 						util.GetLogger().Error(ctx, fmt.Sprintf("[%s] action failed: %s", w.metadata.GetName(ctx), actionErr.Error()))

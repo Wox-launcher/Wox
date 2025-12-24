@@ -16,6 +16,7 @@ from .models.ai import (
 )
 from .models.context import Context
 from .models.image import WoxImage, WoxImageType
+from .models.log import LogLevel
 from .models.mru import MRUData, MRURestoreCallback
 from .models.preview import WoxPreview, WoxPreviewScrollPosition, WoxPreviewType
 from .models.query import (
@@ -69,6 +70,7 @@ __all__: List[str] = [
     "Result",
     "WoxImage",
     "WoxPreview",
+    "LogLevel",
     "ResultTail",
     "ResultAction",
     "ActionContext",

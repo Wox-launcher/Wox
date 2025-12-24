@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_list_item.dart';
 import 'package:wox/entity/wox_plugin_setting.dart';
@@ -96,7 +98,6 @@ class WoxQueryResult {
   late String group;
   late int groupScore;
   late List<WoxListItemTail> tails;
-  late String contextData;
 
   late List<WoxResultAction> actions;
 
@@ -114,7 +115,6 @@ class WoxQueryResult {
       required this.group,
       required this.groupScore,
       required this.tails,
-      required this.contextData,
       required this.actions,
       required this.isGroup});
 
@@ -129,7 +129,6 @@ class WoxQueryResult {
     group = "";
     groupScore = 0;
     tails = [];
-    contextData = "";
     actions = [];
     isGroup = false;
   }
@@ -144,7 +143,6 @@ class WoxQueryResult {
     score = json['Score'];
     group = json['Group'];
     groupScore = json['GroupScore'];
-    contextData = json['ContextData'];
 
     if (json['Tails'] != null) {
       tails = [];
@@ -180,7 +178,6 @@ class WoxQueryResult {
     data['Score'] = score;
     data['Group'] = group;
     data['GroupScore'] = groupScore;
-    data['ContextData'] = contextData;
     data['Actions'] = actions.map((v) => v.toJson()).toList();
     data['Tails'] = tails.map((v) => v.toJson()).toList();
     return data;
@@ -197,7 +194,7 @@ class WoxResultAction {
   late String hotkey;
   late bool isSystemAction;
   late String resultId;
-  late String contextData;
+  late Map<String, String> contextData;
   late List<PluginSettingDefinitionItem> form;
 
   WoxResultAction({
@@ -226,7 +223,23 @@ class WoxResultAction {
     }
     isSystemAction = json['IsSystemAction'];
     resultId = json['ResultId'] ?? "";
-    contextData = json['ContextData'] ?? "";
+    final rawContextData = json['ContextData'];
+    if (rawContextData is Map) {
+      contextData = rawContextData.map((key, value) => MapEntry(key.toString(), value.toString()));
+    } else if (rawContextData is String && rawContextData.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(rawContextData);
+        if (decoded is Map) {
+          contextData = decoded.map((key, value) => MapEntry(key.toString(), value.toString()));
+        } else {
+          contextData = {};
+        }
+      } catch (_) {
+        contextData = {};
+      }
+    } else {
+      contextData = {};
+    }
     if (json['Form'] != null) {
       form = (json['Form'] as List<dynamic>).map((e) => PluginSettingDefinitionItem.fromJson(e)).toList();
     } else {
@@ -268,7 +281,7 @@ class WoxResultAction {
         hotkey: "",
         isSystemAction: false,
         resultId: "",
-        contextData: "",
+        contextData: {},
         form: []);
   }
 }

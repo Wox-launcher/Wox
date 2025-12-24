@@ -40,9 +40,21 @@ var managerOnce sync.Once
 var logger *util.Log
 
 const (
-	// ContextData value for favorite tail
-	favoriteTailContextData = "system:favorite"
+	// ContextData key/value for favorite tail
+	favoriteTailContextDataKey   = "system:favorite"
+	favoriteTailContextDataValue = "true"
 )
+
+func serializeContextData(contextData map[string]string) string {
+	if len(contextData) == 0 {
+		return ""
+	}
+	data, err := json.Marshal(contextData)
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
 
 type debounceTimer struct {
 	timer  *time.Timer
@@ -337,7 +349,7 @@ func (m *Manager) LoadPlugin(ctx context.Context, pluginDirectory string) error 
 
 func (m *Manager) UnloadPlugin(ctx context.Context, pluginInstance *Instance) {
 	for _, callback := range pluginInstance.UnloadCallbacks {
-		callback()
+		callback(ctx)
 	}
 	pluginInstance.Host.UnloadPlugin(ctx, pluginInstance.Metadata)
 
@@ -1104,7 +1116,7 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 		// Add favorite icon to tails if not already present
 		hasFavoriteTail := false
 		for _, tail := range result.Tails {
-			if tail.ContextData == favoriteTailContextData {
+			if tail.ContextData[favoriteTailContextDataKey] == favoriteTailContextDataValue {
 				hasFavoriteTail = true
 				break
 			}
@@ -1113,8 +1125,8 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 			result.Tails = append(result.Tails, QueryResultTail{
 				Type:         QueryResultTailTypeImage,
 				Image:        common.PinIcon,
-				ContextData:  favoriteTailContextData, // Use ContextData to identify favorite tail
-				IsSystemTail: true,                    // Mark as system tail so it will be filtered out in GetUpdatableResult
+				ContextData:  common.ContextData{favoriteTailContextDataKey: favoriteTailContextDataValue}, // Use ContextData to identify favorite tail
+				IsSystemTail: true,                                                                         // Mark as system tail so it will be filtered out in GetUpdatableResult
 			})
 		}
 	}
@@ -1287,7 +1299,7 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 			// Check if favorite tail already exists
 			hasFavoriteTail := false
 			for _, tail := range tails {
-				if tail.ContextData == favoriteTailContextData {
+				if tail.ContextData[favoriteTailContextDataKey] == favoriteTailContextDataValue {
 					hasFavoriteTail = true
 					break
 				}
@@ -1296,8 +1308,8 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 				tails = append(tails, QueryResultTail{
 					Type:         QueryResultTailTypeImage,
 					Image:        common.PinIcon,
-					ContextData:  favoriteTailContextData, // Use ContextData to identify favorite tail
-					IsSystemTail: true,                    // Mark as system tail so it will be filtered out in GetUpdatableResult
+					ContextData:  common.ContextData{favoriteTailContextDataKey: favoriteTailContextDataValue}, // Use ContextData to identify favorite tail
+					IsSystemTail: true,                                                                         // Mark as system tail so it will be filtered out in GetUpdatableResult
 				})
 			}
 		}
@@ -1668,11 +1680,11 @@ func (m *Manager) ExecuteAction(ctx context.Context, resultId string, actionId s
 	actionCache.Action(ctx, ActionContext{
 		ResultId:       resultId,
 		ResultActionId: actionId,
-		ContextData:    resultCache.Result.ContextData,
+		ContextData:    actionCache.ContextData,
 	})
 
 	util.Go(ctx, fmt.Sprintf("[%s] post execute action", resultCache.PluginInstance.GetName(ctx)), func() {
-		m.postExecuteAction(ctx, resultCache)
+		m.postExecuteAction(ctx, resultCache, actionCache.ContextData)
 	})
 
 	return nil
@@ -1706,19 +1718,19 @@ func (m *Manager) SubmitFormAction(ctx context.Context, resultId string, actionI
 		ActionContext: ActionContext{
 			ResultId:       resultId,
 			ResultActionId: actionId,
-			ContextData:    resultCache.Result.ContextData,
+			ContextData:    actionCache.ContextData,
 		},
 		Values: values,
 	})
 
 	util.Go(ctx, fmt.Sprintf("[%s] post execute action", resultCache.PluginInstance.GetName(ctx)), func() {
-		m.postExecuteAction(ctx, resultCache)
+		m.postExecuteAction(ctx, resultCache, actionCache.ContextData)
 	})
 
 	return nil
 }
 
-func (m *Manager) postExecuteAction(ctx context.Context, resultCache *QueryResultCache) {
+func (m *Manager) postExecuteAction(ctx context.Context, resultCache *QueryResultCache, contextData map[string]string) {
 	// Add actioned result for statistics
 	meta := resultCache.PluginInstance.Metadata
 	setting.GetSettingManager().AddActionedResult(ctx, meta.Id, resultCache.Result.Title, resultCache.Result.SubTitle, resultCache.Query.RawQuery)
@@ -1730,7 +1742,7 @@ func (m *Manager) postExecuteAction(ctx context.Context, resultCache *QueryResul
 			Title:       resultCache.Result.Title,
 			SubTitle:    resultCache.Result.SubTitle,
 			Icon:        resultCache.Result.Icon,
-			ContextData: resultCache.Result.ContextData,
+			ContextData: contextData,
 		}
 
 		// Decide MRU identity hash based on plugin metadata feature params
@@ -1899,9 +1911,11 @@ func (m *Manager) ExecutePluginDeeplink(ctx context.Context, pluginId string, ar
 		return
 	}
 
+	logger.Info(ctx, fmt.Sprintf("execute deeplink for plugin: %s, callbacks: %d", pluginInstance.GetName(ctx), len(pluginInstance.DeepLinkCallbacks)))
+
 	for _, callback := range pluginInstance.DeepLinkCallbacks {
 		util.Go(ctx, fmt.Sprintf("[%s] execute deeplink callback", pluginInstance.GetName(ctx)), func() {
-			callback(arguments)
+			callback(ctx, arguments)
 		})
 	}
 }
@@ -1933,7 +1947,7 @@ func (m *Manager) QueryMRU(ctx context.Context) []QueryResultUI {
 			util.GetLogger().Debug(ctx, fmt.Sprintf("mru item restored: %s", item.Title))
 
 			// Build a stable dedupe key using restored values, which are language-independent for Go plugins
-			key := fmt.Sprintf("%s|%s|%s|%s", item.PluginID, restored.Title, restored.SubTitle, restored.ContextData)
+			key := fmt.Sprintf("%s|%s|%s|%s", item.PluginID, restored.Title, restored.SubTitle, serializeContextData(item.ContextData))
 			if seen[key] {
 				util.GetLogger().Debug(ctx, fmt.Sprintf("duplicate mru item, skip restore mru item: %s", item.Title))
 				continue
@@ -1992,7 +2006,7 @@ func (m *Manager) restoreFromMRU(ctx context.Context, pluginInstance *Instance, 
 		}
 
 		// Call the first (and typically only) MRU restore callback
-		if restored, err := pluginInstance.MRURestoreCallbacks[0](mruData); err == nil {
+		if restored, err := pluginInstance.MRURestoreCallbacks[0](ctx, mruData); err == nil {
 			return restored
 		} else {
 			util.GetLogger().Debug(ctx, fmt.Sprintf("MRU restore failed for plugin %s: %s", pluginInstance.GetName(ctx), err.Error()))

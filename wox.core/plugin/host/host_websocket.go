@@ -360,8 +360,8 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 			return
 		}
 		metadata := pluginInstance.Metadata
-		pluginInstance.API.OnSettingChanged(ctx, func(key string, value string) {
-			w.invokeMethod(ctx, metadata, "onPluginSettingChange", map[string]string{
+		pluginInstance.API.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, value string) {
+			w.invokeMethod(callbackCtx, metadata, "onPluginSettingChange", map[string]string{
 				"CallbackId": callbackId,
 				"Key":        key,
 				"Value":      value,
@@ -376,13 +376,13 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 		}
 
 		metadata := pluginInstance.Metadata
-		pluginInstance.API.OnGetDynamicSetting(ctx, func(key string) definition.PluginSettingDefinitionItem {
-			result, err := w.invokeMethod(ctx, metadata, "onGetDynamicSetting", map[string]string{
+		pluginInstance.API.OnGetDynamicSetting(ctx, func(callbackCtx context.Context, key string) definition.PluginSettingDefinitionItem {
+			result, err := w.invokeMethod(callbackCtx, metadata, "onGetDynamicSetting", map[string]string{
 				"CallbackId": callbackId,
 				"Key":        key,
 			})
 			if err != nil {
-				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to get dynamic setting: %s", request.PluginName, err))
+				util.GetLogger().Error(callbackCtx, fmt.Sprintf("[%s] failed to get dynamic setting: %s", request.PluginName, err))
 				return definition.PluginSettingDefinitionItem{
 					Type: definition.PluginSettingDefinitionTypeLabel,
 					Value: &definition.PluginSettingValueLabel{
@@ -395,7 +395,7 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 			var setting definition.PluginSettingDefinitionItem
 			unmarshalErr := json.Unmarshal([]byte(result.(string)), &setting)
 			if unmarshalErr != nil {
-				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal dynamic setting: %s", request.PluginName, unmarshalErr))
+				util.GetLogger().Error(callbackCtx, fmt.Sprintf("[%s] failed to unmarshal dynamic setting: %s", request.PluginName, unmarshalErr))
 				return definition.PluginSettingDefinitionItem{
 					Type: definition.PluginSettingDefinitionTypeLabel,
 					Value: &definition.PluginSettingValueLabel{
@@ -415,14 +415,14 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 		}
 
 		metadata := pluginInstance.Metadata
-		pluginInstance.API.OnDeepLink(ctx, func(arguments map[string]string) {
+		pluginInstance.API.OnDeepLink(ctx, func(callbackCtx context.Context, arguments map[string]string) {
 			args, marshalErr := json.Marshal(arguments)
 			if marshalErr != nil {
-				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal deep link arguments: %s", request.PluginName, marshalErr))
+				util.GetLogger().Error(callbackCtx, fmt.Sprintf("[%s] failed to marshal deep link arguments: %s", request.PluginName, marshalErr))
 				return
 			}
 
-			w.invokeMethod(ctx, metadata, "onDeepLink", map[string]string{
+			w.invokeMethod(callbackCtx, metadata, "onDeepLink", map[string]string{
 				"CallbackId": callbackId,
 				"Arguments":  string(args),
 			})
@@ -436,8 +436,8 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 		}
 
 		metadata := pluginInstance.Metadata
-		pluginInstance.API.OnUnload(ctx, func() {
-			w.invokeMethod(ctx, metadata, "onUnload", map[string]string{
+		pluginInstance.API.OnUnload(ctx, func(callbackCtx context.Context) {
+			w.invokeMethod(callbackCtx, metadata, "onUnload", map[string]string{
 				"CallbackId": callbackId,
 			})
 		})
@@ -450,19 +450,19 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 		}
 
 		metadata := pluginInstance.Metadata
-		pluginInstance.API.OnMRURestore(ctx, func(mruData plugin.MRUData) (*plugin.QueryResult, error) {
+		pluginInstance.API.OnMRURestore(ctx, func(callbackCtx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
 			mruDataJson, marshalErr := json.Marshal(mruData)
 			if marshalErr != nil {
-				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal MRU data: %s", request.PluginName, marshalErr))
+				util.GetLogger().Error(callbackCtx, fmt.Sprintf("[%s] failed to marshal MRU data: %s", request.PluginName, marshalErr))
 				return nil, marshalErr
 			}
 
-			result, invokeErr := w.invokeMethod(ctx, metadata, "onMRURestore", map[string]string{
+			result, invokeErr := w.invokeMethod(callbackCtx, metadata, "onMRURestore", map[string]string{
 				"CallbackId": callbackId,
 				"mruData":    string(mruDataJson),
 			})
 			if invokeErr != nil {
-				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to invoke MRU restore callback: %s", request.PluginName, invokeErr))
+				util.GetLogger().Error(callbackCtx, fmt.Sprintf("[%s] failed to invoke MRU restore callback: %s", request.PluginName, invokeErr))
 				return nil, invokeErr
 			}
 
@@ -474,7 +474,7 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 			var queryResult plugin.QueryResult
 			resultStr, ok := result.(string)
 			if !ok {
-				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] MRU restore result is not a string", request.PluginName))
+				util.GetLogger().Error(callbackCtx, fmt.Sprintf("[%s] MRU restore result is not a string", request.PluginName))
 				return nil, fmt.Errorf("MRU restore result is not a string")
 			}
 
@@ -571,7 +571,7 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 							"ResultId":       actionContext.ResultId,
 							"ActionId":       capturedAction.Id,
 							"ResultActionId": actionContext.ResultActionId,
-							"ContextData":    actionContext.ContextData,
+							"ContextData":    actionContext.ContextData.Marshal(),
 							"Values":         string(valuesJson),
 						})
 						if actionErr != nil {
@@ -584,7 +584,7 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 							"ResultId":       actionContext.ResultId,
 							"ActionId":       capturedAction.Id,
 							"ResultActionId": actionContext.ResultActionId,
-							"ContextData":    actionContext.ContextData,
+							"ContextData":    actionContext.ContextData.Marshal(),
 						})
 						if actionErr != nil {
 							util.GetLogger().Error(ctx, fmt.Sprintf("[%s] action failed: %s", pluginInstance.Metadata.GetName(ctx), actionErr.Error()))

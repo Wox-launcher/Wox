@@ -14,23 +14,23 @@ export class PluginAPI implements PublicAPI {
   ws: WebSocket
   pluginId: string
   pluginName: string
-  settingChangeCallbacks: Map<string, (key: string, value: string) => void>
-  getDynamicSettingCallbacks: Map<string, (key: string) => PluginSettingDefinitionItem>
-  deepLinkCallbacks: Map<string, (params: MapString) => void>
-  unloadCallbacks: Map<string, () => Promise<void>>
+  settingChangeCallbacks: Map<string, (ctx: Context, key: string, value: string) => void>
+  getDynamicSettingCallbacks: Map<string, (ctx: Context, key: string) => PluginSettingDefinitionItem>
+  deepLinkCallbacks: Map<string, (ctx: Context, params: MapString) => void>
+  unloadCallbacks: Map<string, (ctx: Context) => Promise<void>>
   llmStreamCallbacks: Map<string, AI.ChatStreamFunc>
-  mruRestoreCallbacks: Map<string, (mruData: MRUData) => Promise<Result | null>>
+  mruRestoreCallbacks: Map<string, (ctx: Context, mruData: MRUData) => Promise<Result | null>>
 
   constructor(ws: WebSocket, pluginId: string, pluginName: string) {
     this.ws = ws
     this.pluginId = pluginId
     this.pluginName = pluginName
-    this.settingChangeCallbacks = new Map<string, (key: string, value: string) => void>()
-    this.getDynamicSettingCallbacks = new Map<string, (key: string) => PluginSettingDefinitionItem>()
-    this.deepLinkCallbacks = new Map<string, (params: MapString) => void>()
-    this.unloadCallbacks = new Map<string, () => Promise<void>>()
+    this.settingChangeCallbacks = new Map<string, (ctx: Context, key: string, value: string) => void>()
+    this.getDynamicSettingCallbacks = new Map<string, (ctx: Context, key: string) => PluginSettingDefinitionItem>()
+    this.deepLinkCallbacks = new Map<string, (ctx: Context, params: MapString) => void>()
+    this.unloadCallbacks = new Map<string, (ctx: Context) => Promise<void>>()
     this.llmStreamCallbacks = new Map<string, AI.ChatStreamFunc>()
-    this.mruRestoreCallbacks = new Map<string, (mruData: MRUData) => Promise<Result | null>>()
+    this.mruRestoreCallbacks = new Map<string, (ctx: Context, mruData: MRUData) => Promise<Result | null>>()
   }
 
   async invokeMethod(ctx: Context, method: string, params: { [key: string]: string }): Promise<unknown> {
@@ -98,25 +98,25 @@ export class PluginAPI implements PublicAPI {
     await this.invokeMethod(ctx, "SaveSetting", { key, value, isPlatformSpecific: isPlatformSpecific.toString() })
   }
 
-  async OnSettingChanged(ctx: Context, callback: (key: string, value: string) => void): Promise<void> {
+  async OnSettingChanged(ctx: Context, callback: (ctx: Context, key: string, value: string) => void): Promise<void> {
     const callbackId = crypto.randomUUID()
     this.settingChangeCallbacks.set(callbackId, callback)
     await this.invokeMethod(ctx, "OnPluginSettingChanged", { callbackId })
   }
 
-  async OnGetDynamicSetting(ctx: Context, callback: (key: string) => PluginSettingDefinitionItem): Promise<void> {
+  async OnGetDynamicSetting(ctx: Context, callback: (ctx: Context, key: string) => PluginSettingDefinitionItem): Promise<void> {
     const callbackId = crypto.randomUUID()
     this.getDynamicSettingCallbacks.set(callbackId, callback)
     await this.invokeMethod(ctx, "OnGetDynamicSetting", { callbackId })
   }
 
-  async OnDeepLink(ctx: Context, callback: (params: MapString) => void): Promise<void> {
+  async OnDeepLink(ctx: Context, callback: (ctx: Context, params: MapString) => void): Promise<void> {
     const callbackId = crypto.randomUUID()
     this.deepLinkCallbacks.set(callbackId, callback)
     await this.invokeMethod(ctx, "OnDeepLink", { callbackId })
   }
 
-  async OnUnload(ctx: Context, callback: () => Promise<void>): Promise<void> {
+  async OnUnload(ctx: Context, callback: (ctx: Context) => Promise<void>): Promise<void> {
     const callbackId = crypto.randomUUID()
     this.unloadCallbacks.set(callbackId, callback)
     await this.invokeMethod(ctx, "OnUnload", { callbackId })
@@ -132,7 +132,7 @@ export class PluginAPI implements PublicAPI {
     await this.invokeMethod(ctx, "LLMStream", { callbackId, conversations: JSON.stringify(conversations) })
   }
 
-  async OnMRURestore(ctx: Context, callback: (mruData: MRUData) => Promise<Result | null>): Promise<void> {
+  async OnMRURestore(ctx: Context, callback: (ctx: Context, mruData: MRUData) => Promise<Result | null>): Promise<void> {
     const callbackId = crypto.randomUUID()
     this.mruRestoreCallbacks.set(callbackId, callback)
     await this.invokeMethod(ctx, "OnMRURestore", { callbackId })

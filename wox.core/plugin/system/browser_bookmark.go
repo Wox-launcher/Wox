@@ -2,7 +2,6 @@ package system
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -141,7 +140,6 @@ func (c *BrowserBookmarkPlugin) Query(ctx context.Context, query plugin.Query) (
 		}
 
 		if isMatch {
-			contextDataJson, _ := json.Marshal(bookmark)
 			// default icon, overlay cached favicon if exists (no network)
 			icon := browserBookmarkIcon
 			if cachedIcon, ok := getWebsiteIconFromCacheOnly(ctx, bookmark.Url); ok {
@@ -149,14 +147,17 @@ func (c *BrowserBookmarkPlugin) Query(ctx context.Context, query plugin.Query) (
 			}
 
 			results = append(results, plugin.QueryResult{
-				Title:       bookmark.Name,
-				SubTitle:    bookmark.Url,
-				Score:       matchScore,
-				Icon:        icon,
-				ContextData: string(contextDataJson),
+				Title:    bookmark.Name,
+				SubTitle: bookmark.Url,
+				Score:    matchScore,
+				Icon:     icon,
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "i18n:plugin_browser_bookmark_open_in_browser",
+						ContextData: common.ContextData{
+							"name": bookmark.Name,
+							"url":  bookmark.Url,
+						},
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							shell.Open(bookmark.Url)
 						},
@@ -270,44 +271,45 @@ func (c *BrowserBookmarkPlugin) removeDuplicateBookmarks(bookmarks []Bookmark) [
 	return result
 }
 
-func (c *BrowserBookmarkPlugin) handleMRURestore(mruData plugin.MRUData) (*plugin.QueryResult, error) {
-	var contextData Bookmark
-	if err := json.Unmarshal([]byte(mruData.ContextData), &contextData); err != nil {
-		return nil, fmt.Errorf("failed to parse context data: %w", err)
+func (c *BrowserBookmarkPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	name := mruData.ContextData["name"]
+	url := mruData.ContextData["url"]
+	if url == "" {
+		return nil, fmt.Errorf("empty url in context data")
 	}
 
 	// Check if bookmark still exists in current bookmarks
 	found := false
 	for _, bookmark := range c.bookmarks {
-		if bookmark.Name == contextData.Name && bookmark.Url == contextData.Url {
+		if bookmark.Name == name && bookmark.Url == url {
 			found = true
 			break
 		}
 	}
 
 	if !found {
-		return nil, fmt.Errorf("bookmark no longer exists: %s", contextData.Name)
+		return nil, fmt.Errorf("bookmark no longer exists: %s", name)
 	}
 
 	if !mruData.Icon.IsValid() {
 		// default icon, overlay cached favicon if exists (no network)
 		icon := browserBookmarkIcon
-		if cachedIcon, ok := getWebsiteIconFromCacheOnly(context.Background(), contextData.Url); ok {
+		if cachedIcon, ok := getWebsiteIconFromCacheOnly(context.Background(), url); ok {
 			icon = cachedIcon.Overlay(browserBookmarkIcon, 0.4, 0.6, 0.6)
 		}
 		mruData.Icon = icon
 	}
 
 	result := &plugin.QueryResult{
-		Title:       contextData.Name,
-		SubTitle:    contextData.Url,
-		Icon:        mruData.Icon,
-		ContextData: mruData.ContextData,
+		Title:    name,
+		SubTitle: url,
+		Icon:     mruData.Icon,
 		Actions: []plugin.QueryResultAction{
 			{
-				Name: "i18n:plugin_browser_bookmark_open_in_browser",
+				Name:        "i18n:plugin_browser_bookmark_open_in_browser",
+				ContextData: mruData.ContextData,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					shell.Open(contextData.Url)
+					shell.Open(url)
 				},
 			},
 		},

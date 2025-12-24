@@ -2,7 +2,6 @@ package converter
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"wox/common"
@@ -23,10 +22,6 @@ type Converter struct {
 	api       plugin.API
 	registry  *core.ModuleRegistry
 	tokenizer *core.Tokenizer
-}
-
-type converterContextData struct {
-	Query string `json:"query"`
 }
 
 func (c *Converter) GetMetadata() plugin.Metadata {
@@ -357,19 +352,14 @@ func (c *Converter) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 		c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Calculation result: displayValue=%s, rawValue=%s, unit=%s", result.DisplayValue, result.RawValue.String(), result.Unit.Name))
 	}
 
-	contextData := converterContextData{
-		Query: query.Search,
-	}
-	contextDataJson, _ := json.Marshal(contextData)
-
 	return []plugin.QueryResult{
 		{
-			Title:       result.DisplayValue,
-			Icon:        common.PluginConverterIcon,
-			ContextData: string(contextDataJson),
+			Title: result.DisplayValue,
+			Icon:  common.PluginConverterIcon,
 			Actions: []plugin.QueryResultAction{
 				{
-					Name: "i18n:plugin_converter_copy_result",
+					Name:        "i18n:plugin_converter_copy_result",
+					ContextData: common.ContextData{"query": query.Search},
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						clipboard.WriteText(result.DisplayValue)
 					},
@@ -379,31 +369,23 @@ func (c *Converter) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 	}
 }
 
-func (c *Converter) handleMRURestore(mruData plugin.MRUData) (*plugin.QueryResult, error) {
-	var contextData converterContextData
-	if err := json.Unmarshal([]byte(mruData.ContextData), &contextData); err != nil {
-		return nil, fmt.Errorf("failed to parse context data: %w", err)
-	}
-
-	if contextData.Query == "" {
+func (c *Converter) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	query := mruData.ContextData["query"]
+	if query == "" {
 		return nil, fmt.Errorf("empty converter query in context data")
 	}
 
 	// Recalculate using the original query
-	query := plugin.Query{
+	results := c.Query(context.Background(), plugin.Query{
 		Type:     plugin.QueryTypeInput,
-		RawQuery: contextData.Query,
-		Search:   contextData.Query,
-	}
-
-	results := c.Query(context.Background(), query)
+		RawQuery: query,
+		Search:   query,
+	})
 	if len(results) == 0 {
-		return nil, fmt.Errorf("no result for query: %s", contextData.Query)
+		return nil, fmt.Errorf("no result for query: %s", query)
 	}
 
 	restored := results[0]
-	restored.Title = fmt.Sprintf("%s: %s", contextData.Query, restored.Title)
-	restored.ContextData = mruData.ContextData
-
+	restored.Title = fmt.Sprintf("%s: %s", query, restored.Title)
 	return &restored, nil
 }

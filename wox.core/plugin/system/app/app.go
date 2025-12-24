@@ -156,9 +156,9 @@ func (a *ApplicationPlugin) Init(ctx context.Context, initParams plugin.InitPara
 		}
 	})
 
-	a.api.OnSettingChanged(ctx, func(key string, value string) {
+	a.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, value string) {
 		if key == "AppDirectories" {
-			a.indexApps(ctx)
+			a.indexApps(callbackCtx)
 		}
 	})
 
@@ -231,26 +231,21 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 				displayPath = a.api.GetTranslation(ctx, "i18n:plugin_app_windows_settings_subtitle")
 			}
 
-			contextData := appContextData{
-				Name: info.Name,
-				Path: info.Path,
-				Type: info.Type,
-			}
-			contextDataJson, _ := json.Marshal(contextData)
-
-			infoCopy := info
 			result := plugin.QueryResult{
-				Id:          uuid.NewString(),
-				Title:       displayName,
-				SubTitle:    displayPath,
-				Icon:        info.Icon,
-				Score:       util.MaxInt64(nameScore, pathNameScore),
-				ContextData: string(contextDataJson),
-				Actions:     a.buildAppActions(infoCopy, displayName),
+				Id:       uuid.NewString(),
+				Title:    displayName,
+				SubTitle: displayPath,
+				Icon:     info.Icon,
+				Score:    util.MaxInt64(nameScore, pathNameScore),
+				Actions: a.buildAppActions(info, displayName, common.ContextData{
+					"name": info.Name,
+					"path": info.Path,
+					"type": info.Type,
+				}),
 			}
 
 			// Track this result for periodic refresh (refreshRunningApps will handle running state)
-			a.trackedResults.Store(result.Id, infoCopy)
+			a.trackedResults.Store(result.Id, info)
 
 			results = append(results, result)
 		}
@@ -259,30 +254,30 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 	return results
 }
 
-func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string) []plugin.QueryResultAction {
-	infoCopy := info
-	displayNameCopy := displayName
+func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, contextData map[string]string) []plugin.QueryResultAction {
 	actions := []plugin.QueryResultAction{
 		{
-			Name: "i18n:plugin_app_open",
-			Icon: common.OpenIcon,
+			Name:        "i18n:plugin_app_open",
+			Icon:        common.OpenIcon,
+			ContextData: contextData,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				analytics.TrackAppLaunched(ctx, fmt.Sprintf("%s:%s", infoCopy.Type, infoCopy.Name), displayNameCopy)
-				runErr := shell.Open(infoCopy.Path)
+				analytics.TrackAppLaunched(ctx, fmt.Sprintf("%s:%s", info.Type, info.Name), displayName)
+				runErr := shell.Open(info.Path)
 				if runErr != nil {
-					a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error opening app %s: %s", infoCopy.Path, runErr.Error()))
+					a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error opening app %s: %s", info.Path, runErr.Error()))
 					a.api.Notify(ctx, fmt.Sprintf("i18n:plugin_app_open_failed_description: %s", runErr.Error()))
 				}
 			},
 		},
 	}
 
-	if infoCopy.Type != AppTypeWindowsSetting {
+	if info.Type != AppTypeWindowsSetting {
 		actions = append(actions, plugin.QueryResultAction{
-			Name: "i18n:plugin_app_open_containing_folder",
-			Icon: common.OpenContainingFolderIcon,
+			Name:        "i18n:plugin_app_open_containing_folder",
+			Icon:        common.OpenContainingFolderIcon,
+			ContextData: contextData,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				if err := a.retriever.OpenAppFolder(ctx, infoCopy); err != nil {
+				if err := a.retriever.OpenAppFolder(ctx, info); err != nil {
 					a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error opening folder: %s", err.Error()))
 				}
 			},
@@ -290,21 +285,23 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string) []
 	}
 
 	actions = append(actions, plugin.QueryResultAction{
-		Name: "i18n:plugin_app_copy_path",
-		Icon: common.CopyIcon,
+		Name:        "i18n:plugin_app_copy_path",
+		Icon:        common.CopyIcon,
+		ContextData: contextData,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-			clipboard.WriteText(infoCopy.Path)
+			clipboard.WriteText(info.Path)
 		},
 	})
 
 	// Only desktop-style apps have a file path suitable for OS context menu.
-	if infoCopy.Type != AppTypeUWP && infoCopy.Type != AppTypeWindowsSetting {
+	if info.Type != AppTypeUWP && info.Type != AppTypeWindowsSetting {
 		actions = append(actions, plugin.QueryResultAction{
-			Name: "i18n:plugin_file_show_context_menu",
-			Icon: common.PluginMenusIcon,
+			Name:        "i18n:plugin_file_show_context_menu",
+			Icon:        common.PluginMenusIcon,
+			ContextData: contextData,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				a.api.Log(ctx, plugin.LogLevelInfo, "Showing context menu for: "+infoCopy.Path)
-				err := nativecontextmenu.ShowContextMenu(infoCopy.Path)
+				a.api.Log(ctx, plugin.LogLevelInfo, "Showing context menu for: "+info.Path)
+				err := nativecontextmenu.ShowContextMenu(info.Path)
 				if err != nil {
 					a.api.Log(ctx, plugin.LogLevelError, err.Error())
 					a.api.Notify(ctx, err.Error())
@@ -696,11 +693,14 @@ func (a *ApplicationPlugin) removeDuplicateApps(ctx context.Context, apps []appI
 	return result
 }
 
-func (a *ApplicationPlugin) handleMRURestore(mruData plugin.MRUData) (*plugin.QueryResult, error) {
-	ctx := context.Background()
-	var contextData appContextData
-	if err := json.Unmarshal([]byte(mruData.ContextData), &contextData); err != nil {
-		return nil, fmt.Errorf("failed to parse context data: %w", err)
+func (a *ApplicationPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	contextData := appContextData{
+		Name: mruData.ContextData["name"],
+		Path: mruData.ContextData["path"],
+		Type: mruData.ContextData["type"],
+	}
+	if contextData.Path == "" && contextData.Name == "" {
+		return nil, fmt.Errorf("empty app context data")
 	}
 
 	var appInfo *appInfo
@@ -725,12 +725,11 @@ func (a *ApplicationPlugin) handleMRURestore(mruData plugin.MRUData) (*plugin.Qu
 		displayPath = a.api.GetTranslation(ctx, "i18n:plugin_app_windows_settings_subtitle")
 	}
 	result := &plugin.QueryResult{
-		Id:          uuid.NewString(),
-		Title:       displayName,
-		SubTitle:    displayPath,
-		Icon:        appInfo.Icon, // Use current icon instead of cached MRU icon to handle cache invalidation
-		ContextData: mruData.ContextData,
-		Actions:     a.buildAppActions(*appInfo, displayName),
+		Id:       uuid.NewString(),
+		Title:    displayName,
+		SubTitle: displayPath,
+		Icon:     appInfo.Icon, // Use current icon instead of cached MRU icon to handle cache invalidation
+		Actions:  a.buildAppActions(*appInfo, displayName, mruData.ContextData),
 	}
 
 	// Track this result for periodic refresh (refreshRunningApps will handle running state)
@@ -786,7 +785,7 @@ func (a *ApplicationPlugin) refreshRunningApps(ctx context.Context) {
 			hasTerminateAction := false
 			if updatableResult.Actions != nil {
 				for _, action := range *updatableResult.Actions {
-					if action.ContextData == "app.terminate" {
+					if action.ContextData["action"] == "terminate" {
 						hasTerminateAction = true
 						break
 					}
@@ -797,9 +796,14 @@ func (a *ApplicationPlugin) refreshRunningApps(ctx context.Context) {
 				// Capture current Pid for the closure
 				currentAppPid := appInfo.Pid
 				*updatableResult.Actions = append(*updatableResult.Actions, plugin.QueryResultAction{
-					Name:        "i18n:plugin_app_terminate",
-					Icon:        common.TerminateAppIcon,
-					ContextData: "app.terminate",
+					Name: "i18n:plugin_app_terminate",
+					Icon: common.TerminateAppIcon,
+					ContextData: common.ContextData{
+						"name":   appInfo.Name,
+						"path":   appInfo.Path,
+						"type":   appInfo.Type,
+						"action": "terminate",
+					},
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						// peacefully kill the process
 						p, getErr := os.FindProcess(currentAppPid)
@@ -825,7 +829,7 @@ func (a *ApplicationPlugin) refreshRunningApps(ctx context.Context) {
 			if updatableResult.Actions != nil {
 				originalLen := len(*updatableResult.Actions)
 				*updatableResult.Actions = lo.Filter(*updatableResult.Actions, func(action plugin.QueryResultAction, _ int) bool {
-					return action.ContextData != "app.terminate"
+					return action.ContextData["action"] != "terminate"
 				})
 				// Only mark as needing update if we actually removed an action
 				if len(*updatableResult.Actions) != originalLen {

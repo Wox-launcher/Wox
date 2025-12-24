@@ -13,6 +13,17 @@ export const PluginJsonRpcTypeRequest: string = "WOX_JSONRPC_REQUEST"
 export const PluginJsonRpcTypeResponse: string = "WOX_JSONRPC_RESPONSE"
 export const PluginJsonRpcTypeSystemLog: string = "WOX_JSONRPC_SYSTEM_LOG"
 
+function parseContextData(raw?: string): MapString {
+  if (!raw) {
+    return {}
+  }
+  try {
+    return JSON.parse(raw) as MapString
+  } catch {
+    return {}
+  }
+}
+
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 export async function handleRequestFromWox(ctx: Context, request: PluginJsonRpcRequest, ws: WebSocket): unknown {
@@ -65,8 +76,8 @@ async function loadPlugin(ctx: Context, request: PluginJsonRpcRequest) {
     Plugin: module["plugin"] as Plugin,
     API: {} as PluginAPI,
     ModulePath: modulePath,
-    Actions: new Map<Result["Id"], (actionContext: ActionContext) => Promise<void>>(),
-    FormActions: new Map<Result["Id"], (actionContext: FormActionContext) => Promise<void>>()
+    Actions: new Map<Result["Id"], (ctx: Context, actionContext: ActionContext) => Promise<void>>(),
+    FormActions: new Map<Result["Id"], (ctx: Context, actionContext: FormActionContext) => Promise<void>>()
   })
 }
 
@@ -123,7 +134,7 @@ async function onPluginSettingChange(ctx: Context, request: PluginJsonRpcRequest
   const settingKey = request.Params.Key
   const settingValue = request.Params.Value
   const callbackId = request.Params.CallbackId
-  plugin.API.settingChangeCallbacks.get(callbackId)?.(settingKey, settingValue)
+  plugin.API.settingChangeCallbacks.get(callbackId)?.(ctx, settingKey, settingValue)
 }
 
 async function onGetDynamicSetting(ctx: Context, request: PluginJsonRpcRequest) {
@@ -135,7 +146,7 @@ async function onGetDynamicSetting(ctx: Context, request: PluginJsonRpcRequest) 
 
   const settingKey = request.Params.Key
   const callbackId = request.Params.CallbackId
-  const setting = plugin.API.getDynamicSettingCallbacks.get(callbackId)?.(settingKey)
+  const setting = plugin.API.getDynamicSettingCallbacks.get(callbackId)?.(ctx, settingKey)
   if (setting === undefined || setting === null) {
     logger.error(ctx, `dynamic setting not found: ${settingKey}`)
     throw new Error(`dynamic setting not found: ${settingKey}`)
@@ -153,7 +164,7 @@ async function onDeepLink(ctx: Context, request: PluginJsonRpcRequest) {
 
   const callbackId = request.Params.CallbackId
   const params = JSON.parse(request.Params.Arguments) as MapString
-  plugin.API.deepLinkCallbacks.get(callbackId)?.(params)
+  plugin.API.deepLinkCallbacks.get(callbackId)?.(ctx, params)
 }
 
 async function onUnload(ctx: Context, request: PluginJsonRpcRequest) {
@@ -164,7 +175,7 @@ async function onUnload(ctx: Context, request: PluginJsonRpcRequest) {
   }
 
   const callbackId = request.Params.CallbackId
-  await plugin.API.unloadCallbacks.get(callbackId)?.()
+  await plugin.API.unloadCallbacks.get(callbackId)?.(ctx)
 }
 
 async function onLLMStream(ctx: Context, request: PluginJsonRpcRequest) {
@@ -266,10 +277,10 @@ async function action(ctx: Context, request: PluginJsonRpcRequest) {
   const actionContext: ActionContext = {
     ResultId: request.Params.ResultId,
     ResultActionId: request.Params.ResultActionId ?? request.Params.ActionId,
-    ContextData: request.Params.ContextData
+    ContextData: parseContextData(request.Params.ContextData)
   }
 
-  pluginAction(actionContext).catch(err => {
+  pluginAction(ctx, actionContext).catch(err => {
     logger.error(ctx, `<${request.PluginName}> plugin action failed: ${String(err)}`)
   })
 
@@ -293,11 +304,11 @@ async function formAction(ctx: Context, request: PluginJsonRpcRequest) {
   const actionContext: FormActionContext = {
     ResultId: request.Params.ResultId,
     ResultActionId: request.Params.ResultActionId ?? request.Params.ActionId,
-    ContextData: request.Params.ContextData,
+    ContextData: parseContextData(request.Params.ContextData),
     Values: values ?? {}
   }
 
-  pluginAction(actionContext).catch(err => {
+  pluginAction(ctx, actionContext).catch(err => {
     logger.error(ctx, `<${request.PluginName}> plugin form action failed: ${String(err)}`)
   })
 
@@ -319,7 +330,7 @@ async function onMRURestore(ctx: Context, request: PluginJsonRpcRequest): Promis
     Title: mruDataRaw.Title || "",
     SubTitle: mruDataRaw.SubTitle || "",
     Icon: mruDataRaw.Icon || { ImageType: "absolute", ImageData: "" },
-    ContextData: mruDataRaw.ContextData || ""
+    ContextData: typeof mruDataRaw.ContextData === "string" ? parseContextData(mruDataRaw.ContextData) : mruDataRaw.ContextData ?? {}
   }
 
   const callback = pluginInstance.API.mruRestoreCallbacks.get(callbackId)
@@ -328,7 +339,7 @@ async function onMRURestore(ctx: Context, request: PluginJsonRpcRequest): Promis
   }
 
   try {
-    const result = await callback(mruData)
+    const result = await callback(ctx, mruData)
     return result
   } catch (error) {
     logger.error(ctx, `MRU restore callback error: ${error}`)

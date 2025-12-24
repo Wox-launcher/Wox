@@ -1,7 +1,7 @@
 import asyncio
 import json
 import uuid
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Awaitable, Callable, Dict, Optional
 
 import websockets
 from wox_plugin import (
@@ -10,6 +10,7 @@ from wox_plugin import (
     ChatStreamCallback,
     Context,
     Conversation,
+    LogLevel,
     Query,
     MetadataCommand,
     MRUData,
@@ -30,12 +31,14 @@ class PluginAPI(PublicAPI):
         self.ws = ws
         self.plugin_id = plugin_id
         self.plugin_name = plugin_name
-        self.setting_change_callbacks: Dict[str, Callable[[str, str], None]] = {}
-        self.get_dynamic_setting_callbacks: Dict[str, Callable[[str], PluginSettingDefinitionItem]] = {}
-        self.deep_link_callbacks: Dict[str, Callable[[Dict[str, str]], None]] = {}
-        self.unload_callbacks: Dict[str, Callable[[], None]] = {}
+        self.setting_change_callbacks: Dict[str, Callable[[Context, str, str], Awaitable[None] | None]] = {}
+        self.get_dynamic_setting_callbacks: Dict[
+            str, Callable[[Context, str], PluginSettingDefinitionItem | Awaitable[PluginSettingDefinitionItem]]
+        ] = {}
+        self.deep_link_callbacks: Dict[str, Callable[[Context, Dict[str, str]], Awaitable[None] | None]] = {}
+        self.unload_callbacks: Dict[str, Callable[[Context], Awaitable[None] | None]] = {}
         self.llm_stream_callbacks: Dict[str, ChatStreamCallback] = {}
-        self.mru_restore_callbacks: Dict[str, Callable[[MRUData], Optional[Result]]] = {}
+        self.mru_restore_callbacks: Dict[str, Callable[[Context, MRUData], Optional[Result] | Awaitable[Optional[Result]]]] = {}
 
     async def invoke_method(self, ctx: Context, method: str, params: Dict[str, Any]) -> Any:
         """Invoke a method on Wox"""
@@ -83,9 +86,9 @@ class PluginAPI(PublicAPI):
     async def change_query(self, ctx: Context, query: ChangeQueryParam) -> None:
         """Change the query in Wox"""
         params = {
-            "QueryType": query.query_type,
-            "QueryText": query.query_text,
-            "QuerySelection": (query.query_selection.__dict__ if query.query_selection else None),
+            "queryType": query.query_type,
+            "queryText": query.query_text,
+            "querySelection": (query.query_selection.__dict__ if query.query_selection else None),
         }
         await self.invoke_method(ctx, "ChangeQuery", params)
 
@@ -106,7 +109,7 @@ class PluginAPI(PublicAPI):
         """Show a notification message"""
         await self.invoke_method(ctx, "Notify", {"message": message})
 
-    async def log(self, ctx: Context, level: str, msg: str) -> None:
+    async def log(self, ctx: Context, level: LogLevel, msg: str) -> None:
         """Write log"""
         await self.invoke_method(ctx, "Log", {"level": level, "msg": msg})
 
@@ -128,25 +131,37 @@ class PluginAPI(PublicAPI):
             {"key": key, "value": value, "isPlatformSpecific": is_platform_specific},
         )
 
-    async def on_setting_changed(self, ctx: Context, callback: Callable[[str, str], None]) -> None:
+    async def on_setting_changed(
+        self,
+        ctx: Context,
+        callback: Callable[[Context, str, str], Awaitable[None] | None],
+    ) -> None:
         """Register setting changed callback"""
         callback_id = str(uuid.uuid4())
         self.setting_change_callbacks[callback_id] = callback
-        await self.invoke_method(ctx, "OnSettingChanged", {"callbackId": callback_id})
+        await self.invoke_method(ctx, "OnPluginSettingChanged", {"callbackId": callback_id})
 
-    async def on_get_dynamic_setting(self, ctx: Context, callback: Callable[[str], PluginSettingDefinitionItem]) -> None:
+    async def on_get_dynamic_setting(
+        self,
+        ctx: Context,
+        callback: Callable[[Context, str], PluginSettingDefinitionItem | Awaitable[PluginSettingDefinitionItem]],
+    ) -> None:
         """Register dynamic setting callback"""
         callback_id = str(uuid.uuid4())
         self.get_dynamic_setting_callbacks[callback_id] = callback
         await self.invoke_method(ctx, "OnGetDynamicSetting", {"callbackId": callback_id})
 
-    async def on_deep_link(self, ctx: Context, callback: Callable[[Dict[str, str]], None]) -> None:
+    async def on_deep_link(
+        self,
+        ctx: Context,
+        callback: Callable[[Context, Dict[str, str]], Awaitable[None] | None],
+    ) -> None:
         """Register deep link callback"""
         callback_id = str(uuid.uuid4())
         self.deep_link_callbacks[callback_id] = callback
         await self.invoke_method(ctx, "OnDeepLink", {"callbackId": callback_id})
 
-    async def on_unload(self, ctx: Context, callback: Callable[[], None]) -> None:
+    async def on_unload(self, ctx: Context, callback: Callable[[Context], Awaitable[None] | None]) -> None:
         """Register unload callback"""
         callback_id = str(uuid.uuid4())
         self.unload_callbacks[callback_id] = callback
@@ -179,7 +194,11 @@ class PluginAPI(PublicAPI):
             },
         )
 
-    async def on_mru_restore(self, ctx: Context, callback: Callable[[MRUData], Optional[Result]]) -> None:
+    async def on_mru_restore(
+        self,
+        ctx: Context,
+        callback: Callable[[Context, MRUData], Optional[Result] | Awaitable[Optional[Result]]],
+    ) -> None:
         """Register MRU restore callback"""
         callback_id = str(uuid.uuid4())
         self.mru_restore_callbacks[callback_id] = callback

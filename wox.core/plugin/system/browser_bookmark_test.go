@@ -255,24 +255,32 @@ func (m *mockAPI) GetTranslation(ctx context.Context, key string) string { retur
 func (m *mockAPI) GetSetting(ctx context.Context, key string) string     { return "" }
 func (m *mockAPI) SaveSetting(ctx context.Context, key string, value string, isGlobal bool) {
 }
-func (m *mockAPI) GetAllSettings(ctx context.Context) map[string]string                          { return nil }
-func (m *mockAPI) OpenSettingDialog(ctx context.Context)                                         {}
-func (m *mockAPI) HideApp(ctx context.Context)                                                   {}
-func (m *mockAPI) ShowApp(ctx context.Context)                                                   {}
-func (m *mockAPI) ChangeQuery(ctx context.Context, query common.PlainQuery)                      {}
-func (m *mockAPI) RestartApp(ctx context.Context)                                                {}
-func (m *mockAPI) ReloadPlugin(ctx context.Context, pluginId string)                             {}
-func (m *mockAPI) RemovePlugin(ctx context.Context, pluginId string)                             {}
-func (m *mockAPI) OnSettingChanged(ctx context.Context, callback func(key string, value string)) {}
-func (m *mockAPI) OnGetDynamicSetting(context.Context, func(string) definition.PluginSettingDefinitionItem) {
+func (m *mockAPI) GetAllSettings(ctx context.Context) map[string]string     { return nil }
+func (m *mockAPI) OpenSettingDialog(ctx context.Context)                    {}
+func (m *mockAPI) HideApp(ctx context.Context)                              {}
+func (m *mockAPI) ShowApp(ctx context.Context)                              {}
+func (m *mockAPI) ChangeQuery(ctx context.Context, query common.PlainQuery) {}
+func (m *mockAPI) RestartApp(ctx context.Context)                           {}
+func (m *mockAPI) ReloadPlugin(ctx context.Context, pluginId string)        {}
+func (m *mockAPI) RemovePlugin(ctx context.Context, pluginId string)        {}
+func (m *mockAPI) OnSettingChanged(ctx context.Context, callback func(ctx context.Context, key string, value string)) {
 }
-func (m *mockAPI) OnDeepLink(ctx context.Context, callback func(arguments map[string]string))   {}
-func (m *mockAPI) OnUnload(ctx context.Context, callback func())                                {}
+func (m *mockAPI) OnGetDynamicSetting(
+	context.Context,
+	func(context.Context, string) definition.PluginSettingDefinitionItem,
+) {
+}
+func (m *mockAPI) OnDeepLink(ctx context.Context, callback func(context.Context, map[string]string)) {
+}
+func (m *mockAPI) OnUnload(ctx context.Context, callback func(context.Context))                 {}
 func (m *mockAPI) RegisterQueryCommands(ctx context.Context, commands []plugin.MetadataCommand) {}
 func (m *mockAPI) AIChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions, callback common.ChatStreamFunc) error {
 	return nil
 }
-func (m *mockAPI) OnMRURestore(ctx context.Context, callback func(mruData plugin.MRUData) (*plugin.QueryResult, error)) {
+func (m *mockAPI) OnMRURestore(
+	ctx context.Context,
+	callback func(context.Context, plugin.MRUData) (*plugin.QueryResult, error),
+) {
 }
 func (m *mockAPI) UpdateResult(ctx context.Context, result plugin.UpdatableResult) bool {
 	return false

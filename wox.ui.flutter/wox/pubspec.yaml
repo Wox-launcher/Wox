@@ -46,7 +46,7 @@ dependencies:
   lpinyin: ^2.0.3
   syncfusion_flutter_pdfviewer: ^31.1.21
   desktop_drop: ^0.7.0
-  file_picker: ^10.3.7
+  file_picker: ^10.3.8
   hotkey_manager: ^0.2.3
   url_launcher: ^6.2.5
   flutter_image_slideshow: ^0.1.6

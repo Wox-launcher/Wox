@@ -115,12 +115,12 @@ func (c *BrowserPlugin) Init(ctx context.Context, initParams plugin.InitParams) 
 		}
 	})
 
-	c.api.OnSettingChanged(ctx, func(key, value string) {
+	c.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, value string) {
 		if key == browserWebsocketPortSettingKey {
-			util.Go(ctx, "newWebsocketServer on port changed", func() {
-				err := c.newWebsocketServer(ctx)
+			util.Go(callbackCtx, "newWebsocketServer on port changed", func() {
+				err := c.newWebsocketServer(callbackCtx)
 				if err != nil {
-					c.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_browser_server_start_error"), err.Error()))
+					c.api.Notify(callbackCtx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(callbackCtx, "plugin_browser_server_start_error"), err.Error()))
 				}
 			})
 		}

@@ -41,11 +41,11 @@ type API interface {
 	GetTranslation(ctx context.Context, key string) string
 	GetSetting(ctx context.Context, key string) string
 	SaveSetting(ctx context.Context, key string, value string, isPlatformSpecific bool)
-	OnSettingChanged(ctx context.Context, callback func(key string, value string))
-	OnGetDynamicSetting(ctx context.Context, callback func(key string) definition.PluginSettingDefinitionItem)
-	OnDeepLink(ctx context.Context, callback func(arguments map[string]string))
-	OnUnload(ctx context.Context, callback func())
-	OnMRURestore(ctx context.Context, callback func(mruData MRUData) (*QueryResult, error))
+	OnSettingChanged(ctx context.Context, callback func(ctx context.Context, key string, value string))
+	OnGetDynamicSetting(ctx context.Context, callback func(ctx context.Context, key string) definition.PluginSettingDefinitionItem)
+	OnDeepLink(ctx context.Context, callback func(ctx context.Context, arguments map[string]string))
+	OnUnload(ctx context.Context, callback func(ctx context.Context))
+	OnMRURestore(ctx context.Context, callback func(ctx context.Context, mruData MRUData) (*QueryResult, error))
 	RegisterQueryCommands(ctx context.Context, commands []MetadataCommand)
 	AIChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions, callback common.ChatStreamFunc) error
 
@@ -262,20 +262,23 @@ func (a *APIImpl) SaveSetting(ctx context.Context, key string, value string, isP
 	a.pluginInstance.Setting.Set(finalKey, value)
 	if !exist || (existValue != value) {
 		for _, callback := range a.pluginInstance.SettingChangeCallbacks {
-			callback(key, value)
+			callback(ctx, key, value)
 		}
 	}
 }
 
-func (a *APIImpl) OnSettingChanged(ctx context.Context, callback func(key string, value string)) {
+func (a *APIImpl) OnSettingChanged(ctx context.Context, callback func(ctx context.Context, key string, value string)) {
 	a.pluginInstance.SettingChangeCallbacks = append(a.pluginInstance.SettingChangeCallbacks, callback)
 }
 
-func (a *APIImpl) OnGetDynamicSetting(ctx context.Context, callback func(key string) definition.PluginSettingDefinitionItem) {
+func (a *APIImpl) OnGetDynamicSetting(
+	ctx context.Context,
+	callback func(ctx context.Context, key string) definition.PluginSettingDefinitionItem,
+) {
 	a.pluginInstance.DynamicSettingCallbacks = append(a.pluginInstance.DynamicSettingCallbacks, callback)
 }
 
-func (a *APIImpl) OnDeepLink(ctx context.Context, callback func(arguments map[string]string)) {
+func (a *APIImpl) OnDeepLink(ctx context.Context, callback func(ctx context.Context, arguments map[string]string)) {
 	if !a.pluginInstance.Metadata.IsSupportFeature(MetadataFeatureDeepLink) {
 		a.Log(ctx, LogLevelError, "plugin has no access to deep link feature")
 		return
@@ -284,7 +287,7 @@ func (a *APIImpl) OnDeepLink(ctx context.Context, callback func(arguments map[st
 	a.pluginInstance.DeepLinkCallbacks = append(a.pluginInstance.DeepLinkCallbacks, callback)
 }
 
-func (a *APIImpl) OnUnload(ctx context.Context, callback func()) {
+func (a *APIImpl) OnUnload(ctx context.Context, callback func(ctx context.Context)) {
 	a.pluginInstance.UnloadCallbacks = append(a.pluginInstance.UnloadCallbacks, callback)
 }
 
@@ -435,7 +438,7 @@ func (a *APIImpl) applyStartTimeIfAbsent(streamResult *common.ChatStreamData) {
 	}
 }
 
-func (a *APIImpl) OnMRURestore(ctx context.Context, callback func(mruData MRUData) (*QueryResult, error)) {
+func (a *APIImpl) OnMRURestore(ctx context.Context, callback func(ctx context.Context, mruData MRUData) (*QueryResult, error)) {
 	if !a.pluginInstance.Metadata.IsSupportFeature(MetadataFeatureMRU) {
 		a.Log(ctx, LogLevelError, "plugin has no access to MRU feature")
 		return

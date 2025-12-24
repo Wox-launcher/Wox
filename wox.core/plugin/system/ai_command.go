@@ -128,9 +128,9 @@ func (c *Plugin) GetMetadata() plugin.Metadata {
 
 func (c *Plugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	c.api = initParams.API
-	c.api.OnSettingChanged(ctx, func(key string, value string) {
+	c.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, value string) {
 		if key == "commands" {
-			c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("ai command setting changed: %s", value))
+			c.api.Log(callbackCtx, plugin.LogLevelInfo, fmt.Sprintf("ai command setting changed: %s", value))
 			var commands []plugin.MetadataCommand
 			gjson.Parse(value).ForEach(func(_, command gjson.Result) bool {
 				commands = append(commands, plugin.MetadataCommand{
@@ -140,8 +140,8 @@ func (c *Plugin) Init(ctx context.Context, initParams plugin.InitParams) {
 
 				return true
 			})
-			c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("registering query commands: %v", commands))
-			c.api.RegisterQueryCommands(ctx, commands)
+			c.api.Log(callbackCtx, plugin.LogLevelInfo, fmt.Sprintf("registering query commands: %v", commands))
+			c.api.RegisterQueryCommands(callbackCtx, commands)
 		}
 	})
 }

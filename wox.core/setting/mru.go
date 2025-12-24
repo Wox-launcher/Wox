@@ -16,14 +16,14 @@ import (
 
 // MRUItem represents a Most Recently Used item
 type MRUItem struct {
-	Hash        string          `json:"hash"`
-	PluginID    string          `json:"pluginId"`
-	Title       string          `json:"title"`
-	SubTitle    string          `json:"subTitle"`
-	Icon        common.WoxImage `json:"icon"`
-	ContextData string          `json:"contextData"`
-	LastUsed    int64           `json:"lastUsed"`
-	UseCount    int             `json:"useCount"`
+	Hash        string             `json:"hash"`
+	PluginID    string             `json:"pluginId"`
+	Title       string             `json:"title"`
+	SubTitle    string             `json:"subTitle"`
+	Icon        common.WoxImage    `json:"icon"`
+	ContextData common.ContextData `json:"contextData"`
+	LastUsed    int64              `json:"lastUsed"`
+	UseCount    int                `json:"useCount"`
 }
 
 // MRUManager manages Most Recently Used items
@@ -46,6 +46,7 @@ func (m *MRUManager) AddMRUItem(ctx context.Context, item MRUItem) error {
 
 	now := time.Now()
 	timestamp := util.GetSystemTimestamp()
+	contextDataStr := item.ContextData.Marshal()
 
 	// Check if record exists
 	var existingRecord database.MRURecord
@@ -59,7 +60,7 @@ func (m *MRUManager) AddMRUItem(ctx context.Context, item MRUItem) error {
 			Title:       item.Title,
 			SubTitle:    item.SubTitle,
 			Icon:        string(iconData),
-			ContextData: item.ContextData,
+			ContextData: contextDataStr,
 			LastUsed:    timestamp,
 			UseCount:    1,
 			CreatedAt:   now,
@@ -73,7 +74,7 @@ func (m *MRUManager) AddMRUItem(ctx context.Context, item MRUItem) error {
 		updates := map[string]interface{}{
 			"last_used":    timestamp,
 			"use_count":    existingRecord.UseCount + 1,
-			"context_data": item.ContextData, // Update context data in case it changed
+			"context_data": contextDataStr,   // Update context data in case it changed
 			"icon":         string(iconData), // Update icon in case it changed
 			"updated_at":   now,
 		}
@@ -134,7 +135,7 @@ func (m *MRUManager) GetMRUItems(ctx context.Context, limit int) ([]MRUItem, err
 			Title:       record.Title,
 			SubTitle:    record.SubTitle,
 			Icon:        icon,
-			ContextData: record.ContextData,
+			ContextData: common.UnmarshalContextData(record.ContextData),
 			LastUsed:    record.LastUsed,
 			UseCount:    record.UseCount,
 		})

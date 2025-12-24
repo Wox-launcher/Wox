@@ -1,7 +1,8 @@
-from typing import Callable, Dict, List, Optional, Protocol
+from typing import Awaitable, Callable, Dict, List, Optional, Protocol
 
 from .models.ai import AIModel, ChatStreamCallback, Conversation
 from .models.context import Context
+from .models.log import LogLevel
 from .models.mru import MRUData
 from .models.query import ChangeQueryParam, MetadataCommand, Query, RefreshQueryParam, CopyParams
 from .models.result import Result, UpdatableResult  # noqa: F401
@@ -31,7 +32,7 @@ class PublicAPI(Protocol):
         """Show a notification message"""
         ...
 
-    async def log(self, ctx: Context, level: str, msg: str) -> None:
+    async def log(self, ctx: Context, level: LogLevel, msg: str) -> None:
         """Write log message"""
         ...
 
@@ -47,19 +48,31 @@ class PublicAPI(Protocol):
         """Save setting value"""
         ...
 
-    async def on_setting_changed(self, ctx: Context, callback: Callable[[str, str], None]) -> None:
+    async def on_setting_changed(
+        self,
+        ctx: Context,
+        callback: Callable[[Context, str, str], Awaitable[None] | None],
+    ) -> None:
         """Register setting change callback"""
         ...
 
-    async def on_get_dynamic_setting(self, ctx: Context, callback: Callable[[str], PluginSettingDefinitionItem]) -> None:
+    async def on_get_dynamic_setting(
+        self,
+        ctx: Context,
+        callback: Callable[[Context, str], PluginSettingDefinitionItem | Awaitable[PluginSettingDefinitionItem]],
+    ) -> None:
         """Register dynamic setting callback"""
         ...
 
-    async def on_deep_link(self, ctx: Context, callback: Callable[[Dict[str, str]], None]) -> None:
+    async def on_deep_link(
+        self,
+        ctx: Context,
+        callback: Callable[[Context, Dict[str, str]], Awaitable[None] | None],
+    ) -> None:
         """Register deep link callback"""
         ...
 
-    async def on_unload(self, ctx: Context, callback: Callable[[], None]) -> None:
+    async def on_unload(self, ctx: Context, callback: Callable[[Context], Awaitable[None] | None]) -> None:
         """Register unload callback"""
         ...
 
@@ -88,7 +101,11 @@ class PublicAPI(Protocol):
         """
         ...
 
-    async def on_mru_restore(self, ctx: Context, callback: Callable[[MRUData], Optional[Result]]) -> None:
+    async def on_mru_restore(
+        self,
+        ctx: Context,
+        callback: Callable[[Context, MRUData], Optional[Result] | Awaitable[Optional[Result]]],
+    ) -> None:
         """Register MRU restore callback
 
         Args:

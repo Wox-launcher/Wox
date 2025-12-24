@@ -18,11 +18,11 @@ type Instance struct {
 	Host               Host                   // plugin host to run this plugin
 	Setting            *setting.PluginSetting // setting for this plugin
 
-	DynamicSettingCallbacks []func(key string) definition.PluginSettingDefinitionItem // dynamic setting callbacks
-	SettingChangeCallbacks  []func(key string, value string)
-	DeepLinkCallbacks       []func(arguments map[string]string)
-	UnloadCallbacks         []func()
-	MRURestoreCallbacks     []func(mruData MRUData) (*QueryResult, error) // MRU restore callbacks
+	DynamicSettingCallbacks []func(ctx context.Context, key string) definition.PluginSettingDefinitionItem // dynamic setting callbacks
+	SettingChangeCallbacks  []func(ctx context.Context, key string, value string)
+	DeepLinkCallbacks       []func(ctx context.Context, arguments map[string]string)
+	UnloadCallbacks         []func(ctx context.Context)
+	MRURestoreCallbacks     []func(ctx context.Context, mruData MRUData) (*QueryResult, error) // MRU restore callbacks
 
 	// for measure performance
 	LoadStartTimestamp    int64

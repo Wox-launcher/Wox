@@ -1,5 +1,8 @@
+import json
 from dataclasses import dataclass
-from typing import Optional, Callable, TYPE_CHECKING
+from typing import Dict, Optional, Callable, TYPE_CHECKING
+
+from .context import Context
 from .image import WoxImage
 
 if TYPE_CHECKING:
@@ -14,17 +17,24 @@ class MRUData:
     title: str
     sub_title: str
     icon: WoxImage
-    context_data: str
+    context_data: Dict[str, str]
 
     @classmethod
     def from_dict(cls, data: dict) -> "MRUData":
         """Create MRUData from dictionary"""
+        context_data = data.get("ContextData", {}) or {}
+        if isinstance(context_data, str):
+            try:
+                context_data = json.loads(context_data)
+            except Exception:
+                context_data = {}
+
         return cls(
             plugin_id=data.get("PluginID", ""),
             title=data.get("Title", ""),
             sub_title=data.get("SubTitle", ""),
             icon=WoxImage.from_dict(data.get("Icon", {})),
-            context_data=data.get("ContextData", ""),
+            context_data=context_data if isinstance(context_data, dict) else {},
         )
 
     def to_dict(self) -> dict:
@@ -40,4 +50,4 @@ class MRUData:
 
 # Type alias for MRU restore callback
 # Note: We use forward reference to avoid circular import
-MRURestoreCallback = Callable[["MRUData"], Optional["Result"]]
+MRURestoreCallback = Callable[[Context, "MRUData"], Optional["Result"]]

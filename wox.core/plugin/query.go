@@ -125,10 +125,8 @@ type QueryResult struct {
 	// Score of the group, the higher the score, the more relevant the group is, more likely to be displayed on top
 	GroupScore int64
 	// Tails are additional results associate with this result, can be displayed in result detail view
-	Tails []QueryResultTail
-	// Additional data associate with this result, can be retrieved in Action function
-	ContextData string
-	Actions     []QueryResultAction
+	Tails   []QueryResultTail
+	Actions []QueryResultAction
 }
 
 type QueryResultTail struct {
@@ -138,7 +136,7 @@ type QueryResultTail struct {
 	Text  string          // only available when type is QueryResultTailTypeText
 	Image common.WoxImage // only available when type is QueryResultTailTypeImage
 	// Additional data associate with this tail, can be retrieved later
-	ContextData string
+	ContextData map[string]string
 
 	// internal use
 	IsSystemTail bool
@@ -176,7 +174,7 @@ type QueryResultAction struct {
 	// Wox will normalize the hotkey to platform specific format. E.g. "ctrl" will be converted to "control" on macOS
 	Hotkey string
 	// Additional data associate with this action, can be retrieved later
-	ContextData string
+	ContextData map[string]string
 
 	// For execute action
 	Action func(ctx context.Context, actionContext ActionContext) `json:"-"` // Exclude from JSON serialization
@@ -200,8 +198,8 @@ type ActionContext struct {
 	// Useful for calling UpdateResul API to update this specific action's UI
 	ResultActionId string
 
-	// Additional data associate with this result
-	ContextData string
+	// Additional data associate with this action
+	ContextData common.ContextData
 }
 
 type FormActionContext struct {
@@ -211,16 +209,15 @@ type FormActionContext struct {
 
 func (q *QueryResult) ToUI() QueryResultUI {
 	return QueryResultUI{
-		Id:          q.Id,
-		Title:       q.Title,
-		SubTitle:    q.SubTitle,
-		Icon:        q.Icon,
-		Preview:     q.Preview,
-		Score:       q.Score,
-		Group:       q.Group,
-		GroupScore:  q.GroupScore,
-		Tails:       q.Tails,
-		ContextData: q.ContextData,
+		Id:         q.Id,
+		Title:      q.Title,
+		SubTitle:   q.SubTitle,
+		Icon:       q.Icon,
+		Preview:    q.Preview,
+		Score:      q.Score,
+		Group:      q.Group,
+		GroupScore: q.GroupScore,
+		Tails:      q.Tails,
 		Actions: lo.Map(q.Actions, func(action QueryResultAction, index int) QueryResultActionUI {
 			actionType := action.Type
 			if actionType == "" {
@@ -235,6 +232,7 @@ func (q *QueryResult) ToUI() QueryResultUI {
 				PreventHideAfterAction: action.PreventHideAfterAction,
 				Hotkey:                 action.Hotkey,
 				Form:                   action.Form,
+				ContextData:            action.ContextData,
 				IsSystemAction:         action.IsSystemAction,
 			}
 		}),
@@ -242,18 +240,17 @@ func (q *QueryResult) ToUI() QueryResultUI {
 }
 
 type QueryResultUI struct {
-	QueryId     string
-	Id          string
-	Title       string
-	SubTitle    string
-	Icon        common.WoxImage
-	Preview     WoxPreview
-	Score       int64
-	Group       string
-	GroupScore  int64
-	Tails       []QueryResultTail
-	ContextData string
-	Actions     []QueryResultActionUI
+	QueryId    string
+	Id         string
+	Title      string
+	SubTitle   string
+	Icon       common.WoxImage
+	Preview    WoxPreview
+	Score      int64
+	Group      string
+	GroupScore int64
+	Tails      []QueryResultTail
+	Actions    []QueryResultActionUI
 }
 
 // PushResultsPayload is used to push additional results to UI for a query.
@@ -271,6 +268,7 @@ type QueryResultActionUI struct {
 	PreventHideAfterAction bool
 	Hotkey                 string
 	Form                   definition.PluginSettingDefinitions
+	ContextData            map[string]string
 
 	// internal use
 	IsSystemAction bool

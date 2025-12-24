@@ -104,7 +104,6 @@ export interface Result {
   Group?: string
   GroupScore?: number
   Tails?: ResultTail[]
-  ContextData?: string
   Actions?: ResultAction[]
 }
 
@@ -115,7 +114,7 @@ export interface ResultTail {
   /** Tail id, should be unique. It's optional, if you don't set it, Wox will assign a random id for you */
   Id?: string
   /** Additional data associate with this tail, can be retrieved later */
-  ContextData?: string
+  ContextData?: MapString
 }
 
 /**
@@ -175,7 +174,7 @@ export interface ExecuteResultAction {
    * If true, Wox will not hide after user select this result
    */
   PreventHideAfterAction?: boolean
-  Action: (actionContext: ActionContext) => Promise<void>
+  Action: (ctx: Context, actionContext: ActionContext) => Promise<void>
   /**
    * Hotkey to trigger this action. E.g. "ctrl+Shift+Space", "Ctrl+1", "Command+K"
    * Case insensitive, space insensitive
@@ -186,7 +185,7 @@ export interface ExecuteResultAction {
   /**
    * Additional data associate with this action, can be retrieved later
    */
-  ContextData?: string
+  ContextData?: MapString
 }
 
 export interface FormResultAction {
@@ -207,7 +206,7 @@ export interface FormResultAction {
    */
   PreventHideAfterAction?: boolean
   Form: PluginSettingDefinitionItem[]
-  OnSubmit: (actionContext: FormActionContext) => Promise<void>
+  OnSubmit: (ctx: Context, actionContext: FormActionContext) => Promise<void>
   /**
    * Hotkey to trigger this action. E.g. "ctrl+Shift+Space", "Ctrl+1", "Command+K"
    * Case insensitive, space insensitive
@@ -218,7 +217,7 @@ export interface FormResultAction {
   /**
    * Additional data associate with this action, can be retrieved later
    */
-  ContextData?: string
+  ContextData?: MapString
 }
 
 export interface ActionContext {
@@ -235,9 +234,9 @@ export interface ActionContext {
    */
   ResultActionId: string
   /**
-   * Additional data associated with this result
+   * Additional data associated with this action
    */
-  ContextData: string
+  ContextData: MapString
 }
 
 export interface FormActionContext extends ActionContext {
@@ -249,7 +248,7 @@ export interface MRUData {
   Title: string
   SubTitle: string
   Icon: WoxImage
-  ContextData: string
+  ContextData: MapString
 }
 
 export interface PluginInitParams {
@@ -333,22 +332,22 @@ export interface PublicAPI {
   /**
    * Register setting changed callback
    */
-  OnSettingChanged: (ctx: Context, callback: (key: string, value: string) => void) => Promise<void>
+  OnSettingChanged: (ctx: Context, callback: (ctx: Context, key: string, value: string) => void) => Promise<void>
 
   /**
    * Get dynamic setting definition
    */
-  OnGetDynamicSetting: (ctx: Context, callback: (key: string) => PluginSettingDefinitionItem) => Promise<void>
+  OnGetDynamicSetting: (ctx: Context, callback: (ctx: Context, key: string) => PluginSettingDefinitionItem) => Promise<void>
 
   /**
    * Register deep link callback
    */
-  OnDeepLink: (ctx: Context, callback: (arguments: MapString) => void) => Promise<void>
+  OnDeepLink: (ctx: Context, callback: (ctx: Context, arguments: MapString) => void) => Promise<void>
 
   /**
    * Register on load event
    */
-  OnUnload: (ctx: Context, callback: () => Promise<void>) => Promise<void>
+  OnUnload: (ctx: Context, callback: (ctx: Context) => Promise<void>) => Promise<void>
 
   /**
    * Register query commands
@@ -366,7 +365,7 @@ export interface PublicAPI {
    * @param callback Callback function that takes MRUData and returns Result or null
    *                 Return null if the MRU data is no longer valid
    */
-  OnMRURestore: (ctx: Context, callback: (mruData: MRUData) => Promise<Result | null>) => Promise<void>
+  OnMRURestore: (ctx: Context, callback: (ctx: Context, mruData: MRUData) => Promise<Result | null>) => Promise<void>
 
   /**
    * Get the current state of a result that is displayed in the UI.
@@ -380,7 +379,7 @@ export interface PublicAPI {
    * Example:
    * ```typescript
    * // In an action handler
-   * Action: async (actionContext) => {
+   * Action: async (ctx, actionContext) => {
    *   // Get current result state
    *   const updatableResult = await api.GetUpdatableResult(ctx, actionContext.ResultId)
    *   if (updatableResult === null) {
@@ -417,7 +416,7 @@ export interface PublicAPI {
    * Example:
    * ```typescript
    * // In an action handler
-   * Action: async (actionContext) => {
+   * Action: async (ctx, actionContext) => {
    *   // Update only the title
    *   const success = await api.UpdateResult(ctx, {
    *     Id: actionContext.ResultId,
@@ -457,7 +456,7 @@ export interface PublicAPI {
    *
    * Example - Refresh after marking item as favorite:
    * ```typescript
-   * Action: async (actionContext) => {
+   * Action: async (ctx, actionContext) => {
    *   markAsFavorite(item)
    *   // Refresh query and preserve user's current selection
    *   await api.RefreshQuery(ctx, { PreserveSelectedIndex: true })
@@ -466,7 +465,7 @@ export interface PublicAPI {
    *
    * Example - Refresh after deleting item:
    * ```typescript
-   * Action: async (actionContext) => {
+   * Action: async (ctx, actionContext) => {
    *   deleteItem(item)
    *   // Refresh query and reset to first item
    *   await api.RefreshQuery(ctx, { PreserveSelectedIndex: false })

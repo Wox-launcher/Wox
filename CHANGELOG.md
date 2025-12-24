@@ -4,6 +4,9 @@
 
 - Add
 
+  - [`Emoji`] Add ai search support for Emoji plugin
+    ![](screenshots/emoji_ai_search.png)
+
 ## v2.0.0-beta.7 — 2025-12-19
 
 - Add

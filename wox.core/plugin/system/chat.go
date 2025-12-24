@@ -259,21 +259,21 @@ func (r *AIChatPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 		r.agents = agents
 	}
 
-	r.api.OnSettingChanged(ctx, func(key string, value string) {
+	r.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, value string) {
 		if key == "agents" {
-			agents, err := r.loadAgents(ctx)
+			agents, err := r.loadAgents(callbackCtx)
 			if err != nil {
-				r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("AI: Failed to load agents: %s", err.Error()))
+				r.api.Log(callbackCtx, plugin.LogLevelError, fmt.Sprintf("AI: Failed to load agents: %s", err.Error()))
 				return
 			}
 
 			r.agents = agents
 
-			plugin.GetPluginManager().GetUI().ReloadChatResources(ctx, "agents")
+			plugin.GetPluginManager().GetUI().ReloadChatResources(callbackCtx, "agents")
 		}
 
 		if key == "mcp_servers" {
-			r.reloadMCPServers(ctx)
+			r.reloadMCPServers(callbackCtx)
 		}
 	})
 
@@ -673,11 +673,10 @@ func (r *AIChatPlugin) getNewChatPreviewData(ctx context.Context) plugin.QueryRe
 	r.resultChatIdMap.Store(chatData.Id, resultId)
 
 	return plugin.QueryResult{
-		Id:          resultId,
-		Title:       "i18n:ui_ai_chat_new_chat",
-		SubTitle:    "i18n:ui_ai_chat_create_new_chat",
-		Icon:        aiChatIcon,
-		ContextData: chatData.Id,
+		Id:       resultId,
+		Title:    "i18n:ui_ai_chat_new_chat",
+		SubTitle: "i18n:ui_ai_chat_create_new_chat",
+		Icon:     aiChatIcon,
 		Preview: plugin.WoxPreview{
 			PreviewType:    plugin.WoxPreviewTypeChat,
 			PreviewData:    string(previewData),
@@ -687,6 +686,7 @@ func (r *AIChatPlugin) getNewChatPreviewData(ctx context.Context) plugin.QueryRe
 			{
 				Name:                   "i18n:ui_ai_chat_start_chat",
 				PreventHideAfterAction: true,
+				ContextData:            common.ContextData{"chatId": chatData.Id},
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					plugin.GetPluginManager().GetUI().FocusToChatInput(ctx)
 				},
@@ -738,10 +738,9 @@ func (r *AIChatPlugin) Query(ctx context.Context, query plugin.Query) (results [
 
 		group, groupScore := r.getResultGroup(ctx, chat)
 		results = append(results, plugin.QueryResult{
-			Id:          resultId,
-			Title:       chat.Title,
-			Icon:        resultIcon,
-			ContextData: chat.Id,
+			Id:    resultId,
+			Title: chat.Title,
+			Icon:  resultIcon,
 			Preview: plugin.WoxPreview{
 				PreviewType:    plugin.WoxPreviewTypeChat,
 				PreviewData:    string(previewData),
@@ -751,6 +750,7 @@ func (r *AIChatPlugin) Query(ctx context.Context, query plugin.Query) (results [
 				{
 					Name:                   continueChatText,
 					PreventHideAfterAction: true,
+					ContextData:            common.ContextData{"chatId": chat.Id},
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						// focus to chat input
 						plugin.GetPluginManager().GetUI().FocusToChatInput(ctx)
@@ -760,6 +760,7 @@ func (r *AIChatPlugin) Query(ctx context.Context, query plugin.Query) (results [
 					Name:                   "i18n:ui_ai_chat_delete_chat",
 					Icon:                   common.TrashIcon,
 					PreventHideAfterAction: true,
+					ContextData:            common.ContextData{"chatId": chat.Id},
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						// delete chat
 						r.chats = append(r.chats[:i], r.chats[i+1:]...)
@@ -777,8 +778,9 @@ func (r *AIChatPlugin) Query(ctx context.Context, query plugin.Query) (results [
 					Name:                   "i18n:ui_ai_chat_summarize_chat",
 					Icon:                   common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M5 5.5C5 6.33 5.67 7 6.5 7h4v10.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5V7h4c.83 0 1.5-.67 1.5-1.5S18.33 4 17.5 4h-11C5.67 4 5 4.67 5 5.5"/></svg>`),
 					PreventHideAfterAction: true,
+					ContextData:            common.ContextData{"chatId": chat.Id},
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						chatId := actionContext.ContextData
+						chatId := actionContext.ContextData["chatId"]
 						for _, chat := range r.chats {
 							if chat.Id == chatId {
 								r.summarizeChat(ctx, chat)

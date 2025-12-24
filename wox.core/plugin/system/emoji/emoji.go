@@ -303,10 +303,8 @@ func (e *EmojiPlugin) handleAIMatchResult(ctx context.Context, query plugin.Quer
 		e.updateAIPlaceholder(ctx, aiGeneratingResultId, "i18n:plugin_emoji_ai_no_result", common.NewWoxImageEmoji("😕"))
 		return
 	}
-	if len(results) == 1 {
-		e.updateAIPlaceholder(ctx, aiGeneratingResultId, "i18n:plugin_emoji_ai_done", results[0].Icon)
-	} else {
-		e.updateAIPlaceholder(ctx, aiGeneratingResultId, "i18n:plugin_emoji_ai_done", results[0].Icon)
+	e.updateAIPlaceholderWithResult(ctx, aiGeneratingResultId, results[0])
+	if len(results) > 1 {
 		e.api.PushResults(ctx, query, results[1:])
 	}
 }
@@ -370,6 +368,24 @@ func (e *EmojiPlugin) updateAIPlaceholder(ctx context.Context, resultId string, 
 
 	updatable.SubTitle = &subtitle
 	updatable.Icon = &icon
+	e.api.UpdateResult(ctx, *updatable)
+}
+
+func (e *EmojiPlugin) updateAIPlaceholderWithResult(ctx context.Context, resultId string, result plugin.QueryResult) {
+	updatable := e.api.GetUpdatableResult(ctx, resultId)
+	if updatable == nil {
+		return
+	}
+
+	title := result.Title
+	subTitle := result.SubTitle
+	icon := result.Icon
+	actions := result.Actions
+
+	updatable.Title = &title
+	updatable.SubTitle = &subTitle
+	updatable.Icon = &icon
+	updatable.Actions = &actions
 	e.api.UpdateResult(ctx, *updatable)
 }
 

@@ -1024,7 +1024,7 @@ class WoxLauncherController extends GetxController {
     if (resultHeight > maxHeight) {
       resultHeight = maxHeight;
     }
-    if (isShowActionPanel.value || isShowPreviewPanel.value) {
+    if (isShowActionPanel.value || isShowPreviewPanel.value || isShowFormActionPanel.value) {
       resultHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(maxResultCount);
     }
 
@@ -1378,18 +1378,29 @@ class WoxLauncherController extends GetxController {
 
   void handleChatResponse(String traceId, WoxAIChatData data) {
     for (var result in activeResultViewController.items) {
-      if (result.value.data.contextData == data.id) {
-        // update preview in result list view item
-        // otherwise, the preview will lost when user switch to other result and back
-        result.value.data.preview = WoxPreview(
-          previewType: WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code,
-          previewData: jsonEncode(data.toJson()),
-          previewProperties: {},
-          scrollPosition: WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code,
-        );
-
-        Get.find<WoxAIChatController>().handleChatResponse(traceId, data);
+      if (result.value.data.preview.previewType != WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code) {
+        continue;
       }
+
+      try {
+        var previewData = jsonDecode(result.value.data.preview.previewData);
+        if (previewData['Id'] != data.id) {
+          continue;
+        }
+      } catch (_) {
+        continue;
+      }
+
+      // update preview in result list view item
+      // otherwise, the preview will lost when user switch to other result and back
+      result.value.data.preview = WoxPreview(
+        previewType: WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code,
+        previewData: jsonEncode(data.toJson()),
+        previewProperties: {},
+        scrollPosition: WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code,
+      );
+
+      Get.find<WoxAIChatController>().handleChatResponse(traceId, data);
     }
   }
 

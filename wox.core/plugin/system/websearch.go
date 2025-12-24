@@ -146,10 +146,10 @@ func (r *WebSearchPlugin) Init(ctx context.Context, initParams plugin.InitParams
 	r.webSearches = r.loadWebSearches(ctx)
 	r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("loaded %d web searches", len(r.webSearches)))
 
-	r.api.OnSettingChanged(ctx, func(key string, value string) {
+	r.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, value string) {
 		if key == webSearchesSettingKey {
-			r.indexIcons(ctx)
-			r.webSearches = r.loadWebSearches(ctx)
+			r.indexIcons(callbackCtx)
+			r.webSearches = r.loadWebSearches(callbackCtx)
 		}
 	})
 

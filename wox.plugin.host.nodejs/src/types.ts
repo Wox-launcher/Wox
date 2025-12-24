@@ -1,12 +1,12 @@
-import { ActionContext, FormActionContext, MapString, Plugin, Result } from "@wox-launcher/wox-plugin"
+import { ActionContext, Context, FormActionContext, MapString, Plugin, Result } from "@wox-launcher/wox-plugin"
 import { PluginAPI } from "./pluginAPI"
 
 export interface PluginInstance {
   Plugin: Plugin
   API: PluginAPI
   ModulePath: string
-  Actions: Map<Result["Id"], (actionContext: ActionContext) => Promise<void>>
-  FormActions: Map<Result["Id"], (actionContext: FormActionContext) => Promise<void>>
+  Actions: Map<Result["Id"], (ctx: Context, actionContext: ActionContext) => Promise<void>>
+  FormActions: Map<Result["Id"], (ctx: Context, actionContext: FormActionContext) => Promise<void>>
 }
 
 export interface PluginJsonRpcRequest {

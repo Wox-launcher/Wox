@@ -642,6 +642,7 @@ func (m *Manager) ProcessDeeplink(ctx context.Context, deeplink string) {
 		m.ui.ToggleApp(ctx)
 	}
 
+	// wox://plugin/{pluginID}?arg1=val1&arg2=val2
 	if strings.HasPrefix(command, "plugin/") {
 		pluginID := strings.TrimPrefix(command, "plugin/")
 		if pluginID != "" {

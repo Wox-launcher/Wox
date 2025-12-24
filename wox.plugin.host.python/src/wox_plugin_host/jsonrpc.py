@@ -1,11 +1,12 @@
 import asyncio
 import importlib
+import inspect
 import json
 import sys
 import traceback
 import uuid
 from os import path
-from typing import Any, Dict
+from typing import Any, Dict, Optional, Union
 
 import websockets
 from wox_plugin import (
@@ -17,11 +18,28 @@ from wox_plugin import (
     MRUData,
     PluginInitParams,
     Query,
+    ResultActionType,
 )
 
 from . import logger
 from .plugin_api import PluginAPI
 from .plugin_manager import PluginInstance, plugin_instances
+
+
+def _parse_context_data(raw: Optional[Union[str, Dict[str, Any]]]) -> Dict[str, str]:
+    if raw is None:
+        return {}
+    if isinstance(raw, dict):
+        return {k: v for k, v in raw.items() if isinstance(v, str)}
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+    except Exception:
+        return {}
+    if isinstance(data, dict):
+        return {k: v for k, v in data.items() if isinstance(v, str)}
+    return {}
 
 
 async def handle_request_from_wox(ctx: Context, request: Dict[str, Any], ws: websockets.asyncio.server.ServerConnection) -> Any:
@@ -43,6 +61,14 @@ async def handle_request_from_wox(ctx: Context, request: Dict[str, Any], ws: web
         return await form_action(ctx, request)
     elif method == "unloadPlugin":
         return await unload_plugin(ctx, request)
+    elif method == "onPluginSettingChange":
+        return await on_plugin_setting_change(ctx, request)
+    elif method == "onGetDynamicSetting":
+        return await on_get_dynamic_setting(ctx, request)
+    elif method == "onUnload":
+        return await on_unload(ctx, request)
+    elif method == "onDeepLink":
+        return await on_deep_link(ctx, request)
     elif method == "onMRURestore":
         return await on_mru_restore(ctx, request)
     elif method == "onLLMStream":
@@ -147,6 +173,12 @@ async def init_plugin(ctx: Context, request: Dict[str, Any], ws: websockets.asyn
         raise e
 
 
+def _get_action_type_value(action_type: Any) -> str:
+    if hasattr(action_type, "value"):
+        return str(action_type.value)
+    return str(action_type)
+
+
 async def query(ctx: Context, request: Dict[str, Any]) -> list[dict[str, Any]]:
     """Handle query request"""
     plugin_id = request.get("PluginId", "")
@@ -173,8 +205,8 @@ async def query(ctx: Context, request: Dict[str, Any]) -> list[dict[str, Any]]:
                         if not action.id:
                             action.id = str(uuid.uuid4())
 
-                        action_type = str(getattr(action, "type", "execute"))
-                        if action_type == "form":
+                        action_type = _get_action_type_value(getattr(action, "type", None))
+                        if action_type == ResultActionType.FORM.value:
                             on_submit = getattr(action, "on_submit", None)
                             if on_submit is not None:
                                 plugin_instance.form_actions[action.id] = on_submit
@@ -193,7 +225,7 @@ async def query(ctx: Context, request: Dict[str, Any]) -> list[dict[str, Any]]:
                 "Actions": [
                     {
                         "Id": action.id,
-                        "Type": str(getattr(action, "type", "execute")),
+                        "Type": _get_action_type_value(getattr(action, "type", "execute")),
                         "Name": action.name,
                         "Icon": json.loads(action.icon.to_json()),
                         "IsDefault": action.is_default,
@@ -209,7 +241,6 @@ async def query(ctx: Context, request: Dict[str, Any]) -> list[dict[str, Any]]:
                 "Group": result.group,
                 "GroupScore": result.group_score,
                 "Tails": [json.loads(tail.to_json()) for tail in result.tails],
-                "ContextData": result.context_data,
             }
             for result in results
         ]
@@ -235,13 +266,17 @@ async def action(ctx: Context, request: Dict[str, Any]) -> None:
         result_id = params.get("ResultId", "")
         action_id = params.get("ActionId", "")
         result_action_id = params.get("ResultActionId", "")
-        context_data = params.get("ContextData", "")
+        context_data_raw = params.get("ContextData", "")
+        context_data = _parse_context_data(context_data_raw)
 
         # Get action from cache
         action_func = plugin_instance.actions.get(action_id)
         if action_func:
             # Handle both coroutine and regular functions
-            result = action_func(ActionContext(result_id=result_id, result_action_id=result_action_id, context_data=context_data))
+            result = action_func(
+                ctx,
+                ActionContext(result_id=result_id, result_action_id=result_action_id, context_data=context_data),
+            )
             if asyncio.iscoroutine(result):
                 asyncio.create_task(result)
         else:
@@ -272,18 +307,20 @@ async def form_action(ctx: Context, request: Dict[str, Any]) -> None:
         result_id = params.get("ResultId", "")
         action_id = params.get("ActionId", "")
         result_action_id = params.get("ResultActionId", "")
-        context_data = params.get("ContextData", "")
+        context_data_raw = params.get("ContextData", "")
+        context_data = _parse_context_data(context_data_raw)
         values = json.loads(params.get("Values", "{}"))
 
         action_func = plugin_instance.form_actions.get(action_id)
         if action_func:
             result = action_func(
+                ctx,
                 FormActionContext(
                     result_id=result_id,
                     result_action_id=result_action_id or action_id,
                     context_data=context_data,
                     values=values,
-                )
+                ),
             )
             if asyncio.iscoroutine(result):
                 asyncio.create_task(result)
@@ -376,7 +413,7 @@ async def on_mru_restore(ctx: Context, request: Dict[str, Any]) -> Any:
         mru_data = MRUData.from_dict(mru_data_dict)
 
         # Call the callback (may or may not be async)
-        result = callback(mru_data)
+        result = callback(ctx, mru_data)
         if hasattr(result, "__await__"):
             result = await result  # type: ignore
 
@@ -386,6 +423,173 @@ async def on_mru_restore(ctx: Context, request: Dict[str, Any]) -> Any:
         return None
     except Exception as e:
         await logger.error(ctx.get_trace_id(), f"MRU restore callback error: {str(e)}")
+        raise e
+
+
+async def on_deep_link(ctx: Context, request: Dict[str, Any]) -> None:
+    """Handle deep link callback"""
+    plugin_id = request.get("PluginId")
+    if not plugin_id:
+        raise Exception("PluginId is required")
+
+    params = request.get("Params", {})
+    callback_id = params.get("CallbackId") or params.get("callbackId")
+    arguments_raw = params.get("Arguments") or params.get("arguments") or "{}"
+
+    if not callback_id:
+        raise Exception("CallbackId is required")
+
+    plugin_instance = plugin_instances.get(plugin_id)
+    if not plugin_instance:
+        raise Exception(f"plugin instance not found: {plugin_id}")
+
+    if not plugin_instance.api:
+        raise Exception(f"plugin API not found: {plugin_id}")
+
+    from .plugin_api import PluginAPI
+
+    api = plugin_instance.api
+    if not isinstance(api, PluginAPI):
+        raise Exception(f"Invalid API type for plugin: {plugin_id}")
+
+    callback = api.deep_link_callbacks.get(callback_id)
+    if not callback:
+        raise Exception(f"deep link callback not found: {callback_id}")
+
+    try:
+        arguments = json.loads(arguments_raw) if isinstance(arguments_raw, str) else dict(arguments_raw)
+        result = callback(ctx, arguments)
+        if inspect.isawaitable(result):
+            await result
+    except Exception as e:
+        await logger.error(ctx.get_trace_id(), f"deep link callback error: {str(e)}")
+        raise e
+
+
+async def on_plugin_setting_change(ctx: Context, request: Dict[str, Any]) -> None:
+    """Handle setting change callback"""
+    plugin_id = request.get("PluginId")
+    if not plugin_id:
+        raise Exception("PluginId is required")
+
+    params = request.get("Params", {})
+    callback_id = params.get("CallbackId") or params.get("callbackId")
+    key = params.get("Key") or params.get("key") or ""
+    value = params.get("Value") or params.get("value") or ""
+
+    if not callback_id:
+        raise Exception("CallbackId is required")
+
+    plugin_instance = plugin_instances.get(plugin_id)
+    if not plugin_instance:
+        raise Exception(f"plugin instance not found: {plugin_id}")
+
+    if not plugin_instance.api:
+        raise Exception(f"plugin API not found: {plugin_id}")
+
+    from .plugin_api import PluginAPI
+
+    api = plugin_instance.api
+    if not isinstance(api, PluginAPI):
+        raise Exception(f"Invalid API type for plugin: {plugin_id}")
+
+    callback = api.setting_change_callbacks.get(callback_id)
+    if not callback:
+        raise Exception(f"setting change callback not found: {callback_id}")
+
+    try:
+        result = callback(ctx, key, value)
+        if inspect.isawaitable(result):
+            await result
+    except Exception as e:
+        await logger.error(ctx.get_trace_id(), f"setting change callback error: {str(e)}")
+        raise e
+
+
+async def on_get_dynamic_setting(ctx: Context, request: Dict[str, Any]) -> str:
+    """Handle dynamic setting callback"""
+    plugin_id = request.get("PluginId")
+    if not plugin_id:
+        raise Exception("PluginId is required")
+
+    params = request.get("Params", {})
+    callback_id = params.get("CallbackId") or params.get("callbackId")
+    key = params.get("Key") or params.get("key") or ""
+
+    if not callback_id:
+        raise Exception("CallbackId is required")
+
+    plugin_instance = plugin_instances.get(plugin_id)
+    if not plugin_instance:
+        raise Exception(f"plugin instance not found: {plugin_id}")
+
+    if not plugin_instance.api:
+        raise Exception(f"plugin API not found: {plugin_id}")
+
+    from .plugin_api import PluginAPI
+
+    api = plugin_instance.api
+    if not isinstance(api, PluginAPI):
+        raise Exception(f"Invalid API type for plugin: {plugin_id}")
+
+    callback = api.get_dynamic_setting_callbacks.get(callback_id)
+    if not callback:
+        raise Exception(f"dynamic setting callback not found: {callback_id}")
+
+    try:
+        result = callback(ctx, key)
+        if inspect.isawaitable(result):
+            result = await result
+
+        if result is None:
+            return ""
+        if isinstance(result, str):
+            return result
+        if hasattr(result, "to_json"):
+            return result.to_json()  # type: ignore[no-any-return]
+        if isinstance(result, dict):
+            return json.dumps(result)
+        return json.dumps(result.__dict__)
+    except Exception as e:
+        await logger.error(ctx.get_trace_id(), f"dynamic setting callback error: {str(e)}")
+        raise e
+
+
+async def on_unload(ctx: Context, request: Dict[str, Any]) -> None:
+    """Handle unload callback"""
+    plugin_id = request.get("PluginId")
+    if not plugin_id:
+        raise Exception("PluginId is required")
+
+    params = request.get("Params", {})
+    callback_id = params.get("CallbackId") or params.get("callbackId")
+
+    if not callback_id:
+        raise Exception("CallbackId is required")
+
+    plugin_instance = plugin_instances.get(plugin_id)
+    if not plugin_instance:
+        raise Exception(f"plugin instance not found: {plugin_id}")
+
+    if not plugin_instance.api:
+        raise Exception(f"plugin API not found: {plugin_id}")
+
+    from .plugin_api import PluginAPI
+
+    api = plugin_instance.api
+    if not isinstance(api, PluginAPI):
+        raise Exception(f"Invalid API type for plugin: {plugin_id}")
+
+    callback = api.unload_callbacks.get(callback_id)
+    if not callback:
+        raise Exception(f"unload callback not found: {callback_id}")
+
+    try:
+        result = callback(ctx)
+        if inspect.isawaitable(result):
+            await result
+    except Exception as e:
+        await logger.error(ctx.get_trace_id(), f"unload callback error: {str(e)}")
         raise e
 
 

@@ -14,7 +14,10 @@ import (
 type emptyAPIImpl struct {
 }
 
-func (e emptyAPIImpl) OnGetDynamicSetting(context.Context, func(string) definition.PluginSettingDefinitionItem) {
+func (e emptyAPIImpl) OnGetDynamicSetting(
+	context.Context,
+	func(context.Context, string) definition.PluginSettingDefinitionItem,
+) {
 }
 
 func (e emptyAPIImpl) ChangeQuery(ctx context.Context, query common.PlainQuery) {
@@ -43,13 +46,13 @@ func (e emptyAPIImpl) GetSetting(ctx context.Context, key string) string {
 func (e emptyAPIImpl) SaveSetting(ctx context.Context, key string, value string, isPlatformSpecific bool) {
 }
 
-func (e emptyAPIImpl) OnSettingChanged(ctx context.Context, callback func(key string, value string)) {
+func (e emptyAPIImpl) OnSettingChanged(ctx context.Context, callback func(context.Context, string, string)) {
 }
 
-func (e emptyAPIImpl) OnDeepLink(ctx context.Context, callback func(arguments map[string]string)) {
+func (e emptyAPIImpl) OnDeepLink(ctx context.Context, callback func(context.Context, map[string]string)) {
 }
 
-func (e emptyAPIImpl) OnUnload(ctx context.Context, callback func()) {
+func (e emptyAPIImpl) OnUnload(ctx context.Context, callback func(context.Context)) {
 }
 
 func (e emptyAPIImpl) RegisterQueryCommands(ctx context.Context, commands []plugin.MetadataCommand) {
@@ -59,7 +62,7 @@ func (e emptyAPIImpl) AIChatStream(ctx context.Context, model common.Model, conv
 	return nil
 }
 
-func (e emptyAPIImpl) OnMRURestore(ctx context.Context, callback func(mruData plugin.MRUData) (*plugin.QueryResult, error)) {
+func (e emptyAPIImpl) OnMRURestore(ctx context.Context, callback func(context.Context, plugin.MRUData) (*plugin.QueryResult, error)) {
 }
 
 func (e emptyAPIImpl) UpdateResult(ctx context.Context, result plugin.UpdatableResult) bool {

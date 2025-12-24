@@ -26,12 +26,6 @@ type UrlHistory struct {
 	Title string
 }
 
-type urlContextData struct {
-	Url   string `json:"url"`
-	Title string `json:"title"`
-	Type  string `json:"type"` // "history" or "direct"
-}
-
 type UrlPlugin struct {
 	api        plugin.API
 	reg        *regexp.Regexp
@@ -103,23 +97,22 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 		})
 
 		for _, history := range existingUrlHistory {
-			contextData := urlContextData{
-				Url:   history.Url,
-				Title: history.Title,
-				Type:  "history",
+			contextData := common.ContextData{
+				"url":   history.Url,
+				"title": history.Title,
+				"type":  "history",
 			}
-			contextDataJson, _ := json.Marshal(contextData)
 
 			results = append(results, plugin.QueryResult{
-				Title:       history.Url,
-				SubTitle:    history.Title,
-				Score:       100,
-				Icon:        history.Icon.Overlay(urlIcon, 0.4, 0.6, 0.6),
-				ContextData: string(contextDataJson),
+				Title:    history.Url,
+				SubTitle: history.Title,
+				Score:    100,
+				Icon:     history.Icon.Overlay(urlIcon, 0.4, 0.6, 0.6),
 				Actions: []plugin.QueryResultAction{
 					{
-						Name: "i18n:plugin_url_open",
-						Icon: common.OpenIcon,
+						Name:        "i18n:plugin_url_open",
+						Icon:        common.OpenIcon,
+						ContextData: contextData,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							openErr := shell.Open(history.Url)
 							if openErr != nil {
@@ -128,8 +121,9 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 						},
 					},
 					{
-						Name: "i18n:plugin_url_remove",
-						Icon: common.TrashIcon,
+						Name:        "i18n:plugin_url_remove",
+						Icon:        common.TrashIcon,
+						ContextData: contextData,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							r.removeRecentUrl(ctx, history.Url)
 						},
@@ -140,23 +134,22 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 	}
 
 	if len(r.reg.FindStringIndex(query.Search)) > 0 {
-		contextData := urlContextData{
-			Url:   query.Search,
-			Title: "",
-			Type:  "direct",
+		contextData := common.ContextData{
+			"url":   query.Search,
+			"title": "",
+			"type":  "direct",
 		}
-		contextDataJson, _ := json.Marshal(contextData)
 
 		results = append(results, plugin.QueryResult{
-			Title:       query.Search,
-			SubTitle:    "i18n:plugin_url_open_in_browser",
-			Score:       100,
-			Icon:        urlIcon,
-			ContextData: string(contextDataJson),
+			Title:    query.Search,
+			SubTitle: "i18n:plugin_url_open_in_browser",
+			Score:    100,
+			Icon:     urlIcon,
 			Actions: []plugin.QueryResultAction{
 				{
-					Name: "i18n:plugin_url_open",
-					Icon: urlIcon,
+					Name:        "i18n:plugin_url_open",
+					Icon:        urlIcon,
+					ContextData: contextData,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						url := query.Search
 						if !strings.HasPrefix(url, "http") {
@@ -232,38 +225,37 @@ func (r *UrlPlugin) removeRecentUrl(ctx context.Context, url string) {
 	r.api.SaveSetting(ctx, "recentUrls", string(urlsJson), false)
 }
 
-func (r *UrlPlugin) handleMRURestore(mruData plugin.MRUData) (*plugin.QueryResult, error) {
-	var contextData urlContextData
-	if err := json.Unmarshal([]byte(mruData.ContextData), &contextData); err != nil {
-		return nil, fmt.Errorf("failed to parse context data: %w", err)
+func (r *UrlPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	url := mruData.ContextData["url"]
+	title := mruData.ContextData["title"]
+	typeStr := mruData.ContextData["type"]
+	if url == "" {
+		return nil, fmt.Errorf("empty url in context data")
 	}
-
-	url := contextData.Url
 	if !strings.HasPrefix(url, "http") {
 		url = "https://" + url
 	}
 
 	// user may have cleared icon cache, so we need to get icon again
 	if !mruData.Icon.IsValid() {
-		icon, err := getWebsiteIconWithCache(context.Background(), url)
+		icon, err := getWebsiteIconWithCache(ctx, url)
 		if err != nil {
-			r.api.Log(context.Background(), plugin.LogLevelError, fmt.Sprintf("get url icon error: %s", err.Error()))
+			r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("get url icon error: %s", err.Error()))
 			icon = urlIcon
 		}
 		mruData.Icon = icon
 	}
 
 	result := &plugin.QueryResult{
-		Title:       contextData.Url,
-		SubTitle:    contextData.Title,
-		Icon:        mruData.Icon,
-		ContextData: mruData.ContextData,
+		Title:    url,
+		SubTitle: title,
+		Icon:     mruData.Icon,
 	}
 
-	if contextData.Type == "history" {
+	if typeStr == "history" {
 		found := false
 		for _, history := range r.recentUrls {
-			if history.Url == contextData.Url {
+			if history.Url == url {
 				found = true
 				result.SubTitle = history.Title
 				break
@@ -271,13 +263,14 @@ func (r *UrlPlugin) handleMRURestore(mruData plugin.MRUData) (*plugin.QueryResul
 		}
 
 		if !found {
-			return nil, fmt.Errorf("URL no longer in history: %s", contextData.Url)
+			return nil, fmt.Errorf("URL no longer in history: %s", url)
 		}
 
 		result.Actions = []plugin.QueryResultAction{
 			{
-				Name: "i18n:plugin_url_open",
-				Icon: common.OpenIcon,
+				Name:        "i18n:plugin_url_open",
+				Icon:        common.OpenIcon,
+				ContextData: mruData.ContextData,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					openErr := shell.Open(url)
 					if openErr != nil {
@@ -286,10 +279,11 @@ func (r *UrlPlugin) handleMRURestore(mruData plugin.MRUData) (*plugin.QueryResul
 				},
 			},
 			{
-				Name: "i18n:plugin_url_remove",
-				Icon: common.TrashIcon,
+				Name:        "i18n:plugin_url_remove",
+				Icon:        common.TrashIcon,
+				ContextData: mruData.ContextData,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					r.removeRecentUrl(ctx, contextData.Url)
+					r.removeRecentUrl(ctx, url)
 				},
 			},
 		}
@@ -298,8 +292,9 @@ func (r *UrlPlugin) handleMRURestore(mruData plugin.MRUData) (*plugin.QueryResul
 		result.SubTitle = "i18n:plugin_url_open_in_browser"
 		result.Actions = []plugin.QueryResultAction{
 			{
-				Name: "i18n:plugin_url_open",
-				Icon: urlIcon,
+				Name:        "i18n:plugin_url_open",
+				Icon:        urlIcon,
+				ContextData: mruData.ContextData,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					openErr := shell.Open(url)
 					if openErr != nil {

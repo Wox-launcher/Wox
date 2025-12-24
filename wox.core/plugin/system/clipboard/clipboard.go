@@ -198,7 +198,7 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 	// No need for plugin-specific migration code here
 
 	// Register unload callback to close database connection
-	c.api.OnUnload(ctx, func() {
+	c.api.OnUnload(ctx, func(callbackCtx context.Context) {
 		if c.db != nil {
 			c.db.Close()
 		}

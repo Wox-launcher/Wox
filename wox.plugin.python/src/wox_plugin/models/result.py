@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
+from .context import Context
 from .image import WoxImage
 from .preview import WoxPreview
 from .setting import PluginSettingDefinitionItem
@@ -31,7 +32,7 @@ class ResultTail:
     image: WoxImage = field(default_factory=WoxImage)
     id: str = field(default="")
     """Tail id, should be unique. It's optional, if you don't set it, Wox will assign a random id for you"""
-    context_data: str = field(default="")
+    context_data: Dict[str, str] = field(default_factory=dict)
     """Additional data associate with this tail, can be retrieved later"""
 
     def to_json(self) -> str:
@@ -60,7 +61,7 @@ class ResultTail:
             text=data.get("Text", ""),
             image=WoxImage.from_json(json.dumps(data["Image"])),
             id=data.get("Id", ""),
-            context_data=data.get("ContextData", ""),
+            context_data=data.get("ContextData", {}) or {},
         )
 
 
@@ -69,8 +70,11 @@ class ActionContext:
     """Context for result actions"""
 
     result_id: str = field(default="")
+    """The id of the result being acted upon"""
     result_action_id: str = field(default="")
-    context_data: str = field(default="")
+    """The id of the action being executed"""
+    context_data: Dict[str, str] = field(default_factory=dict)
+    """Additional data associate with this action"""
 
     def to_json(self) -> str:
         """Convert to JSON string with camelCase naming"""
@@ -86,10 +90,17 @@ class ActionContext:
     def from_json(cls, json_str: str) -> "ActionContext":
         """Create from JSON string with camelCase naming"""
         data = json.loads(json_str)
+        context_data = data.get("ContextData", {}) or {}
+        if isinstance(context_data, str):
+            try:
+                context_data = json.loads(context_data)
+            except Exception:
+                context_data = {}
+
         return cls(
             result_id=data.get("ResultId", ""),
             result_action_id=data.get("ResultActionId", ""),
-            context_data=data.get("ContextData", ""),
+            context_data=context_data if isinstance(context_data, dict) else {},
         )
 
 
@@ -114,10 +125,16 @@ class FormActionContext(ActionContext):
     def from_json(cls, json_str: str) -> "FormActionContext":
         """Create from JSON string with camelCase naming"""
         data = json.loads(json_str)
+        context_data = data.get("ContextData", {}) or {}
+        if isinstance(context_data, str):
+            try:
+                context_data = json.loads(context_data)
+            except Exception:
+                context_data = {}
         return cls(
             result_id=data.get("ResultId", ""),
             result_action_id=data.get("ResultActionId", ""),
-            context_data=data.get("ContextData", ""),
+            context_data=context_data if isinstance(context_data, dict) else {},
             values=data.get("Values", {}) or {},
         )
 
@@ -127,16 +144,16 @@ class ResultAction:
     """Action model for Wox results"""
 
     name: str
-    action: Optional[Callable[[ActionContext], Awaitable[None]]] = None
+    action: Optional[Callable[[Context, ActionContext], Awaitable[None]]] = None
     id: str = field(default="")
     type: ResultActionType = field(default=ResultActionType.EXECUTE)
     form: List[PluginSettingDefinitionItem] = field(default_factory=list)
-    on_submit: Optional[Callable[[FormActionContext], Awaitable[None]]] = None
+    on_submit: Optional[Callable[[Context, FormActionContext], Awaitable[None]]] = None
     icon: WoxImage = field(default_factory=WoxImage)
     is_default: bool = field(default=False)
     prevent_hide_after_action: bool = field(default=False)
     hotkey: str = field(default="")
-    context_data: str = field(default="")
+    context_data: Dict[str, str] = field(default_factory=dict)
 
     def to_json(self) -> str:
         """Convert to JSON string with camelCase naming"""
@@ -166,6 +183,13 @@ class ResultAction:
         if action_type == ResultActionType.FORM and data.get("Form"):
             form = [PluginSettingDefinitionItem.from_dict(item) for item in data.get("Form", [])]
 
+        context_data = data.get("ContextData", {}) or {}
+        if isinstance(context_data, str):
+            try:
+                context_data = json.loads(context_data)
+            except Exception:
+                context_data = {}
+
         return cls(
             name=data.get("Name", ""),
             id=data.get("Id", ""),
@@ -175,7 +199,7 @@ class ResultAction:
             is_default=data.get("IsDefault", False),
             prevent_hide_after_action=data.get("PreventHideAfterAction", False),
             hotkey=data.get("Hotkey", ""),
-            context_data=data.get("ContextData", ""),
+            context_data=context_data if isinstance(context_data, dict) else {},
         )
 
 
@@ -192,7 +216,6 @@ class Result:
     group: str = field(default="")
     group_score: float = field(default=0.0)
     tails: List[ResultTail] = field(default_factory=list)
-    context_data: str = field(default="")
     actions: List[ResultAction] = field(default_factory=list)
 
     def to_json(self) -> str:
@@ -205,7 +228,6 @@ class Result:
             "Score": self.score,
             "Group": self.group,
             "GroupScore": self.group_score,
-            "ContextData": self.context_data,
         }
         if self.preview:
             data["Preview"] = json.loads(self.preview.to_json())
@@ -239,7 +261,6 @@ class Result:
             group=data.get("Group", ""),
             group_score=data.get("GroupScore", 0.0),
             tails=tails,
-            context_data=data.get("ContextData", ""),
             actions=actions,
         )
 
