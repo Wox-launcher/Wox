@@ -198,7 +198,8 @@ async function onLLMStream(ctx: Context, request: PluginJsonRpcRequest) {
   callbackFunc({
     Status: streamType,
     Data: data,
-    Reasoning: reasoning
+    Reasoning: reasoning,
+    ToolCalls: [] // currently we don't support toolcalls from host
   })
 }
 

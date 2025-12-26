@@ -6,8 +6,8 @@ settings:
 
 dependencies:
   '@wox-launcher/wox-plugin':
-    specifier: ^0.0.107
-    version: 0.0.107
+    specifier: ^0.0.109
+    version: 0.0.109
   dayjs:
     specifier: ^1.11.13
     version: 1.11.13
@@ -1561,8 +1561,8 @@ packages:
     hasBin: true
     dev: true
 
-  /@wox-launcher/wox-plugin@0.0.107:
-    resolution: {integrity: sha512-4KrzPHTj+3czlHEaOrGVyzNgUPi/HDW6F9ZF8O83oNCXM0HYU6/sYr/MTXo6uCc7vpzeAu2xrf1kFDXLBbzzCA==}
+  /@wox-launcher/wox-plugin@0.0.109:
+    resolution: {integrity: sha512-hBN4XixAYjYLZe/B8HxnL7vaPt75QCPsmlc1MpQs1Xch/RmyFRbWXVNQccRpQyzplXZPTG2x8ocRdZziwYMVUw==}
     dev: false
 
   /JSONStream@1.3.5:
