@@ -104,12 +104,15 @@ ifeq ($(PLATFORM),linux)
 	rm -rf $(APPIMAGE_DIR)
 	mkdir -p $(APPIMAGE_DIR)/usr/bin
 	mkdir -p $(APPIMAGE_DIR)/usr/share/icons/hicolor/256x256/apps
+	mkdir -p $(APPIMAGE_DIR)/usr/share/applications
 	cp $(RELEASE_DIR)/wox-linux-$(ARCH) $(APPIMAGE_DIR)/usr/bin/wox
 	chmod +x $(APPIMAGE_DIR)/usr/bin/wox
 	cp assets/linux/wox.desktop $(APPIMAGE_DIR)/wox.desktop
+	cp assets/linux/wox.desktop $(APPIMAGE_DIR)/usr/share/applications/wox.desktop
 	cp assets/linux/AppRun $(APPIMAGE_DIR)/AppRun
 	chmod +x $(APPIMAGE_DIR)/AppRun
 	cp assets/app.png $(APPIMAGE_DIR)/wox.png
+	cp assets/app.png $(APPIMAGE_DIR)/.DirIcon
 	cp assets/app.png $(APPIMAGE_DIR)/usr/share/icons/hicolor/256x256/apps/wox.png
 	ARCH=$(APPIMAGE_ARCH) $(APPIMAGE_TOOL) $(APPIMAGE_DIR) $(RELEASE_DIR)/$(APPIMAGE_NAME)
 else
