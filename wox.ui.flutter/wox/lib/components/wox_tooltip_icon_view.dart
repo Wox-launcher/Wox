@@ -1,20 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:wox/components/wox_tooltip.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 
-class WoxTooltipView extends StatefulWidget {
+class WoxTooltipIconView extends StatefulWidget {
   final String tooltip;
   final double paddingLeft;
   final double paddingRight;
   final Color color;
 
-  const WoxTooltipView({super.key, required this.tooltip, this.paddingLeft = 4.0, this.paddingRight = 4.0, this.color = Colors.black});
+  const WoxTooltipIconView({super.key, required this.tooltip, this.paddingLeft = 4.0, this.paddingRight = 4.0, this.color = Colors.black});
 
   @override
-  State<WoxTooltipView> createState() => _WoxTooltipViewState();
+  State<WoxTooltipIconView> createState() => _WoxTooltipIconViewState();
 }
 
-class _WoxTooltipViewState extends State<WoxTooltipView> {
+class _WoxTooltipIconViewState extends State<WoxTooltipIconView> {
   String tr(String key) {
     return Get.find<WoxSettingController>().tr(key);
   }
@@ -23,7 +24,7 @@ class _WoxTooltipViewState extends State<WoxTooltipView> {
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.only(left: widget.paddingLeft, right: widget.paddingRight),
-      child: Tooltip(
+      child: WoxTooltip(
         message: tr(widget.tooltip),
         child: Icon(
           Icons.info,

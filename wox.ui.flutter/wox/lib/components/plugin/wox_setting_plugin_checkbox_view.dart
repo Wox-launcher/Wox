@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:wox/components/wox_switch.dart';
-import 'package:wox/components/wox_tooltip_view.dart';
+import 'package:wox/components/wox_tooltip_icon_view.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_checkbox.dart';
 import 'package:wox/utils/colors.dart';
 
@@ -16,7 +16,7 @@ class WoxSettingPluginCheckbox extends WoxSettingPluginItem {
     return layout(
       children: [
         label(item.label, item.style),
-        if (item.tooltip != "") WoxTooltipView(tooltip: item.tooltip, paddingLeft: 0, color: getThemeTextColor()),
+        if (item.tooltip != "") WoxTooltipIconView(tooltip: item.tooltip, paddingLeft: 0, color: getThemeTextColor()),
         WoxSwitch(
           value: getSetting(item.key) == "true",
           onChanged: (value) {

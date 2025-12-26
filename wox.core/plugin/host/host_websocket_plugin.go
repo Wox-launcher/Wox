@@ -101,16 +101,14 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 		return []plugin.QueryResult{}
 	}
 
-	for i, r := range results {
-		result := r
+	for i, result := range results {
 		for j, action := range result.Actions {
-			capturedAction := action
-			if capturedAction.Type == plugin.QueryResultActionTypeForm {
+			if action.Type == plugin.QueryResultActionTypeForm {
 				result.Actions[j].OnSubmit = func(ctx context.Context, actionContext plugin.FormActionContext) {
 					valuesJson, _ := json.Marshal(actionContext.Values)
 					_, actionErr := w.websocketHost.invokeMethod(ctx, w.metadata, "formAction", map[string]string{
 						"ResultId":       actionContext.ResultId,
-						"ActionId":       capturedAction.Id,
+						"ActionId":       action.Id,
 						"ResultActionId": actionContext.ResultActionId,
 						"ContextData":    actionContext.ContextData.Marshal(),
 						"Values":         string(valuesJson),
@@ -123,7 +121,7 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 				result.Actions[j].Action = func(ctx context.Context, actionContext plugin.ActionContext) {
 					_, actionErr := w.websocketHost.invokeMethod(ctx, w.metadata, "action", map[string]string{
 						"ResultId":       actionContext.ResultId,
-						"ActionId":       capturedAction.Id,
+						"ActionId":       action.Id,
 						"ResultActionId": actionContext.ResultActionId,
 						"ContextData":    actionContext.ContextData.Marshal(),
 					})

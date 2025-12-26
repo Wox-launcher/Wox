@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:wox/components/wox_tooltip_view.dart';
+import 'package:wox/components/wox_tooltip_icon_view.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_label.dart';
 import 'package:wox/utils/colors.dart';
 
@@ -15,7 +15,7 @@ class WoxSettingPluginLabel extends WoxSettingPluginItem {
     return layout(children: [
       Text(item.content, style: TextStyle(color: getThemeTextColor(), fontSize: 13)),
       if (item.tooltip != "")
-        WoxTooltipView(
+        WoxTooltipIconView(
           tooltip: item.tooltip,
           color: getThemeTextColor(),
         ),

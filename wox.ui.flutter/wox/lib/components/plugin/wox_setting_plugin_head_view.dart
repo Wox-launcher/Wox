@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:wox/components/wox_tooltip_view.dart';
+import 'package:wox/components/wox_tooltip_icon_view.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_head.dart';
 import 'package:wox/utils/colors.dart';
 
@@ -29,7 +29,7 @@ class WoxSettingPluginHead extends WoxSettingPluginItem {
                 color: getThemeTextColor(),
               ),
             ),
-            if (item.tooltip != "") WoxTooltipView(tooltip: item.tooltip, color: getThemeTextColor()),
+            if (item.tooltip != "") WoxTooltipIconView(tooltip: item.tooltip, color: getThemeTextColor()),
           ],
         ),
       ],

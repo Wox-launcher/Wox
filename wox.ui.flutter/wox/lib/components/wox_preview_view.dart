@@ -18,6 +18,7 @@ import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_ai_chat_view.dart';
 import 'package:wox/components/wox_markdown.dart';
 import 'package:wox/components/wox_plugin_detail_view.dart';
+import 'package:wox/components/wox_tooltip.dart';
 import 'package:wox/components/wox_update_view.dart';
 import 'package:wox/controllers/wox_ai_chat_controller.dart';
 import 'package:wox/entity/wox_ai.dart';
@@ -269,11 +270,17 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
                               children: [
                                 ConstrainedBox(
                                   constraints: const BoxConstraints(maxWidth: 80),
-                                  child: Text(e.key, overflow: TextOverflow.ellipsis, style: TextStyle(color: safeFromCssColor(widget.woxTheme.previewPropertyTitleColor))),
+                                  child: WoxTooltip(
+                                    message: e.key,
+                                    child: Text(e.key, overflow: TextOverflow.ellipsis, style: TextStyle(color: safeFromCssColor(widget.woxTheme.previewPropertyTitleColor))),
+                                  ),
                                 ),
                                 ConstrainedBox(
                                   constraints: const BoxConstraints(maxWidth: 260),
-                                  child: Text(e.value, overflow: TextOverflow.ellipsis, style: TextStyle(color: safeFromCssColor(widget.woxTheme.previewPropertyContentColor))),
+                                  child: WoxTooltip(
+                                    message: e.value,
+                                    child: Text(e.value, overflow: TextOverflow.ellipsis, style: TextStyle(color: safeFromCssColor(widget.woxTheme.previewPropertyContentColor))),
+                                  ),
                                 ),
                               ],
                             ),

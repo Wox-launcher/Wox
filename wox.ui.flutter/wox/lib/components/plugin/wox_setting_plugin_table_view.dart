@@ -5,7 +5,7 @@ import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_image_view.dart';
-import 'package:wox/components/wox_tooltip_view.dart';
+import 'package:wox/components/wox_tooltip_icon_view.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_select.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_ai.dart';
@@ -107,7 +107,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
           ),
         ),
         if (column.tooltip != "")
-          WoxTooltipView(
+          WoxTooltipIconView(
             tooltip: tr(column.tooltip),
             paddingRight: 0,
             color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
@@ -651,7 +651,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                       item.title,
                       style: TextStyle(color: getThemeTextColor(), fontSize: 13),
                     ),
-                    if (item.tooltip != "") WoxTooltipView(tooltip: item.tooltip, color: getThemeTextColor()),
+                    if (item.tooltip != "") WoxTooltipIconView(tooltip: item.tooltip, color: getThemeTextColor()),
                   ],
                 ),
                 if (!readonly)
