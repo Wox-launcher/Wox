@@ -71,53 +71,71 @@ func readText() (string, error) {
 
 	start := time.Now()
 
-	r, _, err := openClipboard.Call(0)
-	if r == 0 {
-		return "", fmt.Errorf("failed to open clipboard: %w", err)
-	}
-	defer closeClipboard.Call()
+	// use an inner function to minimize clipboard lock time
+	var resultText string
+	var sizeBytes uintptr
 
-	hMem, _, err := getClipboardData.Call(cFmtUnicodeText)
-	if hMem == 0 {
-		return "", fmt.Errorf("failed to get clipboard data: %w", err)
-	}
+	readErr := func() error {
+		r, _, err := openClipboard.Call(0)
+		if r == 0 {
+			return fmt.Errorf("failed to open clipboard: %w", err)
+		}
+		defer closeClipboard.Call()
 
-	sizeBytes, _, _ := gSize.Call(hMem)
-	if sizeBytes == 0 {
-		return "", errors.New("failed to get global memory size")
-	}
+		hMem, _, err := getClipboardData.Call(cFmtUnicodeText)
+		if hMem == 0 {
+			return fmt.Errorf("failed to get clipboard data: %w", err)
+		}
 
-	p, _, err := gLock.Call(hMem)
-	if p == 0 {
-		return "", fmt.Errorf("failed to lock global memory: %w", err)
-	}
-	defer gUnlock.Call(hMem)
+		sizeBytes, _, _ = gSize.Call(hMem)
+		if sizeBytes == 0 {
+			return errors.New("failed to get global memory size")
+		}
 
-	const maxClipboardTextBytes = 32 * 1024 * 1024
-	toCopyBytes := sizeBytes
-	if toCopyBytes > maxClipboardTextBytes {
-		toCopyBytes = maxClipboardTextBytes
-		util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("clipboard: CF_UNICODETEXT too large (%d bytes), truncating to %d bytes", sizeBytes, maxClipboardTextBytes))
-	}
+		p, _, err := gLock.Call(hMem)
+		if p == 0 {
+			return fmt.Errorf("failed to lock global memory: %w", err)
+		}
+		defer gUnlock.Call(hMem)
 
-	charCount := int(toCopyBytes / 2)
-	if charCount <= 0 {
-		return "", noDataErr
-	}
+		const maxClipboardTextBytes = 32 * 1024 * 1024
+		toCopyBytes := sizeBytes
+		if toCopyBytes > maxClipboardTextBytes {
+			toCopyBytes = maxClipboardTextBytes
+			util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("clipboard: CF_UNICODETEXT too large (%d bytes), truncating to %d bytes", sizeBytes, maxClipboardTextBytes))
+		}
 
-	raw := make([]uint16, charCount)
-	copy(raw, (*[1 << 30]uint16)(unsafe.Pointer(p))[:charCount:charCount])
+		charCount := int(toCopyBytes / 2)
+		if charCount <= 0 {
+			return noDataErr
+		}
 
-	end := 0
-	for end < len(raw) && raw[end] != 0 {
-		end++
-	}
+		// copy data to local slice while clipboard is open
+		raw := make([]uint16, charCount)
+		copy(raw, (*[1 << 30]uint16)(unsafe.Pointer(p))[:charCount:charCount])
+
+		// convert to string (processing happens after clipboard closes)
+		end := 0
+		for end < len(raw) && raw[end] != 0 {
+			end++
+		}
+		resultText = string(utf16.Decode(raw[:end]))
+
+		return nil
+	}()
 
 	if d := time.Since(start); d > 200*time.Millisecond {
 		util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("clipboard: readText held clipboard for %s (size=%d bytes)", d.String(), sizeBytes))
 	}
 
-	return string(utf16.Decode(raw[:end])), nil
+	if readErr == noDataErr {
+		return "", noDataErr
+	}
+	if readErr != nil {
+		return "", readErr
+	}
+
+	return resultText, nil
 }
 
 func writeTextData(text string) error {
@@ -256,39 +274,50 @@ func writeImageData(img image.Image) error {
 }
 
 func readFilePaths() ([]string, error) {
-	var fileNames []string
-
 	avail, _, _ := isClipboardFormatAvailable.Call(cFmtHdrop)
 	if avail == 0 {
 		return nil, noDataErr
 	}
 
-	r, _, err := openClipboard.Call(0)
-	if r == 0 {
-		return nil, fmt.Errorf("failed to open clipboard: %w", err)
-	}
-	defer closeClipboard.Call()
+	var resultFiles []string
 
-	hDrop, _, err := getClipboardData.Call(cFmtHdrop)
-	if hDrop == 0 {
-		return nil, fmt.Errorf("failed to get clipboard data: %w", err)
+	readErr := func() error {
+		r, _, err := openClipboard.Call(0)
+		if r == 0 {
+			return fmt.Errorf("failed to open clipboard: %w", err)
+		}
+		defer closeClipboard.Call()
+
+		hDrop, _, err := getClipboardData.Call(cFmtHdrop)
+		if hDrop == 0 {
+			return fmt.Errorf("failed to get clipboard data: %w", err)
+		}
+
+		hGlobal, _, err := gLock.Call(hDrop)
+		if hGlobal == 0 {
+			return fmt.Errorf("failed to lock global memory: %w", err)
+		}
+		defer gUnlock.Call(hDrop)
+
+		count, _, _ := dragQueryFile.Call(hGlobal, 0xFFFFFFFF, 0, 0)
+
+		// copy all file paths to local memory
+		resultFiles = make([]string, 0, int(count))
+		for i := uint(0); i < uint(count); i++ {
+			pathLen, _, _ := dragQueryFile.Call(hGlobal, uintptr(i), 0, 0)
+			buffer := make([]uint16, pathLen+1)
+			dragQueryFile.Call(hGlobal, uintptr(i), uintptr(unsafe.Pointer(&buffer[0])), uintptr(pathLen+1))
+			resultFiles = append(resultFiles, syscall.UTF16ToString(buffer))
+		}
+
+		return nil
+	}()
+
+	if readErr != nil {
+		return nil, readErr
 	}
 
-	hGlobal, _, err := gLock.Call(hDrop)
-	if hGlobal == 0 {
-		return nil, fmt.Errorf("failed to lock global memory: %w", err)
-	}
-	defer gUnlock.Call(hDrop)
-
-	count, _, _ := dragQueryFile.Call(hGlobal, 0xFFFFFFFF, 0, 0)
-	for i := uint(0); i < uint(count); i++ {
-		len, _, _ := dragQueryFile.Call(hGlobal, uintptr(i), 0, 0)
-		buffer := make([]uint16, len+1)
-		dragQueryFile.Call(hGlobal, uintptr(i), uintptr(unsafe.Pointer(&buffer[0])), uintptr(len+1))
-		fileNames = append(fileNames, syscall.UTF16ToString(buffer))
-	}
-
-	return fileNames, nil
+	return resultFiles, nil
 }
 
 func readImage() (image.Image, error) {
