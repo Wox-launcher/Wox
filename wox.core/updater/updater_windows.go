@@ -15,6 +15,10 @@ func init() {
 
 type WindowsUpdater struct{}
 
+func getExecutablePath() (string, error) {
+	return os.Executable()
+}
+
 func (u *WindowsUpdater) ApplyUpdate(ctx context.Context, pid int, oldPath, newPath string) error {
 	batchContent := fmt.Sprintf(
 		"@echo off\n"+

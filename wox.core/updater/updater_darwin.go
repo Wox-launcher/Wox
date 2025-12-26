@@ -19,6 +19,10 @@ func init() {
 
 type MacOSUpdater struct{}
 
+func getExecutablePath() (string, error) {
+	return os.Executable()
+}
+
 // extractAppFromDMG extracts the app from a DMG file to a temporary directory
 // Returns the path to the extracted app
 func extractAppFromDMG(ctx context.Context, dmgPath string) (string, error) {

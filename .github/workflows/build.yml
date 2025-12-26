@@ -59,3 +59,10 @@ jobs:
           name: ${{ matrix.asset_name }}
           path: ${{ matrix.asset_path }}
           retention-days: 10
+      - name: Upload AppImage artifact
+        if: matrix.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: wox-linux-amd64.AppImage
+          path: ./release/wox-linux-amd64.AppImage
+          retention-days: 10

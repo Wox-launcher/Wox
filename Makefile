@@ -1,4 +1,4 @@
-.PHONY: build clean host _bundle_mac_app plugins help dev test test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release
+.PHONY: build clean host _bundle_mac_app plugins help dev test test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release appimage
 
 # Determine the current platform
 ifeq ($(OS),Windows_NT)
@@ -22,6 +22,14 @@ else
 endif
 
 RELEASE_DIR := release
+APPIMAGE_TOOL ?= appimagetool.AppImage
+APPIMAGE_DIR := $(RELEASE_DIR)/wox.AppDir
+APPIMAGE_NAME := wox-linux-$(ARCH).AppImage
+ifeq ($(ARCH),amd64)
+	APPIMAGE_ARCH := x86_64
+else
+	APPIMAGE_ARCH := $(ARCH)
+endif
 
 help:
 	@echo "Usage: make [target]"
@@ -31,6 +39,7 @@ help:
 	@echo "  dev        Setup development environment"
 	@echo "  test       Run tests"
 	@echo "  build      Build all components"
+	@echo "  appimage   Build Linux AppImage"
 	@echo "  plugins    Update plugin store"
 	@echo "  clean      Clean release directory"
 	@echo "  host       Build plugin hosts"
@@ -43,6 +52,12 @@ _check_deps:
 	@command -v node >/dev/null 2>&1 || { echo "nodejs is required but not installed. Visit https://nodejs.org/" >&2; exit 1; }
 	@command -v pnpm >/dev/null 2>&1 || { echo "pnpm is required but not installed. Run: npm install -g pnpm" >&2; exit 1; }
 	@command -v uv >/dev/null 2>&1 || { echo "uv is required but not installed. Visit https://github.com/astral-sh/uv" >&2; exit 1; }
+ifeq ($(PLATFORM),linux)
+	@if ! command -v $(APPIMAGE_TOOL) >/dev/null 2>&1 && [ ! -x "$(APPIMAGE_TOOL)" ]; then \
+		echo "appimagetool is required but not installed. Install from https://github.com/AppImage/AppImageKit/releases or set APPIMAGE_TOOL to its path." >&2; \
+		exit 1; \
+	fi
+endif
 ifeq ($(PLATFORM),macos)
 	@command -v create-dmg >/dev/null 2>&1 || { echo "create-dmg is required but not installed. Visit https://github.com/create-dmg/create-dmg" >&2; exit 1; }
 endif
@@ -83,6 +98,24 @@ clean-resources:
 	@rm -f wox.core/resource/others/placeholder
 	@rm -f wox.core/resource/script_plugin_templates/placeholder
 
+appimage:
+ifeq ($(PLATFORM),linux)
+	@echo "Building AppImage..."
+	rm -rf $(APPIMAGE_DIR)
+	mkdir -p $(APPIMAGE_DIR)/usr/bin
+	mkdir -p $(APPIMAGE_DIR)/usr/share/icons/hicolor/256x256/apps
+	cp $(RELEASE_DIR)/wox-linux-$(ARCH) $(APPIMAGE_DIR)/usr/bin/wox
+	chmod +x $(APPIMAGE_DIR)/usr/bin/wox
+	cp assets/linux/wox.desktop $(APPIMAGE_DIR)/wox.desktop
+	cp assets/linux/AppRun $(APPIMAGE_DIR)/AppRun
+	chmod +x $(APPIMAGE_DIR)/AppRun
+	cp assets/app.png $(APPIMAGE_DIR)/wox.png
+	cp assets/app.png $(APPIMAGE_DIR)/usr/share/icons/hicolor/256x256/apps/wox.png
+	ARCH=$(APPIMAGE_ARCH) $(APPIMAGE_TOOL) $(APPIMAGE_DIR) $(RELEASE_DIR)/$(APPIMAGE_NAME)
+else
+	@echo "appimage target is only supported on Linux"
+endif
+
 # Test without rebuilding dependencies (fast)
 test: ensure-resources
 	@trap '$(MAKE) clean-resources' EXIT; $(MAKE) test-isolated
@@ -107,7 +140,11 @@ test-debug:
 build: clean dev
 	    $(MAKE) -C wox.ui.flutter/wox build
 		$(MAKE) -C wox.core build
-		
+
+ifeq ($(PLATFORM),linux)
+		$(MAKE) appimage
+endif
+
 ifeq ($(PLATFORM),macos)
 		# to make sure the working directory is the release directory
 		cd $(RELEASE_DIR) && $(MAKE) -f ../Makefile _bundle_mac_app APP_NAME=wox-mac-$(ARCH)

@@ -324,8 +324,8 @@ func ApplyUpdate(ctx context.Context) error {
 	}
 	newPath := currentUpdateInfo.DownloadedPath
 
-	// Get the current executable path
-	oldPath, err := os.Executable()
+	// Get the current executable path (AppImage-aware on Linux)
+	oldPath, err := getExecutablePath()
 	if err != nil {
 		return fmt.Errorf("failed to get current executable path: %w", err)
 	}

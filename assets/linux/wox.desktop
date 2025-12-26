@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Wox
+Exec=wox
+Icon=wox
+Categories=Utility;
+Terminal=false

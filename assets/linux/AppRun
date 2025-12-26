@@ -1,0 +1,4 @@
+#!/bin/sh
+set -e
+HERE="$(dirname "$(readlink -f "$0")")"
+exec "$HERE/usr/bin/wox" "$@"

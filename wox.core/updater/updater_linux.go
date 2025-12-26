@@ -15,6 +15,13 @@ func init() {
 
 type LinuxUpdater struct{}
 
+func getExecutablePath() (string, error) {
+	if appImagePath := os.Getenv("APPIMAGE"); appImagePath != "" {
+		return appImagePath, nil
+	}
+	return os.Executable()
+}
+
 func (u *LinuxUpdater) ApplyUpdate(ctx context.Context, pid int, oldPath, newPath string) error {
 	// Create a shell script to replace the executable after the app exits
 	shellContent := fmt.Sprintf(
