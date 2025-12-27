@@ -1,26 +1,11 @@
 package appearance
 
 /*
-#cgo LDFLAGS: -luser32 -lugdi -ldwmapi
+#cgo LDFLAGS: -luser32 -lgdi32 -ldwmapi
 
 #include <windows.h>
-#include <winuser.h>
 
-static void (*appearanceCallback)(bool);
-static HWND g_hWnd = NULL;
-static HHOOK g_hook = NULL;
-
-typedef struct {
-    DWORD cbSize;
-    HWND hWnd;
-    UINT uMsg;
-    WPARAM wParam;
-    LPARAM lParam;
-    DWORD time;
-    DWORD dwExtraInfo;
-} KBDLLHOOKSTRUCT, *PKBDLLHOOKSTRUCT;
-
-BOOL isDark() {
+static BOOL isDark(void) {
     DWORD value = 0;
     DWORD size = sizeof(value);
     HKEY hKey;
@@ -33,37 +18,52 @@ BOOL isDark() {
     }
     return FALSE;
 }
-
-LRESULT CALLBACK CallWndProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode == HC_ACTION) {
-        if (wParam == WM_SETTINGCHANGE) {
-            // Check if the setting change is related to theme
-            appearanceCallback(isDark());
-        }
-    }
-    return CallNextHookEx(NULL, nCode, wParam, lParam);
-}
-
-void watchSystemAppearance(void (*callback)(bool)) {
-    appearanceCallback = callback;
-}
-
-void stopWatching() {
-    appearanceCallback = NULL;
-}
 */
 import "C"
 
+import "time"
+
+var (
+	appearanceHandler func(bool)
+	stopChan          chan struct{}
+	lastIsDark        bool
+	checkInterval     = time.Second
+)
+
 func isDark() bool {
-	return bool(C.isDark())
+	return C.isDark() != 0
 }
 
 func watchSystemAppearance(callback func(isDark bool)) {
-	C.watchSystemAppearance(func(isDark C.bool) {
-		callback(bool(isDark))
-	})
+	appearanceHandler = callback
+	lastIsDark = isDark()
+	stopChan = make(chan struct{})
+
+	go func() {
+		ticker := time.NewTicker(checkInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				current := isDark()
+				if current != lastIsDark {
+					lastIsDark = current
+					if appearanceHandler != nil {
+						appearanceHandler(current)
+					}
+				}
+			case <-stopChan:
+				return
+			}
+		}
+	}()
 }
 
 func stopWatching() {
-	C.stopWatching()
+	if stopChan != nil {
+		close(stopChan)
+		stopChan = nil
+	}
+	appearanceHandler = nil
 }
