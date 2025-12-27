@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:wox/components/wox_button.dart';
+import 'package:wox/components/wox_hint_box.dart';
 import 'package:wox/components/wox_theme_icon_view.dart';
 import 'package:wox/components/wox_theme_preview.dart';
 import 'package:wox/components/wox_textfield.dart';
@@ -299,7 +300,22 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
       return Text(controller.tr('ui_setting_theme_empty_data'));
     }
 
-    return WoxThemePreview(theme: theme);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (theme.isAutoAppearance)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 0, left: 20, right: 20, top: 20),
+            child: WoxHintBox(
+              text: controller.tr('ui_setting_theme_auto_appearance_hint'),
+              icon: Icons.brightness_6_outlined,
+            ),
+          ),
+        Expanded(
+          child: WoxThemePreview(theme: theme),
+        ),
+      ],
+    );
   }
 
   Widget themeTabDescription() {

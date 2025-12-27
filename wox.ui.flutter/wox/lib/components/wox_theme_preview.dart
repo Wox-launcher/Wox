@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_hotkey_view.dart';
+import 'package:wox/components/wox_theme_auto_preview.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_theme.dart';
@@ -22,6 +23,14 @@ class WoxThemePreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Handle auto appearance theme
+    if (theme.isAutoAppearance) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 200),
+        child: WoxThemeAutoPreview(theme: theme),
+      );
+    }
+
     Color backgroundColor = safeFromCssColor(theme.appBackgroundColor);
     Color queryBoxColor = safeFromCssColor(theme.queryBoxBackgroundColor);
     Color resultItemActiveColor = safeFromCssColor(theme.resultItemActiveBackgroundColor);
@@ -72,7 +81,6 @@ class WoxThemePreview extends StatelessWidget {
                     height: 60,
                     margin: const EdgeInsets.symmetric(vertical: 0, horizontal: 10),
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(theme.resultItemBorderRadius.toDouble()),
                       color: isActive ? resultItemActiveColor : resultItemColor,
                     ),
                     child: ListTile(

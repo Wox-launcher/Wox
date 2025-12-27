@@ -20,6 +20,7 @@ import (
 	"wox/setting"
 	"wox/updater"
 	"wox/util"
+	"wox/util/appearance"
 	"wox/util/autostart"
 	"wox/util/hotkey"
 	"wox/util/ime"
@@ -49,6 +50,7 @@ type Manager struct {
 	themes           *util.HashMap[string, common.Theme]
 	systemThemeIds   []string
 	isUIReadyHandled bool
+	isSystemDark     bool
 
 	activeWindowName string          // active window name before wox is activated
 	activeWindowPid  int             // active window pid before wox is activated
@@ -160,6 +162,18 @@ func (m *Manager) Start(ctx context.Context) error {
 
 	util.Go(ctx, "start store manager", func() {
 		GetStoreManager().Start(util.NewTraceContext())
+	})
+
+	// Start watching system appearance changes for auto theme switching
+	m.isSystemDark = appearance.IsDark()
+	util.Go(ctx, "watch system appearance", func() {
+		appearance.WatchSystemAppearance(func(isDark bool) {
+			if m.isSystemDark != isDark {
+				m.isSystemDark = isDark
+				logger.Info(ctx, fmt.Sprintf("system appearance changed: isDark=%v", isDark))
+				m.applyAutoAppearanceTheme(ctx)
+			}
+		})
 	})
 
 	return nil
@@ -333,10 +347,38 @@ func (m *Manager) StartUIApp(ctx context.Context) error {
 func (m *Manager) GetCurrentTheme(ctx context.Context) common.Theme {
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	if v, ok := m.themes.Load(woxSetting.ThemeId.Get()); ok {
+		// If it's an auto appearance theme, return the actual applied theme (light or dark)
+		if v.IsAutoAppearance {
+			return m.getActualTheme(ctx, v)
+		}
 		return v
 	}
 
 	return common.Theme{}
+}
+
+// getActualTheme returns the actual theme to apply based on system appearance
+// It copies the auto theme's ID and flags but uses the light/dark theme's properties
+func (m *Manager) getActualTheme(ctx context.Context, autoTheme common.Theme) common.Theme {
+	var targetThemeId string
+	if m.isSystemDark {
+		targetThemeId = autoTheme.DarkThemeId
+	} else {
+		targetThemeId = autoTheme.LightThemeId
+	}
+
+	if targetTheme, ok := m.themes.Load(targetThemeId); ok {
+		// Copy the target theme's properties but keep auto theme's identity
+		result := targetTheme
+		result.ThemeId = autoTheme.ThemeId
+		result.IsAutoAppearance = autoTheme.IsAutoAppearance
+		result.DarkThemeId = autoTheme.DarkThemeId
+		result.LightThemeId = autoTheme.LightThemeId
+		return result
+	}
+
+	// Fallback to auto theme if target not found
+	return autoTheme
 }
 
 func (m *Manager) GetAllThemes(ctx context.Context) []common.Theme {
@@ -392,7 +434,17 @@ func (m *Manager) parseTheme(themeJson string) (common.Theme, error) {
 }
 
 func (m *Manager) ChangeTheme(ctx context.Context, theme common.Theme) {
-	m.GetUI(ctx).ChangeTheme(ctx, theme)
+	// If it's an auto appearance theme, save the auto theme ID but apply the appropriate light/dark theme
+	if theme.IsAutoAppearance {
+		woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+		woxSetting.ThemeId.Set(theme.ThemeId)
+
+		// Update system dark state and apply the appropriate theme
+		m.isSystemDark = appearance.IsDark()
+		m.applyAutoAppearanceTheme(ctx)
+	} else {
+		m.GetUI(ctx).ChangeTheme(ctx, theme)
+	}
 }
 
 func (m *Manager) ToggleWindow() {
@@ -416,6 +468,9 @@ func (m *Manager) PostUIReady(ctx context.Context) {
 		return
 	}
 	m.isUIReadyHandled = true
+
+	// Apply auto appearance theme on startup
+	m.applyAutoAppearanceTheme(ctx)
 
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	if !woxSetting.HideOnStart.Get() {
@@ -737,4 +792,35 @@ func (m *Manager) ChangeUserDataDirectory(ctx context.Context, newDirectory stri
 
 	logger.Info(ctx, "User data directory successfully changed")
 	return nil
+}
+
+// applyAutoAppearanceTheme applies the appropriate theme based on system appearance
+// when the current theme has IsAutoAppearance enabled
+func (m *Manager) applyAutoAppearanceTheme(ctx context.Context) {
+	currentTheme := m.GetCurrentTheme(ctx)
+	if !currentTheme.IsAutoAppearance {
+		return
+	}
+
+	var targetThemeId string
+	if m.isSystemDark {
+		targetThemeId = currentTheme.DarkThemeId
+	} else {
+		targetThemeId = currentTheme.LightThemeId
+	}
+
+	if targetThemeId == "" {
+		logger.Warn(ctx, "auto appearance theme is enabled but target theme id is empty")
+		return
+	}
+
+	if targetTheme, ok := m.themes.Load(targetThemeId); ok {
+		logger.Info(ctx, fmt.Sprintf("auto apply theme: %s (isDark=%v)", targetTheme.ThemeName, m.isSystemDark))
+		// Apply theme without saving to settings, so auto appearance logic works on restart
+		if impl, ok := m.ui.(*uiImpl); ok {
+			impl.ChangeThemeWithoutSave(ctx, targetTheme)
+		}
+	} else {
+		logger.Warn(ctx, fmt.Sprintf("target theme not found: %s", targetThemeId))
+	}
 }

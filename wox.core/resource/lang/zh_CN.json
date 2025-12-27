@@ -107,6 +107,7 @@
   "ui_setting_theme_description": "描述",
   "ui_setting_theme_empty_data": "主题数据为空",
   "ui_setting_theme_system_tag": "系统",
+  "ui_setting_theme_auto_appearance_hint": "此主题将根据系统外观设置自动在浅色和深色模式之间切换。",
   "ui_back": "返回",
   "ui_operation": "操作",
   "ui_no_data": "暂无数据",

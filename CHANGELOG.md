@@ -6,6 +6,8 @@
 
   - [`Emoji`] Add ai search support for Emoji plugin
     ![](screenshots/emoji_ai_search.png)
+  - Add auto theme which changes theme based on system light/dark mode
+    ![](screenshots/auto_theme.png)
 
 ## v2.0.0-beta.7 — 2025-12-19
 

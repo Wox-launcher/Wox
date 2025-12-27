@@ -18,12 +18,9 @@ class WoxHintBox extends StatelessWidget {
     final Color baseBackground = getThemeBackgroundColor();
     final bool isDarkTheme = baseBackground.computeLuminance() < 0.5;
 
-    final Color accentColor =
-        isDarkTheme ? Colors.lightBlueAccent : Colors.blue;
-    final Color backgroundColor =
-        accentColor.withValues(alpha: isDarkTheme ? 0.14 : 0.10);
-    final Color borderColor =
-        accentColor.withValues(alpha: isDarkTheme ? 0.35 : 0.30);
+    final Color accentColor = isDarkTheme ? Colors.lightBlueAccent : Colors.blue;
+    final Color backgroundColor = accentColor.withValues(alpha: isDarkTheme ? 0.14 : 0.10);
+    final Color borderColor = accentColor.withValues(alpha: isDarkTheme ? 0.35 : 0.30);
 
     return Container(
       padding: padding,
@@ -40,8 +37,7 @@ class WoxHintBox extends StatelessWidget {
           Expanded(
             child: Text(
               text,
-              style: TextStyle(
-                  color: getThemeTextColor(), fontSize: 13, height: 1.35),
+              style: TextStyle(color: getThemeTextColor(), fontSize: 13, height: 1.35),
             ),
           ),
         ],

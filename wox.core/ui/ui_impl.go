@@ -73,6 +73,13 @@ func (u *uiImpl) ChangeTheme(ctx context.Context, theme common.Theme) {
 	u.invokeWebsocketMethod(ctx, "ChangeTheme", theme)
 }
 
+// ChangeThemeWithoutSave applies the theme without saving to settings
+// This is used for auto appearance theme switching
+func (u *uiImpl) ChangeThemeWithoutSave(ctx context.Context, theme common.Theme) {
+	logger.Info(ctx, fmt.Sprintf("change theme (without save): %s", theme.ThemeName))
+	u.invokeWebsocketMethod(ctx, "ChangeTheme", theme)
+}
+
 func (u *uiImpl) InstallTheme(ctx context.Context, theme common.Theme) {
 	logger.Info(ctx, fmt.Sprintf("install theme: %s", theme.ThemeName))
 	GetStoreManager().Install(ctx, theme)

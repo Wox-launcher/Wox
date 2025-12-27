@@ -107,6 +107,7 @@
   "ui_setting_theme_description": "Description",
   "ui_setting_theme_empty_data": "Theme data is empty",
   "ui_setting_theme_system_tag": "System",
+  "ui_setting_theme_auto_appearance_hint": "This theme will automatically switch between light and dark modes based on your system appearance settings.",
   "ui_back": "Back",
   "ui_operation": "Operation",
   "ui_no_data": "No data",

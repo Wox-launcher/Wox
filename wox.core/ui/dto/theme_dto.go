@@ -1,15 +1,18 @@
 package dto
 
 type ThemeDto struct {
-	ThemeId      string
-	ThemeName    string
-	ThemeAuthor  string
-	ThemeUrl     string
-	Version      string
-	Description  string
-	IsSystem     bool
-	IsInstalled  bool
-	IsUpgradable bool
+	ThemeId          string
+	ThemeName        string
+	ThemeAuthor      string
+	ThemeUrl         string
+	Version          string
+	Description      string
+	IsSystem         bool
+	IsInstalled      bool
+	IsUpgradable     bool
+	IsAutoAppearance bool
+	DarkThemeId      string
+	LightThemeId     string
 
 	AppBackgroundColor                   string
 	AppPaddingLeft                       int

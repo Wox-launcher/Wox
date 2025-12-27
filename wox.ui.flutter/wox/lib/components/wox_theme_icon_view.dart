@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/utils/color_util.dart';
+import 'package:wox/components/wox_theme_icon_auto_view.dart';
 
 class WoxThemeIconView extends StatelessWidget {
   final WoxTheme theme;
@@ -11,6 +12,12 @@ class WoxThemeIconView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Handle auto appearance theme
+    if (theme.isAutoAppearance) {
+      return WoxThemeIconAutoView(theme: theme, width: width, height: height);
+    }
+
+    // Regular theme
     Color backgroundColor = safeFromCssColor(theme.appBackgroundColor);
     Color queryBoxColor = safeFromCssColor(theme.queryBoxBackgroundColor);
     Color resultItemActiveColor = safeFromCssColor(theme.resultItemActiveBackgroundColor);

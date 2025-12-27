@@ -15,6 +15,10 @@ type Theme struct {
 	IsSystem    bool
 	IsInstalled bool
 
+	IsAutoAppearance bool   // Whether to automatically switch theme based on system appearance
+	DarkThemeId      string // ID of the dark theme variant
+	LightThemeId     string // ID of the light theme variant
+
 	AppBackgroundColor                   string
 	AppPaddingLeft                       int
 	AppPaddingTop                        int

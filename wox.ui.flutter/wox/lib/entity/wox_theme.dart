@@ -8,6 +8,9 @@ class WoxTheme {
   late bool isSystem;
   late bool isInstalled;
   late bool isUpgradable;
+  late bool isAutoAppearance;
+  late String darkThemeId;
+  late String lightThemeId;
 
   late String appBackgroundColor;
   late int appPaddingLeft;
@@ -70,6 +73,9 @@ class WoxTheme {
     isSystem,
     isInstalled,
     isUpgradable,
+    isAutoAppearance,
+    darkThemeId,
+    lightThemeId,
     appBackgroundColor,
     appPaddingLeft,
     appPaddingTop,
@@ -130,6 +136,9 @@ class WoxTheme {
     isSystem = json['IsSystem'] ?? false;
     isInstalled = json['IsInstalled'] ?? false;
     isUpgradable = json['IsUpgradable'] ?? false;
+    isAutoAppearance = json['IsAutoAppearance'] ?? false;
+    darkThemeId = json['DarkThemeId'] ?? '';
+    lightThemeId = json['LightThemeId'] ?? '';
     appBackgroundColor = json['AppBackgroundColor'];
     appPaddingLeft = json['AppPaddingLeft'];
     appPaddingTop = json['AppPaddingTop'];
@@ -147,25 +156,19 @@ class WoxTheme {
     resultItemTitleColor = json['ResultItemTitleColor'];
     resultItemSubTitleColor = json['ResultItemSubTitleColor'];
     resultItemTailTextColor = json['ResultItemTailTextColor'];
-    resultItemBorderLeftWidth = _parseInt(
-        json['ResultItemBorderLeftWidth'] ?? json['ResultItemBorderLeft']);
+    resultItemBorderLeftWidth = _parseInt(json['ResultItemBorderLeftWidth'] ?? json['ResultItemBorderLeft']);
     resultItemActiveBackgroundColor = json['ResultItemActiveBackgroundColor'];
     resultItemActiveTitleColor = json['ResultItemActiveTitleColor'];
     resultItemActiveSubTitleColor = json['ResultItemActiveSubTitleColor'];
-    resultItemActiveBorderLeftWidth = _parseInt(
-        json['ResultItemActiveBorderLeftWidth'] ??
-            json['ResultItemActiveBorderLeft']);
+    resultItemActiveBorderLeftWidth = _parseInt(json['ResultItemActiveBorderLeftWidth'] ?? json['ResultItemActiveBorderLeft']);
     resultItemActiveTailTextColor = json['ResultItemActiveTailTextColor'];
     queryBoxFontColor = json['QueryBoxFontColor'];
     queryBoxBackgroundColor = json['QueryBoxBackgroundColor'];
     queryBoxBorderRadius = json['QueryBoxBorderRadius'];
     queryBoxCursorColor = json['QueryBoxCursorColor'];
-    final selectionBackground = json['QueryBoxTextSelectionBackgroundColor'] ??
-        json['QueryBoxTextSelectionColor'];
+    final selectionBackground = json['QueryBoxTextSelectionBackgroundColor'] ?? json['QueryBoxTextSelectionColor'];
     queryBoxTextSelectionBackgroundColor = selectionBackground ?? '';
-    queryBoxTextSelectionColor = json['QueryBoxTextSelectionColor'] ??
-        json['ResultItemActiveTitleColor'] ??
-        '';
+    queryBoxTextSelectionColor = json['QueryBoxTextSelectionColor'] ?? json['ResultItemActiveTitleColor'] ?? '';
     actionContainerBackgroundColor = json['ActionContainerBackgroundColor'];
     actionContainerHeaderFontColor = json['ActionContainerHeaderFontColor'];
     actionContainerPaddingLeft = json['ActionContainerPaddingLeft'];
@@ -200,6 +203,9 @@ class WoxTheme {
     data['IsSystem'] = isSystem;
     data['IsInstalled'] = isInstalled;
     data['IsUpgradable'] = isUpgradable;
+    data['IsAutoAppearance'] = isAutoAppearance;
+    data['DarkThemeId'] = darkThemeId;
+    data['LightThemeId'] = lightThemeId;
     data['AppBackgroundColor'] = appBackgroundColor;
     data['AppPaddingLeft'] = appPaddingLeft;
     data['AppPaddingTop'] = appPaddingTop;
@@ -227,8 +233,7 @@ class WoxTheme {
     data['QueryBoxBackgroundColor'] = queryBoxBackgroundColor;
     data['QueryBoxBorderRadius'] = queryBoxBorderRadius;
     data['QueryBoxCursorColor'] = queryBoxCursorColor;
-    data['QueryBoxTextSelectionBackgroundColor'] =
-        queryBoxTextSelectionBackgroundColor;
+    data['QueryBoxTextSelectionBackgroundColor'] = queryBoxTextSelectionBackgroundColor;
     data['QueryBoxTextSelectionColor'] = queryBoxTextSelectionColor;
     data['ActionContainerBackgroundColor'] = actionContainerBackgroundColor;
     data['ActionContainerHeaderFontColor'] = actionContainerHeaderFontColor;
@@ -264,6 +269,9 @@ class WoxTheme {
     isSystem = false;
     isInstalled = false;
     isUpgradable = false;
+    isAutoAppearance = false;
+    darkThemeId = '';
+    lightThemeId = '';
   }
 }
 

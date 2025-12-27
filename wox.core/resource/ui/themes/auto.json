@@ -1,0 +1,11 @@
+{
+    "ThemeId": "532238bc-6eda-4011-a080-c365b67486fc",
+    "ThemeName": "Wox Auto",
+    "Description": "Auto switch between light and dark theme based on system appearance",
+    "ThemeAuthor": "Wox launcher",
+    "Version": "1.0.0",
+    "ThemeUrl": "https://www.github.com/wox-launcher/wox",
+    "IsAutoAppearance": true,
+    "LightThemeId": "92dc0ea7-a52f-4b0a-9f0d-7cb36a634860",
+    "DarkThemeId": "53c1d0a4-ffc8-4d90-91dc-b408fb0b9a03"
+}

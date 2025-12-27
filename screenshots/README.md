@@ -1,4 +1,4 @@
-# APP 
+# APP
 
 ![APP](https://raw.githubusercontent.com/Wox-launcher/Wox/master/screenshots/app.png)
 
@@ -10,7 +10,10 @@
 
 ![Setting](https://raw.githubusercontent.com/Wox-launcher/Wox/master/screenshots/setting.png)
 
-
 # Fallback Search
 
 ![Fallback Search](https://raw.githubusercontent.com/Wox-launcher/Wox/master/screenshots/fallback_search.png)
+
+# Auto Theme
+
+![Auto Theme](https://raw.githubusercontent.com/Wox-launcher/Wox/master/screenshots/auto_theme.png)
