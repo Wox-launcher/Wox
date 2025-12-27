@@ -360,5 +360,37 @@
         "plugin_description": "一个与 Strava 运动交互的插件"
       }
     }
+  },
+  {
+    "Id": "cb491ba6-e73f-4434-922e-738a55f87558",
+    "Name": "i18n:plugin_name",
+    "Author": "Wox-launcher",
+    "Version": "0.0.1",
+    "MinWoxVersion": "2.0.0",
+    "Runtime": "python",
+    "Description": "i18n:plugin_description",
+    "IconUrl": "https://raw.githubusercontent.com/Wox-Launcher/Wox.Plugin.KillProcess/refs/heads/main/image/app.png",
+    "Website": "https://github.com/Wox-Launcher/Wox.Plugin.KillProcess",
+    "DownloadUrl": "https://github.com/Wox-Launcher/Wox.Plugin.KillProcess/releases/latest/download/wox.plugin.killprocess.wox",
+    "ScreenshotUrls": [
+      "https://github.com/Wox-Launcher/Wox.Plugin.KillProcess/raw/main/image/screenshot.png"
+    ],
+    "SupportedOS": [
+      "windows",
+      "darwin",
+      "linux"
+    ],
+    "DateCreated": "2025-12-27 19:55:00",
+    "DateUpdated": "2025-12-27 19:55:00",
+    "I18n": {
+      "en_US": {
+        "plugin_name": "Kill Process",
+        "plugin_description": "Terminate a running process by its name or ID",
+      },
+      "zh_CN": {
+        "plugin_name": "进程杀手",
+        "plugin_description": "通过进程名称或 ID 终止正在运行的进程",
+      }
+    }
   }
 ]
