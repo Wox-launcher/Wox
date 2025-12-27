@@ -68,6 +68,14 @@ func (u *uiImpl) GetServerPort(ctx context.Context) int {
 
 func (u *uiImpl) ChangeTheme(ctx context.Context, theme common.Theme) {
 	logger.Info(ctx, fmt.Sprintf("change theme: %s", theme.ThemeName))
+
+	// If it's an auto appearance theme, delegate to manager for proper handling
+	if theme.IsAutoAppearance {
+		GetUIManager().ChangeTheme(ctx, theme)
+		return
+	}
+
+	// For normal themes, save and apply directly
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	woxSetting.ThemeId.Set(theme.ThemeId)
 	u.invokeWebsocketMethod(ctx, "ChangeTheme", theme)

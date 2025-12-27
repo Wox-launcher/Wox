@@ -171,7 +171,7 @@ func (m *Manager) Start(ctx context.Context) error {
 			if m.isSystemDark != isDark {
 				m.isSystemDark = isDark
 				logger.Info(ctx, fmt.Sprintf("system appearance changed: isDark=%v", isDark))
-				m.applyAutoAppearanceTheme(ctx)
+				m.applyAutoAppearanceThemeIfNeed(ctx)
 			}
 		})
 	})
@@ -441,7 +441,7 @@ func (m *Manager) ChangeTheme(ctx context.Context, theme common.Theme) {
 
 		// Update system dark state and apply the appropriate theme
 		m.isSystemDark = appearance.IsDark()
-		m.applyAutoAppearanceTheme(ctx)
+		m.applyAutoAppearanceThemeIfNeed(ctx)
 	} else {
 		m.GetUI(ctx).ChangeTheme(ctx, theme)
 	}
@@ -470,7 +470,7 @@ func (m *Manager) PostUIReady(ctx context.Context) {
 	m.isUIReadyHandled = true
 
 	// Apply auto appearance theme on startup
-	m.applyAutoAppearanceTheme(ctx)
+	m.applyAutoAppearanceThemeIfNeed(ctx)
 
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	if !woxSetting.HideOnStart.Get() {
@@ -794,9 +794,9 @@ func (m *Manager) ChangeUserDataDirectory(ctx context.Context, newDirectory stri
 	return nil
 }
 
-// applyAutoAppearanceTheme applies the appropriate theme based on system appearance
+// applyAutoAppearanceThemeIfNeed applies the appropriate theme based on system appearance
 // when the current theme has IsAutoAppearance enabled
-func (m *Manager) applyAutoAppearanceTheme(ctx context.Context) {
+func (m *Manager) applyAutoAppearanceThemeIfNeed(ctx context.Context) {
 	currentTheme := m.GetCurrentTheme(ctx)
 	if !currentTheme.IsAutoAppearance {
 		return
