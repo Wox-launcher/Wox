@@ -385,11 +385,11 @@
     "I18n": {
       "en_US": {
         "plugin_name": "Kill Process",
-        "plugin_description": "Terminate a running process by its name or ID",
+        "plugin_description": "Terminate a running process by its name or ID"
       },
       "zh_CN": {
         "plugin_name": "进程杀手",
-        "plugin_description": "通过进程名称或 ID 终止正在运行的进程",
+        "plugin_description": "通过进程名称或 ID 终止正在运行的进程"
       }
     }
   }
