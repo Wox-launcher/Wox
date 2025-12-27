@@ -78,6 +78,10 @@ func getFileTypeIconImpl(ctx context.Context, ext string) (string, error) {
 	return "", errors.New("no themed icon found")
 }
 
+func getFileIconImpl(ctx context.Context, filePath string) (string, error) {
+	return "", errors.New("file icon not supported")
+}
+
 func mimeFromExt(ext string) string {
 	e := strings.TrimPrefix(strings.ToLower(ext), ".")
 	if e == "" || e == "__unknown" {

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"syscall"
 	"unsafe"
+	"wox/util"
 
 	"github.com/disintegration/imaging"
 	win "github.com/lxn/win"
@@ -22,13 +23,10 @@ import (
 
 var (
 	shell32          = syscall.NewLazyDLL("shell32.dll")
-	gdi32            = syscall.NewLazyDLL("gdi32.dll")
 	user32           = syscall.NewLazyDLL("user32.dll")
 	shGetFileInfo    = shell32.NewProc("SHGetFileInfoW")
 	extractIconEx    = shell32.NewProc("ExtractIconExW")
-	createDIBSection = gdi32.NewProc("CreateDIBSection")
-	createSolidBrush = gdi32.NewProc("CreateSolidBrush")
-	fillRect         = user32.NewProc("FillRect")
+	privateExtractIcons = user32.NewProc("PrivateExtractIconsW")
 )
 
 type shFileInfo struct {
@@ -153,6 +151,179 @@ func getIconFromSHGetFileInfo(ext string) (win.HICON, error) {
 	return shfi.HIcon, nil
 }
 
+func getFileIconImpl(ctx context.Context, filePath string) (string, error) {
+	const size = 48
+	cachePath := buildPathCachePath(filePath, size)
+
+	if _, err := os.Stat(cachePath); err == nil {
+		return cachePath, nil
+	}
+	if strings.TrimSpace(filePath) == "" {
+		return "", errors.New("empty path")
+	}
+	if _, err := os.Stat(filePath); err != nil {
+		return "", err
+	}
+
+	img, err := getHighResIcon(ctx, filePath)
+	if err != nil {
+		img, err = getIconUsingExtractIconEx(ctx, filePath)
+	}
+	if err != nil {
+		img, err = getWindowsDefaultIcon(ctx)
+	}
+	if err != nil {
+		return "", err
+	}
+
+	if mkdirErr := os.MkdirAll(filepath.Dir(cachePath), 0o755); mkdirErr != nil {
+		return "", errors.New("failed to create cache dir: " + mkdirErr.Error())
+	}
+	if saveErr := imaging.Save(img, cachePath); saveErr != nil {
+		return "", errors.New("failed to save icon to cache for " + filePath + ": " + saveErr.Error())
+	}
+
+	return cachePath, nil
+}
+
+func getIconUsingExtractIconEx(ctx context.Context, filePath string) (image.Image, error) {
+	lpIconPath, err := syscall.UTF16PtrFromString(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	var largeIcon win.HICON
+	var smallIcon win.HICON
+	ret, _, _ := extractIconEx.Call(
+		uintptr(unsafe.Pointer(lpIconPath)),
+		0,
+		uintptr(unsafe.Pointer(&largeIcon)),
+		uintptr(unsafe.Pointer(&smallIcon)),
+		1,
+	)
+	if ret == 0 || largeIcon == 0 {
+		return nil, errors.New("no icons found in file")
+	}
+	defer win.DestroyIcon(largeIcon)
+
+	return convertIconToImage(ctx, largeIcon)
+}
+
+func getHighResIcon(ctx context.Context, filePath string) (img image.Image, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			util.GetLogger().Debug(ctx, "PrivateExtractIconsW caused panic (API may not be available)")
+			img = nil
+			err = errors.New("PrivateExtractIconsW panic")
+		}
+	}()
+
+	if err = privateExtractIcons.Find(); err != nil {
+		return nil, err
+	}
+
+	lpIconPath, err := syscall.UTF16PtrFromString(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	sizes := []int{256, 128, 64, 48}
+	for _, size := range sizes {
+		var hIcon win.HICON
+		ret, _, callErr := privateExtractIcons.Call(
+			uintptr(unsafe.Pointer(lpIconPath)),
+			0,
+			uintptr(size),
+			uintptr(size),
+			uintptr(unsafe.Pointer(&hIcon)),
+			0,
+			1,
+			0,
+		)
+		if callErr != nil &&
+			callErr.Error() != "The operation completed successfully." &&
+			callErr.Error() != "User stopped resource enumeration." {
+			continue
+		}
+
+		if ret > 0 && hIcon != 0 {
+			defer win.DestroyIcon(hIcon)
+			util.GetLogger().Info(ctx, "Successfully extracted high-res icon using PrivateExtractIconsW")
+			return convertIconToImage(ctx, hIcon)
+		}
+	}
+
+	return nil, errors.New("no icons found in file")
+}
+
+func getWindowsDefaultIcon(ctx context.Context) (image.Image, error) {
+	if icon, err := getHighResDefaultIcon(ctx); err == nil {
+		return icon, nil
+	}
+	return getStandardDefaultIcon(ctx)
+}
+
+func getHighResDefaultIcon(ctx context.Context) (image.Image, error) {
+	shell32Path, err := syscall.UTF16PtrFromString("shell32.dll")
+	if err != nil {
+		return nil, err
+	}
+
+	if err := privateExtractIcons.Find(); err != nil {
+		return nil, err
+	}
+
+	sizes := []int{256, 128, 64, 48}
+	for _, size := range sizes {
+		var hIcon win.HICON
+		ret, _, callErr := privateExtractIcons.Call(
+			uintptr(unsafe.Pointer(shell32Path)),
+			2,
+			uintptr(size),
+			uintptr(size),
+			uintptr(unsafe.Pointer(&hIcon)),
+			0,
+			1,
+			0,
+		)
+		if callErr != nil &&
+			callErr.Error() != "The operation completed successfully." &&
+			callErr.Error() != "User stopped resource enumeration." {
+			continue
+		}
+		if ret > 0 && hIcon != 0 {
+			defer win.DestroyIcon(hIcon)
+			util.GetLogger().Info(ctx, "Successfully extracted default icon from shell32.dll")
+			return convertIconToImage(ctx, hIcon)
+		}
+	}
+
+	return nil, errors.New("failed to extract high resolution default icon from shell32.dll")
+}
+
+func getStandardDefaultIcon(ctx context.Context) (image.Image, error) {
+	exeExtension, err := syscall.UTF16PtrFromString(".exe")
+	if err != nil {
+		return nil, err
+	}
+
+	var shfi shFileInfo
+	ret, _, _ := shGetFileInfo.Call(
+		uintptr(unsafe.Pointer(exeExtension)),
+		FILE_ATTRIBUTE_NORMAL,
+		uintptr(unsafe.Pointer(&shfi)),
+		uintptr(unsafe.Sizeof(shfi)),
+		SHGFI_ICON|SHGFI_LARGEICON|SHGFI_USEFILEATTRIBUTES,
+	)
+	if ret == 0 || shfi.HIcon == 0 {
+		return nil, errors.New("failed to get default Windows executable icon")
+	}
+	defer win.DestroyIcon(shfi.HIcon)
+
+	util.GetLogger().Info(ctx, "Using Windows standard default executable icon as fallback")
+	return convertIconToImage(ctx, shfi.HIcon)
+}
+
 func getFileTypeIconImpl(ctx context.Context, ext string) (string, error) {
 	const size = 48
 	cachePath := buildCachePath(ext, size)
@@ -196,75 +367,62 @@ func getFileTypeIconImpl(ctx context.Context, ext string) (string, error) {
 }
 
 func convertIconToImage(ctx context.Context, hIcon win.HICON) (image.Image, error) {
-	// Use a more reliable method: draw icon to a DC and capture the bitmap
-	const size = 48
+	var iconInfo win.ICONINFO
+	if !win.GetIconInfo(hIcon, &iconInfo) {
+		return nil, errors.New("failed to get icon info")
+	}
+	defer win.DeleteObject(win.HGDIOBJ(iconInfo.HbmColor))
+	defer win.DeleteObject(win.HGDIOBJ(iconInfo.HbmMask))
 
 	hdc := win.GetDC(0)
-	if hdc == 0 {
-		return nil, errors.New("failed to get DC")
-	}
 	defer win.ReleaseDC(0, hdc)
 
-	// Create a compatible DC and bitmap
-	memDC := win.CreateCompatibleDC(hdc)
-	if memDC == 0 {
-		return nil, errors.New("failed to create compatible DC")
-	}
-	defer win.DeleteDC(memDC)
-
-	// Create a 32-bit RGBA bitmap
-	var bmi win.BITMAPINFO
-	bmi.BmiHeader.BiSize = uint32(unsafe.Sizeof(bmi.BmiHeader))
-	bmi.BmiHeader.BiWidth = size
-	bmi.BmiHeader.BiHeight = -size // top-down
-	bmi.BmiHeader.BiPlanes = 1
-	bmi.BmiHeader.BiBitCount = 32
-	bmi.BmiHeader.BiCompression = win.BI_RGB
-
-	var pBits unsafe.Pointer
-	ret, _, _ := createDIBSection.Call(
-		uintptr(hdc),
-		uintptr(unsafe.Pointer(&bmi)),
-		uintptr(win.DIB_RGB_COLORS),
-		uintptr(unsafe.Pointer(&pBits)),
-		0,
-		0,
-	)
-	hBitmap := win.HBITMAP(ret)
-	if hBitmap == 0 {
-		return nil, errors.New("failed to create DIB section")
-	}
-	defer win.DeleteObject(win.HGDIOBJ(hBitmap))
-
-	// Select bitmap into DC
-	oldBitmap := win.SelectObject(memDC, win.HGDIOBJ(hBitmap))
-	defer win.SelectObject(memDC, oldBitmap)
-
-	// Fill with transparent background (all zeros = transparent black)
-	// This allows the icon's own transparency to show through
-	clearBits := make([]byte, size*size*4)
-	copy((*[1 << 30]byte)(pBits)[:size*size*4], clearBits)
-
-	// Draw the icon
-	if !win.DrawIconEx(memDC, 0, 0, hIcon, size, size, 0, 0, win.DI_NORMAL) {
-		return nil, errors.New("failed to draw icon")
+	var bitmap win.BITMAP
+	if win.GetObject(win.HGDIOBJ(iconInfo.HbmColor), uintptr(unsafe.Sizeof(bitmap)), unsafe.Pointer(&bitmap)) == 0 {
+		return nil, errors.New("failed to get bitmap object")
 	}
 
-	// Copy bitmap data to Go image
-	bits := make([]byte, size*size*4)
-	copy(bits, (*[1 << 30]byte)(pBits)[:size*size*4])
+	width := int(bitmap.BmWidth)
+	height := int(bitmap.BmHeight)
 
-	img := image.NewRGBA(image.Rect(0, 0, size, size))
-	// Convert BGRA to RGBA
-	for y := 0; y < size; y++ {
-		for x := 0; x < size; x++ {
-			base := y*size*4 + x*4
+	var bmpInfo win.BITMAPINFO
+	bmpInfo.BmiHeader.BiSize = uint32(unsafe.Sizeof(bmpInfo.BmiHeader))
+	bmpInfo.BmiHeader.BiWidth = int32(width)
+	bmpInfo.BmiHeader.BiHeight = -int32(height)
+	bmpInfo.BmiHeader.BiPlanes = 1
+	bmpInfo.BmiHeader.BiBitCount = 32
+	bmpInfo.BmiHeader.BiCompression = win.BI_RGB
+
+	bits := make([]byte, width*height*4)
+	if win.GetDIBits(hdc, win.HBITMAP(iconInfo.HbmColor), 0, uint32(height), &bits[0], &bmpInfo, win.DIB_RGB_COLORS) == 0 {
+		return nil, errors.New("failed to get DIB bits")
+	}
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			base := y*width*4 + x*4
 			b := bits[base+0]
 			g := bits[base+1]
 			r := bits[base+2]
 			a := bits[base+3]
 			img.SetRGBA(x, y, color.RGBA{R: r, G: g, B: b, A: a})
 		}
+	}
+
+	hasContent := false
+	bounds := img.Bounds()
+	for y := bounds.Min.Y; y < bounds.Max.Y && !hasContent; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X && !hasContent; x++ {
+			r, g, b, a := img.At(x, y).RGBA()
+			if a > 0 && (r > 0 || g > 0 || b > 0) {
+				hasContent = true
+			}
+		}
+	}
+
+	if !hasContent {
+		return nil, errors.New("extracted icon is empty or fully transparent")
 	}
 
 	return img, nil

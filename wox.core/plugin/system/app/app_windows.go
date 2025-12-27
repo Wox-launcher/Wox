@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"image"
-	"image/color"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -19,20 +17,11 @@ import (
 	"wox/common"
 	"wox/plugin"
 	"wox/util"
+	"wox/util/fileicon"
 	"wox/util/shell"
-
-	win "github.com/lxn/win"
 )
 
 var (
-	// Load shell32.dll and user32.dll
-	shell32 = syscall.NewLazyDLL("shell32.dll")
-	user32  = syscall.NewLazyDLL("user32.dll")
-	// Get the address of APIs
-	extractIconEx       = shell32.NewProc("ExtractIconExW")
-	privateExtractIcons = user32.NewProc("PrivateExtractIconsW")
-	shGetFileInfo       = shell32.NewProc("SHGetFileInfoW")
-
 	// Load version.dll for file version info
 	version                = syscall.NewLazyDLL("version.dll")
 	getFileVersionInfoSize = version.NewProc("GetFileVersionInfoSizeW")
@@ -50,39 +39,11 @@ var (
 	getProcessTimes      = kernel32.NewProc("GetProcessTimes")
 )
 
-// Windows constants for icon extraction
 const (
-	SHGFI_ICON              = 0x000000100
-	SHGFI_DISPLAYNAME       = 0x000000200
-	SHGFI_LARGEICON         = 0x000000000
-	SHGFI_SMALLICON         = 0x000000001
-	SHGFI_SYSICONINDEX      = 0x000004000
-	SHGFI_SHELLICONSIZE     = 0x000000004
-	SHGFI_USEFILEATTRIBUTES = 0x000000010
-
-	FILE_ATTRIBUTE_READONLY  = 0x00000001
-	FILE_ATTRIBUTE_HIDDEN    = 0x00000002
-	FILE_ATTRIBUTE_SYSTEM    = 0x00000004
-	FILE_ATTRIBUTE_DIRECTORY = 0x00000010
-	FILE_ATTRIBUTE_ARCHIVE   = 0x00000020
-	FILE_ATTRIBUTE_NORMAL    = 0x00000080
-	IMAGE_ICON               = 1
-	LR_DEFAULTSIZE           = 0x00000040
-	LR_LOADFROMFILE          = 0x00000010
-
 	// Process access rights
 	PROCESS_QUERY_INFORMATION = 0x0400
 	PROCESS_VM_READ           = 0x0010
 )
-
-// SHFILEINFO structure for SHGetFileInfo
-type SHFILEINFO struct {
-	HIcon         win.HICON
-	IIcon         int32
-	DwAttributes  uint32
-	SzDisplayName [260]uint16
-	SzTypeName    [80]uint16
-}
 
 // PROCESS_MEMORY_COUNTERS_EX structure for GetProcessMemoryInfo
 type PROCESS_MEMORY_COUNTERS_EX struct {
@@ -199,16 +160,10 @@ func (a *WindowsRetriever) parseShortcut(ctx context.Context, appPath string) (a
 
 	// use default icon if no icon is found
 	icon := appIcon
-	img, iconErr := a.GetAppIcon(ctx, targetPath)
-	if iconErr != nil {
+	if iconPath, iconErr := fileicon.GetFileIconByPath(ctx, targetPath); iconErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("Error getting icon for %s, use default icon: %s", targetPath, iconErr.Error()))
 	} else {
-		woxIcon, imgErr := common.NewWoxImage(img)
-		if imgErr != nil {
-			util.GetLogger().Error(ctx, fmt.Sprintf("Error converting icon for %s: %s", targetPath, imgErr.Error()))
-		} else {
-			icon = woxIcon
-		}
+		icon = common.NewWoxImageAbsolutePath(iconPath)
 	}
 
 	// Try to get display name from target exe file version info
@@ -230,16 +185,10 @@ func (a *WindowsRetriever) parseShortcut(ctx context.Context, appPath string) (a
 func (a *WindowsRetriever) parseExe(ctx context.Context, appPath string) (appInfo, error) {
 	// use default icon if no icon is found
 	icon := appIcon
-	img, iconErr := a.GetAppIcon(ctx, appPath)
-	if iconErr != nil {
+	if iconPath, iconErr := fileicon.GetFileIconByPath(ctx, appPath); iconErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("Error getting icon for %s: %s", appPath, iconErr.Error()))
 	} else {
-		woxIcon, imgErr := common.NewWoxImage(img)
-		if imgErr != nil {
-			util.GetLogger().Error(ctx, fmt.Sprintf("Error converting icon for %s: %s", appPath, imgErr.Error()))
-		} else {
-			icon = woxIcon
-		}
+		icon = common.NewWoxImageAbsolutePath(iconPath)
 	}
 
 	// Try to get display name from exe file version info
@@ -256,181 +205,6 @@ func (a *WindowsRetriever) parseExe(ctx context.Context, appPath string) (appInf
 		Icon: icon,
 		Type: AppTypeDesktop,
 	}, nil
-}
-
-func (a *WindowsRetriever) GetAppIcon(ctx context.Context, path string) (image.Image, error) {
-	// Priority 1: Try to get high resolution icon using PrivateExtractIconsW (best quality)
-	if icon, err := a.getHighResIcon(ctx, path); err == nil {
-		return icon, nil
-	}
-
-	// Priority 2: Try ExtractIconEx (avoid SHGetFileInfo due to occasional instability)
-	if icon, err := a.getIconUsingExtractIconEx(ctx, path); err == nil {
-		return icon, nil
-	}
-
-	// Priority 3: Final fallback to Windows default executable icon
-	return a.getWindowsDefaultIcon(ctx)
-}
-
-func (a *WindowsRetriever) getIconUsingExtractIconEx(ctx context.Context, path string) (image.Image, error) {
-	// Convert file path to UTF16
-	lpIconPath, err := syscall.UTF16PtrFromString(path)
-	if err != nil {
-		return nil, err
-	}
-
-	// Get icon handle using ExtractIconEx
-	var largeIcon win.HICON
-	var smallIcon win.HICON
-	ret, _, _ := extractIconEx.Call(
-		uintptr(unsafe.Pointer(lpIconPath)),
-		0,
-		uintptr(unsafe.Pointer(&largeIcon)),
-		uintptr(unsafe.Pointer(&smallIcon)),
-		1,
-	)
-	if ret == 0 {
-		return nil, fmt.Errorf("no icons found in file")
-	}
-	defer win.DestroyIcon(largeIcon) // Ensure icon resources are released
-
-	return a.convertIconToImage(ctx, largeIcon)
-}
-
-func (a *WindowsRetriever) getHighResIcon(ctx context.Context, path string) (image.Image, error) {
-	// Safely try to use PrivateExtractIconsW (undocumented API, but provides best quality)
-	defer func() {
-		if r := recover(); r != nil {
-			util.GetLogger().Debug(ctx, fmt.Sprintf("PrivateExtractIconsW caused panic (API may not be available): %v", r))
-		}
-	}()
-
-	// Check if PrivateExtractIconsW is available
-	if err := privateExtractIcons.Find(); err != nil {
-		return nil, fmt.Errorf("PrivateExtractIconsW not available: %v", err)
-	}
-
-	// Convert file path to UTF16
-	lpIconPath, err := syscall.UTF16PtrFromString(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert path to UTF16: %v", err)
-	}
-
-	// Try different icon sizes: 256, 128, 64, 48 (prioritize larger sizes)
-	sizes := []int{256, 128, 64, 48}
-
-	for _, size := range sizes {
-		var hIcon win.HICON
-
-		// Use a safe call wrapper
-		ret, _, callErr := func() (uintptr, uintptr, error) {
-			defer func() {
-				if r := recover(); r != nil {
-					util.GetLogger().Debug(ctx, fmt.Sprintf("PrivateExtractIconsW call panicked for size %d: %v", size, r))
-				}
-			}()
-
-			return privateExtractIcons.Call(
-				uintptr(unsafe.Pointer(lpIconPath)),
-				0,             // icon index
-				uintptr(size), // cx - desired width
-				uintptr(size), // cy - desired height
-				uintptr(unsafe.Pointer(&hIcon)),
-				0, // icon IDs (not needed)
-				1, // number of icons to extract
-				0, // flags
-			)
-		}()
-
-		// Check for system call errors (ignore "operation completed successfully" and "user stopped resource enumeration")
-		if callErr != nil &&
-			callErr.Error() != "The operation completed successfully." &&
-			callErr.Error() != "User stopped resource enumeration." {
-			continue
-		}
-
-		if ret > 0 && hIcon != 0 {
-			defer win.DestroyIcon(hIcon)
-			util.GetLogger().Info(ctx, fmt.Sprintf("Successfully extracted %dx%d high-res icon from %s using PrivateExtractIconsW", size, size, path))
-			return a.convertIconToImage(ctx, hIcon)
-		}
-	}
-
-	return nil, fmt.Errorf("failed to extract high resolution icon using PrivateExtractIconsW")
-}
-
-func (a *WindowsRetriever) convertIconToImage(ctx context.Context, hIcon win.HICON) (image.Image, error) {
-
-	// Get icon information
-	var iconInfo win.ICONINFO
-	if !win.GetIconInfo(hIcon, &iconInfo) {
-		return nil, fmt.Errorf("failed to get icon info")
-	}
-	defer win.DeleteObject(win.HGDIOBJ(iconInfo.HbmColor))
-	defer win.DeleteObject(win.HGDIOBJ(iconInfo.HbmMask))
-
-	// Get actual bitmap dimensions
-	hdc := win.GetDC(0)
-	defer win.ReleaseDC(0, hdc)
-
-	// Get bitmap info to determine actual size
-	var bitmap win.BITMAP
-	if win.GetObject(win.HGDIOBJ(iconInfo.HbmColor), uintptr(unsafe.Sizeof(bitmap)), unsafe.Pointer(&bitmap)) == 0 {
-		return nil, fmt.Errorf("failed to get bitmap object")
-	}
-
-	width := int(bitmap.BmWidth)
-	height := int(bitmap.BmHeight)
-
-	var bmpInfo win.BITMAPINFO
-	bmpInfo.BmiHeader.BiSize = uint32(unsafe.Sizeof(bmpInfo.BmiHeader))
-	bmpInfo.BmiHeader.BiWidth = int32(width)
-	bmpInfo.BmiHeader.BiHeight = -int32(height) // Negative value indicates top-down DIB
-	bmpInfo.BmiHeader.BiPlanes = 1
-	bmpInfo.BmiHeader.BiBitCount = 32
-	bmpInfo.BmiHeader.BiCompression = win.BI_RGB
-
-	// Allocate memory to store bitmap data
-	bits := make([]byte, width*height*4)
-	if win.GetDIBits(hdc, win.HBITMAP(iconInfo.HbmColor), 0, uint32(height), &bits[0], &bmpInfo, win.DIB_RGB_COLORS) == 0 {
-		return nil, fmt.Errorf("failed to get DIB bits")
-	}
-	img := image.NewRGBA(image.Rect(0, 0, width, height))
-
-	// Copy the bitmap data into the img.Pix slice.
-	// Note: Windows bitmaps are stored in BGR format, so we need to swap the red and blue channels.
-	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
-			base := y*width*4 + x*4
-			// The bitmap data in bits is in BGRA format.
-			b := bits[base+0]
-			g := bits[base+1]
-			r := bits[base+2]
-			a := bits[base+3]
-			// Set the pixel in the image.
-			// Note: image.RGBA expects data in RGBA format, so we swap R and B.
-			img.SetRGBA(x, y, color.RGBA{R: r, G: g, B: b, A: a})
-		}
-	}
-
-	// Validate that the image has actual content (not just transparent pixels)
-	hasContent := false
-	bounds := img.Bounds()
-	for y := bounds.Min.Y; y < bounds.Max.Y && !hasContent; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X && !hasContent; x++ {
-			r, g, b, a := img.At(x, y).RGBA()
-			if a > 0 && (r > 0 || g > 0 || b > 0) {
-				hasContent = true
-			}
-		}
-	}
-
-	if !hasContent {
-		return nil, fmt.Errorf("extracted icon is empty or fully transparent")
-	}
-
-	return img, nil
 }
 
 // resolveShortcutWithAPI uses Windows API to resolve shortcut target path with proper Unicode support
@@ -1138,87 +912,4 @@ func (a *WindowsRetriever) findFallbackUWPIcon(ctx context.Context, packageFamil
 	}
 
 	return iconPath, nil
-}
-
-func (a *WindowsRetriever) getWindowsDefaultIcon(ctx context.Context) (image.Image, error) {
-	// Try to get high resolution default icon using PrivateExtractIconsW first
-	if icon, err := a.getHighResDefaultIcon(ctx); err == nil {
-		return icon, nil
-	}
-
-	// Fallback to standard SHGetFileInfo method
-	return a.getStandardDefaultIcon(ctx)
-}
-
-func (a *WindowsRetriever) getHighResDefaultIcon(ctx context.Context) (image.Image, error) {
-	// Try to extract high-res icon from shell32.dll (contains default icons)
-	shell32Path, err := syscall.UTF16PtrFromString("shell32.dll")
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert shell32.dll path to UTF16: %v", err)
-	}
-
-	// Check if PrivateExtractIconsW is available
-	if err := privateExtractIcons.Find(); err != nil {
-		return nil, fmt.Errorf("PrivateExtractIconsW not available: %v", err)
-	}
-
-	// Try different icon sizes: 256, 128, 64, 48
-	sizes := []int{256, 128, 64, 48}
-
-	for _, size := range sizes {
-		var hIcon win.HICON
-
-		// Extract icon index 2 from shell32.dll (default executable icon)
-		ret, _, callErr := privateExtractIcons.Call(
-			uintptr(unsafe.Pointer(shell32Path)),
-			2,             // icon index 2 is typically the default executable icon
-			uintptr(size), // cx - desired width
-			uintptr(size), // cy - desired height
-			uintptr(unsafe.Pointer(&hIcon)),
-			0, // icon IDs (not needed)
-			1, // number of icons to extract
-			0, // flags
-		)
-
-		// Check for system call errors (ignore "operation completed successfully" and "user stopped resource enumeration")
-		if callErr != nil &&
-			callErr.Error() != "The operation completed successfully." &&
-			callErr.Error() != "User stopped resource enumeration." {
-			continue
-		}
-
-		if ret > 0 && hIcon != 0 {
-			defer win.DestroyIcon(hIcon)
-			util.GetLogger().Info(ctx, fmt.Sprintf("Successfully extracted %dx%d default icon from shell32.dll", size, size))
-			return a.convertIconToImage(ctx, hIcon)
-		}
-	}
-
-	return nil, fmt.Errorf("failed to extract high resolution default icon from shell32.dll")
-}
-
-func (a *WindowsRetriever) getStandardDefaultIcon(ctx context.Context) (image.Image, error) {
-	// Get the default icon for .exe files from Windows
-	// This will return the standard Windows executable file icon
-	exeExtension, err := syscall.UTF16PtrFromString(".exe")
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert .exe extension to UTF16: %v", err)
-	}
-
-	var shfi SHFILEINFO
-	ret, _, _ := shGetFileInfo.Call(
-		uintptr(unsafe.Pointer(exeExtension)),
-		0x80, // FILE_ATTRIBUTE_NORMAL
-		uintptr(unsafe.Pointer(&shfi)),
-		uintptr(unsafe.Sizeof(shfi)),
-		SHGFI_ICON|SHGFI_LARGEICON|0x000000010, // SHGFI_USEFILEATTRIBUTES
-	)
-
-	if ret == 0 || shfi.HIcon == 0 {
-		return nil, fmt.Errorf("failed to get default Windows executable icon")
-	}
-	defer win.DestroyIcon(shfi.HIcon)
-
-	util.GetLogger().Info(ctx, "Using Windows standard default executable icon as fallback")
-	return a.convertIconToImage(ctx, shfi.HIcon)
 }

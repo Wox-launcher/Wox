@@ -492,7 +492,7 @@ func ConvertFileIconToAbsolutePath(ctx context.Context, image WoxImage) (newImag
 	newImage = image
 
 	if image.ImageType == WoxImageTypeFileIcon {
-		absPath, err := fileicon.GetFileTypeIconByPath(ctx, image.ImageData)
+		absPath, err := fileicon.GetFileIconByPath(ctx, image.ImageData)
 		if err == nil {
 			newImage.ImageType = WoxImageTypeAbsolutePath
 			newImage.ImageData = absPath

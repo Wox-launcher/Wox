@@ -7,9 +7,14 @@ import (
 	"wox/util"
 )
 
-// GetFileTypeIconByPath returns a WoxImage representing the OS file-type icon for the given path.
-// It caches by file extension to the image cache directory for performance.
-func GetFileTypeIconByPath(ctx context.Context, filePath string) (string, error) {
+// GetFileIconByPath returns a WoxImage representing the OS file icon for the given path.
+// It first tries to resolve the application/file icon, then falls back to the file-type icon.
+func GetFileIconByPath(ctx context.Context, filePath string) (string, error) {
+	iconPath, err := getFileIconImpl(ctx, filePath)
+	if err == nil && strings.TrimSpace(iconPath) != "" {
+		return iconPath, nil
+	}
+
 	ext := strings.ToLower(strings.TrimSpace(filepath.Ext(filePath)))
 	if ext == "" {
 		// Unknown extension – treat as generic
@@ -38,6 +43,13 @@ func buildCachePath(ext string, size int) string {
 		safe = "__unknown"
 	}
 	file := "filetype_" + safe + "_" + intToString(size) + ".png"
+	return filepath.Join(util.GetLocation().GetImageCacheDirectory(), file)
+}
+
+// buildPathCachePath returns the cache file path for a given file path and size (in px).
+func buildPathCachePath(filePath string, size int) string {
+	hash := util.Md5([]byte(filePath))
+	file := "fileicon_" + hash + "_" + intToString(size) + ".png"
 	return filepath.Join(util.GetLocation().GetImageCacheDirectory(), file)
 }
 
