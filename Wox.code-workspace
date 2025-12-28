@@ -33,7 +33,7 @@
 		"python.languageServer": "Default",
 		"github.copilot.chat.commitMessageGeneration.instructions": [
 			{
-				"file": ".github/instructions/commit-message-instructions.md"
+				"text": "Use conventional commit message format. Use english language."
 			}
 		],
 		"dart.lineLength": 180,
@@ -101,7 +101,9 @@
 				"request": "launch",
 				"mode": "auto",
 				"program": "${workspaceFolder:wox}/ci",
-				"args": ["plugin"]
+				"args": [
+					"plugin"
+				]
 			}
 		],
 		"compounds": [

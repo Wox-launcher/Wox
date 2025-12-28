@@ -19,7 +19,7 @@ publish_to: "none" # Remove this line if you wish to publish to pub.dev
 version: 1.0.0+1
 
 environment:
-  sdk: ">=3.4.0 <4.0.0"
+  sdk: ">=3.7.0 <4.0.0"
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -37,7 +37,7 @@ dependencies:
   logger: ^2.4.0
   uuid: ^4.5.0
   flutter_svg: ^2.0.10+1
-  markdown_widget: ^2.3.2+8
+  gpt_markdown: ^1.1.5
   path_provider: ^2.1.4
   dio: ^5.7.0
   from_css_color: ^2.0.0

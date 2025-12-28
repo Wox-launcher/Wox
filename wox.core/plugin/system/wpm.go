@@ -860,7 +860,8 @@ func (w *WPMPlugin) reloadDevCommand(ctx context.Context) []plugin.QueryResult {
 			Icon:  wpmIcon,
 			Actions: []plugin.QueryResultAction{
 				{
-					Name: "i18n:plugin_wpm_reload",
+					Name:                   "i18n:plugin_wpm_reload",
+					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						w.reloadAllDevPlugins(ctx)
 						util.Go(ctx, "reload dev plugins in dist", func() {

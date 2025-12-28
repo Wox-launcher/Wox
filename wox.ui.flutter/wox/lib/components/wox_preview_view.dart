@@ -43,45 +43,24 @@ class WoxPreviewView extends StatefulWidget {
 
 class _WoxPreviewViewState extends State<WoxPreviewView> {
   final scrollController = ScrollController();
-  final allCodeLanguages = {
-    ...allLanguages,
-    "txt": Mode(),
-    "conf": Mode(),
-    "js": javascript,
-    "ts": typescript,
-    "yml": yaml,
-    "sh": bash,
-    "py": python,
-  };
+  final allCodeLanguages = {...allLanguages, "txt": Mode(), "conf": Mode(), "js": javascript, "ts": typescript, "yml": yaml, "sh": bash, "py": python};
 
   Widget scrollableContent({required Widget child}) {
     return child;
   }
 
   Widget buildMarkdown(String markdownData) {
-    return scrollableContent(
-      child: WoxMarkdownView(
-        data: markdownData,
-        fontColor: safeFromCssColor(widget.woxTheme.previewFontColor),
-      ),
-    );
+    return scrollableContent(child: WoxMarkdownView(data: markdownData, fontColor: safeFromCssColor(widget.woxTheme.previewFontColor)));
   }
 
   Widget buildText(String txtData) {
-    return scrollableContent(
-      child: SelectableText(
-        txtData,
-        style: TextStyle(color: safeFromCssColor(widget.woxTheme.previewFontColor)),
-      ),
-    );
+    return scrollableContent(child: SelectableText(txtData, style: TextStyle(color: safeFromCssColor(widget.woxTheme.previewFontColor))));
   }
 
   Widget buildPdf(String pdfPath) {
-    if (pdfPath.startsWith("http")) {
-      return SfPdfViewer.network(widget.woxPreview.previewData);
-    } else {
-      return SfPdfViewer.file(File(pdfPath));
-    }
+    final Widget viewer = pdfPath.startsWith("http") ? SfPdfViewer.network(widget.woxPreview.previewData) : SfPdfViewer.file(File(pdfPath));
+    // pdf viewer will capture focus from query box, so we need to exclude it
+    return ExcludeFocus(child: viewer);
   }
 
   Widget buildCode(String codePath, String fileExtension) {
@@ -104,11 +83,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
                 textStyle: const TextStyle(fontSize: 13),
                 readOnly: true,
                 gutterStyle: GutterStyle.none,
-                controller: CodeController(
-                  text: snapshot.data,
-                  readOnly: true,
-                  language: allCodeLanguages[fileExtension]!,
-                ),
+                controller: CodeController(text: snapshot.data, readOnly: true, language: allCodeLanguages[fileExtension]!),
               ),
             ),
           );
@@ -126,6 +101,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
     }
 
     Widget contentWidget = const SizedBox();
+    bool isPdfViewer = false;
     if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_MARKDOWN.code) {
       contentWidget = buildMarkdown(widget.woxPreview.previewData);
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TEXT.code) {
@@ -137,6 +113,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
         // render by file extension
         var fileExtension = widget.woxPreview.previewData.split(".").last.toLowerCase();
         if (fileExtension == "pdf") {
+          isPdfViewer = true;
           contentWidget = buildPdf(widget.woxPreview.previewData);
         } else if (fileExtension == "md") {
           if (File(widget.woxPreview.previewData).existsSync()) {
@@ -153,13 +130,9 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
             fileExtension == "svg") {
           if (File(widget.woxPreview.previewData).existsSync()) {
             if (fileExtension == "svg") {
-              contentWidget = Center(
-                child: SvgPicture.file(File(widget.woxPreview.previewData)),
-              );
+              contentWidget = Center(child: SvgPicture.file(File(widget.woxPreview.previewData)));
             } else {
-              contentWidget = Center(
-                child: Image.file(File(widget.woxPreview.previewData)),
-              );
+              contentWidget = Center(child: Image.file(File(widget.woxPreview.previewData)));
             }
           } else {
             contentWidget = buildText("Image file not found: ${widget.woxPreview.previewData}");
@@ -187,9 +160,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
       if (parsedWoxImage == null) {
         contentWidget = SelectableText("Invalid image data: ${widget.woxPreview.previewData}", style: const TextStyle(color: Colors.red));
       } else {
-        contentWidget = Center(
-          child: WoxImageView(woxImage: parsedWoxImage),
-        );
+        contentWidget = Center(child: WoxImageView(woxImage: parsedWoxImage));
       }
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_PLUGIN_DETAIL.code) {
       contentWidget = WoxPluginDetailView(pluginDetailJson: widget.woxPreview.previewData);
@@ -206,10 +177,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
       }
 
       // Chat view has its own layout structure with Expanded widgets, return it directly
-      return Container(
-        padding: const EdgeInsets.only(top: 10.0, bottom: 10.0),
-        child: const WoxAIChatView(),
-      );
+      return Container(padding: const EdgeInsets.only(top: 10.0, bottom: 10.0), child: const WoxAIChatView());
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_UPDATE.code) {
       try {
         final previewData = UpdatePreviewData.fromJson(jsonDecode(widget.woxPreview.previewData));
@@ -228,68 +196,70 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
     }
 
     return Container(
-        padding: const EdgeInsets.only(top: 10.0, bottom: 10.0, left: 10.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Scrollbar(
-                thumbVisibility: true,
-                controller: scrollController,
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    return SingleChildScrollView(
-                      controller: scrollController,
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                        child: Theme(
-                          data: ThemeData(
-                            textSelectionTheme: TextSelectionThemeData(
-                              selectionColor: safeFromCssColor(widget.woxTheme.previewTextSelectionColor),
-                            ),
-                          ),
-                          child: contentWidget,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
+      padding: const EdgeInsets.only(top: 10.0, bottom: 10.0, left: 10.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final themedContent = Theme(
+                  data: ThemeData(textSelectionTheme: TextSelectionThemeData(selectionColor: safeFromCssColor(widget.woxTheme.previewTextSelectionColor))),
+                  child: contentWidget,
+                );
+
+                if (isPdfViewer) {
+                  return SizedBox(width: constraints.maxWidth, height: constraints.maxHeight, child: themedContent);
+                }
+
+                return Scrollbar(
+                  thumbVisibility: true,
+                  controller: scrollController,
+                  child: SingleChildScrollView(
+                    controller: scrollController,
+                    child: ConstrainedBox(constraints: BoxConstraints(minWidth: constraints.maxWidth), child: themedContent),
+                  ),
+                );
+              },
             ),
-            //show previewProperties
-            if (widget.woxPreview.previewProperties.isNotEmpty)
-              Container(
-                padding: const EdgeInsets.only(top: 10.0, right: 10.0),
-                child: Column(
-                  children: [
-                    ...widget.woxPreview.previewProperties.entries.map((e) => Column(
+          ),
+          //show previewProperties
+          if (widget.woxPreview.previewProperties.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.only(top: 10.0, right: 10.0),
+              child: Column(
+                children: [
+                  ...widget.woxPreview.previewProperties.entries.map(
+                    (e) => Column(
+                      children: [
+                        Divider(color: safeFromCssColor(widget.woxTheme.previewSplitLineColor)),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Divider(color: safeFromCssColor(widget.woxTheme.previewSplitLineColor)),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                ConstrainedBox(
-                                  constraints: const BoxConstraints(maxWidth: 80),
-                                  child: WoxTooltip(
-                                    message: e.key,
-                                    child: Text(e.key, overflow: TextOverflow.ellipsis, style: TextStyle(color: safeFromCssColor(widget.woxTheme.previewPropertyTitleColor))),
-                                  ),
-                                ),
-                                ConstrainedBox(
-                                  constraints: const BoxConstraints(maxWidth: 260),
-                                  child: WoxTooltip(
-                                    message: e.value,
-                                    child: Text(e.value, overflow: TextOverflow.ellipsis, style: TextStyle(color: safeFromCssColor(widget.woxTheme.previewPropertyContentColor))),
-                                  ),
-                                ),
-                              ],
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 80),
+                              child: WoxTooltip(
+                                message: e.key,
+                                child: Text(e.key, overflow: TextOverflow.ellipsis, style: TextStyle(color: safeFromCssColor(widget.woxTheme.previewPropertyTitleColor))),
+                              ),
+                            ),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 260),
+                              child: WoxTooltip(
+                                message: e.value,
+                                child: Text(e.value, overflow: TextOverflow.ellipsis, style: TextStyle(color: safeFromCssColor(widget.woxTheme.previewPropertyContentColor))),
+                              ),
                             ),
                           ],
-                        ))
-                  ],
-                ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-          ],
-        ));
+            ),
+        ],
+      ),
+    );
   }
 }
