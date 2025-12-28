@@ -231,7 +231,7 @@ func writeImageData(img image.Image) error {
 
 	start := time.Now()
 
-	_, err = openClipboardWithRetry()
+	_, err := openClipboardWithRetry()
 	if err != nil {
 		return err
 	}
