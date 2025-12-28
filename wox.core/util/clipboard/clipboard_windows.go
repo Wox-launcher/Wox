@@ -160,8 +160,8 @@ func writeTextData(text string) error {
 	}
 	defer closeClipboard.Call()
 
-	r, _, err = emptyClipboard.Call()
-	if r == 0 {
+	rEmpty, _, err := emptyClipboard.Call()
+	if rEmpty == 0 {
 		return fmt.Errorf("failed to clear clipboard: %w", err)
 	}
 
@@ -231,14 +231,14 @@ func writeImageData(img image.Image) error {
 
 	start := time.Now()
 
-	r, _, err := openClipboardWithRetry()
+	_, err = openClipboardWithRetry()
 	if err != nil {
 		return err
 	}
 	defer closeClipboard.Call()
 
-	r, _, err = emptyClipboard.Call()
-	if r == 0 {
+	rEmpty, _, err := emptyClipboard.Call()
+	if rEmpty == 0 {
 		return fmt.Errorf("failed to clear clipboard: %w", err)
 	}
 

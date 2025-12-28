@@ -10,7 +10,11 @@
     ![](screenshots/auto_theme.png)
 
 - Improve
+
   - Improve markdown preview rendering performance and stability
+
+- Fix
+  - Fix clipboard history cause windows copy mal-function #4309
 
 ## v2.0.0-beta.7 — 2025-12-19
 
