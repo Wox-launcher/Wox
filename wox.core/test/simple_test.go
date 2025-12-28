@@ -19,7 +19,7 @@ func TestSimpleCalculator(t *testing.T) {
 	}
 
 	t.Logf("Starting simple calculator test...")
-	success := suite.RunQueryTest(test)
+	success, _ := suite.RunQueryTest(test)
 	if !success {
 		t.Errorf("Simple calculator test failed")
 	} else {

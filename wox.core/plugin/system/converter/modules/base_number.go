@@ -111,6 +111,32 @@ func NewBaseModule(ctx context.Context, api plugin.API) *BaseModule {
 	return m
 }
 
+func (m *BaseModule) Calculate(ctx context.Context, token core.Token) (core.Result, error) {
+	if token.Kind == core.EosToken {
+		return core.Result{}, fmt.Errorf("cannot calculate EOS token")
+	}
+
+	m.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Processing in module %s", m.name))
+
+	input := strings.TrimSpace(strings.ToLower(token.Str))
+	for _, handler := range m.patternHandlers {
+		if matches := handler.regexp.FindStringSubmatch(input); len(matches) > 0 && matches[0] == input {
+			result, err := handler.Handler(ctx, matches)
+			if err != nil {
+				m.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("	=> Pattern '%s': %v", handler.Description, err))
+				continue
+			}
+
+			m.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("	=> Pattern '%s' matched: %v", handler.Description, strings.Join(matches[1:], ", ")))
+			m.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("	=> matched result: value=%s, raw=%s, unit=%s", result.DisplayValue, result.RawValue, result.Unit.Name))
+			return result, nil
+		}
+	}
+
+	m.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("	=> No matching patterns found for token '%s'", token.Str))
+	return core.Result{}, fmt.Errorf("unsupported format")
+}
+
 func (m *BaseModule) Convert(ctx context.Context, value core.Result, toUnit core.Unit) (core.Result, error) {
 	if value.Unit.Type != core.UnitTypeNumber || toUnit.Type != core.UnitTypeNumber {
 		return core.Result{}, fmt.Errorf("base module only supports number conversion")

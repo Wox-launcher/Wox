@@ -174,6 +174,9 @@ func (c *Converter) calculateExpression(ctx context.Context, results []core.Resu
 	// If there are no operators and only one value, E.g. "100usd", "1btc"
 	if len(operators) == 0 && len(results) == 1 {
 		if targetUnit.Name == "" {
+			if isBaseNumberUnit(results[0].Unit) {
+				return core.Result{}, fmt.Errorf("base conversion requires explicit target unit")
+			}
 			if results[0].Unit.Type == core.UnitTypeCrypto || results[0].Unit.Type == core.UnitTypeCurrency {
 				defaultCurrency := GetUserDefaultCurrency()
 				targetUnit = core.Unit{Name: defaultCurrency, Type: core.UnitTypeCurrency}
@@ -315,6 +318,15 @@ func GetUserDefaultCurrency() string {
 		return currency
 	}
 	return "USD" // fallback to USD
+}
+
+func isBaseNumberUnit(unit core.Unit) bool {
+	switch strings.ToLower(unit.Name) {
+	case "bin", "oct", "dec", "hex":
+		return true
+	default:
+		return false
+	}
 }
 
 func (c *Converter) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {

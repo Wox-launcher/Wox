@@ -151,50 +151,101 @@ type TimeModule struct {
 func NewTimeModule(ctx context.Context, api plugin.API) *TimeModule {
 	m := &TimeModule{}
 
-	const (
-		weekdayNames = `(monday|tuesday|wednesday|thursday|friday|saturday|sunday)`
-		monthNames   = `((?i:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec))`
-		timePattern  = `([0-9]{1,2}(?::[0-9]{2})?\s*(?i:(?:am|pm))?)`
-		// Simple time units pattern for formats like 1s, 1ms, 1h, 2d, 5w, 8m, 7y
-		simpleTimePattern = `(\d+)\s*(ms|s|m|h|d|w|y)`
-	)
-
 	// Initialize pattern handlers
 	handlers := []*patternHandler{
 		{
 			Pattern:     `time\s+in\s+([a-zA-Z\s/]+)`,
 			Priority:    1000,
-			Description: "Get current time in a specific location",
+			Description: "Get current time in a specific location (E.g. time in Tokyo)",
 			Handler:     m.handleTimeInLocation,
 		},
 		{
-			Pattern:     timePattern + `\s+in\s+([a-zA-Z\s/]+)`,
+			Pattern:     `([0-9]{1,2}(?::[0-9]{2})?\s*(?i:(?:am|pm))?)` + `\s+in\s+([a-zA-Z\s/]+)`,
 			Priority:    900,
-			Description: "Convert specific time from one location to local time",
+			Description: "Convert specific time from one location to local time (E.g. 3pm in Tokyo)",
 			Handler:     m.handleSpecificTime,
 		},
 		{
-			Pattern:     weekdayNames + `\s+in\s+(\d+)\s*([a-z]*)`,
+			Pattern:     `(monday|tuesday|wednesday|thursday|friday|saturday|sunday)` + `\s+in\s+(\d+)\s*([a-z]*)`,
 			Priority:    800,
-			Description: "Calculate future weekday",
+			Description: "Calculate future weekday (E.g. Monday in 3 days)",
 			Handler:     m.handleWeekdayInFuture,
 		},
 		{
-			Pattern:     `days?\s+until\s+(\d+)(?:st|nd|rd|th)?\s+` + monthNames + `(?:\s+(\d{4}))?`,
+			Pattern:     `days?\s+until\s+(\d+)(?:st|nd|rd|th)?\s+` + `((?i:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec))` + `(?:\s+(\d{4}))?`,
 			Priority:    800,
-			Description: "Calculate days until a specific date",
+			Description: "Calculate days until a specific date, (E.g. days until 25th Dec 2023)",
 			Handler:     m.handleDaysUntil,
 		},
 		{
-			Pattern:     simpleTimePattern,
+			Pattern:     `(?i)(?:in|to)\s+(milliseconds?|seconds?|minutes?|hours?|days?|weeks?|years?|ms|s|m|h|d|w|y)`,
+			Priority:    700,
+			Description: "Handle duration conversion target (E.g. to minutes)",
+			Handler:     m.handleDurationConversion,
+		},
+		{
+			Pattern:     `(?i)=\s*\?\s*(milliseconds?|seconds?|minutes?|hours?|days?|weeks?|years?|ms|s|m|h|d|w|y)`,
+			Priority:    650,
+			Description: "Handle duration conversion target (E.g. =?minutes)",
+			Handler:     m.handleDurationConversion,
+		},
+		{
+			Pattern:     `(?i)(\d+)\s*(milliseconds?|seconds?|minutes?|hours?|days?|weeks?|years?|ms|s|m|h|d|w|y)`,
 			Priority:    10, //this should be the lowest priority, so it will be the last one to be matched
-			Description: "Convert simple time units (e.g., 1s, 1ms, 1h, 2d, 5w, 8m, 7y)",
+			Description: "Convert simple time units (e.g., 1s, 1ms, 1h, 2d, 5w, 8m, 7y), (E.g. 1h to minutes)",
 			Handler:     m.handleSimpleTimeUnit,
 		},
 	}
 
 	m.regexBaseModule = NewRegexBaseModule(api, "time", handlers)
 	return m
+}
+
+func (m *TimeModule) TokenPatterns() []core.TokenPattern {
+	return []core.TokenPattern{
+		{
+			Pattern:   `time\s+in\s+([a-zA-Z\s/]+)`,
+			Type:      core.IdentToken,
+			Priority:  1000,
+			FullMatch: false,
+		},
+		{
+			Pattern:   `([0-9]{1,2}(?::[0-9]{2})?\s*(?i:(?:am|pm))?)` + `\s+in\s+([a-zA-Z\s/]+)`,
+			Type:      core.IdentToken,
+			Priority:  900,
+			FullMatch: false,
+		},
+		{
+			Pattern:   `(?i)(monday|tuesday|wednesday|thursday|friday|saturday|sunday)` + `\s+in\s+(\d+)\s*([a-z]*)`,
+			Type:      core.IdentToken,
+			Priority:  800,
+			FullMatch: false,
+		},
+		{
+			Pattern:   `days?\s+until\s+(\d+)(?:st|nd|rd|th)?\s+` + `((?i:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec))` + `(?:\s+(\d{4}))?`,
+			Type:      core.IdentToken,
+			Priority:  800,
+			FullMatch: false,
+		},
+		{
+			Pattern:   `(?i)(?:in|to)\s+(milliseconds?|seconds?|minutes?|hours?|days?|weeks?|years?|ms|s|m|h|d|w|y)`,
+			Type:      core.ConversionToken,
+			Priority:  700,
+			FullMatch: false,
+		},
+		{
+			Pattern:   `(?i)=\s*\?\s*(milliseconds?|seconds?|minutes?|hours?|days?|weeks?|years?|ms|s|m|h|d|w|y)`,
+			Type:      core.ConversionToken,
+			Priority:  650,
+			FullMatch: false,
+		},
+		{
+			Pattern:   `(?i)(\d+)\s*(milliseconds?|seconds?|minutes?|hours?|days?|weeks?|years?|ms|s|m|h|d|w|y)`,
+			Type:      core.IdentToken,
+			Priority:  10,
+			FullMatch: false,
+		},
+	}
 }
 
 func (m *TimeModule) Convert(ctx context.Context, result core.Result, toUnit core.Unit) (core.Result, error) {
@@ -237,12 +288,9 @@ func (m *TimeModule) Convert(ctx context.Context, result core.Result, toUnit cor
 	fromUnit, fromOk := timeUnits[result.Unit.Name]
 	toTimeUnit, toOk := timeUnits[toUnit.Name]
 	if fromOk && toOk {
-		// Convert the raw value to duration
-		duration := time.Duration(result.RawValue.IntPart()) * fromUnit.Duration
-		// Convert to target unit
-		newValue := decimal.NewFromInt(int64(duration / toTimeUnit.Duration))
+		newValue := result.RawValue.Mul(decimal.NewFromInt(int64(fromUnit.Duration))).Div(decimal.NewFromInt(int64(toTimeUnit.Duration)))
 		return core.Result{
-			DisplayValue: fmt.Sprintf("%.2f %s", newValue.InexactFloat64(), toTimeUnit.DisplayName),
+			DisplayValue: m.formatDurationWithUnit(newValue, toUnit.Name),
 			RawValue:     newValue,
 			Unit:         toUnit,
 			Module:       m,
@@ -349,7 +397,7 @@ func (m *TimeModule) handleWeekdayInFuture(ctx context.Context, matches []string
 	}
 
 	val := decimal.NewFromInt(targetDate.Unix())
-	displayValue := fmt.Sprintf("%s (%s)", targetDate.Format("2006-01-02"), targetDate.Weekday().String())
+	displayValue := fmt.Sprintf("%s, %s", targetDate.Weekday().String(), targetDate.Format("2006-01-02"))
 	return core.Result{
 		DisplayValue: displayValue,
 		RawValue:     val,
@@ -460,19 +508,90 @@ func (m *TimeModule) handleSimpleTimeUnit(ctx context.Context, matches []string)
 	}
 
 	unit := strings.ToLower(matches[2])
-	timeUnit, ok := timeUnits[unit]
+	normalizedUnit, ok := normalizeTimeUnit(unit)
 	if !ok {
 		return core.Result{}, fmt.Errorf("unsupported time unit: %s", unit)
 	}
 
-	duration := time.Duration(value) * timeUnit.Duration
-	displayUnit, _ := getDisplayUnit(duration)
-	displayValue := formatDurationValue(duration)
+	timeUnit, ok := timeUnits[normalizedUnit]
+	if !ok {
+		return core.Result{}, fmt.Errorf("unsupported time unit: %s", unit)
+	}
+
+	rawValue := decimal.NewFromInt(value)
+	displayUnit := normalizedUnit
+	switch normalizedUnit {
+	case "h":
+		displayUnit = "m"
+	case "w":
+		displayUnit = "d"
+	case "d":
+		displayUnit = "w"
+	}
+
+	displayValueDecimal := rawValue
+	if displayUnit != normalizedUnit {
+		displayValueDecimal = rawValue.Mul(decimal.NewFromInt(int64(timeUnit.Duration))).Div(decimal.NewFromInt(int64(timeUnits[displayUnit].Duration)))
+	}
 
 	return core.Result{
-		DisplayValue: displayValue,
-		RawValue:     decimal.NewFromInt(int64(duration)),
+		DisplayValue: m.formatDurationWithUnit(displayValueDecimal, displayUnit),
+		RawValue:     displayValueDecimal,
 		Unit:         core.Unit{Name: displayUnit, Type: core.UnitTypeTime},
 		Module:       m,
 	}, nil
+}
+
+func (m *TimeModule) handleDurationConversion(ctx context.Context, matches []string) (core.Result, error) {
+	unit := strings.ToLower(matches[1])
+	normalizedUnit, ok := normalizeTimeUnit(unit)
+	if !ok {
+		return core.Result{}, fmt.Errorf("unsupported time unit: %s", unit)
+	}
+
+	return core.Result{
+		DisplayValue: fmt.Sprintf("to %s", timeUnits[normalizedUnit].DisplayName),
+		RawValue:     decimal.NewFromInt(0),
+		Unit:         core.Unit{Name: normalizedUnit, Type: core.UnitTypeTime},
+		Module:       m,
+	}, nil
+}
+
+func (m *TimeModule) formatDurationWithUnit(value decimal.Decimal, unitName string) string {
+	displayName := timeUnits[unitName].DisplayName
+	if unitName == "w" {
+		if value.Equal(value.Truncate(0)) {
+			return fmt.Sprintf("%s %s", value.StringFixed(0), displayName)
+		}
+		truncated := value.Truncate(3)
+		return fmt.Sprintf("%s %s", truncated.StringFixed(3), displayName)
+	}
+
+	if value.Equal(value.Truncate(0)) {
+		return fmt.Sprintf("%s %s", value.StringFixed(0), displayName)
+	}
+
+	rounded := value.Round(2)
+	return fmt.Sprintf("%s %s", rounded.StringFixed(2), displayName)
+}
+
+func normalizeTimeUnit(unit string) (string, bool) {
+	switch strings.ToLower(unit) {
+	case "ms", "millisecond", "milliseconds":
+		return "ms", true
+	case "s", "sec", "secs", "second", "seconds":
+		return "s", true
+	case "m", "min", "mins", "minute", "minutes":
+		return "m", true
+	case "h", "hr", "hrs", "hour", "hours":
+		return "h", true
+	case "d", "day", "days":
+		return "d", true
+	case "w", "week", "weeks":
+		return "w", true
+	case "y", "year", "years":
+		return "y", true
+	default:
+		return "", false
+	}
 }

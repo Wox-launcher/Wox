@@ -2,6 +2,7 @@ package test
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -59,11 +60,21 @@ type QueryTest struct {
 	SkipReason     string
 }
 
+type QueryTestFailure struct {
+	Name           string
+	Query          string
+	ExpectedTitle  string
+	ExpectedAction string
+	HasTitleCheck  bool
+	ActualActions  []string
+	Reason         string
+}
+
 // RunQueryTest executes a single query test
-func (ts *TestSuite) RunQueryTest(test QueryTest) bool {
+func (ts *TestSuite) RunQueryTest(test QueryTest) (bool, *QueryTestFailure) {
 	if test.ShouldSkip {
 		ts.t.Skipf("Skipping test %s: %s", test.Name, test.SkipReason)
-		return true
+		return true, nil
 	}
 
 	timeout := test.Timeout
@@ -82,7 +93,14 @@ func (ts *TestSuite) RunQueryTest(test QueryTest) bool {
 	query, queryPlugin, err := plugin.GetPluginManager().NewQuery(ts.ctx, plainQuery)
 	if err != nil {
 		ts.t.Errorf("Failed to create query for %s: %v", test.Name, err)
-		return false
+		return false, &QueryTestFailure{
+			Name:           test.Name,
+			Query:          test.Query,
+			ExpectedTitle:  test.ExpectedTitle,
+			ExpectedAction: test.ExpectedAction,
+			HasTitleCheck:  test.TitleCheck != nil,
+			Reason:         "query_create_failed",
+		}
 	}
 	ts.t.Logf("Query created successfully, executing...")
 
@@ -100,7 +118,14 @@ CollectResults:
 			break CollectResults
 		case <-time.After(timeout):
 			ts.t.Errorf("Query timeout for test %s", test.Name)
-			return false
+			return false, &QueryTestFailure{
+				Name:           test.Name,
+				Query:          test.Query,
+				ExpectedTitle:  test.ExpectedTitle,
+				ExpectedAction: test.ExpectedAction,
+				HasTitleCheck:  test.TitleCheck != nil,
+				Reason:         "query_timeout",
+			}
 		}
 	}
 
@@ -112,7 +137,14 @@ CollectResults:
 	// Verify results
 	if len(allResults) == 0 {
 		ts.t.Errorf("No results returned for query: %s (test: %s)", test.Query, test.Name)
-		return false
+		return false, &QueryTestFailure{
+			Name:           test.Name,
+			Query:          test.Query,
+			ExpectedTitle:  test.ExpectedTitle,
+			ExpectedAction: test.ExpectedAction,
+			HasTitleCheck:  test.TitleCheck != nil,
+			Reason:         "no_results",
+		}
 	}
 
 	// Find matching result
@@ -122,72 +154,127 @@ CollectResults:
 			if test.TitleCheck(result.Title) {
 				found = true
 				// Verify action
-				if !ts.verifyAction(result, test.ExpectedAction, test.Name) {
-					return false
+				ok, actualActions := ts.verifyAction(result, test.ExpectedAction, test.Name, test.Query)
+				if !ok {
+					return false, &QueryTestFailure{
+						Name:           test.Name,
+						Query:          test.Query,
+						ExpectedTitle:  test.ExpectedTitle,
+						ExpectedAction: test.ExpectedAction,
+						HasTitleCheck:  test.TitleCheck != nil,
+						ActualActions:  actualActions,
+						Reason:         "action_mismatch",
+					}
 				}
 				break
 			}
 		} else if result.Title == test.ExpectedTitle {
 			found = true
 			// Verify action
-			if !ts.verifyAction(result, test.ExpectedAction, test.Name) {
-				return false
+			ok, actualActions := ts.verifyAction(result, test.ExpectedAction, test.Name, test.Query)
+			if !ok {
+				return false, &QueryTestFailure{
+					Name:           test.Name,
+					Query:          test.Query,
+					ExpectedTitle:  test.ExpectedTitle,
+					ExpectedAction: test.ExpectedAction,
+					HasTitleCheck:  test.TitleCheck != nil,
+					ActualActions:  actualActions,
+					Reason:         "action_mismatch",
+				}
 			}
 			break
 		}
 	}
 
 	if !found {
-		ts.t.Errorf("Expected title (%s) format not found in results for test %s. Got results for query %q:", test.ExpectedTitle, test.Name, test.Query)
+		expectedTitle := test.ExpectedTitle
+		if test.TitleCheck != nil {
+			expectedTitle = "custom TitleCheck"
+		}
+		ts.t.Errorf("[Test %s] Expected title (%s) not found for query %q", test.Name, expectedTitle, test.Query)
+		ts.t.Errorf("[Test %s] Got %d result(s):", test.Name, len(allResults))
 		for i, result := range allResults {
-			ts.t.Errorf("Result %d:", i+1)
-			ts.t.Errorf("  Title: %s", result.Title)
-			ts.t.Errorf("  SubTitle: %s", result.SubTitle)
-			ts.t.Errorf("  Actions:")
-			for j, action := range result.Actions {
-				ts.t.Errorf("    %d. %s", j+1, action.Name)
+			actionNames := make([]string, 0, len(result.Actions))
+			for _, action := range result.Actions {
+				actionNames = append(actionNames, action.Name)
+			}
+			ts.t.Errorf("[Test %s] #%d title=%q subtitle=%q actions=%s", test.Name, i+1, result.Title, result.SubTitle, strings.Join(actionNames, ", "))
+		}
+		var actualActions []string
+		if len(allResults) > 0 {
+			for _, action := range allResults[0].Actions {
+				actualActions = append(actualActions, action.Name)
 			}
 		}
-		return false
+		return false, &QueryTestFailure{
+			Name:           test.Name,
+			Query:          test.Query,
+			ExpectedTitle:  test.ExpectedTitle,
+			ExpectedAction: test.ExpectedAction,
+			HasTitleCheck:  test.TitleCheck != nil,
+			ActualActions:  actualActions,
+			Reason:         "title_not_found",
+		}
 	}
 
-	return true
+	return true, nil
 }
 
 // RunQueryTests executes multiple query tests
 func (ts *TestSuite) RunQueryTests(tests []QueryTest) {
-	var failedTests []string
+	var failedTests []QueryTestFailure
 
 	for _, test := range tests {
 		ts.t.Run(test.Name, func(t *testing.T) {
 			subSuite := &TestSuite{t: t, ctx: ts.ctx}
-			if !subSuite.RunQueryTest(test) {
-				failedTests = append(failedTests, test.Name)
+			if ok, failure := subSuite.RunQueryTest(test); !ok {
+				if failure == nil {
+					failure = &QueryTestFailure{
+						Name:           test.Name,
+						Query:          test.Query,
+						ExpectedTitle:  test.ExpectedTitle,
+						ExpectedAction: test.ExpectedAction,
+						HasTitleCheck:  test.TitleCheck != nil,
+						Reason:         "unknown",
+					}
+				}
+				failedTests = append(failedTests, *failure)
 			}
 		})
 	}
 
 	if len(failedTests) > 0 {
 		ts.t.Errorf("\nFailed tests (%d):", len(failedTests))
-		for i, name := range failedTests {
-			ts.t.Errorf("%d. %s", i+1, name)
+		for i, failure := range failedTests {
+			expectedTitle := failure.ExpectedTitle
+			if failure.HasTitleCheck {
+				expectedTitle = "custom TitleCheck"
+			}
+			actualActions := "none"
+			if len(failure.ActualActions) > 0 {
+				actualActions = strings.Join(failure.ActualActions, ", ")
+			}
+			ts.t.Errorf("%d. %s | query=%q | expectedTitle=%s | expectedAction=%s | actualActions=%s | reason=%s", i+1, failure.Name, failure.Query, expectedTitle, failure.ExpectedAction, actualActions, failure.Reason)
 		}
 	}
 }
 
 // verifyAction checks if the expected action exists in the result
-func (ts *TestSuite) verifyAction(result plugin.QueryResultUI, expectedAction, testName string) bool {
+func (ts *TestSuite) verifyAction(result plugin.QueryResultUI, expectedAction, testName, query string) (bool, []string) {
+	actualActions := make([]string, 0, len(result.Actions))
 	for _, action := range result.Actions {
+		actualActions = append(actualActions, action.Name)
 		if action.Name == expectedAction {
-			return true
+			return true, actualActions
 		}
 	}
-	ts.t.Errorf("Expected action %q not found in result actions for test %s", expectedAction, testName)
-	ts.t.Errorf("Actual result actions:")
+	ts.t.Errorf("[Test %s] Expected action %q not found for query %q", testName, expectedAction, query)
+	ts.t.Errorf("[Test %s] Actual result actions:", testName)
 	for _, action := range result.Actions {
-		ts.t.Errorf("  %s", action.Name)
+		ts.t.Errorf("[Test %s] %s", testName, action.Name)
 	}
-	return false
+	return false, actualActions
 }
 
 // ensureServicesInitialized initializes services once for all tests

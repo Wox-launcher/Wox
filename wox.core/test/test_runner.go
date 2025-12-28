@@ -72,7 +72,7 @@ func ExampleTestWithIsolatedEnvironment(t *testing.T) {
 			ExpectedAction: "Copy",
 		}
 
-		if !suite.RunQueryTest(test) {
+		if ok, _ := suite.RunQueryTest(test); !ok {
 			t.Errorf("Example test failed")
 		}
 	})
