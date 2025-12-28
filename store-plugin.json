@@ -3,7 +3,7 @@
     "Id": "47b92e1d-fe3a-455f-a70f-c231a3e4c43e",
     "Name": "Obsidian",
     "Author": "qianlifeng",
-    "Version": "0.0.4",
+    "Version": "0.0.5",
     "MinWoxVersion": "2.0.0",
     "Runtime": "nodejs",
     "Description": "Wox plugin to manage obsidian vault notes",
@@ -13,13 +13,9 @@
     "ScreenshotUrls": [
       "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.Obsidian/main/images/app.png"
     ],
-    "SupportedOS": [
-      "Windows",
-      "Darwin",
-      "Linux"
-    ],
+    "SupportedOS": ["Windows", "Darwin", "Linux"],
     "DateCreated": "2023-08-29 00:00:00",
-    "DateUpdated": "2024-06-20 23:02:08"
+    "DateUpdated": "2025-12-28 20:41:19"
   },
   {
     "Id": "bf145a9f-4976-4486-a671-d44eb64c7cd0",
@@ -35,11 +31,7 @@
     "ScreenshotUrls": [
       "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.Selection.Sum/main/assets/snipaste.png"
     ],
-    "SupportedOS": [
-      "Windows",
-      "Darwin",
-      "Linux"
-    ],
+    "SupportedOS": ["Windows", "Darwin", "Linux"],
     "DateCreated": "2024-02-03 15:49:00",
     "DateUpdated": "2024-03-02 09:57:37"
   },
@@ -57,11 +49,7 @@
     "ScreenshotUrls": [
       "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.DeepL/main/assets/snapshot.png"
     ],
-    "SupportedOS": [
-      "Windows",
-      "Darwin",
-      "Linux"
-    ],
+    "SupportedOS": ["Windows", "Darwin", "Linux"],
     "DateCreated": "2024-02-23 19:09:00",
     "DateUpdated": "2025-12-18 21:16:56"
   },
@@ -79,9 +67,7 @@
     "ScreenshotUrls": [
       "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.Arc/main/assets/snapshot.png"
     ],
-    "SupportedOS": [
-      "Darwin"
-    ],
+    "SupportedOS": ["Darwin"],
     "DateCreated": "2024-05-07 13:02:00",
     "DateUpdated": "2024-05-21 22:51:11"
   },
@@ -99,9 +85,7 @@
     "ScreenshotUrls": [
       "https://raw.githubusercontent.com/lylwx/Wox.Plugin.OSXVolumeControl/main/snapshot.jpg"
     ],
-    "SupportedOS": [
-      "Darwin"
-    ],
+    "SupportedOS": ["Darwin"],
     "DateCreated": "2024-05-21 15:50:00",
     "DateUpdated": "2025-11-13 16:25:10"
   },
@@ -119,11 +103,7 @@
     "ScreenshotUrls": [
       "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.Moodist/main/snipaste.png"
     ],
-    "SupportedOS": [
-      "Windows",
-      "Darwin",
-      "Linux"
-    ],
+    "SupportedOS": ["Windows", "Darwin", "Linux"],
     "DateCreated": "2024-06-06 23:51:00",
     "DateUpdated": "2024-06-06 23:51:00"
   },
@@ -141,11 +121,7 @@
     "ScreenshotUrls": [
       "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.Spotify/main/prev.png"
     ],
-    "SupportedOS": [
-      "Windows",
-      "Darwin",
-      "Linux"
-    ],
+    "SupportedOS": ["Windows", "Darwin", "Linux"],
     "DateCreated": "2024-07-05 15:00:00",
     "DateUpdated": "2024-07-05 15:00:00"
   },
@@ -163,11 +139,7 @@
     "ScreenshotUrls": [
       "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.RSSReader/main/prev.png"
     ],
-    "SupportedOS": [
-      "Windows",
-      "Darwin",
-      "Linux"
-    ],
+    "SupportedOS": ["Windows", "Darwin", "Linux"],
     "DateCreated": "2024-08-07 14:00:00",
     "DateUpdated": "2025-05-22 22:50:49"
   },
@@ -185,11 +157,7 @@
     "ScreenshotUrls": [
       "https://raw.githubusercontent.com/sachadvr/Wox.Custom.Commands.Plugin/main/images/screenshot.png"
     ],
-    "SupportedOS": [
-      "Windows",
-      "Darwin",
-      "Linux"
-    ],
+    "SupportedOS": ["Windows", "Darwin", "Linux"],
     "DateCreated": "2025-04-17 11:00:00",
     "DateUpdated": "2025-04-17 23:02:38"
   },
@@ -207,11 +175,7 @@
     "ScreenshotUrls": [
       "https://gist.github.com/user-attachments/assets/26f4c4de-f8fa-49af-8a3e-75ca99ef9a6d"
     ],
-    "SupportedOS": [
-      "Windows",
-      "Darwin",
-      "Linux"
-    ],
+    "SupportedOS": ["Windows", "Darwin", "Linux"],
     "DateCreated": "2025-08-25 21:15:00",
     "DateUpdated": "2025-12-13 13:55:00"
   },
@@ -229,11 +193,7 @@
     "ScreenshotUrls": [
       "https://gist.github.com/user-attachments/assets/4a93ab0f-9496-4b5d-94a8-d8c2b6fb129a"
     ],
-    "SupportedOS": [
-      "Windows",
-      "Darwin",
-      "Linux"
-    ],
+    "SupportedOS": ["Windows", "Darwin", "Linux"],
     "DateCreated": "2025-11-15 23:15:00",
     "DateUpdated": "2025-11-15 23:15:00"
   },
@@ -251,9 +211,7 @@
     "ScreenshotUrls": [
       "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.Mole/main/image/demo.png"
     ],
-    "SupportedOS": [
-      "Darwin"
-    ],
+    "SupportedOS": ["Darwin"],
     "DateCreated": "2025-11-26 22:15:00",
     "DateUpdated": "2025-11-26 22:15:00"
   },
@@ -271,9 +229,7 @@
     "ScreenshotUrls": [
       "https://gist.github.com/user-attachments/assets/da42e6f5-470d-41cf-8796-0684209df0c9"
     ],
-    "SupportedOS": [
-      "windows"
-    ],
+    "SupportedOS": ["windows"],
     "DateCreated": "2025-12-12 21:06:00",
     "DateUpdated": "2025-12-12 21:06:00"
   },
@@ -292,11 +248,7 @@
       "https://gist.github.com/user-attachments/assets/06dc6d7e-1cb2-41e5-aa1d-d2d1bc42984b",
       "https://gist.github.com/user-attachments/assets/07958add-c6dd-42d0-bcbe-7108724dcfc8"
     ],
-    "SupportedOS": [
-      "windows",
-      "darwin",
-      "linux"
-    ],
+    "SupportedOS": ["windows", "darwin", "linux"],
     "DateCreated": "2025-12-13 15:12:00",
     "DateUpdated": "2025-12-13 15:12:00"
   },
@@ -314,10 +266,7 @@
     "ScreenshotUrls": [
       "https://github.com/Wox-launcher/Wox.Plugin.ColorPicker/raw/main/images/screenshot1.png"
     ],
-    "SupportedOS": [
-      "windows",
-      "darwin"
-    ],
+    "SupportedOS": ["windows", "darwin"],
     "DateCreated": "2025-12-15 16:47:00",
     "DateUpdated": "2025-12-18 21:17:03",
     "I18n": {
@@ -345,11 +294,7 @@
     "ScreenshotUrls": [
       "https://github.com/qianlifeng/Wox.Plugin.Strava/raw/main/image/screenshot.png"
     ],
-    "SupportedOS": [
-      "windows",
-      "darwin",
-      "linux"
-    ],
+    "SupportedOS": ["windows", "darwin", "linux"],
     "DateCreated": "2025-12-26 14:47:00",
     "DateUpdated": "2025-12-26 14:47:00",
     "I18n": {
@@ -375,11 +320,7 @@
     "ScreenshotUrls": [
       "https://github.com/Wox-Launcher/Wox.Plugin.KillProcess/raw/main/image/screenshot.png"
     ],
-    "SupportedOS": [
-      "windows",
-      "darwin",
-      "linux"
-    ],
+    "SupportedOS": ["windows", "darwin", "linux"],
     "DateCreated": "2025-12-27 19:55:00",
     "DateUpdated": "2025-12-27 19:55:00",
     "I18n": {
