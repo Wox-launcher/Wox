@@ -65,6 +65,8 @@ func (c *Converter) Init(ctx context.Context, initParams plugin.InitParams) {
 	// Register math module first (highest priority for complex expressions)
 	registry.Register(modules.NewMathModule(ctx, c.api))
 
+	registry.Register(modules.NewBaseModule(ctx, c.api))
+
 	registry.Register(modules.NewTimeModule(ctx, c.api))
 
 	currencyModule := modules.NewCurrencyModule(ctx, c.api)

@@ -174,3 +174,48 @@ func TestConverterCurrency(t *testing.T) {
 
 	suite.RunQueryTests(tests)
 }
+
+func TestConverterBase(t *testing.T) {
+	suite := NewTestSuite(t)
+
+	tests := []QueryTest{
+		{
+			Name:           "Hex to Dec",
+			Query:          "0xff to dec",
+			ExpectedTitle:  "255 dec",
+			ExpectedAction: "Copy",
+			TitleCheck: func(title string) bool {
+				return title == "255 dec"
+			},
+		},
+		{
+			Name:           "Dec to Hex",
+			Query:          "255 dec to hex",
+			ExpectedTitle:  "FF hex",
+			ExpectedAction: "Copy",
+			TitleCheck: func(title string) bool {
+				return title == "FF hex"
+			},
+		},
+		{
+			Name:           "Bin to Dec",
+			Query:          "0b1010 to dec",
+			ExpectedTitle:  "10 dec",
+			ExpectedAction: "Copy",
+			TitleCheck: func(title string) bool {
+				return title == "10 dec"
+			},
+		},
+		{
+			Name:           "Oct to Dec",
+			Query:          "17 oct to dec",
+			ExpectedTitle:  "15 dec",
+			ExpectedAction: "Copy",
+			TitleCheck: func(title string) bool {
+				return title == "15 dec"
+			},
+		},
+	}
+
+	suite.RunQueryTests(tests)
+}
