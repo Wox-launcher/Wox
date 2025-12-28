@@ -9,6 +9,9 @@
   - Add auto theme which changes theme based on system light/dark mode
     ![](screenshots/auto_theme.png)
 
+- Improve
+  - Improve markdown preview rendering performance and stability
+
 ## v2.0.0-beta.7 — 2025-12-19
 
 - Add

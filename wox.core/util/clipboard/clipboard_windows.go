@@ -63,6 +63,19 @@ const (
 
 var lastSeqNum uint32
 
+func openClipboardWithRetry() (uintptr, error) {
+	var r uintptr
+	var err error
+	for i := 0; i < 5; i++ {
+		r, _, err = openClipboard.Call(0)
+		if r != 0 {
+			return r, nil
+		}
+		time.Sleep(time.Millisecond * time.Duration(10+i*10))
+	}
+	return 0, fmt.Errorf("failed to open clipboard after retries: %w", err)
+}
+
 func readText() (string, error) {
 	avail, _, _ := isClipboardFormatAvailable.Call(cFmtUnicodeText)
 	if avail == 0 {
@@ -141,9 +154,9 @@ func readText() (string, error) {
 func writeTextData(text string) error {
 	start := time.Now()
 
-	r, _, err := openClipboard.Call(0)
-	if r == 0 {
-		return fmt.Errorf("failed to open clipboard: %w", err)
+	_, err := openClipboardWithRetry()
+	if err != nil {
+		return err
 	}
 	defer closeClipboard.Call()
 
@@ -181,6 +194,11 @@ func writeTextData(text string) error {
 		return fmt.Errorf("failed to set clipboard data: %w", err)
 	}
 
+	// update lastSeqNum to avoid trigger watchChange by itself
+	if r, _, _ := getClipboardSequenceNumber.Call(); r != 0 {
+		lastSeqNum = uint32(r)
+	}
+
 	if d := time.Since(start); d > 200*time.Millisecond {
 		util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("clipboard: writeTextData held clipboard for %s (chars=%d)", d.String(), len(s)))
 	}
@@ -213,9 +231,9 @@ func writeImageData(img image.Image) error {
 
 	start := time.Now()
 
-	r, _, err := openClipboard.Call(0)
-	if r == 0 {
-		return fmt.Errorf("failed to open clipboard: %w", err)
+	r, _, err := openClipboardWithRetry()
+	if err != nil {
+		return err
 	}
 	defer closeClipboard.Call()
 
@@ -264,6 +282,11 @@ func writeImageData(img image.Image) error {
 	if ret == 0 {
 		gFree.Call(hMem)
 		return fmt.Errorf("failed to set clipboard data: %w", err)
+	}
+
+	// update lastSeqNum to avoid trigger watchChange by itself
+	if r, _, _ := getClipboardSequenceNumber.Call(); r != 0 {
+		lastSeqNum = uint32(r)
 	}
 
 	if d := time.Since(start); d > 200*time.Millisecond {
@@ -341,9 +364,9 @@ func readBmpImage() (image.Image, error) {
 	var headerCopy bitmapHeader
 
 	err := func() error {
-		r, _, err := openClipboard.Call(0)
-		if r == 0 {
-			return fmt.Errorf("failed to open clipboard: %w", err)
+		_, err := openClipboardWithRetry()
+		if err != nil {
+			return err
 		}
 		defer closeClipboard.Call()
 
