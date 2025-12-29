@@ -3,6 +3,7 @@ package shell
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -19,9 +20,10 @@ import (
 
 const (
 	shellInterpreterSettingKey = "shell_interpreter"
+	shellCommandsSettingKey    = "shellCommands"
 )
 
-var shellIcon = common.NewWoxImageEmoji("💻")
+var shellIcon = common.PluginShellIcon
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &ShellPlugin{})
@@ -39,6 +41,13 @@ type shellContextData struct {
 	Interpreter string `json:"interpreter"`
 	HistoryID   string `json:"-"`
 	FromHistory bool   `json:"-"`
+}
+
+type shellCommand struct {
+	Alias   string `json:"Alias"`
+	Command string `json:"Command"`
+	Enabled bool   `json:"Enabled"`
+	Silent  bool   `json:"Silent"` // If true, execute in background; if false, jump to > trigger to show output
 }
 
 type shellExecutionState struct {
@@ -68,6 +77,7 @@ func (s *ShellPlugin) GetMetadata() plugin.Metadata {
 		Entry:         "",
 		TriggerKeywords: []string{
 			">",
+			"*", // Enable global query for commands
 		},
 		Commands: []plugin.MetadataCommand{},
 		SupportedOS: []string{
@@ -96,6 +106,42 @@ func (s *ShellPlugin) GetMetadata() plugin.Metadata {
 					Tooltip:      "i18n:plugin_shell_interpreter_tooltip",
 					DefaultValue: getDefaultInterpreter(),
 					Options:      getInterpreterOptions(),
+				},
+			},
+			{
+				Type: definition.PluginSettingDefinitionTypeTable,
+				Value: &definition.PluginSettingValueTable{
+					Key:     shellCommandsSettingKey,
+					Title:   "i18n:plugin_shell_commands",
+					Tooltip: "i18n:plugin_shell_commands_tooltip",
+					Columns: []definition.PluginSettingValueTableColumn{
+						{
+							Key:   "Alias",
+							Label: "i18n:plugin_shell_command_alias",
+							Type:  definition.PluginSettingValueTableColumnTypeText,
+							Width: 100,
+						},
+						{
+							Key:          "Command",
+							Label:        "i18n:plugin_shell_command_script",
+							Tooltip:      "i18n:plugin_shell_command_script_tooltip",
+							Type:         definition.PluginSettingValueTableColumnTypeText,
+							TextMaxLines: 5,
+						},
+						{
+							Key:   "Enabled",
+							Label: "i18n:plugin_shell_command_enabled",
+							Type:  definition.PluginSettingValueTableColumnTypeCheckbox,
+							Width: 60,
+						},
+						{
+							Key:     "Silent",
+							Label:   "i18n:plugin_shell_command_silent",
+							Tooltip: "i18n:plugin_shell_command_silent_tooltip",
+							Type:    definition.PluginSettingValueTableColumnTypeCheckbox,
+							Width:   60,
+						},
+					},
 				},
 			},
 		},
@@ -315,14 +361,19 @@ func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string) []pl
 }
 
 func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
-	// Get the command from the query
-	command := strings.TrimSpace(query.Search)
-
 	// Get the configured interpreter
 	interpreter := s.api.GetSetting(ctx, shellInterpreterSettingKey)
 	if interpreter == "" {
 		interpreter = getDefaultInterpreter()
 	}
+
+	// Handle global query - check for shell commands
+	if query.IsGlobalQuery() {
+		return s.queryCommands(ctx, query, interpreter)
+	}
+
+	// Get the command from the query
+	command := strings.TrimSpace(query.Search)
 
 	// If no command entered, show history
 	if command == "" {
@@ -410,6 +461,133 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 			},
 		},
 	}
+}
+
+// loadCommands loads configured shell commands from settings
+func (s *ShellPlugin) loadCommands(ctx context.Context) []shellCommand {
+	commandsJson := s.api.GetSetting(ctx, shellCommandsSettingKey)
+	if commandsJson == "" {
+		return nil
+	}
+
+	var commands []shellCommand
+	err := json.Unmarshal([]byte(commandsJson), &commands)
+	if err != nil {
+		s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to unmarshal shell commands: %s", err.Error()))
+		return nil
+	}
+
+	return commands
+}
+
+// queryCommands handles global query to search for configured shell commands
+func (s *ShellPlugin) queryCommands(ctx context.Context, query plugin.Query, interpreter string) []plugin.QueryResult {
+	commands := s.loadCommands(ctx)
+	if len(commands) == 0 {
+		return nil
+	}
+
+	search := strings.TrimSpace(query.Search)
+	if search == "" {
+		return nil
+	}
+
+	// Parse alias and query parameter
+	parts := strings.SplitN(search, " ", 2)
+	searchAlias := strings.ToLower(parts[0])
+	queryParam := ""
+	if len(parts) > 1 {
+		queryParam = parts[1]
+	}
+
+	var results []plugin.QueryResult
+	for _, cmd := range commands {
+		if !cmd.Enabled {
+			continue
+		}
+
+		// Match alias (case-insensitive, prefix match for better UX)
+		if !strings.HasPrefix(strings.ToLower(cmd.Alias), searchAlias) {
+			continue
+		}
+
+		// Replace {query} placeholder with query parameter
+		finalCommand := strings.ReplaceAll(cmd.Command, "{query}", queryParam)
+
+		// Create context data for execution
+		contextData := shellContextData{
+			Command:     finalCommand,
+			Interpreter: interpreter,
+			FromHistory: false,
+		}
+
+		subtitle := fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_execute_with"), interpreter, finalCommand)
+
+		// Build actions based on Silent option
+		var actions []plugin.QueryResultAction
+
+		if cmd.Silent {
+			// Silent mode: execute in background and hide Wox
+			actions = []plugin.QueryResultAction{
+				{
+					Id:                     "execute_background",
+					Name:                   "i18n:plugin_shell_execute_background",
+					Icon:                   common.OpenIcon,
+					PreventHideAfterAction: false,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						util.Go(ctx, "execute shell command in background", func() {
+							s.executeCommandInBackground(ctx, contextData)
+						})
+					},
+				},
+			}
+		} else {
+			// Non-silent mode: change query to > trigger to show output
+			actions = []plugin.QueryResultAction{
+				{
+					Id:                     "execute",
+					Name:                   "i18n:plugin_shell_execute",
+					Icon:                   common.CorrectIcon,
+					PreventHideAfterAction: true,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						// Change query to > trigger with the command to show output
+						s.api.ChangeQuery(ctx, common.PlainQuery{
+							QueryType: plugin.QueryTypeInput,
+							QueryText: fmt.Sprintf("> %s", finalCommand),
+						})
+					},
+				},
+				{
+					Id:                     "execute_background",
+					Name:                   "i18n:plugin_shell_execute_background",
+					Icon:                   common.OpenIcon,
+					PreventHideAfterAction: false,
+					Hotkey:                 "ctrl+enter",
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						util.Go(ctx, "execute shell command in background", func() {
+							s.executeCommandInBackground(ctx, contextData)
+						})
+					},
+				},
+			}
+		}
+
+		result := plugin.QueryResult{
+			Title:    cmd.Alias,
+			SubTitle: subtitle,
+			Icon:     shellIcon,
+			Score:    100,
+			Preview: plugin.WoxPreview{
+				PreviewType:    plugin.WoxPreviewTypeText,
+				PreviewData:    fmt.Sprintf("$ %s", finalCommand),
+				ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
+			},
+			Actions: actions,
+		}
+		results = append(results, result)
+	}
+
+	return results
 }
 
 // executeCommandWithUpdateResult executes a shell command and uses UpdateResult API to push updates
