@@ -18,13 +18,21 @@ import (
 
 type CurrencyModule struct {
 	*regexBaseModule
-	rates map[string]float64
+	rates *util.HashMap[string, float64]
 }
 
 func NewCurrencyModule(ctx context.Context, api plugin.API) *CurrencyModule {
 	m := &CurrencyModule{
-		rates: make(map[string]float64),
+		rates: util.NewHashMap[string, float64](),
 	}
+
+	m.rates.Store("USD", 1.0)   // Base currency
+	m.rates.Store("EUR", 0.85)  // Approximate
+	m.rates.Store("GBP", 0.73)  // Approximate
+	m.rates.Store("JPY", 110.0) // Approximate
+	m.rates.Store("CNY", 6.45)  // Approximate
+	m.rates.Store("AUD", 1.35)  // Approximate
+	m.rates.Store("CAD", 1.25)  // Approximate
 
 	const (
 		currencyPattern = `(?i)(usd|eur|gbp|jpy|cny|aud|cad)`
@@ -74,7 +82,9 @@ func (m *CurrencyModule) StartExchangeRateSyncSchedule(ctx context.Context) {
 		for _, source := range sources {
 			rates, err := source(ctx)
 			if err == nil && len(rates) > 0 {
-				m.rates = rates
+				for k, v := range rates {
+					m.rates.Store(k, v)
+				}
 				util.GetLogger().Info(ctx, "Successfully updated rates from source")
 				break
 			}
@@ -85,7 +95,9 @@ func (m *CurrencyModule) StartExchangeRateSyncSchedule(ctx context.Context) {
 			for _, source := range sources {
 				rates, err := source(ctx)
 				if err == nil && len(rates) > 0 {
-					m.rates = rates
+					for k, v := range rates {
+						m.rates.Store(k, v)
+					}
 					util.GetLogger().Info(ctx, "Successfully updated rates from source")
 					break
 				}
@@ -100,17 +112,20 @@ func (m *CurrencyModule) Convert(ctx context.Context, value core.Result, toUnit 
 	toCurrency := toUnit.Name
 
 	// Check if currencies are supported
-	if _, ok := m.rates[fromCurrency]; !ok {
+	fromRate, fromOk := m.rates.Load(fromCurrency)
+	toRate, toOk := m.rates.Load(toCurrency)
+
+	if !fromOk {
 		return core.Result{}, fmt.Errorf("unsupported currency: %s", fromCurrency)
 	}
-	if _, ok := m.rates[toCurrency]; !ok {
+	if !toOk {
 		return core.Result{}, fmt.Errorf("unsupported currency: %s", toCurrency)
 	}
 
 	// Convert to USD first (as base currency), then to target currency
 	amountFloat, _ := value.RawValue.Float64()
-	amountInUSD := amountFloat / m.rates[fromCurrency]
-	result := amountInUSD * m.rates[toCurrency]
+	amountInUSD := amountFloat / fromRate
+	result := amountInUSD * toRate
 	resultDecimal := decimal.NewFromFloat(result)
 
 	return core.Result{
@@ -122,8 +137,7 @@ func (m *CurrencyModule) Convert(ctx context.Context, value core.Result, toUnit 
 }
 
 func (m *CurrencyModule) CanConvertTo(unit string) bool {
-	_, ok := m.rates[strings.ToUpper(unit)]
-	return ok
+	return m.rates.Exist(strings.ToUpper(unit))
 }
 
 // Helper functions
@@ -137,7 +151,7 @@ func (m *CurrencyModule) handleSingleCurrency(ctx context.Context, matches []str
 	currency := strings.ToUpper(matches[2])
 
 	// Check if the currency is supported
-	if _, ok := m.rates[currency]; !ok {
+	if !m.rates.Exist(currency) {
 		return core.Result{}, fmt.Errorf("unsupported currency: %s", currency)
 	}
 
@@ -151,7 +165,7 @@ func (m *CurrencyModule) handleSingleCurrency(ctx context.Context, matches []str
 
 func (m *CurrencyModule) handleInConversion(ctx context.Context, matches []string) (core.Result, error) {
 	currency := strings.ToUpper(matches[1])
-	if _, ok := m.rates[currency]; !ok {
+	if !m.rates.Exist(currency) {
 		return core.Result{}, fmt.Errorf("unsupported currency: %s", currency)
 	}
 	return core.Result{
@@ -164,7 +178,7 @@ func (m *CurrencyModule) handleInConversion(ctx context.Context, matches []strin
 
 func (m *CurrencyModule) handleToConversion(ctx context.Context, matches []string) (core.Result, error) {
 	currency := strings.ToUpper(matches[1])
-	if _, ok := m.rates[currency]; !ok {
+	if !m.rates.Exist(currency) {
 		return core.Result{}, fmt.Errorf("unsupported currency: %s", currency)
 	}
 	return core.Result{

@@ -15,7 +15,7 @@ import (
 
 type CryptoModule struct {
 	*regexBaseModule
-	prices map[string]float64
+	prices *util.HashMap[string, float64]
 }
 
 // CoinGecko API response structure
@@ -36,13 +36,13 @@ type CoinGeckoResponse struct {
 
 func NewCryptoModule(ctx context.Context, api plugin.API) *CryptoModule {
 	m := &CryptoModule{
-		prices: map[string]float64{
-			"btc":  50000.0, // Approximate BTC price in USD
-			"eth":  3000.0,  // Approximate ETH price in USD
-			"usdt": 1.0,     // USDT is pegged to USD
-			"bnb":  300.0,   // Approximate BNB price in USD
-		},
+		prices: util.NewHashMap[string, float64](),
 	}
+
+	m.prices.Store("btc", 80000.0) // Approximate BTC price in USD
+	m.prices.Store("eth", 3000.0)  // Approximate ETH price in USD
+	m.prices.Store("usdt", 1.0)    // USDT is pegged to USD
+	m.prices.Store("bnb", 850.0)   // Approximate BNB price in USD
 
 	const (
 		cryptoPattern = `(?i)(btc|eth|usdt|bnb)`
@@ -85,7 +85,9 @@ func (m *CryptoModule) StartPriceSyncSchedule(ctx context.Context) {
 	util.Go(ctx, "crypto_price_sync", func() {
 		prices, err := m.fetchCryptoPrices(ctx)
 		if err == nil {
-			m.prices = prices
+			for k, v := range prices {
+				m.prices.Store(k, v)
+			}
 		} else {
 			util.GetLogger().Error(ctx, fmt.Sprintf("Failed to fetch initial crypto prices: %s", err.Error()))
 		}
@@ -93,7 +95,9 @@ func (m *CryptoModule) StartPriceSyncSchedule(ctx context.Context) {
 		for range time.NewTicker(1 * time.Minute).C {
 			prices, err := m.fetchCryptoPrices(ctx)
 			if err == nil {
-				m.prices = prices
+				for k, v := range prices {
+					m.prices.Store(k, v)
+				}
 			} else {
 				util.GetLogger().Error(ctx, fmt.Sprintf("Failed to fetch crypto prices: %s", err.Error()))
 			}
@@ -105,7 +109,7 @@ func (m *CryptoModule) Convert(ctx context.Context, value core.Result, toUnit co
 	fromCrypto := value.Unit.Name
 
 	// Get crypto price in USD
-	cryptoPrice, ok := m.prices[fromCrypto]
+	cryptoPrice, ok := m.prices.Load(fromCrypto)
 	if !ok {
 		return core.Result{}, fmt.Errorf("unsupported cryptocurrency: %s", fromCrypto)
 	}
@@ -156,7 +160,7 @@ func (m *CryptoModule) handleSingleCrypto(ctx context.Context, matches []string)
 	crypto := strings.ToLower(matches[2])
 
 	// Check if the cryptocurrency is supported
-	cryptoPrice, ok := m.prices[crypto]
+	cryptoPrice, ok := m.prices.Load(crypto)
 	if !ok {
 		return core.Result{}, fmt.Errorf("unsupported cryptocurrency: %s", crypto)
 	}
@@ -181,7 +185,7 @@ func (m *CryptoModule) handleSingleCrypto(ctx context.Context, matches []string)
 
 func (m *CryptoModule) handleInConversion(ctx context.Context, matches []string) (core.Result, error) {
 	crypto := strings.ToLower(matches[1])
-	if _, ok := m.prices[crypto]; !ok {
+	if !m.prices.Exist(crypto) {
 		return core.Result{}, fmt.Errorf("unsupported cryptocurrency: %s", crypto)
 	}
 	return core.Result{
@@ -193,7 +197,7 @@ func (m *CryptoModule) handleInConversion(ctx context.Context, matches []string)
 
 func (m *CryptoModule) handleToConversion(ctx context.Context, matches []string) (core.Result, error) {
 	crypto := strings.ToLower(matches[1])
-	if _, ok := m.prices[crypto]; !ok {
+	if !m.prices.Exist(crypto) {
 		return core.Result{}, fmt.Errorf("unsupported cryptocurrency: %s", crypto)
 	}
 	return core.Result{
