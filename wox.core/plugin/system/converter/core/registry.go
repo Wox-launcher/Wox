@@ -55,30 +55,32 @@ type Module interface {
 }
 
 // ModuleRegistry holds all calculator modules
+// Uses a slice to preserve registration order (deterministic iteration)
 type ModuleRegistry struct {
-	modules map[string]Module
+	modules []Module
 }
 
 func NewModuleRegistry() *ModuleRegistry {
 	return &ModuleRegistry{
-		modules: make(map[string]Module),
+		modules: make([]Module, 0),
 	}
 }
 
 func (r *ModuleRegistry) Register(module Module) {
-	r.modules[module.Name()] = module
+	r.modules = append(r.modules, module)
 }
 
 func (r *ModuleRegistry) GetModule(name string) Module {
-	return r.modules[name]
+	for _, module := range r.modules {
+		if module.Name() == name {
+			return module
+		}
+	}
+	return nil
 }
 
 func (r *ModuleRegistry) Modules() []Module {
-	var modules []Module
-	for _, module := range r.modules {
-		modules = append(modules, module)
-	}
-	return modules
+	return r.modules
 }
 
 func (r *ModuleRegistry) GetTokenPatterns() []TokenPattern {

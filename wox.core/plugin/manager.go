@@ -63,6 +63,7 @@ type debounceTimer struct {
 
 type Manager struct {
 	instances          []*Instance
+	systemPluginsWg    sync.WaitGroup // waits for all system plugins to finish loading
 	ui                 common.UI
 	resultCache        *util.HashMap[string, *QueryResultCache]
 	debounceQueryTimer *util.HashMap[string, *debounceTimer]
@@ -366,12 +367,17 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 	start := util.GetSystemTimestamp()
 	logger.Info(ctx, fmt.Sprintf("start loading system plugins, found %d system plugins", len(AllSystemPlugin)))
 
+	// Add all plugins to wait group before starting goroutines
+	m.systemPluginsWg.Add(len(AllSystemPlugin))
+
 	for _, p := range AllSystemPlugin {
 		plugin := p
 		metadata := plugin.GetMetadata()
 		pluginName := metadata.GetName(ctx)
 
 		util.Go(ctx, fmt.Sprintf("load system plugin <%s>", pluginName), func() {
+			defer m.systemPluginsWg.Done()
+
 			metadata := plugin.GetMetadata()
 			metadata.LoadSystemI18nFromDirectory(ctx)
 			instance := &Instance{
@@ -397,9 +403,11 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 				logger.Warn(ctx, fmt.Sprintf("load system plugin[%s] setting too slow, cost %d ms", metadata.GetName(ctx), util.GetSystemTimestamp()-startTimestamp))
 			}
 
-			m.instances = append(m.instances, instance)
-
+			// Init plugin BEFORE adding to instances list
+			// This ensures the plugin is fully initialized before it can be queried
 			m.initPlugin(util.NewTraceContext(), instance)
+
+			m.instances = append(m.instances, instance)
 		})
 	}
 
@@ -728,6 +736,12 @@ func (m *Manager) unloadScriptPluginByPath(ctx context.Context, scriptPath strin
 	} else {
 		logger.Debug(ctx, fmt.Sprintf("No script plugin found for file: %s", fileName))
 	}
+}
+
+// WaitForSystemPlugins blocks until all system plugins have finished loading and initializing.
+// This is useful for tests or callers that need to ensure all plugins are ready before querying.
+func (m *Manager) WaitForSystemPlugins() {
+	m.systemPluginsWg.Wait()
 }
 
 func (m *Manager) GetPluginInstances() []*Instance {

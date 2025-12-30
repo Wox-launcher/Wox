@@ -343,9 +343,10 @@ func ensureServicesInitialized(t *testing.T) {
 		// Initialize plugin system with UI
 		plugin.GetPluginManager().Start(ctx, ui.GetUIManager().GetUI(ctx))
 
-		// Wait for plugins to initialize - increased timeout for stability
-		t.Logf("Waiting 15s for plugins to init")
-		time.Sleep(time.Second * 15)
+		// Wait for all system plugins to fully initialize
+		t.Logf("Waiting for system plugins to initialize...")
+		plugin.GetPluginManager().WaitForSystemPlugins()
+		t.Logf("All system plugins initialized")
 
 		// Initialize selection
 		selection.InitSelection()
