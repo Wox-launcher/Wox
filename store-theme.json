@@ -233,7 +233,7 @@
   },
   {
     "ThemeId": "5cd5be05-1b19-4997-9403-031a7833252a",
-    "ThemeName": "Base46 Aquarium",
+    "ThemeName": "Aquarium",
     "Description": "Wox theme adapted from NvChad base46 aquarium theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -291,7 +291,7 @@
   },
   {
     "ThemeId": "043159da-4744-4913-9a00-adb29bcd425e",
-    "ThemeName": "Base46 Ashes",
+    "ThemeName": "Ashes",
     "Description": "Wox theme adapted from NvChad base46 ashes theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -349,7 +349,7 @@
   },
   {
     "ThemeId": "4ba08b61-2acd-4c25-a473-2c470f7caa54",
-    "ThemeName": "Base46 Ayu Dark",
+    "ThemeName": "Ayu Dark",
     "Description": "Wox theme adapted from NvChad base46 ayu_dark theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -407,7 +407,7 @@
   },
   {
     "ThemeId": "f1f42720-2744-4da4-b0ef-85dc9874b117",
-    "ThemeName": "Base46 Ayu Light",
+    "ThemeName": "Ayu Light",
     "Description": "Wox theme adapted from NvChad base46 ayu_light theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -465,7 +465,7 @@
   },
   {
     "ThemeId": "142f14d9-c76b-4581-b4b7-ecfe3a7d1f8b",
-    "ThemeName": "Base46 Bearded Arc",
+    "ThemeName": "Bearded Arc",
     "Description": "Wox theme adapted from NvChad base46 bearded-arc theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -523,7 +523,7 @@
   },
   {
     "ThemeId": "ab56f218-4919-4ead-ab2f-6091626a2a1f",
-    "ThemeName": "Base46 Blossom Light",
+    "ThemeName": "Blossom Light",
     "Description": "Wox theme adapted from NvChad base46 blossom_light theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -581,7 +581,7 @@
   },
   {
     "ThemeId": "57874b0e-45c0-43bf-a13f-d1f477857456",
-    "ThemeName": "Base46 Catppuccin",
+    "ThemeName": "Catppuccin",
     "Description": "Wox theme adapted from NvChad base46 catppuccin theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -639,7 +639,7 @@
   },
   {
     "ThemeId": "589cbc6d-98f3-4853-8c86-c4f8dcd80112",
-    "ThemeName": "Base46 Chadracula Evondev",
+    "ThemeName": "Chadracula Evondev",
     "Description": "Wox theme adapted from NvChad base46 chadracula-evondev theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -697,7 +697,7 @@
   },
   {
     "ThemeId": "d3407c2e-9d4c-492a-90c3-b9353e6d44cb",
-    "ThemeName": "Base46 Chadracula",
+    "ThemeName": "Chadracula",
     "Description": "Wox theme adapted from NvChad base46 chadracula theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -755,7 +755,7 @@
   },
   {
     "ThemeId": "f92a2834-7f04-471d-bbae-c294d426ceb5",
-    "ThemeName": "Base46 Chadtain",
+    "ThemeName": "Chadtain",
     "Description": "Wox theme adapted from NvChad base46 chadtain theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -813,7 +813,7 @@
   },
   {
     "ThemeId": "5e76c965-a52d-4b79-8d56-fdb6d428def8",
-    "ThemeName": "Base46 Chocolate",
+    "ThemeName": "Chocolate",
     "Description": "Wox theme adapted from NvChad base46 chocolate theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -871,7 +871,7 @@
   },
   {
     "ThemeId": "8a306405-9a92-4f08-a5e9-625e37d2e402",
-    "ThemeName": "Base46 Dark Horizon",
+    "ThemeName": "Dark Horizon",
     "Description": "Wox theme adapted from NvChad base46 dark_horizon theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -929,7 +929,7 @@
   },
   {
     "ThemeId": "a8ef6637-2205-4b24-9c22-30510088d073",
-    "ThemeName": "Base46 Decay",
+    "ThemeName": "Decay",
     "Description": "Wox theme adapted from NvChad base46 decay theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -987,7 +987,7 @@
   },
   {
     "ThemeId": "be2c41f9-8a14-42a3-b9d5-ff896aa790ab",
-    "ThemeName": "Base46 Doomchad",
+    "ThemeName": "Doomchad",
     "Description": "Wox theme adapted from NvChad base46 doomchad theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -1045,7 +1045,7 @@
   },
   {
     "ThemeId": "e3ad1b57-528f-4abf-80e0-a527efee931a",
-    "ThemeName": "Base46 Everblush",
+    "ThemeName": "Everblush",
     "Description": "Wox theme adapted from NvChad base46 everblush theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -1103,7 +1103,7 @@
   },
   {
     "ThemeId": "75a9e245-5024-47f7-857c-83f322aac6ac",
-    "ThemeName": "Base46 Everforest",
+    "ThemeName": "Everforest",
     "Description": "Wox theme adapted from NvChad base46 everforest theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -1161,7 +1161,7 @@
   },
   {
     "ThemeId": "d44ec26a-1f80-4ac9-b3c9-edefa3ca4c4d",
-    "ThemeName": "Base46 Everforest Light",
+    "ThemeName": "Everforest Light",
     "Description": "Wox theme adapted from NvChad base46 everforest_light theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -1219,7 +1219,7 @@
   },
   {
     "ThemeId": "789cedba-77dc-45a0-aed3-f2a558c5f8d2",
-    "ThemeName": "Base46 Falcon",
+    "ThemeName": "Falcon",
     "Description": "Wox theme adapted from NvChad base46 falcon theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -1277,7 +1277,7 @@
   },
   {
     "ThemeId": "155fc6ba-6e64-4563-af41-a1d37de57d50",
-    "ThemeName": "Base46 Flex Light",
+    "ThemeName": "Flex Light",
     "Description": "Wox theme adapted from NvChad base46 flex-light theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -1335,7 +1335,7 @@
   },
   {
     "ThemeId": "f013aee7-e671-48ff-a66d-f479d00cd44c",
-    "ThemeName": "Base46 Flexoki Light",
+    "ThemeName": "Flexoki Light",
     "Description": "Wox theme adapted from NvChad base46 flexoki-light theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -1393,7 +1393,7 @@
   },
   {
     "ThemeId": "8842a0a4-e48c-4aba-be5a-b798835cca59",
-    "ThemeName": "Base46 Flexoki",
+    "ThemeName": "Flexoki",
     "Description": "Wox theme adapted from NvChad base46 flexoki theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -1451,7 +1451,7 @@
   },
   {
     "ThemeId": "15c1fce9-1124-4c17-98fd-a96486d18cfa",
-    "ThemeName": "Base46 Gatekeeper",
+    "ThemeName": "Gatekeeper",
     "Description": "Wox theme adapted from NvChad base46 gatekeeper theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -1509,7 +1509,7 @@
   },
   {
     "ThemeId": "0f0a0a1d-c80d-4596-a619-5e484bd1447b",
-    "ThemeName": "Base46 Github Dark",
+    "ThemeName": "Github Dark",
     "Description": "Wox theme adapted from NvChad base46 github_dark theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -1567,7 +1567,7 @@
   },
   {
     "ThemeId": "cc8458bc-8895-4260-aafd-883b909b49c5",
-    "ThemeName": "Base46 Github Light",
+    "ThemeName": "Github Light",
     "Description": "Wox theme adapted from NvChad base46 github_light theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -1625,7 +1625,7 @@
   },
   {
     "ThemeId": "1727ae0b-59a4-49d7-bcb1-285d3a02823a",
-    "ThemeName": "Base46 Gruvbox",
+    "ThemeName": "Gruvbox",
     "Description": "Wox theme adapted from NvChad base46 gruvbox theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -1683,7 +1683,7 @@
   },
   {
     "ThemeId": "014899a8-6ec8-41c1-9d99-f15fbd204e3f",
-    "ThemeName": "Base46 Gruvbox Light",
+    "ThemeName": "Gruvbox Light",
     "Description": "Wox theme adapted from NvChad base46 gruvbox_light theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -1741,7 +1741,7 @@
   },
   {
     "ThemeId": "9ce6143b-17db-4126-912a-a1c516dde311",
-    "ThemeName": "Base46 Gruvchad",
+    "ThemeName": "Gruvchad",
     "Description": "Wox theme adapted from NvChad base46 gruvchad theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -1799,7 +1799,7 @@
   },
   {
     "ThemeId": "d80b71dd-7e6a-4d17-9dfa-119ecf60aff0",
-    "ThemeName": "Base46 Jabuti",
+    "ThemeName": "Jabuti",
     "Description": "Wox theme adapted from NvChad base46 jabuti theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -1857,7 +1857,7 @@
   },
   {
     "ThemeId": "c663d71c-9cce-43bb-9898-23d573634c22",
-    "ThemeName": "Base46 Jellybeans",
+    "ThemeName": "Jellybeans",
     "Description": "Wox theme adapted from NvChad base46 jellybeans theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -1915,7 +1915,7 @@
   },
   {
     "ThemeId": "1e29a208-392f-4569-836b-021bf3a91714",
-    "ThemeName": "Base46 Kanagawa",
+    "ThemeName": "Kanagawa",
     "Description": "Wox theme adapted from NvChad base46 kanagawa theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -1973,7 +1973,7 @@
   },
   {
     "ThemeId": "ec059dbb-c9dd-4862-8440-3552b244cdac",
-    "ThemeName": "Base46 Material Darker",
+    "ThemeName": "Material Darker",
     "Description": "Wox theme adapted from NvChad base46 material-darker theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -2031,7 +2031,7 @@
   },
   {
     "ThemeId": "8c8fed0a-b4aa-4658-9b5a-6ce5ddc0bffc",
-    "ThemeName": "Base46 Material Lighter",
+    "ThemeName": "Material Lighter",
     "Description": "Wox theme adapted from NvChad base46 material-lighter theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -2089,7 +2089,7 @@
   },
   {
     "ThemeId": "4c690146-7d9b-4095-af47-c13567754a03",
-    "ThemeName": "Base46 Melange",
+    "ThemeName": "Melange",
     "Description": "Wox theme adapted from NvChad base46 melange theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -2147,7 +2147,7 @@
   },
   {
     "ThemeId": "851dff5d-cc72-4b62-9e7b-b22c250cc693",
-    "ThemeName": "Base46 Mito Laser",
+    "ThemeName": "Mito Laser",
     "Description": "Wox theme adapted from NvChad base46 mito-laser theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -2205,7 +2205,7 @@
   },
   {
     "ThemeId": "afd60b4d-1928-4846-a070-b784363d5db8",
-    "ThemeName": "Base46 Monekai",
+    "ThemeName": "Monekai",
     "Description": "Wox theme adapted from NvChad base46 monekai theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -2263,7 +2263,7 @@
   },
   {
     "ThemeId": "564e278a-1667-4931-a2e0-45988d621c0e",
-    "ThemeName": "Base46 Monochrome",
+    "ThemeName": "Monochrome",
     "Description": "Wox theme adapted from NvChad base46 monochrome theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -2321,7 +2321,7 @@
   },
   {
     "ThemeId": "56da974d-4180-451b-8658-5a4f3e733a46",
-    "ThemeName": "Base46 Mountain",
+    "ThemeName": "Mountain",
     "Description": "Wox theme adapted from NvChad base46 mountain theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -2379,7 +2379,7 @@
   },
   {
     "ThemeId": "3bff90be-4ac3-42a7-81e3-0a3059ab5086",
-    "ThemeName": "Base46 Nano Light",
+    "ThemeName": "Nano Light",
     "Description": "Wox theme adapted from NvChad base46 nano-light theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -2437,7 +2437,7 @@
   },
   {
     "ThemeId": "abd83ab0-9247-44e5-84b5-719c775bdad3",
-    "ThemeName": "Base46 Nightfox",
+    "ThemeName": "Nightfox",
     "Description": "Wox theme adapted from NvChad base46 nightfox theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -2495,7 +2495,7 @@
   },
   {
     "ThemeId": "58e665a1-55d0-43fb-b755-cdaa0d06c644",
-    "ThemeName": "Base46 Nightlamp",
+    "ThemeName": "Nightlamp",
     "Description": "Wox theme adapted from NvChad base46 nightlamp theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -2553,7 +2553,7 @@
   },
   {
     "ThemeId": "a7f2834a-f061-49ee-97a3-bc7cde9647fe",
-    "ThemeName": "Base46 Nightowl",
+    "ThemeName": "Nightowl",
     "Description": "Wox theme adapted from NvChad base46 nightowl theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -2611,7 +2611,7 @@
   },
   {
     "ThemeId": "fd4db259-ba38-403f-a2be-49518d2988d1",
-    "ThemeName": "Base46 Nord",
+    "ThemeName": "Nord",
     "Description": "Wox theme adapted from NvChad base46 nord theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -2669,7 +2669,7 @@
   },
   {
     "ThemeId": "a35dbec9-24e3-404a-9912-cbffa66765e6",
-    "ThemeName": "Base46 Oceanic Light",
+    "ThemeName": "Oceanic Light",
     "Description": "Wox theme adapted from NvChad base46 oceanic-light theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -2727,7 +2727,7 @@
   },
   {
     "ThemeId": "159b0698-fb21-4bcd-b2ac-2b924d1cd89d",
-    "ThemeName": "Base46 Oceanic Next",
+    "ThemeName": "Oceanic Next",
     "Description": "Wox theme adapted from NvChad base46 oceanic-next theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -2785,7 +2785,7 @@
   },
   {
     "ThemeId": "16d977f0-2eac-450a-ad02-cc86e3135ab5",
-    "ThemeName": "Base46 One Light",
+    "ThemeName": "One Light",
     "Description": "Wox theme adapted from NvChad base46 one_light theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -2843,7 +2843,7 @@
   },
   {
     "ThemeId": "08eab745-371a-4384-8c51-266fe7194d40",
-    "ThemeName": "Base46 Onedark",
+    "ThemeName": "Onedark",
     "Description": "Wox theme adapted from NvChad base46 onedark theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -2901,7 +2901,7 @@
   },
   {
     "ThemeId": "c8b087b5-4bee-4ca6-b4c0-5b968efce70a",
-    "ThemeName": "Base46 Onenord",
+    "ThemeName": "Onenord",
     "Description": "Wox theme adapted from NvChad base46 onenord theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -2959,7 +2959,7 @@
   },
   {
     "ThemeId": "d5e46d0b-ebaa-4d4f-89fa-ff9e5d05c0d5",
-    "ThemeName": "Base46 Onenord Light",
+    "ThemeName": "Onenord Light",
     "Description": "Wox theme adapted from NvChad base46 onenord_light theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -3017,7 +3017,7 @@
   },
   {
     "ThemeId": "1b07d060-c1d6-4a69-88ec-6c53e363f41d",
-    "ThemeName": "Base46 Oxocarbon",
+    "ThemeName": "Oxocarbon",
     "Description": "Wox theme adapted from NvChad base46 oxocarbon theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -3075,7 +3075,7 @@
   },
   {
     "ThemeId": "9d889f01-867f-465d-909a-90d0ced629f1",
-    "ThemeName": "Base46 Palenight",
+    "ThemeName": "Palenight",
     "Description": "Wox theme adapted from NvChad base46 palenight theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -3133,7 +3133,7 @@
   },
   {
     "ThemeId": "2b048342-0a41-4811-9676-a1a85bd93e53",
-    "ThemeName": "Base46 PastelDark",
+    "ThemeName": "PastelDark",
     "Description": "Wox theme adapted from NvChad base46 pastelDark theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -3191,7 +3191,7 @@
   },
   {
     "ThemeId": "7dd63635-5129-421d-b649-e1310886c4aa",
-    "ThemeName": "Base46 Pastelbeans",
+    "ThemeName": "Pastelbeans",
     "Description": "Wox theme adapted from NvChad base46 pastelbeans theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -3249,7 +3249,7 @@
   },
   {
     "ThemeId": "a0d7ecf5-4eb8-4599-b13e-ad507ed77187",
-    "ThemeName": "Base46 Penumbra Dark",
+    "ThemeName": "Penumbra Dark",
     "Description": "Wox theme adapted from NvChad base46 penumbra_dark theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -3307,7 +3307,7 @@
   },
   {
     "ThemeId": "471bf8ce-133d-4251-af50-445e24c152ca",
-    "ThemeName": "Base46 Penumbra Light",
+    "ThemeName": "Penumbra Light",
     "Description": "Wox theme adapted from NvChad base46 penumbra_light theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -3365,7 +3365,7 @@
   },
   {
     "ThemeId": "720a3fca-7dc5-4bb6-80b9-e3b338e24a34",
-    "ThemeName": "Base46 Poimandres",
+    "ThemeName": "Poimandres",
     "Description": "Wox theme adapted from NvChad base46 poimandres theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -3423,7 +3423,7 @@
   },
   {
     "ThemeId": "0d43cba7-e0c6-4a73-a01f-cbed1ee33c7f",
-    "ThemeName": "Base46 Radium",
+    "ThemeName": "Radium",
     "Description": "Wox theme adapted from NvChad base46 radium theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -3481,7 +3481,7 @@
   },
   {
     "ThemeId": "ac58b754-8fd9-417c-8be7-7b968f95dc25",
-    "ThemeName": "Base46 Rosepine Dawn",
+    "ThemeName": "Rosepine Dawn",
     "Description": "Wox theme adapted from NvChad base46 rosepine-dawn theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -3539,7 +3539,7 @@
   },
   {
     "ThemeId": "cb60f20e-513a-4e89-9ec2-e9c8f51d1866",
-    "ThemeName": "Base46 Rosepine",
+    "ThemeName": "Rosepine",
     "Description": "Wox theme adapted from NvChad base46 rosepine theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -3597,7 +3597,7 @@
   },
   {
     "ThemeId": "111694e2-fbd8-4f45-b129-09bb426e72c4",
-    "ThemeName": "Base46 Rxyhn",
+    "ThemeName": "Rxyhn",
     "Description": "Wox theme adapted from NvChad base46 rxyhn theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -3655,7 +3655,7 @@
   },
   {
     "ThemeId": "cffa80d5-22b0-4357-bf5c-70eaf055583f",
-    "ThemeName": "Base46 Solarized Dark",
+    "ThemeName": "Solarized Dark",
     "Description": "Wox theme adapted from NvChad base46 solarized_dark theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -3713,7 +3713,7 @@
   },
   {
     "ThemeId": "792eb521-5ab0-478d-8fa4-6fd20aab9fe1",
-    "ThemeName": "Base46 Solarized Osaka",
+    "ThemeName": "Solarized Osaka",
     "Description": "Wox theme adapted from NvChad base46 solarized_osaka theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -3771,7 +3771,7 @@
   },
   {
     "ThemeId": "e1783e8f-c73c-4894-8df7-ea4a4b4fabf3",
-    "ThemeName": "Base46 Sweetpastel",
+    "ThemeName": "Sweetpastel",
     "Description": "Wox theme adapted from NvChad base46 sweetpastel theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -3829,7 +3829,7 @@
   },
   {
     "ThemeId": "734a0738-b8c6-4802-8a64-2825ba6d414c",
-    "ThemeName": "Base46 Tokyodark",
+    "ThemeName": "Tokyodark",
     "Description": "Wox theme adapted from NvChad base46 tokyodark theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -3887,7 +3887,7 @@
   },
   {
     "ThemeId": "866a82bc-8685-40f1-b1f2-25e6a7229b05",
-    "ThemeName": "Base46 Tokyonight",
+    "ThemeName": "Tokyonight",
     "Description": "Wox theme adapted from NvChad base46 tokyonight theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -3945,7 +3945,7 @@
   },
   {
     "ThemeId": "1ef8f2b4-4819-47a1-a440-8116a90b0a39",
-    "ThemeName": "Base46 Tomorrow Night",
+    "ThemeName": "Tomorrow Night",
     "Description": "Wox theme adapted from NvChad base46 tomorrow_night theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -4003,7 +4003,7 @@
   },
   {
     "ThemeId": "331987dd-f631-431e-ab10-54e5f6fef8ac",
-    "ThemeName": "Base46 Tundra",
+    "ThemeName": "Tundra",
     "Description": "Wox theme adapted from NvChad base46 tundra theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -4061,7 +4061,7 @@
   },
   {
     "ThemeId": "593cf9e7-e384-48c2-8982-ad847a137ec5",
-    "ThemeName": "Base46 Vscode Dark",
+    "ThemeName": "Vscode Dark",
     "Description": "Wox theme adapted from NvChad base46 vscode_dark theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -4119,7 +4119,7 @@
   },
   {
     "ThemeId": "c1e4b06d-dbc6-4ef5-b635-533789302ffb",
-    "ThemeName": "Base46 Wombat",
+    "ThemeName": "Wombat",
     "Description": "Wox theme adapted from NvChad base46 wombat theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -4177,7 +4177,7 @@
   },
   {
     "ThemeId": "624d35da-6a93-454d-a16e-c31dc112fbb3",
-    "ThemeName": "Base46 Yoru",
+    "ThemeName": "Yoru",
     "Description": "Wox theme adapted from NvChad base46 yoru theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
@@ -4235,7 +4235,7 @@
   },
   {
     "ThemeId": "153e0623-53f2-4c53-920f-e6b383d3e96d",
-    "ThemeName": "Base46 Vwombat",
+    "ThemeName": "Vwombat",
     "Description": "Wox theme adapted from NvChad base46 vwombat theme",
     "ThemeAuthor": "NvChad/base46 (adapted for Wox)",
     "Version": "1.1.0",
