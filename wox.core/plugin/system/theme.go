@@ -96,7 +96,6 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 	currentGroup := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_group_current")
 	availableGroup := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_group_available")
 	storeGroup := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_group_store")
-	storeSubTitleFormat := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_store_install_by")
 	installThemeText := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_install_theme")
 	systemTagText := i18n.GetI18nManager().TranslateWox(ctx, "ui_setting_theme_system_tag")
 	openThemeFolderText := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_open_containing_folder")
@@ -106,8 +105,9 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 		if match {
 			themePath := filepath.Join(util.GetLocation().GetThemeDirectory(), fmt.Sprintf("%s.json", theme.ThemeId))
 			result := plugin.QueryResult{
-				Title: theme.ThemeName,
-				Icon:  common.NewWoxImageTheme(theme),
+				Title:    theme.ThemeName,
+				SubTitle: theme.Description,
+				Icon:     common.NewWoxImageTheme(theme),
 				Actions: []plugin.QueryResultAction{
 					{
 						Name:                   changeThemeText,
@@ -173,12 +173,8 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 		match, _ := plugin.IsStringMatchScore(ctx, theme.ThemeName, query.Search)
 		if match {
 			result := plugin.QueryResult{
-				Title: theme.ThemeName,
-				SubTitle: fmt.Sprintf(
-					storeSubTitleFormat,
-					theme.ThemeName,
-					theme.ThemeAuthor,
-				),
+				Title:      theme.ThemeName,
+				SubTitle:   theme.Description,
 				Icon:       common.NewWoxImageTheme(theme),
 				Group:      storeGroup,
 				GroupScore: 0,
