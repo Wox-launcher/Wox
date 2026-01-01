@@ -17,6 +17,7 @@ import (
 	"wox/i18n"
 	"wox/setting"
 	"wox/util"
+	"wox/util/trash"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/samber/lo"
@@ -705,13 +706,13 @@ func (s *Store) Uninstall(ctx context.Context, plugin *Instance) error {
 			// script plugin: delete the actual script file under user scripts directory
 			scriptPath := path.Join(util.GetLocation().GetUserScriptPluginsDirectory(), plugin.Metadata.Entry)
 			if util.IsFileExists(scriptPath) {
-				if removeErr := os.Remove(scriptPath); removeErr != nil {
+				if removeErr := trash.MoveToTrash(scriptPath); removeErr != nil {
 					logger.Error(ctx, fmt.Sprintf("failed to remove script file %s: %s", scriptPath, removeErr.Error()))
 					return removeErr
 				}
 			}
 		} else {
-			removeErr := os.RemoveAll(plugin.PluginDirectory)
+			removeErr := trash.MoveToTrash(plugin.PluginDirectory)
 			if removeErr != nil {
 				logger.Error(ctx, fmt.Sprintf("failed to remove plugin directory %s: %s", plugin.PluginDirectory, removeErr.Error()))
 				return removeErr

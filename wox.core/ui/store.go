@@ -12,6 +12,7 @@ import (
 	"wox/common"
 	"wox/i18n"
 	"wox/util"
+	"wox/util/trash"
 
 	"github.com/samber/lo"
 	"github.com/tidwall/pretty"
@@ -131,7 +132,7 @@ func (s *Store) Uninstall(ctx context.Context, theme common.Theme) error {
 
 	themePath := path.Join(util.GetLocation().GetThemeDirectory(), fmt.Sprintf("%s.json", theme.ThemeId))
 
-	removeErr := os.Remove(themePath)
+	removeErr := trash.MoveToTrash(themePath)
 	if removeErr != nil {
 		return removeErr
 	}

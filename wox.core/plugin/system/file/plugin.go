@@ -9,6 +9,7 @@ import (
 	"wox/setting/definition"
 	"wox/util/nativecontextmenu"
 	"wox/util/shell"
+	"wox/util/trash"
 
 	"github.com/samber/lo"
 )
@@ -126,6 +127,18 @@ func (c *Plugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryRe
 						shell.OpenFileInFolder(item.Path)
 					},
 					Hotkey: "ctrl+enter",
+				},
+				{
+					Name: "i18n:plugin_clipboard_delete",
+					Icon: common.TrashIcon,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						err := trash.MoveToTrash(item.Path)
+						if err != nil {
+							c.api.Log(ctx, plugin.LogLevelError, err.Error())
+							c.api.Notify(ctx, err.Error())
+							return
+						}
+					},
 				},
 				{
 					Name: "i18n:plugin_file_show_context_menu",

@@ -14,6 +14,7 @@ import (
 	"wox/setting/definition"
 	"wox/util"
 	"wox/util/shell"
+	"wox/util/trash"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/fsnotify/fsnotify"
@@ -836,7 +837,7 @@ func (w *WPMPlugin) listDevCommand(ctx context.Context) []plugin.QueryResult {
 				{
 					Name: "i18n:plugin_wpm_remove_and_delete",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						deleteErr := os.RemoveAll(lp.metadata.Directory)
+						deleteErr := trash.MoveToTrash(lp.metadata.Directory)
 						if deleteErr != nil {
 							w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to delete plugin directory: %s", deleteErr.Error()))
 							return
