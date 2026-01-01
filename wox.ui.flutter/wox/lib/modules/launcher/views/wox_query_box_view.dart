@@ -11,6 +11,7 @@ import 'package:wox/components/wox_platform_focus.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/utils/color_util.dart';
+import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 
@@ -65,8 +66,8 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
         contentPadding: const EdgeInsets.only(
           left: 8,
           right: 68,
-          top: 4,
-          bottom: 17,
+          top: QUERY_BOX_CONTENT_PADDING_TOP,
+          bottom: QUERY_BOX_CONTENT_PADDING_BOTTOM,
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(currentTheme.queryBoxBorderRadius.toDouble()),
@@ -80,6 +81,10 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
       focusNode: controller.queryBoxFocusNode,
       controller: controller.queryBoxTextFieldController,
       scrollController: controller.queryBoxScrollController,
+      keyboardType: TextInputType.multiline,
+      textInputAction: TextInputAction.newline,
+      minLines: 1,
+      maxLines: QUERY_BOX_MAX_LINES,
       enableIMEPersonalizedLearning: true,
       inputFormatters: [
         TextInputFormatter.withFunction((oldValue, newValue) {
@@ -138,6 +143,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
 
     return Obx(() {
       final currentTheme = WoxThemeUtil.instance.currentTheme.value;
+      final queryBoxHeight = controller.getQueryBoxInputHeight();
       controller.queryBoxTextFieldController.updateSelectedTextStyle(
         TextStyle(
           color: safeFromCssColor(currentTheme.queryBoxTextSelectionColor),
@@ -267,7 +273,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                   return KeyEventResult.ignored;
                 },
                 child: SizedBox(
-                  height: 55.0,
+                  height: queryBoxHeight,
                   child: Theme(
                     data: ThemeData(
                       textSelectionTheme: TextSelectionThemeData(
@@ -297,7 +303,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                 ))),
         Positioned(
           right: 10,
-          height: 55,
+          height: queryBoxHeight,
           child: WoxDragMoveArea(
             onDragEnd: () {
               controller.focusQueryBox();

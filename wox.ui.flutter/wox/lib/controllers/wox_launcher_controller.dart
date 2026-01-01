@@ -56,13 +56,10 @@ class WoxLauncherController extends GetxController {
   final currentQuery = PlainQuery.empty().obs;
   final queryBoxFocusNode = FocusNode();
   final queryBoxTextFieldController = QueryBoxTextEditingController(
-    selectedTextStyle: TextStyle(
-      color: safeFromCssColor(
-        WoxThemeUtil.instance.currentTheme.value.queryBoxTextSelectionColor,
-      ),
-    ),
+    selectedTextStyle: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxTextSelectionColor)),
   );
   final queryBoxScrollController = ScrollController(initialScrollOffset: 0.0);
+  final queryBoxLineCount = 1.obs;
 
   //preview related variables
   final currentPreview = WoxPreview.empty().obs;
@@ -348,10 +345,7 @@ class WoxLauncherController extends GetxController {
         ],
       );
     } else {
-      toolbar.value = toolbar.value.copyWith(
-        text: doctorCheckInfo.value.message,
-        icon: doctorCheckInfo.value.icon,
-      );
+      toolbar.value = toolbar.value.copyWith(text: doctorCheckInfo.value.message, icon: doctorCheckInfo.value.icon);
     }
 
     lastAppliedDoctorToolbarMessage = doctorCheckInfo.value.message;
@@ -664,6 +658,7 @@ class WoxLauncherController extends GetxController {
     resultGridViewController.isMouseMoved = false;
 
     if (currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code) {
+      updateQueryBoxLineCount(value);
       // do local filter if query type is selection
       final traceId = const UuidV4().generate();
       resultListViewController.filterItems(traceId, value);
@@ -749,6 +744,7 @@ class WoxLauncherController extends GetxController {
     if (moveCursorToEnd) {
       moveQueryBoxCursorToEnd();
     }
+    updateQueryBoxLineCount(query.queryText);
     updatePluginMetadataOnQueryChanged(traceId, query);
     if (query.isEmpty) {
       // Check if we should show MRU results when query is empty (based on start page setting)
@@ -1035,7 +1031,7 @@ class WoxLauncherController extends GetxController {
     if (isShowToolbar) {
       resultHeight += WoxThemeUtil.instance.getToolbarHeight();
     }
-    var totalHeight = WoxThemeUtil.instance.getQueryBoxHeight() + resultHeight;
+    var totalHeight = getQueryBoxTotalHeight() + resultHeight;
 
     // on windows, if the resolution is scaled in high DPI, the height need to add addtional 1 pixel to avoid cut off
     // otherwise, "Bottom overflowed by 0.x pixels" will happen
@@ -1052,6 +1048,27 @@ class WoxLauncherController extends GetxController {
 
     await windowManager.setSize(Size(WoxSettingUtil.instance.currentSetting.appWidth.toDouble(), totalHeight.toDouble()));
     windowFlickerDetector.recordResize(totalHeight.toInt());
+  }
+
+  void updateQueryBoxLineCount(String text) {
+    final normalizedText = text.replaceAll('\r\n', '\n');
+    final rawLineCount = normalizedText.isEmpty ? 1 : normalizedText.split('\n').length;
+    final clampedLineCount = rawLineCount.clamp(1, QUERY_BOX_MAX_LINES);
+    if (queryBoxLineCount.value == clampedLineCount) {
+      return;
+    }
+    queryBoxLineCount.value = clampedLineCount;
+    resizeHeight();
+  }
+
+  double getQueryBoxInputHeight() {
+    final extraLines = queryBoxLineCount.value - 1;
+    return QUERY_BOX_BASE_HEIGHT + (QUERY_BOX_LINE_HEIGHT * extraLines);
+  }
+
+  double getQueryBoxTotalHeight() {
+    final extraLines = queryBoxLineCount.value - 1;
+    return WoxThemeUtil.instance.getQueryBoxHeight() + (QUERY_BOX_LINE_HEIGHT * extraLines);
   }
 
   void clearHoveredResult() {
@@ -1503,28 +1520,19 @@ class WoxLauncherController extends GetxController {
     });
 
     // Build toolbar action info list
-    var toolbarActions = actionsWithHotkeys.map((action) {
-      return ToolbarActionInfo(
-        name: tr(action.name),
-        hotkey: action.hotkey,
-      );
-    }).toList();
+    var toolbarActions =
+        actionsWithHotkeys.map((action) {
+          return ToolbarActionInfo(name: tr(action.name), hotkey: action.hotkey);
+        }).toList();
 
     // Add "More Actions" hotkey at the end if there are actions
     if (shouldShowMoreActions) {
       final moreActionsHotkey = Platform.isMacOS ? "cmd+j" : "alt+j";
-      toolbarActions.add(
-        ToolbarActionInfo(
-          name: tr("toolbar_more_actions"),
-          hotkey: moreActionsHotkey,
-        ),
-      );
+      toolbarActions.add(ToolbarActionInfo(name: tr("toolbar_more_actions"), hotkey: moreActionsHotkey));
     }
 
     // Update toolbar with all actions
-    toolbar.value = toolbar.value.copyWith(
-      actions: toolbarActions,
-    );
+    toolbar.value = toolbar.value.copyWith(actions: toolbarActions);
   }
 
   void onActionItemActivated(String traceId, WoxListItem<WoxResultAction> item) {
@@ -1568,14 +1576,10 @@ class WoxLauncherController extends GetxController {
   Future<void> updateQueryIconOnQueryChanged(String traceId, PlainQuery query, QueryMetadata queryMetadata) async {
     if (query.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code) {
       if (query.querySelection.type == WoxSelectionTypeEnum.WOX_SELECTION_TYPE_FILE.code) {
-        queryIcon.value = QueryIconInfo(
-          icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code, imageData: QUERY_ICON_SELECTION_FILE),
-        );
+        queryIcon.value = QueryIconInfo(icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code, imageData: QUERY_ICON_SELECTION_FILE));
       }
       if (query.querySelection.type == WoxSelectionTypeEnum.WOX_SELECTION_TYPE_TEXT.code) {
-        queryIcon.value = QueryIconInfo(
-          icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code, imageData: QUERY_ICON_SELECTION_TEXT),
-        );
+        queryIcon.value = QueryIconInfo(icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code, imageData: QUERY_ICON_SELECTION_TEXT));
       }
       return;
     }
