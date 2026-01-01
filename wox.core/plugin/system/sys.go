@@ -321,7 +321,7 @@ func (r *SysPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData
 	result := &plugin.QueryResult{
 		Title:    foundCommand.Title,
 		SubTitle: foundCommand.SubTitle,
-		Icon:     mruData.Icon,
+		Icon:     foundCommand.Icon,
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:                   "i18n:plugin_sys_execute",

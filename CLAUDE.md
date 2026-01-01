@@ -1,7 +1,3 @@
----
-trigger: always_on
----
-
 # AI Instructions for Wox
 
 This document guides AI coding agents working in this repository.

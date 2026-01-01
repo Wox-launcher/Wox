@@ -64,6 +64,20 @@ func (a *appInfo) IsRunning() bool {
 	return a.Pid > 0
 }
 
+func isMacPrefPanePath(appPath string) bool {
+	return util.IsMacOS() && strings.HasSuffix(strings.ToLower(appPath), ".prefpane")
+}
+
+func isMacSystemSettingsPath(appPath string) bool {
+	if !util.IsMacOS() {
+		return false
+	}
+	if isMacPrefPanePath(appPath) {
+		return true
+	}
+	return strings.HasPrefix(strings.ToLower(appPath), "x-apple.systempreferences:")
+}
+
 type appDirectory struct {
 	Path              string
 	Recursive         bool
@@ -196,6 +210,10 @@ func (a *ApplicationPlugin) reuseAppFromCache(ctx context.Context, appPath strin
 		return appInfo{}, false
 	}
 
+	if a.shouldInvalidatePrefPaneCache(appPath, cached.Name) {
+		return appInfo{}, false
+	}
+
 	if cached.LastModifiedUnix == 0 || fileInfo == nil {
 		return appInfo{}, false
 	}
@@ -215,6 +233,19 @@ func (a *ApplicationPlugin) reuseAppFromCache(ctx context.Context, appPath strin
 	return cached, true
 }
 
+func (a *ApplicationPlugin) shouldInvalidatePrefPaneCache(appPath string, cachedName string) bool {
+	if !isMacPrefPanePath(appPath) {
+		return false
+	}
+
+	info := GetPrefPaneInfo(filepath.Base(appPath))
+	if info == nil || !strings.HasPrefix(info.DisplayName, "i18n:") {
+		return false
+	}
+
+	return cachedName != info.DisplayName
+}
+
 func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	var results []plugin.QueryResult
 	for _, info := range a.apps {
@@ -229,6 +260,8 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 			displayPath := info.GetDisplayPath()
 			if info.Type == AppTypeWindowsSetting {
 				displayPath = a.api.GetTranslation(ctx, "i18n:plugin_app_windows_settings_subtitle")
+			} else if isMacSystemSettingsPath(info.Path) {
+				displayPath = a.api.GetTranslation(ctx, "i18n:plugin_app_macos_system_settings_subtitle")
 			}
 
 			result := plugin.QueryResult{
@@ -565,6 +598,7 @@ func (a *ApplicationPlugin) indexExtraApps(ctx context.Context) []appInfo {
 func (a *ApplicationPlugin) getAppPaths(ctx context.Context, appDirectories []appDirectory) (appPaths []string) {
 	var appExtensions = a.retriever.GetAppExtensions(ctx)
 	for _, dir := range appDirectories {
+
 		// Initialize excludeAbsPaths on first call
 		if len(dir.RecursiveExcludes) > 0 && len(dir.excludeAbsPaths) == 0 {
 			dir.excludeAbsPaths = make([]string, 0, len(dir.RecursiveExcludes))
@@ -581,12 +615,16 @@ func (a *ApplicationPlugin) getAppPaths(ctx context.Context, appDirectories []ap
 			continue
 		}
 
+		matchCount := 0
 		for _, entry := range appPath {
 			isExtensionMatch := lo.ContainsBy(appExtensions, func(ext string) bool {
-				return strings.HasSuffix(strings.ToLower(entry.Name()), fmt.Sprintf(".%s", ext))
+				return strings.HasSuffix(strings.ToLower(entry.Name()), fmt.Sprintf(".%s", strings.ToLower(ext)))
 			})
 			if isExtensionMatch {
-				appPaths = append(appPaths, path.Join(dir.Path, entry.Name()))
+				fullPath := path.Join(dir.Path, entry.Name())
+				appPaths = append(appPaths, fullPath)
+				matchCount++
+
 				continue
 			}
 
@@ -619,6 +657,7 @@ func (a *ApplicationPlugin) getAppPaths(ctx context.Context, appDirectories []ap
 				}})...)
 			}
 		}
+
 	}
 
 	return
@@ -723,6 +762,8 @@ func (a *ApplicationPlugin) handleMRURestore(ctx context.Context, mruData plugin
 	displayPath := appInfo.GetDisplayPath()
 	if appInfo.Type == AppTypeWindowsSetting {
 		displayPath = a.api.GetTranslation(ctx, "i18n:plugin_app_windows_settings_subtitle")
+	} else if isMacSystemSettingsPath(appInfo.Path) {
+		displayPath = a.api.GetTranslation(ctx, "i18n:plugin_app_macos_system_settings_subtitle")
 	}
 	result := &plugin.QueryResult{
 		Id:       uuid.NewString(),
