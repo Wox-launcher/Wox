@@ -2,7 +2,7 @@ package window
 
 /*
 #cgo CFLAGS: -x objective-c
-#cgo LDFLAGS: -framework Foundation -framework Cocoa
+#cgo LDFLAGS: -framework Foundation -framework Cocoa -framework ApplicationServices
 #include <stdlib.h>
 
 int getActiveWindowIcon(unsigned char **iconData);

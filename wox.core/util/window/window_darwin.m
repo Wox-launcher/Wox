@@ -1,3 +1,4 @@
+#include <ApplicationServices/ApplicationServices.h>
 #include <Cocoa/Cocoa.h>
 
 int getActiveWindowIcon(unsigned char **iconData) {
@@ -59,20 +60,53 @@ int activateWindowByPid(int pid) {
         if (pid <= 0) {
             return 0;
         }
-        
-        NSRunningApplication *app = [NSRunningApplication runningApplicationWithProcessIdentifier:pid];
-        if (!app) {
+
+        if (!AXIsProcessTrusted()) {
             return 0;
         }
-        
-        // Unhide the application if it's hidden
-        if ([app isHidden]) {
-            [app unhide];
+
+        AXUIElementRef appElement = AXUIElementCreateApplication(pid);
+        if (!appElement) {
+            return 0;
         }
-        
-        // Activate the application with options to bring all windows forward
-        BOOL success = [app activateWithOptions:NSApplicationActivateAllWindows | NSApplicationActivateIgnoringOtherApps];
-        
-        return success ? 1 : 0;
+
+        AXError setFrontmostErr = AXUIElementSetAttributeValue(
+            appElement,
+            kAXFrontmostAttribute,
+            kCFBooleanTrue
+        );
+
+        CFArrayRef windows = NULL;
+        AXError windowsErr = AXUIElementCopyAttributeValue(
+            appElement,
+            kAXWindowsAttribute,
+            (CFTypeRef *)&windows
+        );
+
+        BOOL raised = NO;
+        if (windowsErr == kAXErrorSuccess && windows && CFArrayGetCount(windows) > 0) {
+            AXUIElementRef window = (AXUIElementRef)CFArrayGetValueAtIndex(windows, 0);
+            if (window) {
+                AXUIElementSetAttributeValue(window, kAXMainAttribute, kCFBooleanTrue);
+                AXUIElementSetAttributeValue(appElement, kAXFocusedWindowAttribute, window);
+                AXUIElementPerformAction(window, kAXRaiseAction);
+                raised = YES;
+            }
+        }
+
+        CFIndex windowCount = 0;
+        if (windows) {
+            windowCount = CFArrayGetCount(windows);
+            CFRelease(windows);
+        }
+        CFRelease(appElement);
+
+        if (setFrontmostErr != kAXErrorSuccess) {
+            return 0;
+        }
+        if (raised) {
+            return 1;
+        }
+        return (windowsErr == kAXErrorSuccess && windowCount == 0) ? 1 : 0;
     }
 }

@@ -281,15 +281,19 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 				analytics.TrackAppLaunched(ctx, fmt.Sprintf("%s:%s", info.Type, info.Name), displayName)
 
 				// Check if app is already running and try to activate its window
-				currentPid := a.retriever.GetPid(ctx, info)
-				if currentPid > 0 {
-					// App is running, try to activate its window
-					if window.ActivateWindowByPid(currentPid) {
-						a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Activated existing window for %s (PID: %d)", info.Name, currentPid))
-						return
+				// macos default behavior is to activate existing instance
+				// windows needs special handling to activate existing window
+				if util.IsWindows() {
+					currentPid := a.retriever.GetPid(ctx, info)
+					if currentPid > 0 {
+						// App is running, try to activate its window
+						if window.ActivateWindowByPid(currentPid) {
+							a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Activated existing window for %s (PID: %d)", info.Name, currentPid))
+							return
+						}
+						// If activation failed, fall through to launch new instance
+						a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Could not activate window for %s, launching new instance", info.Name))
 					}
-					// If activation failed, fall through to launch new instance
-					a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Could not activate window for %s, launching new instance", info.Name))
 				}
 
 				// Launch the application
