@@ -38,8 +38,6 @@ import (
 var appRetriever = &MacRetriever{}
 
 var defaultAppIcon = "/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericApplicationIcon.icns"
-var macosWiFiSettingsURL = "x-apple.systempreferences:com.apple.preference.network?Wi-Fi"
-var macosNetworkPrefPanePath = "/System/Library/PreferencePanes/Network.prefPane"
 
 type processInfo struct {
 	Pid  int
@@ -75,47 +73,35 @@ func (a *MacRetriever) GetAppDirectories(ctx context.Context) []appDirectory {
 		{
 			Path: "/System/Library/CoreServices/Applications", Recursive: false,
 		},
-		{
-			Path: "/System/Library/PreferencePanes", Recursive: false,
-		},
 	}
 }
 
 func (a *MacRetriever) GetAppExtensions(ctx context.Context) []string {
-	return []string{"app", "prefPane"}
+	return []string{"app"}
 }
 
 func (a *MacRetriever) ParseAppInfo(ctx context.Context, path string) (appInfo, error) {
-	var appName string
-	var err error
+	appName, err := a.getAppNameFromMdls(path)
+	if err != nil || appName == "(null)" || strings.TrimSpace(appName) == "" {
+		// Spotlight/mdls unavailable or returned invalid value, fallback to Info.plist then filename
+		if err != nil {
+			a.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to get app name from mdls(%s): %s, falling back to Info.plist/filename", path, err.Error()))
+		} else {
+			a.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("mdls returned empty/(null) for %s, falling back to Info.plist/filename", path))
+		}
 
-	if strings.HasSuffix(path, ".prefPane") {
-		appName, _ = a.getPrefPaneName(ctx, path)
-	} else {
-		appName, err = a.getAppNameFromMdls(path)
-		if err != nil || appName == "(null)" || strings.TrimSpace(appName) == "" {
-			// Spotlight/mdls unavailable or returned invalid value, fallback to Info.plist then filename
-			if err != nil {
-				a.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to get app name from mdls(%s): %s, falling back to Info.plist/filename", path, err.Error()))
-			} else {
-				a.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("mdls returned empty/(null) for %s, falling back to Info.plist/filename", path))
-			}
-
-			if nameFromPlist, err2 := a.getAppNameFromPlist(ctx, path); err2 == nil && strings.TrimSpace(nameFromPlist) != "" {
-				appName = nameFromPlist
-			} else {
-				base := filepath.Base(path)
-				appName = base
-				a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("using filename as app name for %s (plistErr=%v)", path, err2))
-			}
+		if nameFromPlist, err2 := a.getAppNameFromPlist(ctx, path); err2 == nil && strings.TrimSpace(nameFromPlist) != "" {
+			appName = nameFromPlist
+		} else {
+			base := filepath.Base(path)
+			appName = base
+			a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("using filename as app name for %s (plistErr=%v)", path, err2))
 		}
 	}
 
-	// Strip extension suffix (.app/.prefPane)
-	for _, extension := range a.GetAppExtensions(ctx) {
-		if strings.HasSuffix(appName, "."+extension) {
-			appName = appName[:len(appName)-len(extension)-1]
-		}
+	// Strip .app extension
+	if strings.HasSuffix(appName, ".app") {
+		appName = appName[:len(appName)-4]
 	}
 
 	info := appInfo{
@@ -129,52 +115,6 @@ func (a *MacRetriever) ParseAppInfo(ctx context.Context, path string) (appInfo, 
 	info.Icon = icon
 
 	return info, nil
-}
-
-func (a *MacRetriever) getPrefPaneName(ctx context.Context, path string) (string, error) {
-	baseName := filepath.Base(path)
-
-	// Check centralized mapping FIRST - this takes priority for modern macOS System Settings panes
-	// Many system panes don't have traditional Info.plist with name fields
-	if info := GetPrefPaneInfo(baseName); info != nil && info.DisplayName != "" {
-		return info.DisplayName, nil
-	}
-
-	// Fallback: try to read from Info.plist
-	plistPath := filepath.Join(path, "Contents", "Info.plist")
-	plistFile, err := os.Open(plistPath)
-	if err != nil {
-		return strings.TrimSuffix(baseName, ".prefPane"), nil
-	}
-	defer plistFile.Close()
-
-	var plistData map[string]interface{}
-	decoder := plist.NewDecoder(plistFile)
-	if err := decoder.Decode(&plistData); err != nil {
-		return strings.TrimSuffix(baseName, ".prefPane"), nil
-	}
-
-	// Try various keys in order of preference
-	if name, ok := plistData["CFBundleName"].(string); ok && name != "" {
-		return name, nil
-	}
-
-	if name, ok := plistData["NSPrefPaneIconLabel"].(string); ok && name != "" {
-		return name, nil
-	}
-
-	// Try CFBundleGetInfoString as fallback (e.g., "Security & Privacy Preference Pane")
-	if infoString, ok := plistData["CFBundleGetInfoString"].(string); ok && infoString != "" {
-		name := strings.TrimSpace(infoString)
-		name = strings.TrimSuffix(name, " Preference Pane")
-		name = strings.TrimSuffix(name, " PreferencePane")
-		name = strings.TrimSuffix(name, " Pane")
-		if name != "" {
-			return name, nil
-		}
-	}
-
-	return strings.TrimSuffix(baseName, ".prefPane"), nil
 }
 
 func (a *MacRetriever) getAppNameFromMdls(path string) (string, error) {
@@ -224,33 +164,6 @@ func (a *MacRetriever) getAppNameFromPlist(ctx context.Context, appPath string) 
 }
 
 func (a *MacRetriever) getMacAppIcon(ctx context.Context, appPath string) (common.WoxImage, error) {
-	// For .prefPane files, check if we have a mapping for SF Symbol icons first
-	if strings.HasSuffix(appPath, ".prefPane") {
-		fileName := filepath.Base(appPath)
-		if info := GetPrefPaneInfo(fileName); info != nil && info.SFSymbol != "" {
-			// Use the centralized mapping to generate the icon
-			iconStyle := info.IconStyle
-			if iconStyle == "" {
-				iconStyle = "filled" // default
-			}
-			if iconBytes, iconLen := a.generateSFSymbolIconBytes(info.SFSymbol, info.BackgroundColor, iconStyle); iconLen > 0 {
-				iconPath, err := a.savePrefPaneIconToCache(ctx, appPath, iconBytes, iconLen)
-				if err == nil {
-					return common.NewWoxImageAbsolutePath(iconPath), nil
-				}
-			}
-		}
-
-		// Fallback to traditional prefPane icon loading
-		if iconBytes, iconLen := a.getPrefPaneIconBytes(appPath); iconLen > 0 {
-			iconPath, err := a.savePrefPaneIconToCache(ctx, appPath, iconBytes, iconLen)
-			if err == nil {
-				return common.NewWoxImageAbsolutePath(iconPath), nil
-			}
-		}
-	}
-
-	// For .app files and fallback, use the standard method
 	if iconPath, err := fileicon.GetFileIconByPath(ctx, appPath); err == nil {
 		return common.NewWoxImageAbsolutePath(iconPath), nil
 	}
@@ -378,36 +291,51 @@ func (a *MacRetriever) GetExtraApps(ctx context.Context) ([]appInfo, error) {
 
 	waitGroup.Wait()
 
-	appInfos = append(appInfos, a.getVirtualSystemSettingsApps(ctx)...)
+	appInfos = append(appInfos, a.getSystemSettingsApps(ctx)...)
 	return appInfos, nil
 }
 
-func (a *MacRetriever) getVirtualSystemSettingsApps(ctx context.Context) []appInfo {
-	icon := a.getWiFiSettingsIcon(ctx)
+func (a *MacRetriever) getSystemSettingsApps(ctx context.Context) []appInfo {
+	var apps []appInfo
 
-	return []appInfo{
-		{
-			Name: "i18n:plugin_app_macos_prefpane_wifi",
-			Path: macosWiFiSettingsURL,
-			Icon: icon,
-		},
-	}
-}
+	for key, info := range systemSettings {
+		if info.URI == "" {
+			continue
+		}
 
-func (a *MacRetriever) getWiFiSettingsIcon(ctx context.Context) common.WoxImage {
-	iconBytes, iconLen := a.generateSFSymbolIconBytes("wifi", "blue", "filled")
-	if iconLen > 0 {
-		iconPath, err := a.savePrefPaneIconToCache(ctx, "WiFi.prefPane", iconBytes, iconLen)
-		if err == nil {
-			return common.NewWoxImageAbsolutePath(iconPath)
+		// Generate icon using SF Symbol
+		iconStyle := info.IconStyle
+		if iconStyle == "" {
+			iconStyle = "filled"
+		}
+
+		var icon common.WoxImage
+		if iconBytes, iconLen := a.generateSFSymbolIconBytes(info.SFSymbol, info.BackgroundColor, iconStyle); iconLen > 0 {
+			// Use key as cache file name to avoid conflicts
+			cacheKey := "virtual_" + key + ".prefPane"
+			if iconPath, err := a.savePrefPaneIconToCache(ctx, cacheKey, iconBytes, iconLen); err == nil {
+				icon = common.NewWoxImageAbsolutePath(iconPath)
+			}
+		}
+
+		if icon.ImageData == "" {
+			icon = common.WoxIcon
+		}
+
+		// Build full URI with x-apple.systempreferences scheme
+		fullURI := "x-apple.systempreferences:" + info.URI
+
+		// Create an app entry for each display name (supports aliases)
+		for _, displayName := range info.DisplayNames {
+			apps = append(apps, appInfo{
+				Name: displayName,
+				Path: fullURI,
+				Icon: icon,
+			})
 		}
 	}
 
-	icon, err := a.getMacAppIcon(ctx, macosNetworkPrefPanePath)
-	if err != nil {
-		return common.WoxIcon
-	}
-	return icon
+	return apps
 }
 
 func (a *MacRetriever) GetPid(ctx context.Context, app appInfo) int {

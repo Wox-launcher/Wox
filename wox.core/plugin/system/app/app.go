@@ -210,10 +210,6 @@ func (a *ApplicationPlugin) reuseAppFromCache(ctx context.Context, appPath strin
 		return appInfo{}, false
 	}
 
-	if a.shouldInvalidatePrefPaneCache(appPath, cached.Name) {
-		return appInfo{}, false
-	}
-
 	if cached.LastModifiedUnix == 0 || fileInfo == nil {
 		return appInfo{}, false
 	}
@@ -231,19 +227,6 @@ func (a *ApplicationPlugin) reuseAppFromCache(ctx context.Context, appPath strin
 
 	cached.Pid = 0
 	return cached, true
-}
-
-func (a *ApplicationPlugin) shouldInvalidatePrefPaneCache(appPath string, cachedName string) bool {
-	if !isMacPrefPanePath(appPath) {
-		return false
-	}
-
-	info := GetPrefPaneInfo(filepath.Base(appPath))
-	if info == nil || !strings.HasPrefix(info.DisplayName, "i18n:") {
-		return false
-	}
-
-	return cachedName != info.DisplayName
 }
 
 func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
@@ -453,7 +436,8 @@ func (a *ApplicationPlugin) indexApps(ctx context.Context) {
 	for _, extraApp := range extraApps {
 		var isExist = false
 		for _, app := range appInfos {
-			if app.Path == extraApp.Path {
+			// Check both Name and Path to support aliases (same path, different name)
+			if app.Name == extraApp.Name && app.Path == extraApp.Path {
 				isExist = true
 				break
 			}

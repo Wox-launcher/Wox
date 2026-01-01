@@ -36,10 +36,12 @@ const unsigned char *GenerateSFSymbolIcon(const char *symbolName, const char *co
             
             // Configure symbol color based on style
             NSColor *symbolColor = isOutlined ? colorFromName(color) : [NSColor whiteColor];
-            NSImageSymbolConfiguration *weightConfig = [NSImageSymbolConfiguration configurationWithPointSize:180 weight:NSFontWeightBold scale:NSImageSymbolScaleLarge];
+            CGFloat symbolWeight = NSFontWeightBold;
+            CGFloat symbolPointSize = 180;
+            NSImageSymbolConfiguration *weightConfig = [NSImageSymbolConfiguration configurationWithPointSize:symbolPointSize weight:symbolWeight scale:NSImageSymbolScaleLarge];
             NSImageSymbolConfiguration *colorConfig = [NSImageSymbolConfiguration configurationWithPaletteColors:@[symbolColor, symbolColor, symbolColor]];
             NSImageSymbolConfiguration *config = [weightConfig configurationByApplyingConfiguration:colorConfig];
-            NSImage *symbolImage = [NSImage imageWithSystemSymbolName:symbol variableValue:0.0 accessibilityDescription:nil];
+            NSImage *symbolImage = [NSImage imageWithSystemSymbolName:symbol accessibilityDescription:nil];
             
             if (!symbolImage) {
                 *length = 0;
