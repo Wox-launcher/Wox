@@ -19,6 +19,7 @@ import (
 	"wox/util/clipboard"
 	"wox/util/nativecontextmenu"
 	"wox/util/shell"
+	"wox/util/window"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
@@ -278,6 +279,20 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 			ContextData: contextData,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				analytics.TrackAppLaunched(ctx, fmt.Sprintf("%s:%s", info.Type, info.Name), displayName)
+
+				// Check if app is already running and try to activate its window
+				currentPid := a.retriever.GetPid(ctx, info)
+				if currentPid > 0 {
+					// App is running, try to activate its window
+					if window.ActivateWindowByPid(currentPid) {
+						a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Activated existing window for %s (PID: %d)", info.Name, currentPid))
+						return
+					}
+					// If activation failed, fall through to launch new instance
+					a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Could not activate window for %s, launching new instance", info.Name))
+				}
+
+				// Launch the application
 				runErr := shell.Open(info.Path)
 				if runErr != nil {
 					a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error opening app %s: %s", info.Path, runErr.Error()))

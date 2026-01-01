@@ -6,14 +6,17 @@
 #include <stdlib.h>
 #include <string.h>
 
-char* getIconData(HICON hIcon, unsigned char **iconData, int *iconSize, int *width, int *height) {
+char *getIconData(HICON hIcon, unsigned char **iconData, int *iconSize, int *width, int *height)
+{
     ICONINFO iconinfo;
-    if (!GetIconInfo(hIcon, &iconinfo)) {
+    if (!GetIconInfo(hIcon, &iconinfo))
+    {
         return "Failed to get icon info";
     }
 
     BITMAP bm;
-    if (!GetObject(iconinfo.hbmColor, sizeof(BITMAP), &bm)) {
+    if (!GetObject(iconinfo.hbmColor, sizeof(BITMAP), &bm))
+    {
         return "Failed to retrieve bitmap info";
     }
 
@@ -21,18 +24,21 @@ char* getIconData(HICON hIcon, unsigned char **iconData, int *iconSize, int *wid
     *height = bm.bmHeight;
 
     HDC hdc = GetDC(NULL);
-    if (!hdc) {
+    if (!hdc)
+    {
         return "Failed to get device context";
     }
 
     HDC hdcMem = CreateCompatibleDC(hdc);
-    if (!hdcMem) {
+    if (!hdcMem)
+    {
         ReleaseDC(NULL, hdc);
         return "Failed to create memory device context";
     }
 
     HBITMAP hbmp = CreateCompatibleBitmap(hdc, *width, *height);
-    if (!hbmp) {
+    if (!hbmp)
+    {
         DeleteDC(hdcMem);
         ReleaseDC(NULL, hdc);
         return "Failed to create bitmap";
@@ -43,15 +49,17 @@ char* getIconData(HICON hIcon, unsigned char **iconData, int *iconSize, int *wid
 
     BITMAPINFOHEADER bi = {sizeof(BITMAPINFOHEADER), *width, -*height, 1, 32, BI_RGB};
     *iconSize = (*width) * (*height) * 4;
-    *iconData = (unsigned char*)malloc(*iconSize);
-    if (!*iconData) {
+    *iconData = (unsigned char *)malloc(*iconSize);
+    if (!*iconData)
+    {
         DeleteObject(hbmp);
         DeleteDC(hdcMem);
         ReleaseDC(NULL, hdc);
         return "Failed to allocate memory for icon data";
     }
 
-    if (!GetDIBits(hdcMem, hbmp, 0, *height, *iconData, (BITMAPINFO*)&bi, DIB_RGB_COLORS)) {
+    if (!GetDIBits(hdcMem, hbmp, 0, *height, *iconData, (BITMAPINFO *)&bi, DIB_RGB_COLORS))
+    {
         free(*iconData);
         DeleteObject(hbmp);
         DeleteDC(hdcMem);
@@ -69,9 +77,11 @@ char* getIconData(HICON hIcon, unsigned char **iconData, int *iconSize, int *wid
     return NULL;
 }
 
-char* getActiveWindowIcon(unsigned char **iconData, int *iconSize, int *width, int *height) {
+char *getActiveWindowIcon(unsigned char **iconData, int *iconSize, int *width, int *height)
+{
     HWND hwnd = GetForegroundWindow();
-    if (!hwnd) {
+    if (!hwnd)
+    {
         return "Unable to get active window handle";
     }
 
@@ -79,13 +89,15 @@ char* getActiveWindowIcon(unsigned char **iconData, int *iconSize, int *width, i
     GetWindowThreadProcessId(hwnd, &processId);
 
     HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, processId);
-    if (!hProcess) {
+    if (!hProcess)
+    {
         return "Unable to open process";
     }
 
     WCHAR exePath[MAX_PATH];
     DWORD exePathLen = MAX_PATH;
-    if (0 == QueryFullProcessImageNameW(hProcess, 0, exePath, &exePathLen)) {
+    if (0 == QueryFullProcessImageNameW(hProcess, 0, exePath, &exePathLen))
+    {
         CloseHandle(hProcess);
         return "Unable to retrieve executable path";
     }
@@ -95,45 +107,147 @@ char* getActiveWindowIcon(unsigned char **iconData, int *iconSize, int *width, i
 
     HICON hIcon;
     ExtractIconExA(exePathA, 0, &hIcon, NULL, 1);
-    if (!hIcon) {
+    if (!hIcon)
+    {
         CloseHandle(hProcess);
         return "Failed to extract icon from executable";
     }
 
-    char* result = getIconData(hIcon, iconData, iconSize, width, height);
+    char *result = getIconData(hIcon, iconData, iconSize, width, height);
     CloseHandle(hProcess);
     return result;
 }
 
-char* getActiveWindowName() {
+char *getActiveWindowName()
+{
     HWND hwnd = GetForegroundWindow();
-    if (!hwnd) {
-        char* result = (char*)malloc(1);
+    if (!hwnd)
+    {
+        char *result = (char *)malloc(1);
         result[0] = '\0';
         return result;
     }
 
     WCHAR windowTitle[1024];
-    if (0 == GetWindowTextW(hwnd, windowTitle, 1024)) {
-        char* result = (char*)malloc(1);
+    if (0 == GetWindowTextW(hwnd, windowTitle, 1024))
+    {
+        char *result = (char *)malloc(1);
         result[0] = '\0';
         return result;
     }
 
     int len = WideCharToMultiByte(CP_UTF8, 0, windowTitle, -1, NULL, 0, NULL, NULL);
-    char* windowTitleA = (char*)malloc(len);
+    char *windowTitleA = (char *)malloc(len);
     WideCharToMultiByte(CP_UTF8, 0, windowTitle, -1, windowTitleA, len, NULL, NULL);
 
     return windowTitleA;
 }
 
-int getActiveWindowPid() {
+int getActiveWindowPid()
+{
     HWND hwnd = GetForegroundWindow();
-    if (!hwnd) {
+    if (!hwnd)
+    {
         return 0;
     }
 
     DWORD processId;
     GetWindowThreadProcessId(hwnd, &processId);
     return processId;
+}
+
+typedef struct
+{
+    DWORD targetPid;
+    HWND foundWindow;
+} FindWindowData;
+
+BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam)
+{
+    FindWindowData *data = (FindWindowData *)lParam;
+
+    // Skip invisible windows
+    if (!IsWindowVisible(hwnd))
+    {
+        return TRUE;
+    }
+
+    // Skip windows without title
+    WCHAR windowTitle[256];
+    if (GetWindowTextW(hwnd, windowTitle, 256) == 0)
+    {
+        return TRUE;
+    }
+
+    // Get the process ID of this window
+    DWORD pid;
+    GetWindowThreadProcessId(hwnd, &pid);
+
+    // Check if this window belongs to our target process
+    if (pid == data->targetPid)
+    {
+        // Check if this is a main window (has WS_OVERLAPPEDWINDOW style)
+        LONG style = GetWindowLong(hwnd, GWL_STYLE);
+        if ((style & WS_OVERLAPPEDWINDOW) || (style & WS_POPUP))
+        {
+            data->foundWindow = hwnd;
+            return FALSE; // Stop enumeration
+        }
+    }
+
+    return TRUE; // Continue enumeration
+}
+
+int activateWindowByPid(int pid)
+{
+    if (pid <= 0)
+    {
+        return 0;
+    }
+
+    FindWindowData data;
+    data.targetPid = (DWORD)pid;
+    data.foundWindow = NULL;
+
+    // Enumerate all top-level windows
+    EnumWindows(EnumWindowsProc, (LPARAM)&data);
+
+    if (data.foundWindow == NULL)
+    {
+        return 0; // Window not found
+    }
+
+    HWND hwnd = data.foundWindow;
+
+    // Restore window if minimized
+    if (IsIconic(hwnd))
+    {
+        ShowWindow(hwnd, SW_RESTORE);
+    }
+
+    // Show window if hidden
+    if (!IsWindowVisible(hwnd))
+    {
+        ShowWindow(hwnd, SW_SHOW);
+    }
+
+    // Bring window to foreground with proper activation
+    DWORD curThreadId = GetCurrentThreadId();
+    DWORD fgThreadId = GetWindowThreadProcessId(GetForegroundWindow(), NULL);
+
+    if (fgThreadId != 0 && fgThreadId != curThreadId)
+    {
+        AttachThreadInput(fgThreadId, curThreadId, TRUE);
+    }
+
+    SetForegroundWindow(hwnd);
+    BringWindowToTop(hwnd);
+    SetFocus(hwnd);
+
+    if (fgThreadId != 0 && fgThreadId != curThreadId)
+    {
+        AttachThreadInput(fgThreadId, curThreadId, FALSE);
+    }
+
+    return 1; // Success
 }

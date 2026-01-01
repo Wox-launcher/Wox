@@ -53,3 +53,26 @@ int getActiveWindowPid() {
         return [activeApp processIdentifier];
     }
 }
+
+int activateWindowByPid(int pid) {
+    @autoreleasepool {
+        if (pid <= 0) {
+            return 0;
+        }
+        
+        NSRunningApplication *app = [NSRunningApplication runningApplicationWithProcessIdentifier:pid];
+        if (!app) {
+            return 0;
+        }
+        
+        // Unhide the application if it's hidden
+        if ([app isHidden]) {
+            [app unhide];
+        }
+        
+        // Activate the application with options to bring all windows forward
+        BOOL success = [app activateWithOptions:NSApplicationActivateAllWindows | NSApplicationActivateIgnoringOtherApps];
+        
+        return success ? 1 : 0;
+    }
+}

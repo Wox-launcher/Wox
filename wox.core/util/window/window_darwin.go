@@ -8,6 +8,7 @@ package window
 int getActiveWindowIcon(unsigned char **iconData);
 char* getActiveWindowName();
 int getActiveWindowPid();
+int activateWindowByPid(int pid);
 */
 import "C"
 import (
@@ -47,4 +48,9 @@ func GetActiveWindowName() string {
 func GetActiveWindowPid() int {
 	pid := C.getActiveWindowPid()
 	return int(pid)
+}
+
+func ActivateWindowByPid(pid int) bool {
+	result := C.activateWindowByPid(C.int(pid))
+	return int(result) == 1
 }
