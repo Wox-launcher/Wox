@@ -796,6 +796,9 @@ func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, 
 			if queryEnvParams.RequireActiveWindowIcon {
 				newEnv.ActiveWindowIcon = currentEnv.ActiveWindowIcon
 			}
+			if queryEnvParams.RequireActiveWindowIsOpenSaveDialog {
+				newEnv.ActiveWindowIsOpenSaveDialog = currentEnv.ActiveWindowIsOpenSaveDialog
+			}
 			if queryEnvParams.RequireActiveBrowserUrl {
 				newEnv.ActiveBrowserUrl = currentEnv.ActiveBrowserUrl
 			}
@@ -1584,6 +1587,7 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 		query.Env.ActiveWindowTitle = m.GetUI().GetActiveWindowName()
 		query.Env.ActiveWindowPid = m.GetUI().GetActiveWindowPid()
 		query.Env.ActiveWindowIcon = m.GetUI().GetActiveWindowIcon()
+		query.Env.ActiveWindowIsOpenSaveDialog = m.GetUI().GetActiveWindowIsOpenSaveDialog()
 		query.Env.ActiveBrowserUrl = m.getActiveBrowserUrl(ctx)
 		return query, instance, nil
 	}
@@ -1599,6 +1603,7 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 		query.Env.ActiveWindowTitle = m.GetUI().GetActiveWindowName()
 		query.Env.ActiveWindowPid = m.GetUI().GetActiveWindowPid()
 		query.Env.ActiveWindowIcon = m.GetUI().GetActiveWindowIcon()
+		query.Env.ActiveWindowIsOpenSaveDialog = m.GetUI().GetActiveWindowIsOpenSaveDialog()
 		query.Env.ActiveBrowserUrl = m.getActiveBrowserUrl(ctx)
 		return query, nil, nil
 	}

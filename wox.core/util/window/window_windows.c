@@ -158,6 +158,54 @@ int getActiveWindowPid()
 
 typedef struct
 {
+    BOOL found;
+} FindChildClassData;
+
+BOOL CALLBACK EnumChildClassProc(HWND hwnd, LPARAM lParam)
+{
+    FindChildClassData *data = (FindChildClassData *)lParam;
+    WCHAR className[256];
+    if (GetClassNameW(hwnd, className, 256) == 0)
+    {
+        return TRUE;
+    }
+
+    if (wcscmp(className, L"DUIViewWndClassName") == 0 || wcscmp(className, L"DirectUIHWND") == 0)
+    {
+        data->found = TRUE;
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+int isOpenSaveDialog()
+{
+    HWND hwnd = GetForegroundWindow();
+    if (!hwnd)
+    {
+        return 0;
+    }
+
+    WCHAR className[256];
+    if (GetClassNameW(hwnd, className, 256) == 0)
+    {
+        return 0;
+    }
+
+    if (wcscmp(className, L"#32770") != 0)
+    {
+        return 0;
+    }
+
+    FindChildClassData data;
+    data.found = FALSE;
+    EnumChildWindows(hwnd, EnumChildClassProc, (LPARAM)&data);
+    return data.found ? 1 : 0;
+}
+
+typedef struct
+{
     DWORD targetPid;
     HWND foundWindow;
 } FindWindowData;

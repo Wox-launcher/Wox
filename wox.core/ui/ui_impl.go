@@ -48,6 +48,11 @@ func (u *uiImpl) ShowApp(ctx context.Context, showContext common.ShowContext) {
 			GetUIManager().SetActiveWindowIcon(woxIcon)
 		}
 	}
+	if isDialog, err := window.IsOpenSaveDialog(); err == nil {
+		GetUIManager().SetActiveWindowIsOpenSaveDialog(isDialog)
+	} else {
+		GetUIManager().SetActiveWindowIsOpenSaveDialog(false)
+	}
 	u.invokeWebsocketMethod(ctx, "ShowApp", getShowAppParams(ctx, showContext))
 }
 
@@ -58,6 +63,11 @@ func (u *uiImpl) ToggleApp(ctx context.Context) {
 		if woxIcon, convErr := common.NewWoxImage(icon); convErr == nil {
 			GetUIManager().SetActiveWindowIcon(woxIcon)
 		}
+	}
+	if isDialog, err := window.IsOpenSaveDialog(); err == nil {
+		GetUIManager().SetActiveWindowIsOpenSaveDialog(isDialog)
+	} else {
+		GetUIManager().SetActiveWindowIsOpenSaveDialog(false)
 	}
 	u.invokeWebsocketMethod(ctx, "ToggleApp", getShowAppParams(ctx, common.ShowContext{SelectAll: true}))
 }
@@ -223,6 +233,10 @@ func (u *uiImpl) GetActiveWindowName() string {
 
 func (u *uiImpl) GetActiveWindowPid() int {
 	return GetUIManager().GetActiveWindowPid()
+}
+
+func (u *uiImpl) GetActiveWindowIsOpenSaveDialog() bool {
+	return GetUIManager().GetActiveWindowIsOpenSaveDialog()
 }
 
 func (u *uiImpl) GetActiveWindowIcon() common.WoxImage {

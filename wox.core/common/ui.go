@@ -44,6 +44,7 @@ type UI interface {
 	GetActiveWindowName() string
 	GetActiveWindowPid() int
 	GetActiveWindowIcon() WoxImage
+	GetActiveWindowIsOpenSaveDialog() bool
 	GetServerPort(ctx context.Context) int
 	GetAllThemes(ctx context.Context) []Theme
 	ChangeTheme(ctx context.Context, theme Theme)

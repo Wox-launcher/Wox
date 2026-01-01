@@ -10,6 +10,7 @@ char* getActiveWindowIcon(unsigned char **iconData, int *iconSize, int *width, i
 char* getActiveWindowName();
 int getActiveWindowPid();
 int activateWindowByPid(int pid);
+int isOpenSaveDialog();
 */
 import "C"
 import (
@@ -69,4 +70,9 @@ func GetActiveWindowPid() int {
 func ActivateWindowByPid(pid int) bool {
 	result := C.activateWindowByPid(C.int(pid))
 	return int(result) == 1
+}
+
+func IsOpenSaveDialog() (bool, error) {
+	result := C.isOpenSaveDialog()
+	return int(result) == 1, nil
 }

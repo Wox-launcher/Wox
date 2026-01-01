@@ -4,9 +4,13 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 	"wox/common"
+	"wox/i18n"
 	"wox/plugin"
 	"wox/setting/definition"
+	"wox/util"
 	"wox/util/shell"
 	"wox/util/window"
 )
@@ -44,7 +48,8 @@ func (c *ExplorerPlugin) GetMetadata() plugin.Metadata {
 			{
 				Name: plugin.MetadataFeatureQueryEnv,
 				Params: map[string]any{
-					"requireActiveWindowPid": true,
+					"requireActiveWindowPid":              true,
+					"requireActiveWindowIsOpenSaveDialog": true,
 				},
 			},
 		},
@@ -65,8 +70,14 @@ func (c *ExplorerPlugin) Query(ctx context.Context, query plugin.Query) []plugin
 		}
 
 		if !isFileExplorer {
-			return []plugin.QueryResult{}
+			if !query.Env.ActiveWindowIsOpenSaveDialog {
+				return []plugin.QueryResult{}
+			}
 		}
+	}
+
+	if query.Env.ActiveWindowIsOpenSaveDialog {
+		return c.queryOpenSaveDialog(ctx, query)
 	}
 
 	currentPath := window.GetActiveFileExplorerPath()
@@ -145,4 +156,85 @@ func (c *ExplorerPlugin) Query(ctx context.Context, query plugin.Query) []plugin
 	}
 
 	return results
+}
+
+type commonFolder struct {
+	titleKey string
+	path     string
+}
+
+func (c *ExplorerPlugin) queryOpenSaveDialog(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+	folders := getCommonFolders()
+	if len(folders) == 0 {
+		return []plugin.QueryResult{}
+	}
+
+	search := strings.TrimSpace(query.Search)
+	var results []plugin.QueryResult
+	for _, folder := range folders {
+		title := i18n.GetI18nManager().TranslateWox(ctx, folder.titleKey)
+		isMatch := true
+		matchScore := int64(0)
+		if search != "" {
+			isMatch, matchScore = plugin.IsStringMatchScore(ctx, title, search)
+		}
+		if !isMatch {
+			continue
+		}
+
+		folderPath := folder.path
+		activePid := query.Env.ActiveWindowPid
+		results = append(results, plugin.QueryResult{
+			Title:    folder.titleKey,
+			SubTitle: folderPath,
+			Icon:     folderIcon,
+			Score:    matchScore,
+			Actions: []plugin.QueryResultAction{
+				{
+					Name: "i18n:plugin_explorer_open",
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						util.Go(ctx, "navigate to active file explorer", func() {
+							if activePid > 0 {
+								if !window.ActivateWindowByPid(activePid) {
+									c.api.Log(ctx, plugin.LogLevelError, "Failed to activate dialog owner window")
+								}
+								time.Sleep(150 * time.Millisecond)
+							}
+							if !window.NavigateActiveFileDialog(folderPath) {
+								c.api.Log(ctx, plugin.LogLevelError, "Failed to navigate open/save dialog to path: "+folderPath)
+							}
+						})
+					},
+				},
+			},
+		})
+	}
+
+	return results
+}
+
+func getCommonFolders() []commonFolder {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+
+	folders := []commonFolder{
+		{titleKey: "i18n:plugin_explorer_common_folder_home", path: homeDir},
+		{titleKey: "i18n:plugin_explorer_common_folder_desktop", path: filepath.Join(homeDir, "Desktop")},
+		{titleKey: "i18n:plugin_explorer_common_folder_documents", path: filepath.Join(homeDir, "Documents")},
+		{titleKey: "i18n:plugin_explorer_common_folder_downloads", path: filepath.Join(homeDir, "Downloads")},
+		{titleKey: "i18n:plugin_explorer_common_folder_pictures", path: filepath.Join(homeDir, "Pictures")},
+		{titleKey: "i18n:plugin_explorer_common_folder_music", path: filepath.Join(homeDir, "Music")},
+		{titleKey: "i18n:plugin_explorer_common_folder_videos", path: filepath.Join(homeDir, "Videos")},
+	}
+
+	var existing []commonFolder
+	for _, folder := range folders {
+		if _, err := os.Stat(folder.path); err == nil {
+			existing = append(existing, folder)
+		}
+	}
+
+	return existing
 }

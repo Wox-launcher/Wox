@@ -55,6 +55,7 @@ type Manager struct {
 	activeWindowName string          // active window name before wox is activated
 	activeWindowPid  int             // active window pid before wox is activated
 	activeWindowIcon common.WoxImage // active window icon before wox is activated
+	activeWindowIsOpenSaveDialog bool // active window is open/save dialog before wox is activated
 }
 
 func GetUIManager() *Manager {
@@ -651,6 +652,14 @@ func (m *Manager) SetActiveWindowIcon(icon common.WoxImage) {
 
 func (m *Manager) GetActiveWindowIcon() common.WoxImage {
 	return m.activeWindowIcon
+}
+
+func (m *Manager) SetActiveWindowIsOpenSaveDialog(isOpenSaveDialog bool) {
+	m.activeWindowIsOpenSaveDialog = isOpenSaveDialog
+}
+
+func (m *Manager) GetActiveWindowIsOpenSaveDialog() bool {
+	return m.activeWindowIsOpenSaveDialog
 }
 
 func (m *Manager) ProcessDeeplink(ctx context.Context, deeplink string) {
