@@ -558,6 +558,8 @@ export interface UpdatableResult {
   Title?: string
   /** Optional - update the subtitle */
   SubTitle?: string
+  /** Optional - update the icon */
+  Icon?: WoxImage
   /** Optional - update the tails */
   Tails?: ResultTail[]
   /** Optional - update the preview */

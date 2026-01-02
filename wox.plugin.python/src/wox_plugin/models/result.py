@@ -906,6 +906,13 @@ class UpdatableResult:
     If None, the current subtitle is kept.
     """
 
+    icon: Optional[WoxImage] = None
+    """
+    New icon for the result.
+
+    If None, the current icon is kept.
+    """
+
     tails: Optional[List[ResultTail]] = None
     """
     New list of tails for the result.
@@ -948,6 +955,8 @@ class UpdatableResult:
             data["Title"] = self.title
         if self.sub_title is not None:
             data["SubTitle"] = self.sub_title
+        if self.icon is not None:
+            data["Icon"] = json.loads(self.icon.to_json())
         if self.tails is not None:
             data["Tails"] = [json.loads(tail.to_json()) for tail in self.tails]
         if self.preview is not None:

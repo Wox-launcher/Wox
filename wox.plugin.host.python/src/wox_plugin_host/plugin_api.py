@@ -11,14 +11,16 @@ from wox_plugin import (
     Context,
     Conversation,
     LogLevel,
-    Query,
     MetadataCommand,
     MRUData,
     PluginSettingDefinitionItem,
     PublicAPI,
+    Query,
     RefreshQueryParam,
     Result,
+    ResultActionType,
     UpdatableResult,
+    WoxImage,
 )
 
 from . import logger
@@ -218,6 +220,8 @@ class PluginAPI(PublicAPI):
             updatable_result.title = response["Title"]
         if "SubTitle" in response:
             updatable_result.sub_title = response["SubTitle"]
+        if "Icon" in response:
+            updatable_result.icon = WoxImage.from_json(json.dumps(response["Icon"]))
         if "Tails" in response:
             from wox_plugin import ResultTail
 
@@ -255,7 +259,7 @@ class PluginAPI(PublicAPI):
                     if not action.id:
                         action.id = str(uuid.uuid4())
                     if not action.type:
-                        action.type = "execute"
+                        action.type = ResultActionType.EXECUTE
 
                     if action.action is not None:
                         plugin_instance.actions[action.id] = action.action
@@ -278,7 +282,7 @@ class PluginAPI(PublicAPI):
                             if not action.id:
                                 action.id = str(uuid.uuid4())
                             if not action.type:
-                                action.type = "execute"
+                                action.type = ResultActionType.EXECUTE
 
                             action_type = str(getattr(action, "type", "execute"))
                             if action_type == "form":

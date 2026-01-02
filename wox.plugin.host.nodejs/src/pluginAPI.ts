@@ -155,6 +155,9 @@ export class PluginAPI implements PublicAPI {
     if (responseData.SubTitle !== undefined) {
       updatableResult.SubTitle = responseData.SubTitle
     }
+    if (responseData.Icon !== undefined) {
+      updatableResult.Icon = responseData.Icon
+    }
     if (responseData.Tails !== undefined) {
       updatableResult.Tails = responseData.Tails
     }
