@@ -1,5 +1,6 @@
 #include <ApplicationServices/ApplicationServices.h>
 #include <Cocoa/Cocoa.h>
+#include <ScriptingBridge/ScriptingBridge.h>
 #include <unistd.h>
 
 int getActiveWindowIcon(unsigned char **iconData) {
@@ -45,6 +46,31 @@ char* getActiveWindowName() {
     }
 }
 
+char* getProcessBundleIdentifier(int pid) {
+    @autoreleasepool {
+        if (pid <= 0) {
+            return strdup("");
+        }
+
+        NSRunningApplication *app = [NSRunningApplication runningApplicationWithProcessIdentifier:pid];
+        if (!app) {
+            return strdup("");
+        }
+
+        NSString *identifier = [app bundleIdentifier];
+        if (identifier && [identifier length] > 0) {
+            return strdup([identifier UTF8String]);
+        }
+
+        NSString *name = [app localizedName];
+        if (name && [name length] > 0) {
+            return strdup([name UTF8String]);
+        }
+
+        return strdup("");
+    }
+}
+
 int getActiveWindowPid() {
     @autoreleasepool {
         NSRunningApplication *activeApp = [[NSWorkspace sharedWorkspace] frontmostApplication];
@@ -55,43 +81,6 @@ int getActiveWindowPid() {
         return [activeApp processIdentifier];
     }
 }
-
-static AXUIElementRef findTextFieldRecursive(AXUIElementRef element, int depth) {
-    if (!element || depth > 6) {
-        return NULL;
-    }
-
-    CFTypeRef role = NULL;
-    if (AXUIElementCopyAttributeValue(element, kAXRoleAttribute, &role) == kAXErrorSuccess && role) {
-        if (CFGetTypeID(role) == CFStringGetTypeID() &&
-            (CFStringCompare(role, kAXTextFieldRole, 0) == kCFCompareEqualTo ||
-             CFStringCompare(role, kAXComboBoxRole, 0) == kCFCompareEqualTo)) {
-            CFRelease(role);
-            return (AXUIElementRef)CFRetain(element);
-        }
-        CFRelease(role);
-    }
-
-    CFArrayRef children = NULL;
-    if (AXUIElementCopyAttributeValue(element, kAXChildrenAttribute, (CFTypeRef *)&children) != kAXErrorSuccess || !children) {
-        return NULL;
-    }
-
-    CFIndex count = CFArrayGetCount(children);
-    for (CFIndex i = 0; i < count; i++) {
-        AXUIElementRef child = (AXUIElementRef)CFArrayGetValueAtIndex(children, i);
-        AXUIElementRef found = findTextFieldRecursive(child, depth + 1);
-        if (found) {
-            CFRelease(children);
-            return found;
-        }
-    }
-
-    CFRelease(children);
-    return NULL;
-}
-
-
 
 static BOOL elementHasSubrole(AXUIElementRef element, CFStringRef subrole) {
     CFTypeRef subroleValue = NULL;
@@ -116,7 +105,6 @@ static BOOL elementHasRole(AXUIElementRef element, CFStringRef role) {
     }
     return matched;
 }
-
 
 
 int isOpenSaveDialog() {
@@ -174,6 +162,41 @@ int isOpenSaveDialog() {
     }
 }
 
+static AXUIElementRef findTextFieldRecursive(AXUIElementRef element, int depth) {
+    if (!element || depth > 6) {
+        return NULL;
+    }
+
+    CFTypeRef role = NULL;
+    if (AXUIElementCopyAttributeValue(element, kAXRoleAttribute, &role) == kAXErrorSuccess && role) {
+        if (CFGetTypeID(role) == CFStringGetTypeID() &&
+            (CFStringCompare(role, kAXTextFieldRole, 0) == kCFCompareEqualTo ||
+             CFStringCompare(role, kAXComboBoxRole, 0) == kCFCompareEqualTo)) {
+            CFRelease(role);
+            return (AXUIElementRef)CFRetain(element);
+        }
+        CFRelease(role);
+    }
+
+    CFArrayRef children = NULL;
+    if (AXUIElementCopyAttributeValue(element, kAXChildrenAttribute, (CFTypeRef *)&children) != kAXErrorSuccess || !children) {
+        return NULL;
+    }
+
+    CFIndex count = CFArrayGetCount(children);
+    for (CFIndex i = 0; i < count; i++) {
+        AXUIElementRef child = (AXUIElementRef)CFArrayGetValueAtIndex(children, i);
+        AXUIElementRef found = findTextFieldRecursive(child, depth + 1);
+        if (found) {
+            CFRelease(children);
+            return found;
+        }
+    }
+
+    CFRelease(children);
+    return NULL;
+}
+
 int navigateActiveFileDialog(const char* path) {
     @autoreleasepool {
         if (path == NULL) {
@@ -205,6 +228,7 @@ int navigateActiveFileDialog(const char* path) {
         CFRelease(gUp);
 
         // Wait briefly for the sheet to appear. 
+        // 50ms might be enough for modern Macs. If it fails, we might need to retry or increase slightly.
         usleep(150 * 1000);
 
         NSRunningApplication *activeApp = [[NSWorkspace sharedWorkspace] frontmostApplication];
@@ -323,5 +347,181 @@ int activateWindowByPid(int pid) {
             return 1;
         }
         return (windowsErr == kAXErrorSuccess && windowCount == 0) ? 1 : 0;
+    }
+}
+
+int isFinder(int pid) {
+    @autoreleasepool {
+        NSRunningApplication *app = [NSRunningApplication runningApplicationWithProcessIdentifier:pid];
+        if (app && [[app bundleIdentifier] isEqualToString:@"com.apple.finder"]) {
+            return 1;
+        }
+        return 0;
+    }
+}
+
+char* getOpenFinderWindowPaths() {
+    @autoreleasepool {
+        id finder = [SBApplication applicationWithBundleIdentifier:@"com.apple.finder"];
+        if (!finder) {
+            return strdup("");
+        }
+
+        id windows = [finder valueForKey:@"windows"];
+        if (![windows isKindOfClass:[NSArray class]]) {
+            return strdup("");
+        }
+
+        NSArray *windowList = (NSArray *)windows;
+        NSMutableArray<NSString *> *paths = [NSMutableArray arrayWithCapacity:[windowList count]];
+        for (id window in windowList) {
+            id target = nil;
+            @try {
+                target = [window valueForKey:@"target"];
+            } @catch (NSException *exception) {
+                target = nil;
+            }
+
+            if (!target) {
+                continue;
+            }
+
+            id urlValue = nil;
+            @try {
+                urlValue = [target valueForKey:@"URL"];
+            } @catch (NSException *exception) {
+                urlValue = nil;
+            }
+
+            NSString *path = nil;
+            if ([urlValue isKindOfClass:[NSURL class]]) {
+                path = [(NSURL *)urlValue path];
+            } else if ([urlValue isKindOfClass:[NSString class]]) {
+                NSString *stringValue = (NSString *)urlValue;
+                if ([stringValue hasPrefix:@"file://"]) {
+                    NSURL *url = [NSURL URLWithString:stringValue];
+                    path = [url path];
+                } else {
+                    path = stringValue;
+                }
+            }
+
+            if (path && [path length] > 0) {
+                [paths addObject:path];
+            }
+        }
+
+        if ([paths count] == 0) {
+            return strdup("");
+        }
+
+        NSString *joined = [paths componentsJoinedByString:@"\n"];
+        return strdup([joined UTF8String]);
+    }
+}
+
+char* getActiveFinderWindowPath() {
+    @autoreleasepool {
+        NSRunningApplication *activeApp = [[NSWorkspace sharedWorkspace] frontmostApplication];
+        if (!activeApp || ![[activeApp bundleIdentifier] isEqualToString:@"com.apple.finder"]) {
+            return strdup("");
+        }
+
+        id finder = [SBApplication applicationWithBundleIdentifier:@"com.apple.finder"];
+        if (!finder) {
+            return strdup("");
+        }
+
+        id windows = [finder valueForKey:@"windows"];
+        if (![windows isKindOfClass:[NSArray class]]) {
+            return strdup("");
+        }
+
+        NSArray *windowList = (NSArray *)windows;
+        if ([windowList count] == 0) {
+            return strdup("");
+        }
+
+        id window = [windowList objectAtIndex:0];
+        id target = nil;
+        @try {
+            target = [window valueForKey:@"target"];
+        } @catch (NSException *exception) {
+            target = nil;
+        }
+        if (!target) {
+            return strdup("");
+        }
+
+        id urlValue = nil;
+        @try {
+            urlValue = [target valueForKey:@"URL"];
+        } @catch (NSException *exception) {
+            urlValue = nil;
+        }
+
+        NSString *path = nil;
+        if ([urlValue isKindOfClass:[NSURL class]]) {
+            path = [(NSURL *)urlValue path];
+        } else if ([urlValue isKindOfClass:[NSString class]]) {
+            NSString *stringValue = (NSString *)urlValue;
+            if ([stringValue hasPrefix:@"file://"]) {
+                NSURL *url = [NSURL URLWithString:stringValue];
+                path = [url path];
+            } else {
+                path = stringValue;
+            }
+        }
+
+        if (!path || [path length] == 0) {
+            return strdup("");
+        }
+        return strdup([path UTF8String]);
+    }
+}
+
+int navigateActiveFinderWindow(const char* path) {
+    @autoreleasepool {
+        if (path == NULL) {
+            return 0;
+        }
+        NSString *pathStr = [NSString stringWithUTF8String:path];
+        if (!pathStr || [pathStr length] == 0) {
+            return 0;
+        }
+
+        NSRunningApplication *activeApp = [[NSWorkspace sharedWorkspace] frontmostApplication];
+        if (!activeApp || ![[activeApp bundleIdentifier] isEqualToString:@"com.apple.finder"]) {
+            return 0;
+        }
+
+        id finder = [SBApplication applicationWithBundleIdentifier:@"com.apple.finder"];
+        if (!finder) {
+            return 0;
+        }
+
+        id windows = [finder valueForKey:@"windows"];
+        if (![windows isKindOfClass:[NSArray class]]) {
+            return 0;
+        }
+
+        NSArray *windowList = (NSArray *)windows;
+        if ([windowList count] == 0) {
+            return 0;
+        }
+
+        id window = [windowList objectAtIndex:0];
+        NSURL *url = [NSURL fileURLWithPath:pathStr];
+        if (!url) {
+            return 0;
+        }
+
+        @try {
+            [window setValue:url forKey:@"target"];
+        } @catch (NSException *exception) {
+            return 0;
+        }
+
+        return 1;
     }
 }

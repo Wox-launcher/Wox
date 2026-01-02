@@ -2,6 +2,7 @@ package system
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,15 +16,29 @@ import (
 	"wox/util/window"
 )
 
-var folderIcon = common.FolderIcon
-var fileIcon = common.PluginFileIcon
+type openSaveFolder struct {
+	titleKey   string
+	path       string
+	scoreBoost int64
+}
+
+type openSaveHistoryEntry struct {
+	Path   string `json:"path"`
+	UsedAt int64  `json:"used_at"`
+	Count  int    `json:"count"`
+}
+
+const (
+	openSaveHistorySettingKey = "openSaveHistory"
+)
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &ExplorerPlugin{})
 }
 
 type ExplorerPlugin struct {
-	api plugin.API
+	api                plugin.API
+	openSaveHistoryMap *util.HashMap[string, []openSaveHistoryEntry] // app window title -> history entries
 }
 
 func (c *ExplorerPlugin) GetMetadata() plugin.Metadata {
@@ -38,6 +53,7 @@ func (c *ExplorerPlugin) GetMetadata() plugin.Metadata {
 		Icon:          "emoji:📂",
 		TriggerKeywords: []string{
 			"*",
+			"explorer",
 		},
 		SupportedOS: []string{
 			"Windows",
@@ -58,6 +74,7 @@ func (c *ExplorerPlugin) GetMetadata() plugin.Metadata {
 
 func (c *ExplorerPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	c.api = initParams.API
+	c.openSaveHistoryMap = c.loadOpenSaveHistory(ctx)
 }
 
 func (c *ExplorerPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
@@ -80,18 +97,22 @@ func (c *ExplorerPlugin) Query(ctx context.Context, query plugin.Query) []plugin
 		return c.queryOpenSaveDialog(ctx, query)
 	}
 
+	return c.queryFileExplorer(ctx, query)
+}
+
+func (c *ExplorerPlugin) queryFileExplorer(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	currentPath := window.GetActiveFileExplorerPath()
 	if currentPath == "" || query.Search == "" {
 		return []plugin.QueryResult{}
 	}
 
-	var results []plugin.QueryResult
 	entries, err := os.ReadDir(currentPath)
 	if err != nil {
 		c.api.Log(ctx, plugin.LogLevelError, "Failed to read directory: "+err.Error())
 		return []plugin.QueryResult{}
 	}
 
+	results := make([]plugin.QueryResult, 0, len(entries))
 	for _, entry := range entries {
 		isMatch, matchScore := plugin.IsStringMatchScore(ctx, entry.Name(), query.Search)
 		if !isMatch {
@@ -99,19 +120,16 @@ func (c *ExplorerPlugin) Query(ctx context.Context, query plugin.Query) []plugin
 		}
 
 		fullPath := filepath.Join(currentPath, entry.Name())
-		icon := fileIcon
 		isDir := entry.IsDir()
+		var icon common.WoxImage
 		if isDir {
-			icon = folderIcon
+			icon = common.FolderIcon
 		} else {
-			// Can use system icon if available, but simple icon for now
 			icon = common.NewWoxImageFileIcon(fullPath)
 		}
 
-		// Create actions based on whether it's a directory or file
 		var actions []plugin.QueryResultAction
 		if isDir {
-			// For directories, default action navigates in the current window
 			actions = []plugin.QueryResultAction{
 				{
 					Name: "i18n:plugin_explorer_open",
@@ -128,7 +146,6 @@ func (c *ExplorerPlugin) Query(ctx context.Context, query plugin.Query) []plugin
 				},
 			}
 		} else {
-			// For files, default action opens the file
 			actions = []plugin.QueryResultAction{
 				{
 					Name: "i18n:plugin_explorer_open",
@@ -158,13 +175,8 @@ func (c *ExplorerPlugin) Query(ctx context.Context, query plugin.Query) []plugin
 	return results
 }
 
-type commonFolder struct {
-	titleKey string
-	path     string
-}
-
 func (c *ExplorerPlugin) queryOpenSaveDialog(ctx context.Context, query plugin.Query) []plugin.QueryResult {
-	folders := getCommonFolders()
+	folders := c.getOpenSaveFolders(ctx, query.Env)
 	if len(folders) == 0 {
 		return []plugin.QueryResult{}
 	}
@@ -173,10 +185,20 @@ func (c *ExplorerPlugin) queryOpenSaveDialog(ctx context.Context, query plugin.Q
 	var results []plugin.QueryResult
 	for _, folder := range folders {
 		title := i18n.GetI18nManager().TranslateWox(ctx, folder.titleKey)
+		// If folder has an explicit title (for common folders), translate it.
+		// For dynamic Finder windows, titleKey is just the path or name, so we use it directly if translation fails or key is missing.
+		if title == folder.titleKey && !strings.HasPrefix(title, "i18n:") {
+			// It's likely a raw path or name
+		}
+
 		isMatch := true
 		matchScore := int64(0)
 		if search != "" {
 			isMatch, matchScore = plugin.IsStringMatchScore(ctx, title, search)
+			if !isMatch {
+				// Try matching path
+				isMatch, matchScore = plugin.IsStringMatchScore(ctx, folder.path, search)
+			}
 		}
 		if !isMatch {
 			continue
@@ -184,16 +206,18 @@ func (c *ExplorerPlugin) queryOpenSaveDialog(ctx context.Context, query plugin.Q
 
 		folderPath := folder.path
 		activePid := query.Env.ActiveWindowPid
+		score := matchScore + folder.scoreBoost
 		results = append(results, plugin.QueryResult{
-			Title:    folder.titleKey,
+			Title:    title,
 			SubTitle: folderPath,
-			Icon:     folderIcon,
-			Score:    matchScore,
+			Icon:     common.FolderIcon,
+			Score:    score,
 			Actions: []plugin.QueryResultAction{
 				{
-					Name: "i18n:plugin_explorer_open",
+					Name: "i18n:plugin_explorer_jump_to",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						util.Go(ctx, "navigate to active file explorer", func() {
+							c.recordOpenSaveHistory(ctx, query.Env.ActiveWindowTitle, folderPath)
 							if activePid > 0 {
 								if !window.ActivateWindowByPid(activePid) {
 									c.api.Log(ctx, plugin.LogLevelError, "Failed to activate dialog owner window")
@@ -213,28 +237,136 @@ func (c *ExplorerPlugin) queryOpenSaveDialog(ctx context.Context, query plugin.Q
 	return results
 }
 
-func getCommonFolders() []commonFolder {
+func (c *ExplorerPlugin) getOpenSaveFolders(ctx context.Context, env plugin.QueryEnv) []openSaveFolder {
+	candidates := make([]openSaveFolder, 0)
+
+	// First, load from history
+	c.openSaveHistoryMap.Range(func(key string, entries []openSaveHistoryEntry) bool {
+		if key != env.ActiveWindowTitle {
+			return true
+		}
+
+		now := time.Now().Unix()
+		for _, entry := range entries {
+			info, err := os.Stat(entry.Path)
+			if err != nil || !info.IsDir() {
+				continue
+			}
+
+			// Calculate score boost based on recency and frequency
+			timeDiff := now - entry.UsedAt
+			timeScore := int64(0)
+			if timeDiff < 3600 { // within 1 hour
+				timeScore = 100
+			} else if timeDiff < 86400 { // within 1 day
+				timeScore = 50
+			} else if timeDiff < 604800 { // within 1 week
+				timeScore = 20
+			}
+			frequencyScore := int64(entry.Count * 5)
+			totalScore := timeScore + frequencyScore
+
+			candidate := openSaveFolder{
+				titleKey:   filepath.Base(entry.Path),
+				path:       entry.Path,
+				scoreBoost: totalScore,
+			}
+			candidates = append(candidates, candidate)
+		}
+		return false
+	})
+
+	// 2. Get open Finder windows
+	openPaths := window.GetOpenFinderWindowPaths()
+	for _, p := range openPaths {
+		if p == "" {
+			continue
+		}
+		candidate := openSaveFolder{
+			titleKey: filepath.Base(p),
+			path:     p,
+		}
+		candidates = append(candidates, candidate)
+	}
+
+	// 2. Add common system folders
 	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return nil
-	}
-
-	folders := []commonFolder{
-		{titleKey: "i18n:plugin_explorer_common_folder_home", path: homeDir},
-		{titleKey: "i18n:plugin_explorer_common_folder_desktop", path: filepath.Join(homeDir, "Desktop")},
-		{titleKey: "i18n:plugin_explorer_common_folder_documents", path: filepath.Join(homeDir, "Documents")},
-		{titleKey: "i18n:plugin_explorer_common_folder_downloads", path: filepath.Join(homeDir, "Downloads")},
-		{titleKey: "i18n:plugin_explorer_common_folder_pictures", path: filepath.Join(homeDir, "Pictures")},
-		{titleKey: "i18n:plugin_explorer_common_folder_music", path: filepath.Join(homeDir, "Music")},
-		{titleKey: "i18n:plugin_explorer_common_folder_videos", path: filepath.Join(homeDir, "Videos")},
-	}
-
-	var existing []commonFolder
-	for _, folder := range folders {
-		if _, err := os.Stat(folder.path); err == nil {
-			existing = append(existing, folder)
+	if err == nil {
+		systemFolders := []struct {
+			titleKey string
+			path     string
+		}{
+			{titleKey: "i18n:plugin_explorer_common_folder_home", path: homeDir},
+			{titleKey: "i18n:plugin_explorer_common_folder_desktop", path: filepath.Join(homeDir, "Desktop")},
+			{titleKey: "i18n:plugin_explorer_common_folder_documents", path: filepath.Join(homeDir, "Documents")},
+			{titleKey: "i18n:plugin_explorer_common_folder_downloads", path: filepath.Join(homeDir, "Downloads")},
+			{titleKey: "i18n:plugin_explorer_common_folder_pictures", path: filepath.Join(homeDir, "Pictures")},
+			{titleKey: "i18n:plugin_explorer_common_folder_music", path: filepath.Join(homeDir, "Music")},
+			{titleKey: "i18n:plugin_explorer_common_folder_videos", path: filepath.Join(homeDir, "Videos")},
+		}
+		for _, folder := range systemFolders {
+			if _, err := os.Stat(folder.path); err == nil {
+				candidate := openSaveFolder{
+					titleKey: folder.titleKey,
+					path:     folder.path,
+				}
+				candidates = append(candidates, candidate)
+			}
 		}
 	}
 
-	return existing
+	return candidates
+}
+
+func (c *ExplorerPlugin) recordOpenSaveHistory(ctx context.Context, key string, path string) {
+	if key == "" || path == "" {
+		return
+	}
+
+	if v, ok := c.openSaveHistoryMap.Load(key); ok {
+		newList := []openSaveHistoryEntry{}
+
+		found := false
+		for _, entry := range v {
+			if entry.Path == path {
+				entry.UsedAt = time.Now().Unix()
+				entry.Count += 1
+				found = true
+			}
+			newList = append(newList, entry)
+		}
+
+		if !found {
+			newList = append([]openSaveHistoryEntry{{Path: path, UsedAt: time.Now().Unix(), Count: 1}}, newList...)
+		}
+
+		c.openSaveHistoryMap.Store(key, newList)
+	}
+
+	payload, err := json.Marshal(c.openSaveHistoryMap.ToMap())
+	if err != nil {
+		c.api.Log(ctx, plugin.LogLevelError, "Failed to marshal open/save history: "+err.Error())
+		return
+	}
+	c.api.SaveSetting(ctx, openSaveHistorySettingKey, string(payload), false)
+}
+
+func (c *ExplorerPlugin) loadOpenSaveHistory(ctx context.Context) *util.HashMap[string, []openSaveHistoryEntry] {
+	var items = util.NewHashMap[string, []openSaveHistoryEntry]()
+	raw := c.api.GetSetting(ctx, openSaveHistorySettingKey)
+	if raw == "" {
+		return items
+	}
+
+	unmarshalMap := make(map[string][]openSaveHistoryEntry)
+	if err := json.Unmarshal([]byte(raw), &unmarshalMap); err != nil {
+		c.api.Log(ctx, plugin.LogLevelError, "Failed to load open/save history: "+err.Error())
+		return items
+	}
+
+	for k, v := range unmarshalMap {
+		items.Store(k, v)
+	}
+
+	return items
 }

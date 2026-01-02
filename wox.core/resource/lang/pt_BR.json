@@ -412,6 +412,7 @@
   "plugin_browser_bookmark_open_in_browser": "Abrir no navegador",
   "plugin_explorer_open": "Abrir",
   "plugin_explorer_open_containing_folder": "Abrir pasta contendo",
+  "plugin_explorer_jump_to": "Ir para",
   "plugin_indicator_activate": "Ativar",
   "plugin_indicator_activate_plugin": "Ativar o plugin %s",
   "plugin_paste_to_window": "Colar em %s",

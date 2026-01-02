@@ -412,6 +412,7 @@
   "plugin_browser_bookmark_open_in_browser": "Открыть в браузере",
   "plugin_explorer_open": "Открыть",
   "plugin_explorer_open_containing_folder": "Открыть содержащую папку",
+  "plugin_explorer_jump_to": "Перейти к",
   "plugin_indicator_activate": "Активировать",
   "plugin_indicator_activate_plugin": "Активировать плагин %s",
   "plugin_paste_to_window": "Вставить в %s",

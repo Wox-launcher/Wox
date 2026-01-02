@@ -2,13 +2,20 @@ package window
 
 /*
 #cgo CFLAGS: -x objective-c
-#cgo LDFLAGS: -framework Foundation -framework Cocoa -framework ApplicationServices
+#cgo LDFLAGS: -framework Foundation -framework Cocoa -framework ApplicationServices -framework ScriptingBridge
 #include <stdlib.h>
 
 int getActiveWindowIcon(unsigned char **iconData);
 char* getActiveWindowName();
+char* getProcessBundleIdentifier(int pid);
 int getActiveWindowPid();
 int activateWindowByPid(int pid);
+int isOpenSaveDialog();
+int navigateActiveFileDialog(const char* path);
+int isFinder(int pid);
+char* getOpenFinderWindowPaths();
+char* getActiveFinderWindowPath();
+int navigateActiveFinderWindow(const char* path);
 */
 import "C"
 import (
@@ -16,6 +23,7 @@ import (
 	"errors"
 	"image"
 	"image/png"
+	"strings"
 	"unsafe"
 )
 
@@ -45,6 +53,19 @@ func GetActiveWindowName() string {
 	return C.GoString(name)
 }
 
+func GetProcessIdentity(pid int) string {
+	if pid <= 0 {
+		return ""
+	}
+
+	identity := C.getProcessBundleIdentifier(C.int(pid))
+	if identity == nil {
+		return ""
+	}
+	defer C.free(unsafe.Pointer(identity))
+	return strings.TrimSpace(C.GoString(identity))
+}
+
 func GetActiveWindowPid() int {
 	pid := C.getActiveWindowPid()
 	return int(pid)
@@ -53,4 +74,65 @@ func GetActiveWindowPid() int {
 func ActivateWindowByPid(pid int) bool {
 	result := C.activateWindowByPid(C.int(pid))
 	return int(result) == 1
+}
+
+func IsOpenSaveDialog() (bool, error) {
+	return int(C.isOpenSaveDialog()) == 1, nil
+}
+
+func NavigateActiveFileDialog(targetPath string) bool {
+	if targetPath == "" {
+		return false
+	}
+
+	cPath := C.CString(targetPath)
+	defer C.free(unsafe.Pointer(cPath))
+	return int(C.navigateActiveFileDialog(cPath)) == 1
+}
+
+// IsFileExplorer checks if the given PID belongs to Finder.
+func IsFileExplorer(pid int) (bool, error) {
+	if C.isFinder(C.int(pid)) == 1 {
+		return true, nil
+	}
+	return false, nil
+}
+
+// GetActiveFileExplorerPath returns the filesystem path of the currently active
+// Finder window on macOS, or an empty string if the foreground window is not
+// Finder or the path cannot be determined.
+func GetActiveFileExplorerPath() string {
+	result := C.getActiveFinderWindowPath()
+	if result == nil {
+		return ""
+	}
+	defer C.free(unsafe.Pointer(result))
+	return strings.TrimSpace(C.GoString(result))
+}
+
+// NavigateActiveFileExplorer navigates the currently active Finder window to the specified path.
+// Returns true if successful, false otherwise.
+func NavigateActiveFileExplorer(targetPath string) bool {
+	if targetPath == "" {
+		return false
+	}
+
+	cPath := C.CString(targetPath)
+	defer C.free(unsafe.Pointer(cPath))
+	return int(C.navigateActiveFinderWindow(cPath)) == 1
+}
+
+// GetOpenFinderWindowPaths returns a list of paths for all currently open Finder windows.
+func GetOpenFinderWindowPaths() []string {
+	result := C.getOpenFinderWindowPaths()
+	if result == nil {
+		return []string{}
+	}
+	defer C.free(unsafe.Pointer(result))
+
+	raw := strings.TrimSpace(C.GoString(result))
+	if raw == "" {
+		return []string{}
+	}
+	return strings.Split(raw, "\n")
 }
