@@ -40,6 +40,11 @@ func GetActiveFileExplorerPath() string {
 	return ""
 }
 
+// GetFileExplorerPathByPid returns empty string on platforms other than Windows and macOS.
+func GetFileExplorerPathByPid(pid int) string {
+	return ""
+}
+
 // IsFileExplorer returns false on platforms other than Windows and macOS.
 func IsFileExplorer(pid int) (bool, error) {
 	return false, nil

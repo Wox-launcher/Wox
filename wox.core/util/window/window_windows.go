@@ -317,6 +317,156 @@ func GetActiveFileExplorerPath() string {
 	return ""
 }
 
+// GetFileExplorerPathByPid returns the filesystem path of an Explorer window owned by pid.
+func GetFileExplorerPathByPid(pid int) string {
+	if pid <= 0 {
+		return ""
+	}
+
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	initialized := false
+	if err := ole.CoInitializeEx(0, ole.COINIT_APARTMENTTHREADED); err != nil {
+		if oleErr, ok := err.(*ole.OleError); ok {
+			switch oleErr.Code() {
+			case ole.S_OK, oleSFalse:
+				initialized = true
+			case rpcEChangedMode:
+				// COM already initialized with different concurrency model; proceed.
+			default:
+				return ""
+			}
+		} else {
+			return ""
+		}
+	} else {
+		initialized = true
+	}
+	if initialized {
+		defer ole.CoUninitialize()
+	}
+
+	unknown, err := oleutil.CreateObject("Shell.Application")
+	if err != nil {
+		return ""
+	}
+	defer unknown.Release()
+
+	shellDisp, err := unknown.QueryInterface(ole.IID_IDispatch)
+	if err != nil {
+		return ""
+	}
+	defer shellDisp.Release()
+
+	windowsVar, err := oleutil.CallMethod(shellDisp, "Windows")
+	if err != nil {
+		return ""
+	}
+	defer windowsVar.Clear()
+	windowsDisp := windowsVar.ToIDispatch()
+	if windowsDisp == nil {
+		return ""
+	}
+
+	countVar, err := oleutil.GetProperty(windowsDisp, "Count")
+	if err != nil {
+		return ""
+	}
+	count := int(countVar.Val)
+	countVar.Clear()
+
+	for i := 0; i < count; i++ {
+		itemVar, err := oleutil.CallMethod(windowsDisp, "Item", i)
+		if err != nil {
+			continue
+		}
+		wDisp := itemVar.ToIDispatch()
+		if wDisp == nil {
+			itemVar.Clear()
+			continue
+		}
+
+		hwndVar, err := oleutil.GetProperty(wDisp, "HWND")
+		if err != nil {
+			itemVar.Clear()
+			continue
+		}
+		wnd := uintptr(hwndVar.Val)
+		hwndVar.Clear()
+
+		var wndPid uint32
+		win.GetWindowThreadProcessId(win.HWND(wnd), &wndPid)
+		if int(wndPid) != pid {
+			itemVar.Clear()
+			continue
+		}
+
+		docVar, err := oleutil.GetProperty(wDisp, "Document")
+		if err != nil {
+			itemVar.Clear()
+			continue
+		}
+		docDisp := docVar.ToIDispatch()
+		if docDisp == nil {
+			docVar.Clear()
+			itemVar.Clear()
+			continue
+		}
+
+		folderVar, err := oleutil.GetProperty(docDisp, "Folder")
+		if err != nil {
+			docVar.Clear()
+			itemVar.Clear()
+			continue
+		}
+		folderDisp := folderVar.ToIDispatch()
+		if folderDisp == nil {
+			folderVar.Clear()
+			docVar.Clear()
+			itemVar.Clear()
+			continue
+		}
+
+		selfVar, err := oleutil.GetProperty(folderDisp, "Self")
+		if err != nil {
+			folderVar.Clear()
+			docVar.Clear()
+			itemVar.Clear()
+			continue
+		}
+		selfDisp := selfVar.ToIDispatch()
+		if selfDisp == nil {
+			selfVar.Clear()
+			folderVar.Clear()
+			docVar.Clear()
+			itemVar.Clear()
+			continue
+		}
+
+		pathVar, err := oleutil.GetProperty(selfDisp, "Path")
+		if err != nil {
+			selfVar.Clear()
+			folderVar.Clear()
+			docVar.Clear()
+			itemVar.Clear()
+			continue
+		}
+
+		p := strings.TrimSpace(pathVar.ToString())
+
+		pathVar.Clear()
+		selfVar.Clear()
+		folderVar.Clear()
+		docVar.Clear()
+		itemVar.Clear()
+
+		return p
+	}
+
+	return ""
+}
+
 // NavigateActiveFileExplorer navigates the currently active Explorer window to the specified path.
 // Returns true if successful, false otherwise.
 func NavigateActiveFileExplorer(targetPath string) bool {

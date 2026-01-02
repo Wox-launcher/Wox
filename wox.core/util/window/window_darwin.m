@@ -360,6 +360,61 @@ int isFinder(int pid) {
     }
 }
 
+static NSString* getFinderWindowPathValue(id window) {
+    id target = nil;
+    @try {
+        target = [window valueForKey:@"target"];
+    } @catch (NSException *exception) {
+        target = nil;
+    }
+
+    if (!target) {
+        return nil;
+    }
+
+    id urlValue = nil;
+    @try {
+        urlValue = [target valueForKey:@"URL"];
+    } @catch (NSException *exception) {
+        urlValue = nil;
+    }
+
+    NSString *path = nil;
+    if ([urlValue isKindOfClass:[NSURL class]]) {
+        path = [(NSURL *)urlValue path];
+    } else if ([urlValue isKindOfClass:[NSString class]]) {
+        NSString *stringValue = (NSString *)urlValue;
+        if ([stringValue hasPrefix:@"file://"]) {
+            NSURL *url = [NSURL URLWithString:stringValue];
+            path = [url path];
+        } else {
+            path = stringValue;
+        }
+    }
+
+    if (!path || [path length] == 0) {
+        return nil;
+    }
+    return path;
+}
+
+static NSString* getFinderWindowNameValue(id window) {
+    id nameValue = nil;
+    @try {
+        nameValue = [window valueForKey:@"name"];
+    } @catch (NSException *exception) {
+        nameValue = nil;
+    }
+    if (![nameValue isKindOfClass:[NSString class]]) {
+        return nil;
+    }
+    NSString *name = (NSString *)nameValue;
+    if ([name length] == 0) {
+        return nil;
+    }
+    return name;
+}
+
 char* getOpenFinderWindowPaths() {
     @autoreleasepool {
         id finder = [SBApplication applicationWithBundleIdentifier:@"com.apple.finder"];
@@ -375,38 +430,8 @@ char* getOpenFinderWindowPaths() {
         NSArray *windowList = (NSArray *)windows;
         NSMutableArray<NSString *> *paths = [NSMutableArray arrayWithCapacity:[windowList count]];
         for (id window in windowList) {
-            id target = nil;
-            @try {
-                target = [window valueForKey:@"target"];
-            } @catch (NSException *exception) {
-                target = nil;
-            }
-
-            if (!target) {
-                continue;
-            }
-
-            id urlValue = nil;
-            @try {
-                urlValue = [target valueForKey:@"URL"];
-            } @catch (NSException *exception) {
-                urlValue = nil;
-            }
-
-            NSString *path = nil;
-            if ([urlValue isKindOfClass:[NSURL class]]) {
-                path = [(NSURL *)urlValue path];
-            } else if ([urlValue isKindOfClass:[NSString class]]) {
-                NSString *stringValue = (NSString *)urlValue;
-                if ([stringValue hasPrefix:@"file://"]) {
-                    NSURL *url = [NSURL URLWithString:stringValue];
-                    path = [url path];
-                } else {
-                    path = stringValue;
-                }
-            }
-
-            if (path && [path length] > 0) {
+            NSString *path = getFinderWindowPathValue(window);
+            if (path) {
                 [paths addObject:path];
             }
         }
@@ -477,6 +502,121 @@ char* getActiveFinderWindowPath() {
             return strdup("");
         }
         return strdup([path UTF8String]);
+    }
+}
+
+static char* copyPathFromAXValue(CFTypeRef value) {
+    if (!value) {
+        return strdup("");
+    }
+
+    if (CFGetTypeID(value) == CFURLGetTypeID()) {
+        CFURLRef url = (CFURLRef)value;
+        CFStringRef path = CFURLCopyFileSystemPath(url, kCFURLPOSIXPathStyle);
+        if (path) {
+            NSString *pathStr = (__bridge NSString *)path;
+            char *result = strdup([pathStr UTF8String]);
+            CFRelease(path);
+            return result;
+        }
+    }
+
+    if (CFGetTypeID(value) == CFStringGetTypeID()) {
+        NSString *stringValue = (__bridge NSString *)value;
+        if ([stringValue hasPrefix:@"file://"]) {
+            NSURL *url = [NSURL URLWithString:stringValue];
+            if (url) {
+                NSString *path = [url path];
+                if (path && [path length] > 0) {
+                    return strdup([path UTF8String]);
+                }
+            }
+        }
+        if ([stringValue length] > 0) {
+            return strdup([stringValue UTF8String]);
+        }
+    }
+
+    return strdup("");
+}
+
+char* getFinderWindowPathByPid(int pid) {
+    @autoreleasepool {
+        if (pid <= 0) {
+            return strdup("");
+        }
+        NSRunningApplication *app = [NSRunningApplication runningApplicationWithProcessIdentifier:pid];
+        if (!app || ![[app bundleIdentifier] isEqualToString:@"com.apple.finder"]) {
+            return strdup("");
+        }
+        id finder = [SBApplication applicationWithBundleIdentifier:@"com.apple.finder"];
+        if (!finder) {
+            return strdup("");
+        }
+
+        id windows = [finder valueForKey:@"windows"];
+        if (![windows isKindOfClass:[NSArray class]]) {
+            return strdup("");
+        }
+
+        NSArray *windowList = (NSArray *)windows;
+        NSString *focusedTitle = nil;
+        if (AXIsProcessTrusted()) {
+            AXUIElementRef appElement = AXUIElementCreateApplication(pid);
+            if (appElement) {
+                AXUIElementRef window = NULL;
+                AXError windowErr = AXUIElementCopyAttributeValue(appElement, kAXFocusedWindowAttribute, (CFTypeRef *)&window);
+                if (windowErr == kAXErrorSuccess && window) {
+                    CFTypeRef documentValue = NULL;
+                    if (AXUIElementCopyAttributeValue(window, kAXDocumentAttribute, &documentValue) == kAXErrorSuccess && documentValue) {
+                        char *result = copyPathFromAXValue(documentValue);
+                        CFRelease(documentValue);
+                        CFRelease(window);
+                        CFRelease(appElement);
+                        return result;
+                    }
+
+                    CFTypeRef titleValue = NULL;
+                    if (AXUIElementCopyAttributeValue(window, kAXTitleAttribute, &titleValue) == kAXErrorSuccess && titleValue) {
+                        if (CFGetTypeID(titleValue) == CFStringGetTypeID()) {
+                            focusedTitle = [(__bridge NSString *)titleValue copy];
+                        }
+                        CFRelease(titleValue);
+                    }
+                    CFRelease(window);
+                }
+                CFRelease(appElement);
+            }
+        }
+
+        if (focusedTitle) {
+            for (id window in windowList) {
+                NSString *name = getFinderWindowNameValue(window);
+                if (!name) {
+                    continue;
+                }
+                if (![name isEqualToString:focusedTitle]) {
+                    NSString *path = getFinderWindowPathValue(window);
+                    if (path && [[path lastPathComponent] isEqualToString:focusedTitle]) {
+                        return strdup([path UTF8String]);
+                    }
+                    continue;
+                }
+                NSString *path = getFinderWindowPathValue(window);
+                if (path) {
+                    return strdup([path UTF8String]);
+                }
+            }
+        }
+
+        if ([windowList count] == 1) {
+            NSString *path = getFinderWindowPathValue([windowList objectAtIndex:0]);
+            if (path) {
+                return strdup([path UTF8String]);
+            }
+        }
+
+        return strdup("");
     }
 }
 

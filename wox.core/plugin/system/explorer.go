@@ -101,7 +101,7 @@ func (c *ExplorerPlugin) Query(ctx context.Context, query plugin.Query) []plugin
 }
 
 func (c *ExplorerPlugin) queryFileExplorer(ctx context.Context, query plugin.Query) []plugin.QueryResult {
-	currentPath := window.GetActiveFileExplorerPath()
+	currentPath := window.GetFileExplorerPathByPid(query.Env.ActiveWindowPid)
 	if currentPath == "" || query.Search == "" {
 		return []plugin.QueryResult{}
 	}

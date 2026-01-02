@@ -15,6 +15,7 @@ int navigateActiveFileDialog(const char* path);
 int isFinder(int pid);
 char* getOpenFinderWindowPaths();
 char* getActiveFinderWindowPath();
+char* getFinderWindowPathByPid(int pid);
 int navigateActiveFinderWindow(const char* path);
 */
 import "C"
@@ -103,6 +104,19 @@ func IsFileExplorer(pid int) (bool, error) {
 // Finder or the path cannot be determined.
 func GetActiveFileExplorerPath() string {
 	result := C.getActiveFinderWindowPath()
+	if result == nil {
+		return ""
+	}
+	defer C.free(unsafe.Pointer(result))
+	return strings.TrimSpace(C.GoString(result))
+}
+
+// GetFileExplorerPathByPid returns a Finder window path for the given PID when possible.
+func GetFileExplorerPathByPid(pid int) string {
+	if pid <= 0 {
+		return ""
+	}
+	result := C.getFinderWindowPathByPid(C.int(pid))
 	if result == nil {
 		return ""
 	}
