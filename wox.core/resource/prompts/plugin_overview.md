@@ -1,53 +1,49 @@
-# Wox Plugin Overview (for Plugin Developers)
+# Wox Plugin Architecture Overview
 
-This is a developer-focused overview to help you choose a plugin type and get started quickly.
+This document provides a high-level overview of the Wox plugin system for developers and AI agents.
 
-## What you build
+## Core Concepts
 
-A Wox plugin is a small integration that:
+A Wox plugin is an event-driven module that interacts with the main application via JSON-RPC.
 
-- Receives a user query.
-- Returns a list of results (items/actions) for Wox to display.
+1. **Trigger**: User types a keyword (e.g., `npm`) or a global query.
+2. **Execution**: Wox spawns or calls the plugin process.
+3. **Response**: The plugin returns a list of **Results** (Items) to be displayed.
+4. **Action**: User selects a result, triggering an **Action** callback in the plugin.
 
-You mainly decide **which plugin type** to use, and then implement the query → results behavior.
+## Plugin Types
 
-## Plugin types (which one should I choose?)
+### 1. SDK Plugins (Managed)
 
-### 1) SDK plugins (recommended)
+Designed for complex, production-grade extensions. Wox manages the lifecycle of these plugins.
 
-Use this when you want a “real” plugin with richer capabilities, maintainability, and a clear structure.
+- **Node.js**: Written in TypeScript/JavaScript. Uses `@wox-launcher/wox-plugin`.
+- **Python**: Written in Python 3.x. Uses `wox-plugin`.
 
-- **Python SDK plugin**: best if you prefer Python.
-- **Node.js SDK plugin**: best if you prefer JavaScript/TypeScript.
+**Benefits**:
 
-What you typically ship:
+- Full access to the Wox API (Notifications, Settings, Filesystem, AI, etc.).
+- Persistent processes (optional) for faster response times.
+- Strong typing and better tooling support.
 
-- A `plugin.json` manifest (metadata like id/name/keywords/entrypoint).
-- Your plugin source code (Python or Node.js).
+### 2. Script Plugins (Unmanaged)
 
-### 2) Script plugins (lightweight)
+Designed for simple, one-off tasks or shell scripts.
 
-Use this for quick utilities and small automations.
+- Can be Bash, Python, or any executable.
+- Stateless and short-lived.
 
-- Usually a single script (Python/Node.js/Bash) based on the provided templates.
-- Stored under the user scripts plugin directory (see tool `get_wox_directories`).
+## Development Workflow
 
-Tradeoff: fastest to start, but generally less suitable for larger projects.
+1. **Scaffold**: Generate a project structure using `wpm create <your_plugin_name>`.
+2. **Configure**: Edit `plugin.json` to define metadata, keywords, and permissions.
+3. **Implement**:
+   - `init()`: Initialize API clients and load settings.
+   - `query()`: Handle user input and return `Result[]`.
+4. **Internationalize**: Use the `I18n` field in `plugin.json` (recommended) or `lang/` files. See `plugin_i18n`.
 
-### 3) Built-in/system plugins
+## Helper Prompts & Tools
 
-Some features are shipped as part of Wox itself. As a third-party developer, you usually don’t implement these.
-
-## Recommended workflow
-
-1. Decide runtime: Python or Node.js or Script plugin
-2. Generate a starter scaffold.
-3. Adjust `plugin.json` (id/name/keywords/entrypoint).
-4. Implement query handling and return results.
-
-## Helpful tools (for an AI agent)
-
-- `plugin_overview`: quick orientation (this document).
-- `get_plugin_json_schema`: generate/validate a correct `plugin.json`.
-- `get_plugin_sdk_docs`: learn the runtime-specific API.
-- `generate_plugin_scaffold`: create a starter plugin skeleton.
+- `get_plugin_json_schema`: Schema specification for `plugin.json`.
+- `get_plugin_sdk_docs`: Detailed API documentation for Node.js and Python.
+- `get_plugin_i18n`: Guidelines for implementing multi-language support.

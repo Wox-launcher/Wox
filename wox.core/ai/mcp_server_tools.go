@@ -305,3 +305,20 @@ func toKebabCase(s string) string {
 	}
 	return result
 }
+
+func handlePluginI18n(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	i18nDocs := getPluginI18n()
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{
+			&mcp.TextContent{Text: i18nDocs},
+		},
+	}, nil
+}
+
+func getPluginI18n() string {
+	return mustRenderMcpPrompt(
+		"plugin_i18n.md",
+		nil,
+		"# Wox Plugin Internationalization (i18n) Guide\n\n(Template unavailable)",
+	)
+}

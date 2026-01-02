@@ -212,5 +212,15 @@ func registerMCPTools(ctx context.Context) {
 		},
 	}, handleGetWoxDirectories)
 
+	// Tool: plugin_i18n
+	mcpPluginDevServer.AddTool(&mcp.Tool{
+		Name:        "get_plugin_i18n",
+		Description: "Guidelines for implementing multi-language support in Wox plugins",
+		InputSchema: map[string]any{
+			"type":       "object",
+			"properties": map[string]any{},
+		},
+	}, handlePluginI18n)
+
 	util.GetLogger().Info(ctx, "MCP: Tools registered successfully")
 }
