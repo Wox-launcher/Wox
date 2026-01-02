@@ -6,7 +6,6 @@ This document guides AI agents and developers on how to implement multi-language
 
 1.  **Raw Strings Only**: The Wox API returns the _raw_ string from the resource.
 2.  **Manual Formatting**: The plugin code is responsible for formatting (replacing placeholders like `%s` or `{name}`).
-3.  **Scope**: Plugins **cannot** access Wox's built-in system translations. You must define all your own strings.
 
 ## Defining Translations
 

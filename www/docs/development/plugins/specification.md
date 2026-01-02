@@ -18,7 +18,7 @@
 | `Icon`               | ✅       | [WoxImage](#icon-formats) string (emoji/base64/relative path)                               | `"emoji:🧮"`                                              |
 | `TriggerKeywords`    | ✅       | One or more trigger keywords. Use `"*"` for global trigger.                                 | `["calc"]`                                                |
 | `Commands`           | ⭕       | Optional commands (see [Query Model](./query-model.md))                                     | `[{"Command":"install","Description":"Install plugins"}]` |
-| `SupportedOS`        | ✅       | Any of `Windows`, `Linux`, `Macos`. Empty defaults to all for script plugins.               | `["Windows","Macos"]`                                     |
+| `SupportedOS`        | ✅       | Any of `Windows`, `Linux`, `Darwin`. Empty defaults to all for script plugins.              | `["Windows","Darwin"]`                                    |
 | `Features`           | ⭕       | Optional feature flags with parameters (see below)                                          | `[{"Name":"debounce","Params":{"IntervalMs":"200"}}]`     |
 | `SettingDefinitions` | ⭕       | Settings schema rendered in Wox settings                                                    | `[...]`                                                   |
 | `I18n`               | ⭕       | Inline translations (see [Internationalization](#internationalization))                     | `{"en_US":{"key":"value"}}`                               |
@@ -46,7 +46,7 @@
   "Entry": "main.py",
   "Icon": "emoji:🧮",
   "TriggerKeywords": ["calc"],
-  "SupportedOS": ["Windows", "Linux", "Macos"],
+  "SupportedOS": ["Windows", "Darwin", "Linux"],
   "Features": [{ "Name": "debounce", "Params": { "IntervalMs": "250" } }, { "Name": "ai" }],
   "SettingDefinitions": [
     {

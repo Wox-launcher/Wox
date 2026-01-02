@@ -1,10 +1,12 @@
 # Wox Plugin JSON Schema Specification
 
-This document defines the schema for `plugin.json`, the manifest file required for every Wox plugin.
+This document defines the schema for `plugin.json`, the manifest file required for SDK plugins (Node.js/Python).
 
 ## File Structure
 
 The `plugin.json` file must be a valid JSON object located in the root of your plugin directory.
+
+> **Note**: Script plugins do **not** use `plugin.json`. They embed a JSON metadata block inside the script file comments.
 
 ## Fields Specification
 
@@ -23,7 +25,7 @@ The `plugin.json` file must be a valid JSON object located in the root of your p
 | `Entry`           | `string`   | Main entry file path relative to plugin root.                                                      | `"main.py"` or `"dist/index.js"`           |
 | `Icon`            | `Icon`     | Plugin icon. See [Icon Formats](#icon-formats) below.                                              | `"emoji:🧮"`                               |
 | `TriggerKeywords` | `string[]` | Array of keywords to trigger the plugin. Use `"*"` for global triggers (careful!). Can't be empty. | `["calc", "math"]`                         |
-| `SupportedOS`     | `string[]` | Array of supported operating systems. Enum: `Windows`, `Linux`, `Macos`. Can't be empty.           | `["Windows", "Macos"]`                     |
+| `SupportedOS`     | `string[]` | Array of supported operating systems. Enum: `Windows`, `Linux`, `Darwin`. Can't be empty.          | `["Windows", "Darwin"]`                    |
 
 ### Optional Fields
 
@@ -126,7 +128,7 @@ The `Icon` string uses a `prefix:data` format. Supported prefixes:
 | `relative:` | Path relative to the plugin directory.       | `"relative:assets/icon.png"`          |
 | `absolute:` | Absolute file path.                          | `"absolute:/usr/local/bin/python"`    |
 | `fileicon:` | Use the system icon for a specific file/app. | `"fileicon:/Applications/Safari.app"` |
-| `base64:`   | Base64 encoded image data (PNG).             | `"base64:iVBORw0KGgoAAAANSUhEUg..."`  |
+| `base64:`   | Base64 encoded image data (PNG), use data URI format. | `"base64:data:image/png;base64,iVBORw0KGgoAAAANSUhEUg..."`  |
 | `svg:`      | raw SVG string.                              | `"svg:<svg>...</svg>"`                |
 
 ## Features Specification
@@ -223,7 +225,7 @@ Displays results in a grid instead of a list.
   "Entry": "dist/index.js",
   "Icon": "emoji:🔍",
   "TriggerKeywords": ["ss", "search"],
-  "SupportedOS": ["Windows", "Macos"],
+  "SupportedOS": ["Windows", "Darwin"],
   "Features": [{ "Name": "querySelection" }, { "Name": "debounce", "Params": { "IntervalMs": 200 } }]
 }
 ```

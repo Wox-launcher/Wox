@@ -13,7 +13,7 @@
   "Entry": "dist/index.js",
   "Icon": "emoji:🚀",
   "TriggerKeywords": {{.TriggerKeywordsJSON}},
-  "SupportedOS": ["Windows", "Linux", "Macos"]
+  "SupportedOS": ["Windows", "Darwin", "Linux"]
 }
 ```
 

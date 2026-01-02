@@ -40,9 +40,11 @@ class Result:
 class WoxImage:
     # Factory methods
     @classmethod
-    def emoji(cls, char: str) -> "WoxImage"
+    def new_emoji(cls, char: str) -> "WoxImage"
     @classmethod
-    def file(cls, path: str) -> "WoxImage"
+    def new_absolute(cls, path: str) -> "WoxImage"
+    @classmethod
+    def new_relative(cls, path: str) -> "WoxImage"
 ```
 
 ## Public API Methods
@@ -96,7 +98,7 @@ class HelloPlugin(Plugin):
 
         return [Result(
             title=title,
-            icon=WoxImage.emoji("👋"),
+            icon=WoxImage.new_emoji("👋"),
             actions=[]
         )]
 

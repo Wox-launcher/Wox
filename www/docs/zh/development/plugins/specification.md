@@ -18,7 +18,7 @@
 | `Icon`               | ✅   | [WoxImage](#icon-格式) 字符串（emoji/base64/相对路径等） | `"emoji:🧮"`                                              |
 | `TriggerKeywords`    | ✅   | 一个或多个触发关键字。`"*"` 表示全局触发。               | `["calc"]`                                                |
 | `Commands`           | ⭕   | 可选命令（见 [查询模型](./query-model.md)）              | `[{"Command":"install","Description":"Install plugins"}]` |
-| `SupportedOS`        | ✅   | `Windows`/`Linux`/`Macos`，脚本插件留空时默认全部        | `["Windows","Macos"]`                                     |
+| `SupportedOS`        | ✅   | `Windows`/`Linux`/`Darwin`，脚本插件留空时默认全部       | `["Windows","Darwin"]`                                    |
 | `Features`           | ⭕   | 可选能力开关（见下方）                                   | `[{"Name":"debounce","Params":{"IntervalMs":"200"}}]`     |
 | `SettingDefinitions` | ⭕   | 设置表单定义                                             | `[...]`                                                   |
 | `I18n`               | ⭕   | 内联翻译（见 [国际化](#国际化)）                         | `{"en_US":{"key":"value"}}`                               |
@@ -46,7 +46,7 @@
   "Entry": "main.py",
   "Icon": "emoji:🧮",
   "TriggerKeywords": ["calc"],
-  "SupportedOS": ["Windows", "Linux", "Macos"],
+  "SupportedOS": ["Windows", "Darwin", "Linux"],
   "Features": [{ "Name": "debounce", "Params": { "IntervalMs": "250" } }, { "Name": "ai" }],
   "SettingDefinitions": [
     {

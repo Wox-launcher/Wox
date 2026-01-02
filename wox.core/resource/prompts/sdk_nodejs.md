@@ -20,7 +20,7 @@ interface Plugin {
 ```typescript
 interface PluginInitParams {
   API: PublicAPI;
-  Metadata: PluginMetadata;
+  PluginDirectory: string;
 }
 ```
 

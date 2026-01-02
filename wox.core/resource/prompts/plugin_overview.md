@@ -42,6 +42,15 @@ Designed for simple, one-off tasks or shell scripts.
    - `query()`: Handle user input and return `Result[]`.
 4. **Internationalize**: Use the `I18n` field in `plugin.json` (recommended) or `lang/` files. See `plugin_i18n`.
 
+## Minimal Script Plugin (Quick Start)
+
+Script plugins are the fastest way to get a working plugin with no build step.
+
+1. **Create**: Run `wpm create <plugin_name>` and choose **Script**.
+2. **Edit**: Open the generated `.py`/`.js`/`.sh` file and update the JSON metadata block in comments.
+3. **Implement**: Modify the `query` handler in the same file to return results.
+4. **Run**: Trigger your plugin by typing its `TriggerKeywords` in Wox.
+
 ## Helper Prompts & Tools
 
 - `get_plugin_json_schema`: Schema specification for `plugin.json`.

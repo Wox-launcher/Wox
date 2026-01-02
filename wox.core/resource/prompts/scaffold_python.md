@@ -13,7 +13,7 @@
   "Entry": "main.py",
   "Icon": "emoji:🚀",
   "TriggerKeywords": {{.TriggerKeywordsJSON}},
-  "SupportedOS": ["Windows", "Linux", "Macos"]
+  "SupportedOS": ["Windows", "Darwin", "Linux"]
 }
 ```
 
@@ -40,7 +40,7 @@ class {{.PascalName}}Plugin(Plugin):
         results.append(Result(
             title=f"Echo: {query.search}" if query.search else "{{.Name}} Ready",
             sub_title="Type keywords to search or select this item",
-            icon=WoxImage.emoji("🚀"),
+            icon=WoxImage.new_emoji("🚀"),
             actions=[
                 ResultAction(
                     id="action_echo",
