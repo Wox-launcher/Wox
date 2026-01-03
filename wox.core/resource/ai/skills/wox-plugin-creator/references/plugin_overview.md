@@ -35,7 +35,11 @@ Designed for simple, one-off tasks or shell scripts.
 
 ## Development Workflow
 
-1. **Scaffold**: Generate a project structure using `wpm create <your_plugin_name>`.
+1. **Scaffold**:
+   - **Node.js/Python**: Clone the official template repos.
+     - https://github.com/Wox-launcher/Wox.Plugin.Template.Nodejs
+     - https://github.com/Wox-launcher/Wox.Plugin.Template.Python
+   - **Script plugins**: Use the script templates under `wox.core/resource/ai/skills/wox-plugin-creator/assets/script_plugin_templates/`.
 2. **Configure**: Edit `plugin.json` to define metadata, keywords, and permissions.
 3. **Implement**:
    - `init()`: Initialize API clients and load settings.
@@ -46,10 +50,15 @@ Designed for simple, one-off tasks or shell scripts.
 
 Script plugins are the fastest way to get a working plugin with no build step.
 
-1. **Create**: Run `wpm create <plugin_name>` and choose **Script**.
+1. **Create**: Start from the script templates under `wox.core/resource/ai/skills/wox-plugin-creator/assets/script_plugin_templates/`.
 2. **Edit**: Open the generated `.py`/`.js`/`.sh` file and update the JSON metadata block in comments.
 3. **Implement**: Modify the `query` handler in the same file to return results.
 4. **Run**: Trigger your plugin by typing its `TriggerKeywords` in Wox.
+
+## AI Skills
+
+- Built-in skills are embedded under `wox.core/resource/ai/skills` and extracted on startup to `~/.wox/ai/skills`.
+- Install a skill for other AI agents by copying its folder into `~/.wox/ai/skills`.
 
 ## Helper Prompts & Tools
 

@@ -33,10 +33,14 @@ func handleGetPluginSDKDocs(ctx context.Context, req *mcp.CallToolRequest) (*mcp
 		docs = getNodeJSSDKDocs()
 	case "python":
 		docs = getPythonSDKDocs()
-	case "script":
-		docs = getScriptPluginDocs()
+	case "script-nodejs":
+		docs = getScriptPluginDocs("nodejs")
+	case "script-python":
+		docs = getScriptPluginDocs("python")
+	case "script-bash":
+		docs = getScriptPluginDocs("bash")
 	default:
-		docs = "Please specify a runtime: nodejs, python, or script"
+		docs = "Please specify a runtime: nodejs, python, script-nodejs, script-python, or script-bash"
 	}
 
 	return &mcp.CallToolResult{
@@ -79,10 +83,14 @@ func handleGeneratePluginScaffold(ctx context.Context, req *mcp.CallToolRequest)
 		scaffold = generateNodeJSScaffold(name, description, triggerKeywords)
 	case "python":
 		scaffold = generatePythonScaffold(name, description, triggerKeywords)
-	case "script":
-		scaffold = generateScriptScaffold(name, description, triggerKeywords)
+	case "script-nodejs":
+		scaffold = generateScriptScaffold(name, description, triggerKeywords, "nodejs")
+	case "script-python":
+		scaffold = generateScriptScaffold(name, description, triggerKeywords, "python")
+	case "script-bash":
+		scaffold = generateScriptScaffold(name, description, triggerKeywords, "bash")
 	default:
-		scaffold = "Please specify a runtime: nodejs, python, or script"
+		scaffold = "Please specify a runtime: nodejs, python, script-nodejs, script-python, or script-bash"
 	}
 
 	return &mcp.CallToolResult{
@@ -152,8 +160,8 @@ func getPythonSDKDocs() string {
 	)
 }
 
-func getScriptPluginDocs() string {
-	return generateScriptScaffold("demo", "A demo script plugin", []string{"demo"})
+func getScriptPluginDocs(runtime string) string {
+	return generateScriptScaffold("demo", "A demo script plugin", []string{"demo"}, runtime)
 }
 
 func generateNodeJSScaffold(name, description string, triggerKeywords []string) string {
@@ -190,34 +198,32 @@ func generatePythonScaffold(name, description string, triggerKeywords []string) 
 	)
 }
 
-func generateScriptScaffold(name, description string, triggerKeywords []string) string {
+func generateScriptScaffold(name, description string, triggerKeywords []string, runtime string) string {
 	pluginID := uuid.New().String()
 	keywords, _ := json.Marshal(triggerKeywords)
 
-	pythonScript := mustRenderMcpTemplateFromScriptTemplates(
-		"template.py",
-		map[string]any{
-			"Name":                name,
-			"Description":         description,
-			"PluginID":            pluginID,
-			"TriggerKeywordsJSON": string(keywords),
-		},
-		"",
-	)
+	templateFile := ""
+	langTitle := ""
+	fence := ""
+	switch runtime {
+	case "python":
+		templateFile = "template.py"
+		langTitle = "Python"
+		fence = "python"
+	case "nodejs":
+		templateFile = "template.js"
+		langTitle = "Node.js"
+		fence = "javascript"
+	case "bash":
+		templateFile = "template.sh"
+		langTitle = "Bash"
+		fence = "bash"
+	default:
+		return "Please specify a script runtime: script-nodejs, script-python, or script-bash"
+	}
 
-	nodeScript := mustRenderMcpTemplateFromScriptTemplates(
-		"template.js",
-		map[string]any{
-			"Name":                name,
-			"Description":         description,
-			"PluginID":            pluginID,
-			"TriggerKeywordsJSON": string(keywords),
-		},
-		"",
-	)
-
-	bashScript := mustRenderMcpTemplateFromScriptTemplates(
-		"template.sh",
+	script := mustRenderMcpTemplateFromScriptTemplates(
+		templateFile,
 		map[string]any{
 			"Name":                name,
 			"Description":         description,
@@ -230,18 +236,14 @@ func generateScriptScaffold(name, description string, triggerKeywords []string) 
 	out := strings.Builder{}
 	out.WriteString("# ")
 	out.WriteString(name)
-	out.WriteString(" - Script Plugin Scaffold\n\n")
+	out.WriteString(" - Script Plugin Scaffold (")
+	out.WriteString(langTitle)
+	out.WriteString(")\n\n")
 
-	out.WriteString("## Python\n\n```python\n")
-	out.WriteString(pythonScript)
-	out.WriteString("\n```\n\n---\n\n")
-
-	out.WriteString("## Node.js\n\n```javascript\n")
-	out.WriteString(nodeScript)
-	out.WriteString("\n```\n\n---\n\n")
-
-	out.WriteString("## Bash\n\n```bash\n")
-	out.WriteString(bashScript)
+	out.WriteString("```")
+	out.WriteString(fence)
+	out.WriteString("\n")
+	out.WriteString(script)
 	out.WriteString("\n```\n")
 
 	return out.String()

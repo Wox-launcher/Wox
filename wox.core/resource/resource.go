@@ -28,11 +28,8 @@ var appIconWindows []byte
 //go:embed others
 var OthersFS embed.FS
 
-//go:embed script_plugin_templates
-var ScriptPluginTemplatesFS embed.FS
-
-//go:embed prompts
-var PromptsFS embed.FS
+//go:embed ai
+var AISkillsFS embed.FS
 
 var embedThemes = []string{}
 
@@ -79,17 +76,17 @@ func Extract(ctx context.Context) error {
 		return othersErr
 	}
 
-	// script_plugin_templates
-	scriptPluginTemplatesDirectory := util.GetLocation().GetScriptPluginTemplatesDirectory()
-	if util.IsDirExists(scriptPluginTemplatesDirectory) {
-		rmErr := os.RemoveAll(scriptPluginTemplatesDirectory)
+	// ai skills and prompts
+	aiDirectory := util.GetLocation().GetAIDirectory()
+	if util.IsDirExists(aiDirectory) {
+		rmErr := os.RemoveAll(aiDirectory)
 		if rmErr != nil {
 			return rmErr
 		}
 	}
-	scriptPluginTemplatesErr := extractFiles(ctx, ScriptPluginTemplatesFS, scriptPluginTemplatesDirectory, "script_plugin_templates", false)
-	if scriptPluginTemplatesErr != nil {
-		return scriptPluginTemplatesErr
+	aiSkillsErr := extractFiles(ctx, AISkillsFS, aiDirectory, "ai", true)
+	if aiSkillsErr != nil {
+		return aiSkillsErr
 	}
 
 	// themes

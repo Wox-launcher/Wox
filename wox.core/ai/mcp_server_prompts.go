@@ -11,7 +11,7 @@ import (
 var mcpPromptTemplateCache sync.Map // map[string]*template.Template
 
 func renderMcpPrompt(templateFile string, data any) (string, error) {
-	cacheKey := "prompts/" + templateFile
+	cacheKey := "ai/skills/wox-plugin-creator/references/" + templateFile
 	if cached, ok := mcpPromptTemplateCache.Load(cacheKey); ok {
 		var buf bytes.Buffer
 		if err := cached.(*template.Template).Execute(&buf, data); err != nil {
@@ -20,7 +20,7 @@ func renderMcpPrompt(templateFile string, data any) (string, error) {
 		return buf.String(), nil
 	}
 
-	b, err := resource.PromptsFS.ReadFile(cacheKey)
+	b, err := resource.AISkillsFS.ReadFile(cacheKey)
 	if err != nil {
 		return "", err
 	}
@@ -77,9 +77,9 @@ func renderMcpTemplateFromFS(cacheKey string, templatePath string, templateFS fs
 }
 
 func mustRenderMcpTemplateFromScriptTemplates(templateFile string, data any, fallback string) string {
-	cacheKey := "script_plugin_templates/" + templateFile
-	templatePath := "script_plugin_templates/" + templateFile
-	out, err := renderMcpTemplateFromFS(cacheKey, templatePath, resource.ScriptPluginTemplatesFS, data)
+	cacheKey := "ai/skills/wox-plugin-creator/assets/script_plugin_templates/" + templateFile
+	templatePath := "ai/skills/wox-plugin-creator/assets/script_plugin_templates/" + templateFile
+	out, err := renderMcpTemplateFromFS(cacheKey, templatePath, resource.AISkillsFS, data)
 	if err != nil {
 		_ = err
 		return fallback

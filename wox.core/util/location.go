@@ -123,6 +123,12 @@ func (l *Location) Init() error {
 	if directoryErr := l.EnsureDirectoryExist(l.GetBackupDirectory()); directoryErr != nil {
 		return directoryErr
 	}
+	if directoryErr := l.EnsureDirectoryExist(l.GetAIDirectory()); directoryErr != nil {
+		return directoryErr
+	}
+	if directoryErr := l.EnsureDirectoryExist(l.GetAISkillsDirectory()); directoryErr != nil {
+		return directoryErr
+	}
 
 	return nil
 }
@@ -199,7 +205,7 @@ func (l *Location) GetOthersDirectory() string {
 }
 
 func (l *Location) GetScriptPluginTemplatesDirectory() string {
-	return path.Join(l.woxDataDirectory, "script_plugin_templates")
+	return path.Join(l.woxDataDirectory, "ai", "skills", "wox-plugin-creator", "assets", "script_plugin_templates")
 }
 
 func (l *Location) GetCacheDirectory() string {
@@ -212,6 +218,14 @@ func (l *Location) GetImageCacheDirectory() string {
 
 func (l *Location) GetBackupDirectory() string {
 	return path.Join(l.woxDataDirectory, "backup")
+}
+
+func (l *Location) GetAIDirectory() string {
+	return path.Join(l.woxDataDirectory, "ai")
+}
+
+func (l *Location) GetAISkillsDirectory() string {
+	return path.Join(l.GetAIDirectory(), "skills")
 }
 
 func (l *Location) GetUIAppPath() string {

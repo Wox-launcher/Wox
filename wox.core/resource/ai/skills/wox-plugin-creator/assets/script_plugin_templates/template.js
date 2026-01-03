@@ -2,7 +2,7 @@
 // {
 //   "Id": "{{.PluginID}}",
 //   "Name": "{{.Name}}",
-//   "Author": "Wox Team",
+//   "Author": "{{.Author}}",
 //   "Version": "1.0.0",
 //   "MinWoxVersion": "2.0.0",
 //   "Description": "{{.Description}}",
@@ -29,6 +29,10 @@
  *
  * This is a template for creating Wox script plugins.
  * Script plugins are single-file plugins that are executed once per query.
+ *
+ * IMPORTANT:
+ * - Do not modify the base implementation in this file.
+ * - Only edit the MyPlugin class section below.
  *
  * Communication with Wox is done via JSON-RPC over stdin/stdout.
  *
@@ -73,7 +77,7 @@
  */
 
 /**
- * Wox plugin base class for script plugins. Don't modify this class directly.
+ * Wox plugin base class for script plugins. Do not modify this class.
  */
 class WoxPluginBase {
   constructor() {

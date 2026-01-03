@@ -2,7 +2,7 @@
 # {
 #   "Id": "{{.PluginID}}",
 #   "Name": "{{.Name}}",
-#   "Author": "Wox Team",
+#   "Author": "{{.Author}}",
 #   "Version": "1.0.0",
 #   "MinWoxVersion": "2.0.0",
 #   "Description": "{{.Description}}",
@@ -37,6 +37,10 @@ Wox Python Script Plugin Template
 
 This is a template for creating Wox script plugins in Python.
 Script plugins are single-file plugins that are executed once per query.
+
+IMPORTANT:
+- Do not modify the base implementation in this file.
+- Only edit the MyPlugin class section below.
 
 To create your plugin:
 1. Create a class that inherits from WoxAPI
@@ -90,7 +94,7 @@ from typing import Any, List, TypedDict
 
 
 class WoxPluginBase:
-    """Wox plugin base class for script plugins. Don't modify this class directly."""
+    """Wox plugin base class for script plugins. Do not modify this class."""
 
     class ActionItem(TypedDict, total=False):
         """Type hint for an action in a result."""

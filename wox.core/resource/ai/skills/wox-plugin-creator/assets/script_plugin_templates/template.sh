@@ -29,6 +29,10 @@
 # This is a template for creating Wox script plugins in Bash.
 # Script plugins are single-file plugins that are executed once per query.
 #
+# IMPORTANT:
+# - Do not modify the base implementation in this file.
+# - Only edit the query/action handling sections below.
+#
 # Communication with Wox is done via JSON-RPC over stdin/stdout.
 #
 # Available methods:

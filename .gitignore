@@ -23,6 +23,9 @@ wox.exe
 wox.core/wox
 www/docs/.vitepress/cache
 www/docs/.vitepress/dist
+.github/skills
+.codex/skills
+claude/skills
 placeholder
 crash.log
 release/
