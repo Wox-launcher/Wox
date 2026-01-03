@@ -58,21 +58,10 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
   // Build the TextField widget
   Widget _buildTextField(dynamic currentTheme) {
     return ExtendedTextField(
-      style: TextStyle(
-        fontSize: 28.0,
-        color: safeFromCssColor(currentTheme.queryBoxFontColor),
-      ),
+      style: TextStyle(fontSize: 28.0, color: safeFromCssColor(currentTheme.queryBoxFontColor)),
       decoration: InputDecoration(
-        contentPadding: const EdgeInsets.only(
-          left: 8,
-          right: 68,
-          top: QUERY_BOX_CONTENT_PADDING_TOP,
-          bottom: QUERY_BOX_CONTENT_PADDING_BOTTOM,
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(currentTheme.queryBoxBorderRadius.toDouble()),
-          borderSide: BorderSide.none,
-        ),
+        contentPadding: const EdgeInsets.only(left: 8, right: 68, top: QUERY_BOX_CONTENT_PADDING_TOP, bottom: QUERY_BOX_CONTENT_PADDING_BOTTOM),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(currentTheme.queryBoxBorderRadius.toDouble()), borderSide: BorderSide.none),
         filled: true,
         fillColor: safeFromCssColor(currentTheme.queryBoxBackgroundColor),
         hoverColor: Colors.transparent,
@@ -144,192 +133,190 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
     return Obx(() {
       final currentTheme = WoxThemeUtil.instance.currentTheme.value;
       final queryBoxHeight = controller.getQueryBoxInputHeight();
-      controller.queryBoxTextFieldController.updateSelectedTextStyle(
-        TextStyle(
-          color: safeFromCssColor(currentTheme.queryBoxTextSelectionColor),
-        ),
-      );
+      controller.queryBoxTextFieldController.updateSelectedTextStyle(TextStyle(color: safeFromCssColor(currentTheme.queryBoxTextSelectionColor)));
 
-      return Stack(children: [
-        Positioned(
+      return Stack(
+        children: [
+          Positioned(
             child: WoxPlatformFocus(
-                onKeyEvent: (FocusNode node, KeyEvent event) {
-                  var traceId = const UuidV4().generate();
+              onKeyEvent: (FocusNode node, KeyEvent event) {
+                var traceId = const UuidV4().generate();
 
-                  String eventType = event is KeyDownEvent
-                      ? "DOWN"
-                      : event is KeyUpEvent
-                          ? "UP"
-                          : event is KeyRepeatEvent
-                              ? "REPEAT"
-                              : "UNKNOWN";
-                  Logger.instance.debug(traceId, "[KEYLOG][FLUTTER] KeyEvent: ${event.logicalKey.keyLabel} ($eventType) - keyId: ${event.logicalKey.keyId}");
+                String eventType =
+                    event is KeyDownEvent
+                        ? "DOWN"
+                        : event is KeyUpEvent
+                        ? "UP"
+                        : event is KeyRepeatEvent
+                        ? "REPEAT"
+                        : "UNKNOWN";
+                Logger.instance.debug(traceId, "[KEYLOG][FLUTTER] KeyEvent: ${event.logicalKey.keyLabel} ($eventType) - keyId: ${event.logicalKey.keyId}");
 
-                  // Handle number keys in quick select mode first (higher priority)
-                  if (controller.isQuickSelectMode.value && event is KeyDownEvent) {
-                    var numberKey = getNumberFromKey(event.logicalKey);
-                    if (numberKey != null) {
-                      if (controller.handleQuickSelectNumberKey(traceId, numberKey)) {
+                // Handle number keys in quick select mode first (higher priority)
+                if (controller.isQuickSelectMode.value && event is KeyDownEvent) {
+                  var numberKey = getNumberFromKey(event.logicalKey);
+                  if (numberKey != null) {
+                    if (controller.handleQuickSelectNumberKey(traceId, numberKey)) {
+                      return KeyEventResult.handled;
+                    }
+                  }
+                }
+
+                // Handle quick select modifier key press/release
+                if ((event is KeyDownEvent || event is KeyRepeatEvent) && isQuickSelectModifierKeyOnly(event)) {
+                  controller.startQuickSelectTimer(traceId);
+                } else {
+                  controller.stopQuickSelectTimer(traceId);
+                }
+
+                var isAnyModifierPressed = WoxHotkey.isAnyModifierPressed();
+                if (!isAnyModifierPressed) {
+                  if (event is KeyDownEvent) {
+                    switch (event.logicalKey) {
+                      case LogicalKeyboardKey.escape:
+                        Logger.instance.info(traceId, "[KEYLOG][FLUTTER] ESC KeyDown -> hiding app");
+                        controller.hideApp(const UuidV4().generate());
                         return KeyEventResult.handled;
-                      }
+                      case LogicalKeyboardKey.enter:
+                        Logger.instance.info(traceId, "[KEYLOG][FLUTTER] Enter KeyDown -> executing action");
+                        controller.executeDefaultAction(const UuidV4().generate());
+                        return KeyEventResult.handled;
+                      case LogicalKeyboardKey.arrowDown:
+                        controller.handleQueryBoxArrowDown();
+                        return KeyEventResult.handled;
+                      case LogicalKeyboardKey.arrowUp:
+                        controller.handleQueryBoxArrowUp();
+                        return KeyEventResult.handled;
+                      case LogicalKeyboardKey.arrowLeft:
+                        if (controller.isInGridMode()) {
+                          controller.handleQueryBoxArrowLeft();
+                          return KeyEventResult.handled;
+                        }
+                        break;
+                      case LogicalKeyboardKey.arrowRight:
+                        if (controller.isInGridMode()) {
+                          controller.handleQueryBoxArrowRight();
+                          return KeyEventResult.handled;
+                        }
+                        break;
+                      case LogicalKeyboardKey.tab:
+                        controller.autoCompleteQuery(const UuidV4().generate());
+                        return KeyEventResult.handled;
+                      case LogicalKeyboardKey.home:
+                        controller.moveQueryBoxCursorToStart();
+                        return KeyEventResult.handled;
+                      case LogicalKeyboardKey.end:
+                        controller.moveQueryBoxCursorToEnd();
+                        return KeyEventResult.handled;
                     }
                   }
 
-                  // Handle quick select modifier key press/release
-                  if ((event is KeyDownEvent || event is KeyRepeatEvent) && isQuickSelectModifierKeyOnly(event)) {
-                    controller.startQuickSelectTimer(traceId);
-                  } else {
-                    controller.stopQuickSelectTimer(traceId);
-                  }
-
-                  var isAnyModifierPressed = WoxHotkey.isAnyModifierPressed();
-                  if (!isAnyModifierPressed) {
-                    if (event is KeyDownEvent) {
-                      switch (event.logicalKey) {
-                        case LogicalKeyboardKey.escape:
-                          Logger.instance.info(traceId, "[KEYLOG][FLUTTER] ESC KeyDown -> hiding app");
-                          controller.hideApp(const UuidV4().generate());
+                  if (event is KeyRepeatEvent) {
+                    switch (event.logicalKey) {
+                      case LogicalKeyboardKey.arrowDown:
+                        controller.handleQueryBoxArrowDown();
+                        return KeyEventResult.handled;
+                      case LogicalKeyboardKey.arrowUp:
+                        controller.handleQueryBoxArrowUp();
+                        return KeyEventResult.handled;
+                      case LogicalKeyboardKey.arrowLeft:
+                        if (controller.isInGridMode()) {
+                          controller.handleQueryBoxArrowLeft();
                           return KeyEventResult.handled;
-                        case LogicalKeyboardKey.enter:
-                          Logger.instance.info(traceId, "[KEYLOG][FLUTTER] Enter KeyDown -> executing action");
-                          controller.executeDefaultAction(const UuidV4().generate());
+                        }
+                        break;
+                      case LogicalKeyboardKey.arrowRight:
+                        if (controller.isInGridMode()) {
+                          controller.handleQueryBoxArrowRight();
                           return KeyEventResult.handled;
-                        case LogicalKeyboardKey.arrowDown:
-                          controller.handleQueryBoxArrowDown();
-                          return KeyEventResult.handled;
-                        case LogicalKeyboardKey.arrowUp:
-                          controller.handleQueryBoxArrowUp();
-                          return KeyEventResult.handled;
-                        case LogicalKeyboardKey.arrowLeft:
-                          if (controller.isInGridMode()) {
-                            controller.handleQueryBoxArrowLeft();
-                            return KeyEventResult.handled;
-                          }
-                          break;
-                        case LogicalKeyboardKey.arrowRight:
-                          if (controller.isInGridMode()) {
-                            controller.handleQueryBoxArrowRight();
-                            return KeyEventResult.handled;
-                          }
-                          break;
-                        case LogicalKeyboardKey.tab:
-                          controller.autoCompleteQuery(const UuidV4().generate());
-                          return KeyEventResult.handled;
-                        case LogicalKeyboardKey.home:
-                          controller.moveQueryBoxCursorToStart();
-                          return KeyEventResult.handled;
-                        case LogicalKeyboardKey.end:
-                          controller.moveQueryBoxCursorToEnd();
-                          return KeyEventResult.handled;
-                      }
-                    }
-
-                    if (event is KeyRepeatEvent) {
-                      switch (event.logicalKey) {
-                        case LogicalKeyboardKey.arrowDown:
-                          controller.handleQueryBoxArrowDown();
-                          return KeyEventResult.handled;
-                        case LogicalKeyboardKey.arrowUp:
-                          controller.handleQueryBoxArrowUp();
-                          return KeyEventResult.handled;
-                        case LogicalKeyboardKey.arrowLeft:
-                          if (controller.isInGridMode()) {
-                            controller.handleQueryBoxArrowLeft();
-                            return KeyEventResult.handled;
-                          }
-                          break;
-                        case LogicalKeyboardKey.arrowRight:
-                          if (controller.isInGridMode()) {
-                            controller.handleQueryBoxArrowRight();
-                            return KeyEventResult.handled;
-                          }
-                          break;
-                      }
+                        }
+                        break;
                     }
                   }
+                }
 
-                  var pressedHotkey = WoxHotkey.parseNormalHotkeyFromEvent(event);
-                  Logger.instance.debug(traceId, "[KEYLOG][FLUTTER] parseNormalHotkeyFromEvent returned: $pressedHotkey");
-                  if (pressedHotkey == null) {
-                    return KeyEventResult.ignored;
-                  }
-
-                  // list all actions
-                  Logger.instance.debug(traceId, "[KEYLOG][FLUTTER] Checking if action hotkey: $pressedHotkey");
-                  if (controller.isActionHotkey(pressedHotkey)) {
-                    Logger.instance.info(traceId, "[KEYLOG][FLUTTER] Alt+J detected -> toggling action panel");
-                    controller.toggleActionPanel(const UuidV4().generate());
-                    return KeyEventResult.handled;
-                  }
-
-                  // check if the pressed hotkey is the action hotkey
-                  var result = controller.getActiveResult();
-                  var action = controller.getActionByHotkey(result, pressedHotkey);
-                  if (action != null) {
-                    controller.executeAction(const UuidV4().generate(), result, action);
-                    return KeyEventResult.handled;
-                  }
-
+                var pressedHotkey = WoxHotkey.parseNormalHotkeyFromEvent(event);
+                Logger.instance.debug(traceId, "[KEYLOG][FLUTTER] parseNormalHotkeyFromEvent returned: $pressedHotkey");
+                if (pressedHotkey == null) {
                   return KeyEventResult.ignored;
-                },
-                child: SizedBox(
-                  height: queryBoxHeight,
-                  child: Theme(
-                    data: ThemeData(
-                      textSelectionTheme: TextSelectionThemeData(
-                        selectionColor: safeFromCssColor(
-                          currentTheme.queryBoxTextSelectionBackgroundColor,
-                        ),
-                      ),
-                    ),
-                    // On Windows, use Shortcuts to prevent arrow keys from moving cursor
-                    // On macOS, Shortcuts interferes with Focus.onKeyEvent, so we skip it
-                    child: Platform.isWindows
-                        ? Shortcuts(
+                }
+
+                // list all actions
+                Logger.instance.debug(traceId, "[KEYLOG][FLUTTER] Checking if action hotkey: $pressedHotkey");
+                if (controller.isActionHotkey(pressedHotkey)) {
+                  Logger.instance.info(traceId, "[KEYLOG][FLUTTER] Alt+J detected -> toggling action panel");
+                  controller.toggleActionPanel(const UuidV4().generate());
+                  return KeyEventResult.handled;
+                }
+
+                // check if the pressed hotkey is the action hotkey
+                var result = controller.getActiveResult();
+                var action = controller.getActionByHotkey(result, pressedHotkey);
+                if (action != null) {
+                  controller.executeAction(const UuidV4().generate(), result, action);
+                  return KeyEventResult.handled;
+                }
+
+                return KeyEventResult.ignored;
+              },
+              child: SizedBox(
+                height: queryBoxHeight,
+                child: Theme(
+                  data: ThemeData(textSelectionTheme: TextSelectionThemeData(selectionColor: safeFromCssColor(currentTheme.queryBoxTextSelectionBackgroundColor))),
+                  // On Windows, use Shortcuts to prevent arrow keys from moving cursor
+                  // On macOS, Shortcuts interferes with Focus.onKeyEvent, so we skip it
+                  child:
+                      Platform.isWindows
+                          ? Shortcuts(
                             shortcuts: <ShortcutActivator, Intent>{
                               // Prevent arrow up/down from moving cursor in TextField
                               SingleActivator(LogicalKeyboardKey.arrowUp): DoNothingIntent(),
                               SingleActivator(LogicalKeyboardKey.arrowDown): DoNothingIntent(),
-                              if (controller.isInGridMode())
-                                ...{
-                                  SingleActivator(LogicalKeyboardKey.arrowLeft): DoNothingIntent(),
-                                  SingleActivator(LogicalKeyboardKey.arrowRight): DoNothingIntent(),
-                                }
+                              // Keep Enter for action; use Shift+Enter for new line
+                              SingleActivator(LogicalKeyboardKey.enter): DoNothingIntent(),
+                              SingleActivator(LogicalKeyboardKey.numpadEnter): DoNothingIntent(),
+                              if (controller.isInGridMode()) ...{
+                                SingleActivator(LogicalKeyboardKey.arrowLeft): DoNothingIntent(),
+                                SingleActivator(LogicalKeyboardKey.arrowRight): DoNothingIntent(),
+                              },
                             },
                             child: _buildTextField(currentTheme),
                           )
-                        : _buildTextField(currentTheme),
-                  ),
-                ))),
-        Positioned(
-          right: 10,
-          height: queryBoxHeight,
-          child: WoxDragMoveArea(
-            onDragEnd: () {
-              controller.focusQueryBox();
-            },
-            child: SizedBox(
-              width: 55,
-              height: 55,
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: MouseRegion(
-                    cursor: controller.queryIcon.value.action != null ? SystemMouseCursors.click : SystemMouseCursors.basic,
-                    child: GestureDetector(
-                      onTap: () {
-                        controller.queryIcon.value.action?.call();
-                        controller.focusQueryBox();
-                      },
-                      child: WoxImageView(woxImage: controller.queryIcon.value.icon, width: 30, height: 30),
+                          : _buildTextField(currentTheme),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            right: 10,
+            height: queryBoxHeight,
+            child: WoxDragMoveArea(
+              onDragEnd: () {
+                controller.focusQueryBox();
+              },
+              child: SizedBox(
+                width: 55,
+                height: 55,
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: MouseRegion(
+                      cursor: controller.queryIcon.value.action != null ? SystemMouseCursors.click : SystemMouseCursors.basic,
+                      child: GestureDetector(
+                        onTap: () {
+                          controller.queryIcon.value.action?.call();
+                          controller.focusQueryBox();
+                        },
+                        child: WoxImageView(woxImage: controller.queryIcon.value.icon, width: 30, height: 30),
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
-      ]);
+        ],
+      );
     });
   }
 }

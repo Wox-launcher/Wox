@@ -124,10 +124,9 @@ func GetFileExplorerPathByPid(pid int) string {
 	return strings.TrimSpace(C.GoString(result))
 }
 
-// NavigateActiveFileExplorer navigates the currently active Finder window to the specified path.
-// Returns true if successful, false otherwise.
-func NavigateActiveFileExplorer(targetPath string) bool {
-	if targetPath == "" {
+// NavigateFileExplorerByPid navigates a Finder window owned by pid to the specified path when possible.
+func NavigateFileExplorerByPid(pid int, targetPath string) bool {
+	if pid <= 0 || targetPath == "" {
 		return false
 	}
 

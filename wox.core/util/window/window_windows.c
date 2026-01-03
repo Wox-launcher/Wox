@@ -204,6 +204,112 @@ int isOpenSaveDialog()
     return data.found ? 1 : 0;
 }
 
+static void SendKey(WORD vk, BOOL isDown)
+{
+    INPUT input;
+    ZeroMemory(&input, sizeof(INPUT));
+    input.type = INPUT_KEYBOARD;
+    input.ki.wVk = vk;
+    if (!isDown)
+    {
+        input.ki.dwFlags = KEYEVENTF_KEYUP;
+    }
+    SendInput(1, &input, sizeof(INPUT));
+}
+
+static void SendUnicodeChar(WCHAR ch)
+{
+    INPUT input;
+    ZeroMemory(&input, sizeof(INPUT));
+    input.type = INPUT_KEYBOARD;
+    input.ki.wVk = 0;
+    input.ki.wScan = ch;
+    input.ki.dwFlags = KEYEVENTF_UNICODE;
+    SendInput(1, &input, sizeof(INPUT));
+
+    ZeroMemory(&input, sizeof(INPUT));
+    input.type = INPUT_KEYBOARD;
+    input.ki.wVk = 0;
+    input.ki.wScan = ch;
+    input.ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
+    SendInput(1, &input, sizeof(INPUT));
+}
+
+static void SendUnicodeString(const WCHAR *text)
+{
+    if (!text)
+    {
+        return;
+    }
+    for (const WCHAR *p = text; *p; ++p)
+    {
+        SendUnicodeChar(*p);
+    }
+}
+
+int navigateActiveFileDialog(const char *path)
+{
+    if (!path || path[0] == '\0')
+    {
+        return 0;
+    }
+
+    if (!isOpenSaveDialog())
+    {
+        return 0;
+    }
+
+    HWND hwnd = GetForegroundWindow();
+    if (!hwnd)
+    {
+        return 0;
+    }
+
+    int wlen = MultiByteToWideChar(CP_UTF8, 0, path, -1, NULL, 0);
+    if (wlen <= 1)
+    {
+        return 0;
+    }
+    WCHAR *wpath = (WCHAR *)malloc(sizeof(WCHAR) * (size_t)wlen);
+    if (!wpath)
+    {
+        return 0;
+    }
+    MultiByteToWideChar(CP_UTF8, 0, path, -1, wpath, wlen);
+
+    SetForegroundWindow(hwnd);
+    Sleep(30);
+
+    // Focus address/location bar (Alt+D then Ctrl+L as fallback)
+    SendKey(VK_MENU, TRUE);
+    SendKey('D', TRUE);
+    SendKey('D', FALSE);
+    SendKey(VK_MENU, FALSE);
+    Sleep(30);
+
+    SendKey(VK_CONTROL, TRUE);
+    SendKey('L', TRUE);
+    SendKey('L', FALSE);
+    SendKey(VK_CONTROL, FALSE);
+    Sleep(30);
+
+    // Select all, replace with target path, then Enter.
+    SendKey(VK_CONTROL, TRUE);
+    SendKey('A', TRUE);
+    SendKey('A', FALSE);
+    SendKey(VK_CONTROL, FALSE);
+    Sleep(30);
+
+    SendUnicodeString(wpath);
+    Sleep(30);
+
+    SendKey(VK_RETURN, TRUE);
+    SendKey(VK_RETURN, FALSE);
+
+    free(wpath);
+    return 1;
+}
+
 typedef struct
 {
     DWORD targetPid;

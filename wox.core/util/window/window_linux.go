@@ -50,8 +50,8 @@ func IsFileExplorer(pid int) (bool, error) {
 	return false, nil
 }
 
-// NavigateActiveFileExplorer is not supported on this platform.
-func NavigateActiveFileExplorer(targetPath string) bool {
+// NavigateFileExplorerByPid is not supported on this platform.
+func NavigateFileExplorerByPid(pid int, targetPath string) bool {
 	return false
 }
 

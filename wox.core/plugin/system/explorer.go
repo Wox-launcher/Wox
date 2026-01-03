@@ -3,6 +3,7 @@ package system
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -101,6 +102,7 @@ func (c *ExplorerPlugin) Query(ctx context.Context, query plugin.Query) []plugin
 }
 
 func (c *ExplorerPlugin) queryFileExplorer(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+	activePid := query.Env.ActiveWindowPid
 	currentPath := window.GetFileExplorerPathByPid(query.Env.ActiveWindowPid)
 	if currentPath == "" || query.Search == "" {
 		return []plugin.QueryResult{}
@@ -134,7 +136,15 @@ func (c *ExplorerPlugin) queryFileExplorer(ctx context.Context, query plugin.Que
 				{
 					Name: "i18n:plugin_explorer_open",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						window.NavigateActiveFileExplorer(fullPath)
+						if activePid <= 0 {
+							c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Navigate explorer by pid failed: invalid pid=%d path=%s", activePid, fullPath))
+							return
+						}
+
+						c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Navigate explorer by pid: pid=%d path=%s", activePid, fullPath))
+						if !window.NavigateFileExplorerByPid(activePid, fullPath) {
+							c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Navigate explorer by pid failed: pid=%d path=%s", activePid, fullPath))
+						}
 					},
 				},
 				{

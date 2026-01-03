@@ -13,6 +13,7 @@ char* getActiveWindowName();
 int getActiveWindowPid();
 int activateWindowByPid(int pid);
 int isOpenSaveDialog();
+int navigateActiveFileDialog(const char* path);
 */
 import "C"
 import (
@@ -101,7 +102,13 @@ func IsOpenSaveDialog() (bool, error) {
 }
 
 func NavigateActiveFileDialog(targetPath string) bool {
-	return NavigateActiveFileExplorer(targetPath)
+	if targetPath == "" {
+		return false
+	}
+
+	cPath := C.CString(targetPath)
+	defer C.free(unsafe.Pointer(cPath))
+	return int(C.navigateActiveFileDialog(cPath)) == 1
 }
 
 // IsFileExplorer checks if the given PID belongs to Explorer by checking the process image name.
@@ -376,6 +383,62 @@ func GetFileExplorerPathByPid(pid int) string {
 	count := int(countVar.Val)
 	countVar.Clear()
 
+	getPath := func(wDisp *ole.IDispatch) string {
+		docVar, err := oleutil.GetProperty(wDisp, "Document")
+		if err != nil {
+			return ""
+		}
+		docDisp := docVar.ToIDispatch()
+		if docDisp == nil {
+			docVar.Clear()
+			return ""
+		}
+
+		folderVar, err := oleutil.GetProperty(docDisp, "Folder")
+		if err != nil {
+			docVar.Clear()
+			return ""
+		}
+		folderDisp := folderVar.ToIDispatch()
+		if folderDisp == nil {
+			folderVar.Clear()
+			docVar.Clear()
+			return ""
+		}
+
+		selfVar, err := oleutil.GetProperty(folderDisp, "Self")
+		if err != nil {
+			folderVar.Clear()
+			docVar.Clear()
+			return ""
+		}
+		selfDisp := selfVar.ToIDispatch()
+		if selfDisp == nil {
+			selfVar.Clear()
+			folderVar.Clear()
+			docVar.Clear()
+			return ""
+		}
+
+		pathVar, err := oleutil.GetProperty(selfDisp, "Path")
+		if err != nil {
+			selfVar.Clear()
+			folderVar.Clear()
+			docVar.Clear()
+			return ""
+		}
+
+		p := strings.TrimSpace(pathVar.ToString())
+
+		pathVar.Clear()
+		selfVar.Clear()
+		folderVar.Clear()
+		docVar.Clear()
+
+		return p
+	}
+
+	paths := map[uintptr]string{}
 	for i := 0; i < count; i++ {
 		itemVar, err := oleutil.CallMethod(windowsDisp, "Item", i)
 		if err != nil {
@@ -402,74 +465,39 @@ func GetFileExplorerPathByPid(pid int) string {
 			continue
 		}
 
-		docVar, err := oleutil.GetProperty(wDisp, "Document")
-		if err != nil {
-			itemVar.Clear()
-			continue
-		}
-		docDisp := docVar.ToIDispatch()
-		if docDisp == nil {
-			docVar.Clear()
-			itemVar.Clear()
-			continue
-		}
-
-		folderVar, err := oleutil.GetProperty(docDisp, "Folder")
-		if err != nil {
-			docVar.Clear()
-			itemVar.Clear()
-			continue
-		}
-		folderDisp := folderVar.ToIDispatch()
-		if folderDisp == nil {
-			folderVar.Clear()
-			docVar.Clear()
-			itemVar.Clear()
-			continue
-		}
-
-		selfVar, err := oleutil.GetProperty(folderDisp, "Self")
-		if err != nil {
-			folderVar.Clear()
-			docVar.Clear()
-			itemVar.Clear()
-			continue
-		}
-		selfDisp := selfVar.ToIDispatch()
-		if selfDisp == nil {
-			selfVar.Clear()
-			folderVar.Clear()
-			docVar.Clear()
-			itemVar.Clear()
-			continue
-		}
-
-		pathVar, err := oleutil.GetProperty(selfDisp, "Path")
-		if err != nil {
-			selfVar.Clear()
-			folderVar.Clear()
-			docVar.Clear()
-			itemVar.Clear()
-			continue
-		}
-
-		p := strings.TrimSpace(pathVar.ToString())
-
-		pathVar.Clear()
-		selfVar.Clear()
-		folderVar.Clear()
-		docVar.Clear()
+		p := getPath(wDisp)
 		itemVar.Clear()
+		if p == "" {
+			continue
+		}
+		paths[wnd] = p
+	}
 
+	if len(paths) == 0 {
+		return ""
+	}
+
+	for wnd := win.GetWindow(win.GetDesktopWindow(), win.GW_CHILD); wnd != 0; wnd = win.GetWindow(wnd, win.GW_HWNDNEXT) {
+		if p, ok := paths[uintptr(wnd)]; ok {
+			if win.IsWindowVisible(wnd) && !win.IsIconic(wnd) {
+				return p
+			}
+		}
+	}
+
+	for _, p := range paths {
 		return p
 	}
 
 	return ""
 }
 
-// NavigateActiveFileExplorer navigates the currently active Explorer window to the specified path.
-// Returns true if successful, false otherwise.
-func NavigateActiveFileExplorer(targetPath string) bool {
+// NavigateFileExplorerByPid navigates an Explorer window owned by pid to the specified path.
+func NavigateFileExplorerByPid(pid int, targetPath string) bool {
+	if pid <= 0 || targetPath == "" {
+		return false
+	}
+
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
@@ -494,12 +522,6 @@ func NavigateActiveFileExplorer(targetPath string) bool {
 		defer ole.CoUninitialize()
 	}
 
-	fg := win.GetForegroundWindow()
-	if fg == 0 {
-		return false
-	}
-
-	// Shell.Application automation to enumerate shell windows
 	unknown, err := oleutil.CreateObject("Shell.Application")
 	if err != nil {
 		return false
@@ -529,6 +551,7 @@ func NavigateActiveFileExplorer(targetPath string) bool {
 	count := int(countVar.Val)
 	countVar.Clear()
 
+	hwnds := map[uintptr]struct{}{}
 	for i := 0; i < count; i++ {
 		itemVar, err := oleutil.CallMethod(windowsDisp, "Item", i)
 		if err != nil {
@@ -548,12 +571,62 @@ func NavigateActiveFileExplorer(targetPath string) bool {
 		wnd := uintptr(hwndVar.Val)
 		hwndVar.Clear()
 
-		if wnd != uintptr(fg) {
+		var wndPid uint32
+		win.GetWindowThreadProcessId(win.HWND(wnd), &wndPid)
+		if int(wndPid) == pid {
+			hwnds[wnd] = struct{}{}
+		}
+
+		itemVar.Clear()
+	}
+
+	if len(hwnds) == 0 {
+		return false
+	}
+
+	var target uintptr
+	for wnd := win.GetWindow(win.GetDesktopWindow(), win.GW_CHILD); wnd != 0; wnd = win.GetWindow(wnd, win.GW_HWNDNEXT) {
+		if _, ok := hwnds[uintptr(wnd)]; ok {
+			if win.IsWindowVisible(wnd) && !win.IsIconic(wnd) {
+				target = uintptr(wnd)
+				break
+			}
+		}
+	}
+	if target == 0 {
+		for h := range hwnds {
+			target = h
+			break
+		}
+	}
+	if target == 0 {
+		return false
+	}
+
+	for i := 0; i < count; i++ {
+		itemVar, err := oleutil.CallMethod(windowsDisp, "Item", i)
+		if err != nil {
+			continue
+		}
+		wDisp := itemVar.ToIDispatch()
+		if wDisp == nil {
 			itemVar.Clear()
 			continue
 		}
 
-		// Found the foreground Explorer window, navigate to the target path
+		hwndVar, err := oleutil.GetProperty(wDisp, "HWND")
+		if err != nil {
+			itemVar.Clear()
+			continue
+		}
+		wnd := uintptr(hwndVar.Val)
+		hwndVar.Clear()
+
+		if wnd != target {
+			itemVar.Clear()
+			continue
+		}
+
 		_, err = oleutil.CallMethod(wDisp, "Navigate", targetPath)
 		itemVar.Clear()
 		return err == nil
@@ -561,6 +634,7 @@ func NavigateActiveFileExplorer(targetPath string) bool {
 
 	return false
 }
+
 
 // GetOpenFinderWindowPaths returns a list of paths for all currently open Finder windows.
 // Not applicable on Windows.
