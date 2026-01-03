@@ -1,12 +1,14 @@
 package system
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path"
 	"strings"
+	texttmpl "text/template"
 	"time"
 	"wox/common"
 	"wox/i18n"
@@ -1150,30 +1152,46 @@ func (w *WPMPlugin) createScriptPluginWithTemplate(ctx context.Context, template
 		w.api.Notify(ctx, fmt.Sprintf("i18n:plugin_wpm_overwriting_script_plugin: %s", scriptFileName))
 	}
 
-	// Replace template variables
-	templateString := string(templateContent)
-	pluginId := strings.ReplaceAll(strings.ToLower(cleanPluginName), " ", "-")
 	triggerKeyword := strings.ToLower(strings.ReplaceAll(cleanPluginName, " ", ""))
 	if len(triggerKeyword) > 10 {
 		triggerKeyword = triggerKeyword[:10]
 	}
 
-	// Replace template placeholders
-	templateString = strings.ReplaceAll(templateString, "script-plugin-template", pluginId)
-	templateString = strings.ReplaceAll(templateString, "python-script-template", pluginId)
-	templateString = strings.ReplaceAll(templateString, "bash-script-template", pluginId)
-	templateString = strings.ReplaceAll(templateString, "Script Plugin Template", cleanPluginName)
-	templateString = strings.ReplaceAll(templateString, "Python Script Template", cleanPluginName)
-	templateString = strings.ReplaceAll(templateString, "Bash Script Template", cleanPluginName)
-	templateString = strings.ReplaceAll(templateString, "spt", triggerKeyword)
-	templateString = strings.ReplaceAll(templateString, "pst", triggerKeyword)
-	templateString = strings.ReplaceAll(templateString, "bst", triggerKeyword)
-	templateString = strings.ReplaceAll(templateString, "A template for Wox script plugins", fmt.Sprintf("A script plugin for %s", cleanPluginName))
-	templateString = strings.ReplaceAll(templateString, "A Python template for Wox script plugins", fmt.Sprintf("A script plugin for %s", cleanPluginName))
-	templateString = strings.ReplaceAll(templateString, "A Bash template for Wox script plugins", fmt.Sprintf("A script plugin for %s", cleanPluginName))
+	triggerKeywordsJSON, err := json.Marshal([]string{triggerKeyword})
+	if err != nil {
+		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to render template: %s", err.Error()))
+		w.api.Notify(ctx, fmt.Sprintf("i18n:plugin_wpm_render_template_failed: %s", err.Error()))
+		return
+	}
+
+	templateData := struct {
+		PluginID            string
+		Name                string
+		Description         string
+		TriggerKeywordsJSON string
+	}{
+		PluginID:            uuid.NewString(),
+		Name:                cleanPluginName,
+		Description:         fmt.Sprintf("A script plugin for %s", cleanPluginName),
+		TriggerKeywordsJSON: string(triggerKeywordsJSON),
+	}
+
+	scriptTemplate, err := texttmpl.New("script-plugin").Option("missingkey=error").Parse(string(templateContent))
+	if err != nil {
+		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to render template: %s", err.Error()))
+		w.api.Notify(ctx, fmt.Sprintf("i18n:plugin_wpm_render_template_failed: %s", err.Error()))
+		return
+	}
+
+	var renderedTemplate bytes.Buffer
+	if err := scriptTemplate.Execute(&renderedTemplate, templateData); err != nil {
+		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to render template: %s", err.Error()))
+		w.api.Notify(ctx, fmt.Sprintf("i18n:plugin_wpm_render_template_failed: %s", err.Error()))
+		return
+	}
 
 	// Write the script file
-	err = os.WriteFile(scriptFilePath, []byte(templateString), 0755)
+	err = os.WriteFile(scriptFilePath, renderedTemplate.Bytes(), 0755)
 	if err != nil {
 		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to write script file: %s", err.Error()))
 		w.api.Notify(ctx, fmt.Sprintf("i18n:plugin_wpm_create_script_file_failed: %s", err.Error()))
@@ -1183,6 +1201,12 @@ func (w *WPMPlugin) createScriptPluginWithTemplate(ctx context.Context, template
 	// Show success notification
 	w.api.Notify(ctx, fmt.Sprintf("i18n:plugin_wpm_script_plugin_created_success: %s", scriptFileName))
 	w.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Created script plugin: %s", scriptFilePath))
+	openErr := shell.Open(path.Dir(scriptFilePath))
+	if openErr != nil {
+		w.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_open_directory_failed"), openErr.Error()))
+	} else {
+		w.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_wpm_script_plugin_opened_directory"), scriptFileName))
+	}
 
 	// Actively trigger script plugin loading instead of waiting
 	util.Go(ctx, "load script plugin immediately", func() {
