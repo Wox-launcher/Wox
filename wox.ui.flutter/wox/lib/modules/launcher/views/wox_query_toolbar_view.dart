@@ -115,7 +115,7 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
                             tooltip: '',
                             onSelected: (value) async {
                               final text = toolbarInfo.text ?? '';
-                              await WoxApi.instance.toolbarSnooze(text, value);
+                              await WoxApi.instance.toolbarSnooze(const UuidV4().generate(), text, value);
                               // Hide current toolbar message immediately
                               controller.toolbar.value = controller.toolbar.value.emptyLeftSide();
                             },

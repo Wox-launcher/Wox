@@ -187,7 +187,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
               flex: (100 - controller.resultPreviewRatio.value * 100).toInt(),
               child: controller.currentPreview.value.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_REMOTE.code
                   ? FutureBuilder(
-                      future: controller.currentPreview.value.unWrap(),
+                      future: controller.currentPreview.value.unWrap(const UuidV4().generate()),
                       builder: (context, snapshot) {
                         if (snapshot.hasData) {
                           return WoxPreviewView(

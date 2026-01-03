@@ -100,6 +100,17 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/toolbar/snooze": handleToolbarSnooze,
 }
 
+const traceIdHeader = "TraceId"
+
+func getTraceContext(r *http.Request) context.Context {
+	traceId := strings.TrimSpace(r.Header.Get(traceIdHeader))
+	if traceId != "" {
+		return util.NewTraceContextWith(traceId)
+	}
+
+	return util.NewTraceContext()
+}
+
 func handleHome(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, "Wox")
 }
@@ -115,7 +126,7 @@ func handlePreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	preview, err := plugin.GetPluginManager().GetResultPreview(util.NewTraceContext(), id)
+	preview, err := plugin.GetPluginManager().GetResultPreview(getTraceContext(r), id)
 	if err != nil {
 		writeErrorResponse(w, err.Error())
 		return
@@ -125,13 +136,13 @@ func handlePreview(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleTheme(w http.ResponseWriter, r *http.Request) {
-	theme := GetUIManager().GetCurrentTheme(util.NewTraceContext())
+	theme := GetUIManager().GetCurrentTheme(getTraceContext(r))
 	writeSuccessResponse(w, theme)
 }
 
 func handlePluginStore(w http.ResponseWriter, r *http.Request) {
-	getCtx := util.NewTraceContext()
-	manifests := plugin.GetStoreManager().GetStorePluginManifests(util.NewTraceContext())
+	getCtx := getTraceContext(r)
+	manifests := plugin.GetStoreManager().GetStorePluginManifests(getTraceContext(r))
 	var plugins = make([]dto.PluginDto, len(manifests))
 	copyErr := copier.Copy(&plugins, &manifests)
 	if copyErr != nil {
@@ -160,9 +171,9 @@ func handlePluginStore(w http.ResponseWriter, r *http.Request) {
 }
 
 func handlePluginInstalled(w http.ResponseWriter, r *http.Request) {
-	defer util.GoRecover(util.NewTraceContext(), "get installed plugins")
+	defer util.GoRecover(getTraceContext(r), "get installed plugins")
 
-	getCtx := util.NewTraceContext()
+	getCtx := getTraceContext(r)
 	instances := plugin.GetPluginManager().GetPluginInstances()
 	var plugins []dto.PluginDto
 	for _, pluginInstance := range instances {
@@ -213,7 +224,7 @@ func convertPluginInstanceToDto(ctx context.Context, pluginInstance *plugin.Inst
 }
 
 func handlePluginInstall(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
+	ctx := getTraceContext(r)
 
 	body, _ := io.ReadAll(r.Body)
 	idResult := gjson.GetBytes(body, "id")
@@ -248,7 +259,7 @@ func handlePluginInstall(w http.ResponseWriter, r *http.Request) {
 }
 
 func handlePluginUninstall(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
+	ctx := getTraceContext(r)
 
 	body, _ := io.ReadAll(r.Body)
 	idResult := gjson.GetBytes(body, "id")
@@ -330,7 +341,7 @@ func handlePluginEnable(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleThemeStore(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
+	ctx := getTraceContext(r)
 
 	storeThemes := GetStoreManager().GetThemes()
 	var themes = make([]dto.ThemeDto, len(storeThemes))
@@ -353,7 +364,7 @@ func handleThemeStore(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleThemeInstalled(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
+	ctx := getTraceContext(r)
 
 	installedThemes := GetUIManager().GetAllThemes(ctx)
 	var themes = make([]dto.ThemeDto, len(installedThemes))
@@ -372,7 +383,7 @@ func handleThemeInstalled(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleThemeInstall(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
+	ctx := getTraceContext(r)
 	body, _ := io.ReadAll(r.Body)
 	idResult := gjson.GetBytes(body, "id")
 	if !idResult.Exists() {
@@ -404,7 +415,7 @@ func handleThemeInstall(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleThemeUninstall(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
+	ctx := getTraceContext(r)
 
 	body, _ := io.ReadAll(r.Body)
 	idResult := gjson.GetBytes(body, "id")
@@ -439,7 +450,7 @@ func handleThemeUninstall(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleThemeApply(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
+	ctx := getTraceContext(r)
 
 	body, _ := io.ReadAll(r.Body)
 	idResult := gjson.GetBytes(body, "id")
@@ -465,7 +476,7 @@ func handleThemeApply(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleSettingWox(w http.ResponseWriter, r *http.Request) {
-	woxSetting := setting.GetSettingManager().GetWoxSetting(util.NewTraceContext())
+	woxSetting := setting.GetSettingManager().GetWoxSetting(getTraceContext(r))
 
 	var settingDto dto.WoxSettingDto
 	settingDto.EnableAutostart = woxSetting.EnableAutostart.Get()
@@ -514,7 +525,7 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := util.NewTraceContext()
+	ctx := getTraceContext(r)
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 
 	var vb bool
@@ -602,13 +613,13 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	GetUIManager().PostSettingUpdate(util.NewTraceContext(), kv.Key, kv.Value)
+	GetUIManager().PostSettingUpdate(getTraceContext(r), kv.Key, kv.Value)
 
 	writeSuccessResponse(w, "")
 }
 
 func handleRuntimeStatus(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
+	ctx := getTraceContext(r)
 	instances := plugin.GetPluginManager().GetPluginInstances()
 
 	statuses := make([]dto.RuntimeStatusDto, 0, len(plugin.AllHosts))
@@ -676,7 +687,7 @@ func handleSettingPluginUpdate(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 		}
-		pluginInstance.API.SaveSetting(util.NewTraceContext(), kv.Key, kv.Value, isPlatformSpecific)
+		pluginInstance.API.SaveSetting(getTraceContext(r), kv.Key, kv.Value, isPlatformSpecific)
 	}
 
 	writeSuccessResponse(w, "")
@@ -696,7 +707,7 @@ func handleOpen(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleSaveWindowPosition(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
+	ctx := getTraceContext(r)
 
 	type positionData struct {
 		X int `json:"x"`
@@ -721,7 +732,7 @@ func handleSaveWindowPosition(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleBackupNow(w http.ResponseWriter, r *http.Request) {
-	backupErr := setting.GetSettingManager().Backup(util.NewTraceContext(), setting.BackupTypeManual)
+	backupErr := setting.GetSettingManager().Backup(getTraceContext(r), setting.BackupTypeManual)
 	if backupErr != nil {
 		writeErrorResponse(w, backupErr.Error())
 		return
@@ -739,7 +750,7 @@ func handleBackupRestore(w http.ResponseWriter, r *http.Request) {
 	}
 
 	backupId := idResult.String()
-	restoreErr := setting.GetSettingManager().Restore(util.NewTraceContext(), backupId)
+	restoreErr := setting.GetSettingManager().Restore(getTraceContext(r), backupId)
 	if restoreErr != nil {
 		writeErrorResponse(w, restoreErr.Error())
 		return
@@ -749,7 +760,7 @@ func handleBackupRestore(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleBackupAll(w http.ResponseWriter, r *http.Request) {
-	backups, err := setting.GetSettingManager().FindAllBackups(util.NewTraceContext())
+	backups, err := setting.GetSettingManager().FindAllBackups(getTraceContext(r))
 	if err != nil {
 		writeErrorResponse(w, err.Error())
 		return
@@ -771,7 +782,7 @@ func handleBackupFolder(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleHotkeyAvailable(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
+	ctx := getTraceContext(r)
 
 	body, _ := io.ReadAll(r.Body)
 	hotkeyResult := gjson.GetBytes(body, "hotkey")
@@ -785,19 +796,19 @@ func handleHotkeyAvailable(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleShow(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
+	ctx := getTraceContext(r)
 	GetUIManager().GetUI(ctx).ShowApp(ctx, common.ShowContext{SelectAll: true})
 	writeSuccessResponse(w, "")
 }
 
 func handleOnUIReady(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
+	ctx := getTraceContext(r)
 	GetUIManager().PostUIReady(ctx)
 	writeSuccessResponse(w, "")
 }
 
 func handleOnFocusLost(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
+	ctx := getTraceContext(r)
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	if woxSetting.HideOnLostFocus.Get() {
 		GetUIManager().GetUI(ctx).HideApp(ctx)
@@ -810,7 +821,7 @@ func handleLangAvailable(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleLangJson(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
+	ctx := getTraceContext(r)
 
 	body, _ := io.ReadAll(r.Body)
 	langCodeResult := gjson.GetBytes(body, "langCode")
@@ -837,25 +848,25 @@ func handleLangJson(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleOnShow(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
+	ctx := getTraceContext(r)
 	GetUIManager().PostOnShow(ctx)
 	writeSuccessResponse(w, "")
 }
 
 func handleOnQueryBoxFocus(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
+	ctx := getTraceContext(r)
 	GetUIManager().PostOnQueryBoxFocus(ctx)
 	writeSuccessResponse(w, "")
 }
 
 func handleOnHide(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
+	ctx := getTraceContext(r)
 	GetUIManager().PostOnHide(ctx)
 	writeSuccessResponse(w, "")
 }
 
 func handleQueryMetadata(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
+	ctx := getTraceContext(r)
 
 	type metadataResponse struct {
 		Icon             common.WoxImage
@@ -949,7 +960,7 @@ func handleQueryMetadata(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleDeeplink(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
+	ctx := getTraceContext(r)
 
 	body, _ := io.ReadAll(r.Body)
 	deeplinkResult := gjson.GetBytes(body, "deeplink")
@@ -969,7 +980,7 @@ func handleAIProviders(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAIModels(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
+	ctx := getTraceContext(r)
 
 	var results = []common.Model{}
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
@@ -995,7 +1006,7 @@ func handleAIModels(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAIPing(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
+	ctx := getTraceContext(r)
 
 	body, _ := io.ReadAll(r.Body)
 	providerResult := gjson.GetBytes(body, "name")
@@ -1035,7 +1046,7 @@ func handleAIPing(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAIChat(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
+	ctx := getTraceContext(r)
 
 	body, _ := io.ReadAll(r.Body)
 	chatDataResult := gjson.GetBytes(body, "chatData")
@@ -1064,7 +1075,7 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAIMCPServerToolsAll(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
+	ctx := getTraceContext(r)
 
 	chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx)
 	if chater == nil {
@@ -1085,7 +1096,7 @@ func handleAIMCPServerToolsAll(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAIAgents(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
+	ctx := getTraceContext(r)
 
 	chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx)
 	if chater == nil {
@@ -1098,7 +1109,7 @@ func handleAIAgents(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAIDefaultModel(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
+	ctx := getTraceContext(r)
 
 	chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx)
 	if chater == nil {
@@ -1111,7 +1122,7 @@ func handleAIDefaultModel(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAIMCPServerTools(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
+	ctx := getTraceContext(r)
 
 	body, _ := io.ReadAll(r.Body)
 	mcpConfigResult := gjson.ParseBytes(body)
@@ -1147,7 +1158,7 @@ func handleAIMCPServerTools(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleDoctorCheck(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
+	ctx := getTraceContext(r)
 	results := plugin.RunDoctorChecks(ctx)
 	writeSuccessResponse(w, results)
 }
@@ -1158,7 +1169,7 @@ func handleUserDataLocation(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleUserDataLocationUpdate(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
+	ctx := getTraceContext(r)
 	logger.Info(ctx, "Updating user data directory location")
 
 	body, _ := io.ReadAll(r.Body)
@@ -1187,7 +1198,7 @@ func handleUserDataLocationUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 func handlePluginDetail(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
+	ctx := getTraceContext(r)
 
 	body, _ := io.ReadAll(r.Body)
 	idResult := gjson.GetBytes(body, "id")
@@ -1215,7 +1226,7 @@ func handlePluginDetail(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleToolbarSnooze(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
+	ctx := getTraceContext(r)
 
 	body, _ := io.ReadAll(r.Body)
 	textResult := gjson.GetBytes(body, "text")
@@ -1271,7 +1282,7 @@ func handleQueryMRU(w http.ResponseWriter, r *http.Request) {
 	if traceIdResult.Exists() && traceIdResult.String() != "" {
 		ctx = util.NewTraceContextWith(traceIdResult.String())
 	} else {
-		ctx = util.NewTraceContext()
+		ctx = getTraceContext(r)
 	}
 
 	mruResults := plugin.GetPluginManager().QueryMRU(ctx)

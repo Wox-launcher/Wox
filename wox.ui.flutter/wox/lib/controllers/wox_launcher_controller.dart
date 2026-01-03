@@ -177,7 +177,7 @@ class WoxLauncherController extends GetxController {
         hideFormActionPanel(traceId);
 
         // Call API when query box gains focus
-        WoxApi.instance.onQueryBoxFocus();
+        WoxApi.instance.onQueryBoxFocus(traceId);
       }
     });
 
@@ -427,7 +427,7 @@ class WoxLauncherController extends GetxController {
       }
     }
 
-    WoxApi.instance.onShow();
+    WoxApi.instance.onShow(traceId);
   }
 
   Future<void> hideApp(String traceId) async {
@@ -453,7 +453,7 @@ class WoxLauncherController extends GetxController {
     isInSettingView.value = false;
 
     await windowManager.hide();
-    await WoxApi.instance.onHide();
+    await WoxApi.instance.onHide(traceId);
   }
 
   void saveWindowPositionIfNeeded() {
@@ -461,11 +461,12 @@ class WoxLauncherController extends GetxController {
     if (setting.showPosition == WoxPositionTypeEnum.POSITION_TYPE_LAST_LOCATION.code) {
       // Run in async task with delay to ensure window position is fully updated
       Future.delayed(const Duration(milliseconds: 500), () async {
+        final traceId = const UuidV4().generate();
         try {
           final position = await windowManager.getPosition();
-          await WoxApi.instance.saveWindowPosition(position.dx.toInt(), position.dy.toInt());
+          await WoxApi.instance.saveWindowPosition(traceId, position.dx.toInt(), position.dy.toInt());
         } catch (e) {
-          Logger.instance.error(const UuidV4().generate(), "Failed to save window position: $e");
+          Logger.instance.error(traceId, "Failed to save window position: $e");
         }
       });
     }
@@ -880,7 +881,7 @@ class WoxLauncherController extends GetxController {
       Get.find<WoxSettingController>().reloadPlugins(msg.traceId);
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "ReloadSetting") {
-      await Get.find<WoxSettingController>().reloadSetting();
+      await Get.find<WoxSettingController>().reloadSetting(msg.traceId);
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "UpdateResult") {
       final success = updateResult(msg.traceId, UpdatableResult.fromJson(msg.data));
@@ -1222,11 +1223,12 @@ class WoxLauncherController extends GetxController {
   }
 
   void doctorCheck() async {
-    var results = await WoxApi.instance.doctorCheck();
+    final traceId = const UuidV4().generate();
+    var results = await WoxApi.instance.doctorCheck(traceId);
     final checkInfo = processDoctorCheckResults(results);
     doctorCheckInfo.value = checkInfo;
-    updateDoctorToolbarIfNeeded(const UuidV4().generate());
-    Logger.instance.debug(const UuidV4().generate(), "doctor check result: ${checkInfo.allPassed}, details: ${checkInfo.results.length} items");
+    updateDoctorToolbarIfNeeded(traceId);
+    Logger.instance.debug(traceId, "doctor check result: ${checkInfo.allPassed}, details: ${checkInfo.results.length} items");
   }
 
   @override
@@ -1253,8 +1255,8 @@ class WoxLauncherController extends GetxController {
     isInSettingView.value = true;
 
     // Preload theme/settings for settings view
-    await WoxThemeUtil.instance.loadTheme();
-    await WoxSettingUtil.instance.loadSetting();
+    await WoxThemeUtil.instance.loadTheme(traceId);
+    await WoxSettingUtil.instance.loadSetting(traceId);
     settingController.activeNavPath.value = 'general';
 
     if (context.path == "/plugin/setting") {
@@ -1541,7 +1543,8 @@ class WoxLauncherController extends GetxController {
   }
 
   Future<void> handleDropFiles(DropDoneDetails details) async {
-    Logger.instance.info(const UuidV4().generate(), "Received drop files: $details");
+    final traceId = const UuidV4().generate();
+    Logger.instance.info(traceId, "Received drop files: $details");
 
     await windowManager.focus();
     focusQueryBox();
@@ -1555,7 +1558,7 @@ class WoxLauncherController extends GetxController {
       querySelection: Selection(type: WoxSelectionTypeEnum.WOX_SELECTION_TYPE_FILE.code, text: "", filePaths: details.files.map((e) => e.path).toList()),
     );
 
-    onQueryChanged(const UuidV4().generate(), woxChangeQuery, "user drop files");
+    onQueryChanged(traceId, woxChangeQuery, "user drop files");
   }
 
   /// Update the plugin metadata based on the query
@@ -1564,7 +1567,7 @@ class WoxLauncherController extends GetxController {
     var queryMetadata = QueryMetadata(icon: WoxImage.empty(), resultPreviewWidthRatio: 0.5, isGridLayout: false, gridLayoutParams: GridLayoutParams.empty());
     if (!query.isEmpty && query.queryText.contains(" ")) {
       // if there is space in the query, then this  may be a plugin query, fetch metadata
-      queryMetadata = await WoxApi.instance.getQueryMetadata(query);
+      queryMetadata = await WoxApi.instance.getQueryMetadata(traceId, query);
     }
 
     updateQueryIconOnQueryChanged(traceId, query, queryMetadata);

@@ -256,7 +256,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
       var host = row["Host"] ?? "";
 
       return FutureBuilder<String>(
-        future: WoxApi.instance.pingAIModel(providerName, modelName, host),
+        future: WoxApi.instance.pingAIModel(const UuidV4().generate(), providerName, modelName, host),
         builder: (context, snapshot) {
           return columnWidth(
             column: column,
@@ -281,7 +281,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
       }
 
       return FutureBuilder<List<AIMCPTool>>(
-        future: WoxApi.instance.findAIMCPServerTools(row),
+        future: WoxApi.instance.findAIMCPServerTools(const UuidV4().generate(), row),
         builder: (context, snapshot) {
           return columnWidth(
             column: column,

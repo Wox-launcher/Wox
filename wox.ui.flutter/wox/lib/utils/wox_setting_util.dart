@@ -10,8 +10,8 @@ class WoxSettingUtil {
 
   static WoxSettingUtil get instance => _instance;
 
-  Future<void> loadSetting() async {
-    _currentSetting = await WoxApi.instance.loadSetting();
+  Future<void> loadSetting(String traceId) async {
+    _currentSetting = await WoxApi.instance.loadSetting(traceId);
   }
 
   WoxSetting get currentSetting => _currentSetting;

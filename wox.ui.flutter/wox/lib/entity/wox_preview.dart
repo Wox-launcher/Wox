@@ -41,9 +41,9 @@ class WoxPreview {
   }
 
   // unwrap the remote preview
-  Future<WoxPreview> unWrap() async {
+  Future<WoxPreview> unWrap(String traceId) async {
     if (previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_REMOTE.code) {
-      return await WoxHttpUtil.instance.getData<WoxPreview>(previewData);
+      return await WoxHttpUtil.instance.getData<WoxPreview>(traceId, previewData);
     }
 
     return this;

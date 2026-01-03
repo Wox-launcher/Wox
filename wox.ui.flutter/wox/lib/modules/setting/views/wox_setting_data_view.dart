@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart' hide DataTable;
 import 'package:get/get.dart';
+import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_switch.dart';
 import 'package:wox/components/wox_path_finder.dart';
@@ -25,7 +26,7 @@ class WoxSettingDataView extends WoxSettingBaseView {
           text: controller.tr("ui_data_backup_folder_link"),
           onPressed: () async {
             try {
-              final backupPath = await WoxApi.instance.getBackupFolder();
+              final backupPath = await WoxApi.instance.getBackupFolder(const UuidV4().generate());
               await controller.openFolder(backupPath);
             } catch (e) {
               // Handle error silently or show a notification

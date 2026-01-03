@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
+import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_ai_model_selector_view.dart';
 import 'package:wox/components/wox_button.dart';
@@ -301,7 +302,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
   // Load all tools list
   Future<void> _loadAllTools() async {
     try {
-      final tools = await WoxApi.instance.findAIMCPServerToolsAll();
+      final tools = await WoxApi.instance.findAIMCPServerToolsAll(const UuidV4().generate());
       if (mounted) {
         setState(() {
           allMCPTools = tools;

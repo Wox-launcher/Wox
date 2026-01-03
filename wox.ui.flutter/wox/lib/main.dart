@@ -48,11 +48,13 @@ Future<void> initArgs(List<String> arguments) async {
 }
 
 Future<void> initialServices(List<String> arguments) async {
+  final traceId = const UuidV4().generate();
+
   WidgetsFlutterBinding.ensureInitialized();
   await Logger.instance.initLogger();
   await initArgs(arguments);
-  await WoxThemeUtil.instance.loadTheme();
-  await WoxSettingUtil.instance.loadSetting();
+  await WoxThemeUtil.instance.loadTheme(traceId);
+  await WoxSettingUtil.instance.loadSetting(traceId);
 
   var launcherController = WoxLauncherController();
 
@@ -101,15 +103,7 @@ class MyApp extends StatelessWidget {
       labelSmall: baseTextTheme.labelSmall?.copyWith(fontSize: 11),
     );
 
-    return MaterialApp(
-      navigatorKey: Get.key,
-      theme: ThemeData(
-        useMaterial3: true,
-        textTheme: scaledTextTheme,
-      ),
-      debugShowCheckedModeBanner: false,
-      home: const WoxApp(),
-    );
+    return MaterialApp(navigatorKey: Get.key, theme: ThemeData(useMaterial3: true, textTheme: scaledTextTheme), debugShowCheckedModeBanner: false, home: const WoxApp());
   }
 }
 
@@ -141,14 +135,15 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
       launcherController.resizeHeight();
 
       // Notify the backend that the UI is ready. The server-side will determine whether to display the UI window.
-      WoxApi.instance.onUIReady();
+      WoxApi.instance.onUIReady(startupTraceId);
     });
   }
 
   @override
   void onProtocolUrlReceived(String url) {
-    Logger.instance.info(const UuidV4().generate(), "deep link received: $url");
-    WoxApi.instance.onProtocolUrlReceived(url);
+    final traceId = const UuidV4().generate();
+    Logger.instance.info(traceId, "deep link received: $url");
+    WoxApi.instance.onProtocolUrlReceived(traceId, url);
   }
 
   @override
@@ -173,7 +168,7 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
       return;
     }
 
-    WoxApi.instance.onFocusLost();
+    WoxApi.instance.onFocusLost(const UuidV4().generate());
   }
 
   @override

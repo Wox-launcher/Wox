@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_table_view.dart';
 import 'package:wox/components/wox_hotkey_recorder_view.dart';
@@ -174,7 +175,7 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
         formField(
           label: controller.tr("ui_lang"),
           child: FutureBuilder(
-              future: WoxApi.instance.getAllLanguages(),
+              future: WoxApi.instance.getAllLanguages(const UuidV4().generate()),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.done) {
                   final languages = snapshot.data as List<WoxLang>;

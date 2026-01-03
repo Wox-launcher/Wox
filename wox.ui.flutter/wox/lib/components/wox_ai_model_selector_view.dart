@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_dropdown_button.dart';
@@ -70,7 +71,7 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
     setState(() => _isLoading = true);
 
     try {
-      allModels = await WoxApi.instance.findAIModels();
+      allModels = await WoxApi.instance.findAIModels(const UuidV4().generate());
 
       // Extract unique providers
       providerKeys = allModels.map((e) => makeProviderKey(e.provider, e.providerAlias)).toSet();

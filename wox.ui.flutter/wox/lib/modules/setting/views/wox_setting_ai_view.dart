@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_table_view.dart';
 import 'package:wox/components/wox_switch.dart';
@@ -17,7 +18,7 @@ class WoxSettingAIView extends WoxSettingBaseView {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder(
-      future: WoxApi.instance.findAIProviders(),
+      future: WoxApi.instance.findAIProviders(const UuidV4().generate()),
       builder: (context, snapshot) {
         if (snapshot.hasData) {
           return form(children: [

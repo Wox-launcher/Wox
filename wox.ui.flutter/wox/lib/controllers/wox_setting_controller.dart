@@ -69,7 +69,8 @@ class WoxSettingController extends GetxController {
   }
 
   Future<void> loadWoxVersion() async {
-    final version = await WoxApi.instance.getWoxVersion();
+    final traceId = const UuidV4().generate();
+    final version = await WoxApi.instance.getWoxVersion(traceId);
     woxVersion.value = version;
   }
 
@@ -78,7 +79,7 @@ class WoxSettingController extends GetxController {
     runtimeStatusError.value = '';
     final traceId = const UuidV4().generate();
     try {
-      final statuses = await WoxApi.instance.getRuntimeStatuses();
+      final statuses = await WoxApi.instance.getRuntimeStatuses(traceId);
       runtimeStatuses.assignAll(statuses);
       Logger.instance.info(traceId, 'Runtime statuses loaded, count: ${statuses.length}');
     } catch (e) {
@@ -95,7 +96,7 @@ class WoxSettingController extends GetxController {
     usageStatsError.value = '';
     final traceId = const UuidV4().generate();
     try {
-      final stats = await WoxApi.instance.getUsageStats();
+      final stats = await WoxApi.instance.getUsageStats(traceId);
       usageStats.value = stats;
       Logger.instance.info(traceId, 'Usage stats loaded');
     } catch (e) {
@@ -107,35 +108,34 @@ class WoxSettingController extends GetxController {
     }
   }
 
-  void hideWindow() {
-    final traceId = const UuidV4().generate();
+  void hideWindow(String traceId) {
     Get.find<WoxLauncherController>().exitSetting(traceId);
   }
 
   Future<void> updateConfig(String key, String value) async {
-    await WoxApi.instance.updateSetting(key, value);
-    await reloadSetting();
-    Logger.instance.info(const UuidV4().generate(), 'Setting updated: $key=$value');
+    final traceId = const UuidV4().generate();
+    await WoxApi.instance.updateSetting(traceId, key, value);
+    await reloadSetting(traceId);
+    Logger.instance.info(traceId, 'Setting updated: $key=$value');
 
     // If user switches to last_location, save current window position immediately
     if (key == "ShowPosition" && value == WoxPositionTypeEnum.POSITION_TYPE_LAST_LOCATION.code) {
       try {
         final launcherController = Get.find<WoxLauncherController>();
         launcherController.saveWindowPositionIfNeeded();
-        Logger.instance.info(const UuidV4().generate(), 'Saved current window position when switching to last_location');
+        Logger.instance.info(traceId, 'Saved current window position when switching to last_location');
       } catch (e) {
-        Logger.instance.error(const UuidV4().generate(), 'Failed to save window position when switching to last_location: $e');
+        Logger.instance.error(traceId, 'Failed to save window position when switching to last_location: $e');
       }
     }
   }
 
   Future<void> updateLang(String langCode) async {
     await updateConfig("LangCode", langCode);
-    langMap.value = await WoxApi.instance.getLangJson(langCode);
+    final traceId = const UuidV4().generate();
+    langMap.value = await WoxApi.instance.getLangJson(traceId, langCode);
 
     // Refresh all loaded plugins to update translations
-    final traceId = const UuidV4().generate();
-
     // Reload installed plugins list
     if (installedPlugins.isNotEmpty) {
       await loadInstalledPlugins(traceId);
@@ -171,7 +171,7 @@ class WoxSettingController extends GetxController {
   Future<void> loadStorePlugins(String traceId) async {
     try {
       var start = DateTime.now();
-      final storePluginsFromAPI = await WoxApi.instance.findStorePlugins();
+      final storePluginsFromAPI = await WoxApi.instance.findStorePlugins(traceId);
       storePluginsFromAPI.sort((a, b) => a.name.compareTo(b.name));
       storePlugins.clear();
       storePlugins.addAll(storePluginsFromAPI);
@@ -182,7 +182,7 @@ class WoxSettingController extends GetxController {
   Future<void> loadInstalledPlugins(String traceId) async {
     try {
       var start = DateTime.now();
-      final installedPluginsFromAPI = await WoxApi.instance.findInstalledPlugins();
+      final installedPluginsFromAPI = await WoxApi.instance.findInstalledPlugins(traceId);
       installedPluginsFromAPI.sort((a, b) => a.name.compareTo(b.name));
       installedPlugins.clear();
       installedPlugins.addAll(installedPluginsFromAPI);
@@ -217,11 +217,12 @@ class WoxSettingController extends GetxController {
   }
 
   Future<void> refreshPlugin(String pluginId, String refreshType /* update / add / remove */) async {
-    Logger.instance.info(const UuidV4().generate(), 'Refreshing plugin: $pluginId, refreshType: $refreshType');
+    final traceId = const UuidV4().generate();
+    Logger.instance.info(traceId, 'Refreshing plugin: $pluginId, refreshType: $refreshType');
     if (refreshType == "add") {
-      PluginDetail updatedPlugin = await WoxApi.instance.getPluginDetail(pluginId);
+      PluginDetail updatedPlugin = await WoxApi.instance.getPluginDetail(traceId, pluginId);
       if (updatedPlugin.id.isEmpty) {
-        Logger.instance.info(const UuidV4().generate(), 'Plugin not found: $pluginId');
+        Logger.instance.info(traceId, 'Plugin not found: $pluginId');
         return;
       }
 
@@ -264,9 +265,9 @@ class WoxSettingController extends GetxController {
         activePlugin.value = installedPlugins.isNotEmpty ? installedPlugins[0] : PluginDetail.empty();
       }
     } else if (refreshType == "update") {
-      PluginDetail updatedPlugin = await WoxApi.instance.getPluginDetail(pluginId);
+      PluginDetail updatedPlugin = await WoxApi.instance.getPluginDetail(traceId, pluginId);
       if (updatedPlugin.id.isEmpty) {
-        Logger.instance.info(const UuidV4().generate(), 'Plugin not found: $pluginId');
+        Logger.instance.info(traceId, 'Plugin not found: $pluginId');
         return;
       }
 
@@ -332,8 +333,9 @@ class WoxSettingController extends GetxController {
     try {
       pluginInstallError.value = '';
       isInstallingPlugin.value = true;
-      Logger.instance.info(const UuidV4().generate(), 'installing plugin: ${plugin.name}');
-      await WoxApi.instance.installPlugin(plugin.id);
+      final traceId = const UuidV4().generate();
+      Logger.instance.info(traceId, 'installing plugin: ${plugin.name}');
+      await WoxApi.instance.installPlugin(traceId, plugin.id);
       await refreshPlugin(plugin.id, "add");
     } catch (e) {
       final traceId = const UuidV4().generate();
@@ -345,20 +347,23 @@ class WoxSettingController extends GetxController {
   }
 
   Future<void> disablePlugin(PluginDetail plugin) async {
-    Logger.instance.info(const UuidV4().generate(), 'disabling plugin: ${plugin.name}');
-    await WoxApi.instance.disablePlugin(plugin.id);
+    final traceId = const UuidV4().generate();
+    Logger.instance.info(traceId, 'disabling plugin: ${plugin.name}');
+    await WoxApi.instance.disablePlugin(traceId, plugin.id);
     await refreshPlugin(plugin.id, "update");
   }
 
   Future<void> enablePlugin(PluginDetail plugin) async {
-    Logger.instance.info(const UuidV4().generate(), 'enabling plugin: ${plugin.name}');
-    await WoxApi.instance.enablePlugin(plugin.id);
+    final traceId = const UuidV4().generate();
+    Logger.instance.info(traceId, 'enabling plugin: ${plugin.name}');
+    await WoxApi.instance.enablePlugin(traceId, plugin.id);
     await refreshPlugin(plugin.id, "update");
   }
 
   Future<void> uninstallPlugin(PluginDetail plugin) async {
-    Logger.instance.info(const UuidV4().generate(), 'uninstalling plugin: ${plugin.name}');
-    await WoxApi.instance.uninstallPlugin(plugin.id);
+    final traceId = const UuidV4().generate();
+    Logger.instance.info(traceId, 'uninstalling plugin: ${plugin.name}');
+    await WoxApi.instance.uninstallPlugin(traceId, plugin.id);
     await refreshPlugin(plugin.id, "remove");
   }
 
@@ -394,7 +399,7 @@ class WoxSettingController extends GetxController {
     final traceId = const UuidV4().generate();
     final activeTabIndex = activePluginTabController.index;
 
-    await WoxApi.instance.updatePluginSetting(pluginId, key, value);
+    await WoxApi.instance.updatePluginSetting(traceId, pluginId, key, value);
     await refreshPlugin(pluginId, "update");
     Logger.instance.info(traceId, 'plugin setting updated: $key=$value');
 
@@ -422,7 +427,8 @@ class WoxSettingController extends GetxController {
   // ---------- Themes ----------
 
   Future<void> loadStoreThemes() async {
-    final storeThemes = await WoxApi.instance.findStoreThemes();
+    final traceId = const UuidV4().generate();
+    final storeThemes = await WoxApi.instance.findStoreThemes(traceId);
     storeThemes.sort((a, b) => a.themeName.compareTo(b.themeName));
     themeList.clear();
     for (var theme in storeThemes) {
@@ -435,7 +441,8 @@ class WoxSettingController extends GetxController {
   }
 
   Future<void> loadInstalledThemes() async {
-    final installThemes = await WoxApi.instance.findInstalledThemes();
+    final traceId = const UuidV4().generate();
+    final installThemes = await WoxApi.instance.findInstalledThemes(traceId);
     installThemes.sort((a, b) => a.themeName.compareTo(b.themeName));
     themeList.clear();
     installedThemesList.clear();
@@ -448,28 +455,32 @@ class WoxSettingController extends GetxController {
   }
 
   Future<void> _loadInstalledThemesForLookup() async {
-    final installThemes = await WoxApi.instance.findInstalledThemes();
+    final traceId = const UuidV4().generate();
+    final installThemes = await WoxApi.instance.findInstalledThemes(traceId);
     installedThemesList.clear();
     installedThemesList.addAll(installThemes);
   }
 
   Future<void> installTheme(WoxTheme theme) async {
-    Logger.instance.info(const UuidV4().generate(), 'Installing theme: ${theme.themeId}');
-    await WoxApi.instance.installTheme(theme.themeId);
+    final traceId = const UuidV4().generate();
+    Logger.instance.info(traceId, 'Installing theme: ${theme.themeId}');
+    await WoxApi.instance.installTheme(traceId, theme.themeId);
     await refreshThemeList();
   }
 
   Future<void> uninstallTheme(WoxTheme theme) async {
-    Logger.instance.info(const UuidV4().generate(), 'Uninstalling theme: ${theme.themeId}');
-    await WoxApi.instance.uninstallTheme(theme.themeId);
+    final traceId = const UuidV4().generate();
+    Logger.instance.info(traceId, 'Uninstalling theme: ${theme.themeId}');
+    await WoxApi.instance.uninstallTheme(traceId, theme.themeId);
     await refreshThemeList();
   }
 
   Future<void> applyTheme(WoxTheme theme) async {
-    Logger.instance.info(const UuidV4().generate(), 'Applying theme: ${theme.themeId}');
-    await WoxApi.instance.applyTheme(theme.themeId);
+    final traceId = const UuidV4().generate();
+    Logger.instance.info(traceId, 'Applying theme: ${theme.themeId}');
+    await WoxApi.instance.applyTheme(traceId, theme.themeId);
     await refreshThemeList();
-    await reloadSetting();
+    await reloadSetting(traceId);
   }
 
   void onFilterThemes(String filter) {
@@ -507,37 +518,40 @@ class WoxSettingController extends GetxController {
   }
 
   Future<void> loadUserDataLocation() async {
-    userDataLocation.value = await WoxApi.instance.getUserDataLocation();
+    final traceId = const UuidV4().generate();
+    userDataLocation.value = await WoxApi.instance.getUserDataLocation(traceId);
   }
 
   Future<void> updateUserDataLocation(String newLocation) async {
-    await WoxApi.instance.updateUserDataLocation(newLocation);
+    final traceId = const UuidV4().generate();
+    await WoxApi.instance.updateUserDataLocation(traceId, newLocation);
     userDataLocation.value = newLocation;
   }
 
   Future<void> backupNow() async {
-    await WoxApi.instance.backupNow();
+    await WoxApi.instance.backupNow(const UuidV4().generate());
     refreshBackups();
   }
 
   Future<void> refreshBackups() async {
-    final result = await WoxApi.instance.getAllBackups();
+    final result = await WoxApi.instance.getAllBackups(const UuidV4().generate());
     backups.assignAll(result);
   }
 
   Future<void> openFolder(String path) async {
-    await WoxApi.instance.open(path);
+    await WoxApi.instance.open(const UuidV4().generate(), path);
   }
 
   Future<void> restoreBackup(String id) async {
-    await WoxApi.instance.restoreBackup(id);
-    await reloadSetting();
+    final traceId = const UuidV4().generate();
+    await WoxApi.instance.restoreBackup(traceId, id);
+    await reloadSetting(traceId);
   }
 
-  Future<void> reloadSetting() async {
-    await WoxSettingUtil.instance.loadSetting();
+  Future<void> reloadSetting(String traceId) async {
+    await WoxSettingUtil.instance.loadSetting(traceId);
     woxSetting.value = WoxSettingUtil.instance.currentSetting;
-    Logger.instance.info(const UuidV4().generate(), 'Setting reloaded');
+    Logger.instance.info(traceId, 'Setting reloaded');
   }
 
   @override

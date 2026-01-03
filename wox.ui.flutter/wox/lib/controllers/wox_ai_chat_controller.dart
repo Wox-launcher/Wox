@@ -101,7 +101,7 @@ class WoxAIChatController extends GetxController {
   void reloadAIModels(String traceId) {
     Logger.instance.debug(traceId, "start reloading ai models");
 
-    WoxApi.instance.findAIModels().then((models) {
+    WoxApi.instance.findAIModels(traceId).then((models) {
       aiModels.assignAll(models);
       Logger.instance.debug(traceId, "reload ai models: ${aiModels.length}");
     });
@@ -391,14 +391,14 @@ class WoxAIChatController extends GetxController {
     isLoadingTools.value = true;
 
     try {
-      final tools = await WoxApi.instance.findAIMCPServerToolsAll();
+      final tools = await WoxApi.instance.findAIMCPServerToolsAll(traceId);
       availableTools.assignAll(tools);
       // Default select all tools
       selectedTools.assignAll(tools.map((tool) => tool.name).toSet());
 
-      Logger.instance.debug(const UuidV4().generate(), "AI: loaded ${tools.length} tools");
+      Logger.instance.debug(traceId, "AI: loaded ${tools.length} tools");
     } catch (e, s) {
-      Logger.instance.error(const UuidV4().generate(), 'Error fetching AI tools: $e $s');
+      Logger.instance.error(traceId, 'Error fetching AI tools: $e $s');
       availableTools.clear();
       selectedTools.clear();
     } finally {
@@ -414,7 +414,7 @@ class WoxAIChatController extends GetxController {
     isLoadingAgents.value = true;
 
     try {
-      final agents = await WoxApi.instance.findAIAgents();
+      final agents = await WoxApi.instance.findAIAgents(traceId);
       availableAgents.assignAll(agents);
       Logger.instance.debug(traceId, "AI: loaded ${agents.length} agents");
 
@@ -428,7 +428,7 @@ class WoxAIChatController extends GetxController {
         updateChatSelectItems();
       }
     } catch (e, s) {
-      Logger.instance.error(const UuidV4().generate(), 'AI: Error fetching AI agents: $e $s');
+      Logger.instance.error(traceId, 'AI: Error fetching AI agents: $e $s');
       availableAgents.clear();
     } finally {
       isLoadingAgents.value = false;
@@ -458,7 +458,7 @@ class WoxAIChatController extends GetxController {
     } else {
       Logger.instance.debug(const UuidV4().generate(), "AI: No agent selected (empty agentName), setting default model and all tools");
 
-      _setDefaultModel();
+      _setDefaultModel(const UuidV4().generate());
 
       // Select all available tools
       selectedTools.clear();
@@ -467,8 +467,8 @@ class WoxAIChatController extends GetxController {
     }
   }
 
-  Future<void> _setDefaultModel() async {
-    var defaultModel = await WoxApi.instance.findDefaultAIModel();
+  Future<void> _setDefaultModel(String traceId) async {
+    var defaultModel = await WoxApi.instance.findDefaultAIModel(traceId);
     aiChatData.value.model.value = defaultModel;
   }
 
@@ -520,7 +520,7 @@ class WoxAIChatController extends GetxController {
 
     aiChatData.value.tools = selectedTools.toList();
 
-    WoxApi.instance.sendChatRequest(aiChatData.value);
+    WoxApi.instance.sendChatRequest(const UuidV4().generate(), aiChatData.value);
   }
 
   String formatTimestamp(int timestamp) {
@@ -586,7 +586,7 @@ class WoxAIChatController extends GetxController {
 
     // Send the chat request to regenerate the response
     aiChatData.value.tools = selectedTools.toList();
-    WoxApi.instance.sendChatRequest(aiChatData.value);
+    WoxApi.instance.sendChatRequest(const UuidV4().generate(), aiChatData.value);
   }
 
   // Edit user message

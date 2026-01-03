@@ -161,7 +161,7 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
 
     // Check if hotkey is available and update state
     Logger.instance.debug(const UuidV4().generate(), "Hotkey str: $hotkeyStr");
-    WoxApi.instance.isHotkeyAvailable(hotkeyStr).then((isAvailable) {
+    WoxApi.instance.isHotkeyAvailable(const UuidV4().generate(), hotkeyStr).then((isAvailable) {
       Logger.instance.debug(const UuidV4().generate(), "Hotkey available: $isAvailable");
       if (!isAvailable) {
         return false;

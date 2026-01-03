@@ -229,7 +229,7 @@ class _WoxSettingViewState extends State<WoxSettingView> {
             final traceId = const UuidV4().generate();
             Logger.instance.info(traceId,
                 "[KEYLOG][FLUTTER-SETTING] ESC key pressed, hiding window");
-            controller.hideWindow();
+            controller.hideWindow(traceId);
             return KeyEventResult.handled;
           }
           return KeyEventResult.ignored;
@@ -263,7 +263,8 @@ class _WoxSettingViewState extends State<WoxSettingView> {
                     Container(
                       margin: const EdgeInsets.all(8),
                       child: GestureDetector(
-                        onTap: () => controller.hideWindow(),
+                        onTap: () =>
+                            controller.hideWindow(const UuidV4().generate()),
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 16, vertical: 10),
