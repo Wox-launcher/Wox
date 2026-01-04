@@ -4,18 +4,24 @@
 
 - Add
 
-  - [`Emoji`] Add ai search support for Emoji plugin
+  - [`Emoji`] Add ai search support for Emoji plugin (you need to enable AI feature in settings first)
     ![](screenshots/emoji_ai_search.png)
   - Add auto theme which changes theme based on system light/dark mode
     ![](screenshots/auto_theme.png)
-  - [`Explorer`] Add Explorer plugin to quick switch paths in Open/Save dialog #3259
+  - [`Explorer`] Add Explorer plugin to quick switch paths in Open/Save dialog #3259, see [Explorer plugin guide](www/docs/zh/guide/plugins/system/explorer.md) for more details
 
 - Improve
 
   - Improve markdown preview rendering performance and stability
+  - Critical deletion actions have been implemented to recycle bin, this will prevent accidental data loss #3958
+  - Improve docs website [https://wox-launcher.github.io/Wox/guide/introduction.html](https://wox-launcher.github.io/Wox/guide/introduction.html) 
+  - Support multiple-line text in query input box #3797 
+    ![](https://github.com/user-attachments/assets/64040d63-5d9b-46b4-93a8-449becf70762)
+
 
 - Fix
   - Fix clipboard history cause windows copy mal-function #4309
+  - Fix switching to application alway opens a new window instead of focusing existing one #1922
 
 ## v2.0.0-beta.7 — 2025-12-19
 

@@ -87,7 +87,11 @@ func (r *UrlPlugin) loadRecentUrls(ctx context.Context) []UrlHistory {
 
 func (r *UrlPlugin) getReg() *regexp.Regexp {
 	// based on https://gist.github.com/dperini/729294
-	return regexp.MustCompile(`^(http:\/\/www\.|https:\/\/www\.|http:\/\/|https:\/\/)?[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,5}(:[0-9]{1,5})?(\/.*)?$`)
+	// added support for IP addresses (e.g., 192.168.1.10)
+	// Pattern explanation:
+	// - First alternative: domain names with TLD (e.g., example.com)
+	// - Second alternative: IPv4 addresses (e.g., 192.168.1.10)
+	return regexp.MustCompile(`^(http://www\.|https://www\.|http://|https://)?([a-z0-9]+([\-\.][a-z0-9]+)*\.[a-z]{2,5}|((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?))(:[0-9]{1,5})?(/.*)?$`)
 }
 
 func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {
