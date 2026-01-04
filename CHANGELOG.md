@@ -8,6 +8,7 @@
     ![](screenshots/emoji_ai_search.png)
   - Add auto theme which changes theme based on system light/dark mode
     ![](screenshots/auto_theme.png)
+  - [`Explorer`] Add Explorer plugin to quick switch paths in Open/Save dialog #3259
 
 - Improve
 

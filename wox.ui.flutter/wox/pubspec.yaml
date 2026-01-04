@@ -31,35 +31,33 @@ dependencies:
   flutter:
     sdk: flutter
 
-  web_socket_channel: ^3.0.1
+  web_socket_channel: ^3.0.3
   flutter_acrylic: ^1.1.4
-  get: ^4.6.6
-  logger: ^2.4.0
-  uuid: ^4.5.0
-  flutter_svg: ^2.0.10+1
+  get: ^4.7.3
+  logger: ^2.6.2
+  uuid: ^4.5.2
+  flutter_svg: ^2.2.3
   gpt_markdown: ^1.1.5
-  path_provider: ^2.1.4
-  dio: ^5.7.0
+  path_provider: ^2.1.5
+  dio: ^5.9.0
   from_css_color: ^2.0.0
-  path: ^1.9.0
+  path: ^1.9.1
   chinese_font_library: ^1.2.0
   lpinyin: ^2.0.3
   syncfusion_flutter_pdfviewer: ^31.1.21
   desktop_drop: ^0.7.0
   file_picker: ^10.3.8
   hotkey_manager: ^0.2.3
-  url_launcher: ^6.2.5
+  url_launcher: ^6.3.2
   flutter_image_slideshow: ^0.1.6
-  dynamic_tabbar: ^1.0.6
+  dynamic_tabbar: ^1.0.9
   protocol_handler: ^0.2.0
-  flutter_code_editor: ^0.3.1
+  flutter_code_editor: ^0.3.5
   flutter_highlight: ^0.7.0
   highlight: ^0.7.0
-  lottie: ^3.1.2
+  lottie: ^3.3.2
   extended_text_field: ^16.0.2
-
-dependency_overrides:
-  math_expressions: ^2.7.0
+  math_expressions: ^3.1.0
 
 dev_dependencies:
   flutter_test:
