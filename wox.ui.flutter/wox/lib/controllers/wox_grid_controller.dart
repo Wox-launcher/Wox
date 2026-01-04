@@ -11,13 +11,7 @@ class WoxGridController<T> extends WoxBaseListController<T> {
   // Row height calculated by the view based on available width and columns
   double rowHeight = 0;
 
-  WoxGridController({
-    super.onItemExecuted,
-    super.onItemActive,
-    super.onFilterBoxEscPressed,
-    super.onFilterBoxLostFocus,
-    super.onItemsEmpty,
-  });
+  WoxGridController({super.onItemExecuted, super.onItemActive, super.onFilterBoxEscPressed, super.onFilterBoxLostFocus, super.onItemsEmpty});
 
   void updateGridParams(GridLayoutParams params) {
     gridLayoutParams = params;
@@ -189,8 +183,6 @@ class WoxGridController<T> extends WoxBaseListController<T> {
 
   @override
   void syncScrollPositionWithActiveIndex(String traceId) {
-    Logger.instance.debug(traceId, "sync ScrollPosition for grid, current activeIndex: ${activeIndex.value}, columns: ${gridLayoutParams.columns}");
-
     if (!scrollController.hasClients) {
       Logger.instance.debug(traceId, "ScrollController not attached to any scroll views yet");
       return;

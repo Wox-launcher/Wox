@@ -163,7 +163,6 @@ class WoxLauncherController extends GetxController {
         onItemExecuted: (traceId, item) {
           executeDefaultAction(traceId);
         },
-        onItemActive: onActionItemActivated,
         onFilterBoxEscPressed: hideActionPanel,
       ),
       tag: 'action',
@@ -1535,11 +1534,6 @@ class WoxLauncherController extends GetxController {
 
     // Update toolbar with all actions
     toolbar.value = toolbar.value.copyWith(actions: toolbarActions);
-  }
-
-  void onActionItemActivated(String traceId, WoxListItem<WoxResultAction> item) {
-    Logger.instance.debug(traceId, "on action item activated: ${item.data.name}");
-    // No need to update toolbar here, executeDefaultAction will handle action execution
   }
 
   Future<void> handleDropFiles(DropDoneDetails details) async {

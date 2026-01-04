@@ -5,13 +5,7 @@ import 'package:wox/utils/wox_theme_util.dart';
 
 /// Controller for list view. Handles list-specific navigation and scrolling.
 class WoxListController<T> extends WoxBaseListController<T> {
-  WoxListController({
-    super.onItemExecuted,
-    super.onItemActive,
-    super.onFilterBoxEscPressed,
-    super.onFilterBoxLostFocus,
-    super.onItemsEmpty,
-  });
+  WoxListController({super.onItemExecuted, super.onItemActive, super.onFilterBoxEscPressed, super.onFilterBoxLostFocus, super.onItemsEmpty});
 
   @override
   void updateActiveIndexByDirection(String traceId, WoxDirection direction) {
@@ -71,8 +65,6 @@ class WoxListController<T> extends WoxBaseListController<T> {
 
   @override
   void syncScrollPositionWithActiveIndex(String traceId) {
-    Logger.instance.debug(traceId, "sync ScrollPosition, current activeIndex: ${activeIndex.value}");
-
     if (!scrollController.hasClients) {
       Logger.instance.debug(traceId, "ScrollController not attached to any scroll views yet");
       return;

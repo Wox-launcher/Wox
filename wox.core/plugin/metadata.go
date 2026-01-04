@@ -110,12 +110,12 @@ func (m *Metadata) GetFeatureParamsForDebounce() (MetadataFeatureParamsDebounce,
 	for _, feature := range m.Features {
 		if strings.EqualFold(feature.Name, MetadataFeatureDebounce) {
 			if v, ok := feature.Params["IntervalMs"]; !ok {
-				return MetadataFeatureParamsDebounce{}, errors.New("debounce feature does not have intervalMs param")
+				return MetadataFeatureParamsDebounce{}, errors.New("debounce feature does not have IntervalMs param")
 			} else {
 				if seconds, ok := v.(string); ok {
 					timeInMilliseconds, convertErr := strconv.Atoi(seconds)
 					if convertErr != nil {
-						return MetadataFeatureParamsDebounce{}, fmt.Errorf("debounce feature intervalMs param is not a valid number: %s", convertErr.Error())
+						return MetadataFeatureParamsDebounce{}, fmt.Errorf("debounce feature IntervalMs param is not a valid number: %s", convertErr.Error())
 					}
 					return MetadataFeatureParamsDebounce{
 						IntervalMs: timeInMilliseconds,
@@ -200,11 +200,11 @@ func (m *Metadata) GetFeatureParamsForQueryEnv() (MetadataFeatureParamsQueryEnv,
 	for _, feature := range m.Features {
 		if strings.EqualFold(feature.Name, MetadataFeatureQueryEnv) {
 			params := MetadataFeatureParamsQueryEnv{
-				RequireActiveWindowName: false,
-				RequireActiveWindowPid:  false,
-				RequireActiveWindowIcon: false,
+				RequireActiveWindowName:             false,
+				RequireActiveWindowPid:              false,
+				RequireActiveWindowIcon:             false,
 				RequireActiveWindowIsOpenSaveDialog: false,
-				RequireActiveBrowserUrl: false,
+				RequireActiveBrowserUrl:             false,
 			}
 
 			if v, ok := feature.Params["requireActiveWindowName"]; ok {
@@ -281,11 +281,11 @@ type MetadataFeatureParamsDebounce struct {
 }
 
 type MetadataFeatureParamsQueryEnv struct {
-	RequireActiveWindowName bool
-	RequireActiveWindowPid  bool
-	RequireActiveWindowIcon bool
+	RequireActiveWindowName             bool
+	RequireActiveWindowPid              bool
+	RequireActiveWindowIcon             bool
 	RequireActiveWindowIsOpenSaveDialog bool
-	RequireActiveBrowserUrl bool
+	RequireActiveBrowserUrl             bool
 }
 
 type MetadataFeatureParamsResultPreviewWidthRatio struct {

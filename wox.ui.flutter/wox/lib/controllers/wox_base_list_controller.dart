@@ -29,13 +29,7 @@ abstract class WoxBaseListController<T> extends GetxController {
   final FocusNode filterBoxFocusNode = FocusNode();
   final TextEditingController filterBoxController = TextEditingController();
 
-  WoxBaseListController({
-    this.onItemExecuted,
-    this.onItemActive,
-    this.onFilterBoxEscPressed,
-    this.onFilterBoxLostFocus,
-    this.onItemsEmpty,
-  });
+  WoxBaseListController({this.onItemExecuted, this.onItemActive, this.onFilterBoxEscPressed, this.onFilterBoxLostFocus, this.onItemsEmpty});
 
   @override
   void onInit() {
@@ -65,8 +59,6 @@ abstract class WoxBaseListController<T> extends GetxController {
     if (index < 0 || index >= _items.length) {
       return;
     }
-
-    Logger.instance.debug(traceId, "update active index, before: ${_activeIndex.value}, after: $index");
 
     _activeIndex.value = index;
     syncScrollPositionWithActiveIndex(traceId);
@@ -116,11 +108,7 @@ abstract class WoxBaseListController<T> extends GetxController {
   }
 
   bool isFuzzyMatch(String queryText, String filterText) {
-    return WoxFuzzyMatchUtil.isFuzzyMatch(
-      text: queryText,
-      pattern: filterText,
-      usePinYin: WoxSettingUtil.instance.currentSetting.usePinYin,
-    );
+    return WoxFuzzyMatchUtil.isFuzzyMatch(text: queryText, pattern: filterText, usePinYin: WoxSettingUtil.instance.currentSetting.usePinYin);
   }
 
   void filterItems(String traceId, String filterText, {bool silent = false}) {
