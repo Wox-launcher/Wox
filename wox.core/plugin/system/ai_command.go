@@ -114,9 +114,6 @@ func (c *Plugin) GetMetadata() plugin.Metadata {
 		},
 		Features: []plugin.MetadataFeature{
 			{
-				Name: plugin.MetadataFeatureIgnoreAutoScore,
-			},
-			{
 				Name: plugin.MetadataFeatureQuerySelection,
 			},
 			{
