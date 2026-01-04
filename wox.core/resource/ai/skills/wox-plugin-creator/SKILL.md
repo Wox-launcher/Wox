@@ -11,8 +11,8 @@ description: Create and scaffold Wox plugins (nodejs, python, script-nodejs, scr
   - `python3 scripts/scaffold_wox_plugin.py --type nodejs --output-dir ./MyPlugin`
 - Scaffold a Python plugin (clones template repo):
   - `python3 scripts/scaffold_wox_plugin.py --type python --output-dir ./MyPlugin`
-- Scaffold a script plugin (uses local templates; plugin-id auto-generated):
-  - `python3 scripts/scaffold_wox_plugin.py --type script-nodejs --output-dir ./MyScript --name "My Script" --trigger-keywords my`
+- Scaffold a script plugin (uses local templates; plugin-id auto-generated; single file output):
+  - `python3 scripts/scaffold_wox_plugin.py --type script-nodejs --output-dir ./Wox.Plugin.Script.MyScript.js --name "My Script" --trigger-keywords my`
 
 ## Workflow
 
@@ -20,7 +20,9 @@ description: Create and scaffold Wox plugins (nodejs, python, script-nodejs, scr
 
 - Use `scripts/scaffold_wox_plugin.py` for `nodejs`, `python`, `script-nodejs`, or `script-python`.
 - For Node.js and Python, the scaffold clones the official template repos and replaces placeholders like `{{.ID}}`, `{{.Name}}`, `{{.Description}}`, `{{.TriggerKeywordsJSON}}`, `{{.Author}}`.
+- Script plugins are **single-file** plugins. Prefer filenames like `Wox.Plugin.Script.<Name>.<ext>` (e.g., `Wox.Plugin.Script.Memos.py`).
 - For script plugins, the scaffold copies Wox script templates from `~/.wox/ai/skills/wox-plugin-creator/assets/script_plugin_templates/` and fills metadata placeholders.
+- Prefer standard library features; avoid third-party dependencies unless absolutely necessary.
 - For SDK usage and API details, read `references/sdk_nodejs.md` or `references/sdk_python.md`.
 
 ### 2) Package and publish

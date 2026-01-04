@@ -89,14 +89,11 @@ ensure-resources:
 	@touch wox.core/resource/hosts/placeholder
 	@mkdir -p wox.core/resource/others
 	@touch wox.core/resource/others/placeholder
-	@mkdir -p wox.core/resource/script_plugin_templates
-	@touch wox.core/resource/script_plugin_templates/placeholder
 
 clean-resources:
 	@rm -f wox.core/resource/ui/flutter/placeholder
 	@rm -f wox.core/resource/hosts/placeholder
 	@rm -f wox.core/resource/others/placeholder
-	@rm -f wox.core/resource/script_plugin_templates/placeholder
 
 appimage:
 ifeq ($(PLATFORM),linux)

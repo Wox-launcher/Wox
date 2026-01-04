@@ -30,7 +30,7 @@ Designed for complex, production-grade extensions. Wox manages the lifecycle of 
 
 Designed for simple, one-off tasks or shell scripts.
 
-- Can be Bash, Python, or any executable.
+- Can be Python or Node.js.
 - Stateless and short-lived.
 
 ## Development Workflow

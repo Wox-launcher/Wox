@@ -7,7 +7,7 @@ import subprocess
 import uuid
 from pathlib import Path
 
-RUNTIMES = ["nodejs", "python", "script-nodejs", "script-python", "script-bash"]
+RUNTIMES = ["nodejs", "python", "script-nodejs", "script-python"]
 TEMPLATE_REPOS = {
     "nodejs": "https://github.com/Wox-launcher/Wox.Plugin.Template.Nodejs",
     "python": "https://github.com/Wox-launcher/Wox.Plugin.Template.Python",
@@ -94,12 +94,42 @@ def render_template(content: str, values: dict[str, str]) -> str:
 
 
 def scaffold_script_plugin(
-    template_path: Path, output_dir: Path, entry: str, values: dict[str, str]
+    template_path: Path, output_path: Path, values: dict[str, str]
 ) -> None:
-    output_dir.mkdir(parents=True, exist_ok=True)
     content = template_path.read_text(encoding="utf-8")
-    output_path = output_dir / entry
     output_path.write_text(render_template(content, values), encoding="utf-8")
+
+
+def sanitize_script_name(name: str) -> str:
+    cleaned = "".join(ch for ch in name if ch.isalnum())
+    return cleaned or "Plugin"
+
+
+def default_script_entry(name: str, ext: str) -> str:
+    safe_name = sanitize_script_name(name)
+    return f"Wox.Plugin.Script.{safe_name}.{ext}"
+
+
+def resolve_script_output(
+    output_dir: Path, entry: str, ext: str, force: bool
+) -> tuple[Path, str]:
+    if output_dir.suffix == f".{ext}":
+        if output_dir.exists() and output_dir.is_dir():
+            raise SystemExit(f"Output path is a directory: {output_dir}")
+        if output_dir.exists() and not force:
+            raise SystemExit(
+                f"Output file already exists: {output_dir}. Use --force to overwrite."
+            )
+        output_dir.parent.mkdir(parents=True, exist_ok=True)
+        return output_dir, output_dir.name
+
+    ensure_empty_dir(output_dir, force)
+    output_path = output_dir / entry
+    if output_path.exists() and not force:
+        raise SystemExit(
+            f"Output file already exists: {output_path}. Use --force to overwrite."
+        )
+    return output_path, entry
 
 
 def main() -> None:
@@ -151,19 +181,23 @@ def main() -> None:
         print(f"Cloned {args.type} template into {output_dir}")
         return
 
-    ensure_empty_dir(output_dir, args.force)
     templates_dir = get_skill_templates_dir()
     if args.type == "script-nodejs":
         template_path = templates_dir / "template.js"
-        entry = args.entry or "plugin.js"
+        entry = args.entry or default_script_entry(args.name, "js")
+        output_path, entry_name = resolve_script_output(
+            output_dir, entry, "js", args.force
+        )
     elif args.type == "script-python":
         template_path = templates_dir / "template.py"
-        entry = args.entry or "plugin.py"
+        entry = args.entry or default_script_entry(args.name, "py")
+        output_path, entry_name = resolve_script_output(
+            output_dir, entry, "py", args.force
+        )
     else:
-        template_path = templates_dir / "template.sh"
-        entry = args.entry or "plugin.sh"
-    values["ENTRY"] = entry
-    scaffold_script_plugin(template_path, output_dir, entry, values)
+        raise SystemExit(f"Unsupported script runtime: {args.type}")
+    values["ENTRY"] = entry_name
+    scaffold_script_plugin(template_path, output_path, values)
 
     print(f"Scaffolded {args.type} plugin at {output_dir}")
 
