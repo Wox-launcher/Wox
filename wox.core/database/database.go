@@ -1,9 +1,13 @@
 package database
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
+	"io"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -182,4 +186,139 @@ func runIntegrityChecks(ctx context.Context, sqlDB *sql.DB) {
 	}
 
 	integrityReport = report
+}
+
+type RecoveryResult struct {
+	RecoveredPath string
+	BackupPath    string
+	Swapped       bool
+}
+
+func RecoverDatabase(ctx context.Context) (RecoveryResult, error) {
+	logger := util.GetLogger()
+	result := RecoveryResult{}
+
+	if _, err := exec.LookPath("sqlite3"); err != nil {
+		return result, fmt.Errorf("sqlite3 not found in PATH: %w", err)
+	}
+
+	dbPath := filepath.Join(util.GetLocation().GetUserDataDirectory(), "wox.db")
+	if _, err := os.Stat(dbPath); err != nil {
+		return result, fmt.Errorf("failed to stat database: %w", err)
+	}
+
+	ts := util.GetSystemTimestamp()
+	backupDir := filepath.Join(util.GetLocation().GetBackupDirectory(), fmt.Sprintf("db_repair_%d", ts))
+	if err := os.MkdirAll(backupDir, os.ModePerm); err != nil {
+		return result, fmt.Errorf("failed to create repair directory: %w", err)
+	}
+
+	workingDbPath := filepath.Join(backupDir, "wox.db")
+	if err := copyFile(dbPath, workingDbPath); err != nil {
+		return result, fmt.Errorf("failed to copy database: %w", err)
+	}
+
+	for _, suffix := range []string{"-wal", "-shm"} {
+		src := dbPath + suffix
+		if _, err := os.Stat(src); err == nil {
+			if copyErr := copyFile(src, workingDbPath+suffix); copyErr != nil {
+				logger.Warn(ctx, fmt.Sprintf("failed to copy %s: %v", src, copyErr))
+			}
+		}
+	}
+
+	recoverSQLPath := filepath.Join(backupDir, "recover.sql")
+	sqlFile, err := os.Create(recoverSQLPath)
+	if err != nil {
+		return result, fmt.Errorf("failed to create recovery SQL: %w", err)
+	}
+
+	recoverCmd := exec.Command("sqlite3", workingDbPath, ".recover")
+	recoverCmd.Stdout = sqlFile
+	recoverErrOutput := &bytes.Buffer{}
+	recoverCmd.Stderr = recoverErrOutput
+	if err := recoverCmd.Run(); err != nil {
+		_ = sqlFile.Close()
+		logger.Error(ctx, fmt.Sprintf("sqlite3 .recover stderr: %s", strings.TrimSpace(recoverErrOutput.String())))
+		return result, fmt.Errorf("sqlite3 .recover failed: %w", err)
+	}
+	if err := sqlFile.Close(); err != nil {
+		return result, fmt.Errorf("failed to close recovery SQL: %w", err)
+	}
+
+	recoveredDbPath := filepath.Join(backupDir, "wox.recovered.db")
+
+	recoverInput, err := os.Open(recoverSQLPath)
+	if err != nil {
+		return result, fmt.Errorf("failed to open recovery SQL: %w", err)
+	}
+	defer recoverInput.Close()
+
+	importCmd := exec.Command("sqlite3", recoveredDbPath)
+	importCmd.Stdin = recoverInput
+	importErrOutput := &bytes.Buffer{}
+	importCmd.Stderr = importErrOutput
+	if err := importCmd.Run(); err != nil {
+		logger.Error(ctx, fmt.Sprintf("sqlite3 import stderr: %s", strings.TrimSpace(importErrOutput.String())))
+		return result, fmt.Errorf("sqlite3 import failed: %w", err)
+	}
+
+	checkOutput, err := exec.Command("sqlite3", recoveredDbPath, "PRAGMA integrity_check;").CombinedOutput()
+	if err != nil {
+		return result, fmt.Errorf("sqlite3 integrity_check failed: %w: %s", err, strings.TrimSpace(string(checkOutput)))
+	}
+	if strings.TrimSpace(string(checkOutput)) != "ok" {
+		return result, fmt.Errorf("sqlite3 integrity_check not ok: %s", strings.TrimSpace(string(checkOutput)))
+	}
+	result.RecoveredPath = recoveredDbPath
+
+	backupOriginalPath := fmt.Sprintf("%s.before_repair_%d", dbPath, ts)
+	if err := os.Rename(dbPath, backupOriginalPath); err != nil {
+		result.BackupPath = backupOriginalPath
+		return result, fmt.Errorf("failed to rename original database: %w", err)
+	}
+	result.BackupPath = backupOriginalPath
+
+	for _, suffix := range []string{"-wal", "-shm"} {
+		src := dbPath + suffix
+		if _, err := os.Stat(src); err == nil {
+			if renameErr := os.Rename(src, backupOriginalPath+suffix); renameErr != nil {
+				logger.Warn(ctx, fmt.Sprintf("failed to rename %s: %v", src, renameErr))
+			}
+		}
+	}
+
+	if err := copyFile(recoveredDbPath, dbPath); err != nil {
+		return result, fmt.Errorf("failed to replace database: %w", err)
+	}
+
+	result.Swapped = true
+	result.RecoveredPath = dbPath
+	return result, nil
+}
+
+func copyFile(src, dst string) error {
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	dstFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(dstFile, srcFile); err != nil {
+		_ = dstFile.Close()
+		return err
+	}
+	if err := dstFile.Close(); err != nil {
+		return err
+	}
+
+	if info, err := os.Stat(src); err == nil {
+		_ = os.Chmod(dst, info.Mode())
+	}
+
+	return nil
 }

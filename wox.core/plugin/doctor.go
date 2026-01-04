@@ -26,7 +26,7 @@ type DoctorCheckResult struct {
 	Passed                 bool
 	Description            string
 	ActionName             string
-	Action                 func(ctx context.Context) `json:"-"`
+	Action                 func(ctx context.Context, actionContext ActionContext) `json:"-"`
 	PreventHideAfterAction bool
 }
 
@@ -58,7 +58,7 @@ func checkWoxVersion(ctx context.Context) DoctorCheckResult {
 			Passed:      false,
 			Description: updateInfo.UpdateError.Error(),
 			ActionName:  "",
-			Action: func(ctx context.Context) {
+			Action: func(ctx context.Context, actionContext ActionContext) {
 			},
 		}
 	}
@@ -70,7 +70,7 @@ func checkWoxVersion(ctx context.Context) DoctorCheckResult {
 			Passed:      true,
 			Description: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version_latest"), updateInfo.CurrentVersion),
 			ActionName:  "",
-			Action: func(ctx context.Context) {
+			Action: func(ctx context.Context, actionContext ActionContext) {
 			},
 		}
 	} else {
@@ -81,7 +81,7 @@ func checkWoxVersion(ctx context.Context) DoctorCheckResult {
 			Description:            "i18n:plugin_doctor_version_update_available",
 			ActionName:             "i18n:plugin_doctor_go_to_update",
 			PreventHideAfterAction: true,
-			Action: func(ctx context.Context) {
+			Action: func(ctx context.Context, actionContext ActionContext) {
 				GetPluginManager().GetUI().ChangeQuery(ctx, common.PlainQuery{
 					QueryType: QueryTypeInput,
 					QueryText: "update ",
@@ -101,7 +101,7 @@ func checkAccessibilityPermission(ctx context.Context) DoctorCheckResult {
 			Passed:      false,
 			Description: "i18n:plugin_doctor_accessibility_required",
 			ActionName:  "i18n:plugin_doctor_accessibility_open_settings",
-			Action: func(ctx context.Context) {
+			Action: func(ctx context.Context, actionContext ActionContext) {
 				permission.GrantAccessibilityPermission(ctx)
 			},
 		}
@@ -113,7 +113,7 @@ func checkAccessibilityPermission(ctx context.Context) DoctorCheckResult {
 		Passed:      hasPermission,
 		Description: "i18n:plugin_doctor_accessibility_granted",
 		ActionName:  "",
-		Action: func(ctx context.Context) {
+		Action: func(ctx context.Context, actionContext ActionContext) {
 		},
 	}
 }
@@ -127,7 +127,7 @@ func checkDatabaseHealth(ctx context.Context) DoctorCheckResult {
 			Passed:      true,
 			Description: "i18n:plugin_doctor_database_not_run",
 			ActionName:  "",
-			Action:      func(ctx context.Context) {},
+			Action:      func(ctx context.Context, actionContext ActionContext) {},
 		}
 	}
 
@@ -140,18 +140,49 @@ func checkDatabaseHealth(ctx context.Context) DoctorCheckResult {
 		desc = i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_database_fix_guidance")
 	}
 
+	actionName := ""
+	action := func(ctx context.Context, actionContext ActionContext) {}
+	if !passed {
+		actionName = "i18n:plugin_doctor_database_repair_action"
+		action = func(ctx context.Context, actionContext ActionContext) {
+			GetPluginManager().GetUI().Notify(ctx, common.NotifyMsg{
+				Text:           i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_database_repair_start"),
+				Icon:           common.PluginDoctorIcon.String(),
+				DisplaySeconds: 6,
+			})
+
+			result, err := database.RecoverDatabase(ctx)
+			if err != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("database repair failed: %v", err))
+				if result.RecoveredPath != "" && !result.Swapped {
+					msg := fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_database_repair_manual"), result.RecoveredPath)
+					GetPluginManager().GetUI().Notify(ctx, common.NotifyMsg{Text: msg, Icon: common.PluginDoctorIcon.String(), DisplaySeconds: 6})
+					return
+				}
+				msg := i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_database_repair_failed")
+				GetPluginManager().GetUI().Notify(ctx, common.NotifyMsg{Text: msg, Icon: common.PluginDoctorIcon.String(), DisplaySeconds: 6})
+				GetPluginManager().GetUI().OpenSettingWindow(ctx, common.SettingWindowContext{Path: "/data"})
+				return
+			}
+
+			if result.Swapped {
+				msg := i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_database_repair_success")
+				GetPluginManager().GetUI().Notify(ctx, common.NotifyMsg{Text: msg, Icon: common.PluginDoctorIcon.String(), DisplaySeconds: 6})
+				return
+			}
+
+			msg := fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_database_repair_manual"), result.RecoveredPath)
+			GetPluginManager().GetUI().Notify(ctx, common.NotifyMsg{Text: msg, Icon: common.PluginDoctorIcon.String(), DisplaySeconds: 6})
+		}
+	}
+
 	return DoctorCheckResult{
 		Name:                   "i18n:plugin_doctor_database",
 		Type:                   DoctorCheckDatabase,
 		Passed:                 passed,
 		Description:            desc,
-		ActionName:             "i18n:plugin_doctor_database_action",
-		PreventHideAfterAction: true,
-		Action: func(ctx context.Context) {
-			// Show guidance: move data dir off iCloud, restore from backup, or reset affected tables (e.g., MRU)
-			msg := i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_database_fix_guidance")
-			GetPluginManager().GetUI().Notify(ctx, common.NotifyMsg{Text: msg, Icon: common.PluginDoctorIcon.String(), DisplaySeconds: 6})
-			GetPluginManager().GetUI().OpenSettingWindow(ctx, common.SettingWindowContext{Path: "/data"})
-		},
+		ActionName:             actionName,
+		PreventHideAfterAction: !passed,
+		Action:                 action,
 	}
 }

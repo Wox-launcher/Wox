@@ -14,10 +14,10 @@
 
   - Improve markdown preview rendering performance and stability
   - Critical deletion actions have been implemented to recycle bin, this will prevent accidental data loss #3958
-  - Improve docs website [https://wox-launcher.github.io/Wox/guide/introduction.html](https://wox-launcher.github.io/Wox/guide/introduction.html) 
-  - Support multiple-line text in query input box #3797 
+  - Improve docs website [https://wox-launcher.github.io/Wox/guide/introduction.html](https://wox-launcher.github.io/Wox/guide/introduction.html)
+  - Support multiple-line text in query input box #3797
     ![](https://github.com/user-attachments/assets/64040d63-5d9b-46b4-93a8-449becf70762)
-
+  - Improve database recovery mechanism to prevent database corruption on cloud disk sync (icloud, onedrive, dropbox, etc.)
 
 - Fix
   - Fix clipboard history cause windows copy mal-function #4309

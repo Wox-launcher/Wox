@@ -59,7 +59,7 @@ func (r *DoctorPlugin) Query(ctx context.Context, query plugin.Query) (results [
 					Name:                   check.ActionName,
 					PreventHideAfterAction: check.PreventHideAfterAction,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						check.Action(ctx)
+						check.Action(ctx, actionContext)
 					},
 				},
 			},
