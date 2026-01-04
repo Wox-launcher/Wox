@@ -806,17 +806,17 @@ func (c *ClipboardPlugin) moveRecordToTop(ctx context.Context, id string) {
 // getResultGroup returns the group and score for a result
 func (c *ClipboardPlugin) getResultGroup(ctx context.Context, record ClipboardRecord) (string, int64) {
 	if record.IsFavorite {
-		return "Favorites", 100
+		return "i18n:plugin_clipboard_group_favorites", 100
 	}
 
 	if util.GetSystemTimestamp()-record.Timestamp < 1000*60*60*24 {
-		return "Today", 90
+		return "i18n:plugin_clipboard_group_today", 90
 	}
 	if util.GetSystemTimestamp()-record.Timestamp < 1000*60*60*24*2 {
-		return "Yesterday", 80
+		return "i18n:plugin_clipboard_group_yesterday", 80
 	}
 
-	return "History", 10
+	return "i18n:plugin_clipboard_group_history", 10
 }
 
 // getDefaultTextIcon returns the default text icon
