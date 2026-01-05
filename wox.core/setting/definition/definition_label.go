@@ -27,5 +27,6 @@ func (p *PluginSettingValueLabel) GetDefaultValue() string {
 func (p *PluginSettingValueLabel) Translate(translator func(ctx context.Context, key string) string) PluginSettingDefinitionValue {
 	copy := *p
 	copy.Content = translator(context.Background(), p.Content)
+	copy.Tooltip = translator(context.Background(), p.Tooltip)
 	return &copy
 }

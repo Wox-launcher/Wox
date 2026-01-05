@@ -21,14 +21,7 @@ class WoxFormActionView extends StatefulWidget {
   final void Function(Map<String, String> values) onSave;
   final VoidCallback onCancel;
 
-  const WoxFormActionView({
-    super.key,
-    required this.action,
-    required this.initialValues,
-    required this.translate,
-    required this.onSave,
-    required this.onCancel,
-  });
+  const WoxFormActionView({super.key, required this.action, required this.initialValues, required this.translate, required this.onSave, required this.onCancel});
 
   @override
   State<WoxFormActionView> createState() => _WoxFormActionViewState();
@@ -54,9 +47,7 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
           _firstFocusableIndex = i;
         }
         final textbox = item.value as PluginSettingValueTextBox;
-        _textControllers[textbox.key] = TextEditingController(
-          text: _values[textbox.key] ?? textbox.defaultValue,
-        );
+        _textControllers[textbox.key] = TextEditingController(text: _values[textbox.key] ?? textbox.defaultValue);
         if (textbox.style.labelWidth > _maxLabelWidth) {
           _maxLabelWidth = textbox.style.labelWidth.toDouble();
         }
@@ -102,10 +93,7 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
   @override
   Widget build(BuildContext context) {
     return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.enter, control: true): _handleSave,
-        const SingleActivator(LogicalKeyboardKey.escape): widget.onCancel,
-      },
+      bindings: {const SingleActivator(LogicalKeyboardKey.enter, control: true): _handleSave, const SingleActivator(LogicalKeyboardKey.escape): widget.onCancel},
       child: Focus(
         autofocus: true,
         child: Column(
@@ -125,17 +113,9 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                WoxButton.secondary(
-                  text: "${_tr("ui_cancel")} (Esc)",
-                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-                  onPressed: widget.onCancel,
-                ),
+                WoxButton.secondary(text: "${_tr("ui_cancel")} (Esc)", padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12), onPressed: widget.onCancel),
                 const SizedBox(width: 12),
-                WoxButton.primary(
-                  text: "${_tr("ui_save")} (Ctrl+Enter)",
-                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
-                  onPressed: _handleSave,
-                ),
+                WoxButton.primary(text: "${_tr("ui_save")} (Ctrl+Enter)", padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12), onPressed: _handleSave),
               ],
             ),
           ],
@@ -168,10 +148,7 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
       default:
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
-          child: Text(
-            widget.translate("ui_not_supported_field"),
-            style: TextStyle(color: getThemeTextColor(), fontSize: 12),
-          ),
+          child: Text(widget.translate("ui_not_supported_field"), style: TextStyle(color: getThemeTextColor(), fontSize: 12)),
         );
     }
   }
@@ -188,13 +165,7 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              SizedBox(
-                width: _maxLabelWidth,
-                child: Text(
-                  _tr(item.label),
-                  style: TextStyle(color: _textColor.withValues(alpha: 0.92), fontSize: 14, fontWeight: FontWeight.w600),
-                ),
-              ),
+              SizedBox(width: _maxLabelWidth, child: Text(_tr(item.label), style: TextStyle(color: _textColor.withValues(alpha: 0.92), fontSize: 14, fontWeight: FontWeight.w600))),
               const SizedBox(width: 10),
               WoxCheckbox(
                 value: isChecked,
@@ -207,10 +178,7 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
           if (item.tooltip.isNotEmpty)
             Padding(
               padding: EdgeInsets.only(top: 4, left: _maxLabelWidth + 10),
-              child: Text(
-                _tr(item.tooltip),
-                style: TextStyle(color: _textColor.withValues(alpha: 0.6), fontSize: 12),
-              ),
+              child: Text(_tr(item.tooltip), style: TextStyle(color: _textColor.withValues(alpha: 0.6), fontSize: 12)),
             ),
         ],
       ),
@@ -226,13 +194,7 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              SizedBox(
-                width: _maxLabelWidth,
-                child: Text(
-                  _tr(item.label),
-                  style: TextStyle(color: _textColor.withValues(alpha: 0.92), fontSize: 14, fontWeight: FontWeight.w600),
-                ),
-              ),
+              SizedBox(width: _maxLabelWidth, child: Text(_tr(item.label), style: TextStyle(color: _textColor.withValues(alpha: 0.92), fontSize: 14, fontWeight: FontWeight.w600))),
               const SizedBox(width: 10),
               Expanded(
                 child: WoxTextField(
@@ -244,22 +206,13 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
                   },
                 ),
               ),
-              if (item.suffix.isNotEmpty) ...[
-                const SizedBox(width: 4),
-                Text(
-                  _tr(item.suffix),
-                  style: TextStyle(color: _textColor, fontSize: 13),
-                ),
-              ],
+              if (item.suffix.isNotEmpty) ...[const SizedBox(width: 4), Text(_tr(item.suffix), style: TextStyle(color: _textColor, fontSize: 13))],
             ],
           ),
           if (item.tooltip.isNotEmpty)
             Padding(
               padding: EdgeInsets.only(top: 4, left: _maxLabelWidth + 10),
-              child: Text(
-                _tr(item.tooltip),
-                style: TextStyle(color: _textColor.withValues(alpha: 0.6), fontSize: 12),
-              ),
+              child: Text(_tr(item.tooltip), style: TextStyle(color: _textColor.withValues(alpha: 0.6), fontSize: 12)),
             ),
         ],
       ),
@@ -277,13 +230,7 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              SizedBox(
-                width: _maxLabelWidth,
-                child: Text(
-                  _tr(item.label),
-                  style: TextStyle(color: _textColor.withValues(alpha: 0.92), fontSize: 14, fontWeight: FontWeight.w600),
-                ),
-              ),
+              SizedBox(width: _maxLabelWidth, child: Text(_tr(item.label), style: TextStyle(color: _textColor.withValues(alpha: 0.92), fontSize: 14, fontWeight: FontWeight.w600))),
               const SizedBox(width: 10),
               Expanded(
                 child: WoxDropdownButton<String>(
@@ -295,30 +242,19 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
                       _updateValue(item.key, value);
                     }
                   },
-                  items: item.options.map((option) {
-                    return WoxDropdownItem(
-                      value: option.value,
-                      label: _tr(option.label),
-                    );
-                  }).toList(),
+                  items:
+                      item.options.map((option) {
+                        return WoxDropdownItem(value: option.value, label: _tr(option.label));
+                      }).toList(),
                 ),
               ),
-              if (item.suffix.isNotEmpty) ...[
-                const SizedBox(width: 4),
-                Text(
-                  _tr(item.suffix),
-                  style: TextStyle(color: _textColor, fontSize: 13),
-                ),
-              ],
+              if (item.suffix.isNotEmpty) ...[const SizedBox(width: 4), Text(_tr(item.suffix), style: TextStyle(color: _textColor, fontSize: 13))],
             ],
           ),
           if (item.tooltip.isNotEmpty)
             Padding(
               padding: EdgeInsets.only(top: 4, left: _maxLabelWidth + 10),
-              child: Text(
-                _tr(item.tooltip),
-                style: TextStyle(color: _textColor.withValues(alpha: 0.6), fontSize: 12),
-              ),
+              child: Text(_tr(item.tooltip), style: TextStyle(color: _textColor.withValues(alpha: 0.6), fontSize: 12)),
             ),
         ],
       ),
@@ -328,14 +264,7 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
   Widget _buildHead(PluginSettingValueHead item) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8, top: 8),
-      child: Text(
-        _tr(item.content),
-        style: TextStyle(
-          color: _textColor,
-          fontSize: 15,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
+      child: Text(_tr(item.content), style: TextStyle(color: _textColor, fontSize: 15, fontWeight: FontWeight.w600)),
     );
   }
 
@@ -345,20 +274,11 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: EdgeInsets.only(left: _maxLabelWidth + 10),
-            child: Text(
-              _tr(item.content),
-              style: TextStyle(color: _textColor.withValues(alpha: 0.6), fontSize: 12),
-            ),
-          ),
+          Padding(padding: EdgeInsets.only(left: _maxLabelWidth + 10), child: Text(_tr(item.content), style: TextStyle(color: _textColor.withValues(alpha: 0.6), fontSize: 12))),
           if (item.tooltip.isNotEmpty)
             Padding(
               padding: EdgeInsets.only(top: 4, left: _maxLabelWidth + 10),
-              child: Text(
-                _tr(item.tooltip),
-                style: TextStyle(color: _textColor.withValues(alpha: 0.6), fontSize: 12),
-              ),
+              child: Text(_tr(item.tooltip), style: TextStyle(color: _textColor.withValues(alpha: 0.6), fontSize: 12)),
             ),
         ],
       ),

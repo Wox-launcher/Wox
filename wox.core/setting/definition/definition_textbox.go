@@ -33,5 +33,6 @@ func (p *PluginSettingValueTextBox) Translate(translator func(ctx context.Contex
 	copy := *p
 	copy.Label = translator(context.Background(), p.Label)
 	copy.Suffix = translator(context.Background(), p.Suffix)
+	copy.Tooltip = translator(context.Background(), p.Tooltip)
 	return &copy
 }

@@ -1,6 +1,9 @@
 import { MetadataCommand, PluginSettingDefinitionItem } from "./setting.js"
 import { AI } from "./ai.js"
 
+export * from "./setting.js"
+export * from "./ai.js"
+
 /**
  * A dictionary type for string key-value pairs.
  *

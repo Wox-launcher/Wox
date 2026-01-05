@@ -38,6 +38,7 @@ func (p *PluginSettingValueSelect) Translate(translator func(ctx context.Context
 	copy := *p
 	copy.Label = translator(context.Background(), p.Label)
 	copy.Suffix = translator(context.Background(), p.Suffix)
+	copy.Tooltip = translator(context.Background(), p.Tooltip)
 	// Deep copy Options
 	copy.Options = make([]PluginSettingValueSelectOption, len(p.Options))
 	for i := range p.Options {
