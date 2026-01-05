@@ -8,10 +8,10 @@ to customize plugin behavior. Settings support various input types including
 text boxes, checkboxes, dropdowns, labels, and more.
 """
 
-from dataclasses import dataclass, field
-from typing import Dict, Any, List
-from enum import Enum
 import json
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, Dict, List
 
 
 class PluginSettingDefinitionType(str, Enum):
@@ -232,24 +232,6 @@ class PluginSettingDefinitionValue:
 
     For checkboxes, use "true" or "false" (case-insensitive).
     """
-
-    def get_key(self) -> str:
-        """
-        Get the setting key.
-
-        Returns:
-            The key identifier for this setting
-        """
-        return self.key
-
-    def get_default_value(self) -> str:
-        """
-        Get the default value.
-
-        Returns:
-            The default value string
-        """
-        return self.default_value
 
     def to_dict(self) -> Dict[str, Any]:
         """

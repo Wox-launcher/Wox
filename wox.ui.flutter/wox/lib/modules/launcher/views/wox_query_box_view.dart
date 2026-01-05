@@ -178,6 +178,12 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                         controller.hideApp(const UuidV4().generate());
                         return KeyEventResult.handled;
                       case LogicalKeyboardKey.enter:
+                        var composing = controller.queryBoxTextFieldController.value.composing;
+                        var isComposing = composing.start >= 0 && composing.end >= 0;
+                        if (isComposing) {
+                          Logger.instance.info(traceId, "[KEYLOG][FLUTTER] Enter KeyDown ignored due to IME composing");
+                          return KeyEventResult.ignored;
+                        }
                         Logger.instance.info(traceId, "[KEYLOG][FLUTTER] Enter KeyDown -> executing action");
                         controller.executeDefaultAction(const UuidV4().generate());
                         return KeyEventResult.handled;

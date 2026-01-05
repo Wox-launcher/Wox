@@ -1,4 +1,4 @@
-import { Context, Platform } from "./index.js"
+import { Platform } from "./index.js"
 
 /**
  * Type of plugin setting UI element.
@@ -18,7 +18,6 @@ import { Context, Platform } from "./index.js"
  * ```
  */
 export type PluginSettingDefinitionType = "head" | "textbox" | "checkbox" | "select" | "label" | "newline" | "table" | "dynamic"
-
 
 /**
  * Visual styling properties for a setting element.
@@ -69,32 +68,8 @@ export interface PluginSettingValueStyle {
 
 /**
  * Base interface for all setting value types.
- *
- * Provides common methods for key retrieval, default values,
- * and translation.
  */
-export interface PluginSettingDefinitionValue {
-  /**
-   * Get the setting key.
-   *
-   * Used to store and retrieve the setting value.
-   *
-   * @returns The unique key for this setting
-   */
-  GetKey: () => string
-  /**
-   * Get the default value for this setting.
-   *
-   * @returns The default value as a string
-   */
-  GetDefaultValue: () => string
-  /**
-   * Translate labels and messages.
-   *
-   * @param translator - Translation function that takes context and key
-   */
-  Translate: (translator: (ctx: Context, key: string) => string) => void
-}
+export interface PluginSettingDefinitionValue {}
 
 /**
  * A single setting item in the plugin settings UI.
@@ -105,11 +80,16 @@ export interface PluginSettingDefinitionValue {
  * ```typescript
  * const setting: PluginSettingDefinitionItem = {
  *   Type: "textbox",
- *   Value: createTextboxSetting({
- *     key: "apiKey",
- *     label: "API Key",
- *     defaultValue: ""
- *   }),
+ *   Value: {
+ *     Key: "apiKey",
+ *     Label: "API Key",
+ *     Suffix: "",
+ *     DefaultValue: "",
+ *     Tooltip: "",
+ *     MaxLines: 1,
+ *     Validators: [],
+ *     Style: {} as PluginSettingValueStyle
+ *   } as PluginSettingValueTextBox,
  *   DisabledInPlatforms: ["linux"],
  *   IsPlatformSpecific: false
  * }
@@ -185,10 +165,7 @@ export interface MetadataCommand {
  *   Label: "Enable Feature",
  *   DefaultValue: "true",
  *   Tooltip: "When enabled, the feature will be active",
- *   Style: defaultStyle,
- *   GetKey: () => "enabled",
- *   GetDefaultValue: () => "true",
- *   Translate: (translator) => {}
+ *   Style: {} as PluginSettingValueStyle
  * }
  * ```
  */
@@ -216,6 +193,62 @@ export interface PluginSettingValueCheckBox extends PluginSettingDefinitionValue
 }
 
 /**
+ * Textbox setting value configuration.
+ *
+ * Represents a text input field in the settings UI.
+ *
+ * @example
+ * ```typescript
+ * const textbox: PluginSettingValueTextBox = {
+ *   Key: "apiKey",
+ *   Label: "API Key",
+ *   Suffix: "",
+ *   DefaultValue: "",
+ *   Tooltip: "Enter your API key",
+ *   MaxLines: 1,
+ *   Validators: [],
+ *   Style: {} as PluginSettingValueStyle
+ * }
+ * ```
+ */
+export interface PluginSettingValueTextBox extends PluginSettingDefinitionValue {
+  /**
+   * Unique key for storing this setting.
+   */
+  Key: string
+  /**
+   * Display label for the textbox.
+   */
+  Label: string
+  /**
+   * Suffix text displayed after the value.
+   */
+  Suffix: string
+  /**
+   * Default value.
+   */
+  DefaultValue: string
+  /**
+   * Tooltip shown on hover.
+   */
+  Tooltip: string
+  /**
+   * Max lines for the textbox. Default is 1.
+   */
+  MaxLines: number
+  /**
+   * Validation rules for the input value.
+   *
+   * All validators must be satisfied for the value to be valid.
+   */
+  Validators: PluginSettingValidator[]
+  /**
+   * Visual styling for this element.
+   */
+  Style: PluginSettingValueStyle
+}
+
+/**
  * Dynamic setting value configuration.
  *
  * Represents a setting that is loaded dynamically via callback.
@@ -224,13 +257,22 @@ export interface PluginSettingValueCheckBox extends PluginSettingDefinitionValue
  * ```typescript
  * await api.OnGetDynamicSetting(ctx, (ctx, key) => {
  *   if (key === "dynamicOption") {
- *     return createTextboxSetting({
- *       key: "dynamicOption",
- *       label: "Dynamic Option",
- *       defaultValue: "loaded from callback"
- *     })
+ *     return {
+ *       Key: "dynamicOption",
+ *       Label: "Dynamic Option",
+ *       Suffix: "",
+ *       DefaultValue: "loaded from callback",
+ *       Tooltip: "",
+ *       MaxLines: 1,
+ *       Validators: [],
+ *       Style: {} as PluginSettingValueStyle
+ *     } as PluginSettingValueTextBox
  *   }
- *   return createLabelSetting({ content: "Unknown setting" })
+ *   return {
+ *     Content: "Unknown setting",
+ *     Tooltip: "",
+ *     Style: {} as PluginSettingValueStyle
+ *   } as PluginSettingValueLabel
  * })
  * ```
  */
@@ -254,10 +296,7 @@ export interface PluginSettingValueDynamic extends PluginSettingDefinitionValue 
  * const head: PluginSettingValueHead = {
  *   Content: "API Configuration",
  *   Tooltip: "Configure your API credentials",
- *   Style: { ...defaultStyle, PaddingTop: 20 },
- *   GetKey: () => "",
- *   GetDefaultValue: () => "",
- *   Translate: () => {}
+ *   Style: { ...({} as PluginSettingValueStyle), PaddingTop: 20 }
  * }
  * ```
  */
@@ -286,10 +325,7 @@ export interface PluginSettingValueHead extends PluginSettingDefinitionValue {
  * const label: PluginSettingValueLabel = {
  *   Content: "Note: API key is required for this feature to work.",
  *   Tooltip: "",
- *   Style: defaultStyle,
- *   GetKey: () => "",
- *   GetDefaultValue: () => "",
- *   Translate: () => {}
+ *   Style: {} as PluginSettingValueStyle
  * }
  * ```
  */
@@ -316,10 +352,7 @@ export interface PluginSettingValueLabel extends PluginSettingDefinitionValue {
  * @example
  * ```typescript
  * const newline: PluginSettingValueNewline = {
- *   Style: defaultStyle,
- *   GetKey: () => "",
- *   GetDefaultValue: () => "",
- *   Translate: () => {}
+ *   Style: {} as PluginSettingValueStyle
  * }
  * ```
  */
@@ -348,10 +381,7 @@ export interface PluginSettingValueNewline extends PluginSettingDefinitionValue 
  *     { Label: "Light", Value: "light" }
  *   ],
  *   Validators: [],
- *   Style: defaultStyle,
- *   GetKey: () => "theme",
- *   GetDefaultValue: () => "dark",
- *   Translate: () => {}
+ *   Style: {} as PluginSettingValueStyle
  * }
  * ```
  */
@@ -508,6 +538,4 @@ export interface PluginSettingValidatorIsNumber extends PluginSettingValidatorVa
  * }
  * ```
  */
-export interface PluginSettingValidatorNotEmpty extends PluginSettingValidatorValue {
-
-}
+export interface PluginSettingValidatorNotEmpty extends PluginSettingValidatorValue {}

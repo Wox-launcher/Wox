@@ -1,6 +1,6 @@
 {
   "name": "@wox-launcher/wox-plugin",
-  "version": "0.0.111",
+  "version": "0.0.113",
   "description": "All nodejs plugin for Wox should use types in this package",
   "repository": {
     "type": "git",

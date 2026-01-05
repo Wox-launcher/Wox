@@ -706,16 +706,23 @@ export interface ExecuteResultAction {
  *   Name: "Create New Item",
  *   Icon: { ImageType: "emoji", ImageData: "➕" },
  *   Form: [
- *     createTextboxSetting({
- *       key: "name",
- *       label: "Name",
- *       defaultValue: ""
- *     }),
- *     createCheckboxSetting({
- *       key: "enabled",
- *       label: "Enable",
- *       defaultValue: "true"
- *     })
+ *     {
+ *       Key: "name",
+ *       Label: "Name",
+ *       Suffix: "",
+ *       DefaultValue: "",
+ *       Tooltip: "",
+ *       MaxLines: 1,
+ *       Validators: [],
+ *       Style: {} as PluginSettingValueStyle
+ *     } as PluginSettingValueTextBox,
+ *     {
+ *       Key: "enabled",
+ *       Label: "Enable",
+ *       DefaultValue: "true",
+ *       Tooltip: "",
+ *       Style: {} as PluginSettingValueStyle
+ *     } as PluginSettingValueCheckBox
  *   ],
  *   OnSubmit: async (ctx, formCtx) => {
  *     console.log("Name:", formCtx.Values["name"])

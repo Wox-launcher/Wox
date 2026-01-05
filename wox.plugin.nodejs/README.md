@@ -139,17 +139,47 @@ Define settings for your plugin:
 
 ```typescript
 const settings: PluginSettingDefinitionItem[] = [
-  createTextboxSetting({
-    key: "apiKey",
-    label: "API Key",
-    tooltip: "Enter your API key",
-    defaultValue: ""
-  }),
-  createCheckboxSetting({
-    key: "enabled",
-    label: "Enable Feature",
-    defaultValue: "true"
-  })
+  {
+    Type: "textbox",
+    Value: {
+      Key: "apiKey",
+      Label: "API Key",
+      Suffix: "",
+      DefaultValue: "",
+      Tooltip: "Enter your API key",
+      MaxLines: 1,
+      Validators: [],
+      Style: {
+        PaddingLeft: 0,
+        PaddingTop: 0,
+        PaddingRight: 0,
+        PaddingBottom: 0,
+        Width: 0,
+        LabelWidth: 0
+      }
+    } as PluginSettingValueTextBox,
+    DisabledInPlatforms: [],
+    IsPlatformSpecific: false
+  },
+  {
+    Type: "checkbox",
+    Value: {
+      Key: "enabled",
+      Label: "Enable Feature",
+      DefaultValue: "true",
+      Tooltip: "",
+      Style: {
+        PaddingLeft: 0,
+        PaddingTop: 0,
+        PaddingRight: 0,
+        PaddingBottom: 0,
+        Width: 0,
+        LabelWidth: 0
+      }
+    } as PluginSettingValueCheckBox,
+    DisabledInPlatforms: [],
+    IsPlatformSpecific: false
+  }
 ]
 ```
 
