@@ -284,7 +284,54 @@ Handles user selection of a result item.
 
 - Script plugins receive only `search`, `trigger_keyword`, `command`, and `raw_query`. Selection payloads and query environment data are not passed to scripts.
 - Each invocation is a fresh process with a 10s timeout; cache to disk if you need reuse.
-- Previews, tails, MRU restoration, and result updates are reserved for full-featured plugins.
+- MRU restoration and result updates are reserved for full-featured plugins.
+
+## Preview
+
+Script plugins can return a `preview` object per result. The preview is shown when the result is selected.
+
+```json
+{
+  "title": "Example with preview",
+  "subtitle": "Select to view preview",
+  "preview": {
+    "type": "markdown",
+    "data": "# Preview Title\n\nDetails here",
+    "properties": {
+      "height": "300"
+    },
+    "scrollPosition": "bottom"
+  },
+  "actions": [
+    {
+      "id": "copy-to-clipboard",
+      "text": "Example"
+    }
+  ]
+}
+```
+
+Supported preview types: `markdown`, `text`, `image`, `url`, `file`, `remote`.
+
+## Tails
+
+Script plugins can return `tails` to display extra badges or text in the result detail view.
+
+```json
+{
+  "title": "Result with tails",
+  "subtitle": "Extra details are in tails",
+  "tails": [
+    { "type": "text", "text": "tag:urgent" },
+    { "type": "image", "image": "emoji:⭐" }
+  ],
+  "actions": [
+    { "id": "copy-to-clipboard", "text": "Example" }
+  ]
+}
+```
+
+Supported tail types: `text`, `image`.
 
 ## Environment Variables
 

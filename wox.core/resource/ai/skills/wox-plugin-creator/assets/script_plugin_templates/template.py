@@ -96,16 +96,43 @@ from typing import Any, List, TypedDict
 class WoxPluginBase:
     """Wox plugin base class for script plugins. Do not modify this class."""
 
+    class Preview(TypedDict, total=False):
+        """Type hint for preview content in a result."""
+
+        preview_type: str  # "markdown", "text"
+        preview_data: str
+        preview_properties: dict[str, str]
+
     class ActionItem(TypedDict, total=False):
         """Type hint for an action in a result."""
 
         id: str
         name: str
+        icon: str
+        """
+        support following icon formats:
+        - "base64:data:image/png;base64,xxx"
+        - "emoji:😀"
+        - "svg:<svg>...</svg>"
+        - "fileicon:/absolute/path/to/file" (get system file icon)
+        - "absolute:/absolute/path/to/image.png"
+        - "url:https://example.com/image.png"
+        """
+
         text: str
         url: str
         path: str
         message: str
-        data: Any
+        data: dict[str, str]
+
+    class TailItem(TypedDict, total=False):
+        """Type hint for a tail in a result."""
+
+        id: str
+        type: str  # "text" or "image"
+        text: str
+        image: str
+        contextData: dict[str, str]
 
     class QueryResult(TypedDict, total=False):
         """Type hint for a query result item."""
@@ -122,6 +149,8 @@ class WoxPluginBase:
         - "absolute:/absolute/path/to/image.png"
         - "url:https://example.com/image.png"
         """
+        preview: WoxPluginBase.Preview
+        tails: List[WoxPluginBase.TailItem]
         score: int
         actions: List[WoxPluginBase.ActionItem]
 

@@ -99,7 +99,22 @@ class WoxPluginBase {
         title: "Hello Wox!",
         subtitle: "This is a default result. Override the query method in your plugin class.",
         score: 100,
-        actions: [{ name: "Copy", id: "copy-to-clipboard", text: "Hello Wox!" }],
+        preview: {
+          type: "markdown",
+          data: "# Preview Title\n\nDetails here",
+          properties: {
+            height: "300",
+          },
+          scrollPosition: "bottom",
+        },
+        actions: [
+          {
+            name: "Copy",
+            id: "copy-to-clipboard",
+            icon: "emoji:📋",
+            text: "Hello Wox!",
+          },
+        ],
       },
     ];
   }

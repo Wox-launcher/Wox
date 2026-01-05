@@ -114,7 +114,7 @@ class WoxMarkdownView extends StatelessWidget {
   Widget buildImage(BuildContext context, String url) {
     final trimmed = url.trim();
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-      return Image.network(trimmed, fit: BoxFit.fill, errorBuilder: (context, error, stackTrace) => const SizedBox());
+      return Image.network(trimmed, fit: BoxFit.fill, errorBuilder: (context, error, stackTrace) => Text(error.toString(), style: const TextStyle(color: Colors.red)));
     }
 
     final resolvedPath = resolveLocalImagePath(trimmed);
@@ -122,7 +122,7 @@ class WoxMarkdownView extends StatelessWidget {
       return Text(url);
     }
     final file = File(resolvedPath);
-    return Image.file(file, fit: BoxFit.fill, errorBuilder: (context, error, stackTrace) => const SizedBox());
+    return Image.file(file, fit: BoxFit.fill, errorBuilder: (context, error, stackTrace) => Text(error.toString()));
   }
 
   String resolveLocalImagePath(String url) {

@@ -172,6 +172,14 @@ func (s *ScriptPlugin) executeScript(ctx context.Context, request map[string]int
 			}
 		}
 
+		if preview, ok := parseScriptPreview(itemMap); ok {
+			queryResult.Preview = preview
+		}
+
+		if tails := parseScriptTails(ctx, s.metadata, itemMap); len(tails) > 0 {
+			queryResult.Tails = tails
+		}
+
 		// Handle actions - must be an array
 		if actionsData, exists := itemMap["actions"]; exists {
 			if actionsArray, ok := actionsData.([]interface{}); ok {
@@ -182,10 +190,23 @@ func (s *ScriptPlugin) executeScript(ctx context.Context, request map[string]int
 							actionName = "Execute"
 						}
 
+						var actionIcon common.WoxImage
+						if iconStr := getFirstStringFromMap(actionMap, []string{"icon", "Icon"}); iconStr != "" {
+							if img, err := common.ParseWoxImage(iconStr); err != nil {
+								util.GetLogger().Warn(ctx, fmt.Sprintf("script plugin %s returned invalid action icon: %s, err: %s", s.metadata.GetName(ctx), iconStr, err.Error()))
+							} else {
+								if img.ImageType == common.WoxImageTypeBase64 && !strings.Contains(img.ImageData, ",") {
+									img.ImageData = fmt.Sprintf("data:image/png;base64,%s", img.ImageData)
+								}
+								actionIcon = img
+							}
+						}
+
 						// Capture actionMap in closure
 						actionMapCopy := actionMap
 						queryResult.Actions = append(queryResult.Actions, plugin.QueryResultAction{
 							Name: actionName,
+							Icon: actionIcon,
 							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 								s.executeAction(ctx, actionMapCopy)
 							},
@@ -204,18 +225,31 @@ func (s *ScriptPlugin) executeScript(ctx context.Context, request map[string]int
 // executeAction executes an action from a script plugin result
 func (s *ScriptPlugin) executeAction(ctx context.Context, actionData map[string]interface{}) {
 	actionId := getStringFromMap(actionData, "id")
+	actionDataValue, hasActionData := actionData["data"]
+	actionDataMap := getStringMapFromValue(actionDataValue)
+	actionDataString := ""
+	if !hasActionData {
+		actionDataValue = nil
+	} else if actionDataMap == nil {
+		actionDataString = getStringFromMap(actionData, "data")
+	}
 
 	// Check if this is a built-in action that can be handled directly
 	if s.handleBuiltInAction(ctx, actionId, actionData) {
 		// Built-in action was handled, still call script action as a hook (optional for script to handle)
+		actionParams := map[string]interface{}{
+			"id": actionId,
+		}
+		if actionDataMap != nil {
+			actionParams["data"] = actionDataMap
+		} else if actionDataString != "" {
+			actionParams["data"] = actionDataString
+		}
 		request := map[string]interface{}{
 			"jsonrpc": "2.0",
 			"method":  "action",
-			"params": map[string]interface{}{
-				"id":   actionId,
-				"data": getStringFromMap(actionData, "data"),
-			},
-			"id": util.GetContextTraceId(ctx),
+			"params":  actionParams,
+			"id":      util.GetContextTraceId(ctx),
 		}
 
 		// Call script action as a hook, but ignore errors since it's optional
@@ -224,14 +258,19 @@ func (s *ScriptPlugin) executeAction(ctx context.Context, actionData map[string]
 	}
 
 	// Custom action - must be handled by script
+	actionParams := map[string]interface{}{
+		"id": actionId,
+	}
+	if actionDataMap != nil {
+		actionParams["data"] = actionDataMap
+	} else if actionDataString != "" {
+		actionParams["data"] = actionDataString
+	}
 	request := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"method":  "action",
-		"params": map[string]interface{}{
-			"id":   actionId,
-			"data": getStringFromMap(actionData, "data"),
-		},
-		"id": util.GetContextTraceId(ctx),
+		"params":  actionParams,
+		"id":      util.GetContextTraceId(ctx),
 	}
 
 	// Execute script for custom action
@@ -556,4 +595,189 @@ func getFloatFromMap(m map[string]interface{}, key string) float64 {
 		}
 	}
 	return 0
+}
+
+func getSliceFromMap(m map[string]interface{}, key string) []interface{} {
+	if value, exists := m[key]; exists {
+		if result, ok := value.([]interface{}); ok {
+			return result
+		}
+	}
+	return nil
+}
+
+func getMapFromMap(m map[string]interface{}, key string) map[string]interface{} {
+	if value, exists := m[key]; exists {
+		if result, ok := value.(map[string]interface{}); ok {
+			return result
+		}
+	}
+	return nil
+}
+
+func getStringMapFromValue(value interface{}) map[string]string {
+	switch typed := value.(type) {
+	case map[string]string:
+		return typed
+	case map[string]interface{}:
+		result := make(map[string]string, len(typed))
+		for key, value := range typed {
+			switch inner := value.(type) {
+			case string:
+				result[key] = inner
+			default:
+				result[key] = fmt.Sprint(value)
+			}
+		}
+		return result
+	default:
+		return nil
+	}
+}
+
+func getFirstStringFromMap(m map[string]interface{}, keys []string) string {
+	for _, key := range keys {
+		if value := getStringFromMap(m, key); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func parseScriptPreview(itemMap map[string]interface{}) (plugin.WoxPreview, bool) {
+	previewMap := getMapFromMap(itemMap, "preview")
+	if previewMap == nil {
+		previewMap = getMapFromMap(itemMap, "Preview")
+	}
+	if previewMap == nil {
+		return plugin.WoxPreview{}, false
+	}
+
+	previewData := getFirstStringFromMap(previewMap, []string{
+		"data",
+		"preview_data",
+		"previewData",
+		"PreviewData",
+	})
+	if previewData == "" {
+		return plugin.WoxPreview{}, false
+	}
+
+	previewType := getFirstStringFromMap(previewMap, []string{
+		"type",
+		"preview_type",
+		"previewType",
+		"PreviewType",
+	})
+	if previewType == "" {
+		previewType = plugin.WoxPreviewTypeText
+	}
+
+	scrollPosition := getFirstStringFromMap(previewMap, []string{
+		"scroll_position",
+		"scrollPosition",
+		"ScrollPosition",
+	})
+
+	propertiesMap := getMapFromMap(previewMap, "properties")
+	if propertiesMap == nil {
+		propertiesMap = getMapFromMap(previewMap, "preview_properties")
+	}
+	if propertiesMap == nil {
+		propertiesMap = getMapFromMap(previewMap, "previewProperties")
+	}
+	if propertiesMap == nil {
+		propertiesMap = getMapFromMap(previewMap, "PreviewProperties")
+	}
+
+	preview := plugin.WoxPreview{
+		PreviewType:    previewType,
+		PreviewData:    previewData,
+		ScrollPosition: scrollPosition,
+	}
+	if len(propertiesMap) > 0 {
+		preview.PreviewProperties = make(map[string]string, len(propertiesMap))
+		for key, value := range propertiesMap {
+			switch typed := value.(type) {
+			case string:
+				preview.PreviewProperties[key] = typed
+			default:
+				preview.PreviewProperties[key] = fmt.Sprint(value)
+			}
+		}
+	}
+
+	return preview, true
+}
+
+func parseScriptTails(ctx context.Context, metadata plugin.Metadata, itemMap map[string]interface{}) []plugin.QueryResultTail {
+	tailsArray := getSliceFromMap(itemMap, "tails")
+	if tailsArray == nil {
+		tailsArray = getSliceFromMap(itemMap, "Tails")
+	}
+	if tailsArray == nil {
+		return nil
+	}
+
+	var tails []plugin.QueryResultTail
+	for _, tailItem := range tailsArray {
+		tailMap, ok := tailItem.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		tailType := getFirstStringFromMap(tailMap, []string{"type", "Type"})
+		switch tailType {
+		case plugin.QueryResultTailTypeImage:
+			imageStr := getFirstStringFromMap(tailMap, []string{"image", "Image"})
+			if imageStr == "" {
+				continue
+			}
+			img, err := common.ParseWoxImage(imageStr)
+			if err != nil {
+				util.GetLogger().Warn(ctx, fmt.Sprintf("script plugin %s returned invalid tail image: %s, err: %s", metadata.GetName(ctx), imageStr, err.Error()))
+				continue
+			}
+			tails = append(tails, plugin.QueryResultTail{
+				Id:    getFirstStringFromMap(tailMap, []string{"id", "Id"}),
+				Type:  plugin.QueryResultTailTypeImage,
+				Image: img,
+			})
+		default:
+			text := getFirstStringFromMap(tailMap, []string{"text", "Text"})
+			if text == "" {
+				continue
+			}
+			tails = append(tails, plugin.QueryResultTail{
+				Id:   getFirstStringFromMap(tailMap, []string{"id", "Id"}),
+				Type: plugin.QueryResultTailTypeText,
+				Text: text,
+			})
+		}
+
+		if len(tails) == 0 {
+			continue
+		}
+
+		contextData := getMapFromMap(tailMap, "contextData")
+		if contextData == nil {
+			contextData = getMapFromMap(tailMap, "ContextData")
+		}
+		if len(contextData) == 0 {
+			continue
+		}
+
+		lastIndex := len(tails) - 1
+		tails[lastIndex].ContextData = make(map[string]string, len(contextData))
+		for key, value := range contextData {
+			switch typed := value.(type) {
+			case string:
+				tails[lastIndex].ContextData[key] = typed
+			default:
+				tails[lastIndex].ContextData[key] = fmt.Sprint(value)
+			}
+		}
+	}
+
+	return tails
 }
