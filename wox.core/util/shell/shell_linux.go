@@ -1,7 +1,6 @@
 package shell
 
 import (
-	"os"
 	"os/exec"
 	"wox/util"
 )
@@ -13,7 +12,7 @@ func Open(path string) error {
 }
 
 func Run(name string, arg ...string) (*exec.Cmd, error) {
-	cmd := exec.Command(name, arg...)
+	cmd := BuildCommand(name, nil, arg...)
 	cmd.Stdout = util.GetLogger().GetWriter()
 	cmd.Stderr = util.GetLogger().GetWriter()
 	cmd.Dir = getWorkingDirectory(name)
@@ -30,12 +29,11 @@ func RunWithEnv(name string, envs []string, arg ...string) (*exec.Cmd, error) {
 		return Run(name, arg...)
 	}
 
-	cmd := exec.Command(name, arg...)
+	cmd := BuildCommand(name, envs, arg...)
 	cmd.Stdout = util.GetLogger().GetWriter()
 	cmd.Stderr = util.GetLogger().GetWriter()
 	// Set working directory: use file's directory if name is a file path, otherwise use user home directory
 	cmd.Dir = getWorkingDirectory(name)
-	cmd.Env = append(os.Environ(), envs...)
 	cmdErr := cmd.Start()
 	if cmdErr != nil {
 		return nil, cmdErr
@@ -45,7 +43,7 @@ func RunWithEnv(name string, envs []string, arg ...string) (*exec.Cmd, error) {
 }
 
 func RunOutput(name string, arg ...string) ([]byte, error) {
-	cmd := exec.Command(name, arg...)
+	cmd := BuildCommand(name, nil, arg...)
 	return cmd.Output()
 }
 

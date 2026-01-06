@@ -303,15 +303,12 @@ func (s *ScriptPlugin) executeScriptRaw(ctx context.Context, request map[string]
 	// Prepare command
 	var cmd *exec.Cmd
 	if interpreter != "" {
-		cmd = exec.CommandContext(timeoutCtx, interpreter, s.scriptPath)
+		cmd = shell.BuildCommandContext(timeoutCtx, interpreter, nil, s.scriptPath)
 		util.GetLogger().Debug(ctx, fmt.Sprintf("Executing command: %s %s", interpreter, s.scriptPath))
 	} else {
-		cmd = exec.CommandContext(timeoutCtx, s.scriptPath)
+		cmd = shell.BuildCommandContext(timeoutCtx, s.scriptPath, nil)
 		util.GetLogger().Debug(ctx, fmt.Sprintf("Executing command: %s", s.scriptPath))
 	}
-
-	// Hide console window on Windows
-	shell.HideWindowCmd(cmd)
 
 	// Set up environment variables for script plugins
 	envVars := []string{

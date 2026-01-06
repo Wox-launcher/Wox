@@ -3,11 +3,11 @@ package ai
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"strings"
 	"time"
 	"wox/common"
 	"wox/util"
+	"wox/util/shell"
 
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -30,7 +30,7 @@ func getMCPSession(ctx context.Context, config common.AIChatMCPServerConfig) (*m
 	var transport mcp.Transport
 	if config.Type == common.AIChatMCPServerTypeSTDIO {
 		command, args := parseCommandArgs(config.Command)
-		cmd := exec.Command(command, args...)
+		cmd := shell.BuildCommand(command, nil, args...)
 		// Set environment variables (each entry is already in "key=value" format)
 		cmd.Env = append(cmd.Env, config.EnvironmentVariables...)
 		transport = &mcp.CommandTransport{Command: cmd}

@@ -14,6 +14,7 @@ import (
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/util"
+	shellutil "wox/util/shell"
 
 	"github.com/google/uuid"
 )
@@ -633,21 +634,21 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 	var cmd *exec.Cmd
 	switch data.Interpreter {
 	case "powershell":
-		cmd = exec.CommandContext(ctx, "powershell", "-Command", data.Command)
+		cmd = shellutil.BuildCommandContext(ctx, "powershell", nil, "-Command", data.Command)
 	case "cmd":
-		cmd = exec.CommandContext(ctx, "cmd", "/C", data.Command)
+		cmd = shellutil.BuildCommandContext(ctx, "cmd", nil, "/C", data.Command)
 	case "bash":
-		cmd = exec.CommandContext(ctx, "bash", "-c", data.Command)
+		cmd = shellutil.BuildCommandContext(ctx, "bash", nil, "-c", data.Command)
 	case "zsh":
-		cmd = exec.CommandContext(ctx, "zsh", "-c", data.Command)
+		cmd = shellutil.BuildCommandContext(ctx, "zsh", nil, "-c", data.Command)
 	case "sh":
-		cmd = exec.CommandContext(ctx, "sh", "-c", data.Command)
+		cmd = shellutil.BuildCommandContext(ctx, "sh", nil, "-c", data.Command)
 	case "python", "python3":
-		cmd = exec.CommandContext(ctx, data.Interpreter, "-c", data.Command)
+		cmd = shellutil.BuildCommandContext(ctx, data.Interpreter, nil, "-c", data.Command)
 	case "node":
-		cmd = exec.CommandContext(ctx, "node", "-e", data.Command)
+		cmd = shellutil.BuildCommandContext(ctx, "node", nil, "-e", data.Command)
 	default:
-		cmd = exec.CommandContext(ctx, data.Interpreter, "-c", data.Command)
+		cmd = shellutil.BuildCommandContext(ctx, data.Interpreter, nil, "-c", data.Command)
 	}
 
 	// Prepare or reuse history record
@@ -954,21 +955,21 @@ func (s *ShellPlugin) executeCommandInBackground(ctx context.Context, data shell
 	var cmd *exec.Cmd
 	switch data.Interpreter {
 	case "powershell":
-		cmd = exec.CommandContext(ctx, "powershell", "-Command", data.Command)
+		cmd = shellutil.BuildCommandContext(ctx, "powershell", nil, "-Command", data.Command)
 	case "cmd":
-		cmd = exec.CommandContext(ctx, "cmd", "/C", data.Command)
+		cmd = shellutil.BuildCommandContext(ctx, "cmd", nil, "/C", data.Command)
 	case "bash":
-		cmd = exec.CommandContext(ctx, "bash", "-c", data.Command)
+		cmd = shellutil.BuildCommandContext(ctx, "bash", nil, "-c", data.Command)
 	case "zsh":
-		cmd = exec.CommandContext(ctx, "zsh", "-c", data.Command)
+		cmd = shellutil.BuildCommandContext(ctx, "zsh", nil, "-c", data.Command)
 	case "sh":
-		cmd = exec.CommandContext(ctx, "sh", "-c", data.Command)
+		cmd = shellutil.BuildCommandContext(ctx, "sh", nil, "-c", data.Command)
 	case "python", "python3":
-		cmd = exec.CommandContext(ctx, data.Interpreter, "-c", data.Command)
+		cmd = shellutil.BuildCommandContext(ctx, data.Interpreter, nil, "-c", data.Command)
 	case "node":
-		cmd = exec.CommandContext(ctx, "node", "-e", data.Command)
+		cmd = shellutil.BuildCommandContext(ctx, "node", nil, "-e", data.Command)
 	default:
-		cmd = exec.CommandContext(ctx, data.Interpreter, "-c", data.Command)
+		cmd = shellutil.BuildCommandContext(ctx, data.Interpreter, nil, "-c", data.Command)
 	}
 
 	// Start command in background without waiting
