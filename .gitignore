@@ -29,3 +29,5 @@ claude/skills
 placeholder
 crash.log
 release/
+wox.ui.macos/build/
+wox.ui.macos/.swiftpm/

@@ -84,6 +84,7 @@ host:
 ensure-resources:
 	@echo "Ensuring required resource directories exist..."
 	@mkdir -p wox.core/resource/ui/flutter
+	@mkdir -p wox.core/resource/ui/macos
 	@touch wox.core/resource/ui/flutter/placeholder
 	@mkdir -p wox.core/resource/hosts
 	@touch wox.core/resource/hosts/placeholder
@@ -138,8 +139,14 @@ test-debug:
 
 
 build: clean dev
-	    $(MAKE) -C wox.ui.flutter/wox build
-		$(MAKE) -C wox.core build
+ifeq ($(PLATFORM),macos)
+	cd wox.ui.macos && swift build -c release
+	mkdir -p wox.core/resource/ui/macos
+	cp wox.ui.macos/.build/release/wox.ui.macos wox.core/resource/ui/macos/wox.ui.macos
+else
+	$(MAKE) -C wox.ui.flutter/wox build
+endif
+	$(MAKE) -C wox.core build
 
 ifeq ($(PLATFORM),linux)
 		$(MAKE) appimage
