@@ -146,37 +146,29 @@ func (a *WindowsRetriever) ParseAppInfo(ctx context.Context, path string) (appIn
 }
 
 func (a *WindowsRetriever) parseShortcut(ctx context.Context, appPath string) (appInfo, error) {
-	// Use PowerShell + COM to resolve shortcut with proper Unicode support
 	targetPath, resolveErr := a.resolveShortcutWithAPI(ctx, appPath)
 	if resolveErr != nil {
 		return appInfo{}, fmt.Errorf("failed to resolve shortcut %s: %v", appPath, resolveErr)
 	}
 
-	a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Resolved shortcut %s -> %s", appPath, targetPath))
-
-	if targetPath == "" || !strings.HasSuffix(strings.ToLower(targetPath), ".exe") {
-		return appInfo{}, errors.New("no target path found or not an exe file")
-	}
-
-	// use default icon if no icon is found
 	icon := appIcon
-	if iconPath, iconErr := fileicon.GetFileIconByPath(ctx, targetPath); iconErr != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("Error getting icon for %s, use default icon: %s", targetPath, iconErr.Error()))
+	if targetPath != "" && strings.HasSuffix(strings.ToLower(targetPath), ".exe") {
+		if iconPath, iconErr := fileicon.GetFileIconByPath(ctx, targetPath); iconErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("Error getting icon for %s, use default icon: %s", targetPath, iconErr.Error()))
+		} else {
+			icon = common.NewWoxImageAbsolutePath(iconPath)
+		}
+	} else if iconPath, iconErr := fileicon.GetFileIconByPath(ctx, appPath); iconErr != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("Error getting icon for %s, use default icon: %s", appPath, iconErr.Error()))
 	} else {
 		icon = common.NewWoxImageAbsolutePath(iconPath)
 	}
 
-	// Try to get display name from target exe file version info
-	displayName := a.getFileDisplayName(ctx, targetPath)
-	if displayName == "" {
-		// Fallback to shortcut filename if no display name found
-		displayName = strings.TrimSuffix(filepath.Base(appPath), filepath.Ext(appPath))
-		a.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Using shortcut filename as display name: %s", displayName))
-	}
+	displayName := strings.TrimSuffix(filepath.Base(appPath), filepath.Ext(appPath))
 
 	return appInfo{
 		Name: displayName,
-		Path: filepath.Clean(targetPath),
+		Path: filepath.Clean(appPath),
 		Icon: icon,
 		Type: AppTypeDesktop,
 	}, nil
