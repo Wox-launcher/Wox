@@ -8,7 +8,7 @@
     ![](screenshots/emoji_ai_search.png)
   - Add auto theme which changes theme based on system light/dark mode
     ![](screenshots/auto_theme.png)
-  - [`Explorer`] Add Explorer plugin to quick switch paths in Open/Save dialog #3259, see [Explorer plugin guide](www/docs/zh/guide/plugins/system/explorer.md) for more details
+  - [`Explorer`] Add Explorer plugin to quick switch paths in Open/Save dialog #3259, see [Explorer plugin guide](https://wox-launcher.github.io/Wox/guide/plugins/system/explorer.html) for more details
 
 - Improve
 
@@ -23,7 +23,7 @@
   - Fix clipboard history cause windows copy mal-function #4309
   - Fix switching to application alway opens a new window instead of focusing existing one #1922
   - Fixed the parsing issue of lnk files on Windows #4315
-  
+
 ## v2.0.0-beta.7 — 2025-12-19
 
 - Add
