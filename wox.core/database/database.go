@@ -13,6 +13,7 @@ import (
 	"time"
 	"wox/analytics"
 	"wox/util"
+	"wox/util/shell"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -233,7 +234,7 @@ func RecoverDatabase(ctx context.Context) (RecoveryResult, error) {
 		return result, fmt.Errorf("failed to create recovery SQL: %w", err)
 	}
 
-	recoverCmd := exec.Command("sqlite3", workingDbPath, ".recover")
+	recoverCmd := shell.BuildCommand("sqlite3", nil, workingDbPath, ".recover")
 	recoverCmd.Stdout = sqlFile
 	recoverErrOutput := &bytes.Buffer{}
 	recoverCmd.Stderr = recoverErrOutput
@@ -254,7 +255,7 @@ func RecoverDatabase(ctx context.Context) (RecoveryResult, error) {
 	}
 	defer recoverInput.Close()
 
-	importCmd := exec.Command("sqlite3", recoveredDbPath)
+	importCmd := shell.BuildCommand("sqlite3", nil, recoveredDbPath)
 	importCmd.Stdin = recoverInput
 	importErrOutput := &bytes.Buffer{}
 	importCmd.Stderr = importErrOutput
@@ -263,7 +264,8 @@ func RecoverDatabase(ctx context.Context) (RecoveryResult, error) {
 		return result, fmt.Errorf("sqlite3 import failed: %w", err)
 	}
 
-	checkOutput, err := exec.Command("sqlite3", recoveredDbPath, "PRAGMA integrity_check;").CombinedOutput()
+	checkCmd := shell.BuildCommand("sqlite3", nil, recoveredDbPath, "PRAGMA integrity_check;")
+	checkOutput, err := checkCmd.CombinedOutput()
 	if err != nil {
 		return result, fmt.Errorf("sqlite3 integrity_check failed: %w: %s", err, strings.TrimSpace(string(checkOutput)))
 	}

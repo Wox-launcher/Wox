@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"wox/util"
+	"wox/util/shell"
 )
 
 func init() {
@@ -43,8 +43,7 @@ func (u *WindowsUpdater) ApplyUpdate(ctx context.Context, pid int, oldPath, newP
 
 	// Execute the batch file
 	util.GetLogger().Info(ctx, "starting Windows update process")
-	cmd := exec.Command("cmd", "/c", "start", "", batchPath)
-	if err := cmd.Start(); err != nil {
+	if _, err := shell.Run("cmd", "/c", "start", "", batchPath); err != nil {
 		return fmt.Errorf("failed to start update process: %w", err)
 	}
 

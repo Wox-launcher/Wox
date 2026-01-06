@@ -2,7 +2,6 @@ package shell
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 	"wox/util"
@@ -23,15 +22,10 @@ func Run(name string, arg ...string) (*exec.Cmd, error) {
 }
 
 func RunWithEnv(name string, envs []string, arg ...string) (*exec.Cmd, error) {
-	cmd := exec.Command(name, arg...)
+	cmd := BuildCommand(name, envs, arg...)
 	cmd.Stdout = util.GetLogger().GetWriter()
 	cmd.Stderr = util.GetLogger().GetWriter()
 	cmd.Dir = getWorkingDirectory(name)
-	if len(envs) == 0 {
-		cmd.Env = os.Environ()
-	} else {
-		cmd.Env = append(os.Environ(), envs...)
-	}
 	cmdErr := cmd.Start()
 	if cmdErr != nil {
 		return nil, cmdErr
@@ -41,7 +35,7 @@ func RunWithEnv(name string, envs []string, arg ...string) (*exec.Cmd, error) {
 }
 
 func RunOutput(name string, arg ...string) ([]byte, error) {
-	cmd := exec.Command(name, arg...)
+	cmd := BuildCommand(name, nil, arg...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		if output != nil {
