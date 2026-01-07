@@ -4,58 +4,89 @@ import AppKit
 struct ResultRow: View {
     let result: WoxQueryResult
     let isSelected: Bool
+    let theme: WoxTheme
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            // Icon
-            WoxIconView(icon: result.icon, size: 32)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(result.title)
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(isSelected ? .white : .primary)
-                    .lineLimit(1)
-
-                if let subTitle = result.subTitle, !subTitle.isEmpty {
-                    Text(subTitle)
-                        .font(.system(size: 13))
-                        .foregroundColor(isSelected ? .white.opacity(0.8) : .secondary)
-                        .lineLimit(1)
+        if result.isGroup {
+            GroupHeader(title: result.title, theme: theme)
+        } else {
+            HStack(alignment: .center, spacing: 0) {
+                // Border Left
+                if isSelected && theme.resultItemActiveBorderLeftWidth > 0 {
+                    Rectangle()
+                        .fill(Color(hex: theme.resultItemActiveBackgroundColor))
+                        .frame(width: theme.resultItemActiveBorderLeftWidth)
+                } else if theme.resultItemBorderLeftWidth > 0 {
+                    Rectangle()
+                        .fill(Color(hex: theme.resultItemTitleColor))
+                        .frame(width: theme.resultItemBorderLeftWidth)
                 }
-            }
-            
-            Spacer()
 
-            if let tails = result.tails {
-                HStack(spacing: 6) {
-                    ForEach(tails) { tail in
-                        HStack(spacing: 4) {
-                            if let icon = tail.icon {
-                                WoxIconView(icon: icon, size: 12)
-                            }
-                            if let text = tail.text {
-                                Text(text)
-                                    .font(.system(size: 11, weight: .medium, design: .monospaced))
-                            }
-                        }
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.white.opacity(isSelected ? 0.2 : 0.05))
-                        .cornerRadius(4)
-                        .foregroundColor(isSelected ? .white.opacity(0.9) : .secondary)
+                // Icon - 30x30 with Flutter-style padding
+                WoxIconView(icon: result.icon, size: 30)
+                    .padding(.leading, 5)
+                    .padding(.trailing, 10)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(result.title)
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(isSelected ? Color(hex: theme.resultItemActiveTitleColor) : Color(hex: theme.resultItemTitleColor))
+                        .lineLimit(1)
+
+                    if let subTitle = result.subTitle, !subTitle.isEmpty {
+                        Text(subTitle)
+                            .font(.system(size: 13))
+                            .foregroundColor(isSelected ? Color(hex: theme.resultItemActiveSubTitleColor) : Color(hex: theme.resultItemSubTitleColor))
+                            .lineLimit(1)
                     }
                 }
-            }
+                
+                Spacer()
 
-            if isSelected {
-                Image(systemName: "return")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(.white.opacity(0.6))
+                if let tails = result.tails {
+                    HStack(spacing: 10) {
+                        ForEach(tails) { tail in
+                            HStack(spacing: 4) {
+                                if let icon = tail.icon {
+                                    WoxIconView(icon: icon, size: 12)
+                                }
+                                if let text = tail.text {
+                                    Text(text)
+                                        .font(.system(size: 12))
+                                        .foregroundColor(isSelected ? Color(hex: theme.resultItemActiveTailTextColor) : Color(hex: theme.resultItemTailTextColor))
+                                }
+                            }
+                        }
+                    }
+                    .padding(.trailing, 5)
+                }
             }
+            .padding(.leading, theme.resultItemPaddingLeft)
+            .padding(.trailing, theme.resultItemPaddingRight)
+            .padding(.top, theme.resultItemPaddingTop)
+            .padding(.bottom, theme.resultItemPaddingBottom)
+            .background(
+                RoundedRectangle(cornerRadius: theme.resultItemBorderRadius)
+                    .fill(isSelected ? Color(hex: theme.resultItemActiveBackgroundColor) : Color.clear)
+            )
+        }
+    }
+}
+
+struct GroupHeader: View {
+    let title: String
+    let theme: WoxTheme
+    
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(Color(hex: theme.resultItemSubTitleColor))
+            Spacer()
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(isSelected ? Color.accentColor : Color.clear)
+        .background(Color.white.opacity(0.02))
     }
 }
 
@@ -82,13 +113,11 @@ struct WoxIconView: View {
     private func iconContent(for icon: WoxIcon) -> some View {
         switch icon.imageType {
         case "absolute":
-            // File path
             if let image = NSImage(contentsOfFile: icon.imageData) {
                 Image(nsImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
             } else {
-                // Try to get file icon
                 let fileIcon = NSWorkspace.shared.icon(forFile: icon.imageData)
                 Image(nsImage: fileIcon)
                     .resizable()
@@ -96,7 +125,6 @@ struct WoxIconView: View {
             }
             
         case "base64":
-            // Base64 encoded image
             if let imageData = parseBase64Image(icon.imageData),
                let nsImage = NSImage(data: imageData) {
                 Image(nsImage: nsImage)
@@ -107,17 +135,13 @@ struct WoxIconView: View {
             }
             
         case "emoji":
-            // Emoji
             Text(icon.imageData)
                 .font(.system(size: size * 0.8))
             
         case "svg":
-            // SVG - for now show placeholder, SVG requires additional handling
-            // Could use WebView or convert to NSImage
             placeholderIcon
             
         case "url":
-            // URL image
             AsyncImage(url: URL(string: icon.imageData)) { image in
                 image
                     .resizable()
@@ -139,7 +163,6 @@ struct WoxIconView: View {
     }
     
     private func parseBase64Image(_ data: String) -> Data? {
-        // Format: "image/png;base64,xxxxx" or just base64 data
         if data.contains(";base64,") {
             let parts = data.components(separatedBy: ";base64,")
             if parts.count == 2 {

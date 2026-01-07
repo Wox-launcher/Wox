@@ -1,3 +1,4 @@
+
 import SwiftUI
 import AppKit
 import WebKit
@@ -6,110 +7,145 @@ struct ContentView: View {
     @ObservedObject var viewModel: WoxViewModel
     @State private var windowController: WoxWindowController?
     
-    private let inputHeight: CGFloat = 64
-    private let resultRowHeight: CGFloat = 52
-    private let toolbarHeight: CGFloat = 32
-    private let maxVisibleResults = 8
-    
-    private let resultWidth: CGFloat = 700
-    private let previewWidth: CGFloat = 500
-    
     var body: some View {
         VStack(spacing: 0) {
             // Input Area
             HStack(alignment: .center, spacing: 12) {
                  Image(systemName: "magnifyingglass")
                     .font(.system(size: 20, weight: .light))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color(hex: viewModel.theme.queryBoxFontColor).opacity(0.6))
                 
-                InputView(text: $viewModel.query, onArrowUp: {
-                    moveSelection(offset: -1)
-                }, onArrowDown: {
-                    moveSelection(offset: 1)
-                }, onEnter: {
-                    executeSelected()
-                }, onCmdJ: {
-                    viewModel.toggleActionPanel()
-                }, onEsc: {
-                    if viewModel.isShowActionPanel {
-                        viewModel.isShowActionPanel = false
-                    }
-                })
-                .frame(height: 32)
+                InputView(
+                    text: $viewModel.query,
+                    textColor: Color(hex: viewModel.theme.queryBoxFontColor),
+                    cursorColor: Color(hex: viewModel.theme.queryBoxCursorColor),
+                    selectionColor: Color(hex: viewModel.theme.queryBoxTextSelectionBackgroundColor),
+                    onArrowUp: {
+                        viewModel.moveSelection(offset: -1)
+                    }, onArrowDown: {
+                        viewModel.moveSelection(offset: 1)
+                    }, onEnter: {
+                        executeSelected()
+                    }, onCmdJ: {
+                        viewModel.toggleActionPanel()
+                    }, onEsc: {
+                        if viewModel.isShowActionPanel {
+                            viewModel.isShowActionPanel = false
+                        }
+                    }, onTab: {
+                        viewModel.autoCompleteQuery()
+                    }, onHotkey: { modifiers, key in
+                        viewModel.handleKeyboardEvent(modifiers: modifiers, key: key)
+                    })
+                .frame(height: 34.0 + CGFloat(viewModel.queryBoxLineCount - 1) * 34.0)
             }
-            .padding(16)
+            .padding(.leading, viewModel.theme.appPaddingLeft + 16)
+            .padding(.trailing, viewModel.theme.appPaddingRight + 16)
+            .padding(.top, viewModel.theme.appPaddingTop + QUERY_BOX_CONTENT_PADDING_TOP)
+            .padding(.bottom, viewModel.theme.appPaddingBottom + QUERY_BOX_CONTENT_PADDING_BOTTOM)
+            .background(Color(hex: viewModel.theme.queryBoxBackgroundColor))
+            .cornerRadius(viewModel.theme.queryBoxBorderRadius)
             
-            if !viewModel.results.isEmpty || (viewModel.isShowActionPanel && viewModel.selectedResult != nil) {
+            if !viewModel.results.isEmpty {
                 Divider()
-                    .background(Color.white.opacity(0.1))
+                    .background(Color(hex: viewModel.theme.previewSplitLineColor))
                 
-                HStack(alignment: .top, spacing: 0) {
-                    // Left Column: Results or Actions
-                    ScrollViewReader { proxy in
-                        ScrollView(.vertical, showsIndicators: false) {
-                            VStack(spacing: 0) {
-                                if viewModel.isShowActionPanel, let result = viewModel.selectedResult {
-                                    ForEach(result.actions ?? []) { action in
-                                        ActionRow(action: action, isSelected: viewModel.selectedActionId == action.id)
-                                            .id(action.id)
-                                            .contentShape(Rectangle())
-                                            .onTapGesture {
-                                                viewModel.selectedActionId = action.id
-                                                viewModel.executeAction(result: result, actionId: action.id)
-                                            }
-                                    }
-                                } else {
+                ZStack(alignment: .bottomTrailing) {
+                    HStack(alignment: .top, spacing: 0) {
+                        // Left Column: Results
+                        ScrollViewReader { proxy in
+                            ScrollView(.vertical, showsIndicators: false) {
+                                VStack(spacing: 0) {
                                     ForEach(viewModel.results) { result in
-                                        ResultRow(result: result, isSelected: viewModel.selectedResultId == result.id)
-                                            .id(result.id)
-                                            .contentShape(Rectangle())
-                                            .onTapGesture {
+                                        ResultRow(
+                                            result: result,
+                                            isSelected: viewModel.selectedResultId == result.id,
+                                            theme: viewModel.theme
+                                        )
+                                        .id(result.id)
+                                        .contentShape(Rectangle())
+                                        .onTapGesture {
+                                            if !result.isGroup {
                                                 viewModel.selectedResultId = result.id
                                                 viewModel.executeAction(result: result)
                                             }
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(.leading, viewModel.theme.resultContainerPaddingLeft)
+                            .padding(.trailing, viewModel.theme.resultContainerPaddingRight)
+                            .padding(.top, viewModel.theme.resultContainerPaddingTop)
+                            .padding(.bottom, viewModel.theme.resultContainerPaddingBottom)
+                            .frame(width: resultWidth, height: resultsHeight)
+                            .onChange(of: viewModel.selectedResultId) { id in
+                                if let id = id {
+                                    withAnimation(.easeInOut(duration: 0.1)) {
+                                        proxy.scrollTo(id, anchor: .center)
                                     }
                                 }
                             }
                         }
-                        .frame(width: resultWidth, height: resultsHeight)
-                        .onChange(of: viewModel.selectedResultId) { id in
-                            if let id = id, !viewModel.isShowActionPanel {
-                                withAnimation(.easeInOut(duration: 0.1)) {
-                                    proxy.scrollTo(id, anchor: .center)
-                                }
-                            }
-                        }
-                        .onChange(of: viewModel.selectedActionId) { id in
-                            if let id = id, viewModel.isShowActionPanel {
-                                withAnimation(.easeInOut(duration: 0.1)) {
-                                    proxy.scrollTo(id, anchor: .center)
-                                }
-                            }
+                        
+                        // Right Column: Preview
+                        if viewModel.isShowPreviewPanel, let preview = viewModel.currentPreview {
+                            Divider()
+                                .background(Color(hex: viewModel.theme.previewSplitLineColor))
+                            
+                            PreviewPanel(preview: preview, theme: viewModel.theme)
+                                .frame(width: previewWidth, height: resultsHeight)
                         }
                     }
                     
-                    // Right Column: Preview
-                    if viewModel.isShowPreviewPanel, let preview = viewModel.currentPreview {
-                        Divider()
-                            .background(Color.white.opacity(0.1))
-                        
-                        PreviewPanel(preview: preview)
-                            .frame(width: previewWidth, height: resultsHeight)
+                    // Action Panel
+                    if viewModel.isShowActionPanel, let result = viewModel.selectedResult, let actions = result.actions, !actions.isEmpty {
+                        ActionPanelView(
+                            actions: actions,
+                            selectedActionId: viewModel.selectedActionId,
+                            theme: viewModel.theme,
+                            onActionTap: { action in
+                                viewModel.selectedActionId = action.id
+                                viewModel.executeAction(result: result, actionId: action.id)
+                            }
+                        )
+                        .padding(.trailing, viewModel.theme.actionContainerPaddingRight + 10)
+                        .padding(.bottom, viewModel.theme.actionContainerPaddingBottom + 10)
+                    }
+                    
+                    // Form Action Panel
+                    if viewModel.isShowFormActionPanel, let action = viewModel.activeFormAction {
+                        FormActionPanelView(
+                            action: action,
+                            values: Binding(
+                                get: { viewModel.formActionValues.compactMapValues { $0 as? String } },
+                                set: { viewModel.formActionValues = $0 }
+                            ),
+                            theme: viewModel.theme,
+                            onSave: { values in
+                                viewModel.submitFormAction(values: values)
+                            },
+                            onCancel: {
+                                viewModel.hideFormActionPanel()
+                            }
+                        )
+                        .padding(.trailing, viewModel.theme.actionContainerPaddingRight + 10)
+                        .padding(.bottom, viewModel.theme.actionContainerPaddingBottom + 10)
                     }
                 }
             }
             
             // Bottom Toolbar
-            if showToolbar {
+            if viewModel.isShowToolbar {
                 Divider()
-                    .background(Color.white.opacity(0.1))
+                    .background(Color(hex: viewModel.theme.previewSplitLineColor))
                 
-                ToolbarView(info: viewModel.toolbarInfo)
-                    .frame(height: toolbarHeight)
+                ToolbarView(info: viewModel.toolbarInfo, theme: viewModel.theme)
+                    .frame(height: TOOLBAR_HEIGHT)
             }
         }
         .frame(width: totalWidth, height: totalHeight)
-        .background(VisualEffectView(material: .hudWindow, blendingMode: .behindWindow))
+        .background(VisualEffectView(material: .popover, blendingMode: .behindWindow))
+        .background(Color(hex: viewModel.theme.appBackgroundColor).opacity(0.85))
         .cornerRadius(12)
         .overlay(
             RoundedRectangle(cornerRadius: 12)
@@ -128,29 +164,21 @@ struct ContentView: View {
         }
     }
     
-    private var showToolbar: Bool {
-        !viewModel.results.isEmpty || viewModel.toolbarInfo.text != nil
-    }
+    private let resultWidth: CGFloat = 700
+    private let previewWidth: CGFloat = 500
     
     private var resultsHeight: CGFloat {
-        if viewModel.isShowActionPanel {
-            let count = min(viewModel.selectedResult?.actions?.count ?? 0, maxVisibleResults)
-            return CGFloat(count) * resultRowHeight
-        } else {
-            let count = min(viewModel.results.count, maxVisibleResults)
-            return CGFloat(count) * resultRowHeight
-        }
+        let maxResultCount = 10
+        let itemCount = viewModel.results.filter { !$0.isGroup }.count
+        let count = min(itemCount, maxResultCount)
+        if count == 0 { return 0 }
+        
+        let itemHeight = RESULT_ITEM_BASE_HEIGHT + viewModel.theme.resultItemPaddingTop + viewModel.theme.resultItemPaddingBottom
+        return CGFloat(count) * itemHeight
     }
     
     private var totalHeight: CGFloat {
-        var height = inputHeight
-        if !viewModel.results.isEmpty || (viewModel.isShowActionPanel && viewModel.selectedResult != nil) {
-            height += 1 + resultsHeight
-        }
-        if showToolbar {
-            height += 1 + toolbarHeight
-        }
-        return height
+        viewModel.calculateTotalHeight()
     }
     
     private var totalWidth: CGFloat {
@@ -159,28 +187,6 @@ struct ContentView: View {
             width += previewWidth + 1
         }
         return width
-    }
-    
-    private func moveSelection(offset: Int) {
-        if viewModel.isShowActionPanel {
-            guard let actions = viewModel.selectedResult?.actions, !actions.isEmpty else { return }
-            let ids = actions.map { $0.id }
-            if let currentId = viewModel.selectedActionId, let index = ids.firstIndex(of: currentId) {
-                let newIndex = max(0, min(ids.count - 1, index + offset))
-                viewModel.selectedActionId = ids[newIndex]
-            } else {
-                viewModel.selectedActionId = actions.first?.id
-            }
-        } else {
-            guard !viewModel.results.isEmpty else { return }
-            let ids = viewModel.results.map { $0.id }
-            if let currentId = viewModel.selectedResultId, let index = ids.firstIndex(of: currentId) {
-                let newIndex = max(0, min(ids.count - 1, index + offset))
-                viewModel.selectedResultId = ids[newIndex]
-            } else {
-                viewModel.selectedResultId = viewModel.results.first?.id
-            }
-        }
     }
     
     private func executeSelected() {
@@ -200,6 +206,7 @@ struct ContentView: View {
 
 struct ToolbarView: View {
     let info: ToolbarInfo
+    let theme: WoxTheme
     
     var body: some View {
         HStack(spacing: 12) {
@@ -209,7 +216,7 @@ struct ToolbarView: View {
             if let text = info.text {
                 Text(text)
                     .font(.system(size: 12))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color(hex: theme.toolbarFontColor))
             }
             
             Spacer()
@@ -220,45 +227,78 @@ struct ToolbarView: View {
                         HStack(spacing: 4) {
                             Text(action.name)
                                 .font(.system(size: 11))
-                                .foregroundColor(.secondary)
+                                .foregroundColor(Color(hex: theme.toolbarFontColor))
                             
-                            HotkeyBadge(hotkey: action.hotkey)
+                            HotkeyBadge(hotkey: action.hotkey, theme: theme)
                         }
                     }
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .background(Color.black.opacity(0.05))
+        .padding(.leading, theme.toolbarPaddingLeft)
+        .padding(.trailing, theme.toolbarPaddingRight)
+        .background(Color(hex: theme.toolbarBackgroundColor))
     }
 }
 
 struct HotkeyBadge: View {
     let hotkey: String
+    let theme: WoxTheme
     
     var body: some View {
-        Text(hotkey.uppercased())
-            .font(.system(size: 9, weight: .bold, design: .monospaced))
+        HStack(spacing: 4) {
+            ForEach(parseHotkeyParts(), id: \.self) { part in
+                KeyBox(key: part, theme: theme)
+            }
+        }
+    }
+    
+    private func parseHotkeyParts() -> [String] {
+        let parts = hotkey.lowercased().split(separator: "+").map { String($0) }
+        return parts.compactMap { part in
+            switch part {
+            case "cmd", "command": return "⌘"
+            case "ctrl", "control": return "⌃"
+            case "alt", "option": return "⌥"
+            case "shift": return "⇧"
+            case "enter", "return": return "↩"
+            case "tab": return "⇥"
+            case "esc", "escape": return "⎋"
+            case "space": return "␣"
+            default: return part.uppercased()
+            }
+        }
+    }
+}
+
+struct KeyBox: View {
+    let key: String
+    let theme: WoxTheme
+    
+    var body: some View {
+        Text(key)
+            .font(.system(size: 11, weight: .medium))
+            .frame(minWidth: 22, minHeight: 20)
             .padding(.horizontal, 4)
-            .padding(.vertical, 2)
-            .background(Color.secondary.opacity(0.15))
-            .cornerRadius(4)
-            .foregroundColor(.secondary)
+            .foregroundColor(Color(hex: theme.toolbarFontColor))
+            .background(Color(hex: theme.toolbarBackgroundColor))
             .overlay(
                 RoundedRectangle(cornerRadius: 4)
-                    .stroke(Color.white.opacity(0.1), lineWidth: 0.5)
+                    .stroke(Color(hex: theme.toolbarFontColor).opacity(0.3), lineWidth: 1)
             )
+            .cornerRadius(4)
     }
 }
 
 struct PreviewPanel: View {
     let preview: WoxPreview
+    let theme: WoxTheme
     
     var body: some View {
         Group {
             switch preview.previewType {
             case "markdown", "text":
-                TextView(text: preview.previewData)
+                TextView(text: preview.previewData, theme: theme)
                     .padding(16)
                 
             case "image":
@@ -273,16 +313,94 @@ struct PreviewPanel: View {
                 WebView(url: URL(string: preview.previewData))
                 
             default:
-                TextView(text: preview.previewData)
+                TextView(text: preview.previewData, theme: theme)
                     .padding(16)
             }
         }
-        .background(Color.black.opacity(0.1))
+        .background(Color(hex: theme.appBackgroundColor).opacity(0.1))
     }
 }
 
+struct ActionRow: View {
+    let action: WoxResultAction
+    let isSelected: Bool
+    let theme: WoxTheme
+    
+    var body: some View {
+        HStack(spacing: 10) {
+            // Icon
+            if let icon = action.icon {
+                WoxIconView(icon: icon, size: 20)
+            }
+            
+            Text(action.name)
+                .font(.system(size: 14))
+                .foregroundColor(isSelected ? Color(hex: theme.actionItemActiveFontColor) : Color(hex: theme.actionItemFontColor))
+            
+            Spacer()
+            
+            if !action.hotkey.isEmpty {
+                HotkeyBadge(hotkey: action.hotkey, theme: theme)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(isSelected ? Color(hex: theme.actionItemActiveBackgroundColor) : Color.clear)
+        )
+    }
+}
+
+struct ActionPanelView: View {
+    let actions: [WoxResultAction]
+    let selectedActionId: String?
+    let theme: WoxTheme
+    let onActionTap: (WoxResultAction) -> Void
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("操作")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(Color(hex: theme.actionContainerHeaderFontColor))
+            
+            Divider()
+                .background(Color(hex: theme.previewSplitLineColor))
+            
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 2) {
+                    ForEach(actions) { action in
+                        ActionRow(action: action, isSelected: selectedActionId == action.id, theme: theme)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                onActionTap(action)
+                            }
+                    }
+                }
+            }
+            .frame(maxHeight: 300)
+        }
+        .padding(.leading, theme.actionContainerPaddingLeft)
+        .padding(.top, theme.actionContainerPaddingTop)
+        .padding(.trailing, theme.actionContainerPaddingRight)
+        .padding(.bottom, theme.actionContainerPaddingBottom)
+        .frame(width: 280)
+        .background(Color(hex: theme.actionContainerBackgroundColor))
+        .background(VisualEffectView(material: .hudWindow, blendingMode: .behindWindow))
+        .cornerRadius(theme.actionQueryBoxBorderRadius)
+        .shadow(color: Color.black.opacity(0.2), radius: 8, x: 0, y: 4)
+        .overlay(
+            RoundedRectangle(cornerRadius: theme.actionQueryBoxBorderRadius)
+                .stroke(Color.white.opacity(0.15), lineWidth: 0.5)
+        )
+    }
+}
+
+// MARK: - Helper Views
+
 struct TextView: NSViewRepresentable {
     let text: String
+    let theme: WoxTheme
     
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
@@ -291,7 +409,7 @@ struct TextView: NSViewRepresentable {
         textView.isSelectable = true
         textView.backgroundColor = .clear
         textView.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
-        textView.textColor = .labelColor
+        textView.textColor = NSColor(Color(hex: theme.previewFontColor))
         textView.autoresizingMask = [.width]
         
         scrollView.documentView = textView
@@ -304,6 +422,7 @@ struct TextView: NSViewRepresentable {
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         if let textView = nsView.documentView as? NSTextView {
             textView.string = text
+            textView.textColor = NSColor(Color(hex: theme.previewFontColor))
         }
     }
 }
@@ -320,25 +439,6 @@ struct WebView: NSViewRepresentable {
             let request = URLRequest(url: url)
             nsView.load(request)
         }
-    }
-}
-
-struct ActionRow: View {
-    let action: WoxResultAction
-    let isSelected: Bool
-    
-    var body: some View {
-        HStack {
-            Text(action.name)
-                .font(.system(size: 16))
-                .foregroundColor(isSelected ? .white : .primary)
-            Spacer()
-            HotkeyBadge(hotkey: action.hotkey)
-                .opacity(isSelected ? 0.8 : 1.0)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(isSelected ? Color.accentColor : Color.clear)
     }
 }
 
@@ -388,8 +488,6 @@ class WoxWindowController {
     }
 }
 
-// MARK: - Window Accessor
-
 struct WindowAccessor: NSViewRepresentable {
     var callback: (NSWindow?) -> Void
     
@@ -403,8 +501,6 @@ struct WindowAccessor: NSViewRepresentable {
     
     func updateNSView(_ nsView: NSView, context: Context) {}
 }
-
-// MARK: - Visual Effect View
 
 struct VisualEffectView: NSViewRepresentable {
     let material: NSVisualEffectView.Material
@@ -428,11 +524,16 @@ struct VisualEffectView: NSViewRepresentable {
 
 struct InputView: NSViewRepresentable {
     @Binding var text: String
+    var textColor: Color
+    var cursorColor: Color
+    var selectionColor: Color
     var onArrowUp: () -> Void
     var onArrowDown: () -> Void
     var onEnter: () -> Void
     var onCmdJ: () -> Void
     var onEsc: () -> Void
+    var onTab: (() -> Void)?
+    var onHotkey: ((NSEvent.ModifierFlags, String) -> Bool)?
     
     func makeNSView(context: Context) -> NSTextField {
         let textField = CustomNSTextField()
@@ -440,14 +541,17 @@ struct InputView: NSViewRepresentable {
         textField.focusRingType = .none
         textField.isBordered = false
         textField.drawsBackground = false
-        textField.font = NSFont.systemFont(ofSize: 26, weight: .light)
+        textField.font = NSFont.systemFont(ofSize: 28, weight: .light)
         textField.placeholderString = "Wox..."
+        textField.textColor = NSColor(textColor)
         
         textField.onArrowUp = onArrowUp
         textField.onArrowDown = onArrowDown
         textField.onEnter = onEnter
         textField.onCmdJ = onCmdJ
         textField.onEsc = onEsc
+        textField.onTab = onTab
+        textField.onHotkey = onHotkey
         
         return textField
     }
@@ -456,6 +560,7 @@ struct InputView: NSViewRepresentable {
         if nsView.stringValue != text {
             nsView.stringValue = text
         }
+        nsView.textColor = NSColor(textColor)
     }
     
     func makeCoordinator() -> Coordinator {
@@ -482,10 +587,18 @@ class CustomNSTextField: NSTextField {
     var onEnter: (() -> Void)?
     var onCmdJ: (() -> Void)?
     var onEsc: (() -> Void)?
+    var onTab: (() -> Void)?
+    var onHotkey: ((NSEvent.ModifierFlags, String) -> Bool)?
     
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        // Handle Tab key for auto-complete
+        if event.keyCode == 48 { // Tab
+            onTab?()
+            return true
+        }
+        
         if event.modifierFlags.contains(.command) {
-            let chars = event.charactersIgnoringModifiers?.lowercased()
+            let chars = event.charactersIgnoringModifiers?.lowercased() ?? ""
             if chars == "a" {
                  return super.performKeyEquivalent(with: event)
             }
@@ -493,12 +606,27 @@ class CustomNSTextField: NSTextField {
                 onCmdJ?()
                 return true
             }
+            
+            // Check for other command+key hotkeys
+            if let onHotkey = onHotkey, !chars.isEmpty {
+                if onHotkey(event.modifierFlags, chars) {
+                    return true
+                }
+            }
+        }
+        
+        // Check for other modifier combinations
+        if event.modifierFlags.contains(.option) || event.modifierFlags.contains(.control) {
+            let chars = event.charactersIgnoringModifiers?.lowercased() ?? ""
+            if let onHotkey = onHotkey, !chars.isEmpty {
+                if onHotkey(event.modifierFlags, chars) {
+                    return true
+                }
+            }
         }
         
         if event.keyCode == 53 { // Escape
             onEsc?()
-            // We return false here to let the system handle escape (which might dismiss the app)
-            // unless the active panel was closed. But for simple logic, we just return super.
             return super.performKeyEquivalent(with: event)
         }
         
