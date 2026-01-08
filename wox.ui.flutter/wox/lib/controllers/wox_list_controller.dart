@@ -66,7 +66,6 @@ class WoxListController<T> extends WoxBaseListController<T> {
   @override
   void syncScrollPositionWithActiveIndex(String traceId) {
     if (!scrollController.hasClients) {
-      Logger.instance.debug(traceId, "ScrollController not attached to any scroll views yet");
       return;
     }
 
@@ -91,8 +90,6 @@ class WoxListController<T> extends WoxBaseListController<T> {
     final currentOffset = scrollController.offset;
     final firstVisibleItemIndex = (currentOffset / itemHeight).floor();
     final lastVisibleItemIndex = firstVisibleItemIndex + visibleItemCount - 1;
-
-    Logger.instance.debug(traceId, "Visible range: $firstVisibleItemIndex - $lastVisibleItemIndex, active: ${activeIndex.value}, visibleItemCount: $visibleItemCount");
 
     if (activeIndex.value >= firstVisibleItemIndex && activeIndex.value <= lastVisibleItemIndex) {
       return;
