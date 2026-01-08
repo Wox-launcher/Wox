@@ -17,6 +17,8 @@ import (
 	"wox/util"
 )
 
+var ErrFeatureNotSupported = errors.New("Plugin does not support this feature")
+
 type MetadataFeatureName = string
 
 const (
@@ -130,7 +132,7 @@ func (m *Metadata) GetFeatureParamsForDebounce() (MetadataFeatureParamsDebounce,
 		}
 	}
 
-	return MetadataFeatureParamsDebounce{}, errors.New("plugin does not support debounce feature")
+	return MetadataFeatureParamsDebounce{}, ErrFeatureNotSupported
 }
 
 func (m *Metadata) GetFeatureParamsForResultPreviewWidthRatio() (MetadataFeatureParamsResultPreviewWidthRatio, error) {
@@ -169,7 +171,7 @@ func (m *Metadata) GetFeatureParamsForResultPreviewWidthRatio() (MetadataFeature
 		}
 	}
 
-	return MetadataFeatureParamsResultPreviewWidthRatio{}, errors.New("plugin does not support resultPreviewWidthRatio feature")
+	return MetadataFeatureParamsResultPreviewWidthRatio{}, ErrFeatureNotSupported
 }
 
 type MetadataFeatureParamsMRU struct {
@@ -193,7 +195,7 @@ func (m *Metadata) GetFeatureParamsForMRU() (MetadataFeatureParamsMRU, error) {
 			return params, nil
 		}
 	}
-	return MetadataFeatureParamsMRU{}, errors.New("plugin does not support mru feature")
+	return MetadataFeatureParamsMRU{}, ErrFeatureNotSupported
 }
 
 func (m *Metadata) GetFeatureParamsForQueryEnv() (MetadataFeatureParamsQueryEnv, error) {
@@ -263,7 +265,7 @@ func (m *Metadata) GetFeatureParamsForQueryEnv() (MetadataFeatureParamsQueryEnv,
 		}
 	}
 
-	return MetadataFeatureParamsQueryEnv{}, errors.New("plugin does not support queryEnv feature")
+	return MetadataFeatureParamsQueryEnv{}, ErrFeatureNotSupported
 }
 
 type MetadataFeature struct {
@@ -386,7 +388,7 @@ func (m *Metadata) GetFeatureParamsForGridLayout() (MetadataFeatureParamsGridLay
 		}
 	}
 
-	return MetadataFeatureParamsGridLayout{}, errors.New("plugin does not support gridLayout feature")
+	return MetadataFeatureParamsGridLayout{}, ErrFeatureNotSupported
 }
 
 func (m *Metadata) GetName(ctx context.Context) string {

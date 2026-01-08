@@ -54,6 +54,8 @@ import 'package:wox/utils/color_util.dart';
 class WoxLauncherController extends GetxController {
   //query related variables
   final currentQuery = PlainQuery.empty().obs;
+  // is current query returned results or finished without results
+  bool isCurrentQueryReturned = false;
   final queryBoxFocusNode = FocusNode();
   final queryBoxTextFieldController = QueryBoxTextEditingController(
     selectedTextStyle: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxTextSelectionColor)),
@@ -208,14 +210,17 @@ class WoxLauncherController extends GetxController {
   bool get isToolbarShowedWithoutResults => isShowToolbar && activeResultViewController.items.isEmpty;
 
   /// Triggered when received query results from the server.
-  void onReceivedQueryResults(String traceId, List<WoxQueryResult> receivedResults) {
+  void onReceivedQueryResults(String traceId, String queryId, List<WoxQueryResult> receivedResults) {
     if (receivedResults.isEmpty) {
       return;
     }
 
     // Cancel loading timer and hide loading animation when results are received
-    loadingTimer?.cancel();
-    isLoading.value = false;
+    if (queryId == currentQuery.value.queryId) {
+      isCurrentQueryReturned = true;
+      loadingTimer?.cancel();
+      isLoading.value = false;
+    }
 
     if (currentQuery.value.queryId != receivedResults.first.queryId) {
       Logger.instance.error(traceId, "query id is not matched, ignore the results");
@@ -718,7 +723,7 @@ class WoxLauncherController extends GetxController {
       for (var result in results) {
         result.queryId = queryId;
       }
-      onReceivedQueryResults(traceId, results);
+      onReceivedQueryResults(traceId, queryId, results);
       var endTime = DateTime.now().millisecondsSinceEpoch;
       Logger.instance.debug(traceId, "queryMRU via websocket took ${endTime - startTime} ms");
     } catch (e) {
@@ -742,6 +747,7 @@ class WoxLauncherController extends GetxController {
     }
 
     currentQuery.value = query;
+    isCurrentQueryReturned = false;
     isShowActionPanel.value = false;
     if (query.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code) {
       canArrowUpHistory = false;
@@ -764,9 +770,24 @@ class WoxLauncherController extends GetxController {
     }
 
     updatePluginMetadataOnQueryChanged(traceId, query).then((isPluginQuery) {
-      if (isPluginQuery) {
+      if (!isPluginQuery) return;
+      if (currentQuery.value.queryId != query.queryId) return;
+      // If query has returned (isFinal received or results arrived), don't start loading animation
+      if (isCurrentQueryReturned) return;
+
+      // Logic to prevent starting the timer if results have already arrived (Race Condition Fix)
+      // Check if we currently have results for this query
+      bool hasResults = activeResultViewController.items.isNotEmpty && activeResultViewController.items.first.value.data.queryId == query.queryId;
+
+      if (!hasResults) {
         loadingTimer = Timer(loadingDelay, () {
-          isLoading.value = true;
+          // Double check before showing loading:
+          // 1. Query is still the same
+          // 2. We still don't have results (or results matching this query)
+          bool stillNoResults = activeResultViewController.items.isEmpty || activeResultViewController.items.first.value.data.queryId != query.queryId;
+          if (currentQuery.value.queryId == query.queryId && stillNoResults && !isCurrentQueryReturned) {
+            isLoading.value = true;
+          }
         });
       }
     });
@@ -934,6 +955,7 @@ class WoxLauncherController extends GetxController {
       // Parse QueryResponse object
       final queryResponse = msg.data as Map<String, dynamic>;
       final resultsData = queryResponse['Results'] as List<dynamic>;
+      final queryId = queryResponse['QueryId'] as String? ?? "";
       final isFinal = queryResponse['IsFinal'] as bool? ?? false;
 
       var results = <WoxQueryResult>[];
@@ -944,7 +966,17 @@ class WoxLauncherController extends GetxController {
       Logger.instance.info(msg.traceId, "Received websocket message: ${msg.method}, results count: ${results.length}, isFinal: $isFinal");
 
       // Process results first
-      onReceivedQueryResults(msg.traceId, results);
+      onReceivedQueryResults(msg.traceId, queryId, results);
+
+      // If this is the final final response, we must stop loading animation explicitly
+      // This handles cases where results are empty but the query is finished
+      // We explicitly check if this final response belongs to the current query
+      if (isFinal && queryId == currentQuery.value.queryId) {
+        loadingTimer?.cancel();
+        if (isLoading.value) {
+          isLoading.value = false;
+        }
+      }
 
       // Record First Paint after results are rendered (use post-frame callback)
       final queryStartTime = queryStartTimeMap[msg.traceId];
@@ -1200,6 +1232,12 @@ class WoxLauncherController extends GetxController {
       return false;
     }
 
+    // Query matched, so we stop loading animation regardless of result count
+    if (queryId == currentQuery.value.queryId) {
+      loadingTimer?.cancel();
+      isLoading.value = false;
+    }
+
     if (results.isEmpty) {
       return true;
     }
@@ -1210,7 +1248,7 @@ class WoxLauncherController extends GetxController {
       }
     }
 
-    onReceivedQueryResults(traceId, results);
+    onReceivedQueryResults(traceId, queryId, results);
     return true;
   }
 
