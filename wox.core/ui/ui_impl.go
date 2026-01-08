@@ -458,6 +458,12 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 	var startTimestamp = util.GetSystemTimestamp()
 	var resultDebouncer = util.NewDebouncer(24, func(results []plugin.QueryResultUI, reason string) {
 		isFinal := reason == "done"
+
+		// no results during ticks, skip sending
+		if !isFinal && len(results) == 0 {
+			return
+		}
+
 		logger.Info(ctx, fmt.Sprintf("query %s: %s, result flushed (reason: %s, isFinal: %v), total results: %d", query.Type, query.String(), reason, isFinal, totalResultCount))
 		responseUIQueryResults(ctx, request, queryId, results, isFinal)
 	})

@@ -53,7 +53,7 @@ func (r *Debouncer[T]) Done(ctx context.Context) {
 	r.flush(ctx, "done")
 }
 
-func (r *Debouncer[T]) flush(ctx context.Context, reason string) {
+func (r *Debouncer[T]) flush(_ context.Context, reason string) {
 	r.m.Lock()
 	defer r.m.Unlock()
 

@@ -184,7 +184,6 @@ class WoxGridController<T> extends WoxBaseListController<T> {
   @override
   void syncScrollPositionWithActiveIndex(String traceId) {
     if (!scrollController.hasClients) {
-      Logger.instance.debug(traceId, "ScrollController not attached to any scroll views yet");
       return;
     }
 
