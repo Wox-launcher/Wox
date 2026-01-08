@@ -57,9 +57,14 @@ func (r *Debouncer[T]) flush(ctx context.Context, reason string) {
 	r.m.Lock()
 	defer r.m.Unlock()
 
-	if len(r.items) > 0 {
-		flushedResults := r.items
-		r.items = nil
-		r.onFlush(flushedResults, reason)
+	if len(r.items) == 0 {
+		// we still need to notify the reason even there is no item
+		// user may want to know the "done" event
+		r.onFlush([]T{}, reason)
+		return
 	}
+
+	flushedResults := r.items
+	r.items = nil
+	r.onFlush(flushedResults, reason)
 }

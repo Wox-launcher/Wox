@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"sort"
 	"strings"
 	texttmpl "text/template"
 	"time"
@@ -609,6 +610,11 @@ func (w *WPMPlugin) createUninstallAction(pluginManifest plugin.StorePluginManif
 func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	var results []plugin.QueryResult
 	pluginManifests := plugin.GetStoreManager().Search(ctx, query.Search)
+	// sort by name
+	sort.SliceStable(pluginManifests, func(i, j int) bool {
+		return pluginManifests[i].GetName(ctx) < pluginManifests[j].GetName(ctx)
+	})
+
 	// get installed plugins once for status checks
 	installed := plugin.GetPluginManager().GetPluginInstances()
 

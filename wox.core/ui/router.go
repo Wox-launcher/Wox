@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -916,7 +917,9 @@ func handleQueryMetadata(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		metadata.WidthRatio = featureParams.WidthRatio
 	} else {
-		logger.Error(ctx, fmt.Sprintf("failed to get feature params for result preview width ratio: %s", err.Error()))
+		if !errors.Is(err, plugin.ErrFeatureNotSupported) {
+			logger.Error(ctx, fmt.Sprintf("failed to get feature params for result preview width ratio: %s", err.Error()))
+		}
 	}
 
 	featureParamsGridLayout, err := pluginInstance.Metadata.GetFeatureParamsForGridLayout()

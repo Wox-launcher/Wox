@@ -37,6 +37,7 @@ type WebsocketMsg struct {
 }
 
 type QueryResponse struct {
+	QueryId string                 `json:"QueryId"`
 	Results []plugin.QueryResultUI `json:"Results"`
 	IsFinal bool                   `json:"IsFinal"` // indicates if this is the final batch of results
 }
@@ -180,7 +181,7 @@ func responseUISuccessWithData(ctx context.Context, request WebsocketMsg, data a
 	})
 }
 
-func responseUIQueryResults(ctx context.Context, request WebsocketMsg, results []plugin.QueryResultUI, isFinal bool) {
+func responseUIQueryResults(ctx context.Context, request WebsocketMsg, queryId string, results []plugin.QueryResultUI, isFinal bool) {
 	responseUI(ctx, WebsocketMsg{
 		RequestId:     request.RequestId,
 		TraceId:       util.GetContextTraceId(ctx),
@@ -189,6 +190,7 @@ func responseUIQueryResults(ctx context.Context, request WebsocketMsg, results [
 		Success:       true,
 		SendTimestamp: util.GetSystemTimestamp(), // Only set timestamp for Query responses
 		Data: QueryResponse{
+			QueryId: queryId,
 			Results: results,
 			IsFinal: isFinal,
 		},
