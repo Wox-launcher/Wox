@@ -313,7 +313,10 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                           controller.queryIcon.value.action?.call();
                           controller.focusQueryBox();
                         },
-                        child: WoxImageView(woxImage: controller.queryIcon.value.icon, width: 30, height: 30),
+                        child:
+                            controller.isLoading.value
+                                ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: safeFromCssColor(currentTheme.queryBoxCursorColor)))
+                                : WoxImageView(woxImage: controller.queryIcon.value.icon, width: 30, height: 30),
                       ),
                     ),
                   ),

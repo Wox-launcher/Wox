@@ -9,6 +9,7 @@
   - Add auto theme which changes theme based on system light/dark mode
     ![](screenshots/auto_theme.png)
   - [`Explorer`] Add Explorer plugin to quick switch paths in Open/Save dialog #3259, see [Explorer plugin guide](https://wox-launcher.github.io/Wox/guide/plugins/system/explorer.html) for more details
+  - Add loading animation to query box during plugin metadata fetching to improve user experience
 
 - Improve
 

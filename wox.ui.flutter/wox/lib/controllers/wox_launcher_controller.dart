@@ -132,6 +132,11 @@ class WoxLauncherController extends GetxController {
   final isGridLayout = false.obs;
   final gridLayoutParams = GridLayoutParams.empty().obs;
 
+  // loading animation related variables
+  final isLoading = false.obs;
+  Timer? loadingTimer;
+  final loadingDelay = const Duration(milliseconds: 500);
+
   @override
   void onInit() {
     super.onInit();
@@ -207,6 +212,10 @@ class WoxLauncherController extends GetxController {
     if (receivedResults.isEmpty) {
       return;
     }
+
+    // Cancel loading timer and hide loading animation when results are received
+    loadingTimer?.cancel();
+    isLoading.value = false;
 
     if (currentQuery.value.queryId != receivedResults.first.queryId) {
       Logger.instance.error(traceId, "query id is not matched, ignore the results");
@@ -745,7 +754,23 @@ class WoxLauncherController extends GetxController {
       moveQueryBoxCursorToEnd();
     }
     updateQueryBoxLineCount(query.queryText);
-    updatePluginMetadataOnQueryChanged(traceId, query);
+    updateQueryBoxLineCount(query.queryText);
+
+    // Cancel previous loading timer and reset loading state
+    loadingTimer?.cancel();
+    // Only reset loading state if it is currently true to avoid unnecessary rebuilds
+    if (isLoading.value) {
+      isLoading.value = false;
+    }
+
+    updatePluginMetadataOnQueryChanged(traceId, query).then((isPluginQuery) {
+      if (isPluginQuery) {
+        loadingTimer = Timer(loadingDelay, () {
+          isLoading.value = true;
+        });
+      }
+    });
+
     if (query.isEmpty) {
       // Check if we should show MRU results when query is empty (based on start page setting)
       if (lastStartPage == WoxStartPageEnum.WOX_START_PAGE_MRU.code) {
@@ -1557,16 +1582,26 @@ class WoxLauncherController extends GetxController {
 
   /// Update the plugin metadata based on the query
   /// E.g. plugin icon, plugin features, etc.
-  Future<void> updatePluginMetadataOnQueryChanged(String traceId, PlainQuery query) async {
+  Future<bool> updatePluginMetadataOnQueryChanged(String traceId, PlainQuery query) async {
     var queryMetadata = QueryMetadata(icon: WoxImage.empty(), resultPreviewWidthRatio: 0.5, isGridLayout: false, gridLayoutParams: GridLayoutParams.empty());
+    var isPluginQuery = false;
+
     if (!query.isEmpty && query.queryText.contains(" ")) {
       // if there is space in the query, then this  may be a plugin query, fetch metadata
-      queryMetadata = await WoxApi.instance.getQueryMetadata(traceId, query);
+      try {
+        queryMetadata = await WoxApi.instance.getQueryMetadata(traceId, query);
+        if (queryMetadata.icon.imageData.isNotEmpty) {
+          isPluginQuery = true;
+        }
+      } catch (e) {
+        Logger.instance.error(traceId, "query metadata failed: $e");
+      }
     }
 
     updateQueryIconOnQueryChanged(traceId, query, queryMetadata);
     updateResultPreviewWidthRatioOnQueryChanged(traceId, query, queryMetadata);
     updateGridLayoutParamsOnQueryChanged(traceId, query, queryMetadata);
+    return isPluginQuery;
   }
 
   /// Change the query icon based on the query
