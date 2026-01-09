@@ -204,7 +204,7 @@ func (a *APIImpl) Notify(ctx context.Context, message string) {
 }
 
 func (a *APIImpl) Log(ctx context.Context, level LogLevel, msg string) {
-	logCtx := util.NewComponentContext(ctx, a.pluginInstance.GetName(ctx))
+	logCtx := util.WithComponentContext(ctx, a.pluginInstance.GetName(ctx))
 	if level == LogLevelError {
 		a.logger.Error(logCtx, msg)
 		logger.Error(logCtx, msg)
@@ -448,6 +448,9 @@ func (a *APIImpl) OnMRURestore(ctx context.Context, callback func(ctx context.Co
 }
 
 func (a *APIImpl) UpdateResult(ctx context.Context, result UpdatableResult) bool {
+	if sessionId, queryId := GetPluginManager().GetQueryInfoByResultId(result.Id); sessionId != "" {
+		ctx = util.WithQueryIdContext(util.WithSessionContext(ctx, sessionId), queryId)
+	}
 	polishedResult := GetPluginManager().PolishUpdatableResult(ctx, a.pluginInstance, result)
 	success := GetPluginManager().GetUI().UpdateResult(ctx, polishedResult)
 	return success
@@ -458,15 +461,23 @@ func (a *APIImpl) PushResults(ctx context.Context, query Query, results []QueryR
 		a.Log(ctx, LogLevelWarning, "PushResults ignored: query id is empty")
 		return false
 	}
-
-	polishedResults := make([]QueryResultUI, 0, len(results))
-	for _, result := range results {
-		polished := GetPluginManager().PolishResult(ctx, a.pluginInstance, query, result)
-		uiResult := polished.ToUI()
-		uiResult.QueryId = query.Id
-		polishedResults = append(polishedResults, uiResult)
+	if query.SessionId == "" {
+		a.Log(ctx, LogLevelWarning, "PushResults ignored: session id is empty")
+		return false
+	}
+	if util.GetContextSessionId(ctx) == "" {
+		ctx = util.WithQueryIdContext(util.WithSessionContext(ctx, query.SessionId), query.Id)
+	}
+	if !GetPluginManager().IsCurrentQuery(query.SessionId, query.Id) {
+		a.Log(ctx, LogLevelWarning, "PushResults ignored: query is not active")
+		return false
 	}
 
+	for _, result := range results {
+		GetPluginManager().PolishResult(ctx, a.pluginInstance, query, result)
+	}
+
+	polishedResults := GetPluginManager().BuildQueryResultsSnapshot(query.SessionId, query.Id)
 	payload := PushResultsPayload{
 		QueryId: query.Id,
 		Results: polishedResults,

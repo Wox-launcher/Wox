@@ -93,7 +93,6 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/backup/folder":    handleBackupFolder,
 	"/hotkey/available": handleHotkeyAvailable,
 	"/query/metadata":   handleQueryMetadata,
-	"/query/mru":        handleQueryMRU,
 	"/deeplink":         handleDeeplink,
 	"/version":          handleVersion,
 
@@ -102,14 +101,27 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 }
 
 const traceIdHeader = "TraceId"
+const sessionIdHeader = "SessionId"
 
 func getTraceContext(r *http.Request) context.Context {
 	traceId := strings.TrimSpace(r.Header.Get(traceIdHeader))
+	sessionId := getSessionIdFromHeader(r)
+	var ctx context.Context
 	if traceId != "" {
-		return util.NewTraceContextWith(traceId)
+		ctx = util.NewTraceContextWith(traceId)
+	} else {
+		ctx = util.NewTraceContext()
 	}
 
-	return util.NewTraceContext()
+	if sessionId != "" {
+		ctx = util.WithSessionContext(ctx, sessionId)
+	}
+
+	return ctx
+}
+
+func getSessionIdFromHeader(r *http.Request) string {
+	return strings.TrimSpace(r.Header.Get(sessionIdHeader))
 }
 
 func handleHome(w http.ResponseWriter, r *http.Request) {
@@ -121,13 +133,23 @@ func handlePing(w http.ResponseWriter, r *http.Request) {
 }
 
 func handlePreview(w http.ResponseWriter, r *http.Request) {
+	sessionId := r.URL.Query().Get("sessionId")
+	queryId := r.URL.Query().Get("queryId")
 	id := r.URL.Query().Get("id")
 	if id == "" {
 		writeErrorResponse(w, "id is empty")
 		return
 	}
+	if sessionId == "" {
+		writeErrorResponse(w, "sessionId is empty")
+		return
+	}
+	if queryId == "" {
+		writeErrorResponse(w, "queryId is empty")
+		return
+	}
 
-	preview, err := plugin.GetPluginManager().GetResultPreview(getTraceContext(r), id)
+	preview, err := plugin.GetPluginManager().GetResultPreview(getTraceContext(r), sessionId, queryId, id)
 	if err != nil {
 		writeErrorResponse(w, err.Error())
 		return
@@ -892,7 +914,6 @@ func handleQueryMetadata(w http.ResponseWriter, r *http.Request) {
 		writeErrorResponse(w, unmarshalErr.Error())
 		return
 	}
-
 	query, pluginInstance, err := plugin.GetPluginManager().NewQuery(ctx, plainQuery)
 	if err != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to new query: %s", err.Error()))
@@ -1271,24 +1292,4 @@ func handleToolbarSnooze(w http.ResponseWriter, r *http.Request) {
 
 func handleVersion(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, updater.CURRENT_VERSION)
-}
-
-func handleQueryMRU(w http.ResponseWriter, r *http.Request) {
-	body, readErr := io.ReadAll(r.Body)
-	if readErr != nil {
-		writeErrorResponse(w, fmt.Sprintf("failed to read request body: %s", readErr.Error()))
-		return
-	}
-
-	var ctx context.Context
-	traceIdResult := gjson.GetBytes(body, "traceId")
-	if traceIdResult.Exists() && traceIdResult.String() != "" {
-		ctx = util.NewTraceContextWith(traceIdResult.String())
-	} else {
-		ctx = getTraceContext(r)
-	}
-
-	mruResults := plugin.GetPluginManager().QueryMRU(ctx)
-	logger.Info(ctx, fmt.Sprintf("found %d MRU results", len(mruResults)))
-	writeSuccessResponse(w, mruResults)
 }

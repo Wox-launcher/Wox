@@ -42,6 +42,10 @@ type Query struct {
 	// It can be used to correlate async updates with the active query.
 	Id string
 
+	// SessionId identifies the UI session that owns this query.
+	// It stays stable for the lifetime of a UI instance.
+	SessionId string
+
 	// By default, Wox will only pass QueryTypeInput query to plugin.
 	// plugin author need to enable MetadataFeatureQuerySelection feature to handle QueryTypeSelection query
 	Type QueryType
@@ -91,10 +95,10 @@ func (q *Query) String() string {
 }
 
 type QueryEnv struct {
-	ActiveWindowTitle string          // active window title when user query, empty if not available
-	ActiveWindowPid   int             // active window pid when user query, 0 if not available
-	ActiveWindowIcon  common.WoxImage // active window icon when user query, empty if not available
-	ActiveWindowIsOpenSaveDialog bool // active window is open/save dialog when user query
+	ActiveWindowTitle            string          // active window title when user query, empty if not available
+	ActiveWindowPid              int             // active window pid when user query, 0 if not available
+	ActiveWindowIcon             common.WoxImage // active window icon when user query, empty if not available
+	ActiveWindowIsOpenSaveDialog bool            // active window is open/save dialog when user query
 
 	// active browser url when user query
 	// Only available when active window is browser and https://github.com/Wox-launcher/Wox.Chrome.Extension is installed
@@ -252,6 +256,7 @@ type QueryResultUI struct {
 	GroupScore int64
 	Tails      []QueryResultTail
 	Actions    []QueryResultActionUI
+	IsGroup    bool
 }
 
 // PushResultsPayload is used to push additional results to UI for a query.

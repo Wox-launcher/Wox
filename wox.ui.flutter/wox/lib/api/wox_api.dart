@@ -172,14 +172,6 @@ class WoxApi {
     return await WoxHttpUtil.instance.postData<List<DoctorCheckResult>>(traceId, "/doctor/check", null);
   }
 
-  Future<List<WoxQueryResult>> queryMRU(String traceId) async {
-    final response = await WoxHttpUtil.instance.postData(traceId, "/query/mru", {"traceId": traceId});
-    if (response is List) {
-      return response.map((item) => WoxQueryResult.fromJson(item)).toList();
-    }
-    return [];
-  }
-
   Future<String> getUserDataLocation(String traceId) async {
     return await WoxHttpUtil.instance.postData(traceId, "/setting/userdata/location", null);
   }

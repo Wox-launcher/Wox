@@ -63,11 +63,7 @@ class Selection {
   }
 
   Map<String, dynamic> toJson() {
-    return <String, dynamic>{
-      'Type': type,
-      'Text': text,
-      'FilePaths': filePaths,
-    };
+    return <String, dynamic>{'Type': type, 'Text': text, 'FilePaths': filePaths};
   }
 
   Selection({required this.type, required this.text, required this.filePaths});
@@ -104,19 +100,20 @@ class WoxQueryResult {
   // Used by the frontend to determine if this result is a group
   late bool isGroup;
 
-  WoxQueryResult(
-      {required this.queryId,
-      required this.id,
-      required this.title,
-      required this.subTitle,
-      required this.icon,
-      required this.preview,
-      required this.score,
-      required this.group,
-      required this.groupScore,
-      required this.tails,
-      required this.actions,
-      required this.isGroup});
+  WoxQueryResult({
+    required this.queryId,
+    required this.id,
+    required this.title,
+    required this.subTitle,
+    required this.icon,
+    required this.preview,
+    required this.score,
+    required this.group,
+    required this.groupScore,
+    required this.tails,
+    required this.actions,
+    required this.isGroup,
+  });
 
   WoxQueryResult.empty() {
     queryId = "";
@@ -164,7 +161,7 @@ class WoxQueryResult {
       actions = [];
     }
 
-    isGroup = false;
+    isGroup = json['IsGroup'] == true;
   }
 
   Map<String, dynamic> toJson() {
@@ -180,6 +177,7 @@ class WoxQueryResult {
     data['GroupScore'] = groupScore;
     data['Actions'] = actions.map((v) => v.toJson()).toList();
     data['Tails'] = tails.map((v) => v.toJson()).toList();
+    data['IsGroup'] = isGroup;
     return data;
   }
 }
@@ -259,30 +257,24 @@ class WoxResultAction {
     data['IsSystemAction'] = isSystemAction;
     data['ResultId'] = resultId;
     data['ContextData'] = contextData;
-    data['Form'] = form
-        .map((e) => {
-              "Type": e.type,
-              "Value": e.value,
-              "DisabledInPlatforms": e.disabledInPlatforms,
-              "IsPlatformSpecific": e.isPlatformSpecific,
-            })
-        .toList();
+    data['Form'] = form.map((e) => {"Type": e.type, "Value": e.value, "DisabledInPlatforms": e.disabledInPlatforms, "IsPlatformSpecific": e.isPlatformSpecific}).toList();
     return data;
   }
 
   static WoxResultAction empty() {
     return WoxResultAction(
-        id: "",
-        type: "execute",
-        name: "",
-        icon: WoxImage.empty(),
-        isDefault: false,
-        preventHideAfterAction: false,
-        hotkey: "",
-        isSystemAction: false,
-        resultId: "",
-        contextData: {},
-        form: []);
+      id: "",
+      type: "execute",
+      name: "",
+      icon: WoxImage.empty(),
+      isDefault: false,
+      preventHideAfterAction: false,
+      hotkey: "",
+      isSystemAction: false,
+      resultId: "",
+      contextData: {},
+      form: [],
+    );
   }
 }
 
@@ -342,10 +334,7 @@ class QueryIconInfo {
   final WoxImage icon;
   final Function()? action;
 
-  QueryIconInfo({
-    required this.icon,
-    this.action,
-  });
+  QueryIconInfo({required this.icon, this.action});
 
   static QueryIconInfo empty() {
     return QueryIconInfo(icon: WoxImage.empty());
@@ -361,15 +350,7 @@ class UpdatableResult {
   WoxPreview? preview;
   List<WoxResultAction>? actions;
 
-  UpdatableResult({
-    required this.id,
-    this.title,
-    this.subTitle,
-    this.icon,
-    this.tails,
-    this.preview,
-    this.actions,
-  });
+  UpdatableResult({required this.id, this.title, this.subTitle, this.icon, this.tails, this.preview, this.actions});
 
   UpdatableResult.fromJson(Map<String, dynamic> json) {
     id = json['Id'];
@@ -407,12 +388,7 @@ class QueryMetadata {
   late bool isGridLayout;
   late GridLayoutParams gridLayoutParams;
 
-  QueryMetadata({
-    required this.icon,
-    required this.resultPreviewWidthRatio,
-    required this.isGridLayout,
-    required this.gridLayoutParams,
-  });
+  QueryMetadata({required this.icon, required this.resultPreviewWidthRatio, required this.isGridLayout, required this.gridLayoutParams});
 
   QueryMetadata.fromJson(Map<String, dynamic> json) {
     icon = WoxImage.fromJson(json['Icon']);
@@ -436,13 +412,7 @@ class GridLayoutParams {
   late double itemMargin; // margin outside each item (all sides)
   late List<String> commands; // commands to enable grid layout for, empty means all
 
-  GridLayoutParams({
-    required this.columns,
-    required this.showTitle,
-    required this.itemPadding,
-    required this.itemMargin,
-    required this.commands,
-  });
+  GridLayoutParams({required this.columns, required this.showTitle, required this.itemPadding, required this.itemMargin, required this.commands});
 
   GridLayoutParams.fromJson(Map<String, dynamic> json) {
     columns = json['Columns'] ?? 8;

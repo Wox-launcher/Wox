@@ -13,7 +13,7 @@ func TestParseExchangeRateFromHKAB(t *testing.T) {
 	}
 
 	m := &CurrencyModule{
-		rates: make(map[string]float64),
+		rates: util.NewHashMap[string, float64](),
 	}
 
 	rates, err := m.parseExchangeRateFromECB(ctx)

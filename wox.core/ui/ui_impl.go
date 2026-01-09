@@ -21,6 +21,8 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+const resultDebounceIntervalMs = 10
+
 type uiImpl struct {
 	requestMap *util.HashMap[string, chan WebsocketMsg]
 	isVisible  bool // cached visibility state, updated by PostOnShow/PostOnHide
@@ -250,10 +252,12 @@ func (u *uiImpl) invokeWebsocketMethod(ctx context.Context, method string, data 
 	defer u.requestMap.Delete(requestID)
 
 	traceId := util.GetContextTraceId(ctx)
+	sessionId := util.GetContextSessionId(ctx)
 
 	err := requestUI(ctx, WebsocketMsg{
 		RequestId: requestID,
 		TraceId:   traceId,
+		SessionId: sessionId,
 		Method:    method,
 		Data:      data,
 	})
@@ -370,7 +374,8 @@ func handleWebsocketLog(ctx context.Context, request WebsocketMsg) {
 		return
 	}
 
-	logCtx := util.NewComponentContext(util.NewTraceContextWith(traceId), " UI")
+	// UI log should use its own conponent name
+	logCtx := util.WithComponentContext(util.NewTraceContextWith(traceId), " UI")
 
 	switch level {
 	case "debug":
@@ -389,12 +394,16 @@ func handleWebsocketLog(ctx context.Context, request WebsocketMsg) {
 }
 
 func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
+	sessionId := request.SessionId
 	queryId, queryIdErr := getWebsocketMsgParameter(ctx, request, "queryId")
 	if queryIdErr != nil {
 		logger.Error(ctx, queryIdErr.Error())
 		responseUIError(ctx, request, queryIdErr.Error())
 		return
+	} else {
+		ctx = util.WithQueryIdContext(ctx, queryId)
 	}
+
 	queryType, queryTypeErr := getWebsocketMsgParameter(ctx, request, "queryType")
 	if queryTypeErr != nil {
 		logger.Error(ctx, queryTypeErr.Error())
@@ -417,20 +426,21 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 	json.Unmarshal([]byte(querySelectionJson), &querySelection)
 
 	var changedQuery common.PlainQuery
-	if queryType == plugin.QueryTypeInput {
+	switch queryType {
+	case plugin.QueryTypeInput:
 		changedQuery = common.PlainQuery{
 			QueryId:   queryId,
 			QueryType: plugin.QueryTypeInput,
 			QueryText: queryText,
 		}
-	} else if queryType == plugin.QueryTypeSelection {
+	case plugin.QueryTypeSelection:
 		changedQuery = common.PlainQuery{
 			QueryId:        queryId,
 			QueryType:      plugin.QueryTypeSelection,
 			QueryText:      queryText,
 			QuerySelection: querySelection,
 		}
-	} else {
+	default:
 		logger.Error(ctx, fmt.Sprintf("unsupported query type: %s", queryType))
 		responseUIError(ctx, request, fmt.Sprintf("unsupported query type: %s", queryType))
 		return
@@ -456,16 +466,20 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 
 	var totalResultCount int
 	var startTimestamp = util.GetSystemTimestamp()
-	var resultDebouncer = util.NewDebouncer(24, func(results []plugin.QueryResultUI, reason string) {
+	var resultDebouncer = util.NewDebouncer(resultDebounceIntervalMs, func(results []plugin.QueryResultUI, reason string) {
 		isFinal := reason == "done"
 
 		// no results during ticks, skip sending
 		if !isFinal && len(results) == 0 {
 			return
 		}
+		if !plugin.GetPluginManager().IsCurrentQuery(sessionId, queryId) {
+			return
+		}
 
-		logger.Info(ctx, fmt.Sprintf("query %s: %s, result flushed (reason: %s, isFinal: %v), total results: %d", query.Type, query.String(), reason, isFinal, totalResultCount))
-		responseUIQueryResults(ctx, request, queryId, results, isFinal)
+		logger.Info(ctx, fmt.Sprintf("query %s: %s, result flushed (reason: %s, isFinal: %v), current: %d, total results: %d", query.Type, query.String(), reason, isFinal, len(results), totalResultCount))
+		snapshot := plugin.GetPluginManager().BuildQueryResultsSnapshot(sessionId, queryId)
+		responseUIQueryResults(ctx, request, queryId, snapshot, isFinal)
 	})
 	resultDebouncer.Start(ctx)
 	logger.Info(ctx, fmt.Sprintf("query %s: %s, result flushed (new start)", query.Type, query.String()))
@@ -473,6 +487,10 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 	for {
 		select {
 		case results := <-resultChan:
+			if !plugin.GetPluginManager().IsCurrentQuery(sessionId, queryId) {
+				resultDebouncer.Done(ctx)
+				return
+			}
 			if len(results) == 0 {
 				continue
 			}
@@ -482,6 +500,10 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 			totalResultCount += len(results)
 			resultDebouncer.Add(ctx, results)
 		case <-doneChan:
+			if !plugin.GetPluginManager().IsCurrentQuery(sessionId, queryId) {
+				resultDebouncer.Done(ctx)
+				return
+			}
 			logger.Info(ctx, fmt.Sprintf("query done, total results: %d, cost %d ms", totalResultCount, util.GetSystemTimestamp()-startTimestamp))
 
 			// if there is no result, show fallback search
@@ -511,6 +533,7 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 }
 
 func handleWebsocketAction(ctx context.Context, request WebsocketMsg) {
+	sessionId := request.SessionId
 	resultId, idErr := getWebsocketMsgParameter(ctx, request, "resultId")
 	if idErr != nil {
 		logger.Error(ctx, idErr.Error())
@@ -523,8 +546,15 @@ func handleWebsocketAction(ctx context.Context, request WebsocketMsg) {
 		responseUIError(ctx, request, actionIdErr.Error())
 		return
 	}
+	queryId, queryErr := getWebsocketMsgParameter(ctx, request, "queryId")
+	if queryErr != nil {
+		logger.Error(ctx, queryErr.Error())
+		responseUIError(ctx, request, queryErr.Error())
+		return
+	}
 
-	executeErr := plugin.GetPluginManager().ExecuteAction(ctx, resultId, actionId)
+	actionCtx := util.WithQueryIdContext(util.WithSessionContext(ctx, sessionId), queryId)
+	executeErr := plugin.GetPluginManager().ExecuteAction(actionCtx, sessionId, queryId, resultId, actionId)
 	if executeErr != nil {
 		responseUIError(ctx, request, executeErr.Error())
 		return
@@ -552,8 +582,16 @@ func handleWebsocketFormAction(ctx context.Context, request WebsocketMsg) {
 		responseUIError(ctx, request, valuesErr.Error())
 		return
 	}
+	queryId, queryErr := getWebsocketMsgParameter(ctx, request, "queryId")
+	if queryErr != nil {
+		logger.Error(ctx, queryErr.Error())
+		responseUIError(ctx, request, queryErr.Error())
+		return
+	} else {
+		ctx = util.WithQueryIdContext(ctx, queryId)
+	}
 
-	executeErr := plugin.GetPluginManager().SubmitFormAction(ctx, resultId, actionId, values)
+	executeErr := plugin.GetPluginManager().SubmitFormAction(ctx, request.SessionId, queryId, resultId, actionId, values)
 	if executeErr != nil {
 		responseUIError(ctx, request, executeErr.Error())
 		return
@@ -563,7 +601,8 @@ func handleWebsocketFormAction(ctx context.Context, request WebsocketMsg) {
 }
 
 func handleWebsocketQueryMRU(ctx context.Context, request WebsocketMsg) {
-	mruResults := plugin.GetPluginManager().QueryMRU(ctx)
+	queryId, _ := getWebsocketMsgParameter(ctx, request, "queryId")
+	mruResults := plugin.GetPluginManager().QueryMRU(ctx, request.SessionId, queryId)
 	logger.Info(ctx, fmt.Sprintf("found %d MRU results via websocket", len(mruResults)))
 	responseUISuccessWithData(ctx, request, mruResults)
 }

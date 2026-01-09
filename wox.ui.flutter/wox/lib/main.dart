@@ -35,6 +35,7 @@ Future<void> initArgs(List<String> arguments) async {
     Env.isDev = true;
     Env.serverPort = 34987;
     Env.serverPid = -1;
+    Env.sessionId = const UuidV4().generate();
     return;
   }
 
@@ -45,6 +46,7 @@ Future<void> initArgs(List<String> arguments) async {
   Env.serverPort = int.parse(arguments[0]);
   Env.serverPid = int.parse(arguments[1]);
   Env.isDev = arguments[2] == "true";
+  Env.sessionId = const UuidV4().generate();
 }
 
 Future<void> initialServices(List<String> arguments) async {

@@ -5,6 +5,7 @@ import 'package:uuid/v4.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:wox/entity/wox_websocket_msg.dart';
 import 'package:wox/enums/wox_msg_method_enum.dart';
+import 'package:wox/utils/env.dart';
 import 'package:wox/utils/log.dart';
 
 class WoxWebsocketMsgUtil {
@@ -35,6 +36,9 @@ class WoxWebsocketMsgUtil {
       (event) {
         isConnecting = false;
         var msg = WoxWebsocketMsg.fromJson(jsonDecode(event));
+        if (msg.sessionId.isNotEmpty && msg.sessionId != Env.sessionId) {
+          return;
+        }
         if (msg.success == false) {
           Logger.instance.error(msg.traceId, "Received error websocket message: ${msg.toJson()}");
           return;
@@ -76,6 +80,8 @@ class WoxWebsocketMsgUtil {
 
   // send message to websocket server
   Future<dynamic> sendMessage(WoxWebsocketMsg msg) async {
+    msg.sessionId = Env.sessionId;
+
     // if query message, send it directly, no need to wait for response
     // because query result may return multiple times
     if (msg.method == WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY.code) {
