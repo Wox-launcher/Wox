@@ -29,6 +29,7 @@ const (
 type WebsocketMsg struct {
 	RequestId     string // unique id for each request
 	TraceId       string // trace id between ui and wox, used for logging
+	SessionId     string // ui session id for isolating messages
 	Type          websocketMsgType
 	Method        string
 	Success       bool
@@ -107,8 +108,12 @@ func serveAndWait(ctx context.Context, port int) {
 				return
 			}
 			util.Go(ctxNew, "handle ui query", func() {
-				traceCtx := context.WithValue(ctxNew, util.ContextKeyTraceId, request.TraceId)
-				onUIWebsocketRequest(traceCtx, request)
+				traceCtx := util.NewTraceContextWith(request.TraceId)
+				sessionCtx := util.WithSessionContext(
+					traceCtx,
+					request.SessionId,
+				)
+				onUIWebsocketRequest(sessionCtx, request)
 			})
 		} else if strings.Contains(string(msg), string(WebsocketMsgTypeResponse)) {
 			var response WebsocketMsg
@@ -118,7 +123,10 @@ func serveAndWait(ctx context.Context, port int) {
 				return
 			}
 			util.Go(ctxNew, "handle ui response", func() {
-				traceCtx := context.WithValue(ctxNew, util.ContextKeyTraceId, response.TraceId)
+				traceCtx := util.WithSessionContext(
+					context.WithValue(ctxNew, util.ContextKeyTraceId, response.TraceId),
+					response.SessionId,
+				)
 				onUIWebsocketResponse(traceCtx, response)
 			})
 		} else {
@@ -174,6 +182,7 @@ func responseUISuccessWithData(ctx context.Context, request WebsocketMsg, data a
 	responseUI(ctx, WebsocketMsg{
 		RequestId: request.RequestId,
 		TraceId:   util.GetContextTraceId(ctx),
+		SessionId: request.SessionId,
 		Type:      WebsocketMsgTypeResponse,
 		Method:    request.Method,
 		Success:   true,
@@ -185,6 +194,7 @@ func responseUIQueryResults(ctx context.Context, request WebsocketMsg, queryId s
 	responseUI(ctx, WebsocketMsg{
 		RequestId:     request.RequestId,
 		TraceId:       util.GetContextTraceId(ctx),
+		SessionId:     request.SessionId,
 		Type:          WebsocketMsgTypeResponse,
 		Method:        request.Method,
 		Success:       true,
@@ -205,6 +215,7 @@ func responseUIError(ctx context.Context, request WebsocketMsg, errMsg string) {
 	responseUI(ctx, WebsocketMsg{
 		RequestId: request.RequestId,
 		TraceId:   util.GetContextTraceId(ctx),
+		SessionId: request.SessionId,
 		Type:      WebsocketMsgTypeResponse,
 		Method:    request.Method,
 		Success:   false,

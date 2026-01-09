@@ -43,6 +43,7 @@ const (
 	// ContextData key/value for favorite tail
 	favoriteTailContextDataKey   = "system:favorite"
 	favoriteTailContextDataValue = "true"
+	previewDataMaxSize           = 1024
 )
 
 func serializeContextData(contextData map[string]string) string {
@@ -61,11 +62,28 @@ type debounceTimer struct {
 	onStop func()
 }
 
+type QueryResultSet struct {
+	Query   Query
+	Results *util.HashMap[string, *QueryResultCache]
+}
+
+func newQueryResultSet(query Query) *QueryResultSet {
+	set := &QueryResultSet{
+		Query:   query,
+		Results: util.NewHashMap[string, *QueryResultCache](),
+	}
+	return set
+}
+
 type Manager struct {
-	instances          []*Instance
-	systemPluginsWg    sync.WaitGroup // waits for all system plugins to finish loading
-	ui                 common.UI
-	resultCache        *util.HashMap[string, *QueryResultCache]
+	instances       []*Instance
+	systemPluginsWg sync.WaitGroup // waits for all system plugins to finish loading
+	ui              common.UI
+
+	// ui session based query result cache. [SessionId] => QueryResultSet
+	// one ui session can only have one active query at a time
+	sessionQueryResultCache *util.HashMap[string, *QueryResultSet]
+
 	debounceQueryTimer *util.HashMap[string, *debounceTimer]
 	aiProviders        *util.HashMap[string, ai.Provider]
 
@@ -79,10 +97,10 @@ type Manager struct {
 func GetPluginManager() *Manager {
 	managerOnce.Do(func() {
 		managerInstance = &Manager{
-			resultCache:        util.NewHashMap[string, *QueryResultCache](),
-			debounceQueryTimer: util.NewHashMap[string, *debounceTimer](),
-			aiProviders:        util.NewHashMap[string, ai.Provider](),
-			scriptReloadTimers: util.NewHashMap[string, *time.Timer](),
+			sessionQueryResultCache: util.NewHashMap[string, *QueryResultSet](),
+			debounceQueryTimer:      util.NewHashMap[string, *debounceTimer](),
+			aiProviders:             util.NewHashMap[string, ai.Provider](),
+			scriptReloadTimers:      util.NewHashMap[string, *time.Timer](),
 		}
 		logger = util.GetLogger()
 	})
@@ -983,6 +1001,239 @@ func (m *Manager) calculateResultScore(ctx context.Context, pluginId, title, sub
 	return score
 }
 
+func (m *Manager) startSessionQueryCache(query Query) {
+	m.sessionQueryResultCache.Store(query.SessionId, newQueryResultSet(query))
+}
+
+func (m *Manager) getQueryResultSet(sessionId string) (*QueryResultSet, bool) {
+	return m.sessionQueryResultCache.Load(sessionId)
+}
+
+func (m *Manager) getQueryResultSetForQuery(query Query) (*QueryResultSet, bool) {
+	if query.Id == "" {
+		return nil, false
+	}
+	set, ok := m.sessionQueryResultCache.Load(query.SessionId)
+	if !ok {
+		return nil, false
+	}
+	if set.Query.Id != query.Id {
+		return nil, false
+	}
+	return set, true
+}
+
+func (m *Manager) storeQueryResult(ctx context.Context, pluginInstance *Instance, query Query, resultOriginal QueryResult) {
+	if query.Id == "" {
+		logger.Warn(ctx, "query id is empty, skip result cache")
+		return
+	}
+	if query.SessionId == "" {
+		logger.Warn(ctx, "query session id is empty, skip result cache")
+		return
+	}
+
+	set, ok := m.getQueryResultSetForQuery(query)
+	if !ok {
+		return
+	}
+
+	set.Results.Store(resultOriginal.Id, &QueryResultCache{
+		Result:         resultOriginal,
+		PluginInstance: pluginInstance,
+		Query:          query,
+	})
+
+}
+
+func (m *Manager) findResultCacheInSession(sessionId string, queryId string, resultId string) (*QueryResultCache, bool) {
+	if resultId == "" {
+		return nil, false
+	}
+	set, found := m.sessionQueryResultCache.Load(sessionId)
+	if !found {
+		return nil, false
+	}
+	if queryId != "" && set.Query.Id != queryId {
+		return nil, false
+	}
+	resultCache, found := set.Results.Load(resultId)
+	if !found {
+		return nil, false
+	}
+	return resultCache, true
+}
+
+func (m *Manager) findResultCacheById(resultId string) (*QueryResultCache, bool) {
+	if resultId == "" {
+		return nil, false
+	}
+
+	var foundCache *QueryResultCache
+	m.sessionQueryResultCache.Range(func(_ string, set *QueryResultSet) bool {
+		resultCache, found := set.Results.Load(resultId)
+		if !found {
+			return true
+		}
+		foundCache = resultCache
+		return false
+	})
+
+	if foundCache == nil {
+		return nil, false
+	}
+
+	return foundCache, true
+}
+
+func (m *Manager) findResultCacheByIdWithContext(ctx context.Context, resultId string) (*QueryResultCache, bool) {
+	sessionId := util.GetContextSessionId(ctx)
+	queryId := util.GetContextQueryId(ctx)
+	if sessionId != "" {
+		if resultCache, ok := m.findResultCacheInSession(sessionId, queryId, resultId); ok {
+			return resultCache, true
+		}
+	}
+	return m.findResultCacheById(resultId)
+}
+
+func (m *Manager) GetSessionIdByQueryId(queryId string) string {
+	if queryId == "" {
+		return ""
+	}
+	var sessionId string
+	m.sessionQueryResultCache.Range(func(_ string, set *QueryResultSet) bool {
+		if set.Query.Id == queryId {
+			sessionId = set.Query.SessionId
+			return false
+		}
+		return true
+	})
+	return sessionId
+}
+
+func (m *Manager) GetResultSessionId(resultId string) string {
+	resultCache, found := m.findResultCacheById(resultId)
+	if !found {
+		return ""
+	}
+	return resultCache.Query.SessionId
+}
+
+func (m *Manager) GetQueryInfoByResultId(resultId string) (string, string) {
+	resultCache, found := m.findResultCacheById(resultId)
+	if !found {
+		return "", ""
+	}
+	return resultCache.Query.SessionId, resultCache.Query.Id
+}
+
+func (m *Manager) IsCurrentQuery(sessionId string, queryId string) bool {
+	if queryId == "" {
+		return false
+	}
+	set, found := m.sessionQueryResultCache.Load(sessionId)
+	if !found {
+		return false
+	}
+	return set.Query.Id == queryId
+}
+
+func (m *Manager) buildResultUI(resultCache *QueryResultCache, queryId string) QueryResultUI {
+	uiResult := resultCache.Result
+	if !uiResult.Preview.IsEmpty() && uiResult.Preview.PreviewType != WoxPreviewTypeRemote && len(uiResult.Preview.PreviewData) > previewDataMaxSize {
+		uiResult.Preview = WoxPreview{
+			PreviewType: WoxPreviewTypeRemote,
+			PreviewData: fmt.Sprintf("/preview?sessionId=%s&queryId=%s&id=%s", resultCache.Query.SessionId, queryId, uiResult.Id),
+		}
+	}
+	resultUI := uiResult.ToUI()
+	resultUI.QueryId = queryId
+	return resultUI
+}
+
+// BuildQueryResultsSnapshot builds a snapshot of query results for the given session and query id.
+// Results are grouped by their group name, and both groups and results within groups are sorted by score.
+func (m *Manager) BuildQueryResultsSnapshot(sessionId string, queryId string) []QueryResultUI {
+	if queryId == "" {
+		return []QueryResultUI{}
+	}
+	set, found := m.sessionQueryResultCache.Load(sessionId)
+	if !found || set.Query.Id != queryId {
+		return []QueryResultUI{}
+	}
+
+	var results []QueryResultUI
+	set.Results.Range(func(_ string, resultCache *QueryResultCache) bool {
+		results = append(results, m.buildResultUI(resultCache, queryId))
+		return true
+	})
+
+	if len(results) == 0 {
+		return []QueryResultUI{}
+	}
+
+	groupScores := map[string]int64{}
+	for _, result := range results {
+		if score, ok := groupScores[result.Group]; !ok || result.GroupScore > score {
+			groupScores[result.Group] = result.GroupScore
+		}
+	}
+
+	var groups []string
+	for group := range groupScores {
+		groups = append(groups, group)
+	}
+	sort.SliceStable(groups, func(i, j int) bool {
+		scoreA := groupScores[groups[i]]
+		scoreB := groupScores[groups[j]]
+		if scoreA == scoreB {
+			return groups[i] < groups[j]
+		}
+		return scoreA > scoreB
+	})
+
+	groupedResults := make(map[string][]QueryResultUI)
+	for _, result := range results {
+		groupedResults[result.Group] = append(groupedResults[result.Group], result)
+	}
+
+	for group := range groupedResults {
+		groupResults := groupedResults[group]
+		sort.SliceStable(groupResults, func(i, j int) bool {
+			return groupResults[i].Score > groupResults[j].Score
+		})
+		groupedResults[group] = groupResults
+	}
+
+	finalResults := make([]QueryResultUI, 0, len(results)+len(groups))
+	for _, group := range groups {
+		groupResults := groupedResults[group]
+		if len(groupResults) == 0 {
+			continue
+		}
+		if group != "" {
+			finalResults = append(finalResults, QueryResultUI{
+				QueryId:    queryId,
+				Id:         fmt.Sprintf("group:%s:%s", queryId, group),
+				Title:      group,
+				SubTitle:   "",
+				Icon:       common.WoxImage{},
+				Preview:    WoxPreview{},
+				Score:      groupScores[group],
+				Group:      group,
+				GroupScore: groupScores[group],
+				Tails:      []QueryResultTail{},
+				Actions:    []QueryResultActionUI{},
+				IsGroup:    true,
+			})
+		}
+		finalResults = append(finalResults, groupResults...)
+	}
+
+	return finalResults
+}
+
 func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, query Query, result QueryResult) QueryResult {
 	// set default id
 	if result.Id == "" {
@@ -1105,12 +1356,11 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	// store preview for ui invoke later
 	// because preview may contain some heavy data (E.g. image or large text),
 	// we will store preview in cache and only send preview to ui when user select the result
-	var maximumPreviewSize = 1024
 	var originalPreview = result.Preview
-	if !result.Preview.IsEmpty() && result.Preview.PreviewType != WoxPreviewTypeRemote && len(result.Preview.PreviewData) > maximumPreviewSize {
+	if !result.Preview.IsEmpty() && result.Preview.PreviewType != WoxPreviewTypeRemote && len(result.Preview.PreviewData) > previewDataMaxSize {
 		result.Preview = WoxPreview{
 			PreviewType: WoxPreviewTypeRemote,
-			PreviewData: fmt.Sprintf("/preview?id=%s", result.Id),
+			PreviewData: fmt.Sprintf("/preview?sessionId=%s&queryId=%s&id=%s", query.SessionId, query.Id, result.Id),
 		}
 	}
 
@@ -1153,18 +1403,14 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	// Because we may have replaced preview with remote preview
 	// we need to restore the original preview in the cache
 	resultCopy.Preview = originalPreview
-	m.resultCache.Store(result.Id, &QueryResultCache{
-		Result:         resultCopy,
-		PluginInstance: pluginInstance,
-		Query:          query,
-	})
+	m.storeQueryResult(ctx, pluginInstance, query, resultCopy)
 
 	return result
 }
 
 func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Instance, result UpdatableResult) UpdatableResult {
 	// Get result cache to update it
-	resultCache, found := m.resultCache.Load(result.Id)
+	resultCache, found := m.findResultCacheByIdWithContext(ctx, result.Id)
 	if !found {
 		return result // Result not in cache, just return as-is
 	}
@@ -1360,7 +1606,7 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 
 func (m *Manager) GetUpdatableResult(ctx context.Context, resultId string) *UpdatableResult {
 	// Try to find the result in the cache
-	resultCache, found := m.resultCache.Load(resultId)
+	resultCache, found := m.findResultCacheByIdWithContext(ctx, resultId)
 	if !found {
 		return nil // Result not found (no longer visible)
 	}
@@ -1400,12 +1646,11 @@ func (m *Manager) GetUpdatableResult(ctx context.Context, resultId string) *Upda
 	}
 }
 
-func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryResultUI, done chan bool) {
-	results = make(chan []QueryResultUI, 10)
-	done = make(chan bool)
+func (m *Manager) Query(ctx context.Context, query Query) (resultsChan chan []QueryResultUI, doneChan chan bool) {
+	resultsChan = make(chan []QueryResultUI, 10)
+	doneChan = make(chan bool)
 
-	// clear old result cache
-	m.resultCache.Clear()
+	m.startSessionQueryCache(query)
 
 	counter := &atomic.Int32{}
 	counter.Store(int32(len(m.instances)))
@@ -1414,7 +1659,7 @@ func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryR
 		if !m.canOperateQuery(ctx, pluginInstance, query) {
 			counter.Add(-1)
 			if counter.Load() == 0 {
-				done <- true
+				doneChan <- true
 			}
 			continue
 		}
@@ -1430,13 +1675,13 @@ func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryR
 				}
 
 				timer := time.AfterFunc(time.Duration(debounceParams.IntervalMs)*time.Millisecond, func() {
-					m.queryParallel(ctx, pluginInstance, query, results, done, counter)
+					m.queryParallel(ctx, pluginInstance, query, resultsChan, doneChan, counter)
 				})
 				onStop := func() {
 					logger.Debug(ctx, fmt.Sprintf("[%s] previous debounced query cancelled", pluginInstance.GetName(ctx)))
 					counter.Add(-1)
 					if counter.Load() == 0 {
-						done <- true
+						doneChan <- true
 					}
 				}
 				m.debounceQueryTimer.Store(pluginInstance.Metadata.Id, &debounceTimer{
@@ -1449,7 +1694,7 @@ func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryR
 			}
 		}
 
-		m.queryParallel(ctx, pluginInstance, query, results, done, counter)
+		m.queryParallel(ctx, pluginInstance, query, resultsChan, doneChan, counter)
 	}
 
 	return
@@ -1471,7 +1716,8 @@ func (m *Manager) QuerySilent(ctx context.Context, query Query) bool {
 				result := results[0]
 				for _, action := range result.Actions {
 					if action.IsDefault {
-						m.ExecuteAction(ctx, result.Id, action.Id)
+						actionCtx := util.WithQueryIdContext(util.WithSessionContext(ctx, query.SessionId), query.Id)
+						m.ExecuteAction(actionCtx, query.SessionId, query.Id, result.Id, action.Id)
 						return true
 					}
 				}
@@ -1584,6 +1830,7 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 		}
 		query, instance := newQueryInputWithPlugins(newQuery, GetPluginManager().GetPluginInstances())
 		query.Id = plainQuery.QueryId
+		query.SessionId = util.GetContextSessionId(ctx)
 		query.Env.ActiveWindowTitle = m.GetUI().GetActiveWindowName()
 		query.Env.ActiveWindowPid = m.GetUI().GetActiveWindowPid()
 		query.Env.ActiveWindowIcon = m.GetUI().GetActiveWindowIcon()
@@ -1600,6 +1847,7 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 			Search:    plainQuery.QueryText,
 			Selection: plainQuery.QuerySelection,
 		}
+		query.SessionId = util.GetContextSessionId(ctx)
 		query.Env.ActiveWindowTitle = m.GetUI().GetActiveWindowName()
 		query.Env.ActiveWindowPid = m.GetUI().GetActiveWindowPid()
 		query.Env.ActiveWindowIcon = m.GetUI().GetActiveWindowIcon()
@@ -1670,8 +1918,8 @@ func (m *Manager) expandQueryShortcut(ctx context.Context, query string, querySh
 	return newQuery
 }
 
-func (m *Manager) ExecuteAction(ctx context.Context, resultId string, actionId string) error {
-	resultCache, found := m.resultCache.Load(resultId)
+func (m *Manager) ExecuteAction(ctx context.Context, sessionId string, queryId string, resultId string, actionId string) error {
+	resultCache, found := m.findResultCacheInSession(sessionId, queryId, resultId)
 	if !found {
 		return fmt.Errorf("result cache not found for result id (execute action): %s", resultId)
 	}
@@ -1696,21 +1944,22 @@ func (m *Manager) ExecuteAction(ctx context.Context, resultId string, actionId s
 	meta := resultCache.PluginInstance.Metadata
 	analytics.TrackActionExecuted(ctx, meta.Id, resultCache.PluginInstance.GetName(ctx))
 
-	actionCache.Action(ctx, ActionContext{
+	actionCtx := util.WithQueryIdContext(util.WithSessionContext(ctx, resultCache.Query.SessionId), resultCache.Query.Id)
+	actionCache.Action(actionCtx, ActionContext{
 		ResultId:       resultId,
 		ResultActionId: actionId,
 		ContextData:    actionCache.ContextData,
 	})
 
-	util.Go(ctx, fmt.Sprintf("[%s] post execute action", resultCache.PluginInstance.GetName(ctx)), func() {
-		m.postExecuteAction(ctx, resultCache, actionCache.ContextData)
+	util.Go(actionCtx, fmt.Sprintf("[%s] post execute action", resultCache.PluginInstance.GetName(actionCtx)), func() {
+		m.postExecuteAction(actionCtx, resultCache, actionCache.ContextData)
 	})
 
 	return nil
 }
 
-func (m *Manager) SubmitFormAction(ctx context.Context, resultId string, actionId string, values map[string]string) error {
-	resultCache, found := m.resultCache.Load(resultId)
+func (m *Manager) SubmitFormAction(ctx context.Context, sessionId string, queryId string, resultId string, actionId string, values map[string]string) error {
+	resultCache, found := m.findResultCacheInSession(sessionId, queryId, resultId)
 	if !found {
 		return fmt.Errorf("result cache not found for result id (submit form action): %s", resultId)
 	}
@@ -1733,7 +1982,8 @@ func (m *Manager) SubmitFormAction(ctx context.Context, resultId string, actionI
 	meta := resultCache.PluginInstance.Metadata
 	analytics.TrackActionExecuted(ctx, meta.Id, resultCache.PluginInstance.GetName(ctx))
 
-	actionCache.OnSubmit(ctx, FormActionContext{
+	actionCtx := util.WithQueryIdContext(util.WithSessionContext(ctx, resultCache.Query.SessionId), resultCache.Query.Id)
+	actionCache.OnSubmit(actionCtx, FormActionContext{
 		ActionContext: ActionContext{
 			ResultId:       resultId,
 			ResultActionId: actionId,
@@ -1742,8 +1992,8 @@ func (m *Manager) SubmitFormAction(ctx context.Context, resultId string, actionI
 		Values: values,
 	})
 
-	util.Go(ctx, fmt.Sprintf("[%s] post execute action", resultCache.PluginInstance.GetName(ctx)), func() {
-		m.postExecuteAction(ctx, resultCache, actionCache.ContextData)
+	util.Go(actionCtx, fmt.Sprintf("[%s] post execute action", resultCache.PluginInstance.GetName(actionCtx)), func() {
+		m.postExecuteAction(actionCtx, resultCache, actionCache.ContextData)
 	})
 
 	return nil
@@ -1799,8 +2049,8 @@ func (m *Manager) postExecuteAction(ctx context.Context, resultCache *QueryResul
 	}
 }
 
-func (m *Manager) GetResultPreview(ctx context.Context, resultId string) (WoxPreview, error) {
-	resultCache, found := m.resultCache.Load(resultId)
+func (m *Manager) GetResultPreview(ctx context.Context, sessionId string, queryId string, resultId string) (WoxPreview, error) {
+	resultCache, found := m.findResultCacheInSession(sessionId, queryId, resultId)
 	if !found {
 		return WoxPreview{}, fmt.Errorf("result cache not found for result id (get preview): %s", resultId)
 	}
@@ -1939,7 +2189,15 @@ func (m *Manager) ExecutePluginDeeplink(ctx context.Context, pluginId string, ar
 	}
 }
 
-func (m *Manager) QueryMRU(ctx context.Context) []QueryResultUI {
+func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string) []QueryResultUI {
+	query := Query{
+		Id:             queryId,
+		SessionId:      sessionId,
+		Type:           QueryTypeInput,
+		TriggerKeyword: "mru",
+	}
+	m.startSessionQueryCache(query)
+
 	mruItems, err := setting.GetSettingManager().GetMRUItems(ctx, 10)
 	if err != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to get MRU items: %s", err.Error()))
@@ -1991,12 +2249,16 @@ func (m *Manager) QueryMRU(ctx context.Context) []QueryResultUI {
 			// Add the remove action to the result
 			restored.Actions = append(restored.Actions, removeMRUAction)
 
-			polishedResult := m.PolishResult(ctx, pluginInstance, Query{}, *restored)
+			polishedResult := m.PolishResult(ctx, pluginInstance, query, *restored)
 			results = append(results, polishedResult.ToUI())
 		}
 	}
 
-	return results
+	if len(results) == 0 {
+		return results
+	}
+
+	return m.BuildQueryResultsSnapshot(query.SessionId, query.Id)
 }
 
 // getPluginInstance finds a plugin instance by ID

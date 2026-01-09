@@ -167,7 +167,7 @@ func (w *WebsocketHost) onMessage(data string) {
 		level := gjson.Get(data, "Level").String()
 		msg := gjson.Get(data, "Message").String()
 
-		logCtx := util.NewComponentContext(util.NewTraceContextWith(traceId), fmt.Sprintf("%s HOST", w.host.GetRuntime(ctx)))
+		logCtx := util.WithComponentContext(util.NewTraceContextWith(traceId), fmt.Sprintf("%s HOST", w.host.GetRuntime(ctx)))
 		if level == "error" {
 			util.GetLogger().Error(logCtx, msg)
 		}

@@ -19,7 +19,7 @@ class WoxHttpUtil {
       final response = await _dio.get(
         _baseUrl + url,
         queryParameters: params,
-        options: Options(headers: {"TraceId": traceId}),
+        options: Options(headers: {"TraceId": traceId, "SessionId": Env.sessionId}),
       );
       WoxResponse woxResponse = WoxResponse.fromJson(response.data);
       if (woxResponse.success == false) throw Exception(woxResponse.message);
@@ -36,7 +36,7 @@ class WoxHttpUtil {
       final response = await _dio.post(
         _baseUrl + url,
         data: data,
-        options: Options(headers: {"TraceId": traceId}),
+        options: Options(headers: {"TraceId": traceId, "SessionId": Env.sessionId}),
       );
       WoxResponse woxResponse = WoxResponse.fromJson(response.data);
       if (woxResponse.success == false) throw Exception(woxResponse.message);

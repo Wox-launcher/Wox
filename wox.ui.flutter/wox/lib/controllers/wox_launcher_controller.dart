@@ -211,71 +211,35 @@ class WoxLauncherController extends GetxController {
 
   /// Triggered when received query results from the server.
   void onReceivedQueryResults(String traceId, String queryId, List<WoxQueryResult> receivedResults) {
-    if (receivedResults.isEmpty) {
-      return;
-    }
-
     // Cancel loading timer and hide loading animation when results are received
     if (queryId == currentQuery.value.queryId) {
       isCurrentQueryReturned = true;
       loadingTimer?.cancel();
       isLoading.value = false;
+    } else {
+      Logger.instance.error(traceId, "query id is not matched, ignore the results");
+      return;
     }
 
-    if (currentQuery.value.queryId != receivedResults.first.queryId) {
-      Logger.instance.error(traceId, "query id is not matched, ignore the results");
+    if (receivedResults.isEmpty) {
       return;
     }
 
     //cancel clear results timer
     clearQueryResultsTimer.cancel();
 
-    //merge results
-    final existingQueryResults = activeResultViewController.items.where((item) => item.value.data.queryId == currentQuery.value.queryId).map((e) => e.value.data).toList();
-    final finalResults = List<WoxQueryResult>.from(existingQueryResults)..addAll(receivedResults);
-
-    //group results
-    var finalResultsSorted = <WoxQueryResult>[];
-    // Build group to score mapping to avoid repeated list traversal
-    final groupScoreMap = <String, int>{};
-    for (var result in finalResults) {
-      if (!groupScoreMap.containsKey(result.group)) {
-        groupScoreMap[result.group] = result.groupScore;
-      }
-    }
-
-    final groups = finalResults.map((e) => e.group).toSet().toList();
-    groups.sort((a, b) => groupScoreMap[b]!.compareTo(groupScoreMap[a]!));
-
-    for (var group in groups) {
-      final groupResults = finalResults.where((element) => element.group == group).toList();
-      final groupResultsSorted = groupResults..sort((a, b) => b.score.compareTo(a.score));
-      if (group != "") {
-        finalResultsSorted.add(
-          WoxQueryResult.empty()
-            ..title = group
-            ..isGroup = true
-            ..score = groupResultsSorted.first.groupScore,
-        );
-      }
-      finalResultsSorted.addAll(groupResultsSorted);
-    }
-
-    // move default action to the first for every result
-    for (var element in finalResultsSorted) {
-      final defaultActionIndex = element.actions.indexWhere((element) => element.isDefault);
-      if (defaultActionIndex != -1) {
-        final defaultAction = element.actions[defaultActionIndex];
-        element.actions.removeAt(defaultActionIndex);
-        element.actions.insert(0, defaultAction);
-      }
-    }
-
     // Use silent mode to avoid triggering onItemActive callback during updateItems (which may cause a little performance issue)
     // Following resetActiveResult will trigger the callback
-    final listItems = finalResultsSorted.map((e) => WoxListItem.fromQueryResult(e)).toList();
-    resultListViewController.updateItems(traceId, listItems, silent: true);
-    resultGridViewController.updateItems(traceId, listItems, silent: true);
+    final listItems = receivedResults.map((e) => WoxListItem.fromQueryResult(e)).toList();
+    activeResultViewController.updateItems(traceId, listItems, silent: true);
+
+    updateActiveResultIndex(traceId);
+    updateDoctorToolbarIfNeeded(traceId);
+    resizeHeight();
+  }
+
+  void updateActiveResultIndex(String traceId) {
+    final existingQueryResults = activeResultViewController.items.where((item) => item.value.data.queryId == currentQuery.value.queryId).map((e) => e.value.data).toList();
 
     // Handle index preservation or reset
     final controller = activeResultViewController;
@@ -311,9 +275,6 @@ class WoxLauncherController extends GetxController {
         resetActiveResult();
       }
     }
-
-    updateDoctorToolbarIfNeeded(traceId);
-    resizeHeight();
   }
 
   void clearDoctorToolbarIfApplied() {
@@ -615,7 +576,7 @@ class WoxLauncherController extends GetxController {
           traceId: traceId,
           type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
           method: WoxMsgMethodEnum.WOX_MSG_METHOD_ACTION.code,
-          data: {"resultId": result.id, "actionId": action.id},
+          data: {"resultId": result.id, "actionId": action.id, "queryId": result.queryId},
         ),
       );
     }
@@ -634,6 +595,7 @@ class WoxLauncherController extends GetxController {
   Future<void> submitFormAction(String traceId, Map<String, String> values) async {
     final action = activeFormAction.value;
     final resultId = activeFormResultId.value;
+    final queryId = currentQuery.value.queryId;
     if (action == null || resultId.isEmpty) {
       hideFormActionPanel(traceId);
       return;
@@ -645,7 +607,7 @@ class WoxLauncherController extends GetxController {
         traceId: traceId,
         type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
         method: WoxMsgMethodEnum.WOX_MSG_METHOD_FORM_ACTION.code,
-        data: {"resultId": resultId, "actionId": action.id, "values": values},
+        data: {"resultId": resultId, "actionId": action.id, "queryId": queryId, "values": values},
       ),
     );
 
@@ -703,7 +665,7 @@ class WoxLauncherController extends GetxController {
           traceId: traceId,
           type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
           method: WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY_MRU.code,
-          data: {},
+          data: {"queryId": queryId},
         ),
       );
 
@@ -1013,6 +975,7 @@ class WoxLauncherController extends GetxController {
       WoxWebsocketMsg(
         requestId: request.requestId,
         traceId: request.traceId,
+        sessionId: request.sessionId,
         type: WoxMsgTypeEnum.WOX_MSG_TYPE_RESPONSE.code,
         method: request.method,
         data: data,

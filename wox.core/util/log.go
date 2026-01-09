@@ -72,22 +72,6 @@ func (l *Log) GetWriter() io.Writer {
 	return logInstance.writer
 }
 
-func GetContextTraceId(ctx context.Context) string {
-	if traceId, ok := ctx.Value(ContextKeyTraceId).(string); ok {
-		return traceId
-	}
-
-	return ""
-}
-
-func GetContextComponentName(ctx context.Context) string {
-	if componentName, ok := ctx.Value(ContextKeyComponentName).(string); ok {
-		return componentName
-	}
-
-	return "Wox"
-}
-
 func formatMsg(context context.Context, msg string, level string) string {
 	var builder strings.Builder
 	builder.Grow(256)
