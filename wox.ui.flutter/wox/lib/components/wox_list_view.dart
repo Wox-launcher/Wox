@@ -77,55 +77,54 @@ class WoxListView<T> extends StatelessWidget {
                                 ),
                               ),
                             )
-                            : AnimatedSwitcher(
-                              duration: Duration.zero,
-                              child: ListView.builder(
-                                key: ValueKey(controller.items.length),
-                                shrinkWrap: true,
-                                controller: controller.scrollController,
-                                physics: const NeverScrollableScrollPhysics(),
-                                itemCount: controller.items.length,
-                                itemExtent: WoxThemeUtil.instance.getResultListViewHeightByCount(1),
-                                itemBuilder: (context, index) {
-                                  var item = controller.items[index];
-                                  return MouseRegion(
-                                    onEnter: (_) {
-                                      if (controller.isMouseMoved && !item.value.isGroup) {
-                                        controller.updateHoveredIndex(index);
-                                      }
+                            : ListView.builder(
+                              shrinkWrap: true,
+                              controller: controller.scrollController,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: controller.items.length,
+                              itemExtent:
+                                  listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code || listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_CHAT.code
+                                      ? WoxThemeUtil.instance.getActionItemHeight()
+                                      : WoxThemeUtil.instance.getResultListViewHeightByCount(1),
+                              itemBuilder: (context, index) {
+                                var item = controller.items[index];
+                                return MouseRegion(
+                                  onEnter: (_) {
+                                    if (controller.isMouseMoved && !item.value.isGroup) {
+                                      controller.updateHoveredIndex(index);
+                                    }
+                                  },
+                                  onHover: (_) {
+                                    if (!controller.isMouseMoved && !item.value.isGroup) {
+                                      controller.isMouseMoved = true;
+                                      controller.updateHoveredIndex(index);
+                                    }
+                                  },
+                                  onExit: (_) {
+                                    if (!item.value.isGroup && controller.hoveredIndex.value == index) {
+                                      controller.clearHoveredResult();
+                                    }
+                                  },
+                                  child: _WoxListItemGestureWrapper<T>(
+                                    controller: controller,
+                                    index: index,
+                                    item: item,
+                                    onItemTapped: () {
+                                      onItemTapped?.call();
                                     },
-                                    onHover: (_) {
-                                      if (!controller.isMouseMoved && !item.value.isGroup) {
-                                        controller.isMouseMoved = true;
-                                        controller.updateHoveredIndex(index);
-                                      }
-                                    },
-                                    onExit: (_) {
-                                      if (!item.value.isGroup && controller.hoveredIndex.value == index) {
-                                        controller.clearHoveredResult();
-                                      }
-                                    },
-                                    child: _WoxListItemGestureWrapper<T>(
-                                      controller: controller,
-                                      index: index,
-                                      item: item,
-                                      onItemTapped: () {
-                                        onItemTapped?.call();
-                                      },
-                                      child: Obx(
-                                        () => WoxListItemView(
-                                          key: ValueKey(item.value.id),
-                                          item: item.value,
-                                          woxTheme: WoxThemeUtil.instance.currentTheme.value,
-                                          isActive: controller.activeIndex.value == index,
-                                          isHovered: controller.hoveredIndex.value == index,
-                                          listViewType: listViewType,
-                                        ),
+                                    child: Obx(
+                                      () => WoxListItemView(
+                                        key: ValueKey(item.value.id),
+                                        item: item.value,
+                                        woxTheme: WoxThemeUtil.instance.currentTheme.value,
+                                        isActive: controller.activeIndex.value == index,
+                                        isHovered: controller.hoveredIndex.value == index,
+                                        listViewType: listViewType,
                                       ),
                                     ),
-                                  );
-                                },
-                              ),
+                                  ),
+                                );
+                              },
                             ),
                   ),
                 ),

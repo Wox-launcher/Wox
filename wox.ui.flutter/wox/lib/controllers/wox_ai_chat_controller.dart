@@ -14,6 +14,7 @@ import 'package:wox/entity/wox_toolbar.dart';
 import 'package:wox/enums/wox_ai_conversation_role_enum.dart';
 import 'package:wox/enums/wox_image_type_enum.dart';
 import 'package:wox/utils/log.dart';
+import 'package:wox/utils/wox_theme_util.dart';
 
 class WoxAIChatController extends GetxController {
   final Rx<WoxAIChatData> aiChatData = WoxAIChatData.empty().obs;
@@ -77,6 +78,7 @@ class WoxAIChatController extends GetxController {
     chatSelectListController = WoxListController<ChatSelectItem>(
       onItemExecuted: _onChatSelectItemExecuted,
       onFilterBoxEscPressed: (traceId) => hideChatSelectPanel(),
+      itemHeight: WoxThemeUtil.instance.getActionItemHeight(),
     );
 
     reloadChatResources(const UuidV4().generate());
@@ -120,14 +122,15 @@ class WoxAIChatController extends GetxController {
     Logger.instance.debug(const UuidV4().generate(), "AI: Updating chat select items for category: ${currentChatSelectCategory.value}");
 
     if (currentChatSelectCategory.isEmpty) {
-      items.add(WoxListItem<ChatSelectItem>(
-        id: "agents",
-        icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖"),
-        title: tr("ui_ai_chat_select_agent"),
-        subTitle: "",
-        tails: [],
-        isGroup: false,
-        data: ChatSelectItem(
+      items.add(
+        WoxListItem<ChatSelectItem>(
+          id: "agents",
+          icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖"),
+          title: tr("ui_ai_chat_select_agent"),
+          subTitle: "",
+          tails: [],
+          isGroup: false,
+          data: ChatSelectItem(
             id: "agents",
             name: tr("ui_ai_chat_select_agent"),
             icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖"),
@@ -137,17 +140,20 @@ class WoxAIChatController extends GetxController {
               currentChatSelectCategory.value = "agents";
               chatSelectListController.clearFilter(traceId);
               updateChatSelectItems();
-            }),
-      ));
+            },
+          ),
+        ),
+      );
 
-      items.add(WoxListItem<ChatSelectItem>(
-        id: "models",
-        icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖"),
-        title: tr("ui_ai_chat_select_model"),
-        subTitle: "",
-        tails: [],
-        isGroup: false,
-        data: ChatSelectItem(
+      items.add(
+        WoxListItem<ChatSelectItem>(
+          id: "models",
+          icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖"),
+          title: tr("ui_ai_chat_select_model"),
+          subTitle: "",
+          tails: [],
+          isGroup: false,
+          data: ChatSelectItem(
             id: "models",
             name: tr("ui_ai_chat_select_model"),
             icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖"),
@@ -157,17 +163,20 @@ class WoxAIChatController extends GetxController {
               currentChatSelectCategory.value = "models";
               chatSelectListController.clearFilter(traceId);
               updateChatSelectItems();
-            }),
-      ));
+            },
+          ),
+        ),
+      );
 
-      items.add(WoxListItem<ChatSelectItem>(
-        id: "tools",
-        icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🔧"),
-        title: tr("ui_ai_chat_configure_tools"),
-        subTitle: "",
-        tails: [],
-        isGroup: false,
-        data: ChatSelectItem(
+      items.add(
+        WoxListItem<ChatSelectItem>(
+          id: "tools",
+          icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🔧"),
+          title: tr("ui_ai_chat_configure_tools"),
+          subTitle: "",
+          tails: [],
+          isGroup: false,
+          data: ChatSelectItem(
             id: "tools",
             name: tr("ui_ai_chat_configure_tools"),
             icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🔧"),
@@ -177,8 +186,10 @@ class WoxAIChatController extends GetxController {
               currentChatSelectCategory.value = "tools";
               chatSelectListController.clearFilter(traceId);
               updateChatSelectItems();
-            }),
-      ));
+            },
+          ),
+        ),
+      );
     } else if (currentChatSelectCategory.value == "models") {
       // Show models grouped by provider
       // Group models by provider
@@ -202,22 +213,24 @@ class WoxAIChatController extends GetxController {
         final providerDisplayName = alias.isEmpty ? provider : "$provider ($alias)";
 
         // Add provider group header
-        items.add(WoxListItem<ChatSelectItem>(
-          id: "group_$providerKey",
-          icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🏢"),
-          title: providerDisplayName,
-          subTitle: "",
-          tails: [],
-          isGroup: true,
-          data: ChatSelectItem(
+        items.add(
+          WoxListItem<ChatSelectItem>(
             id: "group_$providerKey",
-            name: providerDisplayName,
             icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🏢"),
-            isCategory: true,
-            children: [],
-            onExecute: null,
+            title: providerDisplayName,
+            subTitle: "",
+            tails: [],
+            isGroup: true,
+            data: ChatSelectItem(
+              id: "group_$providerKey",
+              name: providerDisplayName,
+              icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🏢"),
+              isCategory: true,
+              children: [],
+              onExecute: null,
+            ),
           ),
-        ));
+        );
 
         // Sort models within this provider
         final models = modelsByProvider[providerKey]!;
@@ -225,14 +238,15 @@ class WoxAIChatController extends GetxController {
 
         // Add models for this provider
         for (final model in models) {
-          items.add(WoxListItem<ChatSelectItem>(
-            id: "${providerKey}_${model.name}",
-            icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖"),
-            title: model.name,
-            subTitle: "",
-            tails: [],
-            isGroup: false,
-            data: ChatSelectItem(
+          items.add(
+            WoxListItem<ChatSelectItem>(
+              id: "${providerKey}_${model.name}",
+              icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖"),
+              title: model.name,
+              subTitle: "",
+              tails: [],
+              isGroup: false,
+              data: ChatSelectItem(
                 id: "${providerKey}_${model.name}",
                 name: model.name,
                 icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖"),
@@ -241,8 +255,10 @@ class WoxAIChatController extends GetxController {
                 onExecute: (String traceId) {
                   aiChatData.value.model.value = AIModel(name: model.name, provider: model.provider, providerAlias: model.providerAlias);
                   hideChatSelectPanel();
-                }),
-          ));
+                },
+              ),
+            ),
+          );
         }
       }
     } else if (currentChatSelectCategory.value == "tools") {
@@ -251,14 +267,15 @@ class WoxAIChatController extends GetxController {
         // Check if this tool is selected to determine if we should show the checkmark
         final bool isSelected = selectedTools.contains(tool.name);
 
-        items.add(WoxListItem<ChatSelectItem>(
-          id: tool.name,
-          icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🔧"),
-          title: tool.name,
-          subTitle: "",
-          tails: isSelected ? [WoxListItemTail.image(WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "✅"))] : [],
-          isGroup: false,
-          data: ChatSelectItem(
+        items.add(
+          WoxListItem<ChatSelectItem>(
+            id: tool.name,
+            icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🔧"),
+            title: tool.name,
+            subTitle: "",
+            tails: isSelected ? [WoxListItemTail.image(WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "✅"))] : [],
+            isGroup: false,
+            data: ChatSelectItem(
               id: tool.name,
               name: tool.name,
               icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🔧"),
@@ -272,21 +289,25 @@ class WoxAIChatController extends GetxController {
                 }
                 // Update the items to reflect the change in selection status
                 updateChatSelectItems();
-              }),
-        ));
+              },
+            ),
+          ),
+        );
       }
     } else if (currentChatSelectCategory.value == "agents") {
       // Add "Cancel Selection" option at the top
-      items.add(WoxListItem<ChatSelectItem>(
-        id: "cancel_agent_selection",
-        icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "❌"),
-        title: tr("ui_ai_chat_cancel_agent_selection"),
-        subTitle: tr("ui_ai_chat_use_default_model_and_tools"),
-        tails: (aiChatData.value.agentName == null || aiChatData.value.agentName!.isEmpty)
-            ? [WoxListItemTail.image(WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "✅"))]
-            : [],
-        isGroup: false,
-        data: ChatSelectItem(
+      items.add(
+        WoxListItem<ChatSelectItem>(
+          id: "cancel_agent_selection",
+          icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "❌"),
+          title: tr("ui_ai_chat_cancel_agent_selection"),
+          subTitle: tr("ui_ai_chat_use_default_model_and_tools"),
+          tails:
+              (aiChatData.value.agentName == null || aiChatData.value.agentName!.isEmpty)
+                  ? [WoxListItemTail.image(WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "✅"))]
+                  : [],
+          isGroup: false,
+          data: ChatSelectItem(
             id: "cancel_agent_selection",
             name: tr("ui_ai_chat_cancel_agent_selection"),
             icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "❌"),
@@ -295,20 +316,23 @@ class WoxAIChatController extends GetxController {
             onExecute: (String traceId) {
               setCurrentAgent("");
               hideChatSelectPanel();
-            }),
-      ));
+            },
+          ),
+        ),
+      );
 
       // Display all available agents
       for (final agent in availableAgents) {
         final bool isSelected = aiChatData.value.agentName == agent.name;
-        items.add(WoxListItem<ChatSelectItem>(
-          id: agent.name,
-          icon: agent.icon, // 使用agent自定义头像
-          title: agent.name,
-          subTitle: "${tr("ui_ai_chat_model")}: ${agent.model.name}",
-          tails: isSelected ? [WoxListItemTail.image(WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "✅"))] : [],
-          isGroup: false,
-          data: ChatSelectItem(
+        items.add(
+          WoxListItem<ChatSelectItem>(
+            id: agent.name,
+            icon: agent.icon, // 使用agent自定义头像
+            title: agent.name,
+            subTitle: "${tr("ui_ai_chat_model")}: ${agent.model.name}",
+            tails: isSelected ? [WoxListItemTail.image(WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "✅"))] : [],
+            isGroup: false,
+            data: ChatSelectItem(
               id: agent.name,
               name: agent.name,
               icon: agent.icon, // 使用agent自定义头像
@@ -317,8 +341,10 @@ class WoxAIChatController extends GetxController {
               onExecute: (String traceId) {
                 setCurrentAgent(agent.name);
                 hideChatSelectPanel();
-              }),
-        ));
+              },
+            ),
+          ),
+        );
       }
     }
 
@@ -369,9 +395,7 @@ class WoxAIChatController extends GetxController {
   // Scroll to bottom of AI chat
   void scrollToBottomOfAiChat() {
     if (aiChatScrollController.hasClients) {
-      aiChatScrollController.jumpTo(
-        aiChatScrollController.position.maxScrollExtent,
-      );
+      aiChatScrollController.jumpTo(aiChatScrollController.position.maxScrollExtent);
     }
   }
 
@@ -501,15 +525,17 @@ class WoxAIChatController extends GetxController {
     }
 
     // append user message to chat data
-    aiChatData.value.conversations.add(WoxAIChatConversation(
-      id: const UuidV4().generate(),
-      role: WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_USER.value,
-      text: text,
-      reasoning: '',
-      images: [],
-      timestamp: DateTime.now().millisecondsSinceEpoch,
-      toolCallInfo: ToolCallInfo.empty(),
-    ));
+    aiChatData.value.conversations.add(
+      WoxAIChatConversation(
+        id: const UuidV4().generate(),
+        role: WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_USER.value,
+        text: text,
+        reasoning: '',
+        images: [],
+        timestamp: DateTime.now().millisecondsSinceEpoch,
+        toolCallInfo: ToolCallInfo.empty(),
+      ),
+    );
     aiChatData.value.updatedAt = DateTime.now().millisecondsSinceEpoch;
 
     textController.clear();

@@ -1,11 +1,12 @@
 import 'package:wox/controllers/wox_base_list_controller.dart';
 import 'package:wox/enums/wox_direction_enum.dart';
 import 'package:wox/utils/log.dart';
-import 'package:wox/utils/wox_theme_util.dart';
 
 /// Controller for list view. Handles list-specific navigation and scrolling.
 class WoxListController<T> extends WoxBaseListController<T> {
-  WoxListController({super.onItemExecuted, super.onItemActive, super.onFilterBoxEscPressed, super.onFilterBoxLostFocus, super.onItemsEmpty});
+  final double itemHeight;
+
+  WoxListController({super.onItemExecuted, super.onItemActive, super.onFilterBoxEscPressed, super.onFilterBoxLostFocus, super.onItemsEmpty, required this.itemHeight});
 
   @override
   void updateActiveIndexByDirection(String traceId, WoxDirection direction) {
@@ -73,7 +74,6 @@ class WoxListController<T> extends WoxBaseListController<T> {
       return;
     }
 
-    final itemHeight = WoxThemeUtil.instance.getResultItemHeight();
     final viewportHeight = scrollController.position.viewportDimension;
 
     if (viewportHeight <= 0) {

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:convert';
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -150,6 +151,7 @@ class WoxLauncherController extends GetxController {
         },
         onItemActive: onResultItemActivated,
         onItemsEmpty: onResultItemsEmpty,
+        itemHeight: WoxThemeUtil.instance.getResultItemHeight(),
       ),
       tag: 'result',
     );
@@ -171,6 +173,7 @@ class WoxLauncherController extends GetxController {
           executeDefaultAction(traceId);
         },
         onFilterBoxEscPressed: hideActionPanel,
+        itemHeight: WoxThemeUtil.instance.getActionItemHeight(),
       ),
       tag: 'action',
     );
@@ -1160,20 +1163,24 @@ class WoxLauncherController extends GetxController {
           }
 
           if (updatableResult.actions != null) {
-            // Save user's current selection before updateItems (which calls filterItems and resets index)
-            var oldActionName = getCurrentActionName();
+            // Optimization: Check if actions actually changed to avoid unnecessary repaint
+            var currentActions = actionListViewController.items.map((e) => e.value.data).toList();
+            if (!listEquals(currentActions, updatableResult.actions!)) {
+              // Save user's current selection before updateItems (which calls filterItems and resets index)
+              var oldActionName = getCurrentActionName();
 
-            var actions = updatedData.actions.map((e) => WoxListItem.fromResultAction(e)).toList();
-            actionListViewController.updateItems(traceId, actions);
+              var actions = updatedData.actions.map((e) => WoxListItem.fromResultAction(e)).toList();
+              actionListViewController.updateItems(traceId, actions);
 
-            // Restore user's selected action after refresh
-            var newActiveIndex = calculatePreservedActionIndex(oldActionName);
-            if (actionListViewController.activeIndex.value != newActiveIndex) {
-              actionListViewController.updateActiveIndex(traceId, newActiveIndex);
+              // Restore user's selected action after refresh
+              var newActiveIndex = calculatePreservedActionIndex(oldActionName);
+              if (actionListViewController.activeIndex.value != newActiveIndex) {
+                actionListViewController.updateActiveIndex(traceId, newActiveIndex);
+              }
+
+              // Update toolbar with all actions with hotkeys
+              updateToolbarWithActions(traceId, updatedData.actions);
             }
-
-            // Update toolbar with all actions with hotkeys
-            updateToolbarWithActions(traceId, updatedData.actions);
           }
         }
       }
