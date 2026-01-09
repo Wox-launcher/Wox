@@ -32,6 +32,10 @@ class WoxThemeUtil {
     return RESULT_ITEM_BASE_HEIGHT + currentTheme.value.resultItemPaddingTop + currentTheme.value.resultItemPaddingBottom;
   }
 
+  double getActionItemHeight() {
+    return ACTION_ITEM_BASE_HEIGHT;
+  }
+
   double getToolbarHeight() {
     return TOOLBAR_HEIGHT;
   }

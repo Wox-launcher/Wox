@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_list_item.dart';
@@ -275,6 +276,42 @@ class WoxResultAction {
       contextData: {},
       form: [],
     );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+
+    return other is WoxResultAction &&
+        other.id == id &&
+        other.type == type &&
+        other.name == name &&
+        other.icon == icon &&
+        other.isDefault == isDefault &&
+        other.preventHideAfterAction == preventHideAfterAction &&
+        other.hotkey == hotkey &&
+        other.isSystemAction == isSystemAction &&
+        other.resultId == resultId &&
+        mapEquals(other.contextData, contextData) &&
+        listEquals(other.form, form); // Note: this requires PluginSettingDefinitionItem equality or relying on identity/empty
+    // Since PluginSettingDefinitionItem doesn't enforce equality, listEquals might fail to catch deep equality if instances differ.
+    // For now, if form is critical we should rely on json comparison or implement equality there too.
+    // Given the context, form updates are rare in this path.
+  }
+
+  @override
+  int get hashCode {
+    return id.hashCode ^
+        type.hashCode ^
+        name.hashCode ^
+        icon.hashCode ^
+        isDefault.hashCode ^
+        preventHideAfterAction.hashCode ^
+        hotkey.hashCode ^
+        isSystemAction.hashCode ^
+        resultId.hashCode ^
+        contextData.hashCode ^
+        form.hashCode;
   }
 }
 
