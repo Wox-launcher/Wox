@@ -15,35 +15,29 @@ class WoxLauncherView extends GetView<WoxLauncherController> {
   Widget build(BuildContext context) {
     return Obx(() {
       return Scaffold(
-        backgroundColor: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.appBackgroundColor),
+        backgroundColor: Colors.transparent,
         body: DropTarget(
           onDragDone: (DropDoneDetails details) {
             controller.handleDropFiles(details);
           },
-          child: Column(
-            children: [
-              Expanded(
-                child: Padding(
-                  padding: EdgeInsets.only(
-                    top: WoxThemeUtil.instance.currentTheme.value.appPaddingTop.toDouble(),
-                    right: WoxThemeUtil.instance.currentTheme.value.appPaddingRight.toDouble(),
-                    bottom: controller.isToolbarShowedWithoutResults ? 0 : WoxThemeUtil.instance.currentTheme.value.appPaddingBottom.toDouble(),
-                    left: WoxThemeUtil.instance.currentTheme.value.appPaddingLeft.toDouble(),
-                  ),
-                  child: const Column(
-                    children: [
-                      WoxQueryBoxView(),
-                      Expanded(child: WoxQueryResultView()),
-                    ],
+          child: Container(
+            color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.appBackgroundColor),
+            child: Column(
+              children: [
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      top: WoxThemeUtil.instance.currentTheme.value.appPaddingTop.toDouble(),
+                      right: WoxThemeUtil.instance.currentTheme.value.appPaddingRight.toDouble(),
+                      bottom: controller.isToolbarShowedWithoutResults ? 0 : WoxThemeUtil.instance.currentTheme.value.appPaddingBottom.toDouble(),
+                      left: WoxThemeUtil.instance.currentTheme.value.appPaddingLeft.toDouble(),
+                    ),
+                    child: const Column(children: [WoxQueryBoxView(), Expanded(child: WoxQueryResultView())]),
                   ),
                 ),
-              ),
-              if (controller.isShowToolbar)
-                const SizedBox(
-                  height: 40,
-                  child: WoxQueryToolbarView(),
-                ),
-            ],
+                if (controller.isShowToolbar) const SizedBox(height: 40, child: WoxQueryToolbarView()),
+              ],
+            ),
           ),
         ),
       );

@@ -2,14 +2,23 @@ package system
 
 import (
 	"context"
+	"time"
 	"wox/common"
 	"wox/plugin"
+	"wox/util"
 	"wox/util/menus"
 
 	"github.com/samber/lo"
 )
 
 var menusIcon = common.PluginMenusIcon
+var menusCacheTTL = time.Minute
+var menusCache = util.NewHashMap[int, menusCacheEntry]()
+
+type menusCacheEntry struct {
+	titles    []string
+	expiresAt time.Time
+}
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &MenusPlugin{})
@@ -64,10 +73,15 @@ func (i *MenusPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 		return []plugin.QueryResult{}
 	}
 
-	menuNames, err := menus.GetAppMenuTitles(query.Env.ActiveWindowPid)
-	if err != nil {
-		i.api.Log(ctx, plugin.LogLevelError, err.Error())
-		return []plugin.QueryResult{}
+	menuNames, ok := getMenusFromCache(query.Env.ActiveWindowPid)
+	if !ok {
+		var err error
+		menuNames, err = menus.GetAppMenuTitles(query.Env.ActiveWindowPid)
+		if err != nil {
+			i.api.Log(ctx, plugin.LogLevelError, err.Error())
+			return []plugin.QueryResult{}
+		}
+		storeMenusCache(query.Env.ActiveWindowPid, menuNames)
 	}
 
 	filteredMenus := lo.Filter(menuNames, func(menu string, _ int) bool {
@@ -88,5 +102,21 @@ func (i *MenusPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 				},
 			},
 		}
+	})
+}
+
+func getMenusFromCache(pid int) ([]string, bool) {
+	entry, ok := menusCache.Load(pid)
+	if !ok || time.Now().After(entry.expiresAt) {
+		menusCache.Delete(pid)
+		return nil, false
+	}
+	return entry.titles, true
+}
+
+func storeMenusCache(pid int, titles []string) {
+	menusCache.Store(pid, menusCacheEntry{
+		titles:    titles,
+		expiresAt: time.Now().Add(menusCacheTTL),
 	})
 }

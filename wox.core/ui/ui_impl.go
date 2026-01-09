@@ -21,7 +21,10 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-const resultDebounceIntervalMs = 10
+// This value cannot be too small; if it is, it will cause frequent result-update requests to the UI,
+// leading to constant window resizing and flickering.
+// we use 32ms here, which is roughly equivalent to 30fps.
+const resultDebounceIntervalMs = 32
 
 type uiImpl struct {
 	requestMap *util.HashMap[string, chan WebsocketMsg]

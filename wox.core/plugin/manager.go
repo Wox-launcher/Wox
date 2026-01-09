@@ -825,7 +825,12 @@ func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, 
 	query.Env = newEnv
 
 	results = pluginInstance.Plugin.Query(ctx, query)
-	logger.Debug(ctx, fmt.Sprintf("<%s> finish query, result count: %d, cost: %dms", pluginInstance.GetName(ctx), len(results), util.GetSystemTimestamp()-start))
+	pluginQueryCost := util.GetSystemTimestamp() - start
+	if pluginQueryCost >= 10 {
+		logger.Debug(ctx, fmt.Sprintf("<%s> finish query, result count: %d, cost: %dms, query is slow", pluginInstance.GetName(ctx), len(results), pluginQueryCost))
+	} else {
+		logger.Debug(ctx, fmt.Sprintf("<%s> finish query, result count: %d, cost: %dms", pluginInstance.GetName(ctx), len(results), pluginQueryCost))
+	}
 
 	for i := range results {
 		if results[i].Group == "" {

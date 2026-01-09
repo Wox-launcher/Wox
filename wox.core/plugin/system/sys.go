@@ -37,10 +37,6 @@ type SysCommand struct {
 	Action                 func(ctx context.Context, actionContext plugin.ActionContext)
 }
 
-type sysContextData struct {
-	CommandID string `json:"commandId"`
-}
-
 func (r *SysPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:            "227f7d64-df08-4e35-ad05-98a26d540d06",
@@ -263,9 +259,10 @@ func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 		}
 	}
 
+	pluginSettingsFormat := i18n.GetI18nManager().TranslateWox(ctx, "plugin_sys_open_plugin_settings")
 	for _, instance := range plugin.GetPluginManager().GetPluginInstances() {
 		pluginName := instance.GetName(ctx)
-		title := fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_sys_open_plugin_settings"), pluginName)
+		title := fmt.Sprintf(pluginSettingsFormat, pluginName)
 		isNameMatch, matchScore := plugin.IsStringMatchScore(ctx, title, query.Search)
 		isTriggerKeywordMatch := slices.Contains(instance.GetTriggerKeywords(), query.Search)
 		if isNameMatch || isTriggerKeywordMatch {

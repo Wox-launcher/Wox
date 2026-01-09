@@ -22,12 +22,6 @@ type IndicatorPlugin struct {
 	api plugin.API
 }
 
-type indicatorContextData struct {
-	TriggerKeyword string `json:"triggerKeyword"`
-	PluginID       string `json:"pluginId"`
-	Command        string `json:"command,omitempty"`
-}
-
 func (i *IndicatorPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:            "38564bf0-75ad-4b3e-8afe-a0e0a287c42e",
