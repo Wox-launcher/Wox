@@ -319,6 +319,8 @@ func downloadUpdate(ctx context.Context, callback UpdateInfoCallback) {
 // ApplyUpdate applies the downloaded update
 // This should be called when the user confirms they want to update
 func ApplyUpdate(ctx context.Context) error {
+	util.GetLogger().Info(ctx, "start applying update")
+
 	if currentUpdateInfo.Status != UpdateStatusReady || currentUpdateInfo.DownloadedPath == "" {
 		return errors.New("no update ready to apply")
 	}
@@ -332,9 +334,15 @@ func ApplyUpdate(ctx context.Context) error {
 
 	pid := os.Getegid()
 
-	util.GetLogger().Info(ctx, fmt.Sprintf("Applying update from %s to %s, pid: %d", oldPath, newPath, pid))
+	util.GetLogger().Info(ctx, fmt.Sprintf("applying update from %s to %s, pid: %d", oldPath, newPath, pid))
 
-	return applyUpdaterInstance.ApplyUpdate(ctx, pid, oldPath, newPath)
+	apllyErr := applyUpdaterInstance.ApplyUpdate(ctx, pid, oldPath, newPath)
+	if apllyErr != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to apply update: %s", apllyErr.Error()))
+		return apllyErr
+	}
+
+	return nil
 }
 
 // calculateFileChecksum calculates the MD5 checksum of a file
