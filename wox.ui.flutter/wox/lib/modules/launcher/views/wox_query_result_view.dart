@@ -129,6 +129,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
               controller.hideActionPanel(const UuidV4().generate());
               controller.hideFormActionPanel(const UuidV4().generate());
             },
+            onRowHeightChanged: () => controller.resizeHeight(),
           );
         }
 
