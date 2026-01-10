@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"syscall"
 	"wox/util"
 	"wox/util/shell"
 )
@@ -21,19 +23,12 @@ func getExecutablePath() (string, error) {
 func (u *WindowsUpdater) ApplyUpdate(ctx context.Context, pid int, oldPath, newPath string) error {
 	backupPath := fmt.Sprintf("%s.old", oldPath)
 
-	// if backup file exists, remove it
-	if _, err := os.Stat(backupPath); err == nil {
-		util.GetLogger().Info(ctx, "removing existing backup executable")
-		if err := os.Remove(backupPath); err != nil {
-			return fmt.Errorf("failed to remove existing backup executable: %w", err)
-		}
-	}
-
 	util.GetLogger().Info(ctx, "replacing Windows executable in-place")
 	if err := os.Rename(oldPath, backupPath); err != nil {
 		return fmt.Errorf("failed to rename current executable: %w", err)
 	} else {
 		util.GetLogger().Info(ctx, "current executable renamed to backup successfully")
+		hideBackupExecutable(ctx, backupPath)
 	}
 
 	util.GetLogger().Info(ctx, "moving new executable to current location")
@@ -52,17 +47,13 @@ func (u *WindowsUpdater) ApplyUpdate(ctx context.Context, pid int, oldPath, newP
 		util.GetLogger().Info(ctx, "new executable moved to current location successfully")
 	}
 
-	util.GetLogger().Info(ctx, "removing backup executable")
-	removeBackupErr := os.Remove(backupPath)
-	if removeBackupErr != nil {
-		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to remove backup executable: %v", removeBackupErr))
-	} else {
-		util.GetLogger().Info(ctx, "backup executable removed successfully")
-	}
-
 	util.GetLogger().Info(ctx, "starting updated application")
-	startCmd := fmt.Sprintf("timeout /t 1 /nobreak >nul & start \"\" \"%s\"", oldPath)
-	if _, err := shell.Run("cmd", "/c", startCmd); err != nil {
+	scriptPath := filepath.Join(util.GetLocation().GetOthersDirectory(), "windows_update_restart.cmd")
+	if _, statErr := os.Stat(scriptPath); statErr != nil {
+		return fmt.Errorf("failed to find windows update restart script: %w", statErr)
+	}
+	logPath := filepath.Join(util.GetLocation().GetLogDirectory(), "update_restart.log")
+	if _, err := shell.Run("cmd.exe", "/c", "call", scriptPath, oldPath, logPath); err != nil {
 		return fmt.Errorf("failed to start updated application: %w", err)
 	}
 
@@ -70,4 +61,26 @@ func (u *WindowsUpdater) ApplyUpdate(ctx context.Context, pid int, oldPath, newP
 	os.Exit(0)
 
 	return nil // This line will never be reached due to os.Exit(0)
+}
+
+func hideBackupExecutable(ctx context.Context, path string) {
+	ptr, ptrErr := syscall.UTF16PtrFromString(path)
+	if ptrErr != nil {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to encode backup executable path: %v", ptrErr))
+		return
+	}
+
+	attrs, attrErr := syscall.GetFileAttributes(ptr)
+	if attrErr != nil {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to get backup executable attributes: %v", attrErr))
+		return
+	}
+
+	if attrs&syscall.FILE_ATTRIBUTE_HIDDEN != 0 {
+		return
+	}
+
+	if err := syscall.SetFileAttributes(ptr, attrs|syscall.FILE_ATTRIBUTE_HIDDEN); err != nil {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to hide backup executable: %v", err))
+	}
 }

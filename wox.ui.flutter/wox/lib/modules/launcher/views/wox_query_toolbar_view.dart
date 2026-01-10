@@ -39,24 +39,13 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (toolbarInfo.icon != null)
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: WoxImageView(woxImage: toolbarInfo.icon!, width: 24, height: 24),
-              ),
+            if (toolbarInfo.icon != null) Padding(padding: const EdgeInsets.only(right: 8), child: WoxImageView(woxImage: toolbarInfo.icon!, width: 24, height: 24)),
             // Text area flexes inside the capped max width and will ellipsize when needed
             Flexible(
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final textSpan = TextSpan(
-                    text: toolbarInfo.text ?? '',
-                    style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor)),
-                  );
-                  final textPainter = TextPainter(
-                    text: textSpan,
-                    maxLines: 1,
-                    textDirection: TextDirection.ltr,
-                  )..layout(maxWidth: constraints.maxWidth);
+                  final textSpan = TextSpan(text: toolbarInfo.text ?? '', style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor)));
+                  final textPainter = TextPainter(text: textSpan, maxLines: 1, textDirection: TextDirection.ltr)..layout(maxWidth: constraints.maxWidth);
 
                   final isTextOverflow = textPainter.didExceedMaxLines;
 
@@ -104,10 +93,7 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
                           data: Theme.of(context).copyWith(
                             popupMenuTheme: PopupMenuThemeData(
                               color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarBackgroundColor),
-                              textStyle: TextStyle(
-                                color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
-                                fontSize: 12,
-                              ),
+                              textStyle: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor), fontSize: 12),
                             ),
                           ),
                           child: PopupMenuButton<String>(
@@ -158,15 +144,8 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
   /// Calculate the precise width of a single action (name + hotkey + spacing)
   double _calculateActionWidth(String actionName, HotkeyX hotkey) {
     // Use TextPainter to precisely measure text width (works for all languages)
-    final textSpan = TextSpan(
-      text: actionName,
-      style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor)),
-    );
-    final textPainter = TextPainter(
-      text: textSpan,
-      maxLines: 1,
-      textDirection: TextDirection.ltr,
-    )..layout();
+    final textSpan = TextSpan(text: actionName, style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor)));
+    final textPainter = TextPainter(text: textSpan, maxLines: 1, textDirection: TextDirection.ltr)..layout();
 
     final nameWidth = textPainter.width;
 
@@ -209,11 +188,7 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
             var hotkey = WoxHotkey.parseHotkeyFromString(actionInfo.hotkey);
             if (hotkey != null) {
               final calculatedWidth = _calculateActionWidth(actionInfo.name, hotkey);
-              actionData.add({
-                'info': actionInfo,
-                'hotkey': hotkey,
-                'width': calculatedWidth,
-              });
+              actionData.add({'info': actionInfo, 'hotkey': hotkey, 'width': calculatedWidth});
             }
           }
 
@@ -268,22 +243,17 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
             actionWidgets.add(
               WoxHotkeyView(
                 hotkey: hotkey,
-                backgroundColor: hasResultItems
-                    ? safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarBackgroundColor)
-                    : safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.appBackgroundColor).withValues(alpha: 0.1),
+                backgroundColor:
+                    hasResultItems
+                        ? safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarBackgroundColor)
+                        : safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.appBackgroundColor).withValues(alpha: 0.1),
                 borderColor: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
                 textColor: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
               ),
             );
           }
 
-          return Align(
-            alignment: Alignment.centerRight,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: actionWidgets,
-            ),
-          );
+          return Align(alignment: Alignment.centerRight, child: Row(mainAxisSize: MainAxisSize.min, children: actionWidgets));
         },
       );
     });

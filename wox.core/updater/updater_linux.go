@@ -59,3 +59,6 @@ func (u *LinuxUpdater) ApplyUpdate(ctx context.Context, pid int, oldPath, newPat
 
 	return nil // This line will never be reached due to os.Exit(0)
 }
+
+func cleanupBackupExecutable(_ context.Context) {
+}

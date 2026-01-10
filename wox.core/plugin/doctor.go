@@ -53,7 +53,7 @@ func checkWoxVersion(ctx context.Context) DoctorCheckResult {
 	updateInfo := updater.GetUpdateInfo()
 	if updateInfo.Status == updater.UpdateStatusError || updateInfo.UpdateError != nil {
 		return DoctorCheckResult{
-			Name:        "i18n:plugin_doctor_version",
+			Name:        i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version"),
 			Type:        DoctorCheckUpdate,
 			Passed:      false,
 			Description: updateInfo.UpdateError.Error(),
@@ -65,7 +65,7 @@ func checkWoxVersion(ctx context.Context) DoctorCheckResult {
 
 	if !updateInfo.HasUpdate {
 		return DoctorCheckResult{
-			Name:        "i18n:plugin_doctor_version",
+			Name:        i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_doctor_version"),
 			Type:        DoctorCheckUpdate,
 			Passed:      true,
 			Description: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version_latest"), updateInfo.CurrentVersion),
@@ -75,11 +75,11 @@ func checkWoxVersion(ctx context.Context) DoctorCheckResult {
 		}
 	} else {
 		return DoctorCheckResult{
-			Name:                   "i18n:plugin_doctor_version",
+			Name:                   i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_doctor_version"),
 			Type:                   DoctorCheckUpdate,
 			Passed:                 false,
-			Description:            "i18n:plugin_doctor_version_update_available",
-			ActionName:             "i18n:plugin_doctor_go_to_update",
+			Description:            i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_doctor_version_update_available"),
+			ActionName:             i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_doctor_go_to_update"),
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext ActionContext) {
 				GetPluginManager().GetUI().ChangeQuery(ctx, common.PlainQuery{

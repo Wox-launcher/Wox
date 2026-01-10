@@ -332,11 +332,8 @@ func ApplyUpdate(ctx context.Context) error {
 		return fmt.Errorf("failed to get current executable path: %w", err)
 	}
 
-	pid := os.Getegid()
-
-	util.GetLogger().Info(ctx, fmt.Sprintf("applying update from %s to %s, pid: %d", oldPath, newPath, pid))
-
-	apllyErr := applyUpdaterInstance.ApplyUpdate(ctx, pid, oldPath, newPath)
+	util.GetLogger().Info(ctx, fmt.Sprintf("applying update from %s to %s", oldPath, newPath))
+	apllyErr := applyUpdaterInstance.ApplyUpdate(ctx, os.Getpid(), oldPath, newPath)
 	if apllyErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to apply update: %s", apllyErr.Error()))
 		return apllyErr

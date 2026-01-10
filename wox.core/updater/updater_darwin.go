@@ -241,3 +241,6 @@ rm -f "$0"
 	os.Exit(0)
 	return nil // This line will never be reached due to os.Exit(0)
 }
+
+func cleanupBackupExecutable(_ context.Context) {
+}
