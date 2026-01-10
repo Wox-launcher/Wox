@@ -208,6 +208,14 @@ class WoxLauncherController extends GetxController {
 
   bool get isShowDoctorCheckInfo => currentQuery.value.isEmpty && !doctorCheckInfo.value.allPassed;
 
+  bool get shouldShowUpdateActionInToolbar {
+    if (currentQuery.value.isEmpty == false || doctorCheckInfo.value.allPassed) {
+      return false;
+    }
+
+    return doctorCheckInfo.value.results.any((result) => result.isVersionIssue);
+  }
+
   bool get isShowToolbar => activeResultViewController.items.isNotEmpty || isShowDoctorCheckInfo;
 
   bool get isToolbarShowedWithoutResults => isShowToolbar && activeResultViewController.items.isEmpty;
@@ -311,24 +319,58 @@ class WoxLauncherController extends GetxController {
     // When there are results (e.g. MRU), keep the right-side hotkeys and only show the warning on the left.
     // When there are no results, show a direct action to open the doctor page.
     if (activeResultViewController.items.isEmpty) {
+      final updateAction = buildUpdateToolbarAction();
+      final actions = <ToolbarActionInfo>[];
+      if (updateAction != null) {
+        actions.add(updateAction);
+      }
+      actions.add(
+        ToolbarActionInfo(
+          name: tr("plugin_doctor_check"),
+          hotkey: "enter",
+          action: () {
+            onQueryChanged(traceId, PlainQuery.text("doctor "), "user click doctor icon");
+          },
+        ),
+      );
+
       toolbar.value = ToolbarInfo(
         text: doctorCheckInfo.value.message,
         icon: doctorCheckInfo.value.icon,
-        actions: [
-          ToolbarActionInfo(
-            name: tr("plugin_doctor_check"),
-            hotkey: "enter",
-            action: () {
-              onQueryChanged(traceId, PlainQuery.text("doctor "), "user click doctor icon");
-            },
-          ),
-        ],
+        actions: actions,
       );
     } else {
-      toolbar.value = toolbar.value.copyWith(text: doctorCheckInfo.value.message, icon: doctorCheckInfo.value.icon);
+      final updateAction = buildUpdateToolbarAction();
+      if (updateAction == null) {
+        toolbar.value = toolbar.value.copyWith(text: doctorCheckInfo.value.message, icon: doctorCheckInfo.value.icon);
+      } else {
+        final mergedActions = List<ToolbarActionInfo>.from(toolbar.value.actions ?? []);
+        final updateHotkey = updateAction.hotkey.toLowerCase();
+        final hasUpdateAction =
+            mergedActions.any((action) => action.hotkey.toLowerCase() == updateHotkey || action.name == updateAction.name);
+        if (!hasUpdateAction) {
+          mergedActions.insert(0, updateAction);
+        }
+        toolbar.value = toolbar.value.copyWith(text: doctorCheckInfo.value.message, icon: doctorCheckInfo.value.icon, actions: mergedActions);
+      }
     }
 
     lastAppliedDoctorToolbarMessage = doctorCheckInfo.value.message;
+  }
+
+  void openUpdateFromToolbar(String traceId) {
+    onQueryChanged(traceId, PlainQuery.text("update "), "toolbar go to update");
+  }
+
+  ToolbarActionInfo? buildUpdateToolbarAction() {
+    if (!shouldShowUpdateActionInToolbar) {
+      return null;
+    }
+
+    return ToolbarActionInfo(
+      name: tr("plugin_doctor_go_to_update"),
+      hotkey: "ctrl+u",
+    );
   }
 
   Future<void> toggleApp(String traceId, ShowAppParams params) async {
@@ -1561,6 +1603,16 @@ class WoxLauncherController extends GetxController {
         actionsWithHotkeys.map((action) {
           return ToolbarActionInfo(name: tr(action.name), hotkey: action.hotkey);
         }).toList();
+
+    final updateAction = buildUpdateToolbarAction();
+    if (updateAction != null) {
+      final updateHotkey = updateAction.hotkey.toLowerCase();
+      final hasUpdateAction =
+          toolbarActions.any((action) => action.hotkey.toLowerCase() == updateHotkey || action.name == updateAction.name);
+      if (!hasUpdateAction) {
+        toolbarActions.insert(0, updateAction);
+      }
+    }
 
     // Add "More Actions" hotkey at the end if there are actions
     if (shouldShowMoreActions) {

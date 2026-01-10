@@ -255,6 +255,14 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                   return KeyEventResult.handled;
                 }
 
+                if (controller.shouldShowUpdateActionInToolbar) {
+                  final updateHotkey = WoxHotkey.parseHotkeyFromString("ctrl+u");
+                  if (updateHotkey != null && updateHotkey.isNormalHotkey && WoxHotkey.equals(updateHotkey.normalHotkey, pressedHotkey)) {
+                    controller.openUpdateFromToolbar(const UuidV4().generate());
+                    return KeyEventResult.handled;
+                  }
+                }
+
                 // check if the pressed hotkey is the action hotkey
                 var result = controller.getActiveResult();
                 var action = controller.getActionByHotkey(result, pressedHotkey);
