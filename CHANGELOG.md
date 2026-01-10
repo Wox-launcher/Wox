@@ -1,5 +1,7 @@
 # Changelog
 
+## v2.0.0-beta.9
+
 ## v2.0.0-beta.8 — 2026-01-10
 
 - Add
