@@ -1717,17 +1717,24 @@ func (m *Manager) QuerySilent(ctx context.Context, query Query) bool {
 			logger.Info(ctx, fmt.Sprintf("silent query done, total results: %d, cost %d ms", len(results), util.GetSystemTimestamp()-startTimestamp))
 
 			// execute default action if only one result
+			woxIcon, _ := common.WoxIcon.ToImage()
 			if len(results) == 1 {
 				result := results[0]
 				for _, action := range result.Actions {
 					if action.IsDefault {
 						actionCtx := util.WithQueryIdContext(util.WithSessionContext(ctx, query.SessionId), query.Id)
-						m.ExecuteAction(actionCtx, query.SessionId, query.Id, result.Id, action.Id)
+						executeErr := m.ExecuteAction(actionCtx, query.SessionId, query.Id, result.Id, action.Id)
+						if executeErr != nil {
+							logger.Error(ctx, fmt.Sprintf("silent query execute failed: %s", executeErr.Error()))
+							notifier.Notify(woxIcon, fmt.Sprintf("Silent query execute failed: %s", executeErr.Error()))
+							return false
+						}
+
 						return true
 					}
 				}
 			} else {
-				notifier.Notify(nil, fmt.Sprintf("Silent query failed, there shouldbe only one result, but got %d", len(results)))
+				notifier.Notify(woxIcon, fmt.Sprintf("Silent query failed, there shouldbe only one result, but got %d", len(results)))
 			}
 
 			return false
