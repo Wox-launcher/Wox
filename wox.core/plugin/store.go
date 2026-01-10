@@ -255,7 +255,7 @@ func (s *Store) InstallWithProgress(ctx context.Context, manifest StorePluginMan
 
 		// only uninstall for non-script plugins; script plugins will be hot-swapped with rollback
 		if manifest.Runtime != PLUGIN_RUNTIME_SCRIPT {
-			uninstallErr := s.Uninstall(ctx, installedPlugin)
+			uninstallErr := s.Uninstall(ctx, installedPlugin, true)
 			if uninstallErr != nil {
 				logger.Error(ctx, fmt.Sprintf("failed to uninstall plugin %s(%s): %s", installedPlugin.Metadata.GetName(ctx), installedPlugin.Metadata.Version, uninstallErr.Error()))
 				return fmt.Errorf("failed to uninstall plugin %s(%s): %s", installedPlugin.Metadata.GetName(ctx), installedPlugin.Metadata.Version, uninstallErr.Error())
@@ -642,7 +642,7 @@ func (s *Store) InstallFromLocal(ctx context.Context, filePath string) error {
 			}
 		}
 
-		uninstallErr := s.Uninstall(ctx, installedPlugin)
+		uninstallErr := s.Uninstall(ctx, installedPlugin, true)
 		if uninstallErr != nil {
 			logger.Error(ctx, fmt.Sprintf("failed to uninstall plugin %s(%s): %s", installedPlugin.Metadata.GetName(ctx), installedPlugin.Metadata.Version, uninstallErr.Error()))
 			return fmt.Errorf("failed to uninstall plugin %s(%s): %s", installedPlugin.Metadata.GetName(ctx), installedPlugin.Metadata.Version, uninstallErr.Error())
@@ -685,7 +685,7 @@ func (s *Store) InstallFromLocal(ctx context.Context, filePath string) error {
 	return nil
 }
 
-func (s *Store) Uninstall(ctx context.Context, plugin *Instance) error {
+func (s *Store) Uninstall(ctx context.Context, plugin *Instance, skipCleanSetting bool) error {
 	logger.Info(ctx, fmt.Sprintf("start to uninstall plugin %s(%s)", plugin.Metadata.GetName(ctx), plugin.Metadata.Version))
 
 	if plugin.IsDevPlugin {
@@ -720,9 +720,11 @@ func (s *Store) Uninstall(ctx context.Context, plugin *Instance) error {
 		}
 	}
 
-	if db := database.GetDB(); db != nil {
-		if err := setting.NewPluginSettingStore(db, plugin.Metadata.Id).DeleteAll(); err != nil {
-			logger.Error(ctx, fmt.Sprintf("failed to delete plugin settings %s(%s): %s", plugin.Metadata.GetName(ctx), plugin.Metadata.Version, err.Error()))
+	if !skipCleanSetting {
+		if db := database.GetDB(); db != nil {
+			if err := setting.NewPluginSettingStore(db, plugin.Metadata.Id).DeleteAll(); err != nil {
+				logger.Error(ctx, fmt.Sprintf("failed to delete plugin settings %s(%s): %s", plugin.Metadata.GetName(ctx), plugin.Metadata.Version, err.Error()))
+			}
 		}
 	}
 

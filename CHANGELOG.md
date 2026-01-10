@@ -24,6 +24,7 @@
   - Fix clipboard history cause windows copy mal-function #4309
   - Fix switching to application alway opens a new window instead of focusing existing one #1922
   - Fixed the parsing issue of lnk files on Windows #4315
+  - Fix the issue where plugin configuration is lost after plugin upgrade
 
 ## v2.0.0-beta.7 — 2025-12-19
 
