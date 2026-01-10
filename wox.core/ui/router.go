@@ -305,7 +305,7 @@ func handlePluginUninstall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	uninstallErr := plugin.GetStoreManager().Uninstall(ctx, findPlugin)
+	uninstallErr := plugin.GetStoreManager().Uninstall(ctx, findPlugin, false)
 	if uninstallErr != nil {
 		writeErrorResponse(w, "can't uninstall plugin: "+uninstallErr.Error())
 		return
