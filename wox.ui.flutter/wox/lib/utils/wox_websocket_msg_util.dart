@@ -15,6 +15,8 @@ class WoxWebsocketMsgUtil {
 
   static WoxWebsocketMsgUtil get instance => _instance;
 
+  static const String _coreSessionPrefix = "core-";
+
   WebSocketChannel? _channel;
 
   late Uri uri;
@@ -36,7 +38,7 @@ class WoxWebsocketMsgUtil {
       (event) {
         isConnecting = false;
         var msg = WoxWebsocketMsg.fromJson(jsonDecode(event));
-        if (msg.sessionId.isNotEmpty && msg.sessionId != Env.sessionId) {
+        if (msg.sessionId.isNotEmpty && msg.sessionId != Env.sessionId && !msg.sessionId.startsWith(_coreSessionPrefix)) {
           return;
         }
         if (msg.success == false) {

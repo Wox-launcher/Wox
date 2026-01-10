@@ -52,10 +52,10 @@ type Manager struct {
 	isUIReadyHandled bool
 	isSystemDark     bool
 
-	activeWindowName string          // active window name before wox is activated
-	activeWindowPid  int             // active window pid before wox is activated
-	activeWindowIcon common.WoxImage // active window icon before wox is activated
-	activeWindowIsOpenSaveDialog bool // active window is open/save dialog before wox is activated
+	activeWindowName             string          // active window name before wox is activated
+	activeWindowPid              int             // active window pid before wox is activated
+	activeWindowIcon             common.WoxImage // active window icon before wox is activated
+	activeWindowIsOpenSaveDialog bool            // active window is open/save dialog before wox is activated
 }
 
 func GetUIManager() *Manager {
@@ -265,20 +265,21 @@ func (m *Manager) RegisterQueryHotkey(ctx context.Context, queryHotkey setting.Q
 	hk := &hotkey.Hotkey{}
 
 	err := hk.Register(ctx, queryHotkey.Hotkey, func() {
-		newCtx := util.NewTraceContext()
-		query := plugin.GetPluginManager().ReplaceQueryVariable(newCtx, queryHotkey.Query)
+		queryCtx := util.WithCoreSessionContext(util.NewTraceContext())
+		query := plugin.GetPluginManager().ReplaceQueryVariable(queryCtx, queryHotkey.Query)
 		plainQuery := common.PlainQuery{
+			QueryId:   uuid.NewString(),
 			QueryType: plugin.QueryTypeInput,
 			QueryText: query,
 		}
 
-		q, _, err := plugin.GetPluginManager().NewQuery(ctx, plainQuery)
+		q, _, err := plugin.GetPluginManager().NewQuery(queryCtx, plainQuery)
 		if queryHotkey.IsSilentExecution {
 			if err != nil {
 				logger.Error(ctx, fmt.Sprintf("failed to create silent query: %s", err.Error()))
 				return
 			}
-			success := plugin.GetPluginManager().QuerySilent(ctx, q)
+			success := plugin.GetPluginManager().QuerySilent(queryCtx, q)
 			if !success {
 				logger.Error(ctx, fmt.Sprintf("failed to execute silent query: %s", query))
 			} else {
@@ -292,8 +293,8 @@ func (m *Manager) RegisterQueryHotkey(ctx context.Context, queryHotkey setting.Q
 					isQueryFocus = true
 				}
 			}
-			m.ui.ChangeQuery(newCtx, plainQuery)
-			m.ui.ShowApp(newCtx, common.ShowContext{SelectAll: false, IsQueryFocus: isQueryFocus})
+			m.ui.ChangeQuery(queryCtx, plainQuery)
+			m.ui.ShowApp(queryCtx, common.ShowContext{SelectAll: false, IsQueryFocus: isQueryFocus})
 		}
 	})
 	if err != nil {
@@ -446,15 +447,6 @@ func (m *Manager) ChangeTheme(ctx context.Context, theme common.Theme) {
 	} else {
 		m.GetUI(ctx).ChangeTheme(ctx, theme)
 	}
-}
-
-func (m *Manager) ToggleWindow() {
-	ctx := util.NewTraceContext()
-	logger.Info(ctx, "[UI] toggle window")
-	requestUI(ctx, WebsocketMsg{
-		RequestId: uuid.NewString(),
-		Method:    "toggleWindow",
-	})
 }
 
 func (m *Manager) GetUI(ctx context.Context) common.UI {

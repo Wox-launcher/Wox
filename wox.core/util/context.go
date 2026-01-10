@@ -29,6 +29,15 @@ func WithSessionContext(ctx context.Context, sessionId string) context.Context {
 	return context.WithValue(ctx, ContextKeySessionId, sessionId)
 }
 
+// UI session context created by the core module
+// Sometimes query requests are initiated by the core module, such as hotkey queries. In such cases, a core session ID is required.
+// The UI module filters out all requests not belonging to its own session, except for core sessions.
+// This ensures requests initiated by the core can be processed by the UI module.
+func WithCoreSessionContext(ctx context.Context) context.Context {
+	coreSessionId := "core-" + uuid.NewString()
+	return context.WithValue(ctx, ContextKeySessionId, coreSessionId)
+}
+
 func WithQueryIdContext(ctx context.Context, queryId string) context.Context {
 	return context.WithValue(ctx, ContextKeyQueryId, queryId)
 }
