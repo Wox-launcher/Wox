@@ -48,6 +48,11 @@ class WoxListView<T> extends StatelessWidget {
         final filterHeight = canShowFilter ? filterTopPadding + filterFieldHeight : 0.0;
         final listMaxHeight = hasBoundedHeight ? (constraints.maxHeight - filterHeight).clamp(0.0, maxHeight).toDouble() : maxHeight;
 
+        final itemHeight =
+            listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code || listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_CHAT.code
+                ? WoxThemeUtil.instance.getActionItemHeight()
+                : WoxThemeUtil.instance.getResultListViewHeightByCount(1);
+
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -69,7 +74,7 @@ class WoxListView<T> extends StatelessWidget {
                     () =>
                         controller.items.isEmpty && controller.filterBoxController.text.isNotEmpty
                             ? SizedBox(
-                              height: WoxThemeUtil.instance.getResultListViewHeightByCount(1),
+                              height: itemHeight,
                               child: Center(
                                 child: Text(
                                   Get.find<WoxSettingController>().tr('ui_no_matches'),
@@ -77,54 +82,54 @@ class WoxListView<T> extends StatelessWidget {
                                 ),
                               ),
                             )
-                            : ListView.builder(
-                              shrinkWrap: true,
-                              controller: controller.scrollController,
-                              physics: const NeverScrollableScrollPhysics(),
-                              itemCount: controller.items.length,
-                              itemExtent:
-                                  listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code || listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_CHAT.code
-                                      ? WoxThemeUtil.instance.getActionItemHeight()
-                                      : WoxThemeUtil.instance.getResultListViewHeightByCount(1),
-                              itemBuilder: (context, index) {
-                                var item = controller.items[index];
-                                return MouseRegion(
-                                  onEnter: (_) {
-                                    if (controller.isMouseMoved && !item.value.isGroup) {
-                                      controller.updateHoveredIndex(index);
-                                    }
-                                  },
-                                  onHover: (_) {
-                                    if (!controller.isMouseMoved && !item.value.isGroup) {
-                                      controller.isMouseMoved = true;
-                                      controller.updateHoveredIndex(index);
-                                    }
-                                  },
-                                  onExit: (_) {
-                                    if (!item.value.isGroup && controller.hoveredIndex.value == index) {
-                                      controller.clearHoveredResult();
-                                    }
-                                  },
-                                  child: _WoxListItemGestureWrapper<T>(
-                                    controller: controller,
-                                    index: index,
-                                    item: item,
-                                    onItemTapped: () {
-                                      onItemTapped?.call();
+                            : AnimatedSwitcher(
+                              duration: Duration.zero,
+                              child: ListView.builder(
+                                shrinkWrap: true,
+                                controller: controller.scrollController,
+                                physics: const NeverScrollableScrollPhysics(),
+                                itemCount: controller.items.length,
+                                itemExtent: itemHeight,
+                                itemBuilder: (context, index) {
+                                  var item = controller.items[index];
+                                  return MouseRegion(
+                                    onEnter: (_) {
+                                      if (controller.isMouseMoved && !item.value.isGroup) {
+                                        controller.updateHoveredIndex(index);
+                                      }
                                     },
-                                    child: Obx(
-                                      () => WoxListItemView(
-                                        key: ValueKey(item.value.id),
-                                        item: item.value,
-                                        woxTheme: WoxThemeUtil.instance.currentTheme.value,
-                                        isActive: controller.activeIndex.value == index,
-                                        isHovered: controller.hoveredIndex.value == index,
-                                        listViewType: listViewType,
+                                    onHover: (_) {
+                                      if (!controller.isMouseMoved && !item.value.isGroup) {
+                                        controller.isMouseMoved = true;
+                                        controller.updateHoveredIndex(index);
+                                      }
+                                    },
+                                    onExit: (_) {
+                                      if (!item.value.isGroup && controller.hoveredIndex.value == index) {
+                                        controller.clearHoveredResult();
+                                      }
+                                    },
+                                    child: _WoxListItemGestureWrapper<T>(
+                                      controller: controller,
+                                      index: index,
+                                      item: item,
+                                      onItemTapped: () {
+                                        onItemTapped?.call();
+                                      },
+                                      child: Obx(
+                                        () => WoxListItemView(
+                                          key: ValueKey(item.value.id),
+                                          item: item.value,
+                                          woxTheme: WoxThemeUtil.instance.currentTheme.value,
+                                          isActive: controller.activeIndex.value == index,
+                                          isHovered: controller.hoveredIndex.value == index,
+                                          listViewType: listViewType,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                );
-                              },
+                                  );
+                                },
+                              ),
                             ),
                   ),
                 ),
