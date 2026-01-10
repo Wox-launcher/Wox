@@ -231,10 +231,13 @@ class WoxLauncherController extends GetxController {
     //cancel clear results timer
     clearQueryResultsTimer.cancel();
 
-    // Use silent mode to avoid triggering onItemActive callback during updateItems (which may cause a little performance issue)
-    // Following resetActiveResult will trigger the callback
+    // 1. Use silent mode to avoid triggering onItemActive callback during updateItems (which may cause a little performance issue)
+    //    Following resetActiveResult in updateActiveResultIndex will trigger the callback
+    // 2. We need update items in both list and grid controllers, because metdata query (grid and list layout change relay on this) may after results arrival,
+    //    at this point, we don't know which layout this query will use, so we update both
     final listItems = receivedResults.map((e) => WoxListItem.fromQueryResult(e)).toList();
-    activeResultViewController.updateItems(traceId, listItems, silent: true);
+    resultListViewController.updateItems(traceId, listItems, silent: true);
+    resultGridViewController.updateItems(traceId, listItems, silent: true);
 
     updateActiveResultIndex(traceId);
     updateDoctorToolbarIfNeeded(traceId);
@@ -1601,6 +1604,10 @@ class WoxLauncherController extends GetxController {
         if (queryMetadata.icon.imageData.isNotEmpty) {
           isPluginQuery = true;
         }
+        Logger.instance.debug(
+          traceId,
+          "fetched query metadata: isPluginQuery=$isPluginQuery, resultPreviewWidthRatio=${queryMetadata.resultPreviewWidthRatio}, isGridLayout=${queryMetadata.isGridLayout}",
+        );
       } catch (e) {
         Logger.instance.error(traceId, "query metadata failed: $e");
       }
