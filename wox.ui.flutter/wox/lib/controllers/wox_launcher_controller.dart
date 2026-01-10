@@ -1655,15 +1655,22 @@ class WoxLauncherController extends GetxController {
   }
 
   Future<void> updateGridLayoutParamsOnQueryChanged(String traceId, PlainQuery query, QueryMetadata queryMetadata) async {
+    final wasGridLayout = isGridLayout.value;
     if (query.isEmpty) {
       isGridLayout.value = false;
       gridLayoutParams.value = GridLayoutParams.empty();
+      if (wasGridLayout) {
+        resizeHeight();
+      }
       return;
     }
     // if there is no space in the query, then this must be a global query
     if (!query.queryText.contains(" ")) {
       isGridLayout.value = false;
       gridLayoutParams.value = GridLayoutParams.empty();
+      if (wasGridLayout) {
+        resizeHeight();
+      }
       return;
     }
 
@@ -1677,6 +1684,14 @@ class WoxLauncherController extends GetxController {
     resultGridViewController.updateGridParams(gridLayoutParams.value);
 
     Logger.instance.debug(traceId, "update grid layout params: columns=${queryMetadata.gridLayoutParams.columns}");
+
+    if (wasGridLayout != isGridLayout.value) {
+      if (!isGridLayout.value) {
+        resizeHeight();
+      } else if (resultGridViewController.rowHeight > 0) {
+        resizeHeight();
+      }
+    }
   }
 
   // Quick select related methods

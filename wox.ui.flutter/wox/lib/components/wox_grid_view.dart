@@ -14,6 +14,7 @@ class WoxGridView extends StatelessWidget {
   final WoxGridController<WoxQueryResult> controller;
   final double maxHeight;
   final VoidCallback? onItemTapped;
+  final VoidCallback? onRowHeightChanged;
 
   // Height for title text (fontSize 12 + some extra)
   static const double titleHeight = 18.0;
@@ -23,6 +24,7 @@ class WoxGridView extends StatelessWidget {
     required this.controller,
     required this.maxHeight,
     this.onItemTapped,
+    this.onRowHeightChanged,
   });
 
   @override
@@ -43,7 +45,10 @@ class WoxGridView extends StatelessWidget {
         final cellHeight = cellWidth + (showTitle ? titleHeight : 0);
 
         // Update controller with the calculated row height for scroll calculations
-        controller.updateRowHeight(cellHeight);
+        final heightChanged = controller.updateRowHeight(cellHeight);
+        if (heightChanged) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => onRowHeightChanged?.call());
+        }
 
         return ConstrainedBox(
           constraints: BoxConstraints(maxHeight: maxHeight),

@@ -17,8 +17,12 @@ class WoxGridController<T> extends WoxBaseListController<T> {
     gridLayoutParams = params;
   }
 
-  void updateRowHeight(double height) {
+  bool updateRowHeight(double height) {
+    if ((rowHeight - height).abs() < 0.5) {
+      return false;
+    }
     rowHeight = height;
+    return true;
   }
 
   /// Calculate total height needed for grid view content
