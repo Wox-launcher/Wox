@@ -1,13 +1,13 @@
 # Changelog
 
-## v2.0.0-beta.8 —
+## v2.0.0-beta.8 — 2026-01-10
 
 - Add
 
   - [`Emoji`] Add ai search support for Emoji plugin (you need to enable AI feature in settings first)
-    ![](screenshots/emoji_ai_search.png)
+    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/emoji_ai_search.png)
   - Add auto theme which changes theme based on system light/dark mode
-    ![](screenshots/auto_theme.png)
+    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/auto_theme.png)
   - [`Explorer`] Add Explorer plugin to quick switch paths in Open/Save dialog #3259, see [Explorer plugin guide](https://wox-launcher.github.io/Wox/guide/plugins/system/explorer.html) for more details
   - Add loading animation to query box during plugin metadata fetching to improve user experience
 
