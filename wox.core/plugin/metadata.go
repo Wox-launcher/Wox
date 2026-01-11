@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"wox/common"
 	"wox/i18n"
 	"wox/resource"
@@ -88,6 +89,10 @@ type Metadata struct {
 	//for dev plugin
 	IsDev              bool   `json:"-"` // plugins loaded from `local plugin directories` which defined in wpm settings
 	DevPluginDirectory string `json:"-"` // absolute path to dev plugin directory defined in wpm settings, only available when IsDev is true
+
+	// cache for translations
+	translateCache     *util.HashMap[string, string] `json:"-"`
+	translateCacheOnce sync.Once                     `json:"-"`
 }
 
 func (m *Metadata) GetIconOrDefault(pluginDirectory string, defaultImage common.WoxImage) common.WoxImage {
@@ -401,11 +406,23 @@ func (m *Metadata) GetDescription(ctx context.Context) string {
 
 func (m *Metadata) translate(ctx context.Context, text common.I18nString) string {
 	rawText := strings.TrimSpace(string(text))
+	m.translateCacheOnce.Do(func() {
+		m.translateCache = util.NewHashMap[string, string]()
+	})
+	langCode := i18n.GetI18nManager().GetCurrentLangCode()
+	cacheKey := string(langCode) + "|" + rawText
+	if cached, ok := m.translateCache.Load(cacheKey); ok {
+		return cached
+	}
+
 	if translated := i18n.GetI18nManager().TranslateI18nMap(ctx, rawText, m.I18n); translated != rawText {
+		m.translateCache.Store(cacheKey, translated)
 		return translated
 	}
 
-	return i18n.GetI18nManager().TranslateWox(ctx, rawText)
+	translated := i18n.GetI18nManager().TranslateWox(ctx, rawText)
+	m.translateCache.Store(cacheKey, translated)
+	return translated
 }
 
 // LoadSystemI18nFromDirectory merges translations from Wox's central lang files into Metadata.I18n.
