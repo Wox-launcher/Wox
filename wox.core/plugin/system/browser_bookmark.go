@@ -140,10 +140,11 @@ func (c *BrowserBookmarkPlugin) Query(ctx context.Context, query plugin.Query) (
 		}
 
 		if isMatch {
-			// default icon, overlay cached favicon if exists (no network)
+			// default icon, use cached favicon if exists (no network)
 			icon := browserBookmarkIcon
-			if cachedIcon, ok := getWebsiteIconFromCacheOnly(ctx, bookmark.Url); ok {
-				icon = cachedIcon.Overlay(browserBookmarkIcon, 0.4, 0.6, 0.6)
+			cachedIcon, ok := getWebsiteIconFromCacheOnly(ctx, bookmark.Url)
+			if ok {
+				icon = cachedIcon
 			}
 
 			results = append(results, plugin.QueryResult{
@@ -235,10 +236,10 @@ func (c *BrowserBookmarkPlugin) loadBookmarkFromFile(ctx context.Context, bookma
 	for _, group := range groups {
 		if name, nameOk := group["name"]; nameOk {
 			if url, urlOk := group["url"]; urlOk {
-				// Do not block on network here; show default icon and overlay only if cache already exists
+				// Do not block on network here; show cached favicon if exists
 				icon := browserBookmarkIcon
 				if cachedIcon, ok := getWebsiteIconFromCacheOnly(ctx, url); ok {
-					icon = cachedIcon.Overlay(browserBookmarkIcon, 0.4, 0.6, 0.6)
+					icon = cachedIcon
 				}
 
 				results = append(results, Bookmark{
@@ -292,10 +293,10 @@ func (c *BrowserBookmarkPlugin) handleMRURestore(ctx context.Context, mruData pl
 	}
 
 	if !mruData.Icon.IsValid() {
-		// default icon, overlay cached favicon if exists (no network)
+		// default icon, use cached favicon if exists (no network)
 		icon := browserBookmarkIcon
 		if cachedIcon, ok := getWebsiteIconFromCacheOnly(context.Background(), url); ok {
-			icon = cachedIcon.Overlay(browserBookmarkIcon, 0.4, 0.6, 0.6)
+			icon = cachedIcon
 		}
 		mruData.Icon = icon
 	}
