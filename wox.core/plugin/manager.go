@@ -841,10 +841,8 @@ func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, 
 	}
 
 	if query.Type == QueryTypeSelection && query.Search != "" {
-		woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 		results = lo.Filter(results, func(item QueryResult, _ int) bool {
-			match, _ := util.IsStringMatchScore(item.Title, query.Search, woxSetting.UsePinYin.Get())
-			return match
+			return IsStringMatch(ctx, item.Title, query.Search)
 		})
 	}
 
