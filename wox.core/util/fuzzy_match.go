@@ -3,6 +3,7 @@ package util
 import (
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -44,40 +45,86 @@ func FuzzyMatch(text string, pattern string, usePinYin bool) FuzzyMatchResult {
 		return FuzzyMatchResult{IsMatch: false, Score: 0}
 	}
 
-	// Normalize both strings (lowercase + remove diacritics)
-	normalizedText := normalizeString(text)
-	normalizedPattern := normalizeString(pattern)
+	// Get buffer for pattern runes
+	patternBufPtr := getRuneBuffer()
+	defer putRuneBuffer(patternBufPtr)
+
+	// Normalize pattern to runes
+	patternRunes := normalizeToRunes(pattern, *patternBufPtr)
+	// Update pool pointer to keep capacity
+	*patternBufPtr = patternRunes
+
+	// Optimization: Pre-check for existence of pattern characters in text (case-insensitive)
+	if !usePinYin || !hasChinese(text) {
+		textStr := text
+		for _, pRune := range patternRunes {
+			found := false
+			for i, r := range textStr {
+				// Normalize rune on the fly to match normalizeToRunes logic
+				r = unicode.ToLower(r)
+				if normalized, ok := diacriticsMap[r]; ok {
+					r = normalized
+				}
+
+				if r == pRune {
+					found = true
+					// Advance textStr to search for next pattern char
+					textStr = textStr[i+utf8.RuneLen(r):]
+					break
+				}
+			}
+			if !found {
+				return FuzzyMatchResult{IsMatch: false, Score: 0}
+			}
+		}
+	}
+
+	// Get buffer for text runes
+	textBufPtr := getRuneBuffer()
+	defer putRuneBuffer(textBufPtr)
+
+	// Normalize text
+	textRunes := normalizeToRunes(text, *textBufPtr)
+	*textBufPtr = textRunes
 
 	// Try exact match first (highest priority)
-	if normalizedText == normalizedPattern {
+	if equalRunes(textRunes, patternRunes) {
 		return FuzzyMatchResult{IsMatch: true, Score: bonusExactMatch + int64(len(pattern)*scoreMatch)}
 	}
 
 	// Try prefix match (high priority)
-	if strings.HasPrefix(normalizedText, normalizedPattern) {
-		patternRunes := []rune(pattern)
-		score := bonusPrefixMatch + int64(len(patternRunes)*scoreMatch) + bonusFirstCharMatch
+	if hasPrefixRunes(textRunes, patternRunes) {
+		patternRuneCount := len(patternRunes)
+		score := bonusPrefixMatch + int64(patternRuneCount*scoreMatch) + bonusFirstCharMatch
 		return FuzzyMatchResult{IsMatch: true, Score: score}
 	}
 
+	// Prepare original runes for Core (needed for case sensitivity checks etc)
+	originalBufPtr := getRuneBuffer()
+	defer putRuneBuffer(originalBufPtr)
+	originalRunes := *originalBufPtr
+	for _, r := range text {
+		originalRunes = append(originalRunes, r)
+	}
+	*originalBufPtr = originalRunes
+
 	// Try fuzzy match on the original text
-	result := fuzzyMatchCore(text, normalizedText, normalizedPattern)
+	result := fuzzyMatchCore(originalRunes, textRunes, patternRunes)
 	if result.IsMatch {
 		return result
 	}
 
 	// Try pinyin matching for Chinese text
-	// Only allow strict matching: all first letters OR all full pinyin
 	if usePinYin && hasChinese(text) {
-		pinyinResult := matchPinyinStrict(text, normalizedPattern)
+		// Pass runes to strict pinyin matcher
+		pinyinResult := matchPinyinStrict(text, patternRunes)
 		if pinyinResult.IsMatch {
 			return pinyinResult
 		}
 	}
 
 	// Fallback: substring match (lower score)
-	if strings.Contains(normalizedText, normalizedPattern) {
-		patternRunes := []rune(pattern)
+	if containsRunes(textRunes, patternRunes) {
 		// Lower score for non-prefix substring matches
 		score := int64(len(patternRunes))
 		return FuzzyMatchResult{IsMatch: true, Score: score}
@@ -89,7 +136,7 @@ func FuzzyMatch(text string, pattern string, usePinYin bool) FuzzyMatchResult {
 // matchPinyinStrict performs strict pinyin matching
 // Only allows: all first letters (e.g., "nh" for "你好") OR all full pinyin (e.g., "nihao" for "你好")
 // Does NOT allow mixed mode (e.g., "nhao" or "nih")
-func matchPinyinStrict(text string, normalizedPattern string) FuzzyMatchResult {
+func matchPinyinStrict(text string, patternRunes []rune) FuzzyMatchResult {
 	pinyinVariants := getPinYin(text)
 
 	var bestResult FuzzyMatchResult
@@ -110,37 +157,42 @@ func matchPinyinStrict(text string, normalizedPattern string) FuzzyMatchResult {
 			continue
 		}
 
-		// Build first letters string from filtered parts
-		var firstLetters strings.Builder
+		// Build first letters buffer
+		firstLettersBufPtr := getRuneBuffer()
+		firstLettersBuf := *firstLettersBufPtr
 		for _, part := range pinyinParts {
-			firstLetters.WriteByte(part[0])
+			firstLettersBuf = append(firstLettersBuf, rune(part[0]))
 		}
-		firstLettersStr := strings.ToLower(firstLetters.String())
+		*firstLettersBufPtr = firstLettersBuf // Update pointer just in case append reallocs
 
-		// Check 1: Exact first letters match (e.g., "nh" matches "你好")
-		if normalizedPattern == firstLettersStr {
-			score := bonusExactMatch + int64(len(normalizedPattern)*scoreMatch)
+		// Convert firstLetters to lowercase runes
+		for i, r := range firstLettersBuf {
+			firstLettersBuf[i] = unicode.ToLower(r)
+		}
+
+		// Check 1: Exact first letters match
+		if equalRunes(patternRunes, firstLettersBuf) {
+			score := bonusExactMatch + int64(len(patternRunes)*scoreMatch)
 			if score > bestResult.Score {
 				bestResult = FuzzyMatchResult{IsMatch: true, Score: score}
 			}
+			putRuneBuffer(firstLettersBufPtr)
 			continue
 		}
 
-		// Check 2: First letters prefix match (e.g., "n" matches "你好")
-		if strings.HasPrefix(firstLettersStr, normalizedPattern) {
-			score := bonusPrefixMatch + int64(len(normalizedPattern)*scoreMatch) + bonusFirstCharMatch
+		// Check 2: First letters prefix match
+		if hasPrefixRunes(firstLettersBuf, patternRunes) {
+			score := bonusPrefixMatch + int64(len(patternRunes)*scoreMatch) + bonusFirstCharMatch
 			if score > bestResult.Score {
 				bestResult = FuzzyMatchResult{IsMatch: true, Score: score}
 			}
+			putRuneBuffer(firstLettersBufPtr)
 			continue
 		}
+		putRuneBuffer(firstLettersBufPtr) // Done with this buffer
 
-		// Check 3: Syllable-level matching (covers exact match, prefix match, and subsequence match)
-		// - Exact match: "nihao" matches "你好" (all syllables matched completely)
-		// - Prefix match: "niha" matches "你好" (last syllable partial, typing in progress)
-		// - Subsequence: "wangyiyinyue" matches "网易云音乐" (can skip syllables)
-		// - Mixed mode rejected: "nih" does NOT match (ni=full + h=first letter)
-		if syllableResult := matchSyllables(pinyinParts, normalizedPattern); syllableResult.IsMatch {
+		// Check 3: Syllable-level matching
+		if syllableResult := matchSyllables(pinyinParts, patternRunes); syllableResult.IsMatch {
 			if syllableResult.Score > bestResult.Score {
 				bestResult = syllableResult
 			}
@@ -178,91 +230,101 @@ func isAlphabeticPinyin(s string) bool {
 const maxConsecutiveSkippedSyllables = 3
 
 // matchSyllables performs unified syllable-level matching
-// Supports: exact match, prefix match (typing in progress), and subsequence match (can skip syllables)
-// Rejects mixed mode: full pinyin + first letter combination (e.g., "nih" for "你好")
-// Rejects scattered matches: if consecutive skipped syllables exceed threshold
-//
-// Examples:
-//   - "nihao" matches "你好" (exact match)
-//   - "niha" matches "你好" (prefix match, typing "hao" in progress)
-//   - "wangyiyinyue" matches "网易云音乐" (subsequence, skipping 1 syllable "yun")
-//   - "nih" does NOT match "你好" (mixed mode: ni=full + h=first letter)
-//   - "daoyan" does NOT match "J道:解惑授道-国际软件架构前沿" (too many skipped syllables)
-func matchSyllables(parts []string, pattern string) FuzzyMatchResult {
-	if len(pattern) == 0 || len(parts) == 0 {
+func matchSyllables(parts []string, patternRunes []rune) FuzzyMatchResult {
+	if len(patternRunes) == 0 || len(parts) == 0 {
 		return FuzzyMatchResult{IsMatch: false, Score: 0}
 	}
 
+	// We work with runes now for pattern
 	patternPos := 0
 	partIdx := 0
 	matchedSyllables := 0
 	totalSkippedSyllables := 0
-	consecutiveSkipped := 0 // Track consecutive skipped syllables
+	consecutiveSkipped := 0
 	lastMatchWasPartial := false
 
-	for patternPos < len(pattern) && partIdx < len(parts) {
+	for patternPos < len(patternRunes) && partIdx < len(parts) {
 		partLower := strings.ToLower(parts[partIdx])
-		remaining := pattern[patternPos:]
+		partRunes := []rune(partLower) // Allocation here? "parts" are strings. optimizing this is next level.
 
-		// Case 1: Remaining starts with full syllable - consume it
-		if strings.HasPrefix(remaining, partLower) {
-			patternPos += len(partLower)
+		remainingLen := len(patternRunes) - patternPos
+		// We need to compare runes.
+
+		// Case 1: Remaining starts with full syllable
+		if hasPrefixRunes(patternRunes[patternPos:], partRunes) {
+			patternPos += len(partRunes)
 			matchedSyllables++
 			partIdx++
 			lastMatchWasPartial = false
-			consecutiveSkipped = 0 // Reset consecutive counter on match
+			consecutiveSkipped = 0
 			continue
 		}
 
 		// Case 2: Remaining is a prefix of this syllable (typing in progress)
-		if strings.HasPrefix(partLower, remaining) {
-			// Check for mixed mode: if we've matched full syllables before,
-			// and remaining is EXACTLY the first letter, this is mixed mode
-			if matchedSyllables > 0 && len(remaining) == 1 {
-				// Mixed mode detected - reject
-				return FuzzyMatchResult{IsMatch: false, Score: 0}
-			}
-			// Valid partial match (typing in progress)
-			patternPos += len(remaining)
-			matchedSyllables++
-			lastMatchWasPartial = true
-			partIdx++
-			consecutiveSkipped = 0 // Reset consecutive counter on match
-			continue
+		// partRunes starts with remaining?
+		// But remaining pattern might be longer than part?
+		// We only care if the *entire* remaining pattern matches the beginning of the part.
+		// ACTUALLY, strict logic:
+		// "remaining is a prefix of this syllable" means:
+		// len(remaining) <= len(part) AND part.StartsWith(remaining)
+
+		checkLen := remainingLen
+		if checkLen > len(partRunes) {
+			checkLen = len(partRunes)
+			// If remaining is longer than part, it CANNOT be a prefix of part unless we only match PART of remaining?
+			// But the logic says "Remaining is a prefix of this syllable".
+			// Means we consume pattern up to what we have?
+			// No, it says "typing in progress".
+			// Usually implies we are at the END of the pattern.
+			// "niha" -> "ni" matched. "ha" left. "hao" next. "hao" starts with "ha".
+			// So yes, `part` starts with `remaining`.
 		}
 
-		// Case 3: No match - skip this syllable and try next
+		// We check if `partRunes` starts with `patternRunes[patternPos:]`
+		// But `patternRunes[patternPos:]` might be longer.
+		// If pattern is "haox", part is "hao". "hao" does NOT start with "haox".
+		// So we only check if `partRunes` starts with `remaining` IF len(remaining) <= len(part).
+
+		if remainingLen <= len(partRunes) {
+			if hasPrefixRunes(partRunes, patternRunes[patternPos:]) {
+				// Check mixed mode
+				if matchedSyllables > 0 && remainingLen == 1 {
+					return FuzzyMatchResult{IsMatch: false, Score: 0}
+				}
+				patternPos += remainingLen
+				matchedSyllables++
+				lastMatchWasPartial = true
+				partIdx++
+				consecutiveSkipped = 0
+				continue
+			}
+		}
+
+		// Case 3: No match
 		totalSkippedSyllables++
 		consecutiveSkipped++
 		partIdx++
 
-		// Check if we've skipped too many consecutive syllables
-		// Only check after we've matched at least one syllable
 		if matchedSyllables > 0 && consecutiveSkipped > maxConsecutiveSkippedSyllables {
-			// Too many consecutive skips - scattered match, reject
 			return FuzzyMatchResult{IsMatch: false, Score: 0}
 		}
 	}
 
 	// Pattern must be fully consumed
-	if patternPos != len(pattern) {
+	if patternPos != len(patternRunes) {
 		return FuzzyMatchResult{IsMatch: false, Score: 0}
 	}
 
-	// Must have matched at least one syllable
+	// ... same scoring logic ...
 	if matchedSyllables == 0 {
 		return FuzzyMatchResult{IsMatch: false, Score: 0}
 	}
 
-	// Calculate score
 	score := int64(matchedSyllables) * scoreMatch * 2
-
-	// Bonus for no skipped syllables (consecutive match)
 	if totalSkippedSyllables == 0 {
 		score += bonusConsecutive * int64(matchedSyllables)
 	}
 
-	// Bonus for exact match (all syllables matched, no partial)
 	if !lastMatchWasPartial && partIdx == len(parts) && totalSkippedSyllables == 0 {
 		score += bonusExactMatch
 	}
@@ -271,11 +333,7 @@ func matchSyllables(parts []string, pattern string) FuzzyMatchResult {
 }
 
 // fuzzyMatchCore performs the core fuzzy matching algorithm
-func fuzzyMatchCore(originalText string, normalizedText string, normalizedPattern string) FuzzyMatchResult {
-	textRunes := []rune(normalizedText)
-	patternRunes := []rune(normalizedPattern)
-	originalRunes := []rune(originalText)
-
+func fuzzyMatchCore(originalRunes []rune, textRunes []rune, patternRunes []rune) FuzzyMatchResult {
 	textLen := len(textRunes)
 	patternLen := len(patternRunes)
 
@@ -299,15 +357,30 @@ func fuzzyMatchCore(originalText string, normalizedText string, normalizedPatter
 		return FuzzyMatchResult{IsMatch: false, Score: 0}
 	}
 
-	// Second pass: find optimal match positions using greedy algorithm with scoring
-	// Try to find better match positions (prefer boundaries, consecutive matches)
-	matchedPositions := optimizeMatchPositions(originalRunes, textRunes, patternRunes)
+	// Use pooled buffer for matchedIndexes
+	matchedIndexesPtr := getIntBuffer()
+	matchedIndexes := *matchedIndexesPtr
+	// Ensure we have space for patternLen
+	if cap(matchedIndexes) < patternLen {
+		// Pool gave us something too small, allocate proper size
+		// We don't update *matchedIndexesPtr here because we don't want to put back this new slice if it's too big/new?
+		// Or we DO want to upgrade the pool?
+		// Let's allocate new slice and put it back later.
+		matchedIndexes = make([]int, patternLen)
+	} else {
+		matchedIndexes = matchedIndexes[:patternLen]
+	}
+	// Important: update pointer so deferred Put sees the slice we are using (including if we grew it)
+	*matchedIndexesPtr = matchedIndexes
+	defer putIntBuffer(matchedIndexesPtr)
+
+	// Also optimizeMatchPositions needs to know it should fill this slice
+	optimizeMatchPositions(originalRunes, textRunes, patternRunes, matchedIndexes)
 
 	// Calculate final score
-	score := calculateScore(originalRunes, textRunes, matchedPositions, patternLen)
+	score := calculateScore(originalRunes, textRunes, matchedIndexes, patternLen)
 
 	// Apply minimum score threshold to filter out low-quality matches
-	// The threshold is dynamic based on pattern length
 	minScore := calculateMinScoreThreshold(patternLen, textLen)
 	if score < minScore {
 		return FuzzyMatchResult{IsMatch: false, Score: 0}
@@ -317,10 +390,10 @@ func fuzzyMatchCore(originalText string, normalizedText string, normalizedPatter
 }
 
 // optimizeMatchPositions finds optimal positions for pattern characters in text
-func optimizeMatchPositions(originalRunes []rune, textRunes []rune, patternRunes []rune) []int {
+func optimizeMatchPositions(originalRunes []rune, textRunes []rune, patternRunes []rune, matchedIndexes []int) {
 	textLen := len(textRunes)
 	patternLen := len(patternRunes)
-	matchedIndexes := make([]int, patternLen)
+	// matchedIndexes is assumed to be of size patternLen
 
 	// Use a greedy approach with lookahead to prefer better match positions
 	patternIdx := 0
@@ -368,8 +441,6 @@ func optimizeMatchPositions(originalRunes []rune, textRunes []rune, patternRunes
 			}
 		}
 	}
-
-	return matchedIndexes
 }
 
 // calculateScore computes the match score based on multiple factors
@@ -517,10 +588,12 @@ func calculateMinScoreThreshold(patternLen int, textLen int) int64 {
 
 // Helper functions
 
-// normalizeString converts string to lowercase and removes diacritics
-func normalizeString(s string) string {
-	var result strings.Builder
-	result.Grow(len(s))
+// normalizeToRunes converts string to lowercase and removes diacritics, appending to buf
+func normalizeToRunes(s string, buf []rune) []rune {
+	// Optimistic check: if no uppercase and no special chars, just append runes
+	// But we need to verify diacritics every time?
+	// The original had a "needsNormalization" check. We can keep it or just iterate.
+	// Since we are writing to buf, iterating once is efficient.
 
 	for _, r := range s {
 		// Convert to lowercase
@@ -528,13 +601,73 @@ func normalizeString(s string) string {
 
 		// Remove diacritics by mapping to base character
 		if normalized, ok := diacriticsMap[r]; ok {
-			result.WriteRune(normalized)
+			buf = append(buf, normalized)
 		} else {
-			result.WriteRune(r)
+			buf = append(buf, r)
 		}
 	}
 
-	return result.String()
+	return buf
+}
+
+// Helper functions for rune slices
+
+func equalRunes(a, b []rune) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func hasPrefixRunes(s, prefix []rune) bool {
+	return len(s) >= len(prefix) && equalRunes(s[:len(prefix)], prefix)
+}
+
+func containsRunes(s, substr []rune) bool {
+	if len(substr) == 0 {
+		return true
+	}
+	if len(substr) > len(s) {
+		return false
+	}
+
+	// Simple brute force - same as strings.Contains default for short strings
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if equalRunes(s[i:i+len(substr)], substr) {
+			return true
+		}
+	}
+	return false
+}
+
+// containsRunesAll checks if all runes in chars are present in s (in order)
+func containsRunesAll(s string, chars []rune) bool {
+	textStr := s
+	for _, pRune := range chars {
+		found := false
+		for i, r := range textStr {
+			// Normalize rune on the fly
+			r = unicode.ToLower(r)
+			if normalized, ok := diacriticsMap[r]; ok {
+				r = normalized
+			}
+
+			if r == pRune {
+				found = true
+				textStr = textStr[i+utf8.RuneLen(r):]
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
 }
 
 // equalRune compares two runes for equality (case-insensitive, diacritics-insensitive)

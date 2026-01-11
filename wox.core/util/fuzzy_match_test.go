@@ -221,3 +221,20 @@ func TestIsStringMatchScoreLong(t *testing.T) {
 	elapsed := GetSystemTimestamp() - start
 	assert.Less(t, elapsed, int64(1000))
 }
+
+// BenchmarkIsStringMatchScore-10    	  578812	      2135 ns/op	       0 B/op	       0 allocs/op
+func BenchmarkIsStringMatchScore(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		FuzzyMatch("刚好今天和老婆去超市 有道词典 Microsoft Word - Document.docx ", "Word", true)
+	}
+}
+
+// BenchmarkFuzzyMatchNoMatch-10    	 4814230	       264.5 ns/op	       0 B/op	       0 allocs/op
+func BenchmarkFuzzyMatchNoMatch(b *testing.B) {
+	// Scenario: Searching "git" in a long list of unrelated items
+	// This should be zero allocations with the optimization
+	text := "Microsoft Word - Document.docx"
+	for i := 0; i < b.N; i++ {
+		FuzzyMatch(text, "git", false)
+	}
+}
