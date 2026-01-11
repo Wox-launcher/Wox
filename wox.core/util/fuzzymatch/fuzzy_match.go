@@ -1,4 +1,4 @@
-package util
+package fuzzymatch
 
 import (
 	"strings"
@@ -50,42 +50,24 @@ func FuzzyMatch(text string, pattern string, usePinYin bool) FuzzyMatchResult {
 	defer putRuneBuffer(patternBufPtr)
 
 	// Normalize pattern to runes
+	// We can use the same processText logic but ignore original buffer and hasChinese?
+	// Or just keep normalizeToRunes as a simple version for pattern.
+	// Pattern is usually short, so existing normalizeToRunes is fine, but let's optimize it too with ASCII check.
 	patternRunes := normalizeToRunes(pattern, *patternBufPtr)
-	// Update pool pointer to keep capacity
 	*patternBufPtr = patternRunes
-
-	// Optimization: Pre-check for existence of pattern characters in text (case-insensitive)
-	if !usePinYin || !hasChinese(text) {
-		textStr := text
-		for _, pRune := range patternRunes {
-			found := false
-			for i, r := range textStr {
-				// Normalize rune on the fly to match normalizeToRunes logic
-				r = unicode.ToLower(r)
-				if normalized, ok := diacriticsMap[r]; ok {
-					r = normalized
-				}
-
-				if r == pRune {
-					found = true
-					// Advance textStr to search for next pattern char
-					textStr = textStr[i+utf8.RuneLen(r):]
-					break
-				}
-			}
-			if !found {
-				return FuzzyMatchResult{IsMatch: false, Score: 0}
-			}
-		}
-	}
 
 	// Get buffer for text runes
 	textBufPtr := getRuneBuffer()
 	defer putRuneBuffer(textBufPtr)
 
-	// Normalize text
-	textRunes := normalizeToRunes(text, *textBufPtr)
-	*textBufPtr = textRunes
+	// Get buffer for original runes
+	originalBufPtr := getRuneBuffer()
+	defer putRuneBuffer(originalBufPtr)
+
+	// Process text: normalize, populate original buffer, and check for Chinese in ONE PASS
+	hasChineseChar := processText(text, originalBufPtr, textBufPtr)
+	textRunes := *textBufPtr
+	originalRunes := *originalBufPtr
 
 	// Try exact match first (highest priority)
 	if equalRunes(textRunes, patternRunes) {
@@ -99,15 +81,6 @@ func FuzzyMatch(text string, pattern string, usePinYin bool) FuzzyMatchResult {
 		return FuzzyMatchResult{IsMatch: true, Score: score}
 	}
 
-	// Prepare original runes for Core (needed for case sensitivity checks etc)
-	originalBufPtr := getRuneBuffer()
-	defer putRuneBuffer(originalBufPtr)
-	originalRunes := *originalBufPtr
-	for _, r := range text {
-		originalRunes = append(originalRunes, r)
-	}
-	*originalBufPtr = originalRunes
-
 	// Try fuzzy match on the original text
 	result := fuzzyMatchCore(originalRunes, textRunes, patternRunes)
 	if result.IsMatch {
@@ -115,7 +88,7 @@ func FuzzyMatch(text string, pattern string, usePinYin bool) FuzzyMatchResult {
 	}
 
 	// Try pinyin matching for Chinese text
-	if usePinYin && hasChinese(text) {
+	if usePinYin && hasChineseChar {
 		// Pass runes to strict pinyin matcher
 		pinyinResult := matchPinyinStrict(text, patternRunes)
 		if pinyinResult.IsMatch {
@@ -261,32 +234,33 @@ func matchSyllables(parts []string, patternRunes []rune) FuzzyMatchResult {
 		}
 
 		// Case 2: Remaining is a prefix of this syllable (typing in progress)
-		// partRunes starts with remaining?
-		// But remaining pattern might be longer than part?
-		// We only care if the *entire* remaining pattern matches the beginning of the part.
-		// ACTUALLY, strict logic:
-		// "remaining is a prefix of this syllable" means:
-		// len(remaining) <= len(part) AND part.StartsWith(remaining)
-
+		// ...
 		checkLen := remainingLen
 		if checkLen > len(partRunes) {
 			checkLen = len(partRunes)
-			// If remaining is longer than part, it CANNOT be a prefix of part unless we only match PART of remaining?
-			// But the logic says "Remaining is a prefix of this syllable".
-			// Means we consume pattern up to what we have?
-			// No, it says "typing in progress".
-			// Usually implies we are at the END of the pattern.
-			// "niha" -> "ni" matched. "ha" left. "hao" next. "hao" starts with "ha".
-			// So yes, `part` starts with `remaining`.
 		}
-
-		// We check if `partRunes` starts with `patternRunes[patternPos:]`
-		// But `patternRunes[patternPos:]` might be longer.
-		// If pattern is "haox", part is "hao". "hao" does NOT start with "haox".
-		// So we only check if `partRunes` starts with `remaining` IF len(remaining) <= len(part).
 
 		if remainingLen <= len(partRunes) {
 			if hasPrefixRunes(partRunes, patternRunes[patternPos:]) {
+				// Strict Mode Rule: If we skipped syllables, we cannot match partially.
+				// We must match the FULL syllable to allow jumping to it.
+				// Exception: "h" matching "hao" (if "h" is valid Initial?).
+				// But "h" match is handled via Initials check in matchPinyinStrict.
+				// Here we are in Pinyin Sytllables check.
+				// So "h" matching "nihao" (skip "ni", match "hao" partial) -> Should FAIL.
+				// And "ha" matching "nihao" (skip "ni", match "hao" partial) -> Should FAIL.
+				// "hao" matching "nihao" (skip "ni", match "hao" full) -> SHOULD PASS.
+
+				if totalSkippedSyllables > 0 && remainingLen < len(partRunes) {
+					// Skipping allowed only for full syllable matches
+					// But wait, what if pattern is "haox"?
+					// If pattern is longer than part, we fall through to Case 3 (No match).
+					// Case 2 is strictly "Remaining <= Part".
+					// So if Remaining < Part, it's a Partial Match.
+					// If TotalSkipped > 0, REJECT Partial Match.
+					goto NoMatch
+				}
+
 				// Check mixed mode
 				if matchedSyllables > 0 && remainingLen == 1 {
 					return FuzzyMatchResult{IsMatch: false, Score: 0}
@@ -300,6 +274,7 @@ func matchSyllables(parts []string, patternRunes []rune) FuzzyMatchResult {
 			}
 		}
 
+	NoMatch:
 		// Case 3: No match
 		totalSkippedSyllables++
 		consecutiveSkipped++
@@ -347,7 +322,7 @@ func fuzzyMatchCore(originalRunes []rune, textRunes []rune, patternRunes []rune)
 	// First pass: check if all pattern characters exist in text (in order)
 	patternIdx := 0
 	for textIdx := 0; textIdx < textLen && patternIdx < patternLen; textIdx++ {
-		if equalRune(textRunes[textIdx], patternRunes[patternIdx]) {
+		if textRunes[textIdx] == patternRunes[patternIdx] {
 			patternIdx++
 		}
 	}
@@ -398,7 +373,7 @@ func optimizeMatchPositions(originalRunes []rune, textRunes []rune, patternRunes
 	// Use a greedy approach with lookahead to prefer better match positions
 	patternIdx := 0
 	for textIdx := 0; textIdx < textLen && patternIdx < patternLen; textIdx++ {
-		if !equalRune(textRunes[textIdx], patternRunes[patternIdx]) {
+		if textRunes[textIdx] != patternRunes[patternIdx] {
 			continue
 		}
 
@@ -416,7 +391,7 @@ func optimizeMatchPositions(originalRunes []rune, textRunes []rune, patternRunes
 		// Look ahead to see if there's a better position
 		foundBetter := false
 		for lookAhead := textIdx + 1; lookAhead < textLen && lookAhead < textIdx+10; lookAhead++ {
-			if equalRune(textRunes[lookAhead], patternRunes[patternIdx]) {
+			if textRunes[lookAhead] == patternRunes[patternIdx] {
 				if isBoundaryChar(originalRunes, lookAhead) {
 					// Found a boundary match ahead, skip current position
 					foundBetter = true
@@ -435,7 +410,7 @@ func optimizeMatchPositions(originalRunes []rune, textRunes []rune, patternRunes
 	if patternIdx != patternLen {
 		patternIdx = 0
 		for textIdx := 0; textIdx < textLen && patternIdx < patternLen; textIdx++ {
-			if equalRune(textRunes[textIdx], patternRunes[patternIdx]) {
+			if textRunes[textIdx] == patternRunes[patternIdx] {
 				matchedIndexes[patternIdx] = textIdx
 				patternIdx++
 			}
@@ -590,12 +565,16 @@ func calculateMinScoreThreshold(patternLen int, textLen int) int64 {
 
 // normalizeToRunes converts string to lowercase and removes diacritics, appending to buf
 func normalizeToRunes(s string, buf []rune) []rune {
-	// Optimistic check: if no uppercase and no special chars, just append runes
-	// But we need to verify diacritics every time?
-	// The original had a "needsNormalization" check. We can keep it or just iterate.
-	// Since we are writing to buf, iterating once is efficient.
-
 	for _, r := range s {
+		// ASCII fast path
+		if r < 128 {
+			if 'A' <= r && r <= 'Z' {
+				r += 'a' - 'A'
+			}
+			buf = append(buf, r)
+			continue
+		}
+
 		// Convert to lowercase
 		r = unicode.ToLower(r)
 
@@ -608,6 +587,44 @@ func normalizeToRunes(s string, buf []rune) []rune {
 	}
 
 	return buf
+}
+
+// processText normalizes text, populates original buffer, and detects Chinese in one pass
+func processText(text string, origBufPtr *[]rune, normBufPtr *[]rune) (hasChinese bool) {
+	orig := *origBufPtr
+	norm := *normBufPtr
+
+	hasChinese = false
+	for _, r := range text {
+		orig = append(orig, r)
+
+		// ASCII fast path
+		if r < 128 {
+			if 'A' <= r && r <= 'Z' {
+				r += 'a' - 'A'
+			}
+			norm = append(norm, r)
+			continue
+		}
+
+		if unicode.Is(unicode.Han, r) {
+			hasChinese = true
+		}
+
+		// Convert to lowercase
+		r = unicode.ToLower(r)
+
+		// Remove diacritics by mapping to base character
+		if normalized, ok := diacriticsMap[r]; ok {
+			norm = append(norm, normalized)
+		} else {
+			norm = append(norm, r)
+		}
+	}
+
+	*origBufPtr = orig
+	*normBufPtr = norm
+	return hasChinese
 }
 
 // Helper functions for rune slices
@@ -671,29 +688,6 @@ func containsRunesAll(s string, chars []rune) bool {
 }
 
 // equalRune compares two runes for equality (case-insensitive, diacritics-insensitive)
-func equalRune(a, b rune) bool {
-	if a == b {
-		return true
-	}
-
-	// Normalize both runes
-	a = unicode.ToLower(a)
-	b = unicode.ToLower(b)
-
-	if a == b {
-		return true
-	}
-
-	// Check diacritics mapping
-	if normalizedA, ok := diacriticsMap[a]; ok {
-		a = normalizedA
-	}
-	if normalizedB, ok := diacriticsMap[b]; ok {
-		b = normalizedB
-	}
-
-	return a == b
-}
 
 // isBoundaryChar checks if the character at the given index is at a word boundary
 func isBoundaryChar(runes []rune, idx int) bool {

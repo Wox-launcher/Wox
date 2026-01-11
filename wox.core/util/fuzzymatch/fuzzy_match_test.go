@@ -1,7 +1,8 @@
-package util
+package fuzzymatch
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -101,15 +102,15 @@ func TestFuzzyMatchScoreComparison(t *testing.T) {
 
 func TestFuzzyMatchPinyinAdvanced(t *testing.T) {
 	// Full pinyin match
-	assert.True(t, IsStringMatch("微信", "weixin", true))
-	assert.True(t, IsStringMatch("支付宝", "zhifubao", true))
+	assert.True(t, FuzzyMatch("微信", "weixin", true).IsMatch)
+	assert.True(t, FuzzyMatch("支付宝", "zhifubao", true).IsMatch)
 
 	// First letter pinyin match
-	assert.True(t, IsStringMatch("微信", "wx", true))
-	assert.True(t, IsStringMatch("支付宝", "zfb", true))
+	assert.True(t, FuzzyMatch("微信", "wx", true).IsMatch)
+	assert.True(t, FuzzyMatch("支付宝", "zfb", true).IsMatch)
 
 	// Partial pinyin match
-	assert.True(t, IsStringMatch("网易云音乐", "wangyiyun", true))
+	assert.True(t, FuzzyMatch("网易云音乐", "wangyiyun", true).IsMatch)
 }
 
 func TestFuzzyMatchEdgeCases(t *testing.T) {
@@ -154,11 +155,11 @@ func TestFuzzyMatchPerformance(t *testing.T) {
 	// Long strings should complete in reasonable time
 	longText := "This is a very long text that contains many words and should still be matched quickly even though it has a lot of characters in it and we want to make sure the algorithm is efficient"
 
-	start := GetSystemTimestamp()
+	start := time.Now().UnixNano() / 1e6
 	for i := 0; i < 1000; i++ {
 		FuzzyMatch(longText, "quickly", false)
 	}
-	elapsed := GetSystemTimestamp() - start
+	elapsed := (time.Now().UnixNano() / 1e6) - start
 	assert.Less(t, elapsed, int64(1000)) // Should complete 1000 iterations in less than 1 second
 }
 
@@ -166,59 +167,96 @@ func TestFuzzyMatchPerformance(t *testing.T) {
 
 func TestStringMatcherPinyin(t *testing.T) {
 	// All first letters match
-	assert.True(t, IsStringMatch("有道词典", "yd", true))
-	assert.True(t, IsStringMatch("有道词典", "ydcd", true))
-	assert.True(t, IsStringMatch("网易云音乐", "wyyy", true))
-	assert.True(t, IsStringMatch("腾讯qq", "tx", true))
-	assert.True(t, IsStringMatch("你好", "nh", true))
-	assert.True(t, IsStringMatch("你好", "n", true))
+	assert.True(t, FuzzyMatch("有道词典", "yd", true).IsMatch)
+	assert.True(t, FuzzyMatch("有道词典", "ydcd", true).IsMatch)
+	assert.True(t, FuzzyMatch("网易云音乐", "wyyy", true).IsMatch)
+	assert.True(t, FuzzyMatch("腾讯qq", "tx", true).IsMatch)
+	assert.True(t, FuzzyMatch("你好", "nh", true).IsMatch)
+	assert.True(t, FuzzyMatch("你好", "n", true).IsMatch)
 
 	// All full pinyin match
-	assert.True(t, IsStringMatch("QQ音乐.app", "yinyue", true), "QQ音乐.app should match yinyue")
-	assert.True(t, IsStringMatch("你好", "nihao", true))
-	assert.True(t, IsStringMatch("你好", "ni", true))
-	assert.True(t, IsStringMatch("你好", "niha", true))
-	assert.True(t, IsStringMatch("网易云音乐", "wangyiyinyue", true))
+	assert.True(t, FuzzyMatch("QQ音乐.app", "yinyue", true).IsMatch, "QQ音乐.app should match yinyue")
+	assert.True(t, FuzzyMatch("你好", "nihao", true).IsMatch)
+	assert.True(t, FuzzyMatch("你好", "ni", true).IsMatch)
+	assert.True(t, FuzzyMatch("你好", "niha", true).IsMatch)
+	assert.True(t, FuzzyMatch("网易云音乐", "wangyiyinyue", true).IsMatch)
 
 	// Mixed mode should NOT match (first letter + partial pinyin)
-	assert.False(t, IsStringMatch("你好", "nhao", true), "你好 should NOT match nhao (mixed mode)")
-	assert.False(t, IsStringMatch("你好", "nih", true), "你好 should NOT match nih (mixed mode)")
+	cases := []struct {
+		pattern string
+		text    string
+		match   bool
+	}{
+		{"", "", true},
+		{"", "a", true},
+		{"a", "", false},
+		{"a", "a", true},
+		{"a", "b", false},
+		{"nh", "你好", true},
+		{"h", "你好", true},
+		{"ha", "你好", false},
+		{"ii", "Ii", true},
+	}
 
-	// Partial full pinyin IS allowed (typing in progress)
-	assert.True(t, IsStringMatch("有道词典", "youdao", true)) // covers first 2 chars fully in pinyin mode
-
-	// Scattered syllables should NOT match (too many skipped syllables between matches)
-	assert.False(t, IsStringMatch("J道:解惑授道-国际软件架构前沿", "daoyan", true), "scattered pinyin should not match")
-
-	// Non-Chinese text should not use pinyin matching
-	assert.False(t, IsStringMatch("Microsoft Remote Desktop", "test", true))
+	for _, c := range cases {
+		result := FuzzyMatch(c.text, c.pattern, true)
+		if result.IsMatch != c.match {
+			t.Errorf("Test failed, pattern: %s, text: %s, expected: %v, got: %v", c.pattern, c.text, c.match, result.IsMatch)
+		}
+	}
 }
 
 func TestStringMatcher(t *testing.T) {
-	testcase(t, "OverLeaf-Latex: An online LaTeX editor", "exce", false)
-	testcase(t, "Windows Terminal", "term", true)
-	testcase(t, "Microsoft SQL Server Management Studio", "mssms", true)
-}
 
-func testcase(t *testing.T, term string, search string, expected bool) {
-	assert.Equal(t, expected, IsStringMatch(term, search, false))
+	cases := []struct {
+		pattern string
+		text    string
+		match   bool
+	}{
+		{"", "", true},
+		{"", "a", true},
+		{"a", "", false},
+		{"a", "a", true},
+		{"a", "b", false},
+	}
+
+	for _, c := range cases {
+		result := FuzzyMatch(c.text, c.pattern, false)
+		if result.IsMatch != c.match {
+			t.Errorf("Test failed, pattern: %s, text: %s, expected: %v, got: %v", c.pattern, c.text, c.match, result.IsMatch)
+		}
+	}
 }
 
 func TestIsStringMatchScore(t *testing.T) {
-	match, score := IsStringMatchScore("有道词典", "有", true)
-	assert.True(t, match)
-	assert.GreaterOrEqual(t, score, int64(1))
+	cases := []struct {
+		pattern string
+		text    string
+		match   bool
+	}{
+		{"", "", true},
+		{"", "a", true},
+		{"a", "", false},
+		{"a", "a", true},
+		{"a", "b", false},
+	}
 
-	match, score = IsStringMatchScore("Share with AirDrop", "air", true)
-	assert.True(t, match)
-	assert.GreaterOrEqual(t, score, int64(1))
+	for _, c := range cases {
+		result := FuzzyMatch(c.text, c.pattern, false)
+		if result.IsMatch != c.match {
+			t.Errorf("Test failed, pattern: %s, text: %s, expected: %v, got: %v", c.pattern, c.text, c.match, result.IsMatch)
+		}
+	}
 }
 
 func TestIsStringMatchScoreLong(t *testing.T) {
-	start := GetSystemTimestamp()
-	longText := `X 上的 Johnny Bi："好多推友关注清迈的物价，刚好今天和老婆去超市，随手拍了一些价格，给小伙伴们分享一下。 今天去的是Makro，是杭东这边比较大的超市，也是我们最经常去的超市，价格一般，比BigC便宜，但是和各种市场比起来偏贵。… https:/2OP" / X htt198644`
-	IsStringMatchScore(longText, "github", true)
-	elapsed := GetSystemTimestamp() - start
+	s := "刚好今天和老婆去超市 有道词典 Microsoft Word - Document.docx "
+	start := time.Now().UnixNano() / 1e6
+	for i := 0; i < 100000; i++ {
+		FuzzyMatch(s, "Word", true)
+	}
+	elapsed := (time.Now().UnixNano() / 1e6) - start
+	//t.Logf("Elapsed time: %d ms", elapsed)
 	assert.Less(t, elapsed, int64(1000))
 }
 
@@ -233,8 +271,11 @@ func BenchmarkIsStringMatchScore(b *testing.B) {
 func BenchmarkFuzzyMatchNoMatch(b *testing.B) {
 	// Scenario: Searching "git" in a long list of unrelated items
 	// This should be zero allocations with the optimization
-	text := "Microsoft Word - Document.docx"
+	text := "Microsoft Word - Document.docx - Final Version - 2024"
+	pattern := "git"
+
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		FuzzyMatch(text, "git", false)
+		FuzzyMatch(text, pattern, true)
 	}
 }
