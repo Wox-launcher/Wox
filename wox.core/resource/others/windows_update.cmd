@@ -23,6 +23,6 @@ if exist "%TARGET%.old" (
   echo [%date% %time%] backup not found: %TARGET%.old >> "%LOG%"
 )
 echo [%date% %time%] launching >> "%LOG%"
-start "" "%TARGET%"
+start "" "%TARGET%" "--update"
 echo [%date% %time%] launched >> "%LOG%"
 endlocal

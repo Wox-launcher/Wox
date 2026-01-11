@@ -28,6 +28,7 @@
   "ui_hide_on_lost_focus_tips": "Quando selecionado, o Wox será ocultado na perda do foco",
   "ui_hide_on_start": "Ocultar ao iniciar",
   "ui_hide_on_start_tips": "Quando selecionado, o Wox será ocultado ao iniciar",
+  "ui_update_success": "Atualizado com sucesso para a versão mais recente",
   "ui_show_tray": "Mostrar ícone na bandeja",
   "ui_show_tray_tips": "Quando selecionado, o Wox exibirá um ícone na bandeja",
   "ui_show_position": "Posição",

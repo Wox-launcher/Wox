@@ -43,5 +43,5 @@ fi
 chmod +x "$OLD_PATH" || sudo chmod +x "$OLD_PATH"
 
 log "Launching updated application"
-"$OLD_PATH" >/dev/null 2>&1 &
+"$OLD_PATH" --updated >/dev/null 2>&1 &
 log "Update process completed"

@@ -30,6 +30,7 @@
   "ui_hide_on_start_tips": "When selected, Wox will hide when it starts",
   "ui_enable_auto_update": "Enable auto update",
   "ui_enable_auto_update_tips": "When selected, Wox will automatically download updates in the background but will not install them until you confirm",
+  "ui_update_success": "Successfully updated to the latest version",
   "ui_show_tray": "Show tray icon",
   "ui_show_tray_tips": "When selected, Wox will show a tray icon",
   "ui_show_position": "Display position",

@@ -23,6 +23,7 @@ log() {
 }
 
 log "Update process started for version $VERSION"
+log "Args: log=$LOG_FILE app=$APP_PATH pid=$PID old=$OLD_PATH"
 log "Extracted app path: $APP_PATH"
 
 log "Waiting for application with PID $PID to exit..."
@@ -116,6 +117,6 @@ log "Cleaning up temporary directory"
 rm -rf "$(dirname "$APP_PATH")"
 
 log "Opening new application: $TARGET_APP_PATH"
-open "$TARGET_APP_PATH" || open -a "$TARGET_APP_PATH"
+open "$TARGET_APP_PATH" --args --updated
 
 log "Update process completed successfully"
