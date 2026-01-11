@@ -123,116 +123,22 @@ func (u *MacOSUpdater) ApplyUpdate(ctx context.Context, pid int, oldPath, newPat
 	}
 	util.GetLogger().Info(ctx, fmt.Sprintf("App extracted to: %s", extractedAppPath))
 
-	// Create a shell script that will wait for the app to exit and then copy the extracted app
-	shellContent := fmt.Sprintf(
-		`#!/bin/bash
-
-# Log file setup
-LOG_FILE="%s"
-LOG_TIMESTAMP=$(date "+%%Y-%%m-%%d %%H:%%M:%%S")
-
-# Log function
-log() {
-  echo "$LOG_TIMESTAMP $1" >> "$LOG_FILE"
-  echo "$1"
-}
-
-log "Update process started for version %s"
-log "Extracted app path: %s"
-
-# Wait for the current app to exit
-log "Waiting for application with PID %d to exit..."
-WAIT_COUNT=0
-
-# Simple function to check if the PID is still running
-is_process_running() {
-  ps -p %d > /dev/null 2>&1
-  return $?
-}
-
-# Wait for the process to exit
-while is_process_running; do
-  # Log every 5 seconds to show progress
-  if [ $((WAIT_COUNT %% 5)) -eq 0 ]; then
-    log "Still waiting for application to exit after ${WAIT_COUNT}s"
-  fi
-
-  # After 30 seconds, force continue
-  if [ $WAIT_COUNT -eq 30 ]; then
-    log "WARNING: Waited for 30 seconds. Forcing continue."
-    break
-  fi
-
-  sleep 1
-  WAIT_COUNT=$((WAIT_COUNT + 1))
-done
-
-log "Application has exited or timeout reached after ${WAIT_COUNT}s"
-
-# Now that the app has exited, copy the extracted app to Applications
-APP_PATH="%s"
-APP_NAME=$(basename "$APP_PATH")
-log "Copying $APP_NAME to /Applications/"
-
-# Remove existing app if it exists
-if [ -d "/Applications/$APP_NAME" ]; then
-  log "Removing existing app: /Applications/$APP_NAME"
-  rm -rf "/Applications/$APP_NAME"
-  if [ $? -ne 0 ]; then
-    log "Failed to remove existing app, trying with sudo"
-    sudo rm -rf "/Applications/$APP_NAME"
-    if [ $? -ne 0 ]; then
-      log "ERROR: Failed to remove existing app even with sudo"
-      exit 1
-    fi
-  fi
-fi
-
-# Copy the app
-log "Copying app to Applications folder"
-cp -R "$APP_PATH" "/Applications/"
-if [ $? -ne 0 ]; then
-  log "Failed to copy app, trying with sudo"
-  sudo cp -R "$APP_PATH" "/Applications/"
-  if [ $? -ne 0 ]; then
-    log "ERROR: Failed to copy app to Applications"
-    exit 1
-  fi
-fi
-
-# Verify the app was copied
-if [ ! -d "/Applications/$APP_NAME" ]; then
-  log "ERROR: App was not copied to Applications"
-  exit 1
-fi
-
-log "App copied successfully to Applications folder"
-
-# Clean up the temporary directory
-log "Cleaning up temporary directory"
-rm -rf "$(dirname "$APP_PATH")"
-
-# Open the new app
-log "Opening new application: /Applications/$APP_NAME"
-open "/Applications/$APP_NAME" || open -a "/Applications/$APP_NAME"
-
-# Clean up
-log "Cleaning up update script"
-log "Update process completed successfully"
-rm -f "$0"
-`,
-		updateLogFile, currentUpdateInfo.LatestVersion, extractedAppPath, pid, pid, extractedAppPath,
-	)
-
-	// Write the shell script
-	shellPath := filepath.Join(filepath.Dir(newPath), "update.sh")
-	if err := os.WriteFile(shellPath, []byte(shellContent), 0755); err != nil {
-		return fmt.Errorf("failed to create update shell script: %w", err)
+	shellPath := filepath.Join(util.GetLocation().GetOthersDirectory(), "macos_update.sh")
+	if _, statErr := os.Stat(shellPath); statErr != nil {
+		return fmt.Errorf("failed to find macos update script: %w", statErr)
 	}
 
 	// Execute the shell script
 	util.GetLogger().Info(ctx, "starting update process")
-	cmd := exec.Command("bash", shellPath)
+	cmd := exec.Command(
+		"bash",
+		shellPath,
+		updateLogFile,
+		currentUpdateInfo.LatestVersion,
+		extractedAppPath,
+		fmt.Sprintf("%d", pid),
+		oldPath,
+	)
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start update process: %w", err)
 	}

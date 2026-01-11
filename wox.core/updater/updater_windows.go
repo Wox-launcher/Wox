@@ -48,11 +48,11 @@ func (u *WindowsUpdater) ApplyUpdate(ctx context.Context, pid int, oldPath, newP
 	}
 
 	util.GetLogger().Info(ctx, "starting updated application")
-	scriptPath := filepath.Join(util.GetLocation().GetOthersDirectory(), "windows_update_restart.cmd")
+	scriptPath := filepath.Join(util.GetLocation().GetOthersDirectory(), "windows_update.cmd")
 	if _, statErr := os.Stat(scriptPath); statErr != nil {
 		return fmt.Errorf("failed to find windows update restart script: %w", statErr)
 	}
-	logPath := filepath.Join(util.GetLocation().GetLogDirectory(), "update_restart.log")
+	logPath := filepath.Join(util.GetLocation().GetLogDirectory(), "update.log")
 	if _, err := shell.Run("cmd.exe", "/c", "call", scriptPath, oldPath, logPath); err != nil {
 		return fmt.Errorf("failed to start updated application: %w", err)
 	}
