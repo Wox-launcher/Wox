@@ -1,19 +1,17 @@
 package util
 
 import (
-	"math/rand"
 	"strings"
-	"time"
 
 	"wox/util/fuzzymatch"
 )
 
-// LeftPad pads a string to length l with char pad
-func LeftPad(s string, pad byte, l int) string {
-	if len(s) >= l {
+// LeftPad left-pads s with the rune r, to length n.
+func LeftPad(s string, n int, r rune) string {
+	if len(s) >= n {
 		return s
 	}
-	return strings.Repeat(string(pad), l-len(s)) + s
+	return strings.Repeat(string(r), n-len(s)) + s
 }
 
 func EllipsisEnd(s string, maxLen int) string {
@@ -59,18 +57,4 @@ func UniqueStrings(slice []string) []string {
 		}
 	}
 	return list
-}
-
-func RandomString(n int) string {
-	var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-
-	b := make([]rune, n)
-	for i := range b {
-		b[i] = letters[rand.Intn(len(letters))]
-	}
-	return string(b)
-}
-
-func init() {
-	rand.Seed(time.Now().UnixNano())
 }
