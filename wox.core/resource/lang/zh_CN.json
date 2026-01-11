@@ -30,6 +30,7 @@
   "ui_hide_on_start_tips": "选中后，Wox启动时将隐藏",
   "ui_enable_auto_update": "启用自动更新",
   "ui_enable_auto_update_tips": "选中后，Wox将在后台自动下载更新，但不会安装，直到您确认",
+  "ui_update_success": "您已成功升级到最新版",
   "ui_show_tray": "显示托盘图标",
   "ui_show_tray_tips": "选中后，Wox将显示托盘图标",
   "ui_show_position": "显示位置",

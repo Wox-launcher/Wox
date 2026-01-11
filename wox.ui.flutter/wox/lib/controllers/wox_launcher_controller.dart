@@ -1333,8 +1333,12 @@ class WoxLauncherController extends GetxController {
 
     // Preload theme/settings for settings view
     await WoxThemeUtil.instance.loadTheme(traceId);
-    await WoxSettingUtil.instance.loadSetting(traceId);
+    await settingController.reloadSetting(traceId);
     settingController.activeNavPath.value = 'general';
+
+    // Keep settings in sync with runtime and plugin state when opening.
+    unawaited(settingController.refreshRuntimeStatuses());
+    unawaited(settingController.reloadPlugins(traceId));
 
     if (context.path == "/plugin/setting") {
       WidgetsBinding.instance.addPostFrameCallback((_) async {

@@ -56,6 +56,7 @@ type Manager struct {
 	activeWindowPid              int             // active window pid before wox is activated
 	activeWindowIcon             common.WoxImage // active window icon before wox is activated
 	activeWindowIsOpenSaveDialog bool            // active window is open/save dialog before wox is activated
+	pendingStartupNotify         *common.NotifyMsg
 }
 
 func GetUIManager() *Manager {
@@ -478,6 +479,17 @@ func (m *Manager) PostOnShow(ctx context.Context) {
 	}
 
 	analytics.TrackUIOpened(ctx)
+
+	if m.pendingStartupNotify != nil {
+		logger.Info(ctx, "showing pending startup notify")
+		m.ui.Notify(ctx, *m.pendingStartupNotify)
+		m.pendingStartupNotify = nil
+	}
+}
+
+func (m *Manager) SetStartupNotify(msg common.NotifyMsg) {
+	logger.Info(util.NewTraceContext(), "setting pending startup notify")
+	m.pendingStartupNotify = &msg
 }
 
 func (m *Manager) PostOnQueryBoxFocus(ctx context.Context) {

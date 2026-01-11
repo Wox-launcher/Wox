@@ -66,6 +66,11 @@ func main() {
 	util.GetLogger().Info(ctx, fmt.Sprintf("golang version: %s", strings.ReplaceAll(runtime.Version(), "go", "")))
 	util.GetLogger().Info(ctx, fmt.Sprintf("wox data location: %s", util.GetLocation().GetWoxDataDirectory()))
 	util.GetLogger().Info(ctx, fmt.Sprintf("user data location: %s", util.GetLocation().GetUserDataDirectory()))
+	if execPath, execErr := os.Executable(); execErr == nil {
+		util.GetLogger().Info(ctx, fmt.Sprintf("startup pid: %d, executable: %s, args: %v", os.Getpid(), execPath, os.Args))
+	} else {
+		util.GetLogger().Info(ctx, fmt.Sprintf("startup pid: %d, executable: <error>, args: %v", os.Getpid(), os.Args))
+	}
 
 	if err := database.Init(ctx); err != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to initialize database: %s", err.Error()))
@@ -155,6 +160,16 @@ func main() {
 	if langErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to initialize lang(%s): %s", woxSetting.LangCode.Get(), langErr.Error()))
 		return
+	}
+
+	for _, arg := range os.Args {
+		if arg == "--updated" {
+			ui.GetUIManager().SetStartupNotify(common.NotifyMsg{
+				Text:           i18n.GetI18nManager().TranslateWox(ctx, "ui_update_success"),
+				DisplaySeconds: 5,
+			})
+			break
+		}
 	}
 
 	themeErr := ui.GetUIManager().Start(ctx)
