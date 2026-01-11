@@ -3,7 +3,7 @@ package plugin
 import (
 	"context"
 	"wox/setting"
-	"wox/util"
+	"wox/util/fuzzymatch"
 )
 
 func IsStringMatch(ctx context.Context, term string, subTerm string) bool {
@@ -13,14 +13,16 @@ func IsStringMatch(ctx context.Context, term string, subTerm string) bool {
 
 func IsStringMatchScore(ctx context.Context, term string, subTerm string) (bool, int64) {
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	return util.IsStringMatchScore(term, subTerm, woxSetting.UsePinYin.Get())
+	result := fuzzymatch.FuzzyMatch(term, subTerm, woxSetting.UsePinYin.Get())
+	return result.IsMatch, result.Score
 }
 
 func IsStringMatchScoreNoPinYin(ctx context.Context, term string, subTerm string) (bool, int64) {
-	return util.IsStringMatchScore(term, subTerm, false)
+	result := fuzzymatch.FuzzyMatch(term, subTerm, false)
+	return result.IsMatch, result.Score
 }
 
 func IsStringMatchNoPinYin(ctx context.Context, term string, subTerm string) bool {
-	match, _ := util.IsStringMatchScore(term, subTerm, false)
-	return match
+	result := fuzzymatch.FuzzyMatch(term, subTerm, false)
+	return result.IsMatch
 }

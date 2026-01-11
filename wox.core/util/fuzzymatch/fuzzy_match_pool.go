@@ -21,6 +21,15 @@ var (
 			return &s
 		},
 	}
+
+	// String slice pool for pinyin parts
+	stringSlicePool = sync.Pool{
+		New: func() interface{} {
+			// Initial capacity 32 strings
+			s := make([]string, 0, 32)
+			return &s
+		},
+	}
 )
 
 func getRuneBuffer() *[]rune {
@@ -54,4 +63,38 @@ func putIntBuffer(bufPtr *[]int) {
 		return
 	}
 	intPool.Put(bufPtr)
+}
+
+func getStringSliceBuffer() *[]string {
+	ptr := stringSlicePool.Get().(*[]string)
+	*ptr = (*ptr)[:0]
+	return ptr
+}
+
+func putStringSliceBuffer(bufPtr *[]string) {
+	if bufPtr == nil {
+		return
+	}
+	if cap(*bufPtr) > maxPoolBufferSize {
+		return
+	}
+	stringSlicePool.Put(bufPtr)
+}
+
+// splitBySpace splits a string by spaces into the provided buffer, avoiding allocations
+// Returns the updated buffer
+func splitBySpace(s string, buf []string) []string {
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == ' ' {
+			if i > start {
+				buf = append(buf, s[start:i])
+			}
+			start = i + 1
+		}
+	}
+	if start < len(s) {
+		buf = append(buf, s[start:])
+	}
+	return buf
 }

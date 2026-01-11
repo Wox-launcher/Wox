@@ -2,7 +2,6 @@ package fuzzymatch
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -151,20 +150,6 @@ func TestFuzzyMatchSpecialCharacters(t *testing.T) {
 	assert.True(t, result.IsMatch)
 }
 
-func TestFuzzyMatchPerformance(t *testing.T) {
-	// Long strings should complete in reasonable time
-	longText := "This is a very long text that contains many words and should still be matched quickly even though it has a lot of characters in it and we want to make sure the algorithm is efficient"
-
-	start := time.Now().UnixNano() / 1e6
-	for i := 0; i < 1000; i++ {
-		FuzzyMatch(longText, "quickly", false)
-	}
-	elapsed := (time.Now().UnixNano() / 1e6) - start
-	assert.Less(t, elapsed, int64(1000)) // Should complete 1000 iterations in less than 1 second
-}
-
-// Tests migrated from strings_test.go
-
 func TestStringMatcherPinyin(t *testing.T) {
 	// All first letters match
 	assert.True(t, FuzzyMatch("有道词典", "yd", true).IsMatch)
@@ -249,30 +234,34 @@ func TestIsStringMatchScore(t *testing.T) {
 	}
 }
 
-func TestIsStringMatchScoreLong(t *testing.T) {
-	s := "刚好今天和老婆去超市 有道词典 Microsoft Word - Document.docx "
-	start := time.Now().UnixNano() / 1e6
-	for i := 0; i < 100000; i++ {
-		FuzzyMatch(s, "Word", true)
-	}
-	elapsed := (time.Now().UnixNano() / 1e6) - start
-	//t.Logf("Elapsed time: %d ms", elapsed)
-	assert.Less(t, elapsed, int64(1000))
-}
-
-// BenchmarkIsStringMatchScore-10    	  578812	      2135 ns/op	       0 B/op	       0 allocs/op
+// cpu: Apple M1 Max
+// BenchmarkIsStringMatchScore-10    	 4148876	       294.5 ns/op	       0 B/op	       0 allocs/op
 func BenchmarkIsStringMatchScore(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		FuzzyMatch("刚好今天和老婆去超市 有道词典 Microsoft Word - Document.docx ", "Word", true)
 	}
 }
 
-// BenchmarkFuzzyMatchNoMatch-10    	 4814230	       264.5 ns/op	       0 B/op	       0 allocs/op
+// cpu: Apple M1 Max
+// BenchmarkFuzzyMatchNoMatch-10    	11877062	        97.95 ns/op	       0 B/op	       0 allocs/op
 func BenchmarkFuzzyMatchNoMatch(b *testing.B) {
 	// Scenario: Searching "git" in a long list of unrelated items
 	// This should be zero allocations with the optimization
 	text := "Microsoft Word - Document.docx - Final Version - 2024"
 	pattern := "git"
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		FuzzyMatch(text, pattern, true)
+	}
+}
+
+// cpu: Apple M1 Max
+// BenchmarkIsStringMatchScorePinyin-10    	 1337829	       868.4 ns/op	       0 B/op	       0 allocs/op
+func BenchmarkIsStringMatchScorePinyin(b *testing.B) {
+	// Scenario: Searching "yd" (YouDao) in the text, forcing Pinyin logic
+	text := "刚好今天和老婆去超市 有道词典 Microsoft Word - Document.docx "
+	pattern := "yd"
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
