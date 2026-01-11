@@ -1,9 +1,10 @@
-package util
+package fuzzymatch
 
 import (
-	"github.com/mozillazg/go-pinyin"
 	"strings"
 	"unicode"
+
+	"github.com/mozillazg/go-pinyin"
 )
 
 func init() {

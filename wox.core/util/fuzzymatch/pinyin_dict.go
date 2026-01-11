@@ -1,4 +1,4 @@
-package util
+package fuzzymatch
 
 // PinyinDict is data map
 // Warning: Auto-generated file, don't edit.

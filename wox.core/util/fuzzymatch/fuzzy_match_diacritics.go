@@ -1,4 +1,4 @@
-package util
+package fuzzymatch
 
 // diacriticsMap maps accented/diacritic characters to their base ASCII equivalents
 // This allows fuzzy matching to ignore accents (e.g., "café" matches "cafe")
