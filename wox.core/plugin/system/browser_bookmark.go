@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 	"wox/common"
 	"wox/plugin"
 	"wox/util"
@@ -118,20 +119,39 @@ func (c *BrowserBookmarkPlugin) Init(ctx context.Context, initParams plugin.Init
 }
 
 func (c *BrowserBookmarkPlugin) Query(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {
+	start := time.Now()
+	// c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("BrowserBookmark: Query start, total bookmarks: %d", len(c.bookmarks)))
+
+	var nameMatchCost time.Duration
+	var urlContainsCost time.Duration
+	var urlMatchCost time.Duration
+	var iconCost time.Duration
+
 	for _, b := range c.bookmarks {
 		var bookmark = b
 		var isMatch bool
 		var matchScore int64
 
 		var minMatchScore int64 = 50 // bookmark plugin has strict match score to avoid too many unrelated results
+
+		t1 := time.Now()
 		isNameMatch, nameScore := plugin.IsStringMatchScore(ctx, bookmark.Name, query.Search)
+		nameMatchCost += time.Since(t1)
+
 		if isNameMatch && nameScore >= minMatchScore {
 			isMatch = true
 			matchScore = nameScore
 		} else {
 			//url match must be exact part match
-			if strings.Contains(bookmark.Url, query.Search) {
+			t2 := time.Now()
+			contains := strings.Contains(bookmark.Url, query.Search)
+			urlContainsCost += time.Since(t2)
+
+			if contains {
+				t3 := time.Now()
 				isUrlMatch, urlScore := plugin.IsStringMatchScoreNoPinYin(ctx, bookmark.Url, query.Search)
+				urlMatchCost += time.Since(t3)
+
 				if isUrlMatch && urlScore >= minMatchScore {
 					isMatch = true
 					matchScore = urlScore
@@ -140,12 +160,14 @@ func (c *BrowserBookmarkPlugin) Query(ctx context.Context, query plugin.Query) (
 		}
 
 		if isMatch {
+			iconStart := time.Now()
 			// default icon, use cached favicon if exists (no network)
 			icon := browserBookmarkIcon
 			cachedIcon, ok := getWebsiteIconFromCacheOnly(ctx, bookmark.Url)
 			if ok {
 				icon = cachedIcon
 			}
+			iconCost += time.Since(iconStart)
 
 			results = append(results, plugin.QueryResult{
 				Title:    bookmark.Name,
@@ -167,6 +189,8 @@ func (c *BrowserBookmarkPlugin) Query(ctx context.Context, query plugin.Query) (
 			})
 		}
 	}
+
+	c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("BrowserBookmark: Query done. nameMatchCost: %v, urlContainsCost: %v, urlMatchCost: %v, totalMatch: %v, iconCost: %v, total: %v, results: %d, total bookmarks: %d", nameMatchCost, urlContainsCost, urlMatchCost, nameMatchCost+urlContainsCost+urlMatchCost, iconCost, time.Since(start), len(results), len(c.bookmarks)))
 
 	return
 }
