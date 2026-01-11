@@ -193,7 +193,9 @@ func (p *UpdatePlugin) buildActions(ctx context.Context, info updater.UpdateInfo
 			IsDefault:              true,
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				if err := updater.ApplyUpdate(ctx); err != nil {
+				if err := updater.ApplyUpdate(ctx, func(stage updater.ApplyUpdateStage) {
+					p.notifyApplyProgress(ctx, stage)
+				}); err != nil {
 					plugin.GetPluginManager().GetUI().Notify(ctx, common.NotifyMsg{
 						Text:           fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_apply_failed"), err.Error()),
 						Icon:           updateIcon.String(),
@@ -205,6 +207,19 @@ func (p *UpdatePlugin) buildActions(ctx context.Context, info updater.UpdateInfo
 	}
 
 	return actions
+}
+
+func (p *UpdatePlugin) notifyApplyProgress(ctx context.Context, stage updater.ApplyUpdateStage) {
+	switch stage {
+	case updater.ApplyUpdateStagePreparing:
+		p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_apply_preparing"))
+	case updater.ApplyUpdateStageExtracting:
+		p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_apply_extracting"))
+	case updater.ApplyUpdateStageReplacing:
+		p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_apply_replacing"))
+	case updater.ApplyUpdateStageRestarting:
+		p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_apply_restarting"))
+	}
 }
 
 func (p *UpdatePlugin) notifyUpdate(ctx context.Context, info updater.UpdateInfo) {

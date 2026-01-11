@@ -20,9 +20,10 @@ func getExecutablePath() (string, error) {
 	return os.Executable()
 }
 
-func (u *WindowsUpdater) ApplyUpdate(ctx context.Context, pid int, oldPath, newPath string) error {
+func (u *WindowsUpdater) ApplyUpdate(ctx context.Context, pid int, oldPath, newPath string, progress ApplyUpdateProgressCallback) error {
 	backupPath := fmt.Sprintf("%s.old", oldPath)
 
+	reportApplyProgress(progress, ApplyUpdateStageReplacing)
 	util.GetLogger().Info(ctx, "replacing Windows executable in-place")
 	if err := os.Rename(oldPath, backupPath); err != nil {
 		return fmt.Errorf("failed to rename current executable: %w", err)
@@ -47,6 +48,7 @@ func (u *WindowsUpdater) ApplyUpdate(ctx context.Context, pid int, oldPath, newP
 		util.GetLogger().Info(ctx, "new executable moved to current location successfully")
 	}
 
+	reportApplyProgress(progress, ApplyUpdateStageRestarting)
 	util.GetLogger().Info(ctx, "starting updated application")
 	scriptPath := filepath.Join(util.GetLocation().GetOthersDirectory(), "windows_update.cmd")
 	if _, statErr := os.Stat(scriptPath); statErr != nil {

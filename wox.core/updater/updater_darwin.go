@@ -113,9 +113,10 @@ func extractAppFromDMG(ctx context.Context, dmgPath string) (string, error) {
 	return extractedAppPath, nil
 }
 
-func (u *MacOSUpdater) ApplyUpdate(ctx context.Context, pid int, oldPath, newPath string) error {
+func (u *MacOSUpdater) ApplyUpdate(ctx context.Context, pid int, oldPath, newPath string, progress ApplyUpdateProgressCallback) error {
 	updateLogFile := filepath.Join(util.GetLocation().GetLogDirectory(), "update.log")
 
+	reportApplyProgress(progress, ApplyUpdateStageExtracting)
 	util.GetLogger().Info(ctx, fmt.Sprintf("Processing DMG file: %s", newPath))
 	extractedAppPath, err := extractAppFromDMG(ctx, newPath)
 	if err != nil {
@@ -129,6 +130,7 @@ func (u *MacOSUpdater) ApplyUpdate(ctx context.Context, pid int, oldPath, newPat
 	}
 
 	// Execute the shell script
+	reportApplyProgress(progress, ApplyUpdateStageReplacing)
 	util.GetLogger().Info(ctx, "starting update process")
 	cmd := exec.Command(
 		"bash",
@@ -139,6 +141,7 @@ func (u *MacOSUpdater) ApplyUpdate(ctx context.Context, pid int, oldPath, newPat
 		fmt.Sprintf("%d", pid),
 		oldPath,
 	)
+	reportApplyProgress(progress, ApplyUpdateStageRestarting)
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start update process: %w", err)
 	}
