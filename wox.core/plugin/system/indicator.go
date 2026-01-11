@@ -8,8 +8,6 @@ import (
 	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
-	"wox/setting"
-	"wox/util"
 
 	"github.com/google/uuid"
 	"github.com/samber/lo"
@@ -23,19 +21,6 @@ func init() {
 
 type IndicatorPlugin struct {
 	api plugin.API
-
-	// cache for translated plugin name and description
-	// this will reduce repeated translation calls, query before: 13ms+, after: 3ms+
-	// key: plugin ID
-	textCache *util.HashMap[string, indicatorTextCache]
-}
-
-type indicatorTextCache struct {
-	translatedName        string
-	translatedDescription string
-	rawName               string
-	rawDescription        string
-	langCode              i18n.LangCode
 }
 
 func (i *IndicatorPlugin) GetMetadata() plugin.Metadata {
@@ -68,7 +53,6 @@ func (i *IndicatorPlugin) GetMetadata() plugin.Metadata {
 
 func (i *IndicatorPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	i.api = initParams.API
-	i.textCache = util.NewHashMap[string, indicatorTextCache]()
 	i.api.OnMRURestore(ctx, i.handleMRURestore)
 }
 
@@ -79,7 +63,6 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 	}
 
 	pluginInstances := plugin.GetPluginManager().GetPluginInstances()
-	langCode := setting.GetSettingManager().GetWoxSetting(ctx).LangCode.Get()
 
 	var results []plugin.QueryResult
 	for _, pluginInstance := range pluginInstances {
@@ -100,31 +83,8 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 			}
 		}
 
-		pluginName, pluginDescription := "", ""
-		cacheKey := pluginInstance.Metadata.Id
-		rawName := string(pluginInstance.Metadata.Name)
-		rawDescription := string(pluginInstance.Metadata.Description)
-
-		cached := false
-		cachedText, ok := i.textCache.Load(cacheKey)
-		if ok && cachedText.langCode == langCode && cachedText.rawName == rawName && cachedText.rawDescription == rawDescription {
-			pluginName = cachedText.translatedName
-			pluginDescription = cachedText.translatedDescription
-			cached = true
-		}
-
-		if !cached {
-			pluginName = pluginInstance.GetName(ctx)
-			pluginDescription = pluginInstance.GetDescription(ctx)
-
-			i.textCache.Store(cacheKey, indicatorTextCache{
-				translatedName:        pluginName,
-				translatedDescription: pluginDescription,
-				rawName:               rawName,
-				rawDescription:        rawDescription,
-				langCode:              langCode,
-			})
-		}
+		pluginName := pluginInstance.GetName(ctx)
+		pluginDescription := pluginInstance.GetDescription(ctx)
 
 		pluginNameMatch, pluginNameScore := plugin.IsStringMatchScore(ctx, pluginName, search)
 		pluginDescMatch, pluginDescScore := plugin.IsStringMatchScore(ctx, pluginDescription, search)

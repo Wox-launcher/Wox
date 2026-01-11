@@ -15,15 +15,19 @@ var managerInstance *Manager
 var managerOnce sync.Once
 
 type Manager struct {
-	currentLangCode LangCode
-	enUsLangJson    string
-	currentLangJson string
+	currentLangCode  LangCode
+	enUsLangJson     string
+	currentLangJson  string
+	currentLangCache *util.HashMap[string, string]
+	enUsCache        *util.HashMap[string, string]
 }
 
 func GetI18nManager() *Manager {
 	managerOnce.Do(func() {
 		managerInstance = &Manager{
-			currentLangCode: LangCodeEnUs,
+			currentLangCode:  LangCodeEnUs,
+			currentLangCache: util.NewHashMap[string, string](),
+			enUsCache:        util.NewHashMap[string, string](),
 		}
 		json, _ := resource.GetLangJson(util.NewTraceContext(), string(LangCodeEnUs))
 		managerInstance.enUsLangJson = string(json)
@@ -43,7 +47,12 @@ func (m *Manager) UpdateLang(ctx context.Context, langCode LangCode) error {
 
 	m.currentLangCode = langCode
 	m.currentLangJson = json
+	m.currentLangCache.Clear()
 	return nil
+}
+
+func (m *Manager) GetCurrentLangCode() LangCode {
+	return m.currentLangCode
 }
 
 func (m *Manager) GetLangJson(ctx context.Context, langCode LangCode) (string, error) {
@@ -55,18 +64,31 @@ func (m *Manager) GetLangJson(ctx context.Context, langCode LangCode) (string, e
 	return string(json), nil
 }
 
+// TranslateWox translates a key using the current language json file.
+// Because this function is hot path, we use cache to improve performance
 func (m *Manager) TranslateWox(ctx context.Context, key string) string {
 	originKey := key
 
 	key = strings.TrimPrefix(key, "i18n:")
+	if value, ok := m.currentLangCache.Load(key); ok {
+		return value
+	}
 	result := gjson.Get(m.currentLangJson, key)
 	if result.Exists() {
-		return result.String()
+		value := result.String()
+		m.currentLangCache.Store(key, value)
+		return value
 	}
 
+	// fallback to en_US
+	if value, ok := m.enUsCache.Load(key); ok {
+		return value
+	}
 	enUsResult := gjson.Get(m.enUsLangJson, key)
 	if enUsResult.Exists() {
-		return enUsResult.String()
+		value := enUsResult.String()
+		m.enUsCache.Store(key, value)
+		return value
 	}
 
 	return originKey
@@ -76,9 +98,14 @@ func (m *Manager) TranslateWoxEnUs(ctx context.Context, key string) string {
 	originKey := key
 
 	key = strings.TrimPrefix(key, "i18n:")
+	if value, ok := m.enUsCache.Load(key); ok {
+		return value
+	}
 	enUsResult := gjson.Get(m.enUsLangJson, key)
 	if enUsResult.Exists() {
-		return enUsResult.String()
+		value := enUsResult.String()
+		m.enUsCache.Store(key, value)
+		return value
 	}
 
 	return originKey
