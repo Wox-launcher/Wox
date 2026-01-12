@@ -1,193 +1,126 @@
 // Search Everything : http://voidtools.com/
-// https://www.voidtools.com/support/everything/sdk/
-// https://github.com/jof4002/Everything
+// https://www.voidtools.com/forum/viewtopic.php?t=15853
+// https://github.com/voidtools/everything_sdk3
 package file
 
 import (
 	"fmt"
+	"sync"
 	"syscall"
 	"time"
 	"unsafe"
 )
 
 const (
-	EVERYTHING_OK                     = 0 // no error detected
-	EVERYTHING_ERROR_MEMORY           = 1 // out of memory.
-	EVERYTHING_ERROR_IPC              = 2 // Everything search client is not running
-	EVERYTHING_ERROR_REGISTERCLASSEX  = 3 // unable to register window class.
-	EVERYTHING_ERROR_CREATEWINDOW     = 4 // unable to create listening window
-	EVERYTHING_ERROR_CREATETHREAD     = 5 // unable to create listening thread
-	EVERYTHING_ERROR_INVALIDINDEX     = 6 // invalid index
-	EVERYTHING_ERROR_INVALIDCALL      = 7 // invalid call
-	EVERYTHING_ERROR_INVALIDREQUEST   = 8 // invalid request data, request data first.
-	EVERYTHING_ERROR_INVALIDPARAMETER = 9 // bad parameter.
+	EVERYTHING3_OK                        = 0
+	EVERYTHING3_ERROR_IPC_PIPE_NOT_FOUND  = 0xE0000002
+	EVERYTHING3_PROPERTY_ID_SIZE          = 2
+	EVERYTHING3_PROPERTY_ID_DATE_MODIFIED = 5
+	EVERYTHING3_PROPERTY_ID_PATH_AND_NAME = 240
 )
 
-const (
-	EVERYTHING_SORT_NAME_ASCENDING                   = 1
-	EVERYTHING_SORT_NAME_DESCENDING                  = 2
-	EVERYTHING_SORT_PATH_ASCENDING                   = 3
-	EVERYTHING_SORT_PATH_DESCENDING                  = 4
-	EVERYTHING_SORT_SIZE_ASCENDING                   = 5
-	EVERYTHING_SORT_SIZE_DESCENDING                  = 6
-	EVERYTHING_SORT_EXTENSION_ASCENDING              = 7
-	EVERYTHING_SORT_EXTENSION_DESCENDING             = 8
-	EVERYTHING_SORT_TYPE_NAME_ASCENDING              = 9
-	EVERYTHING_SORT_TYPE_NAME_DESCENDING             = 10
-	EVERYTHING_SORT_DATE_CREATED_ASCENDING           = 11
-	EVERYTHING_SORT_DATE_CREATED_DESCENDING          = 12
-	EVERYTHING_SORT_DATE_MODIFIED_ASCENDING          = 13
-	EVERYTHING_SORT_DATE_MODIFIED_DESCENDING         = 14
-	EVERYTHING_SORT_ATTRIBUTES_ASCENDING             = 15
-	EVERYTHING_SORT_ATTRIBUTES_DESCENDING            = 16
-	EVERYTHING_SORT_FILE_LIST_FILENAME_ASCENDING     = 17
-	EVERYTHING_SORT_FILE_LIST_FILENAME_DESCENDING    = 18
-	EVERYTHING_SORT_RUN_COUNT_ASCENDING              = 19
-	EVERYTHING_SORT_RUN_COUNT_DESCENDING             = 20
-	EVERYTHING_SORT_DATE_RECENTLY_CHANGED_ASCENDING  = 21
-	EVERYTHING_SORT_DATE_RECENTLY_CHANGED_DESCENDING = 22
-	EVERYTHING_SORT_DATE_ACCESSED_ASCENDING          = 23
-	EVERYTHING_SORT_DATE_ACCESSED_DESCENDING         = 24
-	EVERYTHING_SORT_DATE_RUN_ASCENDING               = 25
-	EVERYTHING_SORT_DATE_RUN_DESCENDING              = 26
-)
+// general
+var Everything3_GetLastError *syscall.LazyProc
+var Everything3_ConnectW *syscall.LazyProc
+var Everything3_DestroyClient *syscall.LazyProc
+var Everything3_GetMajorVersion *syscall.LazyProc
+var Everything3_GetMinorVersion *syscall.LazyProc
+var Everything3_GetRevision *syscall.LazyProc
 
-const (
-	EVERYTHING_REQUEST_FILE_NAME                           = 0x00000001
-	EVERYTHING_REQUEST_PATH                                = 0x00000002
-	EVERYTHING_REQUEST_FULL_PATH_AND_FILE_NAME             = 0x00000004
-	EVERYTHING_REQUEST_EXTENSION                           = 0x00000008
-	EVERYTHING_REQUEST_SIZE                                = 0x00000010
-	EVERYTHING_REQUEST_DATE_CREATED                        = 0x00000020
-	EVERYTHING_REQUEST_DATE_MODIFIED                       = 0x00000040
-	EVERYTHING_REQUEST_DATE_ACCESSED                       = 0x00000080
-	EVERYTHING_REQUEST_ATTRIBUTES                          = 0x00000100
-	EVERYTHING_REQUEST_FILE_LIST_FILE_NAME                 = 0x00000200
-	EVERYTHING_REQUEST_RUN_COUNT                           = 0x00000400
-	EVERYTHING_REQUEST_DATE_RUN                            = 0x00000800
-	EVERYTHING_REQUEST_DATE_RECENTLY_CHANGED               = 0x00001000
-	EVERYTHING_REQUEST_HIGHLIGHTED_FILE_NAME               = 0x00002000
-	EVERYTHING_REQUEST_HIGHLIGHTED_PATH                    = 0x00004000
-	EVERYTHING_REQUEST_HIGHLIGHTED_FULL_PATH_AND_FILE_NAME = 0x00008000
-)
+// search state
+var Everything3_CreateSearchState *syscall.LazyProc
+var Everything3_DestroySearchState *syscall.LazyProc
+var Everything3_SetSearchMatchCase *syscall.LazyProc
+var Everything3_SetSearchMatchWholeWords *syscall.LazyProc
+var Everything3_SetSearchMatchPath *syscall.LazyProc
+var Everything3_SetSearchRegex *syscall.LazyProc
+var Everything3_SetSearchTextW *syscall.LazyProc
+var Everything3_SetSearchViewportCount *syscall.LazyProc
+var Everything3_AddSearchPropertyRequest *syscall.LazyProc
 
-// manipulate search state
-var Everything_SetSearch *syscall.LazyProc
-var Everything_SetMatchPath *syscall.LazyProc
-var Everything_SetMatchCase *syscall.LazyProc
-var Everything_SetMatchWholeWord *syscall.LazyProc
-var Everything_SetRegex *syscall.LazyProc
-var Everything_SetMax *syscall.LazyProc
-var Everything_SetOffset *syscall.LazyProc
-var Everything_SetReplyWindow *syscall.LazyProc
-var Everything_SetReplyID *syscall.LazyProc
-var Everything_SetSort *syscall.LazyProc
-var Everything_SetRequestFlags *syscall.LazyProc
+// execute search
+var Everything3_Search *syscall.LazyProc
 
-// read search state
-var Everything_GetSearch *syscall.LazyProc
-var Everything_GetMatchPath *syscall.LazyProc
-var Everything_GetMatchCase *syscall.LazyProc
-var Everything_GetMatchWholeWord *syscall.LazyProc
-var Everything_GetRegex *syscall.LazyProc
-var Everything_GetMax *syscall.LazyProc
-var Everything_GetOffset *syscall.LazyProc
-var Everything_GetReplyWindow *syscall.LazyProc
-var Everything_GetReplyID *syscall.LazyProc
-var Everything_GetLastError *syscall.LazyProc
-var Everything_GetSort *syscall.LazyProc
-var Everything_GetRequestFlags *syscall.LazyProc
+// result list
+var Everything3_DestroyResultList *syscall.LazyProc
+var Everything3_GetResultListViewportCount *syscall.LazyProc
+var Everything3_IsFolderResult *syscall.LazyProc
+var Everything3_GetResultFullPathNameW *syscall.LazyProc
+var Everything3_GetResultSize *syscall.LazyProc
+var Everything3_GetResultDateModified *syscall.LazyProc
 
-// execute query
-var Everything_Query *syscall.LazyProc
-
-// query reply
-var Everything_IsQueryReply *syscall.LazyProc
-
-// write result state
-
-// read result state
-var Everything_GetNumFileResults *syscall.LazyProc
-var Everything_GetNumFolderResults *syscall.LazyProc
-var Everything_GetNumResults *syscall.LazyProc
-var Everything_GetTotFileResults *syscall.LazyProc
-var Everything_GetTotFolderResults *syscall.LazyProc
-var Everything_GetTotResults *syscall.LazyProc
-
-var Everything_IsFolderResult *syscall.LazyProc
-var Everything_IsFileResult *syscall.LazyProc
-var Everything_GetResultFileName *syscall.LazyProc
-var Everything_GetResultPath *syscall.LazyProc
-var Everything_GetResultFullPathName *syscall.LazyProc
-var Everything_GetResultListSort *syscall.LazyProc
-var Everything_GetResultListRequestedFlags *syscall.LazyProc
-var Everything_GetResultExstension *syscall.LazyProc
-var Everything_GetResultSize *syscall.LazyProc
-var Everything_GetResultDateModified *syscall.LazyProc
-var Everything_GetResultDateAccessed *syscall.LazyProc
-var Everything_GetResultAttributes *syscall.LazyProc
-
-// reset state and free any allocated memory
-var Everything_Reset *syscall.LazyProc
-var Everything_CleanUp *syscall.LazyProc
-var Everything_IsDBLoaded *syscall.LazyProc
+var everything3DLL *syscall.LazyDLL
+var clientMu sync.Mutex
+var cachedClient uintptr
 
 func initEverythingDLL(dllPath string) {
-	mod := syscall.NewLazyDLL(dllPath)
-	if mod != nil {
-		// Search State
-		Everything_SetSearch = mod.NewProc("Everything_SetSearchW")
-		Everything_SetMatchPath = mod.NewProc("Everything_SetMatchPath")
-		Everything_SetMatchCase = mod.NewProc("Everything_SetMatchCase")
-		Everything_SetMatchWholeWord = mod.NewProc("Everything_SetMatchWholeWord")
-		Everything_SetRegex = mod.NewProc("Everything_SetRegex")
-		Everything_SetMax = mod.NewProc("Everything_SetMax")
-		Everything_SetOffset = mod.NewProc("Everything_SetOffset")
-		Everything_SetReplyWindow = mod.NewProc("Everything_SetReplyWindow")
-		Everything_SetReplyID = mod.NewProc("Everything_SetReplyID")
-		Everything_SetSort = mod.NewProc("Everything_SetSort")
-		Everything_SetRequestFlags = mod.NewProc("Everything_SetRequestFlags")
-		// Read Search State
-		Everything_GetSearch = mod.NewProc("Everything_GetSearchW")
-		Everything_GetMatchPath = mod.NewProc("Everything_GetMatchPath")
-		Everything_GetMatchCase = mod.NewProc("Everything_GetMatchCase")
-		Everything_GetMatchWholeWord = mod.NewProc("Everything_GetMatchWholeWord")
-		Everything_GetRegex = mod.NewProc("Everything_GetRegex")
-		Everything_GetMax = mod.NewProc("Everything_GetMax")
-		Everything_GetOffset = mod.NewProc("Everything_GetOffset")
-		Everything_GetReplyWindow = mod.NewProc("Everything_GetReplyWindow")
-		Everything_GetReplyID = mod.NewProc("Everything_GetReplyID")
-		Everything_GetLastError = mod.NewProc("Everything_GetLastError")
-		Everything_GetRequestFlags = mod.NewProc("Everything_GetRequestFlags")
-		// Query
-		Everything_Query = mod.NewProc("Everything_QueryW")
-		// Query Reply
-		Everything_IsQueryReply = mod.NewProc("Everything_QueryW")
-		// Reading results
-		Everything_GetNumFileResults = mod.NewProc("Everything_GetNumFileResults")
-		Everything_GetNumFolderResults = mod.NewProc("Everything_GetNumFolderResults")
-		Everything_GetNumResults = mod.NewProc("Everything_GetNumResults")
-		Everything_GetTotFileResults = mod.NewProc("Everything_GetTotFileResults")
-		Everything_GetTotFolderResults = mod.NewProc("Everything_GetTotFolderResults")
-		Everything_GetTotResults = mod.NewProc("Everything_GetTotResults")
+	everything3DLL = syscall.NewLazyDLL(dllPath)
+	if everything3DLL != nil {
+		Everything3_GetLastError = everything3DLL.NewProc("Everything3_GetLastError")
+		Everything3_ConnectW = everything3DLL.NewProc("Everything3_ConnectW")
+		Everything3_DestroyClient = everything3DLL.NewProc("Everything3_DestroyClient")
+		Everything3_GetMajorVersion = everything3DLL.NewProc("Everything3_GetMajorVersion")
+		Everything3_GetMinorVersion = everything3DLL.NewProc("Everything3_GetMinorVersion")
+		Everything3_GetRevision = everything3DLL.NewProc("Everything3_GetRevision")
 
-		Everything_IsFolderResult = mod.NewProc("Everything_IsFolderResult")
-		Everything_IsFileResult = mod.NewProc("Everything_IsFileResult")
-		Everything_GetResultFileName = mod.NewProc("Everything_GetResultFileName")
-		Everything_GetResultPath = mod.NewProc("Everything_GetResultPath")
-		Everything_GetResultFullPathName = mod.NewProc("Everything_GetResultFullPathNameW")
-		Everything_GetResultListSort = mod.NewProc("Everything_GetResultListSort")
-		Everything_GetResultListRequestedFlags = mod.NewProc("Everything_GetResultListRequestedFlags")
-		Everything_GetResultExstension = mod.NewProc("Everything_GetResultExstension")
-		Everything_GetResultSize = mod.NewProc("Everything_GetResultSize")
-		Everything_GetResultDateModified = mod.NewProc("Everything_GetResultDateModified")
-		Everything_GetResultDateAccessed = mod.NewProc("Everything_GetResultDateAccessed")
-		Everything_GetResultAttributes = mod.NewProc("Everything_GetResultDateAttributes")
+		Everything3_CreateSearchState = everything3DLL.NewProc("Everything3_CreateSearchState")
+		Everything3_DestroySearchState = everything3DLL.NewProc("Everything3_DestroySearchState")
+		Everything3_SetSearchMatchCase = everything3DLL.NewProc("Everything3_SetSearchMatchCase")
+		Everything3_SetSearchMatchWholeWords = everything3DLL.NewProc("Everything3_SetSearchMatchWholeWords")
+		Everything3_SetSearchMatchPath = everything3DLL.NewProc("Everything3_SetSearchMatchPath")
+		Everything3_SetSearchRegex = everything3DLL.NewProc("Everything3_SetSearchRegex")
+		Everything3_SetSearchTextW = everything3DLL.NewProc("Everything3_SetSearchTextW")
+		Everything3_SetSearchViewportCount = everything3DLL.NewProc("Everything3_SetSearchViewportCount")
+		Everything3_AddSearchPropertyRequest = everything3DLL.NewProc("Everything3_AddSearchPropertyRequest")
 
-		// Reset
-		Everything_Reset = mod.NewProc("Everything_Reset")
-		Everything_CleanUp = mod.NewProc("Everything_CleanUP")
-		Everything_IsDBLoaded = mod.NewProc("Everything_IsDBLoaded")
+		Everything3_Search = everything3DLL.NewProc("Everything3_Search")
+
+		Everything3_DestroyResultList = everything3DLL.NewProc("Everything3_DestroyResultList")
+		Everything3_GetResultListViewportCount = everything3DLL.NewProc("Everything3_GetResultListViewportCount")
+		Everything3_IsFolderResult = everything3DLL.NewProc("Everything3_IsFolderResult")
+		Everything3_GetResultFullPathNameW = everything3DLL.NewProc("Everything3_GetResultFullPathNameW")
+		Everything3_GetResultSize = everything3DLL.NewProc("Everything3_GetResultSize")
+		Everything3_GetResultDateModified = everything3DLL.NewProc("Everything3_GetResultDateModified")
+	}
+}
+
+func connectEverythingClient() uintptr {
+	if Everything3_ConnectW == nil {
+		return 0
+	}
+	client, _, _ := Everything3_ConnectW.Call(0)
+	if client != 0 {
+		return client
+	}
+	instance, _ := syscall.UTF16PtrFromString("1.5a")
+	client, _, _ = Everything3_ConnectW.Call(uintptr(unsafe.Pointer(instance)))
+	return client
+}
+
+func destroyEverythingClient(client uintptr) {
+	if Everything3_DestroyClient != nil && client != 0 {
+		Everything3_DestroyClient.Call(client)
+	}
+}
+
+func getCachedClient() uintptr {
+	clientMu.Lock()
+	defer clientMu.Unlock()
+
+	if cachedClient != 0 {
+		return cachedClient
+	}
+	cachedClient = connectEverythingClient()
+	return cachedClient
+}
+
+func resetCachedClient() {
+	clientMu.Lock()
+	defer clientMu.Unlock()
+
+	if cachedClient != 0 {
+		destroyEverythingClient(cachedClient)
+		cachedClient = 0
 	}
 }
 
@@ -207,228 +140,192 @@ func (fi *FileInfo) IsDir() bool        { return fi.isDir }
 // WalkFunc is the type of the function called for each file or directory visited by Walk.
 type WalkFunc func(path string, info FileInfo, err error) error
 
-// Walk calling walkFn for each file or directory in queried resulr
+// Walk calling walkFn for each file or directory in queried result
 func Walk(root string, maxCount int, walkFn WalkFunc) error {
-	SetSearch(root)
-	SetRequestFlags(EVERYTHING_REQUEST_FILE_NAME | EVERYTHING_REQUEST_PATH | EVERYTHING_REQUEST_SIZE | EVERYTHING_REQUEST_DATE_MODIFIED)
-	Query(true)
-	num := GetNumResults()
+	client := getCachedClient()
+	if client == 0 {
+		return EverythingNotRunningError
+	}
+
+	searchState := createSearchState()
+	if searchState == 0 {
+		return EverythingNotRunningError
+	}
+	defer destroySearchState(searchState)
+
+	setSearchMatchDefaults(searchState)
+	setSearchText(searchState, root)
+	if maxCount > 0 {
+		setSearchViewportCount(searchState, maxCount)
+	}
+	addSearchPropertyRequest(searchState, EVERYTHING3_PROPERTY_ID_PATH_AND_NAME)
+	addSearchPropertyRequest(searchState, EVERYTHING3_PROPERTY_ID_SIZE)
+	addSearchPropertyRequest(searchState, EVERYTHING3_PROPERTY_ID_DATE_MODIFIED)
+
+	resultList := search(client, searchState)
+	if resultList == 0 {
+		resetCachedClient()
+		client = getCachedClient()
+		if client == 0 {
+			return EverythingNotRunningError
+		}
+		resultList = search(client, searchState)
+	}
+	if resultList == 0 {
+		return EverythingNotRunningError
+	}
+	defer destroyResultList(resultList)
+
+	num := getResultListViewportCount(resultList)
 	if maxCount > 0 && num > maxCount {
 		num = maxCount
 	}
+
 	for i := 0; i < num; i++ {
 		var fi FileInfo
-		fi.name = GetResultFullPathName(i)
-		fi.size = GetResultSize(i)
-		fi.modTime = GetResultDateModified(i)
-		fi.isDir = IsFolderResult(i)
-		err := walkFn(fi.name, fi, nil)
-		if err != nil {
+		fi.name = getResultFullPathName(resultList, i)
+		fi.size = getResultSize(resultList, i)
+		fi.modTime = getResultDateModified(resultList, i)
+		fi.isDir = isFolderResult(resultList, i)
+		if err := walkFn(fi.name, fi, nil); err != nil {
 			return err
 		}
 	}
 	return nil
-
 }
 
 // GetVersionString print ver
 func GetVersionString() (ver string) {
-	mod := syscall.NewLazyDLL("Everything64.dll")
-	if mod != nil {
-		fmajor := mod.NewProc("Everything_GetMajorVersion")
-		fminor := mod.NewProc("Everything_GetMinorVersion")
-		frevision := mod.NewProc("Everything_GetRevision")
-		p1, _, _ := fmajor.Call()
-		p2, _, _ := fminor.Call()
-		p3, _, _ := frevision.Call()
-		ver = fmt.Sprintf("%d.%d.%d", int(p1), int(p2), int(p3))
+	client := connectEverythingClient()
+	if client == 0 {
+		return ""
 	}
+	defer destroyEverythingClient(client)
+
+	if Everything3_GetMajorVersion == nil || Everything3_GetMinorVersion == nil || Everything3_GetRevision == nil {
+		return ""
+	}
+
+	major, _, _ := Everything3_GetMajorVersion.Call(client)
+	minor, _, _ := Everything3_GetMinorVersion.Call(client)
+	revision, _, _ := Everything3_GetRevision.Call(client)
+	ver = fmt.Sprintf("%d.%d.%d", int(major), int(minor), int(revision))
 	return
 }
 
-// SetSearch void Everything_SetSearchW(LPCWSTR lpString);
-func SetSearch(str string) {
-	if Everything_SetSearch != nil {
-		Everything_SetSearch.Call(uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(str))))
+func createSearchState() uintptr {
+	if Everything3_CreateSearchState == nil {
+		return 0
+	}
+	state, _, _ := Everything3_CreateSearchState.Call()
+	return state
+}
+
+func destroySearchState(searchState uintptr) {
+	if Everything3_DestroySearchState != nil && searchState != 0 {
+		Everything3_DestroySearchState.Call(searchState)
 	}
 }
 
-// SetMatchPath void Everything_SetMatchPath(BOOL bEnable);
-func SetMatchPath(bEnable bool) {
-	if Everything_SetMatchPath != nil {
-		var param int
-		if bEnable {
-			param = 1
-		}
-		Everything_SetMatchPath.Call(uintptr(param))
+func setSearchMatchDefaults(searchState uintptr) {
+	if searchState == 0 {
+		return
+	}
+	setSearchBool(Everything3_SetSearchMatchCase, searchState, false)
+	setSearchBool(Everything3_SetSearchMatchWholeWords, searchState, false)
+	setSearchBool(Everything3_SetSearchMatchPath, searchState, false)
+	setSearchBool(Everything3_SetSearchRegex, searchState, false)
+}
+
+func setSearchBool(proc *syscall.LazyProc, searchState uintptr, enabled bool) {
+	if proc == nil || searchState == 0 {
+		return
+	}
+	var value uintptr
+	if enabled {
+		value = 1
+	}
+	proc.Call(searchState, value)
+}
+
+func setSearchText(searchState uintptr, text string) {
+	if Everything3_SetSearchTextW != nil && searchState != 0 {
+		Everything3_SetSearchTextW.Call(searchState, uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(text))))
 	}
 }
 
-// SetMatchCase void Everything_SetMatchCase(BOOL bEnable);
-func SetMatchCase(bEnable bool) {
-	if Everything_SetMatchCase != nil {
-		var param int
-		if bEnable {
-			param = 1
-		}
-		Everything_SetMatchCase.Call(uintptr(param))
+func setSearchViewportCount(searchState uintptr, count int) {
+	if Everything3_SetSearchViewportCount != nil && searchState != 0 {
+		Everything3_SetSearchViewportCount.Call(searchState, uintptr(count))
 	}
 }
 
-// SetRegex void Everything_SetRegex(BOOL bEnable);
-func SetRegex(bEnable bool) {
-	if Everything_SetRegex != nil {
-		var param int
-		if bEnable {
-			param = 1
-		}
-		Everything_SetRegex.Call(uintptr(param))
+func addSearchPropertyRequest(searchState uintptr, propertyID int) {
+	if Everything3_AddSearchPropertyRequest != nil && searchState != 0 {
+		Everything3_AddSearchPropertyRequest.Call(searchState, uintptr(propertyID))
 	}
 }
 
-// SetSort void Everything_SetSort(DWORD dwSort); // Everything 1.4.1
-func SetSort(sortMode int) {
-	if Everything_SetSort != nil {
-		Everything_SetSort.Call(uintptr(sortMode))
+func search(client uintptr, searchState uintptr) uintptr {
+	if Everything3_Search == nil {
+		return 0
+	}
+	resultList, _, _ := Everything3_Search.Call(client, searchState)
+	return resultList
+}
+
+func destroyResultList(resultList uintptr) {
+	if Everything3_DestroyResultList != nil && resultList != 0 {
+		Everything3_DestroyResultList.Call(resultList)
 	}
 }
 
-// SetRequestFlags void Everything_SetRequestFlags(DWORD dwRequestFlags); // Everything 1.4.1
-func SetRequestFlags(flags int) {
-	if Everything_SetRequestFlags != nil {
-		Everything_SetRequestFlags.Call(uintptr(flags))
+func getResultListViewportCount(resultList uintptr) int {
+	if Everything3_GetResultListViewportCount == nil {
+		return 0
 	}
+	count, _, _ := Everything3_GetResultListViewportCount.Call(resultList)
+	return int(count)
 }
 
-// GetSort DWORD Everything_GetSort(void); // Everything 1.4.1
-func GetSort() (ret int) {
-	if Everything_GetSort != nil {
-		r, _, _ := Everything_GetSort.Call()
-		ret = int(r)
+func getResultFullPathName(resultList uintptr, index int) string {
+	if Everything3_GetResultFullPathNameW == nil {
+		return ""
 	}
-	return
+	pathbuf := make([]uint16, 32768)
+	Everything3_GetResultFullPathNameW.Call(
+		resultList,
+		uintptr(index),
+		uintptr(unsafe.Pointer(&pathbuf[0])),
+		uintptr(len(pathbuf)),
+	)
+	return syscall.UTF16ToString(pathbuf)
 }
 
-// Query BOOL Everything_QueryW(BOOL bWait);
-func Query(bWait bool) (ret bool) {
-	if Everything_Query != nil {
-		var param int
-		if bWait {
-			param = 1
-		}
-		r, _, _ := Everything_Query.Call(uintptr(param))
-		ret = r != 0
+func getResultSize(resultList uintptr, index int) int64 {
+	if Everything3_GetResultSize == nil {
+		return 0
 	}
-	return
+	size, _, _ := Everything3_GetResultSize.Call(resultList, uintptr(index))
+	return int64(size)
 }
 
-// GetNumResults DWORD Everything_GetNumResults(void);
-func GetNumResults() (ret int) {
-	if Everything_GetNumResults != nil {
-		r, _, _ := Everything_GetNumResults.Call()
-		ret = int(r)
+func getResultDateModified(resultList uintptr, index int) time.Time {
+	if Everything3_GetResultDateModified == nil {
+		return time.Time{}
 	}
-	return
+	value, _, _ := Everything3_GetResultDateModified.Call(resultList, uintptr(index))
+	ft := syscall.Filetime{
+		LowDateTime:  uint32(value),
+		HighDateTime: uint32(value >> 32),
+	}
+	return time.Unix(0, ft.Nanoseconds())
 }
 
-// GetResultFullPathName DWORD Everything_GetResultFullPathNameW(DWORD dwIndex,LPWSTR wbuf,DWORD wbuf_size_in_wchars);
-func GetResultFullPathName(index int) (path string) {
-	if Everything_GetResultFullPathName != nil {
-		var pathbuf = make([]uint16, 1024)
-		Everything_GetResultFullPathName.Call(uintptr(index), uintptr(unsafe.Pointer(&pathbuf[0])), 1023) // bufsize-1
-		path = syscall.UTF16ToString(pathbuf)
+func isFolderResult(resultList uintptr, index int) bool {
+	if Everything3_IsFolderResult == nil {
+		return false
 	}
-	return
-}
-
-// IsFolderResult BOOL Everything_IsFolderResult(DWORD dwIndex);
-func IsFolderResult(index int) (ret bool) {
-	if Everything_IsFolderResult != nil {
-		r, _, _ := Everything_IsFolderResult.Call(uintptr(index))
-		ret = r != 0
-	}
-	return
-}
-
-// IsFileResult BOOL Everything_IsFileResult(DWORD dwIndex);
-func IsFileResult(index int) (ret bool) {
-	if Everything_IsFileResult != nil {
-		r, _, _ := Everything_IsFileResult.Call(uintptr(index))
-		ret = r != 0
-	}
-	return
-}
-
-func GetSearch() (query string) {
-	if Everything_GetSearch != nil {
-		r, _, _ := Everything_GetSearch.Call()
-		query = *(*string)(unsafe.Pointer(&r))
-	}
-	return
-}
-
-func GetMatchPath() (enabled int32) {
-	if Everything_GetMatchPath != nil {
-		r, _, _ := Everything_GetMatchPath.Call()
-		enabled = int32(r)
-	}
-	return
-}
-
-func GetMatchCase() (enabled int32) {
-	if Everything_GetMatchCase != nil {
-		r, _, _ := Everything_GetMatchCase.Call()
-		enabled = int32(r)
-	}
-	return
-}
-
-func GetMatchWholeWord() (enabled bool) {
-	if Everything_GetMatchWholeWord != nil {
-		r, _, _ := Everything_GetMatchWholeWord.Call()
-		enabled = r != 0
-	}
-	return
-}
-
-func GetRegex() (enabled bool) {
-	if Everything_GetRegex != nil {
-		r, _, _ := Everything_GetRegex.Call()
-		enabled = r != 0
-	}
-	return
-}
-
-// GetResultListSort DWORD Everything_GetResultListSort(void); // Everything 1.4.1
-func GetResultListSort() (mode int) {
-	if Everything_GetResultListSort != nil {
-		r, _, _ := Everything_GetResultListSort.Call()
-		mode = int(r)
-	}
-	return
-}
-
-// GetResultSize BOOL Everything_GetResultSize(DWORD dwIndex,LARGE_INTEGER *lpSize); // Everything 1.4.1
-func GetResultSize(index int) (size int64) {
-	if Everything_GetResultSize != nil {
-		Everything_GetResultSize.Call(uintptr(index), uintptr(unsafe.Pointer(&size)))
-	}
-	return
-}
-
-// GetResultDateModified BOOL Everything_GetResultDateModified(DWORD dwIndex,FILETIME *lpDateModified); // Everything 1.4.1
-func GetResultDateModified(index int) (t time.Time) {
-	if Everything_GetResultDateModified != nil {
-		var ft syscall.Filetime
-		Everything_GetResultDateModified.Call(uintptr(index), uintptr(unsafe.Pointer(&ft)))
-		t = time.Unix(0, ft.Nanoseconds())
-	}
-	return
-}
-
-// Reset void Everything_Reset(void);
-func Reset() {
-	if Everything_Reset != nil {
-		Everything_Reset.Call()
-	}
+	r, _, _ := Everything3_IsFolderResult.Call(resultList, uintptr(index))
+	return r != 0
 }
