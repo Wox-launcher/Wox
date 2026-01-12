@@ -5,6 +5,11 @@ on:
     branches:
       - master
 
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
 jobs:
   test:
     runs-on: [self-hosted, macOS, ARM64]
@@ -53,6 +58,15 @@ jobs:
         run: make build
         env:
           KEYCHAINPWD: ${{ matrix.needs_keychain && secrets.KEYCHAINPWD || '' }}
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: ${{ matrix.asset_path }}
+      - name: Attest AppImage provenance
+        if: matrix.os == 'Linux'
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: ./release/wox-linux-amd64.AppImage
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
