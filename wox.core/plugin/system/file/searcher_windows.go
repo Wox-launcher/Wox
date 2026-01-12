@@ -4,25 +4,8 @@ import (
 	"context"
 	"path"
 	"path/filepath"
-	"syscall"
-	"unsafe"
 	"wox/util"
 )
-
-var (
-	user32          = syscall.NewLazyDLL("user32.dll")
-	procFindWindowW = user32.NewProc("FindWindowW")
-)
-
-func FindWindow(className, windowName string) uintptr {
-	cn, _ := syscall.UTF16PtrFromString(className)
-	wn, _ := syscall.UTF16PtrFromString(windowName)
-	ret, _, _ := procFindWindowW.Call(
-		uintptr(unsafe.Pointer(cn)),
-		uintptr(unsafe.Pointer(wn)),
-	)
-	return ret
-}
 
 var searcher Searcher = &WindowsSearcher{}
 
@@ -30,20 +13,19 @@ type WindowsSearcher struct {
 }
 
 func (m *WindowsSearcher) Init(ctx context.Context) error {
-	dllPath := path.Join(util.GetLocation().GetOthersDirectory(), "Everything64.dll")
+	dllPath := path.Join(util.GetLocation().GetOthersDirectory(), "Everything3_x64.dll")
 	initEverythingDLL(dllPath)
+
+	legacyDLLPath := path.Join(util.GetLocation().GetOthersDirectory(), "Everything64.dll")
+	initEverything2DLL(legacyDLLPath)
 	return nil
 }
 
 func (m *WindowsSearcher) Search(pattern SearchPattern) ([]SearchResult, error) {
-	// if everything is not running, return error
-	hWnd := FindWindow("EVERYTHING_TASKBAR_NOTIFICATION", "")
-	if hWnd == 0 {
-		return nil, EverythingNotRunningError
-	}
-
 	var results []SearchResult
-	Walk(pattern.Name, 100, func(path string, info FileInfo, err error) error {
+
+	// Everything 1.15 SDK
+	err := Walk(pattern.Name, 100, func(path string, info FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -55,5 +37,23 @@ func (m *WindowsSearcher) Search(pattern SearchPattern) ([]SearchResult, error) 
 
 		return nil
 	})
+	// Everything 1.4 SDK
+	if err == EverythingNotRunningError {
+		err = walkEverything2(pattern.Name, 100, func(path string, info FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+
+			results = append(results, SearchResult{
+				Name: filepath.Base(path),
+				Path: path,
+			})
+
+			return nil
+		})
+	}
+	if err != nil {
+		return nil, err
+	}
 	return results, nil
 }
