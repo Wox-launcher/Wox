@@ -2,6 +2,10 @@
 
 ## v2.0.0-beta.9
 
+- Improve
+
+  - Improve everything sdk integration stability (with 1.5a support) #4317
+
 ## v2.0.0-beta.8 — 2026-01-10
 
 - Add
