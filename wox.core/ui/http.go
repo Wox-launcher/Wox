@@ -107,6 +107,19 @@ func serveAndWait(ctx context.Context, port int) {
 				logger.Error(ctxNew, fmt.Sprintf("failed to unmarshal websocket request: %s", unmarshalErr.Error()))
 				return
 			}
+			if request.RequestId == "" {
+				logger.Error(ctxNew, "websocket request missing request id")
+				return
+			}
+			if request.TraceId == "" {
+				logger.Error(ctxNew, "websocket request missing trace id")
+				return
+			}
+			if request.SessionId == "" {
+				logger.Error(ctxNew, "websocket request missing session id")
+				return
+			}
+
 			util.Go(ctxNew, "handle ui query", func() {
 				traceCtx := util.NewTraceContextWith(request.TraceId)
 				sessionCtx := util.WithSessionContext(

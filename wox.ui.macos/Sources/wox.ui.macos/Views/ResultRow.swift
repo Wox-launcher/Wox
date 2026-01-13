@@ -4,7 +4,9 @@ import AppKit
 struct ResultRow: View {
     let result: WoxQueryResult
     let isSelected: Bool
+    let isHovered: Bool
     let theme: WoxTheme
+    let quickSelectNumber: Int? // nil if not in quick select mode or not visible
 
     var body: some View {
         if result.isGroup {
@@ -18,14 +20,26 @@ struct ResultRow: View {
                         .frame(width: theme.resultItemActiveBorderLeftWidth)
                 } else if theme.resultItemBorderLeftWidth > 0 {
                     Rectangle()
-                        .fill(Color(hex: theme.resultItemTitleColor))
+                        .fill(Color(hex: theme.resultItemActiveBackgroundColor))
                         .frame(width: theme.resultItemBorderLeftWidth)
                 }
 
-                // Icon - 30x30 with Flutter-style padding
-                WoxIconView(icon: result.icon, size: 30)
-                    .padding(.leading, 5)
-                    .padding(.trailing, 10)
+                // Icon - 30x30 with Flutter-style padding and Quick Select number overlay
+                ZStack(alignment: .topLeading) {
+                    WoxIconView(icon: result.icon, size: 30)
+                    
+                    // Quick Select number badge
+                    if let number = quickSelectNumber {
+                        Text("\(number)")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.white)
+                            .frame(width: 16, height: 16)
+                            .background(Circle().fill(Color(hex: theme.resultItemActiveBackgroundColor)))
+                            .offset(x: -4, y: -4)
+                    }
+                }
+                .padding(.leading, 5)
+                .padding(.trailing, 10)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(result.title)
@@ -47,13 +61,14 @@ struct ResultRow: View {
                     HStack(spacing: 10) {
                         ForEach(tails) { tail in
                             HStack(spacing: 4) {
-                                if let icon = tail.icon {
-                                    WoxIconView(icon: icon, size: 12)
-                                }
-                                if let text = tail.text {
+                                if tail.type == "text", let text = tail.text {
                                     Text(text)
                                         .font(.system(size: 12))
                                         .foregroundColor(isSelected ? Color(hex: theme.resultItemActiveTailTextColor) : Color(hex: theme.resultItemTailTextColor))
+                                } else if tail.type == "hotkey", let hotkey = tail.hotkey {
+                                    HotkeyBadge(hotkey: hotkey, theme: theme)
+                                } else if tail.type == "image", let icon = tail.icon {
+                                    WoxIconView(icon: icon, size: 16)
                                 }
                             }
                         }
@@ -67,9 +82,18 @@ struct ResultRow: View {
             .padding(.bottom, theme.resultItemPaddingBottom)
             .background(
                 RoundedRectangle(cornerRadius: theme.resultItemBorderRadius)
-                    .fill(isSelected ? Color(hex: theme.resultItemActiveBackgroundColor) : Color.clear)
+                    .fill(backgroundColor)
             )
         }
+    }
+    
+    private var backgroundColor: Color {
+        if isSelected {
+            return Color(hex: theme.resultItemActiveBackgroundColor)
+        } else if isHovered {
+            return Color(hex: theme.resultItemActiveBackgroundColor).opacity(0.3)
+        }
+        return .clear
     }
 }
 

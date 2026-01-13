@@ -27,6 +27,10 @@
 		{
 			"name": "wox.ui.flutter",
 			"path": "wox.ui.flutter/wox"
+		},
+		{
+			"name": "wox.ui.macos",
+			"path": "wox.ui.macos"
 		}
 	],
 	"settings": {
@@ -75,6 +79,27 @@
 			"ms-vscode.makefile-tools"
 		]
 	},
+	"tasks": {
+		"version": "2.0.0",
+		"tasks": [
+			{
+				"type": "swift",
+				"args": [
+					"build",
+					"--product",
+					"wox.ui.macos"
+				],
+				"env": {},
+				"cwd": "/Users/qianlifeng/Projects/Wox/wox.ui.macos",
+				"disableTaskQueue": true,
+				"dontTriggerTestDiscovery": true,
+				"group": "build",
+				"problemMatcher": [],
+				"label": "swift: Build Debug",
+				"detail": "swift build --product wox.ui.macos"
+			}
+		]
+	},
 	"launch": {
 		"version": "0.2.0",
 		"configurations": [
@@ -92,8 +117,7 @@
 				"name": "Run Flutter",
 				"cwd": "${workspaceFolder:wox.ui.flutter}",
 				"request": "launch",
-				"type": "dart",
-				// "flutterMode": "release"
+				"type": "dart"
 			},
 			{
 				"name": "Run CI",
@@ -104,6 +128,35 @@
 				"args": [
 					"plugin"
 				]
+			},
+			{
+				"type": "swift",
+				"name": "Run Swift",
+				"request": "launch",
+				"args": [],
+				"cwd": "${workspaceFolder:wox.ui.macos}",
+				"program": "${workspaceFolder:wox.ui.macos}/.build/release/wox.ui.macos",
+				"preLaunchTask": "swift: Build Debug"
+			},
+			{
+				"type": "swift",
+				"request": "launch",
+				"args": [],
+				"cwd": "${workspaceFolder:wox.ui.macos}",
+				"name": "Debug wox.ui.macos (wox.ui.macos)",
+				"target": "wox.ui.macos",
+				"configuration": "debug",
+				"preLaunchTask": "swift: Build Debug wox.ui.macos (wox.ui.macos)"
+			},
+			{
+				"type": "swift",
+				"request": "launch",
+				"args": [],
+				"cwd": "${workspaceFolder:wox.ui.macos}",
+				"name": "Release wox.ui.macos (wox.ui.macos)",
+				"target": "wox.ui.macos",
+				"configuration": "release",
+				"preLaunchTask": "swift: Build Release wox.ui.macos (wox.ui.macos)"
 			}
 		],
 		"compounds": [

@@ -1,12 +1,182 @@
 import Foundation
 
+// MARK: - List Item Wrapper
+
+struct WoxListItem<T>: Identifiable {
+    let id: String
+    let icon: WoxIcon?
+    let title: String
+    let subTitle: String
+    let tails: [WoxListItemTail]
+    let isGroup: Bool
+    let hotkey: String?
+    let data: T
+    var isShowQuickSelect: Bool = false
+    var quickSelectNumber: String = ""
+
+    init(id: String, icon: WoxIcon?, title: String, subTitle: String, tails: [WoxListItemTail], isGroup: Bool, hotkey: String? = nil, data: T) {
+        self.id = id
+        self.icon = icon
+        self.title = title
+        self.subTitle = subTitle
+        self.tails = tails
+        self.isGroup = isGroup
+        self.hotkey = hotkey
+        self.data = data
+    }
+}
+
+extension WoxListItem where T == WoxQueryResult {
+    static func fromQueryResult(_ result: WoxQueryResult) -> WoxListItem<WoxQueryResult> {
+        return WoxListItem(
+            id: result.id,
+            icon: result.icon,
+            title: result.title,
+            subTitle: result.subTitle ?? "",
+            tails: result.tails ?? [],
+            isGroup: result.isGroup,
+            data: result
+        )
+    }
+}
+
+extension WoxListItem where T == WoxResultAction {
+    static func fromResultAction(_ action: WoxResultAction) -> WoxListItem<WoxResultAction> {
+        return WoxListItem(
+            id: action.id,
+            icon: action.icon,
+            title: action.name,
+            subTitle: "",
+            tails: [],
+            isGroup: false,
+            hotkey: action.hotkey,
+            data: action
+        )
+    }
+}
+
+// MARK: - WebSocket Message Types
+
+enum WoxMsgType: String {
+    case request = "WebsocketMsgTypeRequest"
+    case response = "WebsocketMsgTypeResponse"
+}
+
+enum WoxMsgMethod: String {
+    case log = "Log"
+    case query = "Query"
+    case queryMRU = "QueryMRU"
+    case action = "Action"
+    case formAction = "FormAction"
+    case visibilityChanged = "VisibilityChanged"
+    case uiReady = "UIReady"
+    case theme = "Theme"
+}
+
+enum Direction: String {
+    case up = "up"
+    case down = "down"
+    case left = "left"
+    case right = "right"
+}
+
+struct WoxWebsocketMsg {
+    let requestId: String
+    let traceId: String
+    var sessionId: String
+    let method: String
+    let type: WoxMsgType
+    var data: Any
+    var success: Bool?
+    var sendTimestamp: Int
+
+    init(
+        requestId: String = UUID().uuidString,
+        traceId: String = UUID().uuidString,
+        sessionId: String = "",
+        method: WoxMsgMethod,
+        type: WoxMsgType = .request,
+        data: Any = [:] as [String: Any],
+        success: Bool? = nil,
+        sendTimestamp: Int = 0
+    ) {
+        self.requestId = requestId
+        self.traceId = traceId
+        self.sessionId = sessionId
+        self.method = method.rawValue
+        self.type = type
+        self.data = data
+        self.success = success
+        self.sendTimestamp = sendTimestamp
+    }
+
+    init(
+        requestId: String = UUID().uuidString,
+        traceId: String = UUID().uuidString,
+        sessionId: String = "",
+        method: String,
+        type: WoxMsgType = .request,
+        data: Any = [:] as [String: Any],
+        success: Bool? = nil,
+        sendTimestamp: Int = 0
+    ) {
+        self.requestId = requestId
+        self.traceId = traceId
+        self.sessionId = sessionId
+        self.method = method
+        self.type = type
+        self.data = data
+        self.success = success
+        self.sendTimestamp = sendTimestamp
+    }
+
+    func toJson() -> [String: Any] {
+        var json: [String: Any] = [
+            "RequestId": requestId,
+            "TraceId": traceId,
+            "SessionId": sessionId,
+            "Method": method,
+            "Type": type.rawValue,
+            "Data": data,
+            "SendTimestamp": sendTimestamp,
+        ]
+        if let success = success {
+            json["Success"] = success
+        }
+        return json
+    }
+
+    static func fromJson(_ dict: [String: Any]) -> WoxWebsocketMsg? {
+        guard let requestId = dict["RequestId"] as? String,
+            let traceId = dict["TraceId"] as? String,
+            let method = dict["Method"] as? String,
+            let typeStr = dict["Type"] as? String,
+            let type = WoxMsgType(rawValue: typeStr)
+        else {
+            return nil
+        }
+
+        return WoxWebsocketMsg(
+            requestId: requestId,
+            traceId: traceId,
+            sessionId: dict["SessionId"] as? String ?? "",
+            method: method,
+            type: type,
+            data: dict["Data"] ?? [:] as [String: Any],
+            success: dict["Success"] as? Bool,
+            sendTimestamp: dict["SendTimestamp"] as? Int ?? 0
+        )
+    }
+}
+
 // MARK: - Constants
 
 let MAX_LIST_VIEW_ITEM_COUNT = 10
 let QUERY_BOX_BASE_HEIGHT: CGFloat = 55.0
 let QUERY_BOX_CONTENT_PADDING_TOP: CGFloat = 4.0
 let QUERY_BOX_CONTENT_PADDING_BOTTOM: CGFloat = 17.0
-let QUERY_BOX_LINE_HEIGHT: CGFloat = QUERY_BOX_BASE_HEIGHT - QUERY_BOX_CONTENT_PADDING_TOP - QUERY_BOX_CONTENT_PADDING_BOTTOM
+let QUERY_BOX_LINE_HEIGHT: CGFloat =
+    QUERY_BOX_BASE_HEIGHT - QUERY_BOX_CONTENT_PADDING_TOP - QUERY_BOX_CONTENT_PADDING_BOTTOM
 let QUERY_BOX_MAX_LINES = 4
 let RESULT_ITEM_BASE_HEIGHT: CGFloat = 50.0
 let TOOLBAR_HEIGHT: CGFloat = 40.0
@@ -18,21 +188,24 @@ struct PlainQuery: Equatable {
     var queryType: String
     var queryText: String
     var querySelection: Selection
-    
+
     var isEmpty: Bool {
         return queryText.isEmpty && querySelection.type.isEmpty
     }
-    
+
     static func empty() -> PlainQuery {
-        return PlainQuery(queryId: "", queryType: "", queryText: "", querySelection: Selection.empty())
+        return PlainQuery(
+            queryId: "", queryType: "", queryText: "", querySelection: Selection.empty())
     }
-    
+
     static func text(_ text: String) -> PlainQuery {
-        return PlainQuery(queryId: "", queryType: "input", queryText: text, querySelection: Selection.empty())
+        return PlainQuery(
+            queryId: "", queryType: "input", queryText: text, querySelection: Selection.empty())
     }
-    
+
     static func emptyInput() -> PlainQuery {
-        return PlainQuery(queryId: "", queryType: "input", queryText: "", querySelection: Selection.empty())
+        return PlainQuery(
+            queryId: "", queryType: "input", queryText: "", querySelection: Selection.empty())
     }
 }
 
@@ -40,7 +213,7 @@ struct Selection: Equatable {
     var type: String
     var text: String
     var filePaths: [String]
-    
+
     static func empty() -> Selection {
         return Selection(type: "", text: "", filePaths: [])
     }
@@ -51,7 +224,7 @@ struct Selection: Equatable {
 struct QueryHistory {
     var query: PlainQuery?
     var timestamp: Int?
-    
+
     init(json: [String: Any]) {
         if let queryJson = json["Query"] as? [String: Any] {
             query = PlainQuery(json: queryJson)
@@ -77,7 +250,7 @@ struct WoxQueryResult: Identifiable, Equatable {
     var preview: WoxPreview?
     var tails: [WoxListItemTail]?
     var actions: [WoxResultAction]?
-    
+
     static func empty() -> WoxQueryResult {
         return WoxQueryResult(
             id: "",
@@ -94,44 +267,48 @@ struct WoxQueryResult: Identifiable, Equatable {
             actions: []
         )
     }
-    
+
     static func fromJson(_ dict: [String: Any]) -> WoxQueryResult? {
         guard let id = dict["Id"] as? String,
-              let title = dict["Title"] as? String else {
+            let title = dict["Title"] as? String
+        else {
             return nil
         }
-        
+
         let subTitle = dict["SubTitle"] as? String
         let score = dict["Score"] as? Int ?? 0
         let group = dict["Group"] as? String ?? ""
         let groupScore = dict["GroupScore"] as? Int ?? 0
         let queryId = dict["QueryId"] as? String ?? ""
-        
+
         var icon: WoxIcon? = nil
         if let iconDict = dict["Icon"] as? [String: Any],
-           let imageType = iconDict["ImageType"] as? String,
-           let imageData = iconDict["ImageData"] as? String {
+            let imageType = iconDict["ImageType"] as? String,
+            let imageData = iconDict["ImageData"] as? String
+        {
             icon = WoxIcon(imageType: imageType, imageData: imageData)
         }
-        
+
         var actions: [WoxResultAction]? = nil
         if let actionsArray = dict["Actions"] as? [[String: Any]] {
             actions = actionsArray.compactMap { WoxResultAction.fromJson($0) }
         }
-        
+
         var preview: WoxPreview? = nil
         if let previewDict = dict["Preview"] as? [String: Any],
-           let previewType = previewDict["PreviewType"] as? String,
-           let previewData = previewDict["PreviewData"] as? String {
+            let previewType = previewDict["PreviewType"] as? String,
+            let previewData = previewDict["PreviewData"] as? String
+        {
             let properties = previewDict["PreviewProperties"] as? [String: String] ?? [:]
-            preview = WoxPreview(previewType: previewType, previewData: previewData, previewProperties: properties)
+            preview = WoxPreview(
+                previewType: previewType, previewData: previewData, previewProperties: properties)
         }
-        
+
         var tails: [WoxListItemTail]? = nil
         if let tailsArray = dict["Tails"] as? [[String: Any]] {
             tails = tailsArray.compactMap { WoxListItemTail.fromJson($0) }
         }
-        
+
         return WoxQueryResult(
             id: id,
             queryId: queryId,
@@ -163,7 +340,7 @@ struct WoxResultAction: Identifiable, Equatable {
     var resultId: String
     var contextData: [String: String]
     var form: [PluginSettingDefinitionItem]?
-    
+
     static func empty() -> WoxResultAction {
         return WoxResultAction(
             id: "",
@@ -179,44 +356,47 @@ struct WoxResultAction: Identifiable, Equatable {
             form: []
         )
     }
-    
+
     static func fromJson(_ dict: [String: Any]) -> WoxResultAction? {
         guard let id = dict["Id"] as? String,
-              let name = dict["Name"] as? String else {
+            let name = dict["Name"] as? String
+        else {
             return nil
         }
-        
+
         let type = dict["Type"] as? String ?? "execute"
         let isDefault = dict["IsDefault"] as? Bool ?? false
         let preventHideAfterAction = dict["PreventHideAfterAction"] as? Bool ?? false
         let hotkey = dict["Hotkey"] as? String ?? ""
         let isSystemAction = dict["IsSystemAction"] as? Bool ?? false
         let resultId = dict["ResultId"] as? String ?? ""
-        
+
         var icon: WoxIcon? = nil
         if let iconDict = dict["Icon"] as? [String: Any],
-           let imageType = iconDict["ImageType"] as? String,
-           let imageData = iconDict["ImageData"] as? String {
+            let imageType = iconDict["ImageType"] as? String,
+            let imageData = iconDict["ImageData"] as? String
+        {
             icon = WoxIcon(imageType: imageType, imageData: imageData)
         }
-        
+
         var contextData: [String: String] = [:]
         if let rawContextData = dict["ContextData"] {
             if let data = rawContextData as? [String: String] {
                 contextData = data
             } else if let dataStr = rawContextData as? String, !dataStr.isEmpty {
                 if let jsonData = dataStr.data(using: .utf8),
-                   let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
+                    let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
+                {
                     contextData = json.compactMapValues { $0 as? String }
                 }
             }
         }
-        
+
         var form: [PluginSettingDefinitionItem]? = nil
         if let formArray = dict["Form"] as? [[String: Any]] {
             form = formArray.compactMap { PluginSettingDefinitionItem.fromJson($0) }
         }
-        
+
         return WoxResultAction(
             id: id,
             type: type,
@@ -240,14 +420,14 @@ struct PluginSettingDefinitionItem: Equatable {
     let value: String
     let disabledInPlatforms: String
     let isPlatformSpecific: Bool
-    
+
     static func fromJson(_ dict: [String: Any]) -> PluginSettingDefinitionItem? {
         guard let type = dict["Type"] as? String else { return nil }
-        
+
         let value = dict["Value"] as? String ?? ""
         let disabledInPlatforms = dict["DisabledInPlatforms"] as? String ?? ""
         let isPlatformSpecific = dict["IsPlatformSpecific"] as? Bool ?? false
-        
+
         return PluginSettingDefinitionItem(
             type: type,
             value: value,
@@ -263,11 +443,11 @@ struct WoxPreview: Equatable {
     let previewType: String
     let previewData: String
     let previewProperties: [String: String]
-    
+
     var isEmpty: Bool {
         return previewData.isEmpty
     }
-    
+
     static func empty() -> WoxPreview {
         return WoxPreview(previewType: "", previewData: "", previewProperties: [:])
     }
@@ -280,19 +460,22 @@ struct WoxListItemTail: Identifiable, Equatable {
     let type: String
     let text: String?
     let icon: WoxIcon?
-    
+    let hotkey: String?
+
     static func fromJson(_ dict: [String: Any]) -> WoxListItemTail? {
         guard let type = dict["Type"] as? String else { return nil }
-        
+
         let text = dict["Text"] as? String
+        let hotkey = dict["Hotkey"] as? String
         var icon: WoxIcon? = nil
         if let iconDict = dict["Icon"] as? [String: Any],
-           let imageType = iconDict["ImageType"] as? String,
-           let imageData = iconDict["ImageData"] as? String {
+            let imageType = iconDict["ImageType"] as? String,
+            let imageData = iconDict["ImageData"] as? String
+        {
             icon = WoxIcon(imageType: imageType, imageData: imageData)
         }
-        
-        return WoxListItemTail(type: type, text: text, icon: icon)
+
+        return WoxListItemTail(type: type, text: text, icon: icon, hotkey: hotkey)
     }
 }
 
@@ -301,7 +484,7 @@ struct WoxListItemTail: Identifiable, Equatable {
 struct WoxIcon: Equatable {
     let imageType: String
     let imageData: String
-    
+
     static func empty() -> WoxIcon {
         return WoxIcon(imageType: "", imageData: "")
     }
@@ -322,7 +505,7 @@ struct WoxTheme {
     var isAutoAppearance: Bool
     var darkThemeId: String
     var lightThemeId: String
-    
+
     var appBackgroundColor: String
     var resultItemTitleColor: String
     var resultItemSubTitleColor: String
@@ -350,7 +533,7 @@ struct WoxTheme {
     var previewTextSelectionColor: String
     var toolbarFontColor: String
     var toolbarBackgroundColor: String
-    
+
     var appPaddingLeft: CGFloat
     var appPaddingTop: CGFloat
     var appPaddingRight: CGFloat
@@ -369,14 +552,14 @@ struct WoxTheme {
     var actionContainerPaddingBottom: CGFloat
     var toolbarPaddingLeft: CGFloat
     var toolbarPaddingRight: CGFloat
-    
+
     var resultItemBorderRadius: CGFloat
     var queryBoxBorderRadius: CGFloat
     var actionQueryBoxBorderRadius: CGFloat
-    
+
     var resultItemBorderLeftWidth: CGFloat
     var resultItemActiveBorderLeftWidth: CGFloat
-    
+
     static func empty() -> WoxTheme {
         return WoxTheme(
             themeId: "",
@@ -395,7 +578,7 @@ struct WoxTheme {
             resultItemTitleColor: "#FFFFFF",
             resultItemSubTitleColor: "#999999",
             resultItemTailTextColor: "#666666",
-            resultItemActiveBackgroundColor: "#007AFF",
+            resultItemActiveBackgroundColor: "#FF0000", // Debug: Red to indicate default fallback
             resultItemActiveTitleColor: "#FFFFFF",
             resultItemActiveSubTitleColor: "#FFFFFF",
             resultItemActiveTailTextColor: "#FFFFFF",
@@ -443,7 +626,7 @@ struct WoxTheme {
             resultItemActiveBorderLeftWidth: 0
         )
     }
-    
+
     static func fromJson(_ dict: [String: Any]) -> WoxTheme {
         return WoxTheme(
             themeId: dict["ThemeId"] as? String ?? "",
@@ -462,26 +645,36 @@ struct WoxTheme {
             resultItemTitleColor: dict["ResultItemTitleColor"] as? String ?? "#FFFFFF",
             resultItemSubTitleColor: dict["ResultItemSubTitleColor"] as? String ?? "#999999",
             resultItemTailTextColor: dict["ResultItemTailTextColor"] as? String ?? "#666666",
-            resultItemActiveBackgroundColor: dict["ResultItemActiveBackgroundColor"] as? String ?? "#007AFF",
+            resultItemActiveBackgroundColor: dict["ResultItemActiveBackgroundColor"] as? String
+                ?? "#007AFF",
             resultItemActiveTitleColor: dict["ResultItemActiveTitleColor"] as? String ?? "#FFFFFF",
-            resultItemActiveSubTitleColor: dict["ResultItemActiveSubTitleColor"] as? String ?? "#FFFFFF",
-            resultItemActiveTailTextColor: dict["ResultItemActiveTailTextColor"] as? String ?? "#FFFFFF",
+            resultItemActiveSubTitleColor: dict["ResultItemActiveSubTitleColor"] as? String
+                ?? "#FFFFFF",
+            resultItemActiveTailTextColor: dict["ResultItemActiveTailTextColor"] as? String
+                ?? "#FFFFFF",
             queryBoxFontColor: dict["QueryBoxFontColor"] as? String ?? "#FFFFFF",
             queryBoxBackgroundColor: dict["QueryBoxBackgroundColor"] as? String ?? "#1E1E1E",
             queryBoxCursorColor: dict["QueryBoxCursorColor"] as? String ?? "#007AFF",
-            queryBoxTextSelectionBackgroundColor: dict["QueryBoxTextSelectionBackgroundColor"] as? String ?? dict["QueryBoxTextSelectionColor"] as? String ?? "#007AFF",
-            queryBoxTextSelectionColor: dict["QueryBoxTextSelectionColor"] as? String ?? dict["ResultItemActiveTitleColor"] as? String ?? "#FFFFFF",
-            actionContainerBackgroundColor: dict["ActionContainerBackgroundColor"] as? String ?? "#2C2C2C",
-            actionContainerHeaderFontColor: dict["ActionContainerHeaderFontColor"] as? String ?? "#999999",
-            actionItemActiveBackgroundColor: dict["ActionItemActiveBackgroundColor"] as? String ?? "#007AFF",
+            queryBoxTextSelectionBackgroundColor: dict["QueryBoxTextSelectionBackgroundColor"]
+                as? String ?? dict["QueryBoxTextSelectionColor"] as? String ?? "#007AFF",
+            queryBoxTextSelectionColor: dict["QueryBoxTextSelectionColor"] as? String ?? dict[
+                "ResultItemActiveTitleColor"] as? String ?? "#FFFFFF",
+            actionContainerBackgroundColor: dict["ActionContainerBackgroundColor"] as? String
+                ?? "#2C2C2C",
+            actionContainerHeaderFontColor: dict["ActionContainerHeaderFontColor"] as? String
+                ?? "#999999",
+            actionItemActiveBackgroundColor: dict["ActionItemActiveBackgroundColor"] as? String
+                ?? "#007AFF",
             actionItemActiveFontColor: dict["ActionItemActiveFontColor"] as? String ?? "#FFFFFF",
             actionItemFontColor: dict["ActionItemFontColor"] as? String ?? "#FFFFFF",
             actionQueryBoxFontColor: dict["ActionQueryBoxFontColor"] as? String ?? "#FFFFFF",
-            actionQueryBoxBackgroundColor: dict["ActionQueryBoxBackgroundColor"] as? String ?? "#1E1E1E",
+            actionQueryBoxBackgroundColor: dict["ActionQueryBoxBackgroundColor"] as? String
+                ?? "#1E1E1E",
             previewFontColor: dict["PreviewFontColor"] as? String ?? "#FFFFFF",
             previewSplitLineColor: dict["PreviewSplitLineColor"] as? String ?? "#333333",
             previewPropertyTitleColor: dict["PreviewPropertyTitleColor"] as? String ?? "#999999",
-            previewPropertyContentColor: dict["PreviewPropertyContentColor"] as? String ?? "#CCCCCC",
+            previewPropertyContentColor: dict["PreviewPropertyContentColor"] as? String
+                ?? "#CCCCCC",
             previewTextSelectionColor: dict["PreviewTextSelectionColor"] as? String ?? "#007AFF",
             toolbarFontColor: dict["ToolbarFontColor"] as? String ?? "#999999",
             toolbarBackgroundColor: dict["ToolbarBackgroundColor"] as? String ?? "#1E1E1E",
@@ -492,7 +685,8 @@ struct WoxTheme {
             resultContainerPaddingLeft: CGFloat(dict["ResultContainerPaddingLeft"] as? Int ?? 0),
             resultContainerPaddingTop: CGFloat(dict["ResultContainerPaddingTop"] as? Int ?? 0),
             resultContainerPaddingRight: CGFloat(dict["ResultContainerPaddingRight"] as? Int ?? 0),
-            resultContainerPaddingBottom: CGFloat(dict["ResultContainerPaddingBottom"] as? Int ?? 0),
+            resultContainerPaddingBottom: CGFloat(
+                dict["ResultContainerPaddingBottom"] as? Int ?? 0),
             resultItemPaddingLeft: CGFloat(dict["ResultItemPaddingLeft"] as? Int ?? 16),
             resultItemPaddingTop: CGFloat(dict["ResultItemPaddingTop"] as? Int ?? 8),
             resultItemPaddingRight: CGFloat(dict["ResultItemPaddingRight"] as? Int ?? 16),
@@ -500,17 +694,24 @@ struct WoxTheme {
             actionContainerPaddingLeft: CGFloat(dict["ActionContainerPaddingLeft"] as? Int ?? 12),
             actionContainerPaddingTop: CGFloat(dict["ActionContainerPaddingTop"] as? Int ?? 12),
             actionContainerPaddingRight: CGFloat(dict["ActionContainerPaddingRight"] as? Int ?? 12),
-            actionContainerPaddingBottom: CGFloat(dict["ActionContainerPaddingBottom"] as? Int ?? 12),
+            actionContainerPaddingBottom: CGFloat(
+                dict["ActionContainerPaddingBottom"] as? Int ?? 12),
             toolbarPaddingLeft: CGFloat(dict["ToolbarPaddingLeft"] as? Int ?? 16),
             toolbarPaddingRight: CGFloat(dict["ToolbarPaddingRight"] as? Int ?? 16),
             resultItemBorderRadius: CGFloat(dict["ResultItemBorderRadius"] as? Int ?? 8),
             queryBoxBorderRadius: CGFloat(dict["QueryBoxBorderRadius"] as? Int ?? 8),
             actionQueryBoxBorderRadius: CGFloat(dict["ActionQueryBoxBorderRadius"] as? Int ?? 6),
-            resultItemBorderLeftWidth: CGFloat(parseBorderWidth(dict["ResultItemBorderLeftWidth"] as? Int, dict["ResultItemBorderLeft"] as? Int, defaultValue: 0)),
-            resultItemActiveBorderLeftWidth: CGFloat(parseBorderWidth(dict["ResultItemActiveBorderLeftWidth"] as? Int, dict["ResultItemActiveBorderLeft"] as? Int, defaultValue: 0))
+            resultItemBorderLeftWidth: CGFloat(
+                parseBorderWidth(
+                    dict["ResultItemBorderLeftWidth"] as? Int, dict["ResultItemBorderLeft"] as? Int,
+                    defaultValue: 0)),
+            resultItemActiveBorderLeftWidth: CGFloat(
+                parseBorderWidth(
+                    dict["ResultItemActiveBorderLeftWidth"] as? Int,
+                    dict["ResultItemActiveBorderLeft"] as? Int, defaultValue: 0))
         )
     }
-    
+
     private static func parseBorderWidth(_ width: Int?, _ legacy: Int?, defaultValue: Int) -> Int {
         if let w = width { return w }
         if let l = legacy { return l }
@@ -531,13 +732,24 @@ struct ToolbarActionInfo: Equatable {
     let hotkey: String
 }
 
+// MARK: - QueryIconInfo
+
+struct QueryIconInfo {
+    let icon: WoxIcon?
+    let action: (() -> Void)?
+
+    static func empty() -> QueryIconInfo {
+        return QueryIconInfo(icon: nil, action: nil)
+    }
+}
+
 // MARK: - Position
 
 struct Position {
     var type: String
     var x: Int
     var y: Int
-    
+
     init(json: [String: Any]) {
         type = json["Type"] as? String ?? ""
         x = json["X"] as? Int ?? 0
@@ -554,17 +766,17 @@ struct ShowAppParams {
     var launchMode: String
     var startPage: String
     var isQueryFocus: Bool
-    
+
     init(json: [String: Any]) {
         selectAll = json["SelectAll"] as? Bool ?? false
         position = Position(json: json["Position"] as? [String: Any] ?? [:])
-        
+
         var histories: [QueryHistory] = []
         if let historiesArray = json["QueryHistories"] as? [[String: Any]] {
             histories = historiesArray.map { QueryHistory(json: $0) }
         }
         queryHistories = histories
-        
+
         launchMode = json["LaunchMode"] as? String ?? "continue"
         startPage = json["StartPage"] as? String ?? "mru"
         isQueryFocus = json["IsQueryFocus"] as? Bool ?? false
@@ -578,16 +790,17 @@ struct QueryMetadata {
     var resultPreviewWidthRatio: CGFloat
     var isGridLayout: Bool
     var gridLayoutParams: GridLayoutParams
-    
+
     init(json: [String: Any]) {
         if let iconDict = json["Icon"] as? [String: Any],
-           let imageType = iconDict["ImageType"] as? String,
-           let imageData = iconDict["ImageData"] as? String {
+            let imageType = iconDict["ImageType"] as? String,
+            let imageData = iconDict["ImageData"] as? String
+        {
             icon = WoxIcon(imageType: imageType, imageData: imageData)
         } else {
             icon = WoxIcon(imageType: "", imageData: "")
         }
-        
+
         resultPreviewWidthRatio = CGFloat(json["WidthRatio"] as? Double ?? 0.5)
         isGridLayout = json["IsGridLayout"] as? Bool ?? false
         gridLayoutParams = GridLayoutParams(json: json["GridLayoutParams"] as? [String: Any] ?? [:])
@@ -602,7 +815,7 @@ struct GridLayoutParams {
     var itemPadding: CGFloat
     var itemMargin: CGFloat
     var commands: [String]
-    
+
     init(json: [String: Any]) {
         columns = json["Columns"] as? Int ?? 8
         showTitle = json["ShowTitle"] as? Bool ?? false
@@ -610,7 +823,7 @@ struct GridLayoutParams {
         itemMargin = CGFloat(json["ItemMargin"] as? Int ?? 6)
         commands = (json["Commands"] as? [String]) ?? []
     }
-    
+
     static func empty() -> GridLayoutParams {
         return GridLayoutParams(json: [:])
     }
