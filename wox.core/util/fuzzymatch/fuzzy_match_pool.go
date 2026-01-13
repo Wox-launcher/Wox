@@ -55,3 +55,27 @@ func putIntBuffer(bufPtr *[]int) {
 	}
 	intPool.Put(bufPtr)
 }
+
+var int64Pool = sync.Pool{
+	New: func() interface{} {
+		// Initial capacity 128 int64s (enough for typical pattern len ~8 * 12 + margin)
+		s := make([]int64, 0, 128)
+		return &s
+	},
+}
+
+func getInt64Buffer() *[]int64 {
+	ptr := int64Pool.Get().(*[]int64)
+	*ptr = (*ptr)[:0]
+	return ptr
+}
+
+func putInt64Buffer(bufPtr *[]int64) {
+	if bufPtr == nil {
+		return
+	}
+	if cap(*bufPtr) > maxPoolBufferSize {
+		return
+	}
+	int64Pool.Put(bufPtr)
+}

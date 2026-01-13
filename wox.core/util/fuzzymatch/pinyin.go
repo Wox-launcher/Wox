@@ -9,13 +9,12 @@ import (
 
 // Pinyin cache to avoid repeated computation
 var (
-	pinyinCache     sync.Map // map[string][]string
+	pinyinCache     sync.Map // map[string][]PinyinSegment
 	pinyinCacheSize atomic.Int32
 )
 
 const (
 	maxPinyinCacheSize = 4096 // Maximum cache entries
-	maxPinyinVariants  = 16   // Limit multiplyTerms output to avoid exponential growth
 )
 
 // getCharPinyin returns pre-processed pinyin variants for a single rune
@@ -29,112 +28,81 @@ func getCharPinyin(r rune) []string {
 	return []string{string(r)}
 }
 
-// PinyinVariant represents a cached pinyin variation
-type PinyinVariant struct {
-	Parts        []string // The pinyin syllables, e.g. ["ni", "hao"]
-	FirstLetters []rune   // Pre-calculated lowercase first letters, e.g. ['n', 'h']
+// PinyinSegment represents a segment of the pinyin string (one character or a block of non-Chinese text)
+// It contains all possible pronunciations for that segment.
+type PinyinSegment struct {
+	Syllables    []string // All possible full pinyin syllables for this segment (e.g. ["xing", "hang"])
+	FirstLetters []rune   // Pre-calculated lowercase first letters for each syllable (e.g. ['x', 'h'])
 }
 
-// getPinYin returns pre-processed pinyin variants.
-func getPinYin(term string) []PinyinVariant {
+// getPinYin returns the pinyin segments for the term.
+// Unlike the previous implementation, this returns a graph of segments (possibilities)
+// rather than expanding all combinations into full strings.
+func getPinYin(term string) []PinyinSegment {
 	if !hasChinese(term) {
-		// Non-Chinese: single variant with single part
-		// For a non-Chinese term like "Hello", Parts will be ["Hello"].
-		// FirstLetters should be ['h'].
-		// The `toLowerASCII` function is assumed to exist or be handled by the broader context.
-		// If term is empty, term[0] would panic.
+		// Non-Chinese: single segment
 		var firstLetter rune
 		if len(term) > 0 {
 			firstLetter = toLowerASCII(rune(term[0]))
 		}
 
-		return []PinyinVariant{{
-			Parts:        []string{term},
+		return []PinyinSegment{{
+			Syllables:    []string{term},
 			FirstLetters: []rune{firstLetter},
 		}}
 	}
 
 	// Check cache first
 	if cached, ok := pinyinCache.Load(term); ok {
-		return cached.([]PinyinVariant)
+		return cached.([]PinyinSegment)
 	}
 
-	// Step 1: Convert to pinyin terms, grouping non-Chinese characters
-	// e.g. "Hello世界" -> [ ["Hello"], ["shi"], ["jie"] ]
-	// This dramatically reduces the depth of multiplyTerms recursion for mixed text
-	var pinyinTerms [][]string
+	var segments []PinyinSegment
 
 	var asciiBuilder strings.Builder
 	asciiBuilder.Grow(16)
 
+	// Helper to flush ASCII buffer
+	flushASCII := func() {
+		if asciiBuilder.Len() > 0 {
+			s := asciiBuilder.String()
+			var fl rune
+			if len(s) > 0 {
+				fl = toLowerASCII(rune(s[0]))
+			}
+			segments = append(segments, PinyinSegment{
+				Syllables:    []string{s},
+				FirstLetters: []rune{fl},
+			})
+			asciiBuilder.Reset()
+		}
+	}
+
 	for _, r := range term {
 		if unicode.Is(unicode.Han, r) {
-			// Flush buffered ASCII if any
-			if asciiBuilder.Len() > 0 {
-				pinyinTerms = append(pinyinTerms, []string{asciiBuilder.String()})
-				asciiBuilder.Reset()
-			}
+			flushASCII()
 
 			// Handle Chinese char
-			pinyinTerms = append(pinyinTerms, getCharPinyin(r))
+			pinyins := getCharPinyin(r)
+
+			// Compute first letters
+			firstLetters := make([]rune, len(pinyins))
+			for i, p := range pinyins {
+				if len(p) > 0 {
+					firstLetters[i] = toLowerASCII(rune(p[0]))
+				}
+			}
+
+			segments = append(segments, PinyinSegment{
+				Syllables:    pinyins,
+				FirstLetters: firstLetters,
+			})
 		} else {
 			// Buffer non-Chinese char
 			asciiBuilder.WriteRune(r)
 		}
 	}
-	// Flush remaining ASCII
-	if asciiBuilder.Len() > 0 {
-		pinyinTerms = append(pinyinTerms, []string{asciiBuilder.String()})
-	}
-
-	// Step 2: Generate heteronym combinations (Cartesian product)
-	// heteronymTerms will contain the "Full Pinyin" variants as slices of parts
-	var heteronymTerms [][]string
-	for _, pinyinTerm := range pinyinTerms {
-
-		heteronymTerms = multiplyTerms(heteronymTerms, pinyinTerm)
-	}
-
-	// Step 3: Create PinyinVariants
-	variantsCount := len(heteronymTerms) * 2
-	variants := make([]PinyinVariant, 0, variantsCount)
-
-	// Helper to create variant
-	createVariant := func(parts []string) PinyinVariant {
-		firstLet := make([]rune, len(parts))
-		for i, part := range parts {
-			if len(part) > 0 {
-				firstLet[i] = toLowerASCII(rune(part[0]))
-			}
-		}
-		return PinyinVariant{
-			Parts:        parts,
-			FirstLetters: firstLet,
-		}
-	}
-
-	// Add Full Pinyin variants
-	for _, parts := range heteronymTerms {
-		variants = append(variants, createVariant(parts))
-	}
-
-	// Add First Letter variants
-	for _, termParts := range heteronymTerms {
-		firstLetParts := make([]string, len(termParts))
-		valid := true
-		for i, part := range termParts {
-			if len(part) > 0 {
-				firstLetParts[i] = part[:1]
-			} else {
-				// Should not happen, but safety check
-				valid = false
-				break
-			}
-		}
-		if valid {
-			variants = append(variants, createVariant(firstLetParts))
-		}
-	}
+	flushASCII()
 
 	// Store in cache (simple LRU-like: clear if too large)
 	if pinyinCacheSize.Load() >= maxPinyinCacheSize {
@@ -142,56 +110,10 @@ func getPinYin(term string) []PinyinVariant {
 		pinyinCache.Clear()
 		pinyinCacheSize.Store(0)
 	}
-	pinyinCache.Store(term, variants)
+	pinyinCache.Store(term, segments)
 	pinyinCacheSize.Add(1)
 
-	return variants
-}
-
-func stringInSlice(term string, terms []string) bool {
-	for _, v := range terms {
-		if v == term {
-			return true
-		}
-	}
-
-	return false
-}
-
-// [["1","2"]] => [["1","2","3"], ["1","2","4"]]
-func multiplyTerms(terms [][]string, n []string) [][]string {
-	if len(terms) == 0 {
-		for _, v := range n {
-			terms = append(terms, []string{v})
-			// Limit initial terms as well
-			if len(terms) >= maxPinyinVariants {
-				break
-			}
-		}
-		return terms
-	}
-
-	// Limit variants to avoid exponential growth
-	// If we already have maxPinyinVariants, only add first pronunciation
-	if len(terms) >= maxPinyinVariants {
-		n = n[:1]
-	}
-
-	newTerms := make([][]string, 0, len(terms)*len(n))
-	for _, term := range terms {
-		for _, v := range n {
-			newTerm := make([]string, len(term), len(term)+1)
-			copy(newTerm, term)
-			newTerm = append(newTerm, v)
-			newTerms = append(newTerms, newTerm)
-			// Hard limit on total variants
-			if len(newTerms) >= maxPinyinVariants {
-				return newTerms
-			}
-		}
-	}
-
-	return newTerms
+	return segments
 }
 
 func hasChinese(str string) bool {

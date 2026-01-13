@@ -308,49 +308,6 @@ func isAlnumByte(b byte) bool {
 	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9')
 }
 
-// matchPinyinStrict performs strict pinyin matching
-// Only allows: all first letters (e.g., "nh" for "你好") OR all full pinyin (e.g., "nihao" for "你好")
-// Does NOT allow mixed mode (e.g., "nhao" or "nih")
-func matchPinyinStrict(text string, patternRunes []rune) FuzzyMatchResult {
-	// getPinYin now returns []PinyinVariant
-	pinyinVariants := getPinYin(text)
-
-	var bestResult FuzzyMatchResult
-
-	for _, variant := range pinyinVariants {
-		// variant.FirstLetters is pre-calculated logic
-		if len(variant.FirstLetters) == 0 {
-			continue
-		}
-
-		// Check 1: Exact first letters match - EARLY EXIT for high score
-		if equalRunes(patternRunes, variant.FirstLetters) {
-			score := bonusExactMatch + int64(len(patternRunes)*scoreMatch)
-			// Early exit: exact first letter match is already very high score
-			return FuzzyMatchResult{IsMatch: true, Score: score}
-		}
-
-		// Check 2: First letters prefix match
-		if hasPrefixRunes(variant.FirstLetters, patternRunes) {
-			score := bonusPrefixMatch + int64(len(patternRunes)*scoreMatch) + bonusFirstCharMatch
-			if score > bestResult.Score {
-				bestResult = FuzzyMatchResult{IsMatch: true, Score: score}
-			}
-			continue
-		}
-
-		// Check 3: Syllable-level matching
-		// matchSyllables needs Parts
-		if syllableResult := matchSyllables(variant.Parts, patternRunes); syllableResult.IsMatch {
-			if syllableResult.Score > bestResult.Score {
-				bestResult = syllableResult
-			}
-		}
-	}
-
-	return bestResult
-}
-
 // toLowerASCII is a fast path for lowercase conversion of ASCII letters
 func toLowerASCII(r rune) rune {
 	if r >= 'A' && r <= 'Z' {
@@ -363,88 +320,279 @@ func toLowerASCII(r rune) rune {
 // This prevents matching scattered syllables like "道"..."沿" in "J道:解惑授道-国际软件架构前沿"
 const maxConsecutiveSkippedSyllables = 3
 
-// matchSyllables performs unified syllable-level matching
-// Optimized to avoid allocations by using inline ASCII comparison
-func matchSyllables(parts []string, patternRunes []rune) FuzzyMatchResult {
-	if len(patternRunes) == 0 || len(parts) == 0 {
+// matchPinyinStrict performs strict pinyin matching
+// Only allows: all first letters (e.g., "nh" for "你好") OR all full pinyin (e.g., "nihao" for "你好")
+// Does NOT allow mixed mode (e.g., "nhao" or "nih")
+// matchPinyinStrict performs strict pinyin matching using segment graph
+// Only allows: all first letters (e.g., "nh" for "你好") OR all full pinyin (e.g., "nihao" for "你好")
+// Now uses a state-based search (limited beam) to handle polyphonic ambiguities without exponential complexity.
+func matchPinyinStrict(text string, patternRunes []rune) FuzzyMatchResult {
+	segments := getPinYin(text)
+	if len(segments) == 0 {
 		return FuzzyMatchResult{IsMatch: false, Score: 0}
 	}
 
-	patternPos := 0
-	partIdx := 0
-	matchedSyllables := 0
-	totalSkippedSyllables := 0
-	consecutiveSkipped := 0
-	lastMatchWasPartial := false
+	bestScore := int64(0)
+	matched := false
 
-	for patternPos < len(patternRunes) && partIdx < len(parts) {
-		part := parts[partIdx]
-		partLen := len(part) // For ASCII pinyin, byte length == rune length
+	// Check 1: Exact first letters match / prefix match
+	// Iterate pattern and segments in lockstep
+	// For pattern[i], it must match one of segments[i].FirstLetters
+	firstLetMatch := true
+	firstLetScore := int64(0)
 
-		remainingLen := len(patternRunes) - patternPos
-
-		// Case 1: Remaining pattern starts with full syllable
-		// Check if pattern[patternPos:patternPos+partLen] matches part (case-insensitive)
-		if remainingLen >= partLen && matchASCIIPrefix(patternRunes[patternPos:patternPos+partLen], part) {
-			patternPos += partLen
-			matchedSyllables++
-			partIdx++
-			lastMatchWasPartial = false
-			consecutiveSkipped = 0
-			continue
-		}
-
-		// Case 2: Remaining pattern is a prefix of this syllable (typing in progress)
-		if remainingLen < partLen {
-			if matchASCIIPrefix(patternRunes[patternPos:], part[:remainingLen]) {
-				// Strict Mode Rule: If we skipped syllables, we cannot match partially
-				if totalSkippedSyllables > 0 {
-					goto NoMatch
+	if len(patternRunes) <= len(segments) {
+		for i, r := range patternRunes {
+			seg := segments[i]
+			found := false
+			for _, fl := range seg.FirstLetters {
+				if fl == r {
+					found = true
+					break
 				}
-
-				// Check mixed mode
-				if matchedSyllables > 0 && remainingLen == 1 {
-					return FuzzyMatchResult{IsMatch: false, Score: 0}
-				}
-				patternPos += remainingLen
-				matchedSyllables++
-				lastMatchWasPartial = true
-				partIdx++
-				consecutiveSkipped = 0
-				continue
+			}
+			if !found {
+				firstLetMatch = false
+				break
 			}
 		}
 
-	NoMatch:
-		// Case 3: No match
-		totalSkippedSyllables++
-		consecutiveSkipped++
-		partIdx++
-
-		if matchedSyllables > 0 && consecutiveSkipped > maxConsecutiveSkippedSyllables {
-			return FuzzyMatchResult{IsMatch: false, Score: 0}
+		if firstLetMatch {
+			// Calculate score for first letter match
+			if len(patternRunes) == len(segments) {
+				firstLetScore = bonusExactMatch + int64(len(patternRunes)*scoreMatch)
+			} else {
+				firstLetScore = bonusPrefixMatch + int64(len(patternRunes)*scoreMatch) + bonusFirstCharMatch
+			}
+			matched = true
+			bestScore = firstLetScore
 		}
 	}
 
-	// Pattern must be fully consumed
-	if patternPos != len(patternRunes) {
-		return FuzzyMatchResult{IsMatch: false, Score: 0}
+	// Check 2: Syllable-level matching (Beam Search)
+	// If first letter exact match found, it's likely the best, but full pinyin might have higher score?
+	// Usually Exact First Letters is very high. Let's keep checking syllables just in case (e.g. fewer skips).
+	// Actually, "Exact First Letter" is usually unbeatable unless Full Pinyin is also Exact.
+
+	const (
+		ModeAny         = 0
+		ModeFirstLetter = 1
+		ModeFullPinyin  = 2
+	)
+
+	type searchState struct {
+		patternIdx          int
+		consecutiveSkipped  int
+		matchedSyllables    int
+		score               int64
+		lastMatchWasPartial bool
+		matchMode           int // 0: Any, 1: FirstLetter, 2: FullPinyin
 	}
 
-	if matchedSyllables == 0 {
-		return FuzzyMatchResult{IsMatch: false, Score: 0}
+	// Active states
+	states := []searchState{{0, 0, 0, 0, false, ModeAny}}
+
+	// Pre-allocate next states buffer
+	nextStates := make([]searchState, 0, 32)
+
+	// Optimization: Use a flat int64 slice instead of map for deduplication
+	// Key space: (PatternIdx+1) * 3 (Modes) * (maxConsecutiveSkippedSyllables+1)
+	// We clear this slice for each segment iteration.
+	// Since PatternLen is usually small, this is fast.
+	rows := len(patternRunes) + 1
+	cols := 3 * (maxConsecutiveSkippedSyllables + 1)
+	size := rows * cols
+
+	// Use pool to avoid allocation
+	bestScoresPtr := getInt64Buffer()
+	defer putInt64Buffer(bestScoresPtr)
+
+	bestScores := *bestScoresPtr
+	if cap(bestScores) < size {
+		bestScores = make([]int64, size)
+	} else {
+		bestScores = bestScores[:size]
+	}
+	*bestScoresPtr = bestScores // Update pointer if we reallocated/sliced
+
+	// Helper to reset bestScores to a sentinel value (e.g. -1, since score is >= 0)
+	// Actually score can be negative? penalty?
+	// Let's use MinInt64.
+	const minInt64 = -9223372036854775808
+
+	for _, seg := range segments {
+		nextStates = nextStates[:0]
+
+		// Reset bestScores
+		for k := 0; k < size; k++ {
+			bestScores[k] = minInt64
+		}
+
+		for _, state := range states {
+			// Branch 1: Skip this segment (syllable)
+			if state.matchedSyllables == 0 || state.consecutiveSkipped < maxConsecutiveSkippedSyllables {
+				newScore := state.score
+				newSkips := state.consecutiveSkipped + 1
+
+				// State Key: PatternIdx * 12 + Mode * 4 + Skips
+				// Mode: 0,1,2. Skips: 0..3.
+				// But wait, leading skips (matchedSyllables == 0) can exceed maxConsecutiveSkippedSyllables
+				// If Skips > 3, we simply map it to bucket 3? Or treat as 3?
+				// If matchedSyllables == 0, we don't care about skip count limitation (it's unlimited).
+				// We can just clamp it to 3 for storage, or use a separate "leading skip" mode/state?
+				// Simplest: if matchedSyllables == 0, skips = 0 (effectively).
+				// Because leading skips don't count towards the limit.
+				// So if matchedSyllables == 0, we can reset consecutiveSkipped to 0 in state?
+				// Correct: "consecutiveSkipped" is for "gap inside match".
+				// Leading gap is handled by score calculation (GapStart penalty) or just ignored (if no penalty).
+				// My code currently increments `consecutiveSkipped`.
+
+				effectiveSkips := newSkips
+
+				// Clamp effectiveSkips to max for indexing (should satisfy < max+1 unless unlimited logic fails)
+				if effectiveSkips > maxConsecutiveSkippedSyllables {
+					effectiveSkips = maxConsecutiveSkippedSyllables
+				}
+
+				idx := state.patternIdx*cols + state.matchMode*4 + effectiveSkips
+
+				if newScore > bestScores[idx] {
+					bestScores[idx] = newScore
+					nextStates = append(nextStates, searchState{
+						patternIdx:          state.patternIdx,
+						consecutiveSkipped:  effectiveSkips, // Update with normalized
+						matchedSyllables:    state.matchedSyllables,
+						score:               newScore,
+						lastMatchWasPartial: false,
+						matchMode:           state.matchMode,
+					})
+				}
+			}
+
+			// Branch 2: Try to match
+			if state.patternIdx < len(patternRunes) {
+				for _, syllable := range seg.Syllables {
+					remainingBytes := len(patternRunes) - state.patternIdx
+					syllableLen := len(syllable)
+
+					// 1. Try Full Syllable Match
+					if remainingBytes >= syllableLen {
+						if matchASCIIPrefix(patternRunes[state.patternIdx:state.patternIdx+syllableLen], syllable) {
+							if syllableLen == 1 || state.matchMode != ModeFirstLetter {
+								newScore := state.score + scoreMatch*2
+								if state.matchedSyllables > 0 && state.consecutiveSkipped == 0 {
+									newScore += bonusConsecutive
+								}
+
+								newMode := state.matchMode
+								if syllableLen > 1 {
+									newMode = ModeFullPinyin
+								} else if newMode == ModeAny {
+									newMode = ModeAny
+								}
+
+								newPatternIdx := state.patternIdx + syllableLen
+
+								idx := newPatternIdx*cols + newMode*4 + 0 // Skips 0
+
+								if newScore > bestScores[idx] {
+									bestScores[idx] = newScore
+									nextStates = append(nextStates, searchState{
+										patternIdx:          newPatternIdx,
+										consecutiveSkipped:  0,
+										matchedSyllables:    state.matchedSyllables + 1,
+										score:               newScore,
+										lastMatchWasPartial: false,
+										matchMode:           newMode,
+									})
+								}
+							}
+						}
+					}
+
+					// 2. Try Partial Match (Prefix)
+					if remainingBytes < syllableLen {
+						if matchASCIIPrefix(patternRunes[state.patternIdx:], syllable[:remainingBytes]) {
+							// Sub-case A: Length 1 (First Letter)
+							if remainingBytes == 1 {
+								if state.matchMode != ModeFullPinyin {
+									newScore := state.score + scoreMatch + 5
+									if state.matchedSyllables > 0 && state.consecutiveSkipped == 0 {
+										newScore += bonusConsecutive
+									}
+
+									newMode := ModeFirstLetter
+									newPatternIdx := state.patternIdx + 1
+									// Skips 0
+									idx := newPatternIdx*cols + newMode*4 + 0
+
+									if newScore > bestScores[idx] {
+										bestScores[idx] = newScore
+										nextStates = append(nextStates, searchState{
+											patternIdx:          newPatternIdx,
+											consecutiveSkipped:  0,
+											matchedSyllables:    state.matchedSyllables + 1,
+											score:               newScore,
+											lastMatchWasPartial: true,
+											matchMode:           newMode,
+										})
+									}
+								}
+							} else {
+								// Sub-case B: Length > 1
+								if state.matchMode != ModeFirstLetter && state.consecutiveSkipped == 0 {
+									newScore := state.score + int64(remainingBytes)*scoreMatch
+									if state.matchedSyllables > 0 {
+										newScore += bonusConsecutive
+									}
+
+									newMode := ModeFullPinyin
+									newPatternIdx := state.patternIdx + remainingBytes
+									// Skips 0
+									idx := newPatternIdx*cols + newMode*4 + 0
+
+									if newScore > bestScores[idx] {
+										bestScores[idx] = newScore
+										nextStates = append(nextStates, searchState{
+											patternIdx:          newPatternIdx,
+											consecutiveSkipped:  0,
+											matchedSyllables:    state.matchedSyllables + 1,
+											score:               newScore,
+											lastMatchWasPartial: true,
+											matchMode:           newMode,
+										})
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
+		states = append(states[:0], nextStates...)
+		if len(states) == 0 {
+			break
+		}
 	}
 
-	score := int64(matchedSyllables) * scoreMatch * 2
-	if totalSkippedSyllables == 0 {
-		score += bonusConsecutive * int64(matchedSyllables)
+	// Find best finished state
+	for _, state := range states {
+		// Must consume entire pattern
+		if state.patternIdx == len(patternRunes) && state.matchedSyllables > 0 {
+			finalScore := state.score
+			if state.matchedSyllables == len(segments) && !state.lastMatchWasPartial {
+				finalScore += bonusExactMatch
+			}
+
+			if !matched || finalScore > bestScore {
+				bestScore = finalScore
+				matched = true
+			}
+		}
 	}
 
-	if !lastMatchWasPartial && partIdx == len(parts) && totalSkippedSyllables == 0 {
-		score += bonusExactMatch
-	}
-
-	return FuzzyMatchResult{IsMatch: true, Score: score}
+	return FuzzyMatchResult{IsMatch: matched, Score: bestScore}
 }
 
 // matchASCIIPrefix checks if pattern runes match the start of an ASCII string (case-insensitive)
