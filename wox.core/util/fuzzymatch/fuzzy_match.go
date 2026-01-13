@@ -1,9 +1,13 @@
 package fuzzymatch
 
 import (
+	"sync/atomic"
 	"unicode"
-	"unicode/utf8"
 )
+
+// Global generation counter to ensure unique generation IDs across function calls.
+// This prevents stale generation values from causing incorrect matches when buffers are reused.
+var globalGeneration atomic.Uint32
 
 //////////////////////////////////////////////////////////////////////////////////
 ///
@@ -120,16 +124,6 @@ func isASCII(s string) bool {
 		}
 	}
 	return true
-}
-
-// containsByte checks if string contains a byte (faster than strings.IndexByte for simple check)
-func containsByte(s string, b byte) bool {
-	for i := 0; i < len(s); i++ {
-		if s[i] == b {
-			return true
-		}
-	}
-	return false
 }
 
 // fuzzyMatchASCII is an optimized path for pure ASCII text and pattern
@@ -320,11 +314,9 @@ func toLowerASCII(r rune) rune {
 // This prevents matching scattered syllables like "道"..."沿" in "J道:解惑授道-国际软件架构前沿"
 const maxConsecutiveSkippedSyllables = 3
 
-// matchPinyinStrict performs strict pinyin matching
+// matchPinyinStrict performs strict pinyin matching using segment graph.
 // Only allows: all first letters (e.g., "nh" for "你好") OR all full pinyin (e.g., "nihao" for "你好")
 // Does NOT allow mixed mode (e.g., "nhao" or "nih")
-// matchPinyinStrict performs strict pinyin matching using segment graph
-// Only allows: all first letters (e.g., "nh" for "你好") OR all full pinyin (e.g., "nihao" for "你好")
 // Now uses a state-based search (limited beam) to handle polyphonic ambiguities without exponential complexity.
 func matchPinyinStrict(text string, patternRunes []rune) FuzzyMatchResult {
 	segments := getPinYin(text)
@@ -395,88 +387,90 @@ func matchPinyinStrict(text string, patternRunes []rune) FuzzyMatchResult {
 	// Pre-allocate next states buffer
 	nextStates := make([]searchState, 0, 32)
 
-	// Optimization: Use a flat int64 slice instead of map for deduplication
-	// Key space: (PatternIdx+1) * 3 (Modes) * (maxConsecutiveSkippedSyllables+1)
-	// We clear this slice for each segment iteration.
-	// Since PatternLen is usually small, this is fast.
+	// Optimization: Use flat slices instead of map for deduplication
+	// Key space: (PatternIdx+1) * (MaxMatched+1) * 3 (Modes) * (MaxSkips+1)
 	rows := len(patternRunes) + 1
-	cols := 3 * (maxConsecutiveSkippedSyllables + 1)
-	size := rows * cols
+	cols1 := len(segments) + 1
+	cols2 := 3 * (maxConsecutiveSkippedSyllables + 1)
+	size := rows * cols1 * cols2
 
 	// Use pool to avoid allocation
 	bestScoresPtr := getInt64Buffer()
 	defer putInt64Buffer(bestScoresPtr)
-
 	bestScores := *bestScoresPtr
 	if cap(bestScores) < size {
 		bestScores = make([]int64, size)
 	} else {
 		bestScores = bestScores[:size]
 	}
-	*bestScoresPtr = bestScores // Update pointer if we reallocated/sliced
+	*bestScoresPtr = bestScores
 
-	// Helper to reset bestScores to a sentinel value (e.g. -1, since score is >= 0)
-	// Actually score can be negative? penalty?
-	// Let's use MinInt64.
-	const minInt64 = -9223372036854775808
+	bestIndexPtr := getIntBuffer()
+	defer putIntBuffer(bestIndexPtr)
+	bestIndex := *bestIndexPtr
+	if cap(bestIndex) < size {
+		bestIndex = make([]int, size)
+	} else {
+		bestIndex = bestIndex[:size]
+	}
+	*bestIndexPtr = bestIndex
+
+	generationPtr := getUint32Buffer()
+	defer putUint32Buffer(generationPtr)
+	generation := *generationPtr
+	if cap(generation) < size {
+		generation = make([]uint32, size)
+	} else {
+		generation = generation[:size]
+	}
+	*generationPtr = generation
+
+	currentGen := globalGeneration.Add(uint32(len(segments) + 1))
 
 	for _, seg := range segments {
 		nextStates = nextStates[:0]
-
-		// Reset bestScores
-		for k := 0; k < size; k++ {
-			bestScores[k] = minInt64
-		}
+		currentGen++
 
 		for _, state := range states {
 			// Branch 1: Skip this segment (syllable)
 			if state.matchedSyllables == 0 || state.consecutiveSkipped < maxConsecutiveSkippedSyllables {
 				newScore := state.score
 				newSkips := state.consecutiveSkipped + 1
-
-				// State Key: PatternIdx * 12 + Mode * 4 + Skips
-				// Mode: 0,1,2. Skips: 0..3.
-				// But wait, leading skips (matchedSyllables == 0) can exceed maxConsecutiveSkippedSyllables
-				// If Skips > 3, we simply map it to bucket 3? Or treat as 3?
-				// If matchedSyllables == 0, we don't care about skip count limitation (it's unlimited).
-				// We can just clamp it to 3 for storage, or use a separate "leading skip" mode/state?
-				// Simplest: if matchedSyllables == 0, skips = 0 (effectively).
-				// Because leading skips don't count towards the limit.
-				// So if matchedSyllables == 0, we can reset consecutiveSkipped to 0 in state?
-				// Correct: "consecutiveSkipped" is for "gap inside match".
-				// Leading gap is handled by score calculation (GapStart penalty) or just ignored (if no penalty).
-				// My code currently increments `consecutiveSkipped`.
-
 				effectiveSkips := newSkips
-
-				// Clamp effectiveSkips to max for indexing (should satisfy < max+1 unless unlimited logic fails)
 				if effectiveSkips > maxConsecutiveSkippedSyllables {
 					effectiveSkips = maxConsecutiveSkippedSyllables
 				}
 
-				idx := state.patternIdx*cols + state.matchMode*4 + effectiveSkips
-
-				if newScore > bestScores[idx] {
-					bestScores[idx] = newScore
-					nextStates = append(nextStates, searchState{
+				// Key: (patternIdx * cols1 + matchedSyllables) * cols2 + Mode * 4 + Skips
+				idx := (state.patternIdx*cols1+state.matchedSyllables)*cols2 + state.matchMode*4 + effectiveSkips
+				if generation[idx] != currentGen || newScore > bestScores[idx] {
+					newState := searchState{
 						patternIdx:          state.patternIdx,
-						consecutiveSkipped:  effectiveSkips, // Update with normalized
+						consecutiveSkipped:  effectiveSkips,
 						matchedSyllables:    state.matchedSyllables,
 						score:               newScore,
 						lastMatchWasPartial: false,
 						matchMode:           state.matchMode,
-					})
+					}
+					if generation[idx] == currentGen {
+						nextStates[bestIndex[idx]] = newState
+					} else {
+						bestIndex[idx] = len(nextStates)
+						generation[idx] = currentGen
+						nextStates = append(nextStates, newState)
+					}
+					bestScores[idx] = newScore
 				}
 			}
 
 			// Branch 2: Try to match
 			if state.patternIdx < len(patternRunes) {
 				for _, syllable := range seg.Syllables {
-					remainingBytes := len(patternRunes) - state.patternIdx
+					remainingRunes := len(patternRunes) - state.patternIdx
 					syllableLen := len(syllable)
 
 					// 1. Try Full Syllable Match
-					if remainingBytes >= syllableLen {
+					if remainingRunes >= syllableLen {
 						if matchASCIIPrefix(patternRunes[state.patternIdx:state.patternIdx+syllableLen], syllable) {
 							if syllableLen == 1 || state.matchMode != ModeFirstLetter {
 								newScore := state.score + scoreMatch*2
@@ -487,34 +481,39 @@ func matchPinyinStrict(text string, patternRunes []rune) FuzzyMatchResult {
 								newMode := state.matchMode
 								if syllableLen > 1 {
 									newMode = ModeFullPinyin
-								} else if newMode == ModeAny {
-									newMode = ModeAny
 								}
 
 								newPatternIdx := state.patternIdx + syllableLen
+								newMatchedSyllables := state.matchedSyllables + 1
+								idx := (newPatternIdx*cols1+newMatchedSyllables)*cols2 + newMode*4 + 0
 
-								idx := newPatternIdx*cols + newMode*4 + 0 // Skips 0
-
-								if newScore > bestScores[idx] {
-									bestScores[idx] = newScore
-									nextStates = append(nextStates, searchState{
+								if generation[idx] != currentGen || newScore > bestScores[idx] {
+									newState := searchState{
 										patternIdx:          newPatternIdx,
 										consecutiveSkipped:  0,
-										matchedSyllables:    state.matchedSyllables + 1,
+										matchedSyllables:    newMatchedSyllables,
 										score:               newScore,
 										lastMatchWasPartial: false,
 										matchMode:           newMode,
-									})
+									}
+									if generation[idx] == currentGen {
+										nextStates[bestIndex[idx]] = newState
+									} else {
+										bestIndex[idx] = len(nextStates)
+										generation[idx] = currentGen
+										nextStates = append(nextStates, newState)
+									}
+									bestScores[idx] = newScore
 								}
 							}
 						}
 					}
 
 					// 2. Try Partial Match (Prefix)
-					if remainingBytes < syllableLen {
-						if matchASCIIPrefix(patternRunes[state.patternIdx:], syllable[:remainingBytes]) {
+					if remainingRunes < syllableLen {
+						if matchASCIIPrefix(patternRunes[state.patternIdx:], syllable[:remainingRunes]) {
 							// Sub-case A: Length 1 (First Letter)
-							if remainingBytes == 1 {
+							if remainingRunes == 1 {
 								if state.matchMode != ModeFullPinyin {
 									newScore := state.score + scoreMatch + 5
 									if state.matchedSyllables > 0 && state.consecutiveSkipped == 0 {
@@ -523,44 +522,58 @@ func matchPinyinStrict(text string, patternRunes []rune) FuzzyMatchResult {
 
 									newMode := ModeFirstLetter
 									newPatternIdx := state.patternIdx + 1
-									// Skips 0
-									idx := newPatternIdx*cols + newMode*4 + 0
+									newMatchedSyllables := state.matchedSyllables + 1
+									idx := (newPatternIdx*cols1+newMatchedSyllables)*cols2 + newMode*4 + 0
 
-									if newScore > bestScores[idx] {
-										bestScores[idx] = newScore
-										nextStates = append(nextStates, searchState{
+									if generation[idx] != currentGen || newScore > bestScores[idx] {
+										newState := searchState{
 											patternIdx:          newPatternIdx,
 											consecutiveSkipped:  0,
-											matchedSyllables:    state.matchedSyllables + 1,
+											matchedSyllables:    newMatchedSyllables,
 											score:               newScore,
 											lastMatchWasPartial: true,
 											matchMode:           newMode,
-										})
+										}
+										if generation[idx] == currentGen {
+											nextStates[bestIndex[idx]] = newState
+										} else {
+											bestIndex[idx] = len(nextStates)
+											generation[idx] = currentGen
+											nextStates = append(nextStates, newState)
+										}
+										bestScores[idx] = newScore
 									}
 								}
 							} else {
 								// Sub-case B: Length > 1
 								if state.matchMode != ModeFirstLetter && state.consecutiveSkipped == 0 {
-									newScore := state.score + int64(remainingBytes)*scoreMatch
+									newScore := state.score + int64(remainingRunes)*scoreMatch
 									if state.matchedSyllables > 0 {
 										newScore += bonusConsecutive
 									}
 
 									newMode := ModeFullPinyin
-									newPatternIdx := state.patternIdx + remainingBytes
-									// Skips 0
-									idx := newPatternIdx*cols + newMode*4 + 0
+									newPatternIdx := state.patternIdx + remainingRunes
+									newMatchedSyllables := state.matchedSyllables + 1
+									idx := (newPatternIdx*cols1+newMatchedSyllables)*cols2 + newMode*4 + 0
 
-									if newScore > bestScores[idx] {
-										bestScores[idx] = newScore
-										nextStates = append(nextStates, searchState{
+									if generation[idx] != currentGen || newScore > bestScores[idx] {
+										newState := searchState{
 											patternIdx:          newPatternIdx,
 											consecutiveSkipped:  0,
-											matchedSyllables:    state.matchedSyllables + 1,
+											matchedSyllables:    newMatchedSyllables,
 											score:               newScore,
 											lastMatchWasPartial: true,
 											matchMode:           newMode,
-										})
+										}
+										if generation[idx] == currentGen {
+											nextStates[bestIndex[idx]] = newState
+										} else {
+											bestIndex[idx] = len(nextStates)
+											generation[idx] = currentGen
+											nextStates = append(nextStates, newState)
+										}
+										bestScores[idx] = newScore
 									}
 								}
 							}
@@ -578,7 +591,6 @@ func matchPinyinStrict(text string, patternRunes []rune) FuzzyMatchResult {
 
 	// Find best finished state
 	for _, state := range states {
-		// Must consume entire pattern
 		if state.patternIdx == len(patternRunes) && state.matchedSyllables > 0 {
 			finalScore := state.score
 			if state.matchedSyllables == len(segments) && !state.lastMatchWasPartial {
@@ -993,31 +1005,6 @@ func containsRunes(s, substr []rune) bool {
 		}
 	}
 	return false
-}
-
-// containsRunesAll checks if all runes in chars are present in s (in order)
-func containsRunesAll(s string, chars []rune) bool {
-	textStr := s
-	for _, pRune := range chars {
-		found := false
-		for i, r := range textStr {
-			// Normalize rune on the fly
-			r = unicode.ToLower(r)
-			if normalized, ok := diacriticsMap[r]; ok {
-				r = normalized
-			}
-
-			if r == pRune {
-				found = true
-				textStr = textStr[i+utf8.RuneLen(r):]
-				break
-			}
-		}
-		if !found {
-			return false
-		}
-	}
-	return true
 }
 
 // equalRune compares two runes for equality (case-insensitive, diacritics-insensitive)

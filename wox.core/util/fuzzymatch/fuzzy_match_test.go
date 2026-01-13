@@ -243,7 +243,7 @@ func TestIsStringMatchScore(t *testing.T) {
 }
 
 // cpu: Apple M1 Max
-// BenchmarkIsStringMatchScore-10    	 1828519	       668.2 ns/op	       0 B/op	       0 allocs/op
+// BenchmarkIsStringMatchScore-10    	 1959001	       618.8 ns/op	       0 B/op	       0 allocs/op
 func BenchmarkIsStringMatchScore(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		FuzzyMatch("刚好今天和老婆去超市 有道词典 Microsoft Word - Document.docx ", "超市", true)
@@ -265,7 +265,7 @@ func BenchmarkFuzzyMatchNoMatch(b *testing.B) {
 }
 
 // cpu: Apple M1 Max
-// BenchmarkIsStringMatchScorePinyin-10    	  211802	      5127 ns/op	       0 B/op	       0 allocs/op
+// BenchmarkIsStringMatchScorePinyin-10    	  697035	      1687 ns/op	       0 B/op	       0 allocs/op
 func BenchmarkIsStringMatchScorePinyin(b *testing.B) {
 	// Scenario: Searching "yd" (YouDao) in the text, forcing Pinyin logic
 	text := "刚好今天和老婆去超市 之前的优化中存在一个过于激进的策略：当句子超过 10 个字时，会强制丢弃多音字的变体以节省计算。这导致在长句中 \"行\" 只保留了 \"hang\" 而丢失了 \"xing\" 有道词典 Microsoft Word - Document.docx "

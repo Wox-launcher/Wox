@@ -21,6 +21,14 @@ var (
 			return &s
 		},
 	}
+
+	uint32Pool = sync.Pool{
+		New: func() interface{} {
+			// Initial capacity 64 uint32s
+			s := make([]uint32, 0, 64)
+			return &s
+		},
+	}
 )
 
 func getRuneBuffer() *[]rune {
@@ -54,6 +62,22 @@ func putIntBuffer(bufPtr *[]int) {
 		return
 	}
 	intPool.Put(bufPtr)
+}
+
+func getUint32Buffer() *[]uint32 {
+	ptr := uint32Pool.Get().(*[]uint32)
+	*ptr = (*ptr)[:0]
+	return ptr
+}
+
+func putUint32Buffer(bufPtr *[]uint32) {
+	if bufPtr == nil {
+		return
+	}
+	if cap(*bufPtr) > maxPoolBufferSize {
+		return
+	}
+	uint32Pool.Put(bufPtr)
 }
 
 var int64Pool = sync.Pool{
