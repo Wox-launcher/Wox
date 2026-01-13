@@ -29,14 +29,24 @@ func getCharPinyin(r rune) []string {
 	return []string{string(r)}
 }
 
-func getPinYin(term string) []string {
+// getPinYin returns pre-processed pinyin variants.
+// Each variant is a slice of pinyin parts (syllables).
+// e.g. for "你好", returns:
+// [
+//
+//	["ni", "hao"],   // full
+//	["n", "h"]       // first letters
+//
+// ]
+func getPinYin(term string) [][]string {
 	if !hasChinese(term) {
-		return []string{term}
+		// Non-Chinese: single variant with single part
+		return [][]string{{term}}
 	}
 
 	// Check cache first
 	if cached, ok := pinyinCache.Load(term); ok {
-		return cached.([]string)
+		return cached.([][]string)
 	}
 
 	// Step 1: Convert to pinyin terms, grouping non-Chinese characters
@@ -68,6 +78,7 @@ func getPinYin(term string) []string {
 	}
 
 	// Step 2: Generate heteronym combinations (Cartesian product)
+	// heteronymTerms will contain the "Full Pinyin" variants as slices of parts
 	var heteronymTerms [][]string
 	for _, pinyinTerm := range pinyinTerms {
 		// if pinyinTerm is too long, only use first letter, otherwise it will generate too many terms and cost too much time
@@ -81,39 +92,30 @@ func getPinYin(term string) []string {
 		heteronymTerms = multiplyTerms(heteronymTerms, pinyinTerm)
 	}
 
-	// Step 3: Generate output strings
-	// We need two types of output:
-	// 1. Full Pinyin: "zhong guo ren"
-	// 2. First Letters: "z g r"
+	// Step 3: Combine Full Pinyin and First Letters
+	// We return [][]string directly, avoiding join/split overhead
 
-	var terms []string
-	terms = make([]string, 0, len(heteronymTerms)*2)
+	variantsCount := len(heteronymTerms) * 2
+	variants := make([][]string, 0, variantsCount)
 
-	// Combine full pinyin
+	// Add Full Pinyin variants
+	variants = append(variants, heteronymTerms...)
+
+	// Add First Letter variants
 	for _, termParts := range heteronymTerms {
-		terms = append(terms, strings.Join(termParts, " "))
-	}
-
-	// Combine first letters
-	// Optimization: Reuse the structure of heteronymTerms but take first char
-	for _, termParts := range heteronymTerms {
-		var sb strings.Builder
-		// Pre-calculate length: len(parts) + (len(parts)-1) for spaces
-		needed := 0
-		if len(termParts) > 0 {
-			needed = len(termParts)*2 - 1
-		}
-		if needed > 0 {
-			sb.Grow(needed)
-			for i, part := range termParts {
-				if i > 0 {
-					sb.WriteByte(' ')
-				}
-				if len(part) > 0 {
-					sb.WriteByte(part[0])
-				}
+		firstLetParts := make([]string, len(termParts))
+		valid := true
+		for i, part := range termParts {
+			if len(part) > 0 {
+				firstLetParts[i] = part[:1]
+			} else {
+				// Should not happen, but safety check
+				valid = false
+				break
 			}
-			terms = append(terms, sb.String())
+		}
+		if valid {
+			variants = append(variants, firstLetParts)
 		}
 	}
 
@@ -123,10 +125,10 @@ func getPinYin(term string) []string {
 		pinyinCache.Clear()
 		pinyinCacheSize.Store(0)
 	}
-	pinyinCache.Store(term, terms)
+	pinyinCache.Store(term, variants)
 	pinyinCacheSize.Add(1)
 
-	return terms
+	return variants
 }
 
 func stringInSlice(term string, terms []string) bool {

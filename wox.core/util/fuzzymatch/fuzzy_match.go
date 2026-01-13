@@ -312,37 +312,38 @@ func isAlnumByte(b byte) bool {
 // Only allows: all first letters (e.g., "nh" for "你好") OR all full pinyin (e.g., "nihao" for "你好")
 // Does NOT allow mixed mode (e.g., "nhao" or "nih")
 func matchPinyinStrict(text string, patternRunes []rune) FuzzyMatchResult {
+	// getPinYin now returns [][]string (pre-split variants)
 	pinyinVariants := getPinYin(text)
 
 	var bestResult FuzzyMatchResult
 
-	// Get pooled buffer once for the entire function
-	// We only need one buffer now since we merge split+filter
-	pinyinPartsBufPtr := getStringSliceBuffer()
-	defer putStringSliceBuffer(pinyinPartsBufPtr)
+	// Get pooled buffer for first letters to avoid allocation
+	firstLettersBufPtr := getRuneBuffer()
+	defer putRuneBuffer(firstLettersBufPtr)
 
-	for _, pinyinText := range pinyinVariants {
-		// Reset and reuse buffer
-		*pinyinPartsBufPtr = (*pinyinPartsBufPtr)[:0]
-
-		// OPTIMIZATION: Combined split + filter in one pass
-		pinyinParts := splitPinyinParts(pinyinText, *pinyinPartsBufPtr)
-		*pinyinPartsBufPtr = pinyinParts
-
+	for _, pinyinParts := range pinyinVariants {
+		// pinyinParts is already []string, no need to split
 		if len(pinyinParts) == 0 {
 			continue
 		}
 
 		// Build first letters buffer
-		firstLettersBufPtr := getRuneBuffer()
 		firstLettersBuf := *firstLettersBufPtr
+		// Reset buffer length but keep capacity
+		firstLettersBuf = firstLettersBuf[:0]
+
 		for _, part := range pinyinParts {
-			// Already lowercase since splitPinyinParts ensures valid pinyin
-			firstLettersBuf = append(firstLettersBuf, rune(part[0]))
+			// Already lowercase since splitPinyinParts ensures valid pinyin?
+			// Wait, getPinYin returns raw parts now. They might be Mixed Case.
+			// matchSyllables handles case-insensitivity.
+			// But for FIRST LETTERS check, we need to handle it.
+			if len(part) > 0 {
+				firstLettersBuf = append(firstLettersBuf, rune(part[0]))
+			}
 		}
 		*firstLettersBufPtr = firstLettersBuf
 
-		// Convert firstLetters to lowercase runes
+		// Convert firstLetters to lowercase runes for comparison
 		for i, r := range firstLettersBuf {
 			firstLettersBuf[i] = toLowerASCII(r)
 		}
@@ -350,7 +351,6 @@ func matchPinyinStrict(text string, patternRunes []rune) FuzzyMatchResult {
 		// Check 1: Exact first letters match - EARLY EXIT for high score
 		if equalRunes(patternRunes, firstLettersBuf) {
 			score := bonusExactMatch + int64(len(patternRunes)*scoreMatch)
-			putRuneBuffer(firstLettersBufPtr)
 			// Early exit: exact first letter match is already very high score
 			return FuzzyMatchResult{IsMatch: true, Score: score}
 		}
@@ -361,10 +361,8 @@ func matchPinyinStrict(text string, patternRunes []rune) FuzzyMatchResult {
 			if score > bestResult.Score {
 				bestResult = FuzzyMatchResult{IsMatch: true, Score: score}
 			}
-			putRuneBuffer(firstLettersBufPtr)
 			continue
 		}
-		putRuneBuffer(firstLettersBufPtr)
 
 		// Check 3: Syllable-level matching
 		if syllableResult := matchSyllables(pinyinParts, patternRunes); syllableResult.IsMatch {
@@ -377,71 +375,12 @@ func matchPinyinStrict(text string, patternRunes []rune) FuzzyMatchResult {
 	return bestResult
 }
 
-// splitPinyinParts splits by space AND filters to valid pinyin parts in ONE PASS
-// This merges splitBySpace + isAlphabeticPinyin into a single traversal
-// Validation is fully inlined for maximum performance
-func splitPinyinParts(s string, buf []string) []string {
-	start := 0
-	hasLower := false
-	isValid := true
-
-	for i := 0; i <= len(s); i++ {
-		// Check for space or end of string
-		if i == len(s) || s[i] == ' ' {
-			// If we found a valid part (has lowercase, all were letters)
-			if i > start && isValid && hasLower {
-				buf = append(buf, s[start:i])
-			}
-			// Reset for next part
-			start = i + 1
-			hasLower = false
-			isValid = true
-		} else {
-			// Check character validity inline
-			c := s[i]
-			if c >= 'a' && c <= 'z' {
-				hasLower = true
-			} else if c < 'A' || c > 'Z' {
-				// Not an ASCII letter - invalidate this part
-				isValid = false
-			}
-		}
-	}
-	return buf
-}
-
 // toLowerASCII is a fast path for lowercase conversion of ASCII letters
 func toLowerASCII(r rune) rune {
 	if r >= 'A' && r <= 'Z' {
 		return r + ('a' - 'A')
 	}
 	return r
-}
-
-// isAlphabeticPinyin checks if a string is a valid pinyin syllable
-// Valid pinyin: contains at least one lowercase ASCII letter
-// Single uppercase letters (like "Q") are NOT pinyin, they're original characters
-// Optimized: uses pure ASCII checks, no unicode table lookups
-func isAlphabeticPinyin(s string) bool {
-	if len(s) == 0 {
-		return false
-	}
-
-	hasLowercase := false
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		// Check if it's an ASCII letter
-		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
-			return false
-		}
-		if c >= 'a' && c <= 'z' {
-			hasLowercase = true
-		}
-	}
-
-	// Must have at least one lowercase letter to be considered pinyin
-	// This filters out single uppercase chars like "Q" which are original text
-	return hasLowercase
 }
 
 // Maximum allowed consecutive skipped syllables before rejecting match

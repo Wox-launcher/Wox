@@ -257,7 +257,7 @@ func BenchmarkFuzzyMatchNoMatch(b *testing.B) {
 }
 
 // cpu: Apple M1 Max
-// BenchmarkIsStringMatchScorePinyin-10    	 1337829	       868.4 ns/op	       0 B/op	       0 allocs/op
+// BenchmarkIsStringMatchScorePinyin-10    	 3031353	       385.6 ns/op	       0 B/op	       0 allocs/op
 func BenchmarkIsStringMatchScorePinyin(b *testing.B) {
 	// Scenario: Searching "yd" (YouDao) in the text, forcing Pinyin logic
 	text := "刚好今天和老婆去超市 有道词典 Microsoft Word - Document.docx "
