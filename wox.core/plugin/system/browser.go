@@ -197,7 +197,6 @@ func (c *BrowserPlugin) newWebsocketServer(ctx context.Context) error {
 
 	c.m = melody.New()
 	c.m.Config.MaxMessageSize = 1024 * 1024 * 10 // 10MB
-	c.m.Config.MessageBufferSize = 1024 * 1024   // 1MB
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {

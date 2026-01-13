@@ -492,7 +492,8 @@ func (m *Metadata) mergeI18n(langCode string, translations map[string]string) {
 		m.I18n = map[string]map[string]string{}
 	}
 	if _, ok := m.I18n[langCode]; !ok {
-		m.I18n[langCode] = map[string]string{}
+		m.I18n[langCode] = translations
+		return
 	}
 
 	for k, v := range translations {
@@ -520,8 +521,12 @@ func flattenI18nJSON(content []byte) (map[string]string, error) {
 			}
 		case []any:
 			for idx, child := range v {
-				nextPrefix := fmt.Sprintf("%s.%d", prefix, idx)
+				nextPrefix := prefix + "." + strconv.Itoa(idx)
 				walk(nextPrefix, child)
+			}
+		case string:
+			if prefix != "" {
+				flattened[prefix] = v
 			}
 		default:
 			if prefix != "" {

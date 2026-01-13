@@ -78,7 +78,6 @@ func writeErrorResponse(w http.ResponseWriter, errMsg string) {
 func serveAndWait(ctx context.Context, port int) {
 	m = melody.New()
 	m.Config.MaxMessageSize = 1024 * 1024 * 10 // 10MB
-	m.Config.MessageBufferSize = 1024 * 1024   // 1MB
 
 	mux := http.NewServeMux()
 

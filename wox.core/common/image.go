@@ -12,6 +12,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 	"wox/util"
 	"wox/util/fileicon"
 
@@ -26,6 +27,36 @@ type WoxImageType = string
 var NOT_PNG_ERR = errors.New("image is not png")
 
 var serverPort int
+
+var pngEncoderBufferPool = sync.Pool{
+	New: func() any {
+		return &png.EncoderBuffer{}
+	},
+}
+
+var fastPngEncoder = &png.Encoder{
+	CompressionLevel: png.BestSpeed,
+	BufferPool:       &pngBufferPool{},
+}
+
+type pngBufferPool struct{}
+
+func (p *pngBufferPool) Get() *png.EncoderBuffer {
+	return pngEncoderBufferPool.Get().(*png.EncoderBuffer)
+}
+
+func (p *pngBufferPool) Put(b *png.EncoderBuffer) {
+	pngEncoderBufferPool.Put(b)
+}
+
+func savePngFast(img image.Image, filename string) error {
+	f, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return fastPngEncoder.Encode(f, img)
+}
 
 const (
 	WoxImageTypeAbsolutePath = "absolute"
@@ -88,7 +119,7 @@ func (w *WoxImage) ToPng() (image.Image, error) {
 		}
 
 		buf := new(bytes.Buffer)
-		encodeErr := png.Encode(buf, img)
+		encodeErr := fastPngEncoder.Encode(buf, img)
 		if encodeErr != nil {
 			return nil, encodeErr
 		}
@@ -261,7 +292,7 @@ func NewWoxImageBase64(data string) WoxImage {
 
 func NewWoxImage(image image.Image) (WoxImage, error) {
 	buf := new(bytes.Buffer)
-	encodeErr := png.Encode(buf, image)
+	encodeErr := fastPngEncoder.Encode(buf, image)
 	if encodeErr != nil {
 		return WoxImage{}, fmt.Errorf("failed to encode image: %s", encodeErr.Error())
 	}
@@ -396,7 +427,7 @@ func resizeImage(ctx context.Context, image WoxImage, size int) (newImage WoxIma
 
 	start := util.GetSystemTimestamp()
 	resizeImg := imaging.Resize(img, width, height, imaging.Lanczos)
-	saveErr := imaging.Save(resizeImg, resizeImgPath)
+	saveErr := savePngFast(resizeImg, resizeImgPath)
 	if saveErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to save resize image: %s", saveErr.Error()))
 		return image
@@ -433,7 +464,7 @@ func cropPngTransparentPaddings(ctx context.Context, woxImage WoxImage) (newImag
 
 	start := util.GetSystemTimestamp()
 	cropImg := cropTransparentPaddings(pngImg)
-	saveErr := imaging.Save(cropImg, cropImgPath)
+	saveErr := savePngFast(cropImg, cropImgPath)
 	if saveErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to save crop image: %s", saveErr.Error()))
 		return woxImage
