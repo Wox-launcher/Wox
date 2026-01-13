@@ -91,13 +91,6 @@ func getPinYin(term string) []PinyinVariant {
 	// heteronymTerms will contain the "Full Pinyin" variants as slices of parts
 	var heteronymTerms [][]string
 	for _, pinyinTerm := range pinyinTerms {
-		// if pinyinTerm is too long, only use first letter, otherwise it will generate too many terms and cost too much time
-		// Optimization cleanup: restored checking input length (pinyinTerms) instead of result length
-		if len(pinyinTerms) > 10 {
-			if len(pinyinTerm) > 1 {
-				pinyinTerm = pinyinTerm[:1]
-			}
-		}
 
 		heteronymTerms = multiplyTerms(heteronymTerms, pinyinTerm)
 	}
