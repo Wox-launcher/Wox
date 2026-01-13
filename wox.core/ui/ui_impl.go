@@ -469,7 +469,10 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 
 	var totalResultCount int
 	var startTimestamp = util.GetSystemTimestamp()
-	var resultDebouncer = util.NewDebouncer(resultDebounceIntervalMs, func(results []plugin.QueryResultUI, reason string) {
+	var firstFlushDelayMs = plugin.GetPluginManager().GetQueryFirstFlushDelayMs(query)
+	logger.Info(ctx, fmt.Sprintf("query %s: %s, first flush delay: %d ms", query.Type, query.String(), firstFlushDelayMs))
+
+	var resultDebouncer = util.NewDebouncer(firstFlushDelayMs, resultDebounceIntervalMs, func(results []plugin.QueryResultUI, reason string) {
 		isFinal := reason == "done"
 
 		// no results during ticks, skip sending

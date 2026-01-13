@@ -6,19 +6,27 @@ import (
 	"time"
 )
 
+// Debouncer batches incoming items and flushes them at specified intervals.
 type Debouncer[T any] struct {
 	items    []T
 	interval int64
 	onFlush  func([]T, string)
 	ticker   *time.Ticker
-	cancel   context.CancelFunc
-	m        sync.Mutex
+
+	// Delay before the first flush occurs
+	firstFlushDelay int64
+	firstFlushTimer *time.Timer
+	firstFlushed    bool
+
+	cancel context.CancelFunc
+	m      sync.Mutex
 }
 
-func NewDebouncer[T any](interval int64, onFlush func([]T, string)) *Debouncer[T] {
+func NewDebouncer[T any](firstFlushDelay int64, interval int64, onFlush func([]T, string)) *Debouncer[T] {
 	return &Debouncer[T]{
-		interval: interval,
-		onFlush:  onFlush,
+		firstFlushDelay: firstFlushDelay,
+		interval:        interval,
+		onFlush:         onFlush,
 	}
 }
 
@@ -28,13 +36,34 @@ func (r *Debouncer[T]) Start(ctx context.Context) {
 	r.ticker = time.NewTicker(time.Duration(r.interval) * time.Millisecond)
 	r.cancel = cancelFunc
 
+	if r.firstFlushDelay > 0 {
+		r.firstFlushTimer = time.AfterFunc(time.Duration(r.firstFlushDelay)*time.Millisecond, func() {
+			r.m.Lock()
+			if !r.firstFlushed {
+				r.firstFlushed = true
+				r.m.Unlock()
+				r.flush(ctx, "first")
+			} else {
+				r.m.Unlock()
+			}
+		})
+	}
+
 	go func() {
 		for {
 			select {
 			case <-r.ticker.C:
-				r.flush(ctx, "tick")
+				r.m.Lock()
+				shouldFlush := r.firstFlushed || r.firstFlushDelay == 0
+				r.m.Unlock()
+				if shouldFlush {
+					r.flush(ctx, "tick")
+				}
 			case <-cancelCtx.Done():
 				r.ticker.Stop()
+				if r.firstFlushTimer != nil {
+					r.firstFlushTimer.Stop()
+				}
 				return
 			}
 		}

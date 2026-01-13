@@ -92,6 +92,9 @@ type Manager struct {
 	// Script plugin monitoring
 	scriptPluginWatcher *fsnotify.Watcher
 	scriptReloadTimers  *util.HashMap[string, *time.Timer]
+
+	// Plugin query latency tracking (EWMA per plugin)
+	pluginQueryLatency *util.HashMap[string, *util.EWMA]
 }
 
 func GetPluginManager() *Manager {
@@ -101,6 +104,7 @@ func GetPluginManager() *Manager {
 			debounceQueryTimer:      util.NewHashMap[string, *debounceTimer](),
 			aiProviders:             util.NewHashMap[string, ai.Provider](),
 			scriptReloadTimers:      util.NewHashMap[string, *time.Timer](),
+			pluginQueryLatency:      util.NewHashMap[string, *util.EWMA](),
 		}
 		logger = util.GetLogger()
 	})
@@ -826,6 +830,9 @@ func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, 
 
 	results = pluginInstance.Plugin.Query(ctx, query)
 	pluginQueryCost := util.GetSystemTimestamp() - start
+
+	m.updatePluginQueryLatency(pluginInstance.Metadata.Id, float64(pluginQueryCost))
+
 	if pluginQueryCost >= 10 {
 		logger.Debug(ctx, fmt.Sprintf("<%s> finish query, result count: %d, cost: %dms, query is slow", pluginInstance.GetName(ctx), len(results), pluginQueryCost))
 	} else {
@@ -1824,6 +1831,52 @@ func (m *Manager) translatePlugin(ctx context.Context, pluginInstance *Instance,
 
 func (m *Manager) GetUI() common.UI {
 	return m.ui
+}
+
+func (m *Manager) updatePluginQueryLatency(pluginId string, costMs float64) {
+	ewma, ok := m.pluginQueryLatency.Load(pluginId)
+	if !ok {
+		ewma = util.NewEWMA(0.3)
+		m.pluginQueryLatency.Store(pluginId, ewma)
+	}
+	ewma.Add(costMs)
+}
+
+func (m *Manager) GetQueryFirstFlushDelayMs(query Query) int64 {
+	const minDelay int64 = 6
+	const maxDelay int64 = 54
+	const defaultDelay int64 = 32
+
+	var totalAvg float64
+	var count int
+
+	for _, pluginInstance := range m.instances {
+		if !m.canOperateQuery(util.NewTraceContext(), pluginInstance, query) {
+			continue
+		}
+		if ewma, ok := m.pluginQueryLatency.Load(pluginInstance.Metadata.Id); ok {
+			if avg, hasValue := ewma.Value(); hasValue {
+				totalAvg += avg
+				count++
+			}
+		}
+	}
+
+	if count == 0 {
+		return defaultDelay
+	}
+
+	avgCost := totalAvg / float64(count)
+	firstDelay := int64(0.8 * avgCost)
+
+	if firstDelay < minDelay {
+		firstDelay = minDelay
+	}
+	if firstDelay > maxDelay {
+		firstDelay = maxDelay
+	}
+
+	return firstDelay
 }
 
 func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Query, *Instance, error) {
