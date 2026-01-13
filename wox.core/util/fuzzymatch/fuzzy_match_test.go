@@ -91,6 +91,11 @@ func TestFuzzxyMatchPinyinPolyphonicCharacter(t *testing.T) {
 	assert.True(t, result.IsMatch)
 }
 
+func TestFuzzyMatchPinyinNonPinyinMixedSearch(t *testing.T) {
+	result := FuzzyMatch("QQ音乐,这是一个测试, 行走", "qqyy", true)
+	assert.True(t, result.IsMatch)
+}
+
 func TestFuzzyMatchScoreComparison(t *testing.T) {
 	// Prefix match should score higher than substring match
 	prefixResult := FuzzyMatch("Terminal", "term", false)

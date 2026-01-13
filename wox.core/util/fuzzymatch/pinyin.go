@@ -33,6 +33,7 @@ func getCharPinyin(r rune) []string {
 type PinyinSegment struct {
 	Syllables    []string // All possible full pinyin syllables for this segment (e.g. ["xing", "hang"])
 	FirstLetters []rune   // Pre-calculated lowercase first letters for each syllable (e.g. ['x', 'h'])
+	IsChinese    bool     // Whether this segment is a Chinese character (true) or non-Chinese text block (false)
 }
 
 // getPinYin returns the pinyin segments for the term.
@@ -49,6 +50,7 @@ func getPinYin(term string) []PinyinSegment {
 		return []PinyinSegment{{
 			Syllables:    []string{term},
 			FirstLetters: []rune{firstLetter},
+			IsChinese:    false,
 		}}
 	}
 
@@ -73,6 +75,7 @@ func getPinYin(term string) []PinyinSegment {
 			segments = append(segments, PinyinSegment{
 				Syllables:    []string{s},
 				FirstLetters: []rune{fl},
+				IsChinese:    false,
 			})
 			asciiBuilder.Reset()
 		}
@@ -96,6 +99,7 @@ func getPinYin(term string) []PinyinSegment {
 			segments = append(segments, PinyinSegment{
 				Syllables:    pinyins,
 				FirstLetters: firstLetters,
+				IsChinese:    true,
 			})
 		} else {
 			// Buffer non-Chinese char

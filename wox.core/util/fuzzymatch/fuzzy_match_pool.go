@@ -29,6 +29,13 @@ var (
 			return &s
 		},
 	}
+
+	searchStatePool = sync.Pool{
+		New: func() interface{} {
+			s := make([]pinyinSearchState, 0, 64)
+			return &s
+		},
+	}
 )
 
 func getRuneBuffer() *[]rune {
@@ -78,6 +85,22 @@ func putUint32Buffer(bufPtr *[]uint32) {
 		return
 	}
 	uint32Pool.Put(bufPtr)
+}
+
+func getSearchStateBuffer() *[]pinyinSearchState {
+	ptr := searchStatePool.Get().(*[]pinyinSearchState)
+	*ptr = (*ptr)[:0]
+	return ptr
+}
+
+func putSearchStateBuffer(bufPtr *[]pinyinSearchState) {
+	if bufPtr == nil {
+		return
+	}
+	if cap(*bufPtr) > maxPoolBufferSize {
+		return
+	}
+	searchStatePool.Put(bufPtr)
 }
 
 var int64Pool = sync.Pool{

@@ -314,6 +314,15 @@ func toLowerASCII(r rune) rune {
 // This prevents matching scattered syllables like "道"..."沿" in "J道:解惑授道-国际软件架构前沿"
 const maxConsecutiveSkippedSyllables = 3
 
+type pinyinSearchState struct {
+	patternIdx          int
+	consecutiveSkipped  int
+	matchedSyllables    int
+	score               int64
+	lastMatchWasPartial bool
+	matchMode           int // 0: Any, 1: FirstLetter, 2: FullPinyin
+}
+
 // matchPinyinStrict performs strict pinyin matching using segment graph.
 // Only allows: all first letters (e.g., "nh" for "你好") OR all full pinyin (e.g., "nihao" for "你好")
 // Does NOT allow mixed mode (e.g., "nhao" or "nih")
@@ -372,20 +381,28 @@ func matchPinyinStrict(text string, patternRunes []rune) FuzzyMatchResult {
 		ModeFullPinyin  = 2
 	)
 
-	type searchState struct {
-		patternIdx          int
-		consecutiveSkipped  int
-		matchedSyllables    int
-		score               int64
-		lastMatchWasPartial bool
-		matchMode           int // 0: Any, 1: FirstLetter, 2: FullPinyin
-	}
-
 	// Active states
-	states := []searchState{{0, 0, 0, 0, false, ModeAny}}
+	statesPtr := getSearchStateBuffer()
+	defer putSearchStateBuffer(statesPtr)
+	states := *statesPtr
+	if cap(states) < 1 {
+		states = make([]pinyinSearchState, 1)
+	} else {
+		states = states[:1]
+	}
+	states[0] = pinyinSearchState{0, 0, 0, 0, false, ModeAny}
+	*statesPtr = states
 
 	// Pre-allocate next states buffer
-	nextStates := make([]searchState, 0, 32)
+	nextStatesPtr := getSearchStateBuffer()
+	defer putSearchStateBuffer(nextStatesPtr)
+	nextStates := *nextStatesPtr
+	if cap(nextStates) < 32 {
+		nextStates = make([]pinyinSearchState, 0, 32)
+	} else {
+		nextStates = nextStates[:0]
+	}
+	*nextStatesPtr = nextStates
 
 	// Optimization: Use flat slices instead of map for deduplication
 	// Key space: (PatternIdx+1) * (MaxMatched+1) * 3 (Modes) * (MaxSkips+1)
@@ -432,6 +449,19 @@ func matchPinyinStrict(text string, patternRunes []rune) FuzzyMatchResult {
 		currentGen++
 
 		for _, state := range states {
+			// Early graduation: if pattern is fully matched, record score and don't continue searching
+			if state.patternIdx == len(patternRunes) && state.matchedSyllables > 0 {
+				finalScore := state.score
+				if state.matchedSyllables == len(segments) && !state.lastMatchWasPartial {
+					finalScore += bonusExactMatch
+				}
+				if !matched || finalScore > bestScore {
+					bestScore = finalScore
+					matched = true
+				}
+				continue
+			}
+
 			// Branch 1: Skip this segment (syllable)
 			if state.matchedSyllables == 0 || state.consecutiveSkipped < maxConsecutiveSkippedSyllables {
 				newScore := state.score
@@ -444,7 +474,7 @@ func matchPinyinStrict(text string, patternRunes []rune) FuzzyMatchResult {
 				// Key: (patternIdx * cols1 + matchedSyllables) * cols2 + Mode * 4 + Skips
 				idx := (state.patternIdx*cols1+state.matchedSyllables)*cols2 + state.matchMode*4 + effectiveSkips
 				if generation[idx] != currentGen || newScore > bestScores[idx] {
-					newState := searchState{
+					newState := pinyinSearchState{
 						patternIdx:          state.patternIdx,
 						consecutiveSkipped:  effectiveSkips,
 						matchedSyllables:    state.matchedSyllables,
@@ -465,7 +495,7 @@ func matchPinyinStrict(text string, patternRunes []rune) FuzzyMatchResult {
 
 			// Branch 2: Try to match
 			if state.patternIdx < len(patternRunes) {
-				for _, syllable := range seg.Syllables {
+				for sylIdx, syllable := range seg.Syllables {
 					remainingRunes := len(patternRunes) - state.patternIdx
 					syllableLen := len(syllable)
 
@@ -479,7 +509,7 @@ func matchPinyinStrict(text string, patternRunes []rune) FuzzyMatchResult {
 								}
 
 								newMode := state.matchMode
-								if syllableLen > 1 {
+								if syllableLen > 1 && seg.IsChinese {
 									newMode = ModeFullPinyin
 								}
 
@@ -488,7 +518,7 @@ func matchPinyinStrict(text string, patternRunes []rune) FuzzyMatchResult {
 								idx := (newPatternIdx*cols1+newMatchedSyllables)*cols2 + newMode*4 + 0
 
 								if generation[idx] != currentGen || newScore > bestScores[idx] {
-									newState := searchState{
+									newState := pinyinSearchState{
 										patternIdx:          newPatternIdx,
 										consecutiveSkipped:  0,
 										matchedSyllables:    newMatchedSyllables,
@@ -526,7 +556,7 @@ func matchPinyinStrict(text string, patternRunes []rune) FuzzyMatchResult {
 									idx := (newPatternIdx*cols1+newMatchedSyllables)*cols2 + newMode*4 + 0
 
 									if generation[idx] != currentGen || newScore > bestScores[idx] {
-										newState := searchState{
+										newState := pinyinSearchState{
 											patternIdx:          newPatternIdx,
 											consecutiveSkipped:  0,
 											matchedSyllables:    newMatchedSyllables,
@@ -558,7 +588,7 @@ func matchPinyinStrict(text string, patternRunes []rune) FuzzyMatchResult {
 									idx := (newPatternIdx*cols1+newMatchedSyllables)*cols2 + newMode*4 + 0
 
 									if generation[idx] != currentGen || newScore > bestScores[idx] {
-										newState := searchState{
+										newState := pinyinSearchState{
 											patternIdx:          newPatternIdx,
 											consecutiveSkipped:  0,
 											matchedSyllables:    newMatchedSyllables,
@@ -579,11 +609,52 @@ func matchPinyinStrict(text string, patternRunes []rune) FuzzyMatchResult {
 							}
 						}
 					}
+
+					// 3. Try First Letter Match (Explicit)
+					// This allows matching the first letter of a syllable even if we have more characters remaining in the pattern.
+					// e.g. Pattern "qqyy" matching "QQ音乐" (QQ, Yin, Yue).
+					// "QQ" consumes "qq" (Full Match). "Yin" consumes "y" (First Letter Match). "Yue" consumes "y" (First Letter Match).
+					// Without this, "Yin" vs "yy" would fail both Full Match (yy!=yin) and Partial Match (yy not prefix of yin).
+					if remainingRunes > 1 && syllableLen > 1 {
+						firstLetter := seg.FirstLetters[sylIdx]
+						if patternRunes[state.patternIdx] == firstLetter {
+							if state.matchMode != ModeFullPinyin {
+								newScore := state.score + scoreMatch + 5
+								if state.matchedSyllables > 0 && state.consecutiveSkipped == 0 {
+									newScore += bonusConsecutive
+								}
+
+								newMode := ModeFirstLetter
+								newPatternIdx := state.patternIdx + 1
+								newMatchedSyllables := state.matchedSyllables + 1
+								idx := (newPatternIdx*cols1+newMatchedSyllables)*cols2 + newMode*4 + 0
+
+								if generation[idx] != currentGen || newScore > bestScores[idx] {
+									newState := pinyinSearchState{
+										patternIdx:          newPatternIdx,
+										consecutiveSkipped:  0,
+										matchedSyllables:    newMatchedSyllables,
+										score:               newScore,
+										lastMatchWasPartial: false, // It's a full match of the first letter logic
+										matchMode:           newMode,
+									}
+									if generation[idx] == currentGen {
+										nextStates[bestIndex[idx]] = newState
+									} else {
+										bestIndex[idx] = len(nextStates)
+										generation[idx] = currentGen
+										nextStates = append(nextStates, newState)
+									}
+									bestScores[idx] = newScore
+								}
+							}
+						}
+					}
 				}
 			}
 		}
 
-		states = append(states[:0], nextStates...)
+		states, nextStates = nextStates, states
 		if len(states) == 0 {
 			break
 		}
