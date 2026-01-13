@@ -83,6 +83,14 @@ func TestFuzzyMatchNoMatch(t *testing.T) {
 	assert.False(t, result.IsMatch)
 }
 
+func TestFuzzxyMatchPinyinPolyphonicCharacter(t *testing.T) {
+	result := FuzzyMatch("这是一个多音字测试, 两行字", "hang", true)
+	assert.True(t, result.IsMatch)
+
+	result = FuzzyMatch("这是一个多音字测试, 行走", "xing", true)
+	assert.True(t, result.IsMatch)
+}
+
 func TestFuzzyMatchScoreComparison(t *testing.T) {
 	// Prefix match should score higher than substring match
 	prefixResult := FuzzyMatch("Terminal", "term", false)
@@ -257,7 +265,7 @@ func BenchmarkFuzzyMatchNoMatch(b *testing.B) {
 }
 
 // cpu: Apple M1 Max
-// BenchmarkIsStringMatchScorePinyin-10    	 3031353	       385.6 ns/op	       0 B/op	       0 allocs/op
+// BenchmarkIsStringMatchScorePinyin-10    	 3435483	       343.9 ns/op	       0 B/op	       0 allocs/op
 func BenchmarkIsStringMatchScorePinyin(b *testing.B) {
 	// Scenario: Searching "yd" (YouDao) in the text, forcing Pinyin logic
 	text := "刚好今天和老婆去超市 有道词典 Microsoft Word - Document.docx "

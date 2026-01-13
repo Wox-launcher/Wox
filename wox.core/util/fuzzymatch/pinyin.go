@@ -29,24 +29,34 @@ func getCharPinyin(r rune) []string {
 	return []string{string(r)}
 }
 
+// PinyinVariant represents a cached pinyin variation
+type PinyinVariant struct {
+	Parts        []string // The pinyin syllables, e.g. ["ni", "hao"]
+	FirstLetters []rune   // Pre-calculated lowercase first letters, e.g. ['n', 'h']
+}
+
 // getPinYin returns pre-processed pinyin variants.
-// Each variant is a slice of pinyin parts (syllables).
-// e.g. for "你好", returns:
-// [
-//
-//	["ni", "hao"],   // full
-//	["n", "h"]       // first letters
-//
-// ]
-func getPinYin(term string) [][]string {
+func getPinYin(term string) []PinyinVariant {
 	if !hasChinese(term) {
 		// Non-Chinese: single variant with single part
-		return [][]string{{term}}
+		// For a non-Chinese term like "Hello", Parts will be ["Hello"].
+		// FirstLetters should be ['h'].
+		// The `toLowerASCII` function is assumed to exist or be handled by the broader context.
+		// If term is empty, term[0] would panic.
+		var firstLetter rune
+		if len(term) > 0 {
+			firstLetter = toLowerASCII(rune(term[0]))
+		}
+
+		return []PinyinVariant{{
+			Parts:        []string{term},
+			FirstLetters: []rune{firstLetter},
+		}}
 	}
 
 	// Check cache first
 	if cached, ok := pinyinCache.Load(term); ok {
-		return cached.([][]string)
+		return cached.([]PinyinVariant)
 	}
 
 	// Step 1: Convert to pinyin terms, grouping non-Chinese characters
@@ -92,14 +102,28 @@ func getPinYin(term string) [][]string {
 		heteronymTerms = multiplyTerms(heteronymTerms, pinyinTerm)
 	}
 
-	// Step 3: Combine Full Pinyin and First Letters
-	// We return [][]string directly, avoiding join/split overhead
-
+	// Step 3: Create PinyinVariants
 	variantsCount := len(heteronymTerms) * 2
-	variants := make([][]string, 0, variantsCount)
+	variants := make([]PinyinVariant, 0, variantsCount)
+
+	// Helper to create variant
+	createVariant := func(parts []string) PinyinVariant {
+		firstLet := make([]rune, len(parts))
+		for i, part := range parts {
+			if len(part) > 0 {
+				firstLet[i] = toLowerASCII(rune(part[0]))
+			}
+		}
+		return PinyinVariant{
+			Parts:        parts,
+			FirstLetters: firstLet,
+		}
+	}
 
 	// Add Full Pinyin variants
-	variants = append(variants, heteronymTerms...)
+	for _, parts := range heteronymTerms {
+		variants = append(variants, createVariant(parts))
+	}
 
 	// Add First Letter variants
 	for _, termParts := range heteronymTerms {
@@ -115,7 +139,7 @@ func getPinYin(term string) [][]string {
 			}
 		}
 		if valid {
-			variants = append(variants, firstLetParts)
+			variants = append(variants, createVariant(firstLetParts))
 		}
 	}
 

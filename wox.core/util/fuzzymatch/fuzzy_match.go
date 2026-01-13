@@ -312,51 +312,26 @@ func isAlnumByte(b byte) bool {
 // Only allows: all first letters (e.g., "nh" for "你好") OR all full pinyin (e.g., "nihao" for "你好")
 // Does NOT allow mixed mode (e.g., "nhao" or "nih")
 func matchPinyinStrict(text string, patternRunes []rune) FuzzyMatchResult {
-	// getPinYin now returns [][]string (pre-split variants)
+	// getPinYin now returns []PinyinVariant
 	pinyinVariants := getPinYin(text)
 
 	var bestResult FuzzyMatchResult
 
-	// Get pooled buffer for first letters to avoid allocation
-	firstLettersBufPtr := getRuneBuffer()
-	defer putRuneBuffer(firstLettersBufPtr)
-
-	for _, pinyinParts := range pinyinVariants {
-		// pinyinParts is already []string, no need to split
-		if len(pinyinParts) == 0 {
+	for _, variant := range pinyinVariants {
+		// variant.FirstLetters is pre-calculated logic
+		if len(variant.FirstLetters) == 0 {
 			continue
 		}
 
-		// Build first letters buffer
-		firstLettersBuf := *firstLettersBufPtr
-		// Reset buffer length but keep capacity
-		firstLettersBuf = firstLettersBuf[:0]
-
-		for _, part := range pinyinParts {
-			// Already lowercase since splitPinyinParts ensures valid pinyin?
-			// Wait, getPinYin returns raw parts now. They might be Mixed Case.
-			// matchSyllables handles case-insensitivity.
-			// But for FIRST LETTERS check, we need to handle it.
-			if len(part) > 0 {
-				firstLettersBuf = append(firstLettersBuf, rune(part[0]))
-			}
-		}
-		*firstLettersBufPtr = firstLettersBuf
-
-		// Convert firstLetters to lowercase runes for comparison
-		for i, r := range firstLettersBuf {
-			firstLettersBuf[i] = toLowerASCII(r)
-		}
-
 		// Check 1: Exact first letters match - EARLY EXIT for high score
-		if equalRunes(patternRunes, firstLettersBuf) {
+		if equalRunes(patternRunes, variant.FirstLetters) {
 			score := bonusExactMatch + int64(len(patternRunes)*scoreMatch)
 			// Early exit: exact first letter match is already very high score
 			return FuzzyMatchResult{IsMatch: true, Score: score}
 		}
 
 		// Check 2: First letters prefix match
-		if hasPrefixRunes(firstLettersBuf, patternRunes) {
+		if hasPrefixRunes(variant.FirstLetters, patternRunes) {
 			score := bonusPrefixMatch + int64(len(patternRunes)*scoreMatch) + bonusFirstCharMatch
 			if score > bestResult.Score {
 				bestResult = FuzzyMatchResult{IsMatch: true, Score: score}
@@ -365,7 +340,8 @@ func matchPinyinStrict(text string, patternRunes []rune) FuzzyMatchResult {
 		}
 
 		// Check 3: Syllable-level matching
-		if syllableResult := matchSyllables(pinyinParts, patternRunes); syllableResult.IsMatch {
+		// matchSyllables needs Parts
+		if syllableResult := matchSyllables(variant.Parts, patternRunes); syllableResult.IsMatch {
 			if syllableResult.Score > bestResult.Score {
 				bestResult = syllableResult
 			}
