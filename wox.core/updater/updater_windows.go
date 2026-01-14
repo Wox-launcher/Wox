@@ -16,6 +16,37 @@ func init() {
 
 type WindowsUpdater struct{}
 
+const windowsUpdateScript = `@echo off
+setlocal
+
+set "TARGET=%~1"
+set "LOG=%~2"
+
+echo [%date% %time%] restart script start >> "%LOG%"
+echo [%date% %time%] args: %* >> "%LOG%"
+if "%TARGET%"=="" (
+  echo [%date% %time%] missing target >> "%LOG%"
+  endlocal
+  exit /b 1
+)
+echo [%date% %time%] target: %TARGET% >> "%LOG%"
+echo [%date% %time%] killing wox-ui.exe >> "%LOG%"
+taskkill /T /F /IM wox-ui.exe >> "%LOG%" 2>&1
+timeout /t 1 /nobreak >nul
+echo [%date% %time%] removing backup >> "%LOG%"
+if exist "%TARGET%.old" (
+  attrib -H -S -R "%TARGET%.old" >> "%LOG%" 2>&1
+  del /f /q "%TARGET%.old" >> "%LOG%" 2>&1
+) else (
+  echo [%date% %time%] backup not found: %TARGET%.old >> "%LOG%"
+)
+echo [%date% %time%] launching >> "%LOG%"
+start "" "%TARGET%" "--update"
+echo [%date% %time%] launched >> "%LOG%"
+endlocal
+del "%~f0" >nul 2>&1
+`
+
 func getExecutablePath() (string, error) {
 	return os.Executable()
 }
@@ -50,11 +81,11 @@ func (u *WindowsUpdater) ApplyUpdate(ctx context.Context, pid int, oldPath, newP
 
 	reportApplyProgress(progress, ApplyUpdateStageRestarting)
 	util.GetLogger().Info(ctx, "starting updated application")
-	scriptPath := filepath.Join(util.GetLocation().GetOthersDirectory(), "windows_update.cmd")
-	if _, statErr := os.Stat(scriptPath); statErr != nil {
-		return fmt.Errorf("failed to find windows update restart script: %w", statErr)
-	}
 	logPath := filepath.Join(util.GetLocation().GetLogDirectory(), "update.log")
+	scriptPath, scriptErr := writeWindowsUpdateScript()
+	if scriptErr != nil {
+		return fmt.Errorf("failed to create windows update restart script: %w", scriptErr)
+	}
 	if _, err := shell.Run("cmd.exe", "/c", "call", scriptPath, oldPath, logPath); err != nil {
 		return fmt.Errorf("failed to start updated application: %w", err)
 	}
@@ -85,4 +116,19 @@ func hideBackupExecutable(ctx context.Context, path string) {
 	if err := syscall.SetFileAttributes(ptr, attrs|syscall.FILE_ATTRIBUTE_HIDDEN); err != nil {
 		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to hide backup executable: %v", err))
 	}
+}
+
+func writeWindowsUpdateScript() (string, error) {
+	tempFile, err := os.CreateTemp("", "wox_update_*.cmd")
+	if err != nil {
+		return "", err
+	}
+	defer tempFile.Close()
+
+	if _, err := tempFile.WriteString(windowsUpdateScript); err != nil {
+		_ = os.Remove(tempFile.Name())
+		return "", err
+	}
+
+	return tempFile.Name(), nil
 }
