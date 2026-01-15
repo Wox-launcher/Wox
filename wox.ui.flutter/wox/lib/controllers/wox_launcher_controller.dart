@@ -94,13 +94,19 @@ class WoxLauncherController extends GetxController {
   int clearQueryResultDelay = 100; // adaptive based on flicker detection
   final windowFlickerDetector = WindowFlickerDetector();
 
+  /// Timer for debouncing resize height on Windows when height increases
+  Timer? resizeHeightDebounceTimer;
+  int resizeHeightDebounceDelay = 100; // ms
+  /// Last window height, used to determine if debounce is needed on Windows
+  double lastWindowHeight = 0;
+
   /// This flag is used to control whether the user can arrow up to show history when the app is first shown.
   var canArrowUpHistory = true;
   final latestQueryHistories = <QueryHistory>[]; // the latest query histories
   var currentQueryHistoryIndex = 0; //  query history index, used to navigate query history
 
   /// Pending preserved index for query refresh
-  int? _pendingPreservedIndex;
+  int? pendingPreservedIndex;
 
   var lastLaunchMode = WoxLaunchModeEnum.WOX_LAUNCH_MODE_CONTINUE.code;
   var lastStartPage = WoxStartPageEnum.WOX_START_PAGE_MRU.code;
@@ -257,10 +263,10 @@ class WoxLauncherController extends GetxController {
 
     // Handle index preservation or reset
     final controller = activeResultViewController;
-    if (_pendingPreservedIndex != null) {
+    if (pendingPreservedIndex != null) {
       // Restore the preserved index
-      final targetIndex = _pendingPreservedIndex!;
-      _pendingPreservedIndex = null; // Clear the pending index
+      final targetIndex = pendingPreservedIndex!;
+      pendingPreservedIndex = null; // Clear the pending index
 
       // Ensure the index is within bounds
       if (targetIndex < controller.items.length) {
@@ -334,11 +340,7 @@ class WoxLauncherController extends GetxController {
         ),
       );
 
-      toolbar.value = ToolbarInfo(
-        text: doctorCheckInfo.value.message,
-        icon: doctorCheckInfo.value.icon,
-        actions: actions,
-      );
+      toolbar.value = ToolbarInfo(text: doctorCheckInfo.value.message, icon: doctorCheckInfo.value.icon, actions: actions);
     } else {
       final updateAction = buildUpdateToolbarAction();
       if (updateAction == null) {
@@ -346,8 +348,7 @@ class WoxLauncherController extends GetxController {
       } else {
         final mergedActions = List<ToolbarActionInfo>.from(toolbar.value.actions ?? []);
         final updateHotkey = updateAction.hotkey.toLowerCase();
-        final hasUpdateAction =
-            mergedActions.any((action) => action.hotkey.toLowerCase() == updateHotkey || action.name == updateAction.name);
+        final hasUpdateAction = mergedActions.any((action) => action.hotkey.toLowerCase() == updateHotkey || action.name == updateAction.name);
         if (!hasUpdateAction) {
           mergedActions.insert(0, updateAction);
         }
@@ -367,10 +368,7 @@ class WoxLauncherController extends GetxController {
       return null;
     }
 
-    return ToolbarActionInfo(
-      name: tr("plugin_doctor_go_to_update"),
-      hotkey: "ctrl+u",
-    );
+    return ToolbarActionInfo(name: tr("plugin_doctor_go_to_update"), hotkey: "ctrl+u");
   }
 
   Future<void> toggleApp(String traceId, ShowAppParams params) async {
@@ -851,7 +849,7 @@ class WoxLauncherController extends GetxController {
     // Save current active index if we need to preserve it
     if (preserveSelectedIndex) {
       final savedActiveIndex = activeResultViewController.activeIndex.value;
-      _pendingPreservedIndex = savedActiveIndex;
+      pendingPreservedIndex = savedActiveIndex;
       Logger.instance.debug(traceId, "preserving selected index: $savedActiveIndex");
     }
 
@@ -1114,8 +1112,21 @@ class WoxLauncherController extends GetxController {
       totalHeight -= WoxThemeUtil.instance.currentTheme.value.appPaddingBottom;
     }
 
-    await windowManager.setSize(Size(WoxSettingUtil.instance.currentSetting.appWidth.toDouble(), totalHeight.toDouble()));
-    windowFlickerDetector.recordResize(totalHeight.toInt());
+    // Windows-specific debounce: if height is increasing, debounce 80ms and only apply the last resize
+    // If height is decreasing or same, resize immediately
+    if (Platform.isWindows && totalHeight > lastWindowHeight) {
+      resizeHeightDebounceTimer?.cancel();
+      resizeHeightDebounceTimer = Timer(Duration(milliseconds: resizeHeightDebounceDelay), () async {
+        lastWindowHeight = totalHeight;
+        await windowManager.setSize(Size(WoxSettingUtil.instance.currentSetting.appWidth.toDouble(), totalHeight.toDouble()));
+        windowFlickerDetector.recordResize(totalHeight.toInt());
+      });
+    } else {
+      resizeHeightDebounceTimer?.cancel();
+      lastWindowHeight = totalHeight;
+      await windowManager.setSize(Size(WoxSettingUtil.instance.currentSetting.appWidth.toDouble(), totalHeight.toDouble()));
+      windowFlickerDetector.recordResize(totalHeight.toInt());
+    }
   }
 
   void updateQueryBoxLineCount(String text) {
@@ -1611,8 +1622,7 @@ class WoxLauncherController extends GetxController {
     final updateAction = buildUpdateToolbarAction();
     if (updateAction != null) {
       final updateHotkey = updateAction.hotkey.toLowerCase();
-      final hasUpdateAction =
-          toolbarActions.any((action) => action.hotkey.toLowerCase() == updateHotkey || action.name == updateAction.name);
+      final hasUpdateAction = toolbarActions.any((action) => action.hotkey.toLowerCase() == updateHotkey || action.name == updateAction.name);
       if (!hasUpdateAction) {
         toolbarActions.insert(0, updateAction);
       }
