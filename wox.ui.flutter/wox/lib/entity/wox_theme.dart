@@ -1,3 +1,6 @@
+import 'package:flutter/material.dart';
+import 'package:wox/utils/color_util.dart';
+
 class WoxTheme {
   late String themeId;
   late String themeName;
@@ -62,6 +65,35 @@ class WoxTheme {
   late String toolbarBackgroundColor;
   late int toolbarPaddingLeft;
   late int toolbarPaddingRight;
+
+  // Cached parsed Color objects for performance
+  late Color appBackgroundColorParsed;
+  late Color resultItemTitleColorParsed;
+  late Color resultItemSubTitleColorParsed;
+  late Color resultItemTailTextColorParsed;
+  late Color resultItemActiveBackgroundColorParsed;
+  late Color resultItemActiveTitleColorParsed;
+  late Color resultItemActiveSubTitleColorParsed;
+  late Color resultItemActiveTailTextColorParsed;
+  late Color queryBoxFontColorParsed;
+  late Color queryBoxBackgroundColorParsed;
+  late Color queryBoxCursorColorParsed;
+  late Color queryBoxTextSelectionBackgroundColorParsed;
+  late Color queryBoxTextSelectionColorParsed;
+  late Color actionContainerBackgroundColorParsed;
+  late Color actionContainerHeaderFontColorParsed;
+  late Color actionItemActiveBackgroundColorParsed;
+  late Color actionItemActiveFontColorParsed;
+  late Color actionItemFontColorParsed;
+  late Color actionQueryBoxFontColorParsed;
+  late Color actionQueryBoxBackgroundColorParsed;
+  late Color previewFontColorParsed;
+  late Color previewSplitLineColorParsed;
+  late Color previewPropertyTitleColorParsed;
+  late Color previewPropertyContentColorParsed;
+  late Color previewTextSelectionColorParsed;
+  late Color toolbarFontColorParsed;
+  late Color toolbarBackgroundColorParsed;
 
   WoxTheme({
     themeId,
@@ -190,6 +222,39 @@ class WoxTheme {
     toolbarBackgroundColor = json['ToolbarBackgroundColor'];
     toolbarPaddingLeft = json['ToolbarPaddingLeft'];
     toolbarPaddingRight = json['ToolbarPaddingRight'];
+
+    // Parse and cache Color objects
+    _parseColors();
+  }
+
+  void _parseColors() {
+    appBackgroundColorParsed = safeFromCssColor(appBackgroundColor);
+    resultItemTitleColorParsed = safeFromCssColor(resultItemTitleColor);
+    resultItemSubTitleColorParsed = safeFromCssColor(resultItemSubTitleColor);
+    resultItemTailTextColorParsed = safeFromCssColor(resultItemTailTextColor);
+    resultItemActiveBackgroundColorParsed = safeFromCssColor(resultItemActiveBackgroundColor);
+    resultItemActiveTitleColorParsed = safeFromCssColor(resultItemActiveTitleColor);
+    resultItemActiveSubTitleColorParsed = safeFromCssColor(resultItemActiveSubTitleColor);
+    resultItemActiveTailTextColorParsed = safeFromCssColor(resultItemActiveTailTextColor);
+    queryBoxFontColorParsed = safeFromCssColor(queryBoxFontColor);
+    queryBoxBackgroundColorParsed = safeFromCssColor(queryBoxBackgroundColor);
+    queryBoxCursorColorParsed = safeFromCssColor(queryBoxCursorColor);
+    queryBoxTextSelectionBackgroundColorParsed = safeFromCssColor(queryBoxTextSelectionBackgroundColor);
+    queryBoxTextSelectionColorParsed = safeFromCssColor(queryBoxTextSelectionColor);
+    actionContainerBackgroundColorParsed = safeFromCssColor(actionContainerBackgroundColor);
+    actionContainerHeaderFontColorParsed = safeFromCssColor(actionContainerHeaderFontColor);
+    actionItemActiveBackgroundColorParsed = safeFromCssColor(actionItemActiveBackgroundColor);
+    actionItemActiveFontColorParsed = safeFromCssColor(actionItemActiveFontColor);
+    actionItemFontColorParsed = safeFromCssColor(actionItemFontColor);
+    actionQueryBoxFontColorParsed = safeFromCssColor(actionQueryBoxFontColor);
+    actionQueryBoxBackgroundColorParsed = safeFromCssColor(actionQueryBoxBackgroundColor);
+    previewFontColorParsed = safeFromCssColor(previewFontColor);
+    previewSplitLineColorParsed = safeFromCssColor(previewSplitLineColor);
+    previewPropertyTitleColorParsed = safeFromCssColor(previewPropertyTitleColor);
+    previewPropertyContentColorParsed = safeFromCssColor(previewPropertyContentColor);
+    previewTextSelectionColorParsed = safeFromCssColor(previewTextSelectionColor);
+    toolbarFontColorParsed = safeFromCssColor(toolbarFontColor);
+    toolbarBackgroundColorParsed = safeFromCssColor(toolbarBackgroundColor);
   }
 
   Map<String, dynamic> toJson() {
@@ -272,6 +337,57 @@ class WoxTheme {
     isAutoAppearance = false;
     darkThemeId = '';
     lightThemeId = '';
+    appBackgroundColor = '';
+    appPaddingLeft = 0;
+    appPaddingTop = 0;
+    appPaddingRight = 0;
+    appPaddingBottom = 0;
+    resultContainerPaddingLeft = 0;
+    resultContainerPaddingTop = 0;
+    resultContainerPaddingRight = 0;
+    resultContainerPaddingBottom = 0;
+    resultItemBorderRadius = 0;
+    resultItemPaddingLeft = 0;
+    resultItemPaddingTop = 0;
+    resultItemPaddingRight = 0;
+    resultItemPaddingBottom = 0;
+    resultItemTitleColor = '';
+    resultItemSubTitleColor = '';
+    resultItemTailTextColor = '';
+    resultItemBorderLeftWidth = 0;
+    resultItemActiveBackgroundColor = '';
+    resultItemActiveTitleColor = '';
+    resultItemActiveSubTitleColor = '';
+    resultItemActiveBorderLeftWidth = 0;
+    resultItemActiveTailTextColor = '';
+    queryBoxFontColor = '';
+    queryBoxBackgroundColor = '';
+    queryBoxBorderRadius = 0;
+    queryBoxCursorColor = '';
+    queryBoxTextSelectionBackgroundColor = '';
+    queryBoxTextSelectionColor = '';
+    actionContainerBackgroundColor = '';
+    actionContainerHeaderFontColor = '';
+    actionContainerPaddingLeft = 0;
+    actionContainerPaddingTop = 0;
+    actionContainerPaddingRight = 0;
+    actionContainerPaddingBottom = 0;
+    actionItemActiveBackgroundColor = '';
+    actionItemActiveFontColor = '';
+    actionItemFontColor = '';
+    actionQueryBoxFontColor = '';
+    actionQueryBoxBackgroundColor = '';
+    actionQueryBoxBorderRadius = 0;
+    previewFontColor = '';
+    previewSplitLineColor = '';
+    previewPropertyTitleColor = '';
+    previewPropertyContentColor = '';
+    previewTextSelectionColor = '';
+    toolbarFontColor = '';
+    toolbarBackgroundColor = '';
+    toolbarPaddingLeft = 0;
+    toolbarPaddingRight = 0;
+    _parseColors();
   }
 }
 

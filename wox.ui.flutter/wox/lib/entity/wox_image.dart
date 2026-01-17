@@ -1,14 +1,30 @@
+import 'dart:io';
+
 import 'package:wox/enums/wox_image_type_enum.dart';
 
 class WoxImage {
   late WoxImageType imageType;
   late String imageData;
 
-  WoxImage({required this.imageType, required this.imageData});
+  // Cached File object and existence check for absolute path images
+  File? cachedFile;
+  bool? cachedFileExists;
+
+  WoxImage({required this.imageType, required this.imageData}) {
+    _cacheFileIfNeeded();
+  }
+
+  void _cacheFileIfNeeded() {
+    if (imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_ABSOLUTE_PATH.code && imageData.isNotEmpty) {
+      cachedFile = File(imageData);
+      cachedFileExists = cachedFile!.existsSync();
+    }
+  }
 
   WoxImage.fromJson(Map<String, dynamic> json) {
     imageType = json['ImageType'];
     imageData = json['ImageData'];
+    _cacheFileIfNeeded();
   }
 
   Map<String, dynamic> toJson() {

@@ -9,7 +9,6 @@ import 'package:wox/enums/wox_list_view_type_enum.dart';
 import 'package:wox/enums/wox_result_tail_type_enum.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_setting_util.dart';
-import 'package:wox/utils/color_util.dart';
 
 import 'wox_hotkey_view.dart';
 
@@ -20,34 +19,44 @@ class WoxListItemView extends StatelessWidget {
   final bool isHovered;
   final WoxListViewType listViewType;
 
+  // Static const values for performance
+  static const _tailPadding = EdgeInsets.only(left: 10.0, right: 5.0);
+  static const _tailItemPadding = EdgeInsets.only(left: 10.0);
+  static const _iconPadding = EdgeInsets.only(left: 5.0, right: 10.0);
+  static const _subtitlePadding = EdgeInsets.only(top: 2.0);
+  static const _quickSelectPadding = EdgeInsets.only(left: 10.0, right: 5.0);
+  static const _quickSelectBorderRadius = BorderRadius.all(Radius.circular(4));
+  static const _strutStyle = StrutStyle(forceStrutHeight: true);
+  static const _iconSize = 30.0;
+  static const _quickSelectSize = 24.0;
+  static const _tailImageSize = 20.0;
+
   const WoxListItemView({super.key, required this.item, required this.woxTheme, required this.isActive, required this.isHovered, required this.listViewType});
 
   Widget buildQuickSelectNumber() {
+    final tailColor = isActive ? woxTheme.resultItemActiveTailTextColorParsed : woxTheme.resultItemTailTextColorParsed;
+    final bgColor = isActive ? woxTheme.resultItemActiveBackgroundColorParsed : woxTheme.appBackgroundColorParsed;
+
     return Padding(
-      padding: const EdgeInsets.only(left: 10.0, right: 5.0),
+      padding: _quickSelectPadding,
       child: Container(
-        width: 24,
-        height: 24,
-        decoration: BoxDecoration(
-          color: safeFromCssColor(isActive ? woxTheme.resultItemActiveTailTextColor : woxTheme.resultItemTailTextColor),
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: safeFromCssColor(isActive ? woxTheme.resultItemActiveTailTextColor : woxTheme.resultItemTailTextColor).withValues(alpha: 0.3), width: 1),
-        ),
-        child: Center(
-          child: Text(
-            item.quickSelectNumber,
-            style: TextStyle(color: safeFromCssColor(isActive ? woxTheme.resultItemActiveBackgroundColor : woxTheme.appBackgroundColor), fontSize: 12, fontWeight: FontWeight.bold),
-          ),
-        ),
+        width: _quickSelectSize,
+        height: _quickSelectSize,
+        decoration: BoxDecoration(color: tailColor, borderRadius: _quickSelectBorderRadius, border: Border.all(color: tailColor.withValues(alpha: 0.3), width: 1)),
+        child: Center(child: Text(item.quickSelectNumber, style: TextStyle(color: bgColor, fontSize: 12, fontWeight: FontWeight.bold))),
       ),
     );
   }
 
   Widget buildTails() {
+    final tailTextColor = isActive ? woxTheme.resultItemActiveTailTextColorParsed : woxTheme.resultItemTailTextColorParsed;
+    final activeBgColor = woxTheme.resultItemActiveBackgroundColorParsed;
+    final actionBgColor = woxTheme.actionContainerBackgroundColorParsed;
+
     return ConstrainedBox(
       constraints: BoxConstraints(maxWidth: WoxSettingUtil.instance.currentSetting.appWidth / 2),
       child: Padding(
-        padding: const EdgeInsets.only(left: 10.0, right: 5.0),
+        padding: _tailPadding,
         child: SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
@@ -55,27 +64,16 @@ class WoxListItemView extends StatelessWidget {
               for (final tail in item.tails)
                 if (tail.type == WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_TEXT.code && tail.text != null)
                   Padding(
-                    padding: const EdgeInsets.only(left: 10.0),
-                    child: Text(
-                      tail.text!,
-                      style: TextStyle(color: safeFromCssColor(isActive ? woxTheme.resultItemActiveTailTextColor : woxTheme.resultItemTailTextColor), fontSize: 12),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      strutStyle: const StrutStyle(forceStrutHeight: true),
-                    ),
+                    padding: _tailItemPadding,
+                    child: Text(tail.text!, style: TextStyle(color: tailTextColor, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis, strutStyle: _strutStyle),
                   )
                 else if (tail.type == WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_HOTKEY.code && tail.hotkey != null)
                   Padding(
-                    padding: const EdgeInsets.only(left: 10.0),
-                    child: WoxHotkeyView(
-                      hotkey: tail.hotkey!,
-                      backgroundColor: isActive ? safeFromCssColor(woxTheme.resultItemActiveBackgroundColor) : safeFromCssColor(woxTheme.actionContainerBackgroundColor),
-                      borderColor: safeFromCssColor(isActive ? woxTheme.resultItemActiveTailTextColor : woxTheme.resultItemTailTextColor),
-                      textColor: safeFromCssColor(isActive ? woxTheme.resultItemActiveTailTextColor : woxTheme.resultItemTailTextColor),
-                    ),
+                    padding: _tailItemPadding,
+                    child: WoxHotkeyView(hotkey: tail.hotkey!, backgroundColor: isActive ? activeBgColor : actionBgColor, borderColor: tailTextColor, textColor: tailTextColor),
                   )
                 else if (tail.type == WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_IMAGE.code && tail.image != null && tail.image!.imageData.isNotEmpty)
-                  Padding(padding: const EdgeInsets.only(left: 10.0), child: WoxImageView(woxImage: tail.image!, width: 20, height: 20)),
+                  Padding(padding: _tailItemPadding, child: WoxImageView(woxImage: tail.image!, width: _tailImageSize, height: _tailImageSize)),
             ],
           ),
         ),
@@ -84,51 +82,83 @@ class WoxListItemView extends StatelessWidget {
   }
 
   Color getBackgroundColor() {
-    if (isActive) {
-      if (listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code) {
-        return safeFromCssColor(woxTheme.actionItemActiveBackgroundColor);
-      }
-      if (listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_CHAT.code) {
-        return safeFromCssColor(woxTheme.resultItemActiveBackgroundColor);
-      }
-      if (listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code) {
-        return safeFromCssColor(woxTheme.resultItemActiveBackgroundColor);
-      }
-    } else if (isHovered) {
-      // Use a lighter version of the active background color for hover state
-      if (listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code) {
-        return safeFromCssColor(woxTheme.actionItemActiveBackgroundColor).withValues(alpha: 0.3);
-      }
-      if (listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_CHAT.code) {
-        return safeFromCssColor(woxTheme.resultItemActiveBackgroundColor).withValues(alpha: 0.3);
-      }
-      if (listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code) {
-        return safeFromCssColor(woxTheme.resultItemActiveBackgroundColor).withValues(alpha: 0.3);
-      }
-    }
+    final isActionType = listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code;
 
+    if (isActive) {
+      return isActionType ? woxTheme.actionItemActiveBackgroundColorParsed : woxTheme.resultItemActiveBackgroundColorParsed;
+    }
+    if (isHovered) {
+      final activeColor = isActionType ? woxTheme.actionItemActiveBackgroundColorParsed : woxTheme.resultItemActiveBackgroundColorParsed;
+      return activeColor.withValues(alpha: 0.3);
+    }
     return Colors.transparent;
   }
 
   @override
   Widget build(BuildContext context) {
     final Stopwatch? buildStopwatch = LoggerSwitch.enableBuildTimeLog ? (Stopwatch()..start()) : null;
+    int? checkpoint1, checkpoint2, checkpoint3;
+
     if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: list item view ${item.title} - container");
 
     final bool isResultList = listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code;
+    final bool isActionList = listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code;
     final BorderRadius borderRadius = isResultList && woxTheme.resultItemBorderRadius > 0 ? BorderRadius.circular(woxTheme.resultItemBorderRadius.toDouble()) : BorderRadius.zero;
 
     // Calculate the maximum border width to reserve space
-    final double maxBorderWidth =
-        listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code
-            ? 0
-            : math.max(woxTheme.resultItemBorderLeftWidth.toDouble(), woxTheme.resultItemActiveBorderLeftWidth.toDouble());
+    final double maxBorderWidth = isActionList ? 0 : math.max(woxTheme.resultItemBorderLeftWidth.toDouble(), woxTheme.resultItemActiveBorderLeftWidth.toDouble());
 
     // Calculate the actual border width for current state
-    final double actualBorderWidth =
-        listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code
-            ? 0
-            : (isActive ? woxTheme.resultItemActiveBorderLeftWidth.toDouble() : woxTheme.resultItemBorderLeftWidth.toDouble());
+    final double actualBorderWidth = isActionList ? 0 : (isActive ? woxTheme.resultItemActiveBorderLeftWidth.toDouble() : woxTheme.resultItemBorderLeftWidth.toDouble());
+
+    // Pre-compute colors for title/subtitle
+    final Color titleColor =
+        isActionList
+            ? (isActive ? woxTheme.actionItemActiveFontColorParsed : woxTheme.actionItemFontColorParsed)
+            : (isActive ? woxTheme.resultItemActiveTitleColorParsed : woxTheme.resultItemTitleColorParsed);
+    final Color subtitleColor = isActive ? woxTheme.resultItemActiveSubTitleColorParsed : woxTheme.resultItemSubTitleColorParsed;
+
+    if (buildStopwatch != null) checkpoint1 = buildStopwatch.elapsedMicroseconds;
+
+    // Build icon widget
+    final Widget iconWidget =
+        item.isGroup
+            ? const SizedBox()
+            : Padding(padding: _iconPadding, child: SizedBox(width: _iconSize, height: _iconSize, child: WoxImageView(woxImage: item.icon, width: _iconSize, height: _iconSize)));
+
+    int? checkpointIcon;
+    if (buildStopwatch != null) checkpointIcon = buildStopwatch.elapsedMicroseconds;
+
+    // Build title/subtitle widget
+    final Widget textWidget = Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(item.title, style: TextStyle(fontSize: 16, color: titleColor), maxLines: 1, overflow: TextOverflow.ellipsis, strutStyle: _strutStyle),
+          if (item.subTitle.isNotEmpty)
+            Padding(
+              padding: _subtitlePadding,
+              child: Text(item.subTitle, style: TextStyle(color: subtitleColor, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis, strutStyle: _strutStyle),
+            ),
+        ],
+      ),
+    );
+
+    int? checkpointText;
+    if (buildStopwatch != null) checkpointText = buildStopwatch.elapsedMicroseconds;
+
+    // Build tails widget
+    final Widget? tailsWidget = item.tails.isNotEmpty ? buildTails() : null;
+
+    int? checkpointTails;
+    if (buildStopwatch != null) checkpointTails = buildStopwatch.elapsedMicroseconds;
+
+    // Build quick select widget
+    final Widget? quickSelectWidget = (item.isShowQuickSelect && item.quickSelectNumber.isNotEmpty) ? buildQuickSelectNumber() : null;
+
+    int? checkpointQuickSelect;
+    if (buildStopwatch != null) checkpointQuickSelect = buildStopwatch.elapsedMicroseconds;
 
     Widget content = Container(
       decoration: BoxDecoration(color: getBackgroundColor()),
@@ -141,54 +171,10 @@ class WoxListItemView extends StatelessWidget {
                 left: woxTheme.resultItemPaddingLeft.toDouble() + maxBorderWidth,
               )
               : EdgeInsets.only(left: maxBorderWidth),
-      child: Row(
-        children: [
-          item.isGroup
-              ? const SizedBox()
-              : Padding(
-                padding: const EdgeInsets.only(left: 5.0, right: 10.0),
-                child: SizedBox(width: 30, height: 30, child: WoxImageView(woxImage: item.icon, width: 30, height: 30)),
-              ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  item.title,
-                  style: TextStyle(
-                    fontSize: 16,
-                    color:
-                        listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code
-                            ? safeFromCssColor(isActive ? woxTheme.actionItemActiveFontColor : woxTheme.actionItemFontColor)
-                            : safeFromCssColor(isActive ? woxTheme.resultItemActiveTitleColor : woxTheme.resultItemTitleColor),
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  strutStyle: const StrutStyle(forceStrutHeight: true),
-                ),
-                item.subTitle.isNotEmpty
-                    ? Padding(
-                      padding: const EdgeInsets.only(top: 2.0),
-                      child: Text(
-                        item.subTitle,
-                        style: TextStyle(color: safeFromCssColor(isActive ? woxTheme.resultItemActiveSubTitleColor : woxTheme.resultItemSubTitleColor), fontSize: 13),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        strutStyle: const StrutStyle(forceStrutHeight: true),
-                      ),
-                    )
-                    : const SizedBox(),
-              ],
-            ),
-          ),
-          // Tails
-          if (item.tails.isNotEmpty) buildTails() else const SizedBox(),
-          // Quick select number
-          if (item.isShowQuickSelect && item.quickSelectNumber.isNotEmpty) buildQuickSelectNumber(),
-        ],
-      ),
+      child: Row(children: [iconWidget, textWidget, if (tailsWidget != null) tailsWidget, if (quickSelectWidget != null) quickSelectWidget]),
     );
+
+    if (buildStopwatch != null) checkpoint2 = buildStopwatch.elapsedMicroseconds;
 
     if (borderRadius != BorderRadius.zero) {
       content = ClipRRect(borderRadius: borderRadius, child: content);
@@ -206,7 +192,7 @@ class WoxListItemView extends StatelessWidget {
             child: Container(
               width: actualBorderWidth,
               decoration: BoxDecoration(
-                color: safeFromCssColor(woxTheme.resultItemActiveBackgroundColor),
+                color: woxTheme.resultItemActiveBackgroundColorParsed,
                 borderRadius: borderRadius != BorderRadius.zero ? BorderRadius.only(topLeft: borderRadius.topLeft, bottomLeft: borderRadius.bottomLeft) : BorderRadius.zero,
               ),
             ),
@@ -216,8 +202,17 @@ class WoxListItemView extends StatelessWidget {
     }
 
     if (buildStopwatch != null) {
+      checkpoint3 = buildStopwatch.elapsedMicroseconds;
       buildStopwatch.stop();
-      Logger.instance.debug(const UuidV4().generate(), "flutter build metric: list item view ${item.title} - ${buildStopwatch.elapsedMicroseconds}μs");
+      final iconTime = checkpointIcon! - checkpoint1!;
+      final textTime = checkpointText! - checkpointIcon;
+      final tailsTime = checkpointTails! - checkpointText;
+      final quickSelectTime = checkpointQuickSelect! - checkpointTails;
+      final containerTime = checkpoint2! - checkpointQuickSelect;
+      Logger.instance.debug(
+        const UuidV4().generate(),
+        "flutter build metric: list item ${item.title} - total:${buildStopwatch.elapsedMicroseconds}μs, prep:${checkpoint1}μs, icon:${iconTime}μs, text:${textTime}μs, tails:${tailsTime}μs, qs:${quickSelectTime}μs, container:${containerTime}μs, wrap:${checkpoint3! - checkpoint2}μs",
+      );
     }
 
     return content;

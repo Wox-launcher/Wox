@@ -20,8 +20,11 @@ class WoxImageView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final Stopwatch? buildStopwatch = LoggerSwitch.enableBuildTimeLog ? (Stopwatch()..start()) : null;
+    late final Widget content;
+
     if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_URL.code) {
-      return Image.network(
+      content = Image.network(
         woxImage.imageData,
         width: width,
         height: height,
@@ -47,66 +50,48 @@ class WoxImageView extends StatelessWidget {
           );
         },
       );
-    }
-    if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_ABSOLUTE_PATH.code) {
-      if (!File(woxImage.imageData).existsSync()) {
-        return const SizedBox(width: 24, height: 24);
+    } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_ABSOLUTE_PATH.code) {
+      // Use cached File and existence check from WoxImage
+      if (woxImage.cachedFileExists != true || woxImage.cachedFile == null) {
+        content = const SizedBox(width: 24, height: 24);
+      } else {
+        content = Image.file(woxImage.cachedFile!, width: width, height: height, fit: BoxFit.contain, gaplessPlayback: true);
       }
-      return Image.file(
-        File(woxImage.imageData),
-        width: width,
-        height: height,
-        fit: BoxFit.contain,
-        gaplessPlayback: true,
-      );
-    }
-    if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code) {
-      return SizedBox(
-        width: width,
-        height: height,
-        child: SvgPicture.string(woxImage.imageData),
-      );
-    }
-    if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code) {
+    } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code) {
+      content = SizedBox(width: width, height: height, child: SvgPicture.string(woxImage.imageData));
+    } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code) {
       // on windows, the emoji has default padding, so we need to offset it a bit
       var offset = const Offset(0, 0);
       if (Platform.isWindows) {
         offset = const Offset(-6, -2);
       }
 
-      return SizedBox(
+      content = SizedBox(
         width: width,
         height: height,
-        child: Transform.translate(
-          offset: offset,
-          child: Transform.scale(
-            scale: 1.03,
-            child: Text(woxImage.imageData, style: TextStyle(fontSize: width, height: 1.0)),
-          ),
-        ),
+        child: Transform.translate(offset: offset, child: Transform.scale(scale: 1.03, child: Text(woxImage.imageData, style: TextStyle(fontSize: width, height: 1.0)))),
       );
-    }
-    if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_LOTTIE.code) {
+    } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_LOTTIE.code) {
       final bytes = utf8.encode(woxImage.imageData);
-      return Lottie.memory(bytes, width: width, height: height);
-    }
-    if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_THEME.code) {
-      return WoxThemeIconView(theme: WoxTheme.fromJson(jsonDecode(woxImage.imageData)), width: width, height: height);
-    }
-    if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_BASE64.code) {
+      content = Lottie.memory(bytes, width: width, height: height);
+    } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_THEME.code) {
+      content = WoxThemeIconView(theme: WoxTheme.fromJson(jsonDecode(woxImage.imageData)), width: width, height: height);
+    } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_BASE64.code) {
       if (!woxImage.imageData.contains(";base64,")) {
-        return Text("Invalid image data: ${woxImage.imageData}", style: const TextStyle(color: Colors.red));
+        content = Text("Invalid image data: ${woxImage.imageData}", style: const TextStyle(color: Colors.red));
+      } else {
+        final imageData = woxImage.imageData.split(";base64,")[1];
+        content = Image.memory(base64Decode(imageData), width: width, height: height, fit: BoxFit.contain, gaplessPlayback: true);
       }
-      final imageData = woxImage.imageData.split(";base64,")[1];
-      return Image.memory(
-        base64Decode(imageData),
-        width: width,
-        height: height,
-        fit: BoxFit.contain,
-        gaplessPlayback: true,
-      );
+    } else {
+      content = const SizedBox(width: 24, height: 24);
     }
 
-    return const SizedBox(width: 24, height: 24);
+    if (buildStopwatch != null) {
+      buildStopwatch.stop();
+      Logger.instance.debug(const UuidV4().generate(), "flutter build metric: image view ${woxImage.imageType} - ${buildStopwatch.elapsedMicroseconds}μs");
+    }
+
+    return content;
   }
 }
