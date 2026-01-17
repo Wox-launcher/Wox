@@ -14,6 +14,7 @@ import 'package:wox/enums/wox_direction_enum.dart';
 import 'package:wox/enums/wox_list_view_type_enum.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/color_util.dart';
+import 'package:wox/utils/log.dart';
 
 class WoxListView<T> extends StatelessWidget {
   final WoxListController<T> controller;
@@ -35,6 +36,7 @@ class WoxListView<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final Stopwatch? buildStopwatch = LoggerSwitch.enableBuildTimeLog ? (Stopwatch()..start()) : null;
     return LayoutBuilder(
       builder: (context, constraints) {
         const filterTopPadding = 6.0;
@@ -53,7 +55,7 @@ class WoxListView<T> extends StatelessWidget {
                 ? WoxThemeUtil.instance.getActionItemHeight()
                 : WoxThemeUtil.instance.getResultListViewHeightByCount(1);
 
-        return Column(
+        final content = Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             ConstrainedBox(
@@ -231,6 +233,16 @@ class WoxListView<T> extends StatelessWidget {
               ),
           ],
         );
+
+        if (buildStopwatch != null) {
+          buildStopwatch.stop();
+          Logger.instance.debug(
+            const UuidV4().generate(),
+            "flutter build metric: build time: list view - ${buildStopwatch.elapsedMicroseconds}μs, items: ${controller.items.length}",
+          );
+        }
+
+        return content;
       },
     );
   }

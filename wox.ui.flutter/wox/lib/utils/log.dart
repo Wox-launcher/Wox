@@ -15,10 +15,7 @@ class Logger {
   Logger._privateConstructor();
 
   Future<void> initLogger() async {
-    _logger = xlogger.Logger(
-      printer: xlogger.SimplePrinter(printTime: true, colors: false),
-      output: WoxFileOutput(),
-    );
+    _logger = xlogger.Logger(printer: xlogger.SimplePrinter(printTime: true, colors: false), output: WoxFileOutput());
   }
 
   static final Logger _instance = Logger._privateConstructor();
@@ -58,11 +55,7 @@ class Logger {
         traceId: traceId,
         type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
         method: WoxMsgMethodEnum.WOX_MSG_METHOD_Log.code,
-        data: {
-          "traceId": traceId,
-          "level": level,
-          "message": message,
-        },
+        data: {"traceId": traceId, "level": level, "message": message},
       );
       WoxWebsocketMsgUtil.instance.sendMessage(msg);
     }
@@ -72,6 +65,7 @@ class Logger {
 class LoggerSwitch {
   static bool enablePaintLog = false;
   static bool enableSizeAndPositionLog = false;
+  static bool enableBuildTimeLog = true;
 }
 
 class WoxFileOutput extends xlogger.LogOutput {

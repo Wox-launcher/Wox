@@ -20,14 +20,7 @@ class WoxListItemView extends StatelessWidget {
   final bool isHovered;
   final WoxListViewType listViewType;
 
-  const WoxListItemView({
-    super.key,
-    required this.item,
-    required this.woxTheme,
-    required this.isActive,
-    required this.isHovered,
-    required this.listViewType,
-  });
+  const WoxListItemView({super.key, required this.item, required this.woxTheme, required this.isActive, required this.isHovered, required this.listViewType});
 
   Widget buildQuickSelectNumber() {
     return Padding(
@@ -38,19 +31,12 @@ class WoxListItemView extends StatelessWidget {
         decoration: BoxDecoration(
           color: safeFromCssColor(isActive ? woxTheme.resultItemActiveTailTextColor : woxTheme.resultItemTailTextColor),
           borderRadius: BorderRadius.circular(4),
-          border: Border.all(
-            color: safeFromCssColor(isActive ? woxTheme.resultItemActiveTailTextColor : woxTheme.resultItemTailTextColor).withValues(alpha: 0.3),
-            width: 1,
-          ),
+          border: Border.all(color: safeFromCssColor(isActive ? woxTheme.resultItemActiveTailTextColor : woxTheme.resultItemTailTextColor).withValues(alpha: 0.3), width: 1),
         ),
         child: Center(
           child: Text(
             item.quickSelectNumber,
-            style: TextStyle(
-              color: safeFromCssColor(isActive ? woxTheme.resultItemActiveBackgroundColor : woxTheme.appBackgroundColor),
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(color: safeFromCssColor(isActive ? woxTheme.resultItemActiveBackgroundColor : woxTheme.appBackgroundColor), fontSize: 12, fontWeight: FontWeight.bold),
           ),
         ),
       ),
@@ -72,15 +58,10 @@ class WoxListItemView extends StatelessWidget {
                     padding: const EdgeInsets.only(left: 10.0),
                     child: Text(
                       tail.text!,
-                      style: TextStyle(
-                        color: safeFromCssColor(isActive ? woxTheme.resultItemActiveTailTextColor : woxTheme.resultItemTailTextColor),
-                        fontSize: 12,
-                      ),
+                      style: TextStyle(color: safeFromCssColor(isActive ? woxTheme.resultItemActiveTailTextColor : woxTheme.resultItemTailTextColor), fontSize: 12),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      strutStyle: const StrutStyle(
-                        forceStrutHeight: true,
-                      ),
+                      strutStyle: const StrutStyle(forceStrutHeight: true),
                     ),
                   )
                 else if (tail.type == WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_HOTKEY.code && tail.hotkey != null)
@@ -94,14 +75,7 @@ class WoxListItemView extends StatelessWidget {
                     ),
                   )
                 else if (tail.type == WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_IMAGE.code && tail.image != null && tail.image!.imageData.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 10.0),
-                    child: WoxImageView(
-                      woxImage: tail.image!,
-                      width: 20,
-                      height: 20,
-                    ),
-                  ),
+                  Padding(padding: const EdgeInsets.only(left: 10.0), child: WoxImageView(woxImage: tail.image!, width: 20, height: 20)),
             ],
           ),
         ),
@@ -138,83 +112,75 @@ class WoxListItemView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final Stopwatch? buildStopwatch = LoggerSwitch.enableBuildTimeLog ? (Stopwatch()..start()) : null;
     if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: list item view ${item.title} - container");
 
     final bool isResultList = listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code;
     final BorderRadius borderRadius = isResultList && woxTheme.resultItemBorderRadius > 0 ? BorderRadius.circular(woxTheme.resultItemBorderRadius.toDouble()) : BorderRadius.zero;
 
     // Calculate the maximum border width to reserve space
-    final double maxBorderWidth = listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code
-        ? 0
-        : math.max(woxTheme.resultItemBorderLeftWidth.toDouble(), woxTheme.resultItemActiveBorderLeftWidth.toDouble());
+    final double maxBorderWidth =
+        listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code
+            ? 0
+            : math.max(woxTheme.resultItemBorderLeftWidth.toDouble(), woxTheme.resultItemActiveBorderLeftWidth.toDouble());
 
     // Calculate the actual border width for current state
-    final double actualBorderWidth = listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code
-        ? 0
-        : (isActive ? woxTheme.resultItemActiveBorderLeftWidth.toDouble() : woxTheme.resultItemBorderLeftWidth.toDouble());
+    final double actualBorderWidth =
+        listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code
+            ? 0
+            : (isActive ? woxTheme.resultItemActiveBorderLeftWidth.toDouble() : woxTheme.resultItemBorderLeftWidth.toDouble());
 
     Widget content = Container(
-      decoration: BoxDecoration(
-        color: getBackgroundColor(),
-      ),
-      padding: isResultList
-          ? EdgeInsets.only(
-              top: woxTheme.resultItemPaddingTop.toDouble(),
-              right: woxTheme.resultItemPaddingRight.toDouble(),
-              bottom: woxTheme.resultItemPaddingBottom.toDouble(),
-              left: woxTheme.resultItemPaddingLeft.toDouble() + maxBorderWidth,
-            )
-          : EdgeInsets.only(left: maxBorderWidth),
+      decoration: BoxDecoration(color: getBackgroundColor()),
+      padding:
+          isResultList
+              ? EdgeInsets.only(
+                top: woxTheme.resultItemPaddingTop.toDouble(),
+                right: woxTheme.resultItemPaddingRight.toDouble(),
+                bottom: woxTheme.resultItemPaddingBottom.toDouble(),
+                left: woxTheme.resultItemPaddingLeft.toDouble() + maxBorderWidth,
+              )
+              : EdgeInsets.only(left: maxBorderWidth),
       child: Row(
         children: [
           item.isGroup
               ? const SizedBox()
               : Padding(
-                  padding: const EdgeInsets.only(left: 5.0, right: 10.0),
-                  child: SizedBox(
-                    width: 30,
-                    height: 30,
-                    child: WoxImageView(
-                      woxImage: item.icon,
-                      width: 30,
-                      height: 30,
-                    ),
-                  ),
-                ),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
-              Text(
-                item.title,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code
-                      ? safeFromCssColor(isActive ? woxTheme.actionItemActiveFontColor : woxTheme.actionItemFontColor)
-                      : safeFromCssColor(isActive ? woxTheme.resultItemActiveTitleColor : woxTheme.resultItemTitleColor),
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                strutStyle: const StrutStyle(
-                  forceStrutHeight: true,
-                ),
+                padding: const EdgeInsets.only(left: 5.0, right: 10.0),
+                child: SizedBox(width: 30, height: 30, child: WoxImageView(woxImage: item.icon, width: 30, height: 30)),
               ),
-              item.subTitle.isNotEmpty
-                  ? Padding(
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  item.title,
+                  style: TextStyle(
+                    fontSize: 16,
+                    color:
+                        listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code
+                            ? safeFromCssColor(isActive ? woxTheme.actionItemActiveFontColor : woxTheme.actionItemFontColor)
+                            : safeFromCssColor(isActive ? woxTheme.resultItemActiveTitleColor : woxTheme.resultItemTitleColor),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  strutStyle: const StrutStyle(forceStrutHeight: true),
+                ),
+                item.subTitle.isNotEmpty
+                    ? Padding(
                       padding: const EdgeInsets.only(top: 2.0),
                       child: Text(
                         item.subTitle,
-                        style: TextStyle(
-                          color: safeFromCssColor(isActive ? woxTheme.resultItemActiveSubTitleColor : woxTheme.resultItemSubTitleColor),
-                          fontSize: 13,
-                        ),
+                        style: TextStyle(color: safeFromCssColor(isActive ? woxTheme.resultItemActiveSubTitleColor : woxTheme.resultItemSubTitleColor), fontSize: 13),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        strutStyle: const StrutStyle(
-                          forceStrutHeight: true,
-                        ),
+                        strutStyle: const StrutStyle(forceStrutHeight: true),
                       ),
                     )
-                  : const SizedBox(),
-            ]),
+                    : const SizedBox(),
+              ],
+            ),
           ),
           // Tails
           if (item.tails.isNotEmpty) buildTails() else const SizedBox(),
@@ -225,10 +191,7 @@ class WoxListItemView extends StatelessWidget {
     );
 
     if (borderRadius != BorderRadius.zero) {
-      content = ClipRRect(
-        borderRadius: borderRadius,
-        child: content,
-      );
+      content = ClipRRect(borderRadius: borderRadius, child: content);
     }
 
     // Use Stack to overlay the left border indicator without affecting layout
@@ -244,17 +207,17 @@ class WoxListItemView extends StatelessWidget {
               width: actualBorderWidth,
               decoration: BoxDecoration(
                 color: safeFromCssColor(woxTheme.resultItemActiveBackgroundColor),
-                borderRadius: borderRadius != BorderRadius.zero
-                    ? BorderRadius.only(
-                        topLeft: borderRadius.topLeft,
-                        bottomLeft: borderRadius.bottomLeft,
-                      )
-                    : BorderRadius.zero,
+                borderRadius: borderRadius != BorderRadius.zero ? BorderRadius.only(topLeft: borderRadius.topLeft, bottomLeft: borderRadius.bottomLeft) : BorderRadius.zero,
               ),
             ),
           ),
         ],
       );
+    }
+
+    if (buildStopwatch != null) {
+      buildStopwatch.stop();
+      Logger.instance.debug(const UuidV4().generate(), "flutter build metric: list item view ${item.title} - ${buildStopwatch.elapsedMicroseconds}μs");
     }
 
     return content;
