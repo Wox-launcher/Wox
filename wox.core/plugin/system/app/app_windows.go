@@ -390,6 +390,14 @@ func (a *WindowsRetriever) GetProcessStat(ctx context.Context, app appInfo) (*Pr
 
 	// Collect stats from all processes with the same path
 	appPathLower := strings.ToLower(filepath.Clean(app.Path))
+	if strings.HasSuffix(appPathLower, ".lnk") {
+		if targetPath, err := a.resolveShortcutWithAPI(ctx, app.Path); err == nil {
+			resolvedLower := strings.ToLower(filepath.Clean(targetPath))
+			if resolvedLower != "" {
+				appPathLower = resolvedLower
+			}
+		}
+	}
 	var totalMemory float64
 	var totalKernelTime int64
 	var totalUserTime int64
@@ -655,6 +663,14 @@ func (a *WindowsRetriever) GetPid(ctx context.Context, app appInfo) int {
 	// For desktop apps, match by path
 	if app.Type == AppTypeDesktop {
 		appPathLower := strings.ToLower(filepath.Clean(app.Path))
+		if strings.HasSuffix(appPathLower, ".lnk") {
+			if targetPath, err := a.resolveShortcutWithAPI(ctx, app.Path); err == nil {
+				resolvedLower := strings.ToLower(filepath.Clean(targetPath))
+				if resolvedLower != "" {
+					appPathLower = resolvedLower
+				}
+			}
+		}
 		for _, proc := range processes {
 			procPathLower := strings.ToLower(filepath.Clean(proc.Path))
 			if procPathLower == appPathLower {
