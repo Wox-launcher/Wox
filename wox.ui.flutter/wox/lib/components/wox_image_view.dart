@@ -20,7 +20,6 @@ class WoxImageView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Stopwatch? buildStopwatch = LoggerSwitch.enableBuildTimeLog ? (Stopwatch()..start()) : null;
     late final Widget content;
 
     if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_URL.code) {
@@ -85,11 +84,6 @@ class WoxImageView extends StatelessWidget {
       }
     } else {
       content = const SizedBox(width: 24, height: 24);
-    }
-
-    if (buildStopwatch != null) {
-      buildStopwatch.stop();
-      Logger.instance.debug(const UuidV4().generate(), "flutter build metric: image view ${woxImage.imageType} - ${buildStopwatch.elapsedMicroseconds}μs");
     }
 
     return content;

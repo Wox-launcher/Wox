@@ -96,9 +96,6 @@ class WoxListItemView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Stopwatch? buildStopwatch = LoggerSwitch.enableBuildTimeLog ? (Stopwatch()..start()) : null;
-    int? checkpoint1, checkpoint2, checkpoint3;
-
     if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: list item view ${item.title} - container");
 
     final bool isResultList = listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code;
@@ -118,16 +115,11 @@ class WoxListItemView extends StatelessWidget {
             : (isActive ? woxTheme.resultItemActiveTitleColorParsed : woxTheme.resultItemTitleColorParsed);
     final Color subtitleColor = isActive ? woxTheme.resultItemActiveSubTitleColorParsed : woxTheme.resultItemSubTitleColorParsed;
 
-    if (buildStopwatch != null) checkpoint1 = buildStopwatch.elapsedMicroseconds;
-
     // Build icon widget
     final Widget iconWidget =
         item.isGroup
             ? const SizedBox()
             : Padding(padding: _iconPadding, child: SizedBox(width: _iconSize, height: _iconSize, child: WoxImageView(woxImage: item.icon, width: _iconSize, height: _iconSize)));
-
-    int? checkpointIcon;
-    if (buildStopwatch != null) checkpointIcon = buildStopwatch.elapsedMicroseconds;
 
     // Build title/subtitle widget
     final Widget textWidget = Expanded(
@@ -145,20 +137,11 @@ class WoxListItemView extends StatelessWidget {
       ),
     );
 
-    int? checkpointText;
-    if (buildStopwatch != null) checkpointText = buildStopwatch.elapsedMicroseconds;
-
     // Build tails widget
     final Widget? tailsWidget = item.tails.isNotEmpty ? buildTails() : null;
 
-    int? checkpointTails;
-    if (buildStopwatch != null) checkpointTails = buildStopwatch.elapsedMicroseconds;
-
     // Build quick select widget
     final Widget? quickSelectWidget = (item.isShowQuickSelect && item.quickSelectNumber.isNotEmpty) ? buildQuickSelectNumber() : null;
-
-    int? checkpointQuickSelect;
-    if (buildStopwatch != null) checkpointQuickSelect = buildStopwatch.elapsedMicroseconds;
 
     Widget content = Container(
       decoration: BoxDecoration(color: getBackgroundColor()),
@@ -173,8 +156,6 @@ class WoxListItemView extends StatelessWidget {
               : EdgeInsets.only(left: maxBorderWidth),
       child: Row(children: [iconWidget, textWidget, if (tailsWidget != null) tailsWidget, if (quickSelectWidget != null) quickSelectWidget]),
     );
-
-    if (buildStopwatch != null) checkpoint2 = buildStopwatch.elapsedMicroseconds;
 
     if (borderRadius != BorderRadius.zero) {
       content = ClipRRect(borderRadius: borderRadius, child: content);
@@ -198,20 +179,6 @@ class WoxListItemView extends StatelessWidget {
             ),
           ),
         ],
-      );
-    }
-
-    if (buildStopwatch != null) {
-      checkpoint3 = buildStopwatch.elapsedMicroseconds;
-      buildStopwatch.stop();
-      final iconTime = checkpointIcon! - checkpoint1!;
-      final textTime = checkpointText! - checkpointIcon;
-      final tailsTime = checkpointTails! - checkpointText;
-      final quickSelectTime = checkpointQuickSelect! - checkpointTails;
-      final containerTime = checkpoint2! - checkpointQuickSelect;
-      Logger.instance.debug(
-        const UuidV4().generate(),
-        "flutter build metric: list item ${item.title} - total:${buildStopwatch.elapsedMicroseconds}μs, prep:${checkpoint1}μs, icon:${iconTime}μs, text:${textTime}μs, tails:${tailsTime}μs, qs:${quickSelectTime}μs, container:${containerTime}μs, wrap:${checkpoint3! - checkpoint2}μs",
       );
     }
 

@@ -36,20 +36,13 @@ class WoxListView<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Stopwatch? buildStopwatch = LoggerSwitch.enableBuildTimeLog ? (Stopwatch()..start()) : null;
-    int? cp1, cp2, cp3, cp4;
-
     // Fast path: when showFilter is false, we don't need LayoutBuilder
     // because we don't need to measure available space for filter
     if (!showFilter) {
-      if (buildStopwatch != null) cp1 = buildStopwatch.elapsedMicroseconds;
-
       final itemHeight =
           listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code || listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_CHAT.code
               ? WoxThemeUtil.instance.getActionItemHeight()
               : WoxThemeUtil.instance.getResultListViewHeightByCount(1);
-
-      if (buildStopwatch != null) cp2 = buildStopwatch.elapsedMicroseconds;
 
       final listWidget = ConstrainedBox(
         constraints: BoxConstraints(maxHeight: maxHeight),
@@ -128,26 +121,12 @@ class WoxListView<T> extends StatelessWidget {
         ),
       );
 
-      if (buildStopwatch != null) {
-        cp3 = buildStopwatch.elapsedMicroseconds;
-        buildStopwatch.stop();
-        final prepTime = (cp1 ?? 0);
-        final heightTime = (cp2 ?? 0) - (cp1 ?? 0);
-        final listTime = (cp3 ?? 0) - (cp2 ?? 0);
-        Logger.instance.debug(
-          const UuidV4().generate(),
-          "flutter build metric: list view (fast) - total:${buildStopwatch.elapsedMicroseconds}μs, prep:${prepTime}μs, height:${heightTime}μs, list:${listTime}μs, items:${controller.items.length}",
-        );
-      }
-
       return listWidget;
     }
 
     // Slow path: with filter, need LayoutBuilder to measure available space
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (buildStopwatch != null) cp1 = buildStopwatch.elapsedMicroseconds;
-
         const filterTopPadding = 6.0;
         const filterFieldHeight = 40.0;
         final hasBoundedHeight = constraints.hasBoundedHeight;
@@ -163,8 +142,6 @@ class WoxListView<T> extends StatelessWidget {
             listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code || listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_CHAT.code
                 ? WoxThemeUtil.instance.getActionItemHeight()
                 : WoxThemeUtil.instance.getResultListViewHeightByCount(1);
-
-        if (buildStopwatch != null) cp2 = buildStopwatch.elapsedMicroseconds;
 
         // Build the list widget
         final listWidget = ConstrainedBox(
@@ -246,8 +223,6 @@ class WoxListView<T> extends StatelessWidget {
             ),
           ),
         );
-
-        if (buildStopwatch != null) cp3 = buildStopwatch.elapsedMicroseconds;
 
         // Build filter widget if needed
         Widget? filterWidget;
@@ -347,23 +322,7 @@ class WoxListView<T> extends StatelessWidget {
           );
         }
 
-        if (buildStopwatch != null) cp4 = buildStopwatch.elapsedMicroseconds;
-
         final content = Column(mainAxisSize: MainAxisSize.min, children: [listWidget, if (filterWidget != null) filterWidget]);
-
-        if (buildStopwatch != null) {
-          buildStopwatch.stop();
-          final layoutTime = cp1 ?? 0;
-          final prepTime = (cp2 ?? 0) - (cp1 ?? 0);
-          final listTime = (cp3 ?? 0) - (cp2 ?? 0);
-          final filterTime = (cp4 ?? 0) - (cp3 ?? 0);
-          final columnTime = buildStopwatch.elapsedMicroseconds - (cp4 ?? 0);
-          Logger.instance.debug(
-            const UuidV4().generate(),
-            "flutter build metric: list view - total:${buildStopwatch.elapsedMicroseconds}μs, layout:${layoutTime}μs, prep:${prepTime}μs, list:${listTime}μs, filter:${filterTime}μs, column:${columnTime}μs, items:${controller.items.length}",
-          );
-        }
-
         return content;
       },
     );

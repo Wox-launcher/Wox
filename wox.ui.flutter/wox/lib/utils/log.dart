@@ -65,7 +65,6 @@ class Logger {
 class LoggerSwitch {
   static bool enablePaintLog = false;
   static bool enableSizeAndPositionLog = false;
-  static bool enableBuildTimeLog = false;
 }
 
 class WoxFileOutput extends xlogger.LogOutput {
