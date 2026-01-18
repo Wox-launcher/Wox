@@ -31,6 +31,10 @@
 		{
 			"name": "wox.ui.macos",
 			"path": "wox.ui.macos"
+		},
+		{
+			"name": "wox.ui.windows",
+			"path": "wox.ui.windows"
 		}
 	],
 	"settings": {
@@ -97,6 +101,38 @@
 				"problemMatcher": [],
 				"label": "swift: Build Debug",
 				"detail": "swift build --product wox.ui.macos"
+			},
+			{
+				"label": "build-windows-debug",
+				"type": "shell",
+				"command": "dotnet",
+				"args": [
+					"build",
+					"${workspaceFolder:wox.ui.windows}/wox.ui.windows.csproj",
+					"-c",
+					"Debug"
+				],
+				"group": "build",
+				"presentation": {
+					"reveal": "silent"
+				},
+				"problemMatcher": "$msCompile"
+			},
+			{
+				"label": "build-windows-release",
+				"type": "shell",
+				"command": "dotnet",
+				"args": [
+					"build",
+					"${workspaceFolder:wox.ui.windows}/wox.ui.windows.csproj",
+					"-c",
+					"Release"
+				],
+				"group": "build",
+				"presentation": {
+					"reveal": "silent"
+				},
+				"problemMatcher": "$msCompile"
 			}
 		]
 	},
@@ -157,6 +193,51 @@
 				"target": "wox.ui.macos",
 				"configuration": "release",
 				"preLaunchTask": "swift: Build Release wox.ui.macos (wox.ui.macos)"
+			},
+			{
+				"name": "Debug wox.ui.windows",
+				"type": "coreclr",
+				"request": "launch",
+				"preLaunchTask": "build-windows-debug",
+				"program": "${workspaceFolder:wox.ui.windows}/bin/Debug/net48/Wox.exe",
+				"args": [],
+				"cwd": "${workspaceFolder:wox.ui.windows}",
+				"console": "internalConsole",
+				"stopAtEntry": false
+			},
+			{
+				"name": "Run Wox (Windows UI)",
+				"configurations": [
+					"Run Go",
+					"Debug wox.ui.windows (with core)"
+				],
+				"stopAll": true
+			},
+			{
+				"name": "Debug wox.ui.windows (with core)",
+				"type": "coreclr",
+				"request": "launch",
+				"preLaunchTask": "build-windows-debug",
+				"program": "${workspaceFolder:wox.ui.windows}/bin/Debug/net48/Wox.exe",
+				"args": [
+					"34987",
+					"0",
+					"true"
+				],
+				"cwd": "${workspaceFolder:wox.ui.windows}",
+				"console": "internalConsole",
+				"stopAtEntry": false
+			},
+			{
+				"name": "Release wox.ui.windows",
+				"type": "coreclr",
+				"request": "launch",
+				"preLaunchTask": "build-windows-release",
+				"program": "${workspaceFolder:wox.ui.windows}/bin/Release/net48/Wox.exe",
+				"args": [],
+				"cwd": "${workspaceFolder:wox.ui.windows}",
+				"console": "internalConsole",
+				"stopAtEntry": false
 			}
 		],
 		"compounds": [

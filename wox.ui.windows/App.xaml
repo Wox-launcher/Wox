@@ -1,0 +1,28 @@
+<Application x:Class="Wox.UI.Windows.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:converters="clr-namespace:Wox.UI.Windows.Converters">
+    <Application.Resources>
+        <!-- Converters -->
+        <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        <converters:WoxImageToImageSourceConverter x:Key="WoxImageToImageSourceConverter"/>
+
+        <!-- Dark Theme Colors -->
+        <SolidColorBrush x:Key="ApplicationBackgroundBrush"
+                Color="#2D2D30"/>
+        <SolidColorBrush x:Key="CardBackgroundFillColorDefaultBrush"
+                Color="#1E1E1E"/>
+        <SolidColorBrush x:Key="CardBackgroundFillColorSecondaryBrush"
+                Color="#3E3E42"/>
+        <SolidColorBrush x:Key="ControlStrokeColorDefaultBrush"
+                Color="#555555"/>
+        <SolidColorBrush x:Key="ControlStrongStrokeColorDefaultBrush"
+                Color="#777777"/>
+        <SolidColorBrush x:Key="TextFillColorPrimaryBrush"
+                Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="TextFillColorSecondaryBrush"
+                Color="#CCCCCC"/>
+        <SolidColorBrush x:Key="AccentBrush"
+                Color="#0078D4"/>
+    </Application.Resources>
+</Application>
