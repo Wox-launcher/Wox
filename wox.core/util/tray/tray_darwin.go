@@ -15,16 +15,20 @@ import (
 )
 
 var (
-	trayMu        sync.Mutex
-	trayMenuFuncs = make(map[int]func())
-	trayNextTag   int
+	trayMu            sync.Mutex
+	trayMenuFuncs     = make(map[int]func())
+	trayNextTag       int
 	leftClickCallback func()
 )
 
 //export reportLeftClick
 func reportLeftClick() {
-	if leftClickCallback != nil {
-		leftClickCallback()
+	trayMu.Lock()
+	callback := leftClickCallback
+	trayMu.Unlock()
+
+	if callback != nil {
+		callback()
 	}
 }
 
@@ -48,8 +52,7 @@ func addMenuItem(title string, callback func()) {
 	trayMenuFuncs[tag] = callback
 
 	cTitle := C.CString(title)
-	dleftClickCallback = onClick
-		efer C.free(unsafe.Pointer(cTitle))
+	defer C.free(unsafe.Pointer(cTitle))
 
 	C.addMenuItem(cTitle, C.int(tag))
 }
@@ -57,6 +60,10 @@ func addMenuItem(title string, callback func()) {
 func CreateTray(appIcon []byte, onClick func(), items ...MenuItem) {
 	//ensure executed in main thread
 	mainthread.Call(func() {
+		trayMu.Lock()
+		leftClickCallback = onClick
+		trayMu.Unlock()
+
 		iconBytesC := C.CBytes(appIcon)
 		defer C.free(iconBytesC)
 

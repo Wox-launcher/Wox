@@ -20,7 +20,9 @@ extern void reportLeftClick();
 - (void)trayClick:(id)sender {
     NSEvent *event = [NSApp currentEvent];
     if (event.type == NSEventTypeRightMouseUp || (event.type == NSEventTypeLeftMouseUp && (event.modifierFlags & NSEventModifierFlagControl))) {
-        [globalStatusItem popUpStatusItemMenu:globalMenu]; 
+        if (globalStatusItem != nil && globalMenu != nil) {
+            [globalStatusItem popUpStatusItemMenu:globalMenu];
+        }
     } else {
         reportLeftClick();
     }
@@ -46,13 +48,17 @@ void createTray(const char *iconBytes, int length) {
         globalStatusItem.button.image = icon;
 
         globalMenu = [[NSMenu alloc] init];
-        [globalMenu retain];
-        
         globalTarget = [[MenuItemTarget alloc] init];
-        
+
         [globalStatusItem.button setAction:@selector(trayClick:)];
         [globalStatusItem.button setTarget:globalTarget];
-        [globalStaMenu) {
+        [globalStatusItem.button sendActionOn:(NSEventMaskLeftMouseUp | NSEventMaskRightMouseUp)];
+    }
+}
+
+void addMenuItem(const char *title, int tag) {
+    @autoreleasepool {
+        if (globalMenu != nil) {
             NSString *itemTitle = [NSString stringWithUTF8String:title];
             NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:itemTitle action:@selector(menuItemAction:) keyEquivalent:@""];
             item.tag = tag;
@@ -73,18 +79,11 @@ void removeTray() {
         }
         if (globalMenu != nil) {
             [globalMenu release];
-            // globalMenu = nil; // globalMenu is static, just set to nil after release?
             globalMenu = nil;
         }
         if (globalTarget != nil) {
             [globalTarget release];
-            globalTarget
-    @autoreleasepool {
-        NSStatusBar *bar = [NSStatusBar systemStatusBar];
-
-        if (globalStatusItem != nil) {
-            [bar removeStatusItem:globalStatusItem];
-            globalStatusItem = nil;
+            globalTarget = nil;
         }
     }
 }
