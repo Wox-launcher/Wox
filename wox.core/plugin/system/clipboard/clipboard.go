@@ -7,6 +7,7 @@ import (
 	"image"
 	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -215,9 +216,14 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 	clipboard.Watch(func(data clipboard.Data) {
 		c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("clipboard data changed, type=%s", data.GetType()))
 
-		// ignore file type
+
 		if data.GetType() == clipboard.ClipboardTypeFile {
-			return
+			fileData := data.(*clipboard.FilePathData)
+			imageData := c.getImageDataFromFilePaths(ctx, fileData.FilePaths)
+			if imageData == nil {
+				return
+			}
+			data = imageData
 		}
 
 		if data.GetType() == clipboard.ClipboardTypeText && !c.isKeepTextHistory(ctx) {
@@ -921,6 +927,40 @@ func (c *ClipboardPlugin) loadImageFromFile(ctx context.Context, filePath string
 	}
 
 	return img
+}
+
+func (c *ClipboardPlugin) getImageDataFromFilePaths(ctx context.Context, filePaths []string) *clipboard.ImageData {
+	for _, filePath := range filePaths {
+		if !c.isImageFilePath(filePath) {
+			continue
+		}
+		if img := c.loadImageFromFile(ctx, filePath); img != nil {
+			return &clipboard.ImageData{Image: img}
+		}
+	}
+
+	return nil
+}
+
+func (c *ClipboardPlugin) isImageFilePath(filePath string) bool {
+	if filePath == "" {
+		return false
+	}
+
+	imageExts := map[string]bool{
+		".png":  true,
+		".jpg":  true,
+		".jpeg": true,
+		".gif":  true,
+		".bmp":  true,
+		".webp": true,
+		".tiff": true,
+		".tif":  true,
+		".ico":  true,
+	}
+
+	ext := strings.ToLower(filepath.Ext(filePath))
+	return imageExts[ext]
 }
 
 // isKeepTextHistory checks if text history should be kept
