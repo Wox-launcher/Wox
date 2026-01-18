@@ -28,10 +28,7 @@ class LinuxWindowManager extends BaseWindowManager {
   @override
   Future<void> setSize(Size size) async {
     try {
-      await _channel.invokeMethod('setSize', {
-        'width': size.width,
-        'height': size.height,
-      });
+      await _channel.invokeMethod('setSize', {'width': size.width, 'height': size.height});
     } catch (e) {
       Logger.instance.error(const UuidV4().generate(), "Error setting window size: $e");
     }
@@ -51,10 +48,7 @@ class LinuxWindowManager extends BaseWindowManager {
   @override
   Future<void> setPosition(Offset position) async {
     try {
-      await _channel.invokeMethod('setPosition', {
-        'x': position.dx,
-        'y': position.dy,
-      });
+      await _channel.invokeMethod('setPosition', {'x': position.dx, 'y': position.dy});
     } catch (e) {
       Logger.instance.error(const UuidV4().generate(), "Error setting position: $e");
     }
@@ -63,10 +57,7 @@ class LinuxWindowManager extends BaseWindowManager {
   @override
   Future<void> center(double width, double height) async {
     try {
-      await _channel.invokeMethod('center', {
-        'width': width,
-        'height': height,
-      });
+      await _channel.invokeMethod('center', {'width': width, 'height': height});
     } catch (e) {
       Logger.instance.error(const UuidV4().generate(), "Error centering window: $e");
     }
@@ -116,6 +107,11 @@ class LinuxWindowManager extends BaseWindowManager {
     } catch (e) {
       Logger.instance.error(const UuidV4().generate(), "Error setting always on top: $e");
     }
+  }
+
+  @override
+  Future<void> setAppearance(String appearance) async {
+    // Not implemented for Linux
   }
 
   @override

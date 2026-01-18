@@ -5,7 +5,7 @@
   "ThemeAuthor": "Wox launcher",
   "Version": "1.0.0",
   "ThemeUrl": "https://www.github.com/wox-launcher/wox",
-  "AppBackgroundColor": "rgba(35, 41, 51, 0.9)",
+  "AppBackgroundColor": "rgba(35, 41, 51, 0.7)",
   "AppPaddingLeft": 10,
   "AppPaddingTop": 10,
   "AppPaddingRight": 10,
@@ -29,7 +29,7 @@
   "ResultItemActiveBorderLeftWidth": 4,
   "ResultItemActiveTailTextColor": "#E2E8F0",
   "QueryBoxFontColor": "#E2E8F0",
-  "QueryBoxBackgroundColor": "rgba(49, 56, 68, 0.9)",
+  "QueryBoxBackgroundColor": "rgba(49, 56, 68, 0.3)",
   "QueryBoxBorderRadius": 8,
   "QueryBoxCursorColor": "#00A88E",
   "QueryBoxTextSelectionBackgroundColor": "rgba(0, 168, 142, 0.8)",
@@ -52,7 +52,7 @@
   "PreviewPropertyContentColor": "#E2E8F0",
   "PreviewTextSelectionColor": "rgba(0, 168, 142, 0.8)",
   "ToolbarFontColor": "#E2E8F0",
-  "ToolbarBackgroundColor": "rgba(35, 41, 51, 0.9)",
+  "ToolbarBackgroundColor": "rgba(35, 41, 51, 0.3)",
   "ToolbarPaddingLeft": 10,
   "ToolbarPaddingRight": 10
 }

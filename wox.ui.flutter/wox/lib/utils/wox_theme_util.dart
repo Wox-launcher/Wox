@@ -2,6 +2,7 @@ import 'package:get/get.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/utils/consts.dart';
+import 'package:wox/utils/windows/window_manager.dart';
 import 'package:wox/utils/wox_setting_util.dart';
 
 class WoxThemeUtil {
@@ -20,6 +21,12 @@ class WoxThemeUtil {
 
   changeTheme(WoxTheme theme) {
     _currentTheme.value = theme;
+
+    // Update window appearance based on theme background luminance
+    // We check appBackgroundColorParsed (Color) luminance
+    // 0.0 is black, 1.0 is white. < 0.5 considered dark.
+    final isDark = theme.appBackgroundColorParsed.computeLuminance() < 0.5;
+    WindowManager.instance.setAppearance(isDark ? 'dark' : 'light');
   }
 
   Rx<WoxTheme> get currentTheme => _currentTheme;

@@ -10,21 +10,11 @@ class WindowsModifierKeyStates {
   final bool isAltPressed;
   final bool isMetaPressed;
 
-  WindowsModifierKeyStates({
-    required this.isShiftPressed,
-    required this.isControlPressed,
-    required this.isAltPressed,
-    required this.isMetaPressed,
-  });
+  WindowsModifierKeyStates({required this.isShiftPressed, required this.isControlPressed, required this.isAltPressed, required this.isMetaPressed});
 }
 
 /// Callback type for keyboard events from Windows message loop
-typedef WindowsKeyboardEventCallback = void Function(
-  String eventType,
-  int keyCode,
-  int scanCode,
-  WindowsModifierKeyStates modifierStates,
-);
+typedef WindowsKeyboardEventCallback = void Function(String eventType, int keyCode, int scanCode, WindowsModifierKeyStates modifierStates);
 
 /// Windows implementation of the window manager
 class WindowsWindowManager extends BaseWindowManager {
@@ -36,12 +26,7 @@ class WindowsWindowManager extends BaseWindowManager {
   final List<WindowsKeyboardEventCallback> _keyboardEventListeners = [];
 
   /// Current modifier key states (updated from Windows message loop)
-  WindowsModifierKeyStates _currentModifierStates = WindowsModifierKeyStates(
-    isShiftPressed: false,
-    isControlPressed: false,
-    isAltPressed: false,
-    isMetaPressed: false,
-  );
+  WindowsModifierKeyStates _currentModifierStates = WindowsModifierKeyStates(isShiftPressed: false, isControlPressed: false, isAltPressed: false, isMetaPressed: false);
 
   /// Get current modifier key states
   WindowsModifierKeyStates get currentModifierStates => _currentModifierStates;
@@ -100,10 +85,7 @@ class WindowsWindowManager extends BaseWindowManager {
   @override
   Future<void> setSize(Size size) async {
     try {
-      await _channel.invokeMethod('setSize', {
-        'width': size.width,
-        'height': size.height,
-      });
+      await _channel.invokeMethod('setSize', {'width': size.width, 'height': size.height});
     } catch (e) {
       Logger.instance.error(const UuidV4().generate(), "Error setting window size: $e");
       rethrow;
@@ -124,10 +106,7 @@ class WindowsWindowManager extends BaseWindowManager {
   @override
   Future<void> setPosition(Offset position) async {
     try {
-      await _channel.invokeMethod('setPosition', {
-        'x': position.dx,
-        'y': position.dy,
-      });
+      await _channel.invokeMethod('setPosition', {'x': position.dx, 'y': position.dy});
     } catch (e) {
       Logger.instance.error(const UuidV4().generate(), "Error setting position: $e");
       rethrow;
@@ -137,10 +116,7 @@ class WindowsWindowManager extends BaseWindowManager {
   @override
   Future<void> center(double? width, double height) async {
     try {
-      await _channel.invokeMethod('center', {
-        'width': width,
-        'height': height,
-      });
+      await _channel.invokeMethod('center', {'width': width, 'height': height});
     } catch (e) {
       Logger.instance.error(const UuidV4().generate(), "Error centering window: $e");
       rethrow;
@@ -193,6 +169,16 @@ class WindowsWindowManager extends BaseWindowManager {
       await _channel.invokeMethod('setAlwaysOnTop', alwaysOnTop);
     } catch (e) {
       Logger.instance.error(const UuidV4().generate(), "Error setting always on top: $e");
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> setAppearance(String appearance) async {
+    try {
+      await _channel.invokeMethod('setAppearance', appearance);
+    } catch (e) {
+      Logger.instance.error(const UuidV4().generate(), "Error setting appearance: $e");
       rethrow;
     }
   }

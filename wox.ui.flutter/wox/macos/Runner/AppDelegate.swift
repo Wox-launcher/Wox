@@ -7,6 +7,8 @@ class AppDelegate: FlutterAppDelegate {
   private var previousActiveApp: NSRunningApplication?
   // Flutter method channel for window events
   private var windowEventChannel: FlutterMethodChannel?
+  // Current appearance (light/dark)
+  private var currentAppearance: String = "light"
 
   private func log(_ message: String) {
     // NSLog("WoxApp: \(message)")
@@ -22,10 +24,21 @@ class AppDelegate: FlutterAppDelegate {
 
   /// Apply acrylic effect to window
   private func applyAcrylicEffect(to window: NSWindow) {
-    // Ensure light theme is used, otherwise the dark theme effect the theme color
-    window.appearance = NSAppearance(named: .aqua)
+    // Set appearance based on current theme
+    if currentAppearance == "dark" {
+      window.appearance = NSAppearance(named: .darkAqua)
+    } else {
+      window.appearance = NSAppearance(named: .aqua)
+    }
 
     if let contentView = window.contentView {
+      // Remove existing visual effect view if any to avoid stacking
+      for subview in contentView.subviews {
+        if subview is NSVisualEffectView {
+          subview.removeFromSuperview()
+        }
+      }
+
       let effectView = NSVisualEffectView(frame: contentView.bounds)
       effectView.material = .popover
       effectView.state = .active
@@ -193,7 +206,8 @@ class AppDelegate: FlutterAppDelegate {
           let x = (screenFrame.width - windowWidth) / 2 + screenFrame.minX
           let y = (screenFrame.height - windowHeight) / 2 + screenFrame.minY
 
-          self?.log("Center: window to \(x),\(y) on screen at \(screenFrame.minX),\(screenFrame.minY)")
+          self?.log(
+            "Center: window to \(x),\(y) on screen at \(screenFrame.minX),\(screenFrame.minY)")
           let newFrame = NSRect(x: x, y: y, width: windowWidth, height: windowHeight)
           window.setFrame(newFrame, display: true)
           result(nil)
@@ -255,6 +269,19 @@ class AppDelegate: FlutterAppDelegate {
             )
           }
 
+        case "setAppearance":
+          if let appearance = call.arguments as? String {
+            self?.currentAppearance = appearance
+            self?.applyAcrylicEffect(to: window)
+            result(nil)
+          } else {
+            result(
+              FlutterError(
+                code: "INVALID_ARGS", message: "Invalid arguments for setAppearance", details: nil
+              )
+            )
+          }
+
         case "startDragging":
           if let currentEvent = window.currentEvent {
             self?.log("Performing drag with event: \(currentEvent)")
@@ -263,8 +290,12 @@ class AppDelegate: FlutterAppDelegate {
           result(nil)
 
         case "waitUntilReadyToShow":
-          // Force appearance to light mode, otherwise borderless window will have a dark border line
-          NSApp.appearance = NSAppearance(named: .aqua)
+          // Set app appearance based on current theme
+          if self?.currentAppearance == "dark" {
+            NSApp.appearance = NSAppearance(named: .darkAqua)
+          } else {
+            NSApp.appearance = NSAppearance(named: .aqua)
+          }
 
           window.level = .popUpMenu
           window.titlebarAppearsTransparent = true

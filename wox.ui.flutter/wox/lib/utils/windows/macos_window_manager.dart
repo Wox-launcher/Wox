@@ -30,10 +30,7 @@ class MacOSWindowManager extends BaseWindowManager {
   @override
   Future<void> setSize(Size size) async {
     try {
-      await _channel.invokeMethod('setSize', {
-        'width': size.width,
-        'height': size.height,
-      });
+      await _channel.invokeMethod('setSize', {'width': size.width, 'height': size.height});
     } catch (e) {
       Logger.instance.error(const Uuid().v4(), "Error setting window size: $e");
     }
@@ -53,10 +50,7 @@ class MacOSWindowManager extends BaseWindowManager {
   @override
   Future<void> setPosition(Offset position) async {
     try {
-      await _channel.invokeMethod('setPosition', {
-        'x': position.dx,
-        'y': position.dy,
-      });
+      await _channel.invokeMethod('setPosition', {'x': position.dx, 'y': position.dy});
     } catch (e) {
       Logger.instance.error(const Uuid().v4(), "Error setting position: $e");
     }
@@ -65,10 +59,7 @@ class MacOSWindowManager extends BaseWindowManager {
   @override
   Future<void> center(double width, double height) async {
     try {
-      await _channel.invokeMethod('center', {
-        'width': width,
-        'height': height,
-      });
+      await _channel.invokeMethod('center', {'width': width, 'height': height});
     } catch (e) {
       Logger.instance.error(const Uuid().v4(), "Error centering window: $e");
     }
@@ -117,6 +108,15 @@ class MacOSWindowManager extends BaseWindowManager {
       await _channel.invokeMethod('setAlwaysOnTop', alwaysOnTop);
     } catch (e) {
       Logger.instance.error(const Uuid().v4(), "Error setting always on top: $e");
+    }
+  }
+
+  @override
+  Future<void> setAppearance(String appearance) async {
+    try {
+      await _channel.invokeMethod('setAppearance', appearance);
+    } catch (e) {
+      Logger.instance.error(const Uuid().v4(), "Error setting appearance: $e");
     }
   }
 

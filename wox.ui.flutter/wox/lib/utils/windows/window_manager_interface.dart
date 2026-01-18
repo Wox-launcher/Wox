@@ -34,6 +34,10 @@ abstract class WindowManagerInterface {
   /// Set whether the window is always on top
   Future<void> setAlwaysOnTop(bool alwaysOnTop);
 
+  /// Set window appearance (light/dark)
+  /// appearance: "light" or "dark"
+  Future<void> setAppearance(String appearance);
+
   /// Wait until the window is ready to show
   Future<void> waitUntilReadyToShow();
 

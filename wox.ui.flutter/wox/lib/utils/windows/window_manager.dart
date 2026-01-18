@@ -69,6 +69,11 @@ class WindowManager implements WindowManagerInterface {
   }
 
   @override
+  Future<void> setAppearance(String appearance) {
+    return _platformImpl.setAppearance(appearance);
+  }
+
+  @override
   Future<void> startDragging() {
     return _platformImpl.startDragging();
   }
