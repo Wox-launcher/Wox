@@ -88,6 +88,7 @@ class WoxListController<T> extends WoxBaseListController<T> {
     }
 
     final currentOffset = scrollController.offset;
+    final maxOffset = scrollController.position.maxScrollExtent;
     final firstVisibleItemIndex = (currentOffset / itemHeight).floor();
     final lastVisibleItemIndex = firstVisibleItemIndex + visibleItemCount - 1;
 
@@ -116,17 +117,17 @@ class WoxListController<T> extends WoxBaseListController<T> {
     if (activeIndex.value < firstVisibleItemIndex) {
       if (groupIndex != -1 && activeIndex.value - groupIndex <= 2) {
         final newOffset = groupIndex * itemHeight;
-        scrollController.jumpTo(newOffset);
+        scrollController.jumpTo(newOffset.clamp(0.0, maxOffset));
       } else {
         final newOffset = activeIndex.value * itemHeight;
-        scrollController.jumpTo(newOffset);
+        scrollController.jumpTo(newOffset.clamp(0.0, maxOffset));
       }
       return;
     }
 
     if (activeIndex.value > lastVisibleItemIndex) {
       final newOffset = (activeIndex.value - visibleItemCount + 1) * itemHeight;
-      scrollController.jumpTo(newOffset);
+      scrollController.jumpTo(newOffset.clamp(0.0, maxOffset));
       return;
     }
   }

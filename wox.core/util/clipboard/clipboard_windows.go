@@ -1,6 +1,5 @@
 package clipboard
 
-import "C"
 import (
 	"bytes"
 	"encoding/binary"
@@ -85,13 +84,13 @@ func readText() (string, error) {
 	start := time.Now()
 
 	// use an inner function to minimize clipboard lock time
-	var resultText string
+	var raw []uint16
 	var sizeBytes uintptr
 
 	readErr := func() error {
-		r, _, err := openClipboard.Call(0)
-		if r == 0 {
-			return fmt.Errorf("failed to open clipboard: %w", err)
+		_, err := openClipboardWithRetry()
+		if err != nil {
+			return err
 		}
 		defer closeClipboard.Call()
 
@@ -124,15 +123,8 @@ func readText() (string, error) {
 		}
 
 		// copy data to local slice while clipboard is open
-		raw := make([]uint16, charCount)
+		raw = make([]uint16, charCount)
 		copy(raw, (*[1 << 30]uint16)(unsafe.Pointer(p))[:charCount:charCount])
-
-		// convert to string (processing happens after clipboard closes)
-		end := 0
-		for end < len(raw) && raw[end] != 0 {
-			end++
-		}
-		resultText = string(utf16.Decode(raw[:end]))
 
 		return nil
 	}()
@@ -148,7 +140,15 @@ func readText() (string, error) {
 		return "", readErr
 	}
 
-	return resultText, nil
+	if len(raw) == 0 {
+		return "", nil
+	}
+
+	end := 0
+	for end < len(raw) && raw[end] != 0 {
+		end++
+	}
+	return string(utf16.Decode(raw[:end])), nil
 }
 
 func writeTextData(text string) error {
@@ -302,12 +302,14 @@ func readFilePaths() ([]string, error) {
 		return nil, noDataErr
 	}
 
-	var resultFiles []string
+	start := time.Now()
+	var rawData []byte
+	var sizeBytes uintptr
 
 	readErr := func() error {
-		r, _, err := openClipboard.Call(0)
-		if r == 0 {
-			return fmt.Errorf("failed to open clipboard: %w", err)
+		_, err := openClipboardWithRetry()
+		if err != nil {
+			return err
 		}
 		defer closeClipboard.Call()
 
@@ -316,28 +318,83 @@ func readFilePaths() ([]string, error) {
 			return fmt.Errorf("failed to get clipboard data: %w", err)
 		}
 
-		hGlobal, _, err := gLock.Call(hDrop)
-		if hGlobal == 0 {
+		sizeBytes, _, _ = gSize.Call(hDrop)
+		if sizeBytes == 0 {
+			return errors.New("failed to get global memory size")
+		}
+
+		p, _, err := gLock.Call(hDrop)
+		if p == 0 {
 			return fmt.Errorf("failed to lock global memory: %w", err)
 		}
 		defer gUnlock.Call(hDrop)
 
-		count, _, _ := dragQueryFile.Call(hGlobal, 0xFFFFFFFF, 0, 0)
-
-		// copy all file paths to local memory
-		resultFiles = make([]string, 0, int(count))
-		for i := uint(0); i < uint(count); i++ {
-			pathLen, _, _ := dragQueryFile.Call(hGlobal, uintptr(i), 0, 0)
-			buffer := make([]uint16, pathLen+1)
-			dragQueryFile.Call(hGlobal, uintptr(i), uintptr(unsafe.Pointer(&buffer[0])), uintptr(pathLen+1))
-			resultFiles = append(resultFiles, syscall.UTF16ToString(buffer))
+		// Copy all data to local slice
+		const maxClipboardFileBytes = 32 * 1024 * 1024
+		toCopyBytes := sizeBytes
+		if toCopyBytes > maxClipboardFileBytes {
+			toCopyBytes = maxClipboardFileBytes
+			util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("clipboard: CF_HDROP too large (%d bytes), truncating", sizeBytes))
 		}
+
+		rawData = make([]byte, toCopyBytes)
+		copy(rawData, (*[1 << 30]byte)(unsafe.Pointer(p))[:toCopyBytes:toCopyBytes])
 
 		return nil
 	}()
 
+	if d := time.Since(start); d > 200*time.Millisecond {
+		util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("clipboard: readFilePaths held clipboard for %s (size=%d bytes)", d.String(), sizeBytes))
+	}
+
 	if readErr != nil {
 		return nil, readErr
+	}
+
+	if len(rawData) < 20 { // DROPFILES struct is 20 bytes
+		return nil, fmt.Errorf("invalid DROPFILES data size")
+	}
+
+	// Manual parse DROPFILES
+	pFiles := binary.LittleEndian.Uint32(rawData[0:4])
+	fWide := binary.LittleEndian.Uint32(rawData[16:20])
+
+	if int(pFiles) >= len(rawData) {
+		return nil, fmt.Errorf("invalid pFiles offset")
+	}
+
+	var resultFiles []string
+	fileData := rawData[pFiles:]
+
+	if fWide != 0 {
+		// Unicode
+		if len(fileData)%2 != 0 {
+			fileData = fileData[:len(fileData)-1]
+		}
+
+		u16s := (*[1 << 29]uint16)(unsafe.Pointer(&fileData[0]))[: len(fileData)/2 : len(fileData)/2]
+
+		start := 0
+		for i := 0; i < len(u16s); i++ {
+			if u16s[i] == 0 {
+				if i > start {
+					resultFiles = append(resultFiles, string(utf16.Decode(u16s[start:i])))
+				}
+				start = i + 1
+				// Check for double null (end of list)
+				if start < len(u16s) && u16s[start] == 0 {
+					break
+				}
+			}
+		}
+	} else {
+		// ANSI (simple fallback)
+		parts := bytes.Split(fileData, []byte{0})
+		for _, p := range parts {
+			if len(p) > 0 {
+				resultFiles = append(resultFiles, string(p))
+			}
+		}
 	}
 
 	return resultFiles, nil
