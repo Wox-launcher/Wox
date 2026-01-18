@@ -5,7 +5,7 @@
   "ThemeAuthor": "Wox launcher",
   "Version": "1.0.0",
   "ThemeUrl": "https://www.github.com/wox-launcher/wox",
-  "AppBackgroundColor": "rgba(35, 41, 51, 0.7)",
+  "AppBackgroundColor": "rgba(35, 41, 51, 0.75)",
   "AppPaddingLeft": 10,
   "AppPaddingTop": 10,
   "AppPaddingRight": 10,
