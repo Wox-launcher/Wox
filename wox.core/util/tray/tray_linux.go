@@ -28,12 +28,20 @@ import (
 )
 
 var (
-	trayIcon    *C.TrayIcon
-	callbacks   = make(map[int]func())
-	nextTag     int
-	initOnce    sync.Once
-	initialized bool
+	trayIcon          *C.TrayIcon
+	callbacks         = make(map[int]func())
+	nextTag           int
+	initOnce          sync.Once
+	initialized       bool
+	leftClickCallback func()
 )
+
+//export reportLeftClick
+func reportLeftClick() {
+	if leftClickCallback != nil {
+		leftClickCallback()
+	}
+}
 
 //export goMenuItemCallback
 func goMenuItemCallback(tag C.int) {
@@ -42,7 +50,8 @@ func goMenuItemCallback(tag C.int) {
 	}
 }
 
-func CreateTray(appIcon []byte, items ...MenuItem) {
+func CreateTray(appIcon []byte, onClick func(), items ...MenuItem) {
+	leftClickCallback = onClick
 	initOnce.Do(func() {
 		if !initialized {
 			C.gtk_init(nil, nil)

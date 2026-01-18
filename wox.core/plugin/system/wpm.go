@@ -514,7 +514,7 @@ func (w *WPMPlugin) createInstallAction(pluginManifest plugin.StorePluginManifes
 
 				// update tails and actions after successful install
 				if updatable := w.api.GetUpdatableResult(ctx, actionContext.ResultId); updatable != nil {
-					newTails := []plugin.QueryResultTail{{Type: plugin.QueryResultTailTypeImage, Image: common.NewWoxImageEmoji("\u2705")}}
+					newTails := []plugin.QueryResultTail{{Type: plugin.QueryResultTailTypeImage, Image: common.NewWoxImageEmoji("✅")}}
 					updatable.Tails = &newTails
 
 					// create actions: uninstall + start using (if not wildcard trigger)
@@ -632,10 +632,10 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 			}
 			if upgrade {
 				// show an upgrade icon
-				tails = append(tails, plugin.QueryResultTail{Type: plugin.QueryResultTailTypeImage, Image: common.NewWoxImageEmoji("\u2b06\ufe0f")})
+				tails = append(tails, plugin.QueryResultTail{Type: plugin.QueryResultTailTypeImage, Image: common.NewWoxImageEmoji("⬆️")})
 			} else {
 				// show an installed icon
-				tails = append(tails, plugin.QueryResultTail{Type: plugin.QueryResultTailTypeImage, Image: common.NewWoxImageEmoji("\u2705")})
+				tails = append(tails, plugin.QueryResultTail{Type: plugin.QueryResultTailTypeImage, Image: common.NewWoxImageEmoji("✅")})
 			}
 		}
 

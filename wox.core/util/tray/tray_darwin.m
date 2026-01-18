@@ -2,6 +2,9 @@
 #include "_cgo_export.h"
 
 static NSStatusItem *globalStatusItem = nil;
+static NSMenu *globalMenu = nil;
+
+extern void reportLeftClick();
 
 @interface MenuItemTarget : NSObject
 @end
@@ -13,7 +16,18 @@ static NSStatusItem *globalStatusItem = nil;
         GoMenuItemCallback((GoInt)(menuItem.tag));
     }
 }
+
+- (void)trayClick:(id)sender {
+    NSEvent *event = [NSApp currentEvent];
+    if (event.type == NSEventTypeRightMouseUp || (event.type == NSEventTypeLeftMouseUp && (event.modifierFlags & NSEventModifierFlagControl))) {
+        [globalStatusItem popUpStatusItemMenu:globalMenu]; 
+    } else {
+        reportLeftClick();
+    }
+}
 @end
+
+static MenuItemTarget *globalTarget = nil;
 
 void createTray(const char *iconBytes, int length) {
     @autoreleasepool {
@@ -31,26 +45,40 @@ void createTray(const char *iconBytes, int length) {
 
         globalStatusItem.button.image = icon;
 
-        NSMenu *menu = [[NSMenu alloc] init];
-        [globalStatusItem setMenu:menu];
-    }
-}
-
-void addMenuItem(const char *title, int tag) {
-    @autoreleasepool {
-        if (globalStatusItem) {
-            NSMenu *menu = globalStatusItem.menu;
+        globalMenu = [[NSMenu alloc] init];
+        [globalMenu retain];
+        
+        globalTarget = [[MenuItemTarget alloc] init];
+        
+        [globalStatusItem.button setAction:@selector(trayClick:)];
+        [globalStatusItem.button setTarget:globalTarget];
+        [globalStaMenu) {
             NSString *itemTitle = [NSString stringWithUTF8String:title];
-            MenuItemTarget *target = [[MenuItemTarget alloc] init];
             NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:itemTitle action:@selector(menuItemAction:) keyEquivalent:@""];
             item.tag = tag;
-            item.target = target;
-            [menu addItem:item];
+            item.target = globalTarget;
+            [globalMenu addItem:item];
         }
     }
 }
 
 void removeTray() {
+    @autoreleasepool {
+        NSStatusBar *bar = [NSStatusBar systemStatusBar];
+
+        if (globalStatusItem != nil) {
+            [bar removeStatusItem:globalStatusItem];
+            [globalStatusItem release];
+            globalStatusItem = nil;
+        }
+        if (globalMenu != nil) {
+            [globalMenu release];
+            // globalMenu = nil; // globalMenu is static, just set to nil after release?
+            globalMenu = nil;
+        }
+        if (globalTarget != nil) {
+            [globalTarget release];
+            globalTarget
     @autoreleasepool {
         NSStatusBar *bar = [NSStatusBar systemStatusBar];
 

@@ -531,7 +531,9 @@ func (m *Manager) IsThemeUpgradable(id string, version string) bool {
 func (m *Manager) ShowTray() {
 	ctx := util.NewTraceContext()
 
-	tray.CreateTray(resource.GetAppIcon(),
+	tray.CreateTray(resource.GetAppIcon(), func() {
+		m.GetUI(ctx).ToggleApp(ctx)
+	},
 		tray.MenuItem{
 			Title: i18n.GetI18nManager().TranslateWox(ctx, "ui_tray_toggle_app"),
 			Callback: func() {

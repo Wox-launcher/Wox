@@ -31,6 +31,7 @@ import (
 
 // menuCallbacks maps menu item IDs to their callbacks.
 var menuCallbacks = make(map[uint32]func())
+var leftClickCallback func()
 
 //export reportClick
 func reportClick(menuId C.UINT_PTR) {
@@ -39,8 +40,16 @@ func reportClick(menuId C.UINT_PTR) {
 	}
 }
 
+//export reportLeftClick
+func reportLeftClick() {
+	if leftClickCallback != nil {
+		leftClickCallback()
+	}
+}
+
 // initializes the system tray icon and menu.
-func CreateTray(appIcon []byte, items ...MenuItem) {
+func CreateTray(appIcon []byte, onClick func(), items ...MenuItem) {
+	leftClickCallback = onClick
 	temp, _ := os.CreateTemp("", "app.ico")
 	temp.Write(appIcon)
 	temp.Close()

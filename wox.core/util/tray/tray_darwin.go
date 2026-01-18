@@ -8,16 +8,25 @@ package tray
 // void removeTray();
 import "C"
 import (
-	"golang.design/x/hotkey/mainthread"
 	"sync"
 	"unsafe"
+
+	"golang.design/x/hotkey/mainthread"
 )
 
 var (
 	trayMu        sync.Mutex
 	trayMenuFuncs = make(map[int]func())
 	trayNextTag   int
+	leftClickCallback func()
 )
+
+//export reportLeftClick
+func reportLeftClick() {
+	if leftClickCallback != nil {
+		leftClickCallback()
+	}
+}
 
 //export GoMenuItemCallback
 func GoMenuItemCallback(tag C.int) {
@@ -39,12 +48,13 @@ func addMenuItem(title string, callback func()) {
 	trayMenuFuncs[tag] = callback
 
 	cTitle := C.CString(title)
-	defer C.free(unsafe.Pointer(cTitle))
+	dleftClickCallback = onClick
+		efer C.free(unsafe.Pointer(cTitle))
 
 	C.addMenuItem(cTitle, C.int(tag))
 }
 
-func CreateTray(appIcon []byte, items ...MenuItem) {
+func CreateTray(appIcon []byte, onClick func(), items ...MenuItem) {
 	//ensure executed in main thread
 	mainthread.Call(func() {
 		iconBytesC := C.CBytes(appIcon)
