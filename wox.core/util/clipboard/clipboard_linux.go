@@ -22,6 +22,10 @@ func writeImageData(img image.Image) error {
 	return notImplement
 }
 
+func writeImageBytes(pngData []byte, dibData []byte) error {
+	return notImplement
+}
+
 func isClipboardChanged() bool {
 	return false
 }

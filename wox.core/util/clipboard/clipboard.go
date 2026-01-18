@@ -75,6 +75,10 @@ func Write(data Data) error {
 	return errors.New("not implemented")
 }
 
+func WriteImageBytes(pngData []byte, dibData []byte) error {
+	return writeImageBytes(pngData, dibData)
+}
+
 func Watch(cb func(Data)) {
 	if !isWatching {
 		isWatching = true

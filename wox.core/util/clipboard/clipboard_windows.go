@@ -207,10 +207,7 @@ func writeTextData(text string) error {
 }
 
 func writeImageData(img image.Image) error {
-	const (
-		cFmtDIB       = 8
-		fileHeaderLen = 14 // BMP file header length to skip
-	)
+	const fileHeaderLen = 14 // BMP file header length to skip
 
 	// Encode outside clipboard lock to minimize time we hold the global clipboard mutex.
 	var pngData []byte
@@ -228,6 +225,16 @@ func writeImageData(img image.Image) error {
 		return fmt.Errorf("invalid BMP data: too short")
 	}
 	dibData := bmpData[fileHeaderLen:]
+
+	return writeImageBytes(pngData, dibData)
+}
+
+func writeImageBytes(pngData []byte, dibData []byte) error {
+	const cFmtDIB = 8
+
+	if len(dibData) == 0 {
+		return errors.New("dib data is empty")
+	}
 
 	start := time.Now()
 

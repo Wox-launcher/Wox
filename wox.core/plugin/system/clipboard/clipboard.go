@@ -1,6 +1,7 @@
 package system
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -21,6 +22,7 @@ import (
 	"github.com/cdfmlr/ellipsis"
 	"github.com/disintegration/imaging"
 	"github.com/google/uuid"
+	"golang.org/x/image/bmp"
 )
 
 var clipboardIcon = common.PluginClipboardIcon
@@ -216,118 +218,126 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 	clipboard.Watch(func(data clipboard.Data) {
 		c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("clipboard data changed, type=%s", data.GetType()))
 
-
 		if data.GetType() == clipboard.ClipboardTypeFile {
 			fileData := data.(*clipboard.FilePathData)
-			imageData := c.getImageDataFromFilePaths(ctx, fileData.FilePaths)
-			if imageData == nil {
+			imageDataList := c.getImageDataListFromFilePaths(ctx, fileData.FilePaths)
+			if len(imageDataList) == 0 {
 				return
 			}
-			data = imageData
-		}
-
-		if data.GetType() == clipboard.ClipboardTypeText && !c.isKeepTextHistory(ctx) {
-			return
-		}
-		if data.GetType() == clipboard.ClipboardTypeImage && !c.isKeepImageHistory(ctx) {
+			for _, imageData := range imageDataList {
+				c.processClipboardData(ctx, imageData)
+			}
 			return
 		}
 
-		// Validate text data
-		if data.GetType() == clipboard.ClipboardTypeText {
-			textData := data.(*clipboard.TextData)
-			if len(textData.Text) == 0 || strings.TrimSpace(textData.Text) == "" {
-				return
-			}
-		}
-
-		// Check for duplicate content by querying the most recent record
-		if c.isDuplicateContent(ctx, data) {
-			c.api.Log(ctx, plugin.LogLevelInfo, "duplicate clipboard content, skipping")
-			return
-		}
-
-		// Create new record (always non-favorite initially)
-		record := ClipboardRecord{
-			ID:         uuid.NewString(),
-			Type:       string(data.GetType()),
-			Timestamp:  util.GetSystemTimestamp(),
-			IsFavorite: false,
-			CreatedAt:  time.Now(),
-		}
-
-		// Handle different data types
-		if data.GetType() == clipboard.ClipboardTypeText {
-			textData := data.(*clipboard.TextData)
-			record.Content = textData.Text
-
-			// Try to get active window icon for text clipboard
-			if iconImage, iconErr := system.GetActiveWindowIcon(ctx); iconErr == nil {
-				iconStr := iconImage.String()
-				record.IconData = &iconStr
-			}
-		} else if data.GetType() == clipboard.ClipboardTypeImage {
-			// Save image to disk
-			imageData := data.(*clipboard.ImageData)
-			imageFilePath := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("clipboard_%s.png", record.ID))
-
-			if saveErr := imaging.Save(imageData.Image, imageFilePath); saveErr != nil {
-				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to save image to disk: %s", saveErr.Error()))
-				return
-			}
-
-			// Get image dimensions
-			width := imageData.Image.Bounds().Dx()
-			height := imageData.Image.Bounds().Dy()
-
-			// Get file size
-			var fileSize int64
-			if fileInfo, err := os.Stat(imageFilePath); err == nil {
-				fileSize = fileInfo.Size()
-			}
-
-			record.FilePath = imageFilePath
-			record.Width = &width
-			record.Height = &height
-			record.FileSize = &fileSize
-			record.Content = fmt.Sprintf("Image (%d×%d) (%s)", width, height, c.formatFileSize(fileSize))
-			c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("saved clipboard image to disk: %s", imageFilePath))
-
-			// Generate preview and icon caches at insert time to avoid query-time decoding/resizing
-			imagePreviewFile := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("clipboard_%s_preview.png", record.ID))
-			imageIconFile := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("clipboard_%s_icon.png", record.ID))
-			previewImg := imaging.Resize(imageData.Image, 400, 0, imaging.Lanczos)
-			iconImg := imaging.Resize(imageData.Image, 40, 0, imaging.Lanczos)
-			if err := imaging.Save(previewImg, imagePreviewFile); err != nil {
-				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to save clipboard image preview cache: %s", err.Error()))
-			}
-			if err := imaging.Save(iconImg, imageIconFile); err != nil {
-				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to save clipboard image icon cache: %s", err.Error()))
-			}
-			// Pre-warm memory cache so first query is instant
-			if util.IsFileExists(imagePreviewFile) && util.IsFileExists(imageIconFile) {
-				c.imageCache[record.ID] = &ImageCacheEntry{
-					Preview: common.NewWoxImageAbsolutePath(imagePreviewFile),
-					Icon:    common.NewWoxImageAbsolutePath(imageIconFile),
-				}
-			}
-		}
-
-		// Insert into database (non-favorite items only)
-		if err := c.db.Insert(ctx, record); err != nil {
-			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to insert clipboard record: %s", err.Error()))
-			return
-		}
-
-		// Enforce max count limit
-		if deletedCount, err := c.db.EnforceMaxCount(ctx, c.maxHistoryCount); err != nil {
-			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to enforce max count: %s", err.Error()))
-		} else if deletedCount > 0 {
-			c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("enforced max count, deleted %d old records", deletedCount))
-		}
-
-		c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("saved clipboard %s to database", data.GetType()))
+		c.processClipboardData(ctx, data)
 	})
+}
+
+func (c *ClipboardPlugin) processClipboardData(ctx context.Context, data clipboard.Data) {
+	if data.GetType() == clipboard.ClipboardTypeText && !c.isKeepTextHistory(ctx) {
+		return
+	}
+	if data.GetType() == clipboard.ClipboardTypeImage && !c.isKeepImageHistory(ctx) {
+		return
+	}
+
+	// Validate text data
+	if data.GetType() == clipboard.ClipboardTypeText {
+		textData := data.(*clipboard.TextData)
+		if len(textData.Text) == 0 || strings.TrimSpace(textData.Text) == "" {
+			return
+		}
+	}
+
+	// Check for duplicate content by querying the most recent record
+	if c.isDuplicateContent(ctx, data) {
+		c.api.Log(ctx, plugin.LogLevelInfo, "duplicate clipboard content, skipping")
+		return
+	}
+
+	// Create new record (always non-favorite initially)
+	record := ClipboardRecord{
+		ID:         uuid.NewString(),
+		Type:       string(data.GetType()),
+		Timestamp:  util.GetSystemTimestamp(),
+		IsFavorite: false,
+		CreatedAt:  time.Now(),
+	}
+
+	// Handle different data types
+	if data.GetType() == clipboard.ClipboardTypeText {
+		textData := data.(*clipboard.TextData)
+		record.Content = textData.Text
+
+		// Try to get active window icon for text clipboard
+		if iconImage, iconErr := system.GetActiveWindowIcon(ctx); iconErr == nil {
+			iconStr := iconImage.String()
+			record.IconData = &iconStr
+		}
+	} else if data.GetType() == clipboard.ClipboardTypeImage {
+		// Save image to disk
+		imageData := data.(*clipboard.ImageData)
+		imageFilePath := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("clipboard_%s.png", record.ID))
+
+		if saveErr := imaging.Save(imageData.Image, imageFilePath); saveErr != nil {
+			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to save image to disk: %s", saveErr.Error()))
+			return
+		}
+
+		// Get image dimensions
+		width := imageData.Image.Bounds().Dx()
+		height := imageData.Image.Bounds().Dy()
+
+		// Get file size
+		var fileSize int64
+		if fileInfo, err := os.Stat(imageFilePath); err == nil {
+			fileSize = fileInfo.Size()
+		}
+
+		record.FilePath = imageFilePath
+		record.Width = &width
+		record.Height = &height
+		record.FileSize = &fileSize
+		record.Content = fmt.Sprintf("Image (%d×%d) (%s)", width, height, c.formatFileSize(fileSize))
+		c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("saved clipboard image to disk: %s", imageFilePath))
+
+		c.saveDibCache(ctx, imageData.Image, record.ID)
+
+		// Generate preview and icon caches at insert time to avoid query-time decoding/resizing
+		imagePreviewFile := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("clipboard_%s_preview.png", record.ID))
+		imageIconFile := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("clipboard_%s_icon.png", record.ID))
+		previewImg := imaging.Resize(imageData.Image, 400, 0, imaging.Lanczos)
+		iconImg := imaging.Resize(imageData.Image, 40, 0, imaging.Lanczos)
+		if err := imaging.Save(previewImg, imagePreviewFile); err != nil {
+			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to save clipboard image preview cache: %s", err.Error()))
+		}
+		if err := imaging.Save(iconImg, imageIconFile); err != nil {
+			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to save clipboard image icon cache: %s", err.Error()))
+		}
+		// Pre-warm memory cache so first query is instant
+		if util.IsFileExists(imagePreviewFile) && util.IsFileExists(imageIconFile) {
+			c.imageCache[record.ID] = &ImageCacheEntry{
+				Preview: common.NewWoxImageAbsolutePath(imagePreviewFile),
+				Icon:    common.NewWoxImageAbsolutePath(imageIconFile),
+			}
+		}
+	}
+
+	// Insert into database (non-favorite items only)
+	if err := c.db.Insert(ctx, record); err != nil {
+		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to insert clipboard record: %s", err.Error()))
+		return
+	}
+
+	// Enforce max count limit
+	if deletedCount, err := c.db.EnforceMaxCount(ctx, c.maxHistoryCount); err != nil {
+		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to enforce max count: %s", err.Error()))
+	} else if deletedCount > 0 {
+		c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("enforced max count, deleted %d old records", deletedCount))
+	}
+
+	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("saved clipboard %s to database", data.GetType()))
 }
 
 func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
@@ -740,6 +750,21 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 					c.moveRecordToTop(ctx, record.ID)
 					// Load image from disk and copy to clipboard
 					if record.FilePath != "" && util.IsFileExists(record.FilePath) {
+
+						// On Windows, also load DIB data from cache for better performance in pasting to apps
+						if util.IsWindows() {
+							dibPath := c.getDibCachePath(record.ID)
+							if util.IsFileExists(dibPath) {
+								if pngData, err := os.ReadFile(record.FilePath); err == nil {
+									if dibData, readErr := os.ReadFile(dibPath); readErr == nil {
+										if writeErr := clipboard.WriteImageBytes(pngData, dibData); writeErr == nil {
+											return
+										}
+									}
+								}
+							}
+						}
+
 						if img := c.loadImageFromFile(ctx, record.FilePath); img != nil {
 							clipboard.Write(&clipboard.ImageData{Image: img})
 						}
@@ -797,6 +822,7 @@ func (c *ClipboardPlugin) deleteRecordAssets(ctx context.Context, record Clipboa
 	iconPath := path.Join(cacheDir, fmt.Sprintf("clipboard_%s_icon.png", record.ID))
 	_ = os.Remove(previewPath)
 	_ = os.Remove(iconPath)
+	_ = os.Remove(c.getDibCachePath(record.ID))
 
 	// Remove memory cache
 	delete(c.imageCache, record.ID)
@@ -929,17 +955,48 @@ func (c *ClipboardPlugin) loadImageFromFile(ctx context.Context, filePath string
 	return img
 }
 
-func (c *ClipboardPlugin) getImageDataFromFilePaths(ctx context.Context, filePaths []string) *clipboard.ImageData {
+func (c *ClipboardPlugin) getDibCachePath(id string) string {
+	return path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("clipboard_%s.dib", id))
+}
+
+func (c *ClipboardPlugin) saveDibCache(ctx context.Context, img image.Image, recordID string) {
+	if !util.IsWindows() {
+		return
+	}
+
+	const fileHeaderLen = 14 // BMP file header length to skip
+	dibPath := c.getDibCachePath(recordID)
+
+	bmpBuf := new(bytes.Buffer)
+	if err := bmp.Encode(bmpBuf, img); err != nil {
+		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to encode dib cache: %s", err.Error()))
+		return
+	}
+
+	bmpData := bmpBuf.Bytes()
+	if len(bmpData) <= fileHeaderLen {
+		c.api.Log(ctx, plugin.LogLevelError, "dib cache data too short")
+		return
+	}
+
+	if err := os.WriteFile(dibPath, bmpData[fileHeaderLen:], 0o644); err != nil {
+		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to save dib cache: %s", err.Error()))
+		return
+	}
+}
+
+func (c *ClipboardPlugin) getImageDataListFromFilePaths(ctx context.Context, filePaths []string) []*clipboard.ImageData {
+	imageDataList := make([]*clipboard.ImageData, 0)
 	for _, filePath := range filePaths {
 		if !c.isImageFilePath(filePath) {
 			continue
 		}
 		if img := c.loadImageFromFile(ctx, filePath); img != nil {
-			return &clipboard.ImageData{Image: img}
+			imageDataList = append(imageDataList, &clipboard.ImageData{Image: img})
 		}
 	}
 
-	return nil
+	return imageDataList
 }
 
 func (c *ClipboardPlugin) isImageFilePath(filePath string) bool {
@@ -1073,20 +1130,27 @@ func (c *ClipboardPlugin) cleanupOrphanedCacheFiles(ctx context.Context) {
 
 	removedCount := 0
 	for _, file := range files {
-		if strings.HasPrefix(file.Name(), "clipboard_") {
-			// Extract ID from filename (format: clipboard_{id}_{type}.png or clipboard_{id}.png)
-			parts := strings.Split(file.Name(), "_")
-			if len(parts) >= 2 {
-				id := strings.TrimSuffix(parts[1], ".png")
-				if len(parts) >= 3 {
-					id = parts[1] // For files like clipboard_{id}_{type}.png
-				}
-				if !validIds[id] {
-					filePath := path.Join(cacheDir, file.Name())
-					if removeErr := os.Remove(filePath); removeErr == nil {
-						removedCount++
-					}
-				}
+		name := file.Name()
+		if !strings.HasPrefix(name, "clipboard_") {
+			continue
+		}
+
+		ext := strings.ToLower(filepath.Ext(name))
+		if ext != ".png" && ext != ".dib" {
+			continue
+		}
+
+		baseName := strings.TrimSuffix(name, ext)
+		parts := strings.Split(baseName, "_")
+		if len(parts) < 2 {
+			continue
+		}
+
+		id := parts[1]
+		if !validIds[id] {
+			filePath := path.Join(cacheDir, name)
+			if removeErr := os.Remove(filePath); removeErr == nil {
+				removedCount++
 			}
 		}
 	}

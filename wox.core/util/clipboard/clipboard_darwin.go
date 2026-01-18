@@ -15,12 +15,14 @@ _Bool hasClipboardChanged();
 import "C"
 import (
 	"bytes"
+	"errors"
 	"fmt"
-	"github.com/samber/lo"
 	"image"
 	"image/png"
 	"strings"
 	"unsafe"
+
+	"github.com/samber/lo"
 )
 
 func readText() (string, error) {
@@ -80,6 +82,15 @@ func writeImageData(img image.Image) error {
 
 	data := buf.Bytes()
 	C.WriteClipboardImage((*C.char)(unsafe.Pointer(&data[0])), C.int(len(data)))
+	return nil
+}
+
+func writeImageBytes(pngData []byte, dibData []byte) error {
+	if len(pngData) == 0 {
+		return errors.New("png data is empty")
+	}
+
+	C.WriteClipboardImage((*C.char)(unsafe.Pointer(&pngData[0])), C.int(len(pngData)))
 	return nil
 }
 
