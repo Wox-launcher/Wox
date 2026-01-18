@@ -37,12 +37,14 @@ var (
 	openProcess          = kernel32.NewProc("OpenProcess")
 	closeHandle          = kernel32.NewProc("CloseHandle")
 	getProcessTimes      = kernel32.NewProc("GetProcessTimes")
+	getPackageFamilyName = kernel32.NewProc("GetPackageFamilyName")
 )
 
 const (
 	// Process access rights
-	PROCESS_QUERY_INFORMATION = 0x0400
-	PROCESS_VM_READ           = 0x0010
+	PROCESS_QUERY_INFORMATION         = 0x0400
+	PROCESS_VM_READ                   = 0x0010
+	PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 )
 
 // PROCESS_MEMORY_COUNTERS_EX structure for GetProcessMemoryInfo
@@ -63,8 +65,9 @@ type PROCESS_MEMORY_COUNTERS_EX struct {
 var appRetriever = &WindowsRetriever{}
 
 type processInfo struct {
-	Pid  int
-	Path string
+	Pid           int
+	Path          string
+	PackageFamily string
 }
 
 type cpuSample struct {
@@ -370,8 +373,6 @@ func getPrivateWorkingSet(handle syscall.Handle) (uintptr, error) {
 }
 
 func (a *WindowsRetriever) GetProcessStat(ctx context.Context, app appInfo) (*ProcessStat, error) {
-	// sync.Map doesn't need initialization
-
 	// For multi-process apps (like Chrome), we need to sum memory from all processes with the same path
 	// Update process list if needed
 	a.runningProcessesMutex.RLock()
@@ -390,7 +391,12 @@ func (a *WindowsRetriever) GetProcessStat(ctx context.Context, app appInfo) (*Pr
 
 	// Collect stats from all processes with the same path
 	appPathLower := strings.ToLower(filepath.Clean(app.Path))
-	if strings.HasSuffix(appPathLower, ".lnk") {
+	uwpFamilyLower := ""
+	if app.Type == AppTypeUWP {
+		if family := a.getUWPAppFamilyName(app.Path); family != "" {
+			uwpFamilyLower = strings.ToLower(family)
+		}
+	} else if strings.HasSuffix(appPathLower, ".lnk") {
 		if targetPath, err := a.resolveShortcutWithAPI(ctx, app.Path); err == nil {
 			resolvedLower := strings.ToLower(filepath.Clean(targetPath))
 			if resolvedLower != "" {
@@ -410,7 +416,17 @@ func (a *WindowsRetriever) GetProcessStat(ctx context.Context, app appInfo) (*Pr
 
 	for _, proc := range processes {
 		procPathLower := strings.ToLower(filepath.Clean(proc.Path))
-		if procPathLower == appPathLower {
+		matched := false
+		if app.Type == AppTypeUWP && uwpFamilyLower != "" {
+			if proc.PackageFamily != "" {
+				matched = strings.ToLower(proc.PackageFamily) == uwpFamilyLower
+			} else {
+				matched = strings.Contains(procPathLower, "\\windowsapps\\") && strings.Contains(procPathLower, uwpFamilyLower)
+			}
+		} else {
+			matched = procPathLower == appPathLower
+		}
+		if matched {
 			// Open process with query information access
 			hProcess, _, _ := openProcess.Call(
 				uintptr(PROCESS_QUERY_INFORMATION|PROCESS_VM_READ),
@@ -506,6 +522,52 @@ func (a *WindowsRetriever) GetProcessStat(ctx context.Context, app appInfo) (*Pr
 		CPU:    cpuPercent,
 		Memory: totalMemory,
 	}, nil
+}
+
+func (a *WindowsRetriever) getUWPAppFamilyName(appPath string) string {
+	if !strings.HasPrefix(appPath, "shell:AppsFolder\\") {
+		return ""
+	}
+	appID := strings.TrimPrefix(appPath, "shell:AppsFolder\\")
+	if appID == "" {
+		return ""
+	}
+	parts := strings.SplitN(appID, "!", 2)
+	if len(parts) == 0 || parts[0] == "" {
+		return ""
+	}
+	return parts[0]
+}
+
+func (a *WindowsRetriever) getProcessPackageFamilyName(handle syscall.Handle) (string, error) {
+	var nameLen uint32
+	ret, _, _ := getPackageFamilyName.Call(
+		uintptr(handle),
+		uintptr(unsafe.Pointer(&nameLen)),
+		0,
+	)
+	if ret == 0 {
+		return "", nil
+	}
+	if ret != 122 { // ERROR_INSUFFICIENT_BUFFER
+		if ret == 15700 { // APPMODEL_ERROR_NO_PACKAGE
+			return "", nil
+		}
+		return "", fmt.Errorf("GetPackageFamilyName failed: %d", ret)
+	}
+	if nameLen == 0 {
+		return "", nil
+	}
+	buffer := make([]uint16, nameLen)
+	ret, _, _ = getPackageFamilyName.Call(
+		uintptr(handle),
+		uintptr(unsafe.Pointer(&nameLen)),
+		uintptr(unsafe.Pointer(&buffer[0])),
+	)
+	if ret != 0 {
+		return "", fmt.Errorf("GetPackageFamilyName failed: %d", ret)
+	}
+	return syscall.UTF16ToString(buffer), nil
 }
 
 func (a *WindowsRetriever) OpenAppFolder(ctx context.Context, app appInfo) error {
@@ -660,19 +722,33 @@ func (a *WindowsRetriever) GetPid(ctx context.Context, app appInfo) int {
 	processes := a.runningProcesses
 	a.runningProcessesMutex.RUnlock()
 
-	// For desktop apps, match by path
-	if app.Type == AppTypeDesktop {
-		appPathLower := strings.ToLower(filepath.Clean(app.Path))
-		if strings.HasSuffix(appPathLower, ".lnk") {
-			if targetPath, err := a.resolveShortcutWithAPI(ctx, app.Path); err == nil {
-				resolvedLower := strings.ToLower(filepath.Clean(targetPath))
-				if resolvedLower != "" {
-					appPathLower = resolvedLower
-				}
+	appPathLower := strings.ToLower(filepath.Clean(app.Path))
+	uwpFamilyLower := ""
+	if app.Type == AppTypeUWP {
+		if family := a.getUWPAppFamilyName(app.Path); family != "" {
+			uwpFamilyLower = strings.ToLower(family)
+		}
+	} else if app.Type == AppTypeDesktop && strings.HasSuffix(appPathLower, ".lnk") {
+		if targetPath, err := a.resolveShortcutWithAPI(ctx, app.Path); err == nil {
+			resolvedLower := strings.ToLower(filepath.Clean(targetPath))
+			if resolvedLower != "" {
+				appPathLower = resolvedLower
 			}
 		}
-		for _, proc := range processes {
-			procPathLower := strings.ToLower(filepath.Clean(proc.Path))
+	}
+
+	// For desktop apps, match by path; for UWP apps, match by package family name
+	for _, proc := range processes {
+		procPathLower := strings.ToLower(filepath.Clean(proc.Path))
+		if app.Type == AppTypeUWP && uwpFamilyLower != "" {
+			if proc.PackageFamily != "" {
+				if strings.ToLower(proc.PackageFamily) == uwpFamilyLower {
+					return proc.Pid
+				}
+			} else if strings.Contains(procPathLower, "\\windowsapps\\") && strings.Contains(procPathLower, uwpFamilyLower) {
+				return proc.Pid
+			}
+		} else if app.Type == AppTypeDesktop {
 			if procPathLower == appPathLower {
 				return proc.Pid
 			}
@@ -712,18 +788,27 @@ func (a *WindowsRetriever) getRunningProcesses(ctx context.Context) []processInf
 			continue
 		}
 
-		// Open process with query information and VM read access
+		// Open process with query information and VM read access (fallback to limited info)
 		hProcess, _, _ := openProcess.Call(
 			uintptr(PROCESS_QUERY_INFORMATION|PROCESS_VM_READ),
 			0,
 			uintptr(pid),
 		)
-
 		if hProcess == 0 {
-			continue
+			hProcess, _, _ = openProcess.Call(
+				uintptr(PROCESS_QUERY_LIMITED_INFORMATION),
+				0,
+				uintptr(pid),
+			)
+			if hProcess == 0 {
+				continue
+			}
 		}
 
-		// Get the executable path
+		packageFamily, _ := a.getProcessPackageFamilyName(syscall.Handle(hProcess))
+
+		// Get the executable path if possible
+		var path string
 		var exePath [syscall.MAX_PATH]uint16
 		ret, _, _ := getModuleFileNameExW.Call(
 			hProcess,
@@ -735,19 +820,18 @@ func (a *WindowsRetriever) getRunningProcesses(ctx context.Context) []processInf
 		// Close process handle
 		closeHandle.Call(hProcess)
 
-		if ret == 0 {
-			continue
+		if ret != 0 {
+			path = syscall.UTF16ToString(exePath[:])
 		}
 
-		// Convert path to string
-		path := syscall.UTF16ToString(exePath[:])
-		if path == "" {
+		if path == "" && packageFamily == "" {
 			continue
 		}
 
 		infos = append(infos, processInfo{
-			Pid:  int(pid),
-			Path: path,
+			Pid:           int(pid),
+			Path:          path,
+			PackageFamily: packageFamily,
 		})
 	}
 
