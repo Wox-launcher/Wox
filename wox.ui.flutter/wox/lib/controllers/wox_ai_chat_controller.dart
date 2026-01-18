@@ -78,7 +78,7 @@ class WoxAIChatController extends GetxController {
     chatSelectListController = WoxListController<ChatSelectItem>(
       onItemExecuted: _onChatSelectItemExecuted,
       onFilterBoxEscPressed: (traceId) => hideChatSelectPanel(),
-      itemHeight: WoxThemeUtil.instance.getActionItemHeight(),
+      itemHeightGetter: () => WoxThemeUtil.instance.getActionItemHeight(),
     );
 
     reloadChatResources(const UuidV4().generate());

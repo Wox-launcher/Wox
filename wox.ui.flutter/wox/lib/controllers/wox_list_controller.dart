@@ -4,9 +4,9 @@ import 'package:wox/utils/log.dart';
 
 /// Controller for list view. Handles list-specific navigation and scrolling.
 class WoxListController<T> extends WoxBaseListController<T> {
-  final double itemHeight;
+  final double Function() itemHeightGetter;
 
-  WoxListController({super.onItemExecuted, super.onItemActive, super.onFilterBoxEscPressed, super.onFilterBoxLostFocus, super.onItemsEmpty, required this.itemHeight});
+  WoxListController({super.onItemExecuted, super.onItemActive, super.onFilterBoxEscPressed, super.onFilterBoxLostFocus, super.onItemsEmpty, required this.itemHeightGetter});
 
   @override
   void updateActiveIndexByDirection(String traceId, WoxDirection direction) {
@@ -75,6 +75,12 @@ class WoxListController<T> extends WoxBaseListController<T> {
     }
 
     final viewportHeight = scrollController.position.viewportDimension;
+    final itemHeight = itemHeightGetter();
+
+    if (itemHeight <= 0) {
+      Logger.instance.debug(traceId, "Invalid item height: $itemHeight, skipping scroll sync");
+      return;
+    }
 
     if (viewportHeight <= 0) {
       Logger.instance.debug(traceId, "Invalid viewport height: $viewportHeight, skipping scroll sync");

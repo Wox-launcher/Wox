@@ -157,7 +157,7 @@ class WoxLauncherController extends GetxController {
         },
         onItemActive: onResultItemActivated,
         onItemsEmpty: onResultItemsEmpty,
-        itemHeight: WoxThemeUtil.instance.getResultItemHeight(),
+        itemHeightGetter: () => WoxThemeUtil.instance.getResultItemHeight(),
       ),
       tag: 'result',
     );
@@ -179,7 +179,7 @@ class WoxLauncherController extends GetxController {
           executeDefaultAction(traceId);
         },
         onFilterBoxEscPressed: hideActionPanel,
-        itemHeight: WoxThemeUtil.instance.getActionItemHeight(),
+        itemHeightGetter: () => WoxThemeUtil.instance.getActionItemHeight(),
       ),
       tag: 'action',
     );
