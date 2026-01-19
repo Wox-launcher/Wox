@@ -12,13 +12,12 @@ class WoxSettingPluginLabel extends WoxSettingPluginItem {
 
   @override
   Widget build(BuildContext context) {
-    return layout(children: [
-      Text(item.content, style: TextStyle(color: getThemeTextColor(), fontSize: 13)),
-      if (item.tooltip != "")
-        WoxTooltipIconView(
-          tooltip: item.tooltip,
-          color: getThemeTextColor(),
-        ),
-    ], style: item.style);
+    return layout(
+      children: [
+        Text(item.content, style: TextStyle(color: getThemeTextColor(), fontSize: 13)),
+        if (item.tooltip != "") WoxTooltipIconView(tooltip: item.tooltip, color: getThemeTextColor()),
+      ],
+      style: item.style,
+    );
   }
 }

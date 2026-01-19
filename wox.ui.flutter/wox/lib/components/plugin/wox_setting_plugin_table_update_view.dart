@@ -30,13 +30,7 @@ class WoxSettingPluginTableUpdate extends StatefulWidget {
   final Function onUpdate;
   final Future<String?> Function(Map<String, dynamic> rowValues)? onUpdateValidate;
 
-  const WoxSettingPluginTableUpdate({
-    super.key,
-    required this.item,
-    required this.row,
-    required this.onUpdate,
-    this.onUpdateValidate,
-  });
+  const WoxSettingPluginTableUpdate({super.key, required this.item, required this.row, required this.onUpdate, this.onUpdateValidate});
 
   @override
   State<WoxSettingPluginTableUpdate> createState() => _WoxSettingPluginTableUpdateState();
@@ -178,19 +172,12 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
         Container(
           width: 80,
           height: 80,
-          decoration: BoxDecoration(
-            border: Border.all(color: getThemeSubTextColor().withAlpha(76)),
-            borderRadius: BorderRadius.circular(8),
-          ),
+          decoration: BoxDecoration(border: Border.all(color: getThemeSubTextColor().withAlpha(76)), borderRadius: BorderRadius.circular(8)),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: Center(
               // Center the preview content (especially emoji) in the 80x80 box
-              child: WoxImageView(
-                woxImage: currentImage,
-                width: 80,
-                height: 80,
-              ),
+              child: WoxImageView(woxImage: currentImage, width: 80, height: 80),
             ),
           ),
         ),
@@ -206,10 +193,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
               onPressed: () async {
                 final emojiResult = await _showEmojiPicker(context);
                 if (emojiResult != null && emojiResult.isNotEmpty) {
-                  final newImage = WoxImage(
-                    imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code,
-                    imageData: emojiResult,
-                  );
+                  final newImage = WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: emojiResult);
                   updateValue(column.key, newImage);
                   setState(() {});
                 }
@@ -220,10 +204,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
               icon: Icon(Icons.file_upload_outlined, size: 14, color: getThemeTextColor()),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               onPressed: () async {
-                final result = await FilePicker.platform.pickFiles(
-                  type: FileType.image,
-                  allowMultiple: false,
-                );
+                final result = await FilePicker.platform.pickFiles(type: FileType.image, allowMultiple: false);
 
                 if (result != null && result.files.isNotEmpty && result.files.first.path != null) {
                   final filePath = result.files.first.path!;
@@ -232,10 +213,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                     final bytes = await file.readAsBytes();
                     final base64Image = base64Encode(bytes);
 
-                    final newImage = WoxImage(
-                      imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_BASE64.code,
-                      imageData: "data:image/png;base64,$base64Image",
-                    );
+                    final newImage = WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_BASE64.code, imageData: "data:image/png;base64,$base64Image");
 
                     updateValue(column.key, newImage);
                     setState(() {});
@@ -263,10 +241,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
             width: 300,
             height: 200,
             child: GridView.builder(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 5,
-                childAspectRatio: 1,
-              ),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 5, childAspectRatio: 1),
               itemCount: commonEmojis.length,
               itemBuilder: (context, index) {
                 return InkWell(
@@ -274,12 +249,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                     selectedEmoji = commonEmojis[index];
                     Navigator.pop(context);
                   },
-                  child: Center(
-                    child: Text(
-                      commonEmojis[index],
-                      style: const TextStyle(fontSize: 24),
-                    ),
-                  ),
+                  child: Center(child: Text(commonEmojis[index], style: const TextStyle(fontSize: 24))),
                 );
               },
             ),
@@ -446,32 +416,29 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
         );
       case PluginSettingValueType.pluginSettingValueTableColumnTypeSelect:
         return Expanded(
-          child: Builder(builder: (context) {
-            final currentValue = getValue(column.key);
-            // Ensure the current value exists in selectOptions, otherwise use first option or null
-            final valueExists = column.selectOptions.any((e) => e.value == currentValue);
-            final effectiveValue = valueExists ? currentValue : (column.selectOptions.isNotEmpty ? column.selectOptions.first.value : null);
+          child: Builder(
+            builder: (context) {
+              final currentValue = getValue(column.key);
+              // Ensure the current value exists in selectOptions, otherwise use first option or null
+              final valueExists = column.selectOptions.any((e) => e.value == currentValue);
+              final effectiveValue = valueExists ? currentValue : (column.selectOptions.isNotEmpty ? column.selectOptions.first.value : null);
 
-            return WoxDropdownButton<String>(
-              value: effectiveValue,
-              isExpanded: true,
-              fontSize: 13,
-              underline: Container(
-                height: 1,
-                color: getThemeDividerColor().withOpacity(0.6),
-              ),
-              onChanged: (value) {
-                updateValue(column.key, value);
-                setState(() {});
-              },
-              items: column.selectOptions.map((e) {
-                return WoxDropdownItem(
-                  value: e.value,
-                  label: e.label,
-                );
-              }).toList(),
-            );
-          }),
+              return WoxDropdownButton<String>(
+                value: effectiveValue,
+                isExpanded: true,
+                fontSize: 13,
+                underline: Container(height: 1, color: getThemeDividerColor().withOpacity(0.6)),
+                onChanged: (value) {
+                  updateValue(column.key, value);
+                  setState(() {});
+                },
+                items:
+                    column.selectOptions.map((e) {
+                      return WoxDropdownItem(value: e.value, label: e.label);
+                    }).toList(),
+              );
+            },
+          ),
         );
       case PluginSettingValueType.pluginSettingValueTableColumnTypeSelectAIModel:
         return Expanded(
@@ -539,9 +506,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
           ),
         );
       case PluginSettingValueType.pluginSettingValueTableColumnTypeWoxImage:
-        return Expanded(
-          child: _buildWoxImageEditor(column),
-        );
+        return Expanded(child: _buildWoxImageEditor(column));
       case PluginSettingValueType.pluginSettingValueTableColumnTypeTextList:
         var columnValues = getValue(column.key);
         return Expanded(
@@ -574,10 +539,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                           child: WoxTextField(
                             controller: textboxEditingController[column.key + i.toString()],
                             maxLines: 1,
-                            style: TextStyle(
-                              overflow: TextOverflow.ellipsis,
-                              color: getThemeTextColor(),
-                            ),
+                            style: TextStyle(overflow: TextOverflow.ellipsis, color: getThemeTextColor()),
                             onChanged: (value) {
                               columnValues[i] = value;
 
@@ -666,10 +628,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
       return MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: accentColor,
-            brightness: isDarkTheme ? Brightness.dark : Brightness.light,
-          ),
+          colorScheme: ColorScheme.fromSeed(seedColor: accentColor, brightness: isDarkTheme ? Brightness.dark : Brightness.light),
           scaffoldBackgroundColor: Colors.transparent,
           cardColor: cardColor,
           shadowColor: textColor.withAlpha(50),
@@ -686,10 +645,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
           child: AlertDialog(
             backgroundColor: cardColor,
             surfaceTintColor: Colors.transparent,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-              side: BorderSide(color: outlineColor),
-            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: outlineColor)),
             elevation: 18,
             insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
             contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
@@ -715,14 +671,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                                 children: [
                                   SizedBox(
                                     width: maxLabelWidth,
-                                    child: Text(
-                                      tr(column.label),
-                                      style: TextStyle(
-                                        color: textColor.withOpacity(0.92),
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
+                                    child: Text(tr(column.label), style: TextStyle(color: textColor.withOpacity(0.92), fontSize: 14, fontWeight: FontWeight.w600)),
                                   ),
                                   const SizedBox(width: 10),
                                   buildColumn(column),
@@ -731,13 +680,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                               if (column.tooltip != "")
                                 Padding(
                                   padding: EdgeInsets.only(top: 4, left: maxLabelWidth + 10),
-                                  child: Text(
-                                    tr(column.tooltip),
-                                    style: TextStyle(
-                                      color: textColor.withOpacity(0.6),
-                                      fontSize: 12,
-                                    ),
-                                  ),
+                                  child: Text(tr(column.tooltip), style: TextStyle(color: textColor.withOpacity(0.6), fontSize: 12)),
                                 ),
                             ],
                           ),
@@ -745,27 +688,14 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                     if (customValidationError != null)
                       Padding(
                         padding: const EdgeInsets.only(top: 10),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                customValidationError!,
-                                style: const TextStyle(color: Colors.red),
-                              ),
-                            ),
-                          ],
-                        ),
+                        child: Row(children: [Expanded(child: Text(customValidationError!, style: const TextStyle(color: Colors.red)))]),
                       ),
                   ],
                 ),
               ),
             ),
             actions: [
-              WoxButton.secondary(
-                text: tr("ui_cancel"),
-                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-                onPressed: () => Navigator.pop(context),
-              ),
+              WoxButton.secondary(text: tr("ui_cancel"), padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12), onPressed: () => Navigator.pop(context)),
               const SizedBox(width: 12),
               WoxButton.primary(
                 text: tr("ui_save"),

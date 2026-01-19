@@ -23,21 +23,13 @@ abstract class WoxSettingPluginItem extends StatelessWidget {
   }
 
   Widget withFlexible(List<Widget> children) {
-    return Wrap(
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: children,
-    );
+    return Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: children);
   }
 
   Widget layout({required List<Widget> children, required PluginSettingValueStyle style}) {
     if (style.hasAnyPadding()) {
       return Padding(
-        padding: EdgeInsets.only(
-          top: style.paddingTop,
-          bottom: style.paddingBottom,
-          left: style.paddingLeft,
-          right: style.paddingRight,
-        ),
+        padding: EdgeInsets.only(top: style.paddingTop, bottom: style.paddingBottom, left: style.paddingLeft, right: style.paddingRight),
         child: withFlexible(children),
       );
     }
@@ -56,10 +48,7 @@ abstract class WoxSettingPluginItem extends StatelessWidget {
           ),
         );
       } else {
-        return Padding(
-          padding: const EdgeInsets.only(right: 4),
-          child: Text(text, style: TextStyle(color: getThemeTextColor(), fontSize: 13)),
-        );
+        return Padding(padding: const EdgeInsets.only(right: 4), child: Text(text, style: TextStyle(color: getThemeTextColor(), fontSize: 13)));
       }
     }
 
@@ -68,10 +57,7 @@ abstract class WoxSettingPluginItem extends StatelessWidget {
 
   Widget suffix(String text) {
     if (text != "") {
-      return Padding(
-        padding: const EdgeInsets.only(left: 4),
-        child: Text(text, style: TextStyle(color: getThemeTextColor(), fontSize: 13)),
-      );
+      return Padding(padding: const EdgeInsets.only(left: 4), child: Text(text, style: TextStyle(color: getThemeTextColor(), fontSize: 13)));
     }
 
     return const SizedBox.shrink();

@@ -22,13 +22,7 @@ class WoxSettingPluginHead extends WoxSettingPluginItem {
       children: [
         Row(
           children: [
-            Text(
-              item.content,
-              style: TextStyle(
-                fontSize: 16,
-                color: getThemeTextColor(),
-              ),
-            ),
+            Text(item.content, style: TextStyle(fontSize: 16, color: getThemeTextColor())),
             if (item.tooltip != "") WoxTooltipIconView(tooltip: item.tooltip, color: getThemeTextColor()),
           ],
         ),
