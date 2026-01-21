@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Input;
+using Wox.UI.Windows.Models;
 using Wox.UI.Windows.Services;
 using Wox.UI.Windows.ViewModels;
 
@@ -20,9 +21,16 @@ public partial class MainWindow : Window
         // Subscribe to API service events
         _apiService.ShowRequested += OnShowRequested;
         _apiService.HideRequested += OnHideRequested;
+        _apiService.SettingLoaded += OnSettingLoaded;
+        ThemeService.Instance.ThemeModeChanged += OnThemeModeChanged;
 
         // Subscribe to window height changes
         _viewModel.WindowHeightChanged += OnWindowHeightChanged;
+
+        SourceInitialized += (s, e) =>
+        {
+            WindowBackdropService.ApplyMica(this, ThemeService.Instance.IsDarkTheme);
+        };
 
         // Focus on query box when window is loaded
         Loaded += (s, e) =>
@@ -37,6 +45,23 @@ public partial class MainWindow : Window
         {
             Height = newHeight;
             Services.Logger.Log($"MainWindow height changed to: {newHeight}");
+        });
+    }
+
+    private void OnSettingLoaded(object? sender, WoxSetting setting)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            _viewModel.ApplySetting(setting);
+            Width = _viewModel.WindowWidth;
+        });
+    }
+
+    private void OnThemeModeChanged(object? sender, bool isDarkTheme)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            WindowBackdropService.ApplyMica(this, isDarkTheme);
         });
     }
 

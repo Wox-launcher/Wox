@@ -11,6 +11,7 @@ public partial class MainViewModel : ObservableObject
 {
     private readonly WoxApiService _apiService;
     private string _currentQueryId = string.Empty;
+    private int _maxResultCount = UIConstants.MAX_LIST_VIEW_ITEM_COUNT;
 
     [ObservableProperty]
     private string _queryText = string.Empty;
@@ -46,6 +47,21 @@ public partial class MainViewModel : ObservableObject
         _apiService = WoxApiService.Instance;
         _apiService.ResultsReceived += OnResultsReceived;
         _apiService.QueryChanged += OnQueryChanged;
+    }
+
+    public void ApplySetting(WoxSetting setting)
+    {
+        if (setting.AppWidth > 0)
+        {
+            WindowWidth = setting.AppWidth;
+        }
+
+        if (setting.MaxResultCount > 0)
+        {
+            _maxResultCount = setting.MaxResultCount;
+        }
+
+        ResizeWindow();
     }
 
     partial void OnQueryTextChanged(string value)
@@ -169,7 +185,7 @@ public partial class MainViewModel : ObservableObject
 
         // Calculate result height
         var itemCount = Results.Count;
-        var maxResultCount = UIConstants.MAX_LIST_VIEW_ITEM_COUNT;
+        var maxResultCount = _maxResultCount;
         var visibleCount = Math.Min(itemCount, maxResultCount);
 
         double resultHeight = 0;

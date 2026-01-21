@@ -7,9 +7,11 @@
         <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
         <converters:WoxImageToImageSourceConverter x:Key="WoxImageToImageSourceConverter"/>
 
-        <!-- Dark Theme Colors -->
+        <!-- Default Theme Colors -->
         <SolidColorBrush x:Key="ApplicationBackgroundBrush"
                 Color="#2D2D30"/>
+        <SolidColorBrush x:Key="AppBackgroundBrush"
+                Color="#E62D2D30"/>
         <SolidColorBrush x:Key="CardBackgroundFillColorDefaultBrush"
                 Color="#1E1E1E"/>
         <SolidColorBrush x:Key="CardBackgroundFillColorSecondaryBrush"
@@ -24,5 +26,51 @@
                 Color="#CCCCCC"/>
         <SolidColorBrush x:Key="AccentBrush"
                 Color="#0078D4"/>
+
+        <!-- Query Box -->
+        <SolidColorBrush x:Key="QueryBoxBackgroundBrush"
+                Color="#1E1E1E"/>
+        <SolidColorBrush x:Key="QueryBoxFontBrush"
+                Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="QueryBoxCursorBrush"
+                Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="QueryBoxSelectionBackgroundBrush"
+                Color="#3E3E42"/>
+        <SolidColorBrush x:Key="QueryBoxSelectionForegroundBrush"
+                Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="QueryBoxPlaceholderBrush"
+                Color="#CCCCCC"/>
+        <CornerRadius x:Key="QueryBoxCornerRadius">8</CornerRadius>
+
+        <!-- Results -->
+        <SolidColorBrush x:Key="ResultItemTitleBrush"
+                Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="ResultItemSubTitleBrush"
+                Color="#CCCCCC"/>
+        <SolidColorBrush x:Key="ResultItemActiveTitleBrush"
+                Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="ResultItemActiveSubTitleBrush"
+                Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="ResultItemActiveBackgroundBrush"
+                Color="#0078D4"/>
+        <SolidColorBrush x:Key="ResultItemHoverBackgroundBrush"
+                Color="#3E3E42"/>
+        <SolidColorBrush x:Key="ResultItemIconBackgroundBrush"
+                Color="#555555"/>
+        <CornerRadius x:Key="ResultItemCornerRadius">6</CornerRadius>
+
+        <!-- Preview -->
+        <SolidColorBrush x:Key="PreviewBackgroundBrush"
+                Color="#1E1E1E"/>
+        <SolidColorBrush x:Key="PreviewFontBrush"
+                Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="PreviewSplitLineBrush"
+                Color="#555555"/>
+
+        <!-- Toolbar -->
+        <SolidColorBrush x:Key="ToolbarBackgroundBrush"
+                Color="#3E3E42"/>
+        <SolidColorBrush x:Key="ToolbarFontBrush"
+                Color="#CCCCCC"/>
     </Application.Resources>
 </Application>

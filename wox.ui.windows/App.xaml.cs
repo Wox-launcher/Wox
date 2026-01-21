@@ -77,6 +77,9 @@ public partial class App : Application
                     // Connect to WebSocket
                     await woxApiService.ConnectAsync();
 
+                    await woxApiService.LoadThemeAsync();
+                    await woxApiService.LoadSettingAsync();
+
                     // Notify server that UI is ready
                     await woxApiService.NotifyUIReadyAsync();
                 }

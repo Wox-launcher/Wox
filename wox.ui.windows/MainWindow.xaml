@@ -9,7 +9,7 @@
         Height="{Binding WindowHeight}"
         Width="{Binding WindowWidth}"
         WindowStyle="None"
-        AllowsTransparency="True"
+        AllowsTransparency="False"
         Background="Transparent"
         Topmost="True"
         ShowInTaskbar="False"
@@ -23,7 +23,7 @@
         <vm:MainViewModel/>
     </Window.DataContext>
 
-    <Border Background="{DynamicResource ApplicationBackgroundBrush}"
+    <Border Background="{DynamicResource AppBackgroundBrush}"
             CornerRadius="12"
             BorderBrush="{DynamicResource ControlStrongStrokeColorDefaultBrush}"
             BorderThickness="1">
@@ -44,51 +44,57 @@
             <!-- Header: Search Box -->
             <Border Grid.Row="0"
                     Padding="16,12"
-                    Background="{DynamicResource CardBackgroundFillColorDefaultBrush}">
-                <TextBox
-                    x:Name="QueryTextBox"
-                    Text="{Binding QueryText, UpdateSourceTrigger=PropertyChanged}"
-                    FontSize="20"
-                    BorderThickness="0"
-                    Background="Transparent"
-                    Foreground="{DynamicResource TextFillColorPrimaryBrush}"
-                    CaretBrush="{DynamicResource TextFillColorPrimaryBrush}"
-                    PreviewKeyDown="QueryTextBox_PreviewKeyDown">
-                    <TextBox.Style>
-                        <Style TargetType="TextBox">
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="TextBox">
-                                        <Grid>
-                                            <ScrollViewer x:Name="PART_ContentHost"
-                                                          Focusable="false"
-                                                          HorizontalScrollBarVisibility="Hidden"
-                                                          VerticalScrollBarVisibility="Hidden"/>
-                                            <TextBlock Text="输入查询..."
-                                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                                       IsHitTestVisible="False"
-                                                       VerticalAlignment="Center">
-                                                <TextBlock.Style>
-                                                    <Style TargetType="TextBlock">
-                                                        <Setter Property="Visibility"
-                                                                Value="Collapsed"/>
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding Text, RelativeSource={RelativeSource TemplatedParent}}"
-                                                                         Value="">
-                                                                <Setter Property="Visibility"
-                                                                        Value="Visible"/>
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </TextBlock.Style>
-                                            </TextBlock>
-                                        </Grid>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                        </Style>
-                    </TextBox.Style>
-                </TextBox>
+                    Background="{DynamicResource AppBackgroundBrush}">
+                <Border Background="{DynamicResource QueryBoxBackgroundBrush}"
+                        CornerRadius="{DynamicResource QueryBoxCornerRadius}"
+                        Padding="12,6">
+                    <TextBox
+                        x:Name="QueryTextBox"
+                        Text="{Binding QueryText, UpdateSourceTrigger=PropertyChanged}"
+                        FontSize="20"
+                        BorderThickness="0"
+                        Background="Transparent"
+                        Foreground="{DynamicResource QueryBoxFontBrush}"
+                        CaretBrush="{DynamicResource QueryBoxCursorBrush}"
+                        SelectionBrush="{DynamicResource QueryBoxSelectionBackgroundBrush}"
+                        SelectionTextBrush="{DynamicResource QueryBoxSelectionForegroundBrush}"
+                        PreviewKeyDown="QueryTextBox_PreviewKeyDown">
+                        <TextBox.Style>
+                            <Style TargetType="TextBox">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="TextBox">
+                                            <Grid>
+                                                <ScrollViewer x:Name="PART_ContentHost"
+                                                              Focusable="false"
+                                                              HorizontalScrollBarVisibility="Hidden"
+                                                              VerticalScrollBarVisibility="Hidden"/>
+                                                <TextBlock Text="输入查询..."
+                                                           Foreground="{DynamicResource QueryBoxPlaceholderBrush}"
+                                                           IsHitTestVisible="False"
+                                                           VerticalAlignment="Center">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Visibility"
+                                                                    Value="Collapsed"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Text, RelativeSource={RelativeSource TemplatedParent}}"
+                                                                             Value="">
+                                                                    <Setter Property="Visibility"
+                                                                            Value="Visible"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </Grid>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </TextBox.Style>
+                    </TextBox>
+                </Border>
             </Border>
 
             <!-- Body: Results and Preview -->
@@ -128,7 +134,7 @@
                                         <Border Background="{TemplateBinding Background}"
                                                 BorderBrush="{TemplateBinding BorderBrush}"
                                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                                CornerRadius="6"
+                                                CornerRadius="{DynamicResource ResultItemCornerRadius}"
                                                 Padding="{TemplateBinding Padding}">
                                             <ContentPresenter/>
                                         </Border>
@@ -136,12 +142,12 @@
                                             <Trigger Property="IsMouseOver"
                                                      Value="True">
                                                 <Setter Property="Background"
-                                                        Value="{DynamicResource CardBackgroundFillColorSecondaryBrush}"/>
+                                                        Value="{DynamicResource ResultItemHoverBackgroundBrush}"/>
                                             </Trigger>
                                             <Trigger Property="IsSelected"
                                                      Value="True">
                                                 <Setter Property="Background"
-                                                        Value="{DynamicResource AccentBrush}"/>
+                                                        Value="{DynamicResource ResultItemActiveBackgroundBrush}"/>
                                             </Trigger>
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>
@@ -183,7 +189,7 @@
                                         Height="32"
                                         Margin="0,0,12,0"
                                         VerticalAlignment="Center"
-                                        Background="{DynamicResource ControlStrokeColorDefaultBrush}"
+                                        Background="{DynamicResource ResultItemIconBackgroundBrush}"
                                         CornerRadius="4">
                                     <TextBlock Text="📄"
                                                FontSize="20"
@@ -210,13 +216,39 @@
                                     <TextBlock Text="{Binding Title}"
                                                FontSize="16"
                                                FontWeight="SemiBold"
-                                               Foreground="{DynamicResource TextFillColorPrimaryBrush}"
-                                               TextTrimming="CharacterEllipsis"/>
+                                               TextTrimming="CharacterEllipsis">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground"
+                                                        Value="{DynamicResource ResultItemTitleBrush}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=IsSelected}"
+                                                                 Value="True">
+                                                        <Setter Property="Foreground"
+                                                                Value="{DynamicResource ResultItemActiveTitleBrush}"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
                                     <TextBlock Text="{Binding SubTitle}"
                                                FontSize="13"
-                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                                TextTrimming="CharacterEllipsis"
-                                               Margin="0,2,0,0"/>
+                                               Margin="0,2,0,0">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground"
+                                                        Value="{DynamicResource ResultItemSubTitleBrush}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=IsSelected}"
+                                                                 Value="True">
+                                                        <Setter Property="Foreground"
+                                                                Value="{DynamicResource ResultItemActiveSubTitleBrush}"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
                                 </StackPanel>
                             </Grid>
                         </DataTemplate>
@@ -227,15 +259,16 @@
                 <Border Grid.Column="1"
                         Width="300"
                         BorderThickness="1,0,0,0"
-                        BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
-                        Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{DynamicResource PreviewSplitLineBrush}"
+                        Background="{DynamicResource PreviewBackgroundBrush}"
                         Visibility="{Binding IsPreviewVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <TextBlock Text="{Binding PreviewContent}"
                                    Padding="16"
                                    TextWrapping="Wrap"
                                    FontFamily="Consolas"
-                                   FontSize="12"/>
+                                   FontSize="12"
+                                   Foreground="{DynamicResource PreviewFontBrush}"/>
                     </ScrollViewer>
                 </Border>
             </Grid>
@@ -244,16 +277,16 @@
             <Border Grid.Row="2"
                     Height="40"
                     Padding="12,0"
-                    Background="{DynamicResource CardBackgroundFillColorSecondaryBrush}"
+                    Background="{DynamicResource ToolbarBackgroundBrush}"
                     BorderThickness="0,1,0,0"
-                    BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                    BorderBrush="{DynamicResource PreviewSplitLineBrush}"
                     Visibility="{Binding IsToolbarVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <Grid>
                     <StackPanel Orientation="Horizontal"
                             HorizontalAlignment="Left">
                         <TextBlock VerticalAlignment="Center"
                                    FontSize="11"
-                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Foreground="{DynamicResource ToolbarFontBrush}"
                                    Opacity="0.7">
                             <Run Text="{Binding Results.Count, Mode=OneWay}"/>
                             <Run Text=" 个结果"/>
@@ -264,16 +297,16 @@
                         <TextBlock Text="打开"
                                    VerticalAlignment="Center"
                                    FontSize="11"
-                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Foreground="{DynamicResource ToolbarFontBrush}"
                                    Margin="0,0,6,0"/>
                         <Border Background="Transparent"
-                                BorderBrush="{DynamicResource TextFillColorSecondaryBrush}"
+                                BorderBrush="{DynamicResource ToolbarFontBrush}"
                                 BorderThickness="1"
                                 CornerRadius="3"
                                 Padding="6,2">
                             <TextBlock Text="Enter"
                                        FontSize="10"
-                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                       Foreground="{DynamicResource ToolbarFontBrush}"/>
                         </Border>
                     </StackPanel>
                 </Grid>

@@ -24,6 +24,7 @@ public class WoxApiService : IDisposable
     public event EventHandler<string>? QueryChanged;
     public event EventHandler? ShowRequested;
     public event EventHandler? HideRequested;
+    public event EventHandler<WoxSetting>? SettingLoaded;
 
     private WoxApiService() { }
 
@@ -228,6 +229,10 @@ public class WoxApiService : IDisposable
                 }
                 SendResponse(msg.RequestId, msg.TraceId, true, null);
                 break;
+            case "ReloadSetting":
+                _ = LoadSettingAsync();
+                SendResponse(msg.RequestId, msg.TraceId, true, null);
+                break;
         }
     }
 
@@ -328,6 +333,60 @@ public class WoxApiService : IDisposable
         catch (Exception ex)
         {
             Logger.Error("Error notifying focus lost", ex);
+        }
+    }
+
+    public async Task LoadThemeAsync()
+    {
+        try
+        {
+            if (_httpClient == null)
+            {
+                return;
+            }
+
+            var response = await _httpClient.PostAsync("/theme", null);
+            response.EnsureSuccessStatusCode();
+
+            var themeJson = await response.Content.ReadAsStringAsync();
+            if (!string.IsNullOrWhiteSpace(themeJson))
+            {
+                ThemeService.Instance.ApplyTheme(themeJson);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Error loading theme", ex);
+        }
+    }
+
+    public async Task LoadSettingAsync()
+    {
+        try
+        {
+            if (_httpClient == null)
+            {
+                return;
+            }
+
+            var response = await _httpClient.PostAsync("/setting/wox", null);
+            response.EnsureSuccessStatusCode();
+
+            var json = await response.Content.ReadAsStringAsync();
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return;
+            }
+
+            var setting = JsonSerializer.Deserialize<WoxSetting>(json);
+            if (setting != null)
+            {
+                SettingLoaded?.Invoke(this, setting);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Error loading setting", ex);
         }
     }
 
