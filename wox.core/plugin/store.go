@@ -666,6 +666,10 @@ func (s *Store) ParsePluginManifestFromLocal(ctx context.Context, filePath strin
 }
 
 func (s *Store) InstallFromLocal(ctx context.Context, filePath string) error {
+	return s.InstallFromLocalWithProgress(ctx, filePath, nil)
+}
+
+func (s *Store) InstallFromLocalWithProgress(ctx context.Context, filePath string, progressCallback InstallProgressCallback) error {
 	pluginMetadata, err := s.ParsePluginManifestFromLocal(ctx, filePath)
 	if err != nil {
 		return err
@@ -708,6 +712,9 @@ func (s *Store) InstallFromLocal(ctx context.Context, filePath string) error {
 
 	//unzip plugin
 	logger.Info(ctx, fmt.Sprintf("start to unzip plugin %s(%s)", pluginMetadata.GetName(ctx), pluginMetadata.Version))
+	if progressCallback != nil {
+		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_install_progress_extracting"))
+	}
 	unzipErr := util.Unzip(filePath, pluginDirectory)
 	if unzipErr != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to unzip plugin %s(%s): %s", pluginMetadata.GetName(ctx), pluginMetadata.Version, unzipErr.Error()))
@@ -716,6 +723,9 @@ func (s *Store) InstallFromLocal(ctx context.Context, filePath string) error {
 
 	//load plugin
 	logger.Info(ctx, fmt.Sprintf("start to load plugin %s(%s)", pluginMetadata.GetName(ctx), pluginMetadata.Version))
+	if progressCallback != nil {
+		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_install_progress_loading"))
+	}
 	loadErr := GetPluginManager().LoadPlugin(ctx, pluginDirectory)
 	if loadErr != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to load plugin %s(%s): %s", pluginMetadata.GetName(ctx), pluginMetadata.Version, loadErr.Error()))
@@ -731,6 +741,10 @@ func (s *Store) InstallFromLocal(ctx context.Context, filePath string) error {
 
 	// notify UI to reload
 	GetPluginManager().GetUI().ReloadSettingPlugins(ctx)
+
+	if progressCallback != nil {
+		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_install_progress_complete"))
+	}
 
 	return nil
 }

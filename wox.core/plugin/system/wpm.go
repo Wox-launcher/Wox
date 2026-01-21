@@ -642,7 +642,7 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 			}
 			if upgrade {
 				// show an upgrade icon
-				tails = append(tails, plugin.QueryResultTail{Type: plugin.QueryResultTailTypeImage, Image: common.NewWoxImageEmoji("⬆️")})
+				tails = append(tails, plugin.QueryResultTail{Type: plugin.QueryResultTailTypeImage, Image: common.UpgradeIcon})
 			} else {
 				// show an installed icon
 				tails = append(tails, plugin.QueryResultTail{Type: plugin.QueryResultTailTypeImage, Image: common.NewWoxImageEmoji("✅")})

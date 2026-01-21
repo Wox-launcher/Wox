@@ -137,7 +137,9 @@ func (i *PluginInstallerPlugin) queryForSelectionFile(ctx context.Context, fileP
 						// notify starting
 						i.api.Notify(ctx, fmt.Sprintf(i.api.GetTranslation(ctx, "plugin_installer_action_start"), actionButtonName, pluginMetadata.GetName(ctx)))
 
-						installErr := plugin.GetStoreManager().InstallFromLocal(ctx, filePath)
+						installErr := plugin.GetStoreManager().InstallFromLocalWithProgress(ctx, filePath, func(message string) {
+							i.api.Notify(ctx, fmt.Sprintf("%s: %s", pluginMetadata.GetName(ctx), message))
+						})
 						if installErr != nil {
 							i.api.Notify(ctx, fmt.Sprintf(i.api.GetTranslation(ctx, "plugin_installer_action_failed"), strings.ToLower(actionButtonName), installErr.Error()))
 							return
