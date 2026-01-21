@@ -40,6 +40,7 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
     final IconData statusIcon = isRunning ? Icons.check_circle : Icons.error;
     final String stateLabel = isRunning ? controller.tr("ui_runtime_status_running") : controller.tr("ui_runtime_status_stopped");
     final String pluginCountLabel = controller.tr("ui_runtime_status_plugin_count").replaceAll("{count}", status.loadedPluginCount.toString());
+    final String hostVersionLabel = status.hostVersion.isNotEmpty && !status.hostVersion.toLowerCase().startsWith('v') ? 'v${status.hostVersion}' : status.hostVersion;
 
     return WoxPanel(
       child: Column(
@@ -51,10 +52,7 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
               Container(
                 width: 36,
                 height: 36,
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: isDarkTheme ? 0.32 : 0.18),
-                  borderRadius: BorderRadius.circular(10),
-                ),
+                decoration: BoxDecoration(color: statusColor.withValues(alpha: isDarkTheme ? 0.32 : 0.18), borderRadius: BorderRadius.circular(10)),
                 child: Icon(statusIcon, color: statusColor, size: 20),
               ),
               const SizedBox(width: 12),
@@ -62,21 +60,13 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      _runtimeDisplayName(status.runtime),
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: textColor,
-                      ),
-                    ),
+                    Text(_runtimeDisplayName(status.runtime), style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: textColor)),
                     const SizedBox(height: 4),
-                    Text(
-                      stateLabel,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: statusColor,
-                      ),
+                    Row(
+                      children: [
+                        Text(stateLabel, style: TextStyle(fontWeight: FontWeight.w600, color: statusColor)),
+                        if (hostVersionLabel.isNotEmpty) ...[const Spacer(), Text(hostVersionLabel, style: TextStyle(color: subTextColor, fontSize: 12))],
+                      ],
                     ),
                   ],
                 ),
@@ -84,10 +74,7 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
             ],
           ),
           const SizedBox(height: 12),
-          Text(
-            pluginCountLabel,
-            style: TextStyle(color: subTextColor),
-          ),
+          Padding(padding: const EdgeInsets.only(left: 48), child: Text(pluginCountLabel, style: TextStyle(color: subTextColor))),
         ],
       ),
     );
@@ -202,192 +189,154 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
       final String runtimeStatusError = controller.runtimeStatusError.value;
       final List<WoxRuntimeStatus> visibleStatuses = statuses.where((status) => status.runtime.toUpperCase() != 'SCRIPT' || status.loadedPluginCount > 0).toList();
 
-      return form(children: [
-        formField(
-          label: controller.tr("ui_runtime_status"),
-          tips: null,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  if (isLoadingStatuses)
-                    const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              if (runtimeStatusError.isNotEmpty) ...[
-                Text(
-                  runtimeStatusError,
-                  style: TextStyle(color: Colors.red, fontSize: 12),
-                ),
-                const SizedBox(height: 4),
-              ],
-              if (!isLoadingStatuses && runtimeStatusError.isEmpty && visibleStatuses.isEmpty)
-                Text(
-                  controller.tr("ui_runtime_status_empty"),
-                  style: TextStyle(color: Colors.grey[120]),
-                ),
-              if (visibleStatuses.isNotEmpty)
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final double availableWidth = constraints.maxWidth.isFinite ? constraints.maxWidth : 960;
-                    final double spacing = 12;
-                    final int columnCount = availableWidth >= 640 ? 2 : 1;
-                    final double cardWidth = columnCount == 1 ? availableWidth : (availableWidth - spacing) / columnCount;
+      return form(
+        children: [
+          formField(
+            label: controller.tr("ui_runtime_status"),
+            tips: null,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [if (isLoadingStatuses) const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))]),
+                const SizedBox(height: 12),
+                if (runtimeStatusError.isNotEmpty) ...[Text(runtimeStatusError, style: TextStyle(color: Colors.red, fontSize: 12)), const SizedBox(height: 4)],
+                if (!isLoadingStatuses && runtimeStatusError.isEmpty && visibleStatuses.isEmpty)
+                  Text(controller.tr("ui_runtime_status_empty"), style: TextStyle(color: Colors.grey[120])),
+                if (visibleStatuses.isNotEmpty)
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final double availableWidth = constraints.maxWidth.isFinite ? constraints.maxWidth : 960;
+                      final double spacing = 12;
+                      final int columnCount = availableWidth >= 640 ? 2 : 1;
+                      final double cardWidth = columnCount == 1 ? availableWidth : (availableWidth - spacing) / columnCount;
 
-                    return Wrap(
-                      spacing: spacing,
-                      runSpacing: spacing,
-                      children: visibleStatuses
-                          .map(
-                            (status) => SizedBox(
-                              width: columnCount == 1 ? availableWidth : cardWidth,
-                              child: _buildRuntimeStatusCard(context, status),
-                            ),
-                          )
-                          .toList(),
-                    );
-                  },
+                      return Wrap(
+                        spacing: spacing,
+                        runSpacing: spacing,
+                        children:
+                            visibleStatuses
+                                .map((status) => SizedBox(width: columnCount == 1 ? availableWidth : cardWidth, child: _buildRuntimeStatusCard(context, status)))
+                                .toList(),
+                      );
+                    },
+                  ),
+              ],
+            ),
+          ),
+          formField(
+            label: controller.tr("ui_runtime_python_path"),
+            tips: controller.tr("ui_runtime_python_path_tips"),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: WoxTextField(
+                        controller: pythonController!,
+                        hintText: controller.tr("ui_runtime_python_path_placeholder"),
+                        onChanged: (value) {
+                          updatePythonPath(value);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    WoxButton.primary(
+                      text: controller.tr("ui_runtime_browse"),
+                      onPressed: () async {
+                        final result = await FileSelector.pick(const UuidV4().generate(), FileSelectorParams(isDirectory: false));
+                        if (result.isNotEmpty) {
+                          pythonController!.text = result.first;
+                          updatePythonPath(result.first);
+                        }
+                      },
+                    ),
+                    const SizedBox(width: 10),
+                    WoxButton.secondary(
+                      text: controller.tr("ui_runtime_clear"),
+                      onPressed: () {
+                        pythonController!.clear();
+                        updatePythonPath("");
+                      },
+                    ),
+                  ],
                 ),
-            ],
+                const SizedBox(height: 5),
+                Obx(() {
+                  if (isPythonValidating.value) {
+                    return Row(
+                      children: [
+                        const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                        const SizedBox(width: 8),
+                        Text(controller.tr("ui_runtime_validating")),
+                      ],
+                    );
+                  } else if (pythonValidationMessage.value.isNotEmpty) {
+                    return Text(pythonValidationMessage.value, style: TextStyle(color: pythonValidationMessage.value.startsWith('✓') ? Colors.green : Colors.red, fontSize: 12));
+                  }
+                  return const SizedBox.shrink();
+                }),
+              ],
+            ),
           ),
-        ),
-        formField(
-          label: controller.tr("ui_runtime_python_path"),
-          tips: controller.tr("ui_runtime_python_path_tips"),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: WoxTextField(
-                      controller: pythonController!,
-                      hintText: controller.tr("ui_runtime_python_path_placeholder"),
-                      onChanged: (value) {
-                        updatePythonPath(value);
+          formField(
+            label: controller.tr("ui_runtime_nodejs_path"),
+            tips: controller.tr("ui_runtime_nodejs_path_tips"),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: WoxTextField(
+                        controller: nodejsController!,
+                        hintText: controller.tr("ui_runtime_nodejs_path_placeholder"),
+                        onChanged: (value) {
+                          updateNodejsPath(value);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    WoxButton.primary(
+                      text: controller.tr("ui_runtime_browse"),
+                      onPressed: () async {
+                        final result = await FileSelector.pick(const UuidV4().generate(), FileSelectorParams(isDirectory: false));
+                        if (result.isNotEmpty) {
+                          nodejsController!.text = result.first;
+                          updateNodejsPath(result.first);
+                        }
                       },
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  WoxButton.primary(
-                    text: controller.tr("ui_runtime_browse"),
-                    onPressed: () async {
-                      final result = await FileSelector.pick(
-                        const UuidV4().generate(),
-                        FileSelectorParams(isDirectory: false),
-                      );
-                      if (result.isNotEmpty) {
-                        pythonController!.text = result.first;
-                        updatePythonPath(result.first);
-                      }
-                    },
-                  ),
-                  const SizedBox(width: 10),
-                  WoxButton.secondary(
-                    text: controller.tr("ui_runtime_clear"),
-                    onPressed: () {
-                      pythonController!.clear();
-                      updatePythonPath("");
-                    },
-                  ),
-                ],
-              ),
-              const SizedBox(height: 5),
-              Obx(() {
-                if (isPythonValidating.value) {
-                  return Row(
-                    children: [
-                      const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                      const SizedBox(width: 8),
-                      Text(controller.tr("ui_runtime_validating")),
-                    ],
-                  );
-                } else if (pythonValidationMessage.value.isNotEmpty) {
-                  return Text(
-                    pythonValidationMessage.value,
-                    style: TextStyle(
-                      color: pythonValidationMessage.value.startsWith('✓') ? Colors.green : Colors.red,
-                      fontSize: 12,
-                    ),
-                  );
-                }
-                return const SizedBox.shrink();
-              }),
-            ],
-          ),
-        ),
-        formField(
-          label: controller.tr("ui_runtime_nodejs_path"),
-          tips: controller.tr("ui_runtime_nodejs_path_tips"),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: WoxTextField(
-                      controller: nodejsController!,
-                      hintText: controller.tr("ui_runtime_nodejs_path_placeholder"),
-                      onChanged: (value) {
-                        updateNodejsPath(value);
+                    const SizedBox(width: 10),
+                    WoxButton.secondary(
+                      text: controller.tr("ui_runtime_clear"),
+                      onPressed: () {
+                        nodejsController!.clear();
+                        updateNodejsPath("");
                       },
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  WoxButton.primary(
-                    text: controller.tr("ui_runtime_browse"),
-                    onPressed: () async {
-                      final result = await FileSelector.pick(
-                        const UuidV4().generate(),
-                        FileSelectorParams(isDirectory: false),
-                      );
-                      if (result.isNotEmpty) {
-                        nodejsController!.text = result.first;
-                        updateNodejsPath(result.first);
-                      }
-                    },
-                  ),
-                  const SizedBox(width: 10),
-                  WoxButton.secondary(
-                    text: controller.tr("ui_runtime_clear"),
-                    onPressed: () {
-                      nodejsController!.clear();
-                      updateNodejsPath("");
-                    },
-                  ),
-                ],
-              ),
-              const SizedBox(height: 5),
-              Obx(() {
-                if (isNodejsValidating.value) {
-                  return Row(
-                    children: [
-                      const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                      const SizedBox(width: 8),
-                      Text(controller.tr("ui_runtime_validating")),
-                    ],
-                  );
-                } else if (nodejsValidationMessage.value.isNotEmpty) {
-                  return Text(
-                    nodejsValidationMessage.value,
-                    style: TextStyle(
-                      color: nodejsValidationMessage.value.startsWith('✓') ? Colors.green : Colors.red,
-                      fontSize: 12,
-                    ),
-                  );
-                }
-                return const SizedBox.shrink();
-              }),
-            ],
+                  ],
+                ),
+                const SizedBox(height: 5),
+                Obx(() {
+                  if (isNodejsValidating.value) {
+                    return Row(
+                      children: [
+                        const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                        const SizedBox(width: 8),
+                        Text(controller.tr("ui_runtime_validating")),
+                      ],
+                    );
+                  } else if (nodejsValidationMessage.value.isNotEmpty) {
+                    return Text(nodejsValidationMessage.value, style: TextStyle(color: nodejsValidationMessage.value.startsWith('✓') ? Colors.green : Colors.red, fontSize: 12));
+                  }
+                  return const SizedBox.shrink();
+                }),
+              ],
+            ),
           ),
-        ),
-      ]);
+        ],
+      );
     });
   }
 }
