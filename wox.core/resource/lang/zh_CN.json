@@ -584,6 +584,8 @@
   "plugin_wpm_uninstall": "卸载",
   "plugin_wpm_install": "安装",
   "plugin_wpm_upgrade": "升级",
+  "plugin_wpm_visit_website": "访问网站",
+  "plugin_wpm_manual_download": "手动下载",
   "plugin_wpm_start_using": "开始使用",
   "plugin_wpm_install_failed": "安装插件失败",
   "plugin_install_progress_starting_download": "开始下载...",

@@ -741,6 +741,27 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 			actions = []plugin.QueryResultAction{w.createInstallAction(pluginManifest)}
 		}
 
+		// Add common actions for all plugins
+		if pluginManifest.Website != "" {
+			actions = append(actions, plugin.QueryResultAction{
+				Name: "i18n:plugin_wpm_visit_website",
+				Icon: common.PluginWebsearchIcon,
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					shell.Open(pluginManifest.Website)
+				},
+			})
+		}
+
+		if pluginManifest.DownloadUrl != "" {
+			actions = append(actions, plugin.QueryResultAction{
+				Name: "i18n:plugin_wpm_manual_download",
+				Icon: common.PluginAppIcon,
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					shell.Open(pluginManifest.DownloadUrl)
+				},
+			})
+		}
+
 		// Create plugin detail JSON for preview
 		pluginName := pluginManifest.GetName(ctx)
 		pluginDescription := pluginManifest.GetDescription(ctx)

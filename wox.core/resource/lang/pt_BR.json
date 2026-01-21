@@ -546,6 +546,8 @@
   "plugin_wpm_uninstall": "Desinstalar",
   "plugin_wpm_install": "Instalar",
   "plugin_wpm_upgrade": "Atualizar",
+  "plugin_wpm_visit_website": "Visitar Site",
+  "plugin_wpm_manual_download": "Download Manual",
   "plugin_wpm_start_using": "Começar a usar",
   "plugin_wpm_install_failed": "Falha ao instalar o plugin",
   "plugin_install_progress_starting_download": "Iniciando download...",

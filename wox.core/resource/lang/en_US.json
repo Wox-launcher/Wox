@@ -583,6 +583,8 @@
   "plugin_wpm_uninstall": "Uninstall",
   "plugin_wpm_install": "Install",
   "plugin_wpm_upgrade": "Upgrade",
+  "plugin_wpm_visit_website": "Visit Website",
+  "plugin_wpm_manual_download": "Manual Download",
   "plugin_wpm_start_using": "Start Using",
   "plugin_wpm_install_failed": "Failed to install plugin",
   "plugin_install_progress_starting_download": "Starting download...",
