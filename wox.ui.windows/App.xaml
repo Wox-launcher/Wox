@@ -72,5 +72,13 @@
                 Color="#3E3E42"/>
         <SolidColorBrush x:Key="ToolbarFontBrush"
                 Color="#CCCCCC"/>
+
+        <!-- Layout Padding & Borders (Defaults) -->
+        <Thickness x:Key="AppPadding">0</Thickness>
+        <Thickness x:Key="ResultContainerPadding">0</Thickness>
+        <Thickness x:Key="ResultItemPadding">12,8</Thickness>
+        <Thickness x:Key="ToolbarPadding">12,0</Thickness>
+        <Thickness x:Key="ResultItemBorderThickness">0</Thickness>
+        <Thickness x:Key="ResultItemActiveBorderThickness">0</Thickness>
     </Application.Resources>
 </Application>

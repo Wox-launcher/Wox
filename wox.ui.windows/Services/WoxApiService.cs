@@ -24,6 +24,7 @@ public class WoxApiService : IDisposable
     public event EventHandler<string>? QueryChanged;
     public event EventHandler? ShowRequested;
     public event EventHandler? HideRequested;
+    public event EventHandler? ToggleRequested;
     public event EventHandler<WoxSetting>? SettingLoaded;
 
     private WoxApiService() { }
@@ -217,7 +218,7 @@ public class WoxApiService : IDisposable
                 break;
 
             case "ToggleApp":
-                // Handle in MainWindow based on current visibility
+                ToggleRequested?.Invoke(this, EventArgs.Empty);
                 SendResponse(msg.RequestId, msg.TraceId, true, null);
                 break;
 

@@ -31,3 +31,5 @@ crash.log
 release/
 wox.ui.macos/build/
 wox.ui.macos/.swiftpm/
+wox.ui.windows/bin/
+wox.ui.windows/obj/

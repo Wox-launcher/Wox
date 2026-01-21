@@ -21,6 +21,7 @@ public partial class MainWindow : Window
         // Subscribe to API service events
         _apiService.ShowRequested += OnShowRequested;
         _apiService.HideRequested += OnHideRequested;
+        _apiService.ToggleRequested += OnToggleRequested;
         _apiService.SettingLoaded += OnSettingLoaded;
         ThemeService.Instance.ThemeModeChanged += OnThemeModeChanged;
 
@@ -69,10 +70,7 @@ public partial class MainWindow : Window
     {
         Dispatcher.Invoke(() =>
         {
-            Show();
-            Activate();
-            QueryTextBox.Focus();
-            QueryTextBox.SelectAll();
+            ShowAndFocus();
         });
     }
 
@@ -82,6 +80,33 @@ public partial class MainWindow : Window
         {
             Hide();
         });
+    }
+
+    private void OnToggleRequested(object? sender, EventArgs e)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            if (IsVisible)
+            {
+                Hide();
+                return;
+            }
+
+            ShowAndFocus();
+        });
+    }
+
+    private void ShowAndFocus()
+    {
+        Show();
+        if (WindowState == WindowState.Minimized)
+        {
+            WindowState = WindowState.Normal;
+        }
+
+        Activate();
+        QueryTextBox.Focus();
+        QueryTextBox.SelectAll();
     }
 
     private void Window_Deactivated(object sender, EventArgs e)

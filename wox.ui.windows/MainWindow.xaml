@@ -43,7 +43,7 @@
 
             <!-- Header: Search Box -->
             <Border Grid.Row="0"
-                    Padding="16,12"
+                    Padding="{DynamicResource AppPadding}"
                     Background="{DynamicResource AppBackgroundBrush}">
                 <Border Background="{DynamicResource QueryBoxBackgroundBrush}"
                         CornerRadius="{DynamicResource QueryBoxCornerRadius}"
@@ -107,6 +107,7 @@
                 <!-- Results List -->
                 <ListView Grid.Column="0"
                           x:Name="ResultsListView"
+                          Padding="{DynamicResource ResultContainerPadding}"
                           ItemsSource="{Binding Results}"
                           SelectedIndex="{Binding SelectedIndex}"
                           SelectedItem="{Binding SelectedResult}"
@@ -121,13 +122,13 @@
                             <Setter Property="HorizontalContentAlignment"
                                     Value="Stretch"/>
                             <Setter Property="Padding"
-                                    Value="12,8"/>
+                                    Value="{DynamicResource ResultItemPadding}"/>
                             <Setter Property="Margin"
                                     Value="4,2"/>
                             <Setter Property="Background"
                                     Value="Transparent"/>
                             <Setter Property="BorderThickness"
-                                    Value="0"/>
+                                    Value="{DynamicResource ResultItemBorderThickness}"/>
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="ListViewItem">
@@ -148,6 +149,8 @@
                                                      Value="True">
                                                 <Setter Property="Background"
                                                         Value="{DynamicResource ResultItemActiveBackgroundBrush}"/>
+                                                <Setter Property="BorderThickness"
+                                                        Value="{DynamicResource ResultItemActiveBorderThickness}"/>
                                             </Trigger>
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>
@@ -276,24 +279,28 @@
             <!-- Footer: Toolbar -->
             <Border Grid.Row="2"
                     Height="40"
-                    Padding="12,0"
+                    Padding="{DynamicResource ToolbarPadding}"
                     Background="{DynamicResource ToolbarBackgroundBrush}"
                     BorderThickness="0,1,0,0"
                     BorderBrush="{DynamicResource PreviewSplitLineBrush}"
-                    Visibility="{Binding IsToolbarVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    Visibility="{Binding IsToolbarVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
+                    HorizontalAlignment="Left">
                 <Grid>
-                    <StackPanel Orientation="Horizontal"
-                            HorizontalAlignment="Left">
-                        <TextBlock VerticalAlignment="Center"
-                                   FontSize="11"
-                                   Foreground="{DynamicResource ToolbarFontBrush}"
-                                   Opacity="0.7">
-                            <Run Text="{Binding Results.Count, Mode=OneWay}"/>
-                            <Run Text=" 个结果"/>
-                        </TextBlock>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal"
-                            HorizontalAlignment="Right">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0"
+                               VerticalAlignment="Center"
+                               FontSize="11"
+                               Foreground="{DynamicResource ToolbarFontBrush}"
+                               Opacity="0.7">
+                        <Run Text="{Binding Results.Count, Mode=OneWay}"/>
+                        <Run Text=" 个结果"/>
+                    </TextBlock>
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                HorizontalAlignment="Right">
                         <TextBlock Text="打开"
                                    VerticalAlignment="Center"
                                    FontSize="11"

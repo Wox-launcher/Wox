@@ -155,6 +155,35 @@ public class ThemeService
                 UpdateCornerRadius("ResultItemCornerRadius", resultCornerRadius.Value);
             }
 
+            // Layout & Borders
+            var appPadding = GetThickness(root, "AppPaddingLeft", "AppPaddingTop", "AppPaddingRight", "AppPaddingBottom");
+            if (appPadding != null) UpdateThicknessResource("AppPadding", appPadding.Value);
+
+            var resultContainerPadding = GetThickness(root, "ResultContainerPaddingLeft", "ResultContainerPaddingTop", "ResultContainerPaddingRight", "ResultContainerPaddingBottom");
+            if (resultContainerPadding != null) UpdateThicknessResource("ResultContainerPadding", resultContainerPadding.Value);
+
+            var resultItemPadding = GetThickness(root, "ResultItemPaddingLeft", "ResultItemPaddingTop", "ResultItemPaddingRight", "ResultItemPaddingBottom");
+            if (resultItemPadding != null) UpdateThicknessResource("ResultItemPadding", resultItemPadding.Value);
+
+            var toolbarPaddingLeft = GetInt(root, "ToolbarPaddingLeft") ?? 0;
+            var toolbarPaddingRight = GetInt(root, "ToolbarPaddingRight") ?? 0;
+            if (toolbarPaddingLeft > 0 || toolbarPaddingRight > 0)
+            {
+                UpdateThicknessResource("ToolbarPadding", new Thickness(toolbarPaddingLeft, 0, toolbarPaddingRight, 0));
+            }
+
+            var resultItemBorderLeft = GetInt(root, "ResultItemBorderLeftWidth");
+            if (resultItemBorderLeft != null)
+            {
+                UpdateThicknessResource("ResultItemBorderThickness", new Thickness(resultItemBorderLeft.Value, 0, 0, 0));
+            }
+
+            var resultItemActiveBorderLeft = GetInt(root, "ResultItemActiveBorderLeftWidth");
+            if (resultItemActiveBorderLeft != null)
+            {
+                UpdateThicknessResource("ResultItemActiveBorderThickness", new Thickness(resultItemActiveBorderLeft.Value, 0, 0, 0));
+            }
+
             UpdateThemeMode(appBackground);
         }
         catch (Exception ex)
@@ -178,6 +207,14 @@ public class ThemeService
         Application.Current.Dispatcher.Invoke(() =>
         {
             Application.Current.Resources[key] = new CornerRadius(value);
+        });
+    }
+
+    private void UpdateThicknessResource(string key, Thickness value)
+    {
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            Application.Current.Resources[key] = value;
         });
     }
 
@@ -220,6 +257,21 @@ public class ThemeService
         }
 
         return null;
+    }
+
+    private static Thickness? GetThickness(JsonElement root, string leftKey, string topKey, string rightKey, string bottomKey)
+    {
+        var left = GetInt(root, leftKey);
+        var top = GetInt(root, topKey);
+        var right = GetInt(root, rightKey);
+        var bottom = GetInt(root, bottomKey);
+
+        if (left == null && top == null && right == null && bottom == null)
+        {
+            return null;
+        }
+
+        return new Thickness(left ?? 0, top ?? 0, right ?? 0, bottom ?? 0);
     }
 
     private void UpdateThemeMode(Color? appBackground)
