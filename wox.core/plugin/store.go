@@ -59,12 +59,35 @@ func (m StorePluginManifest) translate(ctx context.Context, text string) string 
 	return i18n.GetI18nManager().TranslateI18nMap(ctx, text, m.I18n)
 }
 
+func (m StorePluginManifest) translateWithLang(text string, langCode i18n.LangCode) string {
+	if !strings.HasPrefix(text, "i18n:") {
+		return text
+	}
+
+	key := strings.TrimPrefix(text, "i18n:")
+	if langMap, ok := m.I18n[string(langCode)]; ok {
+		if translated, ok := langMap[key]; ok {
+			return translated
+		}
+	}
+
+	return text
+}
+
 func (m StorePluginManifest) GetName(ctx context.Context) string {
 	return m.translate(ctx, m.Name)
 }
 
 func (m StorePluginManifest) GetDescription(ctx context.Context) string {
 	return m.translate(ctx, m.Description)
+}
+
+func (m StorePluginManifest) GetNameEnUs() string {
+	return m.translateWithLang(m.Name, i18n.LangCodeEnUs)
+}
+
+func (m StorePluginManifest) GetDescriptionEnUs() string {
+	return m.translateWithLang(m.Description, i18n.LangCodeEnUs)
 }
 
 var storeInstance *Store
@@ -217,6 +240,8 @@ func (s *Store) Search(ctx context.Context, keyword string) []StorePluginManifes
 
 		return IsStringMatch(ctx, manifest.GetName(ctx), keyword) ||
 			IsStringMatch(ctx, manifest.GetDescription(ctx), keyword) ||
+			IsStringMatch(ctx, manifest.GetNameEnUs(), keyword) ||
+			IsStringMatch(ctx, manifest.GetDescriptionEnUs(), keyword) ||
 			strings.EqualFold(manifest.Id, keyword)
 	})
 }
