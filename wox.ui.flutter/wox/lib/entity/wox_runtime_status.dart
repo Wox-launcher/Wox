@@ -2,12 +2,14 @@ class WoxRuntimeStatus {
   WoxRuntimeStatus({
     required this.runtime,
     required this.isStarted,
+    required this.hostVersion,
     required this.loadedPluginCount,
     required this.loadedPluginNames,
   });
 
   final String runtime;
   final bool isStarted;
+  final String hostVersion;
   final int loadedPluginCount;
   final List<String> loadedPluginNames;
 
@@ -16,6 +18,7 @@ class WoxRuntimeStatus {
       return WoxRuntimeStatus(
         runtime: '',
         isStarted: false,
+        hostVersion: '',
         loadedPluginCount: 0,
         loadedPluginNames: const <String>[],
       );
@@ -35,6 +38,7 @@ class WoxRuntimeStatus {
     return WoxRuntimeStatus(
       runtime: json['Runtime']?.toString() ?? '',
       isStarted: json['IsStarted'] == true,
+      hostVersion: json['HostVersion']?.toString() ?? '',
       loadedPluginCount: parsedCount,
       loadedPluginNames: List<String>.from(
           (json['LoadedPluginNames'] ?? const <dynamic>[])

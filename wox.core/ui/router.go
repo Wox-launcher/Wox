@@ -17,6 +17,7 @@ import (
 	"wox/database"
 	"wox/i18n"
 	"wox/plugin"
+	"wox/plugin/host"
 	"wox/setting"
 	"wox/ui/dto"
 	"wox/updater"
@@ -652,8 +653,8 @@ func handleRuntimeStatus(w http.ResponseWriter, r *http.Request) {
 	instances := plugin.GetPluginManager().GetPluginInstances()
 
 	statuses := make([]dto.RuntimeStatusDto, 0, len(plugin.AllHosts))
-	for _, host := range plugin.AllHosts {
-		runtime := string(host.GetRuntime(ctx))
+	for _, runtimeHost := range plugin.AllHosts {
+		runtime := string(runtimeHost.GetRuntime(ctx))
 
 		var pluginNames []string
 		for _, instance := range instances {
@@ -665,7 +666,8 @@ func handleRuntimeStatus(w http.ResponseWriter, r *http.Request) {
 
 		statuses = append(statuses, dto.RuntimeStatusDto{
 			Runtime:           runtime,
-			IsStarted:         host.IsStarted(ctx),
+			IsStarted:         runtimeHost.IsStarted(ctx),
+			HostVersion:       getRuntimeHostVersion(ctx, runtime),
 			LoadedPluginCount: len(pluginNames),
 			LoadedPluginNames: pluginNames,
 		})
@@ -676,6 +678,45 @@ func handleRuntimeStatus(w http.ResponseWriter, r *http.Request) {
 	})
 
 	writeSuccessResponse(w, statuses)
+}
+
+func getRuntimeHostVersion(ctx context.Context, runtime string) string {
+	runtimeUpper := strings.ToUpper(runtime)
+	switch runtimeUpper {
+	case string(plugin.PLUGIN_RUNTIME_NODEJS):
+		return getNodejsHostVersion(ctx)
+	case string(plugin.PLUGIN_RUNTIME_PYTHON):
+		return getPythonHostVersion(ctx)
+	default:
+		return ""
+	}
+}
+
+func getNodejsHostVersion(ctx context.Context) string {
+	nodePath := host.FindNodejsPath(ctx)
+	versionOutput, err := shell.RunOutput(nodePath, "-v")
+	if err != nil {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to get nodejs host version: %s", err))
+		return ""
+	}
+
+	return strings.TrimSpace(string(versionOutput))
+}
+
+func getPythonHostVersion(ctx context.Context) string {
+	pythonPath := host.FindPythonPath(ctx)
+	versionOutput, err := shell.RunOutput(pythonPath, "--version")
+	version := strings.TrimSpace(string(versionOutput))
+	if err != nil || version == "" {
+		versionOutput, err = shell.RunOutput(pythonPath, "-c", "import sys;print(sys.version.split()[0])")
+		if err != nil {
+			util.GetLogger().Warn(ctx, fmt.Sprintf("failed to get python host version: %s", err))
+			return ""
+		}
+		version = strings.TrimSpace(string(versionOutput))
+	}
+
+	return strings.TrimPrefix(version, "Python ")
 }
 
 func handleSettingPluginUpdate(w http.ResponseWriter, r *http.Request) {
