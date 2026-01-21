@@ -624,16 +624,17 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
       final double maxLabelWidth = getMaxColumnWidth();
       final double dialogContentWidth = math.max(600, maxLabelWidth + 320);
       final Color outlineColor = accentColor.withOpacity(isDarkTheme ? 0.22 : 0.15);
+      final baseTheme = Theme.of(context);
+      final dialogTheme = baseTheme.copyWith(
+        colorScheme: ColorScheme.fromSeed(seedColor: accentColor, brightness: isDarkTheme ? Brightness.dark : Brightness.light),
+        scaffoldBackgroundColor: Colors.transparent,
+        cardColor: cardColor,
+        shadowColor: textColor.withAlpha(50),
+      );
 
-      return MaterialApp(
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: accentColor, brightness: isDarkTheme ? Brightness.dark : Brightness.light),
-          scaffoldBackgroundColor: Colors.transparent,
-          cardColor: cardColor,
-          shadowColor: textColor.withAlpha(50),
-        ),
-        home: Focus(
+      return Theme(
+        data: dialogTheme,
+        child: Focus(
           autofocus: true,
           onKeyEvent: (node, event) {
             if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.escape) {
