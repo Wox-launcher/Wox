@@ -152,10 +152,19 @@ func (w *WebsocketHost) startWebsocketServer(ctx context.Context, port int) {
 			w.onMessage(string(data))
 		})
 	})
-	connErr := w.ws.Connect(ctx)
-	if connErr != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("<%s> failed to connect to host: %s", w.getHostName(ctx), connErr))
-		return
+	const maxAttempts = 10
+	const baseDelay = 200 * time.Millisecond
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		connErr := w.ws.Connect(ctx)
+		if connErr == nil {
+			return
+		}
+		if attempt == maxAttempts {
+			util.GetLogger().Error(ctx, fmt.Sprintf("<%s> failed to connect to host after %d attempts: %s", w.getHostName(ctx), maxAttempts, connErr))
+			return
+		}
+		util.GetLogger().Info(ctx, fmt.Sprintf("<%s> failed to connect to host (attempt %d/%d): %s", w.getHostName(ctx), attempt, maxAttempts, connErr))
+		time.Sleep(time.Duration(attempt) * baseDelay)
 	}
 }
 

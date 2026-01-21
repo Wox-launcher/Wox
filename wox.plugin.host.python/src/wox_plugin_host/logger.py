@@ -10,7 +10,7 @@ websocket: Optional[ServerConnection] = None
 def update_log_directory(log_directory: str) -> None:
     """Update the log directory for the logger"""
     logger.remove()
-    logger.add(f"{log_directory}/python.log", format="{time} {message}")
+    logger.add(f"{log_directory}/python.log", format="{time:YYYY-MM-DD HH:mm:ss.SSS} {message}")
 
 
 def update_websocket(ws: Optional[ServerConnection]) -> None:

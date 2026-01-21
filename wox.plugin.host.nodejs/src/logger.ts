@@ -10,6 +10,10 @@ let ws: WebSocket | undefined = undefined
 
 const winstonLogger = winston.createLogger({
   level: "info",
+  format: winston.format.combine(
+    winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss.SSS" }),
+    winston.format.printf(info => `${info.timestamp} ${info.message}`)
+  ),
   transports: [new winston.transports.File({ filename: "node.log", dirname: logDirectory })]
 })
 
