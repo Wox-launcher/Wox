@@ -271,6 +271,10 @@ func (s *Store) Search(ctx context.Context, keyword string) []StorePluginManifes
 // message: progress message (e.g., "Downloading: 50%", "Extracting files...", "Loading plugin...")
 type InstallProgressCallback func(message string)
 
+// UninstallProgressCallback is called during plugin uninstall to report progress
+// message: progress message (e.g., "Removing plugin...", "Cleaning settings...", "Unloading plugin...")
+type UninstallProgressCallback func(message string)
+
 func (s *Store) Install(ctx context.Context, manifest StorePluginManifest) error {
 	return s.InstallWithProgress(ctx, manifest, nil)
 }
@@ -732,7 +736,19 @@ func (s *Store) InstallFromLocal(ctx context.Context, filePath string) error {
 }
 
 func (s *Store) Uninstall(ctx context.Context, plugin *Instance, skipCleanSetting bool) error {
+	return s.UninstallWithProgress(ctx, plugin, skipCleanSetting, nil)
+}
+
+func (s *Store) UninstallWithProgress(ctx context.Context, plugin *Instance, skipCleanSetting bool, progressCallback UninstallProgressCallback) error {
 	logger.Info(ctx, fmt.Sprintf("start to uninstall plugin %s(%s)", plugin.Metadata.GetName(ctx), plugin.Metadata.Version))
+
+	if progressCallback != nil {
+		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_uninstall_progress_preparing"))
+	}
+
+	if progressCallback != nil {
+		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_uninstall_progress_removing"))
+	}
 
 	if plugin.IsDevPlugin {
 		var wpmPlugin *Instance
@@ -767,6 +783,9 @@ func (s *Store) Uninstall(ctx context.Context, plugin *Instance, skipCleanSettin
 	}
 
 	if !skipCleanSetting {
+		if progressCallback != nil {
+			progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_uninstall_progress_cleaning_settings"))
+		}
 		if db := database.GetDB(); db != nil {
 			if err := setting.NewPluginSettingStore(db, plugin.Metadata.Id).DeleteAll(); err != nil {
 				logger.Error(ctx, fmt.Sprintf("failed to delete plugin settings %s(%s): %s", plugin.Metadata.GetName(ctx), plugin.Metadata.Version, err.Error()))
@@ -774,8 +793,16 @@ func (s *Store) Uninstall(ctx context.Context, plugin *Instance, skipCleanSettin
 		}
 	}
 
+	if progressCallback != nil {
+		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_uninstall_progress_unloading"))
+	}
+
 	GetPluginManager().UnloadPlugin(ctx, plugin)
 	GetPluginManager().GetUI().ReloadSettingPlugins(ctx)
+
+	if progressCallback != nil {
+		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_uninstall_progress_complete"))
+	}
 
 	return nil
 }
