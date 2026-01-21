@@ -460,16 +460,24 @@ func (w *WPMPlugin) uninstallCommand(ctx context.Context, query plugin.Query) []
 					Name:                   "i18n:plugin_wpm_uninstall",
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						if err := plugin.GetStoreManager().Uninstall(ctx, pluginInstance, false); err != nil {
+						pluginName := pluginInstance.GetName(ctx)
+						w.api.Notify(ctx, fmt.Sprintf(
+							w.api.GetTranslation(ctx, "i18n:plugin_installer_action_start"),
+							w.api.GetTranslation(ctx, "i18n:plugin_installer_uninstall"),
+							pluginName,
+						))
+						if err := plugin.GetStoreManager().UninstallWithProgress(ctx, pluginInstance, false, func(message string) {
+							w.api.Notify(ctx, fmt.Sprintf("%s: %s", pluginName, message))
+						}); err != nil {
 							w.api.Notify(ctx, fmt.Sprintf(
 								w.api.GetTranslation(ctx, "i18n:plugin_installer_action_failed"),
 								w.api.GetTranslation(ctx, "i18n:plugin_installer_uninstall"),
-								fmt.Sprintf("%s: %s", pluginInstance.GetName(ctx), err.Error()),
+								fmt.Sprintf("%s: %s", pluginName, err.Error()),
 							))
 						} else {
 							w.api.Notify(ctx, fmt.Sprintf(
 								w.api.GetTranslation(ctx, "i18n:plugin_installer_action_success"),
-								pluginInstance.GetName(ctx),
+								pluginName,
 								w.api.GetTranslation(ctx, "i18n:plugin_installer_verb_uninstall_past"),
 							))
 						}
@@ -576,7 +584,9 @@ func (w *WPMPlugin) createUninstallAction(pluginManifest plugin.StorePluginManif
 						pluginName,
 					))
 
-					uninstallErr := plugin.GetStoreManager().Uninstall(ctx, inst, false)
+					uninstallErr := plugin.GetStoreManager().UninstallWithProgress(ctx, inst, false, func(message string) {
+						w.api.Notify(ctx, fmt.Sprintf("%s: %s", pluginName, message))
+					})
 					if uninstallErr != nil {
 						w.api.Notify(ctx, fmt.Sprintf(
 							w.api.GetTranslation(ctx, "i18n:plugin_installer_action_failed"),
