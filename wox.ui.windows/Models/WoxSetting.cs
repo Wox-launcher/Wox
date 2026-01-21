@@ -12,4 +12,7 @@ public sealed class WoxSetting
 
     [JsonPropertyName("HideOnLostFocus")]
     public bool HideOnLostFocus { get; set; }
+
+    [JsonPropertyName("PreviewWidthRatio")]
+    public double PreviewWidthRatio { get; set; }
 }

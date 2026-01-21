@@ -16,7 +16,11 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
-        _viewModel = (MainViewModel)DataContext;
+        _viewModel = DataContext as MainViewModel;
+        if (_viewModel != null)
+        {
+            _viewModel.PropertyChanged += ViewModel_PropertyChanged;
+        }
         _apiService = WoxApiService.Instance;
 
         // Subscribe to API service events
@@ -39,6 +43,21 @@ public partial class MainWindow : Window
         {
             QueryTextBox.Focus();
         };
+    }
+
+    private void ViewModel_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainViewModel.PreviewScrollPosition))
+        {
+            if (_viewModel?.PreviewScrollPosition == "bottom")
+            {
+                Dispatcher.InvokeAsync(() => PreviewScrollViewer.ScrollToBottom(), System.Windows.Threading.DispatcherPriority.Loaded);
+            }
+            else
+            {
+                Dispatcher.InvokeAsync(() => PreviewScrollViewer.ScrollToTop(), System.Windows.Threading.DispatcherPriority.Loaded);
+            }
+        }
     }
 
     private void OnWindowHeightChanged(object? sender, double newHeight)
@@ -67,10 +86,11 @@ public partial class MainWindow : Window
         });
     }
 
-    private void OnShowRequested(object? sender, EventArgs e)
+    private void OnShowRequested(object? sender, System.Collections.Generic.List<QueryHistory> history)
     {
         Dispatcher.Invoke(() =>
         {
+            _viewModel.OnShowHistory(history);
             ShowAndFocus();
         });
     }
@@ -209,12 +229,26 @@ public partial class MainWindow : Window
         switch (e.Key)
         {
             case Key.Down:
-                _viewModel.MoveSelectionDownCommand.Execute(null);
+                if (_viewModel.Results.Count > 0)
+                {
+                     _viewModel.MoveSelectionDownCommand.Execute(null);
+                }
+                else
+                {
+                    _viewModel.MoveHistoryDownCommand.Execute(null);
+                }
                 e.Handled = true;
                 break;
 
             case Key.Up:
-                _viewModel.MoveSelectionUpCommand.Execute(null);
+                if (_viewModel.Results.Count > 0 && _viewModel.SelectedIndex > 0)
+                {
+                    _viewModel.MoveSelectionUpCommand.Execute(null);
+                }
+                else
+                {
+                    _viewModel.MoveHistoryUpCommand.Execute(null);
+                }
                 e.Handled = true;
                 break;
 

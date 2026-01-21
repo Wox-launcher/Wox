@@ -1,0 +1,84 @@
+<UserControl x:Class="Wox.UI.Windows.Views.FormView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:Wox.UI.Windows.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="300">
+    <UserControl.Resources>
+        <DataTemplate DataType="{x:Type vm:FormTextBoxItemViewModel}">
+            <StackPanel Margin="0,0,0,10">
+                <StackPanel Orientation="Vertical">
+                    <TextBlock Text="{Binding Label}" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,5" 
+                               Foreground="{DynamicResource TextColor}"/>
+                    <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}" 
+                             Style="{DynamicResource InputBoxStyle}"
+                             AcceptsReturn="{Binding IsMultiline}"
+                             ToolTip="{Binding Tooltip}"/>
+                </StackPanel>
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type vm:FormCheckboxItemViewModel}">
+            <StackPanel Margin="0,0,0,10">
+                <CheckBox IsChecked="{Binding IsChecked}" Content="{Binding Label}"
+                          ToolTip="{Binding Tooltip}"
+                          Foreground="{DynamicResource TextColor}"/>
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type vm:FormSelectItemViewModel}">
+            <StackPanel Margin="0,0,0,10">
+                <TextBlock Text="{Binding Label}" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,5"
+                           Foreground="{DynamicResource TextColor}"/>
+                <ComboBox ItemsSource="{Binding Options}" 
+                          SelectedValue="{Binding SelectedValue}"
+                          SelectedValuePath="Value"
+                          DisplayMemberPath="Label"
+                          ToolTip="{Binding Tooltip}"/>
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type vm:FormHeadItemViewModel}">
+            <TextBlock Text="{Binding Text}" FontSize="16" FontWeight="Bold" Margin="0,15,0,10"
+                       Foreground="{DynamicResource TextColor}"/>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type vm:FormLabelItemViewModel}">
+            <TextBlock Text="{Binding Text}" FontSize="12" Margin="0,0,0,10" Opacity="0.8"
+                       Foreground="{DynamicResource TextColor}"/>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type vm:FormNewLineItemViewModel}">
+            <Border Height="10"/>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid Background="{DynamicResource WindowBackground}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <TextBlock Text="Action Form" FontSize="18" FontWeight="Bold" Margin="10" 
+                   Foreground="{DynamicResource TextColor}"/>
+
+        <!-- Form Items -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="10,0">
+            <ItemsControl ItemsSource="{Binding Items}"/>
+        </ScrollViewer>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="10">
+            <Button Content="Cancel (Esc)" Command="{Binding CancelCommand}" Margin="0,0,10,0" Padding="10,5"/>
+            <Button Content="Submit (Ctrl+Enter)" Command="{Binding SubmitAsyncCommand}" Padding="10,5" Style="{DynamicResource PrimaryButtonStyle}"/>
+        </StackPanel>
+    </Grid>
+
+    <UserControl.InputBindings>
+        <KeyBinding Key="Esc" Command="{Binding CancelCommand}"/>
+        <KeyBinding Key="Enter" Modifiers="Ctrl" Command="{Binding SubmitAsyncCommand}"/>
+    </UserControl.InputBindings>
+</UserControl>

@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:Wox.UI.Windows.ViewModels"
+        xmlns:v="clr-namespace:Wox.UI.Windows.Views"
         mc:Ignorable="d"
         Title="Wox"
         Height="{Binding WindowHeight}"
@@ -261,14 +262,14 @@
 
                 <!-- Preview Panel -->
                 <Border Grid.Column="1"
-                        Width="300"
+                        Width="{Binding PreviewWidth}"
                         BorderThickness="1,0,0,0"
                         BorderBrush="{DynamicResource PreviewSplitLineBrush}"
                         Background="{DynamicResource PreviewBackgroundBrush}"
                         Visibility="{Binding IsPreviewVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <Grid>
                         <!-- Text/Markdown Preview -->
-                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ScrollViewer x:Name="PreviewScrollViewer" VerticalScrollBarVisibility="Auto">
                             <TextBlock Text="{Binding PreviewContent}"
                                        Padding="16"
                                        TextWrapping="Wrap"
@@ -348,6 +349,23 @@
                     </StackPanel>
                 </Grid>
             </Border>
+            <!-- Action Panel (Existing logic handles this differently, maybe overlapping?) -->
+             
+            <!-- Form Action Panel Overlay -->
+            <Grid Grid.Row="0" Grid.RowSpan="3" Grid.Column="0" Grid.ColumnSpan="2"
+                  Visibility="{Binding IsFormVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
+                  Background="#80000000"> <!-- Semi-transparent background -->
+                <Border Background="{DynamicResource WindowBackground}" 
+                        CornerRadius="8" 
+                        Width="400" 
+                        MaxHeight="500"
+                        VerticalAlignment="Center" 
+                        HorizontalAlignment="Center"
+                        Padding="0"
+                        Effect="{StaticResource DropShadowEffect}">
+                    <v:FormView DataContext="{Binding FormViewModel}"/>
+                </Border>
+            </Grid>
         </Grid>
     </Border>
 </Window>

@@ -71,6 +71,9 @@ public class ActionItem
     [JsonPropertyName("Name")]
     public string Name { get; set; } = string.Empty;
 
+    [JsonPropertyName("Type")]
+    public string Type { get; set; } = "execute";
+
     [JsonPropertyName("Icon")]
     public WoxImage? Icon { get; set; }
 
@@ -82,6 +85,9 @@ public class ActionItem
 
     [JsonPropertyName("Hotkey")]
     public string? Hotkey { get; set; }
+
+    [JsonPropertyName("Form")]
+    public List<PluginSettingDefinitionItem> Form { get; set; } = new();
 }
 
 public class WoxImage
@@ -103,4 +109,7 @@ public class Preview
 
     [JsonPropertyName("PreviewProperties")]
     public Dictionary<string, object>? PreviewProperties { get; set; }
+
+    [JsonPropertyName("ScrollPosition")]
+    public string? ScrollPosition { get; set; }
 }

@@ -25,7 +25,7 @@ public class WoxApiService : IDisposable
 
     public event EventHandler<QueryResult>? ResultsReceived;
     public event EventHandler<string>? QueryChanged;
-    public event EventHandler? ShowRequested;
+    public event EventHandler<List<QueryHistory>>? ShowRequested;
     public event EventHandler? HideRequested;
     public event EventHandler? ToggleRequested;
     public event EventHandler<WoxSetting>? SettingLoaded;
@@ -219,7 +219,27 @@ public class WoxApiService : IDisposable
                 break;
 
             case "ShowApp":
-                ShowRequested?.Invoke(this, EventArgs.Empty);
+                var history = new List<QueryHistory>();
+                if (msg.Data != null)
+                {
+                    try
+                    {
+                        var json = JsonSerializer.Serialize(msg.Data);
+                        // The data might be directly a list of histories or nested
+                        // Based on Flutter logic it seems to be passed directly or as part of params
+                        // Let's assume it's a list for now, or check for properties
+                        var historyList = JsonSerializer.Deserialize<List<QueryHistory>>(json);
+                        if (historyList != null)
+                        {
+                            history = historyList;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error("Error parsing ShowApp history", ex);
+                    }
+                }
+                ShowRequested?.Invoke(this, history);
                 SendResponse(msg.RequestId, msg.TraceId, true, null);
                 break;
 
@@ -366,6 +386,19 @@ public class WoxApiService : IDisposable
         };
 
         await SendRequestAsync("Action", actionData);
+    }
+
+    public async Task SendFormActionAsync(string queryId, string resultId, string actionId, Dictionary<string, string> values)
+    {
+        var formActionData = new
+        {
+            QueryId = queryId,
+            ResultId = resultId,
+            ActionId = actionId,
+            Values = values
+        };
+
+        await SendRequestAsync("FormAction", formActionData);
     }
 
     private async Task SendRequestAsync(string method, object data)

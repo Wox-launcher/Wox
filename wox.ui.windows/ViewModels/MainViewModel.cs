@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Wox.UI.Windows.Models;
 using Wox.UI.Windows.Services;
+using System.Collections.Generic;
 
 namespace Wox.UI.Windows.ViewModels;
 
@@ -36,6 +37,12 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     private string? _previewImagePath;
+
+    [ObservableProperty]
+    private double _previewWidth = 300;
+
+    [ObservableProperty]
+    private string? _previewScrollPosition;
 
     [ObservableProperty]
     private bool _isPreviewVisible;
@@ -70,6 +77,9 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private string? _toolbarIcon;
 
+    private List<QueryHistory> _queryHistory = new();
+    private int _historyIndex = -1;
+
     public event EventHandler<double>? WindowHeightChanged;
     public event EventHandler<string>? AutoCompleteRequested;
 
@@ -84,6 +94,12 @@ public partial class MainViewModel : ObservableObject
         _apiService.GetCurrentQueryRequested += OnGetCurrentQueryRequested;
     }
 
+    public void OnShowHistory(List<QueryHistory> history)
+    {
+        _queryHistory = history;
+        _historyIndex = -1;
+    }
+
     public void ApplySetting(WoxSetting setting)
     {
         if (setting.AppWidth > 0)
@@ -94,6 +110,15 @@ public partial class MainViewModel : ObservableObject
         if (setting.MaxResultCount > 0)
         {
             _maxResultCount = setting.MaxResultCount;
+        }
+
+        if (setting.PreviewWidthRatio > 0)
+        {
+            PreviewWidth = WindowWidth * setting.PreviewWidthRatio;
+        }
+        else
+        {
+            PreviewWidth = WindowWidth * 0.4; // Default ratio
         }
 
         ResizeWindow();
@@ -111,6 +136,7 @@ public partial class MainViewModel : ObservableObject
         {
             PreviewContent = value.Preview.PreviewData;
             PreviewType = value.Preview.PreviewType ?? "text";
+            PreviewScrollPosition = value.Preview.ScrollPosition;
             IsPreviewVisible = true;
 
             // Handle image preview type
@@ -143,7 +169,6 @@ public partial class MainViewModel : ObservableObject
                 }
                 else if (PreviewType.Equals("image", StringComparison.OrdinalIgnoreCase))
                 {
-                    // Parse Wox image format if needed
                     PreviewImagePath = data;
                 }
             }
@@ -205,13 +230,7 @@ public partial class MainViewModel : ObservableObject
 
             if (defaultAction != null)
             {
-                await _apiService.SendActionAsync(_currentQueryId, SelectedResult.Id, defaultAction.Id);
-
-                if (!defaultAction.PreventHideAfterAction)
-                {
-                    // Hide window after action
-                    Application.Current.MainWindow?.Hide();
-                }
+                await ExecuteActionInternalAsync(defaultAction, SelectedResult.Id);
             }
         }
     }
@@ -432,14 +451,8 @@ public partial class MainViewModel : ObservableObject
             return;
 
         var action = CurrentActions[SelectedActionIndex];
-        await _apiService.SendActionAsync(_currentQueryId, SelectedResult.Id, action.Id);
-
         HideActionPanel();
-
-        if (!action.PreventHideAfterAction)
-        {
-            Application.Current.MainWindow?.Hide();
-        }
+        await ExecuteActionInternalAsync(action, SelectedResult.Id);
     }
 
     #endregion
@@ -486,6 +499,85 @@ public partial class MainViewModel : ObservableObject
         SelectedIndex = index;
         SelectedResult = Results[index];
         await ExecuteSelectedAsync();
+    }
+
+    #endregion
+
+    #region Form Action
+
+    [ObservableProperty]
+    private FormViewModel? _formViewModel;
+
+    [ObservableProperty]
+    private bool _isFormVisible;
+
+    private void ShowForm(ActionItem action, string resultId)
+    {
+        FormViewModel = new FormViewModel(action, _currentQueryId, resultId);
+        FormViewModel.RequestClose += (s, e) => HideForm();
+        IsFormVisible = true;
+        IsActionPanelVisible = false; // Hide action panel if open
+    }
+
+    [RelayCommand]
+    private void HideForm()
+    {
+        IsFormVisible = false;
+        FormViewModel = null;
+    }
+
+    private async Task ExecuteActionInternalAsync(ActionItem action, string resultId)
+    {
+        if (action.Type == "form" || action.Form.Count > 0)
+        {
+            ShowForm(action, resultId);
+        }
+        else
+        {
+            await _apiService.SendActionAsync(_currentQueryId, resultId, action.Id);
+
+            if (!action.PreventHideAfterAction)
+            {
+                Application.Current.MainWindow?.Hide();
+            }
+        }
+    }
+
+    #endregion
+
+    #region Query History
+
+    [RelayCommand]
+    private void MoveHistoryUp()
+    {
+        if (_queryHistory.Count == 0) return;
+
+        if (_historyIndex < _queryHistory.Count - 1)
+        {
+            _historyIndex++;
+            QueryText = _queryHistory[_historyIndex].Query;
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                // Caret move logic handled in view
+            });
+        }
+    }
+
+    [RelayCommand]
+    private void MoveHistoryDown()
+    {
+        if (_historyIndex > -1)
+        {
+            _historyIndex--;
+            if (_historyIndex == -1)
+            {
+                QueryText = string.Empty;
+            }
+            else
+            {
+                QueryText = _queryHistory[_historyIndex].Query;
+            }
+        }
     }
 
     #endregion
