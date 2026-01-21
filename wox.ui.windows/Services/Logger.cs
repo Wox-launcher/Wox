@@ -21,6 +21,24 @@ public static class Logger
 
     public static void Log(string message)
     {
+        WriteLocal(message);
+        TrySendLog("info", message);
+    }
+
+    public static void LogLocal(string message)
+    {
+        WriteLocal(message);
+    }
+
+    public static void Error(string message, Exception? ex = null)
+    {
+        var fullMessage = ex != null ? $"{message}: {ex.Message}\n{ex.StackTrace}" : message;
+        WriteLocal($"ERROR: {fullMessage}");
+        TrySendLog("error", fullMessage);
+    }
+
+    private static void WriteLocal(string message)
+    {
         try
         {
             var logMessage = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}";
@@ -33,9 +51,16 @@ public static class Logger
         }
     }
 
-    public static void Error(string message, Exception? ex = null)
+    private static void TrySendLog(string level, string message)
     {
-        var fullMessage = ex != null ? $"{message}: {ex.Message}\n{ex.StackTrace}" : message;
-        Log($"ERROR: {fullMessage}");
+        try
+        {
+            var traceId = Guid.NewGuid().ToString();
+            WoxApiService.Instance.TrySendLog(traceId, level, message);
+        }
+        catch
+        {
+            // Ignore logging errors
+        }
     }
 }

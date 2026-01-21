@@ -57,7 +57,7 @@ public class WoxApiService : IDisposable
         {
             if (e.Data != null)
             {
-                Logger.Log($"Received message: {e.Data.Substring(0, Math.Min(100, e.Data.Length))}");
+                Logger.LogLocal($"Received message: {e.Data.Substring(0, Math.Min(100, e.Data.Length))}");
                 HandleWebSocketMessage(e.Data);
             }
         };
@@ -304,6 +304,42 @@ public class WoxApiService : IDisposable
         Logger.Log($"Sending request: {method}");
         _wsClient?.Send(json);
         await Task.CompletedTask;
+    }
+
+    public bool TrySendLog(string traceId, string level, string message)
+    {
+        if (!_isConnected || _wsClient == null || string.IsNullOrWhiteSpace(_sessionId))
+        {
+            return false;
+        }
+
+        try
+        {
+            var logData = new
+            {
+                traceId,
+                level,
+                message
+            };
+
+            var msg = new WebsocketMsg
+            {
+                RequestId = Guid.NewGuid().ToString(),
+                TraceId = traceId,
+                SessionId = _sessionId,
+                Method = "Log",
+                Type = WebsocketMsgType.Request,
+                Data = logData
+            };
+
+            var json = JsonSerializer.Serialize(msg);
+            _wsClient.Send(json);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     public async Task NotifyUIReadyAsync()
