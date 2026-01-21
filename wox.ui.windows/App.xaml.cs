@@ -30,15 +30,6 @@ public partial class App : Application
 
         try
         {
-            // Check if running in test mode
-            if (e.Args.Length > 0 && e.Args[0] == "--test")
-            {
-                // Launch test window instead of main window
-                var testWindow = new TestWindow();
-                testWindow.Show();
-                return;
-            }
-
             // Parse command-line arguments: <ServerPort> <ServerPid> <IsDev>
             if (e.Args.Length >= 3)
             {

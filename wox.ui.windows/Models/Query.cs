@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
 namespace Wox.UI.Windows.Models;
@@ -41,7 +42,7 @@ public class ResultItem
     public string Title { get; set; } = string.Empty;
 
     [JsonPropertyName("SubTitle")]
-    public string SubTitle { get; set; } = string.Empty;
+    public string? SubTitle { get; set; }
 
     [JsonPropertyName("Icon")]
     public WoxImage? Icon { get; set; }
@@ -56,10 +57,13 @@ public class ResultItem
     public string? ContextData { get; set; }
 
     [JsonPropertyName("Actions")]
-    public List<ResultAction>? Actions { get; set; }
+    public List<ActionItem>? Actions { get; set; }
+
+    [JsonPropertyName("AutoComplete")]
+    public string? AutoComplete { get; set; }
 }
 
-public class ResultAction
+public class ActionItem
 {
     [JsonPropertyName("Id")]
     public string Id { get; set; } = string.Empty;
@@ -75,6 +79,9 @@ public class ResultAction
 
     [JsonPropertyName("PreventHideAfterAction")]
     public bool PreventHideAfterAction { get; set; }
+
+    [JsonPropertyName("Hotkey")]
+    public string? Hotkey { get; set; }
 }
 
 public class WoxImage

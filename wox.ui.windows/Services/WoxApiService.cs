@@ -1,6 +1,9 @@
+using System;
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using System.Threading.Tasks;
 using System.Windows;
 using Wox.UI.Windows.Models;
 using WS = WebSocketSharp;
@@ -26,6 +29,14 @@ public class WoxApiService : IDisposable
     public event EventHandler? HideRequested;
     public event EventHandler? ToggleRequested;
     public event EventHandler<WoxSetting>? SettingLoaded;
+    public event EventHandler<bool>? RefreshQueryRequested;
+    public event EventHandler<string>? ToolbarMsgReceived;
+    public event Func<object?>? GetCurrentQueryRequested;
+    public event EventHandler<string>? UpdateResultReceived;
+    public event Func<string, string[]?>? PickFilesRequested;
+    public event EventHandler? FocusToChatInputRequested;
+    public event EventHandler<string>? ChatResponseReceived;
+    public event EventHandler<string>? ReloadChatResourcesRequested;
 
     private WoxApiService() { }
 
@@ -232,6 +243,80 @@ public class WoxApiService : IDisposable
                 break;
             case "ReloadSetting":
                 _ = LoadSettingAsync();
+                SendResponse(msg.RequestId, msg.TraceId, true, null);
+                break;
+
+            case "RefreshQuery":
+                if (msg.Data != null)
+                {
+                    var json = JsonSerializer.Serialize(msg.Data);
+                    var refreshData = JsonSerializer.Deserialize<Dictionary<string, object>>(json);
+                    var preserveSelectedIndex = false;
+                    if (refreshData != null && refreshData.TryGetValue("preserveSelectedIndex", out var preserve))
+                    {
+                        preserveSelectedIndex = preserve is JsonElement je && je.GetBoolean();
+                    }
+                    RefreshQueryRequested?.Invoke(this, preserveSelectedIndex);
+                }
+                SendResponse(msg.RequestId, msg.TraceId, true, null);
+                break;
+
+            case "ShowToolbarMsg":
+                if (msg.Data != null)
+                {
+                    var json = JsonSerializer.Serialize(msg.Data);
+                    ToolbarMsgReceived?.Invoke(this, json);
+                }
+                SendResponse(msg.RequestId, msg.TraceId, true, null);
+                break;
+
+            case "GetCurrentQuery":
+                var currentQuery = GetCurrentQueryRequested?.Invoke();
+                SendResponse(msg.RequestId, msg.TraceId, true, currentQuery);
+                break;
+
+            case "UpdateResult":
+                if (msg.Data != null)
+                {
+                    var json = JsonSerializer.Serialize(msg.Data);
+                    UpdateResultReceived?.Invoke(this, json);
+                }
+                SendResponse(msg.RequestId, msg.TraceId, true, null);
+                break;
+
+            case "PickFiles":
+                if (msg.Data != null)
+                {
+                    var json = JsonSerializer.Serialize(msg.Data);
+                    var files = PickFilesRequested?.Invoke(json);
+                    SendResponse(msg.RequestId, msg.TraceId, true, files);
+                }
+                else
+                {
+                    SendResponse(msg.RequestId, msg.TraceId, true, new string[0]);
+                }
+                break;
+
+            case "FocusToChatInput":
+                FocusToChatInputRequested?.Invoke(this, EventArgs.Empty);
+                SendResponse(msg.RequestId, msg.TraceId, true, null);
+                break;
+
+            case "SendChatResponse":
+                if (msg.Data != null)
+                {
+                    var json = JsonSerializer.Serialize(msg.Data);
+                    ChatResponseReceived?.Invoke(this, json);
+                }
+                SendResponse(msg.RequestId, msg.TraceId, true, null);
+                break;
+
+            case "ReloadChatResources":
+                if (msg.Data != null)
+                {
+                    var resourceName = msg.Data?.ToString() ?? "";
+                    ReloadChatResourcesRequested?.Invoke(this, resourceName);
+                }
                 SendResponse(msg.RequestId, msg.TraceId, true, null);
                 break;
         }

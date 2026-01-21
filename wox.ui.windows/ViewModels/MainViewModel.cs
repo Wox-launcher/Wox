@@ -1,4 +1,7 @@
+using System;
 using System.Collections.ObjectModel;
+using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -29,6 +32,12 @@ public partial class MainViewModel : ObservableObject
     private string? _previewContent;
 
     [ObservableProperty]
+    private string _previewType = "text";
+
+    [ObservableProperty]
+    private string? _previewImagePath;
+
+    [ObservableProperty]
     private bool _isPreviewVisible;
 
     [ObservableProperty]
@@ -40,13 +49,39 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private double _windowWidth = 800;
 
+    // Action panel state
+    [ObservableProperty]
+    private bool _isActionPanelVisible;
+
+    [ObservableProperty]
+    private ObservableCollection<ActionItem> _currentActions = new();
+
+    [ObservableProperty]
+    private int _selectedActionIndex = 0;
+
+    // Quick select mode
+    [ObservableProperty]
+    private bool _isQuickSelectMode;
+
+    // Toolbar message
+    [ObservableProperty]
+    private string? _toolbarMessage;
+
+    [ObservableProperty]
+    private string? _toolbarIcon;
+
     public event EventHandler<double>? WindowHeightChanged;
+    public event EventHandler<string>? AutoCompleteRequested;
 
     public MainViewModel()
     {
         _apiService = WoxApiService.Instance;
         _apiService.ResultsReceived += OnResultsReceived;
         _apiService.QueryChanged += OnQueryChanged;
+        _apiService.RefreshQueryRequested += OnRefreshQueryRequested;
+        _apiService.ToolbarMsgReceived += OnToolbarMsgReceived;
+        _apiService.UpdateResultReceived += OnUpdateResultReceived;
+        _apiService.GetCurrentQueryRequested += OnGetCurrentQueryRequested;
     }
 
     public void ApplySetting(WoxSetting setting)
@@ -75,11 +110,49 @@ public partial class MainViewModel : ObservableObject
         if (value?.Preview != null)
         {
             PreviewContent = value.Preview.PreviewData;
+            PreviewType = value.Preview.PreviewType ?? "text";
             IsPreviewVisible = true;
+
+            // Handle image preview type
+            if (PreviewType.Equals("image", StringComparison.OrdinalIgnoreCase) ||
+                PreviewType.Equals("file", StringComparison.OrdinalIgnoreCase))
+            {
+                var data = value.Preview.PreviewData;
+                // Check if it's an image file
+                if (PreviewType.Equals("file", StringComparison.OrdinalIgnoreCase))
+                {
+                    var ext = System.IO.Path.GetExtension(data)?.ToLower();
+                    if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".gif" || ext == ".bmp" || ext == ".webp")
+                    {
+                        PreviewImagePath = data;
+                        PreviewType = "image";
+                    }
+                    else if (ext == ".md")
+                    {
+                        // Try to read markdown file content
+                        try
+                        {
+                            if (System.IO.File.Exists(data))
+                            {
+                                PreviewContent = System.IO.File.ReadAllText(data);
+                                PreviewType = "markdown";
+                            }
+                        }
+                        catch { }
+                    }
+                }
+                else if (PreviewType.Equals("image", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Parse Wox image format if needed
+                    PreviewImagePath = data;
+                }
+            }
         }
         else
         {
             IsPreviewVisible = false;
+            PreviewType = "text";
+            PreviewImagePath = null;
         }
     }
 
@@ -210,4 +283,210 @@ public partial class MainViewModel : ObservableObject
         // Notify window to resize
         WindowHeightChanged?.Invoke(this, WindowHeight);
     }
+
+    #region New Event Handlers
+
+    private void OnRefreshQueryRequested(object? sender, bool preserveSelectedIndex)
+    {
+        Application.Current.Dispatcher.Invoke(async () =>
+        {
+            var currentIndex = preserveSelectedIndex ? SelectedIndex : 0;
+            await _apiService.SendQueryAsync(QueryText);
+            if (preserveSelectedIndex && Results.Count > currentIndex)
+            {
+                SelectedIndex = currentIndex;
+                SelectedResult = Results[currentIndex];
+            }
+        });
+    }
+
+    private void OnToolbarMsgReceived(object? sender, string json)
+    {
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(json);
+                var root = doc.RootElement;
+                if (root.TryGetProperty("Text", out var textProp))
+                {
+                    ToolbarMessage = textProp.GetString();
+                }
+                if (root.TryGetProperty("Icon", out var iconProp))
+                {
+                    ToolbarIcon = iconProp.GetString();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Error parsing toolbar message", ex);
+            }
+        });
+    }
+
+    private void OnUpdateResultReceived(object? sender, string json)
+    {
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(json);
+                var root = doc.RootElement;
+
+                if (!root.TryGetProperty("ResultId", out var resultIdProp))
+                    return;
+
+                var resultId = resultIdProp.GetString();
+                var result = Results.FirstOrDefault(r => r.Id == resultId);
+                if (result == null)
+                    return;
+
+                // Update title if provided
+                if (root.TryGetProperty("Title", out var titleProp))
+                {
+                    result.Title = titleProp.GetString() ?? result.Title;
+                }
+
+                // Update subtitle if provided
+                if (root.TryGetProperty("SubTitle", out var subTitleProp))
+                {
+                    result.SubTitle = subTitleProp.GetString();
+                }
+
+                Logger.Log($"Updated result: {resultId}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Error updating result", ex);
+            }
+        });
+    }
+
+    private object? OnGetCurrentQueryRequested()
+    {
+        return new
+        {
+            QueryId = _currentQueryId,
+            QueryType = "input",
+            RawQuery = QueryText,
+            Search = "",
+            Command = "",
+        };
+    }
+
+    #endregion
+
+    #region Action Panel Commands
+
+    [RelayCommand]
+    private void ToggleActionPanel()
+    {
+        if (SelectedResult?.Actions == null || SelectedResult.Actions.Count == 0)
+        {
+            IsActionPanelVisible = false;
+            return;
+        }
+
+        IsActionPanelVisible = !IsActionPanelVisible;
+
+        if (IsActionPanelVisible)
+        {
+            CurrentActions.Clear();
+            foreach (var action in SelectedResult.Actions)
+            {
+                CurrentActions.Add(action);
+            }
+            SelectedActionIndex = 0;
+        }
+    }
+
+    [RelayCommand]
+    private void HideActionPanel()
+    {
+        IsActionPanelVisible = false;
+        CurrentActions.Clear();
+    }
+
+    [RelayCommand]
+    private void MoveActionUp()
+    {
+        if (SelectedActionIndex > 0)
+        {
+            SelectedActionIndex--;
+        }
+    }
+
+    [RelayCommand]
+    private void MoveActionDown()
+    {
+        if (SelectedActionIndex < CurrentActions.Count - 1)
+        {
+            SelectedActionIndex++;
+        }
+    }
+
+    [RelayCommand]
+    private async Task ExecuteSelectedActionAsync()
+    {
+        if (SelectedResult == null || SelectedActionIndex < 0 || SelectedActionIndex >= CurrentActions.Count)
+            return;
+
+        var action = CurrentActions[SelectedActionIndex];
+        await _apiService.SendActionAsync(_currentQueryId, SelectedResult.Id, action.Id);
+
+        HideActionPanel();
+
+        if (!action.PreventHideAfterAction)
+        {
+            Application.Current.MainWindow?.Hide();
+        }
+    }
+
+    #endregion
+
+    #region Auto-complete
+
+    [RelayCommand]
+    private void AutoComplete()
+    {
+        if (SelectedResult == null)
+            return;
+
+        // Use AutoComplete property if available, otherwise use Title
+        var autoCompleteText = SelectedResult.AutoComplete;
+        if (!string.IsNullOrEmpty(autoCompleteText))
+        {
+            QueryText = autoCompleteText;
+            AutoCompleteRequested?.Invoke(this, autoCompleteText);
+        }
+    }
+
+    #endregion
+
+    #region Quick Select Mode
+
+    [RelayCommand]
+    private void ActivateQuickSelectMode()
+    {
+        IsQuickSelectMode = true;
+    }
+
+    [RelayCommand]
+    private void DeactivateQuickSelectMode()
+    {
+        IsQuickSelectMode = false;
+    }
+
+    [RelayCommand]
+    private async Task QuickSelectAsync(int index)
+    {
+        if (index < 0 || index >= Results.Count)
+            return;
+
+        SelectedIndex = index;
+        SelectedResult = Results[index];
+        await ExecuteSelectedAsync();
+    }
+
+    #endregion
 }

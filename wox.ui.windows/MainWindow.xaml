@@ -17,6 +17,7 @@
         WindowStartupLocation="CenterScreen"
         Deactivated="Window_Deactivated"
         PreviewKeyDown="Window_PreviewKeyDown"
+        PreviewKeyUp="Window_PreviewKeyUp"
         MouseLeftButtonDown="Window_MouseLeftButtonDown">
 
     <Window.DataContext>
@@ -265,14 +266,43 @@
                         BorderBrush="{DynamicResource PreviewSplitLineBrush}"
                         Background="{DynamicResource PreviewBackgroundBrush}"
                         Visibility="{Binding IsPreviewVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <TextBlock Text="{Binding PreviewContent}"
-                                   Padding="16"
-                                   TextWrapping="Wrap"
-                                   FontFamily="Consolas"
-                                   FontSize="12"
-                                   Foreground="{DynamicResource PreviewFontBrush}"/>
-                    </ScrollViewer>
+                    <Grid>
+                        <!-- Text/Markdown Preview -->
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <TextBlock Text="{Binding PreviewContent}"
+                                       Padding="16"
+                                       TextWrapping="Wrap"
+                                       FontFamily="Consolas"
+                                       FontSize="12"
+                                       Foreground="{DynamicResource PreviewFontBrush}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding PreviewType}" Value="image">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </ScrollViewer>
+
+                        <!-- Image Preview -->
+                        <Image Source="{Binding PreviewImagePath}"
+                               Stretch="Uniform"
+                               Margin="8">
+                            <Image.Style>
+                                <Style TargetType="Image">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding PreviewType}" Value="image">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Image.Style>
+                        </Image>
+                    </Grid>
                 </Border>
             </Grid>
 
