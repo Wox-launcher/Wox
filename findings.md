@@ -18,7 +18,9 @@
     - Python implementation
 -->
 <!-- Captured from user request -->
--
+- Provide a migration plan from `wox.ui.flutter` to `wox.ui.windows` for the launcher UI.
+- Exclude all settings-related UI/features.
+- Use current repo structure and existing WPF scaffolding.
 
 ## Research Findings
 <!-- 
@@ -31,7 +33,8 @@
     - Standard pattern: python script.py <command> [args]
 -->
 <!-- Key discoveries during exploration -->
--
+- Flutter launcher views/controllers and behaviors are identified (query box, results, preview, toolbar).
+- WPF project already implements several core features; remaining gaps are listed in `wox.ui.windows/todo.md`.
 
 ## Technical Decisions
 <!-- 
@@ -70,7 +73,11 @@
     - Project structure: src/main.py, src/utils.py
 -->
 <!-- URLs, file paths, API references -->
--
+- wox.ui.flutter/wox/lib/modules/launcher
+- wox.ui.flutter/wox/lib/controllers/wox_launcher_controller.dart
+- wox.ui.windows/MainWindow.xaml
+- wox.ui.windows/ViewModels/MainViewModel.cs
+- wox.ui.windows/todo.md
 
 ## Visual/Browser Findings
 <!-- 
@@ -97,3 +104,11 @@
 - wox.ui.windows already contains WPF project structure (Views/ViewModels/Services/etc.) plus MainWindow/App files and a csproj; wox.ui.flutter contains a single 'wox' subfolder.
 - Flutter UI lives under wox.ui.flutter/wox with lib/ containing api, components, controllers, entity, enums, models, modules, utils, and main.dart.
 - Flutter modules include launcher and setting; launcher module has a views/ directory (settings excluded per request).
+- Launcher views: wox_launcher_view.dart, wox_query_box_view.dart, wox_query_result_view.dart, wox_query_toolbar_view.dart. Controllers include wox_launcher_controller.dart and wox_ai_chat_controller.dart plus list/grid/base, query_box controller, and settings controller.
+- WoxLauncherView builds a DropTarget around the app, shows query box + results, optional toolbar, uses theme padding/colors. QueryBoxView handles IME composition, keyboard navigation (arrows, enter, tab, home/end), quick-select (Alt/Cmd + digits), action hotkey, update hotkey, drag-move area, loading icon, and uses WoxPlatformFocus for key events.
+- QueryResultView: supports list or grid result views, preview panel (local/remote previews), action panel list with hotkeys, and action form panel with form inputs; hides panels on item tap and resizes via theme max heights. ToolbarView: shows left message (optional icon, copy/snooze actions), right-side action hotkeys sized to fit, background/border depends on results.
+- Launcher controller manages query lifecycle, result list/grid controllers, preview panel, action panel/form actions, toolbar state (including update/doctor messages), quick select, drag-drop files, window show/hide/position, query metadata (grid layout + preview ratio), and action hotkeys; integrates WoxApi/websocket and AI chat preview handling.
+- wox.ui.windows/todo.md tracks WPF parity work: Phases 1-3 done; pending Phase 4 (grid layout, doctor toolbar, drag-drop, query icon, multiline query box), Phase 5 (transparent/topmost/acrylic, theme switch), Phase 6 AI chat UI XAML components.\n- MainWindow.xaml already defines a transparent, topmost, no-taskbar window with query TextBox (AcceptsReturn, MaxLines=3) and query icon slot; results list/grid views are wired with styles and bindings.
+- wox.ui.windows Views include FormView.xaml and GridView.xaml; ViewModels include MainViewModel.cs, FormViewModel.cs, and AIChatViewModel.cs.
+- MainViewModel manages query text, results, selection, preview content/type/image path, toolbar visibility, window size, action panel state, quick-select, grid layout params, query icon, and doctor check info; handles settings (width/max results/preview ratio) and preview type detection for file/image/markdown.\n- GridView.xaml uses ItemsControl + UniformGrid bound to GridLayoutParams columns, shows icon/title, and highlights selected/hover; click binds to ExecuteSelectedAsync on MainViewModel.
+- Flutter WoxPreviewView supports markdown, text, file preview (pdf, md, images, code with syntax highlighting and size limit), image data via WoxImage, plugin detail, AI chat preview, update preview, preview properties list, and scroll positioning.
