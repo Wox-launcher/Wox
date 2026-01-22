@@ -15,4 +15,7 @@ public sealed class WoxSetting
 
     [JsonPropertyName("PreviewWidthRatio")]
     public double PreviewWidthRatio { get; set; }
+
+    [JsonPropertyName("ThemeId")]
+    public string ThemeId { get; set; } = "";
 }

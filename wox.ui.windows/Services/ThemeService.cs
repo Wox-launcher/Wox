@@ -31,15 +31,11 @@ public class ThemeService
             if (appBackground != null)
             {
                 var windowBackground = appBackground.Value;
-                if (windowBackground.A == 255)
-                {
-                    windowBackground = ScaleAlpha(windowBackground, 0.9);
-                }
-
-                UpdateResource("ApplicationBackgroundBrush", appBackground.Value);
+                // Flutter behavior: direct use of color, no artificial alpha scaling
+                UpdateResource("ApplicationBackgroundBrush", windowBackground);
                 UpdateResource("AppBackgroundBrush", windowBackground);
-                UpdateResource("PreviewBackgroundBrush", appBackground.Value);
-                UpdateResource("ResultItemIconBackgroundBrush", ScaleAlpha(appBackground.Value, 0.6));
+                UpdateResource("PreviewBackgroundBrush", windowBackground);
+                UpdateResource("ResultItemIconBackgroundBrush", ScaleAlpha(windowBackground, 0.6));
             }
 
             var queryBackground = GetColor(root, "QueryBoxBackgroundColor");

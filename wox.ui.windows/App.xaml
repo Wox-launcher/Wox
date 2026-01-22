@@ -5,7 +5,11 @@
     <Application.Resources>
         <!-- Converters -->
         <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        <converters:BooleanToVisibilityInverseConverter x:Key="BooleanToVisibilityInverseConverter"/>
         <converters:WoxImageToImageSourceConverter x:Key="WoxImageToImageSourceConverter"/>
+        
+        <!-- Effects -->
+        <DropShadowEffect x:Key="DropShadowEffect" BlurRadius="20" ShadowDepth="0" Opacity="0.4" Color="Black"/>
 
         <!-- Default Theme Colors -->
         <SolidColorBrush x:Key="ApplicationBackgroundBrush"

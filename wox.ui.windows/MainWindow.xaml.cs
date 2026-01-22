@@ -60,7 +60,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnWindowHeightChanged(object? sender, double newHeight)
+    private void OnWindowHeightChanged(double newHeight)
     {
         Dispatcher.Invoke(() =>
         {
@@ -253,6 +253,12 @@ public partial class MainWindow : Window
                 break;
 
             case Key.Enter:
+                // Shift+Enter inserts new line (handled by TextBox with AcceptsReturn)
+                if (Keyboard.Modifiers == ModifierKeys.Shift)
+                {
+                    // Let the TextBox handle Shift+Enter for new line
+                    return;
+                }
                 // Alt+Enter toggles action panel
                 if (Keyboard.Modifiers == ModifierKeys.Alt)
                 {
@@ -272,6 +278,22 @@ public partial class MainWindow : Window
                 QueryTextBox.CaretIndex = QueryTextBox.Text.Length;
                 e.Handled = true;
                 break;
+
+            case Key.Left:
+                if (_viewModel.IsGridLayout && _viewModel.Results.Count > 0)
+                {
+                    _viewModel.MoveSelectionLeftCommand.Execute(null);
+                    e.Handled = true;
+                }
+                break;
+
+            case Key.Right:
+                if (_viewModel.IsGridLayout && _viewModel.Results.Count > 0)
+                {
+                    _viewModel.MoveSelectionRightCommand.Execute(null);
+                    e.Handled = true;
+                }
+                break;
         }
     }
 
@@ -281,5 +303,11 @@ public partial class MainWindow : Window
         {
             _ = _viewModel.ExecuteSelectedCommand.ExecuteAsync(null);
         }
+    }
+
+    private void QueryIcon_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        // Query icon click action - focus back to query box
+        QueryTextBox.Focus();
     }
 }

@@ -10,7 +10,7 @@
         Height="{Binding WindowHeight}"
         Width="{Binding WindowWidth}"
         WindowStyle="None"
-        AllowsTransparency="False"
+        AllowsTransparency="True"
         Background="Transparent"
         Topmost="True"
         ShowInTaskbar="False"
@@ -50,52 +50,88 @@
                 <Border Background="{DynamicResource QueryBoxBackgroundBrush}"
                         CornerRadius="{DynamicResource QueryBoxCornerRadius}"
                         Padding="12,6">
-                    <TextBox
-                        x:Name="QueryTextBox"
-                        Text="{Binding QueryText, UpdateSourceTrigger=PropertyChanged}"
-                        FontSize="20"
-                        BorderThickness="0"
-                        Background="Transparent"
-                        Foreground="{DynamicResource QueryBoxFontBrush}"
-                        CaretBrush="{DynamicResource QueryBoxCursorBrush}"
-                        SelectionBrush="{DynamicResource QueryBoxSelectionBackgroundBrush}"
-                        SelectionTextBrush="{DynamicResource QueryBoxSelectionForegroundBrush}"
-                        PreviewKeyDown="QueryTextBox_PreviewKeyDown">
-                        <TextBox.Style>
-                            <Style TargetType="TextBox">
-                                <Setter Property="Template">
-                                    <Setter.Value>
-                                        <ControlTemplate TargetType="TextBox">
-                                            <Grid>
-                                                <ScrollViewer x:Name="PART_ContentHost"
-                                                              Focusable="false"
-                                                              HorizontalScrollBarVisibility="Hidden"
-                                                              VerticalScrollBarVisibility="Hidden"/>
-                                                <TextBlock Text="输入查询..."
-                                                           Foreground="{DynamicResource QueryBoxPlaceholderBrush}"
-                                                           IsHitTestVisible="False"
-                                                           VerticalAlignment="Center">
-                                                    <TextBlock.Style>
-                                                        <Style TargetType="TextBlock">
-                                                            <Setter Property="Visibility"
-                                                                    Value="Collapsed"/>
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding Text, RelativeSource={RelativeSource TemplatedParent}}"
-                                                                             Value="">
-                                                                    <Setter Property="Visibility"
-                                                                            Value="Visible"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </TextBlock.Style>
-                                                </TextBlock>
-                                            </Grid>
-                                        </ControlTemplate>
-                                    </Setter.Value>
-                                </Setter>
-                            </Style>
-                        </TextBox.Style>
-                    </TextBox>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <TextBox
+                            Grid.Column="0"
+                            x:Name="QueryTextBox"
+                            Text="{Binding QueryText, UpdateSourceTrigger=PropertyChanged}"
+                            FontSize="20"
+                            BorderThickness="0"
+                            Background="Transparent"
+                            Foreground="{DynamicResource QueryBoxFontBrush}"
+                            CaretBrush="{DynamicResource QueryBoxCursorBrush}"
+                            SelectionBrush="{DynamicResource QueryBoxSelectionBackgroundBrush}"
+                            SelectionTextBrush="{DynamicResource QueryBoxSelectionForegroundBrush}"
+                            AcceptsReturn="True"
+                            MaxLines="3"
+                            VerticalScrollBarVisibility="Auto"
+                            PreviewKeyDown="QueryTextBox_PreviewKeyDown">
+                            <TextBox.Style>
+                                <Style TargetType="TextBox">
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="TextBox">
+                                                <Grid>
+                                                    <ScrollViewer x:Name="PART_ContentHost"
+                                                                  Focusable="false"
+                                                                  HorizontalScrollBarVisibility="Hidden"
+                                                                  VerticalScrollBarVisibility="Hidden"/>
+                                                    <TextBlock Text="输入查询..."
+                                                               Foreground="{DynamicResource QueryBoxPlaceholderBrush}"
+                                                               IsHitTestVisible="False"
+                                                               VerticalAlignment="Center">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Visibility"
+                                                                        Value="Collapsed"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding Text, RelativeSource={RelativeSource TemplatedParent}}"
+                                                                                 Value="">
+                                                                        <Setter Property="Visibility"
+                                                                                Value="Visible"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </Grid>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </TextBox.Style>
+                        </TextBox>
+                        
+                        <!-- Query Icon -->
+                        <Border Grid.Column="1"
+                                Width="40"
+                                Height="40"
+                                Margin="8,0,0,0"
+                                VerticalAlignment="Center"
+                                Cursor="Hand"
+                                MouseLeftButtonUp="QueryIcon_MouseLeftButtonUp">
+                            <Image Width="30"
+                                   Height="30"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Center"
+                                   Source="{Binding QueryIcon, Converter={StaticResource WoxImageToImageSourceConverter}}">
+                                <Image.Style>
+                                    <Style TargetType="Image">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding QueryIcon}" Value="{x:Null}">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Image.Style>
+                            </Image>
+                        </Border>
+                    </Grid>
                 </Border>
             </Border>
 
@@ -107,8 +143,13 @@
                 </Grid.ColumnDefinitions>
 
                 <!-- Results List -->
+                <v:GridView Grid.Column="0"
+                            x:Name="ResultsGridView"
+                            Visibility="{Binding IsGridLayout, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
                 <ListView Grid.Column="0"
                           x:Name="ResultsListView"
+                          Visibility="{Binding IsGridLayout, Converter={StaticResource BooleanToVisibilityInverseConverter}}"
                           Padding="{DynamicResource ResultContainerPadding}"
                           ItemsSource="{Binding Results}"
                           SelectedIndex="{Binding SelectedIndex}"

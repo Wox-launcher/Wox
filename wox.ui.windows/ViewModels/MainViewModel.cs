@@ -80,8 +80,23 @@ public partial class MainViewModel : ObservableObject
     private List<QueryHistory> _queryHistory = new();
     private int _historyIndex = -1;
 
-    public event EventHandler<double>? WindowHeightChanged;
-    public event EventHandler<string>? AutoCompleteRequested;
+    // Grid layout state
+    [ObservableProperty]
+    private bool _isGridLayout;
+
+    [ObservableProperty]
+    private GridLayoutParams? _gridLayoutParams;
+
+    // Query icon state
+    [ObservableProperty]
+    private WoxImage? _queryIcon;
+
+    // Doctor check state
+    [ObservableProperty]
+    private DoctorCheckInfo? _doctorCheckInfo;
+
+    public event Action<double>? WindowHeightChanged;
+    public event Action<string?>? AutoCompleteRequested;
 
     public MainViewModel()
     {
@@ -92,6 +107,9 @@ public partial class MainViewModel : ObservableObject
         _apiService.ToolbarMsgReceived += OnToolbarMsgReceived;
         _apiService.UpdateResultReceived += OnUpdateResultReceived;
         _apiService.GetCurrentQueryRequested += OnGetCurrentQueryRequested;
+
+        // Initialize default grid params
+        GridLayoutParams = GridLayoutParams.Empty();
     }
 
     public void OnShowHistory(List<QueryHistory> history)
@@ -238,20 +256,70 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void MoveSelectionUp()
     {
-        if (SelectedIndex > 0)
+        if (IsGridLayout)
         {
-            SelectedIndex--;
-            SelectedResult = Results[SelectedIndex];
+            var columns = GridLayoutParams?.Columns ?? 4;
+            if (SelectedIndex >= columns)
+            {
+                SelectedIndex -= columns;
+                SelectedResult = Results[SelectedIndex];
+            }
+        }
+        else
+        {
+            if (SelectedIndex > 0)
+            {
+                SelectedIndex--;
+                SelectedResult = Results[SelectedIndex];
+            }
         }
     }
 
     [RelayCommand]
     private void MoveSelectionDown()
     {
-        if (SelectedIndex < Results.Count - 1)
+        if (IsGridLayout)
         {
-            SelectedIndex++;
-            SelectedResult = Results[SelectedIndex];
+            var columns = GridLayoutParams?.Columns ?? 4;
+            if (SelectedIndex + columns < Results.Count)
+            {
+                SelectedIndex += columns;
+                SelectedResult = Results[SelectedIndex];
+            }
+        }
+        else
+        {
+            if (SelectedIndex < Results.Count - 1)
+            {
+                SelectedIndex++;
+                SelectedResult = Results[SelectedIndex];
+            }
+        }
+    }
+
+    [RelayCommand]
+    private void MoveSelectionLeft()
+    {
+        if (IsGridLayout)
+        {
+            if (SelectedIndex > 0)
+            {
+                SelectedIndex--;
+                SelectedResult = Results[SelectedIndex];
+            }
+        }
+    }
+
+    [RelayCommand]
+    private void MoveSelectionRight()
+    {
+        if (IsGridLayout)
+        {
+            if (SelectedIndex < Results.Count - 1)
+            {
+                SelectedIndex++;
+                SelectedResult = Results[SelectedIndex];
+            }
         }
     }
 
@@ -300,7 +368,7 @@ public partial class MainViewModel : ObservableObject
         Logger.Log($"ResizeWindow: queryBoxHeight={queryBoxHeight}, resultHeight={resultHeight}, total={WindowHeight}, itemCount={itemCount}");
 
         // Notify window to resize
-        WindowHeightChanged?.Invoke(this, WindowHeight);
+        WindowHeightChanged?.Invoke(WindowHeight);
     }
 
     #region New Event Handlers
@@ -469,8 +537,8 @@ public partial class MainViewModel : ObservableObject
         var autoCompleteText = SelectedResult.AutoComplete;
         if (!string.IsNullOrEmpty(autoCompleteText))
         {
-            QueryText = autoCompleteText;
-            AutoCompleteRequested?.Invoke(this, autoCompleteText);
+            QueryText = autoCompleteText!;
+            AutoCompleteRequested?.Invoke(autoCompleteText);
         }
     }
 

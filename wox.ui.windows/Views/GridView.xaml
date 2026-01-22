@@ -1,0 +1,72 @@
+<UserControl x:Class="Wox.UI.Windows.Views.GridView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:Wox.UI.Windows.Views"
+             xmlns:models="clr-namespace:Wox.UI.Windows.Models"
+             xmlns:converters="clr-namespace:Wox.UI.Windows.Converters"
+             mc:Ignorable="d" 
+             d:DesignHeight="450" d:DesignWidth="800">
+    <UserControl.Resources>
+        <converters:IconPathConverter x:Key="IconPathConverter"/>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <ItemsControl ItemsSource="{Binding Results}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <UniformGrid Columns="{Binding GridLayoutParams.Columns, FallbackValue=4}" IsItemsHost="True"/>
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type models:ResultItem}">
+                    <Border Padding="{Binding DataContext.GridLayoutParams.ItemMargin, RelativeSource={RelativeSource AncestorType=UserControl}, FallbackValue=4}"
+                            Background="Transparent">
+                        <Border x:Name="ItemBorder"
+                                Background="{DynamicResource ResultItemBackgroundColor}"
+                                BorderThickness="1"
+                                BorderBrush="Transparent"
+                                CornerRadius="4"
+                                Padding="{Binding DataContext.GridLayoutParams.ItemPadding, RelativeSource={RelativeSource AncestorType=UserControl}, FallbackValue=8}">
+                            <Border.InputBindings>
+                                <MouseBinding MouseAction="LeftClick" Command="{Binding DataContext.ExecuteSelectedAsync, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                            </Border.InputBindings>
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <!-- Icon -->
+                                <Image Grid.Row="0"
+                                       Source="{Binding IcoPath, Converter={StaticResource IconPathConverter}}"
+                                       Width="32" Height="32"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Margin="0,0,0,8"/>
+
+                                <!-- Title -->
+                                <TextBlock Grid.Row="1"
+                                           Text="{Binding Title}"
+                                           Foreground="{DynamicResource ResultItemTitleColor}"
+                                           HorizontalAlignment="Center"
+                                           TextAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"
+                                           Visibility="{Binding DataContext.GridLayoutParams.ShowTitle, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BooleanToVisibilityConverter}, FallbackValue=Visible}"/>
+                            </Grid>
+                        </Border>
+                    </Border>
+                    <DataTemplate.Triggers>
+                        <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                            <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource ResultItemActiveBackgroundColor}"/>
+                            <Setter TargetName="ItemBorder" Property="BorderBrush" Value="{DynamicResource ResultItemActiveBorderColor}"/>
+                        </DataTrigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                             <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource ResultItemActiveBackgroundColor}"/>
+                        </Trigger>
+                    </DataTemplate.Triggers>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </ScrollViewer>
+</UserControl>
