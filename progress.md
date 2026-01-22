@@ -114,3 +114,12 @@
 *Update after completing each phase or encountering errors*
 - Reviewed planning files; resuming WPF migration planning.
 - Updated task_plan.md with phased WPF launcher migration plan; refreshed findings requirements/resources.
+- Completed Phase 2 planning: added feature matrix, integration points, and acceptance criteria in task_plan.md.
+- Entered Phase 3: expanded implementation roadmap into a file-level checklist in task_plan.md.
+- Phase 3 started; expanded 3.2 (Query Box & Hotkeys) into detailed steps and acceptance criteria in task_plan.md.
+- Implemented basic IME composition gating for query dispatch in WPF (MainWindow IME events + MainViewModel guard).
+- Added Home/End handling, Alt+J action panel toggle, and action hotkey parsing/execution in WPF.
+- Added query metadata fetch + query icon binding and loading indicator UI for WPF query box.
+- Wired query metadata to preview width ratio and grid layout; grid mode now suppresses preview panel.
+- Implemented dynamic toolbar message/icon and hotkey action list rendering in WPF.
+- Ported Flutter clearQueryResultDelay + WindowFlickerDetector to WPF and delayed result clearing to reduce flicker.

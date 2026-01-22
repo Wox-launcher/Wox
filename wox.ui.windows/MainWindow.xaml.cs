@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Input;
 using Wox.UI.Windows.Models;
@@ -11,6 +13,26 @@ public partial class MainWindow : Window
 {
     private readonly MainViewModel _viewModel;
     private readonly WoxApiService _apiService;
+    private static readonly Dictionary<string, Key> HotkeyKeyMap =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["esc"] = Key.Escape,
+            ["escape"] = Key.Escape,
+            ["enter"] = Key.Enter,
+            ["tab"] = Key.Tab,
+            ["space"] = Key.Space,
+            ["backspace"] = Key.Back,
+            ["delete"] = Key.Delete,
+            ["insert"] = Key.Insert,
+            ["home"] = Key.Home,
+            ["end"] = Key.End,
+            ["pageup"] = Key.PageUp,
+            ["pagedown"] = Key.PageDown,
+            ["up"] = Key.Up,
+            ["down"] = Key.Down,
+            ["left"] = Key.Left,
+            ["right"] = Key.Right,
+        };
 
     public MainWindow()
     {
@@ -43,6 +65,38 @@ public partial class MainWindow : Window
         {
             QueryTextBox.Focus();
         };
+
+        HookImeCompositionEvents();
+    }
+
+    private void HookImeCompositionEvents()
+    {
+        if (_viewModel == null)
+        {
+            return;
+        }
+
+        TextCompositionManager.AddPreviewTextInputStartHandler(QueryTextBox, OnPreviewTextInputStart);
+        TextCompositionManager.AddPreviewTextInputUpdateHandler(QueryTextBox, OnPreviewTextInputUpdate);
+        TextCompositionManager.AddPreviewTextInputHandler(QueryTextBox, OnPreviewTextInput);
+    }
+
+    private void OnPreviewTextInputStart(object sender, TextCompositionEventArgs e)
+    {
+        _viewModel.IsImeComposing = true;
+    }
+
+    private void OnPreviewTextInputUpdate(object sender, TextCompositionEventArgs e)
+    {
+        _viewModel.IsImeComposing = true;
+    }
+
+    private void OnPreviewTextInput(object sender, TextCompositionEventArgs e)
+    {
+        if (_viewModel.IsImeComposing)
+        {
+            _viewModel.IsImeComposing = false;
+        }
     }
 
     private void ViewModel_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -169,6 +223,15 @@ public partial class MainWindow : Window
             }
         }
 
+        var keyToCheck = e.Key == Key.System ? e.SystemKey : e.Key;
+
+        if (Keyboard.Modifiers == ModifierKeys.Alt && keyToCheck == Key.J)
+        {
+            _viewModel.ToggleActionPanelCommand.Execute(null);
+            e.Handled = true;
+            return;
+        }
+
         // Handle Alt key for quick select mode
         if (e.Key == Key.LeftAlt || e.Key == Key.RightAlt)
         {
@@ -186,6 +249,12 @@ public partial class MainWindow : Window
                 e.Handled = true;
                 return;
             }
+        }
+
+        if (TryExecuteActionHotkey(keyToCheck))
+        {
+            e.Handled = true;
+            return;
         }
 
         switch (e.Key)
@@ -228,6 +297,14 @@ public partial class MainWindow : Window
     {
         switch (e.Key)
         {
+            case Key.Home:
+                QueryTextBox.CaretIndex = 0;
+                e.Handled = true;
+                break;
+            case Key.End:
+                QueryTextBox.CaretIndex = QueryTextBox.Text.Length;
+                e.Handled = true;
+                break;
             case Key.Down:
                 if (_viewModel.Results.Count > 0)
                 {
@@ -295,6 +372,111 @@ public partial class MainWindow : Window
                 }
                 break;
         }
+    }
+
+    private bool TryExecuteActionHotkey(Key key)
+    {
+        if (_viewModel.SelectedResult?.Actions == null)
+        {
+            return false;
+        }
+
+        var modifiers = Keyboard.Modifiers;
+        if (modifiers == ModifierKeys.None)
+        {
+            return false;
+        }
+
+        foreach (var action in _viewModel.SelectedResult.Actions)
+        {
+            if (string.IsNullOrWhiteSpace(action.Hotkey))
+            {
+                continue;
+            }
+
+            if (HotkeyMatches(action.Hotkey, key, modifiers))
+            {
+                _ = _viewModel.ExecuteActionByHotkeyAsync(action);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HotkeyMatches(string hotkey, Key key, ModifierKeys modifiers)
+    {
+        var expectedModifiers = ModifierKeys.None;
+        var expectedKey = Key.None;
+
+        foreach (var token in hotkey.Split(new[] { '+' }, StringSplitOptions.RemoveEmptyEntries).Select(t => t.Trim()))
+        {
+            switch (token.ToLowerInvariant())
+            {
+                case "ctrl":
+                case "control":
+                    expectedModifiers |= ModifierKeys.Control;
+                    break;
+                case "alt":
+                    expectedModifiers |= ModifierKeys.Alt;
+                    break;
+                case "shift":
+                    expectedModifiers |= ModifierKeys.Shift;
+                    break;
+                case "cmd":
+                case "meta":
+                case "win":
+                case "windows":
+                    expectedModifiers |= ModifierKeys.Windows;
+                    break;
+                default:
+                    expectedKey = ParseKeyToken(token);
+                    break;
+            }
+        }
+
+        if (expectedKey == Key.None)
+        {
+            return false;
+        }
+
+        return modifiers == expectedModifiers && key == expectedKey;
+    }
+
+    private static Key ParseKeyToken(string token)
+    {
+        if (HotkeyKeyMap.TryGetValue(token, out var mappedKey))
+        {
+            return mappedKey;
+        }
+
+        if (token.Length == 1)
+        {
+            var ch = token[0];
+            if (ch >= 'a' && ch <= 'z')
+            {
+                return (Key)((int)Key.A + (ch - 'a'));
+            }
+
+            if (ch >= 'A' && ch <= 'Z')
+            {
+                return (Key)((int)Key.A + (ch - 'A'));
+            }
+
+            if (ch >= '0' && ch <= '9')
+            {
+                return (Key)((int)Key.D0 + (ch - '0'));
+            }
+        }
+
+        if (token.StartsWith("f", StringComparison.OrdinalIgnoreCase) &&
+            int.TryParse(token.Substring(1), out var fNumber) &&
+            fNumber is >= 1 and <= 24)
+        {
+            return (Key)((int)Key.F1 + (fNumber - 1));
+        }
+
+        return Key.None;
     }
 
     private void ResultsListView_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)

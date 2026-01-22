@@ -125,13 +125,13 @@ public partial class FormTextBoxItemViewModel : FormItemViewModelBase, IFormInpu
     public string Key { get; }
 
     [ObservableProperty]
-    private string _label;
+    private string _label = string.Empty;
 
     [ObservableProperty]
-    private string _value;
+    private string _value = string.Empty;
 
     [ObservableProperty]
-    private string _tooltip;
+    private string _tooltip = string.Empty;
     
     [ObservableProperty]
     private bool _isMultiline;
@@ -155,13 +155,13 @@ public partial class FormCheckboxItemViewModel : FormItemViewModelBase, IFormInp
     public string Value => IsChecked.ToString().ToLower();
 
     [ObservableProperty]
-    private string _label;
+    private string _label = string.Empty;
 
     [ObservableProperty]
     private bool _isChecked;
 
     [ObservableProperty]
-    private string _tooltip;
+    private string _tooltip = string.Empty;
 }
 
 public partial class FormSelectItemViewModel : FormItemViewModelBase, IFormInputItem
@@ -184,18 +184,18 @@ public partial class FormSelectItemViewModel : FormItemViewModelBase, IFormInput
 
     // For ComboBox binding, usually bind SelectedItem or SelectedValue
     [ObservableProperty]
-    private string _selectedValue; 
+    private string _selectedValue = string.Empty; 
 
     public string Value => SelectedValue;
 
     [ObservableProperty]
-    private string _label;
+    private string _label = string.Empty;
 
     [ObservableProperty]
-    private string _tooltip;
+    private string _tooltip = string.Empty;
 
     [ObservableProperty]
-    private ObservableCollection<PluginSettingValueSelectOption> _options;
+    private ObservableCollection<PluginSettingValueSelectOption> _options = new();
 }
 
 public partial class FormLabelItemViewModel : FormItemViewModelBase
@@ -206,7 +206,7 @@ public partial class FormLabelItemViewModel : FormItemViewModelBase
     }
 
     [ObservableProperty]
-    private string _text;
+    private string _text = string.Empty;
 }
 
 public partial class FormHeadItemViewModel : FormItemViewModelBase
@@ -217,7 +217,7 @@ public partial class FormHeadItemViewModel : FormItemViewModelBase
     }
 
     [ObservableProperty]
-    private string _text;
+    private string _text = string.Empty;
 }
 
 public class FormNewLineItemViewModel : FormItemViewModelBase

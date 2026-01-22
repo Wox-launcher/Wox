@@ -35,6 +35,16 @@
 <!-- Key discoveries during exploration -->
 - Flutter launcher views/controllers and behaviors are identified (query box, results, preview, toolbar).
 - WPF project already implements several core features; remaining gaps are listed in `wox.ui.windows/todo.md`.
+- Reviewed planning files; preparing detailed Flutter -> WPF feature matrix for launcher-only scope.
+- MainWindow toolbar area uses hardcoded Chinese strings ("个结果", "打开", "Enter") and a static layout; likely needs i18n + dynamic actions to match Flutter toolbar behaviors.
+- MainWindow.xaml.cs handles quick select (Alt + digits), action panel navigation, hide-on-ESC, window drag, hide-on-deactivate, and query box key handling (arrows, Enter, Tab, grid left/right); aligns with parts of Flutter hotkey behavior but lacks some keys (Home/End, action hotkey toggle, update hotkey, IME composition handling).
+- MainViewModel includes grid layout selection navigation (up/down/left/right) and uses GridLayoutParams columns; grid layout exists but needs full metadata wiring and UI parity with Flutter grid mode.
+- MainViewModel parses toolbar messages (Text/Icon) from `ShowToolbarMsg`, but `MainWindow.xaml` currently renders static toolbar text/actions, so dynamic message/actions/hotkey list is missing.
+- WPF models already define QueryIconInfo and DoctorCheckInfo in `wox.ui.windows/Models/Query.cs`, but the UI wiring for query icon actions and doctor toolbar display is not implemented.
+- WoxApiService handles Query/ChangeQuery/ShowHistory/RefreshQuery/ShowToolbarMsg/UpdateResult/GetCurrentQuery; no obvious query-metadata or query-icon update message found yet.
+- WPF models include `QueryMetadata` (icon, result preview ratio, grid layout params), but `QueryResult` does not include metadata; wiring for metadata updates appears missing.
+- `QueryMetadata` is only defined in `wox.ui.windows/Models/Query.cs` and not referenced elsewhere; `QueryIcon` is not used in viewmodels yet.
+- Core `/query/metadata` endpoint expects `query` payload with `QueryId/QueryType/QueryText/QuerySelection` and returns a RestResponse wrapper with `Data` containing icon/widthRatio/grid layout info.
 
 ## Technical Decisions
 <!-- 

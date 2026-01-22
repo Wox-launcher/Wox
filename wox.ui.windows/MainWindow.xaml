@@ -115,21 +115,34 @@
                                 VerticalAlignment="Center"
                                 Cursor="Hand"
                                 MouseLeftButtonUp="QueryIcon_MouseLeftButtonUp">
-                            <Image Width="30"
-                                   Height="30"
-                                   VerticalAlignment="Center"
-                                   HorizontalAlignment="Center"
-                                   Source="{Binding QueryIcon, Converter={StaticResource WoxImageToImageSourceConverter}}">
-                                <Image.Style>
-                                    <Style TargetType="Image">
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding QueryIcon}" Value="{x:Null}">
-                                                <Setter Property="Visibility" Value="Collapsed"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Image.Style>
-                            </Image>
+                            <Grid>
+                                <ProgressBar Width="20"
+                                             Height="20"
+                                             IsIndeterminate="True"
+                                             Foreground="{DynamicResource QueryBoxCursorBrush}"
+                                             Background="Transparent"
+                                             VerticalAlignment="Center"
+                                             HorizontalAlignment="Center"
+                                             Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                <Image Width="30"
+                                       Height="30"
+                                       VerticalAlignment="Center"
+                                       HorizontalAlignment="Center"
+                                       Source="{Binding QueryIcon, Converter={StaticResource WoxImageToImageSourceConverter}}">
+                                    <Image.Style>
+                                        <Style TargetType="Image">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsLoading}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding QueryIcon}" Value="{x:Null}">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Image.Style>
+                                </Image>
+                            </Grid>
                         </Border>
                     </Grid>
                 </Border>
@@ -356,38 +369,109 @@
                     BorderThickness="0,1,0,0"
                     BorderBrush="{DynamicResource PreviewSplitLineBrush}"
                     Visibility="{Binding IsToolbarVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
-                    HorizontalAlignment="Left">
+                    HorizontalAlignment="Stretch">
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0"
-                               VerticalAlignment="Center"
-                               FontSize="11"
-                               Foreground="{DynamicResource ToolbarFontBrush}"
-                               Opacity="0.7">
-                        <Run Text="{Binding Results.Count, Mode=OneWay}"/>
-                        <Run Text=" 个结果"/>
-                    </TextBlock>
-                    <StackPanel Grid.Column="1"
+                    <StackPanel Grid.Column="0"
                                 Orientation="Horizontal"
-                                HorizontalAlignment="Right">
-                        <TextBlock Text="打开"
+                                VerticalAlignment="Center">
+                        <Image Width="16"
+                               Height="16"
+                               Margin="0,0,8,0"
+                               VerticalAlignment="Center"
+                               Source="{Binding ToolbarIcon, Converter={StaticResource WoxImageToImageSourceConverter}}">
+                            <Image.Style>
+                                <Style TargetType="Image">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding ToolbarIcon}" Value="{x:Null}">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Image.Style>
+                        </Image>
+                        <TextBlock Text="{Binding ToolbarMessage}"
                                    VerticalAlignment="Center"
                                    FontSize="11"
+                                   Foreground="{DynamicResource ToolbarFontBrush}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding ToolbarMessage}" Value="{x:Null}">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding ToolbarMessage}" Value="">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <TextBlock VerticalAlignment="Center"
+                                   FontSize="11"
                                    Foreground="{DynamicResource ToolbarFontBrush}"
-                                   Margin="0,0,6,0"/>
-                        <Border Background="Transparent"
-                                BorderBrush="{DynamicResource ToolbarFontBrush}"
-                                BorderThickness="1"
-                                CornerRadius="3"
-                                Padding="6,2">
-                            <TextBlock Text="Enter"
-                                       FontSize="10"
-                                       Foreground="{DynamicResource ToolbarFontBrush}"/>
-                        </Border>
+                                   Opacity="0.7">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding ToolbarMessage}" Value="{x:Null}">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding ToolbarMessage}" Value="">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                            <Run Text="{Binding Results.Count, Mode=OneWay}"/>
+                            <Run Text=" 个结果"/>
+                        </TextBlock>
                     </StackPanel>
+                    <ItemsControl Grid.Column="1"
+                                  HorizontalAlignment="Right"
+                                  ItemsSource="{Binding ToolbarActions}">
+                        <ItemsControl.Style>
+                            <Style TargetType="ItemsControl">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ToolbarActions.Count}" Value="0">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ItemsControl.Style>
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,12,0">
+                                    <TextBlock Text="{Binding Name}"
+                                               VerticalAlignment="Center"
+                                               FontSize="11"
+                                               Foreground="{DynamicResource ToolbarFontBrush}"
+                                               Margin="0,0,6,0"/>
+                                    <Border Background="Transparent"
+                                            BorderBrush="{DynamicResource ToolbarFontBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="3"
+                                            Padding="6,2">
+                                        <TextBlock Text="{Binding Hotkey}"
+                                                   FontSize="10"
+                                                   Foreground="{DynamicResource ToolbarFontBrush}"/>
+                                    </Border>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </Grid>
             </Border>
             <!-- Action Panel (Existing logic handles this differently, maybe overlapping?) -->

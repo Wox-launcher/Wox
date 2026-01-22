@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.Input;
 using Wox.UI.Windows.Models;
 using Wox.UI.Windows.Services;
 using System.Collections.Generic;
+using System.Windows.Threading;
 
 namespace Wox.UI.Windows.ViewModels;
 
@@ -16,6 +17,10 @@ public partial class MainViewModel : ObservableObject
     private readonly WoxApiService _apiService;
     private string _currentQueryId = string.Empty;
     private int _maxResultCount = UIConstants.MAX_LIST_VIEW_ITEM_COUNT;
+    private double _defaultPreviewWidthRatio = 0.4;
+    private readonly WindowFlickerDetector _windowFlickerDetector = new();
+    private readonly DispatcherTimer _clearQueryResultsTimer = new();
+    private int _clearQueryResultDelay = 100;
 
     [ObservableProperty]
     private string _queryText = string.Empty;
@@ -75,7 +80,10 @@ public partial class MainViewModel : ObservableObject
     private string? _toolbarMessage;
 
     [ObservableProperty]
-    private string? _toolbarIcon;
+    private WoxImage? _toolbarIcon;
+
+    [ObservableProperty]
+    private ObservableCollection<ToolbarActionItem> _toolbarActions = new();
 
     private List<QueryHistory> _queryHistory = new();
     private int _historyIndex = -1;
@@ -91,9 +99,14 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private WoxImage? _queryIcon;
 
+    [ObservableProperty]
+    private bool _isLoading;
+
     // Doctor check state
     [ObservableProperty]
     private DoctorCheckInfo? _doctorCheckInfo;
+
+    public bool IsImeComposing { get; set; }
 
     public event Action<double>? WindowHeightChanged;
     public event Action<string?>? AutoCompleteRequested;
@@ -110,6 +123,12 @@ public partial class MainViewModel : ObservableObject
 
         // Initialize default grid params
         GridLayoutParams = GridLayoutParams.Empty();
+
+        _clearQueryResultsTimer.Tick += (_, _) =>
+        {
+            _clearQueryResultsTimer.Stop();
+            ClearQueryResults();
+        };
     }
 
     public void OnShowHistory(List<QueryHistory> history)
@@ -132,24 +151,66 @@ public partial class MainViewModel : ObservableObject
 
         if (setting.PreviewWidthRatio > 0)
         {
-            PreviewWidth = WindowWidth * setting.PreviewWidthRatio;
+            _defaultPreviewWidthRatio = setting.PreviewWidthRatio;
         }
         else
         {
-            PreviewWidth = WindowWidth * 0.4; // Default ratio
+            _defaultPreviewWidthRatio = 0.4;
         }
+
+        PreviewWidth = WindowWidth * _defaultPreviewWidthRatio;
 
         ResizeWindow();
     }
 
     partial void OnQueryTextChanged(string value)
     {
+        if (IsImeComposing)
+        {
+            return;
+        }
+
+        _clearQueryResultsTimer.Stop();
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            IsLoading = false;
+            QueryIcon = null;
+            UpdateLayoutFromMetadata(value, null);
+            ClearQueryResults();
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(value) || !value.Contains(' '))
+        {
+            QueryIcon = null;
+            UpdateLayoutFromMetadata(value, null);
+        }
+        else
+        {
+            _ = UpdateQueryMetadataAsync(value);
+        }
+
+        ScheduleClearQueryResults("query change");
+
         // Debounce query sending
         _ = SendQueryAsync(value);
     }
 
     partial void OnSelectedResultChanged(ResultItem? value)
     {
+        if (IsGridLayout)
+        {
+            IsPreviewVisible = false;
+            PreviewType = "text";
+            PreviewImagePath = null;
+            PreviewContent = null;
+            UpdateToolbarActions(value);
+            return;
+        }
+
+        UpdateToolbarActions(value);
+
         if (value?.Preview != null)
         {
             PreviewContent = value.Preview.PreviewData;
@@ -201,8 +262,60 @@ public partial class MainViewModel : ObservableObject
 
     private async Task SendQueryAsync(string query)
     {
+        IsLoading = !string.IsNullOrWhiteSpace(query);
         await Task.Delay(50); // Simple debounce
         await _apiService.SendQueryAsync(query);
+    }
+
+    private async Task UpdateQueryMetadataAsync(string queryText)
+    {
+        var currentQuery = queryText;
+        var metadata = await _apiService.GetQueryMetadataAsync(currentQuery);
+        if (!string.Equals(QueryText, currentQuery, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        QueryIcon = metadata?.Icon;
+        UpdateLayoutFromMetadata(currentQuery, metadata);
+    }
+
+    private void UpdateLayoutFromMetadata(string queryText, QueryMetadata? metadata)
+    {
+        var isPluginQuery = !string.IsNullOrWhiteSpace(queryText) && queryText.Contains(' ');
+        var ratio = _defaultPreviewWidthRatio;
+
+        if (isPluginQuery && metadata != null)
+        {
+            if (metadata.ResultPreviewWidthRatio > 0 && metadata.ResultPreviewWidthRatio <= 1)
+            {
+                ratio = metadata.ResultPreviewWidthRatio;
+            }
+
+            IsGridLayout = metadata.IsGridLayout && metadata.GridLayoutParams != null;
+            GridLayoutParams = IsGridLayout ? metadata.GridLayoutParams : GridLayoutParams.Empty();
+        }
+        else
+        {
+            IsGridLayout = false;
+            GridLayoutParams = GridLayoutParams.Empty();
+        }
+
+        PreviewWidth = WindowWidth * ratio;
+
+        if (IsGridLayout)
+        {
+            IsPreviewVisible = false;
+            PreviewType = "text";
+            PreviewImagePath = null;
+            PreviewContent = null;
+        }
+        else if (SelectedResult != null)
+        {
+            OnSelectedResultChanged(SelectedResult);
+        }
+
+        ResizeWindow();
     }
 
     private void OnResultsReceived(object? sender, QueryResult queryResult)
@@ -212,6 +325,7 @@ public partial class MainViewModel : ObservableObject
             _currentQueryId = queryResult.QueryId;
 
             // Replace or append results based on query ID
+            _clearQueryResultsTimer.Stop();
             Results.Clear();
             foreach (var result in queryResult.Results)
             {
@@ -227,6 +341,11 @@ public partial class MainViewModel : ObservableObject
 
             // Resize window based on result count
             ResizeWindow();
+
+            if (queryResult.IsFinal)
+            {
+                IsLoading = false;
+            }
         });
     }
 
@@ -356,8 +475,9 @@ public partial class MainViewModel : ObservableObject
         }
 
         // Add toolbar height if there are results with actions
-        var hasActions = Results.Any(r => r.Actions != null && r.Actions.Count > 0);
-        IsToolbarVisible = hasActions && visibleCount > 0;
+        var hasActions = ToolbarActions.Count > 0;
+        var hasMessage = !string.IsNullOrWhiteSpace(ToolbarMessage);
+        IsToolbarVisible = (hasActions && visibleCount > 0) || hasMessage;
         if (IsToolbarVisible)
         {
             resultHeight += UIConstants.TOOLBAR_HEIGHT;
@@ -367,8 +487,66 @@ public partial class MainViewModel : ObservableObject
 
         Logger.Log($"ResizeWindow: queryBoxHeight={queryBoxHeight}, resultHeight={resultHeight}, total={WindowHeight}, itemCount={itemCount}");
 
+        _windowFlickerDetector.RecordResize((int)WindowHeight);
+
         // Notify window to resize
         WindowHeightChanged?.Invoke(WindowHeight);
+    }
+
+    private void ScheduleClearQueryResults(string changeReason)
+    {
+        _clearQueryResultsTimer.Stop();
+
+        if (!string.Equals(changeReason, "refresh query", StringComparison.Ordinal))
+        {
+            var adjust = _windowFlickerDetector.AdjustClearDelay(_clearQueryResultDelay);
+            _clearQueryResultDelay = adjust.NewDelay;
+        }
+
+        _clearQueryResultsTimer.Interval = TimeSpan.FromMilliseconds(_clearQueryResultDelay);
+        _clearQueryResultsTimer.Start();
+    }
+
+    private void ClearQueryResults()
+    {
+        Results.Clear();
+        CurrentActions.Clear();
+        SelectedResult = null;
+        SelectedIndex = 0;
+        IsActionPanelVisible = false;
+        IsPreviewVisible = false;
+        PreviewType = "text";
+        PreviewImagePath = null;
+        PreviewContent = null;
+        ToolbarActions.Clear();
+        ResizeWindow();
+    }
+
+    private void UpdateToolbarActions(ResultItem? result)
+    {
+        ToolbarActions.Clear();
+
+        if (result?.Actions == null || result.Actions.Count == 0)
+        {
+            ResizeWindow();
+            return;
+        }
+
+        var actionsWithHotkeys = result.Actions
+            .Where(action => !string.IsNullOrWhiteSpace(action.Hotkey))
+            .OrderBy(action => action.IsDefault)
+            .ToList();
+
+        foreach (var action in actionsWithHotkeys)
+        {
+            ToolbarActions.Add(new ToolbarActionItem
+            {
+                Name = action.Name,
+                Hotkey = action.Hotkey ?? string.Empty
+            });
+        }
+
+        ResizeWindow();
     }
 
     #region New Event Handlers
@@ -378,6 +556,8 @@ public partial class MainViewModel : ObservableObject
         Application.Current.Dispatcher.Invoke(async () =>
         {
             var currentIndex = preserveSelectedIndex ? SelectedIndex : 0;
+            _clearQueryResultDelay = 400;
+            ScheduleClearQueryResults("refresh query");
             await _apiService.SendQueryAsync(QueryText);
             if (preserveSelectedIndex && Results.Count > currentIndex)
             {
@@ -401,14 +581,36 @@ public partial class MainViewModel : ObservableObject
                 }
                 if (root.TryGetProperty("Icon", out var iconProp))
                 {
-                    ToolbarIcon = iconProp.GetString();
+                    ToolbarIcon = ParseWoxImageString(iconProp.GetString());
                 }
+
+                ResizeWindow();
             }
             catch (Exception ex)
             {
                 Logger.Error("Error parsing toolbar message", ex);
             }
         });
+    }
+
+    private static WoxImage? ParseWoxImageString(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var separatorIndex = value.IndexOf(':');
+        if (separatorIndex <= 0 || separatorIndex >= value.Length - 1)
+        {
+            return null;
+        }
+
+        return new WoxImage
+        {
+            ImageType = value.Substring(0, separatorIndex),
+            ImageData = value.Substring(separatorIndex + 1)
+        };
     }
 
     private void OnUpdateResultReceived(object? sender, string json)
@@ -609,6 +811,17 @@ public partial class MainViewModel : ObservableObject
                 Application.Current.MainWindow?.Hide();
             }
         }
+    }
+
+    public async Task ExecuteActionByHotkeyAsync(ActionItem action)
+    {
+        if (SelectedResult == null)
+        {
+            return;
+        }
+
+        HideActionPanel();
+        await ExecuteActionInternalAsync(action, SelectedResult.Id);
     }
 
     #endregion

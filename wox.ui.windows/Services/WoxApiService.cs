@@ -545,6 +545,69 @@ public class WoxApiService : IDisposable
         }
     }
 
+    public async Task<QueryMetadata?> GetQueryMetadataAsync(string queryText)
+    {
+        try
+        {
+            if (_httpClient == null)
+            {
+                return null;
+            }
+
+            var payload = new
+            {
+                query = new
+                {
+                    QueryId = string.Empty,
+                    QueryType = "input",
+                    QueryText = queryText,
+                    QuerySelection = new
+                    {
+                        Type = string.Empty,
+                        Text = string.Empty,
+                        FilePaths = Array.Empty<string>()
+                    }
+                }
+            };
+
+            var jsonBody = JsonSerializer.Serialize(payload);
+            var response = await _httpClient.PostAsync("/query/metadata", new StringContent(jsonBody, Encoding.UTF8, "application/json"));
+            response.EnsureSuccessStatusCode();
+
+            var json = await response.Content.ReadAsStringAsync();
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return null;
+            }
+
+            return DeserializeResponse<QueryMetadata>(json);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Error getting query metadata", ex);
+            return null;
+        }
+    }
+
+    private static T? DeserializeResponse<T>(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object &&
+                doc.RootElement.TryGetProperty("Data", out var dataElement))
+            {
+                return JsonSerializer.Deserialize<T>(dataElement.GetRawText());
+            }
+        }
+        catch
+        {
+            // fall back to raw parsing
+        }
+
+        return JsonSerializer.Deserialize<T>(json);
+    }
+
     public void Dispose()
     {
         _wsClient?.Close();
