@@ -50,9 +50,15 @@ func (p *PluginSetting) Get(key string) (string, bool) {
 }
 
 func (p *PluginSetting) Set(key string, value string) error {
+	if syncStore, ok := any(p.store).(SyncableStore); ok {
+		return syncStore.SetWithOplog(key, value, true)
+	}
 	return p.store.Set(key, value)
 }
 
 func (p *PluginSetting) Delete(key string) error {
+	if syncStore, ok := any(p.store).(SyncableStore); ok {
+		return syncStore.DeleteWithOplog(key, true)
+	}
 	return p.store.Delete(key)
 }

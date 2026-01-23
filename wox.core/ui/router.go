@@ -524,6 +524,7 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 	settingDto.EnableAutoUpdate = woxSetting.EnableAutoUpdate.Get()
 	settingDto.CustomPythonPath = woxSetting.CustomPythonPath.Get()
 	settingDto.CustomNodejsPath = woxSetting.CustomNodejsPath.Get()
+	settingDto.CloudSyncDisabledPlugins = woxSetting.CloudSyncDisabledPlugins.Get()
 
 	settingDto.EnableMCPServer = woxSetting.EnableMCPServer.Get()
 	settingDto.MCPServerPort = woxSetting.MCPServerPort.Get()
@@ -616,6 +617,13 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 		woxSetting.CustomPythonPath.Set(vs)
 	case "CustomNodejsPath":
 		woxSetting.CustomNodejsPath.Set(vs)
+	case "CloudSyncDisabledPlugins":
+		var disabledPlugins []string
+		if err := json.Unmarshal([]byte(vs), &disabledPlugins); err != nil {
+			writeErrorResponse(w, err.Error())
+			return
+		}
+		woxSetting.CloudSyncDisabledPlugins.Set(disabledPlugins)
 
 	case "HttpProxyEnabled":
 		woxSetting.HttpProxyEnabled.Set(vb)

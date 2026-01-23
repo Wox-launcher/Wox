@@ -23,6 +23,13 @@ type SettingValue[T any] struct {
 	mu           sync.RWMutex
 }
 
+// local setting value. Don't set this value directly, use get,set instead
+// setting value that is only stored locally and not synced
+type LocalSettingValue[T any] struct {
+	*SettingValue[T]
+}
+
+// wox setting value. Don't set this value directly, use get,set instead
 type WoxSettingValue[T any] struct {
 	*SettingValue[T]
 }
@@ -77,6 +84,7 @@ func NewWoxSettingValue[T any](store *WoxSettingStore, key string, defaultValue 
 			settingStore: store,
 			key:          key,
 			defaultValue: defaultValue,
+			syncable:     true,
 		},
 	}
 }
@@ -88,6 +96,7 @@ func NewWoxSettingValueWithValidator[T any](store *WoxSettingStore, key string, 
 			key:          key,
 			defaultValue: defaultValue,
 			validator:    validator,
+			syncable:     true,
 		},
 	}
 }
@@ -112,6 +121,7 @@ func NewPluginSettingValue[T any](store *PluginSettingStore, key string, default
 			settingStore: store,
 			key:          key,
 			defaultValue: defaultValue,
+			syncable:     true,
 		},
 		pluginId: store.pluginId,
 	}
@@ -158,7 +168,11 @@ func (v *SettingValue[T]) Set(newValue T) error {
 
 	var err error
 	if v.settingStore != nil {
-		err = v.settingStore.Set(v.key, newValue)
+		if syncStore, ok := v.settingStore.(SyncableStore); ok {
+			err = syncStore.SetWithOplog(v.key, newValue, v.syncable)
+		} else {
+			err = v.settingStore.Set(v.key, newValue)
+		}
 	} else {
 		return fmt.Errorf("no store available")
 	}
@@ -170,4 +184,12 @@ func (v *SettingValue[T]) Set(newValue T) error {
 	v.value = newValue
 	v.isLoaded = true
 	return nil
+}
+
+func (v *SettingValue[T]) SetSyncable(syncable bool) {
+	v.syncable = syncable
+}
+
+func (v *SettingValue[T]) IsSyncable() bool {
+	return v.syncable
 }

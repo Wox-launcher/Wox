@@ -32,6 +32,7 @@ type WoxSetting struct {
 	EnableAutoUpdate     *WoxSettingValue[bool]
 	CustomPythonPath     *PlatformValue[string]
 	CustomNodejsPath     *PlatformValue[string]
+	CloudSyncDisabledPlugins *WoxSettingValue[[]string]
 
 	// HTTP proxy settings
 	HttpProxyEnabled *PlatformValue[bool]
@@ -166,5 +167,6 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 		QueryHistories:   NewWoxSettingValue(store, "QueryHistories", []QueryHistory{}),
 		PinedResults:     NewWoxSettingValue(store, "PinedResults", util.NewHashMap[ResultHash, bool]()),
 		ActionedResults:  NewWoxSettingValue(store, "ActionedResults", util.NewHashMap[ResultHash, []ActionedResult]()),
+		CloudSyncDisabledPlugins: NewWoxSettingValue(store, "CloudSyncDisabledPlugins", []string{}),
 	}
 }

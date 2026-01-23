@@ -27,6 +27,7 @@ type WoxSettingDto struct {
 	EnableAutoUpdate     bool
 	CustomPythonPath     string
 	CustomNodejsPath     string
+	CloudSyncDisabledPlugins []string
 
 	// AI/MCP related
 	EnableMCPServer bool

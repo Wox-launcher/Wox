@@ -60,6 +60,17 @@ type Oplog struct {
 	SyncedToCloud bool `gorm:"default:false"`
 }
 
+type CloudSyncState struct {
+	ID           uint `gorm:"primaryKey"`
+	Cursor       string
+	LastPullTs   int64
+	LastPushTs   int64
+	BackoffUntil int64
+	RetryCount   int
+	LastError    string
+	Bootstrapped bool
+}
+
 type MRURecord struct {
 	Hash        string `gorm:"primaryKey"` // MD5 hash of pluginId+title+subTitle
 	PluginID    string `gorm:"not null"`
@@ -136,6 +147,7 @@ func Init(ctx context.Context) error {
 		&WoxSetting{},
 		&PluginSetting{},
 		&Oplog{},
+		&CloudSyncState{},
 		&MRURecord{},
 		&ToolbarMute{},
 		&MigrationRecord{},

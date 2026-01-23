@@ -19,6 +19,18 @@ type SettingStore interface {
 	Delete(key string) error
 }
 
+type SyncableStore interface {
+	SetWithOplog(key string, value interface{}, syncable bool) error
+	DeleteWithOplog(key string, syncable bool) error
+}
+
+const (
+	oplogEntityWoxSetting    = "wox_setting"
+	oplogEntityPluginSetting = "plugin_setting"
+	oplogOpUpsert            = "upsert"
+	oplogOpDelete            = "delete"
+)
+
 type WoxSettingStore struct {
 	db *gorm.DB
 }
@@ -51,16 +63,37 @@ func (s *WoxSettingStore) Delete(key string) error {
 	return s.db.Delete(&database.WoxSetting{Key: key}).Error
 }
 
-func (s *WoxSettingStore) LogOplog(key string, value interface{}) error {
+func (s *WoxSettingStore) SetWithOplog(key string, value interface{}, syncable bool) error {
+	if err := s.Set(key, value); err != nil {
+		return err
+	}
+	if !syncable {
+		return nil
+	}
+	return s.LogOplog(key, value, oplogOpUpsert)
+}
+
+func (s *WoxSettingStore) DeleteWithOplog(key string, syncable bool) error {
+	if err := s.Delete(key); err != nil {
+		return err
+	}
+	if !syncable {
+		return nil
+	}
+	return s.LogOplog(key, nil, oplogOpDelete)
+}
+
+func (s *WoxSettingStore) LogOplog(key string, value interface{}, op string) error {
 	strValue, err := serializeValue(value)
 	if err != nil {
 		return fmt.Errorf("failed to serialize value for oplog: %w", err)
 	}
 
 	oplog := database.Oplog{
-		EntityType: "setting",
+		EntityType: oplogEntityWoxSetting,
 		EntityID:   key,
-		Operation:  "update",
+		Operation:  op,
+		Key:        key,
 		Value:      strValue,
 		Timestamp:  util.GetSystemTimestamp(),
 	}
@@ -104,7 +137,60 @@ func (s *PluginSettingStore) Delete(key string) error {
 }
 
 func (s *PluginSettingStore) DeleteAll() error {
-	return s.db.Where("plugin_id = ?", s.pluginId).Delete(&database.PluginSetting{}).Error
+	var settings []database.PluginSetting
+	if err := s.db.Where("plugin_id = ?", s.pluginId).Find(&settings).Error; err != nil {
+		return err
+	}
+
+	if err := s.db.Where("plugin_id = ?", s.pluginId).Delete(&database.PluginSetting{}).Error; err != nil {
+		return err
+	}
+
+	for _, setting := range settings {
+		if err := s.LogOplog(setting.Key, nil, oplogOpDelete); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (s *PluginSettingStore) SetWithOplog(key string, value interface{}, syncable bool) error {
+	if err := s.Set(key, value); err != nil {
+		return err
+	}
+	if !syncable {
+		return nil
+	}
+	return s.LogOplog(key, value, oplogOpUpsert)
+}
+
+func (s *PluginSettingStore) DeleteWithOplog(key string, syncable bool) error {
+	if err := s.Delete(key); err != nil {
+		return err
+	}
+	if !syncable {
+		return nil
+	}
+	return s.LogOplog(key, nil, oplogOpDelete)
+}
+
+func (s *PluginSettingStore) LogOplog(key string, value interface{}, op string) error {
+	strValue, err := serializeValue(value)
+	if err != nil {
+		return fmt.Errorf("failed to serialize plugin setting value for oplog: %w", err)
+	}
+
+	oplog := database.Oplog{
+		EntityType: oplogEntityPluginSetting,
+		EntityID:   s.pluginId,
+		Operation:  op,
+		Key:        key,
+		Value:      strValue,
+		Timestamp:  util.GetSystemTimestamp(),
+	}
+
+	return s.db.Create(&oplog).Error
 }
 
 func serializeValue(value interface{}) (string, error) {

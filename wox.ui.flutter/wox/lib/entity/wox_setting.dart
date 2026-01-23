@@ -27,6 +27,7 @@ class WoxSetting {
   late bool enableAutoUpdate;
   late String customPythonPath;
   late String customNodejsPath;
+  late List<String> cloudSyncDisabledPlugins;
 
   WoxSetting({
     required this.enableAutostart,
@@ -55,6 +56,7 @@ class WoxSetting {
     required this.enableAutoUpdate,
     required this.customPythonPath,
     required this.customNodejsPath,
+    required this.cloudSyncDisabledPlugins,
   });
 
   WoxSetting.fromJson(Map<String, dynamic> json) {
@@ -111,6 +113,11 @@ class WoxSetting {
     enableAutoUpdate = json['EnableAutoUpdate'] ?? true;
     customPythonPath = json['CustomPythonPath'] ?? '';
     customNodejsPath = json['CustomNodejsPath'] ?? '';
+    if (json['CloudSyncDisabledPlugins'] != null) {
+      cloudSyncDisabledPlugins = List<String>.from(json['CloudSyncDisabledPlugins']);
+    } else {
+      cloudSyncDisabledPlugins = <String>[];
+    }
   }
 
   Map<String, dynamic> toJson() {
@@ -141,6 +148,7 @@ class WoxSetting {
     data['EnableAutoUpdate'] = enableAutoUpdate;
     data['CustomPythonPath'] = customPythonPath;
     data['CustomNodejsPath'] = customNodejsPath;
+    data['CloudSyncDisabledPlugins'] = cloudSyncDisabledPlugins;
     return data;
   }
 }
