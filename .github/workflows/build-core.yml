@@ -1,6 +1,23 @@
 name: Reusable Build
 
 on:
+  workflow_dispatch:
+    inputs:
+      require_macos_notarize:
+        description: "Require macOS signing + notarization (needs MACOS_* and APPLE_API_* secrets)"
+        type: boolean
+        required: false
+        default: false
+      require_windows_signpath:
+        description: "Require Windows SignPath signing (needs SIGNPATH_* secrets)"
+        type: boolean
+        required: false
+        default: false
+      artifact_retention_days:
+        description: "Artifacts retention days"
+        type: number
+        required: false
+        default: 10
   workflow_call:
     inputs:
       require_macos_notarize:
@@ -15,6 +32,25 @@ on:
         type: number
         required: false
         default: 10
+    secrets:
+      MACOS_KEYCHAINPWD:
+        required: false
+      MACOS_SIGN_P12_BASE64:
+        required: false
+      MACOS_SIGN_P12_PASSWORD:
+        required: false
+      MACOS_SIGN_IDENTITY:
+        required: false
+      APPLE_API_KEY_ID:
+        required: false
+      APPLE_API_ISSUER_ID:
+        required: false
+      APPLE_API_PRIVATE_KEY_P8_BASE64:
+        required: false
+      SIGNPATH_API_TOKEN:
+        required: false
+      SIGNPATH_ORGANIZATION_ID:
+        required: false
 
 permissions:
   contents: read
@@ -95,7 +131,7 @@ jobs:
           done
 
       - name: Setup macOS signing keychain
-        if: ${{ secrets.MACOS_SIGN_P12_BASE64 != '' }}
+        if: ${{ inputs.require_macos_notarize }}
         env:
           MACOS_KEYCHAINPWD: ${{ secrets.MACOS_KEYCHAINPWD }}
           MACOS_SIGN_P12_BASE64: ${{ secrets.MACOS_SIGN_P12_BASE64 }}
@@ -116,10 +152,8 @@ jobs:
           security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$MACOS_SIGN_P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$MACOS_KEYCHAINPWD" "$KEYCHAIN_PATH"
 
-          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
-
       - name: Configure notarization (App Store Connect API Key)
-        if: ${{ secrets.APPLE_API_PRIVATE_KEY_P8_BASE64 != '' }}
+        if: ${{ inputs.require_macos_notarize }}
         env:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
@@ -136,9 +170,8 @@ jobs:
       - name: Build
         run: make build
         env:
-          MACOS_KEYCHAINPWD: ${{ secrets.MACOS_KEYCHAINPWD }}
-          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
-          KEYCHAIN_PATH: ${{ env.KEYCHAIN_PATH }}
+          MACOS_KEYCHAINPWD: ${{ inputs.require_macos_notarize && secrets.MACOS_KEYCHAINPWD || '' }}
+          MACOS_SIGN_IDENTITY: ${{ inputs.require_macos_notarize && secrets.MACOS_SIGN_IDENTITY || '' }}
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v1
@@ -146,7 +179,7 @@ jobs:
           subject-path: ./release/wox-mac-arm64.dmg
 
       - name: Staple and validate dmg
-        if: ${{ secrets.APPLE_API_PRIVATE_KEY_P8_BASE64 != '' }}
+        if: ${{ inputs.require_macos_notarize }}
         run: |
           set -euo pipefail
           xcrun stapler staple ./release/wox-mac-arm64.dmg
@@ -236,6 +269,7 @@ jobs:
 
       - name: Upload unsigned artifact (Windows)
         id: upload-unsigned-artifact
+        if: ${{ inputs.require_windows_signpath }}
         uses: actions/upload-artifact@v4
         with:
           name: unsigned-wox-windows-amd64.exe
@@ -243,7 +277,7 @@ jobs:
           retention-days: 1
 
       - name: Sign with SignPath (Windows)
-        if: ${{ secrets.SIGNPATH_API_TOKEN != '' }}
+        if: ${{ inputs.require_windows_signpath }}
         uses: signpath/github-action-submit-signing-request@v2
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
