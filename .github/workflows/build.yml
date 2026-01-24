@@ -80,24 +80,25 @@ jobs:
           github-artifact-id: ${{ steps.upload-unsigned-artifact.outputs.artifact-id }}
           wait-for-completion: true
           output-artifact-directory: ./release
-          parameters: |
-            version: ${{ github.sha }}
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v1
         with:
           subject-path: ${{ matrix.asset_path }}
+
       - name: Attest AppImage provenance
         if: matrix.os == 'Linux'
         uses: actions/attest-build-provenance@v1
         with:
           subject-path: ./release/wox-linux-amd64.AppImage
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset_name }}
           path: ${{ matrix.asset_path }}
           retention-days: 10
+
       - name: Upload AppImage artifact
         if: matrix.os == 'Linux'
         uses: actions/upload-artifact@v4
