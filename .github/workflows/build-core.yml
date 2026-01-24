@@ -77,6 +77,7 @@ jobs:
             libglib2.0-dev \
             libgirepository1.0-dev \
             libx11-dev \
+            libx11-xcb-dev \
             libxext-dev \
             libxfixes-dev \
             libxi-dev \
@@ -85,7 +86,9 @@ jobs:
             libxkbcommon-dev \
             libxkbcommon-x11-dev \
             libxcursor-dev \
-            libxtst-dev
+            libxtst-dev \
+            libayatana-appindicator3-dev \
+            libkeybinder-3.0-dev
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -345,6 +348,7 @@ jobs:
             libglib2.0-dev \
             libgirepository1.0-dev \
             libx11-dev \
+            libx11-xcb-dev \
             libxext-dev \
             libxfixes-dev \
             libxi-dev \
@@ -353,7 +357,9 @@ jobs:
             libxkbcommon-dev \
             libxkbcommon-x11-dev \
             libxcursor-dev \
-            libxtst-dev
+            libxtst-dev \
+            libayatana-appindicator3-dev \
+            libkeybinder-3.0-dev
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
