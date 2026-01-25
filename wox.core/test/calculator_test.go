@@ -5,8 +5,28 @@ import (
 	"wox/plugin"
 )
 
+const calculatorPluginID = "bd723c38-f28d-4152-8621-76fd21d6456e"
+
+func setCalculatorSeparatorMode(t *testing.T, mode string) {
+	t.Helper()
+	var calcInstance *plugin.Instance
+	for _, instance := range plugin.GetPluginManager().GetPluginInstances() {
+		if instance.Metadata.Id == calculatorPluginID {
+			calcInstance = instance
+			break
+		}
+	}
+	if calcInstance == nil {
+		t.Fatal("Calculator plugin instance not found")
+	}
+	if err := calcInstance.Setting.Set("SeparatorMode", mode); err != nil {
+		t.Fatalf("Failed to set separator mode: %v", err)
+	}
+}
+
 func TestCalculatorBasic(t *testing.T) {
 	suite := NewTestSuite(t)
+	setCalculatorSeparatorMode(t, "Dot")
 
 	tests := []QueryTest{
 		{
@@ -88,6 +108,7 @@ func TestCalculatorBasic(t *testing.T) {
 
 func TestCalculatorTrigonometric(t *testing.T) {
 	suite := NewTestSuite(t)
+	setCalculatorSeparatorMode(t, "Dot")
 
 	tests := []QueryTest{
 		{
@@ -117,7 +138,7 @@ func TestCalculatorTrigonometric(t *testing.T) {
 		{
 			Name:           "Tangent",
 			Query:          "tan(pi/4)",
-			ExpectedTitle:  "0.9999999999999998",
+			ExpectedTitle:  "1",
 			ExpectedAction: "Copy",
 		},
 	}
@@ -127,6 +148,7 @@ func TestCalculatorTrigonometric(t *testing.T) {
 
 func TestCalculatorAdvanced(t *testing.T) {
 	suite := NewTestSuite(t)
+	setCalculatorSeparatorMode(t, "Dot")
 
 	tests := []QueryTest{
 		{
@@ -244,6 +266,7 @@ func TestCalculatorAdvanced(t *testing.T) {
 
 func TestCalculatorSeparators(t *testing.T) {
 	suite := NewTestSuite(t)
+	setCalculatorSeparatorMode(t, "Dot")
 	calculatorId := "bd723c38-f28d-4152-8621-76fd21d6456e"
 
 	// Find the plugin instance to ensure we update the correct setting store

@@ -75,6 +75,11 @@ func call(funcName string, args []decimal.Decimal) (decimal.Decimal, error) {
 			if result == 1 || result == -1 {
 				result = f(math.Nextafter(x, 0))
 			}
+			if math.Abs(result-1) < 1e-12 {
+				result = 1
+			} else if math.Abs(result+1) < 1e-12 {
+				result = -1
+			}
 			return decimal.NewFromFloat(result), nil
 		}
 		return decimal.NewFromFloat(f(args[0].InexactFloat64())), nil
