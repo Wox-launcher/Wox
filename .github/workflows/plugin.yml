@@ -8,8 +8,8 @@ on:
     - cron: "0 */3 * * *"
 
 jobs:
-  build-macos-arm64:
-    runs-on: [self-hosted, macOS, ARM64]
+  build:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - name: Check plugin updates
