@@ -99,6 +99,7 @@ on:
 
 permissions:
   contents: read
+  actions: write
   id-token: write
   attestations: write
 
