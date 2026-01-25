@@ -57,10 +57,12 @@ jobs:
         run: |
           set -euo pipefail
           MAC_ARM64_MD5="$(md5sum release-files/wox-mac-arm64.dmg | awk '{print $1}')"
+          MAC_AMD64_MD5="$(md5sum release-files/wox-mac-amd64.dmg | awk '{print $1}')"
           WINDOWS_MD5="$(md5sum release-files/wox-windows-amd64.exe | awk '{print $1}')"
           LINUX_MD5="$(md5sum release-files/wox-linux-amd64 | awk '{print $1}')"
 
           echo "MAC_ARM64_MD5=$MAC_ARM64_MD5" >> "$GITHUB_OUTPUT"
+          echo "MAC_AMD64_MD5=$MAC_AMD64_MD5" >> "$GITHUB_OUTPUT"
           echo "WINDOWS_MD5=$WINDOWS_MD5" >> "$GITHUB_OUTPUT"
           echo "LINUX_MD5=$LINUX_MD5" >> "$GITHUB_OUTPUT"
 
@@ -87,6 +89,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.VERSION }}
           TAG: ${{ github.ref_name }}
           MAC_ARM64_MD5: ${{ steps.checksums.outputs.MAC_ARM64_MD5 }}
+          MAC_AMD64_MD5: ${{ steps.checksums.outputs.MAC_AMD64_MD5 }}
           WINDOWS_MD5: ${{ steps.checksums.outputs.WINDOWS_MD5 }}
           LINUX_MD5: ${{ steps.checksums.outputs.LINUX_MD5 }}
         run: |
@@ -95,6 +98,7 @@ jobs:
           cd repo
 
           MAC_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/wox-mac-arm64.dmg"
+          MAC_AMD64_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/wox-mac-amd64.dmg"
           WIN_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/wox-windows-amd64.exe"
           LINUX_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/wox-linux-amd64"
 
@@ -107,6 +111,8 @@ jobs:
             --arg version "$VERSION" \
             --arg macUrl "$MAC_URL" \
             --arg macMd5 "$MAC_ARM64_MD5" \
+            --arg macAmd64Url "$MAC_AMD64_URL" \
+            --arg macAmd64Md5 "$MAC_AMD64_MD5" \
             --arg winUrl "$WIN_URL" \
             --arg winMd5 "$WINDOWS_MD5" \
             --arg linuxUrl "$LINUX_URL" \
@@ -115,6 +121,8 @@ jobs:
             '.Version = $version
             | .MacArm64DownloadUrl = $macUrl
             | .MacArm64Checksum = $macMd5
+            | .MacAmd64DownloadUrl = $macAmd64Url
+            | .MacAmd64Checksum = $macAmd64Md5
             | .WindowsDownloadUrl = $winUrl
             | .WindowsChecksum = $winMd5
             | .LinuxDownloadUrl = $linuxUrl
