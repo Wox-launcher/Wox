@@ -16,7 +16,7 @@ jobs:
     with:
       run_tests: false
       build_macos_arm64: false
-      build_macos_amd64: true
+      build_macos_amd64: false
       build_windows_amd64: false
       build_linux_amd64: true
       require_macos_notarize: true

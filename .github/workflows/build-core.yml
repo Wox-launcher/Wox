@@ -142,8 +142,8 @@ jobs:
         with:
           go-version-file: wox.core/go.mod
           cache: true
-      # - name: Test
-      #   run: xvfb-run -a make test
+      - name: Test
+        run: xvfb-run -a make test
 
   build_macos_arm64:
     name: Build macOS ARM64
@@ -529,6 +529,7 @@ jobs:
             libxtst-dev \
             libayatana-appindicator3-dev \
             libkeybinder-3.0-dev \
+            libfuse2 \
             xvfb
       - name: Setup Go
         uses: actions/setup-go@v5
