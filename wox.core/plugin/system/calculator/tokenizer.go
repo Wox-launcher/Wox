@@ -119,24 +119,6 @@ func numberPrefix(chars []rune, i *int, n int, thousandsSep, decimalSep string) 
 			}
 		}
 
-		// 4. Fallback: Check for other common decimal separators (. or ,)
-		if !seenDecimal {
-			isDot := char == '.'
-			isComma := char == ','
-			if isDot || isComma {
-				// Must be followed by a digit to be treated as a decimal separator in this fallback mode
-				if current+1 < n {
-					nextChar := chars[current+1]
-					if nextChar >= '0' && nextChar <= '9' {
-						current++
-						sb.WriteRune('.')
-						seenDecimal = true
-						continue
-					}
-				}
-			}
-		}
-
 		// Nothing matched, break
 		break
 	}
