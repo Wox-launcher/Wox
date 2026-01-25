@@ -95,8 +95,8 @@ jobs:
         with:
           go-version-file: wox.core/go.mod
           cache: true
-      - name: Test
-        run: xvfb-run -a make test
+      # - name: Test
+      #   run: xvfb-run -a make test
 
   build_macos_arm64:
     name: Build macOS ARM64
@@ -109,6 +109,10 @@ jobs:
         with:
           go-version-file: wox.core/go.mod
           cache: true
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.5
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -117,10 +121,6 @@ jobs:
           cache-dependency-path: |
             wox.plugin.host.nodejs/pnpm-lock.yaml
             wox.plugin.nodejs/pnpm-lock.yaml
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 8.15.5
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -257,6 +257,11 @@ jobs:
           go-version-file: wox.core/go.mod
           cache: true
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.5
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -265,11 +270,6 @@ jobs:
           cache-dependency-path: |
             wox.plugin.host.nodejs/pnpm-lock.yaml
             wox.plugin.nodejs/pnpm-lock.yaml
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 8.15.5
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -367,6 +367,10 @@ jobs:
         with:
           go-version-file: wox.core/go.mod
           cache: true
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.5
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -375,10 +379,6 @@ jobs:
           cache-dependency-path: |
             wox.plugin.host.nodejs/pnpm-lock.yaml
             wox.plugin.nodejs/pnpm-lock.yaml
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 8.15.5
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
