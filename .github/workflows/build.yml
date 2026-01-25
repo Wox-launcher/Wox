@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -12,12 +13,13 @@ permissions:
 
 jobs:
   build:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '#build') }}
     uses: ./.github/workflows/build-core.yml
     with:
-      run_tests: false
-      build_macos_arm64: false
-      build_macos_amd64: false
-      build_windows_amd64: false
+      run_tests: true
+      build_macos_arm64: true
+      build_macos_amd64: true
+      build_windows_amd64: true
       build_linux_amd64: true
       require_macos_notarize: true
       require_windows_signpath: true
