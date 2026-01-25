@@ -180,33 +180,40 @@ func GetActiveWindowIcon(ctx context.Context) (common.WoxImage, error) {
 	return woxIcon, nil
 }
 
-func GetPasteToActiveWindowAction(ctx context.Context, api plugin.API, actionCallback func()) (plugin.QueryResultAction, error) {
-	windowName := window.GetActiveWindowName()
-	windowIcon, windowIconErr := window.GetActiveWindowIcon()
-	if windowIconErr == nil && windowName != "" {
-		windowIconImage, err := common.NewWoxImage(windowIcon)
-		if err == nil {
-			return plugin.QueryResultAction{
-				Name:      fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_paste_to_window"), windowName),
-				Icon:      windowIconImage,
-				IsDefault: true,
-				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					if actionCallback != nil {
-						actionCallback()
-					}
-					util.Go(ctx, "ai command paste", func() {
-						time.Sleep(time.Millisecond * 150)
-						err := keyboard.SimulatePaste()
-						if err != nil {
-							api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("simulate paste clipboard failed, err=%s", err.Error()))
-						} else {
-							api.Log(ctx, plugin.LogLevelInfo, "simulate paste clipboard success")
-						}
-					})
-				},
-			}, nil
-		}
+func GetPasteToActiveWindowAction(ctx context.Context, api plugin.API, windowName string, windowPid int, windowIcon common.WoxImage, actionCallback func()) (plugin.QueryResultAction, error) {
+	if windowName == "" {
+		return plugin.QueryResultAction{}, fmt.Errorf("no active window")
 	}
 
-	return plugin.QueryResultAction{}, fmt.Errorf("no active window")
+	action := plugin.QueryResultAction{
+		Name:      fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_paste_to_window"), windowName),
+		IsDefault: true,
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			if actionCallback != nil {
+				actionCallback()
+			}
+			util.Go(ctx, "ai command paste", func() {
+				if windowPid > 0 {
+					if !window.ActivateWindowByPid(windowPid) {
+						api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("activate window failed, pid=%d", windowPid))
+					}
+					time.Sleep(time.Millisecond * 150)
+				} else {
+					time.Sleep(time.Millisecond * 150)
+				}
+				err := keyboard.SimulatePaste()
+				if err != nil {
+					api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("simulate paste clipboard failed, err=%s", err.Error()))
+				} else {
+					api.Log(ctx, plugin.LogLevelInfo, "simulate paste clipboard success")
+				}
+			})
+		},
+	}
+
+	if !windowIcon.IsEmpty() {
+		action.Icon = windowIcon
+	}
+
+	return action, nil
 }

@@ -1894,10 +1894,11 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 		query, instance := newQueryInputWithPlugins(newQuery, GetPluginManager().GetPluginInstances())
 		query.Id = plainQuery.QueryId
 		query.SessionId = util.GetContextSessionId(ctx)
-		query.Env.ActiveWindowTitle = m.GetUI().GetActiveWindowName()
-		query.Env.ActiveWindowPid = m.GetUI().GetActiveWindowPid()
-		query.Env.ActiveWindowIcon = m.GetUI().GetActiveWindowIcon()
-		query.Env.ActiveWindowIsOpenSaveDialog = m.GetUI().GetActiveWindowIsOpenSaveDialog()
+		activeWindowSnapshot := m.GetUI().GetActiveWindowSnapshot(ctx)
+		query.Env.ActiveWindowTitle = activeWindowSnapshot.Name
+		query.Env.ActiveWindowPid = activeWindowSnapshot.Pid
+		query.Env.ActiveWindowIcon = activeWindowSnapshot.Icon
+		query.Env.ActiveWindowIsOpenSaveDialog = activeWindowSnapshot.IsOpenSaveDialog
 		query.Env.ActiveBrowserUrl = m.getActiveBrowserUrl(ctx)
 		return query, instance, nil
 	}
@@ -1911,10 +1912,11 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 			Selection: plainQuery.QuerySelection,
 		}
 		query.SessionId = util.GetContextSessionId(ctx)
-		query.Env.ActiveWindowTitle = m.GetUI().GetActiveWindowName()
-		query.Env.ActiveWindowPid = m.GetUI().GetActiveWindowPid()
-		query.Env.ActiveWindowIcon = m.GetUI().GetActiveWindowIcon()
-		query.Env.ActiveWindowIsOpenSaveDialog = m.GetUI().GetActiveWindowIsOpenSaveDialog()
+		activeWindowSnapshot := m.GetUI().GetActiveWindowSnapshot(ctx)
+		query.Env.ActiveWindowTitle = activeWindowSnapshot.Name
+		query.Env.ActiveWindowPid = activeWindowSnapshot.Pid
+		query.Env.ActiveWindowIcon = activeWindowSnapshot.Icon
+		query.Env.ActiveWindowIsOpenSaveDialog = activeWindowSnapshot.IsOpenSaveDialog
 		query.Env.ActiveBrowserUrl = m.getActiveBrowserUrl(ctx)
 		return query, nil, nil
 	}
@@ -1923,8 +1925,8 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 }
 
 func (m *Manager) getActiveBrowserUrl(ctx context.Context) string {
-	activeWindowName := m.GetUI().GetActiveWindowName()
-	isGoogleChrome := strings.ToLower(activeWindowName) == "google chrome"
+	activeWindowSnapshot := m.GetUI().GetActiveWindowSnapshot(ctx)
+	isGoogleChrome := strings.ToLower(activeWindowSnapshot.Name) == "google chrome"
 	if !isGoogleChrome {
 		return ""
 	}

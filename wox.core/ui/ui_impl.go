@@ -14,7 +14,6 @@ import (
 	"wox/util"
 	"wox/util/notifier"
 	"wox/util/selection"
-	"wox/util/window"
 
 	"github.com/google/uuid"
 	"github.com/samber/lo"
@@ -46,34 +45,12 @@ func (u *uiImpl) HideApp(ctx context.Context) {
 }
 
 func (u *uiImpl) ShowApp(ctx context.Context, showContext common.ShowContext) {
-	GetUIManager().SetActiveWindowName(window.GetActiveWindowName())
-	GetUIManager().SetActiveWindowPid(window.GetActiveWindowPid())
-	if icon, err := window.GetActiveWindowIcon(); err == nil {
-		if woxIcon, convErr := common.NewWoxImage(icon); convErr == nil {
-			GetUIManager().SetActiveWindowIcon(woxIcon)
-		}
-	}
-	if isDialog, err := window.IsOpenSaveDialog(); err == nil {
-		GetUIManager().SetActiveWindowIsOpenSaveDialog(isDialog)
-	} else {
-		GetUIManager().SetActiveWindowIsOpenSaveDialog(false)
-	}
+	GetUIManager().RefreshActiveWindowSnapshot(ctx)
 	u.invokeWebsocketMethod(ctx, "ShowApp", getShowAppParams(ctx, showContext))
 }
 
 func (u *uiImpl) ToggleApp(ctx context.Context) {
-	GetUIManager().SetActiveWindowName(window.GetActiveWindowName())
-	GetUIManager().SetActiveWindowPid(window.GetActiveWindowPid())
-	if icon, err := window.GetActiveWindowIcon(); err == nil {
-		if woxIcon, convErr := common.NewWoxImage(icon); convErr == nil {
-			GetUIManager().SetActiveWindowIcon(woxIcon)
-		}
-	}
-	if isDialog, err := window.IsOpenSaveDialog(); err == nil {
-		GetUIManager().SetActiveWindowIsOpenSaveDialog(isDialog)
-	} else {
-		GetUIManager().SetActiveWindowIsOpenSaveDialog(false)
-	}
+	GetUIManager().RefreshActiveWindowSnapshot(ctx)
 	u.invokeWebsocketMethod(ctx, "ToggleApp", getShowAppParams(ctx, common.ShowContext{SelectAll: true}))
 }
 
@@ -153,6 +130,10 @@ func (u *uiImpl) FocusToChatInput(ctx context.Context) {
 	u.invokeWebsocketMethod(ctx, "FocusToChatInput", nil)
 }
 
+func (u *uiImpl) GetActiveWindowSnapshot(ctx context.Context) common.ActiveWindowSnapshot {
+	return GetUIManager().GetActiveWindowSnapshot(ctx)
+}
+
 func (u *uiImpl) SendChatResponse(ctx context.Context, aiChatData common.AIChatData) {
 	u.invokeWebsocketMethod(ctx, "SendChatResponse", aiChatData)
 }
@@ -230,22 +211,6 @@ func (u *uiImpl) PickFiles(ctx context.Context, params common.PickFilesParams) [
 		result = append(result, file.(string))
 	})
 	return result
-}
-
-func (u *uiImpl) GetActiveWindowName() string {
-	return GetUIManager().GetActiveWindowName()
-}
-
-func (u *uiImpl) GetActiveWindowPid() int {
-	return GetUIManager().GetActiveWindowPid()
-}
-
-func (u *uiImpl) GetActiveWindowIsOpenSaveDialog() bool {
-	return GetUIManager().GetActiveWindowIsOpenSaveDialog()
-}
-
-func (u *uiImpl) GetActiveWindowIcon() common.WoxImage {
-	return GetUIManager().GetActiveWindowIcon()
 }
 
 func (u *uiImpl) invokeWebsocketMethod(ctx context.Context, method string, data any) (responseData any, responseErr error) {

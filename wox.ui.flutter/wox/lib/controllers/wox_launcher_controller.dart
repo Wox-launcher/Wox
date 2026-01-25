@@ -544,7 +544,15 @@ class WoxLauncherController extends GetxController {
     resizeHeight();
   }
 
-  void focusQueryBox({bool selectAll = false}) {
+  Future<void> focusQueryBox({bool selectAll = false}) async {
+    // only focus when window is visible
+    // otherwise it will gain focus but not visible, causing some issues on windows
+    // e.g. active window snapshot is wrong
+    final isVisible = await windowManager.isVisible();
+    if (!isVisible) {
+      return;
+    }
+
     // request focus to action query box since it will lose focus when tap
     queryBoxFocusNode.requestFocus();
 

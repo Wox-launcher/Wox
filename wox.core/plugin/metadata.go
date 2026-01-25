@@ -220,6 +220,9 @@ func (m *Metadata) GetFeatureParamsForQueryEnv() (MetadataFeatureParamsQueryEnv,
 						params.RequireActiveWindowName = true
 					}
 				}
+				if vBool, ok := v.(bool); ok {
+					params.RequireActiveWindowName = vBool
+				}
 			}
 
 			if v, ok := feature.Params["requireActiveWindowPid"]; ok {

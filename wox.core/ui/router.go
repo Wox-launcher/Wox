@@ -977,7 +977,9 @@ func handleQueryMetadata(w http.ResponseWriter, r *http.Request) {
 			metadata.GridLayoutParams = featureParamsGridLayout
 		}
 	} else {
-		logger.Error(ctx, fmt.Sprintf("failed to get feature params for grid layout: %s", err.Error()))
+		if !errors.Is(err, plugin.ErrFeatureNotSupported) {
+			logger.Error(ctx, fmt.Sprintf("failed to get feature params for grid layout: %s", err.Error()))
+		}
 	}
 
 	writeSuccessResponse(w, metadata)
