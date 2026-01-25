@@ -14,7 +14,7 @@ jobs:
   build:
     uses: ./.github/workflows/build-core.yml
     with:
-      require_macos_notarize: false
-      require_windows_signpath: false
+      require_macos_notarize: true
+      require_windows_signpath: true
       artifact_retention_days: 10
     secrets: inherit

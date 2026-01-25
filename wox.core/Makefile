@@ -126,9 +126,7 @@ woxmr-sign:
 ifeq ($(PLATFORM),macos)
 	@if [ -z "$(MACOS_SIGN_IDENTITY)" ]; then \
 		echo "MACOS_SIGN_IDENTITY is empty; skip signing"; \
-		exit 0; \
-	fi
-	@if [ -f "$(WOXMR_OUT_BUNDLE)" ]; then \
+	elif [ -f "$(WOXMR_OUT_BUNDLE)" ]; then \
 		echo "Signing with identity: $(MACOS_SIGN_IDENTITY)"; \
 		codesign --force --sign "$(MACOS_SIGN_IDENTITY)" --timestamp=none "$(WOXMR_OUT_BUNDLE)"; \
 	else \

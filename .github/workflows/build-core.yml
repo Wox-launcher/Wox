@@ -288,7 +288,7 @@ jobs:
           cache: true
 
       - name: Enable Flutter desktop (Windows)
-        shell: msys2 {0}
+        shell: pwsh
         run: flutter config --enable-windows-desktop
 
       - name: Build
