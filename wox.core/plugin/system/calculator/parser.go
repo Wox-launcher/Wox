@@ -115,7 +115,7 @@ func (p *parser) functionNode(str string) (*node, error) {
 	}
 	args = append(args, n)
 
-	for p.consume(",") {
+	for p.consume(",") || p.consume(";") {
 		n, err := p.add()
 		if err != nil {
 			return nil, err

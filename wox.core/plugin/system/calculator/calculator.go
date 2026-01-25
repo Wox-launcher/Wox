@@ -149,8 +149,8 @@ func calculate(n *node) (decimal.Decimal, error) {
 	return decimal.Zero, fmt.Errorf("unknown node type: %s", n.kind)
 }
 
-func Calculate(expr string) (decimal.Decimal, error) {
-	tokens, err := tokenize(expr)
+func Calculate(expr string, thousandsSep, decimalSep string) (decimal.Decimal, error) {
+	tokens, err := tokenize(expr, thousandsSep, decimalSep)
 	if err != nil {
 		return decimal.Zero, err
 	}

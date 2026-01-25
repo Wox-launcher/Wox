@@ -2,6 +2,7 @@ package test
 
 import (
 	"testing"
+	"wox/plugin"
 )
 
 func TestCalculatorBasic(t *testing.T) {
@@ -239,4 +240,142 @@ func TestCalculatorAdvanced(t *testing.T) {
 	}
 
 	suite.RunQueryTests(tests)
+}
+
+func TestCalculatorSeparators(t *testing.T) {
+	suite := NewTestSuite(t)
+	calculatorId := "bd723c38-f28d-4152-8621-76fd21d6456e"
+
+	// Find the plugin instance to ensure we update the correct setting store
+	var calcInstance *plugin.Instance
+	for _, instance := range plugin.GetPluginManager().GetPluginInstances() {
+		if instance.Metadata.Id == calculatorId {
+			calcInstance = instance
+			break
+		}
+	}
+	if calcInstance == nil {
+		t.Fatal("Calculator plugin instance not found")
+	}
+
+	// Helper to set separator mode
+	setMode := func(mode string) {
+		if err := calcInstance.Setting.Set("SeparatorMode", mode); err != nil {
+			t.Fatalf("Failed to set separator mode: %v", err)
+		}
+		// Allow some time for callbacks if any (though here we don't rely on callbacks for this test as we call api.GetSetting)
+	}
+
+	// Test Dot Mode (US: 1,234.56)
+	// Thousands: ,
+	// Decimal: .
+	t.Run("Dot Mode (US)", func(t *testing.T) {
+		setMode("Dot")
+		tests := []QueryTest{
+			{
+				Name:           "Dot Mode - Simple Addition",
+				Query:          "1.5 + 2.5",
+				ExpectedTitle:  "4",
+				ExpectedAction: "Copy",
+			},
+			{
+				Name:           "Dot Mode - Thousands Separator",
+				Query:          "1,000 + 200", // 1000 + 200
+				ExpectedTitle:  "1,200",
+				ExpectedAction: "Copy",
+			},
+			{
+				Name:           "Dot Mode - Output Format",
+				Query:          "1234.56 * 1",
+				ExpectedTitle:  "1,234.56",
+				ExpectedAction: "Copy",
+			},
+			{
+				Name:           "Dot Mode - Argument Separator",
+				Query:          "max(1, 2)", // Comma as argument separator (since decimal is Dot)
+				ExpectedTitle:  "2",
+				ExpectedAction: "Copy",
+			},
+		}
+		suite.RunQueryTests(tests)
+	})
+
+	// Test Comma Mode (European: 1.234,56)
+	// Thousands: .
+	// Decimal: ,
+	t.Run("Comma Mode (EU)", func(t *testing.T) {
+		setMode("Comma")
+		tests := []QueryTest{
+			{
+				Name:           "Comma Mode - Simple Addition",
+				Query:          "1,5 + 2,5", // 1.5 + 2.5
+				ExpectedTitle:  "4",
+				ExpectedAction: "Copy",
+			},
+			{
+				Name:           "Comma Mode - Thousands Separator",
+				Query:          "1.000 + 200", // 1000 + 200
+				ExpectedTitle:  "1.200",
+				ExpectedAction: "Copy",
+			},
+			{
+				Name:           "Comma Mode - Output Format",
+				Query:          "1234,56 * 1",
+				ExpectedTitle:  "1.234,56",
+				ExpectedAction: "Copy",
+			},
+			{
+				Name:           "Comma Mode - Argument Separator",
+				Query:          "max(1; 2)", // Semicolon as separator (since comma is decimal)
+				ExpectedTitle:  "2",
+				ExpectedAction: "Copy",
+			},
+		}
+		suite.RunQueryTests(tests)
+	})
+}
+
+func TestCalculatorMixedSeparators(t *testing.T) {
+	suite := NewTestSuite(t)
+	calculatorId := "bd723c38-f28d-4152-8621-76fd21d6456e"
+
+	var calcInstance *plugin.Instance
+	for _, instance := range plugin.GetPluginManager().GetPluginInstances() {
+		if instance.Metadata.Id == calculatorId {
+			calcInstance = instance
+			break
+		}
+	}
+	if calcInstance == nil {
+		t.Fatal("Calculator plugin instance not found")
+	}
+
+	setMode := func(mode string) {
+		if err := calcInstance.Setting.Set("SeparatorMode", mode); err != nil {
+			t.Fatalf("Failed to set separator mode: %v", err)
+		}
+	}
+
+	// Test Mixed Mode support
+	// Goal: 19,5 (Comma decimal) + 31.5 (Dot decimal) -> 51
+	// regardless of the setting (as long as they are distinct numbers)
+	t.Run("Mixed Mode", func(t *testing.T) {
+		// Even in System Mode or Dot/Comma mode, fallback should detect valid numbers
+		setMode("Dot") // Primary: Dot=Thousands, Comma=Decimal
+		tests := []QueryTest{
+			{
+				Name:           "Mixed - 19,5 + 31.5",
+				Query:          "19,5 + 31.5",
+				ExpectedTitle:  "51",
+				ExpectedAction: "Copy",
+			},
+			{
+				Name:           "Mixed - 19.5 + 31,5",
+				Query:          "19.5 + 31,5",
+				ExpectedTitle:  "51",
+				ExpectedAction: "Copy",
+			},
+		}
+		suite.RunQueryTests(tests)
+	})
 }

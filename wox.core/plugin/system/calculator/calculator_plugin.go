@@ -9,6 +9,7 @@ import (
 	"wox/common"
 	"wox/plugin"
 	"wox/setting"
+	"wox/setting/definition"
 	"wox/util"
 	"wox/util/clipboard"
 
@@ -36,10 +37,22 @@ type CalculatorPlugin struct {
 }
 
 // formatWithThousandsSeparator formats a decimal number with thousands separators
-// e.g., 56335258.87 -> "56,335,258.87"
-func formatWithThousandsSeparator(val decimal.Decimal) string {
+// e.g., 56335258.87 -> "56,335,258.87" (Dot mode)
+// e.g., 56335258.87 -> "56.335.258,87" (Comma mode)
+func (c *CalculatorPlugin) getSeparatorMode(ctx context.Context) SeparatorMode {
+	mode := c.api.GetSetting(ctx, "SeparatorMode")
+	if mode == "" {
+		return SeparatorModeSystem
+	}
+	return SeparatorMode(mode)
+}
+
+func (c *CalculatorPlugin) formatWithThousandsSeparator(ctx context.Context, val decimal.Decimal) string {
 	valStr := val.String()
 	parts := strings.Split(valStr, ".")
+
+	mode := c.getSeparatorMode(ctx)
+	thousandsSep, decimalSep := GetSeparators(mode)
 
 	intPart := parts[0]
 	// Handle negative numbers
@@ -50,40 +63,44 @@ func formatWithThousandsSeparator(val decimal.Decimal) string {
 	}
 
 	// Add thousands separators
-	formattedInt := addThousandsSeparator(intPart)
+	formattedInt := c.addThousandsSeparator(intPart, thousandsSep)
 
 	if negative {
 		formattedInt = "-" + formattedInt
 	}
 
 	if len(parts) == 2 {
-		return formattedInt + "." + parts[1]
+		return formattedInt + decimalSep + parts[1]
 	}
 
 	return formattedInt
 }
 
-// addThousandsSeparator adds comma separators to an integer string
-// e.g., "56335258" -> "56,335,258"
-func addThousandsSeparator(s string) string {
+// addThousandsSeparator adds separators to an integer string
+func (c *CalculatorPlugin) addThousandsSeparator(s string, sep string) string {
 	n := len(s)
 	if n <= 3 {
 		return s
 	}
 
-	// Calculate how many commas we need
-	numCommas := (n - 1) / 3
-	result := make([]byte, n+numCommas)
+	// Calculate how many separators we need
+	numSeps := (n - 1) / 3
+	// sep can be multi-byte? usually just 1 byte but string is safer
+	sepLen := len(sep)
+
+	result := make([]byte, n+numSeps*sepLen)
 
 	// Fill from right to left
 	j := len(result) - 1
 	for i := n - 1; i >= 0; i-- {
 		result[j] = s[i]
 		j--
-		// Add comma every 3 digits, but not at the beginning
+		// Add separator every 3 digits, but not at the beginning
 		if (n-i)%3 == 0 && i > 0 {
-			result[j] = ','
-			j--
+			for k := sepLen - 1; k >= 0; k-- {
+				result[j] = sep[k]
+				j--
+			}
 		}
 	}
 
@@ -108,9 +125,24 @@ func (c *CalculatorPlugin) GetMetadata() plugin.Metadata {
 		},
 		Commands: []plugin.MetadataCommand{},
 		SupportedOS: []string{
-			"Windows",
 			"Macos",
 			"Linux",
+		},
+		SettingDefinitions: []definition.PluginSettingDefinitionItem{
+			{
+				Type: definition.PluginSettingDefinitionTypeSelect,
+				Value: &definition.PluginSettingValueSelect{
+					Key:          "SeparatorMode",
+					Label:        "i18n:plugin_calculator_separator_mode",
+					DefaultValue: "System Locale",
+					Options: []definition.PluginSettingValueSelectOption{
+						{Label: "i18n:plugin_calculator_separator_mode_system_locale", Value: "System Locale"},
+						{Label: "i18n:plugin_calculator_separator_mode_dot", Value: "Dot"},
+						{Label: "i18n:plugin_calculator_separator_mode_comma", Value: "Comma"},
+					},
+					Tooltip: "i18n:plugin_calculator_separator_mode_description",
+				},
+			},
 		},
 	}
 }
@@ -130,13 +162,15 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 		}
 
 		// Try to calculate the expression, if it fails then it's not a valid calculator expression
-		val, err := Calculate(query.Search)
+		mode := c.getSeparatorMode(ctx)
+		thousandsSep, decimalSep := GetSeparators(mode)
+		val, err := Calculate(query.Search, thousandsSep, decimalSep)
 		if err != nil {
 			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Calculator failed to parse expression: %v", err))
 			return []plugin.QueryResult{}
 		}
 		result := val.String()
-		formattedResult := formatWithThousandsSeparator(val)
+		formattedResult := c.formatWithThousandsSeparator(ctx, val)
 
 		// Add to query history with debounce when calculation is successful
 		c.addQueryHistoryDebounced(ctx, query.Search, result)
@@ -175,11 +209,13 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 	}
 
 	// only show history if query has trigger keyword
+
 	if query.TriggerKeyword != "" {
-		val, err := Calculate(query.Search)
+		thousandsSep, decimalSep := GetSeparators(c.getSeparatorMode(ctx))
+		val, err := Calculate(query.Search, thousandsSep, decimalSep)
 		if err == nil {
 			result := val.String()
-			formattedResult := formatWithThousandsSeparator(val)
+			formattedResult := c.formatWithThousandsSeparator(ctx, val)
 
 			// Add to query history with debounce when calculation is successful
 			c.addQueryHistoryDebounced(ctx, query.Search, result)
@@ -222,7 +258,7 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 				historyVal, parseErr := decimal.NewFromString(h.Result)
 				formattedHistoryResult := h.Result
 				if parseErr == nil {
-					formattedHistoryResult = formatWithThousandsSeparator(historyVal)
+					formattedHistoryResult = c.formatWithThousandsSeparator(ctx, historyVal)
 				}
 
 				results = append(results, plugin.QueryResult{

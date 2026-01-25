@@ -9,12 +9,16 @@ import (
 
 func TestTokenize(t *testing.T) {
 	tests := []struct {
-		input    string
-		expected []token
-		hasError bool
+		input        string
+		thousandsSep string
+		decimalSep   string
+		expected     []token
+		hasError     bool
 	}{
 		{
-			input: "0.01",
+			input:        "0.01",
+			thousandsSep: "",
+			decimalSep:   ".",
 			expected: []token{
 				{kind: numberToken, val: decimal.NewFromFloat(0.01)},
 				{kind: eosToken},
@@ -22,7 +26,9 @@ func TestTokenize(t *testing.T) {
 			hasError: false,
 		},
 		{
-			input: ".01",
+			input:        ".01",
+			thousandsSep: "",
+			decimalSep:   ".",
 			expected: []token{
 				{kind: numberToken, val: decimal.NewFromFloat(0.01)},
 				{kind: eosToken},
@@ -30,7 +36,9 @@ func TestTokenize(t *testing.T) {
 			hasError: false,
 		},
 		{
-			input: "1 + .5",
+			input:        "1 + .5",
+			thousandsSep: "",
+			decimalSep:   ".",
 			expected: []token{
 				{kind: numberToken, val: decimal.NewFromFloat(1)},
 				{kind: reservedToken, str: "+"},
@@ -39,10 +47,83 @@ func TestTokenize(t *testing.T) {
 			},
 			hasError: false,
 		},
+		// Test US/Standard format (Comma thousands, Dot decimal)
+		{
+			input:        "1,234.56",
+			thousandsSep: ",",
+			decimalSep:   ".",
+			expected: []token{
+				{kind: numberToken, val: decimal.NewFromFloat(1234.56)},
+				{kind: eosToken},
+			},
+			hasError: false,
+		},
+		// Test European format (Dot thousands, Comma decimal)
+		{
+			input:        "1.234,56",
+			thousandsSep: ".",
+			decimalSep:   ",",
+			expected: []token{
+				{kind: numberToken, val: decimal.NewFromFloat(1234.56)},
+				{kind: eosToken},
+			},
+			hasError: false,
+		},
+		// Test Argument Separation Conflict: max(1,2) with Comma Decimal
+		// Should parse as one number 1.2
+		{
+			input:        "max(1,2)",
+			thousandsSep: ".",
+			decimalSep:   ",",
+			expected: []token{
+				{kind: identToken, str: "max"},
+				{kind: reservedToken, str: "("},
+				{kind: numberToken, val: decimal.NewFromFloat(1.2)},
+				{kind: reservedToken, str: ")"},
+				{kind: eosToken},
+			},
+			hasError: false,
+		},
+		// Test Argument Separation with Semicolon: max(1;2) with Comma Decimal
+		{
+			input:        "max(1;2)",
+			thousandsSep: ".",
+			decimalSep:   ",",
+			expected: []token{
+				{kind: identToken, str: "max"},
+				{kind: reservedToken, str: "("},
+				{kind: numberToken, val: decimal.NewFromFloat(1)},
+				{kind: reservedToken, str: ";"},
+				{kind: numberToken, val: decimal.NewFromFloat(2)},
+				{kind: reservedToken, str: ")"},
+				{kind: eosToken},
+			},
+			hasError: false,
+		},
+		// Test Argument Separation Conflict: max(1, 2) with Comma Decimal (Space separates)
+		// Should parse as 1, separator, 2. But wait, token logic consumes comma as decimal if followed by digit.
+		// Space breaks the "followed by digit" check? No, space is after comma.
+		// If input is "1, 2". "1" is parsed. "," is checked. Is next char digit? No, space.
+		// So "," is NOT consumed as decimal. It becomes reservedToken.
+		{
+			input:        "max(1, 2)",
+			thousandsSep: ".",
+			decimalSep:   ",",
+			expected: []token{
+				{kind: identToken, str: "max"},
+				{kind: reservedToken, str: "("},
+				{kind: numberToken, val: decimal.NewFromFloat(1)},
+				{kind: reservedToken, str: ","},
+				{kind: numberToken, val: decimal.NewFromFloat(2)},
+				{kind: reservedToken, str: ")"},
+				{kind: eosToken},
+			},
+			hasError: false,
+		},
 	}
 
 	for _, test := range tests {
-		tokens, err := tokenize(test.input)
+		tokens, err := tokenize(test.input, test.thousandsSep, test.decimalSep)
 		if test.hasError {
 			assert.Error(t, err, "Input: %s", test.input)
 		} else {
