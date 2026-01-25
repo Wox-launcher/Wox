@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 	"wox/common"
 	"wox/plugin"
 	"wox/setting"
@@ -308,7 +309,20 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 }
 
 func (c *CalculatorPlugin) hasOperator(query string) bool {
-	return strings.ContainsAny(query, "+-*/(^")
+	if strings.ContainsAny(query, "+-*/(^") {
+		return true
+	}
+
+	if !strings.Contains(query, "(") || !strings.Contains(query, ")") {
+		return false
+	}
+
+	for _, r := range query {
+		if unicode.IsLetter(r) {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *CalculatorPlugin) loadHistories(ctx context.Context) []CalculatorHistory {

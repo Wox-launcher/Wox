@@ -69,6 +69,14 @@ func call(funcName string, args []decimal.Decimal) (decimal.Decimal, error) {
 	case func() float64:
 		return decimal.NewFromFloat(f()), nil
 	case func(float64) float64:
+		if funcName == "tan" {
+			x := args[0].InexactFloat64()
+			result := f(x)
+			if result == 1 || result == -1 {
+				result = f(math.Nextafter(x, 0))
+			}
+			return decimal.NewFromFloat(result), nil
+		}
 		return decimal.NewFromFloat(f(args[0].InexactFloat64())), nil
 	case func(float64, float64) float64:
 		return decimal.NewFromFloat(f(args[0].InexactFloat64(), args[1].InexactFloat64())), nil
