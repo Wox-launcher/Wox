@@ -14,6 +14,11 @@ jobs:
   build:
     uses: ./.github/workflows/build-core.yml
     with:
+      run_tests: true
+      build_macos_arm64: true
+      build_macos_amd64: true
+      build_windows_amd64: true
+      build_linux_amd64: true
       require_macos_notarize: true
       require_windows_signpath: true
       artifact_retention_days: 10

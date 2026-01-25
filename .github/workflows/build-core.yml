@@ -3,6 +3,31 @@ name: Reusable Build
 on:
   workflow_dispatch:
     inputs:
+      run_tests:
+        description: "Run test job"
+        type: boolean
+        required: false
+        default: true
+      build_macos_arm64:
+        description: "Build macOS ARM64"
+        type: boolean
+        required: false
+        default: true
+      build_macos_amd64:
+        description: "Build macOS AMD64"
+        type: boolean
+        required: false
+        default: true
+      build_windows_amd64:
+        description: "Build Windows AMD64"
+        type: boolean
+        required: false
+        default: true
+      build_linux_amd64:
+        description: "Build Linux AMD64"
+        type: boolean
+        required: false
+        default: true
       require_macos_notarize:
         description: "Require macOS signing + notarization (needs MACOS_* and APPLE_API_* secrets)"
         type: boolean
@@ -20,6 +45,26 @@ on:
         default: 10
   workflow_call:
     inputs:
+      run_tests:
+        type: boolean
+        required: false
+        default: true
+      build_macos_arm64:
+        type: boolean
+        required: false
+        default: true
+      build_macos_amd64:
+        type: boolean
+        required: false
+        default: true
+      build_windows_amd64:
+        type: boolean
+        required: false
+        default: true
+      build_linux_amd64:
+        type: boolean
+        required: false
+        default: true
       require_macos_notarize:
         type: boolean
         required: false
@@ -59,6 +104,7 @@ permissions:
 
 jobs:
   test:
+    if: ${{ inputs.run_tests }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -89,6 +135,7 @@ jobs:
             libxtst-dev \
             libayatana-appindicator3-dev \
             libkeybinder-3.0-dev \
+            libfuse2 \
             xvfb
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -101,6 +148,7 @@ jobs:
   build_macos_arm64:
     name: Build macOS ARM64
     needs: test
+    if: ${{ always() && inputs.build_macos_arm64 && (!inputs.run_tests || needs.test.result == 'success') }}
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v3
@@ -223,6 +271,7 @@ jobs:
   build_macos_amd64:
     name: Build macOS AMD64
     needs: test
+    if: ${{ always() && inputs.build_macos_amd64 && (!inputs.run_tests || needs.test.result == 'success') }}
     runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v3
@@ -345,6 +394,7 @@ jobs:
   build_windows_amd64:
     name: Build Windows AMD64
     needs: test
+    if: ${{ always() && inputs.build_windows_amd64 && (!inputs.run_tests || needs.test.result == 'success') }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v3
@@ -448,6 +498,7 @@ jobs:
   build_linux_amd64:
     name: Build Linux AMD64
     needs: test
+    if: ${{ always() && inputs.build_linux_amd64 && (!inputs.run_tests || needs.test.result == 'success') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
