@@ -189,15 +189,15 @@ class PluginQueryCommand {
 
 class MetadataFeature {
   late String name;
-  late Map<String, String> params;
+  late Map<String, dynamic> params;
 
   MetadataFeature.fromJson(Map<String, dynamic> json) {
     name = json['Name'];
 
     if (json['Params'] != null) {
-      params = json['Params'].cast<String, String>();
+      params = Map<String, dynamic>.from(json['Params']);
     } else {
-      params = <String, String>{};
+      params = <String, dynamic>{};
     }
   }
 }
