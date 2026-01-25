@@ -10,6 +10,7 @@
 
 - Fix
   - [`Current Folder`] Fix a issue that Current folder plugin's settings do not load #4326
+  - [`Clipboard`] Fix a issue that Clipboard plugin cannot paste to active window #4328
 
 ## v2.0.0-beta.8 — 2026-01-10
 
