@@ -2,6 +2,7 @@ package test
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -188,10 +189,11 @@ func TestCalculatorTime(t *testing.T) {
 	}
 	expectedMonday := fmt.Sprintf("%s (Monday)", targetDate.Format("2006-01-02"))
 
-	// Calculate expected days until Christmas 2025
-	christmas := time.Date(2025, time.December, 25, 0, 0, 0, 0, time.Local)
+	// Calculate expected days until Christmas 2030
+	christmas := time.Date(2030, time.December, 25, 0, 0, 0, 0, time.Local)
 	daysUntilChristmas := int(christmas.Sub(now).Hours() / 24)
 	expectedDaysUntil := fmt.Sprintf("%d days", daysUntilChristmas)
+	daysUntilRe := regexp.MustCompile(`^\d+ days$`)
 
 	tests := []QueryTest{
 		{
@@ -216,12 +218,11 @@ func TestCalculatorTime(t *testing.T) {
 		},
 		{
 			Name:           "Days until Christmas",
-			Query:          "days until 25 Dec 2025",
+			Query:          "days until 25 Dec 2030",
 			ExpectedTitle:  expectedDaysUntil,
 			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
-				// Should contain "days"
-				return strings.Contains(title, "days")
+				return daysUntilRe.MatchString(title)
 			},
 		},
 		{
@@ -303,11 +304,11 @@ func TestCalculatorTime(t *testing.T) {
 		},
 		{
 			Name:           "Days until specific date",
-			Query:          "days until 25th Dec 2024",
+			Query:          "days until 25th Dec 2030",
 			ExpectedTitle:  "",
 			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
-				return strings.Contains(title, "days")
+				return daysUntilRe.MatchString(title)
 			},
 		},
 	}
