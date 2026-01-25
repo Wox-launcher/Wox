@@ -223,7 +223,7 @@ jobs:
   build_macos_amd64:
     name: Build macOS AMD64
     needs: test
-    runs-on: macos-13
+    runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v3
       - name: Setup Go
