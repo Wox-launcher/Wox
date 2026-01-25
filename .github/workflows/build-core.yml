@@ -88,14 +88,15 @@ jobs:
             libxcursor-dev \
             libxtst-dev \
             libayatana-appindicator3-dev \
-            libkeybinder-3.0-dev
+            libkeybinder-3.0-dev \
+            xvfb
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version-file: wox.core/go.mod
           cache: true
       - name: Test
-        run: make test
+        run: xvfb-run -a make test
 
   build_macos_arm64:
     name: Build macOS ARM64
@@ -359,7 +360,8 @@ jobs:
             libxcursor-dev \
             libxtst-dev \
             libayatana-appindicator3-dev \
-            libkeybinder-3.0-dev
+            libkeybinder-3.0-dev \
+            xvfb
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -397,7 +399,7 @@ jobs:
           curl -L -o appimagetool.AppImage https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
           chmod +x appimagetool.AppImage
       - name: Build
-        run: make build
+        run: xvfb-run -a make build
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v1
         with:
