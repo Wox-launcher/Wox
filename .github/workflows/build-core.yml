@@ -142,6 +142,7 @@ jobs:
         with:
           go-version-file: wox.core/go.mod
           cache: true
+          cache-dependency-path: wox.core/go.sum
       - name: Test
         run: xvfb-run -a make test
 
@@ -157,6 +158,7 @@ jobs:
         with:
           go-version-file: wox.core/go.mod
           cache: true
+          cache-dependency-path: wox.core/go.sum
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -280,6 +282,7 @@ jobs:
         with:
           go-version-file: wox.core/go.mod
           cache: true
+          cache-dependency-path: wox.core/go.sum
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -423,6 +426,7 @@ jobs:
         with:
           go-version-file: wox.core/go.mod
           cache: true
+          cache-dependency-path: wox.core/go.sum
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -482,6 +486,31 @@ jobs:
           github-artifact-id: ${{ steps.upload-unsigned-artifact.outputs.artifact-id }}
           wait-for-completion: true
           output-artifact-directory: ./release
+
+      - name: Delete unsigned artifact (Windows)
+        if: ${{ inputs.require_windows_signpath }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runId = context.runId;
+            const name = 'unsigned-wox-windows-amd64.exe';
+            const artifacts = await github.paginate(
+              github.rest.actions.listWorkflowRunArtifacts,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: runId,
+                per_page: 100,
+              }
+            );
+            const target = artifacts.find(artifact => artifact.name === name);
+            if (target) {
+              await github.rest.actions.deleteArtifact({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                artifact_id: target.id,
+              });
+            }
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v1
