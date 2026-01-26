@@ -3,6 +3,7 @@ import 'dart:core';
 
 import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_backup.dart';
+import 'package:wox/entity/wox_cloud_sync.dart';
 import 'package:wox/entity/wox_lang.dart';
 import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/entity/wox_query.dart';
@@ -210,5 +211,37 @@ class WoxApi {
 
   Future<void> toolbarSnooze(String traceId, String text, String duration) async {
     await WoxHttpUtil.instance.postData(traceId, "/toolbar/snooze", {"text": text, "duration": duration});
+  }
+
+  Future<WoxCloudSyncStatus> getCloudSyncStatus(String traceId) async {
+    return await WoxHttpUtil.instance.postData<WoxCloudSyncStatus>(traceId, "/sync/status", null);
+  }
+
+  Future<void> cloudSyncPush(String traceId) async {
+    await WoxHttpUtil.instance.postData(traceId, "/sync/push", null);
+  }
+
+  Future<void> cloudSyncPull(String traceId) async {
+    await WoxHttpUtil.instance.postData(traceId, "/sync/pull", null);
+  }
+
+  Future<void> cloudSyncKeyInit(String traceId, String recoveryCode, String deviceName) async {
+    await WoxHttpUtil.instance.postData(traceId, "/sync/key/init", {"recovery_code": recoveryCode, "device_name": deviceName});
+  }
+
+  Future<void> cloudSyncKeyFetch(String traceId, String recoveryCode) async {
+    await WoxHttpUtil.instance.postData(traceId, "/sync/key/fetch", {"recovery_code": recoveryCode});
+  }
+
+  Future<String> cloudSyncRecoveryCode(String traceId) async {
+    return await WoxHttpUtil.instance.postData(traceId, "/sync/key/recovery_code", null);
+  }
+
+  Future<Map<String, dynamic>> cloudSyncKeyResetPrepare(String traceId) async {
+    return await WoxHttpUtil.instance.postData(traceId, "/sync/key/reset/prepare", null);
+  }
+
+  Future<void> cloudSyncKeyReset(String traceId, String resetToken) async {
+    await WoxHttpUtil.instance.postData(traceId, "/sync/key/reset", {"reset_token": resetToken, "confirm": true});
   }
 }

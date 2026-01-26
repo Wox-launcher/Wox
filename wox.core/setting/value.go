@@ -169,7 +169,7 @@ func (v *SettingValue[T]) Set(newValue T) error {
 	var err error
 	if v.settingStore != nil {
 		if syncStore, ok := v.settingStore.(SyncableStore); ok {
-			err = syncStore.SetWithOplog(v.key, newValue, v.syncable)
+			err = syncStore.SetWithSync(v.key, newValue, v.syncable)
 		} else {
 			err = v.settingStore.Set(v.key, newValue)
 		}
@@ -186,10 +186,48 @@ func (v *SettingValue[T]) Set(newValue T) error {
 	return nil
 }
 
-func (v *SettingValue[T]) SetSyncable(syncable bool) {
-	v.syncable = syncable
+func (v *SettingValue[T]) Key() string {
+	return v.key
 }
 
-func (v *SettingValue[T]) IsSyncable() bool {
-	return v.syncable
+func (v *SettingValue[T]) SetLocal(newValue T) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+
+	if v.settingStore == nil {
+		return fmt.Errorf("no store available")
+	}
+
+	if err := v.settingStore.Set(v.key, newValue); err != nil {
+		return err
+	}
+
+	v.value = newValue
+	v.isLoaded = true
+	return nil
+}
+
+func (v *SettingValue[T]) SetFromString(strValue string) error {
+	var decoded T
+	if err := deserializeValue(strValue, &decoded); err != nil {
+		return err
+	}
+	return v.SetLocal(decoded)
+}
+
+func (v *SettingValue[T]) DeleteLocal() error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+
+	if v.settingStore == nil {
+		return fmt.Errorf("no store available")
+	}
+
+	if err := v.settingStore.Delete(v.key); err != nil {
+		return err
+	}
+
+	v.value = v.defaultValue
+	v.isLoaded = true
+	return nil
 }

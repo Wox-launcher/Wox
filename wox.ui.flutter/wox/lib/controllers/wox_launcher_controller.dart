@@ -1372,7 +1372,7 @@ class WoxLauncherController extends GetxController {
     if (context.path == "/data") {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         await Future.delayed(const Duration(milliseconds: 100));
-        await settingController.switchToDataView(traceId);
+        await settingController.switchToBackupView(traceId);
       });
     }
 

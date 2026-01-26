@@ -35,18 +35,18 @@ Phase 3
 - [x] Add `CloudSyncDisabledPlugins` to WoxSetting + DTO + Flutter entity (synced config)
 - [x] Add local-only CloudSyncState storage (cursor/last_sync/last_error/backoff) in DB or local file
 - [x] Write Oplog entries in `WoxSettingStore.Set/Delete` and `PluginSettingStore.Set/Delete/DeleteAll`
-- [ ] Build CloudSyncManager (queue, debounce, batch, backoff, periodic pull)
-- [ ] Implement crypto + key management (AES-256-GCM, Argon2id, OS keychain)
-- [ ] Implement cloud sync client for `/v1/sync/*` endpoints (push/pull/key/reset)
-- [ ] Apply remote records to local DB with logging bypass + LWW + plugin exclusion filter
-- [ ] Trigger side effects after apply (`PostSettingUpdate`, plugin setting callbacks)
+- [x] Build CloudSyncManager (queue, debounce, batch, backoff, periodic pull)
+- [x] Implement crypto + key management (AES-256-GCM, Argon2id, OS keychain)
+- [x] Implement cloud sync client for `/v1/sync/*` endpoints (push/pull/key/reset)
+- [x] Apply remote records to local DB with logging bypass + LWW + plugin exclusion filter
+- [x] Trigger side effects after apply (`PostSettingUpdate`, plugin setting callbacks)
 - [ ] Handle first-time sync bootstrap (cloud wins if snapshot exists)
 - [ ] Handle platform-specific settings (sync full PlatformValue JSON)
 - [ ] Enforce plugin setting size limits (per-setting/per-plugin caps)
 - [x] Respect `SettingValue.syncable` flag (default true) to decide sync eligibility
-- [ ] Add HTTP endpoints for UI: sync status, push/pull, recovery code, reset flow
-- [ ] Update Flutter UI: cloud sync card + plugin exclusion list
-- [ ] Add i18n keys for new UI (4 locales)
+- [x] Add HTTP endpoints for UI: sync status, push/pull, recovery code, reset flow
+- [x] Update Flutter UI: cloud sync card + plugin exclusion list
+- [x] Add i18n keys for new UI (4 locales)
 - **Status:** in_progress
 
 ### Phase 4: Testing & Verification
@@ -101,8 +101,11 @@ Phase 3
 | Error | Attempt | Resolution |
 |-------|---------|------------|
 | session-catchup.py failed via `python` (exit code 1) | 1 | Re-ran with `python3` successfully |
+| UpdateCloudSyncState return mismatch in CloudSyncManager | 1 | Adjusted call sites to handle returned state + error |
 
 ## Notes
 - Update phase status as you progress: pending -> in_progress -> complete
 - Re-read this plan before major decisions
 - Log ALL errors - they help avoid repetition
+- CloudSyncManager scaffold is in place but not wired into app startup; client/device/key providers still needed.
+- Sync core moved to `wox.core/cloudsync`; setting-specific adapters live in `wox.core/cloudsync/settingadapter` (not yet wired).

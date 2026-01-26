@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -7,6 +8,7 @@ import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_backup.dart';
+import 'package:wox/entity/wox_cloud_sync.dart';
 import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/entity/wox_runtime_status.dart';
 import 'package:wox/entity/wox_theme.dart';
@@ -25,6 +27,13 @@ class WoxSettingController extends GetxController {
   final runtimeStatuses = <WoxRuntimeStatus>[].obs;
   final isRuntimeStatusLoading = false.obs;
   final runtimeStatusError = ''.obs;
+
+  final cloudSyncStatus = WoxCloudSyncStatus.empty().obs;
+  final isCloudSyncStatusLoading = false.obs;
+  final cloudSyncStatusError = ''.obs;
+  final isCloudSyncActionLoading = false.obs;
+  final cloudSyncActionError = ''.obs;
+  final isCloudSyncPluginListLoading = false.obs;
 
   final usageStats = WoxUsageStats.empty().obs;
   final isUsageStatsLoading = false.obs;
@@ -318,8 +327,22 @@ class WoxSettingController extends GetxController {
     }
   }
 
-  Future<void> switchToDataView(String traceId) async {
-    activeNavPath.value = 'data';
+  Future<void> switchToBackupView(String traceId) async {
+    activeNavPath.value = 'data.backup';
+    await refreshBackups();
+  }
+
+  Future<void> switchToCloudSyncView(String traceId) async {
+    activeNavPath.value = 'data.cloudsync';
+    isCloudSyncPluginListLoading.value = true;
+    try {
+      await Future.wait([
+        refreshCloudSyncStatus(),
+        loadInstalledPlugins(traceId),
+      ]);
+    } finally {
+      isCloudSyncPluginListLoading.value = false;
+    }
   }
 
   void setFirstFilteredPluginDetailActive() {
@@ -566,6 +589,138 @@ class WoxSettingController extends GetxController {
     await WoxSettingUtil.instance.loadSetting(traceId);
     woxSetting.value = WoxSettingUtil.instance.currentSetting;
     Logger.instance.info(traceId, 'Setting reloaded');
+  }
+
+  Future<void> refreshCloudSyncStatus() async {
+    final traceId = const UuidV4().generate();
+    isCloudSyncStatusLoading.value = true;
+    cloudSyncStatusError.value = '';
+    try {
+      final status = await WoxApi.instance.getCloudSyncStatus(traceId);
+      cloudSyncStatus.value = status;
+      Logger.instance.info(traceId, 'Cloud sync status loaded');
+    } catch (e) {
+      cloudSyncStatus.value = WoxCloudSyncStatus.empty();
+      cloudSyncStatusError.value = e.toString();
+      Logger.instance.error(traceId, 'Failed to load cloud sync status: $e');
+    } finally {
+      isCloudSyncStatusLoading.value = false;
+    }
+  }
+
+  Future<void> cloudSyncPush() async {
+    final traceId = const UuidV4().generate();
+    isCloudSyncActionLoading.value = true;
+    cloudSyncActionError.value = '';
+    try {
+      await WoxApi.instance.cloudSyncPush(traceId);
+      await refreshCloudSyncStatus();
+    } catch (e) {
+      cloudSyncActionError.value = e.toString();
+      Logger.instance.error(traceId, 'Cloud sync push failed: $e');
+    } finally {
+      isCloudSyncActionLoading.value = false;
+    }
+  }
+
+  Future<void> cloudSyncPull() async {
+    final traceId = const UuidV4().generate();
+    isCloudSyncActionLoading.value = true;
+    cloudSyncActionError.value = '';
+    try {
+      await WoxApi.instance.cloudSyncPull(traceId);
+      await refreshCloudSyncStatus();
+    } catch (e) {
+      cloudSyncActionError.value = e.toString();
+      Logger.instance.error(traceId, 'Cloud sync pull failed: $e');
+    } finally {
+      isCloudSyncActionLoading.value = false;
+    }
+  }
+
+  Future<String?> cloudSyncGenerateRecoveryCode() async {
+    final traceId = const UuidV4().generate();
+    isCloudSyncActionLoading.value = true;
+    cloudSyncActionError.value = '';
+    try {
+      final code = await WoxApi.instance.cloudSyncRecoveryCode(traceId);
+      return code;
+    } catch (e) {
+      cloudSyncActionError.value = e.toString();
+      Logger.instance.error(traceId, 'Cloud sync recovery code failed: $e');
+      return null;
+    } finally {
+      isCloudSyncActionLoading.value = false;
+    }
+  }
+
+  Future<void> cloudSyncInitKey(String recoveryCode, String deviceName) async {
+    final traceId = const UuidV4().generate();
+    isCloudSyncActionLoading.value = true;
+    cloudSyncActionError.value = '';
+    try {
+      await WoxApi.instance.cloudSyncKeyInit(traceId, recoveryCode, deviceName);
+      await refreshCloudSyncStatus();
+    } catch (e) {
+      cloudSyncActionError.value = e.toString();
+      Logger.instance.error(traceId, 'Cloud sync key init failed: $e');
+    } finally {
+      isCloudSyncActionLoading.value = false;
+    }
+  }
+
+  Future<void> cloudSyncFetchKey(String recoveryCode) async {
+    final traceId = const UuidV4().generate();
+    isCloudSyncActionLoading.value = true;
+    cloudSyncActionError.value = '';
+    try {
+      await WoxApi.instance.cloudSyncKeyFetch(traceId, recoveryCode);
+      await refreshCloudSyncStatus();
+    } catch (e) {
+      cloudSyncActionError.value = e.toString();
+      Logger.instance.error(traceId, 'Cloud sync key fetch failed: $e');
+    } finally {
+      isCloudSyncActionLoading.value = false;
+    }
+  }
+
+  Future<String?> cloudSyncPrepareReset() async {
+    final traceId = const UuidV4().generate();
+    isCloudSyncActionLoading.value = true;
+    cloudSyncActionError.value = '';
+    try {
+      final resp = await WoxApi.instance.cloudSyncKeyResetPrepare(traceId);
+      final token = resp['reset_token'];
+      if (token is String) {
+        return token;
+      }
+      return null;
+    } catch (e) {
+      cloudSyncActionError.value = e.toString();
+      Logger.instance.error(traceId, 'Cloud sync reset prepare failed: $e');
+      return null;
+    } finally {
+      isCloudSyncActionLoading.value = false;
+    }
+  }
+
+  Future<void> cloudSyncReset(String resetToken) async {
+    final traceId = const UuidV4().generate();
+    isCloudSyncActionLoading.value = true;
+    cloudSyncActionError.value = '';
+    try {
+      await WoxApi.instance.cloudSyncKeyReset(traceId, resetToken);
+      await refreshCloudSyncStatus();
+    } catch (e) {
+      cloudSyncActionError.value = e.toString();
+      Logger.instance.error(traceId, 'Cloud sync reset failed: $e');
+    } finally {
+      isCloudSyncActionLoading.value = false;
+    }
+  }
+
+  Future<void> updateCloudSyncDisabledPlugins(List<String> pluginIds) async {
+    await updateConfig("CloudSyncDisabledPlugins", jsonEncode(pluginIds));
   }
 
   @override

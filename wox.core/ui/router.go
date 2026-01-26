@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"wox/ai"
+	"wox/cloudsync"
 	"wox/common"
 	"wox/database"
 	"wox/i18n"
@@ -56,6 +57,14 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/setting/userdata/location/update": handleUserDataLocationUpdate,
 	"/setting/position":                 handleSaveWindowPosition,
 	"/runtime/status":                   handleRuntimeStatus,
+	"/sync/status":                      handleSyncStatus,
+	"/sync/push":                        handleSyncPush,
+	"/sync/pull":                        handleSyncPull,
+	"/sync/key/init":                    handleSyncKeyInit,
+	"/sync/key/fetch":                   handleSyncKeyFetch,
+	"/sync/key/recovery_code":           handleSyncRecoveryCode,
+	"/sync/key/reset/prepare":           handleSyncKeyResetPrepare,
+	"/sync/key/reset":                   handleSyncKeyReset,
 
 	// events
 	"/on/focus/lost":     handleOnFocusLost,
@@ -654,6 +663,169 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 	GetUIManager().PostSettingUpdate(getTraceContext(r), kv.Key, kv.Value)
 
 	writeSuccessResponse(w, "")
+}
+
+func handleSyncStatus(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	service := cloudsync.GetService()
+	if service == nil {
+		writeErrorResponse(w, "cloud sync is not configured")
+		return
+	}
+
+	writeSuccessResponse(w, service.Status(ctx))
+}
+
+func handleSyncPush(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	service := cloudsync.GetService()
+	if service == nil || service.Manager == nil {
+		writeErrorResponse(w, "cloud sync is not configured")
+		return
+	}
+
+	service.StartManager(ctx)
+	service.Manager.PushPending(ctx, "manual")
+	writeSuccessResponse(w, "")
+}
+
+func handleSyncPull(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	service := cloudsync.GetService()
+	if service == nil || service.Manager == nil {
+		writeErrorResponse(w, "cloud sync is not configured")
+		return
+	}
+
+	service.StartManager(ctx)
+	service.Manager.Pull(ctx, "manual")
+	writeSuccessResponse(w, "")
+}
+
+func handleSyncKeyInit(w http.ResponseWriter, r *http.Request) {
+	type request struct {
+		RecoveryCode string `json:"recovery_code"`
+		DeviceName   string `json:"device_name"`
+	}
+
+	var payload request
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	if payload.RecoveryCode == "" {
+		writeErrorResponse(w, "recovery_code is empty")
+		return
+	}
+
+	ctx := getTraceContext(r)
+	service := cloudsync.GetService()
+	if service == nil || service.KeyManager == nil {
+		writeErrorResponse(w, "cloud sync is not configured")
+		return
+	}
+
+	resp, err := service.KeyManager.InitWithRecoveryCode(ctx, payload.RecoveryCode, payload.DeviceName)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+
+	writeSuccessResponse(w, resp)
+}
+
+func handleSyncKeyFetch(w http.ResponseWriter, r *http.Request) {
+	type request struct {
+		RecoveryCode string `json:"recovery_code"`
+	}
+
+	var payload request
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	if payload.RecoveryCode == "" {
+		writeErrorResponse(w, "recovery_code is empty")
+		return
+	}
+
+	ctx := getTraceContext(r)
+	service := cloudsync.GetService()
+	if service == nil || service.KeyManager == nil {
+		writeErrorResponse(w, "cloud sync is not configured")
+		return
+	}
+
+	resp, err := service.KeyManager.FetchWithRecoveryCode(ctx, payload.RecoveryCode)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+
+	writeSuccessResponse(w, resp)
+}
+
+func handleSyncRecoveryCode(w http.ResponseWriter, r *http.Request) {
+	code, err := cloudsync.GenerateRecoveryCode()
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+
+	writeSuccessResponse(w, code)
+}
+
+func handleSyncKeyResetPrepare(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	service := cloudsync.GetService()
+	if service == nil || service.KeyManager == nil {
+		writeErrorResponse(w, "cloud sync is not configured")
+		return
+	}
+
+	resp, err := service.KeyManager.PrepareReset(ctx)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+
+	writeSuccessResponse(w, resp)
+}
+
+func handleSyncKeyReset(w http.ResponseWriter, r *http.Request) {
+	type request struct {
+		ResetToken string `json:"reset_token"`
+		Confirm    bool   `json:"confirm"`
+	}
+
+	var payload request
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	if payload.ResetToken == "" {
+		writeErrorResponse(w, "reset_token is empty")
+		return
+	}
+	if !payload.Confirm {
+		writeErrorResponse(w, "confirm is required")
+		return
+	}
+
+	ctx := getTraceContext(r)
+	service := cloudsync.GetService()
+	if service == nil || service.KeyManager == nil {
+		writeErrorResponse(w, "cloud sync is not configured")
+		return
+	}
+
+	resp, err := service.KeyManager.Reset(ctx, payload.ResetToken)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+
+	writeSuccessResponse(w, resp)
 }
 
 func handleRuntimeStatus(w http.ResponseWriter, r *http.Request) {

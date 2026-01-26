@@ -156,6 +156,8 @@ func main() {
 		util.UpdateHTTPProxy(ctx, woxSetting.HttpProxyUrl.Get())
 	}
 
+	initCloudSync(ctx)
+
 	langErr := i18n.GetI18nManager().UpdateLang(ctx, woxSetting.LangCode.Get())
 	if langErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to initialize lang(%s): %s", woxSetting.LangCode.Get(), langErr.Error()))

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"wox/cloudsync"
 	"wox/database"
 	"wox/util"
 
@@ -19,17 +20,13 @@ type SettingStore interface {
 	Delete(key string) error
 }
 
+// SyncableStore defines the interface for setting stores that support syncable operations
+// Any setting store implementing this interface will invoke SetWithSync/DeleteWithSync methods (instead of Set/Delete)
+// when setting/deleting values
 type SyncableStore interface {
-	SetWithOplog(key string, value interface{}, syncable bool) error
-	DeleteWithOplog(key string, syncable bool) error
+	SetWithSync(key string, value interface{}, syncable bool) error
+	DeleteWithSync(key string, syncable bool) error
 }
-
-const (
-	oplogEntityWoxSetting    = "wox_setting"
-	oplogEntityPluginSetting = "plugin_setting"
-	oplogOpUpsert            = "upsert"
-	oplogOpDelete            = "delete"
-)
 
 type WoxSettingStore struct {
 	db *gorm.DB
@@ -63,34 +60,34 @@ func (s *WoxSettingStore) Delete(key string) error {
 	return s.db.Delete(&database.WoxSetting{Key: key}).Error
 }
 
-func (s *WoxSettingStore) SetWithOplog(key string, value interface{}, syncable bool) error {
+func (s *WoxSettingStore) SetWithSync(key string, value interface{}, syncable bool) error {
 	if err := s.Set(key, value); err != nil {
 		return err
 	}
 	if !syncable {
 		return nil
 	}
-	return s.LogOplog(key, value, oplogOpUpsert)
+	return s.logOplog(key, value, cloudsync.OpUpsert)
 }
 
-func (s *WoxSettingStore) DeleteWithOplog(key string, syncable bool) error {
+func (s *WoxSettingStore) DeleteWithSync(key string, syncable bool) error {
 	if err := s.Delete(key); err != nil {
 		return err
 	}
 	if !syncable {
 		return nil
 	}
-	return s.LogOplog(key, nil, oplogOpDelete)
+	return s.logOplog(key, nil, cloudsync.OpDelete)
 }
 
-func (s *WoxSettingStore) LogOplog(key string, value interface{}, op string) error {
+func (s *WoxSettingStore) logOplog(key string, value interface{}, op string) error {
 	strValue, err := serializeValue(value)
 	if err != nil {
 		return fmt.Errorf("failed to serialize value for oplog: %w", err)
 	}
 
 	oplog := database.Oplog{
-		EntityType: oplogEntityWoxSetting,
+		EntityType: cloudsync.EntityWoxSetting,
 		EntityID:   key,
 		Operation:  op,
 		Key:        key,
@@ -98,7 +95,11 @@ func (s *WoxSettingStore) LogOplog(key string, value interface{}, op string) err
 		Timestamp:  util.GetSystemTimestamp(),
 	}
 
-	return s.db.Create(&oplog).Error
+	if err := s.db.Create(&oplog).Error; err != nil {
+		return err
+	}
+	cloudsync.NotifyOplogChanged()
+	return nil
 }
 
 // PluginSettingStore defines the interface for plugin settings
@@ -147,7 +148,7 @@ func (s *PluginSettingStore) DeleteAll() error {
 	}
 
 	for _, setting := range settings {
-		if err := s.LogOplog(setting.Key, nil, oplogOpDelete); err != nil {
+		if err := s.logOplog(setting.Key, nil, cloudsync.OpDelete); err != nil {
 			return err
 		}
 	}
@@ -155,34 +156,34 @@ func (s *PluginSettingStore) DeleteAll() error {
 	return nil
 }
 
-func (s *PluginSettingStore) SetWithOplog(key string, value interface{}, syncable bool) error {
+func (s *PluginSettingStore) SetWithSync(key string, value interface{}, syncable bool) error {
 	if err := s.Set(key, value); err != nil {
 		return err
 	}
 	if !syncable {
 		return nil
 	}
-	return s.LogOplog(key, value, oplogOpUpsert)
+	return s.logOplog(key, value, cloudsync.OpUpsert)
 }
 
-func (s *PluginSettingStore) DeleteWithOplog(key string, syncable bool) error {
+func (s *PluginSettingStore) DeleteWithSync(key string, syncable bool) error {
 	if err := s.Delete(key); err != nil {
 		return err
 	}
 	if !syncable {
 		return nil
 	}
-	return s.LogOplog(key, nil, oplogOpDelete)
+	return s.logOplog(key, nil, cloudsync.OpDelete)
 }
 
-func (s *PluginSettingStore) LogOplog(key string, value interface{}, op string) error {
+func (s *PluginSettingStore) logOplog(key string, value interface{}, op string) error {
 	strValue, err := serializeValue(value)
 	if err != nil {
 		return fmt.Errorf("failed to serialize plugin setting value for oplog: %w", err)
 	}
 
 	oplog := database.Oplog{
-		EntityType: oplogEntityPluginSetting,
+		EntityType: cloudsync.EntityPluginSetting,
 		EntityID:   s.pluginId,
 		Operation:  op,
 		Key:        key,
@@ -190,7 +191,11 @@ func (s *PluginSettingStore) LogOplog(key string, value interface{}, op string) 
 		Timestamp:  util.GetSystemTimestamp(),
 	}
 
-	return s.db.Create(&oplog).Error
+	if err := s.db.Create(&oplog).Error; err != nil {
+		return err
+	}
+	cloudsync.NotifyOplogChanged()
+	return nil
 }
 
 func serializeValue(value interface{}) (string, error) {

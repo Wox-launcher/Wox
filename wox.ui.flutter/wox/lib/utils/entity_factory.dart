@@ -1,6 +1,7 @@
 import 'package:uuid/v4.dart';
 import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_backup.dart';
+import 'package:wox/entity/wox_cloud_sync.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_lang.dart';
 import 'package:wox/entity/wox_plugin.dart';
@@ -29,6 +30,7 @@ class EntityFactory {
     'DoctorCheckResult': (json) => DoctorCheckResult.fromJson(json),
     'QueryMetadata': (json) => QueryMetadata.fromJson(json),
     'WoxUsageStats': (json) => WoxUsageStats.fromJson(json),
+    'WoxCloudSyncStatus': (json) => WoxCloudSyncStatus.fromJson(json),
   };
 
   // List factories

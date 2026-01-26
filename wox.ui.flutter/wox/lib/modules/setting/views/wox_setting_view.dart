@@ -6,7 +6,8 @@ import 'package:wox/components/wox_platform_focus.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/modules/setting/views/wox_setting_ui_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_ai_view.dart';
-import 'package:wox/modules/setting/views/wox_setting_data_view.dart';
+import 'package:wox/modules/setting/views/wox_setting_backup_view.dart';
+import 'package:wox/modules/setting/views/wox_setting_cloud_sync_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_theme_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_about_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_usage_view.dart';
@@ -105,7 +106,32 @@ class _WoxSettingViewState extends State<WoxSettingView> {
         _NavItem(id: 'ui', icon: Icons.palette_outlined, title: controller.tr('ui_ui'), body: const WoxSettingUIView()),
         _NavItem(id: 'ai', icon: Icons.psychology_outlined, title: controller.tr('ui_ai'), body: const WoxSettingAIView()),
         _NavItem(id: 'network', icon: Icons.public_outlined, title: controller.tr('ui_network'), body: const WoxSettingNetworkView()),
-        _NavItem(id: 'data', icon: Icons.folder_outlined, title: controller.tr('ui_data'), body: const WoxSettingDataView()),
+        _NavItem(
+          id: 'data',
+          icon: Icons.folder_outlined,
+          title: controller.tr('ui_data'),
+          isExpanded: true,
+          children: [
+            _NavItem(
+              id: 'data.backup',
+              icon: Icons.backup_outlined,
+              title: controller.tr('ui_data_backup_restore_nav'),
+              body: const WoxSettingBackupView(),
+              onTap: () async {
+                await controller.switchToBackupView(const UuidV4().generate());
+              },
+            ),
+            _NavItem(
+              id: 'data.cloudsync',
+              icon: Icons.cloud_outlined,
+              title: controller.tr('ui_cloud_sync'),
+              body: const WoxSettingCloudSyncView(),
+              onTap: () async {
+                await controller.switchToCloudSyncView(const UuidV4().generate());
+              },
+            ),
+          ],
+        ),
         _NavItem(
           id: 'plugins',
           icon: Icons.extension_outlined,

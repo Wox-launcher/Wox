@@ -11,10 +11,10 @@ import 'package:flutter/material.dart' as material;
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/utils/color_util.dart';
 
-class WoxSettingDataView extends WoxSettingBaseView {
-  const WoxSettingDataView({super.key});
+class WoxSettingBackupView extends WoxSettingBaseView {
+  const WoxSettingBackupView({super.key});
 
-  Widget _buildAutoBackupTips() {
+  Widget buildAutoBackupTips() {
     return Wrap(
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
@@ -68,7 +68,7 @@ class WoxSettingDataView extends WoxSettingBaseView {
           );
         }),
         tips: null,
-        customTips: _buildAutoBackupTips(),
+        customTips: buildAutoBackupTips(),
       ),
       formField(
         label: controller.tr("ui_data_backup_list_title"),

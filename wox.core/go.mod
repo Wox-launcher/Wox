@@ -37,8 +37,10 @@ require (
 	github.com/tidwall/pretty v1.2.1
 	github.com/tmc/langchaingo v0.1.14
 	github.com/wissance/stringFormatter v1.6.1
+	github.com/zalando/go-keyring v0.2.1
 	go.uber.org/zap v1.27.1
 	golang.design/x/hotkey v0.4.1
+	golang.org/x/crypto v0.44.0
 	golang.org/x/image v0.34.0
 	golang.org/x/sys v0.39.0
 	gorm.io/driver/sqlite v1.6.0
@@ -47,15 +49,15 @@ require (
 )
 
 require (
-	github.com/akavel/rsrc v0.10.2 // indirect
+	github.com/alessio/shellescape v1.4.1 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
+	github.com/danieljoos/wincred v1.1.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/jsonschema-go v0.3.0 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
-	github.com/josephspurrier/goversioninfo v1.5.0 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/otiai10/mint v1.6.3 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect

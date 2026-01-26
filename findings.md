@@ -33,11 +33,17 @@
 - `SettingValue` contains a `syncable` flag (currently unused), and should be the canonical sync eligibility signal.
 <!-- Platform-specific Wox settings are stored as `PlatformValue`; we will sync the full JSON blob without platform filtering. -->
 - No existing keychain/credential utility in `wox.core`; need new secure storage for DEK.
+- No existing device-id or account/auth token plumbing in `wox.core` yet.
 - Cloud sync state (cursor/last sync/backoff) should be stored outside `SettingValue` to avoid syncing internal metadata.
 - `Oplog` table includes `SyncedToCloud` and `LogOplog` exists in `WoxSettingStore`, but no current callers.
+- Cloud sync HTTP client now lives in `wox.core/cloudsync` with base URL + auth/device providers; headers include `X-Device-Id`, `X-App-Version`, `X-Platform`, `X-Trace-Id`.
+- Device ID provider uses `${woxDataDirectory}/device_id` when no explicit path is provided.
+- Cloud sync is wired from environment variables: `WOX_CLOUD_SYNC_URL` and `WOX_CLOUD_SYNC_TOKEN`.
+- Key management uses OS keyring (go-keyring) and Argon2id-derived KEK to wrap the DEK (AES-256-GCM).
 - Core settings API: `/setting/wox` (read) and `/setting/wox/update` (write) in `wox.core/ui/router.go`.
 - Plugin settings API: `/setting/plugin/update` uses `APIImpl.SaveSetting` and `PluginSettingStore`.
 - `PostSettingUpdate` in `wox.core/ui/manager.go` applies side effects (tray, hotkeys, lang, autostart, MCP server).
+- Plugin setting callbacks are available via `APIImpl.OnSettingChanged` in `wox.core/plugin/api.go`.
 - Flutter UI calls `/setting/wox` + `/setting/wox/update` via `WoxApi`; settings are reloaded after update.
 - Backup/restore copies the full user data directory; `wox.db` lives under user data.
 
