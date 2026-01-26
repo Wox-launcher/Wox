@@ -8,6 +8,7 @@ import (
 	"time"
 	"unicode"
 	"wox/common"
+	"wox/i18n"
 	"wox/plugin"
 	"wox/setting"
 	"wox/setting/definition"
@@ -78,6 +79,13 @@ func (c *CalculatorPlugin) GetMetadata() plugin.Metadata {
 						LabelWidth:    140,
 						Width:         220,
 						PaddingBottom: 10,
+						I18nOverrideMap: map[i18n.LangCode]definition.PluginSettingValueStyle{
+							i18n.LangCodeZhCn: {
+								LabelWidth:    80,
+								Width:         220,
+								PaddingBottom: 10,
+							},
+						},
 					},
 				},
 			},
@@ -97,6 +105,13 @@ func (c *CalculatorPlugin) GetMetadata() plugin.Metadata {
 						LabelWidth:    140,
 						Width:         220,
 						PaddingBottom: 10,
+						I18nOverrideMap: map[i18n.LangCode]definition.PluginSettingValueStyle{
+							i18n.LangCodeZhCn: {
+								LabelWidth:    80,
+								Width:         220,
+								PaddingBottom: 10,
+							},
+						},
 					},
 				},
 			},

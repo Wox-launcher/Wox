@@ -20,7 +20,7 @@ class WoxSettingPluginSelect extends WoxSettingPluginItem {
         WoxDropdownButton<String>(
           value: getSetting(item.key),
           isExpanded: true,
-          width: item.style.width > 0 ? item.style.width.toDouble() : null,
+          width: resolveStyle(item.style).width > 0 ? resolveStyle(item.style).width.toDouble() : null,
           items:
               item.options.map((e) {
                 return WoxDropdownItem(value: e.value, label: e.label);

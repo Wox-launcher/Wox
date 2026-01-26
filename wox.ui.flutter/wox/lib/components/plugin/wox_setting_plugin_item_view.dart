@@ -22,14 +22,21 @@ abstract class WoxSettingPluginItem extends StatelessWidget {
     return Get.find<WoxSettingController>().tr(key);
   }
 
+  PluginSettingValueStyle resolveStyle(PluginSettingValueStyle style) {
+    final woxSettingController = Get.find<WoxSettingController>();
+    return style.resolve(woxSettingController.woxSetting.value.langCode);
+  }
+
   Widget withFlexible(List<Widget> children) {
     return Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: children);
   }
 
   Widget layout({required List<Widget> children, required PluginSettingValueStyle style}) {
-    if (style.hasAnyPadding()) {
+    final resolvedStyle = resolveStyle(style);
+
+    if (resolvedStyle.hasAnyPadding()) {
       return Padding(
-        padding: EdgeInsets.only(top: style.paddingTop, bottom: style.paddingBottom, left: style.paddingLeft, right: style.paddingRight),
+        padding: EdgeInsets.only(top: resolvedStyle.paddingTop, bottom: resolvedStyle.paddingBottom, left: resolvedStyle.paddingLeft, right: resolvedStyle.paddingRight),
         child: withFlexible(children),
       );
     }
@@ -39,11 +46,13 @@ abstract class WoxSettingPluginItem extends StatelessWidget {
 
   Widget label(String text, PluginSettingValueStyle style) {
     if (text != "") {
-      if (style.labelWidth > 0) {
+      final resolvedStyle = resolveStyle(style);
+
+      if (resolvedStyle.labelWidth > 0) {
         return Padding(
           padding: const EdgeInsets.only(right: 4),
           child: SizedBox(
-            width: style.labelWidth,
+            width: resolvedStyle.labelWidth,
             child: Text(text, style: TextStyle(overflow: TextOverflow.ellipsis, color: getThemeTextColor(), fontSize: 13), textAlign: TextAlign.right),
           ),
         );

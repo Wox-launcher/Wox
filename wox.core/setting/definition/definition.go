@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"wox/i18n"
 	"wox/util"
 
 	"github.com/tidwall/gjson"
@@ -48,6 +49,8 @@ type PluginSettingValueStyle struct {
 
 	Width      int
 	LabelWidth int // if has label, E.g. select, checkbox, textbox
+
+	I18nOverrideMap map[i18n.LangCode]PluginSettingValueStyle // override for different languages
 }
 
 func (n *PluginSettingDefinitionItem) UnmarshalJSON(b []byte) error {
