@@ -1,9 +1,6 @@
 name: Update plugin store
 
 on:
-  push:
-    branches:
-      - master
   schedule:
     - cron: "0 */3 * * *"
 
