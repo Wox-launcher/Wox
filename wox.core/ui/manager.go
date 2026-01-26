@@ -27,6 +27,7 @@ import (
 	"wox/util/selection"
 	"wox/util/shell"
 	"wox/util/tray"
+	"wox/util/window"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/fsnotify/fsnotify"
@@ -52,11 +53,8 @@ type Manager struct {
 	isUIReadyHandled bool
 	isSystemDark     bool
 
-	activeWindowName             string          // active window name before wox is activated
-	activeWindowPid              int             // active window pid before wox is activated
-	activeWindowIcon             common.WoxImage // active window icon before wox is activated
-	activeWindowIsOpenSaveDialog bool            // active window is open/save dialog before wox is activated
-	pendingStartupNotify         *common.NotifyMsg
+	activeWindowSnapshot common.ActiveWindowSnapshot // cached active window snapshot
+	pendingStartupNotify *common.NotifyMsg
 }
 
 func GetUIManager() *Manager {
@@ -255,6 +253,7 @@ func (m *Manager) QuerySelection(ctx context.Context) {
 		return
 	}
 
+	m.RefreshActiveWindowSnapshot(ctx)
 	m.ui.ChangeQuery(newCtx, common.PlainQuery{
 		QueryType:      plugin.QueryTypeSelection,
 		QuerySelection: selection,
@@ -274,6 +273,10 @@ func (m *Manager) RegisterQueryHotkey(ctx context.Context, queryHotkey setting.Q
 			QueryText: query,
 		}
 
+		// we need to refresh active window snapshot before new query
+		// because new query will use active window info in env and here is the
+		// first place we can get the latest active window info
+		m.RefreshActiveWindowSnapshot(ctx)
 		q, _, err := plugin.GetPluginManager().NewQuery(queryCtx, plainQuery)
 		if queryHotkey.IsSilentExecution {
 			if err != nil {
@@ -636,36 +639,38 @@ func (m *Manager) ExitApp(ctx context.Context) {
 	os.Exit(0)
 }
 
-func (m *Manager) SetActiveWindowName(name string) {
-	m.activeWindowName = name
+func (m *Manager) GetActiveWindowSnapshot(ctx context.Context) common.ActiveWindowSnapshot {
+	return m.activeWindowSnapshot
 }
 
-func (m *Manager) GetActiveWindowName() string {
-	return m.activeWindowName
+// RefreshActiveWindowSnapshot updates the cached active window snapshot
+// It skips updating if the active window is Wox UI itself
+func (m *Manager) RefreshActiveWindowSnapshot(ctx context.Context) {
+	activeWindowName := window.GetActiveWindowName()
+	activeWindowPid := window.GetActiveWindowPid()
+	if m.isUIWindow(activeWindowName, activeWindowPid) {
+		return
+	}
+
+	m.activeWindowSnapshot.Name = activeWindowName
+	m.activeWindowSnapshot.Pid = activeWindowPid
+	if icon, err := window.GetActiveWindowIcon(); err == nil {
+		if woxIcon, convErr := common.NewWoxImage(icon); convErr == nil {
+			m.activeWindowSnapshot.Icon = woxIcon
+		}
+	}
+	if isDialog, err := window.IsOpenSaveDialog(); err == nil {
+		m.activeWindowSnapshot.IsOpenSaveDialog = isDialog
+	} else {
+		m.activeWindowSnapshot.IsOpenSaveDialog = false
+	}
 }
 
-func (m *Manager) SetActiveWindowPid(pid int) {
-	m.activeWindowPid = pid
-}
-
-func (m *Manager) GetActiveWindowPid() int {
-	return m.activeWindowPid
-}
-
-func (m *Manager) SetActiveWindowIcon(icon common.WoxImage) {
-	m.activeWindowIcon = icon
-}
-
-func (m *Manager) GetActiveWindowIcon() common.WoxImage {
-	return m.activeWindowIcon
-}
-
-func (m *Manager) SetActiveWindowIsOpenSaveDialog(isOpenSaveDialog bool) {
-	m.activeWindowIsOpenSaveDialog = isOpenSaveDialog
-}
-
-func (m *Manager) GetActiveWindowIsOpenSaveDialog() bool {
-	return m.activeWindowIsOpenSaveDialog
+func (m *Manager) isUIWindow(activeWindowName string, activeWindowPid int) bool {
+	if m.uiProcess != nil && activeWindowPid != 0 && m.uiProcess.Pid == activeWindowPid {
+		return true
+	}
+	return strings.EqualFold(activeWindowName, "wox-ui")
 }
 
 func (m *Manager) ProcessDeeplink(ctx context.Context, deeplink string) {

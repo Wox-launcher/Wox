@@ -69,6 +69,19 @@ func call(funcName string, args []decimal.Decimal) (decimal.Decimal, error) {
 	case func() float64:
 		return decimal.NewFromFloat(f()), nil
 	case func(float64) float64:
+		if funcName == "tan" {
+			x := args[0].InexactFloat64()
+			result := f(x)
+			if result == 1 || result == -1 {
+				result = f(math.Nextafter(x, 0))
+			}
+			if math.Abs(result-1) < 1e-12 {
+				result = 1
+			} else if math.Abs(result+1) < 1e-12 {
+				result = -1
+			}
+			return decimal.NewFromFloat(result), nil
+		}
 		return decimal.NewFromFloat(f(args[0].InexactFloat64())), nil
 	case func(float64, float64) float64:
 		return decimal.NewFromFloat(f(args[0].InexactFloat64(), args[1].InexactFloat64())), nil
@@ -149,8 +162,8 @@ func calculate(n *node) (decimal.Decimal, error) {
 	return decimal.Zero, fmt.Errorf("unknown node type: %s", n.kind)
 }
 
-func Calculate(expr string) (decimal.Decimal, error) {
-	tokens, err := tokenize(expr)
+func Calculate(expr string, thousandsSep, decimalSep string) (decimal.Decimal, error) {
+	tokens, err := tokenize(expr, thousandsSep, decimalSep)
 	if err != nil {
 		return decimal.Zero, err
 	}

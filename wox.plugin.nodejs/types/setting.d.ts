@@ -64,6 +64,12 @@ export interface PluginSettingValueStyle {
    * Only applicable for settings with labels (textbox, checkbox, select).
    */
   LabelWidth: number
+  /**
+   * Override style for different languages.
+   *
+   * Key is the language code (e.g. "zh_CN"), value is the style override.
+   */
+  I18nOverrideMap?: { [key: string]: PluginSettingValueStyle }
 }
 
 /**

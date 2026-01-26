@@ -68,7 +68,6 @@ WOXMR_DIR := plugin/system/mediaplayer/woxmr
 WOXMR_INSTALL_DIR := resource/others/woxmr
 WOXMR_OUT_BUNDLE := $(WOXMR_INSTALL_DIR)/woxmr.bundle
 WOXMR_OUT_PM := $(WOXMR_INSTALL_DIR)/WoxMR.pm
-SIGN_IDENTITY ?= Developer ID Application: jiajuan mao (AGYCFD2ZGN)
 
 woxmr-clean:
 	@echo "Cleaning WoxMR build artifacts..."
@@ -125,9 +124,11 @@ endif
 # Codesign WoxMR.bundle (always, with default identity if not overridden)
 woxmr-sign:
 ifeq ($(PLATFORM),macos)
-	@if [ -f "$(WOXMR_OUT_BUNDLE)" ]; then \
-		echo "Signing with identity: $(SIGN_IDENTITY)"; \
-		codesign --force --sign "$(SIGN_IDENTITY)" --timestamp=none "$(WOXMR_OUT_BUNDLE)"; \
+	@if [ -z "$(MACOS_SIGN_IDENTITY)" ]; then \
+		echo "MACOS_SIGN_IDENTITY is empty; skip signing"; \
+	elif [ -f "$(WOXMR_OUT_BUNDLE)" ]; then \
+		echo "Signing with identity: $(MACOS_SIGN_IDENTITY)"; \
+		codesign --force --sign "$(MACOS_SIGN_IDENTITY)" --timestamp=none "$(WOXMR_OUT_BUNDLE)"; \
 	else \
 		echo "$(WOXMR_OUT_BUNDLE) not found, skip signing"; \
 		exit 1; \

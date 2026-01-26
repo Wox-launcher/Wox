@@ -281,8 +281,13 @@ func (c *Converter) calculateExpression(ctx context.Context, results []core.Resu
 	}
 	result.DisplayValue = fmt.Sprintf("%s %s", result.RawValue.String(), targetUnit.Name)
 
-	// Convert the result to the target unit
-	if targetUnit.Name != result.Unit.Name {
+	// Convert (or format) the result to the target unit
+	shouldConvert := targetUnit.Name != result.Unit.Name
+	if targetUnit.Type == core.UnitTypeCurrency && result.Unit.Type == core.UnitTypeCurrency {
+		// Even when the unit is the same (e.g., USD), convert to format with currency symbol
+		shouldConvert = true
+	}
+	if shouldConvert {
 		for _, module := range c.registry.Modules() {
 			if convertedResult, err := module.Convert(ctx, result, targetUnit); err == nil {
 				c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Converted result with module %s => displayValue=%s, rawValue=%s, unit=%s", module.Name(), convertedResult.DisplayValue, convertedResult.RawValue.String(), convertedResult.Unit.Name))

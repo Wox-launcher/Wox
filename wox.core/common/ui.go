@@ -41,10 +41,7 @@ type UI interface {
 	ToggleApp(ctx context.Context)
 	OpenSettingWindow(ctx context.Context, windowContext SettingWindowContext)
 	PickFiles(ctx context.Context, params PickFilesParams) []string
-	GetActiveWindowName() string
-	GetActiveWindowPid() int
-	GetActiveWindowIcon() WoxImage
-	GetActiveWindowIsOpenSaveDialog() bool
+	GetActiveWindowSnapshot(ctx context.Context) ActiveWindowSnapshot
 	GetServerPort(ctx context.Context) int
 	GetAllThemes(ctx context.Context) []Theme
 	ChangeTheme(ctx context.Context, theme Theme)
@@ -74,6 +71,13 @@ type UI interface {
 
 	// ReloadSetting asks the UI to reload Wox settings from backend.
 	ReloadSetting(ctx context.Context)
+}
+
+type ActiveWindowSnapshot struct {
+	Name             string   // active window name before wox is activated
+	Pid              int      // active window pid before wox is activated
+	Icon             WoxImage // active window icon before wox is activated
+	IsOpenSaveDialog bool     // is active window open/save dialog before wox is activated
 }
 
 type ShowContext struct {

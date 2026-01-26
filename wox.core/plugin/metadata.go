@@ -220,6 +220,9 @@ func (m *Metadata) GetFeatureParamsForQueryEnv() (MetadataFeatureParamsQueryEnv,
 						params.RequireActiveWindowName = true
 					}
 				}
+				if vBool, ok := v.(bool); ok {
+					params.RequireActiveWindowName = vBool
+				}
 			}
 
 			if v, ok := feature.Params["requireActiveWindowPid"]; ok {
@@ -402,6 +405,29 @@ func (m *Metadata) GetName(ctx context.Context) string {
 
 func (m *Metadata) GetDescription(ctx context.Context) string {
 	return m.translate(ctx, m.Description)
+}
+
+func (m *Metadata) GetNameEn(ctx context.Context) string {
+	return m.translateEn(ctx, m.Name)
+}
+
+func (m *Metadata) GetDescriptionEn(ctx context.Context) string {
+	return m.translateEn(ctx, m.Description)
+}
+
+func (m *Metadata) translateEn(ctx context.Context, text common.I18nString) string {
+	rawText := strings.TrimSpace(string(text))
+
+	key := strings.TrimPrefix(rawText, "i18n:")
+	if m.I18n != nil {
+		if enMap, ok := m.I18n["en_US"]; ok {
+			if val, ok := enMap[key]; ok {
+				return val
+			}
+		}
+	}
+
+	return i18n.GetI18nManager().TranslateWoxEnUs(ctx, rawText)
 }
 
 func (m *Metadata) translate(ctx context.Context, text common.I18nString) string {

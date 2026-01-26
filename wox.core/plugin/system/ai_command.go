@@ -259,7 +259,7 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 											},
 										},
 									}
-									pasteToActiveWindowAction, pasteToActiveWindowErr := GetPasteToActiveWindowAction(ctx, c.api, func() {
+									pasteToActiveWindowAction, pasteToActiveWindowErr := GetPasteToActiveWindowAction(ctx, c.api, query.Env.ActiveWindowTitle, query.Env.ActiveWindowPid, query.Env.ActiveWindowIcon, func() {
 										clipboard.WriteText(streamResult.Data)
 									})
 									if pasteToActiveWindowErr == nil {
@@ -441,7 +441,7 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 	}
 
 	// paste to active window
-	pasteToActiveWindowAction, pasteToActiveWindowErr := GetPasteToActiveWindowAction(ctx, c.api, func() {
+	pasteToActiveWindowAction, pasteToActiveWindowErr := GetPasteToActiveWindowAction(ctx, c.api, query.Env.ActiveWindowTitle, query.Env.ActiveWindowPid, query.Env.ActiveWindowIcon, func() {
 		// contextData is pure content (Reasoning is separated)
 		clipboard.WriteText(contextData)
 	})

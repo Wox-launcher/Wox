@@ -107,6 +107,14 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 			{
 				Name: plugin.MetadataFeatureIgnoreAutoScore,
 			},
+			{
+				Name: plugin.MetadataFeatureQueryEnv,
+				Params: map[string]any{
+					"requireActiveWindowName": true,
+					"requireActiveWindowPid":  true,
+					"requireActiveWindowIcon": true,
+				},
+			},
 		},
 		Commands: []plugin.MetadataCommand{
 			{
@@ -514,7 +522,8 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 	}
 
 	// paste to active window
-	pasteToActiveWindowAction, pasteToActiveWindowErr := system.GetPasteToActiveWindowAction(ctx, c.api, func() {
+	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("active window info: name=%s, pid=%d", query.Env.ActiveWindowTitle, query.Env.ActiveWindowPid))
+	pasteToActiveWindowAction, pasteToActiveWindowErr := system.GetPasteToActiveWindowAction(ctx, c.api, query.Env.ActiveWindowTitle, query.Env.ActiveWindowPid, query.Env.ActiveWindowIcon, func() {
 		c.moveRecordToTop(ctx, record.ID)
 		clipboard.WriteText(record.Content)
 	})

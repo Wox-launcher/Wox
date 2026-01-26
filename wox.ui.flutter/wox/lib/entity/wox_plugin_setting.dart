@@ -53,6 +53,8 @@ class PluginSettingValueStyle {
   late double width;
   late double labelWidth;
 
+  late Map<String, PluginSettingValueStyle> i18nOverrideMap;
+
   PluginSettingValueStyle.fromJson(Map<String, dynamic> json) {
     if (json['PaddingLeft'] == null) {
       paddingLeft = 0;
@@ -89,9 +91,23 @@ class PluginSettingValueStyle {
     } else {
       labelWidth = (json['LabelWidth'] as int).toDouble();
     }
+
+    i18nOverrideMap = {};
+    if (json['I18nOverrideMap'] != null) {
+      (json['I18nOverrideMap'] as Map<String, dynamic>).forEach((key, value) {
+        i18nOverrideMap[key] = PluginSettingValueStyle.fromJson(value);
+      });
+    }
   }
 
   bool hasAnyPadding() {
     return paddingLeft > 0 || paddingTop > 0 || paddingRight > 0 || paddingBottom > 0;
+  }
+
+  PluginSettingValueStyle resolve(String langCode) {
+    if (i18nOverrideMap.containsKey(langCode)) {
+      return i18nOverrideMap[langCode]!;
+    }
+    return this;
   }
 }

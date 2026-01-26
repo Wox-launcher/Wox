@@ -78,8 +78,29 @@ func (m StorePluginManifest) GetName(ctx context.Context) string {
 	return m.translate(ctx, m.Name)
 }
 
+func (m StorePluginManifest) GetNameEn(_ context.Context) string {
+	return m.translateEn(m.Name)
+}
+
 func (m StorePluginManifest) GetDescription(ctx context.Context) string {
 	return m.translate(ctx, m.Description)
+}
+
+func (m StorePluginManifest) GetDescriptionEn(_ context.Context) string {
+	return m.translateEn(m.Description)
+}
+
+func (m StorePluginManifest) translateEn(text string) string {
+	if !strings.HasPrefix(text, "i18n:") {
+		return text
+	}
+
+	translated := m.translateWithLang(text, i18n.LangCodeEnUs)
+	if translated != text {
+		return translated
+	}
+
+	return i18n.GetI18nManager().TranslateWoxEnUs(context.Background(), text)
 }
 
 func (m StorePluginManifest) GetNameEnUs() string {

@@ -52,6 +52,10 @@ Due to the large number of Linux distributions, we only test Wox on Ubuntu. We c
 
 - [Doc](https://wox-launcher.github.io/Wox/)
 
+## Sponsors
+
+- [SignPath](https://signpath.org/) sponsors our free Windows code signing.
+
 ## Project Activity
 
 ![Alt](https://repobeats.axiom.co/api/embed/426a758ebe040d1931da135e5011b6c5c9058041.svg "Repobeats analytics image")

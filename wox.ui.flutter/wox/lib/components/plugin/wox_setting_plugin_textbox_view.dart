@@ -41,7 +41,7 @@ class WoxSettingPluginTextBox extends WoxSettingPluginItem {
           child: WoxTextField(
             maxLines: item.maxLines,
             controller: controller,
-            width: item.style.width > 0 ? item.style.width.toDouble() : 100,
+            width: resolveStyle(item.style).width > 0 ? resolveStyle(item.style).width.toDouble() : 100,
             onChanged: (value) {
               for (var element in item.validators) {
                 var errMsg = element.validator.validate(value);

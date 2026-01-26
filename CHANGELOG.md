@@ -2,14 +2,19 @@
 
 ## v2.0.0-beta.9
 
-- Improve
+- Add
+  - [`Calculator`] Add comma separator support in Calculator plugin #4325
 
+- Improve
   - Improve everything sdk integration stability (with 1.5a support) #4317
+
+- Fix
+  - [`Current Folder`] Fix a issue that Current folder plugin's settings do not load #4326
+  - [`Clipboard`] Fix a issue that Clipboard plugin cannot paste to active window #4328
 
 ## v2.0.0-beta.8 — 2026-01-10
 
 - Add
-
   - [`Emoji`] Add ai search support for Emoji plugin (you need to enable AI feature in settings first)
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/emoji_ai_search.png)
   - Add auto theme which changes theme based on system light/dark mode
@@ -18,7 +23,6 @@
   - Add loading animation to query box during plugin metadata fetching to improve user experience
 
 - Improve
-
   - Improve markdown preview rendering performance and stability
   - Critical deletion actions have been implemented to recycle bin, this will prevent accidental data loss #3958
   - Improve docs website [https://wox-launcher.github.io/Wox/guide/introduction.html](https://wox-launcher.github.io/Wox/guide/introduction.html)
@@ -35,7 +39,6 @@
 ## v2.0.0-beta.7 — 2025-12-19
 
 - Add
-
   - Add MCP Server for Wox plugin development (default enabled on port 29867, can be configured in settings)
   - Add thousands separator for numbers in Calculator plugin `#4299`
   - Add windows setting searches
@@ -43,12 +46,10 @@
     ![](screenshots/usage.png)
 
 - Improve
-
   - Improve fuzzy match based on fzf algorithm
   - Improve app searches on windows by
 
 - Fix
-
   - Fix working directory issues, adding getWorkingDirectory function for command execution context, close `#4161`
   - Fix command line window display issue when executing Script Plugin
   - [`AI Chat`] Fix a render issue
@@ -61,12 +62,10 @@
 ## v2.0.0-beta.6 — 2025-12-05
 
 - Add
-
   - Add Emoji plugin
   - Add Launch Mode and Start Page setting
 
 - Improve
-
   - UI now uses safe color parsing (`safeFromCssColor`) to fall back gracefully when theme colors are invalid, preventing crashes and highlighting misconfigured themes.
 
 ---
@@ -81,7 +80,6 @@
 ## v2.0.0-beta.4 — 2025-08-24
 
 - Add
-
   - Quick Select to choose results via digits/letters
   - MRU for query mode, use can now display MRU results when opening Wox
   - Last Query Mode option (retain last query or always start fresh, #4234)
@@ -90,7 +88,6 @@
   - Calculator plugin: add power operator (^) support
 
 - Improve
-
   - Migrate settings from JSON to a unified, type-safe SQLite store
   - Reduce clipboard memory usage
   - Windows UX: app display details, Unicode handling, and UWP icon retrieval
@@ -106,7 +103,6 @@
 ## v2.0.0-beta.3 — 2025-06-23
 
 - Add
-
   - Chat plugin: support multiple tool calls executed simultaneously in a single request
   - Chat plugin: support custom agents
   - ScriptPlugin support
@@ -119,13 +115,11 @@
 ## v2.0.0-beta.2 — 2025-04-18
 
 - Add
-
   - Chat plugin (supports MCP)
   - Double modifiers hotkey (e.g., double-click Ctrl)
   - [Windows] Everything (file plugin)
 
 - Improve
-
   - Settings interface now follows the theme color
   - [Windows] Optimized transparent display effect
 

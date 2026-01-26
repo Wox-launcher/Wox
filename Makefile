@@ -69,6 +69,8 @@ ifeq ($(PLATFORM),windows)
 	}
 endif
 
+
+
 clean:
 	rm -rf $(RELEASE_DIR)
 
@@ -159,20 +161,39 @@ _bundle_mac_app:
 	cp ../assets/mac/Info.plist $(APP_NAME).app/Contents/Info.plist
 	cp ../assets/mac/app.icns $(APP_NAME).app/Contents/Resources/app.icns
 	mv $(APP_NAME).app Wox.app
-	security unlock-keychain -p $(KEYCHAINPWD) login.keychain
-	codesign --options=runtime --force --deep --sign "Developer ID Application: jiajuan mao (AGYCFD2ZGN)" Wox.app/Contents/MacOS/wox
-	create-dmg \
-		--codesign "Developer ID Application: jiajuan mao (AGYCFD2ZGN)" \
-		--notarize "wox" \
-		--volname "Wox Installer" \
-		--volicon "../assets/mac/app.icns" \
-		--window-pos 200 120 \
-		--window-size 800 400 \
-		--icon-size 100 \
-		--icon "Wox.app" 200 190 \
-		--hide-extension "Wox.app" \
-		--app-drop-link 600 185 \
-		Wox.dmg Wox.app
+	@if [ -n "$(MACOS_KEYCHAINPWD)" ]; then \
+		security unlock-keychain -p "$(MACOS_KEYCHAINPWD)"; \
+	fi
+	@if [ -n "$(MACOS_SIGN_IDENTITY)" ]; then \
+		codesign --options=runtime --force --deep --sign "$(MACOS_SIGN_IDENTITY)" Wox.app/Contents/MacOS/wox; \
+	else \
+		echo "MACOS_SIGN_IDENTITY is empty; skip codesign"; \
+	fi
+	@if [ -n "$(MACOS_SIGN_IDENTITY)" ]; then \
+		create-dmg \
+			--codesign "$(MACOS_SIGN_IDENTITY)" \
+			--notarize "wox" \
+			--volname "Wox Installer" \
+			--volicon "../assets/mac/app.icns" \
+			--window-pos 200 120 \
+			--window-size 800 400 \
+			--icon-size 100 \
+			--icon "Wox.app" 200 190 \
+			--hide-extension "Wox.app" \
+			--app-drop-link 600 185 \
+			Wox.dmg Wox.app; \
+	else \
+		create-dmg \
+			--volname "Wox Installer" \
+			--volicon "../assets/mac/app.icns" \
+			--window-pos 200 120 \
+			--window-size 800 400 \
+			--icon-size 100 \
+			--icon "Wox.app" 200 190 \
+			--hide-extension "Wox.app" \
+			--app-drop-link 600 185 \
+			Wox.dmg Wox.app; \
+	fi
 	mv "Wox.dmg" $(APP_NAME).dmg
 
 release:

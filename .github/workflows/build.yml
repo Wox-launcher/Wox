@@ -7,76 +7,20 @@ on:
 
 permissions:
   contents: read
+  actions: write
   id-token: write
   attestations: write
 
 jobs:
-  test:
-    runs-on: [self-hosted, macOS, ARM64]
-    steps:
-      - uses: actions/checkout@v3
-      - name: Test
-        run: make test
-
   build:
-    name: Build ${{ matrix.os }} ${{ matrix.arch }}
-    needs: test
-    strategy:
-      matrix:
-        include:
-          - os: macOS
-            arch: ARM64
-            runner: [self-hosted, macOS, ARM64]
-            asset_path: ./release/wox-mac-arm64.dmg
-            asset_name: wox-mac-arm64.dmg
-            content_type: application/x-elf
-            needs_keychain: true
-          # no resource anymore
-          # - os: macOS
-          #   arch: AMD64
-          #   runner: [self-hosted, macOS, X64]
-          #   asset_path: ./release/wox-mac-amd64.dmg
-          #   asset_name: wox-mac-amd64.dmg
-          #   content_type: application/x-elf
-          #   needs_keychain: true
-          - os: Windows
-            arch: AMD64
-            runner: [self-hosted, Windows]
-            asset_path: ./release/wox-windows-amd64.exe
-            asset_name: wox-windows-amd64.exe
-            content_type: application/x-msdownload
-          - os: Linux
-            arch: AMD64
-            runner: [self-hosted, Linux]
-            asset_path: ./release/wox-linux-amd64
-            asset_name: wox-linux-amd64
-            content_type: application/x-msdownload
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - uses: actions/checkout@v3
-      - name: Build
-        run: make build
-        env:
-          KEYCHAINPWD: ${{ matrix.needs_keychain && secrets.KEYCHAINPWD || '' }}
-      - name: Attest build provenance
-        uses: actions/attest-build-provenance@v1
-        with:
-          subject-path: ${{ matrix.asset_path }}
-      - name: Attest AppImage provenance
-        if: matrix.os == 'Linux'
-        uses: actions/attest-build-provenance@v1
-        with:
-          subject-path: ./release/wox-linux-amd64.AppImage
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.asset_name }}
-          path: ${{ matrix.asset_path }}
-          retention-days: 10
-      - name: Upload AppImage artifact
-        if: matrix.os == 'Linux'
-        uses: actions/upload-artifact@v4
-        with:
-          name: wox-linux-amd64.AppImage
-          path: ./release/wox-linux-amd64.AppImage
-          retention-days: 10
+    uses: ./.github/workflows/build-core.yml
+    with:
+      run_tests: true
+      build_macos_arm64: ${{ contains(github.event.head_commit.message, '#build') }}
+      build_macos_amd64: ${{ contains(github.event.head_commit.message, '#build') }}
+      build_windows_amd64: ${{ contains(github.event.head_commit.message, '#build') }}
+      build_linux_amd64: ${{ contains(github.event.head_commit.message, '#build') }}
+      require_macos_notarize: true
+      require_windows_signpath: true
+      artifact_retention_days: 10
+    secrets: inherit

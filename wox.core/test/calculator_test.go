@@ -2,10 +2,34 @@ package test
 
 import (
 	"testing"
+	"wox/plugin"
 )
+
+const calculatorPluginID = "bd723c38-f28d-4152-8621-76fd21d6456e"
+
+func setCalculatorSeparators(t *testing.T, decimalMode string, thousandsMode string) {
+	t.Helper()
+	var calcInstance *plugin.Instance
+	for _, instance := range plugin.GetPluginManager().GetPluginInstances() {
+		if instance.Metadata.Id == calculatorPluginID {
+			calcInstance = instance
+			break
+		}
+	}
+	if calcInstance == nil {
+		t.Fatal("Calculator plugin instance not found")
+	}
+	if err := calcInstance.Setting.Set("DecimalSeparator", decimalMode); err != nil {
+		t.Fatalf("Failed to set decimal separator mode: %v", err)
+	}
+	if err := calcInstance.Setting.Set("ThousandsSeparator", thousandsMode); err != nil {
+		t.Fatalf("Failed to set thousands separator mode: %v", err)
+	}
+}
 
 func TestCalculatorBasic(t *testing.T) {
 	suite := NewTestSuite(t)
+	setCalculatorSeparators(t, "Dot", "Comma")
 
 	tests := []QueryTest{
 		{
@@ -87,6 +111,7 @@ func TestCalculatorBasic(t *testing.T) {
 
 func TestCalculatorTrigonometric(t *testing.T) {
 	suite := NewTestSuite(t)
+	setCalculatorSeparators(t, "Dot", "Comma")
 
 	tests := []QueryTest{
 		{
@@ -116,7 +141,7 @@ func TestCalculatorTrigonometric(t *testing.T) {
 		{
 			Name:           "Tangent",
 			Query:          "tan(pi/4)",
-			ExpectedTitle:  "0.9999999999999998",
+			ExpectedTitle:  "1",
 			ExpectedAction: "Copy",
 		},
 	}
@@ -124,8 +149,26 @@ func TestCalculatorTrigonometric(t *testing.T) {
 	suite.RunQueryTests(tests)
 }
 
+// calculator calculates should been done in < 10ms
+func TestCalculatorShouldHandleQuick(t *testing.T) {
+	suite := NewTestSuite(t)
+	setCalculatorSeparators(t, "Dot", "Comma")
+
+	tests := []QueryTest{
+		{
+			Name:           "Quick calculation 1",
+			Query:          "123456789 + 987654321",
+			ExpectedTitle:  "1,111,111,110",
+			ExpectedAction: "Copy",
+		},
+	}
+
+	suite.RunQueryTestsWithMaxDuration(tests, 10)
+}
+
 func TestCalculatorAdvanced(t *testing.T) {
 	suite := NewTestSuite(t)
+	setCalculatorSeparators(t, "Dot", "Comma")
 
 	tests := []QueryTest{
 		{
@@ -239,4 +282,144 @@ func TestCalculatorAdvanced(t *testing.T) {
 	}
 
 	suite.RunQueryTests(tests)
+}
+
+func TestCalculatorSeparators(t *testing.T) {
+	suite := NewTestSuite(t)
+	setCalculatorSeparators(t, "Dot", "Comma")
+	calculatorId := "bd723c38-f28d-4152-8621-76fd21d6456e"
+
+	// Find the plugin instance to ensure we update the correct setting store
+	var calcInstance *plugin.Instance
+	for _, instance := range plugin.GetPluginManager().GetPluginInstances() {
+		if instance.Metadata.Id == calculatorId {
+			calcInstance = instance
+			break
+		}
+	}
+	if calcInstance == nil {
+		t.Fatal("Calculator plugin instance not found")
+	}
+
+	// Helper to set separator modes
+	setModes := func(decimalMode string, thousandsMode string) {
+		if err := calcInstance.Setting.Set("DecimalSeparator", decimalMode); err != nil {
+			t.Fatalf("Failed to set decimal separator mode: %v", err)
+		}
+		if err := calcInstance.Setting.Set("ThousandsSeparator", thousandsMode); err != nil {
+			t.Fatalf("Failed to set thousands separator mode: %v", err)
+		}
+	}
+
+	// Test Dot Mode (US: 1,234.56)
+	// Thousands: ,
+	// Decimal: .
+	t.Run("Dot Mode (US)", func(t *testing.T) {
+		setModes("Dot", "Comma")
+		tests := []QueryTest{
+			{
+				Name:           "Dot Mode - Simple Addition",
+				Query:          "1.5 + 2.5",
+				ExpectedTitle:  "4",
+				ExpectedAction: "Copy",
+			},
+			{
+				Name:           "Dot Mode - Thousands Separator",
+				Query:          "1,000 + 200", // 1000 + 200
+				ExpectedTitle:  "1,200",
+				ExpectedAction: "Copy",
+			},
+			{
+				Name:           "Dot Mode - Output Format",
+				Query:          "1234.56 * 1",
+				ExpectedTitle:  "1,234.56",
+				ExpectedAction: "Copy",
+			},
+			{
+				Name:           "Dot Mode - Argument Separator",
+				Query:          "max(1, 2)", // Comma as argument separator (since decimal is Dot)
+				ExpectedTitle:  "2",
+				ExpectedAction: "Copy",
+			},
+		}
+		suite.RunQueryTests(tests)
+	})
+
+	// Test Comma Mode (European: 1.234,56)
+	// Thousands: .
+	// Decimal: ,
+	t.Run("Comma Mode (EU)", func(t *testing.T) {
+		setModes("Comma", "Dot")
+		tests := []QueryTest{
+			{
+				Name:           "Comma Mode - Simple Addition",
+				Query:          "1,5 + 2,5", // 1.5 + 2.5
+				ExpectedTitle:  "4",
+				ExpectedAction: "Copy",
+			},
+			{
+				Name:           "Comma Mode - Thousands Separator",
+				Query:          "1.000 + 200", // 1000 + 200
+				ExpectedTitle:  "1.200",
+				ExpectedAction: "Copy",
+			},
+			{
+				Name:           "Comma Mode - Output Format",
+				Query:          "1234,56 * 1",
+				ExpectedTitle:  "1.234,56",
+				ExpectedAction: "Copy",
+			},
+			{
+				Name:           "Comma Mode - Argument Separator",
+				Query:          "max(1; 2)", // Semicolon as separator (since comma is decimal)
+				ExpectedTitle:  "2",
+				ExpectedAction: "Copy",
+			},
+		}
+		suite.RunQueryTests(tests)
+	})
+
+	// Test Space thousands (SI: 1 234,56)
+	// Thousands: space
+	// Decimal: ,
+	t.Run("Space Thousands (SI)", func(t *testing.T) {
+		setModes("Comma", "Space")
+		tests := []QueryTest{
+			{
+				Name:           "Space Thousands - Simple Addition",
+				Query:          "1 000 + 200",
+				ExpectedTitle:  "1 200",
+				ExpectedAction: "Copy",
+			},
+			{
+				Name:           "Space Thousands - Output Format",
+				Query:          "1234,56 * 1",
+				ExpectedTitle:  "1 234,56",
+				ExpectedAction: "Copy",
+			},
+		}
+		suite.RunQueryTests(tests)
+	})
+
+	// Test Apostrophe thousands (Swiss: 1'234.56)
+	// Thousands: '
+	// Decimal: .
+	t.Run("Apostrophe Thousands (CH)", func(t *testing.T) {
+		setModes("Dot", "Apostrophe")
+		tests := []QueryTest{
+			{
+				Name:           "Apostrophe Thousands - Simple Addition",
+				Query:          "1'000 + 200",
+				ExpectedTitle:  "1'200",
+				ExpectedAction: "Copy",
+			},
+			{
+				Name:           "Apostrophe Thousands - Output Format",
+				Query:          "1234.56 * 1",
+				ExpectedTitle:  "1'234.56",
+				ExpectedAction: "Copy",
+			},
+		}
+		suite.RunQueryTests(tests)
+	})
 }
