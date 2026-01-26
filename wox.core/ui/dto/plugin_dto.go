@@ -9,11 +9,13 @@ import (
 type PluginDto struct {
 	Id                 string
 	Name               string
+	NameEn             string
 	Author             string
 	Version            string
 	MinWoxVersion      string
 	Runtime            string
 	Description        string
+	DescriptionEn      string
 	Icon               common.WoxImage
 	Website            string
 	Entry              string

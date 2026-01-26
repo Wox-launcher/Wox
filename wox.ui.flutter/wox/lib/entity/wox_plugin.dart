@@ -4,7 +4,9 @@ import 'wox_plugin_setting.dart';
 class PluginDetail {
   late String id;
   late String name;
+  late String nameEn;
   late String description;
+  late String descriptionEn;
   late String author;
   late String version;
   late WoxImage icon;
@@ -27,7 +29,9 @@ class PluginDetail {
   PluginDetail.empty() {
     id = '';
     name = '';
+    nameEn = '';
     description = '';
+    descriptionEn = '';
     author = '';
     version = '';
     icon = WoxImage.empty();
@@ -51,7 +55,9 @@ class PluginDetail {
   PluginDetail.fromJson(Map<String, dynamic> json) {
     id = json['Id'];
     name = json['Name'];
+    nameEn = json['NameEn'] ?? '';
     description = json['Description'];
+    descriptionEn = json['DescriptionEn'] ?? '';
     author = json['Author'];
     version = json['Version'];
     icon = WoxImage.fromJson(json['Icon']);
@@ -65,8 +71,7 @@ class PluginDetail {
     isDisable = json['IsDisable'] ?? false;
 
     if (json['TriggerKeywords'] != null) {
-      triggerKeywords =
-          (json['TriggerKeywords'] as List).map((e) => e.toString()).toList();
+      triggerKeywords = (json['TriggerKeywords'] as List).map((e) => e.toString()).toList();
     } else {
       triggerKeywords = <String>[];
     }
@@ -81,15 +86,13 @@ class PluginDetail {
     }
 
     if (json['SupportedOS'] != null) {
-      supportedOS =
-          (json['SupportedOS'] as List).map((e) => e.toString()).toList();
+      supportedOS = (json['SupportedOS'] as List).map((e) => e.toString()).toList();
     } else {
       supportedOS = <String>[];
     }
 
     if (json['ScreenshotUrls'] != null) {
-      screenshotUrls =
-          (json['ScreenshotUrls'] as List).map((e) => e.toString()).toList();
+      screenshotUrls = (json['ScreenshotUrls'] as List).map((e) => e.toString()).toList();
     } else {
       screenshotUrls = <String>[];
     }
@@ -156,8 +159,7 @@ class PluginSetting {
     if (json['TriggerKeywords'] == null) {
       triggerKeywords = <String>[];
     } else {
-      triggerKeywords =
-          (json['TriggerKeywords'] as List).map((e) => e.toString()).toList();
+      triggerKeywords = (json['TriggerKeywords'] as List).map((e) => e.toString()).toList();
     }
 
     if (json['QueryCommands'] == null) {

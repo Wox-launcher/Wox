@@ -185,7 +185,9 @@ func handlePluginStore(w http.ResponseWriter, r *http.Request) {
 		}
 		plugins[i].IsInstalled = isInstalled
 		plugins[i].Name = manifests[i].GetName(getCtx)
+		plugins[i].NameEn = manifests[i].GetNameEn(getCtx)
 		plugins[i].Description = manifests[i].GetDescription(getCtx)
+		plugins[i].DescriptionEn = manifests[i].GetDescriptionEn(getCtx)
 
 		plugins[i] = convertPluginDto(getCtx, plugins[i], pluginInstance)
 	}
@@ -216,6 +218,10 @@ func convertPluginInstanceToDto(ctx context.Context, pluginInstance *plugin.Inst
 	if copyErr != nil {
 		return dto.PluginDto{}, copyErr
 	}
+	installedPlugin.Name = pluginInstance.GetName(ctx)
+	installedPlugin.NameEn = pluginInstance.Metadata.GetNameEn(ctx)
+	installedPlugin.Description = pluginInstance.GetDescription(ctx)
+	installedPlugin.DescriptionEn = pluginInstance.Metadata.GetDescriptionEn(ctx)
 
 	installedPlugin.IsSystem = pluginInstance.IsSystemPlugin
 	installedPlugin.IsDev = pluginInstance.IsDevPlugin

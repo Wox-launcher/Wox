@@ -407,6 +407,29 @@ func (m *Metadata) GetDescription(ctx context.Context) string {
 	return m.translate(ctx, m.Description)
 }
 
+func (m *Metadata) GetNameEn(ctx context.Context) string {
+	return m.translateEn(ctx, m.Name)
+}
+
+func (m *Metadata) GetDescriptionEn(ctx context.Context) string {
+	return m.translateEn(ctx, m.Description)
+}
+
+func (m *Metadata) translateEn(ctx context.Context, text common.I18nString) string {
+	rawText := strings.TrimSpace(string(text))
+
+	key := strings.TrimPrefix(rawText, "i18n:")
+	if m.I18n != nil {
+		if enMap, ok := m.I18n["en_US"]; ok {
+			if val, ok := enMap[key]; ok {
+				return val
+			}
+		}
+	}
+
+	return i18n.GetI18nManager().TranslateWoxEnUs(ctx, rawText)
+}
+
 func (m *Metadata) translate(ctx context.Context, text common.I18nString) string {
 	rawText := strings.TrimSpace(string(text))
 	m.translateCacheOnce.Do(func() {

@@ -199,10 +199,7 @@ class WoxSettingController extends GetxController {
   Future<void> reloadPlugins(String traceId) async {
     final currentActivePluginId = activePlugin.value.id;
 
-    await Future.wait([
-      loadInstalledPlugins(traceId),
-      loadStorePlugins(traceId),
-    ]);
+    await Future.wait([loadInstalledPlugins(traceId), loadStorePlugins(traceId)]);
 
     if (activeNavPath.value != 'plugins.installed' && activeNavPath.value != 'plugins.store') {
       return;
@@ -312,8 +309,10 @@ class WoxSettingController extends GetxController {
 
     //active plugin
     if (activePlugin.value.id.isNotEmpty) {
-      activePlugin.value = filteredPluginList.firstWhere((element) => element.id == activePlugin.value.id,
-          orElse: () => filteredPluginList.isNotEmpty ? filteredPluginList[0] : PluginDetail.empty());
+      activePlugin.value = filteredPluginList.firstWhere(
+        (element) => element.id == activePlugin.value.id,
+        orElse: () => filteredPluginList.isNotEmpty ? filteredPluginList[0] : PluginDetail.empty(),
+      );
     } else {
       setFirstFilteredPluginDetailActive();
     }
@@ -373,13 +372,28 @@ class WoxSettingController extends GetxController {
     if (filterPluginKeywordController.text.isEmpty) {
       filteredPluginList.addAll(pluginList);
     } else {
-      filteredPluginList.addAll(pluginList.where((element) {
-        return WoxFuzzyMatchUtil.isFuzzyMatch(
-          text: element.name,
-          pattern: filterPluginKeywordController.text,
-          usePinYin: WoxSettingUtil.instance.currentSetting.usePinYin,
-        );
-      }));
+      filteredPluginList.addAll(
+        pluginList.where((element) {
+          final keyword = filterPluginKeywordController.text;
+          bool match = WoxFuzzyMatchUtil.isFuzzyMatch(text: element.name, pattern: keyword, usePinYin: WoxSettingUtil.instance.currentSetting.usePinYin);
+          if (match) return true;
+
+          if (element.nameEn.isNotEmpty) {
+            match = WoxFuzzyMatchUtil.isFuzzyMatch(text: element.nameEn, pattern: keyword, usePinYin: false);
+            if (match) return true;
+          }
+
+          if (element.description.toLowerCase().contains(keyword.toLowerCase())) {
+            return true;
+          }
+
+          if (element.descriptionEn.toLowerCase().contains(keyword.toLowerCase())) {
+            return true;
+          }
+
+          return false;
+        }),
+      );
     }
   }
 
