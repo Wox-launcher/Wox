@@ -493,13 +493,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                   );
                 }
                 if (e.type == "newline") {
-                  return WoxSettingPluginNewLine(
-                    value: "",
-                    item: e.value as PluginSettingValueNewLine,
-                    onUpdate: (key, value) async {
-                      await controller.updatePluginSetting(plugin.id, key, value);
-                    },
-                  );
+                  return WoxSettingPluginNewLine(value: "", item: e.value as PluginSettingValueNewLine, onUpdate: (key, value) async {});
                 }
                 if (e.type == "select") {
                   return WoxSettingPluginSelect(
@@ -520,22 +514,10 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                   );
                 }
                 if (e.type == "head") {
-                  return WoxSettingPluginHead(
-                    value: plugin.setting.settings[e.value.key] ?? "",
-                    item: e.value as PluginSettingValueHead,
-                    onUpdate: (key, value) async {
-                      await controller.updatePluginSetting(plugin.id, key, value);
-                    },
-                  );
+                  return WoxSettingPluginHead(value: "", item: e.value as PluginSettingValueHead, onUpdate: (key, value) async {});
                 }
                 if (e.type == "label") {
-                  return WoxSettingPluginLabel(
-                    value: plugin.setting.settings[e.value.key] ?? "",
-                    item: e.value as PluginSettingValueLabel,
-                    onUpdate: (key, value) async {
-                      await controller.updatePluginSetting(plugin.id, key, value);
-                    },
-                  );
+                  return WoxSettingPluginLabel(value: "", item: e.value as PluginSettingValueLabel, onUpdate: (key, value) async {});
                 }
                 if (e.type == "table") {
                   return WoxSettingPluginTable(

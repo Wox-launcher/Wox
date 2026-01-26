@@ -37,77 +37,6 @@ type CalculatorPlugin struct {
 	debounceInterval time.Duration
 }
 
-// formatWithThousandsSeparator formats a decimal number with thousands separators
-// e.g., 56335258.87 -> "56,335,258.87" (Dot mode)
-// e.g., 56335258.87 -> "56.335.258,87" (Comma mode)
-func (c *CalculatorPlugin) getSeparatorMode(ctx context.Context) SeparatorMode {
-	mode := c.api.GetSetting(ctx, "SeparatorMode")
-	if mode == "" {
-		return SeparatorModeSystem
-	}
-	return SeparatorMode(mode)
-}
-
-func (c *CalculatorPlugin) formatWithThousandsSeparator(ctx context.Context, val decimal.Decimal) string {
-	valStr := val.String()
-	parts := strings.Split(valStr, ".")
-
-	mode := c.getSeparatorMode(ctx)
-	thousandsSep, decimalSep := GetSeparators(mode)
-
-	intPart := parts[0]
-	// Handle negative numbers
-	negative := false
-	if strings.HasPrefix(intPart, "-") {
-		negative = true
-		intPart = intPart[1:]
-	}
-
-	// Add thousands separators
-	formattedInt := c.addThousandsSeparator(intPart, thousandsSep)
-
-	if negative {
-		formattedInt = "-" + formattedInt
-	}
-
-	if len(parts) == 2 {
-		return formattedInt + decimalSep + parts[1]
-	}
-
-	return formattedInt
-}
-
-// addThousandsSeparator adds separators to an integer string
-func (c *CalculatorPlugin) addThousandsSeparator(s string, sep string) string {
-	n := len(s)
-	if n <= 3 {
-		return s
-	}
-
-	// Calculate how many separators we need
-	numSeps := (n - 1) / 3
-	// sep can be multi-byte? usually just 1 byte but string is safer
-	sepLen := len(sep)
-
-	result := make([]byte, n+numSeps*sepLen)
-
-	// Fill from right to left
-	j := len(result) - 1
-	for i := n - 1; i >= 0; i-- {
-		result[j] = s[i]
-		j--
-		// Add separator every 3 digits, but not at the beginning
-		if (n-i)%3 == 0 && i > 0 {
-			for k := sepLen - 1; k >= 0; k-- {
-				result[j] = sep[k]
-				j--
-			}
-		}
-	}
-
-	return string(result)
-}
-
 func (c *CalculatorPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:            "bd723c38-f28d-4152-8621-76fd21d6456e",
@@ -133,15 +62,52 @@ func (c *CalculatorPlugin) GetMetadata() plugin.Metadata {
 			{
 				Type: definition.PluginSettingDefinitionTypeSelect,
 				Value: &definition.PluginSettingValueSelect{
-					Key:          "SeparatorMode",
-					Label:        "i18n:plugin_calculator_separator_mode",
+					Key:          "ThousandsSeparator",
+					Label:        "i18n:plugin_calculator_thousands_separator",
 					DefaultValue: "System Locale",
 					Options: []definition.PluginSettingValueSelectOption{
-						{Label: "i18n:plugin_calculator_separator_mode_system_locale", Value: "System Locale"},
-						{Label: "i18n:plugin_calculator_separator_mode_dot", Value: "Dot"},
-						{Label: "i18n:plugin_calculator_separator_mode_comma", Value: "Comma"},
+						{Label: "i18n:plugin_calculator_thousands_separator_system_locale", Value: "System Locale"},
+						{Label: "i18n:plugin_calculator_thousands_separator_comma", Value: "Comma"},
+						{Label: "i18n:plugin_calculator_thousands_separator_dot", Value: "Dot"},
+						{Label: "i18n:plugin_calculator_thousands_separator_space", Value: "Space"},
+						{Label: "i18n:plugin_calculator_thousands_separator_apostrophe", Value: "Apostrophe"},
+						{Label: "i18n:plugin_calculator_thousands_separator_none", Value: "None"},
 					},
-					Tooltip: "i18n:plugin_calculator_separator_mode_description",
+					Tooltip: "i18n:plugin_calculator_thousands_separator_description",
+					Style: definition.PluginSettingValueStyle{
+						LabelWidth:    140,
+						Width:         220,
+						PaddingBottom: 10,
+					},
+				},
+			},
+			{
+				Type: definition.PluginSettingDefinitionTypeSelect,
+				Value: &definition.PluginSettingValueSelect{
+					Key:          "DecimalSeparator",
+					Label:        "i18n:plugin_calculator_decimal_separator",
+					DefaultValue: "System Locale",
+					Options: []definition.PluginSettingValueSelectOption{
+						{Label: "i18n:plugin_calculator_decimal_separator_system_locale", Value: "System Locale"},
+						{Label: "i18n:plugin_calculator_decimal_separator_dot", Value: "Dot"},
+						{Label: "i18n:plugin_calculator_decimal_separator_comma", Value: "Comma"},
+					},
+					Tooltip: "i18n:plugin_calculator_decimal_separator_description",
+					Style: definition.PluginSettingValueStyle{
+						LabelWidth:    140,
+						Width:         220,
+						PaddingBottom: 10,
+					},
+				},
+			},
+			{
+				Type:  definition.PluginSettingDefinitionTypeNewLine,
+				Value: &definition.PluginSettingValueNewLine{},
+			},
+			{
+				Type: definition.PluginSettingDefinitionTypeDynamic,
+				Value: &definition.PluginSettingValueDynamic{
+					Key: "SeparatorPreview",
 				},
 			},
 		},
@@ -150,6 +116,27 @@ func (c *CalculatorPlugin) GetMetadata() plugin.Metadata {
 
 func (c *CalculatorPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	c.api = initParams.API
+	c.api.OnGetDynamicSetting(ctx, func(ctx context.Context, key string) definition.PluginSettingDefinitionItem {
+		if key == "SeparatorPreview" {
+			thousandsSep, decimalSep := c.getSeparators(ctx)
+			sampleNumber := "1234567.89"
+			if thousandsSep != "" {
+				sampleNumber = c.addThousandsSeparator("1234567", thousandsSep) + decimalSep + "89"
+			} else {
+				sampleNumber = "1234567" + decimalSep + "89"
+			}
+
+			return definition.PluginSettingDefinitionItem{
+				Type: definition.PluginSettingDefinitionTypeLabel,
+				Value: &definition.PluginSettingValueLabel{
+					Content: c.api.GetTranslation(ctx, "plugin_calculator_separator_preview_example") + ": " + sampleNumber,
+				},
+			}
+		}
+
+		return definition.PluginSettingDefinitionItem{}
+	})
+
 	c.debounceInterval = 500 * time.Millisecond // 500ms debounce interval
 	c.histories = c.loadHistories(ctx)
 }
@@ -163,8 +150,7 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 		}
 
 		// Try to calculate the expression, if it fails then it's not a valid calculator expression
-		mode := c.getSeparatorMode(ctx)
-		thousandsSep, decimalSep := GetSeparators(mode)
+		thousandsSep, decimalSep := c.getSeparators(ctx)
 		val, err := Calculate(query.Search, thousandsSep, decimalSep)
 		if err != nil {
 			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Calculator failed to parse expression: %v", err))
@@ -210,9 +196,8 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 	}
 
 	// only show history if query has trigger keyword
-
 	if query.TriggerKeyword != "" {
-		thousandsSep, decimalSep := GetSeparators(c.getSeparatorMode(ctx))
+		thousandsSep, decimalSep := c.getSeparators(ctx)
 		val, err := Calculate(query.Search, thousandsSep, decimalSep)
 		if err == nil {
 			result := val.String()
@@ -306,6 +291,91 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 	}
 
 	return results
+}
+
+func (c *CalculatorPlugin) getDecimalSeparator(ctx context.Context) DecimalSeparator {
+	mode := c.api.GetSetting(ctx, "DecimalSeparator")
+	if mode == "" {
+		return DecimalSeparatorSystem
+	}
+	return DecimalSeparator(mode)
+}
+
+func (c *CalculatorPlugin) getThousandsSeparator(ctx context.Context) ThousandsSeparator {
+	mode := c.api.GetSetting(ctx, "ThousandsSeparator")
+	if mode == "" {
+		return ThousandsSeparatorSystem
+	}
+	return ThousandsSeparator(mode)
+}
+
+func (c *CalculatorPlugin) getSeparators(ctx context.Context) (thousandsSep string, decimalSep string) {
+	decimalSep = GetDecimalSeparator(c.getDecimalSeparator(ctx))
+	thousandsSep = GetThousandsSeparator(c.getThousandsSeparator(ctx), decimalSep)
+	if decimalSep != "" && decimalSep == thousandsSep {
+		thousandsSep = ""
+	}
+
+	return thousandsSep, decimalSep
+}
+
+func (c *CalculatorPlugin) formatWithThousandsSeparator(ctx context.Context, val decimal.Decimal) string {
+	valStr := val.String()
+	parts := strings.Split(valStr, ".")
+
+	thousandsSep, decimalSep := c.getSeparators(ctx)
+
+	intPart := parts[0]
+	// Handle negative numbers
+	negative := false
+	if strings.HasPrefix(intPart, "-") {
+		negative = true
+		intPart = intPart[1:]
+	}
+
+	// Add thousands separators
+	formattedInt := c.addThousandsSeparator(intPart, thousandsSep)
+
+	if negative {
+		formattedInt = "-" + formattedInt
+	}
+
+	if len(parts) == 2 {
+		return formattedInt + decimalSep + parts[1]
+	}
+
+	return formattedInt
+}
+
+// addThousandsSeparator adds separators to an integer string
+func (c *CalculatorPlugin) addThousandsSeparator(s string, sep string) string {
+	n := len(s)
+	if n <= 3 {
+		return s
+	}
+
+	// Calculate how many separators we need
+	numSeps := (n - 1) / 3
+	// sep can be multi-byte? usually just 1 byte but string is safer
+	sepLen := len(sep)
+
+	result := make([]byte, n+numSeps*sepLen)
+
+	// Fill from right to left
+	j := len(result) - 1
+	for i := n - 1; i >= 0; i-- {
+		result[j] = s[i]
+		j--
+		// Add separator every 3 digits, but not at the beginning
+		if (n-i)%3 == 0 && i > 0 {
+			for k := sepLen - 1; k >= 0; k-- {
+				result[j] = sep[k]
+				j--
+			}
+		}
+	}
+
+	return string(result)
 }
 
 func (c *CalculatorPlugin) hasOperator(query string) bool {

@@ -20,5 +20,7 @@ func (p *PluginSettingValueDynamic) GetDefaultValue() string {
 	return ""
 }
 
-func (p *PluginSettingValueDynamic) Translate(translator func(ctx context.Context, key string) string) {
+func (p *PluginSettingValueDynamic) Translate(translator func(ctx context.Context, key string) string) PluginSettingDefinitionValue {
+	copy := *p
+	return &copy
 }

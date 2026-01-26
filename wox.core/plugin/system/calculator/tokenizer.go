@@ -145,6 +145,7 @@ func isAlNum(char rune) bool {
 }
 
 func tokenize(input string, thousandsSep, decimalSep string) ([]token, error) {
+	input = normalizeNumberSeparators(input)
 	chars := []rune(input)
 	i := 0
 	n := len(chars)
@@ -182,4 +183,14 @@ func tokenize(input string, thousandsSep, decimalSep string) ([]token, error) {
 	}
 	tokens = append(tokens, token{kind: eosToken})
 	return tokens, nil
+}
+
+func normalizeNumberSeparators(input string) string {
+	replacer := strings.NewReplacer(
+		"\u00A0", " ", // no-break space
+		"\u202F", " ", // narrow no-break space
+		"\u2009", " ", // thin space
+		"\u2007", " ", // figure space
+	)
+	return replacer.Replace(input)
 }

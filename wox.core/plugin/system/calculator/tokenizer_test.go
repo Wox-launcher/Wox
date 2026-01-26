@@ -69,6 +69,39 @@ func TestTokenize(t *testing.T) {
 			},
 			hasError: false,
 		},
+		// Test SI format (Space thousands, Comma decimal)
+		{
+			input:        "1 234,56",
+			thousandsSep: " ",
+			decimalSep:   ",",
+			expected: []token{
+				{kind: numberToken, val: decimal.NewFromFloat(1234.56)},
+				{kind: eosToken},
+			},
+			hasError: false,
+		},
+		// Test SI format with narrow no-break space
+		{
+			input:        "1\u202F234,56",
+			thousandsSep: " ",
+			decimalSep:   ",",
+			expected: []token{
+				{kind: numberToken, val: decimal.NewFromFloat(1234.56)},
+				{kind: eosToken},
+			},
+			hasError: false,
+		},
+		// Test Swiss format (Apostrophe thousands, Dot decimal)
+		{
+			input:        "1'234.56",
+			thousandsSep: "'",
+			decimalSep:   ".",
+			expected: []token{
+				{kind: numberToken, val: decimal.NewFromFloat(1234.56)},
+				{kind: eosToken},
+			},
+			hasError: false,
+		},
 		// Test Argument Separation Conflict: max(1,2) with Comma Decimal
 		// Should parse as one number 1.2
 		{

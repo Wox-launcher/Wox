@@ -7,7 +7,7 @@ import (
 
 const calculatorPluginID = "bd723c38-f28d-4152-8621-76fd21d6456e"
 
-func setCalculatorSeparatorMode(t *testing.T, mode string) {
+func setCalculatorSeparators(t *testing.T, decimalMode string, thousandsMode string) {
 	t.Helper()
 	var calcInstance *plugin.Instance
 	for _, instance := range plugin.GetPluginManager().GetPluginInstances() {
@@ -19,14 +19,17 @@ func setCalculatorSeparatorMode(t *testing.T, mode string) {
 	if calcInstance == nil {
 		t.Fatal("Calculator plugin instance not found")
 	}
-	if err := calcInstance.Setting.Set("SeparatorMode", mode); err != nil {
-		t.Fatalf("Failed to set separator mode: %v", err)
+	if err := calcInstance.Setting.Set("DecimalSeparator", decimalMode); err != nil {
+		t.Fatalf("Failed to set decimal separator mode: %v", err)
+	}
+	if err := calcInstance.Setting.Set("ThousandsSeparator", thousandsMode); err != nil {
+		t.Fatalf("Failed to set thousands separator mode: %v", err)
 	}
 }
 
 func TestCalculatorBasic(t *testing.T) {
 	suite := NewTestSuite(t)
-	setCalculatorSeparatorMode(t, "Dot")
+	setCalculatorSeparators(t, "Dot", "Comma")
 
 	tests := []QueryTest{
 		{
@@ -108,7 +111,7 @@ func TestCalculatorBasic(t *testing.T) {
 
 func TestCalculatorTrigonometric(t *testing.T) {
 	suite := NewTestSuite(t)
-	setCalculatorSeparatorMode(t, "Dot")
+	setCalculatorSeparators(t, "Dot", "Comma")
 
 	tests := []QueryTest{
 		{
@@ -148,7 +151,7 @@ func TestCalculatorTrigonometric(t *testing.T) {
 
 func TestCalculatorAdvanced(t *testing.T) {
 	suite := NewTestSuite(t)
-	setCalculatorSeparatorMode(t, "Dot")
+	setCalculatorSeparators(t, "Dot", "Comma")
 
 	tests := []QueryTest{
 		{
@@ -266,7 +269,7 @@ func TestCalculatorAdvanced(t *testing.T) {
 
 func TestCalculatorSeparators(t *testing.T) {
 	suite := NewTestSuite(t)
-	setCalculatorSeparatorMode(t, "Dot")
+	setCalculatorSeparators(t, "Dot", "Comma")
 	calculatorId := "bd723c38-f28d-4152-8621-76fd21d6456e"
 
 	// Find the plugin instance to ensure we update the correct setting store
@@ -281,19 +284,21 @@ func TestCalculatorSeparators(t *testing.T) {
 		t.Fatal("Calculator plugin instance not found")
 	}
 
-	// Helper to set separator mode
-	setMode := func(mode string) {
-		if err := calcInstance.Setting.Set("SeparatorMode", mode); err != nil {
-			t.Fatalf("Failed to set separator mode: %v", err)
+	// Helper to set separator modes
+	setModes := func(decimalMode string, thousandsMode string) {
+		if err := calcInstance.Setting.Set("DecimalSeparator", decimalMode); err != nil {
+			t.Fatalf("Failed to set decimal separator mode: %v", err)
 		}
-		// Allow some time for callbacks if any (though here we don't rely on callbacks for this test as we call api.GetSetting)
+		if err := calcInstance.Setting.Set("ThousandsSeparator", thousandsMode); err != nil {
+			t.Fatalf("Failed to set thousands separator mode: %v", err)
+		}
 	}
 
 	// Test Dot Mode (US: 1,234.56)
 	// Thousands: ,
 	// Decimal: .
 	t.Run("Dot Mode (US)", func(t *testing.T) {
-		setMode("Dot")
+		setModes("Dot", "Comma")
 		tests := []QueryTest{
 			{
 				Name:           "Dot Mode - Simple Addition",
@@ -327,7 +332,7 @@ func TestCalculatorSeparators(t *testing.T) {
 	// Thousands: .
 	// Decimal: ,
 	t.Run("Comma Mode (EU)", func(t *testing.T) {
-		setMode("Comma")
+		setModes("Comma", "Dot")
 		tests := []QueryTest{
 			{
 				Name:           "Comma Mode - Simple Addition",
@@ -351,6 +356,50 @@ func TestCalculatorSeparators(t *testing.T) {
 				Name:           "Comma Mode - Argument Separator",
 				Query:          "max(1; 2)", // Semicolon as separator (since comma is decimal)
 				ExpectedTitle:  "2",
+				ExpectedAction: "Copy",
+			},
+		}
+		suite.RunQueryTests(tests)
+	})
+
+	// Test Space thousands (SI: 1 234,56)
+	// Thousands: space
+	// Decimal: ,
+	t.Run("Space Thousands (SI)", func(t *testing.T) {
+		setModes("Comma", "Space")
+		tests := []QueryTest{
+			{
+				Name:           "Space Thousands - Simple Addition",
+				Query:          "1 000 + 200",
+				ExpectedTitle:  "1 200",
+				ExpectedAction: "Copy",
+			},
+			{
+				Name:           "Space Thousands - Output Format",
+				Query:          "1234,56 * 1",
+				ExpectedTitle:  "1 234,56",
+				ExpectedAction: "Copy",
+			},
+		}
+		suite.RunQueryTests(tests)
+	})
+
+	// Test Apostrophe thousands (Swiss: 1'234.56)
+	// Thousands: '
+	// Decimal: .
+	t.Run("Apostrophe Thousands (CH)", func(t *testing.T) {
+		setModes("Dot", "Apostrophe")
+		tests := []QueryTest{
+			{
+				Name:           "Apostrophe Thousands - Simple Addition",
+				Query:          "1'000 + 200",
+				ExpectedTitle:  "1'200",
+				ExpectedAction: "Copy",
+			},
+			{
+				Name:           "Apostrophe Thousands - Output Format",
+				Query:          "1234.56 * 1",
+				ExpectedTitle:  "1'234.56",
 				ExpectedAction: "Copy",
 			},
 		}
