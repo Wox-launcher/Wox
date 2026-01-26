@@ -149,6 +149,23 @@ func TestCalculatorTrigonometric(t *testing.T) {
 	suite.RunQueryTests(tests)
 }
 
+// calculator calculates should been done in < 10ms
+func TestCalculatorShouldHandleQuick(t *testing.T) {
+	suite := NewTestSuite(t)
+	setCalculatorSeparators(t, "Dot", "Comma")
+
+	tests := []QueryTest{
+		{
+			Name:           "Quick calculation 1",
+			Query:          "123456789 + 987654321",
+			ExpectedTitle:  "1,111,111,110",
+			ExpectedAction: "Copy",
+		},
+	}
+
+	suite.RunQueryTestsWithMaxDuration(tests, 10)
+}
+
 func TestCalculatorAdvanced(t *testing.T) {
 	suite := NewTestSuite(t)
 	setCalculatorSeparators(t, "Dot", "Comma")

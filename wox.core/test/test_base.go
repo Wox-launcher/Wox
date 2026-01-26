@@ -260,6 +260,17 @@ func (ts *TestSuite) RunQueryTests(tests []QueryTest) {
 	}
 }
 
+func (ts *TestSuite) RunQueryTestsWithMaxDuration(tests []QueryTest, maxDurationMs int64) {
+	startTime := time.Now()
+	ts.RunQueryTests(tests)
+	elapsed := time.Since(startTime).Milliseconds()
+	if elapsed > maxDurationMs {
+		ts.t.Errorf("Total test duration %v exceeded maximum allowed %v", elapsed, maxDurationMs)
+	} else {
+		ts.t.Logf("Total test duration %v within maximum allowed %v", elapsed, maxDurationMs)
+	}
+}
+
 // verifyAction checks if the expected action exists in the result
 func (ts *TestSuite) verifyAction(result plugin.QueryResultUI, expectedAction, testName, query string) (bool, []string) {
 	actualActions := make([]string, 0, len(result.Actions))

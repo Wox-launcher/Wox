@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - master
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -14,14 +13,13 @@ permissions:
 
 jobs:
   build:
-    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '#build') }}
     uses: ./.github/workflows/build-core.yml
     with:
       run_tests: true
-      build_macos_arm64: true
-      build_macos_amd64: true
-      build_windows_amd64: true
-      build_linux_amd64: true
+      build_macos_arm64: ${{ contains(github.event.head_commit.message, '#build') }}
+      build_macos_amd64: ${{ contains(github.event.head_commit.message, '#build') }}
+      build_windows_amd64: ${{ contains(github.event.head_commit.message, '#build') }}
+      build_linux_amd64: ${{ contains(github.event.head_commit.message, '#build') }}
       require_macos_notarize: true
       require_windows_signpath: true
       artifact_retention_days: 10
