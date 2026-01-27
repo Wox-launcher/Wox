@@ -47,6 +47,8 @@ import (
 	_ "wox/plugin/system/shell"
 
 	_ "wox/plugin/system/emoji"
+
+	_ "wox/plugin/system/explorer"
 )
 
 func main() {

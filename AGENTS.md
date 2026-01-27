@@ -139,6 +139,6 @@ This document guides AI coding agents working in this repository.
 ## Repo Rules
 
 - **Comments**: English only, concise, for complex logic only
-- **Don't compile**: Human will build and run Wox to verify changes
 - **Refactors**: Scan `AGENTS.md` and `README.md` files first
+- **Build**: Verify with `make build` in wox.core (you can skip UI build for small changes)
 - **Tests**: Run narrowest relevant tests after changes, avoid breaking unrelated tests
