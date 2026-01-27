@@ -170,10 +170,11 @@ func (a *WindowsRetriever) parseShortcut(ctx context.Context, appPath string) (a
 	displayName := strings.TrimSuffix(filepath.Base(appPath), filepath.Ext(appPath))
 
 	return appInfo{
-		Name: displayName,
-		Path: filepath.Clean(appPath),
-		Icon: icon,
-		Type: AppTypeDesktop,
+		Name:          displayName,
+		Path:          filepath.Clean(appPath),
+		Icon:          icon,
+		Type:          AppTypeDesktop,
+		IsDefaultIcon: icon.ImageData == appIcon.ImageData,
 	}, nil
 }
 
@@ -195,10 +196,11 @@ func (a *WindowsRetriever) parseExe(ctx context.Context, appPath string) (appInf
 	}
 
 	return appInfo{
-		Name: displayName,
-		Path: filepath.Clean(appPath),
-		Icon: icon,
-		Type: AppTypeDesktop,
+		Name:          displayName,
+		Path:          filepath.Clean(appPath),
+		Icon:          icon,
+		Type:          AppTypeDesktop,
+		IsDefaultIcon: icon.ImageData == appIcon.ImageData,
 	}, nil
 }
 

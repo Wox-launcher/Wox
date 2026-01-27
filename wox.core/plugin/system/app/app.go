@@ -45,7 +45,8 @@ type appInfo struct {
 
 	LastModifiedUnix int64 `json:"last_modified_unix,omitempty"`
 
-	Pid int `json:"-"`
+	Pid           int  `json:"-"`
+	IsDefaultIcon bool `json:"-"`
 }
 
 type appContextData struct {
@@ -125,6 +126,12 @@ func (a *ApplicationPlugin) GetMetadata() plugin.Metadata {
 		Features: []plugin.MetadataFeature{
 			{
 				Name: plugin.MetadataFeatureMRU,
+			},
+		},
+		Commands: []plugin.MetadataCommand{
+			{
+				Command:     "reindex",
+				Description: "i18n:plugin_app_command_reindex",
 			},
 		},
 		SettingDefinitions: []definition.PluginSettingDefinitionItem{
@@ -231,6 +238,42 @@ func (a *ApplicationPlugin) reuseAppFromCache(ctx context.Context, appPath strin
 }
 
 func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+	// clean cache and reindex apps
+	if query.Command == "reindex" {
+		reindexId := uuid.NewString()
+		return []plugin.QueryResult{
+			{
+				Id:    reindexId,
+				Title: "i18n:plugin_app_reindex",
+				Icon:  appIcon,
+				Actions: []plugin.QueryResultAction{
+					{
+						Name: "i18n:plugin_app_start_reindex",
+						Icon: common.ExecuteRunIcon,
+						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+							util.Go(ctx, "reindex app", func() {
+								// clean cache file first
+								cachePath := a.getAppCachePath()
+								if err := os.Remove(cachePath); err == nil {
+									a.api.Log(ctx, plugin.LogLevelInfo, "app cache file removed")
+								}
+								imageCache := util.GetLocation().GetImageCacheDirectory()
+								if err := os.RemoveAll(imageCache); err == nil {
+									a.api.Log(ctx, plugin.LogLevelInfo, "image cache directory removed")
+								}
+								// clear in-memory app list
+								a.apps = []appInfo{}
+
+								a.indexApps(ctx)
+								a.api.Notify(ctx, "i18n:plugin_app_reindex_completed")
+							})
+						},
+					},
+				},
+			},
+		}
+	}
+
 	var results []plugin.QueryResult
 	for _, info := range a.apps {
 		displayName := info.Name
@@ -425,12 +468,22 @@ func (a *ApplicationPlugin) watchAppChanges(ctx context.Context) {
 				}
 
 				//wait for file copy complete
-				time.Sleep(time.Second * 2)
+				time.Sleep(time.Second * 3)
 
-				info, getErr := a.retriever.ParseAppInfo(ctx, appPath)
-				if getErr != nil {
-					a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error getting app info for %s: %s", e.Name, getErr.Error()))
-					return
+				var info appInfo
+				var getErr error
+
+				// Retry a few times if icon is default (failed to load)
+				for i := 0; i < 3; i++ {
+					info, getErr = a.retriever.ParseAppInfo(ctx, appPath)
+					if getErr != nil {
+						a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error getting app info for %s: %s", e.Name, getErr.Error()))
+						return
+					}
+					if !info.IsDefaultIcon {
+						break
+					}
+					time.Sleep(time.Second * time.Duration(i+1))
 				}
 
 				a.populateAppMetadata(appPath, &info, nil)

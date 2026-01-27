@@ -7,7 +7,9 @@ import (
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/util"
+	"wox/util/fileicon"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -91,7 +93,11 @@ func TestMacRetriever_ParseAppInfo(t *testing.T) {
 	if util.IsMacOS() {
 		util.GetLocation().Init()
 		appRetriever.UpdateAPI(emptyAPIImpl{})
-		_, err := appRetriever.ParseAppInfo(nil, "/System/Applications/Siri.app")
+
+		appPath := "/Applications/Visual Studio Code.app"
+		fileicon.CleanFileIconCache(context.Background(), appPath)
+		info, err := appRetriever.ParseAppInfo(nil, appPath)
+		assert.False(t, info.IsDefaultIcon, "app should use a custom icon, not the default one")
 		require.NoError(t, err)
 	}
 }

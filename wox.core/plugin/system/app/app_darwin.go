@@ -113,6 +113,9 @@ func (a *MacRetriever) ParseAppInfo(ctx context.Context, path string) (appInfo, 
 		a.api.Log(ctx, plugin.LogLevelError, iconErr.Error())
 	}
 	info.Icon = icon
+	if info.Icon.ImageData == defaultAppIcon {
+		info.IsDefaultIcon = true
+	}
 
 	return info, nil
 }
