@@ -46,17 +46,6 @@ extern void overlayClickCallbackCGO(char* name);
 @property(nonatomic, strong) NSButton *closeButton;
 @property(nonatomic, strong) NSVisualEffectView *backgroundView;
 @property(nonatomic, assign) int stickyPid;
-@property(nonatomic, assign) NSWindow *trackedWindow; // If we find the NSWindow object (rare for other apps)
-// For external apps, we might need a timer to poll position if we really want "sticky" without addChildWindow (which requires same process usually, unless using specialized API).
-// Actually `addChildWindow` works for windows in same app. For external, we can't easily "attach".
-// Plan Scheme A: "Overlay tracks target window".
-// Realistically, polling is needed for external windows. Or just update on Show().
-// Previous implementation `monitor` was sending updates.
-// Here we just set position ONCE when Show() is called. The `explorer` plugin's monitor will call Show() repeatedly or on move?
-// User said: "monitor_darwin.m Listen for Finder activation... call overlay.Show".
-// If Finder moves, does overlay move?
-// If we implemented the monitor to track `kAXMovedNotification` etc, we could call Show() again.
-// For now, `Show` sets the position.
 @end
 
 @interface OverlayWindow ()
@@ -67,6 +56,10 @@ extern void overlayClickCallbackCGO(char* name);
 @property(nonatomic, assign) BOOL isMovable;
 @property(nonatomic, assign) BOOL isDragging;
 @property(nonatomic, assign) NSPoint initialWindowOrigin;
+// AXObserver for tracking window movement
+@property(nonatomic, assign) AXObserverRef axObserver;
+@property(nonatomic, assign) AXUIElementRef trackedWindow;
+@property(nonatomic, assign) OverlayOptions currentOpts;
 @end
 
 static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
@@ -103,6 +96,54 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 }
 @end
 
+// -----------------------------------------------------------------------------
+// Passthrough TextView - lets mouse events pass through to window for dragging
+// -----------------------------------------------------------------------------
+@interface PassthroughTextView : NSTextView
+@end
+
+@implementation PassthroughTextView
+- (NSView *)hitTest:(NSPoint)point {
+    return nil; // Let mouse events pass through to window
+}
+@end
+
+// -----------------------------------------------------------------------------
+// Passthrough ImageView - lets mouse events pass through to window for dragging
+// -----------------------------------------------------------------------------
+@interface PassthroughImageView : NSImageView
+@end
+
+@implementation PassthroughImageView
+- (NSView *)hitTest:(NSPoint)point {
+    return nil; // Let mouse events pass through to window
+}
+@end
+
+// -----------------------------------------------------------------------------
+// Passthrough VisualEffectView - lets mouse events pass through to window
+// -----------------------------------------------------------------------------
+@interface PassthroughVisualEffectView : NSVisualEffectView
+@end
+
+@implementation PassthroughVisualEffectView
+- (NSView *)hitTest:(NSPoint)point {
+    return nil; // Let mouse events pass through to window
+}
+@end
+
+// -----------------------------------------------------------------------------
+// Draggable Content View - accepts first mouse to enable immediate dragging
+// -----------------------------------------------------------------------------
+@interface DraggableContentView : NSView
+@end
+
+@implementation DraggableContentView
+- (BOOL)acceptsFirstMouse:(NSEvent *)event {
+    return YES; // Accept click even when window is not key
+}
+@end
+
 @implementation OverlayWindow
 
 - (instancetype)initWithContentRect:(NSRect)contentRect styleMask:(NSWindowStyleMask)style backing:(NSBackingStoreType)backingStoreType defer:(BOOL)flag {
@@ -114,9 +155,15 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         [self setHasShadow:YES];
         [self setLevel:NSFloatingWindowLevel];
         [self setCollectionBehavior:NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorTransient];
+        // Allow first click to trigger mouseDown instead of just activating window
+        [self setBecomesKeyOnlyIfNeeded:NO];
 
-        // Background
-        NSVisualEffectView *bg = [[NSVisualEffectView alloc] initWithFrame:self.contentView.bounds];
+        // Set custom content view that accepts first mouse
+        DraggableContentView *contentView = [[DraggableContentView alloc] initWithFrame:contentRect];
+        [self setContentView:contentView];
+        
+        // Background - use PassthroughVisualEffectView for drag support
+        PassthroughVisualEffectView *bg = [[PassthroughVisualEffectView alloc] initWithFrame:contentView.bounds];
         bg.material = NSVisualEffectMaterialHUDWindow;
         bg.state = NSVisualEffectStateActive;
         bg.blendingMode = NSVisualEffectBlendingModeBehindWindow;
@@ -126,14 +173,14 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         [self.contentView addSubview:bg positioned:NSWindowBelow relativeTo:nil];
         self.backgroundView = bg;
 
-        // Icon
-        self.iconView = [[NSImageView alloc] initWithFrame:NSMakeRect(12, 0, kIconSize, kIconSize)]; 
+        // Icon - use PassthroughImageView for drag support
+        self.iconView = [[PassthroughImageView alloc] initWithFrame:NSMakeRect(12, 0, kIconSize, kIconSize)]; 
         self.iconView.imageScaling = NSImageScaleProportionallyUpOrDown;
         self.iconView.hidden = YES;
         [self.contentView addSubview:self.iconView];
 
-        // Message (TextView for multiline)
-        self.messageView = [[NSTextView alloc] initWithFrame:NSZeroRect];
+        // Message (TextView for multiline) - use PassthroughTextView for drag support
+        self.messageView = [[PassthroughTextView alloc] initWithFrame:NSZeroRect];
         self.messageView.editable = NO;
         self.messageView.selectable = NO;
         self.messageView.drawsBackground = NO;
@@ -169,10 +216,11 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 }
 
 - (void)mouseDown:(NSEvent *)event {
+    self.initialLocation = [NSEvent mouseLocation];
+    self.initialWindowOrigin = self.frame.origin;
+
     if (self.isMovable) {
         self.isDragging = YES;
-        self.initialLocation = [NSEvent mouseLocation];
-        self.initialWindowOrigin = self.frame.origin;
     }
 }
 
@@ -227,7 +275,8 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 
 - (void)mouseExited:(NSEvent *)event {
     self.isMouseInside = NO;
-    if (self.isAutoClosePending) {
+    // Don't auto-close while dragging
+    if (self.isAutoClosePending && !self.isDragging) {
         [self onClose];
     }
 }
@@ -269,9 +318,24 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 
 - (void)onClose {
     [self stopAutoCloseTimer];
+    [self stopTrackingWindow];
     [self close];
     if (gOverlayWindows && self.name) {
         [gOverlayWindows removeObjectForKey:self.name];
+    }
+}
+
+- (void)stopTrackingWindow {
+    if (self.axObserver) {
+        CFRunLoopRemoveSource(CFRunLoopGetMain(), 
+                              AXObserverGetRunLoopSource(self.axObserver), 
+                              kCFRunLoopDefaultMode);
+        CFRelease(self.axObserver);
+        self.axObserver = NULL;
+    }
+    if (self.trackedWindow) {
+        CFRelease(self.trackedWindow);
+        self.trackedWindow = NULL;
     }
 }
 
@@ -287,8 +351,8 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 
 - (void)updateLayoutWithOptions:(OverlayOptions)opts {
     // 0. Reset State
-    self.isMouseInside = NO; 
     self.isMovable = opts.movable;
+    self.isDragging = NO;
     [self stopAutoCloseTimer];
 
     // 1. Content Update
@@ -417,6 +481,126 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
     
     // 4. Auto Close (Timer)
     [self startAutoCloseTimer:(NSTimeInterval)opts.autoCloseSeconds];
+    
+    // 5. Store options and setup window tracking
+    self.currentOpts = opts;
+    if (opts.stickyWindowPid > 0) {
+        [self startTrackingWindowWithPid:opts.stickyWindowPid];
+    } else {
+        [self stopTrackingWindow];
+    }
+}
+
+// AXObserver callback - called when tracked window moves or resizes
+static void axObserverCallback(AXObserverRef observer, AXUIElementRef element, CFStringRef notification, void *refcon) {
+    OverlayWindow *win = (__bridge OverlayWindow *)refcon;
+    // Call directly without dispatch_async for smoother tracking
+    // AXObserver is already called from the main RunLoop
+    [win updatePositionFromTrackedWindow];
+}
+
+- (void)startTrackingWindowWithPid:(pid_t)pid {
+    // Stop any existing tracking first
+    [self stopTrackingWindow];
+    
+    // Create AXUIElement for the application
+    AXUIElementRef app = AXUIElementCreateApplication(pid);
+    if (!app) return;
+    
+    // Get the focused window
+    AXUIElementRef frontWindow = NULL;
+    AXError err = AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute, (CFTypeRef *)&frontWindow);
+    if (err != kAXErrorSuccess || !frontWindow) {
+        CFRelease(app);
+        return;
+    }
+    
+    // Store the tracked window
+    self.trackedWindow = frontWindow;
+    
+    // Create AXObserver
+    AXObserverRef observer = NULL;
+    err = AXObserverCreate(pid, axObserverCallback, &observer);
+    if (err != kAXErrorSuccess || !observer) {
+        CFRelease(app);
+        CFRelease(frontWindow);
+        self.trackedWindow = NULL;
+        return;
+    }
+    
+    self.axObserver = observer;
+    
+    // Add notifications for window movement and resize
+    AXObserverAddNotification(observer, frontWindow, kAXMovedNotification, (__bridge void *)self);
+    AXObserverAddNotification(observer, frontWindow, kAXResizedNotification, (__bridge void *)self);
+    
+    // Add observer to run loop
+    CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), kCFRunLoopDefaultMode);
+    
+    CFRelease(app);
+}
+
+- (void)updatePositionFromTrackedWindow {
+    if (!self.trackedWindow) return;
+    
+    // Get current window position and size
+    CFTypeRef posVal = NULL, sizeVal = NULL;
+    CGPoint pos; CGSize size;
+    
+    AXError err1 = AXUIElementCopyAttributeValue(self.trackedWindow, kAXPositionAttribute, &posVal);
+    AXError err2 = AXUIElementCopyAttributeValue(self.trackedWindow, kAXSizeAttribute, &sizeVal);
+    
+    if (err1 != kAXErrorSuccess || err2 != kAXErrorSuccess || !posVal || !sizeVal) {
+        if (posVal) CFRelease(posVal);
+        if (sizeVal) CFRelease(sizeVal);
+        return;
+    }
+    
+    AXValueGetValue(posVal, kAXValueCGPointType, &pos);
+    AXValueGetValue(sizeVal, kAXValueCGSizeType, &size);
+    
+    NSScreen *mainScreen = [NSScreen mainScreen];
+    CGFloat screenH = mainScreen.frame.size.height;
+    CGFloat cocoaY = screenH - pos.y - size.height;
+    CGRect targetRect = CGRectMake(pos.x, cocoaY, size.width, size.height);
+    
+    CFRelease(posVal);
+    CFRelease(sizeVal);
+    
+    // Calculate new position based on anchor
+    OverlayOptions opts = self.currentOpts;
+    CGFloat ax = targetRect.origin.x;
+    CGFloat ay = targetRect.origin.y;
+    CGFloat aw = targetRect.size.width;
+    CGFloat ah = targetRect.size.height;
+    
+    CGFloat px, py;
+    int col = opts.anchor % 3;
+    if (col == 0) px = ax;
+    else if (col == 1) px = ax + aw / 2;
+    else px = ax + aw;
+    
+    int row = opts.anchor / 3;
+    if (row == 0) py = ay + ah;
+    else if (row == 1) py = ay + ah / 2;
+    else py = ay;
+    
+    CGFloat ow = self.frame.size.width;
+    CGFloat oh = self.frame.size.height;
+    CGFloat ox = 0, oy = 0;
+    
+    if (col == 0) ox = 0;
+    else if (col == 1) ox = -ow/2;
+    else ox = -ow;
+    
+    if (row == 0) oy = -oh;
+    else if (row == 1) oy = -oh/2;
+    else oy = 0;
+    
+    CGFloat finalX = px + ox + opts.offsetX;
+    CGFloat finalY = py + oy + opts.offsetY;
+    
+    [self setFrameOrigin:NSMakePoint(finalX, finalY)];
 }
 
 @end
