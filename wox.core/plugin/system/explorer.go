@@ -30,7 +30,8 @@ type openSaveHistoryEntry struct {
 }
 
 const (
-	openSaveHistorySettingKey = "openSaveHistory"
+	openSaveHistorySettingKey  = "openSaveHistory"
+	showExplorerHintSettingKey = "showExplorerHint"
 )
 
 func init() {
@@ -60,7 +61,16 @@ func (c *ExplorerPlugin) GetMetadata() plugin.Metadata {
 			"Windows",
 			"Macos",
 		},
-		SettingDefinitions: definition.PluginSettingDefinitions{},
+		SettingDefinitions: definition.PluginSettingDefinitions{
+			{
+				Type: definition.PluginSettingDefinitionTypeCheckBox,
+				Value: &definition.PluginSettingValueCheckBox{
+					Key:          showExplorerHintSettingKey,
+					Label:        "i18n:plugin_explorer_setting_show_hint",
+					DefaultValue: "true",
+				},
+			},
+		},
 		Features: []plugin.MetadataFeature{
 			{
 				Name: plugin.MetadataFeatureQueryEnv,
