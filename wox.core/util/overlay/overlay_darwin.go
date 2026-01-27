@@ -1,97 +1,116 @@
-//go:build darwin
-
 package overlay
 
 /*
 #cgo CFLAGS: -x objective-c
 #cgo LDFLAGS: -framework Cocoa -framework ApplicationServices
 #include <stdlib.h>
+#include <stdbool.h>
 
-extern void overlayClickCallbackCGO();
-extern void finderActivationCallbackCGO(int x, int y, int width, int height);
+typedef struct {
+    char* name;
+    char* title;
+    char* message;
+    unsigned char* iconData;
+    int iconLen;
+    bool closable;
+    int stickyWindowPid;
+    int anchor;
+    int autoCloseSeconds;
+    bool movable;
+    float offsetX;
+    float offsetY;
+    float width;
+    float height;
+} OverlayOptions;
 
-void showExplorerHint(int x, int y, int width, int height, const char* message, const unsigned char* iconData, int iconLen, void (*callback)());
-void hideExplorerHint();
-void startAppActivationListener(void (*callback)(int x, int y, int width, int height));
-void stopAppActivationListener();
+void ShowOverlay(OverlayOptions opts);
+void CloseOverlay(char* name);
+
+// Callback from C
+void overlayClickCallbackCGO(char* name);
+
 */
 import "C"
 import (
+	"bytes"
+	"image"
+	"image/png"
 	"unsafe"
 
 	"golang.design/x/hotkey/mainthread"
 )
 
-var overlayClickCallback OverlayClickCallback
-var finderActivationCallback func(windowFrame Rect)
+var clickCallbacks = make(map[string]func())
 
 //export overlayClickCallbackCGO
-func overlayClickCallbackCGO() {
-	if overlayClickCallback != nil {
-		overlayClickCallback()
+func overlayClickCallbackCGO(cName *C.char) {
+	name := C.GoString(cName)
+	if cb, ok := clickCallbacks[name]; ok {
+		cb()
 	}
 }
 
-//export finderActivationCallbackCGO
-func finderActivationCallbackCGO(x C.int, y C.int, width C.int, height C.int) {
-	if finderActivationCallback != nil {
-		finderActivationCallback(Rect{
-			X:      int(x),
-			Y:      int(y),
-			Width:  int(width),
-			Height: int(height),
-		})
+func Show(opts OverlayOptions) {
+	if opts.OnClick != nil {
+		clickCallbacks[opts.Name] = opts.OnClick
 	}
-}
-
-// ShowExplorerHint displays an explorer hint overlay window.
-func ShowExplorerHint(windowFrame Rect, message string, iconData []byte, onClick OverlayClickCallback) {
-	overlayClickCallback = onClick
 
 	mainthread.Call(func() {
-		cMessage := C.CString(message)
+		cName := C.CString(opts.Name)
+		defer C.free(unsafe.Pointer(cName))
+
+		cTitle := C.CString(opts.Title)
+		defer C.free(unsafe.Pointer(cTitle))
+
+		cMessage := C.CString(opts.Message)
 		defer C.free(unsafe.Pointer(cMessage))
 
 		var cIconData *C.uchar
 		var cIconLen C.int
-		if len(iconData) > 0 {
-			cIconData = (*C.uchar)(unsafe.Pointer(&iconData[0]))
-			cIconLen = C.int(len(iconData))
+
+		pngBytes, _ := imageToPNG(opts.Icon)
+		if len(pngBytes) > 0 {
+			cIconData = (*C.uchar)(unsafe.Pointer(&pngBytes[0]))
+			cIconLen = C.int(len(pngBytes))
 		}
 
-		C.showExplorerHint(
-			C.int(windowFrame.X),
-			C.int(windowFrame.Y),
-			C.int(windowFrame.Width),
-			C.int(windowFrame.Height),
-			cMessage,
-			cIconData,
-			cIconLen,
-			nil,
-		)
+		cOpts := C.OverlayOptions{
+			name:             cName,
+			title:            cTitle,
+			message:          cMessage,
+			iconData:         cIconData,
+			iconLen:          cIconLen,
+			closable:         C.bool(opts.Closable),
+			stickyWindowPid:  C.int(opts.StickyWindowPid),
+			anchor:           C.int(opts.Anchor),
+			autoCloseSeconds: C.int(opts.AutoCloseSeconds),
+			movable:          C.bool(opts.Movable),
+			offsetX:          C.float(opts.OffsetX),
+			offsetY:          C.float(-opts.OffsetY), // Invert Y for MacOS to match Y-Down semantics requested
+			width:            C.float(opts.Width),
+			height:           C.float(opts.Height),
+		}
+
+		C.ShowOverlay(cOpts)
 	})
 }
 
-// HideExplorerHint hides the currently displayed explorer hint overlay.
-func HideExplorerHint() {
-	mainthread.Call(func() {
-		C.hideExplorerHint()
-	})
+func imageToPNG(img image.Image) ([]byte, error) {
+	if img == nil {
+		return nil, nil
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
-// StartAppActivationListener starts listening for app activation events.
-func StartAppActivationListener(onFinderActivated func(windowFrame Rect)) {
-	finderActivationCallback = onFinderActivated
-
+func Close(name string) {
+	delete(clickCallbacks, name)
 	mainthread.Call(func() {
-		C.startAppActivationListener(nil)
+		cName := C.CString(name)
+		defer C.free(unsafe.Pointer(cName))
+		C.CloseOverlay(cName)
 	})
-}
-
-// StopAppActivationListener stops listening for app activation events.
-func StopAppActivationListener() {
-	mainthread.Call(func() {
-		C.stopAppActivationListener()
-	})
-	finderActivationCallback = nil
 }

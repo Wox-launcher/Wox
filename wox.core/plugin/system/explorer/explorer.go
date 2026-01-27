@@ -1,4 +1,4 @@
-package system
+package explorer
 
 import (
 	"context"
@@ -100,7 +100,7 @@ func (c *ExplorerPlugin) Init(ctx context.Context, initParams plugin.InitParams)
 			if value == "true" {
 				c.startOverlayListener(callbackCtx)
 			} else {
-				overlay.StopAppActivationListener()
+				StopMonitor()
 			}
 		}
 	})
@@ -410,18 +410,23 @@ func (c *ExplorerPlugin) loadOpenSaveHistory(ctx context.Context) *util.HashMap[
 }
 
 func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
-	overlay.StartAppActivationListener(func(windowFrame overlay.Rect) {
-		var iconData []byte
-
+	StartMonitor(func(pid int) {
 		message := i18n.GetI18nManager().TranslateWox(ctx, "plugin_explorer_hint_message")
-
-		overlay.ShowExplorerHint(windowFrame, message, iconData, func() {
-			query := common.PlainQuery{
-				QueryType: "Input",
-				QueryText: "explorer ",
-			}
-			c.api.ChangeQuery(ctx, query)
-			c.api.ShowApp(ctx)
+		overlay.Show(overlay.OverlayOptions{
+			Name:            "explorer_hint",
+			Message:         message,
+			StickyWindowPid: pid,
+			Anchor:          overlay.AnchorBottomRight,
+			OffsetX:         -16,
+			OffsetY:         16,
+			OnClick: func() {
+				query := common.PlainQuery{
+					QueryType: "Input",
+					QueryText: "explorer ",
+				}
+				c.api.ChangeQuery(ctx, query)
+				c.api.ShowApp(ctx)
+			},
 		})
 	})
 }
