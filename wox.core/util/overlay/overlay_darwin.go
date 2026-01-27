@@ -2,7 +2,7 @@ package overlay
 
 /*
 #cgo CFLAGS: -x objective-c
-#cgo LDFLAGS: -framework Cocoa -framework ApplicationServices
+#cgo LDFLAGS: -framework Cocoa -framework ApplicationServices -framework CoreVideo
 #include <stdlib.h>
 #include <stdbool.h>
 

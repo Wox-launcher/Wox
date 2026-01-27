@@ -1,6 +1,7 @@
 #import <Cocoa/Cocoa.h>
 #import <QuartzCore/QuartzCore.h>
 #import <CoreGraphics/CoreGraphics.h>
+#import <CoreVideo/CoreVideo.h>
 #import <ApplicationServices/ApplicationServices.h>
 
 // -----------------------------------------------------------------------------
@@ -60,6 +61,10 @@ extern void overlayClickCallbackCGO(char* name);
 @property(nonatomic, assign) AXObserverRef axObserver;
 @property(nonatomic, assign) AXUIElementRef trackedWindow;
 @property(nonatomic, assign) OverlayOptions currentOpts;
+// Timer for delayed show after window stops moving
+@property(nonatomic, strong) NSTimer *showDelayTimer;
+// Target window number for z-order management
+@property(nonatomic, assign) CGWindowID stickyWindowNumber;
 @end
 
 static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
@@ -326,6 +331,10 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 }
 
 - (void)stopTrackingWindow {
+    // Cancel show delay timer
+    [self.showDelayTimer invalidate];
+    self.showDelayTimer = nil;
+    
     if (self.axObserver) {
         CFRunLoopRemoveSource(CFRunLoopGetMain(), 
                               AXObserverGetRunLoopSource(self.axObserver), 
@@ -336,6 +345,45 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
     if (self.trackedWindow) {
         CFRelease(self.trackedWindow);
         self.trackedWindow = NULL;
+    }
+}
+
+// Get the focused window number for a given PID
+- (CGWindowID)getWindowNumberForPid:(pid_t)pid {
+    CGWindowID result = 0;
+    
+    // Get all windows
+    CFArrayRef windowList = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements, kCGNullWindowID);
+    if (!windowList) return 0;
+    
+    // Find the frontmost window for this PID
+    for (CFIndex i = 0; i < CFArrayGetCount(windowList); i++) {
+        NSDictionary *windowInfo = (NSDictionary *)CFArrayGetValueAtIndex(windowList, i);
+        NSNumber *windowPid = windowInfo[(id)kCGWindowOwnerPID];
+        NSNumber *windowNumber = windowInfo[(id)kCGWindowNumber];
+        NSNumber *windowLayer = windowInfo[(id)kCGWindowLayer];
+        
+        // Only consider normal layer windows (layer 0)
+        if ([windowPid intValue] == pid && [windowLayer intValue] == 0) {
+            result = [windowNumber unsignedIntValue];
+            break; // First one found is typically the frontmost
+        }
+    }
+    
+    CFRelease(windowList);
+    return result;
+}
+
+// Order overlay window relative to sticky window
+- (void)orderRelativeToStickyWindow {
+    if (self.stickyWindowNumber > 0) {
+        // Use normal window level and order above the target window
+        [self setLevel:NSNormalWindowLevel];
+        [self orderWindow:NSWindowAbove relativeTo:self.stickyWindowNumber];
+    } else {
+        // Fallback to floating level
+        [self setLevel:NSFloatingWindowLevel];
+        [self orderFront:nil];
     }
 }
 
@@ -419,6 +467,10 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
     
     if (opts.stickyWindowPid > 0) {
         pid_t pid = (pid_t)opts.stickyWindowPid;
+        
+        // Get window number for z-order management
+        self.stickyWindowNumber = [self getWindowNumberForPid:pid];
+        
         AXUIElementRef app = AXUIElementCreateApplication(pid);
         AXUIElementRef frontWindow = NULL;
         AXError err = AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute, (CFTypeRef *)&frontWindow);
@@ -429,9 +481,28 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
             AXUIElementCopyAttributeValue(frontWindow, kAXSizeAttribute, &sizeVal);
             AXValueGetValue(posVal, kAXValueCGPointType, &pos);
             AXValueGetValue(sizeVal, kAXValueCGSizeType, &size);
-            NSScreen *mainScreen = [NSScreen mainScreen];
-            CGFloat screenH = mainScreen.frame.size.height;
-            CGFloat cocoaY = screenH - pos.y - size.height;
+            
+            // Find the screen containing the window center
+            NSPoint windowCenter = NSMakePoint(pos.x + size.width / 2, pos.y + size.height / 2);
+            NSScreen *targetScreen = nil;
+            for (NSScreen *screen in [NSScreen screens]) {
+                // Convert screen frame from Cocoa to CG coordinates for comparison
+                NSRect screenFrame = screen.frame;
+                CGFloat mainScreenH = [NSScreen mainScreen].frame.size.height;
+                CGRect cgScreenFrame = CGRectMake(screenFrame.origin.x, 
+                                                   mainScreenH - screenFrame.origin.y - screenFrame.size.height, 
+                                                   screenFrame.size.width, 
+                                                   screenFrame.size.height);
+                if (CGRectContainsPoint(cgScreenFrame, windowCenter)) {
+                    targetScreen = screen;
+                    break;
+                }
+            }
+            if (!targetScreen) targetScreen = [NSScreen mainScreen];
+            
+            // Convert CG coordinates to Cocoa coordinates using main screen height
+            CGFloat mainScreenH = [NSScreen mainScreen].frame.size.height;
+            CGFloat cocoaY = mainScreenH - pos.y - size.height;
             targetRect = CGRectMake(pos.x, cocoaY, size.width, size.height);
             CFRelease(posVal); CFRelease(sizeVal); CFRelease(frontWindow);
         } else {
@@ -439,6 +510,7 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         }
         CFRelease(app);
     } else {
+        self.stickyWindowNumber = 0;
         targetRect = [NSScreen mainScreen].frame;
         targetRect = [NSScreen mainScreen].visibleFrame;
     }
@@ -494,9 +566,38 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 // AXObserver callback - called when tracked window moves or resizes
 static void axObserverCallback(AXObserverRef observer, AXUIElementRef element, CFStringRef notification, void *refcon) {
     OverlayWindow *win = (__bridge OverlayWindow *)refcon;
-    // Call directly without dispatch_async for smoother tracking
-    // AXObserver is already called from the main RunLoop
-    [win updatePositionFromTrackedWindow];
+    // Hide immediately when window is being moved
+    [win handleTrackedWindowMoved];
+}
+
+- (void)handleTrackedWindowMoved {
+    // Cancel any pending show timer
+    [self.showDelayTimer invalidate];
+    self.showDelayTimer = nil;
+    
+    // Hide the overlay immediately
+    self.alphaValue = 0;
+    
+    // Schedule delayed show after window stops moving (500ms delay)
+    self.showDelayTimer = [NSTimer scheduledTimerWithTimeInterval:0.5
+                                                           target:self
+                                                         selector:@selector(showAfterWindowStopped)
+                                                         userInfo:nil
+                                                          repeats:NO];
+}
+
+- (void)showAfterWindowStopped {
+    self.showDelayTimer = nil;
+    
+    // Update stickyWindowNumber for z-order
+    if (self.currentOpts.stickyWindowPid > 0) {
+        self.stickyWindowNumber = [self getWindowNumberForPid:self.currentOpts.stickyWindowPid];
+    }
+    
+    // Update position and show
+    [self updatePositionFromTrackedWindow];
+    [self orderRelativeToStickyWindow];
+    self.alphaValue = 1.0;
 }
 
 - (void)startTrackingWindowWithPid:(pid_t)pid {
@@ -541,14 +642,28 @@ static void axObserverCallback(AXObserverRef observer, AXUIElementRef element, C
 }
 
 - (void)updatePositionFromTrackedWindow {
-    if (!self.trackedWindow) return;
+    if (self.currentOpts.stickyWindowPid <= 0) return;
+    
+    // Always get the current focused window (not the cached one)
+    AXUIElementRef app = AXUIElementCreateApplication(self.currentOpts.stickyWindowPid);
+    if (!app) return;
+    
+    AXUIElementRef frontWindow = NULL;
+    AXError err = AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute, (CFTypeRef *)&frontWindow);
+    if (err != kAXErrorSuccess || !frontWindow) {
+        CFRelease(app);
+        return;
+    }
     
     // Get current window position and size
     CFTypeRef posVal = NULL, sizeVal = NULL;
     CGPoint pos; CGSize size;
     
-    AXError err1 = AXUIElementCopyAttributeValue(self.trackedWindow, kAXPositionAttribute, &posVal);
-    AXError err2 = AXUIElementCopyAttributeValue(self.trackedWindow, kAXSizeAttribute, &sizeVal);
+    AXError err1 = AXUIElementCopyAttributeValue(frontWindow, kAXPositionAttribute, &posVal);
+    AXError err2 = AXUIElementCopyAttributeValue(frontWindow, kAXSizeAttribute, &sizeVal);
+    
+    CFRelease(frontWindow);
+    CFRelease(app);
     
     if (err1 != kAXErrorSuccess || err2 != kAXErrorSuccess || !posVal || !sizeVal) {
         if (posVal) CFRelease(posVal);
@@ -559,13 +674,19 @@ static void axObserverCallback(AXObserverRef observer, AXUIElementRef element, C
     AXValueGetValue(posVal, kAXValueCGPointType, &pos);
     AXValueGetValue(sizeVal, kAXValueCGSizeType, &size);
     
-    NSScreen *mainScreen = [NSScreen mainScreen];
-    CGFloat screenH = mainScreen.frame.size.height;
-    CGFloat cocoaY = screenH - pos.y - size.height;
-    CGRect targetRect = CGRectMake(pos.x, cocoaY, size.width, size.height);
-    
     CFRelease(posVal);
     CFRelease(sizeVal);
+    
+    // Convert AX coordinates (top-left origin, primary screen) to Cocoa coordinates (bottom-left origin, primary screen)
+    // IMPORTANT: specific screen height must be the PRIMARY screen's height, not [NSScreen mainScreen] which changes based on focus
+    NSScreen *primaryScreen = [[NSScreen screens] firstObject];
+    CGFloat screenH = primaryScreen.frame.size.height;
+    CGFloat cocoaY = screenH - pos.y - size.height;
+    
+    NSLog(@"[OverlayDebug] PID: %d, AXPos:(%f, %f), AXSize:(%f, %f), PrimaryScreenH:%f, CocoaY:%f", 
+          self.currentOpts.stickyWindowPid, pos.x, pos.y, size.width, size.height, screenH, cocoaY);
+    
+    CGRect targetRect = CGRectMake(pos.x, cocoaY, size.width, size.height);
     
     // Calculate new position based on anchor
     OverlayOptions opts = self.currentOpts;
@@ -630,12 +751,8 @@ void ShowOverlay(OverlayOptions opts) {
         }
 
         [win updateLayoutWithOptions:opts];
-        [win orderFront:nil];
-        win.alphaValue = 0;
-        [NSAnimationContext runAnimationGroup:^(NSAnimationContext *ctx){
-            ctx.duration = 0.2;
-            win.animator.alphaValue = 1.0;
-        } completionHandler:nil];
+        [win orderRelativeToStickyWindow];
+        win.alphaValue = 1.0;
     }
 }
 

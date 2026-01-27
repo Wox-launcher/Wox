@@ -2,7 +2,7 @@ package explorer
 
 /*
 #cgo CFLAGS: -x objective-c
-#cgo LDFLAGS: -framework Cocoa
+#cgo LDFLAGS: -framework Cocoa -framework ApplicationServices
 extern void finderActivatedCallbackCGO(int pid);
 void startFinderMonitor();
 void stopFinderMonitor();

@@ -162,7 +162,8 @@ func (c *ExplorerPlugin) queryFileExplorer(ctx context.Context, query plugin.Que
 		if isDir {
 			actions = []plugin.QueryResultAction{
 				{
-					Name: "i18n:plugin_explorer_open",
+					Name:   "i18n:plugin_explorer_open",
+					Hotkey: "ctrl+enter",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						if activePid <= 0 {
 							c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Navigate explorer by pid failed: invalid pid=%d path=%s", activePid, fullPath))
@@ -176,27 +177,28 @@ func (c *ExplorerPlugin) queryFileExplorer(ctx context.Context, query plugin.Que
 					},
 				},
 				{
-					Name: "i18n:plugin_explorer_open_containing_folder",
+					Name:      "i18n:plugin_explorer_open_containing_folder",
+					IsDefault: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						shell.OpenFileInFolder(fullPath)
 					},
-					Hotkey: "ctrl+enter",
 				},
 			}
 		} else {
 			actions = []plugin.QueryResultAction{
 				{
-					Name: "i18n:plugin_explorer_open",
+					Name:   "i18n:plugin_explorer_open",
+					Hotkey: "ctrl+enter",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						shell.Open(fullPath)
 					},
 				},
 				{
-					Name: "i18n:plugin_explorer_open_containing_folder",
+					Name:      "i18n:plugin_explorer_open_containing_folder",
+					IsDefault: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						shell.OpenFileInFolder(fullPath)
 					},
-					Hotkey: "ctrl+enter",
 				},
 			}
 		}
@@ -410,10 +412,12 @@ func (c *ExplorerPlugin) loadOpenSaveHistory(ctx context.Context) *util.HashMap[
 }
 
 func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
+	woxIcon, _ := common.WoxIcon.ToImage()
 	StartMonitor(func(pid int) {
 		message := i18n.GetI18nManager().TranslateWox(ctx, "plugin_explorer_hint_message")
 		overlay.Show(overlay.OverlayOptions{
 			Name:            "explorer_hint",
+			Icon:            woxIcon,
 			Message:         message,
 			StickyWindowPid: pid,
 			Anchor:          overlay.AnchorBottomRight,
