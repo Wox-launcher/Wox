@@ -13,6 +13,7 @@ import (
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/util"
+	"wox/util/overlay"
 	"wox/util/shell"
 	"wox/util/window"
 )
@@ -86,6 +87,23 @@ func (c *ExplorerPlugin) GetMetadata() plugin.Metadata {
 func (c *ExplorerPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	c.api = initParams.API
 	c.openSaveHistoryMap = c.loadOpenSaveHistory(ctx)
+
+	// Start overlay hint listener if enabled
+	showHint := c.api.GetSetting(ctx, showExplorerHintSettingKey)
+	if showHint == "true" {
+		c.startOverlayListener(ctx)
+	}
+
+	// Listen for setting changes
+	c.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, value string) {
+		if key == showExplorerHintSettingKey {
+			if value == "true" {
+				c.startOverlayListener(callbackCtx)
+			} else {
+				overlay.StopAppActivationListener()
+			}
+		}
+	})
 }
 
 func (c *ExplorerPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
@@ -389,4 +407,21 @@ func (c *ExplorerPlugin) loadOpenSaveHistory(ctx context.Context) *util.HashMap[
 	}
 
 	return items
+}
+
+func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
+	overlay.StartAppActivationListener(func(windowFrame overlay.Rect) {
+		var iconData []byte
+
+		message := i18n.GetI18nManager().TranslateWox(ctx, "plugin_explorer_hint_message")
+
+		overlay.ShowExplorerHint(windowFrame, message, iconData, func() {
+			query := common.PlainQuery{
+				QueryType: "Input",
+				QueryText: "explorer ",
+			}
+			c.api.ChangeQuery(ctx, query)
+			c.api.ShowApp(ctx)
+		})
+	})
 }
