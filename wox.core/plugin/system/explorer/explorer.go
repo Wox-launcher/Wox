@@ -417,8 +417,8 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 			Message:         message,
 			StickyWindowPid: pid,
 			Anchor:          overlay.AnchorBottomRight,
-			OffsetX:         -16,
-			OffsetY:         16,
+			OffsetY:         -30,
+			Closable:        true,
 			OnClick: func() {
 				query := common.PlainQuery{
 					QueryType: "Input",
