@@ -2,6 +2,7 @@ package fileicon
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"wox/util"
@@ -21,6 +22,16 @@ func GetFileIconByPath(ctx context.Context, filePath string) (string, error) {
 		ext = ".__unknown"
 	}
 	return GetFileTypeIcon(ctx, ext)
+}
+
+func CleanFileIconCache(ctx context.Context, filePath string) error {
+	const size = 48
+	cachePath := buildPathCachePath(filePath, size)
+	if _, err := os.Stat(cachePath); err == nil {
+		return os.Remove(cachePath)
+	}
+
+	return nil
 }
 
 // GetFileTypeIcon returns a WoxImage representing the OS file-type icon for the given extension.
