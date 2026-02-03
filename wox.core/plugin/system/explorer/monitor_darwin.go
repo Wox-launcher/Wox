@@ -3,27 +3,27 @@ package explorer
 /*
 #cgo CFLAGS: -x objective-c
 #cgo LDFLAGS: -framework Cocoa -framework ApplicationServices
-extern void finderActivatedCallbackCGO(int pid);
-void startFinderMonitor();
-void stopFinderMonitor();
+extern void fileExplorerActivatedCallbackCGO(int pid);
+void startFileExplorerMonitor();
+void stopFileExplorerMonitor();
 */
 import "C"
 
-var onFinderActivated func(pid int)
+var onFileExplorerActivated func(pid int)
 
-//export finderActivatedCallbackCGO
-func finderActivatedCallbackCGO(pid C.int) {
-	if onFinderActivated != nil {
-		onFinderActivated(int(pid))
+//export fileExplorerActivatedCallbackCGO
+func fileExplorerActivatedCallbackCGO(pid C.int) {
+	if onFileExplorerActivated != nil {
+		onFileExplorerActivated(int(pid))
 	}
 }
 
 func StartMonitor(callback func(pid int)) {
-	onFinderActivated = callback
-	C.startFinderMonitor()
+	onFileExplorerActivated = callback
+	C.startFileExplorerMonitor()
 }
 
 func StopMonitor() {
-	C.stopFinderMonitor()
-	onFinderActivated = nil
+	C.stopFileExplorerMonitor()
+	onFileExplorerActivated = nil
 }

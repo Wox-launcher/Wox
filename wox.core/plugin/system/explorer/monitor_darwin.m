@@ -1,7 +1,7 @@
 #import <Cocoa/Cocoa.h>
 #import <ApplicationServices/ApplicationServices.h>
 
-extern void finderActivatedCallbackCGO(int pid);
+extern void fileExplorerActivatedCallbackCGO(int pid);
 
 static id gAppActivationObserver = nil;
 static AXObserverRef gFinderWindowObserver = nil;
@@ -10,7 +10,7 @@ static pid_t gFinderPid = 0;
 // AXObserver callback - called when Finder's focused window changes
 static void finderWindowFocusCallback(AXObserverRef observer, AXUIElementRef element, CFStringRef notification, void *refcon) {
     if (gFinderPid > 0) {
-        finderActivatedCallbackCGO(gFinderPid);
+        fileExplorerActivatedCallbackCGO(gFinderPid);
     }
 }
 
@@ -57,7 +57,7 @@ static void stopFinderWindowObserver() {
     gFinderPid = 0;
 }
 
-void startFinderMonitor() {
+void startFileExplorerMonitor() {
     @autoreleasepool {
         if (gAppActivationObserver) return;
 
@@ -69,7 +69,7 @@ void startFinderMonitor() {
                         NSRunningApplication *app = [[notification userInfo] objectForKey:NSWorkspaceApplicationKey];
                         if (app && [[app bundleIdentifier] isEqualToString:@"com.apple.finder"]) {
                             pid_t pid = [app processIdentifier];
-                            finderActivatedCallbackCGO(pid);
+                            fileExplorerActivatedCallbackCGO(pid);
                             // Start observing window focus changes within Finder
                             startFinderWindowObserver(pid);
                         } else {
@@ -82,13 +82,13 @@ void startFinderMonitor() {
         NSRunningApplication *activeApp = [[NSWorkspace sharedWorkspace] frontmostApplication];
         if (activeApp && [[activeApp bundleIdentifier] isEqualToString:@"com.apple.finder"]) {
             pid_t pid = [activeApp processIdentifier];
-            finderActivatedCallbackCGO(pid);
+            fileExplorerActivatedCallbackCGO(pid);
             startFinderWindowObserver(pid);
         }
     }
 }
 
-void stopFinderMonitor() {
+void stopFileExplorerMonitor() {
     @autoreleasepool {
         stopFinderWindowObserver();
         if (gAppActivationObserver) {
