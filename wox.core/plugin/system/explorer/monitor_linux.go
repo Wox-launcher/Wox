@@ -1,9 +1,9 @@
 package explorer
 
-func StartMonitor(callback func(pid int)) {
+func StartExplorerMonitor(activated func(pid int), deactivated func()) {
 	// Stub implementation for Linux
 }
 
-func StopMonitor() {
+func StopExplorerMonitor() {
 	// Stub implementation for Linux
 }

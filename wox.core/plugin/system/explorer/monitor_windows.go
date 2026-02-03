@@ -2,12 +2,14 @@ package explorer
 
 /*
 extern void fileExplorerActivatedCallbackCGO(int pid);
+extern void fileExplorerDeactivatedCallbackCGO();
 void startFileExplorerMonitor();
 void stopFileExplorerMonitor();
 */
 import "C"
 
 var onFileExplorerActivated func(pid int)
+var onFileExplorerDeactivated func()
 
 //export fileExplorerActivatedCallbackCGO
 func fileExplorerActivatedCallbackCGO(pid C.int) {
@@ -16,12 +18,21 @@ func fileExplorerActivatedCallbackCGO(pid C.int) {
 	}
 }
 
-func StartMonitor(callback func(pid int)) {
-	onFileExplorerActivated = callback
+//export fileExplorerDeactivatedCallbackCGO
+func fileExplorerDeactivatedCallbackCGO() {
+	if onFileExplorerDeactivated != nil {
+		onFileExplorerDeactivated()
+	}
+}
+
+func StartExplorerMonitor(activated func(pid int), deactivated func()) {
+	onFileExplorerActivated = activated
+	onFileExplorerDeactivated = deactivated
 	C.startFileExplorerMonitor()
 }
 
-func StopMonitor() {
+func StopExplorerMonitor() {
 	C.stopFileExplorerMonitor()
 	onFileExplorerActivated = nil
+	onFileExplorerDeactivated = nil
 }
