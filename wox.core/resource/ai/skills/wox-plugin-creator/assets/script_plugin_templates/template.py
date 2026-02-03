@@ -273,7 +273,11 @@ class WoxPluginBase:
             # Manual testing mode
             print("Manual mode - please enter query:")
             query_input = input()
-            stdin_text = f'{{"jsonrpc": "2.0", "method": "query", "params": {{"query": "{query_input}"}}, "id": 1}}'
+            stdin_text = (
+                '{"jsonrpc": "2.0", "method": "query", "params": {"query": "'
+                + query_input
+                + '"}, "id": 1}'
+            )
 
         # Parse JSON-RPC 2.0 request
         try:
@@ -328,6 +332,7 @@ class MyPlugin(WoxPluginBase):
         results: List[WoxPluginBase.QueryResult] = [
             {
                 "title": f"Query: {search}",
+                "icon": "emoji:🔍",
                 "subtitle": "Click to copy the query to clipboard",
                 "score": 100,
                 "actions": [
@@ -336,6 +341,7 @@ class MyPlugin(WoxPluginBase):
             },
             {
                 "title": "Example: Multiple Actions",
+                "icon": "emoji:⚙️",
                 "subtitle": "Right-click to see multiple actions",
                 "score": 90,
                 "actions": [
@@ -348,12 +354,13 @@ class MyPlugin(WoxPluginBase):
                     {
                         "name": "Custom Action",
                         "id": "custom-action",
-                        "data": "custom data",
+                        "data": {"key": "value"},
                     },
                 ],
             },
             {
                 "title": "Settings Example",
+                "icon": "emoji:⚙️",
                 "subtitle": f"API Key configured: {'Yes' if api_key else 'No'}",
                 "score": 70,
                 "actions": [

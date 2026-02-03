@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/user"
 	"path"
 	"sort"
 	"strings"
@@ -39,18 +40,13 @@ var pluginTemplates = []pluginTemplate{
 var scriptPluginTemplates = []pluginTemplate{
 	{
 		Runtime: plugin.PLUGIN_RUNTIME_SCRIPT,
-		Name:    "JavaScript Script Plugin",
+		Name:    "plugin_wpm_script_template_nodejs",
 		Url:     "template.js",
 	},
 	{
 		Runtime: plugin.PLUGIN_RUNTIME_SCRIPT,
-		Name:    "Python Script Plugin",
+		Name:    "plugin_wpm_script_template_python",
 		Url:     "template.py",
-	},
-	{
-		Runtime: plugin.PLUGIN_RUNTIME_SCRIPT,
-		Name:    "Bash Script Plugin",
-		Url:     "template.sh",
 	},
 }
 
@@ -354,6 +350,7 @@ func (w *WPMPlugin) createCommand(ctx context.Context, query plugin.Query) []plu
 	// Add script plugin templates with group
 	for _, template := range scriptPluginTemplates {
 		templateCopy := template // Create a copy for the closure
+		templateDisplayName := i18n.GetI18nManager().TranslateWox(ctx, template.Name)
 
 		// Check if script plugin already exists
 		exists, fileName := w.checkScriptPluginExists(pluginName, template.Url)
@@ -362,23 +359,23 @@ func (w *WPMPlugin) createCommand(ctx context.Context, query plugin.Query) []plu
 		var actions []plugin.QueryResultAction
 
 		if exists {
-			title = fmt.Sprintf("⚠️ %s (Already exists)", template.Name)
-			subtitle = fmt.Sprintf("File '%s' already exists. Choose an action below.", fileName)
+			title = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_script_plugin_exists_title"), templateDisplayName)
+			subtitle = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_script_plugin_exists_subtitle"), fileName)
 			// When file exists, provide actions to open or overwrite the existing file
 			actions = []plugin.QueryResultAction{
 				{
-					Name: "Open existing file",
+					Name: "i18n:plugin_wpm_script_plugin_open_existing_file",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						userScriptPluginDirectory := util.GetLocation().GetUserScriptPluginsDirectory()
 						scriptFilePath := path.Join(userScriptPluginDirectory, fileName)
 						openErr := shell.Open(scriptFilePath)
 						if openErr != nil {
-							w.api.Notify(ctx, fmt.Sprintf("Failed to open file: %s", openErr.Error()))
+							w.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_open_file_failed"), openErr.Error()))
 						}
 					},
 				},
 				{
-					Name:                   "Overwrite existing file",
+					Name:                   "i18n:plugin_wpm_script_plugin_overwrite_existing_file",
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						pluginName := query.Search
@@ -393,7 +390,7 @@ func (w *WPMPlugin) createCommand(ctx context.Context, query plugin.Query) []plu
 				},
 			}
 		} else {
-			title = fmt.Sprintf("Create %s", template.Name)
+			title = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_script_plugin_create_title"), templateDisplayName)
 			subtitle = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_create_plugin_name"), query.Search)
 			actions = []plugin.QueryResultAction{
 				{
@@ -403,10 +400,6 @@ func (w *WPMPlugin) createCommand(ctx context.Context, query plugin.Query) []plu
 						pluginName := query.Search
 						util.Go(ctx, "create script plugin", func() {
 							w.createScriptPluginWithTemplate(ctx, templateCopy, pluginName, query)
-						})
-						w.api.ChangeQuery(ctx, common.PlainQuery{
-							QueryType: plugin.QueryTypeInput,
-							QueryText: fmt.Sprintf("%s create ", query.TriggerKeyword),
 						})
 					},
 				},
@@ -1114,8 +1107,6 @@ func (w *WPMPlugin) checkScriptPluginExists(pluginName string, templateFile stri
 		fileExtension = ".js"
 	case "template.py":
 		fileExtension = ".py"
-	case "template.sh":
-		fileExtension = ".sh"
 	default:
 		fileExtension = ".js" // Default fallback
 	}
@@ -1153,8 +1144,6 @@ func (w *WPMPlugin) createScriptPluginWithTemplate(ctx context.Context, template
 		fileExtension = ".js"
 	case "template.py":
 		fileExtension = ".py"
-	case "template.sh":
-		fileExtension = ".sh"
 	default:
 		fileExtension = ".js" // Default fallback
 	}
@@ -1201,14 +1190,25 @@ func (w *WPMPlugin) createScriptPluginWithTemplate(ctx context.Context, template
 		return
 	}
 
+	author := "Wox User"
+	if currentUser, userErr := user.Current(); userErr == nil {
+		if currentUser.Name != "" {
+			author = currentUser.Name
+		} else if currentUser.Username != "" {
+			author = currentUser.Username
+		}
+	}
+
 	templateData := struct {
 		PluginID            string
 		Name                string
+		Author              string
 		Description         string
 		TriggerKeywordsJSON string
 	}{
 		PluginID:            uuid.NewString(),
 		Name:                cleanPluginName,
+		Author:              author,
 		Description:         fmt.Sprintf("A script plugin for %s", cleanPluginName),
 		TriggerKeywordsJSON: string(triggerKeywordsJSON),
 	}
@@ -1267,6 +1267,9 @@ func (w *WPMPlugin) createScriptPluginWithTemplate(ctx context.Context, template
 		}
 
 		w.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Successfully loaded script plugin: %s", metadata.GetName(ctx)))
+
+		// wait a moment to ensure plugin is fully loaded
+		time.Sleep(300 * time.Millisecond)
 
 		// Change query to the new plugin
 		w.api.ChangeQuery(ctx, common.PlainQuery{
