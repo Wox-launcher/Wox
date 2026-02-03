@@ -480,8 +480,6 @@ func (s *ScriptPlugin) getInterpreterFromExtension(ctx context.Context, ext stri
 		return FindPythonPath(ctx), nil
 	case ".js":
 		return FindNodejsPath(ctx), nil
-	case ".sh":
-		return "bash", nil
 	case ".rb":
 		return "ruby", nil
 	case ".pl":
@@ -549,6 +547,9 @@ func (s *ScriptPlugin) getInterpreterFromShebang(ctx context.Context) (string, e
 	interpreterPath = s.mapInterpreterWithCustomPath(ctx, interpreterPath)
 
 	util.GetLogger().Debug(ctx, fmt.Sprintf("Final interpreter after mapping: %s", interpreterPath))
+	if interpreterPath == "bash" || interpreterPath == "sh" {
+		return "", fmt.Errorf("unsupported interpreter: %s", interpreterPath)
+	}
 	return interpreterPath, nil
 }
 

@@ -152,8 +152,8 @@ func registerMCPTools(ctx context.Context) {
 			"properties": map[string]any{
 				"runtime": map[string]any{
 					"type":        "string",
-					"description": "The plugin runtime: nodejs, python, script-nodejs, script-python, or script-bash",
-					"enum":        []string{"nodejs", "python", "script-nodejs", "script-python", "script-bash"},
+					"description": "The plugin runtime: nodejs, python, script-nodejs, or script-python",
+					"enum":        []string{"nodejs", "python", "script-nodejs", "script-python"},
 				},
 			},
 			"required": []string{"runtime"},
@@ -179,8 +179,8 @@ func registerMCPTools(ctx context.Context) {
 			"properties": map[string]any{
 				"runtime": map[string]any{
 					"type":        "string",
-					"description": "The plugin runtime: nodejs, python, script-nodejs, script-python, or script-bash",
-					"enum":        []string{"nodejs", "python", "script-nodejs", "script-python", "script-bash"},
+					"description": "The plugin runtime: nodejs, python, script-nodejs, or script-python",
+					"enum":        []string{"nodejs", "python", "script-nodejs", "script-python"},
 				},
 				"name": map[string]any{
 					"type":        "string",

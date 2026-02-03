@@ -37,10 +37,8 @@ func handleGetPluginSDKDocs(ctx context.Context, req *mcp.CallToolRequest) (*mcp
 		docs = getScriptPluginDocs("nodejs")
 	case "script-python":
 		docs = getScriptPluginDocs("python")
-	case "script-bash":
-		docs = getScriptPluginDocs("bash")
 	default:
-		docs = "Please specify a runtime: nodejs, python, script-nodejs, script-python, or script-bash"
+		docs = "Please specify a runtime: nodejs, python, script-nodejs, or script-python"
 	}
 
 	return &mcp.CallToolResult{
@@ -87,10 +85,8 @@ func handleGeneratePluginScaffold(ctx context.Context, req *mcp.CallToolRequest)
 		scaffold = generateScriptScaffold(name, description, triggerKeywords, "nodejs")
 	case "script-python":
 		scaffold = generateScriptScaffold(name, description, triggerKeywords, "python")
-	case "script-bash":
-		scaffold = generateScriptScaffold(name, description, triggerKeywords, "bash")
 	default:
-		scaffold = "Please specify a runtime: nodejs, python, script-nodejs, script-python, or script-bash"
+		scaffold = "Please specify a runtime: nodejs, python, script-nodejs, or script-python"
 	}
 
 	return &mcp.CallToolResult{
@@ -214,12 +210,8 @@ func generateScriptScaffold(name, description string, triggerKeywords []string, 
 		templateFile = "template.js"
 		langTitle = "Node.js"
 		fence = "javascript"
-	case "bash":
-		templateFile = "template.sh"
-		langTitle = "Bash"
-		fence = "bash"
 	default:
-		return "Please specify a script runtime: script-nodejs, script-python, or script-bash"
+		return "Please specify a script runtime: script-nodejs or script-python"
 	}
 
 	script := mustRenderMcpTemplateFromScriptTemplates(
