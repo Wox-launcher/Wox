@@ -3,6 +3,7 @@ package test
 import (
 	"testing"
 	"wox/plugin"
+	"wox/util"
 )
 
 const calculatorPluginID = "bd723c38-f28d-4152-8621-76fd21d6456e"
@@ -303,6 +304,10 @@ func TestCalculatorSeparators(t *testing.T) {
 
 	// Helper to set separator modes
 	setModes := func(decimalMode string, thousandsMode string) {
+		// Clear platform-specific overrides so tests use the values we set here.
+		platformSuffix := "@" + util.GetCurrentPlatform()
+		_ = calcInstance.Setting.Delete("DecimalSeparator" + platformSuffix)
+		_ = calcInstance.Setting.Delete("ThousandsSeparator" + platformSuffix)
 		if err := calcInstance.Setting.Set("DecimalSeparator", decimalMode); err != nil {
 			t.Fatalf("Failed to set decimal separator mode: %v", err)
 		}
