@@ -1,14 +1,47 @@
-// TODO: Full implementation of overlay_windows.c based on notify_windows.c
-// For now, providing a stub that compiles, to satisfy the requirement of refactoring.
-// In a real scenario, this would contain the 1000+ lines of Win32 code adapted from notifier.
-// Given strict instructions to "Refactor", I should try to make it work.
-// But copying 1700 lines blindly is risky.
-// I will implement the CGO interface and a basic window creation ensuring the project compiles.
-// The user asked to "Implementing Windows Overlay support".
-
+#define WIN32_LEAN_AND_MEAN
+#define COBJMACROS
 #include <windows.h>
+#include <windowsx.h>
+#include <dwmapi.h>
+#include <uxtheme.h>
+#include <wincodec.h>
+#include <objbase.h>
 #include <stdbool.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
 
+#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
+#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
+#endif
+
+#ifndef DWMWA_WINDOW_CORNER_PREFERENCE
+#define DWMWA_WINDOW_CORNER_PREFERENCE 33
+#endif
+
+#ifndef DWMWCP_DEFAULT
+#define DWMWCP_DEFAULT 0
+#define DWMWCP_DONOTROUND 1
+#define DWMWCP_ROUND 2
+#define DWMWCP_ROUNDSMALL 3
+#endif
+
+#ifndef DWMWA_SYSTEMBACKDROP_TYPE
+#define DWMWA_SYSTEMBACKDROP_TYPE 38
+#endif
+
+#ifndef DWMSBT_AUTO
+#define DWMSBT_AUTO 0
+#define DWMSBT_NONE 1
+#define DWMSBT_MAINWINDOW 2
+#define DWMSBT_TRANSIENTWINDOW 3
+#define DWMSBT_TABBEDWINDOW 4
+#endif
+
+// -----------------------------------------------------------------------------
+// Options Struct (Must match CGO / Go definition)
+// -----------------------------------------------------------------------------
 typedef struct {
     char* name;
     char* title;
@@ -18,19 +51,1441 @@ typedef struct {
     bool closable;
     int stickyWindowPid; // 0 = Screen, >0 = Window
     int anchor;          // 0-8
+    int autoCloseSeconds;
+    bool movable;
     float offsetX;
     float offsetY;
     float width;         // 0 = auto
     float height;        // 0 = auto
 } OverlayOptions;
 
-void ShowOverlay(OverlayOptions opts) {
-    // Stub implementation for Windows
-    // Real implementation would look up window by opts.name, create if needed, and paint.
+extern void overlayClickCallbackCGO(char* name);
+
+// -----------------------------------------------------------------------------
+// Accent / Acrylic
+// -----------------------------------------------------------------------------
+typedef enum {
+    ACCENT_DISABLED = 0,
+    ACCENT_ENABLE_GRADIENT = 1,
+    ACCENT_ENABLE_TRANSPARENTGRADIENT = 2,
+    ACCENT_ENABLE_BLURBEHIND = 3,
+    ACCENT_ENABLE_ACRYLICBLURBEHIND = 4,
+    ACCENT_ENABLE_HOSTBACKDROP = 5
+} ACCENT_STATE;
+
+typedef struct {
+    ACCENT_STATE AccentState;
+    DWORD AccentFlags;
+    DWORD GradientColor;
+    DWORD AnimationId;
+} ACCENT_POLICY;
+
+typedef enum {
+    WCA_UNDEFINED = 0,
+    WCA_NCRENDERING_ENABLED = 1,
+    WCA_NCRENDERING_POLICY = 2,
+    WCA_TRANSITIONS_FORCEDISABLED = 3,
+    WCA_ALLOW_NCPAINT = 4,
+    WCA_CAPTION_BUTTON_BOUNDS = 5,
+    WCA_NONCLIENT_RTL_LAYOUT = 6,
+    WCA_FORCE_ICONIC_REPRESENTATION = 7,
+    WCA_EXTENDED_FRAME_BOUNDS = 8,
+    WCA_HAS_ICONIC_BITMAP = 9,
+    WCA_THEME_ATTRIBUTES = 10,
+    WCA_NCRENDERING_EXILED = 11,
+    WCA_NCADORNMENTINFO = 12,
+    WCA_EXCLUDED_FROM_LIVEPREVIEW = 13,
+    WCA_VIDEO_OVERLAY_ACTIVE = 14,
+    WCA_FORCE_ACTIVEWINDOW_APPEARANCE = 15,
+    WCA_DISALLOW_PEEK = 16,
+    WCA_CLOAK = 17,
+    WCA_CLOAKED = 18,
+    WCA_ACCENT_POLICY = 19
+} WINDOWCOMPOSITIONATTRIB;
+
+typedef struct {
+    WINDOWCOMPOSITIONATTRIB Attrib;
+    PVOID pvData;
+    SIZE_T cbData;
+} WINDOWCOMPOSITIONATTRIBDATA;
+
+typedef BOOL(WINAPI *pfnSetWindowCompositionAttribute)(HWND, WINDOWCOMPOSITIONATTRIBDATA *);
+
+static BOOL TryEnableAccent(HWND hwnd, ACCENT_STATE state, DWORD gradientColor, DWORD accentFlags)
+{
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    if (!user32)
+        return FALSE;
+    pfnSetWindowCompositionAttribute fn = (pfnSetWindowCompositionAttribute)GetProcAddress(user32, "SetWindowCompositionAttribute");
+    if (!fn)
+        return FALSE;
+
+    ACCENT_POLICY policy;
+    ZeroMemory(&policy, sizeof(policy));
+    policy.AccentState = state;
+    policy.AccentFlags = accentFlags;
+    policy.GradientColor = gradientColor; // 0xAABBGGRR
+
+    WINDOWCOMPOSITIONATTRIBDATA data;
+    data.Attrib = WCA_ACCENT_POLICY;
+    data.pvData = &policy;
+    data.cbData = sizeof(policy);
+
+    return fn(hwnd, &data);
 }
 
-void CloseOverlay(char* name) {
-    // Stub implementation
+static BOOL TryEnableHostBackdrop(HWND hwnd)
+{
+    return TryEnableAccent(hwnd, ACCENT_ENABLE_HOSTBACKDROP, 0x70202020, 0);
 }
 
-void overlayClickCallbackCGO(char* name);
+static BOOL TryEnableAcrylic(HWND hwnd)
+{
+    return TryEnableAccent(hwnd, ACCENT_ENABLE_ACRYLICBLURBEHIND, 0x2A202020, 2);
+}
+
+// -----------------------------------------------------------------------------
+// Constants
+// -----------------------------------------------------------------------------
+#define DEFAULT_WINDOW_WIDTH_DIP 400
+#define MIN_WINDOW_WIDTH_DIP 240
+#define PADDING_X_DIP 12
+#define PADDING_Y_DIP 10
+#define ICON_SIZE_DIP 24
+#define ICON_GAP_DIP 10
+#define CLOSE_SIZE_DIP 20
+#define CLOSE_PAD_DIP 10
+#define CORNER_RADIUS_DIP 10
+
+#define TIMER_AUTOCLOSE 1
+#define TIMER_TRACK 2
+
+#define WM_WOX_OVERLAY_COMMAND (WM_APP + 0x610)
+
+// -----------------------------------------------------------------------------
+// Helpers
+// -----------------------------------------------------------------------------
+typedef UINT(WINAPI *pfnGetDpiForSystem)(void);
+typedef UINT(WINAPI *pfnGetDpiForWindow)(HWND);
+typedef BOOL(WINAPI *pfnSetProcessDpiAwarenessContext)(HANDLE);
+
+static UINT GetSystemDpiSafe(void)
+{
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    if (!user32)
+        return 96;
+    pfnGetDpiForSystem fn = (pfnGetDpiForSystem)GetProcAddress(user32, "GetDpiForSystem");
+    if (!fn)
+        return 96;
+    UINT dpi = fn();
+    return dpi ? dpi : 96;
+}
+
+static UINT GetWindowDpiSafe(HWND hwnd, UINT fallback)
+{
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    if (!user32)
+        return fallback;
+    pfnGetDpiForWindow fn = (pfnGetDpiForWindow)GetProcAddress(user32, "GetDpiForWindow");
+    if (!fn)
+        return fallback;
+    UINT dpi = fn(hwnd);
+    return dpi ? dpi : fallback;
+}
+
+static void TryEnablePerMonitorDpiAwareness(void)
+{
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    if (!user32)
+        return;
+    pfnSetProcessDpiAwarenessContext fn = (pfnSetProcessDpiAwarenessContext)GetProcAddress(user32, "SetProcessDpiAwarenessContext");
+    if (!fn)
+        return;
+    fn((HANDLE)-4); // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+}
+
+static WCHAR *DupUtf8ToWide(const char *utf8)
+{
+    if (!utf8)
+        return NULL;
+    int wlen = MultiByteToWideChar(CP_UTF8, 0, utf8, -1, NULL, 0);
+    if (wlen <= 0)
+        return NULL;
+    WCHAR *out = (WCHAR *)malloc((size_t)wlen * sizeof(WCHAR));
+    if (!out)
+        return NULL;
+    MultiByteToWideChar(CP_UTF8, 0, utf8, -1, out, wlen);
+    return out;
+}
+
+static char *DupWideToUtf8(const WCHAR *w)
+{
+    if (!w)
+        return NULL;
+    int len = WideCharToMultiByte(CP_UTF8, 0, w, -1, NULL, 0, NULL, NULL);
+    if (len <= 0)
+        return NULL;
+    char *out = (char *)malloc((size_t)len);
+    if (!out)
+        return NULL;
+    WideCharToMultiByte(CP_UTF8, 0, w, -1, out, len, NULL, NULL);
+    return out;
+}
+
+static HBITMAP Create32BitDIBSection(HDC hdc, int width, int height, void **bits)
+{
+    if (bits)
+        *bits = NULL;
+    BITMAPINFO bmi;
+    ZeroMemory(&bmi, sizeof(bmi));
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = width;
+    bmi.bmiHeader.biHeight = -height;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+    return CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, bits, NULL, 0);
+}
+
+static HBITMAP CreateBitmapFromPngData(const unsigned char *data, int len, int *outW, int *outH)
+{
+    if (outW)
+        *outW = 0;
+    if (outH)
+        *outH = 0;
+    if (!data || len <= 0)
+        return NULL;
+
+    IWICImagingFactory *factory = NULL;
+    HRESULT hr = CoCreateInstance(&CLSID_WICImagingFactory, NULL, CLSCTX_INPROC_SERVER,
+                                  &IID_IWICImagingFactory, (LPVOID *)&factory);
+    if (FAILED(hr) || !factory)
+        return NULL;
+
+    HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, (SIZE_T)len);
+    if (!hMem)
+    {
+        IWICImagingFactory_Release(factory);
+        return NULL;
+    }
+    void *pMem = GlobalLock(hMem);
+    if (!pMem)
+    {
+        GlobalFree(hMem);
+        IWICImagingFactory_Release(factory);
+        return NULL;
+    }
+    memcpy(pMem, data, (SIZE_T)len);
+    GlobalUnlock(hMem);
+
+    IStream *stream = NULL;
+    hr = CreateStreamOnHGlobal(hMem, TRUE, &stream);
+    if (FAILED(hr) || !stream)
+    {
+        GlobalFree(hMem);
+        IWICImagingFactory_Release(factory);
+        return NULL;
+    }
+
+    IWICBitmapDecoder *decoder = NULL;
+    hr = IWICImagingFactory_CreateDecoderFromStream(factory, stream, NULL, WICDecodeMetadataCacheOnLoad, &decoder);
+    if (FAILED(hr) || !decoder)
+    {
+        IStream_Release(stream);
+        IWICImagingFactory_Release(factory);
+        return NULL;
+    }
+
+    IWICBitmapFrameDecode *frame = NULL;
+    hr = IWICBitmapDecoder_GetFrame(decoder, 0, &frame);
+    if (FAILED(hr) || !frame)
+    {
+        IWICBitmapDecoder_Release(decoder);
+        IStream_Release(stream);
+        IWICImagingFactory_Release(factory);
+        return NULL;
+    }
+
+    IWICFormatConverter *converter = NULL;
+    hr = IWICImagingFactory_CreateFormatConverter(factory, &converter);
+    if (FAILED(hr) || !converter)
+    {
+        IWICBitmapFrameDecode_Release(frame);
+        IWICBitmapDecoder_Release(decoder);
+        IStream_Release(stream);
+        IWICImagingFactory_Release(factory);
+        return NULL;
+    }
+
+    hr = IWICFormatConverter_Initialize(converter, (IWICBitmapSource *)frame,
+                                        &GUID_WICPixelFormat32bppBGRA, WICBitmapDitherTypeNone,
+                                        NULL, 0.0, WICBitmapPaletteTypeCustom);
+    if (FAILED(hr))
+    {
+        IWICFormatConverter_Release(converter);
+        IWICBitmapFrameDecode_Release(frame);
+        IWICBitmapDecoder_Release(decoder);
+        IStream_Release(stream);
+        IWICImagingFactory_Release(factory);
+        return NULL;
+    }
+
+    UINT w = 0, h = 0;
+    IWICBitmapSource_GetSize((IWICBitmapSource *)converter, &w, &h);
+    if (w == 0 || h == 0)
+    {
+        IWICFormatConverter_Release(converter);
+        IWICBitmapFrameDecode_Release(frame);
+        IWICBitmapDecoder_Release(decoder);
+        IStream_Release(stream);
+        IWICImagingFactory_Release(factory);
+        return NULL;
+    }
+
+    HDC hdc = GetDC(NULL);
+    void *bits = NULL;
+    HBITMAP dib = Create32BitDIBSection(hdc, (int)w, (int)h, &bits);
+    ReleaseDC(NULL, hdc);
+    if (!dib || !bits)
+    {
+        if (dib)
+            DeleteObject(dib);
+        IWICFormatConverter_Release(converter);
+        IWICBitmapFrameDecode_Release(frame);
+        IWICBitmapDecoder_Release(decoder);
+        IStream_Release(stream);
+        IWICImagingFactory_Release(factory);
+        return NULL;
+    }
+
+    WICRect rc;
+    rc.X = 0;
+    rc.Y = 0;
+    rc.Width = (INT)w;
+    rc.Height = (INT)h;
+    hr = IWICBitmapSource_CopyPixels((IWICBitmapSource *)converter, &rc, w * 4, w * h * 4, (BYTE *)bits);
+    if (FAILED(hr))
+    {
+        DeleteObject(dib);
+        dib = NULL;
+    }
+    else
+    {
+        if (outW)
+            *outW = (int)w;
+        if (outH)
+            *outH = (int)h;
+    }
+
+    IWICFormatConverter_Release(converter);
+    IWICBitmapFrameDecode_Release(frame);
+    IWICBitmapDecoder_Release(decoder);
+    IStream_Release(stream);
+    IWICImagingFactory_Release(factory);
+
+    return dib;
+}
+
+static int MeasureTextHeightW(HDC hdc, const WCHAR *text, int width)
+{
+    if (!text || !*text || width <= 0)
+        return 0;
+    RECT rc = {0, 0, width, 0};
+    DrawTextW(hdc, text, -1, &rc, DT_CALCRECT | DT_WORDBREAK | DT_EDITCONTROL | DT_NOPREFIX);
+    int h = rc.bottom - rc.top;
+    return h > 0 ? h : 0;
+}
+
+static RECT GetWorkAreaForRect(const RECT *target)
+{
+    RECT workArea;
+    ZeroMemory(&workArea, sizeof(workArea));
+
+    HMONITOR mon = MonitorFromRect(target, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi;
+    mi.cbSize = sizeof(mi);
+    if (mon && GetMonitorInfo(mon, &mi))
+    {
+        workArea = mi.rcWork;
+        return workArea;
+    }
+
+    SystemParametersInfo(SPI_GETWORKAREA, 0, &workArea, 0);
+    return workArea;
+}
+
+static void ClampWindowToWorkArea(const RECT *work, int *x, int *y, int width, int height)
+{
+    if (!work || !x || !y)
+        return;
+    if (*x < work->left)
+        *x = work->left;
+    if (*y < work->top)
+        *y = work->top;
+    if (*x + width > work->right)
+        *x = work->right - width;
+    if (*y + height > work->bottom)
+        *y = work->bottom - height;
+}
+
+// -----------------------------------------------------------------------------
+// Overlay Structures
+// -----------------------------------------------------------------------------
+
+typedef struct OverlayWindow
+{
+    HWND hwnd;
+    WCHAR *name;
+    WCHAR *title;
+    WCHAR *message;
+    HBITMAP iconBitmap;
+    int iconWidth;
+    int iconHeight;
+    BOOL closable;
+    BOOL movable;
+    int autoCloseSeconds;
+    int stickyWindowPid;
+    int anchor;
+    float offsetX;
+    float offsetY;
+    float width;
+    float height;
+
+    UINT dpi;
+    HFONT messageFont;
+    UINT fontDpi;
+
+    RECT closeRect;
+    BOOL mouseInside;
+    BOOL closeHover;
+    BOOL closePressed;
+    BOOL dragging;
+    BOOL autoClosePending;
+    POINT dragStart;
+    POINT dragWindowOrigin;
+
+    struct OverlayWindow *next;
+} OverlayWindow;
+
+typedef struct OverlayPayload
+{
+    WCHAR *name;
+    WCHAR *title;
+    WCHAR *message;
+    unsigned char *iconData;
+    int iconLen;
+    BOOL closable;
+    int stickyWindowPid;
+    int anchor;
+    int autoCloseSeconds;
+    BOOL movable;
+    float offsetX;
+    float offsetY;
+    float width;
+    float height;
+} OverlayPayload;
+
+typedef struct OverlayCommand
+{
+    int type; // 1 = show, 2 = close
+    OverlayPayload *payload;
+    WCHAR *name;
+} OverlayCommand;
+
+static OverlayWindow *g_overlays = NULL;
+static const WCHAR *g_overlayClassName = L"WoxOverlayWindow";
+static const WCHAR *g_controllerClassName = L"WoxOverlayController";
+static HANDLE g_threadReadyEvent = NULL;
+static HANDLE g_overlayThread = NULL;
+static DWORD g_overlayThreadId = 0;
+static HWND g_controllerHwnd = NULL;
+static INIT_ONCE g_initOnce = INIT_ONCE_STATIC_INIT;
+
+// -----------------------------------------------------------------------------
+// Forward Decls
+// -----------------------------------------------------------------------------
+static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+static LRESULT CALLBACK OverlayControllerProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+static DWORD WINAPI OverlayThreadProc(LPVOID param);
+
+// -----------------------------------------------------------------------------
+// Overlay Helpers
+// -----------------------------------------------------------------------------
+
+static OverlayWindow *FindOverlayByName(const WCHAR *name)
+{
+    for (OverlayWindow *it = g_overlays; it; it = it->next)
+    {
+        if (it->name && name && wcscmp(it->name, name) == 0)
+            return it;
+    }
+    return NULL;
+}
+
+static void AddOverlay(OverlayWindow *ow)
+{
+    ow->next = g_overlays;
+    g_overlays = ow;
+}
+
+static void RemoveOverlay(OverlayWindow *ow)
+{
+    OverlayWindow **pp = &g_overlays;
+    while (*pp)
+    {
+        if (*pp == ow)
+        {
+            *pp = ow->next;
+            return;
+        }
+        pp = &((*pp)->next);
+    }
+}
+
+typedef struct
+{
+    DWORD pid;
+    HWND hwnd;
+} FindWindowData;
+
+static BOOL CALLBACK EnumWindowByPidProc(HWND hwnd, LPARAM lParam)
+{
+    FindWindowData *d = (FindWindowData *)lParam;
+    if (!IsWindowVisible(hwnd))
+        return TRUE;
+
+    DWORD wpid = 0;
+    GetWindowThreadProcessId(hwnd, &wpid);
+    if (wpid != d->pid)
+        return TRUE;
+
+    LONG style = GetWindowLong(hwnd, GWL_STYLE);
+    if (!(style & WS_OVERLAPPEDWINDOW) && !(style & WS_POPUP))
+        return TRUE;
+
+    d->hwnd = hwnd;
+    return FALSE;
+}
+
+static BOOL FindWindowByPid(int pid, HWND *out)
+{
+    if (out)
+        *out = NULL;
+    if (pid <= 0)
+        return FALSE;
+
+    FindWindowData data;
+    data.pid = (DWORD)pid;
+    data.hwnd = NULL;
+
+    EnumWindows(EnumWindowByPidProc, (LPARAM)&data);
+    if (out)
+        *out = data.hwnd;
+    return data.hwnd != NULL;
+}
+
+static void SetOverlayZOrder(HWND hwnd, HWND target)
+{
+    if (target && IsWindow(target))
+    {
+        SetWindowPos(hwnd, target, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+    else
+    {
+        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+}
+
+static void StartAutoCloseTimer(OverlayWindow *ow)
+{
+    if (!ow || !ow->hwnd)
+        return;
+    KillTimer(ow->hwnd, TIMER_AUTOCLOSE);
+    ow->autoClosePending = FALSE;
+    if (ow->autoCloseSeconds > 0)
+    {
+        SetTimer(ow->hwnd, TIMER_AUTOCLOSE, (UINT)(ow->autoCloseSeconds * 1000), NULL);
+    }
+}
+
+static void StartTrackTimer(OverlayWindow *ow)
+{
+    if (!ow || !ow->hwnd)
+        return;
+    KillTimer(ow->hwnd, TIMER_TRACK);
+    if (ow->stickyWindowPid > 0)
+    {
+        SetTimer(ow->hwnd, TIMER_TRACK, 200, NULL);
+    }
+}
+
+static void UpdateCloseRect(OverlayWindow *ow, int width, int height, UINT dpi)
+{
+    RECT r = {0, 0, 0, 0};
+    if (!ow->closable)
+    {
+        ow->closeRect = r;
+        return;
+    }
+    int closeSize = MulDiv(CLOSE_SIZE_DIP, (int)dpi, 96);
+    int closePad = MulDiv(CLOSE_PAD_DIP, (int)dpi, 96);
+    int x = width - closePad - closeSize;
+    int y = closePad;
+    r.left = x;
+    r.top = y;
+    r.right = x + closeSize;
+    r.bottom = y + closeSize;
+    ow->closeRect = r;
+}
+
+static void ComputeOverlayPosition(OverlayWindow *ow, const RECT *targetRect, int width, int height, int *outX, int *outY)
+{
+    int ax = targetRect->left;
+    int ay = targetRect->top;
+    int aw = targetRect->right - targetRect->left;
+    int ah = targetRect->bottom - targetRect->top;
+
+    int col = ow->anchor % 3;
+    int row = ow->anchor / 3;
+
+    int px = ax;
+    if (col == 1)
+        px = ax + aw / 2;
+    else if (col == 2)
+        px = ax + aw;
+
+    int py = ay;
+    if (row == 1)
+        py = ay + ah / 2;
+    else if (row == 2)
+        py = ay + ah;
+
+    int ox = 0;
+    if (col == 1)
+        ox = -width / 2;
+    else if (col == 2)
+        ox = -width;
+
+    int oy = 0;
+    if (row == 1)
+        oy = -height / 2;
+    else if (row == 2)
+        oy = -height;
+
+    int offX = (int)roundf(ow->offsetX * (float)ow->dpi / 96.0f);
+    int offY = (int)roundf(ow->offsetY * (float)ow->dpi / 96.0f);
+
+    if (outX)
+        *outX = px + ox + offX;
+    if (outY)
+        *outY = py + oy + offY;
+}
+
+static void ApplyCornerRadius(HWND hwnd, UINT dpi, int width, int height)
+{
+    UINT pref = DWMWCP_ROUND;
+    HRESULT hr = DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &pref, sizeof(pref));
+    if (FAILED(hr))
+    {
+        int rr = MulDiv(CORNER_RADIUS_DIP, (int)dpi, 96);
+        HRGN rgn = CreateRoundRectRgn(0, 0, width + 1, height + 1, rr * 2, rr * 2);
+        if (rgn)
+        {
+            SetWindowRgn(hwnd, rgn, TRUE);
+        }
+    }
+}
+
+static void ApplyOverlayLayout(OverlayWindow *ow)
+{
+    if (!ow || !ow->hwnd)
+        return;
+
+    ow->dpi = GetWindowDpiSafe(ow->hwnd, ow->dpi ? ow->dpi : GetSystemDpiSafe());
+
+    if (!ow->messageFont || ow->fontDpi != ow->dpi)
+    {
+        if (ow->messageFont)
+            DeleteObject(ow->messageFont);
+        int fontHeight = -MulDiv(13, (int)ow->dpi, 72);
+        ow->messageFont = CreateFontW(fontHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                      DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                      CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+        ow->fontDpi = ow->dpi;
+    }
+
+    int width = 0;
+    if (ow->width > 0)
+        width = (int)roundf(ow->width * (float)ow->dpi / 96.0f);
+    if (width <= 0)
+        width = MulDiv(DEFAULT_WINDOW_WIDTH_DIP, (int)ow->dpi, 96);
+
+    int minWidth = MulDiv(MIN_WINDOW_WIDTH_DIP, (int)ow->dpi, 96);
+    if (width < minWidth)
+        width = minWidth;
+
+    int iconSize = (ow->iconBitmap ? MulDiv(ICON_SIZE_DIP, (int)ow->dpi, 96) : 0);
+    int iconGap = (ow->iconBitmap ? MulDiv(ICON_GAP_DIP, (int)ow->dpi, 96) : 0);
+    int leftPad = MulDiv(PADDING_X_DIP, (int)ow->dpi, 96);
+    int rightPad = MulDiv(PADDING_X_DIP, (int)ow->dpi, 96);
+    int topPad = MulDiv(PADDING_Y_DIP, (int)ow->dpi, 96);
+    int bottomPad = MulDiv(PADDING_Y_DIP, (int)ow->dpi, 96);
+
+    int closeSize = ow->closable ? MulDiv(CLOSE_SIZE_DIP, (int)ow->dpi, 96) : 0;
+    int closePad = ow->closable ? MulDiv(CLOSE_PAD_DIP, (int)ow->dpi, 96) : 0;
+
+    int textLeft = leftPad + iconSize + iconGap;
+    int textRight = width - rightPad - (ow->closable ? (closePad + closeSize) : 0);
+    int textWidth = textRight - textLeft;
+    if (textWidth < MulDiv(60, (int)ow->dpi, 96))
+        textWidth = MulDiv(60, (int)ow->dpi, 96);
+
+    int textHeight = 0;
+    HDC hdc = GetDC(NULL);
+    if (hdc)
+    {
+        HGDIOBJ oldFont = NULL;
+        if (ow->messageFont)
+            oldFont = SelectObject(hdc, ow->messageFont);
+        textHeight = MeasureTextHeightW(hdc, ow->message ? ow->message : L"", textWidth);
+        if (oldFont)
+            SelectObject(hdc, oldFont);
+        ReleaseDC(NULL, hdc);
+    }
+
+    int contentHeight = textHeight;
+    if (iconSize > contentHeight)
+        contentHeight = iconSize;
+    if (closeSize > contentHeight)
+        contentHeight = closeSize;
+
+    int height = 0;
+    if (ow->height > 0)
+        height = (int)roundf(ow->height * (float)ow->dpi / 96.0f);
+    if (height <= 0)
+        height = topPad + bottomPad + contentHeight;
+
+    UpdateCloseRect(ow, width, height, ow->dpi);
+
+    RECT targetRect;
+    if (ow->stickyWindowPid > 0)
+    {
+        HWND target = NULL;
+        if (FindWindowByPid(ow->stickyWindowPid, &target))
+        {
+            GetWindowRect(target, &targetRect);
+            SetOverlayZOrder(ow->hwnd, target);
+        }
+        else
+        {
+            SystemParametersInfo(SPI_GETWORKAREA, 0, &targetRect, 0);
+        }
+    }
+    else
+    {
+        SystemParametersInfo(SPI_GETWORKAREA, 0, &targetRect, 0);
+        SetOverlayZOrder(ow->hwnd, NULL);
+    }
+
+    int x = 0;
+    int y = 0;
+    ComputeOverlayPosition(ow, &targetRect, width, height, &x, &y);
+
+    RECT workArea = GetWorkAreaForRect(&targetRect);
+    ClampWindowToWorkArea(&workArea, &x, &y, width, height);
+
+    SetWindowPos(ow->hwnd, NULL, x, y, width, height, SWP_NOACTIVATE | SWP_NOZORDER);
+    ApplyCornerRadius(ow->hwnd, ow->dpi, width, height);
+
+    StartAutoCloseTimer(ow);
+    StartTrackTimer(ow);
+}
+
+static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BOOL isNew)
+{
+    if (!ow || !payload)
+        return;
+
+    if (!isNew)
+    {
+        if (ow->title)
+            free(ow->title);
+        if (ow->message)
+            free(ow->message);
+    }
+
+    if (isNew)
+        ow->name = payload->name;
+    else if (payload->name)
+        free(payload->name);
+
+    ow->title = payload->title;
+    ow->message = payload->message;
+
+    if (ow->iconBitmap)
+        DeleteObject(ow->iconBitmap);
+    ow->iconBitmap = NULL;
+    ow->iconWidth = 0;
+    ow->iconHeight = 0;
+
+    if (payload->iconData && payload->iconLen > 0)
+    {
+        int iw = 0;
+        int ih = 0;
+        HBITMAP bmp = CreateBitmapFromPngData(payload->iconData, payload->iconLen, &iw, &ih);
+        if (bmp)
+        {
+            ow->iconBitmap = bmp;
+            ow->iconWidth = iw;
+            ow->iconHeight = ih;
+        }
+    }
+
+    if (payload->iconData)
+        free(payload->iconData);
+
+    ow->closable = payload->closable;
+    ow->stickyWindowPid = payload->stickyWindowPid;
+    ow->anchor = payload->anchor;
+    ow->autoCloseSeconds = payload->autoCloseSeconds;
+    ow->movable = payload->movable;
+    ow->offsetX = payload->offsetX;
+    ow->offsetY = payload->offsetY;
+    ow->width = payload->width;
+    ow->height = payload->height;
+
+    if (ow->title && ow->hwnd)
+        SetWindowTextW(ow->hwnd, ow->title);
+
+    free(payload);
+}
+
+static void DrawCloseButton(HDC hdc, const RECT *rect, UINT dpi, BOOL hover, BOOL pressed)
+{
+    if (!rect)
+        return;
+
+    if (hover || pressed)
+    {
+        COLORREF bg = pressed ? RGB(70, 70, 70) : RGB(55, 55, 55);
+        HBRUSH brush = CreateSolidBrush(bg);
+        FillRect(hdc, rect, brush);
+        DeleteObject(brush);
+    }
+
+    int pad = MulDiv(6, (int)dpi, 96);
+    int thickness = MulDiv(2, (int)dpi, 96);
+    if (thickness < 1)
+        thickness = 1;
+
+    HPEN pen = CreatePen(PS_SOLID, thickness, RGB(230, 230, 230));
+    HGDIOBJ oldPen = SelectObject(hdc, pen);
+
+    MoveToEx(hdc, rect->left + pad, rect->top + pad, NULL);
+    LineTo(hdc, rect->right - pad, rect->bottom - pad);
+    MoveToEx(hdc, rect->right - pad, rect->top + pad, NULL);
+    LineTo(hdc, rect->left + pad, rect->bottom - pad);
+
+    if (oldPen)
+        SelectObject(hdc, oldPen);
+    DeleteObject(pen);
+}
+
+static void HandleOverlayClick(OverlayWindow *ow)
+{
+    if (!ow || !ow->name)
+        return;
+    char *nameUtf8 = DupWideToUtf8(ow->name);
+    if (!nameUtf8)
+        return;
+    overlayClickCallbackCGO(nameUtf8);
+    free(nameUtf8);
+}
+
+// -----------------------------------------------------------------------------
+// Window Proc
+// -----------------------------------------------------------------------------
+
+static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    if (uMsg == WM_NCCREATE)
+    {
+        CREATESTRUCT *cs = (CREATESTRUCT *)lParam;
+        if (cs && cs->lpCreateParams)
+            SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)cs->lpCreateParams);
+        return DefWindowProc(hwnd, uMsg, wParam, lParam);
+    }
+
+    OverlayWindow *ow = (OverlayWindow *)GetWindowLongPtr(hwnd, GWLP_USERDATA);
+
+    switch (uMsg)
+    {
+    case WM_CREATE:
+    {
+        BOOL dark = TRUE;
+        DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
+        UINT cornerPreference = DWMWCP_ROUND;
+        DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &cornerPreference, sizeof(cornerPreference));
+
+        BOOL accentOk = TryEnableAcrylic(hwnd);
+        if (!accentOk)
+            accentOk = TryEnableHostBackdrop(hwnd);
+
+        if (accentOk)
+        {
+            MARGINS margins = {0, 0, 0, 0};
+            DwmExtendFrameIntoClientArea(hwnd, &margins);
+
+            UINT noneBackdrop = DWMSBT_NONE;
+            DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &noneBackdrop, sizeof(noneBackdrop));
+        }
+        else
+        {
+            UINT backdrop = DWMSBT_TRANSIENTWINDOW;
+            HRESULT hrBackdrop = DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop, sizeof(backdrop));
+            if (SUCCEEDED(hrBackdrop))
+            {
+                MARGINS margins = {-1};
+                DwmExtendFrameIntoClientArea(hwnd, &margins);
+            }
+        }
+        return 0;
+    }
+    case WM_ERASEBKGND:
+        return 1;
+    case WM_DPICHANGED:
+    {
+        if (!ow)
+            return 0;
+        ow->dpi = HIWORD(wParam);
+        RECT *suggested = (RECT *)lParam;
+        if (suggested)
+        {
+            SetWindowPos(hwnd, NULL, suggested->left, suggested->top,
+                         suggested->right - suggested->left,
+                         suggested->bottom - suggested->top,
+                         SWP_NOACTIVATE | SWP_NOZORDER);
+        }
+        ApplyOverlayLayout(ow);
+        InvalidateRect(hwnd, NULL, TRUE);
+        return 0;
+    }
+    case WM_PAINT:
+    {
+        if (!ow)
+            break;
+        PAINTSTRUCT ps;
+        HDC paintHdc = BeginPaint(hwnd, &ps);
+
+        RECT client;
+        GetClientRect(hwnd, &client);
+        ow->dpi = GetWindowDpiSafe(hwnd, ow->dpi ? ow->dpi : 96);
+        int width = client.right - client.left;
+        int height = client.bottom - client.top;
+
+        HDC hdc = paintHdc;
+        HPAINTBUFFER paintBuf = BeginBufferedPaint(paintHdc, &client, BPBF_TOPDOWNDIB, NULL, &hdc);
+        if (paintBuf)
+        {
+            BufferedPaintClear(paintBuf, &client);
+        }
+
+        int leftPad = MulDiv(PADDING_X_DIP, (int)ow->dpi, 96);
+        int rightPad = MulDiv(PADDING_X_DIP, (int)ow->dpi, 96);
+        int topPad = MulDiv(PADDING_Y_DIP, (int)ow->dpi, 96);
+        int bottomPad = MulDiv(PADDING_Y_DIP, (int)ow->dpi, 96);
+
+        int iconSize = (ow->iconBitmap ? MulDiv(ICON_SIZE_DIP, (int)ow->dpi, 96) : 0);
+        int iconGap = (ow->iconBitmap ? MulDiv(ICON_GAP_DIP, (int)ow->dpi, 96) : 0);
+        int closeSize = ow->closable ? MulDiv(CLOSE_SIZE_DIP, (int)ow->dpi, 96) : 0;
+        int closePad = ow->closable ? MulDiv(CLOSE_PAD_DIP, (int)ow->dpi, 96) : 0;
+
+        int textLeft = leftPad + iconSize + iconGap;
+        int textRight = width - rightPad - (ow->closable ? (closePad + closeSize) : 0);
+        RECT textRect = {textLeft, topPad, textRight, height - bottomPad};
+
+        SetBkMode(hdc, TRANSPARENT);
+        SetTextColor(hdc, RGB(240, 240, 240));
+        if (ow->messageFont)
+            SelectObject(hdc, ow->messageFont);
+        DrawTextW(hdc, ow->message ? ow->message : L"", -1, &textRect,
+                  DT_LEFT | DT_TOP | DT_WORDBREAK | DT_EDITCONTROL | DT_NOPREFIX);
+
+        if (ow->iconBitmap)
+        {
+            int iconX = leftPad;
+            int iconY = (height - iconSize) / 2;
+            if (iconY < topPad)
+                iconY = topPad;
+            if (iconY + iconSize > height - bottomPad)
+                iconY = height - bottomPad - iconSize;
+            if (iconY < 0)
+                iconY = 0;
+
+            HDC memDC = CreateCompatibleDC(hdc);
+            if (memDC)
+            {
+                HGDIOBJ oldBmp = SelectObject(memDC, ow->iconBitmap);
+                BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+                AlphaBlend(hdc, iconX, iconY, iconSize, iconSize, memDC, 0, 0, ow->iconWidth, ow->iconHeight, bf);
+                if (oldBmp)
+                    SelectObject(memDC, oldBmp);
+                DeleteDC(memDC);
+            }
+        }
+
+        if (ow->closable)
+        {
+            DrawCloseButton(hdc, &ow->closeRect, ow->dpi, ow->closeHover, ow->closePressed);
+        }
+
+        if (paintBuf)
+        {
+            EndBufferedPaint(paintBuf, TRUE);
+        }
+
+        EndPaint(hwnd, &ps);
+        return 0;
+    }
+    case WM_SETCURSOR:
+    {
+        if (!ow)
+            break;
+        if (LOWORD(lParam) == HTCLIENT)
+        {
+            POINT pt;
+            if (GetCursorPos(&pt))
+            {
+                ScreenToClient(hwnd, &pt);
+                if (ow->closable && PtInRect(&ow->closeRect, pt))
+                {
+                    SetCursor(LoadCursor(NULL, IDC_HAND));
+                    return TRUE;
+                }
+            }
+        }
+        break;
+    }
+    case WM_MOUSEMOVE:
+    {
+        if (!ow)
+            break;
+        if (!ow->mouseInside)
+        {
+            ow->mouseInside = TRUE;
+            TRACKMOUSEEVENT tme = {sizeof(TRACKMOUSEEVENT), TME_LEAVE, hwnd, 0};
+            TrackMouseEvent(&tme);
+        }
+
+        POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+        BOOL hoverNow = ow->closable && PtInRect(&ow->closeRect, pt);
+        if (hoverNow != ow->closeHover)
+        {
+            ow->closeHover = hoverNow;
+            InvalidateRect(hwnd, NULL, FALSE);
+        }
+
+        if (ow->dragging)
+        {
+            POINT screenPt;
+            GetCursorPos(&screenPt);
+            int dx = screenPt.x - ow->dragStart.x;
+            int dy = screenPt.y - ow->dragStart.y;
+            SetWindowPos(hwnd, NULL, ow->dragWindowOrigin.x + dx, ow->dragWindowOrigin.y + dy, 0, 0,
+                         SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOSIZE);
+        }
+        return 0;
+    }
+    case WM_MOUSELEAVE:
+    {
+        if (!ow)
+            break;
+        ow->mouseInside = FALSE;
+        ow->closeHover = FALSE;
+        if (!ow->closePressed)
+            InvalidateRect(hwnd, NULL, FALSE);
+        if (ow->autoClosePending && !ow->dragging)
+        {
+            DestroyWindow(hwnd);
+        }
+        return 0;
+    }
+    case WM_LBUTTONDOWN:
+    {
+        if (!ow)
+            break;
+        POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+        if (ow->closable && PtInRect(&ow->closeRect, pt))
+        {
+            ow->closePressed = TRUE;
+            SetCapture(hwnd);
+            InvalidateRect(hwnd, NULL, FALSE);
+            return 0;
+        }
+        if (ow->movable)
+        {
+            ow->dragging = TRUE;
+            SetCapture(hwnd);
+            GetCursorPos(&ow->dragStart);
+            RECT wr;
+            GetWindowRect(hwnd, &wr);
+            ow->dragWindowOrigin.x = wr.left;
+            ow->dragWindowOrigin.y = wr.top;
+        }
+        return 0;
+    }
+    case WM_LBUTTONUP:
+    {
+        if (!ow)
+            break;
+        POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+        BOOL wasClosePressed = ow->closePressed;
+        BOOL wasDragging = ow->dragging;
+        ow->closePressed = FALSE;
+        ow->dragging = FALSE;
+        if (GetCapture() == hwnd)
+            ReleaseCapture();
+        InvalidateRect(hwnd, NULL, FALSE);
+
+        if (wasClosePressed && ow->closable && PtInRect(&ow->closeRect, pt))
+        {
+            DestroyWindow(hwnd);
+            return 0;
+        }
+
+        if (!wasDragging)
+        {
+            HandleOverlayClick(ow);
+        }
+        return 0;
+    }
+    case WM_TIMER:
+    {
+        if (!ow)
+            break;
+        if (wParam == TIMER_AUTOCLOSE)
+        {
+            if (ow->mouseInside || ow->dragging)
+            {
+                ow->autoClosePending = TRUE;
+            }
+            else
+            {
+                DestroyWindow(hwnd);
+            }
+            return 0;
+        }
+        if (wParam == TIMER_TRACK)
+        {
+            if (ow->dragging)
+                return 0;
+            if (ow->stickyWindowPid > 0)
+            {
+                HWND target = NULL;
+                if (FindWindowByPid(ow->stickyWindowPid, &target))
+                {
+                    RECT targetRect;
+                    GetWindowRect(target, &targetRect);
+                    RECT client;
+                    GetClientRect(hwnd, &client);
+                    int width = client.right - client.left;
+                    int height = client.bottom - client.top;
+                    int x = 0;
+                    int y = 0;
+                    ComputeOverlayPosition(ow, &targetRect, width, height, &x, &y);
+                    RECT workArea = GetWorkAreaForRect(&targetRect);
+                    ClampWindowToWorkArea(&workArea, &x, &y, width, height);
+                    SetWindowPos(hwnd, target, x, y, 0, 0, SWP_NOACTIVATE | SWP_NOSIZE);
+                }
+                else
+                {
+                    DestroyWindow(hwnd);
+                }
+            }
+            return 0;
+        }
+        break;
+    }
+    case WM_DESTROY:
+    {
+        if (ow)
+        {
+            KillTimer(hwnd, TIMER_AUTOCLOSE);
+            KillTimer(hwnd, TIMER_TRACK);
+            RemoveOverlay(ow);
+            if (ow->messageFont)
+                DeleteObject(ow->messageFont);
+            if (ow->iconBitmap)
+                DeleteObject(ow->iconBitmap);
+            if (ow->name)
+                free(ow->name);
+            if (ow->title)
+                free(ow->title);
+            if (ow->message)
+                free(ow->message);
+            free(ow);
+        }
+        return 0;
+    }
+    }
+
+    return DefWindowProc(hwnd, uMsg, wParam, lParam);
+}
+
+// -----------------------------------------------------------------------------
+// Controller Proc / Thread
+// -----------------------------------------------------------------------------
+
+static void HandleShowCommand(OverlayPayload *payload)
+{
+    if (!payload || !payload->name)
+    {
+        if (payload)
+            free(payload);
+        return;
+    }
+
+    OverlayWindow *ow = FindOverlayByName(payload->name);
+    if (ow && ow->hwnd && IsWindow(ow->hwnd))
+    {
+        ApplyPayloadToOverlay(ow, payload, FALSE);
+        ApplyOverlayLayout(ow);
+        ShowWindow(ow->hwnd, SW_SHOWNOACTIVATE);
+        InvalidateRect(ow->hwnd, NULL, TRUE);
+        return;
+    }
+
+    ow = (OverlayWindow *)calloc(1, sizeof(OverlayWindow));
+    if (!ow)
+    {
+        if (payload->name)
+            free(payload->name);
+        if (payload->title)
+            free(payload->title);
+        if (payload->message)
+            free(payload->message);
+        if (payload->iconData)
+            free(payload->iconData);
+        free(payload);
+        return;
+    }
+
+    ApplyPayloadToOverlay(ow, payload, TRUE);
+
+    DWORD exStyle = WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
+    if (ow->stickyWindowPid <= 0)
+        exStyle |= WS_EX_TOPMOST;
+
+    ow->hwnd = CreateWindowExW(exStyle, g_overlayClassName, ow->title ? ow->title : L"",
+                               WS_POPUP, 0, 0, 0, 0, NULL, NULL, GetModuleHandleW(NULL), ow);
+    if (!ow->hwnd)
+    {
+        if (ow->name)
+            free(ow->name);
+        if (ow->title)
+            free(ow->title);
+        if (ow->message)
+            free(ow->message);
+        if (ow->iconBitmap)
+            DeleteObject(ow->iconBitmap);
+        free(ow);
+        return;
+    }
+
+    AddOverlay(ow);
+    ApplyOverlayLayout(ow);
+    ShowWindow(ow->hwnd, SW_SHOWNOACTIVATE);
+    UpdateWindow(ow->hwnd);
+}
+
+static void HandleCloseCommand(const WCHAR *name)
+{
+    if (!name)
+        return;
+    OverlayWindow *ow = FindOverlayByName(name);
+    if (ow && ow->hwnd && IsWindow(ow->hwnd))
+    {
+        DestroyWindow(ow->hwnd);
+    }
+}
+
+static LRESULT CALLBACK OverlayControllerProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    if (uMsg == WM_WOX_OVERLAY_COMMAND)
+    {
+        OverlayCommand *cmd = (OverlayCommand *)lParam;
+        if (!cmd)
+            return 0;
+        if (cmd->type == 1)
+        {
+            HandleShowCommand(cmd->payload);
+        }
+        else if (cmd->type == 2)
+        {
+            HandleCloseCommand(cmd->name);
+            if (cmd->name)
+                free(cmd->name);
+        }
+        free(cmd);
+        return 0;
+    }
+    return DefWindowProc(hwnd, uMsg, wParam, lParam);
+}
+
+static DWORD WINAPI OverlayThreadProc(LPVOID param)
+{
+    (void)param;
+    CoInitializeEx(NULL, COINIT_MULTITHREADED);
+    BufferedPaintInit();
+    TryEnablePerMonitorDpiAwareness();
+
+    WNDCLASSEXW wc;
+    ZeroMemory(&wc, sizeof(wc));
+    wc.cbSize = sizeof(wc);
+    wc.lpfnWndProc = OverlayWindowProc;
+    wc.hInstance = GetModuleHandleW(NULL);
+    wc.lpszClassName = g_overlayClassName;
+    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+    RegisterClassExW(&wc);
+
+    WNDCLASSEXW wc2;
+    ZeroMemory(&wc2, sizeof(wc2));
+    wc2.cbSize = sizeof(wc2);
+    wc2.lpfnWndProc = OverlayControllerProc;
+    wc2.hInstance = GetModuleHandleW(NULL);
+    wc2.lpszClassName = g_controllerClassName;
+    RegisterClassExW(&wc2);
+
+    HWND controller = CreateWindowExW(0, g_controllerClassName, L"", 0, 0, 0, 0, 0,
+                                      HWND_MESSAGE, NULL, GetModuleHandleW(NULL), NULL);
+    g_controllerHwnd = controller;
+    g_overlayThreadId = GetCurrentThreadId();
+
+    if (g_threadReadyEvent)
+        SetEvent(g_threadReadyEvent);
+
+    MSG msg;
+    while (GetMessage(&msg, NULL, 0, 0) > 0)
+    {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+
+    CoUninitialize();
+    return 0;
+}
+
+static BOOL CALLBACK InitOverlayThread(PINIT_ONCE InitOnce, PVOID Parameter, PVOID *Context)
+{
+    (void)InitOnce;
+    (void)Parameter;
+    (void)Context;
+
+    g_threadReadyEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    if (!g_threadReadyEvent)
+        return FALSE;
+
+    g_overlayThread = CreateThread(NULL, 0, OverlayThreadProc, NULL, 0, &g_overlayThreadId);
+    if (!g_overlayThread)
+        return FALSE;
+
+    WaitForSingleObject(g_threadReadyEvent, INFINITE);
+    return TRUE;
+}
+
+static void EnsureOverlayThread(void)
+{
+    InitOnceExecuteOnce(&g_initOnce, InitOverlayThread, NULL, NULL);
+}
+
+// -----------------------------------------------------------------------------
+// C Exported Functions
+// -----------------------------------------------------------------------------
+
+void ShowOverlay(OverlayOptions opts)
+{
+    EnsureOverlayThread();
+    if (!g_controllerHwnd)
+        return;
+
+    OverlayPayload *payload = (OverlayPayload *)calloc(1, sizeof(OverlayPayload));
+    if (!payload)
+        return;
+
+    payload->name = DupUtf8ToWide(opts.name);
+    payload->title = DupUtf8ToWide(opts.title);
+    payload->message = DupUtf8ToWide(opts.message);
+    payload->closable = opts.closable ? TRUE : FALSE;
+    payload->stickyWindowPid = opts.stickyWindowPid;
+    payload->anchor = opts.anchor;
+    payload->autoCloseSeconds = opts.autoCloseSeconds;
+    payload->movable = opts.movable ? TRUE : FALSE;
+    payload->offsetX = opts.offsetX;
+    payload->offsetY = opts.offsetY;
+    payload->width = opts.width;
+    payload->height = opts.height;
+
+    if (opts.iconData && opts.iconLen > 0)
+    {
+        payload->iconData = (unsigned char *)malloc((size_t)opts.iconLen);
+        if (payload->iconData)
+        {
+            memcpy(payload->iconData, opts.iconData, (size_t)opts.iconLen);
+            payload->iconLen = opts.iconLen;
+        }
+    }
+
+    OverlayCommand *cmd = (OverlayCommand *)calloc(1, sizeof(OverlayCommand));
+    if (!cmd)
+    {
+        if (payload->name)
+            free(payload->name);
+        if (payload->title)
+            free(payload->title);
+        if (payload->message)
+            free(payload->message);
+        if (payload->iconData)
+            free(payload->iconData);
+        free(payload);
+        return;
+    }
+    cmd->type = 1;
+    cmd->payload = payload;
+
+    if (!PostMessageW(g_controllerHwnd, WM_WOX_OVERLAY_COMMAND, 0, (LPARAM)cmd))
+    {
+        if (payload->name)
+            free(payload->name);
+        if (payload->title)
+            free(payload->title);
+        if (payload->message)
+            free(payload->message);
+        if (payload->iconData)
+            free(payload->iconData);
+        free(payload);
+        free(cmd);
+    }
+}
+
+void CloseOverlay(char *name)
+{
+    if (!name)
+        return;
+    EnsureOverlayThread();
+    if (!g_controllerHwnd)
+        return;
+
+    OverlayCommand *cmd = (OverlayCommand *)calloc(1, sizeof(OverlayCommand));
+    if (!cmd)
+        return;
+
+    cmd->type = 2;
+    cmd->name = DupUtf8ToWide(name);
+
+    if (!PostMessageW(g_controllerHwnd, WM_WOX_OVERLAY_COMMAND, 0, (LPARAM)cmd))
+    {
+        if (cmd->name)
+            free(cmd->name);
+        free(cmd);
+    }
+}

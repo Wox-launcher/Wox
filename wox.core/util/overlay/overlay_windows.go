@@ -2,6 +2,7 @@ package overlay
 
 /*
 #cgo CFLAGS: -DUNICODE -D_UNICODE
+#cgo LDFLAGS: -ldwmapi -luxtheme -lmsimg32 -lgdi32 -luser32 -lole32 -luuid -lwindowscodecs
 #include <stdlib.h>
 #include <stdbool.h>
 
@@ -14,6 +15,8 @@ typedef struct {
     bool closable;
     int stickyWindowPid;
     int anchor;
+    int autoCloseSeconds;
+    bool movable;
     float offsetX;
     float offsetY;
     float width;
@@ -25,20 +28,79 @@ void CloseOverlay(char* name);
 void overlayClickCallbackCGO(char* name);
 */
 import "C"
+import (
+	"bytes"
+	"image"
+	"image/png"
+	"unsafe"
+)
 
-// Stub for click callbacks on Windows
-// In reality, you'd implement the same map logic as Darwin.
-// For now, to match the interface:
+var clickCallbacks = make(map[string]func())
 
 func Show(opts OverlayOptions) {
-	// Basic Stub for Windows compilation
+	if opts.OnClick != nil {
+		clickCallbacks[opts.Name] = opts.OnClick
+	}
+
+	cName := C.CString(opts.Name)
+	defer C.free(unsafe.Pointer(cName))
+
+	cTitle := C.CString(opts.Title)
+	defer C.free(unsafe.Pointer(cTitle))
+
+	cMessage := C.CString(opts.Message)
+	defer C.free(unsafe.Pointer(cMessage))
+
+	var cIconData *C.uchar
+	var cIconLen C.int
+	pngBytes, _ := imageToPNG(opts.Icon)
+	if len(pngBytes) > 0 {
+		cIconData = (*C.uchar)(unsafe.Pointer(&pngBytes[0]))
+		cIconLen = C.int(len(pngBytes))
+	}
+
+	cOpts := C.OverlayOptions{
+		name:             cName,
+		title:            cTitle,
+		message:          cMessage,
+		iconData:         cIconData,
+		iconLen:          cIconLen,
+		closable:         C.bool(opts.Closable),
+		stickyWindowPid:  C.int(opts.StickyWindowPid),
+		anchor:           C.int(opts.Anchor),
+		autoCloseSeconds: C.int(opts.AutoCloseSeconds),
+		movable:          C.bool(opts.Movable),
+		offsetX:          C.float(opts.OffsetX),
+		offsetY:          C.float(opts.OffsetY),
+		width:            C.float(opts.Width),
+		height:           C.float(opts.Height),
+	}
+
+	C.ShowOverlay(cOpts)
 }
 
 func Close(name string) {
-	// Stub
+	delete(clickCallbacks, name)
+	cName := C.CString(name)
+	defer C.free(unsafe.Pointer(cName))
+	C.CloseOverlay(cName)
 }
 
 //export overlayClickCallbackCGO
 func overlayClickCallbackCGO(cName *C.char) {
-	// Callback
+	name := C.GoString(cName)
+	if cb, ok := clickCallbacks[name]; ok {
+		cb()
+	}
+}
+
+func imageToPNG(img image.Image) ([]byte, error) {
+	if img == nil {
+		return nil, nil
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }

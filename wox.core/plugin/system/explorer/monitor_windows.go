@@ -7,6 +7,8 @@ void stopFinderMonitor();
 */
 import "C"
 
+var onFinderActivated func(pid int)
+
 //export finderActivatedCallbackCGO
 func finderActivatedCallbackCGO(pid C.int) {
 	if onFinderActivated != nil {
