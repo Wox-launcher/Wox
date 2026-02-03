@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <wchar.h>
 #include <math.h>
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
@@ -463,6 +464,10 @@ typedef struct OverlayWindow
     BOOL autoClosePending;
     POINT dragStart;
     POINT dragWindowOrigin;
+    RECT lastTargetRect;
+    BOOL hasLastTargetRect;
+    BOOL hiddenForMove;
+    DWORD lastMoveTick;
 
     struct OverlayWindow *next;
 } OverlayWindow;
@@ -546,7 +551,30 @@ typedef struct
 {
     DWORD pid;
     HWND hwnd;
+    HWND fallback;
 } FindWindowData;
+
+static int IsExplorerWindowClass(const WCHAR *className)
+{
+    if (!className || !*className)
+        return 0;
+    if (_wcsicmp(className, L"CabinetWClass") == 0)
+        return 1;
+    if (_wcsicmp(className, L"ExploreWClass") == 0)
+        return 1;
+    return 0;
+}
+
+static int IsDesktopWindowClass(const WCHAR *className)
+{
+    if (!className || !*className)
+        return 0;
+    if (_wcsicmp(className, L"Progman") == 0)
+        return 1;
+    if (_wcsicmp(className, L"WorkerW") == 0)
+        return 1;
+    return 0;
+}
 
 static BOOL CALLBACK EnumWindowByPidProc(HWND hwnd, LPARAM lParam)
 {
@@ -559,12 +587,26 @@ static BOOL CALLBACK EnumWindowByPidProc(HWND hwnd, LPARAM lParam)
     if (wpid != d->pid)
         return TRUE;
 
+    WCHAR className[128];
+    int len = GetClassNameW(hwnd, className, (int)(sizeof(className) / sizeof(className[0])));
+    if (len <= 0)
+        return TRUE;
+    if (IsDesktopWindowClass(className))
+        return TRUE;
+
     LONG style = GetWindowLong(hwnd, GWL_STYLE);
     if (!(style & WS_OVERLAPPEDWINDOW) && !(style & WS_POPUP))
         return TRUE;
 
-    d->hwnd = hwnd;
-    return FALSE;
+    if (IsExplorerWindowClass(className))
+    {
+        d->hwnd = hwnd;
+        return FALSE;
+    }
+
+    if (!d->fallback)
+        d->fallback = hwnd;
+    return TRUE;
 }
 
 static BOOL FindWindowByPid(int pid, HWND *out)
@@ -574,24 +616,62 @@ static BOOL FindWindowByPid(int pid, HWND *out)
     if (pid <= 0)
         return FALSE;
 
+    HWND fg = GetForegroundWindow();
+    if (fg && IsWindowVisible(fg))
+    {
+        DWORD fgPid = 0;
+        GetWindowThreadProcessId(fg, &fgPid);
+        if ((int)fgPid == pid)
+        {
+            WCHAR className[128];
+            int len = GetClassNameW(fg, className, (int)(sizeof(className) / sizeof(className[0])));
+            if (len > 0 && IsExplorerWindowClass(className))
+            {
+                if (out)
+                    *out = fg;
+                return TRUE;
+            }
+        }
+    }
+
     FindWindowData data;
     data.pid = (DWORD)pid;
     data.hwnd = NULL;
+    data.fallback = NULL;
 
     EnumWindows(EnumWindowByPidProc, (LPARAM)&data);
+    if (!data.hwnd && data.fallback)
+        data.hwnd = data.fallback;
     if (out)
         *out = data.hwnd;
     return data.hwnd != NULL;
+}
+
+static void UpdateOverlayOwner(HWND hwnd, HWND target)
+{
+    if (!hwnd)
+        return;
+    HWND owner = (HWND)GetWindowLongPtr(hwnd, GWLP_HWNDPARENT);
+    if (owner != target)
+    {
+        SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, (LONG_PTR)target);
+    }
 }
 
 static void SetOverlayZOrder(HWND hwnd, HWND target)
 {
     if (target && IsWindow(target))
     {
-        SetWindowPos(hwnd, target, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        UpdateOverlayOwner(hwnd, target);
+        if (GetForegroundWindow() == target)
+        {
+            SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+        }
     }
     else
     {
+        UpdateOverlayOwner(hwnd, NULL);
         SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
 }
@@ -853,6 +933,9 @@ static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BO
     ow->offsetY = payload->offsetY;
     ow->width = payload->width;
     ow->height = payload->height;
+    ow->hasLastTargetRect = FALSE;
+    ow->hiddenForMove = FALSE;
+    ow->lastMoveTick = 0;
 
     if (ow->title && ow->hwnd)
         SetWindowTextW(ow->hwnd, ow->title);
@@ -1186,6 +1269,40 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
                 {
                     RECT targetRect;
                     GetWindowRect(target, &targetRect);
+                    BOOL moved = FALSE;
+                    if (!ow->hasLastTargetRect)
+                    {
+                        moved = TRUE;
+                    }
+                    else if (memcmp(&ow->lastTargetRect, &targetRect, sizeof(RECT)) != 0)
+                    {
+                        moved = TRUE;
+                    }
+
+                    if (moved)
+                    {
+                        ow->lastTargetRect = targetRect;
+                        ow->hasLastTargetRect = TRUE;
+                        ow->lastMoveTick = GetTickCount();
+                        if (!ow->hiddenForMove)
+                        {
+                            ShowWindow(hwnd, SW_HIDE);
+                            ow->hiddenForMove = TRUE;
+                        }
+                        return 0;
+                    }
+
+                    if (ow->hiddenForMove)
+                    {
+                        DWORD elapsed = GetTickCount() - ow->lastMoveTick;
+                        if (elapsed < 500)
+                        {
+                            return 0;
+                        }
+                        ow->hiddenForMove = FALSE;
+                        ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+                    }
+
                     RECT client;
                     GetClientRect(hwnd, &client);
                     int width = client.right - client.left;
@@ -1195,7 +1312,8 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
                     ComputeOverlayPosition(ow, &targetRect, width, height, &x, &y);
                     RECT workArea = GetWorkAreaForRect(&targetRect);
                     ClampWindowToWorkArea(&workArea, &x, &y, width, height);
-                    SetWindowPos(hwnd, target, x, y, 0, 0, SWP_NOACTIVATE | SWP_NOSIZE);
+                    SetOverlayZOrder(hwnd, target);
+                    SetWindowPos(hwnd, NULL, x, y, 0, 0, SWP_NOACTIVATE | SWP_NOSIZE | SWP_NOZORDER);
                 }
                 else
                 {
@@ -1276,8 +1394,14 @@ static void HandleShowCommand(OverlayPayload *payload)
     if (ow->stickyWindowPid <= 0)
         exStyle |= WS_EX_TOPMOST;
 
+    HWND owner = NULL;
+    if (ow->stickyWindowPid > 0)
+    {
+        FindWindowByPid(ow->stickyWindowPid, &owner);
+    }
+
     ow->hwnd = CreateWindowExW(exStyle, g_overlayClassName, ow->title ? ow->title : L"",
-                               WS_POPUP, 0, 0, 0, 0, NULL, NULL, GetModuleHandleW(NULL), ow);
+                               WS_POPUP, 0, 0, 0, 0, owner, NULL, GetModuleHandleW(NULL), ow);
     if (!ow->hwnd)
     {
         if (ow->name)
