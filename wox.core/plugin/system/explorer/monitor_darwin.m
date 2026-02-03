@@ -2,6 +2,7 @@
 #import <ApplicationServices/ApplicationServices.h>
 
 extern void fileExplorerActivatedCallbackCGO(int pid);
+extern void fileExplorerDeactivatedCallbackCGO(void);
 
 static id gAppActivationObserver = nil;
 static AXObserverRef gFinderWindowObserver = nil;
@@ -75,6 +76,7 @@ void startFileExplorerMonitor() {
                         } else {
                             // Stop observing when switching away from Finder
                             stopFinderWindowObserver();
+                            fileExplorerDeactivatedCallbackCGO();
                         }
                     }];
         

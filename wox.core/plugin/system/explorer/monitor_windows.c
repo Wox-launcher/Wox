@@ -3,6 +3,7 @@
 #include <wchar.h>
 
 extern void fileExplorerActivatedCallbackCGO(int pid);
+extern void fileExplorerDeactivatedCallbackCGO();
 
 static HWINEVENTHOOK gForegroundHook = NULL;
 static HANDLE gMonitorThread = NULL;
@@ -75,25 +76,26 @@ static void CALLBACK foregroundChangedProc(
     }
 
     if (!isExplorerWindow(hwnd)) {
-        gLastExplorerPid = 0;
-        gLastExplorerHwnd = NULL;
+        if (gLastExplorerPid != 0) {
+            gLastExplorerPid = 0;
+            gLastExplorerHwnd = NULL;
+            fileExplorerDeactivatedCallbackCGO();
+        }
         return;
     }
 
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
     if (pid == 0 || !isExplorerProcess(pid)) {
-        gLastExplorerPid = 0;
-        gLastExplorerHwnd = NULL;
+        if (gLastExplorerPid != 0) {
+            gLastExplorerPid = 0;
+            gLastExplorerHwnd = NULL;
+            fileExplorerDeactivatedCallbackCGO();
+        }
         return;
     }
 
     if (hwnd == gLastExplorerHwnd) {
-        return;
-    }
-
-    if (pid == gLastExplorerPid) {
-        gLastExplorerHwnd = hwnd;
         return;
     }
 

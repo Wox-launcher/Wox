@@ -853,7 +853,22 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
         HWND target = NULL;
         if (FindWindowByPid(ow->stickyWindowPid, &target))
         {
-            GetWindowRect(target, &targetRect);
+            RECT clientRect;
+            if (GetClientRect(target, &clientRect))
+            {
+                POINT tl = {clientRect.left, clientRect.top};
+                POINT br = {clientRect.right, clientRect.bottom};
+                ClientToScreen(target, &tl);
+                ClientToScreen(target, &br);
+                targetRect.left = tl.x;
+                targetRect.top = tl.y;
+                targetRect.right = br.x;
+                targetRect.bottom = br.y;
+            }
+            else
+            {
+                GetWindowRect(target, &targetRect);
+            }
             SetOverlayZOrder(ow->hwnd, target);
         }
         else
@@ -870,6 +885,12 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
     int x = 0;
     int y = 0;
     ComputeOverlayPosition(ow, &targetRect, width, height, &x, &y);
+
+    if (ow->stickyWindowPid > 0)
+    {
+        ow->lastTargetRect = targetRect;
+        ow->hasLastTargetRect = TRUE;
+    }
 
     RECT workArea = GetWorkAreaForRect(&targetRect);
     ClampWindowToWorkArea(&workArea, &x, &y, width, height);
@@ -1268,7 +1289,22 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
                 if (FindWindowByPid(ow->stickyWindowPid, &target))
                 {
                     RECT targetRect;
-                    GetWindowRect(target, &targetRect);
+                    RECT clientRect;
+                    if (GetClientRect(target, &clientRect))
+                    {
+                        POINT tl = {clientRect.left, clientRect.top};
+                        POINT br = {clientRect.right, clientRect.bottom};
+                        ClientToScreen(target, &tl);
+                        ClientToScreen(target, &br);
+                        targetRect.left = tl.x;
+                        targetRect.top = tl.y;
+                        targetRect.right = br.x;
+                        targetRect.bottom = br.y;
+                    }
+                    else
+                    {
+                        GetWindowRect(target, &targetRect);
+                    }
                     BOOL moved = FALSE;
                     if (!ow->hasLastTargetRect)
                     {
