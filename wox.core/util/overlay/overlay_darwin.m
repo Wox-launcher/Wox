@@ -61,8 +61,8 @@ extern void overlayClickCallbackCGO(char* name);
 @property(nonatomic, assign) AXObserverRef axObserver;
 @property(nonatomic, assign) AXUIElementRef trackedWindow;
 @property(nonatomic, assign) OverlayOptions currentOpts;
-// Timer for delayed show after window stops moving
-@property(nonatomic, strong) NSTimer *showDelayTimer;
+// Timer for checking tracked-window drag state and showing overlay on mouse release
+@property(nonatomic, strong) NSTimer *showAfterDragTimer;
 // Target window number for z-order management
 @property(nonatomic, assign) CGWindowID stickyWindowNumber;
 @end
@@ -331,9 +331,9 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 }
 
 - (void)stopTrackingWindow {
-    // Cancel show delay timer
-    [self.showDelayTimer invalidate];
-    self.showDelayTimer = nil;
+    // Cancel drag-release check timer
+    [self.showAfterDragTimer invalidate];
+    self.showAfterDragTimer = nil;
     
     if (self.axObserver) {
         CFRunLoopRemoveSource(CFRunLoopGetMain(), 
@@ -571,23 +571,39 @@ static void axObserverCallback(AXObserverRef observer, AXUIElementRef element, C
 }
 
 - (void)handleTrackedWindowMoved {
-    // Cancel any pending show timer
-    [self.showDelayTimer invalidate];
-    self.showDelayTimer = nil;
+    // Cancel any pending drag check timer
+    [self.showAfterDragTimer invalidate];
+    self.showAfterDragTimer = nil;
     
     // Hide the overlay immediately
     self.alphaValue = 0;
-    
-    // Schedule delayed show after window stops moving (500ms delay)
-    self.showDelayTimer = [NSTimer scheduledTimerWithTimeInterval:0.5
-                                                           target:self
-                                                         selector:@selector(showAfterWindowStopped)
-                                                         userInfo:nil
-                                                          repeats:NO];
+
+    // Show immediately when user releases the mouse after dragging the tracked window.
+    if (!CGEventSourceButtonState(kCGEventSourceStateCombinedSessionState, kCGMouseButtonLeft)) {
+        [self showAfterWindowStopped];
+        return;
+    }
+
+    self.showAfterDragTimer = [NSTimer scheduledTimerWithTimeInterval:0.016
+                                                                target:self
+                                                              selector:@selector(checkTrackedWindowDragEnded)
+                                                              userInfo:nil
+                                                               repeats:YES];
+}
+
+- (void)checkTrackedWindowDragEnded {
+    if (CGEventSourceButtonState(kCGEventSourceStateCombinedSessionState, kCGMouseButtonLeft)) {
+        return;
+    }
+
+    [self.showAfterDragTimer invalidate];
+    self.showAfterDragTimer = nil;
+    [self showAfterWindowStopped];
 }
 
 - (void)showAfterWindowStopped {
-    self.showDelayTimer = nil;
+    [self.showAfterDragTimer invalidate];
+    self.showAfterDragTimer = nil;
     
     // Update stickyWindowNumber for z-order
     if (self.currentOpts.stickyWindowPid > 0) {

@@ -100,7 +100,7 @@ func (c *ExplorerPlugin) Init(ctx context.Context, initParams plugin.InitParams)
 			if value == "true" {
 				c.startOverlayListener(callbackCtx)
 			} else {
-				StopExplorerMonitor()
+				c.stopOverlayListener()
 				overlay.Close("explorer_hint")
 			}
 		}
@@ -412,12 +412,14 @@ func (c *ExplorerPlugin) loadOpenSaveHistory(ctx context.Context) *util.HashMap[
 	return items
 }
 
+func (c *ExplorerPlugin) stopOverlayListener() {
+	StopExplorerMonitor()
+}
+
 func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
+	c.stopOverlayListener()
 	woxIcon, _ := common.WoxIcon.ToImage()
-	StartExplorerMonitor(func(pid int) {
-		if pid <= 0 {
-			return
-		}
+	showOverlay := func(pid int) {
 		message := i18n.GetI18nManager().TranslateWox(ctx, "plugin_explorer_hint_message")
 		overlay.Show(overlay.OverlayOptions{
 			Name:            "explorer_hint",
@@ -436,7 +438,9 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 				c.api.ShowApp(ctx)
 			},
 		})
-	}, func() {
+	}
+
+	StartExplorerMonitor(showOverlay, func() {
 		overlay.Close("explorer_hint")
 	})
 }

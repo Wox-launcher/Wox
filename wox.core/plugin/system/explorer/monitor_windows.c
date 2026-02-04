@@ -6,10 +6,12 @@ extern void fileExplorerActivatedCallbackCGO(int pid);
 extern void fileExplorerDeactivatedCallbackCGO();
 
 static HWINEVENTHOOK gForegroundHook = NULL;
+static HWINEVENTHOOK gObjectShowHook = NULL;
 static HANDLE gMonitorThread = NULL;
 static DWORD gMonitorThreadId = 0;
 static DWORD gLastExplorerPid = 0;
 static HWND gLastExplorerHwnd = NULL;
+
 
 static int isExplorerProcess(DWORD pid) {
     if (pid == 0) {
@@ -37,7 +39,7 @@ static int isExplorerProcess(DWORD pid) {
     return isExplorer;
 }
 
-static int isExplorerWindow(HWND hwnd) {
+static int classifyExplorerWindow(HWND hwnd) {
     if (!hwnd) {
         return 0;
     }
@@ -54,6 +56,22 @@ static int isExplorerWindow(HWND hwnd) {
 
     if (_wcsicmp(className, L"ExploreWClass") == 0) {
         return 1;
+    }
+
+    if (_wcsicmp(className, L"Progman") == 0) {
+        return -1;
+    }
+
+    if (_wcsicmp(className, L"WorkerW") == 0) {
+        return -1;
+    }
+
+    if (_wcsicmp(className, L"Shell_TrayWnd") == 0) {
+        return -1;
+    }
+
+    if (_wcsicmp(className, L"Shell_SecondaryTrayWnd") == 0) {
+        return -1;
     }
 
     return 0;
@@ -75,7 +93,8 @@ static void CALLBACK foregroundChangedProc(
         return;
     }
 
-    if (!isExplorerWindow(hwnd)) {
+    int classResult = classifyExplorerWindow(hwnd);
+    if (classResult == -1) {
         if (gLastExplorerPid != 0) {
             gLastExplorerPid = 0;
             gLastExplorerHwnd = NULL;
@@ -104,6 +123,50 @@ static void CALLBACK foregroundChangedProc(
     fileExplorerActivatedCallbackCGO((int)pid);
 }
 
+static void CALLBACK objectShowProc(
+    HWINEVENTHOOK hook,
+    DWORD event,
+    HWND hwnd,
+    LONG idObject,
+    LONG idChild,
+    DWORD eventThread,
+    DWORD eventTime) {
+    if (event != EVENT_OBJECT_SHOW) {
+        return;
+    }
+
+    if (!hwnd) {
+        return;
+    }
+
+    if (idObject != OBJID_WINDOW || idChild != 0) {
+        return;
+    }
+
+    int classResult = classifyExplorerWindow(hwnd);
+    if (classResult == -1) {
+        return;
+    }
+
+    if (GetForegroundWindow() != hwnd) {
+        return;
+    }
+
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid == 0 || !isExplorerProcess(pid)) {
+        return;
+    }
+
+    if (hwnd == gLastExplorerHwnd) {
+        return;
+    }
+
+    gLastExplorerPid = pid;
+    gLastExplorerHwnd = hwnd;
+    fileExplorerActivatedCallbackCGO((int)pid);
+}
+
 static DWORD WINAPI monitorThreadProc(LPVOID param) {
     MSG msg;
     PeekMessageW(&msg, NULL, WM_USER, WM_USER, PM_NOREMOVE);
@@ -117,8 +180,17 @@ static DWORD WINAPI monitorThreadProc(LPVOID param) {
         0,
         WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
 
+    gObjectShowHook = SetWinEventHook(
+        EVENT_OBJECT_SHOW,
+        EVENT_OBJECT_SHOW,
+        NULL,
+        objectShowProc,
+        0,
+        0,
+        WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+
     HWND hwnd = GetForegroundWindow();
-    if (hwnd && isExplorerWindow(hwnd)) {
+    if (hwnd && classifyExplorerWindow(hwnd) != -1) {
         DWORD pid = 0;
         GetWindowThreadProcessId(hwnd, &pid);
         if (isExplorerProcess(pid)) {
@@ -136,6 +208,11 @@ static DWORD WINAPI monitorThreadProc(LPVOID param) {
     if (gForegroundHook) {
         UnhookWinEvent(gForegroundHook);
         gForegroundHook = NULL;
+    }
+
+    if (gObjectShowHook) {
+        UnhookWinEvent(gObjectShowHook);
+        gObjectShowHook = NULL;
     }
 
     gLastExplorerPid = 0;
