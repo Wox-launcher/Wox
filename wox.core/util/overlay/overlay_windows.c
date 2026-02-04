@@ -467,7 +467,7 @@ typedef struct OverlayWindow
     RECT lastTargetRect;
     BOOL hasLastTargetRect;
     BOOL hiddenForMove;
-    DWORD lastMoveTick;
+    BOOL targetReady;
 
     struct OverlayWindow *next;
 } OverlayWindow;
@@ -505,6 +505,7 @@ static HANDLE g_overlayThread = NULL;
 static DWORD g_overlayThreadId = 0;
 static HWND g_controllerHwnd = NULL;
 static INIT_ONCE g_initOnce = INIT_ONCE_STATIC_INIT;
+
 
 // -----------------------------------------------------------------------------
 // Forward Decls
@@ -781,6 +782,7 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
     if (!ow || !ow->hwnd)
         return;
 
+
     ow->dpi = GetWindowDpiSafe(ow->hwnd, ow->dpi ? ow->dpi : GetSystemDpiSafe());
 
     if (!ow->messageFont || ow->fontDpi != ow->dpi)
@@ -848,11 +850,13 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
     UpdateCloseRect(ow, width, height, ow->dpi);
 
     RECT targetRect;
+    BOOL targetFound = FALSE;
     if (ow->stickyWindowPid > 0)
     {
         HWND target = NULL;
         if (FindWindowByPid(ow->stickyWindowPid, &target))
         {
+            targetFound = TRUE;
             RECT clientRect;
             if (GetClientRect(target, &clientRect))
             {
@@ -869,11 +873,22 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
             {
                 GetWindowRect(target, &targetRect);
             }
+
+            if (targetRect.right - targetRect.left <= 1 || targetRect.bottom - targetRect.top <= 1)
+            {
+                SystemParametersInfo(SPI_GETWORKAREA, 0, &targetRect, 0);
+                targetFound = FALSE;
+            }
+            else
+            {
+                targetFound = TRUE;
+            }
             SetOverlayZOrder(ow->hwnd, target);
         }
         else
         {
             SystemParametersInfo(SPI_GETWORKAREA, 0, &targetRect, 0);
+            SetOverlayZOrder(ow->hwnd, NULL);
         }
     }
     else
@@ -882,9 +897,12 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
         SetOverlayZOrder(ow->hwnd, NULL);
     }
 
+    ow->targetReady = (ow->stickyWindowPid <= 0) ? TRUE : targetFound;
+
     int x = 0;
     int y = 0;
     ComputeOverlayPosition(ow, &targetRect, width, height, &x, &y);
+
 
     if (ow->stickyWindowPid > 0)
     {
@@ -956,7 +974,6 @@ static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BO
     ow->height = payload->height;
     ow->hasLastTargetRect = FALSE;
     ow->hiddenForMove = FALSE;
-    ow->lastMoveTick = 0;
 
     if (ow->title && ow->hwnd)
         SetWindowTextW(ow->hwnd, ow->title);
@@ -1305,6 +1322,11 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
                     {
                         GetWindowRect(target, &targetRect);
                     }
+
+                    if (targetRect.right - targetRect.left <= 1 || targetRect.bottom - targetRect.top <= 1)
+                    {
+                        return 0;
+                    }
                     BOOL moved = FALSE;
                     if (!ow->hasLastTargetRect)
                     {
@@ -1319,7 +1341,6 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
                     {
                         ow->lastTargetRect = targetRect;
                         ow->hasLastTargetRect = TRUE;
-                        ow->lastMoveTick = GetTickCount();
                         if (!ow->hiddenForMove)
                         {
                             ShowWindow(hwnd, SW_HIDE);
@@ -1330,8 +1351,9 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
 
                     if (ow->hiddenForMove)
                     {
-                        DWORD elapsed = GetTickCount() - ow->lastMoveTick;
-                        if (elapsed < 500)
+                        // Keep hidden while the user is still holding mouse during drag,
+                        // then show immediately when mouse is released.
+                        if ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0)
                         {
                             return 0;
                         }
@@ -1434,10 +1456,27 @@ static void HandleShowCommand(OverlayPayload *payload)
     if (ow->stickyWindowPid > 0)
     {
         FindWindowByPid(ow->stickyWindowPid, &owner);
+        if (!owner)
+        {
+            exStyle |= WS_EX_TOPMOST;
+        }
     }
 
     ow->hwnd = CreateWindowExW(exStyle, g_overlayClassName, ow->title ? ow->title : L"",
                                WS_POPUP, 0, 0, 0, 0, owner, NULL, GetModuleHandleW(NULL), ow);
+    if (!ow->hwnd)
+    {
+        DWORD err = GetLastError();
+
+        if (owner && (err == 5 || err == ERROR_ACCESS_DENIED))
+        {
+            owner = NULL;
+            exStyle |= WS_EX_TOPMOST;
+            ow->hwnd = CreateWindowExW(exStyle, g_overlayClassName, ow->title ? ow->title : L"",
+                                       WS_POPUP, 0, 0, 0, 0, owner, NULL, GetModuleHandleW(NULL), ow);
+        }
+    }
+
     if (!ow->hwnd)
     {
         if (ow->name)
@@ -1454,8 +1493,17 @@ static void HandleShowCommand(OverlayPayload *payload)
 
     AddOverlay(ow);
     ApplyOverlayLayout(ow);
-    ShowWindow(ow->hwnd, SW_SHOWNOACTIVATE);
-    UpdateWindow(ow->hwnd);
+    if (ow->stickyWindowPid > 0 && !ow->targetReady)
+    {
+        ow->hiddenForMove = TRUE;
+        ShowWindow(ow->hwnd, SW_HIDE);
+    }
+    else
+    {
+        ShowWindow(ow->hwnd, SW_SHOWNOACTIVATE);
+        UpdateWindow(ow->hwnd);
+    }
+
 }
 
 static void HandleCloseCommand(const WCHAR *name)
