@@ -402,11 +402,14 @@ func (c *ExplorerPlugin) stopOverlayListener() {
 func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 	c.stopOverlayListener()
 	woxIcon, _ := common.WoxIcon.ToImage()
+	tooltipIcon, _ := common.TooltipIcon.ToImage()
 
 	showHint := func(pid int, isDialog bool) {
 		messageKey := "plugin_explorer_hint_message"
+		tooltipMessageKey := "plugin_explorer_hint_tooltip_message"
 		if isDialog {
 			messageKey = "plugin_explorer_hint_message_dialog"
+			tooltipMessageKey = "plugin_explorer_hint_tooltip_message_dialog"
 		}
 
 		var offsetY float64 = -30
@@ -423,6 +426,10 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 			OffsetY:         offsetY,
 			Closable:        true,
 			FontSize:        10,
+			Width:           200,
+			TooltipIcon:     tooltipIcon,
+			TooltipIconSize: 20,
+			Tooltip:         i18n.GetI18nManager().TranslateWox(ctx, tooltipMessageKey),
 			OnClick: func() {
 				window.ActivateWindowByPid(pid)
 				c.api.ChangeQuery(ctx, common.PlainQuery{

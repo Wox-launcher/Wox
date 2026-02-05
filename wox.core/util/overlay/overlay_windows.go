@@ -2,7 +2,7 @@ package overlay
 
 /*
 #cgo CFLAGS: -DUNICODE -D_UNICODE
-#cgo LDFLAGS: -ldwmapi -luxtheme -lmsimg32 -lgdi32 -luser32 -lole32 -luuid -lwindowscodecs
+#cgo LDFLAGS: -ldwmapi -luxtheme -lmsimg32 -lgdi32 -luser32 -lole32 -luuid -lwindowscodecs -lcomctl32
 #include <stdlib.h>
 #include <stdbool.h>
 
@@ -23,6 +23,10 @@ typedef struct {
     float height;
     float fontSize;
     float iconSize;
+    char* tooltip;
+    unsigned char* tooltipIconData;
+    int tooltipIconLen;
+    float tooltipIconSize;
 } OverlayOptions;
 
 void ShowOverlay(OverlayOptions opts);
@@ -53,12 +57,23 @@ func Show(opts OverlayOptions) {
 	cMessage := C.CString(opts.Message)
 	defer C.free(unsafe.Pointer(cMessage))
 
+	cTooltip := C.CString(opts.Tooltip)
+	defer C.free(unsafe.Pointer(cTooltip))
+
 	var cIconData *C.uchar
 	var cIconLen C.int
 	pngBytes, _ := imageToPNG(opts.Icon)
 	if len(pngBytes) > 0 {
 		cIconData = (*C.uchar)(unsafe.Pointer(&pngBytes[0]))
 		cIconLen = C.int(len(pngBytes))
+	}
+
+	var cTooltipIconData *C.uchar
+	var cTooltipIconLen C.int
+	tooltipPngBytes, _ := imageToPNG(opts.TooltipIcon)
+	if len(tooltipPngBytes) > 0 {
+		cTooltipIconData = (*C.uchar)(unsafe.Pointer(&tooltipPngBytes[0]))
+		cTooltipIconLen = C.int(len(tooltipPngBytes))
 	}
 
 	cOpts := C.OverlayOptions{
@@ -78,6 +93,10 @@ func Show(opts OverlayOptions) {
 		height:           C.float(opts.Height),
 		fontSize:         C.float(opts.FontSize),
 		iconSize:         C.float(opts.IconSize),
+		tooltip:          cTooltip,
+		tooltipIconData:  cTooltipIconData,
+		tooltipIconLen:   cTooltipIconLen,
+		tooltipIconSize:  C.float(opts.TooltipIconSize),
 	}
 
 	C.ShowOverlay(cOpts)

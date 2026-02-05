@@ -149,8 +149,15 @@ static void CALLBACK foregroundChangedProc(
     int isValid = 0;
     if (pid != 0) {
         if (isExplorerProcess(pid)) {
-            isValid = 1;
+            if (classResult == 1) {
+                isValid = 1;
+            }
         } else if (isOpenSaveDialog(hwnd)) {
+            isValid = 1;
+        }
+        
+        // If not valid yet, check if it's a dialog inside explorer process
+        if (!isValid && pid != 0 && isExplorerProcess(pid) && isOpenSaveDialog(hwnd)) {
             isValid = 1;
         }
     }
@@ -208,8 +215,15 @@ static void CALLBACK objectShowProc(
     int isValid = 0;
     if (pid != 0) {
         if (isExplorerProcess(pid)) {
-            isValid = 1;
+            if (classResult == 1) {
+                isValid = 1;
+            }
         } else if (isOpenSaveDialog(hwnd)) {
+            isValid = 1;
+        }
+
+        // If not valid yet, check if it's a dialog inside explorer process
+        if (!isValid && pid != 0 && isExplorerProcess(pid) && isOpenSaveDialog(hwnd)) {
             isValid = 1;
         }
     }
@@ -257,8 +271,15 @@ static DWORD WINAPI monitorThreadProc(LPVOID param) {
         int isValid = 0;
         if (pid != 0) {
             if (isExplorerProcess(pid)) {
-                isValid = 1;
+                if (classifyExplorerWindow(hwnd) == 1) { // Re-check class result for initial window
+                     isValid = 1;
+                }
             } else if (isOpenSaveDialog(hwnd)) {
+                isValid = 1;
+            }
+
+            // If not valid yet, check if it's a dialog inside explorer process
+            if (!isValid && pid != 0 && isExplorerProcess(pid) && isOpenSaveDialog(hwnd)) {
                 isValid = 1;
             }
         }

@@ -24,6 +24,10 @@ typedef struct {
     float height;        // 0 = auto
     float fontSize;      // 0 = system default, unit: pt
     float iconSize;      // 0 = default (16), unit: pt
+    char* tooltip;
+    unsigned char* tooltipIconData;
+    int tooltipIconLen;
+    float tooltipIconSize; // 0 = default (16), unit: pt
 } OverlayOptions;
 
 // -----------------------------------------------------------------------------
@@ -32,16 +36,23 @@ typedef struct {
 static const CGFloat kDefaultWindowWidth = 400;
 static const CGFloat kDefaultIconSize = 16;
 static const CGFloat kCloseSize = 20;
+static const CGFloat kTooltipIconGap = 8;
+static const CGFloat kTooltipGap = 6;
+static const CGFloat kTooltipPadding = 8;
+static const CGFloat kTooltipMaxWidth = 400;
+static const CGFloat kTooltipFontSize = 12;
 
 extern void overlayClickCallbackCGO(char* name);
 
 // -----------------------------------------------------------------------------
 // Overlay Window
 // -----------------------------------------------------------------------------
+@class OverlayTooltipWindow;
 @interface OverlayWindow : NSPanel
 @property(nonatomic, strong) NSString *name; // Store the ID
 @property(nonatomic, strong) NSTimer *closeTimer;
 @property(nonatomic, strong) NSImageView *iconView;
+@property(nonatomic, strong) NSImageView *tooltipIconView;
 @property(nonatomic, strong) NSTextField *messageLabel;
 // Simplified text view for now, or use full NSTextView from notifier if needed for multiline.
 // Plan said "use NotificationWindow's robust text logic". So I should use NSTextView.
@@ -53,6 +64,7 @@ extern void overlayClickCallbackCGO(char* name);
 
 @interface OverlayWindow ()
 @property(nonatomic, strong) NSTrackingArea *trackingArea;
+@property(nonatomic, strong) NSTrackingArea *tooltipTrackingArea;
 @property(nonatomic, assign) BOOL isMouseInside;
 @property(nonatomic, assign) BOOL isAutoClosePending;
 @property(nonatomic, assign) NSPoint initialLocation;
@@ -67,6 +79,9 @@ extern void overlayClickCallbackCGO(char* name);
 @property(nonatomic, strong) NSTimer *showAfterDragTimer;
 // Target window number for z-order management
 @property(nonatomic, assign) CGWindowID stickyWindowNumber;
+@property(nonatomic, strong) OverlayTooltipWindow *tooltipWindow;
+@property(nonatomic, copy) NSString *tooltipText;
+@property(nonatomic, assign) NSRect tooltipIconRect;
 @end
 
 static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
@@ -151,6 +166,137 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 }
 @end
 
+// -----------------------------------------------------------------------------
+// Tooltip Window
+// -----------------------------------------------------------------------------
+@interface OverlayTooltipWindow : NSPanel
+@property(nonatomic, strong) NSVisualEffectView *backgroundView;
+@property(nonatomic, strong) NSTextField *textLabel;
+- (void)showWithText:(NSString *)text relativeToRect:(NSRect)iconRect inWindow:(NSWindow *)owner;
+- (void)hideTooltip;
+@end
+
+@implementation OverlayTooltipWindow
+
+- (instancetype)init {
+    self = [super initWithContentRect:NSMakeRect(0, 0, 100, 40)
+                             styleMask:NSWindowStyleMaskBorderless | NSWindowStyleMaskNonactivatingPanel
+                               backing:NSBackingStoreBuffered
+                                 defer:NO];
+    if (self) {
+        [self setOpaque:NO];
+        [self setHasShadow:YES];
+        [self setBackgroundColor:[NSColor clearColor]];
+        [self setLevel:NSFloatingWindowLevel];
+        [self setCollectionBehavior:NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorTransient];
+        [self setIgnoresMouseEvents:YES];
+
+        NSView *content = [[NSView alloc] initWithFrame:self.contentView.bounds];
+        [self setContentView:content];
+        content.wantsLayer = YES;
+        content.layer.cornerRadius = 6.0;
+        content.layer.masksToBounds = YES;
+
+        NSVisualEffectView *bg = [[NSVisualEffectView alloc] initWithFrame:content.bounds];
+        bg.material = NSVisualEffectMaterialHUDWindow;
+        bg.state = NSVisualEffectStateActive;
+        bg.blendingMode = NSVisualEffectBlendingModeBehindWindow;
+        if (@available(macOS 10.14, *)) {
+            bg.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
+        }
+        [content addSubview:bg positioned:NSWindowBelow relativeTo:nil];
+        self.backgroundView = bg;
+
+        NSTextField *label = [[NSTextField alloc] initWithFrame:NSZeroRect];
+        label.editable = NO;
+        label.selectable = NO;
+        label.drawsBackground = NO;
+        label.bezeled = NO;
+        label.font = [NSFont systemFontOfSize:kTooltipFontSize];
+        label.textColor = [NSColor whiteColor];
+        label.alignment = NSTextAlignmentLeft;
+        label.lineBreakMode = NSLineBreakByWordWrapping;
+        label.usesSingleLineMode = NO;
+        if ([label.cell respondsToSelector:@selector(setWraps:)]) {
+            label.cell.wraps = YES;
+        }
+        if ([label.cell respondsToSelector:@selector(setScrollable:)]) {
+            label.cell.scrollable = NO;
+        }
+        if ([label respondsToSelector:@selector(setMaximumNumberOfLines:)]) {
+            label.maximumNumberOfLines = 0;
+        }
+        [content addSubview:label];
+        self.textLabel = label;
+    }
+    return self;
+}
+
+- (BOOL)canBecomeKeyWindow {
+    return NO;
+}
+
+- (void)showWithText:(NSString *)text relativeToRect:(NSRect)iconRect inWindow:(NSWindow *)owner {
+    if (!owner) return;
+    if (!text) text = @"";
+
+    self.textLabel.stringValue = text;
+    NSFont *font = self.textLabel.font ?: [NSFont systemFontOfSize:kTooltipFontSize];
+    NSDictionary *attrs = @{NSFontAttributeName: font};
+
+    NSRect textRect = [text boundingRectWithSize:NSMakeSize(kTooltipMaxWidth, CGFLOAT_MAX)
+                                         options:NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingUsesFontLeading
+                                      attributes:attrs];
+    CGFloat textW = ceil(textRect.size.width);
+    CGFloat textH = ceil(textRect.size.height);
+    if (textW < 1) textW = 1;
+    if (textH < 1) textH = 1;
+
+    CGFloat width = textW + kTooltipPadding * 2;
+    CGFloat height = textH + kTooltipPadding * 2;
+
+    self.textLabel.frame = NSMakeRect(kTooltipPadding, kTooltipPadding, textW, textH);
+    self.backgroundView.frame = ((NSView *)self.contentView).bounds;
+
+    NSRect iconScreen = [owner convertRectToScreen:iconRect];
+    NSPoint iconCenter = NSMakePoint(NSMidX(iconScreen), NSMidY(iconScreen));
+
+    NSScreen *targetScreen = owner.screen ?: [NSScreen mainScreen];
+    for (NSScreen *screen in [NSScreen screens]) {
+        if (NSPointInRect(iconCenter, screen.frame)) {
+            targetScreen = screen;
+            break;
+        }
+    }
+    NSRect workArea = targetScreen.visibleFrame;
+
+    CGFloat x = iconScreen.origin.x + (iconScreen.size.width - width) / 2;
+    CGFloat y = iconScreen.origin.y + iconScreen.size.height + kTooltipGap;
+
+    if (y + height > NSMaxY(workArea)) {
+        y = iconScreen.origin.y - height - kTooltipGap;
+    }
+    if (x + width > NSMaxX(workArea)) {
+        x = NSMaxX(workArea) - width;
+    }
+    if (x < workArea.origin.x) {
+        x = workArea.origin.x;
+    }
+    if (y < workArea.origin.y) {
+        y = workArea.origin.y;
+    }
+
+    [self setFrame:NSMakeRect(x, y, width, height) display:YES];
+    self.backgroundView.frame = ((NSView *)self.contentView).bounds;
+    [self orderFront:nil];
+}
+
+- (void)hideTooltip {
+    [self orderOut:nil];
+}
+
+@end
+
 @implementation OverlayWindow
 
 - (instancetype)initWithContentRect:(NSRect)contentRect styleMask:(NSWindowStyleMask)style backing:(NSBackingStoreType)backingStoreType defer:(BOOL)flag {
@@ -185,6 +331,12 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         self.iconView.imageScaling = NSImageScaleProportionallyUpOrDown;
         self.iconView.hidden = YES;
         [self.contentView addSubview:self.iconView];
+
+        // Tooltip Icon - use PassthroughImageView for drag support
+        self.tooltipIconView = [[PassthroughImageView alloc] initWithFrame:NSMakeRect(0, 0, kDefaultIconSize, kDefaultIconSize)];
+        self.tooltipIconView.imageScaling = NSImageScaleProportionallyUpOrDown;
+        self.tooltipIconView.hidden = YES;
+        [self.contentView addSubview:self.tooltipIconView];
 
         // Message (TextView for multiline) - use PassthroughTextView for drag support
         self.messageView = [[PassthroughTextView alloc] initWithFrame:NSZeroRect];
@@ -223,6 +375,7 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 }
 
 - (void)mouseDown:(NSEvent *)event {
+    [self hideTooltipWindow];
     self.initialLocation = [NSEvent mouseLocation];
     self.initialWindowOrigin = self.frame.origin;
 
@@ -276,11 +429,56 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
     [self.contentView addTrackingArea:self.trackingArea];
 }
 
+- (void)updateTooltipTrackingAreaWithRect:(NSRect)rect enabled:(BOOL)enabled {
+    if (self.tooltipTrackingArea) {
+        [self.contentView removeTrackingArea:self.tooltipTrackingArea];
+        self.tooltipTrackingArea = nil;
+    }
+
+    if (!enabled) return;
+
+    NSTrackingAreaOptions options = NSTrackingMouseEnteredAndExited | NSTrackingActiveAlways;
+    NSDictionary *info = @{@"type": @"tooltip"};
+    self.tooltipTrackingArea = [[NSTrackingArea alloc] initWithRect:rect
+                                                            options:options
+                                                              owner:self
+                                                           userInfo:info];
+    [self.contentView addTrackingArea:self.tooltipTrackingArea];
+}
+
+- (void)ensureTooltipWindow {
+    if (!self.tooltipWindow) {
+        self.tooltipWindow = [[OverlayTooltipWindow alloc] init];
+    }
+}
+
+- (void)showTooltipWindow {
+    if (!self.tooltipText || self.tooltipText.length == 0) return;
+    if (NSIsEmptyRect(self.tooltipIconRect)) return;
+    [self ensureTooltipWindow];
+    [self.tooltipWindow showWithText:self.tooltipText relativeToRect:self.tooltipIconRect inWindow:self];
+}
+
+- (void)hideTooltipWindow {
+    if (self.tooltipWindow) {
+        [self.tooltipWindow hideTooltip];
+    }
+}
+
 - (void)mouseEntered:(NSEvent *)event {
+    if (event.trackingArea == self.tooltipTrackingArea) {
+        self.isMouseInside = YES;
+        [self showTooltipWindow];
+        return;
+    }
     self.isMouseInside = YES;
 }
 
 - (void)mouseExited:(NSEvent *)event {
+    if (event.trackingArea == self.tooltipTrackingArea) {
+        [self hideTooltipWindow];
+        return;
+    }
     self.isMouseInside = NO;
     // Don't auto-close while dragging
     if (self.isAutoClosePending && !self.isDragging) {
@@ -326,6 +524,7 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 - (void)onClose {
     [self stopAutoCloseTimer];
     [self stopTrackingWindow];
+    [self hideTooltipWindow];
     [self close];
     if (gOverlayWindows && self.name) {
         [gOverlayWindows removeObjectForKey:self.name];
@@ -406,6 +605,7 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
     [self stopAutoCloseTimer];
 
     // 1. Content Update
+    [self hideTooltipWindow];
     NSString *msg = opts.message ? [NSString stringWithUTF8String:opts.message] : @"";
     NSImage *icon = nil;
     if (opts.iconData && opts.iconLen > 0) {
@@ -418,6 +618,22 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
     
     self.closeButton.hidden = !opts.closable;
 
+    NSString *tooltip = opts.tooltip ? [NSString stringWithUTF8String:opts.tooltip] : @"";
+    self.tooltipText = tooltip;
+
+    NSImage *tooltipIcon = nil;
+    if (tooltip.length > 0) {
+        if (opts.tooltipIconData && opts.tooltipIconLen > 0) {
+            NSData *tipData = [NSData dataWithBytes:opts.tooltipIconData length:opts.tooltipIconLen];
+            tooltipIcon = [[NSImage alloc] initWithData:tipData];
+        } else {
+            tooltipIcon = [NSImage imageNamed:NSImageNameInfo];
+        }
+    }
+
+    self.tooltipIconView.image = tooltipIcon;
+    self.tooltipIconView.hidden = (tooltip.length == 0 || tooltipIcon == nil);
+
     // 2. Measure & Layout
     CGFloat windowWidth = (opts.width > 0) ? opts.width : kDefaultWindowWidth;
     // Paddings
@@ -428,9 +644,12 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
     
     CGFloat iconSize = (opts.iconSize > 0) ? opts.iconSize : kDefaultIconSize;
     CGFloat fontSize = (opts.fontSize > 0) ? opts.fontSize : [NSFont systemFontSize];
+    CGFloat tooltipIconSize = (opts.tooltipIconSize > 0) ? opts.tooltipIconSize : kDefaultIconSize;
+    CGFloat tooltipIconGap = self.tooltipIconView.hidden ? 0 : kTooltipIconGap;
 
     if (!self.iconView.hidden) padLeft += iconSize + 8;
     if (!self.closeButton.hidden) padRight += kCloseSize + 4;
+    if (!self.tooltipIconView.hidden) padRight += tooltipIconSize + tooltipIconGap;
 
     CGFloat contentWidth = windowWidth - padLeft - padRight;
     
@@ -462,6 +681,17 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
     
     if (!self.iconView.hidden) {
         self.iconView.frame = NSMakeRect(12, (windowHeight - iconSize)/2, iconSize, iconSize);
+    }
+    if (!self.tooltipIconView.hidden) {
+        CGFloat textRight = padLeft + contentWidth;
+        CGFloat ty = (windowHeight - tooltipIconSize) / 2;
+        if (ty < padTop) ty = padTop;
+        self.tooltipIconView.frame = NSMakeRect(textRight + tooltipIconGap, ty, tooltipIconSize, tooltipIconSize);
+        self.tooltipIconRect = [self.contentView convertRect:self.tooltipIconView.frame toView:nil];
+        [self updateTooltipTrackingAreaWithRect:self.tooltipIconView.frame enabled:YES];
+    } else {
+        self.tooltipIconRect = NSZeroRect;
+        [self updateTooltipTrackingAreaWithRect:NSZeroRect enabled:NO];
     }
     if (!self.closeButton.hidden) {
         self.closeButton.frame = NSMakeRect(windowWidth - kCloseSize - 6, (windowHeight - kCloseSize)/2, kCloseSize, kCloseSize);
@@ -582,6 +812,7 @@ static void axObserverCallback(AXObserverRef observer, AXUIElementRef element, C
     
     // Hide the overlay immediately
     self.alphaValue = 0;
+    [self hideTooltipWindow];
 
     // Show immediately when user releases the mouse after dragging the tracked window.
     if (!CGEventSourceButtonState(kCGEventSourceStateCombinedSessionState, kCGMouseButtonLeft)) {
@@ -785,6 +1016,8 @@ void CloseOverlay(char* name) {
         if (win) {
             // Don't close if user is dragging the overlay
             if (win.isDragging) return;
+            [win stopTrackingWindow];
+            [win hideTooltipWindow];
             [win close];
             [gOverlayWindows removeObjectForKey:key];
         }
