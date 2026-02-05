@@ -2,7 +2,7 @@
 #include <windows.h>
 #include <wchar.h>
 
-extern void fileExplorerActivatedCallbackCGO(int pid);
+extern void fileExplorerActivatedCallbackCGO(int pid, int isFileDialog);
 extern void fileExplorerDeactivatedCallbackCGO();
 
 static HWINEVENTHOOK gForegroundHook = NULL;
@@ -11,6 +11,46 @@ static HANDLE gMonitorThread = NULL;
 static DWORD gMonitorThreadId = 0;
 static DWORD gLastExplorerPid = 0;
 static HWND gLastExplorerHwnd = NULL;
+
+
+typedef struct {
+    BOOL found;
+} FindChildClassData;
+
+static BOOL CALLBACK EnumChildClassProc(HWND hwnd, LPARAM lParam) {
+    FindChildClassData *data = (FindChildClassData *)lParam;
+    WCHAR className[256];
+    if (GetClassNameW(hwnd, className, 256) == 0) {
+        return TRUE;
+    }
+
+    if (_wcsicmp(className, L"DUIViewWndClassName") == 0 || _wcsicmp(className, L"DirectUIHWND") == 0) {
+        data->found = TRUE;
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+static int isOpenSaveDialog(HWND hwnd) {
+    if (!hwnd) {
+        return 0;
+    }
+
+    WCHAR className[256];
+    if (GetClassNameW(hwnd, className, 256) == 0) {
+        return 0;
+    }
+
+    if (_wcsicmp(className, L"#32770") != 0) {
+        return 0;
+    }
+
+    FindChildClassData data;
+    data.found = FALSE;
+    EnumChildWindows(hwnd, EnumChildClassProc, (LPARAM)&data);
+    return data.found ? 1 : 0;
+}
 
 
 static int isExplorerProcess(DWORD pid) {
@@ -105,7 +145,17 @@ static void CALLBACK foregroundChangedProc(
 
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
-    if (pid == 0 || !isExplorerProcess(pid)) {
+    
+    int isValid = 0;
+    if (pid != 0) {
+        if (isExplorerProcess(pid)) {
+            isValid = 1;
+        } else if (isOpenSaveDialog(hwnd)) {
+            isValid = 1;
+        }
+    }
+
+    if (!isValid) {
         if (gLastExplorerPid != 0) {
             gLastExplorerPid = 0;
             gLastExplorerHwnd = NULL;
@@ -120,7 +170,7 @@ static void CALLBACK foregroundChangedProc(
 
     gLastExplorerPid = pid;
     gLastExplorerHwnd = hwnd;
-    fileExplorerActivatedCallbackCGO((int)pid);
+    fileExplorerActivatedCallbackCGO((int)pid, isOpenSaveDialog(hwnd) ? 1 : 0);
 }
 
 static void CALLBACK objectShowProc(
@@ -154,7 +204,17 @@ static void CALLBACK objectShowProc(
 
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
-    if (pid == 0 || !isExplorerProcess(pid)) {
+    
+    int isValid = 0;
+    if (pid != 0) {
+        if (isExplorerProcess(pid)) {
+            isValid = 1;
+        } else if (isOpenSaveDialog(hwnd)) {
+            isValid = 1;
+        }
+    }
+
+    if (!isValid) {
         return;
     }
 
@@ -164,7 +224,7 @@ static void CALLBACK objectShowProc(
 
     gLastExplorerPid = pid;
     gLastExplorerHwnd = hwnd;
-    fileExplorerActivatedCallbackCGO((int)pid);
+    fileExplorerActivatedCallbackCGO((int)pid, isOpenSaveDialog(hwnd) ? 1 : 0);
 }
 
 static DWORD WINAPI monitorThreadProc(LPVOID param) {
@@ -193,10 +253,20 @@ static DWORD WINAPI monitorThreadProc(LPVOID param) {
     if (hwnd && classifyExplorerWindow(hwnd) != -1) {
         DWORD pid = 0;
         GetWindowThreadProcessId(hwnd, &pid);
-        if (isExplorerProcess(pid)) {
+        
+        int isValid = 0;
+        if (pid != 0) {
+            if (isExplorerProcess(pid)) {
+                isValid = 1;
+            } else if (isOpenSaveDialog(hwnd)) {
+                isValid = 1;
+            }
+        }
+
+        if (isValid) {
             gLastExplorerPid = pid;
             gLastExplorerHwnd = hwnd;
-            fileExplorerActivatedCallbackCGO((int)pid);
+            fileExplorerActivatedCallbackCGO((int)pid, isOpenSaveDialog(hwnd) ? 1 : 0);
         }
     }
 

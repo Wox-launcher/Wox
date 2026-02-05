@@ -396,20 +396,31 @@ func (c *ExplorerPlugin) loadOpenSaveHistory(ctx context.Context) *util.HashMap[
 
 func (c *ExplorerPlugin) stopOverlayListener() {
 	StopExplorerMonitor()
+	StopExplorerOpenSaveMonitor()
 }
 
 func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 	c.stopOverlayListener()
 	woxIcon, _ := common.WoxIcon.ToImage()
-	showOverlay := func(pid int) {
-		message := i18n.GetI18nManager().TranslateWox(ctx, "plugin_explorer_hint_message")
+
+	showHint := func(pid int, isDialog bool) {
+		messageKey := "plugin_explorer_hint_message"
+		if isDialog {
+			messageKey = "plugin_explorer_hint_message_dialog"
+		}
+
+		var offsetY float64 = -30
+		if isDialog {
+			offsetY = -100
+		}
+
 		overlay.Show(overlay.OverlayOptions{
 			Name:            "explorer_hint",
 			Icon:            woxIcon,
-			Message:         message,
+			Message:         i18n.GetI18nManager().TranslateWox(ctx, messageKey),
 			StickyWindowPid: pid,
 			Anchor:          overlay.AnchorBottomRight,
-			OffsetY:         -30,
+			OffsetY:         offsetY,
 			Closable:        true,
 			FontSize:        10,
 			OnClick: func() {
@@ -426,7 +437,17 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 		})
 	}
 
-	StartExplorerMonitor(showOverlay, func() {
+	// Start monitoring file explorer
+	StartExplorerMonitor(func(pid int) {
+		showHint(pid, false)
+	}, func() {
+		overlay.Close("explorer_hint")
+	})
+
+	// Start monitoring open/save dialogs
+	StartExplorerOpenSaveMonitor(func(pid int) {
+		showHint(pid, true)
+	}, func() {
 		overlay.Close("explorer_hint")
 	})
 }

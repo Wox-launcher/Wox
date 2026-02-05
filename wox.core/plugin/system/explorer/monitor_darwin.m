@@ -1,7 +1,7 @@
 #import <Cocoa/Cocoa.h>
 #import <ApplicationServices/ApplicationServices.h>
 
-extern void fileExplorerActivatedCallbackCGO(int pid);
+extern void fileExplorerActivatedCallbackCGO(int pid, int isFileDialog);
 extern void fileExplorerDeactivatedCallbackCGO(void);
 
 static id gAppActivationObserver = nil;
@@ -11,7 +11,7 @@ static pid_t gFinderPid = 0;
 // AXObserver callback - called when Finder's focused window changes
 static void finderWindowFocusCallback(AXObserverRef observer, AXUIElementRef element, CFStringRef notification, void *refcon) {
     if (gFinderPid > 0) {
-        fileExplorerActivatedCallbackCGO(gFinderPid);
+        fileExplorerActivatedCallbackCGO(gFinderPid, 0);
     }
 }
 
@@ -70,7 +70,7 @@ void startFileExplorerMonitor() {
                         NSRunningApplication *app = [[notification userInfo] objectForKey:NSWorkspaceApplicationKey];
                         if (app && [[app bundleIdentifier] isEqualToString:@"com.apple.finder"]) {
                             pid_t pid = [app processIdentifier];
-                            fileExplorerActivatedCallbackCGO(pid);
+                            fileExplorerActivatedCallbackCGO(pid, 0);
                             // Start observing window focus changes within Finder
                             startFinderWindowObserver(pid);
                         } else {
@@ -84,7 +84,7 @@ void startFileExplorerMonitor() {
         NSRunningApplication *activeApp = [[NSWorkspace sharedWorkspace] frontmostApplication];
         if (activeApp && [[activeApp bundleIdentifier] isEqualToString:@"com.apple.finder"]) {
             pid_t pid = [activeApp processIdentifier];
-            fileExplorerActivatedCallbackCGO(pid);
+            fileExplorerActivatedCallbackCGO(pid, 0);
             startFinderWindowObserver(pid);
         }
     }
