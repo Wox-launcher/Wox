@@ -7,7 +7,7 @@ import (
 
 type PlainQuery struct {
 	QueryId        string
-	QueryType      string
+	QueryType      string // see plugin.QueryType
 	QueryText      string
 	QuerySelection selection.Selection
 }

@@ -22,13 +22,15 @@ typedef struct {
     float offsetY;
     float width;         // 0 = auto
     float height;        // 0 = auto
+    float fontSize;      // 0 = system default, unit: pt
+    float iconSize;      // 0 = default (16), unit: pt
 } OverlayOptions;
 
 // -----------------------------------------------------------------------------
 // Constants
 // -----------------------------------------------------------------------------
 static const CGFloat kDefaultWindowWidth = 400;
-static const CGFloat kIconSize = 24;
+static const CGFloat kDefaultIconSize = 16;
 static const CGFloat kCloseSize = 20;
 
 extern void overlayClickCallbackCGO(char* name);
@@ -179,7 +181,7 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         self.backgroundView = bg;
 
         // Icon - use PassthroughImageView for drag support
-        self.iconView = [[PassthroughImageView alloc] initWithFrame:NSMakeRect(12, 0, kIconSize, kIconSize)]; 
+        self.iconView = [[PassthroughImageView alloc] initWithFrame:NSMakeRect(12, 0, kDefaultIconSize, kDefaultIconSize)];
         self.iconView.imageScaling = NSImageScaleProportionallyUpOrDown;
         self.iconView.hidden = YES;
         [self.contentView addSubview:self.iconView];
@@ -424,14 +426,17 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
     CGFloat padTop = 10;
     CGFloat padBottom = 10;
     
-    if (!self.iconView.hidden) padLeft += kIconSize + 8;
+    CGFloat iconSize = (opts.iconSize > 0) ? opts.iconSize : kDefaultIconSize;
+    CGFloat fontSize = (opts.fontSize > 0) ? opts.fontSize : [NSFont systemFontSize];
+
+    if (!self.iconView.hidden) padLeft += iconSize + 8;
     if (!self.closeButton.hidden) padRight += kCloseSize + 4;
 
     CGFloat contentWidth = windowWidth - padLeft - padRight;
     
     // Setup TextView string
     NSDictionary *attrs = @{
-        NSFontAttributeName: [NSFont systemFontOfSize:14],
+        NSFontAttributeName: [NSFont systemFontOfSize:fontSize],
         NSForegroundColorAttributeName: [NSColor whiteColor]
     };
     NSAttributedString *attrStr = [[NSAttributedString alloc] initWithString:msg attributes:attrs];
@@ -456,7 +461,7 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
     self.messageView.frame = NSMakeRect(padLeft, currentY, contentWidth, textHeight);
     
     if (!self.iconView.hidden) {
-        self.iconView.frame = NSMakeRect(12, (windowHeight - kIconSize)/2, kIconSize, kIconSize);
+        self.iconView.frame = NSMakeRect(12, (windowHeight - iconSize)/2, iconSize, iconSize);
     }
     if (!self.closeButton.hidden) {
         self.closeButton.frame = NSMakeRect(windowWidth - kCloseSize - 6, (windowHeight - kCloseSize)/2, kCloseSize, kCloseSize);

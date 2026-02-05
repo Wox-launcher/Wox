@@ -58,6 +58,8 @@ typedef struct {
     float offsetY;
     float width;         // 0 = auto
     float height;        // 0 = auto
+    float fontSize;      // 0 = system default, unit: pt
+    float iconSize;      // 0 = default (16), unit: DIP
 } OverlayOptions;
 
 extern void overlayClickCallbackCGO(char* name);
@@ -152,7 +154,7 @@ static BOOL TryEnableAcrylic(HWND hwnd)
 #define MIN_WINDOW_WIDTH_DIP 240
 #define PADDING_X_DIP 12
 #define PADDING_Y_DIP 10
-#define ICON_SIZE_DIP 24
+#define DEFAULT_ICON_SIZE_DIP 16
 #define ICON_GAP_DIP 10
 #define CLOSE_SIZE_DIP 20
 #define CLOSE_PAD_DIP 10
@@ -397,6 +399,33 @@ static int MeasureTextHeightW(HDC hdc, const WCHAR *text, int width)
     return h > 0 ? h : 0;
 }
 
+static float GetSystemMessageFontSizePt(void)
+{
+    NONCLIENTMETRICSW ncm;
+    ZeroMemory(&ncm, sizeof(ncm));
+    ncm.cbSize = sizeof(ncm);
+    if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, ncm.cbSize, &ncm, 0))
+    {
+        int px = ncm.lfMessageFont.lfHeight;
+        if (px != 0)
+        {
+            if (px < 0)
+                px = -px;
+
+            HDC hdc = GetDC(NULL);
+            int dpiY = hdc ? GetDeviceCaps(hdc, LOGPIXELSY) : 96;
+            if (hdc)
+                ReleaseDC(NULL, hdc);
+            if (dpiY <= 0)
+                dpiY = 96;
+
+            return ((float)px * 72.0f) / (float)dpiY;
+        }
+    }
+
+    return 9.0f;
+}
+
 static RECT GetWorkAreaForRect(const RECT *target)
 {
     RECT workArea;
@@ -451,10 +480,13 @@ typedef struct OverlayWindow
     float offsetY;
     float width;
     float height;
+    float fontSize; // pt, <=0 means system default
+    float iconSize; // DIP, <=0 means default
 
     UINT dpi;
     HFONT messageFont;
     UINT fontDpi;
+    float appliedFontSize;
 
     RECT closeRect;
     BOOL mouseInside;
@@ -488,6 +520,8 @@ typedef struct OverlayPayload
     float offsetY;
     float width;
     float height;
+    float fontSize;
+    float iconSize;
 } OverlayPayload;
 
 typedef struct OverlayCommand
@@ -782,18 +816,22 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
     if (!ow || !ow->hwnd)
         return;
 
-
     ow->dpi = GetWindowDpiSafe(ow->hwnd, ow->dpi ? ow->dpi : GetSystemDpiSafe());
+    float fontSizePt = (ow->fontSize > 0.0f) ? ow->fontSize : GetSystemMessageFontSizePt();
+    float iconSizeDip = (ow->iconSize > 0.0f) ? ow->iconSize : DEFAULT_ICON_SIZE_DIP;
 
-    if (!ow->messageFont || ow->fontDpi != ow->dpi)
+    if (!ow->messageFont || ow->fontDpi != ow->dpi || fabsf(ow->appliedFontSize - fontSizePt) > 0.01f)
     {
         if (ow->messageFont)
             DeleteObject(ow->messageFont);
-        int fontHeight = -MulDiv(13, (int)ow->dpi, 72);
+        int fontHeight = -(int)roundf(fontSizePt * ((float)ow->dpi / 72.0f));
+        if (fontHeight == 0)
+            fontHeight = -1;
         ow->messageFont = CreateFontW(fontHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                       DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                       CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
         ow->fontDpi = ow->dpi;
+        ow->appliedFontSize = fontSizePt;
     }
 
     int width = 0;
@@ -806,7 +844,7 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
     if (width < minWidth)
         width = minWidth;
 
-    int iconSize = (ow->iconBitmap ? MulDiv(ICON_SIZE_DIP, (int)ow->dpi, 96) : 0);
+    int iconSize = (ow->iconBitmap ? (int)roundf(iconSizeDip * (float)ow->dpi / 96.0f) : 0);
     int iconGap = (ow->iconBitmap ? MulDiv(ICON_GAP_DIP, (int)ow->dpi, 96) : 0);
     int leftPad = MulDiv(PADDING_X_DIP, (int)ow->dpi, 96);
     int rightPad = MulDiv(PADDING_X_DIP, (int)ow->dpi, 96);
@@ -972,6 +1010,8 @@ static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BO
     ow->offsetY = payload->offsetY;
     ow->width = payload->width;
     ow->height = payload->height;
+    ow->fontSize = payload->fontSize;
+    ow->iconSize = payload->iconSize;
     ow->hasLastTargetRect = FALSE;
     ow->hiddenForMove = FALSE;
 
@@ -1116,7 +1156,8 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
         int topPad = MulDiv(PADDING_Y_DIP, (int)ow->dpi, 96);
         int bottomPad = MulDiv(PADDING_Y_DIP, (int)ow->dpi, 96);
 
-        int iconSize = (ow->iconBitmap ? MulDiv(ICON_SIZE_DIP, (int)ow->dpi, 96) : 0);
+        float iconSizeDip = (ow->iconSize > 0.0f) ? ow->iconSize : DEFAULT_ICON_SIZE_DIP;
+        int iconSize = (ow->iconBitmap ? (int)roundf(iconSizeDip * (float)ow->dpi / 96.0f) : 0);
         int iconGap = (ow->iconBitmap ? MulDiv(ICON_GAP_DIP, (int)ow->dpi, 96) : 0);
         int closeSize = ow->closable ? MulDiv(CLOSE_SIZE_DIP, (int)ow->dpi, 96) : 0;
         int closePad = ow->closable ? MulDiv(CLOSE_PAD_DIP, (int)ow->dpi, 96) : 0;
@@ -1632,6 +1673,8 @@ void ShowOverlay(OverlayOptions opts)
     payload->offsetY = opts.offsetY;
     payload->width = opts.width;
     payload->height = opts.height;
+    payload->fontSize = opts.fontSize;
+    payload->iconSize = opts.iconSize;
 
     if (opts.iconData && opts.iconLen > 0)
     {

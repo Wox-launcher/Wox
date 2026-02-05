@@ -3,6 +3,7 @@ import sys
 import uuid
 import os
 import platform
+from typing import Optional
 
 from . import logger
 from .host import start_websocket
@@ -18,6 +19,7 @@ wox_pid = int(sys.argv[3])
 trace_id = str(uuid.uuid4())
 host_id = f"python-{uuid.uuid4()}"
 logger.update_log_directory(log_directory)
+wox_process_handle: Optional[int] = None
 
 
 def check_wox_process() -> bool:
@@ -29,20 +31,27 @@ def check_wox_process() -> bool:
         except OSError:
             return False
 
-    # Windows-specific process checking since os.kill(wox_pid, 0) doesn't work on Windows
+    # Prefer checking the original Wox process handle. This avoids PID-reuse false positives.
+    if wox_process_handle:
+        import ctypes  # type: ignore[import-not-found]
+
+        WAIT_OBJECT_0 = 0x00000000
+        WAIT_TIMEOUT = 0x00000102
+
+        wait_result = ctypes.windll.kernel32.WaitForSingleObject(wox_process_handle, 0)  # type: ignore[attr-defined]
+        if wait_result == WAIT_TIMEOUT:
+            return True
+        if wait_result == WAIT_OBJECT_0:
+            return False
+
+    # Fallback Windows PID-based check (for handle init failure case).
     import ctypes  # type: ignore[import-not-found]
     import ctypes.wintypes  # type: ignore[import-not-found]
 
     PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-    ERROR_ACCESS_DENIED = 5
-
     handle = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, ctypes.wintypes.DWORD(wox_pid))  # type: ignore[attr-defined]
     if handle:
         ctypes.windll.kernel32.CloseHandle(handle)  # type: ignore[attr-defined]
-        return True
-
-    error = ctypes.windll.kernel32.GetLastError()  # type: ignore[attr-defined]
-    if error == ERROR_ACCESS_DENIED:
         return True
 
     return False
@@ -60,6 +69,20 @@ async def monitor_wox_process() -> None:
 
 async def main() -> None:
     """Main function"""
+    global wox_process_handle
+
+    if platform.system() == "Windows":
+        import ctypes  # type: ignore[import-not-found]
+        import ctypes.wintypes  # type: ignore[import-not-found]
+
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        SYNCHRONIZE = 0x00100000
+        wox_process_handle = ctypes.windll.kernel32.OpenProcess(  # type: ignore[attr-defined]
+            PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, False, ctypes.wintypes.DWORD(wox_pid)
+        )
+        if not wox_process_handle:
+            await logger.error(trace_id, "failed to get wox process handle, fallback to PID check")
+
     # Log startup information
 
     await logger.info(trace_id, "----------------------------------------")
@@ -70,7 +93,14 @@ async def main() -> None:
     # Start tasks
     monitor_task = asyncio.create_task(monitor_wox_process())
     websocket_task = asyncio.create_task(start_websocket(port))
-    await asyncio.gather(monitor_task, websocket_task)
+    try:
+        await asyncio.gather(monitor_task, websocket_task)
+    finally:
+        if platform.system() == "Windows" and wox_process_handle:
+            import ctypes  # type: ignore[import-not-found]
+
+            ctypes.windll.kernel32.CloseHandle(wox_process_handle)  # type: ignore[attr-defined]
+            wox_process_handle = None
 
 
 def run() -> None:

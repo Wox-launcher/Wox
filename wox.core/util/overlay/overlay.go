@@ -52,6 +52,12 @@ type OverlayOptions struct {
 	Width float64
 	// Height of the overlay. If 0, it auto-sizes based on content.
 	Height float64
+	// FontSize controls message font size in points.
+	// If 0, use the current system font size.
+	FontSize float64
+	// IconSize controls icon size in DIP/pt.
+	// If 0, defaults to 16.
+	IconSize float64
 	// OnClick is a callback function invoked when the overlay body is clicked.
 	OnClick func()
 }
