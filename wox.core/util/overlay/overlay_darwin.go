@@ -21,6 +21,8 @@ typedef struct {
     float offsetY;
     float width;
     float height;
+    float fontSize;
+    float iconSize;
 } OverlayOptions;
 
 void ShowOverlay(OverlayOptions opts);
@@ -89,6 +91,8 @@ func Show(opts OverlayOptions) {
 			offsetY:          C.float(-opts.OffsetY), // Invert Y for MacOS to match Y-Down semantics requested
 			width:            C.float(opts.Width),
 			height:           C.float(opts.Height),
+			fontSize:         C.float(opts.FontSize),
+			iconSize:         C.float(opts.IconSize),
 		}
 
 		C.ShowOverlay(cOpts)

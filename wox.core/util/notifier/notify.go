@@ -25,6 +25,8 @@ func Notify(icon image.Image, message string) {
 			Anchor:           overlay.AnchorBottomCenter,
 			OffsetY:          -80,
 			AutoCloseSeconds: 5,
+			FontSize:         12,
+			IconSize:         20,
 			Movable:          true,
 		})
 	})

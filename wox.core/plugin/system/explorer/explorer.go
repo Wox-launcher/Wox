@@ -429,13 +429,13 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 			Anchor:          overlay.AnchorBottomRight,
 			OffsetY:         -30,
 			Closable:        true,
+			FontSize:        10,
 			OnClick: func() {
-				query := common.PlainQuery{
-					QueryType: "Input",
-					QueryText: "explorer ",
-				}
-				c.api.ChangeQuery(ctx, query)
 				c.api.ShowApp(ctx)
+				c.api.ChangeQuery(ctx, common.PlainQuery{
+					QueryType: plugin.QueryTypeInput,
+					QueryText: "explorer ",
+				})
 			},
 		})
 	}
