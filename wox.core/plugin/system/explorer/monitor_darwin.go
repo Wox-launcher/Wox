@@ -49,9 +49,3 @@ func StartExplorerOpenSaveMonitor(activated func(pid int), deactivated func()) {
 func StopExplorerOpenSaveMonitor() {
 	// Not implemented for macOS yet
 }
-
-func StopExplorerMonitor() {
-	C.stopFileExplorerMonitor()
-	onFileExplorerActivated = nil
-	onFileExplorerDeactivated = nil
-}
