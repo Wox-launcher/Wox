@@ -124,17 +124,6 @@ func GetFileExplorerPathByPid(pid int) string {
 	return strings.TrimSpace(C.GoString(result))
 }
 
-// NavigateFileExplorerByPid navigates a Finder window owned by pid to the specified path when possible.
-func NavigateFileExplorerByPid(pid int, targetPath string) bool {
-	if pid <= 0 || targetPath == "" {
-		return false
-	}
-
-	cPath := C.CString(targetPath)
-	defer C.free(unsafe.Pointer(cPath))
-	return int(C.navigateActiveFinderWindow(cPath)) == 1
-}
-
 // GetOpenFinderWindowPaths returns a list of paths for all currently open Finder windows.
 func GetOpenFinderWindowPaths() []string {
 	result := C.getOpenFinderWindowPaths()
@@ -148,4 +137,15 @@ func GetOpenFinderWindowPaths() []string {
 		return []string{}
 	}
 	return strings.Split(raw, "\n")
+}
+
+// SelectInFileExplorerByPid selects a file in a Finder window owned by pid.
+func SelectInFileExplorerByPid(pid int, fullPath string) bool {
+	if pid <= 0 || fullPath == "" {
+		return false
+	}
+
+	cPath := C.CString(fullPath)
+	defer C.free(unsafe.Pointer(cPath))
+	return int(C.navigateActiveFinderWindow(cPath)) == 1
 }

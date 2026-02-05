@@ -50,11 +50,11 @@ func IsFileExplorer(pid int) (bool, error) {
 	return false, nil
 }
 
-// NavigateFileExplorerByPid is not supported on this platform.
-func NavigateFileExplorerByPid(pid int, targetPath string) bool {
-	return false
-}
-
 func GetOpenFinderWindowPaths() []string {
 	return []string{}
+}
+
+// SelectInFileExplorerByPid is not supported on this platform.
+func SelectInFileExplorerByPid(pid int, fullPath string) bool {
+	return false
 }
