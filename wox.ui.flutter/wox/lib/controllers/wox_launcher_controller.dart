@@ -18,6 +18,7 @@ import 'package:wox/controllers/wox_grid_controller.dart';
 import 'package:wox/controllers/wox_list_controller.dart';
 import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_list_item.dart';
+import 'package:wox/enums/wox_layout_mode_enum.dart';
 import 'package:wox/models/doctor_check_result.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/windows/window_manager.dart';
@@ -111,6 +112,13 @@ class WoxLauncherController extends GetxController {
   var lastLaunchMode = WoxLaunchModeEnum.WOX_LAUNCH_MODE_CONTINUE.code;
   var lastStartPage = WoxStartPageEnum.WOX_START_PAGE_MRU.code;
   final isInSettingView = false.obs;
+
+  // UI Control Flags
+  final isQueryBoxAtBottom = false.obs;
+  final isToolbarHiddenForce = false.obs;
+  double forceWindowWidth = 0;
+  var forceHideOnBlur = false;
+
   var positionBeforeOpenSetting = const Offset(0, 0);
   // Whether settings was opened when window was hidden (e.g., from tray)
   bool isSettingOpenedFromHidden = false;
@@ -423,6 +431,19 @@ class WoxLauncherController extends GetxController {
       }
     }
 
+    // Handle explorer layout mode
+    if (params.layoutMode == WoxLayoutModeEnum.WOX_LAYOUT_MODE_EXPLORER.code) {
+      isQueryBoxAtBottom.value = true;
+      isToolbarHiddenForce.value = true;
+      forceWindowWidth = WoxSettingUtil.instance.currentSetting.appWidth.toDouble() / 2;
+      forceHideOnBlur = false;
+    }
+
+    // Reset to default layout if no layout mode specified
+    if (params.layoutMode == null || params.layoutMode == WoxLayoutModeEnum.WOX_LAYOUT_MODE_DEFAULT.code) {
+      setDefaultLayoutMode(traceId);
+    }
+
     // Handle different position types
     // on linux, we need to show first and then set position or center it
     if (Platform.isLinux) {
@@ -450,6 +471,13 @@ class WoxLauncherController extends GetxController {
     WoxApi.instance.onShow(traceId);
   }
 
+  void setDefaultLayoutMode(String traceId) {
+    isQueryBoxAtBottom.value = false;
+    isToolbarHiddenForce.value = false;
+    forceWindowWidth = 0;
+    forceHideOnBlur = false;
+  }
+
   Future<void> hideApp(String traceId) async {
     //clear query box text if query type is selection or launch mode is fresh
     if (currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code || lastLaunchMode == WoxLaunchModeEnum.WOX_LAUNCH_MODE_FRESH.code) {
@@ -471,6 +499,7 @@ class WoxLauncherController extends GetxController {
     isQuickSelectKeyPressed = false;
     isSettingOpenedFromHidden = false;
     isInSettingView.value = false;
+    setDefaultLayoutMode(traceId);
 
     await windowManager.hide();
     await WoxApi.instance.onHide(traceId);
@@ -1102,7 +1131,7 @@ class WoxLauncherController extends GetxController {
       resultHeight += WoxThemeUtil.instance.currentTheme.value.resultContainerPaddingTop + WoxThemeUtil.instance.currentTheme.value.resultContainerPaddingBottom;
     }
     // Only add toolbar height when toolbar is actually shown in UI
-    if (isShowToolbar) {
+    if (isShowToolbar && !isToolbarHiddenForce.value) {
       resultHeight += WoxThemeUtil.instance.getToolbarHeight();
     }
     var totalHeight = getQueryBoxTotalHeight() + resultHeight;
@@ -1120,19 +1149,49 @@ class WoxLauncherController extends GetxController {
       totalHeight -= WoxThemeUtil.instance.currentTheme.value.appPaddingBottom;
     }
 
+    double targetWidth = forceWindowWidth != 0 ? forceWindowWidth : WoxSettingUtil.instance.currentSetting.appWidth.toDouble();
+
+    if (isQueryBoxAtBottom.value) {
+      // In explorer mode, we anchor to the bottom
+      // Calculate new Y based on height difference
+      // Since windowManager doesn't support getBounds/getSize, we rely on position + tracked height
+      final pos = await windowManager.getPosition();
+
+      // If this is the first resize (lastWindowHeight == 0), we assume the current window
+      // is just the query box, so use its height as the 'old' height.
+      double oldHeight = lastWindowHeight > 0 ? lastWindowHeight : getQueryBoxTotalHeight();
+
+      double currentBottom = pos.dy + oldHeight;
+
+      if (currentBottom <= 0) {
+        // Fallback if bounds are weird
+      } else {
+        double newTop = currentBottom - totalHeight;
+
+        // Move top up first, then expand height
+        // This keeps the visual "bottom" constant
+        await windowManager.setPosition(Offset(pos.dx, newTop));
+        await windowManager.setSize(Size(targetWidth, totalHeight));
+
+        lastWindowHeight = totalHeight;
+        windowFlickerDetector.recordResize(totalHeight.toInt());
+        return;
+      }
+    }
+
     // Windows-specific debounce: if height is increasing, debounce 80ms and only apply the last resize
     // If height is decreasing or same, resize immediately
-    if (Platform.isWindows && totalHeight > lastWindowHeight) {
+    if (Platform.isWindows && totalHeight > lastWindowHeight && !isQueryBoxAtBottom.value) {
       resizeHeightDebounceTimer?.cancel();
       resizeHeightDebounceTimer = Timer(Duration(milliseconds: resizeHeightDebounceDelay), () async {
         lastWindowHeight = totalHeight;
-        await windowManager.setSize(Size(WoxSettingUtil.instance.currentSetting.appWidth.toDouble(), totalHeight.toDouble()));
+        await windowManager.setSize(Size(targetWidth, totalHeight.toDouble()));
         windowFlickerDetector.recordResize(totalHeight.toInt());
       });
     } else {
       resizeHeightDebounceTimer?.cancel();
       lastWindowHeight = totalHeight;
-      await windowManager.setSize(Size(WoxSettingUtil.instance.currentSetting.appWidth.toDouble(), totalHeight.toDouble()));
+      await windowManager.setSize(Size(targetWidth, totalHeight.toDouble()));
       windowFlickerDetector.recordResize(totalHeight.toInt());
     }
   }

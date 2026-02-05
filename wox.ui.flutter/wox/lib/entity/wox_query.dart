@@ -336,8 +336,17 @@ class ShowAppParams {
   late String launchMode;
   late String startPage;
   late bool isQueryFocus;
+  late String? layoutMode;
 
-  ShowAppParams({required this.selectAll, required this.position, required this.queryHistories, required this.launchMode, required this.startPage, this.isQueryFocus = false});
+  ShowAppParams({
+    required this.selectAll,
+    required this.position,
+    required this.queryHistories,
+    required this.launchMode,
+    required this.startPage,
+    this.isQueryFocus = false,
+    this.layoutMode,
+  });
 
   ShowAppParams.fromJson(Map<String, dynamic> json) {
     selectAll = json['SelectAll'];
@@ -352,6 +361,7 @@ class ShowAppParams {
     launchMode = json['LaunchMode'] ?? 'continue';
     startPage = json['StartPage'] ?? 'mru';
     isQueryFocus = json['IsQueryFocus'] ?? false;
+    layoutMode = json['LayoutMode'];
   }
 }
 

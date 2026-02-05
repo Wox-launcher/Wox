@@ -30,7 +30,7 @@ func fileExplorerDeactivatedCallbackCGO() {
 	}
 }
 
-func StartExplorerMonitor(activated func(pid int), deactivated func()) {
+func StartExplorerMonitor(activated func(pid int), deactivated func(), _ func(string)) {
 	explorerActivatedCallback = activated
 	explorerDeactivatedCallback = deactivated
 	C.startFileExplorerMonitor()
@@ -42,7 +42,7 @@ func StopExplorerMonitor() {
 	C.stopFileExplorerMonitor()
 }
 
-func StartExplorerOpenSaveMonitor(activated func(pid int), deactivated func()) {
+func StartExplorerOpenSaveMonitor(activated func(pid int), deactivated func(), _ func(string)) {
 	// Not implemented for macOS yet
 }
 

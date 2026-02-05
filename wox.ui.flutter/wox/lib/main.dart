@@ -20,6 +20,7 @@ import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_setting_util.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/wox_websocket_msg_util.dart';
+import 'package:wox/enums/wox_layout_mode_enum.dart';
 
 void main(List<String> arguments) async {
   await initialServices(arguments);
@@ -157,6 +158,7 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
 
   @override
   void onWindowBlur() async {
+    final traceId = UuidV4().generate();
     // if windows is already hidden, return
     // in Windows, when the window is hidden, the onWindowBlur event will be triggered which will cause
     // resize function to be called, and then the focus will be got again.
@@ -170,7 +172,12 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
       return;
     }
 
-    WoxApi.instance.onFocusLost(const UuidV4().generate());
+    if (launcherController.forceHideOnBlur) {
+      launcherController.hideApp(traceId);
+      return;
+    }
+
+    WoxApi.instance.onFocusLost(traceId);
   }
 
   @override

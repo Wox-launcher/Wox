@@ -30,10 +30,15 @@ class WoxLauncherView extends GetView<WoxLauncherController> {
                     bottom: controller.isToolbarShowedWithoutResults ? 0 : WoxThemeUtil.instance.currentTheme.value.appPaddingBottom.toDouble(),
                     left: WoxThemeUtil.instance.currentTheme.value.appPaddingLeft.toDouble(),
                   ),
-                  child: const Column(children: [WoxQueryBoxView(), Expanded(child: WoxQueryResultView())]),
+                  child: Column(
+                    children:
+                        controller.isQueryBoxAtBottom.value
+                            ? [const Expanded(child: WoxQueryResultView()), const WoxQueryBoxView()]
+                            : [const WoxQueryBoxView(), const Expanded(child: WoxQueryResultView())],
+                  ),
                 ),
               ),
-              if (controller.isShowToolbar) const SizedBox(height: 40, child: WoxQueryToolbarView()),
+              if (controller.isShowToolbar && !controller.isToolbarHiddenForce.value) const SizedBox(height: 40, child: WoxQueryToolbarView()),
             ],
           ),
         ),
