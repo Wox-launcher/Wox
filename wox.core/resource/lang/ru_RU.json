@@ -465,6 +465,7 @@
   "plugin_explorer_jump_to": "Перейти к",
   "plugin_explorer_setting_show_hint": "Показать подсказку проводника",
   "plugin_explorer_hint_message": "Используйте Wox для быстрой фильтрации текущей папки",
+  "plugin_explorer_hint_message_dialog": "Используйте Wox для быстрой навигации по папкам",
   "plugin_indicator_activate": "Активировать",
   "plugin_indicator_activate_plugin": "Активировать плагин %s",
   "plugin_paste_to_window": "Вставить в %s",

@@ -465,6 +465,7 @@
   "plugin_explorer_jump_to": "Ir para",
   "plugin_explorer_setting_show_hint": "Mostrar dica do explorador de arquivos",
   "plugin_explorer_hint_message": "Use Wox para filtrar rapidamente a pasta atual",
+  "plugin_explorer_hint_message_dialog": "Use Wox para navegar rapidamente pelas pastas",
   "plugin_indicator_activate": "Ativar",
   "plugin_indicator_activate_plugin": "Ativar o plugin %s",
   "plugin_paste_to_window": "Colar em %s",
