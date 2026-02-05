@@ -1,12 +1,16 @@
-#define _WIN32_WINNT 0x0600
+﻿#define _WIN32_WINNT 0x0600
 #include <windows.h>
 #include <wchar.h>
+#include <ctype.h>
+#include <stdio.h>
 
-extern void fileExplorerActivatedCallbackCGO(int pid, int isFileDialog);
+extern void fileExplorerActivatedCallbackCGO(int pid, int isFileDialog, int x, int y, int w, int h);
 extern void fileExplorerDeactivatedCallbackCGO();
+extern void fileExplorerKeyDownCallbackCGO(char key);
 
 static HWINEVENTHOOK gForegroundHook = NULL;
 static HWINEVENTHOOK gObjectShowHook = NULL;
+static HHOOK gKeyboardHook = NULL;
 static HANDLE gMonitorThread = NULL;
 static DWORD gMonitorThreadId = 0;
 static DWORD gLastExplorerPid = 0;
@@ -52,6 +56,31 @@ static int isOpenSaveDialog(HWND hwnd) {
     return data.found ? 1 : 0;
 }
 
+static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode == HC_ACTION) {
+        if (wParam == WM_KEYDOWN) {
+            KBDLLHOOKSTRUCT *p = (KBDLLHOOKSTRUCT *)lParam;
+            DWORD vkCode = p->vkCode;
+
+            // Ignore special keys (Ctrl, Alt)
+            if (GetAsyncKeyState(VK_CONTROL) & 0x8000) return CallNextHookEx(NULL, nCode, wParam, lParam);
+            if (GetAsyncKeyState(VK_MENU) & 0x8000) return CallNextHookEx(NULL, nCode, wParam, lParam);
+            
+            // Map VK to Char
+            // Basic mapping for A-Z, 0-9
+            if ((vkCode >= 0x41 && vkCode <= 0x5A) || // A-Z
+                (vkCode >= 0x30 && vkCode <= 0x39)) { // 0-9
+                
+                 char c = (char)vkCode;
+                 fprintf(stderr, "[Monitor] Key pressed: %c (vk=%lu)\n", c, vkCode);
+                 fflush(stderr);
+                 fileExplorerKeyDownCallbackCGO(c);
+            }
+        }
+    }
+    return CallNextHookEx(NULL, nCode, wParam, lParam);
+}
+
 
 static int isExplorerProcess(DWORD pid) {
     if (pid == 0) {
@@ -68,6 +97,7 @@ static int isExplorerProcess(DWORD pid) {
     int isExplorer = 0;
 
     if (QueryFullProcessImageNameW(process, 0, path, &size)) {
+        // Use single quotes L'\\' for character literal
         const WCHAR *base = wcsrchr(path, L'\\');
         base = base ? base + 1 : path;
         if (_wcsicmp(base, L"explorer.exe") == 0) {
@@ -117,6 +147,46 @@ static int classifyExplorerWindow(HWND hwnd) {
     return 0;
 }
 
+static void updateHooksForExplorer(int isExplorerActive) {
+    if (isExplorerActive) {
+        if (!gKeyboardHook) {
+            fprintf(stderr, "[Monitor] Installing WH_KEYBOARD_LL hook...\n");
+            fflush(stderr);
+            
+            gKeyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, GetModuleHandle(NULL), 0);
+            
+            if (!gKeyboardHook) {
+                fprintf(stderr, "[Monitor] Failed to install keyboard hook: %lu\n", GetLastError());
+                fflush(stderr);
+            } else {
+                fprintf(stderr, "[Monitor] Keyboard hook installed.\n");
+                fflush(stderr);
+            }
+        }
+    } else {
+        if (gKeyboardHook) {
+            fprintf(stderr, "[Monitor] Removing WH_KEYBOARD_LL hook\n");  
+            fflush(stderr);
+            UnhookWindowsHookEx(gKeyboardHook);
+            gKeyboardHook = NULL;
+        }
+    }
+}
+
+static void triggerActivation(HWND hwnd, DWORD pid, int isDialog) {
+    RECT rect;
+    if (GetWindowRect(hwnd, &rect)) {
+        int x = rect.left;
+        int y = rect.top;
+        int w = rect.right - rect.left;
+        int h = rect.bottom - rect.top;
+        fileExplorerActivatedCallbackCGO((int)pid, isDialog, x, y, w, h);
+    } else {
+        // Fallback if GetWindowRect fails
+        fileExplorerActivatedCallbackCGO((int)pid, isDialog, 0, 0, 0, 0);
+    }
+}
+
 static void CALLBACK foregroundChangedProc(
     HWINEVENTHOOK hook,
     DWORD event,
@@ -138,6 +208,7 @@ static void CALLBACK foregroundChangedProc(
         if (gLastExplorerPid != 0) {
             gLastExplorerPid = 0;
             gLastExplorerHwnd = NULL;
+            updateHooksForExplorer(0);
             fileExplorerDeactivatedCallbackCGO();
         }
         return;
@@ -166,10 +237,13 @@ static void CALLBACK foregroundChangedProc(
         if (gLastExplorerPid != 0) {
             gLastExplorerPid = 0;
             gLastExplorerHwnd = NULL;
+            updateHooksForExplorer(0);
             fileExplorerDeactivatedCallbackCGO();
         }
         return;
     }
+
+    updateHooksForExplorer(1);
 
     if (hwnd == gLastExplorerHwnd) {
         return;
@@ -177,7 +251,7 @@ static void CALLBACK foregroundChangedProc(
 
     gLastExplorerPid = pid;
     gLastExplorerHwnd = hwnd;
-    fileExplorerActivatedCallbackCGO((int)pid, isOpenSaveDialog(hwnd) ? 1 : 0);
+    triggerActivation(hwnd, pid, isOpenSaveDialog(hwnd) ? 1 : 0);
 }
 
 static void CALLBACK objectShowProc(
@@ -232,13 +306,15 @@ static void CALLBACK objectShowProc(
         return;
     }
 
+    updateHooksForExplorer(1);
+
     if (hwnd == gLastExplorerHwnd) {
         return;
     }
 
     gLastExplorerPid = pid;
     gLastExplorerHwnd = hwnd;
-    fileExplorerActivatedCallbackCGO((int)pid, isOpenSaveDialog(hwnd) ? 1 : 0);
+    triggerActivation(hwnd, pid, isOpenSaveDialog(hwnd) ? 1 : 0);
 }
 
 static DWORD WINAPI monitorThreadProc(LPVOID param) {
@@ -264,6 +340,7 @@ static DWORD WINAPI monitorThreadProc(LPVOID param) {
         WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
 
     HWND hwnd = GetForegroundWindow();
+    int initialValid = 0;
     if (hwnd && classifyExplorerWindow(hwnd) != -1) {
         DWORD pid = 0;
         GetWindowThreadProcessId(hwnd, &pid);
@@ -285,10 +362,16 @@ static DWORD WINAPI monitorThreadProc(LPVOID param) {
         }
 
         if (isValid) {
+            initialValid = 1;
+            updateHooksForExplorer(1);
             gLastExplorerPid = pid;
             gLastExplorerHwnd = hwnd;
-            fileExplorerActivatedCallbackCGO((int)pid, isOpenSaveDialog(hwnd) ? 1 : 0);
+            triggerActivation(hwnd, pid, isOpenSaveDialog(hwnd) ? 1 : 0);
         }
+    }
+    
+    if (!initialValid) {
+        updateHooksForExplorer(0);
     }
 
     while (GetMessageW(&msg, NULL, 0, 0) > 0) {
@@ -304,6 +387,11 @@ static DWORD WINAPI monitorThreadProc(LPVOID param) {
     if (gObjectShowHook) {
         UnhookWinEvent(gObjectShowHook);
         gObjectShowHook = NULL;
+    }
+    
+    if (gKeyboardHook) {
+        UnhookWindowsHookEx(gKeyboardHook);
+        gKeyboardHook = NULL;
     }
 
     gLastExplorerPid = 0;

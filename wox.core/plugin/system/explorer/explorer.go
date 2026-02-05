@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 	"wox/common"
 	"wox/i18n"
@@ -39,9 +40,15 @@ func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &ExplorerPlugin{})
 }
 
+type overlayRuntime struct {
+	stopCh chan struct{}
+}
+
 type ExplorerPlugin struct {
 	api                plugin.API
 	openSaveHistoryMap *util.HashMap[string, []openSaveHistoryEntry] // app window title -> history entries
+
+	overlayRuntime atomic.Pointer[overlayRuntime]
 }
 
 func (c *ExplorerPlugin) GetMetadata() plugin.Metadata {
@@ -397,64 +404,152 @@ func (c *ExplorerPlugin) loadOpenSaveHistory(ctx context.Context) *util.HashMap[
 func (c *ExplorerPlugin) stopOverlayListener() {
 	StopExplorerMonitor()
 	StopExplorerOpenSaveMonitor()
+
+	if runtime := c.overlayRuntime.Swap(nil); runtime != nil {
+		close(runtime.stopCh)
+	}
 }
 
 func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 	c.stopOverlayListener()
-	woxIcon, _ := common.WoxIcon.ToImage()
-	tooltipIcon, _ := common.TooltipIcon.ToImage()
 
-	showHint := func(pid int, isDialog bool) {
-		messageKey := "plugin_explorer_hint_message"
-		tooltipMessageKey := "plugin_explorer_hint_tooltip_message"
-		if isDialog {
-			messageKey = "plugin_explorer_hint_message_dialog"
-			tooltipMessageKey = "plugin_explorer_hint_tooltip_message_dialog"
-		}
+	runtime := &overlayRuntime{stopCh: make(chan struct{})}
+	c.overlayRuntime.Store(runtime)
 
-		var offsetY float64 = -30
-		if isDialog {
-			offsetY = -100
-		}
+	type overlayEventType int
+	const (
+		overlayEventActivate overlayEventType = iota
+		overlayEventDeactivate
+		overlayEventKey
+	)
 
-		overlay.Show(overlay.OverlayOptions{
-			Name:            "explorer_hint",
-			Icon:            woxIcon,
-			Message:         i18n.GetI18nManager().TranslateWox(ctx, messageKey),
-			StickyWindowPid: pid,
-			Anchor:          overlay.AnchorBottomRight,
-			OffsetY:         offsetY,
-			Closable:        true,
-			FontSize:        10,
-			Width:           200,
-			TooltipIcon:     tooltipIcon,
-			TooltipIconSize: 20,
-			Tooltip:         i18n.GetI18nManager().TranslateWox(ctx, tooltipMessageKey),
-			OnClick: func() {
-				window.ActivateWindowByPid(pid)
-				c.api.ChangeQuery(ctx, common.PlainQuery{
-					QueryType: plugin.QueryTypeInput,
-					QueryText: "explorer ",
-				})
-				plugin.GetPluginManager().GetUI().ShowApp(ctx, common.ShowContext{
-					SelectAll:    false,
-					IsQueryFocus: true,
-				})
-			},
-		})
+	type overlayEvent struct {
+		eventType overlayEventType
+		key       string
 	}
 
+	events := make(chan overlayEvent, 64)
+	pushEvent := func(ev overlayEvent) {
+		select {
+		case events <- ev:
+		default:
+		}
+	}
+
+	onActivated := func(_ int) {
+		c.api.Log(ctx, plugin.LogLevelDebug, "explorer overlay: activated")
+		pushEvent(overlayEvent{eventType: overlayEventActivate})
+	}
+	onDeactivated := func() {
+		c.api.Log(ctx, plugin.LogLevelDebug, "explorer overlay: deactivated")
+		pushEvent(overlayEvent{eventType: overlayEventDeactivate})
+	}
+	onKey := func(key string) {
+		c.api.Log(ctx, plugin.LogLevelDebug, "explorer overlay: key="+key)
+		pushEvent(overlayEvent{eventType: overlayEventKey, key: key})
+	}
+
+	go func() {
+		var (
+			active         bool
+			waitingVisible bool
+			waitingSince   time.Time
+			pending        string
+		)
+
+		resetState := func() {
+			waitingVisible = false
+			waitingSince = time.Time{}
+			pending = ""
+		}
+
+		showOverlay := func() bool {
+			x, y, w, h, ok := GetActiveExplorerRect()
+			if !ok {
+				x, y, w, h, ok = GetActiveDialogRect()
+				if !ok {
+					return false
+				}
+			}
+
+			// Target X: Right edge of explorer - explorerWidth - padding
+			const explorerWidth = 400
+			targetX := x + w - int(explorerWidth) - 30
+			// Target Y: Bottom edge of explorer - initialHeight - padding
+			// We position it near the bottom so it can grow upwards
+			targetY := y + h - 80 - 20
+
+			plugin.GetPluginManager().GetUI().ShowApp(ctx, common.ShowContext{
+				SelectAll:      false,
+				WindowPosition: &common.WindowPosition{X: targetX, Y: targetY},
+				LayoutMode:     common.LayoutModeExplorer,
+			})
+			return true
+		}
+
+		ticker := time.NewTicker(50 * time.Millisecond)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-runtime.stopCh:
+				return
+			case ev := <-events:
+				switch ev.eventType {
+				case overlayEventActivate:
+					active = true
+					resetState()
+				case overlayEventDeactivate:
+					active = false
+					if !waitingVisible {
+						resetState()
+					}
+				case overlayEventKey:
+					if !active || ev.key == "" {
+						continue
+					}
+					if c.api.IsVisible(ctx) {
+						c.api.Log(ctx, plugin.LogLevelDebug, "explorer overlay: key ignored (ui visible)")
+						continue
+					}
+					pending += strings.ToLower(ev.key)
+					if !waitingVisible {
+						if !showOverlay() {
+							c.api.Log(ctx, plugin.LogLevelDebug, "explorer overlay: show failed (no active rect)")
+							resetState()
+							continue
+						}
+						c.api.Log(ctx, plugin.LogLevelDebug, "explorer overlay: show requested")
+						waitingVisible = true
+						waitingSince = time.Now()
+					}
+				}
+			case <-ticker.C:
+				if !waitingVisible {
+					continue
+				}
+				if c.api.IsVisible(ctx) {
+					if pending != "" {
+						c.api.Log(ctx, plugin.LogLevelDebug, "explorer overlay: ui visible, change query="+pending)
+						c.api.ChangeQuery(ctx, common.PlainQuery{
+							QueryType: plugin.QueryTypeInput,
+							QueryText: "explorer " + pending,
+						})
+					}
+					resetState()
+					continue
+				}
+				if !waitingSince.IsZero() && time.Since(waitingSince) > 2*time.Second {
+					c.api.Log(ctx, plugin.LogLevelDebug, "explorer overlay: wait visible timeout, reset")
+					resetState()
+				}
+			}
+		}
+	}()
+
 	// Start monitoring file explorer
-	StartExplorerMonitor(func(pid int) {
-		showHint(pid, false)
-	}, func() {
-		overlay.Close("explorer_hint")
-	})
+	StartExplorerMonitor(onActivated, onDeactivated, onKey)
 
 	// Start monitoring open/save dialogs
-	StartExplorerOpenSaveMonitor(func(pid int) {
-		showHint(pid, true)
-	}, func() {
-		overlay.Close("explorer_hint")
-	})
+	StartExplorerOpenSaveMonitor(onActivated, onDeactivated, onKey)
 }

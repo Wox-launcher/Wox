@@ -5,6 +5,13 @@ import (
 	"wox/util/selection"
 )
 
+type LayoutMode string
+
+const (
+	LayoutModeDefault  LayoutMode = "default"
+	LayoutModeExplorer LayoutMode = "explorer"
+)
+
 type PlainQuery struct {
 	QueryId        string
 	QueryType      string // see plugin.QueryType
@@ -83,6 +90,14 @@ type ActiveWindowSnapshot struct {
 type ShowContext struct {
 	SelectAll    bool
 	IsQueryFocus bool // auto focus chat input on next ui update
+
+	WindowPosition *WindowPosition
+	LayoutMode     LayoutMode
+}
+
+type WindowPosition struct {
+	X int
+	Y int
 }
 
 type PickFilesParams struct {
