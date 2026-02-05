@@ -131,9 +131,8 @@ func (c *ExplorerPlugin) Query(ctx context.Context, query plugin.Query) []plugin
 }
 
 func (c *ExplorerPlugin) queryFileExplorer(ctx context.Context, query plugin.Query) []plugin.QueryResult {
-	activePid := query.Env.ActiveWindowPid
 	currentPath := window.GetFileExplorerPathByPid(query.Env.ActiveWindowPid)
-	if currentPath == "" || query.Search == "" {
+	if currentPath == "" {
 		return []plugin.QueryResult{}
 	}
 
@@ -145,7 +144,13 @@ func (c *ExplorerPlugin) queryFileExplorer(ctx context.Context, query plugin.Que
 
 	results := make([]plugin.QueryResult, 0, len(entries))
 	for _, entry := range entries {
-		isMatch, matchScore := plugin.IsStringMatchScore(ctx, entry.Name(), query.Search)
+		isMatch := true
+		var matchScore int64
+
+		if query.Search != "" {
+			isMatch, matchScore = plugin.IsStringMatchScore(ctx, entry.Name(), query.Search)
+		}
+
 		if !isMatch {
 			continue
 		}
@@ -160,48 +165,25 @@ func (c *ExplorerPlugin) queryFileExplorer(ctx context.Context, query plugin.Que
 		}
 
 		var actions []plugin.QueryResultAction
-		if isDir {
-			actions = []plugin.QueryResultAction{
-				{
-					Name:   "i18n:plugin_explorer_open",
-					Hotkey: "ctrl+enter",
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						if activePid <= 0 {
-							c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Navigate explorer by pid failed: invalid pid=%d path=%s", activePid, fullPath))
-							return
-						}
-
-						c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Navigate explorer by pid: pid=%d path=%s", activePid, fullPath))
-						if !window.NavigateFileExplorerByPid(activePid, fullPath) {
-							c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Navigate explorer by pid failed: pid=%d path=%s", activePid, fullPath))
-						}
-					},
+		actions = []plugin.QueryResultAction{
+			{
+				Name: "i18n:plugin_explorer_open",
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					shell.Open(fullPath)
 				},
-				{
-					Name:      "i18n:plugin_explorer_open_containing_folder",
-					IsDefault: true,
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						shell.OpenFileInFolder(fullPath)
-					},
+			},
+			{
+				Name:      "i18n:plugin_explorer_reveal_in_explorer",
+				IsDefault: true,
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Navigate explorer by pid: pid=%d path=%s", query.Env.ActiveWindowPid, fullPath))
+					if !window.SelectInFileExplorerByPid(query.Env.ActiveWindowPid, fullPath) {
+						c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Select in explorer by pid failed: pid=%d path=%s", query.Env.ActiveWindowPid, fullPath))
+					} else {
+						window.ActivateWindowByPid(query.Env.ActiveWindowPid)
+					}
 				},
-			}
-		} else {
-			actions = []plugin.QueryResultAction{
-				{
-					Name:   "i18n:plugin_explorer_open",
-					Hotkey: "ctrl+enter",
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						shell.Open(fullPath)
-					},
-				},
-				{
-					Name:      "i18n:plugin_explorer_open_containing_folder",
-					IsDefault: true,
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						shell.OpenFileInFolder(fullPath)
-					},
-				},
-			}
+			},
 		}
 
 		results = append(results, plugin.QueryResult{
@@ -431,10 +413,14 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 			Closable:        true,
 			FontSize:        10,
 			OnClick: func() {
-				c.api.ShowApp(ctx)
+				window.ActivateWindowByPid(pid)
 				c.api.ChangeQuery(ctx, common.PlainQuery{
 					QueryType: plugin.QueryTypeInput,
 					QueryText: "explorer ",
+				})
+				plugin.GetPluginManager().GetUI().ShowApp(ctx, common.ShowContext{
+					SelectAll:    false,
+					IsQueryFocus: true,
 				})
 			},
 		})

@@ -492,9 +492,17 @@ func GetFileExplorerPathByPid(pid int) string {
 	return ""
 }
 
-// NavigateFileExplorerByPid navigates an Explorer window owned by pid to the specified path.
-func NavigateFileExplorerByPid(pid int, targetPath string) bool {
-	if pid <= 0 || targetPath == "" {
+// GetOpenFinderWindowPaths returns a list of paths for all currently open Finder windows.
+// Not applicable on Windows.
+func GetOpenFinderWindowPaths() []string {
+	// Theoretically we could implement this for Explorer windows too,
+	// but currently the request is specific to Finder paths.
+	return []string{}
+}
+
+// SelectInFileExplorerByPid selects a file in an Explorer window owned by pid.
+func SelectInFileExplorerByPid(pid int, fullPath string) bool {
+	if pid <= 0 || fullPath == "" {
 		return false
 	}
 
@@ -518,6 +526,7 @@ func NavigateFileExplorerByPid(pid int, targetPath string) bool {
 	} else {
 		initialized = true
 	}
+
 	if initialized {
 		defer ole.CoUninitialize()
 	}
@@ -627,19 +636,52 @@ func NavigateFileExplorerByPid(pid int, targetPath string) bool {
 			continue
 		}
 
-		_, err = oleutil.CallMethod(wDisp, "Navigate", targetPath)
+		// Found the window. Now select the file.
+		documentVar, err := oleutil.GetProperty(wDisp, "Document")
+		if err != nil {
+			itemVar.Clear()
+			continue
+		}
+		documentDisp := documentVar.ToIDispatch()
+
+		folderVar, err := oleutil.GetProperty(documentDisp, "Folder")
+		if err != nil {
+			documentVar.Clear()
+			itemVar.Clear()
+			continue
+		}
+		folderDisp := folderVar.ToIDispatch()
+
+		fileName := filepath.Base(fullPath)
+		parsedItemVar, err := oleutil.CallMethod(folderDisp, "ParseName", fileName)
+		if err != nil {
+			folderVar.Clear()
+			documentVar.Clear()
+			itemVar.Clear()
+			continue
+		}
+
+		// SelectItem (1=Select, 4=Deselect others, 8=Ensure visible, 16=Focus)
+		// We must pass the IDispatch of the Item, specifically.
+		// parsedItemVar is a *VARIANT.
+		// oleutil.CallMethod(documentDisp, "SelectItem", parsedItemVar.ToIDispatch(), 1|4|8|16)
+		// However, ToIDispatch might not be enough if the variant type is not strictly dispatch, but usually it is.
+		itemDisp := parsedItemVar.ToIDispatch()
+		if itemDisp != nil {
+			_, err = oleutil.CallMethod(documentDisp, "SelectItem", itemDisp, 1|4|8|16)
+		} else {
+			// fallback: try passing valid directly if it happens to be something else?
+			// But for ParseName it should return FolderItem object.
+			err = fmt.Errorf("ParseName returned null dispatch")
+		}
+
+		parsedItemVar.Clear()
+		folderVar.Clear()
+		documentVar.Clear()
 		itemVar.Clear()
+
 		return err == nil
 	}
 
 	return false
-}
-
-
-// GetOpenFinderWindowPaths returns a list of paths for all currently open Finder windows.
-// Not applicable on Windows.
-func GetOpenFinderWindowPaths() []string {
-	// Theoretically we could implement this for Explorer windows too,
-	// but currently the request is specific to Finder paths.
-	return []string{}
 }

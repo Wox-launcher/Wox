@@ -579,6 +579,18 @@ void FlutterWindow::HandleWindowManagerMethodCall(
        // ... existing focus implementation ...
        // (Simplified for brevity, assuming existing focus logic remains)
       // 1. Use AttachThreadInput to try to set foreground window
+      
+      // Optimization: Try SetForegroundWindow directly first.
+      // If we already have permission or are in foreground, this avoids AttachThreadInput
+      // which can block for seconds if the foreground window is hung.
+      if (SetForegroundWindow(hwnd))
+      {
+        SetFocus(hwnd);
+        BringWindowToTop(hwnd);
+        result->Success();
+        return;
+      }
+      
       HWND fg = GetForegroundWindow();
       DWORD curTid = GetCurrentThreadId();
       DWORD fgTid = 0;
