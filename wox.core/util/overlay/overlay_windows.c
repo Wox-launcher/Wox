@@ -231,6 +231,7 @@ static BOOL TryEnableAcrylic(HWND hwnd)
 #define TIMER_TRACK 2
 
 #define WM_WOX_OVERLAY_COMMAND (WM_APP + 0x610)
+#define WM_WOX_OVERLAY_REPOSITION (WM_APP + 0x611)
 
 // -----------------------------------------------------------------------------
 // Helpers
@@ -572,6 +573,9 @@ typedef struct OverlayWindow
     BOOL hasLastTargetRect;
     BOOL hiddenForMove;
     BOOL targetReady;
+    
+    HWND targetHwnd;
+    HWINEVENTHOOK locationHook;
 
     RECT tooltipRect;
     BOOL tooltipHover;
@@ -688,6 +692,10 @@ static int IsDesktopWindowClass(const WCHAR *className)
     if (_wcsicmp(className, L"Progman") == 0)
         return 1;
     if (_wcsicmp(className, L"WorkerW") == 0)
+        return 1;
+    if (_wcsicmp(className, L"Shell_TrayWnd") == 0)
+        return 1;
+    if (_wcsicmp(className, L"Shell_SecondaryTrayWnd") == 0)
         return 1;
     return 0;
 }
@@ -1376,6 +1384,22 @@ static LRESULT CALLBACK TooltipWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
 // Window Proc
 // -----------------------------------------------------------------------------
 
+static void CALLBACK OverlayLocationChangeHook(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, 
+                                               LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime)
+{
+    if (!g_overlays || idObject != OBJID_WINDOW)
+        return;
+
+    // Linear search for overlays tracking this window.
+    for (OverlayWindow *ow = g_overlays; ow; ow = ow->next)
+    {
+        if (ow->targetHwnd == hwnd && ow->hwnd && IsWindow(ow->hwnd))
+        {
+            PostMessageW(ow->hwnd, WM_WOX_OVERLAY_REPOSITION, 0, 0);
+        }
+    }
+}
+
 static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     if (uMsg == WM_NCCREATE)
@@ -1716,87 +1740,86 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
                 HWND target = NULL;
                 if (FindWindowByPid(ow->stickyWindowPid, &target))
                 {
-                    RECT targetRect;
-                    RECT clientRect;
-                    if (GetClientRect(target, &clientRect))
+                    if (ow->targetHwnd != target)
                     {
-                        POINT tl = {clientRect.left, clientRect.top};
-                        POINT br = {clientRect.right, clientRect.bottom};
-                        ClientToScreen(target, &tl);
-                        ClientToScreen(target, &br);
-                        targetRect.left = tl.x;
-                        targetRect.top = tl.y;
-                        targetRect.right = br.x;
-                        targetRect.bottom = br.y;
+                        if (ow->locationHook) UnhookWinEvent(ow->locationHook);
+                        ow->targetHwnd = target;
+                        DWORD pid = 0;
+                        DWORD tid = GetWindowThreadProcessId(target, &pid);
+                        ow->locationHook = SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, 
+                                                           NULL, OverlayLocationChangeHook, pid, tid, WINEVENT_OUTOFCONTEXT);
                     }
-                    else
-                    {
-                        GetWindowRect(target, &targetRect);
-                    }
-
-                    if (targetRect.right - targetRect.left <= 1 || targetRect.bottom - targetRect.top <= 1)
-                    {
-                        return 0;
-                    }
-                    BOOL moved = FALSE;
-                    if (!ow->hasLastTargetRect)
-                    {
-                        moved = TRUE;
-                    }
-                    else if (memcmp(&ow->lastTargetRect, &targetRect, sizeof(RECT)) != 0)
-                    {
-                        moved = TRUE;
-                    }
-
-                    if (moved)
-                    {
-                        ow->lastTargetRect = targetRect;
-                        ow->hasLastTargetRect = TRUE;
-                        if (!ow->hiddenForMove)
-                        {
-                            ShowWindow(hwnd, SW_HIDE);
-                            ow->hiddenForMove = TRUE;
-                        }
-                        return 0;
-                    }
-
-                    if (ow->hiddenForMove)
-                    {
-                        // Keep hidden while the user is still holding mouse during drag,
-                        // then show immediately when mouse is released.
-                        if ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0)
-                        {
-                            return 0;
-                        }
-                        ow->hiddenForMove = FALSE;
-                        ShowWindow(hwnd, SW_SHOWNOACTIVATE);
-                    }
-
-                    RECT client;
-                    GetClientRect(hwnd, &client);
-                    int width = client.right - client.left;
-                    int height = client.bottom - client.top;
-                    int x = 0;
-                    int y = 0;
-                    ComputeOverlayPosition(ow, &targetRect, width, height, &x, &y);
-                    RECT workArea = GetWorkAreaForRect(&targetRect);
-                    ClampWindowToWorkArea(&workArea, &x, &y, width, height);
-                    SetOverlayZOrder(hwnd, target);
-                    SetWindowPos(hwnd, NULL, x, y, 0, 0, SWP_NOACTIVATE | SWP_NOSIZE | SWP_NOZORDER);
+                    SendMessage(hwnd, WM_WOX_OVERLAY_REPOSITION, 0, 0);
                 }
                 else
                 {
-                    DestroyWindow(hwnd);
+                   if (ow->locationHook) {
+                        UnhookWinEvent(ow->locationHook);
+                        ow->locationHook = NULL;
+                   }
+                   ow->targetHwnd = NULL;
+                   DestroyWindow(hwnd);
                 }
             }
             return 0;
         }
         break;
     }
+    case WM_WOX_OVERLAY_REPOSITION:
+    {
+        if (!ow || !ow->targetHwnd || !IsWindow(ow->targetHwnd))
+            return 0;
+
+        HWND target = ow->targetHwnd;
+        RECT targetRect;
+        RECT clientRect;
+        if (GetClientRect(target, &clientRect))
+        {
+            POINT tl = {clientRect.left, clientRect.top};
+            POINT br = {clientRect.right, clientRect.bottom};
+            ClientToScreen(target, &tl);
+            ClientToScreen(target, &br);
+            targetRect.left = tl.x;
+            targetRect.top = tl.y;
+            targetRect.right = br.x;
+            targetRect.bottom = br.y;
+        }
+        else
+        {
+            GetWindowRect(target, &targetRect);
+        }
+
+        if (targetRect.right - targetRect.left <= 1 || targetRect.bottom - targetRect.top <= 1)
+        {
+            return 0;
+        }
+
+        RECT client;
+        GetClientRect(hwnd, &client);
+        int width = client.right - client.left;
+        int height = client.bottom - client.top;
+        int x = 0;
+        int y = 0;
+        ComputeOverlayPosition(ow, &targetRect, width, height, &x, &y);
+        RECT workArea = GetWorkAreaForRect(&targetRect);
+        ClampWindowToWorkArea(&workArea, &x, &y, width, height);
+        SetOverlayZOrder(hwnd, target);
+        SetWindowPos(hwnd, NULL, x, y, 0, 0, SWP_NOACTIVATE | SWP_NOSIZE | SWP_NOZORDER);
+        
+        if (!IsWindowVisible(hwnd))
+             ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+
+        return 0;
+    }
     case WM_DESTROY:
     {
         if (ow)
         {
+            if (ow->locationHook)
+            {
+                UnhookWinEvent(ow->locationHook);
+                ow->locationHook = NULL;
+            }
             KillTimer(hwnd, TIMER_AUTOCLOSE);
             KillTimer(hwnd, TIMER_TRACK);
             RemoveOverlay(ow);
