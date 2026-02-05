@@ -58,6 +58,13 @@ type OverlayOptions struct {
 	// IconSize controls icon size in DIP/pt.
 	// If 0, defaults to 16.
 	IconSize float64
+	// Tooltip is the text to display when hovering over the tooltip icon.
+	Tooltip string
+	// TooltipIcon is the image for the tooltip icon. If nil, a default icon is shown (if Tooltip is set).
+	TooltipIcon image.Image
+	// TooltipIconSize controls tooltip icon size in DIP/pt.
+	// If 0, defaults to 16.
+	TooltipIconSize float64
 	// OnClick is a callback function invoked when the overlay body is clicked.
 	OnClick func()
 }

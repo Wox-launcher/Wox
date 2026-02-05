@@ -16,11 +16,7 @@ class WoxHttpUtil {
 
   Future<T> getData<T>(String traceId, String url, {Map<String, dynamic>? params}) async {
     try {
-      final response = await _dio.get(
-        _baseUrl + url,
-        queryParameters: params,
-        options: Options(headers: {"TraceId": traceId, "SessionId": Env.sessionId}),
-      );
+      final response = await _dio.get(_baseUrl + url, queryParameters: params, options: Options(headers: {"TraceId": traceId, "SessionId": Env.sessionId}));
       WoxResponse woxResponse = WoxResponse.fromJson(response.data);
       if (woxResponse.success == false) throw Exception(woxResponse.message);
       return EntityFactory.generateOBJ<T>(woxResponse.data);
@@ -33,11 +29,7 @@ class WoxHttpUtil {
   Future<T> postData<T>(String traceId, String url, dynamic data) async {
     try {
       Logger.instance.info(traceId, 'Posting data to $_baseUrl$url');
-      final response = await _dio.post(
-        _baseUrl + url,
-        data: data,
-        options: Options(headers: {"TraceId": traceId, "SessionId": Env.sessionId}),
-      );
+      final response = await _dio.post(_baseUrl + url, data: data, options: Options(headers: {"TraceId": traceId, "SessionId": Env.sessionId}));
       WoxResponse woxResponse = WoxResponse.fromJson(response.data);
       if (woxResponse.success == false) throw Exception(woxResponse.message);
       return EntityFactory.generateOBJ<T>(woxResponse.data);
