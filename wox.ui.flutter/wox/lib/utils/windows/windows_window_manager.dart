@@ -10,11 +10,22 @@ class WindowsModifierKeyStates {
   final bool isAltPressed;
   final bool isMetaPressed;
 
-  WindowsModifierKeyStates({required this.isShiftPressed, required this.isControlPressed, required this.isAltPressed, required this.isMetaPressed});
+  WindowsModifierKeyStates({
+    required this.isShiftPressed,
+    required this.isControlPressed,
+    required this.isAltPressed,
+    required this.isMetaPressed,
+  });
 }
 
 /// Callback type for keyboard events from Windows message loop
-typedef WindowsKeyboardEventCallback = void Function(String eventType, int keyCode, int scanCode, WindowsModifierKeyStates modifierStates);
+typedef WindowsKeyboardEventCallback =
+    void Function(
+      String eventType,
+      int keyCode,
+      int scanCode,
+      WindowsModifierKeyStates modifierStates,
+    );
 
 /// Windows implementation of the window manager
 class WindowsWindowManager extends BaseWindowManager {
@@ -26,7 +37,12 @@ class WindowsWindowManager extends BaseWindowManager {
   final List<WindowsKeyboardEventCallback> _keyboardEventListeners = [];
 
   /// Current modifier key states (updated from Windows message loop)
-  WindowsModifierKeyStates _currentModifierStates = WindowsModifierKeyStates(isShiftPressed: false, isControlPressed: false, isAltPressed: false, isMetaPressed: false);
+  WindowsModifierKeyStates _currentModifierStates = WindowsModifierKeyStates(
+    isShiftPressed: false,
+    isControlPressed: false,
+    isAltPressed: false,
+    isMetaPressed: false,
+  );
 
   /// Get current modifier key states
   WindowsModifierKeyStates get currentModifierStates => _currentModifierStates;
@@ -78,16 +94,43 @@ class WindowsWindowManager extends BaseWindowManager {
         }
         break;
       default:
-        Logger.instance.warn(const UuidV4().generate(), "Unhandled method call: ${call.method}");
+        Logger.instance.warn(
+          const UuidV4().generate(),
+          "Unhandled method call: ${call.method}",
+        );
     }
   }
 
   @override
   Future<void> setSize(Size size) async {
     try {
-      await _channel.invokeMethod('setSize', {'width': size.width, 'height': size.height});
+      await _channel.invokeMethod('setSize', {
+        'width': size.width,
+        'height': size.height,
+      });
     } catch (e) {
-      Logger.instance.error(const UuidV4().generate(), "Error setting window size: $e");
+      Logger.instance.error(
+        const UuidV4().generate(),
+        "Error setting window size: $e",
+      );
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> setBounds(Offset position, Size size) async {
+    try {
+      await _channel.invokeMethod('setBounds', {
+        'x': position.dx,
+        'y': position.dy,
+        'width': size.width,
+        'height': size.height,
+      });
+    } catch (e) {
+      Logger.instance.error(
+        const UuidV4().generate(),
+        "Error setting window bounds: $e",
+      );
       rethrow;
     }
   }
@@ -95,10 +138,15 @@ class WindowsWindowManager extends BaseWindowManager {
   @override
   Future<Offset> getPosition() async {
     try {
-      final Map<dynamic, dynamic> result = await _channel.invokeMethod('getPosition');
+      final Map<dynamic, dynamic> result = await _channel.invokeMethod(
+        'getPosition',
+      );
       return Offset(result['x'], result['y']);
     } catch (e) {
-      Logger.instance.error(const UuidV4().generate(), "Error getting position: $e");
+      Logger.instance.error(
+        const UuidV4().generate(),
+        "Error getting position: $e",
+      );
       return Offset.zero;
     }
   }
@@ -106,9 +154,15 @@ class WindowsWindowManager extends BaseWindowManager {
   @override
   Future<void> setPosition(Offset position) async {
     try {
-      await _channel.invokeMethod('setPosition', {'x': position.dx, 'y': position.dy});
+      await _channel.invokeMethod('setPosition', {
+        'x': position.dx,
+        'y': position.dy,
+      });
     } catch (e) {
-      Logger.instance.error(const UuidV4().generate(), "Error setting position: $e");
+      Logger.instance.error(
+        const UuidV4().generate(),
+        "Error setting position: $e",
+      );
       rethrow;
     }
   }
@@ -118,7 +172,10 @@ class WindowsWindowManager extends BaseWindowManager {
     try {
       await _channel.invokeMethod('center', {'width': width, 'height': height});
     } catch (e) {
-      Logger.instance.error(const UuidV4().generate(), "Error centering window: $e");
+      Logger.instance.error(
+        const UuidV4().generate(),
+        "Error centering window: $e",
+      );
       rethrow;
     }
   }
@@ -128,7 +185,10 @@ class WindowsWindowManager extends BaseWindowManager {
     try {
       await _channel.invokeMethod('show');
     } catch (e) {
-      Logger.instance.error(const UuidV4().generate(), "Error showing window: $e");
+      Logger.instance.error(
+        const UuidV4().generate(),
+        "Error showing window: $e",
+      );
       rethrow;
     }
   }
@@ -138,7 +198,10 @@ class WindowsWindowManager extends BaseWindowManager {
     try {
       await _channel.invokeMethod('hide');
     } catch (e) {
-      Logger.instance.error(const UuidV4().generate(), "Error hiding window: $e");
+      Logger.instance.error(
+        const UuidV4().generate(),
+        "Error hiding window: $e",
+      );
       rethrow;
     }
   }
@@ -148,7 +211,10 @@ class WindowsWindowManager extends BaseWindowManager {
     try {
       await _channel.invokeMethod('focus');
     } catch (e) {
-      Logger.instance.error(const UuidV4().generate(), "Error focusing window: $e");
+      Logger.instance.error(
+        const UuidV4().generate(),
+        "Error focusing window: $e",
+      );
       rethrow;
     }
   }
@@ -158,7 +224,10 @@ class WindowsWindowManager extends BaseWindowManager {
     try {
       return await _channel.invokeMethod('isVisible');
     } catch (e) {
-      Logger.instance.error(const UuidV4().generate(), "Error checking visibility: $e");
+      Logger.instance.error(
+        const UuidV4().generate(),
+        "Error checking visibility: $e",
+      );
       return false;
     }
   }
@@ -168,7 +237,10 @@ class WindowsWindowManager extends BaseWindowManager {
     try {
       await _channel.invokeMethod('setAlwaysOnTop', alwaysOnTop);
     } catch (e) {
-      Logger.instance.error(const UuidV4().generate(), "Error setting always on top: $e");
+      Logger.instance.error(
+        const UuidV4().generate(),
+        "Error setting always on top: $e",
+      );
       rethrow;
     }
   }
@@ -178,7 +250,10 @@ class WindowsWindowManager extends BaseWindowManager {
     try {
       await _channel.invokeMethod('setAppearance', appearance);
     } catch (e) {
-      Logger.instance.error(const UuidV4().generate(), "Error setting appearance: $e");
+      Logger.instance.error(
+        const UuidV4().generate(),
+        "Error setting appearance: $e",
+      );
       rethrow;
     }
   }
@@ -188,7 +263,10 @@ class WindowsWindowManager extends BaseWindowManager {
     try {
       await _channel.invokeMethod('startDragging');
     } catch (e) {
-      Logger.instance.error(const UuidV4().generate(), "Error starting window drag: $e");
+      Logger.instance.error(
+        const UuidV4().generate(),
+        "Error starting window drag: $e",
+      );
     }
   }
 
@@ -197,7 +275,10 @@ class WindowsWindowManager extends BaseWindowManager {
     try {
       await _channel.invokeMethod('waitUntilReadyToShow');
     } catch (e) {
-      Logger.instance.error(const UuidV4().generate(), "Error waiting until ready to show: $e");
+      Logger.instance.error(
+        const UuidV4().generate(),
+        "Error waiting until ready to show: $e",
+      );
       rethrow;
     }
   }

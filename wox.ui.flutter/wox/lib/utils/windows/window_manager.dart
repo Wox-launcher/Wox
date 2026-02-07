@@ -19,13 +19,20 @@ class WindowManager implements WindowManagerInterface {
     } else if (Platform.isWindows) {
       _platformImpl = WindowsWindowManager.instance;
     } else {
-      throw UnsupportedError('Unsupported platform: ${Platform.operatingSystem}');
+      throw UnsupportedError(
+        'Unsupported platform: ${Platform.operatingSystem}',
+      );
     }
   }
 
   @override
   Future<void> setSize(Size size) {
     return _platformImpl.setSize(size);
+  }
+
+  @override
+  Future<void> setBounds(Offset position, Size size) {
+    return _platformImpl.setBounds(position, size);
   }
 
   @override

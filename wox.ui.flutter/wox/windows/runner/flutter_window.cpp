@@ -412,6 +412,86 @@ void FlutterWindow::HandleWindowManagerMethodCall(
         result->Error("INVALID_ARGUMENTS", "Invalid arguments for setSize");
       }
     }
+    else if (method_name == "setBounds")
+    {
+      const auto *arguments = std::get_if<flutter::EncodableMap>(method_call.arguments());
+      if (arguments)
+      {
+        auto x_it = arguments->find(flutter::EncodableValue("x"));
+        auto y_it = arguments->find(flutter::EncodableValue("y"));
+        auto width_it = arguments->find(flutter::EncodableValue("width"));
+        auto height_it = arguments->find(flutter::EncodableValue("height"));
+        if (x_it != arguments->end() && y_it != arguments->end() && width_it != arguments->end() && height_it != arguments->end())
+        {
+          double x = std::get<double>(x_it->second);
+          double y = std::get<double>(y_it->second);
+          double width = std::get<double>(width_it->second);
+          double height = std::get<double>(height_it->second);
+
+          struct MonitorFindData
+          {
+            LONG targetX, targetY;
+            HMONITOR foundMonitor;
+            UINT foundDpi;
+          } findData = {static_cast<LONG>(x), static_cast<LONG>(y), nullptr, 96};
+
+          EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR hMon, HDC, LPRECT, LPARAM lParam) -> BOOL
+                              {
+                                auto *data = reinterpret_cast<MonitorFindData *>(lParam);
+                                MONITORINFO mi = {sizeof(mi)};
+                                if (GetMonitorInfo(hMon, &mi))
+                                {
+                                  UINT dpi = FlutterDesktopGetDpiForMonitor(hMon);
+                                  float scale = dpi / 96.0f;
+
+                                  LONG logLeft = static_cast<LONG>(mi.rcMonitor.left / scale);
+                                  LONG logTop = static_cast<LONG>(mi.rcMonitor.top / scale);
+                                  LONG logRight = static_cast<LONG>(mi.rcMonitor.right / scale);
+                                  LONG logBottom = static_cast<LONG>(mi.rcMonitor.bottom / scale);
+
+                                  if (data->targetX >= logLeft && data->targetX < logRight &&
+                                      data->targetY >= logTop && data->targetY < logBottom)
+                                  {
+                                    data->foundMonitor = hMon;
+                                    data->foundDpi = dpi;
+                                    return FALSE;
+                                  }
+                                }
+                                return TRUE;
+                              },
+                              reinterpret_cast<LPARAM>(&findData));
+
+          if (findData.foundMonitor == nullptr)
+          {
+            findData.foundMonitor = MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
+            findData.foundDpi = FlutterDesktopGetDpiForMonitor(findData.foundMonitor);
+          }
+
+          float dpiScale = findData.foundDpi / 96.0f;
+          int scaledX = static_cast<int>(x * dpiScale);
+          int scaledY = static_cast<int>(y * dpiScale);
+          int scaledWidth = static_cast<int>(width * dpiScale);
+          int scaledHeight = static_cast<int>(height * dpiScale);
+
+          SetWindowPos(hwnd, nullptr, scaledX, scaledY, scaledWidth, scaledHeight, SWP_NOZORDER | SWP_FRAMECHANGED);
+
+          if (flutter_controller_)
+          {
+            flutter_controller_->ForceRedraw();
+          }
+
+          result->Success();
+        }
+        else
+        {
+          result->Error("INVALID_ARGUMENTS", "Invalid arguments for setBounds");
+        }
+      }
+      else
+      {
+        result->Error("INVALID_ARGUMENTS", "Invalid arguments for setBounds");
+      }
+    }
     else if (method_name == "getPosition")
     {
       RECT rect;

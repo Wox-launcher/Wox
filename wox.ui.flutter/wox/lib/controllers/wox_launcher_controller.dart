@@ -1179,10 +1179,8 @@ class WoxLauncherController extends GetxController {
       } else {
         double newTop = currentBottom - totalHeight;
 
-        // Move top up first, then expand height
-        // This keeps the visual "bottom" constant
-        await windowManager.setPosition(Offset(pos.dx, newTop));
-        await windowManager.setSize(Size(targetWidth, totalHeight));
+        // Apply position and size together to avoid intermediate-frame flicker.
+        await windowManager.setBounds(Offset(pos.dx, newTop), Size(targetWidth, totalHeight));
 
         lastWindowHeight = totalHeight;
         windowFlickerDetector.recordResize(totalHeight.toInt());

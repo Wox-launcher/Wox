@@ -126,6 +126,28 @@ static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
           fl_method_success_response_new(fl_value_new_null()));
     }
   }
+  else if (strcmp(method, "setBounds") == 0)
+  {
+    if (fl_value_get_type(args) == FL_VALUE_TYPE_MAP)
+    {
+      double x = fl_value_get_float(fl_value_lookup_string(args, "x"));
+      double y = fl_value_get_float(fl_value_lookup_string(args, "y"));
+      double width = fl_value_get_float(fl_value_lookup_string(args, "width"));
+      double height = fl_value_get_float(fl_value_lookup_string(args, "height"));
+      GdkWindow *gdk_window = gtk_widget_get_window(GTK_WIDGET(window));
+      if (gdk_window != nullptr)
+      {
+        gdk_window_move_resize(gdk_window, (int)x, (int)y, (int)width, (int)height);
+      }
+      else
+      {
+        gtk_window_move(window, (int)x, (int)y);
+        gtk_window_resize(window, (int)width, (int)height);
+      }
+      response = FL_METHOD_RESPONSE(
+          fl_method_success_response_new(fl_value_new_null()));
+    }
+  }
   else if (strcmp(method, "getPosition") == 0)
   {
     int x, y;
