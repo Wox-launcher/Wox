@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:convert';
 import 'dart:ui';
 
+import 'package:extended_text_field/extended_text_field.dart';
 import 'package:flutter/foundation.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
@@ -64,6 +65,7 @@ class WoxLauncherController extends GetxController {
   );
   final queryBoxScrollController = ScrollController(initialScrollOffset: 0.0);
   final queryBoxLineCount = 1.obs;
+  final queryBoxTextFieldKey = GlobalKey<ExtendedTextFieldState>();
 
   //preview related variables
   final currentPreview = WoxPreview.empty().obs;
@@ -584,11 +586,17 @@ class WoxLauncherController extends GetxController {
 
     // request focus to action query box since it will lose focus when tap
     queryBoxFocusNode.requestFocus();
+    requestQueryBoxKeyboard();
 
     // by default requestFocus will select all text, if selectAll is false, then restore to the previously stored cursor position
     if (selectAll) {
       queryBoxTextFieldController.selection = TextSelection(baseOffset: 0, extentOffset: queryBoxTextFieldController.text.length);
     }
+  }
+
+  void requestQueryBoxKeyboard() {
+    final editableTextState = queryBoxTextFieldKey.currentState?.editableTextKey.currentState;
+    editableTextState?.requestKeyboard();
   }
 
   void showActionPanel(String traceId) {

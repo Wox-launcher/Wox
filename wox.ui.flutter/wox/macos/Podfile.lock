@@ -61,18 +61,18 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/url_launcher_macos/macos
 
 SPEC CHECKSUMS:
-  desktop_drop: 10a3e6a7fa9dbe350541f2574092fecfa345a07b
-  device_info_plus: 4fb280989f669696856f8b129e4a5e3cd6c48f76
-  file_picker: 7584aae6fa07a041af2b36a2655122d42f578c1a
+  desktop_drop: 1eeeb9484299585770b6461e4f3d60950e99efa2
+  device_info_plus: 1b14eed9bf95428983aed283a8d51cce3d8c4215
+  file_picker: e716a70a9fe5fd9e09ebc922d7541464289443af
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
   HotKey: e96d8a2ddbf4591131e2bb3f54e69554d90cdca6
-  hotkey_manager_macos: a4317849af96d2430fa89944d3c58977ca089fbe
-  macos_window_utils: 23f54331a0fd51eea9e0ed347253bf48fd379d1d
-  path_provider_foundation: bb55f6dbba17d0dccd6737fe6f7f34fbd0376880
-  protocol_handler_macos: f9cd7b13bcaf6b0425f7410cbe52376cb843a936
-  syncfusion_pdfviewer_macos: b3b110c68039178ca4105dd03ef38761eca3b36b
-  url_launcher_macos: f87a979182d112f911de6820aefddaf56ee9fbfd
+  hotkey_manager_macos: 1e2edb0c7ae4fe67108af44a9d3445de41404160
+  macos_window_utils: 721df4da91cb4bde7b2b7b6ae93cdead4851118f
+  path_provider_foundation: 0b743cbb62d8e47eab856f09262bb8c1ddcfe6ba
+  protocol_handler_macos: d10a6c01d6373389ffd2278013ab4c47ed6d6daa
+  syncfusion_pdfviewer_macos: caeb5113e428fcad0cddcb054f5745b565c08fd7
+  url_launcher_macos: 175a54c831f4375a6cf895875f716ee5af3888ce
 
 PODFILE CHECKSUM: 9ebaf0ce3d369aaa26a9ea0e159195ed94724cf3
 
-COCOAPODS: 1.16.2
+COCOAPODS: 1.15.2

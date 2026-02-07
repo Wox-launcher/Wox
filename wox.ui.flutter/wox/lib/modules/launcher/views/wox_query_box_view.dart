@@ -58,6 +58,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
   // Build the TextField widget
   Widget _buildTextField(dynamic currentTheme) {
     return ExtendedTextField(
+      key: controller.queryBoxTextFieldKey,
       style: TextStyle(fontSize: 28.0, color: safeFromCssColor(currentTheme.queryBoxFontColor)),
       decoration: InputDecoration(
         contentPadding: const EdgeInsets.only(left: 8, right: 68, top: QUERY_BOX_CONTENT_PADDING_TOP, bottom: QUERY_BOX_CONTENT_PADDING_BOTTOM),
