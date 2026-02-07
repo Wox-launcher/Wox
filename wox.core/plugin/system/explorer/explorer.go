@@ -14,6 +14,7 @@ import (
 	"wox/plugin"
 	"wox/setting"
 	"wox/setting/definition"
+	"wox/ui"
 	"wox/util"
 	"wox/util/overlay"
 	"wox/util/shell"
@@ -485,9 +486,17 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 			if targetX < x+10 {
 				targetX = x + 10
 			}
-			// Target Y: Bottom edge of explorer - initialHeight - padding
+
+			// Keep the initial top position aligned with the actual query box height.
+			// This avoids vertical drift before resize logic expands the result area.
+			currentTheme := ui.GetUIManager().GetCurrentTheme(ctx)
+			queryBoxHeight := 55 + currentTheme.AppPaddingTop + currentTheme.AppPaddingBottom
+			if queryBoxHeight <= 0 {
+				queryBoxHeight = 80
+			}
+			// Target Y: Bottom edge of explorer - query box height - padding
 			// We position it near the bottom so it can grow upwards
-			targetY := y + h - 80 - 20
+			targetY := y + h - queryBoxHeight - 20
 			if targetY < y+10 {
 				targetY = y + 10
 			}
@@ -521,9 +530,9 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 					if !active || ev.key == "" {
 						continue
 					}
-					if c.api.IsVisible(ctx) {
-						continue
-					}
+					// if c.api.IsVisible(ctx) {
+					// 	continue
+					// }
 					pending += strings.ToLower(ev.key)
 					if !waitingVisible {
 						if !showOverlay() {

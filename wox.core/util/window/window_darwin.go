@@ -16,7 +16,7 @@ int isFinder(int pid);
 char* getOpenFinderWindowPaths();
 char* getActiveFinderWindowPath();
 char* getFinderWindowPathByPid(int pid);
-int navigateActiveFinderWindow(const char* path);
+int selectInFinder(const char* path);
 */
 import "C"
 import (
@@ -147,5 +147,5 @@ func SelectInFileExplorerByPid(pid int, fullPath string) bool {
 
 	cPath := C.CString(fullPath)
 	defer C.free(unsafe.Pointer(cPath))
-	return int(C.navigateActiveFinderWindow(cPath)) == 1
+	return int(C.selectInFinder(cPath)) == 1
 }
