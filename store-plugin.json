@@ -390,7 +390,7 @@
     "Id": "e201dc19-34fb-4ad8-8829-bfb2b2eb25d0",
     "Name": "Crypto Portfolio",
     "Author": "qianlifeng",
-    "Version": "0.0.5",
+    "Version": "0.0.6",
     "MinWoxVersion": "2.0.0",
     "Runtime": "nodejs",
     "Description": "i18n:plugin_description",
@@ -402,7 +402,7 @@
     ],
     "SupportedOS": ["windows", "darwin", "linux"],
     "DateCreated": "2026-01-09 16:40:00",
-    "DateUpdated": "2026-01-26 15:05:52",
+    "DateUpdated": "2026-02-07 08:51:08",
     "I18n": {
       "en_US": {
         "plugin_description": "Track your crypto portfolio"
