@@ -439,6 +439,8 @@ class WoxLauncherController extends GetxController {
       isToolbarHiddenForce.value = true;
       forceWindowWidth = WoxSettingUtil.instance.currentSetting.appWidth.toDouble() / 2;
       forceHideOnBlur = false;
+      // Reset tracked height to avoid using stale non-explorer height as anchor.
+      lastWindowHeight = 0;
     }
 
     // Reset to default layout if no layout mode specified
@@ -478,6 +480,7 @@ class WoxLauncherController extends GetxController {
     isToolbarHiddenForce.value = false;
     forceWindowWidth = 0;
     forceHideOnBlur = false;
+    lastWindowHeight = 0;
   }
 
   Future<void> hideApp(String traceId) async {

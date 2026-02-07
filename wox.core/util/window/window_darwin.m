@@ -620,7 +620,7 @@ char* getFinderWindowPathByPid(int pid) {
     }
 }
 
-int navigateActiveFinderWindow(const char* path) {
+int selectInFinder(const char* path) {
     @autoreleasepool {
         if (path == NULL) {
             return 0;
@@ -630,38 +630,29 @@ int navigateActiveFinderWindow(const char* path) {
             return 0;
         }
 
-        NSRunningApplication *activeApp = [[NSWorkspace sharedWorkspace] frontmostApplication];
-        if (!activeApp || ![[activeApp bundleIdentifier] isEqualToString:@"com.apple.finder"]) {
+        // Check if the file/folder exists
+        BOOL isDir = NO;
+        if (![[NSFileManager defaultManager] fileExistsAtPath:pathStr isDirectory:&isDir]) {
             return 0;
         }
 
-        id finder = [SBApplication applicationWithBundleIdentifier:@"com.apple.finder"];
-        if (!finder) {
+        // Use AppleScript to reveal the item in the frontmost Finder window
+        // 'reveal' navigates to the parent folder and selects the item
+        NSString *escapedPath = [pathStr stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
+        NSString *script = [NSString stringWithFormat:
+            @"tell application \"Finder\"\n"
+            @"  activate\n"
+            @"  reveal POSIX file \"%@\"\n"
+            @"end tell", escapedPath];
+        
+        NSAppleScript *appleScript = [[NSAppleScript alloc] initWithSource:script];
+        NSDictionary *errorInfo = nil;
+        [appleScript executeAndReturnError:&errorInfo];
+        
+        if (errorInfo) {
             return 0;
         }
-
-        id windows = [finder valueForKey:@"windows"];
-        if (![windows isKindOfClass:[NSArray class]]) {
-            return 0;
-        }
-
-        NSArray *windowList = (NSArray *)windows;
-        if ([windowList count] == 0) {
-            return 0;
-        }
-
-        id window = [windowList objectAtIndex:0];
-        NSURL *url = [NSURL fileURLWithPath:pathStr];
-        if (!url) {
-            return 0;
-        }
-
-        @try {
-            [window setValue:url forKey:@"target"];
-        } @catch (NSException *exception) {
-            return 0;
-        }
-
+        
         return 1;
     }
 }

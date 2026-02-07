@@ -6,6 +6,7 @@ package explorer
 extern void fileExplorerActivatedCallbackCGO(int pid, int isFileDialog, int x, int y, int w, int h);
 extern void fileExplorerDeactivatedCallbackCGO();
 extern void fileExplorerKeyDownCallbackCGO(char key);
+int getCurrentFinderWindowRect(int *x, int *y, int *w, int *h);
 void startFileExplorerMonitor();
 void stopFileExplorerMonitor();
 */
@@ -149,7 +150,19 @@ func StopExplorerMonitor() {
 
 func GetActiveExplorerRect() (int, int, int, int, bool) {
 	if explorerActive {
-		return explorerRectX, explorerRectY, explorerRectW, explorerRectH, true
+		var x, y, w, h C.int
+		if int(C.getCurrentFinderWindowRect(&x, &y, &w, &h)) == 1 {
+			explorerRectX = int(x)
+			explorerRectY = int(y)
+			explorerRectW = int(w)
+			explorerRectH = int(h)
+			return explorerRectX, explorerRectY, explorerRectW, explorerRectH, true
+		}
+		explorerActive = false
+		if currentState == stateExplorer {
+			currentState = stateNone
+		}
+		return 0, 0, 0, 0, false
 	}
 	return 0, 0, 0, 0, false
 }
