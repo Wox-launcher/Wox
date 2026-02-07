@@ -438,7 +438,7 @@ class WoxLauncherController extends GetxController {
       isQueryBoxAtBottom.value = true;
       isToolbarHiddenForce.value = true;
       forceWindowWidth = WoxSettingUtil.instance.currentSetting.appWidth.toDouble() / 2;
-      forceHideOnBlur = false;
+      forceHideOnBlur = true;
       // Reset tracked height to avoid using stale non-explorer height as anchor.
       lastWindowHeight = 0;
     }
@@ -453,8 +453,19 @@ class WoxLauncherController extends GetxController {
     if (Platform.isLinux) {
       await windowManager.show();
     }
-    // Use the position calculated by backend
-    await windowManager.setPosition(Offset(params.position.x.toDouble(), params.position.y.toDouble()));
+    final targetPosition = Offset(params.position.x.toDouble(), params.position.y.toDouble());
+    final isExplorerLayout = params.layoutMode == WoxLayoutModeEnum.WOX_LAYOUT_MODE_EXPLORER.code;
+    if (Platform.isMacOS && isExplorerLayout) {
+      // In explorer mode, apply position+size together to avoid stale previous height
+      // affecting initial placement in macOS frame conversion.
+      final initialHeight = getQueryBoxTotalHeight();
+      final targetWidth = forceWindowWidth != 0 ? forceWindowWidth : WoxSettingUtil.instance.currentSetting.appWidth.toDouble();
+      await windowManager.setBounds(targetPosition, Size(targetWidth, initialHeight));
+      lastWindowHeight = initialHeight;
+    } else {
+      // Use the position calculated by backend
+      await windowManager.setPosition(targetPosition);
+    }
 
     await windowManager.show();
     if (!isInSettingView.value) {
