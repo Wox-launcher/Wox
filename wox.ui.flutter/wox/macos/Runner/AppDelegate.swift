@@ -118,6 +118,31 @@ class AppDelegate: FlutterAppDelegate {
               ))
           }
 
+        case "setBounds":
+          if let args = call.arguments as? [String: Any],
+            let x = args["x"] as? Double,
+            let y = args["y"] as? Double,
+            let width = args["width"] as? Double,
+            let height = args["height"] as? Double
+          {
+            let targetScreen =
+              NSScreen.screens.first { screen in
+                let frame = screen.frame
+                return x >= frame.origin.x && x < frame.origin.x + frame.width
+              } ?? window.screen ?? NSScreen.main
+            let screenFrame = targetScreen?.frame ?? NSRect.zero
+            let frameRect = window.frameRect(forContentRect: NSRect(x: 0, y: 0, width: width, height: height))
+            let screenTopInAppKit = screenFrame.origin.y + screenFrame.height
+            let flippedY = screenTopInAppKit - y - frameRect.height
+            window.setFrame(NSRect(x: x, y: flippedY, width: frameRect.width, height: frameRect.height), display: true)
+            result(nil)
+          } else {
+            result(
+              FlutterError(
+                code: "INVALID_ARGS", message: "Invalid arguments for setBounds", details: nil
+              ))
+          }
+
         case "getPosition":
           let frame = window.frame
           let screenFrame = window.screen?.frame ?? NSScreen.main?.frame ?? NSRect.zero

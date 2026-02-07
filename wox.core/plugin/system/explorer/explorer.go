@@ -169,6 +169,11 @@ func (c *ExplorerPlugin) queryFileExplorer(ctx context.Context, query plugin.Que
 		var icon common.WoxImage
 		if isDir {
 			icon = common.FolderIcon
+
+			// On macOS, use the .app icon for application bundles
+			if util.IsMacOS() && strings.HasSuffix(strings.ToLower(entry.Name()), ".app") {
+				icon = common.NewWoxImageFileIcon(fullPath)
+			}
 		} else {
 			icon = common.NewWoxImageFileIcon(fullPath)
 		}
@@ -530,9 +535,6 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 					if !active || ev.key == "" {
 						continue
 					}
-					// if c.api.IsVisible(ctx) {
-					// 	continue
-					// }
 					pending += strings.ToLower(ev.key)
 					if !waitingVisible {
 						if !showOverlay() {
