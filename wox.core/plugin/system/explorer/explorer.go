@@ -12,6 +12,7 @@ import (
 	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
+	"wox/setting"
 	"wox/setting/definition"
 	"wox/util"
 	"wox/util/overlay"
@@ -436,16 +437,13 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 		}
 	}
 
-	onActivated := func(_ int) {
-		c.api.Log(ctx, plugin.LogLevelDebug, "explorer overlay: activated")
+	onActivated := func(pid int) {
 		pushEvent(overlayEvent{eventType: overlayEventActivate})
 	}
 	onDeactivated := func() {
-		c.api.Log(ctx, plugin.LogLevelDebug, "explorer overlay: deactivated")
 		pushEvent(overlayEvent{eventType: overlayEventDeactivate})
 	}
 	onKey := func(key string) {
-		c.api.Log(ctx, plugin.LogLevelDebug, "explorer overlay: key="+key)
 		pushEvent(overlayEvent{eventType: overlayEventKey, key: key})
 	}
 
@@ -471,13 +469,28 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 					return false
 				}
 			}
+			if w <= 0 || h <= 0 {
+				return false
+			}
 
-			// Target X: Right edge of explorer - explorerWidth - padding
-			const explorerWidth = 400
-			targetX := x + w - int(explorerWidth) - 30
+			overlayWidth := 400
+			if woxSetting := setting.GetSettingManager().GetWoxSetting(ctx); woxSetting != nil {
+				if configuredWidth := woxSetting.AppWidth.Get() / 2; configuredWidth > 0 {
+					overlayWidth = configuredWidth
+				}
+			}
+
+			// Target X: Right edge of explorer - overlay width - padding
+			targetX := x + w - overlayWidth - 20
+			if targetX < x+10 {
+				targetX = x + 10
+			}
 			// Target Y: Bottom edge of explorer - initialHeight - padding
 			// We position it near the bottom so it can grow upwards
 			targetY := y + h - 80 - 20
+			if targetY < y+10 {
+				targetY = y + 10
+			}
 
 			plugin.GetPluginManager().GetUI().ShowApp(ctx, common.ShowContext{
 				SelectAll:      false,
@@ -509,17 +522,14 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 						continue
 					}
 					if c.api.IsVisible(ctx) {
-						c.api.Log(ctx, plugin.LogLevelDebug, "explorer overlay: key ignored (ui visible)")
 						continue
 					}
 					pending += strings.ToLower(ev.key)
 					if !waitingVisible {
 						if !showOverlay() {
-							c.api.Log(ctx, plugin.LogLevelDebug, "explorer overlay: show failed (no active rect)")
 							resetState()
 							continue
 						}
-						c.api.Log(ctx, plugin.LogLevelDebug, "explorer overlay: show requested")
 						waitingVisible = true
 						waitingSince = time.Now()
 					}
@@ -530,7 +540,6 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 				}
 				if c.api.IsVisible(ctx) {
 					if pending != "" {
-						c.api.Log(ctx, plugin.LogLevelDebug, "explorer overlay: ui visible, change query="+pending)
 						c.api.ChangeQuery(ctx, common.PlainQuery{
 							QueryType: plugin.QueryTypeInput,
 							QueryText: "explorer " + pending,
@@ -540,7 +549,6 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 					continue
 				}
 				if !waitingSince.IsZero() && time.Since(waitingSince) > 2*time.Second {
-					c.api.Log(ctx, plugin.LogLevelDebug, "explorer overlay: wait visible timeout, reset")
 					resetState()
 				}
 			}
