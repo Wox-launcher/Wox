@@ -586,17 +586,17 @@ class WoxLauncherController extends GetxController {
 
     // request focus to action query box since it will lose focus when tap
     queryBoxFocusNode.requestFocus();
-    requestQueryBoxKeyboard();
+    // force to focus the editable text state to ensure keyboard input works
+    // on macos sometimes the keyboard input does not work after requestFocus in certain scenarios
+    // E.g. when in explorer layout mode, sometimes the keyboard input does not work after requestFocus
+    // which cause the user cannot type in the query box
+    final editableTextState = queryBoxTextFieldKey.currentState?.editableTextKey.currentState;
+    editableTextState?.requestKeyboard();
 
     // by default requestFocus will select all text, if selectAll is false, then restore to the previously stored cursor position
     if (selectAll) {
       queryBoxTextFieldController.selection = TextSelection(baseOffset: 0, extentOffset: queryBoxTextFieldController.text.length);
     }
-  }
-
-  void requestQueryBoxKeyboard() {
-    final editableTextState = queryBoxTextFieldKey.currentState?.editableTextKey.currentState;
-    editableTextState?.requestKeyboard();
   }
 
   void showActionPanel(String traceId) {
