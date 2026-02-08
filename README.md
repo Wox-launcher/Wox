@@ -54,7 +54,16 @@ Due to the large number of Linux distributions, we only test Wox on Ubuntu. We c
 
 ## Sponsors
 
-- [SignPath](https://signpath.org/) sponsors our free Windows code signing.
+<table>
+  <tr>
+    <td width="60" align="center">
+      <img src="https://github.com/SignPath.png" width="40" alt="SignPath">
+    </td>
+    <td>
+      Free code signing on Windows provided by <a href="https://signpath.io">SignPath.io</a>, certificate by <a href="https://signpath.org">SignPath Foundation</a>
+    </td>
+  </tr>
+</table>
 
 ## Project Activity
 
