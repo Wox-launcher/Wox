@@ -19,6 +19,8 @@ import (
 	"wox/util/overlay"
 	"wox/util/shell"
 	"wox/util/window"
+
+	"github.com/google/uuid"
 )
 
 type openSaveFolder struct {
@@ -34,8 +36,8 @@ type openSaveHistoryEntry struct {
 }
 
 const (
-	openSaveHistorySettingKey  = "openSaveHistory"
-	showExplorerHintSettingKey = "showExplorerHint"
+	openSaveHistorySettingKey    = "openSaveHistory"
+	enableTypeToSearchSettingKey = "enableTypeToSearch"
 )
 
 func init() {
@@ -75,9 +77,10 @@ func (c *ExplorerPlugin) GetMetadata() plugin.Metadata {
 			{
 				Type: definition.PluginSettingDefinitionTypeCheckBox,
 				Value: &definition.PluginSettingValueCheckBox{
-					Key:          showExplorerHintSettingKey,
-					Label:        "i18n:plugin_explorer_setting_show_hint",
-					DefaultValue: "true",
+					Key:          enableTypeToSearchSettingKey,
+					Label:        "i18n:plugin_explorer_setting_enable_type_to_search",
+					Tooltip:      "i18n:plugin_explorer_setting_enable_type_to_search_tips",
+					DefaultValue: "false",
 				},
 			},
 		},
@@ -85,6 +88,7 @@ func (c *ExplorerPlugin) GetMetadata() plugin.Metadata {
 			{
 				Name: plugin.MetadataFeatureQueryEnv,
 				Params: map[string]any{
+					"requireActiveWindowName":             true,
 					"requireActiveWindowPid":              true,
 					"requireActiveWindowIsOpenSaveDialog": true,
 				},
@@ -98,14 +102,14 @@ func (c *ExplorerPlugin) Init(ctx context.Context, initParams plugin.InitParams)
 	c.openSaveHistoryMap = c.loadOpenSaveHistory(ctx)
 
 	// Start overlay hint listener if enabled
-	showHint := c.api.GetSetting(ctx, showExplorerHintSettingKey)
-	if showHint == "true" {
+	enableTypeToSearch := c.api.GetSetting(ctx, enableTypeToSearchSettingKey)
+	if enableTypeToSearch == "true" {
 		c.startOverlayListener(ctx)
 	}
 
 	// Listen for setting changes
 	c.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, value string) {
-		if key == showExplorerHintSettingKey {
+		if key == enableTypeToSearchSettingKey {
 			if value == "true" {
 				c.startOverlayListener(callbackCtx)
 			} else {
@@ -140,7 +144,16 @@ func (c *ExplorerPlugin) Query(ctx context.Context, query plugin.Query) []plugin
 }
 
 func (c *ExplorerPlugin) queryFileExplorer(ctx context.Context, query plugin.Query) []plugin.QueryResult {
-	currentPath := window.GetFileExplorerPathByPid(query.Env.ActiveWindowPid)
+	currentPath := ""
+	if util.IsWindows() {
+		// Prefer the actual foreground tab path on Windows 11 (tabs may share the same HWND).
+		currentPath = window.GetActiveFileExplorerPath()
+		if currentPath == "" {
+			currentPath = window.GetFileExplorerPathByPidAndWindowTitle(query.Env.ActiveWindowPid, query.Env.ActiveWindowTitle)
+		}
+	} else {
+		currentPath = window.GetFileExplorerPathByPid(query.Env.ActiveWindowPid)
+	}
 	if currentPath == "" {
 		return []plugin.QueryResult{}
 	}
@@ -433,6 +446,7 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 	type overlayEvent struct {
 		eventType overlayEventType
 		key       string
+		ctx       context.Context
 	}
 
 	events := make(chan overlayEvent, 64)
@@ -444,13 +458,17 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 	}
 
 	onActivated := func(pid int) {
+		c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("typeToSearch: activated pid=%d", pid))
 		pushEvent(overlayEvent{eventType: overlayEventActivate})
 	}
 	onDeactivated := func() {
+		c.api.Log(ctx, plugin.LogLevelDebug, "typeToSearch: deactivated")
 		pushEvent(overlayEvent{eventType: overlayEventDeactivate})
 	}
 	onKey := func(key string) {
-		pushEvent(overlayEvent{eventType: overlayEventKey, key: key})
+		traceCtx := context.WithValue(ctx, util.ContextKeyTraceId, uuid.NewString())
+		traceCtx = util.WithCoreSessionContext(traceCtx)
+		pushEvent(overlayEvent{eventType: overlayEventKey, key: key, ctx: traceCtx})
 	}
 
 	go func() {
@@ -459,28 +477,32 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 			waitingVisible bool
 			waitingSince   time.Time
 			pending        string
+			pendingCtx     context.Context
 		)
 
 		resetState := func() {
 			waitingVisible = false
 			waitingSince = time.Time{}
 			pending = ""
+			pendingCtx = nil
 		}
 
-		showOverlay := func() bool {
+		showOverlay := func(localCtx context.Context) bool {
 			x, y, w, h, ok := GetActiveExplorerRect()
 			if !ok {
 				x, y, w, h, ok = GetActiveDialogRect()
 				if !ok {
+					c.api.Log(localCtx, plugin.LogLevelInfo, "typeToSearch: showOverlay skipped (no active explorer/dialog rect)")
 					return false
 				}
 			}
 			if w <= 0 || h <= 0 {
+				c.api.Log(localCtx, plugin.LogLevelInfo, fmt.Sprintf("typeToSearch: showOverlay skipped (invalid rect w=%d h=%d)", w, h))
 				return false
 			}
 
 			overlayWidth := 400
-			if woxSetting := setting.GetSettingManager().GetWoxSetting(ctx); woxSetting != nil {
+			if woxSetting := setting.GetSettingManager().GetWoxSetting(localCtx); woxSetting != nil {
 				if configuredWidth := woxSetting.AppWidth.Get() / 2; configuredWidth > 0 {
 					overlayWidth = configuredWidth
 				}
@@ -494,7 +516,7 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 
 			// Keep the initial top position aligned with the actual query box height.
 			// This avoids vertical drift before resize logic expands the result area.
-			currentTheme := ui.GetUIManager().GetCurrentTheme(ctx)
+			currentTheme := ui.GetUIManager().GetCurrentTheme(localCtx)
 			queryBoxHeight := 55 + currentTheme.AppPaddingTop + currentTheme.AppPaddingBottom
 			if queryBoxHeight <= 0 {
 				queryBoxHeight = 80
@@ -506,7 +528,8 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 				targetY = y + 10
 			}
 
-			plugin.GetPluginManager().GetUI().ShowApp(ctx, common.ShowContext{
+			c.api.Log(localCtx, plugin.LogLevelInfo, fmt.Sprintf("typeToSearch: showOverlay rect=(%d,%d,%d,%d) target=(%d,%d) width=%d", x, y, w, h, targetX, targetY, overlayWidth))
+			plugin.GetPluginManager().GetUI().ShowApp(localCtx, common.ShowContext{
 				SelectAll:      false,
 				WindowPosition: &common.WindowPosition{X: targetX, Y: targetY},
 				LayoutMode:     common.LayoutModeExplorer,
@@ -532,12 +555,29 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 						resetState()
 					}
 				case overlayEventKey:
+					localCtx := ev.ctx
+					if localCtx == nil {
+						localCtx = ctx
+					}
 					if !active || ev.key == "" {
+						c.api.Log(localCtx, plugin.LogLevelDebug, fmt.Sprintf("typeToSearch: ignore key=%q active=%v", ev.key, active))
 						continue
 					}
+					if util.IsWindows() {
+						if c.api.IsVisible(localCtx) {
+							c.api.Log(localCtx, plugin.LogLevelDebug, fmt.Sprintf("typeToSearch: ignore key=%q (wox visible)", ev.key))
+							continue
+						}
+					}
+					if pendingCtx == nil {
+						pendingCtx = localCtx
+						c.api.Log(pendingCtx, plugin.LogLevelInfo, fmt.Sprintf("typeToSearch: begin key=%q", ev.key))
+					}
 					pending += strings.ToLower(ev.key)
+					c.api.Log(pendingCtx, plugin.LogLevelDebug, fmt.Sprintf("typeToSearch: pending=%q", pending))
 					if !waitingVisible {
-						if !showOverlay() {
+						if !showOverlay(pendingCtx) {
+							c.api.Log(pendingCtx, plugin.LogLevelInfo, "typeToSearch: showOverlay failed")
 							resetState()
 							continue
 						}
@@ -549,17 +589,24 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 				if !waitingVisible {
 					continue
 				}
-				if c.api.IsVisible(ctx) {
+				tickCtx := pendingCtx
+				if tickCtx == nil {
+					tickCtx = ctx
+				}
+				if c.api.IsVisible(tickCtx) {
 					if pending != "" {
-						c.api.ChangeQuery(ctx, common.PlainQuery{
+						queryText := "explorer " + pending
+						c.api.Log(tickCtx, plugin.LogLevelInfo, fmt.Sprintf("typeToSearch: changeQuery %q", queryText))
+						c.api.ChangeQuery(tickCtx, common.PlainQuery{
 							QueryType: plugin.QueryTypeInput,
-							QueryText: "explorer " + pending,
+							QueryText: queryText,
 						})
 					}
 					resetState()
 					continue
 				}
 				if !waitingSince.IsZero() && time.Since(waitingSince) > 2*time.Second {
+					c.api.Log(tickCtx, plugin.LogLevelDebug, "typeToSearch: timeout waiting for wox visible")
 					resetState()
 				}
 			}

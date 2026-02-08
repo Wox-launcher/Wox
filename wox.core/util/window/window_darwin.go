@@ -124,6 +124,12 @@ func GetFileExplorerPathByPid(pid int) string {
 	return strings.TrimSpace(C.GoString(result))
 }
 
+// GetFileExplorerPathByPidAndWindowTitle is a Windows-specific helper to handle Explorer tabs.
+// On macOS, Finder does not have the same tab/HWND behavior, so we fall back to PID-based resolution.
+func GetFileExplorerPathByPidAndWindowTitle(pid int, windowTitle string) string {
+	return GetFileExplorerPathByPid(pid)
+}
+
 // GetOpenFinderWindowPaths returns a list of paths for all currently open Finder windows.
 func GetOpenFinderWindowPaths() []string {
 	result := C.getOpenFinderWindowPaths()
