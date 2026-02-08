@@ -422,7 +422,7 @@
   "plugin_explorer_open": "打开",
   "plugin_explorer_reveal_in_explorer": "在文件管理器中显示",
   "plugin_explorer_jump_to": "跳转到",
-  "plugin_explorer_setting_show_hint": "显示文件管理器提示",
+  "plugin_explorer_setting_show_hint": "启用文件管理器快速过滤（直接键入开始过滤，无需快捷键）",
   "plugin_explorer_hint_tooltip_message": "使用 Wox 快速过滤当前文件夹 (你可以在文件管理器插件设置中关闭此提示)",
   "plugin_explorer_hint_tooltip_message_dialog": "使用 Wox 快速导航文件夹 (你可以在文件管理器插件设置中关闭此提示)",
   "plugin_explorer_hint_message": "点击过滤",

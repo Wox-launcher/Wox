@@ -418,7 +418,7 @@
   "plugin_explorer_open": "Abrir",
   "plugin_explorer_reveal_in_explorer": "Revelar no explorador de arquivos",
   "plugin_explorer_jump_to": "Ir para",
-  "plugin_explorer_setting_show_hint": "Mostrar dica do explorador de arquivos",
+  "plugin_explorer_setting_show_hint": "Ativar filtro rápido no explorador de arquivos (digite para filtrar diretamente, sem atalho)",
   "plugin_explorer_hint_tooltip_message": "Clique em mim para filtrar rapidamente as pastas (você pode desativar esta dica nas configurações do plugin)",
   "plugin_explorer_hint_tooltip_message_dialog": "Clique em mim para usar o Wox para navegar rapidamente pelas pastas (você pode desativar esta dica nas configurações do plugin)",
   "plugin_explorer_hint_message": "Clique para filtrar",
