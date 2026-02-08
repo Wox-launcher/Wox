@@ -47,6 +47,10 @@ private:
   // Previous active window handle
   HWND previous_active_window_;
 
+  // Save/restore the previously focused window (Windows focus rules require explicit restore)
+  void SavePreviousActiveWindow(HWND selfHwnd);
+  void RestorePreviousActiveWindow(HWND selfHwnd);
+
   // Get the DPI scaling factor for the window
   float GetDpiScale(HWND hwnd);
 

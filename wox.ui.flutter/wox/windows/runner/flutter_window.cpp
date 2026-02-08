@@ -2,6 +2,7 @@
 
 #include <optional>
 #include <thread>
+#include <string>
 #include <flutter/plugin_registrar_windows.h>
 #include <windows.h>
 #include <dwmapi.h>
@@ -11,6 +12,11 @@
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
 #endif
+
+// After SW_HIDE, Windows may activate another window asynchronously.
+// Retry restoring the previous foreground window shortly after hide.
+static constexpr UINT_PTR kRestoreForegroundTimerId1 = 0xA11;
+static constexpr UINT_PTR kRestoreForegroundTimerId2 = 0xA12;
 
 // Store window instance for window procedure
 FlutterWindow *g_window_instance = nullptr;
@@ -47,6 +53,124 @@ void FlutterWindow::Log(const std::string &message)
   {
     window_manager_channel_->InvokeMethod("log", std::make_unique<flutter::EncodableValue>(message));
   }
+}
+
+void FlutterWindow::SavePreviousActiveWindow(HWND selfHwnd)
+{
+  if (selfHwnd == nullptr)
+  {
+    return;
+  }
+
+  HWND fg = GetForegroundWindow();
+  if (fg == nullptr)
+  {
+    return;
+  }
+
+  // Normalize to root window (avoid saving child controls)
+  HWND root = GetAncestor(fg, GA_ROOT);
+  if (root == nullptr)
+  {
+    root = fg;
+  }
+
+  if (root == selfHwnd)
+  {
+    return;
+  }
+
+  if (!IsWindow(root) || !IsWindowVisible(root))
+  {
+    return;
+  }
+
+  previous_active_window_ = root;
+
+  char fgStr[32];
+  sprintf_s(fgStr, "%p", previous_active_window_);
+  Log(std::string("Window: saved previous foreground hwnd=") + fgStr);
+}
+
+void FlutterWindow::RestorePreviousActiveWindow(HWND selfHwnd)
+{
+  if (selfHwnd == nullptr)
+  {
+    return;
+  }
+
+  HWND prev = previous_active_window_;
+  if (prev == nullptr)
+  {
+    Log("Window: no previous foreground window saved");
+    return;
+  }
+
+  // Normalize again (in case we saved a non-root window in the past)
+  HWND root = GetAncestor(prev, GA_ROOT);
+  if (root != nullptr)
+  {
+    prev = root;
+  }
+
+  if (prev == selfHwnd)
+  {
+    Log("Window: previous foreground is self, skip restore");
+    return;
+  }
+
+  if (!IsWindow(prev))
+  {
+    Log("Window: previous foreground hwnd is invalid (destroyed?)");
+    previous_active_window_ = nullptr;
+    return;
+  }
+
+  char prevStr[32];
+  sprintf_s(prevStr, "%p", prev);
+  Log(std::string("Window: restoring previous foreground hwnd=") + prevStr);
+
+  // If the previous window is minimized, restore it.
+  if (IsIconic(prev))
+  {
+    ShowWindow(prev, SW_RESTORE);
+  }
+
+  // Fast path: try directly.
+  if (SetForegroundWindow(prev))
+  {
+    BringWindowToTop(prev);
+    return;
+  }
+
+  // Fallback: Attach input queues temporarily.
+  DWORD curTid = GetCurrentThreadId();
+  DWORD prevTid = GetWindowThreadProcessId(prev, nullptr);
+  bool attached = false;
+  if (prevTid != 0 && prevTid != curTid)
+  {
+    attached = AttachThreadInput(prevTid, curTid, TRUE);
+  }
+
+  SetForegroundWindow(prev);
+  BringWindowToTop(prev);
+
+  if (attached)
+  {
+    AttachThreadInput(prevTid, curTid, FALSE);
+  }
+
+  if (GetForegroundWindow() == prev)
+  {
+    Log("Window: restore foreground succeeded (AttachThreadInput)");
+    return;
+  }
+
+  // Last try: relax foreground restrictions.
+  AllowSetForegroundWindow(ASFW_ANY);
+  SetForegroundWindow(prev);
+  BringWindowToTop(prev);
+  Log("Window: restore foreground final attempt completed");
 }
 
 // Send keyboard event to Flutter (Windows-specific workaround)
@@ -291,6 +415,18 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message, WPARAM const wparam
 
   switch (message)
   {
+  case WM_TIMER:
+    if (wparam == kRestoreForegroundTimerId1 || wparam == kRestoreForegroundTimerId2)
+    {
+      KillTimer(hwnd, static_cast<UINT_PTR>(wparam));
+      // Only restore when this window is still hidden.
+      if (IsWindowVisible(hwnd) == 0)
+      {
+        RestorePreviousActiveWindow(hwnd);
+      }
+      return 0;
+    }
+    break;
   case WM_FONTCHANGE:
     flutter_controller_->engine()->ReloadSystemFonts();
     break;
@@ -457,9 +593,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
                                     return FALSE;
                                   }
                                 }
-                                return TRUE;
-                              },
-                              reinterpret_cast<LPARAM>(&findData));
+                                return TRUE; }, reinterpret_cast<LPARAM>(&findData));
 
           if (findData.foundMonitor == nullptr)
           {
@@ -523,7 +657,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
 
           // COORDINATE SYSTEM EXPLANATION:
           // ... (existing logic) ...
-          
+
           struct MonitorFindData
           {
             LONG targetX, targetY;
@@ -645,6 +779,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
     }
     else if (method_name == "show")
     {
+      SavePreviousActiveWindow(hwnd);
       ShowWindow(hwnd, SW_SHOW);
       result->Success();
     }
@@ -652,14 +787,24 @@ void FlutterWindow::HandleWindowManagerMethodCall(
     {
       Log("[KEYLOG][NATIVE] Hide called, using ShowWindow(SW_HIDE)");
       ShowWindow(hwnd, SW_HIDE);
+      RestorePreviousActiveWindow(hwnd);
+
+      // Retry restore after the system finishes processing activation changes.
+      KillTimer(hwnd, kRestoreForegroundTimerId1);
+      KillTimer(hwnd, kRestoreForegroundTimerId2);
+      SetTimer(hwnd, kRestoreForegroundTimerId1, 30, nullptr);
+      SetTimer(hwnd, kRestoreForegroundTimerId2, 200, nullptr);
       result->Success();
     }
     else if (method_name == "focus")
     {
-       // ... existing focus implementation ...
-       // (Simplified for brevity, assuming existing focus logic remains)
+      // ... existing focus implementation ...
+      // (Simplified for brevity, assuming existing focus logic remains)
       // 1. Use AttachThreadInput to try to set foreground window
-      
+
+      // Save current foreground window before bringing Wox to front.
+      SavePreviousActiveWindow(hwnd);
+
       // Optimization: Try SetForegroundWindow directly first.
       // If we already have permission or are in foreground, this avoids AttachThreadInput
       // which can block for seconds if the foreground window is hung.
@@ -670,7 +815,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
         result->Success();
         return;
       }
-      
+
       HWND fg = GetForegroundWindow();
       DWORD curTid = GetCurrentThreadId();
       DWORD fgTid = 0;
