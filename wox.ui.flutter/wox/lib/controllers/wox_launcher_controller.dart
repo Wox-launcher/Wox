@@ -438,7 +438,7 @@ class WoxLauncherController extends GetxController {
       isQueryBoxAtBottom.value = true;
       isToolbarHiddenForce.value = true;
       forceWindowWidth = WoxSettingUtil.instance.currentSetting.appWidth.toDouble() / 2;
-      forceHideOnBlur = true;
+      forceHideOnBlur = false;
       // Reset tracked height to avoid using stale non-explorer height as anchor.
       lastWindowHeight = 0;
     }

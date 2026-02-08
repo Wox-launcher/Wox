@@ -234,6 +234,75 @@ func GetActiveFileExplorerPath() string {
 	count := int(countVar.Val)
 	countVar.Clear()
 
+	getShellWindowLocationName := func(wDisp *ole.IDispatch) string {
+		v, err := oleutil.GetProperty(wDisp, "LocationName")
+		if err != nil {
+			return ""
+		}
+		name := strings.TrimSpace(v.ToString())
+		v.Clear()
+		return name
+	}
+
+	getShellWindowPath := func(wDisp *ole.IDispatch) string {
+		docVar, err := oleutil.GetProperty(wDisp, "Document")
+		if err != nil {
+			return ""
+		}
+		docDisp := docVar.ToIDispatch()
+		if docDisp == nil {
+			docVar.Clear()
+			return ""
+		}
+
+		folderVar, err := oleutil.GetProperty(docDisp, "Folder")
+		if err != nil {
+			docVar.Clear()
+			return ""
+		}
+		folderDisp := folderVar.ToIDispatch()
+		if folderDisp == nil {
+			folderVar.Clear()
+			docVar.Clear()
+			return ""
+		}
+
+		selfVar, err := oleutil.GetProperty(folderDisp, "Self")
+		if err != nil {
+			folderVar.Clear()
+			docVar.Clear()
+			return ""
+		}
+		selfDisp := selfVar.ToIDispatch()
+		if selfDisp == nil {
+			selfVar.Clear()
+			folderVar.Clear()
+			docVar.Clear()
+			return ""
+		}
+
+		pathVar, err := oleutil.GetProperty(selfDisp, "Path")
+		if err != nil {
+			selfVar.Clear()
+			folderVar.Clear()
+			docVar.Clear()
+			return ""
+		}
+
+		p := strings.TrimSpace(pathVar.ToString())
+		pathVar.Clear()
+		selfVar.Clear()
+		folderVar.Clear()
+		docVar.Clear()
+		return p
+	}
+
+	type candidate struct {
+		path         string
+		locationName string
+	}
+
+	candidates := make([]candidate, 0, 4)
 	for i := 0; i < count; i++ {
 		itemVar, err := oleutil.CallMethod(windowsDisp, "Item", i)
 		if err != nil {
@@ -258,47 +327,152 @@ func GetActiveFileExplorerPath() string {
 			continue
 		}
 
-		// Matched the foreground window: get Document -> Folder -> Self -> Path
+		p := getShellWindowPath(wDisp)
+		if p != "" {
+			candidates = append(candidates, candidate{path: p, locationName: getShellWindowLocationName(wDisp)})
+		}
+		itemVar.Clear()
+	}
+
+	if len(candidates) == 0 {
+		return ""
+	}
+
+	// With Explorer tabs, multiple ShellWindow entries may share the same HWND.
+	// Use the current window title to identify the active tab.
+	activeTitle := strings.TrimSpace(GetActiveWindowName())
+	activeTitleLower := strings.ToLower(activeTitle)
+	bestIdx := 0
+	bestScore := -1
+	for i, c := range candidates {
+		score := 0
+		loc := strings.TrimSpace(c.locationName)
+		if loc == "" {
+			loc = filepath.Base(c.path)
+		}
+		locLower := strings.ToLower(loc)
+		if activeTitleLower != "" && locLower != "" {
+			if activeTitleLower == locLower {
+				score = 100
+			} else if strings.Contains(activeTitleLower, locLower) || strings.Contains(locLower, activeTitleLower) {
+				score = 50
+			}
+		}
+		if score > bestScore {
+			bestScore = score
+			bestIdx = i
+		}
+	}
+
+	return candidates[bestIdx].path
+}
+
+// GetFileExplorerPathByPidAndWindowTitle returns the filesystem path of an Explorer tab/window owned by pid.
+// On Windows 11, File Explorer tabs can share the same top-level HWND, so we use the window title to pick
+// the active tab (best-effort) when multiple candidates exist.
+func GetFileExplorerPathByPidAndWindowTitle(pid int, windowTitle string) string {
+	if pid <= 0 {
+		return ""
+	}
+
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	initialized := false
+	if err := ole.CoInitializeEx(0, ole.COINIT_APARTMENTTHREADED); err != nil {
+		if oleErr, ok := err.(*ole.OleError); ok {
+			switch oleErr.Code() {
+			case ole.S_OK, oleSFalse:
+				initialized = true
+			case rpcEChangedMode:
+				// COM already initialized with different concurrency model; proceed.
+			default:
+				return ""
+			}
+		} else {
+			return ""
+		}
+	} else {
+		initialized = true
+	}
+	if initialized {
+		defer ole.CoUninitialize()
+	}
+
+	unknown, err := oleutil.CreateObject("Shell.Application")
+	if err != nil {
+		return ""
+	}
+	defer unknown.Release()
+
+	shellDisp, err := unknown.QueryInterface(ole.IID_IDispatch)
+	if err != nil {
+		return ""
+	}
+	defer shellDisp.Release()
+
+	windowsVar, err := oleutil.CallMethod(shellDisp, "Windows")
+	if err != nil {
+		return ""
+	}
+	defer windowsVar.Clear()
+	windowsDisp := windowsVar.ToIDispatch()
+	if windowsDisp == nil {
+		return ""
+	}
+
+	countVar, err := oleutil.GetProperty(windowsDisp, "Count")
+	if err != nil {
+		return ""
+	}
+	count := int(countVar.Val)
+	countVar.Clear()
+
+	getShellWindowLocationName := func(wDisp *ole.IDispatch) string {
+		v, err := oleutil.GetProperty(wDisp, "LocationName")
+		if err != nil {
+			return ""
+		}
+		name := strings.TrimSpace(v.ToString())
+		v.Clear()
+		return name
+	}
+
+	getShellWindowPath := func(wDisp *ole.IDispatch) string {
 		docVar, err := oleutil.GetProperty(wDisp, "Document")
 		if err != nil {
-			itemVar.Clear()
-			break
+			return ""
 		}
 		docDisp := docVar.ToIDispatch()
 		if docDisp == nil {
 			docVar.Clear()
-			itemVar.Clear()
-			break
+			return ""
 		}
 
 		folderVar, err := oleutil.GetProperty(docDisp, "Folder")
 		if err != nil {
 			docVar.Clear()
-			itemVar.Clear()
-			break
+			return ""
 		}
 		folderDisp := folderVar.ToIDispatch()
 		if folderDisp == nil {
 			folderVar.Clear()
 			docVar.Clear()
-			itemVar.Clear()
-			break
+			return ""
 		}
 
 		selfVar, err := oleutil.GetProperty(folderDisp, "Self")
 		if err != nil {
 			folderVar.Clear()
 			docVar.Clear()
-			itemVar.Clear()
-			break
+			return ""
 		}
 		selfDisp := selfVar.ToIDispatch()
 		if selfDisp == nil {
 			selfVar.Clear()
 			folderVar.Clear()
 			docVar.Clear()
-			itemVar.Clear()
-			break
+			return ""
 		}
 
 		pathVar, err := oleutil.GetProperty(selfDisp, "Path")
@@ -306,22 +480,113 @@ func GetActiveFileExplorerPath() string {
 			selfVar.Clear()
 			folderVar.Clear()
 			docVar.Clear()
-			itemVar.Clear()
-			break
+			return ""
 		}
 
 		p := strings.TrimSpace(pathVar.ToString())
-
 		pathVar.Clear()
 		selfVar.Clear()
 		folderVar.Clear()
 		docVar.Clear()
-		itemVar.Clear()
-
 		return p
 	}
 
-	return ""
+	// Compute z-order preference for visible windows (top-most earlier).
+	zOrder := map[uintptr]int{}
+	idx := 0
+	for wnd := win.GetWindow(win.GetDesktopWindow(), win.GW_CHILD); wnd != 0; wnd = win.GetWindow(wnd, win.GW_HWNDNEXT) {
+		zOrder[uintptr(wnd)] = idx
+		idx++
+	}
+
+	titleLower := strings.ToLower(strings.TrimSpace(windowTitle))
+	type candidate struct {
+		path         string
+		locationName string
+		hwnd         uintptr
+		z            int
+	}
+
+	candidates := make([]candidate, 0, 8)
+	for i := 0; i < count; i++ {
+		itemVar, err := oleutil.CallMethod(windowsDisp, "Item", i)
+		if err != nil {
+			continue
+		}
+		wDisp := itemVar.ToIDispatch()
+		if wDisp == nil {
+			itemVar.Clear()
+			continue
+		}
+
+		hwndVar, err := oleutil.GetProperty(wDisp, "HWND")
+		if err != nil {
+			itemVar.Clear()
+			continue
+		}
+		hwnd := uintptr(hwndVar.Val)
+		hwndVar.Clear()
+
+		var wndPid uint32
+		win.GetWindowThreadProcessId(win.HWND(hwnd), &wndPid)
+		if int(wndPid) != pid {
+			itemVar.Clear()
+			continue
+		}
+
+		p := getShellWindowPath(wDisp)
+		if p == "" {
+			itemVar.Clear()
+			continue
+		}
+
+		loc := getShellWindowLocationName(wDisp)
+		z := 1 << 30
+		if v, ok := zOrder[hwnd]; ok {
+			z = v
+		}
+		candidates = append(candidates, candidate{path: p, locationName: loc, hwnd: hwnd, z: z})
+		itemVar.Clear()
+	}
+
+	if len(candidates) == 0 {
+		return ""
+	}
+
+	bestIdx := 0
+	bestScore := -1
+	for i, c := range candidates {
+		score := 0
+		loc := strings.TrimSpace(c.locationName)
+		if loc == "" {
+			loc = filepath.Base(c.path)
+		}
+		locLower := strings.ToLower(loc)
+		if titleLower != "" && locLower != "" {
+			if titleLower == locLower {
+				score += 100
+			} else if strings.Contains(titleLower, locLower) || strings.Contains(locLower, titleLower) {
+				score += 50
+			}
+		}
+
+		// Prefer top-most visible window when ambiguous.
+		if c.z < (1 << 30) {
+			score += 10
+		}
+
+		if score > bestScore {
+			bestScore = score
+			bestIdx = i
+		} else if score == bestScore {
+			// tie-break: closer to top in z-order
+			if c.z < candidates[bestIdx].z {
+				bestIdx = i
+			}
+		}
+	}
+
+	return candidates[bestIdx].path
 }
 
 // GetFileExplorerPathByPid returns the filesystem path of an Explorer window owned by pid.
@@ -506,6 +771,11 @@ func SelectInFileExplorerByPid(pid int, fullPath string) bool {
 		return false
 	}
 
+	// In Windows 11 File Explorer, multiple tabs may share the same top-level HWND.
+	// When that happens, selecting a ShellWindow only by HWND can pick the wrong tab.
+	// Prefer the tab whose current folder path matches the target file's directory.
+	targetDir := filepath.Clean(filepath.Dir(fullPath))
+
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
@@ -560,7 +830,67 @@ func SelectInFileExplorerByPid(pid int, fullPath string) bool {
 	count := int(countVar.Val)
 	countVar.Clear()
 
-	hwnds := map[uintptr]struct{}{}
+	getShellWindowPath := func(wDisp *ole.IDispatch) string {
+		docVar, err := oleutil.GetProperty(wDisp, "Document")
+		if err != nil {
+			return ""
+		}
+		docDisp := docVar.ToIDispatch()
+		if docDisp == nil {
+			docVar.Clear()
+			return ""
+		}
+
+		folderVar, err := oleutil.GetProperty(docDisp, "Folder")
+		if err != nil {
+			docVar.Clear()
+			return ""
+		}
+		folderDisp := folderVar.ToIDispatch()
+		if folderDisp == nil {
+			folderVar.Clear()
+			docVar.Clear()
+			return ""
+		}
+
+		selfVar, err := oleutil.GetProperty(folderDisp, "Self")
+		if err != nil {
+			folderVar.Clear()
+			docVar.Clear()
+			return ""
+		}
+		selfDisp := selfVar.ToIDispatch()
+		if selfDisp == nil {
+			selfVar.Clear()
+			folderVar.Clear()
+			docVar.Clear()
+			return ""
+		}
+
+		pathVar, err := oleutil.GetProperty(selfDisp, "Path")
+		if err != nil {
+			selfVar.Clear()
+			folderVar.Clear()
+			docVar.Clear()
+			return ""
+		}
+
+		p := strings.TrimSpace(pathVar.ToString())
+		pathVar.Clear()
+		selfVar.Clear()
+		folderVar.Clear()
+		docVar.Clear()
+		return p
+	}
+
+	type shellWindowCandidate struct {
+		index int
+		hwnd  uintptr
+		path  string
+	}
+
+	candidates := make([]shellWindowCandidate, 0, 4)
+	uniqueHwnds := map[uintptr]struct{}{}
 	for i := 0; i < count; i++ {
 		itemVar, err := oleutil.CallMethod(windowsDisp, "Item", i)
 		if err != nil {
@@ -582,106 +912,150 @@ func SelectInFileExplorerByPid(pid int, fullPath string) bool {
 
 		var wndPid uint32
 		win.GetWindowThreadProcessId(win.HWND(wnd), &wndPid)
-		if int(wndPid) == pid {
-			hwnds[wnd] = struct{}{}
+		if int(wndPid) != pid {
+			itemVar.Clear()
+			continue
 		}
 
+		p := getShellWindowPath(wDisp)
+		candidates = append(candidates, shellWindowCandidate{index: i, hwnd: wnd, path: p})
+		uniqueHwnds[wnd] = struct{}{}
 		itemVar.Clear()
 	}
 
-	if len(hwnds) == 0 {
+	if len(candidates) == 0 {
 		return false
 	}
 
-	var target uintptr
-	for wnd := win.GetWindow(win.GetDesktopWindow(), win.GW_CHILD); wnd != 0; wnd = win.GetWindow(wnd, win.GW_HWNDNEXT) {
-		if _, ok := hwnds[uintptr(wnd)]; ok {
-			if win.IsWindowVisible(wnd) && !win.IsIconic(wnd) {
-				target = uintptr(wnd)
+	// Prefer the foreground window if it belongs to our target PID.
+	foreground := uintptr(win.GetForegroundWindow())
+	var targetHwnd uintptr
+	if foreground != 0 {
+		if _, ok := uniqueHwnds[foreground]; ok {
+			targetHwnd = foreground
+		}
+	}
+
+	// Otherwise pick a visible, non-minimized window handle.
+	if targetHwnd == 0 {
+		for wnd := win.GetWindow(win.GetDesktopWindow(), win.GW_CHILD); wnd != 0; wnd = win.GetWindow(wnd, win.GW_HWNDNEXT) {
+			if _, ok := uniqueHwnds[uintptr(wnd)]; ok {
+				if win.IsWindowVisible(wnd) && !win.IsIconic(wnd) {
+					targetHwnd = uintptr(wnd)
+					break
+				}
+			}
+		}
+	}
+
+	if targetHwnd == 0 {
+		// Fallback to any candidate.
+		targetHwnd = candidates[0].hwnd
+	}
+
+	cleanEqualFold := func(a, b string) bool {
+		if a == "" || b == "" {
+			return false
+		}
+		return strings.EqualFold(filepath.Clean(a), filepath.Clean(b))
+	}
+
+	bestIndex := -1
+	// 1) Best: same hwnd + same folder path.
+	for _, c := range candidates {
+		if c.hwnd == targetHwnd && cleanEqualFold(c.path, targetDir) {
+			bestIndex = c.index
+			break
+		}
+	}
+	// 2) Next: any tab with matching folder path.
+	if bestIndex == -1 {
+		for _, c := range candidates {
+			if cleanEqualFold(c.path, targetDir) {
+				bestIndex = c.index
 				break
 			}
 		}
 	}
-	if target == 0 {
-		for h := range hwnds {
-			target = h
-			break
+	// 3) Next: same hwnd.
+	if bestIndex == -1 {
+		for _, c := range candidates {
+			if c.hwnd == targetHwnd {
+				bestIndex = c.index
+				break
+			}
 		}
 	}
-	if target == 0 {
+	// 4) Final: first candidate.
+	if bestIndex == -1 {
+		bestIndex = candidates[0].index
+	}
+
+	itemVar, err := oleutil.CallMethod(windowsDisp, "Item", bestIndex)
+	if err != nil {
+		return false
+	}
+	wDisp := itemVar.ToIDispatch()
+	if wDisp == nil {
+		itemVar.Clear()
 		return false
 	}
 
-	for i := 0; i < count; i++ {
-		itemVar, err := oleutil.CallMethod(windowsDisp, "Item", i)
-		if err != nil {
-			continue
-		}
-		wDisp := itemVar.ToIDispatch()
-		if wDisp == nil {
-			itemVar.Clear()
-			continue
-		}
+	// Found the window/tab. Now select the file.
+	documentVar, err := oleutil.GetProperty(wDisp, "Document")
+	if err != nil {
+		itemVar.Clear()
+		return false
+	}
+	documentDisp := documentVar.ToIDispatch()
+	if documentDisp == nil {
+		documentVar.Clear()
+		itemVar.Clear()
+		return false
+	}
 
-		hwndVar, err := oleutil.GetProperty(wDisp, "HWND")
-		if err != nil {
-			itemVar.Clear()
-			continue
-		}
-		wnd := uintptr(hwndVar.Val)
-		hwndVar.Clear()
-
-		if wnd != target {
-			itemVar.Clear()
-			continue
-		}
-
-		// Found the window. Now select the file.
-		documentVar, err := oleutil.GetProperty(wDisp, "Document")
-		if err != nil {
-			itemVar.Clear()
-			continue
-		}
-		documentDisp := documentVar.ToIDispatch()
-
-		folderVar, err := oleutil.GetProperty(documentDisp, "Folder")
-		if err != nil {
-			documentVar.Clear()
-			itemVar.Clear()
-			continue
-		}
-		folderDisp := folderVar.ToIDispatch()
-
-		fileName := filepath.Base(fullPath)
-		parsedItemVar, err := oleutil.CallMethod(folderDisp, "ParseName", fileName)
-		if err != nil {
-			folderVar.Clear()
-			documentVar.Clear()
-			itemVar.Clear()
-			continue
-		}
-
-		// SelectItem (1=Select, 4=Deselect others, 8=Ensure visible, 16=Focus)
-		// We must pass the IDispatch of the Item, specifically.
-		// parsedItemVar is a *VARIANT.
-		// oleutil.CallMethod(documentDisp, "SelectItem", parsedItemVar.ToIDispatch(), 1|4|8|16)
-		// However, ToIDispatch might not be enough if the variant type is not strictly dispatch, but usually it is.
-		itemDisp := parsedItemVar.ToIDispatch()
-		if itemDisp != nil {
-			_, err = oleutil.CallMethod(documentDisp, "SelectItem", itemDisp, 1|4|8|16)
-		} else {
-			// fallback: try passing valid directly if it happens to be something else?
-			// But for ParseName it should return FolderItem object.
-			err = fmt.Errorf("ParseName returned null dispatch")
-		}
-
-		parsedItemVar.Clear()
+	folderVar, err := oleutil.GetProperty(documentDisp, "Folder")
+	if err != nil {
+		documentVar.Clear()
+		itemVar.Clear()
+		return false
+	}
+	folderDisp := folderVar.ToIDispatch()
+	if folderDisp == nil {
 		folderVar.Clear()
 		documentVar.Clear()
 		itemVar.Clear()
-
-		return err == nil
+		return false
 	}
 
-	return false
+	fileName := filepath.Base(fullPath)
+	parsedItemVar, err := oleutil.CallMethod(folderDisp, "ParseName", fileName)
+	if err != nil {
+		folderVar.Clear()
+		documentVar.Clear()
+		itemVar.Clear()
+		return false
+	}
+
+	// SelectItem (1=Select, 4=Deselect others, 8=Ensure visible, 16=Focus)
+	// We must pass the IDispatch of the Item, specifically.
+	// parsedItemVar is a *VARIANT.
+	// oleutil.CallMethod(documentDisp, "SelectItem", parsedItemVar.ToIDispatch(), 1|4|8|16)
+	// However, ToIDispatch might not be enough if the variant type is not strictly dispatch, but usually it is.
+	itemDisp := parsedItemVar.ToIDispatch()
+	if itemDisp != nil {
+		_, err = oleutil.CallMethod(documentDisp, "SelectItem", itemDisp, 1|4|8|16)
+	} else {
+		// fallback: try passing valid directly if it happens to be something else?
+		// But for ParseName it should return FolderItem object.
+		err = fmt.Errorf("ParseName returned null dispatch")
+	}
+
+	parsedItemVar.Clear()
+	folderVar.Clear()
+	documentVar.Clear()
+	itemVar.Clear()
+
+	return err == nil
+
 }

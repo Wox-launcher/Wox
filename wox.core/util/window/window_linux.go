@@ -45,6 +45,12 @@ func GetFileExplorerPathByPid(pid int) string {
 	return ""
 }
 
+// GetFileExplorerPathByPidAndWindowTitle is a Windows-specific helper to handle Explorer tabs.
+// Not supported on this platform.
+func GetFileExplorerPathByPidAndWindowTitle(pid int, windowTitle string) string {
+	return ""
+}
+
 // IsFileExplorer returns false on platforms other than Windows and macOS.
 func IsFileExplorer(pid int) (bool, error) {
 	return false, nil
