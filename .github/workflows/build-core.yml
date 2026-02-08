@@ -483,7 +483,7 @@ jobs:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
           project-slug: Wox
-          signing-policy-slug: release_certificate_2026
+          signing-policy-slug: release-signing
           github-artifact-id: ${{ steps.upload-unsigned-artifact.outputs.artifact-id }}
           wait-for-completion: true
           output-artifact-directory: ./release

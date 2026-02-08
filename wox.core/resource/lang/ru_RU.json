@@ -463,7 +463,7 @@
   "plugin_explorer_open": "Открыть",
   "plugin_explorer_reveal_in_explorer": "Показать в проводнике",
   "plugin_explorer_jump_to": "Перейти к",
-  "plugin_explorer_setting_show_hint": "Показать подсказку проводника",
+  "plugin_explorer_setting_show_hint": "Включить быстрый фильтр в проводнике (начните вводить для фильтрации, без горячих клавиш)",
   "plugin_explorer_hint_tooltip_message": "Используйте Wox для быстрого перехода по папкам (вы можете отключить эту подсказку в настройках плагина)",
   "plugin_explorer_hint_tooltip_message_dialog": "Используйте Wox для быстрого перехода по папкам (вы можете отключить эту подсказку в настройках плагина)",
   "plugin_explorer_hint_message": "Нажмите, чтобы отфильтровать",

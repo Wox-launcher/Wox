@@ -466,7 +466,7 @@
   "plugin_explorer_open": "Open",
   "plugin_explorer_reveal_in_explorer": "Reveal in file explorer",
   "plugin_explorer_jump_to": "Jump to",
-  "plugin_explorer_setting_show_hint": "Show file explorer hint",
+  "plugin_explorer_setting_show_hint": "Enable quick filter in file explorer (type to filter directly, no shortcut required)",
   "plugin_explorer_hint_tooltip_message": "Use Wox to quickly filter current folder (you can disable this hint in plugin setting of file explorer search)",
   "plugin_explorer_hint_tooltip_message_dialog": "Use Wox to quickly navigate folders (you can disable this hint in plugin setting of file explorer search)",
   "plugin_explorer_hint_message": "Click to filter",
