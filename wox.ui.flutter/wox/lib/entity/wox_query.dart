@@ -332,6 +332,7 @@ class Position {
 class ShowAppParams {
   late bool selectAll;
   late Position position;
+  late int windowWidth;
   late List<QueryHistory> queryHistories;
   late String launchMode;
   late String startPage;
@@ -341,6 +342,7 @@ class ShowAppParams {
   ShowAppParams({
     required this.selectAll,
     required this.position,
+    this.windowWidth = 0,
     required this.queryHistories,
     required this.launchMode,
     required this.startPage,
@@ -353,6 +355,7 @@ class ShowAppParams {
     if (json['Position'] != null) {
       position = Position.fromJson(json['Position']);
     }
+    windowWidth = json['WindowWidth'] ?? 0;
     queryHistories = <QueryHistory>[];
     if (json['QueryHistories'] != null) {
       final List<dynamic> histories = json['QueryHistories'];

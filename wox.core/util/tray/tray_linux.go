@@ -89,3 +89,7 @@ func RemoveTray() {
 	}
 	callbacks = make(map[int]func())
 }
+
+func SetQueryIcons(items []QueryIconItem) {
+	// Linux query tray icons are not implemented yet.
+}

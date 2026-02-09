@@ -73,6 +73,8 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
           values[column.key] = [];
         } else if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeCheckbox) {
           values[column.key] = false;
+        } else if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeWoxImage) {
+          values[column.key] = WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖");
         } else {
           values[column.key] = "";
         }

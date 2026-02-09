@@ -520,6 +520,7 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 	settingDto.LangCode = woxSetting.LangCode.Get()
 	settingDto.QueryHotkeys = woxSetting.QueryHotkeys.Get()
 	settingDto.QueryShortcuts = woxSetting.QueryShortcuts.Get()
+	settingDto.TrayQueries = woxSetting.TrayQueries.Get()
 	settingDto.LaunchMode = woxSetting.LaunchMode.Get()
 	settingDto.StartPage = woxSetting.StartPage.Get()
 	settingDto.AIProviders = woxSetting.AIProviders.Get()
@@ -601,6 +602,67 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		woxSetting.QueryShortcuts.Set(queryShortcuts)
+	case "TrayQueries":
+		var rawTrayQueries []map[string]any
+		if err := json.Unmarshal([]byte(vs), &rawTrayQueries); err != nil {
+			writeErrorResponse(w, err.Error())
+			return
+		}
+
+		var trayQueries []setting.TrayQuery
+		for _, rawTrayQuery := range rawTrayQueries {
+			query, _ := rawTrayQuery["Query"].(string)
+			trayQuery := setting.TrayQuery{
+				Query: query,
+			}
+
+			if rawDisabled, ok := rawTrayQuery["Disabled"]; ok {
+				switch disabled := rawDisabled.(type) {
+				case bool:
+					trayQuery.Disabled = disabled
+				case string:
+					if parsed, parseErr := strconv.ParseBool(disabled); parseErr == nil {
+						trayQuery.Disabled = parsed
+					}
+				}
+			}
+
+			if rawWidth, ok := rawTrayQuery["Width"]; ok {
+				switch width := rawWidth.(type) {
+				case float64:
+					trayQuery.Width = int(width)
+				case int:
+					trayQuery.Width = width
+				case string:
+					width = strings.TrimSpace(width)
+					if width != "" {
+						if parsed, parseErr := strconv.Atoi(width); parseErr == nil {
+							trayQuery.Width = parsed
+						}
+					}
+				}
+				if trayQuery.Width < 0 {
+					trayQuery.Width = 0
+				}
+			}
+
+			if rawIcon, ok := rawTrayQuery["Icon"]; ok {
+				switch icon := rawIcon.(type) {
+				case map[string]any:
+					iconData, marshalErr := json.Marshal(icon)
+					if marshalErr == nil {
+						_ = json.Unmarshal(iconData, &trayQuery.Icon)
+					}
+				case string:
+					if parsed, parseErr := common.ParseWoxImage(icon); parseErr == nil {
+						trayQuery.Icon = parsed
+					}
+				}
+			}
+
+			trayQueries = append(trayQueries, trayQuery)
+		}
+		woxSetting.TrayQueries.Set(trayQueries)
 	case "LaunchMode":
 		woxSetting.LaunchMode.Set(setting.LaunchMode(vs))
 	case "StartPage":
