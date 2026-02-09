@@ -422,8 +422,10 @@ func (c *ExplorerPlugin) loadOpenSaveHistory(ctx context.Context) *util.HashMap[
 }
 
 func (c *ExplorerPlugin) stopOverlayListener() {
+	c.api.Log(context.Background(), plugin.LogLevelInfo, "typeToSearch: stop monitor")
 	StopExplorerMonitor()
 	StopExplorerOpenSaveMonitor()
+	setExplorerMonitorLogger(nil)
 
 	if runtime := c.overlayRuntime.Swap(nil); runtime != nil {
 		close(runtime.stopCh)
@@ -432,6 +434,11 @@ func (c *ExplorerPlugin) stopOverlayListener() {
 
 func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 	c.stopOverlayListener()
+
+	setExplorerMonitorLogger(func(msg string) {
+		c.api.Log(ctx, plugin.LogLevelDebug, "typeToSearch: "+msg)
+	})
+	c.api.Log(ctx, plugin.LogLevelInfo, "typeToSearch: start monitor")
 
 	runtime := &overlayRuntime{stopCh: make(chan struct{})}
 	c.overlayRuntime.Store(runtime)
