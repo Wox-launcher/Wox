@@ -4,9 +4,12 @@
 
 - Add
   - [`Calculator`] Add comma separator support in Calculator plugin #4325
-  - [`File Explorer Search`] Add query tips for file explorer plugin (Default is on, user can close this tip in plugin setting)
+  - [`File Explorer Search`] Add type to search feature (default is off, user can enable this in plugin setting). When enabled, user can type to filter in finder/explorer windows.
+    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/typetosearch.png)
+    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/typetosearch_setting.png)
+
 - Improve
-  - Improve everything sdk integration stability (with 1.5a support) #4317
+  - [`File`] Improve everything sdk integration stability (with 1.5a support) #4317
 
 - Fix
   - [`File Explorer Search`] Fix a issue that file explorer search plugin's settings do not load #4326
