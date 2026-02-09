@@ -1,10 +1,14 @@
 # Changelog
 
-## v2.0.0-beta.9
+## v2.0.1 -
+
+## v2.0.0 - 2026-02-09
+
+It's time to release the official 2.0 version! There are no major issues in everyday use anymore. Thank you to all users who tested the beta version and provided feedback!
 
 - Add
   - [`Calculator`] Add comma separator support in Calculator plugin #4325
-  - [`File Explorer Search`] Add type to search feature (default is off, user can enable this in plugin setting). When enabled, user can type to filter in finder/explorer windows.
+  - [`File Explorer Search`] Add type-to-search feature (experimental, default is off, user can enable this in plugin setting). When enabled, user can type to filter in finder/explorer windows.
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/typetosearch.png)
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/typetosearch_setting.png)
 
