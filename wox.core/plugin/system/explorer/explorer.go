@@ -373,25 +373,25 @@ func (c *ExplorerPlugin) recordOpenSaveHistory(ctx context.Context, key string, 
 		return
 	}
 
+	now := time.Now().Unix()
+	newList := []openSaveHistoryEntry{}
 	if v, ok := c.openSaveHistoryMap.Load(key); ok {
-		newList := []openSaveHistoryEntry{}
-
 		found := false
 		for _, entry := range v {
 			if entry.Path == path {
-				entry.UsedAt = time.Now().Unix()
+				entry.UsedAt = now
 				entry.Count += 1
 				found = true
 			}
 			newList = append(newList, entry)
 		}
-
 		if !found {
-			newList = append([]openSaveHistoryEntry{{Path: path, UsedAt: time.Now().Unix(), Count: 1}}, newList...)
+			newList = append([]openSaveHistoryEntry{{Path: path, UsedAt: now, Count: 1}}, newList...)
 		}
-
-		c.openSaveHistoryMap.Store(key, newList)
+	} else {
+		newList = []openSaveHistoryEntry{{Path: path, UsedAt: now, Count: 1}}
 	}
+	c.openSaveHistoryMap.Store(key, newList)
 
 	payload, err := json.Marshal(c.openSaveHistoryMap.ToMap())
 	if err != nil {
@@ -570,11 +570,9 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 						c.api.Log(localCtx, plugin.LogLevelDebug, fmt.Sprintf("typeToSearch: ignore key=%q active=%v", ev.key, active))
 						continue
 					}
-					if util.IsWindows() {
-						if c.api.IsVisible(localCtx) {
-							c.api.Log(localCtx, plugin.LogLevelDebug, fmt.Sprintf("typeToSearch: ignore key=%q (wox visible)", ev.key))
-							continue
-						}
+					if c.api.IsVisible(localCtx) {
+						c.api.Log(localCtx, plugin.LogLevelDebug, fmt.Sprintf("typeToSearch: ignore key=%q (wox visible)", ev.key))
+						continue
 					}
 					if pendingCtx == nil {
 						pendingCtx = localCtx

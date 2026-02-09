@@ -6,10 +6,22 @@ extern void fileExplorerActivatedCallbackCGO(int pid, int isFileDialog, int x, i
 extern void fileExplorerDeactivatedCallbackCGO(void);
 extern void fileExplorerKeyDownCallbackCGO(char key);
 
+typedef NS_ENUM(NSInteger, MonitorContextState) {
+    MonitorContextStateNone = 0,
+    MonitorContextStateExplorer,
+    MonitorContextStateDialog
+};
+
 static id gAppActivationObserver = nil;
 static id gKeyDownObserver = nil;
-static AXObserverRef gFinderWindowObserver = nil;
-static pid_t gFinderPid = 0;
+static AXObserverRef gFrontmostWindowObserver = NULL;
+static pid_t gObservedPid = 0;
+static pid_t gCurrentPid = 0;
+static MonitorContextState gCurrentState = MonitorContextStateNone;
+static int gCurrentX = 0;
+static int gCurrentY = 0;
+static int gCurrentW = 0;
+static int gCurrentH = 0;
 static CFStringRef gAXWindowNumberAttribute = CFSTR("AXWindowNumber");
 
 static BOOL getFinderWindowRectByWindowID(pid_t pid, uint32_t targetWindowID, int *x, int *y, int *w, int *h) {
@@ -132,7 +144,6 @@ static BOOL isEligibleFinderWindow(AXUIElementRef windowElement) {
         CFStringCompare((CFStringRef)roleValue, kAXWindowRole, 0) == kCFCompareEqualTo) {
         isEligible = YES;
 
-        // Exclude desktop-like focused targets. Regular Finder windows are usually AXStandardWindow.
         if (subroleErr == kAXErrorSuccess && subroleValue && CFGetTypeID(subroleValue) == CFStringGetTypeID()) {
             if (CFStringCompare((CFStringRef)subroleValue, kAXStandardWindowSubrole, 0) == kCFCompareEqualTo) {
                 isEligible = YES;
@@ -178,8 +189,6 @@ static BOOL getFocusedFinderWindowRect(pid_t pid, int *x, int *y, int *w, int *h
                     CFRelease(windowNumberValue);
                 }
 
-                // Some Finder windows may not expose AXWindowNumber reliably.
-                // Since focused window was validated as a real Finder window, use frontmost PID fallback.
                 if (!found) {
                     found = getFrontmostFinderWindowRect(pid, x, y, w, h);
                 }
@@ -191,72 +200,358 @@ static BOOL getFocusedFinderWindowRect(pid_t pid, int *x, int *y, int *w, int *h
         CFRelease(app);
     }
 
-    if (found) {
-        return YES;
+    return found;
+}
+
+static BOOL isOpenSaveDialogWindow(AXUIElementRef windowElement) {
+    if (!windowElement) {
+        return NO;
     }
+
+    CFTypeRef roleValue = NULL;
+    if (AXUIElementCopyAttributeValue(windowElement, kAXRoleAttribute, &roleValue) == kAXErrorSuccess && roleValue) {
+        if (CFGetTypeID(roleValue) == CFStringGetTypeID() &&
+            CFStringCompare((CFStringRef)roleValue, CFSTR("AXSheet"), 0) == kCFCompareEqualTo) {
+            CFRelease(roleValue);
+            return YES;
+        }
+        CFRelease(roleValue);
+    }
+
+    CFTypeRef subroleValue = NULL;
+    if (AXUIElementCopyAttributeValue(windowElement, kAXSubroleAttribute, &subroleValue) == kAXErrorSuccess && subroleValue) {
+        if (CFGetTypeID(subroleValue) == CFStringGetTypeID()) {
+            if (CFStringCompare((CFStringRef)subroleValue, CFSTR("AXDialog"), 0) == kCFCompareEqualTo ||
+                CFStringCompare((CFStringRef)subroleValue, CFSTR("AXSystemDialog"), 0) == kCFCompareEqualTo ||
+                CFStringCompare((CFStringRef)subroleValue, CFSTR("AXSheet"), 0) == kCFCompareEqualTo) {
+                CFRelease(subroleValue);
+                return YES;
+            }
+        }
+        CFRelease(subroleValue);
+    }
+
     return NO;
 }
 
-static void triggerFinderActivated(pid_t pid) {
+static BOOL elementMatchesRole(AXUIElementRef element, CFStringRef expectedRole) {
+    if (!element || !expectedRole) {
+        return NO;
+    }
+
+    CFTypeRef roleValue = NULL;
+    BOOL matched = NO;
+    if (AXUIElementCopyAttributeValue(element, kAXRoleAttribute, &roleValue) == kAXErrorSuccess && roleValue) {
+        if (CFGetTypeID(roleValue) == CFStringGetTypeID() && CFStringCompare((CFStringRef)roleValue, expectedRole, 0) == kCFCompareEqualTo) {
+            matched = YES;
+        }
+        CFRelease(roleValue);
+    }
+    return matched;
+}
+
+static BOOL elementOrDescendantMatchesRole(AXUIElementRef element, CFStringRef expectedRole, int depth) {
+    if (!element || !expectedRole || depth > 8) {
+        return NO;
+    }
+
+    if (elementMatchesRole(element, expectedRole)) {
+        return YES;
+    }
+
+    CFArrayRef children = NULL;
+    AXError childrenErr = AXUIElementCopyAttributeValue(element, kAXChildrenAttribute, (CFTypeRef *)&children);
+    if (childrenErr != kAXErrorSuccess || !children) {
+        if (children) {
+            CFRelease(children);
+        }
+        return NO;
+    }
+
+    BOOL found = NO;
+    CFIndex count = CFArrayGetCount(children);
+    for (CFIndex i = 0; i < count; i++) {
+        AXUIElementRef child = (AXUIElementRef)CFArrayGetValueAtIndex(children, i);
+        if (!child || CFGetTypeID(child) != AXUIElementGetTypeID()) {
+            continue;
+        }
+        if (elementOrDescendantMatchesRole(child, expectedRole, depth + 1)) {
+            found = YES;
+            break;
+        }
+    }
+
+    CFRelease(children);
+    return found;
+}
+
+static BOOL isLikelyOpenSaveDialogWindow(AXUIElementRef windowElement) {
+    if (!isOpenSaveDialogWindow(windowElement)) {
+        return NO;
+    }
+
+    // Narrow detection to file-picking dialogs to avoid false positives
+    // from IME candidate windows and generic dialogs.
+    BOOL hasFileList =
+        elementOrDescendantMatchesRole(windowElement, CFSTR("AXOutline"), 0) ||
+        elementOrDescendantMatchesRole(windowElement, CFSTR("AXBrowser"), 0) ||
+        elementOrDescendantMatchesRole(windowElement, CFSTR("AXTable"), 0);
+
+    BOOL hasFileNameInput =
+        elementOrDescendantMatchesRole(windowElement, CFSTR("AXTextField"), 0) ||
+        elementOrDescendantMatchesRole(windowElement, CFSTR("AXComboBox"), 0);
+
+    return hasFileList && hasFileNameInput;
+}
+
+static BOOL getAXWindowRect(AXUIElementRef windowElement, int *x, int *y, int *w, int *h) {
+    if (!windowElement) {
+        return NO;
+    }
+
+    CFTypeRef positionValue = NULL;
+    CFTypeRef sizeValue = NULL;
+    CGPoint position = CGPointZero;
+    CGSize size = CGSizeZero;
+
+    AXError posErr = AXUIElementCopyAttributeValue(windowElement, kAXPositionAttribute, &positionValue);
+    AXError sizeErr = AXUIElementCopyAttributeValue(windowElement, kAXSizeAttribute, &sizeValue);
+
+    BOOL ok = NO;
+    if (posErr == kAXErrorSuccess && sizeErr == kAXErrorSuccess && positionValue && sizeValue &&
+        CFGetTypeID(positionValue) == AXValueGetTypeID() &&
+        CFGetTypeID(sizeValue) == AXValueGetTypeID() &&
+        AXValueGetType((AXValueRef)positionValue) == kAXValueCGPointType &&
+        AXValueGetType((AXValueRef)sizeValue) == kAXValueCGSizeType &&
+        AXValueGetValue((AXValueRef)positionValue, kAXValueCGPointType, &position) &&
+        AXValueGetValue((AXValueRef)sizeValue, kAXValueCGSizeType, &size) &&
+        size.width > 0 && size.height > 0) {
+        *x = (int)position.x;
+        *y = (int)position.y;
+        *w = (int)size.width;
+        *h = (int)size.height;
+        ok = YES;
+    }
+
+    if (positionValue) {
+        CFRelease(positionValue);
+    }
+    if (sizeValue) {
+        CFRelease(sizeValue);
+    }
+
+    return ok;
+}
+
+static AXUIElementRef copyFocusedWindow(AXUIElementRef appElement) {
+    if (!appElement) {
+        return NULL;
+    }
+
+    CFTypeRef focusedWindowValue = NULL;
+    AXError err = AXUIElementCopyAttributeValue(appElement, kAXFocusedWindowAttribute, &focusedWindowValue);
+    if (err != kAXErrorSuccess || !focusedWindowValue || CFGetTypeID(focusedWindowValue) != AXUIElementGetTypeID()) {
+        if (focusedWindowValue) {
+            CFRelease(focusedWindowValue);
+        }
+        return NULL;
+    }
+
+    return (AXUIElementRef)focusedWindowValue;
+}
+
+static AXUIElementRef copyDialogSheetFromWindow(AXUIElementRef parentWindow) {
+    if (!parentWindow) {
+        return NULL;
+    }
+
+    CFArrayRef sheets = NULL;
+    AXError sheetsErr = AXUIElementCopyAttributeValue(parentWindow, CFSTR("AXSheets"), (CFTypeRef *)&sheets);
+    if (sheetsErr != kAXErrorSuccess || !sheets) {
+        if (sheets) {
+            CFRelease(sheets);
+        }
+        return NULL;
+    }
+
+    AXUIElementRef matchedSheet = NULL;
+    CFIndex count = CFArrayGetCount(sheets);
+    for (CFIndex i = 0; i < count; i++) {
+        AXUIElementRef sheet = (AXUIElementRef)CFArrayGetValueAtIndex(sheets, i);
+        if (!sheet || CFGetTypeID(sheet) != AXUIElementGetTypeID()) {
+            continue;
+        }
+        if (isLikelyOpenSaveDialogWindow(sheet)) {
+            matchedSheet = (AXUIElementRef)CFRetain(sheet);
+            break;
+        }
+    }
+
+    CFRelease(sheets);
+    return matchedSheet;
+}
+
+static AXUIElementRef copyOpenSaveDialogWindow(AXUIElementRef appElement) {
+    AXUIElementRef focusedWindow = copyFocusedWindow(appElement);
+    if (!focusedWindow) {
+        return NULL;
+    }
+
+    if (isLikelyOpenSaveDialogWindow(focusedWindow)) {
+        return focusedWindow;
+    }
+
+    AXUIElementRef dialogWindow = copyDialogSheetFromWindow(focusedWindow);
+    CFRelease(focusedWindow);
+    return dialogWindow;
+}
+
+static BOOL getOpenSaveDialogRect(pid_t pid, int *x, int *y, int *w, int *h) {
+    if (pid <= 0 || !AXIsProcessTrusted()) {
+        return NO;
+    }
+
+    AXUIElementRef appElement = AXUIElementCreateApplication(pid);
+    if (!appElement) {
+        return NO;
+    }
+
+    BOOL found = NO;
+    AXUIElementRef dialogWindow = copyOpenSaveDialogWindow(appElement);
+    if (dialogWindow) {
+        found = getAXWindowRect(dialogWindow, x, y, w, h);
+        CFRelease(dialogWindow);
+    }
+
+    CFRelease(appElement);
+    return found;
+}
+
+static void deactivateIfNeeded() {
+    if (gCurrentState != MonitorContextStateNone) {
+        fileExplorerDeactivatedCallbackCGO();
+    }
+    gCurrentState = MonitorContextStateNone;
+    gCurrentPid = 0;
+    gCurrentX = 0;
+    gCurrentY = 0;
+    gCurrentW = 0;
+    gCurrentH = 0;
+}
+
+static void activateIfNeeded(pid_t pid, MonitorContextState state, int x, int y, int w, int h) {
+    if (pid <= 0 || state == MonitorContextStateNone) {
+        deactivateIfNeeded();
+        return;
+    }
+
+    if (gCurrentState == state && gCurrentPid == pid &&
+        gCurrentX == x && gCurrentY == y && gCurrentW == w && gCurrentH == h) {
+        return;
+    }
+
+    gCurrentState = state;
+    gCurrentPid = pid;
+    gCurrentX = x;
+    gCurrentY = y;
+    gCurrentW = w;
+    gCurrentH = h;
+    fileExplorerActivatedCallbackCGO((int)pid, state == MonitorContextStateDialog ? 1 : 0, x, y, w, h);
+}
+
+static void evaluateFrontmostApplicationState() {
+    NSRunningApplication *activeApp = [[NSWorkspace sharedWorkspace] frontmostApplication];
+    if (!activeApp) {
+        deactivateIfNeeded();
+        return;
+    }
+
+    pid_t pid = [activeApp processIdentifier];
+    if (pid <= 0) {
+        deactivateIfNeeded();
+        return;
+    }
+
+    NSString *bundleId = [activeApp bundleIdentifier];
     int x = 0;
     int y = 0;
     int w = 0;
     int h = 0;
-    if (!getFocusedFinderWindowRect(pid, &x, &y, &w, &h)) {
-        fileExplorerDeactivatedCallbackCGO();
+
+    if (bundleId && [bundleId isEqualToString:@"com.apple.finder"]) {
+        if (getFocusedFinderWindowRect(pid, &x, &y, &w, &h)) {
+            activateIfNeeded(pid, MonitorContextStateExplorer, x, y, w, h);
+        } else {
+            deactivateIfNeeded();
+        }
         return;
     }
-    fileExplorerActivatedCallbackCGO(pid, 0, x, y, w, h);
+
+    if (getOpenSaveDialogRect(pid, &x, &y, &w, &h)) {
+        activateIfNeeded(pid, MonitorContextStateDialog, x, y, w, h);
+        return;
+    }
+
+    deactivateIfNeeded();
 }
 
-// AXObserver callback - called when Finder's focused window changes
-static void finderWindowFocusCallback(AXObserverRef observer, AXUIElementRef element, CFStringRef notification, void *refcon) {
-    if (gFinderPid > 0) {
-        triggerFinderActivated(gFinderPid);
-    }
+static void frontmostWindowFocusCallback(AXObserverRef observer, AXUIElementRef element, CFStringRef notification, void *refcon) {
+    evaluateFrontmostApplicationState();
 }
 
-static void startFinderWindowObserver(pid_t pid) {
-    // Stop existing observer if any
-    if (gFinderWindowObserver) {
-        CFRunLoopRemoveSource(CFRunLoopGetMain(), 
-                              AXObserverGetRunLoopSource(gFinderWindowObserver), 
-                              kCFRunLoopDefaultMode);
-        CFRelease(gFinderWindowObserver);
-        gFinderWindowObserver = nil;
+static void stopFrontmostWindowObserver() {
+    if (gFrontmostWindowObserver) {
+        CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(gFrontmostWindowObserver), kCFRunLoopDefaultMode);
+        CFRelease(gFrontmostWindowObserver);
+        gFrontmostWindowObserver = NULL;
     }
-    
-    gFinderPid = pid;
-    
-    // Create AXObserver for window focus changes
+    gObservedPid = 0;
+}
+
+static void startFrontmostWindowObserver(pid_t pid) {
+    if (pid <= 0 || !AXIsProcessTrusted()) {
+        stopFrontmostWindowObserver();
+        return;
+    }
+
+    if (gFrontmostWindowObserver && gObservedPid == pid) {
+        return;
+    }
+
+    stopFrontmostWindowObserver();
+
     AXObserverRef observer = NULL;
-    AXError err = AXObserverCreate(pid, finderWindowFocusCallback, &observer);
+    AXError err = AXObserverCreate(pid, frontmostWindowFocusCallback, &observer);
     if (err != kAXErrorSuccess || !observer) {
         return;
     }
-    
-    gFinderWindowObserver = observer;
-    
-    // Get the application element and add notification
+
     AXUIElementRef app = AXUIElementCreateApplication(pid);
-    if (app) {
-        AXObserverAddNotification(observer, app, kAXFocusedWindowChangedNotification, NULL);
-        CFRelease(app);
+    if (!app) {
+        CFRelease(observer);
+        return;
     }
-    
-    // Add observer to run loop
+
+    AXObserverAddNotification(observer, app, kAXFocusedWindowChangedNotification, NULL);
+    AXObserverAddNotification(observer, app, kAXMainWindowChangedNotification, NULL);
+    AXObserverAddNotification(observer, app, kAXCreatedNotification, NULL);
+
     CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), kCFRunLoopDefaultMode);
+
+    CFRelease(app);
+    gFrontmostWindowObserver = observer;
+    gObservedPid = pid;
 }
 
-static void stopFinderWindowObserver() {
-    if (gFinderWindowObserver) {
-        CFRunLoopRemoveSource(CFRunLoopGetMain(), 
-                              AXObserverGetRunLoopSource(gFinderWindowObserver), 
-                              kCFRunLoopDefaultMode);
-        CFRelease(gFinderWindowObserver);
-        gFinderWindowObserver = nil;
+static void syncFrontmostWindowObserver() {
+    NSRunningApplication *activeApp = [[NSWorkspace sharedWorkspace] frontmostApplication];
+    if (!activeApp) {
+        stopFrontmostWindowObserver();
+        return;
     }
-    gFinderPid = 0;
+
+    pid_t pid = [activeApp processIdentifier];
+    startFrontmostWindowObserver(pid);
 }
 
 void startFileExplorerMonitor() {
@@ -267,18 +562,9 @@ void startFileExplorerMonitor() {
                             object:nil
                              queue:[NSOperationQueue mainQueue]
                         usingBlock:^(NSNotification *notification) {
-                            NSRunningApplication *app = [[notification userInfo] objectForKey:NSWorkspaceApplicationKey];
-                            if (app && [[app bundleIdentifier] isEqualToString:@"com.apple.finder"]) {
-                                pid_t pid = [app processIdentifier];
-                                triggerFinderActivated(pid);
-                                // Start observing window focus changes within Finder
-                                startFinderWindowObserver(pid);
-                            } else {
-                                // Stop observing when switching away from Finder
-                                stopFinderWindowObserver();
-                                fileExplorerDeactivatedCallbackCGO();
-                            }
-                        }];
+                syncFrontmostWindowObserver();
+                evaluateFrontmostApplicationState();
+            }];
         }
 
         if (!gKeyDownObserver) {
@@ -305,25 +591,18 @@ void startFileExplorerMonitor() {
                     return;
                 }
 
-                int x = 0;
-                int y = 0;
-                int w = 0;
-                int h = 0;
-                if (gFinderPid <= 0 || !getFocusedFinderWindowRect(gFinderPid, &x, &y, &w, &h)) {
+                syncFrontmostWindowObserver();
+                evaluateFrontmostApplicationState();
+                if (gCurrentState == MonitorContextStateNone) {
                     return;
                 }
 
                 fileExplorerKeyDownCallbackCGO((char)ch);
             }];
         }
-        
-        // Check if Finder is already active
-        NSRunningApplication *activeApp = [[NSWorkspace sharedWorkspace] frontmostApplication];
-        if (activeApp && [[activeApp bundleIdentifier] isEqualToString:@"com.apple.finder"]) {
-            pid_t pid = [activeApp processIdentifier];
-            triggerFinderActivated(pid);
-            startFinderWindowObserver(pid);
-        }
+
+        syncFrontmostWindowObserver();
+        evaluateFrontmostApplicationState();
     }
 }
 
@@ -344,7 +623,14 @@ int getCurrentFinderWindowRect(int *x, int *y, int *w, int *h) {
 
 void stopFileExplorerMonitor() {
     @autoreleasepool {
-        stopFinderWindowObserver();
+        stopFrontmostWindowObserver();
+        gCurrentPid = 0;
+        gCurrentState = MonitorContextStateNone;
+        gCurrentX = 0;
+        gCurrentY = 0;
+        gCurrentW = 0;
+        gCurrentH = 0;
+
         if (gKeyDownObserver) {
             [NSEvent removeMonitor:gKeyDownObserver];
             gKeyDownObserver = nil;
