@@ -115,7 +115,16 @@ CollectResults:
 		case results := <-resultChan:
 			allResults = append(allResults, results...)
 		case <-doneChan:
-			break CollectResults
+			// Query completion only means all plugin goroutines have finished.
+			// Drain buffered results to avoid dropping late-collected plugin results.
+			for {
+				select {
+				case results := <-resultChan:
+					allResults = append(allResults, results...)
+				default:
+					break CollectResults
+				}
+			}
 		case <-time.After(timeout):
 			ts.t.Errorf("Query timeout for test %s", test.Name)
 			return false, &QueryTestFailure{
