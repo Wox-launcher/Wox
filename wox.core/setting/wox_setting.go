@@ -22,6 +22,7 @@ type WoxSetting struct {
 	LangCode             *WoxSettingValue[i18n.LangCode]
 	QueryHotkeys         *PlatformValue[[]QueryHotkey]
 	QueryShortcuts       *WoxSettingValue[[]QueryShortcut]
+	TrayQueries          *WoxSettingValue[[]TrayQuery]
 	LaunchMode           *WoxSettingValue[LaunchMode]
 	StartPage            *WoxSettingValue[StartPage]
 	ShowPosition         *WoxSettingValue[PositionType]
@@ -80,6 +81,7 @@ const (
 type QueryShortcut struct {
 	Shortcut string // support index placeholder, e.g. shortcut "wi" => "wpm install {0} to {1}", when user input "wi 1 2", the query will be "wpm install 1 to 2"
 	Query    string
+	Disabled bool
 }
 
 func (q *QueryShortcut) HasPlaceholder() bool {
@@ -101,6 +103,14 @@ type QueryHotkey struct {
 	Hotkey            string
 	Query             string // Support plugin.QueryVariable
 	IsSilentExecution bool   // If true, the query will be executed without showing the query in the input box
+	Disabled          bool
+}
+
+type TrayQuery struct {
+	Icon     common.WoxImage
+	Query    string
+	Width    int `json:",omitempty"`
+	Disabled bool
 }
 
 // ResultHash is a unique identifier for a result.
@@ -161,6 +171,7 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 		LastWindowY:      NewWoxSettingValue(store, "LastWindowY", -1),
 		QueryHotkeys:     NewPlatformValue(store, "QueryHotkeys", []QueryHotkey{}, []QueryHotkey{}, []QueryHotkey{}),
 		QueryShortcuts:   NewWoxSettingValue(store, "QueryShortcuts", []QueryShortcut{}),
+		TrayQueries:      NewWoxSettingValue(store, "TrayQueries", []TrayQuery{}),
 		AIProviders:      NewWoxSettingValue(store, "AIProviders", []AIProvider{}),
 		EnableMCPServer:  NewWoxSettingValue(store, "EnableMCPServer", true),
 		MCPServerPort:    NewWoxSettingValue(store, "MCPServerPort", 29867),

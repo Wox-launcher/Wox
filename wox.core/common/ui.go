@@ -8,8 +8,9 @@ import (
 type LayoutMode string
 
 const (
-	LayoutModeDefault  LayoutMode = "default"
-	LayoutModeExplorer LayoutMode = "explorer"
+	LayoutModeDefault   LayoutMode = "default"
+	LayoutModeExplorer  LayoutMode = "explorer"
+	LayoutModeTrayQuery LayoutMode = "tray_query"
 )
 
 type PlainQuery struct {
@@ -92,6 +93,7 @@ type ShowContext struct {
 	IsQueryFocus bool // auto focus chat input on next ui update
 
 	WindowPosition *WindowPosition
+	WindowWidth    int
 	LayoutMode     LayoutMode
 }
 

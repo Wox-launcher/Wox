@@ -2,14 +2,20 @@
 #define _UNICODE
 #include <windows.h>
 #include <shellapi.h>
+#include <stdlib.h>
 
 NOTIFYICONDATA nid;
 HMENU hMenu;
 UINT_PTR nextMenuId = 1;
 HWND hwnd;
+UINT queryIconCount = 0;
+UINT queryIconIds[256] = {0};
+HICON queryIconHandles[256] = {0};
 
 void reportClick(UINT_PTR menuId);
 void reportLeftClick();
+void reportQueryClick(UINT_PTR iconId, int x, int y, int width, int height);
+void clearQueryTrayIcons();
 
 void addMenuItem(UINT_PTR menuId, const char *title)
 {
@@ -44,6 +50,7 @@ void setTrayIcon(const char *tooltip, HICON icon)
 
 void removeTrayIcon()
 {
+	clearQueryTrayIcons();
 	Shell_NotifyIcon(NIM_DELETE, &nid);
 }
 
@@ -68,6 +75,49 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 		else if (lParam == WM_LBUTTONUP)
 		{
 			reportLeftClick();
+		}
+		break;
+	case WM_APP + 2:
+		if (lParam == WM_LBUTTONUP)
+		{
+			NOTIFYICONIDENTIFIER nidIdentifier = {0};
+			nidIdentifier.cbSize = sizeof(NOTIFYICONIDENTIFIER);
+			nidIdentifier.hWnd = hwnd;
+			nidIdentifier.uID = (UINT)wParam;
+
+			RECT rect;
+			if (SUCCEEDED(Shell_NotifyIconGetRect(&nidIdentifier, &rect)))
+			{
+				HMONITOR hMonitor = MonitorFromRect(&rect, MONITOR_DEFAULTTONEAREST);
+				UINT dpi = 96;
+
+				HMODULE shcore = LoadLibraryA("Shcore.dll");
+				if (shcore)
+				{
+					typedef HRESULT(WINAPI *GetDpiForMonitorFunc)(HMONITOR, int, UINT *, UINT *);
+					GetDpiForMonitorFunc getDpiForMonitor = (GetDpiForMonitorFunc)GetProcAddress(shcore, "GetDpiForMonitor");
+					if (getDpiForMonitor)
+					{
+						UINT dpiX = 96, dpiY = 96;
+						if (SUCCEEDED(getDpiForMonitor(hMonitor, 0, &dpiX, &dpiY)))
+						{
+							dpi = dpiX;
+						}
+					}
+					FreeLibrary(shcore);
+				}
+
+				float scale = (float)dpi / 96.0f;
+				int x = (int)(rect.left / scale);
+				int y = (int)(rect.top / scale);
+				int width = (int)((rect.right - rect.left) / scale);
+				int height = (int)((rect.bottom - rect.top) / scale);
+				reportQueryClick((UINT_PTR)wParam, x, y, width, height);
+			}
+			else
+			{
+				reportQueryClick((UINT_PTR)wParam, 0, 0, 0, 0);
+			}
 		}
 		break;
 	case WM_COMMAND:
@@ -131,4 +181,56 @@ void runMessageLoop()
 		TranslateMessage(&msg);
 		DispatchMessage(&msg);
 	}
+}
+
+void addQueryTrayIcon(UINT id, const char *iconName, const char *tooltip)
+{
+	if (queryIconCount >= 256)
+	{
+		return;
+	}
+
+	HICON icon = loadIcon(iconName);
+	NOTIFYICONDATA queryNid = {0};
+	queryNid.cbSize = sizeof(NOTIFYICONDATA);
+	queryNid.hWnd = hwnd;
+	queryNid.uID = id;
+	queryNid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+	queryNid.uCallbackMessage = WM_APP + 2;
+	queryNid.hIcon = icon;
+
+	if (tooltip != NULL)
+	{
+		int len = MultiByteToWideChar(CP_UTF8, 0, tooltip, -1, NULL, 0);
+		if (len > 0)
+		{
+			wchar_t wTooltip[128] = {0};
+			MultiByteToWideChar(CP_UTF8, 0, tooltip, -1, wTooltip, len);
+			wcsncpy(queryNid.szTip, wTooltip, sizeof(queryNid.szTip) / sizeof(wchar_t) - 1);
+		}
+	}
+
+	Shell_NotifyIcon(NIM_ADD, &queryNid);
+	queryIconIds[queryIconCount] = id;
+	queryIconHandles[queryIconCount] = icon;
+	queryIconCount++;
+}
+
+void clearQueryTrayIcons()
+{
+	for (UINT i = 0; i < queryIconCount; i++)
+	{
+		NOTIFYICONDATA queryNid = {0};
+		queryNid.cbSize = sizeof(NOTIFYICONDATA);
+		queryNid.hWnd = hwnd;
+		queryNid.uID = queryIconIds[i];
+		Shell_NotifyIcon(NIM_DELETE, &queryNid);
+		if (queryIconHandles[i] != NULL)
+		{
+			DestroyIcon(queryIconHandles[i]);
+			queryIconHandles[i] = NULL;
+		}
+		queryIconIds[i] = 0;
+	}
+	queryIconCount = 0;
 }

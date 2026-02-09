@@ -12,6 +12,7 @@ class WoxSetting {
   late String langCode;
   late List<QueryHotkey> queryHotkeys;
   late List<QueryShortcut> queryShortcuts;
+  late List<TrayQuery> trayQueries;
   late String launchMode;
   late String startPage;
   late String showPosition;
@@ -41,6 +42,7 @@ class WoxSetting {
     required this.langCode,
     required this.queryHotkeys,
     required this.queryShortcuts,
+    required this.trayQueries,
     required this.launchMode,
     required this.startPage,
     required this.showPosition,
@@ -88,6 +90,14 @@ class WoxSetting {
     } else {
       queryShortcuts = <QueryShortcut>[];
     }
+    if (json['TrayQueries'] != null) {
+      trayQueries = <TrayQuery>[];
+      json['TrayQueries'].forEach((v) {
+        trayQueries.add(TrayQuery.fromJson(v));
+      });
+    } else {
+      trayQueries = <TrayQuery>[];
+    }
 
     launchMode = json['LaunchMode'] ?? 'continue';
     startPage = json['StartPage'] ?? 'mru';
@@ -133,6 +143,7 @@ class WoxSetting {
     data['LangCode'] = langCode;
     data['QueryHotkeys'] = queryHotkeys;
     data['QueryShortcuts'] = queryShortcuts;
+    data['TrayQueries'] = trayQueries;
     data['LaunchMode'] = launchMode;
     data['StartPage'] = startPage;
     data['ShowPosition'] = showPosition;
@@ -160,12 +171,15 @@ class QueryHotkey {
 
   late bool isSilentExecution;
 
-  QueryHotkey({required this.hotkey, required this.query, required this.isSilentExecution});
+  late bool disabled;
+
+  QueryHotkey({required this.hotkey, required this.query, required this.isSilentExecution, required this.disabled});
 
   QueryHotkey.fromJson(Map<String, dynamic> json) {
     hotkey = json['Hotkey'];
     query = json['Query'];
     isSilentExecution = json['IsSilentExecution'] ?? false;
+    disabled = json['Disabled'] ?? false;
   }
 
   Map<String, dynamic> toJson() {
@@ -173,6 +187,7 @@ class QueryHotkey {
     data['Hotkey'] = hotkey;
     data['Query'] = query;
     data['IsSilentExecution'] = isSilentExecution;
+    data['Disabled'] = disabled;
     return data;
   }
 }
@@ -182,17 +197,58 @@ class QueryShortcut {
 
   late String query;
 
-  QueryShortcut({required this.shortcut, required this.query});
+  late bool disabled;
+
+  QueryShortcut({required this.shortcut, required this.query, required this.disabled});
 
   QueryShortcut.fromJson(Map<String, dynamic> json) {
     shortcut = json['Shortcut'];
     query = json['Query'];
+    disabled = json['Disabled'] ?? false;
   }
 
   Map<String, dynamic> toJson() {
     final Map<String, dynamic> data = <String, dynamic>{};
     data['Shortcut'] = shortcut;
     data['Query'] = query;
+    data['Disabled'] = disabled;
+    return data;
+  }
+}
+
+class TrayQuery {
+  late WoxImage icon;
+
+  late String query;
+  late String width;
+
+  late bool disabled;
+
+  TrayQuery({required this.icon, required this.query, required this.width, required this.disabled});
+
+  TrayQuery.fromJson(Map<String, dynamic> json) {
+    if (json['Icon'] is Map<String, dynamic>) {
+      icon = WoxImage.fromJson(json['Icon']);
+    } else if (json['Icon'] is String) {
+      icon = WoxImage.parse(json['Icon']) ?? WoxImage.empty();
+    } else {
+      icon = WoxImage.empty();
+    }
+    query = json['Query'];
+    if (json['Width'] == null) {
+      width = "";
+    } else {
+      width = json['Width'].toString();
+    }
+    disabled = json['Disabled'] ?? false;
+  }
+
+  Map<String, dynamic> toJson() {
+    final Map<String, dynamic> data = <String, dynamic>{};
+    data['Icon'] = icon;
+    data['Query'] = query;
+    data['Width'] = width;
+    data['Disabled'] = disabled;
     return data;
   }
 }

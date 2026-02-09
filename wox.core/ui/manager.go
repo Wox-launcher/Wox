@@ -1,10 +1,13 @@
 package ui
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image/png"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -24,6 +27,7 @@ import (
 	"wox/util/autostart"
 	"wox/util/hotkey"
 	"wox/util/ime"
+	"wox/util/screen"
 	"wox/util/selection"
 	"wox/util/shell"
 	"wox/util/tray"
@@ -262,6 +266,11 @@ func (m *Manager) QuerySelection(ctx context.Context) {
 }
 
 func (m *Manager) RegisterQueryHotkey(ctx context.Context, queryHotkey setting.QueryHotkey) error {
+	if queryHotkey.Disabled {
+		logger.Info(ctx, fmt.Sprintf("skip register disabled query hotkey: %s", queryHotkey.Hotkey))
+		return nil
+	}
+
 	hk := &hotkey.Hotkey{}
 
 	err := hk.Register(ctx, queryHotkey.Hotkey, func() {
@@ -553,6 +562,8 @@ func (m *Manager) ShowTray() {
 				m.ExitApp(util.NewTraceContext())
 			},
 		})
+
+	m.refreshTrayQueryIcons(ctx)
 }
 
 func (m *Manager) HideTray() {
@@ -588,6 +599,11 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value strin
 		queryHotkeys := setting.GetSettingManager().GetWoxSetting(ctx).QueryHotkeys.Get()
 		for _, queryHotkey := range queryHotkeys {
 			m.RegisterQueryHotkey(ctx, queryHotkey)
+		}
+	case "TrayQueries":
+		woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+		if woxSetting.ShowTray.Get() {
+			m.refreshTrayQueryIcons(ctx)
 		}
 	case "LangCode":
 		langCode := vs
@@ -629,6 +645,204 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value strin
 			}
 		}
 	}
+}
+
+func (m *Manager) refreshTrayQueryIcons(ctx context.Context) {
+	if util.IsLinux() {
+		// tray query is not supported on linux yet
+		return
+	}
+
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	queryItems := make([]tray.QueryIconItem, 0, len(woxSetting.TrayQueries.Get()))
+	for _, trayQuery := range woxSetting.TrayQueries.Get() {
+		if trayQuery.Disabled {
+			continue
+		}
+
+		query := strings.TrimSpace(trayQuery.Query)
+		if query == "" {
+			continue
+		}
+
+		iconBytes := m.toTrayIconBytes(ctx, trayQuery.Icon)
+		tooltip := query
+		if len(tooltip) > 80 {
+			tooltip = tooltip[:80]
+		}
+
+		queryItems = append(queryItems, tray.QueryIconItem{
+			Icon:    iconBytes,
+			Tooltip: tooltip,
+			Callback: func(rect tray.ClickRect) {
+				m.executeTrayQuery(util.NewTraceContext(), trayQuery, rect)
+			},
+		})
+	}
+
+	tray.SetQueryIcons(queryItems)
+}
+
+func (m *Manager) executeTrayQuery(ctx context.Context, trayQuery setting.TrayQuery, rect tray.ClickRect) {
+	queryCtx := util.WithCoreSessionContext(ctx)
+	query := plugin.GetPluginManager().ReplaceQueryVariable(queryCtx, trayQuery.Query)
+	plainQuery := common.PlainQuery{
+		QueryId:   uuid.NewString(),
+		QueryType: plugin.QueryTypeInput,
+		QueryText: query,
+	}
+
+	m.RefreshActiveWindowSnapshot(queryCtx)
+	q, _, err := plugin.GetPluginManager().NewQuery(queryCtx, plainQuery)
+	if err != nil {
+		logger.Error(queryCtx, fmt.Sprintf("failed to create tray query: %s", err.Error()))
+		return
+	}
+
+	isQueryFocus := false
+	if plugin.GetPluginManager().IsTriggerKeywordAIChat(queryCtx, q.TriggerKeyword) {
+		if plugin.GetPluginManager().GetAIChatPluginChater(queryCtx).IsAutoFocusToChatInputWhenOpenWithQueryHotkey(queryCtx) {
+			isQueryFocus = true
+		}
+	}
+
+	windowWidth := m.getTrayQueryWindowWidth(queryCtx, trayQuery)
+	position := m.getTrayQueryWindowPosition(queryCtx, rect, windowWidth)
+	m.ui.ShowApp(queryCtx, common.ShowContext{
+		SelectAll:      false,
+		IsQueryFocus:   isQueryFocus,
+		WindowPosition: &position,
+		WindowWidth:    windowWidth,
+		LayoutMode:     common.LayoutModeTrayQuery,
+	})
+	m.ui.ChangeQuery(queryCtx, plainQuery)
+}
+
+func (m *Manager) getTrayQueryWindowWidth(ctx context.Context, trayQuery setting.TrayQuery) int {
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	windowWidth := trayQuery.Width
+	if windowWidth <= 0 {
+		windowWidth = woxSetting.AppWidth.Get() / 2
+	}
+	if windowWidth <= 0 {
+		windowWidth = 400
+	}
+	return windowWidth
+}
+
+func (m *Manager) getTrayQueryWindowPosition(ctx context.Context, rect tray.ClickRect, windowWidth int) common.WindowPosition {
+	theme := m.GetCurrentTheme(ctx)
+	screenSize := screen.GetMouseScreen()
+
+	queryBoxHeight := 55 + theme.AppPaddingTop + theme.AppPaddingBottom
+	if queryBoxHeight <= 0 {
+		queryBoxHeight = 80
+	}
+
+	margin := 8
+	x := screenSize.X + (screenSize.Width-windowWidth)/2
+	y := screenSize.Y + 10
+
+	if rect.Width > 0 && rect.Height > 0 {
+		x = rect.X + (rect.Width-windowWidth)/2
+		if util.IsWindows() {
+			y = rect.Y - queryBoxHeight - margin
+		} else {
+			y = rect.Y + rect.Height + margin
+		}
+	} else if util.IsWindows() {
+		y = screenSize.Y + screenSize.Height - queryBoxHeight - margin
+	}
+
+	minX := screenSize.X + 10
+	maxX := screenSize.X + screenSize.Width - windowWidth - 10
+	x = clampInt(x, minX, maxX)
+
+	minY := screenSize.Y + 10
+	maxY := screenSize.Y + screenSize.Height - queryBoxHeight - 10
+	y = clampInt(y, minY, maxY)
+
+	return common.WindowPosition{X: x, Y: y}
+}
+
+func (m *Manager) toTrayIconBytes(ctx context.Context, icon common.WoxImage) []byte {
+	if icon.IsEmpty() {
+		return resource.GetAppIcon()
+	}
+
+	img, err := icon.ToImage()
+	if err != nil {
+		logger.Warn(ctx, fmt.Sprintf("failed to parse tray query icon, fallback to app icon: %s", err.Error()))
+		return resource.GetAppIcon()
+	}
+
+	buf := bytes.NewBuffer(nil)
+	if err := png.Encode(buf, img); err != nil {
+		logger.Warn(ctx, fmt.Sprintf("failed to encode tray query icon, fallback to app icon: %s", err.Error()))
+		return resource.GetAppIcon()
+	}
+
+	if util.IsWindows() {
+		icoBytes, err := wrapPNGAsICO(buf.Bytes(), img.Bounds().Dx(), img.Bounds().Dy())
+		if err != nil {
+			logger.Warn(ctx, fmt.Sprintf("failed to convert tray query icon to ico, fallback to app icon: %s", err.Error()))
+			return resource.GetAppIcon()
+		}
+		return icoBytes
+	}
+
+	return buf.Bytes()
+}
+
+func wrapPNGAsICO(pngData []byte, width int, height int) ([]byte, error) {
+	if len(pngData) == 0 {
+		return nil, fmt.Errorf("empty png data")
+	}
+
+	if width <= 0 || width > 256 {
+		width = 256
+	}
+	if height <= 0 || height > 256 {
+		height = 256
+	}
+
+	widthByte := byte(width)
+	if width == 256 {
+		widthByte = 0
+	}
+	heightByte := byte(height)
+	if height == 256 {
+		heightByte = 0
+	}
+
+	buf := bytes.NewBuffer(nil)
+	_ = binary.Write(buf, binary.LittleEndian, uint16(0)) // reserved
+	_ = binary.Write(buf, binary.LittleEndian, uint16(1)) // icon type
+	_ = binary.Write(buf, binary.LittleEndian, uint16(1)) // image count
+	_ = buf.WriteByte(widthByte)
+	_ = buf.WriteByte(heightByte)
+	_ = buf.WriteByte(0) // color palette count
+	_ = buf.WriteByte(0) // reserved
+	_ = binary.Write(buf, binary.LittleEndian, uint16(1))
+	_ = binary.Write(buf, binary.LittleEndian, uint16(32))
+	_ = binary.Write(buf, binary.LittleEndian, uint32(len(pngData)))
+	_ = binary.Write(buf, binary.LittleEndian, uint32(22)) // ICONDIR(6) + ICONDIRENTRY(16)
+	_, _ = buf.Write(pngData)
+
+	return buf.Bytes(), nil
+}
+
+func clampInt(v int, min int, max int) int {
+	if min > max {
+		return min
+	}
+	if v < min {
+		return min
+	}
+	if v > max {
+		return max
+	}
+	return v
 }
 
 func (m *Manager) ExitApp(ctx context.Context) {

@@ -443,6 +443,15 @@ class WoxLauncherController extends GetxController {
       lastWindowHeight = 0;
     }
 
+    if (params.layoutMode == WoxLayoutModeEnum.WOX_LAYOUT_MODE_TRAY_QUERY.code) {
+      isQueryBoxAtBottom.value = Platform.isWindows;
+      isToolbarHiddenForce.value = true;
+      final configuredTrayWidth = params.windowWidth;
+      forceWindowWidth = configuredTrayWidth > 0 ? configuredTrayWidth.toDouble() : WoxSettingUtil.instance.currentSetting.appWidth.toDouble() / 2;
+      forceHideOnBlur = true;
+      lastWindowHeight = 0;
+    }
+
     // Reset to default layout if no layout mode specified
     if (params.layoutMode == null || params.layoutMode == WoxLayoutModeEnum.WOX_LAYOUT_MODE_DEFAULT.code) {
       setDefaultLayoutMode(traceId);
@@ -455,9 +464,10 @@ class WoxLauncherController extends GetxController {
     }
     final targetPosition = Offset(params.position.x.toDouble(), params.position.y.toDouble());
     final isExplorerLayout = params.layoutMode == WoxLayoutModeEnum.WOX_LAYOUT_MODE_EXPLORER.code;
-    if (Platform.isMacOS && isExplorerLayout) {
-      // In explorer mode, apply position+size together to avoid stale previous height
-      // affecting initial placement in macOS frame conversion.
+    final isTrayQueryLayout = params.layoutMode == WoxLayoutModeEnum.WOX_LAYOUT_MODE_TRAY_QUERY.code;
+    final shouldApplyBoundsBeforeShow = (Platform.isMacOS && isExplorerLayout) || (!Platform.isLinux && isTrayQueryLayout);
+    if (shouldApplyBoundsBeforeShow) {
+      // Apply position+size together before showing to avoid opening with stale width.
       final initialHeight = getQueryBoxTotalHeight();
       final targetWidth = forceWindowWidth != 0 ? forceWindowWidth : WoxSettingUtil.instance.currentSetting.appWidth.toDouble();
       await windowManager.setBounds(targetPosition, Size(targetWidth, initialHeight));

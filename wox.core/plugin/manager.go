@@ -1953,6 +1953,10 @@ func (m *Manager) expandQueryShortcut(ctx context.Context, query string, querySh
 	})
 
 	for _, shortcut := range queryShorts {
+		if shortcut.Disabled {
+			continue
+		}
+
 		if strings.HasPrefix(query, shortcut.Shortcut) {
 			if !shortcut.HasPlaceholder() {
 				newQuery = strings.Replace(query, shortcut.Shortcut, shortcut.Query, 1)

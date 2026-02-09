@@ -17,6 +17,7 @@ type WoxSettingDto struct {
 	LangCode             i18n.LangCode
 	QueryHotkeys         []setting.QueryHotkey
 	QueryShortcuts       []setting.QueryShortcut
+	TrayQueries          []setting.TrayQuery
 	LaunchMode           setting.LaunchMode
 	StartPage            setting.StartPage
 	AIProviders          []setting.AIProvider
