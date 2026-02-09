@@ -4,6 +4,7 @@ package explorer
 extern void fileExplorerActivatedCallbackCGO(int pid, int isFileDialog, int x, int y, int w, int h);
 extern void fileExplorerDeactivatedCallbackCGO();
 extern void fileExplorerKeyDownCallbackCGO(char key);
+extern void fileExplorerLogCallbackCGO(char* msg);
 void startFileExplorerMonitor();
 void stopFileExplorerMonitor();
 */
@@ -41,6 +42,14 @@ const (
 )
 
 var currentState monitorState = stateNone
+
+//export fileExplorerLogCallbackCGO
+func fileExplorerLogCallbackCGO(msg *C.char) {
+	if msg == nil {
+		return
+	}
+	logFromMonitor(C.GoString(msg))
+}
 
 //export fileExplorerKeyDownCallbackCGO
 func fileExplorerKeyDownCallbackCGO(key C.char) {
