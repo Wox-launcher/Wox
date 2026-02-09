@@ -144,7 +144,8 @@ func parseLatestFromChangelog() (releaseInfo, error) {
 	}
 
 	// Pattern: ## vX.Y.Z — YYYY-MM-DD or ## vX.Y.Z-prerelease — YYYY-MM-DD
-	headerPattern := regexp.MustCompile(`^## v([0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9.]+)?)\s+—\s+(\S+)`)
+	// Support both em-dash (—) and hyphen (-) as separators
+	headerPattern := regexp.MustCompile(`^## v([0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9.]+)?)\s+[-—]\s+(\S+)`)
 
 	lines := strings.Split(string(content), "\n")
 	var info releaseInfo
