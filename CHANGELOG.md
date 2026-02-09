@@ -2,6 +2,9 @@
 
 ## v2.0.1 -
 
+- Fix
+  - [`File Explorer Search`] Fix an issue that file explorer search plugin cannot navigate on open/save dialog
+
 ## v2.0.0 - 2026-02-09
 
 It's time to release the official 2.0 version! There are no major issues in everyday use anymore. Thank you to all users who tested the beta version and provided feedback!

@@ -135,10 +135,13 @@ func (h *HashMap[K, V]) String() (s string) {
 }
 
 func (h *HashMap[K, V]) ToMap() (m map[K]V) {
-	h.Range(func(k K, v V) bool {
+	h.rw.RLock()
+	defer h.rw.RUnlock()
+
+	m = make(map[K]V, len(h.inner))
+	for k, v := range h.inner {
 		m[k] = v
-		return true
-	})
+	}
 
 	return m
 }
