@@ -1,8 +1,5 @@
-import 'dart:convert';
-import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
@@ -10,7 +7,7 @@ import 'package:wox/components/wox_ai_model_selector_view.dart';
 import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_dropdown_button.dart';
 import 'package:wox/components/wox_hotkey_recorder_view.dart';
-import 'package:wox/components/wox_image_view.dart';
+import 'package:wox/components/wox_image_selector.dart';
 import 'package:wox/components/wox_textfield.dart';
 import 'package:wox/components/wox_checkbox.dart';
 import 'package:wox/components/wox_checkbox_tile.dart';
@@ -152,124 +149,20 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
     return Get.find<WoxSettingController>().tr(key);
   }
 
-  Widget _buildWoxImageEditor(PluginSettingValueTableColumn column) {
-    WoxImage? currentImage;
-    dynamic imgJson = getValue(column.key);
-
+  WoxImage getWoxImageValue(String key) {
+    final imgJson = getValue(key);
+    if (imgJson is WoxImage) {
+      return imgJson;
+    }
     if (imgJson is String && imgJson == "") {
-      currentImage = WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖");
-    } else if (imgJson is WoxImage) {
-      currentImage = imgJson;
-    } else {
-      //image sholuld be WoxImage map
-      try {
-        currentImage = WoxImage.fromJson(imgJson);
-      } catch (e) {
-        currentImage = WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖");
-      }
+      return WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖");
     }
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Container(
-          width: 80,
-          height: 80,
-          decoration: BoxDecoration(border: Border.all(color: getThemeSubTextColor().withAlpha(76)), borderRadius: BorderRadius.circular(8)),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Center(
-              // Center the preview content (especially emoji) in the 80x80 box
-              child: WoxImageView(woxImage: currentImage, width: 80, height: 80),
-            ),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            WoxButton.secondary(
-              text: tr('ui_image_editor_emoji'),
-              icon: Icon(Icons.emoji_emotions_outlined, size: 14, color: getThemeTextColor()),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              onPressed: () async {
-                final emojiResult = await _showEmojiPicker(context);
-                if (emojiResult != null && emojiResult.isNotEmpty) {
-                  final newImage = WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: emojiResult);
-                  updateValue(column.key, newImage);
-                  setState(() {});
-                }
-              },
-            ),
-            WoxButton.secondary(
-              text: tr('ui_image_editor_upload_image'),
-              icon: Icon(Icons.file_upload_outlined, size: 14, color: getThemeTextColor()),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              onPressed: () async {
-                final result = await FilePicker.platform.pickFiles(type: FileType.image, allowMultiple: false);
-
-                if (result != null && result.files.isNotEmpty && result.files.first.path != null) {
-                  final filePath = result.files.first.path!;
-                  final file = File(filePath);
-                  if (await file.exists()) {
-                    final bytes = await file.readAsBytes();
-                    final base64Image = base64Encode(bytes);
-
-                    final newImage = WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_BASE64.code, imageData: "data:image/png;base64,$base64Image");
-
-                    updateValue(column.key, newImage);
-                    setState(() {});
-                  }
-                }
-              },
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Future<String?> _showEmojiPicker(BuildContext context) async {
-    final commonEmojis = ["🤖", "👨", "👩", "🧠", "💡", "🔍", "📊", "📈", "📝", "🛠", "⚙️", "🧩", "🎮", "🎯", "🏆", "🎨", "🎭", "🎬", "📱", "💻"];
-
-    String? selectedEmoji;
-
-    await showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(tr('ui_select_emoji')),
-          content: SizedBox(
-            width: 300,
-            height: 200,
-            child: GridView.builder(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 5, childAspectRatio: 1),
-              itemCount: commonEmojis.length,
-              itemBuilder: (context, index) {
-                return InkWell(
-                  onTap: () {
-                    selectedEmoji = commonEmojis[index];
-                    Navigator.pop(context);
-                  },
-                  child: Center(child: Text(commonEmojis[index], style: const TextStyle(fontSize: 24))),
-                );
-              },
-            ),
-          ),
-          actions: [
-            WoxButton.secondary(
-              text: tr('ui_cancel'),
-              onPressed: () {
-                Navigator.pop(context);
-              },
-            ),
-          ],
-        );
-      },
-    );
-
-    return selectedEmoji;
+    try {
+      return WoxImage.fromJson(imgJson);
+    } catch (e) {
+      return WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖");
+    }
   }
 
   // Load all tools list
@@ -509,7 +402,15 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
           ),
         );
       case PluginSettingValueType.pluginSettingValueTableColumnTypeWoxImage:
-        return Expanded(child: _buildWoxImageEditor(column));
+        return Expanded(
+          child: WoxImageSelector(
+            value: getWoxImageValue(column.key),
+            onChanged: (newImage) {
+              updateValue(column.key, newImage);
+              setState(() {});
+            },
+          ),
+        );
       case PluginSettingValueType.pluginSettingValueTableColumnTypeTextList:
         var columnValues = getValue(column.key);
         return Expanded(
