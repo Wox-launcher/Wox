@@ -151,6 +151,10 @@ class AppDelegate: FlutterAppDelegate {
           let y = (screenFrame.origin.y + screenFrame.height) - frame.origin.y - frame.height
           result(["x": x, "y": y])
 
+        case "getSize":
+          let frame = window.frame
+          result(["width": frame.width, "height": frame.height])
+
         case "setPosition":
           if let args = call.arguments as? [String: Any],
             let x = args["x"] as? Double,

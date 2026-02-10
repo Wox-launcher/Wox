@@ -157,6 +157,15 @@ static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
     fl_value_set_string_take(result, "y", fl_value_new_int(y));
     response = FL_METHOD_RESPONSE(fl_method_success_response_new(result));
   }
+  else if (strcmp(method, "getSize") == 0)
+  {
+    int w, h;
+    gtk_window_get_size(window, &w, &h);
+    g_autoptr(FlValue) result = fl_value_new_map();
+    fl_value_set_string_take(result, "width", fl_value_new_int(w));
+    fl_value_set_string_take(result, "height", fl_value_new_int(h));
+    response = FL_METHOD_RESPONSE(fl_method_success_response_new(result));
+  }
   else if (strcmp(method, "setPosition") == 0)
   {
     if (fl_value_get_type(args) == FL_VALUE_TYPE_MAP)

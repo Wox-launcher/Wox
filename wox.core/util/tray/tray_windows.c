@@ -86,7 +86,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 			nidIdentifier.uID = (UINT)wParam;
 
 			RECT rect;
-			if (SUCCEEDED(Shell_NotifyIconGetRect(&nidIdentifier, &rect)))
+			HRESULT hr = Shell_NotifyIconGetRect(&nidIdentifier, &rect);
+			if (SUCCEEDED(hr))
 			{
 				HMONITOR hMonitor = MonitorFromRect(&rect, MONITOR_DEFAULTTONEAREST);
 				UINT dpi = 96;
@@ -94,7 +95,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 				HMODULE shcore = LoadLibraryA("Shcore.dll");
 				if (shcore)
 				{
-					typedef HRESULT(WINAPI *GetDpiForMonitorFunc)(HMONITOR, int, UINT *, UINT *);
+					typedef HRESULT(WINAPI * GetDpiForMonitorFunc)(HMONITOR, int, UINT *, UINT *);
 					GetDpiForMonitorFunc getDpiForMonitor = (GetDpiForMonitorFunc)GetProcAddress(shcore, "GetDpiForMonitor");
 					if (getDpiForMonitor)
 					{
@@ -112,6 +113,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 				int y = (int)(rect.top / scale);
 				int width = (int)((rect.right - rect.left) / scale);
 				int height = (int)((rect.bottom - rect.top) / scale);
+
 				reportQueryClick((UINT_PTR)wParam, x, y, width, height);
 			}
 			else

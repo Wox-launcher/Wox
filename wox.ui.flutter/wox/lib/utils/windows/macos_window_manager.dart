@@ -22,10 +22,7 @@ class MacOSWindowManager extends BaseWindowManager {
         notifyWindowBlur();
         break;
       default:
-        Logger.instance.debug(
-          const Uuid().v4(),
-          "Unhandled method call: ${call.method}",
-        );
+        Logger.instance.debug(const Uuid().v4(), "Unhandled method call: ${call.method}");
     }
     return null;
   }
@@ -33,10 +30,7 @@ class MacOSWindowManager extends BaseWindowManager {
   @override
   Future<void> setSize(Size size) async {
     try {
-      await _channel.invokeMethod('setSize', {
-        'width': size.width,
-        'height': size.height,
-      });
+      await _channel.invokeMethod('setSize', {'width': size.width, 'height': size.height});
     } catch (e) {
       Logger.instance.error(const Uuid().v4(), "Error setting window size: $e");
     }
@@ -45,26 +39,16 @@ class MacOSWindowManager extends BaseWindowManager {
   @override
   Future<void> setBounds(Offset position, Size size) async {
     try {
-      await _channel.invokeMethod('setBounds', {
-        'x': position.dx,
-        'y': position.dy,
-        'width': size.width,
-        'height': size.height,
-      });
+      await _channel.invokeMethod('setBounds', {'x': position.dx, 'y': position.dy, 'width': size.width, 'height': size.height});
     } catch (e) {
-      Logger.instance.error(
-        const Uuid().v4(),
-        "Error setting window bounds: $e",
-      );
+      Logger.instance.error(const Uuid().v4(), "Error setting window bounds: $e");
     }
   }
 
   @override
   Future<Offset> getPosition() async {
     try {
-      final Map<dynamic, dynamic> result = await _channel.invokeMethod(
-        'getPosition',
-      );
+      final Map<dynamic, dynamic> result = await _channel.invokeMethod('getPosition');
       return Offset(result['x'], result['y']);
     } catch (e) {
       Logger.instance.error(const Uuid().v4(), "Error getting position: $e");
@@ -73,12 +57,20 @@ class MacOSWindowManager extends BaseWindowManager {
   }
 
   @override
+  Future<Size> getSize() async {
+    try {
+      final Map<dynamic, dynamic> result = await _channel.invokeMethod('getSize');
+      return Size(result['width'], result['height']);
+    } catch (e) {
+      Logger.instance.error(const Uuid().v4(), "Error getting size: $e");
+      return Size.zero;
+    }
+  }
+
+  @override
   Future<void> setPosition(Offset position) async {
     try {
-      await _channel.invokeMethod('setPosition', {
-        'x': position.dx,
-        'y': position.dy,
-      });
+      await _channel.invokeMethod('setPosition', {'x': position.dx, 'y': position.dy});
     } catch (e) {
       Logger.instance.error(const Uuid().v4(), "Error setting position: $e");
     }
@@ -135,10 +127,7 @@ class MacOSWindowManager extends BaseWindowManager {
     try {
       await _channel.invokeMethod('setAlwaysOnTop', alwaysOnTop);
     } catch (e) {
-      Logger.instance.error(
-        const Uuid().v4(),
-        "Error setting always on top: $e",
-      );
+      Logger.instance.error(const Uuid().v4(), "Error setting always on top: $e");
     }
   }
 
@@ -156,10 +145,7 @@ class MacOSWindowManager extends BaseWindowManager {
     try {
       await _channel.invokeMethod('startDragging');
     } catch (e) {
-      Logger.instance.error(
-        const Uuid().v4(),
-        "Error starting window drag: $e",
-      );
+      Logger.instance.error(const Uuid().v4(), "Error starting window drag: $e");
     }
   }
 
@@ -168,10 +154,7 @@ class MacOSWindowManager extends BaseWindowManager {
     try {
       await _channel.invokeMethod('waitUntilReadyToShow');
     } catch (e) {
-      Logger.instance.error(
-        const Uuid().v4(),
-        "Error waiting until ready to show: $e",
-      );
+      Logger.instance.error(const Uuid().v4(), "Error waiting until ready to show: $e");
     }
   }
 }

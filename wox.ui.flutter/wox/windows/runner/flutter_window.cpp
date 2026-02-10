@@ -643,6 +643,23 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       position[flutter::EncodableValue("y")] = flutter::EncodableValue(scaledY);
       result->Success(flutter::EncodableValue(position));
     }
+    else if (method_name == "getSize")
+    {
+      RECT rect;
+      GetWindowRect(hwnd, &rect);
+
+      // Get DPI scale factor
+      float dpiScale = GetDpiScale(hwnd);
+
+      // Convert physical pixels to logical pixels
+      double width = static_cast<double>(rect.right - rect.left) / dpiScale;
+      double height = static_cast<double>(rect.bottom - rect.top) / dpiScale;
+
+      flutter::EncodableMap size;
+      size[flutter::EncodableValue("width")] = flutter::EncodableValue(width);
+      size[flutter::EncodableValue("height")] = flutter::EncodableValue(height);
+      result->Success(flutter::EncodableValue(size));
+    }
     else if (method_name == "setPosition")
     {
       const auto *arguments = std::get_if<flutter::EncodableMap>(method_call.arguments());

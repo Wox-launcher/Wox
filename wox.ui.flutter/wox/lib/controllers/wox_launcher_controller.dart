@@ -100,8 +100,6 @@ class WoxLauncherController extends GetxController {
   /// Timer for debouncing resize height on Windows when height increases
   Timer? resizeHeightDebounceTimer;
   int resizeHeightDebounceDelay = 100; // ms
-  /// Last window height, used to determine if debounce is needed on Windows
-  double lastWindowHeight = 0;
 
   /// This flag is used to control whether the user can arrow up to show history when the app is first shown.
   var canArrowUpHistory = true;
@@ -439,8 +437,6 @@ class WoxLauncherController extends GetxController {
       isToolbarHiddenForce.value = true;
       forceWindowWidth = WoxSettingUtil.instance.currentSetting.appWidth.toDouble() / 2;
       forceHideOnBlur = true;
-      // Reset tracked height to avoid using stale non-explorer height as anchor.
-      lastWindowHeight = 0;
     }
 
     if (params.layoutMode == WoxLayoutModeEnum.WOX_LAYOUT_MODE_TRAY_QUERY.code) {
@@ -449,7 +445,6 @@ class WoxLauncherController extends GetxController {
       final configuredTrayWidth = params.windowWidth;
       forceWindowWidth = configuredTrayWidth > 0 ? configuredTrayWidth.toDouble() : WoxSettingUtil.instance.currentSetting.appWidth.toDouble() / 2;
       forceHideOnBlur = true;
-      lastWindowHeight = 0;
     }
 
     // Reset to default layout if no layout mode specified
@@ -471,7 +466,6 @@ class WoxLauncherController extends GetxController {
       final initialHeight = getQueryBoxTotalHeight();
       final targetWidth = forceWindowWidth != 0 ? forceWindowWidth : WoxSettingUtil.instance.currentSetting.appWidth.toDouble();
       await windowManager.setBounds(targetPosition, Size(targetWidth, initialHeight));
-      lastWindowHeight = initialHeight;
     } else {
       // Use the position calculated by backend
       await windowManager.setPosition(targetPosition);
@@ -501,7 +495,6 @@ class WoxLauncherController extends GetxController {
     isToolbarHiddenForce.value = false;
     forceWindowWidth = 0;
     forceHideOnBlur = false;
-    lastWindowHeight = 0;
   }
 
   Future<void> hideApp(String traceId) async {
@@ -1200,16 +1193,11 @@ class WoxLauncherController extends GetxController {
     double targetWidth = forceWindowWidth != 0 ? forceWindowWidth : WoxSettingUtil.instance.currentSetting.appWidth.toDouble();
 
     if (isQueryBoxAtBottom.value) {
-      // In explorer mode, we anchor to the bottom
-      // Calculate new Y based on height difference
-      // Since windowManager doesn't support getBounds/getSize, we rely on position + tracked height
+      // In explorer/tray-query mode, we anchor to the bottom.
+      // Use getPosition + getSize to compute the current bottom edge, then adjust top to grow upward.
       final pos = await windowManager.getPosition();
-
-      // If this is the first resize (lastWindowHeight == 0), we assume the current window
-      // is just the query box, so use its height as the 'old' height.
-      double oldHeight = lastWindowHeight > 0 ? lastWindowHeight : getQueryBoxTotalHeight();
-
-      double currentBottom = pos.dy + oldHeight;
+      final currentSize = await windowManager.getSize();
+      double currentBottom = pos.dy + currentSize.height;
 
       if (currentBottom <= 0) {
         // Fallback if bounds are weird
@@ -1219,27 +1207,28 @@ class WoxLauncherController extends GetxController {
         // Apply position and size together to avoid intermediate-frame flicker.
         await windowManager.setBounds(Offset(pos.dx, newTop), Size(targetWidth, totalHeight));
 
-        lastWindowHeight = totalHeight;
         windowFlickerDetector.recordResize(totalHeight.toInt());
         return;
       }
     }
 
-    // Windows-specific debounce: if height is increasing, debounce 80ms and only apply the last resize
-    // If height is decreasing or same, resize immediately
-    if (Platform.isWindows && totalHeight > lastWindowHeight && !isQueryBoxAtBottom.value) {
-      resizeHeightDebounceTimer?.cancel();
-      resizeHeightDebounceTimer = Timer(Duration(milliseconds: resizeHeightDebounceDelay), () async {
-        lastWindowHeight = totalHeight;
-        await windowManager.setSize(Size(targetWidth, totalHeight.toDouble()));
-        windowFlickerDetector.recordResize(totalHeight.toInt());
-      });
-    } else {
-      resizeHeightDebounceTimer?.cancel();
-      lastWindowHeight = totalHeight;
-      await windowManager.setSize(Size(targetWidth, totalHeight.toDouble()));
-      windowFlickerDetector.recordResize(totalHeight.toInt());
+    // Windows-specific debounce: if height is increasing, debounce and only apply the last resize.
+    // If height is decreasing or same, resize immediately.
+    if (Platform.isWindows && !isQueryBoxAtBottom.value) {
+      final currentSize = await windowManager.getSize();
+      if (totalHeight > currentSize.height) {
+        resizeHeightDebounceTimer?.cancel();
+        resizeHeightDebounceTimer = Timer(Duration(milliseconds: resizeHeightDebounceDelay), () async {
+          await windowManager.setSize(Size(targetWidth, totalHeight.toDouble()));
+          windowFlickerDetector.recordResize(totalHeight.toInt());
+        });
+        return;
+      }
     }
+
+    resizeHeightDebounceTimer?.cancel();
+    await windowManager.setSize(Size(targetWidth, totalHeight.toDouble()));
+    windowFlickerDetector.recordResize(totalHeight.toInt());
   }
 
   void updateQueryBoxLineCount(String text) {
