@@ -145,7 +145,7 @@ func (w *WoxImage) ToImage() (image.Image, error) {
 		}
 
 		imgReader := bytes.NewReader(decodedData)
-		return png.Decode(imgReader)
+		return imaging.Decode(imgReader)
 	}
 	if w.ImageType == WoxImageTypeSvg {
 		width, height := 32, 32
