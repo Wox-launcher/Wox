@@ -10,6 +10,7 @@ import (
 	"image"
 	"image/png"
 	"strings"
+	"sync/atomic"
 	"time"
 	"wox/util"
 )
@@ -19,6 +20,10 @@ var notImplement = errors.New("not implemented")
 var watchList = make([]func(Data), 0)
 var isWatching = false
 var WatchIntervalMillisecond = 250
+
+// lastWriteTimestamp tracks the last time Wox wrote to the clipboard (UnixMilli).
+// Used to prevent the polling loop from self-triggering on our own writes.
+var lastWriteTimestamp atomic.Int64
 
 type Type string
 
@@ -65,6 +70,7 @@ func ReadFilesAndText() (Data, error) {
 }
 
 func Write(data Data) error {
+	lastWriteTimestamp.Store(time.Now().UnixMilli())
 	if data.GetType() == ClipboardTypeText {
 		return writeTextData(data.String())
 	}
@@ -76,6 +82,7 @@ func Write(data Data) error {
 }
 
 func WriteImageBytes(pngData []byte, dibData []byte) error {
+	lastWriteTimestamp.Store(time.Now().UnixMilli())
 	return writeImageBytes(pngData, dibData)
 }
 
@@ -100,29 +107,49 @@ func watchChange() {
 		}
 	}()
 
+	if !isClipboardChanged() {
+		return
+	}
+
+	// Skip changes caused by our own writes to prevent self-triggering.
+	// This handles the race where the polling goroutine detects a sequence number
+	// change before the write goroutine updates lastSeqNum.
+	if time.Now().UnixMilli()-lastWriteTimestamp.Load() < 200 {
+		return
+	}
+
+	// Debounce: wait briefly to let the clipboard settle.
+	// When the user rapidly copies items, this avoids opening the clipboard
+	// while the source application is still writing, reducing lock contention.
+	time.Sleep(50 * time.Millisecond)
+
+	// If the clipboard changed again during the debounce window, skip this read.
+	// The next polling cycle will pick up the latest change.
 	if isClipboardChanged() {
-		start := time.Now()
-		data, err := Read()
-		if err != nil {
-			util.GetLogger().Warn(context.Background(), fmt.Sprintf("clipboard: changed but failed to read: %v", err))
-			return
-		}
+		return
+	}
 
-		if d := time.Since(start); d > 200*time.Millisecond {
-			util.GetLogger().Warn(context.Background(), fmt.Sprintf("clipboard: Read took %s (type=%s)", d.String(), data.GetType()))
-		}
+	start := time.Now()
+	data, err := Read()
+	if err != nil {
+		util.GetLogger().Warn(context.Background(), fmt.Sprintf("clipboard: changed but failed to read: %v", err))
+		return
+	}
 
-		for _, cb := range watchList {
-			go func() {
-				defer func() {
-					if err1 := recover(); err1 != nil {
-						util.GetLogger().Error(context.Background(), fmt.Sprintf("clipboard: callback panic: %v", err1))
-					}
-				}()
+	if d := time.Since(start); d > 200*time.Millisecond {
+		util.GetLogger().Warn(context.Background(), fmt.Sprintf("clipboard: Read took %s (type=%s)", d.String(), data.GetType()))
+	}
 
-				cb(data)
+	for _, cb := range watchList {
+		go func() {
+			defer func() {
+				if err1 := recover(); err1 != nil {
+					util.GetLogger().Error(context.Background(), fmt.Sprintf("clipboard: callback panic: %v", err1))
+				}
 			}()
-		}
+
+			cb(data)
+		}()
 	}
 }
 
