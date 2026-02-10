@@ -12,6 +12,14 @@ import 'package:wox/enums/wox_image_type_enum.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:get/get.dart';
 
+class EmojiGroupData {
+  final String labelKey;
+  final IconData icon;
+  final List<String> emojis;
+
+  const EmojiGroupData({required this.labelKey, required this.icon, required this.emojis});
+}
+
 class WoxImageSelector extends StatelessWidget {
   final WoxImage value;
   final ValueChanged<WoxImage> onChanged;
@@ -491,14 +499,6 @@ class WoxImageSelector extends StatelessWidget {
       ],
     );
   }
-}
-
-class EmojiGroupData {
-  final String labelKey;
-  final IconData icon;
-  final List<String> emojis;
-
-  const EmojiGroupData({required this.labelKey, required this.icon, required this.emojis});
 }
 
 class EmojiPickerDialog extends StatefulWidget {
