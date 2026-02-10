@@ -16,6 +16,9 @@ abstract class WindowManagerInterface {
   /// Get the window position
   Future<Offset> getPosition();
 
+  /// Get the window size
+  Future<Size> getSize();
+
   /// Set the window position
   Future<void> setPosition(Offset position);
 
