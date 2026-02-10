@@ -708,6 +708,7 @@ func (m *Manager) executeTrayQuery(ctx context.Context, trayQuery setting.TrayQu
 
 	windowWidth := m.getTrayQueryWindowWidth(queryCtx, trayQuery)
 	position := m.getTrayQueryWindowPosition(queryCtx, rect, windowWidth)
+	m.ui.ChangeQuery(queryCtx, plainQuery)
 	m.ui.ShowApp(queryCtx, common.ShowContext{
 		SelectAll:      false,
 		IsQueryFocus:   isQueryFocus,
@@ -715,7 +716,6 @@ func (m *Manager) executeTrayQuery(ctx context.Context, trayQuery setting.TrayQu
 		WindowWidth:    windowWidth,
 		LayoutMode:     common.LayoutModeTrayQuery,
 	})
-	m.ui.ChangeQuery(queryCtx, plainQuery)
 }
 
 func (m *Manager) getTrayQueryWindowWidth(ctx context.Context, trayQuery setting.TrayQuery) int {
