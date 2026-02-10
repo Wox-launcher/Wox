@@ -33,26 +33,17 @@ class EntityFactory {
 
   // List factories
   static final Map<String, JsonFactory> _listFactories = {
-    'List<PluginDetail>': (json) =>
-        _createList<PluginDetail>(json, (e) => PluginDetail.fromJson(e)),
-    'List<WoxTheme>': (json) =>
-        _createList<WoxTheme>(json, (e) => WoxTheme.fromJson(e)),
-    'List<AIModel>': (json) =>
-        _createList<AIModel>(json, (e) => AIModel.fromJson(e)),
-    'List<WoxLang>': (json) =>
-        _createList<WoxLang>(json, (e) => WoxLang.fromJson(e)),
-    'List<WoxBackup>': (json) =>
-        _createList<WoxBackup>(json, (e) => WoxBackup.fromJson(e)),
-    'List<AIMCPTool>': (json) =>
-        _createList<AIMCPTool>(json, (e) => AIMCPTool.fromJson(e)),
-    'List<AIProviderInfo>': (json) =>
-        _createList<AIProviderInfo>(json, (e) => AIProviderInfo.fromJson(e)),
-    'List<AIAgent>': (json) =>
-        _createList<AIAgent>(json, (e) => AIAgent.fromJson(e)),
-    'List<DoctorCheckResult>': (json) => _createList<DoctorCheckResult>(
-        json, (e) => DoctorCheckResult.fromJson(e)),
-    'List<WoxRuntimeStatus>': (json) => _createList<WoxRuntimeStatus>(
-        json, (e) => WoxRuntimeStatus.fromJson(e)),
+    'List<PluginDetail>': (json) => _createList<PluginDetail>(json, (e) => PluginDetail.fromJson(e)),
+    'List<WoxTheme>': (json) => _createList<WoxTheme>(json, (e) => WoxTheme.fromJson(e)),
+    'List<AIModel>': (json) => _createList<AIModel>(json, (e) => AIModel.fromJson(e)),
+    'List<WoxLang>': (json) => _createList<WoxLang>(json, (e) => WoxLang.fromJson(e)),
+    'List<WoxBackup>': (json) => _createList<WoxBackup>(json, (e) => WoxBackup.fromJson(e)),
+    'List<AIMCPTool>': (json) => _createList<AIMCPTool>(json, (e) => AIMCPTool.fromJson(e)),
+    'List<AIProviderInfo>': (json) => _createList<AIProviderInfo>(json, (e) => AIProviderInfo.fromJson(e)),
+    'List<AIAgent>': (json) => _createList<AIAgent>(json, (e) => AIAgent.fromJson(e)),
+    'List<DoctorCheckResult>': (json) => _createList<DoctorCheckResult>(json, (e) => DoctorCheckResult.fromJson(e)),
+    'List<WoxRuntimeStatus>': (json) => _createList<WoxRuntimeStatus>(json, (e) => WoxRuntimeStatus.fromJson(e)),
+    'List<String>': (json) => _createList<String>(json, (e) => e.toString()),
   };
 
   /// Helper method to create typed lists from JSON with robust error handling
@@ -62,8 +53,7 @@ class EntityFactory {
     // Ensure json is actually a List
     if (json is! List) {
       final traceId = const UuidV4().generate();
-      Logger.instance.warn(traceId,
-          'EntityFactory: Expected List but got ${json.runtimeType}, returning empty list');
+      Logger.instance.warn(traceId, 'EntityFactory: Expected List but got ${json.runtimeType}, returning empty list');
       return <T>[];
     }
 
@@ -76,8 +66,7 @@ class EntityFactory {
       } catch (e) {
         // Log the error but continue processing other items
         final traceId = const UuidV4().generate();
-        Logger.instance.warn(
-            traceId, 'EntityFactory: Failed to parse item at index $i: $e');
+        Logger.instance.warn(traceId, 'EntityFactory: Failed to parse item at index $i: $e');
         // Skip this item and continue with the rest
       }
     }
@@ -106,8 +95,7 @@ class EntityFactory {
       return json as T;
     } catch (e) {
       final traceId = const UuidV4().generate();
-      Logger.instance.error(traceId,
-          'EntityFactory: Failed to generate object of type $typeName: $e');
+      Logger.instance.error(traceId, 'EntityFactory: Failed to generate object of type $typeName: $e');
 
       // Return safe default values based on type
       return _getSafeDefault<T>();

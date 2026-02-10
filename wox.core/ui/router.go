@@ -22,6 +22,7 @@ import (
 	"wox/ui/dto"
 	"wox/updater"
 	"wox/util"
+	"wox/util/font"
 	"wox/util/hotkey"
 	"wox/util/shell"
 
@@ -51,6 +52,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	// settings
 	"/setting/wox":                      handleSettingWox,
 	"/setting/wox/update":               handleSettingWoxUpdate,
+	"/setting/ui/fonts":                 handleSettingUIFontList,
 	"/setting/plugin/update":            handleSettingPluginUpdate,
 	"/setting/userdata/location":        handleUserDataLocation,
 	"/setting/userdata/location/update": handleUserDataLocationUpdate,
@@ -506,7 +508,8 @@ func handleThemeApply(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleSettingWox(w http.ResponseWriter, r *http.Request) {
-	woxSetting := setting.GetSettingManager().GetWoxSetting(getTraceContext(r))
+	ctx := getTraceContext(r)
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 
 	var settingDto dto.WoxSettingDto
 	settingDto.EnableAutostart = woxSetting.EnableAutostart.Get()
@@ -538,8 +541,20 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 	settingDto.AppWidth = woxSetting.AppWidth.Get()
 	settingDto.MaxResultCount = woxSetting.MaxResultCount.Get()
 	settingDto.ThemeId = woxSetting.ThemeId.Get()
+	appFontFamily := woxSetting.AppFontFamily.Get()
+	systemFontFamilies := font.GetSystemFontFamilies(ctx)
+	normalizedAppFontFamily := font.NormalizeConfiguredFontFamily(appFontFamily, systemFontFamilies)
+	if normalizedAppFontFamily != appFontFamily {
+		woxSetting.AppFontFamily.Set(normalizedAppFontFamily)
+	}
+	settingDto.AppFontFamily = normalizedAppFontFamily
 
 	writeSuccessResponse(w, settingDto)
+}
+
+func handleSettingUIFontList(w http.ResponseWriter, r *http.Request) {
+	fontFamilies := font.GetSystemFontFamilies(getTraceContext(r))
+	writeSuccessResponse(w, fontFamilies)
 }
 
 func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
@@ -696,6 +711,8 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 		woxSetting.MaxResultCount.Set(int(vf))
 	case "ThemeId":
 		woxSetting.ThemeId.Set(vs)
+	case "AppFontFamily":
+		woxSetting.AppFontFamily.Set(vs)
 	case "EnableMCPServer":
 		woxSetting.EnableMCPServer.Set(vb)
 	case "MCPServerPort":
