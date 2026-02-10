@@ -883,10 +883,11 @@ class WoxLauncherController extends GetxController {
     // and then the query result is received which will expand the windows height. so it will causes window flicker
     clearQueryResultsTimer.cancel();
 
-    // If app is hidden (e.g. tray query will trigger change query first then showapp), clear immediately so old results won't flash when shown.
+    final currentQueryId = query.queryId;
     final isVisible = await windowManager.isVisible();
+    // If app is hidden (e.g. tray query will trigger change query first then showapp), clear immediately so old results won't flash when shown.
     if (!isVisible) {
-      clearQueryResults(traceId);
+      await clearQueryResults(traceId);
       Logger.instance.debug(traceId, "clear query results immediately because window is hidden");
     } else {
       // delay clear results, otherwise windows height will shrink immediately,
@@ -903,6 +904,11 @@ class WoxLauncherController extends GetxController {
       }
 
       clearQueryResultsTimer = Timer(Duration(milliseconds: clearQueryResultDelay), () {
+        if (currentQuery.value.queryId != currentQueryId) return;
+
+        final hasResultsNow = activeResultViewController.items.isNotEmpty && activeResultViewController.items.first.value.data.queryId == currentQueryId;
+        if (isCurrentQueryReturned || hasResultsNow) return;
+
         clearQueryResults(traceId);
       });
     }
@@ -971,7 +977,7 @@ class WoxLauncherController extends GetxController {
       showApp(msg.traceId, ShowAppParams.fromJson(msg.data));
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "ChangeQuery") {
-      onQueryChanged(msg.traceId, PlainQuery.fromJson(msg.data), "receive change query from wox", moveCursorToEnd: true);
+      await onQueryChanged(msg.traceId, PlainQuery.fromJson(msg.data), "receive change query from wox", moveCursorToEnd: true);
       focusQueryBox();
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "RefreshQuery") {
