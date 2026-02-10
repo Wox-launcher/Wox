@@ -14,6 +14,7 @@ import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_textfield.dart';
 import 'package:wox/components/wox_checkbox.dart';
 import 'package:wox/components/wox_checkbox_tile.dart';
+import 'package:wox/components/wox_markdown.dart';
 import 'package:wox/components/wox_path_finder.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
@@ -683,7 +684,14 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                               if (column.tooltip != "")
                                 Padding(
                                   padding: EdgeInsets.only(top: 4, left: maxLabelWidth + 10),
-                                  child: Text(tr(column.tooltip), style: TextStyle(color: textColor.withOpacity(0.6), fontSize: 12)),
+                                  child: WoxMarkdownView(
+                                    data: tr(column.tooltip),
+                                    fontColor: textColor.withOpacity(0.6),
+                                    fontSize: 12,
+                                    linkColor: accentColor,
+                                    linkHoverColor: accentColor.withOpacity(0.8),
+                                    selectable: true,
+                                  ),
                                 ),
                             ],
                           ),
