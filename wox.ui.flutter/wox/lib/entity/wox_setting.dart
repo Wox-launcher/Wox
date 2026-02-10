@@ -22,6 +22,7 @@ class WoxSetting {
   late int appWidth;
   late int maxResultCount;
   late String themeId;
+  late String appFontFamily;
   late bool httpProxyEnabled;
   late String httpProxyUrl;
   late bool enableAutoBackup;
@@ -52,6 +53,7 @@ class WoxSetting {
     required this.appWidth,
     required this.maxResultCount,
     required this.themeId,
+    required this.appFontFamily,
     required this.httpProxyEnabled,
     required this.httpProxyUrl,
     required this.enableAutoBackup,
@@ -117,6 +119,7 @@ class WoxSetting {
     appWidth = json['AppWidth'];
     maxResultCount = json['MaxResultCount'];
     themeId = json['ThemeId'];
+    appFontFamily = json['AppFontFamily'] ?? '';
     httpProxyEnabled = json['HttpProxyEnabled'] ?? false;
     httpProxyUrl = json['HttpProxyUrl'] ?? '';
     enableAutoBackup = json['EnableAutoBackup'] ?? false;
@@ -153,6 +156,7 @@ class WoxSetting {
     data['AppWidth'] = appWidth;
     data['MaxResultCount'] = maxResultCount;
     data['ThemeId'] = themeId;
+    data['AppFontFamily'] = appFontFamily;
     data['HttpProxyEnabled'] = httpProxyEnabled;
     data['HttpProxyUrl'] = httpProxyUrl;
     data['EnableAutoBackup'] = enableAutoBackup;

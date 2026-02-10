@@ -43,6 +43,7 @@ type WoxSetting struct {
 	AppWidth       *WoxSettingValue[int]
 	MaxResultCount *WoxSettingValue[int]
 	ThemeId        *WoxSettingValue[string]
+	AppFontFamily  *PlatformValue[string]
 
 	// Window position for last location mode
 	LastWindowX *WoxSettingValue[int]
@@ -160,6 +161,7 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 		AppWidth:         NewWoxSettingValue(store, "AppWidth", 800),
 		MaxResultCount:   NewWoxSettingValue(store, "MaxResultCount", 10),
 		ThemeId:          NewWoxSettingValue(store, "ThemeId", DefaultThemeId),
+		AppFontFamily:    NewPlatformValue(store, "AppFontFamily", "", "", ""),
 		EnableAutostart:  NewPlatformValue(store, "EnableAutostart", false, false, false),
 		HttpProxyEnabled: NewPlatformValue(store, "HttpProxyEnabled", false, false, false),
 		HttpProxyUrl:     NewPlatformValue(store, "HttpProxyUrl", "", "", ""),

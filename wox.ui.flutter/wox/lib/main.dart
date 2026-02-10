@@ -20,7 +20,6 @@ import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_setting_util.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/wox_websocket_msg_util.dart';
-import 'package:wox/enums/wox_layout_mode_enum.dart';
 
 void main(List<String> arguments) async {
   await initialServices(arguments);
@@ -91,12 +90,8 @@ Future<void> initWindow() async {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  @override
-  Widget build(BuildContext context) {
-    // Get the base text theme with Chinese font support
+  TextTheme buildAppTextTheme(String appFontFamily) {
     final baseTextTheme = SystemChineseFont.textTheme(Brightness.light);
-
-    // Scale down all font sizes to match Fluent UI appearance
     final scaledTextTheme = baseTextTheme.copyWith(
       bodyLarge: baseTextTheme.bodyLarge?.copyWith(fontSize: 13),
       bodyMedium: baseTextTheme.bodyMedium?.copyWith(fontSize: 13),
@@ -106,7 +101,28 @@ class MyApp extends StatelessWidget {
       labelSmall: baseTextTheme.labelSmall?.copyWith(fontSize: 11),
     );
 
-    return MaterialApp(navigatorKey: Get.key, theme: ThemeData(useMaterial3: true, textTheme: scaledTextTheme), debugShowCheckedModeBanner: false, home: const WoxApp());
+    if (appFontFamily.isEmpty) {
+      return scaledTextTheme;
+    }
+
+    return scaledTextTheme.apply(fontFamily: appFontFamily);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final settingController = Get.find<WoxSettingController>();
+
+    return Obx(() {
+      final appFontFamily = settingController.woxSetting.value.appFontFamily.trim();
+      final textTheme = buildAppTextTheme(appFontFamily);
+
+      return MaterialApp(
+        navigatorKey: Get.key,
+        theme: ThemeData(useMaterial3: true, textTheme: textTheme, fontFamily: appFontFamily.isEmpty ? null : appFontFamily),
+        debugShowCheckedModeBanner: false,
+        home: const WoxApp(),
+      );
+    });
   }
 }
 

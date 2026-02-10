@@ -22,23 +22,55 @@ class WoxApi {
   static WoxApi get instance => _instance;
 
   Future<WoxTheme> loadTheme(String traceId) async {
-    return await WoxHttpUtil.instance.postData<WoxTheme>(traceId, "/theme", null);
+    return await WoxHttpUtil.instance.postData<WoxTheme>(
+      traceId,
+      "/theme",
+      null,
+    );
   }
 
   Future<WoxSetting> loadSetting(String traceId) async {
-    return await WoxHttpUtil.instance.postData<WoxSetting>(traceId, "/setting/wox", null);
+    return await WoxHttpUtil.instance.postData<WoxSetting>(
+      traceId,
+      "/setting/wox",
+      null,
+    );
   }
 
   Future<void> updateSetting(String traceId, String key, String value) async {
-    await WoxHttpUtil.instance.postData(traceId, "/setting/wox/update", {"Key": key, "Value": value});
+    await WoxHttpUtil.instance.postData(traceId, "/setting/wox/update", {
+      "Key": key,
+      "Value": value,
+    });
+  }
+
+  Future<List<String>> getSystemFontFamilies(String traceId) async {
+    return await WoxHttpUtil.instance.postData<List<String>>(
+      traceId,
+      "/setting/ui/fonts",
+      null,
+    );
   }
 
   Future<List<WoxRuntimeStatus>> getRuntimeStatuses(String traceId) async {
-    return await WoxHttpUtil.instance.postData(traceId, "/runtime/status", null);
+    return await WoxHttpUtil.instance.postData(
+      traceId,
+      "/runtime/status",
+      null,
+    );
   }
 
-  Future<void> updatePluginSetting(String traceId, String pluginId, String key, String value) async {
-    await WoxHttpUtil.instance.postData(traceId, "/setting/plugin/update", {"PluginId": pluginId, "Key": key, "Value": value});
+  Future<void> updatePluginSetting(
+    String traceId,
+    String pluginId,
+    String key,
+    String value,
+  ) async {
+    await WoxHttpUtil.instance.postData(traceId, "/setting/plugin/update", {
+      "PluginId": pluginId,
+      "Key": key,
+      "Value": value,
+    });
   }
 
   Future<List<PluginDetail>> findStorePlugins(String traceId) async {
@@ -46,11 +78,17 @@ class WoxApi {
   }
 
   Future<List<PluginDetail>> findInstalledPlugins(String traceId) async {
-    return await WoxHttpUtil.instance.postData(traceId, "/plugin/installed", null);
+    return await WoxHttpUtil.instance.postData(
+      traceId,
+      "/plugin/installed",
+      null,
+    );
   }
 
   Future<PluginDetail> getPluginDetail(String traceId, String pluginId) async {
-    return await WoxHttpUtil.instance.postData(traceId, "/plugin/detail", {"id": pluginId});
+    return await WoxHttpUtil.instance.postData(traceId, "/plugin/detail", {
+      "id": pluginId,
+    });
   }
 
   Future<void> installPlugin(String traceId, String id) async {
@@ -58,7 +96,9 @@ class WoxApi {
   }
 
   Future<void> uninstallPlugin(String traceId, String id) async {
-    await WoxHttpUtil.instance.postData(traceId, "/plugin/uninstall", {"id": id});
+    await WoxHttpUtil.instance.postData(traceId, "/plugin/uninstall", {
+      "id": id,
+    });
   }
 
   Future<void> disablePlugin(String traceId, String id) async {
@@ -74,7 +114,11 @@ class WoxApi {
   }
 
   Future<List<WoxTheme>> findInstalledThemes(String traceId) async {
-    return await WoxHttpUtil.instance.postData(traceId, "/theme/installed", null);
+    return await WoxHttpUtil.instance.postData(
+      traceId,
+      "/theme/installed",
+      null,
+    );
   }
 
   Future<void> installTheme(String traceId, String id) async {
@@ -82,7 +126,9 @@ class WoxApi {
   }
 
   Future<void> uninstallTheme(String traceId, String id) async {
-    await WoxHttpUtil.instance.postData(traceId, "/theme/uninstall", {"id": id});
+    await WoxHttpUtil.instance.postData(traceId, "/theme/uninstall", {
+      "id": id,
+    });
   }
 
   Future<void> applyTheme(String traceId, String id) async {
@@ -90,7 +136,9 @@ class WoxApi {
   }
 
   Future<bool> isHotkeyAvailable(String traceId, String hotkey) async {
-    return await WoxHttpUtil.instance.postData(traceId, "/hotkey/available", {"hotkey": hotkey});
+    return await WoxHttpUtil.instance.postData(traceId, "/hotkey/available", {
+      "hotkey": hotkey,
+    });
   }
 
   Future<void> onUIReady(String traceId) async {
@@ -114,19 +162,35 @@ class WoxApi {
   }
 
   Future<WoxUsageStats> getUsageStats(String traceId) async {
-    return await WoxHttpUtil.instance.postData<WoxUsageStats>(traceId, "/usage/stats", {});
+    return await WoxHttpUtil.instance.postData<WoxUsageStats>(
+      traceId,
+      "/usage/stats",
+      {},
+    );
   }
 
-  Future<QueryMetadata> getQueryMetadata(String traceId, PlainQuery query) async {
-    return await WoxHttpUtil.instance.postData(traceId, "/query/metadata", {"query": query.toJson()});
+  Future<QueryMetadata> getQueryMetadata(
+    String traceId,
+    PlainQuery query,
+  ) async {
+    return await WoxHttpUtil.instance.postData(traceId, "/query/metadata", {
+      "query": query.toJson(),
+    });
   }
 
   Future<List<WoxLang>> getAllLanguages(String traceId) async {
     return await WoxHttpUtil.instance.postData(traceId, "/lang/available", {});
   }
 
-  Future<Map<String, String>> getLangJson(String traceId, String langCode) async {
-    var langJsonStr = await WoxHttpUtil.instance.postData(traceId, "/lang/json", {"langCode": langCode});
+  Future<Map<String, String>> getLangJson(
+    String traceId,
+    String langCode,
+  ) async {
+    var langJsonStr = await WoxHttpUtil.instance.postData(
+      traceId,
+      "/lang/json",
+      {"langCode": langCode},
+    );
 
     //unmarshal json string to map
     var jsonMap = json.decode(langJsonStr);
@@ -134,7 +198,9 @@ class WoxApi {
   }
 
   Future<void> onProtocolUrlReceived(String traceId, String deeplink) async {
-    await WoxHttpUtil.instance.postData(traceId, "/deeplink", {"deeplink": deeplink});
+    await WoxHttpUtil.instance.postData(traceId, "/deeplink", {
+      "deeplink": deeplink,
+    });
   }
 
   Future<List<AIModel>> findAIModels(String traceId) async {
@@ -145,16 +211,32 @@ class WoxApi {
     return await WoxHttpUtil.instance.postData(traceId, "/ai/providers", null);
   }
 
-  Future<String> pingAIModel(String traceId, String providerName, String apiKey, String host) async {
-    return await WoxHttpUtil.instance.postData(traceId, "/ai/ping", {"name": providerName, "apiKey": apiKey, "host": host});
+  Future<String> pingAIModel(
+    String traceId,
+    String providerName,
+    String apiKey,
+    String host,
+  ) async {
+    return await WoxHttpUtil.instance.postData(traceId, "/ai/ping", {
+      "name": providerName,
+      "apiKey": apiKey,
+      "host": host,
+    });
   }
 
-  Future<List<AIMCPTool>> findAIMCPServerTools(String traceId, dynamic data) async {
+  Future<List<AIMCPTool>> findAIMCPServerTools(
+    String traceId,
+    dynamic data,
+  ) async {
     return await WoxHttpUtil.instance.postData(traceId, "/ai/mcp/tools", data);
   }
 
   Future<List<AIMCPTool>> findAIMCPServerToolsAll(String traceId) async {
-    return await WoxHttpUtil.instance.postData(traceId, "/ai/mcp/tools/all", null);
+    return await WoxHttpUtil.instance.postData(
+      traceId,
+      "/ai/mcp/tools/all",
+      null,
+    );
   }
 
   Future<List<AIAgent>> findAIAgents(String traceId) async {
@@ -162,23 +244,41 @@ class WoxApi {
   }
 
   Future<AIModel> findDefaultAIModel(String traceId) async {
-    return await WoxHttpUtil.instance.postData(traceId, "/ai/model/default", null);
+    return await WoxHttpUtil.instance.postData(
+      traceId,
+      "/ai/model/default",
+      null,
+    );
   }
 
   Future<void> sendChatRequest(String traceId, WoxAIChatData data) async {
-    return await WoxHttpUtil.instance.postData(traceId, "/ai/chat", {"chatData": data.toJson()});
+    return await WoxHttpUtil.instance.postData(traceId, "/ai/chat", {
+      "chatData": data.toJson(),
+    });
   }
 
   Future<List<DoctorCheckResult>> doctorCheck(String traceId) async {
-    return await WoxHttpUtil.instance.postData<List<DoctorCheckResult>>(traceId, "/doctor/check", null);
+    return await WoxHttpUtil.instance.postData<List<DoctorCheckResult>>(
+      traceId,
+      "/doctor/check",
+      null,
+    );
   }
 
   Future<String> getUserDataLocation(String traceId) async {
-    return await WoxHttpUtil.instance.postData(traceId, "/setting/userdata/location", null);
+    return await WoxHttpUtil.instance.postData(
+      traceId,
+      "/setting/userdata/location",
+      null,
+    );
   }
 
   Future<void> updateUserDataLocation(String traceId, String location) async {
-    await WoxHttpUtil.instance.postData(traceId, "/setting/userdata/location/update", {"location": location});
+    await WoxHttpUtil.instance.postData(
+      traceId,
+      "/setting/userdata/location/update",
+      {"location": location},
+    );
   }
 
   Future<void> backupNow(String traceId) async {
@@ -206,11 +306,21 @@ class WoxApi {
   }
 
   Future<void> saveWindowPosition(String traceId, int x, int y) async {
-    await WoxHttpUtil.instance.postData(traceId, "/setting/position", {"x": x, "y": y});
+    await WoxHttpUtil.instance.postData(traceId, "/setting/position", {
+      "x": x,
+      "y": y,
+    });
   }
 
-  Future<void> toolbarSnooze(String traceId, String text, String duration) async {
-    await WoxHttpUtil.instance.postData(traceId, "/toolbar/snooze", {"text": text, "duration": duration});
+  Future<void> toolbarSnooze(
+    String traceId,
+    String text,
+    String duration,
+  ) async {
+    await WoxHttpUtil.instance.postData(traceId, "/toolbar/snooze", {
+      "text": text,
+      "duration": duration,
+    });
   }
 
   Future<WoxCloudSyncStatus> getCloudSyncStatus(String traceId) async {

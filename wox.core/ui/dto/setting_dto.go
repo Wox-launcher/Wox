@@ -38,4 +38,5 @@ type WoxSettingDto struct {
 	AppWidth       int
 	MaxResultCount int
 	ThemeId        string
+	AppFontFamily  string
 }
