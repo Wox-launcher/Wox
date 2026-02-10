@@ -5,6 +5,7 @@
 - Add
   - Add tray query feature. User can add custom queries to tray menu for quick access
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/tray_query.png)
+  - Add "App font family" setting to choose system font for Wox interface
 
 - Fix
   - [`File Explorer Search`] Fix an issue that file explorer search plugin cannot navigate on open/save dialog
