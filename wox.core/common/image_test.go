@@ -1,7 +1,12 @@
 package common
 
 import (
+	"bytes"
+	"encoding/base64"
 	"fmt"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"testing"
 	"wox/util"
 
@@ -38,4 +43,28 @@ func TestWoxImage_Emoji(t *testing.T) {
 	path := fmt.Sprintf("%s/%s.png", util.GetLocation().GetImageCacheDirectory(), uuid.NewString())
 	imaging.Save(img, path)
 	t.Log(path)
+}
+
+func TestWoxImage_ToImage_Base64JPEG(t *testing.T) {
+	src := image.NewRGBA(image.Rect(0, 0, 2, 2))
+	src.Set(0, 0, color.RGBA{R: 255, G: 0, B: 0, A: 255})
+	src.Set(1, 0, color.RGBA{R: 0, G: 255, B: 0, A: 255})
+	src.Set(0, 1, color.RGBA{R: 0, G: 0, B: 255, A: 255})
+	src.Set(1, 1, color.RGBA{R: 255, G: 255, B: 0, A: 255})
+
+	buf := bytes.NewBuffer(nil)
+	if err := jpeg.Encode(buf, src, &jpeg.Options{Quality: 90}); err != nil {
+		t.Fatalf("failed to encode jpeg: %v", err)
+	}
+
+	base64Jpeg := fmt.Sprintf("data:image/jpeg;base64,%s", base64.StdEncoding.EncodeToString(buf.Bytes()))
+	woxImage := NewWoxImageBase64(base64Jpeg)
+	img, err := woxImage.ToImage()
+	if err != nil {
+		t.Fatalf("expected jpeg base64 can be decoded, got err: %v", err)
+	}
+
+	if img.Bounds().Dx() != 2 || img.Bounds().Dy() != 2 {
+		t.Fatalf("unexpected image size: %dx%d", img.Bounds().Dx(), img.Bounds().Dy())
+	}
 }
