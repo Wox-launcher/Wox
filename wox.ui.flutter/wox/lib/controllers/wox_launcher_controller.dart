@@ -809,7 +809,7 @@ class WoxLauncherController extends GetxController {
     }
   }
 
-  void onQueryChanged(String traceId, PlainQuery query, String changeReason, {bool moveCursorToEnd = false}) {
+  Future<void> onQueryChanged(String traceId, PlainQuery query, String changeReason, {bool moveCursorToEnd = false}) async {
     Logger.instance.debug(traceId, "query changed: ${query.queryText}, reason: $changeReason");
 
     if (query.queryId == "") {
@@ -883,20 +883,29 @@ class WoxLauncherController extends GetxController {
     // and then the query result is received which will expand the windows height. so it will causes window flicker
     clearQueryResultsTimer.cancel();
 
-    // Adaptive: adjust clearQueryResultDelay based on recent resize flicker
-    // Note: clearQueryResultDelay may have been set by onRefreshQuery for longer delay
-    if (changeReason != "refresh query") {
-      final adjust = windowFlickerDetector.adjustClearDelay(clearQueryResultDelay);
-      clearQueryResultDelay = adjust.newDelay;
-      Logger.instance.debug(
-        const UuidV4().generate(),
-        "Adaptive clear delay: $clearQueryResultDelay ms (flicker=${adjust.status.flicker}, reason=${adjust.status.reason}, events=${adjust.status.events})",
-      );
-    }
-
-    clearQueryResultsTimer = Timer(Duration(milliseconds: clearQueryResultDelay), () {
+    // If app is hidden (e.g. tray query will trigger change query first then showapp), clear immediately so old results won't flash when shown.
+    final isVisible = await windowManager.isVisible();
+    if (!isVisible) {
       clearQueryResults(traceId);
-    });
+      Logger.instance.debug(traceId, "clear query results immediately because window is hidden");
+    } else {
+      // delay clear results, otherwise windows height will shrink immediately,
+      // and then the query result is received which will expand the windows height. so it will causes window flicker
+      // Adaptive: adjust clearQueryResultDelay based on recent resize flicker
+      // Note: clearQueryResultDelay may have been set by onRefreshQuery for longer delay
+      if (changeReason != "refresh query") {
+        final adjust = windowFlickerDetector.adjustClearDelay(clearQueryResultDelay);
+        clearQueryResultDelay = adjust.newDelay;
+        Logger.instance.debug(
+          const UuidV4().generate(),
+          "Adaptive clear delay: $clearQueryResultDelay ms (flicker=${adjust.status.flicker}, reason=${adjust.status.reason}, events=${adjust.status.events})",
+        );
+      }
+
+      clearQueryResultsTimer = Timer(Duration(milliseconds: clearQueryResultDelay), () {
+        clearQueryResults(traceId);
+      });
+    }
 
     // Record query start time for performance metrics
     queryStartTimeMap[traceId] = DateTime.now().millisecondsSinceEpoch;
@@ -1100,6 +1109,7 @@ class WoxLauncherController extends GetxController {
   }
 
   Future<void> clearQueryResults(String traceId) async {
+    Logger.instance.debug(traceId, "clear query results");
     resultListViewController.clearItems();
     resultGridViewController.clearItems();
     actionListViewController.clearItems();
