@@ -5,22 +5,30 @@ import 'package:gpt_markdown/custom_widgets/custom_error_image.dart';
 import 'package:gpt_markdown/custom_widgets/markdown_config.dart';
 import 'package:gpt_markdown/custom_widgets/unordered_ordered_list.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:wox/utils/colors.dart';
 
 class WoxMarkdownView extends StatelessWidget {
   final String data;
   final Color fontColor;
+  final double fontSize;
+  final Color? linkColor;
+  final Color? linkHoverColor;
+  final bool selectable;
 
-  const WoxMarkdownView({super.key, required this.fontColor, required this.data});
+  const WoxMarkdownView({super.key, required this.fontColor, required this.data, this.fontSize = 14, this.linkColor, this.linkHoverColor, this.selectable = true});
 
   @override
   Widget build(BuildContext context) {
-    const baseTextStyle = TextStyle(fontSize: 14);
+    final baseTextStyle = TextStyle(fontSize: fontSize);
     final fontTextStyle = baseTextStyle.copyWith(color: fontColor);
     final bool isDarkFont = fontColor.computeLuminance() < 0.5;
     final codeBackgroundColor = isDarkFont ? Colors.black.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.08);
     final codeTextStyle = fontTextStyle.copyWith(fontSize: 13, color: fontColor);
     final dividerColor = getThemeDividerColor();
+    final effectiveLinkColor = linkColor ?? fontColor;
+    final effectiveLinkHoverColor = linkHoverColor ?? fontColor.withValues(alpha: 0.85);
+
     final themeData = GptMarkdownThemeData(
       brightness: isDarkFont ? Brightness.light : Brightness.dark,
       highlightColor: codeBackgroundColor,
@@ -32,68 +40,75 @@ class WoxMarkdownView extends StatelessWidget {
       h6: baseTextStyle,
       hrLineThickness: 1.5,
       hrLineColor: dividerColor,
-      linkColor: fontColor,
-      linkHoverColor: fontColor.withValues(alpha: 0.85),
+      linkColor: effectiveLinkColor,
+      linkHoverColor: effectiveLinkHoverColor,
     );
 
     final normalizedData = normalizeMarkdownImages(data);
 
-    return DefaultTextStyle.merge(
-      style: fontTextStyle,
-      child: SelectionArea(
-        child: GptMarkdownTheme(
-          gptThemeData: themeData,
-          child: GptMarkdown(
-            normalizedData,
-            style: baseTextStyle,
-            textDirection: Directionality.of(context),
-            imageBuilder: (context, url) => buildImage(context, url),
-            inlineComponents: [
-              ATagMd(),
-              WoxImageMd(),
-              TableMd(),
-              StrikeMd(),
-              BoldMd(),
-              ItalicMd(),
-              UnderLineMd(),
-              LatexMath(),
-              LatexMathMultiLine(),
-              HighlightedText(),
-              SourceTag(),
-            ],
-            unOrderedListBuilder: (context, child, config) {
-              final itemText = child is MdWidget ? child.exp.trimLeft() : '';
-              if (RegExp(r'^\[(?:x|X| )\]\s+').hasMatch(itemText)) {
-                return UnorderedListView(padding: 0, spacing: 0, bulletSize: 0, textDirection: config.textDirection, child: child);
-              }
-              final bulletColor = config.style?.color ?? DefaultTextStyle.of(context).style.color;
-              final fontSize = config.style?.fontSize ?? DefaultTextStyle.of(context).style.fontSize ?? 14;
-              return UnorderedListView(bulletColor: bulletColor, padding: 7, spacing: 10, bulletSize: 0.3 * fontSize, textDirection: config.textDirection, child: child);
-            },
-            codeBuilder: (context, name, code, closed) {
-              final trimmedName = name.trim();
-              final borderRadius = BorderRadius.circular(closed ? 4 : 0);
-              return Container(
-                margin: const EdgeInsets.symmetric(vertical: 6),
-                decoration: BoxDecoration(color: codeBackgroundColor, borderRadius: borderRadius),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (trimmedName.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                        child: Text(trimmedName, style: codeTextStyle.copyWith(fontSize: 12, fontWeight: FontWeight.w600)),
-                      ),
-                    if (trimmedName.isNotEmpty) Divider(height: 1, color: dividerColor.withValues(alpha: 0.4)),
-                    SingleChildScrollView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.all(8), child: Text(code, style: codeTextStyle)),
-                  ],
-                ),
-              );
-            },
-          ),
-        ),
+    final markdownBody = GptMarkdownTheme(
+      gptThemeData: themeData,
+      child: GptMarkdown(
+        normalizedData,
+        style: baseTextStyle,
+        textDirection: Directionality.of(context),
+        linkBuilder: (context, text, url, style) {
+          TextSpan? span;
+          if (text is TextSpan) {
+            span = TextSpan(
+              text: text.text,
+              children: text.children,
+              style: (text.style ?? style).copyWith(decoration: TextDecoration.underline, decorationColor: (text.style?.color ?? style.color)),
+            );
+          }
+          final linkText = Text.rich(span ?? text, style: style);
+          final linkWidget = MouseRegion(cursor: SystemMouseCursors.click, child: linkText);
+          if (!selectable) {
+            return linkWidget;
+          }
+          return SelectionContainer.disabled(child: linkWidget);
+        },
+        onLinkTap: (String url, String title) {
+          final uri = Uri.tryParse(url);
+          if (uri != null) {
+            launchUrl(uri);
+          }
+        },
+        imageBuilder: (context, url) => buildImage(context, url),
+        inlineComponents: [ATagMd(), WoxImageMd(), TableMd(), StrikeMd(), BoldMd(), ItalicMd(), UnderLineMd(), LatexMath(), LatexMathMultiLine(), HighlightedText(), SourceTag()],
+        unOrderedListBuilder: (context, child, config) {
+          final itemText = child is MdWidget ? child.exp.trimLeft() : '';
+          if (RegExp(r'^\[(?:x|X| )\]\s+').hasMatch(itemText)) {
+            return UnorderedListView(padding: 0, spacing: 0, bulletSize: 0, textDirection: config.textDirection, child: child);
+          }
+          final bulletColor = config.style?.color ?? DefaultTextStyle.of(context).style.color;
+          final fontSize = config.style?.fontSize ?? DefaultTextStyle.of(context).style.fontSize ?? 14;
+          return UnorderedListView(bulletColor: bulletColor, padding: 7, spacing: 10, bulletSize: 0.3 * fontSize, textDirection: config.textDirection, child: child);
+        },
+        codeBuilder: (context, name, code, closed) {
+          final trimmedName = name.trim();
+          final borderRadius = BorderRadius.circular(closed ? 4 : 0);
+          return Container(
+            margin: const EdgeInsets.symmetric(vertical: 6),
+            decoration: BoxDecoration(color: codeBackgroundColor, borderRadius: borderRadius),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (trimmedName.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    child: Text(trimmedName, style: codeTextStyle.copyWith(fontSize: 12, fontWeight: FontWeight.w600)),
+                  ),
+                if (trimmedName.isNotEmpty) Divider(height: 1, color: dividerColor.withValues(alpha: 0.4)),
+                SingleChildScrollView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.all(8), child: Text(code, style: codeTextStyle)),
+              ],
+            ),
+          );
+        },
       ),
     );
+
+    return DefaultTextStyle.merge(style: fontTextStyle, child: selectable ? SelectionArea(child: markdownBody) : markdownBody);
   }
 
   String normalizeMarkdownImages(String input) {
