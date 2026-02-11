@@ -256,7 +256,29 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     return Text("Unknown column type: ${column.type}");
   }
 
+  /// Find the index of a row in [freshRows] that matches [originalRow] by comparing
+  /// all fields except the unique row ID key.
+  int _findRowIndex(List<dynamic> freshRows, Map<String, dynamic> originalRow) {
+    for (var i = 0; i < freshRows.length; i++) {
+      var candidate = freshRows[i] as Map<String, dynamic>;
+      bool match = true;
+      for (var key in originalRow.keys) {
+        if (key == rowUniqueIdKey) continue;
+        if ('${candidate[key]}' != '${originalRow[key]}') {
+          match = false;
+          break;
+        }
+      }
+      if (match) return i;
+    }
+    return -1;
+  }
+
   DataCell buildOperationCell(context, row, rows) {
+    // Deep-copy snapshot to avoid sharing nested List/Map references with update dialog state
+    final originalRow = json.decode(json.encode(row)) as Map<String, dynamic>;
+    originalRow.remove(rowUniqueIdKey);
+
     return DataCell(
       SizedBox(
         width: operationWidth,
@@ -277,23 +299,24 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                       row: row,
                       onUpdateValidate: onUpdateValidate,
                       onUpdate: (key, value) async {
+                        // Re-read the latest rows from the current setting value
+                        // to avoid using stale closure-captured data
                         var rowsJson = getSetting(key);
                         if (rowsJson == "") {
                           rowsJson = "[]";
                         }
-                        for (var i = 0; i < rows.length; i++) {
-                          if (rows[i][rowUniqueIdKey] == value[rowUniqueIdKey]) {
-                            rows[i] = value;
-                            break;
-                          }
+                        var freshRows = json.decode(rowsJson) as List<dynamic>;
+
+                        // Find the target row in fresh data by matching original field values
+                        var idx = _findRowIndex(freshRows, originalRow);
+                        if (idx >= 0) {
+                          // Remove the unique key from the updated value before saving
+                          var updatedRow = Map<String, dynamic>.from(value);
+                          updatedRow.remove(rowUniqueIdKey);
+                          freshRows[idx] = updatedRow;
                         }
 
-                        //remove the unique key
-                        rows.forEach((element) {
-                          element.remove(rowUniqueIdKey);
-                        });
-
-                        updateConfig(key, json.encode(rows));
+                        updateConfig(key, json.encode(freshRows));
                       },
                     );
                   },
@@ -331,17 +354,20 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                               onPressed: () {
                                 Navigator.pop(context);
 
+                                // Re-read the latest rows from the current setting value
                                 var rowsJson = getSetting(item.key);
                                 if (rowsJson == "") {
                                   rowsJson = "[]";
                                 }
-                                rows.removeWhere((element) => element[rowUniqueIdKey] == row[rowUniqueIdKey]);
+                                var freshRows = json.decode(rowsJson) as List<dynamic>;
 
-                                //remove the unique key
-                                rows.forEach((element) {
-                                  element.remove(rowUniqueIdKey);
-                                });
-                                updateConfig(item.key, json.encode(rows));
+                                // Find and remove the target row by matching original field values
+                                var idx = _findRowIndex(freshRows, originalRow);
+                                if (idx >= 0) {
+                                  freshRows.removeAt(idx);
+                                }
+
+                                updateConfig(item.key, json.encode(freshRows));
                               },
                             ),
                           ],
