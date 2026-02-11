@@ -9,6 +9,7 @@
 
 - Fix
   - [`File Explorer Search`] Fix an issue that file explorer search plugin cannot navigate on open/save dialog
+  - Fix an issue that Wox setting can't be saved sometimes
 
 ## v2.0.0 - 2026-02-09
 
