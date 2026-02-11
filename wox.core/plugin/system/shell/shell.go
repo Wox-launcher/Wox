@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -12,6 +14,7 @@ import (
 	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
+	"wox/plugin/system/shell/terminal"
 	"wox/setting/definition"
 	"wox/util"
 	shellutil "wox/util/shell"
@@ -22,6 +25,11 @@ import (
 const (
 	shellInterpreterSettingKey = "shell_interpreter"
 	shellCommandsSettingKey    = "shellCommands"
+	shellActionSessionIDKey    = "session_id"
+	shellActionHistoryIDKey    = "history_id"
+	shellActionCommandKey      = "command"
+	shellActionInterpreterKey  = "interpreter"
+	shellOutputSummaryMaxBytes = 64 * 1024
 )
 
 var shellIcon = common.PluginShellIcon
@@ -31,10 +39,13 @@ func init() {
 }
 
 type ShellPlugin struct {
-	api            plugin.API
-	historyManager *ShellHistoryManager
-	// Map to store execution states by result ID
-	executionStates sync.Map // map[string]*shellExecutionState
+	api             plugin.API
+	historyManager  *ShellHistoryManager
+	terminalManager *terminal.Manager
+	// map[session_id]*shellExecutionState
+	executionStates sync.Map
+	// map[result_id]session_id
+	resultSessions sync.Map
 }
 
 type shellContextData struct {
@@ -52,7 +63,8 @@ type shellCommand struct {
 }
 
 type shellExecutionState struct {
-	output         strings.Builder
+	sessionID      string
+	summaryOutput  string
 	isRunning      bool
 	isFinished     bool
 	isKilledByUser bool // true if command was killed by user action
@@ -90,7 +102,7 @@ func (s *ShellPlugin) GetMetadata() plugin.Metadata {
 			{
 				Name: plugin.MetadataFeatureResultPreviewWidthRatio,
 				Params: map[string]any{
-					"WidthRatio": 0.25,
+					"WidthRatio": 0.3,
 				},
 			},
 			{
@@ -192,6 +204,7 @@ func getInterpreterOptions() []definition.PluginSettingValueSelectOption {
 func (s *ShellPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	s.api = initParams.API
 	s.historyManager = NewShellHistoryManager()
+	s.terminalManager = terminal.GetSessionManager()
 
 	// Initialize history table
 	err := s.historyManager.Init(ctx)
@@ -236,12 +249,35 @@ func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string) []pl
 
 	var results []plugin.QueryResult
 	for _, history := range histories {
+		history := history
 		s.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("History: %s, created_at:%s", history.Command, history.CreatedAt.String()))
 
-		// Check if running status is still valid (process might have died)
-		// This handles cases where Wox was restarted or process died unexpectedly
-		if history.Status == "running" {
-			// Mark as failed since we can't track the process anymore
+		runtimeSessionID := history.SessionID
+		hasRuntimeSession := runtimeSessionID != ""
+		if history.Status == "running" && hasRuntimeSession {
+			runtimeState, ok := s.terminalManager.GetState(runtimeSessionID)
+			if !ok {
+				history.Status = "failed"
+				history.ExitCode = -1
+				history.EndTime = util.GetSystemTimestamp()
+				history.Duration = history.EndTime - history.StartTime
+				err := s.historyManager.UpdateStatus(ctx, history.ID, "failed", -1, history.EndTime, history.Duration)
+				if err != nil {
+					s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to update history status: %s", err.Error()))
+				}
+			} else if runtimeState.Status != terminal.SessionStatusRunning {
+				history.Status = string(runtimeState.Status)
+				history.ExitCode = runtimeState.ExitCode
+				history.EndTime = runtimeState.EndTime
+				history.Duration = history.EndTime - history.StartTime
+				err := s.historyManager.UpdateStatus(ctx, history.ID, history.Status, history.ExitCode, history.EndTime, history.Duration)
+				if err != nil {
+					s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to update history status: %s", err.Error()))
+				}
+			}
+		}
+		if history.Status == "running" && !hasRuntimeSession {
+			// Running record without runtime means this command is stale.
 			history.Status = "failed"
 			history.ExitCode = -1
 			history.EndTime = util.GetSystemTimestamp()
@@ -252,38 +288,8 @@ func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string) []pl
 			}
 		}
 
-		// Format status for subtitle (simple)
-		var statusIcon string
-		var statusText string
-		switch history.Status {
-		case "completed":
-			statusIcon = "✅"
-			statusText = i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_success")
-		case "failed":
-			statusIcon = "❌"
-			statusText = i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_failed")
-		case "killed":
-			statusIcon = "🛑"
-			statusText = i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_killed")
-		default:
-			statusIcon = "⏱️"
-			statusText = i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_running")
-		}
-
-		subtitle := fmt.Sprintf("%s %s", statusIcon, statusText)
-
-		// Build preview properties with detailed information
-		previewProperties := map[string]string{
-			i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_status"):      statusText,
-			i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_interpreter"): history.Interpreter,
-			i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_duration"):    s.formatDuration(history.Duration),
-			i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_start_time"):  time.Unix(history.StartTime/1000, 0).Format("2006-01-02 15:04:05"),
-		}
-
-		// Add exit code for completed/failed commands
-		if history.Status == "completed" || history.Status == "failed" {
-			previewProperties[i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_exit_code")] = fmt.Sprintf("%d", history.ExitCode)
-		}
+		title := s.buildSessionTitle(ctx, history.Command, history.Status)
+		subTitle := time.Unix(history.StartTime/1000, 0).Format("2006-01-02 15:04:05")
 
 		// Build actions based on status
 		var actions []plugin.QueryResultAction
@@ -294,31 +300,20 @@ func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string) []pl
 			Name:                   "i18n:plugin_shell_reexecute",
 			Icon:                   common.UpdateIcon,
 			PreventHideAfterAction: true,
+			ContextData:            s.buildActionContextData(history.SessionID, history.ID, history.Command, interpreter),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				// Toggle: if running then stop; otherwise re-execute
-				if stateVal, ok := s.executionStates.Load(actionContext.ResultId); ok {
-					state := stateVal.(*shellExecutionState)
-					state.mutex.Lock()
-					if state.isRunning && state.cmd != nil && state.cmd.Process != nil {
-						state.isKilledByUser = true
-						state.cmd.Process.Kill()
-						s.api.Log(ctx, plugin.LogLevelInfo, "Command killed by user via re-execute toggle")
-						state.mutex.Unlock()
-						return
-					}
-					state.mutex.Unlock()
+				if s.stopSessionByHistoryID(ctx, history.ID) {
+					return
 				}
-				// Start execution
+
 				contextData := shellContextData{
 					Command:     history.Command,
 					Interpreter: interpreter,
 					HistoryID:   history.ID,
 					FromHistory: true,
 				}
-				executionState := &shellExecutionState{}
-				s.executionStates.Store(actionContext.ResultId, executionState)
 				util.Go(ctx, "re-execute shell command from history", func() {
-					s.executeCommandWithUpdateResult(ctx, actionContext.ResultId, contextData, executionState)
+					s.executeCommandWithUpdateResult(ctx, actionContext.ResultId, contextData)
 				})
 			},
 		})
@@ -330,29 +325,45 @@ func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string) []pl
 				Name:                   "i18n:plugin_shell_stop",
 				Icon:                   common.TerminateAppIcon,
 				PreventHideAfterAction: true,
+				ContextData:            s.buildActionContextData(history.SessionID, history.ID, history.Command, interpreter),
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					if stateVal, ok := s.executionStates.Load(actionContext.ResultId); ok {
-						state := stateVal.(*shellExecutionState)
-						state.mutex.Lock()
-						if state.cmd != nil && state.cmd.Process != nil {
-							state.isKilledByUser = true // Mark as killed by user
-							state.cmd.Process.Kill()
-							s.api.Log(ctx, plugin.LogLevelInfo, "Command killed by user")
-						}
-						state.mutex.Unlock()
-					}
+					s.stopSessionByHistoryID(ctx, history.ID)
 				},
 			})
 		}
 
+		actions = append(actions, plugin.QueryResultAction{
+			Id:                     "delete",
+			Name:                   "i18n:plugin_shell_delete",
+			Icon:                   common.TrashIcon,
+			PreventHideAfterAction: true,
+			ContextData:            s.buildActionContextData(history.SessionID, history.ID, history.Command, interpreter),
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				util.Go(ctx, "delete shell session from history", func() {
+					if err := s.deleteSessionResources(ctx, history.ID, history.SessionID, actionContext.ResultId); err != nil {
+						s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to delete shell session(history=%s): %s", history.ID, err.Error()))
+						return
+					}
+					s.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: false})
+				})
+			},
+		})
+
+		previewType := plugin.WoxPreviewTypeText
+		previewData := history.OutputSummary
+		if hasRuntimeSession {
+			previewType = plugin.WoxPreviewTypeTerminal
+			previewData = s.buildTerminalPreviewData(runtimeSessionID, history.Command, history.Status)
+		}
+
 		results = append(results, plugin.QueryResult{
-			Title:    history.Command,
-			SubTitle: subtitle,
+			Title:    title,
+			SubTitle: subTitle,
 			Icon:     shellIcon,
 			Preview: plugin.WoxPreview{
-				PreviewType:       plugin.WoxPreviewTypeText,
-				PreviewData:       history.Output,
-				PreviewProperties: previewProperties,
+				PreviewType:       previewType,
+				PreviewData:       previewData,
+				PreviewProperties: map[string]string{},
 			},
 			Actions: actions,
 		})
@@ -409,10 +420,11 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 					Icon:                   common.CorrectIcon,
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						executionState := &shellExecutionState{}
-						s.executionStates.Store(actionContext.ResultId, executionState)
+						if s.stopSessionByResultID(ctx, actionContext.ResultId) {
+							return
+						}
 						util.Go(ctx, "execute shell command", func() {
-							s.executeCommandWithUpdateResult(ctx, actionContext.ResultId, contextData, executionState)
+							s.executeCommandWithUpdateResult(ctx, actionContext.ResultId, contextData)
 						})
 					},
 				},
@@ -434,16 +446,7 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 					Icon:                   common.TerminateAppIcon,
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						if stateVal, ok := s.executionStates.Load(actionContext.ResultId); ok {
-							state := stateVal.(*shellExecutionState)
-							state.mutex.Lock()
-							if state.cmd != nil && state.cmd.Process != nil {
-								state.isKilledByUser = true // Mark as killed by user
-								state.cmd.Process.Kill()
-								s.api.Log(ctx, plugin.LogLevelInfo, "Command killed by user")
-							}
-							state.mutex.Unlock()
-						}
+						s.stopSessionByResultID(ctx, actionContext.ResultId)
 					},
 				},
 				{
@@ -452,10 +455,26 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 					Icon:                   common.UpdateIcon,
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						executionState := &shellExecutionState{}
-						s.executionStates.Store(actionContext.ResultId, executionState)
+						if s.stopSessionByResultID(ctx, actionContext.ResultId) {
+							return
+						}
 						util.Go(ctx, "re-execute shell command", func() {
-							s.executeCommandWithUpdateResult(ctx, actionContext.ResultId, contextData, executionState)
+							s.executeCommandWithUpdateResult(ctx, actionContext.ResultId, contextData)
+						})
+					},
+				},
+				{
+					Id:                     "delete",
+					Name:                   "i18n:plugin_shell_delete",
+					Icon:                   common.TrashIcon,
+					PreventHideAfterAction: true,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						util.Go(ctx, "delete shell session from current result", func() {
+							if err := s.deleteSessionByActionContext(ctx, actionContext); err != nil {
+								s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to delete shell session(result=%s): %s", actionContext.ResultId, err.Error()))
+								return
+							}
+							s.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: false})
 						})
 					},
 				},
@@ -591,116 +610,122 @@ func (s *ShellPlugin) queryCommands(ctx context.Context, query plugin.Query, int
 	return results
 }
 
-// executeCommandWithUpdateResult executes a shell command and uses UpdateResult API to push updates
-func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, resultId string, data shellContextData, state *shellExecutionState) {
+// executeCommandWithUpdateResult executes a shell command and updates metadata via UpdateResult.
+func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, resultId string, data shellContextData) {
 	s.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Executing shell command: %s with interpreter: %s", data.Command, data.Interpreter))
 
-	// Helper function to update the result UI
-	updateUI := func(subtitle, previewData string, previewProperties map[string]string, actionName *string, actionIcon *common.WoxImage) bool {
+	session, err := s.terminalManager.CreateSession(ctx, terminal.CreateSessionParams{
+		Command:     data.Command,
+		Interpreter: data.Interpreter,
+	})
+	if err != nil {
+		s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to create terminal session: %s", err.Error()))
+		return
+	}
+
+	startTs := util.GetSystemTimestamp()
+	historyID := data.HistoryID
+	if data.FromHistory && data.HistoryID != "" {
+		if resetErr := s.historyManager.ResetForReexecute(ctx, data.HistoryID, session.ID, data.Command, data.Interpreter, startTs, session.OutputPath); resetErr != nil {
+			s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to reset shell history for re-execute (id=%s): %s", data.HistoryID, resetErr.Error()))
+			historyID = ""
+		}
+	}
+	if historyID == "" {
+		historyID = uuid.NewString()
+		createErr := s.historyManager.Create(ctx, &ShellHistory{
+			ID:            historyID,
+			SessionID:     session.ID,
+			Command:       data.Command,
+			Interpreter:   data.Interpreter,
+			Status:        "running",
+			StartTime:     startTs,
+			OutputSummary: "",
+			OutputPath:    session.OutputPath,
+		})
+		if createErr != nil {
+			s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to create shell history: %s", createErr.Error()))
+		}
+	}
+
+	cmd := s.buildCommand(ctx, data.Interpreter, data.Command)
+	setCommandProcessGroup(cmd)
+
+	state := &shellExecutionState{
+		sessionID: session.ID,
+		isRunning: true,
+		startTime: time.Now(),
+		cmd:       cmd,
+	}
+	s.executionStates.Store(session.ID, state)
+	s.resultSessions.Store(resultId, session.ID)
+	s.terminalManager.SetState(ctx, session.ID, terminal.SessionStatusRunning, 0, "")
+
+	updateUI := func() bool {
+		state.mutex.RLock()
+		isRunning := state.isRunning
+		startTime := state.startTime
+		exitCode := state.exitCode
+		state.mutex.RUnlock()
+
+		var status string
+		if isRunning {
+			status = "running"
+		} else if exitCode == 0 {
+			status = "completed"
+		} else if exitCode == -1 {
+			status = "killed"
+		} else {
+			status = "failed"
+		}
+		title := s.buildSessionTitle(ctx, data.Command, status)
+		subTitle := startTime.Format("2006-01-02 15:04:05")
+
 		preview := plugin.WoxPreview{
-			PreviewType:       plugin.WoxPreviewTypeText,
-			PreviewData:       previewData,
-			PreviewProperties: previewProperties,
+			PreviewType:       plugin.WoxPreviewTypeTerminal,
+			PreviewData:       s.buildTerminalPreviewData(session.ID, data.Command, status),
+			PreviewProperties: map[string]string{},
 			ScrollPosition:    plugin.WoxPreviewScrollPositionBottom,
 		}
 
-		UpdatableResult := plugin.UpdatableResult{
+		updatable := plugin.UpdatableResult{
 			Id:       resultId,
-			SubTitle: &subtitle,
+			Title:    &title,
+			SubTitle: &subTitle,
 			Preview:  &preview,
 		}
 
-		// Update action if provided
-		if actionName != nil && actionIcon != nil {
-			// Get current result to update actions
-			currentResult := s.api.GetUpdatableResult(ctx, resultId)
-			if currentResult != nil && currentResult.Actions != nil {
-				// Update the first action (reexecute/stop action)
-				actions := *currentResult.Actions
-				if len(actions) > 0 {
-					actions[0].Name = *actionName
-					actions[0].Icon = *actionIcon
+		currentResult := s.api.GetUpdatableResult(ctx, resultId)
+		if currentResult != nil && currentResult.Actions != nil {
+			actions := *currentResult.Actions
+			for i := range actions {
+				if actions[i].ContextData == nil {
+					actions[i].ContextData = map[string]string{}
 				}
-				UpdatableResult.Actions = &actions
+				actions[i].ContextData[shellActionSessionIDKey] = session.ID
+				actions[i].ContextData[shellActionHistoryIDKey] = historyID
+				actions[i].ContextData[shellActionCommandKey] = data.Command
+				actions[i].ContextData[shellActionInterpreterKey] = data.Interpreter
 			}
+			if len(actions) > 0 {
+				if isRunning {
+					actions[0].Name = i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_stop")
+					actions[0].Icon = common.TerminateAppIcon
+				} else {
+					actions[0].Name = i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_reexecute")
+					actions[0].Icon = common.UpdateIcon
+				}
+			}
+			updatable.Actions = &actions
 		}
 
-		success := s.api.UpdateResult(ctx, UpdatableResult)
-		s.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("UpdateResult called for %s, success: %v, preview length: %d", resultId, success, len(previewData)))
-		return success
+		return s.api.UpdateResult(ctx, updatable)
 	}
 
-	// Build command based on interpreter
-	var cmd *exec.Cmd
-	switch data.Interpreter {
-	case "powershell":
-		cmd = shellutil.BuildCommandContext(ctx, "powershell", nil, "-Command", data.Command)
-	case "cmd":
-		cmd = shellutil.BuildCommandContext(ctx, "cmd", nil, "/C", data.Command)
-	case "bash":
-		cmd = shellutil.BuildCommandContext(ctx, "bash", nil, "-c", data.Command)
-	case "zsh":
-		cmd = shellutil.BuildCommandContext(ctx, "zsh", nil, "-c", data.Command)
-	case "sh":
-		cmd = shellutil.BuildCommandContext(ctx, "sh", nil, "-c", data.Command)
-	case "python", "python3":
-		cmd = shellutil.BuildCommandContext(ctx, data.Interpreter, nil, "-c", data.Command)
-	case "node":
-		cmd = shellutil.BuildCommandContext(ctx, "node", nil, "-e", data.Command)
-	default:
-		cmd = shellutil.BuildCommandContext(ctx, data.Interpreter, nil, "-c", data.Command)
-	}
-
-	// Prepare or reuse history record
-	startTs := util.GetSystemTimestamp()
-	var historyID string
-	if data.FromHistory && data.HistoryID != "" {
-		// Reset existing record instead of creating a new one
-		if err := s.historyManager.ResetForReexecute(ctx, data.HistoryID, data.Command, data.Interpreter, startTs); err != nil {
-			s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to reset shell history for re-execute (id=%s), fallback to create new: %s", data.HistoryID, err.Error()))
-			// Fallback: create a new record
-			historyID = uuid.NewString()
-			historyRecord := &ShellHistory{
-				ID:          historyID,
-				Command:     data.Command,
-				Interpreter: data.Interpreter,
-				Status:      "running",
-				StartTime:   startTs,
-			}
-			if err := s.historyManager.Create(ctx, historyRecord); err != nil {
-				s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to create shell history: %s", err.Error()))
-			}
-		} else {
-			// Success: reuse existing record
-			historyID = data.HistoryID
-		}
-	} else {
-		// Fresh execution: create a new record
-		historyID = uuid.NewString()
-		historyRecord := &ShellHistory{
-			ID:          historyID,
-			Command:     data.Command,
-			Interpreter: data.Interpreter,
-			Status:      "running",
-			StartTime:   startTs,
-		}
-		if err := s.historyManager.Create(ctx, historyRecord); err != nil {
-			s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to create shell history: %s", err.Error()))
-		}
-	}
-
-	// Start history tracker for periodic output saving
-	tracker := newShellHistoryTracker(s.historyManager, historyID, state)
+	tracker := newShellHistoryTracker(s.historyManager, historyID, state, session.OutputPath)
 	tracker.start(ctx)
+	_ = updateUI()
 
-	// Mark as running and save cmd
-	state.mutex.Lock()
-	state.isRunning = true
-	state.startTime = time.Now()
-	state.cmd = cmd
-	state.mutex.Unlock()
-
-	// Get stdout and stderr pipes
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		state.mutex.Lock()
@@ -708,19 +733,13 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 		state.isRunning = false
 		state.isFinished = true
 		state.endTime = time.Now()
+		state.exitCode = 1
 		state.mutex.Unlock()
-
-		// Update UI with error
-		updateUI(
-			"❌ "+i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_failed"),
-			fmt.Sprintf("$ %s\n\n❌ Error:\n%s", data.Command, state.errorMessage),
-			nil,
-			nil,
-			nil,
-		)
+		s.terminalManager.SetState(ctx, session.ID, terminal.SessionStatusFailed, 1, err.Error())
+		tracker.stop(ctx, "failed", 1)
+		_ = updateUI()
 		return
 	}
-
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		state.mutex.Lock()
@@ -728,20 +747,14 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 		state.isRunning = false
 		state.isFinished = true
 		state.endTime = time.Now()
+		state.exitCode = 1
 		state.mutex.Unlock()
-
-		// Update UI with error
-		updateUI(
-			"❌ "+i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_failed"),
-			fmt.Sprintf("$ %s\n\n❌ Error:\n%s", data.Command, state.errorMessage),
-			nil,
-			nil,
-			nil,
-		)
+		s.terminalManager.SetState(ctx, session.ID, terminal.SessionStatusFailed, 1, err.Error())
+		tracker.stop(ctx, "failed", 1)
+		_ = updateUI()
 		return
 	}
 
-	// Start command
 	if err := cmd.Start(); err != nil {
 		state.mutex.Lock()
 		state.errorMessage = fmt.Sprintf("Failed to start command: %s", err.Error())
@@ -750,227 +763,81 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 		state.endTime = time.Now()
 		state.exitCode = 1
 		state.mutex.Unlock()
-
-		// Update UI with error
-		updateUI(
-			"❌ "+i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_failed"),
-			fmt.Sprintf("$ %s\n\n❌ Error:\n%s", data.Command, state.errorMessage),
-			nil,
-			nil,
-			nil,
-		)
-
-		// Stop tracker and save failed state
+		s.terminalManager.SetState(ctx, session.ID, terminal.SessionStatusFailed, 1, err.Error())
 		tracker.stop(ctx, "failed", 1)
+		_ = updateUI()
 		return
 	}
 
-	// Start a goroutine to periodically update UI while running
 	stopUpdater := make(chan struct{})
-	util.Go(ctx, "shell command UI updater", func() {
-		ticker := time.NewTicker(100 * time.Millisecond)
+	util.Go(ctx, "shell command metadata updater", func() {
+		ticker := time.NewTicker(250 * time.Millisecond)
 		defer ticker.Stop()
-
 		for {
 			select {
 			case <-stopUpdater:
 				return
 			case <-ticker.C:
-				state.mutex.RLock()
-				if !state.isRunning {
-					state.mutex.RUnlock()
-					return
-				}
-
-				elapsed := time.Since(state.startTime)
-				output := state.output.String()
-				state.mutex.RUnlock()
-
-				// Build preview
-				var previewBuilder strings.Builder
-				previewBuilder.WriteString(fmt.Sprintf("$ %s\n\n", data.Command))
-				previewBuilder.WriteString(fmt.Sprintf("⏱️ Running... (%.1fs)\n\n", elapsed.Seconds()))
-				if output != "" {
-					previewBuilder.WriteString(output)
-				}
-
-				// Build properties
-				previewProperties := map[string]string{
-					i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_status"):      i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_running"),
-					i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_interpreter"): data.Interpreter,
-					i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_duration"):    fmt.Sprintf("%.1fs", elapsed.Seconds()),
-					i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_start_time"):  state.startTime.Format("2006-01-02 15:04:05"),
-				}
-
-				// Build action name and icon (Stop action)
-				actionName := i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_stop")
-				actionIcon := common.TerminateAppIcon
-
-				// Update UI - if it fails, just stop updating UI but let the command continue
-				if !updateUI(
-					"⏱️ "+i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_running"),
-					previewBuilder.String(),
-					previewProperties,
-					&actionName,
-					&actionIcon,
-				) {
-					// Result no longer visible in UI, stop updating but let command continue
-					s.api.Log(ctx, plugin.LogLevelInfo, "Result no longer visible, stopping UI updates but command continues")
+				if !updateUI() {
 					return
 				}
 			}
 		}
 	})
 
-	// Read output in real-time
 	var wg sync.WaitGroup
 	wg.Add(2)
 
-	// Read stdout
 	go func() {
 		defer wg.Done()
-		scanner := bufio.NewScanner(stdout)
-		for scanner.Scan() {
-			line := scanner.Text()
-			state.mutex.Lock()
-			state.output.WriteString(line)
-			state.output.WriteString("\n")
-			state.mutex.Unlock()
-		}
+		s.pipeOutputToSession(ctx, stdout, state)
 	}()
-
-	// Read stderr
 	go func() {
 		defer wg.Done()
-		scanner := bufio.NewScanner(stderr)
-		for scanner.Scan() {
-			line := scanner.Text()
-			state.mutex.Lock()
-			state.output.WriteString(line)
-			state.output.WriteString("\n")
-			state.mutex.Unlock()
-		}
+		s.pipeOutputToSession(ctx, stderr, state)
 	}()
 
-	// Wait for output reading to complete
+	waitErr := cmd.Wait()
 	wg.Wait()
-
-	// Wait for command to finish
-	err = cmd.Wait()
-
-	// Stop the UI updater
 	close(stopUpdater)
 
-	// Update state
 	state.mutex.Lock()
 	state.isRunning = false
 	state.isFinished = true
 	state.endTime = time.Now()
 
-	var historyStatus string
-	var statusIcon string
-	var statusText string
-
-	// Check if command was killed by user
+	historyStatus := "completed"
+	terminalStatus := terminal.SessionStatusCompleted
 	if state.isKilledByUser {
 		state.exitCode = -1
 		historyStatus = "killed"
-		statusIcon = "🛑"
-		statusText = i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_killed")
-		s.api.Log(ctx, plugin.LogLevelInfo, "Command killed by user")
-	} else if err != nil {
-		// Command failed naturally
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		terminalStatus = terminal.SessionStatusKilled
+	} else if waitErr != nil {
+		historyStatus = "failed"
+		terminalStatus = terminal.SessionStatusFailed
+		if exitErr, ok := waitErr.(*exec.ExitError); ok {
 			state.exitCode = exitErr.ExitCode()
 		} else {
 			state.exitCode = 1
-			state.errorMessage = err.Error()
+			state.errorMessage = waitErr.Error()
 		}
-		historyStatus = "failed"
-		statusIcon = "❌"
-		statusText = i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_failed")
-		s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Command failed: %s", err.Error()))
 	} else {
-		// Command completed successfully
 		state.exitCode = 0
-		historyStatus = "completed"
-		statusIcon = "✅"
-		statusText = i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_success")
-		s.api.Log(ctx, plugin.LogLevelInfo, "Command completed successfully")
 	}
 	exitCode := state.exitCode
-	duration := state.endTime.Sub(state.startTime)
-	output := state.output.String()
-	errorMessage := state.errorMessage
+	errMsg := state.errorMessage
 	state.mutex.Unlock()
 
-	// Stop history tracker and save final state
+	s.terminalManager.SetState(ctx, session.ID, terminalStatus, exitCode, errMsg)
 	tracker.stop(ctx, historyStatus, exitCode)
-
-	// Build final preview
-	var previewBuilder strings.Builder
-	previewBuilder.WriteString(fmt.Sprintf("$ %s\n\n", data.Command))
-	if exitCode == 0 {
-		previewBuilder.WriteString(fmt.Sprintf("✅ Completed in %.2fs\n\n", duration.Seconds()))
-	} else {
-		previewBuilder.WriteString(fmt.Sprintf("❌ Failed with exit code %d (%.2fs)\n\n", exitCode, duration.Seconds()))
-	}
-	if output != "" {
-		previewBuilder.WriteString(output)
-	} else {
-		previewBuilder.WriteString(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_no_output"))
-	}
-	if errorMessage != "" {
-		previewBuilder.WriteString("\n\n❌ Error:\n")
-		previewBuilder.WriteString(errorMessage)
-	}
-
-	// Build final properties
-	previewProperties := map[string]string{
-		i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_status"):      statusText,
-		i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_interpreter"): data.Interpreter,
-		i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_duration"):    fmt.Sprintf("%.2fs", duration.Seconds()),
-		i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_start_time"):  state.startTime.Format("2006-01-02 15:04:05"),
-		i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_exit_code"):   fmt.Sprintf("%d", exitCode),
-	}
-
-	// Build final action name and icon (Re-execute action)
-	actionName := i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_reexecute")
-	actionIcon := common.UpdateIcon
-
-	// Final UI update
-	updateUI(
-		statusIcon+" "+statusText,
-		previewBuilder.String(),
-		previewProperties,
-		&actionName,
-		&actionIcon,
-	)
+	_ = updateUI()
 }
 
 func (s *ShellPlugin) executeCommandInBackground(ctx context.Context, data shellContextData) {
 	s.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Executing shell command in background: %s with interpreter: %s", data.Command, data.Interpreter))
 
-	// Build command based on interpreter
-	var cmd *exec.Cmd
-	switch data.Interpreter {
-	case "powershell":
-		cmd = shellutil.BuildCommandContext(ctx, "powershell", nil, "-Command", data.Command)
-	case "cmd":
-		cmd = shellutil.BuildCommandContext(ctx, "cmd", nil, "/C", data.Command)
-	case "bash":
-		cmd = shellutil.BuildCommandContext(ctx, "bash", nil, "-c", data.Command)
-	case "zsh":
-		cmd = shellutil.BuildCommandContext(ctx, "zsh", nil, "-c", data.Command)
-	case "sh":
-		cmd = shellutil.BuildCommandContext(ctx, "sh", nil, "-c", data.Command)
-	case "python", "python3":
-		cmd = shellutil.BuildCommandContext(ctx, data.Interpreter, nil, "-c", data.Command)
-	case "node":
-		cmd = shellutil.BuildCommandContext(ctx, "node", nil, "-e", data.Command)
-	default:
-		cmd = shellutil.BuildCommandContext(ctx, data.Interpreter, nil, "-c", data.Command)
-	}
+	cmd := s.buildCommand(ctx, data.Interpreter, data.Command)
+	setCommandProcessGroup(cmd)
 
 	// Start command in background without waiting
 	if err := cmd.Start(); err != nil {
@@ -991,6 +858,230 @@ func (s *ShellPlugin) executeCommandInBackground(ctx context.Context, data shell
 			s.api.Log(ctx, plugin.LogLevelInfo, "Background command completed successfully")
 		}
 	})
+}
+
+func (s *ShellPlugin) buildCommand(ctx context.Context, interpreter string, command string) *exec.Cmd {
+	switch interpreter {
+	case "powershell":
+		return shellutil.BuildCommandContext(ctx, "powershell", nil, "-Command", command)
+	case "cmd":
+		return shellutil.BuildCommandContext(ctx, "cmd", nil, "/C", command)
+	case "bash":
+		return shellutil.BuildCommandContext(ctx, "bash", nil, "-c", command)
+	case "zsh":
+		return shellutil.BuildCommandContext(ctx, "zsh", nil, "-c", command)
+	case "sh":
+		return shellutil.BuildCommandContext(ctx, "sh", nil, "-c", command)
+	case "python", "python3":
+		return shellutil.BuildCommandContext(ctx, interpreter, nil, "-c", command)
+	case "node":
+		return shellutil.BuildCommandContext(ctx, "node", nil, "-e", command)
+	default:
+		return shellutil.BuildCommandContext(ctx, interpreter, nil, "-c", command)
+	}
+}
+
+func (s *ShellPlugin) pipeOutputToSession(ctx context.Context, reader io.Reader, state *shellExecutionState) {
+	bufReader := bufio.NewReader(reader)
+	for {
+		line, err := bufReader.ReadString('\n')
+		if line != "" {
+			state.mutex.Lock()
+			state.summaryOutput = appendSummaryOutput(state.summaryOutput, line, shellOutputSummaryMaxBytes)
+			sessionID := state.sessionID
+			state.mutex.Unlock()
+			s.terminalManager.AppendChunk(ctx, sessionID, line)
+		}
+		if err != nil {
+			if err != io.EOF {
+				s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to read command output: %s", err.Error()))
+			}
+			return
+		}
+	}
+}
+
+func appendSummaryOutput(existing string, chunk string, maxBytes int) string {
+	if maxBytes <= 0 {
+		return existing + chunk
+	}
+	combined := existing + chunk
+	if len(combined) <= maxBytes {
+		return combined
+	}
+	return combined[len(combined)-maxBytes:]
+}
+
+func (s *ShellPlugin) stopSessionByResultID(ctx context.Context, resultID string) bool {
+	sessionID, ok := s.resultSessions.Load(resultID)
+	if !ok {
+		return false
+	}
+	return s.stopSessionByID(ctx, sessionID.(string))
+}
+
+func (s *ShellPlugin) stopSessionByHistoryID(ctx context.Context, historyID string) bool {
+	history, err := s.historyManager.GetByID(ctx, historyID)
+	if err != nil || history == nil || history.SessionID == "" {
+		return false
+	}
+	return s.stopSessionByID(ctx, history.SessionID)
+}
+
+func (s *ShellPlugin) stopSessionByID(ctx context.Context, sessionID string) bool {
+	stateVal, ok := s.executionStates.Load(sessionID)
+	if !ok {
+		return false
+	}
+	state := stateVal.(*shellExecutionState)
+	state.mutex.Lock()
+	defer state.mutex.Unlock()
+	if !state.isRunning || state.cmd == nil || state.cmd.Process == nil {
+		return false
+	}
+	state.isKilledByUser = true
+	if err := killProcessGroup(state.cmd); err != nil {
+		s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to kill shell process group: %s", err.Error()))
+		return false
+	}
+	s.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Shell session stopped: %s", sessionID))
+	return true
+}
+
+func (s *ShellPlugin) buildActionContextData(sessionID string, historyID string, command string, interpreter string) map[string]string {
+	contextData := map[string]string{}
+	if sessionID != "" {
+		contextData[shellActionSessionIDKey] = sessionID
+	}
+	if historyID != "" {
+		contextData[shellActionHistoryIDKey] = historyID
+	}
+	if command != "" {
+		contextData[shellActionCommandKey] = command
+	}
+	if interpreter != "" {
+		contextData[shellActionInterpreterKey] = interpreter
+	}
+	return contextData
+}
+
+func (s *ShellPlugin) deleteSessionByActionContext(ctx context.Context, actionContext plugin.ActionContext) error {
+	historyID := actionContext.ContextData[shellActionHistoryIDKey]
+	sessionID := actionContext.ContextData[shellActionSessionIDKey]
+
+	if sessionID == "" {
+		if mappedSessionID, ok := s.resultSessions.Load(actionContext.ResultId); ok {
+			if value, valid := mappedSessionID.(string); valid {
+				sessionID = value
+			}
+		}
+	}
+
+	if historyID == "" && sessionID != "" {
+		history, err := s.historyManager.GetBySessionID(ctx, sessionID)
+		if err == nil && history != nil {
+			historyID = history.ID
+		}
+	}
+
+	if historyID == "" && sessionID == "" {
+		return fmt.Errorf("shell session context not found")
+	}
+
+	return s.deleteSessionResources(ctx, historyID, sessionID, actionContext.ResultId)
+}
+
+func (s *ShellPlugin) deleteSessionResources(ctx context.Context, historyID string, sessionID string, resultID string) error {
+	var history *ShellHistory
+
+	if historyID != "" {
+		record, err := s.historyManager.GetByID(ctx, historyID)
+		if err != nil {
+			s.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Failed to load shell history by id before delete(id=%s): %s", historyID, err.Error()))
+		} else {
+			history = record
+		}
+	}
+
+	if history == nil && sessionID != "" {
+		record, err := s.historyManager.GetBySessionID(ctx, sessionID)
+		if err == nil {
+			history = record
+			if historyID == "" {
+				historyID = record.ID
+			}
+		}
+	}
+
+	if history != nil && sessionID == "" {
+		sessionID = history.SessionID
+	}
+
+	if sessionID != "" {
+		s.stopSessionByID(ctx, sessionID)
+	}
+
+	if sessionID != "" {
+		if err := s.terminalManager.DeleteSession(sessionID); err != nil {
+			return err
+		}
+		s.executionStates.Delete(sessionID)
+		s.resultSessions.Range(func(key any, value any) bool {
+			existingSessionID, ok := value.(string)
+			if ok && existingSessionID == sessionID {
+				s.resultSessions.Delete(key)
+			}
+			return true
+		})
+	}
+
+	if historyID != "" {
+		if err := s.historyManager.Delete(ctx, historyID); err != nil {
+			return err
+		}
+	} else if sessionID != "" {
+		if err := s.historyManager.DeleteBySessionID(ctx, sessionID); err != nil {
+			return err
+		}
+	}
+
+	if history != nil && history.OutputPath != "" {
+		if err := os.Remove(history.OutputPath); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+
+	if resultID != "" {
+		s.resultSessions.Delete(resultID)
+	}
+
+	return nil
+}
+
+func (s *ShellPlugin) buildTerminalPreviewData(sessionID string, command string, status string) string {
+	payload, _ := json.Marshal(map[string]string{
+		"session_id": sessionID,
+		"command":    command,
+		"status":     status,
+	})
+	return string(payload)
+}
+
+func (s *ShellPlugin) statusText(ctx context.Context, status string) string {
+	switch status {
+	case "completed":
+		return i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_success")
+	case "failed":
+		return i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_failed")
+	case "killed":
+		return i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_killed")
+	default:
+		return i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_running")
+	}
+}
+
+func (s *ShellPlugin) buildSessionTitle(ctx context.Context, command string, status string) string {
+	return command
 }
 
 // formatDuration formats duration in milliseconds to human-readable string

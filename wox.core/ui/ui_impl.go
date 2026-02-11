@@ -10,6 +10,7 @@ import (
 	"wox/common"
 	"wox/database"
 	"wox/plugin"
+	"wox/plugin/system/shell/terminal"
 	"wox/setting"
 	"wox/util"
 	"wox/util/notifier"
@@ -315,6 +316,12 @@ func onUIWebsocketRequest(ctx context.Context, request WebsocketMsg) {
 		handleWebsocketAction(ctx, request)
 	case "FormAction":
 		handleWebsocketFormAction(ctx, request)
+	case "TerminalSubscribe":
+		handleWebsocketTerminalSubscribe(ctx, request)
+	case "TerminalUnsubscribe":
+		handleWebsocketTerminalUnsubscribe(ctx, request)
+	case "TerminalSearch":
+		handleWebsocketTerminalSearch(ctx, request)
 	}
 }
 
@@ -590,6 +597,99 @@ func handleWebsocketQueryMRU(ctx context.Context, request WebsocketMsg) {
 	mruResults := plugin.GetPluginManager().QueryMRU(ctx, request.SessionId, queryId)
 	logger.Info(ctx, fmt.Sprintf("found %d MRU results via websocket", len(mruResults)))
 	responseUISuccessWithData(ctx, request, mruResults)
+}
+
+func handleWebsocketTerminalSubscribe(ctx context.Context, request WebsocketMsg) {
+	dataMap, ok := request.Data.(map[string]any)
+	if !ok {
+		responseUIError(ctx, request, "invalid terminal subscribe payload")
+		return
+	}
+
+	sessionID, _ := dataMap["sessionId"].(string)
+	if sessionID == "" {
+		responseUIError(ctx, request, "sessionId is required")
+		return
+	}
+
+	cursor := int64(0)
+	if rawCursor, exists := dataMap["cursor"]; exists {
+		switch value := rawCursor.(type) {
+		case float64:
+			cursor = int64(value)
+		case int64:
+			cursor = value
+		case int:
+			cursor = int64(value)
+		}
+	}
+
+	state, err := terminal.GetSessionManager().Subscribe(ctx, request.SessionId, sessionID, cursor)
+	if err != nil {
+		responseUIError(ctx, request, err.Error())
+		return
+	}
+
+	responseUISuccessWithData(ctx, request, state)
+}
+
+func handleWebsocketTerminalUnsubscribe(ctx context.Context, request WebsocketMsg) {
+	dataMap, ok := request.Data.(map[string]any)
+	if !ok {
+		responseUIError(ctx, request, "invalid terminal unsubscribe payload")
+		return
+	}
+
+	sessionID, _ := dataMap["sessionId"].(string)
+	if sessionID == "" {
+		responseUIError(ctx, request, "sessionId is required")
+		return
+	}
+
+	terminal.GetSessionManager().Unsubscribe(request.SessionId, sessionID)
+	responseUISuccess(ctx, request)
+}
+
+func handleWebsocketTerminalSearch(ctx context.Context, request WebsocketMsg) {
+	dataMap, ok := request.Data.(map[string]any)
+	if !ok {
+		responseUIError(ctx, request, "invalid terminal search payload")
+		return
+	}
+
+	sessionID, _ := dataMap["sessionId"].(string)
+	pattern, _ := dataMap["pattern"].(string)
+	if sessionID == "" || pattern == "" {
+		responseUIError(ctx, request, "sessionId and pattern are required")
+		return
+	}
+
+	cursor := int64(0)
+	if rawCursor, exists := dataMap["cursor"]; exists {
+		switch value := rawCursor.(type) {
+		case float64:
+			cursor = int64(value)
+		case int64:
+			cursor = value
+		case int:
+			cursor = int64(value)
+		}
+	}
+	backward, _ := dataMap["backward"].(bool)
+	caseSensitive, _ := dataMap["caseSensitive"].(bool)
+
+	result, err := terminal.GetSessionManager().Search(ctx, terminal.TerminalSearchRequest{
+		SessionID:     sessionID,
+		Pattern:       pattern,
+		Cursor:        cursor,
+		Backward:      backward,
+		CaseSensitive: caseSensitive,
+	})
+	if err != nil {
+		responseUIError(ctx, request, err.Error())
+		return
+	}
+	responseUISuccessWithData(ctx, request, result)
 }
 
 func getWebsocketMsgParameter(ctx context.Context, msg WebsocketMsg, key string) (string, error) {

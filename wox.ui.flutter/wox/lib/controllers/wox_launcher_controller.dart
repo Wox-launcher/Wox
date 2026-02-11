@@ -70,6 +70,11 @@ class WoxLauncherController extends GetxController {
   //preview related variables
   final currentPreview = WoxPreview.empty().obs;
   final isShowPreviewPanel = false.obs;
+  final terminalFindTrigger = 0.obs;
+  final isTerminalPreviewFullscreen = false.obs;
+  final Map<String, StreamController<Map<String, dynamic>>> terminalChunkControllers = {};
+  final Map<String, StreamController<Map<String, dynamic>>> terminalStateControllers = {};
+  double lastResultPreviewRatioBeforeTerminalFullscreen = 0.5;
 
   /// The ratio of result panel width to total width, value range: 0.0-1.0
   /// e.g., 0.3 means result panel takes 30% width, preview panel takes 70%
@@ -1027,6 +1032,17 @@ class WoxLauncherController extends GetxController {
   }
 
   Future<void> handleWebSocketResponseMessage(WoxWebsocketMsg msg) async {
+    if (msg.method == WoxMsgMethodEnum.WOX_MSG_METHOD_TERMINAL_CHUNK.code) {
+      final data = msg.data as Map<String, dynamic>? ?? {};
+      handleTerminalChunk(data);
+      return;
+    }
+    if (msg.method == WoxMsgMethodEnum.WOX_MSG_METHOD_TERMINAL_STATE.code) {
+      final data = msg.data as Map<String, dynamic>? ?? {};
+      handleTerminalState(data);
+      return;
+    }
+
     if (msg.method == WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY.code) {
       // Log WebSocket latency (Wox -> UI) only for Query method
       if (msg.sendTimestamp > 0) {
@@ -1107,6 +1123,172 @@ class WoxLauncherController extends GetxController {
     );
   }
 
+  Stream<Map<String, dynamic>> terminalChunkStream(String sessionId) {
+    terminalChunkControllers.putIfAbsent(sessionId, () => StreamController<Map<String, dynamic>>.broadcast());
+    return terminalChunkControllers[sessionId]!.stream;
+  }
+
+  Stream<Map<String, dynamic>> terminalStateStream(String sessionId) {
+    terminalStateControllers.putIfAbsent(sessionId, () => StreamController<Map<String, dynamic>>.broadcast());
+    return terminalStateControllers[sessionId]!.stream;
+  }
+
+  void handleTerminalChunk(Map<String, dynamic> data) {
+    final sessionId = data['SessionId'] as String? ?? "";
+    if (sessionId.isEmpty) {
+      return;
+    }
+    if (terminalChunkControllers.containsKey(sessionId)) {
+      terminalChunkControllers[sessionId]!.add(data);
+    }
+  }
+
+  void handleTerminalState(Map<String, dynamic> data) {
+    final sessionId = data['SessionId'] as String? ?? "";
+    if (sessionId.isEmpty) {
+      return;
+    }
+    if (terminalStateControllers.containsKey(sessionId)) {
+      terminalStateControllers[sessionId]!.add(data);
+    }
+  }
+
+  Future<void> subscribeTerminalSession(String traceId, String sessionId, {int cursor = 0}) async {
+    await WoxWebsocketMsgUtil.instance.sendMessage(
+      WoxWebsocketMsg(
+        requestId: const UuidV4().generate(),
+        traceId: traceId,
+        type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
+        method: WoxMsgMethodEnum.WOX_MSG_METHOD_TERMINAL_SUBSCRIBE.code,
+        data: {"sessionId": sessionId, "cursor": cursor},
+      ),
+    );
+  }
+
+  Future<void> unsubscribeTerminalSession(String traceId, String sessionId) async {
+    await WoxWebsocketMsgUtil.instance.sendMessage(
+      WoxWebsocketMsg(
+        requestId: const UuidV4().generate(),
+        traceId: traceId,
+        type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
+        method: WoxMsgMethodEnum.WOX_MSG_METHOD_TERMINAL_UNSUBSCRIBE.code,
+        data: {"sessionId": sessionId},
+      ),
+    );
+  }
+
+  Future<Map<String, dynamic>?> searchTerminalSession(String traceId, String sessionId, String pattern, {int cursor = 0, bool backward = false, bool caseSensitive = false}) async {
+    final response = await WoxWebsocketMsgUtil.instance.sendMessage(
+      WoxWebsocketMsg(
+        requestId: const UuidV4().generate(),
+        traceId: traceId,
+        type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
+        method: WoxMsgMethodEnum.WOX_MSG_METHOD_TERMINAL_SEARCH.code,
+        data: {"sessionId": sessionId, "pattern": pattern, "cursor": cursor, "backward": backward, "caseSensitive": caseSensitive},
+      ),
+    );
+    if (response is Map<String, dynamic>) {
+      return response;
+    }
+    return null;
+  }
+
+  String getTerminalSessionId(WoxPreview preview) {
+    if (preview.previewType != WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TERMINAL.code || preview.previewData.isEmpty) {
+      return "";
+    }
+
+    try {
+      final parsed = jsonDecode(preview.previewData);
+      if (parsed is Map && parsed['session_id'] is String) {
+        return parsed['session_id'] as String;
+      }
+    } catch (_) {}
+
+    return preview.previewData;
+  }
+
+  String getTerminalCommand(WoxPreview preview) {
+    if (preview.previewType != WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TERMINAL.code || preview.previewData.isEmpty) {
+      return "";
+    }
+
+    try {
+      final parsed = jsonDecode(preview.previewData);
+      if (parsed is Map && parsed['command'] is String) {
+        return parsed['command'] as String;
+      }
+    } catch (_) {}
+
+    return "";
+  }
+
+  String getTerminalStatus(WoxPreview preview) {
+    if (preview.previewType != WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TERMINAL.code || preview.previewData.isEmpty) {
+      return "";
+    }
+
+    try {
+      final parsed = jsonDecode(preview.previewData);
+      if (parsed is Map && parsed['status'] is String) {
+        return parsed['status'] as String;
+      }
+    } catch (_) {}
+
+    return "";
+  }
+
+  bool triggerTerminalFind() {
+    if (!isShowPreviewPanel.value) {
+      return false;
+    }
+    if (currentPreview.value.previewType != WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TERMINAL.code) {
+      return false;
+    }
+    final sessionId = getTerminalSessionId(currentPreview.value);
+    if (sessionId.isEmpty) {
+      return false;
+    }
+
+    terminalFindTrigger.value += 1;
+    return true;
+  }
+
+  bool toggleTerminalPreviewFullscreen(String traceId) {
+    if (!isShowPreviewPanel.value || currentPreview.value.previewType != WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TERMINAL.code) {
+      return false;
+    }
+
+    if (isTerminalPreviewFullscreen.value) {
+      final restoreRatio = lastResultPreviewRatioBeforeTerminalFullscreen <= 0 ? 0.5 : lastResultPreviewRatioBeforeTerminalFullscreen;
+      resultPreviewRatio.value = restoreRatio;
+      isTerminalPreviewFullscreen.value = false;
+      Logger.instance.debug(traceId, "terminal preview exit fullscreen, ratio restored: $restoreRatio");
+      return true;
+    }
+
+    if (resultPreviewRatio.value > 0) {
+      lastResultPreviewRatioBeforeTerminalFullscreen = resultPreviewRatio.value;
+    }
+    resultPreviewRatio.value = 0;
+    isTerminalPreviewFullscreen.value = true;
+    Logger.instance.debug(traceId, "terminal preview enter fullscreen");
+    return true;
+  }
+
+  void syncTerminalPreviewFullscreenState() {
+    final isTerminalPreviewVisible = isShowPreviewPanel.value && currentPreview.value.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TERMINAL.code;
+    if (isTerminalPreviewVisible) {
+      return;
+    }
+
+    if (isTerminalPreviewFullscreen.value) {
+      final restoreRatio = lastResultPreviewRatioBeforeTerminalFullscreen <= 0 ? 0.5 : lastResultPreviewRatioBeforeTerminalFullscreen;
+      resultPreviewRatio.value = restoreRatio;
+    }
+    isTerminalPreviewFullscreen.value = false;
+  }
+
   Future<void> clearQueryResults(String traceId) async {
     Logger.instance.debug(traceId, "clear query results");
     resultListViewController.clearItems();
@@ -1114,6 +1296,7 @@ class WoxLauncherController extends GetxController {
     actionListViewController.clearItems();
     isShowPreviewPanel.value = false;
     isShowActionPanel.value = false;
+    syncTerminalPreviewFullscreenState();
 
     if (isShowDoctorCheckInfo) {
       Logger.instance.debug(traceId, "update toolbar to doctor warning, query is empty and doctor check not passed");
@@ -1313,6 +1496,7 @@ class WoxLauncherController extends GetxController {
             currentPreview.value = updatableResult.preview!;
             // Grid layout doesn't support preview panel
             isShowPreviewPanel.value = !isInGridMode() && currentPreview.value.previewData != "";
+            syncTerminalPreviewFullscreenState();
 
             // If preview panel visibility changed, resize window height
             if (oldShowPreview != isShowPreviewPanel.value) {
@@ -1428,6 +1612,14 @@ class WoxLauncherController extends GetxController {
     actionListViewController.dispose();
     resultListViewController.dispose();
     resultGridViewController.dispose();
+    for (final controller in terminalChunkControllers.values) {
+      controller.close();
+    }
+    for (final controller in terminalStateControllers.values) {
+      controller.close();
+    }
+    terminalChunkControllers.clear();
+    terminalStateControllers.clear();
     super.dispose();
   }
 
@@ -1669,6 +1861,7 @@ class WoxLauncherController extends GetxController {
     currentPreview.value = item.data.preview;
     // Grid layout doesn't support preview panel
     isShowPreviewPanel.value = !isInGridMode() && currentPreview.value.previewData != "";
+    syncTerminalPreviewFullscreenState();
 
     // update actions list
     var actions = item.data.actions.map((e) => WoxListItem.fromResultAction(e)).toList();
@@ -1689,6 +1882,7 @@ class WoxLauncherController extends GetxController {
     // otherwise in selection mode, when no result filtered, preview may still be shown
     isShowPreviewPanel.value = false;
     currentPreview.value = WoxPreview.empty();
+    syncTerminalPreviewFullscreenState();
 
     // Clear toolbar actions so height isn't reserved by resizeHeight
     toolbar.value = toolbar.value.emptyRightSide();

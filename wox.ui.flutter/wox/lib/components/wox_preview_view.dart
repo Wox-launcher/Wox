@@ -20,7 +20,9 @@ import 'package:wox/components/wox_markdown.dart';
 import 'package:wox/components/wox_plugin_detail_view.dart';
 import 'package:wox/components/wox_tooltip.dart';
 import 'package:wox/components/wox_update_view.dart';
+import 'package:wox/components/wox_terminal_preview_view.dart';
 import 'package:wox/controllers/wox_ai_chat_controller.dart';
+import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_preview.dart';
@@ -43,6 +45,7 @@ class WoxPreviewView extends StatefulWidget {
 
 class _WoxPreviewViewState extends State<WoxPreviewView> {
   final scrollController = ScrollController();
+  final launcherController = Get.find<WoxLauncherController>();
   final allCodeLanguages = {...allLanguages, "txt": Mode(), "conf": Mode(), "js": javascript, "ts": typescript, "yml": yaml, "sh": bash, "py": python};
 
   Widget scrollableContent({required Widget child}) {
@@ -102,6 +105,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
 
     Widget contentWidget = const SizedBox();
     bool isPdfViewer = false;
+    bool isCustomScrollable = false;
     if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_MARKDOWN.code) {
       contentWidget = buildMarkdown(widget.woxPreview.previewData);
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TEXT.code) {
@@ -185,6 +189,9 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
       } catch (e) {
         contentWidget = buildText("Invalid update preview data: $e");
       }
+    } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TERMINAL.code) {
+      isCustomScrollable = true;
+      contentWidget = WoxTerminalPreviewView(woxPreview: widget.woxPreview, woxTheme: widget.woxTheme);
     }
 
     if (widget.woxPreview.scrollPosition == WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code) {
@@ -208,7 +215,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
                   child: contentWidget,
                 );
 
-                if (isPdfViewer) {
+                if (isPdfViewer || isCustomScrollable) {
                   return SizedBox(width: constraints.maxWidth, height: constraints.maxHeight, child: themedContent);
                 }
 
@@ -223,8 +230,8 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
               },
             ),
           ),
-          //show previewProperties
-          if (widget.woxPreview.previewProperties.isNotEmpty)
+          if (widget.woxPreview.previewProperties.isNotEmpty &&
+              !(widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TERMINAL.code && launcherController.isTerminalPreviewFullscreen.value))
             Container(
               padding: const EdgeInsets.only(top: 10.0, right: 10.0),
               child: Column(

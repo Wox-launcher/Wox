@@ -520,6 +520,7 @@
   "plugin_shell_enter_to_execute": "Нажмите Enter для выполнения команды и просмотра вывода в реальном времени",
   "plugin_shell_stop": "Остановить",
   "plugin_shell_reexecute": "Выполнить снова",
+  "plugin_shell_delete": "Удалить",
   "plugin_shell_execute_background": "Выполнить в фоне",
   "plugin_shell_execute_background_started": "Команда запущена в фоновом режиме",
   "plugin_shell_status_success": "Успешно",

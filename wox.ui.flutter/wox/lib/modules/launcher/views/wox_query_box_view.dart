@@ -129,7 +129,9 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
 
   @override
   Widget build(BuildContext context) {
-    if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: query box view");
+    if (LoggerSwitch.enablePaintLog) {
+      Logger.instance.debug(const UuidV4().generate(), "repaint: query box view");
+    }
 
     return Obx(() {
       final currentTheme = WoxThemeUtil.instance.currentTheme.value;
@@ -246,6 +248,19 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                 Logger.instance.debug(traceId, "[KEYLOG][FLUTTER] parseNormalHotkeyFromEvent returned: $pressedHotkey");
                 if (pressedHotkey == null) {
                   return KeyEventResult.ignored;
+                }
+
+                final findHotkey = Platform.isMacOS ? WoxHotkey.parseHotkeyFromString("cmd+f") : WoxHotkey.parseHotkeyFromString("ctrl+f");
+                if (findHotkey != null && findHotkey.isNormalHotkey && WoxHotkey.equals(findHotkey.normalHotkey, pressedHotkey) && controller.triggerTerminalFind()) {
+                  return KeyEventResult.handled;
+                }
+
+                final terminalFullscreenHotkey = WoxHotkey.parseHotkeyFromString("ctrl+b");
+                if (terminalFullscreenHotkey != null &&
+                    terminalFullscreenHotkey.isNormalHotkey &&
+                    WoxHotkey.equals(terminalFullscreenHotkey.normalHotkey, pressedHotkey) &&
+                    controller.toggleTerminalPreviewFullscreen(traceId)) {
+                  return KeyEventResult.handled;
                 }
 
                 // list all actions
