@@ -501,6 +501,7 @@
   "plugin_shell_enter_to_execute": "Press Enter to execute the command and see real-time output",
   "plugin_shell_stop": "Stop",
   "plugin_shell_reexecute": "Re-execute",
+  "plugin_shell_delete": "Delete",
   "plugin_shell_execute_background": "Execute in Background",
   "plugin_shell_execute_background_started": "Command started in background",
   "plugin_shell_status_success": "Success",

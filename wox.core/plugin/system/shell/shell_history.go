@@ -12,17 +12,19 @@ import (
 
 // ShellHistory represents a shell command execution history record
 type ShellHistory struct {
-	ID          string `gorm:"primaryKey"`
-	Command     string `gorm:"not null;index"`
-	Interpreter string `gorm:"not null"`
-	Output      string `gorm:"type:text"` // Store output as text
-	ExitCode    int
-	Status      string // running, completed, failed, killed
-	StartTime   int64  `gorm:"not null;index"`
-	EndTime     int64
-	Duration    int64 // Duration in milliseconds
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID            string `gorm:"primaryKey"`
+	SessionID     string `gorm:"not null;index"`
+	Command       string `gorm:"not null;index"`
+	Interpreter   string `gorm:"not null"`
+	OutputSummary string `gorm:"type:text"`
+	OutputPath    string `gorm:"type:text"`
+	ExitCode      int
+	Status        string // running, completed, failed, killed
+	StartTime     int64  `gorm:"not null;index"`
+	EndTime       int64
+	Duration      int64 // Duration in milliseconds
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 // ShellHistoryManager manages shell command history in database
@@ -39,6 +41,26 @@ func NewShellHistoryManager() *ShellHistoryManager {
 
 // Init initializes the shell history table
 func (m *ShellHistoryManager) Init(ctx context.Context) error {
+	migrator := m.db.Migrator()
+
+	// No backward compatibility is required for shell history.
+	// If required columns are missing in existing table, recreate it with new schema.
+	if migrator.HasTable(&ShellHistory{}) {
+		requiredColumns := []string{"session_id", "output_summary", "output_path"}
+		var missingColumns []string
+		for _, column := range requiredColumns {
+			if !migrator.HasColumn(&ShellHistory{}, column) {
+				missingColumns = append(missingColumns, column)
+			}
+		}
+		if len(missingColumns) > 0 {
+			util.GetLogger().Warn(ctx, fmt.Sprintf("shell history schema missing columns %v, recreating table", missingColumns))
+			if dropErr := migrator.DropTable(&ShellHistory{}); dropErr != nil {
+				return fmt.Errorf("failed to recreate shell history table: %w", dropErr)
+			}
+		}
+	}
+
 	err := m.db.AutoMigrate(&ShellHistory{})
 	if err != nil {
 		return fmt.Errorf("failed to migrate shell history table: %w", err)
@@ -56,11 +78,14 @@ func (m *ShellHistoryManager) Update(ctx context.Context, record *ShellHistory) 
 	return m.db.WithContext(ctx).Save(record).Error
 }
 
-// UpdateOutput updates only the output field (for performance)
-func (m *ShellHistoryManager) UpdateOutput(ctx context.Context, id string, output string) error {
+// UpdateOutputSummary updates lightweight summary fields.
+func (m *ShellHistoryManager) UpdateOutputSummary(ctx context.Context, id string, summary string, outputPath string) error {
 	return m.db.WithContext(ctx).Model(&ShellHistory{}).
 		Where("id = ?", id).
-		Update("output", output).Error
+		Updates(map[string]any{
+			"output_summary": summary,
+			"output_path":    outputPath,
+		}).Error
 }
 
 // UpdateStatus updates the status and related fields
@@ -76,18 +101,20 @@ func (m *ShellHistoryManager) UpdateStatus(ctx context.Context, id string, statu
 }
 
 // ResetForReexecute resets an existing record to a fresh running state for re-execution
-func (m *ShellHistoryManager) ResetForReexecute(ctx context.Context, id string, command string, interpreter string, startTime int64) error {
+func (m *ShellHistoryManager) ResetForReexecute(ctx context.Context, id string, sessionID string, command string, interpreter string, startTime int64, outputPath string) error {
 	return m.db.WithContext(ctx).Model(&ShellHistory{}).
 		Where("id = ?", id).
-		Updates(map[string]interface{}{
-			"status":      "running",
-			"exit_code":   0,
-			"output":      "",
-			"start_time":  startTime,
-			"end_time":    0,
-			"duration":    0,
-			"command":     command,
-			"interpreter": interpreter,
+		Updates(map[string]any{
+			"status":         "running",
+			"exit_code":      0,
+			"session_id":     sessionID,
+			"output_summary": "",
+			"output_path":    outputPath,
+			"start_time":     startTime,
+			"end_time":       0,
+			"duration":       0,
+			"command":        command,
+			"interpreter":    interpreter,
 		}).Error
 }
 
@@ -95,6 +122,15 @@ func (m *ShellHistoryManager) ResetForReexecute(ctx context.Context, id string, 
 func (m *ShellHistoryManager) GetByID(ctx context.Context, id string) (*ShellHistory, error) {
 	var record ShellHistory
 	err := m.db.WithContext(ctx).Where("id = ?", id).First(&record).Error
+	if err != nil {
+		return nil, err
+	}
+	return &record, nil
+}
+
+func (m *ShellHistoryManager) GetBySessionID(ctx context.Context, sessionID string) (*ShellHistory, error) {
+	var record ShellHistory
+	err := m.db.WithContext(ctx).Where("session_id = ?", sessionID).First(&record).Error
 	if err != nil {
 		return nil, err
 	}
@@ -126,6 +162,10 @@ func (m *ShellHistoryManager) Search(ctx context.Context, keyword string, limit 
 // Delete deletes a shell history record by ID
 func (m *ShellHistoryManager) Delete(ctx context.Context, id string) error {
 	return m.db.WithContext(ctx).Delete(&ShellHistory{}, "id = ?", id).Error
+}
+
+func (m *ShellHistoryManager) DeleteBySessionID(ctx context.Context, sessionID string) error {
+	return m.db.WithContext(ctx).Delete(&ShellHistory{}, "session_id = ?", sessionID).Error
 }
 
 // DeleteOldRecords deletes records older than the specified timestamp
@@ -195,17 +235,19 @@ type shellHistoryTracker struct {
 	manager       *ShellHistoryManager
 	historyID     string
 	state         *shellExecutionState
+	outputPath    string
 	stopChan      chan struct{}
 	saveInterval  time.Duration
-	lastSavedSize int
+	lastSavedHash uint64
 }
 
 // newShellHistoryTracker creates a new history tracker
-func newShellHistoryTracker(manager *ShellHistoryManager, historyID string, state *shellExecutionState) *shellHistoryTracker {
+func newShellHistoryTracker(manager *ShellHistoryManager, historyID string, state *shellExecutionState, outputPath string) *shellHistoryTracker {
 	return &shellHistoryTracker{
 		manager:      manager,
 		historyID:    historyID,
 		state:        state,
+		outputPath:   outputPath,
 		stopChan:     make(chan struct{}),
 		saveInterval: 1 * time.Second, // Save every 1 second
 	}
@@ -235,18 +277,19 @@ func (t *shellHistoryTracker) start(ctx context.Context) {
 // saveOutput saves the current output to database
 func (t *shellHistoryTracker) saveOutput(ctx context.Context) {
 	t.state.mutex.RLock()
-	currentOutput := t.state.output.String()
-	currentSize := len(currentOutput)
+	currentOutput := t.state.summaryOutput
 	t.state.mutex.RUnlock()
 
-	// Only save if output has changed
-	if currentSize > t.lastSavedSize {
-		err := t.manager.UpdateOutput(ctx, t.historyID, currentOutput)
-		if err != nil {
-			util.GetLogger().Error(ctx, fmt.Sprintf("Failed to save shell history output: %s", err.Error()))
-		} else {
-			t.lastSavedSize = currentSize
-		}
+	hash := fnv1a(currentOutput)
+	if hash == t.lastSavedHash {
+		return
+	}
+
+	err := t.manager.UpdateOutputSummary(ctx, t.historyID, currentOutput, t.outputPath)
+	if err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("Failed to save shell history summary: %s", err.Error()))
+	} else {
+		t.lastSavedHash = hash
 	}
 }
 
@@ -267,4 +310,18 @@ func (t *shellHistoryTracker) stop(ctx context.Context, status string, exitCode 
 	if err != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("Failed to update shell history status: %s", err.Error()))
 	}
+}
+
+func fnv1a(s string) uint64 {
+	const (
+		offset64 uint64 = 1469598103934665603
+		prime64  uint64 = 1099511628211
+	)
+
+	hash := offset64
+	for i := 0; i < len(s); i++ {
+		hash ^= uint64(s[i])
+		hash *= prime64
+	}
+	return hash
 }

@@ -502,6 +502,7 @@
   "plugin_shell_enter_to_execute": "按回车执行命令并查看实时输出",
   "plugin_shell_stop": "停止",
   "plugin_shell_reexecute": "重新执行",
+  "plugin_shell_delete": "删除",
   "plugin_shell_execute_background": "后台执行",
   "plugin_shell_execute_background_started": "命令已在后台启动",
   "plugin_shell_status_success": "成功",

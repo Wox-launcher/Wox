@@ -473,6 +473,7 @@
   "plugin_shell_enter_to_execute": "Pressione Enter para executar o comando e ver a saída em tempo real",
   "plugin_shell_stop": "Parar",
   "plugin_shell_reexecute": "Executar novamente",
+  "plugin_shell_delete": "Excluir",
   "plugin_shell_execute_background": "Executar em Segundo Plano",
   "plugin_shell_execute_background_started": "Comando iniciado em segundo plano",
   "plugin_shell_status_success": "Sucesso",

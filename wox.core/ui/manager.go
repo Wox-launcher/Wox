@@ -19,6 +19,7 @@ import (
 	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
+	"wox/plugin/system/shell/terminal"
 	"wox/resource"
 	"wox/setting"
 	"wox/updater"
@@ -70,6 +71,16 @@ func GetUIManager() *Manager {
 			requestMap: util.NewHashMap[string, chan WebsocketMsg](),
 			isVisible:  false, // Initially hidden
 		}
+		terminal.GetSessionManager().SetEmitter(func(ctx context.Context, uiSessionID string, method string, data any) {
+			responseUI(ctx, WebsocketMsg{
+				RequestId: uuid.NewString(),
+				TraceId:   util.GetContextTraceId(ctx),
+				SessionId: uiSessionID,
+				Method:    method,
+				Success:   true,
+				Data:      data,
+			})
+		})
 		managerInstance.themes = util.NewHashMap[string, common.Theme]()
 		logger = util.GetLogger()
 	})

@@ -8,6 +8,7 @@ enum WoxPreviewTypeEnum {
   WOX_PREVIEW_TYPE_URL("url", "url"),
   WOX_PREVIEW_TYPE_FILE("file", "file"),
   WOX_PREVIEW_TYPE_REMOTE("remote", "remote"),
+  WOX_PREVIEW_TYPE_TERMINAL("terminal", "terminal"),
   WOX_PREVIEW_TYPE_PLUGIN_DETAIL("plugin_detail", "plugin_detail"),
   WOX_PREVIEW_TYPE_CHAT("chat", "chat"),
   WOX_PREVIEW_TYPE_UPDATE("update", "update");
@@ -17,7 +18,5 @@ enum WoxPreviewTypeEnum {
 
   const WoxPreviewTypeEnum(this.code, this.value);
 
-  static String getValue(String code) => WoxPreviewTypeEnum.values
-      .firstWhere((activity) => activity.code == code)
-      .value;
+  static String getValue(String code) => WoxPreviewTypeEnum.values.firstWhere((activity) => activity.code == code).value;
 }
