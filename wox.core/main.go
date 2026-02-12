@@ -109,7 +109,7 @@ func main() {
 		if len(os.Args) > 1 {
 			for _, arg := range os.Args {
 				if strings.HasPrefix(arg, "wox://") {
-					_, postDeepLinkErr := util.HttpPost(ctx, fmt.Sprintf("http://localhost:%d/deeplink", existingPort), map[string]string{
+					_, postDeepLinkErr := util.HttpPost(ctx, fmt.Sprintf("http://127.0.0.1:%d/deeplink", existingPort), map[string]string{
 						"deeplink": arg,
 					})
 					if postDeepLinkErr != nil {
@@ -123,7 +123,7 @@ func main() {
 		}
 
 		// show existing instance if no deeplink is provided
-		_, postShowErr := util.HttpPost(ctx, fmt.Sprintf("http://localhost:%d/show", existingPort), "")
+		_, postShowErr := util.HttpPost(ctx, fmt.Sprintf("http://127.0.0.1:%d/show", existingPort), "")
 		if postShowErr != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("failed to show existing instance: %s", postShowErr.Error()))
 		} else {
@@ -259,7 +259,7 @@ func getExistingInstancePort(ctx context.Context) int {
 	}
 
 	//check if the port is valid
-	response, err := util.HttpGet(ctx, fmt.Sprintf("http://localhost:%d/ping", port))
+	response, err := util.HttpGet(ctx, fmt.Sprintf("http://127.0.0.1:%d/ping", port))
 	if err != nil {
 		return 0
 	}

@@ -6,7 +6,7 @@ import 'package:wox/utils/log.dart';
 
 class WoxHttpUtil {
   final Dio _dio = Dio();
-  final String _baseUrl = 'http://localhost:${Env.serverPort}';
+  final String _baseUrl = 'http://127.0.0.1:${Env.serverPort}';
 
   WoxHttpUtil._privateConstructor();
 

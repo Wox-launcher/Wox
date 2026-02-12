@@ -34,7 +34,7 @@ class HeartbeatChecker {
     }
 
     try {
-      var res = await Dio().get("http://localhost:${Env.serverPort}/ping");
+      var res = await Dio().get("http://127.0.0.1:${Env.serverPort}/ping");
       if (res.statusCode == 200) {
         return true;
       }

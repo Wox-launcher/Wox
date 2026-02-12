@@ -146,7 +146,7 @@ func (w *WebsocketHost) invokeMethod(ctx context.Context, metadata plugin.Metada
 }
 
 func (w *WebsocketHost) startWebsocketServer(ctx context.Context, port int) {
-	w.ws = util.NewWebsocketClient(fmt.Sprintf("ws://localhost:%d", port))
+	w.ws = util.NewWebsocketClient(fmt.Sprintf("ws://127.0.0.1:%d", port))
 	w.ws.OnMessage(ctx, func(data []byte) {
 		util.Go(ctx, fmt.Sprintf("<%s> onMessage", w.getHostName(ctx)), func() {
 			w.onMessage(string(data))
