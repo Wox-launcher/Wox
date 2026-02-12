@@ -1,12 +1,14 @@
 # Installation
 
-## Install
+Wox is a self-contained application — no installation required. Simply download and run.
+
+## Download & Run
 
 ### Windows
 
-1. Download the latest Windows installer from [Releases](https://github.com/Wox-launcher/Wox/releases).
-2. Run the installer and follow the prompts.
-3. Wox will launch automatically after installation.
+1. Download the latest Windows build from [Releases](https://github.com/Wox-launcher/Wox/releases).
+2. Extract the archive to any folder you like.
+3. Double-click `Wox.exe` to run.
 
 ### macOS
 
@@ -16,17 +18,18 @@
 
 ### Linux
 
-1. Download the latest Linux archive from [Releases](https://github.com/Wox-launcher/Wox/releases).
-2. Extract the archive.
+1. Download the latest Linux build from [Releases](https://github.com/Wox-launcher/Wox/releases).
+2. Extract the archive to any directory.
 3. Run `./wox` to start Wox.
 
 ## Uninstall
 
+Since Wox is self-contained, simply delete the application files to uninstall.
+
 ### Windows
 
-1. Open Control Panel -> Programs -> Programs and Features.
-2. Find Wox and click Uninstall.
-3. Remove User Data: delete `%USERPROFILE%\\.wox` if you also want to clear settings.
+1. Delete the folder where you extracted Wox.
+2. Remove User Data: delete `%USERPROFILE%\.wox` if you also want to clear settings.
 
 ### macOS
 
@@ -36,5 +39,5 @@
 
 ### Linux
 
-1. Remove the extracted Wox directory.
+1. Delete the directory where you extracted Wox.
 2. Remove User Data: `rm -rf ~/.wox` if you also want to clear settings.
