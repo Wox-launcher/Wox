@@ -57,6 +57,7 @@ type Manager struct {
 	systemThemeIds   []string
 	isUIReadyHandled bool
 	isSystemDark     bool
+	exitOnce         sync.Once
 
 	activeWindowSnapshot common.ActiveWindowSnapshot // cached active window snapshot
 	pendingStartupNotify *common.NotifyMsg
@@ -366,7 +367,21 @@ func (m *Manager) StartUIApp(ctx context.Context) error {
 	}
 
 	m.uiProcess = cmd.Process
-	util.GetLogger().Info(ctx, fmt.Sprintf("ui app pid: %d", cmd.Process.Pid))
+	pid := cmd.Process.Pid
+	util.GetLogger().Info(ctx, fmt.Sprintf("ui app pid: %d", pid))
+
+	util.Go(ctx, "watch ui app", func() {
+		waitErr := cmd.Wait()
+		waitCtx := util.NewTraceContext()
+		if waitErr != nil {
+			logger.Warn(waitCtx, fmt.Sprintf("ui app process(%d) exited with error: %s", pid, waitErr.Error()))
+		} else {
+			logger.Info(waitCtx, fmt.Sprintf("ui app process(%d) exited", pid))
+		}
+		logger.Warn(waitCtx, "ui app exited, quitting backend")
+		m.ExitApp(waitCtx)
+	})
+
 	return nil
 }
 
@@ -857,11 +872,13 @@ func clampInt(v int, min int, max int) int {
 }
 
 func (m *Manager) ExitApp(ctx context.Context) {
-	util.GetLogger().Info(ctx, "start quitting")
-	plugin.GetPluginManager().Stop(ctx)
-	m.Stop(ctx)
-	util.GetLogger().Info(ctx, "bye~")
-	os.Exit(0)
+	m.exitOnce.Do(func() {
+		util.GetLogger().Info(ctx, "start quitting")
+		plugin.GetPluginManager().Stop(ctx)
+		m.Stop(ctx)
+		util.GetLogger().Info(ctx, "bye~")
+		os.Exit(0)
+	})
 }
 
 func (m *Manager) GetActiveWindowSnapshot(ctx context.Context) common.ActiveWindowSnapshot {
