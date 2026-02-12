@@ -18,6 +18,7 @@ import 'wox_setting_plugin_item_view.dart';
 import 'wox_setting_plugin_table_update_view.dart';
 
 class WoxSettingPluginTable extends WoxSettingPluginItem {
+  static const int tableMaxHeightMin = 120;
   final PluginSettingValueTable item;
   static const String rowUniqueIdKey = "wox_table_row_id";
   final double tableWidth;
@@ -501,15 +502,20 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
       );
     }
 
+    var tableMaxHeight = item.maxHeight;
+    if (tableMaxHeight < tableMaxHeightMin) {
+      tableMaxHeight = tableMaxHeightMin;
+    }
+
     return Scrollbar(
       controller: horizontalScrollController,
       child: SingleChildScrollView(
         controller: horizontalScrollController,
         scrollDirection: Axis.horizontal,
         child: ConstrainedBox(
-          // Keep a fixed viewport height for vertical scrolling, but allow width to grow
+          // Keep a bounded viewport height for vertical scrolling, but allow width to grow
           // beyond tableWidth when columns sum exceeds it so that horizontal scroll works.
-          constraints: BoxConstraints(maxHeight: 300, minWidth: tableWidth),
+          constraints: BoxConstraints(maxHeight: tableMaxHeight.toDouble(), minWidth: tableWidth),
           child: Scrollbar(
             controller: verticalScrollController,
             child: SingleChildScrollView(

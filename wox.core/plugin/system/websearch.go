@@ -75,6 +75,7 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 					Title:         "i18n:plugin_websearch_web_searches",
 					SortColumnKey: "Keyword",
 					SortOrder:     definition.PluginSettingValueTableSortOrderAsc,
+					MaxHeight:     500,
 					Columns: []definition.PluginSettingValueTableColumn{
 						{
 							Key:   "Icon",

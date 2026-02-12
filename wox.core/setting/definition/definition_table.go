@@ -33,6 +33,7 @@ type PluginSettingValueTable struct {
 	Columns       []PluginSettingValueTableColumn
 	SortColumnKey string // The key of the column that should be used for sorting
 	SortOrder     string // asc or desc
+	MaxHeight     int    // Max table height in px, <= 0 means use UI default
 
 	Style PluginSettingValueStyle
 }
