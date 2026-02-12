@@ -133,9 +133,9 @@ func serveAndWait(ctx context.Context, port int) {
 		}
 	})
 
-	logger.Info(ctx, fmt.Sprintf("websocket server start at：ws://localhost:%d", port))
+	logger.Info(ctx, fmt.Sprintf("websocket server start at：ws://127.0.0.1:%d", port))
 	handler := cors.Default().Handler(mux)
-	err := http.ListenAndServe(fmt.Sprintf("localhost:%d", port), handler)
+	err := http.ListenAndServe(fmt.Sprintf("127.0.0.1:%d", port), handler)
 	if err != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to start server: %s", err.Error()))
 	}

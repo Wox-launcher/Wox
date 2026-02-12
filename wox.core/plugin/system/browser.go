@@ -230,7 +230,7 @@ func (c *BrowserPlugin) newWebsocketServer(ctx context.Context) error {
 		})
 	})
 
-	c.server = &http.Server{Addr: fmt.Sprintf("localhost:%d", port), Handler: cors.Default().Handler(mux)}
+	c.server = &http.Server{Addr: fmt.Sprintf("127.0.0.1:%d", port), Handler: cors.Default().Handler(mux)}
 	err := c.server.ListenAndServe()
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to start server: %s", err.Error()))

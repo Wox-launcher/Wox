@@ -64,7 +64,7 @@ Future<void> initialServices(List<String> arguments) async {
     launcherController.doctorCheck();
   });
 
-  await WoxWebsocketMsgUtil.instance.initialize(Uri.parse("ws://localhost:${Env.serverPort}/ws"), onMessageReceived: launcherController.handleWebSocketMessage);
+  await WoxWebsocketMsgUtil.instance.initialize(Uri.parse("ws://127.0.0.1:${Env.serverPort}/ws"), onMessageReceived: launcherController.handleWebSocketMessage);
   HeartbeatChecker().startChecking();
   Get.put(launcherController);
   var woxSettingController = WoxSettingController();
