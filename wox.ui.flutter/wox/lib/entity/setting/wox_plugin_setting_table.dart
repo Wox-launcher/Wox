@@ -3,6 +3,7 @@ import 'package:wox/entity/validator/wox_setting_validator.dart';
 import 'package:wox/entity/wox_plugin_setting.dart';
 
 class PluginSettingValueTable {
+  static const int defaultMaxHeight = 300;
   late String key;
   late String defaultValue;
   late String title;
@@ -10,6 +11,7 @@ class PluginSettingValueTable {
   late List<PluginSettingValueTableColumn> columns;
   late String sortColumnKey; // The key of the column that should be used for sorting
   late String sortOrder; // asc or desc
+  late int maxHeight; // Max table height in px, <= 0 means use default
   late PluginSettingValueStyle style;
 
   PluginSettingValueTable.fromJson(Map<String, dynamic> json) {
@@ -25,6 +27,15 @@ class PluginSettingValueTable {
 
     sortColumnKey = json['SortColumnKey'] ?? "";
     sortOrder = json['SortOrder'] ?? "asc";
+    final rawMaxHeight = json['MaxHeight'];
+    if (rawMaxHeight is num) {
+      maxHeight = rawMaxHeight.toInt();
+    } else {
+      maxHeight = defaultMaxHeight;
+    }
+    if (maxHeight <= 0) {
+      maxHeight = defaultMaxHeight;
+    }
 
     if (json['Style'] != null) {
       style = PluginSettingValueStyle.fromJson(json['Style']);
