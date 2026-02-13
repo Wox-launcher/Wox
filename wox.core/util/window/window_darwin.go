@@ -12,11 +12,15 @@ int getActiveWindowPid();
 int activateWindowByPid(int pid);
 int isOpenSaveDialog();
 int navigateActiveFileDialog(const char* path);
+int selectInActiveFileDialog(const char* path);
+char* getActiveFileDialogPath();
+char* getFileDialogPathByPid(int pid);
 int isFinder(int pid);
 char* getOpenFinderWindowPaths();
 char* getActiveFinderWindowPath();
 char* getFinderWindowPathByPid(int pid);
 int selectInFinder(const char* path);
+int navigateInFinder(const char* path);
 */
 import "C"
 import (
@@ -89,6 +93,59 @@ func NavigateActiveFileDialog(targetPath string) bool {
 	cPath := C.CString(targetPath)
 	defer C.free(unsafe.Pointer(cPath))
 	return int(C.navigateActiveFileDialog(cPath)) == 1
+}
+
+// SelectInActiveFileDialog selects a file/folder item in the currently active
+// open/save dialog list without entering/opening it.
+func SelectInActiveFileDialog(targetPath string) bool {
+	if targetPath == "" {
+		return false
+	}
+
+	cPath := C.CString(targetPath)
+	defer C.free(unsafe.Pointer(cPath))
+	return int(C.selectInActiveFileDialog(cPath)) == 1
+}
+
+// GetActiveFileDialogPath returns the currently opened directory path in the
+// active open/save dialog on macOS.
+func GetActiveFileDialogPath() string {
+	result := C.getActiveFileDialogPath()
+	if result == nil {
+		return ""
+	}
+	defer C.free(unsafe.Pointer(result))
+	return strings.TrimSpace(C.GoString(result))
+}
+
+// GetFileDialogPathByPid returns the currently opened directory path in an
+// open/save dialog owned by the specified process.
+func GetFileDialogPathByPid(pid int) string {
+	if pid <= 0 {
+		return ""
+	}
+	result := C.getFileDialogPathByPid(C.int(pid))
+	if result == nil {
+		return ""
+	}
+	defer C.free(unsafe.Pointer(result))
+	return strings.TrimSpace(C.GoString(result))
+}
+
+// NavigateInFileExplorerByPid navigates the active Finder window to targetPath.
+func NavigateInFileExplorerByPid(pid int, targetPath string) bool {
+	if pid <= 0 || targetPath == "" {
+		return false
+	}
+
+	isFinder, _ := IsFileExplorer(pid)
+	if !isFinder {
+		return false
+	}
+
+	cPath := C.CString(targetPath)
+	defer C.free(unsafe.Pointer(cPath))
+	return int(C.navigateInFinder(cPath)) == 1
 }
 
 // IsFileExplorer checks if the given PID belongs to Finder.

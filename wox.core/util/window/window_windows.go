@@ -111,6 +111,27 @@ func NavigateActiveFileDialog(targetPath string) bool {
 	return int(C.navigateActiveFileDialog(cPath)) == 1
 }
 
+// SelectInActiveFileDialog is currently unsupported on Windows.
+func SelectInActiveFileDialog(targetPath string) bool {
+	return false
+}
+
+// GetActiveFileDialogPath is currently unsupported on Windows.
+func GetActiveFileDialogPath() string {
+	return ""
+}
+
+// GetFileDialogPathByPid is currently unsupported on Windows.
+func GetFileDialogPathByPid(pid int) string {
+	return ""
+}
+
+// NavigateInFileExplorerByPid is currently unsupported on Windows.
+// Callers should fall back to SelectInFileExplorerByPid or shell.Open.
+func NavigateInFileExplorerByPid(pid int, targetPath string) bool {
+	return false
+}
+
 // IsFileExplorer checks if the given PID belongs to Explorer by checking the process image name.
 func IsFileExplorer(pid int) (bool, error) {
 	if pid == 0 {

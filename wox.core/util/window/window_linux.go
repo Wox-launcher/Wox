@@ -35,6 +35,22 @@ func NavigateActiveFileDialog(targetPath string) bool {
 	return false
 }
 
+func SelectInActiveFileDialog(targetPath string) bool {
+	return false
+}
+
+func GetActiveFileDialogPath() string {
+	return ""
+}
+
+func GetFileDialogPathByPid(pid int) string {
+	return ""
+}
+
+func NavigateInFileExplorerByPid(pid int, targetPath string) bool {
+	return false
+}
+
 // GetActiveFileExplorerPath returns empty string on platforms other than Windows and macOS.
 func GetActiveFileExplorerPath() string {
 	return ""
