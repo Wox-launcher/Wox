@@ -250,6 +250,70 @@ static BOOL elementMatchesRole(AXUIElementRef element, CFStringRef expectedRole)
     return matched;
 }
 
+static BOOL elementMatchesSubrole(AXUIElementRef element, CFStringRef expectedSubrole) {
+    if (!element || !expectedSubrole) {
+        return NO;
+    }
+
+    CFTypeRef subroleValue = NULL;
+    BOOL matched = NO;
+    if (AXUIElementCopyAttributeValue(element, kAXSubroleAttribute, &subroleValue) == kAXErrorSuccess && subroleValue) {
+        if (CFGetTypeID(subroleValue) == CFStringGetTypeID() && CFStringCompare((CFStringRef)subroleValue, expectedSubrole, 0) == kCFCompareEqualTo) {
+            matched = YES;
+        }
+        CFRelease(subroleValue);
+    }
+    return matched;
+}
+
+static BOOL elementIsTextInput(AXUIElementRef element) {
+    if (!element) {
+        return NO;
+    }
+
+    if (elementMatchesRole(element, kAXTextFieldRole) ||
+        elementMatchesRole(element, kAXComboBoxRole) ||
+        elementMatchesRole(element, CFSTR("AXSearchField")) ||
+        elementMatchesRole(element, CFSTR("AXTextArea"))) {
+        return YES;
+    }
+
+    if (elementMatchesSubrole(element, CFSTR("AXSearchField")) ||
+        elementMatchesSubrole(element, CFSTR("AXSecureTextField"))) {
+        return YES;
+    }
+
+    CFTypeRef editableValue = NULL;
+    BOOL editable = NO;
+    if (AXUIElementCopyAttributeValue(element, CFSTR("AXEditable"), &editableValue) == kAXErrorSuccess && editableValue) {
+        if (CFGetTypeID(editableValue) == CFBooleanGetTypeID()) {
+            editable = CFBooleanGetValue((CFBooleanRef)editableValue);
+        }
+        CFRelease(editableValue);
+    }
+
+    return editable;
+}
+
+static BOOL appHasFocusedTextInput(AXUIElementRef appElement) {
+    if (!appElement) {
+        return NO;
+    }
+
+    AXUIElementRef focusedElement = NULL;
+    AXError err = AXUIElementCopyAttributeValue(appElement, kAXFocusedUIElementAttribute, (CFTypeRef *)&focusedElement);
+    if (err != kAXErrorSuccess || !focusedElement || CFGetTypeID(focusedElement) != AXUIElementGetTypeID()) {
+        if (focusedElement) {
+            CFRelease(focusedElement);
+        }
+        return NO;
+    }
+
+    BOOL isTextInput = elementIsTextInput(focusedElement);
+    CFRelease(focusedElement);
+    return isTextInput;
+}
+
 static BOOL elementOrDescendantMatchesRole(AXUIElementRef element, CFStringRef expectedRole, int depth) {
     if (!element || !expectedRole || depth > 8) {
         return NO;
@@ -419,7 +483,9 @@ static BOOL getOpenSaveDialogRect(pid_t pid, int *x, int *y, int *w, int *h) {
     BOOL found = NO;
     AXUIElementRef dialogWindow = copyOpenSaveDialogWindow(appElement);
     if (dialogWindow) {
-        found = getAXWindowRect(dialogWindow, x, y, w, h);
+        if (!appHasFocusedTextInput(appElement)) {
+            found = getAXWindowRect(dialogWindow, x, y, w, h);
+        }
         CFRelease(dialogWindow);
     }
 
