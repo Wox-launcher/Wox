@@ -905,7 +905,7 @@ class WoxLauncherController extends GetxController {
         if (currentQuery.value.queryId != currentQueryId) return;
 
         final hasResultsNow = activeResultViewController.items.isNotEmpty && activeResultViewController.items.first.value.data.queryId == currentQueryId;
-        if (isCurrentQueryReturned || hasResultsNow) return;
+        if (hasResultsNow) return;
 
         clearQueryResults(traceId);
       });
