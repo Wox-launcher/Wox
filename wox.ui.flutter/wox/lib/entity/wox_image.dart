@@ -6,9 +6,8 @@ class WoxImage {
   late WoxImageType imageType;
   late String imageData;
 
-  // Cached File object and existence check for absolute path images
+  // Cached File object for absolute path images
   File? cachedFile;
-  bool? cachedFileExists;
 
   WoxImage({required this.imageType, required this.imageData}) {
     _cacheFileIfNeeded();
@@ -17,7 +16,6 @@ class WoxImage {
   void _cacheFileIfNeeded() {
     if (imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_ABSOLUTE_PATH.code && imageData.isNotEmpty) {
       cachedFile = File(imageData);
-      cachedFileExists = cachedFile!.existsSync();
     }
   }
 

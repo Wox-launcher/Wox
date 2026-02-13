@@ -50,11 +50,17 @@ class WoxImageView extends StatelessWidget {
         },
       );
     } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_ABSOLUTE_PATH.code) {
-      // Use cached File and existence check from WoxImage
-      if (woxImage.cachedFileExists != true || woxImage.cachedFile == null) {
+      if (woxImage.cachedFile == null) {
         content = const SizedBox(width: 24, height: 24);
       } else {
-        content = Image.file(woxImage.cachedFile!, width: width, height: height, fit: BoxFit.contain, gaplessPlayback: true);
+        content = Image.file(
+          woxImage.cachedFile!,
+          width: width,
+          height: height,
+          fit: BoxFit.contain,
+          gaplessPlayback: true,
+          errorBuilder: (context, error, stackTrace) => SizedBox(width: width, height: height),
+        );
       }
     } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code) {
       content = SizedBox(width: width, height: height, child: SvgPicture.string(woxImage.imageData));
