@@ -1,0 +1,4 @@
+interface:
+  display_name: "Wox Changelog Update"
+  short_description: "Update Wox changelog since last release"
+  default_prompt: "Use $wox-update-changelog to update CHANGELOG.md based on commits since the previous release."
