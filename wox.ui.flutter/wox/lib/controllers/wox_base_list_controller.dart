@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:wox/entity/wox_list_item.dart';
 import 'package:wox/enums/wox_direction_enum.dart';
-import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_fuzzy_match_util.dart';
 import 'package:wox/utils/wox_setting_util.dart';
 
@@ -49,6 +48,15 @@ abstract class WoxBaseListController<T> extends GetxController {
   RxInt get activeIndex => _activeIndex;
   WoxListItem<T> get activeItem => _items[_activeIndex.value].value;
 
+  String buildItemUpdateId(int index) => 'list_item_$index';
+
+  void refreshItemByIndex(int index) {
+    if (index < 0 || index >= _items.length) {
+      return;
+    }
+    update([buildItemUpdateId(index)]);
+  }
+
   /// Abstract method: subclasses implement direction-based navigation
   void updateActiveIndexByDirection(String traceId, WoxDirection direction);
 
@@ -60,7 +68,12 @@ abstract class WoxBaseListController<T> extends GetxController {
       return;
     }
 
+    final previousIndex = _activeIndex.value;
     _activeIndex.value = index;
+    if (previousIndex != index) {
+      refreshItemByIndex(previousIndex);
+      refreshItemByIndex(index);
+    }
     syncScrollPositionWithActiveIndex(traceId);
 
     if (!silent) {
@@ -91,11 +104,26 @@ abstract class WoxBaseListController<T> extends GetxController {
   }
 
   void updateHoveredIndex(int index) {
+    if (index < 0 || index >= _items.length) {
+      return;
+    }
+    if (_hoveredIndex.value == index) {
+      return;
+    }
+
+    final previousIndex = _hoveredIndex.value;
     _hoveredIndex.value = index;
+    refreshItemByIndex(previousIndex);
+    refreshItemByIndex(index);
   }
 
   void clearHoveredResult() {
+    if (_hoveredIndex.value == -1) {
+      return;
+    }
+    final previousIndex = _hoveredIndex.value;
     _hoveredIndex.value = -1;
+    refreshItemByIndex(previousIndex);
   }
 
   bool isItemActive(String itemId) {

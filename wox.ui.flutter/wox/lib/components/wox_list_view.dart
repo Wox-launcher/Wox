@@ -14,7 +14,6 @@ import 'package:wox/enums/wox_direction_enum.dart';
 import 'package:wox/enums/wox_list_view_type_enum.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/color_util.dart';
-import 'package:wox/utils/log.dart';
 
 class WoxListView<T> extends StatelessWidget {
   final WoxListController<T> controller;
@@ -66,7 +65,7 @@ class WoxListView<T> extends StatelessWidget {
                         child: Center(
                           child: Text(
                             Get.find<WoxSettingController>().tr('ui_no_matches'),
-                            style: TextStyle(fontSize: 14.0, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxFontColor).withOpacity(0.5)),
+                            style: TextStyle(fontSize: 14.0, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxFontColor).withValues(alpha: 0.5)),
                           ),
                         ),
                       )
@@ -102,15 +101,20 @@ class WoxListView<T> extends StatelessWidget {
                               onItemTapped: () {
                                 onItemTapped?.call();
                               },
-                              child: Obx(
-                                () => WoxListItemView(
-                                  key: ValueKey(item.value.id),
-                                  item: item.value,
-                                  woxTheme: WoxThemeUtil.instance.currentTheme.value,
-                                  isActive: controller.activeIndex.value == index,
-                                  isHovered: controller.hoveredIndex.value == index,
-                                  listViewType: listViewType,
-                                ),
+                              child: GetBuilder<WoxListController<T>>(
+                                id: controller.buildItemUpdateId(index),
+                                init: controller,
+                                global: false,
+                                autoRemove: false,
+                                builder:
+                                    (_) => WoxListItemView(
+                                      key: ValueKey(item.value.id),
+                                      item: item.value,
+                                      woxTheme: WoxThemeUtil.instance.currentTheme.value,
+                                      isActive: controller.activeIndex.value == index,
+                                      isHovered: controller.hoveredIndex.value == index,
+                                      listViewType: listViewType,
+                                    ),
                               ),
                             ),
                           );
@@ -166,7 +170,7 @@ class WoxListView<T> extends StatelessWidget {
                           child: Center(
                             child: Text(
                               Get.find<WoxSettingController>().tr('ui_no_matches'),
-                              style: TextStyle(fontSize: 14.0, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxFontColor).withOpacity(0.5)),
+                              style: TextStyle(fontSize: 14.0, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxFontColor).withValues(alpha: 0.5)),
                             ),
                           ),
                         )
@@ -204,15 +208,20 @@ class WoxListView<T> extends StatelessWidget {
                                   onItemTapped: () {
                                     onItemTapped?.call();
                                   },
-                                  child: Obx(
-                                    () => WoxListItemView(
-                                      key: ValueKey(item.value.id),
-                                      item: item.value,
-                                      woxTheme: WoxThemeUtil.instance.currentTheme.value,
-                                      isActive: controller.activeIndex.value == index,
-                                      isHovered: controller.hoveredIndex.value == index,
-                                      listViewType: listViewType,
-                                    ),
+                                  child: GetBuilder<WoxListController<T>>(
+                                    id: controller.buildItemUpdateId(index),
+                                    init: controller,
+                                    global: false,
+                                    autoRemove: false,
+                                    builder:
+                                        (_) => WoxListItemView(
+                                          key: ValueKey(item.value.id),
+                                          item: item.value,
+                                          woxTheme: WoxThemeUtil.instance.currentTheme.value,
+                                          isActive: controller.activeIndex.value == index,
+                                          isHovered: controller.hoveredIndex.value == index,
+                                          listViewType: listViewType,
+                                        ),
                                   ),
                                 ),
                               );
