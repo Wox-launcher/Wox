@@ -93,7 +93,7 @@
 				"cwd": "${workspaceFolder:wox.ui.flutter}",
 				"request": "launch",
 				"type": "dart",
-				// "flutterMode": "release"
+				// "flutterMode": "profile"
 			},
 			{
 				"name": "Run CI",
