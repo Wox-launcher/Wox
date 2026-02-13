@@ -35,9 +35,16 @@ type openSaveHistoryEntry struct {
 	Count  int    `json:"count"`
 }
 
+type quickJumpPathEntry struct {
+	Path string `json:"Path"`
+}
+
 const (
 	openSaveHistorySettingKey    = "openSaveHistory"
 	enableTypeToSearchSettingKey = "enableTypeToSearch"
+	quickJumpPathsSettingKey     = "quickJumpPaths"
+
+	explorerCommandAdd = "add"
 )
 
 func init() {
@@ -69,6 +76,12 @@ func (c *ExplorerPlugin) GetMetadata() plugin.Metadata {
 			"*",
 			"explorer",
 		},
+		Commands: []plugin.MetadataCommand{
+			{
+				Command:     explorerCommandAdd,
+				Description: "i18n:plugin_explorer_command_add",
+			},
+		},
 		SupportedOS: []string{
 			"Windows",
 			"Macos",
@@ -81,6 +94,21 @@ func (c *ExplorerPlugin) GetMetadata() plugin.Metadata {
 					Label:        "i18n:plugin_explorer_setting_enable_type_to_search",
 					Tooltip:      "i18n:plugin_explorer_setting_enable_type_to_search_tips",
 					DefaultValue: "false",
+				},
+			},
+			{
+				Type: definition.PluginSettingDefinitionTypeTable,
+				Value: &definition.PluginSettingValueTable{
+					Key:     quickJumpPathsSettingKey,
+					Title:   "i18n:plugin_explorer_setting_quick_jump_paths",
+					Tooltip: "i18n:plugin_explorer_setting_quick_jump_paths_tips",
+					Columns: []definition.PluginSettingValueTableColumn{
+						{
+							Key:   "Path",
+							Label: "i18n:plugin_explorer_setting_quick_jump_path",
+							Type:  definition.PluginSettingValueTableColumnTypeDirPath,
+						},
+					},
 				},
 			},
 		},
@@ -136,31 +164,98 @@ func (c *ExplorerPlugin) Query(ctx context.Context, query plugin.Query) []plugin
 		}
 	}
 
-	if query.Env.ActiveWindowIsOpenSaveDialog {
-		return c.queryOpenSaveDialog(ctx, query)
+	if c.isAddCommandQuery(query) {
+		return c.queryAddQuickJumpPath(ctx, query)
 	}
 
-	return c.queryFileExplorer(ctx, query)
+	results := make([]plugin.QueryResult, 0)
+	results = append(results, c.queryCurrentDirectoryEntries(ctx, query)...)
+	results = append(results, c.queryJumpFolders(ctx, query)...)
+	return results
 }
 
-func (c *ExplorerPlugin) queryFileExplorer(ctx context.Context, query plugin.Query) []plugin.QueryResult {
-	currentPath := ""
-	if util.IsWindows() {
-		// Prefer the actual foreground tab path on Windows 11 (tabs may share the same HWND).
-		currentPath = window.GetActiveFileExplorerPath()
-		if currentPath == "" {
-			currentPath = window.GetFileExplorerPathByPidAndWindowTitle(query.Env.ActiveWindowPid, query.Env.ActiveWindowTitle)
-		}
-	} else {
-		currentPath = window.GetFileExplorerPathByPid(query.Env.ActiveWindowPid)
+func (c *ExplorerPlugin) isAddCommandQuery(query plugin.Query) bool {
+	if strings.EqualFold(query.Command, explorerCommandAdd) {
+		return true
 	}
-	if currentPath == "" {
+	return query.Command == "" && strings.EqualFold(strings.TrimSpace(query.Search), explorerCommandAdd)
+}
+
+func (c *ExplorerPlugin) queryAddQuickJumpPath(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+	path := strings.TrimSpace(query.Search)
+	if query.Command == "" {
+		path = ""
+	}
+	if path == "" {
+		if query.Env.ActiveWindowIsOpenSaveDialog {
+			path = c.getMostRecentOpenSaveHistoryPath(query.Env.ActiveWindowTitle)
+		}
+	}
+	if path == "" {
+		path = c.getCurrentFileExplorerPath(ctx, query.Env)
+	}
+	if path == "" {
+		c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Explorer add skipped: no resolvable path (pid=%d, title=%q, isOpenSaveDialog=%v)", query.Env.ActiveWindowPid, query.Env.ActiveWindowTitle, query.Env.ActiveWindowIsOpenSaveDialog))
 		return []plugin.QueryResult{}
 	}
 
-	entries, err := os.ReadDir(currentPath)
+	path = filepath.Clean(path)
+	if !c.isDirPath(path) {
+		return []plugin.QueryResult{}
+	}
+
+	return []plugin.QueryResult{
+		{
+			Title:    "i18n:plugin_explorer_add_quick_jump_title",
+			SubTitle: path,
+			Icon:     common.FolderIcon,
+			Score:    200,
+			Actions: []plugin.QueryResultAction{
+				{
+					Name:      "i18n:ui_add",
+					IsDefault: true,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						if c.addQuickJumpPath(ctx, path) {
+							c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
+						}
+					},
+				},
+			},
+		},
+	}
+}
+
+func (c *ExplorerPlugin) queryCurrentDirectoryEntries(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+	currentPath := c.getCurrentFileExplorerPath(ctx, query.Env)
+	if currentPath == "" {
+		c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Explorer current directory query skipped: path not found (search=%q, pid=%d, title=%q, isOpenSaveDialog=%v)", query.Search, query.Env.ActiveWindowPid, query.Env.ActiveWindowTitle, query.Env.ActiveWindowIsOpenSaveDialog))
+		return []plugin.QueryResult{}
+	}
+	search := strings.TrimSpace(query.Search)
+
+	results := c.queryDirectoryEntriesAtPath(ctx, query, currentPath, search)
+	if len(results) > 0 || search == "" || !query.Env.ActiveWindowIsOpenSaveDialog {
+		return results
+	}
+
+	parentPath := filepath.Dir(currentPath)
+	if parentPath == "" || parentPath == "." || parentPath == currentPath {
+		return results
+	}
+
+	parentResults := c.queryDirectoryEntriesAtPath(ctx, query, parentPath, search)
+	if len(parentResults) > 0 {
+		c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Explorer current directory fallback to parent path: current=%q parent=%q search=%q matched=%d", currentPath, parentPath, search, len(parentResults)))
+		return parentResults
+	}
+
+	return results
+}
+
+func (c *ExplorerPlugin) queryDirectoryEntriesAtPath(ctx context.Context, query plugin.Query, dirPath string, search string) []plugin.QueryResult {
+	entries, err := os.ReadDir(dirPath)
 	if err != nil {
-		c.api.Log(ctx, plugin.LogLevelError, "Failed to read directory: "+err.Error())
+		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to read directory: path=%q err=%s", dirPath, err.Error()))
 		return []plugin.QueryResult{}
 	}
 
@@ -169,15 +264,15 @@ func (c *ExplorerPlugin) queryFileExplorer(ctx context.Context, query plugin.Que
 		isMatch := true
 		var matchScore int64
 
-		if query.Search != "" {
-			isMatch, matchScore = plugin.IsStringMatchScore(ctx, entry.Name(), query.Search)
+		if search != "" {
+			isMatch, matchScore = plugin.IsStringMatchScore(ctx, entry.Name(), search)
 		}
 
 		if !isMatch {
 			continue
 		}
 
-		fullPath := filepath.Join(currentPath, entry.Name())
+		fullPath := filepath.Join(dirPath, entry.Name())
 		isDir := entry.IsDir()
 		var icon common.WoxImage
 		if isDir {
@@ -191,8 +286,7 @@ func (c *ExplorerPlugin) queryFileExplorer(ctx context.Context, query plugin.Que
 			icon = common.NewWoxImageFileIcon(fullPath)
 		}
 
-		var actions []plugin.QueryResultAction
-		actions = []plugin.QueryResultAction{
+		actions := []plugin.QueryResultAction{
 			{
 				Name: "i18n:plugin_explorer_open",
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -203,12 +297,7 @@ func (c *ExplorerPlugin) queryFileExplorer(ctx context.Context, query plugin.Que
 				Name:      "i18n:plugin_explorer_reveal_in_explorer",
 				IsDefault: true,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Navigate explorer by pid: pid=%d path=%s", query.Env.ActiveWindowPid, fullPath))
-					if !window.SelectInFileExplorerByPid(query.Env.ActiveWindowPid, fullPath) {
-						c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Select in explorer by pid failed: pid=%d path=%s", query.Env.ActiveWindowPid, fullPath))
-					} else {
-						window.ActivateWindowByPid(query.Env.ActiveWindowPid)
-					}
+					c.revealEntry(ctx, query.Env, fullPath, isDir)
 				},
 			},
 		}
@@ -222,11 +311,52 @@ func (c *ExplorerPlugin) queryFileExplorer(ctx context.Context, query plugin.Que
 		})
 	}
 
+	c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer current directory query resolved: path=%q search=%q totalEntries=%d matched=%d", dirPath, search, len(entries), len(results)))
 	return results
 }
 
-func (c *ExplorerPlugin) queryOpenSaveDialog(ctx context.Context, query plugin.Query) []plugin.QueryResult {
-	folders := c.getOpenSaveFolders(ctx, query.Env)
+func (c *ExplorerPlugin) revealEntry(ctx context.Context, env plugin.QueryEnv, fullPath string, isDir bool) {
+	if env.ActiveWindowIsOpenSaveDialog {
+		entryPath := strings.TrimSpace(fullPath)
+		if entryPath == "" {
+			c.api.Log(ctx, plugin.LogLevelError, "Reveal entry in open/save failed: empty entry path")
+			return
+		}
+
+		historyPath := entryPath
+		if !isDir {
+			historyPath = filepath.Dir(entryPath)
+		}
+		if c.isDirPath(historyPath) {
+			c.recordOpenSaveHistory(ctx, env.ActiveWindowTitle, historyPath)
+		}
+
+		if env.ActiveWindowPid > 0 {
+			if !window.ActivateWindowByPid(env.ActiveWindowPid) {
+				c.api.Log(ctx, plugin.LogLevelError, "Failed to activate dialog owner window")
+			}
+			time.Sleep(150 * time.Millisecond)
+		}
+
+		// For current directory search results in open/save, select the item without entering it.
+		if window.SelectInActiveFileDialog(entryPath) {
+			return
+		}
+
+		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Select entry in open/save failed: pid=%d entry=%q isDir=%v", env.ActiveWindowPid, entryPath, isDir))
+		return
+	}
+
+	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Navigate explorer by pid: pid=%d path=%s", env.ActiveWindowPid, fullPath))
+	if !window.SelectInFileExplorerByPid(env.ActiveWindowPid, fullPath) {
+		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Select in explorer by pid failed: pid=%d path=%s", env.ActiveWindowPid, fullPath))
+		return
+	}
+	window.ActivateWindowByPid(env.ActiveWindowPid)
+}
+
+func (c *ExplorerPlugin) queryJumpFolders(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+	folders := c.getJumpFolderCandidates(ctx, query.Env)
 	if len(folders) == 0 {
 		return []plugin.QueryResult{}
 	}
@@ -255,7 +385,6 @@ func (c *ExplorerPlugin) queryOpenSaveDialog(ctx context.Context, query plugin.Q
 		}
 
 		folderPath := folder.path
-		activePid := query.Env.ActiveWindowPid
 		score := matchScore + folder.scoreBoost
 		results = append(results, plugin.QueryResult{
 			Title:    title,
@@ -266,18 +395,7 @@ func (c *ExplorerPlugin) queryOpenSaveDialog(ctx context.Context, query plugin.Q
 				{
 					Name: "i18n:plugin_explorer_jump_to",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						util.Go(ctx, "navigate to active file explorer", func() {
-							c.recordOpenSaveHistory(ctx, query.Env.ActiveWindowTitle, folderPath)
-							if activePid > 0 {
-								if !window.ActivateWindowByPid(activePid) {
-									c.api.Log(ctx, plugin.LogLevelError, "Failed to activate dialog owner window")
-								}
-								time.Sleep(150 * time.Millisecond)
-							}
-							if !window.NavigateActiveFileDialog(folderPath) {
-								c.api.Log(ctx, plugin.LogLevelError, "Failed to navigate open/save dialog to path: "+folderPath)
-							}
-						})
+						c.jumpToFolder(ctx, query.Env, folderPath)
 					},
 				},
 			},
@@ -287,8 +405,41 @@ func (c *ExplorerPlugin) queryOpenSaveDialog(ctx context.Context, query plugin.Q
 	return results
 }
 
-func (c *ExplorerPlugin) getOpenSaveFolders(ctx context.Context, env plugin.QueryEnv) []openSaveFolder {
+func (c *ExplorerPlugin) getJumpFolderCandidates(ctx context.Context, env plugin.QueryEnv) []openSaveFolder {
+	candidateIndex := make(map[string]int)
 	candidates := make([]openSaveFolder, 0)
+	addCandidate := func(candidate openSaveFolder) {
+		candidate.path = strings.TrimSpace(candidate.path)
+		if candidate.path == "" || !c.isDirPath(candidate.path) {
+			return
+		}
+		candidate.path = filepath.Clean(candidate.path)
+		if candidate.titleKey == "" {
+			candidate.titleKey = filepath.Base(candidate.path)
+		}
+
+		key := c.normalizePathKey(candidate.path)
+		if index, ok := candidateIndex[key]; ok {
+			if candidate.scoreBoost > candidates[index].scoreBoost {
+				candidates[index].scoreBoost = candidate.scoreBoost
+			}
+			if candidates[index].titleKey == "" && candidate.titleKey != "" {
+				candidates[index].titleKey = candidate.titleKey
+			}
+			return
+		}
+
+		candidateIndex[key] = len(candidates)
+		candidates = append(candidates, candidate)
+	}
+
+	for _, quickJumpPath := range c.loadQuickJumpPaths(ctx) {
+		addCandidate(openSaveFolder{
+			titleKey:   filepath.Base(quickJumpPath),
+			path:       quickJumpPath,
+			scoreBoost: 300,
+		})
+	}
 
 	// First, load from history
 	c.openSaveHistoryMap.Range(func(key string, entries []openSaveHistoryEntry) bool {
@@ -298,11 +449,6 @@ func (c *ExplorerPlugin) getOpenSaveFolders(ctx context.Context, env plugin.Quer
 
 		now := time.Now().Unix()
 		for _, entry := range entries {
-			info, err := os.Stat(entry.Path)
-			if err != nil || !info.IsDir() {
-				continue
-			}
-
 			// Calculate score boost based on recency and frequency
 			timeDiff := now - entry.UsedAt
 			timeScore := int64(0)
@@ -316,12 +462,11 @@ func (c *ExplorerPlugin) getOpenSaveFolders(ctx context.Context, env plugin.Quer
 			frequencyScore := int64(entry.Count * 5)
 			totalScore := timeScore + frequencyScore
 
-			candidate := openSaveFolder{
+			addCandidate(openSaveFolder{
 				titleKey:   filepath.Base(entry.Path),
 				path:       entry.Path,
 				scoreBoost: totalScore,
-			}
-			candidates = append(candidates, candidate)
+			})
 		}
 		return false
 	})
@@ -332,11 +477,10 @@ func (c *ExplorerPlugin) getOpenSaveFolders(ctx context.Context, env plugin.Quer
 		if p == "" {
 			continue
 		}
-		candidate := openSaveFolder{
+		addCandidate(openSaveFolder{
 			titleKey: filepath.Base(p),
 			path:     p,
-		}
-		candidates = append(candidates, candidate)
+		})
 	}
 
 	// 2. Add common system folders
@@ -355,17 +499,191 @@ func (c *ExplorerPlugin) getOpenSaveFolders(ctx context.Context, env plugin.Quer
 			{titleKey: "i18n:plugin_explorer_common_folder_videos", path: filepath.Join(homeDir, "Videos")},
 		}
 		for _, folder := range systemFolders {
-			if _, err := os.Stat(folder.path); err == nil {
-				candidate := openSaveFolder{
-					titleKey: folder.titleKey,
-					path:     folder.path,
-				}
-				candidates = append(candidates, candidate)
-			}
+			addCandidate(openSaveFolder{
+				titleKey: folder.titleKey,
+				path:     folder.path,
+			})
 		}
 	}
 
 	return candidates
+}
+
+func (c *ExplorerPlugin) getCurrentFileExplorerPath(ctx context.Context, env plugin.QueryEnv) string {
+	if dialogPath := strings.TrimSpace(window.GetFileDialogPathByPid(env.ActiveWindowPid)); dialogPath != "" {
+		c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer path resolved from file dialog by pid: pid=%d path=%q", env.ActiveWindowPid, dialogPath))
+		return dialogPath
+	}
+	c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer path not resolved from file dialog by pid: pid=%d", env.ActiveWindowPid))
+
+	if env.ActiveWindowIsOpenSaveDialog {
+		if dialogPath := strings.TrimSpace(window.GetActiveFileDialogPath()); dialogPath != "" {
+			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer path resolved from active file dialog fallback: path=%q", dialogPath))
+			return dialogPath
+		}
+		c.api.Log(ctx, plugin.LogLevelDebug, "Explorer path not resolved from active file dialog fallback")
+	}
+
+	currentPath := ""
+	if util.IsWindows() {
+		// Prefer the actual foreground tab path on Windows 11 (tabs may share the same HWND).
+		currentPath = strings.TrimSpace(window.GetActiveFileExplorerPath())
+		if currentPath != "" {
+			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer path resolved from active file explorer: path=%q", currentPath))
+			return currentPath
+		}
+		c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer path not resolved from active file explorer, trying pid/title fallback: pid=%d title=%q", env.ActiveWindowPid, env.ActiveWindowTitle))
+		currentPath = strings.TrimSpace(window.GetFileExplorerPathByPidAndWindowTitle(env.ActiveWindowPid, env.ActiveWindowTitle))
+	} else {
+		currentPath = strings.TrimSpace(window.GetFileExplorerPathByPid(env.ActiveWindowPid))
+	}
+	if currentPath != "" {
+		c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer path resolved from file explorer by pid/title: pid=%d title=%q path=%q", env.ActiveWindowPid, env.ActiveWindowTitle, currentPath))
+		return currentPath
+	}
+
+	c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Explorer path resolve failed: pid=%d title=%q isOpenSaveDialog=%v", env.ActiveWindowPid, env.ActiveWindowTitle, env.ActiveWindowIsOpenSaveDialog))
+	return ""
+}
+
+func (c *ExplorerPlugin) getMostRecentOpenSaveHistoryPath(windowTitle string) string {
+	if strings.TrimSpace(windowTitle) == "" {
+		return ""
+	}
+
+	entries, ok := c.openSaveHistoryMap.Load(windowTitle)
+	if !ok || len(entries) == 0 {
+		return ""
+	}
+
+	latestPath := ""
+	latestUsedAt := int64(0)
+	for _, entry := range entries {
+		if entry.UsedAt >= latestUsedAt && c.isDirPath(entry.Path) {
+			latestUsedAt = entry.UsedAt
+			latestPath = entry.Path
+		}
+	}
+
+	return strings.TrimSpace(latestPath)
+}
+
+func (c *ExplorerPlugin) jumpToFolder(ctx context.Context, env plugin.QueryEnv, folderPath string) {
+	util.Go(ctx, "navigate to folder", func() {
+		if env.ActiveWindowIsOpenSaveDialog {
+			c.recordOpenSaveHistory(ctx, env.ActiveWindowTitle, folderPath)
+			if env.ActiveWindowPid > 0 {
+				if !window.ActivateWindowByPid(env.ActiveWindowPid) {
+					c.api.Log(ctx, plugin.LogLevelError, "Failed to activate dialog owner window")
+				}
+				time.Sleep(150 * time.Millisecond)
+			}
+			if !window.NavigateActiveFileDialog(folderPath) {
+				c.api.Log(ctx, plugin.LogLevelError, "Failed to navigate open/save dialog to path: "+folderPath)
+			}
+			return
+		}
+
+		if window.NavigateInFileExplorerByPid(env.ActiveWindowPid, folderPath) {
+			window.ActivateWindowByPid(env.ActiveWindowPid)
+			return
+		}
+
+		if env.ActiveWindowPid > 0 && window.SelectInFileExplorerByPid(env.ActiveWindowPid, folderPath) {
+			window.ActivateWindowByPid(env.ActiveWindowPid)
+			return
+		}
+
+		shell.Open(folderPath)
+	})
+}
+
+func (c *ExplorerPlugin) addQuickJumpPath(ctx context.Context, path string) bool {
+	path = filepath.Clean(strings.TrimSpace(path))
+	if path == "" || !c.isDirPath(path) {
+		return false
+	}
+
+	paths := c.loadQuickJumpPaths(ctx)
+	targetKey := c.normalizePathKey(path)
+	for _, item := range paths {
+		if c.normalizePathKey(item) == targetKey {
+			return false
+		}
+	}
+
+	paths = append(paths, path)
+	if !c.saveQuickJumpPaths(ctx, paths) {
+		return false
+	}
+
+	return true
+}
+
+func (c *ExplorerPlugin) loadQuickJumpPaths(ctx context.Context) []string {
+	raw := c.api.GetSetting(ctx, quickJumpPathsSettingKey)
+	if raw == "" {
+		return []string{}
+	}
+
+	var entries []quickJumpPathEntry
+	if err := json.Unmarshal([]byte(raw), &entries); err != nil {
+		c.api.Log(ctx, plugin.LogLevelError, "Failed to unmarshal quick jump paths: "+err.Error())
+		return []string{}
+	}
+
+	result := make([]string, 0, len(entries))
+	seen := map[string]bool{}
+	for _, entry := range entries {
+		path := strings.TrimSpace(entry.Path)
+		if path == "" {
+			continue
+		}
+		path = filepath.Clean(path)
+		key := c.normalizePathKey(path)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		result = append(result, path)
+	}
+
+	return result
+}
+
+func (c *ExplorerPlugin) saveQuickJumpPaths(ctx context.Context, paths []string) bool {
+	entries := make([]quickJumpPathEntry, 0, len(paths))
+	for _, path := range paths {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			continue
+		}
+		entries = append(entries, quickJumpPathEntry{
+			Path: filepath.Clean(path),
+		})
+	}
+
+	payload, err := json.Marshal(entries)
+	if err != nil {
+		c.api.Log(ctx, plugin.LogLevelError, "Failed to marshal quick jump paths: "+err.Error())
+		return false
+	}
+
+	c.api.SaveSetting(ctx, quickJumpPathsSettingKey, string(payload), false)
+	return true
+}
+
+func (c *ExplorerPlugin) isDirPath(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
+func (c *ExplorerPlugin) normalizePathKey(path string) string {
+	path = filepath.Clean(path)
+	if util.IsWindows() {
+		return strings.ToLower(path)
+	}
+	return path
 }
 
 func (c *ExplorerPlugin) recordOpenSaveHistory(ctx context.Context, key string, path string) {

@@ -23,6 +23,7 @@ static int gCurrentY = 0;
 static int gCurrentW = 0;
 static int gCurrentH = 0;
 static CFStringRef gAXWindowNumberAttribute = CFSTR("AXWindowNumber");
+static BOOL appHasFocusedTextInput(AXUIElementRef appElement);
 
 static BOOL getFinderWindowRectByWindowID(pid_t pid, uint32_t targetWindowID, int *x, int *y, int *w, int *h) {
     if (pid <= 0 || targetWindowID == 0) {
@@ -172,6 +173,13 @@ static BOOL getFocusedFinderWindowRect(pid_t pid, int *x, int *y, int *w, int *h
     BOOL found = NO;
     AXUIElementRef app = AXUIElementCreateApplication(pid);
     if (app) {
+        // Ignore Finder "type to search" when focus is in any text input
+        // (e.g. the top-right Finder search field, rename input, etc.).
+        if (appHasFocusedTextInput(app)) {
+            CFRelease(app);
+            return NO;
+        }
+
         CFTypeRef focusedWindowValue = NULL;
         AXError focusedErr = AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute, &focusedWindowValue);
         if (focusedErr == kAXErrorSuccess && focusedWindowValue && CFGetTypeID(focusedWindowValue) == AXUIElementGetTypeID()) {
