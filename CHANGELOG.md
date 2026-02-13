@@ -5,14 +5,21 @@
 - Add
   - Add tray query feature. User can add custom queries to tray menu for quick access
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/tray_query.png)
-  - Add "App font family" setting to choose system font for Wox interface
+  - Add "App font family" setting to choose system font for Wox interface #4335
+  - [`Plugin Setting`] Add image emoji selector for plugin table image fields
+  - [`Plugin Setting`] Add `maxHeight` property support in plugin table setting value #4339
 
 - Improve
-  - [`Shell`] Enhance Shell plugin to support search/full-screen/scroll-to-load functions
+  - [`Shell`] Enhance Shell plugin terminal preview to support search/full-screen/scroll-to-load functions
+  - Improve query hotkey tooltips and add Wox Chrome extension link in settings #4333
+  - Improve app process exit handling when shutting down Wox #4338
 
 - Fix
   - [`File Explorer Search`] Fix an issue that file explorer search plugin cannot navigate on open/save dialog
-  - Fix an issue that Wox setting can't be saved sometimes
+  - [`Clipboard`] Fix self-triggering in clipboard watch #4309
+  - Fix an issue that Wox setting table values can't be saved sometimes
+  - Fix query results not being cleared correctly when app visibility changes
+  - Fix Base64 JPEG decode issue in image preview
 
 ## v2.0.0 - 2026-02-09
 
