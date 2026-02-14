@@ -20,6 +20,8 @@ import (
 
 var calculatorIcon = common.PluginCalculatorIcon
 
+const maxCalculatorHistories = 300
+
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &CalculatorPlugin{})
 }
@@ -152,7 +154,7 @@ func (c *CalculatorPlugin) Init(ctx context.Context, initParams plugin.InitParam
 		return definition.PluginSettingDefinitionItem{}
 	})
 
-	c.debounceInterval = 500 * time.Millisecond // 500ms debounce interval
+	c.debounceInterval = 800 * time.Millisecond // 800ms debounce interval
 	c.histories = c.loadHistories(ctx)
 }
 
@@ -172,7 +174,7 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 			return []plugin.QueryResult{}
 		}
 		result := val.String()
-		formattedResult := c.formatWithThousandsSeparator(ctx, val)
+		formattedResult := c.formatWithSeparators(val, thousandsSep, decimalSep)
 
 		// Add to query history with debounce when calculation is successful
 		c.addQueryHistoryDebounced(ctx, query.Search, result)
@@ -190,6 +192,7 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 							Result:     result,
 							AddDate:    util.FormatDateTime(util.GetSystemTime()),
 						})
+						c.histories = trimCalculatorHistories(c.histories)
 						clipboard.WriteText(result)
 					},
 				},
@@ -203,6 +206,7 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 							Result:     result,
 							AddDate:    util.FormatDateTime(util.GetSystemTime()),
 						})
+						c.histories = trimCalculatorHistories(c.histories)
 						clipboard.WriteText(formattedResult)
 					},
 				},
@@ -216,7 +220,7 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 		val, err := Calculate(query.Search, thousandsSep, decimalSep)
 		if err == nil {
 			result := val.String()
-			formattedResult := c.formatWithThousandsSeparator(ctx, val)
+			formattedResult := c.formatWithSeparators(val, thousandsSep, decimalSep)
 
 			// Add to query history with debounce when calculation is successful
 			c.addQueryHistoryDebounced(ctx, query.Search, result)
@@ -245,8 +249,22 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 		}
 
 		//show top 500 histories order by desc
+		queryTrackable := query.SessionId != "" && query.Id != ""
 		var count = 0
+	scanLoop:
 		for i := len(c.histories) - 1; i >= 0; i-- {
+			if count%16 == 0 {
+				select {
+				case <-ctx.Done():
+					break scanLoop
+				default:
+				}
+
+				if queryTrackable && !plugin.GetPluginManager().IsCurrentQuery(query.SessionId, query.Id) {
+					break scanLoop
+				}
+			}
+
 			h := c.histories[i]
 
 			count++
@@ -259,7 +277,7 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 				historyVal, parseErr := decimal.NewFromString(h.Result)
 				formattedHistoryResult := h.Result
 				if parseErr == nil {
-					formattedHistoryResult = c.formatWithThousandsSeparator(ctx, historyVal)
+					formattedHistoryResult = c.formatWithSeparators(historyVal, thousandsSep, decimalSep)
 				}
 
 				results = append(results, plugin.QueryResult{
@@ -334,11 +352,9 @@ func (c *CalculatorPlugin) getSeparators(ctx context.Context) (thousandsSep stri
 	return thousandsSep, decimalSep
 }
 
-func (c *CalculatorPlugin) formatWithThousandsSeparator(ctx context.Context, val decimal.Decimal) string {
+func (c *CalculatorPlugin) formatWithSeparators(val decimal.Decimal, thousandsSep string, decimalSep string) string {
 	valStr := val.String()
 	parts := strings.Split(valStr, ".")
-
-	thousandsSep, decimalSep := c.getSeparators(ctx)
 
 	intPart := parts[0]
 	// Handle negative numbers
@@ -423,9 +439,17 @@ func (c *CalculatorPlugin) loadHistories(ctx context.Context) []CalculatorHistor
 		return []CalculatorHistory{}
 	}
 
-	c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Calculator history loaded: %d", len(histories)))
+	trimmedHistories := trimCalculatorHistories(histories)
+	if len(trimmedHistories) != len(histories) {
+		data, marshalErr := json.Marshal(trimmedHistories)
+		if marshalErr != nil {
+			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to marshal trimmed calculator history: %s", marshalErr.Error()))
+		} else {
+			c.api.SaveSetting(ctx, "calculatorHistories", string(data), false)
+		}
+	}
 
-	return histories
+	return trimmedHistories
 }
 
 // addQueryHistoryDebounced adds query to history with debounce mechanism
@@ -453,7 +477,6 @@ func (c *CalculatorPlugin) addQueryHistoryDebounced(ctx context.Context, queryTe
 
 			// Skip if the query is the same as the most recent one
 			if len(latestHistories) > 0 && latestHistories[0].Query.QueryText == queryText {
-				c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Calculator query skipped (duplicate): %s", queryText))
 				return
 			}
 
@@ -468,6 +491,7 @@ func (c *CalculatorPlugin) addQueryHistoryDebounced(ctx context.Context, queryTe
 				Result:     result,
 				AddDate:    util.FormatDateTime(util.GetSystemTime()),
 			})
+			c.histories = trimCalculatorHistories(c.histories)
 
 			historiesJson, err := json.Marshal(c.histories)
 			if err != nil {
@@ -475,8 +499,13 @@ func (c *CalculatorPlugin) addQueryHistoryDebounced(ctx context.Context, queryTe
 			} else {
 				c.api.SaveSetting(ctx, "calculatorHistories", string(historiesJson), false)
 			}
-
-			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Calculator query added to history: %s", queryText))
 		}
 	})
+}
+
+func trimCalculatorHistories(histories []CalculatorHistory) []CalculatorHistory {
+	if len(histories) <= maxCalculatorHistories {
+		return histories
+	}
+	return histories[len(histories)-maxCalculatorHistories:]
 }
