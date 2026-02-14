@@ -14,6 +14,8 @@ int getActiveWindowPid();
 int activateWindowByPid(int pid);
 int isOpenSaveDialog();
 int navigateActiveFileDialog(const char* path);
+char* getActiveFileDialogPath();
+char* getFileDialogPathByPid(int pid);
 */
 import "C"
 import (
@@ -116,14 +118,25 @@ func SelectInActiveFileDialog(targetPath string) bool {
 	return false
 }
 
-// GetActiveFileDialogPath is currently unsupported on Windows.
 func GetActiveFileDialogPath() string {
-	return ""
+	result := C.getActiveFileDialogPath()
+	if result == nil {
+		return ""
+	}
+	defer C.free(unsafe.Pointer(result))
+	return strings.TrimSpace(C.GoString(result))
 }
 
-// GetFileDialogPathByPid is currently unsupported on Windows.
 func GetFileDialogPathByPid(pid int) string {
-	return ""
+	if pid <= 0 {
+		return ""
+	}
+	result := C.getFileDialogPathByPid(C.int(pid))
+	if result == nil {
+		return ""
+	}
+	defer C.free(unsafe.Pointer(result))
+	return strings.TrimSpace(C.GoString(result))
 }
 
 // NavigateInFileExplorerByPid is currently unsupported on Windows.

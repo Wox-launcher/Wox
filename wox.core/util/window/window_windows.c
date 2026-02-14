@@ -3,8 +3,10 @@
 #include <windows.h>
 #include <psapi.h>
 #include <shellapi.h>
+#include <commdlg.h>
 #include <stdlib.h>
 #include <string.h>
+#include <wchar.h>
 
 char *getIconData(HICON hIcon, unsigned char **iconData, int *iconSize, int *width, int *height)
 {
@@ -179,9 +181,8 @@ BOOL CALLBACK EnumChildClassProc(HWND hwnd, LPARAM lParam)
     return TRUE;
 }
 
-int isOpenSaveDialog()
+static int isOpenSaveDialogWindow(HWND hwnd)
 {
-    HWND hwnd = GetForegroundWindow();
     if (!hwnd)
     {
         return 0;
@@ -202,6 +203,232 @@ int isOpenSaveDialog()
     data.found = FALSE;
     EnumChildWindows(hwnd, EnumChildClassProc, (LPARAM)&data);
     return data.found ? 1 : 0;
+}
+
+int isOpenSaveDialog()
+{
+    HWND hwnd = GetForegroundWindow();
+    return isOpenSaveDialogWindow(hwnd);
+}
+
+static char *dupEmptyString()
+{
+    char *result = (char *)malloc(1);
+    if (result)
+    {
+        result[0] = '\0';
+    }
+    return result;
+}
+
+static char *copyUtf8FromWide(const WCHAR *wide)
+{
+    if (!wide)
+    {
+        return dupEmptyString();
+    }
+
+    int len = WideCharToMultiByte(CP_UTF8, 0, wide, -1, NULL, 0, NULL, NULL);
+    if (len <= 0)
+    {
+        return dupEmptyString();
+    }
+
+    char *result = (char *)malloc((size_t)len);
+    if (!result)
+    {
+        return dupEmptyString();
+    }
+
+    WideCharToMultiByte(CP_UTF8, 0, wide, -1, result, len, NULL, NULL);
+    return result;
+}
+
+static int copyParentDirectoryPath(const WCHAR *fullPath, WCHAR *out, size_t outLen)
+{
+    if (!fullPath || !out || outLen == 0)
+    {
+        return 0;
+    }
+
+    WCHAR tmp[32768];
+    size_t tmpCap = sizeof(tmp) / sizeof(tmp[0]);
+    wcsncpy(tmp, fullPath, tmpCap - 1);
+    tmp[tmpCap - 1] = L'\0';
+    size_t len = wcslen(tmp);
+    if (len == 0)
+    {
+        return 0;
+    }
+
+    // Strip trailing separators while keeping drive roots like C:\
+    while (len > 1 && (tmp[len - 1] == L'\\' || tmp[len - 1] == L'/'))
+    {
+        if (len == 3 && tmp[1] == L':')
+        {
+            break;
+        }
+        tmp[len - 1] = L'\0';
+        len--;
+    }
+
+    WCHAR *lastBackslash = wcsrchr(tmp, L'\\');
+    WCHAR *lastSlash = wcsrchr(tmp, L'/');
+    WCHAR *lastSep = lastBackslash;
+    if (lastSlash && (!lastSep || lastSlash > lastSep))
+    {
+        lastSep = lastSlash;
+    }
+    if (!lastSep)
+    {
+        return 0;
+    }
+
+    // Preserve UNC share roots (\\server\share) and don't strip above share level.
+    if (tmp[0] == L'\\' && tmp[1] == L'\\')
+    {
+        WCHAR *p = tmp + 2;
+        while (*p && *p != L'\\' && *p != L'/')
+        {
+            p++;
+        }
+        if (*p)
+        {
+            p++;
+            while (*p && *p != L'\\' && *p != L'/')
+            {
+                p++;
+            }
+            if (lastSep < p)
+            {
+                wcsncpy(out, tmp, outLen - 1);
+                out[outLen - 1] = L'\0';
+                return out[0] != L'\0';
+            }
+        }
+    }
+
+    if (lastSep == tmp + 2 && tmp[1] == L':')
+    {
+        lastSep++;
+    }
+    else if (lastSep == tmp)
+    {
+        lastSep++;
+    }
+
+    *lastSep = L'\0';
+    if (tmp[0] == L'\0')
+    {
+        return 0;
+    }
+
+    wcsncpy(out, tmp, outLen - 1);
+    out[outLen - 1] = L'\0';
+    return out[0] != L'\0';
+}
+
+static char *getDialogDirectoryPathByWindow(HWND hwnd)
+{
+    if (!isOpenSaveDialogWindow(hwnd))
+    {
+        return dupEmptyString();
+    }
+
+    WCHAR folderPath[32768];
+    ZeroMemory(folderPath, sizeof(folderPath));
+    LRESULT folderLen = SendMessageW(hwnd, CDM_GETFOLDERPATH, (WPARAM)(sizeof(folderPath) / sizeof(folderPath[0])), (LPARAM)folderPath);
+    if (folderLen > 0 && folderPath[0] != L'\0')
+    {
+        return copyUtf8FromWide(folderPath);
+    }
+
+    WCHAR selectedPath[32768];
+    ZeroMemory(selectedPath, sizeof(selectedPath));
+    LRESULT selectedLen = SendMessageW(hwnd, CDM_GETFILEPATH, (WPARAM)(sizeof(selectedPath) / sizeof(selectedPath[0])), (LPARAM)selectedPath);
+    if (selectedLen > 0 && selectedPath[0] != L'\0')
+    {
+        WCHAR parentPath[32768];
+        ZeroMemory(parentPath, sizeof(parentPath));
+        if (copyParentDirectoryPath(selectedPath, parentPath, sizeof(parentPath) / sizeof(parentPath[0])))
+        {
+            return copyUtf8FromWide(parentPath);
+        }
+    }
+
+    return dupEmptyString();
+}
+
+char *getActiveFileDialogPath()
+{
+    HWND hwnd = GetForegroundWindow();
+    if (!hwnd)
+    {
+        return dupEmptyString();
+    }
+
+    return getDialogDirectoryPathByWindow(hwnd);
+}
+
+char *getFileDialogPathByPid(int pid)
+{
+    if (pid <= 0)
+    {
+        return dupEmptyString();
+    }
+
+    DWORD targetPid = (DWORD)pid;
+    HWND foreground = GetForegroundWindow();
+    if (foreground)
+    {
+        DWORD fgPid = 0;
+        GetWindowThreadProcessId(foreground, &fgPid);
+        if (fgPid == targetPid && isOpenSaveDialogWindow(foreground))
+        {
+            char *path = getDialogDirectoryPathByWindow(foreground);
+            if (path && path[0] != '\0')
+            {
+                return path;
+            }
+            if (path)
+            {
+                free(path);
+            }
+        }
+    }
+
+    for (int pass = 0; pass < 2; pass++)
+    {
+        for (HWND hwnd = GetWindow(GetDesktopWindow(), GW_CHILD); hwnd != NULL; hwnd = GetWindow(hwnd, GW_HWNDNEXT))
+        {
+            DWORD wndPid = 0;
+            GetWindowThreadProcessId(hwnd, &wndPid);
+            if (wndPid != targetPid)
+            {
+                continue;
+            }
+            if (!isOpenSaveDialogWindow(hwnd))
+            {
+                continue;
+            }
+            if (pass == 0 && (!IsWindowVisible(hwnd) || IsIconic(hwnd)))
+            {
+                continue;
+            }
+
+            char *path = getDialogDirectoryPathByWindow(hwnd);
+            if (path && path[0] != '\0')
+            {
+                return path;
+            }
+            if (path)
+            {
+                free(path);
+            }
+        }
+    }
+
+    return dupEmptyString();
 }
 
 static void SendKey(WORD vk, BOOL isDown)
