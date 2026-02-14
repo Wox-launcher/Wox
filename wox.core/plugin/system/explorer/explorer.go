@@ -463,7 +463,21 @@ func (c *ExplorerPlugin) getJumpFolderCandidates(ctx context.Context, env plugin
 }
 
 func (c *ExplorerPlugin) getCurrentFileExplorerPath(ctx context.Context, env plugin.QueryEnv) string {
-	if env.ActiveWindowIsOpenSaveDialog {
+	isFileExplorerPid := false
+	if env.ActiveWindowPid > 0 {
+		if ok, err := window.IsFileExplorer(env.ActiveWindowPid); err != nil {
+			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer failed to detect file explorer pid=%d: %s", env.ActiveWindowPid, err.Error()))
+		} else {
+			isFileExplorerPid = ok
+		}
+	}
+
+	shouldUseDialogPath := env.ActiveWindowIsOpenSaveDialog && !isFileExplorerPid
+	if env.ActiveWindowIsOpenSaveDialog && isFileExplorerPid {
+		c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer ignored open/save flag for finder pid=%d", env.ActiveWindowPid))
+	}
+
+	if shouldUseDialogPath {
 		if dialogPath := strings.TrimSpace(window.GetFileDialogPathByPid(env.ActiveWindowPid)); dialogPath != "" {
 			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer path resolved from file dialog by pid: pid=%d path=%q", env.ActiveWindowPid, dialogPath))
 			return dialogPath
@@ -471,6 +485,20 @@ func (c *ExplorerPlugin) getCurrentFileExplorerPath(ctx context.Context, env plu
 		if dialogPath := strings.TrimSpace(window.GetActiveFileDialogPath()); dialogPath != "" {
 			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer path resolved from active file dialog: path=%q", dialogPath))
 			return dialogPath
+		}
+	}
+
+	if util.IsMacOS() {
+		activePathProbe := strings.TrimSpace(window.GetActiveFileExplorerPath())
+		pidPathProbe := strings.TrimSpace(window.GetFileExplorerPathByPid(env.ActiveWindowPid))
+
+		if activePathProbe != "" {
+			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer path resolved from active file explorer: path=%q", activePathProbe))
+			return activePathProbe
+		}
+		if pidPathProbe != "" {
+			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer path resolved from file explorer by pid: pid=%d path=%q", env.ActiveWindowPid, pidPathProbe))
+			return pidPathProbe
 		}
 	}
 
@@ -485,14 +513,11 @@ func (c *ExplorerPlugin) getCurrentFileExplorerPath(ctx context.Context, env plu
 			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer path resolved from file explorer by pid/title: pid=%d title=%q path=%q", env.ActiveWindowPid, env.ActiveWindowTitle, pidPath))
 			return pidPath
 		}
-	} else if pidPath := strings.TrimSpace(window.GetFileExplorerPathByPid(env.ActiveWindowPid)); pidPath != "" {
-		c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer path resolved from file explorer by pid: pid=%d path=%q", env.ActiveWindowPid, pidPath))
-		return pidPath
 	}
 
 	// Compatibility fallback for edge cases where open/save detection flag is false
 	// but the active PID still owns an open/save dialog.
-	if !env.ActiveWindowIsOpenSaveDialog {
+	if util.IsWindows() && !shouldUseDialogPath {
 		if dialogPath := strings.TrimSpace(window.GetFileDialogPathByPid(env.ActiveWindowPid)); dialogPath != "" {
 			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer path resolved from file dialog compatibility fallback: pid=%d path=%q", env.ActiveWindowPid, dialogPath))
 			return dialogPath

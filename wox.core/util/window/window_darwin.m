@@ -5,6 +5,7 @@
 #include <unistd.h>
 
 static char* copyPathFromAXValue(CFTypeRef value);
+char* getFinderWindowPathByPid(int pid);
 
 int getActiveWindowIcon(unsigned char **iconData) {
     @autoreleasepool {
@@ -339,6 +340,37 @@ static char* normalizeToDirectoryPathCString(char *pathCString) {
     return NULL;
 }
 
+static char* normalizeToParentDirectoryPathCString(char *pathCString) {
+    if (!pathCString || pathCString[0] == '\0') {
+        if (pathCString) {
+            free(pathCString);
+        }
+        return NULL;
+    }
+
+    NSString *path = [NSString stringWithUTF8String:pathCString];
+    if (!path || [path length] == 0) {
+        free(pathCString);
+        return NULL;
+    }
+
+    NSString *parent = [path stringByDeletingLastPathComponent];
+    if (!parent || [parent length] == 0) {
+        free(pathCString);
+        return NULL;
+    }
+
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    BOOL isDir = NO;
+    if ([fileManager fileExistsAtPath:parent isDirectory:&isDir] && isDir) {
+        free(pathCString);
+        return strdup([parent UTF8String]);
+    }
+
+    free(pathCString);
+    return NULL;
+}
+
 static char* copyNormalizedPathFromAXAttribute(AXUIElementRef element, CFStringRef attr) {
     if (!element || !attr) {
         return NULL;
@@ -358,6 +390,25 @@ static char* copyNormalizedPathFromAXAttribute(AXUIElementRef element, CFStringR
     return result;
 }
 
+static char* copyParentDirectoryFromAXAttribute(AXUIElementRef element, CFStringRef attr) {
+    if (!element || !attr) {
+        return NULL;
+    }
+
+    CFTypeRef value = NULL;
+    AXError err = AXUIElementCopyAttributeValue(element, attr, &value);
+    if (err != kAXErrorSuccess || !value) {
+        if (value) {
+            CFRelease(value);
+        }
+        return NULL;
+    }
+
+    char *result = normalizeToParentDirectoryPathCString(copyPathFromAXValue(value));
+    CFRelease(value);
+    return result;
+}
+
 static char* findDirectoryPathInElementTree(AXUIElementRef element, int depth) {
     if (!element || depth > 10) {
         return NULL;
@@ -372,7 +423,15 @@ static char* findDirectoryPathInElementTree(AXUIElementRef element, int depth) {
     };
     const size_t attrsCount = sizeof(attrsToCheck) / sizeof(attrsToCheck[0]);
     for (size_t i = 0; i < attrsCount; i++) {
-        char *result = copyNormalizedPathFromAXAttribute(element, attrsToCheck[i]);
+        CFStringRef attr = attrsToCheck[i];
+        char *result = NULL;
+        if (attr == kAXDocumentAttribute) {
+            result = copyNormalizedPathFromAXAttribute(element, attr);
+        } else {
+            // Non-document values in open/save trees are usually selected item paths.
+            // Use their parent directory as the actual current directory.
+            result = copyParentDirectoryFromAXAttribute(element, attr);
+        }
         if (result) {
             return result;
         }
@@ -425,7 +484,7 @@ static char* copyDirectoryPathFromDialogContext(AXUIElementRef dialogWindow, AXU
             CFGetTypeID(focusedElementValue) == AXUIElementGetTypeID()) {
             AXUIElementRef focusedElement = (AXUIElementRef)focusedElementValue;
 
-            char *result = copyNormalizedPathFromAXAttribute(focusedElement, kAXValueAttribute);
+            char *result = copyParentDirectoryFromAXAttribute(focusedElement, kAXValueAttribute);
             if (result) {
                 CFRelease(focusedElementValue);
                 return result;
@@ -847,6 +906,9 @@ char* getActiveFileDialogPath() {
         if (!activeApp) {
             return strdup("");
         }
+        if ([[activeApp bundleIdentifier] isEqualToString:@"com.apple.finder"]) {
+            return strdup("");
+        }
 
         AXUIElementRef appElement = AXUIElementCreateApplication([activeApp processIdentifier]);
         if (!appElement) {
@@ -855,11 +917,7 @@ char* getActiveFileDialogPath() {
 
         AXUIElementRef dialogWindow = copyOpenSaveDialogWindowForActiveApp(appElement);
         if (!dialogWindow) {
-            char *fallbackPath = copyDirectoryPathFromDialogContext(NULL, appElement);
             CFRelease(appElement);
-            if (fallbackPath) {
-                return fallbackPath;
-            }
             return strdup("");
         }
 
@@ -884,6 +942,13 @@ char* getFileDialogPathByPid(int pid) {
         if (!AXIsProcessTrusted()) {
             return strdup("");
         }
+        NSRunningApplication *app = [NSRunningApplication runningApplicationWithProcessIdentifier:(pid_t)pid];
+        if (!app) {
+            return strdup("");
+        }
+        if ([[app bundleIdentifier] isEqualToString:@"com.apple.finder"]) {
+            return strdup("");
+        }
 
         AXUIElementRef appElement = AXUIElementCreateApplication((pid_t)pid);
         if (!appElement) {
@@ -892,11 +957,7 @@ char* getFileDialogPathByPid(int pid) {
 
         AXUIElementRef dialogWindow = copyOpenSaveDialogWindowForActiveApp(appElement);
         if (!dialogWindow) {
-            char *fallbackPath = copyDirectoryPathFromDialogContext(NULL, appElement);
             CFRelease(appElement);
-            if (fallbackPath) {
-                return fallbackPath;
-            }
             return strdup("");
         }
 
@@ -1034,6 +1095,31 @@ static NSString* getFinderWindowNameValue(id window) {
     return name;
 }
 
+static BOOL finderPathEquals(NSString *left, NSString *right) {
+    if (!left || !right) {
+        return NO;
+    }
+    return [[left stringByStandardizingPath] caseInsensitiveCompare:[right stringByStandardizingPath]] == NSOrderedSame;
+}
+
+static BOOL finderWindowListContainsPath(NSArray *windowList, NSString *path) {
+    if (!windowList || !path || [path length] == 0) {
+        return NO;
+    }
+
+    for (id window in windowList) {
+        NSString *windowPath = getFinderWindowPathValue(window);
+        if (!windowPath) {
+            continue;
+        }
+        if (finderPathEquals(windowPath, path)) {
+            return YES;
+        }
+    }
+
+    return NO;
+}
+
 char* getOpenFinderWindowPaths() {
     @autoreleasepool {
         id finder = [SBApplication applicationWithBundleIdentifier:@"com.apple.finder"];
@@ -1070,57 +1156,7 @@ char* getActiveFinderWindowPath() {
         if (!activeApp || ![[activeApp bundleIdentifier] isEqualToString:@"com.apple.finder"]) {
             return strdup("");
         }
-
-        id finder = [SBApplication applicationWithBundleIdentifier:@"com.apple.finder"];
-        if (!finder) {
-            return strdup("");
-        }
-
-        id windows = [finder valueForKey:@"windows"];
-        if (![windows isKindOfClass:[NSArray class]]) {
-            return strdup("");
-        }
-
-        NSArray *windowList = (NSArray *)windows;
-        if ([windowList count] == 0) {
-            return strdup("");
-        }
-
-        id window = [windowList objectAtIndex:0];
-        id target = nil;
-        @try {
-            target = [window valueForKey:@"target"];
-        } @catch (NSException *exception) {
-            target = nil;
-        }
-        if (!target) {
-            return strdup("");
-        }
-
-        id urlValue = nil;
-        @try {
-            urlValue = [target valueForKey:@"URL"];
-        } @catch (NSException *exception) {
-            urlValue = nil;
-        }
-
-        NSString *path = nil;
-        if ([urlValue isKindOfClass:[NSURL class]]) {
-            path = [(NSURL *)urlValue path];
-        } else if ([urlValue isKindOfClass:[NSString class]]) {
-            NSString *stringValue = (NSString *)urlValue;
-            if ([stringValue hasPrefix:@"file://"]) {
-                NSURL *url = [NSURL URLWithString:stringValue];
-                path = [url path];
-            } else {
-                path = stringValue;
-            }
-        }
-
-        if (!path || [path length] == 0) {
-            return strdup("");
-        }
-        return strdup([path UTF8String]);
+        return getFinderWindowPathByPid((int)[activeApp processIdentifier]);
     }
 }
 
@@ -1180,6 +1216,7 @@ char* getFinderWindowPathByPid(int pid) {
 
         NSArray *windowList = (NSArray *)windows;
         NSString *focusedTitle = nil;
+        NSString *focusedDocumentPath = nil;
         if (AXIsProcessTrusted()) {
             AXUIElementRef appElement = AXUIElementCreateApplication(pid);
             if (appElement) {
@@ -1188,11 +1225,14 @@ char* getFinderWindowPathByPid(int pid) {
                 if (windowErr == kAXErrorSuccess && window) {
                     CFTypeRef documentValue = NULL;
                     if (AXUIElementCopyAttributeValue(window, kAXDocumentAttribute, &documentValue) == kAXErrorSuccess && documentValue) {
-                        char *result = copyPathFromAXValue(documentValue);
+                        char *rawPath = copyPathFromAXValue(documentValue);
+                        if (rawPath && rawPath[0] != '\0') {
+                            focusedDocumentPath = [[NSString stringWithUTF8String:rawPath] copy];
+                        }
+                        if (rawPath) {
+                            free(rawPath);
+                        }
                         CFRelease(documentValue);
-                        CFRelease(window);
-                        CFRelease(appElement);
-                        return result;
                     }
 
                     CFTypeRef titleValue = NULL;
@@ -1208,6 +1248,17 @@ char* getFinderWindowPathByPid(int pid) {
             }
         }
 
+        if (focusedDocumentPath && [focusedDocumentPath length] > 0) {
+            if (finderWindowListContainsPath(windowList, focusedDocumentPath)) {
+                return strdup([focusedDocumentPath UTF8String]);
+            }
+
+            NSString *parent = [focusedDocumentPath stringByDeletingLastPathComponent];
+            if (parent && [parent length] > 0 && finderWindowListContainsPath(windowList, parent)) {
+                return strdup([parent UTF8String]);
+            }
+        }
+
         if (focusedTitle) {
             for (id window in windowList) {
                 NSString *name = getFinderWindowNameValue(window);
@@ -1215,30 +1266,12 @@ char* getFinderWindowPathByPid(int pid) {
                     continue;
                 }
                 if (![name isEqualToString:focusedTitle]) {
-                    NSString *path = getFinderWindowPathValue(window);
-                    if (path && [[path lastPathComponent] isEqualToString:focusedTitle]) {
-                        return strdup([path UTF8String]);
-                    }
                     continue;
                 }
                 NSString *path = getFinderWindowPathValue(window);
                 if (path) {
                     return strdup([path UTF8String]);
                 }
-            }
-        }
-
-        if ([windowList count] == 1) {
-            NSString *path = getFinderWindowPathValue([windowList objectAtIndex:0]);
-            if (path) {
-                return strdup([path UTF8String]);
-            }
-        }
-
-        for (id window in windowList) {
-            NSString *path = getFinderWindowPathValue(window);
-            if (path && [path length] > 0) {
-                return strdup([path UTF8String]);
             }
         }
 
