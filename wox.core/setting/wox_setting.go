@@ -14,6 +14,7 @@ type WoxSetting struct {
 	EnableAutostart      *PlatformValue[bool]
 	MainHotkey           *PlatformValue[string]
 	SelectionHotkey      *PlatformValue[string]
+	LogLevel             *WoxSettingValue[string]
 	UsePinYin            *WoxSettingValue[bool]
 	SwitchInputMethodABC *WoxSettingValue[bool]
 	HideOnStart          *WoxSettingValue[bool]
@@ -77,6 +78,11 @@ const (
 
 const (
 	DefaultThemeId = "53c1d0a4-ffc8-4d90-91dc-b408fb0b9a03"
+)
+
+const (
+	LogLevelInfo  = "INFO"
+	LogLevelDebug = "DEBUG"
 )
 
 type QueryShortcut struct {
@@ -145,8 +151,11 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 	}
 
 	return &WoxSetting{
-		MainHotkey:           NewPlatformValue(store, "MainHotkey", "alt+space", "option+space", "ctrl+space"),
-		SelectionHotkey:      NewPlatformValue(store, "SelectionHotkey", "ctrl+alt+space", "command+option+space", "ctrl+shift+j"),
+		MainHotkey:      NewPlatformValue(store, "MainHotkey", "alt+space", "option+space", "ctrl+space"),
+		SelectionHotkey: NewPlatformValue(store, "SelectionHotkey", "ctrl+alt+space", "command+option+space", "ctrl+shift+j"),
+		LogLevel: NewWoxSettingValueWithValidator(store, "LogLevel", LogLevelInfo, func(level string) bool {
+			return strings.EqualFold(level, LogLevelInfo) || strings.EqualFold(level, LogLevelDebug)
+		}),
 		UsePinYin:            NewWoxSettingValue(store, "UsePinYin", usePinYin),
 		SwitchInputMethodABC: NewWoxSettingValue(store, "SwitchInputMethodABC", switchInputMethodABC),
 		ShowTray:             NewWoxSettingValue(store, "ShowTray", true),

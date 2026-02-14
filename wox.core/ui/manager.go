@@ -69,8 +69,9 @@ func GetUIManager() *Manager {
 		managerInstance.mainHotkey = &hotkey.Hotkey{}
 		managerInstance.selectionHotkey = &hotkey.Hotkey{}
 		managerInstance.ui = &uiImpl{
-			requestMap: util.NewHashMap[string, chan WebsocketMsg](),
-			isVisible:  false, // Initially hidden
+			requestMap:      util.NewHashMap[string, chan WebsocketMsg](),
+			isVisible:       false, // Initially hidden
+			isInSettingView: false,
 		}
 		terminal.GetSessionManager().SetEmitter(func(ctx context.Context, uiSessionID string, method string, data any) {
 			responseUI(ctx, WebsocketMsg{
@@ -514,6 +515,7 @@ func (m *Manager) PostOnShow(ctx context.Context) {
 	// Update cached visibility state
 	if impl, ok := m.ui.(*uiImpl); ok {
 		impl.isVisible = true
+		impl.isInSettingView = false
 	}
 
 	analytics.TrackUIOpened(ctx)
@@ -545,6 +547,13 @@ func (m *Manager) PostOnHide(ctx context.Context) {
 	// Update cached visibility state
 	if impl, ok := m.ui.(*uiImpl); ok {
 		impl.isVisible = false
+		impl.isInSettingView = false
+	}
+}
+
+func (m *Manager) PostOnSetting(ctx context.Context, isInSettingView bool) {
+	if impl, ok := m.ui.(*uiImpl); ok {
+		impl.isInSettingView = isInSettingView
 	}
 }
 
@@ -614,6 +623,8 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value strin
 		m.RegisterMainHotkey(ctx, vs)
 	case "SelectionHotkey":
 		m.RegisterSelectionHotkey(ctx, vs)
+	case "LogLevel":
+		util.GetLogger().SetLevel(vs)
 	case "QueryHotkeys":
 		// unregister previous hotkeys
 		logger.Info(ctx, "post update query hotkeys, unregister previous query hotkeys")

@@ -161,6 +161,12 @@ class WoxApi {
     await WoxHttpUtil.instance.postData(traceId, "/on/hide", {});
   }
 
+  Future<void> onSetting(String traceId, bool inSettingView) async {
+    await WoxHttpUtil.instance.postData(traceId, "/on/setting", {
+      "inSettingView": inSettingView,
+    });
+  }
+
   Future<WoxUsageStats> getUsageStats(String traceId) async {
     return await WoxHttpUtil.instance.postData<WoxUsageStats>(
       traceId,
@@ -295,6 +301,14 @@ class WoxApi {
 
   Future<String> getBackupFolder(String traceId) async {
     return await WoxHttpUtil.instance.postData(traceId, "/backup/folder", null);
+  }
+
+  Future<void> clearLogs(String traceId) async {
+    await WoxHttpUtil.instance.postData(traceId, "/log/clear", null);
+  }
+
+  Future<void> openLogFile(String traceId) async {
+    await WoxHttpUtil.instance.postData(traceId, "/log/open", null);
   }
 
   Future<void> open(String traceId, String path) async {

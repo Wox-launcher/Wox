@@ -20,8 +20,12 @@ var logInstance *Log
 var logOnce sync.Once
 
 type Log struct {
-	logger *zap.Logger
-	writer io.Writer
+	logger      *zap.Logger
+	writer      io.Writer
+	level       zap.AtomicLevel
+	fileWriter  *Lumberjack
+	logFolder   string
+	clearLogMux sync.Mutex
 }
 
 func GetLogger() *Log {
@@ -61,15 +65,22 @@ func CreateLogger(logFolder string) *Log {
 		os.MkdirAll(logFolder, os.ModePerm)
 	}
 
-	logImpl := &Log{}
-	logImpl.logger, logImpl.writer = createLogger(logFolder)
+	logImpl := &Log{
+		logFolder: logFolder,
+	}
+	defaultLogLevel := zap.InfoLevel
+	if IsDev() {
+		defaultLogLevel = zap.DebugLevel
+	}
+
+	logImpl.logger, logImpl.writer, logImpl.fileWriter, logImpl.level = createLogger(logFolder, defaultLogLevel)
 	log.SetFlags(0) // remove default timestamp
 	log.SetOutput(logImpl.writer)
 	return logImpl
 }
 
 func (l *Log) GetWriter() io.Writer {
-	return logInstance.writer
+	return l.writer
 }
 
 func formatMsg(context context.Context, msg string, level string) string {
@@ -107,13 +118,74 @@ func (l *Log) Error(context context.Context, msg string) {
 	l.logger.Error(formatMsg(context, msg, "ERR"))
 }
 
-func createLogger(logFolder string) (*zap.Logger, io.Writer) {
-	writeSyncer := zapcore.AddSync(&Lumberjack{
+func (l *Log) SetLevel(level string) string {
+	normalizedLevel := NormalizeLogLevel(level)
+	l.level.SetLevel(parseZapLevel(normalizedLevel))
+	return normalizedLevel
+}
+
+func (l *Log) ClearHistory() error {
+	l.clearLogMux.Lock()
+	defer l.clearLogMux.Unlock()
+
+	if err := l.fileWriter.Rotate(); err != nil {
+		return err
+	}
+
+	logFileName := path.Base(l.fileWriter.Filename)
+	entries, err := os.ReadDir(l.logFolder)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		if name == logFileName || name == "crash.log" {
+			continue
+		}
+
+		removeErr := os.Remove(path.Join(l.logFolder, name))
+		if removeErr != nil && !os.IsNotExist(removeErr) {
+			return removeErr
+		}
+	}
+
+	crashLogPath := path.Join(l.logFolder, "crash.log")
+	crashFile, err := os.OpenFile(crashLogPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return err
+	}
+	return crashFile.Close()
+}
+
+func NormalizeLogLevel(level string) string {
+	normalizedLevel := strings.ToUpper(strings.TrimSpace(level))
+	if normalizedLevel == "DEBUG" {
+		return "DEBUG"
+	}
+	return "INFO"
+}
+
+func parseZapLevel(level string) zapcore.Level {
+	if NormalizeLogLevel(level) == "DEBUG" {
+		return zap.DebugLevel
+	}
+	return zap.InfoLevel
+}
+
+func createLogger(logFolder string, initialLevel zapcore.Level) (*zap.Logger, io.Writer, *Lumberjack, zap.AtomicLevel) {
+	fileWriter := &Lumberjack{
 		Filename:  path.Join(logFolder, "log"),
 		LocalTime: true,
 		MaxSize:   500, // megabytes
 		MaxAge:    3,   // days
-	})
+	}
+	writeSyncer := zapcore.AddSync(fileWriter)
+	atomicLevel := zap.NewAtomicLevelAt(initialLevel)
 
 	cfg := zap.NewDevelopmentEncoderConfig()
 	cfg.EncodeTime = nil
@@ -122,7 +194,7 @@ func createLogger(logFolder string) (*zap.Logger, io.Writer) {
 	zapLogger := zap.New(zapcore.NewCore(
 		zapcore.NewConsoleEncoder(cfg),
 		writeSyncer,
-		zap.DebugLevel,
+		atomicLevel,
 	))
 
 	reader, writer := io.Pipe()
@@ -142,5 +214,5 @@ func createLogger(logFolder string) (*zap.Logger, io.Writer) {
 		}
 	})
 
-	return zapLogger, writer
+	return zapLogger, writer, fileWriter, atomicLevel
 }

@@ -9,6 +9,7 @@ type WoxSettingDto struct {
 	EnableAutostart      bool
 	MainHotkey           string
 	SelectionHotkey      string
+	LogLevel             string
 	UsePinYin            bool
 	SwitchInputMethodABC bool
 	HideOnStart          bool

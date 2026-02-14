@@ -152,6 +152,7 @@ func main() {
 		return
 	}
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	util.GetLogger().SetLevel(woxSetting.LogLevel.Get())
 
 	// update proxy
 	if woxSetting.HttpProxyEnabled.Get() {
