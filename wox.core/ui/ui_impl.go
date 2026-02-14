@@ -27,8 +27,9 @@ import (
 const resultDebounceIntervalMs = 32
 
 type uiImpl struct {
-	requestMap *util.HashMap[string, chan WebsocketMsg]
-	isVisible  bool // cached visibility state, updated by PostOnShow/PostOnHide
+	requestMap      *util.HashMap[string, chan WebsocketMsg]
+	isVisible       bool // cached visibility state, updated by PostOnShow/PostOnHide
+	isInSettingView bool // cached setting-view state, updated by PostOnSetting
 }
 
 func (u *uiImpl) ChangeQuery(ctx context.Context, query common.PlainQuery) {
@@ -110,7 +111,7 @@ func (u *uiImpl) Notify(ctx context.Context, msg common.NotifyMsg) {
 		logger.Info(ctx, "toolbar/system message muted by backend")
 		return
 	}
-	if u.IsVisible(ctx) {
+	if u.IsVisible(ctx) && !u.IsInSettingView() {
 		u.invokeWebsocketMethod(ctx, "ShowToolbarMsg", msg)
 	} else {
 		var icon image.Image
@@ -125,6 +126,10 @@ func (u *uiImpl) Notify(ctx context.Context, msg common.NotifyMsg) {
 		}
 		notifier.Notify(icon, msg.Text)
 	}
+}
+
+func (u *uiImpl) IsInSettingView() bool {
+	return u.isInSettingView
 }
 
 func (u *uiImpl) FocusToChatInput(ctx context.Context) {

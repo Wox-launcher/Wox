@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -65,6 +67,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/on/show":           handleOnShow,
 	"/on/querybox/focus": handleOnQueryBoxFocus,
 	"/on/hide":           handleOnHide,
+	"/on/setting":        handleOnSetting,
 	"/usage/stats":       handleUsageStats,
 
 	// lang
@@ -94,6 +97,8 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/backup/restore":   handleBackupRestore,
 	"/backup/all":       handleBackupAll,
 	"/backup/folder":    handleBackupFolder,
+	"/log/clear":        handleLogClear,
+	"/log/open":         handleLogOpen,
 	"/hotkey/available": handleHotkeyAvailable,
 	"/query/metadata":   handleQueryMetadata,
 	"/deeplink":         handleDeeplink,
@@ -515,6 +520,7 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 	settingDto.EnableAutostart = woxSetting.EnableAutostart.Get()
 	settingDto.MainHotkey = woxSetting.MainHotkey.Get()
 	settingDto.SelectionHotkey = woxSetting.SelectionHotkey.Get()
+	settingDto.LogLevel = util.NormalizeLogLevel(woxSetting.LogLevel.Get())
 	settingDto.UsePinYin = woxSetting.UsePinYin.Get()
 	settingDto.SwitchInputMethodABC = woxSetting.SwitchInputMethodABC.Get()
 	settingDto.HideOnStart = woxSetting.HideOnStart.Get()
@@ -577,6 +583,7 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 	var vb bool
 	var vf float64
 	var vs = kv.Value
+	updatedValue := kv.Value
 	if vb1, err := strconv.ParseBool(vs); err == nil {
 		vb = vb1
 	}
@@ -591,6 +598,12 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 		woxSetting.MainHotkey.Set(vs)
 	case "SelectionHotkey":
 		woxSetting.SelectionHotkey.Set(vs)
+	case "LogLevel":
+		updatedValue = util.NormalizeLogLevel(vs)
+		if err := woxSetting.LogLevel.Set(updatedValue); err != nil {
+			writeErrorResponse(w, err.Error())
+			return
+		}
 	case "UsePinYin":
 		woxSetting.UsePinYin.Set(vb)
 	case "SwitchInputMethodABC":
@@ -722,7 +735,7 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	GetUIManager().PostSettingUpdate(getTraceContext(r), kv.Key, kv.Value)
+	GetUIManager().PostSettingUpdate(getTraceContext(r), kv.Key, updatedValue)
 
 	writeSuccessResponse(w, "")
 }
@@ -930,6 +943,44 @@ func handleBackupFolder(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, backupDir)
 }
 
+func handleLogClear(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	err := util.GetLogger().ClearHistory()
+	if err != nil {
+		GetUIManager().GetUI(ctx).Notify(ctx, common.NotifyMsg{
+			Icon:           common.WoxIcon.String(),
+			Text:           fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "ui_data_log_clear_notify_failed"), err.Error()),
+			DisplaySeconds: 6,
+		})
+		writeErrorResponse(w, err.Error())
+		return
+	}
+
+	GetUIManager().GetUI(ctx).Notify(ctx, common.NotifyMsg{
+		Icon:           common.WoxIcon.String(),
+		Text:           i18n.GetI18nManager().TranslateWox(ctx, "ui_data_log_clear_notify_success"),
+		DisplaySeconds: 4,
+	})
+	writeSuccessResponse(w, "")
+}
+
+func handleLogOpen(w http.ResponseWriter, r *http.Request) {
+	logFile := filepath.Join(util.GetLocation().GetLogDirectory(), "log")
+	file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	_ = file.Close()
+
+	if err := shell.OpenFileInFolder(logFile); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+
+	writeSuccessResponse(w, "")
+}
+
 func handleHotkeyAvailable(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
 
@@ -1011,6 +1062,19 @@ func handleOnQueryBoxFocus(w http.ResponseWriter, r *http.Request) {
 func handleOnHide(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
 	GetUIManager().PostOnHide(ctx)
+	writeSuccessResponse(w, "")
+}
+
+func handleOnSetting(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	body, _ := io.ReadAll(r.Body)
+	inSettingViewResult := gjson.GetBytes(body, "inSettingView")
+	if !inSettingViewResult.Exists() {
+		writeErrorResponse(w, "inSettingView is required")
+		return
+	}
+
+	GetUIManager().PostOnSetting(ctx, inSettingViewResult.Bool())
 	writeSuccessResponse(w, "")
 }
 

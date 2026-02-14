@@ -4,6 +4,7 @@ class WoxSetting {
   late bool enableAutostart;
   late String mainHotkey;
   late String selectionHotkey;
+  late String logLevel;
   late bool usePinYin;
   late bool switchInputMethodABC;
   late bool hideOnStart;
@@ -34,6 +35,7 @@ class WoxSetting {
     required this.enableAutostart,
     required this.mainHotkey,
     required this.selectionHotkey,
+    required this.logLevel,
     required this.usePinYin,
     required this.switchInputMethodABC,
     required this.hideOnStart,
@@ -65,6 +67,7 @@ class WoxSetting {
     enableAutostart = json['EnableAutostart'] ?? false;
     mainHotkey = json['MainHotkey'];
     selectionHotkey = json['SelectionHotkey'];
+    logLevel = json['LogLevel'] ?? 'INFO';
     usePinYin = json['UsePinYin'] ?? false;
     switchInputMethodABC = json['SwitchInputMethodABC'] ?? false;
     hideOnStart = json['HideOnStart'] ?? false;
@@ -131,6 +134,7 @@ class WoxSetting {
     data['EnableAutostart'] = enableAutostart;
     data['MainHotkey'] = mainHotkey;
     data['SelectionHotkey'] = selectionHotkey;
+    data['LogLevel'] = logLevel;
     data['UsePinYin'] = usePinYin;
     data['SwitchInputMethodABC'] = switchInputMethodABC;
     data['HideOnStart'] = hideOnStart;

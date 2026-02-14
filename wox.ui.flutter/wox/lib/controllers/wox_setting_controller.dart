@@ -25,6 +25,8 @@ class WoxSettingController extends GetxController {
   final runtimeStatuses = <WoxRuntimeStatus>[].obs;
   final isRuntimeStatusLoading = false.obs;
   final runtimeStatusError = ''.obs;
+  final isClearingLogs = false.obs;
+  final isUpdatingLogLevel = false.obs;
 
   final usageStats = WoxUsageStats.empty().obs;
   final isUsageStatsLoading = false.obs;
@@ -656,6 +658,52 @@ class WoxSettingController extends GetxController {
       const UuidV4().generate(),
     );
     backups.assignAll(result);
+  }
+
+  Future<void> clearLogs() async {
+    if (isClearingLogs.value) {
+      return;
+    }
+
+    final traceId = const UuidV4().generate();
+    isClearingLogs.value = true;
+    try {
+      await WoxApi.instance.clearLogs(traceId);
+      Logger.instance.info(traceId, 'Logs cleared');
+    } catch (e) {
+      Logger.instance.error(traceId, 'Failed to clear logs: $e');
+    } finally {
+      isClearingLogs.value = false;
+    }
+  }
+
+  Future<void> updateLogLevel(String level) async {
+    if (isUpdatingLogLevel.value) {
+      return;
+    }
+
+    final previous = woxSetting.value.logLevel;
+    woxSetting.value.logLevel = level;
+    woxSetting.refresh();
+
+    final traceId = const UuidV4().generate();
+    isUpdatingLogLevel.value = true;
+    try {
+      await WoxApi.instance.updateSetting(traceId, "LogLevel", level);
+      await reloadSetting(traceId);
+      Logger.instance.info(traceId, 'LogLevel updated: $level');
+    } catch (e) {
+      woxSetting.value.logLevel = previous;
+      woxSetting.refresh();
+      Logger.instance.error(traceId, 'Failed to update LogLevel: $e');
+    } finally {
+      isUpdatingLogLevel.value = false;
+    }
+  }
+
+  Future<void> openLogFile() async {
+    final traceId = const UuidV4().generate();
+    await WoxApi.instance.openLogFile(traceId);
   }
 
   Future<void> openFolder(String path) async {

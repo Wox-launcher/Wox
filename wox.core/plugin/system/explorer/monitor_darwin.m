@@ -25,6 +25,170 @@ static int gCurrentH = 0;
 static CFStringRef gAXWindowNumberAttribute = CFSTR("AXWindowNumber");
 static BOOL appHasFocusedTextInput(AXUIElementRef appElement);
 
+// Keep this function shape for temporary native diagnostics.
+// We intentionally keep it as a no-op to avoid C->Go callback instability.
+static void logMessage(NSString *format, ...) {}
+
+static BOOL isSystemOverlayOwnerName(NSString *ownerName) {
+    if (!ownerName || ownerName.length == 0) {
+        return NO;
+    }
+
+    return [ownerName isEqualToString:@"Window Server"] ||
+           [ownerName isEqualToString:@"Dock"] ||
+           [ownerName isEqualToString:@"Control Center"] ||
+           [ownerName isEqualToString:@"Notification Center"] ||
+           [ownerName isEqualToString:@"SystemUIServer"];
+}
+
+static BOOL isVisualFrontmostWindowOwnedByPid(pid_t pid, pid_t *frontPidOut, int *frontLayerOut, NSString **frontOwnerNameOut) {
+    if (pid <= 0) {
+        return NO;
+    }
+
+    if (frontPidOut) {
+        *frontPidOut = 0;
+    }
+    if (frontLayerOut) {
+        *frontLayerOut = 0;
+    }
+    if (frontOwnerNameOut) {
+        *frontOwnerNameOut = nil;
+    }
+
+    CFArrayRef windowList = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements, kCGNullWindowID);
+    if (!windowList) {
+        // Avoid false negatives when we cannot inspect the window stack.
+        logMessage(@"visual-front: window list unavailable, allow pid=%d", (int)pid);
+        return YES;
+    }
+
+    CFIndex count = CFArrayGetCount(windowList);
+    for (CFIndex i = 0; i < count; i++) {
+        NSDictionary *windowInfo = (__bridge NSDictionary *)CFArrayGetValueAtIndex(windowList, i);
+        if (![windowInfo isKindOfClass:[NSDictionary class]]) {
+            continue;
+        }
+
+        NSNumber *windowAlpha = windowInfo[(id)kCGWindowAlpha];
+        if (windowAlpha && [windowAlpha doubleValue] <= 0.01) {
+            continue;
+        }
+
+        CFDictionaryRef boundsDict = (__bridge CFDictionaryRef)windowInfo[(id)kCGWindowBounds];
+        CGRect bounds = CGRectZero;
+        if (!boundsDict || !CGRectMakeWithDictionaryRepresentation(boundsDict, &bounds)) {
+            continue;
+        }
+        if (bounds.size.width <= 1 || bounds.size.height <= 1) {
+            continue;
+        }
+
+        NSNumber *ownerPid = windowInfo[(id)kCGWindowOwnerPID];
+        if (!ownerPid || [ownerPid intValue] <= 0) {
+            continue;
+        }
+        NSString *ownerName = windowInfo[(id)kCGWindowOwnerName];
+
+        pid_t frontPid = (pid_t)[ownerPid intValue];
+        NSNumber *windowLayer = windowInfo[(id)kCGWindowLayer];
+        int layer = windowLayer ? [windowLayer intValue] : 0;
+        if (frontPidOut) {
+            *frontPidOut = frontPid;
+        }
+        if (frontLayerOut) {
+            *frontLayerOut = layer;
+        }
+        if (frontOwnerNameOut) {
+            *frontOwnerNameOut = ownerName;
+        }
+        if (frontPid == pid) {
+            CFRelease(windowList);
+            return YES;
+        }
+
+        if (layer == 0) {
+            // Another app owns the top normal window.
+            CFRelease(windowList);
+            return NO;
+        }
+
+        // Floating/system layers are noisy on macOS (menu bar, overlays, HUDs).
+        // We only treat a mismatched normal app window as decisive foreground.
+        if (layer > 0) {
+            continue;
+        }
+    }
+
+    CFRelease(windowList);
+    // Keep behavior permissive when no decisive foreground window is found.
+    return YES;
+}
+
+static pid_t getWindowOwnerPidByWindowID(uint32_t windowID) {
+    if (windowID == 0) {
+        return 0;
+    }
+
+    CFArrayRef windowList = CGWindowListCopyWindowInfo(kCGWindowListOptionIncludingWindow, windowID);
+    if (!windowList) {
+        return 0;
+    }
+
+    pid_t ownerPid = 0;
+    CFIndex count = CFArrayGetCount(windowList);
+    for (CFIndex i = 0; i < count; i++) {
+        NSDictionary *windowInfo = (__bridge NSDictionary *)CFArrayGetValueAtIndex(windowList, i);
+        if (![windowInfo isKindOfClass:[NSDictionary class]]) {
+            continue;
+        }
+
+        NSNumber *windowNumber = windowInfo[(id)kCGWindowNumber];
+        if (!windowNumber || [windowNumber unsignedIntValue] != windowID) {
+            continue;
+        }
+
+        NSNumber *pidNumber = windowInfo[(id)kCGWindowOwnerPID];
+        if (!pidNumber) {
+            continue;
+        }
+
+        ownerPid = (pid_t)[pidNumber intValue];
+        break;
+    }
+
+    CFRelease(windowList);
+    return ownerPid;
+}
+
+// Returns the app that currently receives keyboard input. This is more
+// reliable than frontmostApplication for non-activating floating windows.
+static pid_t getKeyboardFocusedApplicationPid() {
+    if (!AXIsProcessTrusted()) {
+        return 0;
+    }
+
+    AXUIElementRef systemElement = AXUIElementCreateSystemWide();
+    if (!systemElement) {
+        return 0;
+    }
+
+    CFTypeRef focusedAppValue = NULL;
+    AXError err = AXUIElementCopyAttributeValue(systemElement, kAXFocusedApplicationAttribute, &focusedAppValue);
+    CFRelease(systemElement);
+    if (err != kAXErrorSuccess || !focusedAppValue || CFGetTypeID(focusedAppValue) != AXUIElementGetTypeID()) {
+        if (focusedAppValue) {
+            CFRelease(focusedAppValue);
+        }
+        return 0;
+    }
+
+    pid_t focusedPid = 0;
+    AXUIElementGetPid((AXUIElementRef)focusedAppValue, &focusedPid);
+    CFRelease(focusedAppValue);
+    return focusedPid;
+}
+
 static BOOL getFinderWindowRectByWindowID(pid_t pid, uint32_t targetWindowID, int *x, int *y, int *w, int *h) {
     if (pid <= 0 || targetWindowID == 0) {
         return NO;
@@ -503,6 +667,7 @@ static BOOL getOpenSaveDialogRect(pid_t pid, int *x, int *y, int *w, int *h) {
 
 static void deactivateIfNeeded() {
     if (gCurrentState != MonitorContextStateNone) {
+        logMessage(@"state: deactivate pid=%d state=%ld", (int)gCurrentPid, (long)gCurrentState);
         fileExplorerDeactivatedCallbackCGO();
     }
     gCurrentState = MonitorContextStateNone;
@@ -524,6 +689,7 @@ static void activateIfNeeded(pid_t pid, MonitorContextState state, int x, int y,
         return;
     }
 
+    logMessage(@"state: activate pid=%d state=%ld rect=(%d,%d,%d,%d)", (int)pid, (long)state, x, y, w, h);
     gCurrentState = state;
     gCurrentPid = pid;
     gCurrentX = x;
@@ -542,6 +708,32 @@ static void evaluateFrontmostApplicationState() {
 
     pid_t pid = [activeApp processIdentifier];
     if (pid <= 0) {
+        deactivateIfNeeded();
+        return;
+    }
+
+    // Non-activating panels (e.g. iTerm2 hotkey window) may receive keyboard
+    // focus while Finder remains frontmost. Prefer the focused app pid.
+    pid_t focusedPid = getKeyboardFocusedApplicationPid();
+    if (focusedPid > 0 && focusedPid != pid) {
+        NSRunningApplication *focusedApp = [NSRunningApplication runningApplicationWithProcessIdentifier:focusedPid];
+        if (focusedApp) {
+            activeApp = focusedApp;
+            pid = focusedPid;
+        } else {
+            deactivateIfNeeded();
+            return;
+        }
+    }
+
+    pid_t visualFrontPid = 0;
+    int visualFrontLayer = 0;
+    NSString *visualFrontOwnerName = nil;
+    // Keep a visual foreground sanity check for normal app switches when AX
+    // focus info is missing or delayed.
+    if (!isVisualFrontmostWindowOwnedByPid(pid, &visualFrontPid, &visualFrontLayer, &visualFrontOwnerName)) {
+        NSString *bundleId = [activeApp bundleIdentifier];
+        logMessage(@"evaluate: visual mismatch activePid=%d bundle=%@ frontPid=%d frontLayer=%d frontOwner=%@", (int)pid, bundleId ? bundleId : @"<nil>", (int)visualFrontPid, visualFrontLayer, visualFrontOwnerName ? visualFrontOwnerName : @"<nil>");
         deactivateIfNeeded();
         return;
     }
@@ -668,9 +860,29 @@ void startFileExplorerMonitor() {
                 syncFrontmostWindowObserver();
                 evaluateFrontmostApplicationState();
                 if (gCurrentState == MonitorContextStateNone) {
+                    logMessage(@"key: ignored key=%c state=none pid=%d", (char)ch, (int)gCurrentPid);
                     return;
                 }
 
+                NSInteger eventWindowNumber = [event windowNumber];
+                if (eventWindowNumber > 0) {
+                    pid_t eventOwnerPid = getWindowOwnerPidByWindowID((uint32_t)eventWindowNumber);
+                    // Drop keys from a different window owner (e.g. iTerm2
+                    // hotkey/floating window) even if Finder stays frontmost.
+                    if (eventOwnerPid > 0 && gCurrentPid > 0 && eventOwnerPid != gCurrentPid) {
+                        deactivateIfNeeded();
+                        return;
+                    }
+                }
+
+                pid_t focusedPid = getKeyboardFocusedApplicationPid();
+                // Extra guard for windows that do not expose a stable window id.
+                if (focusedPid > 0 && gCurrentPid > 0 && focusedPid != gCurrentPid) {
+                    deactivateIfNeeded();
+                    return;
+                }
+
+                logMessage(@"key: forward key=%c state=%ld pid=%d", (char)ch, (long)gCurrentState, (int)gCurrentPid);
                 fileExplorerKeyDownCallbackCGO((char)ch);
             }];
         }
