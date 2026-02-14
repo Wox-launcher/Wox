@@ -261,7 +261,7 @@ static int copyParentDirectoryPath(const WCHAR *fullPath, WCHAR *out, size_t out
         return 0;
     }
 
-    // Strip trailing separators while keeping drive roots like C:\
+    // Strip trailing separators while keeping drive roots like C:\.
     while (len > 1 && (tmp[len - 1] == L'\\' || tmp[len - 1] == L'/'))
     {
         if (len == 3 && tmp[1] == L':')
@@ -474,24 +474,30 @@ static void SendUnicodeString(const WCHAR *text)
     }
 }
 
-static HWND findFileNameEdit(HWND hDialog) {
+static HWND findFileNameEdit(HWND hDialog)
+{
     // Try Common Item Dialog (Vista+) style: ComboBoxEx32 (0x47c) -> ComboBox -> Edit
     HWND hComboEx = GetDlgItem(hDialog, 0x047c); // cmb13
-    if (hComboEx) {
+    if (hComboEx)
+    {
         HWND hCombo = FindWindowExW(hComboEx, NULL, L"ComboBox", NULL);
-        if (hCombo) {
+        if (hCombo)
+        {
             HWND hEdit = FindWindowExW(hCombo, NULL, L"Edit", NULL);
-            if (hEdit) return hEdit;
+            if (hEdit)
+                return hEdit;
         }
     }
-    
+
     // Try old style or direct Combo (0x47c) -> Edit (if not Ex) (e.g. in some wrapped dialogs)
     HWND hCombo = GetDlgItem(hDialog, 0x047c);
-    if (hCombo) {
-         HWND hEdit = FindWindowExW(hCombo, NULL, L"Edit", NULL);
-         if (hEdit) return hEdit;
+    if (hCombo)
+    {
+        HWND hEdit = FindWindowExW(hCombo, NULL, L"Edit", NULL);
+        if (hEdit)
+            return hEdit;
     }
-    
+
     return NULL;
 }
 
@@ -526,20 +532,24 @@ int navigateActiveFileDialog(const char *path)
     MultiByteToWideChar(CP_UTF8, 0, path, -1, wpath, wlen);
 
     HWND hEdit = findFileNameEdit(hwnd);
-    if (hEdit) {
-         SendMessageW(hEdit, WM_SETTEXT, 0, (LPARAM)wpath);
-         
-         // Trigger command 
-         HWND hButton = GetDlgItem(hwnd, IDOK);
-         if (hButton) {
-             SendMessage(hwnd, WM_COMMAND, MAKEWPARAM(IDOK, BN_CLICKED), (LPARAM)hButton);
-         } else {
-             PostMessage(hEdit, WM_KEYDOWN, VK_RETURN, 0);
-             PostMessage(hEdit, WM_KEYUP, VK_RETURN, 0);
-         }
-         
-         free(wpath);
-         return 1;
+    if (hEdit)
+    {
+        SendMessageW(hEdit, WM_SETTEXT, 0, (LPARAM)wpath);
+
+        // Trigger command
+        HWND hButton = GetDlgItem(hwnd, IDOK);
+        if (hButton)
+        {
+            SendMessage(hwnd, WM_COMMAND, MAKEWPARAM(IDOK, BN_CLICKED), (LPARAM)hButton);
+        }
+        else
+        {
+            PostMessage(hEdit, WM_KEYDOWN, VK_RETURN, 0);
+            PostMessage(hEdit, WM_KEYUP, VK_RETURN, 0);
+        }
+
+        free(wpath);
+        return 1;
     }
 
     SetForegroundWindow(hwnd);
