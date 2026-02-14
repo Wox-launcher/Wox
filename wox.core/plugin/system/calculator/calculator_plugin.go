@@ -248,27 +248,13 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 			})
 		}
 
-		//show top 500 histories order by desc
-		queryTrackable := query.SessionId != "" && query.Id != ""
+		//show top 100 histories order by desc
 		var count = 0
-	scanLoop:
 		for i := len(c.histories) - 1; i >= 0; i-- {
-			if count%16 == 0 {
-				select {
-				case <-ctx.Done():
-					break scanLoop
-				default:
-				}
-
-				if queryTrackable && !plugin.GetPluginManager().IsCurrentQuery(query.SessionId, query.Id) {
-					break scanLoop
-				}
-			}
-
 			h := c.histories[i]
 
 			count++
-			if count >= 500 {
+			if count >= 100 {
 				break
 			}
 
