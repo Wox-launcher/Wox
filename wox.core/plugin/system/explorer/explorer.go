@@ -56,9 +56,7 @@ type overlayRuntime struct {
 }
 
 type ExplorerPlugin struct {
-	api                plugin.API
-	openSaveHistoryMap *util.HashMap[string, []openSaveHistoryEntry] // app window title -> history entries
-
+	api            plugin.API
 	overlayRuntime atomic.Pointer[overlayRuntime]
 }
 
@@ -73,7 +71,6 @@ func (c *ExplorerPlugin) GetMetadata() plugin.Metadata {
 		Description:   "i18n:plugin_explorer_plugin_description",
 		Icon:          "emoji:📂",
 		TriggerKeywords: []string{
-			"*",
 			"explorer",
 		},
 		Commands: []plugin.MetadataCommand{
@@ -127,7 +124,6 @@ func (c *ExplorerPlugin) GetMetadata() plugin.Metadata {
 
 func (c *ExplorerPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	c.api = initParams.API
-	c.openSaveHistoryMap = c.loadOpenSaveHistory(ctx)
 
 	// Start overlay hint listener if enabled
 	enableTypeToSearch := c.api.GetSetting(ctx, enableTypeToSearchSettingKey)
@@ -149,51 +145,46 @@ func (c *ExplorerPlugin) Init(ctx context.Context, initParams plugin.InitParams)
 }
 
 func (c *ExplorerPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
-	// If global trigger, check context
-	if query.IsGlobalQuery() {
-		isFileExplorer, err := window.IsFileExplorer(query.Env.ActiveWindowPid)
-		if err != nil {
-			c.api.Log(ctx, plugin.LogLevelError, "Failed to check if active app is file explorer: "+err.Error())
-			return []plugin.QueryResult{}
-		}
-
-		if !isFileExplorer {
-			if !query.Env.ActiveWindowIsOpenSaveDialog {
-				return []plugin.QueryResult{}
-			}
-		}
+	if !c.shouldHandleQuery(ctx, query) {
+		return []plugin.QueryResult{}
 	}
 
-	if c.isAddCommandQuery(query) {
+	if strings.EqualFold(query.Command, explorerCommandAdd) {
 		return c.queryAddQuickJumpPath(ctx, query)
 	}
 
-	results := make([]plugin.QueryResult, 0)
-	results = append(results, c.queryCurrentDirectoryEntries(ctx, query)...)
-	results = append(results, c.queryJumpFolders(ctx, query)...)
+	return c.queryExplorerResults(ctx, query)
+}
+
+func (c *ExplorerPlugin) shouldHandleQuery(ctx context.Context, query plugin.Query) bool {
+	if !query.IsGlobalQuery() {
+		return true
+	}
+
+	if query.Env.ActiveWindowIsOpenSaveDialog {
+		return true
+	}
+
+	isFileExplorer, err := window.IsFileExplorer(query.Env.ActiveWindowPid)
+	if err != nil {
+		c.api.Log(ctx, plugin.LogLevelError, "Failed to check if active app is file explorer: "+err.Error())
+		return false
+	}
+	return isFileExplorer
+}
+
+func (c *ExplorerPlugin) queryExplorerResults(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+	directoryResults := c.queryCurrentDirectoryEntries(ctx, query)
+	jumpResults := c.queryJumpFolders(ctx, query)
+
+	results := make([]plugin.QueryResult, 0, len(directoryResults)+len(jumpResults))
+	results = append(results, directoryResults...)
+	results = append(results, jumpResults...)
 	return results
 }
 
-func (c *ExplorerPlugin) isAddCommandQuery(query plugin.Query) bool {
-	if strings.EqualFold(query.Command, explorerCommandAdd) {
-		return true
-	}
-	return query.Command == "" && strings.EqualFold(strings.TrimSpace(query.Search), explorerCommandAdd)
-}
-
 func (c *ExplorerPlugin) queryAddQuickJumpPath(ctx context.Context, query plugin.Query) []plugin.QueryResult {
-	path := strings.TrimSpace(query.Search)
-	if query.Command == "" {
-		path = ""
-	}
-	if path == "" {
-		if query.Env.ActiveWindowIsOpenSaveDialog {
-			path = c.getMostRecentOpenSaveHistoryPath(query.Env.ActiveWindowTitle)
-		}
-	}
-	if path == "" {
-		path = c.getCurrentFileExplorerPath(ctx, query.Env)
-	}
+	path := c.resolveAddPath(ctx, query)
 	if path == "" {
 		c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Explorer add skipped: no resolvable path (pid=%d, title=%q, isOpenSaveDialog=%v)", query.Env.ActiveWindowPid, query.Env.ActiveWindowTitle, query.Env.ActiveWindowIsOpenSaveDialog))
 		return []plugin.QueryResult{}
@@ -225,31 +216,23 @@ func (c *ExplorerPlugin) queryAddQuickJumpPath(ctx context.Context, query plugin
 	}
 }
 
+func (c *ExplorerPlugin) resolveAddPath(ctx context.Context, query plugin.Query) string {
+	if query.Command != "" {
+		if commandPath := strings.TrimSpace(query.Search); commandPath != "" {
+			return commandPath
+		}
+	}
+
+	return c.getCurrentFileExplorerPath(ctx, query.Env)
+}
+
 func (c *ExplorerPlugin) queryCurrentDirectoryEntries(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	currentPath := c.getCurrentFileExplorerPath(ctx, query.Env)
 	if currentPath == "" {
 		c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Explorer current directory query skipped: path not found (search=%q, pid=%d, title=%q, isOpenSaveDialog=%v)", query.Search, query.Env.ActiveWindowPid, query.Env.ActiveWindowTitle, query.Env.ActiveWindowIsOpenSaveDialog))
 		return []plugin.QueryResult{}
 	}
-	search := strings.TrimSpace(query.Search)
-
-	results := c.queryDirectoryEntriesAtPath(ctx, query, currentPath, search)
-	if len(results) > 0 || search == "" || !query.Env.ActiveWindowIsOpenSaveDialog {
-		return results
-	}
-
-	parentPath := filepath.Dir(currentPath)
-	if parentPath == "" || parentPath == "." || parentPath == currentPath {
-		return results
-	}
-
-	parentResults := c.queryDirectoryEntriesAtPath(ctx, query, parentPath, search)
-	if len(parentResults) > 0 {
-		c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Explorer current directory fallback to parent path: current=%q parent=%q search=%q matched=%d", currentPath, parentPath, search, len(parentResults)))
-		return parentResults
-	}
-
-	return results
+	return c.queryDirectoryEntriesAtPath(ctx, query, currentPath, strings.TrimSpace(query.Search))
 }
 
 func (c *ExplorerPlugin) queryDirectoryEntriesAtPath(ctx context.Context, query plugin.Query, dirPath string, search string) []plugin.QueryResult {
@@ -286,7 +269,20 @@ func (c *ExplorerPlugin) queryDirectoryEntriesAtPath(ctx context.Context, query 
 			icon = common.NewWoxImageFileIcon(fullPath)
 		}
 
-		actions := []plugin.QueryResultAction{
+		results = append(results, c.buildDirectoryEntryResult(query, entry.Name(), fullPath, isDir, icon, matchScore))
+	}
+
+	c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer current directory query resolved: path=%q search=%q totalEntries=%d matched=%d", dirPath, search, len(entries), len(results)))
+	return results
+}
+
+func (c *ExplorerPlugin) buildDirectoryEntryResult(query plugin.Query, title string, fullPath string, isDir bool, icon common.WoxImage, score int64) plugin.QueryResult {
+	return plugin.QueryResult{
+		Title:    title,
+		SubTitle: fullPath,
+		Icon:     icon,
+		Score:    score,
+		Actions: []plugin.QueryResultAction{
 			{
 				Name: "i18n:plugin_explorer_open",
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -300,19 +296,8 @@ func (c *ExplorerPlugin) queryDirectoryEntriesAtPath(ctx context.Context, query 
 					c.revealEntry(ctx, query.Env, fullPath, isDir)
 				},
 			},
-		}
-
-		results = append(results, plugin.QueryResult{
-			Title:    entry.Name(),
-			SubTitle: fullPath,
-			Icon:     icon,
-			Score:    matchScore,
-			Actions:  actions,
-		})
+		},
 	}
-
-	c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer current directory query resolved: path=%q search=%q totalEntries=%d matched=%d", dirPath, search, len(entries), len(results)))
-	return results
 }
 
 func (c *ExplorerPlugin) revealEntry(ctx context.Context, env plugin.QueryEnv, fullPath string, isDir bool) {
@@ -323,20 +308,7 @@ func (c *ExplorerPlugin) revealEntry(ctx context.Context, env plugin.QueryEnv, f
 			return
 		}
 
-		historyPath := entryPath
-		if !isDir {
-			historyPath = filepath.Dir(entryPath)
-		}
-		if c.isDirPath(historyPath) {
-			c.recordOpenSaveHistory(ctx, env.ActiveWindowTitle, historyPath)
-		}
-
-		if env.ActiveWindowPid > 0 {
-			if !window.ActivateWindowByPid(env.ActiveWindowPid) {
-				c.api.Log(ctx, plugin.LogLevelError, "Failed to activate dialog owner window")
-			}
-			time.Sleep(150 * time.Millisecond)
-		}
+		c.activateOwnerWindow(ctx, env.ActiveWindowPid)
 
 		// For current directory search results in open/save, select the item without entering it.
 		if window.SelectInActiveFileDialog(entryPath) {
@@ -347,12 +319,23 @@ func (c *ExplorerPlugin) revealEntry(ctx context.Context, env plugin.QueryEnv, f
 		return
 	}
 
-	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Navigate explorer by pid: pid=%d path=%s", env.ActiveWindowPid, fullPath))
+	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Select in explorer by pid: pid=%d path=%s", env.ActiveWindowPid, fullPath))
 	if !window.SelectInFileExplorerByPid(env.ActiveWindowPid, fullPath) {
 		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Select in explorer by pid failed: pid=%d path=%s", env.ActiveWindowPid, fullPath))
 		return
 	}
+
 	window.ActivateWindowByPid(env.ActiveWindowPid)
+}
+
+func (c *ExplorerPlugin) activateOwnerWindow(ctx context.Context, pid int) {
+	if pid <= 0 {
+		return
+	}
+	if !window.ActivateWindowByPid(pid) {
+		c.api.Log(ctx, plugin.LogLevelError, "Failed to activate dialog owner window")
+	}
+	time.Sleep(150 * time.Millisecond)
 }
 
 func (c *ExplorerPlugin) queryJumpFolders(ctx context.Context, query plugin.Query) []plugin.QueryResult {
@@ -365,11 +348,6 @@ func (c *ExplorerPlugin) queryJumpFolders(ctx context.Context, query plugin.Quer
 	var results []plugin.QueryResult
 	for _, folder := range folders {
 		title := i18n.GetI18nManager().TranslateWox(ctx, folder.titleKey)
-		// If folder has an explicit title (for common folders), translate it.
-		// For dynamic Finder windows, titleKey is just the path or name, so we use it directly if translation fails or key is missing.
-		if title == folder.titleKey && !strings.HasPrefix(title, "i18n:") {
-			// It's likely a raw path or name
-		}
 
 		isMatch := true
 		matchScore := int64(0)
@@ -384,30 +362,34 @@ func (c *ExplorerPlugin) queryJumpFolders(ctx context.Context, query plugin.Quer
 			continue
 		}
 
-		folderPath := folder.path
 		score := matchScore + folder.scoreBoost
-		results = append(results, plugin.QueryResult{
-			Title:    title,
-			SubTitle: folderPath,
-			Icon:     common.FolderIcon,
-			Score:    score,
-			Actions: []plugin.QueryResultAction{
-				{
-					Name: "i18n:plugin_explorer_jump_to",
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						c.jumpToFolder(ctx, query.Env, folderPath)
-					},
-				},
-			},
-		})
+		results = append(results, c.buildJumpFolderResult(query, title, folder.path, score))
 	}
 
 	return results
 }
 
+func (c *ExplorerPlugin) buildJumpFolderResult(query plugin.Query, title string, folderPath string, score int64) plugin.QueryResult {
+	return plugin.QueryResult{
+		Title:    title,
+		SubTitle: folderPath,
+		Icon:     common.FolderIcon,
+		Score:    score,
+		Actions: []plugin.QueryResultAction{
+			{
+				Name: "i18n:plugin_explorer_jump_to",
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					c.jumpToFolder(ctx, query.Env, folderPath)
+				},
+			},
+		},
+	}
+}
+
 func (c *ExplorerPlugin) getJumpFolderCandidates(ctx context.Context, env plugin.QueryEnv) []openSaveFolder {
 	candidateIndex := make(map[string]int)
 	candidates := make([]openSaveFolder, 0)
+
 	addCandidate := func(candidate openSaveFolder) {
 		candidate.path = strings.TrimSpace(candidate.path)
 		if candidate.path == "" || !c.isDirPath(candidate.path) {
@@ -433,6 +415,7 @@ func (c *ExplorerPlugin) getJumpFolderCandidates(ctx context.Context, env plugin
 		candidates = append(candidates, candidate)
 	}
 
+	// 1) User managed quick jump paths.
 	for _, quickJumpPath := range c.loadQuickJumpPaths(ctx) {
 		addCandidate(openSaveFolder{
 			titleKey:   filepath.Base(quickJumpPath),
@@ -441,37 +424,7 @@ func (c *ExplorerPlugin) getJumpFolderCandidates(ctx context.Context, env plugin
 		})
 	}
 
-	// First, load from history
-	c.openSaveHistoryMap.Range(func(key string, entries []openSaveHistoryEntry) bool {
-		if key != env.ActiveWindowTitle {
-			return true
-		}
-
-		now := time.Now().Unix()
-		for _, entry := range entries {
-			// Calculate score boost based on recency and frequency
-			timeDiff := now - entry.UsedAt
-			timeScore := int64(0)
-			if timeDiff < 3600 { // within 1 hour
-				timeScore = 100
-			} else if timeDiff < 86400 { // within 1 day
-				timeScore = 50
-			} else if timeDiff < 604800 { // within 1 week
-				timeScore = 20
-			}
-			frequencyScore := int64(entry.Count * 5)
-			totalScore := timeScore + frequencyScore
-
-			addCandidate(openSaveFolder{
-				titleKey:   filepath.Base(entry.Path),
-				path:       entry.Path,
-				scoreBoost: totalScore,
-			})
-		}
-		return false
-	})
-
-	// 2. Get open Finder windows
+	// 2) Open Finder window paths.
 	openPaths := window.GetOpenFinderWindowPaths()
 	for _, p := range openPaths {
 		if p == "" {
@@ -483,7 +436,7 @@ func (c *ExplorerPlugin) getJumpFolderCandidates(ctx context.Context, env plugin
 		})
 	}
 
-	// 2. Add common system folders
+	// 3) Common system folders.
 	homeDir, err := os.UserHomeDir()
 	if err == nil {
 		systemFolders := []struct {
@@ -510,74 +463,50 @@ func (c *ExplorerPlugin) getJumpFolderCandidates(ctx context.Context, env plugin
 }
 
 func (c *ExplorerPlugin) getCurrentFileExplorerPath(ctx context.Context, env plugin.QueryEnv) string {
-	if dialogPath := strings.TrimSpace(window.GetFileDialogPathByPid(env.ActiveWindowPid)); dialogPath != "" {
-		c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer path resolved from file dialog by pid: pid=%d path=%q", env.ActiveWindowPid, dialogPath))
-		return dialogPath
-	}
-	c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer path not resolved from file dialog by pid: pid=%d", env.ActiveWindowPid))
-
 	if env.ActiveWindowIsOpenSaveDialog {
-		if dialogPath := strings.TrimSpace(window.GetActiveFileDialogPath()); dialogPath != "" {
-			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer path resolved from active file dialog fallback: path=%q", dialogPath))
+		if dialogPath := strings.TrimSpace(window.GetFileDialogPathByPid(env.ActiveWindowPid)); dialogPath != "" {
+			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer path resolved from file dialog by pid: pid=%d path=%q", env.ActiveWindowPid, dialogPath))
 			return dialogPath
 		}
-		c.api.Log(ctx, plugin.LogLevelDebug, "Explorer path not resolved from active file dialog fallback")
+		if dialogPath := strings.TrimSpace(window.GetActiveFileDialogPath()); dialogPath != "" {
+			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer path resolved from active file dialog: path=%q", dialogPath))
+			return dialogPath
+		}
 	}
 
-	currentPath := ""
 	if util.IsWindows() {
 		// Prefer the actual foreground tab path on Windows 11 (tabs may share the same HWND).
-		currentPath = strings.TrimSpace(window.GetActiveFileExplorerPath())
-		if currentPath != "" {
-			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer path resolved from active file explorer: path=%q", currentPath))
-			return currentPath
+		if activePath := strings.TrimSpace(window.GetActiveFileExplorerPath()); activePath != "" {
+			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer path resolved from active file explorer: path=%q", activePath))
+			return activePath
 		}
-		c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer path not resolved from active file explorer, trying pid/title fallback: pid=%d title=%q", env.ActiveWindowPid, env.ActiveWindowTitle))
-		currentPath = strings.TrimSpace(window.GetFileExplorerPathByPidAndWindowTitle(env.ActiveWindowPid, env.ActiveWindowTitle))
-	} else {
-		currentPath = strings.TrimSpace(window.GetFileExplorerPathByPid(env.ActiveWindowPid))
+
+		if pidPath := strings.TrimSpace(window.GetFileExplorerPathByPidAndWindowTitle(env.ActiveWindowPid, env.ActiveWindowTitle)); pidPath != "" {
+			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer path resolved from file explorer by pid/title: pid=%d title=%q path=%q", env.ActiveWindowPid, env.ActiveWindowTitle, pidPath))
+			return pidPath
+		}
+	} else if pidPath := strings.TrimSpace(window.GetFileExplorerPathByPid(env.ActiveWindowPid)); pidPath != "" {
+		c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer path resolved from file explorer by pid: pid=%d path=%q", env.ActiveWindowPid, pidPath))
+		return pidPath
 	}
-	if currentPath != "" {
-		c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer path resolved from file explorer by pid/title: pid=%d title=%q path=%q", env.ActiveWindowPid, env.ActiveWindowTitle, currentPath))
-		return currentPath
+
+	// Compatibility fallback for edge cases where open/save detection flag is false
+	// but the active PID still owns an open/save dialog.
+	if !env.ActiveWindowIsOpenSaveDialog {
+		if dialogPath := strings.TrimSpace(window.GetFileDialogPathByPid(env.ActiveWindowPid)); dialogPath != "" {
+			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer path resolved from file dialog compatibility fallback: pid=%d path=%q", env.ActiveWindowPid, dialogPath))
+			return dialogPath
+		}
 	}
 
 	c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Explorer path resolve failed: pid=%d title=%q isOpenSaveDialog=%v", env.ActiveWindowPid, env.ActiveWindowTitle, env.ActiveWindowIsOpenSaveDialog))
 	return ""
 }
 
-func (c *ExplorerPlugin) getMostRecentOpenSaveHistoryPath(windowTitle string) string {
-	if strings.TrimSpace(windowTitle) == "" {
-		return ""
-	}
-
-	entries, ok := c.openSaveHistoryMap.Load(windowTitle)
-	if !ok || len(entries) == 0 {
-		return ""
-	}
-
-	latestPath := ""
-	latestUsedAt := int64(0)
-	for _, entry := range entries {
-		if entry.UsedAt >= latestUsedAt && c.isDirPath(entry.Path) {
-			latestUsedAt = entry.UsedAt
-			latestPath = entry.Path
-		}
-	}
-
-	return strings.TrimSpace(latestPath)
-}
-
 func (c *ExplorerPlugin) jumpToFolder(ctx context.Context, env plugin.QueryEnv, folderPath string) {
 	util.Go(ctx, "navigate to folder", func() {
 		if env.ActiveWindowIsOpenSaveDialog {
-			c.recordOpenSaveHistory(ctx, env.ActiveWindowTitle, folderPath)
-			if env.ActiveWindowPid > 0 {
-				if !window.ActivateWindowByPid(env.ActiveWindowPid) {
-					c.api.Log(ctx, plugin.LogLevelError, "Failed to activate dialog owner window")
-				}
-				time.Sleep(150 * time.Millisecond)
-			}
+			c.activateOwnerWindow(ctx, env.ActiveWindowPid)
 			if !window.NavigateActiveFileDialog(folderPath) {
 				c.api.Log(ctx, plugin.LogLevelError, "Failed to navigate open/save dialog to path: "+folderPath)
 			}
@@ -684,59 +613,6 @@ func (c *ExplorerPlugin) normalizePathKey(path string) string {
 		return strings.ToLower(path)
 	}
 	return path
-}
-
-func (c *ExplorerPlugin) recordOpenSaveHistory(ctx context.Context, key string, path string) {
-	if key == "" || path == "" {
-		return
-	}
-
-	now := time.Now().Unix()
-	newList := []openSaveHistoryEntry{}
-	if v, ok := c.openSaveHistoryMap.Load(key); ok {
-		found := false
-		for _, entry := range v {
-			if entry.Path == path {
-				entry.UsedAt = now
-				entry.Count += 1
-				found = true
-			}
-			newList = append(newList, entry)
-		}
-		if !found {
-			newList = append([]openSaveHistoryEntry{{Path: path, UsedAt: now, Count: 1}}, newList...)
-		}
-	} else {
-		newList = []openSaveHistoryEntry{{Path: path, UsedAt: now, Count: 1}}
-	}
-	c.openSaveHistoryMap.Store(key, newList)
-
-	payload, err := json.Marshal(c.openSaveHistoryMap.ToMap())
-	if err != nil {
-		c.api.Log(ctx, plugin.LogLevelError, "Failed to marshal open/save history: "+err.Error())
-		return
-	}
-	c.api.SaveSetting(ctx, openSaveHistorySettingKey, string(payload), false)
-}
-
-func (c *ExplorerPlugin) loadOpenSaveHistory(ctx context.Context) *util.HashMap[string, []openSaveHistoryEntry] {
-	var items = util.NewHashMap[string, []openSaveHistoryEntry]()
-	raw := c.api.GetSetting(ctx, openSaveHistorySettingKey)
-	if raw == "" {
-		return items
-	}
-
-	unmarshalMap := make(map[string][]openSaveHistoryEntry)
-	if err := json.Unmarshal([]byte(raw), &unmarshalMap); err != nil {
-		c.api.Log(ctx, plugin.LogLevelError, "Failed to load open/save history: "+err.Error())
-		return items
-	}
-
-	for k, v := range unmarshalMap {
-		items.Store(k, v)
-	}
-
-	return items
 }
 
 func (c *ExplorerPlugin) stopOverlayListener() {
