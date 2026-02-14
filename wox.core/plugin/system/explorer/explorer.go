@@ -774,7 +774,12 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 				switch ev.eventType {
 				case overlayEventActivate:
 					active = true
-					resetState()
+					// Don't reset state when we're waiting for the overlay to become visible.
+					// ShowApp steals focus from Explorer, which triggers deactivated → activated cycling.
+					// Resetting here would clear pending keys before the ticker can send changeQuery.
+					if !waitingVisible {
+						resetState()
+					}
 				case overlayEventDeactivate:
 					active = false
 					if !waitingVisible {
