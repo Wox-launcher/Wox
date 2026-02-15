@@ -172,7 +172,12 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
       return Row(children: [WoxImageView(woxImage: woxImage, width: 24, height: 24)]);
     }
     if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeSelect) {
-      var selectOption = column.selectOptions.firstWhere((element) => element.value == value, orElse: () => PluginSettingValueSelectOption.fromJson(<String, dynamic>{}));
+      PluginSettingValueSelectOption selectOption;
+      if (column.selectOptions.isEmpty) {
+        selectOption = PluginSettingValueSelectOption.fromJson(<String, dynamic>{});
+      } else {
+        selectOption = column.selectOptions.firstWhere((element) => element.value == value, orElse: () => column.selectOptions.first);
+      }
       return columnWidth(
         column: column,
         isHeader: false,
