@@ -93,13 +93,24 @@ type ShowContext struct {
 	IsQueryFocus bool // auto focus chat input on next ui update
 
 	WindowPosition *WindowPosition
-	WindowWidth    int
-	LayoutMode     LayoutMode
+	// WindowRect is only effective in LayoutModeExplorer.
+	// The Flutter side uses it as the explorer anchor rect and computes a sticky
+	// bottom-right overlay position from that rect.
+	WindowRect  *WindowRect
+	WindowWidth int
+	LayoutMode  LayoutMode
 }
 
 type WindowPosition struct {
 	X int
 	Y int
+}
+
+type WindowRect struct {
+	X      int
+	Y      int
+	Width  int
+	Height int
 }
 
 type PickFilesParams struct {

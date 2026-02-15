@@ -329,9 +329,27 @@ class Position {
   }
 }
 
+class WindowRect {
+  late int x;
+  late int y;
+  late int width;
+  late int height;
+
+  WindowRect({required this.x, required this.y, required this.width, required this.height});
+
+  WindowRect.fromJson(Map<String, dynamic> json) {
+    x = json['X'] ?? 0;
+    y = json['Y'] ?? 0;
+    width = json['Width'] ?? 0;
+    height = json['Height'] ?? 0;
+  }
+}
+
 class ShowAppParams {
   late bool selectAll;
   late Position position;
+  // WindowRect is only used in LayoutModeExplorer to anchor Wox near explorer's bottom-right.
+  WindowRect? windowRect;
   late int windowWidth;
   late List<QueryHistory> queryHistories;
   late String launchMode;
@@ -342,6 +360,7 @@ class ShowAppParams {
   ShowAppParams({
     required this.selectAll,
     required this.position,
+    this.windowRect,
     this.windowWidth = 0,
     required this.queryHistories,
     required this.launchMode,
@@ -354,6 +373,9 @@ class ShowAppParams {
     selectAll = json['SelectAll'];
     if (json['Position'] != null) {
       position = Position.fromJson(json['Position']);
+    }
+    if (json['WindowRect'] != null) {
+      windowRect = WindowRect.fromJson(json['WindowRect']);
     }
     windowWidth = json['WindowWidth'] ?? 0;
     queryHistories = <QueryHistory>[];
