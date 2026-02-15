@@ -464,7 +464,7 @@ class WoxLauncherController extends GetxController {
     }
     final targetPosition = Offset(params.position.x.toDouble(), params.position.y.toDouble());
     // Apply position+size together before showing to avoid opening with stale width.
-    final initialHeight = getQueryBoxTotalHeight();
+    final initialHeight = calculateWindowHeight();
     final targetWidth = forceWindowWidth != 0 ? forceWindowWidth : WoxSettingUtil.instance.currentSetting.appWidth.toDouble();
     await windowManager.setBounds(targetPosition, Size(targetWidth, initialHeight));
 
@@ -1305,6 +1305,50 @@ class WoxLauncherController extends GetxController {
     await resizeHeight();
   }
 
+  double calculateWindowHeight() {
+    final maxResultCount = WoxSettingUtil.instance.currentSetting.maxResultCount;
+    final maxHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(maxResultCount);
+    final itemCount = activeResultViewController.items.length;
+    double resultHeight;
+
+    if (isInGridMode()) {
+      resultHeight = resultGridViewController.calculateGridHeight();
+    } else {
+      resultHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(itemCount);
+    }
+
+    if (resultHeight > maxHeight) {
+      resultHeight = maxHeight;
+    }
+    if (isShowActionPanel.value || isShowPreviewPanel.value || isShowFormActionPanel.value) {
+      resultHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(maxResultCount);
+    }
+
+    if (itemCount > 0) {
+      resultHeight += WoxThemeUtil.instance.currentTheme.value.resultContainerPaddingTop + WoxThemeUtil.instance.currentTheme.value.resultContainerPaddingBottom;
+    }
+    // Only add toolbar height when toolbar is actually shown in UI.
+    if (isShowToolbar && !isToolbarHiddenForce.value) {
+      resultHeight += WoxThemeUtil.instance.getToolbarHeight();
+    }
+
+    var totalHeight = getQueryBoxTotalHeight() + resultHeight;
+
+    // On Windows with high DPI, add one pixel to avoid fractional cut-off.
+    if (Platform.isWindows) {
+      if (PlatformDispatcher.instance.views.first.devicePixelRatio > 1) {
+        totalHeight = totalHeight + 1;
+      }
+    }
+
+    // If toolbar is shown without results, remove bottom padding to blend with query box.
+    if (isToolbarShowedWithoutResults) {
+      totalHeight -= WoxThemeUtil.instance.currentTheme.value.appPaddingBottom;
+    }
+
+    return totalHeight;
+  }
+
   // select all text in query box
   void selectQueryBoxAllText(String traceId) {
     Logger.instance.info(traceId, "select query box all text");
@@ -1328,45 +1372,7 @@ class WoxLauncherController extends GetxController {
     if (isInSettingView.value) {
       return;
     }
-    final maxResultCount = WoxSettingUtil.instance.currentSetting.maxResultCount;
-    final maxHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(maxResultCount);
-    final itemCount = activeResultViewController.items.length;
-    double resultHeight;
-
-    if (isInGridMode()) {
-      resultHeight = resultGridViewController.calculateGridHeight();
-    } else {
-      resultHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(itemCount);
-    }
-
-    if (resultHeight > maxHeight) {
-      resultHeight = maxHeight;
-    }
-    if (isShowActionPanel.value || isShowPreviewPanel.value || isShowFormActionPanel.value) {
-      resultHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(maxResultCount);
-    }
-
-    if (itemCount > 0) {
-      resultHeight += WoxThemeUtil.instance.currentTheme.value.resultContainerPaddingTop + WoxThemeUtil.instance.currentTheme.value.resultContainerPaddingBottom;
-    }
-    // Only add toolbar height when toolbar is actually shown in UI
-    if (isShowToolbar && !isToolbarHiddenForce.value) {
-      resultHeight += WoxThemeUtil.instance.getToolbarHeight();
-    }
-    var totalHeight = getQueryBoxTotalHeight() + resultHeight;
-
-    // on windows, if the resolution is scaled in high DPI, the height need to add addtional 1 pixel to avoid cut off
-    // otherwise, "Bottom overflowed by 0.x pixels" will happen
-    if (Platform.isWindows) {
-      if (PlatformDispatcher.instance.views.first.devicePixelRatio > 1) {
-        totalHeight = totalHeight + 1;
-      }
-    }
-
-    // if toolbar is showed without results, remove the bottom padding, This way, the toolbar can blend seamlessly with the query box.
-    if (isToolbarShowedWithoutResults) {
-      totalHeight -= WoxThemeUtil.instance.currentTheme.value.appPaddingBottom;
-    }
+    final totalHeight = calculateWindowHeight();
 
     double targetWidth = forceWindowWidth != 0 ? forceWindowWidth : WoxSettingUtil.instance.currentSetting.appWidth.toDouble();
     if (isQueryBoxAtBottom.value) {
