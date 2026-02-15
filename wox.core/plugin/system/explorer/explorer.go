@@ -754,7 +754,8 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 				targetY = y + 10
 			}
 
-			c.api.Log(localCtx, plugin.LogLevelInfo, fmt.Sprintf("typeToSearch: showOverlay rect=(%d,%d,%d,%d) target=(%d,%d) width=%d", x, y, w, h, targetX, targetY, overlayWidth))
+			c.api.Log(localCtx, plugin.LogLevelInfo, fmt.Sprintf("typeToSearch: showOverlay explorerRect=(%d,%d,%d,%d) overlayWidth=%d queryBoxHeight=%d(55+%d+%d) target=(%d,%d)",
+				x, y, w, h, overlayWidth, queryBoxHeight, currentTheme.AppPaddingTop, currentTheme.AppPaddingBottom, targetX, targetY))
 			plugin.GetPluginManager().GetUI().ShowApp(localCtx, common.ShowContext{
 				SelectAll:      false,
 				WindowPosition: &common.WindowPosition{X: targetX, Y: targetY},

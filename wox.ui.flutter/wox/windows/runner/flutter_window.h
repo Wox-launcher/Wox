@@ -47,6 +47,10 @@ private:
   // Previous active window handle
   HWND previous_active_window_;
 
+  // Suppress transient WM_ACTIVATE/WA_INACTIVE blur events between show() and focus().
+  // show() sets this to true; focus() and hide() clear it.
+  bool suppress_blur_ = false;
+
   // Save/restore the previously focused window (Windows focus rules require explicit restore)
   void SavePreviousActiveWindow(HWND selfHwnd);
   void RestorePreviousActiveWindow(HWND selfHwnd);
