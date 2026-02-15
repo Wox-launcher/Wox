@@ -463,23 +463,17 @@ class WoxLauncherController extends GetxController {
       await windowManager.show();
     }
     final targetPosition = Offset(params.position.x.toDouble(), params.position.y.toDouble());
-    final isExplorerLayout = params.layoutMode == WoxLayoutModeEnum.WOX_LAYOUT_MODE_EXPLORER.code;
-    final isTrayQueryLayout = params.layoutMode == WoxLayoutModeEnum.WOX_LAYOUT_MODE_TRAY_QUERY.code;
-    final shouldApplyBoundsBeforeShow = (Platform.isMacOS && isExplorerLayout) || (!Platform.isLinux && isTrayQueryLayout);
-    if (shouldApplyBoundsBeforeShow) {
-      // Apply position+size together before showing to avoid opening with stale width.
-      final initialHeight = getQueryBoxTotalHeight();
-      final targetWidth = forceWindowWidth != 0 ? forceWindowWidth : WoxSettingUtil.instance.currentSetting.appWidth.toDouble();
-      await windowManager.setBounds(targetPosition, Size(targetWidth, initialHeight));
-    } else {
-      // Use the position calculated by backend
-      await windowManager.setPosition(targetPosition);
-    }
+    // Apply position+size together before showing to avoid opening with stale width.
+    final initialHeight = getQueryBoxTotalHeight();
+    final targetWidth = forceWindowWidth != 0 ? forceWindowWidth : WoxSettingUtil.instance.currentSetting.appWidth.toDouble();
+    await windowManager.setBounds(targetPosition, Size(targetWidth, initialHeight));
 
-    await windowManager.show();
+    // Set always-on-top BEFORE show() so the TOPMOST flag is already in place
+    // when the window becomes visible, avoiding transient blur on Windows.
     if (!isInSettingView.value) {
       await windowManager.setAlwaysOnTop(true);
     }
+    await windowManager.show();
     await windowManager.focus();
     focusQueryBox(selectAll: params.selectAll);
 

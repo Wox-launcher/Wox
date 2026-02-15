@@ -1,9 +1,38 @@
 ﻿#define _WIN32_WINNT 0x0600
 #include <windows.h>
+#include <shellscalingapi.h>
 #include <wchar.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <stdarg.h>
+
+static UINT getDpiForWindowMonitor(HWND hwnd)
+{
+    HMONITOR hMonitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    HMODULE shcore = LoadLibraryA("Shcore.dll");
+    if (shcore)
+    {
+        typedef HRESULT(WINAPI * GetDpiForMonitorFunc)(HMONITOR, int, UINT *, UINT *);
+        GetDpiForMonitorFunc getDpiForMonitor =
+            (GetDpiForMonitorFunc)GetProcAddress(shcore, "GetDpiForMonitor");
+        if (getDpiForMonitor)
+        {
+            UINT dpiX = 96, dpiY = 96;
+            // MDT_EFFECTIVE_DPI = 0
+            if (SUCCEEDED(getDpiForMonitor(hMonitor, 0, &dpiX, &dpiY)))
+            {
+                FreeLibrary(shcore);
+                return dpiX;
+            }
+        }
+        FreeLibrary(shcore);
+    }
+    // Fallback to system DPI
+    HDC hdc = GetDC(NULL);
+    UINT dpi = GetDeviceCaps(hdc, LOGPIXELSX);
+    ReleaseDC(NULL, hdc);
+    return dpi;
+}
 
 extern void fileExplorerActivatedCallbackCGO(int pid, int isFileDialog, int x, int y, int w, int h);
 extern void fileExplorerDeactivatedCallbackCGO();
@@ -19,6 +48,15 @@ static DWORD gLastExplorerPid = 0;
 static HWND gLastExplorerHwnd = NULL;
 static DWORD gLastKeyLogTick = 0;
 static DWORD gLastEnsureActivateTick = 0;
+
+// State tracking for the current foreground window type.
+enum ForegroundState
+{
+    stateNone = 0,
+    stateExplorer = 1,
+    stateDialog = 2
+};
+static enum ForegroundState currentState = stateNone;
 
 static void ensureForegroundActivation();
 
@@ -157,8 +195,15 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
                 (vkCode >= 0x30 && vkCode <= 0x39))
             { // 0-9
                 char c = (char)vkCode;
-                logMessage("LowLevelKeyboardProc: key vk=0x%02lX char=%c", vkCode, c);
+                logMessage("LowLevelKeyboardProc: key vk=0x%02lX char=%c state=%d", vkCode, c, currentState);
                 fileExplorerKeyDownCallbackCGO(c);
+                // Only consume the key when Explorer/Dialog is the active foreground window.
+                // This prevents the system beep from Explorer's built-in type-to-search,
+                // while still allowing keys to pass through to other apps (including Wox's query box).
+                if (currentState == stateExplorer || currentState == stateDialog)
+                {
+                    return 1;
+                }
             }
             else
             {
@@ -287,14 +332,26 @@ static void updateHooksForExplorer(int isExplorerActive)
 
 static void triggerActivation(HWND hwnd, DWORD pid, int isDialog)
 {
+    currentState = isDialog ? stateDialog : stateExplorer;
     RECT rect;
     if (GetWindowRect(hwnd, &rect))
     {
-        int x = rect.left;
-        int y = rect.top;
-        int w = rect.right - rect.left;
-        int h = rect.bottom - rect.top;
-        logMessage("Activated hwnd=0x%p pid=%lu dialog=%d rect=(%d,%d,%d,%d)", hwnd, pid, isDialog, x, y, w, h);
+        int physX = rect.left;
+        int physY = rect.top;
+        int physW = rect.right - rect.left;
+        int physH = rect.bottom - rect.top;
+
+        // Convert physical coordinates to logical coordinates for Flutter.
+        // GetWindowRect returns physical pixels, but Flutter's windowManager.setPosition
+        // expects logical (DPI-scaled) coordinates.
+        UINT dpi = getDpiForWindowMonitor(hwnd);
+        float scale = (float)dpi / 96.0f;
+
+        int x = (int)(physX / scale);
+        int y = (int)(physY / scale);
+        int w = (int)(physW / scale);
+        int h = (int)(physH / scale);
+        logMessage("Activated hwnd=0x%p pid=%lu dialog=%d physical=(%d,%d,%d,%d) logical=(%d,%d,%d,%d) dpi=%u scale=%.2f", hwnd, pid, isDialog, physX, physY, physW, physH, x, y, w, h, dpi, scale);
         fileExplorerActivatedCallbackCGO((int)pid, isDialog, x, y, w, h);
     }
     else
@@ -399,6 +456,7 @@ static void CALLBACK foregroundChangedProc(
             logMessage("foregroundChangedProc: deactivated (shell class)");
             gLastExplorerPid = 0;
             gLastExplorerHwnd = NULL;
+            currentState = stateNone;
             updateHooksForExplorer(0);
             fileExplorerDeactivatedCallbackCGO();
         }
@@ -447,6 +505,7 @@ static void CALLBACK foregroundChangedProc(
         {
             gLastExplorerPid = 0;
             gLastExplorerHwnd = NULL;
+            currentState = stateNone;
             updateHooksForExplorer(0);
             fileExplorerDeactivatedCallbackCGO();
         }

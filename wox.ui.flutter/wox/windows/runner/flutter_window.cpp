@@ -483,7 +483,14 @@ LRESULT CALLBACK FlutterWindow::WindowProc(HWND hwnd, UINT message, WPARAM wpara
     }
     else
     {
-      g_window_instance->SendWindowEvent("onWindowBlur");
+      if (g_window_instance->suppress_blur_)
+      {
+        g_window_instance->Log("WM_ACTIVATE: WA_INACTIVE suppressed (show-to-focus transition)");
+      }
+      else
+      {
+        g_window_instance->SendWindowEvent("onWindowBlur");
+      }
     }
     break;
   }
@@ -797,12 +804,19 @@ void FlutterWindow::HandleWindowManagerMethodCall(
     else if (method_name == "show")
     {
       SavePreviousActiveWindow(hwnd);
+      // Suppress transient blur events that fire between show() and the
+      // subsequent focus() call from Dart.  Without this, Windows may
+      // deactivate the newly-shown window (e.g. Explorer steals focus),
+      // sending WM_ACTIVATE/WA_INACTIVE before focus() has a chance to
+      // grab the foreground, which causes onWindowBlur -> hideApp().
+      suppress_blur_ = true;
       ShowWindow(hwnd, SW_SHOW);
       result->Success();
     }
     else if (method_name == "hide")
     {
       Log("[KEYLOG][NATIVE] Hide called, using ShowWindow(SW_HIDE)");
+      suppress_blur_ = false;
       ShowWindow(hwnd, SW_HIDE);
       RestorePreviousActiveWindow(hwnd);
 
@@ -829,6 +843,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       {
         SetFocus(hwnd);
         BringWindowToTop(hwnd);
+        suppress_blur_ = false;
         result->Success();
         return;
       }
@@ -859,6 +874,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       if (GetForegroundWindow() == hwnd)
       {
         Log("Focus: use attach thread input");
+        suppress_blur_ = false;
         result->Success();
         return;
       }
@@ -884,6 +900,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       if (GetForegroundWindow() == hwnd)
       {
         Log("Focus: use Alt key injection");
+        suppress_blur_ = false;
         result->Success();
         return;
       }
@@ -894,6 +911,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       SetFocus(hwnd);
 
       Log("Focus: final attempt completed");
+      suppress_blur_ = false;
       result->Success();
     }
     else if (method_name == "isVisible")
