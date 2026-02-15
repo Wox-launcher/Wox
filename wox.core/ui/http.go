@@ -157,7 +157,7 @@ func requestUI(ctx context.Context, request WebsocketMsg) error {
 	}
 
 	jsonData, _ := json.Marshal(request.Data)
-	util.GetLogger().Info(ctx, fmt.Sprintf("[Wox -> UI] %s: %s", request.Method, jsonData))
+	util.GetLogger().Debug(ctx, fmt.Sprintf("[Wox -> UI] %s: %s", request.Method, jsonData))
 	return m.Broadcast(marshalData)
 }
 

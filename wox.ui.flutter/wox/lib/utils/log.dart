@@ -11,6 +11,7 @@ import 'wox_websocket_msg_util.dart';
 
 class Logger {
   late xlogger.Logger _logger;
+  String logLevel = "INFO";
 
   Logger._privateConstructor();
 
@@ -39,12 +40,50 @@ class Logger {
   }
 
   void log(String traceId, String level, String message) {
+    if (!shouldLog(level)) {
+      return;
+    }
+
     _logger.i("$traceId [$level] $message");
 
     try {
       sendLog(traceId, level, message);
     } catch (e) {
       _logger.e("$traceId [$level] Failed to send log: $e");
+    }
+  }
+
+  void setLogLevel(String level) {
+    final normalized = normalizeLogLevel(level);
+    logLevel = normalized;
+    _logger.i("[LOGGER] log level set to $normalized");
+  }
+
+  String normalizeLogLevel(String level) {
+    final normalized = level.trim().toUpperCase();
+    if (normalized == "DEBUG") {
+      return "DEBUG";
+    }
+    return "INFO";
+  }
+
+  bool shouldLog(String level) {
+    final threshold = logLevel == "DEBUG" ? 10 : 20;
+    return logPriority(level) >= threshold;
+  }
+
+  int logPriority(String level) {
+    switch (level.trim().toLowerCase()) {
+      case "debug":
+        return 10;
+      case "info":
+        return 20;
+      case "warn":
+        return 30;
+      case "error":
+        return 40;
+      default:
+        return 20;
     }
   }
 

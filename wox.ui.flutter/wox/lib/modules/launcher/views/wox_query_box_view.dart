@@ -177,17 +177,17 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                   if (event is KeyDownEvent) {
                     switch (event.logicalKey) {
                       case LogicalKeyboardKey.escape:
-                        Logger.instance.info(traceId, "[KEYLOG][FLUTTER] ESC KeyDown -> hiding app");
+                        Logger.instance.debug(traceId, "[KEYLOG][FLUTTER] ESC KeyDown -> hiding app");
                         controller.hideApp(const UuidV4().generate());
                         return KeyEventResult.handled;
                       case LogicalKeyboardKey.enter:
                         var composing = controller.queryBoxTextFieldController.value.composing;
                         var isComposing = composing.start >= 0 && composing.end >= 0;
                         if (isComposing) {
-                          Logger.instance.info(traceId, "[KEYLOG][FLUTTER] Enter KeyDown ignored due to IME composing");
+                          Logger.instance.debug(traceId, "[KEYLOG][FLUTTER] Enter KeyDown ignored due to IME composing");
                           return KeyEventResult.ignored;
                         }
-                        Logger.instance.info(traceId, "[KEYLOG][FLUTTER] Enter KeyDown -> executing action");
+                        Logger.instance.debug(traceId, "[KEYLOG][FLUTTER] Enter KeyDown -> executing action");
                         controller.executeDefaultAction(const UuidV4().generate());
                         return KeyEventResult.handled;
                       case LogicalKeyboardKey.arrowDown:
@@ -266,7 +266,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                 // list all actions
                 Logger.instance.debug(traceId, "[KEYLOG][FLUTTER] Checking if action hotkey: $pressedHotkey");
                 if (controller.isActionHotkey(pressedHotkey)) {
-                  Logger.instance.info(traceId, "[KEYLOG][FLUTTER] Alt+J detected -> toggling action panel");
+                  Logger.instance.debug(traceId, "[KEYLOG][FLUTTER] Alt+J detected -> toggling action panel");
                   controller.toggleActionPanel(const UuidV4().generate());
                   return KeyEventResult.handled;
                 }

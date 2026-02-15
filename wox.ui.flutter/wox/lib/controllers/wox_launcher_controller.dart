@@ -1328,7 +1328,6 @@ class WoxLauncherController extends GetxController {
     if (isInSettingView.value) {
       return;
     }
-
     final maxResultCount = WoxSettingUtil.instance.currentSetting.maxResultCount;
     final maxHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(maxResultCount);
     final itemCount = activeResultViewController.items.length;
@@ -1370,7 +1369,6 @@ class WoxLauncherController extends GetxController {
     }
 
     double targetWidth = forceWindowWidth != 0 ? forceWindowWidth : WoxSettingUtil.instance.currentSetting.appWidth.toDouble();
-
     if (isQueryBoxAtBottom.value) {
       // In explorer/tray-query mode, we anchor to the bottom.
       // Use getPosition + getSize to compute the current bottom edge, then adjust top to grow upward.
