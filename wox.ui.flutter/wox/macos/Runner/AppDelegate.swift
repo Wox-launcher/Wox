@@ -11,7 +11,9 @@ class AppDelegate: FlutterAppDelegate {
   private var currentAppearance: String = "light"
 
   private func log(_ message: String) {
-    // NSLog("WoxApp: \(message)")
+    DispatchQueue.main.async { [weak self] in
+      self?.windowEventChannel?.invokeMethod("log", arguments: message)
+    }
   }
 
   override func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool {
@@ -108,8 +110,20 @@ class AppDelegate: FlutterAppDelegate {
             let width = args["width"] as? Double,
             let height = args["height"] as? Double
           {
-            let size = NSSize(width: width, height: height)
-            window.setContentSize(size)
+            // Keep top-left stable when resizing; direct setContentSize can shift Y on macOS.
+            let currentFrame = window.frame
+            let currentTop = currentFrame.origin.y + currentFrame.height
+            let targetFrame = window.frameRect(forContentRect: NSRect(x: 0, y: 0, width: width, height: height))
+            let newOriginY = currentTop - targetFrame.height
+            window.setFrame(
+              NSRect(
+                x: currentFrame.origin.x,
+                y: newOriginY,
+                width: targetFrame.width,
+                height: targetFrame.height
+              ),
+              display: true
+            )
             result(nil)
           } else {
             result(
@@ -235,8 +249,7 @@ class AppDelegate: FlutterAppDelegate {
           let x = (screenFrame.width - windowWidth) / 2 + screenFrame.minX
           let y = (screenFrame.height - windowHeight) / 2 + screenFrame.minY
 
-          self?.log(
-            "Center: window to \(x),\(y) on screen at \(screenFrame.minX),\(screenFrame.minY)")
+          self?.log("Center: window to \(x),\(y) on screen at \(screenFrame.minX),\(screenFrame.minY)")
           let newFrame = NSRect(x: x, y: y, width: windowWidth, height: windowHeight)
           window.setFrame(newFrame, display: true)
           result(nil)
@@ -247,9 +260,7 @@ class AppDelegate: FlutterAppDelegate {
           if let frontApp = NSWorkspace.shared.frontmostApplication,
             frontApp != NSRunningApplication.current
           {
-            self?.log(
-              "Saving previous active app: \(frontApp.localizedName ?? "Unknown") (bundleID: \(frontApp.bundleIdentifier ?? "Unknown"))"
-            )
+            self?.log("Saving previous active app: \(frontApp.localizedName ?? "Unknown") (bundleID: \(frontApp.bundleIdentifier ?? "Unknown"))")
             self?.previousActiveApp = frontApp
           } else {
             self?.log("No suitable previous app to save")

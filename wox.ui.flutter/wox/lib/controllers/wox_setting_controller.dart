@@ -48,8 +48,7 @@ class WoxSettingController extends GetxController {
 
   //themes
   final themeList = <WoxTheme>[];
-  final installedThemesList =
-      <WoxTheme>[]; // All installed themes for auto theme lookup
+  final installedThemesList = <WoxTheme>[]; // All installed themes for auto theme lookup
   final filteredThemeList = <WoxTheme>[].obs;
   final activeTheme = WoxTheme.empty().obs;
   final isStoreThemeList = true.obs;
@@ -86,10 +85,7 @@ class WoxSettingController extends GetxController {
     try {
       final statuses = await WoxApi.instance.getRuntimeStatuses(traceId);
       runtimeStatuses.assignAll(statuses);
-      Logger.instance.info(
-        traceId,
-        'Runtime statuses loaded, count: ${statuses.length}',
-      );
+      Logger.instance.info(traceId, 'Runtime statuses loaded, count: ${statuses.length}');
     } catch (e) {
       runtimeStatuses.clear();
       runtimeStatusError.value = e.toString();
@@ -120,18 +116,9 @@ class WoxSettingController extends GetxController {
     final traceId = const UuidV4().generate();
     try {
       final families = await WoxApi.instance.getSystemFontFamilies(traceId);
-      final normalized =
-          families
-              .map((family) => family.trim())
-              .where((family) => family.isNotEmpty)
-              .toSet()
-              .toList()
-            ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+      final normalized = families.map((family) => family.trim()).where((family) => family.isNotEmpty).toSet().toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
       systemFontFamilies.assignAll(normalized);
-      Logger.instance.info(
-        traceId,
-        'System font families loaded, count: ${normalized.length}',
-      );
+      Logger.instance.info(traceId, 'System font families loaded, count: ${normalized.length}');
     } catch (e) {
       systemFontFamilies.clear();
       Logger.instance.error(traceId, 'Failed to load system font families: $e');
@@ -149,20 +136,13 @@ class WoxSettingController extends GetxController {
     Logger.instance.info(traceId, 'Setting updated: $key=$value');
 
     // If user switches to last_location, save current window position immediately
-    if (key == "ShowPosition" &&
-        value == WoxPositionTypeEnum.POSITION_TYPE_LAST_LOCATION.code) {
+    if (key == "ShowPosition" && value == WoxPositionTypeEnum.POSITION_TYPE_LAST_LOCATION.code) {
       try {
         final launcherController = Get.find<WoxLauncherController>();
         launcherController.saveWindowPositionIfNeeded();
-        Logger.instance.info(
-          traceId,
-          'Saved current window position when switching to last_location',
-        );
+        Logger.instance.info(traceId, 'Saved current window position when switching to last_location');
       } catch (e) {
-        Logger.instance.error(
-          traceId,
-          'Failed to save window position when switching to last_location: $e',
-        );
+        Logger.instance.error(traceId, 'Failed to save window position when switching to last_location: $e');
       }
     }
   }
@@ -184,8 +164,7 @@ class WoxSettingController extends GetxController {
     }
 
     // Refresh current view
-    if (activeNavPath.value == 'plugins.installed' ||
-        activeNavPath.value == 'plugins.store') {
+    if (activeNavPath.value == 'plugins.installed' || activeNavPath.value == 'plugins.store') {
       await switchToPluginList(traceId, isStorePluginList.value);
     }
 
@@ -209,31 +188,22 @@ class WoxSettingController extends GetxController {
   Future<void> loadStorePlugins(String traceId) async {
     try {
       var start = DateTime.now();
-      final storePluginsFromAPI = await WoxApi.instance.findStorePlugins(
-        traceId,
-      );
+      final storePluginsFromAPI = await WoxApi.instance.findStorePlugins(traceId);
       storePluginsFromAPI.sort((a, b) => a.name.compareTo(b.name));
       storePlugins.clear();
       storePlugins.addAll(storePluginsFromAPI);
-      Logger.instance.info(
-        traceId,
-        'Store plugins loaded, cost ${DateTime.now().difference(start).inMilliseconds} ms',
-      );
+      Logger.instance.info(traceId, 'Store plugins loaded, cost ${DateTime.now().difference(start).inMilliseconds} ms');
     } finally {}
   }
 
   Future<void> loadInstalledPlugins(String traceId) async {
     try {
       var start = DateTime.now();
-      final installedPluginsFromAPI = await WoxApi.instance
-          .findInstalledPlugins(traceId);
+      final installedPluginsFromAPI = await WoxApi.instance.findInstalledPlugins(traceId);
       installedPluginsFromAPI.sort((a, b) => a.name.compareTo(b.name));
       installedPlugins.clear();
       installedPlugins.addAll(installedPluginsFromAPI);
-      Logger.instance.info(
-        traceId,
-        'Installed plugins loaded, cost ${DateTime.now().difference(start).inMilliseconds} ms',
-      );
+      Logger.instance.info(traceId, 'Installed plugins loaded, cost ${DateTime.now().difference(start).inMilliseconds} ms');
     } finally {}
   }
 
@@ -246,13 +216,9 @@ class WoxSettingController extends GetxController {
   Future<void> reloadPlugins(String traceId) async {
     final currentActivePluginId = activePlugin.value.id;
 
-    await Future.wait([
-      loadInstalledPlugins(traceId),
-      loadStorePlugins(traceId),
-    ]);
+    await Future.wait([loadInstalledPlugins(traceId), loadStorePlugins(traceId)]);
 
-    if (activeNavPath.value != 'plugins.installed' &&
-        activeNavPath.value != 'plugins.store') {
+    if (activeNavPath.value != 'plugins.installed' && activeNavPath.value != 'plugins.store') {
       return;
     }
 
@@ -264,20 +230,11 @@ class WoxSettingController extends GetxController {
     }
   }
 
-  Future<void> refreshPlugin(
-    String pluginId,
-    String refreshType /* update / add / remove */,
-  ) async {
+  Future<void> refreshPlugin(String pluginId, String refreshType /* update / add / remove */) async {
     final traceId = const UuidV4().generate();
-    Logger.instance.info(
-      traceId,
-      'Refreshing plugin: $pluginId, refreshType: $refreshType',
-    );
+    Logger.instance.info(traceId, 'Refreshing plugin: $pluginId, refreshType: $refreshType');
     if (refreshType == "add") {
-      PluginDetail updatedPlugin = await WoxApi.instance.getPluginDetail(
-        traceId,
-        pluginId,
-      );
+      PluginDetail updatedPlugin = await WoxApi.instance.getPluginDetail(traceId, pluginId);
       if (updatedPlugin.id.isEmpty) {
         Logger.instance.info(traceId, 'Plugin not found: $pluginId');
         return;
@@ -293,9 +250,7 @@ class WoxSettingController extends GetxController {
       } else {
         installedPlugins.add(updatedPlugin);
       }
-      int filteredPluginListIndex = filteredPluginList.indexWhere(
-        (p) => p.id == pluginId,
-      );
+      int filteredPluginListIndex = filteredPluginList.indexWhere((p) => p.id == pluginId);
       if (filteredPluginListIndex >= 0) {
         filteredPluginList[filteredPluginListIndex] = updatedPlugin;
       } else {
@@ -318,20 +273,13 @@ class WoxSettingController extends GetxController {
       // if is in store plugin view, update the installed property
       if (activeNavPath.value == 'plugins.store') {
         pluginList.firstWhere((p) => p.id == pluginId).isInstalled = false;
-        filteredPluginList.firstWhere((p) => p.id == pluginId).isInstalled =
-            false;
+        filteredPluginList.firstWhere((p) => p.id == pluginId).isInstalled = false;
       }
       if (activePlugin.value.id == pluginId) {
-        activePlugin.value =
-            installedPlugins.isNotEmpty
-                ? installedPlugins[0]
-                : PluginDetail.empty();
+        activePlugin.value = installedPlugins.isNotEmpty ? installedPlugins[0] : PluginDetail.empty();
       }
     } else if (refreshType == "update") {
-      PluginDetail updatedPlugin = await WoxApi.instance.getPluginDetail(
-        traceId,
-        pluginId,
-      );
+      PluginDetail updatedPlugin = await WoxApi.instance.getPluginDetail(traceId, pluginId);
       if (updatedPlugin.id.isEmpty) {
         Logger.instance.info(traceId, 'Plugin not found: $pluginId');
         return;
@@ -349,9 +297,7 @@ class WoxSettingController extends GetxController {
       if (pluginListIndex >= 0) {
         pluginList[pluginListIndex] = updatedPlugin;
       }
-      int filteredPluginListIndex = filteredPluginList.indexWhere(
-        (p) => p.id == pluginId,
-      );
+      int filteredPluginListIndex = filteredPluginList.indexWhere((p) => p.id == pluginId);
       if (filteredPluginListIndex >= 0) {
         filteredPluginList[filteredPluginListIndex] = updatedPlugin;
       }
@@ -382,11 +328,7 @@ class WoxSettingController extends GetxController {
     if (activePlugin.value.id.isNotEmpty) {
       activePlugin.value = filteredPluginList.firstWhere(
         (element) => element.id == activePlugin.value.id,
-        orElse:
-            () =>
-                filteredPluginList.isNotEmpty
-                    ? filteredPluginList[0]
-                    : PluginDetail.empty(),
+        orElse: () => filteredPluginList.isNotEmpty ? filteredPluginList[0] : PluginDetail.empty(),
       );
     } else {
       setFirstFilteredPluginDetailActive();
@@ -413,10 +355,7 @@ class WoxSettingController extends GetxController {
       await refreshPlugin(plugin.id, "add");
     } catch (e) {
       final traceId = const UuidV4().generate();
-      Logger.instance.error(
-        traceId,
-        'Failed to install plugin ${plugin.name}: $e',
-      );
+      Logger.instance.error(traceId, 'Failed to install plugin ${plugin.name}: $e');
       pluginInstallError.value = e.toString();
     } finally {
       isInstallingPlugin.value = false;
@@ -453,31 +392,19 @@ class WoxSettingController extends GetxController {
       filteredPluginList.addAll(
         pluginList.where((element) {
           final keyword = filterPluginKeywordController.text;
-          bool match = WoxFuzzyMatchUtil.isFuzzyMatch(
-            text: element.name,
-            pattern: keyword,
-            usePinYin: WoxSettingUtil.instance.currentSetting.usePinYin,
-          );
+          bool match = WoxFuzzyMatchUtil.isFuzzyMatch(text: element.name, pattern: keyword, usePinYin: WoxSettingUtil.instance.currentSetting.usePinYin);
           if (match) return true;
 
           if (element.nameEn.isNotEmpty) {
-            match = WoxFuzzyMatchUtil.isFuzzyMatch(
-              text: element.nameEn,
-              pattern: keyword,
-              usePinYin: false,
-            );
+            match = WoxFuzzyMatchUtil.isFuzzyMatch(text: element.nameEn, pattern: keyword, usePinYin: false);
             if (match) return true;
           }
 
-          if (element.description.toLowerCase().contains(
-            keyword.toLowerCase(),
-          )) {
+          if (element.description.toLowerCase().contains(keyword.toLowerCase())) {
             return true;
           }
 
-          if (element.descriptionEn.toLowerCase().contains(
-            keyword.toLowerCase(),
-          )) {
+          if (element.descriptionEn.toLowerCase().contains(keyword.toLowerCase())) {
             return true;
           }
 
@@ -499,11 +426,7 @@ class WoxSettingController extends GetxController {
     await openFolder(directory);
   }
 
-  Future<void> updatePluginSetting(
-    String pluginId,
-    String key,
-    String value,
-  ) async {
+  Future<void> updatePluginSetting(String pluginId, String key, String value) async {
     final traceId = const UuidV4().generate();
     final activeTabIndex = activePluginTabController.index;
 
@@ -519,14 +442,10 @@ class WoxSettingController extends GetxController {
     });
   }
 
-  Future<void> updatePluginTriggerKeywords(
-    String pluginId,
-    List<String> triggerKeywords,
-  ) async {}
+  Future<void> updatePluginTriggerKeywords(String pluginId, List<String> triggerKeywords) async {}
 
   bool shouldShowSettingTab() {
-    return activePlugin.value.isInstalled &&
-        activePlugin.value.settingDefinitions.isNotEmpty;
+    return activePlugin.value.isInstalled && activePlugin.value.settingDefinitions.isNotEmpty;
   }
 
   void switchToPluginSettingTab() {
@@ -597,12 +516,7 @@ class WoxSettingController extends GetxController {
 
   void onFilterThemes(String filter) {
     filteredThemeList.clear();
-    filteredThemeList.addAll(
-      themeList.where(
-        (element) =>
-            element.themeName.toLowerCase().contains(filter.toLowerCase()),
-      ),
-    );
+    filteredThemeList.addAll(themeList.where((element) => element.themeName.toLowerCase().contains(filter.toLowerCase())));
   }
 
   void setFirstFilteredThemeActive() {
@@ -620,10 +534,7 @@ class WoxSettingController extends GetxController {
 
     //active theme
     if (activeTheme.value.themeId.isNotEmpty) {
-      activeTheme.value = filteredThemeList.firstWhere(
-        (element) => element.themeId == activeTheme.value.themeId,
-        orElse: () => filteredThemeList[0],
-      );
+      activeTheme.value = filteredThemeList.firstWhere((element) => element.themeId == activeTheme.value.themeId, orElse: () => filteredThemeList[0]);
     } else {
       setFirstFilteredThemeActive();
     }
@@ -654,9 +565,7 @@ class WoxSettingController extends GetxController {
   }
 
   Future<void> refreshBackups() async {
-    final result = await WoxApi.instance.getAllBackups(
-      const UuidV4().generate(),
-    );
+    final result = await WoxApi.instance.getAllBackups(const UuidV4().generate());
     backups.assignAll(result);
   }
 
@@ -685,6 +594,7 @@ class WoxSettingController extends GetxController {
     final previous = woxSetting.value.logLevel;
     woxSetting.value.logLevel = level;
     woxSetting.refresh();
+    Logger.instance.setLogLevel(level);
 
     final traceId = const UuidV4().generate();
     isUpdatingLogLevel.value = true;
@@ -695,6 +605,7 @@ class WoxSettingController extends GetxController {
     } catch (e) {
       woxSetting.value.logLevel = previous;
       woxSetting.refresh();
+      Logger.instance.setLogLevel(previous);
       Logger.instance.error(traceId, 'Failed to update LogLevel: $e');
     } finally {
       isUpdatingLogLevel.value = false;
@@ -719,6 +630,7 @@ class WoxSettingController extends GetxController {
   Future<void> reloadSetting(String traceId) async {
     await WoxSettingUtil.instance.loadSetting(traceId);
     woxSetting.value = WoxSettingUtil.instance.currentSetting;
+    Logger.instance.setLogLevel(woxSetting.value.logLevel);
     Logger.instance.info(traceId, 'Setting reloaded');
   }
 

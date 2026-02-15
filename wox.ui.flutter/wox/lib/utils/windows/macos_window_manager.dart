@@ -21,6 +21,10 @@ class MacOSWindowManager extends BaseWindowManager {
         Logger.instance.debug(const Uuid().v4(), "Window blur event received");
         notifyWindowBlur();
         break;
+      case 'log':
+        final message = call.arguments as String? ?? "";
+        Logger.instance.debug(const Uuid().v4(), "[NATIVE] $message");
+        break;
       default:
         Logger.instance.debug(const Uuid().v4(), "Unhandled method call: ${call.method}");
     }

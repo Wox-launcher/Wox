@@ -57,6 +57,7 @@ Future<void> initialServices(List<String> arguments) async {
   await initArgs(arguments);
   await WoxThemeUtil.instance.loadTheme(traceId);
   await WoxSettingUtil.instance.loadSetting(traceId);
+  Logger.instance.setLogLevel(WoxSettingUtil.instance.currentSetting.logLevel);
 
   var launcherController = WoxLauncherController();
 
