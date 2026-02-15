@@ -142,4 +142,4 @@ This document guides AI coding agents working in this repository.
 - **Refactors**: Scan `AGENTS.md` and `README.md` files first
 - **Build**: Verify with `make build` in wox.core (you can skip UI build for small changes)
 - **Tests**: Run narrowest relevant tests after changes, avoid breaking unrelated tests
-- **Format**: When formatting your code, you must adhere to the coding style guidelines specified in Wox.code-workspace file.
+- **Format**: When formatting code, you must adhere to the coding style guidelines specified in Wox.code-workspace file.

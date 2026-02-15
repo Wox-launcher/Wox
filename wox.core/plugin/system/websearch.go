@@ -13,7 +13,6 @@ import (
 	"wox/setting/validator"
 	"wox/util"
 	"wox/util/selection"
-	"wox/util/shell"
 )
 
 var webSearchesSettingKey = "webSearches"
@@ -30,6 +29,7 @@ type webSearch struct {
 	Urls       []string
 	Title      string
 	Keyword    string
+	Browser    string
 	IsFallback bool //if true, this search will be used when no other search is matched
 	Icon       common.WoxImage
 	Enabled    bool
@@ -67,6 +67,17 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 			},
 		},
 		SettingDefinitions: []definition.PluginSettingDefinitionItem{
+			{
+				Type:               definition.PluginSettingDefinitionTypeSelect,
+				IsPlatformSpecific: true,
+				Value: &definition.PluginSettingValueSelect{
+					Key:          webSearchDefaultBrowserSettingKey,
+					Label:        "i18n:plugin_websearch_default_browser",
+					Tooltip:      "i18n:plugin_websearch_default_browser_tooltip",
+					DefaultValue: webSearchBrowserSystem,
+					Options:      getWebSearchDefaultBrowserOptions(),
+				},
+			},
 			{
 				Type:               definition.PluginSettingDefinitionTypeTable,
 				IsPlatformSpecific: true,
@@ -121,6 +132,14 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 								},
 							},
 							Width: 60,
+						},
+						{
+							Key:           "Browser",
+							Label:         "i18n:plugin_websearch_browser",
+							Tooltip:       "i18n:plugin_websearch_browser_tooltip",
+							Type:          definition.PluginSettingValueTableColumnTypeSelect,
+							Width:         100,
+							SelectOptions: getWebSearchItemBrowserOptions(),
 						},
 						{
 							Key:   "Enabled",
@@ -204,6 +223,7 @@ func (r *WebSearchPlugin) loadWebSearches(ctx context.Context) (webSearches []we
 					Urls:       []string{"https://www.google.com/search?q={query}"},
 					Title:      "Search Google for {query}",
 					Keyword:    "g",
+					Browser:    webSearchBrowserSystem,
 					IsFallback: true,
 					Enabled:    true,
 					Icon:       common.GoogleIcon,
@@ -221,6 +241,27 @@ func (r *WebSearchPlugin) loadWebSearches(ctx context.Context) (webSearches []we
 	if unmarshalErr != nil {
 		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to unmarshal web searches: %s", unmarshalErr.Error()))
 		return
+	}
+
+	needSave := false
+	for i := range webSearches {
+		normalizedBrowser := normalizeWebSearchBrowser(webSearches[i].Browser)
+		if normalizedBrowser == "" {
+			normalizedBrowser = webSearchBrowserSystem
+		}
+		if normalizedBrowser == webSearchBrowserSystem {
+			normalizedBrowser = webSearchBrowserUseDefault
+		}
+		if webSearches[i].Browser != normalizedBrowser {
+			webSearches[i].Browser = normalizedBrowser
+			needSave = true
+		}
+	}
+
+	if needSave {
+		if marshal, err := json.Marshal(webSearches); err == nil {
+			r.api.SaveSetting(ctx, webSearchesSettingKey, string(marshal), false)
+		}
 	}
 
 	return
@@ -253,10 +294,7 @@ func (r *WebSearchPlugin) Query(ctx context.Context, query plugin.Query) (result
 						Icon: common.SearchIcon,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							util.Go(ctx, "open urls", func() {
-								for _, url := range search.Urls {
-									shell.Open(r.replaceVariables(ctx, url, otherQuery))
-									time.Sleep(time.Millisecond * 100)
-								}
+								r.openSearchUrls(ctx, search, otherQuery)
 							})
 						},
 					},
@@ -286,10 +324,7 @@ func (r *WebSearchPlugin) QueryFallback(ctx context.Context, query plugin.Query)
 					Name: "Search",
 					Icon: common.SearchIcon,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						for _, url := range search.Urls {
-							shell.Open(r.replaceVariables(ctx, url, query.RawQuery))
-							time.Sleep(time.Millisecond * 100)
-						}
+						r.openSearchUrls(ctx, search, query.RawQuery)
 					},
 				},
 			},
@@ -318,10 +353,7 @@ func (r *WebSearchPlugin) querySelection(ctx context.Context, query plugin.Query
 					Name: "Search",
 					Icon: common.SearchIcon,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						for _, url := range search.Urls {
-							shell.Open(r.replaceVariables(ctx, url, query.Selection.Text))
-							time.Sleep(time.Millisecond * 100)
-						}
+						r.openSearchUrls(ctx, search, query.Selection.Text)
 					},
 				},
 			},
@@ -336,4 +368,18 @@ func (r *WebSearchPlugin) replaceVariables(ctx context.Context, text string, que
 	result = strings.ReplaceAll(result, "{lower_query}", strings.ToLower(query))
 	result = strings.ReplaceAll(result, "{upper_query}", strings.ToUpper(query))
 	return result
+}
+
+func (r *WebSearchPlugin) openSearchUrls(ctx context.Context, search webSearch, queryText string) {
+	configuredDefaultBrowser := r.api.GetSetting(ctx, webSearchDefaultBrowserSettingKey)
+	browser := resolveWebSearchBrowser(search.Browser, configuredDefaultBrowser)
+
+	for _, url := range search.Urls {
+		resolvedURL := r.replaceVariables(ctx, url, queryText)
+		openErr := openURLInWebSearchBrowser(resolvedURL, browser)
+		if openErr != nil {
+			r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open url %s: %s", resolvedURL, openErr.Error()))
+		}
+		time.Sleep(time.Millisecond * 100)
+	}
 }
