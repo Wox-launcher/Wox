@@ -261,6 +261,7 @@ func (u *uiImpl) invokeWebsocketMethod(ctx context.Context, method string, data 
 func getShowAppParams(ctx context.Context, showContext common.ShowContext) map[string]any {
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	var position Position
+	var windowRect map[string]int
 
 	if showContext.LayoutMode == "" {
 		showContext.LayoutMode = common.LayoutModeDefault
@@ -292,10 +293,20 @@ func getShowAppParams(ctx context.Context, showContext common.ShowContext) map[s
 		}
 	}
 
+	if showContext.WindowRect != nil {
+		windowRect = map[string]int{
+			"X":      showContext.WindowRect.X,
+			"Y":      showContext.WindowRect.Y,
+			"Width":  showContext.WindowRect.Width,
+			"Height": showContext.WindowRect.Height,
+		}
+	}
+
 	return map[string]any{
 		"SelectAll":      showContext.SelectAll,
 		"IsQueryFocus":   showContext.IsQueryFocus,
 		"Position":       position,
+		"WindowRect":     windowRect,
 		"WindowWidth":    showContext.WindowWidth,
 		"QueryHistories": setting.GetSettingManager().GetLatestQueryHistory(ctx, 10),
 		"LaunchMode":     woxSetting.LaunchMode.Get(),

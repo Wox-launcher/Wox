@@ -12,9 +12,7 @@ import (
 	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
-	"wox/setting"
 	"wox/setting/definition"
-	"wox/ui"
 	"wox/util"
 	"wox/util/overlay"
 	"wox/util/shell"
@@ -726,40 +724,12 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 				c.api.Log(localCtx, plugin.LogLevelInfo, fmt.Sprintf("typeToSearch: showOverlay skipped (invalid rect w=%d h=%d)", w, h))
 				return false
 			}
-
-			overlayWidth := 400
-			if woxSetting := setting.GetSettingManager().GetWoxSetting(localCtx); woxSetting != nil {
-				if configuredWidth := woxSetting.AppWidth.Get() / 2; configuredWidth > 0 {
-					overlayWidth = configuredWidth
-				}
-			}
-
-			// Target X: Right edge of explorer - overlay width - padding
-			targetX := x + w - overlayWidth - 20
-			if targetX < x+10 {
-				targetX = x + 10
-			}
-
-			// Keep the initial top position aligned with the actual query box height.
-			// This avoids vertical drift before resize logic expands the result area.
-			currentTheme := ui.GetUIManager().GetCurrentTheme(localCtx)
-			queryBoxHeight := 55 + currentTheme.AppPaddingTop + currentTheme.AppPaddingBottom
-			if queryBoxHeight <= 0 {
-				queryBoxHeight = 80
-			}
-			// Target Y: Bottom edge of explorer - query box height - padding
-			// We position it near the bottom so it can grow upwards
-			targetY := y + h - queryBoxHeight - 20
-			if targetY < y+10 {
-				targetY = y + 10
-			}
-
-			c.api.Log(localCtx, plugin.LogLevelInfo, fmt.Sprintf("typeToSearch: showOverlay explorerRect=(%d,%d,%d,%d) overlayWidth=%d queryBoxHeight=%d(55+%d+%d) target=(%d,%d)",
-				x, y, w, h, overlayWidth, queryBoxHeight, currentTheme.AppPaddingTop, currentTheme.AppPaddingBottom, targetX, targetY))
+			c.api.Log(localCtx, plugin.LogLevelInfo, fmt.Sprintf("typeToSearch: showOverlay explorerRect=(%d,%d,%d,%d)", x, y, w, h))
 			plugin.GetPluginManager().GetUI().ShowApp(localCtx, common.ShowContext{
-				SelectAll:      false,
-				WindowPosition: &common.WindowPosition{X: targetX, Y: targetY},
-				LayoutMode:     common.LayoutModeExplorer,
+				SelectAll: false,
+				// LayoutModeExplorer: Flutter computes sticky bottom-right position from this rect.
+				WindowRect: &common.WindowRect{X: x, Y: y, Width: w, Height: h},
+				LayoutMode: common.LayoutModeExplorer,
 			})
 			return true
 		}

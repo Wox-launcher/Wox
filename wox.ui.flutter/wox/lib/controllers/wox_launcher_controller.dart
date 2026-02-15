@@ -462,11 +462,27 @@ class WoxLauncherController extends GetxController {
     if (Platform.isLinux) {
       await windowManager.show();
     }
-    final targetPosition = Offset(params.position.x.toDouble(), params.position.y.toDouble());
-    // Apply position+size together before showing to avoid opening with stale width.
-    final initialHeight = calculateWindowHeight();
+    final targetHeight = calculateWindowHeight();
     final targetWidth = forceWindowWidth != 0 ? forceWindowWidth : WoxSettingUtil.instance.currentSetting.appWidth.toDouble();
-    await windowManager.setBounds(targetPosition, Size(targetWidth, initialHeight));
+    var targetPosition = Offset(params.position.x.toDouble(), params.position.y.toDouble());
+    // In explorer layout mode, we will ignore the configured position and try to open at the bottom right of the explorer window.
+    if (params.layoutMode == WoxLayoutModeEnum.WOX_LAYOUT_MODE_EXPLORER.code && params.windowRect != null) {
+      final rect = params.windowRect!;
+      const margin = 20.0;
+
+      var targetX = rect.x + rect.width - targetWidth - margin;
+      if (targetX < rect.x + 10) {
+        targetX = rect.x + 10.0;
+      }
+
+      var targetY = rect.y + rect.height - targetHeight - margin;
+      if (targetY < rect.y + 10) {
+        targetY = rect.y + 10.0;
+      }
+      targetPosition = Offset(targetX, targetY);
+    }
+    // Apply position+size together before showing to avoid opening with stale width.
+    await windowManager.setBounds(targetPosition, Size(targetWidth, targetHeight));
 
     // Set always-on-top BEFORE show() so the TOPMOST flag is already in place
     // when the window becomes visible, avoiding transient blur on Windows.
@@ -1598,10 +1614,15 @@ class WoxLauncherController extends GetxController {
 
   void doctorCheck() async {
     final traceId = const UuidV4().generate();
+    final wasToolbarVisible = isShowToolbar && !isToolbarHiddenForce.value;
     var results = await WoxApi.instance.doctorCheck(traceId);
     final checkInfo = processDoctorCheckResults(results);
     doctorCheckInfo.value = checkInfo;
     updateDoctorToolbarIfNeeded(traceId);
+    final isToolbarVisible = isShowToolbar && !isToolbarHiddenForce.value;
+    if (wasToolbarVisible != isToolbarVisible) {
+      await resizeHeight();
+    }
     Logger.instance.debug(traceId, "doctor check result: ${checkInfo.allPassed}, details: ${checkInfo.results.length} items");
   }
 
