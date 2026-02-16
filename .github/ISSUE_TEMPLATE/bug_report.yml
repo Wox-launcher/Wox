@@ -36,14 +36,14 @@ body:
     validations:
       required: true
 
-  - type: textarea
-    id: logs
+  - type: markdown
     attributes:
-      label: Logs
-      description: |
+      value: |
+        ### Logs
         Please upload Wox log to help identify your bug.
+        Attach the log file in the **Description** editor area where GitHub shows:
+        `Paste, drop, or click to add files`
+
+        Log path:
         - `~/.wox/log/log` if you use macOS or Linux
         - `C:\Users\<yourname>\.wox\log\log` if you use Windows
-      render: shell
-    validations:
-      required: false

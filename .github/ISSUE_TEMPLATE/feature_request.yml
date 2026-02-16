@@ -1,6 +1,6 @@
 name: Feature request
 description: Suggest an idea to improve Wox
-title: "[Feature]: "
+title: "[Feature Request]: "
 labels:
   - enhancement
 assignees:
