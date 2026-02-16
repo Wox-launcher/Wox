@@ -1,0 +1,66 @@
+name: Feature request
+description: Suggest an idea to improve Wox
+title: "[Feature]: "
+labels:
+  - enhancement
+assignees:
+  - qianlifeng
+
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: What problem are you trying to solve?
+      placeholder: Describe the current limitation or pain point.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed_solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the solution you want.
+      placeholder: Explain expected behavior, interaction, or API.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Describe alternatives or workarounds you considered.
+      placeholder: Optional
+    validations:
+      required: false
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      description: Which platform is this feature for?
+      options:
+        - All platforms
+        - macOS
+        - Windows
+        - Linux
+    validations:
+      required: true
+
+  - type: input
+    id: wox_version
+    attributes:
+      label: Wox Version
+      description: You can find it in Wox Settings -> About
+      placeholder: v2.0.0
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: Additional Context
+      description: Add screenshots, mockups, or links if available.
+      placeholder: Optional
+    validations:
+      required: false
