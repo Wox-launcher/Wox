@@ -173,6 +173,83 @@ void FlutterWindow::RestorePreviousActiveWindow(HWND selfHwnd)
   Log("Window: restore foreground final attempt completed");
 }
 
+void FlutterWindow::DismissStartMenuIfOpen()
+{
+  HWND fg = GetForegroundWindow();
+  if (!fg)
+    return;
+
+  WCHAR className[256] = {0};
+  GetClassNameW(fg, className, 256);
+
+  DWORD pid = 0;
+  GetWindowThreadProcessId(fg, &pid);
+
+  // Get process name for detection
+  WCHAR exePath[MAX_PATH] = {0};
+  WCHAR *fileName = nullptr;
+  bool gotProcessName = false;
+
+  if (pid != 0)
+  {
+    HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (hProcess)
+    {
+      DWORD pathLen = MAX_PATH;
+      if (QueryFullProcessImageNameW(hProcess, 0, exePath, &pathLen))
+      {
+        gotProcessName = true;
+        fileName = wcsrchr(exePath, L'\\');
+        if (fileName)
+          fileName++;
+        else
+          fileName = exePath;
+      }
+      CloseHandle(hProcess);
+    }
+  }
+
+  // Detect Start Menu / Search overlay by window class or process name
+  bool isStartMenu = false;
+
+  // UWP apps (Start Menu, Search) use this window class
+  if (wcscmp(className, L"Windows.UI.Core.CoreWindow") == 0)
+  {
+    isStartMenu = true;
+  }
+
+  if (!isStartMenu && gotProcessName && fileName)
+  {
+    if (_wcsicmp(fileName, L"StartMenuExperienceHost.exe") == 0 ||
+        _wcsicmp(fileName, L"SearchHost.exe") == 0 ||
+        _wcsicmp(fileName, L"SearchApp.exe") == 0 ||
+        _wcsicmp(fileName, L"ShellExperienceHost.exe") == 0)
+    {
+      isStartMenu = true;
+    }
+  }
+
+  if (!isStartMenu)
+    return;
+
+  Log("Focus: Start Menu detected, dismissing with WM_CLOSE");
+
+  // Clear saved previous window if it was the Start Menu -- we don't want to
+  // restore it when Wox hides.
+  if (previous_active_window_ == fg || previous_active_window_ == GetAncestor(fg, GA_ROOT))
+  {
+    previous_active_window_ = nullptr;
+  }
+
+  // Post WM_CLOSE to dismiss the Start Menu window.
+  // PostMessage bypasses UIPI restrictions that block SendInput.
+  PostMessage(fg, WM_CLOSE, 0, 0);
+  Sleep(200);
+}
+
+
+
+
 // Send keyboard event to Flutter (Windows-specific workaround)
 void FlutterWindow::SendKeyboardEvent(UINT message, WPARAM wparam, LPARAM lparam)
 {
@@ -829,9 +906,9 @@ void FlutterWindow::HandleWindowManagerMethodCall(
     }
     else if (method_name == "focus")
     {
-      // ... existing focus implementation ...
-      // (Simplified for brevity, assuming existing focus logic remains)
-      // 1. Use AttachThreadInput to try to set foreground window
+      // If the Start Menu or Search overlay is open, dismiss it first.
+      // SetForegroundWindow requires "no menus are active" to succeed.
+      DismissStartMenuIfOpen();
 
       // Save current foreground window before bringing Wox to front.
       SavePreviousActiveWindow(hwnd);

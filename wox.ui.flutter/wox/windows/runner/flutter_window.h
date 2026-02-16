@@ -66,6 +66,10 @@ private:
       const flutter::MethodCall<flutter::EncodableValue> &method_call,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
 
+  // Dismiss the Windows Start Menu if it is currently open.
+  // SetForegroundWindow requires no menus to be active.
+  void DismissStartMenuIfOpen();
+
   // Static window procedure for handling window events
   static LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam);
 };
