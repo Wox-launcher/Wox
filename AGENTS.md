@@ -12,3 +12,12 @@
 - **Build**: Verify with `make build` in wox.core (you can skip UI build for small changes)
 - **Tests**: Run narrowest relevant tests after changes, avoid breaking unrelated tests
 - **Format**: When formatting code, you must adhere to the coding style guidelines specified in Wox.code-workspace file.
+
+## User Coding Style Preferences
+
+- **Favor clarity and maintainability**: Prefer designs that reduce duplication and make intent obvious.
+- **Prioritize consistency**: Keep implementation style and user-facing behavior coherent across related modules.
+- **Respect boundaries**: Place responsibilities in the most appropriate layer to keep modules cohesive.
+- **Align with existing conventions**: Follow established project patterns unless there is a strong reason to change them.
+- **Preserve existing semantics**: Avoid accidental behavior changes during refactor and optimization.
+- **Prefer extensible abstractions**: Choose approaches that support future evolution with minimal rework.

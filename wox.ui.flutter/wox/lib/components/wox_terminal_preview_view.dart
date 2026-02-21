@@ -1,11 +1,12 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
+import 'package:wox/components/wox_preview_top_status_bar.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
+import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/utils/color_util.dart';
@@ -97,7 +98,7 @@ class _WoxTerminalPreviewViewState extends State<WoxTerminalPreviewView> {
   }
 
   String getSearchHotkeyTooltip() {
-    return Platform.isMacOS ? "Cmd+F" : "Ctrl+F";
+    return controller.previewSearchHotkeyLabel;
   }
 
   void bindSession() {
@@ -478,8 +479,13 @@ class _WoxTerminalPreviewViewState extends State<WoxTerminalPreviewView> {
                   return KeyEventResult.ignored;
                 }
 
-                if (HardwareKeyboard.instance.isControlPressed && event.logicalKey == LogicalKeyboardKey.keyB) {
-                  controller.toggleTerminalPreviewFullscreen(const UuidV4().generate());
+                final pressedHotkey = WoxHotkey.parseNormalHotkeyFromEvent(event);
+                if (pressedHotkey != null &&
+                    controller.executeLocalActionByHotkey(
+                      const UuidV4().generate(),
+                      pressedHotkey,
+                      allowedActionIds: {WoxLauncherController.localActionTogglePreviewFullscreenId},
+                    )) {
                   searchFocusNode.requestFocus();
                   return KeyEventResult.handled;
                 }
@@ -546,58 +552,27 @@ class _WoxTerminalPreviewViewState extends State<WoxTerminalPreviewView> {
   Widget buildTopStatusBar() {
     final commandText = terminalCommand.isNotEmpty ? terminalCommand : "-";
     final statusDotColor = sessionRunning ? Colors.green : Colors.grey;
-    final borderColor = safeFromCssColor(widget.woxTheme.previewSplitLineColor).withValues(alpha: 0.75);
-    final backgroundColor = safeFromCssColor(widget.woxTheme.queryBoxBackgroundColor).withValues(alpha: 0.35);
     final fontColor = safeFromCssColor(widget.woxTheme.previewFontColor);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(color: backgroundColor, borderRadius: BorderRadius.circular(8), border: Border.all(color: borderColor, width: 1)),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Container(width: 8, height: 8, decoration: BoxDecoration(color: statusDotColor, shape: BoxShape.circle)),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(commandText, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: fontColor, fontSize: 16, fontWeight: FontWeight.w600, height: 1.1)),
+    return Obx(() {
+      final isFullscreen = controller.isPreviewFullscreen.value;
+      return WoxPreviewTopStatusBar(
+        woxTheme: widget.woxTheme,
+        leading: Container(width: 8, height: 8, decoration: BoxDecoration(color: statusDotColor, shape: BoxShape.circle)),
+        title: Text(commandText, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: fontColor, fontSize: 16, fontWeight: FontWeight.w600, height: 1.1)),
+        trailing: loadingHistory ? SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: fontColor.withValues(alpha: 0.8))) : null,
+        actions: [
+          WoxPreviewTopStatusBarAction(tooltip: getSearchHotkeyTooltip(), onPressed: openSearchBar, icon: const Icon(Icons.search)),
+          WoxPreviewTopStatusBarAction(
+            tooltip: controller.previewFullscreenHotkeyLabel,
+            onPressed: () {
+              controller.togglePreviewFullscreen(const UuidV4().generate());
+            },
+            icon: Icon(isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen),
           ),
-          if (loadingHistory)
-            Padding(
-              padding: const EdgeInsets.only(right: 6),
-              child: SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: fontColor.withValues(alpha: 0.8))),
-            ),
-          IconButton(
-            tooltip: getSearchHotkeyTooltip(),
-            onPressed: openSearchBar,
-            icon: const Icon(Icons.search),
-            iconSize: 18,
-            color: fontColor,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints.tightFor(width: 28, height: 28),
-            splashRadius: 14,
-            visualDensity: VisualDensity.compact,
-          ),
-          const SizedBox(width: 2),
-          Obx(() {
-            final isFullscreen = controller.isTerminalPreviewFullscreen.value;
-            return IconButton(
-              tooltip: "Ctrl+B",
-              onPressed: () {
-                controller.toggleTerminalPreviewFullscreen(const UuidV4().generate());
-              },
-              icon: Icon(isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen),
-              iconSize: 18,
-              color: fontColor,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints.tightFor(width: 28, height: 28),
-              splashRadius: 14,
-              visualDensity: VisualDensity.compact,
-            );
-          }),
         ],
-      ),
-    );
+      );
+    });
   }
 
   @override

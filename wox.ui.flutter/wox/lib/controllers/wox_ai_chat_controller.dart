@@ -45,9 +45,6 @@ class WoxAIChatController extends GetxController {
   final RxBool isShowChatSelectPanel = false.obs;
   final RxString currentChatSelectCategory = "".obs; // models, tools or empty
 
-  double _lastResultPreviewRatio = 0.5;
-  RxBool get isLeftPanelCollapsed => (launcherController.resultPreviewRatio.value == 0.0).obs;
-
   // State for tool usage
   final RxSet<String> selectedTools = <String>{}.obs;
   final RxList<AIMCPTool> availableTools = <AIMCPTool>[].obs;
@@ -645,21 +642,5 @@ class WoxAIChatController extends GetxController {
     aiChatFocusNode.dispose();
     aiChatScrollController.dispose();
     super.onClose();
-  }
-
-  void toggleLeftPanel() {
-    if (!isLeftPanelCollapsed.value) {
-      _lastResultPreviewRatio = launcherController.resultPreviewRatio.value;
-      launcherController.resultPreviewRatio.value = 0.0;
-    } else {
-      launcherController.resultPreviewRatio.value = _lastResultPreviewRatio;
-    }
-  }
-
-  void collapseLeftPanel() {
-    if (!isLeftPanelCollapsed.value) {
-      _lastResultPreviewRatio = launcherController.resultPreviewRatio.value;
-      launcherController.resultPreviewRatio.value = 0.0;
-    }
   }
 }

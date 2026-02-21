@@ -250,33 +250,16 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                   return KeyEventResult.ignored;
                 }
 
-                final findHotkey = Platform.isMacOS ? WoxHotkey.parseHotkeyFromString("cmd+f") : WoxHotkey.parseHotkeyFromString("ctrl+f");
-                if (findHotkey != null && findHotkey.isNormalHotkey && WoxHotkey.equals(findHotkey.normalHotkey, pressedHotkey) && controller.triggerTerminalFind()) {
-                  return KeyEventResult.handled;
-                }
-
-                final terminalFullscreenHotkey = WoxHotkey.parseHotkeyFromString("ctrl+b");
-                if (terminalFullscreenHotkey != null &&
-                    terminalFullscreenHotkey.isNormalHotkey &&
-                    WoxHotkey.equals(terminalFullscreenHotkey.normalHotkey, pressedHotkey) &&
-                    controller.toggleTerminalPreviewFullscreen(traceId)) {
+                if (controller.executeLocalActionByHotkey(traceId, pressedHotkey)) {
                   return KeyEventResult.handled;
                 }
 
                 // list all actions
                 Logger.instance.debug(traceId, "[KEYLOG][FLUTTER] Checking if action hotkey: $pressedHotkey");
                 if (controller.isActionHotkey(pressedHotkey)) {
-                  Logger.instance.debug(traceId, "[KEYLOG][FLUTTER] Alt+J detected -> toggling action panel");
+                  Logger.instance.debug(traceId, "[KEYLOG][FLUTTER] ${controller.moreActionsHotkeyLabel} detected -> toggling action panel");
                   controller.toggleActionPanel(const UuidV4().generate());
                   return KeyEventResult.handled;
-                }
-
-                if (controller.shouldShowUpdateActionInToolbar) {
-                  final updateHotkey = WoxHotkey.parseHotkeyFromString("ctrl+u");
-                  if (updateHotkey != null && updateHotkey.isNormalHotkey && WoxHotkey.equals(updateHotkey.normalHotkey, pressedHotkey)) {
-                    controller.openUpdateFromToolbar(const UuidV4().generate());
-                    return KeyEventResult.handled;
-                  }
                 }
 
                 // check if the pressed hotkey is the action hotkey

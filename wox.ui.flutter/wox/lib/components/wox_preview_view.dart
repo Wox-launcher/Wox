@@ -230,8 +230,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
               },
             ),
           ),
-          if (widget.woxPreview.previewProperties.isNotEmpty &&
-              !(widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TERMINAL.code && launcherController.isTerminalPreviewFullscreen.value))
+          if (widget.woxPreview.previewProperties.isNotEmpty && !(launcherController.supportsPreviewFullscreen(widget.woxPreview) && launcherController.isPreviewFullscreen.value))
             Container(
               padding: const EdgeInsets.only(top: 10.0, right: 10.0),
               child: Column(

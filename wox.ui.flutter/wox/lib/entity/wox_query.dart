@@ -5,9 +5,13 @@ import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_list_item.dart';
 import 'package:wox/entity/wox_plugin_setting.dart';
 import 'package:wox/entity/wox_preview.dart';
+import 'package:wox/enums/wox_image_type_enum.dart';
 import 'package:wox/enums/wox_position_type_enum.dart';
 import 'package:wox/enums/wox_query_type_enum.dart';
+import 'package:wox/enums/wox_result_action_type_enum.dart';
 import 'package:wox/enums/wox_selection_type_enum.dart';
+
+typedef WoxLocalActionHandler = bool Function(String traceId);
 
 class PlainQuery {
   late String queryId;
@@ -185,7 +189,7 @@ class WoxQueryResult {
 
 class WoxResultAction {
   late String id;
-  late String type;
+  late WoxResultActionType type;
   late String name;
   late WoxImage icon;
   late bool isDefault;
@@ -195,6 +199,7 @@ class WoxResultAction {
   late String resultId;
   late Map<String, String> contextData;
   late List<PluginSettingDefinitionItem> form;
+  WoxLocalActionHandler? localActionHandler;
 
   WoxResultAction({
     required this.id,
@@ -208,11 +213,12 @@ class WoxResultAction {
     required this.resultId,
     required this.contextData,
     required this.form,
+    this.localActionHandler,
   });
 
   WoxResultAction.fromJson(Map<String, dynamic> json) {
     id = json['Id'];
-    type = json['Type'] ?? "execute";
+    type = json['Type'] ?? WoxResultActionTypeEnum.WOX_RESULT_ACTION_TYPE_EXECUTE.code;
     name = json['Name'];
     icon = (json['Icon'] != null ? WoxImage.fromJson(json['Icon']) : null)!;
     isDefault = json['IsDefault'];
@@ -244,6 +250,58 @@ class WoxResultAction {
     } else {
       form = [];
     }
+    localActionHandler = null;
+  }
+
+  WoxResultAction copyWith({
+    String? id,
+    WoxResultActionType? type,
+    String? name,
+    WoxImage? icon,
+    bool? isDefault,
+    bool? preventHideAfterAction,
+    String? hotkey,
+    bool? isSystemAction,
+    String? resultId,
+    Map<String, String>? contextData,
+    List<PluginSettingDefinitionItem>? form,
+    WoxLocalActionHandler? localActionHandler,
+  }) {
+    return WoxResultAction(
+      id: id ?? this.id,
+      type: type ?? this.type,
+      name: name ?? this.name,
+      icon: icon ?? this.icon,
+      isDefault: isDefault ?? this.isDefault,
+      preventHideAfterAction: preventHideAfterAction ?? this.preventHideAfterAction,
+      hotkey: hotkey ?? this.hotkey,
+      isSystemAction: isSystemAction ?? this.isSystemAction,
+      resultId: resultId ?? this.resultId,
+      contextData: contextData != null ? Map<String, String>.from(contextData) : Map<String, String>.from(this.contextData),
+      form: form != null ? List<PluginSettingDefinitionItem>.from(form) : List<PluginSettingDefinitionItem>.from(this.form),
+      localActionHandler: localActionHandler ?? this.localActionHandler,
+    );
+  }
+
+  static WoxResultAction local({required String id, required String name, required String hotkey, required String emoji, required WoxLocalActionHandler handler}) {
+    return WoxResultAction(
+      id: id,
+      type: WoxResultActionTypeEnum.WOX_RESULT_ACTION_TYPE_LOCAL.code,
+      name: name,
+      icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: emoji),
+      isDefault: false,
+      preventHideAfterAction: true,
+      hotkey: hotkey,
+      isSystemAction: true,
+      resultId: "",
+      contextData: {},
+      form: [],
+      localActionHandler: handler,
+    );
+  }
+
+  bool runLocalAction(String traceId) {
+    return localActionHandler?.call(traceId) ?? false;
   }
 
   Map<String, dynamic> toJson() {
@@ -265,7 +323,7 @@ class WoxResultAction {
   static WoxResultAction empty() {
     return WoxResultAction(
       id: "",
-      type: "execute",
+      type: WoxResultActionTypeEnum.WOX_RESULT_ACTION_TYPE_EXECUTE.code,
       name: "",
       icon: WoxImage.empty(),
       isDefault: false,
@@ -275,6 +333,7 @@ class WoxResultAction {
       resultId: "",
       contextData: {},
       form: [],
+      localActionHandler: null,
     );
   }
 

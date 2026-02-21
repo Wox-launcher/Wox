@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'dart:ui';
 
 import 'package:extended_text_field/extended_text_field.dart';
-import 'package:flutter/foundation.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -41,6 +40,7 @@ import 'package:wox/enums/wox_msg_method_enum.dart';
 import 'package:wox/enums/wox_msg_type_enum.dart';
 import 'package:wox/enums/wox_position_type_enum.dart';
 import 'package:wox/enums/wox_query_type_enum.dart';
+import 'package:wox/enums/wox_result_action_type_enum.dart';
 import 'package:wox/enums/wox_selection_type_enum.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/utils/consts.dart';
@@ -55,6 +55,10 @@ import 'package:wox/utils/window_flicker_detector.dart';
 import 'package:wox/utils/color_util.dart';
 
 class WoxLauncherController extends GetxController {
+  static const String localActionTogglePreviewFullscreenId = "__local_toggle_preview_fullscreen__";
+  static const String localActionPreviewSearchId = "__local_preview_search__";
+  static const String localActionOpenUpdateId = "__local_open_update__";
+
   //query related variables
   final currentQuery = PlainQuery.empty().obs;
   // is current query returned results or finished without results
@@ -71,10 +75,11 @@ class WoxLauncherController extends GetxController {
   final currentPreview = WoxPreview.empty().obs;
   final isShowPreviewPanel = false.obs;
   final terminalFindTrigger = 0.obs;
-  final isTerminalPreviewFullscreen = false.obs;
+  final isPreviewFullscreen = false.obs;
   final Map<String, StreamController<Map<String, dynamic>>> terminalChunkControllers = {};
   final Map<String, StreamController<Map<String, dynamic>>> terminalStateControllers = {};
-  double lastResultPreviewRatioBeforeTerminalFullscreen = 0.5;
+  double lastResultPreviewRatioBeforePreviewFullscreen = 0.5;
+  double preferredResultPreviewRatio = 0.5;
 
   /// The ratio of result panel width to total width, value range: 0.0-1.0
   /// e.g., 0.3 means result panel takes 30% width, preview panel takes 70%
@@ -239,6 +244,18 @@ class WoxLauncherController extends GetxController {
 
   bool get isToolbarShowedWithoutResults => isShowToolbar && activeResultViewController.items.isEmpty;
 
+  String get previewFullscreenHotkey => "ctrl+b";
+
+  String get previewFullscreenHotkeyLabel => "Ctrl+B";
+
+  String get previewSearchHotkey => Platform.isMacOS ? "cmd+f" : "ctrl+f";
+
+  String get previewSearchHotkeyLabel => Platform.isMacOS ? "Cmd+F" : "Ctrl+F";
+
+  String get moreActionsHotkey => Platform.isMacOS ? "cmd+j" : "alt+j";
+
+  String get moreActionsHotkeyLabel => Platform.isMacOS ? "Cmd+J" : "Alt+J";
+
   /// Triggered when received query results from the server.
   void onReceivedQueryResults(String traceId, String queryId, List<WoxQueryResult> receivedResults) {
     // Cancel loading timer and hide loading animation when results are received
@@ -384,6 +401,134 @@ class WoxLauncherController extends GetxController {
     return ToolbarActionInfo(name: tr("plugin_doctor_go_to_update"), hotkey: "ctrl+u");
   }
 
+  List<WoxResultAction> buildLocalActions() {
+    final actions = <WoxResultAction>[];
+
+    final updateAction = buildUpdateToolbarAction();
+    if (updateAction != null) {
+      actions.add(
+        WoxResultAction.local(
+          id: localActionOpenUpdateId,
+          name: updateAction.name,
+          hotkey: updateAction.hotkey,
+          emoji: "⬆️",
+          handler: (traceId) {
+            openUpdateFromToolbar(traceId);
+            return true;
+          },
+        ),
+      );
+    }
+
+    if (!isShowPreviewPanel.value) {
+      return actions;
+    }
+
+    if (currentPreview.value.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TERMINAL.code) {
+      actions.add(
+        WoxResultAction.local(
+          id: localActionPreviewSearchId,
+          name: tr("ui_action_preview_search"),
+          hotkey: previewSearchHotkey,
+          emoji: "🔎",
+          handler: (_) => triggerTerminalFind(),
+        ),
+      );
+    }
+
+    if (supportsPreviewFullscreen(currentPreview.value)) {
+      actions.add(
+        WoxResultAction.local(
+          id: localActionTogglePreviewFullscreenId,
+          name: isPreviewFullscreen.value ? tr("ui_action_exit_fullscreen") : tr("ui_action_toggle_fullscreen"),
+          hotkey: previewFullscreenHotkey,
+          emoji: isPreviewFullscreen.value ? "🗗" : "🗖",
+          handler: (traceId) => togglePreviewFullscreen(traceId),
+        ),
+      );
+    }
+
+    return actions;
+  }
+
+  List<WoxResultAction> buildActionsByResult(String traceId, WoxQueryResult activeResult) {
+    final localActions = buildLocalActions();
+    final reservedHotkeys = localActions.where((action) => action.hotkey.isNotEmpty).map((action) => action.hotkey.toLowerCase()).toSet();
+
+    final pluginActions =
+        activeResult.actions.map((action) {
+          if (action.hotkey.isEmpty) {
+            return action.copyWith();
+          }
+          final conflicted = reservedHotkeys.contains(action.hotkey.toLowerCase());
+          return conflicted ? action.copyWith(hotkey: "") : action.copyWith();
+        }).toList();
+
+    return [...localActions, ...pluginActions];
+  }
+
+  WoxResultAction? getLocalActionByHotkey(HotKey hotkey, {Set<String>? allowedActionIds}) {
+    final localActions = buildLocalActions();
+    for (final action in localActions) {
+      if (allowedActionIds != null && !allowedActionIds.contains(action.id)) {
+        continue;
+      }
+
+      final parsed = WoxHotkey.parseHotkeyFromString(action.hotkey);
+      if (parsed == null || !parsed.isNormalHotkey) {
+        continue;
+      }
+
+      if (WoxHotkey.equals(parsed.normalHotkey, hotkey)) {
+        return action;
+      }
+    }
+
+    return null;
+  }
+
+  bool executeLocalActionByHotkey(String traceId, HotKey hotkey, {Set<String>? allowedActionIds}) {
+    final action = getLocalActionByHotkey(hotkey, allowedActionIds: allowedActionIds);
+    if (action == null) {
+      return false;
+    }
+
+    return action.runLocalAction(traceId);
+  }
+
+  List<ToolbarActionInfo> buildToolbarActionsFromUnifiedActions(List<WoxResultAction> actions) {
+    final toolbarActions = actions.where((action) => action.hotkey.isNotEmpty).map((action) => ToolbarActionInfo(name: tr(action.name), hotkey: action.hotkey)).toList();
+
+    if (actions.isNotEmpty) {
+      toolbarActions.add(ToolbarActionInfo(name: tr("toolbar_more_actions"), hotkey: moreActionsHotkey));
+    }
+
+    return toolbarActions;
+  }
+
+  void refreshActionsForActiveResult(String traceId, {required bool preserveSelection}) {
+    final activeResult = getActiveResult();
+    if (activeResult == null || activeResult.isGroup) {
+      actionListViewController.clearItems();
+      toolbar.value = toolbar.value.emptyRightSide();
+      return;
+    }
+
+    final oldActionName = preserveSelection ? getCurrentActionName() : null;
+    final actions = buildActionsByResult(traceId, activeResult);
+    final actionItems = actions.map((e) => WoxListItem.fromResultAction(e)).toList();
+    actionListViewController.updateItems(traceId, actionItems);
+
+    if (actionItems.isNotEmpty) {
+      final newActiveIndex = calculatePreservedActionIndex(oldActionName);
+      if (newActiveIndex >= 0 && newActiveIndex < actionItems.length && actionListViewController.activeIndex.value != newActiveIndex) {
+        actionListViewController.updateActiveIndex(traceId, newActiveIndex);
+      }
+    }
+
+    updateToolbarWithActions(traceId, actions);
+  }
+
   Future<void> toggleApp(String traceId, ShowAppParams params) async {
     var isVisible = await windowManager.isVisible();
     if (isVisible) {
@@ -498,7 +643,7 @@ class WoxLauncherController extends GetxController {
       if (isShowPreviewPanel.value && currentPreview.value.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code) {
         final chatController = Get.find<WoxAIChatController>();
         chatController.focusToChatInput(traceId);
-        chatController.collapseLeftPanel();
+        enterPreviewFullscreen(traceId);
       }
     }
 
@@ -569,11 +714,11 @@ class WoxLauncherController extends GetxController {
   }
 
   bool isActionHotkey(HotKey hotkey) {
-    if (Platform.isMacOS) {
-      return WoxHotkey.equals(hotkey, WoxHotkey.parseHotkeyFromString("cmd+J")!.normalHotkey);
-    } else {
-      return WoxHotkey.equals(hotkey, WoxHotkey.parseHotkeyFromString("alt+J")!.normalHotkey);
+    final parsed = WoxHotkey.parseHotkeyFromString(moreActionsHotkey);
+    if (parsed == null || !parsed.isNormalHotkey) {
+      return false;
     }
+    return WoxHotkey.equals(hotkey, parsed.normalHotkey);
   }
 
   void hideActionPanel(String traceId) {
@@ -659,7 +804,8 @@ class WoxLauncherController extends GetxController {
       return null;
     }
 
-    var filteredActions = result.actions.where((action) {
+    final actions = buildActionsByResult(const UuidV4().generate(), result);
+    var filteredActions = actions.where((action) {
       var actionHotkey = WoxHotkey.parseHotkeyFromString(action.hotkey);
       if (actionHotkey != null && WoxHotkey.equals(actionHotkey.normalHotkey, hotkey)) {
         return true;
@@ -690,7 +836,19 @@ class WoxLauncherController extends GetxController {
     var preventHideAfterAction = action.preventHideAfterAction;
     Logger.instance.debug(traceId, "execute action: ${action.name}, prevent hide after action: $preventHideAfterAction");
 
-    if (action.type == "form") {
+    if (action.type == WoxResultActionTypeEnum.WOX_RESULT_ACTION_TYPE_LOCAL.code) {
+      final executed = action.runLocalAction(traceId);
+      if (!executed) {
+        return;
+      }
+
+      actionListViewController.clearFilter(traceId);
+      hideActionPanel(traceId);
+      hideFormActionPanel(traceId);
+      return;
+    }
+
+    if (action.type == WoxResultActionTypeEnum.WOX_RESULT_ACTION_TYPE_FORM.code) {
       showFormActionPanel(action, result.id);
       return;
     } else {
@@ -1266,39 +1424,72 @@ class WoxLauncherController extends GetxController {
     return true;
   }
 
-  bool toggleTerminalPreviewFullscreen(String traceId) {
-    if (!isShowPreviewPanel.value || currentPreview.value.previewType != WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TERMINAL.code) {
+  bool supportsPreviewFullscreen(WoxPreview preview) {
+    return preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TERMINAL.code || preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code;
+  }
+
+  double getPreferredResultPreviewRatio() {
+    return preferredResultPreviewRatio > 0 ? preferredResultPreviewRatio : 0.5;
+  }
+
+  bool enterPreviewFullscreen(String traceId) {
+    if (!isShowPreviewPanel.value || !supportsPreviewFullscreen(currentPreview.value)) {
       return false;
     }
 
-    if (isTerminalPreviewFullscreen.value) {
-      final restoreRatio = lastResultPreviewRatioBeforeTerminalFullscreen <= 0 ? 0.5 : lastResultPreviewRatioBeforeTerminalFullscreen;
-      resultPreviewRatio.value = restoreRatio;
-      isTerminalPreviewFullscreen.value = false;
-      Logger.instance.debug(traceId, "terminal preview exit fullscreen, ratio restored: $restoreRatio");
+    if (isPreviewFullscreen.value) {
       return true;
     }
 
-    if (resultPreviewRatio.value > 0) {
-      lastResultPreviewRatioBeforeTerminalFullscreen = resultPreviewRatio.value;
-    }
+    final restoreRatio = resultPreviewRatio.value > 0 ? resultPreviewRatio.value : getPreferredResultPreviewRatio();
+    lastResultPreviewRatioBeforePreviewFullscreen = restoreRatio;
     resultPreviewRatio.value = 0;
-    isTerminalPreviewFullscreen.value = true;
-    Logger.instance.debug(traceId, "terminal preview enter fullscreen");
+    isPreviewFullscreen.value = true;
+    Logger.instance.debug(traceId, "preview enter fullscreen");
+    refreshActionsForActiveResult(traceId, preserveSelection: true);
     return true;
   }
 
-  void syncTerminalPreviewFullscreenState() {
-    final isTerminalPreviewVisible = isShowPreviewPanel.value && currentPreview.value.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TERMINAL.code;
-    if (isTerminalPreviewVisible) {
+  bool exitPreviewFullscreen(String traceId) {
+    if (!isPreviewFullscreen.value) {
+      return false;
+    }
+
+    final restoreRatio = lastResultPreviewRatioBeforePreviewFullscreen > 0 ? lastResultPreviewRatioBeforePreviewFullscreen : getPreferredResultPreviewRatio();
+    resultPreviewRatio.value = restoreRatio;
+    isPreviewFullscreen.value = false;
+    Logger.instance.debug(traceId, "preview exit fullscreen, ratio restored: $restoreRatio");
+    refreshActionsForActiveResult(traceId, preserveSelection: true);
+    return true;
+  }
+
+  bool togglePreviewFullscreen(String traceId) {
+    if (!isShowPreviewPanel.value || !supportsPreviewFullscreen(currentPreview.value)) {
+      return false;
+    }
+
+    if (isPreviewFullscreen.value) {
+      return exitPreviewFullscreen(traceId);
+    }
+
+    return enterPreviewFullscreen(traceId);
+  }
+
+  bool toggleTerminalPreviewFullscreen(String traceId) {
+    return togglePreviewFullscreen(traceId);
+  }
+
+  void syncPreviewFullscreenState() {
+    final isFullscreenPreviewVisible = isShowPreviewPanel.value && supportsPreviewFullscreen(currentPreview.value);
+    if (isFullscreenPreviewVisible) {
       return;
     }
 
-    if (isTerminalPreviewFullscreen.value) {
-      final restoreRatio = lastResultPreviewRatioBeforeTerminalFullscreen <= 0 ? 0.5 : lastResultPreviewRatioBeforeTerminalFullscreen;
+    if (isPreviewFullscreen.value) {
+      final restoreRatio = lastResultPreviewRatioBeforePreviewFullscreen > 0 ? lastResultPreviewRatioBeforePreviewFullscreen : getPreferredResultPreviewRatio();
       resultPreviewRatio.value = restoreRatio;
     }
-    isTerminalPreviewFullscreen.value = false;
+    isPreviewFullscreen.value = false;
   }
 
   Future<void> clearQueryResults(String traceId) async {
@@ -1308,7 +1499,7 @@ class WoxLauncherController extends GetxController {
     actionListViewController.clearItems();
     isShowPreviewPanel.value = false;
     isShowActionPanel.value = false;
-    syncTerminalPreviewFullscreenState();
+    syncPreviewFullscreenState();
 
     if (isShowDoctorCheckInfo) {
       Logger.instance.debug(traceId, "update toolbar to doctor warning, query is empty and doctor check not passed");
@@ -1512,7 +1703,7 @@ class WoxLauncherController extends GetxController {
             currentPreview.value = updatableResult.preview!;
             // Grid layout doesn't support preview panel
             isShowPreviewPanel.value = !isInGridMode() && currentPreview.value.previewData != "";
-            syncTerminalPreviewFullscreenState();
+            syncPreviewFullscreenState();
 
             // If preview panel visibility changed, resize window height
             if (oldShowPreview != isShowPreviewPanel.value) {
@@ -1521,24 +1712,9 @@ class WoxLauncherController extends GetxController {
           }
 
           if (updatableResult.actions != null) {
-            // Optimization: Check if actions actually changed to avoid unnecessary repaint
-            var currentActions = actionListViewController.items.map((e) => e.value.data).toList();
-            if (!listEquals(currentActions, updatableResult.actions!)) {
-              // Save user's current selection before updateItems (which calls filterItems and resets index)
-              var oldActionName = getCurrentActionName();
-
-              var actions = updatedData.actions.map((e) => WoxListItem.fromResultAction(e)).toList();
-              actionListViewController.updateItems(traceId, actions);
-
-              // Restore user's selected action after refresh
-              var newActiveIndex = calculatePreservedActionIndex(oldActionName);
-              if (actionListViewController.activeIndex.value != newActiveIndex) {
-                actionListViewController.updateActiveIndex(traceId, newActiveIndex);
-              }
-
-              // Update toolbar with all actions with hotkeys
-              updateToolbarWithActions(traceId, updatedData.actions);
-            }
+            refreshActionsForActiveResult(traceId, preserveSelection: true);
+          } else if (updatableResult.preview != null) {
+            refreshActionsForActiveResult(traceId, preserveSelection: true);
           }
         }
       }
@@ -1884,20 +2060,8 @@ class WoxLauncherController extends GetxController {
     currentPreview.value = item.data.preview;
     // Grid layout doesn't support preview panel
     isShowPreviewPanel.value = !isInGridMode() && currentPreview.value.previewData != "";
-    syncTerminalPreviewFullscreenState();
-
-    // update actions list
-    var actions = item.data.actions.map((e) => WoxListItem.fromResultAction(e)).toList();
-    actionListViewController.updateItems(traceId, actions);
-
-    // update active index to default action
-    var defaultActionIndex = actions.indexWhere((element) => element.data.isDefault);
-    if (defaultActionIndex != -1) {
-      actionListViewController.updateActiveIndex(traceId, defaultActionIndex);
-    }
-
-    // update toolbar to show all actions with hotkeys
-    updateToolbarWithActions(traceId, item.data.actions);
+    syncPreviewFullscreenState();
+    refreshActionsForActiveResult(traceId, preserveSelection: false);
   }
 
   void onResultItemsEmpty(String traceId) {
@@ -1905,55 +2069,19 @@ class WoxLauncherController extends GetxController {
     // otherwise in selection mode, when no result filtered, preview may still be shown
     isShowPreviewPanel.value = false;
     currentPreview.value = WoxPreview.empty();
-    syncTerminalPreviewFullscreenState();
+    syncPreviewFullscreenState();
 
     // Clear toolbar actions so height isn't reserved by resizeHeight
     toolbar.value = toolbar.value.emptyRightSide();
   }
 
   void updateToolbarWithActions(String traceId, List<WoxResultAction> actions) {
-    // Filter actions that have hotkeys
-    var actionsWithHotkeys = actions.where((action) => action.hotkey.isNotEmpty).toList();
-
-    // Check if we should show "More Actions" hotkey
-    // Only show when there are >= 1 actions (regardless of whether they have hotkeys)
-    final shouldShowMoreActions = actions.isNotEmpty;
-
-    if (actionsWithHotkeys.isEmpty && !shouldShowMoreActions) {
-      // No actions with hotkeys and no actions at all, clear toolbar right side
+    final toolbarActions = buildToolbarActionsFromUnifiedActions(actions);
+    if (toolbarActions.isEmpty) {
       toolbar.value = toolbar.value.emptyRightSide();
       return;
     }
 
-    // Sort actions: non-default actions first, then default action (Enter) at the end
-    actionsWithHotkeys.sort((a, b) {
-      if (a.isDefault && !b.isDefault) return 1; // a is default, move to end
-      if (!a.isDefault && b.isDefault) return -1; // b is default, move to end
-      return 0; // keep original order
-    });
-
-    // Build toolbar action info list
-    var toolbarActions =
-        actionsWithHotkeys.map((action) {
-          return ToolbarActionInfo(name: tr(action.name), hotkey: action.hotkey);
-        }).toList();
-
-    final updateAction = buildUpdateToolbarAction();
-    if (updateAction != null) {
-      final updateHotkey = updateAction.hotkey.toLowerCase();
-      final hasUpdateAction = toolbarActions.any((action) => action.hotkey.toLowerCase() == updateHotkey || action.name == updateAction.name);
-      if (!hasUpdateAction) {
-        toolbarActions.insert(0, updateAction);
-      }
-    }
-
-    // Add "More Actions" hotkey at the end if there are actions
-    if (shouldShowMoreActions) {
-      final moreActionsHotkey = Platform.isMacOS ? "cmd+j" : "alt+j";
-      toolbarActions.add(ToolbarActionInfo(name: tr("toolbar_more_actions"), hotkey: moreActionsHotkey));
-    }
-
-    // Update toolbar with all actions
     toolbar.value = toolbar.value.copyWith(actions: toolbarActions);
   }
 
@@ -2032,18 +2160,38 @@ class WoxLauncherController extends GetxController {
 
   /// Update the result preview width ratio based on the query
   Future<void> updateResultPreviewWidthRatioOnQueryChanged(String traceId, PlainQuery query, QueryMetadata queryMetadata) async {
+    double nextRatio = 0.5;
     if (query.isEmpty) {
-      resultPreviewRatio.value = 0.5;
+      preferredResultPreviewRatio = nextRatio;
+      if (isPreviewFullscreen.value) {
+        lastResultPreviewRatioBeforePreviewFullscreen = nextRatio;
+      } else {
+        resultPreviewRatio.value = nextRatio;
+      }
       return;
     }
     // if there is no space in the query, then this must be a global query
     if (!query.queryText.contains(" ")) {
-      resultPreviewRatio.value = 0.5;
+      preferredResultPreviewRatio = nextRatio;
+      if (isPreviewFullscreen.value) {
+        lastResultPreviewRatioBeforePreviewFullscreen = nextRatio;
+      } else {
+        resultPreviewRatio.value = nextRatio;
+      }
       return;
     }
 
     Logger.instance.debug(traceId, "update result preview width ratio: ${queryMetadata.resultPreviewWidthRatio}");
-    resultPreviewRatio.value = queryMetadata.resultPreviewWidthRatio;
+    nextRatio = queryMetadata.resultPreviewWidthRatio;
+    if (nextRatio < 0 || nextRatio > 1) {
+      nextRatio = 0.5;
+    }
+    preferredResultPreviewRatio = nextRatio;
+    if (isPreviewFullscreen.value) {
+      lastResultPreviewRatioBeforePreviewFullscreen = nextRatio;
+    } else {
+      resultPreviewRatio.value = nextRatio;
+    }
   }
 
   Future<void> updateGridLayoutParamsOnQueryChanged(String traceId, PlainQuery query, QueryMetadata queryMetadata) async {
