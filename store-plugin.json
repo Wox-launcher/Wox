@@ -411,5 +411,26 @@
         "plugin_description": "追踪你的加密货币投资组合"
       }
     }
-  }
+  },
+  {
+  "Id": "4da3959b-cb61-43a7-865c-7fde658340fa",
+  "Name": "Currency Converter",
+  "Author": "sanioooook",
+  "Version": "1.0.1",
+  "MinWoxVersion": "2.0.0",
+  "Runtime": "nodejs",
+  "Description": "Convert currencies using exchangerate-api.com",
+  "IconUrl": "https://raw.githubusercontent.com/sanioooook/Wox.Plugin.CurrencyConverter/main/images/app.png",
+  "Website": "https://github.com/sanioooook/Wox.Plugin.CurrencyConverter",
+  "DownloadUrl": "https://github.com/sanioooook/Wox.Plugin.CurrencyConverter/releases/latest/download/Wox.Plugin.CurrencyConverter.wox",
+  "ScreenshotUrls": [
+    "https://raw.githubusercontent.com/sanioooook/Wox.Plugin.CurrencyConverter/master/assets/snapshot.png",
+    "https://raw.githubusercontent.com/sanioooook/Wox.Plugin.CurrencyConverter/master/assets/snapshot2.png",
+    "https://raw.githubusercontent.com/sanioooook/Wox.Plugin.CurrencyConverter/master/assets/snapshot3.png",
+    "https://raw.githubusercontent.com/sanioooook/Wox.Plugin.CurrencyConverter/master/assets/snapshot4.png"
+  ],
+  "SupportedOS": ["Windows", "Darwin", "Linux"],
+  "DateCreated": "2026-02-27 00:00:00",
+  "DateUpdated": "2026-02-27 00:00:00"
+}
 ]
