@@ -420,7 +420,7 @@
   "MinWoxVersion": "2.0.0",
   "Runtime": "nodejs",
   "Description": "Convert currencies using exchangerate-api.com",
-  "IconUrl": "https://raw.githubusercontent.com/sanioooook/Wox.Plugin.CurrencyConverter/main/images/app.png",
+  "IconUrl": "https://raw.githubusercontent.com/sanioooook/Wox.Plugin.CurrencyConverter/master/images/app.png",
   "Website": "https://github.com/sanioooook/Wox.Plugin.CurrencyConverter",
   "DownloadUrl": "https://github.com/sanioooook/Wox.Plugin.CurrencyConverter/releases/latest/download/Wox.Plugin.CurrencyConverter.wox",
   "ScreenshotUrls": [
