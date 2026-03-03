@@ -86,6 +86,25 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
     );
   }
 
+  Color _getDropdownBackgroundColor() {
+    final baseDropdownBg = widget.dropdownColor ?? getThemeActiveBackgroundColor();
+    return baseDropdownBg.withAlpha(255);
+  }
+
+  double _contrastRatio(Color foreground, Color background) {
+    final foregroundLuminance = foreground.computeLuminance();
+    final backgroundLuminance = background.computeLuminance();
+    final bright = foregroundLuminance > backgroundLuminance ? foregroundLuminance : backgroundLuminance;
+    final dark = foregroundLuminance > backgroundLuminance ? backgroundLuminance : foregroundLuminance;
+    return (bright + 0.05) / (dark + 0.05);
+  }
+
+  Color _getReadableTextColor(Color background) {
+    const darkText = Colors.black87;
+    const lightText = Colors.white;
+    return _contrastRatio(lightText, background) >= _contrastRatio(darkText, background) ? lightText : darkText;
+  }
+
   void _markOverlayNeedsBuildSafely() {
     if (_overlayEntry == null) {
       return;
@@ -237,7 +256,14 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
 
   void _showFilterableMenu() {
     final activeTextColor = getThemeActiveTextColor();
-    final dropdownBg = widget.dropdownColor ?? getThemeActiveBackgroundColor().withAlpha(255);
+    final dropdownBg = _getDropdownBackgroundColor();
+    final searchBg =
+        dropdownBg.computeLuminance() > 0.45
+            ? Color.alphaBlend(Colors.black.withValues(alpha: 0.08), dropdownBg)
+            : Color.alphaBlend(Colors.white.withValues(alpha: 0.08), dropdownBg);
+    final searchTextColor = _getReadableTextColor(searchBg);
+    final searchHintColor = searchTextColor.withValues(alpha: 0.55);
+    final searchDividerColor = searchTextColor.withValues(alpha: 0.20);
     final borderColor = getThemeSubTextColor();
 
     final RenderBox renderBox = context.findRenderObject() as RenderBox;
@@ -261,6 +287,7 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
                       borderRadius: BorderRadius.circular(4),
                       color: dropdownBg,
                       child: Container(
+                        clipBehavior: Clip.antiAlias,
                         constraints: BoxConstraints(maxHeight: widget.menuMaxHeight ?? 300),
                         decoration: BoxDecoration(border: Border.all(color: borderColor), borderRadius: BorderRadius.circular(4)),
                         child: Column(
@@ -269,47 +296,65 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
                             // Filter text field
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(border: Border(bottom: BorderSide(color: borderColor))),
-                              child: TextField(
-                                controller: _filterController,
-                                focusNode: _filterFocusNode,
-                                autofocus: true,
-                                style: TextStyle(color: activeTextColor, fontSize: widget.fontSize).useSystemChineseFont(),
-                                decoration: InputDecoration(
-                                  hintText: 'Filter...',
-                                  hintStyle: TextStyle(color: activeTextColor.withValues(alpha: 0.5), fontSize: widget.fontSize).useSystemChineseFont(),
-                                  border: InputBorder.none,
-                                  isDense: true,
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                                  prefixIcon: Icon(Icons.search, size: 16, color: activeTextColor.withValues(alpha: 0.7)),
+                              decoration: BoxDecoration(
+                                color: searchBg,
+                                border: Border(bottom: BorderSide(color: searchDividerColor)),
+                                borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                              ),
+                              child: Focus(
+                                onKeyEvent: (node, event) {
+                                  if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.escape) {
+                                    _removeOverlay();
+                                    return KeyEventResult.handled;
+                                  }
+                                  return KeyEventResult.ignored;
+                                },
+                                child: TextField(
+                                  controller: _filterController,
+                                  focusNode: _filterFocusNode,
+                                  autofocus: true,
+                                  textAlignVertical: TextAlignVertical.center,
+                                  style: TextStyle(color: searchTextColor, fontSize: widget.fontSize).useSystemChineseFont(),
+                                  decoration: InputDecoration(
+                                    hintText: 'Filter...',
+                                    hintStyle: TextStyle(color: searchHintColor, fontSize: widget.fontSize).useSystemChineseFont(),
+                                    border: InputBorder.none,
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                                    prefixIcon: Padding(padding: const EdgeInsets.only(left: 4, right: 6), child: Icon(Icons.search, size: 16, color: searchHintColor)),
+                                    prefixIconConstraints: const BoxConstraints(minWidth: 22, minHeight: 22),
+                                  ),
+                                  onChanged: _filterItems,
                                 ),
-                                onChanged: _filterItems,
                               ),
                             ),
                             // Filtered items list
                             Flexible(
-                              child: ListView.builder(
-                                shrinkWrap: true,
-                                padding: EdgeInsets.zero,
-                                itemCount: _filteredItems.length,
-                                itemBuilder: (context, index) {
-                                  final item = _filteredItems[index];
-                                  final isSelected = item.value == widget.value;
-                                  return _buildNoRippleInkWell(
-                                    onTap: () {
-                                      widget.onChanged?.call(item.value);
-                                      _removeOverlay();
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                      color: isSelected ? activeTextColor.withValues(alpha: 0.1) : null,
-                                      child: DefaultTextStyle(
-                                        style: TextStyle(color: activeTextColor, fontSize: widget.fontSize).useSystemChineseFont(),
-                                        child: _buildDropdownMenuItem(item, activeTextColor),
+                              child: Container(
+                                color: dropdownBg,
+                                child: ListView.builder(
+                                  shrinkWrap: true,
+                                  padding: EdgeInsets.zero,
+                                  itemCount: _filteredItems.length,
+                                  itemBuilder: (context, index) {
+                                    final item = _filteredItems[index];
+                                    final isSelected = item.value == widget.value;
+                                    return _buildNoRippleInkWell(
+                                      onTap: () {
+                                        widget.onChanged?.call(item.value);
+                                        _removeOverlay();
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                        color: isSelected ? activeTextColor.withValues(alpha: 0.1) : null,
+                                        child: DefaultTextStyle(
+                                          style: TextStyle(color: activeTextColor, fontSize: widget.fontSize).useSystemChineseFont(),
+                                          child: _buildDropdownMenuItem(item, activeTextColor),
+                                        ),
                                       ),
-                                    ),
-                                  );
-                                },
+                                    );
+                                  },
+                                ),
                               ),
                             ),
                           ],
@@ -357,7 +402,7 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
 
   void _showMultiSelectMenu() {
     final activeTextColor = getThemeActiveTextColor();
-    final dropdownBg = widget.dropdownColor ?? getThemeActiveBackgroundColor().withAlpha(255);
+    final dropdownBg = _getDropdownBackgroundColor();
     final borderColor = getThemeSubTextColor();
 
     final RenderBox renderBox = context.findRenderObject() as RenderBox;
@@ -493,7 +538,7 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
   Widget build(BuildContext context) {
     final textColor = getThemeTextColor();
     final activeTextColor = getThemeActiveTextColor();
-    final dropdownBg = widget.dropdownColor ?? getThemeActiveBackgroundColor().withAlpha(255);
+    final dropdownBg = _getDropdownBackgroundColor();
     final borderColor = getThemeSubTextColor();
 
     if (widget.multiSelect) {

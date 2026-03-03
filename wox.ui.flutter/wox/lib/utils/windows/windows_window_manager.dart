@@ -55,7 +55,7 @@ class WindowsWindowManager extends BaseWindowManager {
       case 'log':
         // Log messages from native code
         final message = call.arguments as String;
-        Logger.instance.info(const UuidV4().generate(), " [NATIVE] $message");
+        Logger.instance.info(const UuidV4().generate(), "[NATIVE] $message");
         break;
       case 'onKeyboardEvent':
         // Handle keyboard events from Windows message loop

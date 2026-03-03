@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:wox/components/wox_tooltip.dart';
 import 'package:wox/utils/colors.dart';
 
 class WoxSettingFormField extends StatelessWidget {
@@ -32,13 +33,7 @@ class WoxSettingFormField extends StatelessWidget {
           Row(
             crossAxisAlignment: rowCrossAxisAlignment,
             children: [
-              Padding(
-                padding: EdgeInsets.only(right: labelGap),
-                child: SizedBox(
-                  width: labelWidth,
-                  child: Text(label, textAlign: TextAlign.right, style: TextStyle(color: getThemeTextColor(), fontSize: 13), overflow: TextOverflow.ellipsis),
-                ),
-              ),
+              Padding(padding: EdgeInsets.only(right: labelGap), child: SizedBox(width: labelWidth, child: _SettingLabelWithTooltip(label: label))),
               Flexible(child: Align(alignment: Alignment.centerLeft, child: child)),
             ],
           ),
@@ -49,6 +44,35 @@ class WoxSettingFormField extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+class _SettingLabelWithTooltip extends StatelessWidget {
+  final String label;
+
+  const _SettingLabelWithTooltip({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final textStyle = TextStyle(color: getThemeTextColor(), fontSize: 13);
+    final textWidget = Text(label, textAlign: TextAlign.right, style: textStyle, maxLines: 1, overflow: TextOverflow.ellipsis);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxWidth = constraints.maxWidth;
+        if (!maxWidth.isFinite || maxWidth <= 0) {
+          return textWidget;
+        }
+
+        final textPainter = TextPainter(text: TextSpan(text: label, style: textStyle), maxLines: 1, textDirection: Directionality.of(context))..layout(maxWidth: maxWidth);
+
+        if (!textPainter.didExceedMaxLines) {
+          return textWidget;
+        }
+
+        return WoxTooltip(message: label, child: textWidget);
+      },
     );
   }
 }
