@@ -80,9 +80,9 @@ func getWebsiteIconWithCache(ctx context.Context, websiteUrl string) (common.Wox
 	return woxImage, nil
 }
 
-// getWebsiteIconFromCacheOnly checks if favicon exists in local cache without any network.
+// GetWebsiteIconFromCacheOnly checks if favicon exists in local cache without any network.
 // return (icon, true) if exists; otherwise (zero, false)
-func getWebsiteIconFromCacheOnly(ctx context.Context, websiteUrl string) (common.WoxImage, bool) {
+func GetWebsiteIconFromCacheOnly(ctx context.Context, websiteUrl string) (common.WoxImage, bool) {
 	parseUrl, err := url.Parse(websiteUrl)
 	if err != nil {
 		return common.WoxImage{}, false

@@ -429,10 +429,53 @@ class WoxSettingController extends GetxController {
   Future<void> updatePluginSetting(String pluginId, String key, String value) async {
     final traceId = const UuidV4().generate();
     final activeTabIndex = activePluginTabController.index;
+    applyPluginSettingOptimistically(pluginId, key, value);
 
-    await WoxApi.instance.updatePluginSetting(traceId, pluginId, key, value);
+    final saveStart = DateTime.now();
+    try {
+      await WoxApi.instance.updatePluginSetting(traceId, pluginId, key, value);
+      Logger.instance.info(traceId, 'plugin setting saved: $key=$value, cost ${DateTime.now().difference(saveStart).inMilliseconds} ms');
+    } catch (e) {
+      Logger.instance.error(traceId, 'failed to save plugin setting: $key=$value, error: $e');
+      return;
+    }
+
+    unawaited(refreshPluginAfterSettingUpdate(pluginId, activeTabIndex, traceId));
+  }
+
+  // Optimistically update the plugin setting in all relevant lists to provide instant feedback in the UI,
+  // instead of waiting for the API response.
+  void applyPluginSettingOptimistically(String pluginId, String key, String value) {
+    bool updatePlugin(List<PluginDetail> plugins) {
+      var updated = false;
+      for (final plugin in plugins) {
+        if (plugin.id != pluginId) {
+          continue;
+        }
+        plugin.setting.settings[key] = value;
+        updated = true;
+      }
+      return updated;
+    }
+
+    final active = activePlugin.value;
+    if (active.id == pluginId) {
+      active.setting.settings[key] = value;
+      activePlugin.refresh();
+    }
+
+    updatePlugin(installedPlugins);
+    updatePlugin(storePlugins);
+    updatePlugin(pluginList);
+    if (updatePlugin(filteredPluginList)) {
+      filteredPluginList.refresh();
+    }
+  }
+
+  Future<void> refreshPluginAfterSettingUpdate(String pluginId, int activeTabIndex, String traceId) async {
+    final refreshStart = DateTime.now();
     await refreshPlugin(pluginId, "update");
-    Logger.instance.info(traceId, 'plugin setting updated: $key=$value');
+    Logger.instance.info(traceId, 'plugin detail refreshed after setting update, cost ${DateTime.now().difference(refreshStart).inMilliseconds} ms');
 
     // switch to the tab that was active before the update
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) {

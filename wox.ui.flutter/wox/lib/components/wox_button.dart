@@ -38,40 +38,15 @@ class WoxButton extends StatelessWidget {
   });
 
   /// Create a primary button (filled background)
-  const WoxButton.primary({
-    super.key,
-    required this.text,
-    required this.onPressed,
-    this.icon,
-    this.width,
-    this.height,
-    this.fontSize = 13,
-    this.padding,
-  }) : type = WoxButtonType.primary;
+  const WoxButton.primary({super.key, required this.text, required this.onPressed, this.icon, this.width, this.height, this.fontSize = 13, this.padding})
+    : type = WoxButtonType.primary;
 
   /// Create a secondary button (transparent background)
-  const WoxButton.secondary({
-    super.key,
-    required this.text,
-    required this.onPressed,
-    this.icon,
-    this.width,
-    this.height,
-    this.fontSize = 13,
-    this.padding,
-  }) : type = WoxButtonType.secondary;
+  const WoxButton.secondary({super.key, required this.text, required this.onPressed, this.icon, this.width, this.height, this.fontSize = 13, this.padding})
+    : type = WoxButtonType.secondary;
 
   /// Create a text button (for links)
-  const WoxButton.text({
-    super.key,
-    required this.text,
-    required this.onPressed,
-    this.icon,
-    this.width,
-    this.height,
-    this.fontSize = 13,
-    this.padding,
-  }) : type = WoxButtonType.text;
+  const WoxButton.text({super.key, required this.text, required this.onPressed, this.icon, this.width, this.height, this.fontSize = 13, this.padding}) : type = WoxButtonType.text;
 
   @override
   Widget build(BuildContext context) {
@@ -79,17 +54,10 @@ class WoxButton extends StatelessWidget {
     if (type == WoxButtonType.text) {
       buttonPadding = const EdgeInsets.symmetric(horizontal: 6, vertical: 4);
     }
+    final baseLabelStyle = Theme.of(context).textTheme.labelLarge;
+    final buttonLabelStyle = (baseLabelStyle ?? const TextStyle()).copyWith(fontSize: fontSize, fontWeight: FontWeight.normal);
 
-    Widget buttonChild = icon != null
-        ? Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              icon!,
-              const SizedBox(width: 8),
-              Text(text),
-            ],
-          )
-        : Text(text);
+    Widget buttonChild = icon != null ? Row(mainAxisSize: MainAxisSize.min, children: [icon!, const SizedBox(width: 8), Text(text)]) : Text(text);
 
     Widget button;
 
@@ -98,30 +66,22 @@ class WoxButton extends StatelessWidget {
         button = ElevatedButton(
           onPressed: onPressed,
           style: ButtonStyle(
-            backgroundColor: WidgetStateProperty.resolveWith<Color>(
-              (Set<WidgetState> states) {
-                if (states.contains(WidgetState.disabled)) {
-                  return getThemeTextColor().withValues(alpha: 0.3);
-                }
-                return getThemeActiveBackgroundColor();
-              },
-            ),
-            foregroundColor: WidgetStateProperty.resolveWith<Color>(
-              (Set<WidgetState> states) {
-                if (states.contains(WidgetState.disabled)) {
-                  return getThemeTextColor().withValues(alpha: 0.5);
-                }
-                return getThemeActionItemActiveColor();
-              },
-            ),
+            backgroundColor: WidgetStateProperty.resolveWith<Color>((Set<WidgetState> states) {
+              if (states.contains(WidgetState.disabled)) {
+                return getThemeTextColor().withValues(alpha: 0.3);
+              }
+              return getThemeActiveBackgroundColor();
+            }),
+            foregroundColor: WidgetStateProperty.resolveWith<Color>((Set<WidgetState> states) {
+              if (states.contains(WidgetState.disabled)) {
+                return getThemeTextColor().withValues(alpha: 0.5);
+              }
+              return getThemeActionItemActiveColor();
+            }),
             padding: WidgetStateProperty.all(buttonPadding),
-            textStyle: WidgetStateProperty.all(
-              TextStyle(fontSize: fontSize, fontWeight: FontWeight.normal),
-            ),
+            textStyle: WidgetStateProperty.all(buttonLabelStyle),
             elevation: WidgetStateProperty.all(0),
-            shape: WidgetStateProperty.all(
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-            ),
+            shape: WidgetStateProperty.all(RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))),
             minimumSize: WidgetStateProperty.all(Size.zero),
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
@@ -133,29 +93,21 @@ class WoxButton extends StatelessWidget {
         button = OutlinedButton(
           onPressed: onPressed,
           style: ButtonStyle(
-            foregroundColor: WidgetStateProperty.resolveWith<Color>(
-              (Set<WidgetState> states) {
-                if (states.contains(WidgetState.disabled)) {
-                  return getThemeTextColor().withValues(alpha: 0.5);
-                }
-                return getThemeTextColor();
-              },
-            ),
-            side: WidgetStateProperty.resolveWith<BorderSide>(
-              (Set<WidgetState> states) {
-                if (states.contains(WidgetState.disabled)) {
-                  return BorderSide(color: getThemeTextColor().withValues(alpha: 0.3));
-                }
-                return BorderSide(color: getThemeTextColor().withValues(alpha: 0.5));
-              },
-            ),
+            foregroundColor: WidgetStateProperty.resolveWith<Color>((Set<WidgetState> states) {
+              if (states.contains(WidgetState.disabled)) {
+                return getThemeTextColor().withValues(alpha: 0.5);
+              }
+              return getThemeTextColor();
+            }),
+            side: WidgetStateProperty.resolveWith<BorderSide>((Set<WidgetState> states) {
+              if (states.contains(WidgetState.disabled)) {
+                return BorderSide(color: getThemeTextColor().withValues(alpha: 0.3));
+              }
+              return BorderSide(color: getThemeTextColor().withValues(alpha: 0.5));
+            }),
             padding: WidgetStateProperty.all(buttonPadding),
-            textStyle: WidgetStateProperty.all(
-              TextStyle(fontSize: fontSize, fontWeight: FontWeight.normal),
-            ),
-            shape: WidgetStateProperty.all(
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-            ),
+            textStyle: WidgetStateProperty.all(buttonLabelStyle),
+            shape: WidgetStateProperty.all(RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))),
             minimumSize: WidgetStateProperty.all(Size.zero),
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
@@ -167,23 +119,17 @@ class WoxButton extends StatelessWidget {
         button = TextButton(
           onPressed: onPressed,
           style: ButtonStyle(
-            foregroundColor: WidgetStateProperty.resolveWith<Color>(
-              (Set<WidgetState> states) {
-                if (states.contains(WidgetState.disabled)) {
-                  return getThemeTextColor().withValues(alpha: 0.5);
-                }
-                return getThemeTextColor();
-              },
-            ),
+            foregroundColor: WidgetStateProperty.resolveWith<Color>((Set<WidgetState> states) {
+              if (states.contains(WidgetState.disabled)) {
+                return getThemeTextColor().withValues(alpha: 0.5);
+              }
+              return getThemeTextColor();
+            }),
             padding: WidgetStateProperty.all(buttonPadding),
-            textStyle: WidgetStateProperty.all(
-              TextStyle(fontSize: fontSize, fontWeight: FontWeight.normal).useSystemChineseFont(),
-            ),
+            textStyle: WidgetStateProperty.all(TextStyle(fontSize: fontSize, fontWeight: FontWeight.normal).useSystemChineseFont()),
             minimumSize: WidgetStateProperty.all(Size.zero),
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            overlayColor: WidgetStateProperty.all(
-              getThemeTextColor().withValues(alpha: 0.1),
-            ),
+            overlayColor: WidgetStateProperty.all(getThemeTextColor().withValues(alpha: 0.1)),
           ),
           child: buttonChild,
         );
@@ -191,11 +137,7 @@ class WoxButton extends StatelessWidget {
     }
 
     if (width != null || height != null) {
-      return SizedBox(
-        width: width,
-        height: height,
-        child: button,
-      );
+      return SizedBox(width: width, height: height, child: button);
     }
 
     return button;

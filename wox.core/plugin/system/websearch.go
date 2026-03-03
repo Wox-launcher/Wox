@@ -12,7 +12,15 @@ import (
 	"wox/setting/definition"
 	"wox/setting/validator"
 	"wox/util"
+	"wox/util/browser"
 	"wox/util/selection"
+)
+
+const (
+	webSearchDefaultBrowserSettingKey = "defaultBrowser"
+
+	webSearchBrowserSystem     = "system"  // follow the system default browser
+	webSearchBrowserUseDefault = "default" // follow the default browser setting of the plugin, which is webSearchBrowserSystem or a specific browser
 )
 
 var webSearchesSettingKey = "webSearches"
@@ -75,7 +83,7 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 					Label:        "i18n:plugin_websearch_default_browser",
 					Tooltip:      "i18n:plugin_websearch_default_browser_tooltip",
 					DefaultValue: webSearchBrowserSystem,
-					Options:      getWebSearchDefaultBrowserOptions(),
+					Options:      r.getWebSearchDefaultBrowserOptions(),
 				},
 			},
 			{
@@ -139,7 +147,7 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 							Tooltip:       "i18n:plugin_websearch_browser_tooltip",
 							Type:          definition.PluginSettingValueTableColumnTypeSelect,
 							Width:         100,
-							SelectOptions: getWebSearchItemBrowserOptions(),
+							SelectOptions: r.getWebSearchItemBrowserOptions(),
 						},
 						{
 							Key:   "Enabled",
@@ -245,7 +253,7 @@ func (r *WebSearchPlugin) loadWebSearches(ctx context.Context) (webSearches []we
 
 	needSave := false
 	for i := range webSearches {
-		normalizedBrowser := normalizeWebSearchBrowser(webSearches[i].Browser)
+		normalizedBrowser := browser.NormalizeBrowserID(webSearches[i].Browser)
 		if normalizedBrowser == "" {
 			normalizedBrowser = webSearchBrowserSystem
 		}
@@ -372,14 +380,69 @@ func (r *WebSearchPlugin) replaceVariables(ctx context.Context, text string, que
 
 func (r *WebSearchPlugin) openSearchUrls(ctx context.Context, search webSearch, queryText string) {
 	configuredDefaultBrowser := r.api.GetSetting(ctx, webSearchDefaultBrowserSettingKey)
-	browser := resolveWebSearchBrowser(search.Browser, configuredDefaultBrowser)
+	browser := r.resolveWebSearchBrowser(search.Browser, configuredDefaultBrowser)
 
 	for _, url := range search.Urls {
 		resolvedURL := r.replaceVariables(ctx, url, queryText)
-		openErr := openURLInWebSearchBrowser(resolvedURL, browser)
+		openErr := r.openURLInWebSearchBrowser(resolvedURL, browser)
 		if openErr != nil {
 			r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open url %s: %s", resolvedURL, openErr.Error()))
 		}
 		time.Sleep(time.Millisecond * 100)
 	}
+}
+
+func (r *WebSearchPlugin) resolveWebSearchBrowser(itemBrowser string, defaultBrowser string) string {
+	normalizedItemBrowser := browser.NormalizeBrowserID(itemBrowser)
+	normalizedDefaultBrowser := browser.NormalizeBrowserID(defaultBrowser)
+	if normalizedDefaultBrowser == "" {
+		normalizedDefaultBrowser = webSearchBrowserSystem
+	}
+
+	switch normalizedItemBrowser {
+	case "", webSearchBrowserUseDefault:
+		return normalizedDefaultBrowser
+	default:
+		return normalizedItemBrowser
+	}
+}
+
+func (r *WebSearchPlugin) getWebSearchDefaultBrowserOptions() []definition.PluginSettingValueSelectOption {
+	options := []definition.PluginSettingValueSelectOption{
+		{Label: "i18n:plugin_websearch_browser_system_default", Value: webSearchBrowserSystem, Icon: common.PluginBrowserIcon},
+	}
+
+	for _, localBrowser := range browser.GetInstalledBrowsers() {
+		options = append(options, definition.PluginSettingValueSelectOption{
+			Label: localBrowser.Label,
+			Value: localBrowser.ID,
+			Icon:  localBrowser.Icon,
+		})
+	}
+
+	return options
+}
+
+func (r *WebSearchPlugin) getWebSearchItemBrowserOptions() []definition.PluginSettingValueSelectOption {
+	options := []definition.PluginSettingValueSelectOption{
+		{Label: "i18n:plugin_websearch_browser_use_default", Value: webSearchBrowserUseDefault, Icon: common.PluginBrowserIcon},
+	}
+
+	for _, localBrowser := range browser.GetInstalledBrowsers() {
+		options = append(options, definition.PluginSettingValueSelectOption{
+			Label: localBrowser.Label,
+			Value: localBrowser.ID,
+			Icon:  localBrowser.Icon,
+		})
+	}
+
+	return options
+}
+
+func (r *WebSearchPlugin) openURLInWebSearchBrowser(url string, browserId string) error {
+	normalizedBrowser := browser.NormalizeBrowserID(browserId)
+	if normalizedBrowser == "" || normalizedBrowser == webSearchBrowserSystem {
+		return browser.OpenURL(url, "")
+	}
+	return browser.OpenURL(url, normalizedBrowser)
 }

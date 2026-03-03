@@ -76,6 +76,8 @@ func (p *PluginSettingValueTable) Translate(translator func(ctx context.Context,
 		for j := range p.Columns[i].SelectOptions {
 			copy.Columns[i].SelectOptions[j].Label = translator(context.Background(), p.Columns[i].SelectOptions[j].Label)
 			copy.Columns[i].SelectOptions[j].Value = p.Columns[i].SelectOptions[j].Value
+			copy.Columns[i].SelectOptions[j].Icon = p.Columns[i].SelectOptions[j].Icon
+			copy.Columns[i].SelectOptions[j].IsSelectAll = p.Columns[i].SelectOptions[j].IsSelectAll
 		}
 	}
 	return &copy

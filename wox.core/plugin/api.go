@@ -262,7 +262,9 @@ func (a *APIImpl) SaveSetting(ctx context.Context, key string, value string, isP
 	a.pluginInstance.Setting.Set(finalKey, value)
 	if !exist || (existValue != value) {
 		for _, callback := range a.pluginInstance.SettingChangeCallbacks {
-			callback(ctx, key, value)
+			util.Go(ctx, "plugin setting change callback", func() {
+				callback(ctx, key, value)
+			})
 		}
 	}
 }

@@ -7,6 +7,7 @@ import 'package:wox/components/wox_ai_model_selector_view.dart';
 import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_dropdown_button.dart';
 import 'package:wox/components/wox_hotkey_recorder_view.dart';
+import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_image_selector.dart';
 import 'package:wox/components/wox_textfield.dart';
 import 'package:wox/components/wox_checkbox.dart';
@@ -336,7 +337,12 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                 },
                 items:
                     column.selectOptions.map((e) {
-                      return WoxDropdownItem(value: e.value, label: e.label);
+                      return WoxDropdownItem(
+                        value: e.value,
+                        label: e.label,
+                        leading: e.icon.imageData.isNotEmpty ? WoxImageView(woxImage: e.icon, width: 16, height: 16) : null,
+                        isSelectAll: e.isSelectAll,
+                      );
                     }).toList(),
               );
             },
