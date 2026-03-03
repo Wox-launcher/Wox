@@ -13,6 +13,7 @@
   - [`Shell`] Enhance Shell plugin terminal preview to support search/full-screen/scroll-to-load functions
   - Improve query hotkey tooltips and add Wox Chrome extension link in settings #4333
   - Improve app process exit handling when shutting down Wox #4338
+  - Improve the layout of the plugin settings page
 
 - Fix
   - [`File Explorer Search`] Fix an issue that file explorer search plugin cannot navigate on open/save dialog
