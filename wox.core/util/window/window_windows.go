@@ -139,10 +139,160 @@ func GetFileDialogPathByPid(pid int) string {
 	return strings.TrimSpace(C.GoString(result))
 }
 
-// NavigateInFileExplorerByPid is currently unsupported on Windows.
-// Callers should fall back to SelectInFileExplorerByPid or shell.Open.
+// NavigateInFileExplorerByPid navigates the active Explorer window owned by pid to the target path.
 func NavigateInFileExplorerByPid(pid int, targetPath string) bool {
-	return false
+	if pid <= 0 || targetPath == "" {
+		return false
+	}
+
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	initialized := false
+	if err := ole.CoInitializeEx(0, ole.COINIT_APARTMENTTHREADED); err != nil {
+		if oleErr, ok := err.(*ole.OleError); ok {
+			switch oleErr.Code() {
+			case ole.S_OK, oleSFalse:
+				initialized = true
+			case rpcEChangedMode:
+				// COM already initialized with different concurrency model; proceed.
+			default:
+				return false
+			}
+		} else {
+			return false
+		}
+	} else {
+		initialized = true
+	}
+
+	if initialized {
+		defer ole.CoUninitialize()
+	}
+
+	unknown, err := oleutil.CreateObject("Shell.Application")
+	if err != nil {
+		return false
+	}
+	defer unknown.Release()
+
+	shellDisp, err := unknown.QueryInterface(ole.IID_IDispatch)
+	if err != nil {
+		return false
+	}
+	defer shellDisp.Release()
+
+	windowsVar, err := oleutil.CallMethod(shellDisp, "Windows")
+	if err != nil {
+		return false
+	}
+	defer windowsVar.Clear()
+	windowsDisp := windowsVar.ToIDispatch()
+	if windowsDisp == nil {
+		return false
+	}
+
+	countVar, err := oleutil.GetProperty(windowsDisp, "Count")
+	if err != nil {
+		return false
+	}
+	count := int(countVar.Val)
+	countVar.Clear()
+
+	type shellWindowCandidate struct {
+		index int
+		hwnd  uintptr
+	}
+
+	candidates := make([]shellWindowCandidate, 0, 4)
+	uniqueHwnds := map[uintptr]struct{}{}
+
+	for i := 0; i < count; i++ {
+		itemVar, err := oleutil.CallMethod(windowsDisp, "Item", i)
+		if err != nil {
+			continue
+		}
+		wDisp := itemVar.ToIDispatch()
+		if wDisp == nil {
+			itemVar.Clear()
+			continue
+		}
+
+		hwndVar, err := oleutil.GetProperty(wDisp, "HWND")
+		if err != nil {
+			itemVar.Clear()
+			continue
+		}
+		wnd := uintptr(hwndVar.Val)
+		hwndVar.Clear()
+
+		var wndPid uint32
+		win.GetWindowThreadProcessId(win.HWND(wnd), &wndPid)
+		if int(wndPid) != pid {
+			itemVar.Clear()
+			continue
+		}
+
+		candidates = append(candidates, shellWindowCandidate{index: i, hwnd: wnd})
+		uniqueHwnds[wnd] = struct{}{}
+		itemVar.Clear()
+	}
+
+	if len(candidates) == 0 {
+		return false
+	}
+
+	// Prefer the foreground window if it belongs to our target PID.
+	foreground := uintptr(win.GetForegroundWindow())
+	var targetHwnd uintptr
+	if foreground != 0 {
+		if _, ok := uniqueHwnds[foreground]; ok {
+			targetHwnd = foreground
+		}
+	}
+
+	// Otherwise pick a visible, non-minimized window handle.
+	if targetHwnd == 0 {
+		for wnd := win.GetWindow(win.GetDesktopWindow(), win.GW_CHILD); wnd != 0; wnd = win.GetWindow(wnd, win.GW_HWNDNEXT) {
+			if _, ok := uniqueHwnds[uintptr(wnd)]; ok {
+				if win.IsWindowVisible(wnd) && !win.IsIconic(wnd) {
+					targetHwnd = uintptr(wnd)
+					break
+				}
+			}
+		}
+	}
+
+	if targetHwnd == 0 {
+		// Fallback to any candidate.
+		targetHwnd = candidates[0].hwnd
+	}
+
+	bestIndex := -1
+	for _, c := range candidates {
+		if c.hwnd == targetHwnd {
+			bestIndex = c.index
+			break
+		}
+	}
+	if bestIndex == -1 {
+		bestIndex = candidates[0].index
+	}
+
+	itemVar, err := oleutil.CallMethod(windowsDisp, "Item", bestIndex)
+	if err != nil {
+		return false
+	}
+	wDisp := itemVar.ToIDispatch()
+	if wDisp == nil {
+		itemVar.Clear()
+		return false
+	}
+
+	_, err = oleutil.CallMethod(wDisp, "Navigate", targetPath)
+	itemVar.Clear()
+
+	return err == nil
 }
 
 // IsFileExplorer checks if the given PID belongs to Explorer by checking the process image name.
