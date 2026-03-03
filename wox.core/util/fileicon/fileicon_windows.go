@@ -42,6 +42,9 @@ const (
 	SHGFI_LARGEICON         = 0x000000000
 	SHGFI_USEFILEATTRIBUTES = 0x000000010
 	FILE_ATTRIBUTE_NORMAL   = 0x00000080
+	FILE_ATTRIBUTE_OFFLINE  = 0x00001000
+	FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS = 0x00400000
+	FILE_ATTRIBUTE_RECALL_ON_OPEN        = 0x00040000
 )
 
 // expandEnvVars expands Windows environment variables in a string
@@ -161,8 +164,21 @@ func getFileIconImpl(ctx context.Context, filePath string) (string, error) {
 	if strings.TrimSpace(filePath) == "" {
 		return "", errors.New("empty path")
 	}
-	if _, err := os.Stat(filePath); err != nil {
+	
+	fi, err := os.Stat(filePath)
+	if err != nil {
 		return "", err
+	}
+
+	// Check if the file is an offline file (e.g. OneDrive, Phone Link)
+	// If it is, avoid reading its contents to extract high res icons, to prevent triggering an automatic file download.
+	if sys, ok := fi.Sys().(*syscall.Win32FileAttributeData); ok {
+		if (sys.FileAttributes&FILE_ATTRIBUTE_OFFLINE != 0) ||
+			(sys.FileAttributes&FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS != 0) ||
+			(sys.FileAttributes&FILE_ATTRIBUTE_RECALL_ON_OPEN != 0) {
+			util.GetLogger().Debug(ctx, "File is offline, falling back to extension icon to avoid download: "+filePath)
+			return getFileTypeIconImpl(ctx, filepath.Ext(filePath))
+		}
 	}
 
 	img, err := getHighResIcon(ctx, filePath)
