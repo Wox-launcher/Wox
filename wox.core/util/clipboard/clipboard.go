@@ -121,12 +121,21 @@ func watchChange() {
 	// Debounce: wait briefly to let the clipboard settle.
 	// When the user rapidly copies items, this avoids opening the clipboard
 	// while the source application is still writing, reducing lock contention.
-	time.Sleep(50 * time.Millisecond)
+	settleStart := time.Now()
+	for {
+		time.Sleep(50 * time.Millisecond)
+		// If the clipboard changed during the sleep, it means the user is still copying or the source app is still writing.
+		// We loop until it settles (no sequence number change for 50ms).
+		if !isClipboardChanged() {
+			break
+		}
 
-	// If the clipboard changed again during the debounce window, skip this read.
-	// The next polling cycle will pick up the latest change.
-	if isClipboardChanged() {
-		return
+		// Unblock after maximum 1 second to prevent permanent deadlocks
+		// from badly behaving apps that continuously update the clipboard.
+		if time.Since(settleStart) > time.Second {
+			util.GetLogger().Warn(context.Background(), "clipboard: debounce timeout exceeded, reading anyway")
+			break
+		}
 	}
 
 	start := time.Now()

@@ -373,6 +373,10 @@ func readFilePaths() ([]string, error) {
 	var resultFiles []string
 	fileData := rawData[pFiles:]
 
+	if len(fileData) == 0 {
+		return nil, fmt.Errorf("empty file data")
+	}
+
 	if fWide != 0 {
 		// Unicode
 		if len(fileData)%2 != 0 {
@@ -451,6 +455,9 @@ func readBmpImage() (image.Image, error) {
 		// Copy header first
 		headerCopy = *(*bitmapHeader)(unsafe.Pointer(pMemBlk))
 
+		// Get the actual allocated memory size to prevent out-of-bounds reads
+		actualBytes, _, _ := gSize.Call(hClipDat)
+
 		// Calculate the total size of DIB data we need to copy
 		var dibSize uint32
 		if headerCopy.BitCount == 32 {
@@ -488,6 +495,12 @@ func readBmpImage() (image.Image, error) {
 				offset += colors * 4
 			}
 			dibSize = offset + imageSize
+		}
+
+		// Apply safety bound to prevent access violation crashes (SIGSEGV)
+		if actualBytes > 0 && dibSize > uint32(actualBytes) {
+			util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("clipboard: calculated DIB size (%d) exceeds allocated size (%d), truncating", dibSize, actualBytes))
+			dibSize = uint32(actualBytes)
 		}
 
 		// Copy all DIB data to local memory
@@ -550,6 +563,11 @@ func readBmpImage() (image.Image, error) {
 
 			srcRow := y * stride
 			destRow := destY * img.Stride
+
+			// Safety check for the entire row to prevent slice bounds out of range panic
+			if srcRow+width*4 > len(pixelData) {
+				continue
+			}
 
 			for x := 0; x < width; x++ {
 				// Input is BGRA or BGRX
