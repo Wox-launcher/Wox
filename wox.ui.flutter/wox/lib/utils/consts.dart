@@ -8,8 +8,9 @@ const double RESULT_ITEM_BASE_HEIGHT = 50.0;
 const double ACTION_ITEM_BASE_HEIGHT = 40.0;
 const double TOOLBAR_HEIGHT = 40.0;
 
-/// Default label width for plugin settings, can be overridden by each setting item
-const double SETTING_LABEL_DEAULT_WIDTH = 160.0;
+/// Default label width for setting view
+const double GENERAL_SETTING_LABEL_WIDTH = 160.0;
+const double PLUGIN_SETTING_LABEL_MAX_WIDTH = 200.0;
 
 // Default font size for setting item tooltips
 const double SETTING_TOOLTIP_DEFAULT_SIZE = 12.0;

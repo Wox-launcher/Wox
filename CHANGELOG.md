@@ -8,12 +8,24 @@
   - Add "App font family" setting to choose system font for Wox interface #4335
   - [`Plugin Setting`] Add image emoji selector for plugin table image fields
   - [`Plugin Setting`] Add `maxHeight` property support in plugin table setting value #4339
+  - [`Plugin Store`] Add filter functionality and upgrade indicators for plugins #4356
+  - [`Browser Bookmarks`] Add Firefox support #4354
+  - [`Web Search`] Allow user to select custom browser #3597
+  - [`Setting`] Add log management features including clearing logs and changing log level
+  - [`Explorer`] Add quick jump paths and enhance file dialog interactions
 
 - Improve
   - [`Shell`] Enhance Shell plugin terminal preview to support search/full-screen/scroll-to-load functions
   - Improve query hotkey tooltips and add Wox Chrome extension link in settings #4333
   - Improve app process exit handling when shutting down Wox #4338
   - Improve the layout of the plugin settings page
+  - [`Plugin Setting`] Improve focus management and validation
+  - Improve preview functionality and local actions
+  - Improve Windows Start Menu handling by dismissing it when Wox opens #4341
+  - [`Explorer`] Improve overlay positioning and DPI handling
+  - [`Calculator`] Improve history management and limit displayed history to top 100 entries #4340
+  - [`Explorer`] Improve file path resolution for open/save dialogs on macOS
+  - Improve listview rendering performance
 
 - Fix
   - [`File Explorer Search`] Fix an issue that file explorer search plugin cannot navigate on open/save dialog
@@ -21,6 +33,9 @@
   - Fix an issue that Wox setting table values can't be saved sometimes
   - Fix query results not being cleared correctly when app visibility changes
   - Fix Base64 JPEG decode issue in image preview
+  - [`Plugin Setting`] Fix an issue with handling null and empty JSON responses in plugin table settings
+  - [`File`] Fix Windows Phone Link automatic downloads occurring when fetching file icons #4352
+  - Fix image loading error handling in image view
 
 ## v2.0.0 - 2026-02-09
 

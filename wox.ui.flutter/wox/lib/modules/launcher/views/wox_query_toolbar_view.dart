@@ -11,6 +11,7 @@ import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/utils/color_util.dart';
+import 'package:wox/utils/wox_text_measure_util.dart';
 
 class WoxQueryToolbarView extends GetView<WoxLauncherController> {
   const WoxQueryToolbarView({super.key});
@@ -44,10 +45,8 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
             Flexible(
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final textSpan = TextSpan(text: toolbarInfo.text ?? '', style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor)));
-                  final textPainter = TextPainter(text: textSpan, maxLines: 1, textDirection: TextDirection.ltr)..layout(maxWidth: constraints.maxWidth);
-
-                  final isTextOverflow = textPainter.didExceedMaxLines;
+                  final textStyle = TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor));
+                  final isTextOverflow = WoxTextMeasureUtil.isTextOverflow(context: context, text: toolbarInfo.text ?? '', style: textStyle, maxWidth: constraints.maxWidth);
 
                   return Row(
                     mainAxisSize: MainAxisSize.min,
@@ -142,12 +141,12 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
   }
 
   /// Calculate the precise width of a single action (name + hotkey + spacing)
-  double _calculateActionWidth(String actionName, HotkeyX hotkey) {
-    // Use TextPainter to precisely measure text width (works for all languages)
-    final textSpan = TextSpan(text: actionName, style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor)));
-    final textPainter = TextPainter(text: textSpan, maxLines: 1, textDirection: TextDirection.ltr)..layout();
-
-    final nameWidth = textPainter.width;
+  double _calculateActionWidth(BuildContext context, String actionName, HotkeyX hotkey) {
+    final nameWidth = WoxTextMeasureUtil.measureTextWidth(
+      context: context,
+      text: actionName,
+      style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor)),
+    );
 
     // Calculate hotkey width
     double hotkeyWidth = 0;
@@ -187,7 +186,7 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
           for (var actionInfo in toolbarInfo.actions!) {
             var hotkey = WoxHotkey.parseHotkeyFromString(actionInfo.hotkey);
             if (hotkey != null) {
-              final calculatedWidth = _calculateActionWidth(actionInfo.name, hotkey);
+              final calculatedWidth = _calculateActionWidth(context, actionInfo.name, hotkey);
               actionData.add({'info': actionInfo, 'hotkey': hotkey, 'width': calculatedWidth});
             }
           }

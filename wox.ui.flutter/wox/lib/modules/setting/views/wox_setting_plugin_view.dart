@@ -16,6 +16,7 @@ import 'package:wox/components/wox_hint_box.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_textfield.dart';
 import 'package:wox/components/wox_checkbox.dart';
+import 'package:wox/components/wox_label.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_label.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_select_ai_model.dart';
@@ -32,6 +33,7 @@ import 'package:wox/components/wox_button.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/strings.dart';
+import 'package:wox/utils/wox_text_measure_util.dart';
 import 'package:wox/enums/wox_plugin_runtime_enum.dart';
 
 class WoxSettingPluginView extends GetView<WoxSettingController> {
@@ -39,10 +41,9 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
   // Local refreshing state for showing loading spinner on refresh button
   static final RxBool _refreshing = false.obs;
   static final GlobalKey _pluginFilterIconKey = GlobalKey();
-  static const double _pluginLabelMaxWidth = 200;
   static const double _pluginLabelMinWidth = 0;
   static const double _pluginTableDefaultWidth = 626;
-  static const double _pluginFilterPanelDefaultWidth = 600;
+  static const double _pluginFilterPanelDefaultWidth = 660;
 
   String _extractSettingLabelText(dynamic settingDefinitionValue, String settingType) {
     if (settingType == "checkbox") {
@@ -64,18 +65,13 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
     return "";
   }
 
-  double _measureLabelWidthByText(String label, {double minWidth = _pluginLabelMinWidth}) {
+  double _measureLabelWidthByText(BuildContext context, String label, {double minWidth = _pluginLabelMinWidth}) {
     final trimmedLabel = label.trim();
-    if (trimmedLabel.isEmpty) {
-      return SETTING_LABEL_DEAULT_WIDTH;
-    }
-
-    final painter = TextPainter(text: TextSpan(text: trimmedLabel, style: const TextStyle(fontSize: 13)), textDirection: TextDirection.ltr, maxLines: 1)..layout();
-    final preferredWidth = painter.width + 8;
-    return preferredWidth.clamp(minWidth, _pluginLabelMaxWidth).toDouble();
+    final preferredWidth = WoxTextMeasureUtil.measureTextWidth(context: context, text: trimmedLabel, style: const TextStyle(fontSize: 13)) + 8;
+    return preferredWidth.clamp(minWidth, PLUGIN_SETTING_LABEL_MAX_WIDTH).toDouble();
   }
 
-  double _calculateUniformPluginLabelWidth(PluginDetail plugin) {
+  double _calculateUniformPluginLabelWidth(BuildContext context, PluginDetail plugin) {
     double maxLabelWidth = 0;
 
     for (final definition in plugin.settingDefinitions) {
@@ -89,14 +85,10 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
         continue;
       }
 
-      maxLabelWidth = math.max(maxLabelWidth, _measureLabelWidthByText(translatedLabel, minWidth: 0));
+      maxLabelWidth = math.max(maxLabelWidth, _measureLabelWidthByText(context, translatedLabel, minWidth: 0));
     }
 
-    if (maxLabelWidth <= 0) {
-      return SETTING_LABEL_DEAULT_WIDTH;
-    }
-
-    return maxLabelWidth.clamp(_pluginLabelMinWidth, _pluginLabelMaxWidth).toDouble();
+    return maxLabelWidth.clamp(_pluginLabelMinWidth, PLUGIN_SETTING_LABEL_MAX_WIDTH).toDouble();
   }
 
   Future<void> _showPluginFilterPanel(BuildContext context) async {
@@ -334,7 +326,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
     return Row(mainAxisSize: MainAxisSize.min, children: rightItems);
   }
 
-  Widget pluginDetail() {
+  Widget pluginDetail(BuildContext context) {
     return Expanded(
       child: Obx(() {
         if (controller.activePlugin.value.id.isEmpty) {
@@ -520,7 +512,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                           dt.TabData(
                             index: 0,
                             title: Tab(child: Text(controller.tr('ui_plugin_tab_settings'), style: TextStyle(color: getThemeTextColor()))),
-                            content: pluginTabSetting(),
+                            content: pluginTabSetting(context),
                           ),
                           dt.TabData(
                             index: 1,
@@ -595,10 +587,10 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
     return WoxPluginDetailView(pluginDetailJson: jsonEncode(pluginData));
   }
 
-  Widget pluginTabSetting() {
+  Widget pluginTabSetting(BuildContext context) {
     return Obx(() {
       var plugin = controller.activePlugin.value;
-      final uniformLabelWidth = _calculateUniformPluginLabelWidth(plugin);
+      final uniformLabelWidth = _calculateUniformPluginLabelWidth(context, plugin);
 
       // Show empty state if no settings
       if (plugin.settingDefinitions.isEmpty) {
@@ -636,7 +628,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                   );
                 }
                 if (e.type == "newline") {
-                  return WoxSettingPluginNewLine(value: "", item: e.value as PluginSettingValueNewLine, onUpdate: (key, value) async {});
+                  return WoxSettingPluginNewLine(value: "", item: e.value as PluginSettingValueNewLine, labelWidth: uniformLabelWidth, onUpdate: (key, value) async {});
                 }
                 if (e.type == "select") {
                   return WoxSettingPluginSelect(
@@ -659,7 +651,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                   );
                 }
                 if (e.type == "head") {
-                  return WoxSettingPluginHead(value: "", item: e.value as PluginSettingValueHead, onUpdate: (key, value) async {});
+                  return WoxSettingPluginHead(value: "", item: e.value as PluginSettingValueHead, labelWidth: uniformLabelWidth, onUpdate: (key, value) async {});
                 }
                 if (e.type == "label") {
                   return WoxSettingPluginLabel(value: "", item: e.value as PluginSettingValueLabel, labelWidth: uniformLabelWidth, onUpdate: (key, value) async {});
@@ -745,6 +737,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
               value: json.encode(plugin.commands),
               tableWidth: _pluginTableDefaultWidth,
               readonly: true,
+              labelWidth: 160,
               item: PluginSettingValueTable.fromJson({
                 "Key": "_commands",
                 "Columns": [
@@ -860,7 +853,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
         children: [
           SizedBox(width: 260, child: pluginList(context)),
           Container(width: 1, height: double.infinity, color: getThemeDividerColor(), margin: const EdgeInsets.only(right: 10, left: 10)),
-          pluginDetail(),
+          pluginDetail(context),
         ],
       ),
     );
@@ -878,6 +871,9 @@ class _PluginFilterPanel extends StatefulWidget {
 }
 
 class _PluginFilterPanelState extends State<_PluginFilterPanel> {
+  static const double _labelColumnMinWidth = 50;
+  static const double _labelColumnMaxWidth = 180;
+
   late final FocusNode _focusNode;
   bool _focusReady = false;
 
@@ -899,11 +895,32 @@ class _PluginFilterPanelState extends State<_PluginFilterPanel> {
     super.dispose();
   }
 
-  Widget _buildBooleanFilterRow({required String label, required bool value, required ValueChanged<bool?> onChanged}) {
+  double _measureLabelWidth(BuildContext context, String label) {
+    return WoxTextMeasureUtil.measureTextWidth(context: context, text: label, style: TextStyle(color: getThemeTextColor(), fontSize: 13));
+  }
+
+  double _calculateLabelColumnWidth(BuildContext context, {required bool isStorePluginList}) {
+    final labels = <String>[
+      if (isStorePluginList) widget.controller.tr('ui_not_installed'),
+      if (!isStorePluginList) widget.controller.tr('ui_plugin_filter_disabled_only'),
+      if (!isStorePluginList) widget.controller.tr('ui_plugin_filter_enabled_only'),
+      if (!isStorePluginList) widget.controller.tr('ui_plugin_filter_upgradable'),
+      widget.controller.tr('ui_runtime_status'),
+    ];
+
+    double width = _labelColumnMinWidth;
+    for (final label in labels) {
+      width = math.max(width, _measureLabelWidth(context, label));
+    }
+
+    return width.clamp(_labelColumnMinWidth, _labelColumnMaxWidth).toDouble();
+  }
+
+  Widget _buildBooleanFilterRow({required String label, required double labelWidth, required bool value, required ValueChanged<bool?> onChanged}) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        SizedBox(width: 72, child: Text(label, style: TextStyle(color: getThemeTextColor(), fontSize: 13))),
+        WoxLabel(label: label, width: labelWidth, textAlign: TextAlign.left, style: TextStyle(color: getThemeTextColor(), fontSize: 13)),
         const SizedBox(width: 10),
         WoxCheckbox(value: value, onChanged: onChanged, size: 18),
       ],
@@ -921,6 +938,7 @@ class _PluginFilterPanelState extends State<_PluginFilterPanel> {
   Widget build(BuildContext context) {
     return Obx(() {
       final isStorePluginList = widget.controller.isStorePluginList.value;
+      final labelColumnWidth = _calculateLabelColumnWidth(context, isStorePluginList: isStorePluginList);
 
       return Material(
         color: getThemeBackgroundColor().withAlpha(255),
@@ -945,12 +963,14 @@ class _PluginFilterPanelState extends State<_PluginFilterPanel> {
                 if (isStorePluginList)
                   _buildBooleanFilterRow(
                     label: widget.controller.tr('ui_not_installed'),
+                    labelWidth: labelColumnWidth,
                     value: widget.controller.filterUninstalledPluginsOnly.value,
                     onChanged: (value) => widget.controller.updatePluginFilters(uninstalledOnly: value ?? false),
                   ),
                 if (!isStorePluginList)
                   _buildBooleanFilterRow(
                     label: widget.controller.tr('ui_plugin_filter_disabled_only'),
+                    labelWidth: labelColumnWidth,
                     value: widget.controller.filterDisabledPluginsOnly.value,
                     onChanged: (value) => widget.controller.updatePluginFilters(disabledOnly: value ?? false),
                   ),
@@ -958,6 +978,7 @@ class _PluginFilterPanelState extends State<_PluginFilterPanel> {
                 if (!isStorePluginList)
                   _buildBooleanFilterRow(
                     label: widget.controller.tr('ui_plugin_filter_enabled_only'),
+                    labelWidth: labelColumnWidth,
                     value: widget.controller.filterEnabledPluginsOnly.value,
                     onChanged: (value) => widget.controller.updatePluginFilters(enabledOnly: value ?? false),
                   ),
@@ -965,6 +986,7 @@ class _PluginFilterPanelState extends State<_PluginFilterPanel> {
                 if (!isStorePluginList)
                   _buildBooleanFilterRow(
                     label: widget.controller.tr('ui_plugin_filter_upgradable'),
+                    labelWidth: labelColumnWidth,
                     value: widget.controller.filterUpgradablePluginsOnly.value,
                     onChanged: (value) => widget.controller.updatePluginFilters(upgradableOnly: value ?? false),
                   ),
@@ -972,7 +994,12 @@ class _PluginFilterPanelState extends State<_PluginFilterPanel> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SizedBox(width: 72, child: Text(widget.controller.tr('ui_runtime_status'), style: TextStyle(color: getThemeTextColor(), fontSize: 13))),
+                    WoxLabel(
+                      label: widget.controller.tr('ui_runtime_status'),
+                      width: labelColumnWidth,
+                      textAlign: TextAlign.left,
+                      style: TextStyle(color: getThemeTextColor(), fontSize: 13),
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: SingleChildScrollView(

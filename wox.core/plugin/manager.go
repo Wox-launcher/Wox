@@ -481,9 +481,8 @@ func (m *Manager) ParseMetadata(ctx context.Context, pluginDirectory string) (Me
 }
 
 // ParseScriptMetadata parses metadata from script plugin file comments
-// Supports two formats:
+// Supports formats:
 // 1. JSON block format (preferred): # { ... } with complete plugin.json structure
-// 2. Legacy @wox.xxx format: individual @wox.id, @wox.name, etc. annotations
 func (m *Manager) ParseScriptMetadata(ctx context.Context, scriptPath string) (Metadata, error) {
 	content, err := os.ReadFile(scriptPath)
 	if err != nil {

@@ -7,7 +7,7 @@ import 'wox_setting_plugin_item_view.dart';
 class WoxSettingPluginNewLine extends WoxSettingPluginItem {
   final PluginSettingValueNewLine item;
 
-  const WoxSettingPluginNewLine({super.key, required this.item, required super.value, required super.onUpdate, super.labelWidth = SETTING_LABEL_DEAULT_WIDTH});
+  const WoxSettingPluginNewLine({super.key, required this.item, required super.value, required super.onUpdate, required super.labelWidth});
 
   @override
   Widget build(BuildContext context) {

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_checkbox.dart';
 import 'package:wox/components/wox_dropdown_button.dart';
+import 'package:wox/components/wox_platform_focus.dart';
 import 'package:wox/components/wox_textfield.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_checkbox.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_head.dart';
@@ -12,6 +13,7 @@ import 'package:wox/entity/setting/wox_plugin_setting_textbox.dart';
 import 'package:wox/entity/wox_plugin_setting.dart';
 import 'package:wox/entity/wox_query.dart';
 import 'package:wox/utils/colors.dart';
+import 'package:wox/utils/wox_text_measure_util.dart';
 
 /// A form panel for collecting form action values
 class WoxFormActionView extends StatefulWidget {
@@ -34,16 +36,15 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
   late Map<String, String> _values;
   final Map<String, TextEditingController> _textControllers = {};
   double _maxLabelWidth = 60;
+  bool _formInitialized = false;
 
-  double _measureLabelWidth(String text) {
+  double _measureLabelWidth(BuildContext context, String text) {
     final trimmed = text.trim();
     if (trimmed.isEmpty) {
       return 60;
     }
 
-    final painter = TextPainter(text: TextSpan(text: trimmed, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)), textDirection: TextDirection.ltr, maxLines: 1)
-      ..layout();
-    return painter.width + 8;
+    return WoxTextMeasureUtil.measureTextWidth(context: context, text: trimmed, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)) + 8;
   }
 
   @override
@@ -51,7 +52,7 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
     super.initState();
     _values = Map<String, String>.from(widget.initialValues);
 
-    // Find first focusable control, init text controllers, and calculate max label width
+    // Find first focusable control and init text controllers.
     for (int i = 0; i < widget.action.form.length; i++) {
       final item = widget.action.form[i];
       if (item.type == "textbox") {
@@ -61,27 +62,13 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
 
         final textbox = item.value as PluginSettingValueTextBox;
         _textControllers[textbox.key] = TextEditingController(text: _values[textbox.key] ?? textbox.defaultValue);
-        final labelWidth = _measureLabelWidth(widget.translate(textbox.label));
-        if (labelWidth > _maxLabelWidth) {
-          _maxLabelWidth = labelWidth;
-        }
       } else if (item.type == "select") {
         if (_firstFocusableIndex == -1) {
           _firstFocusableIndex = i;
         }
-        final select = item.value as PluginSettingValueSelect;
-        final labelWidth = _measureLabelWidth(widget.translate(select.label));
-        if (labelWidth > _maxLabelWidth) {
-          _maxLabelWidth = labelWidth;
-        }
-      } else if (item.type == "checkbox") {
-        final checkbox = item.value as PluginSettingValueCheckBox;
-        final labelWidth = _measureLabelWidth(widget.translate(checkbox.label));
-        if (labelWidth > _maxLabelWidth) {
-          _maxLabelWidth = labelWidth;
-        }
       }
     }
+    _formInitialized = true;
 
     // Request focus on the first focusable control after build
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -91,6 +78,39 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
         _formFocusNode.requestFocus();
       }
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_formInitialized) {
+      return;
+    }
+
+    double maxLabelWidth = 60;
+    for (int i = 0; i < widget.action.form.length; i++) {
+      final item = widget.action.form[i];
+      if (item.type == "textbox") {
+        final textbox = item.value as PluginSettingValueTextBox;
+        final measuredWidth = _measureLabelWidth(context, widget.translate(textbox.label));
+        if (measuredWidth > maxLabelWidth) {
+          maxLabelWidth = measuredWidth;
+        }
+      } else if (item.type == "select") {
+        final select = item.value as PluginSettingValueSelect;
+        final measuredWidth = _measureLabelWidth(context, widget.translate(select.label));
+        if (measuredWidth > maxLabelWidth) {
+          maxLabelWidth = measuredWidth;
+        }
+      } else if (item.type == "checkbox") {
+        final checkbox = item.value as PluginSettingValueCheckBox;
+        final measuredWidth = _measureLabelWidth(context, widget.translate(checkbox.label));
+        if (measuredWidth > maxLabelWidth) {
+          maxLabelWidth = measuredWidth;
+        }
+      }
+    }
+    _maxLabelWidth = maxLabelWidth;
   }
 
   @override
@@ -122,10 +142,17 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
   @override
   Widget build(BuildContext context) {
     return CallbackShortcuts(
-      bindings: {const SingleActivator(LogicalKeyboardKey.enter, control: true): _handleSave, const SingleActivator(LogicalKeyboardKey.escape): widget.onCancel},
-      child: Focus(
+      bindings: {const SingleActivator(LogicalKeyboardKey.enter, control: true): _handleSave},
+      child: WoxPlatformFocus(
         focusNode: _formFocusNode,
         autofocus: true,
+        onKeyEvent: (node, event) {
+          if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.escape) {
+            widget.onCancel();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,

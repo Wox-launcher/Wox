@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_head.dart';
 import 'package:wox/utils/colors.dart';
-import 'package:wox/utils/consts.dart';
 
 import 'wox_setting_plugin_item_view.dart';
 
 class WoxSettingPluginHead extends WoxSettingPluginItem {
   final PluginSettingValueHead item;
 
-  const WoxSettingPluginHead({super.key, required this.item, required super.value, required super.onUpdate, super.labelWidth = SETTING_LABEL_DEAULT_WIDTH});
+  const WoxSettingPluginHead({super.key, required this.item, required super.value, required super.onUpdate, required super.labelWidth});
 
   @override
   Widget build(BuildContext context) {

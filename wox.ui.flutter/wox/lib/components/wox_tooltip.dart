@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:wox/utils/wox_text_measure_util.dart';
 import 'package:wox/utils/color_util.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:flutter/services.dart';
@@ -9,11 +10,7 @@ class WoxTooltip extends StatefulWidget {
   final String message;
   final Widget child;
 
-  const WoxTooltip({
-    super.key,
-    required this.message,
-    required this.child,
-  });
+  const WoxTooltip({super.key, required this.message, required this.child});
 
   @override
   State<WoxTooltip> createState() => WoxTooltipState();
@@ -40,14 +37,7 @@ class WoxTooltipState extends State<WoxTooltip> {
       return widget.child;
     }
 
-    return CompositedTransformTarget(
-      link: layerLink,
-      child: MouseRegion(
-        onEnter: handleTargetEnter,
-        onExit: handleTargetExit,
-        child: widget.child,
-      ),
-    );
+    return CompositedTransformTarget(link: layerLink, child: MouseRegion(onEnter: handleTargetEnter, onExit: handleTargetExit, child: widget.child));
   }
 
   @override
@@ -101,11 +91,7 @@ class WoxTooltipState extends State<WoxTooltip> {
         final theme = Theme.of(context);
         final tooltipTheme = theme.tooltipTheme;
         final textStyle = tooltipTheme.textStyle ?? theme.textTheme.bodySmall?.copyWith(color: Colors.white) ?? const TextStyle(color: Colors.white, fontSize: 12);
-        final decoration = tooltipTheme.decoration ??
-            BoxDecoration(
-              color: Colors.grey.shade700,
-              borderRadius: BorderRadius.circular(4),
-            );
+        final decoration = tooltipTheme.decoration ?? BoxDecoration(color: Colors.grey.shade700, borderRadius: BorderRadius.circular(4));
         final padding = tooltipTheme.padding ?? const EdgeInsets.symmetric(horizontal: 12, vertical: 8);
         final selectionColor = safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.previewTextSelectionColor);
 
@@ -129,10 +115,7 @@ class WoxTooltipState extends State<WoxTooltip> {
                     constraints: BoxConstraints(maxWidth: tooltipMaxWidth),
                     child: Padding(
                       padding: padding,
-                      child: TextSelectionTheme(
-                        data: TextSelectionThemeData(selectionColor: selectionColor),
-                        child: SelectableText(widget.message, style: textStyle),
-                      ),
+                      child: TextSelectionTheme(data: TextSelectionThemeData(selectionColor: selectionColor), child: SelectableText(widget.message, style: textStyle)),
                     ),
                   ),
                 ),
@@ -162,14 +145,10 @@ class WoxTooltipState extends State<WoxTooltip> {
 
     tooltipMaxWidth = (mediaSize.width - tooltipMargin * 2).clamp(0, 360).toDouble();
     final maxTextWidth = (tooltipMaxWidth - padding.horizontal).clamp(0, tooltipMaxWidth).toDouble();
-    final textPainter = TextPainter(
-      text: TextSpan(text: widget.message, style: textStyle),
-      textDirection: Directionality.of(context),
-    );
-    textPainter.layout(maxWidth: maxTextWidth);
+    final textSize = WoxTextMeasureUtil.measureTextSize(context: context, text: widget.message, style: textStyle, maxWidth: maxTextWidth);
 
-    tooltipWidth = (textPainter.width + padding.horizontal).clamp(0, tooltipMaxWidth);
-    tooltipHeight = textPainter.height + padding.vertical;
+    tooltipWidth = (textSize.width + padding.horizontal).clamp(0, tooltipMaxWidth);
+    tooltipHeight = textSize.height + padding.vertical;
 
     final spaceBelow = mediaSize.height - targetRect.bottom;
     final spaceAbove = targetRect.top;

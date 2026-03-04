@@ -42,7 +42,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     required this.item,
     required super.value,
     required super.onUpdate,
-    super.labelWidth = SETTING_LABEL_DEAULT_WIDTH,
+    super.labelWidth = 160.0,
     this.tableWidth = 740.0,
     this.readonly = false,
     this.onUpdateValidate,
