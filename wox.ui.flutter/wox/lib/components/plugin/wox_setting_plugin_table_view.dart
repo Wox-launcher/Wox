@@ -394,10 +394,11 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                         // Re-read the latest rows from the current setting value
                         // to avoid using stale closure-captured data
                         var rowsJson = getSetting(key);
-                        if (rowsJson == "") {
+                        if (rowsJson == "" || rowsJson == "null") {
                           rowsJson = "[]";
                         }
-                        var freshRows = json.decode(rowsJson) as List<dynamic>;
+                        var decoded = json.decode(rowsJson);
+                        var freshRows = decoded is List ? decoded : [];
 
                         // Find the target row in fresh data by matching original field values
                         var idx = _findRowIndex(freshRows, originalRow);
@@ -448,10 +449,11 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
 
                                 // Re-read the latest rows from the current setting value
                                 var rowsJson = getSetting(item.key);
-                                if (rowsJson == "") {
+                                if (rowsJson == "" || rowsJson == "null") {
                                   rowsJson = "[]";
                                 }
-                                var freshRows = json.decode(rowsJson) as List<dynamic>;
+                                var decoded = json.decode(rowsJson);
+                                var freshRows = decoded is List ? decoded : [];
 
                                 // Find and remove the target row by matching original field values
                                 var idx = _findRowIndex(freshRows, originalRow);
@@ -583,10 +585,14 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
 
   Widget buildTable(BuildContext context) {
     var rowsJson = getSetting(item.key);
-    if (rowsJson == "") {
+    if (rowsJson == "" || rowsJson == "null") {
       return buildEmptyTable();
     }
-    var rows = json.decode(rowsJson) as List<dynamic>;
+    var decoded = json.decode(rowsJson);
+    if (decoded == null || decoded is! List) {
+      return buildEmptyTable();
+    }
+    var rows = decoded;
     if (rows.isEmpty) {
       return buildEmptyTable();
     }
@@ -817,10 +823,11 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                               row: const {},
                               onUpdate: (key, row) {
                                 var rowsJson = getSetting(key);
-                                if (rowsJson == "") {
+                                if (rowsJson == "" || rowsJson == "null") {
                                   rowsJson = "[]";
                                 }
-                                var rows = json.decode(rowsJson);
+                                var decoded = json.decode(rowsJson);
+                                var rows = decoded is List ? decoded : [];
                                 rows.add(row);
                                 //remove the unique key
                                 rows.forEach((element) {
