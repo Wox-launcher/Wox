@@ -40,6 +40,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
   bool isUpdate = false;
   Map<String, String> fieldValidationErrors = {};
   Map<String, TextEditingController> textboxEditingController = {};
+  Map<String, FocusNode> _focusNodes = {};
   List<PluginSettingValueTableColumn> columns = [];
   String? customValidationError;
 
@@ -89,9 +90,24 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
     }
 
     for (var column in columns) {
-      // init text box controller
+      // init text box controller and focus node
       if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeText) {
         textboxEditingController[column.key] = TextEditingController(text: getValue(column.key));
+        _focusNodes[column.key] = FocusNode();
+        _focusNodes[column.key]!.addListener(() {
+          if (!_focusNodes[column.key]!.hasFocus) {
+            for (var element in column.validators) {
+              var errMsg = element.validator.validate(textboxEditingController[column.key]!.text);
+              if (errMsg != "") {
+                fieldValidationErrors[column.key] = errMsg;
+                setState(() {});
+                return;
+              }
+            }
+            fieldValidationErrors.remove(column.key);
+            setState(() {});
+          }
+        });
       }
       // init text box controller for text list
       if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeTextList) {
@@ -106,6 +122,22 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
 
         for (var i = 0; i < columnValues.length; i++) {
           textboxEditingController[column.key + i.toString()] = TextEditingController(text: columnValues[i]);
+          _focusNodes[column.key + i.toString()] = FocusNode();
+          final focusKey = column.key + i.toString();
+          _focusNodes[focusKey]!.addListener(() {
+            if (!_focusNodes[focusKey]!.hasFocus) {
+              for (var element in column.validators) {
+                var errMsg = element.validator.validate(columnValues);
+                if (errMsg != "") {
+                  fieldValidationErrors[column.key] = errMsg;
+                  setState(() {});
+                  return;
+                }
+              }
+              fieldValidationErrors.remove(column.key);
+              setState(() {});
+            }
+          });
         }
       }
     }
@@ -115,6 +147,9 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
   void dispose() {
     for (var controller in textboxEditingController.values) {
       controller.dispose();
+    }
+    for (var node in _focusNodes.values) {
+      node.dispose();
     }
     super.dispose();
   }
@@ -249,41 +284,25 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
     switch (column.type) {
       case PluginSettingValueType.pluginSettingValueTableColumnTypeText:
         return Expanded(
-          child: Focus(
-            onFocusChange: (hasFocus) {
-              if (!hasFocus) {
-                for (var element in column.validators) {
-                  var errMsg = element.validator.validate(textboxEditingController[column.key]!.text);
-                  if (errMsg != "") {
-                    fieldValidationErrors[column.key] = errMsg;
-                    setState(() {});
-                    return;
-                  }
-                }
+          child: WoxTextField(
+            controller: textboxEditingController[column.key],
+            focusNode: _focusNodes[column.key],
+            maxLines: column.textMaxLines,
+            onChanged: (value) {
+              updateValue(column.key, value);
 
-                fieldValidationErrors.remove(column.key);
-                setState(() {});
+              for (var element in column.validators) {
+                var errMsg = element.validator.validate(value);
+                if (errMsg != "") {
+                  fieldValidationErrors[column.key] = errMsg;
+                  setState(() {});
+                  return;
+                }
               }
+
+              fieldValidationErrors.remove(column.key);
+              setState(() {});
             },
-            child: WoxTextField(
-              controller: textboxEditingController[column.key],
-              maxLines: column.textMaxLines,
-              onChanged: (value) {
-                updateValue(column.key, value);
-
-                for (var element in column.validators) {
-                  var errMsg = element.validator.validate(value);
-                  if (errMsg != "") {
-                    fieldValidationErrors[column.key] = errMsg;
-                    setState(() {});
-                    return;
-                  }
-                }
-
-                fieldValidationErrors.remove(column.key);
-                setState(() {});
-              },
-            ),
           ),
         );
       case PluginSettingValueType.pluginSettingValueTableColumnTypeCheckbox:
@@ -435,43 +454,26 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                   child: Row(
                     children: [
                       Expanded(
-                        child: Focus(
-                          onFocusChange: (hasFocus) {
-                            if (!hasFocus) {
-                              //validate
-                              for (var element in column.validators) {
-                                var errMsg = element.validator.validate(columnValues);
-                                if (errMsg != "") {
-                                  fieldValidationErrors[column.key] = errMsg;
-                                  setState(() {});
-                                  return;
-                                }
-                              }
+                        child: WoxTextField(
+                          controller: textboxEditingController[column.key + i.toString()],
+                          focusNode: _focusNodes[column.key + i.toString()],
+                          maxLines: 1,
+                          style: TextStyle(overflow: TextOverflow.ellipsis, color: getThemeTextColor()),
+                          onChanged: (value) {
+                            columnValues[i] = value;
 
-                              fieldValidationErrors.remove(column.key);
-                              setState(() {});
+                            for (var element in column.validators) {
+                              var errMsg = element.validator.validate(columnValues);
+                              if (errMsg != "") {
+                                fieldValidationErrors[column.key] = errMsg;
+                                setState(() {});
+                                return;
+                              }
                             }
+
+                            fieldValidationErrors.remove(column.key);
+                            setState(() {});
                           },
-                          child: WoxTextField(
-                            controller: textboxEditingController[column.key + i.toString()],
-                            maxLines: 1,
-                            style: TextStyle(overflow: TextOverflow.ellipsis, color: getThemeTextColor()),
-                            onChanged: (value) {
-                              columnValues[i] = value;
-
-                              for (var element in column.validators) {
-                                var errMsg = element.validator.validate(columnValues);
-                                if (errMsg != "") {
-                                  fieldValidationErrors[column.key] = errMsg;
-                                  setState(() {});
-                                  return;
-                                }
-                              }
-
-                              fieldValidationErrors.remove(column.key);
-                              setState(() {});
-                            },
-                          ),
                         ),
                       ),
                       IconButton(

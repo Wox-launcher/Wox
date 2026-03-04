@@ -53,6 +53,21 @@ class _SettingLabelWithTooltip extends StatelessWidget {
 
   const _SettingLabelWithTooltip({required this.label});
 
+  bool _isTextOverflow({required BuildContext context, required String text, required TextStyle style, required double maxWidth}) {
+    // Merge with DefaultTextStyle to match how the Text widget actually renders
+    // (Text widget inherits letterSpacing, fontFamily, etc. from the theme)
+    final resolvedStyle = DefaultTextStyle.of(context).style.merge(style);
+    final textPainter = TextPainter(
+      text: TextSpan(text: text, style: resolvedStyle),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      locale: Localizations.maybeLocaleOf(context),
+      maxLines: 1,
+    )..layout(minWidth: 0, maxWidth: double.infinity);
+
+    return textPainter.width > maxWidth;
+  }
+
   @override
   Widget build(BuildContext context) {
     final textStyle = TextStyle(color: getThemeTextColor(), fontSize: 13);
@@ -61,17 +76,15 @@ class _SettingLabelWithTooltip extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxWidth = constraints.maxWidth;
-        if (!maxWidth.isFinite || maxWidth <= 0) {
-          return textWidget;
+        final hasLabel = label.trim().isNotEmpty;
+        final shouldShowTooltip = hasLabel && maxWidth > 0 && _isTextOverflow(context: context, text: label, style: textStyle, maxWidth: maxWidth);
+        final child = SizedBox(width: double.infinity, child: textWidget);
+
+        if (!shouldShowTooltip) {
+          return child;
         }
 
-        final textPainter = TextPainter(text: TextSpan(text: label, style: textStyle), maxLines: 1, textDirection: Directionality.of(context))..layout(maxWidth: maxWidth);
-
-        if (!textPainter.didExceedMaxLines) {
-          return textWidget;
-        }
-
-        return WoxTooltip(message: label, child: textWidget);
+        return WoxTooltip(message: label, child: child);
       },
     );
   }
