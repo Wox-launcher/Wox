@@ -475,8 +475,8 @@ func (a *APIImpl) PushResults(ctx context.Context, query Query, results []QueryR
 		return false
 	}
 
-	for _, result := range results {
-		GetPluginManager().PolishResult(ctx, a.pluginInstance, query, result)
+	for i := range results {
+		results[i] = GetPluginManager().PolishResult(ctx, a.pluginInstance, query, results[i])
 	}
 
 	polishedResults := GetPluginManager().BuildQueryResultsSnapshot(query.SessionId, query.Id)
