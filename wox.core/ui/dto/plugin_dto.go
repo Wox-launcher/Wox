@@ -31,6 +31,7 @@ type PluginDto struct {
 	IsDev              bool
 	IsInstalled        bool
 	IsDisable          bool // only available when plugin is installed
+	IsUpgradable       bool
 }
 
 type PluginSettingDto struct {

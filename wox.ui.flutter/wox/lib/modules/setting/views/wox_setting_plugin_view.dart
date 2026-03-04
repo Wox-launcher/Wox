@@ -15,6 +15,7 @@ import 'package:wox/components/plugin/wox_setting_plugin_table_view.dart';
 import 'package:wox/components/wox_hint_box.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_textfield.dart';
+import 'package:wox/components/wox_checkbox.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_label.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_select_ai_model.dart';
@@ -37,9 +38,11 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
   const WoxSettingPluginView({super.key});
   // Local refreshing state for showing loading spinner on refresh button
   static final RxBool _refreshing = false.obs;
+  static final GlobalKey _pluginFilterIconKey = GlobalKey();
   static const double _pluginLabelMaxWidth = 200;
   static const double _pluginLabelMinWidth = 0;
   static const double _pluginTableDefaultWidth = 626;
+  static const double _pluginFilterPanelDefaultWidth = 600;
 
   String _extractSettingLabelText(dynamic settingDefinitionValue, String settingType) {
     if (settingType == "checkbox") {
@@ -96,7 +99,51 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
     return maxLabelWidth.clamp(_pluginLabelMinWidth, _pluginLabelMaxWidth).toDouble();
   }
 
-  Widget pluginList() {
+  Future<void> _showPluginFilterPanel(BuildContext context) async {
+    final filterIconContext = _pluginFilterIconKey.currentContext;
+    if (filterIconContext == null) {
+      return;
+    }
+
+    final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final RenderBox button = filterIconContext.findRenderObject() as RenderBox;
+    final Offset buttonTopLeft = button.localToGlobal(Offset.zero, ancestor: overlay);
+
+    final Size screenSize = overlay.size;
+    const double panelMinWidth = 360;
+    double left = buttonTopLeft.dx;
+    double panelWidth = math.min(_pluginFilterPanelDefaultWidth, screenSize.width - left - 12);
+    if (panelWidth < panelMinWidth) {
+      panelWidth = math.min(_pluginFilterPanelDefaultWidth, screenSize.width - 24);
+      left = left.clamp(12.0, screenSize.width - panelWidth - 12.0);
+    }
+
+    final double panelHeight = 190;
+
+    double top = buttonTopLeft.dy + button.size.height + 8;
+    top = top.clamp(12.0, screenSize.height - panelHeight - 12.0);
+
+    await showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'plugin_filter_panel',
+      barrierColor: Colors.transparent,
+      transitionDuration: Duration.zero,
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        return Material(
+          color: Colors.transparent,
+          child: Stack(
+            children: [
+              Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.translucent, onTap: () => Navigator.of(dialogContext).maybePop(), child: const SizedBox.expand())),
+              Positioned(left: left, top: top, child: _PluginFilterPanel(controller: controller, width: panelWidth)),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget pluginList(BuildContext context) {
     return Column(
       children: [
         Padding(
@@ -117,46 +164,54 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                         child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
                       );
                     }
-                    return GestureDetector(
-                      onTap: () async {
-                        _refreshing.value = true;
-                        try {
-                          final traceId = const UuidV4().generate();
-                          final preserveKeyword = controller.filterPluginKeywordController.text;
-                          final preserveActiveId = controller.activePlugin.value.id;
-                          final isStore = controller.isStorePluginList.value;
 
-                          if (isStore) {
-                            await controller.loadStorePlugins(traceId);
-                            await controller.switchToPluginList(traceId, true);
-                          } else {
-                            await controller.loadInstalledPlugins(traceId);
-                            await controller.switchToPluginList(traceId, false);
-                          }
+                    final Color iconColor = controller.hasPluginFilterApplied ? getThemeActiveBackgroundColor() : getThemeSubTextColor();
+                    return Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(right: 2),
+                          child: GestureDetector(
+                            key: _pluginFilterIconKey,
+                            onTap: () => _showPluginFilterPanel(context),
+                            child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4.0), child: Icon(Icons.filter_alt_outlined, color: iconColor)),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () async {
+                            _refreshing.value = true;
+                            try {
+                              final traceId = const UuidV4().generate();
+                              final preserveKeyword = controller.filterPluginKeywordController.text;
+                              final preserveActiveId = controller.activePlugin.value.id;
+                              final isStore = controller.isStorePluginList.value;
 
-                          // restore filter keyword and re-filter
-                          controller.filterPluginKeywordController.text = preserveKeyword;
-                          controller.filterPlugins();
+                              if (isStore) {
+                                await controller.loadStorePlugins(traceId);
+                                await controller.switchToPluginList(traceId, true);
+                              } else {
+                                await controller.loadInstalledPlugins(traceId);
+                                await controller.switchToPluginList(traceId, false);
+                              }
 
-                          // try restore previous active selection if still present
-                          final idx = controller.filteredPluginList.indexWhere((p) => p.id == preserveActiveId);
-                          if (idx >= 0) {
-                            controller.activePlugin.value = controller.filteredPluginList[idx];
-                          } else {
-                            controller.setFirstFilteredPluginDetailActive();
-                          }
-                        } finally {
-                          _refreshing.value = false;
-                        }
-                      },
-                      child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4.0), child: Icon(Icons.refresh, color: getThemeSubTextColor())),
+                              // restore filter keyword and re-filter
+                              controller.filterPluginKeywordController.text = preserveKeyword;
+                              controller.filterPlugins();
+                              controller.syncActivePluginWithFilteredList(currentActivePluginId: preserveActiveId);
+                            } finally {
+                              _refreshing.value = false;
+                            }
+                          },
+                          child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4.0), child: Icon(Icons.refresh, color: getThemeSubTextColor())),
+                        ),
+                      ],
                     );
                   }),
                 ],
               ),
               onChanged: (value) {
                 controller.filterPlugins();
-                controller.setFirstFilteredPluginDetailActive();
+                controller.syncActivePluginWithFilteredList();
               },
             );
           }),
@@ -234,35 +289,41 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
     // align tags/icons to the right of the tile
     final Color borderColor = isActive ? getThemeActionItemActiveColor() : getThemeSubTextColor();
 
-    List<Widget> rightItems = [];
+    final List<Widget> rightItems = [];
 
-    // Script tag (non-system script plugins)
-    if (!plugin.isSystem && WoxPluginRuntimeEnum.equals(plugin.runtime, WoxPluginRuntimeEnum.SCRIPT)) {
+    void addTag(String text) {
       rightItems.add(
         Container(
+          margin: EdgeInsets.only(left: rightItems.isEmpty ? 0 : 8),
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
           decoration: BoxDecoration(borderRadius: BorderRadius.circular(3), border: Border.all(color: borderColor, width: 0.5)),
-          child: Text(controller.tr('ui_setting_plugin_script_tag'), style: TextStyle(color: borderColor, fontSize: 11, height: 1.1)),
+          child: Text(text, style: TextStyle(color: borderColor, fontSize: 11, height: 1.1)),
         ),
       );
     }
 
+    // Script tag (non-system script plugins)
+    if (!plugin.isSystem && WoxPluginRuntimeEnum.equals(plugin.runtime, WoxPluginRuntimeEnum.SCRIPT)) {
+      addTag(controller.tr('ui_setting_plugin_script_tag'));
+    }
+
     // System tag
     if (plugin.isSystem) {
-      rightItems.add(
-        Container(
-          margin: const EdgeInsets.only(left: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-          decoration: BoxDecoration(borderRadius: BorderRadius.circular(3), border: Border.all(color: borderColor, width: 0.5)),
-          child: Text(controller.tr('ui_setting_plugin_system_tag'), style: TextStyle(color: borderColor, fontSize: 11, height: 1.1)),
-        ),
-      );
+      addTag(controller.tr('ui_setting_plugin_system_tag'));
+    }
+
+    // Installed list tags
+    if (!controller.isStorePluginList.value && plugin.isUpgradable) {
+      addTag(controller.tr('plugin_wpm_upgrade'));
+    }
+    if (!controller.isStorePluginList.value && plugin.isDisable) {
+      addTag(controller.tr('ui_disabled'));
     }
 
     // Store list: show installed check icon
     if (controller.isStorePluginList.value && plugin.isInstalled) {
       rightItems.add(
-        Padding(padding: const EdgeInsets.only(right: 6), child: Icon(Icons.check_circle, size: 20, color: isActive ? getThemeActionItemActiveColor() : Colors.green)),
+        Padding(padding: const EdgeInsets.only(right: 6, left: 4), child: Icon(Icons.check_circle, size: 20, color: isActive ? getThemeActionItemActiveColor() : Colors.green)),
       );
     }
 
@@ -327,6 +388,25 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
               padding: const EdgeInsets.only(bottom: 8.0, left: 16),
               child: Row(
                 children: [
+                  if (plugin.isInstalled && plugin.isUpgradable)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8.0),
+                      child: Obx(
+                        () => WoxButton.secondary(
+                          text: controller.tr('plugin_wpm_upgrade'),
+                          icon:
+                              controller.isUpgradingPlugin.value
+                                  ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: getThemeActionItemActiveColor()))
+                                  : Icon(Icons.system_update_alt, size: 14, color: getThemeTextColor()),
+                          onPressed:
+                              controller.isUpgradingPlugin.value
+                                  ? null
+                                  : () {
+                                    controller.upgradePlugin(plugin);
+                                  },
+                        ),
+                      ),
+                    ),
                   if (plugin.isInstalled && !plugin.isSystem)
                     Padding(
                       padding: const EdgeInsets.only(right: 8.0),
@@ -778,11 +858,169 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 260, child: pluginList()),
+          SizedBox(width: 260, child: pluginList(context)),
           Container(width: 1, height: double.infinity, color: getThemeDividerColor(), margin: const EdgeInsets.only(right: 10, left: 10)),
           pluginDetail(),
         ],
       ),
     );
+  }
+}
+
+class _PluginFilterPanel extends StatefulWidget {
+  final WoxSettingController controller;
+  final double width;
+
+  const _PluginFilterPanel({required this.controller, required this.width});
+
+  @override
+  State<_PluginFilterPanel> createState() => _PluginFilterPanelState();
+}
+
+class _PluginFilterPanelState extends State<_PluginFilterPanel> {
+  late final FocusNode _focusNode;
+  bool _focusReady = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode = FocusNode();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _focusNode.requestFocus();
+        _focusReady = true;
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  Widget _buildBooleanFilterRow({required String label, required bool value, required ValueChanged<bool?> onChanged}) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        SizedBox(width: 72, child: Text(label, style: TextStyle(color: getThemeTextColor(), fontSize: 13))),
+        const SizedBox(width: 10),
+        WoxCheckbox(value: value, onChanged: onChanged, size: 18),
+      ],
+    );
+  }
+
+  Widget _buildRuntimeFilterOption({required bool value, required String label, required ValueChanged<bool?> onChanged}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [WoxCheckbox(value: value, onChanged: onChanged, size: 18), const SizedBox(width: 4), Text(label, style: TextStyle(color: getThemeTextColor(), fontSize: 13))],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      final isStorePluginList = widget.controller.isStorePluginList.value;
+
+      return Material(
+        color: getThemeBackgroundColor().withAlpha(255),
+        elevation: 8,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          width: widget.width,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(color: getThemeBackgroundColor().withAlpha(255), borderRadius: BorderRadius.circular(8), border: Border.all(color: getThemeDividerColor())),
+          child: Focus(
+            focusNode: _focusNode,
+            autofocus: true,
+            onFocusChange: (hasFocus) {
+              if (_focusReady && !hasFocus && mounted) {
+                Navigator.of(context).maybePop();
+              }
+            },
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (isStorePluginList)
+                  _buildBooleanFilterRow(
+                    label: widget.controller.tr('ui_not_installed'),
+                    value: widget.controller.filterUninstalledPluginsOnly.value,
+                    onChanged: (value) => widget.controller.updatePluginFilters(uninstalledOnly: value ?? false),
+                  ),
+                if (!isStorePluginList)
+                  _buildBooleanFilterRow(
+                    label: widget.controller.tr('ui_plugin_filter_disabled_only'),
+                    value: widget.controller.filterDisabledPluginsOnly.value,
+                    onChanged: (value) => widget.controller.updatePluginFilters(disabledOnly: value ?? false),
+                  ),
+                if (!isStorePluginList) const SizedBox(height: 10),
+                if (!isStorePluginList)
+                  _buildBooleanFilterRow(
+                    label: widget.controller.tr('ui_plugin_filter_enabled_only'),
+                    value: widget.controller.filterEnabledPluginsOnly.value,
+                    onChanged: (value) => widget.controller.updatePluginFilters(enabledOnly: value ?? false),
+                  ),
+                if (!isStorePluginList) const SizedBox(height: 10),
+                if (!isStorePluginList)
+                  _buildBooleanFilterRow(
+                    label: widget.controller.tr('ui_plugin_filter_upgradable'),
+                    value: widget.controller.filterUpgradablePluginsOnly.value,
+                    onChanged: (value) => widget.controller.updatePluginFilters(upgradableOnly: value ?? false),
+                  ),
+                const SizedBox(height: 10),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(width: 72, child: Text(widget.controller.tr('ui_runtime_status'), style: TextStyle(color: getThemeTextColor(), fontSize: 13))),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _buildRuntimeFilterOption(
+                              value: widget.controller.filterRuntimeNodejsOnly.value,
+                              label: widget.controller.tr('ui_runtime_name_nodejs'),
+                              onChanged: (value) => widget.controller.updatePluginFilters(runtimeNodejsOnly: value ?? false),
+                            ),
+                            const SizedBox(width: 14),
+                            _buildRuntimeFilterOption(
+                              value: widget.controller.filterRuntimePythonOnly.value,
+                              label: widget.controller.tr('ui_runtime_name_python'),
+                              onChanged: (value) => widget.controller.updatePluginFilters(runtimePythonOnly: value ?? false),
+                            ),
+                            const SizedBox(width: 14),
+                            if (isStorePluginList)
+                              _buildRuntimeFilterOption(
+                                value: widget.controller.filterRuntimeScriptOnly.value,
+                                label: widget.controller.tr('ui_runtime_name_script'),
+                                onChanged: (value) => widget.controller.updatePluginFilters(runtimeScriptOnly: value ?? false),
+                              ),
+                            if (!isStorePluginList)
+                              _buildRuntimeFilterOption(
+                                value: widget.controller.filterRuntimeScriptNodejsOnly.value,
+                                label: widget.controller.tr('plugin_wpm_script_template_nodejs'),
+                                onChanged: (value) => widget.controller.updatePluginFilters(runtimeScriptNodejsOnly: value ?? false),
+                              ),
+                            if (!isStorePluginList) const SizedBox(width: 14),
+                            if (!isStorePluginList)
+                              _buildRuntimeFilterOption(
+                                value: widget.controller.filterRuntimeScriptPythonOnly.value,
+                                label: widget.controller.tr('plugin_wpm_script_template_python'),
+                                onChanged: (value) => widget.controller.updatePluginFilters(runtimeScriptPythonOnly: value ?? false),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    });
   }
 }

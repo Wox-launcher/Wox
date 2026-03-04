@@ -12,6 +12,7 @@ import 'package:wox/entity/wox_runtime_status.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/entity/wox_usage_stats.dart';
 import 'package:wox/enums/wox_position_type_enum.dart';
+import 'package:wox/enums/wox_plugin_runtime_enum.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_fuzzy_match_util.dart';
 import 'package:wox/utils/wox_setting_util.dart';
@@ -39,6 +40,15 @@ class WoxSettingController extends GetxController {
   final installedPlugins = <PluginDetail>[];
   final filterPluginKeywordController = TextEditingController();
   final filteredPluginList = <PluginDetail>[].obs;
+  final filterEnabledPluginsOnly = false.obs;
+  final filterDisabledPluginsOnly = false.obs;
+  final filterUpgradablePluginsOnly = false.obs;
+  final filterUninstalledPluginsOnly = false.obs;
+  final filterRuntimeNodejsOnly = false.obs;
+  final filterRuntimePythonOnly = false.obs;
+  final filterRuntimeScriptOnly = false.obs;
+  final filterRuntimeScriptNodejsOnly = false.obs;
+  final filterRuntimeScriptPythonOnly = false.obs;
   final activePlugin = PluginDetail.empty().obs;
   final isStorePluginList = true.obs;
   late TabController activePluginTabController;
@@ -57,6 +67,7 @@ class WoxSettingController extends GetxController {
   var langMap = <String, String>{}.obs;
 
   final isInstallingPlugin = false.obs;
+  final isUpgradingPlugin = false.obs;
   final pluginInstallError = ''.obs;
   final FocusNode settingFocusNode = FocusNode();
 
@@ -228,6 +239,8 @@ class WoxSettingController extends GetxController {
       setFirstFilteredPluginDetailActive();
       return;
     }
+
+    syncActivePluginWithFilteredList(currentActivePluginId: currentActivePluginId);
   }
 
   Future<void> refreshPlugin(String pluginId, String refreshType /* update / add / remove */) async {
@@ -249,6 +262,12 @@ class WoxSettingController extends GetxController {
         installedPlugins[installedIndex] = updatedPlugin;
       } else {
         installedPlugins.add(updatedPlugin);
+      }
+      int pluginListIndex = pluginList.indexWhere((p) => p.id == pluginId);
+      if (pluginListIndex >= 0) {
+        pluginList[pluginListIndex] = updatedPlugin;
+      } else if (activeNavPath.value == 'plugins.installed') {
+        pluginList.add(updatedPlugin);
       }
       int filteredPluginListIndex = filteredPluginList.indexWhere((p) => p.id == pluginId);
       if (filteredPluginListIndex >= 0) {
@@ -305,6 +324,9 @@ class WoxSettingController extends GetxController {
         activePlugin.value = updatedPlugin;
       }
     }
+
+    filterPlugins();
+    syncActivePluginWithFilteredList();
   }
 
   Future<void> switchToPluginList(String traceId, bool isStorePlugin) async {
@@ -342,7 +364,102 @@ class WoxSettingController extends GetxController {
   void setFirstFilteredPluginDetailActive() {
     if (filteredPluginList.isNotEmpty) {
       activePlugin.value = filteredPluginList[0];
+      return;
     }
+
+    activePlugin.value = PluginDetail.empty();
+  }
+
+  void syncActivePluginWithFilteredList({String? currentActivePluginId}) {
+    if (filteredPluginList.isEmpty) {
+      activePlugin.value = PluginDetail.empty();
+      return;
+    }
+
+    final targetPluginId = currentActivePluginId ?? activePlugin.value.id;
+    if (targetPluginId.isEmpty) {
+      setFirstFilteredPluginDetailActive();
+      return;
+    }
+
+    final idx = filteredPluginList.indexWhere((plugin) => plugin.id == targetPluginId);
+    if (idx >= 0) {
+      activePlugin.value = filteredPluginList[idx];
+      return;
+    }
+
+    setFirstFilteredPluginDetailActive();
+  }
+
+  bool get hasInstalledRuntimePluginFilterApplied =>
+      filterRuntimeNodejsOnly.value || filterRuntimePythonOnly.value || filterRuntimeScriptNodejsOnly.value || filterRuntimeScriptPythonOnly.value;
+
+  bool get hasStoreRuntimePluginFilterApplied => filterRuntimeNodejsOnly.value || filterRuntimePythonOnly.value || filterRuntimeScriptOnly.value;
+
+  bool get hasInstalledPluginFilterApplied =>
+      filterEnabledPluginsOnly.value || filterDisabledPluginsOnly.value || filterUpgradablePluginsOnly.value || hasInstalledRuntimePluginFilterApplied;
+
+  bool get hasStorePluginFilterApplied => filterUninstalledPluginsOnly.value || hasStoreRuntimePluginFilterApplied;
+
+  bool get hasPluginFilterApplied => isStorePluginList.value ? hasStorePluginFilterApplied : hasInstalledPluginFilterApplied;
+
+  void updatePluginFilters({
+    bool? enabledOnly,
+    bool? disabledOnly,
+    bool? upgradableOnly,
+    bool? uninstalledOnly,
+    bool? runtimeNodejsOnly,
+    bool? runtimePythonOnly,
+    bool? runtimeScriptOnly,
+    bool? runtimeScriptNodejsOnly,
+    bool? runtimeScriptPythonOnly,
+  }) {
+    if (enabledOnly != null) {
+      filterEnabledPluginsOnly.value = enabledOnly;
+    }
+    if (disabledOnly != null) {
+      filterDisabledPluginsOnly.value = disabledOnly;
+    }
+    if (upgradableOnly != null) {
+      filterUpgradablePluginsOnly.value = upgradableOnly;
+    }
+    if (uninstalledOnly != null) {
+      filterUninstalledPluginsOnly.value = uninstalledOnly;
+    }
+    if (runtimeNodejsOnly != null) {
+      filterRuntimeNodejsOnly.value = runtimeNodejsOnly;
+    }
+    if (runtimePythonOnly != null) {
+      filterRuntimePythonOnly.value = runtimePythonOnly;
+    }
+    if (runtimeScriptOnly != null) {
+      filterRuntimeScriptOnly.value = runtimeScriptOnly;
+    }
+    if (runtimeScriptNodejsOnly != null) {
+      filterRuntimeScriptNodejsOnly.value = runtimeScriptNodejsOnly;
+    }
+    if (runtimeScriptPythonOnly != null) {
+      filterRuntimeScriptPythonOnly.value = runtimeScriptPythonOnly;
+    }
+
+    filterPlugins();
+    syncActivePluginWithFilteredList();
+  }
+
+  bool isScriptNodejsPlugin(PluginDetail plugin) {
+    if (!WoxPluginRuntimeEnum.equals(plugin.runtime, WoxPluginRuntimeEnum.SCRIPT)) {
+      return false;
+    }
+
+    return plugin.entry.toLowerCase().endsWith('.js');
+  }
+
+  bool isScriptPythonPlugin(PluginDetail plugin) {
+    if (!WoxPluginRuntimeEnum.equals(plugin.runtime, WoxPluginRuntimeEnum.SCRIPT)) {
+      return false;
+    }
+
+    return plugin.entry.toLowerCase().endsWith('.py');
   }
 
   Future<void> installPlugin(PluginDetail plugin) async {
@@ -359,6 +476,28 @@ class WoxSettingController extends GetxController {
       pluginInstallError.value = e.toString();
     } finally {
       isInstallingPlugin.value = false;
+    }
+  }
+
+  Future<void> upgradePlugin(PluginDetail plugin) async {
+    if (isUpgradingPlugin.value) {
+      return;
+    }
+
+    try {
+      pluginInstallError.value = '';
+      isUpgradingPlugin.value = true;
+      final traceId = const UuidV4().generate();
+      Logger.instance.info(traceId, 'upgrading plugin: ${plugin.name}');
+      // Keep the same upgrade path as WPM plugin: install from store by plugin id.
+      await WoxApi.instance.installPlugin(traceId, plugin.id);
+      await refreshPlugin(plugin.id, "update");
+    } catch (e) {
+      final traceId = const UuidV4().generate();
+      Logger.instance.error(traceId, 'Failed to upgrade plugin ${plugin.name}: $e');
+      pluginInstallError.value = e.toString();
+    } finally {
+      isUpgradingPlugin.value = false;
     }
   }
 
@@ -384,34 +523,80 @@ class WoxSettingController extends GetxController {
   }
 
   void filterPlugins() {
-    filteredPluginList.clear();
+    final keyword = filterPluginKeywordController.text;
+    final isStoreView = isStorePluginList.value;
+    final enabledOnly = !isStoreView && filterEnabledPluginsOnly.value;
+    final disabledOnly = !isStoreView && filterDisabledPluginsOnly.value;
+    final upgradableOnly = !isStoreView && filterUpgradablePluginsOnly.value;
+    final uninstalledOnly = isStoreView && filterUninstalledPluginsOnly.value;
+    final runtimeNodejsOnly = filterRuntimeNodejsOnly.value;
+    final runtimePythonOnly = filterRuntimePythonOnly.value;
+    final runtimeScriptOnly = filterRuntimeScriptOnly.value;
+    final runtimeScriptNodejsOnly = filterRuntimeScriptNodejsOnly.value;
+    final runtimeScriptPythonOnly = filterRuntimeScriptPythonOnly.value;
 
-    if (filterPluginKeywordController.text.isEmpty) {
-      filteredPluginList.addAll(pluginList);
-    } else {
-      filteredPluginList.addAll(
-        pluginList.where((element) {
-          final keyword = filterPluginKeywordController.text;
-          bool match = WoxFuzzyMatchUtil.isFuzzyMatch(text: element.name, pattern: keyword, usePinYin: WoxSettingUtil.instance.currentSetting.usePinYin);
-          if (match) return true;
+    bool matchesKeyword(PluginDetail plugin) {
+      if (keyword.isEmpty) {
+        return true;
+      }
 
-          if (element.nameEn.isNotEmpty) {
-            match = WoxFuzzyMatchUtil.isFuzzyMatch(text: element.nameEn, pattern: keyword, usePinYin: false);
-            if (match) return true;
-          }
+      bool match = WoxFuzzyMatchUtil.isFuzzyMatch(text: plugin.name, pattern: keyword, usePinYin: WoxSettingUtil.instance.currentSetting.usePinYin);
+      if (match) {
+        return true;
+      }
 
-          if (element.description.toLowerCase().contains(keyword.toLowerCase())) {
-            return true;
-          }
+      if (plugin.nameEn.isNotEmpty) {
+        match = WoxFuzzyMatchUtil.isFuzzyMatch(text: plugin.nameEn, pattern: keyword, usePinYin: false);
+        if (match) {
+          return true;
+        }
+      }
 
-          if (element.descriptionEn.toLowerCase().contains(keyword.toLowerCase())) {
-            return true;
-          }
+      if (plugin.description.toLowerCase().contains(keyword.toLowerCase())) {
+        return true;
+      }
 
-          return false;
-        }),
-      );
+      if (plugin.descriptionEn.toLowerCase().contains(keyword.toLowerCase())) {
+        return true;
+      }
+
+      return false;
     }
+
+    bool matchesAdvancedFilter(PluginDetail plugin) {
+      if (enabledOnly && plugin.isDisable) {
+        return false;
+      }
+      if (disabledOnly && !plugin.isDisable) {
+        return false;
+      }
+      if (upgradableOnly && !plugin.isUpgradable) {
+        return false;
+      }
+      if (uninstalledOnly && plugin.isInstalled) {
+        return false;
+      }
+
+      final runtimeFilterApplied = runtimeNodejsOnly || runtimePythonOnly || (isStoreView ? runtimeScriptOnly : (runtimeScriptNodejsOnly || runtimeScriptPythonOnly));
+      if (!runtimeFilterApplied) {
+        return true;
+      }
+
+      final matchRuntimeNodejs = runtimeNodejsOnly && WoxPluginRuntimeEnum.equals(plugin.runtime, WoxPluginRuntimeEnum.NODEJS);
+      final matchRuntimePython = runtimePythonOnly && WoxPluginRuntimeEnum.equals(plugin.runtime, WoxPluginRuntimeEnum.PYTHON);
+      final matchRuntimeScript = isStoreView && runtimeScriptOnly && WoxPluginRuntimeEnum.equals(plugin.runtime, WoxPluginRuntimeEnum.SCRIPT);
+      final matchRuntimeScriptNodejs = runtimeScriptNodejsOnly && isScriptNodejsPlugin(plugin);
+      final matchRuntimeScriptPython = runtimeScriptPythonOnly && isScriptPythonPlugin(plugin);
+
+      if (!(matchRuntimeNodejs || matchRuntimePython || matchRuntimeScript || matchRuntimeScriptNodejs || matchRuntimeScriptPython)) {
+        return false;
+      }
+
+      return true;
+    }
+
+    final filtered = pluginList.where((plugin) => matchesKeyword(plugin) && matchesAdvancedFilter(plugin)).toList();
+    filteredPluginList.assignAll(filtered);
   }
 
   Future<void> openPluginWebsite(String website) async {

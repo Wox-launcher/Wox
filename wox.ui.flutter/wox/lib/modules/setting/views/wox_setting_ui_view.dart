@@ -87,6 +87,7 @@ class WoxSettingUIView extends WoxSettingBaseView {
                 },
                 isExpanded: true,
                 enableFilter: true,
+                filterHintText: controller.tr("ui_filter_placeholder"),
                 menuMaxHeight: 360,
               );
             }),

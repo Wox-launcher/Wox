@@ -32,6 +32,7 @@ class WoxDropdownButton<T> extends StatefulWidget {
   final double? width;
   final Widget? underline;
   final bool enableFilter;
+  final String? filterHintText;
   final FocusNode? focusNode;
   final bool autofocus;
   final bool multiSelect;
@@ -55,6 +56,7 @@ class WoxDropdownButton<T> extends StatefulWidget {
     this.width,
     this.underline,
     this.enableFilter = false,
+    this.filterHintText,
     this.focusNode,
     this.autofocus = false,
     this.multiSelect = false,
@@ -316,7 +318,7 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
                                   textAlignVertical: TextAlignVertical.center,
                                   style: TextStyle(color: searchTextColor, fontSize: widget.fontSize).useSystemChineseFont(),
                                   decoration: InputDecoration(
-                                    hintText: 'Filter...',
+                                    hintText: widget.filterHintText ?? 'Filter...',
                                     hintStyle: TextStyle(color: searchHintColor, fontSize: widget.fontSize).useSystemChineseFont(),
                                     border: InputBorder.none,
                                     isDense: true,

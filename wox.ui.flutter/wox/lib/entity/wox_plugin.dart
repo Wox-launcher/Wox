@@ -22,6 +22,7 @@ class PluginDetail {
   late bool isDev;
   late bool isInstalled;
   late bool isDisable;
+  late bool isUpgradable;
   late List<PluginSettingDefinitionItem> settingDefinitions;
   late PluginSetting setting;
   late List<MetadataFeature> features;
@@ -47,6 +48,7 @@ class PluginDetail {
     isDev = false;
     isInstalled = false;
     isDisable = false;
+    isUpgradable = false;
     settingDefinitions = <PluginSettingDefinitionItem>[];
     setting = PluginSetting.empty();
     features = <MetadataFeature>[];
@@ -69,6 +71,7 @@ class PluginDetail {
     isDev = json['IsDev'] ?? false;
     isInstalled = json['IsInstalled'] ?? false;
     isDisable = json['IsDisable'] ?? false;
+    isUpgradable = json['IsUpgradable'] ?? false;
 
     if (json['TriggerKeywords'] != null) {
       triggerKeywords = (json['TriggerKeywords'] as List).map((e) => e.toString()).toList();

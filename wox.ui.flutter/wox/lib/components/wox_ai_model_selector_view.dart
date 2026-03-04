@@ -22,12 +22,7 @@ class WoxAIModelSelectorView extends StatefulWidget {
   /// Whether to allow editing the model
   final bool allowEdit;
 
-  const WoxAIModelSelectorView({
-    super.key,
-    this.initialValue,
-    required this.onModelSelected,
-    this.allowEdit = true,
-  });
+  const WoxAIModelSelectorView({super.key, this.initialValue, required this.onModelSelected, this.allowEdit = true});
 
   @override
   State<WoxAIModelSelectorView> createState() => _WoxAIModelSelectorViewState();
@@ -143,32 +138,19 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
       final bg = getThemeActiveBackgroundColor().withAlpha(70);
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: getThemeActiveBackgroundColor().withAlpha(90)),
-        ),
+        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(6), border: Border.all(color: getThemeActiveBackgroundColor().withAlpha(90))),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            const Padding(
-              padding: EdgeInsets.only(top: 2.0),
-              child: Icon(Icons.info, size: 14),
-            ),
+            const Padding(padding: EdgeInsets.only(top: 2.0), child: Icon(Icons.info, size: 14)),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    tr('ui_ai_model_selector_no_models_title'),
-                    style: TextStyle(color: getThemeTextColor(), fontWeight: FontWeight.w600),
-                  ),
+                  Text(tr('ui_ai_model_selector_no_models_title'), style: TextStyle(color: getThemeTextColor(), fontWeight: FontWeight.w600)),
                   const SizedBox(height: 4),
-                  Text(
-                    tr('ui_ai_model_selector_no_models_desc'),
-                    style: TextStyle(color: getThemeTextColor()),
-                  ),
+                  Text(tr('ui_ai_model_selector_no_models_desc'), style: TextStyle(color: getThemeTextColor())),
                 ],
               ),
             ),
@@ -179,7 +161,7 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
                 // Switch to the AI settings page within the settings view
                 Get.find<WoxSettingController>().activeNavPath.value = 'ai';
               },
-            )
+            ),
           ],
         ),
       );
@@ -210,12 +192,7 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
           child: WoxDropdownButton<String>(
             value: selectedProviderKey,
             isExpanded: true,
-            items: providerKeys
-                .map((providerKey) => WoxDropdownItem<String>(
-                      value: providerKey,
-                      label: getProviderLabel(providerKey),
-                    ))
-                .toList(),
+            items: providerKeys.map((providerKey) => WoxDropdownItem<String>(value: providerKey, label: getProviderLabel(providerKey))).toList(),
             onChanged: (providerKey) {
               if (providerKey != null) {
                 setState(() {
@@ -241,58 +218,47 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
         // Model selector or editor
         Expanded(
           flex: 2,
-          child: isEditMode
-              ? WoxTextField(
-                  controller: nameController,
-                  hintText: tr('ui_ai_model_selector_model_name'),
-                  width: double.infinity, // fill the Expanded width
-                  onChanged: (value) {
-                    if (value.isNotEmpty && selectedProviderKey != null) {
-                      final providerInfo = parseProviderKey(selectedProviderKey!);
-                      final updatedModel = AIModel(
-                        name: value,
-                        provider: providerInfo.$1,
-                        providerAlias: providerInfo.$2,
-                      );
-                      setState(() => this.selectedModel = updatedModel);
-                      widget.onModelSelected(jsonEncode(updatedModel));
-                    }
-                  },
-                )
-              : WoxDropdownButton<String>(
-                  value: selectedModel?.name,
-                  isExpanded: true,
-                  enableFilter: true,
-                  items: getProviderModels()
-                      .map((model) => WoxDropdownItem<String>(
-                            value: model.name,
-                            label: model.name,
-                          ))
-                      .toList(),
-                  onChanged: (modelName) {
-                    if (modelName != null && selectedProviderKey != null) {
-                      final providerInfo = parseProviderKey(selectedProviderKey!);
-                      final selectedModel = allModels.firstWhere(
-                        (m) => m.provider == providerInfo.$1 && m.providerAlias == providerInfo.$2 && m.name == modelName,
-                        orElse: () => AIModel(
-                          name: modelName,
-                          provider: providerInfo.$1,
-                          providerAlias: providerInfo.$2,
-                        ),
-                      );
+          child:
+              isEditMode
+                  ? WoxTextField(
+                    controller: nameController,
+                    hintText: tr('ui_ai_model_selector_model_name'),
+                    width: double.infinity, // fill the Expanded width
+                    onChanged: (value) {
+                      if (value.isNotEmpty && selectedProviderKey != null) {
+                        final providerInfo = parseProviderKey(selectedProviderKey!);
+                        final updatedModel = AIModel(name: value, provider: providerInfo.$1, providerAlias: providerInfo.$2);
+                        setState(() => selectedModel = updatedModel);
+                        widget.onModelSelected(jsonEncode(updatedModel));
+                      }
+                    },
+                  )
+                  : WoxDropdownButton<String>(
+                    value: selectedModel?.name,
+                    isExpanded: true,
+                    enableFilter: true,
+                    filterHintText: tr('ui_filter_placeholder'),
+                    items: getProviderModels().map((model) => WoxDropdownItem<String>(value: model.name, label: model.name)).toList(),
+                    onChanged: (modelName) {
+                      if (modelName != null && selectedProviderKey != null) {
+                        final providerInfo = parseProviderKey(selectedProviderKey!);
+                        final selectedModel = allModels.firstWhere(
+                          (m) => m.provider == providerInfo.$1 && m.providerAlias == providerInfo.$2 && m.name == modelName,
+                          orElse: () => AIModel(name: modelName, provider: providerInfo.$1, providerAlias: providerInfo.$2),
+                        );
 
-                      setState(() {
-                        this.selectedModel = selectedModel;
-                        nameController.text = selectedModel.name;
-                      });
-                      widget.onModelSelected(jsonEncode(selectedModel));
-                    }
-                  },
-                ),
+                        setState(() {
+                          this.selectedModel = selectedModel;
+                          nameController.text = selectedModel.name;
+                        });
+                        widget.onModelSelected(jsonEncode(selectedModel));
+                      }
+                    },
+                  ),
         ),
 
         // Toggle edit/select mode button
-        if (widget.allowEdit && this.selectedModel != null)
+        if (widget.allowEdit && selectedModel != null)
           IconButton(
             icon: Icon(isEditMode ? Icons.list : Icons.edit, color: getThemeTextColor()),
             onPressed: () {
