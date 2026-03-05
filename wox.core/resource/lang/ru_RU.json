@@ -590,6 +590,7 @@
   "plugin_update_release_notes": "Примечания к выпуску",
   "plugin_update_no_release_notes": "Нет доступных примечаний к выпуску.",
   "plugin_script_runtime_missing_subtitle": "Отсутствует runtime: %s",
+  "plugin_script_runtime_install_action": "Установить",
   "plugin_script_runtime_python_missing_markdown": "## ⚠️ Python не найден\n\nДля работы этого скриптового плагина требуется **Python**, но Python не найден в вашей системе.\n\nСкачайте и установите Python с официального сайта:\n\n- [python.org/downloads](https://www.python.org/downloads/)\n\n> После установки перезапустите Wox и попробуйте снова.",
   "plugin_script_runtime_nodejs_missing_markdown": "## ⚠️ Node.js не найден\n\nДля работы этого скриптового плагина требуется **Node.js**, но Node.js не найден в вашей системе.\n\nСкачайте и установите Node.js с официального сайта:\n\n- [nodejs.org](https://nodejs.org/)\n\n> После установки перезапустите Wox и попробуйте снова.",
   "plugin_script_runtime_missing_markdown": "## ⚠️ Отсутствует runtime: %s\n\nДля работы этого скриптового плагина требуется **%s**, но он не найден в вашей системе.\n\nУстановите **%s** и перезапустите Wox.",

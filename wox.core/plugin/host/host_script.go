@@ -113,7 +113,19 @@ func (s *ScriptPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Q
 
 		// Check if this is a missing runtime error
 		if runtimeName := s.detectMissingRuntime(ctx, err); runtimeName != "" {
-			displayRuntimeName := s.getRuntimeDisplayName(runtimeName)
+			displayRuntimeName, installURL := s.getRuntimeDisplayName(runtimeName)
+			var actions []plugin.QueryResultAction
+			if installURL != "" {
+				actions = append(actions, plugin.QueryResultAction{
+					Name: "i18n:plugin_script_runtime_install_action",
+					Icon: common.InstallIcon,
+					Action: func(actionCtx context.Context, _ plugin.ActionContext) {
+						if openErr := shell.Open(installURL); openErr != nil {
+							util.GetLogger().Error(actionCtx, fmt.Sprintf("script plugin %s failed to open runtime install url %s: %s", s.metadata.GetName(actionCtx), installURL, openErr.Error()))
+						}
+					},
+				})
+			}
 			util.GetLogger().Info(ctx, fmt.Sprintf("script plugin %s missing runtime: %s", s.metadata.GetName(ctx), runtimeName))
 			return []plugin.QueryResult{
 				{
@@ -124,6 +136,7 @@ func (s *ScriptPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Q
 						PreviewType: plugin.WoxPreviewTypeMarkdown,
 						PreviewData: s.buildMissingRuntimeMarkdown(ctx, runtimeName),
 					},
+					Actions: actions,
 				},
 			}
 		}
@@ -632,14 +645,14 @@ func (s *ScriptPlugin) getScriptRuntimeName() string {
 	}
 }
 
-func (s *ScriptPlugin) getRuntimeDisplayName(runtimeName string) string {
+func (s *ScriptPlugin) getRuntimeDisplayName(runtimeName string) (string, string) {
 	switch strings.ToLower(runtimeName) {
 	case "python":
-		return "Python"
+		return "Python", "https://www.python.org/downloads/"
 	case "nodejs", "node":
-		return "Node.js"
+		return "Node.js", "https://nodejs.org/"
 	default:
-		return runtimeName
+		return runtimeName, ""
 	}
 }
 
@@ -650,7 +663,7 @@ func (s *ScriptPlugin) buildMissingRuntimeMarkdown(ctx context.Context, runtimeN
 	case "nodejs", "node":
 		return i18n.GetI18nManager().TranslateWox(ctx, "plugin_script_runtime_nodejs_missing_markdown")
 	default:
-		displayRuntimeName := s.getRuntimeDisplayName(runtimeName)
+		displayRuntimeName, _ := s.getRuntimeDisplayName(runtimeName)
 		return fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_script_runtime_missing_markdown"), displayRuntimeName, displayRuntimeName, displayRuntimeName)
 	}
 }
