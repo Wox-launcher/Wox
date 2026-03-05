@@ -67,7 +67,7 @@ import (
 )
 
 func simulateCopy() error {
-	waitCtrlRelease()
+	waitModifiersRelease()
 
 	err := C.simulateCtrlC()
 	if err != nil {
@@ -79,7 +79,7 @@ func simulateCopy() error {
 }
 
 func simulatePaste() error {
-	waitCtrlRelease()
+	waitModifiersRelease()
 
 	err := C.simulateCtrlV()
 	if err != nil {
@@ -90,10 +90,17 @@ func simulatePaste() error {
 	return nil
 }
 
-// when ctrl is pressed, we should wait until ctrl is released to simulate ctrl+c or ctrl+v
-func waitCtrlRelease() {
+// We need to wait for all modifiers to be released before simulating Ctrl+C/Ctrl+V.
+// Otherwise, if the trigger hotkey includes Alt/Shift/Win, the simulated copy/paste
+// may be interpreted as a different shortcut (e.g. Alt+Ctrl+C).
+func waitModifiersRelease() {
 	for i := 0; i < 20; i++ {
-		if C.isKeyPressed(C.int(C.VK_CONTROL)) != 0 {
+		isCtrlPressed := C.isKeyPressed(C.int(C.VK_CONTROL)) != 0
+		isAltPressed := C.isKeyPressed(C.int(C.VK_MENU)) != 0
+		isShiftPressed := C.isKeyPressed(C.int(C.VK_SHIFT)) != 0
+		isLWinPressed := C.isKeyPressed(C.int(C.VK_LWIN)) != 0
+		isRWinPressed := C.isKeyPressed(C.int(C.VK_RWIN)) != 0
+		if isCtrlPressed || isAltPressed || isShiftPressed || isLWinPressed || isRWinPressed {
 			time.Sleep(time.Millisecond * 50)
 			continue
 		} else {
