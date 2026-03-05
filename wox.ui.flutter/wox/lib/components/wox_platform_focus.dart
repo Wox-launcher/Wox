@@ -15,14 +15,7 @@ class WoxPlatformFocus extends StatefulWidget {
   final KeyEventResult Function(FocusNode, KeyEvent)? onKeyEvent;
   final void Function(bool)? onFocusChange;
 
-  const WoxPlatformFocus({
-    super.key,
-    required this.child,
-    this.focusNode,
-    this.autofocus = false,
-    this.onKeyEvent,
-    this.onFocusChange,
-  });
+  const WoxPlatformFocus({super.key, required this.child, this.focusNode, this.autofocus = false, this.onKeyEvent, this.onFocusChange});
 
   @override
   State<WoxPlatformFocus> createState() => _WoxPlatformFocusState();
@@ -110,36 +103,25 @@ class _WoxPlatformFocusState extends State<WoxPlatformFocus> {
     if (eventType == 'keydown') {
       // Check if this is a repeat
       if (_pressedKeys.contains(keyCode)) {
-        keyEvent = KeyRepeatEvent(
-          physicalKey: physicalKey,
-          logicalKey: logicalKey,
-          timeStamp: Duration.zero,
-        );
+        keyEvent = KeyRepeatEvent(physicalKey: physicalKey, logicalKey: logicalKey, timeStamp: Duration.zero);
       } else {
         _pressedKeys.add(keyCode);
-        keyEvent = KeyDownEvent(
-          physicalKey: physicalKey,
-          logicalKey: logicalKey,
-          timeStamp: Duration.zero,
-        );
+        keyEvent = KeyDownEvent(physicalKey: physicalKey, logicalKey: logicalKey, timeStamp: Duration.zero);
       }
     } else if (eventType == 'keyup') {
       _pressedKeys.remove(keyCode);
-      keyEvent = KeyUpEvent(
-        physicalKey: physicalKey,
-        logicalKey: logicalKey,
-        timeStamp: Duration.zero,
-      );
+      keyEvent = KeyUpEvent(physicalKey: physicalKey, logicalKey: logicalKey, timeStamp: Duration.zero);
     }
 
     if (keyEvent != null && widget.onKeyEvent != null) {
-      String eventTypeStr = keyEvent is KeyDownEvent
-          ? "DOWN"
-          : keyEvent is KeyUpEvent
+      String eventTypeStr =
+          keyEvent is KeyDownEvent
+              ? "DOWN"
+              : keyEvent is KeyUpEvent
               ? "UP"
               : keyEvent is KeyRepeatEvent
-                  ? "REPEAT"
-                  : "UNKNOWN";
+              ? "REPEAT"
+              : "UNKNOWN";
       Logger.instance.debug(traceId, "[KEYLOG][PLATFORM-FOCUS] KeyEvent: ${logicalKey.keyLabel} ($eventTypeStr) from Windows msgloop");
 
       // Call user's onKeyEvent callback
@@ -360,6 +342,10 @@ class _WoxPlatformFocusState extends State<WoxPlatformFocus> {
         return LogicalKeyboardKey.control;
       case 0x12:
         return LogicalKeyboardKey.alt;
+      case 0x5B:
+        return LogicalKeyboardKey.metaLeft;
+      case 0x5C:
+        return LogicalKeyboardKey.metaRight;
 
       default:
         return null;
@@ -380,11 +366,6 @@ class _WoxPlatformFocusState extends State<WoxPlatformFocus> {
     }
 
     // On other platforms, use default Focus widget
-    return Focus(
-      focusNode: _focusNode,
-      autofocus: widget.autofocus,
-      onKeyEvent: widget.onKeyEvent,
-      child: widget.child,
-    );
+    return Focus(focusNode: _focusNode, autofocus: widget.autofocus, onKeyEvent: widget.onKeyEvent, child: widget.child);
   }
 }

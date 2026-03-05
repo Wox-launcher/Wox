@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
@@ -89,16 +91,22 @@ class _HotkeyTracker {
 
     // Handle normal hotkeys (modifier + key)
     if (keyEvent is! KeyUpEvent && WoxHotkey.isAllowedKey(keyEvent.physicalKey)) {
-      if (_pressedModifiers.isEmpty) {
+      if (!Platform.isWindows && _pressedModifiers.isEmpty) {
         return null;
       }
 
-      // Convert pressed modifiers to HotKeyModifier list
-      List<HotKeyModifier> modifiers = [];
-      for (var key in _pressedModifiers) {
-        final modifier = WoxHotkey.convertToModifier(key);
-        if (modifier != null && !modifiers.contains(modifier)) {
-          modifiers.add(modifier);
+      // On Windows, rely on native modifier states from message loop.
+      // Win key events may not always be delivered as normal Flutter key events.
+      final modifiers = <HotKeyModifier>[];
+      if (Platform.isWindows) {
+        modifiers.addAll(WoxHotkey.getPressedModifiers());
+      } else {
+        // On other platforms, use tracker-maintained modifier states.
+        for (var key in _pressedModifiers) {
+          final modifier = WoxHotkey.convertToModifier(key);
+          if (modifier != null && !modifiers.contains(modifier)) {
+            modifiers.add(modifier);
+          }
         }
       }
 
@@ -181,25 +189,11 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
       padding: const EdgeInsets.only(left: 5, right: 5, top: 3, bottom: 3),
       decoration: BoxDecoration(
         color: Theme.of(context).canvasColor,
-        border: Border.all(
-          color: Theme.of(context).dividerColor,
-          width: 1,
-        ),
+        border: Border.all(color: Theme.of(context).dividerColor, width: 1),
         borderRadius: BorderRadius.circular(3),
-        boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            offset: const Offset(0.0, 1.0),
-          ),
-        ],
+        boxShadow: <BoxShadow>[BoxShadow(color: Colors.black.withValues(alpha: 0.3), offset: const Offset(0.0, 1.0))],
       ),
-      child: Text(
-        keyLabel,
-        style: TextStyle(
-          color: Theme.of(context).textTheme.bodyMedium?.color,
-          fontSize: 12,
-        ),
-      ),
+      child: Text(keyLabel, style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color, fontSize: 12)),
     );
   }
 
@@ -223,40 +217,25 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
         child: Row(
           children: [
             Container(
-              decoration: BoxDecoration(
-                border: Border.all(color: _isFocused ? getThemeActiveBackgroundColor() : getThemeSubTextColor()),
-                borderRadius: BorderRadius.circular(4),
-              ),
+              decoration: BoxDecoration(border: Border.all(color: _isFocused ? getThemeActiveBackgroundColor() : getThemeSubTextColor()), borderRadius: BorderRadius.circular(4)),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(8.0, 4.0, 8.0, 4.0),
-                child: _hotKey == null || (!_hotKey!.isDoubleHotkey && !_hotKey!.isNormalHotkey && !_hotKey!.isSingleHotkey)
-                    ? SizedBox(
-                        width: 80,
-                        height: 18,
-                        child: Text(
-                          _isFocused ? tr("ui_hotkey_recording") : tr("ui_hotkey_click_to_set"),
-                          style: TextStyle(color: Colors.grey[400], fontSize: 13),
-                        ),
-                      )
-                    : _hotKey!.isDoubleHotkey
+                child:
+                    _hotKey == null || (!_hotKey!.isDoubleHotkey && !_hotKey!.isNormalHotkey && !_hotKey!.isSingleHotkey)
+                        ? SizedBox(
+                          width: 80,
+                          height: 18,
+                          child: Text(_isFocused ? tr("ui_hotkey_recording") : tr("ui_hotkey_click_to_set"), style: TextStyle(color: Colors.grey[400], fontSize: 13)),
+                        )
+                        : _hotKey!.isDoubleHotkey
                         ? Wrap(
-                            spacing: 8,
-                            children: [
-                              buildSingleKeyView(WoxHotkey.getModifierStr(_hotKey!.doubleHotkey!)),
-                              buildSingleKeyView(WoxHotkey.getModifierStr(_hotKey!.doubleHotkey!)),
-                            ],
-                          )
+                          spacing: 8,
+                          children: [buildSingleKeyView(WoxHotkey.getModifierStr(_hotKey!.doubleHotkey!)), buildSingleKeyView(WoxHotkey.getModifierStr(_hotKey!.doubleHotkey!))],
+                        )
                         : HotKeyVirtualView(hotKey: _hotKey!.normalHotkey!),
               ),
             ),
-            if (_isFocused)
-              Padding(
-                padding: const EdgeInsets.only(left: 8.0),
-                child: Text(
-                  tr("ui_hotkey_press_hint"),
-                  style: TextStyle(color: Colors.grey[500], fontSize: 13),
-                ),
-              ),
+            if (_isFocused) Padding(padding: const EdgeInsets.only(left: 8.0), child: Text(tr("ui_hotkey_press_hint"), style: TextStyle(color: Colors.grey[500], fontSize: 13))),
           ],
         ),
       ),
