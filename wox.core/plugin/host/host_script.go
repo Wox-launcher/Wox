@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 	"wox/common"
+	"wox/i18n"
 	"wox/plugin"
 	"wox/util"
 	"wox/util/clipboard"
@@ -109,6 +110,24 @@ func (s *ScriptPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Q
 	if err != nil {
 		requestJSON, _ := json.Marshal(request)
 		util.GetLogger().Error(ctx, fmt.Sprintf("script plugin query failed for %s: %s, raw request: %s", s.metadata.GetName(ctx), err.Error(), requestJSON))
+
+		// Check if this is a missing runtime error
+		if runtimeName := s.detectMissingRuntime(ctx, err); runtimeName != "" {
+			displayRuntimeName := s.getRuntimeDisplayName(runtimeName)
+			util.GetLogger().Info(ctx, fmt.Sprintf("script plugin %s missing runtime: %s", s.metadata.GetName(ctx), runtimeName))
+			return []plugin.QueryResult{
+				{
+					Title:    s.metadata.GetName(ctx),
+					SubTitle: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_script_runtime_missing_subtitle"), displayRuntimeName),
+					Icon:     s.metadata.GetIconOrDefault(s.metadata.Directory, common.NewWoxImageEmoji("⚠️")),
+					Preview: plugin.WoxPreview{
+						PreviewType: plugin.WoxPreviewTypeMarkdown,
+						PreviewData: s.buildMissingRuntimeMarkdown(ctx, runtimeName),
+					},
+				},
+			}
+		}
+
 		s.api.Notify(ctx, err.Error())
 		return []plugin.QueryResult{}
 	}
@@ -571,6 +590,69 @@ func (s *ScriptPlugin) mapInterpreterWithCustomPath(ctx context.Context, interpr
 
 	// Return as-is for other interpreters (bash, ruby, perl, etc.)
 	return interpreter
+}
+
+// detectMissingRuntime checks if a script execution error is caused by a missing runtime.
+// Returns the runtime name (e.g., "python", "nodejs") if a missing runtime is detected, or empty string otherwise.
+func (s *ScriptPlugin) detectMissingRuntime(ctx context.Context, err error) string {
+	if err == nil {
+		return ""
+	}
+
+	errMsg := err.Error()
+
+	// On Windows, exit status 9009 means "command not found"
+	// Also check for common "executable file not found" error messages
+	isMissingRuntime := strings.Contains(errMsg, "exit status 9009") ||
+		strings.Contains(errMsg, "executable file not found") ||
+		strings.Contains(errMsg, "no such file or directory") ||
+		strings.Contains(errMsg, "not found in %PATH%") ||
+		strings.Contains(errMsg, "not found in $PATH")
+
+	if !isMissingRuntime {
+		return ""
+	}
+
+	return s.getScriptRuntimeName()
+}
+
+// getScriptRuntimeName returns the runtime name based on the script file extension
+func (s *ScriptPlugin) getScriptRuntimeName() string {
+	ext := strings.ToLower(filepath.Ext(s.scriptPath))
+	switch ext {
+	case ".py":
+		return "python"
+	case ".js":
+		return "nodejs"
+	default:
+		if ext != "" {
+			return strings.TrimPrefix(ext, ".")
+		}
+		return "unknown"
+	}
+}
+
+func (s *ScriptPlugin) getRuntimeDisplayName(runtimeName string) string {
+	switch strings.ToLower(runtimeName) {
+	case "python":
+		return "Python"
+	case "nodejs", "node":
+		return "Node.js"
+	default:
+		return runtimeName
+	}
+}
+
+func (s *ScriptPlugin) buildMissingRuntimeMarkdown(ctx context.Context, runtimeName string) string {
+	switch strings.ToLower(runtimeName) {
+	case "python":
+		return i18n.GetI18nManager().TranslateWox(ctx, "plugin_script_runtime_python_missing_markdown")
+	case "nodejs", "node":
+		return i18n.GetI18nManager().TranslateWox(ctx, "plugin_script_runtime_nodejs_missing_markdown")
+	default:
+		displayRuntimeName := s.getRuntimeDisplayName(runtimeName)
+		return fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_script_runtime_missing_markdown"), displayRuntimeName, displayRuntimeName, displayRuntimeName)
+	}
 }
 
 // Helper functions to safely extract values from maps
