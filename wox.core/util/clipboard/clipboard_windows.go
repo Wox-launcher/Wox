@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 	"unicode/utf16"
@@ -27,14 +30,19 @@ var (
 	isClipboardFormatAvailable = user32.MustFindProc("IsClipboardFormatAvailable")
 	getClipboardSequenceNumber = user32.MustFindProc("GetClipboardSequenceNumber")
 	registerClipboardFormat    = user32.MustFindProc("RegisterClipboardFormatW")
+	getOpenClipboardWindow     = user32.MustFindProc("GetOpenClipboardWindow")
+	getWindowThreadProcessId   = user32.MustFindProc("GetWindowThreadProcessId")
+	getWindowText              = user32.MustFindProc("GetWindowTextW")
+	getClassName               = user32.MustFindProc("GetClassNameW")
 
-	kernel32 = syscall.NewLazyDLL("kernel32")
-	gLock    = kernel32.NewProc("GlobalLock")
-	gUnlock  = kernel32.NewProc("GlobalUnlock")
-	gAlloc   = kernel32.NewProc("GlobalAlloc")
-	gFree    = kernel32.NewProc("GlobalFree")
-	gSize    = kernel32.NewProc("GlobalSize")
-	memMove  = kernel32.NewProc("RtlMoveMemory")
+	kernel32     = syscall.NewLazyDLL("kernel32")
+	gLock        = kernel32.NewProc("GlobalLock")
+	gUnlock      = kernel32.NewProc("GlobalUnlock")
+	gAlloc       = kernel32.NewProc("GlobalAlloc")
+	gFree        = kernel32.NewProc("GlobalFree")
+	gSize        = kernel32.NewProc("GlobalSize")
+	memMove      = kernel32.NewProc("RtlMoveMemory")
+	getLastError = kernel32.NewProc("GetLastError")
 
 	shell32       = syscall.NewLazyDLL("shell32.dll")
 	dragQueryFile = shell32.NewProc("DragQueryFileW")
@@ -58,9 +66,17 @@ const (
 	cFmtUnicodeText = 13
 	gmemMoveable    = 0x0002
 	cFmtHdrop       = 15
+	cFmtBitmap      = 2
+	cFmtDib         = 8
+	cFmtDibV5       = 17
+
+	clipboardDiagLogThrottleMs = 2000
 )
 
 var lastSeqNum uint32
+var clipboardPNGFormat uint32
+var clipboardPNGFormatOnce sync.Once
+var lastClipboardDiagLogTs int64
 
 func openClipboardWithRetry() (uintptr, error) {
 	var r uintptr
@@ -72,7 +88,9 @@ func openClipboardWithRetry() (uintptr, error) {
 		}
 		time.Sleep(time.Millisecond * time.Duration(10+i*10))
 	}
-	return 0, fmt.Errorf("failed to open clipboard after retries: %w", err)
+	diagErr := wrapClipboardCallErr("failed to open clipboard after retries", err)
+	logClipboardDiagnostic(fmt.Sprintf("clipboard: %s", diagErr.Error()))
+	return 0, diagErr
 }
 
 func readText() (string, error) {
@@ -162,7 +180,7 @@ func writeTextData(text string) error {
 
 	rEmpty, _, err := emptyClipboard.Call()
 	if rEmpty == 0 {
-		return fmt.Errorf("failed to clear clipboard: %w", err)
+		return wrapClipboardCallErr("failed to clear clipboard before writing text", err)
 	}
 
 	if len(text) == 0 {
@@ -191,7 +209,7 @@ func writeTextData(text string) error {
 	v, _, err := setClipboardData.Call(cFmtUnicodeText, hMem)
 	if v == 0 {
 		gFree.Call(hMem)
-		return fmt.Errorf("failed to set clipboard data: %w", err)
+		return wrapClipboardCallErr("failed to set CF_UNICODETEXT clipboard data", err)
 	}
 
 	// update lastSeqNum to avoid trigger watchChange by itself
@@ -230,8 +248,6 @@ func writeImageData(img image.Image) error {
 }
 
 func writeImageBytes(pngData []byte, dibData []byte) error {
-	const cFmtDIB = 8
-
 	if len(dibData) == 0 {
 		return errors.New("dib data is empty")
 	}
@@ -246,13 +262,12 @@ func writeImageBytes(pngData []byte, dibData []byte) error {
 
 	rEmpty, _, err := emptyClipboard.Call()
 	if rEmpty == 0 {
-		return fmt.Errorf("failed to clear clipboard: %w", err)
+		return wrapClipboardCallErr("failed to clear clipboard before writing image", err)
 	}
 
 	// Write PNG format for transparency support
 	if len(pngData) > 0 {
-		pngFormatName, _ := syscall.UTF16PtrFromString("PNG")
-		pngFormat, _, _ := registerClipboardFormat.Call(uintptr(unsafe.Pointer(pngFormatName)))
+		pngFormat := uintptr(getPNGClipboardFormat())
 		if pngFormat != 0 {
 			hMemPng, _, _ := gAlloc.Call(gmemMoveable, uintptr(len(pngData)))
 			if hMemPng != 0 {
@@ -262,8 +277,9 @@ func writeImageBytes(pngData []byte, dibData []byte) error {
 				} else {
 					memMove.Call(pMemPng, uintptr(unsafe.Pointer(&pngData[0])), uintptr(len(pngData)))
 					gUnlock.Call(hMemPng)
-					if v, _, _ := setClipboardData.Call(pngFormat, hMemPng); v == 0 {
+					if v, _, setPNGErr := setClipboardData.Call(pngFormat, hMemPng); v == 0 {
 						gFree.Call(hMemPng)
+						logClipboardDiagnostic(fmt.Sprintf("clipboard: failed to set PNG clipboard data (bytes=%d): %s", len(pngData), wrapClipboardCallErr("SetClipboardData(PNG) failed", setPNGErr).Error()))
 					}
 				}
 			}
@@ -285,10 +301,10 @@ func writeImageBytes(pngData []byte, dibData []byte) error {
 	memMove.Call(pMem, uintptr(unsafe.Pointer(&dibData[0])), uintptr(len(dibData)))
 	gUnlock.Call(hMem)
 
-	ret, _, err := setClipboardData.Call(cFmtDIB, hMem)
+	ret, _, err := setClipboardData.Call(cFmtDib, hMem)
 	if ret == 0 {
 		gFree.Call(hMem)
-		return fmt.Errorf("failed to set clipboard data: %w", err)
+		return wrapClipboardCallErr("failed to set CF_DIB clipboard data", err)
 	}
 
 	// update lastSeqNum to avoid trigger watchChange by itself
@@ -416,12 +432,9 @@ func readImage() (image.Image, error) {
 }
 
 func readBmpImage() (image.Image, error) {
-	const (
-		fileHeaderLen = 14
-		cFmtDIB       = 8
-	)
+	const fileHeaderLen = 14
 
-	avail, _, _ := isClipboardFormatAvailable.Call(cFmtDIB)
+	avail, _, _ := isClipboardFormatAvailable.Call(cFmtDib)
 	if avail == 0 {
 		return nil, noDataErr
 	}
@@ -438,17 +451,17 @@ func readBmpImage() (image.Image, error) {
 		}
 		defer closeClipboard.Call()
 
-		hClipDat, _, err := getClipboardData.Call(cFmtDIB)
+		hClipDat, _, err := getClipboardData.Call(cFmtDib)
 		if err != nil && hClipDat == 0 {
-			return errors.New("not dib format data: " + err.Error())
+			return wrapClipboardCallErr("failed to get CF_DIB clipboard data", err)
 		}
 		if hClipDat == 0 {
-			return errors.New("getClipboardData returned 0")
+			return wrapClipboardCallErr("GetClipboardData(CF_DIB) returned null", err)
 		}
 
 		pMemBlk, _, err := gLock.Call(hClipDat)
 		if pMemBlk == 0 {
-			return errors.New("failed to call global lock: " + err.Error())
+			return wrapClipboardCallErr("failed to lock CF_DIB global memory", err)
 		}
 		defer gUnlock.Call(hClipDat)
 
@@ -506,7 +519,7 @@ func readBmpImage() (image.Image, error) {
 		// Copy all DIB data to local memory
 		const maxClipboardDIBBytes = 128 * 1024 * 1024
 		if dibSize == 0 || dibSize > maxClipboardDIBBytes {
-			return fmt.Errorf("invalid DIB size: %d bytes", dibSize)
+			return fmt.Errorf("invalid DIB size: %d bytes (%s), actualBytes=%d %s", dibSize, formatBitmapHeader(headerCopy), actualBytes, buildClipboardSnapshot())
 		}
 		srcData := (*[1 << 30]byte)(unsafe.Pointer(pMemBlk))[:dibSize:dibSize]
 		dibDataCopy = make([]byte, dibSize)
@@ -545,6 +558,9 @@ func readBmpImage() (image.Image, error) {
 		if headerCopy.Compression == 3 && headerSize == 40 {
 			offset += 12
 		}
+		if int(offset) > len(dibDataCopy) {
+			return nil, fmt.Errorf("invalid DIB pixel offset: offset=%d dataLen=%d (%s) %s", offset, len(dibDataCopy), formatBitmapHeader(headerCopy), buildClipboardSnapshot())
+		}
 
 		img := image.NewNRGBA(image.Rect(0, 0, width, height))
 
@@ -553,6 +569,7 @@ func readBmpImage() (image.Image, error) {
 
 		// Use the copied data instead of direct memory access
 		pixelData := dibDataCopy[offset:]
+		truncatedRows := 0
 
 		for y := 0; y < height; y++ {
 			// DIBs are usually bottom-up
@@ -566,6 +583,7 @@ func readBmpImage() (image.Image, error) {
 
 			// Safety check for the entire row to prevent slice bounds out of range panic
 			if srcRow+width*4 > len(pixelData) {
+				truncatedRows++
 				continue
 			}
 
@@ -582,6 +600,9 @@ func readBmpImage() (image.Image, error) {
 				img.Pix[destRow+x*4+2] = b
 				img.Pix[destRow+x*4+3] = a
 			}
+		}
+		if truncatedRows > 0 {
+			logClipboardDiagnostic(fmt.Sprintf("clipboard: decoded 32bpp image with truncated rows=%d width=%d height=%d pixelDataLen=%d (%s) %s", truncatedRows, width, height, len(pixelData), formatBitmapHeader(headerCopy), buildClipboardSnapshot()))
 		}
 		return img, nil
 	}
@@ -631,7 +652,11 @@ func readBmpImage() (image.Image, error) {
 	}
 	buf.Write(dibDataCopy[:dibSize])
 
-	return bmp.Decode(buf)
+	decoded, decodeErr := bmp.Decode(buf)
+	if decodeErr != nil {
+		return nil, fmt.Errorf("failed to decode clipboard BMP (%s), dibSize=%d dataLen=%d: %w", formatBitmapHeader(headerCopy), dibSize, len(dibDataCopy), decodeErr)
+	}
+	return decoded, nil
 }
 
 func isClipboardChanged() bool {
@@ -647,4 +672,153 @@ func isClipboardChanged() bool {
 	}
 
 	return false
+}
+
+func wrapClipboardCallErr(action string, err error) error {
+	return fmt.Errorf("%s: callErr=%s winerr=%d %s", action, formatClipboardCallErr(err), getWin32LastErrorCode(), buildClipboardSnapshot())
+}
+
+func formatClipboardCallErr(err error) string {
+	if err == nil {
+		return "<nil>"
+	}
+	if errno, ok := err.(syscall.Errno); ok {
+		return fmt.Sprintf("%s (errno=%d)", errno.Error(), uint32(errno))
+	}
+	return err.Error()
+}
+
+func getWin32LastErrorCode() uint32 {
+	if getLastError == nil {
+		return 0
+	}
+	r, _, _ := getLastError.Call()
+	return uint32(r)
+}
+
+func buildClipboardSnapshot() string {
+	lastWriteTs := lastWriteTimestamp.Load()
+	lastWriteAgoMs := int64(-1)
+	if lastWriteTs > 0 {
+		lastWriteAgoMs = time.Now().UnixMilli() - lastWriteTs
+	}
+
+	return fmt.Sprintf(
+		"snapshot{seq=%d last_seq=%d last_write_ago_ms=%d %s %s}",
+		currentClipboardSequence(),
+		lastSeqNum,
+		lastWriteAgoMs,
+		buildClipboardFormatsSnapshot(),
+		buildClipboardOwnerSnapshot(),
+	)
+}
+
+func currentClipboardSequence() uint32 {
+	r, _, _ := getClipboardSequenceNumber.Call()
+	return uint32(r)
+}
+
+func buildClipboardFormatsSnapshot() string {
+	pngFormat := getPNGClipboardFormat()
+	return fmt.Sprintf(
+		"formats{text=%t dib=%t dibv5=%t hdrop=%t bitmap=%t png=%t png_id=%d}",
+		isClipboardFormatAvailableBool(cFmtUnicodeText),
+		isClipboardFormatAvailableBool(cFmtDib),
+		isClipboardFormatAvailableBool(cFmtDibV5),
+		isClipboardFormatAvailableBool(cFmtHdrop),
+		isClipboardFormatAvailableBool(cFmtBitmap),
+		pngFormat > 0 && isClipboardFormatAvailableBool(pngFormat),
+		pngFormat,
+	)
+}
+
+func isClipboardFormatAvailableBool(format uint32) bool {
+	if format == 0 {
+		return false
+	}
+	r, _, _ := isClipboardFormatAvailable.Call(uintptr(format))
+	return r != 0
+}
+
+func getPNGClipboardFormat() uint32 {
+	clipboardPNGFormatOnce.Do(func() {
+		pngFormatName, err := syscall.UTF16PtrFromString("PNG")
+		if err != nil {
+			return
+		}
+		pngFormat, _, _ := registerClipboardFormat.Call(uintptr(unsafe.Pointer(pngFormatName)))
+		clipboardPNGFormat = uint32(pngFormat)
+	})
+	return clipboardPNGFormat
+}
+
+func buildClipboardOwnerSnapshot() string {
+	hWnd, _, _ := getOpenClipboardWindow.Call()
+	if hWnd == 0 {
+		return "owner{none}"
+	}
+
+	var pid uint32
+	getWindowThreadProcessId.Call(hWnd, uintptr(unsafe.Pointer(&pid)))
+	return fmt.Sprintf(
+		"owner{hwnd=0x%X pid=%d class=%q title=%q}",
+		hWnd,
+		pid,
+		readWindowClassName(hWnd),
+		readWindowTitle(hWnd),
+	)
+}
+
+func readWindowTitle(hWnd uintptr) string {
+	buf := make([]uint16, 512)
+	if len(buf) == 0 {
+		return ""
+	}
+	n, _, _ := getWindowText.Call(hWnd, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
+	if n == 0 {
+		return ""
+	}
+	return strings.TrimSpace(syscall.UTF16ToString(buf[:n]))
+}
+
+func readWindowClassName(hWnd uintptr) string {
+	buf := make([]uint16, 256)
+	if len(buf) == 0 {
+		return ""
+	}
+	n, _, _ := getClassName.Call(hWnd, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
+	if n == 0 {
+		return ""
+	}
+	return strings.TrimSpace(syscall.UTF16ToString(buf[:n]))
+}
+
+func formatBitmapHeader(h bitmapHeader) string {
+	return fmt.Sprintf(
+		"header{size=%d width=%d height=%d planes=%d bitCount=%d compression=%d sizeImage=%d clrUsed=%d}",
+		h.Size,
+		h.Width,
+		h.Height,
+		h.PLanes,
+		h.BitCount,
+		h.Compression,
+		h.SizeImage,
+		h.ClrUsed,
+	)
+}
+
+func logClipboardDiagnostic(message string) {
+	if !shouldEmitClipboardDiagLog() {
+		return
+	}
+	util.GetLogger().Warn(util.NewTraceContext(), message)
+}
+
+func shouldEmitClipboardDiagLog() bool {
+	now := time.Now().UnixMilli()
+	last := atomic.LoadInt64(&lastClipboardDiagLogTs)
+	if now-last < clipboardDiagLogThrottleMs {
+		return false
+	}
+	return atomic.CompareAndSwapInt64(&lastClipboardDiagLogTs, last, now)
 }

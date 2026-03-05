@@ -48,7 +48,18 @@ func Read() (Data, error) {
 		}, nil
 	}
 
-	return ReadFilesAndText()
+	otherData, otherErr := ReadFilesAndText()
+	if otherErr == nil {
+		return otherData, nil
+	}
+
+	// If image decoding failed with a real error and no fallback data exists,
+	// surface the image error for diagnostics (instead of masking as noDataErr).
+	if imgErr != nil && imgErr != noDataErr && otherErr == noDataErr {
+		return nil, imgErr
+	}
+
+	return nil, otherErr
 }
 
 func ReadFilesAndText() (Data, error) {
@@ -72,10 +83,18 @@ func ReadFilesAndText() (Data, error) {
 func Write(data Data) error {
 	lastWriteTimestamp.Store(time.Now().UnixMilli())
 	if data.GetType() == ClipboardTypeText {
-		return writeTextData(data.String())
+		err := writeTextData(data.String())
+		if err != nil {
+			util.GetLogger().Error(context.Background(), fmt.Sprintf("clipboard: write text failed: %v", err))
+		}
+		return err
 	}
 	if data.GetType() == ClipboardTypeImage {
-		return writeImageData(data.(*ImageData).Image)
+		err := writeImageData(data.(*ImageData).Image)
+		if err != nil {
+			util.GetLogger().Error(context.Background(), fmt.Sprintf("clipboard: write image failed: %v", err))
+		}
+		return err
 	}
 
 	return errors.New("not implemented")
@@ -83,7 +102,11 @@ func Write(data Data) error {
 
 func WriteImageBytes(pngData []byte, dibData []byte) error {
 	lastWriteTimestamp.Store(time.Now().UnixMilli())
-	return writeImageBytes(pngData, dibData)
+	err := writeImageBytes(pngData, dibData)
+	if err != nil {
+		util.GetLogger().Error(context.Background(), fmt.Sprintf("clipboard: write image bytes failed: %v", err))
+	}
+	return err
 }
 
 func Watch(cb func(Data)) {

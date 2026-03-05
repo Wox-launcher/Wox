@@ -513,7 +513,9 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 			IsDefault: primaryActionValueCopy == primaryActionCode,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				c.moveRecordToTop(ctx, record.ID)
-				clipboard.WriteText(record.Content)
+				if err := clipboard.WriteText(record.Content); err != nil {
+					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to copy text record to clipboard: id=%s err=%s", record.ID, err.Error()))
+				}
 			},
 		},
 	}
@@ -522,7 +524,9 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("active window info: name=%s, pid=%d", query.Env.ActiveWindowTitle, query.Env.ActiveWindowPid))
 	pasteToActiveWindowAction, pasteToActiveWindowErr := system.GetPasteToActiveWindowAction(ctx, c.api, query.Env.ActiveWindowTitle, query.Env.ActiveWindowPid, query.Env.ActiveWindowIcon, func() {
 		c.moveRecordToTop(ctx, record.ID)
-		clipboard.WriteText(record.Content)
+		if err := clipboard.WriteText(record.Content); err != nil {
+			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to copy text record before paste action: id=%s err=%s", record.ID, err.Error()))
+		}
 	})
 	if pasteToActiveWindowErr == nil {
 		actions = append(actions, pasteToActiveWindowAction)
@@ -765,6 +769,8 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 									if dibData, readErr := os.ReadFile(dibPath); readErr == nil {
 										if writeErr := clipboard.WriteImageBytes(pngData, dibData); writeErr == nil {
 											return
+										} else {
+											c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to restore image from PNG+DIB cache: id=%s err=%s", record.ID, writeErr.Error()))
 										}
 									}
 								}
@@ -772,7 +778,9 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 						}
 
 						if img := c.loadImageFromFile(ctx, record.FilePath); img != nil {
-							clipboard.Write(&clipboard.ImageData{Image: img})
+							if err := clipboard.Write(&clipboard.ImageData{Image: img}); err != nil {
+								c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to restore image from file: id=%s path=%s err=%s", record.ID, record.FilePath, err.Error()))
+							}
 						}
 					}
 				},
