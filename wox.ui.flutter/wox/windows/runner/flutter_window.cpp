@@ -17,6 +17,7 @@
 // Retry restoring the previous foreground window shortly after hide.
 static constexpr UINT_PTR kRestoreForegroundTimerId1 = 0xA11;
 static constexpr UINT_PTR kRestoreForegroundTimerId2 = 0xA12;
+static constexpr ULONGLONG kPostShowBlurGraceMs = 300;
 
 // Store window instance for window procedure
 FlutterWindow *g_window_instance = nullptr;
@@ -560,9 +561,17 @@ LRESULT CALLBACK FlutterWindow::WindowProc(HWND hwnd, UINT message, WPARAM wpara
     }
     else
     {
-      if (g_window_instance->suppress_blur_)
+      const bool in_post_show_grace = GetTickCount64() < g_window_instance->blur_guard_until_tick_;
+      if (g_window_instance->blur_guard_active_ || in_post_show_grace)
       {
-        g_window_instance->Log("WM_ACTIVATE: WA_INACTIVE suppressed (show-to-focus transition)");
+        if (g_window_instance->blur_guard_active_)
+        {
+          g_window_instance->Log("WM_ACTIVATE: WA_INACTIVE suppressed (show-to-focus transition)");
+        }
+        else
+        {
+          g_window_instance->Log("WM_ACTIVATE: WA_INACTIVE suppressed (post-show grace)");
+        }
       }
       else
       {
@@ -886,14 +895,16 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       // deactivate the newly-shown window (e.g. Explorer steals focus),
       // sending WM_ACTIVATE/WA_INACTIVE before focus() has a chance to
       // grab the foreground, which causes onWindowBlur -> hideApp().
-      suppress_blur_ = true;
+      blur_guard_active_ = true;
+      blur_guard_until_tick_ = GetTickCount64() + kPostShowBlurGraceMs;
       ShowWindow(hwnd, SW_SHOW);
       result->Success();
     }
     else if (method_name == "hide")
     {
       Log("[KEYLOG][NATIVE] Hide called, using ShowWindow(SW_HIDE)");
-      suppress_blur_ = false;
+      blur_guard_active_ = false;
+      blur_guard_until_tick_ = 0;
       ShowWindow(hwnd, SW_HIDE);
       RestorePreviousActiveWindow(hwnd);
 
@@ -920,7 +931,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       {
         SetFocus(hwnd);
         BringWindowToTop(hwnd);
-        suppress_blur_ = false;
+        blur_guard_active_ = false;
         result->Success();
         return;
       }
@@ -951,7 +962,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       if (GetForegroundWindow() == hwnd)
       {
         Log("Focus: use attach thread input");
-        suppress_blur_ = false;
+        blur_guard_active_ = false;
         result->Success();
         return;
       }
@@ -977,7 +988,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       if (GetForegroundWindow() == hwnd)
       {
         Log("Focus: use Alt key injection");
-        suppress_blur_ = false;
+        blur_guard_active_ = false;
         result->Success();
         return;
       }
@@ -988,7 +999,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       SetFocus(hwnd);
 
       Log("Focus: final attempt completed");
-      suppress_blur_ = false;
+      blur_guard_active_ = false;
       result->Success();
     }
     else if (method_name == "isVisible")

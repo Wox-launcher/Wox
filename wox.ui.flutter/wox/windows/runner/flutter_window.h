@@ -47,9 +47,13 @@ private:
   // Previous active window handle
   HWND previous_active_window_;
 
-  // Suppress transient WM_ACTIVATE/WA_INACTIVE blur events between show() and focus().
+  // Guard transient WM_ACTIVATE/WA_INACTIVE blur events between show() and focus().
   // show() sets this to true; focus() and hide() clear it.
-  bool suppress_blur_ = false;
+  bool blur_guard_active_ = false;
+
+  // Extra blur grace period (GetTickCount64 deadline) after show/focus to absorb
+  // short-lived foreground steals from other apps. see issue #4346
+  ULONGLONG blur_guard_until_tick_ = 0;
 
   // Save/restore the previously focused window (Windows focus rules require explicit restore)
   void SavePreviousActiveWindow(HWND selfHwnd);
