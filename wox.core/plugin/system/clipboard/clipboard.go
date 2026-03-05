@@ -3,9 +3,13 @@ package system
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"image"
+	"image/draw"
 	"os"
 	"path"
 	"path/filepath"
@@ -54,6 +58,7 @@ type FavoriteClipboardItem struct {
 	Type      string  `json:"type"`
 	Content   string  `json:"content"`
 	FilePath  string  `json:"filePath,omitempty"`
+	ImageHash *string `json:"imageHash,omitempty"`
 	IconData  *string `json:"iconData,omitempty"`
 	Width     *int    `json:"width,omitempty"`
 	Height    *int    `json:"height,omitempty"`
@@ -240,6 +245,23 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 }
 
 func (c *ClipboardPlugin) processClipboardData(ctx context.Context, data clipboard.Data) {
+	var imageHash string
+	if data.GetType() == clipboard.ClipboardTypeImage {
+		imageData := data.(*clipboard.ImageData)
+		imageHash = c.calculateImageHash(imageData.Image)
+		bounds := imageData.Image.Bounds()
+		c.api.Log(
+			ctx,
+			plugin.LogLevelInfo,
+			fmt.Sprintf(
+				"clipboard image captured: width=%d height=%d hash=%s",
+				bounds.Dx(),
+				bounds.Dy(),
+				c.shortHashString(imageHash),
+			),
+		)
+	}
+
 	if data.GetType() == clipboard.ClipboardTypeText && !c.isKeepTextHistory(ctx) {
 		return
 	}
@@ -256,7 +278,7 @@ func (c *ClipboardPlugin) processClipboardData(ctx context.Context, data clipboa
 	}
 
 	// Check for duplicate content by querying the most recent record
-	if c.isDuplicateContent(ctx, data) {
+	if c.isDuplicateContent(ctx, data, imageHash) {
 		c.api.Log(ctx, plugin.LogLevelInfo, "duplicate clipboard content, skipping")
 		return
 	}
@@ -301,6 +323,7 @@ func (c *ClipboardPlugin) processClipboardData(ctx context.Context, data clipboa
 		}
 
 		record.FilePath = imageFilePath
+		record.ImageHash = &imageHash
 		record.Width = &width
 		record.Height = &height
 		record.FileSize = &fileSize
@@ -425,7 +448,7 @@ func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 }
 
 // isDuplicateContent checks if the content is duplicate by comparing with the most recent record
-func (c *ClipboardPlugin) isDuplicateContent(ctx context.Context, data clipboard.Data) bool {
+func (c *ClipboardPlugin) isDuplicateContent(ctx context.Context, data clipboard.Data, imageHash string) bool {
 	// Check most recent record from database
 	recent, err := c.db.GetRecent(ctx, 1, 0)
 	var lastRecord *ClipboardRecord
@@ -477,9 +500,7 @@ func (c *ClipboardPlugin) isDuplicateContent(ctx context.Context, data clipboard
 	}
 
 	if data.GetType() == clipboard.ClipboardTypeImage {
-		imageData := data.(*clipboard.ImageData)
-		currentSize := fmt.Sprintf("image(%dx%d)", imageData.Image.Bounds().Dx(), imageData.Image.Bounds().Dy())
-		if mostRecentRecord.Content == currentSize {
+		if imageHash != "" && mostRecentRecord.ImageHash != nil && *mostRecentRecord.ImageHash == imageHash {
 			// Update timestamp of existing record
 			c.updateRecordTimestamp(ctx, mostRecentRecord, util.GetSystemTimestamp())
 			return true
@@ -487,6 +508,41 @@ func (c *ClipboardPlugin) isDuplicateContent(ctx context.Context, data clipboard
 	}
 
 	return false
+}
+
+func (c *ClipboardPlugin) calculateImageHash(img image.Image) string {
+	if img == nil {
+		return ""
+	}
+
+	sourceBounds := img.Bounds()
+	if sourceBounds.Dx() == 0 || sourceBounds.Dy() == 0 {
+		return ""
+	}
+
+	normalized := image.NewNRGBA(image.Rect(0, 0, sourceBounds.Dx(), sourceBounds.Dy()))
+	draw.Draw(normalized, normalized.Bounds(), img, sourceBounds.Min, draw.Src)
+
+	hasher := sha256.New()
+	var dimensions [8]byte
+	binary.LittleEndian.PutUint32(dimensions[0:4], uint32(normalized.Bounds().Dx()))
+	binary.LittleEndian.PutUint32(dimensions[4:8], uint32(normalized.Bounds().Dy()))
+	_, _ = hasher.Write(dimensions[:])
+	_, _ = hasher.Write(normalized.Pix)
+
+	return hex.EncodeToString(hasher.Sum(nil))
+}
+
+func (c *ClipboardPlugin) shortHashString(hash string) string {
+	if len(hash) <= 12 {
+		return hash
+	}
+	return hash[:12]
+}
+
+func (c *ClipboardPlugin) shortHashBytes(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:6])
 }
 
 // convertRecordToResult converts a database record to a query result
@@ -765,23 +821,62 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 						if util.IsWindows() {
 							dibPath := c.getDibCachePath(record.ID)
 							if util.IsFileExists(dibPath) {
-								if pngData, err := os.ReadFile(record.FilePath); err == nil {
-									if dibData, readErr := os.ReadFile(dibPath); readErr == nil {
+								pngData, pngErr := os.ReadFile(record.FilePath)
+								if pngErr != nil {
+									c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to read PNG cache: id=%s path=%s err=%s", record.ID, record.FilePath, pngErr.Error()))
+								} else {
+									dibData, readErr := os.ReadFile(dibPath)
+									if readErr != nil {
+										c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to read DIB cache: id=%s path=%s err=%s", record.ID, dibPath, readErr.Error()))
+									} else {
+										c.api.Log(
+											ctx,
+											plugin.LogLevelInfo,
+											fmt.Sprintf(
+												"restoring image from cache: id=%s png={len=%d sha256=%s} dib={len=%d sha256=%s}",
+												record.ID,
+												len(pngData),
+												c.shortHashBytes(pngData),
+												len(dibData),
+												c.shortHashBytes(dibData),
+											),
+										)
+
 										if writeErr := clipboard.WriteImageBytes(pngData, dibData); writeErr == nil {
+											c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("restored image from cache to clipboard: id=%s", record.ID))
 											return
 										} else {
 											c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to restore image from PNG+DIB cache: id=%s err=%s", record.ID, writeErr.Error()))
 										}
 									}
 								}
+							} else {
+								c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("DIB cache not found, fallback to image decode: id=%s path=%s", record.ID, dibPath))
 							}
 						}
 
 						if img := c.loadImageFromFile(ctx, record.FilePath); img != nil {
+							c.api.Log(
+								ctx,
+								plugin.LogLevelInfo,
+								fmt.Sprintf(
+									"restoring image from file decode: id=%s path=%s width=%d height=%d",
+									record.ID,
+									record.FilePath,
+									img.Bounds().Dx(),
+									img.Bounds().Dy(),
+								),
+							)
 							if err := clipboard.Write(&clipboard.ImageData{Image: img}); err != nil {
 								c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to restore image from file: id=%s path=%s err=%s", record.ID, record.FilePath, err.Error()))
+							} else {
+								c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("restored image from file decode to clipboard: id=%s", record.ID))
 							}
+						} else {
+							c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to decode image file for clipboard restore: id=%s path=%s", record.ID, record.FilePath))
 						}
+					} else {
+						c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("clipboard restore skipped, file missing: id=%s path=%s", record.ID, record.FilePath))
 					}
 				},
 			},
@@ -1283,6 +1378,7 @@ func (c *ClipboardPlugin) addToFavorites(ctx context.Context, record ClipboardRe
 		Type:      record.Type,
 		Content:   record.Content,
 		FilePath:  record.FilePath,
+		ImageHash: record.ImageHash,
 		IconData:  record.IconData,
 		Width:     record.Width,
 		Height:    record.Height,
@@ -1321,6 +1417,7 @@ func (c *ClipboardPlugin) convertFavoriteToRecord(item FavoriteClipboardItem) Cl
 		Type:       item.Type,
 		Content:    item.Content,
 		FilePath:   item.FilePath,
+		ImageHash:  item.ImageHash,
 		IconData:   item.IconData,
 		Width:      item.Width,
 		Height:     item.Height,

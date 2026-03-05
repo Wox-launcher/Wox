@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"hash/crc32"
 	"image"
 	"image/png"
 	"strings"
@@ -253,6 +254,15 @@ func writeImageBytes(pngData []byte, dibData []byte) error {
 	}
 
 	start := time.Now()
+	seqBefore := currentClipboardSequence()
+	logClipboardDiagnostic(
+		fmt.Sprintf(
+			"clipboard: writeImageBytes start seq=%d png={%s} %s",
+			seqBefore,
+			bytesChecksumString(pngData),
+			buildDIBDataSummary(dibData),
+		),
+	)
 
 	_, err := openClipboardWithRetry()
 	if err != nil {
@@ -315,6 +325,16 @@ func writeImageBytes(pngData []byte, dibData []byte) error {
 	if d := time.Since(start); d > 200*time.Millisecond {
 		util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("clipboard: writeImageData held clipboard for %s (pngBytes=%d dibBytes=%d)", d.String(), len(pngData), len(dibData)))
 	}
+	logClipboardDiagnostic(
+		fmt.Sprintf(
+			"clipboard: writeImageBytes success seq_before=%d seq_after=%d png={%s} %s %s",
+			seqBefore,
+			currentClipboardSequence(),
+			bytesChecksumString(pngData),
+			buildDIBDataSummary(dibData),
+			buildClipboardSnapshot(),
+		),
+	)
 
 	return nil
 }
@@ -524,6 +544,7 @@ func readBmpImage() (image.Image, error) {
 		srcData := (*[1 << 30]byte)(unsafe.Pointer(pMemBlk))[:dibSize:dibSize]
 		dibDataCopy = make([]byte, dibSize)
 		copy(dibDataCopy, srcData)
+		logClipboardDiagnostic(fmt.Sprintf("clipboard: read CF_DIB copied %s", buildDIBDataSummary(dibDataCopy)))
 
 		return nil
 	}()
@@ -604,6 +625,15 @@ func readBmpImage() (image.Image, error) {
 		if truncatedRows > 0 {
 			logClipboardDiagnostic(fmt.Sprintf("clipboard: decoded 32bpp image with truncated rows=%d width=%d height=%d pixelDataLen=%d (%s) %s", truncatedRows, width, height, len(pixelData), formatBitmapHeader(headerCopy), buildClipboardSnapshot()))
 		}
+		logClipboardDiagnostic(
+			fmt.Sprintf(
+				"clipboard: decoded 32bpp image width=%d height=%d truncated_rows=%d %s",
+				width,
+				height,
+				truncatedRows,
+				buildDIBDataSummary(dibDataCopy),
+			),
+		)
 		return img, nil
 	}
 
@@ -656,6 +686,15 @@ func readBmpImage() (image.Image, error) {
 	if decodeErr != nil {
 		return nil, fmt.Errorf("failed to decode clipboard BMP (%s), dibSize=%d dataLen=%d: %w", formatBitmapHeader(headerCopy), dibSize, len(dibDataCopy), decodeErr)
 	}
+	logClipboardDiagnostic(
+		fmt.Sprintf(
+			"clipboard: decoded non-32bpp image width=%d height=%d bitCount=%d %s",
+			decoded.Bounds().Dx(),
+			decoded.Bounds().Dy(),
+			headerCopy.BitCount,
+			buildDIBDataSummary(dibDataCopy),
+		),
+	)
 	return decoded, nil
 }
 
@@ -804,6 +843,40 @@ func formatBitmapHeader(h bitmapHeader) string {
 		h.Compression,
 		h.SizeImage,
 		h.ClrUsed,
+	)
+}
+
+func bytesChecksumString(data []byte) string {
+	if len(data) == 0 {
+		return "len=0 crc32=00000000"
+	}
+	return fmt.Sprintf("len=%d crc32=%08x", len(data), crc32.ChecksumIEEE(data))
+}
+
+func buildDIBDataSummary(dibData []byte) string {
+	minHeaderSize := int(unsafe.Sizeof(bitmapHeader{}))
+	if len(dibData) < minHeaderSize {
+		return fmt.Sprintf("dib{len=%d header=short}", len(dibData))
+	}
+
+	header := *(*bitmapHeader)(unsafe.Pointer(&dibData[0]))
+	offset := header.Size
+	if header.Compression == 3 && header.Size == 40 {
+		offset += 12
+	}
+	if header.BitCount <= 8 {
+		colors := header.ClrUsed
+		if colors == 0 {
+			colors = 1 << header.BitCount
+		}
+		offset += colors * 4
+	}
+
+	return fmt.Sprintf(
+		"dib{%s offset=%d data=%s}",
+		formatBitmapHeader(header),
+		offset,
+		bytesChecksumString(dibData),
 	)
 }
 

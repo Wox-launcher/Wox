@@ -24,6 +24,7 @@ type ClipboardRecord struct {
 	Type       string
 	Content    string  // For text content or metadata
 	FilePath   string  // For image files
+	ImageHash  *string // For image deduplication hash, nullable
 	IconData   *string // For storing icon data (base64 or file path), nullable
 	Width      *int    // For image width, nullable
 	Height     *int    // For image height, nullable
@@ -90,6 +91,7 @@ func (c *ClipboardDB) initTables(ctx context.Context) error {
 		type TEXT NOT NULL,
 		content TEXT,
 		file_path TEXT,
+		image_hash TEXT,
 		icon_data TEXT,
 		width INTEGER,
 		height INTEGER,
@@ -116,6 +118,7 @@ func (c *ClipboardDB) initTables(ctx context.Context) error {
 		`ALTER TABLE clipboard_history ADD COLUMN width INTEGER`,
 		`ALTER TABLE clipboard_history ADD COLUMN height INTEGER`,
 		`ALTER TABLE clipboard_history ADD COLUMN file_size INTEGER`,
+		`ALTER TABLE clipboard_history ADD COLUMN image_hash TEXT`,
 		`ALTER TABLE clipboard_history ADD COLUMN alias TEXT`,
 	}
 
@@ -134,12 +137,12 @@ func (c *ClipboardDB) initTables(ctx context.Context) error {
 // Insert adds a new clipboard record to the database
 func (c *ClipboardDB) Insert(ctx context.Context, record ClipboardRecord) error {
 	insertSQL := `
-	INSERT INTO clipboard_history (id, type, content, file_path, icon_data, width, height, file_size, alias, timestamp, is_favorite, created_at)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	INSERT INTO clipboard_history (id, type, content, file_path, image_hash, icon_data, width, height, file_size, alias, timestamp, is_favorite, created_at)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	_, err := c.db.ExecContext(ctx, insertSQL,
-		record.ID, record.Type, record.Content, record.FilePath, record.IconData,
+		record.ID, record.Type, record.Content, record.FilePath, record.ImageHash, record.IconData,
 		record.Width, record.Height, record.FileSize, record.Alias,
 		record.Timestamp, record.IsFavorite, record.CreatedAt)
 
@@ -150,12 +153,12 @@ func (c *ClipboardDB) Insert(ctx context.Context, record ClipboardRecord) error 
 func (c *ClipboardDB) Update(ctx context.Context, record ClipboardRecord) error {
 	updateSQL := `
 	UPDATE clipboard_history
-	SET type = ?, content = ?, file_path = ?, icon_data = ?, width = ?, height = ?, file_size = ?, alias = ?, timestamp = ?, is_favorite = ?
+	SET type = ?, content = ?, file_path = ?, image_hash = ?, icon_data = ?, width = ?, height = ?, file_size = ?, alias = ?, timestamp = ?, is_favorite = ?
 	WHERE id = ?
 	`
 
 	_, err := c.db.ExecContext(ctx, updateSQL,
-		record.Type, record.Content, record.FilePath, record.IconData,
+		record.Type, record.Content, record.FilePath, record.ImageHash, record.IconData,
 		record.Width, record.Height, record.FileSize, record.Alias,
 		record.Timestamp, record.IsFavorite, record.ID)
 
@@ -193,7 +196,7 @@ func (c *ClipboardDB) Delete(ctx context.Context, id string) error {
 // GetRecent retrieves recent clipboard records with pagination
 func (c *ClipboardDB) GetRecent(ctx context.Context, limit, offset int) ([]ClipboardRecord, error) {
 	querySQL := `
-	SELECT id, type, content, file_path, icon_data, width, height, file_size, alias, timestamp, is_favorite, created_at
+	SELECT id, type, content, file_path, image_hash, icon_data, width, height, file_size, alias, timestamp, is_favorite, created_at
 	FROM clipboard_history
 	ORDER BY timestamp DESC
 	LIMIT ? OFFSET ?
@@ -211,7 +214,7 @@ func (c *ClipboardDB) GetRecent(ctx context.Context, limit, offset int) ([]Clipb
 // SearchText searches for text content in clipboard history
 func (c *ClipboardDB) SearchText(ctx context.Context, searchTerm string, limit int) ([]ClipboardRecord, error) {
 	querySQL := `
-	SELECT id, type, content, file_path, icon_data, width, height, file_size, alias, timestamp, is_favorite, created_at
+	SELECT id, type, content, file_path, image_hash, icon_data, width, height, file_size, alias, timestamp, is_favorite, created_at
 	FROM clipboard_history
 	WHERE type = ? AND (content LIKE ? OR alias LIKE ?)
 	ORDER BY timestamp DESC
@@ -231,7 +234,7 @@ func (c *ClipboardDB) SearchText(ctx context.Context, searchTerm string, limit i
 // GetByID retrieves a specific record by ID
 func (c *ClipboardDB) GetByID(ctx context.Context, id string) (*ClipboardRecord, error) {
 	querySQL := `
-	SELECT id, type, content, file_path, alias, timestamp, is_favorite, created_at
+	SELECT id, type, content, file_path, image_hash, icon_data, width, height, file_size, alias, timestamp, is_favorite, created_at
 	FROM clipboard_history
 	WHERE id = ?
 	`
@@ -240,7 +243,8 @@ func (c *ClipboardDB) GetByID(ctx context.Context, id string) (*ClipboardRecord,
 	record := &ClipboardRecord{}
 
 	err := row.Scan(&record.ID, &record.Type, &record.Content,
-		&record.FilePath, &record.Alias, &record.Timestamp, &record.IsFavorite, &record.CreatedAt)
+		&record.FilePath, &record.ImageHash, &record.IconData, &record.Width, &record.Height, &record.FileSize, &record.Alias,
+		&record.Timestamp, &record.IsFavorite, &record.CreatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -375,7 +379,7 @@ func (c *ClipboardDB) scanRecords(rows *sql.Rows) ([]ClipboardRecord, error) {
 	for rows.Next() {
 		var record ClipboardRecord
 		err := rows.Scan(&record.ID, &record.Type, &record.Content,
-			&record.FilePath, &record.IconData, &record.Width, &record.Height, &record.FileSize, &record.Alias,
+			&record.FilePath, &record.ImageHash, &record.IconData, &record.Width, &record.Height, &record.FileSize, &record.Alias,
 			&record.Timestamp, &record.IsFavorite, &record.CreatedAt)
 		if err != nil {
 			return nil, err
