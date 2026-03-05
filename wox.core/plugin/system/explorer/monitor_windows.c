@@ -157,6 +157,78 @@ static int isOpenSaveDialog(HWND hwnd)
     return data.found ? 1 : 0;
 }
 
+static int isFileListClassName(const WCHAR *className)
+{
+    if (!className || className[0] == L'\0')
+    {
+        return 0;
+    }
+
+    // DirectUIHWND: Modern Windows Explorer file list view (Windows 10/11)
+    if (_wcsicmp(className, L"DirectUIHWND") == 0)
+    {
+        return 1;
+    }
+
+    // SysListView32: Classic/legacy list view control
+    if (_wcsicmp(className, L"SysListView32") == 0)
+    {
+        return 1;
+    }
+
+    // SysTreeView32: Navigation pane tree view (also valid for type-to-search)
+    if (_wcsicmp(className, L"SysTreeView32") == 0)
+    {
+        return 1;
+    }
+
+    return 0;
+}
+
+// Whitelist approach: returns 1 only when the focused control is the file list view.
+// This ensures type-to-search does NOT trigger from the search bar, address bar,
+// rename input, or any other non-file-list control.
+static int hasFocusedFileList()
+{
+    HWND foreground = GetForegroundWindow();
+    if (!foreground)
+    {
+        return 0;
+    }
+
+    DWORD threadId = GetWindowThreadProcessId(foreground, NULL);
+    if (threadId == 0)
+    {
+        return 0;
+    }
+
+    GUITHREADINFO guiInfo;
+    guiInfo.cbSize = sizeof(GUITHREADINFO);
+    if (!GetGUIThreadInfo(threadId, &guiInfo))
+    {
+        return 0;
+    }
+
+    HWND focus = guiInfo.hwndFocus;
+    if (!focus)
+    {
+        return 0;
+    }
+
+    // Only check the focused HWND itself — do NOT walk up parents.
+    // When the file list has focus, the focused HWND is DirectUIHWND itself.
+    // When renaming a file, the focused HWND is an Edit control (child of DirectUIHWND),
+    // so it correctly won't match the whitelist.
+    WCHAR className[128];
+    int len = GetClassNameW(focus, className, (int)(sizeof(className) / sizeof(className[0])));
+    if (len > 0 && isFileListClassName(className))
+    {
+        return 1;
+    }
+
+    return 0;
+}
+
 static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
 {
     if (nCode == HC_ACTION)
@@ -185,6 +257,17 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
                 {
                     gLastKeyLogTick = now;
                     logMessage("LowLevelKeyboardProc: ignore key vk=0x%02lX (ALT down)", vkCode);
+                }
+                return CallNextHookEx(NULL, nCode, wParam, lParam);
+            }
+
+            if ((currentState == stateExplorer || currentState == stateDialog) && !hasFocusedFileList())
+            {
+                DWORD now = GetTickCount();
+                if (now - gLastKeyLogTick > 1000)
+                {
+                    gLastKeyLogTick = now;
+                    logMessage("LowLevelKeyboardProc: ignore key vk=0x%02lX (file list not focused)", vkCode);
                 }
                 return CallNextHookEx(NULL, nCode, wParam, lParam);
             }
