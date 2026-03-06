@@ -6,6 +6,7 @@ import 'package:wox/components/wox_hotkey_view.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_hotkey.dart';
+import 'package:wox/entity/wox_toolbar.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/api/wox_api.dart';
@@ -223,39 +224,53 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
           // Build widgets for the actions to show
           List<Widget> actionWidgets = [];
           for (var actionData in actionsToShow) {
-            final actionInfo = actionData['info'];
+            final actionInfo = actionData['info'] as ToolbarActionInfo;
             final hotkey = actionData['hotkey'] as HotkeyX;
 
             if (actionWidgets.isNotEmpty) {
               actionWidgets.add(const SizedBox(width: 16));
             }
 
-            actionWidgets.add(
-              Text(
-                actionInfo.name,
-                style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor)),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-              ),
-            );
-            actionWidgets.add(const SizedBox(width: 8));
-            actionWidgets.add(
-              WoxHotkeyView(
-                hotkey: hotkey,
-                backgroundColor:
-                    hasResultItems
-                        ? safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarBackgroundColor)
-                        : safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.appBackgroundColor).withValues(alpha: 0.1),
-                borderColor: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
-                textColor: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
-              ),
-            );
+            actionWidgets.add(_buildClickableToolbarAction(actionInfo, hotkey));
           }
 
           return Align(alignment: Alignment.centerRight, child: Row(mainAxisSize: MainAxisSize.min, children: actionWidgets));
         },
       );
     });
+  }
+
+  Widget _buildClickableToolbarAction(ToolbarActionInfo actionInfo, HotkeyX hotkey) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          controller.handleToolbarActionTap(const UuidV4().generate(), actionInfo);
+        },
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              actionInfo.name,
+              style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor)),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
+            const SizedBox(width: 8),
+            WoxHotkeyView(
+              hotkey: hotkey,
+              backgroundColor:
+                  hasResultItems
+                      ? safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarBackgroundColor)
+                      : safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.appBackgroundColor).withValues(alpha: 0.1),
+              borderColor: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
+              textColor: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override

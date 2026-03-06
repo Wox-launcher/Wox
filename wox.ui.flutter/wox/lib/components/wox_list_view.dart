@@ -21,6 +21,7 @@ class WoxListView<T> extends StatelessWidget {
   final bool showFilter;
   final double maxHeight;
   final VoidCallback? onItemTapped;
+  final void Function(String traceId, WoxListItem<T> item)? onItemSecondaryTapped;
   final bool Function(String traceId, HotKey hotkey)? onFilteHotkeyPressed;
 
   const WoxListView({
@@ -30,6 +31,7 @@ class WoxListView<T> extends StatelessWidget {
     this.showFilter = true,
     required this.maxHeight,
     this.onItemTapped,
+    this.onItemSecondaryTapped,
     this.onFilteHotkeyPressed,
   });
 
@@ -101,6 +103,7 @@ class WoxListView<T> extends StatelessWidget {
                               onItemTapped: () {
                                 onItemTapped?.call();
                               },
+                              onItemSecondaryTapped: onItemSecondaryTapped,
                               child: GetBuilder<WoxListController<T>>(
                                 id: controller.buildItemUpdateId(index),
                                 init: controller,
@@ -208,6 +211,7 @@ class WoxListView<T> extends StatelessWidget {
                                   onItemTapped: () {
                                     onItemTapped?.call();
                                   },
+                                  onItemSecondaryTapped: onItemSecondaryTapped,
                                   child: GetBuilder<WoxListController<T>>(
                                     id: controller.buildItemUpdateId(index),
                                     init: controller,
@@ -344,8 +348,9 @@ class _WoxListItemGestureWrapper<T> extends StatefulWidget {
   final Rx<WoxListItem<T>> item;
   final Widget child;
   final VoidCallback? onItemTapped;
+  final void Function(String traceId, WoxListItem<T> item)? onItemSecondaryTapped;
 
-  const _WoxListItemGestureWrapper({required this.controller, required this.index, required this.item, required this.child, this.onItemTapped});
+  const _WoxListItemGestureWrapper({required this.controller, required this.index, required this.item, required this.child, this.onItemTapped, this.onItemSecondaryTapped});
 
   @override
   State<_WoxListItemGestureWrapper<T>> createState() => _WoxListItemGestureWrapperState<T>();
@@ -354,6 +359,11 @@ class _WoxListItemGestureWrapper<T> extends StatefulWidget {
 class _WoxListItemGestureWrapperState<T> extends State<_WoxListItemGestureWrapper<T>> {
   DateTime? _lastTapTime;
   static const _doubleClickThreshold = Duration(milliseconds: 200);
+
+  void _activateItem(String traceId) {
+    widget.controller.updateActiveIndex(traceId, widget.index);
+    widget.controller.onItemActive?.call(traceId, widget.item.value);
+  }
 
   void _handleTapDown() {
     if (widget.item.value.isGroup) {
@@ -372,16 +382,25 @@ class _WoxListItemGestureWrapperState<T> extends State<_WoxListItemGestureWrappe
     }
 
     // Single click
-    widget.controller.updateActiveIndex(traceId, widget.index);
-    widget.controller.onItemActive?.call(traceId, widget.item.value);
-
+    _activateItem(traceId);
     widget.onItemTapped?.call();
 
     _lastTapTime = now;
   }
 
+  void _handleSecondaryTapDown() {
+    if (widget.item.value.isGroup) {
+      return;
+    }
+
+    final traceId = const UuidV4().generate();
+    _activateItem(traceId);
+    widget.onItemSecondaryTapped?.call(traceId, widget.item.value);
+    _lastTapTime = null;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(behavior: HitTestBehavior.opaque, onTapDown: (_) => _handleTapDown(), child: widget.child);
+    return GestureDetector(behavior: HitTestBehavior.opaque, onTapDown: (_) => _handleTapDown(), onSecondaryTapDown: (_) => _handleSecondaryTapDown(), child: widget.child);
   }
 }

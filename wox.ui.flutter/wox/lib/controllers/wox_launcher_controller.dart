@@ -402,7 +402,13 @@ class WoxLauncherController extends GetxController {
       return null;
     }
 
-    return ToolbarActionInfo(name: tr("plugin_doctor_go_to_update"), hotkey: "ctrl+u");
+    return ToolbarActionInfo(
+      name: tr("plugin_doctor_go_to_update"),
+      hotkey: "ctrl+u",
+      action: () {
+        openUpdateFromToolbar(const UuidV4().generate());
+      },
+    );
   }
 
   List<WoxResultAction> buildLocalActions() {
@@ -725,6 +731,10 @@ class WoxLauncherController extends GetxController {
     return WoxHotkey.equals(hotkey, parsed.normalHotkey);
   }
 
+  String normalizeToolbarHotkey(String hotkey) {
+    return hotkey.replaceAll(" ", "").toLowerCase();
+  }
+
   void hideActionPanel(String traceId) {
     isShowActionPanel.value = false;
     actionListViewController.clearFilter(traceId);
@@ -794,6 +804,25 @@ class WoxLauncherController extends GetxController {
     resizeHeight();
   }
 
+  void openActionPanelForActiveResult(String traceId) {
+    final activeResult = getActiveResult();
+    if (activeResult == null || activeResult.isGroup) {
+      return;
+    }
+
+    final actions = buildActionsByResult(traceId, activeResult);
+    if (actions.isEmpty) {
+      return;
+    }
+
+    if (isShowFormActionPanel.value) {
+      hideFormActionPanel(traceId, reason: "open action panel");
+    }
+
+    refreshActionsForActiveResult(traceId, preserveSelection: false);
+    showActionPanel(traceId);
+  }
+
   String tr(String key) {
     return Get.find<WoxSettingController>().tr(key);
   }
@@ -828,6 +857,39 @@ class WoxLauncherController extends GetxController {
     }
 
     return filteredActions.first;
+  }
+
+  WoxResultAction? getActionByToolbarHotkey(WoxQueryResult? result, String hotkey) {
+    if (result == null) {
+      return null;
+    }
+
+    final normalizedHotkey = normalizeToolbarHotkey(hotkey);
+    final actions = buildActionsByResult(const UuidV4().generate(), result);
+    return actions.firstWhereOrNull((action) => normalizeToolbarHotkey(action.hotkey) == normalizedHotkey);
+  }
+
+  void handleToolbarActionTap(String traceId, ToolbarActionInfo actionInfo) {
+    if (actionInfo.action != null && activeResultViewController.items.isEmpty) {
+      actionInfo.action!.call();
+      return;
+    }
+
+    if (normalizeToolbarHotkey(actionInfo.hotkey) == normalizeToolbarHotkey(moreActionsHotkey)) {
+      openActionPanelForActiveResult(traceId);
+      return;
+    }
+
+    final activeResult = getActiveResult();
+    final action = getActionByToolbarHotkey(activeResult, actionInfo.hotkey);
+    if (action != null) {
+      executeAction(traceId, activeResult, action);
+      return;
+    }
+
+    if (actionInfo.action != null) {
+      actionInfo.action!.call();
+    }
   }
 
   Future<void> executeAction(String traceId, WoxQueryResult? result, WoxResultAction? action) async {

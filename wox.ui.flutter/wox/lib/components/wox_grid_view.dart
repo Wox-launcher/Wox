@@ -14,18 +14,13 @@ class WoxGridView extends StatelessWidget {
   final WoxGridController<WoxQueryResult> controller;
   final double maxHeight;
   final VoidCallback? onItemTapped;
+  final void Function(String traceId, WoxListItem<WoxQueryResult> item)? onItemSecondaryTapped;
   final VoidCallback? onRowHeightChanged;
 
   // Height for title text (fontSize 12 + some extra)
   static const double titleHeight = 18.0;
 
-  const WoxGridView({
-    super.key,
-    required this.controller,
-    required this.maxHeight,
-    this.onItemTapped,
-    this.onRowHeightChanged,
-  });
+  const WoxGridView({super.key, required this.controller, required this.maxHeight, this.onItemTapped, this.onItemSecondaryTapped, this.onRowHeightChanged});
 
   @override
   Widget build(BuildContext context) {
@@ -103,10 +98,7 @@ class WoxGridView extends StatelessWidget {
     return SingleChildScrollView(
       controller: controller.scrollController,
       physics: const NeverScrollableScrollPhysics(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: rows,
-      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: rows),
     );
   }
 
@@ -115,11 +107,7 @@ class WoxGridView extends StatelessWidget {
       padding: const EdgeInsets.only(left: 8, top: 12, bottom: 4),
       child: Text(
         item.title,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w500,
-          color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor),
-        ),
+        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor)),
       ),
     );
   }
@@ -129,12 +117,8 @@ class WoxGridView extends StatelessWidget {
       children: [
         for (int i = 0; i < columns; i++)
           Expanded(
-            child: i < indices.length
-                ? SizedBox(
-                    height: cellSize,
-                    child: _buildGridItemWidget(indices[i], iconSize, showTitle, itemPadding, itemMargin),
-                  )
-                : SizedBox(height: cellSize),
+            child:
+                i < indices.length ? SizedBox(height: cellSize, child: _buildGridItemWidget(indices[i], iconSize, showTitle, itemPadding, itemMargin)) : SizedBox(height: cellSize),
           ),
       ],
     );
@@ -170,6 +154,12 @@ class WoxGridView extends StatelessWidget {
           final traceId = const UuidV4().generate();
           controller.onItemExecuted?.call(traceId, item.value);
         },
+        onSecondaryTapDown: (_) {
+          final traceId = const UuidV4().generate();
+          controller.updateActiveIndex(traceId, index);
+          controller.onItemActive?.call(traceId, item.value);
+          onItemSecondaryTapped?.call(traceId, item.value);
+        },
         child: Obx(() => _buildGridItem(item.value, index, iconSize, showTitle, itemPadding, itemMargin)),
       ),
     );
@@ -186,9 +176,10 @@ class WoxGridView extends StatelessWidget {
           margin: EdgeInsets.all(itemMargin),
           padding: EdgeInsets.all(itemPadding),
           decoration: BoxDecoration(
-            color: isActive
-                ? safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemActiveBackgroundColor)
-                : isHovered
+            color:
+                isActive
+                    ? safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemActiveBackgroundColor)
+                    : isHovered
                     ? safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemActiveBackgroundColor).withValues(alpha: 0.5)
                     : Colors.transparent,
             borderRadius: BorderRadius.circular(8),

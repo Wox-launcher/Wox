@@ -129,6 +129,9 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
               controller.hideActionPanel(const UuidV4().generate());
               controller.hideFormActionPanel(const UuidV4().generate(), reason: "grid result item tapped");
             },
+            onItemSecondaryTapped: (traceId, item) {
+              controller.openActionPanelForActiveResult(traceId);
+            },
             onRowHeightChanged: () => controller.resizeHeight(),
           );
         }
@@ -141,6 +144,9 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
           onItemTapped: () {
             controller.hideActionPanel(const UuidV4().generate());
             controller.hideFormActionPanel(const UuidV4().generate(), reason: "list result item tapped");
+          },
+          onItemSecondaryTapped: (traceId, item) {
+            controller.openActionPanelForActiveResult(traceId);
           },
         );
       }),
