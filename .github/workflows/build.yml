@@ -16,10 +16,10 @@ jobs:
     uses: ./.github/workflows/build-core.yml
     with:
       run_tests: true
-      build_macos_arm64: ${{ contains(github.event.head_commit.message, '#build') || contains(github.event.head_commit.message, '#build_macos_arm64') }}
-      build_macos_amd64: ${{ contains(github.event.head_commit.message, '#build') || contains(github.event.head_commit.message, '#build_macos_amd64') }}
-      build_windows_amd64: ${{ contains(github.event.head_commit.message, '#build') || contains(github.event.head_commit.message, '#build_windows_amd64') }}
-      build_linux_amd64: ${{ contains(github.event.head_commit.message, '#build') || contains(github.event.head_commit.message, '#build_linux_amd64') }}
+      build_macos_arm64: ${{ contains(github.event.head_commit.message, '#build_all') || contains(github.event.head_commit.message, '#build_macos_arm64') }}
+      build_macos_amd64: ${{ contains(github.event.head_commit.message, '#build_all') || contains(github.event.head_commit.message, '#build_macos_amd64') }}
+      build_windows_amd64: ${{ contains(github.event.head_commit.message, '#build_all') || contains(github.event.head_commit.message, '#build_windows_amd64') }}
+      build_linux_amd64: ${{ contains(github.event.head_commit.message, '#build_all') || contains(github.event.head_commit.message, '#build_linux_amd64') }}
       require_macos_notarize: true
       require_windows_signpath: true
       artifact_retention_days: 10
