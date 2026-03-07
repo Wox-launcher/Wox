@@ -5,13 +5,20 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"wox/util"
 )
 
 func Open(path string) error {
-	_, err := Run("cmd", "/C", "start", "", path)
-	return err
+	cmd := BuildCommand("cmd", []string{"PYTHONIOENCODING=utf-8"})
+	// Set CmdLine directly to bypass Go's automatic argument escaping.
+	// This ensures our quoting is preserved so cmd.exe won't treat & as a command separator.
+	cmd.SysProcAttr.CmdLine = `cmd /C start "" ` + QuoteCmdArg(path)
+	cmd.Stdout = util.GetLogger().GetWriter()
+	cmd.Stderr = util.GetLogger().GetWriter()
+	cmd.Dir = getWorkingDirectory("cmd")
+	return cmd.Start()
 }
 
 func Run(name string, arg ...string) (*exec.Cmd, error) {
@@ -54,4 +61,14 @@ func OpenFileInFolder(path string) error {
 // HideWindowCmd sets the SysProcAttr to hide the console window on Windows
 func HideWindowCmd(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+}
+
+// QuoteCmdArg wraps a value in double quotes for use as a cmd.exe argument,
+// escaping any embedded double quotes. This prevents cmd.exe from treating
+// characters like & as command separators in URLs.
+func QuoteCmdArg(value string) string {
+	if len(value) >= 2 && strings.HasPrefix(value, `"`) && strings.HasSuffix(value, `"`) {
+		return value
+	}
+	return `"` + strings.ReplaceAll(value, `"`, `""`) + `"`
 }
