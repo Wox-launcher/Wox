@@ -9,7 +9,7 @@
         <key>CFBundleName</key>
         <string>Wox</string>
         <key>CFBundleVersion</key>
-        <string>2.0.0</string>
+        <string>2.0.1</string>
         <key>LSMinimumSystemVersion</key>
         <string>10.15</string>
         <key>CFBundleExecutable</key>
@@ -19,7 +19,7 @@
         <key>CFBundlePackageType</key>
         <string>APPL</string>
         <key>CFBundleShortVersionString</key>
-        <string>2.0.0</string>
+        <string>2.0.1</string>
         <key>NSHighResolutionCapable</key>
         <true/>
         <key>LSUIElement</key>
