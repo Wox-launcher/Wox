@@ -57,6 +57,7 @@ ifeq ($(PLATFORM),linux)
 		echo "appimagetool is required but not installed. Install from https://github.com/AppImage/AppImageKit/releases or set APPIMAGE_TOOL to its path." >&2; \
 		exit 1; \
 	fi
+	@command -v patchelf >/dev/null 2>&1 || { echo "patchelf is required on Linux to fix bundled shared library rpath." >&2; exit 1; }
 endif
 ifeq ($(PLATFORM),macos)
 	@command -v create-dmg >/dev/null 2>&1 || { echo "create-dmg is required but not installed. Visit https://github.com/create-dmg/create-dmg" >&2; exit 1; }

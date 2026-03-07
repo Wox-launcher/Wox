@@ -136,6 +136,7 @@ jobs:
             libxtst-dev \
             libayatana-appindicator3-dev \
             libkeybinder-3.0-dev \
+            patchelf \
             libfuse2 \
             xvfb
       - name: Setup Go
