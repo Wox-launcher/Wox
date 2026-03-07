@@ -39,13 +39,61 @@ The `plugin.json` file must be a valid JSON object located in the root of your p
 ### SettingDefinitions
 
 Define a list of UI controls for user configuration. Each item is an object with `Type` and `Value`.
+Use this reference as the source of truth when authoring `SettingDefinitions` in a published plugin or skill.
 
 #### Common Properties
 
-| Property | Type     | Description                                                                                                 |
-| -------- | -------- | ----------------------------------------------------------------------------------------------------------- |
-| `Type`   | `string` | Component type. Enum: `head`, `textbox`, `checkbox`, `select`, `label`, `newline`, `table`, `selectAIModel` |
-| `Value`  | `object` | Configuration object specific to the type.                                                                  |
+| Property | Type       | Description                                                                                                                   |
+| -------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `Type`   | `string`   | Component type. Enum: `head`, `textbox`, `checkbox`, `select`, `label`, `newline`, `table`, `selectAIModel`, `dynamic`     |
+| `Value`  | `object`   | Configuration object specific to the type.                                                                                     |
+| `DisabledInPlatforms` | `string[]` | Optional. Platforms where this setting is disabled. Uses SDK platform names such as `windows`, `darwin`, `linux`. |
+| `IsPlatformSpecific` | `boolean` | Optional. If `true`, Wox stores different values per platform.                                                       |
+
+#### Validators
+
+Validators are used inside textbox/select values and table columns.
+
+Supported validator types:
+
+- `not_empty`
+- `is_number`
+
+Examples:
+
+```json
+{
+  "Type": "textbox",
+  "Value": {
+    "Key": "timeout_ms",
+    "Label": "Timeout",
+    "DefaultValue": "300",
+    "Validators": [
+      {
+        "Type": "is_number",
+        "Value": { "IsInteger": true, "IsFloat": false }
+      }
+    ]
+  }
+}
+```
+
+```json
+{
+  "Type": "textbox",
+  "Value": {
+    "Key": "api_key",
+    "Label": "API Key",
+    "DefaultValue": "",
+    "Validators": [
+      {
+        "Type": "not_empty",
+        "Value": {}
+      }
+    ]
+  }
+}
+```
 
 #### 1. Textbox
 
@@ -57,7 +105,10 @@ Define a list of UI controls for user configuration. Each item is an object with
     "Label": "i18n:api_key",
     "DefaultValue": "",
     "Tooltip": "Enter your API key",
-    "MaxLines": 1 // Optional, default 1
+    "MaxLines": 1,
+    "Suffix": "",
+    "Validators": [],
+    "Style": { "Width": 400 }
   }
 }
 ```
@@ -70,8 +121,9 @@ Define a list of UI controls for user configuration. Each item is an object with
   "Value": {
     "Key": "enableFeature",
     "Label": "Enable Feature",
-    "DefaultValue": "true", // Note: String type "true"/"false"
-    "Tooltip": "Toggle this feature"
+    "DefaultValue": "true",
+    "Tooltip": "Toggle this feature",
+    "Style": {}
   }
 }
 ```
@@ -85,38 +137,120 @@ Define a list of UI controls for user configuration. Each item is an object with
     "Key": "theme",
     "Label": "Theme",
     "DefaultValue": "light",
+    "Suffix": "",
+    "Tooltip": "Theme selection",
+    "IsMulti": false,
     "Options": [
       { "Label": "Light", "Value": "light" },
-      { "Label": "Dark", "Value": "dark" }
-    ]
+      { "Label": "Dark", "Value": "dark" },
+      { "Label": "All", "Value": "all", "IsSelectAll": true }
+    ],
+    "Validators": [],
+    "Style": {}
   }
 }
 ```
 
-#### 4. Table (List of Items)
+`select` notes:
+
+- `IsMulti` enables multi-select.
+- `Options[].Icon` is supported.
+- `Options[].IsSelectAll` is supported for multi-select flows.
+
+#### 4. SelectAIModel
+
+```json
+{
+  "Type": "selectAIModel",
+  "Value": {
+    "Key": "default_model",
+    "Label": "Default model",
+    "DefaultValue": "",
+    "Tooltip": "Choose one configured AI model",
+    "Validators": [],
+    "Style": {}
+  }
+}
+```
+
+#### 5. Table (List of Items)
 
 ```json
 {
   "Type": "table",
   "Value": {
     "Key": "shortcuts",
-    "DefaultValue": "[]", // JSON string of list
+    "DefaultValue": "[]",
     "Title": "Shortcuts",
+    "Tooltip": "Editable shortcut list",
+    "SortColumnKey": "name",
+    "SortOrder": "asc",
+    "MaxHeight": 500,
     "Columns": [
-      { "Label": "Name", "Key": "name", "Type": "text", "Width": 100 },
-      { "Label": "Enabled", "Key": "enabled", "Type": "checkbox", "Width": 50 }
-    ]
+      {
+        "Label": "Name",
+        "Key": "name",
+        "Type": "text",
+        "Width": 100,
+        "Validators": [{ "Type": "not_empty", "Value": {} }]
+      },
+      { "Label": "Enabled", "Key": "enabled", "Type": "checkbox", "Width": 50 },
+      {
+        "Label": "Model",
+        "Key": "model",
+        "Type": "selectAIModel",
+        "Width": 120
+      }
+    ],
+    "Style": {}
   }
 }
 ```
 
-#### 5. Other Types
+Supported table column types include:
 
-- `head`: Section header `{ "Label": "Section Name" }`
-- `label`: Static text `{ "Label": "Some text" }`
-- `newline`: Vertical spacer `{}`
-- `selectAIModel`: Special dropdown for selecting AI models configured in Wox.
-  |
+- `text`
+- `textList`
+- `checkbox`
+- `dirPath`
+- `select`
+- `selectAIModel`
+- `aiModelStatus`
+- `aiMCPServerTools`
+- `aiSelectMCPServerTools`
+- `woxImage`
+
+Table column notes:
+
+- `Validators` are supported on columns.
+- `SelectOptions` are only used when column type is `select`.
+- `TextMaxLines` is only used when column type is `text`.
+- `HideInTable` hides the column in the list but keeps it in the edit dialog.
+- `HideInUpdate` hides the column in the edit dialog but keeps it in the list.
+
+#### 6. Dynamic
+
+`dynamic` is a placeholder setting that must be resolved at runtime through the plugin API callback:
+
+- Node.js: `API.OnGetDynamicSetting(...)`
+- Python: `api.on_get_dynamic_setting(...)`
+
+Example:
+
+```json
+{
+  "Type": "dynamic",
+  "Value": {
+    "Key": "separatorPreview"
+  }
+}
+```
+
+#### 7. Other Types
+
+- `head`: Section header using `Content`, `Tooltip`, and `Style`
+- `label`: Static text using `Content`, `Tooltip`, and `Style`
+- `newline`: Vertical spacer with optional `Style`
 
 ## Icon Formats
 
@@ -130,6 +264,8 @@ The `Icon` string uses a `prefix:data` format. Supported prefixes:
 | `fileicon:` | Use the system icon for a specific file/app. | `"fileicon:/Applications/Safari.app"` |
 | `base64:`   | Base64 encoded image data (PNG), use data URI format. | `"base64:data:image/png;base64,iVBORw0KGgoAAAANSUhEUg..."`  |
 | `svg:`      | raw SVG string.                              | `"svg:<svg>...</svg>"`                |
+| `url:`      | Remote image URL.                            | `"url:https://example.com/icon.png"`  |
+| `lottie:`   | Lottie animation JSON.                       | `"lottie:{...}"`                      |
 
 ## Features Specification
 

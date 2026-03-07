@@ -12,6 +12,8 @@ Wox plugins are categorized by their installation type:
 
 Wox supports two different plugin implementation approaches:
 
+If you use Codex or another compatible agent, see [AI Skills For Plugin Development](./ai-skills.md).
+
 ### Script Plugin
 
 Script plugins are lightweight, single-file plugins that are perfect for simple automation tasks and quick utilities.

@@ -64,8 +64,9 @@ All methods are async and require `ctx`.
 ### Settings
 
 - `get_setting(ctx, key)`: Get setting.
-- `save_setting(ctx, key, value)`: Save setting.
+- `save_setting(ctx, key, value, is_platform_specific)`: Save setting.
 - `on_setting_changed(ctx, callback)`: Listen for changes.
+- `on_get_dynamic_setting(ctx, callback)`: Provide runtime-generated setting definitions for `dynamic` settings.
 
 ### UI Updates
 
@@ -82,6 +83,39 @@ All methods are async and require `ctx`.
 
 - `get_translation(ctx, key)`: Get raw translated string.
   > **Note**: Returns raw string. Use f-strings or `.format()` for parameter substitution.
+
+## Settings Authoring Notes
+
+- The Python SDK exports helper builders for:
+  - `create_textbox_setting()`
+  - `create_checkbox_setting()`
+  - `create_label_setting()`
+- There is no built-in `create_select_setting()` helper today.
+- For advanced settings such as `select`, `table`, validators, or `dynamic`, construct `PluginSettingDefinitionItem` and the corresponding value objects directly, or emit the expected JSON shape manually.
+- For the exact `plugin.json` and validator shape, read `references/plugin_json_schema.md`.
+- For ready-to-copy advanced settings examples, read `references/settings_patterns.md`.
+
+## Dynamic Setting Example
+
+```python
+from wox_plugin import (
+    PluginSettingDefinitionItem,
+    PluginSettingDefinitionType,
+    PluginSettingValueLabel,
+)
+
+async def _on_get_dynamic_setting(ctx, key):
+    if key == "separator_preview":
+        return PluginSettingDefinitionItem(
+            type=PluginSettingDefinitionType.LABEL,
+            value=PluginSettingValueLabel(content="Preview: 1,234.56"),
+        )
+
+    return PluginSettingDefinitionItem(
+        type=PluginSettingDefinitionType.LABEL,
+        value=PluginSettingValueLabel(content="Unknown setting"),
+    )
+```
 
 ## Usage Example
 

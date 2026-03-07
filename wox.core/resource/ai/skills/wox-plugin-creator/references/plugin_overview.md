@@ -39,26 +39,26 @@ Designed for simple, one-off tasks or shell scripts.
    - **Node.js/Python**: Clone the official template repos.
      - https://github.com/Wox-launcher/Wox.Plugin.Template.Nodejs
      - https://github.com/Wox-launcher/Wox.Plugin.Template.Python
-   - **Script plugins**: Use the script templates under `wox.core/resource/ai/skills/wox-plugin-creator/assets/script_plugin_templates/`.
-2. **Configure**: Edit `plugin.json` to define metadata, keywords, and permissions.
+   - **Script plugins**: Use the script templates under `assets/script_plugin_templates/`.
+2. **Configure**:
+   - SDK plugins: edit `plugin.json` to define metadata, trigger keywords, supported OS, features, i18n, and `SettingDefinitions`.
+   - Script plugins: edit the JSON metadata block in the script header comments.
 3. **Implement**:
    - `init()`: Initialize API clients and load settings.
    - `query()`: Handle user input and return `Result[]`.
 4. **Internationalize**: Use the `I18n` field in `plugin.json` (recommended) or `lang/` files. See `plugin_i18n`.
+5. **Validate settings-related work**:
+   - Read `references/plugin_json_schema.md` before authoring `SettingDefinitions`.
+   - For validator syntax and advanced controls, read `references/settings_patterns.md`.
 
 ## Minimal Script Plugin (Quick Start)
 
 Script plugins are the fastest way to get a working plugin with no build step.
 
-1. **Create**: Start from the script templates under `wox.core/resource/ai/skills/wox-plugin-creator/assets/script_plugin_templates/`.
-2. **Edit**: Open the generated `.py`/`.js`/`.sh` file and update the JSON metadata block in comments.
+1. **Create**: Start from the script templates under `assets/script_plugin_templates/`.
+2. **Edit**: Open the generated `.py` or `.js` file and update the JSON metadata block in comments.
 3. **Implement**: Modify the `query` handler in the same file to return results.
 4. **Run**: Trigger your plugin by typing its `TriggerKeywords` in Wox.
-
-## AI Skills
-
-- Built-in skills are embedded under `wox.core/resource/ai/skills` and extracted on startup to `~/.wox/ai/skills`.
-- Install a skill for other AI agents by copying its folder into `~/.wox/ai/skills`.
 
 ## Helper Prompts & Tools
 

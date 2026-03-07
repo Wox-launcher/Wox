@@ -7,6 +7,7 @@
 - 在 `~/.wox/plugins/<你的插件 id>/` 下创建插件目录。
 - 添加 `plugin.json`（见[规范](./specification.md)）和入口文件（如 `main.py`、`index.js`）。
 - 安装 SDK：Python ≥ 3.8 用 `uv add wox-plugin`，Node.js ≥ 16 用 `pnpm add @wox-launcher/wox-plugin`。
+- 如果你使用 Codex，可查看 [用于插件开发的 AI Skills](./ai-skills.md)。
 - 重启 Wox 或在设置里禁用/启用插件以重新加载。
 
 ## 最小示例

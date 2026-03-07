@@ -89,8 +89,9 @@ The `ctx` object is required for all API calls.
 ### Settings
 
 - `GetSetting(ctx, key)`: Retrieve a stored setting.
-- `SaveSetting(ctx, key, value)`: Save a setting.
+- `SaveSetting(ctx, key, value, isPlatformSpecific)`: Save a setting.
 - `OnSettingChanged(ctx, callback)`: Subscribe to setting changes.
+- `OnGetDynamicSetting(ctx, callback)`: Provide runtime-generated setting definitions for `dynamic` settings.
 
 ### UI Updates
 
@@ -107,6 +108,12 @@ The `ctx` object is required for all API calls.
 
 - `GetTranslation(ctx, key)`: Get a raw translated string (without formatting).
   > **Note**: You must handle string formatting (e.g., `sprintf` or template literals) in your code. This method only returns the raw string from the lang file.
+
+## Settings Authoring Notes
+
+- Read `references/plugin_json_schema.md` before writing `plugin.json` settings.
+- For ready-to-copy settings examples and advanced patterns, read `references/settings_patterns.md`.
+- `OnGetDynamicSetting` is used together with a `dynamic` entry in `SettingDefinitions`.
 
 ## Usage Example
 

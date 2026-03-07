@@ -7,6 +7,7 @@ Full-featured plugins run inside dedicated hosts (Python/Node.js) and talk to th
 - Create a folder under `~/.wox/plugins/<your-plugin-id>/`.
 - Add `plugin.json` (see [Specification](./specification.md)) and your entry file (`main.py`, `index.js`, etc.).
 - Install the SDK: `uv add wox-plugin` (Python ≥ 3.8) or `pnpm add @wox-launcher/wox-plugin` (Node.js ≥ 16).
+- If you use Codex, see [AI Skills For Plugin Development](./ai-skills.md).
 - Restart Wox or disable/enable the plugin from settings to reload changes.
 
 ## Minimal examples
