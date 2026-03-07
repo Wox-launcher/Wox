@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -379,11 +380,12 @@ func (r *WebSearchPlugin) replaceVariables(ctx context.Context, text string, que
 }
 
 func (r *WebSearchPlugin) openSearchUrls(ctx context.Context, search webSearch, queryText string) {
+	escapedQueryText := url.QueryEscape(queryText)
 	configuredDefaultBrowser := r.api.GetSetting(ctx, webSearchDefaultBrowserSettingKey)
 	browser := r.resolveWebSearchBrowser(search.Browser, configuredDefaultBrowser)
 
 	for _, url := range search.Urls {
-		resolvedURL := r.replaceVariables(ctx, url, queryText)
+		resolvedURL := r.replaceVariables(ctx, url, escapedQueryText)
 		openErr := r.openURLInWebSearchBrowser(resolvedURL, browser)
 		if openErr != nil {
 			r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open url %s: %s", resolvedURL, openErr.Error()))
