@@ -7,16 +7,16 @@ class PluginSettingValidatorIsNumber implements PluginSettingValidator {
   @override
   String validate(dynamic value) {
     if (value is! String) {
-      return "invalid value";
+      return "i18n:ui_validator_invalid_value";
     }
 
     if (isInteger) {
       if (int.tryParse(value) == null) {
-        return "Value must be an integer";
+        return "i18n:ui_validator_must_be_integer";
       }
     } else if (isFloat) {
       if (double.tryParse(value) == null) {
-        return "Value must be a number";
+        return "i18n:ui_validator_must_be_number";
       }
     }
     return "";

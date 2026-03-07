@@ -16,6 +16,7 @@ import 'package:wox/components/wox_markdown.dart';
 import 'package:wox/components/wox_path_finder.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
+import 'package:wox/entity/validator/wox_setting_validator.dart';
 import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_image.dart';
@@ -40,7 +41,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
   bool isUpdate = false;
   Map<String, String> fieldValidationErrors = {};
   Map<String, TextEditingController> textboxEditingController = {};
-  Map<String, FocusNode> _focusNodes = {};
+  final Map<String, FocusNode> _focusNodes = {};
   List<PluginSettingValueTableColumn> columns = [];
   String? customValidationError;
 
@@ -96,15 +97,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
         _focusNodes[column.key] = FocusNode();
         _focusNodes[column.key]!.addListener(() {
           if (!_focusNodes[column.key]!.hasFocus) {
-            for (var element in column.validators) {
-              var errMsg = element.validator.validate(textboxEditingController[column.key]!.text);
-              if (errMsg != "") {
-                fieldValidationErrors[column.key] = errMsg;
-                setState(() {});
-                return;
-              }
-            }
-            fieldValidationErrors.remove(column.key);
+            setFieldValidationError(column.key, validateValue(textboxEditingController[column.key]!.text, column.validators));
             setState(() {});
           }
         });
@@ -126,19 +119,17 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
           final focusKey = column.key + i.toString();
           _focusNodes[focusKey]!.addListener(() {
             if (!_focusNodes[focusKey]!.hasFocus) {
-              for (var element in column.validators) {
-                var errMsg = element.validator.validate(columnValues);
-                if (errMsg != "") {
-                  fieldValidationErrors[column.key] = errMsg;
-                  setState(() {});
-                  return;
-                }
-              }
-              fieldValidationErrors.remove(column.key);
+              setFieldValidationError(column.key, validateValue(columnValues, column.validators));
               setState(() {});
             }
           });
         }
+      }
+    }
+
+    for (var column in columns) {
+      if (column.validators.isNotEmpty) {
+        setFieldValidationError(column.key, validateValue(getValue(column.key), column.validators));
       }
     }
   }
@@ -174,6 +165,19 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
 
   void updateValue(String key, dynamic value) {
     values[key] = value;
+  }
+
+  String validateValue(dynamic value, List<PluginSettingValidatorItem> validators) {
+    return PluginSettingValidators.validateAll(value, validators);
+  }
+
+  void setFieldValidationError(String key, String errorMessage) {
+    if (errorMessage.isEmpty) {
+      fieldValidationErrors.remove(key);
+      return;
+    }
+
+    fieldValidationErrors[key] = errorMessage;
   }
 
   double getMaxColumnWidth() {
@@ -230,14 +234,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
     // validate field validators first
     for (var column in columns) {
       if (column.validators.isNotEmpty) {
-        for (var element in column.validators) {
-          var errMsg = element.validator.validate(getValue(column.key));
-          if (errMsg != "") {
-            fieldValidationErrors[column.key] = errMsg;
-          } else {
-            fieldValidationErrors.remove(column.key);
-          }
-        }
+        setFieldValidationError(column.key, validateValue(getValue(column.key), column.validators));
       }
     }
     if (fieldValidationErrors.isNotEmpty) {
@@ -290,17 +287,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
             maxLines: column.textMaxLines,
             onChanged: (value) {
               updateValue(column.key, value);
-
-              for (var element in column.validators) {
-                var errMsg = element.validator.validate(value);
-                if (errMsg != "") {
-                  fieldValidationErrors[column.key] = errMsg;
-                  setState(() {});
-                  return;
-                }
-              }
-
-              fieldValidationErrors.remove(column.key);
+              setFieldValidationError(column.key, validateValue(value, column.validators));
               setState(() {});
             },
           ),
@@ -310,6 +297,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
           value: getValueBool(column.key),
           onChanged: (value) {
             updateValue(column.key, value);
+            setFieldValidationError(column.key, validateValue(value, column.validators));
             setState(() {});
           },
         );
@@ -318,6 +306,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
           hotkey: WoxHotkey.parseHotkeyFromString(getValue(column.key)),
           onHotKeyRecorded: (hotkey) {
             updateValue(column.key, hotkey);
+            setFieldValidationError(column.key, validateValue(hotkey, column.validators));
             setState(() {});
           },
         );
@@ -332,6 +321,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
             changeButtonTextKey: 'ui_runtime_browse',
             onChanged: (path) {
               updateValue(column.key, path);
+              setFieldValidationError(column.key, validateValue(path, column.validators));
               setState(() {});
             },
           ),
@@ -349,9 +339,10 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                 value: effectiveValue,
                 isExpanded: true,
                 fontSize: 13,
-                underline: Container(height: 1, color: getThemeDividerColor().withOpacity(0.6)),
+                underline: Container(height: 1, color: getThemeDividerColor().withValues(alpha: 0.6)),
                 onChanged: (value) {
                   updateValue(column.key, value);
+                  setFieldValidationError(column.key, validateValue(value ?? "", column.validators));
                   setState(() {});
                 },
                 items:
@@ -375,6 +366,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
               initialValue: getValue(column.key),
               onModelSelected: (modelJson) {
                 updateValue(column.key, modelJson);
+                setFieldValidationError(column.key, validateValue(modelJson, column.validators));
                 setState(() {});
               },
             ),
@@ -420,6 +412,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                                 selectedTools.remove(tool.name);
                               }
                               updateValue(column.key, selectedTools);
+                              setFieldValidationError(column.key, validateValue(selectedTools, column.validators));
                             });
                           },
                           title: tool.name,
@@ -438,6 +431,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
             value: getWoxImageValue(column.key),
             onChanged: (newImage) {
               updateValue(column.key, newImage);
+              setFieldValidationError(column.key, validateValue(newImage, column.validators));
               setState(() {});
             },
           ),
@@ -461,17 +455,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                           style: TextStyle(overflow: TextOverflow.ellipsis, color: getThemeTextColor()),
                           onChanged: (value) {
                             columnValues[i] = value;
-
-                            for (var element in column.validators) {
-                              var errMsg = element.validator.validate(columnValues);
-                              if (errMsg != "") {
-                                fieldValidationErrors[column.key] = errMsg;
-                                setState(() {});
-                                return;
-                              }
-                            }
-
-                            fieldValidationErrors.remove(column.key);
+                            setFieldValidationError(column.key, validateValue(columnValues, column.validators));
                             setState(() {});
                           },
                         ),
@@ -483,18 +467,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                           //remove controller
                           textboxEditingController.remove(column.key + i.toString());
                           values[column.key] = columnValues;
-
-                          //validate
-                          for (var element in column.validators) {
-                            var errMsg = element.validator.validate(columnValues);
-                            if (errMsg != "") {
-                              fieldValidationErrors[column.key] = errMsg;
-                              setState(() {});
-                              return;
-                            }
-                          }
-
-                          fieldValidationErrors.remove(column.key);
+                          setFieldValidationError(column.key, validateValue(columnValues, column.validators));
                           setState(() {});
                         },
                       ),
@@ -506,6 +479,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                             columnValues.add("");
                             textboxEditingController[column.key + (columnValues.length - 1).toString()] = TextEditingController();
                             values[column.key] = columnValues;
+                            setFieldValidationError(column.key, validateValue(columnValues, column.validators));
                             setState(() {});
                           },
                         ),
@@ -519,6 +493,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                   onPressed: () {
                     columnValues.add("");
                     values[column.key] = columnValues;
+                    setFieldValidationError(column.key, validateValue(columnValues, column.validators));
                     setState(() {});
                   },
                 ),
@@ -541,7 +516,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
       final Color textColor = getThemeTextColor();
       final double maxLabelWidth = getMaxColumnWidth();
       final double dialogContentWidth = math.max(600, maxLabelWidth + 320);
-      final Color outlineColor = accentColor.withOpacity(isDarkTheme ? 0.22 : 0.15);
+      final Color outlineColor = accentColor.withValues(alpha: isDarkTheme ? 0.22 : 0.15);
       final baseTheme = Theme.of(context);
       final dialogTheme = baseTheme.copyWith(
         colorScheme: ColorScheme.fromSeed(seedColor: accentColor, brightness: isDarkTheme ? Brightness.dark : Brightness.light),
@@ -590,7 +565,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                                 children: [
                                   SizedBox(
                                     width: maxLabelWidth,
-                                    child: Text(tr(column.label), style: TextStyle(color: textColor.withOpacity(0.92), fontSize: 14, fontWeight: FontWeight.w600)),
+                                    child: Text(tr(column.label), style: TextStyle(color: textColor.withValues(alpha: 0.92), fontSize: 14, fontWeight: FontWeight.w600)),
                                   ),
                                   const SizedBox(width: 10),
                                   buildColumn(column),
@@ -599,14 +574,21 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                               if (column.tooltip != "")
                                 Padding(
                                   padding: EdgeInsets.only(top: 4, left: maxLabelWidth + 10),
-                                  child: WoxMarkdownView(
-                                    data: tr(column.tooltip),
-                                    fontColor: textColor.withOpacity(0.6),
-                                    fontSize: 12,
-                                    linkColor: accentColor,
-                                    linkHoverColor: accentColor.withOpacity(0.8),
-                                    selectable: true,
+                                  child: ExcludeFocus(
+                                    child: WoxMarkdownView(
+                                      data: tr(column.tooltip),
+                                      fontColor: textColor.withValues(alpha: 0.6),
+                                      fontSize: 12,
+                                      linkColor: accentColor,
+                                      linkHoverColor: accentColor.withValues(alpha: 0.8),
+                                      selectable: true,
+                                    ),
                                   ),
+                                ),
+                              if ((fieldValidationErrors[column.key] ?? "").isNotEmpty)
+                                Padding(
+                                  padding: EdgeInsets.only(top: column.tooltip != "" ? 4 : 2, left: maxLabelWidth + 10),
+                                  child: Text(tr(fieldValidationErrors[column.key]!), style: const TextStyle(color: Colors.red, fontSize: 12)),
                                 ),
                             ],
                           ),

@@ -611,9 +611,10 @@ class WoxSettingController extends GetxController {
     await openFolder(directory);
   }
 
-  Future<void> updatePluginSetting(String pluginId, String key, String value) async {
+  Future<String?> updatePluginSetting(String pluginId, String key, String value) async {
     final traceId = const UuidV4().generate();
     final activeTabIndex = activePluginTabController.index;
+    final previousValue = getPluginSettingValue(pluginId, key);
     applyPluginSettingOptimistically(pluginId, key, value);
 
     final saveStart = DateTime.now();
@@ -622,10 +623,37 @@ class WoxSettingController extends GetxController {
       Logger.instance.info(traceId, 'plugin setting saved: $key=$value, cost ${DateTime.now().difference(saveStart).inMilliseconds} ms');
     } catch (e) {
       Logger.instance.error(traceId, 'failed to save plugin setting: $key=$value, error: $e');
-      return;
+      restorePluginSetting(pluginId, key, previousValue);
+      return e.toString().replaceFirst('Exception: ', '');
     }
 
     unawaited(refreshPluginAfterSettingUpdate(pluginId, activeTabIndex, traceId));
+    return null;
+  }
+
+  String? getPluginSettingValue(String pluginId, String key) {
+    PluginDetail? target;
+
+    if (activePlugin.value.id == pluginId) {
+      target = activePlugin.value;
+    } else {
+      for (final plugin in [...installedPlugins, ...storePlugins, ...pluginList, ...filteredPluginList]) {
+        if (plugin.id == pluginId) {
+          target = plugin;
+          break;
+        }
+      }
+    }
+
+    if (target == null) {
+      return null;
+    }
+
+    if (!target.setting.settings.containsKey(key)) {
+      return null;
+    }
+
+    return target.setting.settings[key];
   }
 
   // Optimistically update the plugin setting in all relevant lists to provide instant feedback in the UI,
@@ -646,6 +674,42 @@ class WoxSettingController extends GetxController {
     final active = activePlugin.value;
     if (active.id == pluginId) {
       active.setting.settings[key] = value;
+      activePlugin.refresh();
+    }
+
+    updatePlugin(installedPlugins);
+    updatePlugin(storePlugins);
+    updatePlugin(pluginList);
+    if (updatePlugin(filteredPluginList)) {
+      filteredPluginList.refresh();
+    }
+  }
+
+  void restorePluginSetting(String pluginId, String key, String? previousValue) {
+    bool updatePlugin(List<PluginDetail> plugins) {
+      var updated = false;
+      for (final plugin in plugins) {
+        if (plugin.id != pluginId) {
+          continue;
+        }
+
+        if (previousValue == null) {
+          plugin.setting.settings.remove(key);
+        } else {
+          plugin.setting.settings[key] = previousValue;
+        }
+        updated = true;
+      }
+      return updated;
+    }
+
+    final active = activePlugin.value;
+    if (active.id == pluginId) {
+      if (previousValue == null) {
+        active.setting.settings.remove(key);
+      } else {
+        active.setting.settings[key] = previousValue;
+      }
       activePlugin.refresh();
     }
 

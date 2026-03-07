@@ -1,55 +1,50 @@
 import 'package:flutter/material.dart';
 import 'package:wox/components/wox_textfield.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_textbox.dart';
+import 'package:wox/entity/validator/wox_setting_validator.dart';
 
 import 'wox_setting_plugin_item_view.dart';
 
-class WoxSettingPluginTextBox extends WoxSettingPluginItem {
+class WoxSettingPluginTextBox extends StatefulWidget {
   final PluginSettingValueTextBox item;
+  final String value;
+  final Future<String?> Function(String key, String value) onUpdate;
+  final double labelWidth;
 
-  WoxSettingPluginTextBox({super.key, required this.item, required super.value, required super.onUpdate, required super.labelWidth}) {
-    if (item.maxLines < 1) {
-      item.maxLines = 1;
-    }
-  }
+  const WoxSettingPluginTextBox({super.key, required this.item, required this.value, required this.onUpdate, required this.labelWidth});
 
   @override
-  Widget build(BuildContext context) {
-    final inputWidth = item.style.width > 0 ? item.style.width.toDouble() : 100.0;
-    return layout(
-      label: item.label,
-      child: Wrap(
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [_TextBoxField(item: item, initialValue: getSetting(item.key), inputWidth: inputWidth, onSave: (value) => updateConfig(item.key, value)), suffix(item.suffix)],
-      ),
-      style: item.style,
-      tooltip: item.tooltip,
-    );
-  }
+  State<WoxSettingPluginTextBox> createState() => _WoxSettingPluginTextBoxState();
 }
 
-class _TextBoxField extends StatefulWidget {
-  final PluginSettingValueTextBox item;
-  final String initialValue;
-  final double inputWidth;
-  final ValueChanged<String> onSave;
-
-  const _TextBoxField({required this.item, required this.initialValue, required this.inputWidth, required this.onSave});
-
-  @override
-  State<_TextBoxField> createState() => _TextBoxFieldState();
-}
-
-class _TextBoxFieldState extends State<_TextBoxField> {
+class _WoxSettingPluginTextBoxState extends State<WoxSettingPluginTextBox> with WoxSettingPluginItemMixin<WoxSettingPluginTextBox> {
   late final TextEditingController _controller;
   late final FocusNode _focusNode;
+  late String _errorMessage;
+
+  @override
+  double get labelWidth => widget.labelWidth;
 
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(text: widget.initialValue);
+    if (widget.item.maxLines < 1) {
+      widget.item.maxLines = 1;
+    }
+
+    _controller = TextEditingController(text: widget.value);
     _focusNode = FocusNode();
     _focusNode.addListener(_onFocusChange);
+    _errorMessage = _validateValue(widget.value);
+  }
+
+  @override
+  void didUpdateWidget(covariant WoxSettingPluginTextBox oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value && widget.value != _controller.text) {
+      _controller.text = widget.value;
+      _errorMessage = _validateValue(widget.value);
+    }
   }
 
   @override
@@ -60,34 +55,69 @@ class _TextBoxFieldState extends State<_TextBoxField> {
     super.dispose();
   }
 
-  void _onFocusChange() {
+  String _validateValue(String value) {
+    return PluginSettingValidators.validateAll(value, widget.item.validators);
+  }
+
+  Future<void> _onFocusChange() async {
     if (!_focusNode.hasFocus) {
-      for (var element in widget.item.validators) {
-        var errMsg = element.validator.validate(_controller.text);
-        widget.item.tooltip = errMsg;
-        if (errMsg != "") {
-          return;
-        }
+      final validationError = _validateValue(_controller.text);
+      if (mounted) {
+        setState(() {
+          _errorMessage = validationError;
+        });
+      }
+      if (validationError.isNotEmpty) {
+        return;
       }
 
-      widget.onSave(_controller.text);
+      final saveError = await updateConfig(widget.onUpdate, widget.item.key, _controller.text);
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _errorMessage = saveError ?? "";
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return WoxTextField(
-      maxLines: widget.item.maxLines,
-      controller: _controller,
-      focusNode: _focusNode,
-      width: widget.inputWidth,
-      onChanged: (value) {
-        for (var element in widget.item.validators) {
-          var errMsg = element.validator.validate(value);
-          widget.item.tooltip = errMsg;
-          break;
-        }
-      },
+    final inputWidth = widget.item.style.width > 0 ? widget.item.style.width.toDouble() : 100.0;
+    final maxLines = widget.item.maxLines > 0 ? widget.item.maxLines : 1;
+    return layout(
+      label: widget.item.label,
+      child: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              WoxTextField(
+                maxLines: maxLines,
+                controller: _controller,
+                focusNode: _focusNode,
+                width: inputWidth,
+                onChanged: (value) {
+                  final validationError = _validateValue(value);
+                  if (_errorMessage == validationError) {
+                    return;
+                  }
+
+                  setState(() {
+                    _errorMessage = validationError;
+                  });
+                },
+              ),
+              validationMessage(_errorMessage),
+            ],
+          ),
+          suffix(widget.item.suffix),
+        ],
+      ),
+      style: widget.item.style,
+      tooltip: widget.item.tooltip,
     );
   }
 }

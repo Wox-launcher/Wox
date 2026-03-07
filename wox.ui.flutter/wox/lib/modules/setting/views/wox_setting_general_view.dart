@@ -231,8 +231,9 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                   ],
                   "SortColumnKey": "Query",
                 }),
-                onUpdate: (key, value) {
-                  controller.updateConfig("QueryHotkeys", value);
+                onUpdate: (key, value) async {
+                  await controller.updateConfig("QueryHotkeys", value);
+                  return null;
                 },
               );
             }),
@@ -271,8 +272,9 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                   ],
                   "SortColumnKey": "Query",
                 }),
-                onUpdate: (key, value) {
-                  controller.updateConfig("QueryShortcuts", value);
+                onUpdate: (key, value) async {
+                  await controller.updateConfig("QueryShortcuts", value);
+                  return null;
                 },
               );
             }),
@@ -302,8 +304,9 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                   ],
                   "SortColumnKey": "",
                 }),
-                onUpdate: (key, value) {
-                  controller.updateConfig("TrayQueries", value);
+                onUpdate: (key, value) async {
+                  await controller.updateConfig("TrayQueries", value);
+                  return null;
                 },
               );
             }),

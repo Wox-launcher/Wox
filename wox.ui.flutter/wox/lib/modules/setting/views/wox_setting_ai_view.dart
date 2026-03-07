@@ -56,8 +56,9 @@ class WoxSettingAIView extends WoxSettingBaseView {
                       ],
                       "SortColumnKey": "Name",
                     }),
-                    onUpdate: (key, value) {
-                      controller.updateConfig("AIProviders", value);
+                    onUpdate: (key, value) async {
+                      await controller.updateConfig("AIProviders", value);
+                      return null;
                     },
                     onUpdateValidate: (rowValues) async {
                       if (rowValues["Name"] != "ollama") {

@@ -5,19 +5,19 @@ class PluginSettingValidatorNotEmpty implements PluginSettingValidator {
   String validate(dynamic value) {
     if (value is String) {
       if (value.trim().isEmpty) {
-        return "Value can not be empty";
+        return "i18n:ui_validator_value_can_not_be_empty";
       }
     }
     if (value is List) {
       if (value.isEmpty) {
-        return "Value can not be empty";
+        return "i18n:ui_validator_value_can_not_be_empty";
       }
 
       if (value is List<String>) {
         //check every string
         for (var item in value) {
           if (item.trim().isEmpty) {
-            return "Value can not be empty";
+            return "i18n:ui_validator_value_can_not_be_empty";
           }
         }
       }
