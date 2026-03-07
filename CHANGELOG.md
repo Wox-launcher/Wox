@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.0.1 -
+## v2.0.1 - 2026-03-07
 
 - Add
   - Add tray query feature. User can add custom queries to tray menu for quick access
