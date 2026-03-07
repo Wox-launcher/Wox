@@ -76,6 +76,7 @@ export default defineConfig({
               text: "Plugin Development",
               items: [
                 { text: "Overview", link: "/development/plugins/overview" },
+                { text: "AI skills", link: "/development/plugins/ai-skills" },
                 { text: "Specification", link: "/development/plugins/specification" },
                 { text: "Query Model", link: "/development/plugins/query-model" },
                 { text: "Script Plugin", link: "/development/plugins/script-plugin" },
@@ -169,6 +170,7 @@ export default defineConfig({
               text: "插件开发",
               items: [
                 { text: "概览", link: "/zh/development/plugins/overview" },
+                { text: "AI 技能", link: "/zh/development/plugins/ai-skills" },
                 { text: "规范", link: "/zh/development/plugins/specification" },
                 { text: "查询模型", link: "/zh/development/plugins/query-model" },
                 { text: "脚本插件", link: "/zh/development/plugins/script-plugin" },
