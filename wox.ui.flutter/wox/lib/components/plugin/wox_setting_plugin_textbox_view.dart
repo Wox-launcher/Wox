@@ -21,6 +21,7 @@ class _WoxSettingPluginTextBoxState extends State<WoxSettingPluginTextBox> with 
   late final TextEditingController _controller;
   late final FocusNode _focusNode;
   late String _errorMessage;
+  bool _hasInteracted = false;
 
   @override
   double get labelWidth => widget.labelWidth;
@@ -35,7 +36,7 @@ class _WoxSettingPluginTextBoxState extends State<WoxSettingPluginTextBox> with 
     _controller = TextEditingController(text: widget.value);
     _focusNode = FocusNode();
     _focusNode.addListener(_onFocusChange);
-    _errorMessage = _validateValue(widget.value);
+    _errorMessage = "";
   }
 
   @override
@@ -43,7 +44,7 @@ class _WoxSettingPluginTextBoxState extends State<WoxSettingPluginTextBox> with 
     super.didUpdateWidget(oldWidget);
     if (oldWidget.value != widget.value && widget.value != _controller.text) {
       _controller.text = widget.value;
-      _errorMessage = _validateValue(widget.value);
+      _errorMessage = _hasInteracted ? _validateValue(widget.value) : "";
     }
   }
 
@@ -64,6 +65,7 @@ class _WoxSettingPluginTextBoxState extends State<WoxSettingPluginTextBox> with 
       final validationError = _validateValue(_controller.text);
       if (mounted) {
         setState(() {
+          _hasInteracted = true;
           _errorMessage = validationError;
         });
       }
@@ -101,11 +103,12 @@ class _WoxSettingPluginTextBoxState extends State<WoxSettingPluginTextBox> with 
                 width: inputWidth,
                 onChanged: (value) {
                   final validationError = _validateValue(value);
-                  if (_errorMessage == validationError) {
+                  if (_hasInteracted && _errorMessage == validationError) {
                     return;
                   }
 
                   setState(() {
+                    _hasInteracted = true;
                     _errorMessage = validationError;
                   });
                 },

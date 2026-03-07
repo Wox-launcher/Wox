@@ -21,6 +21,7 @@ class WoxSettingPluginSelect extends StatefulWidget {
 class _WoxSettingPluginSelectState extends State<WoxSettingPluginSelect> with WoxSettingPluginItemMixin<WoxSettingPluginSelect> {
   late String _rawValue;
   late String _errorMessage;
+  bool _hasInteracted = false;
 
   @override
   double get labelWidth => widget.labelWidth;
@@ -29,7 +30,7 @@ class _WoxSettingPluginSelectState extends State<WoxSettingPluginSelect> with Wo
   void initState() {
     super.initState();
     _rawValue = widget.value;
-    _errorMessage = _validateCurrentValue();
+    _errorMessage = "";
   }
 
   @override
@@ -37,7 +38,7 @@ class _WoxSettingPluginSelectState extends State<WoxSettingPluginSelect> with Wo
     super.didUpdateWidget(oldWidget);
     if (oldWidget.value != widget.value) {
       _rawValue = widget.value;
-      _errorMessage = _validateCurrentValue();
+      _errorMessage = _hasInteracted ? _validateCurrentValue() : "";
     }
   }
 
@@ -72,12 +73,14 @@ class _WoxSettingPluginSelectState extends State<WoxSettingPluginSelect> with Wo
   }
 
   Future<void> _saveValue(String rawValue) async {
+    final validationError = PluginSettingValidators.validateAll(widget.item.isMulti ? _parseMultiValues(rawValue) : rawValue, widget.item.validators);
     setState(() {
       _rawValue = rawValue;
-      _errorMessage = _validateCurrentValue();
+      _hasInteracted = true;
+      _errorMessage = validationError;
     });
 
-    if (_errorMessage.isNotEmpty) {
+    if (validationError.isNotEmpty) {
       return;
     }
 

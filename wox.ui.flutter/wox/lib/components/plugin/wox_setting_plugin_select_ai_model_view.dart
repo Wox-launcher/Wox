@@ -20,6 +20,7 @@ class WoxSettingPluginSelectAIModel extends StatefulWidget {
 class _WoxSettingPluginSelectAIModelState extends State<WoxSettingPluginSelectAIModel> with WoxSettingPluginItemMixin<WoxSettingPluginSelectAIModel> {
   late String _currentValue;
   late String _errorMessage;
+  bool _hasInteracted = false;
 
   @override
   double get labelWidth => widget.labelWidth;
@@ -28,7 +29,7 @@ class _WoxSettingPluginSelectAIModelState extends State<WoxSettingPluginSelectAI
   void initState() {
     super.initState();
     _currentValue = widget.value;
-    _errorMessage = PluginSettingValidators.validateAll(_currentValue, widget.item.validators);
+    _errorMessage = "";
   }
 
   @override
@@ -36,7 +37,7 @@ class _WoxSettingPluginSelectAIModelState extends State<WoxSettingPluginSelectAI
     super.didUpdateWidget(oldWidget);
     if (oldWidget.value != widget.value) {
       _currentValue = widget.value;
-      _errorMessage = PluginSettingValidators.validateAll(_currentValue, widget.item.validators);
+      _errorMessage = _hasInteracted ? PluginSettingValidators.validateAll(_currentValue, widget.item.validators) : "";
     }
   }
 
@@ -44,6 +45,7 @@ class _WoxSettingPluginSelectAIModelState extends State<WoxSettingPluginSelectAI
     final validationError = PluginSettingValidators.validateAll(modelJson, widget.item.validators);
     setState(() {
       _currentValue = modelJson;
+      _hasInteracted = true;
       _errorMessage = validationError;
     });
 

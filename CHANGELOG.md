@@ -10,9 +10,11 @@
   - [`Plugin Setting`] Add `maxHeight` property support in plugin table setting value #4339
   - [`Plugin Store`] Add filter functionality and upgrade indicators for plugins #4356
   - [`Browser Bookmarks`] Add Firefox support #4354
+  - [`Script Plugin`] Add missing runtime notifications with install actions #4357
+  - Add secondary tap support for item actions in grid and list views #4358
   - [`Web Search`] Allow user to select custom browser #3597
   - [`Setting`] Add log management features including clearing logs and changing log level
-  - [`Explorer`] Add quick jump paths and enhance file dialog interactions
+  - [`File Explorer Search`] Add quick jump paths and enhance file dialog interactions
 
 - Improve
   - [`Shell`] Enhance Shell plugin terminal preview to support search/full-screen/scroll-to-load functions
@@ -22,19 +24,20 @@
   - [`Plugin Setting`] Improve focus management and validation
   - Improve preview functionality and local actions
   - Improve Windows Start Menu handling by dismissing it when Wox opens #4341
-  - [`Explorer`] Improve overlay positioning and DPI handling
   - [`Calculator`] Improve history management and limit displayed history to top 100 entries #4340
-  - [`Explorer`] Improve file path resolution for open/save dialogs on macOS
   - Improve listview rendering performance
 
 - Fix
   - [`File Explorer Search`] Fix an issue that file explorer search plugin cannot navigate on open/save dialog
   - [`Clipboard`] Fix self-triggering in clipboard watch #4309
+  - Fix Windows hotkey recording so the Win key and modifier combinations can be captured correctly
   - Fix an issue that Wox setting table values can't be saved sometimes
   - Fix query results not being cleared correctly when app visibility changes
+  - Fix transient focus loss when showing Wox window on Windows #4346
   - Fix Base64 JPEG decode issue in image preview
   - [`Plugin Setting`] Fix an issue with handling null and empty JSON responses in plugin table settings
   - [`File`] Fix Windows Phone Link automatic downloads occurring when fetching file icons #4352
+  - [`Web Search`] Fix query URL formatting for escaped search text #4360
   - Fix image loading error handling in image view
 
 ## v2.0.0 - 2026-02-09

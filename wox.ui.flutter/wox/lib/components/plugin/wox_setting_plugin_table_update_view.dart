@@ -126,12 +126,6 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
         }
       }
     }
-
-    for (var column in columns) {
-      if (column.validators.isNotEmpty) {
-        setFieldValidationError(column.key, validateValue(getValue(column.key), column.validators));
-      }
-    }
   }
 
   @override
