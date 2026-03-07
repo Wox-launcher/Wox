@@ -52,8 +52,22 @@ jobs:
         run: |
           # Extract changelog for current version from CHANGELOG.md
           VERSION="${{ steps.version.outputs.VERSION }}"
-          # Get content between current version header and next --- separator
-          CHANGELOG=$(sed -n "/^## v${VERSION}/,/^---$/p" CHANGELOG.md | head -n -1 | tail -n +2)
+          # Get content between current version header and the next version header
+          CHANGELOG=$(awk -v version="$VERSION" '
+            index($0, "## v" version " ") == 1 {
+              in_changelog = 1
+              next
+            }
+            in_changelog && /^## v[0-9]/ {
+              exit
+            }
+            in_changelog && $0 == "---" {
+              exit
+            }
+            in_changelog {
+              print
+            }
+          ' CHANGELOG.md)
           echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
           echo "$CHANGELOG" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT

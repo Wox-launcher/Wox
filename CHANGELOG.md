@@ -103,8 +103,6 @@ It's time to release the official 2.0 version! There are no major issues in ever
   - [`Clipboard`] Fix clipboard image paste issue on windows
   - Fix a theme regression released on beta.6 that causes crash on invalid theme colors `#4302`
 
----
-
 ## v2.0.0-beta.6 — 2025-12-05
 
 - Add
@@ -114,14 +112,10 @@ It's time to release the official 2.0 version! There are no major issues in ever
 - Improve
   - UI now uses safe color parsing (`safeFromCssColor`) to fall back gracefully when theme colors are invalid, preventing crashes and highlighting misconfigured themes.
 
----
-
 ## v2.0.0-beta.5 — 2025-09-24
 
 - Fix
   - Fix a regression issue that some settings can't be changed on beta.4 @yougg
-
----
 
 ## v2.0.0-beta.4 — 2025-08-24
 
@@ -144,8 +138,6 @@ It's time to release the official 2.0 version! There are no major issues in ever
   - Windows app extension checks (case-insensitive, #4251)
   - Image loading error handling in image view
 
----
-
 ## v2.0.0-beta.3 — 2025-06-23
 
 - Add
@@ -155,8 +147,6 @@ It's time to release the official 2.0 version! There are no major issues in ever
 
 - Fix
   - Windows sometimes cannot gain focus (#4198)
-
----
 
 ## v2.0.0-beta.2 — 2025-04-18
 
@@ -171,8 +161,6 @@ It's time to release the official 2.0 version! There are no major issues in ever
 
 - Fix
   - [Windows] Focus not returning (#4144, #4166)
-
----
 
 ## v2.0.0-beta.1 — 2025-02-27
 
