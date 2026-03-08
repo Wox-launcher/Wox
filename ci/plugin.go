@@ -10,7 +10,6 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/imroc/req/v3"
-	"github.com/tidwall/pretty"
 	"github.com/tidwall/sjson"
 )
 
@@ -119,7 +118,7 @@ func checkPluginNewVersion() error {
 	}
 
 	if hasUpdate {
-		return os.WriteFile("../store-plugin.json", pretty.Pretty(fileStr), 0644)
+		return os.WriteFile("../store-plugin.json", fileStr, 0644)
 	}
 
 	return nil
