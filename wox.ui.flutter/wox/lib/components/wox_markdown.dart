@@ -6,6 +6,7 @@ import 'package:gpt_markdown/custom_widgets/markdown_config.dart';
 import 'package:gpt_markdown/custom_widgets/unordered_ordered_list.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:wox/components/wox_loading_indicator.dart';
 import 'package:wox/utils/colors.dart';
 
 class WoxMarkdownView extends StatelessWidget {
@@ -120,7 +121,7 @@ class WoxMarkdownView extends StatelessWidget {
       final parts = content.split('|');
       final path = parts.first.trim();
       final alt = parts.length > 1 ? parts.sublist(1).join('|').trim() : '';
-      return alt.isEmpty ? '![]($path)' : '![${alt}]($path)';
+      return alt.isEmpty ? '![]($path)' : '![$alt]($path)';
     });
 
     return text;
@@ -205,7 +206,7 @@ class WoxImageMd extends InlineMd {
             if (loadingProgress == null) {
               return child;
             }
-            return CustomImageLoading(progress: loadingProgress.expectedTotalBytes != null ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes! : 1);
+            return const Center(child: WoxLoadingIndicator(size: 24));
           },
           fit: BoxFit.fill,
           errorBuilder: (context, error, stackTrace) {

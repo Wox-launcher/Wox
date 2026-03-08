@@ -16,6 +16,7 @@ import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_ai_chat_view.dart';
+import 'package:wox/components/wox_loading_indicator.dart';
 import 'package:wox/components/wox_markdown.dart';
 import 'package:wox/components/wox_plugin_detail_view.dart';
 import 'package:wox/components/wox_tooltip.dart';
@@ -71,7 +72,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
       future: File(codePath).readAsString(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const CircularProgressIndicator();
+          return const Center(child: WoxLoadingIndicator(size: 20));
         }
         if (snapshot.hasError) {
           return Text("Error: ${snapshot.error}");

@@ -14,6 +14,7 @@ import 'package:wox/components/plugin/wox_setting_plugin_select_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_table_view.dart';
 import 'package:wox/components/wox_hint_box.dart';
 import 'package:wox/components/wox_image_view.dart';
+import 'package:wox/components/wox_loading_indicator.dart';
 import 'package:wox/components/wox_textfield.dart';
 import 'package:wox/components/wox_checkbox.dart';
 import 'package:wox/components/wox_label.dart';
@@ -151,10 +152,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                 children: [
                   Obx(() {
                     if (_refreshing.value) {
-                      return const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 4.0),
-                        child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                      );
+                      return const Padding(padding: EdgeInsets.symmetric(horizontal: 4.0), child: WoxLoadingIndicator(size: 16));
                     }
 
                     final Color iconColor = controller.hasPluginFilterApplied ? getThemeActiveBackgroundColor() : getThemeSubTextColor();
@@ -388,7 +386,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                           text: controller.tr('plugin_wpm_upgrade'),
                           icon:
                               controller.isUpgradingPlugin.value
-                                  ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: getThemeActionItemActiveColor()))
+                                  ? WoxLoadingIndicator(size: 16, color: getThemeActionItemActiveColor())
                                   : Icon(Icons.system_update_alt, size: 14, color: getThemeTextColor()),
                           onPressed:
                               controller.isUpgradingPlugin.value
@@ -415,10 +413,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       child: Obx(
                         () => WoxButton.secondary(
                           text: controller.isInstallingPlugin.value ? controller.tr("ui_plugin_installing") : controller.tr('ui_plugin_install'),
-                          icon:
-                              controller.isInstallingPlugin.value
-                                  ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: getThemeActionItemActiveColor()))
-                                  : null,
+                          icon: controller.isInstallingPlugin.value ? WoxLoadingIndicator(size: 16, color: getThemeActionItemActiveColor()) : null,
                           onPressed:
                               controller.isInstallingPlugin.value
                                   ? null

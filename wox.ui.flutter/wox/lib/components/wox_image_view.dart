@@ -6,6 +6,7 @@ import 'package:flutter_svg/svg.dart';
 import 'package:lottie/lottie.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_theme_icon_view.dart';
+import 'package:wox/components/wox_loading_indicator.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/enums/wox_image_type_enum.dart';
@@ -18,37 +19,57 @@ class WoxImageView extends StatelessWidget {
 
   const WoxImageView({super.key, required this.woxImage, this.width, this.height});
 
+  bool _isSvgUrl(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      return false;
+    }
+
+    return uri.path.toLowerCase().endsWith('.svg');
+  }
+
+  Widget _buildLoadingPlaceholder() {
+    final indicatorSize = ((width ?? height ?? 24) * 0.65).clamp(14.0, 28.0);
+
+    return SizedBox(width: width, height: height, child: Center(child: WoxLoadingIndicator(size: indicatorSize)));
+  }
+
+  Widget _buildErrorPlaceholder(Object error, StackTrace? stackTrace) {
+    var traceId = const UuidV4().generate();
+    Logger.instance.error(traceId, "Failed to load wox url image: $error");
+    Logger.instance.error(traceId, "Image URL: ${woxImage.imageData}");
+    Logger.instance.error(traceId, "Stack trace: $stackTrace");
+    return SizedBox(width: width, height: height);
+  }
+
   @override
   Widget build(BuildContext context) {
     late final Widget content;
 
     if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_URL.code) {
-      content = Image.network(
-        woxImage.imageData,
-        width: width,
-        height: height,
-        fit: BoxFit.contain,
-        gaplessPlayback: true,
-        errorBuilder: (context, error, stackTrace) {
-          var traceId = const UuidV4().generate();
-          Logger.instance.error(traceId, "Failed to load wox url image: $error");
-          Logger.instance.error(traceId, "Image URL: ${woxImage.imageData}");
-          Logger.instance.error(traceId, "Stack trace: $stackTrace");
-          return SizedBox(width: width, height: height);
-        },
-        loadingBuilder: (context, child, loadingProgress) {
-          if (loadingProgress == null) return child;
-          return SizedBox(
-            width: width,
-            height: height,
-            child: Center(
-              child: CircularProgressIndicator(
-                value: loadingProgress.expectedTotalBytes != null ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes! : null,
-              ),
-            ),
-          );
-        },
-      );
+      if (_isSvgUrl(woxImage.imageData)) {
+        content = SvgPicture.network(
+          woxImage.imageData,
+          width: width,
+          height: height,
+          fit: BoxFit.contain,
+          placeholderBuilder: (context) => _buildLoadingPlaceholder(),
+          errorBuilder: (context, error, stackTrace) => _buildErrorPlaceholder(error, stackTrace),
+        );
+      } else {
+        content = Image.network(
+          woxImage.imageData,
+          width: width,
+          height: height,
+          fit: BoxFit.contain,
+          gaplessPlayback: true,
+          errorBuilder: (context, error, stackTrace) => _buildErrorPlaceholder(error, stackTrace),
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return _buildLoadingPlaceholder();
+          },
+        );
+      }
     } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_ABSOLUTE_PATH.code) {
       if (woxImage.cachedFile == null) {
         content = const SizedBox(width: 24, height: 24);

@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_dropdown_button.dart';
+import 'package:wox/components/wox_loading_indicator.dart';
 import 'package:wox/components/wox_switch.dart';
 import 'package:wox/components/wox_path_finder.dart';
 import 'package:wox/modules/setting/views/wox_setting_base.dart';
@@ -238,7 +239,7 @@ class WoxSettingDataView extends WoxSettingBaseView {
               children: [
                 WoxButton.secondary(
                   text: controller.tr("ui_data_log_clear_button"),
-                  icon: isClearing ? SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: getThemeTextColor())) : null,
+                  icon: isClearing ? WoxLoadingIndicator(size: 14, color: getThemeTextColor()) : null,
                   onPressed:
                       isClearing
                           ? null

@@ -7,6 +7,7 @@ import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_drag_move_view.dart';
 import 'package:wox/components/wox_image_view.dart';
+import 'package:wox/components/wox_loading_indicator.dart';
 import 'package:wox/components/wox_platform_focus.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_hotkey.dart';
@@ -322,7 +323,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                         },
                         child:
                             controller.isLoading.value
-                                ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: safeFromCssColor(currentTheme.queryBoxCursorColor)))
+                                ? WoxLoadingIndicator(size: 20, color: safeFromCssColor(currentTheme.queryBoxCursorColor))
                                 : WoxImageView(woxImage: controller.queryIcon.value.icon, width: 30, height: 30),
                       ),
                     ),

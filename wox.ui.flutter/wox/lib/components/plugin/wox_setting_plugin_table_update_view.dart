@@ -9,6 +9,7 @@ import 'package:wox/components/wox_dropdown_button.dart';
 import 'package:wox/components/wox_hotkey_recorder_view.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_image_selector.dart';
+import 'package:wox/components/wox_loading_indicator.dart';
 import 'package:wox/components/wox_textfield.dart';
 import 'package:wox/components/wox_checkbox.dart';
 import 'package:wox/components/wox_checkbox_tile.dart';
@@ -371,7 +372,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
           child: Builder(
             builder: (context) {
               if (isLoadingTools) {
-                return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+                return const Center(child: WoxLoadingIndicator(size: 16));
               }
 
               final selectedTools = getValue(column.key) is List ? getValue(column.key) : [];

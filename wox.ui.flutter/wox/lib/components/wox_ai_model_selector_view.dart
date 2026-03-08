@@ -6,6 +6,7 @@ import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_dropdown_button.dart';
+import 'package:wox/components/wox_loading_indicator.dart';
 import 'package:wox/components/wox_textfield.dart';
 
 import 'package:wox/controllers/wox_setting_controller.dart';
@@ -130,7 +131,7 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return Center(child: CircularProgressIndicator(strokeWidth: 2, color: getThemeActiveBackgroundColor()));
+      return Center(child: WoxLoadingIndicator(size: 16, color: getThemeActiveBackgroundColor()));
     }
 
     // When there are no models/providers available, guide user to AI settings

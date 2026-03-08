@@ -691,8 +691,8 @@ func (s *Store) InstallFromLocalWithProgress(ctx context.Context, filePath strin
 		currentVersion, currentErr := semver.NewVersion(pluginMetadata.Version)
 		if installedErr == nil && currentErr == nil {
 			if installedVersion.GreaterThan(currentVersion) {
-				logger.Info(ctx, fmt.Sprintf("skip %s(%s) from %s store, because it's already installed(%s)", pluginMetadata.GetName(ctx), pluginMetadata.Version, pluginMetadata.GetName(ctx), installedPlugin.Metadata.Version))
-				return fmt.Errorf("skip %s(%s) from %s store, because it's already installed(%s)", pluginMetadata.GetName(ctx), pluginMetadata.Version, pluginMetadata.GetName(ctx), installedPlugin.Metadata.Version)
+				// if installed version is greater than local version, log it but allow installation to proceed (which will effectively downgrade the plugin)
+				logger.Info(ctx, fmt.Sprintf("installing older version %s(%s), because it's already installed with newer version(%s)", pluginMetadata.GetName(ctx), pluginMetadata.Version, installedPlugin.Metadata.Version))
 			}
 		}
 

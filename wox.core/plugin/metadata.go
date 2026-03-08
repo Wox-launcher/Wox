@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -113,26 +114,43 @@ func (m *Metadata) IsSupportFeature(f MetadataFeatureName) bool {
 	return false
 }
 
+func parseFeatureIntParam(value any) (int, error) {
+	switch v := value.(type) {
+	case int:
+		return v, nil
+	case int32:
+		return int(v), nil
+	case int64:
+		return int(v), nil
+	case float64:
+		if math.Trunc(v) != v {
+			return 0, fmt.Errorf("must be an integer")
+		}
+		return int(v), nil
+	case string:
+		parsed, err := strconv.Atoi(v)
+		if err != nil {
+			return 0, err
+		}
+		return parsed, nil
+	default:
+		return 0, fmt.Errorf("unsupported type %T", value)
+	}
+}
+
 func (m *Metadata) GetFeatureParamsForDebounce() (MetadataFeatureParamsDebounce, error) {
 	for _, feature := range m.Features {
 		if strings.EqualFold(feature.Name, MetadataFeatureDebounce) {
 			if v, ok := feature.Params["IntervalMs"]; !ok {
 				return MetadataFeatureParamsDebounce{}, errors.New("debounce feature does not have IntervalMs param")
 			} else {
-				if seconds, ok := v.(string); ok {
-					timeInMilliseconds, convertErr := strconv.Atoi(seconds)
-					if convertErr != nil {
-						return MetadataFeatureParamsDebounce{}, fmt.Errorf("debounce feature IntervalMs param is not a valid number: %s", convertErr.Error())
-					}
-					return MetadataFeatureParamsDebounce{
-						IntervalMs: timeInMilliseconds,
-					}, nil
+				intervalMs, err := parseFeatureIntParam(v)
+				if err != nil {
+					return MetadataFeatureParamsDebounce{}, fmt.Errorf("debounce feature IntervalMs param is not a valid number: %s", err.Error())
 				}
-				if milliseconds, ok := v.(int); ok {
-					return MetadataFeatureParamsDebounce{
-						IntervalMs: milliseconds,
-					}, nil
-				}
+				return MetadataFeatureParamsDebounce{
+					IntervalMs: intervalMs,
+				}, nil
 			}
 		}
 	}
@@ -327,16 +345,11 @@ func (m *Metadata) GetFeatureParamsForGridLayout() (MetadataFeatureParamsGridLay
 			}
 
 			if v, ok := feature.Params["Columns"]; ok {
-				if columnsString, ok := v.(string); ok {
-					if columns, err := strconv.Atoi(columnsString); err == nil {
-						params.Columns = columns
-					} else {
-						return MetadataFeatureParamsGridLayout{}, fmt.Errorf("gridLayout feature Columns param is not a valid number: %s", err.Error())
-					}
+				columns, err := parseFeatureIntParam(v)
+				if err != nil {
+					return MetadataFeatureParamsGridLayout{}, fmt.Errorf("gridLayout feature Columns param is not a valid number: %s", err.Error())
 				}
-				if columnInt, ok := v.(int); ok {
-					params.Columns = columnInt
-				}
+				params.Columns = columns
 			}
 
 			if v, ok := feature.Params["ShowTitle"]; ok {
@@ -349,29 +362,19 @@ func (m *Metadata) GetFeatureParamsForGridLayout() (MetadataFeatureParamsGridLay
 			}
 
 			if v, ok := feature.Params["ItemPadding"]; ok {
-				if vInt, ok := v.(int); ok {
-					params.ItemPadding = vInt
+				padding, err := parseFeatureIntParam(v)
+				if err != nil {
+					return MetadataFeatureParamsGridLayout{}, fmt.Errorf("gridLayout feature ItemPadding param is not a valid number: %s", err.Error())
 				}
-				if vString, ok := v.(string); ok {
-					if padding, err := strconv.Atoi(vString); err == nil {
-						params.ItemPadding = padding
-					} else {
-						return MetadataFeatureParamsGridLayout{}, fmt.Errorf("gridLayout feature ItemPadding param is not a valid number: %s", err.Error())
-					}
-				}
+				params.ItemPadding = padding
 			}
 
 			if v, ok := feature.Params["ItemMargin"]; ok {
-				if vString, ok := v.(string); ok {
-					if margin, err := strconv.Atoi(vString); err == nil {
-						params.ItemMargin = margin
-					} else {
-						return MetadataFeatureParamsGridLayout{}, fmt.Errorf("gridLayout feature ItemMargin param is not a valid number: %s", err.Error())
-					}
+				margin, err := parseFeatureIntParam(v)
+				if err != nil {
+					return MetadataFeatureParamsGridLayout{}, fmt.Errorf("gridLayout feature ItemMargin param is not a valid number: %s", err.Error())
 				}
-				if vInt, ok := v.(int); ok {
-					params.ItemMargin = vInt
-				}
+				params.ItemMargin = margin
 			}
 
 			if v, ok := feature.Params["Commands"]; ok {

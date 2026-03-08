@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_button.dart';
+import 'package:wox/components/wox_loading_indicator.dart';
 import 'package:wox/components/wox_panel.dart';
 import 'package:wox/components/wox_textfield.dart';
 import 'package:wox/entity/wox_runtime_status.dart';
@@ -11,6 +12,7 @@ import 'package:wox/modules/setting/views/wox_setting_base.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/picker.dart';
 
+// ignore: must_be_immutable
 class WoxSettingRuntimeView extends WoxSettingBaseView {
   WoxSettingRuntimeView({super.key});
 
@@ -197,7 +199,7 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(children: [if (isLoadingStatuses) const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))]),
+                Row(children: [if (isLoadingStatuses) const WoxLoadingIndicator(size: 16)]),
                 const SizedBox(height: 12),
                 if (runtimeStatusError.isNotEmpty) ...[Text(runtimeStatusError, style: TextStyle(color: Colors.red, fontSize: 12)), const SizedBox(height: 4)],
                 if (!isLoadingStatuses && runtimeStatusError.isEmpty && visibleStatuses.isEmpty)
@@ -264,13 +266,7 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
                 const SizedBox(height: 5),
                 Obx(() {
                   if (isPythonValidating.value) {
-                    return Row(
-                      children: [
-                        const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                        const SizedBox(width: 8),
-                        Text(controller.tr("ui_runtime_validating")),
-                      ],
-                    );
+                    return Row(children: [const WoxLoadingIndicator(size: 16), const SizedBox(width: 8), Text(controller.tr("ui_runtime_validating"))]);
                   } else if (pythonValidationMessage.value.isNotEmpty) {
                     return Text(pythonValidationMessage.value, style: TextStyle(color: pythonValidationMessage.value.startsWith('✓') ? Colors.green : Colors.red, fontSize: 12));
                   }
@@ -320,13 +316,7 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
                 const SizedBox(height: 5),
                 Obx(() {
                   if (isNodejsValidating.value) {
-                    return Row(
-                      children: [
-                        const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                        const SizedBox(width: 8),
-                        Text(controller.tr("ui_runtime_validating")),
-                      ],
-                    );
+                    return Row(children: [const WoxLoadingIndicator(size: 16), const SizedBox(width: 8), Text(controller.tr("ui_runtime_validating"))]);
                   } else if (nodejsValidationMessage.value.isNotEmpty) {
                     return Text(nodejsValidationMessage.value, style: TextStyle(color: nodejsValidationMessage.value.startsWith('✓') ? Colors.green : Colors.red, fontSize: 12));
                   }

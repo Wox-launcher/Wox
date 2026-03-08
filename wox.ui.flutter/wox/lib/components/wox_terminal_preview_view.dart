@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
+import 'package:wox/components/wox_loading_indicator.dart';
 import 'package:wox/components/wox_preview_top_status_bar.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_hotkey.dart';
@@ -560,7 +561,7 @@ class _WoxTerminalPreviewViewState extends State<WoxTerminalPreviewView> {
         woxTheme: widget.woxTheme,
         leading: Container(width: 8, height: 8, decoration: BoxDecoration(color: statusDotColor, shape: BoxShape.circle)),
         title: Text(commandText, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: fontColor, fontSize: 16, fontWeight: FontWeight.w600, height: 1.1)),
-        trailing: loadingHistory ? SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: fontColor.withValues(alpha: 0.8))) : null,
+        trailing: loadingHistory ? WoxLoadingIndicator(size: 12, color: fontColor.withValues(alpha: 0.8)) : null,
         actions: [
           WoxPreviewTopStatusBarAction(tooltip: getSearchHotkeyTooltip(), onPressed: openSearchBar, icon: const Icon(Icons.search)),
           WoxPreviewTopStatusBarAction(
