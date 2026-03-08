@@ -137,7 +137,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
     return Obx(() {
       final currentTheme = WoxThemeUtil.instance.currentTheme.value;
       final queryBoxHeight = controller.getQueryBoxInputHeight();
-      controller.queryBoxTextFieldController.updateSelectedTextStyle(TextStyle(color: safeFromCssColor(currentTheme.queryBoxTextSelectionColor)));
+      controller.updateQueryBoxSelectedTextStyle();
 
       return Stack(
         children: [

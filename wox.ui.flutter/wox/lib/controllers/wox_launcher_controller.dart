@@ -66,6 +66,7 @@ class WoxLauncherController extends GetxController {
   final queryBoxFocusNode = FocusNode();
   final queryBoxTextFieldController = QueryBoxTextEditingController(
     selectedTextStyle: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxTextSelectionColor)),
+    enableSelectedTextStyle: false,
   );
   final queryBoxScrollController = ScrollController(initialScrollOffset: 0.0);
   final queryBoxLineCount = 1.obs;
@@ -204,6 +205,7 @@ class WoxLauncherController extends GetxController {
 
     // Add focus listener to query box
     queryBoxFocusNode.addListener(() {
+      updateQueryBoxSelectedTextStyle();
       if (queryBoxFocusNode.hasFocus) {
         var traceId = const UuidV4().generate();
         if (isShowFormActionPanel.value) {
@@ -232,6 +234,13 @@ class WoxLauncherController extends GetxController {
 
     // Initialize doctor check info
     doctorCheckInfo.value = DoctorCheckInfo.empty();
+  }
+
+  void updateQueryBoxSelectedTextStyle() {
+    queryBoxTextFieldController.updateSelectedTextStyle(
+      style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxTextSelectionColor)),
+      enabled: queryBoxFocusNode.hasFocus,
+    );
   }
 
   bool get isShowDoctorCheckInfo => currentQuery.value.isEmpty && !doctorCheckInfo.value.allPassed;
