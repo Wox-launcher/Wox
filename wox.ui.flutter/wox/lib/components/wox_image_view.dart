@@ -28,6 +28,10 @@ class WoxImageView extends StatelessWidget {
     return uri.path.toLowerCase().endsWith('.svg');
   }
 
+  bool _isSvgFile(String path) {
+    return path.toLowerCase().endsWith('.svg');
+  }
+
   Widget _buildLoadingPlaceholder() {
     final indicatorSize = ((width ?? height ?? 24) * 0.65).clamp(14.0, 28.0);
 
@@ -73,6 +77,8 @@ class WoxImageView extends StatelessWidget {
     } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_ABSOLUTE_PATH.code) {
       if (woxImage.cachedFile == null) {
         content = const SizedBox(width: 24, height: 24);
+      } else if (_isSvgFile(woxImage.imageData)) {
+        content = SvgPicture.file(woxImage.cachedFile!, width: width, height: height, fit: BoxFit.contain, placeholderBuilder: (context) => _buildLoadingPlaceholder());
       } else {
         content = Image.file(
           woxImage.cachedFile!,

@@ -127,11 +127,11 @@ class WoxListItemView extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(item.title, style: TextStyle(fontSize: 16, color: titleColor), maxLines: 1, overflow: TextOverflow.ellipsis, strutStyle: _strutStyle),
+          Text(item.title, style: TextStyle(fontSize: 16, color: titleColor, height: 1.15), maxLines: 1, overflow: TextOverflow.ellipsis),
           if (item.subTitle.isNotEmpty)
             Padding(
               padding: _subtitlePadding,
-              child: Text(item.subTitle, style: TextStyle(color: subtitleColor, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis, strutStyle: _strutStyle),
+              child: Text(item.subTitle, style: TextStyle(color: subtitleColor, fontSize: 13, height: 1.15), maxLines: 1, overflow: TextOverflow.ellipsis),
             ),
         ],
       ),

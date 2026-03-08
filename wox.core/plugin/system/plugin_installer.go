@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"path"
+	"path/filepath"
 	"strings"
 	"wox/common"
 	"wox/plugin"
@@ -206,7 +208,21 @@ func resolvePluginIcon(filePath string, metadata plugin.Metadata) common.WoxImag
 		return common.WoxIcon
 	}
 
-	iconDataURL := fmt.Sprintf("data:image/png;base64,%s", base64.StdEncoding.EncodeToString(iconBytes))
+	return newArchiveIconImage(icon.ImageData, iconBytes)
+}
+
+func newArchiveIconImage(iconPath string, iconBytes []byte) common.WoxImage {
+	ext := strings.ToLower(filepath.Ext(iconPath))
+	if ext == ".svg" {
+		return common.NewWoxImageSvg(string(iconBytes))
+	}
+
+	mimeType := mime.TypeByExtension(ext)
+	if mimeType == "" {
+		mimeType = "image/png"
+	}
+
+	iconDataURL := fmt.Sprintf("data:%s;base64,%s", mimeType, base64.StdEncoding.EncodeToString(iconBytes))
 	return common.NewWoxImageBase64(iconDataURL)
 }
 

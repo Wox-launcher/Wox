@@ -7,6 +7,7 @@ import (
 	"image"
 	"image/color"
 	"image/jpeg"
+	"os"
 	"testing"
 	"wox/util"
 
@@ -66,5 +67,34 @@ func TestWoxImage_ToImage_Base64JPEG(t *testing.T) {
 
 	if img.Bounds().Dx() != 2 || img.Bounds().Dy() != 2 {
 		t.Fatalf("unexpected image size: %dx%d", img.Bounds().Dx(), img.Bounds().Dy())
+	}
+}
+
+func TestWoxImage_AbsolutePathSvg(t *testing.T) {
+	svgPath := fmt.Sprintf("%s/icon.svg", t.TempDir())
+	svgContent := `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect width="16" height="16" fill="#ff0000"/></svg>`
+
+	if err := os.WriteFile(svgPath, []byte(svgContent), 0644); err != nil {
+		t.Fatalf("failed to write svg file: %v", err)
+	}
+
+	woxImage := NewWoxImageAbsolutePath(svgPath)
+
+	img, err := woxImage.ToImage()
+	if err != nil {
+		t.Fatalf("expected svg absolute path can be decoded, got err: %v", err)
+	}
+
+	if img.Bounds().Dx() != 32 || img.Bounds().Dy() != 32 {
+		t.Fatalf("unexpected rendered svg size: %dx%d", img.Bounds().Dx(), img.Bounds().Dy())
+	}
+
+	pngImg, err := woxImage.ToPng()
+	if err != nil {
+		t.Fatalf("expected svg absolute path can be converted to png, got err: %v", err)
+	}
+
+	if pngImg.Bounds().Dx() != 32 || pngImg.Bounds().Dy() != 32 {
+		t.Fatalf("unexpected png svg size: %dx%d", pngImg.Bounds().Dx(), pngImg.Bounds().Dy())
 	}
 }

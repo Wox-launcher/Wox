@@ -11,6 +11,7 @@ import (
 	"image/png"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 	"wox/util"
@@ -100,7 +101,11 @@ func (w *WoxImage) ToPng() (image.Image, error) {
 	}
 
 	if w.ImageType == WoxImageTypeAbsolutePath {
-		if !strings.HasSuffix(w.ImageData, ".png") {
+		if isSvgFilePath(w.ImageData) {
+			return w.ToImage()
+		}
+
+		if !strings.EqualFold(filepath.Ext(w.ImageData), ".png") {
 			return nil, NOT_PNG_ERR
 		}
 
@@ -130,6 +135,15 @@ func (w *WoxImage) ToPng() (image.Image, error) {
 
 func (w *WoxImage) ToImage() (image.Image, error) {
 	if w.ImageType == WoxImageTypeAbsolutePath {
+		if isSvgFilePath(w.ImageData) {
+			svgData, err := os.ReadFile(w.ImageData)
+			if err != nil {
+				return nil, err
+			}
+
+			return renderSvgImage(string(svgData))
+		}
+
 		return imaging.Open(w.ImageData)
 	}
 	if w.ImageType == WoxImageTypeBase64 {
@@ -148,17 +162,7 @@ func (w *WoxImage) ToImage() (image.Image, error) {
 		return imaging.Decode(imgReader)
 	}
 	if w.ImageType == WoxImageTypeSvg {
-		width, height := 32, 32
-		icon, err := oksvg.ReadIconStream(strings.NewReader(w.ImageData), oksvg.WarnErrorMode)
-		if err != nil {
-			return nil, err
-		}
-		icon.SetTarget(0, 0, float64(width), float64(height))
-
-		rgba := image.NewRGBA(image.Rect(0, 0, width, height))
-		icon.Draw(rasterx.NewDasher(width, height, rasterx.NewScannerGV(width, height, rgba, rgba.Bounds())), 1)
-		//finalImg := cropTransparentPaddings(rgba)
-		return rgba, nil
+		return renderSvgImage(w.ImageData)
 	}
 	if w.ImageType == WoxImageTypeEmoji {
 		emojiInfo, getErr := gomoji.GetInfo(w.ImageData)
@@ -184,6 +188,23 @@ func (w *WoxImage) ToImage() (image.Image, error) {
 	}
 
 	return nil, fmt.Errorf("unsupported image type: %s", w.ImageType)
+}
+
+func isSvgFilePath(filePath string) bool {
+	return strings.EqualFold(filepath.Ext(filePath), ".svg")
+}
+
+func renderSvgImage(svg string) (image.Image, error) {
+	width, height := 32, 32
+	icon, err := oksvg.ReadIconStream(strings.NewReader(svg), oksvg.WarnErrorMode)
+	if err != nil {
+		return nil, err
+	}
+	icon.SetTarget(0, 0, float64(width), float64(height))
+
+	rgba := image.NewRGBA(image.Rect(0, 0, width, height))
+	icon.Draw(rasterx.NewDasher(width, height, rasterx.NewScannerGV(width, height, rgba, rgba.Bounds())), 1)
+	return rgba, nil
 }
 
 func (w *WoxImage) IsValid() bool {
