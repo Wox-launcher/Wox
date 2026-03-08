@@ -176,6 +176,35 @@ const unsigned char *GetPrefPaneIcon(const char *prefPanePath, size_t *length) {
     }
 }
 
+char* GetLocalizedAppName(const char *appPath) {
+    @autoreleasepool {
+        NSString *path = [NSString stringWithUTF8String:appPath];
+        if (!path) {
+            return NULL;
+        }
+
+        NSBundle *bundle = [NSBundle bundleWithPath:path];
+        if (!bundle) {
+            return NULL;
+        }
+
+        NSString *name = [bundle objectForInfoDictionaryKey:@"CFBundleDisplayName"];
+        if (!name || [name length] == 0) {
+            name = [bundle objectForInfoDictionaryKey:@"CFBundleName"];
+        }
+        if (!name || [name length] == 0) {
+            return NULL;
+        }
+
+        const char *utf8 = [name UTF8String];
+        if (!utf8) {
+            return NULL;
+        }
+
+        return strdup(utf8);
+    }
+}
+
 int get_process_list(struct kinfo_proc **procList, size_t *procCount) {
     int err;
     size_t length;

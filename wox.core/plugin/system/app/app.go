@@ -38,16 +38,26 @@ const (
 )
 
 type appInfo struct {
-	Name string
-	Path string
-	Icon common.WoxImage
-	Type AppType
-
-	LastModifiedUnix int64 `json:"last_modified_unix,omitempty"`
+	Name string `json:"name"`
+	// SearchableNames keeps extra aliases for matching when Name alone is not stable enough.
+	// On macOS without Spotlight metadata, the searchable value may come from the localized bundle name,
+	// Info.plist, or the .app filename, and those names can differ for non-Latin apps.
+	SearchableNames  []string        `json:"searchable_names,omitempty"`
+	Path             string          `json:"path"`
+	Icon             common.WoxImage `json:"icon"`
+	Type             AppType         `json:"type,omitempty"`
+	LastModifiedUnix int64           `json:"last_modified_unix,omitempty"`
 
 	Pid           int  `json:"-"`
 	IsDefaultIcon bool `json:"-"`
 }
+
+type appCacheFile struct {
+	Version int       `json:"version"`
+	Apps    []appInfo `json:"apps"`
+}
+
+const appCacheVersion = 2
 
 type appContextData struct {
 	Name string `json:"name"`
@@ -60,6 +70,28 @@ func (a *appInfo) GetDisplayPath() string {
 		return ""
 	}
 	return a.Path
+}
+
+func (a *appInfo) GetSearchCandidates(displayName string) []string {
+	candidates := []string{displayName, a.Name}
+	candidates = append(candidates, a.SearchableNames...)
+
+	baseName := filepath.Base(a.Path)
+	candidates = append(candidates, baseName)
+	if ext := filepath.Ext(baseName); ext != "" {
+		candidates = append(candidates, strings.TrimSuffix(baseName, ext))
+	}
+
+	var filtered []string
+	for _, candidate := range candidates {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		filtered = append(filtered, candidate)
+	}
+
+	return util.UniqueStrings(filtered)
 }
 
 func (a *appInfo) IsRunning() bool {
@@ -283,9 +315,21 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 			displayName = a.api.GetTranslation(ctx, displayName)
 		}
 
-		isNameMatch, nameScore := plugin.IsStringMatchScore(ctx, displayName, query.Search)
-		isPathNameMatch, pathNameScore := plugin.IsStringMatchScore(ctx, filepath.Base(info.Path), query.Search)
-		if isNameMatch || isPathNameMatch {
+		isMatch := false
+		bestScore := int64(0)
+		for _, candidate := range info.GetSearchCandidates(displayName) {
+			matched, score := plugin.IsStringMatchScore(ctx, candidate, query.Search)
+			if !matched {
+				continue
+			}
+
+			if !isMatch || score > bestScore {
+				isMatch = true
+				bestScore = score
+			}
+		}
+
+		if isMatch {
 			displayPath := info.GetDisplayPath()
 			if info.Type == AppTypeWindowsSetting {
 				displayPath = a.api.GetTranslation(ctx, "i18n:plugin_app_windows_settings_subtitle")
@@ -298,7 +342,7 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 				Title:    displayName,
 				SubTitle: displayPath,
 				Icon:     info.Icon,
-				Score:    util.MaxInt64(nameScore, pathNameScore),
+				Score:    bestScore,
 				Actions: a.buildAppActions(info, displayName, common.ContextData{
 					"name": info.Name,
 					"path": info.Path,
@@ -727,7 +771,10 @@ func (a *ApplicationPlugin) saveAppToCache(ctx context.Context) {
 	}
 
 	var cachePath = a.getAppCachePath()
-	cacheContent, marshalErr := json.Marshal(a.apps)
+	cacheContent, marshalErr := json.Marshal(appCacheFile{
+		Version: appCacheVersion,
+		Apps:    a.apps,
+	})
 	if marshalErr != nil {
 		a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error marshalling app cache: %s", marshalErr.Error()))
 		return
@@ -742,6 +789,19 @@ func (a *ApplicationPlugin) saveAppToCache(ctx context.Context) {
 
 func (a *ApplicationPlugin) getAppCachePath() string {
 	return path.Join(util.GetLocation().GetCacheDirectory(), "wox-app-cache.json")
+}
+
+func parseAppCacheContent(cacheContent []byte) ([]appInfo, error) {
+	var cacheFile appCacheFile
+	if err := json.Unmarshal(cacheContent, &cacheFile); err != nil {
+		return nil, fmt.Errorf("error unmarshalling app cache file: %w", err)
+	}
+
+	if cacheFile.Version != appCacheVersion {
+		return nil, fmt.Errorf("app cache version mismatch: got %d want %d", cacheFile.Version, appCacheVersion)
+	}
+
+	return cacheFile.Apps, nil
 }
 
 func (a *ApplicationPlugin) loadAppCache(ctx context.Context) ([]appInfo, error) {
@@ -759,11 +819,10 @@ func (a *ApplicationPlugin) loadAppCache(ctx context.Context) ([]appInfo, error)
 		return nil, readErr
 	}
 
-	var apps []appInfo
-	unmarshalErr := json.Unmarshal(cacheContent, &apps)
-	if unmarshalErr != nil {
-		a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error unmarshalling app cache file: %s", unmarshalErr.Error()))
-		return nil, unmarshalErr
+	apps, err := parseAppCacheContent(cacheContent)
+	if err != nil {
+		a.api.Log(ctx, plugin.LogLevelWarning, err.Error())
+		return nil, err
 	}
 
 	a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("loaded %d apps from cache, cost %d ms", len(apps), util.GetSystemTimestamp()-startTimestamp))

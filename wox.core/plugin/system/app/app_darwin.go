@@ -8,6 +8,7 @@ package app
 
 const unsigned char *GetPrefPaneIcon(const char *prefPanePath, size_t *length);
 const unsigned char *GenerateSFSymbolIcon(const char *symbolName, const char *colorName, const char *iconStyle, size_t *length);
+char* GetLocalizedAppName(const char *appPath);
 int get_process_list(struct kinfo_proc **procList, size_t *procCount);
 char* get_process_path(pid_t pid);
 */
@@ -83,19 +84,22 @@ func (a *MacRetriever) GetAppExtensions(ctx context.Context) []string {
 func (a *MacRetriever) ParseAppInfo(ctx context.Context, path string) (appInfo, error) {
 	appName, err := a.getAppNameFromMdls(path)
 	if err != nil || appName == "(null)" || strings.TrimSpace(appName) == "" {
-		// Spotlight/mdls unavailable or returned invalid value, fallback to Info.plist then filename
+		// Spotlight/mdls unavailable or returned invalid value, fallback to localized bundle name, Info.plist, then filename.
 		if err != nil {
-			a.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to get app name from mdls(%s): %s, falling back to Info.plist/filename", path, err.Error()))
+			a.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to get app name from mdls(%s): %s, falling back to localized bundle name/Info.plist/filename", path, err.Error()))
 		} else {
-			a.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("mdls returned empty/(null) for %s, falling back to Info.plist/filename", path))
+			a.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("mdls returned empty/(null) for %s, falling back to localized bundle name/Info.plist/filename", path))
 		}
 
-		if nameFromPlist, err2 := a.getAppNameFromPlist(ctx, path); err2 == nil && strings.TrimSpace(nameFromPlist) != "" {
+		nameFromPlist, plistErr := a.getAppNameFromPlist(ctx, path)
+		if localizedName := strings.TrimSpace(a.getLocalizedAppName(path)); localizedName != "" {
+			appName = localizedName
+		} else if plistErr == nil && strings.TrimSpace(nameFromPlist) != "" {
 			appName = nameFromPlist
 		} else {
 			base := filepath.Base(path)
 			appName = base
-			a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("using filename as app name for %s (plistErr=%v)", path, err2))
+			a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("using filename as app name for %s (plistErr=%v)", path, plistErr))
 		}
 	}
 
@@ -105,8 +109,9 @@ func (a *MacRetriever) ParseAppInfo(ctx context.Context, path string) (appInfo, 
 	}
 
 	info := appInfo{
-		Name: appName,
-		Path: path,
+		Name:            appName,
+		Path:            path,
+		SearchableNames: a.getAppSearchableNames(ctx, path, appName),
 	}
 	icon, iconErr := a.getMacAppIcon(ctx, path)
 	if iconErr != nil {
@@ -132,6 +137,47 @@ func (a *MacRetriever) getAppNameFromMdls(path string) (string, error) {
 	}
 
 	return strings.TrimSpace(string(out)), nil
+}
+
+func (a *MacRetriever) getLocalizedAppName(appPath string) string {
+	cPath := C.CString(appPath)
+	defer C.free(unsafe.Pointer(cPath))
+
+	cName := C.GetLocalizedAppName(cPath)
+	if cName == nil {
+		return ""
+	}
+	defer C.free(unsafe.Pointer(cName))
+
+	return strings.TrimSpace(C.GoString(cName))
+}
+
+func (a *MacRetriever) getAppSearchableNames(ctx context.Context, appPath string, primaryName string) []string {
+	searchableNames := []string{
+		primaryName,
+		a.getLocalizedAppName(appPath),
+	}
+
+	if plistName, err := a.getAppNameFromPlist(ctx, appPath); err == nil {
+		searchableNames = append(searchableNames, plistName)
+	}
+
+	baseName := filepath.Base(appPath)
+	searchableNames = append(searchableNames, baseName)
+	if strings.HasSuffix(baseName, ".app") {
+		searchableNames = append(searchableNames, strings.TrimSuffix(baseName, ".app"))
+	}
+
+	var filtered []string
+	for _, name := range searchableNames {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		filtered = append(filtered, name)
+	}
+
+	return util.UniqueStrings(filtered)
 }
 
 func (a *MacRetriever) getAppNameFromPlist(ctx context.Context, appPath string) (string, error) {
