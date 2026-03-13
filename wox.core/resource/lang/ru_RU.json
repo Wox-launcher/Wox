@@ -772,6 +772,7 @@
   "plugin_file_everything_please_run_everything": "Пожалуйста, запустите Everything",
   "plugin_file_everything_goto_website": "Перейти на сайт Everything",
   "plugin_manager_query_failed": "Запрос %s не выполнен",
+  "plugin_manager_open_plugin_settings": "Открыть настройки плагина",
   "plugin_manager_unpin_in_query": "Открепить от текущего запроса",
   "plugin_manager_pin_in_query": "Закрепить в текущем запросе",
   "plugin_manager_pin_in_query_success": "Закреплено, будет приоритетным в текущем запросе",

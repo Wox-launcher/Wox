@@ -818,6 +818,7 @@
   "plugin_file_everything_please_run_everything": "请运行 Everything",
   "plugin_file_everything_goto_website": "前往 Everything 官网",
   "plugin_manager_query_failed": "%s 查询失败",
+  "plugin_manager_open_plugin_settings": "打开插件设置",
   "plugin_manager_unpin_in_query": "取消查询置顶",
   "plugin_manager_pin_in_query": "在当前查询中置顶",
   "plugin_manager_pin_in_query_success": "已置顶，将在当前查询中优先显示",

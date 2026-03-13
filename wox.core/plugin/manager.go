@@ -873,6 +873,8 @@ func (m *Manager) GetResultForFailedQuery(ctx context.Context, pluginMetadata Me
 }
 
 func (m *Manager) getDefaultActions(ctx context.Context, pluginInstance *Instance, query Query, title, subTitle string) (defaultActions []QueryResultAction) {
+	const openPluginSettingsActionID = "wox.system.open_plugin_settings"
+
 	// Declare both actions first
 	var addToFavoriteAction func(context.Context, ActionContext)
 	var removeFromFavoriteAction func(context.Context, ActionContext)
@@ -936,6 +938,16 @@ func (m *Manager) getDefaultActions(ctx context.Context, pluginInstance *Instanc
 			IsSystemAction:         true,
 			PreventHideAfterAction: true,
 			Action:                 addToFavoriteAction,
+		})
+	}
+
+	if len(pluginInstance.Metadata.SettingDefinitions) > 0 {
+		defaultActions = append(defaultActions, QueryResultAction{
+			Id:                     openPluginSettingsActionID,
+			Name:                   i18n.GetI18nManager().TranslateWox(ctx, "plugin_manager_open_plugin_settings"),
+			Icon:                   common.SettingIcon,
+			IsSystemAction:         true,
+			PreventHideAfterAction: true,
 		})
 	}
 
@@ -1158,6 +1170,8 @@ func (m *Manager) buildResultUI(resultCache *QueryResultCache, queryId string) Q
 	}
 	resultUI := uiResult.ToUI()
 	resultUI.QueryId = queryId
+	resultUI.PluginId = resultCache.PluginInstance.Metadata.Id
+	resultUI.PluginName = resultCache.PluginInstance.Metadata.GetName(context.Background())
 	return resultUI
 }
 
@@ -1796,7 +1810,10 @@ func (m *Manager) QueryFallback(ctx context.Context, query Query, queryPlugin *I
 	}
 
 	queryResultsUI := lo.Map(queryResults, func(item QueryResult, index int) QueryResultUI {
-		return item.ToUI()
+		resultUI := item.ToUI()
+		resultUI.PluginId = queryPlugin.Metadata.Id
+		resultUI.PluginName = queryPlugin.GetName(ctx)
+		return resultUI
 	})
 	results = append(results, queryResultsUI...)
 	return results
@@ -1806,7 +1823,10 @@ func (m *Manager) queryParallel(ctx context.Context, pluginInstance *Instance, q
 	util.Go(ctx, fmt.Sprintf("[%s] parallel query", pluginInstance.GetName(ctx)), func() {
 		queryResults := m.queryForPlugin(ctx, pluginInstance, query)
 		results <- lo.Map(queryResults, func(item QueryResult, index int) QueryResultUI {
-			return item.ToUI()
+			resultUI := item.ToUI()
+			resultUI.PluginId = pluginInstance.Metadata.Id
+			resultUI.PluginName = pluginInstance.GetName(ctx)
+			return resultUI
 		})
 		counter.Add(-1)
 		if counter.Load() == 0 {

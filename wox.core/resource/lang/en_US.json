@@ -817,6 +817,7 @@
   "plugin_file_everything_please_run_everything": "Please run Everything",
   "plugin_file_everything_goto_website": "Go to Everything website",
   "plugin_manager_query_failed": "%s query failed",
+  "plugin_manager_open_plugin_settings": "Open Plugin Settings",
   "plugin_manager_unpin_in_query": "Unpin from current query",
   "plugin_manager_pin_in_query": "Pin in current query",
   "plugin_manager_pin_in_query_success": "Pinned, will be prioritized in current query",
