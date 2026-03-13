@@ -1156,7 +1156,7 @@ func (m *Manager) buildResultUI(resultCache *QueryResultCache, queryId string) Q
 			PreviewData: fmt.Sprintf("/preview?sessionId=%s&queryId=%s&id=%s", resultCache.Query.SessionId, queryId, uiResult.Id),
 		}
 	}
-	resultUI := uiResult.ToUI()
+	resultUI := uiResult.ToUI(resultCache.PluginInstance)
 	resultUI.QueryId = queryId
 	return resultUI
 }
@@ -1796,7 +1796,7 @@ func (m *Manager) QueryFallback(ctx context.Context, query Query, queryPlugin *I
 	}
 
 	queryResultsUI := lo.Map(queryResults, func(item QueryResult, index int) QueryResultUI {
-		return item.ToUI()
+		return item.ToUI(queryPlugin)
 	})
 	results = append(results, queryResultsUI...)
 	return results
@@ -1806,7 +1806,7 @@ func (m *Manager) queryParallel(ctx context.Context, pluginInstance *Instance, q
 	util.Go(ctx, fmt.Sprintf("[%s] parallel query", pluginInstance.GetName(ctx)), func() {
 		queryResults := m.queryForPlugin(ctx, pluginInstance, query)
 		results <- lo.Map(queryResults, func(item QueryResult, index int) QueryResultUI {
-			return item.ToUI()
+			return item.ToUI(pluginInstance)
 		})
 		counter.Add(-1)
 		if counter.Load() == 0 {
@@ -2318,7 +2318,7 @@ func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string
 			restored.Actions = append(restored.Actions, removeMRUAction)
 
 			polishedResult := m.PolishResult(ctx, pluginInstance, query, *restored)
-			results = append(results, polishedResult.ToUI())
+			results = append(results, polishedResult.ToUI(pluginInstance))
 		}
 	}
 

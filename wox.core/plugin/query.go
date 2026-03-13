@@ -212,7 +212,15 @@ type FormActionContext struct {
 	Values map[string]string
 }
 
-func (q *QueryResult) ToUI() QueryResultUI {
+func (q *QueryResult) ToUI(pluginInstance *Instance) QueryResultUI {
+	// Get plugin info from plugin instance
+	var pluginId string
+	var pluginName string
+	if pluginInstance != nil {
+		pluginId = pluginInstance.Metadata.Id
+		pluginName = pluginInstance.Metadata.GetName(context.Background())
+	}
+
 	return QueryResultUI{
 		Id:         q.Id,
 		Title:      q.Title,
@@ -241,22 +249,26 @@ func (q *QueryResult) ToUI() QueryResultUI {
 				IsSystemAction:         action.IsSystemAction,
 			}
 		}),
+		PluginId:   pluginId,
+		PluginName: pluginName,
 	}
 }
 
 type QueryResultUI struct {
-	QueryId    string
-	Id         string
-	Title      string
-	SubTitle   string
-	Icon       common.WoxImage
-	Preview    WoxPreview
-	Score      int64
-	Group      string
-	GroupScore int64
-	Tails      []QueryResultTail
-	Actions    []QueryResultActionUI
-	IsGroup    bool
+	QueryId     string
+	Id          string
+	Title       string
+	SubTitle    string
+	Icon        common.WoxImage
+	Preview     WoxPreview
+	Score       int64
+	Group       string
+	GroupScore  int64
+	Tails       []QueryResultTail
+	Actions     []QueryResultActionUI
+	IsGroup     bool
+	PluginId    string
+	PluginName  string
 }
 
 // PushResultsPayload is used to push additional results to UI for a query.

@@ -58,6 +58,7 @@ class WoxLauncherController extends GetxController {
   static const String localActionTogglePreviewFullscreenId = "__local_toggle_preview_fullscreen__";
   static const String localActionPreviewSearchId = "__local_preview_search__";
   static const String localActionOpenUpdateId = "__local_open_update__";
+  static const String localActionOpenPluginSettingsId = "__local_open_plugin_settings__";
 
   //query related variables
   final currentQuery = PlainQuery.empty().obs;
@@ -438,6 +439,30 @@ class WoxLauncherController extends GetxController {
         ),
       );
     }
+
+    // Add "Open Plugin Settings" action for plugin results
+    actions.add(
+      WoxResultAction.local(
+        id: localActionOpenPluginSettingsId,
+        name: "Open Plugin Settings",
+        hotkey: "",
+        emoji: "⚙️",
+        handler: (traceId) {
+          final activeResult = getActiveResult();
+          if (activeResult == null) {
+            return false;
+          }
+          // Use pluginId from WoxQueryResult directly
+          final pluginId = activeResult.pluginId;
+          if (pluginId.isEmpty) {
+            return false;
+          }
+          // Open plugin settings with the plugin ID
+          openSetting(traceId, SettingWindowContext(path: "/plugin/setting", param: pluginId));
+          return true;
+        },
+      ),
+    );
 
     if (!isShowPreviewPanel.value) {
       return actions;

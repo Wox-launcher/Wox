@@ -105,6 +105,10 @@ class WoxQueryResult {
   // Used by the frontend to determine if this result is a group
   late bool isGroup;
 
+  // Plugin info that generated this result
+  late String pluginId;
+  late String pluginName;
+
   WoxQueryResult({
     required this.queryId,
     required this.id,
@@ -118,6 +122,8 @@ class WoxQueryResult {
     required this.tails,
     required this.actions,
     required this.isGroup,
+    required this.pluginId,
+    required this.pluginName,
   });
 
   WoxQueryResult.empty() {
@@ -133,6 +139,8 @@ class WoxQueryResult {
     tails = [];
     actions = [];
     isGroup = false;
+    pluginId = "";
+    pluginName = "";
   }
 
   WoxQueryResult.fromJson(Map<String, dynamic> json) {
@@ -167,6 +175,9 @@ class WoxQueryResult {
     }
 
     isGroup = json['IsGroup'] == true;
+
+    pluginId = json['PluginId'] ?? "";
+    pluginName = json['PluginName'] ?? "";
   }
 
   Map<String, dynamic> toJson() {
@@ -183,6 +194,8 @@ class WoxQueryResult {
     data['Actions'] = actions.map((v) => v.toJson()).toList();
     data['Tails'] = tails.map((v) => v.toJson()).toList();
     data['IsGroup'] = isGroup;
+    data['PluginId'] = pluginId;
+    data['PluginName'] = pluginName;
     return data;
   }
 }
