@@ -569,5 +569,37 @@
         "plugin_desc": "在 Wox 中显示 Codex 限额用量"
       }
     }
+  },
+  {
+    "Id": "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+    "Name": "i18n:plugin_name",
+    "Author": "qianlifeng",
+    "Version": "0.0.1",
+    "MinWoxVersion": "2.0.0",
+    "Runtime": "nodejs",
+    "Description": "i18n:plugin_description",
+    "IconUrl": "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.Projects/main/images/app.svg",
+    "Website": "https://github.com/Wox-launcher/Wox.Plugin.Projects",
+    "DownloadUrl": "https://github.com/Wox-launcher/Wox.Plugin.Projects/releases/latest/download/Wox.Plugin.Projects.wox",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.Projects/main/screenshot.png"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
+    "DateCreated": "2026-03-17 21:20:46",
+    "DateUpdated": "2026-03-17 21:20:46",
+    "I18n": {
+      "en_US": {
+        "plugin_name": "Git Projects",
+        "plugin_description": "Quick search and manage local Git projects"
+      },
+      "zh_CN": {
+        "plugin_name": "Git 项目",
+        "plugin_description": "快速搜索和管理本地 Git 项目"
+      }
+    }
   }
 ]
