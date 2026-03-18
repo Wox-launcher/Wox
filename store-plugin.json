@@ -574,7 +574,7 @@
     "Id": "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
     "Name": "i18n:plugin_name",
     "Author": "qianlifeng",
-    "Version": "0.0.1",
+    "Version": "0.0.2",
     "MinWoxVersion": "2.0.0",
     "Runtime": "nodejs",
     "Description": "i18n:plugin_description",
@@ -590,7 +590,7 @@
       "Linux"
     ],
     "DateCreated": "2026-03-17 21:20:46",
-    "DateUpdated": "2026-03-17 21:20:46",
+    "DateUpdated": "2026-03-18 03:51:22",
     "I18n": {
       "en_US": {
         "plugin_name": "Git Projects",
