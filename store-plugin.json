@@ -542,7 +542,7 @@
     "Id": "2f326a0c-cd9f-4ddf-9b45-f8abf082283f",
     "Name": "i18n:plugin_name",
     "Author": "Wox-launcher",
-    "Version": "0.1.0",
+    "Version": "0.2.0",
     "MinWoxVersion": "2.0.0",
     "Runtime": "nodejs",
     "Description": "i18n:plugin_desc",
@@ -558,7 +558,7 @@
       "Linux"
     ],
     "DateCreated": "2026-03-08 15:56:00",
-    "DateUpdated": "2026-03-08 15:56:00",
+    "DateUpdated": "2026-03-19 12:09:12",
     "I18n": {
       "en_US": {
         "plugin_name": "Codex Usage",
@@ -574,7 +574,7 @@
     "Id": "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
     "Name": "i18n:plugin_name",
     "Author": "qianlifeng",
-    "Version": "0.0.3",
+    "Version": "0.0.4",
     "MinWoxVersion": "2.0.0",
     "Runtime": "nodejs",
     "Description": "i18n:plugin_description",
@@ -590,7 +590,7 @@
       "Linux"
     ],
     "DateCreated": "2026-03-17 21:20:46",
-    "DateUpdated": "2026-03-18 06:21:36",
+    "DateUpdated": "2026-03-19 12:09:12",
     "I18n": {
       "en_US": {
         "plugin_name": "Git Projects",
@@ -606,7 +606,7 @@
     "Id": "6dd42f91-009d-4d14-909c-97f25454eea7",
     "Name": "i18n:plugin_name",
     "Author": "qianlifeng",
-    "Version": "0.0.3",
+    "Version": "0.0.4",
     "MinWoxVersion": "2.0.0",
     "Runtime": "nodejs",
     "Description": "i18n:plugin_description",
@@ -622,7 +622,7 @@
       "Linux"
     ],
     "DateCreated": "2026-03-18 11:14:02",
-    "DateUpdated": "2026-03-18 06:21:37",
+    "DateUpdated": "2026-03-19 12:09:13",
     "I18n": {
       "en_US": {
         "plugin_name": "Awake",
