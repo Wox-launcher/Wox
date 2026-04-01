@@ -658,7 +658,7 @@
         "Id": "7487f0be-1afd-49a8-b257-c41459c5afa9",
         "Name": "Quick Links",
         "Author": "bonemind",
-        "Version": "0.0.1",
+        "Version": "0.0.2",
         "MinWoxVersion": "2.0.0",
         "Runtime": "nodejs",
         "Description": "Quickly open named URLs in your browser",
@@ -674,6 +674,6 @@
             "Darwin"
         ],
         "DateCreated": "2026-03-30 00:00:00",
-        "DateUpdated": "2026-03-30 00:00:00"
+        "DateUpdated": "2026-04-01 15:27:18"
     }
 ]
