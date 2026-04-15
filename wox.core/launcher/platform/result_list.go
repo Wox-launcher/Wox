@@ -9,6 +9,7 @@ type ResultListItem struct {
 	Title    string
 	Subtitle string
 	IsGroup  bool
+	Preview  PreviewContent
 }
 
 type ResultListState struct {
@@ -16,8 +17,12 @@ type ResultListState struct {
 	Frame         Rect
 	Items         []ResultListItem
 	SelectedIndex int
+	RowHeight     int
 }
 
 func (s ResultListState) ItemHeight() int {
+	if s.RowHeight > 0 {
+		return s.RowHeight
+	}
 	return defaultResultListItemHeight
 }

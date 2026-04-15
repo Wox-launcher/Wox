@@ -5,12 +5,14 @@ package platform
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync"
 	"syscall"
 	"time"
 	"unsafe"
 	"wox/common"
 	launchertheme "wox/launcher/theme"
+	"wox/util"
 
 	"github.com/lxn/win"
 )
@@ -27,14 +29,22 @@ var (
 	procDwmSetWindowAttribute        = modDwmapi.NewProc("DwmSetWindowAttribute")
 	procDwmExtendFrameIntoClientArea = modDwmapi.NewProc("DwmExtendFrameIntoClientArea")
 	modGdi32                         = syscall.NewLazyDLL("gdi32.dll")
+	procCreateFontW                  = modGdi32.NewProc("CreateFontW")
 	procCreateSolidBrush             = modGdi32.NewProc("CreateSolidBrush")
 	procDeleteObject                 = modGdi32.NewProc("DeleteObject")
 	modUser32                        = syscall.NewLazyDLL("user32.dll")
 	procDrawTextW                    = modUser32.NewProc("DrawTextW")
+	procFillRect                     = modUser32.NewProc("FillRect")
 	procSetWindowCompositionAttr     = modUser32.NewProc("SetWindowCompositionAttribute")
+	modUxTheme                       = syscall.NewLazyDLL("uxtheme.dll")
+	procBufferedPaintInit            = modUxTheme.NewProc("BufferedPaintInit")
+	procBeginBufferedPaint           = modUxTheme.NewProc("BeginBufferedPaint")
+	procBufferedPaintClear           = modUxTheme.NewProc("BufferedPaintClear")
+	procEndBufferedPaint             = modUxTheme.NewProc("EndBufferedPaint")
 
 	nativeShellControllers     sync.Map
 	nativeShellEditControllers sync.Map
+	bufferedPaintInitOnce      sync.Once
 )
 
 const (
@@ -56,8 +66,21 @@ const (
 	defaultResultTitleHeight      = 24
 	defaultResultSubtitleHeight   = 18
 	defaultResultItemSpacingY     = 6
+	defaultPaneGapWidth           = 16
+	defaultPreviewTitleHeight     = 28
+	defaultPreviewPaddingX        = 12
+	defaultPreviewPaddingY        = 8
+	defaultWindowTitleFontSize    = 13
+	defaultResultTitleFontSize    = 18
+	defaultResultSubtitleFontSize = 12
+	defaultPreviewTitleFontSize   = 16
+	defaultPreviewBodyFontSize    = 13
+	defaultUIFontFamily           = "Segoe UI"
 	ecLeftMargin                  = 0x1
 	ecRightMargin                 = 0x2
+	fwNormal                      = 400
+	fwSemibold                    = 600
+	bpbfTopDownDIB                = 2
 )
 
 type margins struct {
@@ -100,7 +123,12 @@ type windowsNativeShellController struct {
 	commands     chan func()
 	threadDone   chan struct{}
 
-	queryBrush win.HBRUSH
+	queryBrush      win.HBRUSH
+	titleFont       win.HFONT
+	resultFont      win.HFONT
+	subFont         win.HFONT
+	previewFont     win.HFONT
+	previewBodyFont win.HFONT
 }
 
 type WindowsNativeShellHost struct {
@@ -142,8 +170,7 @@ func (h *WindowsNativeShellHost) Stop(ctx context.Context) error {
 }
 
 func (h *WindowsNativeShellHost) Show(ctx context.Context, request ShowRequest) error {
-	_ = ctx
-	return h.controller.show(request)
+	return h.controller.show(ctx, request)
 }
 
 func (h *WindowsNativeShellHost) Hide(ctx context.Context) error {
@@ -163,9 +190,25 @@ func (h *WindowsNativeShellHost) NativeWindowHandle(ctx context.Context) uintptr
 
 func (h *WindowsNativeShellHost) DebugSnapshot(ctx context.Context) HostDebugSnapshot {
 	_ = ctx
+	var frame Rect
+	h.controller.mu.RLock()
+	windowHandle := h.controller.windowHandle
+	h.controller.mu.RUnlock()
+	if windowHandle != 0 {
+		var rect win.RECT
+		if win.GetWindowRect(windowHandle, &rect) {
+			frame = Rect{
+				X:      int(rect.Left),
+				Y:      int(rect.Top),
+				Width:  int(rect.Right - rect.Left),
+				Height: int(rect.Bottom - rect.Top),
+			}
+		}
+	}
 	return HostDebugSnapshot{
 		Visible:            h.controller.isVisible(),
 		NativeWindowHandle: h.controller.nativeWindowHandle(),
+		WindowFrame:        frame,
 	}
 }
 
@@ -303,7 +346,7 @@ func (c *windowsNativeShellController) stop() error {
 	return nil
 }
 
-func (c *windowsNativeShellController) show(request ShowRequest) error {
+func (c *windowsNativeShellController) show(ctx context.Context, request ShowRequest) error {
 	return c.call(func() {
 		c.mu.Lock()
 		c.showRequest = request
@@ -315,6 +358,7 @@ func (c *windowsNativeShellController) show(request ShowRequest) error {
 		c.applyThemeAppearanceLocked()
 		c.applyShowRequestLocked()
 		c.applyTextInputStateLocked()
+		util.GetLogger().Info(ctx, fmt.Sprintf("native shell show resultsVisible=%v results=%d selectedIndex=%d previewVisible=%v", request.Results.Visible, len(request.Results.Items), request.Results.SelectedIndex, request.Preview.Visible))
 		if c.windowHandle != 0 {
 			win.InvalidateRect(c.windowHandle, nil, true)
 		}
@@ -466,6 +510,10 @@ func (c *windowsNativeShellController) call(fn func()) error {
 
 func ensureNativeShellWindowClass() error {
 	nativeShellClassOnce.Do(func() {
+		bufferedPaintInitOnce.Do(func() {
+			procBufferedPaintInit.Call()
+		})
+
 		var wc win.WNDCLASSEX
 		wc.CbSize = uint32(unsafe.Sizeof(wc))
 		wc.LpfnWndProc = nativeShellWndProc
@@ -527,12 +575,28 @@ func (c *windowsNativeShellController) createNativeControlsLocked() error {
 
 	nativeShellControllers.Store(uintptr(window), c)
 	nativeShellEditControllers.Store(uintptr(edit), c)
+
+	titleFont := createUIFont(defaultWindowTitleFontSize, fwSemibold)
+	resultFont := createUIFont(defaultResultTitleFontSize, fwSemibold)
+	subFont := createUIFont(defaultResultSubtitleFontSize, fwNormal)
+	previewFont := createUIFont(defaultPreviewTitleFontSize, fwSemibold)
+	previewBodyFont := createUIFont(defaultPreviewBodyFontSize, fwNormal)
+
 	c.mu.Lock()
 	c.windowHandle = window
 	c.editControl = edit
 	c.editWndProc = editWndProc
+	c.titleFont = titleFont
+	c.resultFont = resultFont
+	c.subFont = subFont
+	c.previewFont = previewFont
+	c.previewBodyFont = previewBodyFont
 	c.refreshBrushesLocked()
 	c.mu.Unlock()
+
+	if previewBodyFont != 0 {
+		win.SendMessage(edit, win.WM_SETFONT, uintptr(previewBodyFont), 1)
+	}
 
 	applyNativeShellAppearance(window, c.appearance, launchertheme.DefaultPaintTheme())
 	return nil
@@ -542,6 +606,26 @@ func (c *windowsNativeShellController) destroyNativeControlsLocked() {
 	if c.queryBrush != 0 {
 		deleteGDIObject(uintptr(c.queryBrush))
 		c.queryBrush = 0
+	}
+	if c.previewBodyFont != 0 {
+		deleteGDIObject(uintptr(c.previewBodyFont))
+		c.previewBodyFont = 0
+	}
+	if c.previewFont != 0 {
+		deleteGDIObject(uintptr(c.previewFont))
+		c.previewFont = 0
+	}
+	if c.subFont != 0 {
+		deleteGDIObject(uintptr(c.subFont))
+		c.subFont = 0
+	}
+	if c.resultFont != 0 {
+		deleteGDIObject(uintptr(c.resultFont))
+		c.resultFont = 0
+	}
+	if c.titleFont != 0 {
+		deleteGDIObject(uintptr(c.titleFont))
+		c.titleFont = 0
 	}
 	if c.editControl != 0 {
 		if c.editWndProc != 0 {
@@ -577,6 +661,10 @@ func (c *windowsNativeShellController) applyShowRequestLocked() {
 	if width <= 0 {
 		width = defaultShellWidth
 	}
+	height := c.showRequest.WindowHeight
+	if height <= 0 {
+		height = defaultShellHeight
+	}
 
 	win.SetWindowPos(
 		c.windowHandle,
@@ -584,7 +672,7 @@ func (c *windowsNativeShellController) applyShowRequestLocked() {
 		int32(x),
 		int32(y),
 		int32(width),
-		int32(defaultShellHeight),
+		int32(height),
 		win.SWP_NOACTIVATE,
 	)
 	win.ShowWindow(c.windowHandle, win.SW_SHOW)
@@ -738,27 +826,37 @@ func nativeShellEditWindowProc(hwnd win.HWND, msg uint32, wParam, lParam uintptr
 
 func (c *windowsNativeShellController) handlePaint(hwnd win.HWND) uintptr {
 	var ps win.PAINTSTRUCT
-	hdc := win.BeginPaint(hwnd, &ps)
+	paintHDC := win.BeginPaint(hwnd, &ps)
 	defer win.EndPaint(hwnd, &ps)
 
 	var rect win.RECT
 	win.GetClientRect(hwnd, &rect)
+	hdc, paintBuffer := beginBufferedPaint(paintHDC, &rect)
+	if paintBuffer != 0 {
+		defer endBufferedPaint(paintBuffer)
+	}
 
 	c.mu.RLock()
-	title := "Wox Native Launcher"
-	if c.showRequest.ShowContext.ShowSource != "" {
-		title = fmt.Sprintf("%s (%s)", title, c.showRequest.ShowContext.ShowSource)
-	}
 	queryFrame := c.textInputState.QueryBox.Frame
 	queryVisible := c.textInputState.QueryBox.Visible
 	absoluteFrame := c.queryFrameAbsolute
 	queryRadius := c.showRequest.Theme.QueryBox.BorderRadius
-	textColor := colorRefFromRGBA(resolveThemeColor(c.showRequest.Theme.QueryBox.ForegroundColor, launchertheme.RGBAColor{R: 0xE2, G: 0xE8, B: 0xF0, A: 0xFF}))
-	subtitleColor := colorRefFromRGBA(resolveThemeColor(c.showRequest.Theme.QueryBox.ForegroundColor, launchertheme.RGBAColor{R: 0xE2, G: 0xE8, B: 0xF0, A: 0xFF}).WithAlphaScale(0.72))
-	resultFrame := c.showRequest.Results.Frame
-	resultVisible := c.showRequest.Results.Visible
-	resultItems := append([]ResultListItem(nil), c.showRequest.Results.Items...)
-	selectedIndex := c.showRequest.Results.SelectedIndex
+	resultTitleColor := colorRefFromRGBA(resolveThemeColor(c.showRequest.Theme.Results.TitleColor, launchertheme.RGBAColor{R: 0xE2, G: 0xE8, B: 0xF0, A: 0xFF}))
+	resultSubtitleColor := colorRefFromRGBA(resolveThemeColor(c.showRequest.Theme.Results.SubtitleColor, launchertheme.RGBAColor{R: 0x9C, G: 0xA3, B: 0xAF, A: 0xFF}))
+	activeTitleColor := colorRefFromRGBA(resolveThemeColor(c.showRequest.Theme.Results.ActiveTitleColor, launchertheme.RGBAColor{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF}))
+	activeSubtitleColor := colorRefFromRGBA(resolveThemeColor(c.showRequest.Theme.Results.ActiveSubtitleColor, launchertheme.RGBAColor{R: 0xE2, G: 0xE8, B: 0xF0, A: 0xFF}))
+	activeBackgroundColor := colorRefFromRGBA(resolveResultActiveColor(c.showRequest.Theme))
+	resultRadius := c.showRequest.Theme.Results.BorderRadius
+	previewFontColor := colorRefFromRGBA(resolveThemeColor(c.showRequest.Theme.Preview.FontColor, launchertheme.RGBAColor{R: 0xE2, G: 0xE8, B: 0xF0, A: 0xFF}))
+	previewPropertyTitleColor := colorRefFromRGBA(resolveThemeColor(c.showRequest.Theme.Preview.PropertyTitleColor, launchertheme.RGBAColor{R: 0x9C, G: 0xA3, B: 0xAF, A: 0xFF}))
+	previewPropertyContentColor := colorRefFromRGBA(resolveThemeColor(c.showRequest.Theme.Preview.PropertyContentColor, launchertheme.RGBAColor{R: 0xE2, G: 0xE8, B: 0xF0, A: 0xFF}))
+	previewSplitLineColor := colorRefFromRGBA(resolveThemeColor(c.showRequest.Theme.Preview.SplitLineColor, launchertheme.RGBAColor{R: 0x4A, G: 0x55, B: 0x68, A: 0xFF}))
+	resultState := c.showRequest.Results
+	preview := c.showRequest.Preview
+	resultFont := c.resultFont
+	subFont := c.subFont
+	previewFont := c.previewFont
+	previewBodyFont := c.previewBodyFont
 	c.mu.RUnlock()
 
 	if queryVisible && !queryFrame.IsEmpty() {
@@ -779,26 +877,31 @@ func (c *windowsNativeShellController) handlePaint(hwnd win.HWND) uintptr {
 	}
 
 	win.SetBkMode(hdc, win.TRANSPARENT)
-	win.SetTextColor(hdc, textColor)
 
-	titleRect := win.RECT{
-		Left:   defaultNativeShellPaddingX,
-		Top:    defaultNativeShellTitleY,
-		Right:  rect.Right - defaultNativeShellPaddingX,
-		Bottom: defaultNativeShellTitleY + defaultNativeShellTitleHeight,
-	}
-	drawText(hdc, title, &titleRect, win.DT_LEFT|win.DT_SINGLELINE|win.DT_VCENTER)
-
-	if resultVisible && !resultFrame.IsEmpty() {
+	if resultState.Visible && !resultState.Frame.IsEmpty() {
 		if absoluteFrame {
 			var windowRect win.RECT
 			if win.GetWindowRect(hwnd, &windowRect) {
-				resultFrame.X -= int(windowRect.Left)
-				resultFrame.Y -= int(windowRect.Top)
+				resultState.Frame.X -= int(windowRect.Left)
+				resultState.Frame.Y -= int(windowRect.Top)
 			}
 		}
 
-		drawResultList(hdc, resultFrame, resultItems, selectedIndex, textColor, subtitleColor)
+		drawResultList(hdc, resultState, resultTitleColor, resultSubtitleColor, activeBackgroundColor, activeTitleColor, activeSubtitleColor, resultRadius, resultFont, subFont)
+	}
+
+	if preview.Visible && !preview.Frame.IsEmpty() {
+		if absoluteFrame {
+			var windowRect win.RECT
+			if win.GetWindowRect(hwnd, &windowRect) {
+				preview.Frame.X -= int(windowRect.Left)
+				preview.Frame.Y -= int(windowRect.Top)
+			}
+		}
+
+		splitX := preview.Frame.X - (defaultPaneGapWidth / 2)
+		drawVerticalSplitLine(hdc, splitX, preview.Frame.Y, preview.Frame.Height, previewSplitLineColor)
+		drawPreviewPane(hdc, preview.Frame, preview, previewFontColor, previewPropertyTitleColor, previewPropertyContentColor, previewFont, previewBodyFont)
 	}
 	return 0
 }
@@ -941,6 +1044,76 @@ func drawText(hdc win.HDC, text string, rect *win.RECT, format uint32) {
 	)
 }
 
+func drawTextWithFont(hdc win.HDC, font win.HFONT, text string, rect *win.RECT, format uint32) {
+	if rect == nil {
+		return
+	}
+
+	var oldFont win.HGDIOBJ
+	if font != 0 {
+		oldFont = win.SelectObject(hdc, win.HGDIOBJ(font))
+		defer win.SelectObject(hdc, oldFont)
+	}
+
+	drawText(hdc, text, rect, format)
+}
+
+func createUIFont(size int, weight int32) win.HFONT {
+	dpi := int32(96)
+	if hdc := win.GetDC(0); hdc != 0 {
+		dpi = win.GetDeviceCaps(hdc, win.LOGPIXELSY)
+		win.ReleaseDC(0, hdc)
+	}
+
+	height := -int32(math.Round(float64(size) * float64(dpi) / 72.0))
+	family := syscall.StringToUTF16Ptr(defaultUIFontFamily)
+	handle, _, _ := procCreateFontW.Call(
+		uintptr(height),
+		0,
+		0,
+		0,
+		uintptr(weight),
+		0,
+		0,
+		0,
+		uintptr(win.DEFAULT_CHARSET),
+		uintptr(win.OUT_DEFAULT_PRECIS),
+		uintptr(win.CLIP_DEFAULT_PRECIS),
+		uintptr(win.CLEARTYPE_QUALITY),
+		uintptr(win.DEFAULT_PITCH|win.FF_DONTCARE),
+		uintptr(unsafe.Pointer(family)),
+	)
+	return win.HFONT(handle)
+}
+
+func beginBufferedPaint(paintHDC win.HDC, rect *win.RECT) (win.HDC, uintptr) {
+	if paintHDC == 0 || rect == nil {
+		return paintHDC, 0
+	}
+
+	var bufferedHDC win.HDC
+	buffer, _, _ := procBeginBufferedPaint.Call(
+		uintptr(paintHDC),
+		uintptr(unsafe.Pointer(rect)),
+		uintptr(bpbfTopDownDIB),
+		0,
+		uintptr(unsafe.Pointer(&bufferedHDC)),
+	)
+	if buffer == 0 || bufferedHDC == 0 {
+		return paintHDC, 0
+	}
+
+	procBufferedPaintClear.Call(buffer, uintptr(unsafe.Pointer(rect)))
+	return bufferedHDC, buffer
+}
+
+func endBufferedPaint(buffer uintptr) {
+	if buffer == 0 {
+		return
+	}
+	procEndBufferedPaint.Call(buffer, 1)
+}
+
 func tryEnableAccent(hwnd win.HWND, state uint32, gradientColor uint32, accentFlags uint32) bool {
 	if procSetWindowCompositionAttr.Find() != nil {
 		return false
@@ -978,6 +1151,17 @@ func resolveQueryBoxSolidColor(theme launchertheme.PaintTheme) launchertheme.RGB
 	})
 }
 
+func resolveResultActiveColor(theme launchertheme.PaintTheme) launchertheme.RGBAColor {
+	windowColor := resolveThemeColor(theme.Window.BackgroundColor, launchertheme.RGBAColor{R: 35, G: 41, B: 51, A: 191})
+	activeColor := resolveThemeColor(theme.Results.ActiveBackgroundColor, launchertheme.RGBAColor{R: 0, G: 168, B: 142, A: 179})
+	return activeColor.CompositeOver(launchertheme.RGBAColor{
+		R: windowColor.R,
+		G: windowColor.G,
+		B: windowColor.B,
+		A: 255,
+	})
+}
+
 func colorRefFromRGBA(color launchertheme.RGBAColor) win.COLORREF {
 	return win.COLORREF(color.R) | (win.COLORREF(color.G) << 8) | (win.COLORREF(color.B) << 16)
 }
@@ -1006,12 +1190,15 @@ func drawRoundedQueryBox(hdc win.HDC, rect win.RECT, color win.COLORREF, radius 
 	win.RoundRect(hdc, rect.Left, rect.Top, rect.Right, rect.Bottom, int32(radius*2), int32(radius*2))
 }
 
-func drawResultList(hdc win.HDC, frame Rect, items []ResultListItem, selectedIndex int, titleColor win.COLORREF, subtitleColor win.COLORREF) {
+func drawResultList(hdc win.HDC, state ResultListState, titleColor win.COLORREF, subtitleColor win.COLORREF, activeBackgroundColor win.COLORREF, activeTitleColor win.COLORREF, activeSubtitleColor win.COLORREF, radius int, titleFont win.HFONT, subtitleFont win.HFONT) {
+	frame := state.Frame
 	if frame.IsEmpty() {
 		return
 	}
 
-	itemHeight := defaultResultListItemHeight
+	items := state.Items
+	selectedIndex := state.SelectedIndex
+	itemHeight := state.ItemHeight()
 	currentY := frame.Y
 
 	for index, item := range items {
@@ -1027,7 +1214,7 @@ func drawResultList(hdc win.HDC, frame Rect, items []ResultListItem, selectedInd
 		}
 
 		if index == selectedIndex {
-			drawRoundedQueryBox(hdc, itemRect, colorRefFromRGBA(launchertheme.RGBAColor{R: 255, G: 255, B: 255, A: 20}), 10)
+			drawRoundedQueryBox(hdc, itemRect, activeBackgroundColor, radius)
 		}
 
 		titleRect := win.RECT{
@@ -1045,17 +1232,101 @@ func drawResultList(hdc win.HDC, frame Rect, items []ResultListItem, selectedInd
 
 		if item.IsGroup {
 			win.SetTextColor(hdc, subtitleColor)
-			drawText(hdc, item.Title, &titleRect, win.DT_LEFT|win.DT_SINGLELINE|win.DT_VCENTER|win.DT_END_ELLIPSIS)
+			drawTextWithFont(hdc, subtitleFont, item.Title, &titleRect, win.DT_LEFT|win.DT_SINGLELINE|win.DT_VCENTER|win.DT_END_ELLIPSIS)
 		} else {
-			win.SetTextColor(hdc, titleColor)
-			drawText(hdc, item.Title, &titleRect, win.DT_LEFT|win.DT_SINGLELINE|win.DT_VCENTER|win.DT_END_ELLIPSIS)
+			if index == selectedIndex {
+				win.SetTextColor(hdc, activeTitleColor)
+			} else {
+				win.SetTextColor(hdc, titleColor)
+			}
+			drawTextWithFont(hdc, titleFont, item.Title, &titleRect, win.DT_LEFT|win.DT_SINGLELINE|win.DT_VCENTER|win.DT_END_ELLIPSIS)
 			if item.Subtitle != "" {
-				win.SetTextColor(hdc, subtitleColor)
-				drawText(hdc, item.Subtitle, &subtitleRect, win.DT_LEFT|win.DT_SINGLELINE|win.DT_VCENTER|win.DT_END_ELLIPSIS)
+				if index == selectedIndex {
+					win.SetTextColor(hdc, activeSubtitleColor)
+				} else {
+					win.SetTextColor(hdc, subtitleColor)
+				}
+				drawTextWithFont(hdc, subtitleFont, item.Subtitle, &subtitleRect, win.DT_LEFT|win.DT_SINGLELINE|win.DT_VCENTER|win.DT_END_ELLIPSIS)
 			}
 		}
 
 		currentY += itemHeight + defaultResultItemSpacingY
+	}
+}
+
+func drawVerticalSplitLine(hdc win.HDC, x int, y int, height int, color win.COLORREF) {
+	if height <= 0 {
+		return
+	}
+	brush := createSolidBrush(color)
+	if brush == 0 {
+		return
+	}
+	defer deleteGDIObject(uintptr(brush))
+
+	rect := win.RECT{
+		Left:   int32(x),
+		Top:    int32(y),
+		Right:  int32(x + 1),
+		Bottom: int32(y + height),
+	}
+	procFillRect.Call(uintptr(hdc), uintptr(unsafe.Pointer(&rect)), uintptr(brush))
+}
+
+func drawPreviewPane(hdc win.HDC, frame Rect, preview PreviewState, bodyColor win.COLORREF, propertyTitleColor win.COLORREF, propertyContentColor win.COLORREF, titleFont win.HFONT, bodyFont win.HFONT) {
+	if frame.IsEmpty() {
+		return
+	}
+
+	titleRect := win.RECT{
+		Left:   int32(frame.X + defaultPreviewPaddingX),
+		Top:    int32(frame.Y + defaultPreviewPaddingY),
+		Right:  int32(frame.X + frame.Width - defaultPreviewPaddingX),
+		Bottom: int32(frame.Y + defaultPreviewPaddingY + defaultPreviewTitleHeight),
+	}
+	win.SetTextColor(hdc, bodyColor)
+	drawTextWithFont(hdc, titleFont, preview.Title, &titleRect, win.DT_LEFT|win.DT_SINGLELINE|win.DT_VCENTER|win.DT_END_ELLIPSIS)
+
+	bodyRect := win.RECT{
+		Left:   titleRect.Left,
+		Top:    titleRect.Bottom + 8,
+		Right:  titleRect.Right,
+		Bottom: int32(frame.Y + frame.Height - defaultPreviewPaddingY),
+	}
+	propertyBlockTop := bodyRect.Top
+	if preview.Body.Content != "" {
+		if preview.Body.Kind == PreviewKindUnsupported {
+			win.SetTextColor(hdc, propertyTitleColor)
+		} else {
+			win.SetTextColor(hdc, bodyColor)
+		}
+		drawTextWithFont(hdc, bodyFont, preview.Body.Content, &bodyRect, win.DT_LEFT|win.DT_TOP|win.DT_WORDBREAK|win.DT_EDITCONTROL)
+		propertyBlockTop = bodyRect.Top + 84
+	}
+
+	for _, property := range preview.Body.Properties {
+		if propertyBlockTop >= bodyRect.Bottom {
+			break
+		}
+
+		titleRect := win.RECT{
+			Left:   bodyRect.Left,
+			Top:    propertyBlockTop,
+			Right:  bodyRect.Right,
+			Bottom: propertyBlockTop + 18,
+		}
+		contentRect := win.RECT{
+			Left:   bodyRect.Left,
+			Top:    titleRect.Bottom + 2,
+			Right:  bodyRect.Right,
+			Bottom: titleRect.Bottom + 40,
+		}
+
+		win.SetTextColor(hdc, propertyTitleColor)
+		drawTextWithFont(hdc, bodyFont, property.Title, &titleRect, win.DT_LEFT|win.DT_SINGLELINE|win.DT_VCENTER|win.DT_END_ELLIPSIS)
+		win.SetTextColor(hdc, propertyContentColor)
+		drawTextWithFont(hdc, bodyFont, property.Content, &contentRect, win.DT_LEFT|win.DT_TOP|win.DT_WORDBREAK|win.DT_EDITCONTROL)
+		propertyBlockTop = contentRect.Bottom + 10
 	}
 }
 

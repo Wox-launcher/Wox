@@ -120,13 +120,10 @@
 				"type": "go",
 				"request": "launch",
 				"mode": "auto",
-				"program": "${workspaceFolder:wox.core}",
+				"program": "${workspaceFolder:wox.core}/cmd/native_launcher_full_app",
 				"env": {
 					"CGO_ENABLED": "1",
-					"WOX_NATIVE_LAUNCHER_ENABLED": "1",
-					"WOX_TEST_DATA_DIR": "${workspaceFolder:wox}/.tmp/native-full/.wox",
-					"WOX_TEST_USER_DIR": "${workspaceFolder:wox}/.tmp/native-full/user",
-					"WOX_TEST_DISABLE_TELEMETRY": "true"
+					"WOX_NATIVE_LAUNCHER_ENABLED": "1"
 				}
 			},
 			{

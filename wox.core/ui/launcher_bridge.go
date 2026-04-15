@@ -2,8 +2,11 @@ package ui
 
 import (
 	"context"
+	"fmt"
 	"wox/common"
 	"wox/launcher"
+	"wox/plugin"
+	"wox/util"
 )
 
 type launcherBridge struct {
@@ -37,7 +40,15 @@ func (b *launcherBridge) ChangeTheme(ctx context.Context, theme common.Theme) {
 }
 
 func (b *launcherBridge) PushResults(ctx context.Context, payload interface{}) bool {
-	return b.runtime.PushResults(ctx, payload)
+	if pushPayload, ok := payload.(plugin.PushResultsPayload); ok {
+		util.GetLogger().Info(ctx, fmt.Sprintf("native launcher bridge PushResults queryId=%s results=%d", pushPayload.QueryId, len(pushPayload.Results)))
+	}
+
+	accepted := b.runtime.PushResults(ctx, payload)
+	if pushPayload, ok := payload.(plugin.PushResultsPayload); ok {
+		util.GetLogger().Info(ctx, fmt.Sprintf("native launcher bridge PushResults completed queryId=%s accepted=%v", pushPayload.QueryId, accepted))
+	}
+	return accepted
 }
 
 func (m *Manager) UseLauncherRuntime(runtime launcher.Runtime) {

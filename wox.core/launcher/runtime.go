@@ -2,6 +2,11 @@ package launcher
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"wox/common"
 	"wox/launcher/platform"
@@ -60,6 +65,7 @@ type WindowShellRuntime struct {
 	lastShowContext common.ShowContext
 	query           common.PlainQuery
 	results         platform.ResultListState
+	preview         platform.PreviewState
 	paintTheme      launchertheme.PaintTheme
 	sessionID       string
 
@@ -72,16 +78,22 @@ type DebugSnapshot struct {
 	TextInput platform.TextInputDebugSnapshot
 	Query     common.PlainQuery
 	Results   platform.ResultListState
+	Preview   platform.PreviewState
 }
 
 const (
-	defaultQueryBoxFrameX      = 24
-	defaultQueryBoxFrameY      = 20
-	defaultQueryBoxFrameHeight = 48
-	defaultResultListFrameY    = 84
-	defaultShellPaddingX       = 24
-	defaultShellHeight         = 420
-	defaultShellWidth          = 760
+	defaultQueryBoxFrameX       = 24
+	defaultQueryBoxFrameY       = 20
+	defaultQueryBoxFrameHeight  = 48
+	defaultResultListFrameY     = 84
+	defaultShellPaddingX        = 24
+	defaultPaneGapWidth         = 16
+	defaultResultItemSpacingY   = 6
+	defaultPreviewMinWidth      = 260
+	defaultShellWidth           = 760
+	defaultMaxResultCount       = 10
+	defaultResultItemBaseHeight = 50
+	maxInlinePreviewFileSize    = 1 * 1024 * 1024
 )
 
 func NewWindowShellRuntime(host platform.Host) *WindowShellRuntime {
@@ -108,6 +120,24 @@ func NewWindowShellRuntimeWithBundleAndOptions(bundle platform.Bundle, options W
 		sessionID:          "core-" + uuid.NewString(),
 		onUserQueryChanged: options.OnUserQueryChanged,
 		onSelectedAction:   options.OnSelectedResultAction,
+	}
+}
+
+func (r *WindowShellRuntime) buildShowRequestLocked(showContext common.ShowContext, query common.PlainQuery, items []platform.ResultListItem, selectedIndex int) platform.ShowRequest {
+	previewVisible := hasPreviewContent(items, selectedIndex)
+	windowHeight := calculateWindowHeight(showContext, r.paintTheme, len(items), previewVisible)
+	queryBox := buildQueryBoxState(showContext, query)
+	results := buildResultListState(showContext, r.paintTheme, items, selectedIndex, previewVisible, windowHeight)
+	preview := buildPreviewState(showContext, r.paintTheme, items, selectedIndex, windowHeight)
+
+	return platform.ShowRequest{
+		ShowContext:  showContext,
+		WindowHeight: windowHeight,
+		Query:        query,
+		QueryBox:     queryBox,
+		Results:      results,
+		Preview:      preview,
+		Theme:        r.paintTheme,
 	}
 }
 
@@ -185,23 +215,16 @@ func (r *WindowShellRuntime) Show(ctx context.Context, showContext common.ShowCo
 
 	r.mu.Lock()
 	r.lastShowContext = showContext
-	query := r.query
-	queryBox := buildQueryBoxState(showContext, query)
-	results := buildResultListState(showContext, r.results.Items)
-	paintTheme := r.paintTheme
+	request := r.buildShowRequestLocked(showContext, r.query, r.results.Items, r.results.SelectedIndex)
+	r.results = request.Results
+	r.preview = request.Preview
 	r.mu.Unlock()
 
-	if err := r.host.Show(ctx, platform.ShowRequest{
-		ShowContext: showContext,
-		Query:       query,
-		QueryBox:    queryBox,
-		Results:     results,
-		Theme:       paintTheme,
-	}); err != nil {
+	if err := r.host.Show(ctx, request); err != nil {
 		util.GetLogger().Error(ctx, "launcher shell show failed: "+err.Error())
 	}
 
-	r.syncTextInputState(ctx, queryBox)
+	r.syncTextInputState(ctx, request.QueryBox)
 }
 
 func (r *WindowShellRuntime) Hide(ctx context.Context) {
@@ -240,28 +263,20 @@ func (r *WindowShellRuntime) ChangeQuery(ctx context.Context, query common.Plain
 
 	r.mu.Lock()
 	r.query = query
-	r.results = buildResultListState(r.lastShowContext, nil)
-	showContext := r.lastShowContext
-	queryBox := buildQueryBoxState(showContext, query)
-	results := r.results
-	paintTheme := r.paintTheme
+	request := r.buildShowRequestLocked(r.lastShowContext, query, nil, 0)
+	r.results = request.Results
+	r.preview = request.Preview
 	r.mu.Unlock()
 
 	if !r.host.IsVisible(ctx) {
 		return
 	}
 
-	if err := r.host.Show(ctx, platform.ShowRequest{
-		ShowContext: showContext,
-		Query:       query,
-		QueryBox:    queryBox,
-		Results:     results,
-		Theme:       paintTheme,
-	}); err != nil {
+	if err := r.host.Show(ctx, request); err != nil {
 		util.GetLogger().Error(ctx, "launcher shell query refresh failed: "+err.Error())
 	}
 
-	r.syncTextInputState(ctx, queryBox)
+	r.syncTextInputState(ctx, request.QueryBox)
 }
 
 func (r *WindowShellRuntime) RefreshQuery(ctx context.Context, preserveSelectedIndex bool) {
@@ -270,93 +285,73 @@ func (r *WindowShellRuntime) RefreshQuery(ctx context.Context, preserveSelectedI
 	}
 
 	r.mu.RLock()
-	showContext := r.lastShowContext
-	query := r.query
-	queryBox := buildQueryBoxState(showContext, query)
-	results := r.results
-	paintTheme := r.paintTheme
+	request := r.buildShowRequestLocked(r.lastShowContext, r.query, r.results.Items, r.results.SelectedIndex)
 	r.mu.RUnlock()
 
 	if !r.host.IsVisible(ctx) {
 		return
 	}
 
-	if err := r.host.Show(ctx, platform.ShowRequest{
-		ShowContext: showContext,
-		Query:       query,
-		QueryBox:    queryBox,
-		Results:     results,
-		Theme:       paintTheme,
-	}); err != nil {
+	if err := r.host.Show(ctx, request); err != nil {
 		util.GetLogger().Error(ctx, "launcher shell refresh failed: "+err.Error())
 	}
 
-	r.syncTextInputState(ctx, queryBox)
+	r.syncTextInputState(ctx, request.QueryBox)
 }
 
 func (r *WindowShellRuntime) ChangeTheme(ctx context.Context, theme common.Theme) {
 	r.mu.Lock()
 	r.paintTheme = launchertheme.MapCommonTheme(theme)
-	showContext := r.lastShowContext
-	query := r.query
-	queryBox := buildQueryBoxState(showContext, query)
-	results := r.results
-	paintTheme := r.paintTheme
+	request := r.buildShowRequestLocked(r.lastShowContext, r.query, r.results.Items, r.results.SelectedIndex)
+	r.results = request.Results
+	r.preview = request.Preview
 	r.mu.Unlock()
 
 	if r.host == nil || !r.host.IsVisible(ctx) {
 		return
 	}
 
-	if err := r.host.Show(ctx, platform.ShowRequest{
-		ShowContext: showContext,
-		Query:       query,
-		QueryBox:    queryBox,
-		Results:     results,
-		Theme:       paintTheme,
-	}); err != nil {
+	if err := r.host.Show(ctx, request); err != nil {
 		util.GetLogger().Error(ctx, "launcher shell theme refresh failed: "+err.Error())
 	}
 
-	r.syncTextInputState(ctx, queryBox)
+	r.syncTextInputState(ctx, request.QueryBox)
 }
 
 func (r *WindowShellRuntime) PushResults(ctx context.Context, payload interface{}) bool {
 	pushPayload, ok := payload.(plugin.PushResultsPayload)
 	if !ok {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("launcher runtime PushResults ignored unsupported payload: %T", payload))
 		return false
 	}
 
 	r.mu.Lock()
 	if pushPayload.QueryId != r.query.QueryId {
+		activeQueryID := r.query.QueryId
 		r.mu.Unlock()
+		util.GetLogger().Info(ctx, fmt.Sprintf("launcher runtime PushResults rejected incomingQueryId=%s activeQueryId=%s results=%d", pushPayload.QueryId, activeQueryID, len(pushPayload.Results)))
 		return false
 	}
 
-	r.results = buildResultListState(r.lastShowContext, mapQueryResults(pushPayload.Results))
-	showContext := r.lastShowContext
-	query := r.query
-	queryBox := buildQueryBoxState(showContext, query)
-	results := r.results
-	paintTheme := r.paintTheme
+	items := mapQueryResults(pushPayload.Results)
+	selectedIndex := firstSelectableIndex(items)
+	request := r.buildShowRequestLocked(r.lastShowContext, r.query, items, selectedIndex)
+	r.results = request.Results
+	r.preview = request.Preview
 	r.mu.Unlock()
+
+	util.GetLogger().Info(ctx, fmt.Sprintf("launcher runtime PushResults accepted queryId=%s results=%d selectedIndex=%d previewVisible=%v", pushPayload.QueryId, len(request.Results.Items), request.Results.SelectedIndex, request.Preview.Visible))
 
 	if r.host == nil || !r.host.IsVisible(ctx) {
 		return true
 	}
 
-	if err := r.host.Show(ctx, platform.ShowRequest{
-		ShowContext: showContext,
-		Query:       query,
-		QueryBox:    queryBox,
-		Results:     results,
-		Theme:       paintTheme,
-	}); err != nil {
+	if err := r.host.Show(ctx, request); err != nil {
 		util.GetLogger().Error(ctx, "launcher shell results refresh failed: "+err.Error())
 		return false
 	}
 
-	r.syncTextInputState(ctx, queryBox)
+	r.syncTextInputState(ctx, request.QueryBox)
 	return true
 }
 
@@ -397,30 +392,53 @@ func buildQueryBoxFrame(showContext common.ShowContext) platform.Rect {
 	return frame
 }
 
-func buildResultListState(showContext common.ShowContext, items []platform.ResultListItem) platform.ResultListState {
-	frame := buildResultListFrame(showContext)
+func buildResultListState(showContext common.ShowContext, theme launchertheme.PaintTheme, items []platform.ResultListItem, selectedIndex int, previewVisible bool, windowHeight int) platform.ResultListState {
+	frame := buildResultListFrame(showContext, theme, previewVisible, windowHeight)
 	state := platform.ResultListState{
-		Visible: frame.Height > 0 && len(items) > 0,
-		Frame:   frame,
-		Items:   append([]platform.ResultListItem(nil), items...),
+		Visible:   frame.Height > 0 && len(items) > 0,
+		Frame:     frame,
+		Items:     append([]platform.ResultListItem(nil), items...),
+		RowHeight: resolveResultItemHeight(theme),
 	}
 	if len(state.Items) > 0 {
-		state.SelectedIndex = firstSelectableIndex(state.Items)
+		if selectedIndex < 0 || selectedIndex >= len(state.Items) {
+			selectedIndex = firstSelectableIndex(state.Items)
+		}
+		state.SelectedIndex = selectedIndex
 	}
 	return state
 }
 
-func buildResultListFrame(showContext common.ShowContext) platform.Rect {
+func buildResultListFrame(showContext common.ShowContext, theme launchertheme.PaintTheme, previewVisible bool, windowHeight int) platform.Rect {
 	width := showContext.WindowWidth
 	if width <= 0 {
 		width = defaultShellWidth
 	}
 
+	contentWidth := width - (defaultShellPaddingX * 2)
+	if contentWidth < 0 {
+		contentWidth = 0
+	}
+	resultWidth := contentWidth
+	if previewVisible {
+		previewWidth := contentWidth / 2
+		if previewWidth < defaultPreviewMinWidth {
+			previewWidth = defaultPreviewMinWidth
+		}
+		if previewWidth > contentWidth-defaultPaneGapWidth {
+			previewWidth = contentWidth - defaultPaneGapWidth
+		}
+		if previewWidth < 0 {
+			previewWidth = 0
+		}
+		resultWidth = contentWidth - previewWidth - defaultPaneGapWidth
+	}
+
 	frame := platform.Rect{
 		X:      defaultShellPaddingX,
 		Y:      defaultResultListFrameY,
-		Width:  width - (defaultShellPaddingX * 2),
-		Height: defaultShellHeight - defaultResultListFrameY - defaultShellPaddingX,
+		Width:  resultWidth,
+		Height: windowHeight - defaultResultListFrameY - resolveWindowBottomPadding(theme),
 	}
 
 	if showContext.WindowPosition != nil {
@@ -438,6 +456,137 @@ func buildResultListFrame(showContext common.ShowContext) platform.Rect {
 	return frame
 }
 
+func buildPreviewState(showContext common.ShowContext, theme launchertheme.PaintTheme, items []platform.ResultListItem, selectedIndex int, windowHeight int) platform.PreviewState {
+	selected, ok := resolveSelectedPreviewItem(items, selectedIndex)
+	if !ok {
+		return platform.PreviewState{}
+	}
+
+	return platform.PreviewState{
+		Visible: true,
+		Frame:   buildPreviewFrame(showContext, theme, windowHeight),
+		Title:   selected.Title,
+		Body:    selected.Preview,
+	}
+}
+
+func buildPreviewFrame(showContext common.ShowContext, theme launchertheme.PaintTheme, windowHeight int) platform.Rect {
+	width := showContext.WindowWidth
+	if width <= 0 {
+		width = defaultShellWidth
+	}
+
+	contentWidth := width - (defaultShellPaddingX * 2)
+	if contentWidth < 0 {
+		contentWidth = 0
+	}
+	previewWidth := contentWidth / 2
+	if previewWidth < defaultPreviewMinWidth {
+		previewWidth = defaultPreviewMinWidth
+	}
+	if previewWidth > contentWidth-defaultPaneGapWidth {
+		previewWidth = contentWidth - defaultPaneGapWidth
+	}
+	if previewWidth < 0 {
+		previewWidth = 0
+	}
+
+	resultWidth := contentWidth - previewWidth - defaultPaneGapWidth
+	if resultWidth < 0 {
+		resultWidth = 0
+	}
+
+	frame := platform.Rect{
+		X:      defaultShellPaddingX + resultWidth + defaultPaneGapWidth,
+		Y:      defaultResultListFrameY,
+		Width:  previewWidth,
+		Height: windowHeight - defaultResultListFrameY - resolveWindowBottomPadding(theme),
+	}
+
+	if showContext.WindowPosition != nil {
+		frame.X += showContext.WindowPosition.X
+		frame.Y += showContext.WindowPosition.Y
+	}
+
+	if frame.Height < 0 {
+		frame.Height = 0
+	}
+
+	return frame
+}
+
+func calculateWindowHeight(showContext common.ShowContext, theme launchertheme.PaintTheme, itemCount int, previewVisible bool) int {
+	totalHeight := 0
+	if !showContext.HideQueryBox {
+		totalHeight = defaultQueryBoxFrameY + defaultQueryBoxFrameHeight + resolveWindowBottomPadding(theme)
+	}
+
+	visibleCount := itemCount
+	maxResultCount := resolveMaxResultCount(showContext)
+	if previewVisible && itemCount > 0 {
+		visibleCount = maxResultCount
+	} else if visibleCount > maxResultCount {
+		visibleCount = maxResultCount
+	}
+
+	if visibleCount == 0 {
+		return totalHeight
+	}
+
+	resultHeight := calculateResultRowsHeight(visibleCount, resolveResultItemHeight(theme))
+	resultHeight += theme.Layout.ResultContainerPaddingBottom
+
+	windowHeight := defaultResultListFrameY + resultHeight + resolveWindowBottomPadding(theme)
+	if windowHeight > totalHeight {
+		return windowHeight
+	}
+	return totalHeight
+}
+
+func calculateResultRowsHeight(count int, itemHeight int) int {
+	if count <= 0 || itemHeight <= 0 {
+		return 0
+	}
+
+	return (count * itemHeight) + ((count - 1) * defaultResultItemSpacingY)
+}
+
+func resolveResultItemHeight(theme launchertheme.PaintTheme) int {
+	return defaultResultItemBaseHeight + theme.Layout.ResultItemPaddingTop + theme.Layout.ResultItemPaddingBottom
+}
+
+func resolveWindowBottomPadding(theme launchertheme.PaintTheme) int {
+	if theme.Layout.AppPaddingBottom > 0 {
+		return theme.Layout.AppPaddingBottom
+	}
+	return defaultShellPaddingX
+}
+
+func resolveMaxResultCount(showContext common.ShowContext) int {
+	if showContext.MaxResultCount > 0 {
+		return showContext.MaxResultCount
+	}
+	return defaultMaxResultCount
+}
+
+func hasPreviewContent(items []platform.ResultListItem, selectedIndex int) bool {
+	_, ok := resolveSelectedPreviewItem(items, selectedIndex)
+	return ok
+}
+
+func resolveSelectedPreviewItem(items []platform.ResultListItem, selectedIndex int) (platform.ResultListItem, bool) {
+	if len(items) == 0 || selectedIndex < 0 || selectedIndex >= len(items) {
+		return platform.ResultListItem{}, false
+	}
+
+	selected := items[selectedIndex]
+	if selected.Preview.Kind == platform.PreviewKindNone && len(selected.Preview.Properties) == 0 {
+		return platform.ResultListItem{}, false
+	}
+
+	return selected, true
+}
+
 func mapQueryResults(results []plugin.QueryResultUI) []platform.ResultListItem {
 	mapped := make([]platform.ResultListItem, 0, len(results))
 	for _, result := range results {
@@ -448,9 +597,153 @@ func mapQueryResults(results []plugin.QueryResultUI) []platform.ResultListItem {
 			Title:    result.Title,
 			Subtitle: result.SubTitle,
 			IsGroup:  result.IsGroup,
+			Preview:  mapPreviewContent(result.Preview),
 		})
 	}
 	return mapped
+}
+
+func mapPreviewContent(preview plugin.WoxPreview) platform.PreviewContent {
+	content := platform.PreviewContent{
+		Properties: mapPreviewProperties(preview.PreviewProperties),
+	}
+
+	switch preview.PreviewType {
+	case plugin.WoxPreviewTypeText:
+		content.Kind = platform.PreviewKindText
+		content.Content = preview.PreviewData
+		return content
+	case plugin.WoxPreviewTypeMarkdown:
+		content.Kind = platform.PreviewKindMarkdown
+		content.Content = preview.PreviewData
+		return content
+	case plugin.WoxPreviewTypeFile:
+		return mapFilePreviewContent(preview.PreviewData, preview.PreviewProperties)
+	case plugin.WoxPreviewTypeImage:
+		content.Kind = platform.PreviewKindUnsupported
+		content.Content = "Image preview is not implemented yet."
+		return content
+	case plugin.WoxPreviewTypeUrl:
+		content.Kind = platform.PreviewKindUnsupported
+		content.Content = fmt.Sprintf("URL preview is not implemented yet.\n\n%s", preview.PreviewData)
+		return content
+	case plugin.WoxPreviewTypeRemote:
+		content.Kind = platform.PreviewKindUnsupported
+		content.Content = "Remote preview is not implemented yet."
+		return content
+	case "":
+		return content
+	default:
+		content.Kind = platform.PreviewKindUnsupported
+		content.Content = "Preview type not supported yet: " + preview.PreviewType
+		return content
+	}
+}
+
+func mapPreviewProperties(source map[string]string) []platform.PreviewProperty {
+	if len(source) == 0 {
+		return nil
+	}
+
+	keys := make([]string, 0, len(source))
+	for key := range source {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	properties := make([]platform.PreviewProperty, 0, len(keys))
+	for _, key := range keys {
+		properties = append(properties, platform.PreviewProperty{
+			Title:   key,
+			Content: source[key],
+		})
+	}
+
+	return properties
+}
+
+func mapFilePreviewContent(path string, properties map[string]string) platform.PreviewContent {
+	content := platform.PreviewContent{
+		Properties: mapPreviewProperties(properties),
+	}
+
+	trimmedPath := strings.TrimSpace(path)
+	if trimmedPath == "" {
+		content.Kind = platform.PreviewKindUnsupported
+		content.Content = "File preview path is empty."
+		return content
+	}
+
+	info, err := os.Stat(trimmedPath)
+	if err != nil {
+		content.Kind = platform.PreviewKindUnsupported
+		content.Content = fmt.Sprintf("File preview not available.\n\n%s", trimmedPath)
+		return content
+	}
+	if info.IsDir() {
+		content.Kind = platform.PreviewKindUnsupported
+		content.Content = fmt.Sprintf("Directory preview is not implemented yet.\n\n%s", trimmedPath)
+		return content
+	}
+	if info.Size() > maxInlinePreviewFileSize {
+		content.Kind = platform.PreviewKindUnsupported
+		content.Content = fmt.Sprintf("File too large to preview inline.\n\n%s", trimmedPath)
+		return content
+	}
+
+	extension := strings.ToLower(filepath.Ext(trimmedPath))
+	switch {
+	case extension == ".md" || extension == ".markdown":
+		body, readErr := os.ReadFile(trimmedPath)
+		if readErr != nil {
+			content.Kind = platform.PreviewKindUnsupported
+			content.Content = fmt.Sprintf("Failed to read markdown preview.\n\n%s", trimmedPath)
+			return content
+		}
+		content.Kind = platform.PreviewKindMarkdown
+		content.Content = string(body)
+		return content
+	case isInlineTextPreviewExtension(extension):
+		body, readErr := os.ReadFile(trimmedPath)
+		if readErr != nil {
+			content.Kind = platform.PreviewKindUnsupported
+			content.Content = fmt.Sprintf("Failed to read text preview.\n\n%s", trimmedPath)
+			return content
+		}
+		content.Kind = platform.PreviewKindText
+		content.Content = string(body)
+		return content
+	case isInlineImagePreviewExtension(extension):
+		content.Kind = platform.PreviewKindUnsupported
+		content.Content = fmt.Sprintf("Image file preview is not implemented yet.\n\n%s", trimmedPath)
+		return content
+	case extension == ".pdf":
+		content.Kind = platform.PreviewKindUnsupported
+		content.Content = fmt.Sprintf("PDF preview is not implemented yet.\n\n%s", trimmedPath)
+		return content
+	default:
+		content.Kind = platform.PreviewKindUnsupported
+		content.Content = fmt.Sprintf("Unsupported file preview type: %s\n\n%s", extension, trimmedPath)
+		return content
+	}
+}
+
+func isInlineTextPreviewExtension(extension string) bool {
+	switch extension {
+	case ".txt", ".log", ".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".xml", ".html", ".css", ".scss", ".js", ".ts", ".tsx", ".jsx", ".go", ".py", ".java", ".kt", ".rs", ".c", ".cc", ".cpp", ".h", ".hpp", ".cs", ".sh", ".ps1", ".sql", ".bat":
+		return true
+	default:
+		return false
+	}
+}
+
+func isInlineImagePreviewExtension(extension string) bool {
+	switch extension {
+	case ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg":
+		return true
+	default:
+		return false
+	}
 }
 
 func firstSelectableIndex(items []platform.ResultListItem) int {
@@ -595,29 +888,21 @@ func (r *WindowShellRuntime) applySelectionNavigation(ctx context.Context, delta
 	}
 
 	r.results.SelectedIndex = nextIndex
-	showContext := r.lastShowContext
-	query := r.query
-	queryBox := buildQueryBoxState(showContext, query)
-	results := r.results
-	paintTheme := r.paintTheme
+	request := r.buildShowRequestLocked(r.lastShowContext, r.query, r.results.Items, nextIndex)
+	r.results = request.Results
+	r.preview = request.Preview
 	r.mu.Unlock()
 
 	if r.host == nil || !r.host.IsVisible(ctx) {
 		return
 	}
 
-	if err := r.host.Show(ctx, platform.ShowRequest{
-		ShowContext: showContext,
-		Query:       query,
-		QueryBox:    queryBox,
-		Results:     results,
-		Theme:       paintTheme,
-	}); err != nil {
+	if err := r.host.Show(ctx, request); err != nil {
 		util.GetLogger().Error(ctx, "launcher shell selection refresh failed: "+err.Error())
 		return
 	}
 
-	r.syncTextInputState(ctx, queryBox)
+	r.syncTextInputState(ctx, request.QueryBox)
 }
 
 func (r *WindowShellRuntime) handleSelectedResultSubmit(ctx context.Context) {
@@ -683,9 +968,10 @@ func (r *WindowShellRuntime) DebugSnapshot(ctx context.Context) DebugSnapshot {
 	r.mu.RLock()
 	query := r.query
 	results := r.results
+	preview := r.preview
 	r.mu.RUnlock()
 
-	snapshot := DebugSnapshot{Query: query, Results: results}
+	snapshot := DebugSnapshot{Query: query, Results: results, Preview: preview}
 	if host, ok := r.host.(platform.DebugHost); ok {
 		snapshot.Host = host.DebugSnapshot(ctx)
 	}

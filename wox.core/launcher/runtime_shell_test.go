@@ -7,6 +7,7 @@ import (
 	"time"
 	"wox/common"
 	"wox/launcher/platform"
+	"wox/plugin"
 )
 
 type fakeShellHost struct {
@@ -28,6 +29,7 @@ type fakeTextInputHost struct {
 	updateCalls []platform.TextInputState
 	parentCalls []uintptr
 	changeFn    platform.TextInputChangeHandler
+	navFn       platform.TextInputSelectionNavigationHandler
 }
 
 func (f *fakeShellHost) Start(ctx context.Context, options platform.StartOptions) error {
@@ -98,6 +100,17 @@ func (f *fakeTextInputHost) SetChangeHandler(ctx context.Context, handler platfo
 func (f *fakeTextInputHost) EmitChange(state platform.TextInputState) {
 	if f.changeFn != nil {
 		f.changeFn(context.Background(), state)
+	}
+}
+
+func (f *fakeTextInputHost) SetSelectionNavigationHandler(ctx context.Context, handler platform.TextInputSelectionNavigationHandler) error {
+	f.navFn = handler
+	return nil
+}
+
+func (f *fakeTextInputHost) EmitNavigation(delta int) {
+	if f.navFn != nil {
+		f.navFn(context.Background(), delta)
 	}
 }
 
@@ -444,4 +457,171 @@ func TestWindowShellRuntimeTracksNativeTextInputChanges(t *testing.T) {
 	if observedQuery.QueryType != "input" {
 		t.Fatalf("native query changes should use input query type, got %q", observedQuery.QueryType)
 	}
+}
+
+func TestWindowShellRuntimePushResultsUpdatesPreviewState(t *testing.T) {
+	t.Parallel()
+
+	host := &fakeShellHost{}
+	runtime := NewWindowShellRuntime(host)
+
+	runtime.ChangeQuery(context.Background(), common.PlainQuery{QueryId: "q1", QueryType: "input", QueryText: "hello"})
+	runtime.Show(context.Background(), common.ShowContext{WindowWidth: 900})
+
+	ok := runtime.PushResults(context.Background(), plugin.PushResultsPayload{
+		QueryId: "q1",
+		Results: []plugin.QueryResultUI{
+			{
+				QueryId:  "q1",
+				Id:       "r1",
+				Title:    "Result 1",
+				SubTitle: "Subtitle 1",
+				Preview: plugin.WoxPreview{
+					PreviewType: plugin.WoxPreviewTypeText,
+					PreviewData: "Preview body",
+				},
+			},
+		},
+	})
+
+	if !ok {
+		t.Fatal("PushResults should be accepted for the active query")
+	}
+
+	last := host.showCalls[len(host.showCalls)-1]
+	if !last.Preview.Visible {
+		t.Fatal("PushResults should make preview visible for previewable results")
+	}
+	if last.Preview.Title != "Result 1" {
+		t.Fatalf("unexpected preview title: %q", last.Preview.Title)
+	}
+	if last.Preview.Body.Kind != platform.PreviewKindText || last.Preview.Body.Content != "Preview body" {
+		t.Fatalf("unexpected preview body: %+v", last.Preview.Body)
+	}
+}
+
+func TestWindowShellRuntimeAdjustsWindowHeightToVisibleResults(t *testing.T) {
+	t.Parallel()
+
+	host := &fakeShellHost{}
+	runtime := NewWindowShellRuntime(host)
+
+	runtime.ChangeTheme(context.Background(), common.Theme{
+		AppPaddingBottom:             10,
+		ResultContainerPaddingBottom: 0,
+		ResultItemPaddingTop:         4,
+		ResultItemPaddingBottom:      4,
+	})
+	runtime.ChangeQuery(context.Background(), common.PlainQuery{QueryId: "q1", QueryType: "input", QueryText: "term"})
+	runtime.Show(context.Background(), common.ShowContext{WindowWidth: 900, MaxResultCount: 2})
+
+	if got := host.showCalls[len(host.showCalls)-1].WindowHeight; got != 78 {
+		t.Fatalf("expected query-only height 78, got %d", got)
+	}
+
+	if ok := runtime.PushResults(context.Background(), plugin.PushResultsPayload{
+		QueryId: "q1",
+		Results: []plugin.QueryResultUI{
+			{QueryId: "q1", Id: "r1", Title: "One"},
+		},
+	}); !ok {
+		t.Fatal("PushResults should accept single-result payload")
+	}
+
+	if got := host.showCalls[len(host.showCalls)-1].WindowHeight; got != 152 {
+		t.Fatalf("expected single-result height 152, got %d", got)
+	}
+
+	if ok := runtime.PushResults(context.Background(), plugin.PushResultsPayload{
+		QueryId: "q1",
+		Results: []plugin.QueryResultUI{
+			{QueryId: "q1", Id: "r1", Title: "One"},
+			{QueryId: "q1", Id: "r2", Title: "Two"},
+			{QueryId: "q1", Id: "r3", Title: "Three"},
+		},
+	}); !ok {
+		t.Fatal("PushResults should accept multi-result payload")
+	}
+
+	if got := host.showCalls[len(host.showCalls)-1].WindowHeight; got != 216 {
+		t.Fatalf("expected capped multi-result height 216, got %d", got)
+	}
+
+	if ok := runtime.PushResults(context.Background(), plugin.PushResultsPayload{
+		QueryId: "q1",
+		Results: []plugin.QueryResultUI{
+			{
+				QueryId: "q1",
+				Id:      "r-preview",
+				Title:   "Preview",
+				Preview: plugin.WoxPreview{
+					PreviewType: plugin.WoxPreviewTypeText,
+					PreviewData: "body",
+				},
+			},
+		},
+	}); !ok {
+		t.Fatal("PushResults should accept preview payload")
+	}
+
+	if got := host.showCalls[len(host.showCalls)-1].WindowHeight; got != 216 {
+		t.Fatalf("expected preview height to stay at cap 216, got %d", got)
+	}
+}
+
+func TestWindowShellRuntimeSelectionNavigationUpdatesPreviewState(t *testing.T) {
+	t.Parallel()
+
+	host := &fakeShellHost{}
+	textInput := &fakeTextInputHost{}
+	runtime := NewWindowShellRuntimeWithBundle(platform.Bundle{
+		Host:      host,
+		TextInput: textInput,
+	})
+
+	if err := runtime.Start(context.Background()); err != nil {
+		t.Fatalf("Start returned error: %v", err)
+	}
+
+	runtime.ChangeQuery(context.Background(), common.PlainQuery{QueryId: "q1", QueryType: "input", QueryText: "hello"})
+	runtime.Show(context.Background(), common.ShowContext{WindowWidth: 900})
+	runtime.PushResults(context.Background(), plugin.PushResultsPayload{
+		QueryId: "q1",
+		Results: []plugin.QueryResultUI{
+			{
+				QueryId: "q1",
+				Id:      "r1",
+				Title:   "Result 1",
+				Preview: plugin.WoxPreview{
+					PreviewType: plugin.WoxPreviewTypeText,
+					PreviewData: "Preview 1",
+				},
+				Actions: []plugin.QueryResultActionUI{{Id: "a1", IsDefault: true}},
+			},
+			{
+				QueryId: "q1",
+				Id:      "r2",
+				Title:   "Result 2",
+				Preview: plugin.WoxPreview{
+					PreviewType: plugin.WoxPreviewTypeMarkdown,
+					PreviewData: "Preview 2",
+				},
+				Actions: []plugin.QueryResultActionUI{{Id: "a2", IsDefault: true}},
+			},
+		},
+	})
+
+	textInput.EmitNavigation(1)
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		snapshot := runtime.DebugSnapshot(context.Background())
+		if snapshot.Results.SelectedIndex == 1 && snapshot.Preview.Title == "Result 2" {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	snapshot := runtime.DebugSnapshot(context.Background())
+	t.Fatalf("unexpected post-navigation snapshot: %+v", snapshot)
 }

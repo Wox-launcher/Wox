@@ -19,6 +19,11 @@ type runtimeDebugger interface {
 	DebugSnapshot(ctx context.Context) launcher.DebugSnapshot
 }
 
+type smokePreviewFixtures struct {
+	markdownPath string
+	textPath     string
+}
+
 func main() {
 	mainthread.Init(run)
 }
@@ -41,10 +46,17 @@ func run() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	fixtures, cleanup, err := createSmokePreviewFixtures()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to create smoke preview fixtures: %v\n", err)
+		os.Exit(1)
+	}
+	defer cleanup()
+
 	var runtime launcher.Runtime
-	runtime, err := launcher.DefaultRuntimeFactoryWithOptions(ctx, launcher.WindowShellRuntimeOptions{
+	runtime, err = launcher.DefaultRuntimeFactoryWithOptions(ctx, launcher.WindowShellRuntimeOptions{
 		OnUserQueryChanged: func(queryCtx context.Context, query common.PlainQuery) error {
-			pushDemoResults(queryCtx, runtime, query, *demoResults)
+			pushDemoResults(queryCtx, runtime, query, *demoResults, fixtures)
 			if *debug {
 				fmt.Printf("native launcher smoke [user-query] queryId=%s text=%q type=%s\n", query.QueryId, query.QueryText, query.QueryType)
 			}
@@ -87,7 +99,7 @@ func run() {
 	}
 	runtime.ChangeTheme(ctx, defaultSmokeTheme())
 	runtime.Show(ctx, showCtx)
-	pushDemoResults(ctx, runtime, currentQuery(runtime, *query), *demoResults)
+	pushDemoResults(ctx, runtime, currentQuery(runtime, *query), *demoResults, fixtures)
 	fmt.Printf("native launcher smoke shell visible for %s\n", duration.String())
 	dumpSnapshot(ctx, runtime, *debug, "show")
 
@@ -124,7 +136,7 @@ func run() {
 		case <-queryTimer.C:
 			if !queryHandled {
 				runtime.ChangeQuery(ctx, newSmokeQuery(*updateQuery))
-				pushDemoResults(ctx, runtime, currentQuery(runtime, *updateQuery), *demoResults)
+				pushDemoResults(ctx, runtime, currentQuery(runtime, *updateQuery), *demoResults, fixtures)
 				fmt.Printf("native launcher smoke updated query=%q\n", *updateQuery)
 				dumpSnapshot(ctx, runtime, *debug, "query")
 				queryHandled = true
@@ -165,10 +177,11 @@ func dumpSnapshot(ctx context.Context, runtime launcher.Runtime, enabled bool, p
 
 	snapshot := debugger.DebugSnapshot(ctx)
 	fmt.Printf(
-		"native launcher smoke [%s] host(handle=%#x visible=%t) text(parent=%#x host=%#x edit=%#x hostVisible=%t editVisible=%t focused=%t frame=%+v query=%q results=%d selected=%d)\n",
+		"native launcher smoke [%s] host(handle=%#x visible=%t frame=%+v) text(parent=%#x host=%#x edit=%#x hostVisible=%t editVisible=%t focused=%t frame=%+v query=%q results=%d selected=%d previewVisible=%t previewKind=%s)\n",
 		phase,
 		snapshot.Host.NativeWindowHandle,
 		snapshot.Host.Visible,
+		snapshot.Host.WindowFrame,
 		snapshot.TextInput.ParentWindowHandle,
 		snapshot.TextInput.HostWindowHandle,
 		snapshot.TextInput.EditControlHandle,
@@ -179,6 +192,8 @@ func dumpSnapshot(ctx context.Context, runtime launcher.Runtime, enabled bool, p
 		snapshot.Query.QueryText,
 		len(snapshot.Results.Items),
 		snapshot.Results.SelectedIndex,
+		snapshot.Preview.Visible,
+		snapshot.Preview.Body.Kind,
 	)
 }
 
@@ -192,6 +207,16 @@ func defaultSmokeTheme() common.Theme {
 		QueryBoxBorderRadius:                 8,
 		QueryBoxTextSelectionBackgroundColor: "rgba(0, 168, 142, 0.8)",
 		QueryBoxTextSelectionColor:           "#FFFFFF",
+		ResultItemTitleColor:                 "#E2E8F0",
+		ResultItemSubTitleColor:              "#9CA3AF",
+		ResultItemActiveBackgroundColor:      "rgba(0, 168, 142, 0.7)",
+		ResultItemActiveTitleColor:           "#FFFFFF",
+		ResultItemActiveSubTitleColor:        "#E2E8F0",
+		ResultItemBorderRadius:               10,
+		PreviewFontColor:                     "#E2E8F0",
+		PreviewSplitLineColor:                "#4A5568",
+		PreviewPropertyTitleColor:            "#9CA3AF",
+		PreviewPropertyContentColor:          "#E2E8F0",
 	}
 }
 
@@ -204,7 +229,7 @@ func currentQuery(runtime launcher.Runtime, fallback string) common.PlainQuery {
 	return debugger.DebugSnapshot(context.Background()).Query
 }
 
-func pushDemoResults(ctx context.Context, runtime launcher.Runtime, query common.PlainQuery, count int) {
+func pushDemoResults(ctx context.Context, runtime launcher.Runtime, query common.PlainQuery, count int, fixtures smokePreviewFixtures) {
 	if runtime == nil || query.QueryId == "" {
 		return
 	}
@@ -228,11 +253,13 @@ func pushDemoResults(ctx context.Context, runtime launcher.Runtime, query common
 
 	results := make([]plugin.QueryResultUI, 0, count)
 	for index := 0; index < count; index++ {
+		preview, subtitle := buildSmokePreview(query, index, fixtures)
 		results = append(results, plugin.QueryResultUI{
 			QueryId:  query.QueryId,
 			Id:       fmt.Sprintf("demo-%d", index),
 			Title:    fmt.Sprintf("Result %d for %s", index+1, query.QueryText),
-			SubTitle: fmt.Sprintf("Demo subtitle %d", index+1),
+			SubTitle: subtitle,
+			Preview:  preview,
 			Actions: []plugin.QueryResultActionUI{
 				{
 					Id:        fmt.Sprintf("demo-action-%d", index),
@@ -254,5 +281,74 @@ func newSmokeQuery(text string) common.PlainQuery {
 		QueryId:   fmt.Sprintf("smoke-%d", time.Now().UnixNano()),
 		QueryType: string(plugin.QueryTypeInput),
 		QueryText: text,
+	}
+}
+
+func createSmokePreviewFixtures() (smokePreviewFixtures, func(), error) {
+	dir, err := os.MkdirTemp("", "wox-native-launcher-smoke-*")
+	if err != nil {
+		return smokePreviewFixtures{}, func() {}, err
+	}
+
+	markdownPath := dir + string(os.PathSeparator) + "preview.md"
+	textPath := dir + string(os.PathSeparator) + "preview.txt"
+
+	if writeErr := os.WriteFile(markdownPath, []byte("# Native launcher smoke markdown\n\nThis file preview verifies the runtime file-preview path."), 0o600); writeErr != nil {
+		_ = os.RemoveAll(dir)
+		return smokePreviewFixtures{}, func() {}, writeErr
+	}
+	if writeErr := os.WriteFile(textPath, []byte("Native launcher smoke text preview.\nThis file is rendered through the file-preview fallback path."), 0o600); writeErr != nil {
+		_ = os.RemoveAll(dir)
+		return smokePreviewFixtures{}, func() {}, writeErr
+	}
+
+	cleanup := func() {
+		_ = os.RemoveAll(dir)
+	}
+
+	return smokePreviewFixtures{
+		markdownPath: markdownPath,
+		textPath:     textPath,
+	}, cleanup, nil
+}
+
+func buildSmokePreview(query common.PlainQuery, index int, fixtures smokePreviewFixtures) (plugin.WoxPreview, string) {
+	switch index % 4 {
+	case 0:
+		return plugin.WoxPreview{
+			PreviewType: plugin.WoxPreviewTypeText,
+			PreviewData: fmt.Sprintf("Preview for %s #%d\n\nThis is a smoke-test text preview body.", query.QueryText, index+1),
+			PreviewProperties: map[string]string{
+				"kind":  "text",
+				"query": query.QueryText,
+			},
+		}, "Direct text preview"
+	case 1:
+		return plugin.WoxPreview{
+			PreviewType: plugin.WoxPreviewTypeMarkdown,
+			PreviewData: fmt.Sprintf("# %s result %d\n\n- query: `%s`\n- kind: markdown\n- index: %d", query.QueryText, index+1, query.QueryText, index+1),
+			PreviewProperties: map[string]string{
+				"kind":  "markdown",
+				"index": fmt.Sprintf("%d", index+1),
+			},
+		}, "Direct markdown preview"
+	case 2:
+		return plugin.WoxPreview{
+			PreviewType: plugin.WoxPreviewTypeFile,
+			PreviewData: fixtures.markdownPath,
+			PreviewProperties: map[string]string{
+				"kind": "file-markdown",
+				"path": fixtures.markdownPath,
+			},
+		}, "File-backed markdown preview"
+	default:
+		return plugin.WoxPreview{
+			PreviewType: plugin.WoxPreviewTypeFile,
+			PreviewData: fixtures.textPath,
+			PreviewProperties: map[string]string{
+				"kind": "file-text",
+				"path": fixtures.textPath,
+			},
+		}, "File-backed text preview"
 	}
 }

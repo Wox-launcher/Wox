@@ -17,11 +17,13 @@ type StartOptions struct {
 }
 
 type ShowRequest struct {
-	ShowContext common.ShowContext
-	Query       common.PlainQuery
-	QueryBox    QueryBoxState
-	Results     ResultListState
-	Theme       launchertheme.PaintTheme
+	ShowContext  common.ShowContext
+	WindowHeight int
+	Query        common.PlainQuery
+	QueryBox     QueryBoxState
+	Results      ResultListState
+	Preview      PreviewState
+	Theme        launchertheme.PaintTheme
 }
 
 type Host interface {
@@ -39,6 +41,7 @@ type NativeWindowProvider interface {
 type HostDebugSnapshot struct {
 	Visible            bool
 	NativeWindowHandle uintptr
+	WindowFrame        Rect
 }
 
 type DebugHost interface {
