@@ -135,6 +135,8 @@ Required thread rules:
   must execute on the UI thread
 - `wox.core` query execution, plugin work, indexing, and I/O continue on background goroutines
 - background goroutines communicate back to the UI thread through a bounded dispatch queue
+- no launcher-facing core path may synchronously wait on UI-thread work while holding core locks
+- no UI-thread path may synchronously wait for plugin execution or long-running core work
 
 Platform-specific constraints:
 - Windows
@@ -143,6 +145,15 @@ Platform-specific constraints:
   - AppKit and `WKWebView` must stay on the main thread
 - Linux
   - GTK and `WebKitGTK` stay on the GTK main-loop thread
+
+Startup sequence:
+1. `main()` calls `runtime.LockOSThread()`
+2. start core services on background goroutines
+3. wait for a core-ready signal
+4. create native launcher window and renderer resources on the UI thread
+5. enter the native message loop
+
+The rendering spike must validate this startup sequence with the real `wox.core` initialization path.
 
 ### In-Process Boundary
 The architectural boundary is no longer process-to-process. It becomes:
@@ -169,6 +180,10 @@ Communication patterns:
 - synchronous service calls for short control operations
 - asynchronous event streams for query results, terminal chunks, and incremental updates
 - explicit marshaling onto the UI thread for any native UI mutation
+
+Deadlock rule:
+- launcher-facing updates from `CoreServices` must always be representable as async event dispatch
+- if a control operation requires a reply, the reply must come from a background goroutine boundary, not from a UI-thread re-entrant wait
 
 ### Top-Level Split
 - single `wox` process
@@ -221,27 +236,29 @@ flowchart LR
 The launcher runtime needs an explicit rendering stack. The runtime is not complete if it defines state and layout without defining how pixels reach the screen.
 
 ### Rendering Stack Choice
-V1 should use a **shared Skia-based renderer** for launcher chrome and non-webview content.
+V1 should use a **native-first rendering model** for launcher chrome and non-webview content.
 
 Reasoning:
-- it gives one cross-platform drawing model for rounded rects, shadows, clipping, images, and text
-- it avoids three divergent native text-and-paint implementations for the fixed launcher UI
-- it keeps list rendering, badges, and theme behavior consistent across platforms
-- it is a better fit than `Cairo + Pango` for Windows packaging and than fully native controls for visual consistency
-- it avoids re-implementing text shaping from scratch, because Skia already integrates paragraph and shaping support
+- it keeps the shipped runtime aligned with the long-term goal of replacing Flutter rather than introducing a second heavyweight renderer
+- it makes window transparency, IME, focus, and embedded webview composition work with the native APIs that already own those responsibilities
+- it avoids shipping both a platform-native host layer and a separate cross-platform paint engine in the same product
+- it lets each platform use its strongest text and drawing stack for launcher chrome:
+  - Windows: `Direct2D` + `DirectWrite`
+  - macOS: `AppKit` + `CoreText` + `CoreAnimation`
+  - Linux: `GTK` + `Cairo` + `Pango`
 
 Rejected baseline approaches:
-- fully native view rendering
-  - rejected because Wox launcher visuals and truncation rules would drift across three platforms
+- shared `Skia` renderer
+  - rejected because it adds a second large rendering dependency on top of the native host and works against the long-term “replace Flutter with native launcher runtime” goal
 - native list controls plus custom cells
-  - rejected for v1 because they complicate exact theme parity, tail-badge layout, and keyboard behavior consistency
+  - rejected for v1 because they complicate exact theme parity, tail-badge layout, virtualization behavior, and keyboard behavior consistency
 - full custom GPU renderer with self-managed shaping
   - rejected because text shaping and rich image support are too expensive for the launcher scope
 
 ### Surface And Composition Model
 The runtime should compose two rendering domains:
 
-- `Skia scene`
+- `native-drawn launcher chrome`
   - query box
   - result list
   - overlays
@@ -252,17 +269,17 @@ The runtime should compose two rendering domains:
   - embedded website preview
   - markdown document preview rendered through a lightweight document webview
 
-This yields one consistent renderer for fixed launcher chrome while reserving webview composition for content that is naturally document-like.
+This yields platform-native launcher chrome while reserving webview composition for content that is naturally document-like.
 
-### Platform Raster Backends
+### Platform Drawing Backends
 - Windows
-  - Skia on `D3D11` with native window composition integration
+  - `Win32` host window with custom drawing through `Direct2D` and text layout through `DirectWrite`
 - macOS
-  - Skia on `Metal`
+  - `NSWindow` and `NSView` host with `CoreAnimation`, `CoreGraphics`, and `CoreText`
 - Linux
-  - Skia on `OpenGL` in the GTK host, with CPU fallback for unsupported GPU environments and CI
+  - `GTK` host with custom drawing through `Cairo` and text layout through `Pango`
 
-The native host remains responsible for the top-level render loop, swap chain or backing layer lifecycle, transparency, and child-webview z-order management.
+The native host remains responsible for top-level paint scheduling, transparency, clipping, and child-webview z-order management.
 
 ### Go-To-Renderer Contract
 Go does **not** rasterize pixels directly.
@@ -275,10 +292,10 @@ Go owns:
 - hit-test region ownership
 
 The native renderer owns:
-- Skia surface lifecycle
-- paragraph shaping and final text rasterization
-- image decode and texture upload
-- clip, shadow, and rounded-rect drawing
+- native view or drawing-surface lifecycle
+- paragraph shaping and final text rasterization through the platform text stack
+- image decode or raster upload through platform-native image facilities
+- clip, shadow, border, and rounded-rect drawing through the platform-native paint stack
 - final frame presentation
 
 The contract between them should be a retained scene description, for example `LauncherFrame`, containing:
@@ -298,10 +315,13 @@ The contract between them should be a retained scene description, for example `L
   - preview-pane bounds for active webview sessions
 
 ### Text Shaping And Layout Strategy
-The shared renderer should use:
-- `SkParagraph`
-- `HarfBuzz`
-- `ICU`
+Text shaping and measurement should use the platform text systems:
+- Windows
+  - `DirectWrite`
+- macOS
+  - `CoreText`
+- Linux
+  - `Pango`
 
 Responsibilities:
 - CJK shaping and line breaking
@@ -314,12 +334,22 @@ Layout flow:
 - Go requests text measurement from the renderer through a `TextMetricsBridge`
 - Go computes box layout using measured sizes
 - Go emits the final scene description
-- native renderer performs the final paragraph paint within the provided bounds
+- native renderer performs the final paragraph paint within the provided bounds using the platform text stack
 
-This keeps layout logic in shared Go code without forcing Go to own glyph shaping.
+This keeps layout logic in shared Go code without forcing Go to own glyph shaping or text rasterization.
+
+`TextMetricsBridge` must be treated as a coarse-grained measurement API:
+- batch measurement requests where practical
+- cache paragraph measurements by text, style, and width constraints
+- avoid per-node cgo round trips during every frame
+
+Scene updates should also use diffing rather than full rebuild submission when possible:
+- stable node ids in `LauncherFrame`
+- dirty-node or dirty-region tracking
+- coalesced scene submission during rapid query updates
 
 ### Query Editor Rendering Strategy
-The query box should be visually rendered by the Skia scene, but composing text input must still be driven by a platform-native IME bridge.
+The query box should be visually rendered by the native launcher renderer, but composing text input must still be driven by a platform-native IME bridge.
 
 That means:
 - caret, background, border radius, and selection visuals are part of the launcher scene
@@ -350,9 +380,10 @@ Guardrails:
 - markdown document webviews use a distinct local template profile, not a browsing session profile
 - external links open out of process rather than navigating the preview pane away from its template
 - markdown webviews are considered document previews, not general browsing sessions
+- markdown document webviews should use transient or non-persistent sessions by default unless a concrete caching benefit is demonstrated
 
 ### Plain Text Strategy
-Plain text preview should use the shared Skia renderer, not a webview.
+Plain text preview should use the native launcher renderer, not a webview.
 
 This keeps simple preview fast, cheap, selectable, and independent from webview startup cost.
 
@@ -367,9 +398,10 @@ V1 launcher-side image support:
 - `base64`
   - supported
 - `svg`
-  - supported through Skia SVG rasterization
+  - phase-gated
+  - use a small platform-specific SVG rasterization helper or a pre-rasterized fallback where native support is insufficient
 - `emoji`
-  - supported through shared text shaping
+  - supported through platform text shaping
 - `theme`
   - supported by rendering the theme preview icon from parsed theme data in the launcher scene
 
@@ -384,6 +416,9 @@ Deferred or degraded in v1:
   - not required for launcher v1 parity
   - degrade to a static placeholder or first-frame fallback if encountered
 
+Build requirement:
+- any optional SVG rasterization helper must be explicitly selected and validated per platform instead of assumed as a baseline dependency
+
 ### Result List Rendering Strategy
 The result list should remain a **shared custom virtualized list**, not a platform-native list control.
 
@@ -391,9 +426,9 @@ Reasons:
 - exact theme parity matters for active and inactive states
 - result rows have Wox-specific fixed layout with tails, badges, shortcut hints, and quick-select numbers
 - virtualization behavior needs to stay consistent across platforms
-- keyboard-first interaction is easier to keep identical in one renderer
+- keyboard-first interaction is easier to keep identical in one shared layout and state model
 
-The fixed row shape reduces complexity enough that custom shared rendering is justified here, unlike markdown.
+The fixed row shape reduces complexity enough that shared layout plus native drawing is justified here, unlike markdown.
 
 ### Theme Token Strategy
 The runtime should continue to load the current theme JSON from `wox.core`, but it should map raw theme fields into a smaller renderer-facing token set.
@@ -492,13 +527,30 @@ The single-process launcher path should expose coarse-grained Go interfaces, not
 
 Recommended service split:
 - `LauncherCoreAPI`
-  - synchronous query or action entry points
+  - blocking call surface from launcher worker goroutines into core services
+  - must not be used as a long-running synchronous call on the UI thread
 - `LauncherEventBus`
   - async result snapshots, terminal chunks, and incremental preview updates
 - `UIThreadDispatcher`
   - marshals work from goroutines to the native UI thread
 
 The current WS/HTTP message list remains useful as a semantic checklist, but the target implementation should not serialize these calls for the integrated launcher path.
+
+`LauncherEventBus` needs an explicit backpressure policy:
+- result snapshot events should coalesce by query revision
+- stale incremental updates for superseded query revisions should be dropped
+- terminal chunk streams may buffer within a bounded window, then switch to truncation or compaction rather than blocking the core
+- UI-thread saturation must not stall plugin execution indefinitely
+
+`UIThreadDispatcher` should use platform-native posting mechanisms:
+- Windows
+  - `PostMessage(...)` to the launcher window or host message target, then execute the queued callback on the UI thread
+- macOS
+  - `dispatch_async(dispatch_get_main_queue(), ...)`
+- Linux
+  - `g_idle_add()` or equivalent GTK main-loop scheduling
+
+The Go-owned dispatch loop should be protected with panic recovery so one bad callback does not automatically terminate the entire process.
 
 ### Platform Dialog Services
 `PickFiles` remains in scope for the launcher runtime. It should be implemented in `PlatformHost` using native file-selection dialogs on each platform rather than delegated back into Flutter.
@@ -560,7 +612,7 @@ This keeps preview-specific behavior out of the launcher root state machine.
 The runtime should ship a fixed renderer set:
 
 - `PlainTextRenderer`
-  - handles `text` through the shared Skia renderer
+  - handles `text` through the native launcher renderer
 - `MarkdownRenderer`
   - handles markdown through a document-scoped webview template layered on `WebViewHost`
 - `FileRenderer`
@@ -624,7 +676,7 @@ Dispatch rules:
 - `.md` routes to `MarkdownRenderer`
 - image file types route to `ImagePreview`
 - `.pdf` routes to `PdfRenderer`
-- code and text file types route to a plain-text or code file renderer within the shared Skia scene
+- code and text file types route to a plain-text or code file renderer within the native launcher scene
 
 PDF rules:
 - use a native document-preview path where the platform webview or document layer supports inline PDF rendering
@@ -845,6 +897,7 @@ Instead:
 - the visible query box is rendered by the launcher runtime
 - composing state is owned by a platform-native text input bridge
 - the native bridge mirrors text, selection, and composition ranges into the rendered query box
+- the native bridge also owns candidate-window anchoring and must be able to query the current caret rectangle from launcher layout state
 
 Platform bridges:
 - Windows
@@ -902,7 +955,8 @@ Required spike outputs:
   - tail badges
   - quick-select number
 - one markdown preview rendered through the document-webview pipeline
-- one plain-text preview rendered through the shared Skia pipeline
+- one plain-text preview rendered through the native Windows drawing backend
+- one real query flow from live `wox.core` into the launcher window without mock transport data
 
 Questions this spike must answer:
 - is text quality acceptable compared to the current Flutter launcher
@@ -910,10 +964,18 @@ Questions this spike must answer:
 - is theme fidelity acceptable for launcher-critical fields
 - is markdown-via-webview latency acceptable
 - is the Go-to-renderer interface small enough to remain maintainable
+- does the single-process startup sequence work with real core initialization
+- does WebView + native launcher composition behave correctly in one process under real z-order and resize behavior
 
 Exit criteria:
 - the team can compare screenshots and latency traces against the current launcher
 - the render stack is confirmed or rejected before the implementation plan locks in milestone estimates
+- Windows spike runs a real `wox.core` query path end to end:
+  - query dispatch
+  - result snapshot delivery
+  - result list render
+  - selection change
+  - preview swap
 
 ### Startup Failure Strategy
 The packaged product should ship only one launcher path:
@@ -926,6 +988,19 @@ If the integrated launcher fails to initialize:
 
 The product should not silently fall back to a second launcher implementation.
 
+### Runtime Fault Recovery Strategy
+Single-process packaging requires explicit recovery strategy for launcher-side runtime faults.
+
+Required recovery goals:
+- renderer faults should attempt local recovery before process termination
+- webview child-process exits should attempt session recreation where possible
+- panic boundaries in Go-owned dispatch loops should recover, log, and surface degraded launcher state instead of immediately terminating
+
+Validation targets:
+- renderer device or drawing-context loss on the active platform backend
+- embedded webview process crash or termination
+- panic inside a dispatched launcher callback
+
 ### Phase 1: Freeze Launcher Contract
 - freeze the semantic launcher contract before replacing transport boundaries
 - do not redesign plugin contracts
@@ -936,6 +1011,8 @@ Exit criteria:
 - all phase ownership decisions are documented
 - in-process `LauncherCoreAPI` and `LauncherEventBus` interfaces are defined
 - the UI-thread dispatcher contract is defined
+- all launcher-facing `wox.core` call sites are audited for thread-safety and re-entrancy
+- no audited path is allowed to hold core locks while synchronously waiting for UI-thread work
 
 ### Phase 2: Build The Minimum Shell
 Implement:
@@ -957,6 +1034,7 @@ Success criteria:
 - `PickFiles` and `OpenSettingWindow` work through `PlatformHost`
 - query-box IME composition works on at least one CJK input method per platform
 - launcher and core communicate without launcher-path WS/HTTP
+- GPU device loss and embedded webview process-crash scenarios are handled without terminating the full process
 
 ### Phase 3: Add WebViewHost
 Implement platform webview backends with one shared session abstraction.
@@ -1063,6 +1141,8 @@ In addition to behavior validation, the PoC should verify rendering quality for:
 - Single-process integration removes crash isolation between launcher UI and core services.
 - Single-process integration requires strict UI-thread discipline so plugin or query work never blocks the native host loop.
 - cgo bridge boundaries can become a maintainability problem if scene submission or text measurement calls are too fine-grained.
+- candidate-window positioning for IME composition can regress if caret geometry is not exposed accurately from launcher layout
+- WebView and native launcher surface composition in one process may still expose z-order and resize edge cases that only appear under real query and preview churn
 - The runtime can accidentally grow into a general toolkit if renderer boundaries are not kept strict.
 - Dual frontend maintenance adds short-term operational cost.
 

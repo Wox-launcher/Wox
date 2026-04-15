@@ -1905,7 +1905,7 @@ static void HandleShowCommand(OverlayPayload *payload)
     }
 
     ow->hwnd = CreateWindowExW(exStyle, g_overlayClassName, ow->title ? ow->title : L"",
-                               WS_POPUP, 0, 0, 0, 0, owner, NULL, GetModuleHandleW(NULL), ow);
+                               WS_POPUP | WS_CLIPCHILDREN, 0, 0, 0, 0, owner, NULL, GetModuleHandleW(NULL), ow);
     if (!ow->hwnd)
     {
         DWORD err = GetLastError();
@@ -1915,7 +1915,7 @@ static void HandleShowCommand(OverlayPayload *payload)
             owner = NULL;
             exStyle |= WS_EX_TOPMOST;
             ow->hwnd = CreateWindowExW(exStyle, g_overlayClassName, ow->title ? ow->title : L"",
-                                       WS_POPUP, 0, 0, 0, 0, owner, NULL, GetModuleHandleW(NULL), ow);
+                                       WS_POPUP | WS_CLIPCHILDREN, 0, 0, 0, 0, owner, NULL, GetModuleHandleW(NULL), ow);
         }
     }
 
@@ -2179,4 +2179,21 @@ void CloseOverlay(char *name)
             free(cmd->name);
         free(cmd);
     }
+}
+
+uintptr_t GetOverlayWindowHandle(char *name)
+{
+    if (!name)
+        return 0;
+
+    WCHAR *wideName = DupUtf8ToWide(name);
+    if (!wideName)
+        return 0;
+
+    OverlayWindow *ow = FindOverlayByName(wideName);
+    free(wideName);
+    if (!ow || !ow->hwnd || !IsWindow(ow->hwnd))
+        return 0;
+
+    return (uintptr_t)ow->hwnd;
 }

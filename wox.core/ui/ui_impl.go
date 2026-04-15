@@ -479,6 +479,58 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 		return
 	}
 
+	if err := executeChangedQuery(ctx, sessionId, changedQuery, func(queryId string, results []plugin.QueryResultUI, isFinal bool) {
+		responseUIQueryResults(ctx, request, queryId, results, isFinal)
+	}); err != nil {
+		logger.Error(ctx, err.Error())
+		responseUIError(ctx, request, err.Error())
+	}
+}
+
+type queryResultsEmitter func(queryId string, results []plugin.QueryResultUI, isFinal bool)
+
+func HandleNativeLauncherQueryChanged(ctx context.Context, changedQuery common.PlainQuery) error {
+	return executeChangedQuery(ctx, util.GetContextSessionId(ctx), changedQuery, func(queryId string, results []plugin.QueryResultUI, isFinal bool) {
+		_ = isFinal
+		plugin.GetPluginManager().GetUI().PushResults(ctx, plugin.PushResultsPayload{
+			QueryId: queryId,
+			Results: results,
+		})
+	})
+}
+
+func HandleNativeLauncherSelectedResultAction(ctx context.Context, queryId string, resultId string, actionId string) error {
+	sessionId := util.GetContextSessionId(ctx)
+	if sessionId == "" {
+		return errors.New("session id is empty")
+	}
+	if queryId == "" {
+		return errors.New("query id is empty")
+	}
+	if resultId == "" {
+		return errors.New("result id is empty")
+	}
+	if actionId == "" {
+		return errors.New("action id is empty")
+	}
+
+	actionCtx := util.WithQueryIdContext(util.WithSessionContext(ctx, sessionId), queryId)
+	return plugin.GetPluginManager().ExecuteAction(actionCtx, sessionId, queryId, resultId, actionId)
+}
+
+func executeChangedQuery(ctx context.Context, sessionId string, changedQuery common.PlainQuery, emit queryResultsEmitter) error {
+	if sessionId == "" {
+		return errors.New("session id is empty")
+	}
+	if changedQuery.QueryId == "" {
+		return errors.New("query id is empty")
+	}
+
+	if emit == nil {
+		emit = func(queryId string, results []plugin.QueryResultUI, isFinal bool) {}
+	}
+
+	queryId := changedQuery.QueryId
 	logger.Info(ctx, fmt.Sprintf("start to handle query changed: %s, queryId: %s", changedQuery.String(), queryId))
 
 	if changedQuery.QueryType == plugin.QueryTypeInput && changedQuery.QueryText == "" {
@@ -487,8 +539,8 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 			SessionId: sessionId,
 			Type:      plugin.QueryTypeInput,
 		}, nil)
-		responseUIQueryResults(ctx, request, queryId, []plugin.QueryResultUI{}, true)
-		return
+		emit(queryId, []plugin.QueryResultUI{}, true)
+		return nil
 	}
 	if changedQuery.QueryType == plugin.QueryTypeSelection && changedQuery.QuerySelection.String() == "" {
 		plugin.GetPluginManager().HandleQueryLifecycle(ctx, plugin.Query{
@@ -496,28 +548,25 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 			SessionId: sessionId,
 			Type:      plugin.QueryTypeSelection,
 		}, nil)
-		responseUIQueryResults(ctx, request, queryId, []plugin.QueryResultUI{}, true)
-		return
+		emit(queryId, []plugin.QueryResultUI{}, true)
+		return nil
 	}
 
 	query, queryPlugin, queryErr := plugin.GetPluginManager().NewQuery(ctx, changedQuery)
 	if queryErr != nil {
-		logger.Error(ctx, queryErr.Error())
-		responseUIError(ctx, request, queryErr.Error())
-		return
+		return queryErr
 	}
 
 	plugin.GetPluginManager().HandleQueryLifecycle(ctx, query, queryPlugin)
 
 	var totalResultCount int
-	var startTimestamp = util.GetSystemTimestamp()
-	var firstFlushDelayMs = plugin.GetPluginManager().GetQueryFirstFlushDelayMs(query)
+	startTimestamp := util.GetSystemTimestamp()
+	firstFlushDelayMs := plugin.GetPluginManager().GetQueryFirstFlushDelayMs(query)
 	logger.Info(ctx, fmt.Sprintf("query %s: %s, first flush delay: %d ms", query.Type, query.String(), firstFlushDelayMs))
 
-	var resultDebouncer = util.NewDebouncer(firstFlushDelayMs, resultDebounceIntervalMs, func(results []plugin.QueryResultUI, reason string) {
+	resultDebouncer := util.NewDebouncer(firstFlushDelayMs, resultDebounceIntervalMs, func(results []plugin.QueryResultUI, reason string) {
 		isFinal := reason == "done"
 
-		// no results during ticks, skip sending
 		if !isFinal && len(results) == 0 {
 			return
 		}
@@ -527,7 +576,7 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 
 		logger.Info(ctx, fmt.Sprintf("query %s: %s, result flushed (reason: %s, isFinal: %v), current: %d, total results: %d", query.Type, query.String(), reason, isFinal, len(results), totalResultCount))
 		snapshot := plugin.GetPluginManager().BuildQueryResultsSnapshot(sessionId, queryId)
-		responseUIQueryResults(ctx, request, queryId, snapshot, isFinal)
+		emit(queryId, snapshot, isFinal)
 	})
 	resultDebouncer.Start(ctx)
 	logger.Info(ctx, fmt.Sprintf("query %s: %s, result flushed (new start)", query.Type, query.String()))
@@ -537,7 +586,7 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 		case results := <-resultChan:
 			if !plugin.GetPluginManager().IsCurrentQuery(sessionId, queryId) {
 				resultDebouncer.Done(ctx)
-				return
+				return nil
 			}
 			if len(results) == 0 {
 				continue
@@ -550,11 +599,10 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 		case <-doneChan:
 			if !plugin.GetPluginManager().IsCurrentQuery(sessionId, queryId) {
 				resultDebouncer.Done(ctx)
-				return
+				return nil
 			}
 			logger.Info(ctx, fmt.Sprintf("query done, total results: %d, cost %d ms", totalResultCount, util.GetSystemTimestamp()-startTimestamp))
 
-			// if there is no result, show fallback search
 			if totalResultCount == 0 {
 				fallbackResults := plugin.GetPluginManager().QueryFallback(ctx, query, queryPlugin)
 				if len(fallbackResults) > 0 {
@@ -569,15 +617,13 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 			}
 
 			resultDebouncer.Done(ctx)
-			return
+			return nil
 		case <-time.After(time.Minute):
-			logger.Info(ctx, fmt.Sprintf("query timeout, query: %s, request id: %s", query.String(), request.RequestId))
+			logger.Info(ctx, fmt.Sprintf("query timeout, query: %s", query.String()))
 			resultDebouncer.Done(ctx)
-			responseUIError(ctx, request, fmt.Sprintf("query timeout, query: %s, request id: %s", query.String(), request.RequestId))
-			return
+			return fmt.Errorf("query timeout, query: %s", query.String())
 		}
 	}
-
 }
 
 func handleWebsocketAction(ctx context.Context, request WebsocketMsg) {

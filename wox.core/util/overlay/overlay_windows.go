@@ -5,6 +5,7 @@ package overlay
 #cgo LDFLAGS: -ldwmapi -luxtheme -lmsimg32 -lgdi32 -luser32 -lole32 -luuid -lwindowscodecs -lcomctl32
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 typedef struct {
     char* name;
@@ -32,6 +33,7 @@ typedef struct {
 void ShowOverlay(OverlayOptions opts);
 void CloseOverlay(char* name);
 void overlayClickCallbackCGO(char* name);
+uintptr_t GetOverlayWindowHandle(char* name);
 */
 import "C"
 import (
@@ -107,6 +109,12 @@ func Close(name string) {
 	cName := C.CString(name)
 	defer C.free(unsafe.Pointer(cName))
 	C.CloseOverlay(cName)
+}
+
+func GetWindowHandle(name string) uintptr {
+	cName := C.CString(name)
+	defer C.free(unsafe.Pointer(cName))
+	return uintptr(C.GetOverlayWindowHandle(cName))
 }
 
 //export overlayClickCallbackCGO

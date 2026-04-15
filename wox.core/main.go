@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"wox/analytics"
 	"wox/database"
+	"wox/launcher"
 	"wox/migration"
 	"wox/telemetry"
 
@@ -182,6 +183,27 @@ func run() {
 		return
 	}
 
+	launcherRuntime, launcherRuntimeErr := launcher.StartIfEnabled(ctx, ui.GetUIManager(), func(runtimeCtx context.Context) (launcher.Runtime, error) {
+		return launcher.DefaultRuntimeFactoryWithOptions(runtimeCtx, launcher.WindowShellRuntimeOptions{
+			OnUserQueryChanged: ui.HandleNativeLauncherQueryChanged,
+			OnSelectedResultAction: func(actionCtx context.Context, queryID string, resultID string, actionID string) error {
+				return ui.HandleNativeLauncherSelectedResultAction(actionCtx, queryID, resultID, actionID)
+			},
+		})
+	})
+	if launcherRuntimeErr != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to start native launcher runtime: %s", launcherRuntimeErr.Error()))
+		return
+	}
+	if launcherRuntime != nil {
+		launcherRuntime.ChangeTheme(ctx, ui.GetUIManager().GetCurrentTheme(ctx))
+		defer func() {
+			if stopErr := launcherRuntime.Stop(ctx); stopErr != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("failed to stop native launcher runtime: %s", stopErr.Error()))
+			}
+		}()
+	}
+
 	if woxSetting.ShowTray.Get() {
 		ui.GetUIManager().ShowTray()
 	}
@@ -224,6 +246,10 @@ func run() {
 		if registerQueryHotkeyErr != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("failed to register query hotkey: %s", registerQueryHotkeyErr.Error()))
 		}
+	}
+
+	if launcherRuntime != nil {
+		ui.GetUIManager().PostUIReady(ctx)
 	}
 
 	if util.IsProd() {
