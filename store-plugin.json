@@ -241,7 +241,7 @@
     "Id": "36fa2371-144c-4f53-98bb-874f77b21849",
     "Name": "Mole",
     "Author": "qianlifeng",
-    "Version": "0.0.1",
+    "Version": "0.0.2",
     "MinWoxVersion": "2.0.0",
     "Runtime": "python",
     "Description": "Dig deep like a mole to optimize you Mac",
@@ -255,7 +255,7 @@
       "Darwin"
     ],
     "DateCreated": "2025-11-26 22:15:00",
-    "DateUpdated": "2025-11-26 22:15:00"
+    "DateUpdated": "2026-04-27 06:50:15"
   },
   {
     "Id": "d4cf7d41-5cc2-4c21-8ee6-fbd6ca950c6a",
@@ -680,7 +680,7 @@
     "Id": "6987b7b1-89da-41ef-bab3-d1ba2e3daba0",
     "Name": "Everything",
     "Author": "qianlifeng",
-    "Version": "0.0.8",
+    "Version": "0.0.9",
     "MinWoxVersion": "2.0.0",
     "Runtime": "nodejs",
     "Description": "Search files with Everything on Windows",
@@ -694,7 +694,7 @@
       "Windows"
     ],
     "DateCreated": "2026-04-22 20:40:30",
-    "DateUpdated": "2026-04-22 20:40:30"
+    "DateUpdated": "2026-04-27 06:50:23"
   },
   {
     "Id": "0057ebd4-1a85-4653-8bfa-d51557c0c7a1",
