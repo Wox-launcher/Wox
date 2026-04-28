@@ -727,5 +727,41 @@
         "plugin_description": "搜索 Unsplash 图片并设置为桌面壁纸"
       }
     }
+  },
+  {
+    "Id": "263fa95c-db99-4dc8-be68-784b5ae421f8",
+    "Name": "i18n:plugin_name",
+    "Author": "stmluyuer",
+    "Version": "0.1.0",
+    "MinWoxVersion": "2.0.0",
+    "Runtime": "nodejs",
+    "Description": "i18n:plugin_description",
+    "IconUrl": "https://raw.githubusercontent.com/stmluyuer/LuxTranslate/main/images/app.svg",
+    "Website": "https://github.com/stmluyuer/LuxTranslate",
+    "DownloadUrl": "https://github.com/stmluyuer/LuxTranslate/releases/latest/download/wox.plugin.luxtranslate.wox",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/stmluyuer/LuxTranslate/main/screenshots/query-result.jpg",
+      "https://raw.githubusercontent.com/stmluyuer/LuxTranslate/main/screenshots/multi-provider-result.jpg",
+      "https://raw.githubusercontent.com/stmluyuer/LuxTranslate/main/screenshots/settings-basic.jpg",
+      "https://raw.githubusercontent.com/stmluyuer/LuxTranslate/main/screenshots/settings-llm-table.jpg",
+      "https://raw.githubusercontent.com/stmluyuer/LuxTranslate/main/screenshots/quick-query-tip.jpg"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
+    "DateCreated": "2026-04-28 13:05:57",
+    "DateUpdated": "2026-04-28 13:05:57",
+    "I18n": {
+      "en_US": {
+        "plugin_name": "LuxTranslate",
+        "plugin_description": "Translate text in Wox with no-setup providers and large language models"
+      },
+      "zh_CN": {
+        "plugin_name": "LuxTranslate",
+        "plugin_description": "在 Wox 中使用免配置翻译源和大模型翻译文本"
+      }
+    }
   }
 ]
