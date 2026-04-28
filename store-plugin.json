@@ -763,5 +763,37 @@
         "plugin_description": "在 Wox 中使用免配置翻译源和大模型翻译文本"
       }
     }
+  },
+  {
+    "Id": "76d3be7c-7f4d-4a9d-9f8a-1e8d4c6b5a2f",
+    "Name": "i18n:plugin_name",
+    "Author": "stmluyuer",
+    "Version": "0.1.0",
+    "MinWoxVersion": "2.0.0",
+    "Runtime": "nodejs",
+    "Description": "i18n:plugin_description",
+    "IconUrl": "https://raw.githubusercontent.com/stmluyuer/Wox.Plugin.ScreenshotOCR/main/images/app.svg",
+    "Website": "https://github.com/stmluyuer/Wox.Plugin.ScreenshotOCR",
+    "DownloadUrl": "https://github.com/stmluyuer/Wox.Plugin.ScreenshotOCR/releases/latest/download/wox.plugin.screenshotocr.wox",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/stmluyuer/Wox.Plugin.ScreenshotOCR/main/screenshots/command-help.jpg",
+      "https://raw.githubusercontent.com/stmluyuer/Wox.Plugin.ScreenshotOCR/main/screenshots/settings.jpg",
+      "https://raw.githubusercontent.com/stmluyuer/Wox.Plugin.ScreenshotOCR/main/screenshots/model-config.jpg"
+    ],
+    "SupportedOS": [
+      "Windows"
+    ],
+    "DateCreated": "2026-04-28 20:07:14",
+    "DateUpdated": "2026-04-28 20:07:14",
+    "I18n": {
+      "en_US": {
+        "plugin_name": "Screenshot OCR",
+        "plugin_description": "Capture or read images, recognize text with online OCR, and send text to LuxTranslate"
+      },
+      "zh_CN": {
+        "plugin_name": "截图 OCR",
+        "plugin_description": "截图或读取图片，使用在线 OCR 识别文字，并发送给 LuxTranslate 翻译"
+      }
+    }
   }
 ]
