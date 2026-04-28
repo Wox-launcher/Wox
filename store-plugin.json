@@ -736,15 +736,15 @@
     "MinWoxVersion": "2.0.0",
     "Runtime": "nodejs",
     "Description": "i18n:plugin_description",
-    "IconUrl": "https://raw.githubusercontent.com/stmluyuer/LuxTranslate/main/images/app.svg",
-    "Website": "https://github.com/stmluyuer/LuxTranslate",
-    "DownloadUrl": "https://github.com/stmluyuer/LuxTranslate/releases/latest/download/wox.plugin.luxtranslate.wox",
+    "IconUrl": "https://raw.githubusercontent.com/stmluyuer/Wox.Plugin.LuxTranslate/main/images/app.svg",
+    "Website": "https://github.com/stmluyuer/Wox.Plugin.LuxTranslate",
+    "DownloadUrl": "https://github.com/stmluyuer/Wox.Plugin.LuxTranslate/releases/latest/download/wox.plugin.luxtranslate.wox",
     "ScreenshotUrls": [
-      "https://raw.githubusercontent.com/stmluyuer/LuxTranslate/main/screenshots/query-result.jpg",
-      "https://raw.githubusercontent.com/stmluyuer/LuxTranslate/main/screenshots/multi-provider-result.jpg",
-      "https://raw.githubusercontent.com/stmluyuer/LuxTranslate/main/screenshots/settings-basic.jpg",
-      "https://raw.githubusercontent.com/stmluyuer/LuxTranslate/main/screenshots/settings-llm-table.jpg",
-      "https://raw.githubusercontent.com/stmluyuer/LuxTranslate/main/screenshots/quick-query-tip.jpg"
+      "https://raw.githubusercontent.com/stmluyuer/Wox.Plugin.LuxTranslate/main/screenshots/query-result.jpg",
+      "https://raw.githubusercontent.com/stmluyuer/Wox.Plugin.LuxTranslate/main/screenshots/multi-provider-result.jpg",
+      "https://raw.githubusercontent.com/stmluyuer/Wox.Plugin.LuxTranslate/main/screenshots/settings-basic.jpg",
+      "https://raw.githubusercontent.com/stmluyuer/Wox.Plugin.LuxTranslate/main/screenshots/settings-llm-table.jpg",
+      "https://raw.githubusercontent.com/stmluyuer/Wox.Plugin.LuxTranslate/main/screenshots/quick-query-tip.jpg"
     ],
     "SupportedOS": [
       "Windows",
