@@ -304,7 +304,7 @@
     "Id": "9014abc5-7a57-46c4-8961-abf3d8f1b008",
     "Name": "i18n:plugin_name",
     "Author": "Wox-launcher",
-    "Version": "0.0.2",
+    "Version": "0.0.3",
     "MinWoxVersion": "2.0.0",
     "Runtime": "nodejs",
     "Description": "i18n:plugin_desc",
@@ -319,7 +319,7 @@
       "darwin"
     ],
     "DateCreated": "2025-12-15 16:47:00",
-    "DateUpdated": "2025-12-18 21:17:03",
+    "DateUpdated": "2026-04-29 04:12:17",
     "I18n": {
       "en_US": {
         "plugin_name": "Color Picker",
@@ -542,7 +542,7 @@
     "Id": "2f326a0c-cd9f-4ddf-9b45-f8abf082283f",
     "Name": "i18n:plugin_name",
     "Author": "Wox-launcher",
-    "Version": "0.2.0",
+    "Version": "0.2.1",
     "MinWoxVersion": "2.0.0",
     "Runtime": "nodejs",
     "Description": "i18n:plugin_desc",
@@ -558,7 +558,7 @@
       "Linux"
     ],
     "DateCreated": "2026-03-08 15:56:00",
-    "DateUpdated": "2026-03-19 12:09:12",
+    "DateUpdated": "2026-04-29 04:12:20",
     "I18n": {
       "en_US": {
         "plugin_name": "Codex Usage",
