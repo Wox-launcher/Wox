@@ -131,7 +131,7 @@
     "Id": "aeb94d3d-9c39-4917-9cd0-a4cde95433a2",
     "Name": "Spotify",
     "Author": "Wox-launcher",
-    "Version": "0.0.1",
+    "Version": "0.0.2",
     "MinWoxVersion": "2.0.0",
     "Runtime": "nodejs",
     "Description": "Spotify integration",
@@ -147,7 +147,7 @@
       "Linux"
     ],
     "DateCreated": "2024-07-05 15:00:00",
-    "DateUpdated": "2024-07-05 15:00:00"
+    "DateUpdated": "2026-05-14 06:58:15"
   },
   {
     "Id": "9575a1fc-d81b-4947-bcce-bd075f118f3e",
