@@ -76,6 +76,12 @@ type realIndexRootArtifact struct {
 	EntryCount      int    `json:"entry_count"`
 }
 
+type realIndexIndexedCounts struct {
+	DirectoryCount int
+	FileCount      int
+	EntryCount     int
+}
+
 type realIndexPolicyArtifact struct {
 	Mode                string   `json:"mode"`
 	IgnoredPatternCount int      `json:"ignored_pattern_count"`
@@ -337,36 +343,23 @@ func TestCaptureFileSearchRealIndexForProjectsRoot(t *testing.T) {
 	scanStartedAt := time.Now()
 	scanner.scanAllRoots(scanCtx)
 	scanFinishedAt := time.Now()
-	searchBenchmark := captureRealIndexSearchBenchmark(t, baseCtx, db, searchKeyword, scanStartedAt, scanFinishedAt)
+
+	// Feature addition: release baseline runs are usually read from `go test -v`
+	// output, not from the JSON artifact. Count the final persisted index before
+	// printing the Wox baseline so the one-line comparison includes the total
+	// indexed file/entry volume that explains how large the scan actually was.
+	rootArtifact := captureRealIndexRootArtifact(t, scanCtx, db, root.ID)
+	searchBenchmark := captureRealIndexSearchBenchmark(t, baseCtx, db, searchKeyword, scanStartedAt, scanFinishedAt, realIndexIndexedCounts{
+		DirectoryCount: rootArtifact.DirectoryCount,
+		FileCount:      rootArtifact.FileCount,
+		EntryCount:     rootArtifact.EntryCount,
+	})
 
 	// External baselines still belong in the artifact, but after Wox has already
 	// paid the real index cost. Their run_order explicitly records that they are
 	// lookup references, not cache warmers for the Wox scan.
 	fdBaseline := captureRealIndexFdBaseline(t, baseCtx, rootPath, searchKeyword)
 	rgBaseline := captureRealIndexRgBaseline(t, baseCtx, rootPath, searchKeyword)
-
-	rootAfter, err := db.FindRootByID(scanCtx, root.ID)
-	if err != nil {
-		t.Fatalf("find root after real index capture: %v", err)
-	}
-	if rootAfter == nil {
-		t.Fatalf("expected captured root %q to remain persisted", root.ID)
-	}
-
-	directoryCount, err := db.CountDirectoriesByRoot(scanCtx, root.ID)
-	if err != nil {
-		t.Fatalf("count directories after real index capture: %v", err)
-	}
-	entries, err := db.ListEntriesByRoot(scanCtx, root.ID)
-	if err != nil {
-		t.Fatalf("list entries after real index capture: %v", err)
-	}
-	fileCount := 0
-	for _, entry := range entries {
-		if !entry.IsDir {
-			fileCount++
-		}
-	}
 
 	sqliteSnapshot, err := db.SearchIndexSnapshot(scanCtx)
 	if err != nil {
@@ -377,18 +370,9 @@ func TestCaptureFileSearchRealIndexForProjectsRoot(t *testing.T) {
 
 	timelineMu.Lock()
 	artifact := realIndexArtifact{
-		CapturedAt: time.Now().UTC().Format(time.RFC3339),
-		GoGCFlags:  strings.TrimSpace(os.Getenv(actualIndexGCFlagsEnv)),
-		Root: realIndexRootArtifact{
-			Path:            rootAfter.Path,
-			Status:          string(rootAfter.Status),
-			LastFullScanAt:  rootAfter.LastFullScanAt,
-			ProgressCurrent: rootAfter.ProgressCurrent,
-			ProgressTotal:   rootAfter.ProgressTotal,
-			DirectoryCount:  directoryCount,
-			FileCount:       fileCount,
-			EntryCount:      len(entries),
-		},
+		CapturedAt:         time.Now().UTC().Format(time.RFC3339),
+		GoGCFlags:          strings.TrimSpace(os.Getenv(actualIndexGCFlagsEnv)),
+		Root:               rootArtifact,
 		IndexPolicy:        indexPolicyArtifact,
 		FdBaseline:         fdBaseline,
 		RgBaseline:         rgBaseline,
@@ -403,6 +387,41 @@ func TestCaptureFileSearchRealIndexForProjectsRoot(t *testing.T) {
 	timelineMu.Unlock()
 
 	writeRealIndexArtifact(t, artifact)
+}
+
+func captureRealIndexRootArtifact(t *testing.T, ctx context.Context, db *FileSearchDB, rootID string) realIndexRootArtifact {
+	t.Helper()
+
+	rootAfter, err := db.FindRootByID(ctx, rootID)
+	if err != nil {
+		t.Fatalf("find root after real index capture: %v", err)
+	}
+	if rootAfter == nil {
+		t.Fatalf("expected captured root %q to remain persisted", rootID)
+	}
+
+	directoryCount, err := db.CountDirectoriesByRoot(ctx, rootID)
+	if err != nil {
+		t.Fatalf("count directories after real index capture: %v", err)
+	}
+	// Use SQLite aggregate counts instead of loading every entry row. Large
+	// release baselines should print index volume without adding a second
+	// memory-heavy walk over the captured result set.
+	fileCount, entryCount, err := db.SearchIndexCounts(ctx)
+	if err != nil {
+		t.Fatalf("count indexed entries after real index capture: %v", err)
+	}
+
+	return realIndexRootArtifact{
+		Path:            rootAfter.Path,
+		Status:          string(rootAfter.Status),
+		LastFullScanAt:  rootAfter.LastFullScanAt,
+		ProgressCurrent: rootAfter.ProgressCurrent,
+		ProgressTotal:   rootAfter.ProgressTotal,
+		DirectoryCount:  directoryCount,
+		FileCount:       int(fileCount),
+		EntryCount:      int(entryCount),
+	}
 }
 
 func realIndexBenchmarkPolicy() (Policy, realIndexPolicyArtifact, *indexpolicy.Diagnostics) {
@@ -554,7 +573,7 @@ func realIndexToolExecutable(flagValue *string, envName string, binaryNames ...s
 	return "", lastErr
 }
 
-func captureRealIndexSearchBenchmark(t *testing.T, parentCtx context.Context, db *FileSearchDB, keyword string, indexStartedAt time.Time, indexFinishedAt time.Time) realIndexSearchBenchmark {
+func captureRealIndexSearchBenchmark(t *testing.T, parentCtx context.Context, db *FileSearchDB, keyword string, indexStartedAt time.Time, indexFinishedAt time.Time, indexCounts realIndexIndexedCounts) realIndexSearchBenchmark {
 	t.Helper()
 
 	benchmark := realIndexSearchBenchmark{
@@ -590,13 +609,16 @@ func captureRealIndexSearchBenchmark(t *testing.T, parentCtx context.Context, db
 	benchmark.ResultPreview = buildRealIndexSearchPreview(results)
 
 	t.Logf(
-		"wox baseline: keyword=%q results=%d limit=%d elapsed=%dms index_elapsed=%dms search_elapsed=%dms error=%q",
+		"wox baseline: keyword=%q results=%d limit=%d elapsed=%dms index_elapsed=%dms search_elapsed=%dms indexed_files=%d indexed_entries=%d indexed_dirs=%d error=%q",
 		benchmark.Keyword,
 		benchmark.ResultCount,
 		benchmark.Limit,
 		benchmark.ElapsedMillis,
 		benchmark.IndexElapsedMillis,
 		benchmark.SearchElapsedMillis,
+		indexCounts.FileCount,
+		indexCounts.EntryCount,
+		indexCounts.DirectoryCount,
 		benchmark.Error,
 	)
 	return benchmark

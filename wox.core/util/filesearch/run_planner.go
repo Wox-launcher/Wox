@@ -10,14 +10,10 @@ import (
 	"wox/util"
 )
 
-const estimatedPlannerEntryBytes int64 = 256
-
-// RunPlanner builds one sealed full-run workload in memory before execution.
-// The previous root-centric flow discovered and executed work as the same loop,
-// which made huge roots hold too much state at once and left progress totals
-// unstable. The current planner seals ownership boundaries first, then lets
-// streaming execution do the only recursive walk so large roots avoid a duplicate
-// planning traversal.
+// RunPlanner builds one sealed indexing workload shape in memory before execution.
+// The previous root-centric flow mixed discovery, recursive counting, and writes
+// in one loop. The current planner only seals ownership boundaries; streaming
+// execution owns the real recursive walk and live file counts.
 type RunPlanner struct {
 	policy         *policyState
 	budget         splitBudget
@@ -56,11 +52,6 @@ type runPlannerScopeBuffer struct {
 	totals          PlanTotals
 	splitRequired   bool
 	children        []*runPlannerScopeBuffer
-}
-
-type subtreeChildSummary struct {
-	path   string
-	totals PlanTotals
 }
 
 func NewRunPlanner(policy *policyState) *RunPlanner {
@@ -110,11 +101,12 @@ func (p *RunPlanner) PlanFullRun(ctx context.Context, roots []RootRecord) (RunPl
 		if rootBuffer == nil || rootBuffer.rootScope == nil {
 			continue
 		}
-		// Optimization: full indexing used to keep one huge root-level streaming
-		// job when exact pre-scan was disabled. Splitting the root into direct
-		// files plus top-level subtree leaves keeps execution diagnostics useful
-		// while still avoiding the duplicate count-then-apply filesystem walk.
-		applyStreamingEstimatedTotals(rootBuffer.rootScope)
+		// Optimization: full indexing uses estimated work units because the real
+		// file count is discovered by the streaming executor. Splitting the root
+		// into direct files plus top-level subtree leaves keeps execution
+		// diagnostics useful while still avoiding the duplicate count-then-apply
+		// filesystem walk.
+		applyEstimatedTotalsForStreamingScopes(rootBuffer.rootScope)
 	}
 
 	// Phase 2: seal. We convert the planner-owned buffers into immutable plan
@@ -131,7 +123,7 @@ func (p *RunPlanner) PlanFullRun(ctx context.Context, roots []RootRecord) (RunPl
 	return sealed, nil
 }
 
-func streamingFullRunEstimatedTotals() PlanTotals {
+func streamingRunEstimatedTotals() PlanTotals {
 	return PlanTotals{
 		DirectoryCount:      1,
 		IndexableEntryCount: 1,
@@ -140,18 +132,18 @@ func streamingFullRunEstimatedTotals() PlanTotals {
 	}
 }
 
-func applyStreamingEstimatedTotals(scope *runPlannerScopeBuffer) PlanTotals {
+func applyEstimatedTotalsForStreamingScopes(scope *runPlannerScopeBuffer) PlanTotals {
 	if scope == nil {
 		return PlanTotals{}
 	}
 	if len(scope.children) == 0 {
-		scope.totals = streamingFullRunEstimatedTotals()
+		scope.totals = streamingRunEstimatedTotals()
 		return scope.totals
 	}
 
 	totals := PlanTotals{}
 	for _, child := range scope.children {
-		totals = mergePlanTotals(totals, applyStreamingEstimatedTotals(child))
+		totals = mergePlanTotals(totals, applyEstimatedTotalsForStreamingScopes(child))
 	}
 	scope.totals = totals
 	return totals
@@ -178,7 +170,7 @@ func (p *RunPlanner) PlanIncrementalRun(ctx context.Context, roots []RootRecord,
 		// Optimization: incremental indexing also skips exact planning. Dirty
 		// scopes are already the caller's best available boundary, so walking them
 		// once to count work and again to apply work only delays reconciliation.
-		applyStreamingEstimatedTotals(rootBuffer.rootScope)
+		applyEstimatedTotalsForStreamingScopes(rootBuffer.rootScope)
 	}
 
 	draft, err := p.buildDraftPlan(RunKindIncremental, "incremental-plan", "incremental-run")
@@ -224,8 +216,9 @@ func (p *RunPlanner) planIncrementalRoots(ctx context.Context, roots []RootRecor
 	}
 
 	type rootDraft struct {
-		root     RootRecord
-		children []*runPlannerScopeBuffer
+		root      RootRecord
+		rootScope *runPlannerScopeBuffer
+		children  []*runPlannerScopeBuffer
 	}
 
 	rootDrafts := make(map[string]*rootDraft, len(batches))
@@ -250,10 +243,24 @@ func (p *RunPlanner) planIncrementalRoots(ctx context.Context, roots []RootRecor
 		}
 
 		if batch.Mode == ReconcileModeRoot || len(batch.Paths) == 0 {
-			draft.children = []*runPlannerScopeBuffer{{
-				scopePath: filepath.Clean(root.Path),
-				scopeKind: ScopeKindSubtree,
-			}}
+			// Bug fix: a root-level incremental reconcile used to collapse the
+			// whole configured root into one subtree job. For large home roots that
+			// made an "incremental" pass slower than a full pass, because full
+			// planning already splits the root into top-level streaming scopes.
+			// Reusing the full root planner here keeps root-reconcile semantics while
+			// preserving the same bounded job shape as full indexing.
+			rootBuffer, err := p.planRoot(ctx, root)
+			if err != nil {
+				return nil, wrapRunPlannerRootError(root.ID, err)
+			}
+			draft.rootScope = rootBuffer.rootScope
+			draft.children = nil
+			continue
+		}
+		if draft.rootScope != nil {
+			// A root-level reconcile supersedes any narrower dirty paths already
+			// coalesced for this root. Keep the broader split plan so the final
+			// reconcile still prunes stale rows across the full root.
 			continue
 		}
 
@@ -295,14 +302,17 @@ func (p *RunPlanner) planIncrementalRoots(ctx context.Context, roots []RootRecor
 			ScopePath: filepath.Clean(draft.root.Path),
 		})
 
-		rootScope := &runPlannerScopeBuffer{
-			scopePath: filepath.Clean(draft.root.Path),
-			scopeKind: ScopeKindSubtree,
+		rootScope := draft.rootScope
+		if rootScope == nil {
+			rootScope = &runPlannerScopeBuffer{
+				scopePath: filepath.Clean(draft.root.Path),
+				scopeKind: ScopeKindSubtree,
+			}
 		}
 
-		if len(draft.children) == 1 && filepath.Clean(draft.children[0].scopePath) == filepath.Clean(draft.root.Path) {
+		if draft.rootScope == nil && len(draft.children) == 1 && filepath.Clean(draft.children[0].scopePath) == filepath.Clean(draft.root.Path) {
 			rootScope = draft.children[0]
-		} else if len(draft.children) > 0 {
+		} else if draft.rootScope == nil && len(draft.children) > 0 {
 			rootScope.splitRequired = true
 			rootScope.children = dedupePlannerScopes(draft.children)
 		}
@@ -412,393 +422,6 @@ func (p *RunPlanner) planRootTopLevelScopes(ctx context.Context, root RootRecord
 	return children, nil
 }
 
-func (p *RunPlanner) preScanRoot(ctx context.Context, rootBuffer *runPlannerRootBuffer, budget splitBudget, rootIndex int, rootTotal int) error {
-	if rootBuffer == nil || rootBuffer.rootScope == nil {
-		return nil
-	}
-	if len(rootBuffer.rootScope.children) > 0 {
-		for _, child := range rootBuffer.rootScope.children {
-			if err := p.preScanScope(ctx, rootBuffer.root, child, budget, rootIndex, rootTotal); err != nil {
-				return err
-			}
-		}
-		rootBuffer.rootScope.totals = aggregateChildTotals(rootBuffer.rootScope.children)
-		return nil
-	}
-	return p.preScanScope(ctx, rootBuffer.root, rootBuffer.rootScope, budget, rootIndex, rootTotal)
-}
-
-func (p *RunPlanner) preScanScope(ctx context.Context, root RootRecord, scope *runPlannerScopeBuffer, budget splitBudget, rootIndex int, rootTotal int) error {
-	// Pre-scan still reports a root-level stable denominator in version 1
-	// because recursive subtree splitting can discover more scopes mid-pass.
-	// Emitting the active scope path here still tells the UI exactly which
-	// subtree is being measured without letting the percentage move backwards.
-	p.emitProgress(RunPlannerProgress{
-		Stage:     RunStagePreScan,
-		Root:      root,
-		RootIndex: rootIndex,
-		RootTotal: rootTotal,
-		ScopePath: filepath.Clean(scope.scopePath),
-	})
-	switch scope.scopeKind {
-	case ScopeKindDirectFiles:
-		return p.preScanDirectFilesScope(ctx, root, scope, budget)
-	case ScopeKindSubtree:
-		return p.preScanSubtreeScope(ctx, root, scope, budget, rootIndex, rootTotal)
-	default:
-		return fmt.Errorf("unsupported scope kind %q", scope.scopeKind)
-	}
-}
-
-func (p *RunPlanner) preScanDirectFilesScope(ctx context.Context, root RootRecord, scope *runPlannerScopeBuffer, _ splitBudget) error {
-	totals, _, err := p.scanDirectFilesScope(ctx, root, scope.scopePath)
-	if err != nil {
-		return err
-	}
-	scope.totals = totals
-	// A single directory now owns all of its direct files in one job. The older
-	// chunked plan kept write batches smaller, but it also split delete ownership
-	// across sibling jobs so removed direct files could linger in the index.
-	// Keeping one job per directory restores a single authoritative prune scope.
-	return nil
-}
-
-func (p *RunPlanner) preScanSubtreeScope(ctx context.Context, root RootRecord, scope *runPlannerScopeBuffer, budget splitBudget, rootIndex int, rootTotal int) error {
-	totals, childSummaries, err := p.scanSubtreeScope(ctx, root, scope.scopePath)
-	if err != nil {
-		return err
-	}
-	scope.totals = totals
-	if !scopeExceedsBudget(scope.totals, budget) {
-		return nil
-	}
-
-	scope.splitRequired = true
-	scope.children = make([]*runPlannerScopeBuffer, 0, len(childSummaries)+1)
-
-	// The old root-centric path could only keep a huge subtree as one future job.
-	// Replacing an oversized subtree with direct files plus child subtrees keeps
-	// each leaf bounded while preserving the user's original root definition.
-	directFilesChild := &runPlannerScopeBuffer{
-		scopePath:       scope.scopePath,
-		scopeKind:       ScopeKindDirectFiles,
-		parentScopePath: scope.scopePath,
-	}
-	if err := p.preScanScope(ctx, root, directFilesChild, budget, rootIndex, rootTotal); err != nil {
-		return err
-	}
-	if directFilesChild.totals.IndexableEntryCount > 0 {
-		scope.children = append(scope.children, directFilesChild)
-	}
-
-	for _, childSummary := range childSummaries {
-		childScope := &runPlannerScopeBuffer{
-			scopePath:       childSummary.path,
-			scopeKind:       ScopeKindSubtree,
-			parentScopePath: scope.scopePath,
-			totals:          childSummary.totals,
-		}
-		if childScope.totals.IndexableEntryCount == 0 {
-			continue
-		}
-		// The parent subtree scan already counted each immediate child subtree
-		// exactly. Reusing those totals avoids rescanning every child directory
-		// when it already fits the leaf budget, while oversized children still
-		// recurse and preserve the existing split semantics.
-		if scopeExceedsBudget(childScope.totals, budget) {
-			if err := p.preScanScope(ctx, root, childScope, budget, rootIndex, rootTotal); err != nil {
-				return err
-			}
-			if childScope.totals.IndexableEntryCount == 0 {
-				continue
-			}
-		}
-		scope.children = append(scope.children, childScope)
-	}
-	return nil
-}
-
-func (p *RunPlanner) scanDirectFilesScope(ctx context.Context, root RootRecord, scopePath string) (PlanTotals, []string, error) {
-	scopePath = filepath.Clean(scopePath)
-	if scopePath != filepath.Clean(root.Path) && p.isExcludedPath(root.ID, scopePath) {
-		// A promoted child root owns this scope now. The parent planner returns no
-		// work instead of counting it as skipped, because the dynamic root will
-		// produce its own progress and write units.
-		return PlanTotals{}, nil, nil
-	}
-	info, err := os.Stat(scopePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return PlanTotals{}, nil, nil
-		}
-		return PlanTotals{}, nil, err
-	}
-	if !info.IsDir() {
-		return PlanTotals{}, nil, fmt.Errorf("direct-files scope %q is not a directory", scopePath)
-	}
-
-	totals := PlanTotals{
-		DirectoryCount:      1,
-		IndexableEntryCount: 1,
-		PlannedScanUnits:    1,
-		PlannedWriteUnits:   1,
-	}
-	dirEntries, err := os.ReadDir(scopePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			// Incremental dirty paths can be short-lived build/temp directories.
-			// Treat a scope that disappears after the initial Stat as already
-			// reconciled instead of turning one vanished path into a root retry.
-			return PlanTotals{}, nil, nil
-		}
-		return PlanTotals{}, nil, fmt.Errorf("read direct-files scope %q: %w", scopePath, err)
-	}
-
-	policyContext := p.policy.newTraversalContext(root, scopePath)
-	for _, dirEntry := range dirEntries {
-		select {
-		case <-ctx.Done():
-			return PlanTotals{}, nil, ctx.Err()
-		default:
-		}
-
-		childPath := filepath.Join(scopePath, dirEntry.Name())
-		isDir, _, infoErr := strictDirEntryType(scopePath, dirEntry)
-		if infoErr != nil {
-			// The run planner used to fail the whole root when one child entry under
-			// a readable directory denied metadata access. The older root-centric
-			// scanner skipped those unreadable children and kept indexing the rest of
-			// the root, so we preserve that behavior here instead of turning one
-			// Windows-protected child into a root-wide failure.
-			if shouldSkipUnreadableTraversalError(infoErr) {
-				totals.SkippedCount++
-				util.GetLogger().Warn(ctx, "filesearch skipped unreadable direct-files child "+childPath+": "+infoErr.Error())
-				continue
-			}
-			return PlanTotals{}, nil, infoErr
-		}
-		if isDir && p.isExcludedPath(root.ID, childPath) {
-			// Dynamic child roots are sealed ownership boundaries. Do not count the
-			// child directory in the parent direct-files totals; execution will also
-			// skip writing its directory entry.
-			continue
-		}
-		if isDir {
-			if shouldSkipSystemPathForRoot(root, childPath, true) || !policyContext.ShouldIndexPath(childPath, true) {
-				totals.SkippedCount++
-			}
-			continue
-		}
-		if shouldSkipSystemPathForRoot(root, childPath, false) {
-			totals.SkippedCount++
-			continue
-		}
-		if !policyContext.ShouldIndexPath(childPath, false) {
-			totals.SkippedCount++
-			continue
-		}
-
-		totals.FileCount++
-		totals.IndexableEntryCount++
-		totals.PlannedScanUnits++
-		totals.PlannedWriteUnits++
-	}
-
-	// Planner direct-files pre-scan only needs aggregate totals. The previous
-	// implementation still accumulated and sorted every child file path even
-	// though callers discarded that list, so large flat directories paid extra
-	// allocations and comparisons without affecting the sealed plan.
-	return totals, nil, nil
-}
-
-func (p *RunPlanner) scanSubtreeScope(ctx context.Context, root RootRecord, scopePath string) (PlanTotals, []subtreeChildSummary, error) {
-	scopePath = filepath.Clean(scopePath)
-	if scopePath != filepath.Clean(root.Path) && p.isExcludedPath(root.ID, scopePath) {
-		// Incremental batches can be older than a promotion. If a parent batch now
-		// targets a dynamic-owned scope, planning an empty parent job preserves the
-		// ownership split and lets the dynamic root handle the real reconcile.
-		return PlanTotals{}, nil, nil
-	}
-	if p != nil && p.onSubtreeScan != nil {
-		p.onSubtreeScan(filepath.Clean(scopePath))
-	}
-	info, err := os.Stat(scopePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return PlanTotals{}, nil, nil
-		}
-		return PlanTotals{}, nil, err
-	}
-	if !info.IsDir() {
-		return PlanTotals{}, nil, fmt.Errorf("subtree scope %q is not a directory", scopePath)
-	}
-
-	type queueItem struct {
-		path       string
-		childScope string
-		policy     TraversalPolicyContext
-	}
-
-	totals := PlanTotals{}
-	rootChildOrder := make([]string, 0)
-	rootChildTotals := make(map[string]PlanTotals)
-	queue := []queueItem{{path: scopePath, policy: p.policy.newTraversalContext(root, scopePath)}}
-
-	for len(queue) > 0 {
-		select {
-		case <-ctx.Done():
-			return PlanTotals{}, nil, ctx.Err()
-		default:
-		}
-
-		current := queue[0]
-		queue = queue[1:]
-		if current.path != scopePath && p.isExcludedPath(root.ID, current.path) {
-			// Guard against stale queued children when exclusions change during a
-			// dirty run. The scanner loop is serial, but this keeps the planner's
-			// per-root contract explicit and mirrors SnapshotBuilder's ownership skip.
-			continue
-		}
-
-		dirEntries, readErr := os.ReadDir(current.path)
-		if readErr != nil {
-			if os.IsNotExist(readErr) {
-				// A queued directory can vanish between the planner's Stat/ReadDir
-				// calls, especially under compiler temp folders. Missing paths mean
-				// there is no filesystem work left for this scope; escalating to the
-				// root would make one transient delete look like a global index.
-				if current.path == scopePath {
-					return PlanTotals{}, nil, nil
-				}
-				totals.SkippedCount++
-				if current.childScope != "" {
-					childTotals := rootChildTotals[current.childScope]
-					childTotals.SkippedCount++
-					rootChildTotals[current.childScope] = childTotals
-				}
-				continue
-			}
-			// The new run planner originally failed fast on any unreadable child
-			// directory so its pre-scan counts stayed exact. That was too strict for
-			// real Windows roots such as C:\Windows, where protected children like
-			// CSC should be skipped rather than aborting the whole root. We still
-			// fail if the scope root itself is unreadable, but unreadable descendants
-			// are now treated as skipped work so the rest of the root can index.
-			if current.path != scopePath && shouldSkipUnreadableTraversalError(readErr) {
-				totals.SkippedCount++
-				if current.childScope != "" {
-					childTotals := rootChildTotals[current.childScope]
-					childTotals.SkippedCount++
-					rootChildTotals[current.childScope] = childTotals
-				}
-				util.GetLogger().Warn(ctx, "filesearch skipped unreadable subtree path "+current.path+": "+readErr.Error())
-				continue
-			}
-			return PlanTotals{}, nil, fmt.Errorf("read subtree scope %q: %w", current.path, readErr)
-		}
-
-		totals.DirectoryCount++
-		totals.IndexableEntryCount++
-		totals.PlannedScanUnits++
-		totals.PlannedWriteUnits++
-		if current.childScope != "" {
-			childTotals := rootChildTotals[current.childScope]
-			childTotals.DirectoryCount++
-			childTotals.IndexableEntryCount++
-			childTotals.PlannedScanUnits++
-			childTotals.PlannedWriteUnits++
-			rootChildTotals[current.childScope] = childTotals
-		}
-
-		for _, dirEntry := range dirEntries {
-			childPath := filepath.Join(current.path, dirEntry.Name())
-			isDir, _, infoErr := strictDirEntryType(current.path, dirEntry)
-			if infoErr != nil {
-				if os.IsNotExist(infoErr) {
-					// Children can disappear after ReadDir returns their names. That
-					// is normal churn in temp/build trees, so skip the stale directory
-					// entry instead of failing the whole incremental plan.
-					continue
-				}
-				if shouldSkipUnreadableTraversalError(infoErr) {
-					totals.SkippedCount++
-					if current.childScope != "" {
-						childTotals := rootChildTotals[current.childScope]
-						childTotals.SkippedCount++
-						rootChildTotals[current.childScope] = childTotals
-					}
-					util.GetLogger().Warn(ctx, "filesearch skipped unreadable subtree child "+childPath+": "+infoErr.Error())
-					continue
-				}
-				return PlanTotals{}, nil, infoErr
-			}
-			if isDir && p.isExcludedPath(root.ID, childPath) {
-				// Excluded dynamic roots must not appear as child scopes or totals
-				// under the parent. Counting them here would make the sealed plan
-				// disagree with execution and reopen the parent-ownership bug.
-				continue
-			}
-
-			if shouldSkipSystemPathForRoot(root, childPath, isDir) {
-				totals.SkippedCount++
-				if current.childScope != "" {
-					childTotals := rootChildTotals[current.childScope]
-					childTotals.SkippedCount++
-					rootChildTotals[current.childScope] = childTotals
-				}
-				continue
-			}
-			if !current.policy.ShouldIndexPath(childPath, isDir) {
-				totals.SkippedCount++
-				if current.childScope != "" {
-					childTotals := rootChildTotals[current.childScope]
-					childTotals.SkippedCount++
-					rootChildTotals[current.childScope] = childTotals
-				}
-				continue
-			}
-
-			if isDir {
-				childScope := current.childScope
-				if current.path == scopePath {
-					childScope = childPath
-					if _, exists := rootChildTotals[childScope]; !exists {
-						rootChildOrder = append(rootChildOrder, childScope)
-					}
-				}
-				queue = append(queue, queueItem{
-					path:       childPath,
-					childScope: childScope,
-					policy:     current.policy.Descend(childPath),
-				})
-				continue
-			}
-
-			totals.FileCount++
-			totals.IndexableEntryCount++
-			totals.PlannedScanUnits++
-			totals.PlannedWriteUnits++
-			if current.childScope != "" {
-				childTotals := rootChildTotals[current.childScope]
-				childTotals.FileCount++
-				childTotals.IndexableEntryCount++
-				childTotals.PlannedScanUnits++
-				childTotals.PlannedWriteUnits++
-				rootChildTotals[current.childScope] = childTotals
-			}
-		}
-	}
-
-	childSummaries := make([]subtreeChildSummary, 0, len(rootChildOrder))
-	for _, childScope := range rootChildOrder {
-		childSummaries = append(childSummaries, subtreeChildSummary{
-			path:   childScope,
-			totals: rootChildTotals[childScope],
-		})
-	}
-	return totals, childSummaries, nil
-}
-
 func (p *RunPlanner) isExcludedPath(rootID string, path string) bool {
 	if p == nil || len(p.rootExclusions) == 0 {
 		return false
@@ -819,8 +442,6 @@ func (p *RunPlanner) buildDraftPlan(kind RunKind, planID string, runID string) (
 		RootPlans: make([]RootPlan, 0, len(p.planningRootBuffers)),
 		Jobs:      make([]Job, 0),
 	}
-	plan.PlanningTotals.PlannedScanUnits = int64(len(p.planningRootBuffers))
-
 	orderIndex := 0
 	for _, rootBuffer := range p.planningRootBuffers {
 		if rootBuffer == nil || rootBuffer.rootScope == nil {
@@ -842,7 +463,7 @@ func (p *RunPlanner) buildDraftPlan(kind RunKind, planID string, runID string) (
 			rootPlan.Strategy = RootPlanStrategySegmented
 		}
 
-		plan.PreScanTotals = mergePlanTotals(plan.PreScanTotals, rootPlan.Totals)
+		plan.EstimatedTotals = mergePlanTotals(plan.EstimatedTotals, rootPlan.Totals)
 
 		// The grouped full-run leaf experiment did not reduce the dominant SQLite
 		// cost enough to justify a wider multi-scope job contract. Returning to
@@ -997,17 +618,6 @@ func dedupePlannerScopes(scopes []*runPlannerScopeBuffer) []*runPlannerScopeBuff
 	return result
 }
 
-func aggregateChildTotals(children []*runPlannerScopeBuffer) PlanTotals {
-	totals := PlanTotals{}
-	for _, child := range children {
-		if child == nil {
-			continue
-		}
-		totals = mergePlanTotals(totals, child.totals)
-	}
-	return totals
-}
-
 func mergePlanTotals(left PlanTotals, right PlanTotals) PlanTotals {
 	left.DirectoryCount += right.DirectoryCount
 	left.FileCount += right.FileCount
@@ -1035,16 +645,6 @@ func normalizeSplitBudget(budget splitBudget) splitBudget {
 	return budget
 }
 
-func scopeExceedsBudget(totals PlanTotals, budget splitBudget) bool {
-	if totals.IndexableEntryCount > budget.LeafEntryBudget {
-		return true
-	}
-	if totals.PlannedWriteUnits > budget.LeafWriteBudget {
-		return true
-	}
-	return totals.IndexableEntryCount*estimatedPlannerEntryBytes > budget.LeafMemoryBudget
-}
-
 func jobKindForScope(scopeKind ScopeKind) JobKind {
 	switch scopeKind {
 	case ScopeKindDirectFiles:
@@ -1055,11 +655,9 @@ func jobKindForScope(scopeKind ScopeKind) JobKind {
 }
 
 func strictDirEntryInfo(parentPath string, dirEntry os.DirEntry) (os.FileInfo, error) {
-	// Planning and pre-scan must keep exact counts. The previous silent continue
-	// undercounted files or directories when metadata lookup failed, which could
-	// change split decisions and make progress totals dishonest. Failing fast here
-	// keeps the sealed workload truthful instead of pretending the missing entry
-	// never existed.
+	// Planning now only needs root-level structure, but unreadable metadata still
+	// changes the sealed scope boundary. Failing fast here keeps the workload
+	// shape truthful instead of pretending an unknown entry never existed.
 	info, err := dirEntry.Info()
 	if err != nil {
 		return nil, fmt.Errorf("read metadata for %q: %w", filepath.Join(parentPath, dirEntry.Name()), err)
@@ -1071,8 +669,8 @@ func strictDirEntryType(parentPath string, dirEntry os.DirEntry) (bool, os.FileI
 	// Planner and snapshot traversals used to call Info() for every child even
 	// when DirEntry.Type() already proved whether the child was a file or a
 	// directory. Reusing the cheap type bits removes a large amount of metadata
-	// I/O during pre-scan, while symlinks and unknown entries still fall back to
-	// Info() so the previous target-kind behavior stays intact.
+	// I/O during planning and streaming walks, while symlinks and unknown entries
+	// still fall back to Info() so the previous target-kind behavior stays intact.
 	modeType := dirEntry.Type()
 	if modeType != 0 && modeType&os.ModeSymlink == 0 {
 		return dirEntry.IsDir(), nil, nil

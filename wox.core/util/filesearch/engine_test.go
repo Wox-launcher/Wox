@@ -34,8 +34,8 @@ func TestEngineGetStatusKeepsTransientRunIndexingState(t *testing.T) {
 	// active run state must keep GetStatus() in indexing mode until the run ends.
 	scanner.setTransientRunState(StatusSnapshot{
 		ActiveRootStatus:      RootStatusScanning,
-		ActiveRunStatus:       RunStatusPreScan,
-		ActiveStage:           RunStagePreScan,
+		ActiveRunStatus:       RunStatusPlanning,
+		ActiveStage:           RunStagePlanning,
 		ActiveRootPath:        `C:\dev`,
 		ActiveProgressCurrent: 3,
 		ActiveProgressTotal:   7,

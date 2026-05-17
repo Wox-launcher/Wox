@@ -37,21 +37,29 @@ type StatusSnapshot struct {
 	// Root-local progress was no longer enough once one logical root could fan
 	// out into many execution jobs, so these fields expose the active run state
 	// without removing the existing root-centric compatibility data.
-	ActiveRootPath      string
-	ActiveRunStatus     RunStatus
-	ActiveRunKind       RunKind
-	ActiveJobKind       JobKind
-	ActiveScopePath     string
-	ActiveStage         RunStage
-	RunProgressCurrent  int64
-	RunProgressTotal    int64
+	ActiveRootPath     string
+	ActiveRunStatus    RunStatus
+	ActiveRunKind      RunKind
+	ActiveJobKind      JobKind
+	ActiveScopePath    string
+	ActiveStage        RunStage
+	RunProgressCurrent int64
+	RunProgressTotal   int64
+	// ActiveRunFileCount and ActiveRunEntryCount are live completed counts while
+	// a run is executing, then final persisted counts on the completion summary.
+	// Streaming full runs intentionally skip planner-side recursive counting, so
+	// these values must come from the execution/write boundary instead of
+	// EstimatedTotals.
 	ActiveRunFileCount  int64
 	ActiveRunEntryCount int64
-	ActiveRunElapsedMs  int64
-	ErrorRootPath       string
-	IsIndexing          bool
-	IsInitialIndexing   bool
-	LastError           string
+	// ActiveRunElapsedMs is updated while a run is live and preserved on the
+	// completion summary so toolbar consumers can show both live throughput and
+	// the final elapsed time from the same end-to-end boundary.
+	ActiveRunElapsedMs int64
+	ErrorRootPath      string
+	IsIndexing         bool
+	IsInitialIndexing  bool
+	LastError          string
 }
 
 type SearchResult struct {
@@ -240,4 +248,30 @@ type SubtreeSnapshotBatch struct {
 	ScopePath   string
 	Directories []DirectoryRecord
 	Entries     []EntryRecord
+}
+
+// JobApplyStats carries the entry counts observed at the write boundary. Full
+// streaming runs intentionally skip planner-side recursive counting, so these
+// numbers are the source of truth for live toolbar progress.
+type JobApplyStats struct {
+	EntryCount int64
+	FileCount  int64
+}
+
+func jobApplyStatsFromBatch(batch SubtreeSnapshotBatch) JobApplyStats {
+	stats := JobApplyStats{EntryCount: int64(len(batch.Entries))}
+	for _, entry := range batch.Entries {
+		if !entry.IsDir {
+			stats.FileCount++
+		}
+	}
+	return stats
+}
+
+func (s *JobApplyStats) add(other JobApplyStats) {
+	if s == nil {
+		return
+	}
+	s.EntryCount += other.EntryCount
+	s.FileCount += other.FileCount
 }

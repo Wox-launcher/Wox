@@ -699,7 +699,7 @@ func TestFileSearchDBApplyDirectFilesJobStreamPrunesRemovedDirectFiles(t *testin
 	builder := NewSnapshotBuilder(newPolicyState(Policy{}))
 	builder.SetDirectFileBatchSize(1)
 
-	if err := db.ApplyDirectFilesJobStream(ctx, root, job, builder); err != nil {
+	if _, err := db.ApplyDirectFilesJobStream(ctx, root, job, builder, nil); err != nil {
 		t.Fatalf("apply direct-files stream job: %v", err)
 	}
 
@@ -751,7 +751,7 @@ func TestFileSearchDBApplyDirectFilesJobStreamBulkSyncEmptyScopePreservesEntryCo
 	builder.SetDirectFileBatchSize(1)
 
 	db.BeginBulkSync()
-	if err := db.ApplyDirectFilesJobStream(ctx, root, job, builder); err != nil {
+	if _, err := db.ApplyDirectFilesJobStream(ctx, root, job, builder, nil); err != nil {
 		t.Fatalf("apply direct-files stream job in bulk sync: %v", err)
 	}
 	if err := db.EndBulkSync(ctx); err != nil {
@@ -888,7 +888,7 @@ func TestFileSearchDBPrepareBulkSyncFullRunRootPreservesResultsAcrossDisjointSco
 	if err := db.prepareBulkSyncFullRunRoot(ctx, root.ID); err != nil {
 		t.Fatalf("prepare bulk-sync full-run root: %v", err)
 	}
-	if err := db.ApplyDirectFilesJobStream(ctx, root, directJob, builder); err != nil {
+	if _, err := db.ApplyDirectFilesJobStream(ctx, root, directJob, builder, nil); err != nil {
 		t.Fatalf("apply direct-files stream job after preparing full-run root: %v", err)
 	}
 	if err := db.ReplaceSubtreeSnapshot(ctx, SubtreeSnapshotBatch{

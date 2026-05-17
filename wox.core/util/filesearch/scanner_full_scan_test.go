@@ -341,9 +341,6 @@ func TestScannerFullScanReportsStreamingRunStages(t *testing.T) {
 			t.Fatalf("expected full scan to report stage %q, got %#v", stage, stageSeen)
 		}
 	}
-	if stageSeen[RunStagePreScan] {
-		t.Fatalf("expected streaming full scan to skip pre-scan stage, got %#v", stageSeen)
-	}
 	if !sawPlannerActivityContext {
 		t.Fatal("expected planner stage to publish root/scope activity context")
 	}
@@ -397,11 +394,16 @@ func TestScannerFullScanStreamsLargeRootWithoutChangingRootIdentity(t *testing.T
 	if rootsAfter[0].ID != root.ID {
 		t.Fatalf("expected persisted root identity %q, got %q", root.ID, rootsAfter[0].ID)
 	}
-	if len(scopeSet) != 1 {
-		t.Fatalf("expected streaming large root execution to stay on one scope, got %#v", scopeSet)
+	expectedScopes := []string{
+		rootPath,
+		filepath.Join(rootPath, "nested-a"),
+		filepath.Join(rootPath, "nested-b"),
+		filepath.Join(rootPath, "nested-c"),
 	}
-	if _, ok := scopeSet[filepath.Clean(rootPath)]; !ok {
-		t.Fatalf("expected streaming scope to stay at root path %q, got %#v", rootPath, scopeSet)
+	for _, expectedScope := range expectedScopes {
+		if _, ok := scopeSet[filepath.Clean(expectedScope)]; !ok {
+			t.Fatalf("expected streaming scope %q, got %#v", expectedScope, scopeSet)
+		}
 	}
 }
 

@@ -792,74 +792,16 @@ func (c *FileSearchPlugin) buildToolbarMsgFromStatus(ctx context.Context, status
 	progress := (*int)(nil)
 	indeterminate := false
 	hasPermissionError := util.IsMacOS() && isFileAccessPermissionError(status.LastError)
-	if status.ActiveStage == filesearch.RunStagePlanning || status.ActiveStage == filesearch.RunStagePreScan {
-		// The preparation phase owns pre-execution progress because one persisted
-		// root can fan out into many jobs. Version 1 keeps a root-level denominator
-		// here because recursive split discovery can still grow the scope frontier
-		// mid-pass, but the active root/scope suffix tells users exactly which
-		// part of the filesystem is currently being measured.
-		title = c.api.GetTranslation(ctx, "plugin_file_status_preparing")
-		icon = fileIcon
-		if progressValue, ok := resolveToolbarProgressPercent(status.ActiveProgressCurrent, status.ActiveProgressTotal); ok {
-			progress = &progressValue
-			title = fmt.Sprintf("%s %d%%", title, progressValue)
-		} else {
-			indeterminate = true
-		}
-	} else if status.ActiveStage == filesearch.RunStageExecuting {
-		// Run-scoped progress is the stable denominator during execution. The old
-		// root-local counters could jump backwards when the next split job started,
-		// so the toolbar now prefers the sealed run totals once execution begins.
-		// Appending the active root and scope keeps the global percentage stable
-		// while still explaining what the current bounded job is writing.
-		title = c.api.GetTranslation(ctx, "plugin_file_status_writing")
-		icon = fileIcon
-		if progressValue, ok := resolveToolbarProgressPercent(status.RunProgressCurrent, status.RunProgressTotal); ok {
-			progress = &progressValue
-			title = fmt.Sprintf("%s %d%%", title, progressValue)
-		} else {
-			indeterminate = true
-		}
-	} else if status.ActiveStage == filesearch.RunStageFinalizing {
-		title = c.api.GetTranslation(ctx, "plugin_file_status_finalizing")
-		icon = fileIcon
-		if progressValue, ok := resolveToolbarProgressPercent(status.RunProgressCurrent, status.RunProgressTotal); ok {
-			progress = &progressValue
-			title = fmt.Sprintf("%s %d%%", title, progressValue)
-		} else {
-			indeterminate = true
-		}
-	} else if status.ActiveRootStatus == filesearch.RootStatusPreparing {
-		title = c.buildPreparingToolbarTitle(ctx, status)
-		icon = fileIcon
-		indeterminate = true
-	} else if status.ActiveRootStatus == filesearch.RootStatusSyncing {
-		title = c.buildSyncingToolbarTitle(ctx, status)
-		icon = fileIcon
-		indeterminate = true
-	} else if status.ActiveRootStatus == filesearch.RootStatusWriting {
-		title = c.api.GetTranslation(ctx, "plugin_file_status_writing")
-		icon = fileIcon
-		if progressValue, ok := resolveToolbarProgressPercent(status.ActiveProgressCurrent, status.ActiveProgressTotal); ok {
-			progress = &progressValue
-			title = fmt.Sprintf("%s %d%%", title, progressValue)
-		} else {
-			indeterminate = true
-		}
-	} else if status.ActiveRootStatus == filesearch.RootStatusFinalizing {
-		title = c.api.GetTranslation(ctx, "plugin_file_status_finalizing")
-		icon = fileIcon
-		indeterminate = true
-	} else if status.ActiveRootStatus == filesearch.RootStatusScanning {
-		title = c.buildScanningToolbarTitle(ctx, status)
-		icon = fileIcon
-		if progressValue, ok := resolveToolbarProgressPercent(status.ActiveItemCurrent, status.ActiveItemTotal); ok {
-			progress = &progressValue
-		} else {
-			indeterminate = true
-		}
-	} else if status.IsIndexing {
-		title = c.api.GetTranslation(ctx, "plugin_file_status_indexing")
+	if status.IsIndexing {
+		// Feature change: keep the Raycast-style compact status, but name the
+		// active run kind explicitly. Full runs are user-visible rebuilds, while
+		// incremental runs often reconcile dirty watcher events immediately after
+		// a rebuild; using the same text made that expected follow-up look like a
+		// duplicate full index.
+		title = c.buildIndexingToolbarTitle(ctx, status)
+		// Bug fix: the compact indexing message still belongs to File Search.
+		// Keep the plugin icon visible and let the progress field own only the
+		// activity spinner, instead of clearing the icon to remove old phase noise.
 		icon = fileIcon
 		indeterminate = true
 	} else if hasPermissionError {
@@ -871,8 +813,6 @@ func (c *FileSearchPlugin) buildToolbarMsgFromStatus(ctx context.Context, status
 	if status.ErrorRootCount > 0 && !status.IsIndexing {
 		title = decorateRootErrorToolbarTitle(title, status)
 	}
-
-	title = decorateRunToolbarTitle(title, status)
 
 	return plugin.ToolbarMsg{
 		Id:            fileSearchToolbarMsgID,
@@ -895,6 +835,15 @@ func (c *FileSearchPlugin) buildFullIndexCompletedToolbarTitle(ctx context.Conte
 	if fileCount < 0 {
 		fileCount = 0
 	}
+	if fileCount == 0 {
+		// Bug fix: the scanner may occasionally be unable to read final counts at
+		// the exact completion boundary even though the index is searchable. In that
+		// case, omit the count instead of showing a false "0 files" summary.
+		return fmt.Sprintf(
+			c.api.GetTranslation(ctx, "plugin_file_status_index_complete_no_count"),
+			c.formatFileSearchIndexDuration(ctx, status.ActiveRunElapsedMs),
+		)
+	}
 
 	// Feature addition: full indexing now ends with a Raycast-style summary.
 	// The core emits this only after full-run bulk SQLite maintenance finishes,
@@ -904,6 +853,38 @@ func (c *FileSearchPlugin) buildFullIndexCompletedToolbarTitle(ctx context.Conte
 		c.api.GetTranslation(ctx, "plugin_file_status_index_complete"),
 		formatFileSearchCount(fileCount),
 		c.formatFileSearchIndexDuration(ctx, status.ActiveRunElapsedMs),
+	)
+}
+
+func (c *FileSearchPlugin) buildIndexingToolbarTitle(ctx context.Context, status filesearch.StatusSnapshot) string {
+	indexedFileCount := status.ActiveRunFileCount
+	translationKey := "plugin_file_status_indexing_progress"
+	switch status.ActiveRunKind {
+	case filesearch.RunKindFull:
+		translationKey = "plugin_file_status_full_indexing_progress"
+	case filesearch.RunKindIncremental:
+		// Bug fix: incremental reconciles can spend most of their time applying a
+		// scoped SQLite diff after the scanner has already counted files. Showing
+		// a per-second rate during that long apply phase made old snapshots look
+		// impossibly fast, so incremental status reports the real elapsed boundary
+		// instead of a derived throughput.
+		return fmt.Sprintf(
+			c.api.GetTranslation(ctx, "plugin_file_status_incremental_indexing_elapsed"),
+			formatFileSearchCount(indexedFileCount),
+			c.formatFileSearchIndexDuration(ctx, status.ActiveRunElapsedMs),
+		)
+	}
+	indexRate := estimateActiveIndexRate(indexedFileCount, status.ActiveRunElapsedMs)
+	// Bug fix: live indexing status should never fall back to internal phase
+	// text such as "writing index" or "syncing". A zero value is valid at the
+	// beginning of a run. The run-kind-specific key also prevents post-full
+	// incremental reconciliation from being rendered as a second identical index;
+	// the generic key remains only for legacy/root-only snapshots that do not
+	// carry a run kind yet.
+	return fmt.Sprintf(
+		c.api.GetTranslation(ctx, translationKey),
+		formatFileSearchCount(indexedFileCount),
+		formatFileSearchCount(indexRate),
 	)
 }
 
@@ -927,6 +908,22 @@ func formatFileSearchCount(value int64) string {
 		builder.WriteString(text[index : index+3])
 	}
 	return builder.String()
+}
+
+func estimateActiveIndexRate(indexedFileCount int64, elapsedMs int64) int64 {
+	if indexedFileCount <= 0 || elapsedMs <= 0 {
+		return 0
+	}
+	// Bug fix: toolbar signatures include the rendered title. Computing the rate
+	// from raw milliseconds changed the title on nearly every status snapshot,
+	// which defeated duplicate suppression and spammed ShowToolbarMsg during one
+	// run. Whole-second buckets preserve the visible throughput signal without
+	// making every millisecond a distinct UI state.
+	elapsedSeconds := elapsedMs / 1000
+	if elapsedSeconds <= 0 {
+		elapsedSeconds = 1
+	}
+	return indexedFileCount / elapsedSeconds
 }
 
 func (c *FileSearchPlugin) formatFileSearchIndexDuration(ctx context.Context, elapsedMs int64) string {

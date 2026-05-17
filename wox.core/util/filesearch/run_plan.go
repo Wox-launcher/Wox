@@ -33,8 +33,10 @@ type RunPlan struct {
 	RootPlans      []RootPlan
 	Jobs           []Job
 	TotalWorkUnits int64
-	PlanningTotals PlanTotals
-	PreScanTotals  PlanTotals
+	// EstimatedTotals contains structural work estimates only. Full and
+	// incremental runs stream their real file counts during execution, so UI
+	// summaries must not treat these values as authoritative indexed counts.
+	EstimatedTotals PlanTotals
 }
 
 // Seal returns a deep-copied workload snapshot so later planner mutations do
@@ -60,6 +62,8 @@ type Run struct {
 	Stage                  RunStage
 	CompletedWorkUnits     int64
 	TotalWorkUnits         int64
+	CompletedEntryCount    int64
+	CompletedFileCount     int64
 	ActiveJobID            string
 	QueuedIncrementalCount int
 	LastError              string
@@ -96,18 +100,18 @@ func (p RootPlan) seal() RootPlan {
 // Root-local progress was not enough because the planner can split one root
 // into multiple execution units, so the tree is sealed before execution.
 type ScopeNode struct {
-	ScopePath       string
-	ScopeKind       ScopeKind
-	ParentScopePath string
-	Children              []ScopeNode
-	DirectoryCount        int64
-	FileCount             int64
-	IndexableEntryCount   int64
-	SkippedCount          int64
-	PlannedScanUnits      int64
-	PlannedWriteUnits     int64
-	SplitRequired         bool
-	Sealed                bool
+	ScopePath           string
+	ScopeKind           ScopeKind
+	ParentScopePath     string
+	Children            []ScopeNode
+	DirectoryCount      int64
+	FileCount           int64
+	IndexableEntryCount int64
+	SkippedCount        int64
+	PlannedScanUnits    int64
+	PlannedWriteUnits   int64
+	SplitRequired       bool
+	Sealed              bool
 }
 
 func (n ScopeNode) seal() ScopeNode {
@@ -126,16 +130,16 @@ func (n ScopeNode) seal() ScopeNode {
 // Root-local progress was not enough because one root now becomes a sequence of
 // jobs, and each job needs its own stable kind and progress budget.
 type Job struct {
-	JobID     string
-	RootID    string
-	RootPath  string
-	ScopePath string
-	Kind      JobKind
-	PlannedScanUnits      int64
-	PlannedWriteUnits     int64
-	PlannedTotalUnits     int64
-	Status                JobStatus
-	OrderIndex            int
+	JobID             string
+	RootID            string
+	RootPath          string
+	ScopePath         string
+	Kind              JobKind
+	PlannedScanUnits  int64
+	PlannedWriteUnits int64
+	PlannedTotalUnits int64
+	Status            JobStatus
+	OrderIndex        int
 }
 
 // PlanTotals freezes the counted work for a root or the whole run.
@@ -168,7 +172,6 @@ type RunStatus string
 
 const (
 	RunStatusPlanning   RunStatus = "planning"
-	RunStatusPreScan    RunStatus = "pre_scan"
 	RunStatusExecuting  RunStatus = "executing"
 	RunStatusFinalizing RunStatus = "finalizing"
 	RunStatusCompleted  RunStatus = "completed"
@@ -181,7 +184,6 @@ type RunStage string
 
 const (
 	RunStagePlanning   RunStage = "planning"
-	RunStagePreScan    RunStage = "pre_scan"
 	RunStageExecuting  RunStage = "executing"
 	RunStageFinalizing RunStage = "finalizing"
 )

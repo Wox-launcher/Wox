@@ -439,11 +439,11 @@ func (e *Engine) GetStatus(ctx context.Context) (StatusSnapshot, error) {
 
 	// Run preparation/execution owns the live indexing state. The previous code
 	// merged the active run and then immediately overwrote IsIndexing from the
-	// persisted root counters, which made the toolbar treat a live pre-scan as
-	// "not indexing" whenever another root was already in error.
+	// persisted root counters, which made the toolbar treat a live planning pass
+	// as "not indexing" whenever another root was already in error.
 	if hasActiveRun {
 		status.IsInitialIndexing = activeRun.IsIndexing &&
-			(activeRun.ActiveStage == RunStagePlanning || activeRun.ActiveStage == RunStagePreScan) &&
+			activeRun.ActiveStage == RunStagePlanning &&
 			activeRun.ActiveProgressCurrent == 0
 		status.IsIndexing = activeRun.IsIndexing
 		return status, nil

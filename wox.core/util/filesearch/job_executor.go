@@ -10,8 +10,8 @@ type JobExecutor struct {
 	snapshot           *SnapshotBuilder
 	apply              func(context.Context, RootRecord, Job, *SubtreeSnapshotBatch) error
 	applySubtreeBatch  func(context.Context, RootRecord, []SubtreeSnapshotBatch) error
-	streamDirectFiles  func(context.Context, RootRecord, Job, *SnapshotBuilder) error
-	streamSubtree      func(context.Context, RootRecord, Job, *SnapshotBuilder) error
+	streamDirectFiles  func(context.Context, RootRecord, Job, *SnapshotBuilder, func(JobApplyStats)) (JobApplyStats, error)
+	streamSubtree      func(context.Context, RootRecord, Job, *SnapshotBuilder, func(JobApplyStats)) (JobApplyStats, error)
 	subtreeBatchConfig subtreeApplyBatchConfig
 }
 
@@ -95,14 +95,14 @@ func (e *JobExecutor) SetSubtreeBatchConfig(config subtreeApplyBatchConfig) {
 	e.subtreeBatchConfig = normalizeSubtreeApplyBatchConfig(config)
 }
 
-func (e *JobExecutor) SetDirectFilesStreamFunc(stream func(context.Context, RootRecord, Job, *SnapshotBuilder) error) {
+func (e *JobExecutor) SetDirectFilesStreamFunc(stream func(context.Context, RootRecord, Job, *SnapshotBuilder, func(JobApplyStats)) (JobApplyStats, error)) {
 	if e == nil {
 		return
 	}
 	e.streamDirectFiles = stream
 }
 
-func (e *JobExecutor) SetSubtreeStreamFunc(stream func(context.Context, RootRecord, Job, *SnapshotBuilder) error) {
+func (e *JobExecutor) SetSubtreeStreamFunc(stream func(context.Context, RootRecord, Job, *SnapshotBuilder, func(JobApplyStats)) (JobApplyStats, error)) {
 	if e == nil {
 		return
 	}
@@ -142,6 +142,7 @@ func (e *JobExecutor) ExecuteRun(ctx context.Context, plan RunPlan, roots []Root
 		root       RootRecord
 		jobIndexes []int
 		batches    []SubtreeSnapshotBatch
+		stats      []JobApplyStats
 		totalUnits int64
 	}
 	var pending pendingSubtreeApply
@@ -203,6 +204,9 @@ func (e *JobExecutor) ExecuteRun(ctx context.Context, plan RunPlan, roots []Root
 			job := &jobs[index]
 			job.Status = JobStatusCompleted
 			run.CompletedWorkUnits += job.PlannedTotalUnits
+			if indexOffset := indexOfPendingJob(pending.jobIndexes, index); indexOffset >= 0 && indexOffset < len(pending.stats) {
+				addJobApplyStatsToRun(&run, pending.stats[indexOffset])
+			}
 			lastJob = *job
 			emitJobExecutorSnapshot(run, plan, rootOrder, *job, onSnapshot)
 		}
@@ -226,6 +230,16 @@ func (e *JobExecutor) ExecuteRun(ctx context.Context, plan RunPlan, roots []Root
 			return false
 		}
 		return !shouldBufferSubtreeJob(root, job)
+	}
+	emitStreamingStats := func(job Job, currentStats JobApplyStats) {
+		progressRun := run
+		// Streaming jobs can spend most of a full index inside one large scope.
+		// Emit batch-level file counts through the normal snapshot path so the
+		// toolbar updates while the job is running instead of waiting for the job
+		// completion boundary.
+		progressRun.CompletedEntryCount += currentStats.EntryCount
+		progressRun.CompletedFileCount += currentStats.FileCount
+		emitJobExecutorSnapshot(progressRun, plan, rootOrder, job, onSnapshot)
 	}
 
 	for index := range jobs {
@@ -283,7 +297,10 @@ func (e *JobExecutor) ExecuteRun(ctx context.Context, plan RunPlan, roots []Root
 			// so each job now records its own apply duration to separate snapshot
 			// building cost from SQLite write cost when one scope becomes hot.
 			streamStartedAt := util.GetSystemTimestamp()
-			if err := e.streamDirectFiles(ctx, root, *job, e.snapshot); err != nil {
+			stats, err := e.streamDirectFiles(ctx, root, *job, e.snapshot, func(currentStats JobApplyStats) {
+				emitStreamingStats(*job, currentStats)
+			})
+			if err != nil {
 				logFilesearchJobPhase(ctx, root, *job, "stream_apply", util.GetSystemTimestamp()-streamStartedAt)
 				err = &runRootError{RootID: job.RootID, Err: err}
 				job.Status = JobStatusFailed
@@ -292,14 +309,18 @@ func (e *JobExecutor) ExecuteRun(ctx context.Context, plan RunPlan, roots []Root
 				emitJobExecutorSnapshot(run, plan, rootOrder, *job, onSnapshot)
 				return run, jobs, err
 			}
+			addJobApplyStatsToRun(&run, stats)
 			logFilesearchJobPhase(ctx, root, *job, "stream_apply", util.GetSystemTimestamp()-streamStartedAt)
 		} else if job.Kind == JobKindSubtree && e.streamSubtree != nil {
 			// Full-run subtree jobs can now own a large root without an exact
-			// pre-scan. Streaming the recursive snapshot directly into SQLite keeps
+			// recursive count. Streaming the recursive snapshot directly into SQLite keeps
 			// the old scoped replace semantics while removing the planner's duplicate
 			// filesystem traversal.
 			streamStartedAt := util.GetSystemTimestamp()
-			if err := e.streamSubtree(ctx, root, *job, e.snapshot); err != nil {
+			stats, err := e.streamSubtree(ctx, root, *job, e.snapshot, func(currentStats JobApplyStats) {
+				emitStreamingStats(*job, currentStats)
+			})
+			if err != nil {
 				logFilesearchJobPhase(ctx, root, *job, "stream_apply", util.GetSystemTimestamp()-streamStartedAt)
 				err = &runRootError{RootID: job.RootID, Err: err}
 				job.Status = JobStatusFailed
@@ -308,6 +329,7 @@ func (e *JobExecutor) ExecuteRun(ctx context.Context, plan RunPlan, roots []Root
 				emitJobExecutorSnapshot(run, plan, rootOrder, *job, onSnapshot)
 				return run, jobs, err
 			}
+			addJobApplyStatsToRun(&run, stats)
 			logFilesearchJobPhase(ctx, root, *job, "stream_apply", util.GetSystemTimestamp()-streamStartedAt)
 		} else {
 			buildStartedAt := util.GetSystemTimestamp()
@@ -329,6 +351,7 @@ func (e *JobExecutor) ExecuteRun(ctx context.Context, plan RunPlan, roots []Root
 				pending.root = root
 				pending.jobIndexes = append(pending.jobIndexes, index)
 				pending.batches = append(pending.batches, *batch)
+				pending.stats = append(pending.stats, jobApplyStatsFromBatch(*batch))
 				pending.totalUnits += maxSubtreeBatchUnits(*job)
 				job.Status = JobStatusPending
 				continue
@@ -345,6 +368,9 @@ func (e *JobExecutor) ExecuteRun(ctx context.Context, plan RunPlan, roots []Root
 					return run, jobs, err
 				}
 				logFilesearchJobPhase(ctx, root, *job, "apply_snapshot", util.GetSystemTimestamp()-applyStartedAt)
+			}
+			if batch != nil {
+				addJobApplyStatsToRun(&run, jobApplyStatsFromBatch(*batch))
 			}
 		}
 
@@ -369,6 +395,27 @@ func (e *JobExecutor) ExecuteRun(ctx context.Context, plan RunPlan, roots []Root
 	lastJob.Status = ""
 	emitJobExecutorSnapshot(run, plan, rootOrder, lastJob, onSnapshot)
 	return run, jobs, nil
+}
+
+func addJobApplyStatsToRun(run *Run, stats JobApplyStats) {
+	if run == nil {
+		return
+	}
+	// Full-run toolbar counts used to come from planner estimates, which are
+	// deliberately zero for streaming runs to avoid a duplicate recursive walk.
+	// Accumulating the stats after a job successfully applies keeps the visible
+	// file count tied to persisted work instead of planner estimates.
+	run.CompletedEntryCount += stats.EntryCount
+	run.CompletedFileCount += stats.FileCount
+}
+
+func indexOfPendingJob(indexes []int, target int) int {
+	for index, value := range indexes {
+		if value == target {
+			return index
+		}
+	}
+	return -1
 }
 
 func maxSubtreeBatchUnits(job Job) int64 {
@@ -439,8 +486,8 @@ func buildJobExecutorStatusSnapshot(run Run, plan RunPlan, rootOrder map[string]
 		ActiveStage:           run.Stage,
 		RunProgressCurrent:    run.CompletedWorkUnits,
 		RunProgressTotal:      run.TotalWorkUnits,
-		ActiveRunFileCount:    plan.PreScanTotals.FileCount,
-		ActiveRunEntryCount:   plan.PreScanTotals.IndexableEntryCount,
+		ActiveRunFileCount:    run.CompletedFileCount,
+		ActiveRunEntryCount:   run.CompletedEntryCount,
 		IsIndexing:            run.Status == RunStatusExecuting || run.Status == RunStatusFinalizing,
 		LastError:             run.LastError,
 	}

@@ -601,7 +601,7 @@ func (q *subtreeStreamQueue) currentErr() error {
 }
 
 // StreamSubtreeJobBatches walks one recursive subtree once and emits bounded
-// batches to the caller. Full indexing no longer performs an exact pre-scan, so
+// batches to the caller. Full indexing no longer performs an exact recursive count, so
 // this streaming path is the primary large-root traversal instead of a second
 // copy of the planner's earlier walk.
 func (b *SnapshotBuilder) StreamSubtreeJobBatches(ctx context.Context, root RootRecord, job Job, onBatch func(SubtreeSnapshotBatch) error) error {

@@ -120,7 +120,7 @@ func logFilesearchRunStage(ctx context.Context, kind RunKind, stage RunStage, ro
 	)
 
 	switch stage {
-	case RunStagePlanning, RunStagePreScan, RunStageFinalizing:
+	case RunStagePlanning, RunStageFinalizing:
 		util.GetLogger().Info(ctx, msg)
 	default:
 		util.GetLogger().Debug(ctx, msg)

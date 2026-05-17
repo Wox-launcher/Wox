@@ -595,40 +595,41 @@ func (d *FileSearchDB) ApplyDirectFilesJob(ctx context.Context, job Job, batch S
 	return tx.Commit()
 }
 
-func (d *FileSearchDB) ApplyDirectFilesJobStream(ctx context.Context, root RootRecord, job Job, snapshot *SnapshotBuilder) error {
+func (d *FileSearchDB) ApplyDirectFilesJobStream(ctx context.Context, root RootRecord, job Job, snapshot *SnapshotBuilder, onProgress func(JobApplyStats)) (JobApplyStats, error) {
 	if job.Kind != JobKindDirectFiles {
-		return fmt.Errorf("apply direct-files stream requires kind %q, got %q", JobKindDirectFiles, job.Kind)
+		return JobApplyStats{}, fmt.Errorf("apply direct-files stream requires kind %q, got %q", JobKindDirectFiles, job.Kind)
 	}
 	if snapshot == nil {
-		return fmt.Errorf("direct-files stream requires a snapshot builder")
+		return JobApplyStats{}, fmt.Errorf("direct-files stream requires a snapshot builder")
 	}
 
 	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return JobApplyStats{}, err
 	}
 	defer tx.Rollback()
 
 	lockedRoot, err := lockRootForSubtreeSnapshot(ctx, tx, root.ID)
 	if err != nil {
-		return err
+		return JobApplyStats{}, err
 	}
 	if !pathWithinScope(lockedRoot.Path, job.ScopePath) {
-		return fmt.Errorf("direct-files job scope path %q is outside root path %q", job.ScopePath, lockedRoot.Path)
+		return JobApplyStats{}, fmt.Errorf("direct-files job scope path %q is outside root path %q", job.ScopePath, lockedRoot.Path)
 	}
 
 	directoryStmt, err := prepareDirectoryUpsertStmtTx(ctx, tx)
 	if err != nil {
-		return err
+		return JobApplyStats{}, err
 	}
 	defer directoryStmt.Close()
 
 	stageStmt, err := prepareEntryStageInsertStmtTx(ctx, tx)
 	if err != nil {
-		return err
+		return JobApplyStats{}, err
 	}
 	defer stageStmt.Close()
 
+	stats := JobApplyStats{}
 	// Direct-files jobs now own the whole directory scope. Streaming each batch
 	// into the temporary stage table keeps SQLite writes bounded without losing
 	// the single-scope stale prune that chunked jobs could not express safely.
@@ -648,38 +649,47 @@ func (d *FileSearchDB) ApplyDirectFilesJobStream(ctx context.Context, root RootR
 				return err
 			}
 		}
-		return stageEntryRecordsWithStmtTx(ctx, stageStmt, batch.Entries)
+		if err := stageEntryRecordsWithStmtTx(ctx, stageStmt, batch.Entries); err != nil {
+			return err
+		}
+		stats.add(jobApplyStatsFromBatch(batch))
+		if onProgress != nil {
+			// Streaming toolbar counts are emitted only after the batch has been
+			// staged successfully, so the UI never gets ahead of accepted work.
+			onProgress(stats)
+		}
+		return nil
 	}); err != nil {
-		return err
+		return JobApplyStats{}, err
 	}
 
 	if err := d.replaceDirectFilesEntriesFromStageTx(ctx, tx, job.RootID, job.ScopePath); err != nil {
-		return err
+		return JobApplyStats{}, err
 	}
 
-	return tx.Commit()
+	return stats, tx.Commit()
 }
 
-func (d *FileSearchDB) ApplySubtreeJobStream(ctx context.Context, root RootRecord, job Job, snapshot *SnapshotBuilder) error {
+func (d *FileSearchDB) ApplySubtreeJobStream(ctx context.Context, root RootRecord, job Job, snapshot *SnapshotBuilder, onProgress func(JobApplyStats)) (JobApplyStats, error) {
 	if job.Kind != JobKindSubtree {
-		return fmt.Errorf("apply subtree stream requires kind %q, got %q", JobKindSubtree, job.Kind)
+		return JobApplyStats{}, fmt.Errorf("apply subtree stream requires kind %q, got %q", JobKindSubtree, job.Kind)
 	}
 	if snapshot == nil {
-		return fmt.Errorf("subtree stream requires a snapshot builder")
+		return JobApplyStats{}, fmt.Errorf("subtree stream requires a snapshot builder")
 	}
 
 	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return JobApplyStats{}, err
 	}
 	defer tx.Rollback()
 
 	lockedRoot, err := lockRootForSubtreeSnapshot(ctx, tx, root.ID)
 	if err != nil {
-		return err
+		return JobApplyStats{}, err
 	}
 	if !pathWithinScope(lockedRoot.Path, job.ScopePath) {
-		return fmt.Errorf("subtree job scope path %q is outside root path %q", job.ScopePath, lockedRoot.Path)
+		return JobApplyStats{}, fmt.Errorf("subtree job scope path %q is outside root path %q", job.ScopePath, lockedRoot.Path)
 	}
 
 	if d.bulkSyncFullRunRootFresh(root.ID) {
@@ -694,6 +704,7 @@ func (d *FileSearchDB) ApplySubtreeJobStream(ctx context.Context, root RootRecor
 		entryWriteElapsedMs := int64(0)
 		insertedDirectories := 0
 		insertedEntries := 0
+		stats := JobApplyStats{}
 		if err := snapshot.StreamSubtreeJobBatches(ctx, *lockedRoot, job, func(batch SubtreeSnapshotBatch) error {
 			if err := validateJobSnapshotBatch(job, batch); err != nil {
 				return err
@@ -712,9 +723,15 @@ func (d *FileSearchDB) ApplySubtreeJobStream(ctx context.Context, root RootRecor
 			entryWriteElapsedMs += util.GetSystemTimestamp() - entryStartedAt
 			insertedDirectories += len(batch.Directories)
 			insertedEntries += len(batch.Entries)
+			stats.add(jobApplyStatsFromBatch(batch))
+			if onProgress != nil {
+				// Fresh full-index streams write facts directly, so batch progress
+				// can be reported immediately after each successful write.
+				onProgress(stats)
+			}
 			return nil
 		}); err != nil {
-			return err
+			return JobApplyStats{}, err
 		}
 		streamElapsedMs := util.GetSystemTimestamp() - streamStartedAt
 		scanBuildElapsedMs := streamElapsedMs - directoryWriteElapsedMs - entryWriteElapsedMs
@@ -727,28 +744,29 @@ func (d *FileSearchDB) ApplySubtreeJobStream(ctx context.Context, root RootRecor
 
 		commitStartedAt := util.GetSystemTimestamp()
 		if err := tx.Commit(); err != nil {
-			return err
+			return JobApplyStats{}, err
 		}
 		commitElapsedMs := util.GetSystemTimestamp() - commitStartedAt
 		logFilesearchSQLiteMaintenance(ctx, "subtree_stream_fresh_commit", job.ScopePath, commitElapsedMs, 1)
 		logFilesearchSQLiteMaintenance(ctx, "subtree_stream_fresh_insert", job.ScopePath, streamElapsedMs+commitElapsedMs, insertedEntries)
-		return nil
+		return stats, nil
 	}
 
 	directoryStmt, err := prepareDirectoryUpsertStmtTx(ctx, tx)
 	if err != nil {
-		return err
+		return JobApplyStats{}, err
 	}
 	defer directoryStmt.Close()
 
 	stageStmt, err := prepareEntryStageInsertStmtTx(ctx, tx)
 	if err != nil {
-		return err
+		return JobApplyStats{}, err
 	}
 	defer stageStmt.Close()
 
 	maxScanTime := int64(0)
 	stagedEntries := 0
+	stats := JobApplyStats{}
 	if err := snapshot.StreamSubtreeJobBatches(ctx, *lockedRoot, job, func(batch SubtreeSnapshotBatch) error {
 		if err := validateJobSnapshotBatch(job, batch); err != nil {
 			return err
@@ -772,25 +790,32 @@ func (d *FileSearchDB) ApplySubtreeJobStream(ctx context.Context, root RootRecor
 			return err
 		}
 		stagedEntries += len(batch.Entries)
+		stats.add(jobApplyStatsFromBatch(batch))
+		if onProgress != nil {
+			// Non-fresh streams first stage rows and then replay the scoped diff.
+			// Reporting staged progress still reflects real scan/write work while
+			// keeping the final committed count correction at job completion.
+			onProgress(stats)
+		}
 		return nil
 	}); err != nil {
-		return err
+		return JobApplyStats{}, err
 	}
 	logFilesearchSQLiteMaintenance(ctx, "subtree_stream_stage_entries", job.ScopePath, 0, stagedEntries)
 
 	tombstoneStartedAt := util.GetSystemTimestamp()
 	if err := tombstoneScopedDirectories(tx, ctx, job.RootID, job.ScopePath, maxScanTime); err != nil {
-		return err
+		return JobApplyStats{}, err
 	}
 	logFilesearchSQLiteMaintenance(ctx, "subtree_stream_tombstone_directories", job.ScopePath, util.GetSystemTimestamp()-tombstoneStartedAt, 1)
 
 	replaceStartedAt := util.GetSystemTimestamp()
 	if err := d.replaceSubtreeEntriesFromStageTx(ctx, tx, job.RootID, job.ScopePath); err != nil {
-		return err
+		return JobApplyStats{}, err
 	}
 	logFilesearchSQLiteMaintenance(ctx, "subtree_stream_replace_entries", job.ScopePath, util.GetSystemTimestamp()-replaceStartedAt, stagedEntries)
 
-	return tx.Commit()
+	return stats, tx.Commit()
 }
 
 func (d *FileSearchDB) ApplySubtreeJob(ctx context.Context, job Job, batch SubtreeSnapshotBatch) error {

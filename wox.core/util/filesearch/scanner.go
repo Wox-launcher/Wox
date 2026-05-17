@@ -320,7 +320,12 @@ func (s *Scanner) executePlannedRun(ctx context.Context, kind RunKind, reason st
 		planner.budget = *s.plannerBudgetOverride
 	}
 	planner.SetProgressCallback(func(progress RunPlannerProgress) {
-		s.setTransientRunState(buildPreparationStatusSnapshot(progress, kind))
+		snapshot := buildPreparationStatusSnapshot(progress, kind)
+		// The toolbar now shows live indexing throughput for full runs, so even
+		// preparation snapshots carry elapsed time from the same user-visible
+		// boundary that the final summary uses.
+		snapshot.ActiveRunElapsedMs = util.GetSystemTimestamp() - totalStartedAt
+		s.setTransientRunState(snapshot)
 		s.emitStateChange(ctx)
 		logFilesearchRunStage(ctx, kind, progress.Stage, progress.Root, Job{}, progress.RootIndex, progress.RootTotal, 0, int64(progress.RootTotal))
 	})
@@ -340,9 +345,10 @@ func (s *Scanner) executePlannedRun(ctx context.Context, kind RunKind, reason st
 		s.clearTransientRunState()
 		return err
 	}
-	// Run preparation and pre-scan can traverse large trees before execution starts, but
-	// the old logs only showed coarse stage labels. Record the sealed workload
-	// timing so slow runs reveal whether the stall starts before any SQLite write.
+	// Run preparation can still touch the filesystem while sealing root-level
+	// execution scopes, but it no longer owns recursive file counting. Record the
+	// sealed workload timing so slow runs reveal whether the stall starts before
+	// any SQLite write.
 	logFilesearchRunPreparation(ctx, kind, util.GetSystemTimestamp()-preparationStartedAt, len(plan.RootPlans), len(plan.Jobs), plan.TotalWorkUnits)
 
 	snapshotBuilder := NewSnapshotBuilder(s.policy)
@@ -354,11 +360,11 @@ func (s *Scanner) executePlannedRun(ctx context.Context, kind RunKind, reason st
 		snapshotBuilder.SetDirectFileBatchSize(s.plannerBudgetOverride.DirectFileBatchSize)
 	}
 	executor := NewJobExecutor(snapshotBuilder)
-	executor.SetDirectFilesStreamFunc(func(runCtx context.Context, root RootRecord, job Job, snapshot *SnapshotBuilder) error {
-		return s.db.ApplyDirectFilesJobStream(runCtx, root, job, snapshot)
+	executor.SetDirectFilesStreamFunc(func(runCtx context.Context, root RootRecord, job Job, snapshot *SnapshotBuilder, onProgress func(JobApplyStats)) (JobApplyStats, error) {
+		return s.db.ApplyDirectFilesJobStream(runCtx, root, job, snapshot, onProgress)
 	})
-	executor.SetSubtreeStreamFunc(func(runCtx context.Context, root RootRecord, job Job, snapshot *SnapshotBuilder) error {
-		return s.db.ApplySubtreeJobStream(runCtx, root, job, snapshot)
+	executor.SetSubtreeStreamFunc(func(runCtx context.Context, root RootRecord, job Job, snapshot *SnapshotBuilder, onProgress func(JobApplyStats)) (JobApplyStats, error) {
+		return s.db.ApplySubtreeJobStream(runCtx, root, job, snapshot, onProgress)
 	})
 	if kind == RunKindFull {
 		// Full runs are the only place where we deliberately coalesce multiple
@@ -378,6 +384,7 @@ func (s *Scanner) executePlannedRun(ctx context.Context, kind RunKind, reason st
 			snapshot.ActiveScopePath = job.ScopePath
 			snapshot.ActiveProgressCurrent = 0
 			snapshot.ActiveProgressTotal = 1
+			snapshot.ActiveRunElapsedMs = util.GetSystemTimestamp() - totalStartedAt
 			s.setTransientRunState(snapshot)
 			s.emitStateChange(runCtx)
 		}
@@ -425,6 +432,11 @@ func (s *Scanner) executePlannedRun(ctx context.Context, kind RunKind, reason st
 
 	executionStartedAt := util.GetSystemTimestamp()
 	run, _, err := executor.ExecuteRun(ctx, plan, roots, func(snapshot StatusSnapshot, job Job) {
+		// Job executor snapshots own the monotonic run progress, but the scanner
+		// owns the full-run start boundary. Attach elapsed time here so toolbar
+		// rate calculations do not need plugin-local timers that can drift from
+		// the actual index run.
+		snapshot.ActiveRunElapsedMs = util.GetSystemTimestamp() - totalStartedAt
 		s.setTransientRunState(snapshot)
 		s.emitStateChange(ctx)
 		logFilesearchRunStage(ctx, kind, snapshot.ActiveStage, rootRecordForRunLog(roots, job.RootID), job, snapshot.ActiveRootIndex, snapshot.ActiveRootTotal, snapshot.RunProgressCurrent, snapshot.RunProgressTotal)
@@ -458,8 +470,8 @@ func (s *Scanner) emitCompletedFullRunSummary(ctx context.Context, plan RunPlan,
 		return
 	}
 
-	fileCount := plan.PreScanTotals.FileCount
-	entryCount := plan.PreScanTotals.IndexableEntryCount
+	fileCount := plan.EstimatedTotals.FileCount
+	entryCount := plan.EstimatedTotals.IndexableEntryCount
 	if s.db != nil {
 		if countedFiles, countedEntries, err := s.db.SearchIndexCounts(ctx); err == nil {
 			// Bug fix: full scans now use streaming estimates to avoid a duplicate
@@ -470,6 +482,20 @@ func (s *Scanner) emitCompletedFullRunSummary(ctx context.Context, plan RunPlan,
 			entryCount = countedEntries
 		} else {
 			util.GetLogger().Warn(ctx, "filesearch failed to count completed full index: "+err.Error())
+		}
+		if fileCount <= 0 && entryCount <= 0 {
+			if snapshot, err := s.db.SearchIndexSnapshot(ctx); err == nil && snapshot.EntryCount > 0 {
+				// Bug fix: immediately after a fresh streaming full run, the cheap
+				// summary count can report an empty fact table even though the
+				// diagnostic snapshot moments later sees the committed index. Use
+				// the same verified snapshot path as the full-scan diagnostic before
+				// falling back to an unknown count, so the toolbar never shows a
+				// misleading "Indexed 0 files" for a populated index.
+				fileCount = snapshot.FileCount
+				entryCount = snapshot.EntryCount
+			} else if err != nil {
+				util.GetLogger().Warn(ctx, "filesearch failed to snapshot completed full index count: "+err.Error())
+			}
 		}
 	}
 
@@ -579,10 +605,6 @@ func buildPreparationStatusSnapshot(progress RunPlannerProgress, kind RunKind) S
 		total = 1
 	}
 	rootStatus := RootStatusPreparing
-	if progress.Stage == RunStagePreScan {
-		rootStatus = RootStatusScanning
-	}
-
 	return StatusSnapshot{
 		ProgressCurrent:       0,
 		ProgressTotal:         0,
@@ -614,8 +636,6 @@ func runStatusForPreparationStage(stage RunStage) RunStatus {
 	switch stage {
 	case RunStagePlanning:
 		return RunStatusPlanning
-	case RunStagePreScan:
-		return RunStatusPreScan
 	default:
 		return RunStatusExecuting
 	}
@@ -1547,7 +1567,7 @@ func (s *Scanner) enqueueDirtyRetryForFailedBatch(ctx context.Context, root Root
 			}
 			// Retry the exact subtree scope that failed. The previous recovery path
 			// always enqueued the configured root, which made one bad child under a
-			// large home directory trigger another full pre-scan.
+			// large home directory trigger another full recursive count.
 			s.enqueueDirtyWithContext(ctx, DirtySignal{
 				Kind:          DirtySignalKindPath,
 				RootID:        batch.RootID,
