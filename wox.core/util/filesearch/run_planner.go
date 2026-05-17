@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"wox/util"
 )
@@ -41,8 +42,9 @@ type RunPlannerProgress struct {
 }
 
 type runPlannerRootBuffer struct {
-	root      RootRecord
-	rootScope *runPlannerScopeBuffer
+	root         RootRecord
+	rootScope    *runPlannerScopeBuffer
+	directDeltas []PathDelta
 }
 
 type runPlannerScopeBuffer struct {
@@ -167,6 +169,12 @@ func (p *RunPlanner) PlanIncrementalRun(ctx context.Context, roots []RootRecord,
 		if rootBuffer == nil || rootBuffer.rootScope == nil {
 			continue
 		}
+		if len(rootBuffer.directDeltas) > 0 && len(rootBuffer.rootScope.children) == 0 && rootBuffer.rootScope.totals.IndexableEntryCount == 0 {
+			// Feature addition: a file-only direct-delta run needs a root plan for
+			// finalization, but it must not synthesize a subtree job just because
+			// estimated totals are normally attached to leaf scopes.
+			continue
+		}
 		// Optimization: incremental indexing also skips exact planning. Dirty
 		// scopes are already the caller's best available boundary, so walking them
 		// once to count work and again to apply work only delays reconciliation.
@@ -216,9 +224,10 @@ func (p *RunPlanner) planIncrementalRoots(ctx context.Context, roots []RootRecor
 	}
 
 	type rootDraft struct {
-		root      RootRecord
-		rootScope *runPlannerScopeBuffer
-		children  []*runPlannerScopeBuffer
+		root         RootRecord
+		rootScope    *runPlannerScopeBuffer
+		children     []*runPlannerScopeBuffer
+		directDeltas []PathDelta
 	}
 
 	rootDrafts := make(map[string]*rootDraft, len(batches))
@@ -243,6 +252,26 @@ func (p *RunPlanner) planIncrementalRoots(ctx context.Context, roots []RootRecor
 		}
 
 		if batch.Mode == ReconcileModeRoot || len(batch.Paths) == 0 {
+			if batch.Mode == ReconcileModeDirectDelta && len(batch.DirectDeltas) > 0 {
+				if draft.rootScope != nil {
+					// A previously planned root repair already contains this file.
+					// Keep the broad repair shape instead of adding a second exact
+					// mutation job for the same root.
+					continue
+				}
+				for _, delta := range batch.DirectDeltas {
+					cleanPath := filepath.Clean(delta.Path)
+					if !pathWithinScope(root.Path, cleanPath) {
+						return nil, &runRootError{
+							RootID: root.ID,
+							Err:    fmt.Errorf("incremental direct-delta path %q is outside root path %q", cleanPath, root.Path),
+						}
+					}
+					delta.Path = cleanPath
+					draft.directDeltas = append(draft.directDeltas, delta)
+				}
+				continue
+			}
 			// Bug fix: a root-level incremental reconcile used to collapse the
 			// whole configured root into one subtree job. For large home roots that
 			// made an "incremental" pass slower than a full pass, because full
@@ -255,7 +284,25 @@ func (p *RunPlanner) planIncrementalRoots(ctx context.Context, roots []RootRecor
 			}
 			draft.rootScope = rootBuffer.rootScope
 			draft.children = nil
+			draft.directDeltas = nil
 			continue
+		}
+		for _, delta := range batch.DirectDeltas {
+			if draft.rootScope != nil {
+				// Root repair already covers every file under the configured root,
+				// so keeping exact deltas would only add redundant writes before
+				// the split root plan runs.
+				continue
+			}
+			cleanPath := filepath.Clean(delta.Path)
+			if !pathWithinScope(root.Path, cleanPath) {
+				return nil, &runRootError{
+					RootID: root.ID,
+					Err:    fmt.Errorf("incremental direct-delta path %q is outside root path %q", cleanPath, root.Path),
+				}
+			}
+			delta.Path = cleanPath
+			draft.directDeltas = append(draft.directDeltas, delta)
 		}
 		if draft.rootScope != nil {
 			// A root-level reconcile supersedes any narrower dirty paths already
@@ -318,8 +365,9 @@ func (p *RunPlanner) planIncrementalRoots(ctx context.Context, roots []RootRecor
 		}
 
 		buffers = append(buffers, &runPlannerRootBuffer{
-			root:      draft.root,
-			rootScope: rootScope,
+			root:         draft.root,
+			rootScope:    rootScope,
+			directDeltas: dedupePathDeltas(draft.directDeltas),
 		})
 	}
 
@@ -464,6 +512,32 @@ func (p *RunPlanner) buildDraftPlan(kind RunKind, planID string, runID string) (
 		}
 
 		plan.EstimatedTotals = mergePlanTotals(plan.EstimatedTotals, rootPlan.Totals)
+
+		if len(rootBuffer.directDeltas) > 0 {
+			deltas := append([]PathDelta(nil), rootBuffer.directDeltas...)
+			job := Job{
+				JobID:             fmt.Sprintf("%s-job-%03d", rootBuffer.root.ID, orderIndex),
+				RootID:            rootBuffer.root.ID,
+				RootPath:          rootPlan.RootPath,
+				ScopePath:         rootPlan.RootPath,
+				Kind:              JobKindDirectDelta,
+				DirectDeltas:      deltas,
+				PlannedWriteUnits: int64(len(deltas)),
+				PlannedTotalUnits: int64(len(deltas)),
+				Status:            JobStatusPending,
+				OrderIndex:        orderIndex,
+			}
+			if job.PlannedTotalUnits <= 0 {
+				job.PlannedTotalUnits = 1
+			}
+			plan.TotalWorkUnits += job.PlannedTotalUnits
+			plan.Jobs = append(plan.Jobs, job)
+			rootPlan.Jobs = append(rootPlan.Jobs, JobRef{
+				JobID:      job.JobID,
+				OrderIndex: job.OrderIndex,
+			})
+			orderIndex++
+		}
 
 		// The grouped full-run leaf experiment did not reduce the dominant SQLite
 		// cost enough to justify a wider multi-scope job contract. Returning to
@@ -614,6 +688,31 @@ func dedupePlannerScopes(scopes []*runPlannerScopeBuffer) []*runPlannerScopeBuff
 	result := make([]*runPlannerScopeBuffer, 0, len(order))
 	for _, key := range order {
 		result = append(result, seen[key])
+	}
+	return result
+}
+
+func dedupePathDeltas(deltas []PathDelta) []PathDelta {
+	if len(deltas) == 0 {
+		return nil
+	}
+	byPath := map[string]PathDelta{}
+	paths := make([]string, 0, len(deltas))
+	for _, delta := range deltas {
+		cleanPath := filepath.Clean(delta.Path)
+		if cleanPath == "" || cleanPath == "." {
+			continue
+		}
+		if _, exists := byPath[cleanPath]; !exists {
+			paths = append(paths, cleanPath)
+		}
+		delta.Path = cleanPath
+		byPath[cleanPath] = delta
+	}
+	sort.Strings(paths)
+	result := make([]PathDelta, 0, len(paths))
+	for _, path := range paths {
+		result = append(result, byPath[path])
 	}
 	return result
 }

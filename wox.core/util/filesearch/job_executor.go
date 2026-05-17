@@ -289,7 +289,26 @@ func (e *JobExecutor) ExecuteRun(ctx context.Context, plan RunPlan, roots []Root
 		}
 		emitJobExecutorSnapshot(run, plan, rootOrder, *job, onSnapshot)
 
-		if job.Kind == JobKindDirectFiles && e.streamDirectFiles != nil {
+		if job.Kind == JobKindDirectDelta {
+			// Bug fix: known file changes should not materialize a parent directory
+			// snapshot. The direct-delta job applies the exact paths carried by the
+			// change feed, leaving subtree jobs for directory ownership changes.
+			applyStartedAt := util.GetSystemTimestamp()
+			if e.apply != nil {
+				if err := e.apply(ctx, root, *job, nil); err != nil {
+					logFilesearchJobPhase(ctx, root, *job, "apply_direct_delta", util.GetSystemTimestamp()-applyStartedAt)
+					err = &runRootError{RootID: job.RootID, Err: err}
+					job.Status = JobStatusFailed
+					run.Status = RunStatusFailed
+					run.LastError = err.Error()
+					emitJobExecutorSnapshot(run, plan, rootOrder, *job, onSnapshot)
+					return run, jobs, err
+				}
+			}
+			logFilesearchJobPhase(ctx, root, *job, "apply_direct_delta", util.GetSystemTimestamp()-applyStartedAt)
+			run.CompletedEntryCount += int64(len(job.DirectDeltas))
+			run.CompletedFileCount += int64(len(job.DirectDeltas))
+		} else if job.Kind == JobKindDirectFiles && e.streamDirectFiles != nil {
 			// Direct-files jobs keep delete ownership at directory scope. Streaming
 			// them directly avoids rebuilding the earlier whole-directory memory
 			// spike while preserving that single authoritative prune boundary.

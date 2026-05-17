@@ -645,7 +645,10 @@ func TestFilePlugin_CustomRootsIncrementalSync(t *testing.T) {
 	}
 
 	if err := pollUntil(8*time.Second, 100*time.Millisecond, func() (bool, error) {
-		return observer.HasToolbarTitlePrefix("Writing index") || observer.HasToolbarTitlePrefix("Finalizing index"), nil
+		// Direct-delta incremental runs can finish without entering the heavier
+		// subtree write/finalize labels, so the smoke test accepts the visible
+		// incremental title as the user-facing progress signal.
+		return observer.HasToolbarTitlePrefix("Incremental indexing") || observer.HasToolbarTitlePrefix("Writing index") || observer.HasToolbarTitlePrefix("Finalizing index"), nil
 	}); err != nil {
 		t.Fatalf("expected incremental indexing toolbar message, got titles: %v", observer.ToolbarTitles())
 	}

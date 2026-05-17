@@ -14,11 +14,11 @@ func TestDirtyQueueFlushReadyKeepsDisjointSubtreesSeparate(t *testing.T) {
 		RootEscalationDirectoryRatio: 0.10,
 	})
 
-	firstFile := filepath.Join(string(filepath.Separator), "root", "a", "b", "c", "file.txt")
-	secondFile := filepath.Join(string(filepath.Separator), "root", "a", "d", "e", "file.txt")
+	firstDir := filepath.Join(string(filepath.Separator), "root", "a", "b", "c")
+	secondDir := filepath.Join(string(filepath.Separator), "root", "a", "d", "e")
 
-	queue.Push(DirtySignal{Kind: DirtySignalKindPath, RootID: "root-a", Path: firstFile, PathTypeKnown: true, PathIsDir: false, At: time.Unix(0, 0)})
-	queue.Push(DirtySignal{Kind: DirtySignalKindPath, RootID: "root-a", Path: secondFile, PathTypeKnown: true, PathIsDir: false, At: time.Unix(0, 0)})
+	queue.Push(DirtySignal{Kind: DirtySignalKindPath, RootID: "root-a", Path: firstDir, PathTypeKnown: true, PathIsDir: true, At: time.Unix(0, 0)})
+	queue.Push(DirtySignal{Kind: DirtySignalKindPath, RootID: "root-a", Path: secondDir, PathTypeKnown: true, PathIsDir: true, At: time.Unix(0, 0)})
 
 	batches := queue.FlushReady(time.Unix(0, int64(60*time.Millisecond)), map[string]int{"root-a": 100})
 	if len(batches) != 1 {
@@ -40,7 +40,7 @@ func TestDirtyQueueFlushReadyKeepsDisjointSubtreesSeparate(t *testing.T) {
 	}
 }
 
-func TestDirtyQueueFlushReadyCollapsesManySiblingPathsToParent(t *testing.T) {
+func TestDirtyQueueFlushReadyKeepsKnownFileDeltasOutOfSubtreeCoalescing(t *testing.T) {
 	queue := NewDirtyQueue(DirtyQueueConfig{
 		DebounceWindow:               0,
 		SiblingMergeThreshold:        8,
@@ -52,7 +52,8 @@ func TestDirtyQueueFlushReadyCollapsesManySiblingPathsToParent(t *testing.T) {
 		queue.Push(DirtySignal{
 			Kind:          DirtySignalKindPath,
 			RootID:        "root-a",
-			Path:          filepath.Join(string(filepath.Separator), "root", "a", "parent", "child-"+string(rune('0'+i)), "grand", "file.txt"),
+			SemanticKind:  ChangeSemanticKindModify,
+			Path:          filepath.Join(string(filepath.Separator), "root", "a", "parent", "file-"+string(rune('0'+i))+".txt"),
 			PathTypeKnown: true,
 			PathIsDir:     false,
 			At:            time.Unix(0, 0),
@@ -63,15 +64,23 @@ func TestDirtyQueueFlushReadyCollapsesManySiblingPathsToParent(t *testing.T) {
 	if len(batches) != 1 {
 		t.Fatalf("expected one root batch, got %d", len(batches))
 	}
-	if batches[0].Mode != ReconcileModeSubtree {
-		t.Fatalf("expected subtree reconcile, got %s", batches[0].Mode)
+	if batches[0].Mode != ReconcileModeDirectDelta {
+		t.Fatalf("expected direct-delta reconcile, got %s", batches[0].Mode)
 	}
 	if batches[0].DirtyPathCount != 8 {
 		t.Fatalf("expected 8 dirty paths, got %d", batches[0].DirtyPathCount)
 	}
-	expectedPath := filepath.Join(string(filepath.Separator), "root", "a", "parent")
-	if len(batches[0].Paths) != 1 || batches[0].Paths[0] != expectedPath {
-		t.Fatalf("expected sibling collapse to %s, got %#v", expectedPath, batches[0].Paths)
+	if len(batches[0].Paths) != 0 {
+		t.Fatalf("expected file deltas not to become subtree paths, got %#v", batches[0].Paths)
+	}
+	if len(batches[0].DirectDeltas) != 8 {
+		t.Fatalf("expected 8 direct file deltas, got %#v", batches[0].DirectDeltas)
+	}
+	for i, delta := range batches[0].DirectDeltas {
+		expectedPath := filepath.Join(string(filepath.Separator), "root", "a", "parent", "file-"+string(rune('0'+i))+".txt")
+		if delta.Path != expectedPath || delta.SemanticKind != ChangeSemanticKindModify {
+			t.Fatalf("unexpected direct delta at %d: %#v", i, delta)
+		}
 	}
 }
 
@@ -88,9 +97,9 @@ func TestDirtyQueueFlushReadyEscalatesLargeBatchToRoot(t *testing.T) {
 			queue.Push(DirtySignal{
 				Kind:          DirtySignalKindPath,
 				RootID:        "root-a",
-				Path:          filepath.Join(string(filepath.Separator), "root", "a", "dir-"+string(rune('a'+i)), "grand", "file.txt"),
+				Path:          filepath.Join(string(filepath.Separator), "root", "a", "dir-"+string(rune('a'+i)), "grand"),
 				PathTypeKnown: true,
-				PathIsDir:     false,
+				PathIsDir:     true,
 				At:            time.Unix(0, 0),
 			})
 		}
@@ -119,9 +128,9 @@ func TestDirtyQueueFlushReadyEscalatesLargeBatchToRoot(t *testing.T) {
 			queue.Push(DirtySignal{
 				Kind:          DirtySignalKindPath,
 				RootID:        "root-a",
-				Path:          filepath.Join(string(filepath.Separator), "root", "a", "dir-"+string(rune('a'+i)), "grand", "file.txt"),
+				Path:          filepath.Join(string(filepath.Separator), "root", "a", "dir-"+string(rune('a'+i)), "grand"),
 				PathTypeKnown: true,
-				PathIsDir:     false,
+				PathIsDir:     true,
 				At:            time.Unix(0, 0),
 			})
 		}
@@ -150,9 +159,9 @@ func TestDirtyQueueFlushReadyEscalatesLargeBatchToRoot(t *testing.T) {
 			queue.Push(DirtySignal{
 				Kind:          DirtySignalKindPath,
 				RootID:        "root-a",
-				Path:          filepath.Join(string(filepath.Separator), "root", "a", "dir-"+string(rune('a'+i)), "grand", "file.txt"),
+				Path:          filepath.Join(string(filepath.Separator), "root", "a", "dir-"+string(rune('a'+i)), "grand"),
 				PathTypeKnown: true,
-				PathIsDir:     false,
+				PathIsDir:     true,
 				At:            time.Unix(0, 0),
 			})
 		}
@@ -208,15 +217,15 @@ func TestDirtyQueueFlushReadyPreservesAbsolutePathVolumeRoot(t *testing.T) {
 	})
 
 	rootPath := filepath.Join(t.TempDir(), "root")
-	filePath := filepath.Join(rootPath, "nested", "file.txt")
-	expectedScope := filepath.Dir(filePath)
+	dirPath := filepath.Join(rootPath, "nested")
+	expectedScope := dirPath
 
 	queue.Push(DirtySignal{
 		Kind:          DirtySignalKindPath,
 		RootID:        "root-a",
-		Path:          filePath,
+		Path:          dirPath,
 		PathTypeKnown: true,
-		PathIsDir:     false,
+		PathIsDir:     true,
 		At:            time.Unix(0, 0),
 	})
 
@@ -229,5 +238,41 @@ func TestDirtyQueueFlushReadyPreservesAbsolutePathVolumeRoot(t *testing.T) {
 	}
 	if len(batches[0].Paths) != 1 || batches[0].Paths[0] != expectedScope {
 		t.Fatalf("expected scope %q, got %#v", expectedScope, batches[0].Paths)
+	}
+}
+
+func TestDirtyQueueFlushReadyStillCoalescesDirectorySubtrees(t *testing.T) {
+	queue := NewDirtyQueue(DirtyQueueConfig{
+		DebounceWindow:               0,
+		SiblingMergeThreshold:        8,
+		RootEscalationPathThreshold:  512,
+		RootEscalationDirectoryRatio: 0.10,
+	})
+
+	for i := 0; i < 8; i++ {
+		queue.Push(DirtySignal{
+			Kind:          DirtySignalKindPath,
+			RootID:        "root-a",
+			SemanticKind:  ChangeSemanticKindModify,
+			Path:          filepath.Join(string(filepath.Separator), "root", "a", "parent", "child-"+string(rune('0'+i))),
+			PathTypeKnown: true,
+			PathIsDir:     true,
+			At:            time.Unix(0, 0),
+		})
+	}
+
+	batches := queue.FlushReady(time.Unix(1, 0), map[string]int{"root-a": 100})
+	if len(batches) != 1 {
+		t.Fatalf("expected one root batch, got %d", len(batches))
+	}
+	if batches[0].Mode != ReconcileModeSubtree {
+		t.Fatalf("expected subtree reconcile, got %s", batches[0].Mode)
+	}
+	expectedPath := filepath.Join(string(filepath.Separator), "root", "a", "parent")
+	if len(batches[0].Paths) != 1 || batches[0].Paths[0] != expectedPath {
+		t.Fatalf("expected sibling directory collapse to %s, got %#v", expectedPath, batches[0].Paths)
+	}
+	if len(batches[0].DirectDeltas) != 0 {
+		t.Fatalf("expected directory signals not to become direct deltas, got %#v", batches[0].DirectDeltas)
 	}
 }

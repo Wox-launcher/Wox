@@ -48,7 +48,9 @@ func (p RunPlan) Seal() RunPlan {
 		sealed.RootPlans[i] = p.RootPlans[i].seal()
 	}
 	sealed.Jobs = make([]Job, len(p.Jobs))
-	copy(sealed.Jobs, p.Jobs)
+	for i := range p.Jobs {
+		sealed.Jobs[i] = p.Jobs[i].seal()
+	}
 	return sealed
 }
 
@@ -135,11 +137,21 @@ type Job struct {
 	RootPath          string
 	ScopePath         string
 	Kind              JobKind
+	DirectDeltas      []PathDelta
 	PlannedScanUnits  int64
 	PlannedWriteUnits int64
 	PlannedTotalUnits int64
 	Status            JobStatus
 	OrderIndex        int
+}
+
+func (j Job) seal() Job {
+	sealed := j
+	if j.DirectDeltas != nil {
+		sealed.DirectDeltas = make([]PathDelta, len(j.DirectDeltas))
+		copy(sealed.DirectDeltas, j.DirectDeltas)
+	}
+	return sealed
 }
 
 // PlanTotals freezes the counted work for a root or the whole run.
@@ -209,6 +221,7 @@ type JobKind string
 
 const (
 	JobKindDirectFiles  JobKind = "direct_files"
+	JobKindDirectDelta  JobKind = "direct_delta"
 	JobKindSubtree      JobKind = "subtree"
 	JobKindFinalizeRoot JobKind = "finalize_root"
 )

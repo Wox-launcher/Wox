@@ -470,6 +470,78 @@ func TestRunPlannerIncrementalKeepsDirtyScopeAsStreamingBoundary(t *testing.T) {
 	}
 }
 
+func TestRunPlannerIncrementalFileDeltaBuildsDirectDeltaJob(t *testing.T) {
+	rootPath := filepath.Join(t.TempDir(), "incremental-file-delta-root")
+	filePath := filepath.Join(rootPath, "nested", "changed.txt")
+	mustWriteTestFile(t, filePath, "changed")
+
+	root := testRunPlannerRootRecord("root-incremental-file-delta", rootPath)
+	planner := NewRunPlanner(newPolicyState(Policy{}))
+
+	plan, err := planner.PlanIncrementalRun(context.Background(), []RootRecord{root}, []ReconcileBatch{{
+		RootID: root.ID,
+		Mode:   ReconcileModeDirectDelta,
+		DirectDeltas: []PathDelta{{
+			Path:          filePath,
+			SemanticKind:  ChangeSemanticKindModify,
+			PathTypeKnown: true,
+			PathIsDir:     false,
+		}},
+	}})
+	if err != nil {
+		t.Fatalf("plan file direct delta run: %v", err)
+	}
+
+	if got, want := len(plan.Jobs), 2; got != want {
+		t.Fatalf("expected direct delta job plus finalize, got %d jobs", got)
+	}
+	if got, want := plan.Jobs[0].Kind, JobKindDirectDelta; got != want {
+		t.Fatalf("expected first job to be direct delta, got %s", got)
+	}
+	if got, want := len(plan.Jobs[0].DirectDeltas), 1; got != want {
+		t.Fatalf("expected one direct delta on job, got %#v", plan.Jobs[0].DirectDeltas)
+	}
+	if got, want := plan.Jobs[0].DirectDeltas[0].Path, filePath; got != want {
+		t.Fatalf("unexpected direct delta path: got %q want %q", got, want)
+	}
+	if got, want := plan.Jobs[1].Kind, JobKindFinalizeRoot; got != want {
+		t.Fatalf("expected final job to finalize root, got %s", got)
+	}
+}
+
+func TestRunPlannerIncrementalRootReconcileUsesTopLevelSplit(t *testing.T) {
+	rootPath := filepath.Join(t.TempDir(), "incremental-root-reconcile-split")
+	mustWriteTestFile(t, filepath.Join(rootPath, "child-a", "a.txt"), "a")
+	mustWriteTestFile(t, filepath.Join(rootPath, "child-b", "b.txt"), "b")
+
+	root := testRunPlannerRootRecord("root-incremental-root-reconcile", rootPath)
+	planner := NewRunPlanner(newPolicyState(Policy{}))
+
+	plan, err := planner.PlanIncrementalRun(context.Background(), []RootRecord{root}, []ReconcileBatch{{
+		RootID: root.ID,
+		Mode:   ReconcileModeRoot,
+	}})
+	if err != nil {
+		t.Fatalf("plan root reconcile run: %v", err)
+	}
+
+	if got, want := len(plan.Jobs), 4; got != want {
+		t.Fatalf("expected direct-files, two top-level subtrees, and finalize jobs, got %d jobs", got)
+	}
+	if got, want := plan.Jobs[0].Kind, JobKindDirectFiles; got != want {
+		t.Fatalf("expected root reconcile to start with direct-files job, got %s", got)
+	}
+	if got, want := plan.Jobs[1].ScopePath, filepath.Join(rootPath, "child-a"); got != want {
+		t.Fatalf("unexpected first child scope: got %q want %q", got, want)
+	}
+	if got, want := plan.Jobs[2].ScopePath, filepath.Join(rootPath, "child-b"); got != want {
+		t.Fatalf("unexpected second child scope: got %q want %q", got, want)
+	}
+	if got, want := plan.Jobs[3].Kind, JobKindFinalizeRoot; got != want {
+		t.Fatalf("expected final job to finalize root, got %s", got)
+	}
+}
+
 func testRunPlannerRootRecord(id string, path string) RootRecord {
 	now := time.Now().UnixMilli()
 	return RootRecord{

@@ -523,6 +523,8 @@ func (s *Scanner) emitCompletedFullRunSummary(ctx context.Context, plan RunPlan,
 
 func (s *Scanner) applyRunJob(ctx context.Context, kind RunKind, root RootRecord, job Job, batch *SubtreeSnapshotBatch) error {
 	switch job.Kind {
+	case JobKindDirectDelta:
+		return s.db.ApplyDirectDeltaJob(ctx, root, job, s.policy)
 	case JobKindDirectFiles:
 		if batch == nil {
 			return fmt.Errorf("direct-files job %q is missing snapshot batch", job.JobID)
@@ -1346,6 +1348,7 @@ func (s *Scanner) enqueueDirtyForPath(ctx context.Context, path string) bool {
 
 	s.enqueueDirtyWithContext(ctx, DirtySignal{
 		Kind:          kind,
+		SemanticKind:  ChangeSemanticKindUnknown,
 		RootID:        root.ID,
 		Path:          cleanPath,
 		PathIsDir:     pathIsDir,
@@ -1454,6 +1457,7 @@ func (s *Scanner) handleChangeSignal(ctx context.Context, signal ChangeSignal) {
 			// root reconciles while explicit root-reconcile signals still stay broad.
 			s.enqueueDirtyWithContext(ctx, DirtySignal{
 				Kind:          DirtySignalKindPath,
+				SemanticKind:  signal.SemanticKind,
 				RootID:        signal.RootID,
 				Path:          signal.Path,
 				PathIsDir:     signal.PathIsDir,
@@ -1558,6 +1562,30 @@ func (s *Scanner) handleDirtyQueueFailure(ctx context.Context, root RootRecord, 
 
 func (s *Scanner) enqueueDirtyRetryForFailedBatch(ctx context.Context, root RootRecord, batch ReconcileBatch, at time.Time) bool {
 	switch batch.Mode {
+	case ReconcileModeDirectDelta:
+		requeued := false
+		for _, delta := range batch.DirectDeltas {
+			cleanPath := cleanDirtyQueuePath(delta.Path)
+			if cleanPath == "" || !pathWithinScope(root.Path, cleanPath) {
+				continue
+			}
+			// Feature addition: direct-delta failures retry the same exact file
+			// paths. Widening them to the parent directory would reintroduce the
+			// slow incremental behavior this path is designed to avoid.
+			s.enqueueDirtyWithContext(ctx, DirtySignal{
+				Kind:          DirtySignalKindPath,
+				SemanticKind:  delta.SemanticKind,
+				RootID:        batch.RootID,
+				Path:          cleanPath,
+				PathIsDir:     delta.PathIsDir,
+				PathTypeKnown: delta.PathTypeKnown,
+				At:            at,
+			})
+			requeued = true
+		}
+		if requeued {
+			return true
+		}
 	case ReconcileModeSubtree:
 		requeued := false
 		for _, path := range batch.Paths {
@@ -2108,6 +2136,7 @@ func forceReconcileBatchForFeedState(root RootRecord, batch ReconcileBatch) Reco
 
 	batch.Mode = ReconcileModeRoot
 	batch.Paths = nil
+	batch.DirectDeltas = nil
 	return batch
 }
 
@@ -2170,10 +2199,11 @@ func (s *Scanner) requeueDirtyBatches(ctx context.Context, batches []ReconcileBa
 	for _, batch := range batches {
 		batchCtx := contextWithTraceID(ctx, batch.TraceID)
 		util.GetLogger().Debug(batchCtx, fmt.Sprintf(
-			"filesearch requeue dirty batch: root=%s mode=%s paths=%s",
+			"filesearch requeue dirty batch: root=%s mode=%s paths=%s direct_deltas=%d",
 			batch.RootID,
 			batch.Mode,
 			summarizeLogPaths(batch.Paths),
+			len(batch.DirectDeltas),
 		))
 		switch batch.Mode {
 		case ReconcileModeRoot:
@@ -2192,6 +2222,18 @@ func (s *Scanner) requeueDirtyBatches(ctx context.Context, batches []ReconcileBa
 					Path:          path,
 					PathIsDir:     true,
 					PathTypeKnown: true,
+					At:            requeuedAt,
+				})
+			}
+		case ReconcileModeDirectDelta:
+			for _, delta := range batch.DirectDeltas {
+				s.enqueueDirtyWithContext(batchCtx, DirtySignal{
+					Kind:          DirtySignalKindPath,
+					SemanticKind:  delta.SemanticKind,
+					RootID:        batch.RootID,
+					Path:          delta.Path,
+					PathIsDir:     delta.PathIsDir,
+					PathTypeKnown: delta.PathTypeKnown,
 					At:            requeuedAt,
 				})
 			}

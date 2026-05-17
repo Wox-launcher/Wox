@@ -134,9 +134,25 @@ func (h *dynamicRootHeatTracker) markSuccessfulFlush(batches []ReconcileBatch, g
 			if batch.RootID != state.rootID {
 				continue
 			}
-			if batch.Mode == ReconcileModeRoot || len(batch.Paths) == 0 {
+			if batch.Mode == ReconcileModeRoot {
 				state.flushes[generation] = struct{}{}
 				break
+			}
+			// Feature addition: file-level deltas have no subtree scope, so they
+			// must be matched by their exact paths instead of being treated like a
+			// root flush. Otherwise one tiny file update would satisfy heat checks
+			// for every dynamic child under the same configured root.
+			for _, delta := range batch.DirectDeltas {
+				if pathWithinScope(delta.Path, state.path) || pathWithinScope(state.path, delta.Path) {
+					state.flushes[generation] = struct{}{}
+					break
+				}
+			}
+			if _, ok := state.flushes[generation]; ok {
+				break
+			}
+			if len(batch.Paths) == 0 {
+				continue
 			}
 			for _, scopePath := range batch.Paths {
 				if pathWithinScope(scopePath, state.path) || pathWithinScope(state.path, scopePath) {

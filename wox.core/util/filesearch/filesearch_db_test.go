@@ -1251,6 +1251,50 @@ func TestFileSearchDBReplaceSubtreeSnapshotsTombstonesMissingDirectories(t *test
 	}
 }
 
+func TestFileSearchDBReplaceSubtreeSnapshotsIgnoresUpdatedAtOnlyChanges(t *testing.T) {
+	db, ctx := openTestFileSearchDB(t)
+	now := time.Now().UnixMilli()
+	rootPath := filepath.Join(t.TempDir(), "root-updated-at-diff")
+	scopePath := filepath.Join(rootPath, "scope")
+	filePath := filepath.Join(scopePath, "same.txt")
+	mustWriteTestFile(t, filePath, "same")
+
+	root := RootRecord{ID: "root-updated-at-diff", Path: rootPath, Kind: RootKindUser, Status: RootStatusIdle, CreatedAt: now, UpdatedAt: now}
+	mustInsertRoot(t, ctx, db, root)
+
+	original := makeTestEntryRecord(root, filePath, false, 4, time.UnixMilli(now))
+	original.UpdatedAt = now - 1000
+	mustInsertEntrySnapshots(t, ctx, db, original)
+
+	sameContentLaterScan := original
+	sameContentLaterScan.UpdatedAt = now + 1000
+	if err := db.ReplaceSubtreeSnapshots(ctx, []SubtreeSnapshotBatch{{
+		RootID:    root.ID,
+		ScopePath: scopePath,
+		Directories: []DirectoryRecord{{
+			Path:         scopePath,
+			RootID:       root.ID,
+			ParentPath:   rootPath,
+			LastScanTime: now + 1000,
+			Exists:       true,
+		}},
+		Entries: []EntryRecord{sameContentLaterScan},
+	}}); err != nil {
+		t.Fatalf("replace subtree snapshot with updated_at-only change: %v", err)
+	}
+
+	entries, err := db.ListEntriesByRoot(ctx, root.ID)
+	if err != nil {
+		t.Fatalf("list entries after updated_at-only replace: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected one entry after updated_at-only replace, got %#v", entries)
+	}
+	if got, want := entries[0].UpdatedAt, original.UpdatedAt; got != want {
+		t.Fatalf("expected updated_at-only change not to rewrite entry, got %d want %d", got, want)
+	}
+}
+
 func TestFileSearchDBReplaceSubtreeSnapshotsTombstonesMissingDirectoriesEscapesLikeWildcards(t *testing.T) {
 	db, ctx := openTestFileSearchDB(t)
 	now := time.Now().UnixMilli()

@@ -57,6 +57,35 @@ func (r *Reconciler) ReconcileWithProgress(ctx context.Context, batch ReconcileB
 	}
 
 	switch batch.Mode {
+	case ReconcileModeDirectDelta:
+		util.GetLogger().Debug(ctx, fmt.Sprintf(
+			"filesearch reconcile direct delta started: root=%s paths=%d",
+			root.ID,
+			len(batch.DirectDeltas),
+		))
+		// Feature addition: callers that still use the legacy Reconciler API can
+		// apply exact file deltas without widening them into subtree snapshots.
+		// This keeps the old entry point behavior aligned with the planned-run
+		// executor while preserving the same root state update semantics.
+		if err := r.db.ApplyDirectDeltaJob(ctx, *root, Job{
+			Kind:         JobKindDirectDelta,
+			RootID:       root.ID,
+			ScopePath:    root.Path,
+			DirectDeltas: batch.DirectDeltas,
+		}, r.snapshot.policy); err != nil {
+			return result, err
+		}
+		if len(batch.DirectDeltas) > 0 {
+			now := util.GetSystemTimestamp()
+			root.LastReconcileAt = now
+			root.FeedState = nextFeedStateAfterSuccessfulReconcile(*root)
+			root.UpdatedAt = now
+			if err := r.db.UpdateRootState(ctx, *root); err != nil {
+				return result, err
+			}
+		}
+		result.ReloadNeeded = len(batch.DirectDeltas) > 0
+		return result, nil
 	case ReconcileModeRoot:
 		util.GetLogger().Debug(ctx, fmt.Sprintf(
 			"filesearch reconcile snapshot build started: root=%s mode=%s scope=%s",

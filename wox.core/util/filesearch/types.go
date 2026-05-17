@@ -84,6 +84,7 @@ const (
 
 type DirtySignal struct {
 	Kind          DirtySignalKind
+	SemanticKind  ChangeSemanticKind
 	RootID        string
 	TraceID       string
 	Path          string
@@ -97,6 +98,10 @@ type ReconcileMode string
 const (
 	ReconcileModeSubtree ReconcileMode = "subtree"
 	ReconcileModeRoot    ReconcileMode = "root"
+	// ReconcileModeDirectDelta applies known file changes by exact path instead
+	// of widening them to the parent directory. Directory and unknown-type
+	// changes still use subtree/root modes because they own recursive deletes.
+	ReconcileModeDirectDelta ReconcileMode = "direct_delta"
 )
 
 type ReconcileBatch struct {
@@ -104,7 +109,15 @@ type ReconcileBatch struct {
 	TraceID        string
 	Mode           ReconcileMode
 	Paths          []string
+	DirectDeltas   []PathDelta
 	DirtyPathCount int
+}
+
+type PathDelta struct {
+	Path          string
+	SemanticKind  ChangeSemanticKind
+	PathIsDir     bool
+	PathTypeKnown bool
 }
 
 type RootFeedType string

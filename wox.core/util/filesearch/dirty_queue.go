@@ -155,7 +155,8 @@ func buildReconcileBatch(rootID string, signals []DirtySignal, directoryCount in
 		}
 	}
 
-	dirtyPaths := uniqueDirtyPaths(signals)
+	directDeltas, subtreeSignals := splitDirtySignals(signals)
+	dirtyPaths := uniqueDirtyPaths(subtreeSignals)
 	paths := coalesceDirtyPaths(dirtyPaths, config.SiblingMergeThreshold)
 	if shouldEscalateRoot(len(paths), directoryCount, config) {
 		return ReconcileBatch{
@@ -166,12 +167,69 @@ func buildReconcileBatch(rootID string, signals []DirtySignal, directoryCount in
 		}
 	}
 
+	mode := ReconcileModeSubtree
+	if len(paths) == 0 && len(directDeltas) > 0 {
+		mode = ReconcileModeDirectDelta
+	}
 	return ReconcileBatch{
 		RootID:         rootID,
 		TraceID:        latestSignal.TraceID,
-		Mode:           ReconcileModeSubtree,
+		Mode:           mode,
 		Paths:          paths,
+		DirectDeltas:   directDeltas,
 		DirtyPathCount: len(signals),
+	}
+}
+
+func splitDirtySignals(signals []DirtySignal) ([]PathDelta, []DirtySignal) {
+	deltaByPath := map[string]PathDelta{}
+	deltaOrder := make([]string, 0, len(signals))
+	subtreeSignals := make([]DirtySignal, 0, len(signals))
+
+	for _, signal := range signals {
+		if shouldUseDirectDelta(signal) {
+			path := cleanDirtyQueuePath(signal.Path)
+			if path == "" {
+				continue
+			}
+			if _, exists := deltaByPath[path]; !exists {
+				deltaOrder = append(deltaOrder, path)
+			}
+			// Bug fix: file watcher events were previously collapsed to the parent
+			// directory before planning, which made a single file write rescan and
+			// diff every sibling. Keep the latest per-file semantic so the planner
+			// can build an exact direct-delta job.
+			deltaByPath[path] = PathDelta{
+				Path:          path,
+				SemanticKind:  signal.SemanticKind,
+				PathIsDir:     signal.PathIsDir,
+				PathTypeKnown: signal.PathTypeKnown,
+			}
+			continue
+		}
+		subtreeSignals = append(subtreeSignals, signal)
+	}
+
+	sort.Strings(deltaOrder)
+	deltas := make([]PathDelta, 0, len(deltaOrder))
+	for _, path := range deltaOrder {
+		deltas = append(deltas, deltaByPath[path])
+	}
+	return deltas, subtreeSignals
+}
+
+func shouldUseDirectDelta(signal DirtySignal) bool {
+	if signal.Kind != DirtySignalKindPath {
+		return false
+	}
+	if !signal.PathTypeKnown || signal.PathIsDir {
+		return false
+	}
+	switch signal.SemanticKind {
+	case ChangeSemanticKindCreate, ChangeSemanticKindModify, ChangeSemanticKindMetadata, ChangeSemanticKindRemove, ChangeSemanticKindRename, ChangeSemanticKindUnknown, "":
+		return true
+	default:
+		return false
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -829,6 +830,122 @@ func (d *FileSearchDB) ApplySubtreeJob(ctx context.Context, job Job, batch Subtr
 	// Subtree jobs still own a complete recursive scope, so the existing scoped
 	// replace helper remains correct and keeps this job-oriented wrapper small.
 	return d.ReplaceSubtreeSnapshot(ctx, batch)
+}
+
+func (d *FileSearchDB) ApplyDirectDeltaJob(ctx context.Context, root RootRecord, job Job, policy *policyState) error {
+	if job.Kind != JobKindDirectDelta {
+		return fmt.Errorf("apply direct-delta job requires kind %q, got %q", JobKindDirectDelta, job.Kind)
+	}
+	if policy == nil {
+		policy = newPolicyState(Policy{})
+	}
+
+	tx, err := d.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	lockedRoot, err := lockRootForSubtreeSnapshot(ctx, tx, root.ID)
+	if err != nil {
+		return err
+	}
+
+	artifactSync, err := newEntrySearchArtifactSyncTx(ctx, tx)
+	if err != nil {
+		return err
+	}
+	defer artifactSync.Close()
+
+	factMutator, err := newEntryFactMutatorTx(ctx, tx)
+	if err != nil {
+		return err
+	}
+	defer factMutator.Close()
+
+	// Feature addition: known file watcher events apply through exact path
+	// mutations. The previous dirty path flow widened every file write to the
+	// parent directory, which made ordinary saves rescan and diff all siblings.
+	for _, delta := range job.DirectDeltas {
+		if err := d.applyDirectPathDeltaTx(ctx, tx, *lockedRoot, policy, artifactSync, factMutator, delta); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+func (d *FileSearchDB) applyDirectPathDeltaTx(ctx context.Context, tx *sql.Tx, root RootRecord, policy *policyState, artifactSync *entrySearchArtifactSyncTx, factMutator *entryFactMutatorTx, delta PathDelta) error {
+	startedAt := util.GetSystemTimestamp()
+	cleanPath := filepath.Clean(delta.Path)
+	if cleanPath == "" || cleanPath == "." {
+		return nil
+	}
+	if !pathWithinScope(root.Path, cleanPath) {
+		return fmt.Errorf("direct-delta path %q is outside root path %q", cleanPath, root.Path)
+	}
+
+	if isDeleteOnlyDelta(delta.SemanticKind) {
+		deleted, err := deleteDirectDeltaEntryByPathTx(ctx, tx, artifactSync, factMutator, cleanPath)
+		if err != nil {
+			return err
+		}
+		logFilesearchSQLiteMaintenance(ctx, "direct_delta_delete", cleanPath, util.GetSystemTimestamp()-startedAt, boolToInt(deleted))
+		return nil
+	}
+
+	info, err := os.Stat(cleanPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			deleted, deleteErr := deleteDirectDeltaEntryByPathTx(ctx, tx, artifactSync, factMutator, cleanPath)
+			if deleteErr != nil {
+				return deleteErr
+			}
+			logFilesearchSQLiteMaintenance(ctx, "direct_delta_missing_delete", cleanPath, util.GetSystemTimestamp()-startedAt, boolToInt(deleted))
+			return nil
+		}
+		return err
+	}
+	if info.IsDir() {
+		deleted, err := deleteDirectDeltaEntryByPathTx(ctx, tx, artifactSync, factMutator, cleanPath)
+		if err != nil {
+			return err
+		}
+		logFilesearchSQLiteMaintenance(ctx, "direct_delta_directory_skip", cleanPath, util.GetSystemTimestamp()-startedAt, boolToInt(deleted))
+		return nil
+	}
+
+	policyContext := policy.newTraversalContext(root, filepath.Dir(cleanPath))
+	if !policyContext.ShouldIndexPath(cleanPath, false) {
+		deleted, err := deleteDirectDeltaEntryByPathTx(ctx, tx, artifactSync, factMutator, cleanPath)
+		if err != nil {
+			return err
+		}
+		logFilesearchSQLiteMaintenance(ctx, "direct_delta_policy_delete", cleanPath, util.GetSystemTimestamp()-startedAt, boolToInt(deleted))
+		return nil
+	}
+
+	entry := newEntryRecord(root, cleanPath, info)
+	changed, err := upsertDirectDeltaEntryTx(ctx, tx, artifactSync, factMutator, entry)
+	if err != nil {
+		return err
+	}
+	operation := "direct_delta_upsert"
+	if !changed {
+		operation = "direct_delta_unchanged"
+	}
+	logFilesearchSQLiteMaintenance(ctx, operation, cleanPath, util.GetSystemTimestamp()-startedAt, boolToInt(changed))
+	return nil
+}
+
+func isDeleteOnlyDelta(kind ChangeSemanticKind) bool {
+	// Only explicit Remove is handled as delete-without-stat. Rename is excluded
+	// because FSEvents sends the renamed flag on both the old path (gone) and the
+	// new path (now exists). Treating Rename as delete-only would remove the new
+	// path from the index every time a file is renamed. The stat path below
+	// handles both cases correctly: old path → IsNotExist → delete, new path →
+	// exists → upsert.
+	return kind == ChangeSemanticKindRemove
 }
 
 func (d *FileSearchDB) FinalizeRootRun(ctx context.Context, root RootRecord) error {

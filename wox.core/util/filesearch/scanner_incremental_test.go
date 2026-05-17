@@ -74,6 +74,17 @@ func TestScannerProcessDirtyQueueUpdatesSQLiteAfterReconcile(t *testing.T) {
 		t.Fatalf("remove initial file %q: %v", initialFilePath, err)
 	}
 	mustWriteTestFile(t, newFilePath, "new")
+	// Direct file deltas no longer widen a create event to the parent directory,
+	// so the test must model the watcher remove signal that evicts the old row.
+	scanner.enqueueDirtyWithContext(ctx, DirtySignal{
+		Kind:          DirtySignalKindPath,
+		SemanticKind:  ChangeSemanticKindRemove,
+		RootID:        root.ID,
+		Path:          initialFilePath,
+		PathIsDir:     false,
+		PathTypeKnown: true,
+		At:            time.Now(),
+	})
 	if ok := scanner.enqueueDirtyForPath(ctx, newFilePath); !ok {
 		t.Fatalf("expected scanner to route dirty path %q to root %q", newFilePath, root.ID)
 	}
@@ -81,8 +92,8 @@ func TestScannerProcessDirtyQueueUpdatesSQLiteAfterReconcile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get status after enqueueing dirty path: %v", err)
 	}
-	if status.PendingDirtyRootCount != 1 || status.PendingDirtyPathCount != 1 {
-		t.Fatalf("expected pending dirty counts root=1 path=1 after enqueue, got root=%d path=%d", status.PendingDirtyRootCount, status.PendingDirtyPathCount)
+	if status.PendingDirtyRootCount != 1 || status.PendingDirtyPathCount != 2 {
+		t.Fatalf("expected pending dirty counts root=1 path=2 after enqueue, got root=%d path=%d", status.PendingDirtyRootCount, status.PendingDirtyPathCount)
 	}
 	processAt := time.Now().Add(2 * defaultDirtyDebounceWindow)
 
@@ -98,6 +109,74 @@ func TestScannerProcessDirtyQueueUpdatesSQLiteAfterReconcile(t *testing.T) {
 	results = searchSQLiteForTest(t, db, "initial", 10)
 	if len(results) != 0 {
 		t.Fatalf("expected removed file %q to be evicted from sqlite provider, got %#v", initialFilePath, results)
+	}
+}
+
+func TestScannerProcessDirtyQueueHandlesFileRenameSignals(t *testing.T) {
+	db, ctx := openTestFileSearchDB(t)
+	now := time.Now().UnixMilli()
+	rootPath := filepath.Join(t.TempDir(), "root-rename-delta")
+	oldFilePath := filepath.Join(rootPath, "rename-old-report.txt")
+	newFilePath := filepath.Join(rootPath, "rename-new-report.txt")
+
+	mustWriteTestFile(t, oldFilePath, "renamed")
+
+	root := RootRecord{
+		ID:        "root-rename-delta",
+		Path:      rootPath,
+		Kind:      RootKindUser,
+		Status:    RootStatusIdle,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	mustInsertRoot(t, ctx, db, root)
+
+	scanner := NewScanner(db)
+	scanner.dirtyQueueConfig = DirtyQueueConfig{
+		DebounceWindow:               defaultDirtyDebounceWindow,
+		SiblingMergeThreshold:        8,
+		RootEscalationPathThreshold:  512,
+		RootEscalationDirectoryRatio: 0,
+	}
+	scanner.dirtyQueue = NewDirtyQueue(scanner.dirtyQueueConfig)
+	scanner.scanAllRoots(ctx)
+
+	results := searchSQLiteForTest(t, db, "rename-old-report", 10)
+	if len(results) != 1 || results[0].Path != oldFilePath {
+		t.Fatalf("expected old file %q after full build, got %#v", oldFilePath, results)
+	}
+
+	if err := os.Rename(oldFilePath, newFilePath); err != nil {
+		t.Fatalf("rename file %q to %q: %v", oldFilePath, newFilePath, err)
+	}
+	// FSEvents reports ItemRenamed for both the disappeared old path and the
+	// existing new path. Direct-delta must stat each rename path so the old row is
+	// deleted while the new row is upserted, instead of treating rename as
+	// delete-only.
+	for _, path := range []string{oldFilePath, newFilePath} {
+		scanner.enqueueDirtyWithContext(ctx, DirtySignal{
+			Kind:          DirtySignalKindPath,
+			SemanticKind:  ChangeSemanticKindRename,
+			RootID:        root.ID,
+			Path:          path,
+			PathIsDir:     false,
+			PathTypeKnown: true,
+			At:            time.Now(),
+		})
+	}
+
+	if err := scanner.processDirtyQueue(ctx, time.Now().Add(2*defaultDirtyDebounceWindow)); err != nil {
+		t.Fatalf("process rename dirty queue: %v", err)
+	}
+
+	results = searchSQLiteForTest(t, db, "rename-old-report", 10)
+	if len(results) != 0 {
+		t.Fatalf("expected renamed old file %q to disappear, got %#v", oldFilePath, results)
+	}
+
+	results = searchSQLiteForTest(t, db, "rename-new-report", 10)
+	if len(results) != 1 || results[0].Path != newFilePath {
+		t.Fatalf("expected renamed new file %q to be searchable, got %#v", newFilePath, results)
 	}
 }
 

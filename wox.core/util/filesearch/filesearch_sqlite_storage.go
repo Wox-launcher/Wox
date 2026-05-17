@@ -1508,6 +1508,83 @@ func upsertEntryFactsWithMutatorTx(ctx context.Context, mutator *entryFactMutato
 	return current, nil
 }
 
+func deleteDirectDeltaEntryByPathTx(ctx context.Context, tx *sql.Tx, artifactSync *entrySearchArtifactSyncTx, factMutator *entryFactMutatorTx, path string) (bool, error) {
+	existing, ok, err := selectStoredEntryByPathTx(ctx, tx, path)
+	if err != nil || !ok {
+		return false, err
+	}
+	if err := deleteEntrySearchArtifactsWithSyncTx(ctx, artifactSync, existing); err != nil {
+		return false, err
+	}
+	if err := deleteEntryBigramsTx(ctx, tx, existing.EntryID); err != nil {
+		return false, err
+	}
+	if _, err := factMutator.deleteStmt.ExecContext(ctx, existing.EntryID); err != nil {
+		return false, fmt.Errorf("delete direct-delta entry %q: %w", path, err)
+	}
+	return true, nil
+}
+
+func upsertDirectDeltaEntryTx(ctx context.Context, tx *sql.Tx, artifactSync *entrySearchArtifactSyncTx, factMutator *entryFactMutatorTx, entry EntryRecord) (bool, error) {
+	next := buildStoredEntryRecord(entry)
+	existing, ok, err := selectStoredEntryByPathTx(ctx, tx, next.Path)
+	if err != nil {
+		return false, err
+	}
+	if ok && !entrySearchContentChanged(existing, next) {
+		// Bug fix: exact file deltas must not rebuild FTS for unchanged content.
+		// updated_at only records that this path was observed by the latest
+		// watcher pass, so a no-op delta updates that marker without touching
+		// derived search artifacts.
+		if _, err := tx.ExecContext(ctx, `UPDATE entries SET updated_at = ? WHERE entry_id = ?`, next.UpdatedAt, existing.EntryID); err != nil {
+			return false, fmt.Errorf("update direct-delta timestamp %q: %w", next.Path, err)
+		}
+		return false, nil
+	}
+	if ok {
+		if err := deleteEntrySearchArtifactsWithSyncTx(ctx, artifactSync, existing); err != nil {
+			return false, err
+		}
+		if err := deleteEntryBigramsTx(ctx, tx, existing.EntryID); err != nil {
+			return false, err
+		}
+	}
+
+	current, err := upsertEntryFactsWithMutatorTx(ctx, factMutator, next)
+	if err != nil {
+		return false, err
+	}
+	if err := insertEntrySearchArtifactsWithSyncTx(ctx, artifactSync, current); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func entrySearchContentChanged(left storedEntryRecord, right storedEntryRecord) bool {
+	return left.RootID != right.RootID ||
+		left.ParentPath != right.ParentPath ||
+		left.Name != right.Name ||
+		left.NormalizedName != right.NormalizedName ||
+		left.NameKey != right.NameKey ||
+		left.NormalizedPath != right.NormalizedPath ||
+		left.PinyinFull != right.PinyinFull ||
+		left.PinyinInitials != right.PinyinInitials ||
+		left.Extension != right.Extension ||
+		left.IsDir != right.IsDir ||
+		left.Mtime != right.Mtime ||
+		left.Size != right.Size
+}
+
+func deleteEntryBigramsTx(ctx context.Context, tx *sql.Tx, entryID int64) error {
+	if entryID == 0 {
+		return nil
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM entries_bigram WHERE entry_id = ?`, entryID); err != nil {
+		return fmt.Errorf("delete direct-delta bigrams for entry %d: %w", entryID, err)
+	}
+	return nil
+}
+
 func collectChangedEntrySetsTx(ctx context.Context, tx *sql.Tx, rootID string, scopePath string) ([]storedEntryRecord, []storedEntryRecord, []storedEntryRecord, error) {
 	scopeQuery, scopeArgs := buildEntryScopeQuery(scopePath, "e.path")
 	// Compare the staged snapshot against persisted facts inside SQLite so no-op
@@ -2008,9 +2085,11 @@ func nextPathPrefixUpperBound(prefix string) string {
 func buildEntryDifferencePredicate(existingAlias string, stagedAlias string) string {
 	left := strings.TrimSpace(existingAlias)
 	right := strings.TrimSpace(stagedAlias)
+	// Bug fix: updated_at is a write marker, not file identity. Including it made
+	// every subtree reconcile rewrite unchanged rows because each scan gets a new
+	// timestamp even when mtime, size, names, and search keys are identical.
 	return fmt.Sprintf(
-		"%s.root_id <> %s.root_id OR %s.parent_path <> %s.parent_path OR %s.name <> %s.name OR %s.normalized_name <> %s.normalized_name OR %s.name_key <> %s.name_key OR %s.normalized_path <> %s.normalized_path OR %s.pinyin_full <> %s.pinyin_full OR %s.pinyin_initials <> %s.pinyin_initials OR %s.extension <> %s.extension OR %s.is_dir <> %s.is_dir OR %s.mtime <> %s.mtime OR %s.size <> %s.size OR %s.updated_at <> %s.updated_at",
-		left, right,
+		"%s.root_id <> %s.root_id OR %s.parent_path <> %s.parent_path OR %s.name <> %s.name OR %s.normalized_name <> %s.normalized_name OR %s.name_key <> %s.name_key OR %s.normalized_path <> %s.normalized_path OR %s.pinyin_full <> %s.pinyin_full OR %s.pinyin_initials <> %s.pinyin_initials OR %s.extension <> %s.extension OR %s.is_dir <> %s.is_dir OR %s.mtime <> %s.mtime OR %s.size <> %s.size",
 		left, right,
 		left, right,
 		left, right,
