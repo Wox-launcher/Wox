@@ -1,31 +1,45 @@
 # Changelog
 
-## v2.0.4 -
+## v2.1.0 -
 
 - Add
-  - [`Glance`] Add Glance to the query box so users can see lightweight real-time information, such as time, date, and battery status, without typing a query. Plugins can provide glance metadata, and users can choose the primary glance item or hide the glance icon for a cleaner query box.
+  - [`Glance`] Add Glance to the query box so users can see lightweight real-time information, such as time, date, and battery status, cpu usage, and memory usage without typing a query. Plugins can provide glance metadata, and users can choose the glance item or hide the glance icon for a cleaner query box.
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/glance.png)
-  - [`Screenshot`] Expand Screenshot with scrolling capture, pinned screenshot overlays, and a plugin screenshot API. Users can capture long pages or windows, pin captures above other windows as visual references, and plugins can start direct capture workflows with hidden toolbar and auto-confirm options #4394
+  - [`Screenshot`] Expand Screenshot with scrolling capture, pinned screenshot overlays, a plugin screenshot API, and configurable history retention. Users can capture long pages or windows, pin captures above other windows as visual references, let old screenshot files clean up automatically, and let plugins start direct capture workflows with hidden toolbar and auto-confirm options #4394
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/screenshot_pin.png)
-  - [`Preview`] Redesign the preview UI and add image overlay previews so result previews have a cleaner, more consistent surface, while image-heavy results, including clipboard and screenshot results, can open in a lightweight overlay instead of only inside the launcher preview panel.
+  - [`Preview`] Redesign the preview UI and add list previews and image overlay previews so result previews have a cleaner, more consistent surface, while image-heavy results, including clipboard and screenshot results, can open in a lightweight overlay instead of only inside the launcher preview panel.
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/preview_image_click.png)
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/new_preview.png)
+  - [`Query Refinement`] Add refinement controls so plugins can expose filters and sort options directly in the launcher. File Search can filter files or folders and sort by relevance, name, modified time, or size; Clipboard and WPM can expose their own type and install-status filters. 
+    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/query_refinement.png)
+  - [`AI Command`] Add default actions and Run And Paste support for silent query hotkey workflows. Users can select text in any app, press a hotkey, let an AI command optimize or translate the selected text, and replace the original selection in place when the final answer is ready. You can refer [https://wox-launcher.github.io/Wox/blog/did-you-know-ai-command-silent-translation-query-hotkey.html](https://wox-launcher.github.io/Wox/blog/did-you-know-ai-command-silent-translation-query-hotkey.html) for more details.
+    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/ai_command_run_paste_query_hotkey.mp4)
   - [`WebView`] Add actions to open preview pages in the system browser and clear saved WebView state, making embedded website previews easier to inspect, reset, and recover when a site keeps stale session data.
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/webview_open_in_browser.png)
   - [`Usage`] Add X sharing for usage statistics so users can post their Wox usage summary directly from the usage page.
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/usage_share_x.png)
+  - [`Onboarding`] Add the first-run flow with clearer setup steps for permissions, hotkeys, appearance, plugins, themes, tray queries, and Glance.
+      ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/onboarding.png)
 
 - Improve
-  - [`Query Box`] Improve multi-line query wrapping and pasted text handling #4397
+  - [`File Search`] Improve indexing performance, dynamic root management, hidden/system path handling, and incremental updates so large roots refresh faster and avoid duplicate or unsafe indexed paths.
+  - [`Launcher`] Improve query run state, result caching, and concurrency handling so fast query changes keep the correct result session and preview state #4411
+  - [`Query Box`] Improve multi-line query wrapping, pasted text handling, word-boundary deletion, and Linux Enter handling #4397 #4410
   - [`Settings`] Redesign the settings pages with clearer section structure, more consistent form controls, and cleaner spacing across General, Data, UI, Plugin, AI, Network, Privacy, Runtime, Usage, and About pages. Plugin-provided pixel styling is deprecated so settings can stay visually consistent while still preserving each setting's behavior and validation.
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/settings_redesign.png)
-  - [`App`] Improve macOS app icon handling and default icon detection
-  - [`AI`] Improve OpenAI-compatible streaming so tagged reasoning content is separated from answer text
+  - [`Plugin Store`] Improve install progress, plugin detail state, install-status filtering, and minimum Wox version checks so incompatible plugins are blocked earlier #4401
+  - [`Linux`] Improve Wayland hotkeys, window movement, `.desktop` app indexing and launching, context menus, and file icon resolution #4400 #4404 #4405
+  - [`App`] Improve macOS app icon handling, default icon detection, app directory tracking, and precise app index updates #4402
+  - [`Converter`] Improve currency conversion with broader fiat currency support, exchange-rate refresh fallback, locale-aware default currencies, and clearer rate freshness display.
+  - [`AI`] Improve OpenAI-compatible streaming so tagged reasoning content is separated from answer text.
+  - [`Memory`] Reduce startup and core-process memory usage by lazy-loading Emoji data and releasing native macOS icon images after use.
   - [`File Explorer Search`] Improve type-to-search routing from launcher queries
 
 - Fix
   - [`Plugin Store`] Fix plugin installation by starting the required runtime host when possible before install #4395
   - [`Plugin Setting`] Fix trigger keyword validation so multiple plugins can use the global `*` query
+  - [`Launcher`] Fix Windows focus retry behavior that could select existing query text while the user was typing.
+  - [`Shell`] Fix Windows command output encoding so Shell results preserve the expected text #4409
 
 ## v2.0.3 - 2026-04-26
 
