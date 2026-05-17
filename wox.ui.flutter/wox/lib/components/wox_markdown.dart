@@ -99,6 +99,7 @@ class WoxMarkdownView extends StatelessWidget {
         // Passing the new dimensions into Wox's shared image builder keeps the upgraded
         // dependency compatible without splitting remote/local image behavior.
         imageBuilder: (context, url, width, height) => buildImage(context, url, width: width, height: height),
+        tableBuilder: (context, rows, textStyle, config) => buildMarkdownTable(context, rows, textStyle, config, fontColor, dividerColor),
         inlineComponents: [ATagMd(), WoxImageMd(), TableMd(), StrikeMd(), BoldMd(), ItalicMd(), UnderLineMd(), LatexMath(), LatexMathMultiLine(), HighlightedText(), SourceTag()],
         unOrderedListBuilder: (context, child, config) {
           final itemText = child is MdWidget ? child.exp.trimLeft() : '';
@@ -133,6 +134,64 @@ class WoxMarkdownView extends StatelessWidget {
     );
 
     return DefaultTextStyle.merge(style: fontTextStyle, child: selectable ? SelectionArea(child: markdownBody) : markdownBody);
+  }
+
+  Widget buildMarkdownTable(BuildContext context, List<CustomTableRow> rows, TextStyle textStyle, GptMarkdownConfig config, Color textColor, Color dividerColor) {
+    final controller = ScrollController();
+    final isLightText = textColor.computeLuminance() >= 0.5;
+    final borderColor = dividerColor.withValues(alpha: isLightText ? 0.58 : 0.42);
+    final headerBackgroundColor = isLightText ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.055);
+
+    // Bug fix: gpt_markdown's built-in table renderer reads Flutter's ambient
+    // Material theme instead of Wox's preview colors. In dark launcher previews
+    // that produced a very bright header with almost invisible text, so Wox owns
+    // the table colors here while still letting the package parse markdown cells.
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Scrollbar(
+        controller: controller,
+        child: SingleChildScrollView(
+          controller: controller,
+          scrollDirection: Axis.horizontal,
+          child: Table(
+            textDirection: config.textDirection,
+            defaultColumnWidth: CustomTableColumnWidth(),
+            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+            border: TableBorder.all(width: 1, color: borderColor),
+            children:
+                rows
+                    .map(
+                      (row) => TableRow(
+                        decoration: row.isHeader ? BoxDecoration(color: headerBackgroundColor) : null,
+                        children: row.fields.map((field) => buildMarkdownTableCell(context, row, field, textStyle, config, textColor)).toList(),
+                      ),
+                    )
+                    .toList(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget buildMarkdownTableCell(BuildContext context, CustomTableRow row, CustomTableField field, TextStyle textStyle, GptMarkdownConfig config, Color textColor) {
+    final cellStyle = textStyle.copyWith(color: textColor, fontWeight: row.isHeader ? FontWeight.w700 : textStyle.fontWeight);
+    final cellConfig = config.copyWith(style: cellStyle);
+    Widget content = Padding(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5), child: MdWidget(context, field.data.trim(), false, config: cellConfig));
+
+    switch (field.alignment) {
+      case TextAlign.center:
+        content = Center(child: content);
+        break;
+      case TextAlign.right:
+        content = Align(alignment: Alignment.centerRight, child: content);
+        break;
+      case TextAlign.left:
+      default:
+        content = Align(alignment: Alignment.centerLeft, child: content);
+        break;
+    }
+
+    return content;
   }
 
   String normalizeMarkdownImages(String input) {

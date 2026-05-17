@@ -188,8 +188,8 @@ Wox 会把规范化后的 `Query` 传给 `query()`：
 - `ai`：使用 Wox 配置好的 AI 能力
 - `deepLink`：注册插件深度链接
 - `mru`：从 Wox 的最近使用记录恢复结果
-- `resultPreviewWidthRatio`：调节预览区宽度
-- `gridLayout`：将结果按网格展示
+- `resultPreviewWidthRatio`：已 deprecated，改用 `QueryResponse.Layout.ResultPreviewWidthRatio`
+- `gridLayout`：已 deprecated，改用 `QueryResponse.Layout.GridLayout`
 
 只打开真正需要的能力，这些能力会直接影响 Wox 如何路由查询和构建插件上下文。
 

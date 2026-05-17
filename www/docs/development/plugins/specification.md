@@ -72,9 +72,9 @@ Add items to `Features` when your plugin needs extra capabilities:
 - `queryEnv` – request query environment data. Params: `requireActiveWindowName`, `requireActiveWindowPid`, `requireActiveWindowIcon`, `requireActiveBrowserUrl` (`"true"`/`"false"`).
 - `ai` – allow usage of AI APIs from plugins.
 - `deepLink` – enables custom deep links exposed by the plugin.
-- `resultPreviewWidthRatio` – control result list vs preview width. Params: `WidthRatio` between 0 and 1, optional `Commands` to scope the ratio to specific query commands.
+- `resultPreviewWidthRatio` – deprecated. Use `QueryResponse.Layout.ResultPreviewWidthRatio` instead for query-scoped preview width control.
 - `mru` – enable Most Recently Used support; implement `OnMRURestore` in your plugin.
-- `gridLayout` – display results in a grid layout instead of a list. Useful for visual items like emoji, icons, or colors. See [Grid Layout](#grid-layout) for details.
+- `gridLayout` – deprecated. Use `QueryResponse.Layout.GridLayout` instead for query-scoped grid presentation. See [Grid Layout](#grid-layout) for compatibility details.
 
 ## SettingDefinitions
 
@@ -336,6 +336,11 @@ Wox looks up translations in this order:
 
 ## Result Preview Width Ratio
 
+> Deprecated: prefer `QueryResponse.Layout.ResultPreviewWidthRatio`. The
+> metadata feature is still supported for existing plugins, but it can only
+> express static plugin or command defaults. QueryResponse can choose a preview
+> width for each query result set.
+
 The `resultPreviewWidthRatio` feature controls how much of the launcher width is reserved for the result list when a preview panel is visible. `WidthRatio` must be between `0` and `1`; for example, `0.3` gives 30% to results and 70% to preview.
 
 Use `Commands` when only some commands need a different layout. Empty `Commands` applies the ratio to every command, `["preview"]` applies it only to that command, and `["!preview"]` applies it to every command except `preview`. `WidthRatio: 0.0` hides the result list and is useful for preview-only commands such as Quick Look style file previews.
@@ -356,11 +361,16 @@ Use `Commands` when only some commands need a different layout. Empty `Commands`
 
 ## Grid Layout
 
+> Deprecated: prefer `QueryResponse.Layout.GridLayout`. The metadata feature is
+> still supported for existing plugins, but it can only express static plugin or
+> command defaults. QueryResponse can choose grid presentation for each query
+> result set.
+
 The `gridLayout` feature enables displaying results in a grid format instead of the default vertical list. This is ideal for plugins that display visual items such as emoji, icons, colors, or image thumbnails.
 
-### Configuration
+### Compatibility Configuration
 
-Add the `gridLayout` feature to your `plugin.json`:
+Existing plugins may still add the `gridLayout` feature to `plugin.json`:
 
 ```json
 {

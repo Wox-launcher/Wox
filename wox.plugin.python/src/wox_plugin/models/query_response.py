@@ -77,7 +77,13 @@ class QueryRefinement:
 
 @dataclass
 class QueryGridLayout:
-    """Optional grid presentation hints for the current query response."""
+    """
+    Optional grid presentation hints for the current query response.
+
+    Prefer this QueryResponse layout field over plugin.json gridLayout. The
+    metadata feature is deprecated because it only describes static plugin or
+    command defaults, while QueryResponse can choose the layout per query.
+    """
 
     columns: int = 0
     image_width: int = 0
@@ -103,7 +109,13 @@ class QueryGridLayout:
 
 @dataclass
 class QueryLayout:
-    """Optional presentation hints that apply to one query response."""
+    """
+    Optional presentation hints that apply to one query response.
+
+    Use this object for result preview width and grid layout. The older
+    plugin.json resultPreviewWidthRatio and gridLayout metadata features are
+    deprecated and remain only for compatibility with existing plugins.
+    """
 
     icon: Optional[WoxImage] = None
     result_preview_width_ratio: Optional[float] = None

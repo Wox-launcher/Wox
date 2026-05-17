@@ -189,8 +189,8 @@ At runtime:
 - `ai`: use Wox-configured AI APIs
 - `deepLink`: register plugin deep links
 - `mru`: restore items from Wox MRU storage
-- `resultPreviewWidthRatio`: widen or narrow the preview area
-- `gridLayout`: render results in a grid instead of a list
+- `resultPreviewWidthRatio`: deprecated; use `QueryResponse.Layout.ResultPreviewWidthRatio`
+- `gridLayout`: deprecated; use `QueryResponse.Layout.GridLayout`
 
 Only enable features you actually need. They change how Wox routes queries and builds plugin context.
 

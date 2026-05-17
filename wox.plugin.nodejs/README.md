@@ -72,6 +72,11 @@ for compatibility with older Wox releases. Use `QueryResponse` only when
 `plugin.json` declares `MinWoxVersion` >= `2.0.4` so results, refinements, and
 layout hints are carried together.
 
+When a plugin needs to control the preview width or grid layout, set
+`QueryResponse.Layout.ResultPreviewWidthRatio` or `QueryResponse.Layout.GridLayout`.
+The older `resultPreviewWidthRatio` and `gridLayout` metadata features are
+deprecated because they can only describe static plugin or command defaults.
+
 ### Query Models
 
 - **Query**: User query with search text, type, selection, environment

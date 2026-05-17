@@ -44,9 +44,10 @@ const (
 	// enable this feature to execute custom deep link in plugin
 	MetadataFeatureDeepLink MetadataFeatureName = "deepLink"
 
-	// enable this feature to set the width ratio of the result list and  preview panel
-	// by default, the width ratio is 0.5, which means the result list and preview panel have the same width
-	// if the width ratio is 0.3, which means the result list takes 30% of the width and the preview panel takes 70% of the width
+	// enable this feature to set the width ratio of the result list and preview panel
+	// Deprecated: return QueryResponse.Layout.ResultPreviewWidthRatio instead. Metadata
+	// can only express static plugin or command defaults, while QueryResponse lets each
+	// query return the layout that matches its current results.
 	MetadataFeatureResultPreviewWidthRatio MetadataFeatureName = "resultPreviewWidthRatio"
 
 	// enable this feature to support MRU (Most Recently Used) functionality
@@ -54,8 +55,9 @@ const (
 	MetadataFeatureMRU MetadataFeatureName = "mru"
 
 	// enable this feature to display results in a grid layout instead of list
-	// useful for plugins that display visual items like emoji, icons, colors, etc.
-	// params see MetadataFeatureParamsGridLayout
+	// Deprecated: return QueryResponse.Layout.GridLayout instead. Metadata is kept for
+	// existing plugins, but query-scoped layout is more flexible when only some result
+	// sets should use a grid.
 	MetadataFeatureGridLayout MetadataFeatureName = "gridLayout"
 )
 
@@ -462,6 +464,9 @@ type MetadataFeatureParamsQueryEnv struct {
 	RequireActiveBrowserUrl             bool
 }
 
+// MetadataFeatureParamsResultPreviewWidthRatio keeps compatibility with the
+// deprecated metadata feature. New plugins should return QueryResponse.Layout
+// so preview width can follow the current query instead of a static default.
 type MetadataFeatureParamsResultPreviewWidthRatio struct {
 	WidthRatio float64 // [0-1]
 	Commands   []string
@@ -471,7 +476,9 @@ func (p MetadataFeatureParamsResultPreviewWidthRatio) IsEnabledForCommand(comman
 	return isFeatureEnabledForCommand(p.Commands, command)
 }
 
-// MetadataFeatureParamsGridLayout contains parameters for grid layout feature
+// MetadataFeatureParamsGridLayout keeps compatibility with the deprecated
+// metadata feature. New plugins should return QueryResponse.Layout.GridLayout
+// so grid presentation can follow the current query instead of a static default.
 // Commands behavior:
 //   - Empty: grid enabled for all commands
 //   - "!cmd1,cmd2": exclusion mode - grid enabled for all except cmd1,cmd2 (commands starting with ! are excluded)

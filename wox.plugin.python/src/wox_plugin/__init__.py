@@ -173,6 +173,11 @@ for compatibility with older Wox releases. Use `QueryResponse` only when
 `plugin.json` declares `MinWoxVersion` >= `2.0.4` so results, refinements, and
 layout hints are carried together.
 
+For preview width and grid presentation, prefer `QueryResponse.layout` over the
+deprecated `resultPreviewWidthRatio` and `gridLayout` metadata features. The
+metadata features remain compatible, but they are static defaults rather than
+query-scoped layout decisions.
+
 ## Actions
 
 Actions are operations users can perform on results:

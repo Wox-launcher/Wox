@@ -72,9 +72,9 @@
 - `queryEnv`：请求查询环境。参数：`requireActiveWindowName` / `requireActiveWindowPid` / `requireActiveWindowIcon` / `requireActiveBrowserUrl`（`"true"`/`"false"`）。
 - `ai`：允许使用 Wox 的 AI API。
 - `deepLink`：插件自定义深度链接。
-- `resultPreviewWidthRatio`：控制结果列表与预览区宽度比例，`WidthRatio` 取 0~1，可选 `Commands` 将比例限制到指定查询命令。
+- `resultPreviewWidthRatio`：已 deprecated。请改用 `QueryResponse.Layout.ResultPreviewWidthRatio`，以便按每次查询控制预览宽度。
 - `mru`：启用最近使用（MRU），插件需实现 `OnMRURestore`。
-- `gridLayout`：以网格布局展示结果，适合展示表情、图标、颜色等视觉元素。详见 [网格布局](#网格布局)。
+- `gridLayout`：已 deprecated。请改用 `QueryResponse.Layout.GridLayout`，以便按每次查询控制网格展示。兼容说明见 [网格布局](#网格布局)。
 
 ## SettingDefinitions
 
@@ -336,6 +336,10 @@ Wox 按以下顺序查找翻译：
 
 ## 结果预览宽度比例
 
+> Deprecated：优先使用 `QueryResponse.Layout.ResultPreviewWidthRatio`。该
+> metadata 功能仍会兼容旧插件，但只能表达插件级或命令级的静态默认值；
+> QueryResponse 可以根据每次查询返回的结果集决定预览宽度。
+
 `resultPreviewWidthRatio` 功能用于控制预览面板可见时，结果列表占启动器宽度的比例。`WidthRatio` 必须在 `0` 到 `1` 之间；例如 `0.3` 表示结果列表占 30%，预览区占 70%。
 
 当只有部分命令需要特殊布局时，可以使用 `Commands`。空 `Commands` 表示所有命令生效，`["preview"]` 表示只对该命令生效，`["!preview"]` 表示除 `preview` 外的所有命令生效。`WidthRatio: 0.0` 会隐藏结果列表，适合类似 Quick Look 的纯预览命令。
@@ -356,11 +360,15 @@ Wox 按以下顺序查找翻译：
 
 ## 网格布局
 
+> Deprecated：优先使用 `QueryResponse.Layout.GridLayout`。该 metadata 功能
+> 仍会兼容旧插件，但只能表达插件级或命令级的静态默认值；QueryResponse
+> 可以根据每次查询返回的结果集决定是否使用网格布局。
+
 `gridLayout` 功能可将结果以网格形式展示，替代默认的垂直列表。适用于展示表情符号、图标、颜色或图片缩略图等视觉元素的插件。
 
-### 配置
+### 兼容配置
 
-在 `plugin.json` 中添加 `gridLayout` 功能：
+现有插件仍可在 `plugin.json` 中添加 `gridLayout` 功能：
 
 ```json
 {

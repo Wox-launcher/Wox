@@ -11,9 +11,15 @@
 ```typescript
 interface Plugin {
   init(ctx: Context, params: PluginInitParams): Promise<void>;
-  query(ctx: Context, query: Query): Promise<Result[]>;
+  query(ctx: Context, query: Query): Promise<QueryResponse>;
 }
 ```
+
+Return `QueryResponse` when `plugin.json` declares `MinWoxVersion` >= `2.0.4`.
+Use `QueryResponse.Layout.ResultPreviewWidthRatio` and
+`QueryResponse.Layout.GridLayout` for query-scoped layout. The older
+`resultPreviewWidthRatio` and `gridLayout` metadata features are deprecated
+because they can only describe static plugin or command defaults.
 
 ### PluginInitParams
 

@@ -9,15 +9,21 @@
 ### Plugin Base Class
 
 ```python
-from wox_plugin import Plugin, Query, Result, Context, PluginInitParams
+from wox_plugin import Plugin, Query, QueryResponse, Result, Context, PluginInitParams
 
 class MyPlugin(Plugin):
     async def init(self, ctx: Context, params: PluginInitParams) -> None:
         self.api = params.api
 
-    async def query(self, ctx: Context, query: Query) -> list[Result]:
-        return []
+    async def query(self, ctx: Context, query: Query) -> QueryResponse:
+        return QueryResponse(results=[])
 ```
+
+Return `QueryResponse` when `plugin.json` declares `MinWoxVersion` >= `2.0.4`.
+Use `QueryResponse.layout.result_preview_width_ratio` and
+`QueryResponse.layout.grid_layout` for query-scoped layout. The older
+`resultPreviewWidthRatio` and `gridLayout` metadata features are deprecated
+because they can only describe static plugin or command defaults.
 
 ### Data Models
 

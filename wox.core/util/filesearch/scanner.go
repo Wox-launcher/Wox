@@ -2213,6 +2213,41 @@ func (s *Scanner) pendingDirtyCounts() (int, int) {
 	return pendingRootCount, len(pendingPathSet)
 }
 
+func (s *Scanner) GetDirtyQueueDiagnostics(now time.Time) DirtyQueueDiagnostics {
+	if s == nil {
+		return DirtyQueueDiagnostics{}
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+
+	diagnostics := DirtyQueueDiagnostics{
+		Config:              s.dirtyQueueConfig,
+		LastDirtyRunElapsed: s.lastDirtyRunDuration(),
+	}
+	if s.dirtyQueue == nil {
+		return diagnostics
+	}
+
+	stats := s.dirtyQueue.Stats()
+	diagnostics.PendingRootCount = stats.RootCount
+	diagnostics.PendingRootSignalCount = stats.RootSignalCount
+	diagnostics.PendingPathCount = stats.PathCount
+	diagnostics.EarliestSignal = stats.EarliestSignal
+	diagnostics.LatestSignal = stats.LatestSignal
+	// Feature addition: expose the effective dirty queue timing knobs alongside
+	// raw pending counts. The counts alone cannot explain "why hasn't this file
+	// flushed yet"; the active debounce window and next timer deadline show
+	// whether the queue is waiting for quiet time, hard max-wait, or backpressure.
+	diagnostics.CurrentDebounceWindow = s.currentDirtyDebounceWindow()
+	diagnostics.NextFlushIn = s.dirtyDebounceWindow()
+	if diagnostics.NextFlushIn < 0 {
+		diagnostics.NextFlushIn = 0
+	}
+
+	return diagnostics
+}
+
 func (s *Scanner) refreshTransientSyncPendingCounts() {
 	pendingRootCount, pendingPathCount := s.pendingDirtyCounts()
 

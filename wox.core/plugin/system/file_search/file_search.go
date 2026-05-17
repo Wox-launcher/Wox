@@ -32,6 +32,7 @@ const fileRootsSettingKey = "roots"
 const fileIgnorePatternsSettingKey = "ignorePatterns"
 const fileSkipHiddenFilesSettingKey = "skipHiddenFiles"
 const fileSearchToolbarMsgID = "file-search-status"
+const fileSearchStatusCommand = "status"
 
 const (
 	slowFileSearchQueryThresholdMs   int64 = 40
@@ -187,6 +188,14 @@ func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParam
 	c.unsubscribeStatusChange = c.engine.OnStatusChanged(func(status filesearch.StatusSnapshot) {
 		c.handleStatusChanged(status)
 	})
+	if util.IsDev() {
+		// Feature addition: expose a dev-only diagnostic command for live File
+		// Search triage. Runtime commands keep this out of production builds while
+		// making `f status` discoverable during local debugging sessions.
+		c.api.RegisterQueryCommands(ctx, []plugin.MetadataCommand{
+			{Command: fileSearchStatusCommand, Description: "File Search internal status"},
+		})
+	}
 
 	// Sync toolbar state once when the session enters file-search query mode because
 	// the previous per-keystroke refresh forced a synchronous UI round-trip on every
@@ -238,6 +247,10 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 
 	if c.engine == nil {
 		return plugin.QueryResponse{}
+	}
+
+	if c.isStatusQuery(query) {
+		return c.queryStatus(ctx)
 	}
 
 	if strings.TrimSpace(query.Search) == "" {

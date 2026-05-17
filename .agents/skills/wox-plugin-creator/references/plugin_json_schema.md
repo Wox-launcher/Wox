@@ -398,9 +398,13 @@ Enables automatic boosting of frequently used results.
 }
 ```
 
-### 6. Grid Layout
+### 6. Grid Layout (Deprecated)
 
 Displays results in a grid instead of a list.
+
+Prefer returning `QueryResponse.Layout.GridLayout` from the SDK query method.
+The metadata feature is deprecated because it can only express static plugin or
+command defaults, while QueryResponse can choose the layout for each query.
 
 ```json
 {
@@ -419,7 +423,7 @@ Displays results in a grid instead of a list.
 
 - `deepLink`: Handle custom URI schemes (e.g., `wox://plugin/myplugin?arg=value`).
 - `ignoreAutoScore`: Disable Wox's default frequency-based learning for this plugin.
-- `resultPreviewWidthRatio`: Customize the split ratio between result list and preview panel (0.0 - 1.0).
+- `resultPreviewWidthRatio` (deprecated): Customize the split ratio between result list and preview panel (0.0 - 1.0). Prefer `QueryResponse.Layout.ResultPreviewWidthRatio` so the ratio can change per query.
 
 ## Complete Example
 
