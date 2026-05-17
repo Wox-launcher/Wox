@@ -60,6 +60,11 @@ func (e *Engine) logInitSnapshotAsync(ctx context.Context) {
 	if e == nil || e.db == nil {
 		return
 	}
+	if !shouldCollectFileSearchDiagnosticSnapshot() {
+		// Optimization: init snapshots are logging-only and can scan FTS vocab
+		// tables, so skip the goroutine entirely outside dev diagnostics.
+		return
+	}
 
 	// Capture the heavy SQLite snapshot after engine init returns because the
 	// previous synchronous fts5vocab sampling blocked plugin initialization on

@@ -14,6 +14,7 @@ import (
 	"time"
 	"wox/common"
 	"wox/plugin"
+	"wox/plugin/system/file_search/indexpolicy"
 	"wox/setting"
 	"wox/setting/definition"
 	"wox/setting/validator"
@@ -641,13 +642,13 @@ func (c *FileSearchPlugin) syncSkipHiddenFiles(ctx context.Context) {
 func (c *FileSearchPlugin) getConfiguredIgnorePatternValues(ctx context.Context) []string {
 	raw := strings.TrimSpace(c.api.GetSetting(ctx, fileIgnorePatternsSettingKey))
 	if raw == "" {
-		return append([]string(nil), defaultFileSearchIgnorePatterns...)
+		return appendRequiredFileSearchIgnorePatterns(defaultFileSearchIgnorePatterns)
 	}
 
 	var patterns []fileIgnorePatternSetting
 	if err := json.Unmarshal([]byte(raw), &patterns); err != nil {
 		c.api.Log(ctx, plugin.LogLevelWarning, "Failed to parse file search ignore patterns setting: "+err.Error())
-		return append([]string(nil), defaultFileSearchIgnorePatterns...)
+		return appendRequiredFileSearchIgnorePatterns(defaultFileSearchIgnorePatterns)
 	}
 
 	values := make([]string, 0, len(patterns))
@@ -656,7 +657,31 @@ func (c *FileSearchPlugin) getConfiguredIgnorePatternValues(ctx context.Context)
 			values = append(values, value)
 		}
 	}
-	return values
+	return appendRequiredFileSearchIgnorePatterns(values)
+}
+
+func appendRequiredFileSearchIgnorePatterns(patterns []string) []string {
+	values := append([]string(nil), patterns...)
+	required := indexpolicy.WoxFileSearchStorageIgnorePattern
+	if containsFileSearchIgnorePattern(values, required) {
+		return values
+	}
+
+	// Bug fix: existing users can already have a serialized ignorePatterns value
+	// from before Wox's own storage was excluded. Keep the internal storage rule
+	// mandatory so the scanner cannot index its SQLite DB and self-trigger future
+	// FSEvents/USN dirty batches.
+	return append(values, required)
+}
+
+func containsFileSearchIgnorePattern(patterns []string, target string) bool {
+	target = strings.TrimSpace(target)
+	for _, pattern := range patterns {
+		if strings.EqualFold(strings.TrimSpace(pattern), target) {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *FileSearchPlugin) getConfiguredSkipHiddenFiles(ctx context.Context) bool {

@@ -97,7 +97,11 @@ func (p *fileSearchIndexPolicy) shouldProcessChange(root filesearch.RootRecord, 
 	if cleanPath == "" || cleanPath == "." {
 		return true
 	}
-	if cleanPath == filepath.Clean(root.Path) {
+	if cleanPath == filepath.Clean(root.Path) && root.Kind != filesearch.RootKindDynamic {
+		// Bug fix: persisted dynamic roots inherit their parent policy, so their
+		// own root path must still pass the configured ignore matcher. Returning
+		// early here let an old ~/.wox/filesearch dynamic root keep accepting its
+		// SQLite DB events even after that path became a mandatory ignore rule.
 		return true
 	}
 

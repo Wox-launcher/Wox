@@ -439,6 +439,10 @@ func (f *FSEventsChangeFeed) onEvents(paths []string, flags []uint64, ids []uint
 		}
 		matchedRoots := make([]RootRecord, 0, len(roots))
 		if root, ok := findRootForPathInRoots(roots, eventPath); ok {
+			pathIsDir := flags[index]&fseventFlagItemIsDir != 0
+			if shouldSkipSystemPathForRoot(root, eventPath, pathIsDir) {
+				continue
+			}
 			// FSEvents delivers a concrete path for normal events. Route that path
 			// only to the longest matching root so a promoted dynamic root does not
 			// also wake its parent and lose the intended narrow reconcile boundary.

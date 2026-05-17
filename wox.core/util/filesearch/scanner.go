@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	defaultScanInterval = 24 * time.Hour
+	defaultFTSOptimizeInterval = 12 * time.Hour
 	// Bug fix: small interactive edits should reconcile quickly. Burst
 	// backpressure below still protects generated-output storms.
 	defaultDirtyDebounceWindow        = 2 * time.Second
@@ -126,8 +126,8 @@ func (s *Scanner) Start(ctx context.Context) {
 		util.GetLogger().Info(ctx, "filesearch scanner started")
 		s.startupRestore(ctx)
 
-		fullScanTimer := time.NewTimer(defaultScanInterval)
-		defer fullScanTimer.Stop()
+		ftsOptimizeTimer := time.NewTimer(defaultFTSOptimizeInterval)
+		defer ftsOptimizeTimer.Stop()
 
 		dirtyTimer := time.NewTimer(time.Hour)
 		if !dirtyTimer.Stop() {
@@ -137,10 +137,16 @@ func (s *Scanner) Start(ctx context.Context) {
 
 		for {
 			select {
-			case <-fullScanTimer.C:
-				s.enqueueAllRootsDirtyWithReason(util.NewTraceContext(), "scheduled_interval")
-				s.resetDirtyTimer(dirtyTimer)
-				fullScanTimer.Reset(defaultScanInterval)
+			case <-ftsOptimizeTimer.C:
+				// Optimization: FTS optimize is global table maintenance, not a
+				// correctness step for each file change. Running it on a fixed
+				// 12-hour cadence keeps segment compaction available without making
+				// every incremental root finalize pay for all four FTS tables.
+				optimizeCtx := util.NewTraceContext()
+				if err := s.db.OptimizeFTSTables(optimizeCtx); err != nil {
+					util.GetLogger().Warn(optimizeCtx, "filesearch scheduled FTS optimize failed: "+err.Error())
+				}
+				ftsOptimizeTimer.Reset(defaultFTSOptimizeInterval)
 			case request := <-s.requestCh:
 				rescanCtx := contextWithTraceID(util.NewTraceContext(), request.TraceID)
 				util.GetLogger().Info(rescanCtx, fmt.Sprintf("filesearch full rescan triggered: reason=%s", request.Reason))
@@ -158,13 +164,6 @@ func (s *Scanner) Start(ctx context.Context) {
 					request.completeReset(nil)
 				}
 				s.scanAllRootsWithReason(rescanCtx, request.Reason)
-				if !fullScanTimer.Stop() {
-					select {
-					case <-fullScanTimer.C:
-					default:
-					}
-				}
-				fullScanTimer.Reset(defaultScanInterval)
 			case <-s.dirtyCh:
 				s.resetDirtyTimer(dirtyTimer)
 			case <-dirtyTimer.C:
@@ -269,7 +268,7 @@ func (s *Scanner) scanAllRootsWithReason(ctx context.Context, reason string) {
 		s.runningMu.Unlock()
 	}()
 
-	roots, err := s.db.ListRoots(ctx)
+	roots, err := s.listPolicyAllowedRoots(ctx)
 	if err != nil {
 		util.GetLogger().Warn(ctx, "filesearch failed to load roots: "+err.Error())
 		return
@@ -287,18 +286,21 @@ func (s *Scanner) scanAllRootsWithReason(ctx context.Context, reason string) {
 	}
 
 	util.GetLogger().Info(ctx, fmt.Sprintf("filesearch scan cycle completed: reason=%s", reason))
-	// Optimization: the full diagnostic snapshot is useful, but it reads FTS vocab
-	// and file-size stats that do not affect search readiness. Capture it in the
-	// background so `scanAllRoots` returns as soon as the searchable index is ready.
-	snapshotCtx := util.NewTraceContext()
-	util.Go(snapshotCtx, "filesearch full scan diagnostic snapshot", func() {
-		snapshot, err := s.db.SearchIndexSnapshot(snapshotCtx)
-		if err != nil {
-			util.GetLogger().Warn(snapshotCtx, "filesearch failed to capture sqlite snapshot after full scan: "+err.Error())
-			return
-		}
-		logSQLiteIndexSnapshot(snapshotCtx, "full_scan_complete", snapshot, true)
-	})
+	if shouldCollectFileSearchDiagnosticSnapshot() {
+		// Optimization: the full diagnostic snapshot is useful, but it reads FTS
+		// vocab and file-size stats that do not affect search readiness. Check the
+		// diagnostic switch before starting the goroutine so production builds do not
+		// schedule logging-only SQLite work.
+		snapshotCtx := util.NewTraceContext()
+		util.Go(snapshotCtx, "filesearch full scan diagnostic snapshot", func() {
+			snapshot, err := s.db.SearchIndexSnapshot(snapshotCtx)
+			if err != nil {
+				util.GetLogger().Warn(snapshotCtx, "filesearch failed to capture sqlite snapshot after full scan: "+err.Error())
+				return
+			}
+			logSQLiteIndexSnapshot(snapshotCtx, "full_scan_complete", snapshot, true)
+		})
+	}
 }
 
 func (s *Scanner) executePlannedRun(ctx context.Context, kind RunKind, reason string, roots []RootRecord, batches []ReconcileBatch) error {
@@ -306,7 +308,7 @@ func (s *Scanner) executePlannedRun(ctx context.Context, kind RunKind, reason st
 	allRoots := roots
 	if s != nil && s.db != nil {
 		var err error
-		allRoots, err = s.db.ListRoots(ctx)
+		allRoots, err = s.listPolicyAllowedRoots(ctx)
 		if err != nil {
 			return err
 		}
@@ -668,7 +670,7 @@ func (s *Scanner) refreshChangeFeed(ctx context.Context) {
 		return
 	}
 
-	roots, err := s.db.ListRoots(ctx)
+	roots, err := s.listPolicyAllowedRoots(ctx)
 	if err != nil {
 		util.GetLogger().Warn(ctx, "filesearch failed to refresh change feed roots: "+err.Error())
 		return
@@ -680,6 +682,70 @@ func (s *Scanner) refreshChangeFeed(ctx context.Context) {
 	}
 
 	util.GetLogger().Info(ctx, fmt.Sprintf("filesearch change feed refreshed: roots=%d mode=%s", len(roots), s.changeFeed.Mode()))
+}
+
+func (s *Scanner) listPolicyAllowedRoots(ctx context.Context) ([]RootRecord, error) {
+	if s == nil || s.db == nil {
+		return nil, nil
+	}
+	roots, err := s.db.ListRoots(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return s.prunePolicyRejectedDynamicRoots(ctx, roots)
+}
+
+func (s *Scanner) prunePolicyRejectedDynamicRoots(ctx context.Context, roots []RootRecord) ([]RootRecord, error) {
+	if len(roots) == 0 {
+		return roots, nil
+	}
+
+	rootsByID := make(map[string]RootRecord, len(roots))
+	for _, root := range roots {
+		rootsByID[root.ID] = root
+	}
+
+	kept := make([]RootRecord, 0, len(roots))
+	prunedPaths := make([]string, 0)
+	for _, root := range roots {
+		if root.Kind != RootKindDynamic {
+			kept = append(kept, root)
+			continue
+		}
+		parentRoot, ok := rootsByID[root.DynamicParentRootID]
+		if !ok {
+			kept = append(kept, root)
+			continue
+		}
+		if s.shouldProcessChange(parentRoot, ChangeSignal{
+			Kind:          ChangeSignalKindDirtyPath,
+			RootID:        parentRoot.ID,
+			Path:          root.Path,
+			PathIsDir:     true,
+			PathTypeKnown: true,
+		}) {
+			kept = append(kept, root)
+			continue
+		}
+
+		// Bug fix: ignore-rule changes must also retire hidden dynamic roots that
+		// were persisted before the rule existed. Deleting the dynamic root drops
+		// its indexed rows instead of moving them back to the parent, because the
+		// parent policy now says this subtree should not be indexed at all.
+		if err := s.db.DeleteRoot(ctx, root.ID); err != nil {
+			return nil, err
+		}
+		prunedPaths = append(prunedPaths, root.Path)
+	}
+
+	if len(prunedPaths) > 0 {
+		util.GetLogger().Info(ctx, fmt.Sprintf(
+			"filesearch pruned policy-rejected dynamic roots: count=%d paths=%s",
+			len(prunedPaths),
+			summarizeLogPaths(prunedPaths),
+		))
+	}
+	return kept, nil
 }
 
 func (s *Scanner) changeFeedLoop(ctx context.Context) {
@@ -1297,7 +1363,7 @@ func (s *Scanner) enqueueAllRootsDirty(ctx context.Context) {
 }
 
 func (s *Scanner) enqueueAllRootsDirtyWithReason(ctx context.Context, reason string) {
-	roots, err := s.db.ListRoots(ctx)
+	roots, err := s.listPolicyAllowedRoots(ctx)
 	if err != nil {
 		util.GetLogger().Warn(ctx, "filesearch failed to enqueue dirty roots: "+err.Error())
 		return
@@ -1308,10 +1374,9 @@ func (s *Scanner) enqueueAllRootsDirtyWithReason(ctx context.Context, reason str
 		rootPaths = append(rootPaths, root.Path)
 	}
 	util.GetLogger().Info(ctx, fmt.Sprintf(
-		"filesearch queued full root reconcile: reason=%s roots=%d interval=%s",
+		"filesearch queued full root reconcile: reason=%s roots=%d",
 		reason,
 		len(roots),
-		defaultScanInterval,
 	))
 	if len(rootPaths) > 0 {
 		util.GetLogger().Debug(ctx, fmt.Sprintf(
@@ -1430,13 +1495,15 @@ func (s *Scanner) processDirtyQueue(ctx context.Context, now time.Time) error {
 }
 
 func (s *Scanner) handleChangeSignal(ctx context.Context, signal ChangeSignal) {
-	s.updateRootFeedMetadata(ctx, signal.RootID, signal.FeedType, signal.Cursor)
 	// File watchers can emit thousands of valid change signals in a short burst.
 	// The raw per-event trace made focused debugging harder without adding a
 	// decision point, so keep logging on policy drops and batch failures instead.
 
 	root, rootFound := s.findRootByID(ctx, signal.RootID)
 	if rootFound && !s.shouldProcessChange(root, signal) {
+		// Bug fix: policy drops must happen before feed-cursor writes. Updating the
+		// SQLite root row for ignored ~/.wox/filesearch events modifies the same DB
+		// file and can feed the watcher loop again.
 		// util.GetLogger().Debug(ctx, fmt.Sprintf(
 		// 	"filesearch change signal ignored by policy: kind=%s semantic=%s root=%s path=%s",
 		// 	signal.Kind,
@@ -1446,6 +1513,7 @@ func (s *Scanner) handleChangeSignal(ctx context.Context, signal ChangeSignal) {
 		// ))
 		return
 	}
+	s.updateRootFeedMetadata(ctx, signal.RootID, signal.FeedType, signal.Cursor)
 	if rootFound {
 		s.recordDynamicRootHeat(root, signal)
 	}
@@ -2120,6 +2188,13 @@ func (s *Scanner) loadDirtyQueueContext(ctx context.Context) (map[string]int, ma
 }
 
 func (s *Scanner) logRootReloadIndexSnapshot(ctx context.Context) {
+	if !shouldCollectFileSearchDiagnosticSnapshot() {
+		// Optimization: root reload snapshots were the hot production path in CPU
+		// profiles; they are diagnostic logs, so decide before running any SQLite
+		// snapshot query.
+		return
+	}
+
 	snapshot, err := s.db.SearchIndexSnapshot(ctx)
 	if err != nil {
 		util.GetLogger().Warn(ctx, "filesearch failed to capture sqlite snapshot after root reload: "+err.Error())
@@ -2410,7 +2485,31 @@ func buildDirectorySnapshotRecords(root RootRecord, plan scanPlan, scanTimestamp
 }
 
 func shouldSkipSystemPath(fullPath string, isDir bool) bool {
-	_ = fullPath
 	_ = isDir
-	return false
+	return isWoxFileSearchStoragePath(fullPath)
+}
+
+func isWoxFileSearchStoragePath(fullPath string) bool {
+	homeDir, err := os.UserHomeDir()
+	if err != nil || strings.TrimSpace(homeDir) == "" {
+		return false
+	}
+
+	cleanStoragePath := filepath.Clean(filepath.Join(homeDir, ".wox", "filesearch"))
+	cleanPath := filepath.Clean(strings.TrimSpace(fullPath))
+	if cleanPath == "" || cleanPath == "." {
+		return false
+	}
+	if cleanPath == cleanStoragePath {
+		return true
+	}
+
+	relPath, err := filepath.Rel(cleanStoragePath, cleanPath)
+	if err != nil {
+		return false
+	}
+	// Bug fix: Wox's own File Search SQLite files live under ~/.wox/filesearch.
+	// Treat that subtree as an engine-level internal path so full scans and change
+	// feeds both skip the storage before it can enqueue work against itself.
+	return relPath != "." && relPath != ".." && !strings.HasPrefix(relPath, ".."+string(filepath.Separator))
 }

@@ -2221,21 +2221,14 @@ func insertEntryFTSWithSyncTx(ctx context.Context, syncer *entrySearchArtifactSy
 }
 
 func (d *FileSearchDB) finalizeRootRunTx(ctx context.Context, tx *sql.Tx, root RootRecord) error {
-	if d.isBulkSyncEnabled() {
-		// Bulk sync no longer rebuilds bigrams per root during finalize. Recent
-		// traces showed those root-local refreshes dominating full runs, and the
-		// final search state only requires one global derived-table rebuild after
-		// every root has committed its facts.
-	} else {
-		// Finalize is the only place allowed to advance the persisted feed cursor.
-		// Applying job rows before this point is safe because a crash can replay
-		// the same writes, but advancing the cursor early would acknowledge
-		// unseen change-feed signals and permanently skip them on recovery.
-		if err := optimizeFTSTablesTx(ctx, tx); err != nil {
-			return err
-		}
-	}
-
+	// Finalize is the only place allowed to advance the persisted feed cursor.
+	// Applying job rows before this point is safe because a crash can replay the
+	// same writes, but advancing the cursor early would acknowledge unseen
+	// change-feed signals and permanently skip them on recovery.
+	// Bug fix: finalize must not run FTS optimize. That command is global table
+	// maintenance, and CPU profiles showed doing it here made every small dirty
+	// flush scan all four FTS tables. A scanner timer now runs that compaction
+	// every 12 hours instead.
 	_, err := tx.ExecContext(ctx, `
 		UPDATE roots
 		SET status = ?, feed_type = ?, feed_cursor = ?, feed_state = ?, last_reconcile_at = ?, last_full_scan_at = ?,
@@ -2255,6 +2248,32 @@ func (d *FileSearchDB) finalizeRootRunTx(ctx context.Context, tx *sql.Tx, root R
 		root.ID,
 	)
 	return err
+}
+
+func (d *FileSearchDB) OptimizeFTSTables(ctx context.Context) error {
+	if d == nil || d.db == nil {
+		return nil
+	}
+
+	startedAt := util.GetSystemTimestamp()
+	tx, err := d.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := optimizeFTSTablesTx(ctx, tx); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	// Optimization: scheduled FTS maintenance is intentionally separated from
+	// incremental indexing latency. Keep one timing log at the storage boundary so
+	// future CPU profiles can still correlate the 12-hour compaction cost.
+	logFilesearchSQLiteMaintenance(ctx, "optimize_fts", "scheduled", util.GetSystemTimestamp()-startedAt, len(filesearchFTSTables))
+	return nil
 }
 
 func optimizeFTSTablesTx(ctx context.Context, tx *sql.Tx) error {

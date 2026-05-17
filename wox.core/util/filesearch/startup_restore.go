@@ -11,24 +11,26 @@ import (
 func (s *Scanner) startupRestore(ctx context.Context) {
 	persistedEntryCount := int64(0)
 
-	snapshot, err := s.db.SearchIndexSnapshot(ctx)
+	persistedFileCount, persistedEntryCount, err := s.db.SearchIndexCounts(ctx)
 	if err != nil {
-		util.GetLogger().Warn(ctx, "filesearch startup restore failed to load persisted sqlite snapshot: "+err.Error())
+		util.GetLogger().Warn(ctx, "filesearch startup restore failed to load persisted sqlite counts: "+err.Error())
 		s.scanAllRootsWithReason(ctx, "startup_restore_fallback")
 		s.refreshChangeFeed(ctx)
 		return
 	}
-	persistedEntryCount = snapshot.EntryCount
 	// Startup restore now trusts the persisted SQLite search state directly.
 	// The previous local-provider reload branch duplicated the same data in
 	// memory and left startup with two result stores to keep consistent.
+	// Optimization: restore decisions only need cheap entry/file counts. The old
+	// full snapshot also sampled FTS vocab tables, which made production startup
+	// pay for diagnostic-only index statistics before the diagnostic guard ran.
 	util.GetLogger().Info(ctx, fmt.Sprintf(
-		"filesearch startup restore loaded persisted sqlite search state: entries=%d bigram_rows=%d",
-		snapshot.EntryCount,
-		snapshot.BigramRowCount,
+		"filesearch startup restore loaded persisted sqlite search state: entries=%d files=%d",
+		persistedEntryCount,
+		persistedFileCount,
 	))
 
-	roots, err := s.db.ListRoots(ctx)
+	roots, err := s.listPolicyAllowedRoots(ctx)
 	if err != nil {
 		util.GetLogger().Warn(ctx, "filesearch startup restore failed to load roots: "+err.Error())
 		s.refreshChangeFeed(ctx)
@@ -57,8 +59,14 @@ func (s *Scanner) startupRestore(ctx context.Context) {
 	reconcileRoots := startupReconcileRoots(roots, time.Now())
 	if len(reconcileRoots) == 0 {
 		util.GetLogger().Info(ctx, "filesearch startup restore completed without reconcile")
-		if snapshot, err := s.db.SearchIndexSnapshot(ctx); err == nil {
-			logSQLiteIndexSnapshot(ctx, "startup_restore_complete", snapshot, true)
+		if shouldCollectFileSearchDiagnosticSnapshot() {
+			// Optimization: this second startup snapshot is diagnostic-only. The
+			// initial persisted-state read above already decided restore behavior, so
+			// production should not rescan SQLite just to feed disabled snapshot logs.
+			snapshot, err := s.db.SearchIndexSnapshot(ctx)
+			if err == nil {
+				logSQLiteIndexSnapshot(ctx, "startup_restore_complete", snapshot, true)
+			}
 		}
 		return
 	}
@@ -78,8 +86,13 @@ func (s *Scanner) startupRestore(ctx context.Context) {
 	if err := s.processDirtyQueue(ctx, time.Now().Add(2*s.dirtyDebounceWindow())); err != nil {
 		util.GetLogger().Warn(ctx, "filesearch startup restore failed to process selective reconcile: "+err.Error())
 	}
-	if snapshot, err := s.db.SearchIndexSnapshot(ctx); err == nil {
-		logSQLiteIndexSnapshot(ctx, "startup_restore_complete", snapshot, true)
+	if shouldCollectFileSearchDiagnosticSnapshot() {
+		// Optimization: selective reconcile already calls the real dirty flush path.
+		// Keep the completion snapshot available for dev triage, but avoid another
+		// expensive fts5vocab pass when diagnostic logging is disabled.
+		if snapshot, err := s.db.SearchIndexSnapshot(ctx); err == nil {
+			logSQLiteIndexSnapshot(ctx, "startup_restore_complete", snapshot, true)
+		}
 	}
 }
 

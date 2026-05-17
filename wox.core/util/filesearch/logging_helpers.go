@@ -10,13 +10,25 @@ import (
 const (
 	maxLoggedPaths                                = 8
 	maxLoggedRoots                                = 5
-	fileSearchDiagnosticLoggingEnabled            = true // Turn this off after file-index latency traces are no longer needed.
 	slowFilesearchRunPreparationThresholdMs int64 = 250
 	slowFilesearchRunExecutionThresholdMs   int64 = 500
 	slowFilesearchJobPhaseThresholdMs       int64 = 150
 	slowFilesearchSQLiteMaintenanceMs       int64 = 250
 	slowFilesearchScanDiagnosticMs          int64 = 250
 )
+
+// Diagnostic logging is dev-only because several File Search traces intentionally
+// read full SQLite index state; production should keep only the core warning and
+// status paths instead of paying for investigation artifacts.
+var fileSearchDiagnosticLoggingEnabled = false
+
+func shouldCollectFileSearchDiagnosticSnapshot() bool {
+	// Optimization: diagnostic snapshots create fts5vocab tables and scan SQLite
+	// state, so the guard must run before callers start goroutines or query the DB.
+	// Dev mode still gets the detailed traces needed for local tuning, while
+	// production avoids paying for logging-only snapshot work.
+	return fileSearchDiagnosticLoggingEnabled
+}
 
 func summarizeLogPath(path string) string {
 	path = strings.TrimSpace(path)

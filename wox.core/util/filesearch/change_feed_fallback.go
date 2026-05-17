@@ -171,6 +171,12 @@ func (f *FallbackChangeFeed) handleEventForRoots(roots []RootRecord, event fsnot
 	cleanPath := filepath.Clean(event.Name)
 	cleanRootPath := filepath.Clean(root.Path)
 	pathIsDir, pathTypeKnown := statPathType(cleanPath)
+	if shouldSkipSystemPathForRoot(root, cleanPath, pathIsDir) {
+		// Bug fix: fallback feeds are used on Linux and as a Windows fallback, so
+		// internal Wox storage must be filtered here too. Dropping it before signal
+		// creation keeps ~/.wox/filesearch writes from waking the dirty queue.
+		return
+	}
 	semanticKind := classifyFallbackSemanticKind(event)
 
 	kind := ChangeSignalKindDirtyPath

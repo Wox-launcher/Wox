@@ -365,6 +365,9 @@ func (u *usnWatcherSet) emitResolvedRecords(roots []RootRecord, journal usnJourn
 	for _, record := range records {
 		if record.PathKnown {
 			if root, ok := findRootForPathInRoots(roots, record.Path); ok {
+				if shouldSkipSystemPathForRoot(root, record.Path, record.PathIsDir) {
+					continue
+				}
 				// Known USN paths must be routed to the longest matching root. The
 				// previous broadcast woke both a dynamic root and its parent, which
 				// defeated the ownership split and forced unnecessary parent rescans.

@@ -178,6 +178,10 @@ func diagnosticMillis(nanos int64) int64 {
 	return (nanos + int64(time.Millisecond) - 1) / int64(time.Millisecond)
 }
 
+// WoxFileSearchStorageIgnorePattern is shared with settings loading so older
+// serialized user preferences still receive the mandatory self-storage exclude.
+const WoxFileSearchStorageIgnorePattern = "**/.wox/filesearch/**"
+
 // Feature addition: seed the user-editable ignore table with generated and
 // application-noise folders that are expensive to traverse and noisy as launcher
 // results. Hidden-file skipping moved to its own checkbox, so this editable list
@@ -220,6 +224,11 @@ var defaultIgnorePatterns = []string{
 	".idea",
 	".vscode",
 	".cursor",
+	// Bug fix: Wox stores File Search's own SQLite files under ~/.wox/filesearch.
+	// Indexing that directory makes each DB/WAL write emit another change event, so
+	// exclude it by default before the scanner can feed its own storage back into
+	// the incremental queue.
+	WoxFileSearchStorageIgnorePattern,
 	"**/tmp/**",
 	"**/temp/**",
 	"**/Cache/**",

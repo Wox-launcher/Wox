@@ -355,6 +355,20 @@ func (s *Scanner) promoteDynamicRootCandidate(ctx context.Context, candidate dyn
 		s.dynamicHeat.clear(candidate.rootID, candidate.path)
 		return nil
 	}
+	if !s.shouldProcessChange(parentRoot, ChangeSignal{
+		Kind:          ChangeSignalKindDirtyPath,
+		RootID:        parentRoot.ID,
+		Path:          candidatePath,
+		PathIsDir:     true,
+		PathTypeKnown: true,
+	}) {
+		// Bug fix: hot-path promotion must honor the same ignore rules as the
+		// scanner. Otherwise an ignored noisy subtree can become its own dynamic
+		// root and keep receiving watcher events even though the parent policy would
+		// have excluded it.
+		s.dynamicHeat.clear(candidate.rootID, candidate.path)
+		return nil
+	}
 	if !dynamicRootCapsAllow(roots, parentRoot.ID, config) {
 		util.GetLogger().Info(ctx, fmt.Sprintf(
 			"filesearch dynamic root promotion skipped by cap: parent=%s path=%s",
