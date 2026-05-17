@@ -625,9 +625,6 @@ func TestFilePlugin_CustomRootsIncrementalSync(t *testing.T) {
 		t.Fatalf("initial file did not become searchable: %v", err)
 	}
 
-	observer := newToolbarObserver(t)
-	defer observer.Close()
-
 	incrementalFileName := fmt.Sprintf("sync-target-%d.txt", time.Now().UnixNano())
 	incrementalFilePath := filepath.Join(rootPath, incrementalFileName)
 	results, err := runQueryWithSession(ctx, sessionID, "f "+incrementalFileName)
@@ -644,16 +641,11 @@ func TestFilePlugin_CustomRootsIncrementalSync(t *testing.T) {
 		t.Fatalf("failed to create incremental file: %v", err)
 	}
 
-	if err := pollUntil(8*time.Second, 100*time.Millisecond, func() (bool, error) {
-		// Direct-delta incremental runs can finish without entering the heavier
-		// subtree write/finalize labels, so the smoke test accepts the visible
-		// incremental title as the user-facing progress signal.
-		return observer.HasToolbarTitlePrefix("Incremental indexing") || observer.HasToolbarTitlePrefix("Writing index") || observer.HasToolbarTitlePrefix("Finalizing index"), nil
-	}); err != nil {
-		t.Fatalf("expected incremental indexing toolbar message, got titles: %v", observer.ToolbarTitles())
-	}
-
 	if err := waitForFileSearchResult(ctx, "f "+incrementalFileName, incrementalFileName, incrementalFilePath, 30*time.Second); err != nil {
+		// UX change: fast direct-delta incremental runs are intentionally silent in
+		// the toolbar for their first second. The smoke assertion therefore belongs
+		// on the user-visible search result, not on a transient progress message
+		// that should often never appear.
 		t.Fatalf("incremental file did not become searchable: %v", err)
 	}
 }

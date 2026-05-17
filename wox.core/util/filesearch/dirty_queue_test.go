@@ -84,6 +84,61 @@ func TestDirtyQueueFlushReadyKeepsKnownFileDeltasOutOfSubtreeCoalescing(t *testi
 	}
 }
 
+func TestDirtyQueueFlushReadyUsesMaxPendingWaitWindow(t *testing.T) {
+	base := time.Unix(100, 0)
+
+	t.Run("flushes-when-earliest-signal-exceeds-max-wait", func(t *testing.T) {
+		queue := NewDirtyQueue(DirtyQueueConfig{
+			DebounceWindow:        2 * time.Minute,
+			MaxPendingWaitWindow:  5 * time.Second,
+			SiblingMergeThreshold: 8,
+		})
+
+		queue.Push(DirtySignal{Kind: DirtySignalKindPath, RootID: "root-a", Path: filepath.Join(string(filepath.Separator), "root", "first.txt"), PathTypeKnown: true, At: base})
+		queue.Push(DirtySignal{Kind: DirtySignalKindPath, RootID: "root-a", Path: filepath.Join(string(filepath.Separator), "root", "latest.txt"), PathTypeKnown: true, At: base.Add(4 * time.Second)})
+
+		batches := queue.FlushReadyWithDebounce(base.Add(6*time.Second), map[string]int{"root-a": 100}, 2*time.Minute)
+		if len(batches) != 1 {
+			t.Fatalf("expected max pending wait to flush one batch, got %#v", batches)
+		}
+		if batches[0].Mode != ReconcileModeDirectDelta {
+			t.Fatalf("expected direct-delta batch, got %s", batches[0].Mode)
+		}
+	})
+
+	t.Run("waits-while-quiet-and-max-wait-are-both-pending", func(t *testing.T) {
+		queue := NewDirtyQueue(DirtyQueueConfig{
+			DebounceWindow:        2 * time.Minute,
+			MaxPendingWaitWindow:  5 * time.Second,
+			SiblingMergeThreshold: 8,
+		})
+
+		queue.Push(DirtySignal{Kind: DirtySignalKindPath, RootID: "root-a", Path: filepath.Join(string(filepath.Separator), "root", "first.txt"), PathTypeKnown: true, At: base})
+		queue.Push(DirtySignal{Kind: DirtySignalKindPath, RootID: "root-a", Path: filepath.Join(string(filepath.Separator), "root", "latest.txt"), PathTypeKnown: true, At: base.Add(4 * time.Second)})
+
+		batches := queue.FlushReadyWithDebounce(base.Add(4500*time.Millisecond), map[string]int{"root-a": 100}, 2*time.Minute)
+		if len(batches) != 0 {
+			t.Fatalf("expected dirty queue to wait before quiet or max window expires, got %#v", batches)
+		}
+	})
+
+	t.Run("disabled-max-wait-keeps-latest-based-behavior", func(t *testing.T) {
+		queue := NewDirtyQueue(DirtyQueueConfig{
+			DebounceWindow:        2 * time.Minute,
+			MaxPendingWaitWindow:  0,
+			SiblingMergeThreshold: 8,
+		})
+
+		queue.Push(DirtySignal{Kind: DirtySignalKindPath, RootID: "root-a", Path: filepath.Join(string(filepath.Separator), "root", "first.txt"), PathTypeKnown: true, At: base})
+		queue.Push(DirtySignal{Kind: DirtySignalKindPath, RootID: "root-a", Path: filepath.Join(string(filepath.Separator), "root", "latest.txt"), PathTypeKnown: true, At: base.Add(4 * time.Second)})
+
+		batches := queue.FlushReadyWithDebounce(base.Add(6*time.Second), map[string]int{"root-a": 100}, 2*time.Minute)
+		if len(batches) != 0 {
+			t.Fatalf("expected disabled max wait to keep waiting for the quiet window, got %#v", batches)
+		}
+	})
+}
+
 func TestDirtyQueueFlushReadyEscalatesLargeBatchToRoot(t *testing.T) {
 	t.Run("path-threshold", func(t *testing.T) {
 		queue := NewDirtyQueue(DirtyQueueConfig{

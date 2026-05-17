@@ -10,6 +10,7 @@ import (
 
 type DirtyQueueConfig struct {
 	DebounceWindow               time.Duration
+	MaxPendingWaitWindow         time.Duration
 	MaxDebounceWindow            time.Duration
 	BackpressurePathThreshold    int
 	BackpressureRootThreshold    int
@@ -69,8 +70,7 @@ func (q *DirtyQueue) FlushReadyWithDebounce(now time.Time, rootDirectoryCounts m
 		if len(signals) == 0 {
 			continue
 		}
-		latest := latestDirtySignalAt(signals)
-		if debounceWindow > 0 && now.Sub(latest) < debounceWindow {
+		if !dirtySignalsReady(now, signals, debounceWindow, q.maxPendingWaitWindow()) {
 			continue
 		}
 		rootIDs = append(rootIDs, rootID)
@@ -89,6 +89,10 @@ func (q *DirtyQueue) FlushReadyWithDebounce(now time.Time, rootDirectoryCounts m
 
 func (q *DirtyQueue) debounceWindow() time.Duration {
 	return q.config.DebounceWindow
+}
+
+func (q *DirtyQueue) maxPendingWaitWindow() time.Duration {
+	return q.config.MaxPendingWaitWindow
 }
 
 func (q *DirtyQueue) Stats() DirtyQueueStats {
@@ -436,6 +440,28 @@ func reduceDirtyPathNode(node *dirtyPathNode, threshold int) []string {
 	return paths
 }
 
+func dirtySignalsReady(now time.Time, signals []DirtySignal, debounceWindow time.Duration, maxPendingWaitWindow time.Duration) bool {
+	if len(signals) == 0 {
+		return false
+	}
+
+	latest := latestDirtySignalAt(signals)
+	if debounceWindow <= 0 || now.Sub(latest) >= debounceWindow {
+		return true
+	}
+
+	if maxPendingWaitWindow <= 0 {
+		return false
+	}
+
+	earliest := earliestDirtySignalAt(signals)
+	// Bug fix: a queue that only waits for the latest event can starve forever
+	// when FSEvents keeps reporting unrelated background writes. The max-pending
+	// window keeps burst coalescing but guarantees an old pending root eventually
+	// gets planned even if the quiet window has not been reached.
+	return now.Sub(earliest) >= maxPendingWaitWindow
+}
+
 func latestDirtySignalAt(signals []DirtySignal) time.Time {
 	latest := signals[0].At
 	for i := 1; i < len(signals); i++ {
@@ -444,6 +470,16 @@ func latestDirtySignalAt(signals []DirtySignal) time.Time {
 		}
 	}
 	return latest
+}
+
+func earliestDirtySignalAt(signals []DirtySignal) time.Time {
+	earliest := signals[0].At
+	for i := 1; i < len(signals); i++ {
+		if signals[i].At.Before(earliest) {
+			earliest = signals[i].At
+		}
+	}
+	return earliest
 }
 
 func latestDirtySignal(signals []DirtySignal) DirtySignal {

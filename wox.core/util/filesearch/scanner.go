@@ -20,6 +20,7 @@ const (
 	defaultDirtyPressureLowWindow     = 2 * time.Minute
 	defaultDirtyPressureHighWindow    = 5 * time.Minute
 	defaultMaxDirtyDebounceWindow     = 15 * time.Minute
+	defaultMaxPendingDirtyWaitWindow  = 5 * time.Second
 	defaultDirtyBackpressurePathCount = 64
 	defaultDirtyBackpressureRootCount = 2
 	progressBatchSize                 = 256
@@ -80,6 +81,7 @@ func newScannerWithPolicyState(db *FileSearchDB, policy *policyState) *Scanner {
 
 	dirtyQueueConfig := DirtyQueueConfig{
 		DebounceWindow:            defaultDirtyDebounceWindow,
+		MaxPendingWaitWindow:      defaultMaxPendingDirtyWaitWindow,
 		MaxDebounceWindow:         defaultMaxDirtyDebounceWindow,
 		BackpressurePathThreshold: defaultDirtyBackpressurePathCount,
 		BackpressureRootThreshold: defaultDirtyBackpressureRootCount,
@@ -437,6 +439,15 @@ func (s *Scanner) executePlannedRun(ctx context.Context, kind RunKind, reason st
 		// rate calculations do not need plugin-local timers that can drift from
 		// the actual index run.
 		snapshot.ActiveRunElapsedMs = util.GetSystemTimestamp() - totalStartedAt
+		if kind == RunKindFull && snapshot.ActiveRunStatus == RunStatusCompleted {
+			// Bug fix: the executor finishes before deferred full-run SQLite/FTS
+			// finalization. Publishing that intermediate completion made the toolbar
+			// show an early duration, then replace it with the scanner-owned final
+			// summary. Keep progress snapshots live, but reserve full completion for
+			// emitCompletedFullRunSummary after bulk finalize has finished.
+			logFilesearchRunStage(ctx, kind, snapshot.ActiveStage, rootRecordForRunLog(roots, job.RootID), job, snapshot.ActiveRootIndex, snapshot.ActiveRootTotal, snapshot.RunProgressCurrent, snapshot.RunProgressTotal)
+			return
+		}
 		s.setTransientRunState(snapshot)
 		s.emitStateChange(ctx)
 		logFilesearchRunStage(ctx, kind, snapshot.ActiveStage, rootRecordForRunLog(roots, job.RootID), job, snapshot.ActiveRootIndex, snapshot.ActiveRootTotal, snapshot.RunProgressCurrent, snapshot.RunProgressTotal)
@@ -1450,11 +1461,17 @@ func (s *Scanner) handleChangeSignal(ctx context.Context, signal ChangeSignal) {
 			At:            signal.At,
 		})
 	case ChangeSignalKindDirtyPath:
-		if !rootFound || root.FeedState == RootFeedStateReady || root.FeedType == RootFeedTypeFallback || root.FeedType == "" {
+		if !rootFound || root.FeedState == RootFeedStateReady || root.FeedType == RootFeedTypeFallback || root.FeedType == "" || shouldKeepKnownFileDeltaScoped(signal) {
 			// Fallback feeds cannot replay a journal, so degraded state only tells us
 			// a previous reconcile failed. Keeping later concrete dirty paths scoped
 			// avoids converting one transient temp-directory miss into repeated full
 			// root reconciles while explicit root-reconcile signals still stay broad.
+			//
+			// Bug fix: known file-level watcher events remain useful even when the
+			// root is degraded because they describe one exact file mutation. Keeping
+			// create/modify/metadata/rename/remove scoped lets visible desktop edits
+			// update immediately while the separate degraded root reconcile can still
+			// repair any missed history in the background.
 			s.enqueueDirtyWithContext(ctx, DirtySignal{
 				Kind:          DirtySignalKindPath,
 				SemanticKind:  signal.SemanticKind,
@@ -1514,6 +1531,18 @@ func (s *Scanner) handleChangeSignal(ctx context.Context, signal ChangeSignal) {
 			PathTypeKnown: true,
 			At:            signal.At,
 		})
+	}
+}
+
+func shouldKeepKnownFileDeltaScoped(signal ChangeSignal) bool {
+	if signal.Kind != ChangeSignalKindDirtyPath || !signal.PathTypeKnown || signal.PathIsDir {
+		return false
+	}
+	switch signal.SemanticKind {
+	case ChangeSemanticKindCreate, ChangeSemanticKindModify, ChangeSemanticKindMetadata, ChangeSemanticKindRemove, ChangeSemanticKindRename:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -1812,7 +1841,7 @@ func isIncrementalPermissionFailure(cause error) bool {
 }
 
 func (s *Scanner) updateRootFeedMetadata(ctx context.Context, rootID string, feedType RootFeedType, cursor string) {
-	if rootID == "" || (feedType == "" && cursor == "") {
+	if rootID == "" || feedType == "" {
 		return
 	}
 
@@ -1821,19 +1850,17 @@ func (s *Scanner) updateRootFeedMetadata(ctx context.Context, rootID string, fee
 		return
 	}
 
-	changed := false
-	if feedType != "" && root.FeedType != feedType {
-		root.FeedType = feedType
-		changed = true
-	}
-	if cursor != "" && root.FeedCursor != cursor {
-		root.FeedCursor = cursor
-		changed = true
-	}
-	if !changed {
+	if root.FeedType == feedType {
 		return
 	}
 
+	// Optimization: dirty-path signals can arrive in large FSEvents bursts, and
+	// writing the root row for every cursor would add SQLite contention before
+	// the dirty batch has actually been applied. Persist only the stable feed
+	// type here; root/full finalization records the cursor after indexing reaches
+	// a conservative acknowledgement point.
+	_ = cursor
+	root.FeedType = feedType
 	root.UpdatedAt = util.GetSystemTimestamp()
 	if err := s.db.UpdateRootState(ctx, root); err != nil {
 		util.GetLogger().Warn(ctx, "filesearch failed to update root feed metadata: "+err.Error())
@@ -1933,17 +1960,33 @@ func (s *Scanner) dirtyDebounceWindow() time.Duration {
 		return s.dirtyQueue.debounceWindow()
 	}
 
+	now := time.Now()
 	window := s.currentDirtyDebounceWindow()
+	remaining := time.Millisecond
 	if !stats.LatestSignal.IsZero() {
 		// Bug fix: the timer can be scheduled before a later event arrives. Recompute
 		// the remaining quiet-window delay each time instead of firing with an older
 		// debounce value, otherwise bursty build output still flushes too early.
-		remaining := window - time.Since(stats.LatestSignal)
-		if remaining > 0 {
-			return remaining
+		quietRemaining := window - now.Sub(stats.LatestSignal)
+		if quietRemaining > 0 {
+			remaining = quietRemaining
 		}
 	}
-	return time.Millisecond
+
+	maxPendingWaitWindow := s.dirtyQueue.maxPendingWaitWindow()
+	if maxPendingWaitWindow <= 0 || stats.EarliestSignal.IsZero() {
+		return remaining
+	}
+
+	// Bug fix: quiet-window debounce protects burst coalescing, but it must not
+	// let continuous unrelated FSEvents postpone visible file updates forever.
+	// Cap the next timer by the first pending signal's hard deadline so an old
+	// batch is processed even while newer events keep arriving.
+	maxWaitRemaining := maxPendingWaitWindow - now.Sub(stats.EarliestSignal)
+	if maxWaitRemaining <= 0 {
+		return time.Millisecond
+	}
+	return minDuration(remaining, maxWaitRemaining)
 }
 
 func (s *Scanner) currentDirtyDebounceWindow() time.Duration {

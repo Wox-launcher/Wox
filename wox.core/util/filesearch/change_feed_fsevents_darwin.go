@@ -20,27 +20,53 @@ import (
 	"fmt"
 	"path/filepath"
 	"runtime/cgo"
+	"strings"
 	"sync"
 	"time"
 	"unsafe"
+	"wox/util"
 )
 
-const fseventsLatency = time.Second
+const (
+	fseventsLatency = time.Second
+	// FSEvents can replay thousands of changes after startup, wake, or a large
+	// directory edit. Keep the callback non-blocking, but give normal bursts
+	// enough room so user-visible file edits are not dropped under load.
+	fseventsSignalBufferSize         = 8192
+	fseventsDroppedSignalLogInterval = 5 * time.Second
+	fseventsSummaryLogInterval       = 5 * time.Second
+)
 
 type FSEventsChangeFeed struct {
-	mu        sync.RWMutex
-	stream    C.FSEventStreamRef
-	queue     C.dispatch_queue_t
-	roots     []RootRecord
-	signals   chan ChangeSignal
-	handle    cgo.Handle
-	handlePtr *C.uintptr_t
-	closed    bool
+	mu               sync.RWMutex
+	stream           C.FSEventStreamRef
+	queue            C.dispatch_queue_t
+	streamGeneration uint64
+	roots            []RootRecord
+	signals          chan ChangeSignal
+	handle           cgo.Handle
+	handlePtr        *C.uintptr_t
+	closed           bool
+
+	callbackSummaryMu             sync.Mutex
+	callbackEventCount            int
+	callbackMatchedRootCount      int
+	callbackUnmatchedEventCount   int
+	callbackSignalCount           int
+	callbackLastEventID           uint64
+	lastCallbackSummaryLog        time.Time
+	signalSummaryMu               sync.Mutex
+	emittedSignalCount            int
+	droppedSignalCount            int
+	lastSignalSummaryLog          time.Time
+	channelFullDroppedSignalMu    sync.Mutex
+	channelFullDroppedSignalCount int
+	lastDroppedSignalLog          time.Time
 }
 
 func NewFSEventsChangeFeed() *FSEventsChangeFeed {
 	feed := &FSEventsChangeFeed{
-		signals: make(chan ChangeSignal, 256),
+		signals: make(chan ChangeSignal, fseventsSignalBufferSize),
 	}
 	feed.handle = cgo.NewHandle(feed)
 	feed.handlePtr = (*C.uintptr_t)(C.malloc(C.size_t(unsafe.Sizeof(C.uintptr_t(0)))))
@@ -57,12 +83,13 @@ func (f *FSEventsChangeFeed) Signals() <-chan ChangeSignal {
 }
 
 func (f *FSEventsChangeFeed) Refresh(ctx context.Context, roots []RootRecord) error {
+	_ = ctx
 	prepared := prepareFSEventsRefresh(roots, time.Now(), defaultFeedCursorSafeWindow)
 	for _, signal := range prepared.signals {
 		f.emit(signal)
 	}
 
-	f.stopCurrentStream()
+	f.stopCurrentStream("refresh")
 
 	f.mu.Lock()
 	if f.closed {
@@ -104,6 +131,8 @@ func (f *FSEventsChangeFeed) Refresh(ctx context.Context, roots []RootRecord) er
 		C.FSEventStreamRelease(stream)
 		return nil
 	}
+	generation := f.streamGeneration + 1
+	f.streamGeneration = generation
 	f.stream = stream
 	f.queue = queue
 	f.mu.Unlock()
@@ -122,14 +151,15 @@ func (f *FSEventsChangeFeed) Refresh(ctx context.Context, roots []RootRecord) er
 				At:            time.Now(),
 			})
 		}
-		f.stopCurrentStream()
+		f.stopCurrentStream("start_failed")
 		return fmt.Errorf("start fsevents stream")
 	}
 
-	go func() {
-		<-ctx.Done()
-		f.stopCurrentStream()
-	}()
+	// Bug fix: the active stream must outlive the Refresh caller context. Some
+	// refreshes run from short indexing or dynamic-root tasks; tying the stream
+	// to those contexts leaves roots marked ready while the native watcher has
+	// already been stopped.
+	f.logStreamStarted(generation, len(prepared.watchRoots), prepared.sinceEventID, prepared.watchRoots)
 
 	return nil
 }
@@ -143,7 +173,7 @@ func (f *FSEventsChangeFeed) Close() error {
 	f.closed = true
 	f.mu.Unlock()
 
-	f.stopCurrentStream()
+	f.stopCurrentStream("close")
 	f.handle.Delete()
 	if f.handlePtr != nil {
 		C.free(unsafe.Pointer(f.handlePtr))
@@ -223,9 +253,10 @@ func (f *FSEventsChangeFeed) createStream(roots []RootRecord, sinceEventID uint6
 	return stream, nil
 }
 
-func (f *FSEventsChangeFeed) stopCurrentStream() {
+func (f *FSEventsChangeFeed) stopCurrentStream(reason string) {
 	f.mu.Lock()
 	stream := f.stream
+	generation := f.streamGeneration
 	f.stream = nil
 	f.queue = nil
 	f.mu.Unlock()
@@ -234,6 +265,11 @@ func (f *FSEventsChangeFeed) stopCurrentStream() {
 		C.FSEventStreamStop(stream)
 		C.FSEventStreamInvalidate(stream)
 		C.FSEventStreamRelease(stream)
+		util.GetLogger().Info(context.Background(), fmt.Sprintf(
+			"filesearch fsevents stream stopped: generation=%d reason=%s",
+			generation,
+			reason,
+		))
 	}
 }
 
@@ -260,8 +296,129 @@ func (f *FSEventsChangeFeed) emit(signal ChangeSignal) {
 
 	select {
 	case f.signals <- signal:
+		f.logSignalSummary(signal, false)
 	default:
+		f.logSignalSummary(signal, true)
+		f.logDroppedSignal(signal)
 	}
+}
+
+func (f *FSEventsChangeFeed) logDroppedSignal(signal ChangeSignal) {
+	f.channelFullDroppedSignalMu.Lock()
+	defer f.channelFullDroppedSignalMu.Unlock()
+
+	f.channelFullDroppedSignalCount++
+	now := time.Now()
+	if !f.lastDroppedSignalLog.IsZero() && now.Sub(f.lastDroppedSignalLog) < fseventsDroppedSignalLogInterval {
+		return
+	}
+
+	// Diagnostic logging: a full signal channel means the watcher has lost a
+	// concrete file event. Aggregate the warning so a filesystem burst still
+	// points at the failure boundary without flooding the log.
+	dropped := f.channelFullDroppedSignalCount
+	f.channelFullDroppedSignalCount = 0
+	f.lastDroppedSignalLog = now
+	util.GetLogger().Warn(context.Background(), fmt.Sprintf(
+		"filesearch fsevents signal dropped: channel_full=true dropped_since_last=%d kind=%s semantic=%s root=%s path=%s",
+		dropped,
+		signal.Kind,
+		signal.SemanticKind,
+		signal.RootID,
+		summarizeLogPath(signal.Path),
+	))
+}
+
+func (f *FSEventsChangeFeed) logStreamStarted(generation uint64, rootCount int, sinceEventID uint64, roots []RootRecord) {
+	util.GetLogger().Info(context.Background(), fmt.Sprintf(
+		"filesearch fsevents stream started: generation=%d roots=%d since_event_id=%d root_paths=%s",
+		generation,
+		rootCount,
+		sinceEventID,
+		summarizeFSEventsRootPaths(roots),
+	))
+}
+
+func (f *FSEventsChangeFeed) logCallbackSummary(events int, matchedRoots int, unmatchedEvents int, signals int, lastEventID uint64) {
+	if events <= 0 {
+		return
+	}
+
+	f.callbackSummaryMu.Lock()
+	defer f.callbackSummaryMu.Unlock()
+
+	f.callbackEventCount += events
+	f.callbackMatchedRootCount += matchedRoots
+	f.callbackUnmatchedEventCount += unmatchedEvents
+	f.callbackSignalCount += signals
+	if lastEventID > f.callbackLastEventID {
+		f.callbackLastEventID = lastEventID
+	}
+
+	now := time.Now()
+	if !f.lastCallbackSummaryLog.IsZero() && now.Sub(f.lastCallbackSummaryLog) < fseventsSummaryLogInterval {
+		return
+	}
+
+	// Diagnostic logging: the callback summary distinguishes "macOS never
+	// called us" from later root matching, emit, and consumer bottlenecks without
+	// logging every filesystem event.
+	eventCount := f.callbackEventCount
+	matchedRootCount := f.callbackMatchedRootCount
+	unmatchedEventCount := f.callbackUnmatchedEventCount
+	signalCount := f.callbackSignalCount
+	callbackLastEventID := f.callbackLastEventID
+	f.callbackEventCount = 0
+	f.callbackMatchedRootCount = 0
+	f.callbackUnmatchedEventCount = 0
+	f.callbackSignalCount = 0
+	f.callbackLastEventID = 0
+	f.lastCallbackSummaryLog = now
+
+	util.GetLogger().Info(context.Background(), fmt.Sprintf(
+		"filesearch fsevents callback summary: events=%d matched_roots=%d unmatched_events=%d emitted_candidates=%d last_event_id=%d",
+		eventCount,
+		matchedRootCount,
+		unmatchedEventCount,
+		signalCount,
+		callbackLastEventID,
+	))
+}
+
+func (f *FSEventsChangeFeed) logSignalSummary(signal ChangeSignal, dropped bool) {
+	f.signalSummaryMu.Lock()
+	defer f.signalSummaryMu.Unlock()
+
+	if dropped {
+		f.droppedSignalCount++
+	} else {
+		f.emittedSignalCount++
+	}
+
+	now := time.Now()
+	if !f.lastSignalSummaryLog.IsZero() && now.Sub(f.lastSignalSummaryLog) < fseventsSummaryLogInterval {
+		return
+	}
+
+	// Diagnostic logging: emit summary confirms that callback output reached the
+	// Go signal channel and shows whether the consumer is falling behind.
+	emitted := f.emittedSignalCount
+	droppedCount := f.droppedSignalCount
+	f.emittedSignalCount = 0
+	f.droppedSignalCount = 0
+	f.lastSignalSummaryLog = now
+
+	util.GetLogger().Info(context.Background(), fmt.Sprintf(
+		"filesearch fsevents emit summary: emitted=%d dropped=%d channel_len=%d channel_cap=%d kind=%s semantic=%s root=%s path=%s",
+		emitted,
+		droppedCount,
+		len(f.signals),
+		cap(f.signals),
+		signal.Kind,
+		signal.SemanticKind,
+		signal.RootID,
+		summarizeLogPath(signal.Path),
+	))
 }
 
 func (f *FSEventsChangeFeed) onEvents(paths []string, flags []uint64, ids []uint64) {
@@ -271,8 +428,15 @@ func (f *FSEventsChangeFeed) onEvents(paths []string, flags []uint64, ids []uint
 	}
 
 	now := time.Now()
+	matchedRootCount := 0
+	unmatchedEventCount := 0
+	signalCount := 0
+	lastEventID := uint64(0)
 	for index := range paths {
 		eventPath := filepath.Clean(paths[index])
+		if ids[index] > lastEventID {
+			lastEventID = ids[index]
+		}
 		matchedRoots := make([]RootRecord, 0, len(roots))
 		if root, ok := findRootForPathInRoots(roots, eventPath); ok {
 			// FSEvents delivers a concrete path for normal events. Route that path
@@ -283,13 +447,41 @@ func (f *FSEventsChangeFeed) onEvents(paths []string, flags []uint64, ids []uint
 		if len(matchedRoots) == 0 && fseventRequiresRootReconcile(flags[index]) {
 			matchedRoots = roots
 		}
+		if len(matchedRoots) == 0 {
+			unmatchedEventCount++
+		}
+		matchedRootCount += len(matchedRoots)
 
 		for _, root := range matchedRoots {
 			for _, signal := range translateFSEvent(root, eventPath, flags[index], ids[index], now) {
+				signalCount++
 				f.emit(signal)
 			}
 		}
 	}
+	f.logCallbackSummary(len(paths), matchedRootCount, unmatchedEventCount, signalCount, lastEventID)
+}
+
+func summarizeFSEventsRootPaths(roots []RootRecord) string {
+	if len(roots) == 0 {
+		return "<none>"
+	}
+	const maxRootPathSamples = 4
+	sampleCount := len(roots)
+	if sampleCount > maxRootPathSamples {
+		sampleCount = maxRootPathSamples
+	}
+	parts := make([]string, 0, sampleCount)
+	for index, root := range roots {
+		if index >= maxRootPathSamples {
+			break
+		}
+		parts = append(parts, summarizeLogPath(root.Path))
+	}
+	if len(roots) > maxRootPathSamples {
+		parts = append(parts, fmt.Sprintf("+%d more", len(roots)-maxRootPathSamples))
+	}
+	return fmt.Sprintf("[%s]", strings.Join(parts, ", "))
 }
 
 //export woxFSEventsCallback

@@ -36,6 +36,7 @@ const fileSearchToolbarMsgID = "file-search-status"
 const (
 	slowFileSearchQueryThresholdMs   int64 = 40
 	slowFileSearchStageThresholdMs   int64 = 15
+	incrementalToolbarMinimumShowMs  int64 = 1000
 	fullIndexCompletionToolbarHoldMs int64 = 1000 * 5
 	toolbarActivityPathMaxChars            = 42
 	fileSearchResultLimit                  = 100
@@ -793,6 +794,9 @@ func (c *FileSearchPlugin) buildToolbarMsgFromStatus(ctx context.Context, status
 	indeterminate := false
 	hasPermissionError := util.IsMacOS() && isFileAccessPermissionError(status.LastError)
 	if status.IsIndexing {
+		if shouldSuppressShortIncrementalToolbar(status) {
+			return plugin.ToolbarMsg{}, false
+		}
 		// Feature change: keep the Raycast-style compact status, but name the
 		// active run kind explicitly. Full runs are user-visible rebuilds, while
 		// incremental runs often reconcile dirty watcher events immediately after
@@ -822,6 +826,19 @@ func (c *FileSearchPlugin) buildToolbarMsgFromStatus(ctx context.Context, status
 		Indeterminate: indeterminate,
 		Actions:       c.toolbarMsgActions(ctx, hasPermissionError),
 	}, true
+}
+
+func shouldSuppressShortIncrementalToolbar(status filesearch.StatusSnapshot) bool {
+	// UX optimization: most direct-delta incremental runs finish in well under a
+	// second. Showing a toolbar message for those fast background reconciles
+	// creates visible noise without helping the user, so keep them silent unless
+	// the run crosses the minimum display threshold. Error snapshots are never
+	// suppressed because they may require user action.
+	return status.IsIndexing &&
+		status.ActiveRunKind == filesearch.RunKindIncremental &&
+		status.ActiveRunElapsedMs < incrementalToolbarMinimumShowMs &&
+		status.ErrorRootCount == 0 &&
+		status.LastError == ""
 }
 
 func isFullIndexCompletionSummary(status filesearch.StatusSnapshot) bool {

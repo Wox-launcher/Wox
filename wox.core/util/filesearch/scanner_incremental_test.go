@@ -180,6 +180,148 @@ func TestScannerProcessDirtyQueueHandlesFileRenameSignals(t *testing.T) {
 	}
 }
 
+func TestScannerQueuesKnownFileRenameDeltaWhenRootIsDegraded(t *testing.T) {
+	db, ctx := openTestFileSearchDB(t)
+	now := time.Now().UnixMilli()
+	rootPath := filepath.Join(t.TempDir(), "root-degraded-rename-delta")
+	renamedFilePath := filepath.Join(rootPath, "renamed-report.txt")
+
+	mustWriteTestFile(t, renamedFilePath, "renamed")
+
+	root := RootRecord{
+		ID:        "root-degraded-rename-delta",
+		Path:      rootPath,
+		Kind:      RootKindUser,
+		Status:    RootStatusIdle,
+		FeedType:  RootFeedTypeFSEvents,
+		FeedState: RootFeedStateDegraded,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	mustInsertRoot(t, ctx, db, root)
+
+	scanner := NewScanner(db)
+	scanner.dirtyQueueConfig = DirtyQueueConfig{
+		DebounceWindow:               defaultDirtyDebounceWindow,
+		SiblingMergeThreshold:        8,
+		RootEscalationPathThreshold:  512,
+		RootEscalationDirectoryRatio: 0,
+	}
+	scanner.dirtyQueue = NewDirtyQueue(scanner.dirtyQueueConfig)
+
+	signalAt := time.Now().Add(-3 * defaultDirtyDebounceWindow)
+	scanner.handleChangeSignal(ctx, ChangeSignal{
+		Kind:          ChangeSignalKindDirtyPath,
+		SemanticKind:  ChangeSemanticKindRename,
+		RootID:        root.ID,
+		FeedType:      RootFeedTypeFSEvents,
+		Path:          renamedFilePath,
+		PathIsDir:     false,
+		PathTypeKnown: true,
+		At:            signalAt,
+	})
+
+	rootDirectoryCounts, _, _, err := scanner.loadDirtyQueueContext(ctx)
+	if err != nil {
+		t.Fatalf("load dirty queue context: %v", err)
+	}
+	batches := scanner.dirtyQueue.FlushReadyWithDebounce(time.Now(), rootDirectoryCounts, scanner.currentDirtyDebounceWindow())
+	if len(batches) != 1 {
+		t.Fatalf("expected one dirty batch, got %#v", batches)
+	}
+	if batches[0].Mode != ReconcileModeDirectDelta {
+		t.Fatalf("expected degraded known file rename to stay direct-delta, got %s with paths=%#v", batches[0].Mode, batches[0].Paths)
+	}
+	if len(batches[0].DirectDeltas) != 1 || batches[0].DirectDeltas[0].Path != renamedFilePath {
+		t.Fatalf("expected exact renamed file delta, got %#v", batches[0].DirectDeltas)
+	}
+}
+
+func TestScannerDirtyDebounceWindowIsCappedByMaxPendingWait(t *testing.T) {
+	scanner := NewScanner(nil)
+	scanner.dirtyQueueConfig = DirtyQueueConfig{
+		DebounceWindow:        2 * time.Minute,
+		MaxPendingWaitWindow:  5 * time.Second,
+		SiblingMergeThreshold: 8,
+	}
+	scanner.dirtyQueue = NewDirtyQueue(scanner.dirtyQueueConfig)
+
+	now := time.Now()
+	scanner.dirtyQueue.Push(DirtySignal{
+		Kind:          DirtySignalKindPath,
+		RootID:        "root-a",
+		Path:          filepath.Join(string(filepath.Separator), "root", "first.txt"),
+		PathTypeKnown: true,
+		At:            now.Add(-4 * time.Second),
+	})
+	scanner.dirtyQueue.Push(DirtySignal{
+		Kind:          DirtySignalKindPath,
+		RootID:        "root-a",
+		Path:          filepath.Join(string(filepath.Separator), "root", "latest.txt"),
+		PathTypeKnown: true,
+		At:            now.Add(-100 * time.Millisecond),
+	})
+
+	window := scanner.dirtyDebounceWindow()
+	if window > 1500*time.Millisecond {
+		t.Fatalf("expected max pending wait to cap dirty timer near 1s, got %s", window)
+	}
+	if window <= 0 {
+		t.Fatalf("expected positive dirty timer window, got %s", window)
+	}
+}
+
+func TestScannerHandleChangeSignalDoesNotPersistCursorBeforeReconcile(t *testing.T) {
+	db, ctx := openTestFileSearchDB(t)
+	now := time.Now().UnixMilli()
+	rootPath := filepath.Join(t.TempDir(), "root-cursor-write-throttle")
+	filePath := filepath.Join(rootPath, "changed.txt")
+	initialCursor := mustEncodeFeedCursorForTest(t, FeedCursor{
+		FeedType:  RootFeedTypeFSEvents,
+		UpdatedAt: time.Now().Add(-time.Hour).UnixMilli(),
+		FSEventID: 100,
+	})
+	nextCursor := mustEncodeFeedCursorForTest(t, FeedCursor{
+		FeedType:  RootFeedTypeFSEvents,
+		UpdatedAt: time.Now().UnixMilli(),
+		FSEventID: 200,
+	})
+
+	mustWriteTestFile(t, filePath, "changed")
+	mustInsertRoot(t, ctx, db, RootRecord{
+		ID:         "root-cursor-write-throttle",
+		Path:       rootPath,
+		Kind:       RootKindUser,
+		Status:     RootStatusIdle,
+		FeedType:   RootFeedTypeFSEvents,
+		FeedCursor: initialCursor,
+		FeedState:  RootFeedStateReady,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+	})
+
+	scanner := NewScanner(db)
+	scanner.handleChangeSignal(ctx, ChangeSignal{
+		Kind:          ChangeSignalKindDirtyPath,
+		SemanticKind:  ChangeSemanticKindModify,
+		RootID:        "root-cursor-write-throttle",
+		FeedType:      RootFeedTypeFSEvents,
+		Cursor:        nextCursor,
+		Path:          filePath,
+		PathIsDir:     false,
+		PathTypeKnown: true,
+		At:            time.Now(),
+	})
+
+	rootAfter, err := db.FindRootByID(ctx, "root-cursor-write-throttle")
+	if err != nil {
+		t.Fatalf("find root after change signal: %v", err)
+	}
+	if rootAfter.FeedCursor != initialCursor {
+		t.Fatalf("expected dirty signal not to persist feed cursor before reconcile, got %q want %q", rootAfter.FeedCursor, initialCursor)
+	}
+}
+
 func TestScannerProcessDirtyQueueReloadsDirectChildUnderRoot(t *testing.T) {
 	db, ctx := openTestFileSearchDB(t)
 	now := time.Now().UnixMilli()
