@@ -283,6 +283,10 @@ func (e *Engine) AddRoot(ctx context.Context, rootPath string) error {
 	}
 
 	if e.scanner != nil {
+		// Root membership changed in SQLite; invalidate before the rescan request
+		// so watcher signals arriving during the scheduling window cannot route
+		// against the previous complete root snapshot.
+		e.scanner.invalidateRootCache()
 		e.scanner.RequestRescan(ctx)
 	}
 	return nil
@@ -312,6 +316,10 @@ func (e *Engine) RemoveRoot(ctx context.Context, rootPath string) error {
 	}
 
 	if e.scanner != nil {
+		// Root membership changed in SQLite; invalidate before the rescan request
+		// so watcher signals arriving during the scheduling window cannot route
+		// against the previous complete root snapshot.
+		e.scanner.invalidateRootCache()
 		e.scanner.RequestRescan(ctx)
 	}
 	return nil
@@ -340,11 +348,11 @@ func (e *Engine) GetStatus(ctx context.Context) (StatusSnapshot, error) {
 	}
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	if e.closed || e.db == nil {
+	if e.closed {
 		return StatusSnapshot{}, fmt.Errorf("filesearch engine closed")
 	}
 
-	allRoots, err := e.db.ListRoots(ctx)
+	allRoots, err := e.statusRoots(ctx)
 	if err != nil {
 		return StatusSnapshot{}, err
 	}
@@ -457,6 +465,22 @@ func (e *Engine) GetStatus(ctx context.Context) (StatusSnapshot, error) {
 	status.IsInitialIndexing = status.RootCount > 0 && (status.ActiveRootStatus == RootStatusPreparing || status.ActiveRootStatus == RootStatusScanning) && status.ActiveProgressCurrent == 0 && (status.PreparingRootCount > 0 || status.ScanningRootCount > 0)
 	status.IsIndexing = status.PreparingRootCount > 0 || status.ScanningRootCount > 0 || status.SyncingRootCount > 0 || status.WritingRootCount > 0 || status.FinalizingRootCount > 0 || status.IsInitialIndexing
 	return status, nil
+}
+
+func (e *Engine) statusRoots(ctx context.Context) ([]RootRecord, error) {
+	if e.scanner != nil {
+		if roots, ok := e.scanner.cachedRootSnapshot(); ok {
+			// Optimization: status changes are often emitted while watcher signals
+			// are being enqueued. The scanner root cache is kept coherent with root
+			// membership/state writes, so a complete snapshot avoids a repeated
+			// SQLite ListRoots round trip on that hot notification path.
+			return roots, nil
+		}
+	}
+	if e.db == nil {
+		return nil, fmt.Errorf("filesearch engine closed")
+	}
+	return e.db.ListRoots(ctx)
 }
 
 func mergeTransientRunStatus(status *StatusSnapshot, activeRun StatusSnapshot) {
@@ -753,8 +777,14 @@ func syncUserRootsToDB(ctx context.Context, db *FileSearchDB, scanner *Scanner, 
 		removedCount,
 		changed,
 	))
-	if requestRescan && changed && scanner != nil {
-		scanner.RequestRescan(ctx)
+	if changed && scanner != nil {
+		// Bulk root sync can add and remove many rows at once. Clear the Scanner
+		// cache before any optional rescan so the change-feed goroutine never sees
+		// a complete-but-stale user-root snapshot.
+		scanner.invalidateRootCache()
+		if requestRescan {
+			scanner.RequestRescan(ctx)
+		}
 	}
 
 	return changed, nil

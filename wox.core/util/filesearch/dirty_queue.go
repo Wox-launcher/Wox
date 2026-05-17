@@ -23,6 +23,10 @@ type DirtyQueue struct {
 	config  DirtyQueueConfig
 	mu      sync.Mutex
 	pending map[string][]DirtySignal
+	// pathRefCount keeps PendingCounts cheap on the watcher enqueue path. The
+	// queue still stores full signals for reconcile planning, but status updates
+	// should not rescan that slice for every file-system event.
+	pathRefCount map[string]int
 }
 
 type DirtyQueueStats struct {
@@ -37,8 +41,9 @@ type DirtyQueueStats struct {
 
 func NewDirtyQueue(config DirtyQueueConfig) *DirtyQueue {
 	return &DirtyQueue{
-		config:  config,
-		pending: map[string][]DirtySignal{},
+		config:       config,
+		pending:      map[string][]DirtySignal{},
+		pathRefCount: map[string]int{},
 	}
 }
 
@@ -55,6 +60,7 @@ func (q *DirtyQueue) Push(signal DirtySignal) {
 		q.pending = map[string][]DirtySignal{}
 	}
 	q.pending[normalized.RootID] = append(q.pending[normalized.RootID], normalized)
+	q.trackSignalPathLocked(normalized)
 }
 
 func (q *DirtyQueue) FlushReady(now time.Time, rootDirectoryCounts map[string]int) []ReconcileBatch {
@@ -80,11 +86,26 @@ func (q *DirtyQueue) FlushReadyWithDebounce(now time.Time, rootDirectoryCounts m
 	batches := make([]ReconcileBatch, 0, len(rootIDs))
 	for _, rootID := range rootIDs {
 		signals := q.pending[rootID]
+		q.untrackSignalsLocked(signals)
 		delete(q.pending, rootID)
 		batches = append(batches, buildReconcileBatch(rootID, signals, rootDirectoryCounts[rootID], q.config))
 	}
 
 	return batches
+}
+
+// PendingCounts returns exact queued root/path counts without scanning every
+// signal. This exists because Scanner refreshes transient pending counts when
+// file-watch events arrive, and that path needs predictable O(1) work.
+func (q *DirtyQueue) PendingCounts() (int, int) {
+	if q == nil {
+		return 0, 0
+	}
+
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	return len(q.pending), len(q.pathRefCount)
 }
 
 func (q *DirtyQueue) debounceWindow() time.Duration {
@@ -108,7 +129,6 @@ func (q *DirtyQueue) Stats() DirtyQueueStats {
 
 func (q *DirtyQueue) statsLocked() DirtyQueueStats {
 	stats := DirtyQueueStats{}
-	pathSet := map[string]struct{}{}
 	for _, signals := range q.pending {
 		if len(signals) == 0 {
 			continue
@@ -127,18 +147,44 @@ func (q *DirtyQueue) statsLocked() DirtyQueueStats {
 				hasRootSignal = true
 				continue
 			}
-			if signal.Kind != DirtySignalKindPath || signal.Path == "" {
-				continue
-			}
-			pathSet[signal.Path] = struct{}{}
 		}
 		if hasRootSignal {
 			stats.RootSignalCount++
 		}
 	}
 
-	stats.PathCount = len(pathSet)
+	stats.PathCount = len(q.pathRefCount)
 	return stats
+}
+
+func (q *DirtyQueue) trackSignalPathLocked(signal DirtySignal) {
+	if signal.Kind != DirtySignalKindPath || signal.Path == "" {
+		return
+	}
+	if q.pathRefCount == nil {
+		q.pathRefCount = map[string]int{}
+	}
+	// Optimization: status refresh runs on the watcher enqueue path. Keeping an
+	// exact reference count avoids scanning every queued signal just to know
+	// whether the UI should show pending dirty work during large FSEvents bursts.
+	q.pathRefCount[signal.Path]++
+}
+
+func (q *DirtyQueue) untrackSignalsLocked(signals []DirtySignal) {
+	if len(signals) == 0 || len(q.pathRefCount) == 0 {
+		return
+	}
+	for _, signal := range signals {
+		if signal.Kind != DirtySignalKindPath || signal.Path == "" {
+			continue
+		}
+		count := q.pathRefCount[signal.Path]
+		if count <= 1 {
+			delete(q.pathRefCount, signal.Path)
+			continue
+		}
+		q.pathRefCount[signal.Path] = count - 1
+	}
 }
 
 func buildReconcileBatch(rootID string, signals []DirtySignal, directoryCount int, config DirtyQueueConfig) ReconcileBatch {

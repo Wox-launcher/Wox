@@ -384,7 +384,6 @@ func (c *FileSearchPlugin) indexFilesFromScratch(ctx context.Context) {
 		return
 	}
 
-	c.api.Notify(ctx, "i18n:plugin_file_index_files_started")
 	util.Go(ctx, "filesearch reset index", func() {
 		// Feature addition: the visible action now rebuilds the filesearch storage
 		// directory instead of only clearing tables inside the open database. Roots

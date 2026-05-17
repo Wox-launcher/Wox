@@ -4,17 +4,30 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"wox/plugin/system/file_search/indexpolicy"
 	"wox/util/filesearch"
 )
 
+const maxFileSearchChangePolicyContextCacheEntries = 4096
+
 type fileSearchIndexPolicy struct {
 	// Boundary change: the matching implementation lives in a small plugin-owned
 	// package so real-index benchmarks can use the same rules without importing
 	// the full system plugin and creating a filesearch engine cycle.
-	inner           *indexpolicy.Policy
-	skipHiddenFiles atomic.Bool
+	inner                *indexpolicy.Policy
+	skipHiddenFiles      atomic.Bool
+	changeContextCacheMu sync.RWMutex
+	changeContextCache   map[fileSearchChangePolicyContextKey]fileSearchTraversalPolicyContext
+}
+
+type fileSearchChangePolicyContextKey struct {
+	rootID          string
+	rootPath        string
+	policyRootPath  string
+	scopePath       string
+	skipHiddenFiles bool
 }
 
 var defaultFileSearchIgnorePatterns = indexpolicy.DefaultIgnorePatterns()
@@ -47,6 +60,67 @@ func (p *fileSearchIndexPolicy) newTraversalContext(root filesearch.RootRecord, 
 		inner:           context,
 		skipHiddenFiles: p.skipHiddenFiles.Load(),
 	}
+}
+
+func (p *fileSearchIndexPolicy) changeTraversalContext(root filesearch.RootRecord, scopePath string) filesearch.TraversalPolicyContext {
+	if p == nil || p.inner == nil {
+		return nil
+	}
+	skipHiddenFiles := p.skipHiddenFiles.Load()
+	key := fileSearchChangePolicyContextKey{
+		rootID:          root.ID,
+		rootPath:        root.Path,
+		policyRootPath:  root.PolicyRootPath,
+		scopePath:       scopePath,
+		skipHiddenFiles: skipHiddenFiles,
+	}
+
+	p.changeContextCacheMu.RLock()
+	if cached, ok := p.changeContextCache[key]; ok {
+		p.changeContextCacheMu.RUnlock()
+		return cached
+	}
+	p.changeContextCacheMu.RUnlock()
+
+	context := p.inner.NewTraversalContext(root.Path, root.PolicyRootPath, scopePath)
+	if context == nil {
+		return nil
+	}
+	cached := fileSearchTraversalPolicyContext{
+		inner:           context,
+		skipHiddenFiles: skipHiddenFiles,
+	}
+
+	p.changeContextCacheMu.Lock()
+	defer p.changeContextCacheMu.Unlock()
+	if existing, ok := p.changeContextCache[key]; ok {
+		return existing
+	}
+	if p.changeContextCache == nil {
+		p.changeContextCache = map[fileSearchChangePolicyContextKey]fileSearchTraversalPolicyContext{}
+	}
+	if len(p.changeContextCache) >= maxFileSearchChangePolicyContextCacheEntries {
+		// Optimization: change-signal policy checks are high-frequency but only
+		// need a bounded directory-context memo. Resetting the small cache keeps
+		// memory predictable while preserving the common burst case where many
+		// events arrive from the same directories.
+		p.changeContextCache = map[fileSearchChangePolicyContextKey]fileSearchTraversalPolicyContext{}
+	}
+	p.changeContextCache[key] = cached
+	return cached
+}
+
+func (p *fileSearchIndexPolicy) clearChangeTraversalContextCache() {
+	if p == nil {
+		return
+	}
+	p.changeContextCacheMu.Lock()
+	// Cache invalidation: traversal contexts snapshot configured ignore rules,
+	// .gitignore ancestor frames, and the hidden-file switch. Any setting or
+	// ignore-file change must discard the memo so future watcher events route
+	// through current policy state.
+	p.changeContextCache = nil
+	p.changeContextCacheMu.Unlock()
 }
 
 type fileSearchTraversalPolicyContext struct {
@@ -83,6 +157,7 @@ func (p *fileSearchIndexPolicy) SetIgnorePatterns(patterns []string) {
 		return
 	}
 	p.inner.SetIgnorePatterns(patterns)
+	p.clearChangeTraversalContextCache()
 }
 
 func (p *fileSearchIndexPolicy) SetSkipHiddenFiles(enabled bool) {
@@ -90,6 +165,7 @@ func (p *fileSearchIndexPolicy) SetSkipHiddenFiles(enabled bool) {
 		return
 	}
 	p.skipHiddenFiles.Store(enabled)
+	p.clearChangeTraversalContextCache()
 }
 
 func (p *fileSearchIndexPolicy) shouldProcessChange(root filesearch.RootRecord, change filesearch.ChangeSignal) bool {
@@ -104,6 +180,12 @@ func (p *fileSearchIndexPolicy) shouldProcessChange(root filesearch.RootRecord, 
 		// SQLite DB events even after that path became a mandatory ignore rule.
 		return true
 	}
+	if filepath.Base(cleanPath) == ".gitignore" {
+		p.clearChangeTraversalContextCache()
+		if p != nil && p.inner != nil {
+			p.inner.ClearGitIgnoreCache()
+		}
+	}
 
 	isDir := change.PathIsDir
 	if !change.PathTypeKnown {
@@ -112,14 +194,13 @@ func (p *fileSearchIndexPolicy) shouldProcessChange(root filesearch.RootRecord, 
 		}
 	}
 
-	context := p.newTraversalContext(root, filepath.Dir(cleanPath))
+	context := p.changeTraversalContext(root, filepath.Dir(cleanPath))
 	if context == nil {
 		return true
 	}
-	// Bug fix: change-signal filtering now uses the same traversal context as
-	// full indexing. The previous direct callback kept a second ignore path alive,
-	// so future matcher optimizations could make full scans and watcher events
-	// disagree.
+	// Optimization: change-signal filtering still uses the same traversal rules
+	// as full indexing, but repeated events from one directory reuse a cached
+	// context instead of rebuilding the .gitignore ancestor stack every time.
 	return context.ShouldIndexPath(cleanPath, isDir)
 }
 

@@ -40,6 +40,31 @@ func TestDirtyQueueFlushReadyKeepsDisjointSubtreesSeparate(t *testing.T) {
 	}
 }
 
+func TestDirtyQueuePendingCountsStayExactAcrossFlush(t *testing.T) {
+	queue := NewDirtyQueue(DirtyQueueConfig{
+		DebounceWindow:        0,
+		SiblingMergeThreshold: 8,
+	})
+	firstPath := filepath.Join(string(filepath.Separator), "root", "same.txt")
+	secondPath := filepath.Join(string(filepath.Separator), "root", "other.txt")
+
+	queue.Push(DirtySignal{Kind: DirtySignalKindPath, RootID: "root-a", Path: firstPath, PathTypeKnown: true, At: time.Unix(0, 0)})
+	queue.Push(DirtySignal{Kind: DirtySignalKindPath, RootID: "root-a", Path: firstPath, PathTypeKnown: true, At: time.Unix(0, 0)})
+	queue.Push(DirtySignal{Kind: DirtySignalKindPath, RootID: "root-b", Path: secondPath, PathTypeKnown: true, At: time.Unix(0, 0)})
+
+	if rootCount, pathCount := queue.PendingCounts(); rootCount != 2 || pathCount != 2 {
+		t.Fatalf("expected pending counts roots=2 paths=2 before flush, got roots=%d paths=%d", rootCount, pathCount)
+	}
+
+	batches := queue.FlushReady(time.Unix(1, 0), map[string]int{"root-a": 10})
+	if len(batches) != 2 {
+		t.Fatalf("expected both ready roots to flush, got %#v", batches)
+	}
+	if rootCount, pathCount := queue.PendingCounts(); rootCount != 0 || pathCount != 0 {
+		t.Fatalf("expected pending counts to drain after flush, got roots=%d paths=%d", rootCount, pathCount)
+	}
+}
+
 func TestDirtyQueueFlushReadyKeepsKnownFileDeltasOutOfSubtreeCoalescing(t *testing.T) {
 	queue := NewDirtyQueue(DirtyQueueConfig{
 		DebounceWindow:               0,

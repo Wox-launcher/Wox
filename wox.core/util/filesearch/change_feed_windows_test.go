@@ -17,7 +17,8 @@ func TestUSNResolvedRecordsEmitOnlyLongestMatchingRoot(t *testing.T) {
 		},
 	}
 
-	watcher.emitResolvedRecords([]RootRecord{parent, dynamic}, usnJournalState{Volume: `C:\`, JournalID: 1}, []usnResolvedRecord{
+	roots := []RootRecord{parent, dynamic}
+	watcher.emitResolvedRecords(roots, newRootPathMatcher(roots), usnJournalState{Volume: `C:\`, JournalID: 1}, []usnResolvedRecord{
 		{Path: `C:\Users\qian\dev\Wox\main.go`, PathKnown: true, PathIsDir: false, USN: 10},
 	})
 

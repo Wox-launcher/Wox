@@ -43,6 +43,7 @@ type FSEventsChangeFeed struct {
 	queue            C.dispatch_queue_t
 	streamGeneration uint64
 	roots            []RootRecord
+	rootMatcher      rootPathMatcher
 	signals          chan ChangeSignal
 	handle           cgo.Handle
 	handlePtr        *C.uintptr_t
@@ -97,6 +98,10 @@ func (f *FSEventsChangeFeed) Refresh(ctx context.Context, roots []RootRecord) er
 		return nil
 	}
 	f.roots = append([]RootRecord(nil), prepared.watchRoots...)
+	// Optimization: FSEvents batches can be very large, so root ownership must
+	// not repeat filepath.Rel work for every event/root pair. Refresh builds the
+	// immutable matcher once beside the root snapshot used for fallback scans.
+	f.rootMatcher = newRootPathMatcher(prepared.watchRoots)
 	f.mu.Unlock()
 
 	if len(prepared.watchRoots) == 0 {
@@ -273,10 +278,10 @@ func (f *FSEventsChangeFeed) stopCurrentStream(reason string) {
 	}
 }
 
-func (f *FSEventsChangeFeed) copyRoots() []RootRecord {
+func (f *FSEventsChangeFeed) copyRootSnapshot() ([]RootRecord, rootPathMatcher) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	return append([]RootRecord(nil), f.roots...)
+	return append([]RootRecord(nil), f.roots...), f.rootMatcher
 }
 
 func (f *FSEventsChangeFeed) emit(signal ChangeSignal) {
@@ -296,9 +301,13 @@ func (f *FSEventsChangeFeed) emit(signal ChangeSignal) {
 
 	select {
 	case f.signals <- signal:
-		f.logSignalSummary(signal, false)
+		if fileSearchDiagnosticLoggingEnabled {
+			f.logSignalSummary(signal, false)
+		}
 	default:
-		f.logSignalSummary(signal, true)
+		if fileSearchDiagnosticLoggingEnabled {
+			f.logSignalSummary(signal, true)
+		}
 		f.logDroppedSignal(signal)
 	}
 }
@@ -340,7 +349,7 @@ func (f *FSEventsChangeFeed) logStreamStarted(generation uint64, rootCount int, 
 }
 
 func (f *FSEventsChangeFeed) logCallbackSummary(events int, matchedRoots int, unmatchedEvents int, signals int, lastEventID uint64) {
-	if events <= 0 {
+	if !fileSearchDiagnosticLoggingEnabled || events <= 0 {
 		return
 	}
 
@@ -386,6 +395,10 @@ func (f *FSEventsChangeFeed) logCallbackSummary(events int, matchedRoots int, un
 }
 
 func (f *FSEventsChangeFeed) logSignalSummary(signal ChangeSignal, dropped bool) {
+	if !fileSearchDiagnosticLoggingEnabled {
+		return
+	}
+
 	f.signalSummaryMu.Lock()
 	defer f.signalSummaryMu.Unlock()
 
@@ -422,11 +435,12 @@ func (f *FSEventsChangeFeed) logSignalSummary(signal ChangeSignal, dropped bool)
 }
 
 func (f *FSEventsChangeFeed) onEvents(paths []string, flags []uint64, ids []uint64) {
-	roots := f.copyRoots()
+	roots, matcher := f.copyRootSnapshot()
 	if len(roots) == 0 {
 		return
 	}
 
+	diagnosticLoggingEnabled := fileSearchDiagnosticLoggingEnabled
 	now := time.Now()
 	matchedRootCount := 0
 	unmatchedEventCount := 0
@@ -434,11 +448,11 @@ func (f *FSEventsChangeFeed) onEvents(paths []string, flags []uint64, ids []uint
 	lastEventID := uint64(0)
 	for index := range paths {
 		eventPath := filepath.Clean(paths[index])
-		if ids[index] > lastEventID {
+		if diagnosticLoggingEnabled && ids[index] > lastEventID {
 			lastEventID = ids[index]
 		}
 		matchedRoots := make([]RootRecord, 0, len(roots))
-		if root, ok := findRootForPathInRoots(roots, eventPath); ok {
+		if root, ok := matcher.findClean(eventPath); ok {
 			pathIsDir := flags[index]&fseventFlagItemIsDir != 0
 			if shouldSkipSystemPathForRoot(root, eventPath, pathIsDir) {
 				continue
@@ -451,19 +465,28 @@ func (f *FSEventsChangeFeed) onEvents(paths []string, flags []uint64, ids []uint
 		if len(matchedRoots) == 0 && fseventRequiresRootReconcile(flags[index]) {
 			matchedRoots = roots
 		}
-		if len(matchedRoots) == 0 {
+		if diagnosticLoggingEnabled && len(matchedRoots) == 0 {
 			unmatchedEventCount++
 		}
-		matchedRootCount += len(matchedRoots)
+		if diagnosticLoggingEnabled {
+			matchedRootCount += len(matchedRoots)
+		}
 
 		for _, root := range matchedRoots {
 			for _, signal := range translateFSEvent(root, eventPath, flags[index], ids[index], now) {
-				signalCount++
+				if diagnosticLoggingEnabled {
+					signalCount++
+				}
 				f.emit(signal)
 			}
 		}
 	}
-	f.logCallbackSummary(len(paths), matchedRootCount, unmatchedEventCount, signalCount, lastEventID)
+	if diagnosticLoggingEnabled {
+		// Optimization: callback summaries are diagnostic-only and sit directly on
+		// the FSEvents hot path. Keep all counters and formatting behind the same
+		// dev switch used by File Search scan and SQLite diagnostics.
+		f.logCallbackSummary(len(paths), matchedRootCount, unmatchedEventCount, signalCount, lastEventID)
+	}
 }
 
 func summarizeFSEventsRootPaths(roots []RootRecord) string {

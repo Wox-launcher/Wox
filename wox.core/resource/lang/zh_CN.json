@@ -567,7 +567,6 @@
   "plugin_file_status_error": "文件搜索需要处理",
   "plugin_file_status_error_subtitle": "有 %d 个目录索引失败。",
   "plugin_file_index_files": "重新索引文件",
-  "plugin_file_index_files_started": "文件索引已重新开始",
   "plugin_file_index_files_failed": "重新开始文件索引失败",
   "plugin_indicator_plugin_name": "系统插件指示器",
   "plugin_indicator_plugin_description": "用于插件触发关键字的指示器",

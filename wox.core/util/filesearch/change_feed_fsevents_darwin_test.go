@@ -101,6 +101,39 @@ func TestTranslateFSEventEscalatesDroppedHistoryToRequiresRootReconcile(t *testi
 	}
 }
 
+func TestFSEventsChangeFeedKeepsUnmatchedReconcileFallback(t *testing.T) {
+	roots := []RootRecord{
+		{ID: "root-one", Path: filepath.Join(t.TempDir(), "one"), FeedType: RootFeedTypeFSEvents},
+		{ID: "root-two", Path: filepath.Join(t.TempDir(), "two"), FeedType: RootFeedTypeFSEvents},
+	}
+	feed := NewFSEventsChangeFeed()
+	defer feed.Close()
+	feed.mu.Lock()
+	feed.roots = append([]RootRecord(nil), roots...)
+	feed.rootMatcher = newRootPathMatcher(roots)
+	feed.mu.Unlock()
+
+	feed.onEvents(
+		[]string{filepath.Join(t.TempDir(), "outside", "event.txt")},
+		[]uint64{fseventFlagMustScanSubDirs},
+		[]uint64{123},
+	)
+
+	seen := map[string]bool{}
+	for range roots {
+		signal := mustReadChangeSignal(t, feed.Signals())
+		if signal.Kind != ChangeSignalKindRequiresRootReconcile {
+			t.Fatalf("expected unmatched reconcile fallback signal, got %#v", signal)
+		}
+		seen[signal.RootID] = true
+	}
+	for _, root := range roots {
+		if !seen[root.ID] {
+			t.Fatalf("expected unmatched reconcile fallback to emit for %q, got %#v", root.ID, seen)
+		}
+	}
+}
+
 func TestFSEventsSnapshotRootFeedUsesCurrentEventID(t *testing.T) {
 	feed := NewFSEventsChangeFeed()
 	defer feed.Close()

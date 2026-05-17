@@ -38,7 +38,7 @@ func (s *Scanner) startupRestore(ctx context.Context) {
 	}
 	roots = s.clearStartupTransientMissingPathErrors(ctx, roots)
 
-	s.refreshChangeFeed(ctx)
+	s.refreshChangeFeedWithRoots(ctx, roots)
 	if startupNeedsInitialFullScan(roots, persistedEntryCount) {
 		// Startup restore used to treat an empty persisted index as good enough and
 		// enqueue root-dirty incremental reconcile for every never-scanned root.
@@ -113,7 +113,7 @@ func (s *Scanner) clearStartupTransientMissingPathErrors(ctx context.Context, ro
 			root.FeedState = RootFeedStateReady
 		}
 		root.UpdatedAt = util.GetSystemTimestamp()
-		if err := s.db.UpdateRootState(ctx, root); err != nil {
+		if err := s.updateRootStateAndCache(ctx, root); err != nil {
 			util.GetLogger().Warn(ctx, "filesearch startup restore failed to clear transient root error: "+err.Error())
 			continue
 		}

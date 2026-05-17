@@ -111,7 +111,10 @@ func (h *dynamicRootHeatTracker) record(rootID string, hotPath string, at time.T
 	state := h.states[key]
 	if state == nil || at.Sub(state.firstAt) > config.Window {
 		state = &dynamicRootHeatState{
-			rootID:  rootID,
+			rootID: rootID,
+			// Optimization: heat state is compared against each flushed delta and
+			// scope path later. Store the canonical path once so markSuccessfulFlush
+			// only cleans the varying batch inputs inside their own loops.
 			path:    filepath.Clean(hotPath),
 			firstAt: at,
 			flushes: map[int]struct{}{},
@@ -143,7 +146,8 @@ func (h *dynamicRootHeatTracker) markSuccessfulFlush(batches []ReconcileBatch, g
 			// root flush. Otherwise one tiny file update would satisfy heat checks
 			// for every dynamic child under the same configured root.
 			for _, delta := range batch.DirectDeltas {
-				if pathWithinScope(delta.Path, state.path) || pathWithinScope(state.path, delta.Path) {
+				cleanDeltaPath := filepath.Clean(delta.Path)
+				if cleanPathsOverlap(cleanDeltaPath, state.path) {
 					state.flushes[generation] = struct{}{}
 					break
 				}
@@ -155,7 +159,8 @@ func (h *dynamicRootHeatTracker) markSuccessfulFlush(batches []ReconcileBatch, g
 				continue
 			}
 			for _, scopePath := range batch.Paths {
-				if pathWithinScope(scopePath, state.path) || pathWithinScope(state.path, scopePath) {
+				cleanScopePath := filepath.Clean(scopePath)
+				if cleanPathsOverlap(cleanScopePath, state.path) {
 					state.flushes[generation] = struct{}{}
 					break
 				}
@@ -309,7 +314,7 @@ func (s *Scanner) updateDynamicRootHotTimes(ctx context.Context, batches []Recon
 		// reclaims genuinely cold splits.
 		root.LastHotAt = now.UnixMilli()
 		root.UpdatedAt = util.GetSystemTimestamp()
-		if err := s.db.UpdateRootState(ctx, root); err != nil {
+		if err := s.updateRootStateAndCache(ctx, root); err != nil {
 			return err
 		}
 	}
@@ -370,11 +375,16 @@ func (s *Scanner) promoteDynamicRootCandidate(ctx context.Context, candidate dyn
 		return nil
 	}
 	if !dynamicRootCapsAllow(roots, parentRoot.ID, config) {
-		util.GetLogger().Info(ctx, fmt.Sprintf(
-			"filesearch dynamic root promotion skipped by cap: parent=%s path=%s",
-			parentRoot.ID,
-			summarizeLogPath(candidatePath),
-		))
+		if fileSearchDiagnosticLoggingEnabled {
+			// Diagnostic logging: cap skips are expected during noisy home-root
+			// watcher bursts. Keep the reason available for investigations without
+			// making every rejected hot directory write an info log by default.
+			util.GetLogger().Info(ctx, fmt.Sprintf(
+				"filesearch dynamic root promotion skipped by cap: parent=%s path=%s",
+				parentRoot.ID,
+				summarizeLogPath(candidatePath),
+			))
+		}
 		s.dynamicHeat.clear(candidate.rootID, candidate.path)
 		return nil
 	}

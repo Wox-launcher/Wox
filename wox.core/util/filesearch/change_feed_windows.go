@@ -37,9 +37,10 @@ type WindowsChangeFeed struct {
 }
 
 type usnVolumeConfig struct {
-	journal  usnJournalState
-	roots    []RootRecord
-	startUSN int64
+	journal     usnJournalState
+	roots       []RootRecord
+	rootMatcher rootPathMatcher
+	startUSN    int64
 }
 
 type usnVolumeWatcher struct {
@@ -150,6 +151,10 @@ func (f *WindowsChangeFeed) Refresh(ctx context.Context, roots []RootRecord) err
 	for _, config := range volumeConfigsByPath {
 		prepared := prepareUSNVolumeRefresh(config.roots, config.journal, now, defaultFeedCursorSafeWindow)
 		config.roots = prepared.roots
+		// Optimization: USN polling can resolve many paths per tick. Build the
+		// matcher once per refreshed volume so resolved records avoid repeated
+		// root scans with filepath.Rel in the hot emit loop.
+		config.rootMatcher = newRootPathMatcher(prepared.roots)
 		config.startUSN = prepared.startUSN
 		for _, signal := range prepared.signals {
 			f.emit(signal)
@@ -326,7 +331,7 @@ func (u *usnWatcherSet) runVolumeLoop(ctx context.Context, config usnVolumeConfi
 
 		currentJournal = journal
 		currentUSN = nextUSN
-		u.emitResolvedRecords(config.roots, journal, records)
+		u.emitResolvedRecords(config.roots, config.rootMatcher, journal, records)
 	}
 
 	poll()
@@ -360,18 +365,19 @@ func (u *usnWatcherSet) emitUnavailable(roots []RootRecord, reason string) {
 	}
 }
 
-func (u *usnWatcherSet) emitResolvedRecords(roots []RootRecord, journal usnJournalState, records []usnResolvedRecord) {
+func (u *usnWatcherSet) emitResolvedRecords(roots []RootRecord, matcher rootPathMatcher, journal usnJournalState, records []usnResolvedRecord) {
 	now := time.Now()
 	for _, record := range records {
 		if record.PathKnown {
-			if root, ok := findRootForPathInRoots(roots, record.Path); ok {
-				if shouldSkipSystemPathForRoot(root, record.Path, record.PathIsDir) {
+			cleanPath := filepath.Clean(record.Path)
+			if root, ok := matcher.findClean(cleanPath); ok {
+				if shouldSkipSystemPathForRoot(root, cleanPath, record.PathIsDir) {
 					continue
 				}
 				// Known USN paths must be routed to the longest matching root. The
 				// previous broadcast woke both a dynamic root and its parent, which
 				// defeated the ownership split and forced unnecessary parent rescans.
-				u.emit(translateUSNDelta(root, journal, record.Path, record.PathIsDir, record.PathKnown, record.USN, record.Reason, now))
+				u.emit(translateUSNDelta(root, journal, cleanPath, record.PathIsDir, record.PathKnown, record.USN, record.Reason, now))
 			}
 			continue
 		}

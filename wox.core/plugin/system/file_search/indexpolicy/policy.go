@@ -97,6 +97,19 @@ func (p *Policy) SetDiagnostics(diagnostics *Diagnostics) {
 	p.mu.Unlock()
 }
 
+func (p *Policy) ClearGitIgnoreCache() {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	// Bug fix: file watcher events can report .gitignore edits after a directory
+	// has already populated the cached pattern slice. Clearing the cache lets the
+	// next change-signal policy check reload the current ignore file instead of
+	// reusing stale ancestor rules.
+	p.patternsByDir = map[string][]gitIgnorePattern{}
+	p.mu.Unlock()
+}
+
 func (p *Policy) DiagnosticsSnapshot() DiagnosticsSnapshot {
 	diagnostics := p.diagnosticsRef()
 	if diagnostics == nil {

@@ -567,7 +567,6 @@
   "plugin_file_status_error": "File search needs attention",
   "plugin_file_status_error_subtitle": "%d roots failed to index.",
   "plugin_file_index_files": "Index Files",
-  "plugin_file_index_files_started": "File indexing restarted",
   "plugin_file_index_files_failed": "Failed to restart file indexing",
   "plugin_indicator_plugin_name": "System Plugin Indicator",
   "plugin_indicator_plugin_description": "Indicator for plugin trigger keywords",

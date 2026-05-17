@@ -45,14 +45,20 @@ type Scanner struct {
 	dynamicHeat            *dynamicRootHeatTracker
 	dynamicFlushGeneration int
 	reconciler             *Reconciler
-	transientRunMu         sync.RWMutex
-	transientRunState      *StatusSnapshot
-	transientRootMu        sync.RWMutex
-	transientRootState     *TransientRootState
-	transientSyncMu        sync.RWMutex
-	transientSyncState     *TransientSyncState
-	dirtyBackpressureMu    sync.Mutex
-	lastDirtyRunElapsed    time.Duration
+	// Optimization: watcher signals resolve root state through this Scanner-local
+	// cache once refreshChangeFeedWithRoots has installed a complete snapshot,
+	// avoiding SQLite lookups in the high-frequency change-signal path.
+	rootCacheMu         sync.RWMutex
+	rootCacheByID       map[string]RootRecord
+	rootCacheLoaded     bool
+	transientRunMu      sync.RWMutex
+	transientRunState   *StatusSnapshot
+	transientRootMu     sync.RWMutex
+	transientRootState  *TransientRootState
+	transientSyncMu     sync.RWMutex
+	transientSyncState  *TransientSyncState
+	dirtyBackpressureMu sync.Mutex
+	lastDirtyRunElapsed time.Duration
 	// Tests override the preparation budget so run-based smoke coverage can force
 	// job splitting without manufacturing thousands of files just to cross the
 	// production thresholds.
@@ -561,7 +567,15 @@ func (s *Scanner) applyRunJob(ctx context.Context, kind RunKind, root RootRecord
 		root.Status = RootStatusIdle
 		root = s.captureRootFeedSnapshot(ctx, root)
 		root.UpdatedAt = util.GetSystemTimestamp()
-		return s.db.FinalizeRootRun(ctx, root)
+		if err := s.db.FinalizeRootRun(ctx, root); err != nil {
+			return err
+		}
+		// Optimization: FinalizeRootRun is the durable boundary that refreshes
+		// FeedState and feed snapshots, but it bypasses UpdateRootState. Update the
+		// complete root cache here so the next watcher signal does not fall back to
+		// SQLite after every successful incremental dirty flush.
+		s.upsertRootCache(root)
+		return nil
 	default:
 		return fmt.Errorf("unsupported run job kind %q", job.Kind)
 	}
@@ -608,7 +622,7 @@ func (s *Scanner) handleRunFailure(ctx context.Context, run Run, roots []RootRec
 		root.LastError = &errMessage
 	}
 	root.UpdatedAt = util.GetSystemTimestamp()
-	_ = s.db.UpdateRootState(ctx, root)
+	_ = s.updateRootStateAndCache(ctx, root)
 	s.clearTransientRunState()
 	s.emitStateChange(ctx)
 }
@@ -666,13 +680,24 @@ func rootRecordForRunLog(roots []RootRecord, rootID string) RootRecord {
 }
 
 func (s *Scanner) refreshChangeFeed(ctx context.Context) {
-	if s.changeFeed == nil {
-		return
+	s.refreshChangeFeedWithRoots(ctx, nil)
+}
+
+func (s *Scanner) refreshChangeFeedWithRoots(ctx context.Context, roots []RootRecord) {
+	if roots == nil {
+		var err error
+		roots, err = s.listPolicyAllowedRoots(ctx)
+		if err != nil {
+			util.GetLogger().Warn(ctx, "filesearch failed to refresh change feed roots: "+err.Error())
+			return
+		}
 	}
 
-	roots, err := s.listPolicyAllowedRoots(ctx)
-	if err != nil {
-		util.GetLogger().Warn(ctx, "filesearch failed to refresh change feed roots: "+err.Error())
+	// Optimization: refresh is the one boundary where the scanner has a complete
+	// policy-pruned root snapshot. Replace the hot-path cache here rather than in
+	// listPolicyAllowedRoots, which is also used by planner/query paths.
+	s.replaceRootCache(roots)
+	if s.changeFeed == nil {
 		return
 	}
 
@@ -1342,15 +1367,15 @@ func (s *Scanner) enqueueDirtyWithContext(ctx context.Context, signal DirtySigna
 	if s.dirtyQueue != nil {
 		s.dirtyQueue.Push(normalized)
 	}
-	s.refreshTransientSyncPendingCounts()
-	//pendingRootCount, pendingPathCount := s.pendingDirtyCounts()
-	// util.GetLogger().Debug(contextWithTraceID(ctx, normalized.TraceID), fmt.Sprintf(
-	// 	"filesearch dirty enqueued: %s pending_roots=%d pending_paths=%d",
-	// 	summarizeDirtySignal(normalized),
-	// 	pendingRootCount,
-	// 	pendingPathCount,
-	// ))
-	s.emitStateChange(contextWithTraceID(ctx, normalized.TraceID))
+	shouldEmitState := s.refreshTransientSyncPendingCountsAndReportPendingTransition()
+	if shouldEmitState {
+		// Optimization: watcher bursts can enqueue thousands of signals before a
+		// dirty flush runs. The transient pending counters are still refreshed for
+		// every signal, but status listeners only need the first empty->pending
+		// notification; later signals will be reflected by direct GetStatus calls
+		// and by the post-flush state change.
+		s.emitStateChange(contextWithTraceID(ctx, normalized.TraceID))
+	}
 
 	select {
 	case s.dirtyCh <- struct{}{}:
@@ -1443,20 +1468,29 @@ func (s *Scanner) processDirtyQueue(ctx context.Context, now time.Time) error {
 		return err
 	}
 
-	queuedRootCount, queuedPathCount := s.pendingDirtyCounts()
+	queuedRootCount, queuedPathCount := 0, 0
+	if fileSearchDiagnosticLoggingEnabled {
+		queuedRootCount, queuedPathCount = s.pendingDirtyCounts()
+	}
 	batches := s.dirtyQueue.FlushReadyWithDebounce(now, rootDirectoryCounts, s.currentDirtyDebounceWindow())
 	if len(batches) == 0 {
 		return nil
 	}
-	remainingRootCount, remainingPathCount := s.pendingDirtyCounts()
-	util.GetLogger().Info(ctx, fmt.Sprintf(
-		"filesearch dirty queue flushed: batches=%d queued_roots=%d queued_paths=%d remaining_roots=%d remaining_paths=%d",
-		len(batches),
-		queuedRootCount,
-		queuedPathCount,
-		remainingRootCount,
-		remainingPathCount,
-	))
+	if fileSearchDiagnosticLoggingEnabled {
+		remainingRootCount, remainingPathCount := s.pendingDirtyCounts()
+		// Diagnostic logging: dirty flushes can happen every few seconds during
+		// watcher storms, so the default runtime must not format/write this hot
+		// path log. Developers can enable the diagnostic switch when investigating
+		// queue timing and backpressure behavior.
+		util.GetLogger().Info(ctx, fmt.Sprintf(
+			"filesearch dirty queue flushed: batches=%d queued_roots=%d queued_paths=%d remaining_roots=%d remaining_paths=%d",
+			len(batches),
+			queuedRootCount,
+			queuedPathCount,
+			remainingRootCount,
+			remainingPathCount,
+		))
+	}
 
 	runRoots := make([]RootRecord, 0, len(batches))
 	for _, batch := range batches {
@@ -1513,7 +1547,7 @@ func (s *Scanner) handleChangeSignal(ctx context.Context, signal ChangeSignal) {
 		// ))
 		return
 	}
-	s.updateRootFeedMetadata(ctx, signal.RootID, signal.FeedType, signal.Cursor)
+	s.updateRootFeedMetadata(ctx, root, rootFound, signal.FeedType, signal.Cursor)
 	if rootFound {
 		s.recordDynamicRootHeat(root, signal)
 	}
@@ -1835,7 +1869,7 @@ func (s *Scanner) markRootIncrementalFailure(ctx context.Context, rootID string,
 		root.LastError = &errMessage
 	}
 	root.UpdatedAt = util.GetSystemTimestamp()
-	if err := s.db.UpdateRootState(ctx, root); err != nil {
+	if err := s.updateRootStateAndCache(ctx, root); err != nil {
 		util.GetLogger().Warn(ctx, "filesearch failed to persist incremental root failure: "+err.Error())
 		return
 	}
@@ -1883,7 +1917,7 @@ func (s *Scanner) clearRootTransientIncrementalFailure(ctx context.Context, root
 		root.FeedState = RootFeedStateReady
 	}
 	root.UpdatedAt = util.GetSystemTimestamp()
-	if err := s.db.UpdateRootState(ctx, root); err != nil {
+	if err := s.updateRootStateAndCache(ctx, root); err != nil {
 		util.GetLogger().Warn(ctx, "filesearch failed to clear transient incremental failure: "+err.Error())
 		return
 	}
@@ -1908,13 +1942,8 @@ func isIncrementalPermissionFailure(cause error) bool {
 		strings.Contains(message, "operation not permitted")
 }
 
-func (s *Scanner) updateRootFeedMetadata(ctx context.Context, rootID string, feedType RootFeedType, cursor string) {
-	if rootID == "" || feedType == "" {
-		return
-	}
-
-	root, ok := s.findRootByID(ctx, rootID)
-	if !ok {
+func (s *Scanner) updateRootFeedMetadata(ctx context.Context, root RootRecord, rootFound bool, feedType RootFeedType, cursor string) {
+	if !rootFound || root.ID == "" || feedType == "" {
 		return
 	}
 
@@ -1924,13 +1953,14 @@ func (s *Scanner) updateRootFeedMetadata(ctx context.Context, rootID string, fee
 
 	// Optimization: dirty-path signals can arrive in large FSEvents bursts, and
 	// writing the root row for every cursor would add SQLite contention before
-	// the dirty batch has actually been applied. Persist only the stable feed
-	// type here; root/full finalization records the cursor after indexing reaches
-	// a conservative acknowledgement point.
+	// the dirty batch has actually been applied. The caller already resolved the
+	// root from the cache/DB once, so reuse that record and persist only the
+	// stable feed type; root/full finalization records the cursor after indexing
+	// reaches a conservative acknowledgement point.
 	_ = cursor
 	root.FeedType = feedType
 	root.UpdatedAt = util.GetSystemTimestamp()
-	if err := s.db.UpdateRootState(ctx, root); err != nil {
+	if err := s.updateRootStateAndCache(ctx, root); err != nil {
 		util.GetLogger().Warn(ctx, "filesearch failed to update root feed metadata: "+err.Error())
 		return
 	}
@@ -1986,7 +2016,7 @@ func (s *Scanner) refreshRootFeedSnapshot(ctx context.Context, rootID string) {
 
 	root = s.captureRootFeedSnapshot(ctx, root)
 	root.UpdatedAt = util.GetSystemTimestamp()
-	if err := s.db.UpdateRootState(ctx, root); err != nil {
+	if err := s.updateRootStateAndCache(ctx, root); err != nil {
 		util.GetLogger().Warn(ctx, "filesearch failed to persist refreshed root feed snapshot: "+err.Error())
 		return
 	}
@@ -2204,6 +2234,22 @@ func (s *Scanner) logRootReloadIndexSnapshot(ctx context.Context) {
 }
 
 func (s *Scanner) findRootByID(ctx context.Context, rootID string) (RootRecord, bool) {
+	if rootID == "" {
+		return RootRecord{}, false
+	}
+	if root, found, loaded := s.cachedRootByID(rootID); loaded {
+		if found {
+			return root, true
+		}
+		// Optimization: a loaded root cache is a complete policy-pruned snapshot,
+		// so a miss is definitive and should not fall through to another SQLite
+		// lookup for every unknown watcher signal.
+		return RootRecord{}, false
+	}
+	if s == nil || s.db == nil {
+		return RootRecord{}, false
+	}
+
 	root, err := s.db.FindRootByID(ctx, rootID)
 	if err != nil {
 		util.GetLogger().Warn(ctx, "filesearch failed to resolve root by id: "+err.Error())
@@ -2212,6 +2258,7 @@ func (s *Scanner) findRootByID(ctx context.Context, rootID string) (RootRecord, 
 	if root == nil {
 		return RootRecord{}, false
 	}
+	s.seedRootCacheLookup(*root)
 	return *root, true
 }
 
@@ -2229,7 +2276,7 @@ func (s *Scanner) updateRootFeedState(ctx context.Context, rootID string, state 
 	previousState := root.FeedState
 	root.FeedState = state
 	root.UpdatedAt = util.GetSystemTimestamp()
-	if err := s.db.UpdateRootState(ctx, root); err != nil {
+	if err := s.updateRootStateAndCache(ctx, root); err != nil {
 		util.GetLogger().Warn(ctx, "filesearch failed to update root feed state: "+err.Error())
 		return
 	}
@@ -2262,30 +2309,7 @@ func (s *Scanner) pendingDirtyCounts() (int, int) {
 	if s.dirtyQueue == nil {
 		return 0, 0
 	}
-
-	s.dirtyQueue.mu.Lock()
-	defer s.dirtyQueue.mu.Unlock()
-
-	pendingRootCount := 0
-	pendingPathSet := map[string]struct{}{}
-	for _, signals := range s.dirtyQueue.pending {
-		if len(signals) == 0 {
-			continue
-		}
-
-		pendingRootCount++
-		for _, signal := range signals {
-			if signal.Kind != DirtySignalKindPath {
-				continue
-			}
-			if signal.Path == "" {
-				continue
-			}
-			pendingPathSet[signal.Path] = struct{}{}
-		}
-	}
-
-	return pendingRootCount, len(pendingPathSet)
+	return s.dirtyQueue.PendingCounts()
 }
 
 func (s *Scanner) GetDirtyQueueDiagnostics(now time.Time) DirtyQueueDiagnostics {
@@ -2325,15 +2349,29 @@ func (s *Scanner) GetDirtyQueueDiagnostics(now time.Time) DirtyQueueDiagnostics 
 
 func (s *Scanner) refreshTransientSyncPendingCounts() {
 	pendingRootCount, pendingPathCount := s.pendingDirtyCounts()
+	s.updateTransientSyncPendingCounts(pendingRootCount, pendingPathCount)
+}
 
+func (s *Scanner) refreshTransientSyncPendingCountsAndReportPendingTransition() bool {
+	pendingRootCount, pendingPathCount := s.pendingDirtyCounts()
+	return s.updateTransientSyncPendingCounts(pendingRootCount, pendingPathCount)
+}
+
+func (s *Scanner) updateTransientSyncPendingCounts(pendingRootCount int, pendingPathCount int) bool {
 	s.transientSyncMu.Lock()
 	defer s.transientSyncMu.Unlock()
+
+	wasPending := false
+	if s.transientSyncState != nil {
+		wasPending = s.transientSyncState.PendingRootCount > 0 || s.transientSyncState.PendingPathCount > 0
+	}
+	isPending := pendingRootCount > 0 || pendingPathCount > 0
 
 	if pendingRootCount == 0 && pendingPathCount == 0 {
 		if s.transientSyncState == nil || s.transientSyncState.Root.ID == "" {
 			s.transientSyncState = nil
 		}
-		return
+		return false
 	}
 
 	if s.transientSyncState == nil {
@@ -2342,6 +2380,7 @@ func (s *Scanner) refreshTransientSyncPendingCounts() {
 
 	s.transientSyncState.PendingRootCount = pendingRootCount
 	s.transientSyncState.PendingPathCount = pendingPathCount
+	return !wasPending && isPending
 }
 
 func (s *Scanner) requeueDirtyBatches(ctx context.Context, batches []ReconcileBatch) {

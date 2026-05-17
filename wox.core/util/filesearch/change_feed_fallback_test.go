@@ -42,6 +42,33 @@ func TestFallbackChangeFeedHandleEventEmitsDirtyPathForDirectChildCreate(t *test
 	}
 }
 
+func TestFallbackChangeFeedHandleEventUsesRefreshedLongestRootMatcher(t *testing.T) {
+	parentPath := filepath.Join(t.TempDir(), "workspace")
+	dynamicPath := filepath.Join(parentPath, "src")
+	mustMkdirAll(t, dynamicPath)
+	filePath := filepath.Join(dynamicPath, "main.go")
+	mustWriteTestFile(t, filePath, "package main")
+
+	feed := NewFallbackChangeFeed()
+	defer feed.Close()
+
+	parent := RootRecord{ID: "root-parent", Path: parentPath, FeedType: RootFeedTypeFallback, FeedState: RootFeedStateReady}
+	dynamic := RootRecord{ID: "root-dynamic", Path: dynamicPath, Kind: RootKindDynamic, DynamicParentRootID: parent.ID, FeedType: RootFeedTypeFallback, FeedState: RootFeedStateReady}
+	if err := feed.Refresh(context.Background(), []RootRecord{parent, dynamic}); err != nil {
+		t.Fatalf("refresh fallback change feed: %v", err)
+	}
+
+	feed.handleEvent(fsnotify.Event{Name: filePath, Op: fsnotify.Write})
+
+	signal := mustReadChangeSignal(t, feed.Signals())
+	if signal.RootID != dynamic.ID {
+		t.Fatalf("expected refreshed matcher to choose dynamic root, got %#v", signal)
+	}
+	if signal.Path != filePath {
+		t.Fatalf("expected dirty path %q, got %q", filePath, signal.Path)
+	}
+}
+
 func TestFallbackChangeFeedRefreshEmitsFeedUnavailableForUnwatchableRoot(t *testing.T) {
 	rootPath := filepath.Join(t.TempDir(), "missing-root")
 
