@@ -54,17 +54,16 @@ while ps -p "$PID" > /dev/null 2>&1; do
 done
 
 log "Application exited, replacing executable"
-cp "$NEW_PATH" "$OLD_PATH"
+# Remove the old file first to avoid ETXTBSY error (AppImage FUSE mount may still hold the file open)
+rm -f "$OLD_PATH"
+CP_OUTPUT=$(cp "$NEW_PATH" "$OLD_PATH" 2>&1)
 if [ $? -ne 0 ]; then
-  log "Failed to copy executable, trying with sudo"
-  sudo cp "$NEW_PATH" "$OLD_PATH"
-  if [ $? -ne 0 ]; then
-    log "ERROR: Failed to copy executable"
-    exit 1
-  fi
+  log "Failed to copy executable: $CP_OUTPUT"
+  log "ERROR: Failed to copy executable"
+  exit 1
 fi
 
-chmod +x "$OLD_PATH" || sudo chmod +x "$OLD_PATH"
+chmod +x "$OLD_PATH"
 
 log "Launching updated application"
 "$OLD_PATH" --updated >> "$LOG_FILE" 2>&1 &
