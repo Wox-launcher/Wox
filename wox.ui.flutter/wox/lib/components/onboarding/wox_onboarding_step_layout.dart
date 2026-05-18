@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:wox/components/onboarding/wox_onboarding_style.dart';
 import 'package:wox/utils/colors.dart';
 
 class WoxOnboardingStepLayout extends StatelessWidget {
@@ -33,8 +34,16 @@ class WoxOnboardingStepLayout extends StatelessWidget {
                   return Opacity(opacity: value, child: Transform.translate(offset: Offset(0, 8 * (1 - value)), child: child));
                 },
                 child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: getThemeTextColor().withValues(alpha: 0.028), borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.all(10),
+                  // Glass-dark refresh: the demo shell now uses the same neutral
+                  // overlay and outline as the settings panels. The older faint
+                  // fill worked on flat themes but disappeared on translucent
+                  // glass, so a shared token keeps previews visibly framed.
+                  decoration: BoxDecoration(
+                    color: WoxOnboardingGlassStyle.surface(0.052),
+                    border: Border.all(color: WoxOnboardingGlassStyle.outline(0.10)),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                   child: demo,
                 ),
               ),
@@ -56,9 +65,10 @@ class WoxOnboardingSettingsPanel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        color: getThemeTextColor().withValues(alpha: 0.04),
-        border: Border.all(color: getThemeSubTextColor().withValues(alpha: 0.18)),
+        color: WoxOnboardingGlassStyle.surface(),
+        border: Border.all(color: WoxOnboardingGlassStyle.outline(0.13)),
         borderRadius: BorderRadius.circular(8),
+        boxShadow: WoxOnboardingGlassStyle.panelShadow(0.10),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: children),
     );
@@ -84,7 +94,11 @@ class WoxOnboardingInfoPanel extends StatelessWidget {
         badge != null
             ? Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(color: getThemeActiveBackgroundColor().withValues(alpha: 0.16), borderRadius: BorderRadius.circular(16)),
+              decoration: BoxDecoration(
+                color: WoxOnboardingGlassStyle.activeSurface(0.12),
+                border: Border.all(color: WoxOnboardingGlassStyle.outline(0.14)),
+                borderRadius: BorderRadius.circular(16),
+              ),
               child: Text(badge!, style: TextStyle(color: getThemeActiveBackgroundColor(), fontSize: 12, fontWeight: FontWeight.w600)),
             )
             : null;
@@ -93,9 +107,10 @@ class WoxOnboardingInfoPanel extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        color: getThemeTextColor().withValues(alpha: 0.04),
-        border: Border.all(color: getThemeSubTextColor().withValues(alpha: 0.18)),
+        color: WoxOnboardingGlassStyle.surface(),
+        border: Border.all(color: WoxOnboardingGlassStyle.outline(0.13)),
         borderRadius: BorderRadius.circular(8),
+        boxShadow: WoxOnboardingGlassStyle.panelShadow(0.10),
       ),
       child:
           title != null

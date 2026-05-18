@@ -15,6 +15,7 @@ import 'package:wox/components/onboarding/query_hotkeys_onboarding.dart';
 import 'package:wox/components/onboarding/theme_install_onboarding.dart';
 import 'package:wox/components/onboarding/tray_queries_onboarding.dart';
 import 'package:wox/components/onboarding/welcome_onboarding.dart';
+import 'package:wox/components/onboarding/wox_onboarding_style.dart';
 import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_dropdown_button.dart';
 import 'package:wox/components/wox_image_view.dart';
@@ -249,7 +250,6 @@ class _WoxOnboardingViewState extends State<WoxOnboardingView> {
   @override
   Widget build(BuildContext context) {
     return Obx(() {
-      final background = getThemeBackgroundColor();
       final accent = activeAccent;
       return WoxPlatformFocus(
         focusNode: onboardingFocusNode,
@@ -260,7 +260,10 @@ class _WoxOnboardingViewState extends State<WoxOnboardingView> {
           // launcher/setting subtree. Providing a local Material ancestor prevents
           // Flutter's debug error surface and gives text the expected app style.
           key: const ValueKey('onboarding-view'),
-          color: background,
+          // Glass-dark fix: the backdrop painter already applies the theme app
+          // background once. Painting the same translucent color here as well
+          // made glass themes nearly opaque, hiding the native acrylic layer.
+          color: Colors.transparent,
           // Use DefaultTextStyle.merge so that the fontFamily set by SystemChineseFont
           // in the MaterialApp theme is preserved. DefaultTextStyle would fully replace
           // the inherited style, losing the Chinese system font that the setting view
@@ -269,7 +272,7 @@ class _WoxOnboardingViewState extends State<WoxOnboardingView> {
             style: TextStyle(color: getThemeTextColor(), fontSize: 13),
             child: Stack(
               children: [
-                Positioned.fill(child: _OnboardingBackdrop(accent: accent)),
+                Positioned.fill(child: const _OnboardingBackdrop()),
                 Column(
                   children: [
                     Expanded(child: Row(children: [_buildSidebar(accent), Expanded(child: _buildStepBody(accent))])),
@@ -288,7 +291,13 @@ class _WoxOnboardingViewState extends State<WoxOnboardingView> {
     return Container(
       width: _onboardingSidebarWidth,
       padding: const EdgeInsets.fromLTRB(24, 30, 18, 22),
-      decoration: BoxDecoration(border: Border(right: BorderSide(color: getThemeSubTextColor().withValues(alpha: 0.18)))),
+      decoration: BoxDecoration(
+        // Glass-dark refresh: keep the rail as neutral chrome. The previous
+        // frame leaned on per-step accent color, which fought the glass-dark
+        // launcher surface and made the active step feel like a separate theme.
+        color: WoxOnboardingGlassStyle.chromeSurface(0.28),
+        border: Border(right: BorderSide(color: WoxOnboardingGlassStyle.outline(0.10))),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -318,7 +327,8 @@ class _WoxOnboardingViewState extends State<WoxOnboardingView> {
                 final step = steps[index];
                 final isActive = index == activeStepIndex;
                 final isDone = index < activeStepIndex;
-                final nodeColor = isActive ? accent : (isDone ? getThemeActiveBackgroundColor() : getThemeSubTextColor().withValues(alpha: 0.42));
+                final nodeColor =
+                    isActive ? accent : (isDone ? WoxOnboardingGlassStyle.textColor.withValues(alpha: 0.86) : WoxOnboardingGlassStyle.subTextColor.withValues(alpha: 0.46));
                 const rowHeight = 58.0;
                 const nodeCenterY = rowHeight / 2;
                 final nodeSize = isActive ? 24.0 : 18.0;
@@ -326,7 +336,7 @@ class _WoxOnboardingViewState extends State<WoxOnboardingView> {
                 return InkWell(
                   key: ValueKey('onboarding-step-${step.id}'),
                   borderRadius: BorderRadius.circular(10),
-                  hoverColor: getThemeTextColor().withValues(alpha: 0.04),
+                  hoverColor: WoxOnboardingGlassStyle.surface(0.05),
                   splashColor: Colors.transparent,
                   onTap: () => _goToStep(index),
                   child: SizedBox(
@@ -344,19 +354,9 @@ class _WoxOnboardingViewState extends State<WoxOnboardingView> {
                             clipBehavior: Clip.none,
                             children: [
                               if (index != 0)
-                                Positioned(
-                                  left: 14.5,
-                                  top: 0,
-                                  height: nodeCenterY - nodeRadius - 3,
-                                  child: Container(width: 1, color: getThemeSubTextColor().withValues(alpha: 0.16)),
-                                ),
+                                Positioned(left: 14.5, top: 0, height: nodeCenterY - nodeRadius - 3, child: Container(width: 1, color: WoxOnboardingGlassStyle.mutedOutline(0.18))),
                               if (index != steps.length - 1)
-                                Positioned(
-                                  left: 14.5,
-                                  top: nodeCenterY + nodeRadius + 3,
-                                  bottom: 0,
-                                  child: Container(width: 1, color: getThemeSubTextColor().withValues(alpha: 0.16)),
-                                ),
+                                Positioned(left: 14.5, top: nodeCenterY + nodeRadius + 3, bottom: 0, child: Container(width: 1, color: WoxOnboardingGlassStyle.mutedOutline(0.18))),
                               Positioned(
                                 left: (30 - nodeSize) / 2,
                                 top: nodeCenterY - nodeRadius,
@@ -388,8 +388,13 @@ class _WoxOnboardingViewState extends State<WoxOnboardingView> {
                             alignment: Alignment.centerLeft,
                             padding: const EdgeInsets.symmetric(horizontal: 10),
                             decoration: BoxDecoration(
-                              color: isActive ? accent.withValues(alpha: 0.11) : Colors.transparent,
-                              border: Border.all(color: isActive ? accent.withValues(alpha: 0.28) : Colors.transparent),
+                              // Glass-dark refresh: active rows use the
+                              // launcher's neutral selected-result surface
+                              // instead of tinting the whole row with the
+                              // feature accent. The accent remains in the node
+                              // so progress is still easy to scan.
+                              color: isActive ? WoxOnboardingGlassStyle.activeSurface(0.12) : Colors.transparent,
+                              border: Border.all(color: isActive ? WoxOnboardingGlassStyle.outline(0.18) : Colors.transparent),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
@@ -397,7 +402,7 @@ class _WoxOnboardingViewState extends State<WoxOnboardingView> {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                color: isActive ? getThemeTextColor() : getThemeTextColor().withValues(alpha: 0.78),
+                                color: isActive ? WoxOnboardingGlassStyle.textColor : WoxOnboardingGlassStyle.subTextColor,
                                 fontSize: 13,
                                 fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
                               ),
@@ -610,7 +615,7 @@ class _WoxOnboardingViewState extends State<WoxOnboardingView> {
     return Container(
       height: _onboardingFooterHeight,
       padding: const EdgeInsets.symmetric(horizontal: 28),
-      decoration: BoxDecoration(color: getThemeBackgroundColor().withValues(alpha: 0.52), border: Border(top: BorderSide(color: getThemeSubTextColor().withValues(alpha: 0.16)))),
+      decoration: BoxDecoration(color: WoxOnboardingGlassStyle.chromeSurface(0.50), border: Border(top: BorderSide(color: WoxOnboardingGlassStyle.outline(0.10)))),
       child: Row(
         children: [
           WoxButton.text(key: const ValueKey('onboarding-skip-button'), text: tr('onboarding_skip'), onPressed: () => _finish(markFinished: true)),
@@ -636,26 +641,23 @@ class _WoxOnboardingViewState extends State<WoxOnboardingView> {
 }
 
 class _OnboardingBackdrop extends StatelessWidget {
-  const _OnboardingBackdrop({required this.accent});
-
-  final Color accent;
+  const _OnboardingBackdrop();
 
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
       // The onboarding background now carries the product-tour feeling instead
-      // of reusing the settings page's flat surface. Keeping it as a painter
-      // avoids extra layout widgets and makes the visual layer independent of
-      // the step content.
-      painter: _OnboardingBackdropPainter(accent: accent, textColor: getThemeTextColor(), backgroundColor: getThemeBackgroundColor()),
+      // of reusing the settings page's flat surface. The glass-dark redesign
+      // keeps this layer neutral so wallpaper translucency and the shared
+      // overlay tokens drive the look rather than per-step color washes.
+      painter: _OnboardingBackdropPainter(textColor: getThemeTextColor(), backgroundColor: getThemeBackgroundColor()),
     );
   }
 }
 
 class _OnboardingBackdropPainter extends CustomPainter {
-  const _OnboardingBackdropPainter({required this.accent, required this.textColor, required this.backgroundColor});
+  const _OnboardingBackdropPainter({required this.textColor, required this.backgroundColor});
 
-  final Color accent;
   final Color textColor;
   final Color backgroundColor;
 
@@ -666,7 +668,7 @@ class _OnboardingBackdropPainter extends CustomPainter {
 
     final gridPaint =
         Paint()
-          ..color = textColor.withValues(alpha: 0.022)
+          ..color = textColor.withValues(alpha: 0.026)
           ..strokeWidth = 1;
     for (double x = _onboardingSidebarWidth; x < size.width; x += 52) {
       canvas.drawLine(Offset(x, 0), Offset(x, size.height - _onboardingFooterHeight), gridPaint);
@@ -680,8 +682,8 @@ class _OnboardingBackdropPainter extends CustomPainter {
           ..shader = LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [accent.withValues(alpha: 0.12), textColor.withValues(alpha: 0.014), Colors.transparent],
-            stops: const [0, 0.45, 1],
+            colors: [textColor.withValues(alpha: 0.055), backgroundColor.withValues(alpha: 0.12), Colors.transparent],
+            stops: const [0, 0.50, 1],
           ).createShader(Rect.fromLTWH(_onboardingSidebarWidth, 0, size.width - _onboardingSidebarWidth, size.height - _onboardingFooterHeight));
     final path =
         Path()
@@ -692,17 +694,14 @@ class _OnboardingBackdropPainter extends CustomPainter {
           ..close();
     canvas.drawPath(path, sweepPaint);
 
-    // Feature refinement: the backdrop now stays behind the task content. The
-    // earlier grid and accent shards competed with form controls, so the same
-    // visual language is kept at a lower opacity and aligned to shared layout
-    // constants.
-    final shardPaint = Paint()..color = accent.withValues(alpha: 0.035);
-    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(size.width - 500, 92, 420, 120), const Radius.circular(18)), shardPaint);
-    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(356, size.height - 238, 360, 86), const Radius.circular(18)), shardPaint);
+    // Glass-dark fix: remove the standalone decorative blocks. They were meant
+    // to add depth after removing accent washes, but over a real acrylic window
+    // they read as accidental rectangular artifacts instead of natural glass.
+    // The theme background, grid, and subtle sweep are enough to preserve depth.
   }
 
   @override
   bool shouldRepaint(covariant _OnboardingBackdropPainter oldDelegate) {
-    return oldDelegate.accent != accent || oldDelegate.textColor != textColor || oldDelegate.backgroundColor != backgroundColor;
+    return oldDelegate.textColor != textColor || oldDelegate.backgroundColor != backgroundColor;
   }
 }

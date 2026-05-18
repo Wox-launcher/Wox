@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:wox/components/demo/wox_demo.dart';
 import 'package:wox/components/onboarding/wox_onboarding_step_layout.dart';
+import 'package:wox/components/onboarding/wox_onboarding_style.dart';
 import 'package:wox/components/wox_dropdown_button.dart';
 import 'package:wox/entity/wox_lang.dart';
 import 'package:wox/utils/colors.dart';
@@ -28,7 +29,10 @@ class WoxWelcomeOnboarding extends StatelessWidget {
           // other onboarding descriptions instead of the dim subtitle color.
           Text(tr('onboarding_welcome_card_body'), style: TextStyle(color: getThemeTextColor(), fontSize: 14, height: 1.5)),
           const SizedBox(height: 20),
-          Container(height: 1, color: getThemeSubTextColor().withValues(alpha: 0.14)),
+          // Glass-dark refresh: the separator uses the same neutral outline as
+          // the surrounding panel instead of a subtitle-derived line, which was
+          // too dim against the translucent launcher background.
+          Container(height: 1, color: WoxOnboardingGlassStyle.outline(0.11)),
           const SizedBox(height: 18),
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
