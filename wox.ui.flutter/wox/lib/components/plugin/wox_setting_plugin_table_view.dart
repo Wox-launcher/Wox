@@ -687,8 +687,9 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     Color? rightBorderColor,
     Color? bottomBorderColor,
   }) {
-    // Dense settings tables read better as neutral surfaces; the old active-color header looked like a selected action rather than a table header.
-    final borderColor = getThemeDividerColor().withValues(alpha: 0.58);
+    // Settings table grid lines should match the surrounding settings dividers.
+    // The previous local alpha made table borders look like a separate visual system.
+    final borderColor = getThemeSettingDividerColor();
 
     return DataTable(
       columnSpacing: columnSpacing,
@@ -715,7 +716,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
 
   Widget buildEmptyTable({required bool showScrollbars}) {
     final visibleColumns = buildVisibleColumns();
-    final headerBorderColor = getThemeDividerColor().withValues(alpha: 0.58);
+    final headerBorderColor = getThemeSettingDividerColor();
     if (visibleColumns.isEmpty) {
       return Center(child: Text(tr("ui_no_data"), style: TextStyle(color: getThemeSubTextColor(), fontSize: 13)));
     }
@@ -750,11 +751,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                 Container(
                   height: 82,
                   decoration: BoxDecoration(
-                    border: Border(
-                      left: BorderSide(color: getThemeDividerColor().withValues(alpha: 0.58)),
-                      right: BorderSide(color: getThemeDividerColor().withValues(alpha: 0.58)),
-                      bottom: BorderSide(color: getThemeDividerColor().withValues(alpha: 0.58)),
-                    ),
+                    border: Border(left: BorderSide(color: headerBorderColor), right: BorderSide(color: headerBorderColor), bottom: BorderSide(color: headerBorderColor)),
                   ),
                   child: Center(
                     child: Column(
@@ -843,7 +840,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
             : leftContentWidth > leftViewportWidth
             ? leftContentWidth
             : leftViewportWidth;
-    final headerBorderColor = getThemeDividerColor().withValues(alpha: 0.58);
+    final headerBorderColor = getThemeSettingDividerColor();
 
     if (leftColumns.isEmpty) {
       return SizedBox(

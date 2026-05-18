@@ -8,6 +8,7 @@ import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/enums/wox_list_view_type_enum.dart';
 import 'package:wox/enums/wox_result_tail_text_category_enum.dart';
 import 'package:wox/enums/wox_result_tail_type_enum.dart';
+import 'package:wox/utils/color_util.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
 import 'package:wox/utils/wox_setting_util.dart';
@@ -161,7 +162,7 @@ class WoxListItemView extends StatelessWidget {
     }
     if (isHovered) {
       final activeColor = isActionType ? woxTheme.actionItemActiveBackgroundColorParsed : woxTheme.resultItemActiveBackgroundColorParsed;
-      return activeColor.withValues(alpha: 0.3);
+      return getHoverColorFromActiveColor(activeColor);
     }
     return Colors.transparent;
   }

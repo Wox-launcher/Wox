@@ -195,7 +195,9 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       return const Padding(padding: EdgeInsets.symmetric(horizontal: 4.0), child: WoxLoadingIndicator(size: 16));
                     }
 
-                    final Color iconColor = controller.hasPluginFilterApplied ? getThemeActiveBackgroundColor() : getThemeSubTextColor();
+                    // Shape, not color, carries the applied-filter state so the cue stays consistent across themes whose active colors have different contrast semantics.
+                    final IconData filterIcon = controller.hasPluginFilterApplied ? Icons.filter_alt : Icons.filter_alt_outlined;
+                    final Color iconColor = getThemeSubTextColor();
                     return Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -204,7 +206,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                           child: GestureDetector(
                             key: _pluginFilterIconKey,
                             onTap: () => _showPluginFilterPanel(context),
-                            child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4.0), child: Icon(Icons.filter_alt_outlined, color: iconColor)),
+                            child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4.0), child: Icon(filterIcon, color: iconColor)),
                           ),
                         ),
                         GestureDetector(
@@ -589,6 +591,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                 labelColor: getThemeTextColor(),
                 unselectedLabelColor: getThemeTextColor(),
                 indicatorColor: getThemeActiveBackgroundColor(),
+                dividerColor: getThemeSettingDividerColor(),
                 tabs:
                     controller.activeNavPath.value == 'plugins.installed'
                         ? [
@@ -1073,7 +1076,10 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(width: 260, child: pluginList(context)),
-          Container(width: 1, height: double.infinity, color: getThemeDividerColor(), margin: const EdgeInsets.only(right: 10, left: 10)),
+          // Keep this pane splitter as the reference settings divider. Other
+          // settings separators now reuse the same token instead of local alpha
+          // variants or framework defaults.
+          Container(width: 1, height: double.infinity, color: getThemeSettingDividerColor(), margin: const EdgeInsets.only(right: 10, left: 10)),
           pluginDetail(context),
         ],
       ),
@@ -1094,6 +1100,7 @@ class _InstantPluginTabView extends StatefulWidget {
   final Color labelColor;
   final Color unselectedLabelColor;
   final Color indicatorColor;
+  final Color dividerColor;
 
   const _InstantPluginTabView({
     required this.tabs,
@@ -1101,6 +1108,7 @@ class _InstantPluginTabView extends StatefulWidget {
     required this.labelColor,
     required this.unselectedLabelColor,
     required this.indicatorColor,
+    required this.dividerColor,
   });
 
   @override
@@ -1155,6 +1163,11 @@ class _InstantPluginTabViewState extends State<_InstantPluginTabView> with Ticke
           labelColor: widget.labelColor,
           unselectedLabelColor: widget.unselectedLabelColor,
           indicatorColor: widget.indicatorColor,
+          // Match the tab strip rule to the settings pane splitter. The default
+          // Material divider used a different neutral, which made this horizontal
+          // separator stand apart from the vertical settings separators.
+          dividerColor: widget.dividerColor,
+          dividerHeight: 1,
           // The plugin detail tab strip should not flash a pressed color; the
           // selected underline is the only state cue needed in this compact UI.
           splashFactory: NoSplash.splashFactory,

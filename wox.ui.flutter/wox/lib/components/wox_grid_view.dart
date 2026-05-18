@@ -242,7 +242,10 @@ class WoxGridView extends StatelessWidget {
         isActive
             ? activeColor
             : isHovered
-            ? activeColor.withValues(alpha: 0.45)
+            // Keep grid hover visually below active selection even when the
+            // theme active token is translucent, as glass themes use low-alpha
+            // active colors that were previously overwritten by a fixed hover alpha.
+            ? getHoverColorFromActiveColor(activeColor)
             : Colors.transparent;
     const frameWidth = focusFrameWidth;
     return Column(

@@ -263,8 +263,10 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(width: 260, child: themeList()),
-          // Theme apply refreshes inner list/detail builders before this root row is rebuilt, so the splitter must subscribe to the global theme directly.
-          Obx(() => Container(width: 1, height: double.infinity, color: getThemeDividerColor(), margin: const EdgeInsets.only(right: 10, left: 10))),
+          // Theme apply refreshes inner list/detail builders before this root row
+          // is rebuilt, so the splitter must subscribe to the global theme directly.
+          // Use the settings divider token to match plugin panes and form sections.
+          Obx(() => Container(width: 1, height: double.infinity, color: getThemeSettingDividerColor(), margin: const EdgeInsets.only(right: 10, left: 10))),
           themeDetail(),
         ],
       ),

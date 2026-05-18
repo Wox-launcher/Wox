@@ -50,8 +50,10 @@ abstract class WoxSettingBaseView extends GetView<WoxSettingController> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Section dividers replace the previous continuous form stream and make long settings pages easier to scan.
-          Container(height: 1, color: getThemeDividerColor().withValues(alpha: 0.55)),
+          // Section dividers are part of the same settings layout grid as pane
+          // splitters and tab rules. The old local alpha made group separators
+          // look unrelated to the rest of the settings chrome.
+          Container(height: 1, color: getThemeSettingDividerColor()),
           const SizedBox(height: 14),
           Text(title.toUpperCase(), style: TextStyle(color: getThemeSubTextColor(), fontSize: 11, fontWeight: FontWeight.w600)),
           const SizedBox(height: 12),
