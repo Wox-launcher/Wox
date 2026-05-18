@@ -17,10 +17,11 @@ func (c *FileSearchPlugin) isStatusQuery(query plugin.Query) bool {
 	if !util.IsDev() {
 		return false
 	}
-	if strings.EqualFold(strings.TrimSpace(query.Command), fileSearchStatusCommand) {
-		return true
-	}
-	return strings.EqualFold(strings.TrimSpace(query.Search), fileSearchStatusCommand)
+	// Bug fix: only the parser's command slot should activate the diagnostic
+	// status command. The previous search fallback made `f status` shadow a normal
+	// file search for "status", while Wox command syntax requires `f status ` to
+	// promote the second token from search text to command text.
+	return strings.EqualFold(strings.TrimSpace(query.Command), fileSearchStatusCommand)
 }
 
 func (c *FileSearchPlugin) queryStatus(ctx context.Context) plugin.QueryResponse {
@@ -82,16 +83,22 @@ func (c *FileSearchPlugin) buildStatusQueryResponse(diagnostics filesearch.Diagn
 		},
 		// Feature addition: the status report is meant for diagnosis, not result
 		// browsing. A non-nil zero ratio tells the launcher to give the markdown
-		// preview the full result area while keeping this behavior scoped to `f status`.
+		// preview the full result area while keeping this behavior scoped to the
+		// File Search status command.
 		Layout: plugin.QueryLayout{ResultPreviewWidthRatio: &widthRatio},
 	}
 }
 
 func fileSearchStatusSubtitle(diagnostics filesearch.DiagnosticSnapshot) string {
+	// Feature addition: the result row is the first visible surface for `f status`.
+	// Keep persisted index counts there so diagnostics can distinguish an empty
+	// database from a live-progress display problem without opening the preview.
+	indexSummary := formatFileSearchIndexCountSummary(diagnostics.Index)
 	return fmt.Sprintf(
-		"roots: %d (%d dynamic), pending: %d roots / %d paths, indexing: %t",
+		"roots: %d (%d dynamic), indexed: %s, pending: %d roots / %d paths, indexing: %t",
 		diagnostics.RootCount,
 		diagnostics.DynamicRootCount,
+		indexSummary,
 		diagnostics.DirtyQueue.PendingRootCount,
 		diagnostics.DirtyQueue.PendingPathCount,
 		diagnostics.Status.IsIndexing,
@@ -103,6 +110,9 @@ func formatFileSearchStatusMarkdown(diagnostics filesearch.DiagnosticSnapshot) s
 	builder.WriteString("# File Search Status\n\n")
 	builder.WriteString(fmt.Sprintf("- captured_at: `%s`\n", diagnostics.CapturedAt.Format(time.RFC3339)))
 	builder.WriteString(fmt.Sprintf("- roots: total=%d visible=%d default=%d user=%d dynamic=%d\n", diagnostics.RootCount, diagnostics.UserVisibleRootCount, diagnostics.DefaultRootCount, diagnostics.UserRootCount, diagnostics.DynamicRootCount))
+	// Feature addition: mirror the subtitle's persisted count in the copied
+	// markdown summary so the first lines carry the current index volume.
+	builder.WriteString(fmt.Sprintf("- index: %s\n", formatFileSearchIndexCountSummary(diagnostics.Index)))
 	builder.WriteString(fmt.Sprintf("- pending roots=%d paths=%d root_signals=%d\n", diagnostics.DirtyQueue.PendingRootCount, diagnostics.DirtyQueue.PendingPathCount, diagnostics.DirtyQueue.PendingRootSignalCount))
 	builder.WriteString(fmt.Sprintf("- indexing: %t\n", diagnostics.Status.IsIndexing))
 	builder.WriteString("\n")
@@ -151,6 +161,9 @@ func formatFileSearchStatusMarkdown(diagnostics filesearch.DiagnosticSnapshot) s
 
 	builder.WriteString("## Index\n\n")
 	if diagnostics.Index.Error != "" {
+		if diagnostics.Index.CountsAvailable {
+			builder.WriteString(fmt.Sprintf("- counts: %s\n", formatFileSearchIndexVolume(diagnostics.Index)))
+		}
 		builder.WriteString(fmt.Sprintf("- snapshot_error: `%s`\n", statusMarkdownCell(diagnostics.Index.Error)))
 	} else {
 		builder.WriteString(fmt.Sprintf("- entries=%s files=%s roots=%d bigram_rows=%s\n", formatFileSearchCount(diagnostics.Index.EntryCount), formatFileSearchCount(diagnostics.Index.FileCount), diagnostics.Index.RootCount, formatFileSearchCount(diagnostics.Index.BigramRowCount)))
@@ -202,6 +215,30 @@ func writeFileSearchRootTable(builder *strings.Builder, roots []filesearch.RootD
 	if len(roots) > limit {
 		builder.WriteString(fmt.Sprintf("\nShowing %d of %d roots.\n", limit, len(roots)))
 	}
+}
+
+func formatFileSearchIndexCountSummary(index filesearch.IndexDiagnosticSnapshot) string {
+	if index.Error != "" {
+		if !index.CountsAvailable {
+			return fmt.Sprintf("error=%s", statusMarkdownCell(index.Error))
+		}
+		return fmt.Sprintf("%s snapshot_error=%s", formatFileSearchIndexVolume(index), statusMarkdownCell(index.Error))
+	}
+	return formatFileSearchIndexVolume(index)
+}
+
+func formatFileSearchIndexVolume(index filesearch.IndexDiagnosticSnapshot) string {
+	directoryCount := index.EntryCount - index.FileCount
+	if directoryCount < 0 {
+		directoryCount = 0
+	}
+	return fmt.Sprintf(
+		"files=%s entries=%s dirs=%s roots=%d",
+		formatFileSearchCount(index.FileCount),
+		formatFileSearchCount(index.EntryCount),
+		formatFileSearchCount(directoryCount),
+		index.RootCount,
+	)
 }
 
 func formatRootKindCounts(counts map[filesearch.RootKind]int) string {

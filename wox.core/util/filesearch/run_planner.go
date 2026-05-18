@@ -20,6 +20,9 @@ type RunPlanner struct {
 	budget         splitBudget
 	onProgress     func(RunPlannerProgress)
 	rootExclusions map[string][]string
+	// Full planning skips unreadable roots instead of aborting the whole run.
+	// Scanner owns the durable status update after the sealed plan is available.
+	skippedRoots []runPlannerSkippedRoot
 	// Tests use this hook to assert when subtree scans actually hit the
 	// filesystem, so planner optimizations can prove they removed redundant
 	// rescans without changing the sealed plan shape.
@@ -56,6 +59,14 @@ type runPlannerScopeBuffer struct {
 	children        []*runPlannerScopeBuffer
 }
 
+// runPlannerSkippedRoot carries a root-level planning failure that is not fatal
+// to the whole full-index run. Keeping the root record with the error lets the
+// scanner persist diagnostics while readable roots continue indexing.
+type runPlannerSkippedRoot struct {
+	Root RootRecord
+	Err  error
+}
+
 func NewRunPlanner(policy *policyState) *RunPlanner {
 	if policy == nil {
 		policy = newPolicyState(Policy{})
@@ -74,6 +85,15 @@ func (p *RunPlanner) SetProgressCallback(callback func(RunPlannerProgress)) {
 	p.onProgress = callback
 }
 
+func (p *RunPlanner) SkippedRoots() []runPlannerSkippedRoot {
+	if p == nil || len(p.skippedRoots) == 0 {
+		return nil
+	}
+	skipped := make([]runPlannerSkippedRoot, len(p.skippedRoots))
+	copy(skipped, p.skippedRoots)
+	return skipped
+}
+
 func (p *RunPlanner) SetRootExclusions(exclusions map[string][]string) {
 	if p == nil {
 		return
@@ -88,6 +108,7 @@ func (p *RunPlanner) PlanFullRun(ctx context.Context, roots []RootRecord) (RunPl
 	if p.policy == nil {
 		p.policy = newPolicyState(Policy{})
 	}
+	p.skippedRoots = nil
 
 	// Phase 1: planning. The old root-centric loop only knew about one whole
 	// root at execution time. We still build the structural frontier here, but
@@ -210,6 +231,14 @@ func (p *RunPlanner) planRoots(ctx context.Context, roots []RootRecord) ([]*runP
 
 		buffer, err := p.planRoot(ctx, root)
 		if err != nil {
+			if shouldSkipUnreadableTraversalError(err) {
+				// Bug fix: one unreadable macOS-owned dynamic root must not abort a
+				// user-requested full rebuild. Keep the failure attached to that root
+				// for diagnostics and continue planning the remaining configured roots.
+				util.GetLogger().Warn(ctx, fmt.Sprintf("filesearch skipped unreadable root during full planning: root=%s path=%s err=%s", root.ID, filepath.Clean(root.Path), err.Error()))
+				p.skippedRoots = append(p.skippedRoots, runPlannerSkippedRoot{Root: root, Err: err})
+				continue
+			}
 			return nil, wrapRunPlannerRootError(root.ID, err)
 		}
 		buffers = append(buffers, buffer)

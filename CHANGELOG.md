@@ -1,5 +1,8 @@
 # Changelog
 
+## v2.1.1 - 
+
+
 ## v2.1.0 - 2026-05-18
 
 This version adds many new features and improvements. we hope you’ll like it, and wish you all a pleasant week!

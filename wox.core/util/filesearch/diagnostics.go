@@ -66,6 +66,7 @@ type DirtyQueueDiagnostics struct {
 }
 
 type IndexDiagnosticSnapshot struct {
+	CountsAvailable        bool
 	RootCount              int
 	EntryCount             int64
 	FileCount              int64
@@ -161,8 +162,24 @@ func (e *Engine) GetDiagnostics(ctx context.Context) (DiagnosticSnapshot, error)
 		diagnostics.DirtyQueue = scanner.GetDirtyQueueDiagnostics(time.Now())
 	}
 
-	if snapshot, err := db.SearchIndexSnapshot(ctx); err != nil {
+	// Bug fix: `f status` must always surface the current persisted index volume.
+	// The full SQLite snapshot also samples FTS vocab, size estimates, and top
+	// roots, which can exceed the diagnostic timeout on a busy or large index.
+	// Capture the cheap count query first so snapshot timeout remains a detail
+	// instead of hiding the basic file/entry totals users need for triage.
+	if fileCount, entryCount, err := db.SearchIndexCounts(ctx); err != nil {
 		diagnostics.Index.Error = strings.TrimSpace(err.Error())
+	} else {
+		diagnostics.Index.CountsAvailable = true
+		diagnostics.Index.RootCount = diagnostics.RootCount
+		diagnostics.Index.FileCount = fileCount
+		diagnostics.Index.EntryCount = entryCount
+	}
+
+	if snapshot, err := db.SearchIndexSnapshot(ctx); err != nil {
+		if diagnostics.Index.Error == "" {
+			diagnostics.Index.Error = strings.TrimSpace(err.Error())
+		}
 	} else {
 		diagnostics.Index = indexDiagnosticFromSQLiteSnapshot(snapshot)
 	}
@@ -199,6 +216,7 @@ func rootDiagnosticFromRecord(root RootRecord) RootDiagnostic {
 
 func indexDiagnosticFromSQLiteSnapshot(snapshot sqliteIndexSnapshot) IndexDiagnosticSnapshot {
 	diagnostics := IndexDiagnosticSnapshot{
+		CountsAvailable:        true,
 		RootCount:              snapshot.RootCount,
 		EntryCount:             snapshot.EntryCount,
 		FileCount:              snapshot.FileCount,

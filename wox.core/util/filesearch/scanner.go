@@ -352,9 +352,10 @@ func (s *Scanner) executePlannedRun(ctx context.Context, kind RunKind, reason st
 		plan, err = planner.PlanFullRun(ctx, roots)
 	}
 	if err != nil {
-		s.clearTransientRunState()
+		s.handleRunPlanningFailure(ctx, roots, err)
 		return err
 	}
+	s.markPlannerSkippedRoots(ctx, planner.SkippedRoots())
 	// Run preparation can still touch the filesystem while sealing root-level
 	// execution scopes, but it no longer owns recursive file counting. Record the
 	// sealed workload timing so slow runs reveal whether the stall starts before
@@ -624,6 +625,66 @@ func (s *Scanner) handleRunFailure(ctx context.Context, run Run, roots []RootRec
 	root.UpdatedAt = util.GetSystemTimestamp()
 	_ = s.updateRootStateAndCache(ctx, root)
 	s.clearTransientRunState()
+	s.emitStateChange(ctx)
+}
+
+func (s *Scanner) handleRunPlanningFailure(ctx context.Context, roots []RootRecord, cause error) {
+	s.clearTransientRunState()
+
+	var rootErr *runRootError
+	if !errors.As(cause, &rootErr) || rootErr == nil || strings.TrimSpace(rootErr.RootID) == "" {
+		return
+	}
+	root, ok := s.findRootByID(ctx, rootErr.RootID)
+	if !ok {
+		for _, candidate := range roots {
+			if candidate.ID == rootErr.RootID {
+				root = candidate
+				ok = true
+				break
+			}
+		}
+	}
+	if !ok {
+		return
+	}
+	s.markRootPlanningError(ctx, root, cause)
+}
+
+func (s *Scanner) markPlannerSkippedRoots(ctx context.Context, skippedRoots []runPlannerSkippedRoot) {
+	if len(skippedRoots) == 0 {
+		return
+	}
+
+	for _, skippedRoot := range skippedRoots {
+		root := skippedRoot.Root
+		if strings.TrimSpace(root.ID) == "" {
+			continue
+		}
+		if current, ok := s.findRootByID(ctx, root.ID); ok {
+			root = current
+		}
+		// Bug fix: a skipped unreadable root should be visible in diagnostics, but
+		// it must not keep the whole run in the previous root's preparing state.
+		// Mark only the skipped root as failed and continue executing the sealed
+		// plan for readable roots such as /Applications.
+		s.markRootPlanningError(ctx, root, skippedRoot.Err)
+	}
+}
+
+func (s *Scanner) markRootPlanningError(ctx context.Context, root RootRecord, cause error) {
+	root.Status = RootStatusError
+	root.ProgressCurrent = 0
+	root.ProgressTotal = 0
+	if cause != nil && strings.TrimSpace(cause.Error()) != "" {
+		errMessage := cause.Error()
+		root.LastError = &errMessage
+	}
+	root.UpdatedAt = util.GetSystemTimestamp()
+	if err := s.updateRootStateAndCache(ctx, root); err != nil {
+		util.GetLogger().Warn(ctx, "filesearch failed to persist root planning error: "+err.Error())
+		return
+	}
 	s.emitStateChange(ctx)
 }
 

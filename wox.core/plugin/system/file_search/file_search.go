@@ -192,7 +192,7 @@ func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParam
 	if util.IsDev() {
 		// Feature addition: expose a dev-only diagnostic command for live File
 		// Search triage. Runtime commands keep this out of production builds while
-		// making `f status` discoverable during local debugging sessions.
+		// making the `status` command discoverable during local debugging sessions.
 		c.api.RegisterQueryCommands(ctx, []plugin.MetadataCommand{
 			{Command: fileSearchStatusCommand, Description: "File Search internal status"},
 		})
@@ -515,6 +515,13 @@ func refineFileSearchResults(results []filesearch.SearchResult, selectedType str
 func resolveFileSearchResultIcon(ctx context.Context, result filesearch.SearchResult, fileTypeIcons map[string]common.WoxImage, diagnostics *fileSearchQueryDiagnostics) common.WoxImage {
 	if result.IsDir {
 		diagnostics.directoryCount++
+		// Feature addition: macOS .app bundles are indexed as directories, so the
+		// old directory-first branch always returned the generic folder icon and
+		// bypassed the same bundle icon resolver used by the App plugin. Keep this
+		// narrow to .app packages so ordinary folders do not pay per-path icon cost.
+		if icon := resolveFileSearchMacAppBundleIcon(ctx, result.Path); !icon.IsEmpty() {
+			return icon
+		}
 		return common.FolderIcon
 	}
 
@@ -551,6 +558,27 @@ func resolveFileSearchResultIcon(ctx context.Context, result filesearch.SearchRe
 	}
 
 	return common.NewWoxImageFileIcon(result.Path)
+}
+
+func resolveFileSearchMacAppBundleIcon(ctx context.Context, directoryPath string) common.WoxImage {
+	if !shouldResolveFileSearchMacAppBundleIcon(directoryPath) {
+		return common.WoxImage{}
+	}
+
+	iconPath, err := fileicon.GetFileIconByPath(ctx, directoryPath)
+	if err != nil || strings.TrimSpace(iconPath) == "" {
+		return common.WoxImage{}
+	}
+	return common.NewWoxImageAbsolutePath(iconPath)
+}
+
+func shouldResolveFileSearchMacAppBundleIcon(directoryPath string) bool {
+	if !util.IsMacOS() {
+		return false
+	}
+
+	cleanPath := strings.TrimRight(strings.TrimSpace(directoryPath), string(filepath.Separator))
+	return strings.EqualFold(filepath.Ext(cleanPath), ".app")
 }
 
 func shouldUseFileSearchImageThumbnail(filePath string) bool {
