@@ -2,6 +2,8 @@
 
 ## v2.1.0 - 2026-05-18
 
+This version adds many new features and improvements. we hope you’ll like it, and wish you all a pleasant week!
+
 - Add
   - [`Glance`] Add Glance to the query box so users can see lightweight real-time information, such as time, date, and battery status, cpu usage, and memory usage without typing a query. Plugins can provide glance metadata, and users can choose the glance item or hide the glance icon for a cleaner query box.
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/glance.png)
