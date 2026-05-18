@@ -219,18 +219,6 @@ func (a *ApplicationPlugin) GetMetadata() plugin.Metadata {
 			{
 				Name: plugin.MetadataFeatureMRU,
 			},
-			{
-				// Launchpad is intentionally command-scoped: the default app search stays dense and informative,
-				// while this command uses the existing grid renderer to recreate a visual app launcher.
-				Name: plugin.MetadataFeatureGridLayout,
-				Params: map[string]any{
-					"Commands":    []string{appCommandLaunchpad},
-					"Columns":     7,
-					"ShowTitle":   true,
-					"ItemPadding": 10,
-					"ItemMargin":  4,
-				},
-			},
 		},
 		Commands: []plugin.MetadataCommand{
 			{
@@ -518,7 +506,17 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) plugi
 		startedAt:  startedAt,
 	})
 
-	return plugin.NewQueryResponse(results)
+	response := plugin.NewQueryResponse(results)
+	if isLaunchpadQuery {
+		gridLayout := plugin.MetadataFeatureParamsGridLayout{
+			Columns:     7,
+			ShowTitle:   true,
+			ItemPadding: 10,
+			ItemMargin:  4,
+		}
+		response.Layout = plugin.QueryLayout{GridLayout: &gridLayout}
+	}
+	return response
 }
 
 func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, contextData map[string]string) []plugin.QueryResultAction {

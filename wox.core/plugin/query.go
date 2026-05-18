@@ -446,6 +446,7 @@ type QueryResultCache struct {
 	Result          QueryResult // store the full QueryResult including actions with callbacks
 	PluginInstance  *Instance
 	Query           Query
+	Layout          QueryLayout // query layout used when polishing this result, so later updates keep the same surface sizing
 	FlushBatch      int
 	QueryElapsed    int64
 	QueryElapsedSet bool

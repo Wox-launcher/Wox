@@ -1068,7 +1068,7 @@ func (m *Manager) buildPluginQueryInput(ctx context.Context, pluginInstance *Ins
 	if requirementResult, blocked := m.buildQueryRequirementSettingsResult(ctx, pluginInstance, query); blocked {
 		input.blocked = true
 		input.blockedResponse = QueryResponse{
-			Results: []QueryResult{m.PolishResult(ctx, pluginInstance, query, requirementResult)},
+			Results: []QueryResult{m.PolishResult(ctx, pluginInstance, query, input.metadataLayout, requirementResult)},
 			Layout:  input.metadataLayout,
 			Context: input.queryContext,
 		}
@@ -1136,7 +1136,7 @@ func (m *Manager) finalizePluginQueryResponse(ctx context.Context, pluginInstanc
 	for i := range response.Results {
 		defaultActions := m.getDefaultActions(ctx, pluginInstance, query, response.Results[i].Title, response.Results[i].SubTitle)
 		response.Results[i].Actions = append(response.Results[i].Actions, defaultActions...)
-		response.Results[i] = m.PolishResult(ctx, pluginInstance, query, response.Results[i])
+		response.Results[i] = m.PolishResult(ctx, pluginInstance, query, response.Layout, response.Results[i])
 	}
 
 	if query.Type == QueryTypeSelection && query.Search != "" {
@@ -1161,7 +1161,7 @@ func (m *Manager) buildFailedPluginQueryResponse(ctx context.Context, pluginInst
 	failedResult := m.GetResultForFailedQuery(ctx, pluginInstance.Metadata, query, err)
 	return QueryResponse{
 		Results: []QueryResult{
-			m.PolishResult(ctx, pluginInstance, query, failedResult),
+			m.PolishResult(ctx, pluginInstance, query, metadataLayout, failedResult),
 		},
 		Layout:  metadataLayout,
 		Context: queryContext,
@@ -1487,7 +1487,7 @@ func (m *Manager) getQueryResultSetForQuery(query Query) (*QueryResultSet, bool)
 	return m.getQueryResultSet(query.SessionId, query.Id)
 }
 
-func (m *Manager) storeQueryResult(ctx context.Context, pluginInstance *Instance, query Query, resultOriginal QueryResult) {
+func (m *Manager) storeQueryResult(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, resultOriginal QueryResult) {
 	if query.Id == "" {
 		logger.Warn(ctx, "query id is empty, skip result cache")
 		return
@@ -1506,8 +1506,41 @@ func (m *Manager) storeQueryResult(ctx context.Context, pluginInstance *Instance
 		Result:         resultOriginal,
 		PluginInstance: pluginInstance,
 		Query:          query,
+		Layout:         layout,
 	})
 
+}
+
+func (m *Manager) getCachedLayoutForPluginQuery(ctx context.Context, pluginInstance *Instance, query Query) QueryLayout {
+	if pluginInstance == nil {
+		return QueryLayout{}
+	}
+
+	set, ok := m.getQueryResultSetForQuery(query)
+	if !ok {
+		return m.buildMetadataBackedQueryLayout(ctx, pluginInstance, query)
+	}
+
+	var cachedLayout QueryLayout
+	set.Results.Range(func(_ string, resultCache *QueryResultCache) bool {
+		if resultCache == nil || resultCache.PluginInstance == nil {
+			return true
+		}
+		if resultCache.PluginInstance.Metadata.Id != pluginInstance.Metadata.Id {
+			return true
+		}
+		cachedLayout = resultCache.Layout
+		return false
+	})
+	if cachedLayout.GridLayout != nil || cachedLayout.Icon != nil || cachedLayout.ResultPreviewWidthRatio != nil {
+		return cachedLayout
+	}
+
+	// PushResults and late updates do not carry a new layout payload. Reusing the
+	// cached QueryResponse layout keeps dynamically declared grid results at the
+	// same icon size; metadata remains only as the legacy fallback when nothing
+	// from the current query has been cached yet.
+	return m.buildMetadataBackedQueryLayout(ctx, pluginInstance, query)
 }
 
 func (m *Manager) RecordQueryResultQueryElapsed(sessionId string, queryId string, results []QueryResultUI, elapsedMs int64) {
@@ -1822,8 +1855,8 @@ func (m *Manager) BuildQueryResultsSnapshot(sessionId string, queryId string) []
 	return finalResults
 }
 
-func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, query Query, result QueryResult) QueryResult {
-	resultIconSize := m.getResultIconSizeForQuery(pluginInstance, query)
+func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, result QueryResult) QueryResult {
+	resultIconSize := m.getResultIconSizeForQuery(pluginInstance, query, layout)
 
 	// set default id
 	if result.Id == "" {
@@ -2022,18 +2055,26 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	// Because we may have replaced preview with remote preview
 	// we need to restore the original preview in the cache
 	resultCopy.Preview = originalPreview
-	m.storeQueryResult(ctx, pluginInstance, query, resultCopy)
+	m.storeQueryResult(ctx, pluginInstance, query, layout, resultCopy)
 
 	return result
 }
 
-func (m *Manager) getResultIconSizeForQuery(pluginInstance *Instance, query Query) int {
+func (m *Manager) getResultIconSizeForQuery(pluginInstance *Instance, query Query, layout QueryLayout) int {
 	if pluginInstance == nil {
 		return common.ResultListIconSize
 	}
 
-	// Grid is the only large-icon result surface today. Keep the size pinned in core
-	// for now so third-party metadata does not need a public IconSize contract.
+	// QueryResponse layout is now the preferred grid source. The previous check
+	// only read deprecated metadata, which made plugins that migrated to
+	// QueryResponse render grid images at list size before Flutter placed them
+	// into grid cells.
+	if layout.GridLayout != nil {
+		return common.ResultGridIconSize
+	}
+
+	// Legacy metadata remains a compatibility fallback for older plugins that
+	// still declare gridLayout in plugin.json while they migrate to QueryResponse.
 	if _, isGridLayout, err := pluginInstance.Metadata.GetFeatureParamsForGridLayoutCommand(query.Command); err == nil && isGridLayout {
 		return common.ResultGridIconSize
 	}
@@ -2223,7 +2264,7 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 	if result.Icon != nil {
 		// Updated result icons must keep the same surface-aware size as initial results;
 		// otherwise a grid plugin can become blurry after sending an icon update.
-		resultIconSize := m.getResultIconSizeForQuery(pluginInstance, resultCache.Query)
+		resultIconSize := m.getResultIconSizeForQuery(pluginInstance, resultCache.Query, resultCache.Layout)
 		convertedIcon := common.ConvertIconWithSize(ctx, *result.Icon, pluginInstance.PluginDirectory, resultIconSize)
 		result.Icon = &convertedIcon
 		resultCache.Result.Icon = *result.Icon
@@ -2537,7 +2578,7 @@ func (m *Manager) QueryFallback(ctx context.Context, query Query, queryPlugin *I
 			if v, ok := pluginInstance.Plugin.(FallbackSearcher); ok {
 				fallbackResults := v.QueryFallback(ctx, query)
 				for _, fallbackResult := range fallbackResults {
-					polishedFallbackResult := m.PolishResult(ctx, pluginInstance, query, fallbackResult)
+					polishedFallbackResult := m.PolishResult(ctx, pluginInstance, query, QueryLayout{}, fallbackResult)
 					queryResults = append(queryResults, polishedFallbackResult)
 				}
 				continue
@@ -2575,7 +2616,7 @@ func (m *Manager) QueryFallback(ctx context.Context, query Query, queryPlugin *I
 			}
 		})
 		for i := range queryResults {
-			queryResults[i] = m.PolishResult(ctx, queryPlugin, query, queryResults[i])
+			queryResults[i] = m.PolishResult(ctx, queryPlugin, query, response.Layout, queryResults[i])
 		}
 	}
 
@@ -3238,7 +3279,7 @@ func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string
 			// Add the remove action to the result
 			restored.Actions = append(restored.Actions, removeMRUAction)
 
-			polishedResult := m.PolishResult(ctx, pluginInstance, query, *restored)
+			polishedResult := m.PolishResult(ctx, pluginInstance, query, QueryLayout{}, *restored)
 			results = append(results, polishedResult.ToUI())
 		}
 	}

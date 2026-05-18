@@ -229,7 +229,19 @@ class WoxGridView extends StatelessWidget {
           controller.onItemActive?.call(traceId, item.value);
           onItemSecondaryTapped?.call(traceId, item.value);
         },
-        child: Obx(() => _buildGridItem(item.value, index, contentWidth, contentHeight, showTitle, itemPadding, itemMargin)),
+        child: GetBuilder<WoxGridController<WoxQueryResult>>(
+          id: controller.buildItemUpdateId(index),
+          init: controller,
+          global: false,
+          autoRemove: false,
+          builder: (_) {
+            // Optimization: grid items used to subscribe every cell to activeIndex/hoveredIndex
+            // through Obx, so one click rebuilt the whole emoji grid before the selected frame
+            // could paint. Reusing the same per-item GetBuilder update id as list results keeps
+            // the active-state repaint scoped to the old and new cells refreshed by the controller.
+            return _buildGridItem(item.value, index, contentWidth, contentHeight, showTitle, itemPadding, itemMargin);
+          },
+        ),
       ),
     );
   }

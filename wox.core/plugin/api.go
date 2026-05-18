@@ -534,8 +534,9 @@ func (a *APIImpl) PushResults(ctx context.Context, query Query, results []QueryR
 	// Bug fix: core no longer owns "current query" state because backend query
 	// pipelines are concurrent. Push by query id and let Flutter accept or reject
 	// the payload against the visible query, matching normal Query responses.
+	layout := GetPluginManager().getCachedLayoutForPluginQuery(ctx, a.pluginInstance, query)
 	for i := range results {
-		results[i] = GetPluginManager().PolishResult(ctx, a.pluginInstance, query, results[i])
+		results[i] = GetPluginManager().PolishResult(ctx, a.pluginInstance, query, layout, results[i])
 	}
 
 	polishedResults := GetPluginManager().BuildQueryResultsSnapshot(query.SessionId, query.Id)

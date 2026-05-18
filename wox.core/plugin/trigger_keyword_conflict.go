@@ -159,7 +159,7 @@ func (m *Manager) buildTriggerKeywordConflictResponse(ctx context.Context, query
 	// Query-time blocking prevents two plugins from handling the same concrete trigger.
 	// Returning a core-owned warning row is clearer than letting whichever plugin responds
 	// first define the visible state while the other plugin also runs in the background.
-	result := m.PolishResult(ctx, ownerPlugin, query, QueryResult{
+	result := m.PolishResult(ctx, ownerPlugin, query, QueryLayout{}, QueryResult{
 		Title:    title,
 		SubTitle: subtitle,
 		Icon:     common.NewWoxImageEmoji("⚠️"),

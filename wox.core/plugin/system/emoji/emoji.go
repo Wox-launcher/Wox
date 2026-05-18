@@ -93,15 +93,6 @@ func (e *EmojiPlugin) GetMetadata() plugin.Metadata {
 		},
 		Features: []plugin.MetadataFeature{
 			{
-				Name: plugin.MetadataFeatureGridLayout,
-				Params: map[string]any{
-					"Columns":     12,
-					"ItemPadding": 12,
-					"ItemMargin":  6,
-					"ShowTitle":   false,
-				},
-			},
-			{
 				Name: plugin.MetadataFeatureAI,
 			},
 		},
@@ -190,7 +181,7 @@ func (e *EmojiPlugin) loadEmojis(ctx context.Context) error {
 
 func (e *EmojiPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	if !e.ensureEmojisLoaded(ctx) {
-		return plugin.NewQueryResponse(nil)
+		return e.newEmojiQueryResponse(nil)
 	}
 
 	var results []plugin.QueryResult
@@ -251,7 +242,19 @@ func (e *EmojiPlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 
 	e.maybeStartAIMatch(ctx, query, search, existingEmojiSet, &results)
 
-	return plugin.NewQueryResponse(results)
+	return e.newEmojiQueryResponse(results)
+}
+
+func (e *EmojiPlugin) newEmojiQueryResponse(results []plugin.QueryResult) plugin.QueryResponse {
+	response := plugin.NewQueryResponse(results)
+	gridLayout := plugin.MetadataFeatureParamsGridLayout{
+		Columns:     10,
+		ItemPadding: 12,
+		ItemMargin:  6,
+		ShowTitle:   false,
+	}
+	response.Layout = plugin.QueryLayout{GridLayout: &gridLayout}
+	return response
 }
 
 func (e *EmojiPlugin) maybeStartAIMatch(ctx context.Context, query plugin.Query, search string, existingEmojiSet map[string]bool, results *[]plugin.QueryResult) {
