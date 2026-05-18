@@ -63,7 +63,7 @@ func getProcessRSSBytes(pid int) (uint64, error) {
 		return 0, fmt.Errorf("invalid rss for pid %d: %f", pid, stat.Memory)
 	}
 
-	// pidusage reports RSS bytes on macOS/Linux and the closest process working
-	// set value on Windows, which is the right compact number for Glance.
+	// pidusage reports RSS bytes on macOS/Linux. Windows uses a native PSAPI
+	// implementation because pidusage has no working Windows stat backend.
 	return uint64(stat.Memory), nil
 }
