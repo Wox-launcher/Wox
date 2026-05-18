@@ -10,7 +10,7 @@
   - [`Preview`] Redesign the preview UI and add list previews and image overlay previews so result previews have a cleaner, more consistent surface, while image-heavy results, including clipboard and screenshot results, can open in a lightweight overlay instead of only inside the launcher preview panel.
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/preview_image_click.png)
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/new_preview.png)
-  - [`Query Refinement`] Add refinement controls so plugins can expose filters and sort options directly in the launcher. File Search can filter files or folders and sort by relevance, name, modified time, or size; Clipboard and WPM can expose their own type and install-status filters. 
+  - [`Query Refinement`] Add refinement controls so plugins can expose filters and sort options directly in the launcher. File Search can filter files or folders and sort by relevance, name, modified time, or size; Clipboard and WPM can expose their own type and install-status filters.
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/query_refinement.png)
   - [`AI Command`] Add default actions and Run And Paste support for silent query hotkey workflows. Users can select text in any app, press a hotkey, let an AI command optimize or translate the selected text, and replace the original selection in place when the final answer is ready. You can refer [https://wox-launcher.github.io/Wox/blog/did-you-know-ai-command-silent-translation-query-hotkey.html](https://wox-launcher.github.io/Wox/blog/did-you-know-ai-command-silent-translation-query-hotkey.html) for more details.
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/ai_command_run_paste_query_hotkey.mp4)
@@ -19,7 +19,11 @@
   - [`Usage`] Add X sharing for usage statistics so users can post their Wox usage summary directly from the usage page.
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/usage_share_x.png)
   - [`Onboarding`] Add the first-run flow with clearer setup steps for permissions, hotkeys, appearance, plugins, themes, tray queries, and Glance.
-      ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/onboarding.png)
+    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/onboarding.png)
+  - [`Glass dark theme`] Add new default Glass dark theme with acrylic blur, transparent panels, and light-colored text and icons for better visibility in dark mode. The new default theme also has improved color contrast and accessibility while still preserving the customizable accent color.
+    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/theme_glass_dark.png)
+  - [`Color Plugin`] Add Color plugin to search and preview colors by name and hex code, with actions to copy color values in various formats.
+    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/20260518_new_color_plugin.png)
 
 - Improve
   - [`File Search`] Improve indexing performance, dynamic root management, hidden/system path handling, and incremental updates so large roots refresh faster and avoid duplicate or unsafe indexed paths.

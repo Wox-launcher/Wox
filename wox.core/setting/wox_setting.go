@@ -107,7 +107,7 @@ const (
 )
 
 const (
-	DefaultThemeId = "53c1d0a4-ffc8-4d90-91dc-b408fb0b9a03"
+	DefaultThemeId = "44a933d5-e6de-4c1f-8ee5-b2305c6abdf3"
 )
 
 const (

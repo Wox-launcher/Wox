@@ -588,7 +588,7 @@ export interface Result {
  * { Type: "text", Text: "✓ Verified", Id: "status-tail" }
  *
  * // Image tail for icon
- * { Type: "image", Image: { ImageType: "emoji", ImageData: "🔥" }, ImageWidth: 24, ImageHeight: 24 }
+ * { Type: "image", Image: { ImageType: "emoji", ImageData: "🔥" }, ImageWidth: 24, ImageHeight: 24, Tooltip: "Hot" }
  * ```
  */
 export type ResultTailTextCategory = "default" | "danger" | "warning" | "success"
@@ -636,6 +636,14 @@ export interface ResultTail {
    * Only used when Type is "image". If omitted, Wox uses the default tail image height.
    */
   ImageHeight?: number
+
+  /**
+   * Optional hover text for this tail.
+   *
+   * Use this for compact or icon-only tails so users can understand the tail
+   * without plugins replacing the visual affordance with longer text.
+   */
+  Tooltip?: string
 
   /**
    * Unique identifier for this tail.

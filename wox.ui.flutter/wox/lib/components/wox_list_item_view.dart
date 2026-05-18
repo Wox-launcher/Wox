@@ -13,6 +13,7 @@ import 'package:wox/utils/wox_interface_size_util.dart';
 import 'package:wox/utils/wox_setting_util.dart';
 
 import 'wox_hotkey_view.dart';
+import 'wox_tooltip.dart';
 
 class WoxListItemView extends StatelessWidget {
   final WoxListItem item;
@@ -71,22 +72,39 @@ class WoxListItemView extends StatelessWidget {
             children: [
               for (final tail in item.tails)
                 if (tail.type == WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_TEXT.code && tail.text != null)
-                  Padding(padding: _tailItemPadding, child: buildTextTailTag(tail.text!, tail.textCategory, tailTextColor, maxTextTailWidth))
+                  Padding(padding: _tailItemPadding, child: buildTailTooltip(tail, buildTextTailTag(tail.text!, tail.textCategory, tailTextColor, maxTextTailWidth)))
                 else if (tail.type == WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_HOTKEY.code && tail.hotkey != null)
                   Padding(
                     padding: _tailItemPadding,
-                    child: WoxHotkeyView(hotkey: tail.hotkey!, backgroundColor: isActive ? activeBgColor : actionBgColor, borderColor: tailTextColor, textColor: tailTextColor),
+                    child: buildTailTooltip(
+                      tail,
+                      WoxHotkeyView(hotkey: tail.hotkey!, backgroundColor: isActive ? activeBgColor : actionBgColor, borderColor: tailTextColor, textColor: tailTextColor),
+                    ),
                   )
                 else if (tail.type == WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_IMAGE.code && tail.image != null && tail.image!.imageData.isNotEmpty)
                   Padding(
                     padding: _tailItemPadding,
-                    child: WoxImageView(woxImage: tail.image!, width: tail.imageWidth ?? metrics.tailImageSize, height: tail.imageHeight ?? metrics.tailImageSize),
+                    child: buildTailTooltip(
+                      tail,
+                      WoxImageView(woxImage: tail.image!, width: tail.imageWidth ?? metrics.tailImageSize, height: tail.imageHeight ?? metrics.tailImageSize),
+                    ),
                   ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  Widget buildTailTooltip(WoxListItemTail tail, Widget child) {
+    final tooltip = tail.tooltip?.trim() ?? "";
+    if (tooltip.isEmpty) {
+      return child;
+    }
+
+    // Feature change: result tails can now be icon-only metadata, so the shared
+    // tooltip wrapper gives compact tails an accessible label without changing row layout.
+    return WoxTooltip(message: tooltip, child: child);
   }
 
   _TextTailStyle _getTextTailStyle(String textCategory, Color defaultTextColor) {
@@ -156,7 +174,12 @@ class WoxListItemView extends StatelessWidget {
 
     final bool isResultList = listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code;
     final bool isActionList = listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code;
-    final BorderRadius borderRadius = isResultList && woxTheme.resultItemBorderRadius > 0 ? BorderRadius.circular(woxTheme.resultItemBorderRadius.toDouble()) : BorderRadius.zero;
+    // Bug fix: action rows share the same active-row visual language as result rows, but
+    // the old radius guard clipped only result rows and left action selection rectangular.
+    // Reusing ResultItemBorderRadius keeps the action panel aligned with the result list
+    // without introducing a duplicate theme field for the same row-surface shape.
+    final BorderRadius borderRadius =
+        (isResultList || isActionList) && woxTheme.resultItemBorderRadius > 0 ? BorderRadius.circular(woxTheme.resultItemBorderRadius.toDouble()) : BorderRadius.zero;
 
     // Calculate the maximum border width to reserve space
     final double maxBorderWidth = isActionList ? 0 : math.max(woxTheme.resultItemBorderLeftWidth.toDouble(), woxTheme.resultItemActiveBorderLeftWidth.toDouble());

@@ -129,6 +129,7 @@ class ResultTail:
         image: Image to display (for IMAGE type)
         image_width: Optional width for IMAGE type tails
         image_height: Optional height for IMAGE type tails
+        tooltip: Optional hover text for compact tails
         id: Unique identifier for this tail
         context_data: Additional data for later retrieval
 
@@ -145,6 +146,7 @@ class ResultTail:
         tail = ResultTail(
             type=ResultTailType.IMAGE,
             image=WoxImage.new_emoji("⭐"),
+            tooltip="Favorite",
             id="favorite_indicator"
         )
 
@@ -200,6 +202,14 @@ class ResultTail:
     If None, Wox uses the default tail image height.
     """
 
+    tooltip: str = field(default="")
+    """
+    Optional hover text for this tail.
+
+    Feature change: visual tails can be icon-only. Tooltip lets plugins keep
+    compact tails readable without replacing the visual affordance with text.
+    """
+
     id: str = field(default="")
     """
     Unique identifier for this tail.
@@ -249,6 +259,7 @@ class ResultTail:
                 "Image": json.loads(self.image.to_json()),
                 "ImageWidth": self.image_width,
                 "ImageHeight": self.image_height,
+                "Tooltip": self.tooltip,
                 "Id": self.id,
                 "ContextData": self.context_data,
             }
@@ -280,6 +291,7 @@ class ResultTail:
             image=WoxImage.from_json(json.dumps(data["Image"])),
             image_width=data.get("ImageWidth"),
             image_height=data.get("ImageHeight"),
+            tooltip=data.get("Tooltip", ""),
             id=data.get("Id", ""),
             context_data=data.get("ContextData", {}) or {},
         )

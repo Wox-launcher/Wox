@@ -94,7 +94,10 @@ class WoxListView<T> extends StatelessWidget {
                           child: Center(
                             child: Text(
                               Get.find<WoxSettingController>().tr('ui_no_matches'),
-                              style: TextStyle(fontSize: metrics.resultTitleFontSize, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxFontColor).withValues(alpha: 0.5)),
+                              style: TextStyle(
+                                fontSize: metrics.listEmptyStateFontSize,
+                                color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxFontColor).withValues(alpha: 0.5),
+                              ),
                             ),
                           ),
                         ),
@@ -198,7 +201,10 @@ class WoxListView<T> extends StatelessWidget {
                             child: Center(
                               child: Text(
                                 Get.find<WoxSettingController>().tr('ui_no_matches'),
-                                style: TextStyle(fontSize: metrics.resultTitleFontSize, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxFontColor).withValues(alpha: 0.5)),
+                                style: TextStyle(
+                                  fontSize: metrics.listEmptyStateFontSize,
+                                  color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxFontColor).withValues(alpha: 0.5),
+                                ),
                               ),
                             ),
                           ),
@@ -343,7 +349,12 @@ class WoxListView<T> extends StatelessWidget {
                   style: TextStyle(fontSize: metrics.resultSubtitleFontSize, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionQueryBoxFontColor)),
                   decoration: InputDecoration(
                     isCollapsed: true,
-                    contentPadding: EdgeInsets.only(left: metrics.scaledSpacing(8), right: metrics.scaledSpacing(8), top: metrics.scaledSpacing(20), bottom: metrics.scaledSpacing(18)),
+                    contentPadding: EdgeInsets.only(
+                      left: metrics.scaledSpacing(8),
+                      right: metrics.scaledSpacing(8),
+                      top: metrics.scaledSpacing(20),
+                      bottom: metrics.scaledSpacing(18),
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(WoxThemeUtil.instance.currentTheme.value.actionQueryBoxBorderRadius.toDouble()),
                       borderSide: BorderSide.none,

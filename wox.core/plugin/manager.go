@@ -1684,12 +1684,13 @@ func (m *Manager) GetQueryInfoByResultId(resultId string) (string, string) {
 
 func (m *Manager) buildResultUI(resultCache *QueryResultCache, queryId string) QueryResultUI {
 	uiResult := resultCache.Result
-	// Requirement settings must keep their concrete preview type in the result
-	// payload. If they were wrapped as remote previews, the Flutter grid path
-	// would not know to force the fullscreen settings form.
+	// Core-owned interactive previews must keep their concrete preview type in the
+	// result payload. If they were wrapped as remote previews, Flutter could not
+	// choose the dedicated fullscreen/editing surface before loading the preview.
 	if !uiResult.Preview.IsEmpty() &&
 		uiResult.Preview.PreviewType != WoxPreviewTypeRemote &&
 		uiResult.Preview.PreviewType != WoxPreviewTypeQueryRequirementSettings &&
+		uiResult.Preview.PreviewType != WoxPreviewTypeTriggerKeywordConflict &&
 		len(uiResult.Preview.PreviewData) > previewDataMaxSize {
 		uiResult.Preview = WoxPreview{
 			PreviewType: WoxPreviewTypeRemote,
@@ -1894,6 +1895,9 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 		if result.Tails[i].Type == QueryResultTailTypeText {
 			result.Tails[i].Text = m.translatePlugin(ctx, pluginInstance, result.Tails[i].Text)
 		}
+		if result.Tails[i].Tooltip != "" {
+			result.Tails[i].Tooltip = m.translatePlugin(ctx, pluginInstance, result.Tails[i].Tooltip)
+		}
 	}
 	// translate preview properties
 	var previewProperties = make(map[string]string)
@@ -1950,9 +1954,11 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	}
 
 	// if query is input and trigger keyword is global, disable preview and group.
-	// Query requirement settings keep their preview even in global queries because
-	// stripping it would hide the system form that can unblock the query.
-	if query.IsGlobalQuery() && result.Preview.PreviewType != WoxPreviewTypeQueryRequirementSettings {
+	// Core-owned interactive previews keep their preview even in global queries
+	// because stripping it would hide the form that can unblock the query.
+	if query.IsGlobalQuery() &&
+		result.Preview.PreviewType != WoxPreviewTypeQueryRequirementSettings &&
+		result.Preview.PreviewType != WoxPreviewTypeTriggerKeywordConflict {
 		result.Preview = WoxPreview{}
 		result.Group = ""
 		result.GroupScore = 0
@@ -1962,11 +1968,12 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	// because preview may contain some heavy data (E.g. image or large text),
 	// we will store preview in cache and only send preview to ui when user select the result
 	var originalPreview = result.Preview
-	// Query requirement settings intentionally bypass remote wrapping so the UI
+	// Core-owned interactive previews intentionally bypass remote wrapping so the UI
 	// can detect the type before deciding whether grid previews are allowed.
 	if !result.Preview.IsEmpty() &&
 		result.Preview.PreviewType != WoxPreviewTypeRemote &&
 		result.Preview.PreviewType != WoxPreviewTypeQueryRequirementSettings &&
+		result.Preview.PreviewType != WoxPreviewTypeTriggerKeywordConflict &&
 		len(result.Preview.PreviewData) > previewDataMaxSize {
 		result.Preview = WoxPreview{
 			PreviewType: WoxPreviewTypeRemote,
@@ -2159,6 +2166,9 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 			}
 			if tails[i].Type == QueryResultTailTypeText {
 				tails[i].Text = m.translatePlugin(ctx, pluginInstance, tails[i].Text)
+			}
+			if tails[i].Tooltip != "" {
+				tails[i].Tooltip = m.translatePlugin(ctx, pluginInstance, tails[i].Tooltip)
 			}
 			if tails[i].Type == QueryResultTailTypeImage {
 				tails[i].Image = common.ConvertIcon(ctx, tails[i].Image, pluginInstance.PluginDirectory)
@@ -2537,6 +2547,9 @@ func (m *Manager) QueryFallback(ctx context.Context, query Query, queryPlugin *I
 		if query.Command != "" {
 			return response
 		}
+		if queryPlugin == nil {
+			return response
+		}
 
 		// search query commands
 		commands := lo.Filter(queryPlugin.GetQueryCommands(), func(item MetadataCommand, index int) bool {
@@ -2702,6 +2715,9 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 		query.Id = plainQuery.QueryId
 		query.SessionId = util.GetContextSessionId(ctx)
 		query.Refinements = refinements
+		if conflictErr := m.newTriggerKeywordConflictErrorIfNeeded(ctx, query); conflictErr != nil {
+			return query, nil, conflictErr
+		}
 		activeWindowSnapshot := m.GetUI().GetActiveWindowSnapshot(ctx)
 		query.Env.ActiveWindowTitle = activeWindowSnapshot.Name
 		query.Env.ActiveWindowPid = activeWindowSnapshot.Pid
@@ -2726,6 +2742,9 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 			Refinements:    refinements,
 		}
 		query.SessionId = util.GetContextSessionId(ctx)
+		if conflictErr := m.newTriggerKeywordConflictErrorIfNeeded(ctx, query); conflictErr != nil {
+			return query, nil, conflictErr
+		}
 		activeWindowSnapshot := m.GetUI().GetActiveWindowSnapshot(ctx)
 		query.Env.ActiveWindowTitle = activeWindowSnapshot.Name
 		query.Env.ActiveWindowPid = activeWindowSnapshot.Pid

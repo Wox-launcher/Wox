@@ -2912,11 +2912,13 @@ class WoxLauncherController extends GetxController {
   bool supportsPreviewFullscreen(WoxPreview preview) {
     return preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TERMINAL.code ||
         preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code ||
-        preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_QUERY_REQUIREMENT_SETTINGS.code;
+        preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_QUERY_REQUIREMENT_SETTINGS.code ||
+        preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TRIGGER_KEYWORD_CONFLICT.code;
   }
 
-  bool isQueryRequirementSettingsPreview(WoxPreview preview) {
-    return preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_QUERY_REQUIREMENT_SETTINGS.code;
+  bool isCoreInteractiveSettingsPreview(WoxPreview preview) {
+    return preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_QUERY_REQUIREMENT_SETTINGS.code ||
+        preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TRIGGER_KEYWORD_CONFLICT.code;
   }
 
   bool shouldShowPreviewPanelForPreview(WoxPreview preview) {
@@ -2924,11 +2926,10 @@ class WoxLauncherController extends GetxController {
       return false;
     }
 
-    // Query requirement settings are the exception to the normal grid rule:
-    // grid items cannot carry enough text to explain missing credentials, so
-    // the system settings preview must be visible even while the plugin uses
-    // grid layout for successful results.
-    if (isQueryRequirementSettingsPreview(preview)) {
+    // Core interactive settings previews are the exception to the normal grid rule:
+    // grid items cannot carry enough text or controls to resolve blocked queries,
+    // so these system previews must be visible even while successful results use grid.
+    if (isCoreInteractiveSettingsPreview(preview)) {
       return true;
     }
 
@@ -2936,16 +2937,16 @@ class WoxLauncherController extends GetxController {
   }
 
   void syncPreviewModeForActivePreview(String traceId) {
-    if (isShowPreviewPanel.value && isQueryRequirementSettingsPreview(currentPreview.value)) {
-      // This preview type owns the full query result area. The previous generic
+    if (isShowPreviewPanel.value && isCoreInteractiveSettingsPreview(currentPreview.value)) {
+      // These preview types own the full query result area. The previous generic
       // preview behavior kept grid/list results visible, which left too little
-      // space for an actionable settings form.
+      // space for actionable settings forms.
       if (!isPreviewFullscreen.value) {
         final restoreRatio = resultPreviewRatio.value > 0 ? resultPreviewRatio.value : getPreferredResultPreviewRatio();
         lastResultPreviewRatioBeforePreviewFullscreen = restoreRatio;
         resultPreviewRatio.value = 0;
         isPreviewFullscreen.value = true;
-        Logger.instance.debug(traceId, "query requirement settings preview enter fullscreen");
+        Logger.instance.debug(traceId, "core interactive settings preview enter fullscreen");
       }
       return;
     }

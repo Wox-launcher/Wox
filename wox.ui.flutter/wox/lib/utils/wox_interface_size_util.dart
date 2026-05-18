@@ -55,6 +55,13 @@ class WoxInterfaceSizeMetrics {
   final double tailImageSize;
   final double quickSelectSize;
 
+  // ── List empty state ──────────────────────────────────────────────────────
+  // Empty-match text is shared by result and action lists but should not borrow
+  // resultTitleFontSize. Keeping a dedicated metric lets the action panel stay
+  // visually quieter while density still scales the empty-state label together
+  // with the rest of the launcher interface.
+  final double listEmptyStateFontSize;
+
   // ── Action item ───────────────────────────────────────────────────────────
   // Action rows are shorter than result rows (40px vs 50px base), so their
   // icon and title sizes are scaled down independently to fit the smaller row.
@@ -161,6 +168,8 @@ class WoxInterfaceSizeMetrics {
     required this.tailHotkeyFontSize,
     required this.tailImageSize,
     required this.quickSelectSize,
+    // list empty state
+    required this.listEmptyStateFontSize,
     // action item
     required this.actionItemBaseHeight,
     required this.actionHeaderFontSize,
@@ -257,9 +266,11 @@ class WoxInterfaceSizeMetrics {
       tailHotkeyFontSize: scaled(11),
       tailImageSize: scaled(20),
       quickSelectSize: scaled(20),
+      // list empty state
+      listEmptyStateFontSize: scaled(13),
       // action item
       actionItemBaseHeight: scaled(ACTION_ITEM_BASE_HEIGHT),
-      actionHeaderFontSize: scaled(15),
+      actionHeaderFontSize: scaled(13),
       actionIconSize: scaled(22),
       actionTitleFontSize: scaled(13),
       // action panel

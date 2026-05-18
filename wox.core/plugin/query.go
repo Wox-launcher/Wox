@@ -231,6 +231,9 @@ type QueryResultTail struct {
 	Image        common.WoxImage             // only available when type is QueryResultTailTypeImage
 	ImageWidth   *float64                    // optional width for image tails
 	ImageHeight  *float64                    // optional height for image tails
+	// Tooltip is hover-only context for compact tails. This keeps visual-only tails
+	// readable without forcing plugins to trade result width for explanatory text.
+	Tooltip string
 	// Additional data associate with this tail, can be retrieved later
 	ContextData map[string]string
 

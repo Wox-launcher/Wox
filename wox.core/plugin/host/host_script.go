@@ -860,6 +860,7 @@ func parseScriptTails(ctx context.Context, metadata plugin.Metadata, itemMap map
 				Image:       img,
 				ImageWidth:  getFirstFloatPtrFromMap(tailMap, []string{"imageWidth", "ImageWidth", "width", "Width"}),
 				ImageHeight: getFirstFloatPtrFromMap(tailMap, []string{"imageHeight", "ImageHeight", "height", "Height"}),
+				Tooltip:     getFirstStringFromMap(tailMap, []string{"tooltip", "Tooltip"}),
 			})
 		default:
 			text := getFirstStringFromMap(tailMap, []string{"text", "Text"})
@@ -872,6 +873,7 @@ func parseScriptTails(ctx context.Context, metadata plugin.Metadata, itemMap map
 				Type:         plugin.QueryResultTailTypeText,
 				Text:         text,
 				TextCategory: plugin.QueryResultTailTextCategory(textCategory),
+				Tooltip:      getFirstStringFromMap(tailMap, []string{"tooltip", "Tooltip"}),
 			})
 		}
 

@@ -15,9 +15,10 @@ import (
 type DoctorCheckType string
 
 const (
-	DoctorCheckUpdate        DoctorCheckType = "update"
-	DoctorCheckAccessibility DoctorCheckType = "accessibility"
-	DoctorCheckDatabase      DoctorCheckType = "database"
+	DoctorCheckUpdate                 DoctorCheckType = "update"
+	DoctorCheckAccessibility          DoctorCheckType = "accessibility"
+	DoctorCheckDatabase               DoctorCheckType = "database"
+	DoctorCheckTriggerKeywordConflict DoctorCheckType = "triggerKeywordConflict"
 )
 
 type DoctorCheckResult struct {
@@ -35,6 +36,7 @@ func RunDoctorChecks(ctx context.Context) []DoctorCheckResult {
 	results := []DoctorCheckResult{
 		checkWoxVersion(ctx),
 		checkDatabaseHealth(ctx),
+		checkTriggerKeywordConflicts(ctx),
 	}
 
 	if util.IsMacOS() {
@@ -51,6 +53,41 @@ func RunDoctorChecks(ctx context.Context) []DoctorCheckResult {
 	})
 
 	return results
+}
+
+func checkTriggerKeywordConflicts(ctx context.Context) DoctorCheckResult {
+	conflicts := GetPluginManager().findTriggerKeywordConflicts("")
+	if len(conflicts) == 0 {
+		return DoctorCheckResult{
+			Name:        "i18n:plugin_doctor_trigger_keyword_conflict",
+			Type:        DoctorCheckTriggerKeywordConflict,
+			Passed:      true,
+			Description: "i18n:plugin_doctor_trigger_keyword_conflict_ok",
+			ActionName:  "",
+			Action:      func(ctx context.Context, actionContext ActionContext) {},
+		}
+	}
+
+	description := fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_trigger_keyword_conflict_found"), formatTriggerKeywordConflictDetails(ctx, conflicts))
+	firstPlugin := conflicts[0].PluginInstances[0]
+
+	// Doctor reports duplicate concrete triggers before the user hits the ambiguous
+	// query path. Opening one involved plugin setting gives the user a direct place
+	// to change the trigger keyword without adding a new settings API surface.
+	return DoctorCheckResult{
+		Name:                   "i18n:plugin_doctor_trigger_keyword_conflict",
+		Type:                   DoctorCheckTriggerKeywordConflict,
+		Passed:                 false,
+		Description:            description,
+		ActionName:             "i18n:plugin_doctor_trigger_keyword_conflict_action",
+		PreventHideAfterAction: true,
+		Action: func(ctx context.Context, actionContext ActionContext) {
+			GetPluginManager().GetUI().OpenSettingWindow(ctx, common.SettingWindowContext{
+				Path:  "/plugin/setting",
+				Param: firstPlugin.Metadata.Id,
+			})
+		},
+	}
 }
 
 func translateDoctorCheckResult(ctx context.Context, result DoctorCheckResult) DoctorCheckResult {

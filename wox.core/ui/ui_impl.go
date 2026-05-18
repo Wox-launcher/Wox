@@ -652,6 +652,11 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 
 	query, ownerPlugin, queryErr := plugin.GetPluginManager().NewQuery(ctx, changedQuery)
 	if queryErr != nil {
+		if conflictErr, ok := plugin.AsTriggerKeywordConflictError(queryErr); ok {
+			plugin.GetPluginManager().HandleQueryLifecycle(ctx, query, nil)
+			responseUIQueryResponse(ctx, request, queryId, plugin.GetPluginManager().BuildTriggerKeywordConflictResponse(ctx, query, conflictErr.Conflict), true)
+			return
+		}
 		logger.Error(ctx, queryErr.Error())
 		responseUIError(ctx, request, queryErr.Error())
 		return

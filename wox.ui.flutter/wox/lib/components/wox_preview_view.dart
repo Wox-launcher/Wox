@@ -26,6 +26,7 @@ import 'package:wox/components/wox_plugin_detail_view.dart';
 import 'package:wox/components/wox_preview_scaffold.dart';
 import 'package:wox/components/wox_query_requirement_settings_preview_view.dart';
 import 'package:wox/components/wox_update_view.dart';
+import 'package:wox/components/wox_trigger_keyword_conflict_preview_view.dart';
 import 'package:wox/components/wox_webview_preview.dart';
 import 'package:wox/components/wox_terminal_preview_view.dart';
 import 'package:wox/controllers/wox_ai_chat_controller.dart';
@@ -37,6 +38,7 @@ import 'package:wox/entity/wox_preview_ai_stream.dart';
 import 'package:wox/entity/wox_preview_list.dart';
 import 'package:wox/entity/wox_query_requirement_settings_preview.dart';
 import 'package:wox/entity/wox_theme.dart';
+import 'package:wox/entity/wox_trigger_keyword_conflict_preview.dart';
 import 'package:wox/enums/wox_preview_scroll_position_enum.dart';
 import 'package:wox/enums/wox_preview_type_enum.dart';
 import 'package:wox/enums/wox_image_type_enum.dart';
@@ -372,6 +374,16 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
         return WoxQueryRequirementSettingsPreviewView(data: previewData);
       } catch (e) {
         contentWidget = buildText("Invalid query requirement settings preview data: $e");
+      }
+    } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TRIGGER_KEYWORD_CONFLICT.code) {
+      try {
+        // Core generates this preview when duplicate trigger keywords block query
+        // dispatch. Rendering a dedicated editor lets users fix either plugin
+        // while staying inside the ambiguous query that exposed the conflict.
+        final previewData = TriggerKeywordConflictPreviewData.fromPreviewData(widget.woxPreview.previewData);
+        return WoxTriggerKeywordConflictPreviewView(data: previewData);
+      } catch (e) {
+        contentWidget = buildText("Invalid trigger keyword conflict preview data: $e");
       }
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TERMINAL.code) {
       // Terminal previews have their own status bar, search state, and scrolling.

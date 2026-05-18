@@ -94,8 +94,18 @@ class WoxListItemTail {
   late HotkeyX? hotkey;
   late double? imageWidth;
   late double? imageHeight;
+  late String? tooltip;
 
-  WoxListItemTail({required this.type, this.text, this.textCategory = woxListItemTailTextCategoryDefault, this.image, this.hotkey, this.imageWidth, this.imageHeight});
+  WoxListItemTail({
+    required this.type,
+    this.text,
+    this.textCategory = woxListItemTailTextCategoryDefault,
+    this.image,
+    this.hotkey,
+    this.imageWidth,
+    this.imageHeight,
+    this.tooltip,
+  });
 
   WoxListItemTail.fromJson(Map<String, dynamic> json) {
     type = json['Type'];
@@ -114,6 +124,7 @@ class WoxListItemTail {
 
     imageWidth = (json['ImageWidth'] as num?)?.toDouble();
     imageHeight = (json['ImageHeight'] as num?)?.toDouble();
+    tooltip = json['Tooltip'];
 
     if (json['Hotkey'] != null) {
       hotkey = WoxHotkey.parseHotkeyFromString(json['Hotkey']);
@@ -141,6 +152,7 @@ class WoxListItemTail {
 
     data['ImageWidth'] = imageWidth;
     data['ImageHeight'] = imageHeight;
+    data['Tooltip'] = tooltip;
 
     if (hotkey != null) {
       data['Hotkey'] = hotkey!.toString();
