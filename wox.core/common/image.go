@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
 	"image/png"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -41,14 +43,37 @@ var fastPngEncoder = &png.Encoder{
 }
 
 var derivedImagePathExistenceCache = util.NewHashMap[string, struct{}]()
+var transparentPaddingBypassCache = util.NewHashMap[string, struct{}]()
 
 const (
 	ResultListIconSize     = util.ResultListIconSize
 	ResultGridIconSize     = util.ResultGridIconSize
 	resizeImageCachePrefix = "resize_v2_"
+	pngCropLargeDimension  = 1024
+)
+
+var (
+	pngFileSignature = [8]byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a}
+	pngChunkIHDR     = [4]byte{'I', 'H', 'D', 'R'}
+	pngChunkIDAT     = [4]byte{'I', 'D', 'A', 'T'}
+	pngChunktRNS     = [4]byte{'t', 'R', 'N', 'S'}
+)
+
+const (
+	pngColorTypeGrayscale      = 0
+	pngColorTypeTruecolor      = 2
+	pngColorTypeIndexed        = 3
+	pngColorTypeGrayscaleAlpha = 4
+	pngColorTypeTruecolorAlpha = 6
 )
 
 type pngBufferPool struct{}
+
+type pngCropMetadata struct {
+	width                  int
+	height                 int
+	mayContainTransparency bool
+}
 
 func (p *pngBufferPool) Get() *png.EncoderBuffer {
 	return pngEncoderBufferPool.Get().(*png.EncoderBuffer)
@@ -83,10 +108,19 @@ func isKnownExistingDerivedImagePath(path string) bool {
 	return derivedImagePathExistenceCache.Exist(path)
 }
 
+func rememberTransparentPaddingBypass(imageHash string) {
+	transparentPaddingBypassCache.Store(imageHash, struct{}{})
+}
+
+func isKnownTransparentPaddingBypass(imageHash string) bool {
+	return transparentPaddingBypassCache.Exist(imageHash)
+}
+
 // ClearConvertIconPathExistenceCache clears the in-memory positive cache for derived icon files.
 // Callers should invoke this after removing the image cache directory to avoid stale absolute paths.
 func ClearConvertIconPathExistenceCache() {
 	derivedImagePathExistenceCache.Clear()
+	transparentPaddingBypassCache.Clear()
 }
 
 const (
@@ -512,7 +546,8 @@ func resizeImage(ctx context.Context, image WoxImage, size int) (newImage WoxIma
 		width = 0
 	}
 
-	resizeImg := imaging.Resize(img, width, height, imaging.Lanczos)
+	resizeFilter := imaging.Lanczos
+	resizeImg := imaging.Resize(img, width, height, resizeFilter)
 	saveErr := savePngFast(resizeImg, resizeImgPath)
 	if saveErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to save resize image: %s", saveErr.Error()))
@@ -532,8 +567,12 @@ func cropPngTransparentPaddings(ctx context.Context, woxImage WoxImage) (newImag
 		return woxImage
 	}
 
-	//try load from cache first
 	imgHash := woxImage.Hash()
+	if isKnownTransparentPaddingBypass(imgHash) {
+		return woxImage
+	}
+
+	//try load from cache first
 	cropImgPath := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("crop_padding_%s.png", imgHash))
 	if isKnownExistingDerivedImagePath(cropImgPath) {
 		return NewWoxImageAbsolutePath(cropImgPath)
@@ -541,6 +580,23 @@ func cropPngTransparentPaddings(ctx context.Context, woxImage WoxImage) (newImag
 	if _, err := os.Stat(cropImgPath); err == nil {
 		rememberDerivedImagePathExists(cropImgPath)
 		return NewWoxImageAbsolutePath(cropImgPath)
+	}
+	if metadata, ok := absolutePngCropMetadata(woxImage); ok {
+		if metadata.width > pngCropLargeDimension && metadata.height > pngCropLargeDimension {
+			// Very large PNGs are content images instead of icon artwork. Cropping them can force a
+			// full-size decode and transparent scan with no icon benefit, so keep the original image
+			// and let the resize cache own the bounded icon output.
+			rememberTransparentPaddingBypass(imgHash)
+			return woxImage
+		}
+		if !metadata.mayContainTransparency {
+			// RGB screenshots cannot have transparent padding, so decoding, scanning every pixel,
+			// and writing an equivalent crop file only adds cold-query latency. The metadata-only
+			// check keeps uncertain or alpha-capable PNGs on the existing full crop path, and the
+			// bypass cache avoids repeating this metadata read on the steady warm path.
+			rememberTransparentPaddingBypass(imgHash)
+			return woxImage
+		}
 	}
 
 	pngImg, pngErr := woxImage.ToPng()
@@ -560,6 +616,84 @@ func cropPngTransparentPaddings(ctx context.Context, woxImage WoxImage) (newImag
 
 	rememberDerivedImagePathExists(cropImgPath)
 	return NewWoxImageAbsolutePath(cropImgPath)
+}
+
+// absolutePngCropMetadata reads only PNG metadata before IDAT. Any malformed,
+// unsupported, or non-file image returns ok=false so callers keep the full decode path.
+func absolutePngCropMetadata(woxImage WoxImage) (pngCropMetadata, bool) {
+	if woxImage.ImageType != WoxImageTypeAbsolutePath || !strings.EqualFold(filepath.Ext(woxImage.ImageData), ".png") {
+		return pngCropMetadata{}, false
+	}
+
+	file, err := os.Open(woxImage.ImageData)
+	if err != nil {
+		return pngCropMetadata{}, false
+	}
+	defer file.Close()
+
+	var signature [8]byte
+	if _, err = io.ReadFull(file, signature[:]); err != nil || signature != pngFileSignature {
+		return pngCropMetadata{}, false
+	}
+
+	seenHeader := false
+	metadata := pngCropMetadata{}
+	for {
+		var chunkHeader [8]byte
+		if _, err = io.ReadFull(file, chunkHeader[:]); err != nil {
+			return pngCropMetadata{}, false
+		}
+
+		chunkLength := binary.BigEndian.Uint32(chunkHeader[0:4])
+		chunkType := [4]byte{chunkHeader[4], chunkHeader[5], chunkHeader[6], chunkHeader[7]}
+		switch chunkType {
+		case pngChunkIHDR:
+			if seenHeader || chunkLength != 13 {
+				return pngCropMetadata{}, false
+			}
+
+			var headerData [13]byte
+			if _, err = io.ReadFull(file, headerData[:]); err != nil {
+				return pngCropMetadata{}, false
+			}
+			if _, err = file.Seek(4, io.SeekCurrent); err != nil {
+				return pngCropMetadata{}, false
+			}
+
+			colorType := headerData[9]
+			metadata.width = int(binary.BigEndian.Uint32(headerData[0:4]))
+			metadata.height = int(binary.BigEndian.Uint32(headerData[4:8]))
+			seenHeader = true
+			switch colorType {
+			case pngColorTypeGrayscaleAlpha, pngColorTypeTruecolorAlpha:
+				metadata.mayContainTransparency = true
+				return metadata, true
+			case pngColorTypeGrayscale, pngColorTypeTruecolor, pngColorTypeIndexed:
+				metadata.mayContainTransparency = false
+				continue
+			default:
+				return pngCropMetadata{}, false
+			}
+		case pngChunktRNS:
+			if !seenHeader {
+				return pngCropMetadata{}, false
+			}
+			metadata.mayContainTransparency = true
+			return metadata, true
+		case pngChunkIDAT:
+			if !seenHeader {
+				return pngCropMetadata{}, false
+			}
+			return metadata, true
+		default:
+			if !seenHeader {
+				return pngCropMetadata{}, false
+			}
+			if _, err = file.Seek(int64(chunkLength)+4, io.SeekCurrent); err != nil {
+				return pngCropMetadata{}, false
+			}
+		}
+	}
 }
 
 func cropTransparentPaddings(pngImg image.Image) image.Image {
