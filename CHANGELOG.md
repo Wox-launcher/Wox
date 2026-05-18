@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.1.0 -
+## v2.1.0 - 2026-05-18
 
 - Add
   - [`Glance`] Add Glance to the query box so users can see lightweight real-time information, such as time, date, and battery status, cpu usage, and memory usage without typing a query. Plugins can provide glance metadata, and users can choose the glance item or hide the glance icon for a cleaner query box.
