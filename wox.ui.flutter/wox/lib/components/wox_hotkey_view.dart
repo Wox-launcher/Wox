@@ -1,8 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:wox/entity/wox_hotkey.dart';
+import 'package:wox/utils/wox_hotkey_display_util.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
+import 'package:wox/utils/wox_text_measure_util.dart';
 
 class WoxHotkeyView extends StatelessWidget {
   final HotkeyX hotkey;
@@ -10,17 +12,37 @@ class WoxHotkeyView extends StatelessWidget {
   final Color borderColor;
   final Color textColor;
 
-  const WoxHotkeyView({
-    super.key,
-    required this.hotkey,
-    required this.backgroundColor,
-    required this.borderColor,
-    required this.textColor,
-  });
+  const WoxHotkeyView({super.key, required this.hotkey, required this.backgroundColor, required this.borderColor, required this.textColor});
 
-  Widget buildSingleKey(String key) {
+  static TextStyle keyTextStyle({required Color color}) {
     final metrics = WoxInterfaceSizeUtil.instance.current;
-    final keyWidth = metrics.scaledSpacing(28);
+    return TextStyle(fontFamily: 'SFProDisplay', fontSize: metrics.tailHotkeyFontSize, fontWeight: FontWeight.w500, color: color);
+  }
+
+  static double measureSingleKeyWidth(BuildContext context, String key) {
+    final metrics = WoxInterfaceSizeUtil.instance.current;
+    final minWidth = metrics.scaledSpacing(28);
+    final horizontalPadding = metrics.scaledSpacing(7);
+    final textWidth = WoxTextMeasureUtil.measureTextWidth(context: context, text: key, style: keyTextStyle(color: Colors.transparent));
+    // Feature fix: platform-specific text labels can be wider than the old
+    // macOS glyphs, so hotkey chips must grow
+    // with their label instead of clipping inside a fixed 28 px box.
+    return math.max(minWidth, textWidth + horizontalPadding * 2);
+  }
+
+  static double measureHotkeyWidth(BuildContext context, HotkeyX hotkey) {
+    final labels = WoxHotkeyDisplayUtil.labelsFromHotkey(hotkey);
+    if (labels.isEmpty) {
+      return 0;
+    }
+
+    final spacing = WoxInterfaceSizeUtil.instance.current.toolbarHotkeyKeySpacing;
+    return labels.map((label) => measureSingleKeyWidth(context, label)).fold(0.0, (total, width) => total + width) + (labels.length - 1) * spacing;
+  }
+
+  Widget buildSingleKey(BuildContext context, String key) {
+    final metrics = WoxInterfaceSizeUtil.instance.current;
+    final keyWidth = measureSingleKeyWidth(context, key);
     final keyHeight = metrics.scaledSpacing(22);
 
     return Container(
@@ -29,108 +51,16 @@ class WoxHotkeyView extends StatelessWidget {
         color: backgroundColor,
         border: Border.all(color: borderColor),
         borderRadius: BorderRadius.circular(4),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 2,
-            offset: const Offset(0, 1),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 2, offset: const Offset(0, 1))],
       ),
-      child: Center(
-        child: Text(
-          key,
-          style: TextStyle(
-            fontFamily: 'SFProDisplay',
-            fontSize: metrics.tailHotkeyFontSize,
-            fontWeight: FontWeight.w500,
-            color: textColor,
-          ),
-        ),
-      ),
+      child: Center(child: Text(key, style: keyTextStyle(color: textColor))),
     );
-  }
-
-  String getModifierName(HotKeyModifier modifier) {
-    if (modifier == HotKeyModifier.meta) {
-      return "⌘";
-    } else if (modifier == HotKeyModifier.alt) {
-      return "⌥";
-    } else if (modifier == HotKeyModifier.control) {
-      return "⌃";
-    } else if (modifier == HotKeyModifier.shift) {
-      return "⇧";
-    }
-
-    return modifier.name;
-  }
-
-  String getKeyName(KeyboardKey key) {
-    if (key == LogicalKeyboardKey.enter) {
-      return "⏎";
-    } else if (key == LogicalKeyboardKey.escape) {
-      return "⎋";
-    } else if (key == LogicalKeyboardKey.backspace) {
-      return "⌫";
-    } else if (key == LogicalKeyboardKey.delete) {
-      return "⌦";
-    } else if (key == LogicalKeyboardKey.arrowUp) {
-      return "↑";
-    } else if (key == LogicalKeyboardKey.arrowDown) {
-      return "↓";
-    } else if (key == LogicalKeyboardKey.arrowLeft) {
-      return "←";
-    } else if (key == LogicalKeyboardKey.arrowRight) {
-      return "→";
-    } else if (key == LogicalKeyboardKey.pageUp) {
-      return "⇞";
-    } else if (key == LogicalKeyboardKey.pageDown) {
-      return "⇟";
-    } else if (key == LogicalKeyboardKey.home) {
-      return "↖";
-    } else if (key == LogicalKeyboardKey.end) {
-      return "↘";
-    } else if (key == LogicalKeyboardKey.tab) {
-      return "⇥";
-    } else if (key == LogicalKeyboardKey.capsLock) {
-      return "⇪";
-    } else if (key == LogicalKeyboardKey.insert) {
-      return "⌅";
-    } else if (key == LogicalKeyboardKey.numLock) {
-      return "⇭";
-    } else if (key == LogicalKeyboardKey.scrollLock) {
-      return "⇳";
-    } else if (key == LogicalKeyboardKey.pause) {
-      return "⎉";
-    } else if (key == LogicalKeyboardKey.printScreen) {
-      return "⎙";
-    } else if (key == LogicalKeyboardKey.f1) {
-      return "F1";
-    } else if (key == LogicalKeyboardKey.f2) {
-      return "F2";
-    } else if (key == LogicalKeyboardKey.f3) {
-      return "F3";
-    } else if (key == LogicalKeyboardKey.f4) {
-      return "F4";
-    } else if (key == LogicalKeyboardKey.f5) {
-      return "F5";
-    }
-
-    return key.keyLabel;
   }
 
   @override
   Widget build(BuildContext context) {
     var hotkeyWidgets = <Widget>[];
-    if (hotkey.isNormalHotkey) {
-      hotkeyWidgets.addAll(hotkey.normalHotkey!.modifiers!.map((o) => buildSingleKey(getModifierName(o))));
-      hotkeyWidgets.add(buildSingleKey(getKeyName(hotkey.normalHotkey!.key)));
-    } else if (hotkey.isDoubleHotkey) {
-      hotkeyWidgets.add(buildSingleKey(getModifierName(hotkey.doubleHotkey!)));
-      hotkeyWidgets.add(buildSingleKey(getModifierName(hotkey.doubleHotkey!)));
-    } else if (hotkey.isSingleHotkey) {
-      hotkeyWidgets.add(buildSingleKey(getKeyName(hotkey.singleHotkey!)));
-    }
+    hotkeyWidgets.addAll(WoxHotkeyDisplayUtil.labelsFromHotkey(hotkey).map((key) => buildSingleKey(context, key)));
 
     return Wrap(
       // Hotkey chips appear in result tails and the toolbar, so their physical

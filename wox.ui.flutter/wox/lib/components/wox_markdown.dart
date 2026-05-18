@@ -47,8 +47,10 @@ class WoxMarkdownView extends StatelessWidget {
     final codeLabelFontSize = (fontSize - 2).clamp(9.0, double.infinity).toDouble();
     final codeTextStyle = fontTextStyle.copyWith(fontSize: codeFontSize, color: fontColor);
     final dividerColor = getThemeDividerColor();
-    final effectiveLinkColor = linkColor ?? fontColor;
-    final effectiveLinkHoverColor = linkHoverColor ?? fontColor.withValues(alpha: 0.85);
+    // Glass themes use low-contrast active/accent colors, so markdown links no
+    // longer use caller-provided highlight colors. Keeping links text-colored
+    // and underlined makes them readable on every preview surface.
+    final effectiveLinkColor = fontColor;
 
     final themeData = GptMarkdownThemeData(
       brightness: isDarkFont ? Brightness.light : Brightness.dark,
@@ -62,7 +64,7 @@ class WoxMarkdownView extends StatelessWidget {
       hrLineThickness: 1.5,
       hrLineColor: dividerColor,
       linkColor: effectiveLinkColor,
-      linkHoverColor: effectiveLinkHoverColor,
+      linkHoverColor: effectiveLinkColor,
     );
 
     final normalizedData = normalizeMarkdownImages(data);

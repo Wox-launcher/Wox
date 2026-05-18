@@ -5,6 +5,7 @@ import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_query.dart';
 import 'package:wox/utils/colors.dart';
+import 'package:wox/utils/wox_hotkey_display_util.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
 
 abstract class WoxQueryRefinementBaseView extends StatelessWidget {
@@ -46,27 +47,10 @@ abstract class WoxQueryRefinementBaseView extends StatelessWidget {
   }
 
   String hotkeyLabel() {
-    final parts =
-        refinement.hotkey.trim().split("+").where((part) => part.trim().isNotEmpty).map((part) {
-          final normalized = part.trim().toLowerCase();
-          switch (normalized) {
-            case "alt":
-            case "option":
-              return "Alt";
-            case "control":
-            case "ctrl":
-              return "Ctrl";
-            case "command":
-            case "cmd":
-            case "meta":
-              return "Cmd";
-            case "shift":
-              return "Shift";
-            default:
-              return normalized.length == 1 ? normalized.toUpperCase() : normalized;
-          }
-        }).toList();
-    return parts.join("+");
+    // Feature fix: inline refinement hints should use the same platform-aware
+    // modifier labels as result and toolbar hotkey chips, not a separate
+    // Cmd/Alt/Ctrl formatter that reads wrong on Windows/Linux.
+    return WoxHotkeyDisplayUtil.labelFromHotkeyString(refinement.hotkey);
   }
 
   String hotkeyDisplayLabel() {

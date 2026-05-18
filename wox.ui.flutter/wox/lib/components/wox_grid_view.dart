@@ -191,75 +191,41 @@ class WoxGridView extends StatelessWidget {
   Widget _buildGridItemWidget(int index, double contentWidth, double contentHeight, bool showTitle, double itemPadding, double itemMargin) {
     final item = controller.items[index];
 
-    return MouseRegion(
-      onEnter: (_) {
-        if (controller.isMouseMoved && !item.value.isGroup) {
-          controller.updateHoveredIndex(index);
-        }
-      },
-      onHover: (_) {
-        if (!controller.isMouseMoved && !item.value.isGroup) {
-          controller.isMouseMoved = true;
-          controller.updateHoveredIndex(index);
-        }
-      },
-      onExit: (_) {
-        if (!item.value.isGroup && controller.hoveredIndex.value == index) {
-          controller.clearHoveredResult();
-        }
-      },
-      child: GestureDetector(
-        onTapDown: (_) {
-          final traceId = const UuidV4().generate();
-          // Bug fix: grid selection used to wait for onTap, which fires after
-          // Flutter accepts the full tap gesture. List rows activate on tap
-          // down, so selecting grid cells on tap down gives both layouts the
-          // same immediate active-state feedback while keeping double-click
-          // execution on the existing onDoubleTap path.
-          controller.updateActiveIndex(traceId, index);
-          onItemTapped?.call();
+    return SizedBox.expand(
+      // Bug fix: the gesture wrapper used to defer hit testing to the image/text
+      // children, so empty space inside the visible grid frame did not activate
+      // the item. Expanding the mouse and gesture region over the whole cell
+      // makes the active target match the rectangle users see.
+      child: MouseRegion(
+        onEnter: (_) {
+          if (controller.isMouseMoved && !item.value.isGroup) {
+            controller.updateHoveredIndex(index);
+          }
         },
-        onDoubleTap: () {
-          final traceId = const UuidV4().generate();
-          controller.onItemExecuted?.call(traceId, item.value);
+        onHover: (_) {
+          if (!controller.isMouseMoved && !item.value.isGroup) {
+            controller.isMouseMoved = true;
+            controller.updateHoveredIndex(index);
+          }
         },
-        onSecondaryTapDown: (_) {
-          final traceId = const UuidV4().generate();
-          controller.updateActiveIndex(traceId, index);
-          controller.onItemActive?.call(traceId, item.value);
-          onItemSecondaryTapped?.call(traceId, item.value);
+        onExit: (_) {
+          if (!item.value.isGroup && controller.hoveredIndex.value == index) {
+            controller.clearHoveredResult();
+          }
         },
-        child: GetBuilder<WoxGridController<WoxQueryResult>>(
-          id: controller.buildItemUpdateId(index),
-          init: controller,
-          global: false,
-          autoRemove: false,
-          builder: (_) {
-            // Optimization: grid items used to subscribe every cell to activeIndex/hoveredIndex
-            // through Obx, so one click rebuilt the whole emoji grid before the selected frame
-            // could paint. Reusing the same per-item GetBuilder update id as list results keeps
-            // the active-state repaint scoped to the old and new cells refreshed by the controller.
-            return _buildGridItem(item.value, index, contentWidth, contentHeight, showTitle, itemPadding, itemMargin);
-          },
+        child: _WoxGridItemGestureWrapper(
+          controller: controller,
+          index: index,
+          item: item,
+          onItemTapped: onItemTapped,
+          onItemSecondaryTapped: onItemSecondaryTapped,
+          child: Align(alignment: Alignment.topCenter, child: _buildGridItem(item.value, index, contentWidth, contentHeight, showTitle, itemPadding, itemMargin)),
         ),
       ),
     );
   }
 
   Widget _buildGridItem(WoxListItem<WoxQueryResult> item, int index, double contentWidth, double contentHeight, bool showTitle, double itemPadding, double itemMargin) {
-    final isActive = controller.activeIndex.value == index;
-    final isHovered = controller.hoveredIndex.value == index;
-    final activeColor = safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemActiveBackgroundColor);
-    final frameColor =
-        isActive
-            ? activeColor
-            : isHovered
-            // Keep grid hover visually below active selection even when the
-            // theme active token is translucent, as glass themes use low-alpha
-            // active colors that were previously overwritten by a fixed hover alpha.
-            ? getHoverColorFromActiveColor(activeColor)
-            : Colors.transparent;
-    const frameWidth = focusFrameWidth;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -284,22 +250,7 @@ class WoxGridView extends StatelessWidget {
                   fit: (gridLayoutParams.aspectRatio - 1.0).abs() < 0.01 ? BoxFit.contain : BoxFit.cover,
                 ),
               ),
-              Positioned(
-                left: -itemPadding,
-                top: -itemPadding,
-                right: -itemPadding,
-                bottom: -itemPadding,
-                child: IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: ShapeDecoration(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        side: BorderSide(color: frameColor, width: frameWidth, strokeAlign: BorderSide.strokeAlignOutside),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+              Positioned(left: -itemPadding, top: -itemPadding, right: -itemPadding, bottom: -itemPadding, child: _buildGridItemFrame(index)),
             ],
           ),
         ),
@@ -321,5 +272,103 @@ class WoxGridView extends StatelessWidget {
           ),
       ],
     );
+  }
+
+  Widget _buildGridItemFrame(int index) {
+    return GetBuilder<WoxGridController<WoxQueryResult>>(
+      id: controller.buildItemUpdateId(index),
+      init: controller,
+      global: false,
+      autoRemove: false,
+      builder: (_) {
+        final isActive = controller.activeIndex.value == index;
+        final isHovered = controller.hoveredIndex.value == index;
+        final activeColor = safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemActiveBackgroundColor);
+        final frameColor =
+            isActive
+                ? activeColor
+                : isHovered
+                // Keep grid hover visually below active selection even when the
+                // theme active token is translucent, as glass themes use low-alpha
+                // active colors that were previously overwritten by a fixed hover alpha.
+                ? getHoverColorFromActiveColor(activeColor)
+                : Colors.transparent;
+
+        // Optimization: active/hover changes only need to repaint the selection
+        // frame. The previous per-item GetBuilder rebuilt the whole cell,
+        // including the emoji/image widget, so selection still felt delayed on
+        // dense grids even after the rebuild scope was reduced to two cells.
+        return IgnorePointer(
+          child: DecoratedBox(
+            decoration: ShapeDecoration(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: BorderSide(color: frameColor, width: focusFrameWidth, strokeAlign: BorderSide.strokeAlignOutside),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _WoxGridItemGestureWrapper extends StatefulWidget {
+  final WoxGridController<WoxQueryResult> controller;
+  final int index;
+  final Rx<WoxListItem<WoxQueryResult>> item;
+  final Widget child;
+  final VoidCallback? onItemTapped;
+  final void Function(String traceId, WoxListItem<WoxQueryResult> item)? onItemSecondaryTapped;
+
+  const _WoxGridItemGestureWrapper({required this.controller, required this.index, required this.item, required this.child, this.onItemTapped, this.onItemSecondaryTapped});
+
+  @override
+  State<_WoxGridItemGestureWrapper> createState() => _WoxGridItemGestureWrapperState();
+}
+
+class _WoxGridItemGestureWrapperState extends State<_WoxGridItemGestureWrapper> {
+  DateTime? _lastPrimaryTapTime;
+  static const _doubleClickThreshold = Duration(milliseconds: 200);
+
+  void _handleTapDown() {
+    if (widget.item.value.isGroup) {
+      return;
+    }
+
+    final traceId = const UuidV4().generate();
+    final now = DateTime.now();
+    final isDoubleClick = _lastPrimaryTapTime != null && now.difference(_lastPrimaryTapTime!) <= _doubleClickThreshold;
+
+    // Bug fix: grid used GestureDetector.onDoubleTap while list rows track
+    // double-clicks inside the tap-down handler. The extra double-tap recognizer
+    // made grid selection feel delayed, so grid now follows the same local
+    // tap-down timing model as list results.
+    if (isDoubleClick) {
+      widget.controller.onItemExecuted?.call(traceId, widget.item.value);
+      widget.onItemTapped?.call();
+      _lastPrimaryTapTime = null;
+      return;
+    }
+
+    widget.controller.updateActiveIndex(traceId, widget.index);
+    widget.onItemTapped?.call();
+    _lastPrimaryTapTime = now;
+  }
+
+  void _handleSecondaryTapDown() {
+    if (widget.item.value.isGroup) {
+      return;
+    }
+
+    final traceId = const UuidV4().generate();
+    widget.controller.updateActiveIndex(traceId, widget.index);
+    widget.onItemSecondaryTapped?.call(traceId, widget.item.value);
+    _lastPrimaryTapTime = null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(behavior: HitTestBehavior.opaque, onTapDown: (_) => _handleTapDown(), onSecondaryTapDown: (_) => _handleSecondaryTapDown(), child: widget.child);
   }
 }

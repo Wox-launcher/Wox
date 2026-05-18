@@ -3,32 +3,10 @@ part of 'wox_demo.dart';
 String _formatDemoHotkey(String hotkey, {required String fallback}) {
   final configuredHotkey = hotkey.trim();
   final rawHotkey = configuredHotkey.isEmpty ? fallback : configuredHotkey;
-  // Feature refinement: onboarding demos render the persisted hotkey values
-  // rather than static labels. Formatting is limited to display casing so the
-  // animation always mirrors the recorder shown above it.
-  return rawHotkey.split('+').map(_formatDemoHotkeyPart).join('+');
-}
-
-String _formatDemoHotkeyPart(String part) {
-  final normalized = part.trim().toLowerCase();
-  return switch (normalized) {
-    'alt' || 'option' => Platform.isMacOS ? 'Option' : 'Alt',
-    'control' || 'ctrl' => 'Ctrl',
-    'shift' => 'Shift',
-    'meta' || 'command' || 'cmd' => Platform.isMacOS ? 'Cmd' : 'Win',
-    'windows' || 'win' => 'Win',
-    'space' => 'Space',
-    'enter' => 'Enter',
-    'escape' || 'esc' => 'Esc',
-    'backspace' => 'Backspace',
-    'delete' => 'Delete',
-    'tab' => 'Tab',
-    'arrowup' || 'up' => 'Up',
-    'arrowdown' || 'down' => 'Down',
-    'arrowleft' || 'left' => 'Left',
-    'arrowright' || 'right' => 'Right',
-    _ => normalized.isEmpty ? part : '${normalized[0].toUpperCase()}${normalized.substring(1)}',
-  };
+  // Feature fix: onboarding demos render the persisted hotkey values with the
+  // same platform-specific modifier labels as the real toolbar/recorder. That
+  // avoids teaching Windows/Linux users macOS-only shortcut symbols.
+  return WoxHotkeyDisplayUtil.labelFromHotkeyString(rawHotkey);
 }
 
 String _demoActionPanelHotkey() {

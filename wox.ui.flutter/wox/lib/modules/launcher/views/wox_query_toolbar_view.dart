@@ -162,19 +162,11 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
       style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor), fontSize: WoxInterfaceSizeUtil.instance.current.toolbarFontSize),
     );
 
-    // Calculate hotkey width
+    // Feature fix: modifier labels now vary by platform, so the toolbar's
+    // fit calculation must use the same dynamic chip width as WoxHotkeyView
+    // instead of the old glyph-only constant width.
+    final hotkeyWidth = WoxHotkeyView.measureHotkeyWidth(context, hotkey);
     final metrics = WoxInterfaceSizeUtil.instance.current;
-    double hotkeyWidth = 0;
-    if (hotkey.isNormalHotkey) {
-      // Hotkey chip measurements mirror WoxHotkeyView's density-scaled key box
-      // sizes so overflow decisions match the rendered toolbar actions.
-      final keyCount = (hotkey.normalHotkey!.modifiers?.length ?? 0) + 1;
-      hotkeyWidth = keyCount * metrics.toolbarHotkeyKeySize + (keyCount - 1) * metrics.toolbarHotkeyKeySpacing;
-    } else if (hotkey.isDoubleHotkey) {
-      hotkeyWidth = metrics.toolbarHotkeyKeySize * 2 + metrics.toolbarHotkeyKeySpacing;
-    } else if (hotkey.isSingleHotkey) {
-      hotkeyWidth = metrics.toolbarHotkeyKeySize;
-    }
 
     return nameWidth + metrics.toolbarActionNameHotkeySpacing + hotkeyWidth + metrics.toolbarActionSpacing;
   }

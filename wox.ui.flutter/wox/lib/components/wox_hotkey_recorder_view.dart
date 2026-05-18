@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
+import 'package:wox/components/wox_hotkey_view.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/log.dart';
@@ -187,19 +188,6 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
     return true;
   }
 
-  Widget buildSingleKeyView(String keyLabel) {
-    return Container(
-      padding: const EdgeInsets.only(left: 5, right: 5, top: 3, bottom: 3),
-      decoration: BoxDecoration(
-        color: Theme.of(context).canvasColor,
-        border: Border.all(color: Theme.of(context).dividerColor, width: 1),
-        borderRadius: BorderRadius.circular(3),
-        boxShadow: <BoxShadow>[BoxShadow(color: Colors.black.withValues(alpha: 0.3), offset: const Offset(0.0, 1.0))],
-      ),
-      child: Text(keyLabel, style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color, fontSize: 12)),
-    );
-  }
-
   Widget _buildRecorderBox() {
     return Container(
       // Match the quieter setting control treatment; focus still uses the accent color while idle borders no longer dominate the row.
@@ -216,12 +204,16 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
                   height: 18,
                   child: Text(_isFocused ? tr("ui_hotkey_recording") : tr("ui_hotkey_click_to_set"), style: TextStyle(color: Colors.grey[400], fontSize: 13)),
                 )
-                : _hotKey!.isDoubleHotkey
-                ? Wrap(
-                  spacing: 8,
-                  children: [buildSingleKeyView(WoxHotkey.getModifierStr(_hotKey!.doubleHotkey!)), buildSingleKeyView(WoxHotkey.getModifierStr(_hotKey!.doubleHotkey!))],
-                )
-                : HotKeyVirtualView(hotKey: _hotKey!.normalHotkey!),
+                : WoxHotkeyView(
+                  // Feature fix: the recorder preview used hotkey_manager's
+                  // raw key labels, which still rendered Apple-style modifier
+                  // glyphs on non-macOS. Reusing WoxHotkeyView keeps settings
+                  // and toolbar shortcut labels platform-consistent.
+                  hotkey: _hotKey!,
+                  backgroundColor: Theme.of(context).canvasColor,
+                  borderColor: Theme.of(context).dividerColor,
+                  textColor: Theme.of(context).textTheme.bodyMedium?.color ?? getThemeTextColor(),
+                ),
       ),
     );
   }
