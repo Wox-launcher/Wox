@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/controllers/wox_grid_controller.dart';
+import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_list_item.dart';
 import 'package:wox/entity/wox_query.dart';
 import 'package:wox/utils/wox_theme_util.dart';
@@ -16,6 +17,7 @@ class WoxGridView extends StatelessWidget {
   final double maxHeight;
   final VoidCallback? onItemTapped;
   final void Function(String traceId, WoxListItem<WoxQueryResult> item)? onItemSecondaryTapped;
+  final void Function(String traceId, WoxListItem<WoxQueryResult> item, WoxImage image)? onItemIconLoaded;
   final VoidCallback? onRowHeightChanged;
 
   static const double focusFrameWidth = 4.0;
@@ -28,6 +30,7 @@ class WoxGridView extends StatelessWidget {
     required this.maxHeight,
     this.onItemTapped,
     this.onItemSecondaryTapped,
+    this.onItemIconLoaded,
     this.onRowHeightChanged,
   });
 
@@ -248,6 +251,7 @@ class WoxGridView extends StatelessWidget {
                   width: contentWidth,
                   height: contentHeight,
                   fit: (gridLayoutParams.aspectRatio - 1.0).abs() < 0.01 ? BoxFit.contain : BoxFit.cover,
+                  onLazyImageLoaded: (traceId, image) => onItemIconLoaded?.call(traceId, item, image),
                 ),
               ),
               Positioned(left: -itemPadding, top: -itemPadding, right: -itemPadding, bottom: -itemPadding, child: _buildGridItemFrame(index)),

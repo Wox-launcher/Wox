@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -10,19 +11,23 @@ import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/enums/wox_image_type_enum.dart';
 import 'package:wox/utils/log.dart';
+import 'package:wox/utils/wox_http_util.dart';
+
+typedef WoxLazyImageLoaded = void Function(String traceId, WoxImage image);
 
 class WoxImageView extends StatelessWidget {
   final WoxImage woxImage;
   final double? width;
   final double? height;
   final Color? svgColor;
+  final WoxLazyImageLoaded? onLazyImageLoaded;
   // Feature change: callers such as the aspect-ratio grid need cover-style
   // thumbnails, while existing icon surfaces must keep the previous contain
   // behavior. Owning the fit here avoids duplicating image-type branches in
   // every caller that renders a WoxImage.
   final BoxFit fit;
 
-  const WoxImageView({super.key, required this.woxImage, this.width, this.height, this.svgColor, this.fit = BoxFit.contain});
+  const WoxImageView({super.key, required this.woxImage, this.width, this.height, this.svgColor, this.onLazyImageLoaded, this.fit = BoxFit.contain});
 
   ColorFilter? get _svgColorFilter => svgColor == null ? null : ColorFilter.mode(svgColor!, BlendMode.srcIn);
 
@@ -57,7 +62,13 @@ class WoxImageView extends StatelessWidget {
   Widget build(BuildContext context) {
     late final Widget content;
 
-    if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_URL.code) {
+    if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_LAZY_LOAD_IMAGE.code) {
+      final payload = woxImage.lazyLoadPayload();
+      content =
+          payload == null
+              ? SizedBox(width: width, height: height)
+              : _WoxLazyLoadImageView(payload: payload, width: width, height: height, svgColor: svgColor, fit: fit, onLoaded: onLazyImageLoaded);
+    } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_URL.code) {
       if (_isSvgUrl(woxImage.imageData)) {
         content = SvgPicture.network(
           woxImage.imageData,
@@ -127,5 +138,81 @@ class WoxImageView extends StatelessWidget {
     }
 
     return content;
+  }
+}
+
+class _WoxLazyLoadImageView extends StatefulWidget {
+  final WoxLazyLoadImagePayload payload;
+  final double? width;
+  final double? height;
+  final Color? svgColor;
+  final BoxFit fit;
+  final WoxLazyImageLoaded? onLoaded;
+
+  const _WoxLazyLoadImageView({required this.payload, this.width, this.height, this.svgColor, required this.fit, this.onLoaded});
+
+  @override
+  State<_WoxLazyLoadImageView> createState() => _WoxLazyLoadImageViewState();
+}
+
+class _WoxLazyLoadImageViewState extends State<_WoxLazyLoadImageView> {
+  static final Map<String, Future<WoxImage>> _inFlightLoads = {};
+
+  WoxImage? _loadedImage;
+  String _activeToken = "";
+
+  @override
+  void initState() {
+    super.initState();
+    _loadVisibleImage();
+  }
+
+  @override
+  void didUpdateWidget(covariant _WoxLazyLoadImageView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.payload.token != widget.payload.token) {
+      _loadedImage = null;
+      _loadVisibleImage();
+    }
+  }
+
+  void _loadVisibleImage() {
+    final token = widget.payload.token;
+    if (token.isEmpty || _loadedImage != null) {
+      return;
+    }
+
+    _activeToken = token;
+    final traceId = const UuidV4().generate();
+    // Lazy result icons deliberately dedupe only in-flight requests. Once core
+    // returns the resized image, the launcher result model is updated to the real
+    // absolute icon, so a long-lived token cache in Flutter would duplicate the
+    // core image cache and risk serving stale query tokens.
+    final future = _inFlightLoads.putIfAbsent(token, () => WoxHttpUtil.instance.postData<WoxImage>(traceId, "/image/lazy/load", {"token": token}));
+    unawaited(
+      future
+          .then((image) {
+            if (!mounted || _activeToken != token) {
+              return;
+            }
+            setState(() {
+              _loadedImage = image;
+            });
+            widget.onLoaded?.call(traceId, image);
+          })
+          .catchError((error, stackTrace) {
+            Logger.instance.warn(traceId, "Failed to lazy load wox image: $error");
+          })
+          .whenComplete(() {
+            if (identical(_inFlightLoads[token], future)) {
+              _inFlightLoads.remove(token);
+            }
+          }),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return WoxImageView(woxImage: _loadedImage ?? widget.payload.placeholder, width: widget.width, height: widget.height, svgColor: widget.svgColor, fit: widget.fit);
   }
 }

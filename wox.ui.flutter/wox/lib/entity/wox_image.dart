@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:wox/enums/wox_image_type_enum.dart';
@@ -16,6 +17,19 @@ class WoxImage {
   void _cacheFileIfNeeded() {
     if (imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_ABSOLUTE_PATH.code && imageData.isNotEmpty) {
       cachedFile = File(imageData);
+    }
+  }
+
+  bool get isLazyLoad => imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_LAZY_LOAD_IMAGE.code;
+
+  WoxLazyLoadImagePayload? lazyLoadPayload() {
+    if (!isLazyLoad || imageData.isEmpty) {
+      return null;
+    }
+    try {
+      return WoxLazyLoadImagePayload.fromJson(Map<String, dynamic>.from(jsonDecode(imageData)));
+    } catch (_) {
+      return null;
     }
   }
 
@@ -62,6 +76,8 @@ class WoxImage {
       return WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_RELATIVE_PATH.code, imageData: imageDataString);
     } else if (imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code) {
       return WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: imageDataString);
+    } else if (imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_LAZY_LOAD_IMAGE.code) {
+      return WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_LAZY_LOAD_IMAGE.code, imageData: imageDataString);
     } else {
       return null;
     }
@@ -73,5 +89,24 @@ class WoxImage {
 
   static WoxImage newBase64(String imageData) {
     return WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_BASE64.code, imageData: imageData);
+  }
+}
+
+class WoxLazyLoadImagePayload {
+  final String token;
+  final WoxImage placeholder;
+  final int targetSize;
+
+  WoxLazyLoadImagePayload({required this.token, required this.placeholder, required this.targetSize});
+
+  factory WoxLazyLoadImagePayload.fromJson(Map<String, dynamic> json) {
+    // Core creates lazy image payloads after plugin results are polished. The UI
+    // parses only the token and placeholder here so plugin-facing WoxImage stays
+    // unchanged while large thumbnails can be loaded after the widget is built.
+    return WoxLazyLoadImagePayload(
+      token: json['token']?.toString() ?? "",
+      placeholder: json['placeholder'] is Map ? WoxImage.fromJson(Map<String, dynamic>.from(json['placeholder'])) : WoxImage.empty(),
+      targetSize: json['targetSize'] is int ? json['targetSize'] : int.tryParse(json['targetSize']?.toString() ?? "") ?? 0,
+    );
   }
 }

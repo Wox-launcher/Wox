@@ -200,7 +200,13 @@ class _WoxScreenshotViewState extends State<WoxScreenshotView> {
     }
 
     _isConfirmingSession = true;
-    controller.confirmSelection(const UuidV4().generate()).whenComplete(() {
+    final traceId = const UuidV4().generate();
+    // Bug fix: Enter used to always run the normal selection export, so a scrolling screenshot
+    // preview could show the full stitched image while the clipboard received only the current
+    // viewport. Route keyboard confirmation through the same scrolling export path as the toolbar
+    // button so both confirmation surfaces copy the stitched frame list.
+    final confirmFuture = controller.stage.value == ScreenshotSessionStage.scrolling ? controller.confirmScrollingSelection(traceId) : controller.confirmSelection(traceId);
+    confirmFuture.whenComplete(() {
       if (mounted) {
         _isConfirmingSession = false;
       }

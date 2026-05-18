@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	_ "image/gif"
+	_ "image/jpeg"
 	"image/png"
 	"io"
 	"os"
@@ -133,11 +135,23 @@ const (
 	WoxImageTypeUrl          = "url"
 	WoxImageTypeTheme        = "theme"
 	WoxImageTypeFileIcon     = "fileicon" // system associated file icon for given file absolute path
+	WoxImageTypeLazyLoad     = "lazyloadimage"
 )
 
 type WoxImage struct {
 	ImageType WoxImageType
 	ImageData string
+}
+
+// WoxLazyLoadImagePayload is an internal payload created by core after a plugin
+// has already returned a normal WoxImage. Source is used only inside core before
+// manager token registration; Flutter receives the token form and asks core for
+// the real resized icon only after the result image widget is built.
+type WoxLazyLoadImagePayload struct {
+	Token       string    `json:"token,omitempty"`
+	Placeholder WoxImage  `json:"placeholder"`
+	TargetSize  int       `json:"targetSize"`
+	Source      *WoxImage `json:"source,omitempty"`
 }
 
 func (w *WoxImage) String() string {
@@ -428,6 +442,48 @@ func NewWoxImageTheme(theme Theme) WoxImage {
 	}
 }
 
+func NewWoxImageLazyLoad(token string, placeholder WoxImage, targetSize int) WoxImage {
+	// LazyLoad is an internal image type: core serializes the placeholder and
+	// token together so Flutter can render immediately, then ask core for the
+	// resized raster only when the image widget is built.
+	payload, _ := json.Marshal(WoxLazyLoadImagePayload{
+		Token:       token,
+		Placeholder: placeholder,
+		TargetSize:  targetSize,
+	})
+	return WoxImage{
+		ImageType: WoxImageTypeLazyLoad,
+		ImageData: string(payload),
+	}
+}
+
+func NewWoxImageLazyLoadCandidate(source WoxImage, targetSize int) WoxImage {
+	// Candidate lazy images are returned only inside core while polishing results.
+	// The manager replaces this source-bearing marker with a token-bearing
+	// lazyloadimage after it has registered the result in its cache.
+	payload, _ := json.Marshal(WoxLazyLoadImagePayload{
+		Placeholder: ImageThumbnailPlaceholderIcon,
+		TargetSize:  targetSize,
+		Source:      &source,
+	})
+	return WoxImage{
+		ImageType: WoxImageTypeLazyLoad,
+		ImageData: string(payload),
+	}
+}
+
+func ParseWoxLazyLoadImagePayload(image WoxImage) (WoxLazyLoadImagePayload, error) {
+	if image.ImageType != WoxImageTypeLazyLoad {
+		return WoxLazyLoadImagePayload{}, fmt.Errorf("image type is not lazyloadimage: %s", image.ImageType)
+	}
+
+	var payload WoxLazyLoadImagePayload
+	if err := json.Unmarshal([]byte(image.ImageData), &payload); err != nil {
+		return WoxLazyLoadImagePayload{}, err
+	}
+	return payload, nil
+}
+
 func ParseWoxImageOrDefault(image string, defaultImage WoxImage) WoxImage {
 	if image == "" {
 		return defaultImage
@@ -477,6 +533,9 @@ func ParseWoxImage(image string) (WoxImage, error) {
 	if imageType == WoxImageTypeFileIcon {
 		return NewWoxImageFileIcon(imageData), nil
 	}
+	if imageType == WoxImageTypeLazyLoad {
+		return WoxImage{ImageType: WoxImageTypeLazyLoad, ImageData: imageData}, nil
+	}
 
 	return WoxImage{}, fmt.Errorf("unsupported image type: %s", imageType)
 }
@@ -486,6 +545,16 @@ func ConvertIcon(ctx context.Context, image WoxImage, pluginDirectory string) (n
 }
 
 func ConvertIconWithSize(ctx context.Context, image WoxImage, pluginDirectory string, size int) (newImage WoxImage) {
+	return convertIconWithSize(ctx, image, pluginDirectory, size, false)
+}
+
+// Converted icons can be large and expensive to prepare, so this variant allows the manager to return a lazy load marker for large icons instead of blocking on conversion.
+// The manager replaces the marker with the real resized icon later after it has registered the result in its cache and received the surface size from Flutter.
+func ConvertIconWithSizeMaybeLazy(ctx context.Context, image WoxImage, pluginDirectory string, size int) (newImage WoxImage) {
+	return convertIconWithSize(ctx, image, pluginDirectory, size, true)
+}
+
+func convertIconWithSize(ctx context.Context, image WoxImage, pluginDirectory string, size int, allowLazy bool) (newImage WoxImage) {
 	// Result icon callers can choose the surface size directly. Keep invalid
 	// sizes on the normal list path so every icon cache layer shares one default.
 	if size <= 0 {
@@ -500,9 +569,62 @@ func ConvertIconWithSize(ctx context.Context, image WoxImage, pluginDirectory st
 		return newImage
 	}
 
+	if cached, ok := cachedResizeImage(newImage, size); ok {
+		return cached
+	}
+
+	if allowLazy && shouldLazyLoadImageIcon(ctx, newImage, size) {
+		// Optimization: large local raster icons are expensive because the old
+		// polish path decoded, optionally cropped, resized, and wrote every image
+		// before the query response reached Flutter. Return a source-bearing marker
+		// here and let the manager decide whether to register it as a token, which
+		// keeps cache ownership out of common image conversion.
+		return NewWoxImageLazyLoadCandidate(newImage, size)
+	}
+
 	newImage = cropPngTransparentPaddings(ctx, newImage)
 	newImage = resizeImage(ctx, newImage, size)
 	return
+}
+
+func shouldLazyLoadImageIcon(ctx context.Context, woxImage WoxImage, size int) bool {
+	if woxImage.ImageType != WoxImageTypeAbsolutePath || woxImage.IsGif() || isSvgFilePath(woxImage.ImageData) {
+		return false
+	}
+
+	file, err := os.Open(woxImage.ImageData)
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+
+	config, _, err := image.DecodeConfig(file)
+	if err != nil {
+		// Keep unknown image shapes on the existing synchronous path. This favors
+		// compatibility for uncommon formats and lets the surrounding slow-query
+		// logs reveal any future formats that need a dedicated lazy rule.
+		util.GetLogger().Debug(ctx, fmt.Sprintf("failed to decode result icon config for lazy decision: %s", err.Error()))
+		return false
+	}
+
+	return max(config.Width, config.Height) > 512
+}
+
+func resizeImageCachePath(image WoxImage, size int) string {
+	imgHash := image.Hash()
+	return path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("%s%d_%s.png", resizeImageCachePrefix, size, imgHash))
+}
+
+func cachedResizeImage(image WoxImage, size int) (WoxImage, bool) {
+	resizeImgPath := resizeImageCachePath(image, size)
+	if isKnownExistingDerivedImagePath(resizeImgPath) {
+		return NewWoxImageAbsolutePath(resizeImgPath), true
+	}
+	if _, err := os.Stat(resizeImgPath); err == nil {
+		rememberDerivedImagePathExists(resizeImgPath)
+		return NewWoxImageAbsolutePath(resizeImgPath), true
+	}
+	return WoxImage{}, false
 }
 
 func resizeImage(ctx context.Context, image WoxImage, size int) (newImage WoxImage) {
@@ -517,14 +639,9 @@ func resizeImage(ctx context.Context, image WoxImage, size int) (newImage WoxIma
 
 	newImage = image
 
-	imgHash := image.Hash()
-	resizeImgPath := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("%s%d_%s.png", resizeImageCachePrefix, size, imgHash))
-	if isKnownExistingDerivedImagePath(resizeImgPath) {
-		return NewWoxImageAbsolutePath(resizeImgPath)
-	}
-	if _, err := os.Stat(resizeImgPath); err == nil {
-		rememberDerivedImagePathExists(resizeImgPath)
-		return NewWoxImageAbsolutePath(resizeImgPath)
+	resizeImgPath := resizeImageCachePath(image, size)
+	if cached, ok := cachedResizeImage(image, size); ok {
+		return cached
 	}
 
 	img, imgErr := image.ToImage()

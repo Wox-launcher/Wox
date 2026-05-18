@@ -3294,6 +3294,18 @@ class WoxLauncherController extends GetxController {
     resultGridViewController.clearHoveredResult();
   }
 
+  void updateLazyLoadedResultIcon(String traceId, WoxListItem<WoxQueryResult> item, WoxImage icon) {
+    if (icon.imageData.isEmpty) {
+      return;
+    }
+
+    // Lazy result icons are rendered through a core-owned token first, then
+    // replaced in the result model after Flutter receives the resized cache
+    // image. Updating the model avoids repeated token requests when a list/grid
+    // child is disposed and rebuilt during scrolling.
+    updateResult(traceId, UpdatableResult(id: item.id, icon: icon));
+  }
+
   bool updateResult(String traceId, UpdatableResult updatableResult) {
     // Try to find the result in the current items
     try {

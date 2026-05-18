@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_image_view.dart';
+import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_list_item.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/enums/wox_list_view_type_enum.dart';
@@ -22,6 +23,7 @@ class WoxListItemView extends StatelessWidget {
   final bool isActive;
   final bool isHovered;
   final WoxListViewType listViewType;
+  final void Function(String traceId, WoxListItem item, WoxImage image)? onIconLoaded;
 
   static const _quickSelectBorderRadius = BorderRadius.all(Radius.circular(4));
   static const _textTailBorderRadius = BorderRadius.all(Radius.circular(999));
@@ -29,7 +31,7 @@ class WoxListItemView extends StatelessWidget {
   static const _warningTailColor = Color(0xFFB54708);
   static const _successTailColor = Color(0xFF027A48);
 
-  const WoxListItemView({super.key, required this.item, required this.woxTheme, required this.isActive, required this.isHovered, required this.listViewType});
+  const WoxListItemView({super.key, required this.item, required this.woxTheme, required this.isActive, required this.isHovered, required this.listViewType, this.onIconLoaded});
 
   WoxInterfaceSizeMetrics get _metrics => WoxInterfaceSizeUtil.instance.current;
   EdgeInsets get _tailPadding => EdgeInsets.only(left: _metrics.resultItemTailPaddingLeft, right: _metrics.resultItemTailPaddingRight);
@@ -207,7 +209,14 @@ class WoxListItemView extends StatelessWidget {
     final Widget iconWidget =
         item.isGroup
             ? const SizedBox()
-            : Padding(padding: _iconPadding, child: SizedBox(width: iconSize, height: iconSize, child: WoxImageView(woxImage: item.icon, width: iconSize, height: iconSize)));
+            : Padding(
+              padding: _iconPadding,
+              child: SizedBox(
+                width: iconSize,
+                height: iconSize,
+                child: WoxImageView(woxImage: item.icon, width: iconSize, height: iconSize, onLazyImageLoaded: (traceId, image) => onIconLoaded?.call(traceId, item, image)),
+              ),
+            );
 
     // Build title/subtitle widget
     final Widget textWidget = Expanded(

@@ -53,6 +53,20 @@ type debounceTimer struct {
 	onStop func()
 }
 
+type lazyResultIconEntry struct {
+	SessionId       string
+	QueryId         string
+	ResultId        string
+	OriginalIcon    common.WoxImage
+	PluginDirectory string
+	TargetSize      int
+	CreatedAt       int64
+
+	mu       sync.Mutex
+	resolved bool
+	icon     common.WoxImage
+}
+
 // queryPluginJob is the scheduler's normalized decision for one plugin.
 // Keeping the debounce and fallback flags together makes the lifecycle rule
 // explicit: debounced jobs still affect done, but they do not block fallback.
@@ -171,6 +185,11 @@ type Manager struct {
 
 	// sessionPluginQueries tracks which plugin query is currently active for each UI session (sessionId -> state)
 	sessionPluginQueries *util.HashMap[string, *sessionPluginQueryState]
+
+	// lazyResultIcons keeps core-owned icon tokens for large raster result icons.
+	// Plugins still return ordinary WoxImage values; manager creates these tokens
+	// only after result IDs, query IDs, and surface sizes are known.
+	lazyResultIcons *util.HashMap[string, *lazyResultIconEntry]
 }
 
 const (
@@ -191,6 +210,7 @@ func GetPluginManager() *Manager {
 			pluginToolbarMsgIds:     util.NewHashMap[string, string](),
 			glanceActions:           util.NewHashMap[string, GlanceAction](),
 			sessionPluginQueries:    util.NewHashMap[string, *sessionPluginQueryState](),
+			lazyResultIcons:         util.NewHashMap[string, *lazyResultIconEntry](),
 		}
 		logger = util.GetLogger()
 	})
@@ -1434,6 +1454,7 @@ func (m *Manager) startSessionQueryCache(query Query) {
 	// Store every query under its own query id so a late old query cannot erase
 	// the result cache required to send the newer query's final response.
 	sessionQueries.Store(query.Id, newQueryResultSet(query))
+	m.clearLazyResultIconsForSessionExcept(query.SessionId, query.Id)
 	m.pruneSessionQueryCache(sessionQueries, query.Id)
 }
 
@@ -1509,6 +1530,141 @@ func (m *Manager) storeQueryResult(ctx context.Context, pluginInstance *Instance
 		Layout:         layout,
 	})
 
+}
+
+func (m *Manager) clearLazyResultIconsForSessionExcept(sessionId string, keepQueryId string) {
+	if sessionId == "" {
+		return
+	}
+
+	// Lazy image tokens are scoped to the polished query result that created them.
+	// When the same launcher session starts a newer query, old tokens should stop
+	// resolving so a late Flutter image request cannot hydrate an icon for stale UI.
+	var tokensToDelete []string
+	m.lazyResultIcons.Range(func(token string, entry *lazyResultIconEntry) bool {
+		if entry != nil && entry.SessionId == sessionId && entry.QueryId != keepQueryId {
+			tokensToDelete = append(tokensToDelete, token)
+		}
+		return true
+	})
+	for _, token := range tokensToDelete {
+		m.lazyResultIcons.Delete(token)
+	}
+}
+
+func (m *Manager) convertResultIcon(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, resultId string, icon common.WoxImage) common.WoxImage {
+	resultIconSize := m.getResultIconSizeForQuery(pluginInstance, query, layout)
+	pluginDirectory := ""
+	if pluginInstance != nil {
+		pluginDirectory = pluginInstance.PluginDirectory
+	}
+
+	convertedIcon := common.ConvertIconWithSizeMaybeLazy(ctx, icon, pluginDirectory, resultIconSize)
+	if convertedIcon.ImageType != common.WoxImageTypeLazyLoad {
+		return convertedIcon
+	}
+
+	// Lazy load markers are returned when the plugin-provided icon is too large to send directly through the WebSocket. They contain the original source plus a token that can be used to retrieve the converted thumbnail later. If parsing fails, fall back to returning the lazy marker itself so at least some icon gets to Flutter instead of nothing.
+	payload, payloadErr := common.ParseWoxLazyLoadImagePayload(convertedIcon)
+	if payloadErr != nil || payload.Source == nil || payload.Source.IsEmpty() {
+		return convertedIcon
+	}
+
+	targetSize := payload.TargetSize
+	if targetSize <= 0 {
+		targetSize = resultIconSize
+	}
+	// Result icon conversion is the only place that has both plugin path context
+	// and stable result/query IDs. Common returns only a source-bearing lazy marker;
+	// manager owns token registration because it also owns the result cache.
+	registeredIcon := m.registerLazyResultIcon(ctx, pluginInstance, query, resultId, *payload.Source, pluginDirectory, targetSize)
+	if !registeredIcon.IsEmpty() {
+		return registeredIcon
+	}
+
+	// If a result cannot be tokenized, keep old behavior instead of leaking an
+	// unregistered lazy marker to Flutter.
+	return common.ConvertIconWithSize(ctx, *payload.Source, pluginDirectory, targetSize)
+}
+
+func (m *Manager) registerLazyResultIcon(ctx context.Context, pluginInstance *Instance, query Query, resultId string, normalized common.WoxImage, pluginDirectory string, size int) common.WoxImage {
+	if query.SessionId == "" || query.Id == "" || resultId == "" {
+		return common.WoxImage{}
+	}
+
+	// Store the original normalized image, not a pre-decoded bitmap. The expensive
+	// decode/crop/resize work is intentionally deferred until Flutter asks for this
+	// token from a visible result image widget.
+	token := uuid.NewString()
+	m.lazyResultIcons.Store(token, &lazyResultIconEntry{
+		SessionId:       query.SessionId,
+		QueryId:         query.Id,
+		ResultId:        resultId,
+		OriginalIcon:    normalized,
+		PluginDirectory: pluginDirectory,
+		TargetSize:      size,
+		CreatedAt:       util.GetSystemTimestamp(),
+	})
+
+	pluginName := "<unknown>"
+	if pluginInstance != nil {
+		pluginName = pluginInstance.GetName(ctx)
+	}
+	logger.Debug(ctx, fmt.Sprintf("<%s> result(%s) icon deferred as lazyloadimage, size: %d", pluginName, resultId, size))
+	return common.NewWoxImageLazyLoad(token, common.ImageThumbnailPlaceholderIcon, size)
+}
+
+func (m *Manager) LoadLazyResultIcon(ctx context.Context, token string) (common.WoxImage, error) {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return common.ImageThumbnailPlaceholderIcon, fmt.Errorf("lazy image token is empty")
+	}
+
+	entry, found := m.lazyResultIcons.Load(token)
+	if !found || entry == nil {
+		return common.ImageThumbnailPlaceholderIcon, fmt.Errorf("lazy image token not found")
+	}
+
+	resultCache, cacheFound := m.findResultCacheInSession(entry.SessionId, entry.QueryId, entry.ResultId)
+	if !cacheFound {
+		m.lazyResultIcons.Delete(token)
+		return common.ImageThumbnailPlaceholderIcon, fmt.Errorf("lazy image result is no longer cached")
+	}
+
+	if resultCache.Result.Icon.ImageType != common.WoxImageTypeLazyLoad {
+		m.lazyResultIcons.Delete(token)
+		if !resultCache.Result.Icon.IsEmpty() {
+			return resultCache.Result.Icon, nil
+		}
+		return common.ImageThumbnailPlaceholderIcon, nil
+	}
+	payload, payloadErr := common.ParseWoxLazyLoadImagePayload(resultCache.Result.Icon)
+	if payloadErr != nil || payload.Token != token {
+		m.lazyResultIcons.Delete(token)
+		return common.ImageThumbnailPlaceholderIcon, fmt.Errorf("lazy image token is stale")
+	}
+
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	if entry.resolved {
+		return entry.icon, nil
+	}
+
+	startedAt := util.GetSystemTimestamp()
+	// Lazy load requests intentionally use the original synchronous converter
+	// because this path runs after Flutter has built an image widget for the
+	// result. That keeps the query response fast while still reusing the existing
+	// crop/resize/cache behavior for the actual thumbnail artifact.
+	converted := common.ConvertIconWithSize(ctx, entry.OriginalIcon, entry.PluginDirectory, entry.TargetSize)
+	if converted.IsEmpty() || converted.ImageType == common.WoxImageTypeLazyLoad {
+		converted = common.ImageThumbnailPlaceholderIcon
+	}
+
+	entry.icon = converted
+	entry.resolved = true
+	resultCache.Result.Icon = converted
+	logger.Debug(ctx, fmt.Sprintf("lazy result icon hydrated, result: %s, elapsed: %dms", entry.ResultId, util.GetSystemTimestamp()-startedAt))
+	return converted, nil
 }
 
 func (m *Manager) getCachedLayoutForPluginQuery(ctx context.Context, pluginInstance *Instance, query Query) QueryLayout {
@@ -1856,8 +2012,6 @@ func (m *Manager) BuildQueryResultsSnapshot(sessionId string, queryId string) []
 }
 
 func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, result QueryResult) QueryResult {
-	resultIconSize := m.getResultIconSizeForQuery(pluginInstance, query, layout)
-
 	// set default id
 	if result.Id == "" {
 		result.Id = uuid.NewString()
@@ -1887,7 +2041,7 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	// Result icons are converted for the visual surface selected by metadata. The old
 	// hard-coded list size made grid icons blurry because the UI had to scale 40px
 	// raster caches into much larger cells.
-	result.Icon = common.ConvertIconWithSize(ctx, result.Icon, pluginInstance.PluginDirectory, resultIconSize)
+	result.Icon = m.convertResultIcon(ctx, pluginInstance, query, layout, result.Id, result.Icon)
 	for i := range result.Tails {
 		if result.Tails[i].Type == QueryResultTailTypeImage {
 			result.Tails[i].Image = common.ConvertIcon(ctx, result.Tails[i].Image, pluginInstance.PluginDirectory)
@@ -2264,8 +2418,7 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 	if result.Icon != nil {
 		// Updated result icons must keep the same surface-aware size as initial results;
 		// otherwise a grid plugin can become blurry after sending an icon update.
-		resultIconSize := m.getResultIconSizeForQuery(pluginInstance, resultCache.Query, resultCache.Layout)
-		convertedIcon := common.ConvertIconWithSize(ctx, *result.Icon, pluginInstance.PluginDirectory, resultIconSize)
+		convertedIcon := m.convertResultIcon(ctx, pluginInstance, resultCache.Query, resultCache.Layout, result.Id, *result.Icon)
 		result.Icon = &convertedIcon
 		resultCache.Result.Icon = *result.Icon
 	}

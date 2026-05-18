@@ -10,6 +10,7 @@
 - **Comments**: English only. Add clear intent-level comments where appropriate.
 - **Change Comments Required**: Every optimization, bug fix, and new feature must include comments near the relevant code that explain what changed, why the previous behavior or structure was not enough, and why the chosen implementation is used.
 - **Readability First**: Favor the simplest control flow that keeps behavior correct. Avoid clever abstractions, layered state handling, or indirection that make the execution path harder to follow.
+- **Inline Small Logic**: Prefer keeping very small, single-use logic inline. Do not extract a 3-4 line block into a helper unless it is reused, clarifies a meaningful boundary, or clearly reduces complexity.
 - **Explain Structures And Logic**: Add necessary comments for structs, state transitions, control-flow branches, and non-obvious logic so readers can understand the intent without reverse-engineering the code.
 - **Refactors**: Scan `AGENTS.md` and `README.md` files first
 - **Build**: Verify with `make build` in wox.core (you should skip Go or UI build for small changes)

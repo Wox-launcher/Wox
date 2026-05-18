@@ -103,6 +103,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/ping":                  handlePing,
 	"/preview":               handlePreview,
 	"/preview/image/overlay": handlePreviewImageOverlay,
+	"/image/lazy/load":       handleLazyImageLoad,
 	"/open":                  handleOpen,
 	"/backup/now":            handleBackupNow,
 	"/backup/restore":        handleBackupRestore,
@@ -160,6 +161,33 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 
 func handlePing(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, "pong")
+}
+
+func handleLazyImageLoad(w http.ResponseWriter, r *http.Request) {
+	// Result icon lazy loading is intentionally an internal UI/core endpoint.
+	// Plugins still return ordinary WoxImage values, while Flutter exchanges the
+	// manager-issued token for a resized cache image only after the widget exists.
+	ctx := getTraceContext(r)
+	token := strings.TrimSpace(r.URL.Query().Get("token"))
+	if token == "" && r.Body != nil {
+		var request struct {
+			Token string `json:"token"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err == nil {
+			token = strings.TrimSpace(request.Token)
+		}
+	}
+	if token == "" {
+		writeErrorResponse(w, "token is empty")
+		return
+	}
+
+	icon, err := plugin.GetPluginManager().LoadLazyResultIcon(ctx, token)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, icon)
 }
 
 func handlePreview(w http.ResponseWriter, r *http.Request) {

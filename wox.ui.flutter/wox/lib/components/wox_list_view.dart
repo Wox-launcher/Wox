@@ -9,6 +9,7 @@ import 'package:wox/components/wox_platform_focus.dart';
 import 'package:wox/controllers/wox_list_controller.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/wox_hotkey.dart';
+import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_list_item.dart';
 import 'package:wox/enums/wox_direction_enum.dart';
 import 'package:wox/enums/wox_list_view_type_enum.dart';
@@ -23,6 +24,7 @@ class WoxListView<T> extends StatelessWidget {
   final double maxHeight;
   final VoidCallback? onItemTapped;
   final void Function(String traceId, WoxListItem<T> item)? onItemSecondaryTapped;
+  final void Function(String traceId, WoxListItem<T> item, WoxImage image)? onItemIconLoaded;
   final bool Function(String traceId, HotKey hotkey)? onFilteHotkeyPressed;
 
   const WoxListView({
@@ -33,6 +35,7 @@ class WoxListView<T> extends StatelessWidget {
     required this.maxHeight,
     this.onItemTapped,
     this.onItemSecondaryTapped,
+    this.onItemIconLoaded,
     this.onFilteHotkeyPressed,
   });
 
@@ -148,6 +151,7 @@ class WoxListView<T> extends StatelessWidget {
                                       isActive: controller.activeIndex.value == index,
                                       isHovered: controller.hoveredIndex.value == index,
                                       listViewType: listViewType,
+                                      onIconLoaded: (traceId, _, image) => onItemIconLoaded?.call(traceId, item.value, image),
                                     ),
                               ),
                             ),
@@ -257,6 +261,7 @@ class WoxListView<T> extends StatelessWidget {
                                           isActive: controller.activeIndex.value == index,
                                           isHovered: controller.hoveredIndex.value == index,
                                           listViewType: listViewType,
+                                          onIconLoaded: (traceId, _, image) => onItemIconLoaded?.call(traceId, item.value, image),
                                         ),
                                   ),
                                 ),
