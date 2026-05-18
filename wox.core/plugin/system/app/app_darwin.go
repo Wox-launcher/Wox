@@ -8,7 +8,7 @@ package app
 
 const unsigned char *GetPrefPaneIcon(const char *prefPanePath, size_t *length);
 const unsigned char *GenerateSFSymbolIcon(const char *symbolName, const char *colorName, const char *iconStyle, size_t *length);
-char* GetLocalizedAppName(const char *appPath);
+char* GetLocalizedAppNames(const char *appPath);
 int get_process_list(struct kinfo_proc **procList, size_t *procCount);
 char* get_process_path(pid_t pid);
 */
@@ -181,23 +181,44 @@ func (a *MacRetriever) getAppNameFromMdls(path string) (string, error) {
 }
 
 func (a *MacRetriever) getLocalizedAppName(appPath string) string {
+	names := a.getLocalizedAppNames(appPath)
+	if len(names) == 0 {
+		return ""
+	}
+	return names[0]
+}
+
+func (a *MacRetriever) getLocalizedAppNames(appPath string) []string {
 	cPath := C.CString(appPath)
 	defer C.free(unsafe.Pointer(cPath))
 
-	cName := C.GetLocalizedAppName(cPath)
-	if cName == nil {
-		return ""
+	cNames := C.GetLocalizedAppNames(cPath)
+	if cNames == nil {
+		return nil
 	}
-	defer C.free(unsafe.Pointer(cName))
+	defer C.free(unsafe.Pointer(cNames))
 
-	return strings.TrimSpace(C.GoString(cName))
+	var names []string
+	for _, name := range strings.Split(C.GoString(cNames), "\n") {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		names = append(names, name)
+	}
+
+	return util.UniqueStrings(names)
 }
 
 func (a *MacRetriever) getAppSearchableNames(ctx context.Context, appPath string, primaryName string) []string {
 	searchableNames := []string{
 		primaryName,
-		a.getLocalizedAppName(appPath),
 	}
+	// Bug fix: a single current-locale bundle name is not enough when Spotlight
+	// is disabled. macOS stores display names such as Korean Calculator in
+	// InfoPlist.loctable/InfoPlist.strings resources, so every localized bundle
+	// alias must be indexed.
+	searchableNames = append(searchableNames, a.getLocalizedAppNames(appPath)...)
 
 	if plistName, err := a.getAppNameFromPlist(ctx, appPath); err == nil {
 		searchableNames = append(searchableNames, plistName)

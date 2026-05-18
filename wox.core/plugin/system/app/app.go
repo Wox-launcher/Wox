@@ -69,11 +69,11 @@ type appCacheFile struct {
 }
 
 // Bump this when cached appInfo fields or preprocessed icon semantics change.
-// Version 4 adds IsDefaultIcon to cached app entries and invalidates icon paths
-// generated from the old 48px file-icon source cache; reindexing is required so
-// launchpad can hide apps without real icons and list results stop reusing
-// blurred 40px resize outputs stored in wox-app-cache.json.
-const appCacheVersion = 4
+// Version 5 refreshes macOS searchable_names after localized aliases started
+// reading Finder display names plus every InfoPlist.loctable/InfoPlist.strings
+// localization. Keeping v4 would leave existing caches without names such as
+// Korean Calculator.
+const appCacheVersion = 5
 
 const (
 	appCommandReindex   = "reindex"
