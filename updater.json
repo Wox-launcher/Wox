@@ -1,12 +1,10 @@
 {
-  "Version": "2.0.3",
-  "MacArm64DownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.0.3/wox-mac-arm64.dmg",
-  "MacArm64Checksum": "3e92db6a633e8305b8725ca792c78116",
-  "WindowsDownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.0.3/wox-windows-amd64.exe",
-  "WindowsChecksum": "e5e1f114cb6d5e657d8c5078207677fd",
-  "LinuxDownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.0.3/wox-linux-amd64",
-  "LinuxChecksum": "d5a84323e42ea452f358fafbc9e00550",
-  "ReleaseNotes": "\n- Add\n  - [`Screenshot`] Add screenshot plugin with annotation, history, export path, clipboard handoff, keyboard confirmation, and multi-display handling. One more app to remove from startup list!  \n     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/screenshot.png)  \n    **Tips**: Use it with Query Hotkey to capture screenshots with a single shortcut\n  - [`WebView`] Add configurable website previews with navigation actions, preview toolbar, cache controls, and Windows support.  \n     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/webview_with_hotkey.png)  \n    **Tips**: Use it with Query Hotkey to open frequently used websites with one shortcut, such as Ctrl+Shift+I to quickly check Instagram and hide it again\n  - [`Converter`] Add unit conversion support for length, weight, and temperature #4390\n  - [`File Search`] Add native indexed file search with database-backed scanning, wildcard search, incremental changefeed sync, startup restore, and cross-platform providers. Everything plugin has been moved to [here](https://github.com/qianlifeng/Wox.Plugin.Everything)\n  - [`Toolbar`] Add plugin toolbar messages API so long-running tasks can show progress and actions in the launcher\n  - [`App`] Add customizable ignore rules for app indexing #4375\n  - [`System`] Add shutdown and restart commands with confirmation prompts\n  - [`Query Hotkey`] Add per-hotkey position, query box, toolbar, width, and result count options\n  - [`Tray`] Add context menus and configurable result limits for tray queries\n\n- Improve\n  - [`Launcher`] Improve query result handling, height preservation, and resize timing to reduce flicker and input lag\n  - [`Query`] Improve temporary query restoration, debounced plugin fallback, and result tracking for more stable query transitions\n  - [`Plugin`] Improve uninstall progress reporting and host cleanup\n  - [`File Icon`] Improve Windows file icon retrieval with associated file type fallback\n  - [`Updater`] Improve macOS app replacement and Linux updater logging\n  - [`Settings`] Improve loading of settings and AI model data\n\n- Fix\n  - [`Launcher`] Fix resize regressions, first-result painting flicker, and delayed window hiding on Windows\n  - [`Tray`] Fix preview padding when tray query results only contain a preview\n  - [`App`] Fix application indexing issues and query handling edge cases",
-  "MacAmd64DownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.0.3/wox-mac-amd64.dmg",
-  "MacAmd64Checksum": "147f30578772a216e880446d80dcd35b"
+  "Version": "2.1.0",
+  "MacArm64DownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.1.0/wox-mac-arm64.dmg",
+  "MacArm64Checksum": "",
+  "WindowsDownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.1.0/wox-windows-amd64.exe",
+  "WindowsChecksum": "",
+  "LinuxDownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.1.0/wox-linux-amd64",
+  "LinuxChecksum": "",
+  "ReleaseNotes": ""
 }
