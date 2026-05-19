@@ -666,16 +666,9 @@ class _OnboardingBackdropPainter extends CustomPainter {
     final base = Paint()..color = backgroundColor;
     canvas.drawRect(Offset.zero & size, base);
 
-    final gridPaint =
-        Paint()
-          ..color = textColor.withValues(alpha: 0.026)
-          ..strokeWidth = 1;
-    for (double x = _onboardingSidebarWidth; x < size.width; x += 52) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height - _onboardingFooterHeight), gridPaint);
-    }
-    for (double y = 42; y < size.height - _onboardingFooterHeight; y += 52) {
-      canvas.drawLine(Offset(_onboardingSidebarWidth, y), Offset(size.width, y), gridPaint);
-    }
+    // Visual refinement: the fine grid made the onboarding surface feel busy
+    // over acrylic wallpapers. Keeping only the base fill and sweep lets the
+    // demo cards remain the visual focus while preserving subtle depth.
 
     final sweepPaint =
         Paint()
@@ -697,7 +690,7 @@ class _OnboardingBackdropPainter extends CustomPainter {
     // Glass-dark fix: remove the standalone decorative blocks. They were meant
     // to add depth after removing accent washes, but over a real acrylic window
     // they read as accidental rectangular artifacts instead of natural glass.
-    // The theme background, grid, and subtle sweep are enough to preserve depth.
+    // The theme background and subtle sweep are enough to preserve depth.
   }
 
   @override

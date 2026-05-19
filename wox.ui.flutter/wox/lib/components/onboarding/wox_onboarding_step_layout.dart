@@ -87,7 +87,7 @@ class WoxOnboardingInfoPanel extends StatelessWidget {
     // Readability fix: when an info panel has no separate title, its body text
     // is the primary instruction for the step. The previous subtitle color made
     // these standalone descriptions look faded on dark translucent onboarding
-    // panels, especially over the grid backdrop.
+    // panels, especially over the subtle acrylic backdrop.
     final standaloneBodyStyle = TextStyle(color: getThemeTextColor(), fontSize: 14, height: 1.5);
     final detailBodyStyle = TextStyle(color: getThemeSubTextColor(), fontSize: 14, height: 1.5);
     final badgeWidget =
