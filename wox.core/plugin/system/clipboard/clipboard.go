@@ -46,6 +46,7 @@ const (
 	clipboardTypeRefinementAll   = "all"
 	clipboardTypeRefinementText  = "text"
 	clipboardTypeRefinementImage = "image"
+	clipboardTypeRefinementLink  = "link"
 )
 
 func init() {
@@ -389,6 +390,7 @@ func (c *ClipboardPlugin) buildClipboardTypeRefinement() plugin.QueryRefinement 
 			{Value: clipboardTypeRefinementAll, Title: "i18n:plugin_clipboard_refinement_type_all"},
 			{Value: clipboardTypeRefinementText, Title: "i18n:plugin_clipboard_refinement_type_text"},
 			{Value: clipboardTypeRefinementImage, Title: "i18n:plugin_clipboard_refinement_type_image"},
+			{Value: clipboardTypeRefinementLink, Title: "i18n:plugin_clipboard_refinement_type_link"},
 		},
 	}
 }
@@ -411,17 +413,25 @@ func (c *ClipboardPlugin) getSelectedClipboardType(query plugin.Query) string {
 		return string(clipboard.ClipboardTypeText)
 	case clipboardTypeRefinementImage:
 		return string(clipboard.ClipboardTypeImage)
+	case clipboardTypeRefinementLink:
+		return clipboardTypeRefinementLink
 	default:
 		return clipboardTypeRefinementAll
 	}
 }
 
-func clipboardTypeMatches(recordType string, selectedType string) bool {
+func clipboardRecordMatchesType(recordType string, content string, selectedType string) bool {
+	// Feature addition: Link is a derived clipboard text subtype, not a stored
+	// database type. Keeping the check here lets favorites, recents, and search
+	// results share the same filter without changing persisted records.
+	if selectedType == clipboardTypeRefinementLink {
+		return recordType == string(clipboard.ClipboardTypeText) && util.IsUrl(content)
+	}
 	return selectedType == clipboardTypeRefinementAll || recordType == selectedType
 }
 
 func clipboardFavoriteMatchesSearch(favoriteItem FavoriteClipboardItem, search string, selectedType string) bool {
-	if !clipboardTypeMatches(favoriteItem.Type, selectedType) {
+	if !clipboardRecordMatchesType(favoriteItem.Type, favoriteItem.Content, selectedType) {
 		return false
 	}
 
@@ -461,7 +471,7 @@ func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 		}
 
 		for _, favoriteItem := range favorites {
-			if !clipboardTypeMatches(favoriteItem.Type, selectedType) {
+			if !clipboardRecordMatchesType(favoriteItem.Type, favoriteItem.Content, selectedType) {
 				continue
 			}
 			record := c.convertFavoriteToRecord(favoriteItem)
@@ -477,7 +487,7 @@ func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to get favorites: %s", err.Error()))
 		} else {
 			for _, favoriteItem := range favorites {
-				if !clipboardTypeMatches(favoriteItem.Type, selectedType) {
+				if !clipboardRecordMatchesType(favoriteItem.Type, favoriteItem.Content, selectedType) {
 					continue
 				}
 				record := c.convertFavoriteToRecord(favoriteItem)
@@ -490,6 +500,10 @@ func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 		var recentErr error
 		if selectedType == clipboardTypeRefinementAll {
 			recent, recentErr = c.db.GetRecent(ctx, 50, 0)
+		} else if selectedType == clipboardTypeRefinementLink {
+			// Link refinement is derived from text records, so query text history
+			// first and then apply the shared URL rule in memory.
+			recent, recentErr = c.db.GetRecentByType(ctx, string(clipboard.ClipboardTypeText), 50, 0)
 		} else {
 			recent, recentErr = c.db.GetRecentByType(ctx, selectedType, 50, 0)
 		}
@@ -497,6 +511,9 @@ func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to get recent records: %s", recentErr.Error()))
 		} else {
 			for _, record := range recent {
+				if !clipboardRecordMatchesType(record.Type, record.Content, selectedType) {
+					continue
+				}
 				// All records in database are non-favorite now
 				results = append(results, c.convertRecordToResult(ctx, record, query))
 			}
@@ -522,7 +539,7 @@ func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 
 	// Search in database records
 	var searchResults []ClipboardRecord
-	if selectedType == clipboardTypeRefinementAll {
+	if selectedType == clipboardTypeRefinementAll || selectedType == clipboardTypeRefinementLink {
 		searchResults, err = c.db.SearchText(ctx, query.Search, 100)
 	} else {
 		searchResults, err = c.db.SearchByType(ctx, query.Search, selectedType, 100)
@@ -534,6 +551,9 @@ func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 	}
 
 	for _, record := range allResults {
+		if !clipboardRecordMatchesType(record.Type, record.Content, selectedType) {
+			continue
+		}
 		results = append(results, c.convertRecordToResult(ctx, record, query))
 	}
 
@@ -698,6 +718,10 @@ func (c *ClipboardPlugin) convertRecordToResult(ctx context.Context, record Clip
 func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record ClipboardRecord, query plugin.Query) plugin.QueryResult {
 	primaryActionCode := c.api.GetSetting(ctx, primaryActionSettingKey)
 	openDirectoryPath := resolveClipboardDirectoryPath(record.Content)
+	normalizedLink := ""
+	if util.IsUrl(record.Content) {
+		normalizedLink = util.NormalizeUrl(record.Content)
+	}
 
 	actions := []plugin.QueryResultAction{
 		{
@@ -723,6 +747,19 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 	})
 	if pasteToActiveWindowErr == nil {
 		actions = append(actions, pasteToActiveWindowAction)
+	}
+
+	if normalizedLink != "" {
+		actions = append(actions, plugin.QueryResultAction{
+			Name: "i18n:plugin_clipboard_open_link",
+			Icon: common.OpenIcon,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				c.moveRecordToTop(ctx, record.ID)
+				if err := shell.Open(normalizedLink); err != nil {
+					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open clipboard link: id=%s url=%s err=%s", record.ID, normalizedLink, err.Error()))
+				}
+			},
+		})
 	}
 
 	if openDirectoryPath != "" {
@@ -908,14 +945,24 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 		title = strings.TrimSpace(ellipsis.Centering(record.Content, 80))
 	}
 
+	previewType := plugin.WoxPreviewTypeText
+	previewData := record.Content
+	if normalizedLink != "" {
+		// Feature addition: link clipboard entries use Markdown preview so the
+		// existing Flutter markdown renderer can expose a clickable URL without
+		// adding a clipboard-specific preview surface.
+		previewType = plugin.WoxPreviewTypeMarkdown
+		previewData = formatClipboardLinkMarkdown(record.Content, normalizedLink)
+	}
+
 	return plugin.QueryResult{
 		Title:      title,
 		Icon:       icon,
 		Group:      group,
 		GroupScore: groupScore,
 		Preview: plugin.WoxPreview{
-			PreviewType: plugin.WoxPreviewTypeText,
-			PreviewData: record.Content,
+			PreviewType: previewType,
+			PreviewData: previewData,
 			PreviewProperties: map[string]string{
 				"i18n:plugin_clipboard_copy_date": util.FormatTimestamp(record.Timestamp),
 				// Preview pills show values only, so the character unit belongs in
@@ -928,6 +975,21 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 		Score:   record.Timestamp,
 		Actions: actions,
 	}
+}
+
+func formatClipboardLinkMarkdown(rawContent string, normalizedLink string) string {
+	displayText := strings.TrimSpace(rawContent)
+	return fmt.Sprintf("[%s](%s)", escapeClipboardMarkdownLinkText(displayText), escapeClipboardMarkdownLinkDestination(normalizedLink))
+}
+
+func escapeClipboardMarkdownLinkText(text string) string {
+	replacer := strings.NewReplacer(`\`, `\\`, `[`, `\[`, `]`, `\]`)
+	return replacer.Replace(text)
+}
+
+func escapeClipboardMarkdownLinkDestination(link string) string {
+	replacer := strings.NewReplacer(" ", "%20", "(", "%28", ")", "%29")
+	return replacer.Replace(link)
 }
 
 // convertImageRecord converts an image record to a query result
