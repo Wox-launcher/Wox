@@ -492,8 +492,16 @@ func handleThemeStore(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
 
 	storeThemes := GetStoreManager().GetThemes()
-	var themes = make([]dto.ThemeDto, len(storeThemes))
-	copyErr := copier.Copy(&themes, &storeThemes)
+	effectiveStoreThemes := make([]common.Theme, 0, len(storeThemes))
+	for _, storeTheme := range storeThemes {
+		// New feature: store themes stay raw for install/persistence, but preview
+		// responses should match the current OS so users see the style that will be
+		// applied on this machine.
+		effectiveStoreThemes = append(effectiveStoreThemes, GetUIManager().resolvePlatformTheme(ctx, storeTheme))
+	}
+
+	var themes = make([]dto.ThemeDto, len(effectiveStoreThemes))
+	copyErr := copier.Copy(&themes, &effectiveStoreThemes)
 	if copyErr != nil {
 		writeErrorResponse(w, copyErr.Error())
 		return

@@ -126,16 +126,20 @@ func (u *uiImpl) ChangeTheme(ctx context.Context, theme common.Theme) {
 	}
 
 	// For normal themes, save and apply directly
+	// New feature: direct common.UI callers may bypass Manager.ChangeTheme, so
+	// resolve platform overrides here as well before sending the flat payload to
+	// Flutter.
+	effectiveTheme := GetUIManager().resolvePlatformTheme(ctx, theme)
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	woxSetting.ThemeId.Set(theme.ThemeId)
-	u.invokeWebsocketMethod(ctx, "ChangeTheme", theme)
+	woxSetting.ThemeId.Set(effectiveTheme.ThemeId)
+	u.invokeWebsocketMethod(ctx, "ChangeTheme", effectiveTheme)
 }
 
 // ChangeThemeWithoutSave applies the theme without saving to settings
 // This is used for auto appearance theme switching
 func (u *uiImpl) ChangeThemeWithoutSave(ctx context.Context, theme common.Theme) {
 	logger.Info(ctx, fmt.Sprintf("change theme (without save): %s", theme.ThemeName))
-	u.invokeWebsocketMethod(ctx, "ChangeTheme", theme)
+	u.invokeWebsocketMethod(ctx, "ChangeTheme", GetUIManager().resolvePlatformTheme(ctx, theme))
 }
 
 func (u *uiImpl) InstallTheme(ctx context.Context, theme common.Theme) {

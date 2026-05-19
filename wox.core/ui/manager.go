@@ -480,7 +480,7 @@ func (m *Manager) GetCurrentTheme(ctx context.Context) common.Theme {
 		if v.IsAutoAppearance {
 			return m.getActualTheme(ctx, v)
 		}
-		return v
+		return m.resolvePlatformTheme(ctx, v)
 	}
 
 	return common.Theme{}
@@ -503,17 +503,17 @@ func (m *Manager) getActualTheme(ctx context.Context, autoTheme common.Theme) co
 		result.IsAutoAppearance = autoTheme.IsAutoAppearance
 		result.DarkThemeId = autoTheme.DarkThemeId
 		result.LightThemeId = autoTheme.LightThemeId
-		return result
+		return m.resolvePlatformTheme(ctx, result)
 	}
 
 	// Fallback to auto theme if target not found
-	return autoTheme
+	return m.resolvePlatformTheme(ctx, autoTheme)
 }
 
 func (m *Manager) GetAllThemes(ctx context.Context) []common.Theme {
 	var themes []common.Theme
 	m.themes.Range(func(key string, value common.Theme) bool {
-		themes = append(themes, value)
+		themes = append(themes, m.resolvePlatformTheme(ctx, value))
 		return true
 	})
 	return themes
@@ -562,6 +562,82 @@ func (m *Manager) parseTheme(themeJson string) (common.Theme, error) {
 	return theme, nil
 }
 
+func (m *Manager) resolvePlatformTheme(ctx context.Context, theme common.Theme) common.Theme {
+	platformName, platformOverride := m.getThemePlatformOverride(theme)
+	if platformOverride == nil || len(*platformOverride) == 0 {
+		return clearThemePlatformOverrides(theme)
+	}
+
+	// New feature: platform nodes are preserved on the stored Theme, but Flutter
+	// still expects the old flat payload. Merge the current OS override here so
+	// every caller receives the same effective style without teaching the UI about
+	// platform-specific schema details.
+	themeJSON, marshalErr := json.Marshal(theme)
+	if marshalErr != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to marshal theme %s for platform override %s: %s", theme.ThemeId, platformName, marshalErr.Error()))
+		return clearThemePlatformOverrides(theme)
+	}
+
+	var merged map[string]json.RawMessage
+	unmarshalErr := json.Unmarshal(themeJSON, &merged)
+	if unmarshalErr != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to prepare theme %s for platform override %s: %s", theme.ThemeId, platformName, unmarshalErr.Error()))
+		return clearThemePlatformOverrides(theme)
+	}
+
+	// Legacy border aliases must still work inside platform overrides. If an
+	// override uses the old alias, remove the canonical base value first so the
+	// existing alias parser can treat the alias as the effective value.
+	if _, ok := (*platformOverride)["ResultItemBorderLeft"]; ok {
+		delete(merged, "ResultItemBorderLeftWidth")
+	}
+	if _, ok := (*platformOverride)["ResultItemActiveBorderLeft"]; ok {
+		delete(merged, "ResultItemActiveBorderLeftWidth")
+	}
+	for fieldName, value := range *platformOverride {
+		merged[fieldName] = value
+	}
+
+	delete(merged, "windows")
+	delete(merged, "macos")
+	delete(merged, "linux")
+
+	resolvedJSON, marshalErr := json.Marshal(merged)
+	if marshalErr != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to encode resolved theme %s for platform override %s: %s", theme.ThemeId, platformName, marshalErr.Error()))
+		return clearThemePlatformOverrides(theme)
+	}
+
+	var resolvedTheme common.Theme
+	unmarshalErr = json.Unmarshal(resolvedJSON, &resolvedTheme)
+	if unmarshalErr != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to resolve theme %s for platform override %s: %s", theme.ThemeId, platformName, unmarshalErr.Error()))
+		return clearThemePlatformOverrides(theme)
+	}
+
+	return clearThemePlatformOverrides(resolvedTheme)
+}
+
+func (m *Manager) getThemePlatformOverride(theme common.Theme) (string, *common.ThemePlatformOverride) {
+	switch util.GetCurrentPlatform() {
+	case util.PlatformWindows:
+		return "windows", theme.Windows
+	case util.PlatformMacOS:
+		return "macos", theme.MacOS
+	case util.PlatformLinux:
+		return "linux", theme.Linux
+	default:
+		return util.GetCurrentPlatform(), nil
+	}
+}
+
+func clearThemePlatformOverrides(theme common.Theme) common.Theme {
+	theme.Windows = nil
+	theme.MacOS = nil
+	theme.Linux = nil
+	return theme
+}
+
 func (m *Manager) ChangeTheme(ctx context.Context, theme common.Theme) {
 	// If it's an auto appearance theme, save the auto theme ID but apply the appropriate light/dark theme
 	if theme.IsAutoAppearance {
@@ -572,7 +648,7 @@ func (m *Manager) ChangeTheme(ctx context.Context, theme common.Theme) {
 		m.isSystemDark = appearance.IsDark()
 		m.applyAutoAppearanceThemeIfNeed(ctx)
 	} else {
-		m.GetUI(ctx).ChangeTheme(ctx, theme)
+		m.GetUI(ctx).ChangeTheme(ctx, m.resolvePlatformTheme(ctx, theme))
 	}
 }
 
@@ -1536,9 +1612,11 @@ func (m *Manager) applyAutoAppearanceThemeIfNeed(ctx context.Context) {
 
 	if targetTheme, ok := m.themes.Load(targetThemeId); ok {
 		logger.Info(ctx, fmt.Sprintf("auto apply theme: %s (isDark=%v)", targetTheme.ThemeName, m.isSystemDark))
-		// Apply theme without saving to settings, so auto appearance logic works on restart
+		// Apply the current-platform effective theme without saving to settings, so
+		// auto appearance keeps storing the auto theme ID while the UI receives the
+		// same flattened payload as normal theme changes.
 		if impl, ok := m.ui.(*uiImpl); ok {
-			impl.ChangeThemeWithoutSave(ctx, targetTheme)
+			impl.ChangeThemeWithoutSave(ctx, m.resolvePlatformTheme(ctx, targetTheme))
 		}
 	} else {
 		logger.Warn(ctx, fmt.Sprintf("target theme not found: %s", targetThemeId))
