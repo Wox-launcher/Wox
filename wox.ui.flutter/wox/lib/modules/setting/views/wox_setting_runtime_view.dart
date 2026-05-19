@@ -21,6 +21,12 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
   WoxSettingRuntimeView({super.key});
   static const double _runtimeStatusDetailAreaHeight = 40;
   static const double _runtimeStatusDetailBottomSpacing = 14;
+  static const int _minimumPythonMajorVersion = 3;
+  static const int _minimumPythonMinorVersion = 10;
+  static const String _minimumPythonVersionLabel = '3.10';
+  static const int _minimumNodejsMajorVersion = 20;
+  static const int _minimumNodejsMinorVersion = 0;
+  static const String _minimumNodejsVersionLabel = '20.0.0';
 
   String _runtimeDisplayName(String runtime) {
     switch (runtime.toUpperCase()) {
@@ -276,74 +282,197 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
   // Debounce timers for validation
   Timer? _pythonValidationTimer;
   Timer? _nodejsValidationTimer;
+  bool _hasValidatedInitialPythonPath = false;
+  bool _hasValidatedInitialNodejsPath = false;
 
   // Validation methods
-  Future<void> validatePythonPath(String path) async {
-    if (path.isEmpty) {
+  Future<bool> validatePythonPath(String path) async {
+    final normalizedPath = path.trim();
+    if (normalizedPath.isEmpty) {
       pythonValidationMessage.value = '';
-      return;
+      return true;
     }
 
     isPythonValidating.value = true;
     try {
-      final result = await Process.run(path, ['--version']);
+      final result = await Process.run(normalizedPath, ['--version']);
       if (result.exitCode == 0) {
-        final version = result.stdout.toString().trim();
-        pythonValidationMessage.value = '✓ $version';
+        final version = _readProcessVersionOutput(result);
+        if (_isSupportedPythonVersion(version)) {
+          pythonValidationMessage.value = '✓ $version';
+          return true;
+        }
+
+        // Bug fix: Python 3.9 can execute `--version` but cannot run the Wox
+        // Python host package. The UI now mirrors the backend 3.10 floor so a
+        // browsed or typed path is rejected before it becomes saved settings.
+        pythonValidationMessage.value =
+            '✗ ${controller.tr("ui_runtime_python_version_unsupported").replaceAll("{version}", _displayPythonVersion(version)).replaceAll("{minimumVersion}", _minimumPythonVersionLabel)}';
+        return false;
       } else {
         pythonValidationMessage.value = '✗ ${controller.tr("ui_runtime_validation_failed")}';
+        return false;
       }
     } catch (e) {
       pythonValidationMessage.value = '✗ ${controller.tr("ui_runtime_validation_error")}: ${e.toString()}';
+      return false;
     } finally {
       isPythonValidating.value = false;
     }
   }
 
-  Future<void> validateNodejsPath(String path) async {
-    if (path.isEmpty) {
+  String _readProcessVersionOutput(ProcessResult result) {
+    final stdoutText = result.stdout.toString().trim();
+    if (stdoutText.isNotEmpty) {
+      return stdoutText;
+    }
+    return result.stderr.toString().trim();
+  }
+
+  bool _isSupportedPythonVersion(String versionOutput) {
+    final match = RegExp(r'Python\s+(\d+)\.(\d+)(?:\.(\d+))?').firstMatch(versionOutput);
+    if (match == null) {
+      return false;
+    }
+
+    final majorVersion = int.tryParse(match.group(1) ?? '');
+    final minorVersion = int.tryParse(match.group(2) ?? '');
+    if (majorVersion == null || minorVersion == null) {
+      return false;
+    }
+
+    return majorVersion > _minimumPythonMajorVersion || (majorVersion == _minimumPythonMajorVersion && minorVersion >= _minimumPythonMinorVersion);
+  }
+
+  String _displayPythonVersion(String versionOutput) {
+    return versionOutput.replaceFirst(RegExp(r'^Python\s+'), '').trim();
+  }
+
+  Future<bool> validateNodejsPath(String path) async {
+    final normalizedPath = path.trim();
+    if (normalizedPath.isEmpty) {
       nodejsValidationMessage.value = '';
-      return;
+      return true;
     }
 
     isNodejsValidating.value = true;
     try {
-      final result = await Process.run(path, ['-v']);
+      final result = await Process.run(normalizedPath, ['-v']);
       if (result.exitCode == 0) {
-        final version = result.stdout.toString().trim();
-        nodejsValidationMessage.value = '✓ $version';
+        final version = _readProcessVersionOutput(result);
+        if (_isSupportedNodejsVersion(version)) {
+          nodejsValidationMessage.value = '✓ $version';
+          return true;
+        }
+
+        // Feature: Node.js path validation now enforces the same v20 floor as
+        // the backend. File existence alone was not enough because an older node
+        // binary can pass `-v` while still being unsupported by the Wox host.
+        nodejsValidationMessage.value =
+            '✗ ${controller.tr("ui_runtime_nodejs_version_unsupported").replaceAll("{version}", _displayNodejsVersion(version)).replaceAll("{minimumVersion}", _minimumNodejsVersionLabel)}';
+        return false;
       } else {
         nodejsValidationMessage.value = '✗ ${controller.tr("ui_runtime_validation_failed")}';
+        return false;
       }
     } catch (e) {
       nodejsValidationMessage.value = '✗ ${controller.tr("ui_runtime_validation_error")}: ${e.toString()}';
+      return false;
     } finally {
       isNodejsValidating.value = false;
     }
   }
 
-  void updatePythonPath(String value) {
-    controller.updateConfig("CustomPythonPath", value);
+  bool _isSupportedNodejsVersion(String versionOutput) {
+    final match = RegExp(r'v?(\d+)\.(\d+)(?:\.(\d+))?').firstMatch(versionOutput);
+    if (match == null) {
+      return false;
+    }
 
-    // Cancel previous timer
+    final majorVersion = int.tryParse(match.group(1) ?? '');
+    final minorVersion = int.tryParse(match.group(2) ?? '');
+    if (majorVersion == null || minorVersion == null) {
+      return false;
+    }
+
+    return majorVersion > _minimumNodejsMajorVersion || (majorVersion == _minimumNodejsMajorVersion && minorVersion >= _minimumNodejsMinorVersion);
+  }
+
+  String _displayNodejsVersion(String versionOutput) {
+    final normalizedVersion = versionOutput.trim();
+    if (normalizedVersion.startsWith('v')) {
+      return normalizedVersion.substring(1);
+    }
+    return normalizedVersion;
+  }
+
+  void updatePythonPath(String value) {
     _pythonValidationTimer?.cancel();
 
-    // Start new timer for debounced validation
-    _pythonValidationTimer = Timer(const Duration(milliseconds: 500), () {
-      validatePythonPath(value);
+    if (value.trim().isEmpty) {
+      pythonValidationMessage.value = '';
+      isPythonValidating.value = false;
+      unawaited(_savePythonPath(value));
+      return;
+    }
+
+    _pythonValidationTimer = Timer(const Duration(milliseconds: 500), () async {
+      final isValid = await validatePythonPath(value);
+      if (pythonController?.text != value || !isValid) {
+        return;
+      }
+
+      unawaited(_savePythonPath(value));
     });
   }
 
-  void updateNodejsPath(String value) {
-    controller.updateConfig("CustomNodejsPath", value);
+  Future<void> _savePythonPath(String value) async {
+    try {
+      // Bug fix: save only after the selected executable passes local validation,
+      // then let the backend repeat the same check as the source of truth. This
+      // prevents unsupported paths from being persisted while still supporting
+      // manual edits and file-picker updates through one straightforward flow.
+      await controller.updateConfig("CustomPythonPath", value);
+      await controller.refreshRuntimeStatuses();
+    } catch (e) {
+      if (pythonController?.text == value) {
+        pythonValidationMessage.value = '✗ ${e.toString()}';
+      }
+    }
+  }
 
-    // Cancel previous timer
+  void updateNodejsPath(String value) {
     _nodejsValidationTimer?.cancel();
 
-    // Start new timer for debounced validation
-    _nodejsValidationTimer = Timer(const Duration(milliseconds: 500), () {
-      validateNodejsPath(value);
+    if (value.trim().isEmpty) {
+      nodejsValidationMessage.value = '';
+      isNodejsValidating.value = false;
+      unawaited(_saveNodejsPath(value));
+      return;
+    }
+
+    _nodejsValidationTimer = Timer(const Duration(milliseconds: 500), () async {
+      final isValid = await validateNodejsPath(value);
+      if (nodejsController?.text != value || !isValid) {
+        return;
+      }
+
+      unawaited(_saveNodejsPath(value));
     });
+  }
+
+  Future<void> _saveNodejsPath(String value) async {
+    try {
+      // Feature: save Node.js paths only after local validation, then rely on
+      // the backend as the final guard. This keeps manual input and file-picker
+      // selection consistent with the runtime status resolver.
+      await controller.updateConfig("CustomNodejsPath", value);
+      await controller.refreshRuntimeStatuses();
+    } catch (e) {
+      if (nodejsController?.text == value) {
+        nodejsValidationMessage.value = '✗ ${e.toString()}';
+      }
+    }
   }
 
   void dispose() {
@@ -360,11 +489,16 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
     nodejsController ??= TextEditingController(text: controller.woxSetting.value.customNodejsPath);
 
     // Initial validation
-    if (pythonController!.text.isNotEmpty) {
-      validatePythonPath(pythonController!.text);
+    if (!_hasValidatedInitialPythonPath && pythonController!.text.isNotEmpty) {
+      // Bug fix: initial validation is intentionally one-shot. Running a process
+      // on every reactive rebuild was unnecessary work and could race with the
+      // new save-after-validation flow for manually selected Python paths.
+      _hasValidatedInitialPythonPath = true;
+      unawaited(validatePythonPath(pythonController!.text));
     }
-    if (nodejsController!.text.isNotEmpty) {
-      validateNodejsPath(nodejsController!.text);
+    if (!_hasValidatedInitialNodejsPath && nodejsController!.text.isNotEmpty) {
+      _hasValidatedInitialNodejsPath = true;
+      unawaited(validateNodejsPath(nodejsController!.text));
     }
     return Obx(() {
       final statuses = controller.runtimeStatuses;

@@ -32,7 +32,6 @@ dependencies:
     sdk: flutter
 
   web_socket_channel: ^3.0.3
-  flutter_acrylic: ^1.1.4
   get: ^4.7.3
   logger: ^2.6.2
   uuid: ^4.5.2

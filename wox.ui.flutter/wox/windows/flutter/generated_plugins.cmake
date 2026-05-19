@@ -4,7 +4,6 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   desktop_drop
-  flutter_acrylic
   hotkey_manager_windows
   protocol_handler_windows
   syncfusion_pdfviewer_windows
