@@ -73,7 +73,14 @@ type appCacheFile struct {
 // reading Finder display names plus every InfoPlist.loctable/InfoPlist.strings
 // localization. Keeping v4 would leave existing caches without names such as
 // Korean Calculator.
-const appCacheVersion = 5
+// Version 6 refreshes Windows Settings entries after replacing legacy Control
+// Panel file icons with built-in SVGs and adding System subpages. Keeping v5
+// would continue loading old cached absolute icon paths and omit the new
+// ms-settings rows until the user manually reindexed apps.
+// Version 7 refreshes Windows Settings searchable aliases. Version 6 caches
+// created before the alias table was complete would keep opening the new pages
+// but miss English terms such as "display" for localized Settings titles.
+const appCacheVersion = 7
 
 const (
 	appCommandReindex   = "reindex"
@@ -426,9 +433,10 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) plugi
 	entries, generation := a.getQueryEntriesSnapshot()
 	startedAt := time.Now().UnixNano()
 
-	// When the user grows the same search prefix, the next match set must be a
-	// subset of the previous one.
-	cachedMatches, canReuseCachedMatches := a.getReusableQueryMatches(query, generation)
+	// When the user grows the same search prefix, most fuzzy searches can reuse
+	// the previous matched subset. Pinyin has a separate guard inside
+	// getReusableQueryMatches because syllable-boundary typing is not monotonic.
+	cachedMatches, canReuseCachedMatches := a.getReusableQueryMatches(ctx, query, generation)
 
 	results := make([]plugin.QueryResult, 0, len(entries))
 	matchedIndexes := make([]int, 0, len(entries))
@@ -1395,7 +1403,7 @@ func normalizeQueryCacheKey(search string) string {
 	return strings.ToLower(search)
 }
 
-func (a *ApplicationPlugin) getReusableQueryMatches(query plugin.Query, generation uint64) ([]int, bool) {
+func (a *ApplicationPlugin) getReusableQueryMatches(ctx context.Context, query plugin.Query, generation uint64) ([]int, bool) {
 	if query.SessionId == "" {
 		return nil, false
 	}
@@ -1410,6 +1418,9 @@ func (a *ApplicationPlugin) getReusableQueryMatches(query plugin.Query, generati
 	if previousSearch == "" {
 		return nil, false
 	}
+	if shouldBypassPinyinQueryCache(ctx, previousSearch, currentSearch) {
+		return nil, false
+	}
 	// Reuse only when the current query keeps growing from the same prefix and
 	// still points at the same entry snapshot.
 	if currentSearch == previousSearch || strings.HasPrefix(currentSearch, previousSearch) {
@@ -1417,6 +1428,35 @@ func (a *ApplicationPlugin) getReusableQueryMatches(query plugin.Query, generati
 	}
 
 	return nil, false
+}
+
+func shouldBypassPinyinQueryCache(ctx context.Context, previousSearch string, currentSearch string) bool {
+	if !setting.GetSettingManager().GetWoxSetting(ctx).UsePinYin.Get() {
+		return false
+	}
+	if !isAsciiLetterSearch(previousSearch) || !isAsciiLetterSearch(currentSearch) {
+		return false
+	}
+
+	// Bug fix: pinyin matching is intentionally non-monotonic while the user is
+	// typing across syllable boundaries. A Chinese title can match "xian", miss
+	// "xians", and match again at "xianshi". Reusing the empty subset from the
+	// intermediate query would hide the valid final match, so plain letter
+	// searches must rescan when pinyin is enabled.
+	return true
+}
+
+func isAsciiLetterSearch(search string) bool {
+	if search == "" {
+		return false
+	}
+	for i := 0; i < len(search); i++ {
+		ch := search[i]
+		if (ch < 'a' || ch > 'z') && (ch < 'A' || ch > 'Z') {
+			return false
+		}
+	}
+	return true
 }
 
 func (a *ApplicationPlugin) storeQueryMatches(query plugin.Query, cache appQuerySessionCache) {

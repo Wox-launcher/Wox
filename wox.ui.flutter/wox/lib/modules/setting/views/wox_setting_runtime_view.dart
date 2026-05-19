@@ -370,7 +370,10 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
       final statuses = controller.runtimeStatuses;
       final bool isLoadingStatuses = controller.isRuntimeStatusLoading.value;
       final String runtimeStatusError = controller.runtimeStatusError.value;
-      final List<WoxRuntimeStatus> visibleStatuses = statuses.where((status) => status.runtime.toUpperCase() != 'SCRIPT' || status.loadedPluginCount > 0).toList();
+      // Bug fix: this page is a runtime inventory, not an installed-plugin list.
+      // The previous SCRIPT plugin-count filter hid the built-in script runtime when
+      // users had not installed any script plugins, so keep every backend runtime here.
+      final List<WoxRuntimeStatus> visibleStatuses = statuses.toList();
 
       return form(
         title: controller.tr("ui_runtime_settings"),
