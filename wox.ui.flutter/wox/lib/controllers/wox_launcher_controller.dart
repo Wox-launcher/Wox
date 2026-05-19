@@ -3147,6 +3147,26 @@ class WoxLauncherController extends GetxController {
     return "${size.width}x${size.height}";
   }
 
+  Future<void> _waitForNextFlutterFrame({required String traceId, required String reason}) async {
+    // Bug fix: management-window transitions need a concrete Flutter frame
+    // boundary after native geometry changes. A scheduled frame plus timeout
+    // keeps the staging path deterministic without risking a stuck open if the
+    // hidden Windows window does not produce a frame promptly.
+    final completer = Completer<void>();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!completer.isCompleted) {
+        completer.complete();
+      }
+    });
+    SchedulerBinding.instance.scheduleFrame();
+    await completer.future.timeout(
+      const Duration(milliseconds: 60),
+      onTimeout: () {
+        Logger.instance.warn(traceId, "wait for next Flutter frame timed out: $reason");
+      },
+    );
+  }
+
   int logicalToPhysicalPixels(double logicalPixels) {
     return (logicalPixels * PlatformDispatcher.instance.views.first.devicePixelRatio).round();
   }
@@ -3492,6 +3512,10 @@ class WoxLauncherController extends GetxController {
 
   Future<void> openSetting(String traceId, SettingWindowContext context) async {
     final settingController = Get.find<WoxSettingController>();
+    var wasWindowVisible = false;
+    try {
+      wasWindowVisible = await windowManager.isVisible();
+    } catch (_) {}
 
     // Save current position before switching (used if we return to launcher)
     try {
@@ -3503,18 +3527,25 @@ class WoxLauncherController extends GetxController {
     // visibility, while tray-origin opens must still close directly back to
     // hidden state.
     isSettingOpenedFromHidden = context.source == SettingWindowContext.sourceTray;
+    settingController.activeNavPath.value = 'general';
     isInSettingView.value = true;
     isInOnboardingView.value = false;
+
+    final stageWindowsSettingOpen = Platform.isWindows && wasWindowVisible;
     await WoxApi.instance.onSetting(traceId, true);
     await WoxApi.instance.onOnboarding(traceId, false);
 
-    // Preload theme/settings for settings view
-    await WoxThemeUtil.instance.loadTheme(traceId);
-    await settingController.reloadSetting(traceId);
-    settingController.activeNavPath.value = 'general';
-
-    // Load settings-view data on demand instead of during app startup.
-    settingController.preloadSettingViewData(traceId, forceRefresh: true);
+    // Bug fix: keep the route switch responsive by drawing settings from the
+    // cached theme/settings first. The old awaited refresh made Windows stay
+    // hidden while HTTP reloads ran; refreshing in the background keeps data
+    // fresh without delaying the first settings frame.
+    unawaited(() async {
+      try {
+        await Future.wait([WoxThemeUtil.instance.loadTheme(traceId), settingController.reloadSetting(traceId)]);
+      } catch (e) {
+        Logger.instance.error(traceId, "Failed to refresh settings window data in background: $e");
+      }
+    }());
 
     if (context.path == "/plugin/setting") {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -3542,6 +3573,13 @@ class WoxLauncherController extends GetxController {
     }
 
     const settingWindowSize = Size(1200, 800);
+    if (stageWindowsSettingOpen) {
+      // Bug fix: Windows paints the native acrylic/Mica background as soon as
+      // the root HWND grows. Hide only the final geometry staging window so the
+      // user sees an immediate settings route switch, then the final 1200x800
+      // settings frame, without watching the backdrop expand first.
+      await windowManager.hide();
+    }
     await windowManager.setSize(settingWindowSize);
     if (Platform.isLinux) {
       // On Linux we need to show first before positioning works reliably
@@ -3549,10 +3587,23 @@ class WoxLauncherController extends GetxController {
       await windowManager.center(settingWindowSize.width, settingWindowSize.height);
     } else {
       await windowManager.center(settingWindowSize.width, settingWindowSize.height);
+      if (Platform.isWindows) {
+        // Bug fix: setSize/center update the native HWND immediately, but the
+        // Flutter surface may still contain the previous launcher-sized frame.
+        // Waiting for one scheduled frame makes the first visible settings
+        // frame match the final native window size instead of exposing the
+        // enlarged Windows backdrop behind stale Flutter pixels.
+        await _waitForNextFlutterFrame(traceId: traceId, reason: "settings window open");
+      }
       await windowManager.show();
     }
     await windowManager.focus();
     await windowManager.setAlwaysOnTop(false);
+
+    // Load heavier settings-page data after the window is visible. These lists
+    // (plugins, fonts, backups, usage) are not required for the first frame and
+    // should not lengthen the short Windows hide-and-resize staging path.
+    settingController.preloadSettingViewData(traceId, forceRefresh: true);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await Future.delayed(const Duration(milliseconds: 50));
