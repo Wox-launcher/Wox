@@ -60,6 +60,14 @@ var streamContentTags = []streamContentTag{
 	{Start: "<think>", End: "</think>", Target: streamContentTargetReasoning},
 }
 
+var reasoningExtraFieldNames = [...]string{
+	// OpenAI-compatible providers do not agree on one streamed reasoning field.
+	// Keep the known names in one small list so receiving chunks and empty-chunk
+	// detection stay in sync when provider-specific support is added.
+	"reasoning",
+	"reasoning_content",
+}
+
 // NewOpenAIBaseProvider creates a new OpenAI base provider
 func NewOpenAIBaseProvider(connectContext setting.AIProvider) *OpenAIBaseProvider {
 	return &OpenAIBaseProvider{connectContext: connectContext}
@@ -260,20 +268,26 @@ func (s *OpenAIBaseProviderStream) Receive(ctx context.Context) (common.ChatStre
 	if len(chunk.Choices) > 0 {
 		delta := chunk.Choices[0].Delta
 
-		if reasoningField, exists := delta.JSON.ExtraFields["reasoning"]; exists {
-			// The reasoning field is already a JSON string, so we need to unmarshal it
-			rawReasoning := reasoningField.Raw()
+		for _, reasoningFieldName := range reasoningExtraFieldNames {
+			if reasoningField, exists := delta.JSON.ExtraFields[reasoningFieldName]; exists {
+				// DeepSeek streams thinking as reasoning_content while some other
+				// OpenAI-compatible providers use reasoning. The old single-field
+				// branch dropped DeepSeek thinking chunks as empty stream updates,
+				// so keep the compatible field names together and parse them through
+				// the same path.
+				rawReasoning := reasoningField.Raw()
 
-			// Only process if reasoning is not null
-			if rawReasoning != "null" && rawReasoning != "" {
-				var reasoningStr string
-				if err := json.Unmarshal([]byte(rawReasoning), &reasoningStr); err == nil {
-					if reasoningStr != "" {
-						s.accumulatedReason += reasoningStr
-						util.GetLogger().Debug(ctx, fmt.Sprintf("AI: Extracted reasoning from chunk: %s", reasoningStr))
+				// Only process if reasoning is not null.
+				if rawReasoning != "null" && rawReasoning != "" {
+					var reasoningStr string
+					if err := json.Unmarshal([]byte(rawReasoning), &reasoningStr); err == nil {
+						if reasoningStr != "" {
+							s.accumulatedReason += reasoningStr
+							util.GetLogger().Debug(ctx, fmt.Sprintf("AI: Extracted reasoning from chunk field %s: %s", reasoningFieldName, reasoningStr))
+						}
+					} else {
+						util.GetLogger().Error(ctx, fmt.Sprintf("AI: Failed to unmarshal reasoning field %s: %s, error: %s", reasoningFieldName, rawReasoning, err.Error()))
 					}
-				} else {
-					util.GetLogger().Error(ctx, fmt.Sprintf("AI: Failed to unmarshal reasoning: %s, error: %s", rawReasoning, err.Error()))
 				}
 			}
 		}
@@ -583,9 +597,13 @@ func (s *OpenAIBaseProviderStream) isChunkEmpty(chunk openai.ChatCompletionChunk
 		return false
 	}
 
-	// Check for reasoning field in ExtraFields (for reasoning models like o1, o3-mini, etc.)
-	if reasoningField, exists := delta.JSON.ExtraFields["reasoning"]; exists && reasoningField.Valid() {
-		return false
+	// Check for reasoning fields in ExtraFields. DeepSeek uses reasoning_content,
+	// while other OpenAI-compatible providers use reasoning, and both should
+	// keep streaming chunks alive even when there is no user-visible content.
+	for _, reasoningFieldName := range reasoningExtraFieldNames {
+		if reasoningField, exists := delta.JSON.ExtraFields[reasoningFieldName]; exists && reasoningField.Valid() {
+			return false
+		}
 	}
 
 	return true
