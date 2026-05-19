@@ -2,6 +2,15 @@
 
 ## v2.1.1 - 
 
+- Improve
+  - [`DeepSeek`] Add DeepSeek as a built-in AI provider with a default API host and provider icon, so users can configure DeepSeek directly instead of using a custom OpenAI-compatible provider entry.
+  - [`Screenshot`] Add a native Windows screenshot selection overlay so region capture works more reliably with Windows windowing behavior.
+  - [`App`] Add richer Windows Settings search entries with localized names and clearer icons, making system settings easier to find from Wox.
+
+- Fix
+  - [`Clipboard`] Fix clipboard type refinement hotkey behavior so filtered clipboard queries keep the expected hotkey logic.
+  - [`Launcher`] Fix Flutter frame timing issues and improve settings window responsiveness.
+  - [`Updater`] Fix Linux executable replacement logic during updates.
 
 ## v2.1.0 - 2026-05-18
 
