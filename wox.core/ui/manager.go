@@ -438,6 +438,16 @@ func (m *Manager) StartUIApp(ctx context.Context) error {
 		}
 	}
 
+	// Bug fix: on a fresh Windows 10 install the Flutter runner can fail before
+	// Dart code starts if the MSVC runtime is absent. Check the native runtime
+	// dependencies while the Go backend can still explain the cause and direct
+	// the user to Microsoft's installer instead of launching an opaque failing
+	// child process.
+	if dependencyErr := ensureUIRuntimeDependencies(ctx, appPath); dependencyErr != nil {
+		m.ExitApp(ctx)
+		return dependencyErr
+	}
+
 	logger.Info(ctx, fmt.Sprintf("start ui, path=%s, port=%d, pid=%d", appPath, m.serverPort, os.Getpid()))
 	cmd, cmdErr := shell.RunWithEnv(appPath, m.getUILaunchEnvs(ctx),
 		fmt.Sprintf("%d", m.serverPort),
@@ -463,6 +473,7 @@ func (m *Manager) StartUIApp(ctx context.Context) error {
 		waitCtx := util.NewTraceContext()
 		if waitErr != nil {
 			logger.Warn(waitCtx, fmt.Sprintf("ui app process(%d) exited with error: %s", pid, waitErr.Error()))
+			handleUIRuntimeLaunchFailure(waitCtx, waitErr)
 		} else {
 			logger.Info(waitCtx, fmt.Sprintf("ui app process(%d) exited", pid))
 		}
