@@ -84,6 +84,12 @@ class WindowsWindowManager extends BaseWindowManager {
         // and notifies the screenshot bridge to refresh the stitched frame.
         ScreenshotPlatformBridge.emitScrollingCaptureWheelEventForPlatform();
         break;
+      case 'onSelectionDisplayHint':
+        // Windows sends a single native screenshot hint when the overlay appears. That lets the
+        // screenshot controller prewarm the likely display without putting PNG hydration on the
+        // drag-move path.
+        ScreenshotPlatformBridge.emitSelectionDisplayHintForPlatform(call.arguments as Map<dynamic, dynamic>);
+        break;
       default:
         Logger.instance.warn(const UuidV4().generate(), "Unhandled method call: ${call.method}");
     }

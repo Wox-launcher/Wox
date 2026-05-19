@@ -82,6 +82,24 @@ private:
     RECT selection_bounds{0, 0, 0, 0};
   } scrolling_capture_overlay_state_;
 
+  struct ScreenshotSelectionOverlayState
+  {
+    bool active = false;
+    bool dragging = false;
+    bool completed = false;
+    // The input window is also the dimming surface. A low-level mouse hook drives the fast drag path
+    // because the layered full-screen HWND can receive its first button messages late while DWM is
+    // still presenting the mask; the HWND input handlers remain as a fallback when the hook is unavailable.
+    HWND input_window = nullptr;
+    std::vector<HWND> border_windows;
+    HHOOK mouse_hook = nullptr;
+    POINT drag_start{0, 0};
+    RECT workspace_bounds{0, 0, 0, 0};
+    RECT selection_bounds{0, 0, 0, 0};
+    ULONGLONG started_tick = 0;
+    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> pending_result;
+  } screenshot_selection_overlay_state_;
+
   struct CachedDisplayCapture
   {
     std::wstring display_id;
@@ -118,6 +136,17 @@ private:
   void PrepareCaptureWorkspace(HWND hwnd, const RECT &native_workspace_bounds);
   void RevealPreparedCaptureWorkspace(HWND hwnd);
   flutter::EncodableMap BuildCaptureWorkspaceResponse(const RECT &native_workspace_bounds) const;
+  bool BeginScreenshotSelectionOverlay(HWND hwnd, const RECT &workspace_bounds, std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result, std::string *error_out);
+  void LayoutScreenshotSelectionOverlay();
+  void ApplyScreenshotSelectionDimRegion();
+  void UpdateScreenshotSelectionOverlay(const RECT &selection_bounds);
+  void CompleteScreenshotSelectionOverlay(bool cancelled);
+  void DismissNativeSelectionOverlays();
+  void DestroyScreenshotSelectionOverlayWindows();
+  void MoveSelectionOverlayWindow(HWND hwnd, const RECT &bounds, bool activate = false);
+  const CachedDisplayCapture *PreferredDisplayCaptureForSelection(const RECT &selection_bounds) const;
+  const CachedDisplayCapture *DisplayCaptureForPoint(POINT point) const;
+  void EmitScreenshotSelectionDisplayHint(const CachedDisplayCapture &capture);
   void BeginScrollingCaptureOverlay(HWND hwnd, const RECT &workspace_bounds, const RECT &selection_bounds, const RECT &controls_bounds);
   void DismissScrollingCaptureOverlay();
   void MoveScrollingCaptureControlsWindow(HWND hwnd, const RECT &controls_bounds);
@@ -149,6 +178,15 @@ private:
 
   // Static overlay procedure for the passive scrolling screenshot mask.
   static LRESULT CALLBACK ScrollingCaptureOverlayWindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam);
+
+  // Static procedure for native screenshot region selection input.
+  static LRESULT CALLBACK ScreenshotSelectionInputWindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam);
+
+  // Static procedure for passive native screenshot dim/border windows.
+  static LRESULT CALLBACK ScreenshotSelectionPassiveWindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam);
+
+  // Static low-level mouse hook for native screenshot region selection.
+  static LRESULT CALLBACK ScreenshotSelectionMouseHookProc(int code, WPARAM wparam, LPARAM lparam);
 
   // Static low-level mouse hook for native scrolling screenshot wheel observation.
   static LRESULT CALLBACK ScrollingCaptureMouseHookProc(int code, WPARAM wparam, LPARAM lparam);

@@ -237,7 +237,9 @@ private struct NativeSelectionOverlayResult {
 }
 
 private final class ScreenshotOverlayView: NSView {
-  private static let selectionBorderColor = NSColor(red: 41 / 255, green: 1, blue: 114 / 255, alpha: 1)
+  // Keep the native selection color aligned with the Flutter annotation frame. The older purple
+  // border made the handoff look like a state change when selection completed.
+  private static let selectionBorderColor = NSColor(red: 41 / 255, green: 255 / 255, blue: 114 / 255, alpha: 1)
   private static let overlayColor = NSColor(calibratedWhite: 0, alpha: 0.46)
   private static let labelBackgroundColor = NSColor(calibratedWhite: 0.09, alpha: 0.9)
   private static let selectionShadowColor = NSColor(calibratedWhite: 0, alpha: 0.2)

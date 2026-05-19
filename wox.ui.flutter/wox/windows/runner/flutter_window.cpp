@@ -14,6 +14,7 @@
 #include <vector>
 #include <flutter/plugin_registrar_windows.h>
 #include <windows.h>
+#include <windowsx.h>
 #include <dwmapi.h>
 #include <gdiplus.h>
 #include <objidl.h>
@@ -45,6 +46,8 @@ static constexpr int kDwmCornerDoNotRound = 1;
 static constexpr int kDwmCornerRound = 2;
 static constexpr UINT kScrollingCaptureWheelMessage = WM_APP + 0x51;
 static constexpr wchar_t kScrollingCaptureOverlayWindowClassName[] = L"WoxScrollingCaptureOverlayWindow";
+static constexpr wchar_t kScreenshotSelectionInputWindowClassName[] = L"WoxScreenshotSelectionInputWindow";
+static constexpr wchar_t kScreenshotSelectionBorderWindowClassName[] = L"WoxScreenshotSelectionBorderWindow";
 static constexpr double kScrollingCaptureToolbarSlotHeightDip = 72.0;
 static constexpr double kScrollingCaptureToolbarHeightDip = 56.0;
 static constexpr double kScrollingCaptureToolbarWidthDip = 124.0;
@@ -709,6 +712,92 @@ static bool TryIntersectRects(const RECT &first, const RECT &second, RECT *inter
 
   *intersection_out = intersection;
   return true;
+}
+
+static bool IsRectEmptyOrInvalid(const RECT &rect)
+{
+  return rect.right <= rect.left || rect.bottom <= rect.top;
+}
+
+static bool IsPointInRect(const RECT &rect, const POINT &point)
+{
+  return point.x >= rect.left && point.x < rect.right && point.y >= rect.top && point.y < rect.bottom;
+}
+
+static RECT RectFromPoints(const POINT &first, const POINT &second)
+{
+  return RECT{
+      first.x < second.x ? first.x : second.x,
+      first.y < second.y ? first.y : second.y,
+      first.x > second.x ? first.x : second.x,
+      first.y > second.y ? first.y : second.y};
+}
+
+static RECT ClampRectToBounds(const RECT &rect, const RECT &bounds)
+{
+  return RECT{
+      rect.left < bounds.left ? bounds.left : rect.left,
+      rect.top < bounds.top ? bounds.top : rect.top,
+      rect.right > bounds.right ? bounds.right : rect.right,
+      rect.bottom > bounds.bottom ? bounds.bottom : rect.bottom};
+}
+
+static double RectIntersectionArea(const RECT &first, const RECT &second)
+{
+  RECT intersection{};
+  if (!TryIntersectRects(first, second, &intersection))
+  {
+    return 0;
+  }
+  return static_cast<double>(intersection.right - intersection.left) * static_cast<double>(intersection.bottom - intersection.top);
+}
+
+static HBRUSH ScreenshotSelectionBorderBrush()
+{
+  static HBRUSH border_brush = CreateSolidBrush(RGB(41, 255, 114));
+  return border_brush;
+}
+
+static RECT LocalRectForWorkspace(const RECT &rect, const RECT &workspace)
+{
+  return RECT{
+      rect.left - workspace.left,
+      rect.top - workspace.top,
+      rect.right - workspace.left,
+      rect.bottom - workspace.top};
+}
+
+static void SetOwnedWindowRegion(HWND hwnd, HRGN region)
+{
+  if (hwnd == nullptr || !IsWindow(hwnd))
+  {
+    if (region != nullptr)
+    {
+      DeleteObject(region);
+    }
+    return;
+  }
+
+  if (SetWindowRgn(hwnd, region, TRUE) == 0 && region != nullptr)
+  {
+    DeleteObject(region);
+  }
+}
+
+static HRGN CreateSelectionDimRegion(const RECT &workspace, const RECT &selection)
+{
+  const RECT local_selection = LocalRectForWorkspace(selection, workspace);
+  HRGN dim_region = CreateRectRgn(0, 0, workspace.right - workspace.left, workspace.bottom - workspace.top);
+  HRGN clear_region = CreateRectRgn(local_selection.left, local_selection.top, local_selection.right, local_selection.bottom);
+  if (dim_region != nullptr && clear_region != nullptr)
+  {
+    CombineRgn(dim_region, dim_region, clear_region, RGN_DIFF);
+  }
+  if (clear_region != nullptr)
+  {
+    DeleteObject(clear_region);
+  }
+  return dim_region;
 }
 
 static bool IsKeyDownMessage(UINT message)
@@ -1432,6 +1521,7 @@ bool FlutterWindow::CaptureDisplaySnapshots(std::vector<CachedDisplayCapture> *c
 
   captures_out->clear();
   error_out->clear();
+  const ULONGLONG capture_start = GetTickCount64();
 
   struct MonitorCaptureContext
   {
@@ -1575,6 +1665,14 @@ bool FlutterWindow::CaptureDisplaySnapshots(std::vector<CachedDisplayCapture> *c
     return false;
   }
 
+  // Timing probe: metadata capture still needs BitBlt snapshots so later selected-display hydration
+  // can reuse the cached HBITMAP. Logging only counts and elapsed time makes it clear whether the
+  // remaining startup cost is capture itself or later PNG/Flutter work.
+  std::ostringstream oss;
+  oss << "screenshot_timing event=windows_native_capture displayCount=" << captures_out->size()
+      << " selection=" << (logical_selection.has_value() ? RectToString(logical_selection.value()) : "null")
+      << " elapsedMs=" << (GetTickCount64() - capture_start);
+  Log(oss.str());
   return true;
 }
 
@@ -1587,6 +1685,8 @@ bool FlutterWindow::BuildDisplaySnapshotPayloads(const std::vector<CachedDisplay
 
   snapshots_out->clear();
   error_out->clear();
+  const ULONGLONG payload_start = GetTickCount64();
+  int encoded_count = 0;
 
   for (const auto &capture : captures)
   {
@@ -1620,12 +1720,21 @@ bool FlutterWindow::BuildDisplaySnapshotPayloads(const std::vector<CachedDisplay
       {
         return false;
       }
+      encoded_count += 1;
       snapshot[flutter::EncodableValue("imageBytesBase64")] = flutter::EncodableValue(png_base64);
     }
 
     snapshots_out->push_back(flutter::EncodableValue(snapshot));
   }
 
+  // Timing probe: the original Windows startup encoded every monitor before reveal. This log proves
+  // whether a call is metadata-only or limited to the selected display payload.
+  std::ostringstream oss;
+  oss << "screenshot_timing event=windows_payload_build displayCount=" << captures.size()
+      << " encodedCount=" << encoded_count
+      << " includeImageBytes=" << (include_image_bytes ? "true" : "false")
+      << " elapsedMs=" << (GetTickCount64() - payload_start);
+  Log(oss.str());
   return true;
 }
 
@@ -1657,6 +1766,7 @@ bool FlutterWindow::CachedDisplayCapturesMatch(const std::vector<std::string> &d
 
 void FlutterWindow::PrepareCaptureWorkspace(HWND hwnd, const RECT &native_workspace_bounds)
 {
+  const ULONGLONG prepare_start = GetTickCount64();
   SavePreviousActiveWindow(hwnd);
   FlushPendingChildKeyUps();
 
@@ -1679,6 +1789,11 @@ void FlutterWindow::PrepareCaptureWorkspace(HWND hwnd, const RECT &native_worksp
   screenshot_presentation_state_.active = false;
   screenshot_presentation_state_.workspace_scale = static_cast<double>(GetDpiScale(hwnd));
   screenshot_presentation_state_.native_workspace_bounds = native_workspace_bounds;
+
+  std::ostringstream oss;
+  oss << "screenshot_timing event=windows_prepare_workspace bounds=" << RectToString(native_workspace_bounds)
+      << " elapsedMs=" << (GetTickCount64() - prepare_start);
+  Log(oss.str());
 }
 
 void FlutterWindow::RevealPreparedCaptureWorkspace(HWND hwnd)
@@ -1692,6 +1807,7 @@ void FlutterWindow::RevealPreparedCaptureWorkspace(HWND hwnd)
   blur_guard_until_tick_ = GetTickCount64() + kPostShowBlurGraceMs;
 
   const RECT &native_workspace_bounds = screenshot_presentation_state_.native_workspace_bounds;
+  const ULONGLONG reveal_start = GetTickCount64();
   SetWindowPos(
       hwnd,
       HWND_TOPMOST,
@@ -1719,6 +1835,11 @@ void FlutterWindow::RevealPreparedCaptureWorkspace(HWND hwnd)
 
   screenshot_presentation_state_.prepared = false;
   screenshot_presentation_state_.active = true;
+
+  std::ostringstream oss;
+  oss << "screenshot_timing event=windows_reveal_workspace bounds=" << RectToString(native_workspace_bounds)
+      << " elapsedMs=" << (GetTickCount64() - reveal_start);
+  Log(oss.str());
 }
 
 flutter::EncodableMap FlutterWindow::BuildCaptureWorkspaceResponse(const RECT &native_workspace_bounds) const
@@ -1728,6 +1849,433 @@ flutter::EncodableMap FlutterWindow::BuildCaptureWorkspaceResponse(const RECT &n
   response[flutter::EncodableValue("workspaceScale")] = flutter::EncodableValue(screenshot_presentation_state_.workspace_scale);
   response[flutter::EncodableValue("presentedByPlatform")] = flutter::EncodableValue(true);
   return response;
+}
+
+bool FlutterWindow::BeginScreenshotSelectionOverlay(HWND hwnd, const RECT &workspace_bounds, std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result, std::string *error_out)
+{
+  if (screenshot_selection_overlay_state_.active)
+  {
+    if (error_out != nullptr)
+    {
+      *error_out = "A screenshot selection session is already active";
+    }
+    if (result != nullptr)
+    {
+      result->Error("SELECTION_ERROR", "A screenshot selection session is already active");
+    }
+    return false;
+  }
+
+  static bool input_class_registered = false;
+  if (!input_class_registered)
+  {
+    WNDCLASS window_class{};
+    window_class.hCursor = LoadCursor(nullptr, IDC_CROSS);
+    window_class.lpszClassName = kScreenshotSelectionInputWindowClassName;
+    window_class.hInstance = GetModuleHandle(nullptr);
+    window_class.hbrBackground = reinterpret_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
+    window_class.lpfnWndProc = FlutterWindow::ScreenshotSelectionInputWindowProc;
+    RegisterClass(&window_class);
+    input_class_registered = true;
+  }
+
+  static bool border_class_registered = false;
+  if (!border_class_registered)
+  {
+    WNDCLASS window_class{};
+    window_class.hCursor = LoadCursor(nullptr, IDC_CROSS);
+    window_class.lpszClassName = kScreenshotSelectionBorderWindowClassName;
+    window_class.hInstance = GetModuleHandle(nullptr);
+    window_class.hbrBackground = ScreenshotSelectionBorderBrush();
+    window_class.lpfnWndProc = FlutterWindow::ScreenshotSelectionPassiveWindowProc;
+    RegisterClass(&window_class);
+    border_class_registered = true;
+  }
+
+  SavePreviousActiveWindow(hwnd);
+  FlushPendingChildKeyUps();
+
+  screenshot_selection_overlay_state_.active = true;
+  screenshot_selection_overlay_state_.dragging = false;
+  screenshot_selection_overlay_state_.completed = false;
+  screenshot_selection_overlay_state_.workspace_bounds = workspace_bounds;
+  screenshot_selection_overlay_state_.selection_bounds = {0, 0, 0, 0};
+  screenshot_selection_overlay_state_.started_tick = GetTickCount64();
+
+  const int workspace_width = workspace_bounds.right - workspace_bounds.left;
+  const int workspace_height = workspace_bounds.bottom - workspace_bounds.top;
+  HWND input_window = CreateWindowEx(
+      WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED,
+      kScreenshotSelectionInputWindowClassName,
+      L"Wox screenshot selection input",
+      WS_POPUP,
+      workspace_bounds.left,
+      workspace_bounds.top,
+      workspace_width,
+      workspace_height,
+      nullptr,
+      nullptr,
+      GetModuleHandle(nullptr),
+      nullptr);
+  if (input_window == nullptr)
+  {
+    screenshot_selection_overlay_state_ = ScreenshotSelectionOverlayState{};
+    if (error_out != nullptr)
+    {
+      *error_out = "Failed to create screenshot selection input window";
+    }
+    if (result != nullptr)
+    {
+      result->Error("SELECTION_ERROR", "Failed to create screenshot selection input window");
+    }
+    return false;
+  }
+  screenshot_selection_overlay_state_.input_window = input_window;
+  SetLayeredWindowAttributes(input_window, 0, 118, LWA_ALPHA);
+
+  for (int i = 0; i < 4; ++i)
+  {
+    HWND border_window = CreateWindowEx(
+        WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+        kScreenshotSelectionBorderWindowClassName,
+        L"Wox screenshot selection border",
+        WS_POPUP,
+        workspace_bounds.left,
+        workspace_bounds.top,
+        1,
+        1,
+        nullptr,
+        nullptr,
+        GetModuleHandle(nullptr),
+        nullptr);
+    if (border_window == nullptr)
+    {
+      DestroyScreenshotSelectionOverlayWindows();
+      screenshot_selection_overlay_state_ = ScreenshotSelectionOverlayState{};
+      if (error_out != nullptr)
+      {
+        *error_out = "Failed to create screenshot selection border windows";
+      }
+      if (result != nullptr)
+      {
+        result->Error("SELECTION_ERROR", "Failed to create screenshot selection border windows");
+      }
+      return false;
+    }
+
+    screenshot_selection_overlay_state_.border_windows.push_back(border_window);
+  }
+
+  screenshot_selection_overlay_state_.pending_result = std::move(result);
+
+  // Optimization: do not paint cached HBITMAP snapshots into the selection UI. The old attempt made
+  // the native handoff wait on full-screen GDI/GDI+ repaint and produced a visible top-to-bottom
+  // shade sweep on large desktops. The first fast overlay used several topmost helper windows, but
+  // updating the full-screen dim region during every mouse move still delayed the first feedback.
+  // Keep the dim window stable while dragging and move only ordinary green border windows; using
+  // WS_EX_TRANSPARENT/layered border windows delayed their paint behind the dimming surface.
+  MoveSelectionOverlayWindow(input_window, workspace_bounds, true);
+  LayoutScreenshotSelectionOverlay();
+  SetForegroundWindow(input_window);
+  SetActiveWindow(input_window);
+  SetFocus(input_window);
+
+  // Bug fix: the layered full-screen selection HWND can be visible before Windows has routed the
+  // first captured drag messages to it, which produced several frames where only the dim mask and
+  // cursor moved. A low-level hook observes the active left-button gesture to seed immediate native
+  // feedback, but it does not swallow mouse events because blocking the system input path can make
+  // dragging feel stuck. The HWND handlers below remain the authoritative capture fallback.
+  screenshot_selection_overlay_state_.mouse_hook = SetWindowsHookEx(WH_MOUSE_LL, FlutterWindow::ScreenshotSelectionMouseHookProc, GetModuleHandle(nullptr), 0);
+
+  POINT cursor_position{};
+  if (GetCursorPos(&cursor_position))
+  {
+    const CachedDisplayCapture *cursor_capture = DisplayCaptureForPoint(cursor_position);
+    if (cursor_capture != nullptr)
+    {
+      // Optimization: prewarm once when the native overlay appears, not during drag moves. That
+      // overlaps selected-display hydration with the user's selection time while keeping mouse-move
+      // feedback entirely native and free from PNG/base64 work.
+      EmitScreenshotSelectionDisplayHint(*cursor_capture);
+    }
+  }
+
+  std::ostringstream oss;
+  oss << "screenshot_timing event=windows_native_selection_begin displayCount=" << cached_display_captures_.size()
+      << " workspace=" << RectToString(workspace_bounds)
+      << " mouseHook=" << (screenshot_selection_overlay_state_.mouse_hook != nullptr ? "true" : "false");
+  Log(oss.str());
+
+  return true;
+}
+
+void FlutterWindow::MoveSelectionOverlayWindow(HWND hwnd, const RECT &bounds, bool activate)
+{
+  if (hwnd == nullptr || !IsWindow(hwnd))
+  {
+    return;
+  }
+
+  if (IsRectEmptyOrInvalid(bounds))
+  {
+    ShowWindow(hwnd, SW_HIDE);
+    return;
+  }
+
+  SetWindowPos(
+      hwnd,
+      HWND_TOPMOST,
+      bounds.left,
+      bounds.top,
+      bounds.right - bounds.left,
+      bounds.bottom - bounds.top,
+      SWP_SHOWWINDOW | (activate ? 0 : SWP_NOACTIVATE));
+  RedrawWindow(hwnd, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW);
+}
+
+void FlutterWindow::LayoutScreenshotSelectionOverlay()
+{
+  if (!screenshot_selection_overlay_state_.active)
+  {
+    return;
+  }
+
+  const RECT workspace = screenshot_selection_overlay_state_.workspace_bounds;
+  const RECT selection = ClampRectToBounds(screenshot_selection_overlay_state_.selection_bounds, workspace);
+  const bool has_selection = !IsRectEmptyOrInvalid(selection);
+  HWND input_window = screenshot_selection_overlay_state_.input_window;
+  auto &border_windows = screenshot_selection_overlay_state_.border_windows;
+
+  if (!has_selection)
+  {
+    SetOwnedWindowRegion(input_window, nullptr);
+    InvalidateRect(input_window, nullptr, TRUE);
+    for (const auto border_window : border_windows)
+    {
+      if (border_window != nullptr && IsWindow(border_window))
+      {
+        ShowWindow(border_window, SW_HIDE);
+      }
+    }
+    return;
+  }
+
+  if (border_windows.size() >= 4)
+  {
+    const int border = 2;
+    // Bug fix: the full-screen dim region is expensive to recompute on large virtual desktops.
+    // Drag feedback now repaints four tiny green border windows synchronously, so the selection
+    // follows the cursor instead of waiting for a later compositor repaint at the drag origin.
+    MoveSelectionOverlayWindow(border_windows[0], RECT{selection.left, selection.top, selection.right, selection.top + border});
+    MoveSelectionOverlayWindow(border_windows[1], RECT{selection.left, selection.bottom - border, selection.right, selection.bottom});
+    MoveSelectionOverlayWindow(border_windows[2], RECT{selection.left, selection.top, selection.left + border, selection.bottom});
+    MoveSelectionOverlayWindow(border_windows[3], RECT{selection.right - border, selection.top, selection.right, selection.bottom});
+  }
+}
+
+void FlutterWindow::ApplyScreenshotSelectionDimRegion()
+{
+  if (!screenshot_selection_overlay_state_.active)
+  {
+    return;
+  }
+
+  const RECT workspace = screenshot_selection_overlay_state_.workspace_bounds;
+  const RECT selection = ClampRectToBounds(screenshot_selection_overlay_state_.selection_bounds, workspace);
+  if (IsRectEmptyOrInvalid(selection))
+  {
+    SetOwnedWindowRegion(screenshot_selection_overlay_state_.input_window, nullptr);
+    return;
+  }
+
+  // Optimization: keep the full-screen dimming cut-out off the synchronous mouse-move path. Region
+  // updates are still used because they are much cheaper than repainting monitor bitmaps, but doing
+  // this once after mouse-up prevents the first selection border from waiting on DWM recomposition.
+  SetOwnedWindowRegion(screenshot_selection_overlay_state_.input_window, CreateSelectionDimRegion(workspace, selection));
+}
+
+void FlutterWindow::UpdateScreenshotSelectionOverlay(const RECT &selection_bounds)
+{
+  if (!screenshot_selection_overlay_state_.active)
+  {
+    return;
+  }
+
+  const RECT clamped_selection = ClampRectToBounds(selection_bounds, screenshot_selection_overlay_state_.workspace_bounds);
+  screenshot_selection_overlay_state_.selection_bounds = clamped_selection;
+  // Optimization: mouse-drag feedback stays entirely native. Earlier drag-time display hints made
+  // Flutter hydrate/encode a monitor snapshot mid-drag and caused a one-time pause; the final
+  // selection result prepares the selected display before Flutter is revealed.
+  LayoutScreenshotSelectionOverlay();
+}
+
+void FlutterWindow::CompleteScreenshotSelectionOverlay(bool cancelled)
+{
+  if (!screenshot_selection_overlay_state_.active || screenshot_selection_overlay_state_.completed)
+  {
+    return;
+  }
+
+  auto pending_result = std::move(screenshot_selection_overlay_state_.pending_result);
+  const RECT selection_bounds = screenshot_selection_overlay_state_.selection_bounds;
+  const bool effective_cancelled = cancelled || IsRectEmptyOrInvalid(selection_bounds);
+  const ULONGLONG started_tick = screenshot_selection_overlay_state_.started_tick;
+  const CachedDisplayCapture *preferred_capture = PreferredDisplayCaptureForSelection(selection_bounds);
+  const HWND input_window = screenshot_selection_overlay_state_.input_window;
+  if (screenshot_selection_overlay_state_.mouse_hook != nullptr)
+  {
+    // Bug fix: the hook exists only while the user is drawing the native rectangle. Stop it as soon
+    // as selection completes so later clicks on the Flutter editor or the desktop are not swallowed.
+    UnhookWindowsHookEx(screenshot_selection_overlay_state_.mouse_hook);
+    screenshot_selection_overlay_state_.mouse_hook = nullptr;
+  }
+  if (screenshot_selection_overlay_state_.dragging || GetCapture() == input_window)
+  {
+    // Bug fix: completion can arrive from either the HWND capture path or the low-level hook path.
+    // Release capture in one shared place so a completed or cancelled drag cannot leave Windows
+    // routing the next mouse gesture to the overlay window.
+    screenshot_selection_overlay_state_.dragging = false;
+    ReleaseCapture();
+  }
+
+  flutter::EncodableMap response;
+  response[flutter::EncodableValue("wasHandled")] = flutter::EncodableValue(true);
+  if (effective_cancelled)
+  {
+    response[flutter::EncodableValue("selection")] = flutter::EncodableValue();
+    response[flutter::EncodableValue("editorVisibleBounds")] = flutter::EncodableValue();
+    DestroyScreenshotSelectionOverlayWindows();
+    screenshot_selection_overlay_state_ = ScreenshotSelectionOverlayState{};
+  }
+  else
+  {
+    ApplyScreenshotSelectionDimRegion();
+    response[flutter::EncodableValue("selection")] = flutter::EncodableValue(BuildRectValue(selection_bounds));
+    response[flutter::EncodableValue("editorVisibleBounds")] = flutter::EncodableValue(BuildRectValue(preferred_capture != nullptr ? preferred_capture->monitor_bounds : selection_bounds));
+    screenshot_selection_overlay_state_.dragging = false;
+    screenshot_selection_overlay_state_.completed = true;
+  }
+
+  std::ostringstream oss;
+  oss << "screenshot_timing event=windows_native_selection_complete cancelled=" << (effective_cancelled ? "true" : "false")
+      << " selection=" << RectToString(selection_bounds)
+      << " elapsedMs=" << (started_tick == 0 ? 0 : GetTickCount64() - started_tick);
+  Log(oss.str());
+
+  if (pending_result != nullptr)
+  {
+    pending_result->Success(flutter::EncodableValue(response));
+  }
+}
+
+void FlutterWindow::DismissNativeSelectionOverlays()
+{
+  if (!screenshot_selection_overlay_state_.active)
+  {
+    return;
+  }
+
+  auto pending_result = std::move(screenshot_selection_overlay_state_.pending_result);
+  DestroyScreenshotSelectionOverlayWindows();
+  screenshot_selection_overlay_state_ = ScreenshotSelectionOverlayState{};
+  Log("screenshot_timing event=windows_native_selection_dismiss");
+
+  if (pending_result != nullptr)
+  {
+    flutter::EncodableMap response;
+    response[flutter::EncodableValue("wasHandled")] = flutter::EncodableValue(true);
+    response[flutter::EncodableValue("selection")] = flutter::EncodableValue();
+    response[flutter::EncodableValue("editorVisibleBounds")] = flutter::EncodableValue();
+    pending_result->Success(flutter::EncodableValue(response));
+  }
+}
+
+void FlutterWindow::DestroyScreenshotSelectionOverlayWindows()
+{
+  if (screenshot_selection_overlay_state_.mouse_hook != nullptr)
+  {
+    // Bug fix: cleanup may run through cancellation, window teardown, or Dart dismiss. Unhooking
+    // here prevents a stale low-level hook from pointing at destroyed overlay state.
+    UnhookWindowsHookEx(screenshot_selection_overlay_state_.mouse_hook);
+    screenshot_selection_overlay_state_.mouse_hook = nullptr;
+  }
+
+  if (screenshot_selection_overlay_state_.input_window != nullptr && IsWindow(screenshot_selection_overlay_state_.input_window))
+  {
+    DestroyWindow(screenshot_selection_overlay_state_.input_window);
+  }
+  screenshot_selection_overlay_state_.input_window = nullptr;
+
+  for (const auto border_window : screenshot_selection_overlay_state_.border_windows)
+  {
+    if (border_window != nullptr && IsWindow(border_window))
+    {
+      DestroyWindow(border_window);
+    }
+  }
+  screenshot_selection_overlay_state_.border_windows.clear();
+}
+
+const FlutterWindow::CachedDisplayCapture *FlutterWindow::PreferredDisplayCaptureForSelection(const RECT &selection_bounds) const
+{
+  if (IsRectEmptyOrInvalid(selection_bounds))
+  {
+    return nullptr;
+  }
+
+  const POINT center{
+      selection_bounds.left + (selection_bounds.right - selection_bounds.left) / 2,
+      selection_bounds.top + (selection_bounds.bottom - selection_bounds.top) / 2};
+  for (const auto &capture : cached_display_captures_)
+  {
+    if (IsPointInRect(capture.monitor_bounds, center))
+    {
+      return &capture;
+    }
+  }
+
+  const CachedDisplayCapture *best_capture = nullptr;
+  double best_area = 0;
+  for (const auto &capture : cached_display_captures_)
+  {
+    const double area = RectIntersectionArea(capture.monitor_bounds, selection_bounds);
+    if (area > best_area)
+    {
+      best_area = area;
+      best_capture = &capture;
+    }
+  }
+  return best_capture;
+}
+
+const FlutterWindow::CachedDisplayCapture *FlutterWindow::DisplayCaptureForPoint(POINT point) const
+{
+  for (const auto &capture : cached_display_captures_)
+  {
+    if (IsPointInRect(capture.monitor_bounds, point))
+    {
+      return &capture;
+    }
+  }
+  return nullptr;
+}
+
+void FlutterWindow::EmitScreenshotSelectionDisplayHint(const CachedDisplayCapture &capture)
+{
+  if (!window_manager_channel_)
+  {
+    return;
+  }
+
+  flutter::EncodableMap payload;
+  payload[flutter::EncodableValue("displayId")] = flutter::EncodableValue(Utf8FromUtf16(capture.display_id.c_str()));
+  payload[flutter::EncodableValue("displayBounds")] = flutter::EncodableValue(BuildRectValue(capture.monitor_bounds));
+  window_manager_channel_->InvokeMethod("onSelectionDisplayHint", std::make_unique<flutter::EncodableValue>(payload));
+
+  std::ostringstream oss;
+  oss << "screenshot_timing event=windows_native_selection_hint displayId=" << Utf8FromUtf16(capture.display_id.c_str())
+      << " bounds=" << RectToString(capture.monitor_bounds);
+  Log(oss.str());
 }
 
 void FlutterWindow::BeginScrollingCaptureOverlay(HWND hwnd, const RECT &workspace_bounds, const RECT &selection_bounds, const RECT &controls_bounds)
@@ -2064,6 +2612,7 @@ bool FlutterWindow::OnCreate()
 
 void FlutterWindow::OnDestroy()
 {
+  DismissNativeSelectionOverlays();
   DismissScrollingCaptureOverlay();
   pending_child_keydowns_.clear();
   ClearCachedDisplayCaptures();
@@ -2273,6 +2822,140 @@ LRESULT CALLBACK FlutterWindow::ScrollingCaptureOverlayWindowProc(HWND hwnd, UIN
   default:
     return DefWindowProc(hwnd, message, wparam, lparam);
   }
+}
+
+LRESULT CALLBACK FlutterWindow::ScreenshotSelectionInputWindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
+{
+  if (g_window_instance == nullptr)
+  {
+    return DefWindowProc(hwnd, message, wparam, lparam);
+  }
+
+  switch (message)
+  {
+  case WM_ERASEBKGND:
+    return 1;
+  case WM_PAINT:
+  {
+    PAINTSTRUCT paint{};
+    HDC hdc = BeginPaint(hwnd, &paint);
+    if (hdc != nullptr)
+    {
+      FillRect(hdc, &paint.rcPaint, reinterpret_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
+    }
+    EndPaint(hwnd, &paint);
+    return 0;
+  }
+  case WM_SETCURSOR:
+    SetCursor(LoadCursor(nullptr, IDC_CROSS));
+    return TRUE;
+  case WM_KEYDOWN:
+    if (wparam == VK_ESCAPE)
+    {
+      g_window_instance->CompleteScreenshotSelectionOverlay(true);
+      return 0;
+    }
+    break;
+  case WM_LBUTTONDOWN:
+  {
+    POINT point{GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
+    ClientToScreen(hwnd, &point);
+    g_window_instance->screenshot_selection_overlay_state_.dragging = true;
+    g_window_instance->screenshot_selection_overlay_state_.drag_start = point;
+    SetCapture(hwnd);
+    SetFocus(hwnd);
+    g_window_instance->UpdateScreenshotSelectionOverlay(RectFromPoints(point, point));
+    return 0;
+  }
+  case WM_MOUSEMOVE:
+    if (g_window_instance->screenshot_selection_overlay_state_.dragging)
+    {
+      POINT point{GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
+      ClientToScreen(hwnd, &point);
+      g_window_instance->UpdateScreenshotSelectionOverlay(RectFromPoints(g_window_instance->screenshot_selection_overlay_state_.drag_start, point));
+      return 0;
+    }
+    break;
+  case WM_LBUTTONUP:
+    if (g_window_instance->screenshot_selection_overlay_state_.dragging)
+    {
+      POINT point{GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
+      ClientToScreen(hwnd, &point);
+      g_window_instance->screenshot_selection_overlay_state_.dragging = false;
+      ReleaseCapture();
+      g_window_instance->UpdateScreenshotSelectionOverlay(RectFromPoints(g_window_instance->screenshot_selection_overlay_state_.drag_start, point));
+      g_window_instance->CompleteScreenshotSelectionOverlay(false);
+      return 0;
+    }
+    break;
+  case WM_CANCELMODE:
+    if (g_window_instance->screenshot_selection_overlay_state_.dragging)
+    {
+      g_window_instance->screenshot_selection_overlay_state_.dragging = false;
+      ReleaseCapture();
+      g_window_instance->CompleteScreenshotSelectionOverlay(true);
+      return 0;
+    }
+    break;
+  default:
+    break;
+  }
+
+  return DefWindowProc(hwnd, message, wparam, lparam);
+}
+
+LRESULT CALLBACK FlutterWindow::ScreenshotSelectionPassiveWindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
+{
+  switch (message)
+  {
+  case WM_NCHITTEST:
+    return HTTRANSPARENT;
+  case WM_SETCURSOR:
+    SetCursor(LoadCursor(nullptr, IDC_CROSS));
+    return TRUE;
+  default:
+    return DefWindowProc(hwnd, message, wparam, lparam);
+  }
+}
+
+LRESULT CALLBACK FlutterWindow::ScreenshotSelectionMouseHookProc(int code, WPARAM wparam, LPARAM lparam)
+{
+  if (code == HC_ACTION && g_window_instance != nullptr)
+  {
+    const auto *mouse = reinterpret_cast<MSLLHOOKSTRUCT *>(lparam);
+    auto &state = g_window_instance->screenshot_selection_overlay_state_;
+    if (mouse != nullptr && state.active && !state.completed)
+    {
+      switch (wparam)
+      {
+      case WM_LBUTTONDOWN:
+        // Bug fix: seed the first drag point through the low-level hook instead of waiting for the
+        // layered mask HWND to receive capture. The hook is observer-only; returning through
+        // CallNextHookEx keeps Windows' normal cursor and capture delivery alive.
+        state.dragging = true;
+        state.drag_start = mouse->pt;
+        g_window_instance->UpdateScreenshotSelectionOverlay(RectFromPoints(mouse->pt, mouse->pt));
+        break;
+      case WM_MOUSEMOVE:
+        if (state.dragging)
+        {
+          g_window_instance->UpdateScreenshotSelectionOverlay(RectFromPoints(state.drag_start, mouse->pt));
+        }
+        break;
+      case WM_LBUTTONUP:
+        if (state.dragging)
+        {
+          g_window_instance->UpdateScreenshotSelectionOverlay(RectFromPoints(state.drag_start, mouse->pt));
+          g_window_instance->CompleteScreenshotSelectionOverlay(false);
+        }
+        break;
+      default:
+        break;
+      }
+    }
+  }
+
+  return CallNextHookEx(nullptr, code, wparam, lparam);
 }
 
 LRESULT CALLBACK FlutterWindow::ScrollingCaptureMouseHookProc(int code, WPARAM wparam, LPARAM lparam)
@@ -2626,6 +3309,52 @@ void FlutterWindow::HandleWindowManagerMethodCall(
 
       result->Success();
     }
+    else if (method_name == "selectCaptureRegion")
+    {
+      const auto *arguments = std::get_if<flutter::EncodableMap>(method_call.arguments());
+      if (arguments == nullptr)
+      {
+        result->Error("INVALID_ARGUMENTS", "Invalid arguments for selectCaptureRegion");
+        return;
+      }
+
+      auto x_it = arguments->find(flutter::EncodableValue("x"));
+      auto y_it = arguments->find(flutter::EncodableValue("y"));
+      auto width_it = arguments->find(flutter::EncodableValue("width"));
+      auto height_it = arguments->find(flutter::EncodableValue("height"));
+      if (x_it == arguments->end() || y_it == arguments->end() || width_it == arguments->end() || height_it == arguments->end())
+      {
+        result->Error("INVALID_ARGUMENTS", "Invalid arguments for selectCaptureRegion");
+        return;
+      }
+
+      const double x = std::get<double>(x_it->second);
+      const double y = std::get<double>(y_it->second);
+      const double width = std::get<double>(width_it->second);
+      const double height = std::get<double>(height_it->second);
+      const RECT native_workspace_bounds{
+          static_cast<LONG>(std::lround(x)),
+          static_cast<LONG>(std::lround(y)),
+          static_cast<LONG>(std::lround(x + width)),
+          static_cast<LONG>(std::lround(y + height))};
+
+      if (cached_display_captures_.empty())
+      {
+        // Native selection is a capability path that depends on metadata capture caching monitor
+        // bounds. If the cache is missing, return unhandled so Dart can use the older Flutter path.
+        flutter::EncodableMap response;
+        response[flutter::EncodableValue("wasHandled")] = flutter::EncodableValue(false);
+        result->Success(flutter::EncodableValue(response));
+        return;
+      }
+
+      std::string selection_error;
+      if (!BeginScreenshotSelectionOverlay(hwnd, native_workspace_bounds, std::move(result), &selection_error))
+      {
+        return;
+      }
+      return;
+    }
     else if (method_name == "prepareCaptureWorkspace")
     {
       const auto *arguments = std::get_if<flutter::EncodableMap>(method_call.arguments());
@@ -2732,6 +3461,11 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       screenshot_presentation_state_.workspace_scale = 1.0;
       screenshot_presentation_state_.native_workspace_bounds = {0, 0, 0, 0};
       SyncFlutterChildWindowToClientArea(hwnd, "dismissCaptureWorkspacePresentation", false);
+      result->Success();
+    }
+    else if (method_name == "dismissNativeSelectionOverlays")
+    {
+      DismissNativeSelectionOverlays();
       result->Success();
     }
     else if (method_name == "debugCaptureWorkspaceState")

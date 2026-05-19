@@ -108,6 +108,14 @@ class WoxScreenshotController extends GetxController {
     Logger.instance.debug(traceId, 'scrolling_capture_timing event=$event${details.isEmpty ? '' : ' $details'}');
   }
 
+  // Screenshot startup spans native capture, optional native selection, deferred PNG hydration, and
+  // Flutter reveal. Keeping these probes small and searchable makes Windows startup regressions
+  // diagnosable without logging image payloads or full monitor metadata.
+  void _logScreenshotTiming(String traceId, String event, Map<String, Object?> fields) {
+    final details = fields.entries.map((entry) => '${entry.key}=${_formatScrollingTimingValue(entry.value)}').join(' ');
+    Logger.instance.debug(traceId, 'screenshot_timing event=$event${details.isEmpty ? '' : ' $details'}');
+  }
+
   String _formatScrollingTimingValue(Object? value) {
     if (value == null) {
       return 'null';
@@ -156,32 +164,31 @@ class WoxScreenshotController extends GetxController {
     await _prepareNewSession(traceId);
 
     try {
+      final metadataWatch = Stopwatch()..start();
       final metadataSnapshots = await ScreenshotPlatformBridge.instance.captureDisplayMetadata();
+      _logScreenshotTiming(traceId, 'capture_metadata', {'elapsedMs': metadataWatch.elapsedMilliseconds, 'displayCount': metadataSnapshots.length});
       if (metadataSnapshots.isEmpty) {
         throw StateError('No display snapshots returned');
       }
 
       final nativeWorkspaceBounds = _calculateUnionRect(metadataSnapshots.map((item) => item.logicalBounds.toRect()).toList());
-      if (Platform.isMacOS) {
-        // macOS native selection now starts from cached display metadata so the topmost overlay can
-        // appear before Flutter receives PNG/base64 payloads for every monitor. That keeps the
-        // screenshot startup path focused on the native selector, then hydrates pixels only when
-        // the annotation/export pipeline truly needs them.
-        final nativeSelectionResult = await _tryStartMacOSNativeSelectionEditor(traceId, metadataSnapshots, nativeWorkspaceBounds);
+      if (_shouldTryNativeSelection(metadataSnapshots)) {
+        // Windows joins the macOS metadata-first handoff: show native selection before Flutter gets
+        // PNG/base64 payloads. The previous Windows fallback prepared and hydrated the full virtual
+        // desktop before reveal, which is exactly the slow path on large multi-monitor layouts.
+        final nativeSelectionResult = await _tryStartNativeSelectionEditor(traceId, metadataSnapshots, nativeWorkspaceBounds);
         if (nativeSelectionResult != null) {
           return nativeSelectionResult;
         }
+      }
 
+      if (Platform.isMacOS || Platform.isWindows) {
         await _presentPreparedCaptureWorkspace(traceId, metadataSnapshots, nativeWorkspaceBounds);
         return _sessionFutureOrCancelled();
       }
 
-      if (Platform.isWindows) {
-        await _presentPreparedCaptureWorkspace(traceId, metadataSnapshots, nativeWorkspaceBounds);
-      } else {
-        final rawSnapshots = await _hydrateRawSnapshots(metadataSnapshots);
-        await _presentFlutterCaptureWorkspace(traceId, rawSnapshots, nativeWorkspaceBounds);
-      }
+      final rawSnapshots = await _hydrateRawSnapshots(metadataSnapshots);
+      await _presentFlutterCaptureWorkspace(traceId, rawSnapshots, nativeWorkspaceBounds);
     } catch (e) {
       Logger.instance.error(traceId, 'Failed to start screenshot session: $e');
       final failed = CaptureScreenshotResult.failed(errorCode: 'capture_failed', errorMessage: e.toString());
@@ -204,6 +211,16 @@ class WoxScreenshotController extends GetxController {
     }
 
     return completer.future;
+  }
+
+  bool _shouldTryNativeSelection(List<DisplaySnapshot> metadataSnapshots) {
+    if (Platform.isWindows) {
+      return metadataSnapshots.isNotEmpty;
+    }
+    if (Platform.isMacOS) {
+      return metadataSnapshots.length >= 2;
+    }
+    return false;
   }
 
   Future<void> _presentFlutterCaptureWorkspace(String traceId, List<DisplaySnapshot> rawSnapshots, Rect nativeWorkspaceBounds) async {
@@ -270,23 +287,35 @@ class WoxScreenshotController extends GetxController {
     stage.value = ScreenshotSessionStage.selecting;
   }
 
-  Future<CaptureScreenshotResult?> _tryStartMacOSNativeSelectionEditor(String traceId, List<DisplaySnapshot> rawSnapshots, Rect nativeWorkspaceBounds) async {
-    if (!Platform.isMacOS || rawSnapshots.length < 2) {
+  Future<CaptureScreenshotResult?> _tryStartNativeSelectionEditor(String traceId, List<DisplaySnapshot> rawSnapshots, Rect nativeWorkspaceBounds) async {
+    if (!_shouldTryNativeSelection(rawSnapshots)) {
       return null;
     }
 
     _pendingRawSnapshots = rawSnapshots;
     _nativeWorkspaceBounds = nativeWorkspaceBounds;
-    _acceptSelectionDisplayHints = true;
+    // macOS can prewarm while its native overlay tracks the display. Windows sends only one hint
+    // when the native overlay appears; drag-time hints were removed because they made PNG hydration
+    // contend with mouse feedback and caused a visible mid-drag pause.
+    _acceptSelectionDisplayHints = Platform.isMacOS || Platform.isWindows;
     final previousSelectionDisplayHintSubscription = _selectionDisplayHintSubscription;
     if (previousSelectionDisplayHintSubscription != null) {
       await previousSelectionDisplayHintSubscription.cancel();
     }
-    _selectionDisplayHintSubscription = ScreenshotPlatformBridge.instance.selectionDisplayHints().listen((hint) {
-      unawaited(_handleMacOSSelectionDisplayHint(traceId, hint));
-    });
+    _selectionDisplayHintSubscription =
+        _acceptSelectionDisplayHints
+            ? ScreenshotPlatformBridge.instance.selectionDisplayHints().listen((hint) {
+              unawaited(_handleNativeSelectionDisplayHint(traceId, hint));
+            })
+            : null;
 
+    final selectionWatch = Stopwatch()..start();
     final nativeSelection = await ScreenshotPlatformBridge.instance.selectCaptureRegion(ScreenshotRect.fromRect(nativeWorkspaceBounds));
+    _logScreenshotTiming(traceId, 'native_selection_result', {
+      'elapsedMs': selectionWatch.elapsedMilliseconds,
+      'handled': nativeSelection.wasHandled,
+      'selection': nativeSelection.selection?.toRect(),
+    });
     _acceptSelectionDisplayHints = false;
     final activeSelectionDisplayHintSubscription = _selectionDisplayHintSubscription;
     if (activeSelectionDisplayHintSubscription != null) {
@@ -294,7 +323,7 @@ class WoxScreenshotController extends GetxController {
     }
     _selectionDisplayHintSubscription = null;
     if (!nativeSelection.wasHandled) {
-      _clearMacOSPreparationState();
+      _clearNativePreparationState();
       return null;
     }
 
@@ -306,16 +335,16 @@ class WoxScreenshotController extends GetxController {
       return cancelled;
     }
 
-    // A single Flutter window cannot reliably render across multiple macOS displays, so the
+    // A single Flutter window cannot reliably render across mixed native displays, so the
     // annotation editor is confined to the monitor where the user drew the selection. This avoids
     // cross-display rendering artifacts while keeping the transition seamless on that monitor.
     final selectedDisplay = _findDisplaySnapshotForSelection(nativeSelection.selection!.toRect(), rawSnapshots);
     _activeNativeWorkspaceBounds = selectedDisplay.logicalBounds.toRect();
-    await _prepareMacOSDisplayForAnnotation(selectedDisplay);
+    await _prepareNativeDisplayForAnnotation(traceId, selectedDisplay);
     final presentation = _preparedPresentation;
     final normalizedSnapshots = _preparedSnapshots;
     if (presentation == null || normalizedSnapshots == null) {
-      throw StateError('macOS screenshot handoff did not prepare a Flutter workspace');
+      throw StateError('Native screenshot handoff did not prepare a Flutter workspace');
     }
     final normalizedSelection = _normalizeNativeRectForWorkspace(
       nativeSelection.selection!.toRect(),
@@ -337,7 +366,9 @@ class WoxScreenshotController extends GetxController {
     await WoxApi.instance.onShow(traceId);
 
     if (presentation.presentedByPlatform) {
+      final revealWatch = Stopwatch()..start();
       await ScreenshotPlatformBridge.instance.revealPreparedCaptureWorkspace();
+      _logScreenshotTiming(traceId, 'native_reveal_workspace', {'elapsedMs': revealWatch.elapsedMilliseconds, 'displayId': selectedDisplay.displayId});
     } else {
       final bounds = virtualBoundsRect;
       await windowManager.setBounds(bounds.topLeft, bounds.size);
@@ -349,7 +380,9 @@ class WoxScreenshotController extends GetxController {
     // Native selection now stays on-screen until Flutter already holds the final annotation frame.
     // That removes the visible "loading / resize / repaint" gap that used to appear after mouse-up.
     await WidgetsBinding.instance.endOfFrame;
+    final dismissWatch = Stopwatch()..start();
     await ScreenshotPlatformBridge.instance.dismissNativeSelectionOverlays();
+    _logScreenshotTiming(traceId, 'native_dismiss_overlays', {'elapsedMs': dismissWatch.elapsedMilliseconds});
     if (_activeRequest?.autoConfirm == true) {
       // Auto-confirm still waits until Flutter owns the normalized selection and decoded workspace.
       // Exporting through confirmSelection keeps plugin API captures on the same file-output path as
@@ -362,7 +395,7 @@ class WoxScreenshotController extends GetxController {
   }
 
   Future<void> _prepareNewSession(String traceId) async {
-    _clearMacOSPreparationState();
+    _clearNativePreparationState();
     _disposeDecodedImages();
     _captureSessionRevision += 1;
     displaySnapshots.clear();
@@ -1338,7 +1371,7 @@ class WoxScreenshotController extends GetxController {
   void _resetSessionState() {
     _savedWindowState = null;
     _activeRequest = null;
-    _clearMacOSPreparationState();
+    _clearNativePreparationState();
     _disposeScrollingCaptureFrames();
     isScrollingCaptureUpdating.value = false;
     selectedAnnotationId.value = null;
@@ -1405,7 +1438,7 @@ class WoxScreenshotController extends GetxController {
         return snapshot;
       }
 
-      // macOS native selection now prewarms only the displays that are likely to be shown next.
+      // Native selection now prewarms only the displays that are likely to be shown next.
       // Merge hydrated bytes back into the normalized snapshot list by display id so the visible
       // workspace and later export both reuse the deferred payloads without rebuilding geometry.
       return snapshot.copyWith(imageBytesBase64: hydrated.imageBytesBase64);
@@ -1570,7 +1603,7 @@ class WoxScreenshotController extends GetxController {
     }
   }
 
-  Future<void> _handleMacOSSelectionDisplayHint(String traceId, ScreenshotSelectionDisplayHint hint) async {
+  Future<void> _handleNativeSelectionDisplayHint(String traceId, ScreenshotSelectionDisplayHint hint) async {
     if (!_acceptSelectionDisplayHints || _pendingRawSnapshots.isEmpty) {
       return;
     }
@@ -1597,21 +1630,26 @@ class WoxScreenshotController extends GetxController {
     }
 
     try {
-      await _prepareMacOSDisplayForAnnotation(targetDisplay);
+      _logScreenshotTiming(traceId, 'native_selection_hint', {'displayId': targetDisplay.displayId, 'bounds': displayBounds});
+      await _prepareNativeDisplayForAnnotation(traceId, targetDisplay);
     } catch (error) {
-      Logger.instance.error(traceId, 'Failed to prewarm macOS screenshot workspace for ${targetDisplay.displayId}: $error');
+      Logger.instance.error(traceId, 'Failed to prewarm native screenshot workspace for ${targetDisplay.displayId}: $error');
     }
   }
 
-  Future<void> _prepareMacOSDisplayForAnnotation(DisplaySnapshot targetDisplay) async {
+  Future<void> _prepareNativeDisplayForAnnotation(String traceId, DisplaySnapshot targetDisplay) async {
     final targetBounds = targetDisplay.logicalBounds.toRect();
     if (_preparedDisplayId == targetDisplay.displayId && _preparedDisplayBounds == targetBounds && _preparedPresentation != null && _preparedSnapshots != null) {
       return;
     }
 
     final revision = ++_preparedDisplayRevision;
+    final prepareWatch = Stopwatch()..start();
     final presentation = await ScreenshotPlatformBridge.instance.prepareCaptureWorkspace(ScreenshotRect.fromRect(targetBounds));
+    _logScreenshotTiming(traceId, 'native_prepare_display', {'elapsedMs': prepareWatch.elapsedMilliseconds, 'displayId': targetDisplay.displayId, 'bounds': targetBounds});
+    final hydrateWatch = Stopwatch()..start();
     await _ensureRawSnapshotHydrated(targetDisplay.displayId);
+    _logScreenshotTiming(traceId, 'native_hydrate_display', {'elapsedMs': hydrateWatch.elapsedMilliseconds, 'displayId': targetDisplay.displayId});
     var normalizedSnapshots = _normalizeSnapshotsForWorkspace(
       _pendingRawSnapshots,
       nativeWorkspaceBounds: targetBounds,
@@ -1628,10 +1666,12 @@ class WoxScreenshotController extends GetxController {
       }
     }
     if (preparedTargetSnapshot == null) {
-      throw StateError('Prepared macOS display snapshot is missing for ${targetDisplay.displayId}');
+      throw StateError('Prepared native display snapshot is missing for ${targetDisplay.displayId}');
     }
 
+    final decodeWatch = Stopwatch()..start();
     await _ensureDisplayDecoded(preparedTargetSnapshot);
+    _logScreenshotTiming(traceId, 'native_decode_display', {'elapsedMs': decodeWatch.elapsedMilliseconds, 'displayId': targetDisplay.displayId});
 
     if (revision != _preparedDisplayRevision || _sessionCompleter == null || _sessionCompleter!.isCompleted) {
       return;
@@ -1650,7 +1690,7 @@ class WoxScreenshotController extends GetxController {
     stage.value = ScreenshotSessionStage.selecting;
   }
 
-  void _clearMacOSPreparationState() {
+  void _clearNativePreparationState() {
     _acceptSelectionDisplayHints = false;
     _selectionDisplayHintSubscription?.cancel();
     _selectionDisplayHintSubscription = null;
@@ -1909,9 +1949,9 @@ class WoxScreenshotController extends GetxController {
     );
   }
 
-  /// Finds the display whose bounds best contain the given selection rect. The macOS native drag
-  /// overlay can span multiple monitors, but the Flutter annotation editor still has to collapse to
-  /// one target display so the handoff can prepare and reveal a single stable workspace.
+  /// Finds the display whose bounds best contain the given selection rect. Native drag overlays can
+  /// span multiple monitors, but the Flutter annotation editor still has to collapse to one target
+  /// display so the handoff can prepare and reveal a single stable workspace.
   DisplaySnapshot _findDisplaySnapshotForSelection(Rect selection, List<DisplaySnapshot> snapshots) {
     final center = selection.center;
     for (final snapshot in snapshots) {
@@ -2171,7 +2211,7 @@ class WoxScreenshotController extends GetxController {
 
   @override
   void onClose() {
-    _clearMacOSPreparationState();
+    _clearNativePreparationState();
     _disposeScrollingCaptureFrames();
     _disposeDecodedImages();
     textDraftController.dispose();

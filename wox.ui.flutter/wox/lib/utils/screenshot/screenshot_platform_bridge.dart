@@ -16,6 +16,13 @@ abstract class ScreenshotPlatformBridge {
     }
   }
 
+  static void emitSelectionDisplayHintForPlatform(Map<dynamic, dynamic> arguments) {
+    final bridge = _instance;
+    if (bridge is MethodChannelScreenshotPlatformBridge) {
+      bridge._emitSelectionDisplayHint(arguments);
+    }
+  }
+
   static void setInstanceForTest(ScreenshotPlatformBridge bridge) {
     _instance = bridge;
   }
@@ -153,8 +160,8 @@ class MethodChannelScreenshotPlatformBridge implements ScreenshotPlatformBridge 
 
       return ScreenshotNativeSelectionResult.fromJson(response.map((key, value) => MapEntry(key.toString(), value)));
     } on MissingPluginException {
-      // Only the macOS runner currently installs the native region selector. Returning an
-      // unhandled response keeps the existing Flutter workspace path active everywhere else.
+      // Native region selection is capability-based. Returning an unhandled response keeps the
+      // existing Flutter workspace path active on Linux and older runners.
       return const ScreenshotNativeSelectionResult(wasHandled: false);
     }
   }
@@ -185,8 +192,8 @@ class MethodChannelScreenshotPlatformBridge implements ScreenshotPlatformBridge 
 
       return ScreenshotWorkspacePresentation.fromJson(response.map((key, value) => MapEntry(key.toString(), value)));
     } on MissingPluginException {
-      // Only macOS currently separates screenshot preparation from reveal. Older/native-simple
-      // runners can still satisfy the contract through the original present call.
+      // Native preparation is optional. Older/native-simple runners can still satisfy the contract
+      // through the original present call.
       return presentCaptureWorkspace(nativeWorkspaceBounds);
     }
   }
@@ -208,6 +215,13 @@ class MethodChannelScreenshotPlatformBridge implements ScreenshotPlatformBridge 
 
   void _emitScrollingCaptureWheelEvent() {
     _scrollingCaptureWheelController.add(null);
+  }
+
+  void _emitSelectionDisplayHint(Map<dynamic, dynamic> arguments) {
+    // Native selection hints arrive as loosely typed method-channel maps. Parsing them here keeps
+    // controller code focused on prewarm policy rather than transport-specific null checks.
+    final normalized = arguments.map<String, dynamic>((key, value) => MapEntry(key.toString(), value));
+    _selectionDisplayHintController.add(ScreenshotSelectionDisplayHint.fromJson(normalized));
   }
 
   @override
@@ -302,10 +316,7 @@ class MethodChannelScreenshotPlatformBridge implements ScreenshotPlatformBridge 
       return;
     }
 
-    // Native drag-time hints arrive as loosely typed method-channel maps. Parsing them here keeps
-    // the controller focused on prewarm orchestration instead of transport-specific null checks.
-    final normalized = arguments.map<String, dynamic>((key, value) => MapEntry(key.toString(), value));
-    _selectionDisplayHintController.add(ScreenshotSelectionDisplayHint.fromJson(normalized));
+    _emitSelectionDisplayHint(arguments);
   }
 
   List<DisplaySnapshot> _decodeSnapshotResponse(List<dynamic>? response) {
