@@ -58,9 +58,42 @@ func FindPythonPath(ctx context.Context) string {
 }
 
 // minimumPythonVersion is the minimum Python version required by Wox.
-// Python versions older than this are known to be incompatible with modern macOS
-// (e.g. Python 3.6 crashes on macOS 13+ due to missing CoreFoundation framework).
-var minimumPythonVersion, _ = semver.NewVersion("v3.9.0")
+// Bug fix: the Python host package declares Python 3.10+ and bundled
+// dependencies use syntax that Python 3.9 cannot parse. The old 3.9 floor let
+// an incompatible executable pass discovery and then fail during host startup.
+var minimumPythonVersion, _ = semver.NewVersion("v3.10.0")
+
+// ValidatePythonExecutable verifies that a custom Python executable can run the Wox host.
+func ValidatePythonExecutable(ctx context.Context, pythonPath string) (*semver.Version, error) {
+	normalizedPath := strings.TrimSpace(pythonPath)
+	if normalizedPath == "" {
+		message := "Python executable path is empty."
+		return nil, &runtimeExecutableError{statusCode: plugin.RuntimeHostStatusExecutableMissing, message: message}
+	}
+
+	// Bug fix: custom Python paths are now validated before they are persisted.
+	// The previous setting flow only checked the path during host startup, which
+	// let users save Python 3.9 and then see a later startup failure from the
+	// Python package. Keeping this helper in the host package makes the settings
+	// API and host resolver enforce the same executable and minimum-version rules.
+	if !util.IsFileExists(normalizedPath) {
+		message := fmt.Sprintf("custom Python path does not exist: %s", normalizedPath)
+		util.GetLogger().Warn(ctx, message)
+		return nil, &runtimeExecutableError{statusCode: plugin.RuntimeHostStatusExecutableMissing, message: message, path: normalizedPath}
+	}
+
+	installedVersion, versionErr := getPythonExecutableVersion(ctx, normalizedPath)
+	if versionErr != nil {
+		return nil, fmt.Errorf("failed to get custom Python version at %s: %w", normalizedPath, versionErr)
+	}
+	if installedVersion.LessThan(minimumPythonVersion) {
+		message := fmt.Sprintf("Python %s at %s is below the minimum required version %s.", installedVersion.String(), normalizedPath, minimumPythonVersion.String())
+		util.GetLogger().Warn(ctx, message)
+		return nil, &runtimeExecutableError{statusCode: plugin.RuntimeHostStatusUnsupportedVersion, message: message, path: normalizedPath}
+	}
+
+	return installedVersion, nil
+}
 
 func (n *PythonHost) resolvePythonPath(ctx context.Context) (string, error) {
 	util.GetLogger().Debug(ctx, "start finding python path")
@@ -69,23 +102,13 @@ func (n *PythonHost) resolvePythonPath(ctx context.Context) (string, error) {
 	// not a generic host startup failure, so do not hide it behind auto-detect.
 	customPath := setting.GetSettingManager().GetWoxSetting(ctx).CustomPythonPath.Get()
 	if customPath != "" {
-		if util.IsFileExists(customPath) {
-			installedVersion, versionErr := getPythonExecutableVersion(ctx, customPath)
-			if versionErr != nil {
-				return "", fmt.Errorf("failed to get custom Python version at %s: %w", customPath, versionErr)
-			}
-			if installedVersion.LessThan(minimumPythonVersion) {
-				message := fmt.Sprintf("Python %s at %s is below the minimum required version %s.", installedVersion.String(), customPath, minimumPythonVersion.String())
-				util.GetLogger().Warn(ctx, message)
-				return "", &runtimeExecutableError{statusCode: plugin.RuntimeHostStatusUnsupportedVersion, message: message, path: customPath}
-			}
-
-			util.GetLogger().Info(ctx, fmt.Sprintf("using custom python path: %s", customPath))
-			return customPath, nil
+		installedVersion, validateErr := ValidatePythonExecutable(ctx, customPath)
+		if validateErr != nil {
+			return "", validateErr
 		}
-		message := fmt.Sprintf("custom Python path does not exist: %s", customPath)
-		util.GetLogger().Warn(ctx, message)
-		return "", &runtimeExecutableError{statusCode: plugin.RuntimeHostStatusExecutableMissing, message: message, path: customPath}
+
+		util.GetLogger().Info(ctx, fmt.Sprintf("using custom python path: %s, version: %s", customPath, installedVersion.String()))
+		return customPath, nil
 	}
 
 	possiblePythonPaths := collectPythonPaths()

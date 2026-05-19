@@ -18,6 +18,7 @@ import (
 	"wox/database"
 	"wox/i18n"
 	"wox/plugin"
+	pluginhost "wox/plugin/host"
 	appplugin "wox/plugin/system/app"
 	"wox/setting"
 	"wox/telemetry"
@@ -871,8 +872,27 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 	case "EnableAutoUpdate":
 		woxSetting.EnableAutoUpdate.Set(vb)
 	case "CustomPythonPath":
+		if strings.TrimSpace(vs) != "" {
+			// Bug fix: reject unsupported custom Python paths at save time. The
+			// old flow persisted any path and only failed later when the host
+			// tried to start, so this backend guard keeps API callers and the UI
+			// on the same minimum-version contract.
+			if _, validateErr := pluginhost.ValidatePythonExecutable(ctx, vs); validateErr != nil {
+				writeErrorResponse(w, validateErr.Error())
+				return
+			}
+		}
 		woxSetting.CustomPythonPath.Set(vs)
 	case "CustomNodejsPath":
+		if strings.TrimSpace(vs) != "" {
+			// Feature: Node.js custom paths use the same save-time validation as
+			// Python. Checking the version here prevents non-UI API callers from
+			// persisting a Node.js executable that the host will immediately reject.
+			if _, validateErr := pluginhost.ValidateNodejsExecutable(ctx, vs); validateErr != nil {
+				writeErrorResponse(w, validateErr.Error())
+				return
+			}
+		}
 		woxSetting.CustomNodejsPath.Set(vs)
 
 	case "HttpProxyEnabled":

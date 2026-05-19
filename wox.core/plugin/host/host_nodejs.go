@@ -57,6 +57,42 @@ func FindNodejsPath(ctx context.Context) string {
 	return nodePath
 }
 
+// minimumNodejsVersion is the minimum Node.js version required by Wox.
+// Feature: the Node.js host now has an explicit floor, matching the settings
+// UI contract so older runtimes are rejected before plugins depend on newer
+// host behavior and fail later during startup.
+var minimumNodejsVersion, _ = semver.NewVersion("v20.0.0")
+
+// ValidateNodejsExecutable verifies that a custom Node.js executable can run the Wox host.
+func ValidateNodejsExecutable(ctx context.Context, nodePath string) (*semver.Version, error) {
+	normalizedPath := strings.TrimSpace(nodePath)
+	if normalizedPath == "" {
+		message := "Node.js executable path is empty."
+		return nil, &runtimeExecutableError{statusCode: plugin.RuntimeHostStatusExecutableMissing, message: message}
+	}
+
+	// Feature: validate custom Node.js paths before persisting them. The previous
+	// flow only checked file existence, so users could save an old executable and
+	// discover the version mismatch only after the host tried to start.
+	if !util.IsFileExists(normalizedPath) {
+		message := fmt.Sprintf("custom Node.js path does not exist: %s", normalizedPath)
+		util.GetLogger().Warn(ctx, message)
+		return nil, &runtimeExecutableError{statusCode: plugin.RuntimeHostStatusExecutableMissing, message: message, path: normalizedPath}
+	}
+
+	installedVersion, versionErr := getNodejsExecutableVersion(ctx, normalizedPath)
+	if versionErr != nil {
+		return nil, fmt.Errorf("failed to get custom Node.js version at %s: %w", normalizedPath, versionErr)
+	}
+	if installedVersion.LessThan(minimumNodejsVersion) {
+		message := fmt.Sprintf("Node.js %s at %s is below the minimum required version %s.", installedVersion.String(), normalizedPath, minimumNodejsVersion.String())
+		util.GetLogger().Warn(ctx, message)
+		return nil, &runtimeExecutableError{statusCode: plugin.RuntimeHostStatusUnsupportedVersion, message: message, path: normalizedPath}
+	}
+
+	return installedVersion, nil
+}
+
 func (n *NodejsHost) resolveNodejsPath(ctx context.Context) (string, error) {
 	util.GetLogger().Debug(ctx, "start finding nodejs path")
 
@@ -64,33 +100,41 @@ func (n *NodejsHost) resolveNodejsPath(ctx context.Context) (string, error) {
 	// falling back to another Node.js binary and later surfacing as "not started".
 	customPath := setting.GetSettingManager().GetWoxSetting(ctx).CustomNodejsPath.Get()
 	if customPath != "" {
-		if util.IsFileExists(customPath) {
-			util.GetLogger().Info(ctx, fmt.Sprintf("using custom nodejs path: %s", customPath))
-			return customPath, nil
+		installedVersion, validateErr := ValidateNodejsExecutable(ctx, customPath)
+		if validateErr != nil {
+			return "", validateErr
 		}
-		message := fmt.Sprintf("custom Node.js path does not exist: %s", customPath)
-		util.GetLogger().Warn(ctx, message)
-		return "", &runtimeExecutableError{statusCode: plugin.RuntimeHostStatusExecutableMissing, message: message, path: customPath}
+
+		util.GetLogger().Info(ctx, fmt.Sprintf("using custom nodejs path: %s, version: %s", customPath, installedVersion.String()))
+		return customPath, nil
 	}
 
 	possibleNodejsPaths := collectNodejsPaths()
 
 	foundVersion, _ := semver.NewVersion("v0.0.1")
 	foundPath := ""
+	var unsupportedPath string
+	var unsupportedVersion *semver.Version
 	for _, p := range possibleNodejsPaths {
 		if util.IsFileExists(p) {
-			versionOriginal, versionErr := shell.RunOutput(p, "-v")
+			installedVersion, versionErr := getNodejsExecutableVersion(ctx, p)
 			if versionErr != nil {
 				util.GetLogger().Error(ctx, fmt.Sprintf("failed to get nodejs version: %s, path=%s", versionErr, p))
 				continue
 			}
-			version := strings.TrimSpace(string(versionOriginal))
-			installedVersion, parseErr := semver.NewVersion(version)
-			if parseErr != nil {
-				util.GetLogger().Error(ctx, fmt.Sprintf("failed to parse nodejs version: %s, path=%s", parseErr, p))
+			util.GetLogger().Debug(ctx, fmt.Sprintf("found nodejs path: %s, version: %s", p, installedVersion.String()))
+
+			// Feature: keep the best unsupported Node.js candidate so runtime
+			// status can tell users to upgrade instead of reporting a missing
+			// executable when only old installations are present.
+			if installedVersion.LessThan(minimumNodejsVersion) {
+				util.GetLogger().Warn(ctx, fmt.Sprintf("skipping nodejs %s at %s: version is below minimum required %s, please upgrade your Node.js installation", installedVersion.String(), p, minimumNodejsVersion.String()))
+				if unsupportedVersion == nil || installedVersion.GreaterThan(unsupportedVersion) {
+					unsupportedPath = p
+					unsupportedVersion = installedVersion
+				}
 				continue
 			}
-			util.GetLogger().Debug(ctx, fmt.Sprintf("found nodejs path: %s, version: %s", p, installedVersion.String()))
 
 			if installedVersion.GreaterThan(foundVersion) {
 				foundPath = p
@@ -107,8 +151,24 @@ func (n *NodejsHost) resolveNodejsPath(ctx context.Context) (string, error) {
 	// Feature: PATH lookup is still supported, but now it is explicit so the UI
 	// can tell users when Node.js is truly absent instead of showing a host error.
 	if envPath, lookErr := exec.LookPath("node"); lookErr == nil {
-		util.GetLogger().Info(ctx, fmt.Sprintf("finally use nodejs path from env: %s", envPath))
-		return envPath, nil
+		installedVersion, versionErr := getNodejsExecutableVersion(ctx, envPath)
+		if versionErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to get nodejs version from env path: %s, path=%s", versionErr, envPath))
+		} else if installedVersion.LessThan(minimumNodejsVersion) {
+			if unsupportedVersion == nil || installedVersion.GreaterThan(unsupportedVersion) {
+				unsupportedPath = envPath
+				unsupportedVersion = installedVersion
+			}
+		} else {
+			util.GetLogger().Info(ctx, fmt.Sprintf("finally use nodejs path from env: %s, version: %s", envPath, installedVersion.String()))
+			return envPath, nil
+		}
+	}
+
+	if unsupportedVersion != nil {
+		message := fmt.Sprintf("Node.js %s at %s is below the minimum required version %s.", unsupportedVersion.String(), unsupportedPath, minimumNodejsVersion.String())
+		util.GetLogger().Warn(ctx, message)
+		return "", &runtimeExecutableError{statusCode: plugin.RuntimeHostStatusUnsupportedVersion, message: message, path: unsupportedPath}
 	}
 
 	message := "Node.js executable was not found. Install Node.js or configure the Node.js path in runtime settings."
@@ -194,6 +254,22 @@ func collectNodejsPaths() []string {
 	default:
 		return collectNodejsPathsForLinux()
 	}
+}
+
+func getNodejsExecutableVersion(ctx context.Context, nodePath string) (*semver.Version, error) {
+	versionOriginal, versionErr := shell.RunOutput(nodePath, "-v")
+	if versionErr != nil {
+		return nil, versionErr
+	}
+
+	version := strings.TrimSpace(string(versionOriginal))
+	installedVersion, err := semver.NewVersion(version)
+	if err != nil {
+		return nil, err
+	}
+
+	util.GetLogger().Debug(ctx, fmt.Sprintf("resolved nodejs version: %s, path=%s", installedVersion.String(), nodePath))
+	return installedVersion, nil
 }
 
 func collectNodejsPathsForDarwin() []string {
