@@ -531,6 +531,7 @@
   "plugin_file_status_full_indexing_progress": "Полное индексирование... %s файлов (%s/с)",
   "plugin_file_status_incremental_indexing_elapsed": "Инкрементальное индексирование... %s файлов, прошло %s",
   "plugin_file_status_index_complete_no_count": "Индекс файлов завершен за %s",
+  "plugin_file_status_index_complete": "Проиндексировано %s файлов за %s, в среднем %s файлов/с",
   "plugin_file_status_indexing_subtitle": "Отслеживается %d каталогов, сейчас сканируется %d. Результаты могут быть неполными.",
   "plugin_file_status_ready": "Поиск файлов готов",
   "plugin_file_status_ready_subtitle": "Отслеживается %d каталогов, проиндексировано %d элементов.",

@@ -31,6 +31,9 @@ const (
 	sqlitePreferredBatchRows = 2000
 	entryFactColumnCount     = 14
 	directoryColumnCount     = 5
+
+	bulkFinalizeSQLiteCacheSize = -131072
+	bulkFinalizeSQLiteMmapSize  = 268435456
 )
 
 type storedEntryRecord struct {
@@ -91,7 +94,6 @@ type sqliteIndexDefinition struct {
 }
 
 var entriesIndexDefinitions = []sqliteIndexDefinition{
-	{Name: "idx_entries_root_id", SQL: `CREATE INDEX IF NOT EXISTS idx_entries_root_id ON entries(root_id)`},
 	// collect_diff_stale/changed_old always constrain by root_id and a scope path
 	// prefix together. The previous root_id-only index forced tiny subtree diffs
 	// under large roots such as C:\Windows to rescan far too much of the root on
@@ -102,6 +104,14 @@ var entriesIndexDefinitions = []sqliteIndexDefinition{
 	{Name: "idx_entries_name_key", SQL: `CREATE INDEX IF NOT EXISTS idx_entries_name_key ON entries(name_key)`},
 	{Name: "idx_entries_extension", SQL: `CREATE INDEX IF NOT EXISTS idx_entries_extension ON entries(extension)`},
 	{Name: "idx_entries_is_dir", SQL: `CREATE INDEX IF NOT EXISTS idx_entries_is_dir ON entries(is_dir)`},
+}
+
+var retiredEntriesIndexNames = []string{
+	"idx_entries_root_id",
+}
+
+type sqliteTxBeginner interface {
+	BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error)
 }
 
 func (d *FileSearchDB) ensureBaseTables(ctx context.Context) error {
@@ -372,6 +382,9 @@ func createEntriesTable(ctx context.Context, tx *sql.Tx) error {
 }
 
 func createEntriesIndexes(ctx context.Context, tx *sql.Tx) error {
+	if err := dropRetiredEntriesIndexes(ctx, tx); err != nil {
+		return err
+	}
 	for _, definition := range entriesIndexDefinitions {
 		if _, err := tx.ExecContext(ctx, definition.SQL); err != nil {
 			return err
@@ -380,7 +393,24 @@ func createEntriesIndexes(ctx context.Context, tx *sql.Tx) error {
 	return nil
 }
 
+func dropRetiredEntriesIndexes(ctx context.Context, exec rootExecContext) error {
+	for _, name := range retiredEntriesIndexNames {
+		// Optimization: idx_entries_root_id is now redundant because
+		// idx_entries_root_id_path can serve root_id equality through SQLite's
+		// leftmost-prefix rule. Dropping the retired index during schema/index
+		// maintenance keeps old databases from paying rebuild and write costs for
+		// an access path that no longer adds query coverage.
+		if _, err := exec.ExecContext(ctx, fmt.Sprintf(`DROP INDEX IF EXISTS %s`, name)); err != nil {
+			return fmt.Errorf("drop retired %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
 func dropEntriesSecondaryIndexes(ctx context.Context, exec rootExecContext) error {
+	if err := dropRetiredEntriesIndexes(ctx, exec); err != nil {
+		return err
+	}
 	for _, definition := range entriesIndexDefinitions {
 		if _, err := exec.ExecContext(ctx, fmt.Sprintf(`DROP INDEX IF EXISTS %s`, definition.Name)); err != nil {
 			return fmt.Errorf("drop %s: %w", definition.Name, err)
@@ -390,14 +420,28 @@ func dropEntriesSecondaryIndexes(ctx context.Context, exec rootExecContext) erro
 }
 
 func (d *FileSearchDB) recreateEntryIndexes(ctx context.Context) error {
-	tx, err := d.db.BeginTx(ctx, nil)
+	return recreateEntryIndexesWithBeginner(ctx, d.db)
+}
+
+func recreateEntryIndexesWithBeginner(ctx context.Context, beginner sqliteTxBeginner) error {
+	tx, err := beginner.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 
-	if err := createEntriesIndexes(ctx, tx); err != nil {
+	if err := dropRetiredEntriesIndexes(ctx, tx); err != nil {
 		return err
+	}
+	for _, definition := range entriesIndexDefinitions {
+		startedAt := util.GetSystemTimestamp()
+		if _, err := tx.ExecContext(ctx, definition.SQL); err != nil {
+			return fmt.Errorf("create %s: %w", definition.Name, err)
+		}
+		// Diagnostic addition: bulk finalize previously reported only the total
+		// index recreation cost. Logging each index keeps the rebuild semantics
+		// identical while showing whether one secondary index dominates the pause.
+		logFilesearchSQLiteMaintenance(ctx, "recreate_entry_index", definition.Name, util.GetSystemTimestamp()-startedAt, 1)
 	}
 	return tx.Commit()
 }
@@ -952,24 +996,62 @@ func (d *FileSearchDB) EndBulkSync(ctx context.Context) error {
 		return nil
 	}
 
-	if entryIndexesDropped {
-		startedAt := util.GetSystemTimestamp()
-		if err := d.recreateEntryIndexes(ctx); err != nil {
+	return d.withBulkFinalizeConnection(ctx, func(conn *sql.Conn) error {
+		if entryIndexesDropped {
+			startedAt := util.GetSystemTimestamp()
+			if err := recreateEntryIndexesWithBeginner(ctx, conn); err != nil {
+				return err
+			}
+			logFilesearchSQLiteMaintenance(ctx, "recreate_entry_indexes", "bulk", util.GetSystemTimestamp()-startedAt, len(entriesIndexDefinitions))
+		}
+
+		// Bulk mode now defers both bigram and FTS maintenance until the end of the
+		// scan cycle. Root-local bigram refreshes made full runs stall in every
+		// finalize job, while the final index only needs one consistent rebuild after
+		// the fact table has settled.
+		// Optimization: a foreground full index only needs rebuilt FTS tables to make
+		// results searchable. FTS optimize only merges segments/compacts storage, so
+		// keeping it out of the user-visible indexing path preserves search semantics
+		// while avoiding a finalize pause on every manual rebuild.
+		if err := d.rebuildBulkSearchArtifactsWithBeginner(ctx, conn, false, entryIndexesDropped); err != nil {
 			return err
 		}
-		logFilesearchSQLiteMaintenance(ctx, "recreate_entry_indexes", "bulk", util.GetSystemTimestamp()-startedAt, len(entriesIndexDefinitions))
-	}
+		return nil
+	})
+}
 
-	// Bulk mode now defers both bigram and FTS maintenance until the end of the
-	// scan cycle. Root-local bigram refreshes made full runs stall in every
-	// finalize job, while the final index only needs one consistent rebuild after
-	// the fact table has settled.
-	// Optimization: a foreground full index only needs rebuilt FTS tables to make
-	// results searchable. FTS optimize only merges segments/compacts storage, so
-	// keeping it out of the user-visible indexing path preserves search semantics
-	// while avoiding a finalize pause on every manual rebuild.
-	if err := d.rebuildBulkSearchArtifacts(ctx, false, entryIndexesDropped); err != nil {
+func (d *FileSearchDB) withBulkFinalizeConnection(ctx context.Context, run func(conn *sql.Conn) error) error {
+	conn, err := d.db.Conn(ctx)
+	if err != nil {
 		return err
+	}
+	defer conn.Close()
+
+	if err := configureBulkFinalizeConnection(ctx, conn); err != nil {
+		return err
+	}
+	return run(conn)
+}
+
+func configureBulkFinalizeConnection(ctx context.Context, conn *sql.Conn) error {
+	pragmas := []struct {
+		name string
+		sql  string
+	}{
+		{name: "cache_size", sql: fmt.Sprintf(`PRAGMA cache_size = %d`, bulkFinalizeSQLiteCacheSize)},
+		{name: "temp_store", sql: `PRAGMA temp_store = MEMORY`},
+		{name: "mmap_size", sql: fmt.Sprintf(`PRAGMA mmap_size = %d`, bulkFinalizeSQLiteMmapSize)},
+	}
+	for _, pragma := range pragmas {
+		startedAt := util.GetSystemTimestamp()
+		// Optimization: bulk finalize performs large SQLite scans and temporary
+		// sort/build work in one foreground checkpoint. Applying conservative
+		// connection-local PRAGMAs here improves that checkpoint without changing
+		// table contents, index definitions, or search visibility semantics.
+		if _, err := conn.ExecContext(ctx, pragma.sql); err != nil {
+			return fmt.Errorf("set bulk finalize pragma %s: %w", pragma.name, err)
+		}
+		logFilesearchSQLiteMaintenance(ctx, "bulk_finalize_pragma", pragma.name, util.GetSystemTimestamp()-startedAt, 1)
 	}
 	return nil
 }
@@ -2328,8 +2410,12 @@ func (d *FileSearchDB) rebuildFTSTables(ctx context.Context, optimize bool) erro
 }
 
 func (d *FileSearchDB) rebuildBulkSearchArtifacts(ctx context.Context, optimize bool, freshEmptyIndex bool) error {
+	return d.rebuildBulkSearchArtifactsWithBeginner(ctx, d.db, optimize, freshEmptyIndex)
+}
+
+func (d *FileSearchDB) rebuildBulkSearchArtifactsWithBeginner(ctx context.Context, beginner sqliteTxBeginner, optimize bool, freshEmptyIndex bool) error {
 	bigramStartedAt := util.GetSystemTimestamp()
-	tx, err := d.db.BeginTx(ctx, nil)
+	tx, err := beginner.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}

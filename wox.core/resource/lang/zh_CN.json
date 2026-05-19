@@ -566,7 +566,7 @@
   "plugin_file_status_full_indexing_progress": "正在全量索引... %s 个文件（%s/秒）",
   "plugin_file_status_incremental_indexing_elapsed": "正在增量索引... %s 个文件，用时 %s",
   "plugin_file_status_index_complete_no_count": "文件索引完成，用时 %s",
-  "plugin_file_status_index_complete": "已索引 %s 个文件，用时 %s",
+  "plugin_file_status_index_complete": "已索引 %s 个文件，用时 %s，平均 %s/秒",
   "plugin_file_status_index_duration_seconds": "%d秒",
   "plugin_file_status_index_duration_minutes": "%d分%02d秒",
   "plugin_file_status_index_duration_hours": "%d小时%02d分",

@@ -531,6 +531,7 @@
   "plugin_file_status_full_indexing_progress": "Indexação completa... %s arquivos (%s/s)",
   "plugin_file_status_incremental_indexing_elapsed": "Indexação incremental... %s arquivos, %s decorrido",
   "plugin_file_status_index_complete_no_count": "Índice de arquivos concluído em %s",
+  "plugin_file_status_index_complete": "Indexados %s arquivos em %s, média de %s arquivos/s",
   "plugin_file_status_indexing_subtitle": "Monitorando %d diretórios, com %d em varredura no momento. Os resultados podem estar incompletos.",
   "plugin_file_status_ready": "A busca de arquivos está pronta",
   "plugin_file_status_ready_subtitle": "Monitorando %d diretórios com %d itens indexados.",

@@ -566,7 +566,7 @@
   "plugin_file_status_full_indexing_progress": "Full indexing... %s files (%s/s)",
   "plugin_file_status_incremental_indexing_elapsed": "Incremental indexing... %s files, %s elapsed",
   "plugin_file_status_index_complete_no_count": "File index completed in %s",
-  "plugin_file_status_index_complete": "Indexed %s files in %s",
+  "plugin_file_status_index_complete": "Indexed %s files in %s, average %s/s",
   "plugin_file_status_index_duration_seconds": "%ds",
   "plugin_file_status_index_duration_minutes": "%dm %02ds",
   "plugin_file_status_index_duration_hours": "%dh %02dm",

@@ -931,10 +931,12 @@ func (c *FileSearchPlugin) buildFullIndexCompletedToolbarTitle(ctx context.Conte
 	// The core emits this only after full-run bulk SQLite maintenance finishes,
 	// so the count and duration describe the complete persisted index rather
 	// than the earlier executor completion snapshot.
+	averageRate := estimateCompletedIndexRate(fileCount, status.ActiveRunElapsedMs)
 	return fmt.Sprintf(
 		c.api.GetTranslation(ctx, "plugin_file_status_index_complete"),
 		formatFileSearchCount(fileCount),
 		c.formatFileSearchIndexDuration(ctx, status.ActiveRunElapsedMs),
+		formatFileSearchCount(averageRate),
 	)
 }
 
@@ -1006,6 +1008,17 @@ func estimateActiveIndexRate(indexedFileCount int64, elapsedMs int64) int64 {
 		elapsedSeconds = 1
 	}
 	return indexedFileCount / elapsedSeconds
+}
+
+func estimateCompletedIndexRate(indexedFileCount int64, elapsedMs int64) int64 {
+	if indexedFileCount <= 0 || elapsedMs <= 0 {
+		return 0
+	}
+	rate := (indexedFileCount*1000 + elapsedMs/2) / elapsedMs
+	if rate <= 0 {
+		return 1
+	}
+	return rate
 }
 
 func (c *FileSearchPlugin) formatFileSearchIndexDuration(ctx context.Context, elapsedMs int64) string {
