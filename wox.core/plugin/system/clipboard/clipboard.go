@@ -383,7 +383,7 @@ func (c *ClipboardPlugin) buildClipboardTypeRefinement() plugin.QueryRefinement 
 		Title:        "i18n:plugin_clipboard_refinement_type",
 		Type:         plugin.QueryRefinementTypeSingleSelect,
 		DefaultValue: []string{clipboardTypeRefinementAll},
-		Hotkey:       "cmd+t",
+		Hotkey:       clipboardTypeRefinementHotkey(),
 		Persist:      false,
 		Options: []plugin.QueryRefinementOption{
 			{Value: clipboardTypeRefinementAll, Title: "i18n:plugin_clipboard_refinement_type_all"},
@@ -391,6 +391,13 @@ func (c *ClipboardPlugin) buildClipboardTypeRefinement() plugin.QueryRefinement 
 			{Value: clipboardTypeRefinementImage, Title: "i18n:plugin_clipboard_refinement_type_image"},
 		},
 	}
+}
+
+func clipboardTypeRefinementHotkey() string {
+	if util.IsMacOS() {
+		return "cmd+t"
+	}
+	return "alt+t"
 }
 
 func (c *ClipboardPlugin) getSelectedClipboardType(query plugin.Query) string {

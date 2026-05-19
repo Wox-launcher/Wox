@@ -56,8 +56,8 @@
   "ToolbarPaddingLeft": 10,
   "ToolbarPaddingRight": 10,
   "windows": {
-    "AppBackgroundColor": "rgba(18, 18, 22, 0.66)",
+    "AppBackgroundColor": "rgba(18, 18, 22, 0.75)",
     "ResultItemActiveBackgroundColor": "rgba(255, 255, 255, 0.10)",
-    "ToolbarBackgroundColor": "rgba(16, 16, 20, 0.46)"
+    "ToolbarBackgroundColor": "rgba(16, 16, 20, 0.2)"
   }
 }
