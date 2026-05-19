@@ -31,6 +31,7 @@ const (
 	actualIndexFdPathEnv        = "WOX_FILESEARCH_REAL_INDEX_FD"
 	actualIndexRgPathEnv        = "WOX_FILESEARCH_REAL_INDEX_RG"
 	actualIndexGCFlagsEnv       = "WOX_FILESEARCH_REAL_INDEX_GCFLAGS"
+	actualIndexDiagnosticsEnv   = "WOX_FILESEARCH_REAL_INDEX_DIAGNOSTICS"
 	actualIndexDefaultRootPath  = "~/Projects"
 	actualIndexDefaultKeyword   = "default-cover"
 	actualIndexTimeout          = 30 * time.Minute
@@ -290,6 +291,17 @@ func TestCaptureFileSearchRealIndexForProjectsRoot(t *testing.T) {
 	indexPolicy, indexPolicyArtifact, policyDiagnostics := realIndexBenchmarkPolicy()
 	scanner.policy.Set(indexPolicy)
 	engine := &Engine{db: db, scanner: scanner}
+	previousDiagnosticLoggingEnabled := fileSearchDiagnosticLoggingEnabled
+	if shouldEnableRealIndexDiagnostics() {
+		// Diagnostic addition: real-index captures need the existing stage and
+		// SQLite timing logs, but normal package tests should stay quiet. The env
+		// switch keeps the production default unchanged while making local
+		// optimization runs explain where index time is being spent.
+		fileSearchDiagnosticLoggingEnabled = true
+	}
+	defer func() {
+		fileSearchDiagnosticLoggingEnabled = previousDiagnosticLoggingEnabled
+	}()
 
 	var (
 		timelineMu sync.Mutex
@@ -494,6 +506,19 @@ func (c realIndexTraversalPolicyContext) Descend(directoryPath string) Traversal
 	}
 }
 
+func (c realIndexTraversalPolicyContext) WithDirectoryEntries(directoryPath string, entries []os.DirEntry) TraversalPolicyContext {
+	if c.inner == nil {
+		return c
+	}
+	// Benchmark alignment: real-index captures use the same directory-entry hint
+	// path as the production plugin wrapper, so .gitignore load reductions are
+	// measured in the workstation-sized benchmark instead of only in app runs.
+	return realIndexTraversalPolicyContext{
+		inner:           c.inner.WithDirectoryEntries(directoryPath, entries),
+		skipHiddenFiles: c.skipHiddenFiles,
+	}
+}
+
 func isHiddenRealIndexPath(path string) bool {
 	name := filepath.Base(filepath.Clean(strings.TrimSpace(path)))
 	return strings.HasPrefix(name, ".") && name != "." && name != ".."
@@ -509,6 +534,11 @@ func shouldCaptureRealIndex() bool {
 	// Accepting a `go test -args` flag keeps the real-index capture runnable from
 	// either shell without weakening the default skip guard for CI.
 	return strings.TrimSpace(os.Getenv(actualIndexCaptureEnv)) == "1"
+}
+
+func shouldEnableRealIndexDiagnostics() bool {
+	value := strings.TrimSpace(strings.ToLower(os.Getenv(actualIndexDiagnosticsEnv)))
+	return value == "1" || value == "true" || value == "yes" || value == "on"
 }
 
 func realIndexRootPath() string {

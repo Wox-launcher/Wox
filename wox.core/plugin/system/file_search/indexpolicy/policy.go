@@ -292,6 +292,10 @@ func (p *Policy) NewTraversalContext(rootPath string, policyRootPath string, sco
 	if dirRelSlash == "." {
 		dirRelSlash = ""
 	}
+	dirSegmentsLower := []string{}
+	if hasDirRel && dirRelSlash != "" {
+		dirSegmentsLower = lowerSlashPathSegments(dirRelSlash)
+	}
 	// Optimization: traversal starts from a sealed scope, not always from the
 	// policy root. A scope inside an ignored configured path must keep the old
 	// behavior where every descendant is ignored, but normal children only need
@@ -307,7 +311,7 @@ func (p *Policy) NewTraversalContext(rootPath string, policyRootPath string, sco
 		dirPath:                   scopePath,
 		dirRelSlash:               dirRelSlash,
 		hasDirRel:                 hasDirRel,
-		dirSegmentsLower:          lowerPathSegments(scopePath),
+		dirSegmentsLower:          dirSegmentsLower,
 		ignoreRules:               rules,
 		configuredAncestorIgnored: configuredAncestorIgnored,
 		gitIgnoreFrames:           p.gitIgnoreFramesForDirectory(policyRootPath, scopePath, diagnostics),
@@ -401,6 +405,14 @@ func (c *TraversalContext) Descend(directoryPath string) *TraversalContext {
 			childRelSlash = ""
 		}
 	}
+	childSegmentsLower := append(append([]string(nil), c.dirSegmentsLower...), strings.ToLower(name))
+	if filepath.Dir(cleanPath) != c.dirPath {
+		if hasChildRel && childRelSlash != "" {
+			childSegmentsLower = lowerSlashPathSegments(childRelSlash)
+		} else {
+			childSegmentsLower = nil
+		}
+	}
 
 	child := &TraversalContext{
 		policy:                    c.policy,
@@ -410,27 +422,66 @@ func (c *TraversalContext) Descend(directoryPath string) *TraversalContext {
 		dirPath:                   cleanPath,
 		dirRelSlash:               childRelSlash,
 		hasDirRel:                 hasChildRel,
-		dirSegmentsLower:          append(append([]string(nil), c.dirSegmentsLower...), strings.ToLower(name)),
+		dirSegmentsLower:          childSegmentsLower,
 		ignoreRules:               c.ignoreRules,
-		configuredAncestorIgnored: c.configuredAncestorIgnored || configuredPatternMatchesPath(c.ignoreRules, c.matchRootPath, cleanPath),
+		configuredAncestorIgnored: c.configuredAncestorIgnored || c.configuredChildPathIgnored(cleanPath, name),
 		gitIgnoreFrames:           append([]traversalGitIgnoreFrame(nil), c.gitIgnoreFrames...),
 		diagnostics:               c.diagnostics,
 	}
-	if !hasChildRel {
-		return child
+	// Optimization: Descend only moves traversal state now. The scanner can pass
+	// the child directory's actual ReadDir entries through WithDirectoryEntries
+	// when that directory is read, so most directories no longer pay a failed
+	// child/.gitignore ReadFile before we know such a file exists.
+	return child
+}
+
+func (c *TraversalContext) WithDirectoryEntries(directoryPath string, entries []os.DirEntry) *TraversalContext {
+	if c == nil || c.policy == nil {
+		return c
+	}
+
+	cleanPath := filepath.Clean(strings.TrimSpace(directoryPath))
+	if cleanPath == "" || cleanPath == "." {
+		return c
+	}
+	if cleanPath != c.dirPath {
+		context := c.policy.NewTraversalContext(c.rootPath, c.policyRootPath, cleanPath)
+		if context == nil {
+			return c
+		}
+		return context.WithDirectoryEntries(cleanPath, entries)
+	}
+	if !c.hasDirRel || !directoryEntriesContain(entries, ".gitignore") || c.hasGitIgnoreFrameForCurrentDirectory() {
+		return c
 	}
 
 	patterns := c.policy.patternsForDirectory(cleanPath, c.diagnostics)
-	if len(patterns) > 0 {
-		// Optimization: .gitignore is loaded once when entering a directory and
-		// then carried with the queue item. Children no longer rebuild
-		// the ancestor directory list or call filepath.Rel for every ancestor.
-		child.gitIgnoreFrames = append(child.gitIgnoreFrames, traversalGitIgnoreFrame{
-			dirRelSlash: childRelSlash,
-			patterns:    patterns,
-		})
+	if len(patterns) == 0 {
+		return c
 	}
-	return child
+
+	updated := *c
+	updated.gitIgnoreFrames = append(append([]traversalGitIgnoreFrame(nil), c.gitIgnoreFrames...), traversalGitIgnoreFrame{
+		dirRelSlash: c.dirRelSlash,
+		patterns:    patterns,
+	})
+	// Optimization: directory-local .gitignore loading is now tied to the
+	// directory listing that proved the file exists. This preserves the existing
+	// carried-frame matcher while avoiding a failed os.ReadFile for the many
+	// directories that do not contain .gitignore.
+	return &updated
+}
+
+func (c *TraversalContext) hasGitIgnoreFrameForCurrentDirectory() bool {
+	if c == nil {
+		return false
+	}
+	for _, frame := range c.gitIgnoreFrames {
+		if frame.dirRelSlash == c.dirRelSlash {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *TraversalContext) shouldIgnoreByConfiguredPattern(fullPath string, name string, diagnostics *Diagnostics) bool {
@@ -445,13 +496,50 @@ func (c *TraversalContext) shouldIgnoreByConfiguredPattern(fullPath string, name
 		return true
 	}
 
-	childRelSlash, hasChildRel := c.childRelPath(name)
-	fullSlash := filepath.ToSlash(fullPath)
-	if c.ignoreRules.matchesTraversalChild(fullSlash, childRelSlash, hasChildRel, name, c.dirSegmentsLower) {
+	if c.ignoreRules.matchesTraversalChildSegments(name, c.dirSegmentsLower) {
 		ignored = true
 		return true
 	}
+	if c.ignoreRules.hasPathCandidateRules() {
+		childRelSlash, hasChildRel := c.childRelPath(name)
+		pathCandidate := filepath.ToSlash(fullPath)
+		if hasChildRel {
+			pathCandidate = childRelSlash
+			childRelSlash = ""
+			hasChildRel = false
+		}
+		if c.ignoreRules.matchesTraversalChildPathCandidates(pathCandidate, childRelSlash, hasChildRel) {
+			ignored = true
+			return true
+		}
+	}
 	return false
+}
+
+func (c *TraversalContext) configuredChildPathIgnored(cleanPath string, name string) bool {
+	if c == nil {
+		return false
+	}
+	if c.ignoreRules.matchesTraversalChildSegments(name, c.dirSegmentsLower) {
+		return true
+	}
+	if !c.ignoreRules.hasPathCandidateRules() {
+		return false
+	}
+	childRelSlash, hasChildRel := c.childRelPath(name)
+	if filepath.Dir(cleanPath) != c.dirPath {
+		childRelSlash, hasChildRel = relativePathForGitIgnoreMatch(c.matchRootPath, cleanPath)
+		if childRelSlash == "." {
+			childRelSlash = ""
+		}
+	}
+	pathCandidate := filepath.ToSlash(cleanPath)
+	if hasChildRel {
+		pathCandidate = childRelSlash
+		childRelSlash = ""
+		hasChildRel = false
+	}
+	return c.ignoreRules.matchesTraversalChildPathCandidates(pathCandidate, childRelSlash, hasChildRel)
 }
 
 func (c *TraversalContext) shouldIgnoreByGitIgnore(name string, isDir bool, diagnostics *Diagnostics) bool {
@@ -507,6 +595,15 @@ func traversalRelPathFromFrame(frameDirRelSlash string, childRelSlash string) (s
 		return "", false
 	}
 	return strings.TrimPrefix(childRelSlash, prefix), true
+}
+
+func directoryEntriesContain(entries []os.DirEntry, name string) bool {
+	for _, entry := range entries {
+		if entry.Name() == name {
+			return true
+		}
+	}
+	return false
 }
 
 func splitFileSearchPathSegments(fullPath string) []string {
@@ -689,10 +786,6 @@ func recursivePathSegmentPattern(pattern string) ([]string, bool) {
 	return parts, true
 }
 
-func lowerPathSegments(path string) []string {
-	return lowerSlashPathSegments(filepath.ToSlash(filepath.Clean(path)))
-}
-
 func lowerSlashPathSegments(path string) []string {
 	rawSegments := strings.Split(path, "/")
 	segments := make([]string, 0, len(rawSegments))
@@ -831,11 +924,20 @@ func globPatternToRegex(pattern string, segmentOnly bool) string {
 
 func configuredPatternMatchesPath(rules fileSearchIgnoreRules, matchRootPath string, fullPath string) bool {
 	relPath, hasRelPath := relativePathForGitIgnoreMatch(filepath.Clean(matchRootPath), fullPath)
+	if hasRelPath {
+		if relPath == "." || relPath == "" {
+			return false
+		}
+		// Bug fix: configured ignore rules are scoped to the indexed policy root.
+		// Matching segment rules against the absolute Windows path made any root
+		// under %TEMP% look ignored by the default **/temp/** rule. Use the
+		// root-relative path when available so defaults describe content inside the
+		// configured root, not every ancestor chosen by the OS or test harness.
+		return rules.matches([]string{relPath}, splitFileSearchPathSegments(relPath))
+	}
+
 	fullSlash := filepath.ToSlash(filepath.Clean(fullPath))
 	candidates := []string{fullSlash}
-	if hasRelPath {
-		candidates = append(candidates, relPath)
-	}
 	segments := splitFileSearchPathSegments(fullSlash)
 	return rules.matches(candidates, segments)
 }
@@ -862,16 +964,10 @@ func (rules fileSearchIgnoreRules) matches(pathCandidates []string, segments []s
 	return false
 }
 
-func (rules fileSearchIgnoreRules) matchesTraversalChild(fullSlash string, relSlash string, hasRelSlash bool, segment string, dirSegmentsLower []string) bool {
+func (rules fileSearchIgnoreRules) matchesTraversalChildSegments(segment string, dirSegmentsLower []string) bool {
 	normalizedSegment := strings.ToLower(segment)
 	for _, rule := range rules.pathRules {
 		if rule.matchesTraversalPathSegments(dirSegmentsLower, normalizedSegment) {
-			return true
-		}
-		if rule.matchesPathCandidate(fullSlash) {
-			return true
-		}
-		if hasRelSlash && rule.matchesPathCandidate(relSlash) {
 			return true
 		}
 	}
@@ -885,6 +981,30 @@ func (rules fileSearchIgnoreRules) matchesTraversalChild(fullSlash string, relSl
 		}
 	}
 
+	return false
+}
+
+func (rules fileSearchIgnoreRules) hasPathCandidateRules() bool {
+	for _, rule := range rules.pathRules {
+		if len(rule.pathSegmentParts) == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func (rules fileSearchIgnoreRules) matchesTraversalChildPathCandidates(fullSlash string, relSlash string, hasRelSlash bool) bool {
+	for _, rule := range rules.pathRules {
+		if len(rule.pathSegmentParts) > 0 {
+			continue
+		}
+		if rule.matchesPathCandidate(fullSlash) {
+			return true
+		}
+		if hasRelSlash && rule.matchesPathCandidate(relSlash) {
+			return true
+		}
+	}
 	return false
 }
 

@@ -22,6 +22,16 @@ type TraversalPolicyContext interface {
 	Descend(directoryPath string) TraversalPolicyContext
 }
 
+// DirectoryEntryAwareTraversalPolicyContext lets a scanner pass the directory
+// listing it already paid for into policy code. The base traversal contract stays
+// small for other callers, while filesearch can avoid probing every directory
+// for optional policy files such as .gitignore when ReadDir already proved they
+// are absent.
+type DirectoryEntryAwareTraversalPolicyContext interface {
+	TraversalPolicyContext
+	WithDirectoryEntries(directoryPath string, entries []os.DirEntry) TraversalPolicyContext
+}
+
 type EngineOptions struct {
 	Policy Policy
 }
@@ -120,6 +130,10 @@ func (c allowAllTraversalPolicyContext) Descend(directoryPath string) TraversalP
 	return c
 }
 
+func (c allowAllTraversalPolicyContext) WithDirectoryEntries(directoryPath string, entries []os.DirEntry) TraversalPolicyContext {
+	return c
+}
+
 type safeTraversalPolicyContext struct {
 	inner TraversalPolicyContext
 }
@@ -153,6 +167,34 @@ func (c safeTraversalPolicyContext) Descend(directoryPath string) TraversalPolic
 	}
 	return safeTraversalPolicyContext{
 		inner: child,
+	}
+}
+
+func (c safeTraversalPolicyContext) WithDirectoryEntries(directoryPath string, entries []os.DirEntry) TraversalPolicyContext {
+	if c.inner == nil {
+		return allowAllTraversalPolicyContext{}
+	}
+
+	entryAware, ok := c.inner.(DirectoryEntryAwareTraversalPolicyContext)
+	if !ok {
+		return c
+	}
+
+	var updated TraversalPolicyContext
+	func() {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				util.GetLogger().Warn(context.Background(), fmt.Sprintf("filesearch policy TraversalContext.WithDirectoryEntries panic recovered: %v", recovered))
+				updated = nil
+			}
+		}()
+		updated = entryAware.WithDirectoryEntries(directoryPath, entries)
+	}()
+	if updated == nil {
+		return c
+	}
+	return safeTraversalPolicyContext{
+		inner: updated,
 	}
 }
 

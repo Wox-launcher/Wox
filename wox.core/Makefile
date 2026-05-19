@@ -2,7 +2,7 @@
 
 SQLITE_BUILD_TAGS ?= sqlite_fts5
 FILESEARCH_REAL_INDEX_ROOT ?= ~/
-FILESEARCH_REAL_INDEX_KEYWORD ?= default-cover
+FILESEARCH_REAL_INDEX_KEYWORD ?= Wox
 FILESEARCH_REAL_INDEX_ARTIFACT ?=
 # Default to the same no-optimization flags used by the debugger-launched Wox
 # core. That makes the local benchmark match the development app's real full

@@ -152,6 +152,20 @@ func (c fileSearchTraversalPolicyContext) Descend(directoryPath string) filesear
 	}
 }
 
+func (c fileSearchTraversalPolicyContext) WithDirectoryEntries(directoryPath string, entries []os.DirEntry) filesearch.TraversalPolicyContext {
+	if c.inner == nil {
+		return c
+	}
+	// Optimization: the core scanner can now forward a directory's ReadDir
+	// result before evaluating its children. Preserve the plugin-owned hidden
+	// file setting while letting indexpolicy skip .gitignore reads for directories
+	// that the listing already proved do not contain one.
+	return fileSearchTraversalPolicyContext{
+		inner:           c.inner.WithDirectoryEntries(directoryPath, entries),
+		skipHiddenFiles: c.skipHiddenFiles,
+	}
+}
+
 func (p *fileSearchIndexPolicy) SetIgnorePatterns(patterns []string) {
 	if p == nil || p.inner == nil {
 		return

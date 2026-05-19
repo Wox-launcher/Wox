@@ -463,6 +463,7 @@ func (b *SnapshotBuilder) BuildSubtreeSnapshot(ctx context.Context, root RootRec
 			util.GetLogger().Warn(ctx, "filesearch skipped unreadable directory "+current.path+": "+readErr.Error())
 			continue
 		}
+		currentPolicy := traversalPolicyWithDirectoryEntries(current.policy, current.path, dirEntries)
 		batch.Directories = append(batch.Directories, DirectoryRecord{
 			Path:         current.path,
 			RootID:       root.ID,
@@ -488,7 +489,7 @@ func (b *SnapshotBuilder) BuildSubtreeSnapshot(ctx context.Context, root RootRec
 			if shouldSkipSystemPathForRoot(root, childPath, isDir) {
 				continue
 			}
-			if !current.policy.ShouldIndexPath(childPath, isDir) {
+			if !currentPolicy.ShouldIndexPath(childPath, isDir) {
 				continue
 			}
 			if info == nil {
@@ -513,7 +514,7 @@ func (b *SnapshotBuilder) BuildSubtreeSnapshot(ctx context.Context, root RootRec
 			queue = append(queue, queueItem{
 				path:   childPath,
 				info:   info,
-				policy: current.policy.Descend(childPath),
+				policy: currentPolicy.Descend(childPath),
 			})
 		}
 	}
@@ -776,6 +777,7 @@ func (b *SnapshotBuilder) streamSubtreeWorker(ctx context.Context, root RootReco
 				}
 				return nil
 			}
+			currentPolicy := traversalPolicyWithDirectoryEntries(current.policy, current.path, dirEntries)
 
 			batch.Directories = append(batch.Directories, DirectoryRecord{
 				Path:         current.path,
@@ -815,7 +817,7 @@ func (b *SnapshotBuilder) streamSubtreeWorker(ctx context.Context, root RootReco
 					continue
 				}
 				policyStartedAt := time.Now()
-				shouldIndex := current.policy.ShouldIndexPath(childPath, isDir)
+				shouldIndex := currentPolicy.ShouldIndexPath(childPath, isDir)
 				diagnostics.recordPolicyCheck(time.Since(policyStartedAt))
 				if !shouldIndex {
 					continue
@@ -835,7 +837,7 @@ func (b *SnapshotBuilder) streamSubtreeWorker(ctx context.Context, root RootReco
 					if !workQueue.push(subtreeStreamQueueItem{
 						path:   childPath,
 						info:   childInfo,
-						policy: current.policy.Descend(childPath),
+						policy: currentPolicy.Descend(childPath),
 					}) {
 						if err := workQueue.currentErr(); err != nil {
 							return err
@@ -920,4 +922,23 @@ func (b *SnapshotBuilder) shouldIndexScopePath(root RootRecord, path string, isD
 	// subtree scanner. Keeping scope checks on the removed per-path callback would
 	// let ignored dirty paths enter execution through a different matcher.
 	return context.ShouldIndexPath(cleanPath, isDir)
+}
+
+func traversalPolicyWithDirectoryEntries(policy TraversalPolicyContext, directoryPath string, entries []os.DirEntry) TraversalPolicyContext {
+	if policy == nil {
+		return allowAllTraversalPolicyContext{}
+	}
+	entryAware, ok := policy.(DirectoryEntryAwareTraversalPolicyContext)
+	if !ok {
+		return policy
+	}
+	// Optimization: scanners already have the ReadDir payload for the directory
+	// being evaluated. Passing it through the optional policy hook lets rich
+	// policies load directory-local ignore files only when they are present,
+	// while simpler policies continue to use the base interface unchanged.
+	updated := entryAware.WithDirectoryEntries(directoryPath, entries)
+	if updated == nil {
+		return policy
+	}
+	return updated
 }
