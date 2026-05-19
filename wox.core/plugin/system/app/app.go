@@ -88,6 +88,14 @@ const (
 )
 
 const (
+	// Optimization: broad global app queries used to return hundreds of
+	// applications, making result action creation and manager/UI polish dominate
+	// latency while adding little value to the aggregated result list. Plugin
+	// context and launchpad remain full browsing surfaces.
+	appQueryResultLimitInGloablQuery = 50
+)
+
+const (
 	appChangeDebounceWindow = 3 * time.Second
 	appChangeMaxWait        = 20 * time.Second
 )
@@ -119,6 +127,17 @@ type appQuerySessionCache struct {
 	search     string
 	matches    []int
 	startedAt  int64
+}
+
+// appQueryMatch is a lightweight matched candidate. Query builds full
+// QueryResult objects only after capping so broad searches do not pay action,
+// icon, and result-cache costs for rows the UI will not need.
+type appQueryMatch struct {
+	entryIndex  int
+	entry       appQueryEntry
+	displayName string
+	displayPath string
+	score       int64
 }
 
 func (a *appInfo) GetDisplayPath() string {
@@ -432,14 +451,19 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) plugi
 	// force extra work in the middle of a keystroke.
 	entries, generation := a.getQueryEntriesSnapshot()
 	startedAt := time.Now().UnixNano()
+	queryStartedAt := util.GetSystemTimestamp()
 
 	// When the user grows the same search prefix, most fuzzy searches can reuse
 	// the previous matched subset. Pinyin has a separate guard inside
 	// getReusableQueryMatches because syllable-boundary typing is not monotonic.
 	cachedMatches, canReuseCachedMatches := a.getReusableQueryMatches(ctx, query, generation)
 
-	results := make([]plugin.QueryResult, 0, len(entries))
 	matchedIndexes := make([]int, 0, len(entries))
+	matchCapacity := len(entries)
+	if matchCapacity > appQueryResultLimitInGloablQuery {
+		matchCapacity = appQueryResultLimitInGloablQuery
+	}
+	matches := make([]appQueryMatch, 0, matchCapacity)
 
 	matchEntry := func(entryIndex int) {
 		entry := entries[entryIndex]
@@ -467,30 +491,13 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) plugi
 			return
 		}
 
-		resultID := uuid.NewString()
-		contextData := common.ContextData{
-			"name": entry.info.Name,
-			"path": entry.info.Path,
-			"type": entry.info.Type,
-		}
-		actions := a.buildAppActions(entry.info, displayName, contextData)
-		result := plugin.QueryResult{
-			Id:       resultID,
-			Title:    displayName,
-			SubTitle: displayPath,
-			Icon:     a.getQueryResultIcon(entry.info, isLaunchpadQuery),
-			Score:    bestScore,
-			Actions:  actions,
-		}
-
-		// Launchpad mode is a static app grid that replaces macOS Launchpad's removed entry point.
-		// The normal app query tracks visible rows so CPU/memory tails and terminate actions stay fresh,
-		// but those running-state updates make a Launchpad-style grid noisy and can resize cells while browsing.
-		if !isLaunchpadQuery {
-			a.trackedResults.Store(result.Id, entry.info)
-		}
-
-		results = append(results, result)
+		matches = append(matches, appQueryMatch{
+			entryIndex:  entryIndex,
+			entry:       entry,
+			displayName: displayName,
+			displayPath: displayPath,
+			score:       bestScore,
+		})
 		matchedIndexes = append(matchedIndexes, entryIndex)
 	}
 
@@ -505,6 +512,48 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) plugi
 		for entryIndex := range entries {
 			matchEntry(entryIndex)
 		}
+	}
+
+	limitGlobalQueryResults := query.IsGlobalQuery()
+	selectedMatches, droppedDefaultIconCount := selectAppQueryMatches(matches, limitGlobalQueryResults)
+	if limitGlobalQueryResults && len(matches) > len(selectedMatches) {
+		a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf(
+			"app global query capped results: matched=%d returned=%d limit=%d dropped_default_icon=%d cost=%dms",
+			len(matches),
+			len(selectedMatches),
+			appQueryResultLimitInGloablQuery,
+			droppedDefaultIconCount,
+			util.GetSystemTimestamp()-queryStartedAt,
+		))
+	}
+
+	results := make([]plugin.QueryResult, 0, len(selectedMatches))
+	for _, match := range selectedMatches {
+		entry := match.entry
+		resultID := uuid.NewString()
+		contextData := common.ContextData{
+			"name": entry.info.Name,
+			"path": entry.info.Path,
+			"type": entry.info.Type,
+		}
+		actions := a.buildAppActions(entry.info, match.displayName, contextData)
+		result := plugin.QueryResult{
+			Id:       resultID,
+			Title:    match.displayName,
+			SubTitle: match.displayPath,
+			Icon:     a.getQueryResultIcon(entry.info, isLaunchpadQuery),
+			Score:    match.score,
+			Actions:  actions,
+		}
+
+		// Launchpad mode is a static app grid that replaces macOS Launchpad's removed entry point.
+		// The normal app query tracks visible rows so CPU/memory tails and terminate actions stay fresh,
+		// but those running-state updates make a Launchpad-style grid noisy and can resize cells while browsing.
+		if !isLaunchpadQuery {
+			a.trackedResults.Store(result.Id, entry.info)
+		}
+
+		results = append(results, result)
 	}
 
 	a.storeQueryMatches(query, appQuerySessionCache{
@@ -525,6 +574,49 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) plugi
 		response.Layout = plugin.QueryLayout{GridLayout: &gridLayout}
 	}
 	return response
+}
+
+func selectAppQueryMatches(matches []appQueryMatch, shouldLimit bool) ([]appQueryMatch, int) {
+	if !shouldLimit || len(matches) <= appQueryResultLimitInGloablQuery {
+		return matches, 0
+	}
+
+	selected := make([]appQueryMatch, len(matches))
+	copy(selected, matches)
+	sort.SliceStable(selected, func(i, j int) bool {
+		leftDefaultIcon := selected[i].entry.info.IsDefaultIcon
+		rightDefaultIcon := selected[j].entry.info.IsDefaultIcon
+		if leftDefaultIcon != rightDefaultIcon {
+			// Optimization: when broad searches must be capped, prefer keeping apps
+			// with real icons because default-icon entries are usually lower-signal
+			// executables discovered from broad Windows roots.
+			return !leftDefaultIcon
+		}
+		if selected[i].score != selected[j].score {
+			return selected[i].score > selected[j].score
+		}
+		if selected[i].displayName != selected[j].displayName {
+			return selected[i].displayName < selected[j].displayName
+		}
+		return selected[i].displayPath < selected[j].displayPath
+	})
+
+	selected = selected[:appQueryResultLimitInGloablQuery]
+	selectedDefaultIcons := 0
+	for _, match := range selected {
+		if match.entry.info.IsDefaultIcon {
+			selectedDefaultIcons++
+		}
+	}
+
+	totalDefaultIcons := 0
+	for _, match := range matches {
+		if match.entry.info.IsDefaultIcon {
+			totalDefaultIcons++
+		}
+	}
+
+	return selected, totalDefaultIcons - selectedDefaultIcons
 }
 
 func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, contextData map[string]string) []plugin.QueryResultAction {
