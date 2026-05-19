@@ -3,9 +3,17 @@
 ## v2.1.1 - 
 
 - Improve
-  - [`DeepSeek`] Add DeepSeek as a built-in AI provider with a default API host and provider icon, so users can configure DeepSeek directly instead of using a custom OpenAI-compatible provider entry.
-  - [`Screenshot`] Add a native Windows screenshot selection overlay so region capture works more reliably with Windows windowing behavior.
-  - [`App`] Add richer Windows Settings search entries with localized names and clearer icons, making system settings easier to find from Wox.
+  - [`AI`] Improve provider setup with built-in DeepSeek support, including the default API host and provider icon.
+  - [`Screenshot`] Improve Windows region capture with a native selection overlay that works more reliably with Windows windowing behavior.
+  - [`Runtime`] Improve Windows startup diagnostics by detecting missing Microsoft Visual C++ Redistributable dependencies and showing localized recovery guidance.
+  - [`Runtime`] Improve Node.js and Python executable validation by enforcing supported minimum versions in runtime settings and host discovery, with clearer upgrade guidance for unsupported runtimes #4414
+  - [`Hotkey`] Improve hotkey display with platform-aware modifier labels and more consistent rendering across grids, toolbar actions, refinement controls, and the recorder #4413
+  - [`App`] Improve Windows Settings search entries with localized names and clearer icons, making system settings easier to find from Wox.
+  - [`Theme`] Improve theme behavior with platform-specific overrides for Windows, macOS, and Linux.
+  - [`Plugin`] Improve result polishing with layout-aware sizing so plugin results keep more consistent spacing in list and grid views.
+  - [`File Search`] Improve diagnostics and indexing error handling so scan status and skipped roots are easier to understand when troubleshooting file search.
+  - [`Memory`] Improve memory usage reporting with platform-specific retrieval on Windows and Linux.
+  - [`Image`] Improve large icon and PNG handling with lazy raster loading, metadata-aware decoding, and transparent padding support for cleaner previews and lower memory pressure.
 
 - Fix
   - [`Clipboard`] Fix clipboard type refinement hotkey behavior so filtered clipboard queries keep the expected hotkey logic.
