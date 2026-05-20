@@ -232,10 +232,15 @@ func statPathType(path string) (bool, bool) {
 		return false, false
 	}
 
-	if info, err := os.Stat(path); err == nil {
+	if info, err := os.Lstat(path); err == nil {
+		// Bug fix: change feeds and manual dirty routing must match full scans,
+		// which index symlink entries but do not recurse into their targets. Lstat
+		// keeps a symlink-to-directory from becoming a subtree dirty scope by
+		// accident; Stat remains only as a fallback for unusual filesystems where
+		// Lstat cannot classify an existing path.
 		return info.IsDir(), true
 	}
-	if info, err := os.Lstat(path); err == nil {
+	if info, err := os.Stat(path); err == nil {
 		return info.IsDir(), true
 	}
 

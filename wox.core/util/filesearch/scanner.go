@@ -1491,12 +1491,10 @@ func (s *Scanner) enqueueDirtyForPath(ctx context.Context, path string) bool {
 
 	cleanPath := filepath.Clean(path)
 	cleanRootPath := filepath.Clean(root.Path)
-	pathIsDir := false
-	pathTypeKnown := false
-	if info, err := os.Stat(cleanPath); err == nil {
-		pathIsDir = info.IsDir()
-		pathTypeKnown = true
-	}
+	// Bug fix: manual dirty routing must not be the one path that follows a
+	// symlink-to-directory into a subtree scan. Use the same Lstat-first type
+	// helper as watcher feeds so symlink entries stay direct file-like deltas.
+	pathIsDir, pathTypeKnown := statPathType(cleanPath)
 
 	kind := DirtySignalKindPath
 	if cleanPath == cleanRootPath {

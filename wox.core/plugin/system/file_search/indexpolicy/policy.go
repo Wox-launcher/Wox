@@ -276,13 +276,12 @@ func (p *Policy) NewTraversalContext(rootPath string, policyRootPath string, sco
 		return nil
 	}
 
-	rootPath = filepath.Clean(strings.TrimSpace(rootPath))
-	policyRootPath = strings.TrimSpace(policyRootPath)
+	rootPath = cleanTraversalPath(rootPath)
 	if policyRootPath == "" {
 		policyRootPath = rootPath
 	}
-	policyRootPath = filepath.Clean(policyRootPath)
-	scopePath = filepath.Clean(strings.TrimSpace(scopePath))
+	policyRootPath = cleanTraversalPath(policyRootPath)
+	scopePath = cleanTraversalPath(scopePath)
 	if scopePath == "" || scopePath == "." {
 		scopePath = rootPath
 	}
@@ -346,7 +345,7 @@ func (c *TraversalContext) ShouldIndexPath(path string, isDir bool) bool {
 		return true
 	}
 
-	cleanPath := filepath.Clean(strings.TrimSpace(path))
+	cleanPath := cleanTraversalPath(path)
 	if cleanPath == "" || cleanPath == "." {
 		return true
 	}
@@ -362,6 +361,7 @@ func (c *TraversalContext) ShouldIndexPath(path string, isDir bool) bool {
 		if context == nil {
 			return true
 		}
+
 		return context.ShouldIndexPath(cleanPath, isDir)
 	}
 
@@ -389,7 +389,7 @@ func (c *TraversalContext) Descend(directoryPath string) *TraversalContext {
 		return c
 	}
 
-	cleanPath := filepath.Clean(strings.TrimSpace(directoryPath))
+	cleanPath := cleanTraversalPath(directoryPath)
 	if cleanPath == "" || cleanPath == "." {
 		return c
 	}
@@ -440,7 +440,7 @@ func (c *TraversalContext) WithDirectoryEntries(directoryPath string, entries []
 		return c
 	}
 
-	cleanPath := filepath.Clean(strings.TrimSpace(directoryPath))
+	cleanPath := cleanTraversalPath(directoryPath)
 	if cleanPath == "" || cleanPath == "." {
 		return c
 	}
@@ -607,7 +607,7 @@ func directoryEntriesContain(entries []os.DirEntry, name string) bool {
 }
 
 func splitFileSearchPathSegments(fullPath string) []string {
-	normalized := filepath.ToSlash(filepath.Clean(strings.TrimSpace(fullPath)))
+	normalized := filepath.ToSlash(cleanTraversalPath(fullPath))
 	if normalized == "." || normalized == "" {
 		return nil
 	}
@@ -1053,7 +1053,7 @@ func (r fileSearchIgnoreRule) matchesSegment(segment string) bool {
 }
 
 func (p *Policy) patternsForDirectory(directory string, diagnostics *Diagnostics) []gitIgnorePattern {
-	directory = filepath.Clean(strings.TrimSpace(directory))
+	directory = cleanTraversalPath(directory)
 	if directory == "" {
 		return nil
 	}
@@ -1110,8 +1110,8 @@ func (p *Policy) gitIgnoreFramesForDirectory(rootPath string, directory string, 
 }
 
 func directoriesFromRootToDirectory(rootPath string, directory string) []string {
-	rootPath = filepath.Clean(strings.TrimSpace(rootPath))
-	directory = filepath.Clean(strings.TrimSpace(directory))
+	rootPath = cleanTraversalPath(rootPath)
+	directory = cleanTraversalPath(directory)
 	if rootPath == "" || directory == "" || !pathWithinRoot(rootPath, directory) {
 		return nil
 	}
@@ -1136,7 +1136,7 @@ func directoriesFromRootToDirectory(rootPath string, directory string) []string 
 }
 
 func pathWithinRoot(rootPath string, candidatePath string) bool {
-	rel, err := filepath.Rel(filepath.Clean(rootPath), filepath.Clean(candidatePath))
+	rel, err := filepath.Rel(cleanTraversalPath(rootPath), cleanTraversalPath(candidatePath))
 	if err != nil {
 		return false
 	}
@@ -1146,6 +1146,18 @@ func pathWithinRoot(rootPath string, candidatePath string) bool {
 
 	parentPrefix := ".." + string(filepath.Separator)
 	return rel != ".." && !strings.HasPrefix(rel, parentPrefix)
+}
+
+func cleanTraversalPath(path string) string {
+	if path == "" {
+		return ""
+	}
+
+	// Bug fix: traversal policy receives paths that came from the filesystem, and
+	// leading or trailing spaces are valid path bytes. Trimming them made fallback
+	// re-rooting rebuild a context for a different parent, so recursive policy
+	// checks could fail to converge on unusual directory names.
+	return filepath.Clean(path)
 }
 
 type gitIgnorePattern struct {

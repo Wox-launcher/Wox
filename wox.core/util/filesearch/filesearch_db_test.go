@@ -2,6 +2,7 @@ package filesearch
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -720,6 +721,62 @@ func TestFileSearchDBApplyDirectFilesJobStreamPrunesRemovedDirectFiles(t *testin
 	}
 	if _, ok := seen[siblingSubtreePath]; !ok {
 		t.Fatalf("expected sibling subtree entry %q to remain after stream apply", siblingSubtreePath)
+	}
+}
+
+func TestFileSearchDBApplyDirectDeltaIndexesSymlinkItself(t *testing.T) {
+	db, ctx := openTestFileSearchDB(t)
+	now := time.Now().UnixMilli()
+	rootPath := filepath.Join(t.TempDir(), "root-direct-delta-symlink")
+	targetPath := filepath.Join(t.TempDir(), "target")
+	targetFilePath := filepath.Join(targetPath, "target-only.txt")
+	linkPath := filepath.Join(rootPath, "linked-target")
+
+	mustMkdirAll(t, rootPath)
+	mustWriteTestFile(t, targetFilePath, "target")
+	if err := os.Symlink(targetPath, linkPath); err != nil {
+		t.Fatalf("create symlink: %v", err)
+	}
+
+	root := RootRecord{
+		ID:        "root-direct-delta-symlink",
+		Path:      rootPath,
+		Kind:      RootKindUser,
+		Status:    RootStatusIdle,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	mustInsertRoot(t, ctx, db, root)
+
+	err := db.ApplyDirectDeltaJob(ctx, root, Job{
+		JobID:    "job-direct-delta-symlink",
+		RootID:   root.ID,
+		RootPath: root.Path,
+		Kind:     JobKindDirectDelta,
+		DirectDeltas: []PathDelta{{
+			Path:          linkPath,
+			SemanticKind:  ChangeSemanticKindCreate,
+			PathIsDir:     false,
+			PathTypeKnown: true,
+		}},
+	}, newPolicyState(Policy{}))
+	if err != nil {
+		t.Fatalf("apply symlink direct delta: %v", err)
+	}
+
+	entries, err := db.ListEntriesByRoot(ctx, root.ID)
+	if err != nil {
+		t.Fatalf("list root entries after symlink direct delta: %v", err)
+	}
+	seen := map[string]EntryRecord{}
+	for _, entry := range entries {
+		seen[entry.Path] = entry
+	}
+	if entry, ok := seen[linkPath]; !ok || entry.IsDir {
+		t.Fatalf("expected symlink itself as non-directory direct delta entry, got ok=%v entry=%#v", ok, entry)
+	}
+	if _, ok := seen[filepath.Join(linkPath, "target-only.txt")]; ok {
+		t.Fatalf("expected direct delta not to index symlink target contents, got %#v", seen)
 	}
 }
 

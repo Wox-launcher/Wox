@@ -894,7 +894,11 @@ func (d *FileSearchDB) applyDirectPathDeltaTx(ctx context.Context, tx *sql.Tx, r
 		return nil
 	}
 
-	info, err := os.Stat(cleanPath)
+	// Bug fix: direct deltas should update the symlink entry itself instead of
+	// following a symlink-to-directory and deleting it as a skipped directory.
+	// Full scans use DirEntry.Info, which reports symlink metadata, so Lstat keeps
+	// incremental updates on the same indexing contract.
+	info, err := os.Lstat(cleanPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			deleted, deleteErr := deleteDirectDeltaEntryByPathTx(ctx, tx, artifactSync, factMutator, cleanPath)

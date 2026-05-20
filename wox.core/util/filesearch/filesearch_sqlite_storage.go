@@ -927,7 +927,10 @@ func fileSizeOrZero(path string) int64 {
 	if strings.TrimSpace(path) == "" {
 		return 0
 	}
-	info, err := os.Stat(path)
+	// Bug fix: storage diagnostics should report the indexed symlink entry size
+	// instead of following a symlink target. This keeps snapshot sampling aligned
+	// with full-scan and direct-delta metadata.
+	info, err := os.Lstat(path)
 	if err != nil {
 		return 0
 	}

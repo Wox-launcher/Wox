@@ -203,7 +203,13 @@ func (p *fileSearchIndexPolicy) shouldProcessChange(root filesearch.RootRecord, 
 
 	isDir := change.PathIsDir
 	if !change.PathTypeKnown {
-		if info, err := os.Stat(cleanPath); err == nil {
+		if info, err := os.Lstat(cleanPath); err == nil {
+			// Bug fix: policy checks for watcher paths must classify symlinks the
+			// same way full scans do. A symlink-to-directory should be matched as the
+			// link entry itself, not as a directory target that can pass dir-only
+			// ignore semantics.
+			isDir = info.IsDir()
+		} else if info, err := os.Stat(cleanPath); err == nil {
 			isDir = info.IsDir()
 		}
 	}

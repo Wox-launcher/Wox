@@ -882,7 +882,17 @@ func (b *SnapshotBuilder) validateScopePath(root RootRecord, scopePath string) (
 		return nil, nil
 	}
 
-	info, err := os.Stat(scopePath)
+	var info os.FileInfo
+	var err error
+	if scopePath == filepath.Clean(root.Path) {
+		info, err = os.Stat(scopePath)
+	} else {
+		// Bug fix: incremental dirty scopes should not be able to follow a
+		// symlink-to-directory when full scans do not follow symlink children. Keep
+		// explicit symlink roots working via Stat above, but classify nested scopes
+		// with Lstat so the link itself is indexed without traversing the target.
+		info, err = os.Lstat(scopePath)
+	}
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil

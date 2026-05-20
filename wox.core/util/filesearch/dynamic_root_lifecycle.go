@@ -351,7 +351,11 @@ func (s *Scanner) promoteDynamicRootCandidate(ctx context.Context, candidate dyn
 		s.dynamicHeat.clear(candidate.rootID, candidate.path)
 		return nil
 	}
-	info, err := os.Stat(candidatePath)
+	// Bug fix: hot dynamic-root promotion must not turn a symlink-to-directory
+	// inside a parent root into an implicit root. Users can still add the symlink
+	// as an explicit root, but parent-root watcher heat should follow full-scan
+	// semantics and treat nested symlinks as entries.
+	info, err := os.Lstat(candidatePath)
 	if err != nil || !info.IsDir() {
 		s.dynamicHeat.clear(candidate.rootID, candidate.path)
 		return nil
