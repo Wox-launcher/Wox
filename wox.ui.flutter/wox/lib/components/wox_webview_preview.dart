@@ -9,6 +9,7 @@ import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_loading_indicator.dart';
+import 'package:wox/components/wox_selectable_text.dart';
 import 'package:wox/components/wox_tooltip.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_preview_webview_data.dart';
@@ -153,7 +154,7 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
   Widget _buildWindowsPreview(WoxPreviewWebviewData preview) {
     final future = _windowsSessionFuture;
     if (future == null) {
-      return SelectableText("WebView preview is not initialized on Windows.\nURL: ${preview.url}");
+      return WoxSelectableText("WebView preview is not initialized on Windows.\nURL: ${preview.url}");
     }
 
     return FutureBuilder<WoxWebViewSession?>(
@@ -166,7 +167,7 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
         final session = snapshot.data;
         if (session == null) {
           final message = _windowsErrorMessage ?? "WebView2 Runtime is not available on this system.";
-          return SelectableText("$message\nURL: ${preview.url}");
+          return WoxSelectableText("$message\nURL: ${preview.url}");
         }
 
         return _buildPreviewWithToolbar(child: session.buildWidget(), navigationState: session.navigationState);
@@ -406,6 +407,6 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
       );
     }
 
-    return SelectableText("WebView preview is currently only available on macOS and Windows.\nURL: ${preview.url}");
+    return WoxSelectableText("WebView preview is currently only available on macOS and Windows.\nURL: ${preview.url}");
   }
 }

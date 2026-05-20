@@ -8,6 +8,7 @@ import 'package:wox/components/wox_list_view.dart';
 import 'package:wox/components/wox_markdown.dart';
 import 'package:wox/components/wox_platform_focus.dart';
 import 'package:wox/components/wox_preview_top_status_bar.dart';
+import 'package:wox/components/wox_selectable_text.dart';
 import 'package:wox/components/wox_tooltip.dart';
 import 'package:wox/controllers/wox_ai_chat_controller.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
@@ -542,7 +543,10 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
             width: double.infinity,
             padding: EdgeInsets.all(_metrics.scaledSpacing(6)),
             decoration: BoxDecoration(color: Colors.black.withAlpha(20), border: Border.all(color: Colors.black.withAlpha(10), width: 1.0)),
-            child: SelectableText(value, style: TextStyle(fontSize: _metrics.smallLabelFontSize, fontFamily: 'monospace', color: safeFromCssColor(woxTheme.resultItemTitleColor))),
+            child: WoxSelectableText(
+              value,
+              style: TextStyle(fontSize: _metrics.smallLabelFontSize, fontFamily: 'monospace', color: safeFromCssColor(woxTheme.resultItemTitleColor)),
+            ),
           ),
         ],
       ),

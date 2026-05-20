@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_loading_indicator.dart';
+import 'package:wox/components/wox_selectable_text.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/enums/wox_image_type_enum.dart';
 import 'package:wox/utils/colors.dart';
@@ -135,7 +136,7 @@ class WoxMarkdownView extends StatelessWidget {
       ),
     );
 
-    return DefaultTextStyle.merge(style: fontTextStyle, child: selectable ? SelectionArea(child: markdownBody) : markdownBody);
+    return DefaultTextStyle.merge(style: fontTextStyle, child: selectable ? WoxSelectionArea(child: markdownBody) : markdownBody);
   }
 
   Widget buildMarkdownTable(BuildContext context, List<CustomTableRow> rows, TextStyle textStyle, GptMarkdownConfig config, Color textColor, Color dividerColor) {

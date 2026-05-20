@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:wox/components/wox_button.dart';
+import 'package:wox/components/wox_selectable_text.dart';
 import 'package:wox/components/wox_switch.dart';
 import 'package:wox/modules/setting/views/wox_setting_base.dart';
 import 'package:wox/utils/colors.dart';
@@ -46,7 +47,7 @@ class WoxSettingPrivacyView extends WoxSettingBaseView {
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: getThemePopupOutlineColor()),
                     ),
-                    child: SelectableText(jsonString, style: TextStyle(fontSize: 12, color: getThemeTextColor())),
+                    child: WoxSelectableText(jsonString, style: TextStyle(fontSize: 12, color: getThemeTextColor())),
                   ),
                 ],
               ),

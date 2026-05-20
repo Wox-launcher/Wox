@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:wox/components/wox_selectable_text.dart';
 import 'package:wox/entity/wox_preview_ai_stream.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/utils/color_util.dart';
@@ -102,7 +103,7 @@ class _WoxAIStreamPreviewViewState extends State<WoxAIStreamPreviewView> {
           ],
           answerText.isEmpty
               ? _WaitingForAnswer(statusLabel: widget.data.statusLabel, woxTheme: widget.woxTheme)
-              : SelectableText(
+              : WoxSelectableText(
                 answerText,
                 style: TextStyle(
                   color: bodyColor,
@@ -193,7 +194,7 @@ class _ReasoningSection extends StatelessWidget {
                       ),
                     ),
                     SizedBox(height: WoxInterfaceSizeUtil.instance.current.scaledSpacing(8)),
-                    SelectableText(
+                    WoxSelectableText(
                       reasoning,
                       maxLines: isExpanded ? null : 2,
                       style: TextStyle(

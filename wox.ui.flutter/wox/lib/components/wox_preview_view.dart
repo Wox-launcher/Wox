@@ -25,6 +25,7 @@ import 'package:wox/components/wox_markdown.dart';
 import 'package:wox/components/wox_plugin_detail_view.dart';
 import 'package:wox/components/wox_preview_scaffold.dart';
 import 'package:wox/components/wox_query_requirement_settings_preview_view.dart';
+import 'package:wox/components/wox_selectable_text.dart';
 import 'package:wox/components/wox_update_view.dart';
 import 'package:wox/components/wox_trigger_keyword_conflict_preview_view.dart';
 import 'package:wox/components/wox_webview_preview.dart';
@@ -143,7 +144,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
                   ),
                   child: Align(
                     alignment: shouldShowQuote ? Alignment.center : Alignment.topLeft,
-                    child: SelectableText(txtData, textAlign: shouldShowQuote ? TextAlign.center : TextAlign.left, style: shouldShowQuote ? quoteTextStyle : plainTextStyle),
+                    child: WoxSelectableText(txtData, textAlign: shouldShowQuote ? TextAlign.center : TextAlign.left, style: shouldShowQuote ? quoteTextStyle : plainTextStyle),
                   ),
                 ),
               ],
@@ -262,7 +263,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
       contentWidget = buildText(widget.woxPreview.previewData);
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_FILE.code) {
       if (widget.woxPreview.previewData.isEmpty) {
-        contentWidget = SelectableText("Invalid file data: ${widget.woxPreview.previewData}", style: const TextStyle(color: Colors.red));
+        contentWidget = WoxSelectableText("Invalid file data: ${widget.woxPreview.previewData}", style: const TextStyle(color: Colors.red));
       } else {
         // render by file extension
         var fileExtension = widget.woxPreview.previewData.split(".").last.toLowerCase();
@@ -327,7 +328,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_IMAGE.code) {
       final parsedWoxImage = WoxImage.parse(widget.woxPreview.previewData);
       if (parsedWoxImage == null) {
-        contentWidget = SelectableText("Invalid image data: ${widget.woxPreview.previewData}", style: const TextStyle(color: Colors.red));
+        contentWidget = WoxSelectableText("Invalid image data: ${widget.woxPreview.previewData}", style: const TextStyle(color: Colors.red));
       } else {
         contentHandlesScrolling = true;
         final overlayWoxImage = widget.woxPreview.previewOverlayData.isNotEmpty ? WoxImage.parse(widget.woxPreview.previewOverlayData) ?? parsedWoxImage : parsedWoxImage;

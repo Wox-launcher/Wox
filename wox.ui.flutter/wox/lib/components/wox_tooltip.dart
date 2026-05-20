@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:wox/components/wox_selectable_text.dart';
 import 'package:wox/utils/color_util.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
@@ -116,7 +117,6 @@ class WoxTooltipState extends State<WoxTooltip> {
         final textStyle = resolveTooltipTextStyle(context);
         final decoration = resolveTooltipDecoration();
         final padding = resolveTooltipPadding();
-        final selectionColor = safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.previewTextSelectionColor);
 
         return Positioned(
           left: 0,
@@ -138,7 +138,7 @@ class WoxTooltipState extends State<WoxTooltip> {
                     constraints: BoxConstraints(maxWidth: tooltipMaxWidth),
                     child: Padding(
                       padding: padding,
-                      child: TextSelectionTheme(data: TextSelectionThemeData(selectionColor: selectionColor), child: SelectableText(widget.message, style: textStyle)),
+                      child: WoxSelectableText(widget.message, style: textStyle),
                     ),
                   ),
                 ),

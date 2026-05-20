@@ -6,6 +6,7 @@ import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_loading_indicator.dart';
 import 'package:wox/components/wox_preview_top_status_bar.dart';
+import 'package:wox/components/wox_selectable_text.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_preview.dart';
@@ -454,10 +455,10 @@ class _WoxTerminalPreviewViewState extends State<WoxTerminalPreviewView> {
         spans.add(TextSpan(text: terminalText.substring(cursor)));
       }
 
-      return SelectableText.rich(TextSpan(style: TextStyle(color: fontColor, fontSize: _metrics.resultSubtitleFontSize), children: spans));
+      return WoxSelectableText.rich(TextSpan(style: TextStyle(color: fontColor, fontSize: _metrics.resultSubtitleFontSize), children: spans));
     }
 
-    return SelectableText(terminalText, style: TextStyle(color: safeFromCssColor(widget.woxTheme.previewFontColor), fontSize: _metrics.resultSubtitleFontSize));
+    return WoxSelectableText(terminalText, style: TextStyle(color: safeFromCssColor(widget.woxTheme.previewFontColor), fontSize: _metrics.resultSubtitleFontSize));
   }
 
   Widget buildSearchBar() {
