@@ -87,6 +87,8 @@ private:
     bool active = false;
     bool dragging = false;
     bool completed = false;
+    bool dim_region_dirty = false;
+    bool dim_region_update_posted = false;
     // The input window is also the dimming surface. A low-level mouse hook drives the fast drag path
     // because the layered full-screen HWND can receive its first button messages late while DWM is
     // still presenting the mask; the HWND input handlers remain as a fallback when the hook is unavailable.
@@ -138,6 +140,9 @@ private:
   flutter::EncodableMap BuildCaptureWorkspaceResponse(const RECT &native_workspace_bounds) const;
   bool BeginScreenshotSelectionOverlay(HWND hwnd, const RECT &workspace_bounds, std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result, std::string *error_out);
   void LayoutScreenshotSelectionOverlay();
+  void ScheduleScreenshotSelectionDimRegionUpdate();
+  void FlushScreenshotSelectionDimRegionUpdate();
+  void CancelScreenshotSelectionDimRegionUpdate();
   void ApplyScreenshotSelectionDimRegion();
   void UpdateScreenshotSelectionOverlay(const RECT &selection_bounds);
   void CompleteScreenshotSelectionOverlay(bool cancelled);

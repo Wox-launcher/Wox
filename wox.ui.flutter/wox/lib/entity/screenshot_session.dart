@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -348,6 +349,15 @@ class DisplaySnapshot {
     }
 
     return _cachedImageProvider ??= MemoryImage(imageBytes);
+  }
+
+  void releaseImageCache() {
+    final cachedProvider = _cachedImageProvider;
+    if (cachedProvider != null) {
+      unawaited(cachedProvider.evict());
+    }
+    _cachedImageProvider = null;
+    _cachedImageBytes = null;
   }
 
   factory DisplaySnapshot.fromJson(Map<String, dynamic> json) {

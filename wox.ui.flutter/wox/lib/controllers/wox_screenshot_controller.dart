@@ -1371,6 +1371,9 @@ class WoxScreenshotController extends GetxController {
   void _resetSessionState() {
     _savedWindowState = null;
     _activeRequest = null;
+    for (final snapshot in displaySnapshots) {
+      snapshot.releaseImageCache();
+    }
     _clearNativePreparationState();
     _disposeScrollingCaptureFrames();
     isScrollingCaptureUpdating.value = false;
@@ -1694,6 +1697,15 @@ class WoxScreenshotController extends GetxController {
     _acceptSelectionDisplayHints = false;
     _selectionDisplayHintSubscription?.cancel();
     _selectionDisplayHintSubscription = null;
+    for (final snapshot in _pendingRawSnapshots) {
+      snapshot.releaseImageCache();
+    }
+    for (final snapshot in _hydratedRawSnapshots.values) {
+      snapshot.releaseImageCache();
+    }
+    for (final snapshot in _preparedSnapshots ?? const <DisplaySnapshot>[]) {
+      snapshot.releaseImageCache();
+    }
     _pendingRawSnapshots = const <DisplaySnapshot>[];
     _hydratedRawSnapshots.clear();
     _rawSnapshotHydrationTasks.clear();

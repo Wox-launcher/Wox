@@ -45,6 +45,7 @@ static constexpr int kDwmSystemBackdropTabbed = 3;
 static constexpr int kDwmCornerDoNotRound = 1;
 static constexpr int kDwmCornerRound = 2;
 static constexpr UINT kScrollingCaptureWheelMessage = WM_APP + 0x51;
+static constexpr UINT kScreenshotSelectionDimRegionUpdateMessage = WM_APP + 0x52;
 static constexpr wchar_t kScrollingCaptureOverlayWindowClassName[] = L"WoxScrollingCaptureOverlayWindow";
 static constexpr wchar_t kScreenshotSelectionInputWindowClassName[] = L"WoxScreenshotSelectionInputWindow";
 static constexpr wchar_t kScreenshotSelectionBorderWindowClassName[] = L"WoxScreenshotSelectionBorderWindow";
@@ -2073,12 +2074,65 @@ void FlutterWindow::LayoutScreenshotSelectionOverlay()
   }
 }
 
+void FlutterWindow::ScheduleScreenshotSelectionDimRegionUpdate()
+{
+  if (!screenshot_selection_overlay_state_.active || screenshot_selection_overlay_state_.input_window == nullptr || !IsWindow(screenshot_selection_overlay_state_.input_window))
+  {
+    return;
+  }
+
+  screenshot_selection_overlay_state_.dim_region_dirty = true;
+  if (screenshot_selection_overlay_state_.dim_region_update_posted)
+  {
+    return;
+  }
+
+  // Bug fix: Windows used to leave the selected center dimmed until mouse-up because rebuilding the
+  // full-screen region synchronously on every mouse move made large virtual desktops stutter. A
+  // posted message still coalesces repeated moves, but unlike WM_TIMER it is not held behind the
+  // system timer cadence, so the cut-out follows fast drags more closely.
+  if (PostMessage(screenshot_selection_overlay_state_.input_window, kScreenshotSelectionDimRegionUpdateMessage, 0, 0))
+  {
+    screenshot_selection_overlay_state_.dim_region_update_posted = true;
+    return;
+  }
+
+  // If Windows cannot queue the message, prefer visual correctness over the old permanently dimmed
+  // selection center; this fallback is rare and still avoids touching Flutter state.
+  ApplyScreenshotSelectionDimRegion();
+}
+
+void FlutterWindow::FlushScreenshotSelectionDimRegionUpdate()
+{
+  if (!screenshot_selection_overlay_state_.active)
+  {
+    return;
+  }
+
+  if (!screenshot_selection_overlay_state_.dim_region_dirty)
+  {
+    CancelScreenshotSelectionDimRegionUpdate();
+    return;
+  }
+
+  ApplyScreenshotSelectionDimRegion();
+}
+
+void FlutterWindow::CancelScreenshotSelectionDimRegionUpdate()
+{
+  screenshot_selection_overlay_state_.dim_region_update_posted = false;
+  screenshot_selection_overlay_state_.dim_region_dirty = false;
+}
+
 void FlutterWindow::ApplyScreenshotSelectionDimRegion()
 {
   if (!screenshot_selection_overlay_state_.active)
   {
     return;
   }
+
+  screenshot_selection_overlay_state_.dim_region_update_posted = false;
+  screenshot_selection_overlay_state_.dim_region_dirty = false;
 
   const RECT workspace = screenshot_selection_overlay_state_.workspace_bounds;
   const RECT selection = ClampRectToBounds(screenshot_selection_overlay_state_.selection_bounds, workspace);
@@ -2088,9 +2142,9 @@ void FlutterWindow::ApplyScreenshotSelectionDimRegion()
     return;
   }
 
-  // Optimization: keep the full-screen dimming cut-out off the synchronous mouse-move path. Region
-  // updates are still used because they are much cheaper than repainting monitor bitmaps, but doing
-  // this once after mouse-up prevents the first selection border from waiting on DWM recomposition.
+  // The dimming cut-out is intentionally applied outside the synchronous border-layout path. That
+  // keeps the cursor-following border responsive while the selected center still becomes undimmed
+  // during drag instead of waiting until the selection completes.
   SetOwnedWindowRegion(screenshot_selection_overlay_state_.input_window, CreateSelectionDimRegion(workspace, selection));
 }
 
@@ -2107,6 +2161,13 @@ void FlutterWindow::UpdateScreenshotSelectionOverlay(const RECT &selection_bound
   // Flutter hydrate/encode a monitor snapshot mid-drag and caused a one-time pause; the final
   // selection result prepares the selected display before Flutter is revealed.
   LayoutScreenshotSelectionOverlay();
+  if (IsRectEmptyOrInvalid(clamped_selection))
+  {
+    CancelScreenshotSelectionDimRegionUpdate();
+    return;
+  }
+
+  ScheduleScreenshotSelectionDimRegionUpdate();
 }
 
 void FlutterWindow::CompleteScreenshotSelectionOverlay(bool cancelled)
@@ -2149,7 +2210,9 @@ void FlutterWindow::CompleteScreenshotSelectionOverlay(bool cancelled)
   }
   else
   {
-    ApplyScreenshotSelectionDimRegion();
+    // The latest scheduled cut-out must be visible before the native overlay hands selection back
+    // to Flutter; otherwise the last drag frame can briefly show the old dimmed center.
+    FlushScreenshotSelectionDimRegionUpdate();
     response[flutter::EncodableValue("selection")] = flutter::EncodableValue(BuildRectValue(selection_bounds));
     response[flutter::EncodableValue("editorVisibleBounds")] = flutter::EncodableValue(BuildRectValue(preferred_capture != nullptr ? preferred_capture->monitor_bounds : selection_bounds));
     screenshot_selection_overlay_state_.dragging = false;
@@ -2192,6 +2255,8 @@ void FlutterWindow::DismissNativeSelectionOverlays()
 
 void FlutterWindow::DestroyScreenshotSelectionOverlayWindows()
 {
+  CancelScreenshotSelectionDimRegionUpdate();
+
   if (screenshot_selection_overlay_state_.mouse_hook != nullptr)
   {
     // Bug fix: cleanup may run through cancellation, window teardown, or Dart dismiss. Unhooking
@@ -2849,6 +2914,9 @@ LRESULT CALLBACK FlutterWindow::ScreenshotSelectionInputWindowProc(HWND hwnd, UI
   case WM_SETCURSOR:
     SetCursor(LoadCursor(nullptr, IDC_CROSS));
     return TRUE;
+  case kScreenshotSelectionDimRegionUpdateMessage:
+    g_window_instance->FlushScreenshotSelectionDimRegionUpdate();
+    return 0;
   case WM_KEYDOWN:
     if (wparam == VK_ESCAPE)
     {
