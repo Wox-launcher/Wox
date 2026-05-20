@@ -528,7 +528,7 @@
   "plugin_bug_report_notify_disabled": "已关闭问题发现模式。",
   "plugin_bug_report_notify_export_failed": "导出诊断报告失败：%s",
   "plugin_bug_report_notify_exported": "诊断报告已导出：%s",
-  "plugin_bug_report_preview": "## 问题发现模式\n\n当 Wox 经常自动退出、窗口突然消失，或崩溃得太快看不到错误时，可以开启这个模式。\n\n开启后，Wox 会重启，并收集一份更容易排查问题的诊断日志。\n\n问题再次出现后，回到这里导出诊断报告，然后把 zip 文件附到 issue 里。\n\n收集完成后，可以手动关闭这个模式。",
+  "plugin_bug_report_preview": "## 问题发现模式\n\n当 Wox 的问题需要一次干净的复现报告时，可以开启这个模式，例如异常退出、窗口突然消失、卡住、插件错误或界面异常。\n\n开启后，Wox 会重启，并收集一份更容易排查问题的诊断日志。\n\n问题再次出现后，回到这里导出诊断报告，然后把 zip 文件附到 issue 里。\n\n收集完成后，可以手动关闭这个模式。",
   "plugin_glance_plugin_name": "系统速览",
   "plugin_glance_plugin_description": "提供可一眼查看的系统信息",
   "plugin_glance_time_name": "时间",

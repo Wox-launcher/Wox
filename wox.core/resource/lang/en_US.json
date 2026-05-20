@@ -528,7 +528,7 @@
   "plugin_bug_report_notify_disabled": "Bug aware mode disabled.",
   "plugin_bug_report_notify_export_failed": "Failed to export diagnostics: %s",
   "plugin_bug_report_notify_exported": "Diagnostics exported: %s",
-  "plugin_bug_report_preview": "## Bug aware mode\n\nUse this when Wox keeps quitting, disappears unexpectedly, or crashes before you can see the error.\n\nAfter enabling it, Wox will restart and collect a cleaner set of diagnostic logs.\n\nWhen the problem happens again, come back here, export diagnostics, and attach the zip file to your issue.\n\nTurn this mode off after you finish collecting the report.",
+  "plugin_bug_report_preview": "## Bug aware mode\n\nUse this when a Wox problem needs a clean reproduction report, such as unexpected exits, disappearing windows, stuck behavior, plugin errors, or UI issues.\n\nAfter enabling it, Wox will restart and collect a cleaner set of diagnostic logs.\n\nWhen the problem happens again, come back here, export diagnostics, and attach the zip file to your issue.\n\nTurn this mode off after you finish collecting the report.",
   "plugin_glance_plugin_name": "System Glance",
   "plugin_glance_plugin_description": "Provide glanceable system information",
   "plugin_glance_time_name": "Time",

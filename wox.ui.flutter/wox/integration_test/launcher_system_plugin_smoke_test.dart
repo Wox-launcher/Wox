@@ -239,6 +239,8 @@ void registerSystemPluginSmokeTests() {
       expect(result.preview.previewType, equals(WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_MARKDOWN.code));
       expect(result.preview.previewData, anyOf(contains('Bug aware'), contains('问题发现')));
       expect(result.preview.previewData, contains('Wox'));
+      expect(result.icon.imageData.toLowerCase(), contains('#8a8a8a'));
+      expect(result.preview.previewData.toLowerCase(), isNot(contains('crash')));
       expect(result.preview.previewData, isNot(contains('supervisor')));
       expect(result.preview.previewData, isNot(contains('stdout')));
     });

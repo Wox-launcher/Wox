@@ -20,6 +20,10 @@ type BugReportPlugin struct {
 	api plugin.API
 }
 
+const bugReportIssueURL = "https://github.com/Wox-launcher/Wox/issues/new?template=bug_report.yml"
+
+var bugReportDisabledIcon = common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24"><path fill="#8A8A8A" d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12c5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>`)
+
 func (p *BugReportPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:              "b7f6f0f3-9d18-4f17-b74d-f28d19b1b541",
@@ -53,10 +57,7 @@ func (p *BugReportPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 	result := plugin.QueryResult{
 		Title:    title,
 		SubTitle: subtitle,
-		Icon:     common.PermissionIcon,
-		// New feature: enabling bug aware mode has a visible restart impact, so
-		// the primary result carries a short localized preview that explains the
-		// user-facing purpose without exposing implementation details.
+		Icon:     p.iconForState(enabled),
 		Preview: plugin.WoxPreview{
 			PreviewType: plugin.WoxPreviewTypeMarkdown,
 			PreviewData: "i18n:plugin_bug_report_preview",
@@ -64,6 +65,13 @@ func (p *BugReportPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 		Actions: p.buildActions(enabled),
 	}
 	return plugin.NewQueryResponse([]plugin.QueryResult{result})
+}
+
+func (p *BugReportPlugin) iconForState(enabled bool) common.WoxImage {
+	if enabled {
+		return common.PermissionIcon
+	}
+	return bugReportDisabledIcon
 }
 
 func (p *BugReportPlugin) buildActions(enabled bool) []plugin.QueryResultAction {
@@ -160,5 +168,8 @@ func (p *BugReportPlugin) exportDiagnostics(ctx context.Context) {
 		return
 	}
 	_ = shell.OpenFileInFolder(exportPath)
+	if openErr := shell.Open(bugReportIssueURL); openErr != nil {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to open bug report issue page after diagnostics export: %s", openErr.Error()))
+	}
 	p.api.Notify(ctx, fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_bug_report_notify_exported"), exportPath))
 }

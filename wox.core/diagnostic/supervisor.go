@@ -41,22 +41,22 @@ func (m *Manager) StartSupervisorDetached(ctx context.Context, waitParent bool) 
 
 func (m *Manager) RunSupervisor(ctx context.Context, args []string) int {
 	_ = m.EnsureDirectories()
-	waitParentPid := parseWaitParentPid(args)
-	if waitParentPid > 0 {
-		m.waitForParentExit(waitParentPid)
-	}
-
-	executable, err := os.Executable()
-	if err != nil {
-		_ = os.WriteFile(m.SupervisorLogPath(), []byte(fmt.Sprintf("failed to resolve executable: %v\n", err)), 0644)
-		return 1
-	}
-
 	logFile, err := os.OpenFile(m.SupervisorLogPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		return 1
 	}
 	defer logFile.Close()
+
+	waitParentPid := parseWaitParentPid(args)
+	if waitParentPid > 0 {
+		m.waitForParentExit(logFile, waitParentPid)
+	}
+
+	executable, err := os.Executable()
+	if err != nil {
+		_, _ = fmt.Fprintf(logFile, "[%s] failed to resolve executable: %v\n", time.Now().Format(time.RFC3339), err)
+		return 1
+	}
 
 	childArgs := []string{ArgChild}
 	cmd := exec.Command(executable, childArgs...)
@@ -96,17 +96,24 @@ func (m *Manager) RunSupervisor(ctx context.Context, args []string) int {
 	return 0
 }
 
-func (m *Manager) waitForParentExit(parentPid int) {
+func (m *Manager) waitForParentExit(logFile io.Writer, parentPid int) {
 	// The supervisor is launched while Wox is still shutting down. Waiting a
 	// short bounded period prevents the child from hitting the single-instance
 	// forwarding path against the process that asked to restart.
+	waitStartedAt := time.Now()
+	_, _ = fmt.Fprintf(logFile, "[%s] waiting for parent exit: pid=%d\n", waitStartedAt.Format(time.RFC3339), parentPid)
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		if !isProcessRunning(parentPid) {
+			_, _ = fmt.Fprintf(logFile, "[%s] parent exited: pid=%d durationMs=%d\n", time.Now().Format(time.RFC3339), parentPid, time.Since(waitStartedAt).Milliseconds())
 			return
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
+	// Bug diagnostics: if this timeout is reached, the restart delay is before
+	// the monitored child starts. Keeping it in supervisor.log makes Windows
+	// handoff delays visible without needing to infer them from breadcrumbs.
+	_, _ = fmt.Fprintf(logFile, "[%s] parent wait timed out: pid=%d durationMs=%d\n", time.Now().Format(time.RFC3339), parentPid, time.Since(waitStartedAt).Milliseconds())
 }
 
 func parseWaitParentPid(args []string) int {
