@@ -245,6 +245,15 @@ class WoxApi {
     await WoxHttpUtil.instance.postData(traceId, "/log/open", null);
   }
 
+  Future<Map<String, dynamic>> getDiagnosticStatus(String traceId) async {
+    final data = await WoxHttpUtil.instance.postData<Map<String, dynamic>>(traceId, "/diagnostics/status", null);
+    return data;
+  }
+
+  Future<String> exportDiagnostics(String traceId) async {
+    return await WoxHttpUtil.instance.postData<String>(traceId, "/diagnostics/export", null);
+  }
+
   Future<void> open(String traceId, String path) async {
     await WoxHttpUtil.instance.postData(traceId, "/open", {"path": path});
   }

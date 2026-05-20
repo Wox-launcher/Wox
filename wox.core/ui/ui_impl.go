@@ -98,6 +98,13 @@ func (u *uiImpl) RefreshGlance(ctx context.Context, pluginId string, ids []strin
 	})
 }
 
+func (u *uiImpl) UpdateDiagnosticStatus(ctx context.Context, enabled bool) {
+	// New feature: bug aware status is a global launcher decoration, so core
+	// pushes it separately from plugin toolbar messages to avoid ownership
+	// conflicts with normal plugin status updates.
+	u.invokeWebsocketMethod(ctx, "DiagnosticStatusChanged", map[string]any{"enabled": enabled})
+}
+
 func (u *uiImpl) HideApp(ctx context.Context) {
 	u.invokeWebsocketMethod(ctx, "HideApp", nil)
 }

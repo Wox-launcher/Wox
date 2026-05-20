@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:logger/logger.dart' as xlogger;
@@ -11,12 +12,16 @@ import 'wox_websocket_msg_util.dart';
 
 class Logger {
   late xlogger.Logger _logger;
+  WoxFileOutput? _output;
+  bool _isInitialized = false;
   String logLevel = "INFO";
 
   Logger._privateConstructor();
 
   Future<void> initLogger() async {
-    _logger = xlogger.Logger(printer: xlogger.SimplePrinter(printTime: true, colors: false), output: WoxFileOutput());
+    _output = WoxFileOutput();
+    _logger = xlogger.Logger(printer: xlogger.SimplePrinter(printTime: true, colors: false), output: _output);
+    _isInitialized = true;
   }
 
   static final Logger _instance = Logger._privateConstructor();
@@ -40,11 +45,21 @@ class Logger {
   }
 
   void log(String traceId, String level, String message) {
+    if (!_isInitialized) {
+      return;
+    }
+
     if (!shouldLog(level)) {
       return;
     }
 
     _logger.i("$traceId [$level] $message");
+    if (level.trim().toLowerCase() == "error") {
+      // Feature: fatal Flutter errors can precede process termination, so
+      // error-level logs force a file flush instead of waiting for IOSink's
+      // normal buffering to drain.
+      unawaited(flush());
+    }
 
     try {
       sendLog(traceId, level, message);
@@ -57,6 +72,10 @@ class Logger {
     final normalized = normalizeLogLevel(level);
     logLevel = normalized;
     _logger.i("[LOGGER] log level set to $normalized");
+  }
+
+  Future<void> flush() async {
+    await _output?.flush();
   }
 
   String normalizeLogLevel(String level) {
@@ -107,12 +126,11 @@ class LoggerSwitch {
 }
 
 class WoxFileOutput extends xlogger.LogOutput {
-  late IOSink sink;
+  late File logFile;
 
   WoxFileOutput() {
-    var logFile = File(path.join(getHomeDir(), ".wox", "log", 'ui.log'));
+    logFile = File(path.join(getHomeDir(), ".wox", "log", 'ui.log'));
     logFile.createSync(recursive: true);
-    sink = logFile.openWrite(mode: FileMode.append);
   }
 
   String getHomeDir() {
@@ -125,8 +143,13 @@ class WoxFileOutput extends xlogger.LogOutput {
 
   @override
   void output(xlogger.OutputEvent event) {
-    for (var element in event.lines) {
-      sink.writeln(element);
-    }
+    // Feature: crash diagnostics need ui.log to be durable even when the
+    // process exits immediately after a framework error. Synchronous appends
+    // avoid IOSink flush/write races during global error handling.
+    logFile.writeAsStringSync("${event.lines.join('\n')}\n", mode: FileMode.append, flush: true);
+  }
+
+  Future<void> flush() async {
+    return;
   }
 }

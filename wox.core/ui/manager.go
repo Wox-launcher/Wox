@@ -15,8 +15,10 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"wox/analytics"
 	"wox/common"
+	"wox/diagnostic"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/plugin/system/shell/terminal"
@@ -54,6 +56,7 @@ type Manager struct {
 	ui               common.UI
 	serverPort       int
 	uiProcess        *os.Process
+	uiStopRequested  atomic.Bool
 	themes           *util.HashMap[string, common.Theme]
 	systemThemeIds   []string
 	isUIReadyHandled bool
@@ -204,8 +207,13 @@ func (m *Manager) Stop(ctx context.Context) {
 		logger.Info(ctx, "skip stopping ui app in dev mode")
 		return
 	}
+	if m.uiProcess == nil {
+		logger.Info(ctx, "skip stopping ui app because no ui process is tracked")
+		return
+	}
 
 	logger.Info(ctx, "start stopping ui app")
+	m.uiStopRequested.Store(true)
 	var pid = m.uiProcess.Pid
 	killErr := m.uiProcess.Kill()
 	if killErr != nil {
@@ -459,6 +467,7 @@ func (m *Manager) StartUIApp(ctx context.Context) error {
 	}
 
 	m.uiProcess = cmd.Process
+	m.uiStopRequested.Store(false)
 	pid := cmd.Process.Pid
 	// Debug Glance reads this PID to report combined core + Flutter memory.
 	// Prod launches the UI from core, while dev mode can later replace it with
@@ -471,6 +480,7 @@ func (m *Manager) StartUIApp(ctx context.Context) error {
 		// Clear only this exited process so a restarted UI keeps its newer PID.
 		util.ClearWoxUIProcessPid(pid)
 		waitCtx := util.NewTraceContext()
+		diagnostic.GetManager().RecordUIExit(waitCtx, pid, waitErr, m.uiStopRequested.Load())
 		if waitErr != nil {
 			logger.Warn(waitCtx, fmt.Sprintf("ui app process(%d) exited with error: %s", pid, waitErr.Error()))
 			handleUIRuntimeLaunchFailure(waitCtx, waitErr)
@@ -1306,6 +1316,7 @@ func (m *Manager) ExitApp(ctx context.Context) {
 		util.GetLogger().Info(ctx, "start quitting")
 		plugin.GetPluginManager().Stop(ctx)
 		m.Stop(ctx)
+		diagnostic.GetManager().MarkCleanExit(ctx)
 		util.GetLogger().Info(ctx, "bye~")
 		os.Exit(0)
 	})

@@ -16,6 +16,7 @@ import (
 	"wox/ai"
 	"wox/common"
 	"wox/database"
+	"wox/diagnostic"
 	"wox/i18n"
 	"wox/plugin"
 	pluginhost "wox/plugin/host"
@@ -99,24 +100,28 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/permission/privacy/open":       handlePermissionPrivacyOpen,
 
 	// others
-	"/":                      handleHome,
-	"/show":                  handleShow,
-	"/ping":                  handlePing,
-	"/preview":               handlePreview,
-	"/preview/image/overlay": handlePreviewImageOverlay,
-	"/image/lazy/load":       handleLazyImageLoad,
-	"/open":                  handleOpen,
-	"/backup/now":            handleBackupNow,
-	"/backup/restore":        handleBackupRestore,
-	"/backup/all":            handleBackupAll,
-	"/backup/folder":         handleBackupFolder,
-	"/log/clear":             handleLogClear,
-	"/log/open":              handleLogOpen,
-	"/hotkey/available":      handleHotkeyAvailable,
-	"/glance":                handleGlance,
-	"/glance/action":         handleGlanceAction,
-	"/deeplink":              handleDeeplink,
-	"/version":               handleVersion,
+	"/":                            handleHome,
+	"/show":                        handleShow,
+	"/ping":                        handlePing,
+	"/preview":                     handlePreview,
+	"/preview/image/overlay":       handlePreviewImageOverlay,
+	"/image/lazy/load":             handleLazyImageLoad,
+	"/open":                        handleOpen,
+	"/backup/now":                  handleBackupNow,
+	"/backup/restore":              handleBackupRestore,
+	"/backup/all":                  handleBackupAll,
+	"/backup/folder":               handleBackupFolder,
+	"/log/clear":                   handleLogClear,
+	"/log/open":                    handleLogOpen,
+	"/diagnostics/status":          handleDiagnosticsStatus,
+	"/diagnostics/monitor/enable":  handleDiagnosticsMonitorEnable,
+	"/diagnostics/monitor/disable": handleDiagnosticsMonitorDisable,
+	"/diagnostics/export":          handleDiagnosticsExport,
+	"/hotkey/available":            handleHotkeyAvailable,
+	"/glance":                      handleGlance,
+	"/glance/action":               handleGlanceAction,
+	"/deeplink":                    handleDeeplink,
+	"/version":                     handleVersion,
 
 	// test-only triggers
 	"/test/plugin/install_local":     handleTestInstallLocalPlugin,
@@ -1341,6 +1346,57 @@ func handleLogOpen(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeSuccessResponse(w, "")
+}
+
+func handleDiagnosticsStatus(w http.ResponseWriter, r *http.Request) {
+	state := diagnostic.GetManager().LoadState()
+	writeSuccessResponse(w, map[string]any{
+		"enabled":        state.Enabled,
+		"lastCleanExit":  state.LastCleanExit,
+		"lastExportPath": state.LastExportPath,
+	})
+}
+
+func handleDiagnosticsMonitorEnable(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	previousLogLevel := util.NormalizeLogLevel(woxSetting.LogLevel.Get())
+	state, err := diagnostic.GetManager().Enable(ctx, previousLogLevel)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	// New feature: API-based enabling mirrors the system plugin path so any
+	// future settings surface gets the same clean-log DEBUG session behavior.
+	woxSetting.LogLevel.Set(setting.LogLevelDebug)
+	util.GetLogger().SetLevel(setting.LogLevelDebug)
+	GetUIManager().GetUI(ctx).UpdateDiagnosticStatus(ctx, true)
+	writeSuccessResponse(w, state)
+}
+
+func handleDiagnosticsMonitorDisable(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	state, err := diagnostic.GetManager().Disable(ctx)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	if state.PreviousLogLevel != "" {
+		setting.GetSettingManager().GetWoxSetting(ctx).LogLevel.Set(state.PreviousLogLevel)
+		util.GetLogger().SetLevel(state.PreviousLogLevel)
+	}
+	GetUIManager().GetUI(ctx).UpdateDiagnosticStatus(ctx, false)
+	writeSuccessResponse(w, state)
+}
+
+func handleDiagnosticsExport(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	exportPath, err := diagnostic.GetManager().Export(ctx)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, exportPath)
 }
 
 func handleHotkeyAvailable(w http.ResponseWriter, r *http.Request) {

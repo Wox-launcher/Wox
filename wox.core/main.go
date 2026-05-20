@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"wox/analytics"
 	"wox/database"
+	"wox/diagnostic"
 	"wox/migration"
 	"wox/telemetry"
 
@@ -55,6 +56,13 @@ import (
 )
 
 func main() {
+	if diagnostic.GetManager().IsSupervisorArg(os.Args) {
+		ctx := util.NewTraceContext()
+		if locationErr := util.GetLocation().Init(); locationErr != nil {
+			os.Exit(1)
+		}
+		os.Exit(diagnostic.GetManager().RunSupervisor(ctx, os.Args))
+	}
 	mainthread.Init(run)
 }
 
@@ -117,6 +125,20 @@ func run() {
 		// never terminate on its own, so os.Exit is required to avoid a zombie process.
 		os.Exit(0)
 	}
+
+	// User may launch Wox manually (not from bugreport) with the intent to enable bug aware mode
+	// In this case, we should relaunch the supervisor and enable bug aware mode before the main instance starts.
+	if diagnostic.GetManager().IsEnabled() && !diagnostic.GetManager().IsChildArg(os.Args) {
+		if supervisorErr := diagnostic.GetManager().StartSupervisorDetached(ctx, true); supervisorErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to start bug aware supervisor: %s", supervisorErr.Error()))
+		} else {
+			util.GetLogger().Info(ctx, "bug aware supervisor started, exiting current process")
+			diagnostic.GetManager().MarkCleanExit(ctx)
+			os.Exit(0)
+		}
+	}
+
+	diagnostic.GetManager().RecordRunStart(ctx, diagnostic.GetManager().IsChildArg(os.Args))
 
 	util.GetLogger().Info(ctx, "no existing instance found, proceeding with full startup")
 

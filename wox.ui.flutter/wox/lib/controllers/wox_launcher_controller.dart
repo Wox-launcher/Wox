@@ -238,6 +238,10 @@ class WoxLauncherController extends GetxController {
   // toolbar related variables
   final toolbar = ToolbarInfo.empty().obs;
   final toolbarMsg = ToolbarMsg.empty().obs;
+  // Feature: bug aware mode is launcher-wide diagnostic state, not a plugin
+  // toolbar message. Keeping it separate preserves ShowToolbarMsg ownership
+  // while allowing monitoring mode to keep a persistent toolbar indicator.
+  final isBugAwareModeEnabled = false.obs;
   // store i18n key instead of literal text
   final toolbarCopyText = 'toolbar_copy'.obs;
 
@@ -985,7 +989,9 @@ class WoxLauncherController extends GetxController {
 
   bool get hasVisibleToolbarMsg => toolbarMsg.value.isPersistent;
 
-  bool get isShowToolbar => activeResultViewController.items.isNotEmpty || isShowDoctorCheckInfo || hasVisibleToolbarMsg;
+  bool get hasBugAwareToolbarIndicator => isBugAwareModeEnabled.value;
+
+  bool get isShowToolbar => activeResultViewController.items.isNotEmpty || isShowDoctorCheckInfo || hasVisibleToolbarMsg || hasBugAwareToolbarIndicator;
 
   bool get isToolbarShowedWithoutResults => isShowToolbar && activeResultViewController.items.isEmpty;
 
@@ -996,6 +1002,37 @@ class WoxLauncherController extends GetxController {
   int? get resolvedToolbarProgress => hasVisibleToolbarMsg ? toolbarMsg.value.progress : null;
 
   bool get resolvedToolbarIndeterminate => hasVisibleToolbarMsg && toolbarMsg.value.indeterminate;
+
+  Future<void> loadDiagnosticStatus(String traceId) async {
+    try {
+      final status = await WoxApi.instance.getDiagnosticStatus(traceId);
+      updateDiagnosticStatus(traceId, status["enabled"] == true, shouldResize: false);
+    } catch (e) {
+      Logger.instance.warn(traceId, "failed to load diagnostic status: $e");
+    }
+  }
+
+  void updateDiagnosticStatus(String traceId, bool enabled, {bool shouldResize = true}) {
+    if (isBugAwareModeEnabled.value == enabled) {
+      return;
+    }
+
+    // Feature: the backend owns the persistent diagnostic flag and Flutter owns
+    // the toolbar affordance. A single update path keeps startup status loading
+    // and live websocket changes consistent.
+    isBugAwareModeEnabled.value = enabled;
+    Logger.instance.info(traceId, "bug aware mode status changed: enabled=$enabled");
+    if (shouldResize) {
+      unawaited(resizeHeight(traceId: traceId, reason: "bug aware toolbar visibility changed"));
+    }
+  }
+
+  Future<void> activateBugReportQuery(String traceId) async {
+    // Feature: clicking the bug indicator should enter the system plugin using
+    // Wox's normal trigger-keyword semantics, which require the trailing space.
+    await onQueryChanged(traceId, PlainQuery.text("bugreport "), "bug aware toolbar indicator clicked", moveCursorToEnd: true);
+    await focusQueryBox();
+  }
 
   bool isFullscreenPreviewOnly() {
     return !isQueryBoxVisible.value && isShowPreviewPanel.value && resultPreviewRatio.value == 0;
@@ -2634,6 +2671,10 @@ class WoxLauncherController extends GetxController {
       final toolbarMsgId = data['toolbarMsgId'] as String? ?? "";
       await clearToolbarMsg(msg.traceId, toolbarMsgId);
       responseWoxWebsocketRequest(msg, true, null);
+    } else if (msg.method == "DiagnosticStatusChanged") {
+      final data = msg.data as Map<String, dynamic>? ?? {};
+      updateDiagnosticStatus(msg.traceId, data["enabled"] == true);
+      responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "GetCurrentQuery") {
       responseWoxWebsocketRequest(msg, true, currentQuery.value.toJson());
     } else if (msg.method == "FocusToChatInput") {
@@ -3070,7 +3111,7 @@ class WoxLauncherController extends GetxController {
     // Only add toolbar height when toolbar is actually shown in UI.
     // Use local hasItems instead of the isShowToolbar getter so that
     // overrideItemCount is respected.
-    final showToolbar = (hasItems || isShowDoctorCheckInfo || hasVisibleToolbarMsg) && !isToolbarHiddenForce.value;
+    final showToolbar = (hasItems || isShowDoctorCheckInfo || hasVisibleToolbarMsg || hasBugAwareToolbarIndicator) && !isToolbarHiddenForce.value;
     if (showToolbar) {
       resultHeight += WoxThemeUtil.instance.getToolbarHeight();
     }

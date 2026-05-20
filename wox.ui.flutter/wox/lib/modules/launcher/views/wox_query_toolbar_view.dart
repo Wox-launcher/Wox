@@ -277,24 +277,56 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
     );
   }
 
+  Widget bugAwareIndicator() {
+    return Obx(() {
+      if (!controller.hasBugAwareToolbarIndicator) {
+        return const SizedBox.shrink();
+      }
+
+      final metrics = WoxInterfaceSizeUtil.instance.current;
+      final settingController = Get.find<WoxSettingController>();
+      const iconColor = Color(0xFFE5484D);
+
+      // Feature: bug aware mode needs a launcher-owned entry point that is
+      // always visible while monitoring is enabled. It cannot reuse
+      // ShowToolbarMsg because plugin messages are transient and may be
+      // cleared by unrelated plugin actions.
+      return Tooltip(
+        message: settingController.tr("ui_bug_aware_enabled_tooltip"),
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              controller.activateBugReportQuery(const UuidV4().generate());
+            },
+            child: SizedBox(
+              width: metrics.toolbarIconSize,
+              height: metrics.toolbarIconSize,
+              child: Icon(Icons.bug_report_outlined, size: metrics.toolbarIconSize, color: iconColor),
+            ),
+          ),
+        ),
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: query toolbar view - container");
 
     return Obx(() {
       final metrics = WoxInterfaceSizeUtil.instance.metrics.value;
+      final baseToolbarColor = hasResultItems ? safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarBackgroundColor) : Colors.transparent;
+      // Feature update: bug aware mode is now indicated only by the fixed red
+      // icon. Keeping the toolbar background unchanged avoids making normal
+      // result actions look like warnings while diagnostics are enabled.
+      final toolbarColor = baseToolbarColor;
+      final toolbarBorderColor = hasResultItems ? safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor).withValues(alpha: 0.1) : Colors.transparent;
       return SizedBox(
         height: WoxThemeUtil.instance.getToolbarHeight(),
         child: Container(
-          decoration: BoxDecoration(
-            color: hasResultItems ? safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarBackgroundColor) : Colors.transparent,
-            border: Border(
-              top: BorderSide(
-                color: hasResultItems ? safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor).withValues(alpha: 0.1) : Colors.transparent,
-                width: 1,
-              ),
-            ),
-          ),
+          decoration: BoxDecoration(color: toolbarColor, border: Border(top: BorderSide(color: toolbarBorderColor, width: 1))),
           child: Padding(
             padding: EdgeInsets.only(
               left: WoxInterfaceSizeUtil.instance.current.scaledSpacing(WoxThemeUtil.instance.currentTheme.value.toolbarPaddingLeft.toDouble()),
@@ -306,10 +338,13 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
                 // Toolbar text, icons, and hotkey chips use density metrics now,
                 // so reserve the right-action area with the same scale instead
                 // of the old normal-only 200px estimate.
-                final double leftMaxWidth = (constraints.maxWidth - metrics.toolbarRightReservedWidth).clamp(0.0, constraints.maxWidth).toDouble();
+                final bugAwareIndicatorWidth = controller.hasBugAwareToolbarIndicator ? metrics.toolbarIconSize + metrics.toolbarIconSpacing : 0.0;
+                final double leftMaxWidth = (constraints.maxWidth - metrics.toolbarRightReservedWidth - bugAwareIndicatorWidth).clamp(0.0, constraints.maxWidth).toDouble();
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
+                    bugAwareIndicator(),
+                    if (controller.hasBugAwareToolbarIndicator) SizedBox(width: metrics.toolbarIconSpacing),
                     // Left part takes only the space it needs up to leftMaxWidth
                     leftPart(leftMaxWidth),
                     if (hasLeftMessage) SizedBox(width: metrics.toolbarActionSpacing),

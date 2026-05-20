@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui';
 
 import 'package:chinese_font_library/chinese_font_library.dart';
 import 'package:flutter/material.dart';
@@ -26,12 +28,42 @@ import 'package:wox/utils/wox_interface_size_util.dart';
 import 'package:wox/utils/wox_websocket_msg_util.dart';
 
 Future<void> main(List<String> arguments) async {
-  await initialServices(arguments);
-  await initWindow();
+  await runZonedGuarded(
+    () async {
+      await initialServices(arguments);
+      await initWindow();
 
-  await initDeepLink();
+      await initDeepLink();
 
-  runApp(const MyApp());
+      runApp(const MyApp());
+    },
+    (error, stack) {
+      Logger.instance.error(const UuidV4().generate(), "Unhandled Flutter zone error: $error\n$stack");
+      unawaited(Logger.instance.flush());
+    },
+  );
+}
+
+void registerFlutterGlobalErrorHandlers(String traceId) {
+  final bindingType = WidgetsBinding.instance.runtimeType.toString();
+  if (Platform.environment.containsKey("FLUTTER_TEST") || bindingType.contains("TestWidgetsFlutterBinding") || bindingType.contains("LiveTestWidgetsFlutterBinding")) {
+    return;
+  }
+
+  // Feature: bug aware diagnostics need Flutter framework and platform errors
+  // to reach ui.log before a crash or forced process exit. These handlers keep
+  // normal Flutter error presentation while also flushing file-backed logs.
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    Logger.instance.error(traceId, "FlutterError: ${details.exception}\n${details.stack}");
+    unawaited(Logger.instance.flush());
+  };
+
+  PlatformDispatcher.instance.onError = (error, stack) {
+    Logger.instance.error(traceId, "PlatformDispatcher error: $error\n$stack");
+    unawaited(Logger.instance.flush());
+    return true;
+  };
 }
 
 Future<void> initArgs(List<String> arguments) async {
@@ -60,6 +92,7 @@ Future<void> initialServices(List<String> arguments) async {
 
   WidgetsFlutterBinding.ensureInitialized();
   await Logger.instance.initLogger();
+  registerFlutterGlobalErrorHandlers(traceId);
   HeartbeatChecker().init();
   await WoxWebsocketMsgUtil.instance.init();
   await initArgs(arguments);
@@ -70,6 +103,7 @@ Future<void> initialServices(List<String> arguments) async {
 
   var launcherController = WoxLauncherController();
   launcherController.startDoctorCheckTimer();
+  await launcherController.loadDiagnosticStatus(traceId);
 
   await WoxWebsocketMsgUtil.instance.initialize(Uri.parse("ws://127.0.0.1:${Env.serverPort}/ws"), onMessageReceived: launcherController.handleWebSocketMessage);
   HeartbeatChecker().startChecking();

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wox/enums/wox_preview_type_enum.dart';
 import 'package:wox/enums/wox_selection_type_enum.dart';
 
 import 'smoke_test_helper.dart';
@@ -216,7 +217,33 @@ void registerSystemPluginSmokeTests() {
       expect(result.actions, isNotEmpty);
     });
 
-    testWidgets('T6-08: Emoji plugin returns emoji results', (tester) async {
+    testWidgets('T6-08: Bug report plugin returns diagnostic actions', (tester) async {
+      final controller = await launchAndShowLauncher(tester, windowSize: smokeLargeWindowSize);
+      final result = await queryAndWaitForResultWhere(
+        tester,
+        controller,
+        'bugreport ',
+        (candidate) => candidate.title.startsWith('Bug aware') || candidate.title.startsWith('问题发现'),
+        description: 'Expected bugreport trigger query to show the built-in diagnostic actions.',
+      );
+
+      // New feature: `bugreport ` follows Wox trigger-keyword semantics and
+      // opens the diagnostic workflow without adding a separate settings path.
+      expect(result.title, isNotEmpty);
+      expect(result.subTitle, isNotEmpty);
+      expect(result.isGroup, isFalse);
+      expect(result.actions, isNotEmpty);
+      // Feature update: the preview should explain the user-facing workflow
+      // without exposing implementation details that make the report flow feel
+      // harder to understand.
+      expect(result.preview.previewType, equals(WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_MARKDOWN.code));
+      expect(result.preview.previewData, anyOf(contains('Bug aware'), contains('问题发现')));
+      expect(result.preview.previewData, contains('Wox'));
+      expect(result.preview.previewData, isNot(contains('supervisor')));
+      expect(result.preview.previewData, isNot(contains('stdout')));
+    });
+
+    testWidgets('T6-09: Emoji plugin returns emoji results', (tester) async {
       final controller = await launchAndShowLauncher(tester, windowSize: smokeLargeWindowSize);
       final result = await queryAndWaitForActiveResult(tester, controller, 'emoji smile');
 
@@ -225,7 +252,7 @@ void registerSystemPluginSmokeTests() {
       expect(result.isGroup, isFalse);
     });
 
-    testWidgets('T6-09: Indicator plugin shows plugin hints', (tester) async {
+    testWidgets('T6-10: Indicator plugin shows plugin hints', (tester) async {
       final controller = await launchAndShowLauncher(tester, windowSize: smokeLargeWindowSize);
       final result = await queryAndWaitForActiveResult(tester, controller, '*');
 
@@ -235,7 +262,7 @@ void registerSystemPluginSmokeTests() {
       expectQueryLatencyWithinThreshold(result);
     });
 
-    testWidgets('T6-10: Converter plugin time conversion', (tester) async {
+    testWidgets('T6-11: Converter plugin time conversion', (tester) async {
       final controller = await launchAndShowLauncher(tester, windowSize: smokeLargeWindowSize);
       final result = await queryAndWaitForActiveResult(tester, controller, '1h to minutes');
 
@@ -245,7 +272,7 @@ void registerSystemPluginSmokeTests() {
       expectQueryLatencyWithinThreshold(result);
     });
 
-    testWidgets('T6-10A: Converter plugin length conversion', (tester) async {
+    testWidgets('T6-11A: Converter plugin length conversion', (tester) async {
       final controller = await launchAndShowLauncher(tester, windowSize: smokeLargeWindowSize);
       final result = await queryAndWaitForActiveResult(tester, controller, '10cm to mm');
 
