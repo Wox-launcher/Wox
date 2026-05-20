@@ -568,7 +568,9 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 	// Add all plugins to wait group before starting goroutines
 	m.systemPluginsWg.Add(len(AllSystemPlugin))
 
-	for _, p := range AllSystemPlugin {
+	loadedInstances := make([]*Instance, len(AllSystemPlugin))
+	for i, p := range AllSystemPlugin {
+		index := i
 		plugin := p
 		metadata := plugin.GetMetadata()
 		pluginName := metadata.GetName(ctx)
@@ -610,8 +612,20 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 			// This ensures the plugin is fully initialized before it can be queried
 			m.initPlugin(util.NewTraceContext(), instance)
 
-			m.instances = append(m.instances, instance)
+			// Bug fix: system plugins initialize in parallel, but appending to the
+			// shared manager slice from those goroutines races and can drop a
+			// plugin from one CI run. Store each initialized instance in a stable
+			// slot, then publish the slice on this goroutine after the wait so
+			// global queries always see the full system plugin set.
+			loadedInstances[index] = instance
 		})
+	}
+
+	m.systemPluginsWg.Wait()
+	for _, instance := range loadedInstances {
+		if instance != nil {
+			m.instances = append(m.instances, instance)
+		}
 	}
 
 	logger.Debug(ctx, fmt.Sprintf("finish loading system plugins, cost %d ms", util.GetSystemTimestamp()-start))

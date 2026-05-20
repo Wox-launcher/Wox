@@ -175,8 +175,12 @@ test: ensure-resources
 	@trap '$(MAKE) clean-resources' EXIT; $(MAKE) test-isolated
 
 # Test with custom environment
+# Bug fix: let the Go test config choose its per-process sandbox instead of
+# forcing one shared /tmp directory. The shared directory lets stateful plugin
+# tests leak saved settings, favorites, and histories into later make test
+# runs, which makes CI and local reruns fail for reasons unrelated to code.
 test-isolated:
-	cd wox.core && WOX_TEST_DATA_DIR=/tmp/wox-test-isolated WOX_TEST_CLEANUP=true go test -tags "$(SQLITE_BUILD_TAGS)" ./test -v
+	cd wox.core && WOX_TEST_CLEANUP=true go test -tags "$(SQLITE_BUILD_TAGS)" ./test -v
 
 # Test without network dependencies
 test-offline:
