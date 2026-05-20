@@ -248,6 +248,32 @@ class WoxPreviewScrollPosition(str, Enum):
 
 
 @dataclass
+class WoxPreviewTag:
+    """
+    Metadata tag shown below preview content.
+
+    The UI now renders preview metadata as compact tags instead of a key/value
+    table, so the visible label is separate from the optional tooltip text.
+    """
+
+    label: str = field(default="")
+    tooltip: str = field(default="")
+
+    def to_dict(self) -> Dict[str, str]:
+        return {
+            "Label": self.label,
+            "Tooltip": self.tooltip,
+        }
+
+    @classmethod
+    def from_json(cls, json_data: Dict[str, Any]) -> "WoxPreviewTag":
+        return cls(
+            label=str(json_data.get("Label", "")),
+            tooltip=str(json_data.get("Tooltip", "")),
+        )
+
+
+@dataclass
 class WoxPreview:
     """
     Preview model for displaying rich content in Wox results.
@@ -259,7 +285,8 @@ class WoxPreview:
     Attributes:
         preview_type: The type of preview content to display
         preview_data: The actual content data (format depends on preview_type)
-        preview_properties: Optional properties for preview customization
+        preview_tags: Optional metadata tags shown below preview content
+        preview_properties: Deprecated key/value metadata kept for compatibility
         scroll_position: Initial scroll position when preview is shown
 
     Example usage:
@@ -306,16 +333,11 @@ class WoxPreview:
 
     preview_properties: Dict[str, str] = field(default_factory=dict)
     """
-    Optional properties for preview customization.
+    Deprecated: use preview_tags instead.
 
-    This dictionary can contain additional properties that modify
-    how the preview is displayed. The available properties depend
-    on the preview_type and Wox version.
-
-    Common properties may include:
-    - "height": Maximum height for the preview
-    - "theme": Theme override for code blocks
-    - Custom plugin-specific properties
+    The launcher still maps each legacy key/value pair to a metadata tag with
+    the value as the visible label and the key as the tooltip, so older plugins
+    keep their current display while new plugins can use preview_tags directly.
     """
 
     scroll_position: WoxPreviewScrollPosition = field(default=WoxPreviewScrollPosition.BOTTOM)
@@ -324,6 +346,15 @@ class WoxPreview:
 
     Controls where the content is scrolled when the preview appears.
     Default is BOTTOM which scrolls to the end of the content.
+    """
+
+    preview_tags: List[WoxPreviewTag] = field(default_factory=list)
+    """
+    Metadata tags shown below the preview content.
+
+    This field is intentionally appended after existing constructor fields so
+    older positional WoxPreview(...) calls keep their argument meanings while
+    new plugins can pass preview_tags by keyword.
     """
 
     def to_json(self) -> str:
@@ -340,6 +371,7 @@ class WoxPreview:
             {
                 "PreviewType": self.preview_type,
                 "PreviewData": self.preview_data,
+                "PreviewTags": [tag.to_dict() for tag in self.preview_tags],
                 "PreviewProperties": self.preview_properties,
                 "ScrollPosition": self.scroll_position,
             }
@@ -367,6 +399,13 @@ class WoxPreview:
         return cls(
             preview_type=WoxPreviewType(data.get("PreviewType")),
             preview_data=data.get("PreviewData", ""),
+            preview_tags=[
+                WoxPreviewTag.from_json(item)
+                for item in data.get("PreviewTags", [])
+                if isinstance(item, dict)
+            ]
+            if isinstance(data.get("PreviewTags", []), list)
+            else [],
             preview_properties=data.get("PreviewProperties", {}),
             scroll_position=WoxPreviewScrollPosition(data.get("ScrollPosition")),
         )

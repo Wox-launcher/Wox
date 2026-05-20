@@ -97,6 +97,7 @@ Methods for interacting with Wox:
 
 #### Preview Models (`models/preview.py`)
 - `WoxPreview`: Preview content for results
+- `WoxPreviewTag`: Metadata tag shown below preview content
 - `WoxPreviewListData`: Structured data for list previews
 - `WoxPreviewListItem`: Row data for list previews
 - `WoxPreviewType`: MARKDOWN, TEXT, IMAGE, URL, FILE, LIST, REMOTE
@@ -231,7 +232,7 @@ from .models.context import Context
 from .models.image import WoxImage, WoxImageType
 from .models.log import LogLevel
 from .models.mru import MRUData, MRURestoreCallback
-from .models.preview import WoxPreview, WoxPreviewListData, WoxPreviewListItem, WoxPreviewScrollPosition, WoxPreviewType
+from .models.preview import WoxPreview, WoxPreviewListData, WoxPreviewListItem, WoxPreviewScrollPosition, WoxPreviewTag, WoxPreviewType
 from .models.query import (
     ChangeQueryParam,
     CopyParams,
@@ -308,6 +309,7 @@ __all__: List[str] = [
     "Result",
     "WoxImage",
     "WoxPreview",
+    "WoxPreviewTag",
     "WoxPreviewListData",
     "WoxPreviewListItem",
     "LogLevel",
@@ -352,6 +354,7 @@ __all__: List[str] = [
     "WoxImageType",
     # Preview
     "WoxPreview",
+    "WoxPreviewTag",
     "WoxPreviewListData",
     "WoxPreviewListItem",
     "WoxPreviewType",

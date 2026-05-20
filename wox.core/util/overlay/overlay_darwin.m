@@ -60,6 +60,7 @@ static const CGFloat kTooltipFontSize = 12;
 static const CGFloat kStickyPredictiveCorrectionThreshold = 48;
 static const CGFloat kResizeGripSize = 10;
 static const CGFloat kResizeMinSize = 64;
+static const CGFloat kWheelZoomStep = 1.12;
 
 typedef NS_OPTIONS(NSUInteger, OverlayResizeEdges) {
     OverlayResizeEdgeNone = 0,
@@ -700,6 +701,54 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 
     [self setFrame:frame display:YES];
     [self updateResizableContentFrame];
+}
+
+- (void)zoomResizableImageOverlayAtPoint:(NSPoint)windowPoint factor:(CGFloat)factor {
+    if (!self.isResizable || !self.transparentMode || ![self roundedImageSurfaceHasImage] || factor <= 0) return;
+
+    NSRect frame = self.frame;
+    if (frame.size.width <= 0 || frame.size.height <= 0) return;
+
+    CGFloat width = MAX(kResizeMinSize, frame.size.width * factor);
+    CGFloat height = MAX(kResizeMinSize, frame.size.height * factor);
+    if (self.resizeAspectRatio > 0) {
+        height = width / self.resizeAspectRatio;
+        if (height < kResizeMinSize) {
+            height = kResizeMinSize;
+            width = height * self.resizeAspectRatio;
+        }
+    }
+
+    CGFloat anchorX = windowPoint.x / frame.size.width;
+    CGFloat anchorY = windowPoint.y / frame.size.height;
+    anchorX = MIN(1.0, MAX(0.0, anchorX));
+    anchorY = MIN(1.0, MAX(0.0, anchorY));
+
+    // Feature change: edge dragging was the only resize path, which made quick preview inspection
+    // awkward for large images. Wheel zoom reuses the same aspect/min-size rules and keeps the
+    // cursor-anchored image point stable so zooming feels like adjusting the current view, not
+    // starting a separate resize mode.
+    NSRect nextFrame = NSMakeRect(NSMinX(frame) + windowPoint.x - width * anchorX,
+                                  NSMinY(frame) + windowPoint.y - height * anchorY,
+                                  width,
+                                  height);
+    [self setFrame:nextFrame display:YES];
+    [self updateResizableContentFrame];
+}
+
+- (void)scrollWheel:(NSEvent *)event {
+    if (!self.isResizable || !self.transparentMode || ![self roundedImageSurfaceHasImage]) {
+        [super scrollWheel:event];
+        return;
+    }
+
+    CGFloat delta = event.scrollingDeltaY != 0 ? event.scrollingDeltaY : event.deltaY;
+    if (delta == 0) {
+        [super scrollWheel:event];
+        return;
+    }
+
+    [self zoomResizableImageOverlayAtPoint:[event locationInWindow] factor:(delta > 0 ? kWheelZoomStep : 1.0 / kWheelZoomStep)];
 }
 
 - (NSCursor *)cursorForResizeEdges:(NSUInteger)edges {

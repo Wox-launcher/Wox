@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	"image/draw"
@@ -23,6 +24,7 @@ import (
 	"wox/setting/definition"
 	"wox/util"
 	"wox/util/clipboard"
+	"wox/util/ocr"
 	"wox/util/shell"
 
 	"github.com/cdfmlr/ellipsis"
@@ -36,6 +38,7 @@ var isKeepTextHistorySettingKey = "is_keep_text_history"
 var textHistoryDaysSettingKey = "text_history_days"
 var isKeepImageHistorySettingKey = "is_keep_image_history"
 var imageHistoryDaysSettingKey = "image_history_days"
+var clipboardImageTextRecognitionSettingKey = "image_text_recognition_enabled"
 var primaryActionSettingKey = "primary_action"
 var primaryActionValueCopy = "copy"
 var primaryActionValuePaste = "paste"
@@ -74,6 +77,7 @@ type FavoriteClipboardItem struct {
 	Height    *int    `json:"height,omitempty"`
 	FileSize  *int64  `json:"fileSize,omitempty"`
 	Alias     *string `json:"alias,omitempty"`
+	OCRText   *string `json:"ocrText,omitempty"`
 	Timestamp int64   `json:"timestamp"`
 	CreatedAt int64   `json:"createdAt"`
 }
@@ -85,6 +89,7 @@ type ClipboardDBInterface interface {
 	UpdateTimestamp(ctx context.Context, id string, timestamp int64) error
 	UpdateContent(ctx context.Context, id string, content string) error
 	UpdateAlias(ctx context.Context, id string, alias *string) error
+	UpdateOCRText(ctx context.Context, id string, ocrText *string) error
 	Delete(ctx context.Context, id string) error
 	GetRecent(ctx context.Context, limit, offset int) ([]ClipboardRecord, error)
 	GetRecentByType(ctx context.Context, recordType string, limit, offset int) ([]ClipboardRecord, error)
@@ -177,6 +182,15 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 					Label:        "i18n:plugin_clipboard_keep_image_history",
 					Suffix:       "i18n:plugin_clipboard_days",
 					DefaultValue: "3",
+				},
+			},
+			{
+				Type: definition.PluginSettingDefinitionTypeCheckBox,
+				Value: &definition.PluginSettingValueCheckBox{
+					Key:          clipboardImageTextRecognitionSettingKey,
+					Label:        "i18n:plugin_clipboard_image_text_recognition",
+					Tooltip:      "i18n:plugin_clipboard_image_text_recognition_tooltip",
+					DefaultValue: "true",
 				},
 			},
 			{
@@ -358,6 +372,13 @@ func (c *ClipboardPlugin) processClipboardData(ctx context.Context, data clipboa
 		return
 	}
 
+	if data.GetType() == clipboard.ClipboardTypeImage && c.isImageTextRecognitionEnabled(ctx) {
+		// Feature addition: clipboard image OCR is intentionally independent
+		// from screenshot OCR sidecars. The clipboard plugin owns its own index
+		// field because cb queries search clipboard records, not screenshot files.
+		c.scheduleClipboardImageTextRecognition(ctx, record.ID, record.FilePath)
+	}
+
 	// Enforce max count limit
 	if deletedCount, err := c.db.EnforceMaxCount(ctx, c.maxHistoryCount); err != nil {
 		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to enforce max count: %s", err.Error()))
@@ -447,6 +468,9 @@ func clipboardFavoriteMatchesSearch(favoriteItem FavoriteClipboardItem, search s
 		return true
 	}
 	if favoriteItem.Alias != nil && strings.Contains(strings.ToLower(*favoriteItem.Alias), normalizedSearch) {
+		return true
+	}
+	if favoriteItem.OCRText != nil && selectedType == string(clipboard.ClipboardTypeImage) && strings.Contains(strings.ToLower(*favoriteItem.OCRText), normalizedSearch) {
 		return true
 	}
 
@@ -999,19 +1023,24 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 
 	group, groupScore := c.getResultGroup(ctx, record)
 
-	// Build preview properties with available information
-	previewProperties := map[string]string{
-		"i18n:plugin_clipboard_copy_date": util.FormatTimestamp(record.Timestamp),
+	previewTags := []plugin.WoxPreviewTag{
+		{Label: util.FormatTimestamp(record.Timestamp), Tooltip: "i18n:plugin_clipboard_copy_date"},
 	}
 
 	if record.Width != nil && record.Height != nil {
 		// Width and height now share one value because the preview shell only
 		// shows metadata values by default. Keeping dimensions together saves
 		// pill space while preserving the exact image size in the tooltip.
-		previewProperties["i18n:plugin_clipboard_image_dimensions"] = fmt.Sprintf("%dx%d", *record.Width, *record.Height)
+		previewTags = append(previewTags, plugin.WoxPreviewTag{Label: fmt.Sprintf("%dx%d", *record.Width, *record.Height), Tooltip: "i18n:plugin_clipboard_image_dimensions"})
 	}
 	if record.FileSize != nil {
-		previewProperties["i18n:plugin_clipboard_image_size"] = c.formatFileSize(*record.FileSize)
+		previewTags = append(previewTags, plugin.WoxPreviewTag{Label: c.formatFileSize(*record.FileSize), Tooltip: "i18n:plugin_clipboard_image_size"})
+	}
+	if record.OCRText != nil && strings.TrimSpace(*record.OCRText) != "" {
+		// Feature addition: OCR uses an explicit tag so the visible footer says
+		// "OCR" while the tooltip carries the full recognized text. Legacy
+		// PreviewProperties would show a truncated value as the tag label.
+		previewTags = append(previewTags, plugin.WoxPreviewTag{Label: "OCR", Tooltip: strings.TrimSpace(*record.OCRText)})
 	}
 
 	return plugin.QueryResult{
@@ -1025,7 +1054,7 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 			// Keep the inline preview on the cached thumbnail for query performance, but route
 			// click-to-enlarge through the original PNG so the native overlay shows the real image.
 			PreviewOverlayData: overlayWoxImage.String(),
-			PreviewProperties:  previewProperties,
+			PreviewTags:        previewTags,
 		},
 		Score: record.Timestamp,
 		Actions: []plugin.QueryResultAction{
@@ -1358,6 +1387,48 @@ func (c *ClipboardPlugin) isKeepImageHistory(ctx context.Context) bool {
 	return c.api.GetSetting(ctx, isKeepImageHistorySettingKey) == "true"
 }
 
+// isImageTextRecognitionEnabled checks whether clipboard images should be OCR-indexed.
+func (c *ClipboardPlugin) isImageTextRecognitionEnabled(ctx context.Context) bool {
+	return c.api.GetSetting(ctx, clipboardImageTextRecognitionSettingKey) == "true"
+}
+
+func (c *ClipboardPlugin) scheduleClipboardImageTextRecognition(ctx context.Context, recordID string, imagePath string) {
+	if recordID == "" || imagePath == "" {
+		return
+	}
+
+	util.Go(ctx, "clipboard image text recognition", func() {
+		c.recognizeClipboardImageText(ctx, recordID, imagePath)
+	})
+}
+
+func (c *ClipboardPlugin) recognizeClipboardImageText(ctx context.Context, recordID string, imagePath string) {
+	result, err := ocr.Recognize(ctx, ocr.Request{ImagePath: imagePath})
+	if err != nil {
+		if errors.Is(err, ocr.ErrUnsupported) || errors.Is(err, ocr.ErrUnavailable) {
+			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("clipboard image text recognition skipped: id=%s err=%s", recordID, err.Error()))
+			return
+		}
+		c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("clipboard image text recognition failed: id=%s path=%s err=%s", recordID, imagePath, err.Error()))
+		return
+	}
+
+	text := strings.TrimSpace(result.Text)
+	if text == "" {
+		c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("clipboard image text recognition produced no text: id=%s engine=%s", recordID, result.Engine))
+		return
+	}
+
+	// Feature addition: update only the OCR column after insert so clipboard
+	// capture stays fast and image persistence succeeds even when system OCR
+	// is slow, missing, or returns no text.
+	if err := c.db.UpdateOCRText(ctx, recordID, &text); err != nil {
+		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to save clipboard image OCR text: id=%s err=%s", recordID, err.Error()))
+		return
+	}
+	c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("clipboard image text recognition saved: id=%s engine=%s", recordID, result.Engine))
+}
+
 // getTextHistoryDays returns the number of days to keep text history
 func (c *ClipboardPlugin) getTextHistoryDays(ctx context.Context) int {
 	textHistoryDaysStr := c.api.GetSetting(ctx, textHistoryDaysSettingKey)
@@ -1603,6 +1674,7 @@ func (c *ClipboardPlugin) addToFavorites(ctx context.Context, record ClipboardRe
 		Height:    record.Height,
 		FileSize:  record.FileSize,
 		Alias:     record.Alias,
+		OCRText:   record.OCRText,
 		Timestamp: record.Timestamp,
 		CreatedAt: record.CreatedAt.Unix(),
 	}
@@ -1642,6 +1714,7 @@ func (c *ClipboardPlugin) convertFavoriteToRecord(item FavoriteClipboardItem) Cl
 		Height:     item.Height,
 		FileSize:   item.FileSize,
 		Alias:      item.Alias,
+		OCRText:    item.OCRText,
 		Timestamp:  item.Timestamp,
 		IsFavorite: true,
 		CreatedAt:  time.Unix(item.CreatedAt, 0),

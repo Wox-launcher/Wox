@@ -244,6 +244,7 @@ static BOOL TryEnableAcrylic(HWND hwnd)
 #define MIN_RESIZE_SIZE_DIP 64
 #define IMAGE_SHADOW_PADDING_DIP 20
 #define IMAGE_SHADOW_MAX_ALPHA 96
+#define WHEEL_ZOOM_STEP 1.12f
 
 #define TIMER_AUTOCLOSE 1
 #define TIMER_TRACK 2
@@ -1291,6 +1292,101 @@ static void UpdateTransparentImageShadow(OverlayWindow *ow)
     ReleaseDC(NULL, screenDC);
 }
 
+static void MoveTransparentImageShadow(OverlayWindow *ow)
+{
+    if (!ow || !ow->transparent || !ow->hwnd || !ow->shadowHwnd || !IsWindow(ow->shadowHwnd))
+        return;
+
+    RECT windowRect;
+    if (!GetWindowRect(ow->hwnd, &windowRect))
+        return;
+
+    int imageW = windowRect.right - windowRect.left;
+    int imageH = windowRect.bottom - windowRect.top;
+    if (imageW <= 0 || imageH <= 0)
+        return;
+
+    UINT dpi = ow->dpi ? ow->dpi : GetWindowDpiSafe(ow->hwnd, 96);
+    int pad = GetTransparentImageShadowPadding(dpi);
+    int shadowW = imageW + pad * 2;
+    int shadowH = imageH + pad * 2;
+    if (pad <= 0 || shadowW <= 0 || shadowH <= 0)
+        return;
+
+    // Optimization: dragging does not change image size, so the expensive shadow bitmap can stay
+    // cached in the layered shadow HWND. Moving that HWND with the image avoids per-mouse-move
+    // DIB allocation and reduces flicker when crossing monitors.
+    SetWindowPos(ow->shadowHwnd, ow->hwnd, windowRect.left - pad, windowRect.top - pad, shadowW, shadowH, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+}
+
+static BOOL UpdateTransparentImageLayer(OverlayWindow *ow)
+{
+    if (!ow || !ow->transparent || !ow->hwnd || !IsWindow(ow->hwnd) || !ow->iconBitmap)
+        return FALSE;
+
+    RECT windowRect;
+    if (!GetWindowRect(ow->hwnd, &windowRect))
+        return FALSE;
+
+    int imageW = windowRect.right - windowRect.left;
+    int imageH = windowRect.bottom - windowRect.top;
+    if (imageW <= 0 || imageH <= 0)
+        return FALSE;
+
+    HDC screenDC = GetDC(NULL);
+    if (!screenDC)
+        return FALSE;
+
+    HDC layerDC = CreateCompatibleDC(screenDC);
+    if (!layerDC)
+    {
+        ReleaseDC(NULL, screenDC);
+        return FALSE;
+    }
+
+    void *bits = NULL;
+    HBITMAP layerBitmap = Create32BitDIBSection(screenDC, imageW, imageH, &bits);
+    if (!layerBitmap || !bits)
+    {
+        if (layerBitmap)
+            DeleteObject(layerBitmap);
+        DeleteDC(layerDC);
+        ReleaseDC(NULL, screenDC);
+        return FALSE;
+    }
+    ZeroMemory(bits, (SIZE_T)imageW * (SIZE_T)imageH * sizeof(uint32_t));
+
+    HGDIOBJ oldLayer = SelectObject(layerDC, layerBitmap);
+    HDC imageDC = CreateCompatibleDC(screenDC);
+    HGDIOBJ oldImage = NULL;
+    if (imageDC)
+    {
+        oldImage = SelectObject(imageDC, ow->iconBitmap);
+        BLENDFUNCTION imageBlend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+        AlphaBlend(layerDC, 0, 0, imageW, imageH, imageDC, 0, 0, ow->iconWidth, ow->iconHeight, imageBlend);
+    }
+
+    POINT dst = {windowRect.left, windowRect.top};
+    SIZE size = {imageW, imageH};
+    POINT src = {0, 0};
+    BLENDFUNCTION layerBlend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    // Bug fix: regular WM_PAINT on a WS_EX_LAYERED image window can leave old scaled frames behind
+    // during fast wheel zoom. Submitting the whole ARGB surface through UpdateLayeredWindow replaces
+    // the previous pixels atomically, matching the shadow window's stable update path.
+    BOOL updated = UpdateLayeredWindow(ow->hwnd, screenDC, &dst, &size, layerDC, &src, 0, &layerBlend, ULW_ALPHA);
+
+    if (oldImage)
+        SelectObject(imageDC, oldImage);
+    if (imageDC)
+        DeleteDC(imageDC);
+    if (oldLayer)
+        SelectObject(layerDC, oldLayer);
+    DeleteObject(layerBitmap);
+    DeleteDC(layerDC);
+    ReleaseDC(NULL, screenDC);
+    return updated;
+}
+
 static void ApplyAspectRatioToSizingRect(OverlayWindow *ow, WPARAM edge, RECT *rect)
 {
     if (!ow || !rect || ow->aspectRatio <= 0.0f)
@@ -1364,6 +1460,56 @@ static void ApplyAspectRatioToSizingRect(OverlayWindow *ow, WPARAM edge, RECT *r
         rect->top = cy - newHeight / 2;
         rect->bottom = rect->top + newHeight;
     }
+}
+
+static BOOL ZoomResizableImageOverlayAtScreenPoint(OverlayWindow *ow, POINT screenPt, int wheelDelta)
+{
+    if (!ow || !ow->hwnd || !ow->transparent || !ow->resizable || !ow->iconBitmap || wheelDelta == 0)
+        return FALSE;
+
+    RECT wr;
+    if (!GetWindowRect(ow->hwnd, &wr))
+        return FALSE;
+
+    int currentWidth = wr.right - wr.left;
+    int currentHeight = wr.bottom - wr.top;
+    if (currentWidth <= 0 || currentHeight <= 0)
+        return FALSE;
+
+    UINT dpi = ow->dpi ? ow->dpi : GetWindowDpiSafe(ow->hwnd, 96);
+    int minSize = MulDiv(MIN_RESIZE_SIZE_DIP, (int)dpi, 96);
+    float factor = powf(WHEEL_ZOOM_STEP, (float)wheelDelta / (float)WHEEL_DELTA);
+    int newWidth = (int)roundf((float)currentWidth * factor);
+    int newHeight = (int)roundf((float)currentHeight * factor);
+
+    if (ow->aspectRatio > 0.0f)
+    {
+        newWidth = max(minSize, newWidth);
+        newHeight = (int)roundf((float)newWidth / ow->aspectRatio);
+        if (newHeight < minSize)
+        {
+            newHeight = minSize;
+            newWidth = (int)roundf((float)newHeight * ow->aspectRatio);
+        }
+    }
+    else
+    {
+        newWidth = max(minSize, newWidth);
+        newHeight = max(minSize, newHeight);
+    }
+
+    float anchorX = (float)(screenPt.x - wr.left) / (float)currentWidth;
+    float anchorY = (float)(screenPt.y - wr.top) / (float)currentHeight;
+    anchorX = min(1.0f, max(0.0f, anchorX));
+    anchorY = min(1.0f, max(0.0f, anchorY));
+
+    // Feature change: transparent image overlays could only be resized from their edges, which is
+    // slow when inspecting preview images. Wheel zoom uses the same aspect/min-size constraints and
+    // keeps the pixel under the cursor anchored so the overlay scales in place instead of jumping.
+    int newX = screenPt.x - (int)roundf((float)newWidth * anchorX);
+    int newY = screenPt.y - (int)roundf((float)newHeight * anchorY);
+    SetWindowPos(ow->hwnd, NULL, newX, newY, newWidth, newHeight, SWP_NOACTIVATE | SWP_NOZORDER);
+    return TRUE;
 }
 
 static void ShowTooltipWindow(OverlayWindow *ow, HWND owner, POINT clientPt);
@@ -1594,6 +1740,7 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
         SetWindowRgn(ow->hwnd, NULL, TRUE);
         UINT pref = DWMWCP_DONOTROUND;
         DwmSetWindowAttribute(ow->hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &pref, sizeof(pref));
+        UpdateTransparentImageLayer(ow);
         UpdateTransparentImageShadow(ow);
     }
     else
@@ -1725,6 +1872,16 @@ static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BO
             SetWindowLongPtrW(ow->hwnd, GWL_STYLE, updatedStyle);
             SetWindowPos(ow->hwnd, NULL, 0, 0, 0, 0,
                          SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+        }
+
+        LONG_PTR exStyle = GetWindowLongPtrW(ow->hwnd, GWL_EXSTYLE);
+        LONG_PTR updatedExStyle = ow->transparent ? (exStyle | WS_EX_LAYERED) : (exStyle & ~WS_EX_LAYERED);
+        if (updatedExStyle != exStyle)
+        {
+            // Bug fix: URL image overlays can reuse a non-transparent loading window for the final
+            // transparent image. Keep the extended layered style aligned with the current payload so
+            // the image surface can use the atomic UpdateLayeredWindow path instead of stale paint.
+            SetWindowLongPtrW(ow->hwnd, GWL_EXSTYLE, updatedExStyle);
         }
     }
     if (!isNew && previousStickyWindowPid != ow->stickyWindowPid)
@@ -2038,6 +2195,19 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
         if (!ow)
             return 0;
         ow->dpi = HIWORD(wParam);
+        if (ow->dragging)
+        {
+            // Bug fix: crossing monitors with different DPI sends WM_DPICHANGED while the custom
+            // drag loop is still positioning the overlay from raw screen pixels. Re-running the
+            // normal anchor layout here snaps preview overlays back to the primary work area, so
+            // keep the drag-owned frame and only refresh DPI-sensitive transparent drawing assets.
+            if (ow->transparent)
+            {
+                UpdateTransparentImageLayer(ow);
+                UpdateTransparentImageShadow(ow);
+            }
+            return 0;
+        }
         RECT *suggested = (RECT *)lParam;
         if (suggested)
         {
@@ -2080,8 +2250,8 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             GetClientRect(hwnd, &client);
             ow->iconRect = client;
             SetWindowRgn(hwnd, NULL, TRUE);
+            UpdateTransparentImageLayer(ow);
             UpdateTransparentImageShadow(ow);
-            InvalidateRect(hwnd, NULL, TRUE);
             return 0;
         }
         break;
@@ -2108,27 +2278,11 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
 
         if (ow->transparent)
         {
-            if (ow->iconBitmap)
-            {
-                HDC memDC = CreateCompatibleDC(hdc);
-                if (memDC)
-                {
-                    HGDIOBJ oldBmp = SelectObject(memDC, ow->iconBitmap);
-                    BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-                    AlphaBlend(hdc, ow->iconRect.left, ow->iconRect.top,
-                               ow->iconRect.right - ow->iconRect.left,
-                               ow->iconRect.bottom - ow->iconRect.top,
-                               memDC, 0, 0, ow->iconWidth, ow->iconHeight, bf);
-                    if (oldBmp)
-                        SelectObject(memDC, oldBmp);
-                    DeleteDC(memDC);
-                }
-            }
-
+            // Bug fix: transparent image overlays are painted by UpdateTransparentImageLayer.
+            // Leaving WM_PAINT to AlphaBlend into a layered client DC during rapid wheel zoom caused
+            // stale scaled image rectangles to remain in DWM composition until a later repaint.
             if (paintBuf)
-            {
-                EndBufferedPaint(paintBuf, TRUE);
-            }
+                EndBufferedPaint(paintBuf, FALSE);
             EndPaint(hwnd, &ps);
             return 0;
         }
@@ -2324,9 +2478,9 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             SetWindowPos(hwnd, NULL, ow->dragWindowOrigin.x + dx, ow->dragWindowOrigin.y + dy, 0, 0,
                          SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOSIZE);
             // Feature change: pinned screenshots use a companion shadow HWND. Moving only the image
-            // would leave the shadow behind, so keep both native windows locked together while
-            // dragging.
-            UpdateTransparentImageShadow(ow);
+            // would leave the shadow behind. Dragging changes only origin, so move the cached
+            // shadow surface instead of rebuilding it for every mouse event.
+            MoveTransparentImageShadow(ow);
         }
         return 0;
     }
@@ -2348,6 +2502,15 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             DestroyWindow(hwnd);
         }
         return 0;
+    }
+    case WM_MOUSEWHEEL:
+    {
+        if (!ow)
+            break;
+        POINT screenPt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+        if (ZoomResizableImageOverlayAtScreenPoint(ow, screenPt, GET_WHEEL_DELTA_WPARAM(wParam)))
+            return 0;
+        break;
     }
     case WM_LBUTTONDOWN:
     {
@@ -2673,15 +2836,6 @@ static void HandleShowCommand(OverlayPayload *payload)
         free(ow);
         return;
     }
-    if (ow->transparent)
-    {
-        // Bug fix: transparent image overlays use WS_EX_LAYERED, but the old Windows path never
-        // initialized the layered opacity. That left the native pin window successfully created and
-        // positioned while still visually absent. Use a fully opaque layered surface so WM_PAINT can
-        // display the alpha-blended screenshot without a system frame.
-        SetLayeredWindowAttributes(ow->hwnd, 0, 255, LWA_ALPHA);
-    }
-
     AddOverlay(ow);
     ApplyOverlayLayout(ow);
     if (ow->stickyWindowPid > 0 && !ow->targetReady)

@@ -40,6 +40,15 @@ const (
 	WoxPreviewScrollPositionBottom = "bottom" // scroll to bottom after preview first show
 )
 
+// WoxPreviewTag is the metadata chip contract shown below the preview content.
+// PreviewProperties used to force metadata into a key/value shape even though
+// the UI now displays compact tags, so tags keep the visible label separate
+// from the optional explanatory tooltip.
+type WoxPreviewTag struct {
+	Label   string
+	Tooltip string
+}
+
 type WoxPreview struct {
 	PreviewType WoxPreviewType
 	PreviewData string
@@ -47,8 +56,12 @@ type WoxPreview struct {
 	// preview in the native overlay. PreviewData often points at a lightweight thumbnail, which is
 	// correct for the inline preview but not enough for the click-to-enlarge flow.
 	PreviewOverlayData string
-	PreviewProperties  map[string]string // key support i18n
-	ScrollPosition     WoxPreviewScrollPosition
+	PreviewTags        []WoxPreviewTag
+	// Deprecated: use PreviewTags instead. The UI still maps each legacy key/value
+	// pair to a tag with value as Label and key as Tooltip so older plugins keep
+	// their compact metadata display without changing their payload.
+	PreviewProperties map[string]string // key support i18n
+	ScrollPosition    WoxPreviewScrollPosition
 }
 
 func (p *WoxPreview) IsEmpty() bool {

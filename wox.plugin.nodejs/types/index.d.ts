@@ -471,6 +471,7 @@ export type QueryReturn = QueryResponse | LegacyQueryReturn
  *   Preview: {
  *     PreviewType: "markdown",
  *     PreviewData: "# Calculator\n\nA simple calculator app",
+ *     PreviewTags: [{ Label: "System", Tooltip: "Source" }],
  *     PreviewProperties: {}
  *   },
  *   Tails: [
@@ -1672,6 +1673,24 @@ export interface WoxPreviewListData {
 }
 
 /**
+ * Metadata tag shown below preview content.
+ *
+ * The preview footer now renders compact tags instead of a key/value table, so
+ * Label is the visible chip text and Tooltip provides optional hover context.
+ */
+export interface WoxPreviewTag {
+  /**
+   * Visible text shown inside the metadata tag.
+   */
+  Label: string
+
+  /**
+   * Optional hover text for the metadata tag.
+   */
+  Tooltip?: string
+}
+
+/**
  * Preview panel content for a result.
  *
  * When a result is selected, the preview panel displays additional
@@ -1683,6 +1702,7 @@ export interface WoxPreviewListData {
  * {
  *   PreviewType: "markdown",
  *   PreviewData: "# Title\n\nDescription with **formatting**",
+ *   PreviewTags: [{ Label: "17 chars", Tooltip: "Copy characters" }],
  *   PreviewProperties: {}
  * }
  *
@@ -1690,13 +1710,15 @@ export interface WoxPreviewListData {
  * {
  *   PreviewType: "image",
  *   PreviewData: "https://example.com/image.png",
- *   PreviewProperties: { "height": "300" }
+ *   PreviewTags: [{ Label: "300 px", Tooltip: "Height" }],
+ *   PreviewProperties: {}
  * }
  *
  * // URL preview
  * {
  *   PreviewType: "url",
  *   PreviewData: "https://github.com/Wox-launcher/Wox",
+ *   PreviewTags: [],
  *   PreviewProperties: {}
  * }
  *
@@ -1713,6 +1735,7 @@ export interface WoxPreviewListData {
  *       }
  *     ]
  *   } satisfies WoxPreviewListData),
+ *   PreviewTags: [{ Label: "Done", Tooltip: "Status" }],
  *   PreviewProperties: {}
  * }
  * ```
@@ -1737,15 +1760,15 @@ export interface WoxPreview {
    */
   PreviewData: string
   /**
-   * Additional properties for the preview.
+   * Metadata tags shown below the preview content.
+   */
+  PreviewTags?: WoxPreviewTag[]
+  /**
+   * @deprecated Use PreviewTags instead.
    *
-   * Type-specific options like height, width, scroll position, etc.
-   *
-   * @example
-   * ```typescript
-   * { "height": "400", "width": "600" }
-   * { "scrollPosition": "top" }
-   * ```
+   * The launcher still maps each legacy key/value pair to a metadata tag with
+   * the value as Label and the key as Tooltip, so existing plugins remain
+   * compatible while new plugins can use the tag contract directly.
    */
   PreviewProperties: Record<string, string>
 }

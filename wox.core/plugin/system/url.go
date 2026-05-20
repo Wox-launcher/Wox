@@ -110,7 +110,7 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryR
 				Actions: []plugin.QueryResultAction{
 					{
 						Name:        "i18n:plugin_url_open",
-						Icon:        common.OpenIcon,
+						Icon:        common.PluginBrowserIcon,
 						ContextData: contextData,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							openErr := shell.Open(history.Url)

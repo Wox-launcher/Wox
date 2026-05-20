@@ -414,7 +414,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
     return WoxPreviewScaffold(
       woxTheme: widget.woxTheme,
       scrollController: scrollController,
-      properties: launcherController.supportsPreviewFullscreen(widget.woxPreview) && launcherController.isPreviewFullscreen.value ? {} : widget.woxPreview.previewProperties,
+      tags: launcherController.supportsPreviewFullscreen(widget.woxPreview) && launcherController.isPreviewFullscreen.value ? const [] : widget.woxPreview.previewTags,
       contentHandlesScrolling: isPdfViewer || contentHandlesScrolling,
       child: contentWidget,
     );

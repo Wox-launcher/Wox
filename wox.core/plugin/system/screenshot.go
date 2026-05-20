@@ -2,9 +2,12 @@ package system
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,6 +19,7 @@ import (
 	"wox/setting/validator"
 	"wox/util"
 	"wox/util/clipboard"
+	"wox/util/ocr"
 	"wox/util/overlay"
 	"wox/util/shell"
 
@@ -28,7 +32,9 @@ var screenshotHistoryPreviewWidth = 400
 var screenshotHistoryIconWidth = 40
 var screenshotPinnedOverlayPrefix = "wox_screenshot_pin_"
 var screenshotRetentionDaysSettingKey = "retention_days"
+var screenshotOCREnabledSettingKey = "ocr_enabled"
 var screenshotDefaultRetentionDays = 30
+var screenshotOCRSidecarVersion = 1
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &ScreenshotPlugin{})
@@ -66,6 +72,15 @@ func (p *ScreenshotPlugin) GetMetadata() plugin.Metadata {
 			"Linux",
 		},
 		SettingDefinitions: []definition.PluginSettingDefinitionItem{
+			{
+				Type: definition.PluginSettingDefinitionTypeCheckBox,
+				Value: &definition.PluginSettingValueCheckBox{
+					Key:          screenshotOCREnabledSettingKey,
+					Label:        "i18n:plugin_screenshot_ocr_enabled",
+					Tooltip:      "i18n:plugin_screenshot_ocr_enabled_tooltip",
+					DefaultValue: "true",
+				},
+			},
 			{
 				Type: definition.PluginSettingDefinitionTypeTextBox,
 				Value: &definition.PluginSettingValueTextBox{
@@ -146,6 +161,17 @@ type screenshotHistoryItem struct {
 	fileName  string
 	size      int64
 	timestamp int64
+	ocrText   string
+}
+
+type screenshotOCRSidecar struct {
+	Version          int    `json:"version"`
+	Platform         string `json:"platform"`
+	Engine           string `json:"engine"`
+	Text             string `json:"text"`
+	RecognizedAt     int64  `json:"recognizedAt"`
+	SourceSize       int64  `json:"sourceSize"`
+	SourceModifiedAt int64  `json:"sourceModifiedAt"`
 }
 
 func (p *ScreenshotPlugin) newScreenshotResult() plugin.QueryResult {
@@ -173,7 +199,10 @@ func (p *ScreenshotPlugin) queryScreenshotHistory(query plugin.Query) ([]plugin.
 	results := make([]plugin.QueryResult, 0, len(items))
 	search := strings.ToLower(strings.TrimSpace(query.Search))
 	for _, item := range items {
-		if search != "" && !strings.Contains(strings.ToLower(item.fileName), search) && !strings.Contains(strings.ToLower(util.FormatTimestamp(item.timestamp)), search) {
+		if search != "" &&
+			!strings.Contains(strings.ToLower(item.fileName), search) &&
+			!strings.Contains(strings.ToLower(util.FormatTimestamp(item.timestamp)), search) &&
+			!strings.Contains(strings.ToLower(item.ocrText), search) {
 			continue
 		}
 
@@ -210,11 +239,16 @@ func (p *ScreenshotPlugin) listScreenshotHistory() ([]screenshotHistoryItem, err
 		// Reusing the existing screenshot export directory keeps the history feature storage-free.
 		// The file modification time is the simplest durable ordering signal for captures already
 		// written by Flutter, and zero-byte reservation files are skipped above.
+		ocrText := ""
+		if sidecar, sidecarErr := p.readScreenshotOCRSidecar(filepath.Join(screenshotDirectory, entry.Name()), info); sidecarErr == nil {
+			ocrText = sidecar.Text
+		}
 		items = append(items, screenshotHistoryItem{
 			path:      filepath.Join(screenshotDirectory, entry.Name()),
 			fileName:  entry.Name(),
 			size:      info.Size(),
 			timestamp: info.ModTime().UnixMilli(),
+			ocrText:   ocrText,
 		})
 	}
 
@@ -227,6 +261,21 @@ func (p *ScreenshotPlugin) listScreenshotHistory() ([]screenshotHistoryItem, err
 
 func (p *ScreenshotPlugin) getScreenshotDirectory() string {
 	return filepath.Join(util.GetLocation().GetWoxDataDirectory(), "screenshots")
+}
+
+func (p *ScreenshotPlugin) isScreenshotOCREnabled(ctx context.Context) bool {
+	value := strings.TrimSpace(p.api.GetSetting(ctx, screenshotOCREnabledSettingKey))
+	if value == "" {
+		return true
+	}
+	enabled, err := strconv.ParseBool(value)
+	if err != nil {
+		// OCR should default to enabled when the stored checkbox value is missing or malformed. The
+		// previous screenshot history only searched filenames, and treating bad state as disabled
+		// would silently hide the new text-search capability until the user discovers the setting.
+		return true
+	}
+	return enabled
 }
 
 func (p *ScreenshotPlugin) getScreenshotRetentionDays(ctx context.Context) int {
@@ -306,6 +355,7 @@ func (p *ScreenshotPlugin) cleanupExpiredScreenshots(ctx context.Context) {
 		}
 		removedCount++
 		p.removeScreenshotHistoryThumbnails(ctx, item)
+		p.removeScreenshotOCRSidecar(ctx, item.path)
 	}
 
 	if removedCount > 0 {
@@ -439,6 +489,103 @@ func (p *ScreenshotPlugin) removeScreenshotHistoryThumbnails(ctx context.Context
 	}
 }
 
+func (p *ScreenshotPlugin) screenshotOCRSidecarPath(screenshotPath string) string {
+	return screenshotPath + ".ocr.json"
+}
+
+func (p *ScreenshotPlugin) readScreenshotOCRSidecar(screenshotPath string, info os.FileInfo) (screenshotOCRSidecar, error) {
+	sidecarPath := p.screenshotOCRSidecarPath(screenshotPath)
+	data, err := os.ReadFile(sidecarPath)
+	if err != nil {
+		return screenshotOCRSidecar{}, err
+	}
+
+	var sidecar screenshotOCRSidecar
+	if err := json.Unmarshal(data, &sidecar); err != nil {
+		return screenshotOCRSidecar{}, fmt.Errorf("failed to parse screenshot ocr sidecar: %w", err)
+	}
+	if sidecar.Version != screenshotOCRSidecarVersion {
+		return screenshotOCRSidecar{}, fmt.Errorf("unsupported screenshot ocr sidecar version: %d", sidecar.Version)
+	}
+	if sidecar.SourceSize != info.Size() || sidecar.SourceModifiedAt != info.ModTime().UnixMilli() {
+		// Sidecars are intentionally file-adjacent instead of stored in a database. Matching size
+		// and mtime prevents an old OCR result from being reused if a PNG is replaced at the same path.
+		return screenshotOCRSidecar{}, fmt.Errorf("screenshot ocr sidecar is stale")
+	}
+	sidecar.Text = strings.TrimSpace(sidecar.Text)
+	return sidecar, nil
+}
+
+func (p *ScreenshotPlugin) removeScreenshotOCRSidecar(ctx context.Context, screenshotPath string) {
+	sidecarPath := p.screenshotOCRSidecarPath(screenshotPath)
+	if !util.IsFileExists(sidecarPath) {
+		return
+	}
+	if err := os.Remove(sidecarPath); err != nil && !os.IsNotExist(err) {
+		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to remove expired screenshot ocr sidecar: path=%s err=%s", sidecarPath, err.Error()))
+	}
+}
+
+func (p *ScreenshotPlugin) scheduleScreenshotOCR(ctx context.Context, screenshotPath string) {
+	if !p.isScreenshotOCREnabled(ctx) {
+		return
+	}
+
+	// OCR runs after the screenshot file is already durable. The old history path had no text index,
+	// but blocking screenshot completion on platform OCR would make capture feel unreliable on
+	// machines where Windows/macOS OCR models are missing or still warming up.
+	util.Go(ctx, "recognize screenshot text", func() {
+		if err := p.writeScreenshotOCRSidecar(ctx, screenshotPath); err != nil {
+			if errors.Is(err, ocr.ErrUnsupported) || errors.Is(err, ocr.ErrUnavailable) {
+				p.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("screenshot ocr skipped: path=%s err=%s", screenshotPath, err.Error()))
+				return
+			}
+			p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to recognize screenshot text: path=%s err=%s", screenshotPath, err.Error()))
+		}
+	})
+}
+
+func (p *ScreenshotPlugin) writeScreenshotOCRSidecar(ctx context.Context, screenshotPath string) error {
+	info, err := os.Stat(screenshotPath)
+	if err != nil {
+		return fmt.Errorf("failed to stat screenshot for ocr: %w", err)
+	}
+
+	result, err := ocr.Recognize(ctx, ocr.Request{ImagePath: screenshotPath})
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(result.Text) == "" {
+		return nil
+	}
+
+	sidecar := screenshotOCRSidecar{
+		Version:          screenshotOCRSidecarVersion,
+		Platform:         runtime.GOOS,
+		Engine:           result.Engine,
+		Text:             result.Text,
+		RecognizedAt:     time.Now().UnixMilli(),
+		SourceSize:       info.Size(),
+		SourceModifiedAt: info.ModTime().UnixMilli(),
+	}
+	data, err := json.MarshalIndent(sidecar, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to encode screenshot ocr sidecar: %w", err)
+	}
+
+	sidecarPath := p.screenshotOCRSidecarPath(screenshotPath)
+	tmpPath := sidecarPath + ".tmp"
+	if err := os.WriteFile(tmpPath, data, 0o644); err != nil {
+		return fmt.Errorf("failed to write screenshot ocr sidecar: %w", err)
+	}
+	if err := os.Rename(tmpPath, sidecarPath); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("failed to replace screenshot ocr sidecar: %w", err)
+	}
+	p.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("screenshot ocr sidecar written: path=%s engine=%s", sidecarPath, result.Engine))
+	return nil
+}
+
 func (p *ScreenshotPlugin) screenshotHistoryResult(item screenshotHistoryItem) plugin.QueryResult {
 	group, groupScore := p.screenshotHistoryGroup(item.timestamp)
 	previewImage, iconImage, thumbnailsReady := p.getScreenshotHistoryThumbnails(item)
@@ -449,6 +596,17 @@ func (p *ScreenshotPlugin) screenshotHistoryResult(item screenshotHistoryItem) p
 		// warm-up finishes; preview can still open the original file on explicit selection.
 		previewImage = common.NewWoxImageAbsolutePath(item.path)
 		iconImage = screenshotIcon
+	}
+
+	previewTags := []plugin.WoxPreviewTag{
+		{Label: util.FormatTimestamp(item.timestamp), Tooltip: "i18n:plugin_screenshot_history_date"},
+		{Label: p.formatFileSize(item.size), Tooltip: "i18n:plugin_screenshot_history_size"},
+	}
+	if strings.TrimSpace(item.ocrText) != "" {
+		// Feature addition: OCR uses an explicit tag so the visible footer says
+		// "OCR" while the tooltip carries the full recognized text. Legacy
+		// PreviewProperties would show a truncated value as the tag label.
+		previewTags = append(previewTags, plugin.WoxPreviewTag{Label: "OCR", Tooltip: strings.TrimSpace(item.ocrText)})
 	}
 
 	return plugin.QueryResult{
@@ -463,10 +621,7 @@ func (p *ScreenshotPlugin) screenshotHistoryResult(item screenshotHistoryItem) p
 			// Thumbnail previews keep screenshot search responsive, while the overlay click should
 			// reuse the original screenshot file so users can inspect it at full available size.
 			PreviewOverlayData: overlayImage.String(),
-			PreviewProperties: map[string]string{
-				"i18n:plugin_screenshot_history_date": util.FormatTimestamp(item.timestamp),
-				"i18n:plugin_screenshot_history_size": p.formatFileSize(item.size),
-			},
+			PreviewTags:        previewTags,
 		},
 		Score: item.timestamp,
 		Actions: []plugin.QueryResultAction{
@@ -611,6 +766,7 @@ func (p *ScreenshotPlugin) captureScreenshot(ctx context.Context, actionContext 
 			// can repair the cache.
 			p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to generate screenshot history thumbnails: path=%s err=%s", result.ScreenshotPath, err.Error()))
 		}
+		p.scheduleScreenshotOCR(ctx, result.ScreenshotPath)
 		if result.PinToScreen {
 			// Flutter owns final image composition, but the pinned desktop window belongs in Go because
 			// util/overlay is already the native surface abstraction used by core. Branching on the

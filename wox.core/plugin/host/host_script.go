@@ -805,11 +805,40 @@ func parseScriptPreview(itemMap map[string]interface{}) (plugin.WoxPreview, bool
 	if propertiesMap == nil {
 		propertiesMap = getMapFromMap(previewMap, "PreviewProperties")
 	}
+	tagsArray := getSliceFromMap(previewMap, "tags")
+	if tagsArray == nil {
+		tagsArray = getSliceFromMap(previewMap, "preview_tags")
+	}
+	if tagsArray == nil {
+		tagsArray = getSliceFromMap(previewMap, "previewTags")
+	}
+	if tagsArray == nil {
+		tagsArray = getSliceFromMap(previewMap, "PreviewTags")
+	}
 
 	preview := plugin.WoxPreview{
 		PreviewType:    previewType,
 		PreviewData:    previewData,
 		ScrollPosition: scrollPosition,
+	}
+	if len(tagsArray) > 0 {
+		// Script previews now accept explicit tags because the launcher metadata
+		// UI is tag-based. Keep the parser permissive across naming styles so
+		// shell scripts do not need a Go-specific payload shape.
+		preview.PreviewTags = make([]plugin.WoxPreviewTag, 0, len(tagsArray))
+		for _, item := range tagsArray {
+			tagMap, ok := item.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			preview.PreviewTags = append(preview.PreviewTags, plugin.WoxPreviewTag{
+				Label: getFirstStringFromMap(tagMap, []string{"label", "Label"}),
+				Tooltip: getFirstStringFromMap(tagMap, []string{
+					"tooltip",
+					"Tooltip",
+				}),
+			})
+		}
 	}
 	if len(propertiesMap) > 0 {
 		preview.PreviewProperties = make(map[string]string, len(propertiesMap))

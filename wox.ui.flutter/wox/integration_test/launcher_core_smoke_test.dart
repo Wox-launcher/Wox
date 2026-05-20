@@ -578,7 +578,7 @@ void registerLauncherCoreSmokeTests() {
         title: 'Compress 1 image',
         subTitle: 'Synthetic smoke result for list preview',
         icon: WoxImage.empty(),
-        preview: WoxPreview(previewType: WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_LIST.code, previewData: previewData, previewProperties: const {}, scrollPosition: ''),
+        preview: WoxPreview(previewType: WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_LIST.code, previewData: previewData, scrollPosition: ''),
         score: 100,
         group: '',
         groupScore: 0,

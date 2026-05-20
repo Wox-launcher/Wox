@@ -3834,7 +3834,6 @@ class WoxLauncherController extends GetxController {
       result.value.data.preview = WoxPreview(
         previewType: WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code,
         previewData: jsonEncode(data.toJson()),
-        previewProperties: {},
         scrollPosition: WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code,
       );
 

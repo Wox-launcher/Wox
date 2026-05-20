@@ -78,8 +78,10 @@ void registerLauncherPluginSmokeTests() {
       expect(result.subTitle, equals('This is a subtitle'));
       expect(result.preview.previewType, equals(WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TEXT.code));
       expect(result.preview.previewData, equals('This is a preview'));
-      expect(result.preview.previewProperties['Property1'], equals('Hello World'));
-      expect(result.preview.previewProperties['Property2'], equals('This is a property'));
+      final property1Tag = result.preview.previewTags.firstWhere((tag) => tag.tooltip == 'Property1');
+      final property2Tag = result.preview.previewTags.firstWhere((tag) => tag.tooltip == 'Property2');
+      expect(property1Tag.label, equals('Hello World'));
+      expect(property2Tag.label, equals('This is a property'));
       // Dev smoke builds now append batch/latency/score tails automatically, so
       // assert only on the template plugin's own tail payload here.
       final businessTails = getSmokeBusinessTails(result);

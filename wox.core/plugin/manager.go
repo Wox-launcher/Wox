@@ -1413,6 +1413,43 @@ func (m *Manager) normalizeListPreviewData(ctx context.Context, pluginInstance *
 	return preview
 }
 
+func (m *Manager) normalizePreviewMetadata(ctx context.Context, pluginInstance *Instance, preview WoxPreview) WoxPreview {
+	// PreviewTags are the UI-facing metadata contract. Translate them in core so
+	// Flutter only consumes one tag list and does not need to know about the
+	// deprecated key/value PreviewProperties compatibility shape.
+	for i := range preview.PreviewTags {
+		preview.PreviewTags[i].Label = m.translatePlugin(ctx, pluginInstance, preview.PreviewTags[i].Label)
+		if preview.PreviewTags[i].Tooltip != "" {
+			preview.PreviewTags[i].Tooltip = m.translatePlugin(ctx, pluginInstance, preview.PreviewTags[i].Tooltip)
+		}
+	}
+
+	if len(preview.PreviewProperties) == 0 {
+		return preview
+	}
+
+	translatedProperties := make(map[string]string, len(preview.PreviewProperties))
+	for key, value := range preview.PreviewProperties {
+		// Legacy properties only supported i18n on the key. Keep values as final
+		// display labels so older plugins retain their existing text semantics.
+		translatedProperties[m.translatePlugin(ctx, pluginInstance, key)] = value
+	}
+	preview.PreviewProperties = translatedProperties
+
+	if len(preview.PreviewTags) > 0 {
+		return preview
+	}
+
+	preview.PreviewTags = make([]WoxPreviewTag, 0, len(preview.PreviewProperties))
+	for key, value := range preview.PreviewProperties {
+		preview.PreviewTags = append(preview.PreviewTags, WoxPreviewTag{
+			Label:   value,
+			Tooltip: key,
+		})
+	}
+	return preview
+}
+
 func (m *Manager) calculateResultScore(ctx context.Context, pluginId, title, subTitle string, currentQuery string) int64 {
 	var score int64 = 0
 
@@ -2100,13 +2137,7 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 			result.Tails[i].Tooltip = m.translatePlugin(ctx, pluginInstance, result.Tails[i].Tooltip)
 		}
 	}
-	// translate preview properties
-	var previewProperties = make(map[string]string)
-	for key, value := range result.Preview.PreviewProperties {
-		translatedKey := m.translatePlugin(ctx, pluginInstance, key)
-		previewProperties[translatedKey] = value
-	}
-	result.Preview.PreviewProperties = previewProperties
+	result.Preview = m.normalizePreviewMetadata(ctx, pluginInstance, result.Preview)
 	// translate action names
 	for actionIndex := range result.Actions {
 		result.Actions[actionIndex].Name = m.translatePlugin(ctx, pluginInstance, result.Actions[actionIndex].Name)
@@ -2418,12 +2449,7 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 		// so icon conversion and row text translation cannot live only in the
 		// first result-processing path.
 		preview := m.normalizeListPreviewData(ctx, pluginInstance, *result.Preview)
-		var previewProperties = make(map[string]string)
-		for key, value := range preview.PreviewProperties {
-			translatedKey := m.translatePlugin(ctx, pluginInstance, key)
-			previewProperties[translatedKey] = value
-		}
-		preview.PreviewProperties = previewProperties
+		preview = m.normalizePreviewMetadata(ctx, pluginInstance, preview)
 		result.Preview = &preview
 		resultCache.Result.Preview = preview
 	}
@@ -3178,6 +3204,7 @@ func (m *Manager) GetResultPreview(ctx context.Context, sessionId string, queryI
 		preview.PreviewData = m.translatePlugin(ctx, resultCache.PluginInstance, preview.PreviewData)
 	}
 
+	preview = m.normalizePreviewMetadata(ctx, resultCache.PluginInstance, preview)
 	return preview, nil
 }
 

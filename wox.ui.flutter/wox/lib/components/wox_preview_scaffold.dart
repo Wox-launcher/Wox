@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:wox/components/wox_tooltip.dart';
+import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/utils/color_util.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
@@ -7,18 +8,11 @@ import 'package:wox/utils/wox_interface_size_util.dart';
 class WoxPreviewScaffold extends StatelessWidget {
   final WoxTheme woxTheme;
   final Widget child;
-  final Map<String, String> properties;
+  final List<WoxPreviewTag> tags;
   final ScrollController scrollController;
   final bool contentHandlesScrolling;
 
-  const WoxPreviewScaffold({
-    super.key,
-    required this.woxTheme,
-    required this.child,
-    required this.properties,
-    required this.scrollController,
-    this.contentHandlesScrolling = false,
-  });
+  const WoxPreviewScaffold({super.key, required this.woxTheme, required this.child, required this.tags, required this.scrollController, this.contentHandlesScrolling = false});
 
   @override
   Widget build(BuildContext context) {
@@ -38,14 +32,11 @@ class WoxPreviewScaffold extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(child: _buildContentSurface(context)),
-          if (properties.isNotEmpty) ...[
+          if (tags.isNotEmpty) ...[
             // The framed preview body already separates content from metadata,
             // so an extra divider above the pills would add visual noise without
             // improving scanability.
-            Padding(
-              padding: EdgeInsets.only(top: WoxInterfaceSizeUtil.instance.current.scaledSpacing(10)),
-              child: _PreviewPropertyPills(woxTheme: woxTheme, properties: properties),
-            ),
+            Padding(padding: EdgeInsets.only(top: WoxInterfaceSizeUtil.instance.current.scaledSpacing(10)), child: _PreviewTagPills(woxTheme: woxTheme, tags: tags)),
           ],
         ],
       ),
@@ -99,11 +90,11 @@ class WoxPreviewScaffold extends StatelessWidget {
   }
 }
 
-class _PreviewPropertyPills extends StatelessWidget {
+class _PreviewTagPills extends StatelessWidget {
   final WoxTheme woxTheme;
-  final Map<String, String> properties;
+  final List<WoxPreviewTag> tags;
 
-  const _PreviewPropertyPills({required this.woxTheme, required this.properties});
+  const _PreviewTagPills({required this.woxTheme, required this.tags});
 
   @override
   Widget build(BuildContext context) {
@@ -115,24 +106,23 @@ class _PreviewPropertyPills extends StatelessWidget {
     // steals height from the preview body on compact launcher windows. They are
     // styled as quiet metadata, not controls, because actions already live in
     // the launcher toolbar.
-    // Only the value is shown by default to keep the metadata strip compact; the
-    // title remains available in the tooltip for users who need the exact field.
+    // Tags show only their label by default to keep the metadata strip compact;
+    // the tooltip carries explanatory text without expanding the footer.
     return SizedBox(
       // Preview metadata belongs to the launcher surface, so pill height and
       // text follow density while borders and radii remain theme-owned.
       height: WoxInterfaceSizeUtil.instance.current.scaledSpacing(26),
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        itemCount: properties.length,
+        itemCount: tags.length,
         separatorBuilder: (context, index) => SizedBox(width: WoxInterfaceSizeUtil.instance.current.scaledSpacing(8)),
         itemBuilder: (context, index) {
-          final entry = properties.entries.elementAt(index);
-          final value = entry.value.trim();
-          final label = value.isEmpty ? entry.key : "${entry.key}: $value";
-          final visibleText = value.isEmpty ? entry.key : value;
+          final tag = tags[index];
+          final visibleText = tag.label.trim().isEmpty ? tag.tooltip : tag.label;
+          final tooltip = tag.tooltip.trim().isEmpty ? visibleText : tag.tooltip;
 
           return WoxTooltip(
-            message: label,
+            message: tooltip,
             child: Container(
               constraints: BoxConstraints(maxWidth: WoxInterfaceSizeUtil.instance.current.scaledSpacing(220)),
               padding: EdgeInsets.symmetric(horizontal: WoxInterfaceSizeUtil.instance.current.scaledSpacing(9), vertical: WoxInterfaceSizeUtil.instance.current.scaledSpacing(4)),
