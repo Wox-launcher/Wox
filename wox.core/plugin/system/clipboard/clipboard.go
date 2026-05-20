@@ -451,7 +451,7 @@ func clipboardRecordMatchesType(recordType string, content string, selectedType 
 	return selectedType == clipboardTypeRefinementAll || recordType == selectedType
 }
 
-func clipboardFavoriteMatchesSearch(favoriteItem FavoriteClipboardItem, search string, selectedType string) bool {
+func clipboardFavoriteMatchesSearch(ctx context.Context, favoriteItem FavoriteClipboardItem, search string, selectedType string) bool {
 	if !clipboardRecordMatchesType(favoriteItem.Type, favoriteItem.Content, selectedType) {
 		return false
 	}
@@ -463,18 +463,58 @@ func clipboardFavoriteMatchesSearch(favoriteItem FavoriteClipboardItem, search s
 		return false
 	}
 
-	normalizedSearch := strings.ToLower(search)
-	if strings.Contains(strings.ToLower(favoriteItem.Content), normalizedSearch) {
+	if clipboardSearchCandidateMatches(ctx, favoriteItem.Content, search) {
 		return true
 	}
-	if favoriteItem.Alias != nil && strings.Contains(strings.ToLower(*favoriteItem.Alias), normalizedSearch) {
+	if favoriteItem.Alias != nil && clipboardSearchCandidateMatches(ctx, *favoriteItem.Alias, search) {
 		return true
 	}
-	if favoriteItem.OCRText != nil && selectedType == string(clipboard.ClipboardTypeImage) && strings.Contains(strings.ToLower(*favoriteItem.OCRText), normalizedSearch) {
+	if favoriteItem.OCRText != nil && selectedType == string(clipboard.ClipboardTypeImage) && clipboardSearchCandidateMatches(ctx, *favoriteItem.OCRText, search) {
 		return true
 	}
 
 	return false
+}
+
+func clipboardRecordMatchesSearch(ctx context.Context, record ClipboardRecord, search string, selectedType string) bool {
+	if !clipboardRecordMatchesType(record.Type, record.Content, selectedType) {
+		return false
+	}
+
+	// Preserve the historical "All" search behavior: it searched text history
+	// only. Image OCR search stays tied to the Image refinement so broad global
+	// clipboard searches do not unexpectedly surface screenshots.
+	if selectedType == clipboardTypeRefinementAll && record.Type != string(clipboard.ClipboardTypeText) {
+		return false
+	}
+
+	if clipboardSearchCandidateMatches(ctx, record.Content, search) {
+		return true
+	}
+	if record.Alias != nil && clipboardSearchCandidateMatches(ctx, *record.Alias, search) {
+		return true
+	}
+	if record.OCRText != nil && selectedType == string(clipboard.ClipboardTypeImage) && clipboardSearchCandidateMatches(ctx, *record.OCRText, search) {
+		return true
+	}
+
+	return false
+}
+
+func clipboardSearchCandidateMatches(ctx context.Context, candidate string, search string) bool {
+	search = strings.TrimSpace(search)
+	if search == "" {
+		return true
+	}
+	if strings.TrimSpace(candidate) == "" {
+		return false
+	}
+
+	// Feature fix: clipboard OCR text participates in the same fuzzy matcher as
+	// other Wox results. This keeps pinyin search controlled by the global
+	// UsePinYin setting instead of using SQLite LIKE or plain substring checks.
+	matched, _ := plugin.IsStringMatchScore(ctx, candidate, search)
+	return matched
 }
 
 func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
@@ -554,20 +594,17 @@ func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 	favorites, err := c.getFavoriteItems(ctx)
 	if err == nil {
 		for _, favoriteItem := range favorites {
-			if clipboardFavoriteMatchesSearch(favoriteItem, query.Search, selectedType) {
+			if clipboardFavoriteMatchesSearch(ctx, favoriteItem, query.Search, selectedType) {
 				record := c.convertFavoriteToRecord(favoriteItem)
 				allResults = append(allResults, record)
 			}
 		}
 	}
 
-	// Search in database records
-	var searchResults []ClipboardRecord
-	if selectedType == clipboardTypeRefinementAll || selectedType == clipboardTypeRefinementLink {
-		searchResults, err = c.db.SearchText(ctx, query.Search, 100)
-	} else {
-		searchResults, err = c.db.SearchByType(ctx, query.Search, selectedType, 100)
-	}
+	// Search in database records. The old SQL LIKE path could only match raw
+	// text, so pinyin queries never reached Chinese OCR text. Fetch typed
+	// history candidates and apply the same plugin matcher used elsewhere.
+	searchResults, err := c.searchClipboardRecords(ctx, query.Search, selectedType, 100)
 	if err != nil {
 		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to search clipboard records: %s", err.Error()))
 	} else {
@@ -582,6 +619,36 @@ func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 	}
 
 	return c.newClipboardQueryResponse(results)
+}
+
+func (c *ClipboardPlugin) searchClipboardRecords(ctx context.Context, search string, selectedType string, limit int) ([]ClipboardRecord, error) {
+	scanLimit := c.maxHistoryCount
+	if scanLimit <= 0 {
+		scanLimit = 5000
+	}
+
+	var records []ClipboardRecord
+	var err error
+	if selectedType == clipboardTypeRefinementAll || selectedType == clipboardTypeRefinementLink {
+		records, err = c.db.GetRecentByType(ctx, string(clipboard.ClipboardTypeText), scanLimit, 0)
+	} else {
+		records, err = c.db.GetRecentByType(ctx, selectedType, scanLimit, 0)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]ClipboardRecord, 0, limit)
+	for _, record := range records {
+		if !clipboardRecordMatchesSearch(ctx, record, search, selectedType) {
+			continue
+		}
+		results = append(results, record)
+		if limit > 0 && len(results) >= limit {
+			break
+		}
+	}
+	return results, nil
 }
 
 // isDuplicateContent checks if the content is duplicate by comparing with the most recent record

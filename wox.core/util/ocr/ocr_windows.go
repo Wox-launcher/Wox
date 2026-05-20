@@ -122,6 +122,7 @@ func runWindowsPowerShellOCR(ctx context.Context, request Request, engine string
 	)
 	input := map[string]any{
 		"imagePath": request.ImagePath,
+		"languages": request.Languages,
 	}
 	var stdin bytes.Buffer
 	if err := json.NewEncoder(&stdin).Encode(input); err != nil {
@@ -214,6 +215,8 @@ try {
   Add-Type -AssemblyName System.Runtime.WindowsRuntime
   [Windows.Storage.StorageFile, Windows.Storage, ContentType=WindowsRuntime] > $null
   [Windows.Graphics.Imaging.BitmapDecoder, Windows.Graphics.Imaging, ContentType=WindowsRuntime] > $null
+  [Windows.Globalization.Language, Windows.Globalization, ContentType=WindowsRuntime] > $null
+  [Windows.System.UserProfile.GlobalizationPreferences, Windows.System.UserProfile, ContentType=WindowsRuntime] > $null
   [Windows.Media.Ocr.OcrEngine, Windows.Media.Ocr, ContentType=WindowsRuntime] > $null
 
   $asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
@@ -228,12 +231,101 @@ try {
   $stream = Await-WinRT ($file.OpenReadAsync()) 'Windows.Storage.Streams.IRandomAccessStreamWithContentType, Windows.Storage.Streams, ContentType=WindowsRuntime'
   $decoder = Await-WinRT ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($stream)) 'Windows.Graphics.Imaging.BitmapDecoder, Windows.Graphics.Imaging, ContentType=WindowsRuntime'
   $bitmap = Await-WinRT ($decoder.GetSoftwareBitmapAsync()) 'Windows.Graphics.Imaging.SoftwareBitmap, Windows.Graphics.Imaging, ContentType=WindowsRuntime'
-  $engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages()
-  if ($null -eq $engine) {
-    throw 'Windows.Media.Ocr.OcrEngine is unavailable for current user languages'
+
+  # Feature fix: TryCreateFromUserProfileLanguages can pick the first profile language even
+  # when another installed OCR language is needed for the image. Try explicit or installed
+  # non-English recognizers first, and only fall back to profile/English recognizers when
+  # the first pass finds no text so English OCR does not append mojibake to Chinese results.
+  $primaryLanguageCandidates = New-Object 'System.Collections.Generic.List[string]'
+  $fallbackLanguageCandidates = New-Object 'System.Collections.Generic.List[string]'
+  $seenPrimaryLanguageCandidates = @{}
+  $seenFallbackLanguageCandidates = @{}
+  function Add-LanguageCandidate($list, [hashtable]$seen, [string]$tag) {
+    if ($null -eq $tag) {
+      return
+    }
+    $trimmed = $tag.Trim()
+    if ($trimmed -eq '') {
+      return
+    }
+    $key = $trimmed.ToLowerInvariant()
+    if (-not $seen.ContainsKey($key)) {
+      $seen[$key] = $true
+      [void]$list.Add($trimmed)
+    }
   }
-  $result = Await-WinRT ($engine.RecognizeAsync($bitmap)) 'Windows.Media.Ocr.OcrResult, Windows.Media.Ocr, ContentType=WindowsRuntime'
-  [Console]::Out.Write((@{ engine = 'windows_media_ocr'; text = [string]$result.Text } | ConvertTo-Json -Compress))
+
+  $hasRequestedLanguages = $false
+  if ($null -ne $request.languages) {
+    foreach ($languageTag in @($request.languages)) {
+      Add-LanguageCandidate $primaryLanguageCandidates $seenPrimaryLanguageCandidates ([string]$languageTag)
+      $hasRequestedLanguages = $true
+    }
+  }
+  if (-not $hasRequestedLanguages) {
+    foreach ($language in [Windows.Media.Ocr.OcrEngine]::AvailableRecognizerLanguages) {
+      $languageTag = [string]$language.LanguageTag
+      if ($languageTag -notmatch '^en($|-)') {
+        Add-LanguageCandidate $primaryLanguageCandidates $seenPrimaryLanguageCandidates $languageTag
+      }
+    }
+  }
+  foreach ($languageTag in [Windows.System.UserProfile.GlobalizationPreferences]::Languages) {
+    Add-LanguageCandidate $fallbackLanguageCandidates $seenFallbackLanguageCandidates ([string]$languageTag)
+  }
+  foreach ($language in [Windows.Media.Ocr.OcrEngine]::AvailableRecognizerLanguages) {
+    Add-LanguageCandidate $fallbackLanguageCandidates $seenFallbackLanguageCandidates ([string]$language.LanguageTag)
+  }
+
+  $recognizedTexts = New-Object 'System.Collections.Generic.List[string]'
+  function Recognize-WithLanguages($candidateTags) {
+    foreach ($languageTag in $candidateTags) {
+      try {
+        $language = [Windows.Globalization.Language]::new($languageTag)
+        $engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromLanguage($language)
+        if ($null -eq $engine) {
+          continue
+        }
+        $result = Await-WinRT ($engine.RecognizeAsync($bitmap)) 'Windows.Media.Ocr.OcrResult, Windows.Media.Ocr, ContentType=WindowsRuntime'
+        if ($null -ne $result.Text -and [string]$result.Text -ne '') {
+          [void]$recognizedTexts.Add([string]$result.Text)
+        }
+      } catch {
+        continue
+      }
+    }
+  }
+
+  Recognize-WithLanguages $primaryLanguageCandidates
+  if ($recognizedTexts.Count -eq 0) {
+    Recognize-WithLanguages $fallbackLanguageCandidates
+  }
+  if ($recognizedTexts.Count -eq 0) {
+    $engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages()
+    if ($null -eq $engine) {
+      throw 'Windows.Media.Ocr.OcrEngine is unavailable for requested and installed languages'
+    }
+    $result = Await-WinRT ($engine.RecognizeAsync($bitmap)) 'Windows.Media.Ocr.OcrResult, Windows.Media.Ocr, ContentType=WindowsRuntime'
+    if ($null -ne $result.Text -and [string]$result.Text -ne '') {
+      [void]$recognizedTexts.Add([string]$result.Text)
+    }
+  }
+
+  $uniqueLines = New-Object 'System.Collections.Generic.List[string]'
+  $seenLines = @{}
+  foreach ($text in $recognizedTexts) {
+    foreach ($line in ([string]$text -split '\r?\n')) {
+      $trimmed = $line.Trim()
+      if ($trimmed -eq '') {
+        continue
+      }
+      if (-not $seenLines.ContainsKey($trimmed)) {
+        $seenLines[$trimmed] = $true
+        [void]$uniqueLines.Add($trimmed)
+      }
+    }
+  }
+  [Console]::Out.Write((@{ engine = 'windows_media_ocr'; text = ($uniqueLines -join [Environment]::NewLine) } | ConvertTo-Json -Compress))
 } catch {
   [Console]::Out.Write((@{ engine = 'windows_media_ocr'; code = 'unavailable'; error = $_.Exception.Message } | ConvertTo-Json -Compress))
 }

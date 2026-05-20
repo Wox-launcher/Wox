@@ -134,7 +134,7 @@ func (p *ScreenshotPlugin) Query(ctx context.Context, query plugin.Query) plugin
 	// The default screenshot query now lists saved captures instead of starting a capture directly.
 	// Starting a new capture moved to the explicit "new" command so history browsing and capture
 	// creation do not compete for the same default result.
-	results, err := p.queryScreenshotHistory(query)
+	results, err := p.queryScreenshotHistory(ctx, query)
 	if err != nil {
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to query screenshot history: %s", err.Error()))
 		return plugin.QueryResponse{}
@@ -190,19 +190,16 @@ func (p *ScreenshotPlugin) newScreenshotResult() plugin.QueryResult {
 	}
 }
 
-func (p *ScreenshotPlugin) queryScreenshotHistory(query plugin.Query) ([]plugin.QueryResult, error) {
+func (p *ScreenshotPlugin) queryScreenshotHistory(ctx context.Context, query plugin.Query) ([]plugin.QueryResult, error) {
 	items, err := p.listScreenshotHistory()
 	if err != nil {
 		return nil, err
 	}
 
 	results := make([]plugin.QueryResult, 0, len(items))
-	search := strings.ToLower(strings.TrimSpace(query.Search))
+	search := strings.TrimSpace(query.Search)
 	for _, item := range items {
-		if search != "" &&
-			!strings.Contains(strings.ToLower(item.fileName), search) &&
-			!strings.Contains(strings.ToLower(util.FormatTimestamp(item.timestamp)), search) &&
-			!strings.Contains(strings.ToLower(item.ocrText), search) {
+		if !screenshotHistoryItemMatchesSearch(ctx, item, search) {
 			continue
 		}
 
@@ -210,6 +207,23 @@ func (p *ScreenshotPlugin) queryScreenshotHistory(query plugin.Query) ([]plugin.
 	}
 
 	return results, nil
+}
+
+func screenshotHistoryItemMatchesSearch(ctx context.Context, item screenshotHistoryItem, search string) bool {
+	search = strings.TrimSpace(search)
+	if search == "" {
+		return true
+	}
+
+	// Feature fix: OCR search must use the same fuzzy matcher as normal plugin
+	// results so the global pinyin option also applies to text recognized from
+	// screenshots. Plain substring checks cannot match Chinese text by pinyin.
+	for _, candidate := range []string{item.fileName, util.FormatTimestamp(item.timestamp), item.ocrText} {
+		if matched, _ := plugin.IsStringMatchScore(ctx, candidate, search); matched {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *ScreenshotPlugin) listScreenshotHistory() ([]screenshotHistoryItem, error) {
