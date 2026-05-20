@@ -986,6 +986,8 @@
   "plugin_wpm_create": "创建",
   "plugin_wpm_uninstall": "卸载",
   "plugin_wpm_install": "安装",
+  "plugin_wpm_view_install": "在 WPM 中查看",
+  "plugin_wpm_plugin_store": "插件商店",
   "plugin_wpm_installing": "安装中...",
   "plugin_wpm_upgrade": "升级",
   "plugin_wpm_refinement_status": "状态",

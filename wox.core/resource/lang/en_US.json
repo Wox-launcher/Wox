@@ -985,6 +985,8 @@
   "plugin_wpm_create": "Create",
   "plugin_wpm_uninstall": "Uninstall",
   "plugin_wpm_install": "Install",
+  "plugin_wpm_view_install": "View in WPM",
+  "plugin_wpm_plugin_store": "Plugin Store",
   "plugin_wpm_installing": "Installing...",
   "plugin_wpm_upgrade": "Upgrade",
   "plugin_wpm_refinement_status": "Status",

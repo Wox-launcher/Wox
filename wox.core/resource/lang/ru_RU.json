@@ -858,6 +858,8 @@
   "plugin_wpm_create": "Создать",
   "plugin_wpm_uninstall": "Удалить",
   "plugin_wpm_install": "Установить",
+  "plugin_wpm_view_install": "Открыть в WPM",
+  "plugin_wpm_plugin_store": "Магазин плагинов",
   "plugin_wpm_installing": "Установка...",
   "plugin_wpm_upgrade": "Обновить",
   "plugin_wpm_refinement_status": "Статус",

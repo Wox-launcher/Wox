@@ -112,6 +112,7 @@ func (w *WPMPlugin) GetMetadata() plugin.Metadata {
 			"wpm",
 			"store",
 			"pm",
+			"*",
 		},
 		Features: []plugin.MetadataFeature{
 			{
@@ -295,6 +296,10 @@ func (w *WPMPlugin) parseMetadata(ctx context.Context, directory string) (plugin
 }
 
 func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
+	if query.IsGlobalQuery() {
+		return plugin.NewQueryResponse(w.globalQueryCommand(ctx, query))
+	}
+
 	if query.Command == "create" {
 		return plugin.NewQueryResponse(w.createCommand(ctx, query))
 	}
@@ -326,6 +331,57 @@ func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryR
 	}
 
 	return plugin.QueryResponse{}
+}
+
+func (w *WPMPlugin) globalQueryCommand(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+	if strings.TrimSpace(query.Search) == "" {
+		return []plugin.QueryResult{}
+	}
+
+	// Feature addition: global query should be discovery-only. The explicit
+	// "wpm install" command can show installed, upgradable, and uninstallable
+	// rows, but global search stays focused on plugins the user does not have.
+	installedById := w.buildInstalledPluginLookup()
+	results := []plugin.QueryResult{}
+	for _, pluginManifest := range w.searchStorePlugins(ctx, query.Search) {
+		if _, installed := installedById[pluginManifest.Id]; installed {
+			continue
+		}
+
+		results = append(results, w.buildGlobalStorePluginResult(ctx, pluginManifest))
+	}
+
+	return results
+}
+
+func (w *WPMPlugin) buildGlobalStorePluginResult(ctx context.Context, pluginManifest plugin.StorePluginManifest) plugin.QueryResult {
+	pluginName := pluginManifest.GetName(ctx)
+
+	// Feature addition: Enter from global query changes the launcher into the
+	// explicit WPM install command instead of installing immediately. This keeps
+	// the existing install preview and confirmation flow in one place.
+	return plugin.QueryResult{
+		Id:       uuid.NewString(),
+		Title:    pluginName,
+		SubTitle: pluginManifest.GetDescription(ctx),
+		Icon:     w.buildPluginDetailIcon(pluginManifest),
+		Tails:    []plugin.QueryResultTail{plugin.NewQueryResultTailText(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_plugin_store"))},
+		Preview:  w.buildPluginDetailPreview(ctx, pluginManifest, false, false),
+		Actions: []plugin.QueryResultAction{
+			{
+				Name:                   "i18n:plugin_wpm_view_install",
+				Icon:                   wpmIcon,
+				IsDefault:              true,
+				PreventHideAfterAction: true,
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					w.api.ChangeQuery(ctx, common.PlainQuery{
+						QueryType: plugin.QueryTypeInput,
+						QueryText: fmt.Sprintf("wpm install %s", pluginName),
+					})
+				},
+			},
+		},
+	}
 }
 
 func (w *WPMPlugin) buildInstallStatusRefinement() plugin.QueryRefinement {
@@ -381,6 +437,31 @@ func wpmInstallStatusMatches(selectedStatus string, installed bool, upgradable b
 	default:
 		return true
 	}
+}
+
+func (w *WPMPlugin) searchStorePlugins(ctx context.Context, keyword string) []plugin.StorePluginManifest {
+	pluginManifests := plugin.GetStoreManager().Search(ctx, keyword)
+
+	// Refactor support: global query and explicit install query both need the
+	// same stable ordering. Keeping the sort in one helper prevents discovery
+	// results from drifting away from the WPM install command.
+	sort.SliceStable(pluginManifests, func(i, j int) bool {
+		return pluginManifests[i].GetName(ctx) < pluginManifests[j].GetName(ctx)
+	})
+
+	return pluginManifests
+}
+
+func (w *WPMPlugin) buildInstalledPluginLookup() map[string]*plugin.Instance {
+	// Refactor support: install filtering and global discovery both need an
+	// exact installed-state lookup. A map keeps the behavior consistent without
+	// repeatedly scanning every installed plugin for each store row.
+	installedById := map[string]*plugin.Instance{}
+	for _, installedPlugin := range plugin.GetPluginManager().GetPluginInstances() {
+		installedById[installedPlugin.Metadata.Id] = installedPlugin
+	}
+
+	return installedById
 }
 
 func (w *WPMPlugin) createCommand(ctx context.Context, query plugin.Query) []plugin.QueryResult {
@@ -576,7 +657,9 @@ func (w *WPMPlugin) buildPluginDetailIcon(manifest plugin.StorePluginManifest) c
 // for a plugin listed in installCommand results.
 // isInstalled reflects whether the plugin is currently installed.
 // isInstalling reflects whether an install/upgrade is currently in progress;
-// when true the preview shows a loading chip so the user knows to wait.
+// the preview intentionally no longer serializes either state. The result tail
+// and toolbar message already carry install progress, and repeating the same
+// state inside plugin detail preview made the UI feel noisy.
 func (w *WPMPlugin) buildPluginDetailPreview(ctx context.Context, manifest plugin.StorePluginManifest, isInstalled bool, isInstalling bool) plugin.WoxPreview {
 	icon := w.buildPluginDetailIcon(manifest)
 	pluginDetailData := map[string]interface{}{
@@ -589,8 +672,6 @@ func (w *WPMPlugin) buildPluginDetailPreview(ctx context.Context, manifest plugi
 		"Website":        manifest.Website,
 		"Runtime":        manifest.Runtime,
 		"ScreenshotUrls": manifest.ScreenshotUrls,
-		"IsInstalled":    isInstalled,
-		"IsInstalling":   isInstalling,
 	}
 	pluginDetailJSON, _ := json.Marshal(pluginDetailData)
 	return plugin.WoxPreview{
@@ -825,21 +906,13 @@ func (w *WPMPlugin) createUninstallAction(pluginManifest plugin.StorePluginManif
 
 func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	var results []plugin.QueryResult
-	pluginManifests := plugin.GetStoreManager().Search(ctx, query.Search)
-	// sort by name
-
-	sort.SliceStable(pluginManifests, func(i, j int) bool {
-		return pluginManifests[i].GetName(ctx) < pluginManifests[j].GetName(ctx)
-	})
+	pluginManifests := w.searchStorePlugins(ctx, query.Search)
 
 	// Feature addition: build one installed-plugin lookup and use it for both
 	// filtering and row decoration. The previous per-row scans were acceptable
 	// for tails/actions only, but refinement filtering needs the same status
 	// decision to stay consistent across the whole result.
-	installedById := map[string]*plugin.Instance{}
-	for _, installedPlugin := range plugin.GetPluginManager().GetPluginInstances() {
-		installedById[installedPlugin.Metadata.Id] = installedPlugin
-	}
+	installedById := w.buildInstalledPluginLookup()
 	selectedStatus := selectedWPMInstallStatus(query)
 
 	for _, pluginManifest := range pluginManifests {

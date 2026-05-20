@@ -856,6 +856,8 @@
   "plugin_wpm_create": "Criar",
   "plugin_wpm_uninstall": "Desinstalar",
   "plugin_wpm_install": "Instalar",
+  "plugin_wpm_view_install": "Ver no WPM",
+  "plugin_wpm_plugin_store": "Loja de plugins",
   "plugin_wpm_installing": "Instalando...",
   "plugin_wpm_upgrade": "Atualizar",
   "plugin_wpm_refinement_status": "Status",
