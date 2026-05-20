@@ -30,17 +30,17 @@ import (
 )
 
 func getFileIconImpl(ctx context.Context, filePath string, size int) (string, error) {
-	cachePath := buildPathCachePath(filePath, size)
-
-	if _, err := os.Stat(cachePath); err == nil {
-		return cachePath, nil
-	}
-
 	if filePath == "" {
 		return "", errors.New("empty path")
 	}
-	if _, err := os.Stat(filePath); err != nil {
+	info, err := os.Stat(filePath)
+	if err != nil {
 		return "", err
+	}
+
+	cachePath := buildPathCachePath(filePath, size, info.ModTime().UnixNano())
+	if _, err := os.Stat(cachePath); err == nil {
+		return cachePath, nil
 	}
 
 	if iconPath, err := ResolveMacAppBundleIconPath(filePath); err == nil {

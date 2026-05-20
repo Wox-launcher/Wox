@@ -163,11 +163,6 @@ func getIconFromSHGetFileInfo(ext string) (win.HICON, error) {
 }
 
 func getFileIconImpl(ctx context.Context, filePath string, size int) (string, error) {
-	cachePath := buildPathCachePath(filePath, size)
-
-	if _, err := os.Stat(cachePath); err == nil {
-		return cachePath, nil
-	}
 	if strings.TrimSpace(filePath) == "" {
 		return "", errors.New("empty path")
 	}
@@ -175,6 +170,11 @@ func getFileIconImpl(ctx context.Context, filePath string, size int) (string, er
 	fi, err := os.Stat(filePath)
 	if err != nil {
 		return "", err
+	}
+
+	cachePath := buildPathCachePath(filePath, size, fi.ModTime().UnixNano())
+	if _, err := os.Stat(cachePath); err == nil {
+		return cachePath, nil
 	}
 
 	// Check if the file is an offline file (e.g. OneDrive, Phone Link)

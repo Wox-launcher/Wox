@@ -49,12 +49,17 @@ type appInfo struct {
 	// SearchableNames keeps extra aliases for matching when Name alone is not stable enough.
 	// On macOS without Spotlight metadata, the searchable value may come from the localized bundle name,
 	// Info.plist, or the .app filename, and those names can differ for non-Latin apps.
-	SearchableNames  []string        `json:"searchable_names,omitempty"`
-	Identity         string          `json:"identity,omitempty"`
-	Path             string          `json:"path"`
-	Icon             common.WoxImage `json:"icon"`
-	Type             AppType         `json:"type,omitempty"`
-	LastModifiedUnix int64           `json:"last_modified_unix,omitempty"`
+	SearchableNames []string        `json:"searchable_names,omitempty"`
+	Identity        string          `json:"identity,omitempty"`
+	Path            string          `json:"path"`
+	Icon            common.WoxImage `json:"icon"`
+	// IconSourcePath records the real file used to render Icon. Windows shortcuts
+	// can keep their own mtime while the target executable changes, so cache reuse
+	// must compare this source in addition to the indexed shortcut path.
+	IconSourcePath         string  `json:"icon_source_path,omitempty"`
+	IconSourceModifiedUnix int64   `json:"icon_source_modified_unix,omitempty"`
+	Type                   AppType `json:"type,omitempty"`
+	LastModifiedUnix       int64   `json:"last_modified_unix,omitempty"`
 
 	Pid int `json:"-"`
 	// IsDefaultIcon is persisted so launchpad can hide entries whose icon fell
@@ -80,7 +85,10 @@ type appCacheFile struct {
 // Version 7 refreshes Windows Settings searchable aliases. Version 6 caches
 // created before the alias table was complete would keep opening the new pages
 // but miss English terms such as "display" for localized Settings titles.
-const appCacheVersion = 7
+// Version 8 refreshes app entries with icon-source metadata. The old cache only
+// tracked the shortcut/file path mtime, so updated executable icons behind
+// unchanged .lnk files could keep showing stale cached PNGs.
+const appCacheVersion = 8
 
 const (
 	appCommandReindex   = "reindex"
@@ -375,6 +383,30 @@ func (a *ApplicationPlugin) populateAppMetadata(ctx context.Context, appPath str
 
 	info.LastModifiedUnix = fileInfo.ModTime().UnixNano()
 	info.Pid = 0
+	a.populateIconSourceMetadata(ctx, info)
+}
+
+func (a *ApplicationPlugin) populateIconSourceMetadata(ctx context.Context, info *appInfo) {
+	iconSourcePath := strings.TrimSpace(info.IconSourcePath)
+	if iconSourcePath == "" {
+		info.IconSourceModifiedUnix = 0
+		return
+	}
+
+	iconSourcePath = filepath.Clean(iconSourcePath)
+	fileInfo, statErr := os.Stat(iconSourcePath)
+	if statErr != nil {
+		// Bug fix: keep missing icon sources from being treated as fresh cache
+		// entries. Reindexing later can recover after installers finish moving
+		// files into place, while pathless icons still keep the existing fast path.
+		a.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("app icon source stat failed: path=%s err=%s", iconSourcePath, statErr.Error()))
+		info.IconSourcePath = iconSourcePath
+		info.IconSourceModifiedUnix = 0
+		return
+	}
+
+	info.IconSourcePath = iconSourcePath
+	info.IconSourceModifiedUnix = fileInfo.ModTime().UnixNano()
 }
 
 func (a *ApplicationPlugin) reuseAppFromCache(ctx context.Context, appPath string, fileInfo os.FileInfo, cache map[string]appInfo) (appInfo, bool) {
@@ -392,6 +424,10 @@ func (a *ApplicationPlugin) reuseAppFromCache(ctx context.Context, appPath strin
 		return appInfo{}, false
 	}
 
+	if !a.isCachedIconSourceFresh(ctx, cached) {
+		return appInfo{}, false
+	}
+
 	if cached.Icon.ImageType == common.WoxImageTypeAbsolutePath && cached.Icon.ImageData != "" {
 		if _, err := os.Stat(cached.Icon.ImageData); err != nil {
 			a.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("cached icon missing for %s, reindexing", appPath))
@@ -404,6 +440,29 @@ func (a *ApplicationPlugin) reuseAppFromCache(ctx context.Context, appPath strin
 		cached.Identity = strings.TrimSpace(resolveAppIdentityForPlatform(ctx, cached))
 	}
 	return cached, true
+}
+
+func (a *ApplicationPlugin) isCachedIconSourceFresh(ctx context.Context, cached appInfo) bool {
+	iconSourcePath := strings.TrimSpace(cached.IconSourcePath)
+	if iconSourcePath == "" {
+		return cached.IconSourceModifiedUnix == 0
+	}
+
+	fileInfo, statErr := os.Stat(iconSourcePath)
+	if statErr != nil {
+		a.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("cached icon source missing for %s, reindexing: %s", cached.Path, statErr.Error()))
+		return false
+	}
+
+	if cached.IconSourceModifiedUnix == 0 || cached.IconSourceModifiedUnix != fileInfo.ModTime().UnixNano() {
+		// Bug fix: shortcut entries can keep the same .lnk mtime after the target
+		// app updates. Treat the icon source mtime as part of app cache freshness
+		// so stale appInfo records are reparsed and the new fileicon cache key is used.
+		a.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("cached icon source changed for %s, reindexing", cached.Path))
+		return false
+	}
+
+	return true
 }
 
 func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {

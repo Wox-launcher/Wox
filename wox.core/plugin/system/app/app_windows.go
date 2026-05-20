@@ -215,7 +215,9 @@ func (a *WindowsRetriever) parseShortcut(ctx context.Context, appPath string) (a
 	}
 
 	icon := appIcon
+	iconSourcePath := appPath
 	if targetPath != "" && strings.HasSuffix(strings.ToLower(targetPath), ".exe") {
+		iconSourcePath = targetPath
 		if iconPath, iconErr := fileicon.GetFileIconByPath(ctx, targetPath); iconErr != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("Error getting icon for %s, use default icon: %s", targetPath, iconErr.Error()))
 		} else {
@@ -230,11 +232,15 @@ func (a *WindowsRetriever) parseShortcut(ctx context.Context, appPath string) (a
 	displayName := strings.TrimSuffix(filepath.Base(appPath), filepath.Ext(appPath))
 
 	return appInfo{
-		Name:          displayName,
-		Path:          filepath.Clean(appPath),
-		Icon:          icon,
-		Type:          AppTypeDesktop,
-		IsDefaultIcon: icon.ImageData == appIcon.ImageData,
+		Name: displayName,
+		Path: filepath.Clean(appPath),
+		Icon: icon,
+		// Bug fix: .lnk files often keep the same timestamp when an updater
+		// replaces the target executable. Store the actual icon source so app
+		// cache reuse can notice target icon changes without a full reindex.
+		IconSourcePath: filepath.Clean(iconSourcePath),
+		Type:           AppTypeDesktop,
+		IsDefaultIcon:  icon.ImageData == appIcon.ImageData,
 	}, nil
 }
 
@@ -265,11 +271,12 @@ func (a *WindowsRetriever) parseExe(ctx context.Context, appPath string) (appInf
 	}
 
 	return appInfo{
-		Name:          displayName,
-		Path:          filepath.Clean(appPath),
-		Icon:          icon,
-		Type:          AppTypeDesktop,
-		IsDefaultIcon: icon.ImageData == appIcon.ImageData,
+		Name:           displayName,
+		Path:           filepath.Clean(appPath),
+		Icon:           icon,
+		IconSourcePath: filepath.Clean(appPath),
+		Type:           AppTypeDesktop,
+		IsDefaultIcon:  icon.ImageData == appIcon.ImageData,
 	}, nil
 }
 
@@ -302,11 +309,13 @@ func (a *WindowsRetriever) parseUrlShortcut(ctx context.Context, appPath string)
 
 	// Resolve icon: prefer IconFile from the .url, fall back to file association icon
 	icon := appIcon
+	iconSourcePath := appPath
 	if iconFile != "" {
 		if iconPath, iconErr := fileicon.GetFileIconByPath(ctx, iconFile); iconErr != nil {
 			util.GetLogger().Debug(ctx, fmt.Sprintf("Failed to get icon from IconFile %s: %s", iconFile, iconErr.Error()))
 		} else {
 			icon = common.NewWoxImageAbsolutePath(iconPath)
+			iconSourcePath = iconFile
 		}
 	}
 	// If IconFile didn't yield an icon, try the .url file itself
@@ -321,11 +330,12 @@ func (a *WindowsRetriever) parseUrlShortcut(ctx context.Context, appPath string)
 	displayName := strings.TrimSuffix(filepath.Base(appPath), filepath.Ext(appPath))
 
 	return appInfo{
-		Name:          displayName,
-		Path:          filepath.Clean(appPath),
-		Icon:          icon,
-		Type:          AppTypeDesktop,
-		IsDefaultIcon: icon.ImageData == appIcon.ImageData,
+		Name:           displayName,
+		Path:           filepath.Clean(appPath),
+		Icon:           icon,
+		IconSourcePath: filepath.Clean(iconSourcePath),
+		Type:           AppTypeDesktop,
+		IsDefaultIcon:  icon.ImageData == appIcon.ImageData,
 	}, nil
 }
 

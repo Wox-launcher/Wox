@@ -30,11 +30,6 @@ func getFileTypeIconImpl(ctx context.Context, ext string, size int) (string, err
 // association first. The old implementation returned "not supported", which
 // meant every fileicon caller fell back to fragile extension heuristics.
 func getFileIconImpl(ctx context.Context, filePath string, size int) (string, error) {
-	cachePath := buildPathCachePath(filePath, size)
-	if _, err := os.Stat(cachePath); err == nil {
-		return cachePath, nil
-	}
-
 	if strings.TrimSpace(filePath) == "" {
 		return "", errors.New("empty path")
 	}
@@ -42,6 +37,11 @@ func getFileIconImpl(ctx context.Context, filePath string, size int) (string, er
 	info, err := os.Stat(filePath)
 	if err != nil {
 		return "", err
+	}
+
+	cachePath := buildPathCachePath(filePath, size, info.ModTime().UnixNano())
+	if _, err := os.Stat(cachePath); err == nil {
+		return cachePath, nil
 	}
 
 	iconNames := getFileIconNames(ctx, filePath, info)

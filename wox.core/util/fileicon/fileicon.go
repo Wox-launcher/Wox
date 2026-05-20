@@ -4,11 +4,12 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"wox/util"
 )
 
-const fileIconPathCachePrefix = "fileicon_v4_"
+const fileIconPathCachePrefix = "fileicon_v5_"
 
 // GetFileIconByPath returns the default list-size cached OS icon path for the given path.
 // It first tries to resolve the application/file icon, then falls back to the file-type icon.
@@ -53,9 +54,16 @@ func CleanFileIconCache(ctx context.Context, filePath string) error {
 		}
 		seenSizes[size] = struct{}{}
 
-		cachePath := buildPathCachePath(filePath, size)
-		if _, err := os.Stat(cachePath); err == nil {
-			if removeErr := os.Remove(cachePath); removeErr != nil {
+		// Bug fix: path icon caches now include the source mtime so one app can
+		// leave multiple historical files behind after updates. Clean every
+		// current-version cache for the path+size pair because callers do not know
+		// the old executable mtime they want to discard.
+		cachePaths, globErr := filepath.Glob(buildPathCacheGlob(filePath, size))
+		if globErr != nil {
+			return globErr
+		}
+		for _, cachePath := range cachePaths {
+			if removeErr := os.Remove(cachePath); removeErr != nil && !os.IsNotExist(removeErr) {
 				return removeErr
 			}
 		}
@@ -94,14 +102,23 @@ func buildCachePath(ext string, size int) string {
 	return filepath.Join(util.GetLocation().GetImageCacheDirectory(), file)
 }
 
-// buildPathCachePath returns the cache file path for a given file path and size (in px).
-func buildPathCachePath(filePath string, size int) string {
+func buildPathCacheStem(filePath string, size int) string {
 	hash := util.Md5([]byte(filePath))
-	// The prefix is the cache-version boundary for file-icon rendering behavior.
-	// Bump it when source extraction or resize semantics change so older blurred
-	// caches are ignored without keeping legacy-size cleanup paths.
-	file := fileIconPathCachePrefix + hash + "_" + intToString(size) + ".png"
+	return fileIconPathCachePrefix + hash + "_" + intToString(size) + "_"
+}
+
+// buildPathCachePath returns the cache file path for a given file path, source mtime, and size (in px).
+func buildPathCachePath(filePath string, size int, sourceModifiedUnix int64) string {
+	// Bug fix: the old cache key used only the source path. When an executable
+	// kept the same path but shipped a new embedded icon, Wox kept returning the
+	// old PNG and the resize cache also stayed stale. Include the source mtime so
+	// updated app binaries naturally produce a new icon path and downstream cache key.
+	file := buildPathCacheStem(filePath, size) + strconv.FormatInt(sourceModifiedUnix, 10) + ".png"
 	return filepath.Join(util.GetLocation().GetImageCacheDirectory(), file)
+}
+
+func buildPathCacheGlob(filePath string, size int) string {
+	return filepath.Join(util.GetLocation().GetImageCacheDirectory(), buildPathCacheStem(filePath, size)+"*.png")
 }
 
 // intToString avoids fmt for tiny helper to keep deps minimal here
