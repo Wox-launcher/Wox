@@ -827,5 +827,36 @@
         "plugin_description": "使用 rimage 压缩选中的图片"
       }
     }
+  },
+  {
+    "Id": "94fbbf13-3bd3-4a26-b710-96e8ecda59ac",
+    "Name": "i18n:plugin_name",
+    "Author": "qianlifeng",
+    "Version": "0.0.1",
+    "MinWoxVersion": "2.1.0",
+    "Runtime": "nodejs",
+    "Description": "i18n:plugin_description",
+    "IconUrl": "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.HotkeyTrigger/main/images/app.png",
+    "Website": "https://github.com/qianlifeng/Wox.Plugin.HotkeyTrigger",
+    "DownloadUrl": "https://github.com/qianlifeng/Wox.Plugin.HotkeyTrigger/releases/latest/download/wox.plugin.hotkeytrigger.wox",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.HotkeyTrigger/main/screenshot.png"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin"
+    ],
+    "DateCreated": "2026-05-20 21:29:31",
+    "DateUpdated": "2026-05-20 21:29:31",
+    "I18n": {
+      "en_US": {
+        "plugin_name": "HotkeyTrigger",
+        "plugin_description": "Can't remember all your software shortcuts? Query and trigger configured system hotkeys through Wox"
+      },
+      "zh_CN": {
+        "plugin_name": "HotkeyTrigger",
+        "plugin_description": "一堆软件快捷键记不住？通过 Wox 查询并触发已配置的系统快捷键"
+      }
+    }
   }
 ]
