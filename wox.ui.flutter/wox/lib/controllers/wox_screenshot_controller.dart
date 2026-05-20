@@ -15,6 +15,8 @@ import 'package:wox/utils/log.dart';
 import 'package:wox/utils/screenshot/screenshot_platform_bridge.dart';
 import 'package:wox/utils/windows/window_manager.dart';
 
+enum _ScrollingCaptureDirection { append, prepend }
+
 class WoxScreenshotController extends GetxController {
   static const Color defaultAnnotationColor = Color(0xFFFF5B36);
   static const Color mosaicAnnotationUiColor = Color(0xFF29FF72);
@@ -29,9 +31,22 @@ class WoxScreenshotController extends GetxController {
   static const int _scrollingCaptureStoredPixelBudget = 24 * 1024 * 1024;
   static const double _scrollingCaptureWheelSteps = 7;
   static const Duration _scrollingCaptureSettleDelay = Duration(milliseconds: 120);
-  static const double _scrollingCaptureOverlapThreshold = 20;
-  static const double _scrollingCaptureDuplicateThreshold = 14;
-  static const double _scrollingCaptureMinimumOverlapRatio = 0.18;
+  // Feature trial: scrolling capture now uses a single template-matching registration path. The
+  // previous average-difference matcher was too strict for white pages with repeated text, so this
+  // keeps the tuning local while manual testing compares the new score against real captures.
+  static const int _scrollingCaptureTemplateMatchMaxHeight = 240;
+  static const double _scrollingCaptureTemplateMatchHeightRatio = 0.28;
+  static const double _scrollingCaptureTemplateMatchSearchRatio = 0.85;
+  static const int _scrollingCaptureTemplateMatchMaxHorizontalShift = 2;
+  // Optimization: real debug logs showed full per-row NCC taking hundreds of milliseconds on large
+  // selections. A smaller sample grid plus coarse-to-fine search keeps the same matcher semantics
+  // while scoring far fewer y candidates; the refine radius covers coarse-step misses around the
+  // best coarse location.
+  static const int _scrollingCaptureTemplateMatchTargetColumns = 64;
+  static const int _scrollingCaptureTemplateMatchTargetRows = 48;
+  static const int _scrollingCaptureTemplateMatchCoarseStep = 6;
+  static const int _scrollingCaptureTemplateMatchRefineRadius = 12;
+  static const double _scrollingCaptureTemplateMatchThreshold = 0.82;
   static const int _scrollingCaptureSeamFeatherRows = 10;
   static const double _scrollingCaptureToolbarMinWidth = 168;
   static const double _scrollingCapturePreviewMaxWidth = 320;
@@ -68,9 +83,10 @@ class WoxScreenshotController extends GetxController {
   ScreenshotWorkspacePresentation? _preparedPresentation;
   List<DisplaySnapshot>? _preparedSnapshots;
   Timer? _scrollingCaptureFrameDebounce;
-  StreamSubscription<void>? _scrollingCaptureWheelSubscription;
+  StreamSubscription<ScrollingCaptureWheelEvent>? _scrollingCaptureWheelSubscription;
   Rect? _scrollingCaptureControlsBounds;
   Rect? _pendingScrollingCaptureSelection;
+  _ScrollingCaptureDirection? _pendingScrollingCaptureDirection;
   String _scrollingCaptureTraceId = "";
   StreamSubscription<ScreenshotSelectionDisplayHint>? _selectionDisplayHintSubscription;
   bool _acceptSelectionDisplayHints = false;
@@ -562,7 +578,7 @@ class WoxScreenshotController extends GetxController {
       }
 
       final firstFrameWatch = Stopwatch()..start();
-      await _appendScrollingCaptureFrame(traceId, currentSelection);
+      await _appendScrollingCaptureFrame(traceId, currentSelection, _ScrollingCaptureDirection.append);
       _logScrollingCaptureTiming(traceId, 'start_initial_frame_done', {'elapsedMs': firstFrameWatch.elapsedMilliseconds, 'frameCount': scrollingCaptureFrames.length});
       if (Platform.isMacOS && scrollingCaptureFrames.isNotEmpty) {
         await _beginNativeScrollingCaptureOverlay(traceId, currentSelection);
@@ -590,10 +606,16 @@ class WoxScreenshotController extends GetxController {
 
   void _listenForNativeScrollingCaptureWheelEvents(String traceId) {
     _scrollingCaptureWheelSubscription?.cancel();
-    _scrollingCaptureWheelSubscription = ScreenshotPlatformBridge.instance.scrollingCaptureWheelEvents().listen((_) {
+    _scrollingCaptureWheelSubscription = ScreenshotPlatformBridge.instance.scrollingCaptureWheelEvents().listen((event) {
       final selectionForRefresh = selectionRect;
       if (selectionForRefresh != null) {
-        _scheduleScrollingCaptureFrame(traceId, selectionForRefresh);
+        final direction = _scrollingCaptureDirectionFromDelta(event.deltaY);
+        _logScrollingCaptureTiming(traceId, 'native_wheel_event', {
+          'deltaY': event.deltaY,
+          'rawDeltaY': event.rawDeltaY,
+          'direction': _scrollingCaptureDirectionName(direction),
+        });
+        _scheduleScrollingCaptureFrame(traceId, selectionForRefresh, direction);
       }
     });
     // Native scrolling capture should append frames only after real wheel input. Polling while idle
@@ -630,17 +652,19 @@ class WoxScreenshotController extends GetxController {
         'wheelSteps': wheelSteps,
         'frameCount': scrollingCaptureFrames.length,
       });
-      _scheduleScrollingCaptureFrame(traceId, currentSelection);
+      _scheduleScrollingCaptureFrame(traceId, currentSelection, _scrollingCaptureDirectionFromDelta(scrollDeltaY));
     } catch (e) {
       Logger.instance.error(traceId, 'Failed to update scrolling screenshot: $e');
     }
   }
 
-  void _scheduleScrollingCaptureFrame(String traceId, Rect selection) {
+  void _scheduleScrollingCaptureFrame(String traceId, Rect selection, _ScrollingCaptureDirection direction) {
     _pendingScrollingCaptureSelection = selection;
+    _pendingScrollingCaptureDirection = direction;
     final hadDebounce = _scrollingCaptureFrameDebounce != null;
     _logScrollingCaptureTiming(traceId, 'schedule_request', {
       'selection': selection,
+      'direction': _scrollingCaptureDirectionName(direction),
       'frameCount': scrollingCaptureFrames.length,
       'pending': _pendingScrollingCaptureSelection != null,
       'updating': isScrollingCaptureUpdating.value,
@@ -661,20 +685,28 @@ class WoxScreenshotController extends GetxController {
       });
       if (stage.value != ScreenshotSessionStage.scrolling) {
         _pendingScrollingCaptureSelection = null;
+        _pendingScrollingCaptureDirection = null;
         _logScrollingCaptureTiming(traceId, 'schedule_dropped_inactive', {'frameCount': scrollingCaptureFrames.length});
         return;
       }
       if (isScrollingCaptureUpdating.value) {
         final queuedSelection = _pendingScrollingCaptureSelection;
+        final queuedDirection = _pendingScrollingCaptureDirection ?? _ScrollingCaptureDirection.append;
         if (queuedSelection != null) {
-          _logScrollingCaptureTiming(traceId, 'schedule_merged_while_updating', {'selection': queuedSelection, 'frameCount': scrollingCaptureFrames.length});
-          _scheduleScrollingCaptureFrame(traceId, queuedSelection);
+          _logScrollingCaptureTiming(traceId, 'schedule_merged_while_updating', {
+            'selection': queuedSelection,
+            'direction': _scrollingCaptureDirectionName(queuedDirection),
+            'frameCount': scrollingCaptureFrames.length,
+          });
+          _scheduleScrollingCaptureFrame(traceId, queuedSelection, queuedDirection);
         }
         return;
       }
 
       final selectionForCapture = _pendingScrollingCaptureSelection;
+      final directionForCapture = _pendingScrollingCaptureDirection ?? _ScrollingCaptureDirection.append;
       _pendingScrollingCaptureSelection = null;
+      _pendingScrollingCaptureDirection = null;
       if (selectionForCapture == null) {
         _logScrollingCaptureTiming(traceId, 'schedule_dropped_no_selection', {'frameCount': scrollingCaptureFrames.length});
         return;
@@ -683,13 +715,22 @@ class WoxScreenshotController extends GetxController {
       // Use throttling instead of debounce for wheel-driven capture. Debounce waited until scrolling
       // stopped, which allowed a single captured pair to be separated by more than one viewport and
       // caused poor overlap matches; throttling records intermediate frames while staying bounded.
-      _logScrollingCaptureTiming(traceId, 'schedule_append_started', {'selection': selectionForCapture, 'frameCount': scrollingCaptureFrames.length});
+      _logScrollingCaptureTiming(traceId, 'schedule_append_started', {
+        'selection': selectionForCapture,
+        'direction': _scrollingCaptureDirectionName(directionForCapture),
+        'frameCount': scrollingCaptureFrames.length,
+      });
       unawaited(
-        _appendScrollingCaptureFrame(traceId, selectionForCapture).whenComplete(() {
+        _appendScrollingCaptureFrame(traceId, selectionForCapture, directionForCapture).whenComplete(() {
           final queuedSelection = _pendingScrollingCaptureSelection;
+          final queuedDirection = _pendingScrollingCaptureDirection ?? _ScrollingCaptureDirection.append;
           if (queuedSelection != null && stage.value == ScreenshotSessionStage.scrolling) {
-            _logScrollingCaptureTiming(traceId, 'schedule_append_done_with_pending', {'selection': queuedSelection, 'frameCount': scrollingCaptureFrames.length});
-            _scheduleScrollingCaptureFrame(traceId, queuedSelection);
+            _logScrollingCaptureTiming(traceId, 'schedule_append_done_with_pending', {
+              'selection': queuedSelection,
+              'direction': _scrollingCaptureDirectionName(queuedDirection),
+              'frameCount': scrollingCaptureFrames.length,
+            });
+            _scheduleScrollingCaptureFrame(traceId, queuedSelection, queuedDirection);
           }
         }),
       );
@@ -778,7 +819,7 @@ class WoxScreenshotController extends GetxController {
     }
 
     if (scrollingCaptureFrames.isEmpty) {
-      await _appendScrollingCaptureFrame(traceId, currentSelection);
+      await _appendScrollingCaptureFrame(traceId, currentSelection, _ScrollingCaptureDirection.append);
     }
 
     stage.value = ScreenshotSessionStage.exporting;
@@ -831,7 +872,7 @@ class WoxScreenshotController extends GetxController {
     return exportFile.path;
   }
 
-  Future<void> _appendScrollingCaptureFrame(String traceId, Rect selection) async {
+  Future<void> _appendScrollingCaptureFrame(String traceId, Rect selection, _ScrollingCaptureDirection direction) async {
     final appendWatch = Stopwatch()..start();
     final frameIndex = scrollingCaptureFrames.length;
     final frameLimit = _scrollingCaptureFrameLimit();
@@ -855,20 +896,28 @@ class WoxScreenshotController extends GetxController {
 
     isScrollingCaptureUpdating.value = true;
     try {
-      _logScrollingCaptureTiming(traceId, 'append_start', {'frameIndex': frameIndex, 'selection': selection, 'frameCount': scrollingCaptureFrames.length});
+      _logScrollingCaptureTiming(traceId, 'append_start', {
+        'frameIndex': frameIndex,
+        'selection': selection,
+        'direction': _scrollingCaptureDirectionName(direction),
+        'frameCount': scrollingCaptureFrames.length,
+      });
       final captureWatch = Stopwatch()..start();
       final nextFrame = await _captureScrollingSelectionFrame(selection);
       _logScrollingCaptureTiming(traceId, 'append_capture_done', {
         'elapsedMs': captureWatch.elapsedMilliseconds,
         'frameIndex': frameIndex,
+        'direction': _scrollingCaptureDirectionName(direction),
         'pixel': '${nextFrame.pixelWidth}x${nextFrame.pixelHeight}',
       });
       if (scrollingCaptureFrames.isNotEmpty) {
-        final overlap = _findScrollingOverlap(traceId, scrollingCaptureFrames.last, nextFrame);
+        final anchorFrame = direction == _ScrollingCaptureDirection.append ? scrollingCaptureFrames.last : scrollingCaptureFrames.first;
+        final overlap = _findScrollingOverlap(traceId, anchorFrame, nextFrame, direction);
         if (overlap.isDuplicate) {
           _logScrollingCaptureTiming(traceId, 'append_dropped_duplicate', {
             'elapsedMs': appendWatch.elapsedMilliseconds,
             'frameIndex': frameIndex,
+            'direction': _scrollingCaptureDirectionName(direction),
             'overlapRows': overlap.overlapRows,
             'averageDifference': overlap.averageDifference,
           });
@@ -877,14 +926,14 @@ class WoxScreenshotController extends GetxController {
         }
 
         if (!overlap.isReliable) {
-          // Unreliable overlap used to append the whole frame, which made live previews repeat the
-          // same viewport whenever the page had dynamic content or a wheel refresh captured before
-          // scrolling had settled. Dropping the uncertain frame keeps the long image monotonic; the
-          // next wheel capture can still append once a stable overlap is visible.
+          // Feature trial: template matching is the only registration path for scrolling capture
+          // right now. A low NCC score means the seam is not proven, so dropping the frame keeps the
+          // stitched image monotonic while the debug log exposes the score for manual tuning.
           nextFrame.dispose();
           _logScrollingCaptureTiming(traceId, 'append_dropped_unreliable_overlap', {
             'elapsedMs': appendWatch.elapsedMilliseconds,
             'frameIndex': frameIndex,
+            'direction': _scrollingCaptureDirectionName(direction),
             'overlapRows': overlap.overlapRows,
             'averageDifference': overlap.averageDifference,
           });
@@ -892,18 +941,35 @@ class WoxScreenshotController extends GetxController {
           return;
         }
 
-        nextFrame.cropTop = overlap.overlapRows;
-        nextFrame.seamFeatherRows = math.min(_scrollingCaptureSeamFeatherRows, math.min(nextFrame.cropTop, nextFrame.visibleHeight)).toInt();
-        if (nextFrame.visibleHeight <= 0) {
-          nextFrame.dispose();
-          return;
+        if (direction == _ScrollingCaptureDirection.append) {
+          nextFrame.cropTop = overlap.overlapRows;
+          nextFrame.seamFeatherRows = math.min(_scrollingCaptureSeamFeatherRows, math.min(nextFrame.cropTop, nextFrame.visibleHeight)).toInt();
+          if (nextFrame.visibleHeight <= 0) {
+            nextFrame.dispose();
+            return;
+          }
+        } else {
+          final previousFirstFrame = scrollingCaptureFrames.first;
+          // Bug fix: upward scrolling prepends the freshly captured viewport and removes the shared
+          // rows from the old first frame. Reusing cropTop keeps preview/export drawing on the same
+          // top-to-bottom frame model instead of introducing a second crop direction.
+          previousFirstFrame.cropTop = math.min(previousFirstFrame.pixelHeight, previousFirstFrame.cropTop + overlap.overlapRows).toInt();
+          previousFirstFrame.seamFeatherRows = math.min(_scrollingCaptureSeamFeatherRows, math.min(previousFirstFrame.cropTop, previousFirstFrame.visibleHeight)).toInt();
+          if (previousFirstFrame.visibleHeight <= 0) {
+            scrollingCaptureFrames.removeAt(0).dispose();
+          }
         }
       }
 
-      scrollingCaptureFrames.add(nextFrame);
+      if (direction == _ScrollingCaptureDirection.append) {
+        scrollingCaptureFrames.add(nextFrame);
+      } else {
+        scrollingCaptureFrames.insert(0, nextFrame);
+      }
       _logScrollingCaptureTiming(traceId, 'append_accepted', {
         'elapsedMs': appendWatch.elapsedMilliseconds,
         'frameIndex': frameIndex,
+        'direction': _scrollingCaptureDirectionName(direction),
         'frameCount': scrollingCaptureFrames.length,
         'pixel': '${nextFrame.pixelWidth}x${nextFrame.pixelHeight}',
         'visibleHeight': nextFrame.visibleHeight,
@@ -912,7 +978,12 @@ class WoxScreenshotController extends GetxController {
       await _syncNativeScrollingControlsBounds(traceId, selection);
     } finally {
       isScrollingCaptureUpdating.value = false;
-      _logScrollingCaptureTiming(traceId, 'append_finished', {'elapsedMs': appendWatch.elapsedMilliseconds, 'frameIndex': frameIndex, 'frameCount': scrollingCaptureFrames.length});
+      _logScrollingCaptureTiming(traceId, 'append_finished', {
+        'elapsedMs': appendWatch.elapsedMilliseconds,
+        'frameIndex': frameIndex,
+        'direction': _scrollingCaptureDirectionName(direction),
+        'frameCount': scrollingCaptureFrames.length,
+      });
     }
   }
 
@@ -938,6 +1009,14 @@ class WoxScreenshotController extends GetxController {
     final direction = scrollDeltaY >= 0 ? 1.0 : -1.0;
     final magnitude = (scrollDeltaY.abs() / 60).clamp(1.0, _scrollingCaptureWheelSteps);
     return direction * magnitude;
+  }
+
+  _ScrollingCaptureDirection _scrollingCaptureDirectionFromDelta(double deltaY) {
+    return deltaY < 0 ? _ScrollingCaptureDirection.prepend : _ScrollingCaptureDirection.append;
+  }
+
+  String _scrollingCaptureDirectionName(_ScrollingCaptureDirection direction) {
+    return direction == _ScrollingCaptureDirection.prepend ? 'prepend' : 'append';
   }
 
   Future<String> _writeScrollingSelectionPngFile({required String exportFilePath, required List<ScrollingCapturePreviewFrame> frames}) async {
@@ -1040,175 +1119,192 @@ class WoxScreenshotController extends GetxController {
     }
   }
 
-  _ScrollingCaptureOverlap _findScrollingOverlap(String traceId, ScrollingCapturePreviewFrame previous, ScrollingCapturePreviewFrame next) {
+  _ScrollingCaptureOverlap _findScrollingOverlap(String traceId, ScrollingCapturePreviewFrame previous, ScrollingCapturePreviewFrame next, _ScrollingCaptureDirection direction) {
     final overlapWatch = Stopwatch()..start();
     if (previous.pixelWidth != next.pixelWidth || previous.pixelHeight != next.pixelHeight) {
       _logScrollingCaptureTiming(traceId, 'overlap_dimension_mismatch', {
         'elapsedMs': overlapWatch.elapsedMilliseconds,
+        'direction': _scrollingCaptureDirectionName(direction),
         'previous': '${previous.pixelWidth}x${previous.pixelHeight}',
         'next': '${next.pixelWidth}x${next.pixelHeight}',
       });
       return const _ScrollingCaptureOverlap(overlapRows: 0, averageDifference: double.infinity, isReliable: false, isDuplicate: false);
     }
 
-    final columns = _scrollingOverlapComparisonColumns(previous, next);
-    final sameViewportDifference = _averageSameViewportDifference(previous, next, columns);
-    if (sameViewportDifference <= _scrollingCaptureDuplicateThreshold) {
-      // Cursor pixels and hover states can change even when the page has not actually moved. Treat
-      // a mostly-same viewport as duplicate instead of appending a second copy of the first screen.
-      _logScrollingCaptureTiming(traceId, 'overlap_duplicate_same_viewport', {
-        'elapsedMs': overlapWatch.elapsedMilliseconds,
-        'sameViewportDifference': sameViewportDifference,
-        'columnCount': columns.length,
-      });
-      return _ScrollingCaptureOverlap(overlapRows: next.pixelHeight, averageDifference: sameViewportDifference, isReliable: true, isDuplicate: true);
-    }
-
-    final maxOverlap = math.max(1, (next.pixelHeight * 0.97).floor());
-    // Very small overlaps are easy to match against repeated cards or blank page regions. Requiring
-    // a meaningful shared band favors dropping an over-fast wheel sample over stitching the same
-    // viewport again at a wrong offset.
-    final minOverlap = math.min(maxOverlap, math.max(48, (next.pixelHeight * _scrollingCaptureMinimumOverlapRatio).floor()));
-    final coarseStep = math.max(2, (next.pixelHeight / 100).round());
-    var best = _findBestScrollingOverlapInRange(previous, next, columns, minOverlap, maxOverlap, coarseStep);
-    final refineMin = math.max(minOverlap, best.overlapRows - coarseStep);
-    final refineMax = math.min(maxOverlap, best.overlapRows + coarseStep);
-    best = _findBestScrollingOverlapInRange(previous, next, columns, refineMin, refineMax, 1);
-
-    final isReliable = best.averageDifference <= _scrollingCaptureOverlapThreshold;
-    final isDuplicate = isReliable && best.overlapRows >= next.pixelHeight * 0.94;
-    _logScrollingCaptureTiming(traceId, 'overlap_done', {
+    final match = direction == _ScrollingCaptureDirection.append ? _findAppendTemplateMatchOverlap(previous, next) : _findPrependTemplateMatchOverlap(previous, next);
+    final isReliable = match.score >= _scrollingCaptureTemplateMatchThreshold && match.overlapRows > 0 && match.overlapRows <= next.pixelHeight;
+    final isDuplicate = isReliable && match.overlapRows >= next.pixelHeight * 0.94;
+    _logScrollingCaptureTiming(traceId, 'overlap_template_match_done', {
       'elapsedMs': overlapWatch.elapsedMilliseconds,
-      'sameViewportDifference': sameViewportDifference,
-      'overlapRows': best.overlapRows,
-      'averageDifference': best.averageDifference,
+      'direction': _scrollingCaptureDirectionName(direction),
+      'templateHeight': match.templateHeight,
+      'searchMaxY': match.searchMaxY,
+      'candidateY': match.candidateY,
+      'xShift': match.xShift,
+      'overlapRows': match.overlapRows,
+      'score': match.score,
+      'sampleCount': match.sampleCount,
+      'coarseStep': match.coarseStep,
+      'refineRadius': match.refineRadius,
+      'scoredCandidates': match.scoredCandidates,
       'reliable': isReliable,
       'duplicate': isDuplicate,
-      'columnCount': columns.length,
     });
-    return _ScrollingCaptureOverlap(overlapRows: isReliable ? best.overlapRows : 0, averageDifference: best.averageDifference, isReliable: isReliable, isDuplicate: isDuplicate);
+    return _ScrollingCaptureOverlap(overlapRows: isReliable ? match.overlapRows : 0, averageDifference: 1 - match.score, isReliable: isReliable, isDuplicate: isDuplicate);
   }
 
-  _ScrollingCaptureOverlapCandidate _findBestScrollingOverlapInRange(
-    ScrollingCapturePreviewFrame previous,
-    ScrollingCapturePreviewFrame next,
-    List<int> columns,
-    int minOverlap,
-    int maxOverlap,
-    int step,
-  ) {
-    var bestOverlap = minOverlap;
-    var bestDifference = double.infinity;
+  _ScrollingTemplateMatch _findAppendTemplateMatchOverlap(ScrollingCapturePreviewFrame previous, ScrollingCapturePreviewFrame next) {
+    final templateHeight = _scrollingTemplateHeight(previous.visibleHeight);
+    final templateTop = previous.pixelHeight - templateHeight;
+    final searchMaxY = math.max(0, math.min(next.pixelHeight - templateHeight, (next.pixelHeight * _scrollingCaptureTemplateMatchSearchRatio).floor())).toInt();
+    final sample = _buildTemplateMatchSample(previous, templateTop, templateHeight);
+    final candidate = _findBestTemplateMatchCandidate(sample, next, searchMaxY);
 
-    for (var overlapRows = maxOverlap; overlapRows >= minOverlap; overlapRows -= step) {
-      final difference = _averageOverlapDifference(previous, next, overlapRows, columns);
-      if (difference < bestDifference) {
-        bestDifference = difference;
-        bestOverlap = overlapRows;
-      }
-    }
-
-    return _ScrollingCaptureOverlapCandidate(overlapRows: bestOverlap, averageDifference: bestDifference);
+    // Template matching searches for the previous visible bottom template's top edge inside the next
+    // frame. The overlap is therefore the matched top plus the template height; using the inverse
+    // would make an unchanged viewport look like only a small overlap and crop most of the image.
+    final overlapRows = (candidate.candidateY + templateHeight).clamp(0, next.pixelHeight).toInt();
+    return _ScrollingTemplateMatch(
+      overlapRows: overlapRows,
+      score: candidate.score,
+      candidateY: candidate.candidateY,
+      xShift: candidate.xShift,
+      templateHeight: templateHeight,
+      searchMaxY: searchMaxY,
+      sampleCount: sample.values.length,
+      coarseStep: candidate.coarseStep,
+      refineRadius: candidate.refineRadius,
+      scoredCandidates: candidate.scoredCandidates,
+    );
   }
 
-  List<int> _scrollingOverlapComparisonColumns(ScrollingCapturePreviewFrame previous, ScrollingCapturePreviewFrame next) {
-    final startX = (next.pixelWidth * 0.06).floor();
-    final endX = math.max(startX + 1, (next.pixelWidth * 0.94).ceil());
-    final candidateStepX = math.max(1, ((endX - startX) / 72).ceil());
-    final rowStep = math.max(1, (next.pixelHeight / 24).round());
-    final movingColumns = <int>[];
+  _ScrollingTemplateMatch _findPrependTemplateMatchOverlap(ScrollingCapturePreviewFrame previous, ScrollingCapturePreviewFrame next) {
+    final templateHeight = _scrollingTemplateHeight(previous.visibleHeight);
+    final templateTop = previous.cropTop;
+    final searchMaxY = math.max(0, math.min(next.pixelHeight - templateHeight, (next.pixelHeight * _scrollingCaptureTemplateMatchSearchRatio).floor())).toInt();
+    final sample = _buildTemplateMatchSample(previous, templateTop, templateHeight);
+    final candidate = _findBestTemplateMatchCandidate(sample, next, searchMaxY);
 
-    for (var x = startX; x < endX; x += candidateStepX) {
-      var motion = 0.0;
-      var texture = 0.0;
-      var sampleCount = 0;
-      for (var y = 0; y < next.pixelHeight; y += rowStep) {
-        final previousLuma = _lumaAt(previous, x, y);
-        final nextLuma = _lumaAt(next, x, y);
-        motion += (previousLuma - nextLuma).abs();
-        if (y >= rowStep) {
-          texture += (previousLuma - _lumaAt(previous, x, y - rowStep)).abs();
-          texture += (nextLuma - _lumaAt(next, x, y - rowStep)).abs();
+    // Bug fix: upward scrolling matches the old first frame's visible top inside the newly captured
+    // viewport. Rows below that match are already present in the old first frame, so they become the
+    // overlap removed from the old frame after the new frame is inserted above it.
+    final overlapRows = (next.pixelHeight - candidate.candidateY).clamp(0, next.pixelHeight).toInt();
+    return _ScrollingTemplateMatch(
+      overlapRows: overlapRows,
+      score: candidate.score,
+      candidateY: candidate.candidateY,
+      xShift: candidate.xShift,
+      templateHeight: templateHeight,
+      searchMaxY: searchMaxY,
+      sampleCount: sample.values.length,
+      coarseStep: candidate.coarseStep,
+      refineRadius: candidate.refineRadius,
+      scoredCandidates: candidate.scoredCandidates,
+    );
+  }
+
+  int _scrollingTemplateHeight(int visibleHeight) {
+    return math.max(1, math.min(_scrollingCaptureTemplateMatchMaxHeight, (visibleHeight * _scrollingCaptureTemplateMatchHeightRatio).round())).toInt();
+  }
+
+  _ScrollingTemplateCandidate _findBestTemplateMatchCandidate(_ScrollingTemplateSample sample, ScrollingCapturePreviewFrame next, int searchMaxY) {
+    var bestScore = double.negativeInfinity;
+    var bestCandidateY = 0;
+    var bestXShift = 0;
+    var scoredCandidates = 0;
+    void scoreCandidateY(int candidateY) {
+      for (var xShift = -_scrollingCaptureTemplateMatchMaxHorizontalShift; xShift <= _scrollingCaptureTemplateMatchMaxHorizontalShift; xShift++) {
+        final score = _templateMatchScore(sample, next, candidateY, xShift);
+        scoredCandidates += 1;
+        if (score > bestScore) {
+          bestScore = score;
+          bestCandidateY = candidateY;
+          bestXShift = xShift;
         }
-        sampleCount += 1;
-      }
-
-      final averageMotion = sampleCount == 0 ? 0.0 : motion / sampleCount;
-      final averageTexture = sampleCount <= 1 ? 0.0 : texture / ((sampleCount - 1) * 2);
-      if (averageMotion >= 9 && averageTexture >= 2.5) {
-        movingColumns.add(x);
       }
     }
 
-    if (movingColumns.length >= 12) {
-      return _limitScrollingComparisonColumns(movingColumns, 48);
+    final coarseStep = math.max(1, math.min(_scrollingCaptureTemplateMatchCoarseStep, searchMaxY == 0 ? 1 : searchMaxY)).toInt();
+    for (var candidateY = 0; candidateY <= searchMaxY; candidateY += coarseStep) {
+      scoreCandidateY(candidateY);
+    }
+    if (searchMaxY % coarseStep != 0) {
+      scoreCandidateY(searchMaxY);
     }
 
-    // Fixed sidebars and blank gutters are common in long screenshots. When motion detection cannot
-    // find enough useful columns, fall back to a centered textured sample instead of the full width so
-    // static app chrome does not dominate the vertical registration score.
-    final fallbackColumns = <int>[];
-    final fallbackStart = (next.pixelWidth * 0.18).floor();
-    final fallbackEnd = math.max(fallbackStart + 1, (next.pixelWidth * 0.82).ceil());
-    final fallbackStep = math.max(1, ((fallbackEnd - fallbackStart) / 48).ceil());
-    for (var x = fallbackStart; x < fallbackEnd; x += fallbackStep) {
-      fallbackColumns.add(x);
+    final coarseBestY = bestCandidateY;
+    final refineRadius = math.max(_scrollingCaptureTemplateMatchRefineRadius, coarseStep * 2);
+    final refineMinY = math.max(0, coarseBestY - refineRadius).toInt();
+    final refineMaxY = math.min(searchMaxY, coarseBestY + refineRadius).toInt();
+    for (var candidateY = refineMinY; candidateY <= refineMaxY; candidateY++) {
+      scoreCandidateY(candidateY);
     }
-    return fallbackColumns;
+
+    return _ScrollingTemplateCandidate(
+      score: bestScore,
+      candidateY: bestCandidateY,
+      xShift: bestXShift,
+      coarseStep: coarseStep,
+      refineRadius: refineRadius,
+      scoredCandidates: scoredCandidates,
+    );
   }
 
-  List<int> _limitScrollingComparisonColumns(List<int> columns, int maxColumns) {
-    if (columns.length <= maxColumns) {
-      return columns;
-    }
+  _ScrollingTemplateSample _buildTemplateMatchSample(ScrollingCapturePreviewFrame frame, int templateTop, int templateHeight) {
+    final horizontalPadding = math.min(_scrollingCaptureTemplateMatchMaxHorizontalShift, math.max(0, (frame.pixelWidth - 1) ~/ 2));
+    final startX = horizontalPadding;
+    final endX = math.max(startX + 1, frame.pixelWidth - horizontalPadding);
+    final stepX = math.max(1, ((endX - startX) / _scrollingCaptureTemplateMatchTargetColumns).ceil());
+    final stepY = math.max(1, (templateHeight / _scrollingCaptureTemplateMatchTargetRows).ceil());
+    final xs = <int>[];
+    final ys = <int>[];
+    final values = <double>[];
+    var sum = 0.0;
+    var sumSquares = 0.0;
 
-    final step = columns.length / maxColumns;
-    return List<int>.generate(maxColumns, (index) => columns[(index * step).floor().clamp(0, columns.length - 1).toInt()]);
-  }
-
-  double _averageSameViewportDifference(ScrollingCapturePreviewFrame previous, ScrollingCapturePreviewFrame next, List<int> columns) {
-    final sampleStepY = math.max(1, (next.pixelHeight / 72).round());
-    var totalDifference = 0.0;
-    var sampleCount = 0;
-
-    for (var y = 0; y < next.pixelHeight; y += sampleStepY) {
-      for (final x in columns) {
-        totalDifference += math.min((_lumaAt(previous, x, y) - _lumaAt(next, x, y)).abs(), 72.0);
-        sampleCount += 1;
+    for (var relativeY = 0; relativeY < templateHeight; relativeY += stepY) {
+      final y = templateTop + relativeY;
+      for (var x = startX; x < endX; x += stepX) {
+        final luma = _lumaAt(frame, x, y);
+        xs.add(x);
+        ys.add(relativeY);
+        values.add(luma);
+        sum += luma;
+        sumSquares += luma * luma;
       }
     }
 
-    if (sampleCount == 0) {
-      return double.infinity;
-    }
-    return totalDifference / sampleCount;
+    final count = values.length;
+    final variance = count == 0 ? 0.0 : sumSquares - (sum * sum / count);
+    return _ScrollingTemplateSample(xs: xs, ys: ys, values: values, sum: sum, variance: variance);
   }
 
-  double _averageOverlapDifference(ScrollingCapturePreviewFrame previous, ScrollingCapturePreviewFrame next, int overlapRows, List<int> columns) {
-    final sampleStepY = math.max(1, (overlapRows / 64).round());
-    var totalDifference = 0.0;
-    var sampleCount = 0;
-
-    // Compare only columns that look like moving content, and use luma/edge differences with capped
-    // outliers. That makes the matcher less sensitive to fixed sidebars, large blank areas, lazy-load
-    // placeholders, and live counters while keeping the search cheap enough for preview updates.
-    for (var y = 0; y < overlapRows; y += sampleStepY) {
-      final previousY = previous.pixelHeight - overlapRows + y;
-      for (final x in columns) {
-        final previousLuma = _lumaAt(previous, x, previousY);
-        final nextLuma = _lumaAt(next, x, y);
-        final previousEdge = previousY > 0 ? (previousLuma - _lumaAt(previous, x, previousY - 1)).abs() : 0.0;
-        final nextEdge = y > 0 ? (nextLuma - _lumaAt(next, x, y - 1)).abs() : 0.0;
-        totalDifference += math.min((previousLuma - nextLuma).abs(), 72.0);
-        totalDifference += math.min((previousEdge - nextEdge).abs(), 48.0) * 0.35;
-        sampleCount += 1;
-      }
+  double _templateMatchScore(_ScrollingTemplateSample sample, ScrollingCapturePreviewFrame frame, int candidateY, int xShift) {
+    final count = sample.values.length;
+    if (count == 0 || sample.variance <= 0.0001) {
+      return double.negativeInfinity;
     }
 
-    if (sampleCount == 0) {
-      return double.infinity;
+    var candidateSum = 0.0;
+    var candidateSumSquares = 0.0;
+    var crossSum = 0.0;
+    for (var i = 0; i < count; i++) {
+      final candidate = _lumaAt(frame, sample.xs[i] + xShift, candidateY + sample.ys[i]);
+      candidateSum += candidate;
+      candidateSumSquares += candidate * candidate;
+      crossSum += sample.values[i] * candidate;
     }
-    return totalDifference / sampleCount;
+
+    final candidateVariance = candidateSumSquares - (candidateSum * candidateSum / count);
+    if (candidateVariance <= 0.0001) {
+      return double.negativeInfinity;
+    }
+
+    // Zero-mean NCC compares texture instead of absolute brightness, which keeps matching stable on
+    // mostly white pages where slight capture brightness changes would break raw pixel differences.
+    final numerator = crossSum - (sample.sum * candidateSum / count);
+    final denominator = math.sqrt(sample.variance * candidateVariance);
+    return denominator <= 0 ? double.negativeInfinity : numerator / denominator;
   }
 
   double _lumaAt(ScrollingCapturePreviewFrame frame, int x, int y) {
@@ -1398,6 +1494,7 @@ class WoxScreenshotController extends GetxController {
     _scrollingCaptureFrameDebounce?.cancel();
     _scrollingCaptureFrameDebounce = null;
     _pendingScrollingCaptureSelection = null;
+    _pendingScrollingCaptureDirection = null;
     _scrollingCaptureWheelSubscription?.cancel();
     _scrollingCaptureWheelSubscription = null;
     _scrollingCaptureControlsBounds = null;
@@ -2311,11 +2408,58 @@ class _ScrollingCaptureOverlap {
   final bool isDuplicate;
 }
 
-class _ScrollingCaptureOverlapCandidate {
-  const _ScrollingCaptureOverlapCandidate({required this.overlapRows, required this.averageDifference});
+class _ScrollingTemplateMatch {
+  const _ScrollingTemplateMatch({
+    required this.overlapRows,
+    required this.score,
+    required this.candidateY,
+    required this.xShift,
+    required this.templateHeight,
+    required this.searchMaxY,
+    required this.sampleCount,
+    required this.coarseStep,
+    required this.refineRadius,
+    required this.scoredCandidates,
+  });
 
   final int overlapRows;
-  final double averageDifference;
+  final double score;
+  final int candidateY;
+  final int xShift;
+  final int templateHeight;
+  final int searchMaxY;
+  final int sampleCount;
+  final int coarseStep;
+  final int refineRadius;
+  final int scoredCandidates;
+}
+
+class _ScrollingTemplateCandidate {
+  const _ScrollingTemplateCandidate({
+    required this.score,
+    required this.candidateY,
+    required this.xShift,
+    required this.coarseStep,
+    required this.refineRadius,
+    required this.scoredCandidates,
+  });
+
+  final double score;
+  final int candidateY;
+  final int xShift;
+  final int coarseStep;
+  final int refineRadius;
+  final int scoredCandidates;
+}
+
+class _ScrollingTemplateSample {
+  const _ScrollingTemplateSample({required this.xs, required this.ys, required this.values, required this.sum, required this.variance});
+
+  final List<int> xs;
+  final List<int> ys;
+  final List<double> values;
+  final double sum;
+  final double variance;
 }
 
 class ScreenshotMosaicSource {

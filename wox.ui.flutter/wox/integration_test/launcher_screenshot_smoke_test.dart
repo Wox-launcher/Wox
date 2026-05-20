@@ -160,11 +160,11 @@ class _FakeScreenshotBridge implements ScreenshotPlatformBridge {
   }
 
   @override
-  Stream<void> scrollingCaptureWheelEvents() {
+  Stream<ScrollingCaptureWheelEvent> scrollingCaptureWheelEvents() {
     if (delegateNativePresentation) {
       return _delegate.scrollingCaptureWheelEvents();
     }
-    return const Stream<void>.empty();
+    return const Stream<ScrollingCaptureWheelEvent>.empty();
   }
 }
 

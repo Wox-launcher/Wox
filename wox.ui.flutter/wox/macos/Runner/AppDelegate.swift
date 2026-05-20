@@ -657,11 +657,11 @@ private final class ScrollingCaptureOverlaySession {
   private let overlayWindow: NSWindow
   private let controlsWindow: NSWindow
   private let controlsBounds: NSRect
-  private let onScroll: () -> Void
+  private let onScroll: (Double, Double) -> Void
   private let onTimingLog: (String) -> Void
   private var scrollMonitor: Any?
 
-  init(workspaceBounds: NSRect, selection: NSRect, controlsWindow: NSWindow, controlsBounds: NSRect, onScroll: @escaping () -> Void, onTimingLog: @escaping (String) -> Void) {
+  init(workspaceBounds: NSRect, selection: NSRect, controlsWindow: NSWindow, controlsBounds: NSRect, onScroll: @escaping (Double, Double) -> Void, onTimingLog: @escaping (String) -> Void) {
     self.selection = selection
     self.controlsWindow = controlsWindow
     self.controlsBounds = controlsBounds
@@ -721,15 +721,20 @@ private final class ScrollingCaptureOverlaySession {
   }
 
   private func installScrollMonitor() {
-    scrollMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.scrollWheel]) { [weak self] _ in
+    scrollMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.scrollWheel]) { [weak self] event in
       guard let self else {
         return
       }
 
       let point = topLeftPoint(fromAppKit: NSEvent.mouseLocation)
       if self.selection.contains(point) {
-        self.onTimingLog("event=native_scroll_monitor_hit selection=\(formatTimingRect(self.selection))")
-        self.onScroll()
+        let rawDeltaY = event.scrollingDeltaY
+        // Bug fix: native scroll events must carry direction so Dart can prepend when the user
+        // scrolls upward. AppKit's raw delta uses the opposite sign from Flutter's PointerScrollEvent
+        // convention used by the synthetic scroll path, so normalize it here and log both values.
+        let normalizedDeltaY = -rawDeltaY
+        self.onTimingLog("event=native_scroll_monitor_hit selection=\(formatTimingRect(self.selection)) rawDeltaY=\(rawDeltaY) deltaY=\(normalizedDeltaY)")
+        self.onScroll(normalizedDeltaY, rawDeltaY)
       }
     }
   }
@@ -1090,9 +1095,9 @@ class AppDelegate: FlutterAppDelegate {
       selection: selection,
       controlsWindow: window,
       controlsBounds: controlsBounds,
-      onScroll: { [weak self] in
+      onScroll: { [weak self] deltaY, rawDeltaY in
         DispatchQueue.main.async {
-          self?.screenshotEventChannel?.invokeMethod("onScrollingCaptureWheel", arguments: nil)
+          self?.screenshotEventChannel?.invokeMethod("onScrollingCaptureWheel", arguments: ["deltaY": deltaY, "rawDeltaY": rawDeltaY])
         }
       },
       onTimingLog: { [weak self] message in

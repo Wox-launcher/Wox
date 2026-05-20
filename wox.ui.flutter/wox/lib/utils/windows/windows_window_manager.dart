@@ -79,10 +79,10 @@ class WindowsWindowManager extends BaseWindowManager {
         }
         break;
       case 'onScrollingCaptureWheel':
-        // Windows scrolling capture follows the macOS model: once Flutter is reduced to the
-        // compact preview window, native code observes wheel input over the selected desktop region
-        // and notifies the screenshot bridge to refresh the stitched frame.
-        ScreenshotPlatformBridge.emitScrollingCaptureWheelEventForPlatform();
+        // Windows scrolling capture follows the macOS model: once Flutter is reduced to the compact
+        // preview window, native code observes wheel input over the selected desktop region and
+        // forwards the normalized delta so Dart can choose append vs prepend stitching.
+        ScreenshotPlatformBridge.emitScrollingCaptureWheelEventForPlatform(call.arguments);
         break;
       case 'onSelectionDisplayHint':
         // Windows sends a single native screenshot hint when the overlay appears. That lets the

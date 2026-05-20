@@ -160,7 +160,7 @@ private:
   void ApplyScrollingCaptureControlsRegion(HWND hwnd);
   void ClearScrollingCaptureControlsRegion();
   void PaintScrollingCaptureOverlay(HWND hwnd);
-  void EmitScrollingCaptureWheelEvent();
+  void EmitScrollingCaptureWheelEvent(int wheel_delta);
   bool IsPointInScrollingCaptureSelection(POINT point) const;
 
   // Send window event to Flutter

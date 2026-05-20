@@ -2595,11 +2595,18 @@ void FlutterWindow::PaintScrollingCaptureOverlay(HWND hwnd)
   EndPaint(hwnd, &paint);
 }
 
-void FlutterWindow::EmitScrollingCaptureWheelEvent()
+void FlutterWindow::EmitScrollingCaptureWheelEvent(int wheel_delta)
 {
   if (window_manager_channel_)
   {
-    window_manager_channel_->InvokeMethod("onScrollingCaptureWheel", std::make_unique<flutter::EncodableValue>(flutter::EncodableMap()));
+    const double delta_y = -static_cast<double>(wheel_delta) / static_cast<double>(WHEEL_DELTA);
+    flutter::EncodableMap payload;
+    // Bug fix: Dart needs the native wheel direction to choose append vs prepend stitching. Windows
+    // reports positive wheel deltas for upward scrolls, so normalize to Flutter's convention where
+    // positive deltaY means scrolling down through the page.
+    payload[flutter::EncodableValue("deltaY")] = flutter::EncodableValue(delta_y);
+    payload[flutter::EncodableValue("rawDeltaY")] = flutter::EncodableValue(static_cast<double>(wheel_delta));
+    window_manager_channel_->InvokeMethod("onScrollingCaptureWheel", std::make_unique<flutter::EncodableValue>(payload));
   }
 }
 
@@ -2709,7 +2716,7 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message, WPARAM const wparam
 {
   if (message == kScrollingCaptureWheelMessage)
   {
-    EmitScrollingCaptureWheelEvent();
+    EmitScrollingCaptureWheelEvent(static_cast<int>(lparam));
     return 0;
   }
 
@@ -3033,10 +3040,11 @@ LRESULT CALLBACK FlutterWindow::ScrollingCaptureMouseHookProc(int code, WPARAM w
     const auto *mouse = reinterpret_cast<MSLLHOOKSTRUCT *>(lparam);
     if (mouse != nullptr && g_window_instance->IsPointInScrollingCaptureSelection(mouse->pt))
     {
+      const int wheel_delta = GET_WHEEL_DELTA_WPARAM(mouse->mouseData);
       // The native mask is mouse-transparent, so the wheel already scrolls the app underneath. This
-      // hook mirrors macOS' global scroll monitor by telling Dart only that a new frame should be
-      // captured after the target app has moved.
-      PostMessage(g_window_instance->GetHandle(), kScrollingCaptureWheelMessage, 0, 0);
+      // hook mirrors macOS' global scroll monitor and forwards the wheel direction so Dart can stitch
+      // newly captured content above or below the existing long screenshot.
+      PostMessage(g_window_instance->GetHandle(), kScrollingCaptureWheelMessage, 0, static_cast<LPARAM>(wheel_delta));
     }
   }
 

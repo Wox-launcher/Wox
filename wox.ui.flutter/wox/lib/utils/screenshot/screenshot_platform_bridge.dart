@@ -4,15 +4,43 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:wox/entity/screenshot_session.dart';
 
+class ScrollingCaptureWheelEvent {
+  const ScrollingCaptureWheelEvent({required this.deltaY, this.rawDeltaY});
+
+  factory ScrollingCaptureWheelEvent.fromChannelArguments(Object? arguments) {
+    if (arguments is Map) {
+      // Bug fix: native scrolling capture used to emit an untyped "wheel happened" signal, which
+      // forced Dart to guess the stitching direction. Keep a defensive default so older native
+      // runners still append downward, while new runners can pass a normalized Flutter-style delta.
+      return ScrollingCaptureWheelEvent(
+        deltaY: _readDouble(arguments['deltaY']) ?? 1.0,
+        rawDeltaY: _readDouble(arguments['rawDeltaY']),
+      );
+    }
+
+    return const ScrollingCaptureWheelEvent(deltaY: 1.0);
+  }
+
+  final double deltaY;
+  final double? rawDeltaY;
+
+  static double? _readDouble(Object? value) {
+    if (value is num) {
+      return value.toDouble();
+    }
+    return null;
+  }
+}
+
 abstract class ScreenshotPlatformBridge {
   static ScreenshotPlatformBridge _instance = MethodChannelScreenshotPlatformBridge();
 
   static ScreenshotPlatformBridge get instance => _instance;
 
-  static void emitScrollingCaptureWheelEventForPlatform() {
+  static void emitScrollingCaptureWheelEventForPlatform([Object? arguments]) {
     final bridge = _instance;
     if (bridge is MethodChannelScreenshotPlatformBridge) {
-      bridge._emitScrollingCaptureWheelEvent();
+      bridge._emitScrollingCaptureWheelEvent(arguments);
     }
   }
 
@@ -76,7 +104,7 @@ abstract class ScreenshotPlatformBridge {
     String? traceId,
   }) async {}
 
-  Stream<void> scrollingCaptureWheelEvents() => const Stream<void>.empty();
+  Stream<ScrollingCaptureWheelEvent> scrollingCaptureWheelEvents() => const Stream<ScrollingCaptureWheelEvent>.empty();
 
   Future<Map<String, dynamic>> debugCaptureWorkspaceState();
 }
@@ -89,7 +117,7 @@ class MethodChannelScreenshotPlatformBridge implements ScreenshotPlatformBridge 
 
   late final MethodChannel _channel = MethodChannel(_resolveChannelName());
   late final StreamController<ScreenshotSelectionDisplayHint> _selectionDisplayHintController = StreamController<ScreenshotSelectionDisplayHint>.broadcast();
-  late final StreamController<void> _scrollingCaptureWheelController = StreamController<void>.broadcast();
+  late final StreamController<ScrollingCaptureWheelEvent> _scrollingCaptureWheelController = StreamController<ScrollingCaptureWheelEvent>.broadcast();
 
   MethodChannelScreenshotPlatformBridge() {
     if (Platform.isMacOS) {
@@ -211,10 +239,10 @@ class MethodChannelScreenshotPlatformBridge implements ScreenshotPlatformBridge 
   Stream<ScreenshotSelectionDisplayHint> selectionDisplayHints() => _selectionDisplayHintController.stream;
 
   @override
-  Stream<void> scrollingCaptureWheelEvents() => _scrollingCaptureWheelController.stream;
+  Stream<ScrollingCaptureWheelEvent> scrollingCaptureWheelEvents() => _scrollingCaptureWheelController.stream;
 
-  void _emitScrollingCaptureWheelEvent() {
-    _scrollingCaptureWheelController.add(null);
+  void _emitScrollingCaptureWheelEvent([Object? arguments]) {
+    _scrollingCaptureWheelController.add(ScrollingCaptureWheelEvent.fromChannelArguments(arguments));
   }
 
   void _emitSelectionDisplayHint(Map<dynamic, dynamic> arguments) {
@@ -303,7 +331,7 @@ class MethodChannelScreenshotPlatformBridge implements ScreenshotPlatformBridge 
 
   Future<void> _handleMacOSScreenshotEvent(MethodCall call) async {
     if (call.method == 'onScrollingCaptureWheel') {
-      _emitScrollingCaptureWheelEvent();
+      _emitScrollingCaptureWheelEvent(call.arguments);
       return;
     }
 
