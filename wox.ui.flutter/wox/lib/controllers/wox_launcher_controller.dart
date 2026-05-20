@@ -2474,7 +2474,6 @@ class WoxLauncherController extends GetxController {
       moveQueryBoxCursorToEnd();
     }
     updateQueryBoxLineCount(traceId, query.queryText);
-    updateQueryBoxLineCount(traceId, query.queryText);
 
     // Cancel previous loading timer and reset loading state
     loadingTimer?.cancel();

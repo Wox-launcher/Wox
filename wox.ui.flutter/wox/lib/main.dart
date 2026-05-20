@@ -38,7 +38,7 @@ Future<void> main(List<String> arguments) async {
       runApp(const MyApp());
     },
     (error, stack) {
-      Logger.instance.error(const UuidV4().generate(), "Unhandled Flutter zone error: $error\n$stack");
+      Logger.instance.crash(const UuidV4().generate(), "Unhandled Flutter zone error: $error\n$stack");
       unawaited(Logger.instance.flush());
     },
   );
@@ -50,17 +50,17 @@ void registerFlutterGlobalErrorHandlers(String traceId) {
     return;
   }
 
-  // Feature: bug aware diagnostics need Flutter framework and platform errors
-  // to reach ui.log before a crash or forced process exit. These handlers keep
-  // normal Flutter error presentation while also flushing file-backed logs.
+  // Bug fix: only crash handlers force synchronous disk writes. Normal errors
+  // stay buffered so plugin error storms cannot block the query input path,
+  // while framework/platform crashes still reach ui.log before process exit.
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
-    Logger.instance.error(traceId, "FlutterError: ${details.exception}\n${details.stack}");
+    Logger.instance.crash(traceId, "FlutterError: ${details.exception}\n${details.stack}");
     unawaited(Logger.instance.flush());
   };
 
   PlatformDispatcher.instance.onError = (error, stack) {
-    Logger.instance.error(traceId, "PlatformDispatcher error: $error\n$stack");
+    Logger.instance.crash(traceId, "PlatformDispatcher error: $error\n$stack");
     unawaited(Logger.instance.flush());
     return true;
   };

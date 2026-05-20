@@ -36,6 +36,13 @@ class Logger {
     log(traceId, "error", msg);
   }
 
+  void crash(String traceId, String msg) {
+    // Bug fix: crash diagnostics are the only logs that should force a sync
+    // disk write. Regular error logs can be frequent during plugin failures, so
+    // tying every error to writeAsStringSync would still block the UI isolate.
+    log(traceId, "error", msg, syncToDisk: true);
+  }
+
   void warn(String traceId, String msg) {
     log(traceId, "warn", msg);
   }
@@ -44,7 +51,7 @@ class Logger {
     log(traceId, "debug", msg);
   }
 
-  void log(String traceId, String level, String message) {
+  void log(String traceId, String level, String message, {bool syncToDisk = false}) {
     if (!_isInitialized) {
       return;
     }
@@ -53,13 +60,10 @@ class Logger {
       return;
     }
 
-    _logger.i("$traceId [$level] $message");
-    if (level.trim().toLowerCase() == "error") {
-      // Feature: fatal Flutter errors can precede process termination, so
-      // error-level logs force a file flush instead of waiting for IOSink's
-      // normal buffering to drain.
-      unawaited(flush());
+    if (syncToDisk) {
+      _output?.writeNextLogSynchronously();
     }
+    _logger.i("$traceId [$level] $message");
 
     try {
       sendLog(traceId, level, message);
@@ -127,10 +131,13 @@ class LoggerSwitch {
 
 class WoxFileOutput extends xlogger.LogOutput {
   late File logFile;
+  IOSink? _sink;
+  bool _writeNextLogSynchronously = false;
 
   WoxFileOutput() {
     logFile = File(path.join(getHomeDir(), ".wox", "log", 'ui.log'));
     logFile.createSync(recursive: true);
+    _sink = logFile.openWrite(mode: FileMode.append);
   }
 
   String getHomeDir() {
@@ -143,13 +150,28 @@ class WoxFileOutput extends xlogger.LogOutput {
 
   @override
   void output(xlogger.OutputEvent event) {
-    // Feature: crash diagnostics need ui.log to be durable even when the
-    // process exits immediately after a framework error. Synchronous appends
-    // avoid IOSink flush/write races during global error handling.
-    logFile.writeAsStringSync("${event.lines.join('\n')}\n", mode: FileMode.append, flush: true);
+    final content = "${event.lines.join('\n')}\n";
+    if (_writeNextLogSynchronously) {
+      // Bug fix: synchronous writes are now opt-in for crash paths instead of
+      // inferred from "[error]". Error storms should stay buffered so they do
+      // not freeze typing, while crash handlers can still persist one line
+      // before the process exits.
+      _writeNextLogSynchronously = false;
+      logFile.writeAsStringSync(content, mode: FileMode.append, flush: true);
+      return;
+    }
+
+    // Optimization: buffered IOSink writes keep frequent info/debug logs off the
+    // UI isolate's blocking path while preserving the existing ui.log stream for
+    // normal diagnostics.
+    _sink?.write(content);
+  }
+
+  void writeNextLogSynchronously() {
+    _writeNextLogSynchronously = true;
   }
 
   Future<void> flush() async {
-    return;
+    await _sink?.flush();
   }
 }

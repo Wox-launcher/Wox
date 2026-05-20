@@ -238,7 +238,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
             // Transition from composing to non-composing state indicates user has finished word selection
             // Example: The moment when "wo'zhi'dao" converts to "我知道"
             Future.microtask(() {
-              Logger.instance.info(traceId, "IME: composition completed, start query: ${formattedValue.text}");
+              Logger.instance.debug(traceId, "IME: composition completed, start query: ${formattedValue.text}");
               controller.onQueryBoxTextChanged(formattedValue.text);
             });
           } else if (!wasComposing && !isComposing && oldValue.text != formattedValue.text) {
@@ -246,7 +246,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
             // Text has changed but neither state is in IME composition
             // Example: Direct input of English letters or numbers
             Future.microtask(() {
-              Logger.instance.info(traceId, "IME: normal input, start query: ${formattedValue.text}");
+              Logger.instance.debug(traceId, "IME: normal input, start query: ${formattedValue.text}");
               controller.onQueryBoxTextChanged(formattedValue.text);
             });
           }
