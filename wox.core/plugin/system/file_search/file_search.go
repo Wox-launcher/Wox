@@ -821,6 +821,14 @@ func (c *FileSearchPlugin) syncToolbarMsgWithStatus(ctx context.Context, status 
 		return
 	}
 
+	if !completionSummary && !statusHasToolbarError(status) && c.shouldHoldCompletionToolbar() {
+		// Bug fix: the completion hold used to protect only against the idle clear
+		// emitted after the scanner removed its transient run state. A quick follow-up
+		// incremental run could still replace the "Indexed ..." summary in the next
+		// frame, so keep non-error progress behind the minimum completion window.
+		return
+	}
+
 	signature := buildToolbarMsgSignature(toolbarMsg)
 	// Only push toolbar updates when the rendered snapshot changes. The status
 	// listener can emit many identical preparation snapshots, and forwarding each one
@@ -912,6 +920,10 @@ func isFullIndexCompletionSummary(status filesearch.StatusSnapshot) bool {
 		status.ActiveRunElapsedMs > 0
 }
 
+func statusHasToolbarError(status filesearch.StatusSnapshot) bool {
+	return status.ErrorRootCount > 0 || status.LastError != ""
+}
+
 func (c *FileSearchPlugin) buildFullIndexCompletedToolbarTitle(ctx context.Context, status filesearch.StatusSnapshot) string {
 	fileCount := status.ActiveRunFileCount
 	if fileCount < 0 {
@@ -945,8 +957,22 @@ func (c *FileSearchPlugin) buildIndexingToolbarTitle(ctx context.Context, status
 	translationKey := "plugin_file_status_indexing_progress"
 	switch status.ActiveRunKind {
 	case filesearch.RunKindFull:
+		if status.ActiveRunStatus == filesearch.RunStatusFinalizing {
+			// Feature addition: full indexing now reports the deferred SQLite/FTS
+			// save phase explicitly. The previous rate-only title stopped changing
+			// once scan jobs finished, which made long bulk finalization look like a
+			// stalled or silent toolbar until the completion summary arrived.
+			return c.api.GetTranslation(ctx, "plugin_file_status_full_indexing_saving")
+		}
 		translationKey = "plugin_file_status_full_indexing_progress"
 	case filesearch.RunKindIncremental:
+		if status.ActiveJobKind == filesearch.JobKindFinalizeRoot && status.ActiveRunStatus == filesearch.RunStatusFinalizing {
+			// UX fix: incremental streaming can write many small SQLite batches while
+			// it scans, so showing "saving index" for every write makes the toolbar
+			// alternate with elapsed progress. Reserve the saving text for the final
+			// root finalize job, which is the single end-of-run persistence boundary.
+			return c.api.GetTranslation(ctx, "plugin_file_status_incremental_indexing_saving")
+		}
 		// Bug fix: incremental reconciles can spend most of their time applying a
 		// scoped SQLite diff after the scanner has already counted files. Showing
 		// a per-second rate during that long apply phase made old snapshots look

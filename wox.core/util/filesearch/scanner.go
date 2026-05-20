@@ -421,9 +421,20 @@ func (s *Scanner) executePlannedRun(ctx context.Context, kind RunKind, reason st
 		if !bulkSyncStarted {
 			return
 		}
+		if runSucceeded {
+			s.emitFullRunBulkFinalizingSnapshot(ctx, plan, totalStartedAt)
+		}
 		bulkFinalizeStartedAt := util.GetSystemTimestamp()
 		if err := s.db.EndBulkSync(ctx); err != nil {
 			util.GetLogger().Warn(ctx, "filesearch failed to finalize bulk sqlite search sync: "+err.Error())
+			if runSucceeded {
+				// Bug fix: the saving-index snapshot is emitted before EndBulkSync
+				// starts. If SQLite finalization fails, clear that transient state so
+				// the toolbar does not stay on an active spinner for a run that will not
+				// publish the normal completion summary.
+				s.clearTransientRunState()
+				s.emitStateChange(ctx)
+			}
 			return
 		}
 		// Full runs intentionally defer the global FTS rebuild until the facts
@@ -483,6 +494,41 @@ func (s *Scanner) executePlannedRun(ctx context.Context, kind RunKind, reason st
 		})
 	}
 	return nil
+}
+
+func (s *Scanner) emitFullRunBulkFinalizingSnapshot(ctx context.Context, plan RunPlan, startedAt int64) {
+	if plan.Kind != RunKindFull {
+		return
+	}
+
+	fileCount := plan.EstimatedTotals.FileCount
+	entryCount := plan.EstimatedTotals.IndexableEntryCount
+	if snapshot, ok := s.GetTransientRunState(); ok {
+		fileCount = snapshot.ActiveRunFileCount
+		entryCount = snapshot.ActiveRunEntryCount
+	}
+
+	// Feature addition: full indexing can spend a visible amount of time in the
+	// deferred SQLite/FTS finalize after scan jobs have stopped emitting progress.
+	// Publish a scanner-owned finalizing snapshot before EndBulkSync so the
+	// toolbar keeps showing that the same full-index run is saving the persisted
+	// index instead of going quiet until the completion summary appears.
+	s.setTransientRunState(StatusSnapshot{
+		RootCount:           len(plan.RootPlans),
+		ProgressCurrent:     plan.TotalWorkUnits,
+		ProgressTotal:       plan.TotalWorkUnits,
+		ActiveRootStatus:    RootStatusFinalizing,
+		ActiveRunStatus:     RunStatusFinalizing,
+		ActiveRunKind:       RunKindFull,
+		ActiveStage:         RunStageFinalizing,
+		RunProgressCurrent:  plan.TotalWorkUnits,
+		RunProgressTotal:    plan.TotalWorkUnits,
+		ActiveRunFileCount:  fileCount,
+		ActiveRunEntryCount: entryCount,
+		ActiveRunElapsedMs:  util.GetSystemTimestamp() - startedAt,
+		IsIndexing:          true,
+	})
+	s.emitStateChange(ctx)
 }
 
 func (s *Scanner) emitCompletedFullRunSummary(ctx context.Context, plan RunPlan, elapsedMs int64) {
