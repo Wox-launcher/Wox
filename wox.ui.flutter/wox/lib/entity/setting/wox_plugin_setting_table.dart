@@ -12,6 +12,7 @@ class PluginSettingValueTable {
   late String sortColumnKey; // The key of the column that should be used for sorting
   late String sortOrder; // asc or desc
   late int maxHeight; // Max table height in px, <= 0 means use default
+  late int updateDialogWidth; // Optional add/update dialog content width, <= 0 means use the default adaptive width
   late PluginSettingValueStyle style;
 
   PluginSettingValueTable.fromJson(Map<String, dynamic> json) {
@@ -35,6 +36,17 @@ class PluginSettingValueTable {
     }
     if (maxHeight <= 0) {
       maxHeight = defaultMaxHeight;
+    }
+
+    // Dense table editors sometimes need more horizontal room than the shared
+    // default can provide. Keep the field opt-in so existing tables continue to
+    // use the adaptive width calculation unless their config asks for a wider
+    // add/update dialog explicitly.
+    final rawUpdateDialogWidth = json['UpdateDialogWidth'];
+    if (rawUpdateDialogWidth is num) {
+      updateDialogWidth = rawUpdateDialogWidth.toInt();
+    } else {
+      updateDialogWidth = 0;
     }
 
     // Style is deprecated in plugin SDKs; ignore plugin JSON and let the UI layout own spacing and width.
@@ -67,6 +79,7 @@ class PluginSettingValueTableColumn {
   late int textMaxLines; // Only used when Type is PluginSettingValueTableColumnTypeText
   late bool hideInTable; // Hide this column in the table, but still show it in the setting dialog
   late bool hideInUpdate; // Hide this column in the update dialog
+  late bool enableQueryVariablePicker; // Enable the dynamic query placeholder picker for text columns
   late List<PluginSettingValidatorItem> validators;
   late List<PluginSettingValueTableColumnChangeAction> onChangedActions;
 
@@ -87,6 +100,10 @@ class PluginSettingValueTableColumn {
     }
     hideInTable = json['HideInTable'] ?? false;
     hideInUpdate = json['HideInUpdate'] ?? false;
+    // Query placeholder support is opt-in so the generic table editor keeps the
+    // same behavior for normal text columns while query-template fields can
+    // expose fast `{wox:...}` insertion.
+    enableQueryVariablePicker = json['EnableQueryVariablePicker'] ?? false;
 
     if (json['Validators'] != null) {
       validators = (json['Validators'] as List).map((e) => PluginSettingValidatorItem.fromJson(e)).toList();

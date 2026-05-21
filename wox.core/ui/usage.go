@@ -22,10 +22,13 @@ type usageStatsRequest struct {
 }
 
 type usageStatsItem struct {
-	Id    string          `json:"Id"`
-	Name  string          `json:"Name"`
-	Count int64           `json:"Count"`
-	Icon  common.WoxImage `json:"Icon"`
+	Id    string `json:"Id"`
+	Name  string `json:"Name"`
+	Count int64  `json:"Count"`
+	// Icon is filled after the raw usage queries because the analytics rows only
+	// contain id/name/count. GORM must ignore this response-only struct field;
+	// otherwise it treats WoxImage as a database relation and logs an invalid field error.
+	Icon common.WoxImage `json:"Icon" gorm:"-"`
 }
 
 type usageStatsBucket struct {

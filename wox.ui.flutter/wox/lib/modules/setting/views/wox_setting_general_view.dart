@@ -282,6 +282,7 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                       "Key": "QueryHotkeys",
                       "Title": "i18n:ui_query_hotkeys",
                       "Tooltip": "i18n:ui_query_hotkeys_tips",
+                      "UpdateDialogWidth": 760,
                       "Columns": [
                         {
                           "Key": "Hotkey",
@@ -300,6 +301,7 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                           "Tooltip": "i18n:ui_query_hotkeys_query_tooltip",
                           "Type": "text",
                           "TextMaxLines": 1,
+                          "EnableQueryVariablePicker": true,
                           "Validators": [
                             {"Type": "not_empty"},
                           ],

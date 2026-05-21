@@ -153,6 +153,16 @@
 					"-e",
 					"const http=require('http');let attempts=0;const max=600;function check(){attempts++;const req=http.get('http://127.0.0.1:34987/ping',res=>{res.resume();if(res.statusCode>=200&&res.statusCode<300){console.log('core ready');process.exit(0);}retry();});req.on('error',retry);req.setTimeout(1000,()=>{req.destroy();retry();});}function retry(){if(attempts>=max){console.error('core did not become ready on http://127.0.0.1:34987/ping');process.exit(1);}setTimeout(check,200);}check();"
 				],
+				// UX fix: this readiness probe is expected to run on every Flutter debug
+				// launch, so keep its terminal hidden unless VS Code needs to report a
+				// task failure. Reusing a dedicated panel also prevents utility output
+				// from interleaving with developer terminals.
+				"presentation": {
+					"reveal": "never",
+					"panel": "dedicated",
+					"clear": true,
+					"showReuseMessage": false
+				},
 				"problemMatcher": []
 			}
 		]

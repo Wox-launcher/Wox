@@ -2,8 +2,8 @@ import 'dart:io';
 import 'dart:convert';
 import 'dart:ui' as ui;
 
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/entity/wox_image.dart';
@@ -391,6 +391,77 @@ void registerLauncherCoreSmokeTests() {
       await closeSettings(tester, settingController, launcherController);
     });
 
+    testWidgets('T2-15b: Query hotkey query field inserts dynamic placeholders from picker', (tester) async {
+      final launcherController = await launchAndShowLauncher(tester, windowSize: smokeLargeWindowSize);
+      final settingController = await openSettings(tester, launcherController, 'general');
+
+      final queryHotkeysTitle = find.text(settingController.tr('ui_query_hotkeys')).first;
+      await tester.scrollUntilVisible(queryHotkeysTitle, 260, scrollable: find.byType(Scrollable).first, duration: const Duration(milliseconds: 80), continuous: true);
+      await tester.pump(const Duration(milliseconds: 250));
+
+      final addButton = _closestButtonWithText(tester, settingController.tr('ui_add'), tester.getCenter(queryHotkeysTitle));
+      await tester.tap(addButton, warnIfMissed: false);
+      await tester.pump(const Duration(milliseconds: 400));
+
+      // Query hotkeys have a dense row editor, so their table config should be
+      // able to opt into a wider add/update dialog without changing the shared
+      // default used by smaller tables.
+      expect(tester.getSize(find.byType(AlertDialog).last).width, greaterThan(760));
+
+      final queryField = find.byKey(const ValueKey('query-variable-text-field-Query'));
+      expect(queryField, findsOneWidget);
+
+      await tester.tap(queryField);
+      await tester.enterText(queryField, '{');
+      await tester.pump(const Duration(milliseconds: 250));
+
+      final selectedTextOption = find.byKey(const ValueKey('query-variable-picker-option-selected_text'));
+      expect(selectedTextOption, findsOneWidget);
+      expect(find.descendant(of: selectedTextOption, matching: find.textContaining('{wox:selected_text}')), findsNothing);
+      await tester.tap(selectedTextOption);
+      await tester.pump(const Duration(milliseconds: 250));
+
+      TextField field = tester.widget<TextField>(queryField);
+      expect(field.controller.runtimeType.toString(), contains('QueryVariableTextEditingController'));
+      expect(field.controller?.text, equals('{wox:selected_text}'));
+
+      field.controller?.selection = const TextSelection.collapsed(offset: 5);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump(const Duration(milliseconds: 250));
+      field = tester.widget<TextField>(queryField);
+      expect(field.controller?.selection.extentOffset, equals('{wox:selected_text}'.length));
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pump(const Duration(milliseconds: 250));
+      field = tester.widget<TextField>(queryField);
+      expect(field.controller?.selection.extentOffset, equals(0));
+
+      field.controller?.selection = TextSelection.collapsed(offset: field.controller!.text.length);
+
+      final pickerButton = find.byKey(const ValueKey('query-variable-picker-button-Query'));
+      expect(pickerButton, findsOneWidget);
+      await tester.tap(pickerButton);
+      await tester.pump(const Duration(milliseconds: 250));
+
+      final selectedFileOption = find.byKey(const ValueKey('query-variable-picker-option-selected_file'));
+      expect(selectedFileOption, findsOneWidget);
+      await tester.tap(selectedFileOption);
+      await tester.pump(const Duration(milliseconds: 250));
+
+      field = tester.widget<TextField>(queryField);
+      expect(field.controller?.text, equals('{wox:selected_text}{wox:selected_file}'));
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+      await tester.pump(const Duration(milliseconds: 250));
+
+      field = tester.widget<TextField>(queryField);
+      expect(field.controller?.text, equals('{wox:selected_text}'));
+
+      await tester.tap(find.text(settingController.tr('ui_cancel')).last, warnIfMissed: false);
+      await tester.pump(const Duration(milliseconds: 300));
+      await closeSettings(tester, settingController, launcherController);
+    });
+
     testWidgets('T2-16: LaunchMode switch via settings syncs hide and show behavior immediately', (tester) async {
       final controller = await launchAndShowLauncher(tester, windowSize: smokeLargeWindowSize);
 
@@ -603,4 +674,27 @@ void registerLauncherCoreSmokeTests() {
       expect(listData.items.first.tails.first.textCategory, equals(woxListItemTailTextCategoryWarning));
     });
   });
+}
+
+Finder _closestButtonWithText(WidgetTester tester, String text, Offset target) {
+  final buttons = find.ancestor(of: find.text(text), matching: find.byWidgetPredicate((widget) => widget is OutlinedButton || widget is ElevatedButton || widget is TextButton));
+  final elements = buttons.evaluate().toList();
+  expect(elements, isNotEmpty, reason: 'Expected at least one button with text "$text".');
+
+  Element closest = elements.first;
+  var closestDistance = double.infinity;
+  for (final element in elements) {
+    final renderObject = element.renderObject;
+    if (renderObject is! RenderBox || !renderObject.hasSize) {
+      continue;
+    }
+    final buttonCenter = renderObject.localToGlobal(renderObject.size.center(Offset.zero));
+    final distance = (buttonCenter - target).distance;
+    if (distance < closestDistance) {
+      closestDistance = distance;
+      closest = element;
+    }
+  }
+
+  return find.byWidget(closest.widget);
 }

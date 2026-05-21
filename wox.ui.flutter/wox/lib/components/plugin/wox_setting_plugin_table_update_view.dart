@@ -12,6 +12,7 @@ import 'package:wox/components/wox_hotkey_recorder_view.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_image_selector.dart';
 import 'package:wox/components/wox_loading_indicator.dart';
+import 'package:wox/components/wox_query_variable_textfield.dart';
 import 'package:wox/components/wox_textfield.dart';
 import 'package:wox/components/wox_checkbox.dart';
 import 'package:wox/components/wox_checkbox_tile.dart';
@@ -51,6 +52,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
   final Map<String, FocusNode> _focusNodes = {};
   List<PluginSettingValueTableColumn> columns = [];
   final Set<String> _customValidationErrorKeys = {};
+  bool _isEscapeClosePending = false;
 
   // Store tool list to avoid repeated requests
   List<AIMCPTool> allMCPTools = [];
@@ -454,20 +456,61 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
     }
   }
 
+  KeyEventResult _handleDialogKeyEvent(BuildContext context, KeyEvent event) {
+    if (event.logicalKey != LogicalKeyboardKey.escape) {
+      return KeyEventResult.ignored;
+    }
+
+    if (event is KeyDownEvent || event is KeyRepeatEvent) {
+      // Bug fix: closing this settings dialog on KeyDown let the matching KeyUp
+      // fall back to the settings page, whose own Escape handler exits settings.
+      // Defer the pop until KeyUp so one physical Escape press closes only this dialog.
+      _isEscapeClosePending = true;
+      return KeyEventResult.handled;
+    }
+
+    if (event is KeyUpEvent) {
+      if (_isEscapeClosePending) {
+        _isEscapeClosePending = false;
+        Navigator.pop(context);
+      }
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
   Widget buildColumn(PluginSettingValueTableColumn column) {
     switch (column.type) {
       case PluginSettingValueType.pluginSettingValueTableColumnTypeText:
         return Expanded(
-          child: WoxTextField(
-            controller: textboxEditingController[column.key],
-            focusNode: _focusNodes[column.key],
-            maxLines: column.textMaxLines,
-            onChanged: (value) {
-              updateValue(column.key, value);
-              setFieldValidationError(column.key, validateValue(value, column.validators));
-              setState(() {});
-            },
-          ),
+          child:
+              column.enableQueryVariablePicker
+                  // Query hotkeys need fast dynamic-placeholder insertion, but
+                  // regular table text fields should keep the plain editor. The
+                  // column flag keeps this feature explicit instead of coupling it
+                  // to one table key or column name.
+                  ? WoxQueryVariableTextField(
+                    key: ValueKey(column.key),
+                    controller: textboxEditingController[column.key],
+                    focusNode: _focusNodes[column.key],
+                    maxLines: column.textMaxLines,
+                    onChanged: (value) {
+                      updateValue(column.key, value);
+                      setFieldValidationError(column.key, validateValue(value, column.validators));
+                      setState(() {});
+                    },
+                  )
+                  : WoxTextField(
+                    controller: textboxEditingController[column.key],
+                    focusNode: _focusNodes[column.key],
+                    maxLines: column.textMaxLines,
+                    onChanged: (value) {
+                      updateValue(column.key, value);
+                      setFieldValidationError(column.key, validateValue(value, column.validators));
+                      setState(() {});
+                    },
+                  ),
         );
       case PluginSettingValueType.pluginSettingValueTableColumnTypeCheckbox:
         return WoxCheckbox(
@@ -716,7 +759,12 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
       final Color cardColor = getThemePopupSurfaceColor();
       final Color textColor = getThemeTextColor();
       final double maxLabelWidth = measureMaxLabelWidth(context);
-      final double dialogContentWidth = math.max(600, maxLabelWidth + math.max(320, getMaxColumnWidth()));
+      // Table add/update dialogs used to have only the shared adaptive width,
+      // which is too tight for dense rows such as Query Hotkeys. A table-level
+      // override keeps the default behavior unchanged while allowing specific
+      // tables to reserve enough room for long query fields and descriptions.
+      final double dialogContentWidth =
+          widget.item.updateDialogWidth > 0 ? widget.item.updateDialogWidth.toDouble() : math.max(600, maxLabelWidth + math.max(320, getMaxColumnWidth()));
       final Color outlineColor = getThemePopupOutlineColor();
       final baseTheme = Theme.of(context);
       final dialogTheme = baseTheme.copyWith(
@@ -730,13 +778,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
         data: dialogTheme,
         child: Focus(
           autofocus: true,
-          onKeyEvent: (node, event) {
-            if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.escape) {
-              Navigator.pop(context);
-              return KeyEventResult.handled;
-            }
-            return KeyEventResult.ignored;
-          },
+          onKeyEvent: (node, event) => _handleDialogKeyEvent(context, event),
           child: AlertDialog(
             backgroundColor: cardColor,
             surfaceTintColor: Colors.transparent,
@@ -749,60 +791,66 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
             content: SizedBox(
               width: dialogContentWidth,
               child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 4),
-                    for (var column in columns)
-                      if (!column.hideInUpdate)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  SizedBox(
-                                    width: maxLabelWidth,
-                                    child: Text(tr(column.label), style: TextStyle(color: textColor.withValues(alpha: 0.92), fontSize: 14, fontWeight: FontWeight.w600)),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  // Table row editors use the same compact split layout as plugin
-                                  // settings because their dialogs are much narrower than full
-                                  // settings pages and need the input column to stay scannable.
-                                  buildColumn(column),
-                                ],
-                              ),
-                              if (column.tooltip != "")
-                                Padding(
-                                  padding: EdgeInsets.only(top: 4, left: maxLabelWidth + 10),
-                                  child: ExcludeFocus(
-                                    child: WoxMarkdownView(
-                                      data: tr(column.tooltip),
-                                      fontColor: textColor.withValues(alpha: 0.6),
-                                      fontSize: 12,
-                                      linkColor: accentColor,
-                                      linkHoverColor: accentColor.withValues(alpha: 0.8),
-                                      selectable: true,
+                // Desktop scrollbars overlay this scroll view, so reserve a small
+                // right gutter for long tooltips and wide inputs instead of letting
+                // the thumb cover readable text.
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 4),
+                      for (var column in columns)
+                        if (!column.hideInUpdate)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    SizedBox(
+                                      width: maxLabelWidth,
+                                      child: Text(tr(column.label), style: TextStyle(color: textColor.withValues(alpha: 0.92), fontSize: 14, fontWeight: FontWeight.w600)),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    // Table row editors use the same compact split layout as plugin
+                                    // settings because their dialogs are much narrower than full
+                                    // settings pages and need the input column to stay scannable.
+                                    buildColumn(column),
+                                  ],
+                                ),
+                                if (column.tooltip != "")
+                                  Padding(
+                                    padding: EdgeInsets.only(top: 4, left: maxLabelWidth + 10),
+                                    child: ExcludeFocus(
+                                      child: WoxMarkdownView(
+                                        data: tr(column.tooltip),
+                                        fontColor: textColor.withValues(alpha: 0.6),
+                                        fontSize: 12,
+                                        linkColor: accentColor,
+                                        linkHoverColor: accentColor.withValues(alpha: 0.8),
+                                        selectable: true,
+                                      ),
                                     ),
                                   ),
-                                ),
-                              if ((fieldValidationErrors[column.key] ?? "").isNotEmpty)
-                                Padding(
-                                  padding: EdgeInsets.only(top: column.tooltip != "" ? 4 : 2, left: maxLabelWidth + 10),
-                                  child: Text(tr(fieldValidationErrors[column.key]!), style: const TextStyle(color: Colors.red, fontSize: 12)),
-                                ),
-                            ],
+                                if ((fieldValidationErrors[column.key] ?? "").isNotEmpty)
+                                  Padding(
+                                    padding: EdgeInsets.only(top: column.tooltip != "" ? 4 : 2, left: maxLabelWidth + 10),
+                                    child: Text(tr(fieldValidationErrors[column.key]!), style: const TextStyle(color: Colors.red, fontSize: 12)),
+                                  ),
+                              ],
+                            ),
                           ),
+                      if (saveErrorMessage.isNotEmpty)
+                        Padding(
+                          padding: EdgeInsets.only(top: 2, left: maxLabelWidth + 10),
+                          child: Text(tr(saveErrorMessage), style: const TextStyle(color: Colors.red, fontSize: 12)),
                         ),
-                    if (saveErrorMessage.isNotEmpty)
-                      Padding(
-                        padding: EdgeInsets.only(top: 2, left: maxLabelWidth + 10),
-                        child: Text(tr(saveErrorMessage), style: const TextStyle(color: Colors.red, fontSize: 12)),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
