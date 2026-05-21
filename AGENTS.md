@@ -13,7 +13,7 @@
 - **Inline Small Logic**: Prefer keeping very small, single-use logic inline. Do not extract a 3-4 line block into a helper unless it is reused, clarifies a meaningful boundary, or clearly reduces complexity.
 - **Explain Structures And Logic**: Add necessary comments for structs, state transitions, control-flow branches, and non-obvious logic so readers can understand the intent without reverse-engineering the code.
 - **Refactors**: Scan `AGENTS.md` and `README.md` files first
-- **Verification**: After code changes, only run code formatting according to the project style. Do not run build, tests, smoke tests, or app/runtime commands unless the user explicitly asks; the user will verify behavior.
+- **Verification**: After code changes, run code formatting according to the project style. Go build may be run for Go/backend changes. Do not run Flutter build; for Flutter changes, only check syntax/static errors. Do not run smoke test unless the user explicitly asks; the user will verify behavior.
 - **Unit Tests**: Do not write unit tests unless the user requests them
 - **Smoke Tests**: Do not add or run smoke tests unless the user explicitly asks for them.
 - **Format**: When formatting code, you must adhere to the coding style guidelines specified in Wox.code-workspace file.

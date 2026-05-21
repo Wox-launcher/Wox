@@ -416,7 +416,10 @@ class WoxSettingController extends GetxController {
     return _builtInSettingSearchDefinitions.map((definition) {
       final title = tr(definition.titleKey);
       final subtitle = definition.subtitleKey.isEmpty ? tr(_settingNavTitleKey(definition.navPath)) : tr(definition.subtitleKey);
-      final texts = <String>[definition.settingKey, title, subtitle, tr(_settingNavTitleKey(definition.navPath)), ...definition.searchKeywords.map(tr)];
+      // Search refinement: subtitles are explanatory result text, not stable
+      // lookup terms. Keeping them out prevents broad helper copy from pulling
+      // unrelated settings into short keyword searches.
+      final texts = <String>[definition.settingKey, title, tr(_settingNavTitleKey(definition.navPath)), ...definition.searchKeywords.map(tr)];
       return WoxSettingSearchResult(
         type: WoxSettingSearchTargetType.builtInSetting,
         id: 'builtInSetting:${definition.settingKey}',
@@ -442,16 +445,7 @@ class WoxSettingController extends GetxController {
         pluginId: plugin.id,
         settingKey: '',
         icon: plugin.icon,
-        searchTexts: _normalizeSettingSearchTexts([
-          plugin.id,
-          plugin.name,
-          plugin.nameEn,
-          plugin.description,
-          plugin.descriptionEn,
-          plugin.author,
-          plugin.runtime,
-          ...plugin.triggerKeywords,
-        ]),
+        searchTexts: _normalizeSettingSearchTexts([plugin.id, plugin.name, plugin.nameEn, plugin.author, plugin.runtime, ...plugin.triggerKeywords]),
         score: 0,
       );
     }).toList();
@@ -476,7 +470,10 @@ class WoxSettingController extends GetxController {
             pluginId: plugin.id,
             settingKey: extracted.settingKey,
             icon: plugin.icon,
-            searchTexts: _normalizeSettingSearchTexts([plugin.name, plugin.nameEn, plugin.id, extracted.settingKey, title, ...extracted.searchTexts]),
+            // Search refinement: the plugin name is the result subtitle for
+            // plugin settings. Match the setting's own visible title/key instead
+            // so searching a plugin does not fan out into every setting it owns.
+            searchTexts: _normalizeSettingSearchTexts([extracted.settingKey, title, ...extracted.searchTexts]),
             score: 0,
           ),
         );
