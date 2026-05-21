@@ -36,6 +36,8 @@ const double _selectionEdgeTolerance = 7;
 const double _textDraftMaxWidth = 480;
 const double _scrollingPreviewMaxWidth = 320;
 const double _scrollingNativeToolbarSlotHeight = 72;
+const double _screenshotToolbarIconSize = 24;
+const double _screenshotMosaicToolIconPaintSize = 18;
 const MethodChannel _macOSWindowManagerChannel = MethodChannel('com.wox.macos_window_manager');
 const MouseCursor _macOSResizeUpLeftDownRightCursor = _MacOSDiagonalResizeCursor('resizeUpLeftDownRight');
 const MouseCursor _macOSResizeUpRightDownLeftCursor = _MacOSDiagonalResizeCursor('resizeUpRightDownLeft');
@@ -2031,7 +2033,7 @@ class _ToolButton extends StatelessWidget {
     const activeColor = Color(0xFF29FF72);
     final foreground = enabled ? (selected ? activeColor : color) : Colors.white38;
     final enabledAction = enabled ? onPressed : null;
-    final iconWidget = iconBuilder?.call(foreground) ?? Icon(icon, color: foreground, size: 24);
+    final iconWidget = iconBuilder?.call(foreground) ?? Icon(icon, color: foreground, size: _screenshotToolbarIconSize);
 
     final button = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -2073,7 +2075,7 @@ class _ScrollingCaptureToolIcon extends StatelessWidget {
     // Long screenshot needs a distinct vertical-expansion symbol instead of a down arrow, which
     // users read as download/export. Keep it as a plain foreground-colored glyph so pin and
     // scrolling capture stay visually grouped with the white annotation tools.
-    return Center(child: Icon(Icons.height, color: color, size: 24));
+    return Center(child: Icon(Icons.height, color: color, size: _screenshotToolbarIconSize));
   }
 }
 
@@ -2085,8 +2087,9 @@ class _MosaicToolIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // The built-in grid icons read as layout controls. A bordered checkerboard matches common
-    // screenshot mosaic tools and mirrors the pixel blocks created by the brush itself.
-    return Center(child: CustomPaint(size: const Size.square(24), painter: _MosaicToolIconPainter(color)));
+    // screenshot mosaic tools, while the smaller paint size keeps the solid square optically aligned
+    // with Material icons that reserve padding inside the shared toolbar icon slot.
+    return Center(child: CustomPaint(size: const Size.square(_screenshotMosaicToolIconPaintSize), painter: _MosaicToolIconPainter(color)));
   }
 }
 
