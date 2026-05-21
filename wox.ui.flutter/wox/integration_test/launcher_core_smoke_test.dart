@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 import 'dart:ui' as ui;
@@ -159,6 +160,74 @@ void registerLauncherCoreSmokeTests() {
       expect(controller.isInSettingView.value, isFalse);
       expect(controller.queryBoxFocusNode.hasFocus, isTrue);
       expect(find.byType(WoxLauncherView), findsOneWidget);
+    });
+
+    testWidgets('T2-06aa: Escape exits settings when only the window route has focus', (tester) async {
+      final controller = await launchAndShowLauncher(tester, windowSize: smokeLargeWindowSize);
+      final settingController = await openSettings(tester, controller, 'general');
+
+      FocusManager.instance.primaryFocus?.unfocus();
+      settingController.settingFocusNode.unfocus();
+      settingController.settingSearchFocusNode.unfocus();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(settingController.settingFocusNode.hasFocus, isFalse);
+      expect(settingController.settingSearchFocusNode.hasFocus, isFalse);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.escape);
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Regression guard: the settings route can hold keyboard focus at the
+      // ModalScope/window level after a native focus transition. Escape must
+      // still leave settings, but only on KeyUp so holding Escape cannot leak
+      // into the launcher hide path.
+      expect(await windowManager.isVisible(), isTrue);
+      expect(controller.isInSettingView.value, isTrue);
+      expect(find.byType(WoxSettingView), findsOneWidget);
+
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.escape);
+      await waitForQueryBoxFocus(tester, controller);
+
+      expect(await windowManager.isVisible(), isTrue);
+      expect(controller.isInSettingView.value, isFalse);
+      expect(controller.queryBoxFocusNode.hasFocus, isTrue);
+      expect(find.byType(WoxLauncherView), findsOneWidget);
+    });
+
+    testWidgets('T2-06ab: Escape closes a settings dialog before exiting settings', (tester) async {
+      final controller = await launchAndShowLauncher(tester, windowSize: smokeLargeWindowSize);
+      final settingController = await openSettings(tester, controller, 'general');
+
+      unawaited(
+        showDialog<void>(
+          context: tester.element(find.byType(WoxSettingView)),
+          builder: (context) {
+            // Smoke-only dialog route: this keeps the test focused on the
+            // Navigator stack behavior that regressed, without depending on a
+            // particular settings pane being visible or scrollable.
+            return AlertDialog(
+              title: const Text('Settings smoke dialog'),
+              actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(settingController.tr('ui_ok')))],
+            );
+          },
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byType(AlertDialog), findsOneWidget);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.escape);
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.escape);
+      await tester.pump(const Duration(milliseconds: 400));
+
+      // Regression guard: dialogs are Navigator routes above the settings page.
+      // The page-level Escape fallback must let the dialog route consume Escape
+      // first instead of sending the whole settings window back to the launcher.
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(await windowManager.isVisible(), isTrue);
+      expect(controller.isInSettingView.value, isTrue);
+      expect(find.byType(WoxSettingView), findsOneWidget);
+
+      await closeSettings(tester, settingController, controller);
     });
 
     testWidgets('T2-06b: Re-show after a hidden settings route opens the launcher query UI', (tester) async {
@@ -439,6 +508,9 @@ void registerLauncherCoreSmokeTests() {
       await tester.pump(const Duration(milliseconds: 100));
       expect(settingController.settingSearchFocusNode.hasFocus, isTrue);
 
+      await tester.tap(searchField, warnIfMissed: false);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(settingController.settingSearchFocusNode.hasFocus, isTrue);
       await tester.enterText(searchField, 'Interface Size');
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.byKey(const ValueKey('settings-search-clear-button')), findsOneWidget);
@@ -455,6 +527,9 @@ void registerLauncherCoreSmokeTests() {
       expect(settingController.settingSearchPanelVisible.value, isFalse);
       expect(find.byKey(const ValueKey('settings-search-clear-button')), findsNothing);
 
+      await tester.tap(searchField, warnIfMissed: false);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(settingController.settingSearchFocusNode.hasFocus, isTrue);
       await tester.enterText(searchField, 'Interface Size');
       await tester.pump(const Duration(milliseconds: 300));
       expect(settingController.selectedSettingSearchResultIndex.value, equals(0));
@@ -467,6 +542,21 @@ void registerLauncherCoreSmokeTests() {
       await tester.sendKeyUpEvent(LogicalKeyboardKey.escape);
       await tester.pump(const Duration(milliseconds: 300));
       expect(launcherController.isInSettingView.value, isTrue);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.escape);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(launcherController.isInSettingView.value, isTrue);
+
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.escape);
+      await waitForQueryBoxFocus(tester, launcherController);
+      expect(launcherController.isInSettingView.value, isFalse);
+      expect(launcherController.queryBoxFocusNode.hasFocus, isTrue);
+      expect(find.byType(WoxLauncherView), findsOneWidget);
+
+      await openSettings(tester, launcherController, 'general');
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(settingController.settingSearchTextController.text, isEmpty);
+      expect(settingController.settingSearchPanelVisible.value, isFalse);
 
       await tester.tap(searchField, warnIfMissed: false);
       await tester.pump(const Duration(milliseconds: 100));
