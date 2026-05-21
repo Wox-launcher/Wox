@@ -228,6 +228,7 @@ class WoxSettingDataView extends WoxSettingBaseView {
           title: controller.tr("ui_data_section_storage"),
           children: [
             formField(
+              settingKey: "UserDataLocation",
               label: controller.tr("ui_data_config_location"),
               labelWidth: GENERAL_SETTING_WIDE_LABEL_WIDTH,
               child: Obx(
@@ -289,6 +290,7 @@ class WoxSettingDataView extends WoxSettingBaseView {
           title: controller.tr("ui_data_section_backup"),
           children: [
             formField(
+              settingKey: "EnableAutoBackup",
               label: controller.tr("ui_data_backup_auto_title"),
               labelWidth: GENERAL_SETTING_WIDE_LABEL_WIDTH,
               child: Obx(() {

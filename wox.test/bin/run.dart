@@ -116,6 +116,14 @@ List<_SmokeTemplatePluginDefinition> _templatePluginDefinitionsForSmoke(String? 
     return const <_SmokeTemplatePluginDefinition>[];
   }
 
+  // Settings-focused smoke cases use built-in settings and installed system
+  // plugins only. Skipping template packaging keeps these UI flows away from
+  // unrelated template clone/install failures on Windows.
+  const settingsFocusedTests = ['T2-15'];
+  if (settingsFocusedTests.any(testName.contains)) {
+    return const <_SmokeTemplatePluginDefinition>[];
+  }
+
   return _templatePluginDefinitions;
 }
 
@@ -604,6 +612,16 @@ Future<_SmokeTemplatePluginPackage> _prepareSmokeTemplatePlugin({
   required Map<String, String> environment,
   required File logFile,
 }) async {
+  final pluginEnvironment = Map<String, String>.from(environment);
+  if (Platform.isWindows && definition.runtime == 'nodejs') {
+    // Bug fix: pnpm's default isolated linker creates a dense symlink tree that
+    // repeatedly hits Windows EBUSY during smoke setup. Hoisted/copy mode keeps
+    // the template package build deterministic while avoiding that fragile
+    // symlink layout in the temporary artifacts directory.
+    pluginEnvironment['npm_config_node_linker'] = 'hoisted';
+    pluginEnvironment['npm_config_package_import_method'] = 'copy';
+  }
+
   final workspaceDir = Directory('${artifactsDir.path}${Platform.pathSeparator}template-plugin-workspace');
   final repoName = definition.repoUrl.split('/').last;
   final pluginRoot = Directory('${workspaceDir.path}${Platform.pathSeparator}$repoName');
@@ -616,7 +634,7 @@ Future<_SmokeTemplatePluginPackage> _prepareSmokeTemplatePlugin({
     'git',
     ['clone', '--depth', '1', definition.repoUrl, pluginRoot.path],
     workingDirectory: workspaceDir.path,
-    environment: environment,
+    environment: pluginEnvironment,
     outputFile: logFile,
     prefix: '[template-plugin:${definition.runtime}]',
   );
@@ -627,13 +645,20 @@ Future<_SmokeTemplatePluginPackage> _prepareSmokeTemplatePlugin({
     'make',
     ['init'],
     workingDirectory: pluginRoot.path,
-    environment: environment,
+    environment: pluginEnvironment,
     outputFile: logFile,
     prefix: '[template-plugin:${definition.runtime}]',
     stdinData: '$initInput\n',
   );
-  await _runTemplateInstallWithRetry(definition: definition, pluginRoot: pluginRoot, environment: environment, logFile: logFile);
-  await _runLoggedCommand('make', ['package'], workingDirectory: pluginRoot.path, environment: environment, outputFile: logFile, prefix: '[template-plugin:${definition.runtime}]');
+  await _runTemplateInstallWithRetry(definition: definition, pluginRoot: pluginRoot, environment: pluginEnvironment, logFile: logFile);
+  await _runLoggedCommand(
+    'make',
+    ['package'],
+    workingDirectory: pluginRoot.path,
+    environment: pluginEnvironment,
+    outputFile: logFile,
+    prefix: '[template-plugin:${definition.runtime}]',
+  );
 
   final pluginJson = jsonDecode(await File('${pluginRoot.path}${Platform.pathSeparator}plugin.json').readAsString()) as Map<String, dynamic>;
   final packageName = definition.name.trim().toLowerCase();

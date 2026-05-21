@@ -13,9 +13,9 @@
 - **Inline Small Logic**: Prefer keeping very small, single-use logic inline. Do not extract a 3-4 line block into a helper unless it is reused, clarifies a meaningful boundary, or clearly reduces complexity.
 - **Explain Structures And Logic**: Add necessary comments for structs, state transitions, control-flow branches, and non-obvious logic so readers can understand the intent without reverse-engineering the code.
 - **Refactors**: Scan `AGENTS.md` and `README.md` files first
-- **Build**: Verify with `make build` in wox.core (you should skip Go or UI build for small changes)
+- **Verification**: After code changes, only run code formatting according to the project style. Do not run build, tests, smoke tests, or app/runtime commands unless the user explicitly asks; the user will verify behavior.
 - **Unit Tests**: Do not write unit tests unless the user requests them
-- **Smoke Tests**: For major fixes or feature additions, corresponding smoke tests must be added
+- **Smoke Tests**: Do not add or run smoke tests unless the user explicitly asks for them.
 - **Format**: When formatting code, you must adhere to the coding style guidelines specified in Wox.code-workspace file.
 
 ## User Coding Style Preferences

@@ -9,6 +9,10 @@ abstract class WoxSettingBaseView extends GetView<WoxSettingController> {
   const WoxSettingBaseView({super.key});
 
   Widget form({double width = GENERAL_SETTING_FORM_WIDTH, String? title, String? description, required List<Widget> children}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      controller.notifyBuiltInSettingViewReady();
+    });
+
     return Align(
       alignment: Alignment.topLeft,
       child: SingleChildScrollView(
@@ -65,6 +69,7 @@ abstract class WoxSettingBaseView extends GetView<WoxSettingController> {
 
   Widget formField({
     Key? key,
+    String? settingKey,
     required String label,
     required Widget child,
     String? tips,
@@ -75,7 +80,7 @@ abstract class WoxSettingBaseView extends GetView<WoxSettingController> {
     double bottomSpacing = 18,
   }) {
     final resolvedTips = tipsWidget ?? (tips == null ? null : Text(tips, style: TextStyle(color: getThemeSubTextColor(), fontSize: SETTING_TOOLTIP_DEFAULT_SIZE, height: 1.35)));
-    return WoxSettingFormField(
+    final field = WoxSettingFormField(
       key: key,
       label: label,
       tips: resolvedTips,
@@ -86,6 +91,36 @@ abstract class WoxSettingBaseView extends GetView<WoxSettingController> {
       fullWidth: fullWidth,
       controlMaxWidth: fullWidth ? null : controlMaxWidth,
       child: child,
+    );
+
+    return settingTarget(settingKey: settingKey, child: field);
+  }
+
+  Widget settingTarget({String? settingKey, required Widget child}) {
+    if (settingKey == null || settingKey.trim().isEmpty) {
+      return child;
+    }
+
+    final normalizedKey = settingKey.trim();
+    return Container(
+      key: controller.getBuiltInSettingKey(normalizedKey),
+      child: Obx(() {
+        final highlighted = controller.isSettingTargetHighlighted('built-in-$normalizedKey');
+        final wrappedChild = highlighted ? KeyedSubtree(key: ValueKey('settings-highlight-built-in-$normalizedKey'), child: child) : child;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOutCubic,
+          // Settings search needs a visible target cue after jumping across
+          // pages. Keeping the effect local to the row avoids changing the
+          // fixed settings layout or introducing another persistent state.
+          decoration: BoxDecoration(
+            color: highlighted ? getThemeActiveBackgroundColor().withValues(alpha: 0.12) : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: highlighted ? getThemeActiveBackgroundColor().withValues(alpha: 0.34) : Colors.transparent),
+          ),
+          child: wrappedChild,
+        );
+      }),
     );
   }
 }

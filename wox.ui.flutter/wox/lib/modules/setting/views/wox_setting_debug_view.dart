@@ -14,6 +14,7 @@ class WoxSettingDebugView extends WoxSettingBaseView {
         description: controller.tr("ui_debug_description"),
         children: [
           formField(
+            settingKey: "ShowScoreTail",
             label: controller.tr("ui_debug_show_score_tail"),
             tips: controller.tr("ui_debug_show_score_tail_tips"),
             child: WoxSwitch(
@@ -27,6 +28,7 @@ class WoxSettingDebugView extends WoxSettingBaseView {
             ),
           ),
           formField(
+            settingKey: "ShowPerformanceTail",
             label: controller.tr("ui_debug_show_performance_tail"),
             tips: controller.tr("ui_debug_show_performance_tail_tips"),
             child: WoxSwitch(

@@ -6,10 +6,19 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
+import 'package:wox/entity/setting/wox_plugin_setting_checkbox.dart';
+import 'package:wox/entity/setting/wox_plugin_setting_head.dart';
+import 'package:wox/entity/setting/wox_plugin_setting_label.dart';
+import 'package:wox/entity/setting/wox_plugin_setting_select.dart';
+import 'package:wox/entity/setting/wox_plugin_setting_select_ai_model.dart';
+import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
+import 'package:wox/entity/setting/wox_plugin_setting_textbox.dart';
 import 'package:wox/entity/wox_backup.dart';
 import 'package:wox/entity/wox_glance.dart';
 import 'package:wox/entity/wox_plugin.dart';
+import 'package:wox/entity/wox_plugin_setting.dart';
 import 'package:wox/entity/wox_runtime_status.dart';
+import 'package:wox/entity/wox_setting_search.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/entity/wox_usage_stats.dart';
 import 'package:wox/enums/wox_position_type_enum.dart';
@@ -20,6 +29,8 @@ import 'package:wox/utils/wox_interface_size_util.dart';
 import 'package:wox/utils/wox_setting_util.dart';
 
 class WoxSettingController extends GetxController {
+  static const double _settingSearchResultEstimatedRowExtent = 52.0;
+
   final activeNavPath = 'general'.obs;
   final woxSetting = WoxSettingUtil.instance.currentSetting.obs;
   final userDataLocation = "".obs;
@@ -66,7 +77,7 @@ class WoxSettingController extends GetxController {
   String pendingInstalledPluginFocusRef = '';
   final pluginListScrollController = ScrollController();
   final Map<String, GlobalKey> pluginListItemKeys = <String, GlobalKey>{};
-  late TabController activePluginTabController;
+  TabController? activePluginTabController;
 
   // UI state: show loading spinner when refreshing visible plugin list
   final isRefreshingPluginList = false.obs;
@@ -86,10 +97,22 @@ class WoxSettingController extends GetxController {
   final isUpgradingPlugin = false.obs;
   final pluginInstallError = ''.obs;
   final FocusNode settingFocusNode = FocusNode();
+  final TextEditingController settingSearchTextController = TextEditingController();
+  final FocusNode settingSearchFocusNode = FocusNode();
+  final ScrollController settingSearchResultScrollController = ScrollController();
+  final settingSearchResults = <WoxSettingSearchResult>[].obs;
+  final settingSearchPanelVisible = false.obs;
+  final selectedSettingSearchResultIndex = 0.obs;
+  final highlightedSettingTargetId = ''.obs;
   final Map<String, GlobalKey> generalSectionKeys = <String, GlobalKey>{};
+  final Map<String, GlobalKey> builtInSettingKeys = <String, GlobalKey>{};
+  final Map<String, GlobalKey> pluginSettingItemKeys = <String, GlobalKey>{};
   final RxnInt pendingTrayQueryEditRowIndex = RxnInt();
   bool _hasPreloadedSettingViewData = false;
   String _pendingGeneralSectionAnchor = '';
+  String _pendingBuiltInSettingKey = '';
+  String _pendingPluginSettingKey = '';
+  Timer? _settingHighlightTimer;
 
   @override
   void onInit() {
@@ -127,6 +150,458 @@ class WoxSettingController extends GetxController {
 
   GlobalKey getGeneralSectionKey(String sectionId) {
     return generalSectionKeys.putIfAbsent(sectionId, () => GlobalKey(debugLabel: 'settings-general-$sectionId'));
+  }
+
+  GlobalKey getBuiltInSettingKey(String settingKey) {
+    return builtInSettingKeys.putIfAbsent(settingKey, () => GlobalKey(debugLabel: 'settings-built-in-$settingKey'));
+  }
+
+  GlobalKey getPluginSettingItemKey(String pluginId, String settingKey) {
+    final key = '$pluginId\x00$settingKey';
+    return pluginSettingItemKeys.putIfAbsent(key, () => GlobalKey(debugLabel: 'settings-plugin-setting-$pluginId-$settingKey'));
+  }
+
+  bool isSettingTargetHighlighted(String targetId) {
+    return highlightedSettingTargetId.value == targetId;
+  }
+
+  void handleSettingSearchChanged() {
+    refreshSettingSearchResults();
+    settingSearchPanelVisible.value = settingSearchTextController.text.trim().isNotEmpty;
+  }
+
+  void closeSettingSearchPanel() {
+    settingSearchPanelVisible.value = false;
+  }
+
+  void clearSettingSearch() {
+    settingSearchTextController.clear();
+    settingSearchResults.clear();
+    settingSearchPanelVisible.value = false;
+    selectedSettingSearchResultIndex.value = 0;
+  }
+
+  void refreshSettingSearchResults() {
+    final keyword = settingSearchTextController.text.trim();
+    if (keyword.isEmpty) {
+      settingSearchResults.clear();
+      selectedSettingSearchResultIndex.value = 0;
+      return;
+    }
+
+    final results = <WoxSettingSearchResult>[];
+    for (final candidate in [..._buildBuiltInSettingSearchResults(), ..._buildInstalledPluginSearchResults(), ..._buildPluginSettingSearchResults()]) {
+      final score = _matchSettingSearchCandidate(candidate.searchTexts, keyword);
+      if (score <= 0) {
+        continue;
+      }
+      results.add(
+        WoxSettingSearchResult(
+          type: candidate.type,
+          id: candidate.id,
+          title: candidate.title,
+          subtitle: candidate.subtitle,
+          navPath: candidate.navPath,
+          pluginId: candidate.pluginId,
+          settingKey: candidate.settingKey,
+          icon: candidate.icon,
+          searchTexts: candidate.searchTexts,
+          score: score,
+        ),
+      );
+    }
+
+    results.sort((a, b) {
+      final scoreCompare = b.score.compareTo(a.score);
+      if (scoreCompare != 0) {
+        return scoreCompare;
+      }
+      // Feature refinement: plugin settings inherit their plugin name as
+      // searchable text. When that ties with the plugin row itself, prefer the
+      // higher-level destination so typing a plugin name opens the plugin first.
+      final typeCompare = _settingSearchTypePriority(a.type).compareTo(_settingSearchTypePriority(b.type));
+      if (typeCompare != 0) {
+        return typeCompare;
+      }
+      return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+    });
+    settingSearchResults.assignAll(results.take(8));
+    // Feature: every search refresh starts with a deterministic keyboard target
+    // so Enter can immediately open the best match without requiring a mouse.
+    selectedSettingSearchResultIndex.value = 0;
+    _scheduleSelectedSettingSearchResultVisible(immediate: true);
+  }
+
+  void selectSettingSearchResult(int index) {
+    if (settingSearchResults.isEmpty) {
+      selectedSettingSearchResultIndex.value = 0;
+      return;
+    }
+
+    selectedSettingSearchResultIndex.value = index.clamp(0, settingSearchResults.length - 1).toInt();
+    _scheduleSelectedSettingSearchResultVisible();
+  }
+
+  void moveSettingSearchSelection(int delta) {
+    if (settingSearchResults.isEmpty) {
+      selectedSettingSearchResultIndex.value = 0;
+      return;
+    }
+
+    final nextIndex = (selectedSettingSearchResultIndex.value + delta).clamp(0, settingSearchResults.length - 1).toInt();
+    selectedSettingSearchResultIndex.value = nextIndex;
+    _scheduleSelectedSettingSearchResultVisible(immediate: true);
+  }
+
+  void _scheduleSelectedSettingSearchResultVisible({bool immediate = false}) {
+    if (settingSearchResultScrollController.hasClients) {
+      _scrollSelectedSettingSearchResultVisible(immediate: immediate);
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollSelectedSettingSearchResultVisible(immediate: immediate);
+    });
+  }
+
+  void _scrollSelectedSettingSearchResultVisible({bool immediate = false}) {
+    if (!settingSearchResultScrollController.hasClients || settingSearchResults.isEmpty) {
+      return;
+    }
+
+    final position = settingSearchResultScrollController.position;
+    final selectedIndex = selectedSettingSearchResultIndex.value.clamp(0, settingSearchResults.length - 1).toInt();
+    final itemTop = selectedIndex * _settingSearchResultEstimatedRowExtent;
+    final itemBottom = itemTop + _settingSearchResultEstimatedRowExtent;
+    final viewportTop = position.pixels;
+    final viewportBottom = viewportTop + position.viewportDimension;
+    double? targetOffset;
+    // Bug fix: keyboard selection used to move only the highlighted row. The
+    // floating list is height-limited, so rows past the viewport stayed hidden.
+    // Keyboard repeat can cancel short animations before they visibly move, so
+    // arrow navigation uses an immediate jump while search refreshes can still
+    // defer until the list has a mounted scroll position.
+    if (itemTop < viewportTop) {
+      targetOffset = itemTop;
+    } else if (itemBottom > viewportBottom) {
+      targetOffset = itemBottom - position.viewportDimension;
+    }
+    if (targetOffset == null) {
+      return;
+    }
+
+    final clampedOffset = targetOffset.clamp(position.minScrollExtent, position.maxScrollExtent).toDouble();
+    if ((clampedOffset - position.pixels).abs() < 0.5) {
+      return;
+    }
+    if (immediate) {
+      settingSearchResultScrollController.jumpTo(clampedOffset);
+      return;
+    }
+    unawaited(settingSearchResultScrollController.animateTo(clampedOffset, duration: const Duration(milliseconds: 120), curve: Curves.easeOutCubic));
+  }
+
+  Future<void> activateSelectedSettingSearchResult() async {
+    if (settingSearchResults.isEmpty) {
+      return;
+    }
+
+    await activateSettingSearchResult(settingSearchResults[selectedSettingSearchResultIndex.value.clamp(0, settingSearchResults.length - 1).toInt()]);
+  }
+
+  Future<void> activateSettingSearchResult(WoxSettingSearchResult result) async {
+    settingSearchPanelVisible.value = false;
+
+    switch (result.type) {
+      case WoxSettingSearchTargetType.builtInSetting:
+        activeNavPath.value = result.navPath;
+        _pendingBuiltInSettingKey = result.settingKey;
+        _highlightSettingTarget(result.highlightTargetId);
+        _schedulePendingBuiltInSettingFocus();
+        break;
+      case WoxSettingSearchTargetType.installedPlugin:
+        await switchToPluginList(const UuidV4().generate(), false);
+        focusInstalledPlugin(result.pluginId);
+        _highlightSettingTarget(result.highlightTargetId);
+        break;
+      case WoxSettingSearchTargetType.pluginSetting:
+        await switchToPluginList(const UuidV4().generate(), false);
+        final focused = focusInstalledPlugin(result.pluginId);
+        if (!focused) {
+          return;
+        }
+        _pendingPluginSettingKey = result.settingKey;
+        // Search jumps always land on the Settings tab because the result
+        // points to a concrete plugin setting, not just the plugin detail pane.
+        if (shouldShowSettingTab()) {
+          activePluginTabController?.index = 0;
+        }
+        _highlightSettingTarget(result.highlightTargetId);
+        _schedulePendingPluginSettingFocus();
+        break;
+    }
+  }
+
+  void notifyBuiltInSettingViewReady() {
+    if (_pendingBuiltInSettingKey.isEmpty) {
+      return;
+    }
+    _schedulePendingBuiltInSettingFocus();
+  }
+
+  void notifyPluginSettingViewReady() {
+    if (_pendingPluginSettingKey.isEmpty) {
+      return;
+    }
+    _schedulePendingPluginSettingFocus();
+  }
+
+  void _highlightSettingTarget(String targetId) {
+    highlightedSettingTargetId.value = targetId;
+    _settingHighlightTimer?.cancel();
+    _settingHighlightTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (highlightedSettingTargetId.value == targetId) {
+        highlightedSettingTargetId.value = '';
+      }
+    });
+  }
+
+  void _schedulePendingBuiltInSettingFocus({int attempt = 0}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_pendingBuiltInSettingKey.isEmpty) {
+        return;
+      }
+
+      final targetKey = builtInSettingKeys[_pendingBuiltInSettingKey];
+      final targetContext = targetKey?.currentContext;
+      if (targetContext == null) {
+        if (attempt >= 10) {
+          return;
+        }
+        Future.delayed(const Duration(milliseconds: 80), () {
+          _schedulePendingBuiltInSettingFocus(attempt: attempt + 1);
+        });
+        return;
+      }
+
+      Scrollable.ensureVisible(targetContext, duration: const Duration(milliseconds: 220), curve: Curves.easeOutCubic, alignment: 0.14);
+      _pendingBuiltInSettingKey = '';
+    });
+  }
+
+  void _schedulePendingPluginSettingFocus({int attempt = 0}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_pendingPluginSettingKey.isEmpty || activePlugin.value.id.isEmpty) {
+        return;
+      }
+
+      final targetKey = pluginSettingItemKeys['${activePlugin.value.id}\x00$_pendingPluginSettingKey'];
+      final targetContext = targetKey?.currentContext;
+      if (targetContext == null) {
+        if (attempt >= 10) {
+          return;
+        }
+        Future.delayed(const Duration(milliseconds: 80), () {
+          _schedulePendingPluginSettingFocus(attempt: attempt + 1);
+        });
+        return;
+      }
+
+      Scrollable.ensureVisible(targetContext, duration: const Duration(milliseconds: 220), curve: Curves.easeOutCubic, alignment: 0.14);
+      _pendingPluginSettingKey = '';
+    });
+  }
+
+  List<WoxSettingSearchResult> _buildBuiltInSettingSearchResults() {
+    return _builtInSettingSearchDefinitions.map((definition) {
+      final title = tr(definition.titleKey);
+      final subtitle = definition.subtitleKey.isEmpty ? tr(_settingNavTitleKey(definition.navPath)) : tr(definition.subtitleKey);
+      final texts = <String>[definition.settingKey, title, subtitle, tr(_settingNavTitleKey(definition.navPath)), ...definition.searchKeywords.map(tr)];
+      return WoxSettingSearchResult(
+        type: WoxSettingSearchTargetType.builtInSetting,
+        id: 'builtInSetting:${definition.settingKey}',
+        title: title,
+        subtitle: subtitle,
+        navPath: definition.navPath,
+        pluginId: '',
+        settingKey: definition.settingKey,
+        searchTexts: _normalizeSettingSearchTexts(texts),
+        score: 0,
+      );
+    }).toList();
+  }
+
+  List<WoxSettingSearchResult> _buildInstalledPluginSearchResults() {
+    return installedPlugins.map((plugin) {
+      return WoxSettingSearchResult(
+        type: WoxSettingSearchTargetType.installedPlugin,
+        id: 'installedPlugin:${plugin.id}',
+        title: plugin.name,
+        subtitle: plugin.description.isNotEmpty ? plugin.description : plugin.id,
+        navPath: 'plugins.installed',
+        pluginId: plugin.id,
+        settingKey: '',
+        icon: plugin.icon,
+        searchTexts: _normalizeSettingSearchTexts([
+          plugin.id,
+          plugin.name,
+          plugin.nameEn,
+          plugin.description,
+          plugin.descriptionEn,
+          plugin.author,
+          plugin.runtime,
+          ...plugin.triggerKeywords,
+        ]),
+        score: 0,
+      );
+    }).toList();
+  }
+
+  List<WoxSettingSearchResult> _buildPluginSettingSearchResults() {
+    final results = <WoxSettingSearchResult>[];
+    for (final plugin in installedPlugins) {
+      for (final definition in plugin.settingDefinitions) {
+        final extracted = _extractPluginSettingSearchData(definition);
+        final title = tr(extracted.title).trim();
+        if (extracted.settingKey.isEmpty || title.isEmpty) {
+          continue;
+        }
+        results.add(
+          WoxSettingSearchResult(
+            type: WoxSettingSearchTargetType.pluginSetting,
+            id: 'pluginSetting:${plugin.id}:${extracted.settingKey}',
+            title: title,
+            subtitle: plugin.name,
+            navPath: 'plugins.installed',
+            pluginId: plugin.id,
+            settingKey: extracted.settingKey,
+            icon: plugin.icon,
+            searchTexts: _normalizeSettingSearchTexts([plugin.name, plugin.nameEn, plugin.id, extracted.settingKey, title, ...extracted.searchTexts]),
+            score: 0,
+          ),
+        );
+      }
+    }
+    return results;
+  }
+
+  int _matchSettingSearchCandidate(List<String> searchTexts, String keyword) {
+    var bestScore = 0;
+    for (final text in searchTexts) {
+      if (text.isEmpty) {
+        continue;
+      }
+      final match = WoxFuzzyMatchUtil.match(text: text, pattern: keyword, usePinYin: WoxSettingUtil.instance.currentSetting.usePinYin);
+      if (match.isMatch && match.score > bestScore) {
+        bestScore = match.score;
+      }
+    }
+    return bestScore;
+  }
+
+  int _settingSearchTypePriority(WoxSettingSearchTargetType type) {
+    switch (type) {
+      case WoxSettingSearchTargetType.builtInSetting:
+        return 0;
+      case WoxSettingSearchTargetType.installedPlugin:
+        return 1;
+      case WoxSettingSearchTargetType.pluginSetting:
+        return 2;
+    }
+  }
+
+  List<String> _normalizeSettingSearchTexts(List<String> rawTexts) {
+    final seen = <String>{};
+    final texts = <String>[];
+    void addText(String text) {
+      final trimmed = text.trim();
+      if (trimmed.isEmpty) {
+        return;
+      }
+      final key = trimmed.toLowerCase();
+      if (seen.add(key)) {
+        texts.add(trimmed);
+      }
+    }
+
+    for (final text in rawTexts) {
+      addText(text);
+      // Feature: plugin settings often define visible labels as i18n keys.
+      // Search stores both the raw definition text and the rendered text so SDKs
+      // do not need a separate keyword field just to make settings discoverable.
+      addText(tr(text));
+    }
+    return texts;
+  }
+
+  String _settingNavTitleKey(String navPath) {
+    switch (navPath) {
+      case 'general':
+        return 'ui_general';
+      case 'ui':
+        return 'ui_ui';
+      case 'ai':
+        return 'ui_ai';
+      case 'network':
+        return 'ui_network';
+      case 'data':
+        return 'ui_data';
+      case 'plugins.runtime':
+        return 'ui_runtime_settings';
+      case 'debug':
+        return 'ui_debug';
+      case 'privacy':
+        return 'ui_privacy';
+      default:
+        return 'ui_settings';
+    }
+  }
+
+  _PluginSettingSearchData _extractPluginSettingSearchData(PluginSettingDefinitionItem definition) {
+    final value = definition.value;
+    // Feature refinement: plugin setting search now stays on visible titles,
+    // labels, option text, and stable keys. Tooltip text is hover help and made
+    // broad words surface unrelated settings too often.
+    if (value is PluginSettingValueCheckBox) {
+      return _PluginSettingSearchData(settingKey: value.key, title: value.label, searchTexts: [value.label, value.key]);
+    }
+    if (value is PluginSettingValueTextBox) {
+      return _PluginSettingSearchData(settingKey: value.key, title: value.label, searchTexts: [value.label, value.key, value.suffix]);
+    }
+    if (value is PluginSettingValueSelect) {
+      return _PluginSettingSearchData(
+        settingKey: value.key,
+        title: value.label,
+        searchTexts: [
+          value.label,
+          value.key,
+          value.suffix,
+          ...value.options.expand((option) => [option.label, option.value]),
+        ],
+      );
+    }
+    if (value is PluginSettingValueSelectAIModel) {
+      return _PluginSettingSearchData(settingKey: value.key, title: value.label, searchTexts: [value.label, value.key, value.suffix]);
+    }
+    if (value is PluginSettingValueTable) {
+      final title = value.title.trim().isNotEmpty ? value.title : value.key;
+      return _PluginSettingSearchData(
+        settingKey: value.key,
+        title: title,
+        searchTexts: [
+          title,
+          value.key,
+          ...value.columns.expand((column) => [column.key, column.label]),
+        ],
+      );
+    }
+    if (value is PluginSettingValueHead) {
+      return _PluginSettingSearchData(settingKey: '', title: value.content, searchTexts: [value.content]);
+    }
+    if (value is PluginSettingValueLabel) {
+      return _PluginSettingSearchData(settingKey: '', title: value.content, searchTexts: [value.content]);
+    }
+    return const _PluginSettingSearchData(settingKey: '', title: '', searchTexts: []);
   }
 
   void focusGeneralSection(String sectionId) {
@@ -991,7 +1466,7 @@ class WoxSettingController extends GetxController {
 
   Future<String?> updatePluginSetting(String pluginId, String key, String value) async {
     final traceId = const UuidV4().generate();
-    final activeTabIndex = activePluginTabController.index;
+    final activeTabIndex = activePluginTabController?.index ?? 0;
     final previousValue = getPluginSettingValue(pluginId, key);
     applyPluginSettingOptimistically(pluginId, key, value);
 
@@ -1106,8 +1581,9 @@ class WoxSettingController extends GetxController {
 
     // switch to the tab that was active before the update
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
-      if (activePluginTabController.index != activeTabIndex) {
-        activePluginTabController.index = activeTabIndex;
+      final tabController = activePluginTabController;
+      if (tabController != null && tabController.index != activeTabIndex) {
+        tabController.index = activeTabIndex;
       }
     });
   }
@@ -1338,9 +1814,13 @@ class WoxSettingController extends GetxController {
 
   @override
   void onClose() {
+    _settingHighlightTimer?.cancel();
     pluginListScrollController.dispose();
     themeListScrollController.dispose();
     settingFocusNode.dispose();
+    settingSearchTextController.dispose();
+    settingSearchFocusNode.dispose();
+    settingSearchResultScrollController.dispose();
     super.onClose();
   }
 }
@@ -1351,3 +1831,130 @@ class _GeneralSectionFocusRequest {
 
   const _GeneralSectionFocusRequest({required this.sectionId, this.trayQueryEditRowIndex});
 }
+
+class _BuiltInSettingSearchDefinition {
+  final String settingKey;
+  final String navPath;
+  final String titleKey;
+  final String subtitleKey;
+  final List<String> searchKeywords;
+
+  const _BuiltInSettingSearchDefinition({required this.settingKey, required this.navPath, required this.titleKey, this.subtitleKey = '', this.searchKeywords = const []});
+}
+
+class _PluginSettingSearchData {
+  final String settingKey;
+  final String title;
+  final List<String> searchTexts;
+
+  const _PluginSettingSearchData({required this.settingKey, required this.title, required this.searchTexts});
+}
+
+const List<_BuiltInSettingSearchDefinition> _builtInSettingSearchDefinitions = [
+  _BuiltInSettingSearchDefinition(
+    settingKey: 'EnableAutostart',
+    navPath: 'general',
+    titleKey: 'ui_autostart',
+    subtitleKey: 'ui_autostart_tips',
+    searchKeywords: ['startup', 'auto start'],
+  ),
+  _BuiltInSettingSearchDefinition(settingKey: 'HideOnStart', navPath: 'general', titleKey: 'ui_hide_on_start', subtitleKey: 'ui_hide_on_start_tips'),
+  _BuiltInSettingSearchDefinition(
+    settingKey: 'EnableAutoUpdate',
+    navPath: 'general',
+    titleKey: 'ui_enable_auto_update',
+    subtitleKey: 'ui_enable_auto_update_tips',
+    searchKeywords: ['update'],
+  ),
+  _BuiltInSettingSearchDefinition(settingKey: 'MainHotkey', navPath: 'general', titleKey: 'ui_hotkey', subtitleKey: 'ui_hotkey_tips', searchKeywords: ['shortcut', 'main hotkey']),
+  _BuiltInSettingSearchDefinition(
+    settingKey: 'SelectionHotkey',
+    navPath: 'general',
+    titleKey: 'ui_selection_hotkey',
+    subtitleKey: 'ui_selection_hotkey_tips',
+    searchKeywords: ['selection shortcut'],
+  ),
+  _BuiltInSettingSearchDefinition(settingKey: 'LaunchMode', navPath: 'general', titleKey: 'ui_launch_mode', subtitleKey: 'ui_launch_mode_tips'),
+  _BuiltInSettingSearchDefinition(settingKey: 'StartPage', navPath: 'general', titleKey: 'ui_start_page', subtitleKey: 'ui_start_page_tips'),
+  _BuiltInSettingSearchDefinition(settingKey: 'HideOnLostFocus', navPath: 'general', titleKey: 'ui_hide_on_lost_focus', subtitleKey: 'ui_hide_on_lost_focus_tips'),
+  _BuiltInSettingSearchDefinition(settingKey: 'UsePinYin', navPath: 'general', titleKey: 'ui_use_pinyin', subtitleKey: 'ui_use_pinyin_tips', searchKeywords: ['pinyin']),
+  _BuiltInSettingSearchDefinition(settingKey: 'SwitchInputMethodABC', navPath: 'general', titleKey: 'ui_switch_input_method_abc', subtitleKey: 'ui_switch_input_method_abc_tips'),
+  _BuiltInSettingSearchDefinition(settingKey: 'LangCode', navPath: 'general', titleKey: 'ui_lang', searchKeywords: ['language']),
+  _BuiltInSettingSearchDefinition(settingKey: 'IgnoredHotkeyApps', navPath: 'general', titleKey: 'ui_hotkey_ignore_apps', subtitleKey: 'ui_hotkey_ignore_apps_tips'),
+  _BuiltInSettingSearchDefinition(settingKey: 'QueryHotkeys', navPath: 'general', titleKey: 'ui_query_hotkeys', subtitleKey: 'ui_query_hotkeys_tips'),
+  _BuiltInSettingSearchDefinition(settingKey: 'QueryShortcuts', navPath: 'general', titleKey: 'ui_query_shortcuts', subtitleKey: 'ui_query_shortcuts_tips'),
+  _BuiltInSettingSearchDefinition(settingKey: 'TrayQueries', navPath: 'general', titleKey: 'ui_tray_queries', subtitleKey: 'ui_tray_queries_tips'),
+  _BuiltInSettingSearchDefinition(settingKey: 'ShowPosition', navPath: 'ui', titleKey: 'ui_show_position', subtitleKey: 'ui_show_position_tips', searchKeywords: ['position']),
+  _BuiltInSettingSearchDefinition(settingKey: 'ShowTray', navPath: 'ui', titleKey: 'ui_show_tray', subtitleKey: 'ui_show_tray_tips', searchKeywords: ['tray']),
+  _BuiltInSettingSearchDefinition(settingKey: 'AppWidth', navPath: 'ui', titleKey: 'ui_app_width', subtitleKey: 'ui_app_width_tips', searchKeywords: ['width']),
+  _BuiltInSettingSearchDefinition(
+    settingKey: 'UiDensity',
+    navPath: 'ui',
+    titleKey: 'ui_interface_size',
+    subtitleKey: 'ui_interface_size_tips',
+    searchKeywords: ['Interface Size', 'density', 'compact', 'comfortable'],
+  ),
+  _BuiltInSettingSearchDefinition(settingKey: 'AppFontFamily', navPath: 'ui', titleKey: 'ui_app_font_family', subtitleKey: 'ui_app_font_family_tips', searchKeywords: ['font']),
+  _BuiltInSettingSearchDefinition(
+    settingKey: 'MaxResultCount',
+    navPath: 'ui',
+    titleKey: 'ui_max_result_count',
+    subtitleKey: 'ui_max_result_count_tips',
+    searchKeywords: ['result count'],
+  ),
+  _BuiltInSettingSearchDefinition(settingKey: 'EnableGlance', navPath: 'ui', titleKey: 'ui_glance_enable', subtitleKey: 'ui_glance_enable_tips', searchKeywords: ['glance']),
+  _BuiltInSettingSearchDefinition(settingKey: 'HideGlanceIcon', navPath: 'ui', titleKey: 'ui_glance_hide_icon', subtitleKey: 'ui_glance_hide_icon_tips'),
+  _BuiltInSettingSearchDefinition(settingKey: 'PrimaryGlance', navPath: 'ui', titleKey: 'ui_glance_primary', subtitleKey: 'ui_glance_primary_tips'),
+  _BuiltInSettingSearchDefinition(settingKey: 'AIProviders', navPath: 'ai', titleKey: 'ui_ai_model', searchKeywords: ['ai provider', 'api key', 'model']),
+  _BuiltInSettingSearchDefinition(settingKey: 'HttpProxyEnabled', navPath: 'network', titleKey: 'ui_proxy_enabled', searchKeywords: ['proxy']),
+  _BuiltInSettingSearchDefinition(settingKey: 'HttpProxyUrl', navPath: 'network', titleKey: 'ui_proxy_url', searchKeywords: ['proxy url']),
+  _BuiltInSettingSearchDefinition(
+    settingKey: 'EnableAutoBackup',
+    navPath: 'data',
+    titleKey: 'ui_data_backup_auto_title',
+    subtitleKey: 'ui_data_backup_auto_tips',
+    searchKeywords: ['backup'],
+  ),
+  _BuiltInSettingSearchDefinition(
+    settingKey: 'UserDataLocation',
+    navPath: 'data',
+    titleKey: 'ui_data_config_location',
+    subtitleKey: 'ui_data_config_location_tips',
+    searchKeywords: ['data location'],
+  ),
+  _BuiltInSettingSearchDefinition(
+    settingKey: 'CustomPythonPath',
+    navPath: 'plugins.runtime',
+    titleKey: 'ui_runtime_python_path',
+    subtitleKey: 'ui_runtime_python_path_tips',
+    searchKeywords: ['python'],
+  ),
+  _BuiltInSettingSearchDefinition(
+    settingKey: 'CustomNodejsPath',
+    navPath: 'plugins.runtime',
+    titleKey: 'ui_runtime_nodejs_path',
+    subtitleKey: 'ui_runtime_nodejs_path_tips',
+    searchKeywords: ['nodejs', 'node'],
+  ),
+  _BuiltInSettingSearchDefinition(
+    settingKey: 'ShowScoreTail',
+    navPath: 'debug',
+    titleKey: 'ui_debug_show_score_tail',
+    subtitleKey: 'ui_debug_show_score_tail_tips',
+    searchKeywords: ['score'],
+  ),
+  _BuiltInSettingSearchDefinition(
+    settingKey: 'ShowPerformanceTail',
+    navPath: 'debug',
+    titleKey: 'ui_debug_show_performance_tail',
+    subtitleKey: 'ui_debug_show_performance_tail_tips',
+    searchKeywords: ['performance'],
+  ),
+  _BuiltInSettingSearchDefinition(
+    settingKey: 'EnableAnonymousUsageStats',
+    navPath: 'privacy',
+    titleKey: 'ui_privacy_anonymous_stats_title',
+    subtitleKey: 'ui_privacy_anonymous_stats_description',
+    searchKeywords: ['privacy', 'telemetry'],
+  ),
+];

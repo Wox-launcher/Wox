@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:uuid/v4.dart';
+import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_preview_list.dart';
@@ -361,6 +362,34 @@ void registerLauncherCoreSmokeTests() {
       await tapSettingNavItem(tester, settingController, 'data');
       expect(find.byType(WoxSettingView), findsOneWidget);
 
+      final navScrollPosition = _settingsNavScrollPosition(tester);
+      if (navScrollPosition.maxScrollExtent > 0) {
+        navScrollPosition.jumpTo(navScrollPosition.maxScrollExtent / 2);
+        await tester.pump(const Duration(milliseconds: 150));
+
+        final visibleNavItem = _firstVisibleSettingsNavItemThatWouldMoveRevealOffset(tester, navScrollPosition, settingController.activeNavPath.value, const [
+          'general',
+          'ui',
+          'ai',
+          'network',
+          'data',
+          'plugins.store',
+          'plugins.installed',
+          'plugins.runtime',
+          'themes.store',
+          'themes.installed',
+          'usage',
+          'debug',
+          'privacy',
+          'about',
+        ]);
+        expect(visibleNavItem, isNotNull);
+        final navOffsetBeforeVisibleTap = navScrollPosition.pixels;
+        await tester.tap(find.byKey(ValueKey('settings-nav-$visibleNavItem')), warnIfMissed: false);
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(navScrollPosition.pixels, equals(navOffsetBeforeVisibleTap));
+      }
+
       await closeSettings(tester, settingController, launcherController);
     });
 
@@ -388,6 +417,203 @@ void registerLauncherCoreSmokeTests() {
         await tester.pump(const Duration(milliseconds: 250));
       }
 
+      await closeSettings(tester, settingController, launcherController);
+    });
+
+    testWidgets('T2-15c: Settings search jumps to built-in plugin and plugin setting targets', (tester) async {
+      final launcherController = await launchAndShowLauncher(tester, windowSize: smokeLargeWindowSize);
+      final settingController = await openSettings(tester, launcherController, 'general');
+
+      final searchField = find.byKey(const ValueKey('settings-search-field'));
+      expect(searchField, findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(settingController.settingSearchFocusNode.hasFocus, isTrue);
+      expect(tester.widget<TextField>(searchField).decoration?.hintText, equals('Search settings'));
+      expect(find.byKey(const ValueKey('settings-search-clear-button')), findsNothing);
+      final generalNavTopBeforeSearch = tester.getTopLeft(find.byKey(const ValueKey('settings-nav-general'))).dy;
+
+      settingController.settingFocusNode.requestFocus();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(settingController.settingSearchFocusNode.hasFocus, isFalse);
+      await _sendSettingsFindShortcut(tester);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(settingController.settingSearchFocusNode.hasFocus, isTrue);
+
+      await tester.enterText(searchField, 'Interface Size');
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byKey(const ValueKey('settings-search-clear-button')), findsOneWidget);
+      final searchResultPanel = find.byKey(const ValueKey('settings-search-result-panel'));
+      expect(searchResultPanel, findsOneWidget);
+      final searchResultPanelDecoration = tester.widget<Container>(searchResultPanel).decoration;
+      expect(searchResultPanelDecoration, isA<BoxDecoration>());
+      expect((searchResultPanelDecoration as BoxDecoration).color?.a, equals(1.0));
+      expect(tester.getTopLeft(find.byKey(const ValueKey('settings-nav-general'))).dy, equals(generalNavTopBeforeSearch));
+      expect(settingController.selectedSettingSearchResultIndex.value, equals(0));
+      await tester.tap(find.byKey(const ValueKey('settings-search-clear-button')), warnIfMissed: false);
+      await tester.pump(const Duration(milliseconds: 120));
+      expect(settingController.settingSearchTextController.text, isEmpty);
+      expect(settingController.settingSearchPanelVisible.value, isFalse);
+      expect(find.byKey(const ValueKey('settings-search-clear-button')), findsNothing);
+
+      await tester.enterText(searchField, 'Interface Size');
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(settingController.selectedSettingSearchResultIndex.value, equals(0));
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.escape);
+      await tester.pump(const Duration(milliseconds: 120));
+      expect(settingController.settingSearchTextController.text, isEmpty);
+      expect(settingController.settingSearchPanelVisible.value, isFalse);
+      expect(launcherController.isInSettingView.value, isTrue);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.escape);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(launcherController.isInSettingView.value, isTrue);
+
+      await tester.tap(searchField, warnIfMissed: false);
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.enterText(searchField, 'Interface Size');
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(settingController.selectedSettingSearchResultIndex.value, equals(0));
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(settingController.activeNavPath.value, equals('ui'));
+      expect(find.byKey(const ValueKey('settings-highlight-built-in-UiDensity')), findsOneWidget);
+
+      await tester.tap(searchField, warnIfMissed: false);
+      await tester.pump(const Duration(milliseconds: 100));
+      String? cursorQuery;
+      for (final candidateQuery in ['plugin', 'setting', 'search', 'backup', 'debug', 'image', 'Interface Size']) {
+        await tester.enterText(searchField, candidateQuery);
+        await tester.pump(const Duration(milliseconds: 300));
+        if (settingController.settingSearchResults.length > 1) {
+          cursorQuery = candidateQuery;
+          break;
+        }
+      }
+      expect(cursorQuery, isNotNull);
+      final searchCursorOffsetBeforeArrowMove = cursorQuery!.length ~/ 2;
+      settingController.settingSearchTextController.selection = TextSelection.collapsed(offset: searchCursorOffsetBeforeArrowMove);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump(const Duration(milliseconds: 120));
+      expect(settingController.selectedSettingSearchResultIndex.value, equals(1));
+      expect(settingController.settingSearchTextController.selection.baseOffset, equals(searchCursorOffsetBeforeArrowMove));
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump(const Duration(milliseconds: 120));
+      expect(settingController.selectedSettingSearchResultIndex.value, equals(0));
+      expect(settingController.settingSearchTextController.selection.baseOffset, equals(searchCursorOffsetBeforeArrowMove));
+
+      await settingController.loadInstalledPlugins(const UuidV4().generate());
+      String? resultScrollQuery;
+      ScrollPosition? searchResultScrollPosition;
+      for (final candidateQuery in ['plugin', 'setting', 'search', 'backup', 'debug', 'image', 'e', 't', 'a', 's', 'i', 'o', 'r', 'n', 'l', 'c']) {
+        await tester.enterText(searchField, candidateQuery);
+        await tester.pump(const Duration(milliseconds: 300));
+        final candidateScrollable = find.descendant(of: searchResultPanel, matching: find.byType(Scrollable));
+        if (candidateScrollable.evaluate().isEmpty) {
+          continue;
+        }
+        final candidateScrollPosition = tester.state<ScrollableState>(candidateScrollable.first).position;
+        if (candidateScrollPosition.maxScrollExtent > 0) {
+          resultScrollQuery = candidateQuery;
+          searchResultScrollPosition = candidateScrollPosition;
+          break;
+        }
+      }
+      if (resultScrollQuery != null && searchResultScrollPosition != null) {
+        final searchResultOffsetBeforeKeyboardMove = searchResultScrollPosition.pixels;
+        for (var index = 0; index < settingController.settingSearchResults.length - 1; index++) {
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+          await tester.pump(const Duration(milliseconds: 120));
+        }
+        expect(settingController.selectedSettingSearchResultIndex.value, equals(settingController.settingSearchResults.length - 1));
+        expect(searchResultScrollPosition.pixels, greaterThan(searchResultOffsetBeforeKeyboardMove));
+      }
+
+      await tester.tap(searchField, warnIfMissed: false);
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.enterText(searchField, 'EnableAnonymousUsageStats');
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(settingController.settingSearchResults.first.navPath, equals('privacy'));
+      expect(settingController.selectedSettingSearchResultIndex.value, equals(0));
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump(const Duration(milliseconds: 700));
+      expect(settingController.activeNavPath.value, equals('privacy'));
+      _expectFinderInsideVerticalBounds(tester, find.byKey(const ValueKey('settings-nav-privacy')), find.byKey(const ValueKey('settings-nav-list')));
+
+      final searchablePluginsWithIcon = settingController.installedPlugins.where(
+        (plugin) => plugin.icon.imageData.trim().isNotEmpty && plugin.settingDefinitions.any(_isStableSearchablePluginSetting),
+      );
+      expect(searchablePluginsWithIcon, isNotEmpty);
+      final plugin = searchablePluginsWithIcon.first;
+      final tooltipOnlyCase = _findTooltipOnlyPluginSettingSearchCase(settingController.installedPlugins, settingController.tr);
+      expect(tooltipOnlyCase, isNotNull);
+      await tester.tap(searchField, warnIfMissed: false);
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.enterText(searchField, tooltipOnlyCase!.query);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(settingController.settingSearchResults.map((result) => result.resultKey), isNot(contains(tooltipOnlyCase.resultKey)));
+
+      await tester.tap(searchField, warnIfMissed: false);
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.enterText(searchField, plugin.name);
+      await tester.pump(const Duration(milliseconds: 300));
+      final installedPluginResultKey = 'settings-search-result-installedPlugin-${plugin.id}';
+      expect(settingController.settingSearchResults.map((result) => result.resultKey), contains(installedPluginResultKey));
+      expect(find.descendant(of: find.byKey(ValueKey(installedPluginResultKey)), matching: find.byType(WoxImageView)), findsOneWidget);
+      if (settingController.settingSearchResults.length > 1) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(settingController.selectedSettingSearchResultIndex.value, equals(1));
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(settingController.selectedSettingSearchResultIndex.value, equals(0));
+      }
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(settingController.activeNavPath.value, equals('plugins.installed'));
+      expect(settingController.activePlugin.value.id, equals(plugin.id));
+      expect(find.byKey(ValueKey('settings-highlight-plugin-${plugin.id}')), findsOneWidget);
+
+      final settingDefinition = plugin.settingDefinitions.firstWhere(_isStableSearchablePluginSetting);
+      final settingKey = settingDefinition.value.key as String;
+      final settingQuery = _pluginSettingSearchText(settingDefinition);
+      expect(settingQuery.trim(), isNotEmpty);
+
+      await tester.tap(searchField, warnIfMissed: false);
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.enterText(searchField, settingQuery);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(settingController.settingSearchResults.map((result) => result.resultKey), contains('settings-search-result-pluginSetting-${plugin.id}-$settingKey'));
+      final pluginSettingResultIndex = settingController.settingSearchResults.indexWhere(
+        (result) => result.resultKey == 'settings-search-result-pluginSetting-${plugin.id}-$settingKey',
+      );
+      expect(pluginSettingResultIndex, greaterThanOrEqualTo(0));
+      for (var index = 0; index < pluginSettingResultIndex; index++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pump(const Duration(milliseconds: 80));
+      }
+      expect(settingController.selectedSettingSearchResultIndex.value, equals(pluginSettingResultIndex));
+      final pluginSettingResultKey = 'settings-search-result-pluginSetting-${plugin.id}-$settingKey';
+      expect(find.descendant(of: find.byKey(ValueKey(pluginSettingResultKey)), matching: find.byType(WoxImageView)), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump(const Duration(milliseconds: 700));
+      expect(settingController.activeNavPath.value, equals('plugins.installed'));
+      expect(settingController.activePlugin.value.id, equals(plugin.id));
+      expect(find.byKey(ValueKey('settings-highlight-plugin-setting-${plugin.id}-$settingKey')), findsOneWidget);
+
+      await tester.tap(searchField, warnIfMissed: false);
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.enterText(searchField, 'residual search');
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(settingController.settingSearchTextController.text, equals('residual search'));
+      await closeSettings(tester, settingController, launcherController);
+      expect(settingController.settingSearchTextController.text, isEmpty);
+
+      await openSettings(tester, launcherController, 'general');
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(settingController.settingSearchTextController.text, isEmpty);
+      expect(settingController.settingSearchPanelVisible.value, isFalse);
+      expect(settingController.settingSearchFocusNode.hasFocus, isTrue);
+      expect(find.byKey(const ValueKey('settings-search-clear-button')), findsNothing);
       await closeSettings(tester, settingController, launcherController);
     });
 
@@ -676,6 +902,150 @@ void registerLauncherCoreSmokeTests() {
   });
 }
 
+bool _isStableSearchablePluginSetting(dynamic settingDefinition) {
+  final type = settingDefinition.type as String;
+  if (type == 'head' || type == 'label' || type == 'newline') {
+    return false;
+  }
+
+  try {
+    final key = settingDefinition.value.key as String;
+    return key.trim().isNotEmpty;
+  } catch (_) {
+    return false;
+  }
+}
+
+String _pluginSettingSearchText(dynamic settingDefinition) {
+  final type = settingDefinition.type as String;
+  final value = settingDefinition.value;
+  if (type == 'table') {
+    return (value.title as String).trim().isNotEmpty ? value.title as String : value.key as String;
+  }
+  try {
+    final label = value.label as String;
+    if (label.trim().isNotEmpty) {
+      return label;
+    }
+  } catch (_) {}
+  return value.key as String;
+}
+
+_TooltipOnlyPluginSettingSearchCase? _findTooltipOnlyPluginSettingSearchCase(Iterable<dynamic> plugins, String Function(String) translate) {
+  for (final plugin in plugins) {
+    for (final settingDefinition in plugin.settingDefinitions as Iterable<dynamic>) {
+      if (!_isStableSearchablePluginSetting(settingDefinition)) {
+        continue;
+      }
+
+      final tooltip = translate(_pluginSettingTooltipText(settingDefinition)).trim();
+      if (tooltip.isEmpty) {
+        continue;
+      }
+
+      final query = _shortTooltipSearchQuery(tooltip);
+      if (query.isEmpty) {
+        continue;
+      }
+
+      final nonTooltipTexts = _pluginSettingNonTooltipSearchTexts(plugin, settingDefinition, translate).map((text) => text.toLowerCase()).where((text) => text.isNotEmpty).toList();
+      final normalizedQuery = query.toLowerCase();
+      if (nonTooltipTexts.any((text) => text.contains(normalizedQuery) || normalizedQuery.contains(text))) {
+        continue;
+      }
+
+      return _TooltipOnlyPluginSettingSearchCase(query: query, resultKey: 'settings-search-result-pluginSetting-${plugin.id}-${settingDefinition.value.key}');
+    }
+  }
+  return null;
+}
+
+String _pluginSettingTooltipText(dynamic settingDefinition) {
+  final value = settingDefinition.value;
+  try {
+    if ((settingDefinition.type as String) == 'table') {
+      final tableTooltip = value.tooltip as String;
+      if (tableTooltip.trim().isNotEmpty) {
+        return tableTooltip;
+      }
+      for (final column in value.columns as Iterable<dynamic>) {
+        final columnTooltip = column.tooltip as String;
+        if (columnTooltip.trim().isNotEmpty) {
+          return columnTooltip;
+        }
+      }
+      return '';
+    }
+    return value.tooltip as String;
+  } catch (_) {
+    return '';
+  }
+}
+
+List<String> _pluginSettingNonTooltipSearchTexts(dynamic plugin, dynamic settingDefinition, String Function(String) translate) {
+  final value = settingDefinition.value;
+  final texts = <String>[plugin.id as String, plugin.name as String, plugin.nameEn as String, value.key as String];
+  void addText(String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) {
+      return;
+    }
+    texts.add(trimmed);
+    texts.add(translate(trimmed));
+  }
+
+  try {
+    if ((settingDefinition.type as String) == 'table') {
+      addText((value.title as String).trim().isNotEmpty ? value.title as String : value.key as String);
+      for (final column in value.columns as Iterable<dynamic>) {
+        addText(column.key as String);
+        addText(column.label as String);
+      }
+      return texts;
+    }
+
+    addText(value.label as String);
+    try {
+      addText(value.suffix as String);
+    } catch (_) {}
+    try {
+      for (final option in value.options as Iterable<dynamic>) {
+        addText(option.label as String);
+        addText(option.value as String);
+      }
+    } catch (_) {}
+  } catch (_) {}
+
+  return texts;
+}
+
+String _shortTooltipSearchQuery(String tooltip) {
+  final normalized = tooltip.replaceAll(RegExp(r'\s+'), ' ').trim();
+  if (normalized.length <= 80) {
+    return normalized;
+  }
+  final firstSentence = normalized.split(RegExp(r'[.!?。！？]')).first.trim();
+  if (firstSentence.length >= 16 && firstSentence.length <= 80) {
+    return firstSentence;
+  }
+  return normalized.substring(0, 80).trim();
+}
+
+class _TooltipOnlyPluginSettingSearchCase {
+  final String query;
+  final String resultKey;
+
+  const _TooltipOnlyPluginSettingSearchCase({required this.query, required this.resultKey});
+}
+
+Future<void> _sendSettingsFindShortcut(WidgetTester tester) async {
+  final modifierKey = Platform.isMacOS ? LogicalKeyboardKey.metaLeft : LogicalKeyboardKey.controlLeft;
+  await tester.sendKeyDownEvent(modifierKey);
+  await tester.sendKeyDownEvent(LogicalKeyboardKey.keyF);
+  await tester.sendKeyUpEvent(LogicalKeyboardKey.keyF);
+  await tester.sendKeyUpEvent(modifierKey);
+}
+
 Finder _closestButtonWithText(WidgetTester tester, String text, Offset target) {
   final buttons = find.ancestor(of: find.text(text), matching: find.byWidgetPredicate((widget) => widget is OutlinedButton || widget is ElevatedButton || widget is TextButton));
   final elements = buttons.evaluate().toList();
@@ -697,4 +1067,58 @@ Finder _closestButtonWithText(WidgetTester tester, String text, Offset target) {
   }
 
   return find.byWidget(closest.widget);
+}
+
+void _expectFinderInsideVerticalBounds(WidgetTester tester, Finder itemFinder, Finder viewportFinder) {
+  expect(itemFinder, findsOneWidget);
+  expect(viewportFinder, findsOneWidget);
+
+  final itemTop = tester.getTopLeft(itemFinder).dy;
+  final itemBottom = tester.getBottomLeft(itemFinder).dy;
+  final viewportTop = tester.getTopLeft(viewportFinder).dy;
+  final viewportBottom = tester.getBottomLeft(viewportFinder).dy;
+
+  expect(itemTop, greaterThanOrEqualTo(viewportTop));
+  expect(itemBottom, lessThanOrEqualTo(viewportBottom));
+}
+
+ScrollPosition _settingsNavScrollPosition(WidgetTester tester) {
+  final navScrollable = find.descendant(of: find.byKey(const ValueKey('settings-nav-list')), matching: find.byType(Scrollable)).first;
+  return tester.state<ScrollableState>(navScrollable).position;
+}
+
+String? _firstVisibleSettingsNavItemThatWouldMoveRevealOffset(WidgetTester tester, ScrollPosition navScrollPosition, String activeNavPath, List<String> navPaths) {
+  final viewportFinder = find.byKey(const ValueKey('settings-nav-list'));
+  final viewportTop = tester.getTopLeft(viewportFinder).dy;
+  final viewportBottom = tester.getBottomLeft(viewportFinder).dy;
+  final viewportHeight = viewportBottom - viewportTop;
+  final currentOffset = navScrollPosition.pixels;
+
+  for (final navPath in navPaths) {
+    if (navPath == activeNavPath) {
+      continue;
+    }
+
+    final itemFinder = find.byKey(ValueKey('settings-nav-$navPath'));
+    if (itemFinder.evaluate().isEmpty) {
+      continue;
+    }
+
+    final itemTop = tester.getTopLeft(itemFinder).dy;
+    final itemBottom = tester.getBottomLeft(itemFinder).dy;
+    if (itemTop < viewportTop || itemBottom > viewportBottom) {
+      continue;
+    }
+
+    // Regression guard: the old active-nav sync re-centered even fully visible
+    // rows. Pick a visible row whose reveal offset would change the current
+    // scroll position so the test fails until the sidebar preserves manual clicks.
+    final revealOffset = currentOffset + itemTop - viewportTop - viewportHeight * 0.18;
+    final clampedRevealOffset = revealOffset.clamp(navScrollPosition.minScrollExtent, navScrollPosition.maxScrollExtent).toDouble();
+    if ((clampedRevealOffset - currentOffset).abs() > 1) {
+      return navPath;
+    }
+  }
+
+  return null;
 }

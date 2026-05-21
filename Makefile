@@ -144,10 +144,11 @@ ensure-resources:
 	@mkdir -p wox.core/resource/others
 	@touch wox.core/resource/others/placeholder
 
+# Bug fix: keep the tracked others placeholder because go:embed rejects an
+# empty directory, and deleting it after tests makes the next smoke build fail.
 clean-resources:
 	@rm -f wox.core/resource/ui/flutter/placeholder
 	@rm -f wox.core/resource/hosts/placeholder
-	@rm -f wox.core/resource/others/placeholder
 
 appimage:
 ifeq ($(PLATFORM),linux)
@@ -193,8 +194,8 @@ test-verbose:
 test-debug:
 	cd wox.core && WOX_TEST_DATA_DIR=/tmp/wox-test-debug WOX_TEST_CLEANUP=false WOX_TEST_VERBOSE=true go test -tags "$(SQLITE_BUILD_TAGS)" ./test -v
 
-smoke:
-	$(MAKE) -C wox.test smoke SMOKE_FILTER="$(SMOKE_FILTER)"
+smoke: ensure-resources
+	@trap '$(MAKE) clean-resources' EXIT; $(MAKE) -C wox.test smoke SMOKE_FILTER="$(SMOKE_FILTER)"
 
 %:
 	@:

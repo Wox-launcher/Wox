@@ -22,6 +22,7 @@ import 'package:wox/entity/setting/wox_plugin_setting_label.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_select_ai_model.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_plugin.dart';
+import 'package:wox/entity/wox_plugin_setting.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_checkbox.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_head.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_newline.dart';
@@ -129,6 +130,54 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
     }
 
     return maxLabelWidth.clamp(PLUGIN_SETTING_LABEL_MIN_WIDTH, PLUGIN_SETTING_LABEL_MAX_WIDTH).toDouble();
+  }
+
+  String _extractStablePluginSettingKey(PluginSettingDefinitionItem definition) {
+    final value = definition.value;
+    if (value is PluginSettingValueCheckBox) {
+      return value.key;
+    }
+    if (value is PluginSettingValueTextBox) {
+      return value.key;
+    }
+    if (value is PluginSettingValueSelect) {
+      return value.key;
+    }
+    if (value is PluginSettingValueSelectAIModel) {
+      return value.key;
+    }
+    if (value is PluginSettingValueTable) {
+      return value.key;
+    }
+    return "";
+  }
+
+  Widget _buildPluginSettingTarget({required PluginDetail plugin, required PluginSettingDefinitionItem definition, required Widget child}) {
+    final settingKey = _extractStablePluginSettingKey(definition).trim();
+    if (settingKey.isEmpty) {
+      return child;
+    }
+
+    return Container(
+      key: controller.getPluginSettingItemKey(plugin.id, settingKey),
+      child: Obx(() {
+        final isHighlighted = controller.isSettingTargetHighlighted('plugin-setting-${plugin.id}-$settingKey');
+        final wrappedChild = isHighlighted ? KeyedSubtree(key: ValueKey('settings-highlight-plugin-setting-${plugin.id}-$settingKey'), child: child) : child;
+
+        // Feature: plugin settings are indexed from existing definitions, so each rendered
+        // setting row owns the same stable key used by search to scroll and flash the target.
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          decoration: BoxDecoration(
+            color: isHighlighted ? getThemeActiveBackgroundColor().withValues(alpha: isThemeDark() ? 0.18 : 0.10) : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: isHighlighted ? getThemeActiveBackgroundColor().withValues(alpha: 0.45) : Colors.transparent, width: 1),
+          ),
+          child: wrappedChild,
+        );
+      }),
+    );
   }
 
   Future<void> _showPluginFilterPanel(BuildContext context) async {
@@ -268,48 +317,61 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                     padding: const EdgeInsets.only(bottom: 8.0),
                     child: Obx(() {
                       final isActive = controller.activePlugin.value.id == plugin.id;
-                      return Container(
-                        key: controller.getPluginListItemKey(plugin.id),
-                        decoration: BoxDecoration(color: isActive ? getThemeActiveBackgroundColor() : Colors.transparent, borderRadius: BorderRadius.circular(4)),
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.translucent,
-                          onTap: () {
-                            controller.activePlugin.value = plugin;
-                          },
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.only(left: 6, right: 6),
-                            leading: WoxImageView(woxImage: plugin.icon, width: 32, height: 32),
-                            title: Text(
-                              plugin.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(fontSize: 15, color: isActive ? getThemeActionItemActiveColor() : getThemeTextColor()),
-                            ),
-                            subtitle: Row(
-                              mainAxisAlignment: MainAxisAlignment.start,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Text(
-                                  plugin.version,
+                      final isHighlighted = controller.isSettingTargetHighlighted('plugin-${plugin.id}');
+                      final tile = GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onTap: () {
+                          controller.activePlugin.value = plugin;
+                        },
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.only(left: 6, right: 6),
+                          leading: WoxImageView(woxImage: plugin.icon, width: 32, height: 32),
+                          title: Text(
+                            plugin.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 15, color: isActive ? getThemeActionItemActiveColor() : getThemeTextColor()),
+                          ),
+                          subtitle: Row(
+                            mainAxisAlignment: MainAxisAlignment.start,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Text(
+                                plugin.version,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(color: isActive ? getThemeActionItemActiveColor() : getThemeSubTextColor(), fontSize: 12),
+                              ),
+                              const SizedBox(width: 10),
+                              Flexible(
+                                child: Text(
+                                  plugin.author,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(color: isActive ? getThemeActionItemActiveColor() : getThemeSubTextColor(), fontSize: 12),
                                 ),
-                                const SizedBox(width: 10),
-                                Flexible(
-                                  child: Text(
-                                    plugin.author,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(color: isActive ? getThemeActionItemActiveColor() : getThemeSubTextColor(), fontSize: 12),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            trailing: pluginTrailIcon(plugin, isActive),
+                              ),
+                            ],
                           ),
+                          trailing: pluginTrailIcon(plugin, isActive),
                         ),
                       );
+                      final row = Container(
+                        key: controller.getPluginListItemKey(plugin.id),
+                        decoration: BoxDecoration(
+                          // Feature: settings search can jump to an installed plugin row.
+                          // Keep the selected fill dominant while using a border as the
+                          // temporary search cue so active and highlighted states do not fight.
+                          color:
+                              isActive
+                                  ? getThemeActiveBackgroundColor()
+                                  : (isHighlighted ? getThemeActiveBackgroundColor().withValues(alpha: isThemeDark() ? 0.16 : 0.08) : Colors.transparent),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: isHighlighted ? getThemeActiveBackgroundColor().withValues(alpha: 0.48) : Colors.transparent, width: 1),
+                        ),
+                        child: tile,
+                      );
+                      return isHighlighted ? KeyedSubtree(key: ValueKey('settings-highlight-plugin-${plugin.id}'), child: row) : row;
                     }),
                   );
                 },
@@ -796,6 +858,9 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
     return Obx(() {
       var plugin = controller.activePlugin.value;
       final uniformLabelWidth = _calculateUniformPluginLabelWidth(context, plugin);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        controller.notifyPluginSettingViewReady();
+      });
 
       // Show empty state if no settings
       if (plugin.settingDefinitions.isEmpty) {
@@ -815,8 +880,9 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               ...plugin.settingDefinitions.map((e) {
+                late final Widget settingWidget;
                 if (e.type == "checkbox") {
-                  return WoxSettingPluginCheckbox(
+                  settingWidget = WoxSettingPluginCheckbox(
                     value: plugin.setting.settings[e.value.key] ?? "",
                     item: e.value as PluginSettingValueCheckBox,
                     labelWidth: uniformLabelWidth,
@@ -824,9 +890,10 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       return controller.updatePluginSetting(plugin.id, key, value);
                     },
                   );
+                  return _buildPluginSettingTarget(plugin: plugin, definition: e, child: settingWidget);
                 }
                 if (e.type == "textbox") {
-                  return WoxSettingPluginTextBox(
+                  settingWidget = WoxSettingPluginTextBox(
                     value: plugin.setting.settings[e.value.key] ?? "",
                     item: e.value as PluginSettingValueTextBox,
                     labelWidth: uniformLabelWidth,
@@ -834,12 +901,19 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       return controller.updatePluginSetting(plugin.id, key, value);
                     },
                   );
+                  return _buildPluginSettingTarget(plugin: plugin, definition: e, child: settingWidget);
                 }
                 if (e.type == "newline") {
-                  return WoxSettingPluginNewLine(value: "", item: e.value as PluginSettingValueNewLine, labelWidth: uniformLabelWidth, onUpdate: (key, value) async => null);
+                  settingWidget = WoxSettingPluginNewLine(
+                    value: "",
+                    item: e.value as PluginSettingValueNewLine,
+                    labelWidth: uniformLabelWidth,
+                    onUpdate: (key, value) async => null,
+                  );
+                  return _buildPluginSettingTarget(plugin: plugin, definition: e, child: settingWidget);
                 }
                 if (e.type == "select") {
-                  return WoxSettingPluginSelect(
+                  settingWidget = WoxSettingPluginSelect(
                     value: plugin.setting.settings[e.value.key] ?? "",
                     item: e.value as PluginSettingValueSelect,
                     labelWidth: uniformLabelWidth,
@@ -847,9 +921,10 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       return controller.updatePluginSetting(plugin.id, key, value);
                     },
                   );
+                  return _buildPluginSettingTarget(plugin: plugin, definition: e, child: settingWidget);
                 }
                 if (e.type == "selectAIModel") {
-                  return WoxSettingPluginSelectAIModel(
+                  settingWidget = WoxSettingPluginSelectAIModel(
                     value: plugin.setting.settings[e.value.key] ?? "",
                     item: e.value as PluginSettingValueSelectAIModel,
                     labelWidth: uniformLabelWidth,
@@ -857,15 +932,18 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       return controller.updatePluginSetting(plugin.id, key, value);
                     },
                   );
+                  return _buildPluginSettingTarget(plugin: plugin, definition: e, child: settingWidget);
                 }
                 if (e.type == "head") {
-                  return WoxSettingPluginHead(value: "", item: e.value as PluginSettingValueHead, labelWidth: uniformLabelWidth, onUpdate: (key, value) async => null);
+                  settingWidget = WoxSettingPluginHead(value: "", item: e.value as PluginSettingValueHead, labelWidth: uniformLabelWidth, onUpdate: (key, value) async => null);
+                  return _buildPluginSettingTarget(plugin: plugin, definition: e, child: settingWidget);
                 }
                 if (e.type == "label") {
-                  return WoxSettingPluginLabel(value: "", item: e.value as PluginSettingValueLabel, labelWidth: uniformLabelWidth, onUpdate: (key, value) async => null);
+                  settingWidget = WoxSettingPluginLabel(value: "", item: e.value as PluginSettingValueLabel, labelWidth: uniformLabelWidth, onUpdate: (key, value) async => null);
+                  return _buildPluginSettingTarget(plugin: plugin, definition: e, child: settingWidget);
                 }
                 if (e.type == "table") {
-                  return WoxSettingPluginTable(
+                  settingWidget = WoxSettingPluginTable(
                     value: plugin.setting.settings[e.value.key] ?? "",
                     item: e.value as PluginSettingValueTable,
                     labelWidth: uniformLabelWidth,
@@ -873,6 +951,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       return controller.updatePluginSetting(plugin.id, key, value);
                     },
                   );
+                  return _buildPluginSettingTarget(plugin: plugin, definition: e, child: settingWidget);
                 }
 
                 return Text(e.type);

@@ -533,6 +533,7 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
             title: controller.tr("ui_runtime_executable_paths"),
             children: [
               formField(
+                settingKey: "CustomPythonPath",
                 label: controller.tr("ui_runtime_python_path"),
                 labelWidth: GENERAL_SETTING_LABEL_WIDTH,
                 tips: controller.tr("ui_runtime_python_path_tips"),
@@ -587,6 +588,7 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
                 ),
               ),
               formField(
+                settingKey: "CustomNodejsPath",
                 label: controller.tr("ui_runtime_nodejs_path"),
                 labelWidth: GENERAL_SETTING_LABEL_WIDTH,
                 tips: controller.tr("ui_runtime_nodejs_path_tips"),

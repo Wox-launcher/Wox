@@ -103,6 +103,7 @@ class WoxSettingPrivacyView extends WoxSettingBaseView {
       description: controller.tr("ui_privacy_description"),
       children: [
         formField(
+          settingKey: "EnableAnonymousUsageStats",
           label: controller.tr("ui_privacy_anonymous_stats_title"),
           labelWidth: GENERAL_SETTING_WIDE_LABEL_WIDTH,
           child: Obx(() {

@@ -1708,7 +1708,10 @@ class WoxLauncherController extends GetxController {
       // otherwise the window reopens as settings instead of the query UI.
       isSettingOpenedFromHidden = false;
       isInSettingView.value = false;
-      Get.find<WoxSettingController>().settingFocusNode.unfocus();
+      final settingController = Get.find<WoxSettingController>();
+      settingController.clearSettingSearch();
+      settingController.settingFocusNode.unfocus();
+      settingController.settingSearchFocusNode.unfocus();
       await WoxApi.instance.onSetting(traceId, false);
     }
 
@@ -1973,8 +1976,18 @@ class WoxLauncherController extends GetxController {
     }
     quickSelectTimer?.cancel();
     isQuickSelectKeyPressed = false;
+    final wasInSettingView = isInSettingView.value;
     isSettingOpenedFromHidden = false;
     isInSettingView.value = false;
+    if (wasInSettingView) {
+      // Bug fix: hideApp can close settings through blur/tray paths without
+      // calling exitSetting. Clear the per-session search state here too so the
+      // next open is not polluted by the hidden route.
+      final settingController = Get.find<WoxSettingController>();
+      settingController.clearSettingSearch();
+      settingController.settingFocusNode.unfocus();
+      settingController.settingSearchFocusNode.unfocus();
+    }
     await WoxApi.instance.onSetting(traceId, false);
     isInOnboardingView.value = false;
     await WoxApi.instance.onOnboarding(traceId, false);
@@ -3567,6 +3580,10 @@ class WoxLauncherController extends GetxController {
     // visibility, while tray-origin opens must still close directly back to
     // hidden state.
     isSettingOpenedFromHidden = context.source == SettingWindowContext.sourceTray;
+    // Bug fix: settings search is a per-visit affordance. Clearing it at entry
+    // protects against stale text if a previous settings route was hidden by a
+    // platform path that did not go through the normal back button flow.
+    settingController.clearSettingSearch();
     settingController.activeNavPath.value = 'general';
     isInSettingView.value = true;
     isInOnboardingView.value = false;
@@ -3647,7 +3664,10 @@ class WoxLauncherController extends GetxController {
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await Future.delayed(const Duration(milliseconds: 50));
-      settingController.settingFocusNode.requestFocus();
+      // Feature: the search box is the primary settings entry point, so new
+      // settings sessions put keyboard focus there instead of the passive page
+      // focus node.
+      settingController.settingSearchFocusNode.requestFocus();
     });
 
     // On Windows, ensure focus is properly set after window is shown
@@ -3655,14 +3675,20 @@ class WoxLauncherController extends GetxController {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         await Future.delayed(const Duration(milliseconds: 100));
         await windowManager.focus();
-        settingController.settingFocusNode.requestFocus();
+        settingController.settingSearchFocusNode.requestFocus();
         Logger.instance.info(traceId, "[SETTING] Windows focus requested after delay");
       });
     }
   }
 
   Future<void> exitSetting(String traceId) async {
+    final settingController = Get.find<WoxSettingController>();
     closeAllDialogsInSetting();
+    // Bug fix: search text should not survive closing settings. Reset before
+    // either exit branch so returning to the launcher and hidden-window exits
+    // both reopen with a clean search field.
+    settingController.clearSettingSearch();
+    settingController.settingSearchFocusNode.unfocus();
 
     if (isSettingOpenedFromHidden) {
       // For hidden-opened settings, exit means hide the window directly

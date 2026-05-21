@@ -37,6 +37,7 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
             title: controller.tr("ui_general_section_startup"),
             children: [
               formField(
+                settingKey: "EnableAutostart",
                 label: controller.tr("ui_autostart"),
                 tips: controller.tr("ui_autostart_tips"),
                 child: WoxSwitch(
@@ -47,6 +48,7 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                 ),
               ),
               formField(
+                settingKey: "HideOnStart",
                 label: controller.tr("ui_hide_on_start"),
                 tips: controller.tr("ui_hide_on_start_tips"),
                 child: Obx(() {
@@ -59,6 +61,7 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                 }),
               ),
               formField(
+                settingKey: "EnableAutoUpdate",
                 label: controller.tr("ui_enable_auto_update"),
                 labelWidth: GENERAL_SETTING_WIDE_LABEL_WIDTH,
                 tips: controller.tr("ui_enable_auto_update_tips"),
@@ -82,6 +85,7 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
             title: controller.tr("ui_general_section_launch"),
             children: [
               formField(
+                settingKey: "MainHotkey",
                 label: controller.tr("ui_hotkey"),
                 tips: controller.tr("ui_hotkey_tips"),
                 controlMaxWidth: 520,
@@ -93,6 +97,7 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                 ),
               ),
               formField(
+                settingKey: "SelectionHotkey",
                 label: controller.tr("ui_selection_hotkey"),
                 tips: controller.tr("ui_selection_hotkey_tips"),
                 controlMaxWidth: 520,
@@ -104,6 +109,7 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                 ),
               ),
               formField(
+                settingKey: "LaunchMode",
                 label: controller.tr("ui_launch_mode"),
                 tips: controller.tr("ui_launch_mode_tips"),
                 child: Obx(() {
@@ -131,6 +137,7 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                 }),
               ),
               formField(
+                settingKey: "StartPage",
                 label: controller.tr("ui_start_page"),
                 tips: controller.tr("ui_start_page_tips"),
                 child: Obx(() {
@@ -154,6 +161,7 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                 }),
               ),
               formField(
+                settingKey: "HideOnLostFocus",
                 label: controller.tr("ui_hide_on_lost_focus"),
                 tips: controller.tr("ui_hide_on_lost_focus_tips"),
                 child: Obx(() {
@@ -166,6 +174,7 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                 }),
               ),
               formField(
+                settingKey: "UsePinYin",
                 label: controller.tr("ui_use_pinyin"),
                 tips: controller.tr("ui_use_pinyin_tips"),
                 child: Obx(() {
@@ -178,6 +187,7 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                 }),
               ),
               formField(
+                settingKey: "SwitchInputMethodABC",
                 label: controller.tr("ui_switch_input_method_abc"),
                 tips: controller.tr("ui_switch_input_method_abc_tips"),
                 child: Obx(() {
@@ -195,6 +205,7 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
             title: controller.tr("ui_general_section_language"),
             children: [
               formField(
+                settingKey: "LangCode",
                 label: controller.tr("ui_lang"),
                 child: FutureBuilder(
                   future: WoxApi.instance.getAllLanguages(const UuidV4().generate()),
@@ -226,254 +237,273 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
           formSection(
             title: controller.tr("ui_general_section_hotkeys"),
             children: [
-              Padding(
-                padding: const EdgeInsets.only(bottom: 24),
-                child: Obx(() {
-                  final rows = controller.woxSetting.value.ignoredHotkeyApps.map((app) => <String, dynamic>{"App": app.toJson()}).toList();
+              settingTarget(
+                settingKey: "IgnoredHotkeyApps",
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  child: Obx(() {
+                    final rows = controller.woxSetting.value.ignoredHotkeyApps.map((app) => <String, dynamic>{"App": app.toJson()}).toList();
 
-                  return WoxSettingPluginTable(
-                    inlineTitleActions: true,
-                    tableWidth: GENERAL_SETTING_TABLE_WIDTH,
-                    value: json.encode(rows),
-                    item: PluginSettingValueTable.fromJson({
-                      "Key": "IgnoredHotkeyAppsTable",
-                      "Title": "i18n:ui_hotkey_ignore_apps",
-                      "Tooltip": "i18n:ui_hotkey_ignore_apps_tips",
-                      "MaxHeight": 220,
-                      "Columns": [
-                        {
-                          "Key": "App",
-                          "Label": "i18n:ui_hotkey_ignore_apps_app",
-                          "Tooltip": "i18n:ui_hotkey_ignore_apps_tips",
-                          "Type": "app",
-                          "Width": 420,
-                          "Validators": [
-                            {"Type": "not_empty"},
-                          ],
-                        },
-                      ],
-                      "SortColumnKey": "",
-                    }),
-                    onUpdate: (key, value) async {
-                      final decodedRows = json.decode(value) as List<dynamic>;
-                      final apps = decodedRows.map((row) => row is Map<String, dynamic> ? row["App"] : null).whereType<Map<String, dynamic>>().toList();
+                    return WoxSettingPluginTable(
+                      inlineTitleActions: true,
+                      tableWidth: GENERAL_SETTING_TABLE_WIDTH,
+                      value: json.encode(rows),
+                      item: PluginSettingValueTable.fromJson({
+                        "Key": "IgnoredHotkeyAppsTable",
+                        "Title": "i18n:ui_hotkey_ignore_apps",
+                        "Tooltip": "i18n:ui_hotkey_ignore_apps_tips",
+                        "MaxHeight": 220,
+                        "Columns": [
+                          {
+                            "Key": "App",
+                            "Label": "i18n:ui_hotkey_ignore_apps_app",
+                            "Tooltip": "i18n:ui_hotkey_ignore_apps_tips",
+                            "Type": "app",
+                            "Width": 420,
+                            "Validators": [
+                              {"Type": "not_empty"},
+                            ],
+                          },
+                        ],
+                        "SortColumnKey": "",
+                      }),
+                      onUpdate: (key, value) async {
+                        final decodedRows = json.decode(value) as List<dynamic>;
+                        final apps = decodedRows.map((row) => row is Map<String, dynamic> ? row["App"] : null).whereType<Map<String, dynamic>>().toList();
 
-                      await controller.updateConfig("IgnoredHotkeyApps", json.encode(apps));
-                      return null;
-                    },
-                  );
-                }),
+                        await controller.updateConfig("IgnoredHotkeyApps", json.encode(apps));
+                        return null;
+                      },
+                    );
+                  }),
+                ),
               ),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 24),
-                child: Obx(() {
-                  return WoxSettingPluginTable(
-                    inlineTitleActions: true,
-                    tableWidth: GENERAL_SETTING_TABLE_WIDTH,
-                    titleActions: [
-                      _buildDemoTitleAction(
-                        triggerKey: 'settings-query-hotkeys-demo-trigger',
-                        popoverKey: 'wox-demo-popover-queryHotkeys',
-                        demo: WoxQueryHotkeysDemo(accent: const Color(0xFFF43F5E), tr: controller.tr),
-                      ),
-                    ],
-                    value: json.encode(controller.woxSetting.value.queryHotkeys),
-                    item: PluginSettingValueTable.fromJson({
-                      "Key": "QueryHotkeys",
-                      "Title": "i18n:ui_query_hotkeys",
-                      "Tooltip": "i18n:ui_query_hotkeys_tips",
-                      "UpdateDialogWidth": 760,
-                      "Columns": [
-                        {
-                          "Key": "Hotkey",
-                          "Label": "i18n:ui_query_hotkeys_hotkey",
-                          "Tooltip": "i18n:ui_query_hotkeys_hotkey_tooltip",
-                          "Width": 120,
-                          "Type": "hotkey",
-                          "TextMaxLines": 1,
-                          "Validators": [
-                            {"Type": "not_empty"},
-                          ],
-                        },
-                        {
-                          "Key": "Query",
-                          "Label": "i18n:ui_query_hotkeys_query",
-                          "Tooltip": "i18n:ui_query_hotkeys_query_tooltip",
-                          "Type": "text",
-                          "TextMaxLines": 1,
-                          "EnableQueryVariablePicker": true,
-                          "Validators": [
-                            {"Type": "not_empty"},
-                          ],
-                        },
-                        {
-                          "Key": "Position",
-                          "Label": "i18n:ui_query_hotkeys_position",
-                          "Tooltip": "i18n:ui_query_hotkeys_position_tooltip",
-                          "Type": "select",
-                          "Width": 120,
-                          "SelectOptions": [
-                            {"Label": controller.tr("ui_query_position_system_default"), "Value": "system_default"},
-                            {"Label": controller.tr("ui_query_position_top_left"), "Value": "top_left"},
-                            {"Label": controller.tr("ui_query_position_top_center"), "Value": "top_center"},
-                            {"Label": controller.tr("ui_query_position_top_right"), "Value": "top_right"},
-                            {"Label": controller.tr("ui_query_position_center"), "Value": "center"},
-                            {"Label": controller.tr("ui_query_position_bottom_left"), "Value": "bottom_left"},
-                            {"Label": controller.tr("ui_query_position_bottom_center"), "Value": "bottom_center"},
-                            {"Label": controller.tr("ui_query_position_bottom_right"), "Value": "bottom_right"},
-                          ],
-                        },
-                        {
-                          "Key": "HideQueryBox",
-                          "Label": "i18n:ui_query_hotkeys_hide_query_box",
-                          "Tooltip": "i18n:ui_query_hotkeys_hide_query_box_tooltip",
-                          "Width": 80,
-                          "Type": "checkbox",
-                        },
-                        {
-                          "Key": "HideToolbar",
-                          "Label": "i18n:ui_query_hotkeys_hide_toolbar",
-                          "Tooltip": "i18n:ui_query_hotkeys_hide_toolbar_tooltip",
-                          "Width": 80,
-                          "Type": "checkbox",
-                        },
-                        {"Key": "Width", "Label": "i18n:ui_query_hotkeys_width", "Tooltip": "i18n:ui_query_hotkeys_width_tooltip", "Type": "text", "Width": 50, "TextMaxLines": 1},
-                        {
-                          "Key": "MaxResultCount",
-                          "Label": "i18n:ui_query_hotkeys_max_result_count",
-                          "Tooltip": "i18n:ui_query_hotkeys_max_result_count_tooltip",
-                          "Type": "text",
-                          "Width": 90,
-                          "TextMaxLines": 1,
-                        },
-                        {"Key": "IsSilentExecution", "Label": "i18n:ui_query_hotkeys_silent", "Tooltip": "i18n:ui_query_hotkeys_silent_tooltip", "Width": 40, "Type": "checkbox"},
-                        {"Key": "Disabled", "Label": "i18n:ui_disabled", "Tooltip": "i18n:ui_disabled_tooltip", "Width": 60, "Type": "checkbox"},
+              settingTarget(
+                settingKey: "QueryHotkeys",
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  child: Obx(() {
+                    return WoxSettingPluginTable(
+                      inlineTitleActions: true,
+                      tableWidth: GENERAL_SETTING_TABLE_WIDTH,
+                      titleActions: [
+                        _buildDemoTitleAction(
+                          triggerKey: 'settings-query-hotkeys-demo-trigger',
+                          popoverKey: 'wox-demo-popover-queryHotkeys',
+                          demo: WoxQueryHotkeysDemo(accent: const Color(0xFFF43F5E), tr: controller.tr),
+                        ),
                       ],
-                      "SortColumnKey": "Query",
-                    }),
-                    onUpdate: (key, value) async {
-                      await controller.updateConfig("QueryHotkeys", value);
-                      return null;
-                    },
-                  );
-                }),
+                      value: json.encode(controller.woxSetting.value.queryHotkeys),
+                      item: PluginSettingValueTable.fromJson({
+                        "Key": "QueryHotkeys",
+                        "Title": "i18n:ui_query_hotkeys",
+                        "Tooltip": "i18n:ui_query_hotkeys_tips",
+                        "UpdateDialogWidth": 760,
+                        "Columns": [
+                          {
+                            "Key": "Hotkey",
+                            "Label": "i18n:ui_query_hotkeys_hotkey",
+                            "Tooltip": "i18n:ui_query_hotkeys_hotkey_tooltip",
+                            "Width": 120,
+                            "Type": "hotkey",
+                            "TextMaxLines": 1,
+                            "Validators": [
+                              {"Type": "not_empty"},
+                            ],
+                          },
+                          {
+                            "Key": "Query",
+                            "Label": "i18n:ui_query_hotkeys_query",
+                            "Tooltip": "i18n:ui_query_hotkeys_query_tooltip",
+                            "Type": "text",
+                            "TextMaxLines": 1,
+                            "EnableQueryVariablePicker": true,
+                            "Validators": [
+                              {"Type": "not_empty"},
+                            ],
+                          },
+                          {
+                            "Key": "Position",
+                            "Label": "i18n:ui_query_hotkeys_position",
+                            "Tooltip": "i18n:ui_query_hotkeys_position_tooltip",
+                            "Type": "select",
+                            "Width": 120,
+                            "SelectOptions": [
+                              {"Label": controller.tr("ui_query_position_system_default"), "Value": "system_default"},
+                              {"Label": controller.tr("ui_query_position_top_left"), "Value": "top_left"},
+                              {"Label": controller.tr("ui_query_position_top_center"), "Value": "top_center"},
+                              {"Label": controller.tr("ui_query_position_top_right"), "Value": "top_right"},
+                              {"Label": controller.tr("ui_query_position_center"), "Value": "center"},
+                              {"Label": controller.tr("ui_query_position_bottom_left"), "Value": "bottom_left"},
+                              {"Label": controller.tr("ui_query_position_bottom_center"), "Value": "bottom_center"},
+                              {"Label": controller.tr("ui_query_position_bottom_right"), "Value": "bottom_right"},
+                            ],
+                          },
+                          {
+                            "Key": "HideQueryBox",
+                            "Label": "i18n:ui_query_hotkeys_hide_query_box",
+                            "Tooltip": "i18n:ui_query_hotkeys_hide_query_box_tooltip",
+                            "Width": 80,
+                            "Type": "checkbox",
+                          },
+                          {
+                            "Key": "HideToolbar",
+                            "Label": "i18n:ui_query_hotkeys_hide_toolbar",
+                            "Tooltip": "i18n:ui_query_hotkeys_hide_toolbar_tooltip",
+                            "Width": 80,
+                            "Type": "checkbox",
+                          },
+                          {
+                            "Key": "Width",
+                            "Label": "i18n:ui_query_hotkeys_width",
+                            "Tooltip": "i18n:ui_query_hotkeys_width_tooltip",
+                            "Type": "text",
+                            "Width": 50,
+                            "TextMaxLines": 1,
+                          },
+                          {
+                            "Key": "MaxResultCount",
+                            "Label": "i18n:ui_query_hotkeys_max_result_count",
+                            "Tooltip": "i18n:ui_query_hotkeys_max_result_count_tooltip",
+                            "Type": "text",
+                            "Width": 90,
+                            "TextMaxLines": 1,
+                          },
+                          {"Key": "IsSilentExecution", "Label": "i18n:ui_query_hotkeys_silent", "Tooltip": "i18n:ui_query_hotkeys_silent_tooltip", "Width": 40, "Type": "checkbox"},
+                          {"Key": "Disabled", "Label": "i18n:ui_disabled", "Tooltip": "i18n:ui_disabled_tooltip", "Width": 60, "Type": "checkbox"},
+                        ],
+                        "SortColumnKey": "Query",
+                      }),
+                      onUpdate: (key, value) async {
+                        await controller.updateConfig("QueryHotkeys", value);
+                        return null;
+                      },
+                    );
+                  }),
+                ),
               ),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 24),
-                child: Obx(() {
-                  return WoxSettingPluginTable(
-                    inlineTitleActions: true,
-                    tableWidth: GENERAL_SETTING_TABLE_WIDTH,
-                    titleActions: [
-                      _buildDemoTitleAction(
-                        triggerKey: 'settings-query-shortcuts-demo-trigger',
-                        popoverKey: 'wox-demo-popover-queryShortcuts',
-                        demo: WoxQueryShortcutsDemo(accent: const Color(0xFFA78BFA), tr: controller.tr),
-                      ),
-                    ],
-                    value: json.encode(controller.woxSetting.value.queryShortcuts),
-                    item: PluginSettingValueTable.fromJson({
-                      "Key": "QueryShortcuts",
-                      "Title": "i18n:ui_query_shortcuts",
-                      "Tooltip": "i18n:ui_query_shortcuts_tips",
-                      "Columns": [
-                        {
-                          "Key": "Shortcut",
-                          "Label": "i18n:ui_query_shortcuts_shortcut",
-                          "Tooltip": "i18n:ui_query_shortcuts_shortcut_tooltip",
-                          "Width": 120,
-                          "Type": "text",
-                          "TextMaxLines": 1,
-                          "Validators": [
-                            {"Type": "not_empty"},
-                          ],
-                        },
-                        {
-                          "Key": "Query",
-                          "Label": "i18n:ui_query_shortcuts_query",
-                          "Tooltip": "i18n:ui_query_shortcuts_query_tooltip",
-                          "Type": "text",
-                          "TextMaxLines": 1,
-                          "Validators": [
-                            {"Type": "not_empty"},
-                          ],
-                        },
-                        {"Key": "Disabled", "Label": "i18n:ui_disabled", "Tooltip": "i18n:ui_disabled_tooltip", "Width": 60, "Type": "checkbox"},
+              settingTarget(
+                settingKey: "QueryShortcuts",
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  child: Obx(() {
+                    return WoxSettingPluginTable(
+                      inlineTitleActions: true,
+                      tableWidth: GENERAL_SETTING_TABLE_WIDTH,
+                      titleActions: [
+                        _buildDemoTitleAction(
+                          triggerKey: 'settings-query-shortcuts-demo-trigger',
+                          popoverKey: 'wox-demo-popover-queryShortcuts',
+                          demo: WoxQueryShortcutsDemo(accent: const Color(0xFFA78BFA), tr: controller.tr),
+                        ),
                       ],
-                      "SortColumnKey": "Query",
-                    }),
-                    onUpdate: (key, value) async {
-                      await controller.updateConfig("QueryShortcuts", value);
-                      return null;
-                    },
-                  );
-                }),
+                      value: json.encode(controller.woxSetting.value.queryShortcuts),
+                      item: PluginSettingValueTable.fromJson({
+                        "Key": "QueryShortcuts",
+                        "Title": "i18n:ui_query_shortcuts",
+                        "Tooltip": "i18n:ui_query_shortcuts_tips",
+                        "Columns": [
+                          {
+                            "Key": "Shortcut",
+                            "Label": "i18n:ui_query_shortcuts_shortcut",
+                            "Tooltip": "i18n:ui_query_shortcuts_shortcut_tooltip",
+                            "Width": 120,
+                            "Type": "text",
+                            "TextMaxLines": 1,
+                            "Validators": [
+                              {"Type": "not_empty"},
+                            ],
+                          },
+                          {
+                            "Key": "Query",
+                            "Label": "i18n:ui_query_shortcuts_query",
+                            "Tooltip": "i18n:ui_query_shortcuts_query_tooltip",
+                            "Type": "text",
+                            "TextMaxLines": 1,
+                            "Validators": [
+                              {"Type": "not_empty"},
+                            ],
+                          },
+                          {"Key": "Disabled", "Label": "i18n:ui_disabled", "Tooltip": "i18n:ui_disabled_tooltip", "Width": 60, "Type": "checkbox"},
+                        ],
+                        "SortColumnKey": "Query",
+                      }),
+                      onUpdate: (key, value) async {
+                        await controller.updateConfig("QueryShortcuts", value);
+                        return null;
+                      },
+                    );
+                  }),
+                ),
               ),
-              Padding(
-                key: controller.getGeneralSectionKey('tray_queries'),
-                padding: const EdgeInsets.only(bottom: 24),
-                child: Obx(() {
-                  return WoxSettingPluginTable(
-                    inlineTitleActions: true,
-                    tableWidth: GENERAL_SETTING_TABLE_WIDTH,
-                    titleActions: [
-                      _buildDemoTitleAction(
-                        triggerKey: 'settings-tray-queries-demo-trigger',
-                        popoverKey: 'wox-demo-popover-trayQueries',
-                        demo: WoxTrayQueriesDemo(accent: const Color(0xFF22C55E), tr: controller.tr),
-                      ),
-                    ],
-                    value: json.encode(controller.woxSetting.value.trayQueries),
-                    autoOpenEditRowIndex: controller.pendingTrayQueryEditRowIndex.value,
-                    item: PluginSettingValueTable.fromJson({
-                      "Key": "TrayQueries",
-                      "Title": "i18n:ui_tray_queries",
-                      "Tooltip": "i18n:ui_tray_queries_tips",
-                      "Columns": [
-                        {"Key": "Icon", "Label": "i18n:ui_tray_queries_icon", "Tooltip": "i18n:ui_tray_queries_icon_tooltip", "Type": "woxImage", "Width": 40},
-                        {
-                          "Key": "Query",
-                          "Label": "i18n:ui_tray_queries_query",
-                          "Tooltip": "i18n:ui_tray_queries_query_tooltip",
-                          "Type": "text",
-                          "TextMaxLines": 1,
-                          "Validators": [
-                            {"Type": "not_empty"},
-                          ],
-                        },
-                        {
-                          "Key": "HideQueryBox",
-                          "Label": "i18n:ui_tray_queries_hide_query_box",
-                          "Tooltip": "i18n:ui_tray_queries_hide_query_box_tooltip",
-                          "Width": 80,
-                          "Type": "checkbox",
-                        },
-                        {
-                          "Key": "HideToolbar",
-                          "Label": "i18n:ui_tray_queries_hide_toolbar",
-                          "Tooltip": "i18n:ui_tray_queries_hide_toolbar_tooltip",
-                          "Width": 80,
-                          "Type": "checkbox",
-                        },
-                        {"Key": "Width", "Label": "i18n:ui_tray_queries_width", "Tooltip": "i18n:ui_tray_queries_width_tooltip", "Type": "text", "Width": 40, "TextMaxLines": 1},
-                        {
-                          "Key": "MaxResultCount",
-                          "Label": "i18n:ui_tray_queries_max_result_count",
-                          "Tooltip": "i18n:ui_tray_queries_max_result_count_tooltip",
-                          "Type": "text",
-                          "Width": 90,
-                          "TextMaxLines": 1,
-                        },
-                        {"Key": "Disabled", "Label": "i18n:ui_disabled", "Tooltip": "i18n:ui_disabled_tooltip", "Width": 50, "Type": "checkbox"},
+              settingTarget(
+                settingKey: "TrayQueries",
+                child: Padding(
+                  key: controller.getGeneralSectionKey('tray_queries'),
+                  padding: const EdgeInsets.only(bottom: 24),
+                  child: Obx(() {
+                    return WoxSettingPluginTable(
+                      inlineTitleActions: true,
+                      tableWidth: GENERAL_SETTING_TABLE_WIDTH,
+                      titleActions: [
+                        _buildDemoTitleAction(
+                          triggerKey: 'settings-tray-queries-demo-trigger',
+                          popoverKey: 'wox-demo-popover-trayQueries',
+                          demo: WoxTrayQueriesDemo(accent: const Color(0xFF22C55E), tr: controller.tr),
+                        ),
                       ],
-                      "SortColumnKey": "",
-                    }),
-                    onUpdate: (key, value) async {
-                      await controller.updateConfig("TrayQueries", value);
-                      return null;
-                    },
-                  );
-                }),
+                      value: json.encode(controller.woxSetting.value.trayQueries),
+                      autoOpenEditRowIndex: controller.pendingTrayQueryEditRowIndex.value,
+                      item: PluginSettingValueTable.fromJson({
+                        "Key": "TrayQueries",
+                        "Title": "i18n:ui_tray_queries",
+                        "Tooltip": "i18n:ui_tray_queries_tips",
+                        "Columns": [
+                          {"Key": "Icon", "Label": "i18n:ui_tray_queries_icon", "Tooltip": "i18n:ui_tray_queries_icon_tooltip", "Type": "woxImage", "Width": 40},
+                          {
+                            "Key": "Query",
+                            "Label": "i18n:ui_tray_queries_query",
+                            "Tooltip": "i18n:ui_tray_queries_query_tooltip",
+                            "Type": "text",
+                            "TextMaxLines": 1,
+                            "Validators": [
+                              {"Type": "not_empty"},
+                            ],
+                          },
+                          {
+                            "Key": "HideQueryBox",
+                            "Label": "i18n:ui_tray_queries_hide_query_box",
+                            "Tooltip": "i18n:ui_tray_queries_hide_query_box_tooltip",
+                            "Width": 80,
+                            "Type": "checkbox",
+                          },
+                          {
+                            "Key": "HideToolbar",
+                            "Label": "i18n:ui_tray_queries_hide_toolbar",
+                            "Tooltip": "i18n:ui_tray_queries_hide_toolbar_tooltip",
+                            "Width": 80,
+                            "Type": "checkbox",
+                          },
+                          {"Key": "Width", "Label": "i18n:ui_tray_queries_width", "Tooltip": "i18n:ui_tray_queries_width_tooltip", "Type": "text", "Width": 40, "TextMaxLines": 1},
+                          {
+                            "Key": "MaxResultCount",
+                            "Label": "i18n:ui_tray_queries_max_result_count",
+                            "Tooltip": "i18n:ui_tray_queries_max_result_count_tooltip",
+                            "Type": "text",
+                            "Width": 90,
+                            "TextMaxLines": 1,
+                          },
+                          {"Key": "Disabled", "Label": "i18n:ui_disabled", "Tooltip": "i18n:ui_disabled_tooltip", "Width": 50, "Type": "checkbox"},
+                        ],
+                        "SortColumnKey": "",
+                      }),
+                      onUpdate: (key, value) async {
+                        await controller.updateConfig("TrayQueries", value);
+                        return null;
+                      },
+                    );
+                  }),
+                ),
               ),
             ],
           ),
