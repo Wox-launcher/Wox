@@ -186,7 +186,6 @@ test-isolated:
 test-offline:
 	cd wox.core && WOX_TEST_ENABLE_NETWORK=false go test -tags "$(SQLITE_BUILD_TAGS)" ./test -v
 
-# Test with verbose logging
 test-verbose:
 	cd wox.core && WOX_TEST_VERBOSE=true go test -tags "$(SQLITE_BUILD_TAGS)" ./test -v
 
