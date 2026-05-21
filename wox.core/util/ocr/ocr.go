@@ -99,8 +99,34 @@ func normalizeRequest(request Request) (Request, error) {
 		return Request{}, fmt.Errorf("ocr image file is empty")
 	}
 
+	// Feature fix: platform OCR engines expect BCP-47 language tags, but callers may pass
+	// locale-style values such as zh_CN. Normalize the request once at the OCR boundary so
+	// native engines can choose the right model instead of silently falling back to English.
+	request.Languages = normalizeLanguages(request.Languages)
 	request.ImagePath = imagePath
 	return request, nil
+}
+
+func normalizeLanguages(languages []string) []string {
+	if len(languages) == 0 {
+		return nil
+	}
+
+	normalizedLanguages := make([]string, 0, len(languages))
+	seenLanguages := map[string]bool{}
+	for _, language := range languages {
+		language = strings.TrimSpace(strings.ReplaceAll(language, "_", "-"))
+		if language == "" {
+			continue
+		}
+		key := strings.ToLower(language)
+		if seenLanguages[key] {
+			continue
+		}
+		seenLanguages[key] = true
+		normalizedLanguages = append(normalizedLanguages, language)
+	}
+	return normalizedLanguages
 }
 
 func normalizeText(text string) string {
