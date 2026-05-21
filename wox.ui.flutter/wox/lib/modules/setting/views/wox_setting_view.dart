@@ -293,7 +293,7 @@ class _WoxSettingViewState extends State<WoxSettingView> {
     final results = controller.settingSearchResults;
     return Container(
       key: const ValueKey('settings-search-result-panel'),
-      margin: const EdgeInsets.only(top: 8),
+      margin: const EdgeInsets.only(top: 2),
       constraints: const BoxConstraints(maxHeight: 280),
       decoration: BoxDecoration(
         // Bug fix: the floating palette sits directly over the navigation rail.
@@ -313,7 +313,7 @@ class _WoxSettingViewState extends State<WoxSettingView> {
               : ListView.builder(
                 controller: controller.settingSearchResultScrollController,
                 shrinkWrap: true,
-                padding: const EdgeInsets.symmetric(vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
                 itemCount: results.length,
                 itemBuilder: (context, index) {
                   final result = results[index];
@@ -345,7 +345,7 @@ class _WoxSettingViewState extends State<WoxSettingView> {
                             borderRadius: BorderRadius.circular(5),
                           ),
                           child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
                               _buildSearchResultIcon(result, isSelected),
                               const SizedBox(width: 8),
@@ -473,6 +473,9 @@ class _WoxSettingViewState extends State<WoxSettingView> {
   }
 
   Widget _buildSearchResultIcon(WoxSettingSearchResult result, bool isSelected) {
+    // Visual refinement: 24px keeps search result icons readable beside the
+    // two-line text without making the navigation palette feel heavier.
+    const iconSize = 24.0;
     final icon = result.icon;
     if ((result.type == WoxSettingSearchTargetType.installedPlugin || result.type == WoxSettingSearchTargetType.pluginSetting) &&
         icon != null &&
@@ -483,11 +486,11 @@ class _WoxSettingViewState extends State<WoxSettingView> {
       return ClipRRect(
         key: ValueKey('settings-search-result-plugin-icon-${result.pluginId}-${result.settingKey}'),
         borderRadius: BorderRadius.circular(3),
-        child: WoxImageView(woxImage: icon, width: 16, height: 16),
+        child: WoxImageView(woxImage: icon, width: iconSize, height: iconSize),
       );
     }
 
-    return Icon(_searchResultIcon(result.type), color: isSelected ? getThemeTextColor() : getThemeSubTextColor(), size: 16);
+    return Icon(_searchResultIcon(result.type), color: isSelected ? getThemeTextColor() : getThemeSubTextColor(), size: iconSize);
   }
 
   bool _isSearchFocusShortcut(KeyEvent event) {

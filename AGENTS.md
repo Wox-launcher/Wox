@@ -7,11 +7,12 @@
 
 ## Rules
 
-- **Comments**: English only. Add clear intent-level comments where appropriate.
-- **Change Comments Required**: Every optimization, bug fix, and new feature must include comments near the relevant code that explain what changed, why the previous behavior or structure was not enough, and why the chosen implementation is used.
+- **Comments**: English only. Add intent-level comments only where they are necessary, such as complex logic, counterintuitive behavior, important state transitions, or code whose purpose is not obvious from the implementation.
+- **New Functions**: Add a short comment for new functions unless the function is trivial, such as 2-4 straightforward lines whose purpose is obvious from the name and body.
+- **Change Comments**: For optimizations, bug fixes, and new features, add comments near the relevant code only when they clarify a non-obvious reason, previous limitation, or implementation choice. Avoid boilerplate comments for obvious changes.
 - **Readability First**: Favor the simplest control flow that keeps behavior correct. Avoid clever abstractions, layered state handling, or indirection that make the execution path harder to follow.
 - **Inline Small Logic**: Prefer keeping very small, single-use logic inline. Do not extract a 3-4 line block into a helper unless it is reused, clarifies a meaningful boundary, or clearly reduces complexity.
-- **Explain Structures And Logic**: Add necessary comments for structs, state transitions, control-flow branches, and non-obvious logic so readers can understand the intent without reverse-engineering the code.
+- **Explain Structures And Logic**: Add comments for complex structs, state transitions, control-flow branches, and non-obvious or counterintuitive logic. Do not comment obvious code just to satisfy a rule.
 - **Refactors**: Scan `AGENTS.md` and `README.md` files first
 - **Verification**: After code changes, run code formatting according to the project style. Go build may be run for Go/backend changes. Do not run Flutter build; for Flutter changes, only check syntax/static errors. Do not run smoke test unless the user explicitly asks; the user will verify behavior.
 - **Unit Tests**: Do not write unit tests unless the user requests them
@@ -27,7 +28,7 @@
 - **Align with existing conventions**: Follow established project patterns unless there is a strong reason to change them.
 - **Preserve existing semantics**: Avoid accidental behavior changes during refactor and optimization.
 - **Prefer extensible abstractions**: Choose approaches that support future evolution with minimal rework.
-- **Document each change point**: Optimization points, bug fixes, and feature additions should carry local comments that explain the reason for the change, the behavior being introduced or corrected, and the rationale behind the chosen solution.
+- **Document non-obvious change points**: Complex or counterintuitive optimization points, bug fixes, and feature additions should carry local comments that explain the reason for the change, the behavior being introduced or corrected, and the rationale behind the chosen solution. Obvious small changes do not need comments.
 
 
 ## Debug

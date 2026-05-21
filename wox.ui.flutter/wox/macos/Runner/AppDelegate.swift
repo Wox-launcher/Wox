@@ -12,6 +12,10 @@ private func virtualDesktopTopInAppKit() -> CGFloat {
   return NSScreen.screens.map { $0.frame.maxY }.max() ?? 0
 }
 
+private func quartzTopLeftToWorkspaceYOffset() -> CGFloat {
+  return virtualDesktopTopInAppKit() - (NSScreen.main?.frame.maxY ?? virtualDesktopTopInAppKit())
+}
+
 private func appKitY(fromTopLeftY y: CGFloat, height: CGFloat = 0) -> CGFloat {
   return virtualDesktopTopInAppKit() - y - height
 }
@@ -22,6 +26,24 @@ private func topLeftY(fromAppKitY y: CGFloat, height: CGFloat) -> CGFloat {
 
 private func topLeftPoint(fromAppKit point: CGPoint) -> CGPoint {
   return CGPoint(x: point.x, y: topLeftY(fromAppKitY: point.y, height: 0))
+}
+
+private func quartzPoint(fromWorkspaceTopLeftPoint point: CGPoint) -> CGPoint {
+  // Accessibility and CGWindow APIs report top-left coordinates in Quartz display space anchored
+  // to the main display. The screenshot selector uses Wox's virtual-desktop top-left space, so the
+  // Y offset keeps hover hit-testing aligned on vertical multi-monitor layouts.
+  return CGPoint(x: point.x, y: point.y - quartzTopLeftToWorkspaceYOffset())
+}
+
+private func workspaceTopLeftRect(fromQuartzRect rect: NSRect) -> NSRect {
+  // AX element frames and CGWindow bounds share the Quartz top-left coordinate space. Normalize them
+  // once before validation so the returned selection matches the Flutter annotation contract.
+  return NSRect(
+    x: rect.origin.x,
+    y: rect.origin.y + quartzTopLeftToWorkspaceYOffset(),
+    width: rect.width,
+    height: rect.height
+  )
 }
 
 private func topLeftRect(fromAppKitRect rect: NSRect) -> NSRect {
@@ -48,6 +70,25 @@ private func elapsedMilliseconds(since start: Date) -> Int {
 
 private func formatTimingRect(_ rect: NSRect) -> String {
   return "\(Int(rect.width.rounded()))x\(Int(rect.height.rounded()))@\(Int(rect.origin.x.rounded())),\(Int(rect.origin.y.rounded()))"
+}
+
+private let screenshotHoverMinimumSide: CGFloat = 12
+private let screenshotHoverMinimumArea: CGFloat = 256
+private let screenshotHoverDisplaySizedWidthRatio: CGFloat = 0.90
+private let screenshotHoverDisplaySizedHeightRatio: CGFloat = 0.75
+
+private func isTooSmallForScreenshotHover(_ rect: NSRect) -> Bool {
+  // Bug fix: AX and CGWindow can report tiny text/image fragments or invisible slivers with valid
+  // geometry. Requiring both minimum side length and area keeps hover preview focused on regions a
+  // user can reasonably click and annotate.
+  return rect.width < screenshotHoverMinimumSide || rect.height < screenshotHoverMinimumSide || rect.width * rect.height < screenshotHoverMinimumArea
+}
+
+private func isDisplaySizedScreenshotHoverCandidate(_ rect: NSRect, displayBounds: NSRect) -> Bool {
+  return displayBounds.width > 0 &&
+    displayBounds.height > 0 &&
+    rect.width >= displayBounds.width * screenshotHoverDisplaySizedWidthRatio &&
+    rect.height >= displayBounds.height * screenshotHoverDisplaySizedHeightRatio
 }
 
 private func screenshotWindowLevel() -> NSWindow.Level {
@@ -197,6 +238,10 @@ private func rectFromPoints(_ start: CGPoint, _ end: CGPoint) -> NSRect {
     width: abs(end.x - start.x),
     height: abs(end.y - start.y)
   )
+}
+
+private func isManualScreenshotSelection(_ selection: NSRect) -> Bool {
+  return selection.width >= 4 && selection.height >= 4
 }
 
 private func intersectionArea(_ lhs: NSRect, _ rhs: NSRect) -> CGFloat {
@@ -431,9 +476,13 @@ private final class ScreenshotOverlaySession {
   private let onComplete: (NativeSelectionOverlayResult) -> Void
   private var localEventMonitor: Any?
   private var dragStart: CGPoint?
+  private var hoverSelection: NSRect?
+  private var pendingHoverSelection: NSRect?
   private var isCompleting = false
   private var overlaysDismissed = false
   private var lastPreferredDisplayId: String?
+  private let currentProcessId = pid_t(ProcessInfo.processInfo.processIdentifier)
+  private let systemWideAccessibilityElement = AXUIElementCreateSystemWide()
 
   init(
     workspaceBounds: NSRect,
@@ -450,6 +499,9 @@ private final class ScreenshotOverlaySession {
 
   func begin() {
     installEventMonitor()
+    // Build the first hover preview before the selector windows are ordered front. AX and
+    // CGWindow hit-testing can then see the user's original desktop target instead of our overlay.
+    updateHoverSelection(at: topLeftPoint(fromAppKit: NSEvent.mouseLocation))
     for window in windows {
       window.orderFrontRegardless()
     }
@@ -478,7 +530,7 @@ private final class ScreenshotOverlaySession {
   }
 
   private func installEventMonitor() {
-    localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp, .keyDown]) { [weak self] event in
+    localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDown, .leftMouseDragged, .leftMouseUp, .keyDown]) { [weak self] event in
       return self?.handle(event: event) ?? event
     }
   }
@@ -497,10 +549,26 @@ private final class ScreenshotOverlaySession {
 
       return nil
 
+    case .mouseMoved:
+      guard dragStart == nil else {
+        return nil
+      }
+
+      // Hover previews are resolved only before a real drag starts. Once dragging begins the
+      // selector keeps the existing manual rectangle path so the new feature cannot alter drag
+      // selection semantics.
+      updateHoverSelection(at: topLeftPoint(fromAppKit: NSEvent.mouseLocation))
+      return nil
+
     case .leftMouseDown:
       let point = clampPoint(topLeftPoint(fromAppKit: NSEvent.mouseLocation), to: workspaceBounds)
+      pendingHoverSelection = hoverSelection
       dragStart = point
+      self.hoverSelection = nil
       let selection = rectFromPoints(point, point)
+      // Bug fix: hover click completion is deferred until mouse-up. Mouse-down records the hover
+      // candidate but still starts the normal drag path, so users can press on a preview and drag
+      // a manual rectangle instead of being forced into the hovered control.
       updateSelection(selection)
       updatePreferredDisplayHint(for: selection)
       return nil
@@ -510,6 +578,7 @@ private final class ScreenshotOverlaySession {
         return nil
       }
 
+      hoverSelection = nil
       let point = clampPoint(topLeftPoint(fromAppKit: NSEvent.mouseLocation), to: workspaceBounds)
       let selection = rectFromPoints(dragStart, point)
       // Mouse-up used to be the first moment Flutter learned which monitor would host annotation,
@@ -526,11 +595,37 @@ private final class ScreenshotOverlaySession {
 
       let point = clampPoint(topLeftPoint(fromAppKit: NSEvent.mouseLocation), to: workspaceBounds)
       let selection = rectFromPoints(dragStart, point)
-      completeSelection(selection)
+      if let pendingHoverSelection, !isManualScreenshotSelection(selection) {
+        // Bug fix: a plain click on a hover preview still enters annotation, but only after mouse-up
+        // proves that the user did not draw a manual rectangle from the same starting point.
+        self.pendingHoverSelection = nil
+        completeSelection(pendingHoverSelection)
+      } else {
+        self.pendingHoverSelection = nil
+        completeSelection(selection)
+      }
       return nil
 
     default:
       return event
+    }
+  }
+
+  private func updateHoverSelection(at topLeftPoint: CGPoint) {
+    let point = clampPoint(topLeftPoint, to: workspaceBounds)
+    let selection = accessibilityHoverSelection(at: point) ?? windowHoverSelection(at: point)
+
+    if hoverSelection == selection {
+      return
+    }
+
+    hoverSelection = selection
+    // Hover selection intentionally reuses the existing selection drawing path instead of changing
+    // the captured backdrop or rebuilding any region. That keeps mouse-move updates cheap while
+    // still making the control-level target visible before the user clicks.
+    updateSelection(selection)
+    if let selection {
+      updatePreferredDisplayHint(for: selection)
     }
   }
 
@@ -572,6 +667,7 @@ private final class ScreenshotOverlaySession {
 
     isCompleting = true
     dragStart = nil
+    pendingHoverSelection = nil
     if let localEventMonitor {
       NSEvent.removeMonitor(localEventMonitor)
       self.localEventMonitor = nil
@@ -601,6 +697,284 @@ private final class ScreenshotOverlaySession {
     }
 
     return preferredCapture(for: selection)?.displayId
+  }
+
+  private func accessibilityHoverSelection(at point: CGPoint) -> NSRect? {
+    let hitTestPoint = quartzPoint(fromWorkspaceTopLeftPoint: point)
+    var hitElement: AXUIElement?
+    let error = AXUIElementCopyElementAtPosition(systemWideAccessibilityElement, Float(hitTestPoint.x), Float(hitTestPoint.y), &hitElement)
+    guard error == .success, let hitElement else {
+      return nil
+    }
+
+    var currentElement: AXUIElement? = hitElement
+    var fallbackSelection: NSRect?
+
+    for _ in 0..<8 {
+      guard let element = currentElement else {
+        break
+      }
+
+      let role = accessibilityRole(for: element)
+      let subrole = accessibilitySubrole(for: element)
+      if isSelectableAccessibilityElement(element, role: role, subrole: subrole),
+        let rect = accessibilityRect(for: element),
+        let selection = validatedHoverSelection(rect, at: point)
+      {
+        if isPreferredAccessibilityRole(role) {
+          return selection
+        }
+
+        fallbackSelection = fallbackSelection ?? selection
+      }
+
+      currentElement = accessibilityParent(for: element)
+    }
+
+    // AX hit-testing often starts on text or image leaves in web content. Walking upward lets the
+    // preview land on a meaningful row, button, or input, while this fallback still gives a usable
+    // rect when an app exposes no better parent.
+    return fallbackSelection
+  }
+
+  private func accessibilityRect(for element: AXUIElement) -> NSRect? {
+    var positionValue: CFTypeRef?
+    var sizeValue: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &positionValue) == .success,
+      AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &sizeValue) == .success,
+      let positionValue,
+      let sizeValue,
+      CFGetTypeID(positionValue) == AXValueGetTypeID(),
+      CFGetTypeID(sizeValue) == AXValueGetTypeID()
+    else {
+      return nil
+    }
+
+    let positionAXValue = positionValue as! AXValue
+    let sizeAXValue = sizeValue as! AXValue
+    var position = CGPoint.zero
+    var size = CGSize.zero
+    guard AXValueGetType(positionAXValue) == .cgPoint,
+      AXValueGetType(sizeAXValue) == .cgSize,
+      AXValueGetValue(positionAXValue, .cgPoint, &position),
+      AXValueGetValue(sizeAXValue, .cgSize, &size)
+    else {
+      return nil
+    }
+
+    return workspaceTopLeftRect(fromQuartzRect: NSRect(origin: position, size: size))
+  }
+
+  private func accessibilityParent(for element: AXUIElement) -> AXUIElement? {
+    var parentValue: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(element, kAXParentAttribute as CFString, &parentValue) == .success,
+      let parentValue,
+      CFGetTypeID(parentValue) == AXUIElementGetTypeID()
+    else {
+      return nil
+    }
+
+    return (parentValue as! AXUIElement)
+  }
+
+  private func accessibilityRole(for element: AXUIElement) -> String? {
+    var roleValue: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleValue) == .success else {
+      return nil
+    }
+
+    return roleValue as? String
+  }
+
+  private func accessibilitySubrole(for element: AXUIElement) -> String? {
+    var subroleValue: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(element, kAXSubroleAttribute as CFString, &subroleValue) == .success else {
+      return nil
+    }
+
+    return subroleValue as? String
+  }
+
+  private func isHiddenAccessibilityElement(_ element: AXUIElement) -> Bool {
+    var hiddenValue: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(element, kAXHiddenAttribute as CFString, &hiddenValue) == .success else {
+      return false
+    }
+
+    return (hiddenValue as? Bool) ?? false
+  }
+
+  private func hasAccessibilityWindowAssociation(_ element: AXUIElement, role: String?) -> Bool {
+    if role == kAXWindowRole as String {
+      return true
+    }
+
+    var windowValue: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(element, kAXWindowAttribute as CFString, &windowValue) == .success,
+      let windowValue
+    else {
+      return false
+    }
+
+    return CFGetTypeID(windowValue) == AXUIElementGetTypeID()
+  }
+
+  private func isSelectableAccessibilityElement(_ element: AXUIElement, role: String?, subrole: String?) -> Bool {
+    if isCurrentProcessAccessibilityElement(element) || isHiddenAccessibilityElement(element) {
+      return false
+    }
+
+    let ignoredRoles = [
+      "AXApplication",
+      "AXSystemWide",
+      "AXDesktop",
+      "AXTitleBar",
+      "AXToolbar",
+      "AXMenu",
+      "AXMenuBar",
+      "AXMenuBarItem",
+      "AXMenuItem",
+      "AXDockItem",
+      "AXStatusItem",
+    ]
+    let ignoredSubroles = [
+      "AXDesktop",
+      "AXCloseButton",
+      "AXMinimizeButton",
+      "AXZoomButton",
+      "AXFullScreenButton",
+      "AXToolbarButton",
+    ]
+    if let role, ignoredRoles.contains(role) {
+      return false
+    }
+    if let subrole, ignoredSubroles.contains(subrole) {
+      return false
+    }
+
+    // Bug fix: AX can hit Finder/Desktop, wallpaper, or titlebar chrome nodes that expose geometry
+    // but are not useful screenshot targets. Requiring a window association keeps content controls
+    // selectable while the role/subrole deny-list skips window buttons and menu/toolbar chrome.
+    return hasAccessibilityWindowAssociation(element, role: role)
+  }
+
+  private func isPreferredAccessibilityRole(_ role: String?) -> Bool {
+    guard let role else {
+      return true
+    }
+
+    // Text and image leaves usually describe the visual content under the cursor, not the clickable
+    // control or row the user wants to capture. Prefer their parent when AX exposes one.
+    let leafRoles = [
+      kAXStaticTextRole as String,
+      kAXImageRole as String,
+    ]
+    return !leafRoles.contains(role)
+  }
+
+  private func isCurrentProcessAccessibilityElement(_ element: AXUIElement) -> Bool {
+    var pid: pid_t = 0
+    return AXUIElementGetPid(element, &pid) == .success && pid == currentProcessId
+  }
+
+  private func windowHoverSelection(at point: CGPoint) -> NSRect? {
+    guard let windowInfos = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
+      return nil
+    }
+
+    let hitTestPoint = quartzPoint(fromWorkspaceTopLeftPoint: point)
+    for windowInfo in windowInfos {
+      let ownerPid = (windowInfo[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value ?? 0
+      if ownerPid == currentProcessId {
+        continue
+      }
+
+      let layer = (windowInfo[kCGWindowLayer as String] as? NSNumber)?.intValue ?? 0
+      if layer != 0 {
+        continue
+      }
+
+      let alpha = (windowInfo[kCGWindowAlpha as String] as? NSNumber)?.doubleValue ?? 1
+      if alpha <= 0 {
+        continue
+      }
+
+      guard let boundsDictionary = windowInfo[kCGWindowBounds as String] as? NSDictionary,
+        let rect = CGRect(dictionaryRepresentation: boundsDictionary as CFDictionary)
+      else {
+        continue
+      }
+
+      let windowRect = NSRect(x: rect.origin.x, y: rect.origin.y, width: rect.width, height: rect.height)
+      if !windowRect.contains(hitTestPoint) {
+        continue
+      }
+
+      let workspaceWindowRect = workspaceTopLeftRect(fromQuartzRect: windowRect)
+      if isDesktopLikeWindowInfo(windowInfo, workspaceRect: workspaceWindowRect, at: point) {
+        continue
+      }
+
+      // The window-level fallback keeps the feature useful when AX is unavailable because the user
+      // has not granted accessibility permission, or when an app exposes unreliable control bounds.
+      return validatedHoverSelection(workspaceWindowRect, at: point, allowDisplaySizedCandidate: true)
+    }
+
+    return nil
+  }
+
+  private func isDesktopLikeWindowInfo(_ windowInfo: [String: Any], workspaceRect: NSRect, at point: CGPoint) -> Bool {
+    // Bug fix: CGWindow fallback can still list wallpaper, Dock, or Finder desktop surfaces as
+    // layer-0 windows. Geometry alone cannot distinguish those from real full-screen apps, so use
+    // owner/name hints only for known desktop surfaces while keeping normal app windows selectable.
+    let ownerName = windowInfo[kCGWindowOwnerName as String] as? String ?? ""
+    let windowName = windowInfo[kCGWindowName as String] as? String ?? ""
+    if ownerName == "Window Server" || ownerName == "Dock" {
+      return true
+    }
+
+    guard let containingCapture = captures.first(where: { $0.logicalBounds.contains(point) }) else {
+      return true
+    }
+
+    let selection = workspaceRect.intersection(containingCapture.logicalBounds).intersection(workspaceBounds)
+    let looksDisplaySized = !selection.isEmpty && isDisplaySizedScreenshotHoverCandidate(selection, displayBounds: containingCapture.logicalBounds)
+    if looksDisplaySized && ownerName == "Finder" && (windowName.isEmpty || windowName.localizedCaseInsensitiveContains("desktop")) {
+      return true
+    }
+    if looksDisplaySized && (windowName.localizedCaseInsensitiveContains("desktop") || windowName.localizedCaseInsensitiveContains("wallpaper")) {
+      return true
+    }
+
+    return false
+  }
+
+  private func validatedHoverSelection(_ rect: NSRect, at point: CGPoint, allowDisplaySizedCandidate: Bool = false) -> NSRect? {
+    let values = [rect.minX, rect.minY, rect.width, rect.height]
+    if values.contains(where: { !$0.isFinite }) || isTooSmallForScreenshotHover(rect) {
+      return nil
+    }
+
+    guard let containingCapture = captures.first(where: { $0.logicalBounds.contains(point) }) else {
+      return nil
+    }
+
+    if rect.width > containingCapture.logicalBounds.width + 2 || rect.height > containingCapture.logicalBounds.height + 2 {
+      return nil
+    }
+
+    let selection = rect.intersection(containingCapture.logicalBounds).intersection(workspaceBounds)
+    if selection.isEmpty || isTooSmallForScreenshotHover(selection) {
+      return nil
+    }
+    if !allowDisplaySizedCandidate && isDisplaySizedScreenshotHoverCandidate(selection, displayBounds: containingCapture.logicalBounds) {
+      // Bug fix: AX may report desktop/wallpaper or full-display containers as ordinary elements
+      // even though the pointer is over empty background. Reject display-sized AX candidates so the
+      // selector only previews real controls, with CGWindow fallback handling actual app windows.
+      return nil
+    }
+
+    return selection
   }
 
   private func preferredEditorVisibleBounds(for selection: NSRect) -> NSRect? {

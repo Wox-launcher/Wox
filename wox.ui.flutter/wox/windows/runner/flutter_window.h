@@ -11,6 +11,7 @@
 #include <string>
 #include <unordered_set>
 #include <vector>
+#include <uiautomation.h>
 
 #include "win32_window.h"
 
@@ -98,6 +99,17 @@ private:
     POINT drag_start{0, 0};
     RECT workspace_bounds{0, 0, 0, 0};
     RECT selection_bounds{0, 0, 0, 0};
+    bool has_pending_hover_selection = false;
+    RECT pending_hover_selection_bounds{0, 0, 0, 0};
+    bool has_hover_selection = false;
+    RECT hover_selection_bounds{0, 0, 0, 0};
+    std::string hover_selection_source;
+    std::vector<RECT> hover_candidate_bounds;
+    bool has_last_hover_probe_point = false;
+    POINT last_hover_probe_point{0, 0};
+    ULONGLONG last_hover_probe_tick = 0;
+    std::string last_hover_debug_signature;
+    ULONGLONG last_hover_debug_tick = 0;
     ULONGLONG started_tick = 0;
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> pending_result;
   } screenshot_selection_overlay_state_;
@@ -112,6 +124,7 @@ private:
   };
 
   std::vector<CachedDisplayCapture> cached_display_captures_;
+  IUIAutomation *screenshot_uia_automation_ = nullptr;
 
   // Save/restore the previously focused window (Windows focus rules require explicit restore)
   void SavePreviousActiveWindow(HWND selfHwnd);
@@ -140,15 +153,33 @@ private:
   flutter::EncodableMap BuildCaptureWorkspaceResponse(const RECT &native_workspace_bounds) const;
   bool BeginScreenshotSelectionOverlay(HWND hwnd, const RECT &workspace_bounds, std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result, std::string *error_out);
   void LayoutScreenshotSelectionOverlay();
+  void UpdateScreenshotSelectionHover(const POINT &point);
   void ScheduleScreenshotSelectionDimRegionUpdate();
   void FlushScreenshotSelectionDimRegionUpdate();
   void CancelScreenshotSelectionDimRegionUpdate();
   void ApplyScreenshotSelectionDimRegion();
+  void InvalidateScreenshotSelectionDimChange(const RECT &old_selection_bounds, const RECT &new_selection_bounds);
   void UpdateScreenshotSelectionOverlay(const RECT &selection_bounds);
+  void BeginScreenshotSelectionPointerDown(const POINT &point);
+  void CompleteScreenshotSelectionPointerUp(const POINT &point);
   void CompleteScreenshotSelectionOverlay(bool cancelled);
   void DismissNativeSelectionOverlays();
   void DestroyScreenshotSelectionOverlayWindows();
   void MoveSelectionOverlayWindow(HWND hwnd, const RECT &bounds, bool activate = false);
+  void LogScreenshotHoverDebug(const std::string &signature, const std::string &message);
+  bool TryPickCachedHoverSelection(const POINT &point, RECT *selection_out, std::string *source_out) const;
+  bool TryResolveScreenshotHoverSelection(const POINT &point, RECT *selection_out, std::string *source_out, std::vector<RECT> *candidate_bounds_out);
+  bool TryResolveUiaHoverSelection(const POINT &point, RECT *selection_out, std::string *source_out, std::vector<RECT> *candidate_bounds_out);
+  bool TryResolveWindowHoverSelection(const POINT &point, RECT *selection_out, std::string *source_out, std::vector<RECT> *candidate_bounds_out);
+  bool TryGetUiaElementBounds(IUIAutomationElement *element, RECT *bounds_out);
+  bool IsChromeLikeScreenshotHoverUiaElement(IUIAutomationElement *element, const RECT &bounds, HWND native_window);
+  void AddHoverCandidateRect(const RECT &candidate, std::vector<RECT> *candidate_bounds_out) const;
+  bool TryFindDeepestUiaElementBounds(IUIAutomationTreeWalker *walker, IUIAutomationElement *element, const POINT &point, int depth, RECT *bounds_out, std::vector<RECT> *candidate_bounds_out);
+  bool NormalizeHoverSelectionRect(const POINT &point, const RECT &candidate, RECT *selection_out, bool allow_display_sized_candidate = false) const;
+  bool IsScreenshotOverlayWindow(HWND hwnd);
+  bool IsSelectableScreenshotHoverWindow(HWND hwnd);
+  HWND FindUnderlyingWindowAtPoint(const POINT &point);
+  IUIAutomation *EnsureScreenshotUiaAutomation();
   const CachedDisplayCapture *PreferredDisplayCaptureForSelection(const RECT &selection_bounds) const;
   const CachedDisplayCapture *DisplayCaptureForPoint(POINT point) const;
   void EmitScreenshotSelectionDisplayHint(const CachedDisplayCapture &capture);
@@ -159,6 +190,7 @@ private:
   HRGN CreateScrollingCaptureControlsRegion(int width, int height) const;
   void ApplyScrollingCaptureControlsRegion(HWND hwnd);
   void ClearScrollingCaptureControlsRegion();
+  void PaintScreenshotSelectionOverlay(HWND hwnd);
   void PaintScrollingCaptureOverlay(HWND hwnd);
   void EmitScrollingCaptureWheelEvent(int wheel_delta);
   bool IsPointInScrollingCaptureSelection(POINT point) const;
