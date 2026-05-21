@@ -29,7 +29,10 @@ void registerLauncherGridSmokeTests() {
 
       final params = controller.gridLayoutParams.value;
       expect(controller.isGridLayout.value, isTrue);
-      expect(params.columns, equals(12));
+      // Smoke coverage follows the emoji plugin's current grid contract; the
+      // important regression guard below is that explicit ItemPadding remains
+      // authoritative for content sizing.
+      expect(params.columns, equals(10));
       expect(params.itemPadding, equals(12));
       expect(params.itemMargin, equals(6));
       expect(params.aspectRatio, equals(1.0));

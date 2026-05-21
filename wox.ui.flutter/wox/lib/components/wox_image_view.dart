@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:lottie/lottie.dart';
@@ -70,14 +71,14 @@ class WoxImageView extends StatelessWidget {
               : _WoxLazyLoadImageView(payload: payload, width: width, height: height, svgColor: svgColor, fit: fit, onLoaded: onLazyImageLoaded);
     } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_URL.code) {
       if (_isSvgUrl(woxImage.imageData)) {
-        content = SvgPicture.network(
-          woxImage.imageData,
+        content = _WoxSvgNetworkImageView(
+          url: woxImage.imageData,
           width: width,
           height: height,
           fit: fit,
           colorFilter: _svgColorFilter,
-          placeholderBuilder: (context) => _buildLoadingPlaceholder(),
-          errorBuilder: (context, error, stackTrace) => _buildErrorPlaceholder(error, stackTrace),
+          loadingBuilder: _buildLoadingPlaceholder,
+          errorBuilder: _buildErrorPlaceholder,
         );
       } else {
         content = Image.network(
@@ -138,6 +139,76 @@ class WoxImageView extends StatelessWidget {
     }
 
     return content;
+  }
+}
+
+class _WoxSvgNetworkImageView extends StatefulWidget {
+  final String url;
+  final double? width;
+  final double? height;
+  final BoxFit fit;
+  final ColorFilter? colorFilter;
+  final Widget Function() loadingBuilder;
+  final Widget Function(Object error, StackTrace? stackTrace) errorBuilder;
+
+  const _WoxSvgNetworkImageView({required this.url, this.width, this.height, required this.fit, this.colorFilter, required this.loadingBuilder, required this.errorBuilder});
+
+  @override
+  State<_WoxSvgNetworkImageView> createState() => _WoxSvgNetworkImageViewState();
+}
+
+class _WoxSvgNetworkImageViewState extends State<_WoxSvgNetworkImageView> {
+  late Future<String> _svgFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _svgFuture = _loadSvg();
+  }
+
+  @override
+  void didUpdateWidget(covariant _WoxSvgNetworkImageView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.url != widget.url) {
+      _svgFuture = _loadSvg();
+    }
+  }
+
+  Future<String> _loadSvg() async {
+    try {
+      // Bug fix: SvgPicture.network can surface socket failures as late Flutter
+      // test errors even with errorBuilder. Fetch the SVG text here so network
+      // failures stay inside this FutureBuilder and degrade to the normal empty
+      // image placeholder instead of failing unrelated smoke cases.
+      final response = await Dio().get<String>(widget.url, options: Options(responseType: ResponseType.plain)).timeout(const Duration(seconds: 8));
+      return response.data ?? "";
+    } catch (error, stackTrace) {
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<String>(
+      future: _svgFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return widget.loadingBuilder();
+        }
+        if (snapshot.hasError || (snapshot.data ?? "").isEmpty) {
+          return widget.errorBuilder(snapshot.error ?? "Empty SVG response", snapshot.stackTrace);
+        }
+
+        return SvgPicture.string(
+          snapshot.data!,
+          width: widget.width,
+          height: widget.height,
+          fit: widget.fit,
+          colorFilter: widget.colorFilter,
+          errorBuilder: (context, error, stackTrace) => widget.errorBuilder(error, stackTrace),
+        );
+      },
+    );
   }
 }
 

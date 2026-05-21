@@ -335,6 +335,17 @@ class _WoxQueryVariableTextFieldState extends State<WoxQueryVariableTextField> {
     widget.onChanged?.call(updatedText);
     _removeOverlay();
     _focusNode.requestFocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _controller.text != updatedText) {
+        return;
+      }
+
+      // Bug fix: tapping the suffix picker can restore the pre-button caret on
+      // the next frame, so keep the caret after the inserted placeholder. That
+      // makes an immediate Backspace remove the newly inserted token instead of
+      // deleting the previous runtime variable.
+      _controller.selection = TextSelection.collapsed(offset: cursorOffset.clamp(0, _controller.text.length).toInt());
+    });
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
