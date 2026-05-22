@@ -3,9 +3,11 @@ import 'dart:core';
 import 'dart:io' show pid;
 
 import 'package:wox/entity/wox_ai.dart';
+import 'package:wox/entity/wox_ai_command_template.dart';
 import 'package:wox/entity/wox_backup.dart';
 import 'package:wox/entity/wox_lang.dart';
 import 'package:wox/entity/wox_glance.dart';
+import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/entity/wox_runtime_status.dart';
@@ -111,6 +113,10 @@ class WoxApi {
     return await WoxHttpUtil.instance.postData(traceId, "/hotkey/available", {"hotkey": hotkey});
   }
 
+  Future<HotkeyAvailability> checkHotkeyAvailability(String traceId, String hotkey) async {
+    return await WoxHttpUtil.instance.postData<HotkeyAvailability>(traceId, "/hotkey/availability", {"hotkey": hotkey});
+  }
+
   Future<void> onUIReady(String traceId) async {
     // Dev mode starts Flutter outside the backend process tree, so the ready
     // callback reports the UI PID for core-side memory diagnostics.
@@ -135,6 +141,10 @@ class WoxApi {
 
   Future<void> onSetting(String traceId, bool inSettingView) async {
     await WoxHttpUtil.instance.postData(traceId, "/on/setting", {"inSettingView": inSettingView});
+  }
+
+  Future<void> onHotkeyRecording(String traceId, bool isRecording) async {
+    await WoxHttpUtil.instance.postData(traceId, "/on/hotkey/recording", {"isRecording": isRecording});
   }
 
   Future<void> onOnboarding(String traceId, bool inOnboardingView) async {
@@ -183,6 +193,10 @@ class WoxApi {
 
   Future<List<AIAgent>> findAIAgents(String traceId) async {
     return await WoxHttpUtil.instance.postData(traceId, "/ai/agents", null);
+  }
+
+  Future<List<AICommandTemplate>> findAICommandTemplates(String traceId) async {
+    return await WoxHttpUtil.instance.postData(traceId, "/ai/commands/store", null);
   }
 
   Future<AIModel> findDefaultAIModel(String traceId) async {

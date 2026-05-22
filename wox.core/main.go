@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"wox/ai"
 	"wox/analytics"
 	"wox/database"
 	"wox/diagnostic"
@@ -196,6 +197,10 @@ func run() {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to initialize lang(%s): %s", woxSetting.LangCode.Get(), langErr.Error()))
 		return
 	}
+
+	util.Go(ctx, "start ai command store manager", func() {
+		ai.GetStoreManager().Start(util.NewTraceContext())
+	})
 
 	for _, arg := range os.Args {
 		if arg == "--updated" {

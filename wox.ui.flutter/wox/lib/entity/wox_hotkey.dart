@@ -22,6 +22,23 @@ class HotkeyX {
   }
 }
 
+/// Hotkey availability result returned by core, including the owner of Wox-managed conflicts.
+class HotkeyAvailability {
+  final bool available;
+  final String conflictType;
+  final String conflictValue;
+
+  HotkeyAvailability({required this.available, this.conflictType = "", this.conflictValue = ""});
+
+  factory HotkeyAvailability.fromJson(Map<String, dynamic>? json) {
+    return HotkeyAvailability(
+      available: json?["Available"] == true,
+      conflictType: json?["ConflictType"]?.toString() ?? "",
+      conflictValue: json?["ConflictValue"]?.toString() ?? "",
+    );
+  }
+}
+
 /// A hotkey in Wox at least consists of a modifier and a key.
 class WoxHotkey {
   static HotkeyX? parseHotkeyFromString(String value) {

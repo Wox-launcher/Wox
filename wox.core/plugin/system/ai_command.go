@@ -36,10 +36,15 @@ var (
 const (
 	aiCommandDefaultActionRun         = "run"
 	aiCommandDefaultActionRunAndPaste = "run_and_paste"
+	aiCommandDefaultActionRunAndShow  = "run_and_show"
+	aiCommandInputTextVariable        = "{wox:input_text}"
 	aiCommandLoadingOverlayOffsetX    = 18
 	aiCommandLoadingOverlayOffsetY    = 18
 	aiCommandLoadingOverlayMinWidth   = 128
 	aiCommandLoadingOverlayMaxWidth   = 220
+	aiCommandResultOverlayWidth       = 520
+	aiCommandResultOverlayMinHeight   = 96
+	aiCommandResultOverlayMaxHeight   = 360
 )
 
 type commandSetting struct {
@@ -68,6 +73,7 @@ type aiCommandFinalResult struct {
 type aiCommandStreamOptions struct {
 	updateVisibleResult bool
 	onStreamingStarted  func(ctx context.Context)
+	onStreamResult      func(ctx context.Context, streamResult common.ChatStreamData)
 }
 
 func (c *commandSetting) AIModel() (model common.Model) {
@@ -83,6 +89,9 @@ func (c *commandSetting) NormalizedDefaultAction(allowPaste bool) string {
 	// Feature addition: old command rows do not have defaultAction. Treat missing
 	// or unknown values as Run so existing commands keep their previous safe
 	// "show result in Wox" behavior after the new explicit action setting lands.
+	if c.DefaultAction == aiCommandDefaultActionRunAndShow {
+		return aiCommandDefaultActionRunAndShow
+	}
 	if allowPaste && c.DefaultAction == aiCommandDefaultActionRunAndPaste {
 		return aiCommandDefaultActionRunAndPaste
 	}
@@ -168,7 +177,7 @@ func (c *Plugin) GetMetadata() plugin.Metadata {
 						{
 							Key:          "prompt",
 							Label:        "i18n:plugin_ai_command_prompt",
-							Type:         definition.PluginSettingValueTableColumnTypeText,
+							Type:         definition.PluginSettingValueTableColumnTypeAICommandPrompt,
 							TextMaxLines: 10,
 							Tooltip:      "i18n:plugin_ai_command_prompt_tooltip",
 							Validators: []validator.PluginSettingValidator{
@@ -193,6 +202,7 @@ func (c *Plugin) GetMetadata() plugin.Metadata {
 							Tooltip: "i18n:plugin_ai_command_default_action_tooltip",
 							SelectOptions: []definition.PluginSettingValueSelectOption{
 								{Label: "i18n:plugin_ai_command_default_action_run", Value: aiCommandDefaultActionRun},
+								{Label: "i18n:plugin_ai_command_default_action_run_and_show", Value: aiCommandDefaultActionRunAndShow},
 								{Label: "i18n:plugin_ai_command_default_action_run_and_paste", Value: aiCommandDefaultActionRunAndPaste},
 							},
 						},
@@ -271,7 +281,7 @@ func (c *Plugin) buildAICommandConversations(command commandSetting, input strin
 	var conversations []common.Conversation
 	prompts := strings.Split(command.Prompt, "{wox:new_ai_conversation}")
 	for index, message := range prompts {
-		msg := fmt.Sprintf(message, input)
+		msg := renderAICommandPrompt(message, input)
 		if index%2 == 0 {
 			conversations = append(conversations, common.Conversation{
 				Role: common.ConversationRoleUser,
@@ -285,6 +295,18 @@ func (c *Plugin) buildAICommandConversations(command commandSetting, input strin
 		}
 	}
 	return conversations
+}
+
+func renderAICommandPrompt(prompt string, inputText string) string {
+	if strings.Contains(prompt, aiCommandInputTextVariable) {
+		return strings.ReplaceAll(prompt, aiCommandInputTextVariable, inputText)
+	}
+
+	if strings.Contains(prompt, "%s") {
+		return fmt.Sprintf(prompt, inputText)
+	}
+
+	return prompt
 }
 
 func (c *Plugin) buildCopyAnswerAction(answer string) plugin.QueryResultAction {
@@ -365,6 +387,94 @@ func (c *Plugin) showAICommandLoadingOverlay(ctx context.Context, name string) b
 	return true
 }
 
+func (c *Plugin) currentAICommandOverlayPosition(ctx context.Context) mouse.Point {
+	position, ok := mouse.CurrentPosition()
+	if !ok {
+		c.api.Log(ctx, plugin.LogLevelDebug, "use fallback ai command result overlay position: mouse position is unavailable")
+		return mouse.Point{X: aiCommandLoadingOverlayOffsetX, Y: aiCommandLoadingOverlayOffsetY}
+	}
+	return position
+}
+
+func (c *Plugin) showAICommandResultOverlay(ctx context.Context, name string, position mouse.Point, streamResult common.ChatStreamData) {
+	message := formatAICommandResultOverlayMessage(ctx, streamResult)
+	copyText := strings.TrimSpace(streamResult.Data)
+	opts := overlay.OverlayOptions{
+		Name:             name,
+		Message:          message,
+		Loading:          streamResult.Status == common.ChatStreamStatusStreaming && copyText == "",
+		Topmost:          true,
+		AbsolutePosition: true,
+		Anchor:           overlay.AnchorTopLeft,
+		OffsetX:          position.X + aiCommandLoadingOverlayOffsetX,
+		OffsetY:          position.Y + aiCommandLoadingOverlayOffsetY,
+		Width:            aiCommandResultOverlayWidth,
+		Height:           estimateAICommandResultOverlayHeight(message),
+		FontSize:         12,
+		Movable:          true,
+		Closable:         true,
+		CloseOnEscape:    true,
+	}
+
+	if copyText != "" {
+		if copyIcon, err := common.CopyIcon.ToImageWithoutRemoteFetch(); err == nil {
+			opts.Icon = overlay.NewImageIcon(copyIcon)
+			opts.IconSize = 16
+		}
+		opts.OnClick = func() {
+			if err := clipboard.WriteText(copyText); err != nil {
+				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to copy ai command overlay answer: %s", err.Error()))
+				c.api.Notify(ctx, "plugin_ai_command_copy_failed")
+			}
+		}
+	}
+
+	aiCommandShowOverlay(opts)
+}
+
+func formatAICommandResultOverlayMessage(ctx context.Context, streamResult common.ChatStreamData) string {
+	answer := strings.TrimSpace(streamResult.Data)
+	if answer != "" {
+		return answer
+	}
+
+	reasoning := strings.TrimSpace(streamResult.Reasoning)
+	if reasoning != "" {
+		return reasoning
+	}
+
+	if streamResult.Status == common.ChatStreamStatusError {
+		return i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_preview_error")
+	}
+	return i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_thinking")
+}
+
+func estimateAICommandResultOverlayHeight(message string) float64 {
+	lines := 1
+	columns := 0
+	for _, r := range message {
+		if r == '\n' {
+			lines++
+			columns = 0
+			continue
+		}
+		columns++
+		if columns >= 64 {
+			lines++
+			columns = 0
+		}
+	}
+
+	height := 48 + float64(lines)*18
+	if height < aiCommandResultOverlayMinHeight {
+		return aiCommandResultOverlayMinHeight
+	}
+	if height > aiCommandResultOverlayMaxHeight {
+		return aiCommandResultOverlayMaxHeight
+	}
+	return height
+}
+
 func (c *Plugin) startAICommandStream(ctx context.Context, command commandSetting, conversations []common.Conversation, modelLabel string, resultId string, options aiCommandStreamOptions) <-chan aiCommandFinalResult {
 	finalCh := make(chan aiCommandFinalResult, 1)
 
@@ -405,6 +515,9 @@ func (c *Plugin) startAICommandStream(ctx context.Context, command commandSettin
 					options.onStreamingStarted(ctx)
 				})
 			}
+			if options.onStreamResult != nil {
+				options.onStreamResult(ctx, streamResult)
+			}
 
 			if options.updateVisibleResult {
 				if updatable := c.api.GetUpdatableResult(ctx, resultId); updatable != nil {
@@ -444,6 +557,9 @@ func (c *Plugin) startAICommandStream(ctx context.Context, command commandSettin
 			}
 		})
 		if err != nil {
+			if options.onStreamResult != nil {
+				options.onStreamResult(ctx, common.ChatStreamData{Status: common.ChatStreamStatusError, Data: err.Error()})
+			}
 			if options.updateVisibleResult {
 				if updatable := c.api.GetUpdatableResult(ctx, resultId); updatable != nil && updatable.Preview != nil {
 					preview := c.buildAIStreamPreview(ctx, common.ChatStreamData{Status: common.ChatStreamStatusError, Data: err.Error()}, modelLabel)
@@ -469,6 +585,30 @@ func (c *Plugin) buildAICommandActions(ctx context.Context, command commandSetti
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				c.startAICommandStream(ctx, command, conversations, modelLabel, actionContext.ResultId, aiCommandStreamOptions{updateVisibleResult: true})
+			},
+		},
+		{
+			Name:      "i18n:plugin_ai_command_run_and_show",
+			IsDefault: defaultAction == aiCommandDefaultActionRunAndShow,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				util.Go(ctx, "ai command run and show", func() {
+					overlayName := fmt.Sprintf("ai_command_run_and_show_result_%s", actionContext.ResultId)
+					position := c.currentAICommandOverlayPosition(ctx)
+					c.showAICommandResultOverlay(ctx, overlayName, position, common.ChatStreamData{Status: common.ChatStreamStatusStreaming})
+
+					final := <-c.startAICommandStream(ctx, command, conversations, modelLabel, actionContext.ResultId, aiCommandStreamOptions{
+						onStreamResult: func(ctx context.Context, streamResult common.ChatStreamData) {
+							c.showAICommandResultOverlay(ctx, overlayName, position, streamResult)
+						},
+					})
+					if final.Err != nil {
+						c.notifyAICommandActionError(ctx, final.Err)
+						return
+					}
+					if strings.TrimSpace(final.Answer) == "" {
+						c.notifyAICommandActionError(ctx, fmt.Errorf("ai command returned empty answer"))
+					}
+				})
 			},
 		},
 	}
@@ -639,7 +779,7 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 		if query.Selection.Type == selection.SelectionTypeText {
 			conversations = append(conversations, common.Conversation{
 				Role: common.ConversationRoleUser,
-				Text: fmt.Sprintf(command.Prompt, query.Selection.Text),
+				Text: renderAICommandPrompt(command.Prompt, query.Selection.Text),
 			})
 		}
 

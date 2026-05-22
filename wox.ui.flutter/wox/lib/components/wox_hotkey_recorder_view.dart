@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -8,6 +9,7 @@ import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_hotkey_view.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/utils/colors.dart';
+import 'package:wox/utils/wox_hotkey_recording_bus.dart';
 import 'package:wox/utils/log.dart';
 import 'package:get/get.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
@@ -16,10 +18,19 @@ enum WoxHotkeyRecorderTipPosition { left, right }
 
 class WoxHotkeyRecorder extends StatefulWidget {
   final ValueChanged<String> onHotKeyRecorded;
+  final ValueChanged<String>? onUnavailableHotKeyRecorded;
   final HotkeyX? hotkey;
   final WoxHotkeyRecorderTipPosition tipPosition;
+  final bool recordUnavailableHotkey;
 
-  const WoxHotkeyRecorder({super.key, required this.onHotKeyRecorded, required this.hotkey, this.tipPosition = WoxHotkeyRecorderTipPosition.left});
+  const WoxHotkeyRecorder({
+    super.key,
+    required this.onHotKeyRecorded,
+    required this.hotkey,
+    this.onUnavailableHotKeyRecorded,
+    this.tipPosition = WoxHotkeyRecorderTipPosition.left,
+    this.recordUnavailableHotkey = false,
+  });
 
   @override
   State<WoxHotkeyRecorder> createState() => _WoxHotkeyRecorderState();
@@ -129,7 +140,9 @@ class _HotkeyTracker {
 class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
   HotkeyX? _hotKey;
   bool _isFocused = false;
+  String _availabilityMessage = "";
   late FocusNode _focusNode;
+  StreamSubscription<String>? _globalHotkeySubscription;
   final _tracker = _HotkeyTracker();
 
   String tr(String key) {
@@ -142,24 +155,58 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
 
     _focusNode = FocusNode();
     _hotKey = widget.hotkey;
+    _globalHotkeySubscription = WoxHotkeyRecordingBus.instance.stream.listen((hotkey) {
+      if (_isFocused) {
+        Logger.instance.info(const UuidV4().generate(), "Hotkey recorder received backend RecordHotkey event: hotkey=$hotkey");
+        _recordHotkey(hotkey);
+      } else {
+        Logger.instance.debug(const UuidV4().generate(), "Hotkey recorder ignored backend RecordHotkey event because it is not focused: hotkey=$hotkey");
+      }
+    });
     HardwareKeyboard.instance.addHandler(_handleKeyEvent);
   }
 
   @override
   void dispose() {
-    super.dispose();
-
+    if (_isFocused) {
+      _postHotkeyRecording(false);
+    }
+    _globalHotkeySubscription?.cancel();
     HardwareKeyboard.instance.removeHandler(_handleKeyEvent);
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant WoxHotkeyRecorder oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.hotkey?.toStr() != widget.hotkey?.toStr()) {
+      _hotKey = widget.hotkey;
+    }
+  }
+
+  // Reports recorder focus so core can forward Wox-owned global hotkey presses to this recorder instead of executing them.
+  void _postHotkeyRecording(bool isRecording) {
+    final traceId = const UuidV4().generate();
+    Logger.instance.info(traceId, "Hotkey recorder posts recording state: isRecording=$isRecording");
+    WoxApi.instance
+        .onHotkeyRecording(traceId, isRecording)
+        .then((_) {
+          Logger.instance.info(traceId, "Hotkey recorder recording state accepted by core: isRecording=$isRecording");
+        })
+        .catchError((error) {
+          Logger.instance.warn(traceId, "Failed to update hotkey recording state: $error");
+        });
   }
 
   bool _handleKeyEvent(KeyEvent keyEvent) {
     if (_isFocused == false) return false;
 
-    Logger.instance.debug(const UuidV4().generate(), "Hotkey: $keyEvent");
+    Logger.instance.info(const UuidV4().generate(), "Hotkey recorder received Flutter key event: $keyEvent");
 
     // backspace to clear hotkey
     if (keyEvent.logicalKey == LogicalKeyboardKey.backspace) {
       _hotKey = null;
+      _availabilityMessage = "";
       widget.onHotKeyRecorded("");
       setState(() {});
       return true;
@@ -168,24 +215,66 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
     // Process the key event
     final hotkeyStr = _tracker.processKeyEvent(keyEvent);
     if (hotkeyStr == null) {
+      Logger.instance.debug(const UuidV4().generate(), "Hotkey recorder did not parse a hotkey from event: $keyEvent");
       return false;
     }
 
-    // Check if hotkey is available and update state
-    Logger.instance.debug(const UuidV4().generate(), "Hotkey str: $hotkeyStr");
-    WoxApi.instance.isHotkeyAvailable(const UuidV4().generate(), hotkeyStr).then((isAvailable) {
-      Logger.instance.debug(const UuidV4().generate(), "Hotkey available: $isAvailable");
-      if (!isAvailable) {
-        return false;
-      }
-
-      _hotKey = WoxHotkey.parseHotkeyFromString(hotkeyStr);
-      widget.onHotKeyRecorded(hotkeyStr);
-      setState(() {});
-      return true;
-    });
-
+    _recordHotkey(hotkeyStr);
     return true;
+  }
+
+  void _recordHotkey(String hotkeyStr) {
+    final traceId = const UuidV4().generate();
+    Logger.instance.info(traceId, "Hotkey recorder checks availability: hotkey=$hotkeyStr recordUnavailable=${widget.recordUnavailableHotkey}");
+    WoxApi.instance
+        .checkHotkeyAvailability(traceId, hotkeyStr)
+        .then((availability) {
+          Logger.instance.info(
+            traceId,
+            "Hotkey recorder availability result: hotkey=$hotkeyStr available=${availability.available} conflictType=${availability.conflictType} conflictValue=${availability.conflictValue}",
+          );
+          if (!mounted) {
+            return false;
+          }
+          if (!availability.available) {
+            _hotKey = WoxHotkey.parseHotkeyFromString(hotkeyStr);
+            if (widget.recordUnavailableHotkey) {
+              Logger.instance.info(traceId, "Hotkey recorder records unavailable hotkey for parent validation: hotkey=$hotkeyStr");
+              _availabilityMessage = "";
+              widget.onUnavailableHotKeyRecorded?.call(hotkeyStr);
+            } else {
+              _availabilityMessage = _buildAvailabilityMessage(availability);
+              Logger.instance.warn(traceId, "Hotkey recorder rejected unavailable hotkey without parent callback: hotkey=$hotkeyStr");
+            }
+            setState(() {});
+            return false;
+          }
+
+          _hotKey = WoxHotkey.parseHotkeyFromString(hotkeyStr);
+          _availabilityMessage = "";
+          widget.onHotKeyRecorded(hotkeyStr);
+          setState(() {});
+          return true;
+        })
+        .catchError((error) {
+          Logger.instance.warn(traceId, "Hotkey recorder availability check failed: hotkey=$hotkeyStr error=$error");
+          return false;
+        });
+  }
+
+  String _buildAvailabilityMessage(HotkeyAvailability availability) {
+    switch (availability.conflictType) {
+      case "main":
+        return tr("ui_hotkey_conflict_main");
+      case "selection":
+        return tr("ui_hotkey_conflict_selection");
+      case "query":
+        return tr("ui_hotkey_conflict_query").replaceAll("{query}", availability.conflictValue);
+      case "system":
+        return tr("ui_hotkey_conflict_system");
+      default:
+        return tr("ui_hotkey_unavailable");
+    }
   }
 
   Widget _buildRecorderBox() {
@@ -230,32 +319,40 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
 
   Widget _buildRecorderContent() {
     final recorderBox = _buildRecorderBox();
+    Widget content;
     if (!_isFocused) {
-      return recorderBox;
-    }
-
-    if (widget.tipPosition == WoxHotkeyRecorderTipPosition.right) {
+      content = recorderBox;
+    } else if (widget.tipPosition == WoxHotkeyRecorderTipPosition.right) {
       // Dense table-edit rows have their labels below the control area, so the recording hint stays to the right to avoid covering the row content.
-      return Row(mainAxisSize: MainAxisSize.min, children: [recorderBox, Padding(padding: const EdgeInsets.only(left: 8.0), child: _buildFocusedHint())]);
-    }
-
-    // General settings align the recorder itself to the right edge. The left hint is painted outside the recorder's layout box
-    // so focusing the control does not push the keycaps away from their idle position.
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        recorderBox,
-        Positioned.fill(
-          child: OverflowBox(
-            maxWidth: double.infinity,
-            alignment: Alignment.centerLeft,
-            child: FractionalTranslation(
-              translation: const Offset(-1, 0),
-              child: Padding(padding: const EdgeInsets.only(right: 8.0), child: Center(heightFactor: 1, child: _buildFocusedHint(singleLine: true))),
+      content = Row(mainAxisSize: MainAxisSize.min, children: [recorderBox, Padding(padding: const EdgeInsets.only(left: 8.0), child: _buildFocusedHint())]);
+    } else {
+      // General settings align the recorder itself to the right edge. The left hint is painted outside the recorder's layout box
+      // so focusing the control does not push the keycaps away from their idle position.
+      content = Stack(
+        clipBehavior: Clip.none,
+        children: [
+          recorderBox,
+          Positioned.fill(
+            child: OverflowBox(
+              maxWidth: double.infinity,
+              alignment: Alignment.centerLeft,
+              child: FractionalTranslation(
+                translation: const Offset(-1, 0),
+                child: Padding(padding: const EdgeInsets.only(right: 8.0), child: Center(heightFactor: 1, child: _buildFocusedHint(singleLine: true))),
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      );
+    }
+
+    if (_availabilityMessage.isEmpty) {
+      return content;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [content, const SizedBox(height: 6), Text(_availabilityMessage, textAlign: TextAlign.right, style: const TextStyle(color: Colors.red, fontSize: 12))],
     );
   }
 
@@ -264,10 +361,12 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
     return Focus(
       focusNode: _focusNode,
       onFocusChange: (value) {
+        Logger.instance.info(const UuidV4().generate(), "Hotkey recorder focus changed: focused=$value");
         _isFocused = value;
         if (_isFocused) {
           _tracker.reset();
         }
+        _postHotkeyRecording(_isFocused);
 
         setState(() {});
       },

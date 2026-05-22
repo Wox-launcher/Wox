@@ -14,9 +14,10 @@ class WoxDropdownItem<T> {
   final String? tooltip;
   final Widget? leading;
   final Widget? trailing;
+  final Widget? menuTrailing;
   final bool isSelectAll;
 
-  const WoxDropdownItem({required this.value, required this.label, this.subtitle, this.tooltip, this.leading, this.trailing, this.isSelectAll = false});
+  const WoxDropdownItem({required this.value, required this.label, this.subtitle, this.tooltip, this.leading, this.trailing, this.menuTrailing, this.isSelectAll = false});
 }
 
 /// Wox dropdown button with theme-aware styling
@@ -533,7 +534,8 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
     final hasLeading = item.leading != null;
     final hasSubtitle = item.subtitle != null && item.subtitle!.isNotEmpty;
     final hasTooltip = item.tooltip != null && item.tooltip!.isNotEmpty;
-    final hasTrailing = item.trailing != null;
+    final trailing = item.menuTrailing ?? item.trailing;
+    final hasTrailing = trailing != null;
     if (!hasLeading && !hasSubtitle && !hasTooltip && !hasTrailing) {
       return Text(item.label);
     }
@@ -561,7 +563,7 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
                   )
                   : Text(item.label),
         ),
-        if (hasTrailing) ...[const SizedBox(width: 12), item.trailing!],
+        if (hasTrailing) ...[const SizedBox(width: 12), trailing],
         // Dropdown help icons use WoxTooltip so menu rows and the rest of Wox share
         // one overlay behavior instead of mixing Material Tooltip semantics here.
         if (hasTooltip) WoxTooltip(message: item.tooltip!, child: Icon(Icons.info_outline, size: 16, color: activeTextColor)),

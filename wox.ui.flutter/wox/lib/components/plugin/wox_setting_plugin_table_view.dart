@@ -38,6 +38,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
   final bool readonly;
   final bool inlineTitleActions;
   final List<Widget> titleActions;
+  final List<Widget> trailingActions;
   final int minimumRowCount;
   final String minimumRowDeleteMessage;
   final Widget? Function(PluginSettingValueTableColumn column, Map<String, dynamic> row)? customCellBuilder;
@@ -61,6 +62,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     this.readonly = false,
     this.inlineTitleActions = false,
     this.titleActions = const [],
+    this.trailingActions = const [],
     this.minimumRowCount = 0,
     this.minimumRowDeleteMessage = "",
     this.customCellBuilder,
@@ -291,7 +293,9 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
       return columnWidth(column: column, isHeader: false, isOperation: false, child: customCell);
     }
 
-    if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeText) {
+    if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeText ||
+        column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeQueryHotkeyQuery ||
+        column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeAICommandPrompt) {
       return columnWidth(
         column: column,
         isHeader: false,
@@ -1048,7 +1052,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
   Widget buildInlineTitleHeader(BuildContext context) {
     final hasTitle = item.title.trim().isNotEmpty;
     final hasTooltip = item.tooltip.trim().isNotEmpty;
-    final hasAction = !readonly || titleActions.isNotEmpty;
+    final hasAction = !readonly || titleActions.isNotEmpty || trailingActions.isNotEmpty;
 
     if (!hasTitle && !hasTooltip && !hasAction) {
       return const SizedBox.shrink();
@@ -1090,7 +1094,16 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
               ],
             ),
           ),
-          if (!readonly) ...[const SizedBox(width: 16), buildAddButton(context)],
+          if (trailingActions.isNotEmpty || !readonly) ...[
+            const SizedBox(width: 16),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final action in trailingActions) ...[action, const SizedBox(width: 8)],
+                if (!readonly) buildAddButton(context),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -1135,8 +1148,18 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (!readonly) SizedBox(width: tableWidth, child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [buildAddButton(context)])),
-            if (!readonly) const SizedBox(height: 6),
+            if (trailingActions.isNotEmpty || !readonly)
+              SizedBox(
+                width: tableWidth,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    for (final action in trailingActions) ...[action, const SizedBox(width: 8)],
+                    if (!readonly) buildAddButton(context),
+                  ],
+                ),
+              ),
+            if (trailingActions.isNotEmpty || !readonly) const SizedBox(height: 6),
             buildHoverAwareTable(context),
           ],
         ),

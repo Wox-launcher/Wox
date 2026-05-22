@@ -61,6 +61,8 @@ class PluginSettingValueType {
   static const pluginSettingValueTableColumnTypeDirPath = "dirPath";
   static const pluginSettingValueTableColumnTypeSelect = "select";
   static const pluginSettingValueTableColumnTypeSelectAIModel = "selectAIModel";
+  static const pluginSettingValueTableColumnTypeQueryHotkeyQuery = "queryHotkeyQuery";
+  static const pluginSettingValueTableColumnTypeAICommandPrompt = "aiCommandPrompt";
   static const pluginSettingValueTableColumnTypeAIModelStatus = "aiModelStatus";
   static const pluginSettingValueTableColumnTypeAIMCPServerTools = "aiMCPServerTools";
   static const pluginSettingValueTableColumnTypeAISelectMCPServerTools = "aiSelectMCPServerTools";
@@ -76,10 +78,9 @@ class PluginSettingValueTableColumn {
   late int width;
   late String type; //see PluginSettingValueType
   late List<PluginSettingValueSelectOption> selectOptions; // Only used when Type is PluginSettingValueTableColumnTypeSelect
-  late int textMaxLines; // Only used when Type is PluginSettingValueTableColumnTypeText
+  late int textMaxLines; // Only used by text-like table columns
   late bool hideInTable; // Hide this column in the table, but still show it in the setting dialog
   late bool hideInUpdate; // Hide this column in the update dialog
-  late bool enableQueryVariablePicker; // Enable the dynamic query placeholder picker for text columns
   late List<PluginSettingValidatorItem> validators;
   late List<PluginSettingValueTableColumnChangeAction> onChangedActions;
 
@@ -100,10 +101,6 @@ class PluginSettingValueTableColumn {
     }
     hideInTable = json['HideInTable'] ?? false;
     hideInUpdate = json['HideInUpdate'] ?? false;
-    // Query placeholder support is opt-in so the generic table editor keeps the
-    // same behavior for normal text columns while query-template fields can
-    // expose fast `{wox:...}` insertion.
-    enableQueryVariablePicker = json['EnableQueryVariablePicker'] ?? false;
 
     if (json['Validators'] != null) {
       validators = (json['Validators'] as List).map((e) => PluginSettingValidatorItem.fromJson(e)).toList();

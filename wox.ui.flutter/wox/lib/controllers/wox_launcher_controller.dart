@@ -52,6 +52,7 @@ import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/env.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/picker.dart';
+import 'package:wox/utils/wox_hotkey_recording_bus.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
 import 'package:wox/utils/wox_setting_util.dart';
 import 'package:wox/utils/webview/wox_webview_util.dart';
@@ -2686,6 +2687,12 @@ class WoxLauncherController extends GetxController {
     } else if (msg.method == "DiagnosticStatusChanged") {
       final data = msg.data as Map<String, dynamic>? ?? {};
       updateDiagnosticStatus(msg.traceId, data["enabled"] == true);
+      responseWoxWebsocketRequest(msg, true, null);
+    } else if (msg.method == "RecordHotkey") {
+      final data = msg.data as Map<String, dynamic>? ?? {};
+      final hotkey = data["Hotkey"]?.toString() ?? "";
+      Logger.instance.info(msg.traceId, "Received RecordHotkey websocket request: hotkey=$hotkey");
+      WoxHotkeyRecordingBus.instance.emit(hotkey);
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "GetCurrentQuery") {
       responseWoxWebsocketRequest(msg, true, currentQuery.value.toJson());

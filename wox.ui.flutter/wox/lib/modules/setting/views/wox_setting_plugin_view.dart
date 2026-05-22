@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
+import 'package:wox/components/plugin/wox_ai_command_template_dialog.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_head_view.dart';
 import 'package:wox/components/wox_plugin_detail_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_label_view.dart';
@@ -44,6 +45,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
   static const String _triggerKeywordColumnKey = "keyword";
   static const String _triggerKeywordOriginalColumnKey = "_wox_original_trigger_keyword";
   static const String _globalTriggerKeyword = "*";
+  static const String _aiCommandPluginId = "c9910664-1c28-47ae-bad6-e7332a02d471";
   // Local refreshing state for showing loading spinner on refresh button
   static final RxBool _refreshing = false.obs;
   static final GlobalKey _pluginFilterIconKey = GlobalKey();
@@ -872,6 +874,8 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
         );
       }
 
+      final useInlineTableActions = plugin.settingDefinitions.every((definition) => definition.type == "table");
+
       return Padding(
         padding: const EdgeInsets.all(16.0),
         child: SingleChildScrollView(
@@ -943,10 +947,14 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                   return _buildPluginSettingTarget(plugin: plugin, definition: e, child: settingWidget);
                 }
                 if (e.type == "table") {
+                  final tableValue = e.value as PluginSettingValueTable;
+                  final isAICommandCommandsTable = plugin.id == _aiCommandPluginId && tableValue.key == "commands";
                   settingWidget = WoxSettingPluginTable(
                     value: plugin.setting.settings[e.value.key] ?? "",
-                    item: e.value as PluginSettingValueTable,
+                    item: tableValue,
                     labelWidth: uniformLabelWidth,
+                    inlineTitleActions: useInlineTableActions,
+                    trailingActions: isAICommandCommandsTable ? [_buildAICommandTemplateAction(context, plugin, plugin.setting.settings[tableValue.key] ?? "")] : const [],
                     onUpdate: (key, value) async {
                       return controller.updatePluginSetting(plugin.id, key, value);
                     },
@@ -961,6 +969,40 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
         ),
       );
     });
+  }
+
+  Widget _buildAICommandTemplateAction(BuildContext context, PluginDetail plugin, String tableValue) {
+    return WoxButton.secondary(
+      text: controller.tr("ui_ai_command_template_add_from_store"),
+      icon: Icon(Icons.storefront_outlined, color: getThemeSubTextColor(), size: 16),
+      height: 30,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      onPressed: () async {
+        List<dynamic> rows = [];
+        try {
+          final decoded = json.decode(tableValue.trim().isEmpty ? "[]" : tableValue);
+          if (decoded is List) {
+            rows = decoded;
+          }
+        } catch (_) {
+          rows = [];
+        }
+
+        await showAICommandTemplateDialog(context: context, pluginId: plugin.id, currentRows: rows, triggerKeyword: _resolvePrimaryTriggerKeyword(plugin));
+        WoxSettingFocusUtil.restoreIfInSettingView();
+      },
+    );
+  }
+
+  String _resolvePrimaryTriggerKeyword(PluginDetail plugin) {
+    for (final keyword in plugin.triggerKeywords) {
+      final normalized = keyword.trim();
+      if (normalized.isNotEmpty) {
+        return normalized;
+      }
+    }
+
+    return "ai";
   }
 
   Widget pluginTabTriggerKeywords() {

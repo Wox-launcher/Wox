@@ -27,7 +27,6 @@ import (
 	"wox/updater"
 	"wox/util"
 	"wox/util/font"
-	"wox/util/hotkey"
 	"wox/util/overlay"
 	"wox/util/permission"
 	"wox/util/screen"
@@ -71,28 +70,30 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/runtime/restart":                  handleRuntimeRestart,
 
 	// events
-	"/on/focus/lost":     handleOnFocusLost,
-	"/on/ready":          handleOnUIReady,
-	"/on/show":           handleOnShow,
-	"/on/querybox/focus": handleOnQueryBoxFocus,
-	"/on/hide":           handleOnHide,
-	"/on/setting":        handleOnSetting,
-	"/on/onboarding":     handleOnOnboarding,
-	"/usage/stats":       handleUsageStats,
+	"/on/focus/lost":       handleOnFocusLost,
+	"/on/ready":            handleOnUIReady,
+	"/on/show":             handleOnShow,
+	"/on/querybox/focus":   handleOnQueryBoxFocus,
+	"/on/hide":             handleOnHide,
+	"/on/setting":          handleOnSetting,
+	"/on/hotkey/recording": handleOnHotkeyRecording,
+	"/on/onboarding":       handleOnOnboarding,
+	"/usage/stats":         handleUsageStats,
 
 	// lang
 	"/lang/available": handleLangAvailable,
 	"/lang/json":      handleLangJson,
 
 	// ai
-	"/ai/providers":     handleAIProviders,
-	"/ai/models":        handleAIModels,
-	"/ai/model/default": handleAIDefaultModel,
-	"/ai/ping":          handleAIPing,
-	"/ai/chat":          handleAIChat,
-	"/ai/mcp/tools":     handleAIMCPServerTools,
-	"/ai/mcp/tools/all": handleAIMCPServerToolsAll,
-	"/ai/agents":        handleAIAgents,
+	"/ai/providers":      handleAIProviders,
+	"/ai/commands/store": handleAICommandStore,
+	"/ai/models":         handleAIModels,
+	"/ai/model/default":  handleAIDefaultModel,
+	"/ai/ping":           handleAIPing,
+	"/ai/chat":           handleAIChat,
+	"/ai/mcp/tools":      handleAIMCPServerTools,
+	"/ai/mcp/tools/all":  handleAIMCPServerToolsAll,
+	"/ai/agents":         handleAIAgents,
 
 	// doctor
 	"/doctor/check":                  handleDoctorCheck,
@@ -118,6 +119,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/diagnostics/monitor/disable": handleDiagnosticsMonitorDisable,
 	"/diagnostics/export":          handleDiagnosticsExport,
 	"/hotkey/available":            handleHotkeyAvailable,
+	"/hotkey/availability":         handleHotkeyAvailability,
 	"/glance":                      handleGlance,
 	"/glance/action":               handleGlanceAction,
 	"/deeplink":                    handleDeeplink,
@@ -1409,8 +1411,22 @@ func handleHotkeyAvailable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isAvailable := hotkey.IsHotkeyAvailable(ctx, hotkeyResult.String())
+	isAvailable := GetUIManager().IsHotkeyAvailable(ctx, hotkeyResult.String())
 	writeSuccessResponse(w, isAvailable)
+}
+
+func handleHotkeyAvailability(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+
+	body, _ := io.ReadAll(r.Body)
+	hotkeyResult := gjson.GetBytes(body, "hotkey")
+	if !hotkeyResult.Exists() {
+		writeErrorResponse(w, "hotkey is empty")
+		return
+	}
+
+	availability := GetUIManager().CheckHotkeyAvailability(ctx, hotkeyResult.String())
+	writeSuccessResponse(w, availability)
 }
 
 func handleShow(w http.ResponseWriter, r *http.Request) {
@@ -1764,6 +1780,20 @@ func handleOnSetting(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, "")
 }
 
+func handleOnHotkeyRecording(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	body, _ := io.ReadAll(r.Body)
+	isRecordingResult := gjson.GetBytes(body, "isRecording")
+	if !isRecordingResult.Exists() {
+		writeErrorResponse(w, "isRecording is required")
+		return
+	}
+
+	logger.Info(ctx, fmt.Sprintf("received hotkey recording state from UI: isRecording=%t", isRecordingResult.Bool()))
+	GetUIManager().PostOnHotkeyRecording(ctx, isRecordingResult.Bool())
+	writeSuccessResponse(w, "")
+}
+
 func handleOnOnboarding(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
 	body, _ := io.ReadAll(r.Body)
@@ -1795,6 +1825,11 @@ func handleDeeplink(w http.ResponseWriter, r *http.Request) {
 func handleAIProviders(w http.ResponseWriter, r *http.Request) {
 	providers := ai.GetAllProviders()
 	writeSuccessResponse(w, providers)
+}
+
+func handleAICommandStore(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	writeSuccessResponse(w, ai.GetStoreManager().GetCommands(ctx))
 }
 
 func handleAIModels(w http.ResponseWriter, r *http.Request) {

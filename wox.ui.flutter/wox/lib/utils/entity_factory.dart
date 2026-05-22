@@ -1,8 +1,10 @@
 import 'package:uuid/v4.dart';
 import 'package:wox/entity/wox_ai.dart';
+import 'package:wox/entity/wox_ai_command_template.dart';
 import 'package:wox/entity/wox_backup.dart';
-import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_glance.dart';
+import 'package:wox/entity/wox_hotkey.dart';
+import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_lang.dart';
 import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/entity/wox_preview.dart';
@@ -28,6 +30,7 @@ class EntityFactory {
     'AIModel': (json) => AIModel.fromJson(json),
     'DoctorCheckResult': (json) => DoctorCheckResult.fromJson(json),
     'WoxUsageStats': (json) => WoxUsageStats.fromJson(json),
+    'HotkeyAvailability': (json) => HotkeyAvailability.fromJson(json),
   };
 
   // List factories
@@ -41,6 +44,7 @@ class EntityFactory {
     'List<AIMCPTool>': (json) => _createList<AIMCPTool>(json, (e) => AIMCPTool.fromJson(e)),
     'List<AIProviderInfo>': (json) => _createList<AIProviderInfo>(json, (e) => AIProviderInfo.fromJson(e)),
     'List<AIAgent>': (json) => _createList<AIAgent>(json, (e) => AIAgent.fromJson(e)),
+    'List<AICommandTemplate>': (json) => _createList<AICommandTemplate>(json, (e) => AICommandTemplate.fromJson(e)),
     'List<DoctorCheckResult>': (json) => _createList<DoctorCheckResult>(json, (e) => DoctorCheckResult.fromJson(e)),
     'List<WoxRuntimeStatus>': (json) => _createList<WoxRuntimeStatus>(json, (e) => WoxRuntimeStatus.fromJson(e)),
     'List<GlanceItem>': (json) => _createList<GlanceItem>(json, (e) => GlanceItem.fromJson(e)),

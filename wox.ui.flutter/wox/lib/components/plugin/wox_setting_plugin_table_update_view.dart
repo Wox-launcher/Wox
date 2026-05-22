@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
+import 'package:wox/components/plugin/wox_ai_command_default_action_dropdown.dart';
 import 'package:wox/components/wox_ai_model_selector_view.dart';
 import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_dropdown_button.dart';
@@ -58,6 +59,22 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
   List<AIMCPTool> allMCPTools = [];
   bool isLoadingTools = true;
 
+  bool _isTextEditingColumn(PluginSettingValueTableColumn column) {
+    return column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeText ||
+        column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeQueryHotkeyQuery ||
+        column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeAICommandPrompt;
+  }
+
+  // Detects the AI command default action select without coupling the generic table editor to the AI plugin id.
+  bool _isAICommandDefaultActionColumn(PluginSettingValueTableColumn column) {
+    if (column.key != "defaultAction") {
+      return false;
+    }
+
+    final values = column.selectOptions.map((option) => option.value).toSet();
+    return values.contains(AICommandDefaultActionValue.run) && values.contains(AICommandDefaultActionValue.runAndShow) && values.contains(AICommandDefaultActionValue.runAndPaste);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -103,7 +120,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
 
     for (var column in columns) {
       // init text box controller and focus node
-      if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeText) {
+      if (_isTextEditingColumn(column)) {
         textboxEditingController[column.key] = TextEditingController(text: getValue(column.key));
         _focusNodes[column.key] = FocusNode();
         _focusNodes[column.key]!.addListener(() {
@@ -480,38 +497,43 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
     return KeyEventResult.ignored;
   }
 
+  // Builds text-like columns that need a placeholder-aware editor.
+  Widget _buildQueryVariableColumn({required PluginSettingValueTableColumn column, required WoxQueryVariableSource source}) {
+    return Expanded(
+      child: WoxQueryVariableTextField(
+        key: ValueKey(column.key),
+        controller: textboxEditingController[column.key],
+        focusNode: _focusNodes[column.key],
+        maxLines: column.textMaxLines,
+        source: source,
+        onChanged: (value) {
+          updateValue(column.key, value);
+          setFieldValidationError(column.key, validateValue(value, column.validators));
+          setState(() {});
+        },
+      ),
+    );
+  }
+
   Widget buildColumn(PluginSettingValueTableColumn column) {
     switch (column.type) {
       case PluginSettingValueType.pluginSettingValueTableColumnTypeText:
         return Expanded(
-          child:
-              column.enableQueryVariablePicker
-                  // Query hotkeys need fast dynamic-placeholder insertion, but
-                  // regular table text fields should keep the plain editor. The
-                  // column flag keeps this feature explicit instead of coupling it
-                  // to one table key or column name.
-                  ? WoxQueryVariableTextField(
-                    key: ValueKey(column.key),
-                    controller: textboxEditingController[column.key],
-                    focusNode: _focusNodes[column.key],
-                    maxLines: column.textMaxLines,
-                    onChanged: (value) {
-                      updateValue(column.key, value);
-                      setFieldValidationError(column.key, validateValue(value, column.validators));
-                      setState(() {});
-                    },
-                  )
-                  : WoxTextField(
-                    controller: textboxEditingController[column.key],
-                    focusNode: _focusNodes[column.key],
-                    maxLines: column.textMaxLines,
-                    onChanged: (value) {
-                      updateValue(column.key, value);
-                      setFieldValidationError(column.key, validateValue(value, column.validators));
-                      setState(() {});
-                    },
-                  ),
+          child: WoxTextField(
+            controller: textboxEditingController[column.key],
+            focusNode: _focusNodes[column.key],
+            maxLines: column.textMaxLines,
+            onChanged: (value) {
+              updateValue(column.key, value);
+              setFieldValidationError(column.key, validateValue(value, column.validators));
+              setState(() {});
+            },
+          ),
         );
+      case PluginSettingValueType.pluginSettingValueTableColumnTypeQueryHotkeyQuery:
+        return _buildQueryVariableColumn(column: column, source: WoxQueryVariableSource.queryHotkey);
+      case PluginSettingValueType.pluginSettingValueTableColumnTypeAICommandPrompt:
+        return _buildQueryVariableColumn(column: column, source: WoxQueryVariableSource.aiCommand);
       case PluginSettingValueType.pluginSettingValueTableColumnTypeCheckbox:
         return WoxCheckbox(
           value: getValueBool(column.key),
@@ -561,6 +583,21 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
           ),
         );
       case PluginSettingValueType.pluginSettingValueTableColumnTypeSelect:
+        if (_isAICommandDefaultActionColumn(column)) {
+          return Expanded(
+            child: WoxAICommandDefaultActionDropdown(
+              value: getValue(column.key).toString(),
+              fontSize: 13,
+              underline: Container(height: 1, color: getThemeDividerColor().withValues(alpha: 0.6)),
+              onChanged: (value) {
+                updateValue(column.key, value);
+                applySelectColumnChangeActions(column);
+                setFieldValidationError(column.key, validateValue(value, column.validators));
+                setState(() {});
+              },
+            ),
+          );
+        }
         return Expanded(
           child: Builder(
             builder: (context) {

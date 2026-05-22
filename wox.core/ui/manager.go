@@ -242,10 +242,14 @@ func (m *Manager) RegisterMainHotkey(ctx context.Context, combineKey string) err
 	managerInstance.mainHotkey = &hotkey.Hotkey{}
 	return m.mainHotkey.Register(ctx, combineKey, func() {
 		triggerCtx := util.NewTraceContext()
-		activationStartedAt := util.GetSystemTimestamp()
+		logger.Info(triggerCtx, fmt.Sprintf("main hotkey callback received: hotkey=%s recordingActive=%t", combineKey, m.isHotkeyRecordingActive()))
+		if m.recordHotkeyIfRecording(triggerCtx, combineKey) {
+			return
+		}
 		if m.shouldIgnoreHotkeyTrigger(triggerCtx) {
 			return
 		}
+		activationStartedAt := util.GetSystemTimestamp()
 		m.ui.ToggleApp(triggerCtx, common.ShowContext{
 			SelectAll:           true,
 			ShowSource:          common.ShowSourceDefault,
@@ -273,6 +277,10 @@ func (m *Manager) RegisterSelectionHotkey(ctx context.Context, combineKey string
 	managerInstance.selectionHotkey = &hotkey.Hotkey{}
 	return m.selectionHotkey.Register(ctx, combineKey, func() {
 		triggerCtx := util.NewTraceContext()
+		logger.Info(triggerCtx, fmt.Sprintf("selection hotkey callback received: hotkey=%s recordingActive=%t", combineKey, m.isHotkeyRecordingActive()))
+		if m.recordHotkeyIfRecording(triggerCtx, combineKey) {
+			return
+		}
 		if m.shouldIgnoreHotkeyTrigger(triggerCtx) {
 			return
 		}
@@ -376,6 +384,10 @@ func (m *Manager) RegisterQueryHotkey(ctx context.Context, queryHotkey setting.Q
 
 	err := hk.Register(ctx, combineKey, func() {
 		queryCtx := util.WithCoreSessionContext(util.NewTraceContext())
+		logger.Info(queryCtx, fmt.Sprintf("query hotkey callback received: hotkey=%s query=%s recordingActive=%t", combineKey, queryHotkey.Query, m.isHotkeyRecordingActive()))
+		if m.recordHotkeyIfRecording(queryCtx, combineKey) {
+			return
+		}
 		if m.shouldIgnoreHotkeyTrigger(queryCtx) {
 			return
 		}
@@ -396,6 +408,135 @@ func (m *Manager) unregisterQueryHotkeys(ctx context.Context) {
 		hk.Unregister(ctx)
 	}
 	m.queryHotkeys = nil
+}
+
+type HotkeyAvailability struct {
+	Available     bool
+	ConflictType  string
+	ConflictValue string
+}
+
+const (
+	hotkeyConflictTypeMain      = "main"
+	hotkeyConflictTypeSelection = "selection"
+	hotkeyConflictTypeQuery     = "query"
+	hotkeyConflictTypeSystem    = "system"
+)
+
+// CheckHotkeyAvailability checks Wox-owned settings before probing the platform registry.
+func (m *Manager) CheckHotkeyAvailability(ctx context.Context, hotkeyStr string) HotkeyAvailability {
+	if conflict := m.findConfiguredHotkeyConflict(ctx, hotkeyStr); conflict.ConflictType != "" {
+		logger.Info(ctx, fmt.Sprintf("hotkey availability check: hotkey=%s available=false reason=wox_setting conflictType=%s conflictValue=%s", hotkeyStr, conflict.ConflictType, conflict.ConflictValue))
+		return conflict
+	}
+
+	isAvailable := hotkey.IsHotkeyAvailable(ctx, hotkeyStr)
+	logger.Info(ctx, fmt.Sprintf("hotkey availability check: hotkey=%s available=%t reason=platform_probe", hotkeyStr, isAvailable))
+	if !isAvailable {
+		return HotkeyAvailability{Available: false, ConflictType: hotkeyConflictTypeSystem}
+	}
+	return HotkeyAvailability{Available: true}
+}
+
+// IsHotkeyAvailable keeps the existing bool endpoint compatible with callers that only need availability.
+func (m *Manager) IsHotkeyAvailable(ctx context.Context, hotkeyStr string) bool {
+	return m.CheckHotkeyAvailability(ctx, hotkeyStr).Available
+}
+
+// findConfiguredHotkeyConflict keeps availability checks aligned with Wox-owned hotkey settings.
+func (m *Manager) findConfiguredHotkeyConflict(ctx context.Context, hotkeyStr string) HotkeyAvailability {
+	normalized := normalizeHotkeyForCompare(hotkeyStr)
+	if normalized == "" {
+		return HotkeyAvailability{Available: true}
+	}
+
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	if normalizeHotkeyForCompare(woxSetting.MainHotkey.Get()) == normalized {
+		return HotkeyAvailability{Available: false, ConflictType: hotkeyConflictTypeMain}
+	}
+	if normalizeHotkeyForCompare(woxSetting.SelectionHotkey.Get()) == normalized {
+		return HotkeyAvailability{Available: false, ConflictType: hotkeyConflictTypeSelection}
+	}
+
+	for _, queryHotkey := range woxSetting.QueryHotkeys.Get() {
+		if queryHotkey.Disabled {
+			continue
+		}
+		if normalizeHotkeyForCompare(queryHotkey.Hotkey) == normalized {
+			return HotkeyAvailability{Available: false, ConflictType: hotkeyConflictTypeQuery, ConflictValue: queryHotkey.Query}
+		}
+	}
+
+	return HotkeyAvailability{Available: true}
+}
+
+// normalizeHotkeyForCompare canonicalizes common aliases so stored settings and recorder output compare consistently.
+func normalizeHotkeyForCompare(hotkeyStr string) string {
+	tokens := []string{}
+	for _, token := range strings.Split(hotkeyStr, "+") {
+		normalizedToken := normalizeHotkeyToken(token)
+		if normalizedToken != "" {
+			tokens = append(tokens, normalizedToken)
+		}
+	}
+
+	if len(tokens) == 2 && tokens[0] == tokens[1] && isHotkeyModifierToken(tokens[0]) {
+		return strings.Join(tokens, "+")
+	}
+
+	modifiers := map[string]bool{}
+	key := ""
+	for _, token := range tokens {
+		if isHotkeyModifierToken(token) {
+			modifiers[token] = true
+			continue
+		}
+		if key == "" {
+			key = token
+		}
+	}
+
+	parts := []string{}
+	for _, modifier := range []string{"ctrl", "shift", "alt", "meta"} {
+		if modifiers[modifier] {
+			parts = append(parts, modifier)
+		}
+	}
+	if key != "" {
+		parts = append(parts, key)
+	}
+
+	return strings.Join(parts, "+")
+}
+
+// normalizeHotkeyToken maps platform and UI aliases to one comparison token.
+func normalizeHotkeyToken(token string) string {
+	switch strings.ToLower(strings.TrimSpace(token)) {
+	case "", " ":
+		return ""
+	case "control":
+		return "ctrl"
+	case "option":
+		return "alt"
+	case "cmd", "command", "win", "windows", "super":
+		return "meta"
+	case "return":
+		return "enter"
+	case "arrowleft":
+		return "left"
+	case "arrowright":
+		return "right"
+	case "arrowup":
+		return "up"
+	case "arrowdown":
+		return "down"
+	default:
+		return strings.ToLower(strings.TrimSpace(token))
+	}
+}
+
+func isHotkeyModifierToken(token string) bool {
+	return token == "ctrl" || token == "shift" || token == "alt" || token == "meta"
 }
 
 func (m *Manager) StartWebsocketAndWait(ctx context.Context) {
@@ -708,6 +849,7 @@ func (m *Manager) PostOnShow(ctx context.Context) {
 		impl.isVisible = true
 		impl.isInSettingView = false
 		impl.isInOnboardingView = false
+		impl.isRecordingHotkey = false
 	}
 
 	analytics.TrackUIOpened(ctx)
@@ -741,12 +883,16 @@ func (m *Manager) PostOnHide(ctx context.Context) {
 		impl.isVisible = false
 		impl.isInSettingView = false
 		impl.isInOnboardingView = false
+		impl.isRecordingHotkey = false
 	}
 }
 
 func (m *Manager) PostOnSetting(ctx context.Context, isInSettingView bool) {
 	if impl, ok := m.ui.(*uiImpl); ok {
 		impl.isInSettingView = isInSettingView
+		if !isInSettingView {
+			impl.isRecordingHotkey = false
+		}
 		if isInSettingView {
 			// Settings can be opened while the launcher is hidden. Marking the
 			// shared window visible here keeps backend notification routing in
@@ -763,10 +909,21 @@ func (m *Manager) PostOnOnboarding(ctx context.Context, isInOnboardingView bool)
 		// state so Flutter can keep isInSettingView false while backend routing
 		// still suppresses toolbar notifications over the guide.
 		impl.isInOnboardingView = isInOnboardingView
+		if !isInOnboardingView {
+			impl.isRecordingHotkey = false
+		}
 		if isInOnboardingView {
 			impl.isVisible = true
 			impl.isInSettingView = false
 		}
+	}
+}
+
+// PostOnHotkeyRecording tracks recorder focus so global hotkey callbacks can feed the active recorder.
+func (m *Manager) PostOnHotkeyRecording(ctx context.Context, isRecording bool) {
+	if impl, ok := m.ui.(*uiImpl); ok {
+		impl.isRecordingHotkey = isRecording
+		logger.Info(ctx, fmt.Sprintf("hotkey recording state changed: %t", isRecording))
 	}
 }
 
@@ -1440,6 +1597,27 @@ func (m *Manager) shouldIgnoreHotkeyTrigger(ctx context.Context) bool {
 		}
 	}
 
+	return false
+}
+
+// recordHotkeyIfRecording forwards Wox-owned global hotkey presses to the active recorder instead of executing them.
+func (m *Manager) recordHotkeyIfRecording(ctx context.Context, hotkeyStr string) bool {
+	if !m.isHotkeyRecordingActive() {
+		return false
+	}
+
+	logger.Info(ctx, fmt.Sprintf("record registered hotkey while recording: %s", hotkeyStr))
+	util.Go(ctx, "record global hotkey in UI", func() {
+		m.ui.RecordHotkey(ctx, hotkeyStr)
+	})
+	return true
+}
+
+// isHotkeyRecordingActive reports whether the shared UI is currently capturing a hotkey.
+func (m *Manager) isHotkeyRecordingActive() bool {
+	if impl, ok := m.ui.(*uiImpl); ok {
+		return impl.isRecordingHotkey && impl.isVisible
+	}
 	return false
 }
 

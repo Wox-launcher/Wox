@@ -6,13 +6,25 @@ import 'package:wox/components/wox_tooltip.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/utils/colors.dart';
 
+enum WoxQueryVariableSource { queryHotkey, aiCommand }
+
 class WoxQueryVariableTextField extends StatefulWidget {
   final TextEditingController? controller;
   final FocusNode? focusNode;
   final int maxLines;
   final ValueChanged<String>? onChanged;
+  final WoxQueryVariableSource source;
+  final double? width;
 
-  const WoxQueryVariableTextField({super.key, required this.controller, required this.focusNode, required this.maxLines, required this.onChanged});
+  const WoxQueryVariableTextField({
+    super.key,
+    required this.controller,
+    required this.focusNode,
+    required this.maxLines,
+    required this.onChanged,
+    this.source = WoxQueryVariableSource.queryHotkey,
+    this.width,
+  });
 
   @override
   State<WoxQueryVariableTextField> createState() => _WoxQueryVariableTextFieldState();
@@ -21,7 +33,7 @@ class WoxQueryVariableTextField extends StatefulWidget {
 class _WoxQueryVariableTextFieldState extends State<WoxQueryVariableTextField> {
   final LayerLink _layerLink = LayerLink();
   static final RegExp _queryVariablePattern = RegExp(r'\{wox:[a-zA-Z0-9_]+\}');
-  final List<_QueryVariableOption> _options = const [
+  final List<_QueryVariableOption> _queryHotkeyOptions = const [
     _QueryVariableOption(
       id: 'selected_text',
       value: '{wox:selected_text}',
@@ -49,6 +61,16 @@ class _WoxQueryVariableTextFieldState extends State<WoxQueryVariableTextField> {
       labelKey: 'ui_query_variable_file_explorer_path',
       descriptionKey: 'ui_query_variable_file_explorer_path_tooltip',
       icon: Icons.folder_open,
+    ),
+  ];
+
+  final List<_QueryVariableOption> _aiCommandOptions = const [
+    _QueryVariableOption(
+      id: 'input_text',
+      value: '{wox:input_text}',
+      labelKey: 'ui_query_variable_input_text',
+      descriptionKey: 'ui_query_variable_input_text_tooltip',
+      icon: Icons.short_text,
     ),
   ];
 
@@ -126,27 +148,28 @@ class _WoxQueryVariableTextFieldState extends State<WoxQueryVariableTextField> {
   }
 
   List<_QueryVariableOption> get _filteredOptions {
+    final options = widget.source == WoxQueryVariableSource.aiCommand ? _aiCommandOptions : _queryHotkeyOptions;
     final triggerStart = _replaceStart;
     if (triggerStart == null || _openedFromButton) {
-      return _options;
+      return options;
     }
 
     final selection = _controller.selection;
     if (!selection.isValid || selection.baseOffset != selection.extentOffset || selection.extentOffset <= triggerStart) {
-      return _options;
+      return options;
     }
 
     final query = _controller.text.substring(triggerStart + 1, selection.extentOffset).toLowerCase();
     if (query.isEmpty) {
-      return _options;
+      return options;
     }
 
     final filtered =
-        _options.where((option) {
+        options.where((option) {
           final label = tr(option.labelKey).toLowerCase();
           return option.value.toLowerCase().contains(query) || label.contains(query) || option.id.contains(query);
         }).toList();
-    return filtered.isEmpty ? _options : filtered;
+    return filtered.isEmpty ? options : filtered;
   }
 
   void _handleChanged(String value) {
@@ -462,6 +485,7 @@ class _WoxQueryVariableTextFieldState extends State<WoxQueryVariableTextField> {
           textFieldKey: ValueKey('query-variable-text-field-${widget.key is ValueKey ? (widget.key as ValueKey).value : 'field'}'),
           controller: _controller,
           focusNode: _focusNode,
+          width: widget.width,
           maxLines: widget.maxLines,
           onChanged: _handleChanged,
           onTap: _normalizeCaretOutsideVariable,

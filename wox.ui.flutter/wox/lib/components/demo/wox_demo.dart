@@ -26,6 +26,7 @@ part 'wox_query_hotkeys_demo.dart';
 part 'wox_query_shortcuts_demo.dart';
 part 'wox_tray_queries_demo.dart';
 part 'wox_plugin_store_demo.dart';
+part 'wox_ai_command_default_action_demo.dart';
 part 'wox_theme_install_demo.dart';
 part 'wox_theme_store_demo.dart';
 part 'wox_glance_demo.dart';

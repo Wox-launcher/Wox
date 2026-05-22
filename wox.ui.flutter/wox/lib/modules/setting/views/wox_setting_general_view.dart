@@ -315,9 +315,8 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                             "Key": "Query",
                             "Label": "i18n:ui_query_hotkeys_query",
                             "Tooltip": "i18n:ui_query_hotkeys_query_tooltip",
-                            "Type": "text",
+                            "Type": PluginSettingValueType.pluginSettingValueTableColumnTypeQueryHotkeyQuery,
                             "TextMaxLines": 1,
-                            "EnableQueryVariablePicker": true,
                             "Validators": [
                               {"Type": "not_empty"},
                             ],

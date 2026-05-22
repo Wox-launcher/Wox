@@ -68,6 +68,7 @@ type uiImpl struct {
 	isVisible          bool // cached visibility state, updated by PostOnShow/PostOnHide
 	isInSettingView    bool // cached setting-view state, updated by PostOnSetting
 	isInOnboardingView bool // cached onboarding state, updated by PostOnOnboarding
+	isRecordingHotkey  bool // cached hotkey-recorder focus state, updated by PostOnHotkeyRecording
 }
 
 func (u *uiImpl) ChangeQuery(ctx context.Context, query common.PlainQuery) {
@@ -117,6 +118,13 @@ func (u *uiImpl) ShowApp(ctx context.Context, showContext common.ShowContext) {
 func (u *uiImpl) ToggleApp(ctx context.Context, showContext common.ShowContext) {
 	GetUIManager().RefreshActiveWindowSnapshot(ctx)
 	u.invokeWebsocketMethod(ctx, "ToggleApp", getShowAppParams(ctx, showContext))
+}
+
+func (u *uiImpl) RecordHotkey(ctx context.Context, hotkey string) {
+	logger.Info(ctx, fmt.Sprintf("send RecordHotkey to UI: hotkey=%s", hotkey))
+	u.invokeWebsocketMethod(ctx, "RecordHotkey", map[string]any{
+		"Hotkey": hotkey,
+	})
 }
 
 func (u *uiImpl) GetServerPort(ctx context.Context) int {

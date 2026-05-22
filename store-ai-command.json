@@ -50,7 +50,6 @@
       "Vision": false,
       "RecommendedQueryHotkey": {
         "Hotkey": "ctrl+shift+t",
-        "Query": "ai translate {wox:selected_text}",
         "HideQueryBox": true,
         "HideToolbar": true,
         "IsSilentExecution": true,
@@ -91,7 +90,6 @@
       "Vision": false,
       "RecommendedQueryHotkey": {
         "Hotkey": "ctrl+shift+s",
-        "Query": "ai summarize {wox:selected_text}",
         "HideQueryBox": false,
         "HideToolbar": false,
         "IsSilentExecution": false,
