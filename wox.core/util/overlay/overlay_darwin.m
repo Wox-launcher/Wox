@@ -44,6 +44,9 @@ typedef struct {
     unsigned char* tooltipIconData;
     int tooltipIconLen;
     float tooltipIconSize; // 0 = default (16), unit: pt
+    bool showCopyButton;
+    char* copyButtonTooltip;
+    char* copyButtonSuccessTooltip;
 } OverlayOptions;
 
 // -----------------------------------------------------------------------------
@@ -51,6 +54,9 @@ typedef struct {
 // -----------------------------------------------------------------------------
 static const CGFloat kDefaultWindowWidth = 400;
 static const CGFloat kDefaultIconSize = 16;
+static const CGFloat kCopyButtonSize = 24;
+static const CGFloat kCopyButtonGap = 8;
+static const CGFloat kCopyButtonMargin = 10;
 static const CGFloat kCloseSize = 20;
 static const CGFloat kTooltipIconGap = 8;
 static const CGFloat kTooltipGap = 6;
@@ -70,7 +76,7 @@ typedef NS_OPTIONS(NSUInteger, OverlayResizeEdges) {
     OverlayResizeEdgeTop = 1 << 3,
 };
 
-extern void overlayClickCallbackCGO(char* name);
+extern bool overlayClickCallbackCGO(char* name);
 extern void overlayDebugLogCallbackCGO(char* message);
 
 static void OverlayDebugLog(NSString *message) {
@@ -96,6 +102,10 @@ static void OverlayDebugLog(NSString *message) {
 // Plan said "use NotificationWindow's robust text logic". So I should use NSTextView.
 @property(nonatomic, strong) NSTextView *messageView;
 @property(nonatomic, strong) NSButton *closeButton;
+@property(nonatomic, strong) NSButton *copyButton;
+@property(nonatomic, copy) NSString *copyButtonTooltip;
+@property(nonatomic, copy) NSString *copyButtonSuccessTooltip;
+@property(nonatomic, strong) NSTimer *copyFeedbackTimer;
 @property(nonatomic, strong) NSVisualEffectView *backgroundView;
 @property(nonatomic, assign) int stickyPid;
 @end
@@ -495,6 +505,30 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         
         [self.contentView addSubview:self.closeButton];
 
+        self.copyButton = [[HandCursorButton alloc] initWithFrame:NSMakeRect(0, 0, kCopyButtonSize, kCopyButtonSize)];
+        [self.copyButton setBezelStyle:NSBezelStyleRegularSquare];
+        [self.copyButton setButtonType:NSButtonTypeMomentaryLight];
+        [self.copyButton setTarget:self];
+        [self.copyButton setAction:@selector(onClick)];
+        [self.copyButton setHidden:YES];
+        [self.copyButton setBordered:NO];
+        [self.copyButton setWantsLayer:YES];
+        self.copyButton.layer.backgroundColor = [NSColor colorWithWhite:1.0 alpha:0.14].CGColor;
+        self.copyButton.layer.borderColor = [NSColor colorWithWhite:1.0 alpha:0.24].CGColor;
+        self.copyButton.layer.borderWidth = 1;
+        self.copyButton.layer.cornerRadius = 6;
+        if (@available(macOS 11.0, *)) {
+            self.copyButton.image = [NSImage imageWithSystemSymbolName:@"doc.on.doc" accessibilityDescription:@"Copy"];
+            self.copyButton.imagePosition = NSImageOnly;
+            self.copyButton.contentTintColor = [NSColor whiteColor];
+        } else {
+            NSMutableAttributedString *copyTitle = [[NSMutableAttributedString alloc] initWithString:@"⧉"];
+            [copyTitle addAttribute:NSForegroundColorAttributeName value:[NSColor whiteColor] range:NSMakeRange(0, copyTitle.length)];
+            [copyTitle addAttribute:NSFontAttributeName value:[NSFont systemFontOfSize:13 weight:NSFontWeightSemibold] range:NSMakeRange(0, copyTitle.length)];
+            [self.copyButton setAttributedTitle:copyTitle];
+        }
+        [self.contentView addSubview:self.copyButton];
+
         // Tracking Area setup
         [self setupTrackingArea];
     }
@@ -585,7 +619,7 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
     CGFloat dy = currentLocation.y - self.initialLocation.y;
     
     // If movement is small, treat as click
-    if (dx*dx + dy*dy < 25.0) {
+    if (dx*dx + dy*dy < 25.0 && self.copyButton.hidden) {
         [self onClick];
     }
     
@@ -972,6 +1006,8 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 
 - (void)onClose {
     [self stopAutoCloseTimer];
+    [self.copyFeedbackTimer invalidate];
+    self.copyFeedbackTimer = nil;
     [self stopTrackingWindow];
     [self hideTooltipWindow];
     [self close];
@@ -1106,8 +1142,48 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 
 - (void)onClick {
     if (self.name) {
-       overlayClickCallbackCGO((char*)[self.name UTF8String]);
+       if (overlayClickCallbackCGO((char*)[self.name UTF8String])) {
+           [self showCopyButtonSuccessFeedback];
+       }
     }
+}
+
+- (void)showCopyButtonSuccessFeedback {
+    if (self.copyButton.hidden) return;
+    NSString *successTooltip = self.copyButtonSuccessTooltip.length > 0 ? self.copyButtonSuccessTooltip : self.copyButtonTooltip;
+    [self.copyButton setToolTip:successTooltip];
+    if (@available(macOS 11.0, *)) {
+        self.copyButton.image = [NSImage imageWithSystemSymbolName:@"checkmark" accessibilityDescription:@"Copied"];
+    } else {
+        NSMutableAttributedString *successTitle = [[NSMutableAttributedString alloc] initWithString:@"✓"];
+        [successTitle addAttribute:NSForegroundColorAttributeName value:[NSColor whiteColor] range:NSMakeRange(0, successTitle.length)];
+        [successTitle addAttribute:NSFontAttributeName value:[NSFont systemFontOfSize:14 weight:NSFontWeightBold] range:NSMakeRange(0, successTitle.length)];
+        [self.copyButton setAttributedTitle:successTitle];
+    }
+    self.copyButton.layer.backgroundColor = [NSColor colorWithCalibratedRed:0.18 green:0.44 blue:0.32 alpha:0.86].CGColor;
+
+    [self.copyFeedbackTimer invalidate];
+    self.copyFeedbackTimer = [NSTimer scheduledTimerWithTimeInterval:1.2 target:self selector:@selector(onCopyFeedbackTimerFired:) userInfo:nil repeats:NO];
+}
+
+- (void)resetCopyButtonFeedback {
+    [self.copyFeedbackTimer invalidate];
+    self.copyFeedbackTimer = nil;
+    if (self.copyButton.hidden) return;
+    [self.copyButton setToolTip:self.copyButtonTooltip];
+    if (@available(macOS 11.0, *)) {
+        self.copyButton.image = [NSImage imageWithSystemSymbolName:@"doc.on.doc" accessibilityDescription:@"Copy"];
+    } else {
+        NSMutableAttributedString *copyTitle = [[NSMutableAttributedString alloc] initWithString:@"⧉"];
+        [copyTitle addAttribute:NSForegroundColorAttributeName value:[NSColor whiteColor] range:NSMakeRange(0, copyTitle.length)];
+        [copyTitle addAttribute:NSFontAttributeName value:[NSFont systemFontOfSize:13 weight:NSFontWeightSemibold] range:NSMakeRange(0, copyTitle.length)];
+        [self.copyButton setAttributedTitle:copyTitle];
+    }
+    self.copyButton.layer.backgroundColor = [NSColor colorWithWhite:1.0 alpha:0.14].CGColor;
+}
+
+- (void)onCopyFeedbackTimerFired:(NSTimer *)timer {
+    [self resetCopyButtonFeedback];
 }
 
 - (BOOL)canBecomeKeyWindow {
@@ -1174,6 +1250,10 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
     }
     
     self.closeButton.hidden = !opts.closable;
+    self.copyButton.hidden = !opts.showCopyButton;
+    self.copyButtonTooltip = opts.copyButtonTooltip ? [NSString stringWithUTF8String:opts.copyButtonTooltip] : @"";
+    self.copyButtonSuccessTooltip = opts.copyButtonSuccessTooltip ? [NSString stringWithUTF8String:opts.copyButtonSuccessTooltip] : @"";
+    [self resetCopyButtonFeedback];
     self.closeOnEscape = opts.closeOnEscape;
 
     NSString *tooltip = opts.tooltip ? [NSString stringWithUTF8String:opts.tooltip] : @"";
@@ -1214,6 +1294,7 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 
         self.messageView.hidden = YES;
         self.closeButton.hidden = YES;
+        self.copyButton.hidden = YES;
         self.tooltipIconView.hidden = YES;
         self.loadingIndicator.hidden = YES;
         [self.loadingIndicator stopAnimation:nil];
@@ -1248,6 +1329,7 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         CGFloat padRight = 12;
         CGFloat padTop = 10;
         CGFloat padBottom = 10;
+        if (!self.copyButton.hidden) padBottom += kCopyButtonSize + kCopyButtonGap;
         
         CGFloat iconSize = (opts.iconSize > 0) ? opts.iconSize : kDefaultIconSize;
         CGFloat fontSize = (opts.fontSize > 0) ? opts.fontSize : [NSFont systemFontSize];
@@ -1283,8 +1365,11 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         if (windowHeight < 40) windowHeight = 40; // Min height
 
         // Update Frames
-        CGFloat currentY = (windowHeight - textHeight) / 2; // Center Vertically
-        if (currentY < padTop) currentY = padTop;
+        CGFloat textAreaBottom = padBottom;
+        CGFloat textAreaTop = windowHeight - padTop;
+        CGFloat textAreaHeight = MAX(0, textAreaTop - textAreaBottom);
+        CGFloat currentY = textAreaBottom + (textAreaHeight - textHeight) / 2;
+        if (currentY < textAreaBottom) currentY = textAreaBottom;
 
         self.messageView.frame = NSMakeRect(padLeft, currentY, contentWidth, textHeight);
         
@@ -1307,6 +1392,9 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         }
         if (!self.closeButton.hidden) {
             self.closeButton.frame = NSMakeRect(windowWidth - kCloseSize - 6, (windowHeight - kCloseSize)/2, kCloseSize, kCloseSize);
+        }
+        if (!self.copyButton.hidden) {
+            self.copyButton.frame = NSMakeRect(windowWidth - kCopyButtonSize - kCopyButtonMargin, kCopyButtonMargin, kCopyButtonSize, kCopyButtonSize);
         }
     }
 

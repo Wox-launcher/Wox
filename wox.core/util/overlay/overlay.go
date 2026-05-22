@@ -149,6 +149,12 @@ type OverlayOptions struct {
 	// TooltipIconSize controls tooltip icon size in DIP/pt.
 	// If 0, defaults to 16.
 	TooltipIconSize float64
-	// OnClick is a callback function invoked when the overlay body is clicked.
-	OnClick func()
+	// ShowCopyButton displays a copy affordance in the bottom-right corner.
+	ShowCopyButton bool
+	// CopyButtonTooltip is displayed when hovering over ShowCopyButton.
+	CopyButtonTooltip string
+	// CopyButtonSuccessTooltip is displayed briefly after OnClick reports success.
+	CopyButtonSuccessTooltip string
+	// OnClick is a callback function invoked when the overlay body or copy button is clicked.
+	OnClick func() bool
 }

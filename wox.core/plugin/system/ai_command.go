@@ -45,6 +45,7 @@ const (
 	aiCommandResultOverlayWidth       = 520
 	aiCommandResultOverlayMinHeight   = 96
 	aiCommandResultOverlayMaxHeight   = 360
+	aiCommandResultOverlayCopyHeight  = 38
 )
 
 type commandSetting struct {
@@ -409,7 +410,7 @@ func (c *Plugin) showAICommandResultOverlay(ctx context.Context, name string, po
 		OffsetX:          position.X + aiCommandLoadingOverlayOffsetX,
 		OffsetY:          position.Y + aiCommandLoadingOverlayOffsetY,
 		Width:            aiCommandResultOverlayWidth,
-		Height:           estimateAICommandResultOverlayHeight(message),
+		Height:           estimateAICommandResultOverlayHeight(message, copyText != ""),
 		FontSize:         12,
 		Movable:          true,
 		Closable:         true,
@@ -417,15 +418,16 @@ func (c *Plugin) showAICommandResultOverlay(ctx context.Context, name string, po
 	}
 
 	if copyText != "" {
-		if copyIcon, err := common.CopyIcon.ToImageWithoutRemoteFetch(); err == nil {
-			opts.Icon = overlay.NewImageIcon(copyIcon)
-			opts.IconSize = 16
-		}
-		opts.OnClick = func() {
+		opts.ShowCopyButton = true
+		opts.CopyButtonTooltip = i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_copy")
+		opts.CopyButtonSuccessTooltip = i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_copied")
+		opts.OnClick = func() bool {
 			if err := clipboard.WriteText(copyText); err != nil {
 				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to copy ai command overlay answer: %s", err.Error()))
 				c.api.Notify(ctx, "plugin_ai_command_copy_failed")
+				return false
 			}
+			return true
 		}
 	}
 
@@ -449,7 +451,7 @@ func formatAICommandResultOverlayMessage(ctx context.Context, streamResult commo
 	return i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_thinking")
 }
 
-func estimateAICommandResultOverlayHeight(message string) float64 {
+func estimateAICommandResultOverlayHeight(message string, showCopyButton bool) float64 {
 	lines := 1
 	columns := 0
 	for _, r := range message {
@@ -466,6 +468,9 @@ func estimateAICommandResultOverlayHeight(message string) float64 {
 	}
 
 	height := 48 + float64(lines)*18
+	if showCopyButton {
+		height += aiCommandResultOverlayCopyHeight
+	}
 	if height < aiCommandResultOverlayMinHeight {
 		return aiCommandResultOverlayMinHeight
 	}

@@ -36,32 +36,38 @@ type usageStatsBucket struct {
 	Count int64 `json:"Count"`
 }
 
+type usageStatsDayBucket struct {
+	Date  string `json:"Date"`
+	Count int64  `json:"Count"`
+}
+
 type usageStatsResponse struct {
-	TotalOpened               int64            `json:"TotalOpened"`
-	TotalAppLaunch            int64            `json:"TotalAppLaunch"`
-	TotalActions              int64            `json:"TotalActions"`
-	TotalAppsUsed             int64            `json:"TotalAppsUsed"`
-	UsageDays                 int              `json:"UsageDays"`
-	Period                    string           `json:"Period"`
-	PeriodDays                int              `json:"PeriodDays"`
-	PeriodOpened              int64            `json:"PeriodOpened"`
-	PreviousPeriodOpened      int64            `json:"PreviousPeriodOpened"`
-	OpenedChangePercent       *float64         `json:"OpenedChangePercent"`
-	PeriodAppLaunch           int64            `json:"PeriodAppLaunch"`
-	PreviousPeriodAppLaunch   int64            `json:"PreviousPeriodAppLaunch"`
-	AppLaunchChangePercent    *float64         `json:"AppLaunchChangePercent"`
-	PeriodAppsUsed            int64            `json:"PeriodAppsUsed"`
-	PreviousPeriodAppsUsed    int64            `json:"PreviousPeriodAppsUsed"`
-	AppsUsedChangePercent     *float64         `json:"AppsUsedChangePercent"`
-	PeriodActions             int64            `json:"PeriodActions"`
-	PreviousPeriodActions     int64            `json:"PreviousPeriodActions"`
-	ActionsChangePercent      *float64         `json:"ActionsChangePercent"`
-	MostActiveHour            int              `json:"MostActiveHour"`
-	MostActiveDay             int              `json:"MostActiveDay"`
-	OpenedByHour              []int            `json:"OpenedByHour"`
-	OpenedByWeekday           []int            `json:"OpenedByWeekday"`
-	TopApps                   []usageStatsItem `json:"TopApps"`
-	TopPlugins                []usageStatsItem `json:"TopPlugins"`
+	TotalOpened               int64                 `json:"TotalOpened"`
+	TotalAppLaunch            int64                 `json:"TotalAppLaunch"`
+	TotalActions              int64                 `json:"TotalActions"`
+	TotalAppsUsed             int64                 `json:"TotalAppsUsed"`
+	UsageDays                 int                   `json:"UsageDays"`
+	Period                    string                `json:"Period"`
+	PeriodDays                int                   `json:"PeriodDays"`
+	PeriodOpened              int64                 `json:"PeriodOpened"`
+	PreviousPeriodOpened      int64                 `json:"PreviousPeriodOpened"`
+	OpenedChangePercent       *float64              `json:"OpenedChangePercent"`
+	PeriodAppLaunch           int64                 `json:"PeriodAppLaunch"`
+	PreviousPeriodAppLaunch   int64                 `json:"PreviousPeriodAppLaunch"`
+	AppLaunchChangePercent    *float64              `json:"AppLaunchChangePercent"`
+	PeriodAppsUsed            int64                 `json:"PeriodAppsUsed"`
+	PreviousPeriodAppsUsed    int64                 `json:"PreviousPeriodAppsUsed"`
+	AppsUsedChangePercent     *float64              `json:"AppsUsedChangePercent"`
+	PeriodActions             int64                 `json:"PeriodActions"`
+	PreviousPeriodActions     int64                 `json:"PreviousPeriodActions"`
+	ActionsChangePercent      *float64              `json:"ActionsChangePercent"`
+	MostActiveHour            int                   `json:"MostActiveHour"`
+	MostActiveDay             int                   `json:"MostActiveDay"`
+	OpenedByHour              []int                 `json:"OpenedByHour"`
+	OpenedByWeekday           []int                 `json:"OpenedByWeekday"`
+	OpenedByDay               []usageStatsDayBucket `json:"OpenedByDay"`
+	TopApps                   []usageStatsItem      `json:"TopApps"`
+	TopPlugins                []usageStatsItem      `json:"TopPlugins"`
 	currentPeriodStartUnixMs  int64
 	previousPeriodStartUnixMs int64
 	currentPeriodEndUnixMs    int64
@@ -93,6 +99,7 @@ func handleUsageStats(w http.ResponseWriter, r *http.Request) {
 	fillUsageDays(ctx, &resp)
 	fillPeriodMetrics(ctx, &resp)
 	fillOpenedBuckets(ctx, &resp)
+	fillOpenedByDay(ctx, &resp)
 	fillTopItems(ctx, &resp)
 
 	writeSuccessResponse(w, resp)
@@ -278,6 +285,42 @@ func fillOpenedBuckets(ctx context.Context, resp *usageStatsResponse) {
 	if resp.PeriodOpened == 0 {
 		resp.MostActiveHour = -1
 		resp.MostActiveDay = -1
+	}
+}
+
+// fillOpenedByDay always expands the latest year into daily cells so the heatmap stays stable when the period filter changes.
+func fillOpenedByDay(ctx context.Context, resp *usageStatsResponse) {
+	db := database.GetDB()
+	if db == nil {
+		return
+	}
+
+	now := time.Now()
+	start := now.AddDate(-1, 0, 0).Local()
+	startDay := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, start.Location())
+	end := now.Local()
+	endDay := time.Date(end.Year(), end.Month(), end.Day(), 0, 0, 0, 0, end.Location())
+	startUnixMs := startDay.UnixMilli()
+	endUnixMs := now.UnixMilli()
+
+	var openedDays []usageStatsDayBucket
+	_ = db.Raw(
+		"SELECT strftime('%Y-%m-%d', timestamp/1000, 'unixepoch', 'localtime') AS date, COUNT(*) AS count "+
+			"FROM events WHERE event_type = ? AND timestamp >= ? AND timestamp < ? GROUP BY date ORDER BY date",
+		analytics.EventTypeUIOpened,
+		startUnixMs,
+		endUnixMs,
+	).Scan(&openedDays).Error
+
+	countsByDay := make(map[string]int64, len(openedDays))
+	for _, day := range openedDays {
+		countsByDay[day.Date] = day.Count
+	}
+
+	resp.OpenedByDay = make([]usageStatsDayBucket, 0)
+	for day := startDay; !day.After(endDay); day = day.AddDate(0, 0, 1) {
+		date := day.Format("2006-01-02")
+		resp.OpenedByDay = append(resp.OpenedByDay, usageStatsDayBucket{Date: date, Count: countsByDay[date]})
 	}
 }
 

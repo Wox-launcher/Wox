@@ -81,9 +81,12 @@ typedef struct {
     unsigned char* tooltipIconData;
     int tooltipIconLen;
     float tooltipIconSize;
+    bool showCopyButton;
+    char* copyButtonTooltip;
+    char* copyButtonSuccessTooltip;
 } OverlayOptions;
 
-extern void overlayClickCallbackCGO(char* name);
+extern bool overlayClickCallbackCGO(char* name);
 
 static BOOL BuildTooltipLogPath(WCHAR *path, DWORD pathLen)
 {
@@ -238,6 +241,9 @@ static BOOL TryEnableAcrylic(HWND hwnd)
 #define ICON_GAP_DIP 10
 #define CLOSE_SIZE_DIP 20
 #define CLOSE_PAD_DIP 10
+#define COPY_BUTTON_SIZE_DIP 24
+#define COPY_BUTTON_PAD_DIP 12
+#define COPY_BUTTON_TEXT_GAP_DIP 8
 #define TOOLTIP_GAP_DIP 6
 #define CORNER_RADIUS_DIP 10
 #define RESIZE_GRIP_DIP 10
@@ -249,6 +255,7 @@ static BOOL TryEnableAcrylic(HWND hwnd)
 #define TIMER_AUTOCLOSE 1
 #define TIMER_TRACK 2
 #define TIMER_LIVE_FOLLOW 3
+#define TIMER_COPY_FEEDBACK 4
 #define PREDICTIVE_CORRECTION_THRESHOLD_PX 48
 
 #define WM_WOX_OVERLAY_COMMAND (WM_APP + 0x610)
@@ -582,6 +589,9 @@ typedef struct OverlayWindow
     WCHAR *title;
     WCHAR *message;
     WCHAR *tooltip;
+    WCHAR *copyButtonTooltip;
+    WCHAR *copyButtonSuccessTooltip;
+    WCHAR *activeTooltip;
     HBITMAP iconBitmap;
     int iconWidth;
     int iconHeight;
@@ -621,9 +631,14 @@ typedef struct OverlayWindow
     float appliedFontSize;
 
     RECT closeRect;
+    RECT copyButtonRect;
     BOOL mouseInside;
     BOOL closeHover;
     BOOL closePressed;
+    BOOL showCopyButton;
+    BOOL copyButtonHover;
+    BOOL copyButtonPressed;
+    BOOL copyButtonFeedback;
     BOOL dragging;
     BOOL autoClosePending;
     POINT dragStart;
@@ -653,6 +668,8 @@ typedef struct OverlayPayload
     WCHAR *title;
     WCHAR *message;
     WCHAR *tooltip;
+    WCHAR *copyButtonTooltip;
+    WCHAR *copyButtonSuccessTooltip;
     unsigned char *iconData;
     int iconLen;
     WCHAR *iconFilePath;
@@ -683,6 +700,7 @@ typedef struct OverlayPayload
     float height;
     float fontSize;
     float iconSize;
+    BOOL showCopyButton;
 } OverlayPayload;
 
 typedef struct OverlayCommand
@@ -1057,6 +1075,27 @@ static void UpdateCloseRect(OverlayWindow *ow, int width, int height, UINT dpi)
     r.right = x + closeSize;
     r.bottom = y + closeSize;
     ow->closeRect = r;
+}
+
+// UpdateCopyButtonRect keeps the optional copy affordance anchored inside the HUD surface.
+static void UpdateCopyButtonRect(OverlayWindow *ow, int width, int height, UINT dpi)
+{
+    RECT r = {0, 0, 0, 0};
+    if (!ow->showCopyButton)
+    {
+        ow->copyButtonRect = r;
+        return;
+    }
+
+    int buttonSize = MulDiv(COPY_BUTTON_SIZE_DIP, (int)dpi, 96);
+    int buttonPad = MulDiv(COPY_BUTTON_PAD_DIP, (int)dpi, 96);
+    int x = width - buttonPad - buttonSize;
+    int y = height - buttonPad - buttonSize;
+    r.left = x;
+    r.top = y;
+    r.right = x + buttonSize;
+    r.bottom = y + buttonSize;
+    ow->copyButtonRect = r;
 }
 
 static void ComputeOverlayPosition(OverlayWindow *ow, const RECT *targetRect, int width, int height, int *outX, int *outY)
@@ -1512,7 +1551,7 @@ static BOOL ZoomResizableImageOverlayAtScreenPoint(OverlayWindow *ow, POINT scre
     return TRUE;
 }
 
-static void ShowTooltipWindow(OverlayWindow *ow, HWND owner, POINT clientPt);
+static void ShowTooltipWindow(OverlayWindow *ow, HWND owner, RECT anchorRect, const WCHAR *text);
 static void HideTooltipWindow(OverlayWindow *ow);
 
 static void ApplyOverlayLayout(OverlayWindow *ow)
@@ -1599,7 +1638,11 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
     if (ow->height > 0)
         height = (int)roundf(ow->height * (float)ow->dpi / 96.0f);
     if (height <= 0)
+    {
         height = topPad + bottomPad + contentHeight;
+        if (ow->showCopyButton)
+            height += MulDiv(COPY_BUTTON_SIZE_DIP + COPY_BUTTON_TEXT_GAP_DIP, (int)ow->dpi, 96);
+    }
 
     if (ow->transparent)
     {
@@ -1622,10 +1665,12 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
         RECT empty = {0, 0, 0, 0};
         ow->closeRect = empty;
         ow->tooltipRect = empty;
+        ow->copyButtonRect = empty;
     }
     else
     {
         UpdateCloseRect(ow, width, height, ow->dpi);
+        UpdateCopyButtonRect(ow, width, height, ow->dpi);
 
         if (ow->tooltip)
         {
@@ -1775,6 +1820,10 @@ static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BO
             free(ow->message);
         if (ow->tooltip)
             free(ow->tooltip);
+        if (ow->copyButtonTooltip)
+            free(ow->copyButtonTooltip);
+        if (ow->copyButtonSuccessTooltip)
+            free(ow->copyButtonSuccessTooltip);
     }
 
     if (isNew)
@@ -1785,6 +1834,9 @@ static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BO
     ow->title = payload->title;
     ow->message = payload->message;
     ow->tooltip = payload->tooltip;
+    ow->copyButtonTooltip = payload->copyButtonTooltip;
+    ow->copyButtonSuccessTooltip = payload->copyButtonSuccessTooltip;
+    ow->activeTooltip = NULL;
 
     if (ow->iconBitmap)
         DeleteObject(ow->iconBitmap);
@@ -1858,6 +1910,10 @@ static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BO
     ow->fontSize = payload->fontSize;
     ow->iconSize = payload->iconSize;
     ow->tooltipIconSize = payload->tooltipIconSize;
+    ow->showCopyButton = payload->showCopyButton;
+    ow->copyButtonHover = FALSE;
+    ow->copyButtonPressed = FALSE;
+    ow->copyButtonFeedback = FALSE;
     ow->hasLastTargetRect = FALSE;
     ow->hiddenForMove = FALSE;
     if (ow->hwnd)
@@ -1936,15 +1992,77 @@ static void DrawCloseButton(HDC hdc, const RECT *rect, UINT dpi, BOOL hover, BOO
     DeleteObject(pen);
 }
 
-static void HandleOverlayClick(OverlayWindow *ow)
+// DrawCopyButton renders a small native copy affordance without requiring callers to pass an icon.
+static void DrawCopyButton(HDC hdc, const RECT *rect, UINT dpi, BOOL hover, BOOL pressed, BOOL feedback)
+{
+    if (!rect)
+        return;
+
+    int radius = MulDiv(6, (int)dpi, 96);
+    COLORREF bg = feedback ? RGB(47, 111, 84) : (pressed ? RGB(76, 76, 76) : (hover ? RGB(58, 58, 58) : RGB(44, 44, 44)));
+    HBRUSH brush = CreateSolidBrush(bg);
+    HPEN borderPen = CreatePen(PS_SOLID, 1, RGB(92, 92, 92));
+    HGDIOBJ oldBrush = SelectObject(hdc, brush);
+    HGDIOBJ oldPen = SelectObject(hdc, borderPen);
+    RoundRect(hdc, rect->left, rect->top, rect->right, rect->bottom, radius, radius);
+    if (oldBrush)
+        SelectObject(hdc, oldBrush);
+    if (oldPen)
+        SelectObject(hdc, oldPen);
+    DeleteObject(brush);
+    DeleteObject(borderPen);
+
+    int pad = MulDiv(7, (int)dpi, 96);
+    int offset = MulDiv(3, (int)dpi, 96);
+
+    if (feedback)
+    {
+        int fontHeight = -MulDiv(15, (int)dpi, 72);
+        HFONT iconFont = CreateFontW(fontHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                     DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                     CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe MDL2 Assets");
+        HGDIOBJ oldFont = iconFont ? SelectObject(hdc, iconFont) : NULL;
+        SetBkMode(hdc, TRANSPARENT);
+        SetTextColor(hdc, RGB(245, 245, 245));
+        RECT glyphRect = *rect;
+        DrawTextW(hdc, L"\xE73E", -1, &glyphRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        if (oldFont)
+            SelectObject(hdc, oldFont);
+        if (iconFont)
+            DeleteObject(iconFont);
+    }
+    else
+    {
+        int thickness = MulDiv(2, (int)dpi, 96);
+        if (thickness < 1)
+            thickness = 1;
+        HPEN iconPen = CreatePen(PS_SOLID, thickness, RGB(232, 232, 232));
+        HGDIOBJ oldIconPen = SelectObject(hdc, iconPen);
+        HGDIOBJ oldNullBrush = SelectObject(hdc, GetStockObject(NULL_BRUSH));
+
+        RECT back = {rect->left + pad, rect->top + pad + offset, rect->right - pad - offset, rect->bottom - pad};
+        RECT front = {rect->left + pad + offset, rect->top + pad, rect->right - pad, rect->bottom - pad - offset};
+        Rectangle(hdc, back.left, back.top, back.right, back.bottom);
+        Rectangle(hdc, front.left, front.top, front.right, front.bottom);
+
+        if (oldNullBrush)
+            SelectObject(hdc, oldNullBrush);
+        if (oldIconPen)
+            SelectObject(hdc, oldIconPen);
+        DeleteObject(iconPen);
+    }
+}
+
+static BOOL HandleOverlayClick(OverlayWindow *ow)
 {
     if (!ow || !ow->name)
-        return;
+        return FALSE;
     char *nameUtf8 = DupWideToUtf8(ow->name);
     if (!nameUtf8)
-        return;
-    overlayClickCallbackCGO(nameUtf8);
+        return FALSE;
+    BOOL ok = overlayClickCallbackCGO(nameUtf8) ? TRUE : FALSE;
     free(nameUtf8);
+    return ok;
 }
 
 static HFONT g_tooltipFont = NULL;
@@ -1980,11 +2098,13 @@ static void MeasureTooltipTextRect(HDC hdc, const WCHAR *text, int maxWidth, REC
         *outRect = rc;
 }
 
-static void ShowTooltipWindow(OverlayWindow *ow, HWND owner, POINT clientPt)
+static void ShowTooltipWindow(OverlayWindow *ow, HWND owner, RECT anchorRect, const WCHAR *text)
 {
-    if (!ow || !ow->tooltipHwnd || !ow->tooltip || !*ow->tooltip)
+    (void)owner;
+    if (!ow || !ow->tooltipHwnd || !text || !*text)
         return;
 
+    ow->activeTooltip = (WCHAR *)text;
     UINT dpi = ow->dpi ? ow->dpi : GetWindowDpiSafe(owner, 96);
     int pad = MulDiv(8, (int)dpi, 96);
     int maxWidth = MulDiv(400, (int)dpi, 96);
@@ -1998,7 +2118,7 @@ static void ShowTooltipWindow(OverlayWindow *ow, HWND owner, POINT clientPt)
         HGDIOBJ oldFont = NULL;
         if (font)
             oldFont = SelectObject(hdc, font);
-        MeasureTooltipTextRect(hdc, ow->tooltip, maxWidth, &textRc);
+        MeasureTooltipTextRect(hdc, text, maxWidth, &textRc);
         if (oldFont)
             SelectObject(hdc, oldFont);
         ReleaseDC(NULL, hdc);
@@ -2014,7 +2134,7 @@ static void ShowTooltipWindow(OverlayWindow *ow, HWND owner, POINT clientPt)
     int width = textW + pad * 2;
     int height = textH + pad * 2;
 
-    RECT iconRc = ow->tooltipRect;
+    RECT iconRc = anchorRect;
     POINT tl = {iconRc.left, iconRc.top};
     POINT br = {iconRc.right, iconRc.bottom};
     ClientToScreen(owner, &tl);
@@ -2095,7 +2215,7 @@ static LRESULT CALLBACK TooltipWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
 
         RECT textRc = rc;
         InflateRect(&textRc, -pad, -pad);
-        DrawTextW(hdc, ow->tooltip ? ow->tooltip : L"", -1, &textRc,
+        DrawTextW(hdc, ow->activeTooltip ? ow->activeTooltip : L"", -1, &textRc,
                   DT_LEFT | DT_WORDBREAK | DT_NOPREFIX);
 
         if (oldFont)
@@ -2311,7 +2431,12 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
 
         int textLeft = leftPad + iconSize + iconGap;
         int textRight = width - rightReserved;
-        RECT textRect = {textLeft, topPad, textRight, height - bottomPad};
+        int textBottom = height - bottomPad;
+        if (ow->showCopyButton)
+            textBottom -= MulDiv(COPY_BUTTON_SIZE_DIP + COPY_BUTTON_TEXT_GAP_DIP, (int)ow->dpi, 96);
+        if (textBottom < topPad)
+            textBottom = topPad;
+        RECT textRect = {textLeft, topPad, textRight, textBottom};
 
         SetBkMode(hdc, TRANSPARENT);
         SetTextColor(hdc, RGB(240, 240, 240));
@@ -2363,6 +2488,11 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
         if (ow->closable)
         {
             DrawCloseButton(hdc, &ow->closeRect, ow->dpi, ow->closeHover, ow->closePressed);
+        }
+
+        if (ow->showCopyButton)
+        {
+            DrawCopyButton(hdc, &ow->copyButtonRect, ow->dpi, ow->copyButtonHover, ow->copyButtonPressed, ow->copyButtonFeedback);
         }
 
         if (paintBuf)
@@ -2430,6 +2560,11 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
                     SetCursor(LoadCursor(NULL, IDC_HAND));
                     return TRUE;
                 }
+                if (ow->showCopyButton && PtInRect(&ow->copyButtonRect, pt))
+                {
+                    SetCursor(LoadCursor(NULL, IDC_HAND));
+                    return TRUE;
+                }
             }
         }
         break;
@@ -2446,15 +2581,15 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
         }
 
         POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-        if (ow->tooltipHwnd && ow->tooltip && *ow->tooltip)
+        if (ow->tooltipHwnd)
         {
-            BOOL hoverTooltip = PtInRect(&ow->tooltipRect, pt);
+            BOOL hoverTooltip = ow->tooltip && *ow->tooltip && PtInRect(&ow->tooltipRect, pt);
             if (hoverTooltip != ow->tooltipHover)
             {
                 ow->tooltipHover = hoverTooltip;
                 if (hoverTooltip)
                 {
-                    ShowTooltipWindow(ow, hwnd, pt);
+                    ShowTooltipWindow(ow, hwnd, ow->tooltipRect, ow->tooltip);
                 }
                 else
                 {
@@ -2466,6 +2601,21 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
         if (hoverNow != ow->closeHover)
         {
             ow->closeHover = hoverNow;
+            InvalidateRect(hwnd, NULL, FALSE);
+        }
+        BOOL copyHoverNow = ow->showCopyButton && PtInRect(&ow->copyButtonRect, pt);
+        if (copyHoverNow != ow->copyButtonHover)
+        {
+            ow->copyButtonHover = copyHoverNow;
+            if (copyHoverNow)
+            {
+                const WCHAR *copyTooltip = ow->copyButtonFeedback && ow->copyButtonSuccessTooltip && *ow->copyButtonSuccessTooltip ? ow->copyButtonSuccessTooltip : ow->copyButtonTooltip;
+                ShowTooltipWindow(ow, hwnd, ow->copyButtonRect, copyTooltip);
+            }
+            else if (!ow->tooltipHover)
+            {
+                HideTooltipWindow(ow);
+            }
             InvalidateRect(hwnd, NULL, FALSE);
         }
 
@@ -2490,7 +2640,8 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             break;
         ow->mouseInside = FALSE;
         ow->closeHover = FALSE;
-        if (ow->tooltipHwnd && ow->tooltipHover)
+        ow->copyButtonHover = FALSE;
+        if (ow->tooltipHwnd)
         {
             ow->tooltipHover = FALSE;
             HideTooltipWindow(ow);
@@ -2531,6 +2682,13 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             InvalidateRect(hwnd, NULL, FALSE);
             return 0;
         }
+        if (ow->showCopyButton && PtInRect(&ow->copyButtonRect, pt))
+        {
+            ow->copyButtonPressed = TRUE;
+            SetCapture(hwnd);
+            InvalidateRect(hwnd, NULL, FALSE);
+            return 0;
+        }
         if (ow->movable)
         {
             ow->dragging = TRUE;
@@ -2549,8 +2707,10 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             break;
         POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
         BOOL wasClosePressed = ow->closePressed;
+        BOOL wasCopyButtonPressed = ow->copyButtonPressed;
         BOOL wasDragging = ow->dragging;
         ow->closePressed = FALSE;
+        ow->copyButtonPressed = FALSE;
         ow->dragging = FALSE;
         if (GetCapture() == hwnd)
             ReleaseCapture();
@@ -2562,7 +2722,21 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             return 0;
         }
 
-        if (!wasDragging)
+        if (wasCopyButtonPressed && ow->showCopyButton && PtInRect(&ow->copyButtonRect, pt))
+        {
+            if (HandleOverlayClick(ow))
+            {
+                ow->copyButtonFeedback = TRUE;
+                KillTimer(hwnd, TIMER_COPY_FEEDBACK);
+                SetTimer(hwnd, TIMER_COPY_FEEDBACK, 1200, NULL);
+                if (ow->copyButtonHover && ow->copyButtonSuccessTooltip && *ow->copyButtonSuccessTooltip)
+                    ShowTooltipWindow(ow, hwnd, ow->copyButtonRect, ow->copyButtonSuccessTooltip);
+                InvalidateRect(hwnd, NULL, FALSE);
+            }
+            return 0;
+        }
+
+        if (!wasDragging && !ow->showCopyButton)
         {
             HandleOverlayClick(ow);
         }
@@ -2651,6 +2825,15 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             SetOverlayZOrder(hwnd, ow->targetHwnd);
             if (!IsWindowVisible(hwnd))
                 ShowOverlayWindowWithFocusPolicy(ow);
+            return 0;
+        }
+        if (wParam == TIMER_COPY_FEEDBACK)
+        {
+            KillTimer(hwnd, TIMER_COPY_FEEDBACK);
+            ow->copyButtonFeedback = FALSE;
+            if (ow->copyButtonHover && ow->copyButtonTooltip && *ow->copyButtonTooltip)
+                ShowTooltipWindow(ow, hwnd, ow->copyButtonRect, ow->copyButtonTooltip);
+            InvalidateRect(hwnd, NULL, FALSE);
             return 0;
         }
         break;
@@ -3004,6 +3187,8 @@ void ShowOverlay(OverlayOptions opts)
     payload->title = DupUtf8ToWide(opts.title);
     payload->message = DupUtf8ToWide(opts.message);
     payload->tooltip = DupUtf8ToWide(opts.tooltip);
+    payload->copyButtonTooltip = DupUtf8ToWide(opts.copyButtonTooltip);
+    payload->copyButtonSuccessTooltip = DupUtf8ToWide(opts.copyButtonSuccessTooltip);
     payload->iconFilePath = DupUtf8ToWide(opts.iconFilePath);
     payload->transparent = opts.transparent ? TRUE : FALSE;
     payload->hitTestIconOnly = opts.hitTestIconOnly ? TRUE : FALSE;
@@ -3030,6 +3215,7 @@ void ShowOverlay(OverlayOptions opts)
     payload->fontSize = opts.fontSize;
     payload->iconSize = opts.iconSize;
     payload->tooltipIconSize = opts.tooltipIconSize;
+    payload->showCopyButton = opts.showCopyButton ? TRUE : FALSE;
 
     if (opts.iconData && opts.iconLen > 0)
     {

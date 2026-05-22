@@ -26,6 +26,7 @@ class WoxUsageStats {
   late int mostActiveDay;
   late List<int> openedByHour;
   late List<int> openedByWeekday;
+  late List<WoxUsageStatsDay> openedByDay;
   late List<WoxUsageStatsItem> topApps;
   late List<WoxUsageStatsItem> topPlugins;
 
@@ -53,6 +54,7 @@ class WoxUsageStats {
     required this.mostActiveDay,
     required this.openedByHour,
     required this.openedByWeekday,
+    required this.openedByDay,
     required this.topApps,
     required this.topPlugins,
   });
@@ -81,6 +83,7 @@ class WoxUsageStats {
     mostActiveDay = -1;
     openedByHour = List<int>.filled(24, 0);
     openedByWeekday = List<int>.filled(7, 0);
+    openedByDay = <WoxUsageStatsDay>[];
     topApps = <WoxUsageStatsItem>[];
     topPlugins = <WoxUsageStatsItem>[];
   }
@@ -121,6 +124,15 @@ class WoxUsageStats {
       openedByWeekday = List<int>.filled(7, 0);
     }
 
+    if (json['OpenedByDay'] != null) {
+      openedByDay = <WoxUsageStatsDay>[];
+      for (final v in json['OpenedByDay'] as List) {
+        openedByDay.add(WoxUsageStatsDay.fromJson(v));
+      }
+    } else {
+      openedByDay = <WoxUsageStatsDay>[];
+    }
+
     if (json['TopApps'] != null) {
       topApps = <WoxUsageStatsItem>[];
       for (final v in json['TopApps'] as List) {
@@ -151,6 +163,18 @@ class WoxUsageStats {
       return value;
     }
     return double.tryParse(value.toString());
+  }
+}
+
+class WoxUsageStatsDay {
+  late String date;
+  late int count;
+
+  WoxUsageStatsDay({required this.date, required this.count});
+
+  WoxUsageStatsDay.fromJson(Map<String, dynamic> json) {
+    date = json['Date'] ?? '';
+    count = json['Count'] ?? 0;
   }
 }
 

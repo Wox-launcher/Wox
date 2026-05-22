@@ -45,27 +45,6 @@ class _WoxSettingUsageViewState extends State<WoxSettingUsageView> {
     });
   }
 
-  String _weekdayLabel(int weekday) {
-    switch (weekday) {
-      case 0:
-        return controller.tr('ui_weekday_sun');
-      case 1:
-        return controller.tr('ui_weekday_mon');
-      case 2:
-        return controller.tr('ui_weekday_tue');
-      case 3:
-        return controller.tr('ui_weekday_wed');
-      case 4:
-        return controller.tr('ui_weekday_thu');
-      case 5:
-        return controller.tr('ui_weekday_fri');
-      case 6:
-        return controller.tr('ui_weekday_sat');
-      default:
-        return weekday.toString();
-    }
-  }
-
   Widget _form({double width = GENERAL_SETTING_COMPACT_FORM_WIDTH, required List<Widget> children}) {
     return Align(
       alignment: Alignment.topLeft,
@@ -150,34 +129,6 @@ class _WoxSettingUsageViewState extends State<WoxSettingUsageView> {
     return controller.tr('ui_usage_overview').replaceAll('{period}', _periodLabel(period));
   }
 
-  String _compareLabel(WoxUsageStats stats) {
-    if (stats.period == 'all') {
-      return controller.tr('ui_usage_period_all');
-    }
-    return controller.tr('ui_usage_compare_previous_period').replaceAll('{days}', stats.periodDays.toString());
-  }
-
-  _UsageTrend _buildUsageTrend({required double? changePercent, required int current, required int previous, required Color accentColor, bool allTime = false}) {
-    if (allTime) {
-      return _UsageTrend(label: controller.tr('ui_usage_metric_cumulative'), color: accentColor, icon: Icons.all_inclusive);
-    }
-
-    if (changePercent == null) {
-      return _UsageTrend(label: controller.tr('ui_usage_metric_new'), color: accentColor, icon: Icons.trending_up);
-    }
-
-    if (changePercent.abs() < 0.5 || current == previous) {
-      return _UsageTrend(label: controller.tr('ui_usage_metric_stable'), color: getThemeSubTextColor(), icon: Icons.remove);
-    }
-
-    final rounded = changePercent.abs().round();
-    return _UsageTrend(
-      label: '${changePercent > 0 ? '+' : '-'}$rounded%',
-      color: changePercent > 0 ? accentColor : const Color(0xFFEF4444),
-      icon: changePercent > 0 ? Icons.arrow_upward : Icons.arrow_downward,
-    );
-  }
-
   Widget _periodSelector({required String selectedPeriod, required bool disabled}) {
     return Container(
       padding: const EdgeInsets.all(3),
@@ -219,12 +170,13 @@ class _WoxSettingUsageViewState extends State<WoxSettingUsageView> {
     );
   }
 
-  Widget _statCard({required String title, required String value, required IconData icon, required Color accentColor, required _UsageTrend trend, required String compareLabel}) {
+  Widget _statCard({required String title, required String value, required IconData icon, required Color accentColor}) {
     return WoxPanel(
-      height: 116,
+      height: 92,
       padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Row(
             children: [
@@ -248,44 +200,16 @@ class _WoxSettingUsageViewState extends State<WoxSettingUsageView> {
               ),
             ],
           ),
-          const Spacer(),
-          // The comparison row belongs to the whole KPI card, not just the text column. Placing it
-          // at the bottom separates auxiliary trend context from the primary icon/value content and
-          // gives localized labels the full card width without truncating common English text.
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                decoration: BoxDecoration(color: trend.color.withValues(alpha: isThemeDark() ? 0.16 : 0.09), borderRadius: BorderRadius.circular(6)),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(trend.icon, size: 10, color: trend.color),
-                    const SizedBox(width: 3),
-                    Text(trend.label, style: TextStyle(color: trend.color, fontSize: 10, fontWeight: FontWeight.w700)),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: SizedBox(
-                  height: 16,
-                  child: FittedBox(
-                    alignment: Alignment.centerLeft,
-                    fit: BoxFit.scaleDown,
-                    child: Text(compareLabel, style: TextStyle(color: getThemeSubTextColor(), fontSize: 11, fontWeight: FontWeight.w500), maxLines: 1),
-                  ),
-                ),
-              ),
-            ],
-          ),
         ],
       ),
     );
   }
 
-  Widget _dashboardPanel({required String title, required IconData icon, required Widget child, String? footer}) {
+  Widget _dashboardPanel({required String title, required IconData icon, required Widget child, String? footer, double? height, Alignment childAlignment = Alignment.topLeft}) {
+    final content = height == null ? child : Expanded(child: Align(alignment: childAlignment, child: child));
+
     return WoxPanel(
+      height: height,
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -298,153 +222,209 @@ class _WoxSettingUsageViewState extends State<WoxSettingUsageView> {
             ],
           ),
           const SizedBox(height: 14),
-          child,
+          content,
           if (footer != null) ...[const SizedBox(height: 12), Text(footer, style: TextStyle(color: getThemeSubTextColor(), fontSize: 12, fontWeight: FontWeight.w500))],
         ],
       ),
     );
   }
 
-  Widget _barChart({
-    required List<int> data,
-    required List<String> labels,
-    required List<String> tooltipLabels,
-    required int highlightIndex,
-    required Color accentColor,
-    double height = 150,
-  }) {
-    final maxValue = data.isEmpty ? 0 : data.reduce(math.max);
-    final axisMax = _chartAxisMax(maxValue);
-    final tickValues = List<int>.generate(5, (i) => (axisMax - axisMax * i / 4).round());
-    final neutralBar = getThemeSubTextColor().withValues(alpha: isThemeDark() ? 0.42 : 0.30);
-    final gridColor = getThemeTextColor().withValues(alpha: isThemeDark() ? 0.09 : 0.055);
+  // Builds a GitHub-style daily activity grid so each visible cell maps to one local calendar day.
+  Widget _dailyHeatmap({required List<WoxUsageStatsDay> data, required Color accentColor}) {
+    final days = _buildLatestYearHeatmapDays(data);
 
-    // Chart rendering stays widget-based instead of introducing a painter so the setting page keeps
-    // straightforward layout behavior and still gains modern gridlines, rounded bars, and active
-    // bucket highlighting from the real usage summary. Hover state is local to the chart so bars can
-    // expose exact values without adding global dashboard state or changing the API shape again.
-    int? hoveredIndex;
-    return StatefulBuilder(
-      builder: (context, setChartState) {
-        return Column(
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // The first dashboard pass drew the bars without a y-axis, which made hover values
-                // the only way to understand scale. A compact axis keeps the chart readable at a
-                // glance while staying inside the existing settings card layout.
-                SizedBox(
-                  width: 28,
-                  height: height,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children:
-                        tickValues.map((value) {
-                          return Text(_formatAxisValue(value), style: TextStyle(color: getThemeSubTextColor(), fontSize: 10, fontWeight: FontWeight.w500));
-                        }).toList(),
+    if (days.isEmpty) {
+      return SizedBox(
+        height: 118,
+        child: Align(alignment: Alignment.centerLeft, child: Text(controller.tr('ui_usage_no_data'), style: TextStyle(color: getThemeSubTextColor(), fontSize: 12))),
+      );
+    }
+
+    final maxCount = days.map((day) => day.count).reduce(math.max);
+    final thresholds = _heatmapThresholds(days);
+    final firstOffset = _heatmapWeekdayIndex(days.first.date);
+    final totalCells = firstOffset + days.length;
+    final weekCount = math.max(1, (totalCells / 7).ceil());
+    const monthHeight = 18.0;
+    final dayCells = List<_UsageHeatmapDay?>.filled(weekCount * 7, null);
+
+    for (var i = 0; i < days.length; i++) {
+      dayCells[firstOffset + i] = days[i];
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const cellGap = 2.5;
+        const horizontalInset = 4.0;
+        final availableGridWidth = math.max(0.0, constraints.maxWidth - horizontalInset * 2);
+        final cellSize = ((availableGridWidth - cellGap * (weekCount - 1)) / weekCount).clamp(6.0, 13.0).toDouble();
+        final weekStride = cellSize + cellGap;
+        final gridWidth = weekCount * cellSize + (weekCount - 1) * cellGap;
+        final gridHeight = cellSize * 7 + cellGap * 6;
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: horizontalInset),
+          child: Align(
+            alignment: Alignment.center,
+            child: SizedBox(
+              width: gridWidth,
+              height: monthHeight + gridHeight,
+              child: Stack(
+                children: [
+                  ..._heatmapMonthLabels(days, firstOffset, weekStride, gridWidth).map(
+                    (label) =>
+                        Positioned(left: label.left, top: 0, child: Text(label.text, style: TextStyle(color: getThemeSubTextColor(), fontSize: 10, fontWeight: FontWeight.w600))),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: SizedBox(
-                    height: height,
-                    child: Stack(
-                      children: [
-                        Positioned.fill(
-                          child: Column(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: List.generate(5, (_) => Container(height: 1, color: gridColor))),
-                        ),
-                        Positioned.fill(
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: List.generate(data.length, (i) {
-                              final value = data[i];
-                              final ratio = axisMax == 0 ? 0.0 : value / axisMax;
-                              final barHeight = value == 0 ? 5.0 : math.max(8.0, (height - 10) * ratio);
-                              final isActive = (hoveredIndex ?? highlightIndex) == i && value > 0;
-                              final tooltipLabel = i < tooltipLabels.length ? tooltipLabels[i] : labels[i];
-                              return Expanded(
-                                // Usage chart bars keep their short hover delay, but
-                                // render through WoxTooltip so chart hints match other
-                                // text overlays and remain selectable when needed.
-                                child: WoxTooltip(
-                                  message: '$tooltipLabel · $value',
-                                  waitDuration: const Duration(milliseconds: 180),
-                                  child: MouseRegion(
-                                    cursor: SystemMouseCursors.click,
-                                    onEnter: (_) => setChartState(() => hoveredIndex = i),
-                                    onExit: (_) => setChartState(() => hoveredIndex = null),
-                                    child: Padding(
-                                      padding: EdgeInsets.symmetric(horizontal: data.length > 12 ? 3 : 6),
-                                      child: Align(
-                                        alignment: Alignment.bottomCenter,
-                                        child: AnimatedContainer(
-                                          duration: const Duration(milliseconds: 140),
-                                          height: barHeight,
-                                          decoration: BoxDecoration(color: isActive ? accentColor : neutralBar, borderRadius: BorderRadius.circular(7)),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    height: gridHeight,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: List.generate(weekCount, (week) {
+                        return Padding(
+                          padding: EdgeInsets.only(right: week == weekCount - 1 ? 0 : cellGap),
+                          child: Column(
+                            children: List.generate(7, (row) {
+                              final day = dayCells[week * 7 + row];
+                              return Padding(
+                                padding: EdgeInsets.only(bottom: row == 6 ? 0 : cellGap),
+                                child: _heatmapCell(day: day, maxCount: maxCount, thresholds: thresholds, accentColor: accentColor, size: cellSize),
                               );
                             }),
                           ),
-                        ),
-                      ],
+                        );
+                      }),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                const SizedBox(width: 36),
-                Expanded(
-                  child: Row(
-                    children: List.generate(labels.length, (i) {
-                      final isActive = (hoveredIndex ?? highlightIndex) == i && (data.isNotEmpty && i < data.length && data[i] > 0);
-                      return Expanded(
-                        child: Text(
-                          labels[i],
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: isActive ? accentColor : getThemeSubTextColor(), fontSize: 11, fontWeight: isActive ? FontWeight.w700 : FontWeight.w500),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      );
-                    }),
-                  ),
-                ),
-              ],
-            ),
-          ],
+          ),
         );
       },
     );
   }
 
-  int _chartAxisMax(int maxValue) {
-    if (maxValue <= 0) {
-      return 4;
+  // Keep the visual range fixed even if a stale backend returns all-time daily buckets.
+  List<_UsageHeatmapDay> _buildLatestYearHeatmapDays(List<WoxUsageStatsDay> data) {
+    final countsByDate = <String, int>{};
+    for (final day in data) {
+      final date = _parseUsageDate(day.date);
+      if (date == null) {
+        continue;
+      }
+      countsByDate[_formatUsageDate(date)] = day.count;
     }
 
-    final magnitude = math.pow(10, maxValue.toString().length - 1).toInt();
-    for (final factor in const [1, 2, 5, 10]) {
-      final candidate = magnitude * factor;
-      if (candidate >= maxValue) {
-        return candidate;
-      }
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final start = DateTime(today.year - 1, today.month, today.day);
+    final days = <_UsageHeatmapDay>[];
+    for (var day = start; !day.isAfter(today); day = day.add(const Duration(days: 1))) {
+      days.add(_UsageHeatmapDay(date: day, count: countsByDate[_formatUsageDate(day)] ?? 0));
     }
-    return magnitude * 10;
+    return days;
   }
 
-  String _formatAxisValue(int value) {
-    if (value >= 1000 && value % 1000 == 0) {
-      return '${value ~/ 1000}k';
+  Widget _heatmapCell({required _UsageHeatmapDay? day, required int maxCount, required _HeatmapThresholds thresholds, required Color accentColor, required double size}) {
+    final color = day == null ? Colors.transparent : _heatmapColor(day.count, maxCount, thresholds, accentColor);
+    final borderColor = day == null ? Colors.transparent : _outlineColor();
+    final cell = AnimatedContainer(
+      duration: const Duration(milliseconds: 120),
+      width: size,
+      height: size,
+      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3), border: Border.all(color: borderColor)),
+    );
+
+    if (day == null) {
+      return cell;
     }
-    return value.toString();
+
+    return WoxTooltip(message: _heatmapTooltip(day), waitDuration: const Duration(milliseconds: 180), child: MouseRegion(cursor: SystemMouseCursors.click, child: cell));
+  }
+
+  Color _heatmapColor(int count, int maxCount, _HeatmapThresholds thresholds, Color accentColor) {
+    final emptyColor = isThemeDark() ? Colors.white.withValues(alpha: 0.07) : const Color(0xFFE8EDF3);
+    if (count <= 0 || maxCount <= 0) {
+      return emptyColor;
+    }
+
+    final level =
+        count > thresholds.high
+            ? 4.0
+            : count > thresholds.medium
+            ? 3.0
+            : count > thresholds.low
+            ? 2.0
+            : 1.0;
+    final baseAlpha = isThemeDark() ? 0.22 : 0.18;
+    final alpha = baseAlpha + level * (isThemeDark() ? 0.16 : 0.18);
+    return accentColor.withValues(alpha: alpha.clamp(0.0, 1.0).toDouble());
+  }
+
+  // Quartile thresholds keep the heatmap relative to the user's own yearly activity distribution.
+  _HeatmapThresholds _heatmapThresholds(List<_UsageHeatmapDay> days) {
+    final positiveCounts = days.map((day) => day.count).where((count) => count > 0).toList()..sort();
+    if (positiveCounts.isEmpty) {
+      return const _HeatmapThresholds(low: 0, medium: 0, high: 0);
+    }
+
+    int percentile(double value) {
+      final index = ((positiveCounts.length - 1) * value).floor().clamp(0, positiveCounts.length - 1);
+      return positiveCounts[index];
+    }
+
+    return _HeatmapThresholds(low: percentile(0.25), medium: percentile(0.50), high: percentile(0.75));
+  }
+
+  List<_HeatmapMonthLabel> _heatmapMonthLabels(List<_UsageHeatmapDay> days, int firstOffset, double weekStride, double gridWidth) {
+    final labels = <_HeatmapMonthLabel>[];
+    final seenMonths = <String>{};
+    for (var i = 0; i < days.length; i++) {
+      final date = days[i].date;
+      final key = '${date.year}-${date.month}';
+      if (!seenMonths.add(key)) {
+        continue;
+      }
+
+      final column = (firstOffset + i) ~/ 7;
+      final left = math.min(column * weekStride, math.max(0, gridWidth - 32));
+      labels.add(_HeatmapMonthLabel(left: left.toDouble(), text: _monthLabel(date.month)));
+    }
+    return labels;
+  }
+
+  String _heatmapTooltip(_UsageHeatmapDay day) {
+    return controller.tr('ui_usage_day_opened_count').replaceAll('{date}', _formatUsageDate(day.date)).replaceAll('{count}', day.count.toString());
+  }
+
+  DateTime? _parseUsageDate(String value) {
+    final parts = value.split('-');
+    if (parts.length != 3) {
+      return null;
+    }
+
+    final year = int.tryParse(parts[0]);
+    final month = int.tryParse(parts[1]);
+    final day = int.tryParse(parts[2]);
+    if (year == null || month == null || day == null) {
+      return null;
+    }
+    return DateTime(year, month, day);
+  }
+
+  int _heatmapWeekdayIndex(DateTime date) {
+    return date.weekday % 7;
+  }
+
+  String _formatUsageDate(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
+  String _monthLabel(int month) {
+    return controller.tr('ui_month_short_$month');
   }
 
   Widget _itemIcon(WoxUsageStatsItem item, Color accentColor) {
@@ -566,19 +546,17 @@ class _WoxSettingUsageViewState extends State<WoxSettingUsageView> {
   }
 
   Widget _usageDashboardBody({required WoxUsageStats stats, required String selectedPeriod, required String error}) {
-    final allTime = stats.period == 'all' || selectedPeriod == 'all';
-    final mostHour = stats.mostActiveHour < 0 ? '-' : '${stats.mostActiveHour.toString().padLeft(2, '0')}:00';
-    final mostDay = stats.mostActiveDay < 0 ? '-' : _weekdayLabel(stats.mostActiveDay);
     const blueAccent = Color(0xFF3B82F6);
     const tealAccent = Color(0xFF14B8A6);
     const amberAccent = Color(0xFFF59E0B);
     const violetAccent = Color(0xFF8B5CF6);
+    const greenAccent = Color(0xFF22C55E);
+    const heatmapPanelHeight = 252.0;
     // KPI cards can keep their semantic accents, but the lower analytics panels need a calmer
     // reading rhythm. Reusing blue for app/time panels and violet for plugin panels matches the
     // accepted mockup more closely than giving every card its own dominant color.
     const appPanelAccent = blueAccent;
     const pluginPanelAccent = violetAccent;
-    final compareLabel = _compareLabel(stats);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -598,20 +576,7 @@ class _WoxSettingUsageViewState extends State<WoxSettingUsageView> {
               children: [
                 SizedBox(
                   width: cardWidth,
-                  child: _statCard(
-                    title: controller.tr('ui_usage_opened'),
-                    value: stats.periodOpened.toString(),
-                    icon: Icons.visibility_outlined,
-                    accentColor: blueAccent,
-                    trend: _buildUsageTrend(
-                      changePercent: stats.openedChangePercent,
-                      current: stats.periodOpened,
-                      previous: stats.previousPeriodOpened,
-                      accentColor: blueAccent,
-                      allTime: allTime,
-                    ),
-                    compareLabel: compareLabel,
-                  ),
+                  child: _statCard(title: controller.tr('ui_usage_opened'), value: stats.periodOpened.toString(), icon: Icons.visibility_outlined, accentColor: blueAccent),
                 ),
                 SizedBox(
                   width: cardWidth,
@@ -620,49 +585,15 @@ class _WoxSettingUsageViewState extends State<WoxSettingUsageView> {
                     value: stats.periodAppLaunch.toString(),
                     icon: Icons.rocket_launch_outlined,
                     accentColor: tealAccent,
-                    trend: _buildUsageTrend(
-                      changePercent: stats.appLaunchChangePercent,
-                      current: stats.periodAppLaunch,
-                      previous: stats.previousPeriodAppLaunch,
-                      accentColor: tealAccent,
-                      allTime: allTime,
-                    ),
-                    compareLabel: compareLabel,
                   ),
                 ),
                 SizedBox(
                   width: cardWidth,
-                  child: _statCard(
-                    title: controller.tr('ui_usage_apps_used'),
-                    value: stats.periodAppsUsed.toString(),
-                    icon: Icons.apps_outlined,
-                    accentColor: amberAccent,
-                    trend: _buildUsageTrend(
-                      changePercent: stats.appsUsedChangePercent,
-                      current: stats.periodAppsUsed,
-                      previous: stats.previousPeriodAppsUsed,
-                      accentColor: amberAccent,
-                      allTime: allTime,
-                    ),
-                    compareLabel: compareLabel,
-                  ),
+                  child: _statCard(title: controller.tr('ui_usage_apps_used'), value: stats.periodAppsUsed.toString(), icon: Icons.apps_outlined, accentColor: amberAccent),
                 ),
                 SizedBox(
                   width: cardWidth,
-                  child: _statCard(
-                    title: controller.tr('ui_usage_actions'),
-                    value: stats.periodActions.toString(),
-                    icon: Icons.bolt_outlined,
-                    accentColor: violetAccent,
-                    trend: _buildUsageTrend(
-                      changePercent: stats.actionsChangePercent,
-                      current: stats.periodActions,
-                      previous: stats.previousPeriodActions,
-                      accentColor: violetAccent,
-                      allTime: allTime,
-                    ),
-                    compareLabel: compareLabel,
-                  ),
+                  child: _statCard(title: controller.tr('ui_usage_actions'), value: stats.periodActions.toString(), icon: Icons.bolt_outlined, accentColor: violetAccent),
                 ),
               ],
             );
@@ -672,43 +603,16 @@ class _WoxSettingUsageViewState extends State<WoxSettingUsageView> {
         LayoutBuilder(
           builder: (context, constraints) {
             final width = constraints.maxWidth.isFinite ? constraints.maxWidth : GENERAL_SETTING_COMPACT_FORM_WIDTH;
-            final spacing = 12.0;
-            final columns = width >= 760 ? 2 : 1;
-            final blockWidth = columns == 1 ? width : (width - spacing) / columns;
 
-            final hourLabels = List<String>.generate(24, (i) => i % 6 == 0 ? i.toString().padLeft(2, '0') : '');
-            final hourTooltipLabels = List<String>.generate(24, (i) => '${i.toString().padLeft(2, '0')}:00');
-            final weekdayLabels = List<String>.generate(7, (i) => _weekdayLabel(i));
-
-            return Wrap(
-              spacing: spacing,
-              runSpacing: spacing,
-              children: [
-                SizedBox(
-                  width: blockWidth,
-                  child: _dashboardPanel(
-                    title: controller.tr('ui_usage_opened_by_hour'),
-                    icon: Icons.schedule_outlined,
-                    child: _barChart(data: stats.openedByHour, labels: hourLabels, tooltipLabels: hourTooltipLabels, highlightIndex: stats.mostActiveHour, accentColor: blueAccent),
-                    footer: '${controller.tr('ui_usage_most_active_hour')} · $mostHour',
-                  ),
-                ),
-                SizedBox(
-                  width: blockWidth,
-                  child: _dashboardPanel(
-                    title: controller.tr('ui_usage_opened_by_weekday'),
-                    icon: Icons.calendar_today_outlined,
-                    child: _barChart(
-                      data: stats.openedByWeekday,
-                      labels: weekdayLabels,
-                      tooltipLabels: weekdayLabels,
-                      highlightIndex: stats.mostActiveDay,
-                      accentColor: appPanelAccent,
-                    ),
-                    footer: '${controller.tr('ui_usage_most_active_day')} · $mostDay',
-                  ),
-                ),
-              ],
+            return SizedBox(
+              width: width,
+              child: _dashboardPanel(
+                title: controller.tr('ui_usage_opened_by_day'),
+                icon: Icons.calendar_today_outlined,
+                child: _dailyHeatmap(data: stats.openedByDay, accentColor: greenAccent),
+                height: heatmapPanelHeight,
+                childAlignment: Alignment.center,
+              ),
             );
           },
         ),
@@ -1022,12 +926,26 @@ class _WoxSettingUsageViewState extends State<WoxSettingUsageView> {
   }
 }
 
-class _UsageTrend {
-  const _UsageTrend({required this.label, required this.color, required this.icon});
+class _UsageHeatmapDay {
+  const _UsageHeatmapDay({required this.date, required this.count});
 
-  final String label;
-  final Color color;
-  final IconData icon;
+  final DateTime date;
+  final int count;
+}
+
+class _HeatmapMonthLabel {
+  const _HeatmapMonthLabel({required this.left, required this.text});
+
+  final double left;
+  final String text;
+}
+
+class _HeatmapThresholds {
+  const _HeatmapThresholds({required this.low, required this.medium, required this.high});
+
+  final int low;
+  final int medium;
+  final int high;
 }
 
 class _UsagePeriodOption {

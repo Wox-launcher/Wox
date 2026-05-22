@@ -41,11 +41,14 @@ typedef struct {
     unsigned char* tooltipIconData;
     int tooltipIconLen;
     float tooltipIconSize;
+    bool showCopyButton;
+    char* copyButtonTooltip;
+    char* copyButtonSuccessTooltip;
 } OverlayOptions;
 
 void ShowOverlay(OverlayOptions opts);
 void CloseOverlay(char* name);
-void overlayClickCallbackCGO(char* name);
+bool overlayClickCallbackCGO(char* name);
 */
 import "C"
 import (
@@ -56,7 +59,7 @@ import (
 	"unsafe"
 )
 
-var clickCallbacks = make(map[string]func())
+var clickCallbacks = make(map[string]func() bool)
 var clickCallbacksMu sync.RWMutex
 
 func Show(opts OverlayOptions) {
@@ -80,6 +83,12 @@ func Show(opts OverlayOptions) {
 
 	cTooltip := C.CString(opts.Tooltip)
 	defer C.free(unsafe.Pointer(cTooltip))
+
+	cCopyButtonTooltip := C.CString(opts.CopyButtonTooltip)
+	defer C.free(unsafe.Pointer(cCopyButtonTooltip))
+
+	cCopyButtonSuccessTooltip := C.CString(opts.CopyButtonSuccessTooltip)
+	defer C.free(unsafe.Pointer(cCopyButtonSuccessTooltip))
 
 	var cIconData *C.uchar
 	var cIconLen C.int
@@ -109,40 +118,43 @@ func Show(opts OverlayOptions) {
 	}
 
 	cOpts := C.OverlayOptions{
-		name:             cName,
-		title:            cTitle,
-		message:          cMessage,
-		iconData:         cIconData,
-		iconLen:          cIconLen,
-		iconFilePath:     cIconFilePath,
-		transparent:      C.bool(opts.Transparent),
-		hitTestIconOnly:  C.bool(opts.HitTestIconOnly),
-		iconX:            C.float(opts.IconX),
-		iconY:            C.float(opts.IconY),
-		iconWidth:        C.float(opts.IconWidth),
-		iconHeight:       C.float(opts.IconHeight),
-		closable:         C.bool(opts.Closable),
-		closeOnEscape:    C.bool(opts.CloseOnEscape),
-		loading:          C.bool(opts.Loading),
-		topmost:          C.bool(opts.Topmost),
-		absolutePosition: C.bool(opts.AbsolutePosition),
-		stickyWindowPid:  C.int(opts.StickyWindowPid),
-		anchor:           C.int(opts.Anchor),
-		autoCloseSeconds: C.int(opts.AutoCloseSeconds),
-		movable:          C.bool(opts.Movable),
-		resizable:        C.bool(opts.Resizable),
-		cornerRadius:     C.float(opts.CornerRadius),
-		aspectRatio:      C.float(opts.AspectRatio),
-		offsetX:          C.float(opts.OffsetX),
-		offsetY:          C.float(opts.OffsetY),
-		width:            C.float(opts.Width),
-		height:           C.float(opts.Height),
-		fontSize:         C.float(opts.FontSize),
-		iconSize:         C.float(opts.IconSize),
-		tooltip:          cTooltip,
-		tooltipIconData:  cTooltipIconData,
-		tooltipIconLen:   cTooltipIconLen,
-		tooltipIconSize:  C.float(opts.TooltipIconSize),
+		name:                     cName,
+		title:                    cTitle,
+		message:                  cMessage,
+		iconData:                 cIconData,
+		iconLen:                  cIconLen,
+		iconFilePath:             cIconFilePath,
+		transparent:              C.bool(opts.Transparent),
+		hitTestIconOnly:          C.bool(opts.HitTestIconOnly),
+		iconX:                    C.float(opts.IconX),
+		iconY:                    C.float(opts.IconY),
+		iconWidth:                C.float(opts.IconWidth),
+		iconHeight:               C.float(opts.IconHeight),
+		closable:                 C.bool(opts.Closable),
+		closeOnEscape:            C.bool(opts.CloseOnEscape),
+		loading:                  C.bool(opts.Loading),
+		topmost:                  C.bool(opts.Topmost),
+		absolutePosition:         C.bool(opts.AbsolutePosition),
+		stickyWindowPid:          C.int(opts.StickyWindowPid),
+		anchor:                   C.int(opts.Anchor),
+		autoCloseSeconds:         C.int(opts.AutoCloseSeconds),
+		movable:                  C.bool(opts.Movable),
+		resizable:                C.bool(opts.Resizable),
+		cornerRadius:             C.float(opts.CornerRadius),
+		aspectRatio:              C.float(opts.AspectRatio),
+		offsetX:                  C.float(opts.OffsetX),
+		offsetY:                  C.float(opts.OffsetY),
+		width:                    C.float(opts.Width),
+		height:                   C.float(opts.Height),
+		fontSize:                 C.float(opts.FontSize),
+		iconSize:                 C.float(opts.IconSize),
+		tooltip:                  cTooltip,
+		tooltipIconData:          cTooltipIconData,
+		tooltipIconLen:           cTooltipIconLen,
+		tooltipIconSize:          C.float(opts.TooltipIconSize),
+		showCopyButton:           C.bool(opts.ShowCopyButton),
+		copyButtonTooltip:        cCopyButtonTooltip,
+		copyButtonSuccessTooltip: cCopyButtonSuccessTooltip,
 	}
 
 	C.ShowOverlay(cOpts)
@@ -158,14 +170,15 @@ func Close(name string) {
 }
 
 //export overlayClickCallbackCGO
-func overlayClickCallbackCGO(cName *C.char) {
+func overlayClickCallbackCGO(cName *C.char) C.bool {
 	name := C.GoString(cName)
 	clickCallbacksMu.RLock()
 	cb, ok := clickCallbacks[name]
 	clickCallbacksMu.RUnlock()
 	if ok {
-		cb()
+		return C.bool(cb())
 	}
+	return C.bool(false)
 }
 
 func imageToPNG(img image.Image) ([]byte, error) {
