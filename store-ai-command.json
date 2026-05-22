@@ -1,14 +1,84 @@
 [
-    {
-        "Name": "Translate English to Chinese",
-        "Author": "qianlifeng",
-        "Command": "translate",
-        "Prompt": "请将以下英文翻译为中文，不要输出任何与译文无关的解释：\n%s"
+  {
+    "Id": "translate-to-chinese",
+    "Category": "translation",
+    "Name": "i18n:name_translate_to_chinese",
+    "Description": "i18n:desc_translate_to_chinese",
+    "Author": "Wox Launcher",
+    "Command": "translate",
+    "Prompt": "i18n:prompt_translate_to_chinese",
+    "DefaultAction": "run_and_paste",
+    "Vision": false,
+    "RecommendedQueryHotkey": {
+      "Hotkey": "ctrl+shift+t",
+      "Query": "ai translate {wox:selected_text}",
+      "HideQueryBox": true,
+      "HideToolbar": true,
+      "IsSilentExecution": true,
+      "Position": "system_default"
     },
-    {
-        "Name": "TLDR",
-        "Author": "qianlifeng",
-        "Command": "tldr",
-        "Prompt": "Extract all facts from the text and summarize it in all relevant aspects in up to seven bullet points and a 1-liner summary. Pick a good matching emoji for every bullet point. And replay in chinese, thx.\nText: %s\nSummary:"
+    "I18n": {
+      "en_US": {
+        "name_translate_to_chinese": "Translate to Chinese",
+        "desc_translate_to_chinese": "Translate selected text into Chinese.",
+        "prompt_translate_to_chinese": "Translate the following text into Chinese. Return only the translation:\n{wox:input_text}"
+      },
+      "zh_CN": {
+        "name_translate_to_chinese": "翻译为中文",
+        "desc_translate_to_chinese": "把选中的文本翻译成中文。",
+        "prompt_translate_to_chinese": "请将以下内容翻译为中文，不要输出任何与译文无关的解释：\n{wox:input_text}"
+      },
+      "pt_BR": {
+        "name_translate_to_chinese": "Traduzir para chines",
+        "desc_translate_to_chinese": "Traduz o texto selecionado para chines.",
+        "prompt_translate_to_chinese": "Traduza o texto a seguir para chines. Retorne apenas a traducao:\n{wox:input_text}"
+      },
+      "ru_RU": {
+        "name_translate_to_chinese": "Перевести на китайский",
+        "desc_translate_to_chinese": "Переводит выделенный текст на китайский.",
+        "prompt_translate_to_chinese": "Переведи следующий текст на китайский. Верни только перевод:\n{wox:input_text}"
+      }
     }
+  },
+  {
+    "Id": "summarize-selection",
+    "Category": "summary",
+    "Name": "i18n:name_summarize_selection",
+    "Description": "i18n:desc_summarize_selection",
+    "Author": "Wox Launcher",
+    "Command": "summarize",
+    "Prompt": "i18n:prompt_summarize_selection",
+    "DefaultAction": "run",
+    "Vision": false,
+    "RecommendedQueryHotkey": {
+      "Hotkey": "ctrl+shift+s",
+      "Query": "ai summarize {wox:selected_text}",
+      "HideQueryBox": false,
+      "HideToolbar": false,
+      "IsSilentExecution": false,
+      "Position": "system_default"
+    },
+    "I18n": {
+      "en_US": {
+        "name_summarize_selection": "Summarize Selection",
+        "desc_summarize_selection": "Summarize selected text into concise bullet points.",
+        "prompt_summarize_selection": "Extract the important facts from the following text. Return up to seven bullet points and a one-line summary:\n{wox:input_text}"
+      },
+      "zh_CN": {
+        "name_summarize_selection": "总结选中文本",
+        "desc_summarize_selection": "把选中的长文本总结成简洁要点。",
+        "prompt_summarize_selection": "请提取以下文本中的重要事实，最多输出七个要点和一句话总结：\n{wox:input_text}"
+      },
+      "pt_BR": {
+        "name_summarize_selection": "Resumir selecao",
+        "desc_summarize_selection": "Resume o texto selecionado em pontos concisos.",
+        "prompt_summarize_selection": "Extraia os fatos importantes do texto a seguir. Retorne ate sete pontos e um resumo em uma linha:\n{wox:input_text}"
+      },
+      "ru_RU": {
+        "name_summarize_selection": "Кратко изложить выделенное",
+        "desc_summarize_selection": "Сводит выделенный текст к кратким пунктам.",
+        "prompt_summarize_selection": "Извлеки важные факты из следующего текста. Верни до семи пунктов и краткое резюме в одну строку:\n{wox:input_text}"
+      }
+    }
+  }
 ]
