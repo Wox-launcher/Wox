@@ -47,6 +47,9 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
   final ScrollController horizontalBodyScrollController = ScrollController();
   final ScrollController verticalBodyScrollController = ScrollController();
   final ScrollController verticalPinnedBodyScrollController = ScrollController();
+  final Map<String, Future<String>> _aiModelStatusFutures = <String, Future<String>>{};
+  final Map<String, Object> _aiModelStatusErrors = <String, Object>{};
+  final Set<String> _aiModelStatusSuccessKeys = <String>{};
 
   WoxSettingPluginTable({
     super.key,
@@ -147,6 +150,22 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     }
 
     return null;
+  }
+
+  Future<String> getAIModelStatusFuture({required String cacheKey, required String providerName, required String apiKey, required String host}) {
+    // Keep ping futures stable across hover-triggered table rebuilds so finished status dots do not flash back to the waiting state.
+    return _aiModelStatusFutures.putIfAbsent(cacheKey, () async {
+      try {
+        final result = await WoxApi.instance.pingAIModel(const UuidV4().generate(), providerName, apiKey, host);
+        _aiModelStatusErrors.remove(cacheKey);
+        _aiModelStatusSuccessKeys.add(cacheKey);
+        return result;
+      } catch (error) {
+        _aiModelStatusSuccessKeys.remove(cacheKey);
+        _aiModelStatusErrors[cacheKey] = error;
+        rethrow;
+      }
+    });
   }
 
   PluginSettingValueTableColumn buildOperationColumnDefinition() {
@@ -421,11 +440,25 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     }
     if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeAIModelStatus) {
       var providerName = row["Name"] ?? "";
-      var modelName = row["ApiKey"] ?? "";
+      var apiKey = row["ApiKey"] ?? "";
       var host = row["Host"] ?? "";
+      final statusCacheKey = json.encode([providerName, apiKey, host]);
+
+      if (_aiModelStatusErrors.containsKey(statusCacheKey)) {
+        return columnWidth(
+          column: column,
+          isHeader: false,
+          isOperation: false,
+          child: WoxTooltip(message: _aiModelStatusErrors[statusCacheKey]?.toString() ?? "", child: const Icon(Icons.circle, color: Colors.red)),
+        );
+      }
+
+      if (_aiModelStatusSuccessKeys.contains(statusCacheKey)) {
+        return columnWidth(column: column, isHeader: false, isOperation: false, child: const Icon(Icons.circle, color: Colors.green));
+      }
 
       return FutureBuilder<String>(
-        future: WoxApi.instance.pingAIModel(const UuidV4().generate(), providerName, modelName, host),
+        future: getAIModelStatusFuture(cacheKey: statusCacheKey, providerName: providerName, apiKey: apiKey, host: host),
         builder: (context, snapshot) {
           return columnWidth(
             column: column,

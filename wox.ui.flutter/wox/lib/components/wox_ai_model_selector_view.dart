@@ -2,8 +2,6 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:uuid/v4.dart';
-import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_dropdown_button.dart';
 import 'package:wox/components/wox_image_view.dart';
@@ -76,9 +74,9 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
     setState(() => _isLoading = true);
 
     try {
-      final results = await Future.wait([WoxApi.instance.findAIModels(const UuidV4().generate()), WoxApi.instance.findAIProviders(const UuidV4().generate())]);
-      allModels = results[0] as List<AIModel>;
-      allProviders = results[1] as List<AIProviderInfo>;
+      final resources = await Get.find<WoxSettingController>().loadAIModelSelectorResources();
+      allModels = resources.models;
+      allProviders = resources.providers;
       providerIcons = {for (final provider in allProviders) provider.name: provider.icon};
 
       // Extract unique providers

@@ -15,9 +15,11 @@ import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_textbox.dart';
 import 'package:wox/entity/wox_backup.dart';
 import 'package:wox/entity/wox_glance.dart';
+import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/entity/wox_plugin_setting.dart';
 import 'package:wox/entity/wox_runtime_status.dart';
+import 'package:wox/entity/wox_setting.dart';
 import 'package:wox/entity/wox_setting_search.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/entity/wox_usage_stats.dart';
@@ -108,6 +110,8 @@ class WoxSettingController extends GetxController {
   final Map<String, GlobalKey> builtInSettingKeys = <String, GlobalKey>{};
   final Map<String, GlobalKey> pluginSettingItemKeys = <String, GlobalKey>{};
   final RxnInt pendingTrayQueryEditRowIndex = RxnInt();
+  Future<WoxAIModelSelectorResources>? _aiModelSelectorResourcesFuture;
+  WoxAIModelSelectorResources? _aiModelSelectorResources;
   bool _hasPreloadedSettingViewData = false;
   String _pendingGeneralSectionAnchor = '';
   String _pendingBuiltInSettingKey = '';
@@ -146,6 +150,54 @@ class WoxSettingController extends GetxController {
     unawaited(refreshRuntimeStatuses());
     unawaited(refreshUsageStats());
     unawaited(reloadPlugins(traceId));
+    unawaited(loadAIModelSelectorResources(traceId: traceId, forceRefresh: forceRefresh));
+  }
+
+  /// Loads and caches AI model selector data for the current settings session.
+  Future<WoxAIModelSelectorResources> loadAIModelSelectorResources({String? traceId, bool forceRefresh = false}) async {
+    if (forceRefresh && _aiModelSelectorResources == null) {
+      final running = _aiModelSelectorResourcesFuture;
+      if (running != null) {
+        return running;
+      }
+    }
+
+    if (!forceRefresh) {
+      final cached = _aiModelSelectorResources;
+      if (cached != null) {
+        return cached;
+      }
+
+      final running = _aiModelSelectorResourcesFuture;
+      if (running != null) {
+        return running;
+      }
+    }
+
+    final effectiveTraceId = traceId ?? const UuidV4().generate();
+    final future = _fetchAIModelSelectorResources(effectiveTraceId);
+    _aiModelSelectorResourcesFuture = future;
+
+    try {
+      final resources = await future;
+      _aiModelSelectorResources = resources;
+      return resources;
+    } finally {
+      if (identical(_aiModelSelectorResourcesFuture, future)) {
+        _aiModelSelectorResourcesFuture = null;
+      }
+    }
+  }
+
+  /// Clears stale AI model selector data before the next provider-driven refresh.
+  void invalidateAIModelSelectorResources() {
+    _aiModelSelectorResources = null;
+    _aiModelSelectorResourcesFuture = null;
+  }
+
+  Future<WoxAIModelSelectorResources> _fetchAIModelSelectorResources(String traceId) async {
+    final results = await Future.wait([WoxApi.instance.findAIModels(traceId), WoxApi.instance.findAIProviders(traceId)]);
+    return WoxAIModelSelectorResources(models: results[0] as List<AIModel>, providers: results[1] as List<AIProviderInfo>);
   }
 
   GlobalKey getGeneralSectionKey(String sectionId) {
@@ -800,6 +852,11 @@ class WoxSettingController extends GetxController {
     await WoxApi.instance.updateSetting(traceId, key, value);
     await reloadSetting(traceId);
     Logger.instance.info(traceId, 'Setting updated: $key=$value');
+
+    if (key == "AIProviders") {
+      invalidateAIModelSelectorResources();
+      unawaited(loadAIModelSelectorResources(traceId: traceId, forceRefresh: true));
+    }
 
     // If user switches to last_location, save current window position immediately
     if (key == "ShowPosition" && value == WoxPositionTypeEnum.POSITION_TYPE_LAST_LOCATION.code) {
@@ -1820,6 +1877,13 @@ class WoxSettingController extends GetxController {
     settingSearchResultScrollController.dispose();
     super.onClose();
   }
+}
+
+class WoxAIModelSelectorResources {
+  final List<AIModel> models;
+  final List<AIProviderInfo> providers;
+
+  const WoxAIModelSelectorResources({required this.models, required this.providers});
 }
 
 class _GeneralSectionFocusRequest {
