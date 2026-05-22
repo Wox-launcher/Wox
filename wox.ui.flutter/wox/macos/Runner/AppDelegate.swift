@@ -276,6 +276,32 @@ private struct CachedDisplayCapture {
   let image: CGImage
 }
 
+private enum DisplaySnapshotImagePayloadMode {
+  case none
+  case base64
+  case filePath
+
+  var includesImagePayload: Bool {
+    switch self {
+    case .none:
+      return false
+    case .base64, .filePath:
+      return true
+    }
+  }
+
+  var logName: String {
+    switch self {
+    case .none:
+      return "none"
+    case .base64:
+      return "base64"
+    case .filePath:
+      return "file"
+    }
+  }
+}
+
 private struct NativeSelectionOverlayResult {
   let selection: NSRect?
   let editorVisibleBounds: NSRect?
@@ -1683,6 +1709,7 @@ class AppDelegate: FlutterAppDelegate {
 
   private func dismissCaptureWorkspacePresentation(on window: NSWindow) {
     dismissScrollingCaptureOverlay()
+    cachedDisplayCaptures.removeAll()
     guard let savedState = screenshotPresentationState else {
       isCapturePresentationActive = false
       captureWorkspaceBounds = .zero
@@ -1772,11 +1799,11 @@ class AppDelegate: FlutterAppDelegate {
 
   private func buildDisplaySnapshotPayload(
     capture: CachedDisplayCapture,
-    includeImageBytes: Bool,
+    imagePayloadMode: DisplaySnapshotImagePayloadMode,
     logicalSelection: NSRect? = nil
   ) throws -> [String: Any] {
     let payloadStart = Date()
-    let payloadCapture = try payloadCaptureForSelection(capture, logicalSelection: includeImageBytes ? logicalSelection : nil)
+    let payloadCapture = try payloadCaptureForSelection(capture, logicalSelection: imagePayloadMode.includesImagePayload ? logicalSelection : nil)
     var payload: [String: Any] = [
       "displayId": payloadCapture.displayId,
       "logicalBounds": [
@@ -1795,33 +1822,44 @@ class AppDelegate: FlutterAppDelegate {
       "rotation": payloadCapture.rotation,
     ]
 
-    if includeImageBytes {
+    if imagePayloadMode.includesImagePayload {
       let encodeStart = Date()
       let bitmap = NSBitmapImageRep(cgImage: payloadCapture.image)
       guard let pngData = bitmap.representation(using: .png, properties: [:]) else {
         throw DisplayCaptureError(code: "capture_failed", message: "Failed to encode macOS display image", details: nil)
       }
-      payload["imageBytesBase64"] = pngData.base64EncodedString()
-      logScrollingCaptureTiming("event=native_payload_encode_done displayId=\(payloadCapture.displayId) logical=\(formatTimingRect(payloadCapture.logicalBounds)) pixel=\(payloadCapture.image.width)x\(payloadCapture.image.height) cropped=\(logicalSelection != nil) elapsedMs=\(elapsedMilliseconds(since: encodeStart))")
+      switch imagePayloadMode {
+      case .base64:
+        payload["imageBytesBase64"] = pngData.base64EncodedString()
+      case .filePath:
+        // Match the Windows deferred hydration path: keep MethodChannel payloads tiny and let Dart
+        // load the PNG from disk only when it is preparing a visible annotation frame.
+        let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent("wox-\(UUID().uuidString).png")
+        try pngData.write(to: fileURL, options: .atomic)
+        payload["imageFilePath"] = fileURL.path
+      case .none:
+        break
+      }
+      logScrollingCaptureTiming("event=native_payload_encode_done displayId=\(payloadCapture.displayId) payloadMode=\(imagePayloadMode.logName) logical=\(formatTimingRect(payloadCapture.logicalBounds)) pixel=\(payloadCapture.image.width)x\(payloadCapture.image.height) cropped=\(logicalSelection != nil) elapsedMs=\(elapsedMilliseconds(since: encodeStart))")
     }
 
-    logScrollingCaptureTiming("event=native_payload_done displayId=\(payloadCapture.displayId) includeImageBytes=\(includeImageBytes) logical=\(formatTimingRect(payloadCapture.logicalBounds)) pixel=\(payloadCapture.image.width)x\(payloadCapture.image.height) cropped=\(logicalSelection != nil) elapsedMs=\(elapsedMilliseconds(since: payloadStart))")
+    logScrollingCaptureTiming("event=native_payload_done displayId=\(payloadCapture.displayId) payloadMode=\(imagePayloadMode.logName) logical=\(formatTimingRect(payloadCapture.logicalBounds)) pixel=\(payloadCapture.image.width)x\(payloadCapture.image.height) cropped=\(logicalSelection != nil) elapsedMs=\(elapsedMilliseconds(since: payloadStart))")
     return payload
   }
 
   private func buildDisplaySnapshotPayloads(
     captures: [CachedDisplayCapture],
-    includeImageBytes: Bool,
+    imagePayloadMode: DisplaySnapshotImagePayloadMode,
     logicalSelection: NSRect? = nil
   ) throws -> [[String: Any]] {
     let payloadsStart = Date()
     let payloads = try captures.map { capture in
-      // The native overlay consumes cached CGImages directly, but Flutter only needs PNG/base64
+      // The native overlay consumes cached CGImages directly, but Flutter only needs PNG payloads
       // once it is about to reveal an annotation frame or export pixels. Building payloads on
       // demand keeps the overlay path off the slow serialization step that made screenshot startup lag.
-      try buildDisplaySnapshotPayload(capture: capture, includeImageBytes: includeImageBytes, logicalSelection: logicalSelection)
+      try buildDisplaySnapshotPayload(capture: capture, imagePayloadMode: imagePayloadMode, logicalSelection: logicalSelection)
     }
-    logScrollingCaptureTiming("event=native_payloads_done snapshotCount=\(captures.count) includeImageBytes=\(includeImageBytes) cropped=\(logicalSelection != nil) elapsedMs=\(elapsedMilliseconds(since: payloadsStart))")
+    logScrollingCaptureTiming("event=native_payloads_done snapshotCount=\(captures.count) payloadMode=\(imagePayloadMode.logName) cropped=\(logicalSelection != nil) elapsedMs=\(elapsedMilliseconds(since: payloadsStart))")
     return payloads
   }
 
@@ -2019,7 +2057,7 @@ class AppDelegate: FlutterAppDelegate {
   private func captureDisplayMetadata() async throws -> [[String: Any]] {
     let captures = try await captureDisplayCaptures()
     cachedDisplayCaptures = captures
-    return try buildDisplaySnapshotPayloads(captures: captures, includeImageBytes: false)
+    return try buildDisplaySnapshotPayloads(captures: captures, imagePayloadMode: .none)
   }
 
   private func loadDisplaySnapshots(displayIds: [String]) async throws -> [[String: Any]] {
@@ -2048,7 +2086,7 @@ class AppDelegate: FlutterAppDelegate {
       )
     }
 
-    return try buildDisplaySnapshotPayloads(captures: filteredCaptures, includeImageBytes: true)
+    return try buildDisplaySnapshotPayloads(captures: filteredCaptures, imagePayloadMode: .filePath)
   }
 
   private func captureAllDisplays(traceId: String? = nil, logicalSelection: NSRect? = nil) async throws -> [[String: Any]] {
@@ -2070,7 +2108,7 @@ class AppDelegate: FlutterAppDelegate {
     if logicalSelection == nil {
       cachedDisplayCaptures = captures
     }
-    let payloads = try buildDisplaySnapshotPayloads(captures: captures, includeImageBytes: true, logicalSelection: logicalSelection)
+    let payloads = try buildDisplaySnapshotPayloads(captures: captures, imagePayloadMode: .base64, logicalSelection: logicalSelection)
     logScrollingCaptureTiming("event=native_capture_all_displays_done snapshotCount=\(captures.count) selection=\(logicalSelection.map { formatTimingRect($0) } ?? "null") elapsedMs=\(elapsedMilliseconds(since: captureAllStart))")
     return payloads
   }

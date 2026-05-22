@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -314,7 +315,15 @@ class CaptureScreenshotResult {
 }
 
 class DisplaySnapshot {
-  DisplaySnapshot({required this.displayId, required this.logicalBounds, required this.pixelBounds, required this.scale, required this.rotation, this.imageBytesBase64 = ''});
+  DisplaySnapshot({
+    required this.displayId,
+    required this.logicalBounds,
+    required this.pixelBounds,
+    required this.scale,
+    required this.rotation,
+    this.imageBytesBase64 = '',
+    this.imageFilePath = '',
+  });
 
   final String displayId;
   final ScreenshotRect logicalBounds;
@@ -322,11 +331,11 @@ class DisplaySnapshot {
   final double scale;
   final int rotation;
   final String imageBytesBase64;
-  // The macOS screenshot flow now starts from metadata plus native CGImage overlays, then hydrates
-  // PNG/base64 bytes only for displays that Flutter actually needs to render or export. Snapshot
-  // models therefore need to represent "geometry ready, pixels deferred" instead of assuming every
-  // bridge response already includes image payloads.
-  bool get hasImageBytes => imageBytesBase64.isNotEmpty;
+  final String imageFilePath;
+  // Native screenshot flows start from metadata plus platform overlays, then hydrate PNG payloads
+  // only for displays Flutter actually renders or exports. Windows can provide that payload as a
+  // temp file path to avoid pushing large base64 strings through MethodChannel during prewarm.
+  bool get hasImageBytes => imageBytesBase64.isNotEmpty || imageFilePath.isNotEmpty;
 
   Uint8List? _cachedImageBytes;
   MemoryImage? _cachedImageProvider;
@@ -340,7 +349,30 @@ class DisplaySnapshot {
       throw StateError('Display snapshot $displayId does not have image bytes yet');
     }
 
-    return _cachedImageBytes ??= base64Decode(imageBytesBase64);
+    final cachedBytes = _cachedImageBytes;
+    if (cachedBytes != null) {
+      return cachedBytes;
+    }
+    if (imageBytesBase64.isNotEmpty) {
+      return _cachedImageBytes = base64Decode(imageBytesBase64);
+    }
+    return _cachedImageBytes = File(imageFilePath).readAsBytesSync();
+  }
+
+  // Load deferred snapshot pixels without forcing file-backed Windows payloads through sync IO.
+  Future<Uint8List> loadImageBytes() async {
+    if (!hasImageBytes) {
+      throw StateError('Display snapshot $displayId does not have image bytes yet');
+    }
+
+    final cachedBytes = _cachedImageBytes;
+    if (cachedBytes != null) {
+      return cachedBytes;
+    }
+    if (imageBytesBase64.isNotEmpty) {
+      return _cachedImageBytes = base64Decode(imageBytesBase64);
+    }
+    return _cachedImageBytes = await File(imageFilePath).readAsBytes();
   }
 
   MemoryImage get imageProvider {
@@ -358,6 +390,15 @@ class DisplaySnapshot {
     }
     _cachedImageProvider = null;
     _cachedImageBytes = null;
+    if (imageFilePath.isNotEmpty) {
+      unawaited(() async {
+        try {
+          await File(imageFilePath).delete();
+        } catch (_) {
+          // Copied snapshots can point at the same temp file; duplicate cleanup is harmless.
+        }
+      }());
+    }
   }
 
   factory DisplaySnapshot.fromJson(Map<String, dynamic> json) {
@@ -371,18 +412,25 @@ class DisplaySnapshot {
       scale: (json['scale'] ?? json['Scale'] ?? 1).toDouble(),
       rotation: (json['rotation'] ?? json['Rotation'] ?? 0) as int,
       imageBytesBase64: json['imageBytesBase64'] as String? ?? json['ImageBytesBase64'] as String? ?? '',
+      imageFilePath: json['imageFilePath'] as String? ?? json['ImageFilePath'] as String? ?? '',
     );
   }
 
-  DisplaySnapshot copyWith({ScreenshotRect? logicalBounds, ScreenshotRect? pixelBounds, double? scale, int? rotation, String? imageBytesBase64}) {
-    return DisplaySnapshot(
+  DisplaySnapshot copyWith({ScreenshotRect? logicalBounds, ScreenshotRect? pixelBounds, double? scale, int? rotation, String? imageBytesBase64, String? imageFilePath}) {
+    final next = DisplaySnapshot(
       displayId: displayId,
       logicalBounds: logicalBounds ?? this.logicalBounds,
       pixelBounds: pixelBounds ?? this.pixelBounds,
       scale: scale ?? this.scale,
       rotation: rotation ?? this.rotation,
       imageBytesBase64: imageBytesBase64 ?? this.imageBytesBase64,
+      imageFilePath: imageFilePath ?? this.imageFilePath,
     );
+    if (next.imageBytesBase64 == this.imageBytesBase64 && next.imageFilePath == this.imageFilePath) {
+      next._cachedImageBytes = _cachedImageBytes;
+      next._cachedImageProvider = _cachedImageProvider;
+    }
+    return next;
   }
 }
 

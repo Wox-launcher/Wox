@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -73,9 +74,12 @@ class WoxScreenshotController extends GetxController {
 
   final Map<String, ui.Image> _decodedImages = <String, ui.Image>{};
   final Map<String, Future<void>> _displayDecodeTasks = <String, Future<void>>{};
+  final Queue<String> _idleDisplayDecodeQueue = Queue<String>();
   List<DisplaySnapshot> _pendingRawSnapshots = const <DisplaySnapshot>[];
   final Map<String, DisplaySnapshot> _hydratedRawSnapshots = <String, DisplaySnapshot>{};
   final Map<String, Future<DisplaySnapshot>> _rawSnapshotHydrationTasks = <String, Future<DisplaySnapshot>>{};
+  Future<void>? _idleDisplayDecodeTask;
+  int _idleDisplayDecodeGeneration = 0;
   Rect? _nativeWorkspaceBounds;
   Rect? _activeNativeWorkspaceBounds;
   String? _preparedDisplayId;
@@ -310,9 +314,8 @@ class WoxScreenshotController extends GetxController {
 
     _pendingRawSnapshots = rawSnapshots;
     _nativeWorkspaceBounds = nativeWorkspaceBounds;
-    // macOS can prewarm while its native overlay tracks the display. Windows sends only one hint
-    // when the native overlay appears; drag-time hints were removed because they made PNG hydration
-    // contend with mouse feedback and caused a visible mid-drag pause.
+    // Windows prewarm now carries hydrated monitor pixels as a temp file path instead of a huge
+    // MethodChannel base64 string, so the native selector can prepare the toolbar path early again.
     _acceptSelectionDisplayHints = Platform.isMacOS || Platform.isWindows;
     final previousSelectionDisplayHintSubscription = _selectionDisplayHintSubscription;
     if (previousSelectionDisplayHintSubscription != null) {
@@ -610,11 +613,7 @@ class WoxScreenshotController extends GetxController {
       final selectionForRefresh = selectionRect;
       if (selectionForRefresh != null) {
         final direction = _scrollingCaptureDirectionFromDelta(event.deltaY);
-        _logScrollingCaptureTiming(traceId, 'native_wheel_event', {
-          'deltaY': event.deltaY,
-          'rawDeltaY': event.rawDeltaY,
-          'direction': _scrollingCaptureDirectionName(direction),
-        });
+        _logScrollingCaptureTiming(traceId, 'native_wheel_event', {'deltaY': event.deltaY, 'rawDeltaY': event.rawDeltaY, 'direction': _scrollingCaptureDirectionName(direction)});
         _scheduleScrollingCaptureFrame(traceId, selectionForRefresh, direction);
       }
     });
@@ -1106,7 +1105,8 @@ class WoxScreenshotController extends GetxController {
           continue;
         }
 
-        final codec = await ui.instantiateImageCodec(snapshot.imageBytes);
+        final imageBytes = await snapshot.loadImageBytes();
+        final codec = await ui.instantiateImageCodec(imageBytes);
         final frame = await codec.getNextFrame();
         decodedImages[snapshot.displayId] = frame.image;
       }
@@ -1465,11 +1465,13 @@ class WoxScreenshotController extends GetxController {
   }
 
   void _resetSessionState() {
+    // Invalidate in-flight hydrate/decode work before releasing caches so late async completions
+    // cannot repopulate image maps or keep temp PNG files alive after the screenshot finishes.
+    _captureSessionRevision += 1;
+    isSessionActive.value = false;
     _savedWindowState = null;
     _activeRequest = null;
-    for (final snapshot in displaySnapshots) {
-      snapshot.releaseImageCache();
-    }
+    _releaseSnapshotImageCaches(displaySnapshots);
     _clearNativePreparationState();
     _disposeScrollingCaptureFrames();
     isScrollingCaptureUpdating.value = false;
@@ -1486,7 +1488,6 @@ class WoxScreenshotController extends GetxController {
     virtualBounds.value = null;
     workspaceScale.value = 1;
     stage.value = ScreenshotSessionStage.idle;
-    isSessionActive.value = false;
     _disposeDecodedImages();
   }
 
@@ -1534,14 +1535,14 @@ class WoxScreenshotController extends GetxController {
   List<DisplaySnapshot> _mergeHydratedSnapshotBytes(List<DisplaySnapshot> snapshots) {
     return snapshots.map((snapshot) {
       final hydrated = _hydratedRawSnapshots[snapshot.displayId];
-      if (hydrated == null || !hydrated.hasImageBytes || snapshot.imageBytesBase64 == hydrated.imageBytesBase64) {
+      if (hydrated == null || !hydrated.hasImageBytes || (snapshot.imageBytesBase64 == hydrated.imageBytesBase64 && snapshot.imageFilePath == hydrated.imageFilePath)) {
         return snapshot;
       }
 
       // Native selection now prewarms only the displays that are likely to be shown next.
-      // Merge hydrated bytes back into the normalized snapshot list by display id so the visible
+      // Merge hydrated payloads back into the normalized snapshot list by display id so the visible
       // workspace and later export both reuse the deferred payloads without rebuilding geometry.
-      return snapshot.copyWith(imageBytesBase64: hydrated.imageBytesBase64);
+      return snapshot.copyWith(imageBytesBase64: hydrated.imageBytesBase64, imageFilePath: hydrated.imageFilePath);
     }).toList();
   }
 
@@ -1582,10 +1583,13 @@ class WoxScreenshotController extends GetxController {
         scale: loadedSnapshot.scale,
         rotation: loadedSnapshot.rotation,
         imageBytesBase64: loadedSnapshot.imageBytesBase64,
+        imageFilePath: loadedSnapshot.imageFilePath,
       );
 
-      if (sessionRevision == _captureSessionRevision && _sessionCompleter != null && !_sessionCompleter!.isCompleted) {
+      if (_isActiveCaptureSessionRevision(sessionRevision)) {
         _hydratedRawSnapshots[displayId] = hydratedSnapshot;
+      } else {
+        hydratedSnapshot.releaseImageCache();
       }
       return hydratedSnapshot;
     }().whenComplete(() {
@@ -1606,10 +1610,17 @@ class WoxScreenshotController extends GetxController {
     final requestedDisplayIds = displayIds.toSet().toList();
     final pendingDisplayIds = <String>[];
     final resolvedSnapshots = <String, DisplaySnapshot>{};
+    final pendingTasks = <String, Future<DisplaySnapshot>>{};
     for (final displayId in requestedDisplayIds) {
       final hydratedSnapshot = _hydratedRawSnapshots[displayId];
       if (hydratedSnapshot != null && hydratedSnapshot.hasImageBytes) {
         resolvedSnapshots[displayId] = hydratedSnapshot;
+        continue;
+      }
+
+      final existingTask = _rawSnapshotHydrationTasks[displayId];
+      if (existingTask != null) {
+        pendingTasks[displayId] = existingTask;
         continue;
       }
 
@@ -1618,44 +1629,94 @@ class WoxScreenshotController extends GetxController {
 
     if (pendingDisplayIds.isNotEmpty) {
       final sessionRevision = _captureSessionRevision;
-      final loadedSnapshots = await ScreenshotPlatformBridge.instance.loadDisplaySnapshots(pendingDisplayIds);
-      final loadedSnapshotMap = <String, DisplaySnapshot>{};
-      for (final loadedSnapshot in loadedSnapshots) {
-        loadedSnapshotMap[loadedSnapshot.displayId] = loadedSnapshot;
+      final pendingRawSnapshotMap = <String, DisplaySnapshot>{};
+      for (final displayId in pendingDisplayIds) {
+        pendingRawSnapshotMap[displayId] = _rawSnapshotForDisplayId(displayId);
       }
 
-      // The original hydration path called the native bridge once per monitor. Batch-loading keeps
-      // the metadata-first startup useful on Windows and Linux by collapsing those repeated method
-      // channel round-trips into one payload fetch while still updating the per-display cache.
+      late final Future<Map<String, DisplaySnapshot>> batchTask;
+      batchTask = () async {
+        final loadedSnapshots = await ScreenshotPlatformBridge.instance.loadDisplaySnapshots(pendingDisplayIds);
+        final loadedSnapshotMap = <String, DisplaySnapshot>{};
+        for (final loadedSnapshot in loadedSnapshots) {
+          loadedSnapshotMap[loadedSnapshot.displayId] = loadedSnapshot;
+        }
+
+        final hydratedSnapshotMap = <String, DisplaySnapshot>{};
+        // The original hydration path called the native bridge once per monitor. Batch-loading keeps
+        // the metadata-first startup useful by collapsing repeated method channel round-trips while
+        // registering per-display futures so fast cross-monitor handoffs reuse the same native work.
+        for (final displayId in pendingDisplayIds) {
+          final loadedSnapshot = loadedSnapshotMap[displayId];
+          if (loadedSnapshot == null) {
+            _releaseSnapshotImageCaches(loadedSnapshots);
+            throw StateError('Display snapshot $displayId could not be hydrated');
+          }
+
+          final rawSnapshot = pendingRawSnapshotMap[displayId]!;
+          final hydratedSnapshot = rawSnapshot.copyWith(
+            logicalBounds: loadedSnapshot.logicalBounds,
+            pixelBounds: loadedSnapshot.pixelBounds,
+            scale: loadedSnapshot.scale,
+            rotation: loadedSnapshot.rotation,
+            imageBytesBase64: loadedSnapshot.imageBytesBase64,
+            imageFilePath: loadedSnapshot.imageFilePath,
+          );
+
+          hydratedSnapshotMap[displayId] = hydratedSnapshot;
+          if (_isActiveCaptureSessionRevision(sessionRevision)) {
+            _hydratedRawSnapshots[displayId] = hydratedSnapshot;
+          } else {
+            hydratedSnapshot.releaseImageCache();
+          }
+        }
+
+        return hydratedSnapshotMap;
+      }();
+
       for (final displayId in pendingDisplayIds) {
-        final loadedSnapshot = loadedSnapshotMap[displayId];
-        if (loadedSnapshot == null) {
-          throw StateError('Display snapshot $displayId could not be hydrated');
-        }
-
-        final rawSnapshot = _rawSnapshotForDisplayId(displayId);
-        final hydratedSnapshot = rawSnapshot.copyWith(
-          logicalBounds: loadedSnapshot.logicalBounds,
-          pixelBounds: loadedSnapshot.pixelBounds,
-          scale: loadedSnapshot.scale,
-          rotation: loadedSnapshot.rotation,
-          imageBytesBase64: loadedSnapshot.imageBytesBase64,
-        );
-
-        resolvedSnapshots[displayId] = hydratedSnapshot;
-        if (sessionRevision == _captureSessionRevision && _sessionCompleter != null && !_sessionCompleter!.isCompleted) {
-          _hydratedRawSnapshots[displayId] = hydratedSnapshot;
-        }
+        late final Future<DisplaySnapshot> displayTask;
+        displayTask = batchTask
+            .then((hydratedSnapshotMap) {
+              final hydratedSnapshot = hydratedSnapshotMap[displayId];
+              if (hydratedSnapshot == null) {
+                throw StateError('Display snapshot $displayId could not be resolved');
+              }
+              return hydratedSnapshot;
+            })
+            .whenComplete(() {
+              if (_rawSnapshotHydrationTasks[displayId] == displayTask) {
+                _rawSnapshotHydrationTasks.remove(displayId);
+              }
+            });
+        _rawSnapshotHydrationTasks[displayId] = displayTask;
+        pendingTasks[displayId] = displayTask;
       }
     }
 
-    return displayIds.map((displayId) {
+    final resolvedInOrder = <DisplaySnapshot>[];
+    for (final displayId in displayIds) {
       final hydratedSnapshot = _hydratedRawSnapshots[displayId] ?? resolvedSnapshots[displayId];
-      if (hydratedSnapshot == null) {
-        throw StateError('Display snapshot $displayId could not be resolved');
+      if (hydratedSnapshot != null) {
+        resolvedInOrder.add(hydratedSnapshot);
+        continue;
       }
-      return hydratedSnapshot;
-    }).toList();
+
+      final pendingTask = pendingTasks[displayId] ?? _rawSnapshotHydrationTasks[displayId];
+      if (pendingTask != null) {
+        resolvedInOrder.add(await pendingTask);
+        continue;
+      }
+
+      final lateHydratedSnapshot = _hydratedRawSnapshots[displayId];
+      if (lateHydratedSnapshot != null) {
+        resolvedInOrder.add(lateHydratedSnapshot);
+        continue;
+      }
+
+      throw StateError('Display snapshot $displayId could not be resolved');
+    }
+    return resolvedInOrder;
   }
 
   Future<List<DisplaySnapshot>> _hydrateRawSnapshots(List<DisplaySnapshot> rawSnapshots) async {
@@ -1668,6 +1729,7 @@ class WoxScreenshotController extends GetxController {
   }
 
   Future<void> _ensureSelectionSnapshotsReady(Rect selection) async {
+    final sessionRevision = _captureSessionRevision;
     final snapshotsNeedingHydration =
         displaySnapshots.where((snapshot) {
           return !snapshot.hasImageBytes && !snapshot.logicalBounds.toRect().intersect(selection).isEmpty;
@@ -1677,6 +1739,11 @@ class WoxScreenshotController extends GetxController {
     }
 
     final hydratedSnapshots = await _hydrateRawSnapshotBatch(snapshotsNeedingHydration.map((snapshot) => snapshot.displayId).toList());
+    if (!_isActiveCaptureSessionRevision(sessionRevision)) {
+      _releaseSnapshotImageCaches(hydratedSnapshots);
+      return;
+    }
+
     for (final hydratedSnapshot in hydratedSnapshots) {
       DisplaySnapshot? currentSnapshot;
       for (final snapshot in displaySnapshots) {
@@ -1689,10 +1756,13 @@ class WoxScreenshotController extends GetxController {
         continue;
       }
 
-      await _ensureDisplayDecoded(currentSnapshot.copyWith(imageBytesBase64: hydratedSnapshot.imageBytesBase64));
+      await _ensureDisplayDecoded(
+        currentSnapshot.copyWith(imageBytesBase64: hydratedSnapshot.imageBytesBase64, imageFilePath: hydratedSnapshot.imageFilePath),
+        sessionRevision: sessionRevision,
+      );
     }
 
-    if (_sessionCompleter == null || _sessionCompleter!.isCompleted) {
+    if (!_isActiveCaptureSessionRevision(sessionRevision)) {
       return;
     }
 
@@ -1700,6 +1770,127 @@ class WoxScreenshotController extends GetxController {
     displaySnapshots.assignAll(mergedSnapshots);
     if (_preparedSnapshots != null) {
       _preparedSnapshots = _mergeHydratedSnapshotBytes(_preparedSnapshots!);
+    }
+  }
+
+  bool _isActiveCaptureSessionRevision(int sessionRevision) {
+    return isSessionActive.value && sessionRevision == _captureSessionRevision && _sessionCompleter != null && !_sessionCompleter!.isCompleted;
+  }
+
+  void _scheduleRemainingNativeDisplayPrewarm(String traceId, String priorityDisplayId) {
+    final remainingDisplayIds =
+        _pendingRawSnapshots.map((snapshot) => snapshot.displayId).where((displayId) {
+          return displayId != priorityDisplayId && !_decodedImages.containsKey(displayId);
+        }).toList();
+    if (remainingDisplayIds.isEmpty) {
+      return;
+    }
+
+    final sessionRevision = _captureSessionRevision;
+    unawaited(() async {
+      try {
+        final hydrateWatch = Stopwatch()..start();
+        final hydratedSnapshots = await _hydrateRawSnapshotBatch(remainingDisplayIds);
+        _logScreenshotTiming(traceId, 'native_hydrate_remaining_displays', {
+          'elapsedMs': hydrateWatch.elapsedMilliseconds,
+          'displayCount': hydratedSnapshots.length,
+          'priorityDisplayId': priorityDisplayId,
+        });
+
+        if (!_isActiveCaptureSessionRevision(sessionRevision)) {
+          _releaseSnapshotImageCaches(hydratedSnapshots);
+          return;
+        }
+
+        if (displaySnapshots.isNotEmpty) {
+          displaySnapshots.assignAll(_mergeHydratedSnapshotBytes(displaySnapshots.toList()));
+        }
+        if (_preparedSnapshots != null) {
+          _preparedSnapshots = _mergeHydratedSnapshotBytes(_preparedSnapshots!);
+        }
+        _scheduleIdleDisplayDecodes(traceId, hydratedSnapshots.map((snapshot) => snapshot.displayId), sessionRevision: sessionRevision, priorityDisplayId: priorityDisplayId);
+      } catch (error) {
+        if (_isActiveCaptureSessionRevision(sessionRevision)) {
+          Logger.instance.warn(traceId, 'Failed to prewarm remaining screenshot displays: $error');
+        }
+      }
+    }());
+  }
+
+  void _scheduleIdleDisplayDecodes(String traceId, Iterable<String> displayIds, {required int sessionRevision, required String priorityDisplayId}) {
+    for (final displayId in displayIds) {
+      if (displayId == priorityDisplayId || _decodedImages.containsKey(displayId) || _displayDecodeTasks.containsKey(displayId) || _idleDisplayDecodeQueue.contains(displayId)) {
+        continue;
+      }
+
+      final snapshot = _hydratedRawSnapshots[displayId];
+      if (snapshot == null || !snapshot.hasImageBytes) {
+        continue;
+      }
+
+      _idleDisplayDecodeQueue.add(displayId);
+    }
+
+    if (_idleDisplayDecodeQueue.isEmpty || _idleDisplayDecodeTask != null) {
+      return;
+    }
+
+    late final Future<void> decodeTask;
+    final decodeGeneration = _idleDisplayDecodeGeneration;
+    decodeTask = _runIdleDisplayDecodeQueue(traceId, sessionRevision, decodeGeneration).whenComplete(() {
+      if (_idleDisplayDecodeTask == decodeTask) {
+        _idleDisplayDecodeTask = null;
+      }
+    });
+    _idleDisplayDecodeTask = decodeTask;
+  }
+
+  Future<void> _runIdleDisplayDecodeQueue(String traceId, int sessionRevision, int decodeGeneration) async {
+    while (_idleDisplayDecodeQueue.isNotEmpty) {
+      if (decodeGeneration != _idleDisplayDecodeGeneration) {
+        return;
+      }
+
+      if (!_isActiveCaptureSessionRevision(sessionRevision)) {
+        if (decodeGeneration == _idleDisplayDecodeGeneration) {
+          _idleDisplayDecodeQueue.clear();
+        }
+        return;
+      }
+
+      final displayId = _idleDisplayDecodeQueue.removeFirst();
+      if (_decodedImages.containsKey(displayId)) {
+        continue;
+      }
+
+      final snapshot = _hydratedRawSnapshots[displayId];
+      if (snapshot == null || !snapshot.hasImageBytes) {
+        continue;
+      }
+
+      await WidgetsBinding.instance.endOfFrame;
+      if (decodeGeneration != _idleDisplayDecodeGeneration) {
+        return;
+      }
+
+      if (!_isActiveCaptureSessionRevision(sessionRevision)) {
+        if (decodeGeneration == _idleDisplayDecodeGeneration) {
+          _idleDisplayDecodeQueue.clear();
+        }
+        return;
+      }
+
+      try {
+        final decodeWatch = Stopwatch()..start();
+        await _ensureDisplayDecoded(snapshot, sessionRevision: sessionRevision);
+        if (_isActiveCaptureSessionRevision(sessionRevision)) {
+          _logScreenshotTiming(traceId, 'native_idle_decode_display', {'elapsedMs': decodeWatch.elapsedMilliseconds, 'displayId': displayId});
+        }
+      } catch (error) {
+        if (_isActiveCaptureSessionRevision(sessionRevision)) {
+          Logger.instance.warn(traceId, 'Failed to idle-decode screenshot display $displayId: $error');
+        }
+      }
     }
   }
 
@@ -1743,13 +1934,23 @@ class WoxScreenshotController extends GetxController {
       return;
     }
 
+    final sessionRevision = _captureSessionRevision;
     final revision = ++_preparedDisplayRevision;
     final prepareWatch = Stopwatch()..start();
     final presentation = await ScreenshotPlatformBridge.instance.prepareCaptureWorkspace(ScreenshotRect.fromRect(targetBounds));
+    if (!_isActiveCaptureSessionRevision(sessionRevision) || revision != _preparedDisplayRevision) {
+      return;
+    }
+
     _logScreenshotTiming(traceId, 'native_prepare_display', {'elapsedMs': prepareWatch.elapsedMilliseconds, 'displayId': targetDisplay.displayId, 'bounds': targetBounds});
     final hydrateWatch = Stopwatch()..start();
     await _ensureRawSnapshotHydrated(targetDisplay.displayId);
+    if (!_isActiveCaptureSessionRevision(sessionRevision) || revision != _preparedDisplayRevision) {
+      return;
+    }
+
     _logScreenshotTiming(traceId, 'native_hydrate_display', {'elapsedMs': hydrateWatch.elapsedMilliseconds, 'displayId': targetDisplay.displayId});
+    _scheduleRemainingNativeDisplayPrewarm(traceId, targetDisplay.displayId);
     var normalizedSnapshots = _normalizeSnapshotsForWorkspace(
       _pendingRawSnapshots,
       nativeWorkspaceBounds: targetBounds,
@@ -1770,21 +1971,22 @@ class WoxScreenshotController extends GetxController {
     }
 
     final decodeWatch = Stopwatch()..start();
-    await _ensureDisplayDecoded(preparedTargetSnapshot);
+    await _ensureDisplayDecoded(preparedTargetSnapshot, sessionRevision: sessionRevision);
     _logScreenshotTiming(traceId, 'native_decode_display', {'elapsedMs': decodeWatch.elapsedMilliseconds, 'displayId': targetDisplay.displayId});
 
-    if (revision != _preparedDisplayRevision || _sessionCompleter == null || _sessionCompleter!.isCompleted) {
+    if (revision != _preparedDisplayRevision || !_isActiveCaptureSessionRevision(sessionRevision)) {
       return;
     }
 
     // Mouse-up used to be the point where Flutter first learned which display would host the
     // annotation editor, so the first visible frame still had to decode and lay out the new
     // backdrop. Warming the hidden workspace here makes the reveal path effectively frame-only.
+    final latestPreparedSnapshots = _mergeHydratedSnapshotBytes(normalizedSnapshots);
     _preparedDisplayId = targetDisplay.displayId;
     _preparedDisplayBounds = targetBounds;
     _preparedPresentation = presentation;
-    _preparedSnapshots = normalizedSnapshots;
-    displaySnapshots.assignAll(normalizedSnapshots);
+    _preparedSnapshots = latestPreparedSnapshots;
+    displaySnapshots.assignAll(latestPreparedSnapshots);
     virtualBounds.value = ScreenshotRect.fromRect(presentation.workspaceBounds.toRect());
     workspaceScale.value = presentation.workspaceScale;
     stage.value = ScreenshotSessionStage.selecting;
@@ -1794,18 +1996,15 @@ class WoxScreenshotController extends GetxController {
     _acceptSelectionDisplayHints = false;
     _selectionDisplayHintSubscription?.cancel();
     _selectionDisplayHintSubscription = null;
-    for (final snapshot in _pendingRawSnapshots) {
-      snapshot.releaseImageCache();
-    }
-    for (final snapshot in _hydratedRawSnapshots.values) {
-      snapshot.releaseImageCache();
-    }
-    for (final snapshot in _preparedSnapshots ?? const <DisplaySnapshot>[]) {
-      snapshot.releaseImageCache();
-    }
+    _releaseSnapshotImageCaches(_pendingRawSnapshots);
+    _releaseSnapshotImageCaches(_hydratedRawSnapshots.values);
+    _releaseSnapshotImageCaches(_preparedSnapshots ?? const <DisplaySnapshot>[]);
     _pendingRawSnapshots = const <DisplaySnapshot>[];
     _hydratedRawSnapshots.clear();
     _rawSnapshotHydrationTasks.clear();
+    _idleDisplayDecodeQueue.clear();
+    _idleDisplayDecodeTask = null;
+    _idleDisplayDecodeGeneration += 1;
     _nativeWorkspaceBounds = null;
     _activeNativeWorkspaceBounds = null;
     _preparedDisplayId = null;
@@ -2201,16 +2400,26 @@ class WoxScreenshotController extends GetxController {
 
   Future<void> _decodeDisplayImages(List<DisplaySnapshot> snapshots) async {
     _disposeDecodedImages();
+    final sessionRevision = _captureSessionRevision;
     for (final snapshot in snapshots) {
       if (!snapshot.hasImageBytes) {
         continue;
       }
-      await _ensureDisplayDecoded(snapshot);
+      if (!_isActiveCaptureSessionRevision(sessionRevision)) {
+        snapshot.releaseImageCache();
+        return;
+      }
+      await _ensureDisplayDecoded(snapshot, sessionRevision: sessionRevision);
     }
   }
 
-  Future<void> _ensureDisplayDecoded(DisplaySnapshot snapshot) {
+  Future<void> _ensureDisplayDecoded(DisplaySnapshot snapshot, {int? sessionRevision}) {
     if (!snapshot.hasImageBytes) {
+      return Future<void>.value();
+    }
+
+    final decodeSessionRevision = sessionRevision ?? _captureSessionRevision;
+    if (!_isActiveCaptureSessionRevision(decodeSessionRevision)) {
       return Future<void>.value();
     }
 
@@ -2224,16 +2433,28 @@ class WoxScreenshotController extends GetxController {
       return existingTask;
     }
 
-    final decodeTask = _decodeDisplayImage(snapshot).whenComplete(() {
+    final decodeTask = _decodeDisplayImage(snapshot, sessionRevision: decodeSessionRevision).whenComplete(() {
       _displayDecodeTasks.remove(snapshot.displayId);
     });
     _displayDecodeTasks[snapshot.displayId] = decodeTask;
     return decodeTask;
   }
 
-  Future<void> _decodeDisplayImage(DisplaySnapshot snapshot) async {
-    final codec = await ui.instantiateImageCodec(snapshot.imageBytes);
+  Future<void> _decodeDisplayImage(DisplaySnapshot snapshot, {required int sessionRevision}) async {
+    final imageBytes = await snapshot.loadImageBytes();
+    if (!_isActiveCaptureSessionRevision(sessionRevision)) {
+      snapshot.releaseImageCache();
+      return;
+    }
+
+    final codec = await ui.instantiateImageCodec(imageBytes);
     final frame = await codec.getNextFrame();
+    if (!_isActiveCaptureSessionRevision(sessionRevision)) {
+      frame.image.dispose();
+      snapshot.releaseImageCache();
+      return;
+    }
+
     final previousImage = _decodedImages[snapshot.displayId];
     if (previousImage != null) {
       previousImage.dispose();
@@ -2247,6 +2468,15 @@ class WoxScreenshotController extends GetxController {
     }
     _decodedImages.clear();
     _displayDecodeTasks.clear();
+    _idleDisplayDecodeQueue.clear();
+    _idleDisplayDecodeTask = null;
+    _idleDisplayDecodeGeneration += 1;
+  }
+
+  void _releaseSnapshotImageCaches(Iterable<DisplaySnapshot> snapshots) {
+    for (final snapshot in snapshots) {
+      snapshot.releaseImageCache();
+    }
   }
 
   Rect _calculateUnionRect(List<Rect> rects) {
@@ -2320,6 +2550,8 @@ class WoxScreenshotController extends GetxController {
 
   @override
   void onClose() {
+    _captureSessionRevision += 1;
+    isSessionActive.value = false;
     _clearNativePreparationState();
     _disposeScrollingCaptureFrames();
     _disposeDecodedImages();

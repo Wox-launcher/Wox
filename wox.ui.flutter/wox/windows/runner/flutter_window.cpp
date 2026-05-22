@@ -47,8 +47,10 @@ static constexpr int kDwmCornerRound = 2;
 static constexpr UINT kScrollingCaptureWheelMessage = WM_APP + 0x51;
 static constexpr UINT kScreenshotSelectionDimRegionUpdateMessage = WM_APP + 0x52;
 static constexpr UINT kScreenshotSelectionHoverMoveMessage = WM_APP + 0x53;
+static constexpr UINT kScreenshotDisplaySnapshotPayloadReadyMessage = WM_APP + 0x54;
 static constexpr UINT_PTR kScreenshotSelectionHoverProbeTimerId = 0xA13;
 static constexpr UINT kScreenshotSelectionHoverProbeDelayMs = 60;
+static constexpr UINT kScreenshotSelectionStartupHoverProbeDelayMs = 1200;
 static constexpr wchar_t kScrollingCaptureOverlayWindowClassName[] = L"WoxScrollingCaptureOverlayWindow";
 static constexpr wchar_t kScreenshotSelectionInputWindowClassName[] = L"WoxScreenshotSelectionInputWindow";
 static constexpr wchar_t kScreenshotSelectionBorderWindowClassName[] = L"WoxScreenshotSelectionBorderWindow";
@@ -509,6 +511,46 @@ static bool EncodeBitmapToPngBase64(HBITMAP bitmap, std::string &png_base64, std
   GlobalUnlock(global);
   stream->Release();
   png_base64 = Base64Encode(copy);
+  return true;
+}
+
+// Write an HBITMAP to a temp PNG file so Dart receives only a small file-path payload.
+static bool SaveBitmapToTempPngFile(HBITMAP bitmap, std::string &png_file_path, std::string &error)
+{
+  CLSID png_clsid{};
+  if (!GetPngEncoderClsid(&png_clsid))
+  {
+    error = "Failed to find PNG encoder";
+    return false;
+  }
+
+  wchar_t temp_directory[MAX_PATH + 1]{};
+  const DWORD temp_directory_length = GetTempPathW(static_cast<DWORD>(_countof(temp_directory)), temp_directory);
+  if (temp_directory_length == 0 || temp_directory_length >= _countof(temp_directory))
+  {
+    error = "Failed to resolve temp directory for monitor PNG";
+    return false;
+  }
+
+  wchar_t temp_file_path[MAX_PATH + 1]{};
+  if (GetTempFileNameW(temp_directory, L"wox", 0, temp_file_path) == 0)
+  {
+    error = "Failed to create temp monitor PNG path";
+    return false;
+  }
+
+  // GDI+ writes the actual PNG bytes; remove the placeholder file created by GetTempFileNameW.
+  DeleteFileW(temp_file_path);
+  Gdiplus::Bitmap image(bitmap, nullptr);
+  const auto status = image.Save(temp_file_path, &png_clsid, nullptr);
+  if (status != Gdiplus::Ok)
+  {
+    DeleteFileW(temp_file_path);
+    error = "Failed to write monitor image PNG file";
+    return false;
+  }
+
+  png_file_path = Utf8FromUtf16(temp_file_path);
   return true;
 }
 
@@ -1565,6 +1607,39 @@ void FlutterWindow::ClearCachedDisplayCaptures()
   ReleaseDisplayCaptures(&cached_display_captures_);
 }
 
+// Clone cached HBITMAPs before async encoding so cache cleanup cannot race the worker thread.
+bool FlutterWindow::CloneDisplayCaptures(const std::vector<CachedDisplayCapture> &captures, std::vector<CachedDisplayCapture> *captures_out, std::string *error_out)
+{
+  if (captures_out == nullptr || error_out == nullptr)
+  {
+    return false;
+  }
+
+  captures_out->clear();
+  error_out->clear();
+  captures_out->reserve(captures.size());
+  for (const auto &capture : captures)
+  {
+    auto bitmap_copy = static_cast<HBITMAP>(CopyImage(capture.bitmap, IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION));
+    if (bitmap_copy == nullptr)
+    {
+      ReleaseDisplayCaptures(captures_out);
+      *error_out = "Failed to clone cached monitor bitmap for async payload";
+      return false;
+    }
+
+    captures_out->push_back(CachedDisplayCapture{
+        capture.display_id,
+        capture.monitor_bounds,
+        capture.scale,
+        capture.rotation,
+        bitmap_copy,
+    });
+  }
+
+  return true;
+}
+
 bool FlutterWindow::CaptureDisplaySnapshots(std::vector<CachedDisplayCapture> *captures_out, std::string *error_out, const std::optional<RECT> &logical_selection)
 {
   if (captures_out == nullptr || error_out == nullptr)
@@ -1729,7 +1804,28 @@ bool FlutterWindow::CaptureDisplaySnapshots(std::vector<CachedDisplayCapture> *c
   return true;
 }
 
-bool FlutterWindow::BuildDisplaySnapshotPayloads(const std::vector<CachedDisplayCapture> &captures, bool include_image_bytes, flutter::EncodableList *snapshots_out, std::string *error_out)
+bool FlutterWindow::BuildDisplaySnapshotPayloads(const std::vector<CachedDisplayCapture> &captures, FlutterWindow::ScreenshotImagePayloadMode payload_mode, flutter::EncodableList *snapshots_out, std::string *error_out)
+{
+  int payload_count = 0;
+  ULONGLONG elapsed_ms = 0;
+  if (!BuildDisplaySnapshotPayloadsCore(captures, payload_mode, snapshots_out, error_out, &payload_count, &elapsed_ms))
+  {
+    return false;
+  }
+
+  // Timing probe: the original Windows startup encoded every monitor before reveal. This log proves
+  // whether a call is metadata-only or limited to the selected display payload.
+  std::ostringstream oss;
+  oss << "screenshot_timing event=windows_payload_build displayCount=" << captures.size()
+      << " payloadCount=" << payload_count
+      << " payloadMode=" << ScreenshotImagePayloadModeName(payload_mode)
+      << " elapsedMs=" << elapsed_ms;
+  Log(oss.str());
+  return true;
+}
+
+// Build snapshot payloads without touching MethodChannel so it can run on a worker thread.
+bool FlutterWindow::BuildDisplaySnapshotPayloadsCore(const std::vector<CachedDisplayCapture> &captures, FlutterWindow::ScreenshotImagePayloadMode payload_mode, flutter::EncodableList *snapshots_out, std::string *error_out, int *payload_count_out, ULONGLONG *elapsed_ms_out)
 {
   if (snapshots_out == nullptr || error_out == nullptr)
   {
@@ -1739,7 +1835,7 @@ bool FlutterWindow::BuildDisplaySnapshotPayloads(const std::vector<CachedDisplay
   snapshots_out->clear();
   error_out->clear();
   const ULONGLONG payload_start = GetTickCount64();
-  int encoded_count = 0;
+  int payload_count = 0;
 
   for (const auto &capture : captures)
   {
@@ -1766,29 +1862,112 @@ bool FlutterWindow::BuildDisplaySnapshotPayloads(const std::vector<CachedDisplay
     snapshot[flutter::EncodableValue("scale")] = flutter::EncodableValue(capture.scale);
     snapshot[flutter::EncodableValue("rotation")] = flutter::EncodableValue(capture.rotation);
 
-    if (include_image_bytes)
+    if (payload_mode == ScreenshotImagePayloadMode::kBase64)
     {
       std::string png_base64;
       if (!EncodeBitmapToPngBase64(capture.bitmap, png_base64, *error_out))
       {
         return false;
       }
-      encoded_count += 1;
+      payload_count += 1;
       snapshot[flutter::EncodableValue("imageBytesBase64")] = flutter::EncodableValue(png_base64);
+    }
+    else if (payload_mode == ScreenshotImagePayloadMode::kFilePath)
+    {
+      std::string png_file_path;
+      if (!SaveBitmapToTempPngFile(capture.bitmap, png_file_path, *error_out))
+      {
+        return false;
+      }
+      payload_count += 1;
+      snapshot[flutter::EncodableValue("imageFilePath")] = flutter::EncodableValue(png_file_path);
     }
 
     snapshots_out->push_back(flutter::EncodableValue(snapshot));
   }
 
-  // Timing probe: the original Windows startup encoded every monitor before reveal. This log proves
-  // whether a call is metadata-only or limited to the selected display payload.
-  std::ostringstream oss;
-  oss << "screenshot_timing event=windows_payload_build displayCount=" << captures.size()
-      << " encodedCount=" << encoded_count
-      << " includeImageBytes=" << (include_image_bytes ? "true" : "false")
-      << " elapsedMs=" << (GetTickCount64() - payload_start);
-  Log(oss.str());
+  if (payload_count_out != nullptr)
+  {
+    *payload_count_out = payload_count;
+  }
+  if (elapsed_ms_out != nullptr)
+  {
+    *elapsed_ms_out = GetTickCount64() - payload_start;
+  }
   return true;
+}
+
+const char *FlutterWindow::ScreenshotImagePayloadModeName(FlutterWindow::ScreenshotImagePayloadMode payload_mode)
+{
+  switch (payload_mode)
+  {
+  case ScreenshotImagePayloadMode::kBase64:
+    return "base64";
+  case ScreenshotImagePayloadMode::kFilePath:
+    return "file";
+  case ScreenshotImagePayloadMode::kNone:
+  default:
+    return "none";
+  }
+}
+
+// Encode selected display snapshots in the background, then marshal MethodResult completion home.
+void FlutterWindow::BuildDisplaySnapshotPayloadsAsync(std::vector<CachedDisplayCapture> captures, std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result)
+{
+  const HWND target_window = GetHandle();
+  std::thread([target_window, captures = std::move(captures), result = std::move(result)]() mutable {
+    auto payload_result = std::make_unique<FlutterWindow::DisplaySnapshotPayloadAsyncResult>();
+    payload_result->result = std::move(result);
+    payload_result->display_count = captures.size();
+    payload_result->payload_mode = FlutterWindow::ScreenshotImagePayloadMode::kFilePath;
+    payload_result->success = FlutterWindow::BuildDisplaySnapshotPayloadsCore(
+        captures,
+        FlutterWindow::ScreenshotImagePayloadMode::kFilePath,
+        &payload_result->snapshots,
+        &payload_result->error,
+        &payload_result->payload_count,
+        &payload_result->elapsed_ms);
+    FlutterWindow::ReleaseDisplayCaptures(&captures);
+
+    auto *raw_result = payload_result.get();
+    if (target_window != nullptr && PostMessage(target_window, kScreenshotDisplaySnapshotPayloadReadyMessage, 0, reinterpret_cast<LPARAM>(raw_result)))
+    {
+      payload_result.release();
+      return;
+    }
+
+    if (target_window == nullptr)
+    {
+      // The app window is gone; dropping the pending MethodResult is safer than calling it from a
+      // worker thread after the messenger has started tearing down.
+      return;
+    }
+  }).detach();
+}
+
+// Complete the pending loadDisplaySnapshots MethodResult on the window thread.
+void FlutterWindow::CompleteDisplaySnapshotPayloadAsyncResult(DisplaySnapshotPayloadAsyncResult *payload_result)
+{
+  if (payload_result == nullptr || payload_result->result == nullptr)
+  {
+    return;
+  }
+
+  std::ostringstream oss;
+  oss << "screenshot_timing event=windows_payload_build displayCount=" << payload_result->display_count
+      << " payloadCount=" << payload_result->payload_count
+      << " payloadMode=" << ScreenshotImagePayloadModeName(payload_result->payload_mode)
+      << " thread=background"
+      << " elapsedMs=" << payload_result->elapsed_ms;
+  Log(oss.str());
+
+  if (!payload_result->success)
+  {
+    payload_result->result->Error("CAPTURE_ERROR", payload_result->error);
+    return;
+  }
+
+  payload_result->result->Success(flutter::EncodableValue(payload_result->snapshots));
 }
 
 const FlutterWindow::CachedDisplayCapture *FlutterWindow::FindCachedDisplayCapture(const std::string &display_id) const
@@ -2068,14 +2247,7 @@ bool FlutterWindow::BeginScreenshotSelectionOverlay(HWND hwnd, const RECT &works
   if (GetCursorPos(&cursor_position))
   {
     UpdateScreenshotSelectionHover(cursor_position);
-    const CachedDisplayCapture *cursor_capture = DisplayCaptureForPoint(cursor_position);
-    if (cursor_capture != nullptr)
-    {
-      // Optimization: prewarm once when the native overlay appears, not during drag moves. That
-      // overlaps selected-display hydration with the user's selection time while keeping mouse-move
-      // feedback entirely native and free from PNG/base64 work.
-      EmitScreenshotSelectionDisplayHint(*cursor_capture);
-    }
+    EmitScreenshotSelectionDisplayHint(cursor_position);
   }
 
   std::ostringstream oss;
@@ -2316,7 +2488,10 @@ void FlutterWindow::ScheduleScreenshotHoverProbe(const POINT &point, HWND root_w
   state.pending_hover_probe_point = point;
   state.pending_hover_probe_root_window = root_window;
   state.pending_hover_probe_revision = ++state.hover_probe_revision;
-  if (SetTimer(state.input_window, kScreenshotSelectionHoverProbeTimerId, kScreenshotSelectionHoverProbeDelayMs, nullptr) != 0)
+  const ULONGLONG now = GetTickCount64();
+  const ULONGLONG age = state.started_tick == 0 || now < state.started_tick ? 0 : now - state.started_tick;
+  const UINT delay = age < kScreenshotSelectionStartupHoverProbeDelayMs ? kScreenshotSelectionStartupHoverProbeDelayMs : kScreenshotSelectionHoverProbeDelayMs;
+  if (SetTimer(state.input_window, kScreenshotSelectionHoverProbeTimerId, delay, nullptr) != 0)
   {
     state.hover_probe_timer_active = true;
     return;
@@ -2432,6 +2607,25 @@ void FlutterWindow::HandleScreenshotHoverProbeTimer()
     state.hover_candidate_bounds.clear();
     state.hover_candidate_root_window = nullptr;
   }
+}
+
+void FlutterWindow::EmitScreenshotSelectionDisplayHint(const POINT &point)
+{
+  if (window_manager_channel_ == nullptr)
+  {
+    return;
+  }
+
+  const auto *capture = DisplayCaptureForPoint(point);
+  if (capture == nullptr)
+  {
+    return;
+  }
+
+  flutter::EncodableMap payload;
+  payload[flutter::EncodableValue("displayId")] = flutter::EncodableValue(Utf8FromUtf16(capture->display_id.c_str()));
+  payload[flutter::EncodableValue("displayBounds")] = flutter::EncodableValue(BuildRectValue(capture->monitor_bounds));
+  window_manager_channel_->InvokeMethod("onSelectionDisplayHint", std::make_unique<flutter::EncodableValue>(payload));
 }
 
 void FlutterWindow::LogScreenshotHoverDebug(const std::string &signature, const std::string &message)
@@ -3255,9 +3449,8 @@ void FlutterWindow::UpdateScreenshotSelectionOverlay(const RECT &selection_bound
   state.hover_move_message_posted = false;
   state.hover_display_sized_uia_rejected = false;
   CancelScreenshotHoverProbeTimer();
-  // Optimization: mouse-drag feedback stays entirely native. Earlier drag-time display hints made
-  // Flutter hydrate/encode a monitor snapshot mid-drag and caused a one-time pause; the final
-  // selection result prepares the selected display before Flutter is revealed.
+  // Drag feedback stays native. The one-shot display hint may still warm Flutter in parallel, but
+  // it no longer carries base64 PNGs through the channel on the mouse-move path.
   LayoutScreenshotSelectionOverlay();
   CancelScreenshotSelectionDimRegionUpdate();
   InvalidateScreenshotSelectionDimChange(previous_selection, clamped_selection);
@@ -3500,24 +3693,6 @@ RECT FlutterWindow::DisplayBoundsForPoint(POINT point) const
   }
 
   return screenshot_selection_overlay_state_.workspace_bounds;
-}
-
-void FlutterWindow::EmitScreenshotSelectionDisplayHint(const CachedDisplayCapture &capture)
-{
-  if (!window_manager_channel_)
-  {
-    return;
-  }
-
-  flutter::EncodableMap payload;
-  payload[flutter::EncodableValue("displayId")] = flutter::EncodableValue(Utf8FromUtf16(capture.display_id.c_str()));
-  payload[flutter::EncodableValue("displayBounds")] = flutter::EncodableValue(BuildRectValue(capture.monitor_bounds));
-  window_manager_channel_->InvokeMethod("onSelectionDisplayHint", std::make_unique<flutter::EncodableValue>(payload));
-
-  std::ostringstream oss;
-  oss << "screenshot_timing event=windows_native_selection_hint displayId=" << Utf8FromUtf16(capture.display_id.c_str())
-      << " bounds=" << RectToString(capture.monitor_bounds);
-  Log(oss.str());
 }
 
 void FlutterWindow::BeginScrollingCaptureOverlay(HWND hwnd, const RECT &workspace_bounds, const RECT &selection_bounds, const RECT &controls_bounds)
@@ -4043,6 +4218,12 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message, WPARAM const wparam
   if (message == kScrollingCaptureWheelMessage)
   {
     EmitScrollingCaptureWheelEvent(static_cast<int>(lparam));
+    return 0;
+  }
+  if (message == kScreenshotDisplaySnapshotPayloadReadyMessage)
+  {
+    auto payload_result = std::unique_ptr<DisplaySnapshotPayloadAsyncResult>(reinterpret_cast<DisplaySnapshotPayloadAsyncResult *>(lparam));
+    CompleteDisplaySnapshotPayloadAsyncResult(payload_result.get());
     return 0;
   }
 
@@ -4597,7 +4778,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       }
 
       flutter::EncodableList snapshots;
-      if (!BuildDisplaySnapshotPayloads(captures, true, &snapshots, &capture_error))
+      if (!BuildDisplaySnapshotPayloads(captures, ScreenshotImagePayloadMode::kBase64, &snapshots, &capture_error))
       {
         ReleaseDisplayCaptures(&captures);
         result->Error("CAPTURE_ERROR", capture_error);
@@ -4632,7 +4813,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       cached_display_captures_ = std::move(captures);
 
       flutter::EncodableList snapshots;
-      if (!BuildDisplaySnapshotPayloads(cached_display_captures_, false, &snapshots, &capture_error))
+      if (!BuildDisplaySnapshotPayloads(cached_display_captures_, ScreenshotImagePayloadMode::kNone, &snapshots, &capture_error))
       {
         result->Error("CAPTURE_ERROR", capture_error);
         return;
@@ -4710,14 +4891,17 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       }
 
       std::string capture_error;
-      flutter::EncodableList snapshots;
-      if (!BuildDisplaySnapshotPayloads(filtered_captures, true, &snapshots, &capture_error))
+      std::vector<CachedDisplayCapture> async_captures;
+      if (!CloneDisplayCaptures(filtered_captures, &async_captures, &capture_error))
       {
         result->Error("CAPTURE_ERROR", capture_error);
         return;
       }
 
-      result->Success(flutter::EncodableValue(snapshots));
+      // PNG encoding still costs CPU even when the channel payload is only a file path. Clone the
+      // HBITMAPs quickly, then let a worker thread encode/write files and post the MethodResult
+      // back to the UI thread when the small path payload is ready.
+      BuildDisplaySnapshotPayloadsAsync(std::move(async_captures), std::move(result));
     }
     else if (method_name == "writeClipboardImageFile")
     {
@@ -4898,6 +5082,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
     else if (method_name == "dismissCaptureWorkspacePresentation")
     {
       DismissScrollingCaptureOverlay();
+      ClearCachedDisplayCaptures();
       screenshot_presentation_state_.active = false;
       screenshot_presentation_state_.prepared = false;
       screenshot_presentation_state_.workspace_scale = 1.0;

@@ -127,6 +127,25 @@ private:
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> pending_result;
   } screenshot_selection_overlay_state_;
 
+  enum class ScreenshotImagePayloadMode
+  {
+    kNone,
+    kBase64,
+    kFilePath,
+  };
+
+  struct DisplaySnapshotPayloadAsyncResult
+  {
+    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result;
+    bool success = false;
+    flutter::EncodableList snapshots;
+    std::string error;
+    size_t display_count = 0;
+    int payload_count = 0;
+    ScreenshotImagePayloadMode payload_mode = ScreenshotImagePayloadMode::kNone;
+    ULONGLONG elapsed_ms = 0;
+  };
+
   struct CachedDisplayCapture
   {
     std::wstring display_id;
@@ -155,10 +174,15 @@ private:
   // Helpers for logging native geometry.
   std::string RectToString(const RECT &rect) const;
   RECT GetWindowRectSafe(HWND hwnd) const;
-  void ReleaseDisplayCaptures(std::vector<CachedDisplayCapture> *captures);
+  static void ReleaseDisplayCaptures(std::vector<CachedDisplayCapture> *captures);
   void ClearCachedDisplayCaptures();
   bool CaptureDisplaySnapshots(std::vector<CachedDisplayCapture> *captures_out, std::string *error_out, const std::optional<RECT> &logical_selection = std::nullopt);
-  bool BuildDisplaySnapshotPayloads(const std::vector<CachedDisplayCapture> &captures, bool include_image_bytes, flutter::EncodableList *snapshots_out, std::string *error_out);
+  bool BuildDisplaySnapshotPayloads(const std::vector<CachedDisplayCapture> &captures, ScreenshotImagePayloadMode payload_mode, flutter::EncodableList *snapshots_out, std::string *error_out);
+  static bool BuildDisplaySnapshotPayloadsCore(const std::vector<CachedDisplayCapture> &captures, ScreenshotImagePayloadMode payload_mode, flutter::EncodableList *snapshots_out, std::string *error_out, int *payload_count_out, ULONGLONG *elapsed_ms_out);
+  static const char *ScreenshotImagePayloadModeName(ScreenshotImagePayloadMode payload_mode);
+  bool CloneDisplayCaptures(const std::vector<CachedDisplayCapture> &captures, std::vector<CachedDisplayCapture> *captures_out, std::string *error_out);
+  void BuildDisplaySnapshotPayloadsAsync(std::vector<CachedDisplayCapture> captures, std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  void CompleteDisplaySnapshotPayloadAsyncResult(DisplaySnapshotPayloadAsyncResult *payload_result);
   const CachedDisplayCapture *FindCachedDisplayCapture(const std::string &display_id) const;
   bool CachedDisplayCapturesMatch(const std::vector<std::string> &display_ids) const;
   void PrepareCaptureWorkspace(HWND hwnd, const RECT &native_workspace_bounds);
@@ -171,6 +195,7 @@ private:
   void ScheduleScreenshotHoverProbe(const POINT &point, HWND root_window);
   void CancelScreenshotHoverProbeTimer();
   void HandleScreenshotHoverProbeTimer();
+  void EmitScreenshotSelectionDisplayHint(const POINT &point);
   void ApplyScreenshotHoverSelection(const POINT &point, bool has_hover_selection, const RECT &hover_selection, const std::string &hover_source, HWND root_window, const std::vector<RECT> *candidate_bounds, bool update_candidate_bounds, ULONGLONG elapsed_ms);
   void ScheduleScreenshotSelectionDimRegionUpdate();
   void FlushScreenshotSelectionDimRegionUpdate();
@@ -203,7 +228,6 @@ private:
   IUIAutomation *EnsureScreenshotUiaAutomation();
   const CachedDisplayCapture *PreferredDisplayCaptureForSelection(const RECT &selection_bounds) const;
   const CachedDisplayCapture *DisplayCaptureForPoint(POINT point) const;
-  void EmitScreenshotSelectionDisplayHint(const CachedDisplayCapture &capture);
   void BeginScrollingCaptureOverlay(HWND hwnd, const RECT &workspace_bounds, const RECT &selection_bounds, const RECT &controls_bounds);
   void DismissScrollingCaptureOverlay();
   void MoveScrollingCaptureControlsWindow(HWND hwnd, const RECT &controls_bounds);
