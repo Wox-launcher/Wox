@@ -104,10 +104,23 @@ private:
     bool has_hover_selection = false;
     RECT hover_selection_bounds{0, 0, 0, 0};
     std::string hover_selection_source;
+    HWND hover_selection_root_window = nullptr;
     std::vector<RECT> hover_candidate_bounds;
+    HWND hover_candidate_root_window = nullptr;
     bool has_last_hover_probe_point = false;
     POINT last_hover_probe_point{0, 0};
     ULONGLONG last_hover_probe_tick = 0;
+    bool has_pending_hover_move = false;
+    POINT pending_hover_move_point{0, 0};
+    bool hover_move_message_posted = false;
+    bool has_pending_hover_probe = false;
+    POINT pending_hover_probe_point{0, 0};
+    HWND pending_hover_probe_root_window = nullptr;
+    ULONGLONG hover_probe_revision = 0;
+    ULONGLONG pending_hover_probe_revision = 0;
+    bool hover_probe_timer_active = false;
+    bool hover_display_sized_uia_rejected = false;
+    ULONGLONG last_hover_probe_slow_tick = 0;
     std::string last_hover_debug_signature;
     ULONGLONG last_hover_debug_tick = 0;
     ULONGLONG started_tick = 0;
@@ -154,6 +167,11 @@ private:
   bool BeginScreenshotSelectionOverlay(HWND hwnd, const RECT &workspace_bounds, std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result, std::string *error_out);
   void LayoutScreenshotSelectionOverlay();
   void UpdateScreenshotSelectionHover(const POINT &point);
+  void UpdateScreenshotSelectionHoverFromHook(const POINT &point);
+  void ScheduleScreenshotHoverProbe(const POINT &point, HWND root_window);
+  void CancelScreenshotHoverProbeTimer();
+  void HandleScreenshotHoverProbeTimer();
+  void ApplyScreenshotHoverSelection(const POINT &point, bool has_hover_selection, const RECT &hover_selection, const std::string &hover_source, HWND root_window, const std::vector<RECT> *candidate_bounds, bool update_candidate_bounds, ULONGLONG elapsed_ms);
   void ScheduleScreenshotSelectionDimRegionUpdate();
   void FlushScreenshotSelectionDimRegionUpdate();
   void CancelScreenshotSelectionDimRegionUpdate();
@@ -167,8 +185,8 @@ private:
   void DestroyScreenshotSelectionOverlayWindows();
   void MoveSelectionOverlayWindow(HWND hwnd, const RECT &bounds, bool activate = false);
   void LogScreenshotHoverDebug(const std::string &signature, const std::string &message);
+  bool TryPickSmallestHoverCandidate(const POINT &point, const std::vector<RECT> &candidate_bounds, RECT *selection_out) const;
   bool TryPickCachedHoverSelection(const POINT &point, RECT *selection_out, std::string *source_out) const;
-  bool TryResolveScreenshotHoverSelection(const POINT &point, RECT *selection_out, std::string *source_out, std::vector<RECT> *candidate_bounds_out);
   bool TryResolveUiaHoverSelection(const POINT &point, RECT *selection_out, std::string *source_out, std::vector<RECT> *candidate_bounds_out);
   bool TryResolveWindowHoverSelection(const POINT &point, RECT *selection_out, std::string *source_out, std::vector<RECT> *candidate_bounds_out);
   bool TryGetUiaElementBounds(IUIAutomationElement *element, RECT *bounds_out);
@@ -176,9 +194,12 @@ private:
   void AddHoverCandidateRect(const RECT &candidate, std::vector<RECT> *candidate_bounds_out) const;
   bool TryFindDeepestUiaElementBounds(IUIAutomationTreeWalker *walker, IUIAutomationElement *element, const POINT &point, int depth, RECT *bounds_out, std::vector<RECT> *candidate_bounds_out);
   bool NormalizeHoverSelectionRect(const POINT &point, const RECT &candidate, RECT *selection_out, bool allow_display_sized_candidate = false) const;
+  // Resolve the physical display rectangle even before screenshot captures have been cached.
+  RECT DisplayBoundsForPoint(POINT point) const;
   bool IsScreenshotOverlayWindow(HWND hwnd);
   bool IsSelectableScreenshotHoverWindow(HWND hwnd);
   HWND FindUnderlyingWindowAtPoint(const POINT &point);
+  HWND ResolveScreenshotHoverRootWindowAtPoint(const POINT &point);
   IUIAutomation *EnsureScreenshotUiaAutomation();
   const CachedDisplayCapture *PreferredDisplayCaptureForSelection(const RECT &selection_bounds) const;
   const CachedDisplayCapture *DisplayCaptureForPoint(POINT point) const;

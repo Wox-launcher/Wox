@@ -46,6 +46,9 @@ static constexpr int kDwmCornerDoNotRound = 1;
 static constexpr int kDwmCornerRound = 2;
 static constexpr UINT kScrollingCaptureWheelMessage = WM_APP + 0x51;
 static constexpr UINT kScreenshotSelectionDimRegionUpdateMessage = WM_APP + 0x52;
+static constexpr UINT kScreenshotSelectionHoverMoveMessage = WM_APP + 0x53;
+static constexpr UINT_PTR kScreenshotSelectionHoverProbeTimerId = 0xA13;
+static constexpr UINT kScreenshotSelectionHoverProbeDelayMs = 60;
 static constexpr wchar_t kScrollingCaptureOverlayWindowClassName[] = L"WoxScrollingCaptureOverlayWindow";
 static constexpr wchar_t kScreenshotSelectionInputWindowClassName[] = L"WoxScreenshotSelectionInputWindow";
 static constexpr wchar_t kScreenshotSelectionBorderWindowClassName[] = L"WoxScreenshotSelectionBorderWindow";
@@ -53,8 +56,7 @@ static constexpr double kScrollingCaptureToolbarSlotHeightDip = 72.0;
 static constexpr double kScrollingCaptureToolbarHeightDip = 56.0;
 static constexpr double kScrollingCaptureToolbarWidthDip = 124.0;
 static constexpr double kScrollingCaptureToolbarCornerRadiusDip = 18.0;
-static constexpr int kScreenshotHoverMinimumSide = 12;
-static constexpr int kScreenshotHoverMinimumArea = 256;
+static constexpr int kScreenshotHoverMinimumDimension = 200;
 static constexpr int kScreenshotHoverDisplaySizedWidthPercent = 90;
 static constexpr int kScreenshotHoverDisplaySizedHeightPercent = 75;
 static constexpr int kScreenshotHoverChromeBandHeight = 96;
@@ -743,12 +745,11 @@ static long long RectArea(const RECT &rect)
 
 static bool IsTooSmallForScreenshotHover(const RECT &rect)
 {
-  // Bug fix: accessibility providers often expose hairlines, carets, or icon fragments with valid
-  // bounds. Treating those as hover targets made empty-looking areas selectable, so candidates need
-  // both a minimum side length and enough total area to be useful for annotation.
+  // UIA often exposes text runs, icons, and separators as valid rectangles. Hover auto-selection is
+  // intended for windows and substantial controls, so require both dimensions to be screenshot-sized.
   const int width = rect.right - rect.left;
   const int height = rect.bottom - rect.top;
-  return width < kScreenshotHoverMinimumSide || height < kScreenshotHoverMinimumSide || RectArea(rect) < kScreenshotHoverMinimumArea;
+  return width <= kScreenshotHoverMinimumDimension || height <= kScreenshotHoverMinimumDimension;
 }
 
 static bool IsDisplaySizedScreenshotHoverCandidate(const RECT &rect, const RECT &display_bounds)
@@ -1957,10 +1958,23 @@ bool FlutterWindow::BeginScreenshotSelectionOverlay(HWND hwnd, const RECT &works
   screenshot_selection_overlay_state_.pending_hover_selection_bounds = {0, 0, 0, 0};
   screenshot_selection_overlay_state_.hover_selection_bounds = {0, 0, 0, 0};
   screenshot_selection_overlay_state_.hover_selection_source.clear();
+  screenshot_selection_overlay_state_.hover_selection_root_window = nullptr;
   screenshot_selection_overlay_state_.hover_candidate_bounds.clear();
+  screenshot_selection_overlay_state_.hover_candidate_root_window = nullptr;
   screenshot_selection_overlay_state_.has_last_hover_probe_point = false;
   screenshot_selection_overlay_state_.last_hover_probe_point = {0, 0};
   screenshot_selection_overlay_state_.last_hover_probe_tick = 0;
+  screenshot_selection_overlay_state_.has_pending_hover_move = false;
+  screenshot_selection_overlay_state_.pending_hover_move_point = {0, 0};
+  screenshot_selection_overlay_state_.hover_move_message_posted = false;
+  screenshot_selection_overlay_state_.has_pending_hover_probe = false;
+  screenshot_selection_overlay_state_.pending_hover_probe_point = {0, 0};
+  screenshot_selection_overlay_state_.pending_hover_probe_root_window = nullptr;
+  screenshot_selection_overlay_state_.hover_probe_revision = 0;
+  screenshot_selection_overlay_state_.pending_hover_probe_revision = 0;
+  screenshot_selection_overlay_state_.hover_probe_timer_active = false;
+  screenshot_selection_overlay_state_.hover_display_sized_uia_rejected = false;
+  screenshot_selection_overlay_state_.last_hover_probe_slow_tick = 0;
   screenshot_selection_overlay_state_.last_hover_debug_signature.clear();
   screenshot_selection_overlay_state_.last_hover_debug_tick = 0;
   screenshot_selection_overlay_state_.started_tick = GetTickCount64();
@@ -2111,12 +2125,10 @@ void FlutterWindow::LayoutScreenshotSelectionOverlay()
   const bool has_hover_selection = !has_committed_selection && screenshot_selection_overlay_state_.has_hover_selection && !IsRectEmptyOrInvalid(hover_selection);
   const RECT selection = has_committed_selection ? committed_selection : hover_selection;
   const bool has_selection = has_committed_selection || has_hover_selection;
-  HWND input_window = screenshot_selection_overlay_state_.input_window;
   auto &border_windows = screenshot_selection_overlay_state_.border_windows;
 
   if (!has_selection)
   {
-    SetOwnedWindowRegion(input_window, nullptr);
     for (const auto border_window : border_windows)
     {
       if (border_window != nullptr && IsWindow(border_window))
@@ -2141,6 +2153,65 @@ void FlutterWindow::LayoutScreenshotSelectionOverlay()
   }
 }
 
+// Apply a hover result from either the fast window path or the deferred UIA timer while preserving
+// the UIA candidate cache unless the caller explicitly provides a fresh cache.
+void FlutterWindow::ApplyScreenshotHoverSelection(const POINT &point, bool has_hover_selection, const RECT &hover_selection, const std::string &hover_source, HWND root_window, const std::vector<RECT> *candidate_bounds, bool update_candidate_bounds, ULONGLONG elapsed_ms)
+{
+  auto &state = screenshot_selection_overlay_state_;
+  const RECT previous_hover_selection = state.hover_selection_bounds;
+  const RECT next_hover_selection = has_hover_selection ? hover_selection : RECT{0, 0, 0, 0};
+  const bool root_changed = state.hover_selection_root_window != root_window;
+  const bool changed =
+      has_hover_selection != state.has_hover_selection ||
+      hover_source != state.hover_selection_source ||
+      root_changed ||
+      (has_hover_selection && !EqualRect(&next_hover_selection, &state.hover_selection_bounds)) ||
+      (!has_hover_selection && !IsRectEmptyOrInvalid(state.hover_selection_bounds));
+
+  if (update_candidate_bounds)
+  {
+    if (candidate_bounds != nullptr)
+    {
+      state.hover_candidate_bounds = *candidate_bounds;
+      state.hover_candidate_root_window = !state.hover_candidate_bounds.empty() ? root_window : nullptr;
+    }
+    else
+    {
+      state.hover_candidate_bounds.clear();
+      state.hover_candidate_root_window = nullptr;
+    }
+  }
+
+  if (!has_hover_selection || hover_source != "window-display-sized" || root_changed)
+  {
+    state.hover_display_sized_uia_rejected = false;
+  }
+
+  if (!changed)
+  {
+    return;
+  }
+
+  state.has_hover_selection = has_hover_selection;
+  state.hover_selection_bounds = next_hover_selection;
+  state.hover_selection_source = hover_source;
+  state.hover_selection_root_window = has_hover_selection ? root_window : nullptr;
+  {
+    std::ostringstream oss;
+    oss << "screenshot_debug event=windows_hover_change point=" << point.x << "," << point.y
+        << " has=" << (has_hover_selection ? "true" : "false")
+        << " source=" << hover_source
+        << " selection=" << RectToString(state.hover_selection_bounds)
+        << " elapsedMs=" << elapsed_ms;
+    LogScreenshotHoverDebug(std::string("change|") + hover_source + "|" + RectToString(state.hover_selection_bounds), oss.str());
+  }
+  // Hover preview uses the same paint-time cut-out as a committed selection. Keep the invalidation
+  // local to the old and new rectangles so hover changes do not repaint the whole frozen desktop.
+  CancelScreenshotSelectionDimRegionUpdate();
+  LayoutScreenshotSelectionOverlay();
+  InvalidateScreenshotSelectionDimChange(previous_hover_selection, state.hover_selection_bounds);
+}
+
 void FlutterWindow::UpdateScreenshotSelectionHover(const POINT &point)
 {
   auto &state = screenshot_selection_overlay_state_;
@@ -2151,90 +2222,216 @@ void FlutterWindow::UpdateScreenshotSelectionHover(const POINT &point)
     return;
   }
 
-  const ULONGLONG now = GetTickCount64();
-  if (state.has_hover_selection &&
-      (state.hover_selection_source == "uia-point" || state.hover_selection_source == "uia-tree") &&
-      !state.hover_candidate_bounds.empty())
+  state.has_last_hover_probe_point = true;
+  state.last_hover_probe_point = point;
+  state.last_hover_probe_tick = GetTickCount64();
+  HWND root_window = ResolveScreenshotHoverRootWindowAtPoint(point);
+  if (!state.hover_candidate_bounds.empty() &&
+      state.hover_candidate_root_window != nullptr &&
+      root_window != state.hover_candidate_root_window)
+  {
+    state.hover_candidate_bounds.clear();
+    state.hover_candidate_root_window = nullptr;
+  }
+
+  if (!state.hover_candidate_bounds.empty())
   {
     RECT cached_selection{};
     std::string cached_source;
     if (TryPickCachedHoverSelection(point, &cached_selection, &cached_source))
     {
-      if (!EqualRect(&cached_selection, &state.hover_selection_bounds))
-      {
-        // Optimization fix: UIA containers can contain smaller controls. Instead of re-running
-        // UIA on every move or freezing on the large rect, pick the smallest cached nested rect
-        // that contains the cursor and update the preview entirely from local geometry.
-        state.hover_selection_bounds = cached_selection;
-        state.hover_selection_source = cached_source;
-        CancelScreenshotSelectionDimRegionUpdate();
-        SetOwnedWindowRegion(state.input_window, nullptr);
-        LayoutScreenshotSelectionOverlay();
-      }
+      // UIA containers can contain smaller controls. Reusing the cached nested candidates keeps
+      // mouse movement in local geometry after the deferred probe has populated the cache.
+      ApplyScreenshotHoverSelection(point, true, cached_selection, cached_source, root_window, nullptr, false, 0);
+      CancelScreenshotHoverProbeTimer();
       return;
     }
   }
-
-  if (state.has_hover_selection && !IsRectEmptyOrInvalid(state.hover_selection_bounds) && IsPointInRect(state.hover_selection_bounds, point))
-  {
-    const int dx = std::abs(point.x - state.last_hover_probe_point.x);
-    const int dy = std::abs(point.y - state.last_hover_probe_point.y);
-    if (state.hover_selection_source == "window" && now - state.last_hover_probe_tick < 80 && dx < 24 && dy < 24)
-    {
-      // Window fallback is intentionally re-probed at a lower rate so a later UIA hit can still
-      // refine the preview, but the cursor no longer pays the window/UIA cost on every pixel move.
-      return;
-    }
-  }
-  else if (state.has_last_hover_probe_point)
-  {
-    const int dx = std::abs(point.x - state.last_hover_probe_point.x);
-    const int dy = std::abs(point.y - state.last_hover_probe_point.y);
-    if (now - state.last_hover_probe_tick < 32 && dx < 10 && dy < 10)
-    {
-      // Empty or rejected hover areas used to retry UIA for every mouse packet. Coalescing tiny
-      // movements keeps the overlay responsive while still updating quickly when the cursor crosses
-      // into a new window or control.
-      return;
-    }
-  }
-
-  state.has_last_hover_probe_point = true;
-  state.last_hover_probe_point = point;
-  state.last_hover_probe_tick = now;
 
   RECT hover_selection{};
   std::string hover_source;
-  std::vector<RECT> hover_candidates;
-  const ULONGLONG resolve_start = GetTickCount64();
-  const bool has_hover_selection = TryResolveScreenshotHoverSelection(point, &hover_selection, &hover_source, &hover_candidates);
-  const ULONGLONG resolve_elapsed = GetTickCount64() - resolve_start;
-  if (has_hover_selection == state.has_hover_selection &&
-      hover_source == state.hover_selection_source &&
-      (!has_hover_selection || EqualRect(&hover_selection, &state.hover_selection_bounds)))
+  const bool has_hover_selection = TryResolveWindowHoverSelection(point, &hover_selection, &hover_source, nullptr);
+  if (has_hover_selection)
   {
-    state.hover_candidate_bounds = std::move(hover_candidates);
+    ApplyScreenshotHoverSelection(point, true, hover_selection, hover_source, root_window, nullptr, false, 0);
+    ScheduleScreenshotHoverProbe(point, root_window);
     return;
   }
 
-  state.has_hover_selection = has_hover_selection;
-  state.hover_selection_bounds = has_hover_selection ? hover_selection : RECT{0, 0, 0, 0};
-  state.hover_selection_source = hover_source;
-  state.hover_candidate_bounds = std::move(hover_candidates);
+  ApplyScreenshotHoverSelection(point, false, RECT{0, 0, 0, 0}, hover_source, nullptr, nullptr, true, 0);
+  CancelScreenshotHoverProbeTimer();
+}
+
+// Keep the low-level mouse hook out of UIA/window probing. It may use the current UIA cache for
+// immediate visual feedback, then coalesces the authoritative hover update through the input HWND.
+void FlutterWindow::UpdateScreenshotSelectionHoverFromHook(const POINT &point)
+{
+  auto &state = screenshot_selection_overlay_state_;
+  if (!state.active || state.dragging || state.completed)
   {
-    std::ostringstream oss;
-    oss << "screenshot_debug event=windows_hover_change point=" << point.x << "," << point.y
-        << " has=" << (has_hover_selection ? "true" : "false")
-        << " source=" << hover_source
-        << " selection=" << RectToString(state.hover_selection_bounds)
-        << " elapsedMs=" << resolve_elapsed;
-    LogScreenshotHoverDebug(std::string("change|") + hover_source + "|" + RectToString(state.hover_selection_bounds), oss.str());
+    return;
   }
-  // Hover preview is visual-only. The committed selection still owns the dim cut-out so moving the
-  // cursor across UIA elements does not rebuild a full-screen window region on every mouse event.
-  CancelScreenshotSelectionDimRegionUpdate();
-  SetOwnedWindowRegion(screenshot_selection_overlay_state_.input_window, nullptr);
-  LayoutScreenshotSelectionOverlay();
+
+  if (!state.hover_candidate_bounds.empty())
+  {
+    RECT cached_selection{};
+    std::string cached_source;
+    if (TryPickCachedHoverSelection(point, &cached_selection, &cached_source))
+    {
+      ApplyScreenshotHoverSelection(point, true, cached_selection, cached_source, state.hover_candidate_root_window, nullptr, false, 0);
+    }
+  }
+
+  state.pending_hover_move_point = point;
+  state.has_pending_hover_move = true;
+  if (state.hover_move_message_posted || state.input_window == nullptr || !IsWindow(state.input_window))
+  {
+    return;
+  }
+
+  if (PostMessage(state.input_window, kScreenshotSelectionHoverMoveMessage, 0, 0))
+  {
+    state.hover_move_message_posted = true;
+  }
+}
+
+// Arm a one-shot UIA refinement probe for the latest hover point. Re-arming the same timer
+// coalesces fast mouse packets so UIA never runs in the mouse hook or for every pixel move.
+void FlutterWindow::ScheduleScreenshotHoverProbe(const POINT &point, HWND root_window)
+{
+  auto &state = screenshot_selection_overlay_state_;
+  if (!state.active || state.dragging || state.completed || state.input_window == nullptr || !IsWindow(state.input_window))
+  {
+    return;
+  }
+
+  if (root_window == nullptr ||
+      (state.hover_selection_source == "window-display-sized" && state.hover_display_sized_uia_rejected))
+  {
+    CancelScreenshotHoverProbeTimer();
+    return;
+  }
+
+  state.has_pending_hover_probe = true;
+  state.pending_hover_probe_point = point;
+  state.pending_hover_probe_root_window = root_window;
+  state.pending_hover_probe_revision = ++state.hover_probe_revision;
+  if (SetTimer(state.input_window, kScreenshotSelectionHoverProbeTimerId, kScreenshotSelectionHoverProbeDelayMs, nullptr) != 0)
+  {
+    state.hover_probe_timer_active = true;
+    return;
+  }
+
+  state.has_pending_hover_probe = false;
+  state.pending_hover_probe_root_window = nullptr;
+  state.hover_probe_timer_active = false;
+}
+
+// Cancel any deferred UIA work and bump the revision so queued timer messages cannot apply later.
+void FlutterWindow::CancelScreenshotHoverProbeTimer()
+{
+  auto &state = screenshot_selection_overlay_state_;
+  if (state.hover_probe_timer_active && state.input_window != nullptr && IsWindow(state.input_window))
+  {
+    KillTimer(state.input_window, kScreenshotSelectionHoverProbeTimerId);
+  }
+
+  state.hover_probe_timer_active = false;
+  state.has_pending_hover_probe = false;
+  state.pending_hover_probe_root_window = nullptr;
+  ++state.hover_probe_revision;
+}
+
+// Run the deferred UIA probe only if the cursor is still in the same native window target that
+// scheduled it. This prevents late UIA results from replacing newer hover/window feedback.
+void FlutterWindow::HandleScreenshotHoverProbeTimer()
+{
+  auto &state = screenshot_selection_overlay_state_;
+  if (state.input_window != nullptr && IsWindow(state.input_window))
+  {
+    KillTimer(state.input_window, kScreenshotSelectionHoverProbeTimerId);
+  }
+  state.hover_probe_timer_active = false;
+
+  if (!state.active || state.dragging || state.completed || !state.has_pending_hover_probe)
+  {
+    return;
+  }
+
+  const POINT probe_point = state.pending_hover_probe_point;
+  HWND probe_root_window = state.pending_hover_probe_root_window;
+  const ULONGLONG probe_revision = state.pending_hover_probe_revision;
+  state.has_pending_hover_probe = false;
+  state.pending_hover_probe_root_window = nullptr;
+
+  if (probe_root_window == nullptr ||
+      (state.hover_selection_source == "window-display-sized" && state.hover_display_sized_uia_rejected) ||
+      probe_revision != state.hover_probe_revision)
+  {
+    return;
+  }
+
+  POINT cursor_point = probe_point;
+  GetCursorPos(&cursor_point);
+  if (ResolveScreenshotHoverRootWindowAtPoint(cursor_point) != probe_root_window)
+  {
+    return;
+  }
+
+  RECT uia_selection{};
+  std::string uia_source;
+  std::vector<RECT> uia_candidates;
+  const ULONGLONG resolve_start = GetTickCount64();
+  const bool has_uia_selection = TryResolveUiaHoverSelection(probe_point, &uia_selection, &uia_source, &uia_candidates);
+  const ULONGLONG resolve_elapsed = GetTickCount64() - resolve_start;
+  if (resolve_elapsed > 16)
+  {
+    const ULONGLONG now = GetTickCount64();
+    if (now - state.last_hover_probe_slow_tick >= 150)
+    {
+      state.last_hover_probe_slow_tick = now;
+      std::ostringstream oss;
+      oss << "screenshot_debug event=windows_hover_uia_timer_slow point=" << probe_point.x << "," << probe_point.y
+          << " source=" << uia_source
+          << " elapsedMs=" << resolve_elapsed;
+      Log(oss.str());
+    }
+  }
+
+  if (!state.active || state.dragging || state.completed || probe_revision != state.hover_probe_revision)
+  {
+    return;
+  }
+
+  cursor_point = probe_point;
+  GetCursorPos(&cursor_point);
+  if (ResolveScreenshotHoverRootWindowAtPoint(cursor_point) != probe_root_window ||
+      (has_uia_selection && !IsPointInRect(uia_selection, cursor_point)))
+  {
+    return;
+  }
+  if (!has_uia_selection && (cursor_point.x != probe_point.x || cursor_point.y != probe_point.y))
+  {
+    return;
+  }
+
+  if (has_uia_selection)
+  {
+    ApplyScreenshotHoverSelection(probe_point, true, uia_selection, uia_source, probe_root_window, &uia_candidates, true, resolve_elapsed);
+    return;
+  }
+
+  if (uia_source == "uia-display-sized-rejected" &&
+      state.hover_selection_source == "window-display-sized" &&
+      state.hover_selection_root_window == probe_root_window)
+  {
+    state.hover_display_sized_uia_rejected = true;
+  }
+  if (state.hover_candidate_root_window == probe_root_window)
+  {
+    state.hover_candidate_bounds.clear();
+    state.hover_candidate_root_window = nullptr;
+  }
 }
 
 void FlutterWindow::LogScreenshotHoverDebug(const std::string &signature, const std::string &message)
@@ -2259,9 +2456,11 @@ void FlutterWindow::LogScreenshotHoverDebug(const std::string &signature, const 
   Log(message);
 }
 
-bool FlutterWindow::TryPickCachedHoverSelection(const POINT &point, RECT *selection_out, std::string *source_out) const
+// Pick the innermost practical hover target by choosing the smallest normalized candidate that
+// still contains the cursor.
+bool FlutterWindow::TryPickSmallestHoverCandidate(const POINT &point, const std::vector<RECT> &candidate_bounds, RECT *selection_out) const
 {
-  if (selection_out == nullptr || screenshot_selection_overlay_state_.hover_candidate_bounds.empty())
+  if (selection_out == nullptr || candidate_bounds.empty())
   {
     return false;
   }
@@ -2269,7 +2468,7 @@ bool FlutterWindow::TryPickCachedHoverSelection(const POINT &point, RECT *select
   bool found = false;
   RECT best_selection{};
   long long best_area = 0;
-  for (const auto &candidate : screenshot_selection_overlay_state_.hover_candidate_bounds)
+  for (const auto &candidate : candidate_bounds)
   {
     RECT normalized{};
     if (!NormalizeHoverSelectionRect(point, candidate, &normalized) || !IsPointInRect(normalized, point))
@@ -2277,9 +2476,7 @@ bool FlutterWindow::TryPickCachedHoverSelection(const POINT &point, RECT *select
       continue;
     }
 
-    const long long width = static_cast<long long>(normalized.right - normalized.left);
-    const long long height = static_cast<long long>(normalized.bottom - normalized.top);
-    const long long area = width * height;
+    const long long area = RectArea(normalized);
     if (!found || area < best_area)
     {
       found = true;
@@ -2294,47 +2491,21 @@ bool FlutterWindow::TryPickCachedHoverSelection(const POINT &point, RECT *select
   }
 
   *selection_out = best_selection;
-  if (source_out != nullptr)
-  {
-    *source_out = screenshot_selection_overlay_state_.hover_selection_source;
-  }
   return true;
 }
 
-bool FlutterWindow::TryResolveScreenshotHoverSelection(const POINT &point, RECT *selection_out, std::string *source_out, std::vector<RECT> *candidate_bounds_out)
+bool FlutterWindow::TryPickCachedHoverSelection(const POINT &point, RECT *selection_out, std::string *source_out) const
 {
-  if (selection_out == nullptr)
+  if (!TryPickSmallestHoverCandidate(point, screenshot_selection_overlay_state_.hover_candidate_bounds, selection_out))
   {
-    if (source_out != nullptr)
-    {
-      *source_out = "invalid-output";
-    }
     return false;
   }
 
-  if (candidate_bounds_out != nullptr)
+  if (source_out != nullptr)
   {
-    candidate_bounds_out->clear();
+    *source_out = "uia-cache";
   }
-
-  if (TryResolveUiaHoverSelection(point, selection_out, source_out, candidate_bounds_out))
-  {
-    return true;
-  }
-
-  // UI Automation is the preferred source because it can describe controls inside browser and app
-  // windows. Some apps do not expose useful UIA bounds or the screenshot input HWND can be the top
-  // accessible element, so keep a window-level fallback instead of leaving users without a preview.
-  if (TryResolveWindowHoverSelection(point, selection_out, source_out, candidate_bounds_out))
-  {
-    return true;
-  }
-
-  if (source_out != nullptr && source_out->empty())
-  {
-    *source_out = "none";
-  }
-  return false;
+  return true;
 }
 
 bool FlutterWindow::TryResolveUiaHoverSelection(const POINT &point, RECT *selection_out, std::string *source_out, std::vector<RECT> *candidate_bounds_out)
@@ -2349,28 +2520,51 @@ bool FlutterWindow::TryResolveUiaHoverSelection(const POINT &point, RECT *select
     return false;
   }
 
+  std::vector<RECT> local_candidate_bounds;
+  std::vector<RECT> *candidate_bounds = candidate_bounds_out != nullptr ? candidate_bounds_out : &local_candidate_bounds;
+  candidate_bounds->clear();
+  bool display_sized_rejected = false;
+
   IUIAutomationElement *point_element = nullptr;
   if (SUCCEEDED(automation->ElementFromPoint(point, &point_element)) && point_element != nullptr)
   {
     RECT point_bounds{};
     const bool has_point_bounds = TryGetUiaElementBounds(point_element, &point_bounds);
-    const bool has_point_selection = has_point_bounds && NormalizeHoverSelectionRect(point, point_bounds, selection_out);
-    if (has_point_selection)
+    if (has_point_bounds)
     {
-      AddHoverCandidateRect(point_bounds, candidate_bounds_out);
+      const RECT display_bounds = DisplayBoundsForPoint(point);
+      RECT display_intersection{};
+      if (TryIntersectRects(point_bounds, display_bounds, &display_intersection) &&
+          IsDisplaySizedScreenshotHoverCandidate(display_intersection, display_bounds))
+      {
+        std::ostringstream oss;
+        oss << "screenshot_debug event=windows_hover_uia_display_sized_rejected point=" << point.x << "," << point.y
+            << " bounds=" << RectToString(point_bounds);
+        LogScreenshotHoverDebug(std::string("uia_display_sized_rejected|") + RectToString(point_bounds), oss.str());
+        display_sized_rejected = true;
+      }
+    }
+
+    if (has_point_bounds)
+    {
+      AddHoverCandidateRect(point_bounds, candidate_bounds);
       IUIAutomationTreeWalker *point_walker = nullptr;
       if (SUCCEEDED(automation->get_ControlViewWalker(&point_walker)) && point_walker != nullptr)
       {
         RECT ignored_bounds{};
-        TryFindDeepestUiaElementBounds(point_walker, point_element, point, 0, &ignored_bounds, candidate_bounds_out);
+        TryFindDeepestUiaElementBounds(point_walker, point_element, point, 0, &ignored_bounds, candidate_bounds);
         point_walker->Release();
       }
-      if (source_out != nullptr)
+
+      if (TryPickSmallestHoverCandidate(point, *candidate_bounds, selection_out))
       {
-        *source_out = "uia-point";
+        if (source_out != nullptr)
+        {
+          *source_out = "uia-point";
+        }
+        point_element->Release();
+        return true;
       }
-      point_element->Release();
-      return true;
     }
 
     if (has_point_bounds)
@@ -2388,7 +2582,7 @@ bool FlutterWindow::TryResolveUiaHoverSelection(const POINT &point, RECT *select
   {
     if (source_out != nullptr)
     {
-      *source_out = "uia-no-underlying-window";
+      *source_out = display_sized_rejected ? "uia-display-sized-rejected" : "uia-no-underlying-window";
     }
     std::ostringstream oss;
     oss << "screenshot_debug event=windows_hover_no_underlying_window point=" << point.x << "," << point.y;
@@ -2401,7 +2595,7 @@ bool FlutterWindow::TryResolveUiaHoverSelection(const POINT &point, RECT *select
   {
     if (source_out != nullptr)
     {
-      *source_out = "uia-handle-failed";
+      *source_out = display_sized_rejected ? "uia-display-sized-rejected" : "uia-handle-failed";
     }
     return false;
   }
@@ -2413,14 +2607,14 @@ bool FlutterWindow::TryResolveUiaHoverSelection(const POINT &point, RECT *select
     window_element->Release();
     if (source_out != nullptr)
     {
-      *source_out = "uia-walker-failed";
+      *source_out = display_sized_rejected ? "uia-display-sized-rejected" : "uia-walker-failed";
     }
     return false;
   }
 
   RECT deepest_bounds{};
-  const bool found_deepest = TryFindDeepestUiaElementBounds(walker, window_element, point, 0, &deepest_bounds, candidate_bounds_out);
-  const bool found = found_deepest && NormalizeHoverSelectionRect(point, deepest_bounds, selection_out);
+  const bool found_deepest = TryFindDeepestUiaElementBounds(walker, window_element, point, 0, &deepest_bounds, candidate_bounds);
+  const bool found = found_deepest && TryPickSmallestHoverCandidate(point, *candidate_bounds, selection_out);
   walker->Release();
   window_element->Release();
   if (found && source_out != nullptr)
@@ -2434,6 +2628,10 @@ bool FlutterWindow::TryResolveUiaHoverSelection(const POINT &point, RECT *select
         << " bounds=" << RectToString(deepest_bounds)
         << " hwnd=" << reinterpret_cast<uintptr_t>(underlying_window);
     LogScreenshotHoverDebug(std::string("uia_tree_rejected|") + RectToString(deepest_bounds), oss.str());
+  }
+  if (!found && display_sized_rejected && source_out != nullptr)
+  {
+    *source_out = "uia-display-sized-rejected";
   }
   return found;
 }
@@ -2474,6 +2672,13 @@ bool FlutterWindow::TryResolveWindowHoverSelection(const POINT &point, RECT *sel
     }
   }
 
+  const RECT display_bounds = DisplayBoundsForPoint(point);
+  RECT display_intersection{};
+  const bool is_display_sized_window =
+      IsZoomed(root_window) &&
+      TryIntersectRects(window_bounds, display_bounds, &display_intersection) &&
+      IsDisplaySizedScreenshotHoverCandidate(display_intersection, display_bounds);
+
   if (NormalizeHoverSelectionRect(point, window_bounds, selection_out, true))
   {
     if (candidate_bounds_out != nullptr)
@@ -2483,7 +2688,7 @@ bool FlutterWindow::TryResolveWindowHoverSelection(const POINT &point, RECT *sel
     }
     if (source_out != nullptr)
     {
-      *source_out = "window";
+      *source_out = is_display_sized_window ? "window-display-sized" : "window";
     }
     return true;
   }
@@ -2696,8 +2901,7 @@ bool FlutterWindow::NormalizeHoverSelectionRect(const POINT &point, const RECT &
     return false;
   }
 
-  const CachedDisplayCapture *display_capture = DisplayCaptureForPoint(point);
-  const RECT display_bounds = display_capture != nullptr ? display_capture->monitor_bounds : workspace;
+  const RECT display_bounds = DisplayBoundsForPoint(point);
   RECT display_intersection{};
   if (!TryIntersectRects(workspace_intersection, display_bounds, &display_intersection) || !IsPointInRect(display_intersection, point))
   {
@@ -2714,15 +2918,6 @@ bool FlutterWindow::NormalizeHoverSelectionRect(const POINT &point, const RECT &
     // Bug fix: UIA can return a desktop, monitor, wallpaper, or full-screen pane rectangle before
     // it exposes the underlying app control. Accepting that as a hover hit made empty desktop areas
     // selectable, so only validated window fallback candidates may cover most of a display.
-    return false;
-  }
-
-  const int workspace_width = workspace.right - workspace.left;
-  const int workspace_height = workspace.bottom - workspace.top;
-  const int width = display_intersection.right - display_intersection.left;
-  const int height = display_intersection.bottom - display_intersection.top;
-  if (width >= workspace_width - 2 && height >= workspace_height - 2)
-  {
     return false;
   }
 
@@ -2851,6 +3046,28 @@ HWND FlutterWindow::FindUnderlyingWindowAtPoint(const POINT &point)
       reinterpret_cast<LPARAM>(&context));
 
   return context.found;
+}
+
+// Resolve the selectable top-level owner used to validate deferred UIA hover results.
+HWND FlutterWindow::ResolveScreenshotHoverRootWindowAtPoint(const POINT &point)
+{
+  HWND target_window = FindUnderlyingWindowAtPoint(point);
+  if (target_window == nullptr)
+  {
+    return nullptr;
+  }
+
+  HWND root_window = GetAncestor(target_window, GA_ROOTOWNER);
+  if (root_window == nullptr || !IsSelectableScreenshotHoverWindow(root_window))
+  {
+    root_window = target_window;
+  }
+  if (!IsSelectableScreenshotHoverWindow(root_window))
+  {
+    return nullptr;
+  }
+
+  return root_window;
 }
 
 IUIAutomation *FlutterWindow::EnsureScreenshotUiaAutomation()
@@ -3002,14 +3219,21 @@ void FlutterWindow::UpdateScreenshotSelectionOverlay(const RECT &selection_bound
 
   auto &state = screenshot_selection_overlay_state_;
   const RECT previous_selection = state.selection_bounds;
+  const RECT previous_hover_selection = state.hover_selection_bounds;
   const RECT clamped_selection = ClampRectToBounds(selection_bounds, state.workspace_bounds);
   const bool has_hover_state =
       state.has_hover_selection ||
       !IsRectEmptyOrInvalid(state.hover_selection_bounds) ||
       !state.hover_selection_source.empty() ||
+      state.hover_selection_root_window != nullptr ||
       !state.hover_candidate_bounds.empty() ||
+      state.hover_candidate_root_window != nullptr ||
       state.has_last_hover_probe_point ||
-      state.last_hover_probe_tick != 0;
+      state.last_hover_probe_tick != 0 ||
+      state.has_pending_hover_move ||
+      state.hover_move_message_posted ||
+      state.has_pending_hover_probe ||
+      state.hover_probe_timer_active;
   if (EqualRect(&previous_selection, &clamped_selection) && !has_hover_state)
   {
     // Performance fix: the low-level mouse hook and the input HWND can both report the same drag
@@ -3022,15 +3246,22 @@ void FlutterWindow::UpdateScreenshotSelectionOverlay(const RECT &selection_bound
   state.has_hover_selection = false;
   state.hover_selection_bounds = {0, 0, 0, 0};
   state.hover_selection_source.clear();
+  state.hover_selection_root_window = nullptr;
   state.hover_candidate_bounds.clear();
+  state.hover_candidate_root_window = nullptr;
   state.has_last_hover_probe_point = false;
   state.last_hover_probe_tick = 0;
+  state.has_pending_hover_move = false;
+  state.hover_move_message_posted = false;
+  state.hover_display_sized_uia_rejected = false;
+  CancelScreenshotHoverProbeTimer();
   // Optimization: mouse-drag feedback stays entirely native. Earlier drag-time display hints made
   // Flutter hydrate/encode a monitor snapshot mid-drag and caused a one-time pause; the final
   // selection result prepares the selected display before Flutter is revealed.
   LayoutScreenshotSelectionOverlay();
   CancelScreenshotSelectionDimRegionUpdate();
   InvalidateScreenshotSelectionDimChange(previous_selection, clamped_selection);
+  InvalidateScreenshotSelectionDimChange(previous_hover_selection, clamped_selection);
 }
 
 void FlutterWindow::BeginScreenshotSelectionPointerDown(const POINT &point)
@@ -3078,7 +3309,9 @@ void FlutterWindow::CompleteScreenshotSelectionPointerUp(const POINT &point)
     screenshot_selection_overlay_state_.has_hover_selection = false;
     screenshot_selection_overlay_state_.hover_selection_bounds = {0, 0, 0, 0};
     screenshot_selection_overlay_state_.hover_selection_source.clear();
+    screenshot_selection_overlay_state_.hover_selection_root_window = nullptr;
     screenshot_selection_overlay_state_.hover_candidate_bounds.clear();
+    screenshot_selection_overlay_state_.hover_candidate_root_window = nullptr;
     CompleteScreenshotSelectionOverlay(false);
     return;
   }
@@ -3102,6 +3335,9 @@ void FlutterWindow::CompleteScreenshotSelectionOverlay(bool cancelled)
   const ULONGLONG started_tick = screenshot_selection_overlay_state_.started_tick;
   const CachedDisplayCapture *preferred_capture = PreferredDisplayCaptureForSelection(selection_bounds);
   const HWND input_window = screenshot_selection_overlay_state_.input_window;
+  CancelScreenshotHoverProbeTimer();
+  screenshot_selection_overlay_state_.has_pending_hover_move = false;
+  screenshot_selection_overlay_state_.hover_move_message_posted = false;
   if (screenshot_selection_overlay_state_.mouse_hook != nullptr)
   {
     // Bug fix: the hook exists only while the user is drawing the native rectangle. Stop it as soon
@@ -3177,6 +3413,7 @@ void FlutterWindow::DismissNativeSelectionOverlays()
 void FlutterWindow::DestroyScreenshotSelectionOverlayWindows()
 {
   CancelScreenshotSelectionDimRegionUpdate();
+  CancelScreenshotHoverProbeTimer();
 
   if (screenshot_selection_overlay_state_.mouse_hook != nullptr)
   {
@@ -3244,6 +3481,25 @@ const FlutterWindow::CachedDisplayCapture *FlutterWindow::DisplayCaptureForPoint
     }
   }
   return nullptr;
+}
+
+RECT FlutterWindow::DisplayBoundsForPoint(POINT point) const
+{
+  const CachedDisplayCapture *display_capture = DisplayCaptureForPoint(point);
+  if (display_capture != nullptr)
+  {
+    return display_capture->monitor_bounds;
+  }
+
+  MONITORINFO monitor_info{};
+  monitor_info.cbSize = sizeof(monitor_info);
+  HMONITOR monitor = MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST);
+  if (monitor != nullptr && GetMonitorInfoW(monitor, &monitor_info))
+  {
+    return monitor_info.rcMonitor;
+  }
+
+  return screenshot_selection_overlay_state_.workspace_bounds;
 }
 
 void FlutterWindow::EmitScreenshotSelectionDisplayHint(const CachedDisplayCapture &capture)
@@ -3611,7 +3867,12 @@ void FlutterWindow::PaintScreenshotSelectionOverlay(HWND hwnd)
     Gdiplus::SolidBrush dim_brush(Gdiplus::Color(118, 0, 0, 0));
     const Gdiplus::Rect dim_rect(surface_rect.left, surface_rect.top, surface_rect.right - surface_rect.left, surface_rect.bottom - surface_rect.top);
     graphics.FillRectangle(&dim_brush, dim_rect);
-    const RECT selection = ClampRectToBounds(screenshot_selection_overlay_state_.selection_bounds, workspace);
+    const RECT committed_selection = ClampRectToBounds(screenshot_selection_overlay_state_.selection_bounds, workspace);
+    const RECT hover_selection = ClampRectToBounds(screenshot_selection_overlay_state_.hover_selection_bounds, workspace);
+    const RECT selection =
+        !IsRectEmptyOrInvalid(committed_selection)
+            ? committed_selection
+            : (screenshot_selection_overlay_state_.has_hover_selection ? hover_selection : RECT{0, 0, 0, 0});
     if (!IsRectEmptyOrInvalid(selection))
     {
       if (TryIntersectRects(selection, dirty_workspace_rect, &undim_rect))
@@ -3981,6 +4242,29 @@ LRESULT CALLBACK FlutterWindow::ScreenshotSelectionInputWindowProc(HWND hwnd, UI
   case kScreenshotSelectionDimRegionUpdateMessage:
     g_window_instance->FlushScreenshotSelectionDimRegionUpdate();
     return 0;
+  case kScreenshotSelectionHoverMoveMessage:
+  {
+    auto &state = g_window_instance->screenshot_selection_overlay_state_;
+    state.hover_move_message_posted = false;
+    if (state.has_pending_hover_move && !state.dragging && !state.completed)
+    {
+      const POINT point = state.pending_hover_move_point;
+      state.has_pending_hover_move = false;
+      g_window_instance->UpdateScreenshotSelectionHover(point);
+    }
+    else
+    {
+      state.has_pending_hover_move = false;
+    }
+    return 0;
+  }
+  case WM_TIMER:
+    if (wparam == kScreenshotSelectionHoverProbeTimerId)
+    {
+      g_window_instance->HandleScreenshotHoverProbeTimer();
+      return 0;
+    }
+    break;
   case WM_KEYDOWN:
     if (wparam == VK_ESCAPE)
     {
@@ -4091,7 +4375,7 @@ LRESULT CALLBACK FlutterWindow::ScreenshotSelectionMouseHookProc(int code, WPARA
         }
         else
         {
-          g_window_instance->UpdateScreenshotSelectionHover(mouse->pt);
+          g_window_instance->UpdateScreenshotSelectionHoverFromHook(mouse->pt);
         }
         break;
       case WM_LBUTTONUP:
