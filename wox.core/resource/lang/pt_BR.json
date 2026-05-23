@@ -1204,6 +1204,7 @@
   "ui_action_webview_go_back": "Voltar",
   "ui_action_webview_go_forward": "Avançar",
   "ui_action_webview_open_in_browser": "Abrir no navegador",
+  "ui_action_webview_hide_wox": "Ocultar Wox",
   "ui_action_webview_open_inspector": "Abrir Inspetor",
   "ui_action_webview_clear_state": "Limpar estado do WebView",
   "ui_no_matches": "Nenhuma correspondência",

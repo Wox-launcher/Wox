@@ -32,8 +32,8 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
   static const double _toolbarHeight = 36;
   // These are normal-density base values; preview toolbar controls scale from
   // them so the floating shape stays proportional to the active interface size.
-  static const double _toolbarWidth = 208;
-  static const double _toolbarTriggerWidth = 256;
+  static const double _toolbarWidth = 240;
+  static const double _toolbarTriggerWidth = 288;
   static const double _toolbarTriggerHeight = 72;
   static const Duration _toolbarAnimationDuration = Duration(milliseconds: 180);
   static const Duration _toolbarAutoHideDelay = Duration(milliseconds: 1200);
@@ -334,6 +334,12 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
                               iconColor: iconColor,
                               onPressed: _openInBrowser,
                             ),
+                            _buildToolbarButton(
+                              icon: Icons.visibility_off_rounded,
+                              tooltip: launcherController.tr("ui_action_webview_hide_wox"),
+                              iconColor: iconColor,
+                              onPressed: _hideWox,
+                            ),
                             Expanded(child: _buildToolbarDragHandle()),
                           ],
                         ),
@@ -363,7 +369,7 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
         iconSize: _scaled(20),
         color: iconColor,
         disabledColor: iconColor.withValues(alpha: 0.28),
-        padding: EdgeInsets.zero,
+        padding: EdgeInsets.only(left: _scaled(6), right: _scaled(6)),
         constraints: BoxConstraints.tightFor(width: _scaled(32), height: _scaled(32)),
         splashRadius: _scaled(16),
         visualDensity: VisualDensity.compact,
@@ -429,6 +435,10 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
 
   void _openInBrowser() {
     unawaited(_openCurrentUrlInBrowser());
+  }
+
+  void _hideWox() {
+    unawaited(launcherController.hideApp(const UuidV4().generate()));
   }
 
   Future<void> _openCurrentUrlInBrowser() async {
