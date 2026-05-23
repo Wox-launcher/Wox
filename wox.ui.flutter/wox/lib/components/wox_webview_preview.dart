@@ -46,6 +46,8 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
   final launcherController = Get.find<WoxLauncherController>();
   Timer? _toolbarHideTimer;
   bool _isToolbarVisible = true;
+  String? _focusedHiddenQueryBoxPreviewData;
+  int _hiddenQueryBoxWebViewFocusToken = 0;
 
   WoxInterfaceSizeMetrics get _metrics => WoxInterfaceSizeUtil.instance.current;
 
@@ -67,6 +69,7 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
   void didUpdateWidget(covariant WoxWebViewPreview oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.previewData != widget.previewData) {
+      _focusedHiddenQueryBoxPreviewData = null;
       unawaited(_releaseCurrentSession());
       _refreshWindowsSession();
       _showToolbarTemporarily();
@@ -99,6 +102,7 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
           _session = session;
           WoxWebViewUtil.setActiveSession(session);
           _subscribeSessionActions(session);
+          _focusWebViewIfQueryBoxHidden(session: session);
           return session;
         })
         .catchError((error) {
@@ -149,6 +153,53 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
     }
 
     launcherController.hideApp(traceId);
+  }
+
+  void _focusWebViewIfQueryBoxHidden({WoxWebViewSession? session}) {
+    if (launcherController.isQueryBoxVisible.value || _focusedHiddenQueryBoxPreviewData == widget.previewData) {
+      return;
+    }
+
+    _focusedHiddenQueryBoxPreviewData = widget.previewData;
+    final focusToken = ++_hiddenQueryBoxWebViewFocusToken;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || launcherController.isQueryBoxVisible.value) {
+        return;
+      }
+      if (focusToken != _hiddenQueryBoxWebViewFocusToken) {
+        return;
+      }
+      if (session != null && !identical(_session, session)) {
+        return;
+      }
+
+      unawaited(_focusActiveWebView(focusToken: focusToken, session: session));
+    });
+  }
+
+  Future<void> _focusActiveWebView({required int focusToken, WoxWebViewSession? session}) async {
+    const retryDelays = [Duration.zero, Duration(milliseconds: 50), Duration(milliseconds: 100), Duration(milliseconds: 200), Duration(milliseconds: 400)];
+
+    for (final delay in retryDelays) {
+      if (delay > Duration.zero) {
+        await Future.delayed(delay);
+      }
+      if (!mounted || launcherController.isQueryBoxVisible.value || focusToken != _hiddenQueryBoxWebViewFocusToken) {
+        return;
+      }
+      if (session != null && !identical(_session, session)) {
+        return;
+      }
+
+      final focused = await WoxWebViewUtil.focusActiveSession();
+      if (focused) {
+        return;
+      }
+    }
+
+    if (mounted && !launcherController.isQueryBoxVisible.value && focusToken == _hiddenQueryBoxWebViewFocusToken) {
+      _focusedHiddenQueryBoxPreviewData = null;
+    }
   }
 
   Widget _buildWindowsPreview(WoxPreviewWebviewData preview) {
@@ -402,6 +453,7 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
     }
 
     if (Platform.isMacOS) {
+      _focusWebViewIfQueryBoxHidden();
       return _buildPreviewWithToolbar(
         child: AppKitView(key: ValueKey(widget.previewData), viewType: "wox/webview_preview", creationParams: preview.toJson(), creationParamsCodec: const StandardMessageCodec()),
       );

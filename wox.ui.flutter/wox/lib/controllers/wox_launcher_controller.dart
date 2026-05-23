@@ -2099,11 +2099,14 @@ class WoxLauncherController extends GetxController {
       return;
     }
 
-    // request focus to action query box since it will lose focus when tap
-    queryBoxFocusNode.requestFocus();
     if (!isQueryBoxVisible.value) {
+      // Hidden query-box launches usually hand keyboard ownership to the preview surface.
+      // Do not let generic launcher focus recovery pull focus back to the offstage editor.
       return;
     }
+
+    // request focus to action query box since it will lose focus when tap
+    queryBoxFocusNode.requestFocus();
 
     // force to focus the editable text state to ensure keyboard input works
     // on macos sometimes the keyboard input does not work after requestFocus in certain scenarios

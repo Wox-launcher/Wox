@@ -52,6 +52,11 @@ class WoxMacosWebViewPlatform implements WoxWebViewPlatform {
   }
 
   @override
+  Future<bool> focusActiveSession() async {
+    return _invoke('focusActiveSession');
+  }
+
+  @override
   Future<bool> openInspector() async {
     return _invoke('openInspector');
   }

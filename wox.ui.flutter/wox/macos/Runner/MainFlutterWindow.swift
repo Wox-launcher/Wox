@@ -49,6 +49,8 @@ class MainFlutterWindow: NSPanel {
         result(WoxWebViewPreviewPlugin.getCurrentUrl())
       case "clearState":
         result(WoxWebViewPreviewPlugin.clearState())
+      case "focusActiveSession":
+        result(WoxWebViewPreviewPlugin.focusActiveSession())
       default:
         result(FlutterMethodNotImplemented)
       }

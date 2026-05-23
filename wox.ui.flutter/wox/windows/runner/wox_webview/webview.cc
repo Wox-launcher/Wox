@@ -725,6 +725,14 @@ bool Webview::GoForward() {
   return SUCCEEDED(webview_->GoForward());
 }
 
+bool Webview::Focus() {
+  if (!IsValid()) {
+    return false;
+  }
+  return SUCCEEDED(webview_controller_->MoveFocus(
+      COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC));
+}
+
 void Webview::AddScriptToExecuteOnDocumentCreated(
     const std::string& script,
     AddScriptToExecuteOnDocumentCreatedCallback callback) {

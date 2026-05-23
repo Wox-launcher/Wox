@@ -190,6 +190,14 @@ class WoxWebViewPreviewPlugin: NSObject {
     return activeWebView?.url?.absoluteString
   }
 
+  static func focusActiveSession() -> Bool {
+    guard let activeWebView, let window = activeWebView.window else {
+      return false
+    }
+
+    return window.makeFirstResponder(activeWebView)
+  }
+
   static func clearState() -> Bool {
     guard let activeWebView else {
       return false

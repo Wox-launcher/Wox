@@ -20,6 +20,7 @@ constexpr auto kMethodReload = "reload";
 constexpr auto kMethodStop = "stop";
 constexpr auto kMethodGoBack = "goBack";
 constexpr auto kMethodGoForward = "goForward";
+constexpr auto kMethodFocus = "focus";
 constexpr auto kMethodAddScriptToExecuteOnDocumentCreated =
     "addScriptToExecuteOnDocumentCreated";
 constexpr auto kMethodRemoveScriptToExecuteOnDocumentCreated =
@@ -494,6 +495,14 @@ void WebviewBridge::HandleMethodCall(
   // goForward
   if (method_name.compare(kMethodGoForward) == 0) {
     if (webview_->GoForward()) {
+      return result->Success();
+    }
+    return result->Error(kMethodFailed);
+  }
+
+  // focus
+  if (method_name.compare(kMethodFocus) == 0) {
+    if (webview_->Focus()) {
       return result->Success();
     }
     return result->Error(kMethodFailed);

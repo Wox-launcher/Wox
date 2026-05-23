@@ -350,9 +350,14 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
       return content;
     }
 
+    final alignAvailabilityToControlStart = widget.tipPosition == WoxHotkeyRecorderTipPosition.right;
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [content, const SizedBox(height: 6), Text(_availabilityMessage, textAlign: TextAlign.right, style: const TextStyle(color: Colors.red, fontSize: 12))],
+      crossAxisAlignment: alignAvailabilityToControlStart ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+      children: [
+        content,
+        const SizedBox(height: 6),
+        Text(_availabilityMessage, textAlign: alignAvailabilityToControlStart ? TextAlign.left : TextAlign.right, style: const TextStyle(color: Colors.red, fontSize: 12)),
+      ],
     );
   }
 

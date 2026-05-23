@@ -88,6 +88,17 @@ class WoxWindowsWebViewPlatform implements WoxWebViewPlatform {
   }
 
   @override
+  Future<bool> focusActiveSession() async {
+    final controller = _activeController;
+    if (controller == null) {
+      return false;
+    }
+
+    await controller.focus();
+    return true;
+  }
+
+  @override
   Future<bool> openInspector() async {
     final controller = _activeController;
     if (controller == null) {

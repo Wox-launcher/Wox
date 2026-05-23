@@ -141,6 +141,7 @@ class Webview {
   bool Reload();
   bool GoBack();
   bool GoForward();
+  bool Focus();
   void AddScriptToExecuteOnDocumentCreated(
       const std::string& script,
       AddScriptToExecuteOnDocumentCreatedCallback callback);
