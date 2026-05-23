@@ -43,6 +43,26 @@ class WoxWindowsWebViewSession implements WoxWebViewSession {
   @override
   Widget buildWidget() => SizedBox.expand(child: Webview(controller));
 
+  /// Resume the cached WebView before it is mounted into the preview tree again.
+  Future<void> resume() async {
+    if (_disposed) {
+      return;
+    }
+
+    await ensureInitialized();
+    await controller.resume();
+  }
+
+  /// Suspend a cached WebView after the preview tree releases it so it cannot keep painting or holding focus off-screen.
+  Future<void> suspend() async {
+    if (_disposed) {
+      return;
+    }
+
+    await ensureInitialized();
+    await controller.suspend();
+  }
+
   Future<void> ensureInitialized() {
     _initialization ??= _initialize();
     return _initialization!;

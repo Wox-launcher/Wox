@@ -28,6 +28,7 @@ class WoxWindowsWebViewPlatform implements WoxWebViewPlatform {
     final shouldCache = cacheKey.isNotEmpty;
     final session = shouldCache ? (_cachedSessions[cacheKey] ??= WoxWindowsWebViewSession.cached(cacheKey: cacheKey)) : WoxWindowsWebViewSession.transient();
     await session.ensureInitialized();
+    await session.resume();
     await session.apply(previewData);
     return session;
   }
@@ -122,7 +123,15 @@ class WoxWindowsWebViewPlatform implements WoxWebViewPlatform {
 
   @override
   Future<void> releaseSession(WoxWebViewSession? session) async {
-    if (session is! WoxWindowsWebViewSession || session.isCached) {
+    if (session is! WoxWindowsWebViewSession) {
+      return;
+    }
+
+    if (session.isCached) {
+      // Cached WebViews keep their browser state, but they should not keep rendering or owning focus while Flutter no longer mounts their texture.
+      if (!identical(_activeSession, session)) {
+        await session.suspend();
+      }
       return;
     }
 

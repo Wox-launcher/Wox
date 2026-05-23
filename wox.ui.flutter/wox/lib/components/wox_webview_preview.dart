@@ -70,8 +70,7 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.previewData != widget.previewData) {
       _focusedHiddenQueryBoxPreviewData = null;
-      unawaited(_releaseCurrentSession());
-      _refreshWindowsSession();
+      unawaited(_replaceWindowsSession());
       _showToolbarTemporarily();
     }
   }
@@ -123,6 +122,15 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
     WoxWebViewUtil.clearActiveSession(session);
     _session = null;
     await WoxWebViewUtil.releaseSession(session);
+  }
+
+  Future<void> _replaceWindowsSession() async {
+    await _releaseCurrentSession();
+    if (!mounted) {
+      return;
+    }
+
+    _refreshWindowsSession();
   }
 
   void _subscribeSessionActions(WoxWebViewSession? session) {
