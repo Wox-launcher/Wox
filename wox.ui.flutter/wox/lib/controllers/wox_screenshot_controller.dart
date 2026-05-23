@@ -204,7 +204,7 @@ class WoxScreenshotController extends GetxController {
 
       if (Platform.isMacOS || Platform.isWindows) {
         await _presentPreparedCaptureWorkspace(traceId, metadataSnapshots, nativeWorkspaceBounds);
-        return _sessionFutureOrCancelled();
+        return await _sessionFutureOrCancelled();
       }
 
       final rawSnapshots = await _hydrateRawSnapshots(metadataSnapshots);
@@ -437,13 +437,7 @@ class WoxScreenshotController extends GetxController {
     final isVisible = await windowManager.isVisible();
     final position = await windowManager.getPosition();
     final size = await windowManager.getSize();
-    _savedWindowState = _SavedScreenshotWindowState(
-      wasVisible: isVisible,
-      wasInSettingView: launcherController.isInSettingView.value,
-      position: position,
-      size: size,
-      forceHideOnBlur: launcherController.forceHideOnBlur,
-    );
+    _savedWindowState = _SavedScreenshotWindowState(wasVisible: isVisible, position: position, size: size, forceHideOnBlur: launcherController.forceHideOnBlur);
 
     launcherController.forceHideOnBlur = false;
     if (isVisible) {
@@ -1428,18 +1422,14 @@ class WoxScreenshotController extends GetxController {
     // when the screenshot session aborts before that handoff completes.
     await ScreenshotPlatformBridge.instance.dismissNativeSelectionOverlays();
     await ScreenshotPlatformBridge.instance.dismissCaptureWorkspacePresentation();
-    await windowManager.setAlwaysOnTop(!savedState.wasInSettingView);
+    await windowManager.setAlwaysOnTop(true);
     await windowManager.setBounds(savedState.position, savedState.size);
 
     if (savedState.wasVisible && restoreVisibility) {
       await windowManager.show();
       await windowManager.focus();
       await WoxApi.instance.onShow(traceId);
-      if (savedState.wasInSettingView) {
-        Get.find<WoxSettingController>().settingFocusNode.requestFocus();
-      } else {
-        launcherController.focusQueryBox(selectAll: true);
-      }
+      launcherController.focusQueryBox(selectAll: true);
     } else {
       if (!windowAlreadyHidden) {
         // Screenshot completion should leave Wox hidden. The previous restore path always tried to
@@ -2571,10 +2561,9 @@ class WoxScreenshotController extends GetxController {
 }
 
 class _SavedScreenshotWindowState {
-  const _SavedScreenshotWindowState({required this.wasVisible, required this.wasInSettingView, required this.position, required this.size, required this.forceHideOnBlur});
+  const _SavedScreenshotWindowState({required this.wasVisible, required this.position, required this.size, required this.forceHideOnBlur});
 
   final bool wasVisible;
-  final bool wasInSettingView;
   final Offset position;
   final Size size;
   final bool forceHideOnBlur;

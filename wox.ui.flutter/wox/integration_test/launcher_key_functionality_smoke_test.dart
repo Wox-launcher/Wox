@@ -1,6 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wox/modules/setting/views/wox_setting_view.dart';
-
 import 'smoke_test_helper.dart';
 
 void registerLauncherKeyFunctionalitySmokeTests() {
@@ -11,7 +9,7 @@ void registerLauncherKeyFunctionalitySmokeTests() {
 
       await tapSettingNavItem(tester, settingController, 'ui');
 
-      expect(find.byType(WoxSettingView), findsOneWidget);
+      expectSettingsWindowOpen(launcherController);
 
       await closeSettings(tester, settingController, launcherController);
     });
@@ -22,7 +20,7 @@ void registerLauncherKeyFunctionalitySmokeTests() {
 
       await tapSettingNavItem(tester, settingController, 'data');
 
-      expect(find.byType(WoxSettingView), findsOneWidget);
+      expectSettingsWindowOpen(launcherController);
 
       await closeSettings(tester, settingController, launcherController);
     });
@@ -33,10 +31,10 @@ void registerLauncherKeyFunctionalitySmokeTests() {
 
       await tapSettingNavItem(tester, settingController, 'usage');
 
-      expect(find.byType(WoxSettingView), findsOneWidget);
+      expectSettingsWindowOpen(launcherController);
 
       await tapSettingNavItem(tester, settingController, 'about');
-      expect(find.byType(WoxSettingView), findsOneWidget);
+      expectSettingsWindowOpen(launcherController);
 
       await closeSettings(tester, settingController, launcherController);
     });

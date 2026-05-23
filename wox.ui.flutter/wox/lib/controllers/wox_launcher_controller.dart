@@ -47,10 +47,14 @@ import 'package:wox/enums/wox_query_type_enum.dart';
 import 'package:wox/enums/wox_result_action_type_enum.dart';
 import 'package:wox/enums/wox_selection_type_enum.dart';
 import 'package:wox/enums/wox_show_source_enum.dart';
+import 'package:wox/modules/onboarding/views/wox_onboarding_view.dart';
+import 'package:wox/modules/setting/views/wox_setting_view.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/env.dart';
 import 'package:wox/utils/log.dart';
+import 'package:wox/utils/multiplewindow/wox_multiple_window.dart';
+import 'package:wox/utils/multiplewindow/wox_multiple_window_ids.dart';
 import 'package:wox/utils/picker.dart';
 import 'package:wox/utils/wox_hotkey_recording_bus.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
@@ -191,11 +195,8 @@ class WoxLauncherController extends GetxController {
 
   var lastLaunchMode = WoxLaunchModeEnum.WOX_LAUNCH_MODE_CONTINUE.code;
   var lastStartPage = WoxStartPageEnum.WOX_START_PAGE_MRU.code;
-  final isInSettingView = false.obs;
-  // Onboarding shares the settings-sized management window but stays separate
-  // from isInSettingView so build routing and tests can distinguish the guide
-  // while backend notification routing still treats it as a management surface.
-  final isInOnboardingView = false.obs;
+  final isSettingWindowOpen = false.obs;
+  final isOnboardingWindowOpen = false.obs;
 
   // UI Control Flags
   final isQueryBoxAtBottom = false.obs;
@@ -216,10 +217,6 @@ class WoxLauncherController extends GetxController {
   // until the matching query results arrive.
   String? pendingRestoredQueryId;
   double? pendingRestoredQueryWindowHeight;
-
-  var positionBeforeOpenSetting = const Offset(0, 0);
-  // Whether settings was opened when window was hidden (e.g., from tray)
-  bool isSettingOpenedFromHidden = false;
 
   // Performance metrics: Map<traceId, startTime>
   final Map<String, int> queryStartTimeMap = {};
@@ -410,14 +407,12 @@ class WoxLauncherController extends GetxController {
     formActionValues.clear();
     isShowFormActionPanel.value = false;
 
-    if (isInSettingView.value) {
+    if (isSettingWindowOpen.value) {
       await exitSetting(const UuidV4().generate());
     }
-    if (isInOnboardingView.value) {
-      // Test teardown should not mark the guide as completed; it only clears
-      // the transient management-view state so the next smoke test starts from
-      // a clean launcher/window lifecycle.
-      isInOnboardingView.value = false;
+    if (isOnboardingWindowOpen.value) {
+      isOnboardingWindowOpen.value = false;
+      await WoxMultipleWindow.closeWindow(WoxMultipleWindowIds.onboarding);
       await WoxApi.instance.onOnboarding(const UuidV4().generate(), false);
     }
 
@@ -1669,13 +1664,7 @@ class WoxLauncherController extends GetxController {
 
     var isVisible = await windowManager.isVisible();
     if (isVisible) {
-      if (isInSettingView.value) {
-        exitSetting(traceId);
-      } else if (isInOnboardingView.value) {
-        hideApp(traceId);
-      } else {
-        hideApp(traceId);
-      }
+      hideApp(traceId);
     } else {
       showApp(traceId, params);
     }
@@ -1693,27 +1682,6 @@ class WoxLauncherController extends GetxController {
       if (isVisibleAfterCancel) {
         return;
       }
-    }
-
-    if (isInOnboardingView.value) {
-      // Showing the launcher from a hotkey or the final onboarding action must
-      // leave the guide state first; otherwise build routing would keep the
-      // management page mounted over fresh query results.
-      isInOnboardingView.value = false;
-      await WoxApi.instance.onOnboarding(traceId, false);
-    }
-    if (isInSettingView.value) {
-      // Bug fix: the native window can become hidden while the settings route is
-      // still mounted, for example after a management-view blur or a platform
-      // hide outside hideApp(). A later launcher show must clear that stale route;
-      // otherwise the window reopens as settings instead of the query UI.
-      isSettingOpenedFromHidden = false;
-      isInSettingView.value = false;
-      final settingController = Get.find<WoxSettingController>();
-      settingController.clearSettingSearch();
-      settingController.settingFocusNode.unfocus();
-      settingController.settingSearchFocusNode.unfocus();
-      await WoxApi.instance.onSetting(traceId, false);
     }
 
     // update some properties to latest for later use
@@ -1797,9 +1765,7 @@ class WoxLauncherController extends GetxController {
 
     // Set always-on-top BEFORE show() so the TOPMOST flag is already in place
     // when the window becomes visible, avoiding transient blur on Windows.
-    if (!isInSettingView.value) {
-      await windowManager.setAlwaysOnTop(true);
-    }
+    await windowManager.setAlwaysOnTop(true);
     await windowManager.show();
     final visibleActivationCost = _captureDevLauncherVisibleActivationCost(params);
     await windowManager.focus();
@@ -1977,21 +1943,6 @@ class WoxLauncherController extends GetxController {
     }
     quickSelectTimer?.cancel();
     isQuickSelectKeyPressed = false;
-    final wasInSettingView = isInSettingView.value;
-    isSettingOpenedFromHidden = false;
-    isInSettingView.value = false;
-    if (wasInSettingView) {
-      // Bug fix: hideApp can close settings through blur/tray paths without
-      // calling exitSetting. Clear the per-session search state here too so the
-      // next open is not polluted by the hidden route.
-      final settingController = Get.find<WoxSettingController>();
-      settingController.clearSettingSearch();
-      settingController.settingFocusNode.unfocus();
-      settingController.settingSearchFocusNode.unfocus();
-    }
-    await WoxApi.instance.onSetting(traceId, false);
-    isInOnboardingView.value = false;
-    await WoxApi.instance.onOnboarding(traceId, false);
     resetLayoutState(traceId);
 
     await WoxApi.instance.onHide(traceId);
@@ -2459,18 +2410,6 @@ class WoxLauncherController extends GetxController {
     }
 
     clearHoveredResult();
-
-    //hide setting view if query changed
-    if (isInSettingView.value) {
-      isInSettingView.value = false;
-      await WoxApi.instance.onSetting(traceId, false);
-    }
-    if (isInOnboardingView.value) {
-      // Query-changing commands are launcher actions. Clear onboarding first so
-      // selection/query hotkeys do not keep the guide mounted above results.
-      isInOnboardingView.value = false;
-      await WoxApi.instance.onOnboarding(traceId, false);
-    }
 
     currentQuery.value = query;
     backendQueryContext = QueryContext.empty();
@@ -3210,26 +3149,6 @@ class WoxLauncherController extends GetxController {
     return "${size.width}x${size.height}";
   }
 
-  Future<void> _waitForNextFlutterFrame({required String traceId, required String reason}) async {
-    // Bug fix: management-window transitions need a concrete Flutter frame
-    // boundary after native geometry changes. A scheduled frame plus timeout
-    // keeps the staging path deterministic without risking a stuck open if the
-    // hidden Windows window does not produce a frame promptly.
-    final completer = Completer<void>();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!completer.isCompleted) {
-        completer.complete();
-      }
-    });
-    SchedulerBinding.instance.scheduleFrame();
-    await completer.future.timeout(
-      const Duration(milliseconds: 60),
-      onTimeout: () {
-        Logger.instance.warn(traceId, "wait for next Flutter frame timed out: $reason");
-      },
-    );
-  }
-
   int logicalToPhysicalPixels(double logicalPixels) {
     return (logicalPixels * PlatformDispatcher.instance.views.first.devicePixelRatio).round();
   }
@@ -3240,13 +3159,6 @@ class WoxLauncherController extends GetxController {
   }
 
   Future<void> resizeHeight({required String traceId, String reason = "unspecified", bool forceDwmRecomposition = false, double? overrideTargetHeight}) async {
-    // Don't resize when in a management view; settings and onboarding both use
-    // the same fixed 1200x800 window instead of launcher content height.
-    if (isInSettingView.value || isInOnboardingView.value) {
-      Logger.instance.debug(traceId, "resize skipped: reason=$reason, management view is active");
-      return;
-    }
-
     final currentSize = await windowManager.getSize();
     var totalHeight = overrideTargetHeight ?? calculateWindowHeight();
 
@@ -3575,37 +3487,16 @@ class WoxLauncherController extends GetxController {
 
   Future<void> openSetting(String traceId, SettingWindowContext context) async {
     final settingController = Get.find<WoxSettingController>();
-    var wasWindowVisible = false;
-    try {
-      wasWindowVisible = await windowManager.isVisible();
-    } catch (_) {}
 
-    // Save current position before switching (used if we return to launcher)
-    try {
-      positionBeforeOpenSetting = await windowManager.getPosition();
-    } catch (_) {}
+    if (isOnboardingWindowOpen.value) {
+      await _closeOnboardingWindow(traceId, notifyBackend: true, showLauncher: false);
+    }
 
-    // Bug fix: settings exit behavior follows the opener source instead of
-    // current visibility. Launcher-origin opens can temporarily lose native
-    // visibility, while tray-origin opens must still close directly back to
-    // hidden state.
-    isSettingOpenedFromHidden = context.source == SettingWindowContext.sourceTray;
-    // Bug fix: settings search is a per-visit affordance. Clearing it at entry
-    // protects against stale text if a previous settings route was hidden by a
-    // platform path that did not go through the normal back button flow.
     settingController.clearSettingSearch();
     settingController.activeNavPath.value = 'general';
-    isInSettingView.value = true;
-    isInOnboardingView.value = false;
 
-    final stageWindowsSettingOpen = Platform.isWindows && wasWindowVisible;
-    await WoxApi.instance.onSetting(traceId, true);
     await WoxApi.instance.onOnboarding(traceId, false);
 
-    // Bug fix: keep the route switch responsive by drawing settings from the
-    // cached theme/settings first. The old awaited refresh made Windows stay
-    // hidden while HTTP reloads ran; refreshing in the background keeps data
-    // fresh without delaying the first settings frame.
     unawaited(() async {
       try {
         await Future.wait([WoxThemeUtil.instance.loadTheme(traceId), settingController.reloadSetting(traceId)]);
@@ -3614,6 +3505,36 @@ class WoxLauncherController extends GetxController {
       }
     }());
 
+    const settingWindowSize = Size(1200, 800);
+    await WoxMultipleWindow.createWindow(
+      id: WoxMultipleWindowIds.settings,
+      title: settingController.tr("ui_tray_open_setting_window"),
+      preferredSize: settingWindowSize,
+      preferredConstraints: BoxConstraints.tight(settingWindowSize),
+      showTitleBar: true,
+      mica: true,
+      resizable: false,
+      minimizable: true,
+      closeOnRequest: true,
+      onDestroyed: () => _onSettingWindowDestroyed(),
+      builder: (_) => const WoxSettingView(),
+    );
+
+    isSettingWindowOpen.value = true;
+    await WoxApi.instance.onSetting(traceId, true);
+    _applySettingWindowContext(traceId, context);
+    await hideApp(traceId);
+
+    settingController.preloadSettingViewData(traceId, forceRefresh: true);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await Future.delayed(const Duration(milliseconds: 50));
+      settingController.settingSearchFocusNode.requestFocus();
+    });
+  }
+
+  void _applySettingWindowContext(String traceId, SettingWindowContext context) {
+    final settingController = Get.find<WoxSettingController>();
     if (context.path == "/plugin/setting") {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         await Future.delayed(const Duration(milliseconds: 100));
@@ -3621,137 +3542,108 @@ class WoxLauncherController extends GetxController {
         settingController.focusInstalledPlugin(context.param);
         settingController.switchToPluginSettingTab();
       });
+      return;
     }
     if (context.path == "/data") {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         await Future.delayed(const Duration(milliseconds: 100));
         await settingController.switchToDataView(traceId);
       });
+      return;
     }
     if (context.path == "/about") {
-      // The onboarding entry lives on About, so tests and future deep links need
-      // the same openSetting path support that plugin/data pages already have.
       settingController.activeNavPath.value = 'about';
+      return;
     }
     if (context.path == "/general" && context.param.trim().isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         settingController.focusGeneralSection(context.param);
       });
     }
+  }
 
-    const settingWindowSize = Size(1200, 800);
-    if (stageWindowsSettingOpen) {
-      // Bug fix: Windows paints the native acrylic/Mica background as soon as
-      // the root HWND grows. Hide only the final geometry staging window so the
-      // user sees an immediate settings route switch, then the final 1200x800
-      // settings frame, without watching the backdrop expand first.
-      await windowManager.hide();
+  void _onSettingWindowDestroyed() {
+    if (!isSettingWindowOpen.value) {
+      return;
     }
-    await windowManager.setSize(settingWindowSize);
-    if (Platform.isLinux) {
-      // On Linux we need to show first before positioning works reliably
-      await windowManager.show();
-      await windowManager.center(settingWindowSize.width, settingWindowSize.height);
-    } else {
-      await windowManager.center(settingWindowSize.width, settingWindowSize.height);
-      if (Platform.isWindows) {
-        // Bug fix: setSize/center update the native HWND immediately, but the
-        // Flutter surface may still contain the previous launcher-sized frame.
-        // Waiting for one scheduled frame makes the first visible settings
-        // frame match the final native window size instead of exposing the
-        // enlarged Windows backdrop behind stale Flutter pixels.
-        await _waitForNextFlutterFrame(traceId: traceId, reason: "settings window open");
-      }
-      await windowManager.show();
-    }
-    await windowManager.focus();
-    await windowManager.setAlwaysOnTop(false);
 
-    // Load heavier settings-page data after the window is visible. These lists
-    // (plugins, fonts, backups, usage) are not required for the first frame and
-    // should not lengthen the short Windows hide-and-resize staging path.
-    settingController.preloadSettingViewData(traceId, forceRefresh: true);
-
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await Future.delayed(const Duration(milliseconds: 50));
-      // Feature: the search box is the primary settings entry point, so new
-      // settings sessions put keyboard focus there instead of the passive page
-      // focus node.
-      settingController.settingSearchFocusNode.requestFocus();
-    });
-
-    // On Windows, ensure focus is properly set after window is shown
-    if (Platform.isWindows) {
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        await Future.delayed(const Duration(milliseconds: 100));
-        await windowManager.focus();
-        settingController.settingSearchFocusNode.requestFocus();
-        Logger.instance.info(traceId, "[SETTING] Windows focus requested after delay");
-      });
-    }
+    final traceId = const UuidV4().generate();
+    final settingController = Get.find<WoxSettingController>();
+    isSettingWindowOpen.value = false;
+    settingController.clearSettingSearch();
+    settingController.settingFocusNode.unfocus();
+    settingController.settingSearchFocusNode.unfocus();
+    unawaited(WoxApi.instance.onSetting(traceId, false));
   }
 
   Future<void> exitSetting(String traceId) async {
     final settingController = Get.find<WoxSettingController>();
     closeAllDialogsInSetting();
-    // Bug fix: search text should not survive closing settings. Reset before
-    // either exit branch so returning to the launcher and hidden-window exits
-    // both reopen with a clean search field.
     settingController.clearSettingSearch();
+    settingController.settingFocusNode.unfocus();
     settingController.settingSearchFocusNode.unfocus();
 
-    if (isSettingOpenedFromHidden) {
-      // For hidden-opened settings, exit means hide the window directly
-      await hideApp(traceId);
+    if (isSettingWindowOpen.value) {
+      isSettingWindowOpen.value = false;
+      await WoxApi.instance.onSetting(traceId, false);
+    }
+    await WoxMultipleWindow.closeWindow(WoxMultipleWindowIds.settings);
+  }
+
+  Future<void> _closeOnboardingWindow(String traceId, {required bool notifyBackend, required bool showLauncher}) async {
+    final wasOpen = isOnboardingWindowOpen.value;
+    isOnboardingWindowOpen.value = false;
+    if (notifyBackend && wasOpen) {
+      await WoxApi.instance.onOnboarding(traceId, false);
+    }
+    await WoxMultipleWindow.closeWindow(WoxMultipleWindowIds.onboarding);
+    if (showLauncher) {
+      await WoxApi.instance.show(traceId);
+    }
+  }
+
+  void _onOnboardingWindowDestroyed() {
+    if (!isOnboardingWindowOpen.value) {
       return;
     }
 
-    // Switch back to launcher
-    isInSettingView.value = false;
-    await WoxApi.instance.onSetting(traceId, false);
-    await windowManager.setAlwaysOnTop(true);
-    await resizeHeight(traceId: traceId, reason: "exit setting view");
-    await windowManager.setPosition(positionBeforeOpenSetting);
-    await windowManager.focus();
-    // Bug fix: leaving settings marks the launcher visible before query-box
-    // focus has finished. Await the first focus request so callers and smoke
-    // tests observe the real postcondition, then keep the delayed retry for
-    // platforms that report window focus before the launcher text field rebuilds.
-    await _focusQueryBoxAfterLauncherShow(selectAll: true);
+    final traceId = const UuidV4().generate();
+    isOnboardingWindowOpen.value = false;
+    unawaited(WoxApi.instance.onOnboarding(traceId, false));
+    unawaited(WoxApi.instance.show(traceId));
   }
 
   Future<void> openOnboarding(String traceId) async {
     final settingController = Get.find<WoxSettingController>();
 
-    closeAllDialogsInSetting();
-    // Bug fix: onboarding has its own page-level Escape handling, but the
-    // shared window can still carry focus from the launcher query box or
-    // settings view during the route swap. Drop those old focus owners before
-    // mounting the guide so their Escape-to-hide handlers cannot fire first.
+    if (isSettingWindowOpen.value) {
+      await exitSetting(traceId);
+    }
+
     queryBoxFocusNode.unfocus();
     settingController.settingFocusNode.unfocus();
 
-    isInSettingView.value = false;
-    isInOnboardingView.value = true;
     await WoxApi.instance.onSetting(traceId, false);
-    await WoxApi.instance.onOnboarding(traceId, true);
 
     await WoxThemeUtil.instance.loadTheme(traceId);
     await settingController.reloadSetting(traceId);
 
-    // Feature refinement: onboarding still uses the management-window contract,
-    // but it is narrower than settings so the shared Wox examples read closer
-    // to the real launcher width instead of stretching across a settings page.
-    await windowManager.setSize(_onboardingWindowSize);
-    if (Platform.isLinux) {
-      await windowManager.show();
-      await windowManager.center(_onboardingWindowSize.width, _onboardingWindowSize.height);
-    } else {
-      await windowManager.center(_onboardingWindowSize.width, _onboardingWindowSize.height);
-      await windowManager.show();
-    }
-    await windowManager.focus();
-    await windowManager.setAlwaysOnTop(false);
+    await WoxMultipleWindow.createWindow(
+      id: WoxMultipleWindowIds.onboarding,
+      title: settingController.tr("onboarding_title"),
+      preferredSize: _onboardingWindowSize,
+      preferredConstraints: BoxConstraints.tight(_onboardingWindowSize),
+      showTitleBar: false,
+      mica: true,
+      resizable: false,
+      minimizable: false,
+      closeOnRequest: false,
+      onDestroyed: () => _onOnboardingWindowDestroyed(),
+      builder: (_) => const WoxOnboardingView(),
+    );
+    isOnboardingWindowOpen.value = true;
+    await WoxApi.instance.onOnboarding(traceId, true);
+    await hideApp(traceId);
   }
 
   Future<void> finishOnboarding(String traceId, {required bool markFinished}) async {
@@ -3763,19 +3655,12 @@ class WoxLauncherController extends GetxController {
       await settingController.updateConfig("OnboardingFinished", "true");
     }
 
-    isInOnboardingView.value = false;
-    await WoxApi.instance.onOnboarding(traceId, false);
-    await windowManager.setAlwaysOnTop(true);
+    await _closeOnboardingWindow(traceId, notifyBackend: true, showLauncher: false);
     await WoxApi.instance.show(traceId);
   }
 
   void closeAllDialogsInSetting() {
-    final navigator = Get.key.currentState;
-    if (navigator == null) {
-      return;
-    }
-
-    navigator.popUntil((route) => route.isFirst);
+    WoxMultipleWindow.popUntilRoot(WoxMultipleWindowIds.settings);
   }
 
   Future<void> showToolbarMsg(String traceId, ToolbarMsg msg) async {

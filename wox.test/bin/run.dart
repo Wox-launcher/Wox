@@ -119,7 +119,7 @@ List<_SmokeTemplatePluginDefinition> _templatePluginDefinitionsForSmoke(String? 
   // Settings-focused smoke cases use built-in settings and installed system
   // plugins only. Skipping template packaging keeps these UI flows away from
   // unrelated template clone/install failures on Windows.
-  const settingsFocusedTests = ['T2-15'];
+  const settingsFocusedTests = ['T1B', 'T2-06', 'T2-14', 'T2-15', 'T2-16', 'T3'];
   if (settingsFocusedTests.any(testName.contains)) {
     return const <_SmokeTemplatePluginDefinition>[];
   }

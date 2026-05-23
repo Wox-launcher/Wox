@@ -1,9 +1,12 @@
+// ignore_for_file: invalid_use_of_internal_member, implementation_imports
+
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
 import 'package:chinese_font_library/chinese_font_library.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/src/widgets/_window.dart' as flutter_windowing show WindowManager;
 import 'package:get/get.dart';
 import 'package:protocol_handler/protocol_handler.dart';
 import 'package:uuid/v4.dart';
@@ -16,12 +19,11 @@ import 'package:wox/utils/windows/window_manager.dart';
 import 'package:wox/utils/windows/window_manager_interface.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/modules/launcher/views/wox_launcher_view.dart';
-import 'package:wox/modules/onboarding/views/wox_onboarding_view.dart';
 import 'package:wox/modules/screenshot/views/wox_screenshot_view.dart';
-import 'package:wox/modules/setting/views/wox_setting_view.dart';
 import 'package:wox/utils/env.dart';
 import 'package:wox/utils/heartbeat_checker.dart';
 import 'package:wox/utils/log.dart';
+import 'package:wox/utils/multiplewindow/wox_multiple_window.dart';
 import 'package:wox/utils/wox_setting_util.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
@@ -165,12 +167,10 @@ class MyApp extends StatelessWidget {
     return Obx(() {
       final appFontFamily = settingController.woxSetting.value.appFontFamily.trim();
       final textTheme = buildAppTextTheme(appFontFamily);
+      final theme = ThemeData(useMaterial3: true, textTheme: textTheme, fontFamily: appFontFamily.isEmpty ? null : appFontFamily);
 
-      return MaterialApp(
-        navigatorKey: Get.key,
-        theme: ThemeData(useMaterial3: true, textTheme: textTheme, fontFamily: appFontFamily.isEmpty ? null : appFontFamily),
-        debugShowCheckedModeBanner: false,
-        home: const WoxApp(),
+      return flutter_windowing.WindowManager(
+        child: WoxMultipleWindowHost(theme: theme, child: MaterialApp(navigatorKey: Get.key, theme: theme, debugShowCheckedModeBanner: false, home: const WoxApp())),
       );
     });
   }
@@ -229,7 +229,7 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
     final traceId = UuidV4().generate();
     Logger.instance.debug(
       traceId,
-      "onWindowBlur triggered: forceHideOnBlur=${launcherController.forceHideOnBlur}, isShowFormActionPanel=${launcherController.isShowFormActionPanel.value}, isShowActionPanel=${launcherController.isShowActionPanel.value}, isInSettingView=${launcherController.isInSettingView.value}, isInOnboardingView=${launcherController.isInOnboardingView.value}",
+      "onWindowBlur triggered: forceHideOnBlur=${launcherController.forceHideOnBlur}, isShowFormActionPanel=${launcherController.isShowFormActionPanel.value}, isShowActionPanel=${launcherController.isShowActionPanel.value}",
     );
     // if windows is already hidden, return
     // in Windows, when the window is hidden, the onWindowBlur event will be triggered which will cause
@@ -246,14 +246,6 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
       // selection overlay handed control back to Flutter. Reclaim focus here so the annotation
       // workspace stays interactive even if macOS briefly moves key-window ownership elsewhere.
       await _recoverScreenshotWindowFocus(traceId);
-      return;
-    }
-
-    // Settings and onboarding are management views. They intentionally ignore
-    // launcher hide-on-blur so setup is not interrupted by System Settings or
-    // other windows opened during the guide.
-    if (launcherController.isInSettingView.value || launcherController.isInOnboardingView.value) {
-      Logger.instance.debug(traceId, "onWindowBlur ignored: management view is active");
       return;
     }
 
@@ -295,19 +287,10 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
       return WoxBorderDragMoveArea(
         borderWidth: WoxThemeUtil.instance.currentTheme.value.appPaddingTop.toDouble(),
         onDragEnd: () {
-          if (launcherController.isInSettingView.value || launcherController.isInOnboardingView.value) {
-            return;
-          }
-
           launcherController.focusQueryBox();
           launcherController.saveWindowPositionIfNeeded();
         },
-        child:
-            launcherController.isInOnboardingView.value
-                ? const WoxOnboardingView()
-                : launcherController.isInSettingView.value
-                ? const WoxSettingView()
-                : const WoxLauncherView(),
+        child: const WoxLauncherView(),
       );
     });
   }

@@ -64,11 +64,11 @@ func parseQueryRefinementsFromUI(rawJson string) (map[string]string, error) {
 }
 
 type uiImpl struct {
-	requestMap         *util.HashMap[string, chan WebsocketMsg]
-	isVisible          bool // cached visibility state, updated by PostOnShow/PostOnHide
-	isInSettingView    bool // cached setting-view state, updated by PostOnSetting
-	isInOnboardingView bool // cached onboarding state, updated by PostOnOnboarding
-	isRecordingHotkey  bool // cached hotkey-recorder focus state, updated by PostOnHotkeyRecording
+	requestMap             *util.HashMap[string, chan WebsocketMsg]
+	isVisible              bool // cached visibility state, updated by PostOnShow/PostOnHide
+	isSettingWindowOpen    bool // cached settings window state, updated by PostOnSetting
+	isOnboardingWindowOpen bool // cached onboarding window state, updated by PostOnOnboarding
+	isRecordingHotkey      bool // cached hotkey-recorder focus state, updated by PostOnHotkeyRecording
 }
 
 func (u *uiImpl) ChangeQuery(ctx context.Context, query common.PlainQuery) {
@@ -225,13 +225,11 @@ func (u *uiImpl) ClearToolbarMsg(ctx context.Context, toolbarMsgId string) {
 }
 
 func (u *uiImpl) IsInSettingView() bool {
-	return u.isInSettingView
+	return u.isSettingWindowOpen
 }
 
 func (u *uiImpl) IsInManagementView() bool {
-	// Settings and onboarding both occupy the shared Wox window as management
-	// surfaces, so toolbar notifications should not overlay either of them.
-	return u.isInSettingView || u.isInOnboardingView
+	return u.isSettingWindowOpen || u.isOnboardingWindowOpen
 }
 
 func (u *uiImpl) FocusToChatInput(ctx context.Context) {

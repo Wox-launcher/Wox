@@ -7,7 +7,6 @@ import 'package:get/get.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_platform_focus.dart';
-import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/wox_setting_search.dart';
 import 'package:wox/modules/setting/views/wox_setting_ui_view.dart';
@@ -21,7 +20,6 @@ import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/color_util.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/env.dart';
-import 'package:wox/utils/log.dart';
 
 import 'wox_setting_plugin_view.dart';
 import 'wox_setting_general_view.dart';
@@ -39,7 +37,6 @@ class WoxSettingView extends StatefulWidget {
 class _WoxSettingViewState extends State<WoxSettingView> {
   static const String navItemKeyPrefix = 'settings-nav-';
   static const String navListKey = 'settings-nav-list';
-  static const String backButtonKey = 'settings-back-button';
 
   WoxSettingController get controller => Get.find<WoxSettingController>();
   final ScrollController _navScrollController = ScrollController();
@@ -48,8 +45,6 @@ class _WoxSettingViewState extends State<WoxSettingView> {
   late final Worker _activeNavPathWorker;
   String _lastQueuedVisibleNavPath = '';
   bool _consumeSearchEscapeKeyUp = false;
-  bool _settingFocusEscapePressPending = false;
-  bool _windowFallbackEscapePressPending = false;
 
   @override
   void initState() {
@@ -401,75 +396,14 @@ class _WoxSettingViewState extends State<WoxSettingView> {
       return false;
     }
     if (controller.settingSearchFocusNode.hasFocus && event.logicalKey == LogicalKeyboardKey.escape) {
-      // Bug fix: settings search has a two-step Escape flow: first clear the
-      // search text, then a later Escape exits settings. The global window
-      // fallback must not join the same key sequence while the search field owns
-      // focus, otherwise the KeyUp can exit settings immediately after clearing.
+      // Settings search owns Escape while focused so the same key sequence
+      // cannot also reach page-level shortcuts after clearing the text.
       return false;
     }
     if (event is KeyUpEvent && event.logicalKey == LogicalKeyboardKey.escape && _consumeSearchEscapeKeyUp) {
       return false;
     }
-    if (_handleWindowLevelEscapeFallback(event)) {
-      return true;
-    }
     return _handleSearchKeyEvent(event) == KeyEventResult.handled;
-  }
-
-  bool _handleWindowLevelEscapeFallback(KeyEvent event) {
-    if (event.logicalKey != LogicalKeyboardKey.escape || !_isActiveSettingRoute()) {
-      return false;
-    }
-
-    if (_hasSettingsDialogRoute()) {
-      return false;
-    }
-
-    final primaryFocus = FocusManager.instance.primaryFocus;
-    if (primaryFocus != null && primaryFocus != FocusManager.instance.rootScope && primaryFocus is! FocusScopeNode) {
-      return false;
-    }
-
-    if (event is KeyDownEvent || event is KeyRepeatEvent) {
-      // Bug fix: the settings route can leave Flutter's primary focus on the
-      // route-level ModalScope instead of a concrete settings widget. The page
-      // Focus handler then never sees Escape, so the window-level handler must
-      // consume down/repeat and defer the actual exit to KeyUp to preserve the
-      // existing hold-Escape behavior.
-      _windowFallbackEscapePressPending = true;
-      return true;
-    }
-
-    if (event is KeyUpEvent) {
-      if (!_windowFallbackEscapePressPending) {
-        return false;
-      }
-      // Bug fix: only the fallback that consumed Escape down/repeat may exit on
-      // KeyUp. Dialog routes can close before the release event reaches this
-      // handler, so an unpaired KeyUp must be ignored instead of also closing
-      // settings.
-      _windowFallbackEscapePressPending = false;
-      final traceId = const UuidV4().generate();
-      Logger.instance.info(traceId, "[KEYLOG][FLUTTER-SETTING] ESC key pressed from window-level focus fallback, hiding window");
-      controller.hideWindow(traceId);
-      return true;
-    }
-
-    return false;
-  }
-
-  bool _isActiveSettingRoute() {
-    if (!Get.isRegistered<WoxLauncherController>()) {
-      return false;
-    }
-    return Get.find<WoxLauncherController>().isInSettingView.value;
-  }
-
-  bool _hasSettingsDialogRoute() {
-    // Bug fix guard: dialogs are separate Navigator routes and should keep
-    // their own Escape behavior. The fallback is only for the settings page
-    // route itself after focus falls back to the route ModalScope.
-    return Get.key.currentState?.canPop() ?? false;
   }
 
   Widget _buildSearchResultIcon(WoxSettingSearchResult result, bool isSelected) {
@@ -654,7 +588,6 @@ class _WoxSettingViewState extends State<WoxSettingView> {
         focusNode: controller.settingFocusNode,
         autofocus: true,
         onKeyEvent: (FocusNode node, KeyEvent event) {
-          Logger.instance.debug(const UuidV4().generate(), "[KEYLOG][FLUTTER-SETTING] WoxPlatformFocus received key event: ${event.logicalKey.keyLabel}");
           if (_isSearchFocusShortcut(event)) {
             if (event is KeyDownEvent || event is KeyRepeatEvent) {
               _focusSettingSearchFromShortcut();
@@ -664,11 +597,9 @@ class _WoxSettingViewState extends State<WoxSettingView> {
           if (event.logicalKey == LogicalKeyboardKey.escape && controller.settingSearchFocusNode.hasFocus) {
             if ((event is KeyDownEvent || event is KeyRepeatEvent) && controller.settingSearchTextController.text.trim().isNotEmpty) {
               // Bug fix: Escape arrives as down/up. Clearing the text on key
-              // down made the following key up look like a normal settings
-              // Escape, so the window exited after the search was cleared.
+              // down can move focus back to the page before the matching KeyUp,
+              // so consume the release with a pending flag.
               _consumeSearchEscapeKeyUp = true;
-              _settingFocusEscapePressPending = false;
-              _windowFallbackEscapePressPending = false;
               controller.clearSettingSearch();
               return KeyEventResult.handled;
             }
@@ -683,27 +614,6 @@ class _WoxSettingViewState extends State<WoxSettingView> {
             // pending search-clear flag instead of requiring the search field to
             // still be focused.
             _consumeSearchEscapeKeyUp = false;
-            return KeyEventResult.handled;
-          }
-          if (event.logicalKey == LogicalKeyboardKey.escape && (event is KeyDownEvent || event is KeyRepeatEvent)) {
-            // Bug fix: Escape can arrive as a down/repeat/up sequence. The old
-            // KeyDown handler exited settings immediately, so holding Escape could
-            // also leak follow-up events into the launcher or hide path. Consume
-            // the press here and perform the route transition on KeyUp only.
-            _settingFocusEscapePressPending = true;
-            return KeyEventResult.handled;
-          }
-          if (event is KeyUpEvent && event.logicalKey == LogicalKeyboardKey.escape) {
-            if (!_settingFocusEscapePressPending) {
-              return KeyEventResult.ignored;
-            }
-            // Bug fix: dialog routes can consume the Escape press and close
-            // before the release bubbles back to this page Focus. Only a KeyUp
-            // paired with a settings-owned KeyDown may exit settings.
-            _settingFocusEscapePressPending = false;
-            final traceId = const UuidV4().generate();
-            Logger.instance.info(traceId, "[KEYLOG][FLUTTER-SETTING] ESC key pressed, hiding window");
-            controller.hideWindow(traceId);
             return KeyEventResult.handled;
           }
           return KeyEventResult.ignored;
@@ -723,31 +633,7 @@ class _WoxSettingViewState extends State<WoxSettingView> {
                   // made the three-pane layout look like separate components.
                   border: Border(right: BorderSide(color: getThemeSettingDividerColor(), width: 1)),
                 ),
-                child: Column(
-                  children: [
-                    _buildSearchBox(),
-                    Expanded(child: _buildSidebarNavArea(navItems)),
-                    Container(
-                      margin: const EdgeInsets.fromLTRB(14, 8, 14, 16),
-                      child: GestureDetector(
-                        key: const ValueKey(backButtonKey),
-                        onTap: () => controller.hideWindow(const UuidV4().generate()),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          decoration: BoxDecoration(borderRadius: BorderRadius.circular(6)),
-                          child: Row(
-                            children: [
-                              Icon(Icons.arrow_back, color: getThemeTextColor().withValues(alpha: 0.86), size: 18),
-                              const SizedBox(width: 12),
-                              Text(controller.tr('ui_back'), style: TextStyle(color: getThemeTextColor(), fontSize: 13)),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                ),
+                child: Column(children: [_buildSearchBox(), Expanded(child: _buildSidebarNavArea(navItems)), const SizedBox(height: 8)]),
               ),
               // Content area
               Expanded(child: _findBodyByPath(navItems, controller.activeNavPath.value) ?? navItems[0].body!),

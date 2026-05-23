@@ -185,18 +185,15 @@ Future<WoxLauncherController> launchOnboardingApp(WidgetTester tester) async {
   await startSmokeAppBeforeFirstPump(timeout: const Duration(seconds: 30), beforeRunApp: () => seedOnboardingFinishedBeforeReady(false));
 
   final onboardingFinder = find.byKey(const ValueKey('onboarding-view'));
+  final controller = Get.find<WoxLauncherController>();
   await tester.pump(const Duration(milliseconds: 500));
   if (onboardingFinder.evaluate().isEmpty) {
-    // Bug fix: the backend handles /on/ready only once per smoke process, so
-    // onboarding cases cannot depend on startup routing after the startup smoke
-    // has consumed it. Explicitly opening the guide keeps these cases focused
-    // on onboarding behavior in both filtered and full-suite runs.
-    await Get.find<WoxLauncherController>().openOnboarding(const UuidV4().generate());
+    await controller.openOnboarding(const UuidV4().generate());
   }
-  await pumpUntil(tester, () => onboardingFinder.evaluate().isNotEmpty, timeout: const Duration(seconds: 30));
+  await pumpUntil(tester, () => controller.isOnboardingWindowOpen.value && onboardingFinder.evaluate().isNotEmpty, timeout: const Duration(seconds: 30));
+  expect(controller.isOnboardingWindowOpen.value, isTrue);
   expect(onboardingFinder, findsOneWidget);
 
-  final controller = Get.find<WoxLauncherController>();
   registerLauncherTestCleanup(tester, controller);
   return controller;
 }
@@ -604,11 +601,30 @@ Future<void> releaseQuickSelectModifier(WidgetTester tester) async {
 Future<WoxSettingController> openSettings(WidgetTester tester, WoxLauncherController launcherController, String path) async {
   await triggerTestOpenSetting(tester, path: path);
 
-  await pumpUntil(tester, () => launcherController.isInSettingView.value && find.byType(WoxSettingView).evaluate().isNotEmpty, timeout: const Duration(seconds: 30));
+  final settingController = Get.find<WoxSettingController>();
+  final expectedNavPath = _expectedSettingNavPath(path);
+  await pumpUntil(
+    tester,
+    () => launcherController.isSettingWindowOpen.value && find.byType(WoxSettingView).evaluate().isNotEmpty && settingController.activeNavPath.value == expectedNavPath,
+    timeout: const Duration(seconds: 30),
+  );
 
-  expect(launcherController.isInSettingView.value, isTrue);
-  expect(find.byType(WoxSettingView), findsOneWidget);
-  return Get.find<WoxSettingController>();
+  expectSettingsWindowOpen(launcherController);
+  expect(settingController.activeNavPath.value, expectedNavPath);
+  return settingController;
+}
+
+String _expectedSettingNavPath(String path) {
+  if (path == '/plugin/setting') {
+    return 'plugins.installed';
+  }
+  if (path == '/data') {
+    return 'data';
+  }
+  if (path == '/about') {
+    return 'about';
+  }
+  return 'general';
 }
 
 Future<void> closeSettings(WidgetTester tester, WoxSettingController settingController, WoxLauncherController launcherController) async {
@@ -624,13 +640,28 @@ Future<void> closeSettings(WidgetTester tester, WoxSettingController settingCont
   final fallbackDeadline = DateTime.now().add(const Duration(seconds: 2));
   while (DateTime.now().isBefore(fallbackDeadline)) {
     await tester.pump(const Duration(milliseconds: 200));
-    if (!launcherController.isInSettingView.value) {
+    if (!launcherController.isSettingWindowOpen.value) {
       return;
     }
   }
 
   settingController.hideWindow(const UuidV4().generate());
-  await pumpUntil(tester, () => launcherController.isInSettingView.value == false, timeout: const Duration(seconds: 30));
+  await pumpUntil(tester, () => launcherController.isSettingWindowOpen.value == false && find.byType(WoxSettingView).evaluate().isEmpty, timeout: const Duration(seconds: 30));
+}
+
+void expectSettingsWindowOpen(WoxLauncherController launcherController) {
+  expect(launcherController.isSettingWindowOpen.value, isTrue);
+  expect(find.byType(WoxSettingView), findsOneWidget);
+}
+
+void expectSettingsWindowClosed(WoxLauncherController launcherController) {
+  expect(launcherController.isSettingWindowOpen.value, isFalse);
+  expect(find.byType(WoxSettingView), findsNothing);
+}
+
+void expectOnboardingWindowOpen(WoxLauncherController launcherController) {
+  expect(launcherController.isOnboardingWindowOpen.value, isTrue);
+  expect(find.byKey(const ValueKey('onboarding-view')), findsOneWidget);
 }
 
 Future<void> tapSettingNavItem(WidgetTester tester, WoxSettingController settingController, String navPath, {Duration timeout = const Duration(seconds: 30)}) async {

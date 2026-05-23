@@ -75,9 +75,10 @@ func GetUIManager() *Manager {
 		managerInstance.mainHotkey = &hotkey.Hotkey{}
 		managerInstance.selectionHotkey = &hotkey.Hotkey{}
 		managerInstance.ui = &uiImpl{
-			requestMap:      util.NewHashMap[string, chan WebsocketMsg](),
-			isVisible:       false, // Initially hidden
-			isInSettingView: false,
+			requestMap:             util.NewHashMap[string, chan WebsocketMsg](),
+			isVisible:              false, // Initially hidden
+			isSettingWindowOpen:    false,
+			isOnboardingWindowOpen: false,
 		}
 		terminal.GetSessionManager().SetEmitter(func(ctx context.Context, uiSessionID string, method string, data any) {
 			responseUI(ctx, WebsocketMsg{
@@ -847,8 +848,6 @@ func (m *Manager) PostOnShow(ctx context.Context) {
 	// Update cached visibility state
 	if impl, ok := m.ui.(*uiImpl); ok {
 		impl.isVisible = true
-		impl.isInSettingView = false
-		impl.isInOnboardingView = false
 		impl.isRecordingHotkey = false
 	}
 
@@ -881,40 +880,30 @@ func (m *Manager) PostOnHide(ctx context.Context) {
 	// Update cached visibility state
 	if impl, ok := m.ui.(*uiImpl); ok {
 		impl.isVisible = false
-		impl.isInSettingView = false
-		impl.isInOnboardingView = false
 		impl.isRecordingHotkey = false
 	}
 }
 
-func (m *Manager) PostOnSetting(ctx context.Context, isInSettingView bool) {
+func (m *Manager) PostOnSetting(ctx context.Context, isSettingWindowOpen bool) {
 	if impl, ok := m.ui.(*uiImpl); ok {
-		impl.isInSettingView = isInSettingView
-		if !isInSettingView {
+		impl.isSettingWindowOpen = isSettingWindowOpen
+		if !isSettingWindowOpen {
 			impl.isRecordingHotkey = false
 		}
-		if isInSettingView {
-			// Settings can be opened while the launcher is hidden. Marking the
-			// shared window visible here keeps backend notification routing in
-			// sync without waiting for launcher-specific onShow.
-			impl.isVisible = true
-			impl.isInOnboardingView = false
+		if isSettingWindowOpen {
+			impl.isOnboardingWindowOpen = false
 		}
 	}
 }
 
-func (m *Manager) PostOnOnboarding(ctx context.Context, isInOnboardingView bool) {
+func (m *Manager) PostOnOnboarding(ctx context.Context, isOnboardingWindowOpen bool) {
 	if impl, ok := m.ui.(*uiImpl); ok {
-		// Onboarding is a management surface like settings, but it needs its own
-		// state so Flutter can keep isInSettingView false while backend routing
-		// still suppresses toolbar notifications over the guide.
-		impl.isInOnboardingView = isInOnboardingView
-		if !isInOnboardingView {
+		impl.isOnboardingWindowOpen = isOnboardingWindowOpen
+		if !isOnboardingWindowOpen {
 			impl.isRecordingHotkey = false
 		}
-		if isInOnboardingView {
-			impl.isVisible = true
-			impl.isInSettingView = false
+		if isOnboardingWindowOpen {
+			impl.isSettingWindowOpen = false
 		}
 	}
 }
@@ -1616,14 +1605,14 @@ func (m *Manager) recordHotkeyIfRecording(ctx context.Context, hotkeyStr string)
 // isHotkeyRecordingActive reports whether the shared UI is currently capturing a hotkey.
 func (m *Manager) isHotkeyRecordingActive() bool {
 	if impl, ok := m.ui.(*uiImpl); ok {
-		return impl.isRecordingHotkey && impl.isVisible
+		return impl.isRecordingHotkey
 	}
 	return false
 }
 
 func (m *Manager) isOnboardingViewActive() bool {
 	if impl, ok := m.ui.(*uiImpl); ok {
-		return impl.isInOnboardingView && impl.isVisible
+		return impl.isOnboardingWindowOpen
 	}
 	return false
 }

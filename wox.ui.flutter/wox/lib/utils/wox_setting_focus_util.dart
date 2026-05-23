@@ -15,7 +15,7 @@ class WoxSettingFocusUtil {
       }
 
       final launcherController = Get.find<WoxLauncherController>();
-      if (!launcherController.isInSettingView.value) {
+      if (!launcherController.isSettingWindowOpen.value) {
         return;
       }
 

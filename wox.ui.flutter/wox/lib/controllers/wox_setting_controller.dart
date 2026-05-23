@@ -844,7 +844,7 @@ class WoxSettingController extends GetxController {
   }
 
   void hideWindow(String traceId) {
-    Get.find<WoxLauncherController>().exitSetting(traceId);
+    unawaited(Get.find<WoxLauncherController>().exitSetting(traceId));
   }
 
   Future<void> updateConfig(String key, String value) async {

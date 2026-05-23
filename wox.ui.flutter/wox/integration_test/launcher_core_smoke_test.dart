@@ -121,45 +121,40 @@ void registerLauncherCoreSmokeTests() {
       expect(controller.activeResultViewController.items.any((item) => item.value.isShowQuickSelect), isFalse);
     });
 
-    testWidgets('T2-06: Closing settings returns focus to the launcher query box', (tester) async {
+    testWidgets('T2-06: Closing settings closes only the settings window', (tester) async {
       final controller = await launchAndShowLauncher(tester, windowSize: smokeLargeWindowSize);
       final settingController = await openSettings(tester, controller, 'general');
 
-      expect(controller.isInSettingView.value, isTrue);
+      expectSettingsWindowOpen(controller);
+      await waitForWindowVisibility(tester, false);
 
       await closeSettings(tester, settingController, controller);
-      await waitForQueryBoxFocus(tester, controller);
 
-      expect(await windowManager.isVisible(), isTrue);
-      expect(controller.isInSettingView.value, isFalse);
-      expect(controller.queryBoxFocusNode.hasFocus, isTrue);
+      expectSettingsWindowClosed(controller);
+      expect(await windowManager.isVisible(), isFalse);
     });
 
-    testWidgets('T2-06a: Holding Escape in settings returns to query box without hiding launcher', (tester) async {
+    testWidgets('T2-06a: Holding Escape in settings closes on key up without showing launcher', (tester) async {
       final controller = await launchAndShowLauncher(tester, windowSize: smokeLargeWindowSize);
       await openSettings(tester, controller, 'general');
 
       await tester.sendKeyDownEvent(LogicalKeyboardKey.escape);
       await tester.pump(const Duration(milliseconds: 100));
 
-      expect(await windowManager.isVisible(), isTrue);
-      expect(controller.isInSettingView.value, isTrue);
-      expect(find.byType(WoxSettingView), findsOneWidget);
+      expect(await windowManager.isVisible(), isFalse);
+      expectSettingsWindowOpen(controller);
 
       await tester.sendKeyRepeatEvent(LogicalKeyboardKey.escape);
       await tester.pump(const Duration(milliseconds: 100));
 
-      expect(await windowManager.isVisible(), isTrue);
-      expect(controller.isInSettingView.value, isTrue);
-      expect(find.byType(WoxSettingView), findsOneWidget);
+      expect(await windowManager.isVisible(), isFalse);
+      expectSettingsWindowOpen(controller);
 
       await tester.sendKeyUpEvent(LogicalKeyboardKey.escape);
-      await waitForQueryBoxFocus(tester, controller);
+      await pumpUntil(tester, () => !controller.isSettingWindowOpen.value && find.byType(WoxSettingView).evaluate().isEmpty, timeout: const Duration(seconds: 30));
 
-      expect(await windowManager.isVisible(), isTrue);
-      expect(controller.isInSettingView.value, isFalse);
-      expect(controller.queryBoxFocusNode.hasFocus, isTrue);
-      expect(find.byType(WoxLauncherView), findsOneWidget);
+      expect(await windowManager.isVisible(), isFalse);
+      expectSettingsWindowClosed(controller);
     });
 
     testWidgets('T2-06aa: Escape exits settings when only the window route has focus', (tester) async {
@@ -176,21 +171,14 @@ void registerLauncherCoreSmokeTests() {
       await tester.sendKeyDownEvent(LogicalKeyboardKey.escape);
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Regression guard: the settings route can hold keyboard focus at the
-      // ModalScope/window level after a native focus transition. Escape must
-      // still leave settings, but only on KeyUp so holding Escape cannot leak
-      // into the launcher hide path.
-      expect(await windowManager.isVisible(), isTrue);
-      expect(controller.isInSettingView.value, isTrue);
-      expect(find.byType(WoxSettingView), findsOneWidget);
+      expect(await windowManager.isVisible(), isFalse);
+      expectSettingsWindowOpen(controller);
 
       await tester.sendKeyUpEvent(LogicalKeyboardKey.escape);
-      await waitForQueryBoxFocus(tester, controller);
+      await pumpUntil(tester, () => !controller.isSettingWindowOpen.value && find.byType(WoxSettingView).evaluate().isEmpty, timeout: const Duration(seconds: 30));
 
-      expect(await windowManager.isVisible(), isTrue);
-      expect(controller.isInSettingView.value, isFalse);
-      expect(controller.queryBoxFocusNode.hasFocus, isTrue);
-      expect(find.byType(WoxLauncherView), findsOneWidget);
+      expect(await windowManager.isVisible(), isFalse);
+      expectSettingsWindowClosed(controller);
     });
 
     testWidgets('T2-06ab: Escape closes a settings dialog before exiting settings', (tester) async {
@@ -223,41 +211,41 @@ void registerLauncherCoreSmokeTests() {
       // The page-level Escape fallback must let the dialog route consume Escape
       // first instead of sending the whole settings window back to the launcher.
       expect(find.byType(AlertDialog), findsNothing);
-      expect(await windowManager.isVisible(), isTrue);
-      expect(controller.isInSettingView.value, isTrue);
-      expect(find.byType(WoxSettingView), findsOneWidget);
+      expect(await windowManager.isVisible(), isFalse);
+      expectSettingsWindowOpen(controller);
 
       await closeSettings(tester, settingController, controller);
     });
 
-    testWidgets('T2-06b: Re-show after a hidden settings route opens the launcher query UI', (tester) async {
+    testWidgets('T2-06b: Re-show launcher while settings window stays open', (tester) async {
       final controller = await launchAndShowLauncher(tester, windowSize: smokeLargeWindowSize);
-      await openSettings(tester, controller, 'general');
+      final settingController = await openSettings(tester, controller, 'general');
 
-      await windowManager.hide();
       await waitForWindowVisibility(tester, false);
-      expect(controller.isInSettingView.value, isTrue);
+      expectSettingsWindowOpen(controller);
 
       await triggerBackendShowApp(tester);
       await waitForQueryBoxFocus(tester, controller);
 
       expect(await windowManager.isVisible(), isTrue);
-      expect(controller.isInSettingView.value, isFalse);
+      expectSettingsWindowOpen(controller);
       expect(controller.queryBoxFocusNode.hasFocus, isTrue);
       expect(find.byType(WoxLauncherView), findsOneWidget);
+      await closeSettings(tester, settingController, controller);
     });
 
     testWidgets('T2-06c: Tray-opened settings closes back to hidden state on Escape', (tester) async {
       final controller = await launchLauncherApp(tester);
       await triggerTestOpenSetting(tester, source: SettingWindowContext.sourceTray);
-      await pumpUntil(tester, () => controller.isInSettingView.value && find.byType(WoxSettingView).evaluate().isNotEmpty, timeout: const Duration(seconds: 30));
+      await pumpUntil(tester, () => controller.isSettingWindowOpen.value && find.byType(WoxSettingView).evaluate().isNotEmpty, timeout: const Duration(seconds: 30));
 
       await tester.sendKeyDownEvent(LogicalKeyboardKey.escape);
       await tester.pump(const Duration(milliseconds: 100));
       await tester.sendKeyUpEvent(LogicalKeyboardKey.escape);
+      await pumpUntil(tester, () => !controller.isSettingWindowOpen.value && find.byType(WoxSettingView).evaluate().isEmpty, timeout: const Duration(seconds: 30));
 
       await waitForWindowVisibility(tester, false);
-      expect(controller.isInSettingView.value, isFalse);
+      expectSettingsWindowClosed(controller);
     });
 
     testWidgets('T2-07: Re-show restores query box focus for immediate typing', (tester) async {
@@ -273,7 +261,7 @@ void registerLauncherCoreSmokeTests() {
 
       expect(await windowManager.isVisible(), isTrue);
       expect(controller.queryBoxFocusNode.hasFocus, isTrue);
-      expect(controller.isInSettingView.value, isFalse);
+      expect(controller.isSettingWindowOpen.value, isFalse);
     });
 
     testWidgets('T2-07a: Re-show focus retry does not select text typed during startup', (tester) async {
@@ -412,24 +400,23 @@ void registerLauncherCoreSmokeTests() {
 
       await openSettings(tester, launcherController, 'general');
 
-      expect(launcherController.isInSettingView.value, isTrue);
-      expect(find.byType(WoxSettingView), findsOneWidget);
+      expectSettingsWindowOpen(launcherController);
     });
 
     testWidgets('T2-15: Settings page basic navigation', (tester) async {
       final launcherController = await launchAndShowLauncher(tester);
       final settingController = await openSettings(tester, launcherController, 'general');
 
-      expect(find.byType(WoxSettingView), findsOneWidget);
+      expectSettingsWindowOpen(launcherController);
 
       await tapSettingNavItem(tester, settingController, 'general');
-      expect(find.byType(WoxSettingView), findsOneWidget);
+      expectSettingsWindowOpen(launcherController);
 
       await tapSettingNavItem(tester, settingController, 'ui');
-      expect(find.byType(WoxSettingView), findsOneWidget);
+      expectSettingsWindowOpen(launcherController);
 
       await tapSettingNavItem(tester, settingController, 'data');
-      expect(find.byType(WoxSettingView), findsOneWidget);
+      expectSettingsWindowOpen(launcherController);
 
       final navScrollPosition = _settingsNavScrollPosition(tester);
       if (navScrollPosition.maxScrollExtent > 0) {
@@ -538,20 +525,19 @@ void registerLauncherCoreSmokeTests() {
       await tester.pump(const Duration(milliseconds: 120));
       expect(settingController.settingSearchTextController.text, isEmpty);
       expect(settingController.settingSearchPanelVisible.value, isFalse);
-      expect(launcherController.isInSettingView.value, isTrue);
+      expectSettingsWindowOpen(launcherController);
       await tester.sendKeyUpEvent(LogicalKeyboardKey.escape);
       await tester.pump(const Duration(milliseconds: 300));
-      expect(launcherController.isInSettingView.value, isTrue);
+      expectSettingsWindowOpen(launcherController);
 
       await tester.sendKeyDownEvent(LogicalKeyboardKey.escape);
       await tester.pump(const Duration(milliseconds: 100));
-      expect(launcherController.isInSettingView.value, isTrue);
+      expectSettingsWindowOpen(launcherController);
 
       await tester.sendKeyUpEvent(LogicalKeyboardKey.escape);
-      await waitForQueryBoxFocus(tester, launcherController);
-      expect(launcherController.isInSettingView.value, isFalse);
-      expect(launcherController.queryBoxFocusNode.hasFocus, isTrue);
-      expect(find.byType(WoxLauncherView), findsOneWidget);
+      await pumpUntil(tester, () => !launcherController.isSettingWindowOpen.value && find.byType(WoxSettingView).evaluate().isEmpty, timeout: const Duration(seconds: 30));
+      expectSettingsWindowClosed(launcherController);
+      expect(await windowManager.isVisible(), isFalse);
 
       await openSettings(tester, launcherController, 'general');
       await tester.pump(const Duration(milliseconds: 250));
@@ -803,6 +789,9 @@ void registerLauncherCoreSmokeTests() {
       // Verify lastLaunchMode was synced immediately.
       expect(controller.lastLaunchMode, equals(WoxLaunchModeEnum.WOX_LAUNCH_MODE_CONTINUE.code));
 
+      await triggerBackendShowApp(tester);
+      await waitForQueryBoxFocus(tester, controller);
+
       // Query and get results.
       await queryAndWaitForResults(tester, controller, 'wox launcher test xyz123');
       expect(controller.activeResultViewController.items, isNotEmpty);
@@ -837,6 +826,9 @@ void registerLauncherCoreSmokeTests() {
 
       // Verify lastLaunchMode was synced back to fresh.
       expect(controller.lastLaunchMode, equals(WoxLaunchModeEnum.WOX_LAUNCH_MODE_FRESH.code));
+
+      await triggerBackendShowApp(tester);
+      await waitForQueryBoxFocus(tester, controller);
 
       // Query and get results again.
       await queryAndWaitForResults(tester, controller, 'wox launcher test xyz123');

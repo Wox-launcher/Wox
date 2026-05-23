@@ -27,6 +27,8 @@ import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_lang.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/consts.dart';
+import 'package:wox/utils/multiplewindow/wox_multiple_window.dart';
+import 'package:wox/utils/multiplewindow/wox_multiple_window_ids.dart';
 
 const double _onboardingSidebarWidth = 256;
 const double _onboardingFooterHeight = 72;
@@ -144,10 +146,8 @@ class _WoxOnboardingViewState extends State<WoxOnboardingView> {
         return;
       }
 
-      // Bug fix: onboarding is routed through the shared launcher window, so a
-      // stale launcher query-box focus could keep handling Escape and hide the
-      // guide. Claim a page-level focus target and make Escape a no-op here so
-      // users leave onboarding only through the explicit Skip/Finish actions.
+      // Claim a page-level focus target and make Escape a no-op here so users
+      // leave onboarding only through the explicit Skip/Finish actions.
       onboardingFocusNode.requestFocus();
     });
   }
@@ -279,6 +279,7 @@ class _WoxOnboardingViewState extends State<WoxOnboardingView> {
                     _buildFooter(accent),
                   ],
                 ),
+                Positioned(top: 0, left: 0, right: 0, height: 36, child: WoxMultipleWindowDragMoveArea(windowId: WoxMultipleWindowIds.onboarding, child: const SizedBox.expand())),
               ],
             ),
           ),
