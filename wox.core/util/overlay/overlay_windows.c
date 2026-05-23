@@ -64,6 +64,7 @@ typedef struct {
     bool loading;
     bool topmost;
     bool absolutePosition;
+    bool preservePosition;
     int stickyWindowPid; // 0 = Screen, >0 = Window
     int anchor;          // 0-8
     int autoCloseSeconds;
@@ -75,6 +76,8 @@ typedef struct {
     float offsetY;
     float width;         // 0 = auto
     float height;        // 0 = auto
+    float maxHeight;     // 0 = no cap for auto height
+    bool followScroll;
     float fontSize;      // 0 = system default, unit: pt
     float iconSize;      // 0 = default (16), unit: DIP
     char* tooltip;
@@ -244,6 +247,9 @@ static BOOL TryEnableAcrylic(HWND hwnd)
 #define COPY_BUTTON_SIZE_DIP 24
 #define COPY_BUTTON_PAD_DIP 12
 #define COPY_BUTTON_TEXT_GAP_DIP 8
+#define SCROLLBAR_WIDTH_DIP 3
+#define SCROLLBAR_HIT_WIDTH_DIP 14
+#define SCROLLBAR_MIN_THUMB_DIP 24
 #define TOOLTIP_GAP_DIP 6
 #define CORNER_RADIUS_DIP 10
 #define RESIZE_GRIP_DIP 10
@@ -256,6 +262,7 @@ static BOOL TryEnableAcrylic(HWND hwnd)
 #define TIMER_TRACK 2
 #define TIMER_LIVE_FOLLOW 3
 #define TIMER_COPY_FEEDBACK 4
+#define TIMER_REPAINT 5
 #define PREDICTIVE_CORRECTION_THRESHOLD_PX 48
 
 #define WM_WOX_OVERLAY_COMMAND (WM_APP + 0x610)
@@ -611,6 +618,7 @@ typedef struct OverlayWindow
     BOOL loading;
     BOOL topmost;
     BOOL absolutePosition;
+    BOOL preservePosition;
     BOOL movable;
     BOOL resizable;
     float cornerRadius;
@@ -622,6 +630,8 @@ typedef struct OverlayWindow
     float offsetY;
     float width;
     float height;
+    float maxHeight;
+    BOOL followScroll;
     float fontSize; // pt, <=0 means system default
     float iconSize; // DIP, <=0 means default
 
@@ -632,6 +642,19 @@ typedef struct OverlayWindow
 
     RECT closeRect;
     RECT copyButtonRect;
+    RECT textRect;
+    RECT textScrollbarTrackRect;
+    RECT textScrollbarThumbRect;
+    int textContentHeight;
+    int textScrollOffset;
+    int textMaxScrollOffset;
+    BOOL textUserScrolled;
+    BOOL textScrollbarHover;
+    BOOL textScrollbarDragging;
+    POINT textScrollbarDragStart;
+    int textScrollbarDragStartOffset;
+    BOOL repaintPending;
+    BOOL layoutSizeChanged;
     BOOL mouseInside;
     BOOL closeHover;
     BOOL closePressed;
@@ -687,6 +710,7 @@ typedef struct OverlayPayload
     BOOL loading;
     BOOL topmost;
     BOOL absolutePosition;
+    BOOL preservePosition;
     int stickyWindowPid;
     int anchor;
     int autoCloseSeconds;
@@ -698,6 +722,8 @@ typedef struct OverlayPayload
     float offsetY;
     float width;
     float height;
+    float maxHeight;
+    BOOL followScroll;
     float fontSize;
     float iconSize;
     BOOL showCopyButton;
@@ -1044,17 +1070,8 @@ static void ShowOverlayWindowWithFocusPolicy(OverlayWindow *ow)
     if (!ow || !ow->hwnd)
         return;
 
-    if (ow->closeOnEscape)
-    {
-        // Bug fix: SW_SHOWNOACTIVATE made Escape-to-close overlays visible but left keyboard focus
-        // on the launcher. Focus only keyboard-dismissable overlays so ordinary notification
-        // overlays keep their non-activating behavior.
-        ShowWindow(ow->hwnd, SW_SHOW);
-        SetForegroundWindow(ow->hwnd);
-        SetFocus(ow->hwnd);
-        return;
-    }
-
+    // CloseOnEscape means "close if this overlay already has focus"; showing or refreshing
+    // the overlay must not steal focus from the user's active app.
     ShowWindow(ow->hwnd, SW_SHOWNOACTIVATE);
 }
 
@@ -1096,6 +1113,142 @@ static void UpdateCopyButtonRect(OverlayWindow *ow, int width, int height, UINT 
     r.right = x + buttonSize;
     r.bottom = y + buttonSize;
     ow->copyButtonRect = r;
+}
+
+static void UpdateTextScrollbarRects(OverlayWindow *ow, int width, int height, int copyButtonReserve, UINT dpi)
+{
+    RECT empty = {0, 0, 0, 0};
+    ow->textScrollbarTrackRect = empty;
+    ow->textScrollbarThumbRect = empty;
+    if (!ow || ow->textMaxScrollOffset <= 0 || ow->textContentHeight <= 0)
+        return;
+
+    int barWidth = MulDiv(SCROLLBAR_WIDTH_DIP, (int)dpi, 96);
+    if (barWidth < 2)
+        barWidth = 2;
+    int rightPad = MulDiv(CLOSE_PAD_DIP, (int)dpi, 96);
+    int trackRight = width - rightPad;
+    int trackLeft = trackRight - barWidth;
+
+    int top = ow->textRect.top;
+    if (ow->closable)
+        top = max(top, ow->closeRect.bottom + MulDiv(8, (int)dpi, 96));
+    int bottom = height - MulDiv(PADDING_Y_DIP, (int)dpi, 96) - copyButtonReserve;
+    if (ow->showCopyButton)
+        bottom = min(bottom, ow->copyButtonRect.top - MulDiv(8, (int)dpi, 96));
+    if (bottom <= top)
+        return;
+
+    RECT track = {trackLeft, top, trackRight, bottom};
+    ow->textScrollbarTrackRect = track;
+
+    int trackHeight = bottom - top;
+    int visibleTextHeight = ow->textRect.bottom - ow->textRect.top;
+    int thumbHeight = (int)roundf((float)visibleTextHeight * (float)trackHeight / (float)ow->textContentHeight);
+    int minThumbHeight = MulDiv(SCROLLBAR_MIN_THUMB_DIP, (int)dpi, 96);
+    if (thumbHeight < minThumbHeight)
+        thumbHeight = minThumbHeight;
+    if (thumbHeight > trackHeight)
+        thumbHeight = trackHeight;
+
+    int maxThumbTravel = trackHeight - thumbHeight;
+    int thumbTop = top;
+    if (maxThumbTravel > 0 && ow->textMaxScrollOffset > 0)
+        thumbTop += (int)roundf((float)ow->textScrollOffset * (float)maxThumbTravel / (float)ow->textMaxScrollOffset);
+    RECT thumb = {trackLeft, thumbTop, trackRight, thumbTop + thumbHeight};
+    ow->textScrollbarThumbRect = thumb;
+}
+
+static BOOL PointInTextScrollbarHitRect(OverlayWindow *ow, POINT pt)
+{
+    if (!ow || ow->textMaxScrollOffset <= 0)
+        return FALSE;
+    RECT hit = ow->textScrollbarTrackRect;
+    if (hit.bottom <= hit.top || hit.right <= hit.left)
+        return FALSE;
+    int hitWidth = MulDiv(SCROLLBAR_HIT_WIDTH_DIP, (int)ow->dpi, 96);
+    int center = (hit.left + hit.right) / 2;
+    hit.left = center - hitWidth / 2;
+    hit.right = hit.left + hitWidth;
+    return PtInRect(&hit, pt);
+}
+
+static void DrawTextScrollbar(HDC hdc, OverlayWindow *ow)
+{
+    if (!ow || ow->textMaxScrollOffset <= 0)
+        return;
+    RECT thumb = ow->textScrollbarThumbRect;
+    if (thumb.right <= thumb.left || thumb.bottom <= thumb.top)
+        return;
+
+    HBRUSH brush = CreateSolidBrush((ow->textScrollbarHover || ow->textScrollbarDragging) ? RGB(190, 190, 190) : RGB(140, 140, 140));
+    if (!brush)
+        return;
+    FillRect(hdc, &thumb, brush);
+    DeleteObject(brush);
+}
+
+// Updates the text viewport and keeps follow mode paused when the user scrolls away.
+static void ScrollOverlayText(OverlayWindow *ow, int delta, BOOL userInitiated)
+{
+    if (!ow || ow->textMaxScrollOffset <= 0 || delta == 0)
+        return;
+
+    int nextOffset = ow->textScrollOffset + delta;
+    if (nextOffset < 0)
+        nextOffset = 0;
+    if (nextOffset > ow->textMaxScrollOffset)
+        nextOffset = ow->textMaxScrollOffset;
+    if (nextOffset == ow->textScrollOffset)
+        return;
+
+    ow->textScrollOffset = nextOffset;
+    if (userInitiated && ow->followScroll)
+        ow->textUserScrolled = ow->textScrollOffset < ow->textMaxScrollOffset;
+    RECT client;
+    GetClientRect(ow->hwnd, &client);
+    int copyButtonReserve = ow->showCopyButton ? MulDiv(COPY_BUTTON_SIZE_DIP + COPY_BUTTON_TEXT_GAP_DIP, (int)ow->dpi, 96) : 0;
+    UpdateTextScrollbarRects(ow, client.right - client.left, client.bottom - client.top, copyButtonReserve, ow->dpi);
+    InvalidateRect(ow->hwnd, NULL, FALSE);
+}
+
+static void ScheduleOverlayRepaint(OverlayWindow *ow)
+{
+    if (!ow || !ow->hwnd || ow->repaintPending)
+        return;
+
+    ow->repaintPending = TRUE;
+    SetTimer(ow->hwnd, TIMER_REPAINT, 16, NULL);
+}
+
+static void SetTextScrollOffsetFromThumbPoint(OverlayWindow *ow, POINT pt)
+{
+    if (!ow || ow->textMaxScrollOffset <= 0)
+        return;
+
+    int trackHeight = ow->textScrollbarTrackRect.bottom - ow->textScrollbarTrackRect.top;
+    int thumbHeight = ow->textScrollbarThumbRect.bottom - ow->textScrollbarThumbRect.top;
+    int travel = trackHeight - thumbHeight;
+    if (travel <= 0)
+        return;
+
+    int dy = pt.y - ow->textScrollbarDragStart.y;
+    int nextOffset = ow->textScrollbarDragStartOffset + (int)roundf((float)dy * (float)ow->textMaxScrollOffset / (float)travel);
+    if (nextOffset < 0)
+        nextOffset = 0;
+    if (nextOffset > ow->textMaxScrollOffset)
+        nextOffset = ow->textMaxScrollOffset;
+    if (nextOffset == ow->textScrollOffset)
+        return;
+
+    ow->textScrollOffset = nextOffset;
+    if (ow->followScroll)
+        ow->textUserScrolled = ow->textScrollOffset < ow->textMaxScrollOffset;
+    RECT client;
+    GetClientRect(ow->hwnd, &client);
+    int copyButtonReserve = ow->showCopyButton ? MulDiv(COPY_BUTTON_SIZE_DIP + COPY_BUTTON_TEXT_GAP_DIP, (int)ow->dpi, 96) : 0;
+    UpdateTextScrollbarRects(ow, client.right - client.left, client.bottom - client.top, copyButtonReserve, ow->dpi);
+    InvalidateRect(ow->hwnd, NULL, FALSE);
 }
 
 static void ComputeOverlayPosition(OverlayWindow *ow, const RECT *targetRect, int width, int height, int *outX, int *outY)
@@ -1559,6 +1712,8 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
     if (!ow || !ow->hwnd)
         return;
 
+    BOOL shouldFollowScroll = ow->followScroll && !ow->textUserScrolled;
+
     ow->dpi = GetWindowDpiSafe(ow->hwnd, ow->dpi ? ow->dpi : GetSystemDpiSafe());
     float fontSizePt = (ow->fontSize > 0.0f) ? ow->fontSize : GetSystemMessageFontSizePt();
     float iconSizeDip = (ow->iconSize > 0.0f) ? ow->iconSize : DEFAULT_ICON_SIZE_DIP;
@@ -1634,16 +1789,24 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
     if (tooltipIconSize > contentHeight)
         contentHeight = tooltipIconSize;
 
+    int copyButtonReserve = 0;
+    if (ow->showCopyButton)
+        copyButtonReserve = MulDiv(COPY_BUTTON_SIZE_DIP + COPY_BUTTON_TEXT_GAP_DIP, (int)ow->dpi, 96);
+
     int height = 0;
     if (ow->height > 0)
         height = (int)roundf(ow->height * (float)ow->dpi / 96.0f);
     if (height <= 0)
     {
         height = topPad + bottomPad + contentHeight;
-        if (ow->showCopyButton)
-            height += MulDiv(COPY_BUTTON_SIZE_DIP + COPY_BUTTON_TEXT_GAP_DIP, (int)ow->dpi, 96);
+        height += copyButtonReserve;
+        if (ow->maxHeight > 0)
+        {
+            int maxHeight = (int)roundf(ow->maxHeight * (float)ow->dpi / 96.0f);
+            if (maxHeight > 0 && height > maxHeight)
+                height = maxHeight;
+        }
     }
-
     if (ow->transparent)
     {
         // Bug fix: transparent image overlays must keep the whole client area as the screenshot.
@@ -1666,11 +1829,48 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
         ow->closeRect = empty;
         ow->tooltipRect = empty;
         ow->copyButtonRect = empty;
+        ow->textRect = empty;
+        ow->textScrollbarTrackRect = empty;
+        ow->textScrollbarThumbRect = empty;
+        ow->textContentHeight = 0;
+        ow->textScrollOffset = 0;
+        ow->textMaxScrollOffset = 0;
+        ow->textUserScrolled = FALSE;
     }
     else
     {
+        int textBottom = height - bottomPad - copyButtonReserve;
+        if (textBottom < topPad)
+            textBottom = topPad;
+        int visibleTextHeight = textBottom - topPad;
+
+        ow->textRect.left = textLeft;
+        ow->textRect.top = topPad;
+        ow->textRect.right = textLeft + textWidth;
+        ow->textRect.bottom = textBottom;
+        ow->textContentHeight = textHeight;
+        ow->textMaxScrollOffset = (visibleTextHeight > 0 && textHeight > visibleTextHeight) ? (textHeight - visibleTextHeight) : 0;
+        if (ow->textMaxScrollOffset <= 0)
+        {
+            ow->textScrollOffset = 0;
+            ow->textUserScrolled = FALSE;
+        }
+        else if (shouldFollowScroll)
+        {
+            ow->textScrollOffset = ow->textMaxScrollOffset;
+        }
+        else if (ow->textScrollOffset > ow->textMaxScrollOffset)
+        {
+            ow->textScrollOffset = ow->textMaxScrollOffset;
+        }
+        if (ow->textScrollOffset < 0)
+            ow->textScrollOffset = 0;
+        if (ow->followScroll && ow->textScrollOffset >= ow->textMaxScrollOffset)
+            ow->textUserScrolled = FALSE;
+
         UpdateCloseRect(ow, width, height, ow->dpi);
         UpdateCopyButtonRect(ow, width, height, ow->dpi);
+        UpdateTextScrollbarRects(ow, width, height, copyButtonReserve, ow->dpi);
 
         if (ow->tooltip)
         {
@@ -1774,6 +1974,24 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
             x = current.left;
             y = current.top;
         }
+    }
+    else if (ow->preservePosition)
+    {
+        RECT current;
+        if (GetWindowRect(ow->hwnd, &current))
+        {
+            // Some callers refresh only the content of an existing overlay. Keep the
+            // current user-visible position instead of reapplying the original anchor.
+            x = current.left;
+            y = current.top;
+        }
+    }
+
+    RECT currentWindowRect;
+    ow->layoutSizeChanged = TRUE;
+    if (GetWindowRect(ow->hwnd, &currentWindowRect))
+    {
+        ow->layoutSizeChanged = (currentWindowRect.right - currentWindowRect.left) != width || (currentWindowRect.bottom - currentWindowRect.top) != height;
     }
 
     SetWindowPos(ow->hwnd, NULL, x, y, width, height, SWP_NOACTIVATE | SWP_NOZORDER);
@@ -1890,6 +2108,7 @@ static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BO
     ow->loading = payload->loading;
     ow->topmost = payload->topmost;
     ow->absolutePosition = payload->absolutePosition;
+    ow->preservePosition = payload->preservePosition;
     ow->transparent = payload->transparent;
     ow->hitTestIconOnly = payload->hitTestIconOnly;
     ow->iconX = payload->iconX;
@@ -1907,6 +2126,8 @@ static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BO
     ow->offsetY = payload->offsetY;
     ow->width = payload->width;
     ow->height = payload->height;
+    ow->maxHeight = payload->maxHeight;
+    ow->followScroll = payload->followScroll;
     ow->fontSize = payload->fontSize;
     ow->iconSize = payload->iconSize;
     ow->tooltipIconSize = payload->tooltipIconSize;
@@ -2408,42 +2629,29 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
         }
 
         int leftPad = MulDiv(PADDING_X_DIP, (int)ow->dpi, 96);
-        int rightPad = MulDiv(PADDING_X_DIP, (int)ow->dpi, 96);
         int topPad = MulDiv(PADDING_Y_DIP, (int)ow->dpi, 96);
         int bottomPad = MulDiv(PADDING_Y_DIP, (int)ow->dpi, 96);
 
         float iconSizeDip = (ow->iconSize > 0.0f) ? ow->iconSize : DEFAULT_ICON_SIZE_DIP;
         int iconSize = (ow->iconBitmap ? (int)roundf(iconSizeDip * (float)ow->dpi / 96.0f) : 0);
-        int iconGap = (ow->iconBitmap ? MulDiv(ICON_GAP_DIP, (int)ow->dpi, 96) : 0);
-
-        float tooltipIconSizeDip = (ow->tooltipIconSize > 0.0f) ? ow->tooltipIconSize : DEFAULT_ICON_SIZE_DIP;
-        int tooltipIconSize = (ow->tooltip ? (int)roundf(tooltipIconSizeDip * (float)ow->dpi / 96.0f) : 0);
-        int tooltipIconGap = (ow->tooltip ? MulDiv(ICON_GAP_DIP, (int)ow->dpi, 96) : 0);
-
-        int closeSize = ow->closable ? MulDiv(CLOSE_SIZE_DIP, (int)ow->dpi, 96) : 0;
-        int closePad = ow->closable ? MulDiv(CLOSE_PAD_DIP, (int)ow->dpi, 96) : 0;
-
-        int rightReserved = rightPad;
-        if (ow->closable)
-            rightReserved += closePad + closeSize;
-        if (ow->tooltip)
-            rightReserved += tooltipIconGap + tooltipIconSize;
-
-        int textLeft = leftPad + iconSize + iconGap;
-        int textRight = width - rightReserved;
-        int textBottom = height - bottomPad;
-        if (ow->showCopyButton)
-            textBottom -= MulDiv(COPY_BUTTON_SIZE_DIP + COPY_BUTTON_TEXT_GAP_DIP, (int)ow->dpi, 96);
-        if (textBottom < topPad)
-            textBottom = topPad;
-        RECT textRect = {textLeft, topPad, textRight, textBottom};
 
         SetBkMode(hdc, TRANSPARENT);
         SetTextColor(hdc, RGB(240, 240, 240));
         if (ow->messageFont)
             SelectObject(hdc, ow->messageFont);
-        DrawTextW(hdc, ow->message ? ow->message : L"", -1, &textRect,
+        RECT textRect = ow->textRect;
+        int savedDc = SaveDC(hdc);
+        if (savedDc)
+            IntersectClipRect(hdc, textRect.left, textRect.top, textRect.right, textRect.bottom);
+        RECT drawTextRect = textRect;
+        drawTextRect.top -= ow->textScrollOffset;
+        drawTextRect.bottom = drawTextRect.top + ow->textContentHeight + MulDiv(4, (int)ow->dpi, 96);
+        DrawTextW(hdc, ow->message ? ow->message : L"", -1, &drawTextRect,
                   DT_LEFT | DT_TOP | DT_WORDBREAK | DT_EDITCONTROL | DT_NOPREFIX);
+        if (savedDc)
+            RestoreDC(hdc, savedDc);
+
+        DrawTextScrollbar(hdc, ow);
 
         if (ow->iconBitmap)
         {
@@ -2565,6 +2773,11 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
                     SetCursor(LoadCursor(NULL, IDC_HAND));
                     return TRUE;
                 }
+                if (PointInTextScrollbarHitRect(ow, pt))
+                {
+                    SetCursor(LoadCursor(NULL, IDC_HAND));
+                    return TRUE;
+                }
             }
         }
         break;
@@ -2581,6 +2794,19 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
         }
 
         POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+        if (ow->textScrollbarDragging)
+        {
+            SetTextScrollOffsetFromThumbPoint(ow, pt);
+            return 0;
+        }
+
+        BOOL scrollbarHoverNow = PointInTextScrollbarHitRect(ow, pt);
+        if (scrollbarHoverNow != ow->textScrollbarHover)
+        {
+            ow->textScrollbarHover = scrollbarHoverNow;
+            InvalidateRect(hwnd, NULL, FALSE);
+        }
+
         if (ow->tooltipHwnd)
         {
             BOOL hoverTooltip = ow->tooltip && *ow->tooltip && PtInRect(&ow->tooltipRect, pt);
@@ -2641,6 +2867,7 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
         ow->mouseInside = FALSE;
         ow->closeHover = FALSE;
         ow->copyButtonHover = FALSE;
+        ow->textScrollbarHover = FALSE;
         if (ow->tooltipHwnd)
         {
             ow->tooltipHover = FALSE;
@@ -2658,6 +2885,17 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
     {
         if (!ow)
             break;
+        if (ow->textMaxScrollOffset > 0)
+        {
+            int wheelDelta = GET_WHEEL_DELTA_WPARAM(wParam);
+            int lineStep = MulDiv(18, (int)(ow->dpi ? ow->dpi : GetWindowDpiSafe(hwnd, 96)), 96);
+            int units = wheelDelta / WHEEL_DELTA;
+            if (units != 0)
+            {
+                ScrollOverlayText(ow, -units * lineStep * 3, TRUE);
+                return 0;
+            }
+        }
         POINT screenPt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
         if (ZoomResizableImageOverlayAtScreenPoint(ow, screenPt, GET_WHEEL_DELTA_WPARAM(wParam)))
             return 0;
@@ -2689,6 +2927,37 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             InvalidateRect(hwnd, NULL, FALSE);
             return 0;
         }
+        if (PointInTextScrollbarHitRect(ow, pt))
+        {
+            if (!PtInRect(&ow->textScrollbarThumbRect, pt))
+            {
+                int thumbHeight = ow->textScrollbarThumbRect.bottom - ow->textScrollbarThumbRect.top;
+                int targetTop = pt.y - thumbHeight / 2;
+                int trackTop = ow->textScrollbarTrackRect.top;
+                int trackHeight = ow->textScrollbarTrackRect.bottom - ow->textScrollbarTrackRect.top;
+                int travel = trackHeight - thumbHeight;
+                if (travel > 0)
+                {
+                    if (targetTop < trackTop)
+                        targetTop = trackTop;
+                    if (targetTop > trackTop + travel)
+                        targetTop = trackTop + travel;
+                    ow->textScrollOffset = (int)roundf((float)(targetTop - trackTop) * (float)ow->textMaxScrollOffset / (float)travel);
+                    if (ow->followScroll)
+                        ow->textUserScrolled = ow->textScrollOffset < ow->textMaxScrollOffset;
+                    RECT client;
+                    GetClientRect(hwnd, &client);
+                    int copyButtonReserve = ow->showCopyButton ? MulDiv(COPY_BUTTON_SIZE_DIP + COPY_BUTTON_TEXT_GAP_DIP, (int)ow->dpi, 96) : 0;
+                    UpdateTextScrollbarRects(ow, client.right - client.left, client.bottom - client.top, copyButtonReserve, ow->dpi);
+                }
+            }
+            ow->textScrollbarDragging = TRUE;
+            ow->textScrollbarDragStart = pt;
+            ow->textScrollbarDragStartOffset = ow->textScrollOffset;
+            SetCapture(hwnd);
+            InvalidateRect(hwnd, NULL, FALSE);
+            return 0;
+        }
         if (ow->movable)
         {
             ow->dragging = TRUE;
@@ -2712,6 +2981,7 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
         ow->closePressed = FALSE;
         ow->copyButtonPressed = FALSE;
         ow->dragging = FALSE;
+        ow->textScrollbarDragging = FALSE;
         if (GetCapture() == hwnd)
             ReleaseCapture();
         InvalidateRect(hwnd, NULL, FALSE);
@@ -2836,6 +3106,13 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             InvalidateRect(hwnd, NULL, FALSE);
             return 0;
         }
+        if (wParam == TIMER_REPAINT)
+        {
+            KillTimer(hwnd, TIMER_REPAINT);
+            ow->repaintPending = FALSE;
+            RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+            return 0;
+        }
         break;
     }
     case WM_WOX_OVERLAY_REPOSITION:
@@ -2876,6 +3153,7 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             KillTimer(hwnd, TIMER_AUTOCLOSE);
             KillTimer(hwnd, TIMER_TRACK);
             KillTimer(hwnd, TIMER_LIVE_FOLLOW);
+            KillTimer(hwnd, TIMER_REPAINT);
             DestroyTransparentImageShadow(ow);
             RemoveOverlay(ow);
             if (ow->messageFont)
@@ -2934,7 +3212,21 @@ static void HandleShowCommand(OverlayPayload *payload)
         ApplyPayloadToOverlay(ow, payload, FALSE);
         ApplyOverlayLayout(ow);
         ShowOverlayWindowWithFocusPolicy(ow);
-        InvalidateRect(ow->hwnd, NULL, TRUE);
+        if (ow->layoutSizeChanged)
+        {
+            // Size changes expose new client area immediately. Force that frame to paint now,
+            // while same-size streaming updates stay coalesced to keep scrolling responsive.
+            if (ow->repaintPending)
+            {
+                KillTimer(ow->hwnd, TIMER_REPAINT);
+                ow->repaintPending = FALSE;
+            }
+            RedrawWindow(ow->hwnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+        }
+        else
+        {
+            ScheduleOverlayRepaint(ow);
+        }
         return;
     }
 
@@ -3201,6 +3493,7 @@ void ShowOverlay(OverlayOptions opts)
     payload->loading = opts.loading ? TRUE : FALSE;
     payload->topmost = opts.topmost ? TRUE : FALSE;
     payload->absolutePosition = opts.absolutePosition ? TRUE : FALSE;
+    payload->preservePosition = opts.preservePosition ? TRUE : FALSE;
     payload->stickyWindowPid = opts.stickyWindowPid;
     payload->anchor = opts.anchor;
     payload->autoCloseSeconds = opts.autoCloseSeconds;
@@ -3212,6 +3505,8 @@ void ShowOverlay(OverlayOptions opts)
     payload->offsetY = opts.offsetY;
     payload->width = opts.width;
     payload->height = opts.height;
+    payload->maxHeight = opts.maxHeight;
+    payload->followScroll = opts.followScroll ? TRUE : FALSE;
     payload->fontSize = opts.fontSize;
     payload->iconSize = opts.iconSize;
     payload->tooltipIconSize = opts.tooltipIconSize;

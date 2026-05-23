@@ -24,6 +24,7 @@ typedef struct {
     bool loading;
     bool topmost;
     bool absolutePosition;
+    bool preservePosition;
     int stickyWindowPid;
     int anchor;
     int autoCloseSeconds;
@@ -35,6 +36,8 @@ typedef struct {
     float offsetY;
     float width;
     float height;
+    float maxHeight;
+    bool followScroll;
     float fontSize;
     float iconSize;
     char* tooltip;
@@ -173,6 +176,7 @@ func Show(opts OverlayOptions) {
 			loading:                  C.bool(opts.Loading),
 			topmost:                  C.bool(opts.Topmost),
 			absolutePosition:         C.bool(opts.AbsolutePosition),
+			preservePosition:         C.bool(opts.PreservePosition),
 			stickyWindowPid:          C.int(opts.StickyWindowPid),
 			anchor:                   C.int(opts.Anchor),
 			autoCloseSeconds:         C.int(opts.AutoCloseSeconds),
@@ -184,6 +188,8 @@ func Show(opts OverlayOptions) {
 			offsetY:                  C.float(offsetY),
 			width:                    C.float(opts.Width),
 			height:                   C.float(opts.Height),
+			maxHeight:                C.float(opts.MaxHeight),
+			followScroll:             C.bool(opts.FollowScroll),
 			fontSize:                 C.float(opts.FontSize),
 			iconSize:                 C.float(opts.IconSize),
 			tooltip:                  cTooltip,

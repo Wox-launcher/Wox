@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"unicode"
 	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
@@ -43,9 +44,8 @@ const (
 	aiCommandLoadingOverlayMinWidth   = 128
 	aiCommandLoadingOverlayMaxWidth   = 220
 	aiCommandResultOverlayWidth       = 520
-	aiCommandResultOverlayMinHeight   = 96
-	aiCommandResultOverlayMaxHeight   = 360
-	aiCommandResultOverlayCopyHeight  = 38
+	aiCommandResultOverlayMaxHeight   = 600
+	aiCommandResultOverlayMinUpdateMs = 80
 )
 
 type commandSetting struct {
@@ -397,24 +397,29 @@ func (c *Plugin) currentAICommandOverlayPosition(ctx context.Context) mouse.Poin
 	return position
 }
 
-func (c *Plugin) showAICommandResultOverlay(ctx context.Context, name string, position mouse.Point, streamResult common.ChatStreamData) {
+func (c *Plugin) showAICommandResultOverlay(ctx context.Context, name string, position *mouse.Point, streamResult common.ChatStreamData) {
 	message := formatAICommandResultOverlayMessage(ctx, streamResult)
 	copyText := strings.TrimSpace(streamResult.Data)
 	opts := overlay.OverlayOptions{
-		Name:             name,
-		Message:          message,
-		Loading:          streamResult.Status == common.ChatStreamStatusStreaming && copyText == "",
-		Topmost:          true,
-		AbsolutePosition: true,
-		Anchor:           overlay.AnchorTopLeft,
-		OffsetX:          position.X + aiCommandLoadingOverlayOffsetX,
-		OffsetY:          position.Y + aiCommandLoadingOverlayOffsetY,
-		Width:            aiCommandResultOverlayWidth,
-		Height:           estimateAICommandResultOverlayHeight(message, copyText != ""),
-		FontSize:         12,
-		Movable:          true,
-		Closable:         true,
-		CloseOnEscape:    true,
+		Name:          name,
+		Message:       message,
+		Loading:       streamResult.Status == common.ChatStreamStatusStreaming && copyText == "",
+		Topmost:       true,
+		Width:         aiCommandResultOverlayWidth,
+		MaxHeight:     aiCommandResultOverlayMaxHeight,
+		FontSize:      12,
+		Movable:       true,
+		Closable:      true,
+		CloseOnEscape: true,
+		FollowScroll:  true,
+	}
+	if position != nil {
+		opts.AbsolutePosition = true
+		opts.Anchor = overlay.AnchorTopLeft
+		opts.OffsetX = position.X + aiCommandLoadingOverlayOffsetX
+		opts.OffsetY = position.Y + aiCommandLoadingOverlayOffsetY
+	} else {
+		opts.PreservePosition = true
 	}
 
 	if copyText != "" {
@@ -435,12 +440,12 @@ func (c *Plugin) showAICommandResultOverlay(ctx context.Context, name string, po
 }
 
 func formatAICommandResultOverlayMessage(ctx context.Context, streamResult common.ChatStreamData) string {
-	answer := strings.TrimSpace(streamResult.Data)
+	answer := normalizeAICommandOverlayMessage(streamResult.Data)
 	if answer != "" {
 		return answer
 	}
 
-	reasoning := strings.TrimSpace(streamResult.Reasoning)
+	reasoning := normalizeAICommandOverlayMessage(streamResult.Reasoning)
 	if reasoning != "" {
 		return reasoning
 	}
@@ -451,33 +456,41 @@ func formatAICommandResultOverlayMessage(ctx context.Context, streamResult commo
 	return i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_thinking")
 }
 
-func estimateAICommandResultOverlayHeight(message string, showCopyButton bool) float64 {
-	lines := 1
-	columns := 0
-	for _, r := range message {
-		if r == '\n' {
-			lines++
-			columns = 0
+// normalizeAICommandOverlayMessage keeps streamed overlay text compact without altering normal line breaks.
+func normalizeAICommandOverlayMessage(message string) string {
+	normalized := strings.ReplaceAll(message, "\r\n", "\n")
+	normalized = strings.ReplaceAll(normalized, "\r", "\n")
+	normalized = strings.Map(func(r rune) rune {
+		switch r {
+		case '\n', '\t':
+			return r
+		case '\u200B', '\u200C', '\u200D', '\uFEFF':
+			return -1
+		}
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, normalized)
+	lines := strings.Split(normalized, "\n")
+	compactLines := make([]string, 0, len(lines))
+	previousBlank := false
+
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			if previousBlank {
+				continue
+			}
+			compactLines = append(compactLines, "")
+			previousBlank = true
 			continue
 		}
-		columns++
-		if columns >= 64 {
-			lines++
-			columns = 0
-		}
+
+		compactLines = append(compactLines, line)
+		previousBlank = false
 	}
 
-	height := 48 + float64(lines)*18
-	if showCopyButton {
-		height += aiCommandResultOverlayCopyHeight
-	}
-	if height < aiCommandResultOverlayMinHeight {
-		return aiCommandResultOverlayMinHeight
-	}
-	if height > aiCommandResultOverlayMaxHeight {
-		return aiCommandResultOverlayMaxHeight
-	}
-	return height
+	return strings.TrimSpace(strings.Join(compactLines, "\n"))
 }
 
 func (c *Plugin) startAICommandStream(ctx context.Context, command commandSetting, conversations []common.Conversation, modelLabel string, resultId string, options aiCommandStreamOptions) <-chan aiCommandFinalResult {
@@ -599,11 +612,22 @@ func (c *Plugin) buildAICommandActions(ctx context.Context, command commandSetti
 				util.Go(ctx, "ai command run and show", func() {
 					overlayName := fmt.Sprintf("ai_command_run_and_show_result_%s", actionContext.ResultId)
 					position := c.currentAICommandOverlayPosition(ctx)
-					c.showAICommandResultOverlay(ctx, overlayName, position, common.ChatStreamData{Status: common.ChatStreamStatusStreaming})
+					c.showAICommandResultOverlay(ctx, overlayName, &position, common.ChatStreamData{Status: common.ChatStreamStatusStreaming})
+					lastOverlayUpdateAt := int64(0)
+					lastOverlayMessage := ""
 
 					final := <-c.startAICommandStream(ctx, command, conversations, modelLabel, actionContext.ResultId, aiCommandStreamOptions{
 						onStreamResult: func(ctx context.Context, streamResult common.ChatStreamData) {
-							c.showAICommandResultOverlay(ctx, overlayName, position, streamResult)
+							message := formatAICommandResultOverlayMessage(ctx, streamResult)
+							if streamResult.Status == common.ChatStreamStatusStreaming {
+								now := util.GetSystemTimestamp()
+								if message == lastOverlayMessage || (lastOverlayUpdateAt > 0 && now-lastOverlayUpdateAt < aiCommandResultOverlayMinUpdateMs) {
+									return
+								}
+								lastOverlayUpdateAt = now
+								lastOverlayMessage = message
+							}
+							c.showAICommandResultOverlay(ctx, overlayName, nil, streamResult)
 						},
 					})
 					if final.Err != nil {

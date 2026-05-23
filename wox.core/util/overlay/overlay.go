@@ -103,6 +103,8 @@ type OverlayOptions struct {
 	// pointer-following progress overlays, and the native layer must not re-anchor to the
 	// primary work area like a notification.
 	AbsolutePosition bool
+	// PreservePosition keeps an existing overlay at its current window position during content updates.
+	PreservePosition bool
 	// StickyWindowPid determines the positioning context.
 	// If 0, the overlay is positioned relative to the screen (work area).
 	// If > 0, the overlay is positioned relative to the window owned by this PID.
@@ -136,6 +138,10 @@ type OverlayOptions struct {
 	Width float64
 	// Height of the overlay. If 0, it auto-sizes based on content.
 	Height float64
+	// MaxHeight caps auto-sized overlays. It does not replace Height; callers can omit Height to grow with content until this cap.
+	MaxHeight float64
+	// FollowScroll keeps scrollable text pinned to the bottom until the user scrolls away.
+	FollowScroll bool
 	// FontSize controls message font size in points.
 	// If 0, use the current system font size.
 	FontSize float64

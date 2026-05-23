@@ -27,6 +27,7 @@ typedef struct {
     bool loading;
     bool topmost;
     bool absolutePosition;
+    bool preservePosition;
     int stickyWindowPid; // 0 = Screen, >0 = Window
     int anchor;          // 0-8: TL,TC,TR, LC,C,RC, BL,BC,BR
     int autoCloseSeconds;
@@ -38,6 +39,8 @@ typedef struct {
     float offsetY;
     float width;         // 0 = auto
     float height;        // 0 = auto
+    float maxHeight;     // 0 = no cap for auto height
+    bool followScroll;
     float fontSize;      // 0 = system default, unit: pt
     float iconSize;      // 0 = default (16), unit: pt
     char* tooltip;
@@ -1362,6 +1365,9 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 
         CGFloat textHeight = textSize.height;
         windowHeight = (opts.height > 0) ? opts.height : (textHeight + padTop + padBottom);
+        if (opts.height <= 0 && opts.maxHeight > 0 && windowHeight > opts.maxHeight) {
+            windowHeight = opts.maxHeight;
+        }
         if (windowHeight < 40) windowHeight = 40; // Min height
 
         // Update Frames
@@ -1523,6 +1529,10 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
     if (preserveLiveFollowFrame) {
         finalX = liveFollowOrigin.x;
         finalY = liveFollowOrigin.y;
+    } else if (opts.preservePosition) {
+        // Content-only refreshes should resize/repaint without reapplying the original anchor.
+        finalX = self.frame.origin.x;
+        finalY = self.frame.origin.y;
     }
     if (opts.stickyWindowPid > 0 && !preserveLiveFollowFrame && CGEventSourceButtonState(kCGEventSourceStateCombinedSessionState, kCGMouseButtonLeft)) {
         // Optimization: layout refresh can detect mouse-down before the first AX
