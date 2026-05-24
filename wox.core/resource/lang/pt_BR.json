@@ -840,6 +840,7 @@
   "plugin_update_notify_apply_extracting": "Extraindo atualização...",
   "plugin_update_notify_apply_replacing": "Substituindo aplicativo...",
   "plugin_update_notify_apply_restarting": "Reiniciando o Wox...",
+  "plugin_update_notify_available": "Nova versão disponível: %s → %s",
   "plugin_update_notify_up_to_date": "Já está atualizado",
   "plugin_update_notify_error": "Erro de atualização: %s",
   "plugin_update_status_none": "Já está atualizado",
