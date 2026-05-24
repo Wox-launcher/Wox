@@ -9,6 +9,7 @@ import 'package:wox/components/wox_switch.dart';
 import 'package:wox/modules/setting/views/wox_setting_base.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/consts.dart';
+import 'package:wox/utils/wox_dialog_util.dart';
 import 'package:wox/utils/wox_setting_focus_util.dart';
 
 class WoxSettingPrivacyView extends WoxSettingBaseView {
@@ -18,7 +19,7 @@ class WoxSettingPrivacyView extends WoxSettingBaseView {
     final sampleData = _buildSamplePayload();
     final jsonString = const JsonEncoder.withIndent('  ').convert(sampleData);
 
-    await showDialog(
+    await showWoxDialog(
       context: context,
       barrierColor: getThemePopupBarrierColor(),
       builder: (dialogContext) {

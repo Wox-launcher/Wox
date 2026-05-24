@@ -9,6 +9,7 @@ import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/wox_setting.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/log.dart';
+import 'package:wox/utils/wox_dialog_util.dart';
 
 class WoxAppSelector extends StatefulWidget {
   final IgnoredHotkeyApp value;
@@ -72,7 +73,7 @@ class _WoxAppSelectorState extends State<WoxAppSelector> {
   }
 
   Future<void> _openSelector() async {
-    final selectedApp = await showDialog<IgnoredHotkeyApp>(
+    final selectedApp = await showWoxDialog<IgnoredHotkeyApp>(
       context: context,
       barrierColor: getThemePopupBarrierColor(),
       builder: (ctx) => _AppSelectorDialog(initialApps: _availableApps, selectedApp: widget.value, loadApps: _loadAvailableApps),

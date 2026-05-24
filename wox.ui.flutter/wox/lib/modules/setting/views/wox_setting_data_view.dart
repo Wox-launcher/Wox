@@ -14,6 +14,7 @@ import 'package:wox/modules/setting/views/wox_setting_base.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/picker.dart';
+import 'package:wox/utils/wox_dialog_util.dart';
 import 'package:wox/utils/wox_setting_focus_util.dart';
 
 class WoxSettingDataView extends WoxSettingBaseView {
@@ -114,7 +115,7 @@ class WoxSettingDataView extends WoxSettingBaseView {
         WoxButton.text(
           text: controller.tr("ui_data_backup_restore"),
           onPressed: () async {
-            await showDialog(
+            await showWoxDialog(
               context: context,
               barrierColor: getThemePopupBarrierColor(),
               builder: (context) {
@@ -255,7 +256,7 @@ class WoxSettingDataView extends WoxSettingBaseView {
                         final picked = selectedDirectory[0];
                         // The compact Data layout no longer embeds WoxPathFinder, so it keeps the
                         // same confirmation flow here before moving Wox's storage location.
-                        await showDialog(
+                        await showWoxDialog(
                           context: context,
                           barrierColor: getThemePopupBarrierColor(),
                           builder:
@@ -350,7 +351,7 @@ class WoxSettingDataView extends WoxSettingBaseView {
                           isClearing
                               ? null
                               : () async {
-                                await showDialog(
+                                await showWoxDialog(
                                   context: context,
                                   barrierColor: getThemePopupBarrierColor(),
                                   builder: (dialogContext) {

@@ -20,6 +20,8 @@ import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/color_util.dart';
 import 'package:wox/utils/wox_setting_focus_util.dart';
 
+import 'package:wox/utils/wox_dialog_util.dart';
+
 import 'wox_setting_plugin_item_view.dart';
 import 'wox_setting_plugin_table_update_view.dart';
 
@@ -542,7 +544,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     final originalRow = json.decode(json.encode(row)) as Map<String, dynamic>;
     originalRow.remove(rowUniqueIdKey);
 
-    await showDialog(
+    await showWoxDialog(
       context: context,
       barrierColor: getThemePopupBarrierColor(),
       builder: (context) {
@@ -629,7 +631,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                         ? null
                         : () async {
                           //confirm delete
-                          await showDialog(
+                          await showWoxDialog(
                             context: context,
                             barrierColor: getThemePopupBarrierColor(),
                             builder: (context) {
@@ -1023,7 +1025,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
       height: 30,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       onPressed: () async {
-        await showDialog(
+        await showWoxDialog(
           context: context,
           barrierColor: getThemePopupBarrierColor(),
           builder: (context) {

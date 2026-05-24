@@ -15,9 +15,10 @@ import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/wox_ai_command_template.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/utils/colors.dart';
+import 'package:wox/utils/wox_dialog_util.dart';
 
 Future<void> showAICommandTemplateDialog({required BuildContext context, required String pluginId, required List<dynamic> currentRows, required String triggerKeyword}) async {
-  await showDialog(
+  await showWoxDialog(
     context: context,
     barrierColor: getThemePopupBarrierColor(),
     builder: (context) => _AICommandTemplateDialog(pluginId: pluginId, currentRows: currentRows, triggerKeyword: triggerKeyword),

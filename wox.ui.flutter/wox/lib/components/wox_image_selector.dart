@@ -11,6 +11,7 @@ import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/enums/wox_image_type_enum.dart';
 import 'package:wox/utils/colors.dart';
+import 'package:wox/utils/wox_dialog_util.dart';
 import 'package:get/get.dart';
 
 class EmojiGroupData {
@@ -471,7 +472,7 @@ class WoxImageSelector extends StatelessWidget {
   Future<String?> showEmojiPicker(BuildContext context) async {
     final initialEmoji = value.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code ? value.imageData : null;
 
-    return showDialog<String>(
+    return showWoxDialog<String>(
       context: context,
       barrierColor: getThemePopupBarrierColor(),
       builder: (context) {
