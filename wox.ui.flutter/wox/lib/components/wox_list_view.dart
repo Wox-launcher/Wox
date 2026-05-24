@@ -313,6 +313,23 @@ class WoxListView<T> extends StatelessWidget {
                 }
               }
 
+              // Emacs-style navigation: Ctrl+N / Ctrl+P move through items
+              // just like Arrow Down / Arrow Up.
+              if ((event is KeyDownEvent || event is KeyRepeatEvent) &&
+                  HardwareKeyboard.instance.isControlPressed &&
+                  !HardwareKeyboard.instance.isShiftPressed &&
+                  !HardwareKeyboard.instance.isAltPressed &&
+                  !HardwareKeyboard.instance.isMetaPressed) {
+                switch (event.logicalKey) {
+                  case LogicalKeyboardKey.keyN:
+                    controller.updateActiveIndexByDirection(traceId, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
+                    return KeyEventResult.handled;
+                  case LogicalKeyboardKey.keyP:
+                    controller.updateActiveIndexByDirection(traceId, WoxDirectionEnum.WOX_DIRECTION_UP.code);
+                    return KeyEventResult.handled;
+                }
+              }
+
               var pressedHotkey = WoxHotkey.parseNormalHotkeyFromEvent(event);
               if (pressedHotkey == null) {
                 return KeyEventResult.ignored;

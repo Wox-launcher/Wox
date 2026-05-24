@@ -395,6 +395,24 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                   }
                 }
 
+                // Emacs-style navigation: Ctrl+N / Ctrl+P move through results
+                // just like Arrow Down / Arrow Up, so launcher users can keep
+                // their hands on the home row.
+                if ((event is KeyDownEvent || event is KeyRepeatEvent) &&
+                    HardwareKeyboard.instance.isControlPressed &&
+                    !HardwareKeyboard.instance.isShiftPressed &&
+                    !HardwareKeyboard.instance.isAltPressed &&
+                    !HardwareKeyboard.instance.isMetaPressed) {
+                  switch (event.logicalKey) {
+                    case LogicalKeyboardKey.keyN:
+                      controller.handleQueryBoxArrowDown();
+                      return KeyEventResult.handled;
+                    case LogicalKeyboardKey.keyP:
+                      controller.handleQueryBoxArrowUp();
+                      return KeyEventResult.handled;
+                  }
+                }
+
                 var pressedHotkey = WoxHotkey.parseNormalHotkeyFromEvent(event);
                 if (pressedHotkey == null) {
                   return KeyEventResult.ignored;
