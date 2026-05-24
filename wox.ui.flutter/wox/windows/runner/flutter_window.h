@@ -79,6 +79,7 @@ private:
   {
     bool active = false;
     HWND overlay_window = nullptr;
+    HWND controls_window = nullptr;
     HHOOK mouse_hook = nullptr;
     RECT selection_bounds{0, 0, 0, 0};
   } scrolling_capture_overlay_state_;

@@ -6,9 +6,11 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/src/widgets/_window.dart' as flutter_windowing;
+import 'package:get/get.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/multiplewindow/wox_multiple_window_style.dart';
+import 'package:wox/utils/wox_theme_util.dart';
 
 class WoxMultipleWindowHost extends StatefulWidget {
   const WoxMultipleWindowHost({super.key, required this.theme, required this.child});
@@ -54,7 +56,11 @@ class _WoxMultipleWindowHostState extends State<WoxMultipleWindowHost> {
 abstract class WoxMultipleWindowHandle {
   String get id;
 
+  int? get nativeHandle;
+
   Future<void> focus();
+
+  Future<void> hide();
 
   Future<void> close();
 }
@@ -106,6 +112,8 @@ class WoxMultipleWindow {
     bool resizable = false,
     bool minimizable = true,
     bool closeOnRequest = true,
+    bool centerOnCreate = true,
+    bool roundedCorners = true,
     VoidCallback? onDestroyed,
   }) async {
     final existing = _windows[id];
@@ -150,6 +158,7 @@ class WoxMultipleWindow {
           showTitleBar: showTitleBar,
           minimizable: minimizable,
           mica: mica,
+          roundedCorners: roundedCorners,
           onPrepared: () {
             if (!preparationReady.isCompleted) {
               preparationReady.complete();
@@ -170,7 +179,9 @@ class WoxMultipleWindow {
     if (prepareOffscreen) {
       await preparationReady.future.timeout(const Duration(milliseconds: 500), onTimeout: () {});
     }
-    WoxMultipleWindowStyle.centerOnCursorDisplay(controller);
+    if (centerOnCreate) {
+      WoxMultipleWindowStyle.centerOnCursorDisplay(controller);
+    }
     return handle;
   }
 
@@ -219,8 +230,16 @@ class _WoxMultipleWindowHandleImpl implements WoxMultipleWindowHandle {
   final flutter_windowing.RegularWindowController controller;
 
   @override
+  int? get nativeHandle => WoxMultipleWindowStyle.nativeHandleOf(controller);
+
+  @override
   Future<void> focus() async {
     controller.activate();
+  }
+
+  @override
+  Future<void> hide() async {
+    WoxMultipleWindowStyle.hide(controller);
   }
 
   @override
@@ -290,6 +309,7 @@ class _WoxMultipleWindowRoot extends StatefulWidget {
     required this.showTitleBar,
     required this.minimizable,
     required this.mica,
+    required this.roundedCorners,
     required this.onPrepared,
     required this.builder,
   });
@@ -302,6 +322,7 @@ class _WoxMultipleWindowRoot extends StatefulWidget {
   final bool showTitleBar;
   final bool minimizable;
   final bool mica;
+  final bool roundedCorners;
   final VoidCallback onPrepared;
   final WidgetBuilder builder;
 
@@ -310,15 +331,23 @@ class _WoxMultipleWindowRoot extends StatefulWidget {
 }
 
 class _WoxMultipleWindowRootState extends State<_WoxMultipleWindowRoot> {
+  Worker? _themeWorker;
+
   @override
   void initState() {
     super.initState();
+    _themeWorker = ever(WoxThemeUtil.instance.currentTheme, (_) {
+      _applyWindowStyle();
+      if (mounted) {
+        setState(() {});
+      }
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Timer(const Duration(milliseconds: 120), () {
         if (!mounted) {
           return;
         }
-        WoxMultipleWindowStyle.apply(widget.controller, mica: widget.mica);
+        _applyWindowStyle();
         setState(() {});
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) {
@@ -328,6 +357,26 @@ class _WoxMultipleWindowRootState extends State<_WoxMultipleWindowRoot> {
         });
       });
     });
+  }
+
+  @override
+  void didUpdateWidget(_WoxMultipleWindowRoot oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.mica != widget.mica || oldWidget.roundedCorners != widget.roundedCorners) {
+      _applyWindowStyle();
+    }
+  }
+
+  @override
+  void dispose() {
+    _themeWorker?.dispose();
+    super.dispose();
+  }
+
+  void _applyWindowStyle() {
+    // Multiple windows have their own HWND, so theme changes must reapply the
+    // same native appearance policy that the main query window receives.
+    WoxMultipleWindowStyle.apply(widget.controller, mica: widget.mica, darkMode: isThemeDark(), roundedCorners: widget.roundedCorners);
   }
 
   @override

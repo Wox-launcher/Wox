@@ -20,7 +20,7 @@ class WoxThemeUtil {
     changeTheme(theme);
   }
 
-  changeTheme(WoxTheme theme) {
+  void changeTheme(WoxTheme theme) {
     _currentTheme.value = theme;
 
     // Update window appearance based on theme background luminance

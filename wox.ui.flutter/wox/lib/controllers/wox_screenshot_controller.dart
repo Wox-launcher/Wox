@@ -12,7 +12,10 @@ import 'package:wox/api/wox_api.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/screenshot_session.dart';
+import 'package:wox/modules/screenshot/views/wox_screenshot_view.dart';
 import 'package:wox/utils/log.dart';
+import 'package:wox/utils/multiplewindow/wox_multiple_window.dart';
+import 'package:wox/utils/multiplewindow/wox_multiple_window_ids.dart';
 import 'package:wox/utils/screenshot/screenshot_platform_bridge.dart';
 import 'package:wox/utils/windows/window_manager.dart';
 
@@ -98,7 +101,10 @@ class WoxScreenshotController extends GetxController {
   int _captureSessionRevision = 0;
   Completer<CaptureScreenshotResult>? _sessionCompleter;
   _SavedScreenshotWindowState? _savedWindowState;
+  WoxMultipleWindowHandle? _screenshotWindow;
   CaptureScreenshotRequest? _activeRequest;
+  bool _isClosingScreenshotWindow = false;
+  bool _isScreenshotWindowPresented = false;
 
   String tr(String key) => Get.find<WoxSettingController>().tr(key);
 
@@ -119,6 +125,76 @@ class WoxScreenshotController extends GetxController {
   // read-only view state keeps the pixelated preview aligned with the final PNG instead of forcing
   // the widget tree to decode MemoryImage bytes again on every brush movement.
   Map<String, ui.Image> get decodedDisplayImages => _decodedImages;
+
+  int? get _screenshotWindowHandle => _screenshotWindow?.nativeHandle;
+
+  // Keeps launcher hotkeys from stealing focus away from the dedicated screenshot editor window.
+  Future<void> focusSessionWindow(String traceId) async {
+    final screenshotWindow = _screenshotWindow;
+    if (screenshotWindow == null) {
+      return;
+    }
+
+    try {
+      await screenshotWindow.focus();
+    } catch (e) {
+      Logger.instance.warn(traceId, 'Failed to focus independent screenshot window: $e');
+    }
+  }
+
+  // Creates the screenshot editor window offscreen so native capture can reveal it only after the
+  // background pixels and first Flutter frame are ready.
+  Future<void> _ensureScreenshotWindow(String traceId) async {
+    final existingWindow = _screenshotWindow;
+    if (existingWindow != null) {
+      await existingWindow.hide();
+      _isScreenshotWindowPresented = false;
+      return;
+    }
+
+    final handle = await WoxMultipleWindow.createWindow(
+      id: WoxMultipleWindowIds.screenshot,
+      title: 'Screenshot',
+      preferredSize: const Size(64, 64),
+      builder: (_) => const WoxScreenshotView(),
+      showTitleBar: false,
+      mica: false,
+      minimizable: false,
+      centerOnCreate: false,
+      roundedCorners: false,
+      onDestroyed: () {
+        _screenshotWindow = null;
+        _isScreenshotWindowPresented = false;
+        if (_isClosingScreenshotWindow || !isSessionActive.value) {
+          return;
+        }
+
+        unawaited(cancelSession(const UuidV4().generate(), reason: 'screenshot_window_destroyed'));
+      },
+    );
+    _screenshotWindow = handle;
+    await handle.hide();
+    if (handle.nativeHandle == null) {
+      Logger.instance.warn(traceId, 'Independent screenshot window was created without a native handle');
+    }
+  }
+
+  // Destroys the dedicated screenshot window without treating the destroy callback as user cancel.
+  Future<void> _closeScreenshotWindow() async {
+    final screenshotWindow = _screenshotWindow;
+    if (screenshotWindow == null) {
+      return;
+    }
+
+    _isClosingScreenshotWindow = true;
+    try {
+      await screenshotWindow.close();
+    } finally {
+      _isClosingScreenshotWindow = false;
+      _screenshotWindow = null;
+      _isScreenshotWindowPresented = false;
+    }
+  }
 
   // Scrolling capture spans Flutter scheduling, native screen capture, image decoding, overlap
   // matching, and repaint. Centralizing timing log formatting keeps every probe searchable with the
@@ -245,7 +321,7 @@ class WoxScreenshotController extends GetxController {
 
   Future<void> _presentFlutterCaptureWorkspace(String traceId, List<DisplaySnapshot> rawSnapshots, Rect nativeWorkspaceBounds) async {
     _activeNativeWorkspaceBounds = nativeWorkspaceBounds;
-    final presentation = await ScreenshotPlatformBridge.instance.presentCaptureWorkspace(ScreenshotRect.fromRect(nativeWorkspaceBounds));
+    final presentation = await ScreenshotPlatformBridge.instance.presentCaptureWorkspace(ScreenshotRect.fromRect(nativeWorkspaceBounds), windowHandle: _screenshotWindowHandle);
     final normalizedSnapshots = _normalizeSnapshotsForWorkspace(
       rawSnapshots,
       nativeWorkspaceBounds: nativeWorkspaceBounds,
@@ -259,14 +335,7 @@ class WoxScreenshotController extends GetxController {
     workspaceScale.value = presentation.workspaceScale;
 
     if (!presentation.presentedByPlatform) {
-      final bounds = virtualBoundsRect;
-      // The fallback path still uses one Flutter window, but only platforms without screenshot-
-      // specific native presentation should reach it. macOS and Windows install their own
-      // capture overlay handling so multi-display selection does not inherit launcher assumptions.
-      await windowManager.setBounds(bounds.topLeft, bounds.size);
-      await windowManager.setAlwaysOnTop(true);
-      await windowManager.show();
-      await windowManager.focus();
+      throw StateError('Screenshot capture requires independent window presentation');
     }
 
     await WoxApi.instance.onShow(traceId);
@@ -275,7 +344,7 @@ class WoxScreenshotController extends GetxController {
 
   Future<void> _presentPreparedCaptureWorkspace(String traceId, List<DisplaySnapshot> metadataSnapshots, Rect nativeWorkspaceBounds) async {
     _activeNativeWorkspaceBounds = nativeWorkspaceBounds;
-    final presentation = await ScreenshotPlatformBridge.instance.prepareCaptureWorkspace(ScreenshotRect.fromRect(nativeWorkspaceBounds));
+    final presentation = await ScreenshotPlatformBridge.instance.prepareCaptureWorkspace(ScreenshotRect.fromRect(nativeWorkspaceBounds), windowHandle: _screenshotWindowHandle);
     final rawSnapshots = await _hydrateRawSnapshots(metadataSnapshots);
     final normalizedSnapshots = _normalizeSnapshotsForWorkspace(
       rawSnapshots,
@@ -290,19 +359,15 @@ class WoxScreenshotController extends GetxController {
     workspaceScale.value = presentation.workspaceScale;
 
     await WoxApi.instance.onShow(traceId);
-    if (presentation.presentedByPlatform) {
-      // macOS and Windows now share the same handoff: resize and prime the native screenshot shell
-      // before Flutter decodes monitor PNGs, then reveal only after the first annotation frame is
-      // ready. The previous all-in-one path made the user wait for capture, PNG encoding, layout,
-      // and show on one visible transition.
-      await ScreenshotPlatformBridge.instance.revealPreparedCaptureWorkspace();
-    } else {
-      final bounds = virtualBoundsRect;
-      await windowManager.setBounds(bounds.topLeft, bounds.size);
-      await windowManager.setAlwaysOnTop(true);
-      await windowManager.show();
-      await windowManager.focus();
+    if (!presentation.presentedByPlatform) {
+      throw StateError('Screenshot capture requires independent window presentation');
     }
+
+    // Resize and prime the native screenshot shell before Flutter decodes monitor PNGs, then reveal
+    // only after the first annotation frame is ready.
+    await ScreenshotPlatformBridge.instance.revealPreparedCaptureWorkspace(windowHandle: _screenshotWindowHandle);
+    _isScreenshotWindowPresented = true;
+    await focusSessionWindow(traceId);
 
     stage.value = ScreenshotSessionStage.selecting;
   }
@@ -384,17 +449,15 @@ class WoxScreenshotController extends GetxController {
     await WidgetsBinding.instance.endOfFrame;
     await WoxApi.instance.onShow(traceId);
 
-    if (presentation.presentedByPlatform) {
-      final revealWatch = Stopwatch()..start();
-      await ScreenshotPlatformBridge.instance.revealPreparedCaptureWorkspace();
-      _logScreenshotTiming(traceId, 'native_reveal_workspace', {'elapsedMs': revealWatch.elapsedMilliseconds, 'displayId': selectedDisplay.displayId});
-    } else {
-      final bounds = virtualBoundsRect;
-      await windowManager.setBounds(bounds.topLeft, bounds.size);
-      await windowManager.setAlwaysOnTop(true);
-      await windowManager.show();
-      await windowManager.focus();
+    if (!presentation.presentedByPlatform) {
+      throw StateError('Screenshot capture requires independent window presentation');
     }
+
+    final revealWatch = Stopwatch()..start();
+    await ScreenshotPlatformBridge.instance.revealPreparedCaptureWorkspace(windowHandle: _screenshotWindowHandle);
+    _isScreenshotWindowPresented = true;
+    await focusSessionWindow(traceId);
+    _logScreenshotTiming(traceId, 'native_reveal_workspace', {'elapsedMs': revealWatch.elapsedMilliseconds, 'displayId': selectedDisplay.displayId});
 
     // Native selection now stays on-screen until Flutter already holds the final annotation frame.
     // That removes the visible "loading / resize / repaint" gap that used to appear after mouse-up.
@@ -440,13 +503,9 @@ class WoxScreenshotController extends GetxController {
     _savedWindowState = _SavedScreenshotWindowState(wasVisible: isVisible, position: position, size: size, forceHideOnBlur: launcherController.forceHideOnBlur);
 
     launcherController.forceHideOnBlur = false;
-    if (isVisible) {
-      await WoxApi.instance.onHide(traceId);
-    }
-
-    // Hiding the current window before native capture prevents the launcher itself from ending up in
-    // the captured background, which is a hard requirement for the single-window screenshot workflow.
-    await windowManager.hide();
+    // The screenshot editor now uses an independent native window. Keep the existing launcher
+    // visible so silent screenshot query hotkeys do not alter the user's current query window.
+    await _ensureScreenshotWindow(traceId);
   }
 
   Future<void> cancelSession(String traceId, {String reason = 'unspecified'}) async {
@@ -595,6 +654,7 @@ class WoxScreenshotController extends GetxController {
       workspaceBounds: ScreenshotRect.fromRect(virtualBoundsRect),
       selection: ScreenshotRect.fromRect(selection),
       controlsBounds: ScreenshotRect.fromRect(controlsBounds),
+      windowHandle: _screenshotWindowHandle,
       traceId: traceId,
     );
     isNativeScrollingCaptureOverlay.value = true;
@@ -793,7 +853,7 @@ class WoxScreenshotController extends GetxController {
       // The stitched image becomes narrower as more vertical content is added. Resizing the compact
       // Flutter preview window after each accepted frame keeps the native side panel wrapped to the
       // image instead of leaving the old first-frame panel width visible as a gray gutter.
-      await windowManager.setBounds(nextBounds.topLeft, nextBounds.size);
+      await ScreenshotPlatformBridge.instance.moveScrollingCaptureControlsWindow(controlsBounds: ScreenshotRect.fromRect(nextBounds), windowHandle: _screenshotWindowHandle);
       _logScrollingCaptureTiming(traceId, 'native_preview_resize_done', {
         'elapsedMs': resizeWatch.elapsedMilliseconds,
         'frameCount': scrollingCaptureFrames.length,
@@ -1421,9 +1481,8 @@ class WoxScreenshotController extends GetxController {
     // visible. Closing it here as part of the generic restore path prevents a stuck topmost shade
     // when the screenshot session aborts before that handoff completes.
     await ScreenshotPlatformBridge.instance.dismissNativeSelectionOverlays();
-    await ScreenshotPlatformBridge.instance.dismissCaptureWorkspacePresentation();
-    await windowManager.setAlwaysOnTop(true);
-    await windowManager.setBounds(savedState.position, savedState.size);
+    await ScreenshotPlatformBridge.instance.dismissCaptureWorkspacePresentation(windowHandle: _screenshotWindowHandle);
+    await _closeScreenshotWindow();
 
     if (savedState.wasVisible && restoreVisibility) {
       await windowManager.show();
@@ -1442,16 +1501,17 @@ class WoxScreenshotController extends GetxController {
   }
 
   Future<void> _hideScreenshotWindowBeforeFinish(String traceId) async {
-    // Finishing a screenshot changes the reused Wox window back from fullscreen capture bounds to
-    // the saved launcher bounds. Hide first so cancel/failure/confirm do not visibly shrink the
-    // capture surface before the normal restore path decides whether to show the launcher again.
-    final isVisible = await windowManager.isVisible();
-    if (!isVisible) {
+    // Hide the capture surface before cancel/failure/confirm so users do not see the editor shrink,
+    // close, or hand focus back while the normal restore path decides whether to show the launcher.
+    if (!_isScreenshotWindowPresented) {
       return;
     }
 
-    await windowManager.hide();
-    await WoxApi.instance.onHide(traceId);
+    await _screenshotWindow?.hide();
+    _isScreenshotWindowPresented = false;
+    if (_savedWindowState?.wasVisible != true) {
+      await WoxApi.instance.onHide(traceId);
+    }
   }
 
   void _resetSessionState() {
@@ -1461,6 +1521,7 @@ class WoxScreenshotController extends GetxController {
     isSessionActive.value = false;
     _savedWindowState = null;
     _activeRequest = null;
+    _isScreenshotWindowPresented = false;
     _releaseSnapshotImageCaches(displaySnapshots);
     _clearNativePreparationState();
     _disposeScrollingCaptureFrames();
@@ -1927,7 +1988,7 @@ class WoxScreenshotController extends GetxController {
     final sessionRevision = _captureSessionRevision;
     final revision = ++_preparedDisplayRevision;
     final prepareWatch = Stopwatch()..start();
-    final presentation = await ScreenshotPlatformBridge.instance.prepareCaptureWorkspace(ScreenshotRect.fromRect(targetBounds));
+    final presentation = await ScreenshotPlatformBridge.instance.prepareCaptureWorkspace(ScreenshotRect.fromRect(targetBounds), windowHandle: _screenshotWindowHandle);
     if (!_isActiveCaptureSessionRevision(sessionRevision) || revision != _preparedDisplayRevision) {
       return;
     }
@@ -2545,6 +2606,7 @@ class WoxScreenshotController extends GetxController {
     _clearNativePreparationState();
     _disposeScrollingCaptureFrames();
     _disposeDecodedImages();
+    unawaited(_closeScreenshotWindow());
     textDraftController.dispose();
     super.onClose();
   }
@@ -2555,6 +2617,7 @@ class WoxScreenshotController extends GetxController {
     }
     _sessionCompleter = null;
     _savedWindowState = null;
+    await _closeScreenshotWindow();
     _resetSessionState();
     ScreenshotPlatformBridge.resetInstance();
   }

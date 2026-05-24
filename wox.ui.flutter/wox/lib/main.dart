@@ -19,7 +19,6 @@ import 'package:wox/utils/windows/window_manager.dart';
 import 'package:wox/utils/windows/window_manager_interface.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/modules/launcher/views/wox_launcher_view.dart';
-import 'package:wox/modules/screenshot/views/wox_screenshot_view.dart';
 import 'package:wox/utils/env.dart';
 import 'package:wox/utils/heartbeat_checker.dart';
 import 'package:wox/utils/log.dart';
@@ -187,7 +186,6 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
   final launcherController = Get.find<WoxLauncherController>();
   final screenshotController = Get.find<WoxScreenshotController>();
   final settingController = Get.find<WoxSettingController>();
-  bool _isRecoveringScreenshotWindowFocus = false;
 
   @override
   void initState() {
@@ -242,10 +240,8 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
     }
 
     if (screenshotController.isSessionActive.value) {
-      // Ignoring blur used to leave the screenshot session alive but unfocused after the native
-      // selection overlay handed control back to Flutter. Reclaim focus here so the annotation
-      // workspace stays interactive even if macOS briefly moves key-window ownership elsewhere.
-      await _recoverScreenshotWindowFocus(traceId);
+      Logger.instance.debug(traceId, "onWindowBlur ignored: independent screenshot window owns focus");
+      await screenshotController.focusSessionWindow(traceId);
       return;
     }
 
@@ -259,39 +255,15 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
     WoxApi.instance.onFocusLost(traceId);
   }
 
-  Future<void> _recoverScreenshotWindowFocus(String traceId) async {
-    if (_isRecoveringScreenshotWindowFocus) {
-      return;
-    }
-
-    _isRecoveringScreenshotWindowFocus = true;
-    try {
-      await windowManager.focus();
-    } catch (e) {
-      Logger.instance.error(traceId, "onWindowBlur failed screenshot focus recovery: $e");
-    } finally {
-      _isRecoveringScreenshotWindowFocus = false;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    return Obx(() {
-      if (screenshotController.isSessionActive.value) {
-        // Screenshot capture needs the entire virtual-desktop surface for region selection. The
-        // launcher border drag overlays would steal edge pointer input and make secondary displays
-        // feel "dead", so the capture view bypasses them while the session is active.
-        return const WoxScreenshotView();
-      }
-
-      return WoxBorderDragMoveArea(
-        borderWidth: WoxThemeUtil.instance.currentTheme.value.appPaddingTop.toDouble(),
-        onDragEnd: () {
-          launcherController.focusQueryBox();
-          launcherController.saveWindowPositionIfNeeded();
-        },
-        child: const WoxLauncherView(),
-      );
-    });
+    return WoxBorderDragMoveArea(
+      borderWidth: WoxThemeUtil.instance.currentTheme.value.appPaddingTop.toDouble(),
+      onDragEnd: () {
+        launcherController.focusQueryBox();
+        launcherController.saveWindowPositionIfNeeded();
+      },
+      child: const WoxLauncherView(),
+    );
   }
 }

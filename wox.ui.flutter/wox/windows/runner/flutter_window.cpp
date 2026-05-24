@@ -749,6 +749,47 @@ static bool TryReadNestedRectArgument(const flutter::EncodableMap &arguments, co
   return rect_out->right > rect_out->left && rect_out->bottom > rect_out->top;
 }
 
+static bool TryResolveWindowHandleArgument(const flutter::EncodableMap &arguments, HWND fallback_hwnd, HWND *hwnd_out, std::string *error_out)
+{
+  *hwnd_out = fallback_hwnd;
+  const auto window_handle_it = arguments.find(flutter::EncodableValue("windowHandle"));
+  if (window_handle_it == arguments.end())
+  {
+    return true;
+  }
+
+  int64_t raw_handle = 0;
+  if (const auto *int64_value = std::get_if<int64_t>(&window_handle_it->second))
+  {
+    raw_handle = *int64_value;
+  }
+  else if (const auto *int32_value = std::get_if<int32_t>(&window_handle_it->second))
+  {
+    raw_handle = static_cast<int64_t>(*int32_value);
+  }
+  else
+  {
+    if (error_out != nullptr)
+    {
+      *error_out = "windowHandle must be an integer";
+    }
+    return false;
+  }
+
+  auto target_hwnd = reinterpret_cast<HWND>(static_cast<intptr_t>(raw_handle));
+  if (target_hwnd == nullptr || !IsWindow(target_hwnd))
+  {
+    if (error_out != nullptr)
+    {
+      *error_out = "windowHandle does not refer to a valid window";
+    }
+    return false;
+  }
+
+  *hwnd_out = target_hwnd;
+  return true;
+}
+
 static bool TryIntersectRects(const RECT &first, const RECT &second, RECT *intersection_out)
 {
   RECT intersection{};
@@ -2011,11 +2052,18 @@ void FlutterWindow::PrepareCaptureWorkspace(HWND hwnd, const RECT &native_worksp
       native_workspace_bounds.bottom - native_workspace_bounds.top,
       SWP_FRAMECHANGED | SWP_NOACTIVATE);
 
-  if (flutter_controller_)
+  if (hwnd == GetHandle() && flutter_controller_)
   {
     flutter_controller_->ForceRedraw();
   }
-  SyncFlutterChildWindowToClientArea(hwnd, "prepareCaptureWorkspace", false);
+  if (hwnd == GetHandle())
+  {
+    SyncFlutterChildWindowToClientArea(hwnd, "prepareCaptureWorkspace", false);
+  }
+  else
+  {
+    InvalidateRect(hwnd, nullptr, TRUE);
+  }
 
   screenshot_presentation_state_.prepared = true;
   screenshot_presentation_state_.active = false;
@@ -2049,7 +2097,14 @@ void FlutterWindow::RevealPreparedCaptureWorkspace(HWND hwnd)
       native_workspace_bounds.bottom - native_workspace_bounds.top,
       SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 
-  SyncFlutterChildWindowToClientArea(hwnd, "revealPreparedCaptureWorkspace", false);
+  if (hwnd == GetHandle())
+  {
+    SyncFlutterChildWindowToClientArea(hwnd, "revealPreparedCaptureWorkspace", false);
+  }
+  else
+  {
+    InvalidateRect(hwnd, nullptr, TRUE);
+  }
 
   // Screenshot capture replaces the standard show() -> focus() sequence on Windows because the
   // generic window-manager path assumes one monitor/DPI. Reapplying the focus restore steps here
@@ -2061,7 +2116,14 @@ void FlutterWindow::RevealPreparedCaptureWorkspace(HWND hwnd)
     AllowSetForegroundWindow(ASFW_ANY);
     SetForegroundWindow(hwnd);
   }
-  FocusFlutterViewOrRoot(hwnd);
+  if (hwnd == GetHandle())
+  {
+    FocusFlutterViewOrRoot(hwnd);
+  }
+  else
+  {
+    SetFocus(hwnd);
+  }
   BringWindowToTop(hwnd);
   blur_guard_active_ = false;
 
@@ -3714,6 +3776,7 @@ void FlutterWindow::BeginScrollingCaptureOverlay(HWND hwnd, const RECT &workspac
 
   scrolling_capture_overlay_state_.active = true;
   scrolling_capture_overlay_state_.selection_bounds = selection_bounds;
+  scrolling_capture_overlay_state_.controls_window = hwnd;
 
   const int workspace_width = workspace_bounds.right - workspace_bounds.left;
   const int workspace_height = workspace_bounds.bottom - workspace_bounds.top;
@@ -3760,11 +3823,16 @@ void FlutterWindow::BeginScrollingCaptureOverlay(HWND hwnd, const RECT &workspac
 void FlutterWindow::DismissScrollingCaptureOverlay()
 {
   const bool was_active = scrolling_capture_overlay_state_.active;
+  HWND controls_window = scrolling_capture_overlay_state_.controls_window;
 
   ClearScrollingCaptureControlsRegion();
   if (was_active)
   {
-    SetScrollingCaptureControlsBackdrop(GetHandle(), false);
+    if (controls_window == nullptr || !IsWindow(controls_window))
+    {
+      controls_window = GetHandle();
+    }
+    SetScrollingCaptureControlsBackdrop(controls_window, false);
   }
 
   if (scrolling_capture_overlay_state_.mouse_hook != nullptr)
@@ -3780,11 +3848,13 @@ void FlutterWindow::DismissScrollingCaptureOverlay()
   }
 
   scrolling_capture_overlay_state_.active = false;
+  scrolling_capture_overlay_state_.controls_window = nullptr;
   scrolling_capture_overlay_state_.selection_bounds = {0, 0, 0, 0};
 }
 
 void FlutterWindow::MoveScrollingCaptureControlsWindow(HWND hwnd, const RECT &controls_bounds)
 {
+  scrolling_capture_overlay_state_.controls_window = hwnd;
   SetWindowPos(
       hwnd,
       HWND_TOPMOST,
@@ -3793,13 +3863,27 @@ void FlutterWindow::MoveScrollingCaptureControlsWindow(HWND hwnd, const RECT &co
       controls_bounds.right - controls_bounds.left,
       controls_bounds.bottom - controls_bounds.top,
       SWP_FRAMECHANGED | SWP_SHOWWINDOW);
-  SyncFlutterChildWindowToClientArea(hwnd, "beginScrollingCaptureOverlay", false);
+  if (hwnd == GetHandle())
+  {
+    SyncFlutterChildWindowToClientArea(hwnd, "beginScrollingCaptureOverlay", false);
+  }
+  else
+  {
+    InvalidateRect(hwnd, nullptr, TRUE);
+  }
   ApplyScrollingCaptureControlsRegion(hwnd);
-  if (flutter_controller_)
+  if (hwnd == GetHandle() && flutter_controller_)
   {
     flutter_controller_->ForceRedraw();
   }
-  FocusFlutterViewOrRoot(hwnd);
+  if (hwnd == GetHandle())
+  {
+    FocusFlutterViewOrRoot(hwnd);
+  }
+  else
+  {
+    SetFocus(hwnd);
+  }
 }
 
 void FlutterWindow::SetScrollingCaptureControlsBackdrop(HWND hwnd, bool compact)
@@ -3893,17 +3977,16 @@ void FlutterWindow::ApplyScrollingCaptureControlsRegion(HWND hwnd)
   const int width = client_rect.right - client_rect.left;
   const int height = client_rect.bottom - client_rect.top;
 
-  // Bug fix: Windows keeps the reused Flutter screenshot window backed by its normal acrylic/Mica
-  // surface, unlike macOS where AppKit can make unpainted preview pixels fully transparent. Clip the
-  // native window to the painted preview and toolbar regions so the compact scrolling controls do
-  // not show a gray rectangular backing panel.
+  // Windows can keep a Flutter screenshot window backed by its normal DWM surface, unlike macOS
+  // where AppKit can make unpainted preview pixels fully transparent. Clip the native window to the
+  // painted preview and toolbar regions so the compact scrolling controls do not show a gray backing.
   HRGN root_region = CreateScrollingCaptureControlsRegion(width, height);
   if (root_region != nullptr)
   {
     SetWindowRgn(hwnd, root_region, TRUE);
   }
 
-  if (child_window_ != nullptr && IsWindow(child_window_))
+  if (hwnd == GetHandle() && child_window_ != nullptr && IsWindow(child_window_))
   {
     HRGN child_region = CreateScrollingCaptureControlsRegion(width, height);
     if (child_region != nullptr)
@@ -3915,12 +3998,16 @@ void FlutterWindow::ApplyScrollingCaptureControlsRegion(HWND hwnd)
 
 void FlutterWindow::ClearScrollingCaptureControlsRegion()
 {
-  HWND hwnd = GetHandle();
+  HWND hwnd = scrolling_capture_overlay_state_.controls_window;
+  if (hwnd == nullptr || !IsWindow(hwnd))
+  {
+    hwnd = GetHandle();
+  }
   if (hwnd != nullptr && IsWindow(hwnd))
   {
     SetWindowRgn(hwnd, nullptr, TRUE);
   }
-  if (child_window_ != nullptr && IsWindow(child_window_))
+  if (hwnd == GetHandle() && child_window_ != nullptr && IsWindow(child_window_))
   {
     SetWindowRgn(child_window_, nullptr, TRUE);
   }
@@ -5010,7 +5097,15 @@ void FlutterWindow::HandleWindowManagerMethodCall(
           static_cast<LONG>(std::lround(x + width)),
           static_cast<LONG>(std::lround(y + height))};
 
-      PrepareCaptureWorkspace(hwnd, native_workspace_bounds);
+      HWND target_hwnd = hwnd;
+      std::string window_error;
+      if (!TryResolveWindowHandleArgument(*arguments, hwnd, &target_hwnd, &window_error))
+      {
+        result->Error("INVALID_ARGUMENTS", window_error);
+        return;
+      }
+
+      PrepareCaptureWorkspace(target_hwnd, native_workspace_bounds);
       result->Success(flutter::EncodableValue(BuildCaptureWorkspaceResponse(native_workspace_bounds)));
     }
     else if (method_name == "presentCaptureWorkspace")
@@ -5042,13 +5137,31 @@ void FlutterWindow::HandleWindowManagerMethodCall(
           static_cast<LONG>(std::lround(x + width)),
           static_cast<LONG>(std::lround(y + height))};
 
-      PrepareCaptureWorkspace(hwnd, native_workspace_bounds);
-      RevealPreparedCaptureWorkspace(hwnd);
+      HWND target_hwnd = hwnd;
+      std::string window_error;
+      if (!TryResolveWindowHandleArgument(*arguments, hwnd, &target_hwnd, &window_error))
+      {
+        result->Error("INVALID_ARGUMENTS", window_error);
+        return;
+      }
+
+      PrepareCaptureWorkspace(target_hwnd, native_workspace_bounds);
+      RevealPreparedCaptureWorkspace(target_hwnd);
       result->Success(flutter::EncodableValue(BuildCaptureWorkspaceResponse(native_workspace_bounds)));
     }
     else if (method_name == "revealPreparedCaptureWorkspace")
     {
-      RevealPreparedCaptureWorkspace(hwnd);
+      HWND target_hwnd = hwnd;
+      if (const auto *arguments = std::get_if<flutter::EncodableMap>(method_call.arguments()))
+      {
+        std::string window_error;
+        if (!TryResolveWindowHandleArgument(*arguments, hwnd, &target_hwnd, &window_error))
+        {
+          result->Error("INVALID_ARGUMENTS", window_error);
+          return;
+        }
+      }
+      RevealPreparedCaptureWorkspace(target_hwnd);
       result->Success();
     }
     else if (method_name == "beginScrollingCaptureOverlay")
@@ -5073,21 +5186,73 @@ void FlutterWindow::HandleWindowManagerMethodCall(
         return;
       }
 
-      // Windows now follows the macOS scrolling-capture handoff: the fullscreen capture shell is
-      // replaced by a passive native mask, while the reused Flutter window becomes the compact
-      // preview/toolbox. Keeping this state native lets wheel input reach the selected app directly.
-      BeginScrollingCaptureOverlay(hwnd, workspace_bounds, selection_bounds, controls_bounds);
+      // Windows follows the macOS scrolling-capture handoff: the fullscreen capture shell is replaced
+      // by a passive native mask, while the Flutter screenshot window becomes the compact preview.
+      // Keeping this state native lets wheel input reach the selected app directly.
+      HWND target_hwnd = hwnd;
+      std::string window_error;
+      if (!TryResolveWindowHandleArgument(*arguments, hwnd, &target_hwnd, &window_error))
+      {
+        result->Error("INVALID_ARGUMENTS", window_error);
+        return;
+      }
+
+      // Screenshot can now run in a dedicated Flutter window. The native mask and mouse hook stay
+      // process-level, but the compact controls must be moved and clipped on the screenshot window.
+      BeginScrollingCaptureOverlay(target_hwnd, workspace_bounds, selection_bounds, controls_bounds);
+      result->Success();
+    }
+    else if (method_name == "moveScrollingCaptureControlsWindow")
+    {
+      const auto *arguments = std::get_if<flutter::EncodableMap>(method_call.arguments());
+      if (arguments == nullptr)
+      {
+        result->Error("INVALID_ARGUMENTS", "Invalid arguments for moveScrollingCaptureControlsWindow");
+        return;
+      }
+
+      const double scale = screenshot_presentation_state_.workspace_scale <= 0 ? static_cast<double>(GetDpiScale(hwnd)) : screenshot_presentation_state_.workspace_scale;
+      RECT controls_bounds{};
+      std::string parse_error;
+      if (!TryReadNestedRectArgument(*arguments, "controlsBounds", scale, &controls_bounds, &parse_error))
+      {
+        result->Error("INVALID_ARGUMENTS", parse_error);
+        return;
+      }
+
+      HWND target_hwnd = scrolling_capture_overlay_state_.controls_window != nullptr ? scrolling_capture_overlay_state_.controls_window : hwnd;
+      std::string window_error;
+      if (!TryResolveWindowHandleArgument(*arguments, target_hwnd, &target_hwnd, &window_error))
+      {
+        result->Error("INVALID_ARGUMENTS", window_error);
+        return;
+      }
+
+      MoveScrollingCaptureControlsWindow(target_hwnd, controls_bounds);
       result->Success();
     }
     else if (method_name == "dismissCaptureWorkspacePresentation")
     {
+      HWND target_hwnd = hwnd;
+      if (const auto *arguments = std::get_if<flutter::EncodableMap>(method_call.arguments()))
+      {
+        std::string window_error;
+        if (!TryResolveWindowHandleArgument(*arguments, hwnd, &target_hwnd, &window_error))
+        {
+          result->Error("INVALID_ARGUMENTS", window_error);
+          return;
+        }
+      }
       DismissScrollingCaptureOverlay();
       ClearCachedDisplayCaptures();
       screenshot_presentation_state_.active = false;
       screenshot_presentation_state_.prepared = false;
       screenshot_presentation_state_.workspace_scale = 1.0;
       screenshot_presentation_state_.native_workspace_bounds = {0, 0, 0, 0};
-      SyncFlutterChildWindowToClientArea(hwnd, "dismissCaptureWorkspacePresentation", false);
+      if (target_hwnd == hwnd)
+      {
+        SyncFlutterChildWindowToClientArea(hwnd, "dismissCaptureWorkspacePresentation", false);
+      }
       result->Success();
     }
     else if (method_name == "dismissNativeSelectionOverlays")
@@ -5608,6 +5773,17 @@ void FlutterWindow::HandleWindowManagerMethodCall(
         std::string appearance = *arguments;
         BOOL useDark = (appearance == "dark");
         DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &useDark, sizeof(useDark));
+        // Theme changes can reset the DWM material on the existing launcher HWND.
+        // Reapply the same backdrop policy used at window creation so translucent
+        // Flutter theme colors do not turn into a plain opaque surface until the
+        // next query resize refreshes the frame.
+        MARGINS margins = {-1};
+        DwmExtendFrameIntoClientArea(hwnd, &margins);
+        int backdrop_type = kDwmSystemBackdropTabbed;
+        DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop_type, sizeof(backdrop_type));
+        int corner_preference = kDwmCornerRound;
+        DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corner_preference, sizeof(corner_preference));
+        SetWindowPos(hwnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
         result->Success();
       }
       else

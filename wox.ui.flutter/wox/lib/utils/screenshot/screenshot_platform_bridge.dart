@@ -12,10 +12,7 @@ class ScrollingCaptureWheelEvent {
       // Bug fix: native scrolling capture used to emit an untyped "wheel happened" signal, which
       // forced Dart to guess the stitching direction. Keep a defensive default so older native
       // runners still append downward, while new runners can pass a normalized Flutter-style delta.
-      return ScrollingCaptureWheelEvent(
-        deltaY: _readDouble(arguments['deltaY']) ?? 1.0,
-        rawDeltaY: _readDouble(arguments['rawDeltaY']),
-      );
+      return ScrollingCaptureWheelEvent(deltaY: _readDouble(arguments['deltaY']) ?? 1.0, rawDeltaY: _readDouble(arguments['rawDeltaY']));
     }
 
     return const ScrollingCaptureWheelEvent(deltaY: 1.0);
@@ -77,17 +74,17 @@ abstract class ScreenshotPlatformBridge {
 
   Future<ScreenshotNativeSelectionResult> selectCaptureRegion(ScreenshotRect nativeWorkspaceBounds);
 
-  Future<ScreenshotWorkspacePresentation> presentCaptureWorkspace(ScreenshotRect nativeWorkspaceBounds);
+  Future<ScreenshotWorkspacePresentation> presentCaptureWorkspace(ScreenshotRect nativeWorkspaceBounds, {int? windowHandle});
 
-  Future<ScreenshotWorkspacePresentation> prepareCaptureWorkspace(ScreenshotRect nativeWorkspaceBounds) {
-    return presentCaptureWorkspace(nativeWorkspaceBounds);
+  Future<ScreenshotWorkspacePresentation> prepareCaptureWorkspace(ScreenshotRect nativeWorkspaceBounds, {int? windowHandle}) {
+    return presentCaptureWorkspace(nativeWorkspaceBounds, windowHandle: windowHandle);
   }
 
-  Future<void> revealPreparedCaptureWorkspace() async {}
+  Future<void> revealPreparedCaptureWorkspace({int? windowHandle}) async {}
 
   Stream<ScreenshotSelectionDisplayHint> selectionDisplayHints() => const Stream<ScreenshotSelectionDisplayHint>.empty();
 
-  Future<void> dismissCaptureWorkspacePresentation();
+  Future<void> dismissCaptureWorkspacePresentation({int? windowHandle});
 
   Future<void> dismissNativeSelectionOverlays();
 
@@ -101,8 +98,11 @@ abstract class ScreenshotPlatformBridge {
     required ScreenshotRect workspaceBounds,
     required ScreenshotRect selection,
     required ScreenshotRect controlsBounds,
+    int? windowHandle,
     String? traceId,
   }) async {}
+
+  Future<void> moveScrollingCaptureControlsWindow({required ScreenshotRect controlsBounds, int? windowHandle}) async {}
 
   Stream<ScrollingCaptureWheelEvent> scrollingCaptureWheelEvents() => const Stream<ScrollingCaptureWheelEvent>.empty();
 
@@ -195,25 +195,25 @@ class MethodChannelScreenshotPlatformBridge implements ScreenshotPlatformBridge 
   }
 
   @override
-  Future<ScreenshotWorkspacePresentation> presentCaptureWorkspace(ScreenshotRect nativeWorkspaceBounds) async {
+  Future<ScreenshotWorkspacePresentation> presentCaptureWorkspace(ScreenshotRect nativeWorkspaceBounds, {int? windowHandle}) async {
     try {
-      final response = await _channel.invokeMethod<Map<dynamic, dynamic>>('presentCaptureWorkspace', nativeWorkspaceBounds.toJson());
+      final response = await _channel.invokeMethod<Map<dynamic, dynamic>>('presentCaptureWorkspace', _windowScopedRectArguments(nativeWorkspaceBounds, windowHandle: windowHandle));
       if (response == null) {
         return ScreenshotWorkspacePresentation(workspaceBounds: nativeWorkspaceBounds, workspaceScale: 1, presentedByPlatform: false);
       }
 
       return ScreenshotWorkspacePresentation.fromJson(response.map((key, value) => MapEntry(key.toString(), value)));
     } on MissingPluginException {
-      // Linux and older runners do not implement screenshot-only presentation. Falling back to the
-      // generic window-manager path keeps the existing single-window workflow available there.
+      // Linux and older runners do not implement screenshot-only presentation. Return an unhandled
+      // presentation so the controller can fail instead of falling back to the launcher window.
       return ScreenshotWorkspacePresentation(workspaceBounds: nativeWorkspaceBounds, workspaceScale: 1, presentedByPlatform: false);
     }
   }
 
   @override
-  Future<ScreenshotWorkspacePresentation> prepareCaptureWorkspace(ScreenshotRect nativeWorkspaceBounds) async {
+  Future<ScreenshotWorkspacePresentation> prepareCaptureWorkspace(ScreenshotRect nativeWorkspaceBounds, {int? windowHandle}) async {
     try {
-      final response = await _channel.invokeMethod<Map<dynamic, dynamic>>('prepareCaptureWorkspace', nativeWorkspaceBounds.toJson());
+      final response = await _channel.invokeMethod<Map<dynamic, dynamic>>('prepareCaptureWorkspace', _windowScopedRectArguments(nativeWorkspaceBounds, windowHandle: windowHandle));
       if (response == null) {
         return ScreenshotWorkspacePresentation(workspaceBounds: nativeWorkspaceBounds, workspaceScale: 1, presentedByPlatform: false);
       }
@@ -222,14 +222,14 @@ class MethodChannelScreenshotPlatformBridge implements ScreenshotPlatformBridge 
     } on MissingPluginException {
       // Native preparation is optional. Older/native-simple runners can still satisfy the contract
       // through the original present call.
-      return presentCaptureWorkspace(nativeWorkspaceBounds);
+      return presentCaptureWorkspace(nativeWorkspaceBounds, windowHandle: windowHandle);
     }
   }
 
   @override
-  Future<void> revealPreparedCaptureWorkspace() async {
+  Future<void> revealPreparedCaptureWorkspace({int? windowHandle}) async {
     try {
-      await _channel.invokeMethod<void>('revealPreparedCaptureWorkspace');
+      await _channel.invokeMethod<void>('revealPreparedCaptureWorkspace', _windowHandleArguments(windowHandle));
     } on MissingPluginException {
       return;
     }
@@ -253,9 +253,9 @@ class MethodChannelScreenshotPlatformBridge implements ScreenshotPlatformBridge 
   }
 
   @override
-  Future<void> dismissCaptureWorkspacePresentation() async {
+  Future<void> dismissCaptureWorkspacePresentation({int? windowHandle}) async {
     try {
-      await _channel.invokeMethod<void>('dismissCaptureWorkspacePresentation');
+      await _channel.invokeMethod<void>('dismissCaptureWorkspacePresentation', _windowHandleArguments(windowHandle));
     } on MissingPluginException {
       return;
     }
@@ -302,6 +302,7 @@ class MethodChannelScreenshotPlatformBridge implements ScreenshotPlatformBridge 
     required ScreenshotRect workspaceBounds,
     required ScreenshotRect selection,
     required ScreenshotRect controlsBounds,
+    int? windowHandle,
     String? traceId,
   }) async {
     try {
@@ -309,8 +310,18 @@ class MethodChannelScreenshotPlatformBridge implements ScreenshotPlatformBridge 
         'workspaceBounds': workspaceBounds.toJson(),
         'selection': selection.toJson(),
         'controlsBounds': controlsBounds.toJson(),
+        if (windowHandle != null) 'windowHandle': windowHandle,
         if (traceId != null && traceId.isNotEmpty) 'traceId': traceId,
       });
+    } on MissingPluginException {
+      return;
+    }
+  }
+
+  @override
+  Future<void> moveScrollingCaptureControlsWindow({required ScreenshotRect controlsBounds, int? windowHandle}) async {
+    try {
+      await _channel.invokeMethod<void>('moveScrollingCaptureControlsWindow', {'controlsBounds': controlsBounds.toJson(), if (windowHandle != null) 'windowHandle': windowHandle});
     } on MissingPluginException {
       return;
     }
@@ -354,5 +365,13 @@ class MethodChannelScreenshotPlatformBridge implements ScreenshotPlatformBridge 
     return snapshots.whereType<Map<dynamic, dynamic>>().map((item) {
       return DisplaySnapshot.fromJson(item.map((key, value) => MapEntry(key.toString(), value)));
     }).toList();
+  }
+
+  Map<String, dynamic> _windowScopedRectArguments(ScreenshotRect rect, {int? windowHandle}) {
+    return {...rect.toJson(), if (windowHandle != null) 'windowHandle': windowHandle};
+  }
+
+  Object? _windowHandleArguments(int? windowHandle) {
+    return windowHandle == null ? null : <String, dynamic>{'windowHandle': windowHandle};
   }
 }

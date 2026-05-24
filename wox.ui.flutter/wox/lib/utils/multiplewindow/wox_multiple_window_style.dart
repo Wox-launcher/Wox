@@ -27,43 +27,15 @@ const int _wmNcLButtonDown = 0x00A1;
 const int _htCaption = 2;
 const int _monitorDefaultToNearest = 2;
 const int _offscreenCoordinate = -32000;
+const int _swHide = 0;
 
 const int _dwmwaUseImmersiveDarkMode = 20;
 const int _dwmwaWindowCornerPreference = 33;
 const int _dwmwaSystemBackdropType = 38;
+const int _dwmcpDoNotRound = 1;
 const int _dwmcpRound = 2;
-const int _dwmsbtNone = 1;
-const int _dwmsbtTabbedWindow = 4;
-
-const int _wcaAccentPolicy = 19;
-const int _accentEnableAcrylicBlurBehind = 4;
-const int _accentEnableHostBackdrop = 5;
-const int _woxAcrylicGradientColor = 0x2A202020;
-const int _woxHostBackdropGradientColor = 0x70202020;
-
-final class _AccentPolicy extends ffi.Struct {
-  @ffi.Int32()
-  external int accentState;
-
-  @ffi.Uint32()
-  external int accentFlags;
-
-  @ffi.Uint32()
-  external int gradientColor;
-
-  @ffi.Uint32()
-  external int animationId;
-}
-
-final class _WindowCompositionAttribData extends ffi.Struct {
-  @ffi.Uint32()
-  external int attrib;
-
-  external ffi.Pointer<ffi.Void> data;
-
-  @ffi.UintPtr()
-  external int sizeOfData;
-}
+const int _dwmsbtNone = 0;
+const int _dwmsbtTabbedWindow = 3;
 
 final class _Margins extends ffi.Struct {
   @ffi.Int32()
@@ -131,8 +103,8 @@ typedef _ReleaseCaptureNative = ffi.Int32 Function();
 typedef _ReleaseCaptureDart = int Function();
 typedef _SendMessageNative = ffi.IntPtr Function(ffi.Pointer<ffi.Void>, ffi.Uint32, ffi.UintPtr, ffi.IntPtr);
 typedef _SendMessageDart = int Function(ffi.Pointer<ffi.Void>, int, int, int);
-typedef _SetWindowCompositionAttributeNative = ffi.Int32 Function(ffi.Pointer<ffi.Void>, ffi.Pointer<_WindowCompositionAttribData>);
-typedef _SetWindowCompositionAttributeDart = int Function(ffi.Pointer<ffi.Void>, ffi.Pointer<_WindowCompositionAttribData>);
+typedef _ShowWindowNative = ffi.Int32 Function(ffi.Pointer<ffi.Void>, ffi.Int32);
+typedef _ShowWindowDart = int Function(ffi.Pointer<ffi.Void>, int);
 typedef _DwmSetWindowAttributeNative = ffi.Int32 Function(ffi.Pointer<ffi.Void>, ffi.Uint32, ffi.Pointer<ffi.Void>, ffi.Uint32);
 typedef _DwmSetWindowAttributeDart = int Function(ffi.Pointer<ffi.Void>, int, ffi.Pointer<ffi.Void>, int);
 typedef _DwmExtendFrameIntoClientAreaNative = ffi.Int32 Function(ffi.Pointer<ffi.Void>, ffi.Pointer<_Margins>);
@@ -151,15 +123,14 @@ class WoxMultipleWindowStyle {
   static final _GetWindowRectDart? _getWindowRect = _user32?.lookupFunction<_GetWindowRectNative, _GetWindowRectDart>("GetWindowRect");
   static final _ReleaseCaptureDart? _releaseCapture = _user32?.lookupFunction<_ReleaseCaptureNative, _ReleaseCaptureDart>("ReleaseCapture");
   static final _SendMessageDart? _sendMessage = _user32?.lookupFunction<_SendMessageNative, _SendMessageDart>("SendMessageW");
-  static final _SetWindowCompositionAttributeDart? _setWindowCompositionAttribute = _user32
-      ?.lookupFunction<_SetWindowCompositionAttributeNative, _SetWindowCompositionAttributeDart>("SetWindowCompositionAttribute");
+  static final _ShowWindowDart? _showWindow = _user32?.lookupFunction<_ShowWindowNative, _ShowWindowDart>("ShowWindow");
   static final _DwmSetWindowAttributeDart? _dwmSetWindowAttribute = _dwmapi?.lookupFunction<_DwmSetWindowAttributeNative, _DwmSetWindowAttributeDart>("DwmSetWindowAttribute");
   static final _DwmExtendFrameIntoClientAreaDart? _dwmExtendFrameIntoClientArea = _dwmapi?.lookupFunction<_DwmExtendFrameIntoClientAreaNative, _DwmExtendFrameIntoClientAreaDart>(
     "DwmExtendFrameIntoClientArea",
   );
 
   /// Applies native Windows chrome policy for a Flutter windowing controller.
-  static void apply(Object controller, {required bool mica}) {
+  static void apply(Object controller, {required bool mica, required bool darkMode, bool roundedCorners = true}) {
     if (!Platform.isWindows) {
       return;
     }
@@ -172,10 +143,16 @@ class WoxMultipleWindowStyle {
     // The wrapper draws any requested titlebar in Flutter. Native chrome is
     // always removed so all platforms share the same visual contract.
     _removeNativeFrame(hwnd);
-    _enableDarkMode(hwnd);
-    _enableRoundedCorners(hwnd);
+    _setDarkMode(hwnd, darkMode);
+    if (roundedCorners) {
+      _enableRoundedCorners(hwnd);
+    } else {
+      _disableRoundedCorners(hwnd);
+    }
     if (mica) {
       _enableBackdrop(hwnd);
+    } else {
+      _disableBackdrop(hwnd);
     }
     _refreshWindowFrame(hwnd);
   }
@@ -253,6 +230,20 @@ class WoxMultipleWindowStyle {
     _setWindowPos?.call(hwnd, ffi.nullptr, _offscreenCoordinate, _offscreenCoordinate, 0, 0, _swpNoSize | _swpNoZOrder | _swpNoActivate | _swpFrameChanged);
   }
 
+  /// Hides a managed window without destroying its Flutter view.
+  static void hide(Object controller) {
+    if (!Platform.isWindows) {
+      return;
+    }
+
+    final hwnd = _windowHandleOf(controller);
+    if (hwnd == null || hwnd.address == 0) {
+      return;
+    }
+
+    _showWindow?.call(hwnd, _swHide);
+  }
+
   /// Starts native dragging for a custom Flutter-drawn title area.
   static void startDragging(Object controller) {
     if (!Platform.isWindows) {
@@ -266,6 +257,19 @@ class WoxMultipleWindowStyle {
 
     _releaseCapture?.call();
     _sendMessage?.call(hwnd, _wmNcLButtonDown, _htCaption, 0);
+  }
+
+  /// Returns the native Windows handle for bridge calls that must target this window.
+  static int? nativeHandleOf(Object controller) {
+    if (!Platform.isWindows) {
+      return null;
+    }
+
+    final hwnd = _windowHandleOf(controller);
+    if (hwnd == null || hwnd.address == 0) {
+      return null;
+    }
+    return hwnd.address;
   }
 
   static ffi.Pointer<ffi.Void>? _windowHandleOf(Object controller) {
@@ -287,10 +291,10 @@ class WoxMultipleWindowStyle {
     setWindowLongPtr(hwnd, _gwlStyle, updatedStyle);
   }
 
-  static void _enableDarkMode(ffi.Pointer<ffi.Void> hwnd) {
+  static void _setDarkMode(ffi.Pointer<ffi.Void> hwnd, bool enabled) {
     final value = calloc<ffi.Int32>();
     try {
-      value.value = 1;
+      value.value = enabled ? 1 : 0;
       _dwmSetWindowAttribute?.call(hwnd, _dwmwaUseImmersiveDarkMode, value.cast<ffi.Void>(), ffi.sizeOf<ffi.Int32>());
     } finally {
       calloc.free(value);
@@ -307,43 +311,26 @@ class WoxMultipleWindowStyle {
     }
   }
 
-  static void _enableBackdrop(ffi.Pointer<ffi.Void> hwnd) {
-    if (_tryEnableAccent(hwnd, _accentEnableAcrylicBlurBehind, _woxAcrylicGradientColor, 2) ||
-        _tryEnableAccent(hwnd, _accentEnableHostBackdrop, _woxHostBackdropGradientColor, 0)) {
-      _extendFrame(hwnd, 0);
-      _setDwmBackdrop(hwnd, _dwmsbtNone);
-      return;
+  static void _disableRoundedCorners(ffi.Pointer<ffi.Void> hwnd) {
+    final value = calloc<ffi.Int32>();
+    try {
+      value.value = _dwmcpDoNotRound;
+      _dwmSetWindowAttribute?.call(hwnd, _dwmwaWindowCornerPreference, value.cast<ffi.Void>(), ffi.sizeOf<ffi.Int32>());
+    } finally {
+      calloc.free(value);
     }
+  }
 
+  static void _enableBackdrop(ffi.Pointer<ffi.Void> hwnd) {
+    // Match the main query window's Windows 11 DWM path. Acrylic accent tints
+    // produce a different blend under translucent Wox theme backgrounds.
     _extendFrame(hwnd, -1);
     _setDwmBackdrop(hwnd, _dwmsbtTabbedWindow);
   }
 
-  static bool _tryEnableAccent(ffi.Pointer<ffi.Void> hwnd, int accentState, int gradientColor, int accentFlags) {
-    final setWindowCompositionAttribute = _setWindowCompositionAttribute;
-    if (setWindowCompositionAttribute == null) {
-      return false;
-    }
-
-    final policy = calloc<_AccentPolicy>();
-    final data = calloc<_WindowCompositionAttribData>();
-    try {
-      policy.ref
-        ..accentState = accentState
-        ..accentFlags = accentFlags
-        ..gradientColor = gradientColor
-        ..animationId = 0;
-
-      data.ref
-        ..attrib = _wcaAccentPolicy
-        ..data = policy.cast<ffi.Void>()
-        ..sizeOfData = ffi.sizeOf<_AccentPolicy>();
-
-      return setWindowCompositionAttribute(hwnd, data) != 0;
-    } finally {
-      calloc.free(data);
-      calloc.free(policy);
-    }
+  static void _disableBackdrop(ffi.Pointer<ffi.Void> hwnd) {
+    _extendFrame(hwnd, 0);
+    _setDwmBackdrop(hwnd, _dwmsbtNone);
   }
 
   static void _extendFrame(ffi.Pointer<ffi.Void> hwnd, int margin) {
