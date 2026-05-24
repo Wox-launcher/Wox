@@ -61,6 +61,7 @@ static const CGFloat kCopyButtonSize = 24;
 static const CGFloat kCopyButtonGap = 8;
 static const CGFloat kCopyButtonMargin = 10;
 static const CGFloat kCloseSize = 20;
+static const CGFloat kCloseMargin = 10;
 static const CGFloat kTooltipIconGap = 8;
 static const CGFloat kTooltipGap = 6;
 static const CGFloat kTooltipPadding = 8;
@@ -1342,7 +1343,7 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         BOOL hasLeadingIndicator = !self.loadingIndicator.hidden;
         BOOL hasLeadingIcon = hasLeadingIndicator || !self.iconView.hidden;
         if (hasLeadingIcon) padLeft += iconSize + 8;
-        if (!self.closeButton.hidden) padRight += kCloseSize + 4;
+        if (!self.closeButton.hidden) padRight += kCloseSize + kCloseMargin;
         if (!self.tooltipIconView.hidden) padRight += tooltipIconSize + tooltipIconGap;
 
         CGFloat contentWidth = windowWidth - padLeft - padRight;
@@ -1397,7 +1398,7 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
             [self updateTooltipTrackingAreaWithRect:NSZeroRect enabled:NO];
         }
         if (!self.closeButton.hidden) {
-            self.closeButton.frame = NSMakeRect(windowWidth - kCloseSize - 6, (windowHeight - kCloseSize)/2, kCloseSize, kCloseSize);
+            self.closeButton.frame = NSMakeRect(windowWidth - kCloseSize - kCloseMargin, windowHeight - kCloseSize - kCloseMargin, kCloseSize, kCloseSize);
         }
         if (!self.copyButton.hidden) {
             self.copyButton.frame = NSMakeRect(windowWidth - kCopyButtonSize - kCopyButtonMargin, kCopyButtonMargin, kCopyButtonSize, kCopyButtonSize);
@@ -1530,9 +1531,10 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         finalX = liveFollowOrigin.x;
         finalY = liveFollowOrigin.y;
     } else if (opts.preservePosition) {
-        // Content-only refreshes should resize/repaint without reapplying the original anchor.
+        // AppKit frame origins are bottom-left. Preserve the visible top-left corner so
+        // content refreshes grow downward like the Windows overlay path.
         finalX = self.frame.origin.x;
-        finalY = self.frame.origin.y;
+        finalY = NSMaxY(self.frame) - windowHeight;
     }
     if (opts.stickyWindowPid > 0 && !preserveLiveFollowFrame && CGEventSourceButtonState(kCGEventSourceStateCombinedSessionState, kCGMouseButtonLeft)) {
         // Optimization: layout refresh can detect mouse-down before the first AX
