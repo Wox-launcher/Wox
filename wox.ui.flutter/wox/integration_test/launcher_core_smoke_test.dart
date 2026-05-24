@@ -161,7 +161,18 @@ void registerLauncherCoreSmokeTests() {
       final controller = await launchAndShowLauncher(tester, windowSize: smokeLargeWindowSize);
       final settingController = await openSettings(tester, controller, 'general');
 
-      FocusManager.instance.primaryFocus?.unfocus();
+      // Smoke setup: native focus transitions can leave only the route/window scope
+      // focused. Temporarily stop the concrete settings focus nodes from claiming
+      // focus so this test exercises the window-level Escape fallback.
+      settingController.settingFocusNode.canRequestFocus = false;
+      settingController.settingSearchFocusNode.canRequestFocus = false;
+      addTearDown(() {
+        settingController.settingFocusNode.canRequestFocus = true;
+        settingController.settingSearchFocusNode.canRequestFocus = true;
+      });
+
+      final settingRouteFocusScope = FocusScope.of(tester.element(find.byType(WoxSettingView)));
+      settingRouteFocusScope.requestFocus();
       settingController.settingFocusNode.unfocus();
       settingController.settingSearchFocusNode.unfocus();
       await tester.pump(const Duration(milliseconds: 100));

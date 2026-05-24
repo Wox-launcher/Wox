@@ -1,22 +1,44 @@
 # Changelog
 
-## v2.1.1 - 
+## v2.1.2 - 
+
+
+## v2.1.1 - 2026-05-24
+
+- Add
+  - [`Settings`] Add settings search so users can find built-in and plugin settings by localized text without browsing each settings page.
+![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/setting_search.png)
+  - [`AI Command`] Add an AI command template dialog and default-action selector, with built-in translation and summarization command templates for faster setup.
+![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/ai_command_templates.png)
+  - [`Bug Report`] Add built-in diagnostics collection and a toolbar indicator so users can prepare bug reports with relevant runtime context #4416
 
 - Improve
-  - [`AI`] Improve provider setup with built-in DeepSeek support, including the default API host and provider icon.
-  - [`Screenshot`] Improve Windows region capture with a native selection overlay that works more reliably with Windows windowing behavior.
+  - [`AI`] Improve AI model selector loading with cached provider resources so settings forms can reuse model data more reliably.
+  - [`Screenshot`] Improve capture on Windows with a native selection overlay, hover-aware region selection, deferred image loading, direction-aware scrolling stitching, and more reliable image cache cleanup.
+  - [`WebView`] Improve embedded preview sessions with focus support, suspend and resume handling, and a toolbar action to hide Wox.
+  - [`Overlay`] Improve overlay behavior with preserve-position, max-height, and follow-scroll options for workflows such as AI command result windows.
   - [`Runtime`] Improve Windows startup diagnostics by detecting missing Microsoft Visual C++ Redistributable dependencies and showing localized recovery guidance.
   - [`Runtime`] Improve Node.js and Python executable validation by enforcing supported minimum versions in runtime settings and host discovery, with clearer upgrade guidance for unsupported runtimes #4414
   - [`Hotkey`] Improve hotkey display with platform-aware modifier labels and more consistent rendering across grids, toolbar actions, refinement controls, and the recorder #4413
-  - [`App`] Improve Windows Settings search entries with localized names and clearer icons, making system settings easier to find from Wox.
+  - [`Query Hotkey`] Improve query hotkey editing with placeholder-variable insertion while preserving the caret position.
+  - [`App`] Improve app search and icons with better global match selection, localized macOS app names, Windows Settings entries, and icon cache invalidation.
   - [`Theme`] Improve theme behavior with platform-specific overrides for Windows, macOS, and Linux.
   - [`Plugin`] Improve result polishing with layout-aware sizing so plugin results keep more consistent spacing in list and grid views.
-  - [`File Search`] Improve diagnostics and indexing error handling so scan status and skipped roots are easier to understand when troubleshooting file search.
+  - [`Preview`] Improve preview content with metadata tags and selectable text support, making OCR, screenshot, clipboard, and rich previews easier to inspect and copy.
+  - [`File Search`] Improve traversal performance, symlink handling, scan-rate status messages, and indexing diagnostics so skipped roots and scan progress are easier to understand when troubleshooting file search #4417
+  - [`Clipboard`] Improve clipboard URL handling with a link refinement type and more robust URL parsing.
+  - [`WPM`] Improve plugin store interactions with global query support.
+  - [`Usage`] Improve usage statistics with daily breakdowns in the Usage settings page.
+  - [`Navigation`] Improve keyboard navigation with Ctrl+N and Ctrl+P shortcuts in lists and launcher results. #4420
   - [`Memory`] Improve memory usage reporting with platform-specific retrieval on Windows and Linux.
   - [`Image`] Improve large icon and PNG handling with lazy raster loading, metadata-aware decoding, and transparent padding support for cleaner previews and lower memory pressure.
 
 - Fix
   - [`Clipboard`] Fix clipboard type refinement hotkey behavior so filtered clipboard queries keep the expected hotkey logic.
+  - [`OCR`] Fix OCR language handling on Windows and macOS so requested languages are normalized and recognized more reliably.
+  - [`Settings`] Fix settings search and Escape-key handling so navigation and search state behave consistently.
+  - [`Image`] Fix SVG loading error handling so broken vector images fail more gracefully.
+  - [`Logging`] Fix crash diagnostics and Flutter logging behavior so startup and runtime errors are captured more consistently.
   - [`Launcher`] Fix Flutter frame timing issues and improve settings window responsiveness.
   - [`Updater`] Fix Linux executable replacement logic during updates.
 

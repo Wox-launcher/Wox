@@ -246,7 +246,7 @@ func (p *UpdatePlugin) notifyUpdate(ctx context.Context, info updater.UpdateInfo
 	}
 
 	if info.HasUpdate {
-		p.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version_update_available"), info.CurrentVersion, info.LatestVersion))
+		p.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_available"), info.CurrentVersion, info.LatestVersion))
 		return
 	}
 
