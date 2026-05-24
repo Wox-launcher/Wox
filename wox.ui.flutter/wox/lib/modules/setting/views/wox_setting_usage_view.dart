@@ -60,13 +60,6 @@ class _WoxSettingUsageViewState extends State<WoxSettingUsageView> {
     );
   }
 
-  Color _pageBackgroundColor() {
-    // The dashboard redesign originally used a fixed light analytics background, but settings tabs
-    // must share the active theme's app background. Reading the theme here keeps Usage visually
-    // aligned with every other settings tab while preserving the redesigned card layout above it.
-    return getThemeBackgroundColor();
-  }
-
   Color _panelColor() {
     if (isThemeDark()) {
       return getThemePanelBackgroundColor().lighter(4);
@@ -815,7 +808,7 @@ class _WoxSettingUsageViewState extends State<WoxSettingUsageView> {
       if (readyBoundary == null || readyBoundary.debugNeedsPaint) {
         throw StateError('Usage page is not ready for sharing');
       }
-      return readyBoundary.toImage(pixelRatio: 2);
+      return await readyBoundary.toImage(pixelRatio: 2);
     } finally {
       entry.remove();
     }
@@ -900,27 +893,24 @@ class _WoxSettingUsageViewState extends State<WoxSettingUsageView> {
       final stats = controller.usageStats.value;
       final selectedPeriod = controller.usageStatsPeriod.value;
 
-      return Container(
-        color: _pageBackgroundColor(),
-        child: Stack(
-          children: [
-            _form(
-              width: GENERAL_SETTING_WIDE_FORM_WIDTH,
-              children: [
-                if (_shareStatusMessage.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Text(_shareStatusMessage, style: TextStyle(color: _shareStatusIsError ? Colors.red : getThemeSubTextColor(), fontSize: 12)),
-                  ),
-                // Normal settings view keeps its original title and subtitle. The share-only title
-                // and outer padding are rendered in a temporary overlay when the user clicks Share.
-                _usageSummaryHeader(isLoading: isLoading, disableShare: isLoading, selectedPeriod: selectedPeriod),
-                const SizedBox(height: 18),
-                _usageDashboardBody(stats: stats, selectedPeriod: selectedPeriod, error: error),
-              ],
-            ),
-          ],
-        ),
+      return Stack(
+        children: [
+          _form(
+            width: GENERAL_SETTING_WIDE_FORM_WIDTH,
+            children: [
+              if (_shareStatusMessage.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Text(_shareStatusMessage, style: TextStyle(color: _shareStatusIsError ? Colors.red : getThemeSubTextColor(), fontSize: 12)),
+                ),
+              // Normal settings view keeps its original title and subtitle. The share-only title
+              // and outer padding are rendered in a temporary overlay when the user clicks Share.
+              _usageSummaryHeader(isLoading: isLoading, disableShare: isLoading, selectedPeriod: selectedPeriod),
+              const SizedBox(height: 18),
+              _usageDashboardBody(stats: stats, selectedPeriod: selectedPeriod, error: error),
+            ],
+          ),
+        ],
       );
     });
   }

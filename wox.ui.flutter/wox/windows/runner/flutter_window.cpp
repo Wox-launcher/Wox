@@ -48,6 +48,7 @@ static constexpr UINT kScrollingCaptureWheelMessage = WM_APP + 0x51;
 static constexpr UINT kScreenshotSelectionDimRegionUpdateMessage = WM_APP + 0x52;
 static constexpr UINT kScreenshotSelectionHoverMoveMessage = WM_APP + 0x53;
 static constexpr UINT kScreenshotDisplaySnapshotPayloadReadyMessage = WM_APP + 0x54;
+static constexpr UINT kWmDpiChangedBeforeParent = 0x02E2;
 static constexpr UINT_PTR kScreenshotSelectionHoverProbeTimerId = 0xA13;
 static constexpr UINT kScreenshotSelectionHoverProbeDelayMs = 60;
 static constexpr UINT kScreenshotSelectionStartupHoverProbeDelayMs = 1200;
@@ -71,10 +72,10 @@ static ULONG_PTR g_gdiplus_token = 0;
 
 static void EnsureGdiplusInitialized()
 {
-  std::call_once(g_gdiplus_init_once, []() {
+  std::call_once(g_gdiplus_init_once, []()
+                 {
     Gdiplus::GdiplusStartupInput startup_input;
-    Gdiplus::GdiplusStartup(&g_gdiplus_token, &startup_input, nullptr);
-  });
+    Gdiplus::GdiplusStartup(&g_gdiplus_token, &startup_input, nullptr); });
 }
 
 static std::string Base64Encode(const std::vector<uint8_t> &data)
@@ -1160,9 +1161,81 @@ RECT FlutterWindow::GetWindowRectSafe(HWND hwnd) const
   return rect;
 }
 
+HWND FlutterWindow::FindFlutterContentWindow(HWND hwnd)
+{
+  if (hwnd == nullptr || !IsWindow(hwnd))
+  {
+    return nullptr;
+  }
+
+  if (hwnd == GetHandle() && child_window_ != nullptr && IsWindow(child_window_))
+  {
+    return child_window_;
+  }
+
+  std::wstring preferred_class_name;
+  if (child_window_ != nullptr && IsWindow(child_window_))
+  {
+    wchar_t class_name[256]{};
+    if (GetClassNameW(child_window_, class_name, static_cast<int>(sizeof(class_name) / sizeof(class_name[0]))) > 0)
+    {
+      preferred_class_name = class_name;
+    }
+  }
+
+  struct ChildSearchContext
+  {
+    HWND root = nullptr;
+    HWND first_child = nullptr;
+    HWND preferred_child = nullptr;
+    std::wstring preferred_class_name;
+  } context{hwnd, nullptr, nullptr, preferred_class_name};
+
+  EnumChildWindows(
+      hwnd,
+      [](HWND child, LPARAM data) -> BOOL
+      {
+        auto *context = reinterpret_cast<ChildSearchContext *>(data);
+        if (GetParent(child) != context->root)
+        {
+          return TRUE;
+        }
+
+        if (context->first_child == nullptr)
+        {
+          context->first_child = child;
+        }
+
+        if (!context->preferred_class_name.empty())
+        {
+          wchar_t class_name[256]{};
+          if (GetClassNameW(child, class_name, static_cast<int>(sizeof(class_name) / sizeof(class_name[0]))) > 0 &&
+              context->preferred_class_name == class_name)
+          {
+            context->preferred_child = child;
+            return FALSE;
+          }
+        }
+
+        return TRUE;
+      },
+      reinterpret_cast<LPARAM>(&context));
+
+  if (context.preferred_child != nullptr && IsWindow(context.preferred_child))
+  {
+    return context.preferred_child;
+  }
+  if (context.first_child != nullptr && IsWindow(context.first_child))
+  {
+    return context.first_child;
+  }
+  return nullptr;
+}
+
 void FlutterWindow::SyncFlutterChildWindowToClientArea(HWND hwnd, const char *source, bool engine_handled)
 {
-  if (child_window_ == nullptr || !IsWindow(child_window_))
+  HWND content_window = FindFlutterContentWindow(hwnd);
+  if (content_window == nullptr || !IsWindow(content_window))
   {
     return;
   }
@@ -1172,9 +1245,17 @@ void FlutterWindow::SyncFlutterChildWindowToClientArea(HWND hwnd, const char *so
   const int width = client_rect.right - client_rect.left;
   const int height = client_rect.bottom - client_rect.top;
 
-  MoveWindow(child_window_, client_rect.left, client_rect.top, width, height, TRUE);
+  MoveWindow(content_window, client_rect.left, client_rect.top, width, height, TRUE);
 
-  const RECT child_rect = GetWindowRectSafe(child_window_);
+  if (hwnd != GetHandle())
+  {
+    // Flutter updates its cached DPR from the content child HWND, so refresh after the child has
+    // moved to the target monitor. The follow-up WM_SIZE makes Dart receive metrics with that DPR.
+    SendMessage(content_window, kWmDpiChangedBeforeParent, 0, 0);
+    SendMessage(content_window, WM_SIZE, SIZE_RESTORED, MAKELPARAM(width, height));
+  }
+
+  const RECT child_rect = GetWindowRectSafe(content_window);
   std::ostringstream oss;
   oss << source << ": engineHandled=" << (engine_handled ? "true" : "false")
       << ", client=" << RectToString(client_rect)
@@ -1184,13 +1265,13 @@ void FlutterWindow::SyncFlutterChildWindowToClientArea(HWND hwnd, const char *so
 
 void FlutterWindow::FocusFlutterViewOrRoot(HWND hwnd)
 {
-  // Keyboard shortcuts are delivered to Flutter through the hosted child HWND, not the top-level
-  // runner HWND. Screenshot reveal used to focus the root window after WM_ACTIVATE had already
-  // focused the child, so Escape/Enter never reached Dart during capture. Prefer the child and only
-  // fall back to the root before Flutter has created or retained a valid view handle.
-  if (child_window_ != nullptr && IsWindow(child_window_))
+  // Keyboard shortcuts are delivered to Flutter through the hosted content HWND, not the top-level
+  // runner HWND. Screenshot reveal can target an independent Flutter window, so resolve the content
+  // child from the target root instead of assuming the main launcher child HWND.
+  HWND content_window = FindFlutterContentWindow(hwnd);
+  if (content_window != nullptr && IsWindow(content_window))
   {
-    SetFocus(child_window_);
+    SetFocus(content_window);
     return;
   }
 
@@ -1625,6 +1706,19 @@ float FlutterWindow::GetDpiScale(HWND hwnd)
   return dpiScale;
 }
 
+float FlutterWindow::GetDpiScaleForRect(const RECT &rect)
+{
+  RECT monitor_rect = rect;
+  HMONITOR monitor = MonitorFromRect(&monitor_rect, MONITOR_DEFAULTTONEAREST);
+  if (monitor == nullptr)
+  {
+    return 1.0f;
+  }
+
+  const UINT dpi = FlutterDesktopGetDpiForMonitor(monitor);
+  return dpi == 0 ? 1.0f : static_cast<float>(dpi) / 96.0f;
+}
+
 void FlutterWindow::ReleaseDisplayCaptures(std::vector<CachedDisplayCapture> *captures)
 {
   if (captures == nullptr)
@@ -1956,7 +2050,8 @@ const char *FlutterWindow::ScreenshotImagePayloadModeName(FlutterWindow::Screens
 void FlutterWindow::BuildDisplaySnapshotPayloadsAsync(std::vector<CachedDisplayCapture> captures, std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result)
 {
   const HWND target_window = GetHandle();
-  std::thread([target_window, captures = std::move(captures), result = std::move(result)]() mutable {
+  std::thread([target_window, captures = std::move(captures), result = std::move(result)]() mutable
+              {
     auto payload_result = std::make_unique<FlutterWindow::DisplaySnapshotPayloadAsyncResult>();
     payload_result->result = std::move(result);
     payload_result->display_count = captures.size();
@@ -1982,8 +2077,8 @@ void FlutterWindow::BuildDisplaySnapshotPayloadsAsync(std::vector<CachedDisplayC
       // The app window is gone; dropping the pending MethodResult is safer than calling it from a
       // worker thread after the messenger has started tearing down.
       return;
-    }
-  }).detach();
+    } })
+      .detach();
 }
 
 // Complete the pending loadDisplaySnapshots MethodResult on the window thread.
@@ -2056,22 +2151,27 @@ void FlutterWindow::PrepareCaptureWorkspace(HWND hwnd, const RECT &native_worksp
   {
     flutter_controller_->ForceRedraw();
   }
-  if (hwnd == GetHandle())
-  {
-    SyncFlutterChildWindowToClientArea(hwnd, "prepareCaptureWorkspace", false);
-  }
-  else
-  {
-    InvalidateRect(hwnd, nullptr, TRUE);
-  }
+  SyncFlutterChildWindowToClientArea(hwnd, "prepareCaptureWorkspace", false);
+  InvalidateRect(hwnd, nullptr, TRUE);
 
   screenshot_presentation_state_.prepared = true;
   screenshot_presentation_state_.active = false;
-  screenshot_presentation_state_.workspace_scale = static_cast<double>(GetDpiScale(hwnd));
+  const HWND content_window = FindFlutterContentWindow(hwnd);
+  const float window_scale = GetDpiScale(hwnd);
+  const float content_scale = content_window != nullptr && IsWindow(content_window) ? GetDpiScale(content_window) : window_scale;
+  const float rect_scale = GetDpiScaleForRect(native_workspace_bounds);
+  // Dart lays out the annotation editor in the hosted Flutter view's logical pixels. Monitor DPI can
+  // differ from the offscreen secondary window's current view DPI, and using it makes the workspace
+  // canvas appear zoomed on some low-resolution displays.
+  screenshot_presentation_state_.workspace_scale = content_scale > 0 ? static_cast<double>(content_scale) : (rect_scale > 0 ? static_cast<double>(rect_scale) : 1.0);
   screenshot_presentation_state_.native_workspace_bounds = native_workspace_bounds;
 
   std::ostringstream oss;
   oss << "screenshot_timing event=windows_prepare_workspace bounds=" << RectToString(native_workspace_bounds)
+      << " windowScale=" << window_scale
+      << " contentScale=" << content_scale
+      << " rectScale=" << rect_scale
+      << " workspaceScale=" << screenshot_presentation_state_.workspace_scale
       << " elapsedMs=" << (GetTickCount64() - prepare_start);
   Log(oss.str());
 }
@@ -2097,14 +2197,8 @@ void FlutterWindow::RevealPreparedCaptureWorkspace(HWND hwnd)
       native_workspace_bounds.bottom - native_workspace_bounds.top,
       SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 
-  if (hwnd == GetHandle())
-  {
-    SyncFlutterChildWindowToClientArea(hwnd, "revealPreparedCaptureWorkspace", false);
-  }
-  else
-  {
-    InvalidateRect(hwnd, nullptr, TRUE);
-  }
+  SyncFlutterChildWindowToClientArea(hwnd, "revealPreparedCaptureWorkspace", false);
+  InvalidateRect(hwnd, nullptr, TRUE);
 
   // Screenshot capture replaces the standard show() -> focus() sequence on Windows because the
   // generic window-manager path assumes one monitor/DPI. Reapplying the focus restore steps here
@@ -2116,14 +2210,7 @@ void FlutterWindow::RevealPreparedCaptureWorkspace(HWND hwnd)
     AllowSetForegroundWindow(ASFW_ANY);
     SetForegroundWindow(hwnd);
   }
-  if (hwnd == GetHandle())
-  {
-    FocusFlutterViewOrRoot(hwnd);
-  }
-  else
-  {
-    SetFocus(hwnd);
-  }
+  FocusFlutterViewOrRoot(hwnd);
   BringWindowToTop(hwnd);
   blur_guard_active_ = false;
 
@@ -3266,7 +3353,8 @@ HWND FlutterWindow::FindUnderlyingWindowAtPoint(const POINT &point)
   } context{this, point, nullptr};
 
   EnumWindows(
-      [](HWND hwnd, LPARAM lparam) -> BOOL {
+      [](HWND hwnd, LPARAM lparam) -> BOOL
+      {
         auto *context = reinterpret_cast<EnumContext *>(lparam);
         if (context == nullptr || context->window == nullptr)
         {
@@ -3425,7 +3513,8 @@ void FlutterWindow::InvalidateScreenshotSelectionDimChange(const RECT &old_selec
   const RECT workspace = screenshot_selection_overlay_state_.workspace_bounds;
   RECT dirty{};
   bool has_dirty = false;
-  auto addDirtySelection = [&](const RECT &selection) {
+  auto addDirtySelection = [&](const RECT &selection)
+  {
     RECT clamped = ClampRectToBounds(selection, workspace);
     if (IsRectEmptyOrInvalid(clamped))
     {
@@ -3863,27 +3952,14 @@ void FlutterWindow::MoveScrollingCaptureControlsWindow(HWND hwnd, const RECT &co
       controls_bounds.right - controls_bounds.left,
       controls_bounds.bottom - controls_bounds.top,
       SWP_FRAMECHANGED | SWP_SHOWWINDOW);
-  if (hwnd == GetHandle())
-  {
-    SyncFlutterChildWindowToClientArea(hwnd, "beginScrollingCaptureOverlay", false);
-  }
-  else
-  {
-    InvalidateRect(hwnd, nullptr, TRUE);
-  }
+  SyncFlutterChildWindowToClientArea(hwnd, "beginScrollingCaptureOverlay", false);
+  InvalidateRect(hwnd, nullptr, TRUE);
   ApplyScrollingCaptureControlsRegion(hwnd);
   if (hwnd == GetHandle() && flutter_controller_)
   {
     flutter_controller_->ForceRedraw();
   }
-  if (hwnd == GetHandle())
-  {
-    FocusFlutterViewOrRoot(hwnd);
-  }
-  else
-  {
-    SetFocus(hwnd);
-  }
+  FocusFlutterViewOrRoot(hwnd);
 }
 
 void FlutterWindow::SetScrollingCaptureControlsBackdrop(HWND hwnd, bool compact)
@@ -3986,12 +4062,13 @@ void FlutterWindow::ApplyScrollingCaptureControlsRegion(HWND hwnd)
     SetWindowRgn(hwnd, root_region, TRUE);
   }
 
-  if (hwnd == GetHandle() && child_window_ != nullptr && IsWindow(child_window_))
+  HWND content_window = FindFlutterContentWindow(hwnd);
+  if (content_window != nullptr && IsWindow(content_window))
   {
     HRGN child_region = CreateScrollingCaptureControlsRegion(width, height);
     if (child_region != nullptr)
     {
-      SetWindowRgn(child_window_, child_region, TRUE);
+      SetWindowRgn(content_window, child_region, TRUE);
     }
   }
 }
@@ -4007,9 +4084,10 @@ void FlutterWindow::ClearScrollingCaptureControlsRegion()
   {
     SetWindowRgn(hwnd, nullptr, TRUE);
   }
-  if (hwnd == GetHandle() && child_window_ != nullptr && IsWindow(child_window_))
+  HWND content_window = FindFlutterContentWindow(hwnd);
+  if (content_window != nullptr && IsWindow(content_window))
   {
-    SetWindowRgn(child_window_, nullptr, TRUE);
+    SetWindowRgn(content_window, nullptr, TRUE);
   }
 }
 
@@ -4083,7 +4161,8 @@ void FlutterWindow::PaintScreenshotSelectionOverlay(HWND hwnd)
   RECT surface_rect = uses_buffer ? RECT{0, 0, dirty_width, dirty_height} : dirty_client_rect;
   FillRect(paint_dc, &surface_rect, reinterpret_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
 
-  auto drawSnapshotArea = [&](const RECT &area_workspace_rect) {
+  auto drawSnapshotArea = [&](const RECT &area_workspace_rect)
+  {
     for (const auto &capture : cached_display_captures_)
     {
       if (capture.bitmap == nullptr)
@@ -5162,6 +5241,32 @@ void FlutterWindow::HandleWindowManagerMethodCall(
         }
       }
       RevealPreparedCaptureWorkspace(target_hwnd);
+      result->Success();
+    }
+    else if (method_name == "focusCaptureWorkspace")
+    {
+      HWND target_hwnd = hwnd;
+      if (const auto *arguments = std::get_if<flutter::EncodableMap>(method_call.arguments()))
+      {
+        std::string window_error;
+        if (!TryResolveWindowHandleArgument(*arguments, hwnd, &target_hwnd, &window_error))
+        {
+          result->Error("INVALID_ARGUMENTS", window_error);
+          return;
+        }
+      }
+
+      // The Dart windowing controller can activate the top-level HWND without restoring focus to the
+      // hosted Flutter content HWND. Reapply native focus so Escape and Enter continue reaching Dart.
+      DismissStartMenuIfOpen();
+      SavePreviousActiveWindow(target_hwnd);
+      if (!SetForegroundWindow(target_hwnd))
+      {
+        AllowSetForegroundWindow(ASFW_ANY);
+        SetForegroundWindow(target_hwnd);
+      }
+      FocusFlutterViewOrRoot(target_hwnd);
+      BringWindowToTop(target_hwnd);
       result->Success();
     }
     else if (method_name == "beginScrollingCaptureOverlay")

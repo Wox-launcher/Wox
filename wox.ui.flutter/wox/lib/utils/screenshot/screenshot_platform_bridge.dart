@@ -82,6 +82,9 @@ abstract class ScreenshotPlatformBridge {
 
   Future<void> revealPreparedCaptureWorkspace({int? windowHandle}) async {}
 
+  // Restores native keyboard focus to the screenshot workspace after window activation.
+  Future<void> focusCaptureWorkspace({int? windowHandle}) async {}
+
   Stream<ScreenshotSelectionDisplayHint> selectionDisplayHints() => const Stream<ScreenshotSelectionDisplayHint>.empty();
 
   Future<void> dismissCaptureWorkspacePresentation({int? windowHandle});
@@ -230,6 +233,15 @@ class MethodChannelScreenshotPlatformBridge implements ScreenshotPlatformBridge 
   Future<void> revealPreparedCaptureWorkspace({int? windowHandle}) async {
     try {
       await _channel.invokeMethod<void>('revealPreparedCaptureWorkspace', _windowHandleArguments(windowHandle));
+    } on MissingPluginException {
+      return;
+    }
+  }
+
+  @override
+  Future<void> focusCaptureWorkspace({int? windowHandle}) async {
+    try {
+      await _channel.invokeMethod<void>('focusCaptureWorkspace', _windowHandleArguments(windowHandle));
     } on MissingPluginException {
       return;
     }

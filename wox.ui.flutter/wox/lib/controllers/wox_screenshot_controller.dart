@@ -137,6 +137,7 @@ class WoxScreenshotController extends GetxController {
 
     try {
       await screenshotWindow.focus();
+      await ScreenshotPlatformBridge.instance.focusCaptureWorkspace(windowHandle: screenshotWindow.nativeHandle);
     } catch (e) {
       Logger.instance.warn(traceId, 'Failed to focus independent screenshot window: $e');
     }
@@ -160,6 +161,9 @@ class WoxScreenshotController extends GetxController {
       showTitleBar: false,
       mica: false,
       minimizable: false,
+      // Native screenshot presentation resizes this hidden shell to the selected monitor. Keeping
+      // the default tight 64x64 window constraint makes Flutter scale that small surface up.
+      resizable: true,
       centerOnCreate: false,
       roundedCorners: false,
       onDestroyed: () {

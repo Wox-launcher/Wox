@@ -165,8 +165,11 @@ private:
   HWND NormalizeToRootWindow(HWND hwnd) const;
   bool ShouldSuppressBlurForActivatedWindow(HWND selfHwnd, HWND activatedHwnd);
 
-  // Get the DPI scaling factor for the window
+  // Get DPI scaling for a window or native desktop rectangle.
   float GetDpiScale(HWND hwnd);
+  float GetDpiScaleForRect(const RECT &rect);
+  // Resolve the hosted Flutter content HWND for the main window or a secondary Flutter window.
+  HWND FindFlutterContentWindow(HWND hwnd);
 
   // Sync the hosted Flutter child window with the root client area.
   void SyncFlutterChildWindowToClientArea(HWND hwnd, const char *source, bool engine_handled);
@@ -289,8 +292,8 @@ private:
   // is appropriate for the show/capture paths where WM_SETFOCUS will re-sync
   // modifier state.  When skipPhysicallyHeld is false (hide path) every
   // pending keydown is flushed unconditionally, because after SW_HIDE the real
-  // keyup will be delivered to whichever window gains focus next — not Flutter
-  // — leaving HardwareKeyboard in a permanently "pressed" state.
+  // keyup will be delivered to whichever window gains focus next, not Flutter,
+  // leaving HardwareKeyboard in a permanently "pressed" state.
   void FlushPendingChildKeyUps(bool skipPhysicallyHeld = true);
   static uint64_t MakeKeyboardMessageSignature(UINT message, WPARAM wparam, LPARAM lparam);
 
