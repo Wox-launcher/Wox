@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.1.1 - 
+## v2.1.1 - 2026-05-24
 
 - Add
   - [`Settings`] Add settings search so users can find built-in and plugin settings by localized text without browsing each settings page.
