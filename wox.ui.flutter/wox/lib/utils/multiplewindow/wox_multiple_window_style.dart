@@ -20,11 +20,13 @@ const int _wsDlgFrame = 0x00400000;
 const int _swpNoMove = 0x0002;
 const int _swpNoSize = 0x0001;
 const int _swpNoZOrder = 0x0004;
+const int _swpNoActivate = 0x0010;
 const int _swpFrameChanged = 0x0020;
 
 const int _wmNcLButtonDown = 0x00A1;
 const int _htCaption = 2;
 const int _monitorDefaultToNearest = 2;
+const int _offscreenCoordinate = -32000;
 
 const int _dwmwaUseImmersiveDarkMode = 20;
 const int _dwmwaWindowCornerPreference = 33;
@@ -235,6 +237,20 @@ class WoxMultipleWindowStyle {
       calloc.free(cursorRect);
       calloc.free(cursor);
     }
+  }
+
+  /// Moves a new window outside visible work areas while Flutter paints its first frames.
+  static void moveOffscreen(Object controller) {
+    if (!Platform.isWindows) {
+      return;
+    }
+
+    final hwnd = _windowHandleOf(controller);
+    if (hwnd == null || hwnd.address == 0) {
+      return;
+    }
+
+    _setWindowPos?.call(hwnd, ffi.nullptr, _offscreenCoordinate, _offscreenCoordinate, 0, 0, _swpNoSize | _swpNoZOrder | _swpNoActivate | _swpFrameChanged);
   }
 
   /// Starts native dragging for a custom Flutter-drawn title area.

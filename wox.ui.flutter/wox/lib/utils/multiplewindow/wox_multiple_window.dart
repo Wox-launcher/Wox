@@ -127,6 +127,8 @@ class WoxMultipleWindow {
     final effectiveConstraints = resizable ? preferredConstraints : BoxConstraints.tight(preferredSize);
     final controller = flutter_windowing.RegularWindowController(preferredSize: preferredSize, preferredConstraints: effectiveConstraints, title: title, delegate: delegate);
     final handle = _WoxMultipleWindowHandleImpl(id: id, controller: controller);
+    final prepareOffscreen = Platform.isWindows;
+    final preparationReady = Completer<void>();
     final record = _WoxWindowRecord(
       id: id,
       controller: controller,
@@ -148,6 +150,11 @@ class WoxMultipleWindow {
           showTitleBar: showTitleBar,
           minimizable: minimizable,
           mica: mica,
+          onPrepared: () {
+            if (!preparationReady.isCompleted) {
+              preparationReady.complete();
+            }
+          },
           builder: builder,
         );
       },
@@ -155,9 +162,15 @@ class WoxMultipleWindow {
 
     record.registered = true;
     _windows[id] = record;
+    if (prepareOffscreen) {
+      WoxMultipleWindowStyle.moveOffscreen(controller);
+    }
     registry.register(entry);
-    WoxMultipleWindowStyle.centerOnCursorDisplay(controller);
     controller.activate();
+    if (prepareOffscreen) {
+      await preparationReady.future.timeout(const Duration(milliseconds: 500), onTimeout: () {});
+    }
+    WoxMultipleWindowStyle.centerOnCursorDisplay(controller);
     return handle;
   }
 
@@ -277,6 +290,7 @@ class _WoxMultipleWindowRoot extends StatefulWidget {
     required this.showTitleBar,
     required this.minimizable,
     required this.mica,
+    required this.onPrepared,
     required this.builder,
   });
 
@@ -288,6 +302,7 @@ class _WoxMultipleWindowRoot extends StatefulWidget {
   final bool showTitleBar;
   final bool minimizable;
   final bool mica;
+  final VoidCallback onPrepared;
   final WidgetBuilder builder;
 
   @override
@@ -305,6 +320,12 @@ class _WoxMultipleWindowRootState extends State<_WoxMultipleWindowRoot> {
         }
         WoxMultipleWindowStyle.apply(widget.controller, mica: widget.mica);
         setState(() {});
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) {
+            return;
+          }
+          widget.onPrepared();
+        });
       });
     });
   }

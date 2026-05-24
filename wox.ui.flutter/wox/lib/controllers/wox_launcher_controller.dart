@@ -3505,6 +3505,9 @@ class WoxLauncherController extends GetxController {
       }
     }());
 
+    // Hide the launcher before the settings window prewarms offscreen so the confirmed query does not remain visible during window preparation.
+    final hideLauncherFuture = hideApp(traceId);
+
     const settingWindowSize = Size(1200, 800);
     await WoxMultipleWindow.createWindow(
       id: WoxMultipleWindowIds.settings,
@@ -3523,7 +3526,7 @@ class WoxLauncherController extends GetxController {
     isSettingWindowOpen.value = true;
     await WoxApi.instance.onSetting(traceId, true);
     _applySettingWindowContext(traceId, context);
-    await hideApp(traceId);
+    await hideLauncherFuture;
 
     settingController.preloadSettingViewData(traceId, forceRefresh: true);
 
