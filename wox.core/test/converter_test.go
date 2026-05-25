@@ -412,15 +412,21 @@ func TestConverterStorageQueryIntentParity(t *testing.T) {
 
 	tests := []QueryTest{
 		{
-			Name:           "Equals-question syntax converts bytes to decimal gigabytes",
-			Query:          "32 bytes =? gb",
-			ExpectedTitle:  "0.000000032 gigabytes",
+			Name:           "To conversion syntax parses Byte base unit to Decimal storage unit",
+			Query:          "32 bytes to gb",
+			ExpectedTitle:  "0.000000032 GB",
 			ExpectedAction: "Copy",
 		},
 		{
-			Name:           "Equals-question syntax converts compact bytes to decimal gigabytes",
+			Name:           "Equals-question conversion syntax matches Decimal storage unit output",
+			Query:          "32 bytes =? gb",
+			ExpectedTitle:  "0.000000032 GB",
+			ExpectedAction: "Copy",
+		},
+		{
+			Name:           "Compact byte input parses with equals-question conversion syntax",
 			Query:          "32bytes =? gb",
-			ExpectedTitle:  "0.000000032 gigabytes",
+			ExpectedTitle:  "0.000000032 GB",
 			ExpectedAction: "Copy",
 		},
 	}
@@ -454,46 +460,43 @@ func TestConverterUnits(t *testing.T) {
 			ExpectedAction: "Copy",
 		},
 		{
-			Name:           "Storage full-word input renders symbol output",
+			Name:           "Storage Unit full-word form renders Unit symbol form output",
 			Query:          "1 gigabyte to gibibyte",
 			ExpectedTitle:  "0.9313225746154785 GiB",
 			ExpectedAction: "Copy",
 		},
 		{
-			Name:           "Storage uppercase symbol input renders symbol output",
+			Name:           "Storage Unit symbol form renders Unit symbol form output",
 			Query:          "1 GB to MiB",
 			ExpectedTitle:  "953.67431640625 MiB",
 			ExpectedAction: "Copy",
 		},
 		{
-			Name:           "Storage byte symbol to word alias",
+			Name:           "Storage Byte base unit symbol alias renders symbolized output",
 			Query:          "32 b to bytes",
 			ExpectedTitle:  "32 B",
 			ExpectedAction: "Copy",
 		},
 		{
-			Name:           "Storage byte singular to symbol alias",
+			Name:           "Storage Byte base unit singular alias renders symbolized output",
 			Query:          "1 byte to b",
 			ExpectedTitle:  "1 B",
 			ExpectedAction: "Copy",
 		},
 		{
-			Name:           "Storage byte plural to singular alias",
+			Name:           "Storage Byte base unit plural alias renders symbolized output",
 			Query:          "2 bytes to byte",
 			ExpectedTitle:  "2 B",
 			ExpectedAction: "Copy",
 		},
 		{
-			Name:           "Storage decimal gigabyte family",
+			Name:           "Storage Decimal storage unit uses GB output",
 			Query:          "32 bytes to gb",
-			ExpectedTitle:  "",
+			ExpectedTitle:  "0.000000032 GB",
 			ExpectedAction: "Copy",
-			TitleCheck: func(title string) bool {
-				return strings.Contains(title, "0.000000032") && strings.Contains(title, "GB") && !strings.Contains(title, "GiB")
-			},
 		},
 		{
-			Name:           "Storage binary gibibyte family",
+			Name:           "Storage Binary storage unit uses GiB output",
 			Query:          "32 bytes to gib",
 			ExpectedTitle:  "",
 			ExpectedAction: "Copy",
@@ -502,25 +505,22 @@ func TestConverterUnits(t *testing.T) {
 			},
 		},
 		{
-			Name:           "Storage gb ambiguity resolves to decimal bytes",
+			Name:           "Storage gb ambiguity resolves to Decimal storage unit bytes",
 			Query:          "1 gb to bytes",
 			ExpectedTitle:  "1000000000 B",
 			ExpectedAction: "Copy",
 		},
 		{
-			Name:           "Storage gib preserves binary bytes",
+			Name:           "Storage gib preserves Binary storage unit bytes",
 			Query:          "1 gib to bytes",
 			ExpectedTitle:  "1073741824 B",
 			ExpectedAction: "Copy",
 		},
 		{
-			Name:           "Storage decimal to binary explicit control",
+			Name:           "Storage Decimal to Binary storage unit explicit control",
 			Query:          "1 gb to gib",
-			ExpectedTitle:  "",
+			ExpectedTitle:  "0.9313225746154785 GiB",
 			ExpectedAction: "Copy",
-			TitleCheck: func(title string) bool {
-				return strings.Contains(title, "0.9313225746154785") && strings.Contains(title, "GiB")
-			},
 		},
 	}
 
