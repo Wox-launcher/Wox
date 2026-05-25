@@ -33,6 +33,7 @@ func NewUnitModule(ctx context.Context, api plugin.API) *UnitModule {
 		lengthUnits      = `(?:mm|millimeter|millimeters|cm|centimeter|centimeters|m|meter|meters|metre|metres|km|kilometer|kilometers|kilometre|kilometres|inch|inches|ft|foot|feet|yd|yard|yards|mi|mile|miles)`
 		weightUnits      = `(?:mg|milligram|milligrams|g|gram|grams|kg|kilogram|kilograms|oz|ounce|ounces|lb|lbs|pound|pounds|t|ton|tons)`
 		temperatureUnits = `(?:°?\s*c|celsius|centigrade|°?\s*f|fahrenheit|°?\s*k|kelvin)`
+		storageUnits     = `(?:b|byte|bytes)`
 	)
 
 	// Length, weight, and temperature add single-letter aliases like "m", "g", and "c".
@@ -57,6 +58,13 @@ func NewUnitModule(ctx context.Context, api plugin.API) *UnitModule {
 			Pattern:     numberPattern + `\s*(` + temperatureUnits + `)\s*(?:to|in|=\s*\?)\s*(` + temperatureUnits + `)`,
 			Priority:    1500,
 			Description: "Convert temperature units (e.g. 32f to c)",
+			Handler:     m.handleUnitConversion,
+			FullMatch:   true,
+		},
+		{
+			Pattern:     numberPattern + `\s*(` + storageUnits + `)\s*(?:to|in|=\s*\?)\s*(` + storageUnits + `)`,
+			Priority:    1500,
+			Description: "Convert byte aliases (e.g. 32 b to bytes)",
 			Handler:     m.handleUnitConversion,
 			FullMatch:   true,
 		},
@@ -186,6 +194,13 @@ func NewUnitModule(ctx context.Context, api plugin.API) *UnitModule {
 		func(value decimal.Decimal) decimal.Decimal {
 			return value.Add(decimal.RequireFromString("273.15"))
 		},
+	)
+	m.registerLinearUnit(
+		[]string{"b", "byte", "bytes"},
+		core.UnitTypeStorage,
+		"byte",
+		"bytes",
+		decimal.NewFromInt(1),
 	)
 
 	return m

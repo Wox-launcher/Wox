@@ -432,6 +432,24 @@ func TestConverterUnits(t *testing.T) {
 			ExpectedTitle:  "0 celsius",
 			ExpectedAction: "Copy",
 		},
+		{
+			Name:           "Storage byte symbol to word alias",
+			Query:          "32 b to bytes",
+			ExpectedTitle:  "32 bytes",
+			ExpectedAction: "Copy",
+		},
+		{
+			Name:           "Storage byte singular to symbol alias",
+			Query:          "1 byte to b",
+			ExpectedTitle:  "1 byte",
+			ExpectedAction: "Copy",
+		},
+		{
+			Name:           "Storage byte plural to singular alias",
+			Query:          "2 bytes to byte",
+			ExpectedTitle:  "2 bytes",
+			ExpectedAction: "Copy",
+		},
 	}
 
 	suite.RunQueryTests(tests)

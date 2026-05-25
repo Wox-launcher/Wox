@@ -17,6 +17,7 @@ const (
 	UnitTypeLength                      // For length units (millimeters, meters, etc.)
 	UnitTypeWeight                      // For weight units (grams, kilograms, etc.)
 	UnitTypeTemperature                 // For temperature units (celsius, fahrenheit, etc.)
+	UnitTypeStorage                     // For storage units (byte aliases in converter scope)
 )
 
 type Unit struct {
