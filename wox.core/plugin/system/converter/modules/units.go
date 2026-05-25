@@ -15,6 +15,7 @@ type unitSpec struct {
 	unitType core.UnitType
 	singular string
 	plural   string
+	symbol   string
 	toBase   func(decimal.Decimal) decimal.Decimal
 	fromBase func(decimal.Decimal) decimal.Decimal
 }
@@ -296,6 +297,7 @@ func (m *UnitModule) registerStorageUnit(glossary core.StorageGlossary, symbol s
 		unitType: core.UnitTypeStorage,
 		singular: singular,
 		plural:   plural,
+		symbol:   symbol,
 		toBase: func(value decimal.Decimal) decimal.Decimal {
 			return value.Mul(factor)
 		},
@@ -364,7 +366,9 @@ func (m *UnitModule) formatValue(value decimal.Decimal, spec unitSpec) string {
 	}
 
 	unitName := spec.plural
-	if value.Abs().Equal(decimal.NewFromInt(1)) {
+	if spec.unitType == core.UnitTypeStorage {
+		unitName = spec.symbol
+	} else if value.Abs().Equal(decimal.NewFromInt(1)) {
 		unitName = spec.singular
 	}
 	return fmt.Sprintf("%s %s", displayText, unitName)
@@ -376,7 +380,7 @@ func storageUnitPattern(glossary core.StorageGlossary) string {
 	for _, alias := range aliases {
 		escapedAliases = append(escapedAliases, regexp.QuoteMeta(alias))
 	}
-	return `(?:` + strings.Join(escapedAliases, `|`) + `)`
+	return `(?i:(?:` + strings.Join(escapedAliases, `|`) + `))`
 }
 
 func normalizeUnitAlias(alias string) string {
