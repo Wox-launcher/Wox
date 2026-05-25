@@ -33,6 +33,8 @@ const int _swpFrameChanged = 0x0020;
 const int _wmNcLButtonDown = 0x00A1;
 const int _htCaption = 2;
 const int _monitorDefaultToNearest = 2;
+const int _defaultDpi = 96;
+const int _mdtEffectiveDpi = 0;
 const int _offscreenCoordinate = -32000;
 const int _swHide = 0;
 const int _swShow = 5;
@@ -95,6 +97,21 @@ final class _MonitorInfo extends ffi.Struct {
   external int dwFlags;
 }
 
+// Carries the target logical point and monitor match result through the Win32
+// EnumDisplayMonitors callback.
+final class _MonitorFindData extends ffi.Struct {
+  @ffi.Int32()
+  external int targetX;
+
+  @ffi.Int32()
+  external int targetY;
+
+  external ffi.Pointer<ffi.Void> foundMonitor;
+
+  @ffi.Uint32()
+  external int foundDpi;
+}
+
 typedef _GetWindowLongPtrNative = ffi.IntPtr Function(ffi.Pointer<ffi.Void>, ffi.Int32);
 typedef _GetWindowLongPtrDart = int Function(ffi.Pointer<ffi.Void>, int);
 typedef _SetWindowLongPtrNative = ffi.IntPtr Function(ffi.Pointer<ffi.Void>, ffi.Int32, ffi.IntPtr);
@@ -105,10 +122,15 @@ typedef _GetCursorPosNative = ffi.Int32 Function(ffi.Pointer<_WindowPoint>);
 typedef _GetCursorPosDart = int Function(ffi.Pointer<_WindowPoint>);
 typedef _MonitorFromRectNative = ffi.Pointer<ffi.Void> Function(ffi.Pointer<_WindowRect>, ffi.Uint32);
 typedef _MonitorFromRectDart = ffi.Pointer<ffi.Void> Function(ffi.Pointer<_WindowRect>, int);
+typedef _MonitorEnumProcNative = ffi.Int32 Function(ffi.Pointer<ffi.Void>, ffi.Pointer<ffi.Void>, ffi.Pointer<_WindowRect>, ffi.IntPtr);
+typedef _EnumDisplayMonitorsNative = ffi.Int32 Function(ffi.Pointer<ffi.Void>, ffi.Pointer<_WindowRect>, ffi.Pointer<ffi.NativeFunction<_MonitorEnumProcNative>>, ffi.IntPtr);
+typedef _EnumDisplayMonitorsDart = int Function(ffi.Pointer<ffi.Void>, ffi.Pointer<_WindowRect>, ffi.Pointer<ffi.NativeFunction<_MonitorEnumProcNative>>, int);
 typedef _GetMonitorInfoNative = ffi.Int32 Function(ffi.Pointer<ffi.Void>, ffi.Pointer<_MonitorInfo>);
 typedef _GetMonitorInfoDart = int Function(ffi.Pointer<ffi.Void>, ffi.Pointer<_MonitorInfo>);
 typedef _GetWindowRectNative = ffi.Int32 Function(ffi.Pointer<ffi.Void>, ffi.Pointer<_WindowRect>);
 typedef _GetWindowRectDart = int Function(ffi.Pointer<ffi.Void>, ffi.Pointer<_WindowRect>);
+typedef _GetDpiForMonitorNative = ffi.Int32 Function(ffi.Pointer<ffi.Void>, ffi.Int32, ffi.Pointer<ffi.Uint32>, ffi.Pointer<ffi.Uint32>);
+typedef _GetDpiForMonitorDart = int Function(ffi.Pointer<ffi.Void>, int, ffi.Pointer<ffi.Uint32>, ffi.Pointer<ffi.Uint32>);
 typedef _ReleaseCaptureNative = ffi.Int32 Function();
 typedef _ReleaseCaptureDart = int Function();
 typedef _SendMessageNative = ffi.IntPtr Function(ffi.Pointer<ffi.Void>, ffi.Uint32, ffi.UintPtr, ffi.IntPtr);
@@ -122,6 +144,7 @@ typedef _DwmExtendFrameIntoClientAreaDart = int Function(ffi.Pointer<ffi.Void>, 
 
 class WoxMultipleWindowStyle {
   static final ffi.DynamicLibrary? _user32 = Platform.isWindows ? ffi.DynamicLibrary.open("user32.dll") : null;
+  static final ffi.DynamicLibrary? _shcore = Platform.isWindows ? ffi.DynamicLibrary.open("shcore.dll") : null;
   static final ffi.DynamicLibrary? _dwmapi = Platform.isWindows ? ffi.DynamicLibrary.open("dwmapi.dll") : null;
 
   static final _GetWindowLongPtrDart? _getWindowLongPtr = _user32?.lookupFunction<_GetWindowLongPtrNative, _GetWindowLongPtrDart>("GetWindowLongPtrW");
@@ -129,8 +152,10 @@ class WoxMultipleWindowStyle {
   static final _SetWindowPosDart? _setWindowPos = _user32?.lookupFunction<_SetWindowPosNative, _SetWindowPosDart>("SetWindowPos");
   static final _GetCursorPosDart? _getCursorPos = _user32?.lookupFunction<_GetCursorPosNative, _GetCursorPosDart>("GetCursorPos");
   static final _MonitorFromRectDart? _monitorFromRect = _user32?.lookupFunction<_MonitorFromRectNative, _MonitorFromRectDart>("MonitorFromRect");
+  static final _EnumDisplayMonitorsDart? _enumDisplayMonitors = _user32?.lookupFunction<_EnumDisplayMonitorsNative, _EnumDisplayMonitorsDart>("EnumDisplayMonitors");
   static final _GetMonitorInfoDart? _getMonitorInfo = _user32?.lookupFunction<_GetMonitorInfoNative, _GetMonitorInfoDart>("GetMonitorInfoW");
   static final _GetWindowRectDart? _getWindowRect = _user32?.lookupFunction<_GetWindowRectNative, _GetWindowRectDart>("GetWindowRect");
+  static final _GetDpiForMonitorDart? _getDpiForMonitor = _shcore?.lookupFunction<_GetDpiForMonitorNative, _GetDpiForMonitorDart>("GetDpiForMonitor");
   static final _ReleaseCaptureDart? _releaseCapture = _user32?.lookupFunction<_ReleaseCaptureNative, _ReleaseCaptureDart>("ReleaseCapture");
   static final _SendMessageDart? _sendMessage = _user32?.lookupFunction<_SendMessageNative, _SendMessageDart>("SendMessageW");
   static final _ShowWindowDart? _showWindow = _user32?.lookupFunction<_ShowWindowNative, _ShowWindowDart>("ShowWindow");
@@ -233,14 +258,27 @@ class WoxMultipleWindowStyle {
     }
 
     final hwnd = _windowHandleOf(controller);
-    if (hwnd == null || hwnd.address == 0) {
+    final setWindowPos = _setWindowPos;
+    if (hwnd == null || hwnd.address == 0 || setWindowPos == null) {
       return;
     }
 
-    _setWindowPos?.call(hwnd, ffi.nullptr, position.dx.round(), position.dy.round(), size.width.round(), size.height.round(), _swpNoZOrder | _swpFrameChanged);
+    // Core sends the same logical coordinates used by the primary window.
+    // Convert with the target monitor DPI before calling Win32 so secondary
+    // windows follow the primary placement contract on high-DPI displays.
+    final dpiScale = _dpiScaleForLogicalPosition(position);
+    setWindowPos(
+      hwnd,
+      ffi.nullptr,
+      (position.dx * dpiScale).toInt(),
+      (position.dy * dpiScale).toInt(),
+      (size.width * dpiScale).toInt(),
+      (size.height * dpiScale).toInt(),
+      _swpNoZOrder | _swpFrameChanged,
+    );
   }
 
-  /// Returns the native top-left position for platforms where Wox currently needs it.
+  /// Returns the logical top-left position for platforms where Wox currently needs it.
   static Offset? positionOf(Object controller) {
     if (!Platform.isWindows) {
       return null;
@@ -257,7 +295,8 @@ class WoxMultipleWindowStyle {
       if (getWindowRect(hwnd, windowRect) == 0) {
         return null;
       }
-      return Offset(windowRect.ref.left.toDouble(), windowRect.ref.top.toDouble());
+      final dpiScale = _dpiScaleForNativeRect(windowRect);
+      return Offset(windowRect.ref.left / dpiScale, windowRect.ref.top / dpiScale);
     } finally {
       calloc.free(windowRect);
     }
@@ -435,5 +474,140 @@ class WoxMultipleWindowStyle {
 
   static void _refreshWindowFrame(ffi.Pointer<ffi.Void> hwnd) {
     _setWindowPos?.call(hwnd, ffi.nullptr, 0, 0, 0, 0, _swpNoMove | _swpNoSize | _swpNoZOrder | _swpFrameChanged);
+  }
+
+  static double _dpiScaleForLogicalPosition(Offset position) {
+    final dpi = _dpiForLogicalPosition(position);
+    return dpi <= 0 ? 1 : dpi / _defaultDpi;
+  }
+
+  // Matches the primary window's native setBounds behavior: locate the monitor
+  // by logical bounds first, then use that monitor's DPI for physical Win32
+  // coordinates.
+  static int _dpiForLogicalPosition(Offset position) {
+    final enumDisplayMonitors = _enumDisplayMonitors;
+    if (enumDisplayMonitors != null) {
+      final data = calloc<_MonitorFindData>();
+      try {
+        data.ref
+          ..targetX = position.dx.toInt()
+          ..targetY = position.dy.toInt()
+          ..foundMonitor = ffi.nullptr
+          ..foundDpi = _defaultDpi;
+
+        final callback = ffi.Pointer.fromFunction<_MonitorEnumProcNative>(_logicalMonitorEnumCallback, 1);
+        enumDisplayMonitors(ffi.nullptr, ffi.nullptr, callback, data.address);
+        if (data.ref.foundMonitor.address != 0) {
+          return data.ref.foundDpi;
+        }
+      } finally {
+        calloc.free(data);
+      }
+    }
+
+    return _dpiForMonitor(_fallbackMonitor());
+  }
+
+  // Called synchronously by EnumDisplayMonitors while resolving the target
+  // logical coordinate to a monitor.
+  static int _logicalMonitorEnumCallback(ffi.Pointer<ffi.Void> monitor, ffi.Pointer<ffi.Void> hdc, ffi.Pointer<_WindowRect> rect, int lParam) {
+    final getMonitorInfo = _getMonitorInfo;
+    if (monitor.address == 0 || lParam == 0 || getMonitorInfo == null) {
+      return 1;
+    }
+
+    final data = ffi.Pointer<_MonitorFindData>.fromAddress(lParam);
+    final monitorInfo = calloc<_MonitorInfo>();
+    try {
+      monitorInfo.ref.cbSize = ffi.sizeOf<_MonitorInfo>();
+      if (getMonitorInfo(monitor, monitorInfo) == 0) {
+        return 1;
+      }
+
+      final dpi = _dpiForMonitor(monitor);
+      final scale = dpi / _defaultDpi;
+      if (scale <= 0) {
+        return 1;
+      }
+
+      final monitorRect = monitorInfo.ref.rcMonitor;
+      final logicalLeft = (monitorRect.left / scale).toInt();
+      final logicalTop = (monitorRect.top / scale).toInt();
+      final logicalRight = (monitorRect.right / scale).toInt();
+      final logicalBottom = (monitorRect.bottom / scale).toInt();
+      final targetX = data.ref.targetX;
+      final targetY = data.ref.targetY;
+
+      if (targetX >= logicalLeft && targetX < logicalRight && targetY >= logicalTop && targetY < logicalBottom) {
+        data.ref
+          ..foundMonitor = monitor
+          ..foundDpi = dpi;
+        return 0;
+      }
+    } finally {
+      calloc.free(monitorInfo);
+    }
+
+    return 1;
+  }
+
+  // Converts a native physical rect back into the logical coordinate system
+  // expected by launcher layout code.
+  static double _dpiScaleForNativeRect(ffi.Pointer<_WindowRect> rect) {
+    final monitorFromRect = _monitorFromRect;
+    if (monitorFromRect == null) {
+      return 1;
+    }
+
+    final monitor = monitorFromRect(rect, _monitorDefaultToNearest);
+    return _dpiScaleForMonitor(monitor);
+  }
+
+  static double _dpiScaleForMonitor(ffi.Pointer<ffi.Void> monitor) {
+    final dpi = _dpiForMonitor(monitor);
+    return dpi <= 0 ? 1 : dpi / _defaultDpi;
+  }
+
+  // Reads effective monitor DPI with a safe 96 DPI fallback when the OS bridge
+  // is unavailable.
+  static int _dpiForMonitor(ffi.Pointer<ffi.Void> monitor) {
+    final getDpiForMonitor = _getDpiForMonitor;
+    if (monitor.address == 0 || getDpiForMonitor == null) {
+      return _defaultDpi;
+    }
+
+    final dpiX = calloc<ffi.Uint32>();
+    final dpiY = calloc<ffi.Uint32>();
+    try {
+      final result = getDpiForMonitor(monitor, _mdtEffectiveDpi, dpiX, dpiY);
+      if (result != 0 || dpiX.value <= 0) {
+        return _defaultDpi;
+      }
+      return dpiX.value;
+    } finally {
+      calloc.free(dpiY);
+      calloc.free(dpiX);
+    }
+  }
+
+  // Uses the virtual desktop origin as the same practical primary-monitor
+  // fallback used by the existing Windows placement path.
+  static ffi.Pointer<ffi.Void> _fallbackMonitor() {
+    final monitorFromRect = _monitorFromRect;
+    if (monitorFromRect == null) {
+      return ffi.nullptr;
+    }
+
+    final originRect = calloc<_WindowRect>();
+    try {
+      originRect.ref
+        ..left = 0
+        ..top = 0
+        ..right = 1
+        ..bottom = 1;
+      return monitorFromRect(originRect, _monitorDefaultToNearest);
+    } finally {
+      calloc.free(originRect);
+    }
   }
 }
