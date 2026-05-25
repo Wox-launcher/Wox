@@ -55,6 +55,7 @@ import 'package:wox/utils/env.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/multiplewindow/wox_multiple_window.dart';
 import 'package:wox/utils/multiplewindow/wox_multiple_window_ids.dart';
+import 'package:wox/utils/multiplewindow/wox_multiple_window_style.dart';
 import 'package:wox/utils/picker.dart';
 import 'package:wox/utils/wox_hotkey_recording_bus.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
@@ -3499,7 +3500,9 @@ class WoxLauncherController extends GetxController {
     // Hide the launcher before the settings window prewarms offscreen so the confirmed query does not remain visible during window preparation.
     final hideLauncherFuture = hideApp(traceId);
 
-    const settingWindowSize = Size(1200, 800);
+    const settingWindowPreferredSize = Size(1200, 800);
+    const settingWindowMaxWorkAreaFraction = 0.8;
+    final settingWindowSize = WoxMultipleWindowStyle.constrainSizeToCursorDisplayWorkArea(settingWindowPreferredSize, maxWorkAreaFraction: settingWindowMaxWorkAreaFraction);
     await WoxMultipleWindow.createWindow(
       id: WoxMultipleWindowIds.settings,
       title: settingController.tr("ui_tray_open_setting_window"),

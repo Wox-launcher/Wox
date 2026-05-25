@@ -256,8 +256,10 @@ class WoxMultipleWindowStyle {
       }
 
       final workArea = monitorInfo.ref.rcWork;
-      final windowWidth = windowRect.ref.right - windowRect.ref.left;
-      final windowHeight = windowRect.ref.bottom - windowRect.ref.top;
+      final targetDpiScale = _dpiScaleForMonitor(monitor);
+      final hasPreferredSize = preferredSize != null && targetDpiScale > 0;
+      final windowWidth = hasPreferredSize ? (preferredSize.width * targetDpiScale).round() : windowRect.ref.right - windowRect.ref.left;
+      final windowHeight = hasPreferredSize ? (preferredSize.height * targetDpiScale).round() : windowRect.ref.bottom - windowRect.ref.top;
       if (windowWidth <= 0 || windowHeight <= 0) {
         return;
       }
@@ -271,6 +273,28 @@ class WoxMultipleWindowStyle {
       calloc.free(cursorRect);
       calloc.free(cursor);
     }
+  }
+
+  /// Caps a preferred window size to the cursor display work area before the window is created.
+  static Size constrainSizeToCursorDisplayWorkArea(Size preferredSize, {double maxWorkAreaFraction = 1}) {
+    if (!Platform.isWindows) {
+      return preferredSize;
+    }
+
+    final availableWorkAreaSize = _cursorDisplayLogicalWorkAreaSize();
+    if (availableWorkAreaSize == null) {
+      return preferredSize;
+    }
+
+    final safeMaxWorkAreaFraction = maxWorkAreaFraction <= 0 ? 1.0 : maxWorkAreaFraction.clamp(0.0, 1.0).toDouble();
+    final maxWidth = availableWorkAreaSize.width * safeMaxWorkAreaFraction;
+    final maxHeight = availableWorkAreaSize.height * safeMaxWorkAreaFraction;
+    final constrainedWidth = preferredSize.width > maxWidth ? maxWidth.floorToDouble() : preferredSize.width;
+    final constrainedHeight = preferredSize.height > maxHeight ? maxHeight.floorToDouble() : preferredSize.height;
+    if (constrainedWidth <= 0 || constrainedHeight <= 0) {
+      return preferredSize;
+    }
+    return Size(constrainedWidth, constrainedHeight);
   }
 
   /// Moves and resizes a managed window where the current platform exposes native positioning.
@@ -671,6 +695,61 @@ class WoxMultipleWindowStyle {
 
     final monitor = monitorFromRect(rect, _monitorDefaultToNearest);
     return _dpiScaleForMonitor(monitor);
+  }
+
+  // rcWork is reported in physical pixels. Convert it with the cursor
+  // monitor's DPI so the requested logical size maps to the visible target
+  // monitor size instead of the primary monitor scale on mixed-DPI desktops.
+  static Size? _cursorDisplayLogicalWorkAreaSize() {
+    final getCursorPos = _getCursorPos;
+    final monitorFromRect = _monitorFromRect;
+    final getMonitorInfo = _getMonitorInfo;
+    if (getCursorPos == null || monitorFromRect == null || getMonitorInfo == null) {
+      return null;
+    }
+
+    final cursor = calloc<_WindowPoint>();
+    final cursorRect = calloc<_WindowRect>();
+    final monitorInfo = calloc<_MonitorInfo>();
+    try {
+      if (getCursorPos(cursor) == 0) {
+        return null;
+      }
+
+      cursorRect.ref
+        ..left = cursor.ref.x
+        ..top = cursor.ref.y
+        ..right = cursor.ref.x + 1
+        ..bottom = cursor.ref.y + 1;
+
+      final monitor = monitorFromRect(cursorRect, _monitorDefaultToNearest);
+      if (monitor.address == 0) {
+        return null;
+      }
+
+      monitorInfo.ref.cbSize = ffi.sizeOf<_MonitorInfo>();
+      if (getMonitorInfo(monitor, monitorInfo) == 0) {
+        return null;
+      }
+
+      final targetDpiScale = _dpiScaleForMonitor(monitor);
+      if (targetDpiScale <= 0) {
+        return null;
+      }
+
+      // rcWork is the monitor work area after Windows subtracts taskbars and app bars.
+      final availableWorkArea = monitorInfo.ref.rcWork;
+      final availableWorkAreaWidth = (availableWorkArea.right - availableWorkArea.left) / targetDpiScale;
+      final availableWorkAreaHeight = (availableWorkArea.bottom - availableWorkArea.top) / targetDpiScale;
+      if (availableWorkAreaWidth <= 0 || availableWorkAreaHeight <= 0) {
+        return null;
+      }
+      return Size(availableWorkAreaWidth, availableWorkAreaHeight);
+    } finally {
+      calloc.free(monitorInfo);
+      calloc.free(cursorRect);
+      calloc.free(cursor);
+    }
   }
 
   static double _dpiScaleForMonitor(ffi.Pointer<ffi.Void> monitor) {

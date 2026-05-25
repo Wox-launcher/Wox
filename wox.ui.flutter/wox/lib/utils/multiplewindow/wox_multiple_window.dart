@@ -210,9 +210,14 @@ class WoxMultipleWindow {
     if (prepareOffscreen) {
       await WoxMultipleWindowStyle.moveOffscreen(controller);
     }
-    await WoxMultipleWindowStyle.apply(controller, mica: mica, darkMode: isThemeDark(), roundedCorners: roundedCorners, minimizable: minimizable, resizable: resizable);
-    if (Platform.isMacOS && centerOnCreate) {
-      await WoxMultipleWindowStyle.centerOnCursorDisplay(controller, preferredSize: preferredSize);
+    // macOS needs native styling before the window becomes visible. Windows
+    // waits for _WoxMultipleWindowRoot's first-frame style pass so removing the
+    // HWND frame cannot race Flutter view attachment.
+    if (Platform.isMacOS) {
+      await WoxMultipleWindowStyle.apply(controller, mica: mica, darkMode: isThemeDark(), roundedCorners: roundedCorners, minimizable: minimizable, resizable: resizable);
+      if (centerOnCreate) {
+        await WoxMultipleWindowStyle.centerOnCursorDisplay(controller, preferredSize: preferredSize);
+      }
     }
     registry.register(entry);
     controller.activate();

@@ -79,7 +79,11 @@ class Logger {
   }
 
   Future<void> flush() async {
-    await _output?.flush();
+    try {
+      await _output?.flush();
+    } catch (_) {
+      // Crash handlers must not create another uncaught error while trying to persist diagnostics.
+    }
   }
 
   String normalizeLogLevel(String level) {
@@ -132,6 +136,7 @@ class LoggerSwitch {
 class WoxFileOutput extends xlogger.LogOutput {
   late File logFile;
   IOSink? _sink;
+  Future<void>? _flushFuture;
   bool _writeNextLogSynchronously = false;
 
   WoxFileOutput() {
@@ -172,6 +177,23 @@ class WoxFileOutput extends xlogger.LogOutput {
   }
 
   Future<void> flush() async {
-    await _sink?.flush();
+    final activeFlush = _flushFuture;
+    if (activeFlush != null) {
+      return activeFlush;
+    }
+
+    final sink = _sink;
+    if (sink == null) {
+      return;
+    }
+
+    late final Future<void> guardedFlush;
+    guardedFlush = sink.flush().whenComplete(() {
+      if (identical(_flushFuture, guardedFlush)) {
+        _flushFuture = null;
+      }
+    });
+    _flushFuture = guardedFlush;
+    await guardedFlush;
   }
 }
