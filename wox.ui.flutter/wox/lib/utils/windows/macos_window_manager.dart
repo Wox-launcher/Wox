@@ -83,6 +83,19 @@ class MacOSWindowManager extends BaseWindowManager {
   }
 
   @override
+  Future<int?> getNativeHandle() async {
+    try {
+      final result = await _channel.invokeMethod<Object?>('getWindowHandle');
+      if (result is num) {
+        return result.toInt();
+      }
+    } catch (e) {
+      Logger.instance.error(const Uuid().v4(), "Error getting native window handle: $e");
+    }
+    return null;
+  }
+
+  @override
   Future<void> setPosition(Offset position) async {
     try {
       await _channel.invokeMethod('setPosition', {'x': position.dx, 'y': position.dy});

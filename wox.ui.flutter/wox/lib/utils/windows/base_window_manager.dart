@@ -6,6 +6,9 @@ abstract class BaseWindowManager implements WindowManagerInterface {
   final ObserverList<WindowListener> _listeners = ObserverList<WindowListener>();
 
   @override
+  Future<int?> getNativeHandle() async => null;
+
+  @override
   void addListener(WindowListener listener) {
     _listeners.add(listener);
   }

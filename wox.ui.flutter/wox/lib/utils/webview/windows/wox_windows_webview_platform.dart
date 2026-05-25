@@ -46,7 +46,7 @@ class WoxWindowsWebViewPlatform implements WoxWebViewPlatform {
   }
 
   @override
-  Future<bool> goBack() async {
+  Future<bool> goBack({int? windowHandle}) async {
     final controller = _activeController;
     if (controller == null) {
       return false;
@@ -57,7 +57,7 @@ class WoxWindowsWebViewPlatform implements WoxWebViewPlatform {
   }
 
   @override
-  Future<bool> goForward() async {
+  Future<bool> goForward({int? windowHandle}) async {
     final controller = _activeController;
     if (controller == null) {
       return false;
@@ -68,12 +68,12 @@ class WoxWindowsWebViewPlatform implements WoxWebViewPlatform {
   }
 
   @override
-  Future<String?> getCurrentUrl() async {
+  Future<String?> getCurrentUrl({int? windowHandle}) async {
     return _activeSession?.currentUrl;
   }
 
   @override
-  Future<bool> clearState() async {
+  Future<bool> clearState({int? windowHandle}) async {
     final session = _activeSession;
     if (session == null) {
       return false;
@@ -89,7 +89,7 @@ class WoxWindowsWebViewPlatform implements WoxWebViewPlatform {
   }
 
   @override
-  Future<bool> focusActiveSession() async {
+  Future<bool> focusActiveSession({int? windowHandle}) async {
     final controller = _activeController;
     if (controller == null) {
       return false;
@@ -100,7 +100,7 @@ class WoxWindowsWebViewPlatform implements WoxWebViewPlatform {
   }
 
   @override
-  Future<bool> openInspector() async {
+  Future<bool> openInspector({int? windowHandle}) async {
     final controller = _activeController;
     if (controller == null) {
       return false;
@@ -111,7 +111,7 @@ class WoxWindowsWebViewPlatform implements WoxWebViewPlatform {
   }
 
   @override
-  Future<bool> refresh() async {
+  Future<bool> refresh({int? windowHandle}) async {
     final controller = _activeController;
     if (controller == null) {
       return false;

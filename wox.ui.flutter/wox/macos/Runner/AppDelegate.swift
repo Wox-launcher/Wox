@@ -196,16 +196,16 @@ private func makeScreenshotWindowTransparent(_ window: NSWindow) {
     return
   }
 
-  func clearBackingLayers(in view: NSView) {
-    view.wantsLayer = true
-    view.layer?.isOpaque = false
-    view.layer?.backgroundColor = NSColor.clear.cgColor
-    for subview in view.subviews {
-      clearBackingLayers(in: subview)
-    }
-  }
-
   clearBackingLayers(in: contentView)
+}
+
+private func clearBackingLayers(in view: NSView) {
+  view.wantsLayer = true
+  view.layer?.isOpaque = false
+  view.layer?.backgroundColor = NSColor.clear.cgColor
+  for subview in view.subviews {
+    clearBackingLayers(in: subview)
+  }
 }
 
 private func screenshotCollectionBehavior() -> NSWindow.CollectionBehavior {
@@ -2258,6 +2258,89 @@ class AppDelegate: FlutterAppDelegate {
     }
   }
 
+  private func targetWindow(from arguments: Any?, fallback: NSWindow) -> NSWindow {
+    guard
+      let args = arguments as? [String: Any],
+      let rawWindowHandle = args["windowHandle"],
+      let windowHandle = nativeWindowHandle(from: rawWindowHandle),
+      let pointer = UnsafeRawPointer(bitPattern: windowHandle)
+    else {
+      return fallback
+    }
+
+    return Unmanaged<NSWindow>.fromOpaque(pointer).takeUnretainedValue()
+  }
+
+  private func nativeWindowHandle(from value: Any) -> UInt? {
+    if let value = value as? UInt {
+      return value
+    }
+    if let value = value as? UInt64 {
+      return UInt(truncatingIfNeeded: value)
+    }
+    if let value = value as? Int {
+      return value > 0 ? UInt(value) : nil
+    }
+    if let value = value as? NSNumber {
+      return UInt(truncatingIfNeeded: value.uint64Value)
+    }
+    return nil
+  }
+
+  private func applyManagedWindowStyle(to window: NSWindow, mica: Bool, roundedCorners: Bool, minimizable: Bool, resizable: Bool) {
+    // RegularWindowController creates a titled AppKit window. Wox draws the
+    // visible titlebar in Flutter, so managed windows must use the same
+    // borderless native contract as the Windows secondary-window path.
+    window.styleMask.insert(.fullSizeContentView)
+    window.styleMask.remove(.titled)
+    window.styleMask.remove(.closable)
+    // Keep native capabilities in sync with the Flutter-drawn traffic lights;
+    // hidden AppKit buttons still need these masks for minimize/zoom commands.
+    if minimizable {
+      window.styleMask.insert(.miniaturizable)
+    } else {
+      window.styleMask.remove(.miniaturizable)
+    }
+    if resizable {
+      window.styleMask.insert(.resizable)
+    } else {
+      window.styleMask.remove(.resizable)
+    }
+    window.titleVisibility = .hidden
+    window.titlebarAppearsTransparent = true
+    window.standardWindowButton(.closeButton)?.isHidden = true
+    window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+    window.standardWindowButton(.zoomButton)?.isHidden = true
+    window.isOpaque = false
+    window.backgroundColor = .clear
+    window.hasShadow = roundedCorners
+
+    if let contentView = window.contentView {
+      clearBackingLayers(in: contentView)
+    }
+    if mica {
+      applyAcrylicEffect(to: window)
+    } else {
+      removeAcrylicEffect(from: window)
+    }
+    applyManagedWindowCornerMask(to: window, roundedCorners: roundedCorners)
+  }
+
+  private func applyManagedWindowCornerMask(to window: NSWindow, roundedCorners: Bool) {
+    guard let contentView = window.contentView else {
+      return
+    }
+
+    // Borderless transparent windows do not receive AppKit's normal rounded
+    // frame clipping, so the Flutter surface must be clipped explicitly.
+    for view in [contentView, contentView.superview].compactMap({ $0 }) {
+      view.wantsLayer = true
+      view.layer?.cornerRadius = roundedCorners ? 12 : 0
+      view.layer?.cornerCurve = .continuous
+      view.layer?.masksToBounds = roundedCorners
+    }
+  }
+
   // Setup notification for window blur event
   private func setupWindowBlurNotification() {
     guard let window = mainFlutterWindow else { return }
@@ -2404,7 +2487,8 @@ class AppDelegate: FlutterAppDelegate {
 
         case "presentCaptureWorkspace":
           if let args = call.arguments as? [String: Any], let bounds = self?.parseRect(arguments: args) {
-            result(self?.presentCaptureWorkspace(on: window, bounds: bounds))
+            let targetWindow = self?.targetWindow(from: call.arguments, fallback: window) ?? window
+            result(self?.presentCaptureWorkspace(on: targetWindow, bounds: bounds))
           } else {
             result(
               FlutterError(
@@ -2417,7 +2501,8 @@ class AppDelegate: FlutterAppDelegate {
 
         case "prepareCaptureWorkspace":
           if let args = call.arguments as? [String: Any], let bounds = self?.parseRect(arguments: args) {
-            result(self?.prepareCaptureWorkspace(on: window, bounds: bounds))
+            let targetWindow = self?.targetWindow(from: call.arguments, fallback: window) ?? window
+            result(self?.prepareCaptureWorkspace(on: targetWindow, bounds: bounds))
           } else {
             result(
               FlutterError(
@@ -2429,17 +2514,20 @@ class AppDelegate: FlutterAppDelegate {
           }
 
         case "revealPreparedCaptureWorkspace":
-          self?.revealPreparedCaptureWorkspace(on: window)
+          let targetWindow = self?.targetWindow(from: call.arguments, fallback: window) ?? window
+          self?.revealPreparedCaptureWorkspace(on: targetWindow)
           result(nil)
 
         case "dismissCaptureWorkspacePresentation":
-          self?.dismissCaptureWorkspacePresentation(on: window)
+          let targetWindow = self?.targetWindow(from: call.arguments, fallback: window) ?? window
+          self?.dismissCaptureWorkspacePresentation(on: targetWindow)
           result(nil)
 
         case "beginScrollingCaptureOverlay":
           if let args = call.arguments as? [String: Any] {
             do {
-              try self?.beginScrollingCaptureOverlay(on: window, arguments: args)
+              let targetWindow = self?.targetWindow(from: call.arguments, fallback: window) ?? window
+              try self?.beginScrollingCaptureOverlay(on: targetWindow, arguments: args)
               result(nil)
             } catch let error as DisplayCaptureError {
               result(error.asFlutterError())
@@ -2480,7 +2568,8 @@ class AppDelegate: FlutterAppDelegate {
           }
 
         case "debugCaptureWorkspaceState":
-          result(self?.debugCaptureWorkspaceState(for: window))
+          let targetWindow = self?.targetWindow(from: call.arguments, fallback: window) ?? window
+          result(self?.debugCaptureWorkspaceState(for: targetWindow))
 
         case "activateScreenshotDiagonalResizeCursor":
           if let args = call.arguments as? [String: Any],
@@ -2496,17 +2585,31 @@ class AppDelegate: FlutterAppDelegate {
             result(FlutterError(code: "INVALID_ARGS", message: "Invalid screenshot diagonal resize cursor", details: nil))
           }
 
+        case "applyManagedWindowStyle":
+          if let args = call.arguments as? [String: Any] {
+            let targetWindow = self?.targetWindow(from: call.arguments, fallback: window) ?? window
+            let mica = args["mica"] as? Bool ?? true
+            let roundedCorners = args["roundedCorners"] as? Bool ?? true
+            let minimizable = args["minimizable"] as? Bool ?? true
+            let resizable = args["resizable"] as? Bool ?? false
+            self?.applyManagedWindowStyle(to: targetWindow, mica: mica, roundedCorners: roundedCorners, minimizable: minimizable, resizable: resizable)
+            result(nil)
+          } else {
+            result(FlutterError(code: "INVALID_ARGS", message: "Invalid arguments for applyManagedWindowStyle", details: nil))
+          }
+
         case "setSize":
           if let args = call.arguments as? [String: Any],
             let width = args["width"] as? Double,
             let height = args["height"] as? Double
           {
+            let targetWindow = self?.targetWindow(from: call.arguments, fallback: window) ?? window
             // Keep top-left stable when resizing; direct setContentSize can shift Y on macOS.
-            let currentFrame = window.frame
+            let currentFrame = targetWindow.frame
             let currentTop = currentFrame.origin.y + currentFrame.height
-            let targetFrame = window.frameRect(forContentRect: NSRect(x: 0, y: 0, width: width, height: height))
+            let targetFrame = targetWindow.frameRect(forContentRect: NSRect(x: 0, y: 0, width: width, height: height))
             let newOriginY = currentTop - targetFrame.height
-            window.setFrame(
+            targetWindow.setFrame(
               NSRect(
                 x: currentFrame.origin.x,
                 y: newOriginY,
@@ -2609,16 +2712,17 @@ class AppDelegate: FlutterAppDelegate {
             let width = args["width"] as? Double,
             let height = args["height"] as? Double
           {
-            let frameRect = window.frameRect(forContentRect: NSRect(x: 0, y: 0, width: width, height: height))
+            let targetWindow = self?.targetWindow(from: call.arguments, fallback: window) ?? window
+            let frameRect = targetWindow.frameRect(forContentRect: NSRect(x: 0, y: 0, width: width, height: height))
             // Screenshot capture stretches one window across the virtual desktop, so screen-local
             // Y conversion is not enough once monitors sit at different heights.
             let flippedY = appKitY(fromTopLeftY: y, height: frameRect.height)
-            window.setFrame(NSRect(x: x, y: flippedY, width: frameRect.width, height: frameRect.height), display: true)
+            targetWindow.setFrame(NSRect(x: x, y: flippedY, width: frameRect.width, height: frameRect.height), display: true)
             if self?.isCapturePresentationActive == true {
               // Scrolling preview resizes the same transparent Flutter window as more stitched rows
               // arrive. Re-clearing backing layers after the native resize prevents AppKit from
               // reintroducing an opaque frame-sized surface around the compact controls.
-              makeScreenshotWindowTransparent(window)
+              makeScreenshotWindowTransparent(targetWindow)
             }
             result(nil)
           } else {
@@ -2629,7 +2733,8 @@ class AppDelegate: FlutterAppDelegate {
           }
 
         case "getPosition":
-          let frame = window.frame
+          let targetWindow = self?.targetWindow(from: call.arguments, fallback: window) ?? window
+          let frame = targetWindow.frame
           // Return the shared virtual-desktop top-left position so saved window locations round-trip
           // correctly even after the window temporarily spans multiple displays for screenshot capture.
           let x = frame.origin.x
@@ -2642,20 +2747,26 @@ class AppDelegate: FlutterAppDelegate {
           // the controller think the window is taller than the actual Flutter
           // content area on macOS, which can skip needed resizes and cause
           // transient RenderFlex overflows in smoke tests.
-          let contentRect = window.contentRect(forFrameRect: window.frame)
+          let targetWindow = self?.targetWindow(from: call.arguments, fallback: window) ?? window
+          let contentRect = targetWindow.contentRect(forFrameRect: targetWindow.frame)
           result(["width": contentRect.width, "height": contentRect.height])
+
+        case "getWindowHandle":
+          let targetWindow = self?.targetWindow(from: call.arguments, fallback: window) ?? window
+          result(UInt(bitPattern: Unmanaged.passUnretained(targetWindow).toOpaque()))
 
         case "setPosition":
           if let args = call.arguments as? [String: Any],
             let x = args["x"] as? Double,
             let y = args["y"] as? Double
           {
+            let targetWindow = self?.targetWindow(from: call.arguments, fallback: window) ?? window
             // Keep launcher positioning on the same virtual-desktop contract as screenshot capture.
             // The previous screen-relative conversion restored windows to the wrong Y whenever the
             // saved position belonged to a display that was vertically offset from the main screen.
-            let flippedY = appKitY(fromTopLeftY: y, height: window.frame.height)
+            let flippedY = appKitY(fromTopLeftY: y, height: targetWindow.frame.height)
 
-            window.setFrameOrigin(NSPoint(x: x, y: flippedY))
+            targetWindow.setFrameOrigin(NSPoint(x: x, y: flippedY))
             result(nil)
           } else {
             result(
@@ -2665,6 +2776,7 @@ class AppDelegate: FlutterAppDelegate {
           }
 
         case "center":
+          let targetWindow = self?.targetWindow(from: call.arguments, fallback: window) ?? window
           // Get the screen where the mouse cursor is located
           let mouseLocation = NSEvent.mouseLocation
           var targetScreen: NSScreen? = nil
@@ -2674,10 +2786,10 @@ class AppDelegate: FlutterAppDelegate {
               break
             }
           }
-          let screenFrame = targetScreen?.frame ?? NSScreen.main?.frame ?? NSRect.zero
+          let screenFrame = targetScreen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? NSRect.zero
 
-          var windowWidth: CGFloat = window.frame.width
-          var windowHeight: CGFloat = window.frame.height
+          var windowWidth: CGFloat = targetWindow.frame.width
+          var windowHeight: CGFloat = targetWindow.frame.height
           if let args = call.arguments as? [String: Any] {
             if let width = args["width"] as? Double {
               windowWidth = CGFloat(width)
@@ -2692,22 +2804,24 @@ class AppDelegate: FlutterAppDelegate {
 
           self?.log("Center: window to \(x),\(y) on screen at \(screenFrame.minX),\(screenFrame.minY)")
           let newFrame = NSRect(x: x, y: y, width: windowWidth, height: windowHeight)
-          window.setFrame(newFrame, display: true)
+          targetWindow.setFrame(newFrame, display: true)
           result(nil)
 
         case "show":
+          let targetWindow = self?.targetWindow(from: call.arguments, fallback: window) ?? window
           self?.log("Showing Wox window")
           self?.savePreviousActiveAppIfNeeded()
 
-          window.makeKeyAndOrderFront(nil)
+          targetWindow.makeKeyAndOrderFront(nil)
           NSApp.activate(ignoringOtherApps: true)
           result(nil)
 
         case "hide":
+          let targetWindow = self?.targetWindow(from: call.arguments, fallback: window) ?? window
           self?.log("Hiding Wox window")
           let isWoxFrontmost = NSApp.isActive || NSWorkspace.shared.frontmostApplication == NSRunningApplication.current
           let shouldRestorePreviousApp = self?.shouldRestorePreviousAppOnHide == true
-          window.orderOut(nil)
+          targetWindow.orderOut(nil)
           // Only restore the previous app when Wox stayed focused since the last show/focus.
           if isWoxFrontmost && shouldRestorePreviousApp {
             if let prevApp = self?.previousActiveApp, prevApp != NSRunningApplication.current, !prevApp.isTerminated {
@@ -2726,27 +2840,39 @@ class AppDelegate: FlutterAppDelegate {
           result(nil)
 
         case "focus":
+          let targetWindow = self?.targetWindow(from: call.arguments, fallback: window) ?? window
           if self?.isCapturePresentationActive == true {
             // Blur recovery is part of the screenshot interaction loop, so a generic focus call must
             // not revive the launcher's lower panel ordering. Reapply screenshot-specific window
             // traits here to keep recovery aligned with the prepared capture workspace contract.
-            if let panel = window as? NSPanel {
+            if let panel = targetWindow as? NSPanel {
               panel.isFloatingPanel = false
             }
-            window.collectionBehavior = screenshotCollectionBehavior()
-            window.level = screenshotWindowLevel()
+            targetWindow.collectionBehavior = screenshotCollectionBehavior()
+            targetWindow.level = screenshotWindowLevel()
           }
           self?.log("Focusing Wox window")
           self?.savePreviousActiveAppIfNeeded()
-          window.makeKeyAndOrderFront(nil)
+          targetWindow.makeKeyAndOrderFront(nil)
           NSApp.activate(ignoringOtherApps: true)
           result(nil)
 
         case "isVisible":
-          result(window.isVisible)
+          let targetWindow = self?.targetWindow(from: call.arguments, fallback: window) ?? window
+          result(targetWindow.isVisible)
 
         case "setAlwaysOnTop":
-          if let alwaysOnTop = call.arguments as? Bool {
+          let targetWindow = self?.targetWindow(from: call.arguments, fallback: window) ?? window
+          let alwaysOnTop: Bool?
+          if let value = call.arguments as? Bool {
+            alwaysOnTop = value
+          } else if let args = call.arguments as? [String: Any] {
+            alwaysOnTop = args["value"] as? Bool
+          } else {
+            alwaysOnTop = nil
+          }
+
+          if let alwaysOnTop {
             if self?.isCapturePresentationActive == true {
               // Screenshot presentation owns the window level while capture is active. Letting the
               // generic always-on-top toggle run here would collapse the shielding-level editor back
@@ -2756,9 +2882,9 @@ class AppDelegate: FlutterAppDelegate {
               return
             }
             if alwaysOnTop {
-              window.level = .popUpMenu
+              targetWindow.level = .popUpMenu
             } else {
-              window.level = .normal
+              targetWindow.level = .normal
             }
 
             result(nil)
@@ -2784,9 +2910,10 @@ class AppDelegate: FlutterAppDelegate {
           }
 
         case "startDragging":
-          if let currentEvent = window.currentEvent {
+          let targetWindow = self?.targetWindow(from: call.arguments, fallback: window) ?? window
+          if let currentEvent = targetWindow.currentEvent {
             self?.log("Performing drag with event: \(currentEvent)")
-            window.performDrag(with: currentEvent)
+            targetWindow.performDrag(with: currentEvent)
           }
           result(nil)
 

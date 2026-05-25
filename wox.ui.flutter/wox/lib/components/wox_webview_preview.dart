@@ -12,6 +12,7 @@ import 'package:wox/components/wox_selectable_text.dart';
 import 'package:wox/components/wox_tooltip.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_preview_webview_data.dart';
+import 'package:wox/utils/log.dart';
 import 'package:wox/utils/webview/wox_webview_util.dart';
 import 'package:wox/utils/webview/wox_webview_session.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
@@ -40,13 +41,15 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
   Future<WoxWebViewSession?>? _windowsSessionFuture;
   WoxWebViewSession? _session;
   StreamSubscription<WoxWebViewSessionAction>? _sessionActionSubscription;
-  StreamSubscription<void>? _unhandledEscapeSubscription;
-  StreamSubscription<void>? _webViewStartDraggingSubscription;
+  StreamSubscription<int?>? _unhandledEscapeSubscription;
+  StreamSubscription<int?>? _webViewStartDraggingSubscription;
+  StreamSubscription<int?>? _webViewShowToolbarSubscription;
   String? _windowsErrorMessage;
   Timer? _toolbarHideTimer;
   bool _isToolbarVisible = true;
   String? _focusedHiddenQueryBoxPreviewData;
   int _hiddenQueryBoxWebViewFocusToken = 0;
+  int _toolbarHideGeneration = 0;
 
   WoxInterfaceSizeMetrics get _metrics => WoxInterfaceSizeUtil.instance.current;
   WoxLauncherController get launcherController => widget.launcherController;
@@ -63,7 +66,9 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
     _refreshWindowsSession();
     _subscribeUnhandledEscape();
     _subscribeWebViewStartDragging();
+    _subscribeWebViewShowToolbar();
     _showToolbarTemporarily();
+    unawaited(_logToolbarDebug("init"));
   }
 
   @override
@@ -81,22 +86,76 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
     _toolbarHideTimer?.cancel();
     _unhandledEscapeSubscription?.cancel();
     _webViewStartDraggingSubscription?.cancel();
+    _webViewShowToolbarSubscription?.cancel();
+    unawaited(_logToolbarDebug("dispose"));
     unawaited(_releaseCurrentSession());
     super.dispose();
   }
 
   void _subscribeUnhandledEscape() {
     _unhandledEscapeSubscription?.cancel();
-    _unhandledEscapeSubscription = WoxWebViewUtil.unhandledEscape.listen((_) {
-      _handleFallbackEscape();
+    _unhandledEscapeSubscription = WoxWebViewUtil.unhandledEscape.listen((sourceWindowHandle) {
+      unawaited(_handleFallbackEscapeFromNativeEvent(sourceWindowHandle));
     });
   }
 
   void _subscribeWebViewStartDragging() {
     _webViewStartDraggingSubscription?.cancel();
-    _webViewStartDraggingSubscription = WoxWebViewUtil.startDragging.listen((_) {
-      _handleWebViewStartDragging();
+    _webViewStartDraggingSubscription = WoxWebViewUtil.startDragging.listen((sourceWindowHandle) {
+      unawaited(_handleWebViewStartDraggingFromNativeEvent(sourceWindowHandle));
     });
+  }
+
+  void _subscribeWebViewShowToolbar() {
+    _webViewShowToolbarSubscription?.cancel();
+    _webViewShowToolbarSubscription = WoxWebViewUtil.showToolbar.listen((sourceWindowHandle) {
+      unawaited(_handleWebViewShowToolbarFromNativeEvent(sourceWindowHandle));
+    });
+  }
+
+  Future<bool> _isNativeEventForThisWindow(int? sourceWindowHandle) async {
+    if (!Platform.isMacOS) {
+      return true;
+    }
+    if (sourceWindowHandle == null) {
+      unawaited(_logToolbarDebug("native event rejected because source window is missing"));
+      return false;
+    }
+
+    final currentWindowHandle = await launcherController.windowDriver.getNativeHandle();
+    final isMatch = currentWindowHandle == sourceWindowHandle;
+    if (!isMatch) {
+      Logger.instance.info(
+        "webview-toolbar-debug",
+        "webview toolbar debug native event ignored: sessionId=${launcherController.sessionId}, currentWindowHandle=$currentWindowHandle, sourceWindowHandle=$sourceWindowHandle, visible=$_isToolbarVisible, url=${webviewData.url}",
+      );
+    }
+    return isMatch;
+  }
+
+  Future<void> _handleFallbackEscapeFromNativeEvent(int? sourceWindowHandle) async {
+    if (!await _isNativeEventForThisWindow(sourceWindowHandle)) {
+      return;
+    }
+
+    _handleFallbackEscape();
+  }
+
+  Future<void> _handleWebViewStartDraggingFromNativeEvent(int? sourceWindowHandle) async {
+    if (!await _isNativeEventForThisWindow(sourceWindowHandle)) {
+      return;
+    }
+
+    _handleWebViewStartDragging();
+  }
+
+  Future<void> _handleWebViewShowToolbarFromNativeEvent(int? sourceWindowHandle) async {
+    if (!await _isNativeEventForThisWindow(sourceWindowHandle)) {
+      return;
+    }
+
+    unawaited(_logToolbarDebug("native showToolbar accepted", sourceWindowHandle: sourceWindowHandle));
+    _showToolbarTemporarily();
   }
 
   void _refreshWindowsSession() {
@@ -215,7 +274,7 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
         return;
       }
 
-      final focused = await WoxWebViewUtil.focusActiveSession();
+      final focused = await WoxWebViewUtil.focusActiveSession(windowHandle: await launcherController.windowDriver.getNativeHandle());
       if (focused) {
         return;
       }
@@ -254,7 +313,9 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
     return Stack(
       children: [
         Positioned.fill(child: child),
-        _buildToolbarTrigger(),
+        // macOS uses native WKWebView tracking. Flutter hover regions can receive synthetic enter events
+        // while the pointer is over the platform view, which makes top-side movement show the toolbar.
+        if (!Platform.isMacOS) _buildToolbarTrigger(),
         if (navigationState == null)
           _buildToolbar()
         else
@@ -407,6 +468,7 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
   }
 
   void _showToolbarTemporarily() {
+    unawaited(_logToolbarDebug("show temporarily requested"));
     _showToolbar();
   }
 
@@ -414,6 +476,7 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
     _toolbarHideTimer?.cancel();
 
     if (!_isToolbarVisible && mounted) {
+      unawaited(_logToolbarDebug("show"));
       setState(() {
         _isToolbarVisible = true;
       });
@@ -426,11 +489,15 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
 
   void _scheduleToolbarHide({Duration delay = _toolbarAutoHideDelay}) {
     _toolbarHideTimer?.cancel();
+    final generation = ++_toolbarHideGeneration;
+    unawaited(_logToolbarDebug("hide scheduled generation=$generation delayMs=${delay.inMilliseconds}"));
     _toolbarHideTimer = Timer(delay, () {
       if (!mounted || !_isToolbarVisible) {
+        unawaited(_logToolbarDebug("hide skipped generation=$generation mounted=$mounted"));
         return;
       }
 
+      unawaited(_logToolbarDebug("hide fired generation=$generation"));
       setState(() {
         _isToolbarVisible = false;
       });
@@ -438,15 +505,15 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
   }
 
   void _refresh() {
-    unawaited(WoxWebViewUtil.refresh());
+    unawaited(_refreshCurrentWebView());
   }
 
   void _goBack() {
-    unawaited(WoxWebViewUtil.goBack());
+    unawaited(_goBackCurrentWebView());
   }
 
   void _goForward() {
-    unawaited(WoxWebViewUtil.goForward());
+    unawaited(_goForwardCurrentWebView());
   }
 
   void _openInBrowser() {
@@ -460,13 +527,33 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
   Future<void> _openCurrentUrlInBrowser() async {
     // WebView navigation can move away from the original preview URL. Prefer the platform-reported current
     // URL and fall back to the preview data so cached/native views still have a usable browser escape hatch.
-    final currentUrl = await WoxWebViewUtil.getCurrentUrl();
+    final currentUrl = await WoxWebViewUtil.getCurrentUrl(windowHandle: await launcherController.windowDriver.getNativeHandle());
     final uri = _resolveExternalBrowserUri(currentUrl) ?? _resolveExternalBrowserUri(webviewData.url);
     if (uri == null) {
       return;
     }
 
     await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  Future<void> _refreshCurrentWebView() async {
+    await WoxWebViewUtil.refresh(windowHandle: await launcherController.windowDriver.getNativeHandle());
+  }
+
+  Future<void> _goBackCurrentWebView() async {
+    await WoxWebViewUtil.goBack(windowHandle: await launcherController.windowDriver.getNativeHandle());
+  }
+
+  Future<void> _goForwardCurrentWebView() async {
+    await WoxWebViewUtil.goForward(windowHandle: await launcherController.windowDriver.getNativeHandle());
+  }
+
+  Future<void> _logToolbarDebug(String event, {int? sourceWindowHandle}) async {
+    final currentWindowHandle = await launcherController.windowDriver.getNativeHandle();
+    Logger.instance.info(
+      "webview-toolbar-debug",
+      "webview toolbar debug $event: sessionId=${launcherController.sessionId}, currentWindowHandle=$currentWindowHandle, sourceWindowHandle=$sourceWindowHandle, visible=$_isToolbarVisible, mounted=$mounted, url=${webviewData.url}",
+    );
   }
 
   Uri? _resolveExternalBrowserUri(String? url) {
@@ -489,7 +576,17 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
     if (Platform.isMacOS) {
       _focusWebViewIfQueryBoxHidden();
       return _buildPreviewWithToolbar(
-        child: AppKitView(key: ValueKey(widget.previewData), viewType: "wox/webview_preview", creationParams: preview.toJson(), creationParamsCodec: const StandardMessageCodec()),
+        child: AppKitView(
+          key: ValueKey(widget.previewData),
+          viewType: "wox/webview_preview",
+          creationParams: {
+            ...preview.toJson(),
+            "toolbarTriggerWidth": _scaled(_toolbarTriggerWidth),
+            "toolbarTriggerHeight": _scaled(_toolbarTriggerHeight),
+            "toolbarTriggerBottom": _scaled(_toolbarBottomSpacing - 18),
+          },
+          creationParamsCodec: const StandardMessageCodec(),
+        ),
       );
     }
 

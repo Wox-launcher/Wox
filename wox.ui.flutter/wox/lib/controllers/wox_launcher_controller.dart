@@ -1429,7 +1429,7 @@ class WoxLauncherController extends GetxController {
           hotkey: previewRefreshHotkey,
           emoji: "🔄",
           handler: (_) {
-            unawaited(WoxWebViewUtil.refresh());
+            unawaited(windowDriver.getNativeHandle().then((windowHandle) => WoxWebViewUtil.refresh(windowHandle: windowHandle)));
             return true;
           },
         ),
@@ -1441,7 +1441,7 @@ class WoxLauncherController extends GetxController {
           hotkey: previewBackHotkey,
           emoji: "◀️",
           handler: (_) {
-            unawaited(WoxWebViewUtil.goBack());
+            unawaited(windowDriver.getNativeHandle().then((windowHandle) => WoxWebViewUtil.goBack(windowHandle: windowHandle)));
             return true;
           },
         ),
@@ -1453,7 +1453,7 @@ class WoxLauncherController extends GetxController {
           hotkey: previewForwardHotkey,
           emoji: "▶️",
           handler: (_) {
-            unawaited(WoxWebViewUtil.goForward());
+            unawaited(windowDriver.getNativeHandle().then((windowHandle) => WoxWebViewUtil.goForward(windowHandle: windowHandle)));
             return true;
           },
         ),
@@ -1468,7 +1468,9 @@ class WoxLauncherController extends GetxController {
             // Log the native result because macOS WebKit can reject programmatic inspector opening without
             // throwing through MethodChannel. The previous fire-and-forget call made that failure invisible.
             unawaited(
-              WoxWebViewUtil.openInspector()
+              windowDriver
+                  .getNativeHandle()
+                  .then((windowHandle) => WoxWebViewUtil.openInspector(windowHandle: windowHandle))
                   .then((opened) => Logger.instance.debug(traceId, "open webview inspector result: $opened"))
                   .catchError((err, stack) => Logger.instance.error(traceId, "open webview inspector failed: $err")),
             );
@@ -1483,7 +1485,7 @@ class WoxLauncherController extends GetxController {
           hotkey: "",
           emoji: "🧹",
           handler: (_) {
-            unawaited(WoxWebViewUtil.clearState());
+            unawaited(windowDriver.getNativeHandle().then((windowHandle) => WoxWebViewUtil.clearState(windowHandle: windowHandle)));
             return true;
           },
         ),

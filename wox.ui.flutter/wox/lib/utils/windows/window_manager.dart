@@ -44,6 +44,11 @@ class WindowManager implements WindowManagerInterface {
   }
 
   @override
+  Future<int?> getNativeHandle() {
+    return _platformImpl.getNativeHandle();
+  }
+
+  @override
   Future<void> setPosition(Offset position) {
     return _platformImpl.setPosition(position);
   }

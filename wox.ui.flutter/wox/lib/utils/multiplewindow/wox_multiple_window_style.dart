@@ -1,16 +1,18 @@
 // ignore_for_file: invalid_use_of_internal_member, implementation_imports
 
-// Windows-specific native helpers for Flutter's experimental internal
-// windowing API. This file imports `_window_win32.dart` to reach the HWND used
-// for frame removal, placement, topmost state, and custom dragging. Recheck it
-// when upgrading Flutter; it was first verified on Flutter 3.45.0-1.0.pre-196,
-// master revision 2731746a84.
+// Native helpers for Flutter's experimental internal windowing API. This file
+// imports platform-specific `_window_*` internals to reach the HWND/NSWindow
+// handles used for frame removal, placement, topmost state, and custom
+// dragging. Recheck it when upgrading Flutter; it was first verified on Flutter
+// 3.45.0-1.0.pre-196, master revision 2731746a84.
 
+import 'dart:async';
 import 'dart:ffi' as ffi;
 import 'dart:io';
-import 'dart:ui';
 
 import 'package:ffi/ffi.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/src/widgets/_window_macos.dart' as macos_windowing;
 import 'package:flutter/src/widgets/_window_win32.dart' as win32_windowing;
 
 const int _gwlStyle = -16;
@@ -143,6 +145,8 @@ typedef _DwmExtendFrameIntoClientAreaNative = ffi.Int32 Function(ffi.Pointer<ffi
 typedef _DwmExtendFrameIntoClientAreaDart = int Function(ffi.Pointer<ffi.Void>, ffi.Pointer<_Margins>);
 
 class WoxMultipleWindowStyle {
+  static const MethodChannel _macosChannel = MethodChannel("com.wox.macos_window_manager");
+
   static final ffi.DynamicLibrary? _user32 = Platform.isWindows ? ffi.DynamicLibrary.open("user32.dll") : null;
   static final ffi.DynamicLibrary? _shcore = Platform.isWindows ? ffi.DynamicLibrary.open("shcore.dll") : null;
   static final ffi.DynamicLibrary? _dwmapi = Platform.isWindows ? ffi.DynamicLibrary.open("dwmapi.dll") : null;
@@ -164,8 +168,19 @@ class WoxMultipleWindowStyle {
     "DwmExtendFrameIntoClientArea",
   );
 
-  /// Applies native Windows chrome policy for a Flutter windowing controller.
-  static void apply(Object controller, {required bool mica, required bool darkMode, bool roundedCorners = true}) {
+  /// Applies native chrome policy for a Flutter windowing controller.
+  static Future<void> apply(Object controller, {required bool mica, required bool darkMode, bool roundedCorners = true, bool minimizable = true, bool resizable = false}) async {
+    if (Platform.isMacOS) {
+      await _invokeMacOSWindowMethod<void>(controller, "applyManagedWindowStyle", {
+        "mica": mica,
+        "darkMode": darkMode,
+        "roundedCorners": roundedCorners,
+        "minimizable": minimizable,
+        "resizable": resizable,
+      });
+      return;
+    }
+
     if (!Platform.isWindows) {
       return;
     }
@@ -193,7 +208,14 @@ class WoxMultipleWindowStyle {
   }
 
   /// Centers a newly created window on the display currently containing the mouse cursor.
-  static void centerOnCursorDisplay(Object controller) {
+  static Future<void> centerOnCursorDisplay(Object controller, {Size? preferredSize}) async {
+    if (Platform.isMacOS) {
+      await _invokeMacOSWindowMethod<void>(controller, "center", {
+        if (preferredSize != null) ...{"width": preferredSize.width, "height": preferredSize.height},
+      });
+      return;
+    }
+
     if (!Platform.isWindows) {
       return;
     }
@@ -252,7 +274,12 @@ class WoxMultipleWindowStyle {
   }
 
   /// Moves and resizes a managed window where the current platform exposes native positioning.
-  static void setBounds(Object controller, Offset position, Size size) {
+  static Future<void> setBounds(Object controller, Offset position, Size size) async {
+    if (Platform.isMacOS) {
+      await _invokeMacOSWindowMethod<void>(controller, "setBounds", {"x": position.dx, "y": position.dy, "width": size.width, "height": size.height});
+      return;
+    }
+
     if (!Platform.isWindows) {
       return;
     }
@@ -278,8 +305,28 @@ class WoxMultipleWindowStyle {
     );
   }
 
+  /// Resizes a managed window where controller-only resize does not update the native frame.
+  static Future<void> setSize(Object controller, Size size) async {
+    if (Platform.isMacOS) {
+      await _invokeMacOSWindowMethod<void>(controller, "setSize", {"width": size.width, "height": size.height});
+    }
+  }
+
   /// Returns the logical top-left position for platforms where Wox currently needs it.
-  static Offset? positionOf(Object controller) {
+  static Future<Offset?> positionOf(Object controller) async {
+    if (Platform.isMacOS) {
+      final result = await _invokeMacOSWindowMethod<Map<dynamic, dynamic>>(controller, "getPosition");
+      if (result == null) {
+        return null;
+      }
+      final x = result["x"];
+      final y = result["y"];
+      if (x is num && y is num) {
+        return Offset(x.toDouble(), y.toDouble());
+      }
+      return null;
+    }
+
     if (!Platform.isWindows) {
       return null;
     }
@@ -302,8 +349,13 @@ class WoxMultipleWindowStyle {
     }
   }
 
-  /// Applies topmost state for managed windows on Windows.
-  static void setAlwaysOnTop(Object controller, bool value) {
+  /// Applies topmost state for managed windows where native handles are exposed.
+  static Future<void> setAlwaysOnTop(Object controller, bool value) async {
+    if (Platform.isMacOS) {
+      await _invokeMacOSWindowMethod<void>(controller, "setAlwaysOnTop", {"value": value});
+      return;
+    }
+
     if (!Platform.isWindows) {
       return;
     }
@@ -318,7 +370,12 @@ class WoxMultipleWindowStyle {
   }
 
   /// Moves a new window outside visible work areas while Flutter paints its first frames.
-  static void moveOffscreen(Object controller) {
+  static Future<void> moveOffscreen(Object controller) async {
+    if (Platform.isMacOS) {
+      await _invokeMacOSWindowMethod<void>(controller, "setPosition", {"x": _offscreenCoordinate.toDouble(), "y": _offscreenCoordinate.toDouble()});
+      return;
+    }
+
     if (!Platform.isWindows) {
       return;
     }
@@ -332,7 +389,12 @@ class WoxMultipleWindowStyle {
   }
 
   /// Hides a managed window without destroying its Flutter view.
-  static void hide(Object controller) {
+  static Future<void> hide(Object controller) async {
+    if (Platform.isMacOS) {
+      await _invokeMacOSWindowMethod<void>(controller, "hide");
+      return;
+    }
+
     if (!Platform.isWindows) {
       return;
     }
@@ -346,7 +408,12 @@ class WoxMultipleWindowStyle {
   }
 
   /// Shows a managed window that was hidden without destroying its Flutter view.
-  static void show(Object controller) {
+  static Future<void> show(Object controller) async {
+    if (Platform.isMacOS) {
+      await _invokeMacOSWindowMethod<void>(controller, "show");
+      return;
+    }
+
     if (!Platform.isWindows) {
       return;
     }
@@ -359,8 +426,21 @@ class WoxMultipleWindowStyle {
     _showWindow?.call(hwnd, _swShow);
   }
 
+  /// Focuses a managed window where Wox needs native focus semantics.
+  static Future<void> focus(Object controller) async {
+    if (Platform.isMacOS) {
+      await _invokeMacOSWindowMethod<void>(controller, "focus");
+      return;
+    }
+  }
+
   /// Starts native dragging for a custom Flutter-drawn title area.
   static void startDragging(Object controller) {
+    if (Platform.isMacOS) {
+      unawaited(_invokeMacOSWindowMethod<void>(controller, "startDragging"));
+      return;
+    }
+
     if (!Platform.isWindows) {
       return;
     }
@@ -374,8 +454,12 @@ class WoxMultipleWindowStyle {
     _sendMessage?.call(hwnd, _wmNcLButtonDown, _htCaption, 0);
   }
 
-  /// Returns the native Windows handle for bridge calls that must target this window.
+  /// Returns the native window handle for bridge calls that must target this window.
   static int? nativeHandleOf(Object controller) {
+    if (Platform.isMacOS) {
+      return _macOSWindowHandleOf(controller);
+    }
+
     if (!Platform.isWindows) {
       return null;
     }
@@ -385,6 +469,32 @@ class WoxMultipleWindowStyle {
       return null;
     }
     return hwnd.address;
+  }
+
+  static Future<T?> _invokeMacOSWindowMethod<T>(Object controller, String method, [Map<String, dynamic>? arguments]) async {
+    final windowHandle = _macOSWindowHandleOf(controller);
+    if (windowHandle == null) {
+      return null;
+    }
+
+    final payload = <String, dynamic>{...?arguments, "windowHandle": windowHandle};
+    try {
+      return await _macosChannel.invokeMethod<T>(method, payload);
+    } on MissingPluginException {
+      return null;
+    } on PlatformException {
+      return null;
+    }
+  }
+
+  static int? _macOSWindowHandleOf(Object controller) {
+    if (controller is macos_windowing.WindowControllerMacOS) {
+      final handle = controller.windowHandle;
+      if (handle.address != 0) {
+        return handle.address;
+      }
+    }
+    return null;
   }
 
   static ffi.Pointer<ffi.Void>? _windowHandleOf(Object controller) {

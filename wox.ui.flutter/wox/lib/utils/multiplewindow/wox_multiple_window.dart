@@ -18,6 +18,8 @@ import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/multiplewindow/wox_multiple_window_style.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 
+const double _woxManagedWindowCornerRadius = 12;
+
 class WoxMultipleWindowHost extends StatefulWidget {
   const WoxMultipleWindowHost({super.key, required this.theme, required this.child});
 
@@ -116,11 +118,20 @@ class WoxMultipleWindow {
     record.controller.setMinimized(true);
   }
 
+  static void _toggleMaximizeWindow(String id) {
+    final record = _windows[id];
+    if (record == null) {
+      return;
+    }
+
+    record.controller.setMaximized(!record.controller.isMaximized);
+  }
+
   /// Creates or focuses a top-level Flutter window managed through Flutter windowing.
   ///
-  /// When [showTitleBar] is true, the titlebar is Flutter-drawn. Windows also
-  /// removes the native frame through [WoxMultipleWindowStyle]; other platforms
-  /// currently keep the native frame provided by Flutter windowing.
+  /// When [showTitleBar] is true, the titlebar is Flutter-drawn. Desktop
+  /// platforms with native window handles remove their native frame through
+  /// [WoxMultipleWindowStyle] so the wrapper owns all visible chrome.
   static Future<WoxMultipleWindowHandle> createWindow({
     required String id,
     required String title,
@@ -156,6 +167,9 @@ class WoxMultipleWindow {
     final effectiveConstraints = resizable ? preferredConstraints : BoxConstraints.tight(preferredSize);
     final controller = flutter_windowing.RegularWindowController(preferredSize: preferredSize, preferredConstraints: effectiveConstraints, title: title, delegate: delegate);
     final handle = _WoxMultipleWindowHandleImpl(id: id, controller: controller);
+    // Windows can keep the HWND hidden until Flutter is ready. macOS shows the
+    // NSWindow during controller creation, so moving it offscreen only creates
+    // extra visible jumps before the final placement.
     final prepareOffscreen = Platform.isWindows;
     final preparationReady = Completer<void>();
     final record = _WoxWindowRecord(
@@ -177,6 +191,7 @@ class WoxMultipleWindow {
           navigatorKey: navigatorKey,
           theme: _theme ?? ThemeData(useMaterial3: true),
           showTitleBar: showTitleBar,
+          resizable: resizable,
           minimizable: minimizable,
           mica: mica,
           roundedCorners: roundedCorners,
@@ -193,15 +208,19 @@ class WoxMultipleWindow {
     record.registered = true;
     _windows[id] = record;
     if (prepareOffscreen) {
-      WoxMultipleWindowStyle.moveOffscreen(controller);
+      await WoxMultipleWindowStyle.moveOffscreen(controller);
+    }
+    await WoxMultipleWindowStyle.apply(controller, mica: mica, darkMode: isThemeDark(), roundedCorners: roundedCorners, minimizable: minimizable, resizable: resizable);
+    if (Platform.isMacOS && centerOnCreate) {
+      await WoxMultipleWindowStyle.centerOnCursorDisplay(controller, preferredSize: preferredSize);
     }
     registry.register(entry);
     controller.activate();
     if (prepareOffscreen) {
       await preparationReady.future.timeout(const Duration(milliseconds: 500), onTimeout: () {});
     }
-    if (centerOnCreate) {
-      WoxMultipleWindowStyle.centerOnCursorDisplay(controller);
+    if (!Platform.isMacOS && centerOnCreate) {
+      await WoxMultipleWindowStyle.centerOnCursorDisplay(controller, preferredSize: preferredSize);
     }
     return handle;
   }
@@ -258,25 +277,29 @@ class _WoxMultipleWindowHandleImpl implements WoxMultipleWindowHandle {
   Future<Size> getSize() async => controller.contentSize;
 
   @override
-  Future<Offset> getPosition() async => WoxMultipleWindowStyle.positionOf(controller) ?? _position;
+  Future<Offset> getPosition() async {
+    final nativePosition = await WoxMultipleWindowStyle.positionOf(controller);
+    return nativePosition ?? _position;
+  }
 
   @override
   Future<void> setBounds(Offset position, Size size) async {
     _position = position;
     controller.setConstraints(BoxConstraints.tight(size));
     controller.setSize(size);
-    WoxMultipleWindowStyle.setBounds(controller, position, size);
+    await WoxMultipleWindowStyle.setBounds(controller, position, size);
   }
 
   @override
   Future<void> setSize(Size size) async {
     controller.setConstraints(BoxConstraints.tight(size));
     controller.setSize(size);
+    await WoxMultipleWindowStyle.setSize(controller, size);
   }
 
   @override
   Future<void> setAlwaysOnTop(bool value) async {
-    WoxMultipleWindowStyle.setAlwaysOnTop(controller, value);
+    await WoxMultipleWindowStyle.setAlwaysOnTop(controller, value);
   }
 
   @override
@@ -286,18 +309,19 @@ class _WoxMultipleWindowHandleImpl implements WoxMultipleWindowHandle {
 
   @override
   Future<void> show() async {
-    WoxMultipleWindowStyle.show(controller);
+    await WoxMultipleWindowStyle.show(controller);
     controller.activate();
   }
 
   @override
   Future<void> focus() async {
+    await WoxMultipleWindowStyle.focus(controller);
     controller.activate();
   }
 
   @override
   Future<void> hide() async {
-    WoxMultipleWindowStyle.hide(controller);
+    await WoxMultipleWindowStyle.hide(controller);
   }
 
   @override
@@ -365,6 +389,7 @@ class _WoxMultipleWindowRoot extends StatefulWidget {
     required this.navigatorKey,
     required this.theme,
     required this.showTitleBar,
+    required this.resizable,
     required this.minimizable,
     required this.mica,
     required this.roundedCorners,
@@ -378,6 +403,7 @@ class _WoxMultipleWindowRoot extends StatefulWidget {
   final GlobalKey<NavigatorState> navigatorKey;
   final ThemeData theme;
   final bool showTitleBar;
+  final bool resizable;
   final bool minimizable;
   final bool mica;
   final bool roundedCorners;
@@ -436,9 +462,18 @@ class _WoxMultipleWindowRootState extends State<_WoxMultipleWindowRoot> {
   }
 
   void _applyWindowStyle() {
-    // Multiple windows have their own HWND, so theme changes must reapply the
-    // same native appearance policy that the main query window receives.
-    WoxMultipleWindowStyle.apply(widget.controller, mica: widget.mica, darkMode: isThemeDark(), roundedCorners: widget.roundedCorners);
+    // Multiple windows have their own native handles, so theme changes must
+    // reapply the same appearance policy that the main query window receives.
+    unawaited(
+      WoxMultipleWindowStyle.apply(
+        widget.controller,
+        mica: widget.mica,
+        darkMode: isThemeDark(),
+        roundedCorners: widget.roundedCorners,
+        minimizable: widget.minimizable,
+        resizable: widget.resizable,
+      ),
+    );
   }
 
   @override
@@ -455,7 +490,9 @@ class _WoxMultipleWindowRootState extends State<_WoxMultipleWindowRoot> {
             windowId: widget.id,
             title: widget.title,
             showTitleBar: widget.showTitleBar,
+            resizable: widget.resizable,
             minimizable: widget.minimizable,
+            roundedCorners: widget.roundedCorners,
             child: widget.builder(context),
           );
         },
@@ -465,34 +502,51 @@ class _WoxMultipleWindowRootState extends State<_WoxMultipleWindowRoot> {
 }
 
 class _WoxMultipleWindowFrame extends StatelessWidget {
-  const _WoxMultipleWindowFrame({required this.windowId, required this.title, required this.showTitleBar, required this.minimizable, required this.child});
+  const _WoxMultipleWindowFrame({
+    required this.windowId,
+    required this.title,
+    required this.showTitleBar,
+    required this.resizable,
+    required this.minimizable,
+    required this.roundedCorners,
+    required this.child,
+  });
 
   final String windowId;
   final String title;
   final bool showTitleBar;
+  final bool resizable;
   final bool minimizable;
+  final bool roundedCorners;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
+    final Widget frame;
     if (!showTitleBar) {
-      return child;
+      frame = child;
+    } else {
+      frame = Material(
+        type: MaterialType.transparency,
+        child: Column(children: [_WoxSimulatedTitleBar(windowId: windowId, title: title, resizable: resizable, minimizable: minimizable), Expanded(child: child)]),
+      );
     }
 
-    return Material(
-      type: MaterialType.transparency,
-      child: Column(children: [_WoxSimulatedTitleBar(windowId: windowId, title: title, minimizable: minimizable), Expanded(child: child)]),
-    );
+    if (Platform.isMacOS && roundedCorners) {
+      return ClipRRect(borderRadius: BorderRadius.circular(_woxManagedWindowCornerRadius), child: frame);
+    }
+    return frame;
   }
 }
 
 class _WoxSimulatedTitleBar extends StatelessWidget {
-  const _WoxSimulatedTitleBar({required this.windowId, required this.title, required this.minimizable});
+  const _WoxSimulatedTitleBar({required this.windowId, required this.title, required this.resizable, required this.minimizable});
 
   static const double height = 40;
 
   final String windowId;
   final String title;
+  final bool resizable;
   final bool minimizable;
 
   @override
@@ -544,15 +598,7 @@ class _WoxSimulatedTitleBar extends StatelessWidget {
   Widget _buildMacTitleBar(Color textColor) {
     return Row(
       children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 12),
-          child: Row(
-            children: [
-              _WoxMacTrafficLight(color: const Color(0xFFFF5F57), onPressed: () => unawaited(WoxMultipleWindow.closeWindow(windowId))),
-              if (minimizable) ...[const SizedBox(width: 8), _WoxMacTrafficLight(color: const Color(0xFFFFBD2E), onPressed: () => WoxMultipleWindow._minimizeWindow(windowId))],
-            ],
-          ),
-        ),
+        _WoxMacTrafficLightGroup(windowId: windowId, minimizable: minimizable, resizable: resizable),
         Expanded(
           child: WoxMultipleWindowDragMoveArea(
             windowId: windowId,
@@ -566,7 +612,7 @@ class _WoxSimulatedTitleBar extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(width: 68),
+        const SizedBox(width: _WoxMacTrafficLightGroup.width),
       ],
     );
   }
@@ -622,23 +668,129 @@ class _WoxTitleBarButtonState extends State<_WoxTitleBarButton> {
   }
 }
 
-class _WoxMacTrafficLight extends StatelessWidget {
-  const _WoxMacTrafficLight({required this.color, required this.onPressed});
+class _WoxMacTrafficLightGroup extends StatefulWidget {
+  const _WoxMacTrafficLightGroup({required this.windowId, required this.minimizable, required this.resizable});
 
-  final Color color;
-  final VoidCallback onPressed;
+  static const double _leftPadding = 18;
+  static const double _rightPadding = 8;
+  static const double _buttonSize = 20;
+  static const double _buttonGap = 3;
+  static const double width = _leftPadding + _rightPadding + (_buttonSize * 3) + (_buttonGap * 2);
+
+  final String windowId;
+  final bool minimizable;
+  final bool resizable;
+
+  @override
+  State<_WoxMacTrafficLightGroup> createState() => _WoxMacTrafficLightGroupState();
+}
+
+class _WoxMacTrafficLightGroupState extends State<_WoxMacTrafficLightGroup> {
+  bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onPressed,
-      child: Padding(
-        padding: const EdgeInsets.all(6),
-        child: DecoratedBox(decoration: BoxDecoration(color: color, shape: BoxShape.circle), child: const SizedBox(width: 12, height: 12)),
+    return MouseRegion(
+      hitTestBehavior: HitTestBehavior.opaque,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: SizedBox(
+        width: _WoxMacTrafficLightGroup.width,
+        height: _WoxSimulatedTitleBar.height,
+        child: Padding(
+          padding: const EdgeInsets.only(left: _WoxMacTrafficLightGroup._leftPadding, right: _WoxMacTrafficLightGroup._rightPadding),
+          child: Row(
+            children: [
+              _WoxMacTrafficLight(kind: _WoxMacTrafficLightKind.close, hovered: _hovered, onPressed: () => unawaited(WoxMultipleWindow.closeWindow(widget.windowId))),
+              const SizedBox(width: _WoxMacTrafficLightGroup._buttonGap),
+              _WoxMacTrafficLight(
+                kind: _WoxMacTrafficLightKind.minimize,
+                hovered: _hovered,
+                onPressed: widget.minimizable ? () => WoxMultipleWindow._minimizeWindow(widget.windowId) : null,
+              ),
+              const SizedBox(width: _WoxMacTrafficLightGroup._buttonGap),
+              _WoxMacTrafficLight(
+                kind: _WoxMacTrafficLightKind.zoom,
+                hovered: _hovered,
+                onPressed: widget.resizable ? () => WoxMultipleWindow._toggleMaximizeWindow(widget.windowId) : null,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
+}
+
+enum _WoxMacTrafficLightKind { close, minimize, zoom }
+
+class _WoxMacTrafficLight extends StatelessWidget {
+  const _WoxMacTrafficLight({required this.kind, required this.hovered, required this.onPressed});
+
+  final _WoxMacTrafficLightKind kind;
+  final bool hovered;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onPressed != null;
+    final color = switch (kind) {
+      _WoxMacTrafficLightKind.close => const Color(0xFFFF5F57),
+      _WoxMacTrafficLightKind.minimize => enabled ? const Color(0xFFFFBD2E) : const Color(0xFF6E6E73),
+      _WoxMacTrafficLightKind.zoom => enabled ? const Color(0xFF28C840) : const Color(0xFF6E6E73),
+    };
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onPressed,
+      child: SizedBox(
+        width: _WoxMacTrafficLightGroup._buttonSize,
+        height: _WoxMacTrafficLightGroup._buttonSize,
+        child: Center(
+          child: SizedBox(
+            width: 14,
+            height: 14,
+            child: DecoratedBox(
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              child: hovered && enabled ? CustomPaint(painter: _WoxMacTrafficLightGlyphPainter(kind)) : const SizedBox.expand(),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WoxMacTrafficLightGlyphPainter extends CustomPainter {
+  const _WoxMacTrafficLightGlyphPainter(this.kind);
+
+  final _WoxMacTrafficLightKind kind;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint =
+        Paint()
+          ..color = Colors.black.withValues(alpha: 0.58)
+          ..strokeCap = StrokeCap.round
+          ..strokeWidth = 1.45
+          ..style = PaintingStyle.stroke;
+    final center = Offset(size.width / 2, size.height / 2);
+    const half = 2.6;
+
+    switch (kind) {
+      case _WoxMacTrafficLightKind.close:
+        canvas.drawLine(center.translate(-half, -half), center.translate(half, half), paint);
+        canvas.drawLine(center.translate(half, -half), center.translate(-half, half), paint);
+      case _WoxMacTrafficLightKind.minimize:
+        canvas.drawLine(center.translate(-3.0, 0), center.translate(3.0, 0), paint);
+      case _WoxMacTrafficLightKind.zoom:
+        canvas.drawLine(center.translate(-3.0, 0), center.translate(3.0, 0), paint);
+        canvas.drawLine(center.translate(0, -3.0), center.translate(0, 3.0), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_WoxMacTrafficLightGlyphPainter oldDelegate) => oldDelegate.kind != kind;
 }
 
 class WoxMultipleWindowDragMoveArea extends StatelessWidget {

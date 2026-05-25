@@ -1,9 +1,34 @@
 import Cocoa
 import FlutterMacOS
+import ObjectiveC.runtime
 
 class MainFlutterWindow: NSPanel {
   var isReadyToShow: Bool = false
   private var webViewPreviewChannel: FlutterMethodChannel?
+
+  // Temporary Flutter windowing compatibility hack.
+  //
+  // Wox still starts macOS through the standard storyboard-backed MainFlutterWindow, which creates
+  // and attaches the implicit FlutterViewController before Dart can create any RegularWindowController.
+  // Flutter's experimental macOS windowing API enables multiview lazily when the first
+  // RegularWindowController is created, but the engine asserts if multiview is enabled after a view
+  // controller has already been added. Flip the same internal flag here so secondary RegularWindow
+  // creation does not crash while the existing primary-window startup path remains unchanged.
+  //
+  // This touches a private FlutterEngine ivar and must be treated as a short-term bridge. Remove it
+  // once Wox migrates macOS startup to Flutter's official multiple_windows pattern: create only a
+  // FlutterEngine in AppDelegate, register plugins against that engine, and let Dart create both the
+  // primary and secondary windows through RegularWindowController.
+  private func enableFlutterEngineMultiViewAfterImplicitView(_ engine: FlutterEngine) {
+    guard let multiViewIvar = class_getInstanceVariable(FlutterEngine.self, "_multiViewEnabled") else {
+      NSLog("FlutterEngine _multiViewEnabled ivar is unavailable; additional Flutter windows may fail")
+      return
+    }
+
+    let offset = ivar_getOffset(multiViewIvar)
+    let rawEngine = Unmanaged.passUnretained(engine).toOpaque()
+    rawEngine.advanced(by: offset).assumingMemoryBound(to: ObjCBool.self).pointee = true
+  }
 
   override var canBecomeKey: Bool {
     // Screenshot annotation reuses the main Flutter window as a temporary borderless panel. AppKit
@@ -23,6 +48,7 @@ class MainFlutterWindow: NSPanel {
 
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
+    enableFlutterEngineMultiViewAfterImplicitView(flutterViewController.engine)
     let windowFrame = self.frame
     self.contentViewController = flutterViewController
     self.setFrame(windowFrame, display: false)
@@ -38,19 +64,19 @@ class MainFlutterWindow: NSPanel {
     webViewPreviewChannel.setMethodCallHandler { call, result in
       switch call.method {
       case "openInspector":
-        result(WoxWebViewPreviewPlugin.openInspector())
+        result(WoxWebViewPreviewPlugin.openInspector(arguments: call.arguments))
       case "refresh":
-        result(WoxWebViewPreviewPlugin.refresh())
+        result(WoxWebViewPreviewPlugin.refresh(arguments: call.arguments))
       case "goBack":
-        result(WoxWebViewPreviewPlugin.goBack())
+        result(WoxWebViewPreviewPlugin.goBack(arguments: call.arguments))
       case "goForward":
-        result(WoxWebViewPreviewPlugin.goForward())
+        result(WoxWebViewPreviewPlugin.goForward(arguments: call.arguments))
       case "getCurrentUrl":
-        result(WoxWebViewPreviewPlugin.getCurrentUrl())
+        result(WoxWebViewPreviewPlugin.getCurrentUrl(arguments: call.arguments))
       case "clearState":
-        result(WoxWebViewPreviewPlugin.clearState())
+        result(WoxWebViewPreviewPlugin.clearState(arguments: call.arguments))
       case "focusActiveSession":
-        result(WoxWebViewPreviewPlugin.focusActiveSession())
+        result(WoxWebViewPreviewPlugin.focusActiveSession(arguments: call.arguments))
       default:
         result(FlutterMethodNotImplemented)
       }

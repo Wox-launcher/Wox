@@ -5,6 +5,8 @@ import 'package:wox/utils/windows/window_manager.dart';
 abstract class WoxWindowDriver {
   bool get isPrimary;
 
+  Future<int?> getNativeHandle();
+
   Future<bool> isVisible();
 
   Future<void> show();
@@ -31,6 +33,9 @@ abstract class WoxWindowDriver {
 class WoxPrimaryWindowDriver implements WoxWindowDriver {
   @override
   bool get isPrimary => true;
+
+  @override
+  Future<int?> getNativeHandle() => windowManager.getNativeHandle();
 
   @override
   Future<bool> isVisible() => windowManager.isVisible();
@@ -82,6 +87,9 @@ class WoxSecondaryWindowDriver implements WoxWindowDriver {
 
   @override
   bool get isPrimary => false;
+
+  @override
+  Future<int?> getNativeHandle() async => _handle?.nativeHandle;
 
   @override
   Future<bool> isVisible() async => _visible;

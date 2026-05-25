@@ -23,48 +23,56 @@ class WoxWebViewUtil {
     return null;
   }
 
-  static Future<bool> openInspector() async {
-    return (await _platform?.openInspector()) ?? false;
+  static Future<bool> openInspector({int? windowHandle}) async {
+    return (await _platform?.openInspector(windowHandle: windowHandle)) ?? false;
   }
 
-  static Future<bool> refresh() async {
-    return (await _platform?.refresh()) ?? false;
+  static Future<bool> refresh({int? windowHandle}) async {
+    return (await _platform?.refresh(windowHandle: windowHandle)) ?? false;
   }
 
-  static Future<bool> goBack() async {
-    return (await _platform?.goBack()) ?? false;
+  static Future<bool> goBack({int? windowHandle}) async {
+    return (await _platform?.goBack(windowHandle: windowHandle)) ?? false;
   }
 
-  static Future<bool> goForward() async {
-    return (await _platform?.goForward()) ?? false;
+  static Future<bool> goForward({int? windowHandle}) async {
+    return (await _platform?.goForward(windowHandle: windowHandle)) ?? false;
   }
 
-  static Future<String?> getCurrentUrl() async {
-    return _platform?.getCurrentUrl();
+  static Future<String?> getCurrentUrl({int? windowHandle}) async {
+    return _platform?.getCurrentUrl(windowHandle: windowHandle);
   }
 
-  static Future<bool> clearState() async {
-    return (await _platform?.clearState()) ?? false;
+  static Future<bool> clearState({int? windowHandle}) async {
+    return (await _platform?.clearState(windowHandle: windowHandle)) ?? false;
   }
 
-  static Future<bool> focusActiveSession() async {
-    return (await _platform?.focusActiveSession()) ?? false;
+  static Future<bool> focusActiveSession({int? windowHandle}) async {
+    return (await _platform?.focusActiveSession(windowHandle: windowHandle)) ?? false;
   }
 
-  static Stream<void> get unhandledEscape {
+  static Stream<int?> get unhandledEscape {
     if (Platform.isMacOS) {
       return _macosPlatform.unhandledEscape;
     }
 
-    return const Stream<void>.empty();
+    return const Stream<int?>.empty();
   }
 
-  static Stream<void> get startDragging {
+  static Stream<int?> get startDragging {
     if (Platform.isMacOS) {
       return _macosPlatform.startDragging;
     }
 
-    return const Stream<void>.empty();
+    return const Stream<int?>.empty();
+  }
+
+  static Stream<int?> get showToolbar {
+    if (Platform.isMacOS) {
+      return _macosPlatform.showToolbar;
+    }
+
+    return const Stream<int?>.empty();
   }
 
   /// Acquires a webview session for the given preview data. The caller should call [releaseSession] when the session is no longer needed.

@@ -17,12 +17,18 @@ private struct WoxWebViewPreviewRequest {
   let injectCss: String
   let cacheDisabled: Bool
   let cacheKey: String
+  let toolbarTriggerWidth: Double
+  let toolbarTriggerHeight: Double
+  let toolbarTriggerBottom: Double
 
   init(args: [String: Any]) {
     urlString = args["url"] as? String ?? ""
     injectCss = args["injectCss"] as? String ?? ""
     cacheDisabled = args["cacheDisabled"] as? Bool ?? false
     cacheKey = args["cacheKey"] as? String ?? ""
+    toolbarTriggerWidth = args["toolbarTriggerWidth"] as? Double ?? 288
+    toolbarTriggerHeight = args["toolbarTriggerHeight"] as? Double ?? 72
+    toolbarTriggerBottom = args["toolbarTriggerBottom"] as? Double ?? 42
   }
 
   var hasCache: Bool {
@@ -43,6 +49,14 @@ private final class WoxCachedWebViewEntry {
     self.webView = webView
     self.signature = signature
     self.currentURL = currentURL
+  }
+}
+
+private final class WoxWeakWebViewBox {
+  weak var webView: WKWebView?
+
+  init(_ webView: WKWebView) {
+    self.webView = webView
   }
 }
 
@@ -92,6 +106,7 @@ private enum WoxWebViewStore {
     // Preserve the plugin's mobile-preview behavior. Clearing site state is now a separate reset action, so existing sites
     // keep their mobile layout while users still have a way to recover from stale login/session storage.
     webView.customUserAgent = mobileUserAgent
+    WoxWebViewPreviewPlugin.registerMessageSource(webView)
     return webView
   }
 }
@@ -100,6 +115,8 @@ class WoxWebViewPreviewPlugin: NSObject {
   private static weak var activeWebView: WKWebView?
   private static var activeCacheKey: String?
   private static var methodChannel: FlutterMethodChannel?
+  private static var messageSources: [ObjectIdentifier: WoxWeakWebViewBox] = [:]
+  private static var cacheKeys: [ObjectIdentifier: String] = [:]
 
   static func register(with registrar: FlutterPluginRegistrar) {
     let factory = WoxWebViewPreviewFactory()
@@ -113,10 +130,54 @@ class WoxWebViewPreviewPlugin: NSObject {
   static func setActiveWebView(_ webView: WKWebView, cacheKey: String?) {
     activeWebView = webView
     activeCacheKey = cacheKey
+    let webViewId = ObjectIdentifier(webView)
+    if let cacheKey {
+      cacheKeys[webViewId] = cacheKey
+    } else {
+      cacheKeys.removeValue(forKey: webViewId)
+    }
   }
 
-  static func openInspector() -> Bool {
-    guard let activeWebView else {
+  static func registerMessageSource(_ webView: WKWebView) {
+    messageSources[ObjectIdentifier(webView.configuration.userContentController)] = WoxWeakWebViewBox(webView)
+  }
+
+  private static func nativeWindowHandle(from value: Any?) -> UInt? {
+    if let value = value as? UInt {
+      return value
+    }
+    if let value = value as? UInt64 {
+      return UInt(truncatingIfNeeded: value)
+    }
+    if let value = value as? Int {
+      return value > 0 ? UInt(value) : nil
+    }
+    if let value = value as? NSNumber {
+      return UInt(truncatingIfNeeded: value.uint64Value)
+    }
+    return nil
+  }
+
+  private static func targetWebView(from arguments: Any?) -> WKWebView? {
+    guard let args = arguments as? [String: Any], let targetHandle = nativeWindowHandle(from: args["windowHandle"]) else {
+      return activeWebView
+    }
+
+    for source in messageSources.values {
+      guard let webView = source.webView, let window = webView.window else {
+        continue
+      }
+      let windowHandle = UInt(bitPattern: Unmanaged.passUnretained(window).toOpaque())
+      if windowHandle == targetHandle {
+        return webView
+      }
+    }
+
+    return nil
+  }
+
+  static func openInspector(arguments: Any?) -> Bool {
+    guard let activeWebView = targetWebView(from: arguments) else {
       NSLog("WoxWebViewPreviewPlugin.openInspector skipped: no active WKWebView")
       return false
     }
@@ -158,8 +219,8 @@ class WoxWebViewPreviewPlugin: NSObject {
     return true
   }
 
-  static func refresh() -> Bool {
-    guard let activeWebView else {
+  static func refresh(arguments: Any?) -> Bool {
+    guard let activeWebView = targetWebView(from: arguments) else {
       return false
     }
 
@@ -167,8 +228,8 @@ class WoxWebViewPreviewPlugin: NSObject {
     return true
   }
 
-  static func goBack() -> Bool {
-    guard let activeWebView, activeWebView.canGoBack else {
+  static func goBack(arguments: Any?) -> Bool {
+    guard let activeWebView = targetWebView(from: arguments), activeWebView.canGoBack else {
       return false
     }
 
@@ -176,8 +237,8 @@ class WoxWebViewPreviewPlugin: NSObject {
     return true
   }
 
-  static func goForward() -> Bool {
-    guard let activeWebView, activeWebView.canGoForward else {
+  static func goForward(arguments: Any?) -> Bool {
+    guard let activeWebView = targetWebView(from: arguments), activeWebView.canGoForward else {
       return false
     }
 
@@ -185,22 +246,22 @@ class WoxWebViewPreviewPlugin: NSObject {
     return true
   }
 
-  static func getCurrentUrl() -> String? {
+  static func getCurrentUrl(arguments: Any?) -> String? {
     // Flutter preview data only records the original URL. Reading WKWebView.url keeps the external-browser
     // toolbar action aligned with in-page navigation without adding another delegate state cache on macOS.
-    return activeWebView?.url?.absoluteString
+    return targetWebView(from: arguments)?.url?.absoluteString
   }
 
-  static func focusActiveSession() -> Bool {
-    guard let activeWebView, let window = activeWebView.window else {
+  static func focusActiveSession(arguments: Any?) -> Bool {
+    guard let activeWebView = targetWebView(from: arguments), let window = activeWebView.window else {
       return false
     }
 
     return window.makeFirstResponder(activeWebView)
   }
 
-  static func clearState() -> Bool {
-    guard let activeWebView else {
+  static func clearState(arguments: Any?) -> Bool {
+    guard let activeWebView = targetWebView(from: arguments) else {
       return false
     }
 
@@ -210,7 +271,7 @@ class WoxWebViewPreviewPlugin: NSObject {
 
     let dataStore = activeWebView.configuration.websiteDataStore
     let dataTypes = WKWebsiteDataStore.allWebsiteDataTypes()
-    WoxWebViewStore.removeEntry(cacheKey: activeCacheKey)
+    WoxWebViewStore.removeEntry(cacheKey: cacheKeys[ObjectIdentifier(activeWebView)] ?? activeCacheKey)
 
     // Clearing only cookies/cache is not enough for modern login flows. WKWebsiteDataStore records include IndexedDB,
     // local storage, service workers and cache storage, so clear the current host group before forcing a fresh bootstrap.
@@ -230,12 +291,32 @@ class WoxWebViewPreviewPlugin: NSObject {
     return true
   }
 
-  static func notifyUnhandledEscape() {
-    methodChannel?.invokeMethod("unhandledEscape", arguments: nil)
+  private static func windowEventArguments(from userContentController: WKUserContentController) -> [String: Any]? {
+    guard let webView = messageSources[ObjectIdentifier(userContentController)]?.webView, let window = webView.window else {
+      return nil
+    }
+
+    return ["windowHandle": UInt(bitPattern: Unmanaged.passUnretained(window).toOpaque())]
   }
 
-  static func notifyStartDragging() {
-    methodChannel?.invokeMethod("startDragging", arguments: nil)
+  private static func windowEventArguments(for webView: WKWebView) -> [String: Any]? {
+    guard let window = webView.window else {
+      return nil
+    }
+
+    return ["windowHandle": UInt(bitPattern: Unmanaged.passUnretained(window).toOpaque())]
+  }
+
+  static func notifyUnhandledEscape(from userContentController: WKUserContentController) {
+    methodChannel?.invokeMethod("unhandledEscape", arguments: windowEventArguments(from: userContentController))
+  }
+
+  static func notifyStartDragging(from userContentController: WKUserContentController) {
+    methodChannel?.invokeMethod("startDragging", arguments: windowEventArguments(from: userContentController))
+  }
+
+  static func notifyShowToolbar(for webView: WKWebView) {
+    methodChannel?.invokeMethod("showToolbar", arguments: windowEventArguments(for: webView))
   }
 }
 
@@ -253,9 +334,9 @@ private final class WoxWebViewScriptMessageHandler: NSObject, WKScriptMessageHan
 
     switch type {
     case unhandledEscapeMessageType:
-      WoxWebViewPreviewPlugin.notifyUnhandledEscape()
+      WoxWebViewPreviewPlugin.notifyUnhandledEscape(from: userContentController)
     case startDraggingMessageType:
-      WoxWebViewPreviewPlugin.notifyStartDragging()
+      WoxWebViewPreviewPlugin.notifyStartDragging(from: userContentController)
     default:
       return
     }
@@ -274,6 +355,11 @@ class WoxWebViewPreviewFactory: NSObject, FlutterPlatformViewFactory {
 
 final class WoxWebViewPreviewNativeView: NSView, WKNavigationDelegate, WKUIDelegate {
   private let webView: WKWebView
+  private let toolbarTriggerWidth: Double
+  private let toolbarTriggerHeight: Double
+  private let toolbarTriggerBottom: Double
+  private var toolbarTrackingArea: NSTrackingArea?
+  private var lastNativeToolbarPostTime: TimeInterval = 0
 
   init(frame frameRect: NSRect, args: Any?) {
     let creationParams = args as? [String: Any] ?? [:]
@@ -281,6 +367,9 @@ final class WoxWebViewPreviewNativeView: NSView, WKNavigationDelegate, WKUIDeleg
     let resolved = WoxWebViewStore.resolveWebView(for: request)
 
     webView = resolved.webView
+    toolbarTriggerWidth = request.toolbarTriggerWidth
+    toolbarTriggerHeight = request.toolbarTriggerHeight
+    toolbarTriggerBottom = request.toolbarTriggerBottom
     super.init(frame: frameRect)
 
     WoxWebViewPreviewPlugin.setActiveWebView(webView, cacheKey: request.hasCache ? request.cacheKey : nil)
@@ -290,6 +379,7 @@ final class WoxWebViewPreviewNativeView: NSView, WKNavigationDelegate, WKUIDeleg
     webView.frame = bounds
     webView.removeFromSuperview()
     addSubview(webView)
+    installToolbarTrackingArea()
 
     wantsLayer = true
     layer?.backgroundColor = NSColor.clear.cgColor
@@ -300,6 +390,68 @@ final class WoxWebViewPreviewNativeView: NSView, WKNavigationDelegate, WKUIDeleg
   @available(*, unavailable)
   required init?(coder: NSCoder) {
     fatalError("init(coder:) has not been implemented")
+  }
+
+  deinit {
+    if let toolbarTrackingArea {
+      webView.removeTrackingArea(toolbarTrackingArea)
+    }
+  }
+
+  override func viewDidMoveToWindow() {
+    super.viewDidMoveToWindow()
+    window?.acceptsMouseMovedEvents = true
+  }
+
+  override func updateTrackingAreas() {
+    super.updateTrackingAreas()
+    installToolbarTrackingArea()
+  }
+
+  override func mouseMoved(with event: NSEvent) {
+    notifyToolbarIfNeeded(for: event)
+  }
+
+  private func installToolbarTrackingArea() {
+    if let toolbarTrackingArea {
+      webView.removeTrackingArea(toolbarTrackingArea)
+    }
+
+    let trackingArea = NSTrackingArea(
+      rect: webView.bounds,
+      options: [.activeAlways, .inVisibleRect, .mouseMoved],
+      owner: self,
+      userInfo: nil
+    )
+    webView.addTrackingArea(trackingArea)
+    toolbarTrackingArea = trackingArea
+  }
+
+  private func notifyToolbarIfNeeded(for event: NSEvent) {
+    guard event.window === webView.window else {
+      return
+    }
+
+    let location = webView.convert(event.locationInWindow, from: nil)
+    let bounds = webView.bounds
+    // WKWebView can use a flipped coordinate space, so normalize to visual distance from the bottom edge.
+    let distanceFromBottom = webView.isFlipped ? bounds.height - location.y : location.y
+    let left = (bounds.width - toolbarTriggerWidth) / 2
+    let right = left + toolbarTriggerWidth
+    let bottom = toolbarTriggerBottom
+    let top = toolbarTriggerBottom + toolbarTriggerHeight
+
+    guard location.x >= left && location.x <= right && distanceFromBottom >= bottom && distanceFromBottom <= top else {
+      return
+    }
+
+    let now = Date().timeIntervalSince1970
+    guard now - lastNativeToolbarPostTime >= 0.3 else {
+      return
+    }
+
+    lastNativeToolbarPostTime = now
+    WoxWebViewPreviewPlugin.notifyShowToolbar(for: webView)
   }
 
   fileprivate static func makeConfiguration(sessionPolicy: WoxWebViewSessionPolicy, injectCss: String?) -> WKWebViewConfiguration {
@@ -327,7 +479,6 @@ final class WoxWebViewPreviewNativeView: NSView, WKNavigationDelegate, WKUIDeleg
         forMainFrameOnly: true
       )
     )
-
     if let injectCss, !injectCss.isEmpty {
       userContentController.addUserScript(
         WKUserScript(
