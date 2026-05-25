@@ -67,12 +67,14 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          channel: master
           cache: true
 
       - name: Enable Flutter desktop (Windows)
         shell: bash
-        run: flutter config --enable-windows-desktop
+        run: |
+          flutter config --enable-windows-desktop
+          flutter config --enable-windowing
 
       - name: Prepare development environment
         shell: bash

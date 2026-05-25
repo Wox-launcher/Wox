@@ -185,12 +185,14 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          channel: master
           cache: true
       - name: Install create-dmg
         run: brew install create-dmg
       - name: Enable Flutter desktop (macOS)
-        run: flutter config --enable-macos-desktop
+        run: |
+          flutter config --enable-macos-desktop
+          flutter config --enable-windowing
 
       - name: Validate macOS signing/notarization secrets
         if: ${{ inputs.require_macos_notarize }}
@@ -309,12 +311,14 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          channel: master
           cache: true
       - name: Install create-dmg
         run: brew install create-dmg
       - name: Enable Flutter desktop (macOS)
-        run: flutter config --enable-macos-desktop
+        run: |
+          flutter config --enable-macos-desktop
+          flutter config --enable-windowing
 
       - name: Validate macOS signing/notarization secrets
         if: ${{ inputs.require_macos_notarize }}
@@ -458,12 +462,14 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          channel: master
           cache: true
 
       - name: Enable Flutter desktop (Windows)
         shell: pwsh
-        run: flutter config --enable-windows-desktop
+        run: |
+          flutter config --enable-windows-desktop
+          flutter config --enable-windowing
 
       - name: Build
         shell: bash
@@ -591,10 +597,12 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          channel: master
           cache: true
       - name: Enable Flutter desktop (Linux)
-        run: flutter config --enable-linux-desktop
+        run: |
+          flutter config --enable-linux-desktop
+          flutter config --enable-windowing
       - name: Download appimagetool
         run: |
           curl -L -o appimagetool.AppImage https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
