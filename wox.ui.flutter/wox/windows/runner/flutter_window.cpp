@@ -5403,19 +5403,6 @@ void FlutterWindow::HandleWindowManagerMethodCall(
           GetWindowRect(hwnd, &rect);
           SetWindowPos(hwnd, nullptr, rect.left, rect.top, scaledWidth, scaledHeight, SWP_NOZORDER | SWP_FRAMECHANGED);
 
-          RECT root_rect{};
-          RECT client_rect{};
-          GetWindowRect(hwnd, &root_rect);
-          GetClientRect(hwnd, &client_rect);
-          const RECT child_rect = GetWindowRectSafe(child_window_);
-          std::ostringstream oss;
-          oss << "setSize: logical=" << width << "x" << height
-              << ", physical=" << scaledWidth << "x" << scaledHeight
-              << ", root=" << RectToString(root_rect)
-              << ", client=" << RectToString(client_rect)
-              << ", child=" << RectToString(child_rect);
-          Log(oss.str());
-
           // Force Flutter to redraw immediately to match the new window size
           if (flutter_controller_)
           {
@@ -5494,21 +5481,6 @@ void FlutterWindow::HandleWindowManagerMethodCall(
           int scaledHeight = static_cast<int>(height * dpiScale);
 
           SetWindowPos(hwnd, nullptr, scaledX, scaledY, scaledWidth, scaledHeight, SWP_NOZORDER | SWP_FRAMECHANGED);
-
-          RECT root_rect{};
-          RECT client_rect{};
-          GetWindowRect(hwnd, &root_rect);
-          GetClientRect(hwnd, &client_rect);
-          const RECT child_rect = GetWindowRectSafe(child_window_);
-          std::ostringstream oss;
-          oss << "setBounds: logicalPos=" << x << "," << y
-              << ", logicalSize=" << width << "x" << height
-              << ", physicalPos=" << scaledX << "," << scaledY
-              << ", physicalSize=" << scaledWidth << "x" << scaledHeight
-              << ", root=" << RectToString(root_rect)
-              << ", client=" << RectToString(client_rect)
-              << ", child=" << RectToString(child_rect);
-          Log(oss.str());
 
           if (flutter_controller_)
           {
@@ -5691,9 +5663,59 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       int x = monitorLeft + (monitorWidth - scaledWidth) / 2;
       int y = monitorTop + (monitorHeight - scaledHeight) / 2;
 
-      Log("Center: window to " + std::to_string(x) + "," + std::to_string(y) + " with " + std::to_string(scaledWidth) + "," + std::to_string(scaledHeight) + " on monitor at " + std::to_string(monitorLeft) + "," + std::to_string(monitorTop));
       SetWindowPos(hwnd, nullptr, x, y, scaledWidth, scaledHeight, SWP_NOZORDER);
       result->Success();
+    }
+    else if (method_name == "constrainSizeToCursorDisplayWorkArea")
+    {
+      const auto *arguments = std::get_if<flutter::EncodableMap>(method_call.arguments());
+      if (!arguments)
+      {
+        result->Error("INVALID_ARGUMENTS", "Arguments must be provided for constrainSizeToCursorDisplayWorkArea");
+        return;
+      }
+
+      auto width_it = arguments->find(flutter::EncodableValue("width"));
+      auto height_it = arguments->find(flutter::EncodableValue("height"));
+      auto fraction_it = arguments->find(flutter::EncodableValue("maxWorkAreaFraction"));
+
+      if (width_it == arguments->end() || height_it == arguments->end() || fraction_it == arguments->end())
+      {
+        result->Error("INVALID_ARGUMENTS", "Width, height and maxWorkAreaFraction must be provided for constrainSizeToCursorDisplayWorkArea");
+        return;
+      }
+
+      double width = std::get<double>(width_it->second);
+      double height = std::get<double>(height_it->second);
+      double max_work_area_fraction = std::get<double>(fraction_it->second);
+
+      POINT cursor_pos;
+      GetCursorPos(&cursor_pos);
+
+      HMONITOR monitor = MonitorFromPoint(cursor_pos, MONITOR_DEFAULTTONEAREST);
+      MONITORINFO monitor_info;
+      monitor_info.cbSize = sizeof(MONITORINFO);
+
+      if (!GetMonitorInfo(monitor, &monitor_info))
+      {
+        result->Error("MONITOR_ERROR", "Failed to get monitor info");
+        return;
+      }
+
+      const UINT dpi = FlutterDesktopGetDpiForMonitor(monitor);
+      const double dpi_scale = dpi <= 0 ? 1.0 : static_cast<double>(dpi) / 96.0;
+      const double safe_fraction = max_work_area_fraction <= 0 ? 1.0 : std::clamp(max_work_area_fraction, 0.0, 1.0);
+      const double work_area_width = static_cast<double>(monitor_info.rcWork.right - monitor_info.rcWork.left) / dpi_scale;
+      const double work_area_height = static_cast<double>(monitor_info.rcWork.bottom - monitor_info.rcWork.top) / dpi_scale;
+      const double max_width = work_area_width * safe_fraction;
+      const double max_height = work_area_height * safe_fraction;
+      const double constrained_width = width > max_width ? std::floor(max_width) : width;
+      const double constrained_height = height > max_height ? std::floor(max_height) : height;
+
+      flutter::EncodableMap response;
+      response[flutter::EncodableValue("width")] = flutter::EncodableValue(constrained_width <= 0 ? width : constrained_width);
+      response[flutter::EncodableValue("height")] = flutter::EncodableValue(constrained_height <= 0 ? height : constrained_height);
+      result->Success(flutter::EncodableValue(response));
     }
     else if (method_name == "show")
     {

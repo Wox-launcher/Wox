@@ -3,6 +3,7 @@ package modules
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"wox/plugin"
 	"wox/plugin/system/converter/core"
@@ -14,6 +15,7 @@ type unitSpec struct {
 	unitType core.UnitType
 	singular string
 	plural   string
+	symbol   string
 	toBase   func(decimal.Decimal) decimal.Decimal
 	fromBase func(decimal.Decimal) decimal.Decimal
 }
@@ -34,6 +36,8 @@ func NewUnitModule(ctx context.Context, api plugin.API) *UnitModule {
 		weightUnits      = `(?:mg|milligram|milligrams|g|gram|grams|kg|kilogram|kilograms|oz|ounce|ounces|lb|lbs|pound|pounds|t|ton|tons)`
 		temperatureUnits = `(?:°?\s*c|celsius|centigrade|°?\s*f|fahrenheit|°?\s*k|kelvin)`
 	)
+	storageGlossary := core.NewStorageGlossary()
+	storageUnits := storageUnitPattern(storageGlossary)
 
 	// Length, weight, and temperature add single-letter aliases like "m", "g", and "c".
 	// Matching the whole conversion query avoids stealing those tokens from the existing
@@ -57,6 +61,13 @@ func NewUnitModule(ctx context.Context, api plugin.API) *UnitModule {
 			Pattern:     numberPattern + `\s*(` + temperatureUnits + `)\s*(?:to|in|=\s*\?)\s*(` + temperatureUnits + `)`,
 			Priority:    1500,
 			Description: "Convert temperature units (e.g. 32f to c)",
+			Handler:     m.handleUnitConversion,
+			FullMatch:   true,
+		},
+		{
+			Pattern:     numberPattern + `\s*(` + storageUnits + `)\s*(?:to|in|=\s*\?)\s*(` + storageUnits + `)`,
+			Priority:    1500,
+			Description: "Convert byte aliases (e.g. 32 b to bytes)",
 			Handler:     m.handleUnitConversion,
 			FullMatch:   true,
 		},
@@ -187,6 +198,15 @@ func NewUnitModule(ctx context.Context, api plugin.API) *UnitModule {
 			return value.Add(decimal.RequireFromString("273.15"))
 		},
 	)
+	m.registerStorageUnit(storageGlossary, "B", "byte", "bytes", decimal.NewFromInt(1))
+	m.registerStorageUnit(storageGlossary, "KB", "kilobyte", "kilobytes", decimal.NewFromInt(1000))
+	m.registerStorageUnit(storageGlossary, "MB", "megabyte", "megabytes", decimal.NewFromInt(1000000))
+	m.registerStorageUnit(storageGlossary, "GB", "gigabyte", "gigabytes", decimal.NewFromInt(1000000000))
+	m.registerStorageUnit(storageGlossary, "TB", "terabyte", "terabytes", decimal.NewFromInt(1000000000000))
+	m.registerStorageUnit(storageGlossary, "KiB", "kibibyte", "kibibytes", decimal.NewFromInt(1024))
+	m.registerStorageUnit(storageGlossary, "MiB", "mebibyte", "mebibytes", decimal.NewFromInt(1048576))
+	m.registerStorageUnit(storageGlossary, "GiB", "gibibyte", "gibibytes", decimal.NewFromInt(1073741824))
+	m.registerStorageUnit(storageGlossary, "TiB", "tebibyte", "tebibytes", decimal.NewFromInt(1099511627776))
 
 	return m
 }
@@ -271,6 +291,28 @@ func (m *UnitModule) registerLinearUnit(aliases []string, unitType core.UnitType
 	}
 }
 
+// registerStorageUnit registers all glossary aliases for one canonical storage unit.
+func (m *UnitModule) registerStorageUnit(glossary core.StorageGlossary, symbol string, singular string, plural string, factor decimal.Decimal) {
+	spec := unitSpec{
+		unitType: core.UnitTypeStorage,
+		singular: singular,
+		plural:   plural,
+		symbol:   symbol,
+		toBase: func(value decimal.Decimal) decimal.Decimal {
+			return value.Mul(factor)
+		},
+		fromBase: func(value decimal.Decimal) decimal.Decimal {
+			return value.Div(factor)
+		},
+	}
+	for _, alias := range glossary.Aliases() {
+		unit, ok := glossary.ResolveStorageUnit(alias)
+		if ok && unit.Symbol == symbol {
+			m.units[normalizeUnitAlias(alias)] = spec
+		}
+	}
+}
+
 func (m *UnitModule) registerTemperatureUnit(aliases []string, displayName string, toBase func(decimal.Decimal) decimal.Decimal, fromBase func(decimal.Decimal) decimal.Decimal) {
 	spec := unitSpec{
 		unitType: core.UnitTypeTemperature,
@@ -314,7 +356,7 @@ func (m *UnitModule) formatValue(value decimal.Decimal, spec unitSpec) string {
 	displayValue := value
 	if spec.unitType == core.UnitTypeLength {
 		displayValue = value.Round(3)
-	} else {
+	} else if spec.unitType != core.UnitTypeStorage {
 		displayValue = value.Round(2)
 	}
 	displayText := displayValue.StringFixedBank(int32(max(displayValue.Exponent()*-1, 0)))
@@ -324,10 +366,21 @@ func (m *UnitModule) formatValue(value decimal.Decimal, spec unitSpec) string {
 	}
 
 	unitName := spec.plural
-	if value.Abs().Equal(decimal.NewFromInt(1)) {
+	if spec.unitType == core.UnitTypeStorage {
+		unitName = spec.symbol
+	} else if value.Abs().Equal(decimal.NewFromInt(1)) {
 		unitName = spec.singular
 	}
 	return fmt.Sprintf("%s %s", displayText, unitName)
+}
+
+func storageUnitPattern(glossary core.StorageGlossary) string {
+	aliases := glossary.Aliases()
+	escapedAliases := make([]string, 0, len(aliases))
+	for _, alias := range aliases {
+		escapedAliases = append(escapedAliases, regexp.QuoteMeta(alias))
+	}
+	return `(?i:(?:` + strings.Join(escapedAliases, `|`) + `))`
 }
 
 func normalizeUnitAlias(alias string) string {

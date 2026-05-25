@@ -157,6 +157,21 @@ class WindowsWindowManager extends BaseWindowManager {
     }
   }
 
+  /// Caps a preferred size to the cursor display work area.
+  Future<Size> constrainSizeToCursorDisplayWorkArea(Size preferredSize, {double maxWorkAreaFraction = 1}) async {
+    try {
+      final Map<dynamic, dynamic> result = await _channel.invokeMethod('constrainSizeToCursorDisplayWorkArea', {
+        'width': preferredSize.width,
+        'height': preferredSize.height,
+        'maxWorkAreaFraction': maxWorkAreaFraction,
+      });
+      return Size((result['width'] as num).toDouble(), (result['height'] as num).toDouble());
+    } catch (e) {
+      Logger.instance.error(const UuidV4().generate(), "Error constraining size to cursor display work area: $e");
+      return preferredSize;
+    }
+  }
+
   @override
   Future<void> show() async {
     try {
