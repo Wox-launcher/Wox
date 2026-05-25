@@ -8,6 +8,7 @@ import 'package:wox/utils/webview/wox_webview_session.dart';
 class WoxMacosWebViewPlatform implements WoxWebViewPlatform {
   static const MethodChannel _channel = MethodChannel('com.wox.webview_preview');
   final StreamController<void> _unhandledEscapeController = StreamController<void>.broadcast();
+  final StreamController<void> _startDraggingController = StreamController<void>.broadcast();
 
   WoxMacosWebViewPlatform() {
     _channel.setMethodCallHandler((call) async {
@@ -16,11 +17,18 @@ class WoxMacosWebViewPlatform implements WoxWebViewPlatform {
         return;
       }
 
+      if (call.method == 'startDragging') {
+        _startDraggingController.add(null);
+        return;
+      }
+
       throw MissingPluginException('Unknown method ${call.method}');
     });
   }
 
   Stream<void> get unhandledEscape => _unhandledEscapeController.stream;
+
+  Stream<void> get startDragging => _startDraggingController.stream;
 
   @override
   Future<WoxWebViewSession?> acquireSession(WoxPreviewWebviewData previewData) async {

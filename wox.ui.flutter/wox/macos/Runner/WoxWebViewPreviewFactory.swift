@@ -6,6 +6,7 @@ private let mobileUserAgent =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1"
 private let webViewPreviewMessageHandlerName = "woxWebViewPreview"
 private let unhandledEscapeMessageType = "woxUnhandledEscape"
+private let startDraggingMessageType = "woxStartDragging"
 
 private enum WoxWebViewSessionPolicy {
   case persistent
@@ -232,6 +233,10 @@ class WoxWebViewPreviewPlugin: NSObject {
   static func notifyUnhandledEscape() {
     methodChannel?.invokeMethod("unhandledEscape", arguments: nil)
   }
+
+  static func notifyStartDragging() {
+    methodChannel?.invokeMethod("startDragging", arguments: nil)
+  }
 }
 
 private final class WoxWebViewScriptMessageHandler: NSObject, WKScriptMessageHandler {
@@ -242,15 +247,18 @@ private final class WoxWebViewScriptMessageHandler: NSObject, WKScriptMessageHan
       return
     }
 
-    guard
-      let body = message.body as? [String: Any],
-      let type = body["type"] as? String,
-      type == unhandledEscapeMessageType
-    else {
+    guard let body = message.body as? [String: Any], let type = body["type"] as? String else {
       return
     }
 
-    WoxWebViewPreviewPlugin.notifyUnhandledEscape()
+    switch type {
+    case unhandledEscapeMessageType:
+      WoxWebViewPreviewPlugin.notifyUnhandledEscape()
+    case startDraggingMessageType:
+      WoxWebViewPreviewPlugin.notifyStartDragging()
+    default:
+      return
+    }
   }
 }
 
@@ -312,6 +320,13 @@ final class WoxWebViewPreviewNativeView: NSView, WKNavigationDelegate, WKUIDeleg
         forMainFrameOnly: true
       )
     )
+    userContentController.addUserScript(
+      WKUserScript(
+        source: makeStartDraggingScript(),
+        injectionTime: .atDocumentStart,
+        forMainFrameOnly: true
+      )
+    )
 
     if let injectCss, !injectCss.isEmpty {
       userContentController.addUserScript(
@@ -349,6 +364,90 @@ final class WoxWebViewPreviewNativeView: NSView, WKNavigationDelegate, WKUIDeleg
             window.webkit.messageHandlers.\(webViewPreviewMessageHandlerName).postMessage({ type: '\(unhandledEscapeMessageType)' });
           }, 0);
         }, true);
+      })();
+      """
+  }
+
+  // Mirrors the Windows WebView script so non-interactive page areas can start native window dragging.
+  private static func makeStartDraggingScript() -> String {
+    return """
+      (() => {
+        if (window.__woxStartDraggingInstalled__) {
+          return;
+        }
+
+        window.__woxStartDraggingInstalled__ = true;
+
+        const interactiveSelector = [
+          'a[href]',
+          'area[href]',
+          'button',
+          'input',
+          'textarea',
+          'select',
+          'option',
+          'summary',
+          'label',
+          '[contenteditable]',
+          '[role="button"]',
+          '[role="link"]',
+          '[role="textbox"]',
+          '[role="checkbox"]',
+          '[role="radio"]',
+          '[role="switch"]',
+          '[role="slider"]',
+          '[role="tab"]',
+          '[role="menuitem"]',
+          '[onclick]',
+          '[data-wox-no-drag]',
+          '[data-no-drag]',
+          '[draggable="true"]',
+        ].join(',');
+
+        const isInteractiveElement = (element) => {
+          if (!(element instanceof Element)) {
+            return false;
+          }
+
+          if (element.isContentEditable) {
+            return true;
+          }
+
+          return element.closest(interactiveSelector) !== null;
+        };
+
+        const isInteractiveTarget = (event) => {
+          const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+          for (const item of path) {
+            if (item === window || item === document) {
+              break;
+            }
+            if (isInteractiveElement(item)) {
+              return true;
+            }
+          }
+
+          return isInteractiveElement(event.target);
+        };
+
+        const isScrollbarClick = (event) => {
+          const root = document.documentElement;
+          if (!root) {
+            return false;
+          }
+
+          return event.clientX >= root.clientWidth || event.clientY >= root.clientHeight;
+        };
+
+        const handlePointerStart = (event) => {
+          if (event.defaultPrevented || event.button !== 0 || isScrollbarClick(event) || isInteractiveTarget(event)) {
+            return;
+          }
+
+          window.webkit.messageHandlers.\(webViewPreviewMessageHandlerName).postMessage({ type: '\(startDraggingMessageType)' });
+        };
+
+        document.addEventListener(window.PointerEvent ? 'pointerdown' : 'mousedown', handlePointerStart, true);
       })();
       """
   }

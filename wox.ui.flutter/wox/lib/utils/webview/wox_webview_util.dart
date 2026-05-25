@@ -59,6 +59,14 @@ class WoxWebViewUtil {
     return const Stream<void>.empty();
   }
 
+  static Stream<void> get startDragging {
+    if (Platform.isMacOS) {
+      return _macosPlatform.startDragging;
+    }
+
+    return const Stream<void>.empty();
+  }
+
   /// Acquires a webview session for the given preview data. The caller should call [releaseSession] when the session is no longer needed.
   static Future<WoxWebViewSession?> acquireSession(WoxPreviewWebviewData previewData) async {
     return _platform?.acquireSession(previewData);

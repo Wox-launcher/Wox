@@ -41,6 +41,7 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
   WoxWebViewSession? _session;
   StreamSubscription<WoxWebViewSessionAction>? _sessionActionSubscription;
   StreamSubscription<void>? _unhandledEscapeSubscription;
+  StreamSubscription<void>? _webViewStartDraggingSubscription;
   String? _windowsErrorMessage;
   Timer? _toolbarHideTimer;
   bool _isToolbarVisible = true;
@@ -61,6 +62,7 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
     super.initState();
     _refreshWindowsSession();
     _subscribeUnhandledEscape();
+    _subscribeWebViewStartDragging();
     _showToolbarTemporarily();
   }
 
@@ -78,6 +80,7 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
   void dispose() {
     _toolbarHideTimer?.cancel();
     _unhandledEscapeSubscription?.cancel();
+    _webViewStartDraggingSubscription?.cancel();
     unawaited(_releaseCurrentSession());
     super.dispose();
   }
@@ -86,6 +89,13 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
     _unhandledEscapeSubscription?.cancel();
     _unhandledEscapeSubscription = WoxWebViewUtil.unhandledEscape.listen((_) {
       _handleFallbackEscape();
+    });
+  }
+
+  void _subscribeWebViewStartDragging() {
+    _webViewStartDraggingSubscription?.cancel();
+    _webViewStartDraggingSubscription = WoxWebViewUtil.startDragging.listen((_) {
+      _handleWebViewStartDragging();
     });
   }
 
@@ -148,6 +158,9 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
         case WoxWebViewSessionAction.fallbackEscape:
           _handleFallbackEscape();
           break;
+        case WoxWebViewSessionAction.startDragging:
+          _handleWebViewStartDragging();
+          break;
       }
     });
   }
@@ -160,6 +173,10 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
     }
 
     launcherController.hideApp(traceId);
+  }
+
+  void _handleWebViewStartDragging() {
+    launcherController.windowDriver.startDragging();
   }
 
   void _focusWebViewIfQueryBoxHidden({WoxWebViewSession? session}) {

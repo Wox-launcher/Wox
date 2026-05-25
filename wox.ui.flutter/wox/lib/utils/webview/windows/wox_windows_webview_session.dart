@@ -153,6 +153,7 @@ class WoxWindowsWebViewSession implements WoxWebViewSession {
   Future<void> _initialize() async {
     await controller.initialize();
     await controller.addScriptToExecuteOnDocumentCreated(WoxWebViewSupport.buildUnhandledEscapeScript(postMessageExpression: "window.chrome.webview.postMessage"));
+    await controller.addScriptToExecuteOnDocumentCreated(WoxWebViewSupport.buildStartDraggingScript(postMessageExpression: "window.chrome.webview.postMessage"));
     _acceleratorKeySubscription = controller.acceleratorKeyPressed.listen((event) {
       final isAltJ = event.keyEventKind == 2 && event.virtualKey == 0x4A;
 
@@ -173,8 +174,13 @@ class WoxWindowsWebViewSession implements WoxWebViewSession {
         return;
       }
 
-      if (message["type"] == WoxWebViewSupport.unhandledEscapeMessageType) {
-        _actions.add(WoxWebViewSessionAction.fallbackEscape);
+      switch (message["type"]) {
+        case WoxWebViewSupport.unhandledEscapeMessageType:
+          _actions.add(WoxWebViewSessionAction.fallbackEscape);
+          break;
+        case WoxWebViewSupport.startDraggingMessageType:
+          _actions.add(WoxWebViewSessionAction.startDragging);
+          break;
       }
     });
     await controller.setBackgroundColor(Colors.transparent);
