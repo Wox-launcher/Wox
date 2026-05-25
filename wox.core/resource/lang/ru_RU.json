@@ -1206,7 +1206,7 @@
   "ui_action_webview_go_back": "Назад",
   "ui_action_webview_go_forward": "Вперед",
   "ui_action_webview_open_in_browser": "Открыть в браузере",
-  "ui_action_webview_hide_wox": "Скрыть Wox",
+  "ui_action_webview_exit_page": "Выйти с этой страницы",
   "ui_action_webview_open_inspector": "Открыть инспектор",
   "ui_action_webview_clear_state": "Очистить состояние WebView",
   "ui_no_matches": "Нет совпадений",

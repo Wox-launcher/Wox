@@ -1355,7 +1355,7 @@
   "ui_action_webview_go_back": "后退",
   "ui_action_webview_go_forward": "前进",
   "ui_action_webview_open_in_browser": "在浏览器中打开",
-  "ui_action_webview_hide_wox": "隐藏 Wox",
+  "ui_action_webview_exit_page": "退出此网页",
   "ui_action_webview_open_inspector": "打开检查器",
   "ui_action_webview_clear_state": "清除网页状态",
   "ui_no_matches": "无匹配结果",

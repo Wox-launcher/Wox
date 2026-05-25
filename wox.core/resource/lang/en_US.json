@@ -1355,7 +1355,7 @@
   "ui_action_webview_go_back": "Go Back",
   "ui_action_webview_go_forward": "Go Forward",
   "ui_action_webview_open_in_browser": "Open in Browser",
-  "ui_action_webview_hide_wox": "Hide Wox",
+  "ui_action_webview_exit_page": "Exit This Page",
   "ui_action_webview_open_inspector": "Open Inspector",
   "ui_action_webview_clear_state": "Clear WebView State",
   "ui_no_matches": "No matches",

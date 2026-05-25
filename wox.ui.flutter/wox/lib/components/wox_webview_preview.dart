@@ -351,10 +351,10 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
                               onPressed: _openInBrowser,
                             ),
                             _buildToolbarButton(
-                              icon: Icons.visibility_off_rounded,
-                              tooltip: launcherController.tr("ui_action_webview_hide_wox"),
+                              icon: Icons.exit_to_app_rounded,
+                              tooltip: launcherController.tr("ui_action_webview_exit_page"),
                               iconColor: iconColor,
-                              onPressed: _hideWox,
+                              onPressed: _exitWebPage,
                             ),
                             Expanded(child: _buildToolbarDragHandle()),
                           ],
@@ -453,7 +453,7 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
     unawaited(_openCurrentUrlInBrowser());
   }
 
-  void _hideWox() {
+  void _exitWebPage() {
     unawaited(launcherController.hideApp(const UuidV4().generate()));
   }
 
