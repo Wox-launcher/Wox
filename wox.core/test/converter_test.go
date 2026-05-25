@@ -450,6 +450,45 @@ func TestConverterUnits(t *testing.T) {
 			ExpectedTitle:  "2 bytes",
 			ExpectedAction: "Copy",
 		},
+		{
+			Name:           "Storage decimal gigabyte family",
+			Query:          "32 bytes to gb",
+			ExpectedTitle:  "",
+			ExpectedAction: "Copy",
+			TitleCheck: func(title string) bool {
+				return strings.Contains(title, "0.000000032") && strings.Contains(title, "gigabytes") && !strings.Contains(title, "gibibytes")
+			},
+		},
+		{
+			Name:           "Storage binary gibibyte family",
+			Query:          "32 bytes to gib",
+			ExpectedTitle:  "",
+			ExpectedAction: "Copy",
+			TitleCheck: func(title string) bool {
+				return strings.Contains(title, "0.0000000298023224") && strings.Contains(title, "gibibytes")
+			},
+		},
+		{
+			Name:           "Storage gb ambiguity resolves to decimal bytes",
+			Query:          "1 gb to bytes",
+			ExpectedTitle:  "1000000000 bytes",
+			ExpectedAction: "Copy",
+		},
+		{
+			Name:           "Storage gib preserves binary bytes",
+			Query:          "1 gib to bytes",
+			ExpectedTitle:  "1073741824 bytes",
+			ExpectedAction: "Copy",
+		},
+		{
+			Name:           "Storage decimal to binary explicit control",
+			Query:          "1 gb to gib",
+			ExpectedTitle:  "",
+			ExpectedAction: "Copy",
+			TitleCheck: func(title string) bool {
+				return strings.Contains(title, "0.9313225746154785") && strings.Contains(title, "gibibytes")
+			},
+		},
 	}
 
 	suite.RunQueryTests(tests)
