@@ -17,8 +17,9 @@ import 'package:wox/utils/wox_interface_size_util.dart';
 class WoxTerminalPreviewView extends StatefulWidget {
   final WoxPreview woxPreview;
   final WoxTheme woxTheme;
+  final WoxLauncherController controller;
 
-  const WoxTerminalPreviewView({super.key, required this.woxPreview, required this.woxTheme});
+  const WoxTerminalPreviewView({super.key, required this.woxPreview, required this.woxTheme, required this.controller});
 
   @override
   State<WoxTerminalPreviewView> createState() => _WoxTerminalPreviewViewState();
@@ -38,7 +39,7 @@ class _WoxTerminalPreviewViewState extends State<WoxTerminalPreviewView> {
   static const int loadMoreBytes = 64 * 1024;
   static const double topLoadTriggerOffset = 16;
 
-  final controller = Get.find<WoxLauncherController>();
+  WoxLauncherController get controller => widget.controller;
   final scrollController = ScrollController();
   final searchController = TextEditingController();
   final searchFocusNode = FocusNode();

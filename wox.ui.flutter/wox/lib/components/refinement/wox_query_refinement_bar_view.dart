@@ -10,8 +10,10 @@ import 'wox_query_refinement_single_select_view.dart';
 import 'wox_query_refinement_sort_view.dart';
 import 'wox_query_refinement_toggle_view.dart';
 
-class WoxQueryRefinementBarView extends GetView<WoxLauncherController> {
-  const WoxQueryRefinementBarView({super.key});
+class WoxQueryRefinementBarView extends StatelessWidget {
+  const WoxQueryRefinementBarView({super.key, required this.controller});
+
+  final WoxLauncherController controller;
 
   Widget _buildRefinement(WoxQueryRefinement refinement) {
     final selectedValues = controller.getQueryRefinementSelectedValues(refinement.id);
@@ -21,13 +23,13 @@ class WoxQueryRefinementBarView extends GetView<WoxLauncherController> {
 
     switch (refinement.type) {
       case "singleSelect":
-        return WoxQueryRefinementSingleSelectView(refinement: refinement, selectedValues: selectedValues, onChanged: handleChanged);
+        return WoxQueryRefinementSingleSelectView(launcherController: controller, refinement: refinement, selectedValues: selectedValues, onChanged: handleChanged);
       case "multiSelect":
-        return WoxQueryRefinementMultiSelectView(refinement: refinement, selectedValues: selectedValues, onChanged: handleChanged);
+        return WoxQueryRefinementMultiSelectView(launcherController: controller, refinement: refinement, selectedValues: selectedValues, onChanged: handleChanged);
       case "toggle":
-        return WoxQueryRefinementToggleView(refinement: refinement, selectedValues: selectedValues, onChanged: handleChanged);
+        return WoxQueryRefinementToggleView(launcherController: controller, refinement: refinement, selectedValues: selectedValues, onChanged: handleChanged);
       case "sort":
-        return WoxQueryRefinementSortView(refinement: refinement, selectedValues: selectedValues, onChanged: handleChanged);
+        return WoxQueryRefinementSortView(launcherController: controller, refinement: refinement, selectedValues: selectedValues, onChanged: handleChanged);
       default:
         return const SizedBox.shrink();
     }

@@ -47,8 +47,9 @@ class UpdatePreviewData {
 
 class WoxUpdateView extends StatefulWidget {
   final UpdatePreviewData data;
+  final WoxLauncherController launcherController;
 
-  const WoxUpdateView({super.key, required this.data});
+  const WoxUpdateView({super.key, required this.data, required this.launcherController});
 
   @override
   State<WoxUpdateView> createState() => _WoxUpdateViewState();
@@ -159,7 +160,7 @@ class _WoxUpdateViewState extends State<WoxUpdateView> {
 
   @override
   Widget build(BuildContext context) {
-    final launcherController = Get.find<WoxLauncherController>();
+    final launcherController = widget.launcherController;
     final theme = WoxThemeUtil.instance.currentTheme.value;
     final fontColor = safeFromCssColor(theme.previewFontColor);
     final data = widget.data;

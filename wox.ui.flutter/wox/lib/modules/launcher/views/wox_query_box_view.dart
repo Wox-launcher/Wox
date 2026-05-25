@@ -22,8 +22,10 @@ import 'package:wox/utils/wox_interface_size_util.dart';
 import 'package:wox/utils/wox_text_measure_util.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 
-class WoxQueryBoxView extends GetView<WoxLauncherController> {
-  const WoxQueryBoxView({super.key});
+class WoxQueryBoxView extends StatelessWidget {
+  const WoxQueryBoxView({super.key, required this.controller});
+
+  final WoxLauncherController controller;
 
   bool _isSubmitKey(LogicalKeyboardKey key) {
     return key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.numpadEnter;
@@ -474,6 +476,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
             right: 6,
             height: queryBoxHeight,
             child: WoxDragMoveArea(
+              onDragStart: controller.windowDriver.startDragging,
               onDragEnd: () {
                 controller.focusQueryBox();
               },

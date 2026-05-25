@@ -61,31 +61,38 @@ class _FakeScreenshotBridge implements ScreenshotPlatformBridge {
   }
 
   @override
-  Future<ScreenshotWorkspacePresentation> presentCaptureWorkspace(ScreenshotRect nativeWorkspaceBounds) async {
+  Future<ScreenshotWorkspacePresentation> presentCaptureWorkspace(ScreenshotRect nativeWorkspaceBounds, {int? windowHandle}) async {
     if (presentation != null) {
       return presentation!(nativeWorkspaceBounds);
     }
     if (delegateNativePresentation) {
-      return _delegate.presentCaptureWorkspace(nativeWorkspaceBounds);
+      return _delegate.presentCaptureWorkspace(nativeWorkspaceBounds, windowHandle: windowHandle);
     }
     return ScreenshotWorkspacePresentation(workspaceBounds: nativeWorkspaceBounds, workspaceScale: 1, presentedByPlatform: false);
   }
 
   @override
-  Future<ScreenshotWorkspacePresentation> prepareCaptureWorkspace(ScreenshotRect nativeWorkspaceBounds) async {
+  Future<ScreenshotWorkspacePresentation> prepareCaptureWorkspace(ScreenshotRect nativeWorkspaceBounds, {int? windowHandle}) async {
     if (presentation != null) {
       return presentation!(nativeWorkspaceBounds);
     }
     if (delegateNativePresentation) {
-      return _delegate.prepareCaptureWorkspace(nativeWorkspaceBounds);
+      return _delegate.prepareCaptureWorkspace(nativeWorkspaceBounds, windowHandle: windowHandle);
     }
     return ScreenshotWorkspacePresentation(workspaceBounds: nativeWorkspaceBounds, workspaceScale: 1, presentedByPlatform: false);
   }
 
   @override
-  Future<void> revealPreparedCaptureWorkspace() async {
+  Future<void> revealPreparedCaptureWorkspace({int? windowHandle}) async {
     if (delegateNativePresentation) {
-      await _delegate.revealPreparedCaptureWorkspace();
+      await _delegate.revealPreparedCaptureWorkspace(windowHandle: windowHandle);
+    }
+  }
+
+  @override
+  Future<void> focusCaptureWorkspace({int? windowHandle}) async {
+    if (delegateNativePresentation) {
+      await _delegate.focusCaptureWorkspace(windowHandle: windowHandle);
     }
   }
 
@@ -98,9 +105,9 @@ class _FakeScreenshotBridge implements ScreenshotPlatformBridge {
   }
 
   @override
-  Future<void> dismissCaptureWorkspacePresentation() async {
+  Future<void> dismissCaptureWorkspacePresentation({int? windowHandle}) async {
     if (delegateNativePresentation) {
-      await _delegate.dismissCaptureWorkspacePresentation();
+      await _delegate.dismissCaptureWorkspacePresentation(windowHandle: windowHandle);
     }
   }
 
@@ -149,13 +156,27 @@ class _FakeScreenshotBridge implements ScreenshotPlatformBridge {
     required ScreenshotRect workspaceBounds,
     required ScreenshotRect selection,
     required ScreenshotRect controlsBounds,
+    int? windowHandle,
     String? traceId,
   }) async {
     if (delegateNativePresentation) {
       // The fake bridge mirrors the production bridge's optional trace id so
       // screenshot smoke tests keep compiling when observability data is added
       // to bridge calls without changing the fake capture behavior.
-      await _delegate.beginScrollingCaptureOverlay(workspaceBounds: workspaceBounds, selection: selection, controlsBounds: controlsBounds, traceId: traceId);
+      await _delegate.beginScrollingCaptureOverlay(
+        workspaceBounds: workspaceBounds,
+        selection: selection,
+        controlsBounds: controlsBounds,
+        windowHandle: windowHandle,
+        traceId: traceId,
+      );
+    }
+  }
+
+  @override
+  Future<void> moveScrollingCaptureControlsWindow({required ScreenshotRect controlsBounds, int? windowHandle}) async {
+    if (delegateNativePresentation) {
+      await _delegate.moveScrollingCaptureControlsWindow(controlsBounds: controlsBounds, windowHandle: windowHandle);
     }
   }
 

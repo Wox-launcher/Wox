@@ -11,14 +11,13 @@ import 'package:get/get.dart';
 import 'package:protocol_handler/protocol_handler.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_border_drag_move_view.dart';
-import 'package:wox/controllers/wox_ai_chat_controller.dart';
-import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/controllers/wox_screenshot_controller.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/utils/windows/window_manager.dart';
 import 'package:wox/utils/windows/window_manager_interface.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/modules/launcher/views/wox_launcher_view.dart';
+import 'package:wox/runtime/wox_app_runtime.dart';
 import 'package:wox/utils/env.dart';
 import 'package:wox/utils/heartbeat_checker.dart';
 import 'package:wox/utils/log.dart';
@@ -102,18 +101,18 @@ Future<void> initialServices(List<String> arguments) async {
   WoxInterfaceSizeUtil.instance.refreshFromDensity(WoxSettingUtil.instance.currentSetting.uiDensity);
   Logger.instance.setLogLevel(WoxSettingUtil.instance.currentSetting.logLevel);
 
-  var launcherController = WoxLauncherController();
+  final runtime = WoxAppRuntime.initializePrimary(sessionId: Env.sessionId);
+  var launcherController = runtime.primaryInstance.launcherController;
   launcherController.startDoctorCheckTimer();
   await launcherController.loadDiagnosticStatus(traceId);
 
-  await WoxWebsocketMsgUtil.instance.initialize(Uri.parse("ws://127.0.0.1:${Env.serverPort}/ws"), onMessageReceived: launcherController.handleWebSocketMessage);
+  await WoxWebsocketMsgUtil.instance.initialize(Uri.parse("ws://127.0.0.1:${Env.serverPort}/ws"), onMessageReceived: runtime.handleCoreWebSocketMessage);
   HeartbeatChecker().startChecking();
   Get.put(launcherController);
   var woxSettingController = WoxSettingController();
   Get.put(woxSettingController);
   Get.put(WoxScreenshotController());
-  var woxAIChatController = WoxAIChatController();
-  Get.put(woxAIChatController);
+  Get.put(runtime.primaryInstance.aiChatController);
 
   //load lang
   var langCode = WoxSettingUtil.instance.currentSetting.langCode;
@@ -183,7 +182,7 @@ class WoxApp extends StatefulWidget {
 }
 
 class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
-  final launcherController = Get.find<WoxLauncherController>();
+  final launcherController = WoxAppRuntime.instance.primaryInstance.launcherController;
   final screenshotController = Get.find<WoxScreenshotController>();
   final settingController = Get.find<WoxSettingController>();
 
@@ -263,7 +262,8 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
         launcherController.focusQueryBox();
         launcherController.saveWindowPositionIfNeeded();
       },
-      child: const WoxLauncherView(),
+      onDragStart: launcherController.windowDriver.startDragging,
+      child: WoxLauncherView(controller: launcherController),
     );
   }
 }

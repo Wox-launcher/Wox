@@ -30,8 +30,9 @@ import 'package:wox/utils/log.dart';
 
 class WoxQueryRequirementSettingsPreviewView extends StatefulWidget {
   final QueryRequirementSettingsPreviewData data;
+  final WoxLauncherController launcherController;
 
-  const WoxQueryRequirementSettingsPreviewView({super.key, required this.data});
+  const WoxQueryRequirementSettingsPreviewView({super.key, required this.data, required this.launcherController});
 
   @override
   State<WoxQueryRequirementSettingsPreviewView> createState() => _WoxQueryRequirementSettingsPreviewViewState();
@@ -139,7 +140,7 @@ class _WoxQueryRequirementSettingsPreviewViewState extends State<WoxQueryRequire
       if (!mounted) {
         return;
       }
-      Get.find<WoxLauncherController>().onRefreshQuery(traceId, false);
+      widget.launcherController.onRefreshQuery(traceId, false);
     } catch (e) {
       Logger.instance.error(traceId, "failed to save query requirement settings: $e");
       if (!mounted) {

@@ -24,7 +24,6 @@ import 'package:wox/entity/wox_list_item.dart';
 import 'package:wox/entity/screenshot_session.dart';
 import 'package:wox/models/doctor_check_result.dart';
 import 'package:wox/utils/wox_theme_util.dart';
-import 'package:wox/utils/windows/window_manager.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_image.dart';
@@ -49,6 +48,7 @@ import 'package:wox/enums/wox_selection_type_enum.dart';
 import 'package:wox/enums/wox_show_source_enum.dart';
 import 'package:wox/modules/onboarding/views/wox_onboarding_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_view.dart';
+import 'package:wox/runtime/wox_window_driver.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/env.dart';
@@ -68,6 +68,19 @@ import 'package:wox/utils/window_flicker_detector.dart';
 import 'package:wox/utils/color_util.dart';
 
 class WoxLauncherController extends GetxController {
+  WoxLauncherController({required this.sessionId, required this.windowDriver, required this.isPrimaryInstance});
+
+  final String sessionId;
+  final WoxWindowDriver windowDriver;
+  final bool isPrimaryInstance;
+  WoxAIChatController? aiChatController;
+
+  WoxAIChatController get activeAIChatController => aiChatController ?? Get.find<WoxAIChatController>();
+
+  Future<dynamic> sendWebsocketMessage(WoxWebsocketMsg msg) {
+    return WoxWebsocketMsgUtil.instance.sendMessage(msg, sessionId: sessionId);
+  }
+
   static const int _slowLauncherActivationWarningThresholdMs = 20;
   static const String localActionTogglePreviewFullscreenId = "__local_toggle_preview_fullscreen__";
   static const String localActionPreviewSearchId = "__local_preview_search__";
@@ -205,8 +218,7 @@ class WoxLauncherController extends GetxController {
   double forceWindowWidth = 0;
   int forceMaxResultCount = 0;
   var forceHideOnBlur = false;
-  // Used to store the current main query before a temporary query source (tray query / selection query / query hotkey query)
-  // overwrites it, so that we can restore the main query after hiding.
+  // Used to store the current main query before a query-hotkey source overwrites it, so that we can restore the main query after hiding.
   PlainQuery? queryBeforeTemporaryQuery;
   String? queryBeforeTemporaryQuerySource;
   double? windowHeightBeforeTemporaryQuery;
@@ -413,7 +425,7 @@ class WoxLauncherController extends GetxController {
     if (isOnboardingWindowOpen.value) {
       isOnboardingWindowOpen.value = false;
       await WoxMultipleWindow.closeWindow(WoxMultipleWindowIds.onboarding);
-      await WoxApi.instance.onOnboarding(const UuidV4().generate(), false);
+      await WoxApi.instance.onOnboarding(const UuidV4().generate(), false, sessionId: sessionId);
     }
 
     queryBoxTextFieldController.clear();
@@ -459,7 +471,7 @@ class WoxLauncherController extends GetxController {
         onItemsEmpty: onResultItemsEmpty,
         itemHeightGetter: () => WoxThemeUtil.instance.getResultItemHeight(),
       ),
-      tag: 'result',
+      tag: 'result-$sessionId',
     );
 
     resultGridViewController = Get.put(
@@ -470,7 +482,7 @@ class WoxLauncherController extends GetxController {
         onItemActive: onResultItemActivated,
         onItemsEmpty: onResultItemsEmpty,
       ),
-      tag: 'grid',
+      tag: 'grid-$sessionId',
     );
 
     actionListViewController = Get.put(
@@ -481,7 +493,7 @@ class WoxLauncherController extends GetxController {
         onFilterBoxEscPressed: hideActionPanel,
         itemHeightGetter: () => WoxThemeUtil.instance.getActionItemHeight(),
       ),
-      tag: 'action',
+      tag: 'action-$sessionId',
     );
 
     // Add focus listener to query box
@@ -508,7 +520,7 @@ class WoxLauncherController extends GetxController {
         hideFormActionPanel(traceId, reason: "query box gained focus");
 
         // Call API when query box gains focus
-        WoxApi.instance.onQueryBoxFocus(traceId);
+        WoxApi.instance.onQueryBoxFocus(traceId, sessionId: sessionId);
       }
     });
 
@@ -1509,7 +1521,7 @@ class WoxLauncherController extends GetxController {
             preventHideAfterAction: action.preventHideAfterAction,
             isDefault: action.isDefault,
             handler: (traceId) {
-              WoxWebsocketMsgUtil.instance.sendMessage(
+              sendWebsocketMessage(
                 WoxWebsocketMsg(
                   requestId: const UuidV4().generate(),
                   traceId: traceId,
@@ -1649,7 +1661,7 @@ class WoxLauncherController extends GetxController {
       return;
     }
 
-    var isVisible = await windowManager.isVisible();
+    var isVisible = await windowDriver.isVisible();
     if (isVisible) {
       hideApp(traceId);
     } else {
@@ -1737,18 +1749,18 @@ class WoxLauncherController extends GetxController {
     // Handle different position types
     // on linux, we need to show first and then set position or center it
     if (Platform.isLinux) {
-      await windowManager.show();
+      await windowDriver.show();
     }
 
     // Apply position+size together before showing to avoid opening with stale width.
-    await windowManager.setBounds(targetPosition, Size(targetWidth, targetHeight));
+    await windowDriver.setBounds(targetPosition, Size(targetWidth, targetHeight));
 
     // Set always-on-top BEFORE show() so the TOPMOST flag is already in place
     // when the window becomes visible, avoiding transient blur on Windows.
-    await windowManager.setAlwaysOnTop(true);
-    await windowManager.show();
+    await windowDriver.setAlwaysOnTop(true);
+    await windowDriver.show();
     final visibleActivationCost = _captureDevLauncherVisibleActivationCost(params);
-    await windowManager.focus();
+    await windowDriver.focus();
 
     // Workaround for Windows DWM Acrylic bug:
     // When resizing a hidden window to its full height, DWM caching fails to compose the transparent alpha channel upon showing.
@@ -1771,13 +1783,13 @@ class WoxLauncherController extends GetxController {
     if (params.isQueryFocus) {
       Logger.instance.debug(traceId, "need to auto focus to chat input on show app (query focus)");
       if (isShowPreviewPanel.value && currentPreview.value.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code) {
-        final chatController = Get.find<WoxAIChatController>();
+        final chatController = activeAIChatController;
         chatController.focusToChatInput(traceId);
         enterPreviewFullscreen(traceId);
       }
     }
 
-    WoxApi.instance.onShow(traceId);
+    WoxApi.instance.onShow(traceId, sessionId: sessionId);
     unawaited(refreshGlance(traceId, "windowShown"));
   }
 
@@ -1842,10 +1854,11 @@ class WoxLauncherController extends GetxController {
   }
 
   bool shouldRestoreQueryAfterHide(String showSource) {
-    return showSource == WoxShowSourceEnum.WOX_SHOW_SOURCE_TRAY_QUERY.code ||
-        showSource == WoxShowSourceEnum.WOX_SHOW_SOURCE_QUERY_HOTKEY.code ||
-        showSource == WoxShowSourceEnum.WOX_SHOW_SOURCE_SELECTION.code ||
-        showSource == WoxShowSourceEnum.WOX_SHOW_SOURCE_EXPLORER.code;
+    if (!isPrimaryInstance) {
+      return false;
+    }
+
+    return showSource == WoxShowSourceEnum.WOX_SHOW_SOURCE_QUERY_HOTKEY.code;
   }
 
   void preserveQueryBeforeTemporaryQuery(String traceId, String showSource) {
@@ -1898,7 +1911,7 @@ class WoxLauncherController extends GetxController {
     // hide first to avoid the potential delay caused by some heavy operations in onHide callback
     // E.g. on tray query mode, hideActionPanel will call resize height, which may cause a noticeable
     // resize animation if the window is still visible while resizing, so we hide the window first and then do the rest of the operations
-    await windowManager.hide();
+    await windowDriver.hide();
 
     //clear query box text if query type is selection or launch mode is fresh
     if (currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code || lastLaunchMode == WoxLaunchModeEnum.WOX_LAUNCH_MODE_FRESH.code) {
@@ -1919,19 +1932,22 @@ class WoxLauncherController extends GetxController {
     resetLayoutState(traceId);
 
     if (!suppressBackendHideForScreenshot) {
-      await WoxApi.instance.onHide(traceId);
+      await WoxApi.instance.onHide(traceId, sessionId: sessionId);
     }
     await restoreQueryAfterTemporaryQuery(traceId);
   }
 
   void saveWindowPositionIfNeeded() {
+    if (!isPrimaryInstance) {
+      return;
+    }
     final setting = WoxSettingUtil.instance.currentSetting;
     if (setting.showPosition == WoxPositionTypeEnum.POSITION_TYPE_LAST_LOCATION.code) {
       // Run in async task with delay to ensure window position is fully updated
       Future.delayed(const Duration(milliseconds: 500), () async {
         final traceId = const UuidV4().generate();
         try {
-          final position = await windowManager.getPosition();
+          final position = await windowDriver.getPosition();
           await WoxApi.instance.saveWindowPosition(traceId, position.dx.toInt(), position.dy.toInt());
         } catch (e) {
           Logger.instance.error(traceId, "Failed to save window position: $e");
@@ -2018,7 +2034,7 @@ class WoxLauncherController extends GetxController {
     // only focus when window is visible
     // otherwise it will gain focus but not visible, causing some issues on windows
     // e.g. active window snapshot is wrong
-    final isVisible = await windowManager.isVisible();
+    final isVisible = await windowDriver.isVisible();
     if (!isVisible) {
       return;
     }
@@ -2240,7 +2256,7 @@ class WoxLauncherController extends GetxController {
       showFormActionPanel(traceId, action, result.id);
       return;
     } else {
-      await WoxWebsocketMsgUtil.instance.sendMessage(
+      await sendWebsocketMessage(
         WoxWebsocketMsg(
           requestId: const UuidV4().generate(),
           traceId: traceId,
@@ -2271,7 +2287,7 @@ class WoxLauncherController extends GetxController {
       return;
     }
 
-    await WoxWebsocketMsgUtil.instance.sendMessage(
+    await sendWebsocketMessage(
       WoxWebsocketMsg(
         requestId: const UuidV4().generate(),
         traceId: traceId,
@@ -2340,7 +2356,7 @@ class WoxLauncherController extends GetxController {
     prepareQueryLayoutOnQueryChanged(traceId, currentQuery.value);
 
     try {
-      final response = await WoxWebsocketMsgUtil.instance.sendMessage(
+      final response = await sendWebsocketMessage(
         WoxWebsocketMsg(
           requestId: const UuidV4().generate(),
           traceId: traceId,
@@ -2432,7 +2448,7 @@ class WoxLauncherController extends GetxController {
 
     if (query.isEmpty) {
       try {
-        await WoxWebsocketMsgUtil.instance.sendMessage(
+        await sendWebsocketMessage(
           WoxWebsocketMsg(
             requestId: const UuidV4().generate(),
             traceId: traceId,
@@ -2462,7 +2478,7 @@ class WoxLauncherController extends GetxController {
     }
 
     final currentQueryId = query.queryId;
-    final isVisible = await windowManager.isVisible();
+    final isVisible = await windowDriver.isVisible();
     // If app is hidden (e.g. tray query will trigger change query first then showapp), clear immediately so old results won't flash when shown.
     if (!isVisible) {
       cancelPendingResultTransitions();
@@ -2486,7 +2502,7 @@ class WoxLauncherController extends GetxController {
     // Record query start time for performance metrics
     queryStartTimeMap[traceId] = DateTime.now().millisecondsSinceEpoch;
 
-    WoxWebsocketMsgUtil.instance.sendMessage(
+    sendWebsocketMessage(
       WoxWebsocketMsg(
         requestId: const UuidV4().generate(),
         traceId: traceId,
@@ -2552,7 +2568,7 @@ class WoxLauncherController extends GetxController {
     } else if (msg.method == "ChangeQuery") {
       final showSource = msg.data['ShowSource'] as String? ?? WoxShowSourceEnum.WOX_SHOW_SOURCE_DEFAULT.code;
       if (shouldRestoreQueryAfterHide(showSource)) {
-        // Temporary query sources such as tray query, query hotkey, or selection query should not replace the main query session permanently.
+        // Query hotkeys that still reuse the primary launcher should not replace the main query session permanently.
         preserveQueryBeforeTemporaryQuery(msg.traceId, showSource);
       }
       await onQueryChanged(msg.traceId, PlainQuery.fromJson(msg.data), "receive change query from wox", moveCursorToEnd: true);
@@ -2583,7 +2599,7 @@ class WoxLauncherController extends GetxController {
       responseWoxWebsocketRequest(msg, true, files);
     } else if (msg.method == "CaptureScreenshot") {
       final screenshotController = Get.find<WoxScreenshotController>();
-      final result = await screenshotController.startCaptureSession(msg.traceId, CaptureScreenshotRequest.fromJson(msg.data));
+      final result = await screenshotController.startCaptureSession(msg.traceId, CaptureScreenshotRequest.fromJson(msg.data), ownerLauncherController: this);
       responseWoxWebsocketRequest(msg, true, result.toJson());
     } else if (msg.method == "OpenSettingWindow") {
       openSetting(msg.traceId, SettingWindowContext.fromJson(msg.data));
@@ -2612,13 +2628,13 @@ class WoxLauncherController extends GetxController {
     } else if (msg.method == "GetCurrentQuery") {
       responseWoxWebsocketRequest(msg, true, currentQuery.value.toJson());
     } else if (msg.method == "FocusToChatInput") {
-      Get.find<WoxAIChatController>().focusToChatInput(msg.traceId);
+      activeAIChatController.focusToChatInput(msg.traceId);
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "SendChatResponse") {
       handleChatResponse(msg.traceId, WoxAIChatData.fromJson(msg.data));
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "ReloadChatResources") {
-      Get.find<WoxAIChatController>().reloadChatResources(msg.traceId, resourceName: msg.data as String);
+      activeAIChatController.reloadChatResources(msg.traceId, resourceName: msg.data as String);
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "ReloadSettingPlugins") {
       Get.find<WoxSettingController>().reloadPlugins(msg.traceId);
@@ -2740,7 +2756,7 @@ class WoxLauncherController extends GetxController {
   }
 
   void responseWoxWebsocketRequest(WoxWebsocketMsg request, bool success, dynamic data) {
-    WoxWebsocketMsgUtil.instance.sendMessage(
+    sendWebsocketMessage(
       WoxWebsocketMsg(
         requestId: request.requestId,
         traceId: request.traceId,
@@ -2784,7 +2800,7 @@ class WoxLauncherController extends GetxController {
   }
 
   Future<void> subscribeTerminalSession(String traceId, String sessionId, {int cursor = 0}) async {
-    await WoxWebsocketMsgUtil.instance.sendMessage(
+    await sendWebsocketMessage(
       WoxWebsocketMsg(
         requestId: const UuidV4().generate(),
         traceId: traceId,
@@ -2796,7 +2812,7 @@ class WoxLauncherController extends GetxController {
   }
 
   Future<void> unsubscribeTerminalSession(String traceId, String sessionId) async {
-    await WoxWebsocketMsgUtil.instance.sendMessage(
+    await sendWebsocketMessage(
       WoxWebsocketMsg(
         requestId: const UuidV4().generate(),
         traceId: traceId,
@@ -2808,7 +2824,7 @@ class WoxLauncherController extends GetxController {
   }
 
   Future<Map<String, dynamic>?> searchTerminalSession(String traceId, String sessionId, String pattern, {int cursor = 0, bool backward = false, bool caseSensitive = false}) async {
-    final response = await WoxWebsocketMsgUtil.instance.sendMessage(
+    final response = await sendWebsocketMessage(
       WoxWebsocketMsg(
         requestId: const UuidV4().generate(),
         traceId: traceId,
@@ -3132,7 +3148,7 @@ class WoxLauncherController extends GetxController {
   }
 
   Future<void> resizeHeight({required String traceId, String reason = "unspecified", bool forceDwmRecomposition = false, double? overrideTargetHeight}) async {
-    final currentSize = await windowManager.getSize();
+    final currentSize = await windowDriver.getSize();
     var totalHeight = overrideTargetHeight ?? calculateWindowHeight();
 
     // Force DWM to recompose Acrylic by adding a single pixel to bypass caching identical sizes
@@ -3169,7 +3185,7 @@ class WoxLauncherController extends GetxController {
       if (isQueryBoxAtBottom.value) {
         // When the query box is anchored to the bottom, grow the window upward.
         // Use getPosition + getSize to compute the current bottom edge, then adjust top to grow upward.
-        final pos = await windowManager.getPosition();
+        final pos = await windowDriver.getPosition();
         double currentBottom = pos.dy + currentSize.height;
 
         if (currentBottom <= 0) {
@@ -3177,8 +3193,8 @@ class WoxLauncherController extends GetxController {
         } else {
           double newTop = currentBottom - totalHeight;
           // Apply position and size together to avoid intermediate-frame flicker.
-          await windowManager.setBounds(Offset(pos.dx, newTop), targetSize);
-          final resizedSize = await windowManager.getSize();
+          await windowDriver.setBounds(Offset(pos.dx, newTop), targetSize);
+          final resizedSize = await windowDriver.getSize();
           Logger.instance.debug(
             traceId,
             "resize applied: reason=$reason, before=${formatWindowSize(currentSize)}, target=${formatWindowSize(targetSize)}, after=${formatWindowSize(resizedSize)}, mode=setBounds, growUpward=true",
@@ -3190,8 +3206,8 @@ class WoxLauncherController extends GetxController {
         }
       }
 
-      await windowManager.setSize(targetSize);
-      final resizedSize = await windowManager.getSize();
+      await windowDriver.setSize(targetSize);
+      final resizedSize = await windowDriver.getSize();
       Logger.instance.debug(
         traceId,
         "resize applied: reason=$reason, before=${formatWindowSize(currentSize)}, target=${formatWindowSize(targetSize)}, after=${formatWindowSize(resizedSize)}, mode=setSize, growUpward=false",
@@ -3468,7 +3484,7 @@ class WoxLauncherController extends GetxController {
     settingController.clearSettingSearch();
     settingController.activeNavPath.value = 'general';
 
-    await WoxApi.instance.onOnboarding(traceId, false);
+    await WoxApi.instance.onOnboarding(traceId, false, sessionId: sessionId);
 
     unawaited(() async {
       try {
@@ -3497,7 +3513,7 @@ class WoxLauncherController extends GetxController {
     );
 
     isSettingWindowOpen.value = true;
-    await WoxApi.instance.onSetting(traceId, true);
+    await WoxApi.instance.onSetting(traceId, true, sessionId: sessionId);
     _applySettingWindowContext(traceId, context);
     await hideLauncherFuture;
 
@@ -3549,7 +3565,7 @@ class WoxLauncherController extends GetxController {
     settingController.clearSettingSearch();
     settingController.settingFocusNode.unfocus();
     settingController.settingSearchFocusNode.unfocus();
-    unawaited(WoxApi.instance.onSetting(traceId, false));
+    unawaited(WoxApi.instance.onSetting(traceId, false, sessionId: sessionId));
   }
 
   Future<void> exitSetting(String traceId) async {
@@ -3561,7 +3577,7 @@ class WoxLauncherController extends GetxController {
 
     if (isSettingWindowOpen.value) {
       isSettingWindowOpen.value = false;
-      await WoxApi.instance.onSetting(traceId, false);
+      await WoxApi.instance.onSetting(traceId, false, sessionId: sessionId);
     }
     await WoxMultipleWindow.closeWindow(WoxMultipleWindowIds.settings);
   }
@@ -3570,7 +3586,7 @@ class WoxLauncherController extends GetxController {
     final wasOpen = isOnboardingWindowOpen.value;
     isOnboardingWindowOpen.value = false;
     if (notifyBackend && wasOpen) {
-      await WoxApi.instance.onOnboarding(traceId, false);
+      await WoxApi.instance.onOnboarding(traceId, false, sessionId: sessionId);
     }
     await WoxMultipleWindow.closeWindow(WoxMultipleWindowIds.onboarding);
     if (showLauncher) {
@@ -3585,7 +3601,7 @@ class WoxLauncherController extends GetxController {
 
     final traceId = const UuidV4().generate();
     isOnboardingWindowOpen.value = false;
-    unawaited(WoxApi.instance.onOnboarding(traceId, false));
+    unawaited(WoxApi.instance.onOnboarding(traceId, false, sessionId: sessionId));
     unawaited(WoxApi.instance.show(traceId));
   }
 
@@ -3599,7 +3615,7 @@ class WoxLauncherController extends GetxController {
     queryBoxFocusNode.unfocus();
     settingController.settingFocusNode.unfocus();
 
-    await WoxApi.instance.onSetting(traceId, false);
+    await WoxApi.instance.onSetting(traceId, false, sessionId: sessionId);
 
     await WoxThemeUtil.instance.loadTheme(traceId);
     await settingController.reloadSetting(traceId);
@@ -3618,7 +3634,7 @@ class WoxLauncherController extends GetxController {
       builder: (_) => const WoxOnboardingView(),
     );
     isOnboardingWindowOpen.value = true;
-    await WoxApi.instance.onOnboarding(traceId, true);
+    await WoxApi.instance.onOnboarding(traceId, true, sessionId: sessionId);
     await hideApp(traceId);
   }
 
@@ -3734,7 +3750,7 @@ class WoxLauncherController extends GetxController {
         scrollPosition: WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code,
       );
 
-      Get.find<WoxAIChatController>().handleChatResponse(traceId, data);
+      activeAIChatController.handleChatResponse(traceId, data);
     }
   }
 
@@ -3866,7 +3882,7 @@ class WoxLauncherController extends GetxController {
     final traceId = const UuidV4().generate();
     Logger.instance.info(traceId, "Received drop files: ${details.files.map((e) => e.path).join(", ")}");
 
-    await windowManager.focus();
+    await windowDriver.focus();
     focusQueryBox();
 
     canArrowUpHistory = false;

@@ -17,7 +17,6 @@ import 'package:wox/utils/log.dart';
 import 'package:wox/utils/multiplewindow/wox_multiple_window.dart';
 import 'package:wox/utils/multiplewindow/wox_multiple_window_ids.dart';
 import 'package:wox/utils/screenshot/screenshot_platform_bridge.dart';
-import 'package:wox/utils/windows/window_manager.dart';
 
 enum _ScrollingCaptureDirection { append, prepend }
 
@@ -100,6 +99,7 @@ class WoxScreenshotController extends GetxController {
   int _preparedDisplayRevision = 0;
   int _captureSessionRevision = 0;
   Completer<CaptureScreenshotResult>? _sessionCompleter;
+  WoxLauncherController? _ownerLauncherController;
   _SavedScreenshotWindowState? _savedWindowState;
   WoxMultipleWindowHandle? _screenshotWindow;
   CaptureScreenshotRequest? _activeRequest;
@@ -254,13 +254,14 @@ class WoxScreenshotController extends GetxController {
     return null;
   }
 
-  Future<CaptureScreenshotResult> startCaptureSession(String traceId, CaptureScreenshotRequest request) async {
+  Future<CaptureScreenshotResult> startCaptureSession(String traceId, CaptureScreenshotRequest request, {WoxLauncherController? ownerLauncherController}) async {
     if (_sessionCompleter != null && !_sessionCompleter!.isCompleted) {
       return CaptureScreenshotResult.failed(errorCode: 'busy', errorMessage: 'Screenshot session is already running');
     }
 
     _activeRequest = request;
     _sessionCompleter = Completer<CaptureScreenshotResult>();
+    _ownerLauncherController = ownerLauncherController ?? Get.find<WoxLauncherController>();
     await _prepareNewSession(traceId);
 
     try {
@@ -494,16 +495,16 @@ class WoxScreenshotController extends GetxController {
     stage.value = ScreenshotSessionStage.loading;
     isSessionActive.value = true;
 
-    final launcherController = Get.find<WoxLauncherController>();
+    final launcherController = _ownerLauncherController ?? Get.find<WoxLauncherController>();
     // The launcher query box can still hold primary focus from the action that started screenshot
     // capture. If that stale focus survives into the screenshot workspace, launcher-side IME and
     // focus listeners wake back up behind the overlay and can cancel the session before annotation
     // begins. Clear the launcher focus up front so the screenshot view becomes the only focus owner.
     FocusManager.instance.primaryFocus?.unfocus();
     launcherController.queryBoxFocusNode.unfocus();
-    final isVisible = await windowManager.isVisible();
-    final position = await windowManager.getPosition();
-    final size = await windowManager.getSize();
+    final isVisible = await launcherController.windowDriver.isVisible();
+    final position = await launcherController.windowDriver.getPosition();
+    final size = await launcherController.windowDriver.getSize();
     _savedWindowState = _SavedScreenshotWindowState(wasVisible: isVisible, position: position, size: size, forceHideOnBlur: launcherController.forceHideOnBlur);
 
     launcherController.forceHideOnBlur = false;
@@ -1478,7 +1479,7 @@ class WoxScreenshotController extends GetxController {
       return;
     }
 
-    final launcherController = Get.find<WoxLauncherController>();
+    final launcherController = _ownerLauncherController ?? Get.find<WoxLauncherController>();
     launcherController.forceHideOnBlur = savedState.forceHideOnBlur;
 
     // The native multi-display selector can stay alive until Flutter confirms its workspace is
@@ -1489,17 +1490,17 @@ class WoxScreenshotController extends GetxController {
     await _closeScreenshotWindow();
 
     if (savedState.wasVisible && restoreVisibility) {
-      await windowManager.show();
-      await windowManager.focus();
-      await WoxApi.instance.onShow(traceId);
+      await launcherController.windowDriver.show();
+      await launcherController.windowDriver.focus();
+      await WoxApi.instance.onShow(traceId, sessionId: launcherController.sessionId);
       launcherController.focusQueryBox(selectAll: true);
     } else {
       if (!windowAlreadyHidden) {
         // Screenshot completion should leave Wox hidden. The previous restore path always tried to
         // show the launcher again before the session reset, which made the finished capture linger
         // on-screen and briefly re-opened Wox after the user had already confirmed the export.
-        await windowManager.hide();
-        await WoxApi.instance.onHide(traceId);
+        await launcherController.windowDriver.hide();
+        await WoxApi.instance.onHide(traceId, sessionId: launcherController.sessionId);
       }
     }
   }
@@ -1514,7 +1515,8 @@ class WoxScreenshotController extends GetxController {
     await _screenshotWindow?.hide();
     _isScreenshotWindowPresented = false;
     if (_savedWindowState?.wasVisible != true) {
-      await WoxApi.instance.onHide(traceId);
+      final owner = _ownerLauncherController;
+      await WoxApi.instance.onHide(traceId, sessionId: owner?.sessionId);
     }
   }
 
@@ -1524,6 +1526,7 @@ class WoxScreenshotController extends GetxController {
     _captureSessionRevision += 1;
     isSessionActive.value = false;
     _savedWindowState = null;
+    _ownerLauncherController = null;
     _activeRequest = null;
     _isScreenshotWindowPresented = false;
     _releaseSnapshotImageCaches(displaySnapshots);

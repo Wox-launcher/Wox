@@ -14,8 +14,10 @@ import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
 import 'package:wox/utils/color_util.dart';
 
-class WoxQueryResultView extends GetView<WoxLauncherController> {
-  const WoxQueryResultView({super.key});
+class WoxQueryResultView extends StatelessWidget {
+  const WoxQueryResultView({super.key, required this.controller});
+
+  final WoxLauncherController controller;
 
   Widget getActionPanelView() {
     if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: action panel view container");
@@ -195,7 +197,12 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                           future: controller.currentPreview.value.unWrap(const UuidV4().generate()),
                           builder: (context, snapshot) {
                             if (snapshot.hasData) {
-                              return WoxPreviewView(woxPreview: snapshot.data!, woxTheme: WoxThemeUtil.instance.currentTheme.value);
+                              return WoxPreviewView(
+                                woxPreview: snapshot.data!,
+                                woxTheme: WoxThemeUtil.instance.currentTheme.value,
+                                launcherController: controller,
+                                aiChatController: controller.activeAIChatController,
+                              );
                             } else if (snapshot.hasError) {
                               return Text("${snapshot.error}");
                             } else {
@@ -203,7 +210,12 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                             }
                           },
                         )
-                        : WoxPreviewView(woxPreview: controller.currentPreview.value, woxTheme: WoxThemeUtil.instance.currentTheme.value),
+                        : WoxPreviewView(
+                          woxPreview: controller.currentPreview.value,
+                          woxTheme: WoxThemeUtil.instance.currentTheme.value,
+                          launcherController: controller,
+                          aiChatController: controller.activeAIChatController,
+                        ),
               )
               : const SizedBox(),
     );

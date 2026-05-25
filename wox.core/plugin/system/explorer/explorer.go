@@ -710,58 +710,74 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 
 	go func() {
 		var (
-			active         bool
-			waitingVisible bool
-			waitingSince   time.Time
-			handoffUntil   time.Time
-			pending        string
-			pendingCtx     context.Context
+			active              bool
+			handoffUntil        time.Time
+			pending             string
+			pendingCtx          context.Context
+			explorerShowContext *common.ShowContext
 		)
 
 		resetState := func() {
-			waitingVisible = false
-			waitingSince = time.Time{}
 			handoffUntil = time.Time{}
 			pending = ""
 			pendingCtx = nil
+			explorerShowContext = nil
 		}
 
-		changeExplorerQuery := func(localCtx context.Context) {
-			if pending == "" {
-				return
+		resolveExplorerShowContext := func(localCtx context.Context) (common.ShowContext, bool) {
+			if explorerShowContext != nil {
+				return *explorerShowContext, true
 			}
-			queryText := "explorer " + pending
-			c.typeToSearchDebugLog(localCtx, "changeQuery %q", queryText)
-			c.api.ChangeQuery(localCtx, common.PlainQuery{
-				QueryType: plugin.QueryTypeInput,
-				QueryText: queryText,
-			})
-		}
 
-		showOverlay := func(localCtx context.Context) bool {
 			x, y, w, h, ok := GetActiveExplorerRect()
 			if !ok {
 				x, y, w, h, ok = GetActiveDialogRect()
 				if !ok {
 					c.typeToSearchDebugLog(localCtx, "showOverlay skipped (no active explorer/dialog rect)")
-					return false
+					return common.ShowContext{}, false
 				}
 			}
 			if w <= 0 || h <= 0 {
 				c.typeToSearchDebugLog(localCtx, "showOverlay skipped (invalid rect w=%d h=%d)", w, h)
-				return false
+				return common.ShowContext{}, false
 			}
 			c.typeToSearchDebugLog(localCtx, "showOverlay explorerRect=(%d,%d,%d,%d)", x, y, w, h)
 			woxSetting := setting.GetSettingManager().GetWoxSetting(localCtx)
 			initialWindowHeight := getExplorerInitialWindowHeight(localCtx)
 			position := getExplorerWindowPosition(common.WindowRect{X: x, Y: y, Width: w, Height: h}, woxSetting.AppWidth.Get()/2, initialWindowHeight)
-			plugin.GetPluginManager().GetUI().ShowApp(localCtx, common.ShowContext{
+			showContext := common.ShowContext{
 				HideToolbar:      true,
 				QueryBoxAtBottom: true,
 				HideOnBlur:       true,
 				ShowSource:       common.ShowSourceExplorer,
 				WindowPosition:   &position,
 				WindowWidth:      woxSetting.AppWidth.Get() / 2,
+			}
+			explorerShowContext = &showContext
+			return showContext, true
+		}
+
+		openExplorerQuery := func(localCtx context.Context) bool {
+			if pending == "" {
+				return true
+			}
+
+			showContext, ok := resolveExplorerShowContext(localCtx)
+			if !ok {
+				return false
+			}
+
+			queryText := "explorer " + pending
+			c.typeToSearchDebugLog(localCtx, "openExplorerInstance %q", queryText)
+			plugin.GetPluginManager().GetUI().OpenWoxInstance(localCtx, common.OpenWoxInstanceRequest{
+				Role:         common.WoxInstanceRoleSecondary,
+				InstanceName: string(common.ShowSourceExplorer),
+				Query: common.PlainQuery{
+					QueryId:   uuid.NewString(),
+					QueryType: plugin.QueryTypeInput,
+					QueryText: queryText,
+				},
+				ShowApp: showContext,
 			})
 			return true
 		}
@@ -776,19 +792,15 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 			case ev := <-events:
 				switch ev.eventType {
 				case overlayEventActivate:
-					c.typeToSearchDebugLog(ctx, "event activate active=%v waitingVisible=%v pending=%q", active, waitingVisible, pending)
+					c.typeToSearchDebugLog(ctx, "event activate active=%v pending=%q", active, pending)
 					active = true
-					// Bug fix: keep pending keys while waiting for visible and during the handoff
-					// grace window. ShowApp can trigger activation churn before all fast-typed
-					// keys have either been pushed through ChangeQuery or handed to Flutter's
-					// EditableText, so the old eager reset still dropped early characters.
-					if !waitingVisible && handoffUntil.IsZero() {
+					if handoffUntil.IsZero() {
 						resetState()
 					}
 				case overlayEventDeactivate:
-					c.typeToSearchDebugLog(ctx, "event deactivate active=%v waitingVisible=%v pending=%q", active, waitingVisible, pending)
+					c.typeToSearchDebugLog(ctx, "event deactivate active=%v pending=%q", active, pending)
 					active = false
-					if !waitingVisible && handoffUntil.IsZero() {
+					if handoffUntil.IsZero() {
 						resetState()
 					}
 				case overlayEventKey:
@@ -796,29 +808,15 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 					if localCtx == nil {
 						localCtx = ctx
 					}
-					visible := c.api.IsVisible(localCtx)
-					c.typeToSearchDebugLog(localCtx, "event key=%q active=%v visible=%v waitingVisible=%v pending=%q", ev.key, active, visible, waitingVisible, pending)
 					inHandoff := !handoffUntil.IsZero() && time.Now().Before(handoffUntil)
-					canCaptureHandoffKey := waitingVisible || inHandoff
-					if (!active && !canCaptureHandoffKey) || ev.key == "" {
-						c.typeToSearchDebugLog(localCtx, "ignore key=%q active=%v waitingVisible=%v handoff=%v", ev.key, active, waitingVisible, inHandoff)
+					visible := c.api.IsVisible(localCtx)
+					c.typeToSearchDebugLog(localCtx, "event key=%q active=%v visible=%v handoff=%v pending=%q", ev.key, active, visible, inHandoff, pending)
+					if (!active && !inHandoff) || ev.key == "" {
+						c.typeToSearchDebugLog(localCtx, "ignore key=%q active=%v handoff=%v", ev.key, active, inHandoff)
 						continue
 					}
-					if visible {
-						if !canCaptureHandoffKey {
-							c.typeToSearchDebugLog(localCtx, "ignore key=%q (wox visible)", ev.key)
-							continue
-						}
-						// Bug fix: Finder-to-Wox focus handoff is not atomic on macOS. Wox can
-						// become visible before the ticker starts the grace window and before
-						// Flutter's EditableText is ready, so fast typing after the first key was
-						// ignored here and also missed by Flutter. Treat waitingVisible as part of
-						// the handoff and push the full query immediately.
-						pending += strings.ToLower(ev.key)
-						changeExplorerQuery(localCtx)
-						waitingVisible = false
-						waitingSince = time.Time{}
-						handoffUntil = time.Now().Add(350 * time.Millisecond)
+					if visible && !inHandoff {
+						c.typeToSearchDebugLog(localCtx, "ignore key=%q (wox visible)", ev.key)
 						continue
 					}
 					if pendingCtx == nil {
@@ -827,43 +825,17 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 					}
 					pending += strings.ToLower(ev.key)
 					c.typeToSearchDebugLog(pendingCtx, "pending=%q", pending)
-					if !waitingVisible {
-						if !showOverlay(pendingCtx) {
-							c.typeToSearchDebugLog(pendingCtx, "showOverlay failed")
-							resetState()
-							continue
-						}
-						waitingVisible = true
-						waitingSince = time.Now()
+					// OpenWoxInstance is idempotent for the explorer instance name, so handoff
+					// keys refresh the same secondary window instead of touching the primary launcher.
+					if !openExplorerQuery(pendingCtx) {
+						c.typeToSearchDebugLog(pendingCtx, "openExplorerQuery failed")
+						resetState()
+						continue
 					}
+					handoffUntil = time.Now().Add(350 * time.Millisecond)
 				}
 			case <-ticker.C:
 				if !handoffUntil.IsZero() && time.Now().After(handoffUntil) {
-					resetState()
-					continue
-				}
-				if !waitingVisible {
-					continue
-				}
-				tickCtx := pendingCtx
-				if tickCtx == nil {
-					tickCtx = ctx
-				}
-				visible := c.api.IsVisible(tickCtx)
-				c.typeToSearchDebugLog(tickCtx, "ticker waitingVisible=%v visible=%v pending=%q active=%v", waitingVisible, visible, pending, active)
-				if visible {
-					changeExplorerQuery(tickCtx)
-					// Keep a short raw-key capture window after the first ChangeQuery. The
-					// previous immediate reset assumed Flutter had already taken keyboard focus,
-					// but macOS can still deliver the next few Finder key events before the
-					// launcher text input is ready, which dropped characters in fast typing.
-					waitingVisible = false
-					waitingSince = time.Time{}
-					handoffUntil = time.Now().Add(350 * time.Millisecond)
-					continue
-				}
-				if !waitingSince.IsZero() && time.Since(waitingSince) > 2*time.Second {
-					c.typeToSearchDebugLog(tickCtx, "timeout waiting for wox visible")
 					resetState()
 				}
 			}

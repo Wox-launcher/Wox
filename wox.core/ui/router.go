@@ -70,15 +70,16 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/runtime/restart":                  handleRuntimeRestart,
 
 	// events
-	"/on/focus/lost":       handleOnFocusLost,
-	"/on/ready":            handleOnUIReady,
-	"/on/show":             handleOnShow,
-	"/on/querybox/focus":   handleOnQueryBoxFocus,
-	"/on/hide":             handleOnHide,
-	"/on/setting":          handleOnSetting,
-	"/on/hotkey/recording": handleOnHotkeyRecording,
-	"/on/onboarding":       handleOnOnboarding,
-	"/usage/stats":         handleUsageStats,
+	"/on/focus/lost":         handleOnFocusLost,
+	"/on/ready":              handleOnUIReady,
+	"/on/show":               handleOnShow,
+	"/on/querybox/focus":     handleOnQueryBoxFocus,
+	"/on/hide":               handleOnHide,
+	"/on/setting":            handleOnSetting,
+	"/on/hotkey/recording":   handleOnHotkeyRecording,
+	"/on/onboarding":         handleOnOnboarding,
+	"/on/instance/destroyed": handleOnInstanceDestroyed,
+	"/usage/stats":           handleUsageStats,
 
 	// lang
 	"/lang/available": handleLangAvailable,
@@ -1594,15 +1595,10 @@ func handleTestTriggerSelectionHotkey(w http.ResponseWriter, r *http.Request) {
 
 	ctx := getTraceContext(r)
 	uiManager := GetUIManager()
-	uiManager.RefreshActiveWindowSnapshot(ctx)
-	uiManager.GetUI(ctx).ChangeQuery(ctx, common.PlainQuery{
-		QueryType:      plugin.QueryTypeSelection,
-		QuerySelection: selected,
-	})
-	time.Sleep(150 * time.Millisecond)
-	uiManager.GetUI(ctx).ShowApp(ctx, common.ShowContext{
-		ShowSource: common.ShowSourceSelection,
-	})
+	if err := uiManager.triggerSelectionQuery(ctx, selected); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
 
 	writeSuccessResponse(w, "")
 }
@@ -1804,6 +1800,12 @@ func handleOnOnboarding(w http.ResponseWriter, r *http.Request) {
 	}
 
 	GetUIManager().PostOnOnboarding(ctx, inOnboardingViewResult.Bool())
+	writeSuccessResponse(w, "")
+}
+
+func handleOnInstanceDestroyed(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	GetUIManager().PostOnInstanceDestroyed(ctx)
 	writeSuccessResponse(w, "")
 }
 

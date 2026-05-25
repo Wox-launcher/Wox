@@ -12,8 +12,10 @@ import 'package:wox/utils/wox_interface_size_util.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/color_util.dart';
 
-class WoxLauncherView extends GetView<WoxLauncherController> {
-  const WoxLauncherView({super.key});
+class WoxLauncherView extends StatelessWidget {
+  const WoxLauncherView({super.key, required this.controller});
+
+  final WoxLauncherController controller;
 
   @override
   Widget build(BuildContext context) {
@@ -22,9 +24,9 @@ class WoxLauncherView extends GetView<WoxLauncherController> {
       final isQueryBoxVisible = controller.isQueryBoxVisible.value;
       final isToolbarShowedWithoutResults = controller.isToolbarShowedWithoutResults;
       final interfaceMetrics = WoxInterfaceSizeUtil.instance.metrics.value;
-      final queryBoxView = const WoxQueryBoxView();
-      final refinementBarView = const WoxQueryRefinementBarView();
-      final resultView = const WoxQueryResultView();
+      final queryBoxView = WoxQueryBoxView(controller: controller);
+      final refinementBarView = WoxQueryRefinementBarView(controller: controller);
+      final resultView = WoxQueryResultView(controller: controller);
       final topPadding = isQueryBoxVisible ? theme.appPaddingTop.toDouble() : 0.0;
 
       double bottomPadding = theme.appPaddingBottom.toDouble();
@@ -46,9 +48,9 @@ class WoxLauncherView extends GetView<WoxLauncherController> {
         content = Stack(
           children: [
             if (controller.isQueryBoxAtBottom.value)
-              Positioned.fill(bottom: bottomResultInset, child: const WoxQueryResultView())
+              Positioned.fill(bottom: bottomResultInset, child: WoxQueryResultView(controller: controller))
             else
-              Positioned.fill(top: topResultInset, child: const WoxQueryResultView()),
+              Positioned.fill(top: topResultInset, child: WoxQueryResultView(controller: controller)),
             Positioned(
               top: controller.isQueryBoxAtBottom.value ? null : 0,
               bottom: controller.isQueryBoxAtBottom.value ? 0 : null,
@@ -91,7 +93,7 @@ class WoxLauncherView extends GetView<WoxLauncherController> {
             },
             child: Column(
               children: [
-                if (!isQueryBoxVisible) const Offstage(offstage: true, child: WoxQueryBoxView()),
+                if (!isQueryBoxVisible) Offstage(offstage: true, child: WoxQueryBoxView(controller: controller)),
                 Flexible(
                   fit: isQueryBoxVisible ? FlexFit.tight : FlexFit.loose,
                   child: Padding(
@@ -109,7 +111,7 @@ class WoxLauncherView extends GetView<WoxLauncherController> {
                     // so it must observe density metrics directly instead of relying on
                     // the old fixed 40px wrapper.
                     height: interfaceMetrics.toolbarHeight,
-                    child: const WoxQueryToolbarView(),
+                    child: WoxQueryToolbarView(controller: controller),
                   ),
               ],
             ),

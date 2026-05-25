@@ -5,7 +5,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_code_editor/flutter_code_editor.dart';
 import 'package:flutter_svg/svg.dart';
-import 'package:get/get.dart';
 import 'package:highlight/highlight.dart';
 import 'package:highlight/languages/all.dart';
 import 'package:highlight/languages/bash.dart';
@@ -51,8 +50,10 @@ import 'package:flutter_highlight/themes/monokai.dart';
 class WoxPreviewView extends StatefulWidget {
   final WoxPreview woxPreview;
   final WoxTheme woxTheme;
+  final WoxLauncherController launcherController;
+  final WoxAIChatController aiChatController;
 
-  const WoxPreviewView({super.key, required this.woxPreview, required this.woxTheme});
+  const WoxPreviewView({super.key, required this.woxPreview, required this.woxTheme, required this.launcherController, required this.aiChatController});
 
   @override
   State<WoxPreviewView> createState() => _WoxPreviewViewState();
@@ -60,9 +61,10 @@ class WoxPreviewView extends StatefulWidget {
 
 class _WoxPreviewViewState extends State<WoxPreviewView> {
   final scrollController = ScrollController();
-  final launcherController = Get.find<WoxLauncherController>();
   final allCodeLanguages = {...allLanguages, "txt": Mode(), "conf": Mode(), "js": javascript, "ts": typescript, "yml": yaml, "sh": bash, "py": python};
   WoxInterfaceSizeMetrics get _metrics => WoxInterfaceSizeUtil.instance.current;
+  WoxLauncherController get launcherController => widget.launcherController;
+  WoxAIChatController get aiChatController => widget.aiChatController;
 
   Widget scrollableContent({required Widget child}) {
     return child;
@@ -339,7 +341,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
       contentWidget = WoxPluginDetailView(pluginDetailJson: widget.woxPreview.previewData);
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code) {
       var previewChatData = WoxAIChatData.fromJson(jsonDecode(widget.woxPreview.previewData));
-      var chatController = Get.find<WoxAIChatController>();
+      var chatController = aiChatController;
       chatController.aiChatData.value = previewChatData;
 
       // Handle scroll position for chat view
@@ -350,11 +352,11 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
       }
 
       // Chat view has its own layout structure with Expanded widgets, return it directly
-      return Container(padding: const EdgeInsets.only(top: 10.0, bottom: 10.0), child: const WoxAIChatView());
+      return Container(padding: const EdgeInsets.only(top: 10.0, bottom: 10.0), child: WoxAIChatView(controller: chatController));
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_UPDATE.code) {
       try {
         final previewData = UpdatePreviewData.fromJson(jsonDecode(widget.woxPreview.previewData));
-        return WoxUpdateView(data: previewData);
+        return WoxUpdateView(data: previewData, launcherController: launcherController);
       } catch (e) {
         contentWidget = buildText("Invalid update preview data: $e");
       }
@@ -372,7 +374,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
         // execution. Rendering it as a native settings form keeps users inside
         // the query flow instead of forcing a separate settings-window detour.
         final previewData = QueryRequirementSettingsPreviewData.fromPreviewData(widget.woxPreview.previewData);
-        return WoxQueryRequirementSettingsPreviewView(data: previewData);
+        return WoxQueryRequirementSettingsPreviewView(data: previewData, launcherController: launcherController);
       } catch (e) {
         contentWidget = buildText("Invalid query requirement settings preview data: $e");
       }
@@ -382,7 +384,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
         // dispatch. Rendering a dedicated editor lets users fix either plugin
         // while staying inside the ambiguous query that exposed the conflict.
         final previewData = TriggerKeywordConflictPreviewData.fromPreviewData(widget.woxPreview.previewData);
-        return WoxTriggerKeywordConflictPreviewView(data: previewData);
+        return WoxTriggerKeywordConflictPreviewView(data: previewData, launcherController: launcherController);
       } catch (e) {
         contentWidget = buildText("Invalid trigger keyword conflict preview data: $e");
       }
@@ -392,14 +394,14 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
       // disturb the interactive terminal surface.
       return Container(
         padding: launcherController.isFullscreenPreviewOnly() ? EdgeInsets.zero : const EdgeInsets.only(top: 10.0, bottom: 10.0, left: 10.0),
-        child: WoxTerminalPreviewView(woxPreview: widget.woxPreview, woxTheme: widget.woxTheme),
+        child: WoxTerminalPreviewView(woxPreview: widget.woxPreview, woxTheme: widget.woxTheme, controller: launcherController),
       );
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_WEBVIEW.code) {
       // WebView owns platform view sizing and navigation, so only preserve the
       // existing preview padding instead of wrapping it in the generic scroller.
       return Container(
         padding: launcherController.isFullscreenPreviewOnly() ? EdgeInsets.zero : const EdgeInsets.only(top: 10.0, bottom: 10.0, left: 10.0),
-        child: WoxWebViewPreview(previewData: widget.woxPreview.previewData),
+        child: WoxWebViewPreview(previewData: widget.woxPreview.previewData, launcherController: launcherController),
       );
     }
 

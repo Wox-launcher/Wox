@@ -15,8 +15,10 @@ import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/utils/color_util.dart';
 import 'package:wox/utils/wox_text_measure_util.dart';
 
-class WoxQueryToolbarView extends GetView<WoxLauncherController> {
-  const WoxQueryToolbarView({super.key});
+class WoxQueryToolbarView extends StatelessWidget {
+  const WoxQueryToolbarView({super.key, required this.controller});
+
+  final WoxLauncherController controller;
 
   bool get hasResultItems => controller.resultListViewController.items.isNotEmpty;
 

@@ -76,6 +76,7 @@ func GetUIManager() *Manager {
 		managerInstance.selectionHotkey = &hotkey.Hotkey{}
 		managerInstance.ui = &uiImpl{
 			requestMap:             util.NewHashMap[string, chan WebsocketMsg](),
+			sessionStates:          map[string]*uiSessionState{},
 			isVisible:              false, // Initially hidden
 			isSettingWindowOpen:    false,
 			isOnboardingWindowOpen: false,
@@ -314,14 +315,27 @@ func (m *Manager) triggerSelectionQuery(ctx context.Context, selected selection.
 	}
 
 	m.RefreshActiveWindowSnapshot(ctx)
-	m.ui.ChangeQuery(ctx, common.PlainQuery{
+	m.openSecondaryInstance(ctx, string(common.ShowSourceSelection), common.PlainQuery{
 		QueryType:      plugin.QueryTypeSelection,
 		QuerySelection: selected,
-	})
-	m.ui.ShowApp(ctx, common.ShowContext{
+	}, common.ShowContext{
 		ShowSource: common.ShowSourceSelection,
 	})
 	return nil
+}
+
+// openSecondaryInstance routes query-owned transient UI into a secondary window so the primary launcher query is left untouched.
+func (m *Manager) openSecondaryInstance(ctx context.Context, instanceName string, query common.PlainQuery, showContext common.ShowContext) {
+	if query.QueryId == "" {
+		query.QueryId = uuid.NewString()
+	}
+
+	m.ui.OpenWoxInstance(ctx, common.OpenWoxInstanceRequest{
+		Role:         common.WoxInstanceRoleSecondary,
+		InstanceName: instanceName,
+		Query:        query,
+		ShowApp:      showContext,
+	})
 }
 
 func (m *Manager) triggerQueryHotkey(ctx context.Context, queryHotkey setting.QueryHotkey) error {
@@ -355,8 +369,6 @@ func (m *Manager) triggerQueryHotkey(ctx context.Context, queryHotkey setting.Qu
 		}
 	}
 
-	m.ui.ChangeQuery(queryCtx, plainQuery)
-
 	showContext := common.ShowContext{
 		SelectAll:      false,
 		IsQueryFocus:   isQueryFocus,
@@ -370,6 +382,13 @@ func (m *Manager) triggerQueryHotkey(ctx context.Context, queryHotkey setting.Qu
 		showContext.WindowPosition = &position
 	}
 
+	if queryHotkey.HideQueryBox && queryHotkey.HideToolbar {
+		normalizedHotkey := normalizeHotkeyForCompare(queryHotkey.Hotkey)
+		m.openSecondaryInstance(queryCtx, "query-hotkey:"+normalizedHotkey, plainQuery, showContext)
+		return nil
+	}
+
+	m.ui.ChangeQuery(queryCtx, plainQuery)
 	m.ui.ShowApp(queryCtx, showContext)
 	return nil
 }
@@ -827,6 +846,9 @@ func (m *Manager) PostUIReady(ctx context.Context) {
 		return
 	}
 	m.isUIReadyHandled = true
+	if impl, ok := m.ui.(*uiImpl); ok {
+		impl.setPrimarySession(util.GetContextSessionId(ctx))
+	}
 
 	// Apply auto appearance theme on startup
 	m.applyAutoAppearanceThemeIfNeed(ctx)
@@ -847,8 +869,18 @@ func (m *Manager) PostUIReady(ctx context.Context) {
 func (m *Manager) PostOnShow(ctx context.Context) {
 	// Update cached visibility state
 	if impl, ok := m.ui.(*uiImpl); ok {
-		impl.isVisible = true
-		impl.isRecordingHotkey = false
+		sessionId := util.GetContextSessionId(ctx)
+		impl.sessionStatesMu.Lock()
+		if sessionId != "" {
+			state := impl.getOrCreateSessionStateLocked(sessionId)
+			state.isVisible = true
+			state.isRecordingHotkey = false
+		}
+		if impl.isPrimarySession(sessionId) {
+			impl.isVisible = true
+			impl.isRecordingHotkey = false
+		}
+		impl.sessionStatesMu.Unlock()
 	}
 
 	analytics.TrackUIOpened(ctx)
@@ -879,41 +911,100 @@ func (m *Manager) PostOnQueryBoxFocus(ctx context.Context) {
 func (m *Manager) PostOnHide(ctx context.Context) {
 	// Update cached visibility state
 	if impl, ok := m.ui.(*uiImpl); ok {
-		impl.isVisible = false
-		impl.isRecordingHotkey = false
+		sessionId := util.GetContextSessionId(ctx)
+		impl.sessionStatesMu.Lock()
+		if sessionId != "" {
+			state := impl.getOrCreateSessionStateLocked(sessionId)
+			state.isVisible = false
+			state.isRecordingHotkey = false
+		}
+		if impl.isPrimarySession(sessionId) {
+			impl.isVisible = false
+			impl.isRecordingHotkey = false
+		}
+		impl.sessionStatesMu.Unlock()
 	}
 }
 
 func (m *Manager) PostOnSetting(ctx context.Context, isSettingWindowOpen bool) {
 	if impl, ok := m.ui.(*uiImpl); ok {
-		impl.isSettingWindowOpen = isSettingWindowOpen
-		if !isSettingWindowOpen {
-			impl.isRecordingHotkey = false
+		sessionId := util.GetContextSessionId(ctx)
+		impl.sessionStatesMu.Lock()
+		if sessionId != "" {
+			state := impl.getOrCreateSessionStateLocked(sessionId)
+			state.isSettingWindowOpen = isSettingWindowOpen
+			if !isSettingWindowOpen {
+				state.isRecordingHotkey = false
+			}
+			if isSettingWindowOpen {
+				state.isOnboardingWindowOpen = false
+			}
 		}
-		if isSettingWindowOpen {
-			impl.isOnboardingWindowOpen = false
+		if impl.isPrimarySession(sessionId) {
+			impl.isSettingWindowOpen = isSettingWindowOpen
+			if !isSettingWindowOpen {
+				impl.isRecordingHotkey = false
+			}
+			if isSettingWindowOpen {
+				impl.isOnboardingWindowOpen = false
+			}
 		}
+		impl.sessionStatesMu.Unlock()
 	}
 }
 
 func (m *Manager) PostOnOnboarding(ctx context.Context, isOnboardingWindowOpen bool) {
 	if impl, ok := m.ui.(*uiImpl); ok {
-		impl.isOnboardingWindowOpen = isOnboardingWindowOpen
-		if !isOnboardingWindowOpen {
-			impl.isRecordingHotkey = false
+		sessionId := util.GetContextSessionId(ctx)
+		impl.sessionStatesMu.Lock()
+		if sessionId != "" {
+			state := impl.getOrCreateSessionStateLocked(sessionId)
+			state.isOnboardingWindowOpen = isOnboardingWindowOpen
+			if !isOnboardingWindowOpen {
+				state.isRecordingHotkey = false
+			}
+			if isOnboardingWindowOpen {
+				state.isSettingWindowOpen = false
+			}
 		}
-		if isOnboardingWindowOpen {
-			impl.isSettingWindowOpen = false
+		if impl.isPrimarySession(sessionId) {
+			impl.isOnboardingWindowOpen = isOnboardingWindowOpen
+			if !isOnboardingWindowOpen {
+				impl.isRecordingHotkey = false
+			}
+			if isOnboardingWindowOpen {
+				impl.isSettingWindowOpen = false
+			}
 		}
+		impl.sessionStatesMu.Unlock()
 	}
 }
 
 // PostOnHotkeyRecording tracks recorder focus so global hotkey callbacks can feed the active recorder.
 func (m *Manager) PostOnHotkeyRecording(ctx context.Context, isRecording bool) {
 	if impl, ok := m.ui.(*uiImpl); ok {
-		impl.isRecordingHotkey = isRecording
+		sessionId := util.GetContextSessionId(ctx)
+		impl.sessionStatesMu.Lock()
+		if sessionId != "" {
+			impl.getOrCreateSessionStateLocked(sessionId).isRecordingHotkey = isRecording
+		}
+		if impl.isPrimarySession(sessionId) {
+			impl.isRecordingHotkey = isRecording
+		}
+		impl.sessionStatesMu.Unlock()
 		logger.Info(ctx, fmt.Sprintf("hotkey recording state changed: %t", isRecording))
 	}
+}
+
+func (m *Manager) PostOnInstanceDestroyed(ctx context.Context) {
+	sessionId := util.GetContextSessionId(ctx)
+	if sessionId == "" {
+		return
+	}
+	if impl, ok := m.ui.(*uiImpl); ok {
+		impl.removeSession(sessionId)
+	}
+	plugin.GetPluginManager().ClearSessionState(ctx, sessionId)
 }
 
 func (m *Manager) IsSystemTheme(id string) bool {
@@ -1110,8 +1201,7 @@ func (m *Manager) executeTrayQuery(ctx context.Context, trayQuery setting.TrayQu
 		}
 		logger.Debug(queryCtx, fmt.Sprintf("tray query anchor resolved: windowX=%d bottom=%d screen=(x=%d y=%d w=%d h=%d)", trayAnchor.WindowX, trayAnchor.Bottom, trayAnchor.ScreenRect.X, trayAnchor.ScreenRect.Y, trayAnchor.ScreenRect.Width, trayAnchor.ScreenRect.Height))
 	}
-	m.ui.ChangeQuery(queryCtx, plainQuery)
-	m.ui.ShowApp(queryCtx, common.ShowContext{
+	m.openSecondaryInstance(queryCtx, "tray-query:"+strings.TrimSpace(trayQuery.Query), plainQuery, common.ShowContext{
 		SelectAll:        false,
 		IsQueryFocus:     isQueryFocus,
 		HideQueryBox:     trayQuery.HideQueryBox,
@@ -1605,6 +1695,8 @@ func (m *Manager) recordHotkeyIfRecording(ctx context.Context, hotkeyStr string)
 // isHotkeyRecordingActive reports whether the shared UI is currently capturing a hotkey.
 func (m *Manager) isHotkeyRecordingActive() bool {
 	if impl, ok := m.ui.(*uiImpl); ok {
+		impl.sessionStatesMu.RLock()
+		defer impl.sessionStatesMu.RUnlock()
 		return impl.isRecordingHotkey
 	}
 	return false
@@ -1612,6 +1704,8 @@ func (m *Manager) isHotkeyRecordingActive() bool {
 
 func (m *Manager) isOnboardingViewActive() bool {
 	if impl, ok := m.ui.(*uiImpl); ok {
+		impl.sessionStatesMu.RLock()
+		defer impl.sessionStatesMu.RUnlock()
 		return impl.isOnboardingWindowOpen
 	}
 	return false

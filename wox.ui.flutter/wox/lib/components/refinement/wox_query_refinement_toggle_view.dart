@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'wox_query_refinement_base_view.dart';
 
 class WoxQueryRefinementToggleView extends WoxQueryRefinementBaseView {
-  const WoxQueryRefinementToggleView({super.key, required super.refinement, required super.selectedValues, required super.onChanged});
+  const WoxQueryRefinementToggleView({super.key, required super.launcherController, required super.refinement, required super.selectedValues, required super.onChanged});
 
   String get enabledValue {
     if (refinement.options.isNotEmpty && refinement.options.first.value.isNotEmpty) {

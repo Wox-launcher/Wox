@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_newline.dart';
-import 'package:wox/utils/consts.dart';
 
 import 'wox_setting_plugin_item_view.dart';
 

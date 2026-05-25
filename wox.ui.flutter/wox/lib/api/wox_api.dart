@@ -127,28 +127,32 @@ class WoxApi {
     await WoxHttpUtil.instance.postData(traceId, "/on/focus/lost", {});
   }
 
-  Future<void> onShow(String traceId) async {
-    await WoxHttpUtil.instance.postData(traceId, "/on/show", {});
+  Future<void> onShow(String traceId, {String? sessionId}) async {
+    await WoxHttpUtil.instance.postData(traceId, "/on/show", {}, sessionId: sessionId);
   }
 
-  Future<void> onQueryBoxFocus(String traceId) async {
-    await WoxHttpUtil.instance.postData(traceId, "/on/querybox/focus", {});
+  Future<void> onQueryBoxFocus(String traceId, {String? sessionId}) async {
+    await WoxHttpUtil.instance.postData(traceId, "/on/querybox/focus", {}, sessionId: sessionId);
   }
 
-  Future<void> onHide(String traceId) async {
-    await WoxHttpUtil.instance.postData(traceId, "/on/hide", {});
+  Future<void> onHide(String traceId, {String? sessionId}) async {
+    await WoxHttpUtil.instance.postData(traceId, "/on/hide", {}, sessionId: sessionId);
   }
 
-  Future<void> onSetting(String traceId, bool inSettingView) async {
-    await WoxHttpUtil.instance.postData(traceId, "/on/setting", {"inSettingView": inSettingView});
+  Future<void> onSetting(String traceId, bool inSettingView, {String? sessionId}) async {
+    await WoxHttpUtil.instance.postData(traceId, "/on/setting", {"inSettingView": inSettingView}, sessionId: sessionId);
   }
 
-  Future<void> onHotkeyRecording(String traceId, bool isRecording) async {
-    await WoxHttpUtil.instance.postData(traceId, "/on/hotkey/recording", {"isRecording": isRecording});
+  Future<void> onHotkeyRecording(String traceId, bool isRecording, {String? sessionId}) async {
+    await WoxHttpUtil.instance.postData(traceId, "/on/hotkey/recording", {"isRecording": isRecording}, sessionId: sessionId);
   }
 
-  Future<void> onOnboarding(String traceId, bool inOnboardingView) async {
-    await WoxHttpUtil.instance.postData(traceId, "/on/onboarding", {"inOnboardingView": inOnboardingView});
+  Future<void> onOnboarding(String traceId, bool inOnboardingView, {String? sessionId}) async {
+    await WoxHttpUtil.instance.postData(traceId, "/on/onboarding", {"inOnboardingView": inOnboardingView}, sessionId: sessionId);
+  }
+
+  Future<void> onInstanceDestroyed(String traceId, {required String sessionId}) async {
+    await WoxHttpUtil.instance.postData(traceId, "/on/instance/destroyed", {}, sessionId: sessionId);
   }
 
   Future<WoxUsageStats> getUsageStats(String traceId, {String period = '30d'}) async {

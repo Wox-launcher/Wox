@@ -68,6 +68,7 @@ type UI interface {
 	HideApp(ctx context.Context)
 	ShowApp(ctx context.Context, showContext ShowContext)
 	ToggleApp(ctx context.Context, showContext ShowContext)
+	OpenWoxInstance(ctx context.Context, request OpenWoxInstanceRequest)
 	RecordHotkey(ctx context.Context, hotkey string)
 	OpenSettingWindow(ctx context.Context, windowContext SettingWindowContext)
 	OpenOnboardingWindow(ctx context.Context)
@@ -136,6 +137,23 @@ type ShowContext struct {
 	TrayAnchor     *TrayAnchor
 	WindowWidth    int
 	MaxResultCount int
+}
+
+type WoxInstanceRole string
+
+const (
+	WoxInstanceRolePrimary   WoxInstanceRole = "primary"
+	WoxInstanceRoleSecondary WoxInstanceRole = "secondary"
+)
+
+// OpenWoxInstanceRequest asks the Flutter runtime to open or reuse a UI instance.
+// SessionId remains the instance identity on the Flutter side; InstanceName is
+// only a live secondary reuse key.
+type OpenWoxInstanceRequest struct {
+	Role         WoxInstanceRole
+	InstanceName string
+	Query        PlainQuery
+	ShowApp      ShowContext
 }
 
 type WindowPosition struct {

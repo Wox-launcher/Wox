@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"image"
 	"strings"
+	"sync"
 	"time"
 	"wox/common"
 	"wox/database"
@@ -65,10 +66,62 @@ func parseQueryRefinementsFromUI(rawJson string) (map[string]string, error) {
 
 type uiImpl struct {
 	requestMap             *util.HashMap[string, chan WebsocketMsg]
+	primarySessionId       string
+	sessionStatesMu        sync.RWMutex
+	sessionStates          map[string]*uiSessionState
 	isVisible              bool // cached visibility state, updated by PostOnShow/PostOnHide
 	isSettingWindowOpen    bool // cached settings window state, updated by PostOnSetting
 	isOnboardingWindowOpen bool // cached onboarding window state, updated by PostOnOnboarding
 	isRecordingHotkey      bool // cached hotkey-recorder focus state, updated by PostOnHotkeyRecording
+}
+
+type uiSessionState struct {
+	isVisible              bool
+	isSettingWindowOpen    bool
+	isOnboardingWindowOpen bool
+	isRecordingHotkey      bool
+}
+
+func (u *uiImpl) setPrimarySession(sessionId string) {
+	if sessionId == "" {
+		return
+	}
+	u.sessionStatesMu.Lock()
+	defer u.sessionStatesMu.Unlock()
+	if u.primarySessionId == "" {
+		u.primarySessionId = sessionId
+	}
+	if u.sessionStates == nil {
+		u.sessionStates = map[string]*uiSessionState{}
+	}
+	if _, ok := u.sessionStates[sessionId]; !ok {
+		u.sessionStates[sessionId] = &uiSessionState{}
+	}
+}
+
+func (u *uiImpl) getOrCreateSessionStateLocked(sessionId string) *uiSessionState {
+	if u.sessionStates == nil {
+		u.sessionStates = map[string]*uiSessionState{}
+	}
+	state, ok := u.sessionStates[sessionId]
+	if !ok {
+		state = &uiSessionState{}
+		u.sessionStates[sessionId] = state
+	}
+	return state
+}
+
+func (u *uiImpl) isPrimarySession(sessionId string) bool {
+	return sessionId == "" || sessionId == u.primarySessionId
+}
+
+func (u *uiImpl) removeSession(sessionId string) {
+	if sessionId == "" {
+		return
+	}
+	u.sessionStatesMu.Lock()
+	defer u.sessionStatesMu.Unlock()
+	delete(u.sessionStates, sessionId)
 }
 
 func (u *uiImpl) ChangeQuery(ctx context.Context, query common.PlainQuery) {
@@ -118,6 +171,15 @@ func (u *uiImpl) ShowApp(ctx context.Context, showContext common.ShowContext) {
 func (u *uiImpl) ToggleApp(ctx context.Context, showContext common.ShowContext) {
 	GetUIManager().RefreshActiveWindowSnapshot(ctx)
 	u.invokeWebsocketMethod(ctx, "ToggleApp", getShowAppParams(ctx, showContext))
+}
+
+func (u *uiImpl) OpenWoxInstance(ctx context.Context, request common.OpenWoxInstanceRequest) {
+	u.invokeWebsocketMethod(ctx, "OpenWoxInstance", map[string]any{
+		"Role":         request.Role,
+		"InstanceName": request.InstanceName,
+		"Query":        request.Query,
+		"ShowApp":      getShowAppParams(ctx, request.ShowApp),
+	})
 }
 
 func (u *uiImpl) RecordHotkey(ctx context.Context, hotkey string) {
@@ -225,10 +287,14 @@ func (u *uiImpl) ClearToolbarMsg(ctx context.Context, toolbarMsgId string) {
 }
 
 func (u *uiImpl) IsInSettingView() bool {
+	u.sessionStatesMu.RLock()
+	defer u.sessionStatesMu.RUnlock()
 	return u.isSettingWindowOpen
 }
 
 func (u *uiImpl) IsInManagementView() bool {
+	u.sessionStatesMu.RLock()
+	defer u.sessionStatesMu.RUnlock()
 	return u.isSettingWindowOpen || u.isOnboardingWindowOpen
 }
 
@@ -299,6 +365,14 @@ func (u *uiImpl) PushResults(ctx context.Context, payload interface{}) bool {
 func (u *uiImpl) IsVisible(ctx context.Context) bool {
 	// Return cached visibility state instead of querying UI via WebSocket
 	// The state is updated by PostOnShow/PostOnHide callbacks
+	sessionId := util.GetContextSessionId(ctx)
+	u.sessionStatesMu.RLock()
+	defer u.sessionStatesMu.RUnlock()
+	if sessionId != "" {
+		if state, ok := u.sessionStates[sessionId]; ok {
+			return state.isVisible
+		}
+	}
 	return u.isVisible
 }
 

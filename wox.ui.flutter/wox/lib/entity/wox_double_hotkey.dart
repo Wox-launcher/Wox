@@ -1,4 +1,3 @@
-import 'package:flutter/services.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 
 class WoxDoubleHotkey {
@@ -26,7 +25,7 @@ class WoxDoubleHotkey {
       default:
         throw Exception("Unsupported modifier for double click");
     }
-    return "${doubleClickPrefix}$modifierStr";
+    return "$doubleClickPrefix$modifierStr";
   }
 
   static HotKeyModifier? parseModifierFromDoubleClickStr(String hotkeyStr) {

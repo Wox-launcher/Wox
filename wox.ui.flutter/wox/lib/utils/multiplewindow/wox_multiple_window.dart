@@ -1,5 +1,11 @@
 // ignore_for_file: invalid_use_of_internal_member, implementation_imports
 
+// This wrapper intentionally uses Flutter's experimental internal windowing
+// API (`flutter/src/widgets/_window.dart`) so Wox can host multiple launcher
+// surfaces in one Flutter process. Recheck this file when upgrading Flutter;
+// it was first verified on Flutter 3.45.0-1.0.pre-196, master revision
+// 2731746a84.
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -58,6 +64,20 @@ abstract class WoxMultipleWindowHandle {
 
   int? get nativeHandle;
 
+  Future<Size> getSize();
+
+  Future<Offset> getPosition();
+
+  Future<void> setBounds(Offset position, Size size);
+
+  Future<void> setSize(Size size);
+
+  Future<void> setAlwaysOnTop(bool value);
+
+  void startDragging();
+
+  Future<void> show();
+
   Future<void> focus();
 
   Future<void> hide();
@@ -98,8 +118,9 @@ class WoxMultipleWindow {
 
   /// Creates or focuses a top-level Flutter window managed through Flutter windowing.
   ///
-  /// When [showTitleBar] is true, the titlebar is Flutter-drawn; the native
-  /// frame is still removed so theme and backdrop behavior stay consistent.
+  /// When [showTitleBar] is true, the titlebar is Flutter-drawn. Windows also
+  /// removes the native frame through [WoxMultipleWindowStyle]; other platforms
+  /// currently keep the native frame provided by Flutter windowing.
   static Future<WoxMultipleWindowHandle> createWindow({
     required String id,
     required String title,
@@ -228,9 +249,46 @@ class _WoxMultipleWindowHandleImpl implements WoxMultipleWindowHandle {
   @override
   final String id;
   final flutter_windowing.RegularWindowController controller;
+  Offset _position = Offset.zero;
 
   @override
   int? get nativeHandle => WoxMultipleWindowStyle.nativeHandleOf(controller);
+
+  @override
+  Future<Size> getSize() async => controller.contentSize;
+
+  @override
+  Future<Offset> getPosition() async => WoxMultipleWindowStyle.positionOf(controller) ?? _position;
+
+  @override
+  Future<void> setBounds(Offset position, Size size) async {
+    _position = position;
+    controller.setConstraints(BoxConstraints.tight(size));
+    controller.setSize(size);
+    WoxMultipleWindowStyle.setBounds(controller, position, size);
+  }
+
+  @override
+  Future<void> setSize(Size size) async {
+    controller.setConstraints(BoxConstraints.tight(size));
+    controller.setSize(size);
+  }
+
+  @override
+  Future<void> setAlwaysOnTop(bool value) async {
+    WoxMultipleWindowStyle.setAlwaysOnTop(controller, value);
+  }
+
+  @override
+  void startDragging() {
+    WoxMultipleWindowStyle.startDragging(controller);
+  }
+
+  @override
+  Future<void> show() async {
+    WoxMultipleWindowStyle.show(controller);
+    controller.activate();
+  }
 
   @override
   Future<void> focus() async {
@@ -343,6 +401,10 @@ class _WoxMultipleWindowRootState extends State<_WoxMultipleWindowRoot> {
       }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // The native window can report a stale zero/initial size until Flutter
+      // presents its first frames, so defer style application and preparation
+      // long enough for RegularWindowController.contentSize/GetWindowRect to
+      // reflect the painted surface.
       Timer(const Duration(milliseconds: 120), () {
         if (!mounted) {
           return;

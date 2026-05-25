@@ -4,7 +4,7 @@ import 'package:wox/components/wox_dropdown_button.dart';
 import 'wox_query_refinement_base_view.dart';
 
 class WoxQueryRefinementSingleSelectView extends WoxQueryRefinementBaseView {
-  const WoxQueryRefinementSingleSelectView({super.key, required super.refinement, required super.selectedValues, required super.onChanged});
+  const WoxQueryRefinementSingleSelectView({super.key, required super.launcherController, required super.refinement, required super.selectedValues, required super.onChanged});
 
   @override
   Widget build(BuildContext context) {

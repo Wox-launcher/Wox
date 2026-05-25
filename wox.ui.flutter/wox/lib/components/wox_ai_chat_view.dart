@@ -25,8 +25,10 @@ import 'package:wox/utils/wox_interface_size_util.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/color_util.dart';
 
-class WoxAIChatView extends GetView<WoxAIChatController> {
-  const WoxAIChatView({super.key});
+class WoxAIChatView extends StatelessWidget {
+  const WoxAIChatView({super.key, required this.controller});
+
+  final WoxAIChatController controller;
 
   WoxTheme get woxTheme => WoxThemeUtil.instance.currentTheme.value;
   WoxInterfaceSizeMetrics get _metrics => WoxInterfaceSizeUtil.instance.current;

@@ -12,8 +12,9 @@ import 'package:wox/utils/log.dart';
 
 class WoxTriggerKeywordConflictPreviewView extends StatefulWidget {
   final TriggerKeywordConflictPreviewData data;
+  final WoxLauncherController launcherController;
 
-  const WoxTriggerKeywordConflictPreviewView({super.key, required this.data});
+  const WoxTriggerKeywordConflictPreviewView({super.key, required this.data, required this.launcherController});
 
   @override
   State<WoxTriggerKeywordConflictPreviewView> createState() => _WoxTriggerKeywordConflictPreviewViewState();
@@ -102,7 +103,7 @@ class _WoxTriggerKeywordConflictPreviewViewState extends State<WoxTriggerKeyword
       setState(() {
         _messageByPlugin[plugin.pluginId] = tr("plugin_manager_trigger_keyword_conflict_saved");
       });
-      Get.find<WoxLauncherController>().onRefreshQuery(traceId, false);
+      widget.launcherController.onRefreshQuery(traceId, false);
     } catch (e) {
       Logger.instance.error(traceId, "failed to save trigger keywords from conflict preview: $e");
       if (!mounted) {

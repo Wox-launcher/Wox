@@ -1603,6 +1603,18 @@ func (m *Manager) clearLazyResultIconsForSessionExcept(sessionId string, keepQue
 	}
 }
 
+// ClearSessionState drops query-owned caches for a UI instance that has been destroyed.
+func (m *Manager) ClearSessionState(ctx context.Context, sessionId string) {
+	if sessionId == "" {
+		return
+	}
+
+	m.sessionQueryResultCache.Delete(sessionId)
+	m.sessionPluginQueries.Delete(sessionId)
+	m.clearLazyResultIconsForSessionExcept(sessionId, "")
+	logger.Info(ctx, fmt.Sprintf("cleared plugin session state: %s", sessionId))
+}
+
 func (m *Manager) convertResultIcon(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, resultId string, icon common.WoxImage) common.WoxImage {
 	resultIconSize := m.getResultIconSizeForQuery(pluginInstance, query, layout)
 	pluginDirectory := ""

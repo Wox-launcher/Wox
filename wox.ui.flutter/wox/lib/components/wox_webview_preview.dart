@@ -5,7 +5,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_loading_indicator.dart';
@@ -13,15 +12,15 @@ import 'package:wox/components/wox_selectable_text.dart';
 import 'package:wox/components/wox_tooltip.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_preview_webview_data.dart';
-import 'package:wox/utils/windows/window_manager.dart';
 import 'package:wox/utils/webview/wox_webview_util.dart';
 import 'package:wox/utils/webview/wox_webview_session.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
 
 class WoxWebViewPreview extends StatefulWidget {
   final String previewData;
+  final WoxLauncherController launcherController;
 
-  const WoxWebViewPreview({super.key, required this.previewData});
+  const WoxWebViewPreview({super.key, required this.previewData, required this.launcherController});
 
   @override
   State<WoxWebViewPreview> createState() => _WoxWebViewPreviewState();
@@ -43,13 +42,13 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
   StreamSubscription<WoxWebViewSessionAction>? _sessionActionSubscription;
   StreamSubscription<void>? _unhandledEscapeSubscription;
   String? _windowsErrorMessage;
-  final launcherController = Get.find<WoxLauncherController>();
   Timer? _toolbarHideTimer;
   bool _isToolbarVisible = true;
   String? _focusedHiddenQueryBoxPreviewData;
   int _hiddenQueryBoxWebViewFocusToken = 0;
 
   WoxInterfaceSizeMetrics get _metrics => WoxInterfaceSizeUtil.instance.current;
+  WoxLauncherController get launcherController => widget.launcherController;
 
   double _scaled(double value) => _metrics.scaledSpacing(value);
 
@@ -383,7 +382,7 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
         onPanStart: (_) {
-          windowManager.startDragging();
+          launcherController.windowDriver.startDragging();
         },
         child: SizedBox(height: _scaled(32)),
       ),

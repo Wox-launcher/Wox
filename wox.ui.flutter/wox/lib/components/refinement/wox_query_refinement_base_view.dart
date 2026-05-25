@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
 import 'package:wox/components/wox_dropdown_button.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
@@ -12,11 +11,12 @@ abstract class WoxQueryRefinementBaseView extends StatelessWidget {
   final WoxQueryRefinement refinement;
   final List<String> selectedValues;
   final ValueChanged<List<String>> onChanged;
+  final WoxLauncherController launcherController;
 
-  const WoxQueryRefinementBaseView({super.key, required this.refinement, required this.selectedValues, required this.onChanged});
+  const WoxQueryRefinementBaseView({super.key, required this.launcherController, required this.refinement, required this.selectedValues, required this.onChanged});
 
   String tr(String key) {
-    return Get.find<WoxLauncherController>().tr(key);
+    return launcherController.tr(key);
   }
 
   double get controlHeight => WoxInterfaceSizeUtil.instance.current.scaledSpacing(26);

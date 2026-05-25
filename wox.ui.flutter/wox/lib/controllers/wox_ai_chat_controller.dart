@@ -36,7 +36,7 @@ class WoxAIChatController extends GetxController {
 
   // Controllers and focus nodes
   final TextEditingController textController = TextEditingController();
-  final WoxLauncherController launcherController = Get.find<WoxLauncherController>();
+  final WoxLauncherController launcherController;
   final FocusNode aiChatFocusNode = FocusNode();
   final ScrollController aiChatScrollController = ScrollController();
   final RxList<AIModel> aiModels = <AIModel>[].obs;
@@ -72,7 +72,7 @@ class WoxAIChatController extends GetxController {
     return toolCallExpandedStates[conversationId] ?? false;
   }
 
-  WoxAIChatController() {
+  WoxAIChatController({WoxLauncherController? launcherController}) : launcherController = launcherController ?? Get.find<WoxLauncherController>() {
     chatSelectListController = WoxListController<ChatSelectItem>(
       onItemExecuted: _onChatSelectItemExecuted,
       onFilterBoxEscPressed: (traceId) => hideChatSelectPanel(),

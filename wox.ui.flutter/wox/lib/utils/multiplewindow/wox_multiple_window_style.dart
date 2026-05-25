@@ -1,7 +1,14 @@
 // ignore_for_file: invalid_use_of_internal_member, implementation_imports
 
+// Windows-specific native helpers for Flutter's experimental internal
+// windowing API. This file imports `_window_win32.dart` to reach the HWND used
+// for frame removal, placement, topmost state, and custom dragging. Recheck it
+// when upgrading Flutter; it was first verified on Flutter 3.45.0-1.0.pre-196,
+// master revision 2731746a84.
+
 import 'dart:ffi' as ffi;
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:ffi/ffi.dart';
 import 'package:flutter/src/widgets/_window_win32.dart' as win32_windowing;
@@ -28,6 +35,9 @@ const int _htCaption = 2;
 const int _monitorDefaultToNearest = 2;
 const int _offscreenCoordinate = -32000;
 const int _swHide = 0;
+const int _swShow = 5;
+const int _hwndTopmost = -1;
+const int _hwndNoTopmost = -2;
 
 const int _dwmwaUseImmersiveDarkMode = 20;
 const int _dwmwaWindowCornerPreference = 33;
@@ -216,6 +226,58 @@ class WoxMultipleWindowStyle {
     }
   }
 
+  /// Moves and resizes a managed window where the current platform exposes native positioning.
+  static void setBounds(Object controller, Offset position, Size size) {
+    if (!Platform.isWindows) {
+      return;
+    }
+
+    final hwnd = _windowHandleOf(controller);
+    if (hwnd == null || hwnd.address == 0) {
+      return;
+    }
+
+    _setWindowPos?.call(hwnd, ffi.nullptr, position.dx.round(), position.dy.round(), size.width.round(), size.height.round(), _swpNoZOrder | _swpFrameChanged);
+  }
+
+  /// Returns the native top-left position for platforms where Wox currently needs it.
+  static Offset? positionOf(Object controller) {
+    if (!Platform.isWindows) {
+      return null;
+    }
+
+    final hwnd = _windowHandleOf(controller);
+    final getWindowRect = _getWindowRect;
+    if (hwnd == null || hwnd.address == 0 || getWindowRect == null) {
+      return null;
+    }
+
+    final windowRect = calloc<_WindowRect>();
+    try {
+      if (getWindowRect(hwnd, windowRect) == 0) {
+        return null;
+      }
+      return Offset(windowRect.ref.left.toDouble(), windowRect.ref.top.toDouble());
+    } finally {
+      calloc.free(windowRect);
+    }
+  }
+
+  /// Applies topmost state for managed windows on Windows.
+  static void setAlwaysOnTop(Object controller, bool value) {
+    if (!Platform.isWindows) {
+      return;
+    }
+
+    final hwnd = _windowHandleOf(controller);
+    if (hwnd == null || hwnd.address == 0) {
+      return;
+    }
+
+    final insertAfter = ffi.Pointer<ffi.Void>.fromAddress(value ? _hwndTopmost : _hwndNoTopmost);
+    _setWindowPos?.call(hwnd, insertAfter, 0, 0, 0, 0, _swpNoMove | _swpNoSize | _swpFrameChanged);
+  }
+
   /// Moves a new window outside visible work areas while Flutter paints its first frames.
   static void moveOffscreen(Object controller) {
     if (!Platform.isWindows) {
@@ -242,6 +304,20 @@ class WoxMultipleWindowStyle {
     }
 
     _showWindow?.call(hwnd, _swHide);
+  }
+
+  /// Shows a managed window that was hidden without destroying its Flutter view.
+  static void show(Object controller) {
+    if (!Platform.isWindows) {
+      return;
+    }
+
+    final hwnd = _windowHandleOf(controller);
+    if (hwnd == null || hwnd.address == 0) {
+      return;
+    }
+
+    _showWindow?.call(hwnd, _swShow);
   }
 
   /// Starts native dragging for a custom Flutter-drawn title area.

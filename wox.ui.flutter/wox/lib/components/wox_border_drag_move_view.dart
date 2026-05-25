@@ -4,14 +4,10 @@ import 'package:wox/components/wox_drag_move_view.dart';
 /// A component that adds border drag functionality around the interface
 /// Allows window dragging from top, bottom, left, and right borders
 class WoxBorderDragMoveArea extends StatelessWidget {
-  const WoxBorderDragMoveArea({
-    super.key,
-    required this.child,
-    this.onDragEnd,
-    this.borderWidth = 5.0,
-  });
+  const WoxBorderDragMoveArea({super.key, required this.child, this.onDragStart, this.onDragEnd, this.borderWidth = 5.0});
 
   final Widget child;
+  final VoidCallback? onDragStart;
   final VoidCallback? onDragEnd;
   final double borderWidth;
 
@@ -29,12 +25,7 @@ class WoxBorderDragMoveArea extends StatelessWidget {
           left: 0,
           right: 0,
           height: borderWidth,
-          child: WoxDragMoveArea(
-            onDragEnd: onDragEnd,
-            child: Container(
-              color: Colors.transparent,
-            ),
-          ),
+          child: WoxDragMoveArea(onDragStart: onDragStart, onDragEnd: onDragEnd, child: Container(color: Colors.transparent)),
         ),
 
         // Bottom drag area
@@ -43,12 +34,7 @@ class WoxBorderDragMoveArea extends StatelessWidget {
           left: 0,
           right: 0,
           height: borderWidth,
-          child: WoxDragMoveArea(
-            onDragEnd: onDragEnd,
-            child: Container(
-              color: Colors.transparent,
-            ),
-          ),
+          child: WoxDragMoveArea(onDragStart: onDragStart, onDragEnd: onDragEnd, child: Container(color: Colors.transparent)),
         ),
 
         // Left drag area
@@ -57,12 +43,7 @@ class WoxBorderDragMoveArea extends StatelessWidget {
           bottom: borderWidth,
           left: 0,
           width: borderWidth,
-          child: WoxDragMoveArea(
-            onDragEnd: onDragEnd,
-            child: Container(
-              color: Colors.transparent,
-            ),
-          ),
+          child: WoxDragMoveArea(onDragStart: onDragStart, onDragEnd: onDragEnd, child: Container(color: Colors.transparent)),
         ),
 
         // Right drag area
@@ -71,12 +52,7 @@ class WoxBorderDragMoveArea extends StatelessWidget {
           bottom: borderWidth,
           right: 0,
           width: borderWidth,
-          child: WoxDragMoveArea(
-            onDragEnd: onDragEnd,
-            child: Container(
-              color: Colors.transparent,
-            ),
-          ),
+          child: WoxDragMoveArea(onDragStart: onDragStart, onDragEnd: onDragEnd, child: Container(color: Colors.transparent)),
         ),
       ],
     );
