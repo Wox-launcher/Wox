@@ -24,6 +24,7 @@ import 'package:wox/entity/wox_list_item.dart';
 import 'package:wox/entity/screenshot_session.dart';
 import 'package:wox/models/doctor_check_result.dart';
 import 'package:wox/utils/wox_theme_util.dart';
+import 'package:wox/utils/windows/windows_window_manager.dart';
 import 'package:wox/utils/windows/window_manager.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/entity/wox_hotkey.dart';
@@ -3639,7 +3640,12 @@ class WoxLauncherController extends GetxController {
       });
     }
 
-    const settingWindowSize = Size(1200, 800);
+    const settingWindowPreferredSize = Size(1200, 800);
+    const settingWindowMaxWorkAreaFraction = 0.8;
+    final settingWindowSize =
+        Platform.isWindows
+            ? await WindowsWindowManager.instance.constrainSizeToCursorDisplayWorkArea(settingWindowPreferredSize, maxWorkAreaFraction: settingWindowMaxWorkAreaFraction)
+            : settingWindowPreferredSize;
     if (stageWindowsSettingOpen) {
       // Bug fix: Windows paints the native acrylic/Mica background as soon as
       // the root HWND grows. Hide only the final geometry staging window so the
