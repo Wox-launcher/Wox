@@ -454,21 +454,33 @@ func TestConverterUnits(t *testing.T) {
 			ExpectedAction: "Copy",
 		},
 		{
+			Name:           "Storage full-word input renders symbol output",
+			Query:          "1 gigabyte to gibibyte",
+			ExpectedTitle:  "0.9313225746154785 GiB",
+			ExpectedAction: "Copy",
+		},
+		{
+			Name:           "Storage uppercase symbol input renders symbol output",
+			Query:          "1 GB to MiB",
+			ExpectedTitle:  "953.67431640625 MiB",
+			ExpectedAction: "Copy",
+		},
+		{
 			Name:           "Storage byte symbol to word alias",
 			Query:          "32 b to bytes",
-			ExpectedTitle:  "32 bytes",
+			ExpectedTitle:  "32 B",
 			ExpectedAction: "Copy",
 		},
 		{
 			Name:           "Storage byte singular to symbol alias",
 			Query:          "1 byte to b",
-			ExpectedTitle:  "1 byte",
+			ExpectedTitle:  "1 B",
 			ExpectedAction: "Copy",
 		},
 		{
 			Name:           "Storage byte plural to singular alias",
 			Query:          "2 bytes to byte",
-			ExpectedTitle:  "2 bytes",
+			ExpectedTitle:  "2 B",
 			ExpectedAction: "Copy",
 		},
 		{
@@ -477,7 +489,7 @@ func TestConverterUnits(t *testing.T) {
 			ExpectedTitle:  "",
 			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
-				return strings.Contains(title, "0.000000032") && strings.Contains(title, "gigabytes") && !strings.Contains(title, "gibibytes")
+				return strings.Contains(title, "0.000000032") && strings.Contains(title, "GB") && !strings.Contains(title, "GiB")
 			},
 		},
 		{
@@ -486,19 +498,19 @@ func TestConverterUnits(t *testing.T) {
 			ExpectedTitle:  "",
 			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
-				return strings.Contains(title, "0.0000000298023224") && strings.Contains(title, "gibibytes")
+				return strings.Contains(title, "0.0000000298023224") && strings.Contains(title, "GiB")
 			},
 		},
 		{
 			Name:           "Storage gb ambiguity resolves to decimal bytes",
 			Query:          "1 gb to bytes",
-			ExpectedTitle:  "1000000000 bytes",
+			ExpectedTitle:  "1000000000 B",
 			ExpectedAction: "Copy",
 		},
 		{
 			Name:           "Storage gib preserves binary bytes",
 			Query:          "1 gib to bytes",
-			ExpectedTitle:  "1073741824 bytes",
+			ExpectedTitle:  "1073741824 B",
 			ExpectedAction: "Copy",
 		},
 		{
@@ -507,7 +519,7 @@ func TestConverterUnits(t *testing.T) {
 			ExpectedTitle:  "",
 			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
-				return strings.Contains(title, "0.9313225746154785") && strings.Contains(title, "gibibytes")
+				return strings.Contains(title, "0.9313225746154785") && strings.Contains(title, "GiB")
 			},
 		},
 	}
