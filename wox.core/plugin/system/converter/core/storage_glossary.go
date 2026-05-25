@@ -1,6 +1,9 @@
 package core
 
-import "strings"
+import (
+	"sort"
+	"strings"
+)
 
 type StorageUnitFamily string
 
@@ -41,6 +44,21 @@ func NewStorageGlossary() StorageGlossary {
 func (g StorageGlossary) ResolveStorageUnit(input string) (StorageUnit, bool) {
 	unit, ok := g.aliases[normalizeStorageAlias(input)]
 	return unit, ok
+}
+
+// Aliases returns the supported storage aliases in deterministic, longest-first order.
+func (g StorageGlossary) Aliases() []string {
+	aliases := make([]string, 0, len(g.aliases))
+	for alias := range g.aliases {
+		aliases = append(aliases, alias)
+	}
+	sort.Slice(aliases, func(i, j int) bool {
+		if len(aliases[i]) == len(aliases[j]) {
+			return aliases[i] < aliases[j]
+		}
+		return len(aliases[i]) > len(aliases[j])
+	})
+	return aliases
 }
 
 func normalizeStorageAlias(input string) string {
