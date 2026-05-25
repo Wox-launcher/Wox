@@ -407,6 +407,27 @@ func TestConverterBase(t *testing.T) {
 	suite.RunQueryTests(tests)
 }
 
+func TestConverterStorageQueryIntentParity(t *testing.T) {
+	suite := NewTestSuite(t)
+
+	tests := []QueryTest{
+		{
+			Name:           "Equals-question syntax converts bytes to decimal gigabytes",
+			Query:          "32 bytes =? gb",
+			ExpectedTitle:  "0.000000032 gigabytes",
+			ExpectedAction: "Copy",
+		},
+		{
+			Name:           "Equals-question syntax converts compact bytes to decimal gigabytes",
+			Query:          "32bytes =? gb",
+			ExpectedTitle:  "0.000000032 gigabytes",
+			ExpectedAction: "Copy",
+		},
+	}
+
+	suite.RunQueryTests(tests)
+}
+
 func TestConverterUnits(t *testing.T) {
 	suite := NewTestSuite(t)
 
