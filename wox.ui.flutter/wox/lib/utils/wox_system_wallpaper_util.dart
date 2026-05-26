@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/utils/log.dart';
 
@@ -15,6 +16,7 @@ class WoxSystemWallpaperUtil {
   String _cachedWallpaperPath = '';
   bool _hasCachedWallpaperPath = false;
   Future<String?>? _loadingWallpaperPath;
+  static const MethodChannel _macOSWindowManagerChannel = MethodChannel('com.wox.macos_window_manager');
 
   // Resolve and cache the active desktop wallpaper path so theme editor previews can reuse it without rerunning platform commands.
   Future<String?> loadSystemWallpaperPath({String? traceId, bool forceRefresh = false}) async {
@@ -106,16 +108,30 @@ class WoxSystemWallpaperUtil {
     return null;
   }
 
-  // macOS keeps the current desktop picture behind System Events.
+  // macOS exposes the current desktop picture through AppKit without requiring System Events automation permission.
   Future<String?> _getMacOSWallpaperPath() async {
-    final result = await Process.run('osascript', [
-      '-e',
-      'tell application "System Events" to get POSIX path of (picture of desktop 1 as alias)',
-    ]).timeout(const Duration(seconds: 2));
-    final path = result.stdout.toString().trim();
-    if (path.isNotEmpty && await File(path).exists()) {
-      return path;
+    try {
+      final path = await _macOSWindowManagerChannel.invokeMethod<String?>('getDesktopWallpaperPath').timeout(const Duration(seconds: 2));
+      if (path != null && path.isNotEmpty && await File(path).exists()) {
+        return path;
+      }
+    } catch (e) {
+      Logger.instance.debug(const UuidV4().generate(), 'Failed to load macOS wallpaper through native channel: $e');
     }
+
+    try {
+      final result = await Process.run('osascript', [
+        '-e',
+        'tell application "System Events" to get POSIX path of (picture of desktop 1 as alias)',
+      ]).timeout(const Duration(seconds: 2));
+      final path = result.stdout.toString().trim();
+      if (path.isNotEmpty && await File(path).exists()) {
+        return path;
+      }
+    } catch (e) {
+      Logger.instance.debug(const UuidV4().generate(), 'Failed to load macOS wallpaper through System Events fallback: $e');
+    }
+
     return null;
   }
 

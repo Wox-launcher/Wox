@@ -1205,6 +1205,12 @@ class AppDelegate: FlutterAppDelegate {
   private var activeScrollingCaptureTraceId = ""
   private var nativeOverlayDismissTimeoutWorkItem: DispatchWorkItem?
 
+  // Carries both a resolved file path and whether macOS' image wallpaper extension owns the current Space.
+  private struct WallpaperStoreResolution {
+    let imagePath: String?
+    let usesImageExtension: Bool
+  }
+
   private func describeFrontmostApplication() -> String {
     guard let frontApp = NSWorkspace.shared.frontmostApplication else {
       return "Unknown (bundleID: Unknown)"
@@ -1236,6 +1242,252 @@ class AppDelegate: FlutterAppDelegate {
         self?.windowEventChannel?.invokeMethod("log", arguments: message)
       }
     }
+  }
+
+  // Resolve the active desktop wallpaper without System Events automation permission.
+  private func desktopWallpaperPath() -> String? {
+    let storeResolution = desktopWallpaperPathFromStore()
+    if let path = storeResolution.imagePath {
+      return path
+    }
+
+    if storeResolution.usesImageExtension, let path = latestWallpaperAgentImageCachePath() {
+      return path
+    }
+
+    var screens = NSScreen.screens
+    if let mainScreen = NSScreen.main {
+      screens.insert(mainScreen, at: 0)
+    }
+    var seenScreens = Set<ObjectIdentifier>()
+
+    for screen in screens {
+      let screenId = ObjectIdentifier(screen)
+      if seenScreens.contains(screenId) {
+        continue
+      }
+      seenScreens.insert(screenId)
+
+      guard
+        let url = NSWorkspace.shared.desktopImageURL(for: screen),
+        url.isFileURL
+      else {
+        continue
+      }
+
+      let path = url.path
+      if FileManager.default.fileExists(atPath: path) {
+        return path
+      }
+    }
+
+    return nil
+  }
+
+  // Resolve static image wallpaper choices from macOS' current Space wallpaper store.
+  private func desktopWallpaperPathFromStore() -> WallpaperStoreResolution {
+    let storeURL = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support/com.apple.wallpaper/Store/Index.plist")
+    guard
+      let data = try? Data(contentsOf: storeURL),
+      let root = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any]
+    else {
+      return WallpaperStoreResolution(imagePath: nil, usesImageExtension: false)
+    }
+
+    var usesImageExtension = false
+    for spaceID in currentDesktopSpaceIdentifiers() {
+      let resolution = desktopWallpaperPath(fromSpaceID: spaceID, root: root)
+      usesImageExtension = usesImageExtension || resolution.usesImageExtension
+      if let imagePath = resolution.imagePath {
+        return WallpaperStoreResolution(imagePath: imagePath, usesImageExtension: usesImageExtension)
+      }
+    }
+
+    if let displays = root["Displays"] as? [String: Any] {
+      for display in displays.values {
+        guard let display = display as? [String: Any] else {
+          continue
+        }
+        let resolution = wallpaperStoreResolution(fromDesktop: display["Desktop"] as? [String: Any])
+        usesImageExtension = usesImageExtension || resolution.usesImageExtension
+        if let imagePath = resolution.imagePath {
+          return WallpaperStoreResolution(imagePath: imagePath, usesImageExtension: usesImageExtension)
+        }
+      }
+    }
+
+    return WallpaperStoreResolution(imagePath: nil, usesImageExtension: usesImageExtension)
+  }
+
+  // Read the active macOS Space IDs so per-Space wallpapers override global defaults.
+  private func currentDesktopSpaceIdentifiers() -> [String] {
+    let spacesURL = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Preferences/com.apple.spaces.plist")
+    guard
+      let data = try? Data(contentsOf: spacesURL),
+      let root = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any],
+      let configuration = root["SpacesDisplayConfiguration"] as? [String: Any],
+      let managementData = configuration["Management Data"] as? [String: Any],
+      let monitors = managementData["Monitors"] as? [[String: Any]]
+    else {
+      return [""]
+    }
+
+    var spaceIDs: [String] = []
+    for monitor in monitors {
+      guard
+        let currentSpace = monitor["Current Space"] as? [String: Any],
+        let uuid = currentSpace["uuid"] as? String
+      else {
+        continue
+      }
+      if !spaceIDs.contains(uuid) {
+        spaceIDs.append(uuid)
+      }
+    }
+
+    if !spaceIDs.contains("") {
+      spaceIDs.append("")
+    }
+    return spaceIDs
+  }
+
+  // Resolve a wallpaper choice from a specific Space entry in macOS' wallpaper store.
+  private func desktopWallpaperPath(fromSpaceID spaceID: String, root: [String: Any]) -> WallpaperStoreResolution {
+    guard
+      let spaces = root["Spaces"] as? [String: Any],
+      let space = spaces[spaceID] as? [String: Any]
+    else {
+      return WallpaperStoreResolution(imagePath: nil, usesImageExtension: false)
+    }
+
+    var usesImageExtension = false
+    if let displays = space["Displays"] as? [String: Any] {
+      for display in displays.values {
+        guard let display = display as? [String: Any] else {
+          continue
+        }
+        let resolution = wallpaperStoreResolution(fromDesktop: display["Desktop"] as? [String: Any])
+        usesImageExtension = usesImageExtension || resolution.usesImageExtension
+        if let imagePath = resolution.imagePath {
+          return WallpaperStoreResolution(imagePath: imagePath, usesImageExtension: usesImageExtension)
+        }
+      }
+    }
+
+    if let defaultSpace = space["Default"] as? [String: Any] {
+      let resolution = wallpaperStoreResolution(fromDesktop: defaultSpace["Desktop"] as? [String: Any])
+      usesImageExtension = usesImageExtension || resolution.usesImageExtension
+      if let imagePath = resolution.imagePath {
+        return WallpaperStoreResolution(imagePath: imagePath, usesImageExtension: usesImageExtension)
+      }
+    }
+
+    return WallpaperStoreResolution(imagePath: nil, usesImageExtension: usesImageExtension)
+  }
+
+  // Decode one Desktop content entry and return either its source image or the provider kind.
+  private func wallpaperStoreResolution(fromDesktop desktop: [String: Any]?) -> WallpaperStoreResolution {
+    guard
+      let content = desktop?["Content"] as? [String: Any],
+      let choices = content["Choices"] as? [[String: Any]]
+    else {
+      return WallpaperStoreResolution(imagePath: nil, usesImageExtension: false)
+    }
+
+    var usesImageExtension = false
+    for choice in choices {
+      if choice["Provider"] as? String == "com.apple.wallpaper.extension.image" {
+        usesImageExtension = true
+      }
+
+      if let imagePath = firstExistingImagePath(in: choice["Files"]) {
+        return WallpaperStoreResolution(imagePath: imagePath, usesImageExtension: usesImageExtension)
+      }
+
+      guard
+        let configurationData = choice["Configuration"] as? Data,
+        let configuration = try? PropertyListSerialization.propertyList(from: configurationData, options: [], format: nil),
+        let imagePath = firstExistingImagePath(in: configuration)
+      else {
+        continue
+      }
+      return WallpaperStoreResolution(imagePath: imagePath, usesImageExtension: usesImageExtension)
+    }
+
+    return WallpaperStoreResolution(imagePath: nil, usesImageExtension: usesImageExtension)
+  }
+
+  // Use WallpaperAgent's rendered image cache for photo shuffle choices that do not expose a source path.
+  private func latestWallpaperAgentImageCachePath() -> String? {
+    let cacheURL = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Containers/com.apple.wallpaper.agent/Data/Library/Caches/com.apple.wallpaper.caches/extension-com.apple.wallpaper.extension.image")
+    guard let files = try? FileManager.default.contentsOfDirectory(at: cacheURL, includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey], options: [.skipsHiddenFiles]) else {
+      return nil
+    }
+
+    let imageFiles = files.compactMap { url -> (url: URL, modificationDate: Date)? in
+      guard
+        isSupportedWallpaperImagePath(url.path),
+        (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true,
+        let modificationDate = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+      else {
+        return nil
+      }
+      return (url, modificationDate)
+    }
+
+    return imageFiles.max { $0.modificationDate < $1.modificationDate }?.url.path
+  }
+
+  // Walk decoded wallpaper configuration values because macOS stores file URLs under several provider-specific keys.
+  private func firstExistingImagePath(in value: Any?) -> String? {
+    if let path = value as? String {
+      return existingImagePath(from: path)
+    }
+
+    if let values = value as? [Any] {
+      for item in values {
+        if let path = firstExistingImagePath(in: item) {
+          return path
+        }
+      }
+      return nil
+    }
+
+    if let dictionary = value as? [String: Any] {
+      for key in ["relative", "url", "path", "absolute"] {
+        if let path = firstExistingImagePath(in: dictionary[key]) {
+          return path
+        }
+      }
+      for item in dictionary.values {
+        if let path = firstExistingImagePath(in: item) {
+          return path
+        }
+      }
+    }
+
+    return nil
+  }
+
+  // Normalize file URLs and plain paths before accepting them as previewable wallpaper images.
+  private func existingImagePath(from rawPath: String) -> String? {
+    let path: String
+    if let url = URL(string: rawPath), url.isFileURL {
+      path = url.path
+    } else {
+      path = rawPath
+    }
+
+    guard isSupportedWallpaperImagePath(path), FileManager.default.fileExists(atPath: path) else {
+      return nil
+    }
+    return path
+  }
+
+  // Keep non-image cache metadata out of the theme preview path.
+  private func isSupportedWallpaperImagePath(_ path: String) -> Bool {
+    let supportedExtensions = ["bmp", "gif", "heic", "jpeg", "jpg", "png", "tif", "tiff", "webp"]
+    return supportedExtensions.contains(URL(fileURLWithPath: path).pathExtension.lowercased())
   }
 
   private func logScrollingCaptureTiming(_ fields: String, traceId: String? = nil) {
@@ -2495,6 +2747,9 @@ class AppDelegate: FlutterAppDelegate {
           } else {
             result(FlutterError(code: "INVALID_ARGS", message: "Invalid screenshot diagonal resize cursor", details: nil))
           }
+
+        case "getDesktopWallpaperPath":
+          result(self?.desktopWallpaperPath())
 
         case "setSize":
           if let args = call.arguments as? [String: Any],
