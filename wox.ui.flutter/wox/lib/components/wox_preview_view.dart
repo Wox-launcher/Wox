@@ -399,14 +399,14 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
       // Keep them out of the generic shell so the new default styling does not
       // disturb the interactive terminal surface.
       return Container(
-        padding: launcherController.isFullscreenPreviewOnly() ? EdgeInsets.zero : const EdgeInsets.only(top: 10.0, bottom: 10.0, left: 10.0),
+        padding: launcherController.isPreviewOnlyLayout ? EdgeInsets.zero : const EdgeInsets.only(top: 10.0, bottom: 10.0, left: 10.0),
         child: WoxTerminalPreviewView(woxPreview: widget.woxPreview, woxTheme: widget.woxTheme),
       );
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_WEBVIEW.code) {
       // WebView owns platform view sizing and navigation, so only preserve the
       // existing preview padding instead of wrapping it in the generic scroller.
       return Container(
-        padding: launcherController.isFullscreenPreviewOnly() ? EdgeInsets.zero : const EdgeInsets.only(top: 10.0, bottom: 10.0, left: 10.0),
+        padding: launcherController.isPreviewOnlyLayout ? EdgeInsets.zero : const EdgeInsets.only(top: 10.0, bottom: 10.0, left: 10.0),
         child: WoxWebViewPreview(previewData: widget.woxPreview.previewData),
       );
     }

@@ -3,13 +3,20 @@ package system
 import (
 	"context"
 	"strings"
+	"sync"
+	"time"
 	"wox/common"
 	"wox/plugin"
+	"wox/plugin/system/explorer"
+	"wox/setting/definition"
 	"wox/util"
 	"wox/util/airdrop"
 	"wox/util/clipboard"
+	"wox/util/keyboard"
 	"wox/util/selection"
 	"wox/util/shell"
+
+	"github.com/google/uuid"
 )
 
 var selectionIcon = common.PluginSelectionIcon
@@ -19,12 +26,33 @@ var selectionIcon = common.PluginSelectionIcon
 // the full set of actions (copy path, open folder, preview, etc.).
 const selectionCommandPreview = "preview"
 
+const (
+	enableSpaceQuickLookSettingKey = "enableSpaceQuickLook"
+	// The trailing space makes Wox parse "preview" as a command instead of a
+	// search term for selection queries.
+	selectionQuickLookQueryText = "selection " + selectionCommandPreview + " "
+)
+
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &SelectionPlugin{})
 }
 
 type SelectionPlugin struct {
-	api plugin.API
+	api            plugin.API
+	quickLookMu    sync.Mutex
+	quickLookState *selectionSpaceQuickLookState
+}
+
+// selectionSpaceQuickLookState owns the platform monitor subscriptions and the
+// small key-state machine needed to avoid repeated or accidental Space previews.
+type selectionSpaceQuickLookState struct {
+	plugin        *SelectionPlugin
+	explorerSub   explorer.ExplorerRawKeySubscription
+	dialogSub     explorer.ExplorerRawKeySubscription
+	mu            sync.Mutex
+	spaceDown     bool
+	spaceConsumed bool
+	invalidUntil  time.Time
 }
 
 func (i *SelectionPlugin) GetMetadata() plugin.Metadata {
@@ -54,6 +82,19 @@ func (i *SelectionPlugin) GetMetadata() plugin.Metadata {
 				Description: "i18n:plugin_selection_command_preview",
 			},
 		},
+		SettingDefinitions: definition.PluginSettingDefinitions{
+			{
+				Type: definition.PluginSettingDefinitionTypeCheckBox,
+				Value: &definition.PluginSettingValueCheckBox{
+					Key:          enableSpaceQuickLookSettingKey,
+					Label:        "i18n:plugin_selection_setting_enable_space_quick_look",
+					Tooltip:      "i18n:plugin_selection_setting_enable_space_quick_look_tips",
+					DefaultValue: "false",
+				},
+				DisabledInPlatforms: []util.Platform{util.PlatformLinux},
+				IsPlatformSpecific:  true,
+			},
+		},
 		Features: []plugin.MetadataFeature{
 			{
 				Name: plugin.MetadataFeatureQuerySelection,
@@ -74,6 +115,192 @@ func (i *SelectionPlugin) GetMetadata() plugin.Metadata {
 
 func (i *SelectionPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	i.api = initParams.API
+
+	i.updateSpaceQuickLookListener(ctx, i.api.GetSetting(ctx, enableSpaceQuickLookSettingKey) == "true")
+	i.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, value string) {
+		if key == enableSpaceQuickLookSettingKey {
+			i.updateSpaceQuickLookListener(callbackCtx, value == "true")
+		}
+	})
+	i.api.OnUnload(ctx, func(ctx context.Context) {
+		i.stopSpaceQuickLookListener()
+	})
+}
+
+// updateSpaceQuickLookListener keeps the platform monitor subscriptions aligned
+// with the platform-specific plugin setting.
+func (i *SelectionPlugin) updateSpaceQuickLookListener(ctx context.Context, enabled bool) {
+	if !enabled || (!util.IsWindows() && !util.IsMacOS()) {
+		i.stopSpaceQuickLookListener()
+		return
+	}
+
+	i.quickLookMu.Lock()
+	if i.quickLookState != nil {
+		i.quickLookMu.Unlock()
+		return
+	}
+
+	state := &selectionSpaceQuickLookState{plugin: i}
+	explorerSub, explorerErr := explorer.AddExplorerRawKeyListener(state.handleRawKey)
+	if explorerErr != nil {
+		i.quickLookMu.Unlock()
+		i.api.Log(ctx, plugin.LogLevelWarning, "Failed to enable Space Quick Look explorer listener: "+explorerErr.Error())
+		return
+	}
+
+	dialogSub, dialogErr := explorer.AddExplorerOpenSaveRawKeyListener(state.handleRawKey)
+	if dialogErr != nil {
+		if explorerSub != nil {
+			_ = explorerSub.Close()
+		}
+		i.quickLookMu.Unlock()
+		i.api.Log(ctx, plugin.LogLevelWarning, "Failed to enable Space Quick Look dialog listener: "+dialogErr.Error())
+		return
+	}
+
+	state.explorerSub = explorerSub
+	state.dialogSub = dialogSub
+	i.quickLookState = state
+	i.quickLookMu.Unlock()
+}
+
+// stopSpaceQuickLookListener removes any active Space Quick Look monitor
+// subscriptions owned by the Selection plugin.
+func (i *SelectionPlugin) stopSpaceQuickLookListener() {
+	i.quickLookMu.Lock()
+	state := i.quickLookState
+	i.quickLookState = nil
+	i.quickLookMu.Unlock()
+
+	if state != nil {
+		state.close()
+	}
+}
+
+func (s *selectionSpaceQuickLookState) close() {
+	if s.explorerSub != nil {
+		_ = s.explorerSub.Close()
+	}
+	if s.dialogSub != nil {
+		_ = s.dialogSub.Close()
+	}
+}
+
+// handleRawKey applies QuickLook-style Space filtering before triggering the
+// existing Selection preview command.
+func (s *selectionSpaceQuickLookState) handleRawKey(event keyboard.RawKeyEvent) bool {
+	if event.Type == keyboard.EventTypeKeyUp {
+		if event.Key == keyboard.KeySpace {
+			s.mu.Lock()
+			s.spaceDown = false
+			s.spaceConsumed = false
+			s.mu.Unlock()
+		}
+		return false
+	}
+
+	if event.Type != keyboard.EventTypeKeyDown {
+		return false
+	}
+
+	if event.Key != keyboard.KeySpace {
+		s.recordInvalidKeyIfNeeded(event)
+		return false
+	}
+
+	s.mu.Lock()
+	if s.spaceDown {
+		consume := s.spaceConsumed
+		s.mu.Unlock()
+		return consume
+	}
+
+	s.spaceDown = true
+	if event.Modifiers != 0 {
+		s.spaceConsumed = false
+		s.mu.Unlock()
+		return false
+	}
+	if time.Now().Before(s.invalidUntil) {
+		s.spaceConsumed = false
+		s.mu.Unlock()
+		return false
+	}
+	if s.plugin.api.IsVisible(context.Background()) {
+		s.spaceConsumed = false
+		s.mu.Unlock()
+		return false
+	}
+	s.spaceConsumed = true
+	s.mu.Unlock()
+
+	util.Go(context.Background(), "selection space quick look", func() {
+		s.plugin.triggerSpaceQuickLook()
+	})
+	return true
+}
+
+// recordInvalidKeyIfNeeded suppresses Space briefly after normal typing or
+// command keys so typing in Explorer cannot accidentally open preview.
+func (s *selectionSpaceQuickLookState) recordInvalidKeyIfNeeded(event keyboard.RawKeyEvent) {
+	if isSpaceQuickLookNavigationKey(event.Key) || isSpaceQuickLookModifierKey(event.Key) {
+		return
+	}
+
+	s.mu.Lock()
+	s.invalidUntil = time.Now().Add(time.Second)
+	s.mu.Unlock()
+}
+
+func isSpaceQuickLookNavigationKey(key keyboard.Key) bool {
+	switch key {
+	case keyboard.KeyLeft, keyboard.KeyRight, keyboard.KeyUp, keyboard.KeyDown,
+		keyboard.KeyReturn, keyboard.KeyEscape, keyboard.KeyF5, keyboard.KeyF11:
+		return true
+	default:
+		return false
+	}
+}
+
+func isSpaceQuickLookModifierKey(key keyboard.Key) bool {
+	switch key {
+	case keyboard.KeyCtrl, keyboard.KeyShift, keyboard.KeyAlt, keyboard.KeySuper:
+		return true
+	default:
+		return false
+	}
+}
+
+// triggerSpaceQuickLook opens the existing preview-only Selection query for a
+// single selected file.
+func (i *SelectionPlugin) triggerSpaceQuickLook() {
+	ctx := util.NewTraceContext()
+	ctx = util.WithCoreSessionContext(ctx)
+	ctx = util.WithShowSourceContext(ctx, string(common.ShowSourceSelection))
+
+	selected, err := selection.GetSelected(ctx)
+	if err != nil {
+		return
+	}
+	if selected.Type != selection.SelectionTypeFile || len(selected.FilePaths) != 1 {
+		return
+	}
+	if !util.IsFileExists(selected.FilePaths[0]) {
+		return
+	}
+
+	plugin.GetPluginManager().GetUI().ChangeQuery(ctx, common.PlainQuery{
+		QueryId:        uuid.NewString(),
+		QueryType:      plugin.QueryTypeSelection,
+		QueryText:      selectionQuickLookQueryText,
+		QuerySelection: selected,
+	})
+	plugin.GetPluginManager().GetUI().ShowApp(ctx, common.ShowContext{
+		HideQueryBox: true,
+		HideToolbar:  true,
+		ShowSource:   common.ShowSourceSelection,
+	})
 }
 
 func (i *SelectionPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {

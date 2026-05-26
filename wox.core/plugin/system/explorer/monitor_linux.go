@@ -25,3 +25,13 @@ func GetActiveDialogRect() (int, int, int, int, bool) {
 	// Stub implementation for Linux
 	return 0, 0, 0, 0, false
 }
+
+func AddExplorerRawKeyListener(listener ExplorerRawKeyListener) (ExplorerRawKeySubscription, error) {
+	// Stub implementation for Linux
+	return nil, nil
+}
+
+func AddExplorerOpenSaveRawKeyListener(listener ExplorerRawKeyListener) (ExplorerRawKeySubscription, error) {
+	// Stub implementation for Linux
+	return nil, nil
+}

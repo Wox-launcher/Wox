@@ -4,7 +4,7 @@ package keyboard
 
 /*
 #cgo CFLAGS: -x objective-c
-#cgo LDFLAGS: -framework Cocoa -framework Carbon
+#cgo LDFLAGS: -framework Cocoa -framework Carbon -framework ApplicationServices
 #include <stdlib.h>
 
 int woxDarwinEnsureKeyboardReady(char **errorOut);

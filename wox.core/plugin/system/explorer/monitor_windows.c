@@ -126,6 +126,50 @@ static BOOL CALLBACK EnumChildClassProc(HWND hwnd, LPARAM lParam)
     return TRUE;
 }
 
+static BOOL CALLBACK EnumDesktopViewProc(HWND hwnd, LPARAM lParam)
+{
+    FindChildClassData *data = (FindChildClassData *)lParam;
+    WCHAR className[256];
+    if (GetClassNameW(hwnd, className, 256) == 0)
+    {
+        logMessage("EnumDesktopViewProc: GetClassNameW failed err=%lu", GetLastError());
+        return TRUE;
+    }
+
+    if (_wcsicmp(className, L"SHELLDLL_DefView") == 0)
+    {
+        data->found = TRUE;
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+static int isDesktopShellWindow(HWND hwnd)
+{
+    if (!hwnd)
+    {
+        return 0;
+    }
+
+    WCHAR className[256];
+    if (GetClassNameW(hwnd, className, 256) == 0)
+    {
+        logMessage("isDesktopShellWindow: GetClassNameW failed err=%lu", GetLastError());
+        return 0;
+    }
+
+    if (_wcsicmp(className, L"Progman") != 0 && _wcsicmp(className, L"WorkerW") != 0)
+    {
+        return 0;
+    }
+
+    FindChildClassData data;
+    data.found = FALSE;
+    EnumChildWindows(hwnd, EnumDesktopViewProc, (LPARAM)&data);
+    return data.found ? 1 : 0;
+}
+
 static int isOpenSaveDialog(HWND hwnd)
 {
     if (!hwnd)
@@ -323,7 +367,8 @@ static int isForegroundExplorerOrDialogWindow(HWND hwnd)
     }
 
     int classResult = classifyExplorerWindow(hwnd);
-    if (classResult == -1)
+    int isDesktop = isDesktopShellWindow(hwnd);
+    if (classResult == -1 && !isDesktop)
     {
         return 0;
     }
@@ -337,7 +382,7 @@ static int isForegroundExplorerOrDialogWindow(HWND hwnd)
 
     int isExplorer = isExplorerProcess(pid);
     int isDialog = isOpenSaveDialog(hwnd);
-    if (isExplorer && classResult != -1)
+    if (isExplorer && (classResult != -1 || isDesktop))
     {
         return 1;
     }
@@ -356,7 +401,7 @@ static void triggerActivation(HWND hwnd, DWORD pid, int isDialog);
 // without a fresh activation callback for the same HWND. The old implementation
 // recovered on the next key press; keep that behavior here so raw-key dispatch
 // does not get stuck in stateNone after the first type-to-search cycle.
-int refreshFileExplorerMonitorState()
+int refreshFileExplorerMonitorStateForRawKey(int allowDesktop)
 {
     HWND hwnd = GetForegroundWindow();
     DWORD pid = 0;
@@ -368,7 +413,8 @@ int refreshFileExplorerMonitorState()
     }
 
     int classResult = classifyExplorerWindow(hwnd);
-    if (classResult == -1)
+    int isDesktop = allowDesktop ? isDesktopShellWindow(hwnd) : 0;
+    if (classResult == -1 && !isDesktop)
     {
         return 0;
     }
@@ -381,7 +427,7 @@ int refreshFileExplorerMonitorState()
 
     int isExplorer = isExplorerProcess(pid);
     isDialog = isOpenSaveDialog(hwnd);
-    if (!((isExplorer && classResult != -1) || isDialog))
+    if (!((isExplorer && (classResult != -1 || isDesktop)) || isDialog))
     {
         return 0;
     }
@@ -394,9 +440,14 @@ int refreshFileExplorerMonitorState()
 
     gLastExplorerPid = pid;
     gLastExplorerHwnd = hwnd;
-    logMessage("refreshFileExplorerMonitorState: reactivate hwnd=0x%p pid=%lu dialog=%d previous=%d", hwnd, pid, isDialog, currentState);
+    logMessage("refreshFileExplorerMonitorState: reactivate hwnd=0x%p pid=%lu dialog=%d desktop=%d previous=%d", hwnd, pid, isDialog, isDesktop, currentState);
     triggerActivation(hwnd, pid, isDialog ? 1 : 0);
     return 1;
+}
+
+int refreshFileExplorerMonitorState()
+{
+    return refreshFileExplorerMonitorStateForRawKey(0);
 }
 
 static void triggerActivation(HWND hwnd, DWORD pid, int isDialog)

@@ -29,6 +29,35 @@ static HANDLE gKeyboardThread = NULL;
 static DWORD gKeyboardThreadId = 0;
 static HHOOK gRawKeyboardHook = NULL;
 
+static void clearKeyboardThreadHandle(void)
+{
+    if (gKeyboardThread)
+    {
+        CloseHandle(gKeyboardThread);
+    }
+    gKeyboardThread = NULL;
+    gKeyboardThreadId = 0;
+    gRawKeyboardHook = NULL;
+}
+
+static void resetKeyboardThreadIfExited(void)
+{
+    if (!gKeyboardThread)
+    {
+        return;
+    }
+
+    DWORD waitResult = WaitForSingleObject(gKeyboardThread, 0);
+    if (waitResult == WAIT_OBJECT_0 || waitResult == WAIT_FAILED)
+    {
+        // Dev rebuilds can leave Go-side state alive while the native message
+        // thread has exited. Drop the stale handle so the next request can
+        // recreate the low-level keyboard hook instead of failing with
+        // ERROR_INVALID_THREAD_ID.
+        clearKeyboardThreadHandle();
+    }
+}
+
 static UINT toWindowsModifierMask(UINT modifiers)
 {
     UINT nativeMask = 0;
@@ -197,6 +226,8 @@ static DWORD WINAPI keyboardThreadProc(LPVOID param)
 
 int woxKeyboardEnsureThread(void)
 {
+    resetKeyboardThreadIfExited();
+
     if (gKeyboardThread)
     {
         return 1;
@@ -209,8 +240,19 @@ int woxKeyboardEnsureThread(void)
         return 0;
     }
 
+    int attempts = 0;
     while (PostThreadMessageW(gKeyboardThreadId, WM_NULL, 0, 0) == 0)
     {
+        if (WaitForSingleObject(gKeyboardThread, 0) == WAIT_OBJECT_0)
+        {
+            clearKeyboardThreadHandle();
+            return 0;
+        }
+        if (++attempts > 200)
+        {
+            clearKeyboardThreadHandle();
+            return 0;
+        }
         Sleep(5);
     }
     return 1;
@@ -234,6 +276,18 @@ static int sendRequest(KeyboardRequest *request)
     if (!PostThreadMessageW(gKeyboardThreadId, WM_WOX_KEYBOARD_REQUEST, 0, (LPARAM)request))
     {
         request->errorCode = GetLastError();
+        if (request->errorCode == ERROR_INVALID_THREAD_ID)
+        {
+            clearKeyboardThreadHandle();
+            if (woxKeyboardEnsureThread() && PostThreadMessageW(gKeyboardThreadId, WM_WOX_KEYBOARD_REQUEST, 0, (LPARAM)request))
+            {
+                WaitForSingleObject(request->done, INFINITE);
+                CloseHandle(request->done);
+                request->done = NULL;
+                return request->ok;
+            }
+            request->errorCode = GetLastError();
+        }
         CloseHandle(request->done);
         request->done = NULL;
         return 0;

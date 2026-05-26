@@ -299,7 +299,7 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
             return;
           }
 
-          launcherController.focusQueryBox();
+          unawaited(launcherController.focusLauncherKeyboardTarget());
           launcherController.saveWindowPositionIfNeeded();
         },
         child:

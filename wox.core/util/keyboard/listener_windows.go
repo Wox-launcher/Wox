@@ -101,16 +101,16 @@ func AddRawKeyListener(handler RawKeyHandler) (RawKeySubscription, error) {
 	id := nextListenerID
 	nextListenerID++
 	rawKeyListeners[id] = handler
-	needEnable := !rawHookIsEnabled
 	managerMu.Unlock()
 
-	if needEnable {
-		if err := setRawHookEnabled(true); err != nil {
-			managerMu.Lock()
-			delete(rawKeyListeners, id)
-			managerMu.Unlock()
-			return nil, err
-		}
+	// The native hook thread can be recreated independently of Go-side listener
+	// state in dev rebuild flows. Enabling is idempotent on the native side, so
+	// confirm it for every new listener instead of trusting the cached flag.
+	if err := setRawHookEnabled(true); err != nil {
+		managerMu.Lock()
+		delete(rawKeyListeners, id)
+		managerMu.Unlock()
+		return nil, err
 	}
 
 	return &rawKeySubscription{id: id}, nil
