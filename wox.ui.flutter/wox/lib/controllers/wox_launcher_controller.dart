@@ -3241,9 +3241,13 @@ class WoxLauncherController extends GetxController {
       return normalizedText.isEmpty ? 1 : normalizedText.split('\n').length.clamp(1, QUERY_BOX_MAX_LINES).toInt();
     }
 
+    final metrics = WoxInterfaceSizeUtil.instance.current;
+    final textHeightFactor = metrics.queryBoxTextHeightFactor;
     final painter = TextPainter(
-      text: TextSpan(text: normalizedText.isEmpty ? ' ' : normalizedText, style: TextStyle(fontSize: WoxInterfaceSizeUtil.instance.current.queryBoxFontSize)),
+      text: TextSpan(text: normalizedText.isEmpty ? ' ' : normalizedText, style: TextStyle(fontSize: metrics.queryBoxFontSize, height: textHeightFactor)),
       textDirection: TextDirection.ltr,
+      strutStyle: StrutStyle(fontSize: metrics.queryBoxFontSize, height: textHeightFactor, leading: 0, forceStrutHeight: true),
+      textScaler: TextScaler.noScaling,
     )..layout(minWidth: 0, maxWidth: queryBoxTextWrapWidth);
 
     // Query text can wrap visually even when it has no explicit newline. The previous explicit-newline

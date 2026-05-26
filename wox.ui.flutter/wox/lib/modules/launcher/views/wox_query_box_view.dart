@@ -191,74 +191,83 @@ class WoxQueryBoxView extends StatelessWidget {
     // Query box text and accessory sizes follow density while existing
     // decoration padding stays fixed, preserving the normal layout and keeping
     // multi-line height calculation aligned with controller metrics.
-    return ExtendedTextField(
-      key: controller.queryBoxTextFieldKey,
-      style: TextStyle(fontSize: WoxInterfaceSizeUtil.instance.current.queryBoxFontSize, color: safeFromCssColor(currentTheme.queryBoxFontColor)),
-      decoration: InputDecoration(
-        contentPadding: EdgeInsets.only(left: 8, right: rightAccessoryWidth, top: QUERY_BOX_CONTENT_PADDING_TOP, bottom: QUERY_BOX_CONTENT_PADDING_BOTTOM),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(currentTheme.queryBoxBorderRadius.toDouble()), borderSide: BorderSide.none),
-        filled: true,
-        fillColor: safeFromCssColor(currentTheme.queryBoxBackgroundColor),
-        hoverColor: Colors.transparent,
+    final metrics = WoxInterfaceSizeUtil.instance.current;
+    final textHeightFactor = metrics.queryBoxTextHeightFactor;
+    final queryBoxTextStyle = TextStyle(fontSize: metrics.queryBoxFontSize, height: textHeightFactor, color: safeFromCssColor(currentTheme.queryBoxFontColor));
+    final queryBoxStrutStyle = StrutStyle(fontSize: metrics.queryBoxFontSize, height: textHeightFactor, leading: 0, forceStrutHeight: true);
+
+    return MediaQuery.withNoTextScaling(
+      child: ExtendedTextField(
+        key: controller.queryBoxTextFieldKey,
+        style: queryBoxTextStyle,
+        strutStyle: queryBoxStrutStyle,
+        textAlignVertical: TextAlignVertical.center,
+        decoration: InputDecoration(
+          contentPadding: EdgeInsets.only(left: 8, right: rightAccessoryWidth, top: QUERY_BOX_CONTENT_PADDING_TOP, bottom: QUERY_BOX_CONTENT_PADDING_BOTTOM),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(currentTheme.queryBoxBorderRadius.toDouble()), borderSide: BorderSide.none),
+          filled: true,
+          fillColor: safeFromCssColor(currentTheme.queryBoxBackgroundColor),
+          hoverColor: Colors.transparent,
+        ),
+        cursorColor: safeFromCssColor(currentTheme.queryBoxCursorColor),
+        focusNode: controller.queryBoxFocusNode,
+        controller: controller.queryBoxTextFieldController,
+        scrollController: controller.queryBoxScrollController,
+        keyboardType: TextInputType.multiline,
+        textInputAction: TextInputAction.newline,
+        minLines: 1,
+        maxLines: QUERY_BOX_MAX_LINES,
+        enableIMEPersonalizedLearning: true,
+        inputFormatters: [
+          TextInputFormatter.withFunction((oldValue, newValue) {
+            var traceId = const UuidV4().generate();
+            final formattedValue = normalizeMacOptionDeleteInFormatter(oldValue, newValue);
+            Logger.instance.debug(traceId, "IME Formatter - old: ${oldValue.text}, new: ${formattedValue.text}, composing: ${formattedValue.composing}");
+
+            // Flutter's IME handling has inconsistencies across platforms, especially on Windows
+            // So we use input formatter to detect IME input completion instead of onChanged event
+            // Reference: https://github.com/flutter/flutter/issues/128565
+            //
+            // Issues:
+            // 1. isComposingRangeValid state is unstable on certain platforms
+            // 2. When IME input completes, the composing state changes occur in this order:
+            //    a. First, text content updates (e.g., from pinyin "wo'zhi'dao" to characters "我知道")
+            //    b. Then, the composing state is cleared (from valid to invalid)
+            //
+            // Solution:
+            // 1. Track composing range changes to more accurately detect when IME input completes
+            // 2. Use start and end positions to determine composing state instead of relying solely on isComposingRangeValid
+
+            // Check if both states are in IME editing mode
+            // composing.start >= 0 indicates an active IME composition region
+            bool wasComposing = oldValue.composing.start >= 0 && oldValue.composing.end >= 0;
+            bool isComposing = formattedValue.composing.start >= 0 && formattedValue.composing.end >= 0;
+
+            if (wasComposing && !isComposing) {
+              // Scenario 1: IME composition completed
+              // Transition from composing to non-composing state indicates user has finished word selection
+              // Example: The moment when "wo'zhi'dao" converts to "我知道"
+              Future.microtask(() {
+                Logger.instance.debug(traceId, "IME: composition completed, start query: ${formattedValue.text}");
+                controller.onQueryBoxTextChanged(formattedValue.text);
+              });
+            } else if (!wasComposing && !isComposing && oldValue.text != formattedValue.text) {
+              // Scenario 2: Normal text input (non-IME)
+              // Text has changed but neither state is in IME composition
+              // Example: Direct input of English letters or numbers
+              Future.microtask(() {
+                Logger.instance.debug(traceId, "IME: normal input, start query: ${formattedValue.text}");
+                controller.onQueryBoxTextChanged(formattedValue.text);
+              });
+            }
+
+            // Use Future.microtask to ensure query is triggered after text update is complete
+            // This prevents querying with incomplete state updates
+
+            return formattedValue;
+          }),
+        ],
       ),
-      cursorColor: safeFromCssColor(currentTheme.queryBoxCursorColor),
-      focusNode: controller.queryBoxFocusNode,
-      controller: controller.queryBoxTextFieldController,
-      scrollController: controller.queryBoxScrollController,
-      keyboardType: TextInputType.multiline,
-      textInputAction: TextInputAction.newline,
-      minLines: 1,
-      maxLines: QUERY_BOX_MAX_LINES,
-      enableIMEPersonalizedLearning: true,
-      inputFormatters: [
-        TextInputFormatter.withFunction((oldValue, newValue) {
-          var traceId = const UuidV4().generate();
-          final formattedValue = normalizeMacOptionDeleteInFormatter(oldValue, newValue);
-          Logger.instance.debug(traceId, "IME Formatter - old: ${oldValue.text}, new: ${formattedValue.text}, composing: ${formattedValue.composing}");
-
-          // Flutter's IME handling has inconsistencies across platforms, especially on Windows
-          // So we use input formatter to detect IME input completion instead of onChanged event
-          // Reference: https://github.com/flutter/flutter/issues/128565
-          //
-          // Issues:
-          // 1. isComposingRangeValid state is unstable on certain platforms
-          // 2. When IME input completes, the composing state changes occur in this order:
-          //    a. First, text content updates (e.g., from pinyin "wo'zhi'dao" to characters "我知道")
-          //    b. Then, the composing state is cleared (from valid to invalid)
-          //
-          // Solution:
-          // 1. Track composing range changes to more accurately detect when IME input completes
-          // 2. Use start and end positions to determine composing state instead of relying solely on isComposingRangeValid
-
-          // Check if both states are in IME editing mode
-          // composing.start >= 0 indicates an active IME composition region
-          bool wasComposing = oldValue.composing.start >= 0 && oldValue.composing.end >= 0;
-          bool isComposing = formattedValue.composing.start >= 0 && formattedValue.composing.end >= 0;
-
-          if (wasComposing && !isComposing) {
-            // Scenario 1: IME composition completed
-            // Transition from composing to non-composing state indicates user has finished word selection
-            // Example: The moment when "wo'zhi'dao" converts to "我知道"
-            Future.microtask(() {
-              Logger.instance.debug(traceId, "IME: composition completed, start query: ${formattedValue.text}");
-              controller.onQueryBoxTextChanged(formattedValue.text);
-            });
-          } else if (!wasComposing && !isComposing && oldValue.text != formattedValue.text) {
-            // Scenario 2: Normal text input (non-IME)
-            // Text has changed but neither state is in IME composition
-            // Example: Direct input of English letters or numbers
-            Future.microtask(() {
-              Logger.instance.debug(traceId, "IME: normal input, start query: ${formattedValue.text}");
-              controller.onQueryBoxTextChanged(formattedValue.text);
-            });
-          }
-
-          // Use Future.microtask to ensure query is triggered after text update is complete
-          // This prevents querying with incomplete state updates
-
-          return formattedValue;
-        }),
-      ],
     );
   }
 
