@@ -22,6 +22,7 @@ import 'package:wox/utils/color_util.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/env.dart';
 import 'package:wox/utils/wox_system_wallpaper_util.dart';
+
 import 'wox_setting_plugin_view.dart';
 import 'wox_setting_general_view.dart';
 import 'wox_setting_network_view.dart';
