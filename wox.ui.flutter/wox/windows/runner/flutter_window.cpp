@@ -21,6 +21,7 @@
 
 #include "flutter/generated_plugin_registrant.h"
 #include "utils.h"
+#include "wox_preview_handler_plugin.h"
 #include "wox_webview/wox_webview_plugin.h"
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
@@ -4159,6 +4160,7 @@ bool FlutterWindow::OnCreate()
   }
   RegisterPlugins(flutter_controller_->engine());
   RegisterWoxWebviewPlugin(flutter_controller_->engine()->GetRegistrarForPlugin("WoxWebviewPlugin"));
+  RegisterWoxPreviewHandlerPlugin(flutter_controller_->engine()->GetRegistrarForPlugin("WoxPreviewHandlerPlugin"));
 
   // Set up window manager method channel
   window_manager_channel_ = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(

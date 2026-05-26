@@ -11,6 +11,7 @@ add_executable(${BINARY_NAME} WIN32
   "main.cpp"
   "utils.cpp"
   "win32_window.cpp"
+  "wox_preview_handler_plugin.cpp"
   "wox_webview/graphics_context.cc"
   "wox_webview/texture_bridge.cc"
   "wox_webview/webview.cc"
@@ -50,6 +51,7 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app flutter_wrapper_plugin)
 target_link_libraries(${BINARY_NAME} PRIVATE "Shell32.lib")
 target_link_libraries(${BINARY_NAME} PRIVATE "Ole32.lib")
+target_link_libraries(${BINARY_NAME} PRIVATE "Shlwapi.lib")
 target_link_libraries(${BINARY_NAME} PRIVATE "gdiplus.lib")
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
 target_link_libraries(${BINARY_NAME} PRIVATE "UIAutomationCore.lib")
