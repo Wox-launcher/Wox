@@ -25,6 +25,7 @@ import 'package:wox/components/wox_plugin_detail_view.dart';
 import 'package:wox/components/wox_preview_scaffold.dart';
 import 'package:wox/components/wox_query_requirement_settings_preview_view.dart';
 import 'package:wox/components/wox_selectable_text.dart';
+import 'package:wox/components/wox_theme_editor.dart';
 import 'package:wox/components/wox_update_view.dart';
 import 'package:wox/components/wox_trigger_keyword_conflict_preview_view.dart';
 import 'package:wox/components/wox_webview_preview.dart';
@@ -377,6 +378,13 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
         return WoxQueryRequirementSettingsPreviewView(data: previewData, launcherController: launcherController);
       } catch (e) {
         contentWidget = buildText("Invalid query requirement settings preview data: $e");
+      }
+    } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_THEME_EDIT.code) {
+      try {
+        final initialTheme = widget.woxPreview.previewData.isEmpty ? widget.woxTheme : WoxTheme.fromJson(jsonDecode(widget.woxPreview.previewData));
+        return WoxThemeEditor(initialTheme: initialTheme);
+      } catch (e) {
+        contentWidget = buildText("Invalid theme editor preview data: $e");
       }
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TRIGGER_KEYWORD_CONFLICT.code) {
       try {

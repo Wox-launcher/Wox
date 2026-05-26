@@ -100,7 +100,7 @@ class _PreviewTagPills extends StatelessWidget {
   Widget build(BuildContext context) {
     final fontColor = safeFromCssColor(woxTheme.previewFontColor);
     final contentColor = safeFromCssColor(woxTheme.previewPropertyContentColor);
-    final borderColor = safeFromCssColor(woxTheme.previewSplitLineColor);
+    final borderColor = safeFromCssColor(woxTheme.previewPropertyTitleColor, defaultColor: safeFromCssColor(woxTheme.previewSplitLineColor));
 
     // Pills are horizontally scrollable instead of wrapping so metadata never
     // steals height from the preview body on compact launcher windows. They are

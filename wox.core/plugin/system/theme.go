@@ -53,6 +53,10 @@ func (c *ThemePlugin) GetMetadata() plugin.Metadata {
 				Command:     "restore",
 				Description: "i18n:plugin_theme_restore_command_description",
 			},
+			{
+				Command:     "edit",
+				Description: "i18n:plugin_theme_edit_command_description",
+			},
 		},
 		SettingDefinitions: definition.PluginSettingDefinitions{
 			{
@@ -87,6 +91,12 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 	}
 	if query.Command == "restore" {
 		return plugin.NewQueryResponse(c.queryRestore(ctx, query))
+	}
+	if query.Command == "edit" {
+		response := plugin.NewQueryResponse(c.queryEdit(ctx))
+		widthRatio := 0.0
+		response.Layout.ResultPreviewWidthRatio = &widthRatio
+		return response
 	}
 
 	uiManager := plugin.GetPluginManager().GetUI()
@@ -397,6 +407,28 @@ func (c *ThemePlugin) queryRestore(ctx context.Context, query plugin.Query) []pl
 						plugin.GetPluginManager().GetUI().RestoreTheme(ctx)
 					},
 				},
+			},
+		},
+	}
+}
+
+// queryEdit opens the core-owned theme editor as a fullscreen preview result.
+func (c *ThemePlugin) queryEdit(ctx context.Context) []plugin.QueryResult {
+	currentTheme := ui.GetUIManager().GetCurrentTheme(ctx)
+	themeJSON, marshalErr := json.Marshal(currentTheme)
+	if marshalErr != nil {
+		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to marshal current theme for editor: %s", marshalErr.Error()))
+	}
+
+	return []plugin.QueryResult{
+		{
+			Id:       uuid.NewString(),
+			Title:    i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_edit_title"),
+			SubTitle: i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_edit_subtitle"),
+			Icon:     themeIcon,
+			Preview: plugin.WoxPreview{
+				PreviewType: plugin.WoxPreviewTypeThemeEdit,
+				PreviewData: string(themeJSON),
 			},
 		},
 	}
