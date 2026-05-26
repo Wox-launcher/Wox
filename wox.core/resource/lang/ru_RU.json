@@ -730,7 +730,7 @@
   "plugin_query_history_plugin_name": "История запросов Wox",
   "plugin_query_history_plugin_description": "История запросов Wox",
   "plugin_selection_plugin_name": "Выделение",
-  "plugin_selection_plugin_description": "Действия Wox по умолчанию для запроса выделения",
+  "plugin_selection_plugin_description": "Действия и предпросмотр для выбранного текста или файлов",
   "plugin_selection_command_preview": "Предпросмотр выбранного файла",
   "plugin_selection_setting_enable_space_quick_look": "Включить быстрый просмотр по пробелу",
   "plugin_selection_setting_enable_space_quick_look_tips": "Если включено, нажатие пробела в Проводнике, Finder или диалогах открытия/сохранения показывает выбранный файл в Wox.",

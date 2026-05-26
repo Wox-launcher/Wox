@@ -90,6 +90,7 @@ export default defineConfig({
               text: "Blog",
               items: [
                 { text: "Overview", link: "/blog/" },
+                { text: "Did You Know: Wox Can Preview Files with the Space Key", link: "/blog/did-you-know-selection-space-quick-look" },
                 { text: "Did You Know: Wox Can Bring Back a Launchpad-Style App Grid", link: "/blog/did-you-know-wox-app-launchpad" },
                 { text: "Did You Know: Wox Can Translate Selected Text Silently", link: "/blog/did-you-know-ai-command-silent-translation-query-hotkey" },
                 { text: "Did You Know: Wox Can Browse Websites with Query Hotkeys", link: "/blog/did-you-know-wox-query-hotkey-webview" },
@@ -197,6 +198,7 @@ export default defineConfig({
               text: "博客",
               items: [
                 { text: "总览", link: "/zh/blog/" },
+                { text: "你知道吗：Wox 可以用空格键快速预览文件", link: "/zh/blog/did-you-know-selection-space-quick-look" },
                 { text: "你知道吗：Wox 可以找回类似 Launchpad 的应用网格", link: "/zh/blog/did-you-know-wox-app-launchpad" },
                 { text: "你知道吗：Wox 可以用快捷键静默翻译选中文本", link: "/zh/blog/did-you-know-ai-command-silent-translation-query-hotkey" },
                 { text: "你知道吗：Wox 可以用快捷键查询快速浏览网页", link: "/zh/blog/did-you-know-wox-query-hotkey-webview" },
