@@ -771,7 +771,7 @@
   "plugin_query_history_plugin_name": "Wox 查询历史",
   "plugin_query_history_plugin_description": "Wox 的查询历史",
   "plugin_selection_plugin_name": "选中内容",
-  "plugin_selection_plugin_description": "选中查询的默认操作",
+  "plugin_selection_plugin_description": "选中文本或文件的操作与预览",
   "plugin_selection_command_preview": "预览选中的文件",
   "plugin_selection_setting_enable_space_quick_look": "启用空格快速预览",
   "plugin_selection_setting_enable_space_quick_look_tips": "启用后，在文件资源管理器、Finder 或打开/保存对话框中按空格键，用 Wox 预览选中的文件。",

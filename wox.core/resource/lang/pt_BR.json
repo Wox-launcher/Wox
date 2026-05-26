@@ -730,7 +730,7 @@
   "plugin_query_history_plugin_name": "Histórico de consulta do Wox",
   "plugin_query_history_plugin_description": "Histórico de consultas do Wox",
   "plugin_selection_plugin_name": "Seleção",
-  "plugin_selection_plugin_description": "Ações padrão do Wox para consulta de seleção",
+  "plugin_selection_plugin_description": "Ações e pré-visualizações para texto ou arquivos selecionados",
   "plugin_selection_command_preview": "Pré-visualizar arquivo selecionado",
   "plugin_selection_setting_enable_space_quick_look": "Ativar visualização rápida com Espaço",
   "plugin_selection_setting_enable_space_quick_look_tips": "Quando ativado, pressionar Espaço no Explorador de Arquivos, Finder ou diálogos de abrir/salvar visualiza o arquivo selecionado com o Wox.",
