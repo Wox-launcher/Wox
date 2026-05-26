@@ -25,6 +25,7 @@ import 'package:wox/utils/color_util.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/windows/windows_window_manager.dart';
+import 'package:wox/utils/wox_dialog_util.dart';
 import 'package:wox/utils/wox_system_wallpaper_util.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
 import 'package:wox/utils/wox_theme_util.dart';
@@ -288,7 +289,7 @@ class _WoxThemeEditorState extends State<WoxThemeEditor> {
     var selectedHsvColor = _colorToWheelHsv(selectedColor);
     final colorTextController = TextEditingController(text: _colorToCss(selectedColor));
 
-    await showDialog<void>(
+    await showWoxDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) {
@@ -525,7 +526,7 @@ class _WoxThemeEditorState extends State<WoxThemeEditor> {
     final nameController = TextEditingController(text: defaultName);
     String nameError = '';
 
-    final result = await showDialog<String>(
+    final result = await showWoxDialog<String>(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(

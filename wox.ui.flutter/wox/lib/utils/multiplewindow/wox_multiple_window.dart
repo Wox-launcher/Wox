@@ -426,10 +426,8 @@ class _WoxMultipleWindowRootState extends State<_WoxMultipleWindowRoot> {
   void initState() {
     super.initState();
     _themeWorker = ever(WoxThemeUtil.instance.currentTheme, (_) {
+      // Keep theme reactions below MaterialApp; rebuilding the window root while dialog routes are mounted can invalidate Flutter windowing dependencies.
       _applyWindowStyle();
-      if (mounted) {
-        setState(() {});
-      }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // The native window can report a stale zero/initial size until Flutter
@@ -556,17 +554,19 @@ class _WoxSimulatedTitleBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final backgroundColor = getThemeBackgroundColor();
-    final borderColor = getThemeDividerColor().withValues(alpha: isThemeDark() ? 0.42 : 0.30);
-    final textColor = getThemeTextColor();
+    return Obx(() {
+      final backgroundColor = getThemeBackgroundColor();
+      final borderColor = getThemeDividerColor().withValues(alpha: isThemeDark() ? 0.42 : 0.30);
+      final textColor = getThemeTextColor();
 
-    return SizedBox(
-      height: height,
-      child: DecoratedBox(
-        decoration: BoxDecoration(color: backgroundColor, border: Border(bottom: BorderSide(color: borderColor, width: 1))),
-        child: Platform.isMacOS ? _buildMacTitleBar(textColor) : _buildDefaultTitleBar(textColor),
-      ),
-    );
+      return SizedBox(
+        height: height,
+        child: DecoratedBox(
+          decoration: BoxDecoration(color: backgroundColor, border: Border(bottom: BorderSide(color: borderColor, width: 1))),
+          child: Platform.isMacOS ? _buildMacTitleBar(textColor) : _buildDefaultTitleBar(textColor),
+        ),
+      );
+    });
   }
 
   Widget _buildDefaultTitleBar(Color textColor) {
