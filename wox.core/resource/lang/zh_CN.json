@@ -721,6 +721,8 @@
   "plugin_selection_plugin_name": "选中内容",
   "plugin_selection_plugin_description": "选中查询的默认操作",
   "plugin_selection_command_preview": "预览选中的文件",
+  "plugin_selection_setting_enable_space_quick_look": "启用空格快速预览",
+  "plugin_selection_setting_enable_space_quick_look_tips": "启用后，在文件资源管理器、Finder 或打开/保存对话框中按空格键，用 Wox 预览选中的文件。",
   "plugin_screenshot_plugin_name": "截图",
   "plugin_screenshot_plugin_description": "截取屏幕区域",
   "plugin_screenshot_command_new_description": "开始新的截图",

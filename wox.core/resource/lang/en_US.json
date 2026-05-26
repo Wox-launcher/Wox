@@ -721,6 +721,8 @@
   "plugin_selection_plugin_name": "Selection",
   "plugin_selection_plugin_description": "Wox default actions for selection query",
   "plugin_selection_command_preview": "Preview selected file",
+  "plugin_selection_setting_enable_space_quick_look": "Enable Space Quick Look",
+  "plugin_selection_setting_enable_space_quick_look_tips": "When enabled, pressing Space in File Explorer, Finder, or open/save dialogs previews the selected file with Wox.",
   "plugin_screenshot_plugin_name": "Screenshot",
   "plugin_screenshot_plugin_description": "Capture an area of the screen",
   "plugin_screenshot_command_new_description": "Start a new screenshot",

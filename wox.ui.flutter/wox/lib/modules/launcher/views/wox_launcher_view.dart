@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:uuid/v4.dart';
 import 'package:wox/components/refinement/wox_query_refinement_bar_view.dart';
 import 'package:wox/components/wox_platform_focus.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
@@ -23,6 +26,7 @@ class WoxLauncherView extends StatelessWidget {
       final theme = WoxThemeUtil.instance.currentTheme.value;
       final isQueryBoxVisible = controller.isQueryBoxVisible.value;
       final isToolbarShowedWithoutResults = controller.isToolbarShowedWithoutResults;
+      final isPreviewOnlyLayout = controller.isPreviewOnlyLayout;
       final interfaceMetrics = WoxInterfaceSizeUtil.instance.metrics.value;
       final queryBoxView = WoxQueryBoxView(controller: controller);
       final refinementBarView = WoxQueryRefinementBarView(controller: controller);
@@ -35,7 +39,7 @@ class WoxLauncherView extends StatelessWidget {
       }
 
       final contentPadding =
-          controller.isFullscreenPreviewOnly()
+          isPreviewOnlyLayout
               ? EdgeInsets.zero
               : EdgeInsets.only(top: topPadding, right: theme.appPaddingRight.toDouble(), bottom: bottomPadding, left: theme.appPaddingLeft.toDouble());
 
@@ -73,9 +77,16 @@ class WoxLauncherView extends StatelessWidget {
       }
 
       return WoxPlatformFocus(
+        focusNode: controller.launcherFocusNode,
         onKeyEvent: (node, event) {
           if (event is! KeyDownEvent || event.logicalKey != LogicalKeyboardKey.escape) {
             return KeyEventResult.ignored;
+          }
+
+          final traceId = const UuidV4().generate();
+          if (!isQueryBoxVisible) {
+            unawaited(controller.hideApp(traceId));
+            return KeyEventResult.handled;
           }
 
           if (controller.queryBoxFocusNode.hasFocus) {
@@ -105,7 +116,7 @@ class WoxLauncherView extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (controller.isShowToolbar && !controller.isToolbarHiddenForce.value)
+                if (controller.isToolbarVisible)
                   SizedBox(
                     // The parent reserves toolbar height before the toolbar child paints,
                     // so it must observe density metrics directly instead of relying on

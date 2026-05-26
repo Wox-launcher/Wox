@@ -5946,6 +5946,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
     {
       ReleaseCapture();
       SendMessage(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+      FocusFlutterViewOrRoot(hwnd);
       result->Success();
     }
     else if (method_name == "waitUntilReadyToShow")

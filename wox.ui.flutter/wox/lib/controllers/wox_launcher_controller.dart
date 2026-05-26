@@ -129,6 +129,7 @@ class WoxLauncherController extends GetxController {
   final currentQuery = PlainQuery.empty().obs;
   // is current query returned results or finished without results
   bool isCurrentQueryReturned = false;
+  final launcherFocusNode = FocusNode();
   final queryBoxFocusNode = FocusNode();
   final queryBoxTextFieldController = QueryBoxTextEditingController(
     selectedTextStyle: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxTextSelectionColor)),
@@ -927,7 +928,7 @@ class WoxLauncherController extends GetxController {
   }
 
   bool get shouldShowQueryRefinementAffordance {
-    return isQueryBoxVisible.value && queryRefinements.isNotEmpty && !isFullscreenPreviewOnly();
+    return isQueryBoxVisible.value && queryRefinements.isNotEmpty && !isPreviewOnlyLayout;
   }
 
   bool get shouldShowQueryRefinements {
@@ -1000,7 +1001,14 @@ class WoxLauncherController extends GetxController {
 
   bool get isShowToolbar => activeResultViewController.items.isNotEmpty || isShowDoctorCheckInfo || hasVisibleToolbarMsg || hasBugAwareToolbarIndicator;
 
-  bool get isToolbarShowedWithoutResults => isShowToolbar && activeResultViewController.items.isEmpty;
+  bool get isToolbarVisible => isShowToolbar && !isToolbarHiddenForce.value;
+
+  bool get isToolbarShowedWithoutResults => isToolbarVisible && activeResultViewController.items.isEmpty;
+
+  // Launcher chrome is the query box and toolbar shell around result content.
+  bool get isLauncherChromeHidden => !isQueryBoxVisible.value && !isToolbarVisible;
+
+  bool get isPreviewOnlyLayout => isLauncherChromeHidden && isShowPreviewPanel.value && resultPreviewRatio.value == 0;
 
   String? get resolvedToolbarText => hasVisibleToolbarMsg ? toolbarMsg.value.displayText : toolbar.value.text;
 
@@ -1039,10 +1047,6 @@ class WoxLauncherController extends GetxController {
     // Wox's normal trigger-keyword semantics, which require the trailing space.
     await onQueryChanged(traceId, PlainQuery.text("bugreport "), "bug aware toolbar indicator clicked", moveCursorToEnd: true);
     await focusQueryBox();
-  }
-
-  bool isFullscreenPreviewOnly() {
-    return !isQueryBoxVisible.value && isShowPreviewPanel.value && resultPreviewRatio.value == 0;
   }
 
   String get previewFullscreenHotkey => "ctrl+b";
@@ -2026,6 +2030,29 @@ class WoxLauncherController extends GetxController {
     }
   }
 
+  /// Focuses the active launcher keyboard target.
+  /// Hidden-query preview mode has no editable query box, so it needs a stable
+  /// launcher-level focus node to keep Escape and other global keys reachable.
+  Future<void> focusLauncherKeyboardTarget({bool selectAll = false, bool Function()? shouldSelectAll}) async {
+    if (isQueryBoxVisible.value) {
+      await focusQueryBox(selectAll: selectAll, shouldSelectAll: shouldSelectAll);
+      return;
+    }
+
+    final screenshotController = Get.find<WoxScreenshotController>();
+    if (screenshotController.isSessionActive.value) {
+      return;
+    }
+
+    final isVisible = await windowDriver.isVisible();
+    if (!isVisible) {
+      return;
+    }
+
+    await windowDriver.focus();
+    launcherFocusNode.requestFocus();
+  }
+
   Future<void> focusQueryBox({bool selectAll = false, bool Function()? shouldSelectAll}) async {
     final screenshotController = Get.find<WoxScreenshotController>();
     if (screenshotController.isSessionActive.value) {
@@ -2090,7 +2117,7 @@ class WoxLauncherController extends GetxController {
     final focusToken = ++_visibleLauncherFocusToken;
     final textBeforeFocusSequence = queryBoxTextFieldController.text;
 
-    await focusQueryBox(
+    await focusLauncherKeyboardTarget(
       selectAll: selectAll,
       shouldSelectAll: () => _shouldSelectAllForVisibleLauncherFocus(selectAll: selectAll, focusToken: focusToken, textBeforeFocusSequence: textBeforeFocusSequence),
     );
@@ -2108,7 +2135,7 @@ class WoxLauncherController extends GetxController {
           if (focusToken != _visibleLauncherFocusToken) {
             return;
           }
-          await focusQueryBox(
+          await focusLauncherKeyboardTarget(
             selectAll: selectAll,
             shouldSelectAll: () => _shouldSelectAllForVisibleLauncherFocus(selectAll: selectAll, focusToken: focusToken, textBeforeFocusSequence: textBeforeFocusSequence),
           );
@@ -3075,7 +3102,7 @@ class WoxLauncherController extends GetxController {
       resultHeight = math.max(resultHeight, WoxThemeUtil.instance.getResultListViewHeightByCount(1));
     }
 
-    if (!isQueryBoxVisible.value && !isFullscreenPreviewOnly()) {
+    if (!isQueryBoxVisible.value && !isPreviewOnlyLayout) {
       resultHeight += WoxThemeUtil.instance.currentTheme.value.appPaddingBottom.toDouble();
     }
 
@@ -3449,13 +3476,13 @@ class WoxLauncherController extends GetxController {
 
   void doctorCheck() async {
     final traceId = const UuidV4().generate();
-    final wasToolbarVisible = isShowToolbar && !isToolbarHiddenForce.value;
+    final wasToolbarVisible = isToolbarVisible;
     var results = await WoxApi.instance.doctorCheck(traceId);
     final checkInfo = processDoctorCheckResults(results);
     doctorCheckInfo.value = checkInfo;
     updateDoctorToolbarIfNeeded(traceId);
-    final isToolbarVisible = isShowToolbar && !isToolbarHiddenForce.value;
-    if (wasToolbarVisible != isToolbarVisible) {
+    final toolbarVisible = isToolbarVisible;
+    if (wasToolbarVisible != toolbarVisible) {
       await resizeHeight(traceId: traceId, reason: "doctor check toolbar visibility changed");
     }
     Logger.instance.debug(traceId, "doctor check result: ${checkInfo.allPassed}, details: ${checkInfo.results.length} items");
@@ -3467,6 +3494,7 @@ class WoxLauncherController extends GetxController {
     glanceRefreshTimer?.cancel();
     cancelPendingResultTransitions();
     loadingTimer?.cancel();
+    launcherFocusNode.dispose();
     queryBoxFocusNode.dispose();
     queryBoxTextFieldController.dispose();
     actionListViewController.dispose();

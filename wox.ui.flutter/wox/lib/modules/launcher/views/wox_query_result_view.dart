@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
@@ -5,8 +7,10 @@ import 'package:wox/components/wox_form_action_view.dart';
 import 'package:wox/components/wox_grid_view.dart';
 import 'package:wox/components/wox_list_view.dart';
 import 'package:wox/components/wox_preview_view.dart';
+import 'package:wox/components/wox_tooltip.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_query.dart';
+import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/enums/wox_list_view_type_enum.dart';
 import 'package:wox/enums/wox_preview_type_enum.dart';
 import 'package:wox/utils/log.dart';
@@ -186,39 +190,44 @@ class WoxQueryResultView extends StatelessWidget {
   Widget getPreviewView() {
     if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: preview view container");
 
-    return Obx(
-      () =>
-          controller.isShowPreviewPanel.value
-              ? Flexible(
-                flex: (100 - controller.resultPreviewRatio.value * 100).toInt(),
-                child:
-                    controller.currentPreview.value.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_REMOTE.code
-                        ? FutureBuilder(
-                          future: controller.currentPreview.value.unWrap(const UuidV4().generate()),
-                          builder: (context, snapshot) {
-                            if (snapshot.hasData) {
-                              return WoxPreviewView(
-                                woxPreview: snapshot.data!,
-                                woxTheme: WoxThemeUtil.instance.currentTheme.value,
-                                launcherController: controller,
-                                aiChatController: controller.activeAIChatController,
-                              );
-                            } else if (snapshot.hasError) {
-                              return Text("${snapshot.error}");
-                            } else {
-                              return const SizedBox();
-                            }
-                          },
-                        )
-                        : WoxPreviewView(
-                          woxPreview: controller.currentPreview.value,
-                          woxTheme: WoxThemeUtil.instance.currentTheme.value,
-                          launcherController: controller,
-                          aiChatController: controller.activeAIChatController,
-                        ),
+    return Obx(() {
+      if (!controller.isShowPreviewPanel.value) {
+        return const SizedBox();
+      }
+
+      final woxTheme = WoxThemeUtil.instance.currentTheme.value;
+      final previewContent =
+          controller.currentPreview.value.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_REMOTE.code
+              ? FutureBuilder(
+                future: controller.currentPreview.value.unWrap(const UuidV4().generate()),
+                builder: (context, snapshot) {
+                  if (snapshot.hasData) {
+                    return WoxPreviewView(woxPreview: snapshot.data!, woxTheme: woxTheme, launcherController: controller, aiChatController: controller.activeAIChatController);
+                  } else if (snapshot.hasError) {
+                    return Text("${snapshot.error}");
+                  } else {
+                    return const SizedBox();
+                  }
+                },
               )
-              : const SizedBox(),
-    );
+              : WoxPreviewView(
+                woxPreview: controller.currentPreview.value,
+                woxTheme: woxTheme,
+                launcherController: controller,
+                aiChatController: controller.activeAIChatController,
+              );
+
+      return Flexible(
+        flex: (100 - controller.resultPreviewRatio.value * 100).toInt(),
+        child: _PreviewPanelHoverClose(
+          showCloseButton: controller.isPreviewOnlyLayout,
+          woxTheme: woxTheme,
+          tooltip: controller.tr("ui_cancel"),
+          onClose: () => unawaited(controller.hideApp(const UuidV4().generate())),
+          child: previewContent,
+        ),
+      );
+    });
   }
 
   @override
@@ -243,6 +252,73 @@ class WoxQueryResultView extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _PreviewPanelHoverClose extends StatefulWidget {
+  final Widget child;
+  final bool showCloseButton;
+  final WoxTheme woxTheme;
+  final String tooltip;
+  final VoidCallback onClose;
+
+  const _PreviewPanelHoverClose({required this.child, required this.showCloseButton, required this.woxTheme, required this.tooltip, required this.onClose});
+
+  @override
+  State<_PreviewPanelHoverClose> createState() => _PreviewPanelHoverCloseState();
+}
+
+class _PreviewPanelHoverCloseState extends State<_PreviewPanelHoverClose> {
+  static const closeButtonSize = 28.0;
+  static const closeButtonOffset = 20.0;
+  bool isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final closeColor = safeFromCssColor(widget.woxTheme.previewSplitLineColor);
+    final showCloseButton = widget.showCloseButton && isHovered;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => isHovered = true),
+      onExit: (_) => setState(() => isHovered = false),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          widget.child,
+          Positioned(
+            top: closeButtonOffset,
+            right: closeButtonOffset,
+            child: AnimatedOpacity(
+              opacity: showCloseButton ? 1 : 0,
+              duration: const Duration(milliseconds: 120),
+              curve: Curves.easeOut,
+              child: IgnorePointer(
+                ignoring: !showCloseButton,
+                child: WoxTooltip(
+                  message: widget.tooltip,
+                  waitDuration: const Duration(milliseconds: 500),
+                  child: IconButton(
+                    onPressed: widget.onClose,
+                    icon: Icon(Icons.close_rounded, size: 16, color: closeColor),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(width: closeButtonSize, height: closeButtonSize),
+                    visualDensity: VisualDensity.compact,
+                    style: ButtonStyle(
+                      foregroundColor: WidgetStateProperty.all(closeColor),
+                      backgroundColor: WidgetStateProperty.all(Colors.transparent),
+                      overlayColor: WidgetStateProperty.resolveWith<Color?>(
+                        (states) => states.contains(WidgetState.hovered) ? closeColor.withValues(alpha: 0.10) : Colors.transparent,
+                      ),
+                      shape: WidgetStateProperty.all(RoundedRectangleBorder(borderRadius: BorderRadius.circular(6))),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

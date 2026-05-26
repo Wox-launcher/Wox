@@ -259,7 +259,7 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
     return WoxBorderDragMoveArea(
       borderWidth: WoxThemeUtil.instance.currentTheme.value.appPaddingTop.toDouble(),
       onDragEnd: () {
-        launcherController.focusQueryBox();
+        unawaited(launcherController.focusLauncherKeyboardTarget());
         launcherController.saveWindowPositionIfNeeded();
       },
       onDragStart: launcherController.windowDriver.startDragging,

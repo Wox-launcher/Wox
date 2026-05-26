@@ -1,5 +1,6 @@
 #import <Cocoa/Cocoa.h>
 #import <Carbon/Carbon.h>
+#import <ApplicationServices/ApplicationServices.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
@@ -9,7 +10,8 @@ extern int keyboardHookEventCGO(int eventKind, unsigned int keyCode, unsigned in
 
 static EventHandlerRef gHotkeyHandler = NULL;
 static NSMutableDictionary<NSNumber *, NSValue *> *gHotkeyRefs = nil;
-static id gRawKeyboardMonitor = nil;
+static CFMachPortRef gRawKeyboardEventTap = NULL;
+static CFRunLoopSourceRef gRawKeyboardEventTapSource = NULL;
 
 static char *copyErrorMessage(const char *message) {
     if (!message) {
@@ -188,44 +190,97 @@ int woxDarwinUnregisterHotkey(int id, char **errorOut) {
     }
 }
 
+static CGEventRef rawKeyboardEventTapCallback(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void *refcon) {
+    @autoreleasepool {
+        if (type == kCGEventTapDisabledByTimeout || type == kCGEventTapDisabledByUserInput) {
+            if (gRawKeyboardEventTap) {
+                CGEventTapEnable(gRawKeyboardEventTap, true);
+            }
+            return event;
+        }
+
+        if (type != kCGEventKeyDown && type != kCGEventKeyUp && type != kCGEventFlagsChanged) {
+            return event;
+        }
+
+        NSEvent *nsEvent = [NSEvent eventWithCGEvent:event];
+        if (!nsEvent) {
+            return event;
+        }
+
+        unsigned short keyCode = (unsigned short)CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode);
+        unsigned int modifiers = currentModifierMask(nsEvent.modifierFlags);
+        unsigned int character = currentCharacterCode(nsEvent);
+        int eventKind = -1;
+
+        if (type == kCGEventFlagsChanged) {
+            if (!isModifierKeyCode(keyCode)) {
+                return event;
+            }
+            eventKind = modifierKeyPressed(keyCode, nsEvent.modifierFlags) ? 0 : 1;
+            character = 0;
+        } else if (type == kCGEventKeyDown) {
+            eventKind = 0;
+        } else if (type == kCGEventKeyUp) {
+            eventKind = 1;
+        }
+
+        if (eventKind == -1) {
+            return event;
+        }
+
+        int consume = keyboardHookEventCGO(eventKind, keyCode, modifiers, character);
+        if (consume != 0) {
+            return NULL;
+        }
+        return event;
+    }
+}
+
 int woxDarwinSetRawKeyboardHookEnabled(int enabled, char **errorOut) {
     @autoreleasepool {
         if (enabled) {
-            if (!gRawKeyboardMonitor) {
-                NSEventMask mask = NSEventMaskKeyDown | NSEventMaskKeyUp | NSEventMaskFlagsChanged;
-                gRawKeyboardMonitor = [NSEvent addGlobalMonitorForEventsMatchingMask:mask handler:^(NSEvent *event) {
-                    if (!event) {
-                        return;
+            if (!gRawKeyboardEventTap) {
+                CGEventMask mask = CGEventMaskBit(kCGEventKeyDown) | CGEventMaskBit(kCGEventKeyUp) | CGEventMaskBit(kCGEventFlagsChanged);
+                gRawKeyboardEventTap = CGEventTapCreate(kCGSessionEventTap,
+                                                         kCGHeadInsertEventTap,
+                                                         kCGEventTapOptionDefault,
+                                                         mask,
+                                                         rawKeyboardEventTapCallback,
+                                                         NULL);
+                if (!gRawKeyboardEventTap) {
+                    if (errorOut) {
+                        *errorOut = copyErrorMessage("failed to create macOS raw keyboard event tap");
                     }
+                    return 0;
+                }
 
-                    unsigned int modifiers = currentModifierMask(event.modifierFlags);
-                    unsigned short keyCode = event.keyCode;
-
-                    if (event.type == NSEventTypeFlagsChanged) {
-                        if (!isModifierKeyCode(keyCode)) {
-                            return;
-                        }
-                        int eventKind = modifierKeyPressed(keyCode, event.modifierFlags) ? 0 : 1;
-                        keyboardHookEventCGO(eventKind, keyCode, modifiers, 0);
-                        return;
+                gRawKeyboardEventTapSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, gRawKeyboardEventTap, 0);
+                if (!gRawKeyboardEventTapSource) {
+                    CFRelease(gRawKeyboardEventTap);
+                    gRawKeyboardEventTap = NULL;
+                    if (errorOut) {
+                        *errorOut = copyErrorMessage("failed to create macOS raw keyboard event tap source");
                     }
+                    return 0;
+                }
 
-                    if (event.type == NSEventTypeKeyDown) {
-                        keyboardHookEventCGO(0, keyCode, modifiers, currentCharacterCode(event));
-                        return;
-                    }
-
-                    if (event.type == NSEventTypeKeyUp) {
-                        keyboardHookEventCGO(1, keyCode, modifiers, currentCharacterCode(event));
-                    }
-                }];
+                CFRunLoopAddSource(CFRunLoopGetMain(), gRawKeyboardEventTapSource, kCFRunLoopCommonModes);
+                CGEventTapEnable(gRawKeyboardEventTap, true);
             }
             return 1;
         }
 
-        if (gRawKeyboardMonitor) {
-            [NSEvent removeMonitor:gRawKeyboardMonitor];
-            gRawKeyboardMonitor = nil;
+        if (gRawKeyboardEventTapSource) {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), gRawKeyboardEventTapSource, kCFRunLoopCommonModes);
+            CFRelease(gRawKeyboardEventTapSource);
+            gRawKeyboardEventTapSource = NULL;
+        }
+
+        if (gRawKeyboardEventTap) {
+            CGEventTapEnable(gRawKeyboardEventTap, false);
+            CFRelease(gRawKeyboardEventTap);
+            gRawKeyboardEventTap = NULL;
         }
         return 1;
     }
