@@ -680,7 +680,7 @@
     "Id": "6987b7b1-89da-41ef-bab3-d1ba2e3daba0",
     "Name": "Everything",
     "Author": "qianlifeng",
-    "Version": "0.0.9",
+    "Version": "0.1.0",
     "MinWoxVersion": "2.0.0",
     "Runtime": "nodejs",
     "Description": "Search files with Everything on Windows",
@@ -694,7 +694,7 @@
       "Windows"
     ],
     "DateCreated": "2026-04-22 20:40:30",
-    "DateUpdated": "2026-04-27 06:50:23"
+    "DateUpdated": "2026-05-26 12:55:29"
   },
   {
     "Id": "0057ebd4-1a85-4653-8bfa-d51557c0c7a1",
