@@ -6,8 +6,9 @@ import 'wox_setting_plugin_item_view.dart';
 
 class WoxSettingPluginCheckbox extends WoxSettingPluginItem {
   final PluginSettingValueCheckBox item;
+  final List<Widget> labelActions;
 
-  const WoxSettingPluginCheckbox({super.key, required this.item, required super.value, required super.onUpdate, required super.labelWidth});
+  const WoxSettingPluginCheckbox({super.key, required this.item, required super.value, required super.onUpdate, required super.labelWidth, this.labelActions = const []});
 
   @override
   Widget build(BuildContext context) {
@@ -25,6 +26,7 @@ class WoxSettingPluginCheckbox extends WoxSettingPluginItem {
       ),
       style: item.style,
       tooltip: item.tooltip,
+      labelActions: labelActions,
     );
   }
 }

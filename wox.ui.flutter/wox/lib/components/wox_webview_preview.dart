@@ -20,8 +20,9 @@ import 'package:wox/utils/wox_interface_size_util.dart';
 class WoxWebViewPreview extends StatefulWidget {
   final String previewData;
   final WoxLauncherController launcherController;
+  final bool showToolbar;
 
-  const WoxWebViewPreview({super.key, required this.previewData, required this.launcherController});
+  const WoxWebViewPreview({super.key, required this.previewData, required this.launcherController, this.showToolbar = true});
 
   @override
   State<WoxWebViewPreview> createState() => _WoxWebViewPreviewState();
@@ -310,6 +311,10 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
   }
 
   Widget _buildPreviewWithToolbar({required Widget child, ValueListenable<WoxWebViewNavigationState>? navigationState}) {
+    if (!widget.showToolbar) {
+      return child;
+    }
+
     return Stack(
       children: [
         Positioned.fill(child: child),
@@ -469,10 +474,18 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
 
   void _showToolbarTemporarily() {
     unawaited(_logToolbarDebug("show temporarily requested"));
+    if (!widget.showToolbar) {
+      return;
+    }
+
     _showToolbar();
   }
 
   void _showToolbar({bool keepVisible = false}) {
+    if (!widget.showToolbar) {
+      return;
+    }
+
     _toolbarHideTimer?.cancel();
 
     if (!_isToolbarVisible && mounted) {
@@ -488,6 +501,10 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
   }
 
   void _scheduleToolbarHide({Duration delay = _toolbarAutoHideDelay}) {
+    if (!widget.showToolbar) {
+      return;
+    }
+
     _toolbarHideTimer?.cancel();
     final generation = ++_toolbarHideGeneration;
     unawaited(_logToolbarDebug("hide scheduled generation=$generation delayMs=${delay.inMilliseconds}"));

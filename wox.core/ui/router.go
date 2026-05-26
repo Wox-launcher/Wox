@@ -109,6 +109,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/ping":                        handlePing,
 	"/preview":                     handlePreview,
 	"/preview/image/overlay":       handlePreviewImageOverlay,
+	"/image/file/icon":             handleFileIcon,
 	"/image/lazy/load":             handleLazyImageLoad,
 	"/open":                        handleOpen,
 	"/backup/now":                  handleBackupNow,
@@ -172,6 +173,56 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 
 func handlePing(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, "pong")
+}
+
+type fileIconRequest struct {
+	Path string `json:"path"`
+	Size int    `json:"size"`
+}
+
+func handleFileIcon(w http.ResponseWriter, r *http.Request) {
+	// File previews run in Flutter, but icon extraction already belongs to core's
+	// platform-specific fileicon pipeline. Keep this endpoint small so previews
+	// reuse the same cached icon artifacts as launcher results.
+	ctx := getTraceContext(r)
+	filePath := strings.TrimSpace(r.URL.Query().Get("path"))
+	size := 0
+	if rawSize := strings.TrimSpace(r.URL.Query().Get("size")); rawSize != "" {
+		if parsedSize, err := strconv.Atoi(rawSize); err == nil {
+			size = parsedSize
+		}
+	}
+
+	if r.Body != nil {
+		var request fileIconRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err == nil {
+			if filePath == "" {
+				filePath = strings.TrimSpace(request.Path)
+			}
+			if size <= 0 {
+				size = request.Size
+			}
+		}
+	}
+
+	if filePath == "" {
+		writeErrorResponse(w, "path is empty")
+		return
+	}
+	if size <= 0 {
+		size = common.ResultListIconSize
+	}
+	if size > common.ResultGridIconSize {
+		size = common.ResultGridIconSize
+	}
+
+	icon := common.ConvertIconWithSize(ctx, common.NewWoxImageFileIcon(filePath), "", size)
+	if icon.IsEmpty() || icon.ImageType == common.WoxImageTypeFileIcon {
+		writeErrorResponse(w, "failed to resolve file icon")
+		return
+	}
+
+	writeSuccessResponse(w, icon)
 }
 
 func handleLazyImageLoad(w http.ResponseWriter, r *http.Request) {
