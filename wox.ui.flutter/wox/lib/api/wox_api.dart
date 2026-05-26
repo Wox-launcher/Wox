@@ -109,6 +109,10 @@ class WoxApi {
     await WoxHttpUtil.instance.postData(traceId, "/theme/apply", {"id": id});
   }
 
+  Future<WoxTheme> saveTheme(String traceId, String name, WoxTheme theme, {bool overwrite = false}) async {
+    return await WoxHttpUtil.instance.postData<WoxTheme>(traceId, "/theme/save", {"Name": name, "Theme": theme.toJson(), "Overwrite": overwrite});
+  }
+
   Future<bool> isHotkeyAvailable(String traceId, String hotkey) async {
     return await WoxHttpUtil.instance.postData(traceId, "/hotkey/available", {"hotkey": hotkey});
   }

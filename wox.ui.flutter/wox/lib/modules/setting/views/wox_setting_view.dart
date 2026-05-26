@@ -14,6 +14,7 @@ import 'package:wox/modules/setting/views/wox_setting_ui_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_ai_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_data_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_theme_view.dart';
+import 'package:wox/modules/setting/views/wox_setting_theme_editor_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_about_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_usage_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_privacy_view.dart';
@@ -22,6 +23,7 @@ import 'package:wox/utils/color_util.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/env.dart';
 import 'package:wox/utils/log.dart';
+import 'package:wox/utils/wox_system_wallpaper_util.dart';
 
 import 'wox_setting_plugin_view.dart';
 import 'wox_setting_general_view.dart';
@@ -56,6 +58,12 @@ class _WoxSettingViewState extends State<WoxSettingView> {
     super.initState();
     _activeNavPathWorker = ever<String>(controller.activeNavPath, (_) => _scheduleActiveNavItemVisible());
     HardwareKeyboard.instance.addHandler(_handleHardwareKeyboardEvent);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        unawaited(controller.preloadThemeStore(const UuidV4().generate()));
+        unawaited(_preloadThemeEditorWallpaper());
+      }
+    });
   }
 
   @override
@@ -68,6 +76,16 @@ class _WoxSettingViewState extends State<WoxSettingView> {
 
   GlobalKey _getNavItemKey(String navPath) {
     return _navItemKeys.putIfAbsent(navPath, () => GlobalKey(debugLabel: 'settings-nav-$navPath'));
+  }
+
+  // Preload the desktop wallpaper as soon as settings opens so the theme editor backdrop is ready before the editor page is selected.
+  Future<void> _preloadThemeEditorWallpaper() async {
+    final traceId = const UuidV4().generate();
+    final wallpaperPath = await WoxSystemWallpaperUtil.instance.loadSystemWallpaperPath(traceId: traceId, forceRefresh: true);
+    if (!mounted || wallpaperPath == null) {
+      return;
+    }
+    await WoxSystemWallpaperUtil.instance.precacheSystemWallpaperPath(context, wallpaperPath, traceId: traceId);
   }
 
   void _scheduleActiveNavItemVisible({int attempt = 0}) {
@@ -637,6 +655,7 @@ class _WoxSettingViewState extends State<WoxSettingView> {
                 await controller.switchToThemeList(false);
               },
             ),
+            _NavItem(id: 'themes.edit', icon: Icons.tune_outlined, title: controller.tr('ui_theme_editor_title'), body: const WoxSettingThemeEditorView()),
           ],
         ),
         _NavItem(id: 'usage', icon: Icons.query_stats_outlined, title: controller.tr('ui_usage'), body: const WoxSettingUsageView()),

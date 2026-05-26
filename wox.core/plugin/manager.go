@@ -1930,6 +1930,7 @@ func (m *Manager) buildResultUI(resultCache *QueryResultCache, queryId string) Q
 	if !uiResult.Preview.IsEmpty() &&
 		uiResult.Preview.PreviewType != WoxPreviewTypeRemote &&
 		uiResult.Preview.PreviewType != WoxPreviewTypeQueryRequirementSettings &&
+		uiResult.Preview.PreviewType != WoxPreviewTypeThemeEdit &&
 		uiResult.Preview.PreviewType != WoxPreviewTypeTriggerKeywordConflict &&
 		len(uiResult.Preview.PreviewData) > previewDataMaxSize {
 		uiResult.Preview = WoxPreview{
@@ -2190,6 +2191,7 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	// because stripping it would hide the form that can unblock the query.
 	if query.IsGlobalQuery() &&
 		result.Preview.PreviewType != WoxPreviewTypeQueryRequirementSettings &&
+		result.Preview.PreviewType != WoxPreviewTypeThemeEdit &&
 		result.Preview.PreviewType != WoxPreviewTypeTriggerKeywordConflict {
 		result.Preview = WoxPreview{}
 		result.Group = ""
@@ -2205,6 +2207,7 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	if !result.Preview.IsEmpty() &&
 		result.Preview.PreviewType != WoxPreviewTypeRemote &&
 		result.Preview.PreviewType != WoxPreviewTypeQueryRequirementSettings &&
+		result.Preview.PreviewType != WoxPreviewTypeThemeEdit &&
 		result.Preview.PreviewType != WoxPreviewTypeTriggerKeywordConflict &&
 		len(result.Preview.PreviewData) > previewDataMaxSize {
 		result.Preview = WoxPreview{

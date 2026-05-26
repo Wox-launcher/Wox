@@ -2977,11 +2977,13 @@ class WoxLauncherController extends GetxController {
     return preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TERMINAL.code ||
         preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code ||
         preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_QUERY_REQUIREMENT_SETTINGS.code ||
+        preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_THEME_EDIT.code ||
         preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TRIGGER_KEYWORD_CONFLICT.code;
   }
 
   bool isCoreInteractiveSettingsPreview(WoxPreview preview) {
     return preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_QUERY_REQUIREMENT_SETTINGS.code ||
+        preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_THEME_EDIT.code ||
         preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TRIGGER_KEYWORD_CONFLICT.code;
   }
 

@@ -172,6 +172,16 @@ class WindowsWindowManager extends BaseWindowManager {
     }
   }
 
+  /// Returns true when the OS supports the native Mica backdrop used by translucent themes.
+  Future<bool> supportsMicaBackdrop() async {
+    try {
+      return await _channel.invokeMethod('supportsMicaBackdrop');
+    } catch (e) {
+      Logger.instance.error(const UuidV4().generate(), "Error checking Mica backdrop support: $e");
+      return false;
+    }
+  }
+
   @override
   Future<void> show() async {
     try {

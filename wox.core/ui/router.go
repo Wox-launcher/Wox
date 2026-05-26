@@ -34,6 +34,7 @@ import (
 	"wox/util/shell"
 	"wox/util/tray"
 
+	"github.com/google/uuid"
 	"github.com/jinzhu/copier"
 	"github.com/samber/lo"
 	"github.com/tidwall/gjson"
@@ -56,6 +57,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/theme/install":   handleThemeInstall,
 	"/theme/uninstall": handleThemeUninstall,
 	"/theme/apply":     handleThemeApply,
+	"/theme/save":      handleThemeSave,
 
 	// settings
 	"/setting/wox":                      handleSettingWox,
@@ -637,6 +639,79 @@ func handleThemeApply(w http.ResponseWriter, r *http.Request) {
 
 	GetUIManager().ChangeTheme(ctx, findTheme)
 	writeSuccessResponse(w, "")
+}
+
+type saveThemeRequest struct {
+	Name      string       `json:"Name"`
+	Theme     common.Theme `json:"Theme"`
+	Overwrite bool         `json:"Overwrite"`
+}
+
+// handleThemeSave persists an edited draft as either a new user theme or an overwrite of the current user theme.
+func handleThemeSave(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeErrorResponse(w, "failed to read theme save request: "+err.Error())
+		return
+	}
+
+	var request saveThemeRequest
+	if err := json.Unmarshal(body, &request); err != nil {
+		writeErrorResponse(w, "failed to parse theme save request: "+err.Error())
+		return
+	}
+
+	themeName := strings.TrimSpace(request.Name)
+	if themeName == "" {
+		writeErrorResponse(w, "theme name is empty")
+		return
+	}
+
+	theme := request.Theme
+	if theme.AppBackgroundColor == "" {
+		writeErrorResponse(w, "theme data is empty")
+		return
+	}
+
+	if request.Overwrite {
+		if strings.TrimSpace(theme.ThemeId) == "" {
+			writeErrorResponse(w, "theme id is empty")
+			return
+		}
+		if GetUIManager().IsSystemTheme(theme.ThemeId) {
+			writeErrorResponse(w, "can't overwrite system theme")
+			return
+		}
+	} else {
+		theme.ThemeId = uuid.NewString()
+	}
+	theme.ThemeName = themeName
+	if strings.TrimSpace(theme.ThemeAuthor) == "" {
+		theme.ThemeAuthor = "Wox Launcher"
+	}
+	if strings.TrimSpace(theme.ThemeUrl) == "" {
+		theme.ThemeUrl = "https://github.com/Wox-launcher/Wox"
+	}
+	if strings.TrimSpace(theme.Version) == "" {
+		theme.Version = "1.0.0"
+	}
+	theme.IsSystem = false
+	theme.IsInstalled = true
+	theme.IsAutoAppearance = false
+	theme.DarkThemeId = ""
+	theme.LightThemeId = ""
+	theme.Windows = nil
+	theme.MacOS = nil
+	theme.Linux = nil
+
+	if installErr := GetStoreManager().Install(ctx, theme); installErr != nil {
+		writeErrorResponse(w, "can't save theme: "+installErr.Error())
+		return
+	}
+
+	writeSuccessResponse(w, theme)
 }
 
 func handleSettingWox(w http.ResponseWriter, r *http.Request) {

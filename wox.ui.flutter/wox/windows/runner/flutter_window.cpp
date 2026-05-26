@@ -69,6 +69,25 @@ FlutterWindow *g_window_instance = nullptr;
 static std::once_flag g_gdiplus_init_once;
 static ULONG_PTR g_gdiplus_token = 0;
 
+// GetWindowsBuildNumberForCapabilities mirrors the backdrop support check without
+// exposing Win32Window internals to the Flutter method channel.
+static DWORD GetWindowsBuildNumberForCapabilities()
+{
+  OSVERSIONINFOEX osvi = {0};
+  osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
+  typedef NTSTATUS(WINAPI *RtlGetVersionPtr)(PRTL_OSVERSIONINFOW);
+  HMODULE h_ntdll = GetModuleHandleW(L"ntdll.dll");
+  if (h_ntdll)
+  {
+    RtlGetVersionPtr rtl_get_version = reinterpret_cast<RtlGetVersionPtr>(GetProcAddress(h_ntdll, "RtlGetVersion"));
+    if (rtl_get_version)
+    {
+      rtl_get_version(reinterpret_cast<PRTL_OSVERSIONINFOW>(&osvi));
+    }
+  }
+  return osvi.dwBuildNumber;
+}
+
 static void EnsureGdiplusInitialized()
 {
   std::call_once(g_gdiplus_init_once, []() {
@@ -5262,6 +5281,11 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       size[flutter::EncodableValue("width")] = flutter::EncodableValue(width);
       size[flutter::EncodableValue("height")] = flutter::EncodableValue(height);
       result->Success(flutter::EncodableValue(size));
+    }
+    else if (method_name == "supportsMicaBackdrop")
+    {
+      // Keep Dart's transparency controls aligned with the native backdrop gate used by Win32Window.
+      result->Success(flutter::EncodableValue(GetWindowsBuildNumberForCapabilities() >= 22000));
     }
     else if (method_name == "setPosition")
     {

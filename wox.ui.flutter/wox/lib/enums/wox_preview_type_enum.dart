@@ -16,6 +16,7 @@ enum WoxPreviewTypeEnum {
   WOX_PREVIEW_TYPE_UPDATE("update", "update"),
   WOX_PREVIEW_TYPE_AI_STREAM("ai_stream", "ai_stream"),
   WOX_PREVIEW_TYPE_QUERY_REQUIREMENT_SETTINGS("query_requirement_settings", "query_requirement_settings"),
+  WOX_PREVIEW_TYPE_THEME_EDIT("theme_edit", "theme_edit"),
   WOX_PREVIEW_TYPE_TRIGGER_KEYWORD_CONFLICT("trigger_keyword_conflict", "trigger_keyword_conflict");
 
   final String code;

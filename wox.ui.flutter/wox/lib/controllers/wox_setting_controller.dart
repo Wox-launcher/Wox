@@ -30,6 +30,15 @@ import 'package:wox/utils/wox_fuzzy_match_util.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
 import 'package:wox/utils/wox_setting_util.dart';
 
+// WoxThemeEditorDraftSession carries the original active theme, saved baseline, and current unsaved draft.
+class WoxThemeEditorDraftSession {
+  final WoxTheme restoreTheme;
+  final WoxTheme sourceTheme;
+  final WoxTheme draftTheme;
+
+  const WoxThemeEditorDraftSession({required this.restoreTheme, required this.sourceTheme, required this.draftTheme});
+}
+
 class WoxSettingController extends GetxController {
   static const double _settingSearchResultEstimatedRowExtent = 52.0;
 
@@ -86,11 +95,18 @@ class WoxSettingController extends GetxController {
 
   //themes
   final themeList = <WoxTheme>[];
+  final storeThemesList = <WoxTheme>[];
   final installedThemesList = <WoxTheme>[]; // All installed themes for auto theme lookup
   final filteredThemeList = <WoxTheme>[].obs;
   final activeTheme = WoxTheme.empty().obs;
   final isStoreThemeList = true.obs;
   final themeListScrollController = ScrollController();
+  final filterThemeKeywordController = TextEditingController();
+  WoxTheme? _themeEditorRestoreTheme;
+  WoxTheme? _themeEditorSourceTheme;
+  WoxTheme? _themeEditorDraftTheme;
+  Future<void>? _storeThemesLoadFuture;
+  bool _hasLoadedStoreThemes = false;
 
   //lang
   var langMap = <String, String>{}.obs;
@@ -597,6 +613,12 @@ class WoxSettingController extends GetxController {
         return 'ui_data';
       case 'plugins.runtime':
         return 'ui_runtime_settings';
+      case 'themes.store':
+        return 'ui_store_themes';
+      case 'themes.installed':
+        return 'ui_installed_themes';
+      case 'themes.edit':
+        return 'ui_theme_editor_title';
       case 'debug':
         return 'ui_debug';
       case 'privacy':
@@ -1657,32 +1679,130 @@ class WoxSettingController extends GetxController {
 
   // ---------- Themes ----------
 
-  Future<void> loadStoreThemes() async {
-    final traceId = const UuidV4().generate();
-    final storeThemes = await WoxApi.instance.findStoreThemes(traceId);
-    storeThemes.sort((a, b) => a.themeName.compareTo(b.themeName));
-    themeList.clear();
-    for (var theme in storeThemes) {
-      themeList.add(theme);
+  WoxTheme _cloneTheme(WoxTheme theme) {
+    return WoxTheme.fromJson(Map<String, dynamic>.from(theme.toJson()));
+  }
+
+  // Return the in-memory theme editor session so settings can be closed and reopened without dropping unsaved color changes.
+  WoxThemeEditorDraftSession getOrCreateThemeEditorDraftSession({required WoxTheme requestedTheme, required WoxTheme currentTheme}) {
+    final cachedRestoreTheme = _themeEditorRestoreTheme;
+    final cachedSourceTheme = _themeEditorSourceTheme;
+    final cachedDraftTheme = _themeEditorDraftTheme;
+    final requestedThemeId = requestedTheme.themeId;
+    if (cachedRestoreTheme != null &&
+        cachedSourceTheme != null &&
+        cachedDraftTheme != null &&
+        (requestedThemeId.isEmpty || requestedThemeId == cachedSourceTheme.themeId || requestedThemeId == cachedDraftTheme.themeId)) {
+      return WoxThemeEditorDraftSession(restoreTheme: _cloneTheme(cachedRestoreTheme), sourceTheme: _cloneTheme(cachedSourceTheme), draftTheme: _cloneTheme(cachedDraftTheme));
     }
+
+    final restoreTheme = _cloneTheme(currentTheme);
+    final sourceTheme = _cloneTheme(requestedTheme.themeId.isEmpty ? currentTheme : requestedTheme);
+    final draftTheme = _cloneTheme(sourceTheme);
+    _themeEditorRestoreTheme = _cloneTheme(restoreTheme);
+    _themeEditorSourceTheme = _cloneTheme(sourceTheme);
+    _themeEditorDraftTheme = _cloneTheme(draftTheme);
+    return WoxThemeEditorDraftSession(restoreTheme: restoreTheme, sourceTheme: sourceTheme, draftTheme: draftTheme);
+  }
+
+  // Keep the latest draft in the controller because the editor widget can be disposed when settings closes.
+  void updateThemeEditorDraft(WoxTheme draftTheme) {
+    if (_themeEditorDraftTheme == null) {
+      return;
+    }
+    _themeEditorDraftTheme = _cloneTheme(draftTheme);
+  }
+
+  // Clear the draft session only when the user explicitly discards the edited theme.
+  WoxTheme discardThemeEditorDraft() {
+    final restoreTheme = _cloneTheme(_themeEditorRestoreTheme ?? WoxTheme.empty());
+    _themeEditorRestoreTheme = null;
+    _themeEditorSourceTheme = null;
+    _themeEditorDraftTheme = null;
+    return restoreTheme;
+  }
+
+  // Reset the draft baseline after save so discard is disabled until the next edit.
+  void commitThemeEditorDraft(WoxTheme savedTheme) {
+    final savedThemeClone = _cloneTheme(savedTheme);
+    _themeEditorRestoreTheme = _cloneTheme(savedThemeClone);
+    _themeEditorSourceTheme = _cloneTheme(savedThemeClone);
+    _themeEditorDraftTheme = _cloneTheme(savedThemeClone);
+  }
+
+  // Preload the theme store once per app session so settings tab switches can reuse the in-memory list.
+  Future<void> preloadThemeStore(String traceId) async {
+    await _ensureStoreThemesLoaded(traceId);
+  }
+
+  // Share an in-flight store request so preload and tab selection do not duplicate the same local API call.
+  Future<void> _ensureStoreThemesLoaded(String traceId, {bool forceRefresh = false}) {
+    if (!forceRefresh && _hasLoadedStoreThemes) {
+      return Future.value();
+    }
+
+    final existingLoad = _storeThemesLoadFuture;
+    if (!forceRefresh && existingLoad != null) {
+      return existingLoad;
+    }
+
+    late final Future<void> loadFuture;
+    loadFuture = _loadStoreThemesIntoCache(traceId).whenComplete(() {
+      if (identical(_storeThemesLoadFuture, loadFuture)) {
+        _storeThemesLoadFuture = null;
+      }
+    });
+    _storeThemesLoadFuture = loadFuture;
+    return loadFuture;
+  }
+
+  // Load store data into the controller cache without changing whichever theme list is currently visible.
+  Future<void> _loadStoreThemesIntoCache(String traceId) async {
+    try {
+      final start = DateTime.now();
+      final storeThemes = await WoxApi.instance.findStoreThemes(traceId);
+      storeThemes.sort((a, b) => a.themeName.compareTo(b.themeName));
+      if (storeThemes.isEmpty) {
+        // Core loads the remote manifest in the background during startup. An early settings entry can see an empty store before that finishes.
+        _hasLoadedStoreThemes = false;
+        Logger.instance.warn(traceId, 'Theme store cache skipped because API returned no themes');
+        return;
+      }
+
+      storeThemesList.clear();
+      storeThemesList.addAll(storeThemes);
+      _hasLoadedStoreThemes = true;
+      await _loadInstalledThemesForLookup();
+      Logger.instance.info(traceId, 'Store themes cached, cost ${DateTime.now().difference(start).inMilliseconds} ms');
+    } catch (e) {
+      _hasLoadedStoreThemes = false;
+      Logger.instance.error(traceId, 'Failed to cache store themes: $e');
+    }
+  }
+
+  Future<void> loadStoreThemes({bool forceRefresh = false}) async {
+    final traceId = const UuidV4().generate();
+    await _ensureStoreThemesLoaded(traceId, forceRefresh: forceRefresh);
+    if (!forceRefresh && !_hasLoadedStoreThemes && storeThemesList.isEmpty) {
+      await _ensureStoreThemesLoaded(traceId, forceRefresh: true);
+    }
+    _replaceVisibleThemes(storeThemesList);
+  }
+
+  void _replaceVisibleThemes(Iterable<WoxTheme> themes) {
+    themeList.clear();
+    themeList.addAll(themes);
     filteredThemeList.clear();
     filteredThemeList.addAll(themeList);
-    // Also load installed themes for auto theme lookup
-    await _loadInstalledThemesForLookup();
   }
 
   Future<void> loadInstalledThemes() async {
     final traceId = const UuidV4().generate();
     final installThemes = await WoxApi.instance.findInstalledThemes(traceId);
     installThemes.sort((a, b) => a.themeName.compareTo(b.themeName));
-    themeList.clear();
     installedThemesList.clear();
-    for (var theme in installThemes) {
-      themeList.add(theme);
-      installedThemesList.add(theme);
-    }
-    filteredThemeList.clear();
-    filteredThemeList.addAll(themeList);
+    installedThemesList.addAll(installThemes);
+    _replaceVisibleThemes(installThemes);
   }
 
   Future<void> _loadInstalledThemesForLookup() async {
@@ -1696,6 +1816,8 @@ class WoxSettingController extends GetxController {
     final traceId = const UuidV4().generate();
     Logger.instance.info(traceId, 'Installing theme: ${theme.themeId}');
     await WoxApi.instance.installTheme(traceId, theme.themeId);
+    _updateCachedStoreThemeInstallState(theme.themeId, true);
+    await _loadInstalledThemesForLookup();
     await refreshThemeList();
   }
 
@@ -1703,6 +1825,8 @@ class WoxSettingController extends GetxController {
     final traceId = const UuidV4().generate();
     Logger.instance.info(traceId, 'Uninstalling theme: ${theme.themeId}');
     await WoxApi.instance.uninstallTheme(traceId, theme.themeId);
+    _updateCachedStoreThemeInstallState(theme.themeId, false);
+    await _loadInstalledThemesForLookup();
     await refreshThemeList();
   }
 
@@ -1714,9 +1838,75 @@ class WoxSettingController extends GetxController {
     await reloadSetting(traceId);
   }
 
+  void _updateCachedStoreThemeInstallState(String themeId, bool isInstalled) {
+    for (final theme in storeThemesList) {
+      if (theme.themeId == themeId) {
+        theme.isInstalled = isInstalled;
+      }
+    }
+  }
+
+  // Save edited theme drafts through core so the new theme is installed and applied consistently.
+  Future<WoxTheme> saveThemeAs(WoxTheme theme, String name, {bool switchToInstalledThemes = false, bool overwrite = false}) async {
+    final traceId = const UuidV4().generate();
+    Logger.instance.info(traceId, 'Saving theme: $name, overwrite=$overwrite');
+    final savedTheme = await WoxApi.instance.saveTheme(traceId, name, theme, overwrite: overwrite);
+    if (switchToInstalledThemes) {
+      activeNavPath.value = 'themes.installed';
+      isStoreThemeList.value = false;
+    }
+    if (!isStoreThemeList.value) {
+      await loadInstalledThemes();
+    } else {
+      await _loadInstalledThemesForLookup();
+    }
+    await reloadSetting(traceId);
+    activeTheme.value = savedTheme;
+    return savedTheme;
+  }
+
   void onFilterThemes(String filter) {
     filteredThemeList.clear();
     filteredThemeList.addAll(themeList.where((element) => element.themeName.toLowerCase().contains(filter.toLowerCase())));
+  }
+
+  void ensureThemeVisible(String themeId) {
+    final index = filteredThemeList.indexWhere((theme) => theme.themeId == themeId);
+    if (index < 0) {
+      return;
+    }
+
+    const rowExtent = 72.0;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!themeListScrollController.hasClients) {
+        return;
+      }
+      final maxExtent = themeListScrollController.position.maxScrollExtent;
+      final targetOffset = (index * rowExtent).clamp(0.0, maxExtent).toDouble();
+      themeListScrollController.animateTo(targetOffset, duration: const Duration(milliseconds: 180), curve: Curves.easeOutCubic);
+    });
+  }
+
+  Future<void> locateCurrentTheme() async {
+    if (isStoreThemeList.value) {
+      await switchToThemeList(false);
+    } else if (themeList.isEmpty) {
+      await refreshThemeList();
+    }
+
+    final currentThemeId = woxSetting.value.themeId;
+    if (currentThemeId.isEmpty) {
+      return;
+    }
+
+    filterThemeKeywordController.clear();
+    onFilterThemes('');
+    final matchedTheme = filteredThemeList.firstWhere((theme) => theme.themeId == currentThemeId, orElse: () => WoxTheme.empty());
+    if (matchedTheme.themeId.isEmpty) {
+      return;
+    }
+    activeTheme.value = matchedTheme;
+    ensureThemeVisible(currentThemeId);
   }
 
   void setFirstFilteredThemeActive() {
@@ -1733,6 +1923,11 @@ class WoxSettingController extends GetxController {
     }
 
     //active theme
+    if (filteredThemeList.isEmpty) {
+      activeTheme.value = WoxTheme.empty();
+      return;
+    }
+
     if (activeTheme.value.themeId.isNotEmpty) {
       activeTheme.value = filteredThemeList.firstWhere((element) => element.themeId == activeTheme.value.themeId, orElse: () => filteredThemeList[0]);
     } else {
@@ -1871,6 +2066,7 @@ class WoxSettingController extends GetxController {
     _settingHighlightTimer?.cancel();
     pluginListScrollController.dispose();
     themeListScrollController.dispose();
+    filterThemeKeywordController.dispose();
     settingFocusNode.dispose();
     settingSearchTextController.dispose();
     settingSearchFocusNode.dispose();
