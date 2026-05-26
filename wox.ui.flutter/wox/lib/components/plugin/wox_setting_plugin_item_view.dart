@@ -60,10 +60,20 @@ abstract class WoxSettingPluginItem extends StatelessWidget {
     return Padding(padding: EdgeInsets.only(top: style.paddingTop, bottom: style.paddingBottom, left: style.paddingLeft, right: style.paddingRight), child: child);
   }
 
-  Widget layout({required String label, required Widget child, required PluginSettingValueStyle style, String tooltip = "", bool includeBottomSpacing = true}) {
+  Widget layout({
+    required String label,
+    required Widget child,
+    required PluginSettingValueStyle style,
+    String tooltip = "",
+    bool includeBottomSpacing = true,
+    List<Widget> labelActions = const [],
+  }) {
     final hasLabel = label.trim().isNotEmpty;
     final tipsWidget = tooltip.trim().isNotEmpty ? tooltipText(tooltip) : null;
     final bottomSpacing = includeBottomSpacing ? 10.0 : 0.0;
+    // Text-only labels need a small top offset to align with controls. Title-side
+    // actions are taller, so keep them centered with 24px controls instead.
+    final labelTopPadding = labelActions.isEmpty ? 6.0 : 1.0;
 
     if (!hasLabel) {
       final content = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [child, if (tipsWidget != null) tipsWidget]);
@@ -83,7 +93,17 @@ abstract class WoxSettingPluginItem extends StatelessWidget {
             // leaving the right column to carry longer descriptions.
             SizedBox(
               width: labelWidth,
-              child: Padding(padding: const EdgeInsets.only(top: 6), child: Text(label, style: TextStyle(color: getThemeTextColor(), fontSize: 13, fontWeight: FontWeight.w500))),
+              child: Padding(
+                padding: EdgeInsets.only(top: labelTopPadding),
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: getThemeTextColor(), fontSize: 13, fontWeight: FontWeight.w500)),
+                    ),
+                    if (labelActions.isNotEmpty) ...[const SizedBox(width: 6), ...labelActions],
+                  ],
+                ),
+              ),
             ),
             const SizedBox(width: defaultLabelGap),
             Expanded(
@@ -152,10 +172,20 @@ mixin WoxSettingPluginItemMixin<T extends StatefulWidget> on State<T> {
     return Padding(padding: EdgeInsets.only(top: style.paddingTop, bottom: style.paddingBottom, left: style.paddingLeft, right: style.paddingRight), child: child);
   }
 
-  Widget layout({required String label, required Widget child, required PluginSettingValueStyle style, String tooltip = "", bool includeBottomSpacing = true}) {
+  Widget layout({
+    required String label,
+    required Widget child,
+    required PluginSettingValueStyle style,
+    String tooltip = "",
+    bool includeBottomSpacing = true,
+    List<Widget> labelActions = const [],
+  }) {
     final hasLabel = label.trim().isNotEmpty;
     final tipsWidget = tooltip.trim().isNotEmpty ? tooltipText(tooltip) : null;
     final bottomSpacing = includeBottomSpacing ? 10.0 : 0.0;
+    // Text-only labels need a small top offset to align with controls. Title-side
+    // actions are taller, so keep them centered with 24px controls instead.
+    final labelTopPadding = labelActions.isEmpty ? 6.0 : 1.0;
 
     if (!hasLabel) {
       final content = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [child, if (tipsWidget != null) tipsWidget]);
@@ -175,7 +205,17 @@ mixin WoxSettingPluginItemMixin<T extends StatefulWidget> on State<T> {
             // leaving the right column to carry longer descriptions.
             SizedBox(
               width: labelWidth,
-              child: Padding(padding: const EdgeInsets.only(top: 6), child: Text(label, style: TextStyle(color: getThemeTextColor(), fontSize: 13, fontWeight: FontWeight.w500))),
+              child: Padding(
+                padding: EdgeInsets.only(top: labelTopPadding),
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: getThemeTextColor(), fontSize: 13, fontWeight: FontWeight.w500)),
+                    ),
+                    if (labelActions.isNotEmpty) ...[const SizedBox(width: 6), ...labelActions],
+                  ],
+                ),
+              ),
             ),
             const SizedBox(width: WoxSettingPluginItem.defaultLabelGap),
             Expanded(

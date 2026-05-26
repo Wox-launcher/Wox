@@ -22,6 +22,7 @@ part 'wox_tray_query_icon.dart';
 part 'wox_theme_swatch_icon.dart';
 part 'wox_main_hotkey_demo.dart';
 part 'wox_selection_hotkey_demo.dart';
+part 'wox_selection_space_quick_look_demo.dart';
 part 'wox_query_hotkeys_demo.dart';
 part 'wox_query_shortcuts_demo.dart';
 part 'wox_tray_queries_demo.dart';

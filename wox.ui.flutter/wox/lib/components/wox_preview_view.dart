@@ -1,26 +1,16 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_code_editor/flutter_code_editor.dart';
-import 'package:flutter_svg/svg.dart';
 import 'package:get/get.dart';
-import 'package:highlight/highlight.dart';
-import 'package:highlight/languages/all.dart';
-import 'package:highlight/languages/bash.dart';
-import 'package:highlight/languages/javascript.dart';
-import 'package:highlight/languages/python.dart';
-import 'package:highlight/languages/typescript.dart';
-import 'package:highlight/languages/yaml.dart';
-import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
+import 'package:wox/components/file_preview/file_preview_registry.dart';
+import 'package:wox/components/file_preview/file_preview_renderer.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_ai_chat_view.dart';
 import 'package:wox/components/wox_ai_stream_preview_view.dart';
 import 'package:wox/components/wox_list_preview_view.dart';
-import 'package:wox/components/wox_loading_indicator.dart';
 import 'package:wox/components/wox_markdown.dart';
 import 'package:wox/components/wox_plugin_detail_view.dart';
 import 'package:wox/components/wox_preview_scaffold.dart';
@@ -47,7 +37,6 @@ import 'package:wox/enums/wox_image_type_enum.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
 import 'package:wox/utils/color_util.dart';
-import 'package:flutter_highlight/themes/monokai.dart';
 
 class WoxPreviewView extends StatefulWidget {
   final WoxPreview woxPreview;
@@ -62,7 +51,6 @@ class WoxPreviewView extends StatefulWidget {
 class _WoxPreviewViewState extends State<WoxPreviewView> {
   final scrollController = ScrollController();
   final launcherController = Get.find<WoxLauncherController>();
-  final allCodeLanguages = {...allLanguages, "txt": Mode(), "conf": Mode(), "js": javascript, "ts": typescript, "yml": yaml, "sh": bash, "py": python};
   WoxInterfaceSizeMetrics get _metrics => WoxInterfaceSizeUtil.instance.current;
 
   Widget scrollableContent({required Widget child}) {
@@ -156,53 +144,6 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
     );
   }
 
-  Widget buildPdf(String pdfPath) {
-    final Widget viewer = pdfPath.startsWith("http") ? SfPdfViewer.network(widget.woxPreview.previewData) : SfPdfViewer.file(File(pdfPath));
-    // pdf viewer will capture focus from query box, so we need to exclude it
-    return ExcludeFocus(child: viewer);
-  }
-
-  Widget buildCode(String codePath, String fileExtension) {
-    return FutureBuilder(
-      future: File(codePath).readAsString(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: WoxLoadingIndicator(size: 20));
-        }
-        if (snapshot.hasError) {
-          return Text("Error: ${snapshot.error}");
-        }
-
-        if (snapshot.hasData) {
-          return CodeTheme(
-            data: CodeThemeData(styles: monokaiTheme),
-            // Code preview keeps its own editor scroller, but the scrollbar now
-            // lives inside the scaffold-provided frame instead of floating on
-            // the launcher panel.
-            child: Scrollbar(
-              thumbVisibility: true,
-              controller: scrollController,
-              child: SingleChildScrollView(
-                controller: scrollController,
-                child: CodeField(
-                  // Preview typography is part of the launcher surface, so it
-                  // follows interface density while settings controls keep
-                  // their existing fixed sizing.
-                  textStyle: TextStyle(fontSize: _metrics.resultSubtitleFontSize),
-                  readOnly: true,
-                  gutterStyle: GutterStyle.none,
-                  controller: CodeController(text: snapshot.data, readOnly: true, language: allCodeLanguages[fileExtension]!),
-                ),
-              ),
-            ),
-          );
-        }
-
-        return const SizedBox();
-      },
-    );
-  }
-
   bool canOpenPreviewImageOverlay(WoxImage image) {
     return image.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_ABSOLUTE_PATH.code ||
         image.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_BASE64.code ||
@@ -256,7 +197,6 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
     }
 
     Widget contentWidget = const SizedBox();
-    bool isPdfViewer = false;
     bool contentHandlesScrolling = false;
     if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_MARKDOWN.code) {
       contentWidget = buildMarkdown(widget.woxPreview.previewData);
@@ -264,58 +204,24 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
       contentWidget = buildText(widget.woxPreview.previewData);
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_FILE.code) {
       if (widget.woxPreview.previewData.isEmpty) {
-        contentWidget = WoxSelectableText("Invalid file data: ${widget.woxPreview.previewData}", style: const TextStyle(color: Colors.red));
+        contentWidget = WoxSelectableText(
+          launcherController.tr("ui_file_preview_invalid_file_data").replaceAll("{data}", widget.woxPreview.previewData),
+          style: const TextStyle(color: Colors.red),
+        );
       } else {
-        // render by file extension
-        var fileExtension = widget.woxPreview.previewData.split(".").last.toLowerCase();
-        if (fileExtension == "pdf") {
-          isPdfViewer = true;
-          contentWidget = buildPdf(widget.woxPreview.previewData);
-        } else if (fileExtension == "md") {
-          if (File(widget.woxPreview.previewData).existsSync()) {
-            contentWidget = buildMarkdown(File(widget.woxPreview.previewData).readAsStringSync());
-          } else {
-            contentWidget = buildText("Markdown file not found: ${widget.woxPreview.previewData}");
-          }
-        } else if (fileExtension == "png" ||
-            fileExtension == "gif" ||
-            fileExtension == "bmp" ||
-            fileExtension == "webp" ||
-            fileExtension == "jpeg" ||
-            fileExtension == "jpg" ||
-            fileExtension == "svg") {
-          if (File(widget.woxPreview.previewData).existsSync()) {
-            if (fileExtension == "svg") {
-              contentHandlesScrolling = true;
-              contentWidget = buildImageSurface(
-                SvgPicture.file(File(widget.woxPreview.previewData), fit: BoxFit.contain),
-                overlayImage: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_ABSOLUTE_PATH.code, imageData: widget.woxPreview.previewData),
-              );
-            } else {
-              contentHandlesScrolling = true;
-              contentWidget = buildImageSurface(
-                Image.file(File(widget.woxPreview.previewData), fit: BoxFit.contain),
-                overlayImage: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_ABSOLUTE_PATH.code, imageData: widget.woxPreview.previewData),
-              );
-            }
-          } else {
-            contentWidget = buildText("Image file not found: ${widget.woxPreview.previewData}");
-          }
-        } else if (allCodeLanguages.containsKey(fileExtension)) {
-          // if file is bigger than 1MB, do not preview
-          var file = File(widget.woxPreview.previewData);
-          if (file.lengthSync() > 1 * 1024 * 1024) {
-            contentWidget = buildText("File too big to preview, current size: ${(file.lengthSync() / 1024 / 1024).toInt()} MB");
-          } else if (File(widget.woxPreview.previewData).existsSync()) {
-            contentHandlesScrolling = true;
-            contentWidget = buildCode(widget.woxPreview.previewData, fileExtension);
-          } else {
-            contentWidget = buildText("Code file not found: ${widget.woxPreview.previewData}");
-          }
-        } else {
-          // unsupported file type
-          contentWidget = buildText("Unsupported file type preview: $fileExtension");
-        }
+        final filePreviewResult = defaultWoxFilePreviewRegistry.render(
+          WoxFilePreviewContext(
+            filePath: widget.woxPreview.previewData,
+            fileExtension: resolveWoxFilePreviewExtension(widget.woxPreview.previewData),
+            scrollController: scrollController,
+            buildText: buildText,
+            buildMarkdown: buildMarkdown,
+            buildImageSurface: buildImageSurface,
+            translate: launcherController.tr,
+          ),
+        );
+        contentWidget = filePreviewResult.content;
+        contentHandlesScrolling = filePreviewResult.contentHandlesScrolling;
       }
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_LIST.code) {
       try {
@@ -423,7 +329,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
       woxTheme: widget.woxTheme,
       scrollController: scrollController,
       tags: launcherController.supportsPreviewFullscreen(widget.woxPreview) && launcherController.isPreviewFullscreen.value ? const [] : widget.woxPreview.previewTags,
-      contentHandlesScrolling: isPdfViewer || contentHandlesScrolling,
+      contentHandlesScrolling: contentHandlesScrolling,
       child: contentWidget,
     );
   }

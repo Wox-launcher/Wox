@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
+import 'package:wox/components/demo/wox_demo.dart';
 import 'package:wox/components/plugin/wox_ai_command_template_dialog.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_head_view.dart';
 import 'package:wox/components/wox_plugin_detail_view.dart';
@@ -46,6 +47,8 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
   static const String _triggerKeywordOriginalColumnKey = "_wox_original_trigger_keyword";
   static const String _globalTriggerKeyword = "*";
   static const String _aiCommandPluginId = "c9910664-1c28-47ae-bad6-e7332a02d471";
+  static const String _selectionPluginId = "d9e557ed-89bd-4b8b-bd64-2a7632cf3483";
+  static const String _selectionSpaceQuickLookSettingKey = "enableSpaceQuickLook";
   // Local refreshing state for showing loading spinner on refresh button
   static final RxBool _refreshing = false.obs;
   static final GlobalKey _pluginFilterIconKey = GlobalKey();
@@ -128,7 +131,13 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
         continue;
       }
 
-      maxLabelWidth = math.max(maxLabelWidth, _measureLabelWidthByText(context, translatedLabel, minWidth: 0));
+      final labelActionWidth =
+          plugin.id == _selectionPluginId &&
+                  definition.value is PluginSettingValueCheckBox &&
+                  (definition.value as PluginSettingValueCheckBox).key == _selectionSpaceQuickLookSettingKey
+              ? 28.0
+              : 0.0;
+      maxLabelWidth = math.max(maxLabelWidth, _measureLabelWidthByText(context, translatedLabel, minWidth: 0) + labelActionWidth);
     }
 
     return maxLabelWidth.clamp(PLUGIN_SETTING_LABEL_MIN_WIDTH, PLUGIN_SETTING_LABEL_MAX_WIDTH).toDouble();
@@ -886,10 +895,12 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
               ...plugin.settingDefinitions.map((e) {
                 late final Widget settingWidget;
                 if (e.type == "checkbox") {
+                  final checkboxValue = e.value as PluginSettingValueCheckBox;
                   settingWidget = WoxSettingPluginCheckbox(
-                    value: plugin.setting.settings[e.value.key] ?? "",
-                    item: e.value as PluginSettingValueCheckBox,
+                    value: plugin.setting.settings[checkboxValue.key] ?? "",
+                    item: checkboxValue,
                     labelWidth: uniformLabelWidth,
+                    labelActions: _buildPluginSettingLabelActions(plugin: plugin, settingKey: checkboxValue.key),
                     onUpdate: (key, value) async {
                       return controller.updatePluginSetting(plugin.id, key, value);
                     },
@@ -991,6 +1002,40 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
         await showAICommandTemplateDialog(context: context, pluginId: plugin.id, currentRows: rows, triggerKeyword: _resolvePrimaryTriggerKeyword(plugin));
         WoxSettingFocusUtil.restoreIfInSettingView();
       },
+    );
+  }
+
+  List<Widget> _buildPluginSettingLabelActions({required PluginDetail plugin, required String settingKey}) {
+    if (plugin.id != _selectionPluginId || settingKey != _selectionSpaceQuickLookSettingKey) {
+      return const [];
+    }
+
+    return [
+      _buildPluginSettingDemoAction(
+        triggerKey: 'settings-selection-space-quick-look-demo-trigger',
+        popoverKey: 'wox-demo-popover-selectionSpaceQuickLook',
+        demo: WoxSelectionSpaceQuickLookDemo(accent: const Color(0xFF10B981), tr: controller.tr),
+      ),
+    ];
+  }
+
+  Widget _buildPluginSettingDemoAction({required String triggerKey, required String popoverKey, required Widget demo}) {
+    final foreground = getThemeTextColor();
+
+    return WoxDemoPopover(
+      key: ValueKey(triggerKey),
+      popoverKey: ValueKey(popoverKey),
+      demo: demo,
+      width: 680,
+      height: 460,
+      child: Semantics(
+        label: controller.tr("ui_demo_preview"),
+        button: true,
+        child: MouseRegion(
+          cursor: SystemMouseCursors.help,
+          child: SizedBox(width: 22, height: 22, child: Icon(Icons.play_circle_outline_rounded, color: foreground.withValues(alpha: 0.88), size: 18)),
+        ),
+      ),
     );
   }
 
