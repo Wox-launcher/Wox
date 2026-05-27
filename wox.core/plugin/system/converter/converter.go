@@ -384,7 +384,7 @@ func (c *Converter) Query(ctx context.Context, query plugin.Query) plugin.QueryR
 		{
 			Title: result.DisplayValue,
 			Icon:  common.PluginConverterIcon,
-			Tails: c.buildCurrencyRateTails(ctx, result),
+			Tails: c.buildResultTails(ctx, result),
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:        "i18n:plugin_converter_copy_result",
@@ -396,6 +396,30 @@ func (c *Converter) Query(ctx context.Context, query plugin.Query) plugin.QueryR
 			},
 		},
 	})
+}
+
+// buildResultTails chooses the contextual tail for the calculated converter result.
+func (c *Converter) buildResultTails(ctx context.Context, result core.Result) []plugin.QueryResultTail {
+	if timeZoneTail := c.buildTimeZoneTail(result); len(timeZoneTail) > 0 {
+		return timeZoneTail
+	}
+
+	return c.buildCurrencyRateTails(ctx, result)
+}
+
+// buildTimeZoneTail exposes the resolved IANA timezone for location-based time queries.
+func (c *Converter) buildTimeZoneTail(result core.Result) []plugin.QueryResultTail {
+	if result.Unit.Type != core.UnitTypeTime {
+		return nil
+	}
+
+	if result.Unit.Name != "UTC" && !strings.Contains(result.Unit.Name, "/") {
+		return nil
+	}
+
+	return []plugin.QueryResultTail{
+		plugin.NewQueryResultTailText(result.Unit.Name),
+	}
 }
 
 func (c *Converter) buildCurrencyRateTails(ctx context.Context, result core.Result) []plugin.QueryResultTail {
