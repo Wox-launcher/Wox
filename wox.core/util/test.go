@@ -31,7 +31,7 @@ func IsTestMode() bool {
 func GetTestServerPortOverride() (int, error) {
 	portOverride := strings.TrimSpace(os.Getenv(TestServerPortEnv))
 	port, err := strconv.Atoi(portOverride)
-	if err != nil || port <= 0 {
+	if err != nil || port <= 0 || port > 65535 {
 		return 0, fmt.Errorf("invalid %s: %q", TestServerPortEnv, portOverride)
 	}
 
