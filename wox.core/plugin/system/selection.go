@@ -91,7 +91,7 @@ func (i *SelectionPlugin) GetMetadata() plugin.Metadata {
 					Tooltip:      "i18n:plugin_selection_setting_enable_space_quick_look_tips",
 					DefaultValue: "false",
 				},
-				DisabledInPlatforms: []util.Platform{util.PlatformLinux},
+				DisabledInPlatforms: []util.Platform{util.PlatformMacOS, util.PlatformLinux},
 				IsPlatformSpecific:  true,
 			},
 		},
@@ -130,7 +130,7 @@ func (i *SelectionPlugin) Init(ctx context.Context, initParams plugin.InitParams
 // updateSpaceQuickLookListener keeps the platform monitor subscriptions aligned
 // with the platform-specific plugin setting.
 func (i *SelectionPlugin) updateSpaceQuickLookListener(ctx context.Context, enabled bool) {
-	if !enabled || (!util.IsWindows() && !util.IsMacOS()) {
+	if !enabled || !util.IsWindows() {
 		i.stopSpaceQuickLookListener()
 		return
 	}
