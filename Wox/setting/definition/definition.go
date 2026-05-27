@@ -19,6 +19,7 @@ const (
 	PluginSettingDefinitionTypeLabel         PluginSettingDefinitionType = "label"
 	PluginSettingDefinitionTypeNewLine       PluginSettingDefinitionType = "newline"
 	PluginSettingDefinitionTypeTable         PluginSettingDefinitionType = "table"
+	PluginSettingDefinitionTypePath          PluginSettingDefinitionType = "path"
 
 	// dynamic setting will be replaced by the actual setting when retrieved
 	// this is useful when the setting is dynamic. E.g. a list of plugins for select
@@ -109,6 +110,14 @@ func (n *PluginSettingDefinitionItem) UnmarshalJSON(b []byte) error {
 	case "table":
 		n.Type = PluginSettingDefinitionTypeTable
 		var v PluginSettingValueTable
+		unmarshalErr := json.Unmarshal([]byte(contentResult.String()), &v)
+		if unmarshalErr != nil {
+			return unmarshalErr
+		}
+		n.Value = &v
+	case "path":
+		n.Type = PluginSettingDefinitionTypePath
+		var v PluginSettingValuePath
 		unmarshalErr := json.Unmarshal([]byte(contentResult.String()), &v)
 		if unmarshalErr != nil {
 			return unmarshalErr
