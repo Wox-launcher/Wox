@@ -276,6 +276,12 @@ func (u *uiImpl) Notify(ctx context.Context, msg common.NotifyMsg) {
 	}
 }
 
+func (u *uiImpl) UpdateAttentionUnreadCount(ctx context.Context, unreadCount int) {
+	u.invokeWebsocketMethod(ctx, "AttentionUnreadCountChanged", map[string]any{
+		"unreadCount": unreadCount,
+	})
+}
+
 func (u *uiImpl) ShowToolbarMsg(ctx context.Context, msg interface{}) {
 	u.invokeWebsocketMethod(ctx, "ShowToolbarMsg", msg)
 }
@@ -525,24 +531,34 @@ func getShowAppParams(ctx context.Context, showContext common.ShowContext) map[s
 	}
 
 	params := map[string]any{
-		"SelectAll":           showContext.SelectAll,
-		"IsQueryFocus":        showContext.IsQueryFocus,
-		"HideQueryBox":        showContext.HideQueryBox,
-		"HideToolbar":         hideToolbar,
-		"QueryBoxAtBottom":    showContext.QueryBoxAtBottom,
-		"HideOnBlur":          showContext.HideOnBlur,
-		"Position":            position,
-		"TrayAnchor":          showContext.TrayAnchor,
-		"WindowWidth":         windowWidth,
-		"MaxResultCount":      maxResultCount,
-		"QueryHistories":      setting.GetSettingManager().GetLatestQueryHistory(ctx, 10),
-		"LaunchMode":          woxSetting.LaunchMode.Get(),
-		"StartPage":           woxSetting.StartPage.Get(),
-		"ShowSource":          showSource,
-		"ActivationStartedAt": showContext.ActivationStartedAt,
+		"SelectAll":            showContext.SelectAll,
+		"IsQueryFocus":         showContext.IsQueryFocus,
+		"HideQueryBox":         showContext.HideQueryBox,
+		"HideToolbar":          hideToolbar,
+		"QueryBoxAtBottom":     showContext.QueryBoxAtBottom,
+		"HideOnBlur":           showContext.HideOnBlur,
+		"Position":             position,
+		"TrayAnchor":           showContext.TrayAnchor,
+		"WindowWidth":          windowWidth,
+		"MaxResultCount":       maxResultCount,
+		"QueryHistories":       setting.GetSettingManager().GetLatestQueryHistory(ctx, 10),
+		"LaunchMode":           woxSetting.LaunchMode.Get(),
+		"StartPage":            woxSetting.StartPage.Get(),
+		"ShowSource":           showSource,
+		"ActivationStartedAt":  showContext.ActivationStartedAt,
+		"AttentionUnreadCount": getAttentionUnreadCount(ctx),
 	}
 
 	return params
+}
+
+func getAttentionUnreadCount(ctx context.Context) int {
+	count, err := plugin.GetAttentionManager().UnreadCount(ctx)
+	if err != nil {
+		logger.Warn(ctx, fmt.Sprintf("failed to count unread attention items for show app: %v", err))
+		return 0
+	}
+	return int(count)
 }
 
 func onUIWebsocketRequest(ctx context.Context, request WebsocketMsg) {

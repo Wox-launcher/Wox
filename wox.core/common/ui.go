@@ -82,6 +82,7 @@ type UI interface {
 	UninstallTheme(ctx context.Context, theme Theme)
 	RestoreTheme(ctx context.Context)
 	Notify(ctx context.Context, msg NotifyMsg)
+	UpdateAttentionUnreadCount(ctx context.Context, unreadCount int)
 	ShowToolbarMsg(ctx context.Context, msg interface{})
 	ClearToolbarMsg(ctx context.Context, toolbarMsgId string)
 	UpdateDiagnosticStatus(ctx context.Context, enabled bool)

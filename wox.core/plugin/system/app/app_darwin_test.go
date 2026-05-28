@@ -34,6 +34,9 @@ func (e emptyAPIImpl) ShowApp(ctx context.Context) {
 func (e emptyAPIImpl) Notify(ctx context.Context, message string) {
 }
 
+func (e emptyAPIImpl) PushAttention(ctx context.Context, request plugin.PushAttentionRequest) {
+}
+
 func (e emptyAPIImpl) Log(ctx context.Context, level plugin.LogLevel, msg string) {
 }
 

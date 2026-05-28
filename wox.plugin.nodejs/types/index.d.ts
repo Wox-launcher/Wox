@@ -1282,6 +1282,30 @@ export interface CopyParams {
   woxImage?: WoxImage
 }
 
+export type AttentionActionType = "change_query"
+
+/**
+ * Action executed when the user opens a persistent attention item.
+ */
+export interface AttentionAction {
+  type: AttentionActionType
+  query: string
+}
+
+/**
+ * Persistent item that asks Wox to keep something visible until the user sees it.
+ *
+ * Wox stores the item, maintains unread state, and shows an unread badge near the
+ * query box like a lightweight inbox. The key is scoped to the current plugin.
+ */
+export interface PushAttentionRequest {
+  key: string
+  title: string
+  description?: string
+  icon?: WoxImage
+  action?: AttentionAction
+}
+
 /**
  * Options for the built-in screenshot workflow.
  */
@@ -1331,6 +1355,14 @@ export interface PublicAPI {
    * Notify message
    */
   Notify: (ctx: Context, message: string) => Promise<void>
+
+  /**
+   * Push a persistent attention item into Wox.
+   *
+   * Unlike Notify, this survives until the user handles it. Wox shows the unread
+   * count near the query box and opens the attention inbox when the badge is clicked.
+   */
+  PushAttention: (ctx: Context, request: PushAttentionRequest) => Promise<void>
 
   /**
    * Show or update a toolbar msg.

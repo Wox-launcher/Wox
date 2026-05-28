@@ -73,6 +73,22 @@ type MRURecord struct {
 	UpdatedAt   time.Time
 }
 
+// AttentionItem stores persistent plugin-sourced user attention items.
+type AttentionItem struct {
+	IdentityKey        string `gorm:"primaryKey"`
+	PluginID           string `gorm:"index;not null"`
+	Key                string `gorm:"index;not null"`
+	Title              string `gorm:"not null"`
+	Description        string
+	Icon               string
+	Action             string
+	ContentFingerprint string `gorm:"not null"`
+	IsRead             bool   `gorm:"index;not null;default:false"`
+	CreatedTimestamp   int64  `gorm:"index;not null"`
+	UpdatedTimestamp   int64  `gorm:"index;not null"`
+	ReadTimestamp      int64  `gorm:"index"`
+}
+
 // MigrationRecord tracks one-time application migrations (data/setting compatibility upgrades).
 // IDs are managed by the migration package and are ordered lexicographically.
 type MigrationRecord struct {
@@ -137,6 +153,7 @@ func Init(ctx context.Context) error {
 		&PluginSetting{},
 		&Oplog{},
 		&MRURecord{},
+		&AttentionItem{},
 		&ToolbarMute{},
 		&MigrationRecord{},
 	)
