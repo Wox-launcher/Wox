@@ -975,9 +975,14 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                   return _buildPluginSettingTarget(plugin: plugin, definition: e, child: settingWidget);
                 }
                 if (e.type == "path") {
-                  settingWidget = WoxSettingPluginPath(value: plugin.setting.settings[e.value.key] ?? "", item: e.value as PluginSettingValuePath, onUpdate: (key, value) async {
-                    return controller.updatePluginSetting(plugin.id, key, value);
-                  });
+                  settingWidget = WoxSettingPluginPath(
+                    value: plugin.setting.settings[e.value.key] ?? "",
+                    item: e.value as PluginSettingValuePath,
+                    labelWidth: uniformLabelWidth,
+                    onUpdate: (key, value) async {
+                      return controller.updatePluginSetting(plugin.id, key, value);
+                    },
+                  );
                   return _buildPluginSettingTarget(plugin: plugin, definition: e, child: settingWidget);
                 }
 

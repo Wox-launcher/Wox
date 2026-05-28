@@ -62,10 +62,11 @@ func TestPathSettingTranslate(t *testing.T) {
 		return translations[key]
 	}
 
-	pathVal.Translate(translator)
-	assert.Equal(t, "Translated Label", pathVal.Label)
-	assert.Equal(t, "Translated Suffix", pathVal.Suffix)
-	assert.Equal(t, "Translated Tooltip", pathVal.Tooltip)
+	translated := pathVal.Translate(translator).(*PluginSettingValuePath)
+	assert.Equal(t, "Translated Label", translated.Label)
+	assert.Equal(t, "Translated Suffix", translated.Suffix)
+	assert.Equal(t, "Translated Tooltip", translated.Tooltip)
+	assert.Equal(t, "label.key", pathVal.Label)
 }
 
 func TestPathSettingGetKeyAndGetDefaultValue(t *testing.T) {

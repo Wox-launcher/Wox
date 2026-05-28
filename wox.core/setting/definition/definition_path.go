@@ -28,8 +28,10 @@ func (p *PluginSettingValuePath) GetDefaultValue() string {
 	return p.DefaultValue
 }
 
-func (p *PluginSettingValuePath) Translate(translator func(ctx context.Context, key string) string) {
-	p.Label = translator(context.Background(), p.Label)
-	p.Suffix = translator(context.Background(), p.Suffix)
-	p.Tooltip = translator(context.Background(), p.Tooltip)
+func (p *PluginSettingValuePath) Translate(translator func(ctx context.Context, key string) string) PluginSettingDefinitionValue {
+	copy := *p
+	copy.Label = translator(context.Background(), p.Label)
+	copy.Suffix = translator(context.Background(), p.Suffix)
+	copy.Tooltip = translator(context.Background(), p.Tooltip)
+	return &copy
 }
