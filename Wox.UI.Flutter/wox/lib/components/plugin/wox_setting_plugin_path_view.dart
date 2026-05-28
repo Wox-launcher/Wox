@@ -21,23 +21,34 @@ class WoxSettingPluginPath extends WoxSettingPluginItem {
         if (item.tooltip != "") WoxTooltipView(tooltip: item.tooltip, paddingLeft: 0),
         SizedBox(
           width: item.style.width > 0 ? item.style.width.toDouble() : 100,
-          child: WoxPathFinder(
-            path: controller.text,
-            showOpenButton: false,
-            showChangeButton: true,
-            onChanged: (value) {
-              controller.text = value;
-
-              for (var element in item.validators) {
-                var errMsg = element.validator.validate(value);
-                item.tooltip = errMsg;
-                if (errMsg != "") {
-                  return;
+          child: Focus(
+            onFocusChange: (hasFocus) {
+              if (!hasFocus) {
+                for (var element in item.validators) {
+                  var errMsg = element.validator.validate(controller.text);
+                  item.tooltip = errMsg;
+                  if (errMsg != "") {
+                    return;
+                  }
                 }
-              }
 
-              updateConfig(item.key, value);
+                updateConfig(item.key, controller.text);
+              }
             },
+            child: WoxPathFinder(
+              path: controller.text,
+              showOpenButton: false,
+              showChangeButton: true,
+              onChanged: (value) {
+                controller.text = value;
+
+                for (var element in item.validators) {
+                  var errMsg = element.validator.validate(value);
+                  item.tooltip = errMsg;
+                  break;
+                }
+              },
+            ),
           ),
         ),
         suffix(item.suffix),
