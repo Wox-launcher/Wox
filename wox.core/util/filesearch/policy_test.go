@@ -14,9 +14,7 @@ func TestStatPathTypeTreatsSymlinkDirectoryAsFile(t *testing.T) {
 	if err := os.MkdirAll(targetPath, 0o755); err != nil {
 		t.Fatalf("mkdir target: %v", err)
 	}
-	if err := os.Symlink(targetPath, linkPath); err != nil {
-		t.Fatalf("create symlink: %v", err)
-	}
+	mustCreateSymlink(t, targetPath, linkPath)
 
 	isDir, known := statPathType(linkPath)
 	if !known || isDir {

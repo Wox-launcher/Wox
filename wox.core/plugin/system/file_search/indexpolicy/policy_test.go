@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -32,13 +33,20 @@ func TestTraversalContextFallbackHandlesTrailingSpaceDirectory(t *testing.T) {
 func runTrailingSpaceFallbackHelper(t *testing.T) {
 	t.Helper()
 
-	rootPath := t.TempDir()
+	rootPath, err := os.MkdirTemp("", "wox-indexpolicy-")
+	if err != nil {
+		t.Fatalf("create test root: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.RemoveAll(testCreatePath(rootPath))
+	})
+
 	spacedDir := filepath.Join(rootPath, "Research ")
 	filePath := filepath.Join(spacedDir, "note.md")
-	if err := os.MkdirAll(spacedDir, 0o755); err != nil {
+	if err := os.MkdirAll(testCreatePath(spacedDir), 0o755); err != nil {
 		t.Fatalf("mkdir spaced directory: %v", err)
 	}
-	if err := os.WriteFile(filePath, []byte("note"), 0o644); err != nil {
+	if err := os.WriteFile(testCreatePath(filePath), []byte("note"), 0o644); err != nil {
 		t.Fatalf("write spaced file: %v", err)
 	}
 
@@ -50,4 +58,12 @@ func runTrailingSpaceFallbackHelper(t *testing.T) {
 	if !context.ShouldIndexPath(filePath, false) {
 		t.Fatalf("expected spaced file path to remain indexable")
 	}
+}
+
+// testCreatePath keeps Windows from trimming trailing spaces in path components.
+func testCreatePath(path string) string {
+	if runtime.GOOS != "windows" {
+		return path
+	}
+	return `\\?\` + path
 }

@@ -2,6 +2,8 @@
 
 ## v2.1.2 - 
 
+- Fix
+  - [`Security`] Fix Windows file reveal behavior to open Explorer with parameterized process arguments instead of interpolated PowerShell command text, preventing crafted file paths from being interpreted as commands when opening a file's containing folder.
 
 ## v2.1.1 - 2026-05-24
 

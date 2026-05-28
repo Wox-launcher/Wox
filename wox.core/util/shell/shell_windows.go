@@ -1,7 +1,6 @@
 package shell
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -53,9 +52,13 @@ func OpenFileInFolder(path string) error {
 		return err
 	}
 
-	powershellCmd := fmt.Sprintf("Start-Process \"explorer.exe\" -ArgumentList \"/select,%s\"", absPath)
-	_, err = Run("powershell.exe", "-Command", powershellCmd)
+	name, args := buildOpenFileInFolderCommand(absPath)
+	_, err = Run(name, args...)
 	return err
+}
+
+func buildOpenFileInFolderCommand(path string) (string, []string) {
+	return "explorer.exe", []string{"/select," + path}
 }
 
 // HideWindowCmd sets the SysProcAttr to hide the console window on Windows

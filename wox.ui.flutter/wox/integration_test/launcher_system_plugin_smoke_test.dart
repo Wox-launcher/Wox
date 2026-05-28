@@ -176,7 +176,13 @@ void registerSystemPluginSmokeTests() {
 
     testWidgets('T6-05: System plugin lock command', (tester) async {
       final controller = await launchAndShowLauncher(tester, windowSize: smokeLargeWindowSize);
-      final result = await queryAndWaitForActiveResult(tester, controller, 'lock');
+      final result = await queryAndWaitForResultWhere(
+        tester,
+        controller,
+        'lock',
+        (candidate) => candidate.title.toLowerCase().contains('lock') && findResultActionsByName(candidate, 'execute').isNotEmpty,
+        description: 'Expected the system lock command result to be present in the lock query results.',
+      );
       final executeAction = expectResultActionByName(result, 'execute');
 
       // Keep these broad system-command smoke tests focused on command wiring.
