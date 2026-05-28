@@ -22,9 +22,11 @@ import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_checkbox.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_head.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_newline.dart';
+import 'package:wox/entity/setting/wox_plugin_setting_path.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_select.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_textbox.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_checkbox_view.dart';
+import 'package:wox/components/plugin/wox_setting_plugin_path_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_textbox_view.dart';
 import 'package:wox/modules/setting/wox_setting_controller.dart';
 import 'package:wox/utils/colors.dart';
@@ -456,6 +458,16 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                     return WoxSettingPluginTable(
                       value: plugin.setting.settings[e.value.key] ?? "",
                       item: e.value as PluginSettingValueTable,
+                      onUpdate: (key, value) async {
+                        await controller.updatePluginSetting(plugin.id, key, value);
+                        controller.refreshPluginList();
+                      },
+                    );
+                  }
+                  if (e.type == "path") {
+                    return WoxSettingPluginPath(
+                      value: plugin.setting.settings[e.value.key] ?? "",
+                      item: e.value as PluginSettingValuePath,
                       onUpdate: (key, value) async {
                         await controller.updatePluginSetting(plugin.id, key, value);
                         controller.refreshPluginList();
