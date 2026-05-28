@@ -729,6 +729,7 @@
   "plugin_window_manager_command_maximize_width": "Maximizar Largura",
   "plugin_window_manager_command_next_display": "Próximo Monitor",
   "plugin_window_manager_command_previous_display": "Monitor Anterior",
+  "plugin_window_manager_command_minimize": "Minimizar",
   "plugin_window_manager_command_restore": "Restaurar",
   "plugin_file_plugin_name": "Busca de Arquivos",
   "plugin_file_plugin_description": "Pesquisar arquivos e pastas",

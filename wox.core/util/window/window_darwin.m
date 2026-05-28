@@ -457,6 +457,8 @@ int moveResizeWindowForManagement(const char *windowId, int pid, int x, int y, i
             return -1;
         }
 
+        AXUIElementSetAttributeValue(window, kAXMinimizedAttribute, kCFBooleanFalse);
+
         AXError positionErr = AXUIElementSetAttributeValue(window, kAXPositionAttribute, positionValue);
         AXError sizeErr = AXUIElementSetAttributeValue(window, kAXSizeAttribute, sizeValue);
         CFRelease(positionValue);
@@ -467,6 +469,23 @@ int moveResizeWindowForManagement(const char *windowId, int pid, int x, int y, i
             return -1;
         }
         return 1;
+    }
+}
+
+int minimizeWindowForManagement(const char *windowId, int pid) {
+    @autoreleasepool {
+        if (!AXIsProcessTrusted()) {
+            return -2;
+        }
+
+        AXUIElementRef window = copyWindowForId((pid_t)pid, parseWindowId(windowId));
+        if (!window) {
+            return 0;
+        }
+
+        AXError err = AXUIElementSetAttributeValue(window, kAXMinimizedAttribute, kCFBooleanTrue);
+        CFRelease(window);
+        return err == kAXErrorSuccess ? 1 : -1;
     }
 }
 

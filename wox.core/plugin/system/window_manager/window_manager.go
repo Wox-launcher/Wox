@@ -49,6 +49,7 @@ const (
 	operationMaximizeWidth      windowOperation = "maximize-width"
 	operationNextDisplay        windowOperation = "next-display"
 	operationPreviousDisplay    windowOperation = "previous-display"
+	operationMinimize           windowOperation = "minimize"
 	operationRestore            windowOperation = "restore"
 )
 
@@ -82,6 +83,7 @@ var windowManagerCommands = []windowManagerCommand{
 	{Command: "maximize-width", TitleKey: "plugin_window_manager_command_maximize_width", Aliases: []string{"full width", "最大宽度"}, Op: operationMaximizeWidth},
 	{Command: "next-display", TitleKey: "plugin_window_manager_command_next_display", Aliases: []string{"next monitor", "next screen", "下一个显示器"}, Op: operationNextDisplay},
 	{Command: "previous-display", TitleKey: "plugin_window_manager_command_previous_display", Aliases: []string{"previous monitor", "previous screen", "上一个显示器"}, Op: operationPreviousDisplay},
+	{Command: "minimize", TitleKey: "plugin_window_manager_command_minimize", Aliases: []string{"minimize window", "minimise", "最小化"}, Op: operationMinimize},
 	{Command: "restore", TitleKey: "plugin_window_manager_command_restore", Aliases: []string{"restore window", "还原"}, Op: operationRestore},
 }
 
@@ -108,6 +110,7 @@ func (p *WindowManagerPlugin) GetMetadata() plugin.Metadata {
 		Icon:          windowManagerIcon.String(),
 		TriggerKeywords: []string{
 			"window",
+			"*",
 		},
 		Commands: lo.Map(windowManagerCommands, func(command windowManagerCommand, _ int) plugin.MetadataCommand {
 			return plugin.MetadataCommand{
@@ -196,11 +199,6 @@ func (p *WindowManagerPlugin) noActiveWindowResult() plugin.QueryResult {
 
 // commandResult captures the active-window query env so delayed actions still target the original window.
 func (p *WindowManagerPlugin) commandResult(ctx context.Context, query plugin.Query, command windowManagerCommand, score int64) plugin.QueryResult {
-	icon := windowManagerIcon
-	if !query.Env.ActiveWindowIcon.IsEmpty() {
-		icon = query.Env.ActiveWindowIcon
-	}
-
 	targetName := strings.TrimSpace(query.Env.ActiveWindowTitle)
 	if targetName == "" {
 		targetName = strconv.Itoa(query.Env.ActiveWindowPid)
@@ -212,9 +210,9 @@ func (p *WindowManagerPlugin) commandResult(ctx context.Context, query plugin.Qu
 	return plugin.QueryResult{
 		Title:    "i18n:" + command.TitleKey,
 		SubTitle: subtitle,
-		Icon:     icon,
+		Icon:     windowManagerCommandIcon(command.Op),
 		Score:    score,
-		Tails:    []plugin.QueryResultTail{plugin.NewQueryResultTailText(command.Command)},
+		Tails:    targetWindowIconTail(query.Env.ActiveWindowIcon),
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:      "i18n:plugin_window_manager_action_apply",
@@ -245,6 +243,124 @@ func (p *WindowManagerPlugin) commandMatches(ctx context.Context, command window
 	return bestScore > 0, bestScore
 }
 
+const (
+	layoutIconFill   = "#2563EB"
+	layoutIconEmpty  = "#F8FAFC"
+	layoutIconStroke = "#64748B"
+)
+
+type layoutIconRect struct {
+	X      float64
+	Y      float64
+	Width  float64
+	Height float64
+}
+
+// windowManagerCommandIcon renders the target layout as a compact SVG preview.
+func windowManagerCommandIcon(operation windowOperation) common.WoxImage {
+	switch operation {
+	case operationLeftHalf:
+		return layoutSummaryIcon(layoutIconRect{X: 8, Y: 8, Width: 16, Height: 32})
+	case operationRightHalf:
+		return layoutSummaryIcon(layoutIconRect{X: 24, Y: 8, Width: 16, Height: 32})
+	case operationTopHalf:
+		return layoutSummaryIcon(layoutIconRect{X: 8, Y: 8, Width: 32, Height: 16})
+	case operationBottomHalf:
+		return layoutSummaryIcon(layoutIconRect{X: 8, Y: 24, Width: 32, Height: 16})
+	case operationTopLeftQuarter:
+		return layoutSummaryIcon(layoutIconRect{X: 8, Y: 8, Width: 16, Height: 16})
+	case operationTopRightQuarter:
+		return layoutSummaryIcon(layoutIconRect{X: 24, Y: 8, Width: 16, Height: 16})
+	case operationBottomLeftQuarter:
+		return layoutSummaryIcon(layoutIconRect{X: 8, Y: 24, Width: 16, Height: 16})
+	case operationBottomRightQuarter:
+		return layoutSummaryIcon(layoutIconRect{X: 24, Y: 24, Width: 16, Height: 16})
+	case operationFirstThird:
+		return layoutSummaryIcon(layoutIconRect{X: 8, Y: 8, Width: 11, Height: 32})
+	case operationCenterThird:
+		return layoutSummaryIcon(layoutIconRect{X: 19, Y: 8, Width: 10, Height: 32})
+	case operationLastThird:
+		return layoutSummaryIcon(layoutIconRect{X: 29, Y: 8, Width: 11, Height: 32})
+	case operationFirstTwoThirds:
+		return layoutSummaryIcon(layoutIconRect{X: 8, Y: 8, Width: 21, Height: 32})
+	case operationLastTwoThirds:
+		return layoutSummaryIcon(layoutIconRect{X: 19, Y: 8, Width: 21, Height: 32})
+	case operationMaximize:
+		return layoutSummaryIcon(layoutIconRect{X: 8, Y: 8, Width: 32, Height: 32})
+	case operationAlmostMaximize:
+		return layoutSummaryIcon(layoutIconRect{X: 10, Y: 10, Width: 28, Height: 28})
+	case operationCenter:
+		return layoutSummaryIcon(layoutIconRect{X: 14, Y: 12, Width: 20, Height: 24})
+	case operationReasonableSize:
+		return layoutSummaryIcon(layoutIconRect{X: 12, Y: 12, Width: 24, Height: 24})
+	case operationMaximizeHeight:
+		return layoutSummaryIcon(layoutIconRect{X: 18, Y: 8, Width: 12, Height: 32})
+	case operationMaximizeWidth:
+		return layoutSummaryIcon(layoutIconRect{X: 8, Y: 18, Width: 32, Height: 12})
+	case operationNextDisplay:
+		return displayMoveIcon(true)
+	case operationPreviousDisplay:
+		return displayMoveIcon(false)
+	case operationMinimize:
+		return layoutSummaryIcon(layoutIconRect{X: 13, Y: 35, Width: 22, Height: 4})
+	case operationRestore:
+		return layoutSummaryIcon(layoutIconRect{X: 14, Y: 14, Width: 20, Height: 20})
+	default:
+		return windowManagerIcon
+	}
+}
+
+// layoutSummaryIcon draws an empty desktop frame and fills the target area.
+func layoutSummaryIcon(filledRects ...layoutIconRect) common.WoxImage {
+	var filled strings.Builder
+	for _, rect := range filledRects {
+		filled.WriteString(layoutIconRectSvg(rect))
+	}
+
+	return common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect x="8" y="8" width="32" height="32" rx="5" fill="` + layoutIconEmpty + `"/>` + filled.String() + `<rect x="8" y="8" width="32" height="32" rx="5" fill="none" stroke="` + layoutIconStroke + `" stroke-width="2.5"/></svg>`)
+}
+
+// displayMoveIcon uses two frames because display movement is not a single-display layout.
+func displayMoveIcon(next bool) common.WoxImage {
+	targetX := 29.0
+	arrowPath := "M20 24H28M25 21L28 24L25 27"
+	if !next {
+		targetX = 9
+		arrowPath = "M28 24H20M23 21L20 24L23 27"
+	}
+
+	return common.NewWoxImageSvg(fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect x="6" y="13" width="16" height="22" rx="3" fill="%s" stroke="%s" stroke-width="2.3"/><rect x="26" y="13" width="16" height="22" rx="3" fill="%s" stroke="%s" stroke-width="2.3"/><rect x="%s" y="19" width="10" height="10" rx="1.8" fill="%s"/><path d="%s" fill="none" stroke="%s" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`, layoutIconEmpty, layoutIconStroke, layoutIconEmpty, layoutIconStroke, svgNumber(targetX), layoutIconFill, arrowPath, layoutIconFill))
+}
+
+// layoutIconRectSvg converts a logical filled area into SVG markup.
+func layoutIconRectSvg(rect layoutIconRect) string {
+	return fmt.Sprintf(`<rect x="%s" y="%s" width="%s" height="%s" rx="1.8" fill="%s"/>`, svgNumber(rect.X), svgNumber(rect.Y), svgNumber(rect.Width), svgNumber(rect.Height), layoutIconFill)
+}
+
+func svgNumber(value float64) string {
+	if value == math.Trunc(value) {
+		return strconv.Itoa(int(value))
+	}
+	return strconv.FormatFloat(value, 'f', 1, 64)
+}
+
+// targetWindowIconTail shows which captured window will be adjusted without taking over the main layout icon.
+func targetWindowIconTail(icon common.WoxImage) []plugin.QueryResultTail {
+	if icon.IsEmpty() {
+		return nil
+	}
+
+	size := 18.0
+	return []plugin.QueryResultTail{
+		{
+			Type:        plugin.QueryResultTailTypeImage,
+			Image:       icon,
+			ImageWidth:  &size,
+			ImageHeight: &size,
+		},
+	}
+}
+
 // applyCommand hides Wox before moving the captured window so the launcher never becomes the target.
 func (p *WindowManagerPlugin) applyCommand(ctx context.Context, command windowManagerCommand, env plugin.QueryEnv) {
 	p.api.HideApp(ctx)
@@ -258,6 +374,14 @@ func (p *WindowManagerPlugin) applyCommand(ctx context.Context, command windowMa
 
 	if command.Op == operationRestore {
 		p.restoreWindow(ctx, managedWindow)
+		return
+	}
+
+	if command.Op == operationMinimize {
+		p.storeRestoreRect(managedWindow, managedWindow.Bounds)
+		if err := window.MinimizeWindow(managedWindow); err != nil {
+			p.notifyFailure(ctx, err)
+		}
 		return
 	}
 

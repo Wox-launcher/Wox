@@ -761,6 +761,7 @@
   "plugin_window_manager_command_maximize_width": "最大宽度",
   "plugin_window_manager_command_next_display": "下一个显示器",
   "plugin_window_manager_command_previous_display": "上一个显示器",
+  "plugin_window_manager_command_minimize": "最小化",
   "plugin_window_manager_command_restore": "还原",
   "plugin_file_plugin_name": "文件搜索",
   "plugin_file_plugin_description": "搜索文件和文件夹",
