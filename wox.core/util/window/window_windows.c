@@ -4,11 +4,38 @@
 #include <psapi.h>
 #include <shellapi.h>
 #include <commdlg.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <wchar.h>
 
+typedef struct
+{
+    int x;
+    int y;
+    int width;
+    int height;
+} WoxWindowRectC;
+
+typedef struct
+{
+    char id[64];
+    WoxWindowRectC bounds;
+    WoxWindowRectC workArea;
+    int isPrimary;
+} WoxDisplayInfoC;
+
+typedef struct
+{
+    char id[64];
+    int pid;
+    WoxWindowRectC bounds;
+    WoxDisplayInfoC display;
+    int isMinimized;
+} WoxManagedWindowC;
+
 char *getWindowIconByPid(int pid, unsigned char **iconData, int *iconSize, int *width, int *height);
+static char *dupEmptyString();
 
 char *getIconData(HICON hIcon, unsigned char **iconData, int *iconSize, int *width, int *height)
 {
@@ -229,6 +256,295 @@ int getActiveWindowPid()
     DWORD processId;
     GetWindowThreadProcessId(hwnd, &processId);
     return processId;
+}
+
+static WoxWindowRectC rectFromWinRectForManagement(RECT rect)
+{
+    WoxWindowRectC result;
+    result.x = rect.left;
+    result.y = rect.top;
+    result.width = rect.right - rect.left;
+    result.height = rect.bottom - rect.top;
+    return result;
+}
+
+static HWND rootWindowForManagement(HWND hwnd)
+{
+    if (!hwnd)
+    {
+        return NULL;
+    }
+    HWND root = GetAncestor(hwnd, GA_ROOT);
+    return root ? root : hwnd;
+}
+
+static void copyWindowIdForManagement(char *dest, size_t destSize, HWND hwnd)
+{
+    if (!dest || destSize == 0)
+    {
+        return;
+    }
+    snprintf(dest, destSize, "%llu", (unsigned long long)(UINT_PTR)rootWindowForManagement(hwnd));
+    dest[destSize - 1] = '\0';
+}
+
+static char *formatWindowIdForManagement(HWND hwnd)
+{
+    HWND root = rootWindowForManagement(hwnd);
+    if (!root)
+    {
+        return dupEmptyString();
+    }
+
+    char buffer[64];
+    copyWindowIdForManagement(buffer, sizeof(buffer), root);
+    char *result = (char *)malloc(strlen(buffer) + 1);
+    if (!result)
+    {
+        return dupEmptyString();
+    }
+    strcpy(result, buffer);
+    return result;
+}
+
+static HWND parseWindowIdForManagement(const char *windowId)
+{
+    if (!windowId || windowId[0] == '\0')
+    {
+        return NULL;
+    }
+
+    unsigned long long value = strtoull(windowId, NULL, 10);
+    if (value == 0)
+    {
+        return NULL;
+    }
+    return (HWND)(UINT_PTR)value;
+}
+
+static DWORD getWindowPidForManagement(HWND hwnd)
+{
+    DWORD pid = 0;
+    if (hwnd)
+    {
+        GetWindowThreadProcessId(hwnd, &pid);
+    }
+    return pid;
+}
+
+static int isManageableWindowForManagement(HWND hwnd)
+{
+    return hwnd && IsWindow(hwnd) && IsWindowVisible(hwnd);
+}
+
+static HWND resolveWindowForManagement(const char *windowId, int pid)
+{
+    HWND hwnd = parseWindowIdForManagement(windowId);
+    if (hwnd && isManageableWindowForManagement(hwnd))
+    {
+        if (pid <= 0 || getWindowPidForManagement(hwnd) == (DWORD)pid)
+        {
+            return rootWindowForManagement(hwnd);
+        }
+    }
+
+    if (pid <= 0)
+    {
+        return NULL;
+    }
+
+    for (HWND candidate = GetWindow(GetDesktopWindow(), GW_CHILD); candidate != NULL; candidate = GetWindow(candidate, GW_HWNDNEXT))
+    {
+        if (!isManageableWindowForManagement(candidate) || IsIconic(candidate))
+        {
+            continue;
+        }
+        if (getWindowPidForManagement(candidate) == (DWORD)pid)
+        {
+            return rootWindowForManagement(candidate);
+        }
+    }
+    return NULL;
+}
+
+static int fillDisplayInfoForManagement(HMONITOR monitor, WoxDisplayInfoC *outDisplay)
+{
+    if (!monitor || !outDisplay)
+    {
+        return 0;
+    }
+
+    MONITORINFO info;
+    ZeroMemory(&info, sizeof(info));
+    info.cbSize = sizeof(info);
+    if (!GetMonitorInfo(monitor, &info))
+    {
+        return 0;
+    }
+
+    snprintf(outDisplay->id, sizeof(outDisplay->id), "%llu", (unsigned long long)(UINT_PTR)monitor);
+    outDisplay->id[sizeof(outDisplay->id) - 1] = '\0';
+    outDisplay->bounds = rectFromWinRectForManagement(info.rcMonitor);
+    outDisplay->workArea = rectFromWinRectForManagement(info.rcWork);
+    outDisplay->isPrimary = (info.dwFlags & MONITORINFOF_PRIMARY) ? 1 : 0;
+    return 1;
+}
+
+char *getActiveWindowIdForManagement()
+{
+    return formatWindowIdForManagement(GetForegroundWindow());
+}
+
+int getManagedWindowForManagement(const char *windowId, int pid, WoxManagedWindowC *outWindow)
+{
+    if (!outWindow)
+    {
+        return -1;
+    }
+
+    HWND hwnd = resolveWindowForManagement(windowId, pid);
+    if (!hwnd)
+    {
+        return 0;
+    }
+
+    RECT rect;
+    if (!GetWindowRect(hwnd, &rect))
+    {
+        return -1;
+    }
+
+    HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    WoxDisplayInfoC display;
+    ZeroMemory(&display, sizeof(display));
+    if (!fillDisplayInfoForManagement(monitor, &display))
+    {
+        return -3;
+    }
+
+    ZeroMemory(outWindow, sizeof(*outWindow));
+    copyWindowIdForManagement(outWindow->id, sizeof(outWindow->id), hwnd);
+    outWindow->pid = pid > 0 ? pid : (int)getWindowPidForManagement(hwnd);
+    outWindow->bounds = rectFromWinRectForManagement(rect);
+    outWindow->display = display;
+    outWindow->isMinimized = IsIconic(hwnd) ? 1 : 0;
+    return 1;
+}
+
+typedef struct
+{
+    WoxDisplayInfoC *displays;
+    int count;
+    int capacity;
+    int failed;
+} DisplayEnumForManagementData;
+
+static BOOL CALLBACK enumDisplaysForManagementProc(HMONITOR monitor, HDC hdc, LPRECT rect, LPARAM lParam)
+{
+    DisplayEnumForManagementData *data = (DisplayEnumForManagementData *)lParam;
+    if (!data || data->failed)
+    {
+        return FALSE;
+    }
+
+    if (data->count >= data->capacity)
+    {
+        int newCapacity = data->capacity == 0 ? 4 : data->capacity * 2;
+        WoxDisplayInfoC *newDisplays = (WoxDisplayInfoC *)realloc(data->displays, sizeof(WoxDisplayInfoC) * (size_t)newCapacity);
+        if (!newDisplays)
+        {
+            data->failed = 1;
+            return FALSE;
+        }
+        data->displays = newDisplays;
+        data->capacity = newCapacity;
+    }
+
+    WoxDisplayInfoC display;
+    ZeroMemory(&display, sizeof(display));
+    if (fillDisplayInfoForManagement(monitor, &display))
+    {
+        data->displays[data->count] = display;
+        data->count++;
+    }
+    return TRUE;
+}
+
+int listDisplaysForManagement(WoxDisplayInfoC **outDisplays, int *outCount)
+{
+    if (!outDisplays || !outCount)
+    {
+        return -1;
+    }
+
+    *outDisplays = NULL;
+    *outCount = 0;
+
+    DisplayEnumForManagementData data;
+    ZeroMemory(&data, sizeof(data));
+    if (!EnumDisplayMonitors(NULL, NULL, enumDisplaysForManagementProc, (LPARAM)&data))
+    {
+        if (data.displays)
+        {
+            free(data.displays);
+        }
+        return -1;
+    }
+
+    if (data.failed)
+    {
+        if (data.displays)
+        {
+            free(data.displays);
+        }
+        return -1;
+    }
+
+    if (data.count == 0)
+    {
+        if (data.displays)
+        {
+            free(data.displays);
+        }
+        return -3;
+    }
+
+    *outDisplays = data.displays;
+    *outCount = data.count;
+    return 1;
+}
+
+void freeDisplaysForManagement(WoxDisplayInfoC *displays)
+{
+    if (displays)
+    {
+        free(displays);
+    }
+}
+
+int moveResizeWindowForManagement(const char *windowId, int pid, int x, int y, int width, int height)
+{
+    HWND hwnd = resolveWindowForManagement(windowId, pid);
+    if (!hwnd)
+    {
+        return 0;
+    }
+
+    if (IsZoomed(hwnd) || IsIconic(hwnd))
+    {
+        ShowWindow(hwnd, SW_RESTORE);
+    }
+
+    if (width < 1)
+    {
+        width = 1;
+    }
+    if (height < 1)
+    {
+        height = 1;
+    }
+
+    return SetWindowPos(hwnd, HWND_TOP, x, y, width, height, SWP_SHOWWINDOW) ? 1 : -1;
 }
 
 typedef struct

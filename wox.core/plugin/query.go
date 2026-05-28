@@ -117,14 +117,19 @@ func (q *Query) String() string {
 }
 
 type QueryEnv struct {
-	ActiveWindowTitle            string          // active window title when user query, empty if not available
-	ActiveWindowPid              int             // active window pid when user query, 0 if not available
-	ActiveWindowIcon             common.WoxImage // active window icon when user query, empty if not available
-	ActiveWindowIsOpenSaveDialog bool            // active window is open/save dialog when user query
+	ActiveWindowTitle string          // active window title when user query, empty if not available
+	ActiveWindowPid   int             // active window pid when user query, 0 if not available
+	ActiveWindowIcon  common.WoxImage // active window icon when user query, empty if not available
 
 	// active browser url when user query
 	// Only available when active window is browser and https://github.com/Wox-launcher/Wox.Chrome.Extension is installed
 	ActiveBrowserUrl string
+
+	// These fields are core-only for built-in system plugins. Do not add them
+	// to SDK models or public plugin docs unless we explicitly decide to expose
+	// the native window handle/dialog state as public plugin API.
+	ActiveWindowId               string `json:"-"` // exact top-level window id; Windows HWND, macOS CGWindowID
+	ActiveWindowIsOpenSaveDialog bool   `json:"-"` // active window is open/save dialog when user query
 }
 
 // QueryResponse is the complete plugin answer for one query execution.

@@ -31,6 +31,25 @@ func GetActiveWindowPid() int {
 	return -1
 }
 
+func GetActiveWindowId() string {
+	return ""
+}
+
+// GetManagedWindow is not implemented on Linux yet.
+func GetManagedWindow(windowId string, pid int, title string) (ManagedWindow, error) {
+	return ManagedWindow{}, ErrWindowManagementUnsupported
+}
+
+// ListDisplays is not implemented on Linux yet.
+func ListDisplays() ([]DisplayInfo, error) {
+	return nil, ErrWindowManagementUnsupported
+}
+
+// MoveResizeWindow is not implemented on Linux yet.
+func MoveResizeWindow(managedWindow ManagedWindow, rect WindowRect) error {
+	return ErrWindowManagementUnsupported
+}
+
 func GetProcessIdentity(pid int) string {
 	return ""
 }

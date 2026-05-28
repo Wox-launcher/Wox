@@ -1135,6 +1135,9 @@ func (m *Manager) buildPluginQueryEnv(ctx context.Context, pluginInstance *Insta
 	if queryEnvParams.RequireActiveWindowPid {
 		query.Env.ActiveWindowPid = currentEnv.ActiveWindowPid
 	}
+	if queryEnvParams.RequireActiveWindowId {
+		query.Env.ActiveWindowId = currentEnv.ActiveWindowId
+	}
 	if queryEnvParams.RequireActiveWindowIcon {
 		query.Env.ActiveWindowIcon = currentEnv.ActiveWindowIcon
 	}
@@ -2970,6 +2973,7 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 		activeWindowSnapshot := m.GetUI().GetActiveWindowSnapshot(ctx)
 		query.Env.ActiveWindowTitle = activeWindowSnapshot.Name
 		query.Env.ActiveWindowPid = activeWindowSnapshot.Pid
+		query.Env.ActiveWindowId = activeWindowSnapshot.WindowId
 		query.Env.ActiveWindowIcon = activeWindowSnapshot.Icon
 		query.Env.ActiveWindowIsOpenSaveDialog = activeWindowSnapshot.IsOpenSaveDialog
 		query.Env.ActiveBrowserUrl = m.getActiveBrowserUrl(ctx)
@@ -2997,6 +3001,7 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 		activeWindowSnapshot := m.GetUI().GetActiveWindowSnapshot(ctx)
 		query.Env.ActiveWindowTitle = activeWindowSnapshot.Name
 		query.Env.ActiveWindowPid = activeWindowSnapshot.Pid
+		query.Env.ActiveWindowId = activeWindowSnapshot.WindowId
 		query.Env.ActiveWindowIcon = activeWindowSnapshot.Icon
 		query.Env.ActiveWindowIsOpenSaveDialog = activeWindowSnapshot.IsOpenSaveDialog
 		query.Env.ActiveBrowserUrl = m.getActiveBrowserUrl(ctx)

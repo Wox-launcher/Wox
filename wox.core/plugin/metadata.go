@@ -308,6 +308,7 @@ func (m *Metadata) GetFeatureParamsForQueryEnv() (MetadataFeatureParamsQueryEnv,
 			params := MetadataFeatureParamsQueryEnv{
 				RequireActiveWindowName:             false,
 				RequireActiveWindowPid:              false,
+				RequireActiveWindowId:               false,
 				RequireActiveWindowIcon:             false,
 				RequireActiveWindowIsOpenSaveDialog: false,
 				RequireActiveBrowserUrl:             false,
@@ -332,6 +333,17 @@ func (m *Metadata) GetFeatureParamsForQueryEnv() (MetadataFeatureParamsQueryEnv,
 				}
 				if vBool, ok := v.(bool); ok {
 					params.RequireActiveWindowPid = vBool
+				}
+			}
+
+			if v, ok := feature.Params["requireActiveWindowId"]; ok {
+				if vString, ok := v.(string); ok {
+					if vString == "true" {
+						params.RequireActiveWindowId = true
+					}
+				}
+				if vBool, ok := v.(bool); ok {
+					params.RequireActiveWindowId = vBool
 				}
 			}
 
@@ -459,6 +471,7 @@ type MetadataFeatureParamsDebounce struct {
 type MetadataFeatureParamsQueryEnv struct {
 	RequireActiveWindowName             bool
 	RequireActiveWindowPid              bool
+	RequireActiveWindowId               bool
 	RequireActiveWindowIcon             bool
 	RequireActiveWindowIsOpenSaveDialog bool
 	RequireActiveBrowserUrl             bool
