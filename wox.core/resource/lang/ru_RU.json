@@ -729,6 +729,7 @@
   "plugin_window_manager_command_maximize_width": "Максимальная ширина",
   "plugin_window_manager_command_next_display": "Следующий дисплей",
   "plugin_window_manager_command_previous_display": "Предыдущий дисплей",
+  "plugin_window_manager_command_minimize": "Свернуть",
   "plugin_window_manager_command_restore": "Восстановить",
   "plugin_file_plugin_name": "Поиск файлов",
   "plugin_file_plugin_description": "Поиск файлов и папок",

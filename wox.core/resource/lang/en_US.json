@@ -761,6 +761,7 @@
   "plugin_window_manager_command_maximize_width": "Maximize Width",
   "plugin_window_manager_command_next_display": "Next Display",
   "plugin_window_manager_command_previous_display": "Previous Display",
+  "plugin_window_manager_command_minimize": "Minimize",
   "plugin_window_manager_command_restore": "Restore",
   "plugin_file_plugin_name": "File Search",
   "plugin_file_plugin_description": "Search files and folders",
