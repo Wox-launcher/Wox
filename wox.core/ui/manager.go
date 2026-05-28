@@ -1504,6 +1504,7 @@ func (m *Manager) RefreshActiveWindowSnapshotBlocking(ctx context.Context) {
 
 func (m *Manager) refreshActiveWindowSnapshot(ctx context.Context, waitForDetails bool) {
 	activeWindowPid := window.GetActiveWindowPid()
+	activeWindowId := window.GetActiveWindowId()
 
 	if activeWindowPid <= 0 {
 		m.activeWindowSnapshotMu.Lock()
@@ -1524,7 +1525,7 @@ func (m *Manager) refreshActiveWindowSnapshot(ctx context.Context, waitForDetail
 	// available. Keeping old details with a new PID created mixed snapshots, and
 	// blocking here made every launcher activation wait for icon and AX dialog
 	// probes even when the UI only needed to become visible.
-	m.activeWindowSnapshot = common.ActiveWindowSnapshot{Pid: activeWindowPid}
+	m.activeWindowSnapshot = common.ActiveWindowSnapshot{Pid: activeWindowPid, WindowId: activeWindowId}
 	m.activeWindowSnapshotMu.Unlock()
 
 	if waitForDetails {

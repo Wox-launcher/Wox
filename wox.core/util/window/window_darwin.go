@@ -5,12 +5,39 @@ package window
 #cgo LDFLAGS: -framework Foundation -framework Cocoa -framework ApplicationServices -framework ScriptingBridge
 #include <stdlib.h>
 
+typedef struct {
+	int x;
+	int y;
+	int width;
+	int height;
+} WoxWindowRectC;
+
+typedef struct {
+	char id[64];
+	WoxWindowRectC bounds;
+	WoxWindowRectC workArea;
+	int isPrimary;
+} WoxDisplayInfoC;
+
+typedef struct {
+	char id[64];
+	int pid;
+	WoxWindowRectC bounds;
+	WoxDisplayInfoC display;
+	int isMinimized;
+} WoxManagedWindowC;
+
 int getActiveWindowIcon(unsigned char **iconData);
 int getWindowIconByPid(int pid, unsigned char **iconData);
 char* getActiveWindowName();
 char* getWindowNameByPid(int pid);
 char* getProcessBundleIdentifier(int pid);
 int getActiveWindowPid();
+char* getActiveWindowIdForManagement();
+int getManagedWindowForManagement(const char* windowId, int pid, WoxManagedWindowC* outWindow);
+int listDisplaysForManagement(WoxDisplayInfoC** outDisplays, int* outCount);
+void freeDisplaysForManagement(WoxDisplayInfoC* displays);
+int moveResizeWindowForManagement(const char* windowId, int pid, int x, int y, int width, int height);
 int activateWindowByPid(int pid);
 int isOpenSaveDialog();
 int isOpenSaveDialogByPid(int pid);
@@ -29,6 +56,7 @@ import "C"
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"image"
 	"image/png"
 	"strings"
@@ -116,6 +144,107 @@ func GetProcessIdentity(pid int) string {
 func GetActiveWindowPid() int {
 	pid := C.getActiveWindowPid()
 	return int(pid)
+}
+
+// GetActiveWindowId returns the CGWindowID from the focused Accessibility window as a decimal string.
+func GetActiveWindowId() string {
+	windowId := C.getActiveWindowIdForManagement()
+	if windowId == nil {
+		return ""
+	}
+	defer C.free(unsafe.Pointer(windowId))
+	return C.GoString(windowId)
+}
+
+// GetManagedWindow resolves a captured Accessibility window and returns its current bounds.
+func GetManagedWindow(windowId string, pid int, title string) (ManagedWindow, error) {
+	cWindowId := C.CString(windowId)
+	defer C.free(unsafe.Pointer(cWindowId))
+
+	var out C.WoxManagedWindowC
+	result := int(C.getManagedWindowForManagement(cWindowId, C.int(pid), &out))
+	if result != 1 {
+		return ManagedWindow{}, windowManagementErrorFromCode(result)
+	}
+
+	return ManagedWindow{
+		Id:          C.GoString(&out.id[0]),
+		Pid:         int(out.pid),
+		Title:       title,
+		Bounds:      windowRectFromDarwinRect(out.bounds),
+		Display:     displayInfoFromDarwinDisplay(out.display),
+		IsMinimized: int(out.isMinimized) == 1,
+	}, nil
+}
+
+// ListDisplays returns macOS screen bounds and visible frames in top-left desktop coordinates.
+func ListDisplays() ([]DisplayInfo, error) {
+	var outDisplays *C.WoxDisplayInfoC
+	var outCount C.int
+	result := int(C.listDisplaysForManagement(&outDisplays, &outCount))
+	if result != 1 {
+		return nil, windowManagementErrorFromCode(result)
+	}
+	defer C.freeDisplaysForManagement(outDisplays)
+
+	count := int(outCount)
+	if count == 0 {
+		return nil, ErrWindowManagementDisplayNotFound
+	}
+
+	rawDisplays := unsafe.Slice(outDisplays, count)
+	displays := make([]DisplayInfo, 0, count)
+	for _, rawDisplay := range rawDisplays {
+		displays = append(displays, displayInfoFromDarwinDisplay(rawDisplay))
+	}
+	SortDisplays(displays)
+	return displays, nil
+}
+
+// MoveResizeWindow applies an Accessibility position and size to the target window.
+func MoveResizeWindow(managedWindow ManagedWindow, rect WindowRect) error {
+	cWindowId := C.CString(managedWindow.Id)
+	defer C.free(unsafe.Pointer(cWindowId))
+
+	result := int(C.moveResizeWindowForManagement(cWindowId, C.int(managedWindow.Pid), C.int(rect.X), C.int(rect.Y), C.int(max(1, rect.Width)), C.int(max(1, rect.Height))))
+	if result != 1 {
+		return windowManagementErrorFromCode(result)
+	}
+	return nil
+}
+
+// windowManagementErrorFromCode maps Objective-C bridge return codes to shared errors.
+func windowManagementErrorFromCode(code int) error {
+	switch code {
+	case 0:
+		return ErrWindowManagementWindowNotFound
+	case -2:
+		return ErrWindowManagementPermissionDenied
+	case -3:
+		return ErrWindowManagementDisplayNotFound
+	default:
+		return fmt.Errorf("window management failed with code %d", code)
+	}
+}
+
+// windowRectFromDarwinRect converts the Objective-C bridge rect into the shared Go type.
+func windowRectFromDarwinRect(rect C.WoxWindowRectC) WindowRect {
+	return WindowRect{
+		X:      int(rect.x),
+		Y:      int(rect.y),
+		Width:  int(rect.width),
+		Height: int(rect.height),
+	}
+}
+
+// displayInfoFromDarwinDisplay converts NSScreen metrics into the shared Go type.
+func displayInfoFromDarwinDisplay(display C.WoxDisplayInfoC) DisplayInfo {
+	return DisplayInfo{
+		Id:        C.GoString(&display.id[0]),
+		Bounds:    windowRectFromDarwinRect(display.bounds),
+		WorkArea:  windowRectFromDarwinRect(display.workArea),
+		IsPrimary: int(display.isPrimary) == 1,
+	}
 }
 
 func ActivateWindowByPid(pid int) bool {

@@ -479,8 +479,9 @@ func (c *ExplorerPlugin) getCurrentFileExplorerPath(ctx context.Context, env plu
 		}
 	}
 
-	shouldUseDialogPath := env.ActiveWindowIsOpenSaveDialog && !isFileExplorerPid
-	if env.ActiveWindowIsOpenSaveDialog && isFileExplorerPid {
+	isOpenSaveDialog := env.ActiveWindowIsOpenSaveDialog
+	shouldUseDialogPath := isOpenSaveDialog && !isFileExplorerPid
+	if isOpenSaveDialog && isFileExplorerPid {
 		c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer ignored open/save flag for finder pid=%d", env.ActiveWindowPid))
 	}
 
@@ -531,7 +532,7 @@ func (c *ExplorerPlugin) getCurrentFileExplorerPath(ctx context.Context, env plu
 		}
 	}
 
-	c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Explorer path resolve failed: pid=%d title=%q isOpenSaveDialog=%v", env.ActiveWindowPid, env.ActiveWindowTitle, env.ActiveWindowIsOpenSaveDialog))
+	c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Explorer path resolve failed: pid=%d title=%q isOpenSaveDialog=%v", env.ActiveWindowPid, env.ActiveWindowTitle, isOpenSaveDialog))
 	return ""
 }
 

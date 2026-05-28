@@ -54,6 +54,8 @@ import (
 	_ "wox/plugin/system/file_search"
 
 	_ "wox/plugin/system/glance"
+
+	_ "wox/plugin/system/window_manager"
 )
 
 func main() {
