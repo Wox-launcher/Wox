@@ -480,6 +480,7 @@ class ShowAppParams {
   late bool hideOnBlur;
   late String showSource;
   late int activationStartedAt;
+  late int attentionUnreadCount;
 
   ShowAppParams({
     required this.selectAll,
@@ -496,6 +497,7 @@ class ShowAppParams {
     this.hideOnBlur = false,
     this.showSource = 'default',
     this.activationStartedAt = 0,
+    this.attentionUnreadCount = 0,
   });
 
   ShowAppParams.fromJson(Map<String, dynamic> json) {
@@ -522,6 +524,7 @@ class ShowAppParams {
     hideOnBlur = json['HideOnBlur'] ?? false;
     showSource = json['ShowSource'] ?? 'default';
     activationStartedAt = (json['ActivationStartedAt'] as num?)?.toInt() ?? 0;
+    attentionUnreadCount = (json['AttentionUnreadCount'] as num?)?.toInt() ?? 0;
   }
 }
 

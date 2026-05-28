@@ -37,6 +37,7 @@ type API interface {
 	HideApp(ctx context.Context)
 	ShowApp(ctx context.Context)
 	Notify(ctx context.Context, description string)
+	PushAttention(ctx context.Context, request PushAttentionRequest)
 	Log(ctx context.Context, level LogLevel, msg string)
 	GetTranslation(ctx context.Context, key string) string
 	GetSetting(ctx context.Context, key string) string
@@ -250,6 +251,42 @@ func (a *APIImpl) Notify(ctx context.Context, message string) {
 		Icon:           icon,
 		DisplaySeconds: 5,
 	})
+}
+
+// PushAttention persists a plugin-owned item and refreshes the launcher unread badge.
+func (a *APIImpl) PushAttention(ctx context.Context, request PushAttentionRequest) {
+	if a.pluginInstance == nil {
+		return
+	}
+
+	request.Title = a.GetTranslation(ctx, request.Title)
+	if request.Description != "" {
+		request.Description = a.GetTranslation(ctx, request.Description)
+	}
+
+	defaultIcon := a.pluginInstance.Metadata.GetIconOrDefault(a.pluginInstance.PluginDirectory, common.WoxIcon)
+	_, err := GetAttentionManager().Push(ctx, AttentionPluginSource{
+		PluginID:        a.pluginInstance.Metadata.Id,
+		PluginDirectory: a.pluginInstance.PluginDirectory,
+		DefaultIcon:     defaultIcon,
+	}, request)
+	if err != nil {
+		a.Log(ctx, LogLevelWarning, fmt.Sprintf("failed to push attention item: %v", err))
+		return
+	}
+
+	PublishAttentionUnreadCount(ctx)
+}
+
+// PublishAttentionUnreadCount pushes the current unread attention count to the UI.
+func PublishAttentionUnreadCount(ctx context.Context) {
+	count, err := GetAttentionManager().UnreadCount(ctx)
+	if err != nil {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to count unread attention items: %v", err))
+		return
+	}
+
+	GetPluginManager().GetUI().UpdateAttentionUnreadCount(ctx, int(count))
 }
 
 func (a *APIImpl) Log(ctx context.Context, level LogLevel, msg string) {

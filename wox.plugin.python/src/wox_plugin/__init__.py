@@ -53,7 +53,7 @@ class MyPlugin:
 
 ### Public API (`PublicAPI`)
 Methods for interacting with Wox:
-- **UI Control**: `show_app()`, `hide_app()`, `is_visible()`, `notify()`
+- **UI Control**: `show_app()`, `hide_app()`, `is_visible()`, `notify()`, `push_attention()`
 - **Query**: `change_query()`, `refresh_query()`, `push_results()`
 - **Settings**: `get_setting()`, `save_setting()`, `on_setting_changed()`
 - **Logging**: `log()`
@@ -228,6 +228,7 @@ from .models.ai import (
     ConversationRole,
     ToolCallInfo,
 )
+from .models.attention import AttentionAction, AttentionActionType, PushAttentionRequest
 from .models.context import Context
 from .models.image import WoxImage, WoxImageType
 from .models.log import LogLevel
@@ -295,6 +296,9 @@ __all__: List[str] = [
     "ChatStreamCallback",
     "ScreenshotOption",
     "ScreenshotResult",
+    "PushAttentionRequest",
+    "AttentionAction",
+    "AttentionActionType",
     # Models
     "Context",
     "Query",

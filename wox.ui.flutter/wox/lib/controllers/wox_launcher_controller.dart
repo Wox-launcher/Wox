@@ -229,6 +229,7 @@ class WoxLauncherController extends GetxController {
   /// The icon at end of query box.
   final queryIcon = QueryIconInfo.empty().obs;
   final glanceItems = <GlanceItem>[].obs;
+  final attentionUnreadCount = 0.obs;
   Timer? glanceRefreshTimer;
   QueryContext backendQueryContext = QueryContext.empty();
   String backendQueryContextQueryId = "";
@@ -284,6 +285,10 @@ class WoxLauncherController extends GetxController {
   bool get shouldShowGlance {
     final setting = WoxSettingUtil.instance.currentSetting;
     return setting.enableGlance && isGlobalInputQuery(currentQuery.value) && queryIcon.value.icon.imageData.isEmpty && glanceItems.isNotEmpty && !isLoading.value;
+  }
+
+  bool get shouldShowAttentionBadge {
+    return attentionUnreadCount.value > 0 && isGlobalInputQuery(currentQuery.value) && !isLoading.value;
   }
 
   bool shouldShowGlanceIcon(GlanceItem item) {
@@ -1037,6 +1042,40 @@ class WoxLauncherController extends GetxController {
     }
   }
 
+  void updateAttentionUnreadCount(String traceId, int unreadCount) {
+    final nextCount = unreadCount < 0 ? 0 : unreadCount;
+    if (attentionUnreadCount.value == nextCount) {
+      return;
+    }
+
+    attentionUnreadCount.value = nextCount;
+    Logger.instance.info(traceId, "attention unread count changed: count=$nextCount");
+  }
+
+  Future<void> activateAttentionQuery(String traceId) async {
+    await onQueryChanged(traceId, PlainQuery.text("attention "), "attention badge clicked", moveCursorToEnd: true);
+    await focusQueryBox();
+  }
+
+  String get attentionHotkey => Platform.isMacOS ? "cmd+u" : "alt+u";
+
+  String get attentionHotkeyLabel => Platform.isMacOS ? "Cmd+U" : "Alt+U";
+
+  // executeAttentionHotkey only works while the badge is visible, matching the on-screen affordance.
+  bool executeAttentionHotkey(String traceId, HotKey hotkey) {
+    if (!shouldShowAttentionBadge) {
+      return false;
+    }
+
+    final parsed = WoxHotkey.parseHotkeyFromString(attentionHotkey);
+    if (parsed == null || !parsed.isNormalHotkey || !WoxHotkey.equals(parsed.normalHotkey, hotkey)) {
+      return false;
+    }
+
+    unawaited(activateAttentionQuery(traceId));
+    return true;
+  }
+
   Future<void> activateBugReportQuery(String traceId) async {
     // Feature: clicking the bug indicator should enter the system plugin using
     // Wox's normal trigger-keyword semantics, which require the trailing space.
@@ -1725,6 +1764,7 @@ class WoxLauncherController extends GetxController {
     latestQueryHistories.assignAll(params.queryHistories);
     lastLaunchMode = params.launchMode;
     lastStartPage = params.startPage;
+    updateAttentionUnreadCount(traceId, params.attentionUnreadCount);
     if (currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code) {
       canArrowUpHistory = true;
       if (lastLaunchMode == WoxLaunchModeEnum.WOX_LAUNCH_MODE_CONTINUE.code) {
@@ -2718,6 +2758,10 @@ class WoxLauncherController extends GetxController {
     } else if (msg.method == "DiagnosticStatusChanged") {
       final data = msg.data as Map<String, dynamic>? ?? {};
       updateDiagnosticStatus(msg.traceId, data["enabled"] == true);
+      responseWoxWebsocketRequest(msg, true, null);
+    } else if (msg.method == "AttentionUnreadCountChanged") {
+      final data = msg.data as Map<String, dynamic>? ?? {};
+      updateAttentionUnreadCount(msg.traceId, (data["unreadCount"] as num?)?.toInt() ?? 0);
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "RecordHotkey") {
       final data = msg.data as Map<String, dynamic>? ?? {};

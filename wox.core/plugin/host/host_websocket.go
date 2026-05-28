@@ -409,6 +409,22 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 		}
 		pluginInstance.API.Notify(ctx, message)
 		w.sendResponseToHost(ctx, request, "")
+	case "PushAttention":
+		rawRequest, exist := request.Params["request"]
+		if !exist {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] PushAttention method must have a request parameter", request.PluginName))
+			return
+		}
+
+		var attentionRequest plugin.PushAttentionRequest
+		if err := json.Unmarshal([]byte(rawRequest), &attentionRequest); err != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal push attention request: %s", request.PluginName, err))
+			w.sendResponseErrToHost(ctx, request, fmt.Errorf("failed to unmarshal push attention request: %w", err))
+			return
+		}
+
+		pluginInstance.API.PushAttention(ctx, attentionRequest)
+		w.sendResponseToHost(ctx, request, "")
 	case "ShowToolbarMsg":
 		rawMsg, exist := request.Params["msg"]
 		if !exist {
