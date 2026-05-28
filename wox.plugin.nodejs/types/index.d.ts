@@ -397,7 +397,7 @@ export interface QueryRefinement {
   Type: QueryRefinementType
   Options: QueryRefinementOption[]
   DefaultValue?: string[]
-  Hotkey?: string
+  Hotkey: string
   Persist?: boolean
 }
 
