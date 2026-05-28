@@ -1,19 +1,20 @@
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:uuid/v4.dart';
+import 'package:wox/components/wox_textfield.dart';
 import 'package:wox/utils/picker.dart';
 
 class WoxPathFinder extends StatefulWidget {
-  final String path;
-  final bool showOpenButton;
-  final bool showChangeButton;
-  final ValueChanged<String> onChanged;
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final ValueChanged<String>? onChanged;
+  final double? width;
 
   const WoxPathFinder({
     super.key,
-    required this.path,
-    this.showOpenButton = false,
-    this.showChangeButton = true,
-    required this.onChanged,
+    required this.controller,
+    required this.focusNode,
+    this.onChanged,
+    this.width,
   });
 
   @override
@@ -21,59 +22,46 @@ class WoxPathFinder extends StatefulWidget {
 }
 
 class _WoxPathFinderState extends State<WoxPathFinder> {
-  late TextEditingController controller;
-  bool disableBrowse = false;
+  bool _disableBrowse = false;
 
-  @override
-  void initState() {
-    super.initState();
-    controller = TextEditingController(text: widget.path);
-  }
-
-  @override
-  void didUpdateWidget(WoxPathFinder oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.path != controller.text) {
-      controller.text = widget.path;
+  Future<void> _browse() async {
+    if (_disableBrowse) return;
+    _disableBrowse = true;
+    try {
+      final selectedDirectory = await FileSelector.pick(
+        const UuidV4().generate(),
+        FileSelectorParams(isDirectory: true),
+      );
+      if (selectedDirectory.isNotEmpty) {
+        widget.controller.text = selectedDirectory[0];
+        widget.onChanged?.call(selectedDirectory[0]);
+      }
+    } finally {
+      _disableBrowse = false;
     }
   }
 
   @override
-  void dispose() {
-    controller.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return TextBox(
-      controller: controller,
-      onChanged: (value) {
-        widget.onChanged(value);
-      },
-      suffixMode: OverlayVisibilityMode.always,
-      suffix: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (widget.showChangeButton)
-            Button(
-              onPressed: disableBrowse
-                  ? null
-                  : () async {
-                      disableBrowse = true;
-                      final selectedDirectory = await FileSelector.pick(
-                        const UuidV4().generate(),
-                        FileSelectorParams(isDirectory: true),
-                      );
-                      if (selectedDirectory.isNotEmpty) {
-                        controller.text = selectedDirectory[0];
-                        widget.onChanged(selectedDirectory[0]);
-                      }
-                      disableBrowse = false;
-                    },
-              child: const Text('Browse'),
+    return WoxTextField(
+      controller: widget.controller,
+      focusNode: widget.focusNode,
+      width: widget.width,
+      onChanged: widget.onChanged,
+      suffixIcon: Padding(
+        padding: const EdgeInsets.only(right: 4),
+        child: SizedBox(
+          height: 24,
+          child: TextButton(
+            onPressed: _browse,
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-        ],
+            child: const Text('Browse', style: TextStyle(fontSize: 12)),
+          ),
+        ),
       ),
     );
   }
