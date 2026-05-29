@@ -3410,11 +3410,9 @@ class WoxLauncherController extends GetxController {
     }
 
     final metrics = WoxInterfaceSizeUtil.instance.current;
-    final textHeightFactor = metrics.queryBoxTextHeightFactor;
     final painter = TextPainter(
-      text: TextSpan(text: normalizedText.isEmpty ? ' ' : normalizedText, style: TextStyle(fontSize: metrics.queryBoxFontSize, height: textHeightFactor)),
+      text: TextSpan(text: normalizedText.isEmpty ? ' ' : normalizedText, style: TextStyle(fontSize: metrics.queryBoxFontSize)),
       textDirection: TextDirection.ltr,
-      strutStyle: StrutStyle(fontSize: metrics.queryBoxFontSize, height: textHeightFactor, leading: 0, forceStrutHeight: true),
       textScaler: TextScaler.noScaling,
     )..layout(minWidth: 0, maxWidth: queryBoxTextWrapWidth);
 
