@@ -65,7 +65,7 @@ import 'package:wox/utils/window_flicker_detector.dart';
 import 'package:wox/utils/color_util.dart';
 
 class WoxLauncherController extends GetxController {
-  static const int _slowLauncherActivationWarningThresholdMs = 20;
+  static const int _slowLauncherActivationWarningThresholdMs = 50;
   static const String localActionTogglePreviewFullscreenId = "__local_toggle_preview_fullscreen__";
   static const String localActionPreviewSearchId = "__local_preview_search__";
   static const String localActionOpenUpdateId = "__local_open_update__";
@@ -4214,6 +4214,19 @@ class WoxLauncherController extends GetxController {
       return;
     }
     if (isGlobalInputQuery(query)) {
+      preferredResultPreviewRatio = nextRatio;
+      if (isPreviewFullscreen.value) {
+        lastResultPreviewRatioBeforePreviewFullscreen = nextRatio;
+      } else {
+        resultPreviewRatio.value = nextRatio;
+      }
+      return;
+    }
+    // Selection queries default to a 6:4 split (list 40%, preview 60%).
+    // Only apply when the backend did not return an explicit ratio; an explicit
+    // zero means the plugin wants a preview-only layout and must be respected.
+    if (query.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code && queryLayout.resultPreviewWidthRatio == null) {
+      nextRatio = 0.4;
       preferredResultPreviewRatio = nextRatio;
       if (isPreviewFullscreen.value) {
         lastResultPreviewRatioBeforePreviewFullscreen = nextRatio;
