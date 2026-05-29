@@ -319,10 +319,6 @@ class WoxInterfaceSizeMetrics {
   double scaledSpacing(double base) => (base * scale).roundToDouble();
 
   double get queryBoxLineHeight => queryBoxBaseHeight - QUERY_BOX_CONTENT_PADDING_TOP - QUERY_BOX_CONTENT_PADDING_BOTTOM;
-
-  // Keep editable text layout inside the fixed query-box content band so font
-  // metrics cannot drift away from the launcher height calculation.
-  double get queryBoxTextHeightFactor => queryBoxLineHeight / queryBoxFontSize;
 }
 
 class WoxInterfaceSizeUtil {

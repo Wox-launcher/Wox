@@ -217,15 +217,12 @@ class WoxQueryBoxView extends StatelessWidget {
     // decoration padding stays fixed, preserving the normal layout and keeping
     // multi-line height calculation aligned with controller metrics.
     final metrics = WoxInterfaceSizeUtil.instance.current;
-    final textHeightFactor = metrics.queryBoxTextHeightFactor;
-    final queryBoxTextStyle = TextStyle(fontSize: metrics.queryBoxFontSize, height: textHeightFactor, color: safeFromCssColor(currentTheme.queryBoxFontColor));
-    final queryBoxStrutStyle = StrutStyle(fontSize: metrics.queryBoxFontSize, height: textHeightFactor, leading: 0, forceStrutHeight: true);
+    final queryBoxTextStyle = TextStyle(fontSize: metrics.queryBoxFontSize, color: safeFromCssColor(currentTheme.queryBoxFontColor));
 
     return MediaQuery.withNoTextScaling(
       child: ExtendedTextField(
         key: controller.queryBoxTextFieldKey,
         style: queryBoxTextStyle,
-        strutStyle: queryBoxStrutStyle,
         textAlignVertical: TextAlignVertical.center,
         decoration: InputDecoration(
           contentPadding: EdgeInsets.only(left: 8, right: rightAccessoryWidth, top: QUERY_BOX_CONTENT_PADDING_TOP, bottom: QUERY_BOX_CONTENT_PADDING_BOTTOM),
