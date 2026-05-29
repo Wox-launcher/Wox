@@ -624,7 +624,7 @@ wheels = [
 
 [[package]]
 name = "wox-plugin"
-version = "0.0.80"
+version = "0.0.81"
 source = { editable = "." }
 
 [package.optional-dependencies]

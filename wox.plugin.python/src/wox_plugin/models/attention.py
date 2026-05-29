@@ -48,7 +48,7 @@ class PushAttentionRequest:
     action: Optional[AttentionAction] = field(default=None)
 
     def to_dict(self) -> dict:
-        payload = {
+        payload: dict[str, object] = {
             "key": self.key,
             "title": self.title,
             "description": self.description,

@@ -399,11 +399,7 @@ class WoxPreview:
         return cls(
             preview_type=WoxPreviewType(data.get("PreviewType")),
             preview_data=data.get("PreviewData", ""),
-            preview_tags=[
-                WoxPreviewTag.from_json(item)
-                for item in data.get("PreviewTags", [])
-                if isinstance(item, dict)
-            ]
+            preview_tags=[WoxPreviewTag.from_json(item) for item in data.get("PreviewTags", []) if isinstance(item, dict)]
             if isinstance(data.get("PreviewTags", []), list)
             else [],
             preview_properties=data.get("PreviewProperties", {}),
