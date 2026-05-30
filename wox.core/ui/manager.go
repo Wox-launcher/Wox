@@ -1446,7 +1446,7 @@ func (m *Manager) toTrayIconBytes(ctx context.Context, icon common.WoxImage) []b
 		return svgBytes
 	}
 
-	img, err := icon.ToImage()
+	img, err := icon.ToImageWithoutRemoteFetch()
 	if err != nil {
 		logger.Warn(ctx, fmt.Sprintf("failed to parse tray query icon, fallback to app icon: %s", err.Error()))
 		return resource.GetAppIcon()
