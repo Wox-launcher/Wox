@@ -9,12 +9,15 @@ import 'package:wox/utils/wox_interface_size_util.dart';
 import 'package:wox/utils/wox_text_measure_util.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 
+enum WoxTooltipSide { left, top, right, bottom }
+
 class WoxTooltip extends StatefulWidget {
   final String message;
   final Widget child;
   final Duration waitDuration;
+  final WoxTooltipSide? preferSide;
 
-  const WoxTooltip({super.key, required this.message, required this.child, this.waitDuration = Duration.zero});
+  const WoxTooltip({super.key, required this.message, required this.child, this.waitDuration = Duration.zero, this.preferSide});
 
   @override
   State<WoxTooltip> createState() => WoxTooltipState();
@@ -27,7 +30,8 @@ class WoxTooltipState extends State<WoxTooltip> {
   Timer? hideTimer;
   bool isHoveringTarget = false;
   bool isHoveringTooltip = false;
-  bool showAbove = false;
+  Alignment targetAnchor = Alignment.bottomLeft;
+  Alignment followerAnchor = Alignment.topLeft;
   double tooltipWidth = 0;
   double tooltipHeight = 0;
   double tooltipOffsetX = 0;
@@ -124,8 +128,8 @@ class WoxTooltipState extends State<WoxTooltip> {
           child: CompositedTransformFollower(
             link: layerLink,
             showWhenUnlinked: false,
-            targetAnchor: showAbove ? Alignment.topLeft : Alignment.bottomLeft,
-            followerAnchor: showAbove ? Alignment.bottomLeft : Alignment.topLeft,
+            targetAnchor: targetAnchor,
+            followerAnchor: followerAnchor,
             offset: Offset(tooltipOffsetX, tooltipOffsetY),
             child: Material(
               color: Colors.transparent,
@@ -136,10 +140,7 @@ class WoxTooltipState extends State<WoxTooltip> {
                   decoration: decoration,
                   child: ConstrainedBox(
                     constraints: BoxConstraints(maxWidth: tooltipMaxWidth),
-                    child: Padding(
-                      padding: padding,
-                      child: WoxSelectableText(widget.message, style: textStyle),
-                    ),
+                    child: Padding(padding: padding, child: WoxSelectableText(widget.message, style: textStyle)),
                   ),
                 ),
               ),
@@ -171,18 +172,69 @@ class WoxTooltipState extends State<WoxTooltip> {
     tooltipWidth = (textSize.width + padding.horizontal).clamp(0, tooltipMaxWidth);
     tooltipHeight = textSize.height + padding.vertical;
 
+    if (widget.preferSide == WoxTooltipSide.left) {
+      updateHorizontalPlacement(targetRect, mediaSize, showOnLeft: true);
+      return;
+    }
+
+    if (widget.preferSide == WoxTooltipSide.right) {
+      updateHorizontalPlacement(targetRect, mediaSize, showOnLeft: false);
+      return;
+    }
+
+    if (widget.preferSide == WoxTooltipSide.top) {
+      updateVerticalPlacement(targetRect, mediaSize, showAbove: true);
+      return;
+    }
+
+    if (widget.preferSide == WoxTooltipSide.bottom) {
+      updateVerticalPlacement(targetRect, mediaSize, showAbove: false);
+      return;
+    }
+
     final spaceBelow = mediaSize.height - targetRect.bottom;
     final spaceAbove = targetRect.top;
-    showAbove = spaceBelow < tooltipHeight + tooltipGap && spaceAbove > spaceBelow;
-    tooltipOffsetY = showAbove ? -tooltipGap : tooltipGap;
+    final showAbove = spaceBelow < tooltipHeight + tooltipGap && spaceAbove > spaceBelow;
+    updateVerticalPlacement(targetRect, mediaSize, showAbove: showAbove);
+  }
 
-    final rightEdge = targetRect.left + tooltipWidth;
-    tooltipOffsetX = 0;
-    if (rightEdge > mediaSize.width - tooltipMargin) {
-      tooltipOffsetX = (mediaSize.width - tooltipMargin) - rightEdge;
-    } else if (targetRect.left < tooltipMargin) {
-      tooltipOffsetX = tooltipMargin - targetRect.left;
-    }
+  // Top/bottom placement keeps auto mode's layout rules while also letting
+  // callers pin a specific side when nearby chrome would clip the overlay.
+  void updateVerticalPlacement(Rect targetRect, Size mediaSize, {required bool showAbove}) {
+    targetAnchor = showAbove ? Alignment.topLeft : Alignment.bottomLeft;
+    followerAnchor = showAbove ? Alignment.bottomLeft : Alignment.topLeft;
+
+    final baseTop = showAbove ? targetRect.top - tooltipHeight : targetRect.bottom;
+    final preferredTop = baseTop + (showAbove ? -tooltipGap : tooltipGap);
+    final minTop = tooltipMargin;
+    final maxTop = mediaSize.height - tooltipMargin - tooltipHeight;
+    final clampedTop = maxTop < minTop ? minTop : preferredTop.clamp(minTop, maxTop).toDouble();
+    tooltipOffsetY = clampedTop - baseTop;
+
+    final baseLeft = targetRect.left;
+    final maxLeft = mediaSize.width - tooltipMargin - tooltipWidth;
+    final clampedLeft = maxLeft < tooltipMargin ? tooltipMargin : baseLeft.clamp(tooltipMargin, maxLeft).toDouble();
+    tooltipOffsetX = clampedLeft - baseLeft;
+  }
+
+  // Left/right placement is used by query-box accessory pills that sit against
+  // the top-right launcher edge and should not open downward into clipped UI.
+  void updateHorizontalPlacement(Rect targetRect, Size mediaSize, {required bool showOnLeft}) {
+    final targetCenterY = targetRect.top + targetRect.height / 2;
+    final baseTop = targetCenterY - tooltipHeight / 2;
+    final minTop = tooltipMargin;
+    final maxTop = mediaSize.height - tooltipMargin - tooltipHeight;
+    final clampedTop = maxTop < minTop ? minTop : baseTop.clamp(minTop, maxTop).toDouble();
+
+    targetAnchor = showOnLeft ? Alignment.centerLeft : Alignment.centerRight;
+    followerAnchor = showOnLeft ? Alignment.centerRight : Alignment.centerLeft;
+    tooltipOffsetY = clampedTop - baseTop;
+
+    final baseLeft = showOnLeft ? targetRect.left - tooltipWidth : targetRect.right;
+    final preferredLeft = baseLeft + (showOnLeft ? -tooltipGap : tooltipGap);
+    final maxLeft = mediaSize.width - tooltipMargin - tooltipWidth;
+    final clampedLeft = maxLeft < tooltipMargin ? tooltipMargin : preferredLeft.clamp(tooltipMargin, maxLeft).toDouble();
+    tooltipOffsetX = clampedLeft - baseLeft;
   }
 
   void removeOverlay() {
