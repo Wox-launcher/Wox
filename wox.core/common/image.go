@@ -3,6 +3,7 @@ package common
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
@@ -13,6 +14,7 @@ import (
 	_ "image/jpeg"
 	"image/png"
 	"io"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -249,33 +251,134 @@ func (w *WoxImage) toImage(allowRemoteFetch bool) (image.Image, error) {
 		return renderSvgImage(w.ImageData)
 	}
 	if w.ImageType == WoxImageTypeEmoji {
-		emojiInfo, getErr := gomoji.GetInfo(w.ImageData)
-		if getErr != nil {
-			return nil, getErr
+		emojiPath, err := w.emojiImageCachePath(w.ImageData)
+		if err != nil {
+			return nil, err
 		}
 
-		// load from cache first
-		codePoint := strings.ToLower(emojiInfo.CodePoint)
-		emojiPath := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("emoji_%s.png", codePoint))
 		if _, err := os.Stat(emojiPath); err == nil {
 			return imaging.Open(emojiPath)
 		}
 
 		if !allowRemoteFetch {
-			return nil, fmt.Errorf("emoji image cache miss: %s", codePoint)
+			return nil, fmt.Errorf("emoji image cache miss: %s", w.ImageData)
 		}
 
-		//download emoji image and cache it
-		url := fmt.Sprintf("https://cdn.jsdelivr.net/gh/twitter/twemoji@v11.0.0/36x36/%s.png", codePoint)
-		err := util.HttpDownload(util.NewTraceContext(), url, emojiPath)
-		if err != nil {
+		if err := os.MkdirAll(util.GetLocation().GetImageCacheDirectory(), 0755); err != nil {
+			return nil, err
+		}
+
+		if err := util.HttpDownload(util.NewTraceContext(), w.emojiImageDownloadURL(w.ImageData), emojiPath); err != nil {
 			return nil, err
 		}
 
 		return imaging.Open(emojiPath)
 	}
+	if w.ImageType == WoxImageTypeUrl {
+		cachePath, err := w.urlImageCachePath(w.ImageData)
+		if err != nil {
+			return nil, err
+		}
+
+		if img, ok, err := w.loadCachedURLImage(cachePath); err != nil {
+			return nil, err
+		} else if ok {
+			return img, nil
+		}
+
+		if !allowRemoteFetch {
+			return nil, fmt.Errorf("url image cache miss: %s", w.ImageData)
+		}
+
+		if err := w.warmURLImageCache(util.NewTraceContext(), w.ImageData, cachePath); err != nil {
+			return nil, err
+		}
+
+		if img, ok, err := w.loadCachedURLImage(cachePath); err != nil {
+			return nil, err
+		} else if ok {
+			return img, nil
+		}
+
+		return nil, fmt.Errorf("url image cache miss after download: %s", w.ImageData)
+	}
 
 	return nil, fmt.Errorf("unsupported image type: %s", w.ImageType)
+}
+
+func (w *WoxImage) emojiImageCachePath(emoji string) (string, error) {
+	emojiInfo, err := gomoji.GetInfo(emoji)
+	if err != nil {
+		return "", err
+	}
+
+	codePoint := strings.ToLower(emojiInfo.CodePoint)
+	return path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("emoji_%s.png", codePoint)), nil
+}
+
+func (w *WoxImage) emojiImageDownloadURL(emoji string) string {
+	emojiInfo, _ := gomoji.GetInfo(emoji)
+	codePoint := strings.ToLower(emojiInfo.CodePoint)
+	return fmt.Sprintf("https://cdn.jsdelivr.net/gh/twitter/twemoji@v11.0.0/36x36/%s.png", codePoint)
+}
+
+func (w *WoxImage) urlImageCachePath(rawURL string) (string, error) {
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		return "", err
+	}
+
+	ext := strings.ToLower(filepath.Ext(parsedURL.Path))
+	if ext == "" || len(ext) > 8 {
+		ext = ".img"
+	}
+
+	cacheName := fmt.Sprintf("remote_image_%x%s", md5.Sum([]byte(rawURL)), ext)
+	return path.Join(util.GetLocation().GetImageCacheDirectory(), cacheName), nil
+}
+
+func (w *WoxImage) loadCachedURLImage(cachePath string) (image.Image, bool, error) {
+	info, err := os.Stat(cachePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	if info.IsDir() || info.Size() == 0 {
+		return nil, false, nil
+	}
+
+	if isSvgFilePath(cachePath) {
+		svgData, err := os.ReadFile(cachePath)
+		if err != nil {
+			return nil, false, err
+		}
+		img, err := renderSvgImage(string(svgData))
+		if err != nil {
+			return nil, false, err
+		}
+		return img, true, nil
+	}
+
+	img, err := imaging.Open(cachePath)
+	if err != nil {
+		return nil, false, err
+	}
+	return img, true, nil
+}
+
+func (w *WoxImage) warmURLImageCache(ctx context.Context, rawURL string, cachePath string) error {
+	if err := os.MkdirAll(util.GetLocation().GetImageCacheDirectory(), 0755); err != nil {
+		return err
+	}
+
+	data, err := util.HttpGet(ctx, rawURL)
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(cachePath, data, 0644)
 }
 
 func isSvgFilePath(filePath string) bool {
