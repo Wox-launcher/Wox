@@ -842,6 +842,7 @@
   "plugin_screenshot_capture_subtitle": "选择一个区域并截取到剪贴板",
   "plugin_screenshot_capture_action": "开始截图",
   "plugin_screenshot_capture_failed": "截图失败",
+  "plugin_screenshot_permission_denied": "截图需要屏幕录制权限，请在系统设置中授权 Wox。",
   "plugin_screenshot_capture_success": "截图已保存",
   "plugin_screenshot_capture_clipboard_warning": "截图已保存，但复制到剪贴板失败",
   "plugin_screenshot_pin_failed": "截图固定到屏幕失败",

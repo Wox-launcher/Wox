@@ -842,6 +842,7 @@
   "plugin_screenshot_capture_subtitle": "Select a region and capture it to clipboard",
   "plugin_screenshot_capture_action": "Start screenshot",
   "plugin_screenshot_capture_failed": "Screenshot failed",
+  "plugin_screenshot_permission_denied": "Screenshot needs screen recording permission. Grant Wox access in system settings.",
   "plugin_screenshot_capture_success": "Screenshot saved",
   "plugin_screenshot_capture_clipboard_warning": "Screenshot saved, but copying to clipboard failed",
   "plugin_screenshot_pin_failed": "Failed to pin screenshot",

@@ -794,6 +794,7 @@
   "plugin_selection_command_preview": "Предпросмотр выбранного файла",
   "plugin_selection_setting_enable_space_quick_look": "Включить быстрый просмотр по пробелу",
   "plugin_selection_setting_enable_space_quick_look_tips": "Если включено, нажатие пробела в Проводнике Windows или диалогах открытия/сохранения показывает выбранный файл в Wox.",
+  "plugin_screenshot_permission_denied": "Для снимка экрана требуется разрешение на запись экрана. Разрешите доступ Wox в настройках системы.",
   "plugin_screenshot_pin_failed": "Не удалось закрепить снимок на экране",
   "plugin_screenshot_ocr_enabled": "Распознавать текст на снимках",
   "plugin_screenshot_ocr_enabled_tooltip": "Автоматически использует локальное системное OCR после сохранения снимка, чтобы историю снимков можно было искать по тексту. Поддерживаются Windows и macOS; Linux пока не поддерживается.",
