@@ -214,6 +214,11 @@ func MoveResizeWindow(managedWindow ManagedWindow, rect WindowRect) error {
 	return nil
 }
 
+// MaximizeWindow falls back to explicit sizing on macOS because this package has no native zoom bridge yet.
+func MaximizeWindow(managedWindow ManagedWindow) error {
+	return ErrWindowManagementUnsupported
+}
+
 // MinimizeWindow minimizes the captured Accessibility window.
 func MinimizeWindow(managedWindow ManagedWindow) error {
 	cWindowId := C.CString(managedWindow.Id)

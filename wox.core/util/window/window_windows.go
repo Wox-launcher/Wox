@@ -40,6 +40,7 @@ int getManagedWindowForManagement(const char* windowId, int pid, WoxManagedWindo
 int listDisplaysForManagement(WoxDisplayInfoC** outDisplays, int* outCount);
 void freeDisplaysForManagement(WoxDisplayInfoC* displays);
 int moveResizeWindowForManagement(const char* windowId, int pid, int x, int y, int width, int height);
+int maximizeWindowForManagement(const char* windowId, int pid);
 int minimizeWindowForManagement(const char* windowId, int pid);
 int activateWindowByPid(int pid);
 int isOpenSaveDialog();
@@ -240,6 +241,18 @@ func MoveResizeWindow(managedWindow ManagedWindow, rect WindowRect) error {
 	defer C.free(unsafe.Pointer(cWindowId))
 
 	result := int(C.moveResizeWindowForManagement(cWindowId, C.int(managedWindow.Pid), C.int(rect.X), C.int(rect.Y), C.int(max(1, rect.Width)), C.int(max(1, rect.Height))))
+	if result != 1 {
+		return windowManagementErrorFromCode(result)
+	}
+	return nil
+}
+
+// MaximizeWindow uses the native maximize state so Windows updates caption button behavior.
+func MaximizeWindow(managedWindow ManagedWindow) error {
+	cWindowId := C.CString(managedWindow.Id)
+	defer C.free(unsafe.Pointer(cWindowId))
+
+	result := int(C.maximizeWindowForManagement(cWindowId, C.int(managedWindow.Pid)))
 	if result != 1 {
 		return windowManagementErrorFromCode(result)
 	}
