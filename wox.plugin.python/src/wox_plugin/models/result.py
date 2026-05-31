@@ -114,6 +114,38 @@ class ResultActionType(str, Enum):
 
 
 @dataclass
+class ResultDragData:
+    """
+    Native drag payload exposed by a Wox result.
+
+    Only file drag data is supported for now. Paths should be absolute file or
+    directory paths so Wox can hand them to the operating system drag session.
+    """
+
+    type: str
+    files: List[str] = field(default_factory=list)
+
+    def to_json(self) -> str:
+        data = {
+            "Type": self.type,
+            "Files": self.files,
+        }
+        return json.dumps(data)
+
+    @classmethod
+    def files_data(cls, files: List[str]) -> "ResultDragData":
+        return cls(type="files", files=files)
+
+    @classmethod
+    def from_json(cls, json_str: str) -> "ResultDragData":
+        data = json.loads(json_str)
+        return cls(
+            type=data.get("Type", data.get("type", "")),
+            files=[str(item) for item in data.get("Files", data.get("files", []))],
+        )
+
+
+@dataclass
 class ResultTail:
     """
     Tail model for Wox results.
@@ -841,6 +873,14 @@ class Result:
     triggered by clicking or hotkeys.
     """
 
+    drag_data: Optional[ResultDragData] = None
+    """
+    Optional native drag payload for this result.
+
+    Use ResultDragData.files_data([...]) to let users drag files or directories
+    from the result into other desktop applications.
+    """
+
     def to_json(self) -> str:
         """
         Convert to JSON string with camelCase naming.
@@ -865,6 +905,8 @@ class Result:
             data["Tails"] = [json.loads(tail.to_json()) for tail in self.tails]
         if self.actions:
             data["Actions"] = [json.loads(action.to_json()) for action in self.actions]
+        if self.drag_data:
+            data["DragData"] = json.loads(self.drag_data.to_json())
         return json.dumps(data)
 
     @classmethod
@@ -891,6 +933,10 @@ class Result:
         if "Actions" in data:
             actions = [ResultAction.from_json(json.dumps(action)) for action in data["Actions"]]
 
+        drag_data = None
+        if "DragData" in data and data["DragData"] is not None:
+            drag_data = ResultDragData.from_json(json.dumps(data["DragData"]))
+
         return cls(
             title=data.get("Title", ""),
             icon=WoxImage.from_json(json.dumps(data.get("Icon", {}))),
@@ -902,6 +948,7 @@ class Result:
             group_score=data.get("GroupScore", 0.0),
             tails=tails,
             actions=actions,
+            drag_data=drag_data,
         )
 
 
@@ -998,6 +1045,14 @@ class UpdatableResult:
     preserved by ID matching.
     """
 
+    drag_data: Optional[ResultDragData] = None
+    """
+    New native drag payload for the result.
+
+    If None, the current drag payload is kept. Pass an empty ResultDragData to
+    clear drag support for this result.
+    """
+
     def to_json(self) -> str:
         """
         Convert to JSON string with camelCase naming.
@@ -1021,5 +1076,7 @@ class UpdatableResult:
             data["Preview"] = json.loads(self.preview.to_json())
         if self.actions is not None:
             data["Actions"] = [json.loads(action.to_json()) for action in self.actions]
+        if self.drag_data is not None:
+            data["DragData"] = json.loads(self.drag_data.to_json())
 
         return json.dumps(data)

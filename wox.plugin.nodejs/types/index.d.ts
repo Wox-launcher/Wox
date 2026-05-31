@@ -574,6 +574,28 @@ export interface Result {
    * triggered via keyboard shortcuts or clicking.
    */
   Actions?: ResultAction[]
+
+  /**
+   * Optional native drag payload for this result.
+   *
+   * Wox currently supports file drags only. Use absolute file or directory
+   * paths so the desktop shell can transfer them to another app.
+   */
+  DragData?: ResultDragData
+}
+
+export interface ResultDragData {
+  /**
+   * Native drag payload type.
+   *
+   * Currently only `files` is supported.
+   */
+  Type: "files"
+
+  /**
+   * Absolute file or directory paths exported by the drag session.
+   */
+  Files: string[]
 }
 
 /**
@@ -707,6 +729,8 @@ export interface UpdatableResult {
   Preview?: WoxPreview
   /** Optional - update the actions */
   Actions?: ResultAction[]
+  /** Optional - update or clear native drag data */
+  DragData?: ResultDragData
 }
 
 /**

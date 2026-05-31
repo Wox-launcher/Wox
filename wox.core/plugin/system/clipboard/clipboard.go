@@ -1096,6 +1096,10 @@ func (c *ClipboardPlugin) convertFileRecord(ctx context.Context, record Clipboar
 		Score:      record.Timestamp,
 		Tails:      tails,
 		Actions:    actions,
+		DragData: &plugin.QueryResultDragData{
+			Type:  plugin.QueryResultDragDataTypeFiles,
+			Files: append([]string(nil), filePaths...),
+		},
 	}
 }
 
@@ -1504,6 +1508,10 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 			PreviewTags:        previewTags,
 		},
 		Score: record.Timestamp,
+		DragData: &plugin.QueryResultDragData{
+			Type:  plugin.QueryResultDragDataTypeFiles,
+			Files: []string{record.FilePath},
+		},
 		Actions: []plugin.QueryResultAction{
 			{
 				Name: "i18n:plugin_clipboard_primary_action_copy_to_clipboard",

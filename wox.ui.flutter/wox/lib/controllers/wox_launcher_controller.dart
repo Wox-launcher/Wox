@@ -53,6 +53,7 @@ import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/env.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/picker.dart';
+import 'package:wox/utils/result_drag_platform_bridge.dart';
 import 'package:wox/utils/wox_hotkey_recording_bus.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
 import 'package:wox/utils/wox_setting_util.dart';
@@ -3509,6 +3510,11 @@ class WoxLauncherController extends GetxController {
         needUpdate = true;
       }
 
+      if (updatableResult.hasDragDataUpdate) {
+        updatedData.dragData = updatableResult.dragData?.isFiles == true ? updatableResult.dragData : null;
+        needUpdate = true;
+      }
+
       if (needUpdate) {
         // Force create a new WoxListItem with updated data to trigger reactive update
         updatedResult = updatedResult.copyWith(data: updatedData);
@@ -4013,6 +4019,20 @@ class WoxLauncherController extends GetxController {
     isShowPreviewPanel.value = shouldShowPreviewPanelForPreview(currentPreview.value);
     syncPreviewModeForActivePreview(traceId);
     refreshActionsForActiveResult(traceId, preserveSelection: false);
+  }
+
+  Future<void> startResultDrag(String traceId, WoxListItem<WoxQueryResult> item) async {
+    if (item.isGroup || item.data.dragData == null || !item.data.dragData!.isFiles) {
+      return;
+    }
+
+    final status = await ResultDragPlatformBridge.instance.startFileDrag(traceId, item.data.dragData!.files);
+    if (status != ResultDragStatus.error) {
+      // Native drag hides the window as soon as the drag session starts. Once
+      // the session ends, keep Wox hidden for both successful and canceled
+      // drops instead of restoring a result surface the user has already left.
+      await hideApp(traceId);
+    }
   }
 
   void onResultItemsEmpty(String traceId) {

@@ -206,6 +206,14 @@ type RefreshQueryParam struct {
 	PreserveSelectedIndex bool
 }
 
+const QueryResultDragDataTypeFiles = "files"
+
+// QueryResultDragData declares data the UI can export through a native drag session.
+type QueryResultDragData struct {
+	Type  string
+	Files []string
+}
+
 // Query result return from plugin
 type QueryResult struct {
 	// Result id, should be unique. It's optional, if you don't set it, Wox will assign a random id for you
@@ -225,6 +233,8 @@ type QueryResult struct {
 	// Tails are additional results associate with this result, can be displayed in result detail view
 	Tails   []QueryResultTail
 	Actions []QueryResultAction
+	// DragData declares what can be dragged out of Wox for this result.
+	DragData *QueryResultDragData
 }
 
 type QueryResultTail struct {
@@ -331,6 +341,7 @@ func (q *QueryResult) ToUI() QueryResultUI {
 		Group:      q.Group,
 		GroupScore: q.GroupScore,
 		Tails:      q.Tails,
+		DragData:   q.DragData,
 		Actions: lo.Map(q.Actions, func(action QueryResultAction, index int) QueryResultActionUI {
 			actionType := action.Type
 			if actionType == "" {
@@ -375,6 +386,7 @@ type QueryResultUI struct {
 	GroupScore int64
 	Tails      []QueryResultTail
 	Actions    []QueryResultActionUI
+	DragData   *QueryResultDragData
 	IsGroup    bool
 }
 
@@ -444,6 +456,7 @@ type UpdatableResult struct {
 	Preview  *WoxPreview
 	Tails    *[]QueryResultTail
 	Actions  *[]QueryResultAction
+	DragData *QueryResultDragData
 }
 
 // store latest result value after query/refresh, so we can retrieve data later in action/refresh
