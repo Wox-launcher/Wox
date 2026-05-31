@@ -1026,7 +1026,7 @@ func (m *Manager) buildMetadataBackedQueryLayout(ctx context.Context, pluginInst
 		logger.Error(ctx, fmt.Sprintf("failed to parse icon: %s", parseErr.Error()))
 	}
 
-	defaultWidthRatio := 0.5
+	defaultWidthRatio := 0.4
 	layout.ResultPreviewWidthRatio = &defaultWidthRatio
 
 	featureParams, isResultPreviewWidthRatioEnabled, err := pluginInstance.Metadata.GetFeatureParamsForResultPreviewWidthRatioCommand(query.Command)

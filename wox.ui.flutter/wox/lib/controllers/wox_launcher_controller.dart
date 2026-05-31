@@ -149,12 +149,13 @@ class WoxLauncherController extends GetxController {
   final isPreviewFullscreen = false.obs;
   final Map<String, StreamController<Map<String, dynamic>>> terminalChunkControllers = {};
   final Map<String, StreamController<Map<String, dynamic>>> terminalStateControllers = {};
-  double lastResultPreviewRatioBeforePreviewFullscreen = 0.5;
-  double preferredResultPreviewRatio = 0.5;
+  static const double defaultResultPreviewRatio = 0.4;
+  double lastResultPreviewRatioBeforePreviewFullscreen = defaultResultPreviewRatio;
+  double preferredResultPreviewRatio = defaultResultPreviewRatio;
 
   /// The ratio of result panel width to total width, value range: 0.0-1.0
   /// e.g., 0.3 means result panel takes 30% width, preview panel takes 70%
-  final resultPreviewRatio = 0.5.obs;
+  final resultPreviewRatio = defaultResultPreviewRatio.obs;
 
   // result related variables
   late final WoxListController<WoxQueryResult> resultListViewController;
@@ -3092,7 +3093,7 @@ class WoxLauncherController extends GetxController {
   }
 
   double getPreferredResultPreviewRatio() {
-    return preferredResultPreviewRatio > 0 ? preferredResultPreviewRatio : 0.5;
+    return preferredResultPreviewRatio > 0 ? preferredResultPreviewRatio : defaultResultPreviewRatio;
   }
 
   bool enterPreviewFullscreen(String traceId) {
@@ -4201,7 +4202,7 @@ class WoxLauncherController extends GetxController {
 
   /// Update the result preview width ratio based on the query
   void updateResultPreviewWidthRatioOnQueryChanged(String traceId, PlainQuery query, QueryLayout queryLayout) {
-    double nextRatio = 0.5;
+    double nextRatio = defaultResultPreviewRatio;
     if (query.isEmpty) {
       preferredResultPreviewRatio = nextRatio;
       if (isPreviewFullscreen.value) {
@@ -4224,7 +4225,7 @@ class WoxLauncherController extends GetxController {
     // Only apply when the backend did not return an explicit ratio; an explicit
     // zero means the plugin wants a preview-only layout and must be respected.
     if (query.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code && queryLayout.resultPreviewWidthRatio == null) {
-      nextRatio = 0.4;
+      nextRatio = defaultResultPreviewRatio;
       preferredResultPreviewRatio = nextRatio;
       if (isPreviewFullscreen.value) {
         lastResultPreviewRatioBeforePreviewFullscreen = nextRatio;
@@ -4234,10 +4235,10 @@ class WoxLauncherController extends GetxController {
       return;
     }
 
-    nextRatio = queryLayout.resultPreviewWidthRatio ?? 0.5;
+    nextRatio = queryLayout.resultPreviewWidthRatio ?? defaultResultPreviewRatio;
     Logger.instance.debug(traceId, "update result preview width ratio: $nextRatio");
     if (nextRatio < 0 || nextRatio > 1) {
-      nextRatio = 0.5;
+      nextRatio = defaultResultPreviewRatio;
     }
     preferredResultPreviewRatio = nextRatio;
     if (isPreviewFullscreen.value) {
