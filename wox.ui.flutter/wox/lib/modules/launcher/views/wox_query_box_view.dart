@@ -293,6 +293,35 @@ class WoxQueryBoxView extends StatelessWidget {
     );
   }
 
+  Widget _buildQueryBoxRightBlankDragArea(BuildContext context, double boxWidth, double boxHeight, double rightAccessoryWidth, dynamic currentTheme) {
+    final metrics = WoxInterfaceSizeUtil.instance.current;
+    final text = controller.queryBoxTextFieldController.text;
+    final queryBoxTextStyle = TextStyle(fontSize: metrics.queryBoxFontSize, color: safeFromCssColor(currentTheme.queryBoxFontColor));
+    final contentWidth = (boxWidth - 8 - rightAccessoryWidth).clamp(0, double.infinity).toDouble();
+    final textWidth = text.isEmpty ? 0.0 : WoxTextMeasureUtil.measureTextWidth(context: context, text: text, style: queryBoxTextStyle).ceilToDouble();
+    final blankWidth = (contentWidth - textWidth).clamp(0, double.infinity).toDouble();
+
+    if (blankWidth <= 0) {
+      return const SizedBox.shrink();
+    }
+
+    return Positioned(
+      left: 8 + textWidth,
+      top: 0,
+      width: blankWidth,
+      height: boxHeight,
+      child: MouseRegion(
+        child: WoxDragMoveArea(
+          onDragStart: controller.windowDriver.startDragging,
+          onDragEnd: () {
+            controller.focusQueryBox();
+          },
+          child: SizedBox(width: blankWidth, height: boxHeight),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (LoggerSwitch.enablePaintLog) {
@@ -500,7 +529,12 @@ class WoxQueryBoxView extends StatelessWidget {
 
                     return Theme(
                       data: ThemeData(textSelectionTheme: TextSelectionThemeData(selectionColor: safeFromCssColor(currentTheme.queryBoxTextSelectionBackgroundColor))),
-                      child: _buildTextField(currentTheme, rightAccessoryWidth),
+                      child: Stack(
+                        children: [
+                          _buildTextField(currentTheme, rightAccessoryWidth),
+                          _buildQueryBoxRightBlankDragArea(context, constraints.maxWidth, queryBoxHeight, rightAccessoryWidth, currentTheme),
+                        ],
+                      ),
                     );
                   },
                 ),
@@ -510,13 +544,7 @@ class WoxQueryBoxView extends StatelessWidget {
           Positioned(
             right: 6,
             height: queryBoxHeight,
-            child: WoxDragMoveArea(
-              onDragStart: controller.windowDriver.startDragging,
-              onDragEnd: () {
-                controller.focusQueryBox();
-              },
-              child: SizedBox(width: _getQueryBoxRightAccessoryWidth(context, currentTheme), height: queryBoxHeight, child: Center(child: _buildRightAccessory(currentTheme))),
-            ),
+            child: SizedBox(width: _getQueryBoxRightAccessoryWidth(context, currentTheme), height: queryBoxHeight, child: Center(child: _buildRightAccessory(currentTheme))),
           ),
         ],
       );
