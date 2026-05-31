@@ -302,8 +302,4 @@ class WoxApi {
   Future<void> saveWindowPosition(String traceId, int x, int y) async {
     await WoxHttpUtil.instance.postData(traceId, "/setting/position", {"x": x, "y": y});
   }
-
-  Future<void> toolbarSnooze(String traceId, String text, String duration) async {
-    await WoxHttpUtil.instance.postData(traceId, "/toolbar/snooze", {"text": text, "duration": duration});
-  }
 }

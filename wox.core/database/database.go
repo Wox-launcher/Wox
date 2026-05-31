@@ -154,7 +154,6 @@ func Init(ctx context.Context) error {
 		&Oplog{},
 		&MRURecord{},
 		&AttentionItem{},
-		&ToolbarMute{},
 		&MigrationRecord{},
 	)
 	if err != nil {
