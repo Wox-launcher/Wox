@@ -303,6 +303,7 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                         "Tooltip": "i18n:ui_query_hotkeys_tips",
                         "UpdateDialogWidth": 760,
                         "Columns": [
+                          {"Key": "Name", "Label": "i18n:ui_query_hotkeys_name", "Tooltip": "i18n:ui_query_hotkeys_name_tooltip", "Type": "text", "Width": 140, "TextMaxLines": 1},
                           {
                             "Key": "Hotkey",
                             "Label": "i18n:ui_query_hotkeys_hotkey",
@@ -376,7 +377,14 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                             "HideInTable": true,
                             "TextMaxLines": 1,
                           },
-                          {"Key": "IsSilentExecution", "Label": "i18n:ui_query_hotkeys_silent", "Tooltip": "i18n:ui_query_hotkeys_silent_tooltip", "Width": 40, "Type": "checkbox"},
+                          {
+                            "Key": "IsSilentExecution",
+                            "Label": "i18n:ui_query_hotkeys_silent",
+                            "Tooltip": "i18n:ui_query_hotkeys_silent_tooltip",
+                            "Width": 40,
+                            "HideInTable": true,
+                            "Type": "checkbox",
+                          },
                           {"Key": "Disabled", "Label": "i18n:ui_disabled", "Tooltip": "i18n:ui_disabled_tooltip", "Width": 60, "Type": "checkbox"},
                         ],
                         "SortColumnKey": "Query",

@@ -463,7 +463,7 @@ func (m *Manager) findConfiguredHotkeyConflict(ctx context.Context, hotkeyStr st
 			continue
 		}
 		if normalizeHotkeyForCompare(queryHotkey.Hotkey) == normalized {
-			return HotkeyAvailability{Available: false, ConflictType: hotkeyConflictTypeQuery, ConflictValue: queryHotkey.Query}
+			return HotkeyAvailability{Available: false, ConflictType: hotkeyConflictTypeQuery, ConflictValue: queryHotkey.DisplayName()}
 		}
 	}
 

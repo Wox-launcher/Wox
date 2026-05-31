@@ -893,6 +893,9 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 				Position: setting.QueryHotkeyPositionSystemDefault,
 			}
 
+			if rawName, ok := rawQueryHotkey["Name"]; ok {
+				queryHotkey.Name = strings.TrimSpace(parseString(rawName))
+			}
 			if rawHotkey, ok := rawQueryHotkey["Hotkey"]; ok {
 				queryHotkey.Hotkey = strings.TrimSpace(parseString(rawHotkey))
 			}

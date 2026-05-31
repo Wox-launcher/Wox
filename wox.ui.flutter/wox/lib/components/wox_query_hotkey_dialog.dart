@@ -43,6 +43,7 @@ class _WoxQueryHotkeyDialogState extends State<WoxQueryHotkeyDialog> {
   late final WoxSettingController controller;
   late final QueryHotkey _initialSnapshot;
   late final QueryHotkey _draft;
+  late final TextEditingController _nameController;
   late final TextEditingController _queryController;
   late final TextEditingController _widthController;
   late final TextEditingController _maxResultCountController;
@@ -61,6 +62,7 @@ class _WoxQueryHotkeyDialogState extends State<WoxQueryHotkeyDialog> {
     controller = Get.find<WoxSettingController>();
     _initialSnapshot = _cloneDraft(_parseDraft(widget.initialRow));
     _draft = _cloneDraft(_initialSnapshot);
+    _nameController = TextEditingController(text: _draft.name);
     _queryController = TextEditingController(text: _draft.query);
     _widthController = TextEditingController(text: _draft.width);
     _maxResultCountController = TextEditingController(text: _draft.maxResultCount);
@@ -70,6 +72,7 @@ class _WoxQueryHotkeyDialogState extends State<WoxQueryHotkeyDialog> {
 
   @override
   void dispose() {
+    _nameController.dispose();
     _queryController.dispose();
     _widthController.dispose();
     _maxResultCountController.dispose();
@@ -92,6 +95,7 @@ class _WoxQueryHotkeyDialogState extends State<WoxQueryHotkeyDialog> {
   QueryHotkey _parseDraft(Map<String, dynamic> row) {
     if (row.isEmpty) {
       return QueryHotkey(
+        name: "",
         hotkey: "",
         query: "",
         isSilentExecution: false,
@@ -109,6 +113,7 @@ class _WoxQueryHotkeyDialogState extends State<WoxQueryHotkeyDialog> {
 
   QueryHotkey _cloneDraft(QueryHotkey source) {
     return QueryHotkey(
+      name: source.name,
       hotkey: source.hotkey,
       query: source.query,
       isSilentExecution: source.isSilentExecution,
@@ -256,8 +261,17 @@ class _WoxQueryHotkeyDialogState extends State<WoxQueryHotkeyDialog> {
     return token == 'ctrl' || token == 'shift' || token == 'alt' || token == 'meta';
   }
 
+  bool _isEditingSameHotkey(String hotkey) {
+    if (!_isEditing) {
+      return false;
+    }
+
+    return _normalizeHotkey(hotkey) == _normalizeHotkey(_initialSnapshot.hotkey);
+  }
+
   bool _isSameRow(QueryHotkey left, QueryHotkey right) {
-    return _normalizeHotkey(left.hotkey) == _normalizeHotkey(right.hotkey) &&
+    return left.name.trim() == right.name.trim() &&
+        _normalizeHotkey(left.hotkey) == _normalizeHotkey(right.hotkey) &&
         left.query == right.query &&
         left.isSilentExecution == right.isSilentExecution &&
         left.hideQueryBox == right.hideQueryBox &&
@@ -288,7 +302,7 @@ class _WoxQueryHotkeyDialogState extends State<WoxQueryHotkeyDialog> {
         continue;
       }
       if (!existing.disabled && _normalizeHotkey(existing.hotkey) == normalized) {
-        return tr('ui_hotkey_conflict_query').replaceAll('{query}', existing.query);
+        return tr('ui_hotkey_conflict_query').replaceAll('{query}', existing.displayName);
       }
     }
 
@@ -318,6 +332,16 @@ class _WoxQueryHotkeyDialogState extends State<WoxQueryHotkeyDialog> {
       }
       setState(() {
         _hotkeyAvailabilityError = internalConflict;
+      });
+      return;
+    }
+
+    if (_isEditingSameHotkey(hotkey)) {
+      if (!mounted || validationToken != _hotkeyValidationToken) {
+        return;
+      }
+      setState(() {
+        _hotkeyAvailabilityError = "";
       });
       return;
     }
@@ -355,6 +379,7 @@ class _WoxQueryHotkeyDialogState extends State<WoxQueryHotkeyDialog> {
   }
 
   bool _validateForm() {
+    _draft.name = _nameController.text.trim();
     _draft.query = _queryController.text;
     _draft.width = _widthController.text.trim();
     _draft.maxResultCount = _maxResultCountController.text.trim();
@@ -679,6 +704,20 @@ class _WoxQueryHotkeyDialogState extends State<WoxQueryHotkeyDialog> {
                   const SizedBox(height: 14),
                   _buildPresetSelector(),
                   const SizedBox(height: 18),
+                  _buildFormRow(
+                    label: tr('ui_query_hotkeys_name'),
+                    helperMarkdown: tr('ui_query_hotkeys_name_tooltip'),
+                    child: WoxTextField(
+                      width: double.infinity,
+                      controller: _nameController,
+                      onChanged: (value) {
+                        setState(() {
+                          _draft.name = value.trim();
+                          _saveErrorMessage = "";
+                        });
+                      },
+                    ),
+                  ),
                   _buildFormRow(
                     label: tr('ui_query_hotkeys_hotkey'),
                     helperMarkdown: tr('ui_query_hotkeys_hotkey_tooltip'),

@@ -357,6 +357,8 @@
   "ui_no_data": "暂无数据",
   "ui_query_hotkeys_hotkey": "快捷键",
   "ui_query_hotkeys_hotkey_tooltip": "用于触发查询的快捷键",
+  "ui_query_hotkeys_name": "名称",
+  "ui_query_hotkeys_name_tooltip": "可选。为该查询快捷键设置一个便于识别和记忆的名称。",
   "ui_query_hotkeys_query": "查询",
   "ui_query_hotkeys_query_tooltip": "当快捷键被触发时，查询的内容。输入 { 可以插入动态变量。\n\n使用活动浏览器 URL 变量需要安装 Wox Chrome 扩展：[安装 Wox Chrome 扩展](https://chromewebstore.google.com/detail/wox/bjbkdpjdnagiongdfemjhepkkglnailh)",
   "ui_query_variable_picker_insert": "插入动态占位符",
