@@ -105,6 +105,8 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	// others
 	"/":                            handleHome,
 	"/show":                        handleShow,
+	"/tooltip/show":                handleTooltipOverlayShow,
+	"/tooltip/hide":                handleTooltipOverlayHide,
 	"/ping":                        handlePing,
 	"/preview":                     handlePreview,
 	"/preview/image/overlay":       handlePreviewImageOverlay,

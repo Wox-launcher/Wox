@@ -135,6 +135,23 @@ class WoxApi {
     await WoxHttpUtil.instance.postData(traceId, "/on/show", {}, sessionId: sessionId);
   }
 
+  Future<void> showTooltipOverlay(String traceId, String name, String text, double x, double y, double anchorX, double anchorY, double anchorWidth, double anchorHeight) async {
+    await WoxHttpUtil.instance.postData(traceId, "/tooltip/show", {
+      "name": name,
+      "text": text,
+      "x": x,
+      "y": y,
+      "anchorX": anchorX,
+      "anchorY": anchorY,
+      "anchorWidth": anchorWidth,
+      "anchorHeight": anchorHeight,
+    });
+  }
+
+  Future<void> hideTooltipOverlay(String traceId, String name) async {
+    await WoxHttpUtil.instance.postData(traceId, "/tooltip/hide", {"name": name});
+  }
+
   Future<void> onQueryBoxFocus(String traceId, {String? sessionId}) async {
     await WoxHttpUtil.instance.postData(traceId, "/on/querybox/focus", {}, sessionId: sessionId);
   }

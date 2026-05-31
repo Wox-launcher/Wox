@@ -641,7 +641,7 @@ class WoxQueryBoxView extends StatelessWidget {
 
     return WoxTooltip(
       message: tooltip,
-      preferSide: WoxTooltipSide.left,
+      preferSide: WoxTooltipSide.top,
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
         child: GestureDetector(
@@ -689,7 +689,7 @@ class WoxQueryBoxView extends StatelessWidget {
 
     return WoxTooltip(
       message: "${controller.tr("ui_attention_unread_tooltip")} ${controller.attentionHotkeyLabel}",
-      preferSide: WoxTooltipSide.left,
+      preferSide: WoxTooltipSide.top,
       child: StatefulBuilder(
         builder: (context, setHovered) {
           final metrics = WoxInterfaceSizeUtil.instance.current;
@@ -751,7 +751,7 @@ class WoxQueryBoxView extends StatelessWidget {
     // other launcher overlays instead of falling back to Material Tooltip.
     return WoxTooltip(
       message: item.tooltip.isNotEmpty ? item.tooltip : item.text,
-      preferSide: WoxTooltipSide.left,
+      preferSide: WoxTooltipSide.top,
       child: StatefulBuilder(
         builder: (context, setHovered) {
           final metrics = WoxInterfaceSizeUtil.instance.current;

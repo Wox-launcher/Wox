@@ -2,12 +2,15 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:uuid/v4.dart';
+import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_selectable_text.dart';
 import 'package:wox/utils/color_util.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
 import 'package:wox/utils/wox_text_measure_util.dart';
 import 'package:wox/utils/wox_theme_util.dart';
+import 'package:wox/utils/windows/window_manager.dart';
 
 enum WoxTooltipSide { left, top, right, bottom }
 
@@ -34,12 +37,21 @@ class WoxTooltipState extends State<WoxTooltip> {
   Alignment followerAnchor = Alignment.topLeft;
   double tooltipWidth = 0;
   double tooltipHeight = 0;
+  double tooltipLeft = 0;
+  double tooltipTop = 0;
   double tooltipOffsetX = 0;
   double tooltipOffsetY = 6;
   double tooltipMaxWidth = 360;
   double tooltipGap = 6;
   double tooltipMargin = 8;
   double tooltipPreferredMaxWidth = 560;
+  double targetLeft = 0;
+  double targetTop = 0;
+  double targetWidth = 0;
+  double targetHeight = 0;
+  late final String nativeTooltipName;
+  bool nativeTooltipVisible = false;
+  bool nativeTooltipSupported = true;
 
   @override
   Widget build(BuildContext context) {
@@ -51,10 +63,24 @@ class WoxTooltipState extends State<WoxTooltip> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    nativeTooltipName = 'wox_tooltip_${const UuidV4().generate()}';
+  }
+
+  @override
+  void didUpdateWidget(covariant WoxTooltip oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.message != widget.message && nativeTooltipVisible) {
+      unawaited(showOverlay());
+    }
+  }
+
+  @override
   void dispose() {
     showTimer?.cancel();
     hideTimer?.cancel();
-    removeOverlay();
+    unawaited(removeOverlay());
     super.dispose();
   }
 
@@ -66,15 +92,24 @@ class WoxTooltipState extends State<WoxTooltip> {
   void handleTargetExit(PointerExitEvent event) {
     isHoveringTarget = false;
     showTimer?.cancel();
+    if (nativeTooltipSupported) {
+      return;
+    }
     scheduleHide();
   }
 
   void handleTooltipEnter(PointerEnterEvent event) {
+    if (nativeTooltipSupported) {
+      return;
+    }
     isHoveringTooltip = true;
-    showOverlay();
+    unawaited(showOverlay());
   }
 
   void handleTooltipExit(PointerExitEvent event) {
+    if (nativeTooltipSupported) {
+      return;
+    }
     isHoveringTooltip = false;
     scheduleHide();
   }
@@ -88,7 +123,7 @@ class WoxTooltipState extends State<WoxTooltip> {
     hideTimer?.cancel();
     showTimer?.cancel();
     if (widget.waitDuration == Duration.zero) {
-      showOverlay();
+      unawaited(showOverlay());
       return;
     }
 
@@ -97,19 +132,55 @@ class WoxTooltipState extends State<WoxTooltip> {
     // while sharing one selectable, boundary-aware overlay implementation.
     showTimer = Timer(widget.waitDuration, () {
       if (mounted && isHoveringTarget) {
-        showOverlay();
+        unawaited(showOverlay());
       }
     });
   }
 
   void maybeHide() {
     if (!isHoveringTarget && !isHoveringTooltip) {
-      removeOverlay();
+      unawaited(removeOverlay());
     }
   }
 
-  void showOverlay() {
+  Future<void> showOverlay() async {
     updatePlacement();
+    if (nativeTooltipSupported && await showNativeOverlay()) {
+      return;
+    }
+
+    showFallbackOverlay();
+  }
+
+  Future<bool> showNativeOverlay() async {
+    if (!mounted || widget.message.isEmpty) {
+      return false;
+    }
+
+    try {
+      final windowPosition = await windowManager.getPosition();
+      await WoxApi.instance.showTooltipOverlay(
+        const UuidV4().generate(),
+        nativeTooltipName,
+        widget.message,
+        windowPosition.dx + tooltipLeft,
+        windowPosition.dy + tooltipTop,
+        windowPosition.dx + targetLeft,
+        windowPosition.dy + targetTop,
+        targetWidth,
+        targetHeight,
+      );
+      nativeTooltipVisible = true;
+      removeFallbackOverlay();
+      return true;
+    } catch (_) {
+      nativeTooltipSupported = false;
+      nativeTooltipVisible = false;
+      return false;
+    }
+  }
+
+  void showFallbackOverlay() {
     if (overlayEntry != null) {
       overlayEntry?.markNeedsBuild();
       return;
@@ -161,6 +232,10 @@ class WoxTooltipState extends State<WoxTooltip> {
     final targetSize = renderObject.size;
     final targetPosition = renderObject.localToGlobal(Offset.zero);
     final targetRect = targetPosition & targetSize;
+    targetLeft = targetRect.left;
+    targetTop = targetRect.top;
+    targetWidth = targetRect.width;
+    targetHeight = targetRect.height;
     final mediaSize = MediaQuery.of(context).size;
     final textStyle = resolveTooltipTextStyle(context);
     final padding = resolveTooltipPadding();
@@ -210,11 +285,13 @@ class WoxTooltipState extends State<WoxTooltip> {
     final maxTop = mediaSize.height - tooltipMargin - tooltipHeight;
     final clampedTop = maxTop < minTop ? minTop : preferredTop.clamp(minTop, maxTop).toDouble();
     tooltipOffsetY = clampedTop - baseTop;
+    tooltipTop = clampedTop;
 
     final baseLeft = targetRect.left;
     final maxLeft = mediaSize.width - tooltipMargin - tooltipWidth;
     final clampedLeft = maxLeft < tooltipMargin ? tooltipMargin : baseLeft.clamp(tooltipMargin, maxLeft).toDouble();
     tooltipOffsetX = clampedLeft - baseLeft;
+    tooltipLeft = clampedLeft;
   }
 
   // Left/right placement is used by query-box accessory pills that sit against
@@ -229,15 +306,30 @@ class WoxTooltipState extends State<WoxTooltip> {
     targetAnchor = showOnLeft ? Alignment.centerLeft : Alignment.centerRight;
     followerAnchor = showOnLeft ? Alignment.centerRight : Alignment.centerLeft;
     tooltipOffsetY = clampedTop - baseTop;
+    tooltipTop = clampedTop;
 
     final baseLeft = showOnLeft ? targetRect.left - tooltipWidth : targetRect.right;
     final preferredLeft = baseLeft + (showOnLeft ? -tooltipGap : tooltipGap);
     final maxLeft = mediaSize.width - tooltipMargin - tooltipWidth;
     final clampedLeft = maxLeft < tooltipMargin ? tooltipMargin : preferredLeft.clamp(tooltipMargin, maxLeft).toDouble();
     tooltipOffsetX = clampedLeft - baseLeft;
+    tooltipLeft = clampedLeft;
   }
 
-  void removeOverlay() {
+  Future<void> removeOverlay() async {
+    if (nativeTooltipVisible) {
+      nativeTooltipVisible = false;
+      try {
+        await WoxApi.instance.hideTooltipOverlay(const UuidV4().generate(), nativeTooltipName);
+      } catch (_) {
+        nativeTooltipSupported = false;
+      }
+    }
+
+    removeFallbackOverlay();
+  }
+
+  void removeFallbackOverlay() {
     overlayEntry?.remove();
     overlayEntry = null;
   }
