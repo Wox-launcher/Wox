@@ -168,7 +168,10 @@ func (p *WindowManagerPlugin) Init(ctx context.Context, initParams plugin.InitPa
 // Query lists available window layout commands or returns the explicitly parsed command.
 func (p *WindowManagerPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	if !hasActiveWindow(query.Env) {
-		return plugin.NewQueryResponse([]plugin.QueryResult{p.noActiveWindowResult()})
+		if p.shouldShowNoActiveWindowResult(ctx, query) {
+			return plugin.NewQueryResponse([]plugin.QueryResult{p.noActiveWindowResult()})
+		}
+		return plugin.QueryResponse{}
 	}
 
 	if query.Command != "" {
@@ -186,6 +189,25 @@ func (p *WindowManagerPlugin) Query(ctx context.Context, query plugin.Query) plu
 		}
 	}
 	return plugin.NewQueryResponse(results)
+}
+
+// shouldShowNoActiveWindowResult keeps the explanatory row scoped to window-manager queries.
+func (p *WindowManagerPlugin) shouldShowNoActiveWindowResult(ctx context.Context, query plugin.Query) bool {
+	if query.Command != "" {
+		return true
+	}
+
+	search := strings.TrimSpace(query.Search)
+	if search == "" {
+		return !query.IsGlobalQuery()
+	}
+
+	for _, command := range windowManagerCommands {
+		if matched, _ := p.commandMatches(ctx, command, search); matched {
+			return true
+		}
+	}
+	return false
 }
 
 // noActiveWindowResult explains why the plugin cannot act on the current query.

@@ -739,6 +739,7 @@ class _WoxQueryHotkeyDialogState extends State<WoxQueryHotkeyDialog> {
                     helperMarkdown: tr('ui_query_hotkeys_query_tooltip'),
                     error: _fieldErrors['Query'] ?? '',
                     child: WoxQueryVariableTextField(
+                      key: const ValueKey('Query'),
                       controller: _queryController,
                       focusNode: _queryFocusNode,
                       width: double.infinity,
