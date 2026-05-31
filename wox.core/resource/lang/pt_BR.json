@@ -1445,6 +1445,7 @@
   "plugin_clipboard_refinement_type": "Tipo",
   "plugin_clipboard_refinement_type_all": "Todos",
   "plugin_clipboard_refinement_type_text": "Texto",
+  "plugin_clipboard_refinement_type_file": "Arquivo",
   "plugin_clipboard_refinement_type_image": "Imagem",
   "plugin_clipboard_refinement_type_link": "Link",
   "plugin_clipboard_keep_text_history": "Manter histórico de texto por",

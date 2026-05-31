@@ -15,7 +15,7 @@ import 'package:wox/components/wox_loading_indicator.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
 
 class CodeFilePreviewRenderer implements WoxFilePreviewRenderer {
-  static final allCodeLanguages = {...allLanguages, "txt": Mode(), "conf": Mode(), "js": javascript, "ts": typescript, "yml": yaml, "sh": bash, "py": python};
+  static final allCodeLanguages = {...allLanguages, "txt": Mode(), "conf": Mode(), "toml": Mode(), "js": javascript, "ts": typescript, "yml": yaml, "sh": bash, "py": python};
 
   @override
   bool supports(String fileExtension) {

@@ -9,6 +9,7 @@ const char* GetClipboardText();
 char* GetAllClipboardFilePaths();
 unsigned char *GetClipboardImage(size_t *length);
 void WriteClipboardText(const char *text);
+void WriteClipboardFiles(const char **filePaths, int count);
 void WriteClipboardImage(const char *imageData, int length);
 _Bool hasClipboardChanged();
 int GetClipboardContentType();
@@ -86,6 +87,28 @@ func writeTextData(text string) error {
 	defer C.free(unsafe.Pointer(cText))
 	C.WriteClipboardText(cText)
 
+	return nil
+}
+
+func writeFilePaths(filePaths []string) error {
+	cFilePaths := make([]*C.char, 0, len(filePaths))
+	for _, filePath := range filePaths {
+		trimmedPath := strings.TrimSpace(filePath)
+		if trimmedPath == "" {
+			continue
+		}
+		cFilePaths = append(cFilePaths, C.CString(trimmedPath))
+	}
+
+	for _, cFilePath := range cFilePaths {
+		defer C.free(unsafe.Pointer(cFilePath))
+	}
+
+	if len(cFilePaths) == 0 {
+		return errors.New("file paths are empty")
+	}
+
+	C.WriteClipboardFiles((**C.char)(unsafe.Pointer(&cFilePaths[0])), C.int(len(cFilePaths)))
 	return nil
 }
 

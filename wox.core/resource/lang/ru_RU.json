@@ -1446,6 +1446,7 @@
   "plugin_clipboard_refinement_type": "Тип",
   "plugin_clipboard_refinement_type_all": "Все",
   "plugin_clipboard_refinement_type_text": "Текст",
+  "plugin_clipboard_refinement_type_file": "Файл",
   "plugin_clipboard_refinement_type_image": "Изображение",
   "plugin_clipboard_refinement_type_link": "Ссылка",
   "plugin_clipboard_keep_text_history": "Хранить историю текста",

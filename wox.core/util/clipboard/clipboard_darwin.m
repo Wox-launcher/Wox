@@ -117,6 +117,32 @@ void WriteClipboardText(const char *text) {
     [pasteboard setString:string forType:NSPasteboardTypeString];
 }
 
+void WriteClipboardFiles(const char **filePaths, int count) {
+    NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+    [pasteboard clearContents];
+
+    NSMutableArray *urls = [NSMutableArray arrayWithCapacity:count];
+    for (int i = 0; i < count; i++) {
+        if (filePaths[i] == NULL) {
+            continue;
+        }
+
+        NSString *path = [NSString stringWithUTF8String:filePaths[i]];
+        if (path == nil || [path length] == 0) {
+            continue;
+        }
+
+        NSURL *url = [NSURL fileURLWithPath:path];
+        if (url != nil) {
+            [urls addObject:url];
+        }
+    }
+
+    if ([urls count] > 0) {
+        [pasteboard writeObjects:urls];
+    }
+}
+
 void WriteClipboardImage(const char *imageData, int length) {
     NSData *data = [NSData dataWithBytes:imageData length:length];
     NSImage *image = [[NSImage alloc] initWithData:data];

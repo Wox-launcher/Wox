@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"strings"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -305,6 +306,36 @@ func writeTextData(text string) error {
 	}
 
 	// Update lastSeqNum to avoid triggering watchChange on our own writes
+	lastSeqNum = uint32(C.clipboardGetSequenceNumber())
+	return nil
+}
+
+func writeFilePaths(filePaths []string) error {
+	trimmedPaths := make([]string, 0, len(filePaths))
+	for _, filePath := range filePaths {
+		trimmedPath := strings.TrimSpace(filePath)
+		if trimmedPath == "" {
+			continue
+		}
+		trimmedPaths = append(trimmedPaths, trimmedPath)
+	}
+
+	if len(trimmedPaths) == 0 {
+		return fmt.Errorf("clipboard: file paths are empty")
+	}
+
+	buffer := make([]uint16, 0)
+	for _, filePath := range trimmedPaths {
+		encodedPath := utf16Encode(filePath)
+		buffer = append(buffer, encodedPath...)
+	}
+	buffer = append(buffer, 0)
+
+	ret := C.clipboardWriteFilePaths((*C.wchar_t)(unsafe.Pointer(&buffer[0])), C.int(len(buffer)))
+	if ret != 0 {
+		return fmt.Errorf("clipboard: writeFilePaths failed (code=%d)", int(ret))
+	}
+
 	lastSeqNum = uint32(C.clipboardGetSequenceNumber())
 	return nil
 }
