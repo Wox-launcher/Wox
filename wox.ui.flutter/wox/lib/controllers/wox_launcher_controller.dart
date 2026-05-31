@@ -4027,10 +4027,9 @@ class WoxLauncherController extends GetxController {
     }
 
     final status = await ResultDragPlatformBridge.instance.startFileDrag(traceId, item.data.dragData!.files);
-    if (status != ResultDragStatus.error) {
-      // Native drag hides the window as soon as the drag session starts. Once
-      // the session ends, keep Wox hidden for both successful and canceled
-      // drops instead of restoring a result surface the user has already left.
+    if (status == ResultDragStatus.success || status == ResultDragStatus.cancel) {
+      // Keep launcher visible only when the user releases inside Wox itself,
+      // which native drag reports as cancel_in_source.
       await hideApp(traceId);
     }
   }

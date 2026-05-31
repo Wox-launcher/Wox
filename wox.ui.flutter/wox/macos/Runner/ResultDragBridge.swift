@@ -6,6 +6,7 @@ private let resultDragChannelName = "com.wox.result_drag"
 final class ResultDragBridge: NSObject, NSDraggingSource {
   private let channel: FlutterMethodChannel
   private weak var sourceView: NSView?
+  private weak var sourceWindow: NSWindow?
   private var pendingResult: FlutterResult?
 
   init(binaryMessenger: FlutterBinaryMessenger, sourceView: NSView) {
@@ -60,10 +61,7 @@ final class ResultDragBridge: NSObject, NSDraggingSource {
     let session = sourceView.beginDraggingSession(with: items, event: event, source: self)
     session.draggingFormation = .pile
     session.animatesToStartingPositionsOnCancelOrFail = true
-    // Target apps may keep the drag session open for overwrite or permission
-    // prompts after mouse release. Hide Wox immediately after AppKit accepts
-    // the session so those prompts own the foreground interaction.
-    window.orderOut(nil)
+    sourceWindow = window
   }
 
   private func makeDraggingItem(path: String, index: Int, dragPoint: NSPoint) -> NSDraggingItem {
@@ -91,9 +89,25 @@ final class ResultDragBridge: NSObject, NSDraggingSource {
   }
 
   func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
-    let status = operation.contains(.copy) ? "success" : "cancel"
+    let releasedInSourceWindow = sourceWindow?.frame.contains(screenPoint) ?? false
+    let status: String
+    if releasedInSourceWindow {
+      status = "cancel_in_source"
+    } else if operation.contains(.copy) {
+      status = "success"
+    } else {
+      status = "cancel"
+    }
+
+    if status != "cancel_in_source" {
+      // Hide exactly when drag ends for external targets while keeping Wox
+      // visible when the pointer is released back inside the launcher.
+      sourceWindow?.orderOut(nil)
+    }
+
     pendingResult?(statusPayload(status))
     pendingResult = nil
+    sourceWindow = nil
   }
 
   private func statusPayload(_ status: String) -> [String: String] {
