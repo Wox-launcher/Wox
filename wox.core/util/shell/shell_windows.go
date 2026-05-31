@@ -58,7 +58,9 @@ func OpenFileInFolder(path string) error {
 }
 
 func buildOpenFileInFolderCommand(path string) (string, []string) {
-	return "explorer.exe", []string{"/select," + path}
+	// Pass the target path as a separate argument so Go's Windows argv escaping
+	// preserves spaces without routing the path through a shell.
+	return "explorer.exe", []string{"/select,", path}
 }
 
 // HideWindowCmd sets the SysProcAttr to hide the console window on Windows

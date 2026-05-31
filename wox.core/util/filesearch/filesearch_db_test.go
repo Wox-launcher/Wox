@@ -2,6 +2,7 @@ package filesearch
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -733,7 +734,9 @@ func TestFileSearchDBApplyDirectDeltaIndexesSymlinkItself(t *testing.T) {
 
 	mustMkdirAll(t, rootPath)
 	mustWriteTestFile(t, targetFilePath, "target")
-	mustCreateSymlink(t, targetPath, linkPath)
+	if err := os.Symlink(targetPath, linkPath); err != nil {
+		t.Fatalf("create symlink: %v", err)
+	}
 
 	root := RootRecord{
 		ID:        "root-direct-delta-symlink",

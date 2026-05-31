@@ -53,7 +53,9 @@ func TestSnapshotBuilderDoesNotDescendIntoSymlinkDirectoryCycle(t *testing.T) {
 	linkPath := filepath.Join(sourcePath, "loop")
 
 	mustWriteTestFile(t, targetFilePath, "kept")
-	mustCreateSymlink(t, sourcePath, linkPath)
+	if err := os.Symlink(sourcePath, linkPath); err != nil {
+		t.Fatalf("create symlink cycle: %v", err)
+	}
 
 	root := RootRecord{ID: "root-symlink-cycle", Path: rootPath, Kind: RootKindUser}
 	builder := NewSnapshotBuilder(nil)
@@ -84,7 +86,9 @@ func TestSnapshotBuilderTreatsSymlinkScopeAsLinkEntry(t *testing.T) {
 	if err := os.MkdirAll(rootPath, 0o755); err != nil {
 		t.Fatalf("mkdir root: %v", err)
 	}
-	mustCreateSymlink(t, targetPath, linkPath)
+	if err := os.Symlink(targetPath, linkPath); err != nil {
+		t.Fatalf("create symlink scope: %v", err)
+	}
 
 	root := RootRecord{ID: "root-symlink-scope", Path: rootPath, Kind: RootKindUser}
 	builder := NewSnapshotBuilder(nil)

@@ -2,25 +2,27 @@ package system
 
 import (
 	"testing"
-	"wox/util"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestUrlPlugin_Query(t *testing.T) {
-	assert.True(t, util.IsUrl("https://www.google.com"))
-	assert.True(t, util.IsUrl("bilibili.com"))
+	urlPlugin := &UrlPlugin{}
+	reg := urlPlugin.getReg()
+
+	assert.Greater(t, len(reg.FindStringIndex("https://www.google.com")), 0)
+	assert.Greater(t, len(reg.FindStringIndex("bilibili.com")), 0)
 
 	// IP address URLs
-	assert.True(t, util.IsUrl("192.168.1.10"))
-	assert.True(t, util.IsUrl("http://192.168.1.10"))
-	assert.True(t, util.IsUrl("https://192.168.1.10"))
-	assert.True(t, util.IsUrl("http://192.168.1.10:8080"))
-	assert.True(t, util.IsUrl("http://192.168.1.10:8080/path"))
-	assert.True(t, util.IsUrl("10.0.0.1"))
-	assert.True(t, util.IsUrl("255.255.255.255"))
+	assert.Greater(t, len(reg.FindStringIndex("192.168.1.10")), 0)
+	assert.Greater(t, len(reg.FindStringIndex("http://192.168.1.10")), 0)
+	assert.Greater(t, len(reg.FindStringIndex("https://192.168.1.10")), 0)
+	assert.Greater(t, len(reg.FindStringIndex("http://192.168.1.10:8080")), 0)
+	assert.Greater(t, len(reg.FindStringIndex("http://192.168.1.10:8080/path")), 0)
+	assert.Greater(t, len(reg.FindStringIndex("10.0.0.1")), 0)
+	assert.Greater(t, len(reg.FindStringIndex("255.255.255.255")), 0)
 
 	// some invalid urls
-	assert.False(t, util.IsUrl("http://google"))
-	assert.False(t, util.IsUrl("http://.google.com"))
+	assert.Equal(t, 0, len(reg.FindStringIndex("http://google")))
+	assert.Equal(t, 0, len(reg.FindStringIndex("http://.google.com")))
 }

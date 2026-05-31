@@ -2,11 +2,8 @@ package filesearch
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
-	"syscall"
 	"testing"
 	"wox/util"
 )
@@ -84,16 +81,4 @@ func searchSQLiteForTest(t *testing.T, db *FileSearchDB, raw string, limit int) 
 		t.Fatalf("search sqlite provider for %q: %v", raw, err)
 	}
 	return results
-}
-
-// mustCreateSymlink skips Windows environments without symlink creation privileges.
-func mustCreateSymlink(t *testing.T, oldname string, newname string) {
-	t.Helper()
-
-	if err := os.Symlink(oldname, newname); err != nil {
-		if runtime.GOOS == "windows" && errors.Is(err, syscall.Errno(1314)) {
-			t.Skip("Windows symlink privileges are unavailable; enable Developer Mode or run elevated")
-		}
-		t.Fatalf("create symlink: %v", err)
-	}
 }

@@ -10,10 +10,13 @@ func TestBuildOpenFileInFolderCommandUsesExplorerArguments(t *testing.T) {
 	if name != "explorer.exe" {
 		t.Fatalf("expected explorer.exe, got %q", name)
 	}
-	if len(args) != 1 {
-		t.Fatalf("expected one argument, got %d: %#v", len(args), args)
+	if len(args) != 2 {
+		t.Fatalf("expected two arguments, got %d: %#v", len(args), args)
 	}
-	if args[0] != `/select,`+path {
-		t.Fatalf("expected select argument to preserve path as data, got %q", args[0])
+	if args[0] != "/select," {
+		t.Fatalf("expected select flag, got %q", args[0])
+	}
+	if args[1] != path {
+		t.Fatalf("expected path argument to preserve path as data, got %q", args[1])
 	}
 }

@@ -1,7 +1,6 @@
 package modules
 
 import (
-	"strings"
 	"testing"
 	"wox/util"
 
@@ -17,11 +16,6 @@ func TestFetchCryptoPrices(t *testing.T) {
 
 	module := &CryptoModule{}
 	prices, err := module.fetchCryptoPrices(ctx)
-	if err != nil {
-		if strings.HasPrefix(err.Error(), "failed to fetch prices:") {
-			t.Skipf("skip CoinGecko integration check because the external API is unreachable: %v", err)
-		}
-		t.Fatalf("fetch crypto prices: %v", err)
-	}
+	assert.NoError(t, err)
 	assert.NotEmpty(t, prices)
 }
