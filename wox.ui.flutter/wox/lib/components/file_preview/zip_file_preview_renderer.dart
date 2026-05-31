@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:flutter/material.dart';
@@ -12,25 +13,26 @@ import 'package:wox/utils/wox_interface_size_util.dart';
 class ZipFilePreviewRenderer implements WoxFilePreviewRenderer {
   @override
   bool supports(String fileExtension) {
-    return fileExtension == "zip";
+    return {"zip", "tar", "tgz", "gz"}.contains(fileExtension);
   }
 
   @override
   WoxFilePreviewResult render(WoxFilePreviewContext context) {
     final file = File(context.filePath);
     if (!file.existsSync()) {
-      return WoxFilePreviewResult(content: context.buildText(context.tr("ui_file_preview_zip_not_found", {"path": context.filePath})));
+      return WoxFilePreviewResult(content: context.buildText(context.tr("ui_file_preview_archive_not_found", {"path": context.filePath})));
     }
 
-    return WoxFilePreviewResult(content: _ZipFilePreview(file: file, tr: context.tr));
+    return WoxFilePreviewResult(content: _ZipFilePreview(file: file, tr: context.tr, kind: _ArchivePreviewKind.fromPath(file.path)));
   }
 }
 
 class _ZipFilePreview extends StatefulWidget {
   final File file;
   final WoxFilePreviewTranslationFormatter tr;
+  final _ArchivePreviewKind kind;
 
-  const _ZipFilePreview({required this.file, required this.tr});
+  const _ZipFilePreview({required this.file, required this.tr, required this.kind});
 
   @override
   State<_ZipFilePreview> createState() => _ZipFilePreviewState();
@@ -42,7 +44,7 @@ class _ZipFilePreviewState extends State<_ZipFilePreview> {
   @override
   void initState() {
     super.initState();
-    _previewFuture = _loadZipPreview(widget.file);
+    _previewFuture = _loadArchivePreview(widget.file, widget.kind);
   }
 
   @override
@@ -58,8 +60,8 @@ class _ZipFilePreviewState extends State<_ZipFilePreview> {
             icon: Icons.folder_zip_rounded,
             accent: const Color(0xFFF59E0B),
             title: path.basename(widget.file.path),
-            subtitle: widget.tr("ui_file_preview_zip_read_failed"),
-            properties: buildWoxFilePreviewCommonProperties(widget.file, typeLabel: widget.tr("ui_file_preview_type_zip_archive"), tr: widget.tr),
+            subtitle: widget.tr("ui_file_preview_archive_read_failed"),
+            properties: buildWoxFilePreviewCommonProperties(widget.file, typeLabel: widget.tr(widget.kind.typeKey), tr: widget.tr),
             sections: [
               WoxFilePreviewSection(
                 title: widget.tr("ui_file_preview_error_title"),
@@ -79,11 +81,12 @@ class _ZipFilePreviewState extends State<_ZipFilePreview> {
           title: path.basename(widget.file.path),
           subtitle: widget.tr("ui_file_preview_zip_summary", {"files": data.fileCount.toString(), "folders": data.directoryCount.toString()}),
           properties: [
-            ...buildWoxFilePreviewCommonProperties(widget.file, typeLabel: widget.tr("ui_file_preview_type_zip_archive"), tr: widget.tr),
+            ...buildWoxFilePreviewCommonProperties(widget.file, typeLabel: widget.tr(widget.kind.typeKey), tr: widget.tr),
             WoxFilePreviewProperty(label: widget.tr("ui_file_preview_zip_entries"), value: data.entryCount.toString()),
             WoxFilePreviewProperty(label: widget.tr("ui_file_preview_zip_files"), value: data.fileCount.toString()),
             WoxFilePreviewProperty(label: widget.tr("ui_file_preview_zip_folders"), value: data.directoryCount.toString()),
             WoxFilePreviewProperty(label: widget.tr("ui_file_preview_zip_uncompressed"), value: formatWoxFilePreviewSize(data.totalUncompressedSize)),
+            if (data.inferredFileName.isNotEmpty) WoxFilePreviewProperty(label: widget.tr("ui_file_preview_archive_inferred_file"), value: data.inferredFileName),
           ],
           sections: [
             WoxFilePreviewSection(
@@ -176,8 +179,16 @@ class _ZipPreviewData {
   final int directoryCount;
   final int totalUncompressedSize;
   final List<_ZipPreviewEntry> entries;
+  final String inferredFileName;
 
-  const _ZipPreviewData({required this.entryCount, required this.fileCount, required this.directoryCount, required this.totalUncompressedSize, required this.entries});
+  const _ZipPreviewData({
+    required this.entryCount,
+    required this.fileCount,
+    required this.directoryCount,
+    required this.totalUncompressedSize,
+    required this.entries,
+    this.inferredFileName = "",
+  });
 
   bool get hasMoreEntries => entryCount > entries.length;
 }
@@ -191,31 +202,94 @@ class _ZipPreviewEntry {
   const _ZipPreviewEntry({required this.name, required this.size, required this.isDirectory, required this.modified});
 }
 
-// Reads ZIP directory metadata only. Entry content is not decompressed, keeping
-// preview cheap even for large archives.
-Future<_ZipPreviewData> _loadZipPreview(File file) async {
+enum _ArchivePreviewKind {
+  zip("ui_file_preview_type_zip_archive"),
+  tar("ui_file_preview_type_tar_archive"),
+  tgz("ui_file_preview_type_tgz_archive"),
+  gzip("ui_file_preview_type_gzip_archive");
+
+  final String typeKey;
+
+  const _ArchivePreviewKind(this.typeKey);
+
+  static _ArchivePreviewKind fromPath(String filePath) {
+    final lower = filePath.toLowerCase();
+    if (lower.endsWith(".tar.gz") || lower.endsWith(".tgz")) {
+      return _ArchivePreviewKind.tgz;
+    }
+    if (lower.endsWith(".tar")) {
+      return _ArchivePreviewKind.tar;
+    }
+    if (lower.endsWith(".gz")) {
+      return _ArchivePreviewKind.gzip;
+    }
+    return _ArchivePreviewKind.zip;
+  }
+}
+
+// Reads archive directory metadata only where the format supports it. Plain
+// gzip has no directory, so it is shown as a single inferred decompressed file.
+Future<_ZipPreviewData> _loadArchivePreview(File file, _ArchivePreviewKind kind) async {
+  if (kind == _ArchivePreviewKind.gzip) {
+    return _loadGzipPreview(file);
+  }
+
   final input = InputFileStream(file.path);
   try {
-    final archive = ZipDecoder().decodeStream(input, verify: false);
-    var fileCount = 0;
-    var directoryCount = 0;
-    var totalUncompressedSize = 0;
-    final entries = <_ZipPreviewEntry>[];
-
-    for (final entry in archive.files) {
-      if (entry.isDirectory) {
-        directoryCount++;
-      } else {
-        fileCount++;
-        totalUncompressedSize += entry.size;
-      }
-      if (entries.length < 120) {
-        entries.add(_ZipPreviewEntry(name: entry.name, size: entry.size, isDirectory: entry.isDirectory, modified: entry.lastModDateTime));
-      }
+    if (kind == _ArchivePreviewKind.zip) {
+      return _archiveToPreviewData(ZipDecoder().decodeStream(input, verify: false));
     }
-
-    return _ZipPreviewData(entryCount: archive.files.length, fileCount: fileCount, directoryCount: directoryCount, totalUncompressedSize: totalUncompressedSize, entries: entries);
+    if (kind == _ArchivePreviewKind.tar) {
+      return _archiveToPreviewData(TarDecoder().decodeStream(input, storeData: false));
+    }
   } finally {
     input.closeSync();
   }
+
+  final bytes = file.readAsBytesSync();
+  final decompressed = GZipDecoder().decodeBytes(bytes, verify: false);
+  return _archiveToPreviewData(TarDecoder().decodeBytes(decompressed, storeData: false));
+}
+
+_ZipPreviewData _archiveToPreviewData(Archive archive) {
+  var fileCount = 0;
+  var directoryCount = 0;
+  var totalUncompressedSize = 0;
+  final entries = <_ZipPreviewEntry>[];
+
+  for (final entry in archive.files) {
+    if (entry.isDirectory) {
+      directoryCount++;
+    } else {
+      fileCount++;
+      totalUncompressedSize += entry.size;
+    }
+    if (entries.length < 120) {
+      entries.add(_ZipPreviewEntry(name: entry.name, size: entry.size, isDirectory: entry.isDirectory, modified: entry.lastModDateTime));
+    }
+  }
+
+  return _ZipPreviewData(entryCount: archive.files.length, fileCount: fileCount, directoryCount: directoryCount, totalUncompressedSize: totalUncompressedSize, entries: entries);
+}
+
+_ZipPreviewData _loadGzipPreview(File file) {
+  final bytes = file.readAsBytesSync();
+  final inferredFileName = _stripGzipExtension(path.basename(file.path));
+  final uncompressedSize = bytes.length >= 4 ? ByteData.sublistView(bytes).getUint32(bytes.length - 4, Endian.little) : 0;
+  return _ZipPreviewData(
+    entryCount: 1,
+    fileCount: 1,
+    directoryCount: 0,
+    totalUncompressedSize: uncompressedSize,
+    inferredFileName: inferredFileName,
+    entries: [_ZipPreviewEntry(name: inferredFileName, size: uncompressedSize, isDirectory: false, modified: null)],
+  );
+}
+
+String _stripGzipExtension(String name) {
+  final lower = name.toLowerCase();
+  if (lower.endsWith(".gz")) {
+    return name.substring(0, name.length - 3);
+  }
+  return name;
 }
