@@ -353,7 +353,13 @@ private:
 class FileDropSource : public IDropSource
 {
 public:
-  FileDropSource() : ref_count_(1) {}
+  explicit FileDropSource(HWND owner_window) : ref_count_(1), owner_window_(owner_window) {}
+
+  // Whether drag ended by releasing mouse inside the Wox source window.
+  bool released_on_source_window() const
+  {
+    return released_on_source_window_;
+  }
 
   HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void **object) override
   {
@@ -394,6 +400,23 @@ public:
     }
     if ((key_state & MK_LBUTTON) == 0)
     {
+      if (owner_window_ != nullptr)
+      {
+        POINT cursor{};
+        if (::GetCursorPos(&cursor))
+        {
+          RECT owner_rect{};
+          if (::GetWindowRect(owner_window_, &owner_rect) && ::PtInRect(&owner_rect, cursor))
+          {
+            released_on_source_window_ = true;
+            return DRAGDROP_S_CANCEL;
+          }
+        }
+
+        // Hide when user releases outside Wox so late target dialogs do not
+        // keep the launcher visible while DoDragDrop is still blocked.
+        ::ShowWindow(owner_window_, SW_HIDE);
+      }
       return DRAGDROP_S_DROP;
     }
     return S_OK;
@@ -406,6 +429,8 @@ public:
 
 private:
   std::atomic<ULONG> ref_count_;
+  HWND owner_window_ = nullptr;
+  bool released_on_source_window_ = false;
 };
 
 bool ExtractFiles(const flutter::EncodableValue *arguments, std::vector<std::wstring> *files)
@@ -462,19 +487,16 @@ flutter::EncodableValue StartFileDrag(const flutter::EncodableValue *arguments)
   }
 
   auto *data_object = new FileDataObject(hdrop);
-  auto *drop_source = new FileDropSource();
+  auto *drop_source = new FileDropSource(g_owner_window);
 
   if (g_owner_window != nullptr)
   {
     ::ReleaseCapture();
-    // DoDragDrop may stay blocked while the target app shows overwrite or
-    // permission dialogs. Hide Wox once the drag source is ready so that wait
-    // happens behind the target UI instead of looking like a frozen launcher.
-    ::ShowWindow(g_owner_window, SW_HIDE);
   }
 
   DWORD effect = DROPEFFECT_NONE;
   HRESULT hr = ::DoDragDrop(data_object, drop_source, DROPEFFECT_COPY, &effect);
+  const bool released_on_source_window = drop_source->released_on_source_window();
 
   data_object->Release();
   drop_source->Release();
@@ -482,6 +504,10 @@ flutter::EncodableValue StartFileDrag(const flutter::EncodableValue *arguments)
   if (hr == DRAGDROP_S_DROP && (effect & DROPEFFECT_COPY) != 0)
   {
     return StatusResult("success");
+  }
+  if (released_on_source_window)
+  {
+    return StatusResult("cancel_in_source");
   }
   if (hr == DRAGDROP_S_CANCEL)
   {

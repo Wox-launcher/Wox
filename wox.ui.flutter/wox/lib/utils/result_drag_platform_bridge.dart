@@ -6,6 +6,7 @@ import 'package:wox/utils/log.dart';
 enum ResultDragStatus {
   success,
   cancel,
+  cancelInSource,
   error;
 
   static ResultDragStatus fromString(String? value) {
@@ -14,6 +15,8 @@ enum ResultDragStatus {
         return ResultDragStatus.success;
       case 'cancel':
         return ResultDragStatus.cancel;
+      case 'cancel_in_source':
+        return ResultDragStatus.cancelInSource;
       default:
         return ResultDragStatus.error;
     }
