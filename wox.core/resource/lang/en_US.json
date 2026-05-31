@@ -1011,6 +1011,7 @@
   "plugin_clipboard_refinement_type": "Type",
   "plugin_clipboard_refinement_type_all": "All",
   "plugin_clipboard_refinement_type_text": "Text",
+  "plugin_clipboard_refinement_type_file": "File",
   "plugin_clipboard_refinement_type_image": "Image",
   "plugin_clipboard_refinement_type_link": "Link",
   "plugin_clipboard_keep_text_history": "Keep text history for",

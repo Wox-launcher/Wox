@@ -100,6 +100,13 @@ func Write(data Data) error {
 		}
 		return err
 	}
+	if data.GetType() == ClipboardTypeFile {
+		err := writeFilePaths(data.(*FilePathData).FilePaths)
+		if err != nil {
+			util.GetLogger().Error(context.Background(), fmt.Sprintf("clipboard: write file paths failed: %v", err))
+		}
+		return err
+	}
 
 	return errors.New("not implemented")
 }

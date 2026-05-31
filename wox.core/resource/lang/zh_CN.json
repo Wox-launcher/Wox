@@ -1012,6 +1012,7 @@
   "plugin_clipboard_refinement_type": "类型",
   "plugin_clipboard_refinement_type_all": "全部",
   "plugin_clipboard_refinement_type_text": "文本",
+  "plugin_clipboard_refinement_type_file": "文件",
   "plugin_clipboard_refinement_type_image": "图片",
   "plugin_clipboard_refinement_type_link": "链接",
   "plugin_clipboard_keep_text_history": "保留文本历史记录",
