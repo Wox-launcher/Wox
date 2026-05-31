@@ -615,22 +615,29 @@ class _WoxThemeEditorState extends State<WoxThemeEditor> {
   Widget _buildGroupChip(int index, _ThemeColorGroup group) {
     final isActive = index == _activeGroupIndex;
     final activeColor = getThemeActiveBackgroundColor();
+    final textColor = getThemeTextColor();
 
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: InkWell(
         borderRadius: BorderRadius.circular(6),
+        splashFactory: NoSplash.splashFactory,
+        overlayColor: WidgetStateProperty.all(Colors.transparent),
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
+        hoverColor: Colors.transparent,
+        enableFeedback: false,
         onTap: () => _selectGroup(index),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: isActive ? activeColor.withValues(alpha: 0.22) : Colors.transparent,
+            color: isActive ? activeColor.withValues(alpha: 0.16) : Colors.transparent,
             borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: isActive ? activeColor.withValues(alpha: 0.62) : getThemeSettingDividerColor().withValues(alpha: 0.5)),
+            border: Border.all(color: isActive ? activeColor.withValues(alpha: 0.32) : Colors.transparent),
           ),
           child: Text(
             _tr(group.labelKey),
-            style: TextStyle(color: isActive ? getThemeTextColor() : getThemeSubTextColor(), fontSize: 12, fontWeight: isActive ? FontWeight.w600 : FontWeight.w400),
+            style: TextStyle(color: isActive ? textColor : textColor.withValues(alpha: 0.78), fontSize: 12, fontWeight: isActive ? FontWeight.w600 : FontWeight.w500),
           ),
         ),
       ),
@@ -694,6 +701,12 @@ class _WoxThemeEditorState extends State<WoxThemeEditor> {
 
     return InkWell(
       borderRadius: BorderRadius.circular(7),
+      splashFactory: NoSplash.splashFactory,
+      overlayColor: WidgetStateProperty.all(Colors.transparent),
+      splashColor: Colors.transparent,
+      highlightColor: Colors.transparent,
+      hoverColor: Colors.transparent,
+      enableFeedback: false,
       onTap: () => unawaited(_openColorDialog(token)),
       child: Container(
         width: 190,

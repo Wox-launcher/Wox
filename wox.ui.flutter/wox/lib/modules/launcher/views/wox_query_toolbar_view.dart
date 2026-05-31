@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_hotkey_view.dart';
+import 'package:wox/components/wox_drag_move_view.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_hotkey.dart';
@@ -197,7 +198,19 @@ class WoxQueryToolbarView extends StatelessWidget {
             actionWidgets.add(_buildClickableToolbarAction(actionInfo, hotkey));
           }
 
-          return Align(alignment: Alignment.centerRight, child: Row(mainAxisSize: MainAxisSize.min, children: actionWidgets));
+          return Row(
+            children: [
+              Expanded(
+                child: WoxDragMoveArea(
+                  child: Container(color: Colors.transparent),
+                  onDragEnd: () {
+                    controller.focusQueryBox();
+                  },
+                ),
+              ),
+              Row(mainAxisSize: MainAxisSize.min, children: actionWidgets),
+            ],
+          );
         },
       );
     });
