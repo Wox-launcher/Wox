@@ -186,13 +186,13 @@ class WoxHotkey {
         key = LogicalKeyboardKey.metaLeft;
       } else if (e == "metaright") {
         key = LogicalKeyboardKey.metaRight;
-      } else if (e == "arrowup") {
+      } else if (e == "up" || e == "arrowup") {
         key = LogicalKeyboardKey.arrowUp;
-      } else if (e == "arrowdown") {
+      } else if (e == "down" || e == "arrowdown") {
         key = LogicalKeyboardKey.arrowDown;
-      } else if (e == "arrowleft") {
+      } else if (e == "left" || e == "arrowleft") {
         key = LogicalKeyboardKey.arrowLeft;
-      } else if (e == "arrowright") {
+      } else if (e == "right" || e == "arrowright") {
         key = LogicalKeyboardKey.arrowRight;
       } else if (e == "pageup") {
         key = LogicalKeyboardKey.pageUp;
