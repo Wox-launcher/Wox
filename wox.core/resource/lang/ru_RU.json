@@ -348,6 +348,8 @@
   "ui_no_data": "Нет данных",
   "ui_query_hotkeys_hotkey": "Горячая клавиша",
   "ui_query_hotkeys_hotkey_tooltip": "Горячая клавиша для запроса",
+  "ui_query_hotkeys_name": "Название",
+  "ui_query_hotkeys_name_tooltip": "Необязательно. Пользовательское имя, чтобы этот query hotkey было проще узнать и запомнить.",
   "ui_query_hotkeys_query": "Запрос",
   "ui_query_hotkeys_query_tooltip": "Запрос при нажатии горячей клавиши. Введите {, чтобы вставить динамические переменные.\n\nДля переменной URL активного браузера требуется расширение Wox для Chrome: [Установить расширение Wox для Chrome](https://chromewebstore.google.com/detail/wox/bjbkdpjdnagiongdfemjhepkkglnailh)",
   "ui_query_variable_picker_insert": "Вставить динамический плейсхолдер",

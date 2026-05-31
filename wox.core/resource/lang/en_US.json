@@ -357,6 +357,8 @@
   "ui_no_data": "No data",
   "ui_query_hotkeys_hotkey": "Hotkey",
   "ui_query_hotkeys_hotkey_tooltip": "The hotkey to trigger the query.",
+  "ui_query_hotkeys_name": "Name",
+  "ui_query_hotkeys_name_tooltip": "Optional. A custom name to help you recognize this query hotkey.",
   "ui_query_hotkeys_query": "Query",
   "ui_query_hotkeys_query_tooltip": "The query when the hotkey is triggered. Type { to insert dynamic variables.\n\nUsing the active browser URL variable requires the Wox Chrome extension: [Install Wox Chrome extension](https://chromewebstore.google.com/detail/wox/bjbkdpjdnagiongdfemjhepkkglnailh)",
   "ui_query_variable_picker_insert": "Insert dynamic placeholder",

@@ -144,6 +144,7 @@ type AIProvider struct {
 }
 
 type QueryHotkey struct {
+	Name              string
 	Hotkey            string
 	Query             string // Support plugin.QueryVariable
 	IsSilentExecution bool   // If true, the query will be executed without showing the query in the input box
@@ -153,6 +154,14 @@ type QueryHotkey struct {
 	MaxResultCount    int
 	Position          QueryHotkeyPosition
 	Disabled          bool
+}
+
+func (q QueryHotkey) DisplayName() string {
+	if strings.TrimSpace(q.Name) != "" {
+		return strings.TrimSpace(q.Name)
+	}
+
+	return q.Query
 }
 
 type QueryHotkeyPosition string

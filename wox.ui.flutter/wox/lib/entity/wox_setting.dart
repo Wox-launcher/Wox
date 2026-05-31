@@ -205,6 +205,8 @@ class WoxSetting {
 }
 
 class QueryHotkey {
+  late String name;
+
   late String hotkey;
 
   late String query; // Support plugin.QueryVariable
@@ -219,6 +221,7 @@ class QueryHotkey {
   late bool disabled;
 
   QueryHotkey({
+    required this.name,
     required this.hotkey,
     required this.query,
     required this.isSilentExecution,
@@ -231,6 +234,7 @@ class QueryHotkey {
   });
 
   QueryHotkey.fromJson(Map<String, dynamic> json) {
+    name = json['Name']?.toString() ?? "";
     hotkey = json['Hotkey'];
     query = json['Query'];
     isSilentExecution = json['IsSilentExecution'] ?? false;
@@ -242,8 +246,11 @@ class QueryHotkey {
     disabled = json['Disabled'] ?? false;
   }
 
+  String get displayName => name.trim().isNotEmpty ? name.trim() : query;
+
   Map<String, dynamic> toJson() {
     final Map<String, dynamic> data = <String, dynamic>{};
+    data['Name'] = name;
     data['Hotkey'] = hotkey;
     data['Query'] = query;
     data['IsSilentExecution'] = isSilentExecution;
