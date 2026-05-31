@@ -149,6 +149,7 @@ class WoxQueryResultView extends StatelessWidget {
             onItemSecondaryTapped: (traceId, item) {
               controller.openActionPanelForActiveResult(traceId);
             },
+            onItemDragStarted: controller.startResultDrag,
             onItemIconLoaded: controller.updateLazyLoadedResultIcon,
             onRowHeightChanged: () => controller.resizeHeight(traceId: const UuidV4().generate(), reason: "grid row height changed"),
           );
@@ -166,6 +167,7 @@ class WoxQueryResultView extends StatelessWidget {
           onItemSecondaryTapped: (traceId, item) {
             controller.openActionPanelForActiveResult(traceId);
           },
+          onItemDragStarted: controller.startResultDrag,
           onItemIconLoaded: controller.updateLazyLoadedResultIcon,
         );
       }),

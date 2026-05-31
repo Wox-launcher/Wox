@@ -1191,6 +1191,7 @@ class AppDelegate: FlutterAppDelegate {
   // Screenshot prewarm events use their own channel so drag-time hints do not interfere with the
   // main window manager handler that already owns blur and debug traffic.
   private var screenshotEventChannel: FlutterMethodChannel?
+  private var resultDragBridge: ResultDragBridge?
   // Current appearance (light/dark)
   private var currentAppearance: String = "light"
   private var screenshotPresentationState: ScreenshotPresentationState?
@@ -2637,6 +2638,7 @@ class AppDelegate: FlutterAppDelegate {
     // Store window event channel for use in window events
     windowEventChannel = channel
     screenshotEventChannel = screenshotChannel
+    resultDragBridge = ResultDragBridge(binaryMessenger: controller.engine.binaryMessenger, sourceView: flutterView)
 
     // Setup window blur notification
     setupWindowBlurNotification()
