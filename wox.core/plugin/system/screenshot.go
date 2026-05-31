@@ -631,6 +631,10 @@ func (p *ScreenshotPlugin) screenshotHistoryResult(item screenshotHistoryItem) p
 		Icon:       iconImage,
 		Group:      group,
 		GroupScore: groupScore,
+		DragData: &plugin.QueryResultDragData{
+			Type:  plugin.QueryResultDragDataTypeFiles,
+			Files: []string{item.path},
+		},
 		Preview: plugin.WoxPreview{
 			PreviewType: plugin.WoxPreviewTypeImage,
 			PreviewData: previewImage.String(),

@@ -248,7 +248,9 @@ class _WoxQueryConceptDemoState extends State<WoxQueryConceptDemo> with SingleTi
                   if (_woxOpacity > 0.01)
                     Positioned.fill(
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(48, 40, 52, 36),
+                        // Keep a larger gap above the simulated taskbar so the
+                        // welcome window does not visually sit on top of it.
+                        padding: const EdgeInsets.fromLTRB(48, 34, 52, 56),
                         child: Opacity(
                           opacity: _woxOpacity,
                           child: Transform.translate(
@@ -412,6 +414,18 @@ class _ConceptDemoWindow extends StatelessWidget {
     ];
   }
 
+  Color _conceptMicaSurfaceColor(Color appColor) {
+    if (appColor.a >= 0.96) {
+      return appColor;
+    }
+
+    final isDarkSurface = appColor.computeLuminance() < 0.5;
+    final tint = isDarkSurface ? const Color(0xFF202020) : const Color(0xFFF2F2F2);
+    final mixed = Color.lerp(appColor.withValues(alpha: 1), tint, 0.18) ?? appColor;
+    final alpha = (0.64 + appColor.a * 0.18).clamp(0.64, 0.86).toDouble();
+    return mixed.withValues(alpha: alpha);
+  }
+
   @override
   Widget build(BuildContext context) {
     // LayoutBuilder at the root gives us the mini window's actual width so we
@@ -432,24 +446,31 @@ class _ConceptDemoWindow extends StatelessWidget {
         // identical to the real launcher's action-panel overlay.
         final panelWidth = (constraints.maxWidth * 0.42).clamp(250.0, 320.0);
 
-        return Container(
-          decoration: BoxDecoration(
-            color: getThemeBackgroundColor().withValues(alpha: 0.86),
-            border: Border.all(color: getThemeTextColor().withValues(alpha: 0.10)),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
+        final effectiveBg = _conceptMicaSurfaceColor(getThemeBackgroundColor());
+        final effectiveBorderColor = getThemeTextColor().withValues(alpha: 0.10);
+
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: BackdropFilter(
+            filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
             // Stack fills the parent so every Positioned child (query bar, footer)
             // uses the same coordinate space as the real WoxDemoWindow.
             child: Stack(
               fit: StackFit.expand,
               children: [
-                // Accent radial gradient sits behind all content.
+                Positioned.fill(
+                  child: DecoratedBox(decoration: BoxDecoration(color: effectiveBg, border: Border.all(color: effectiveBorderColor), borderRadius: BorderRadius.circular(8))),
+                ),
+                // Accent tint stays subtle so the glass blur remains legible.
                 Positioned.fill(
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      gradient: RadialGradient(center: const Alignment(0.6, -0.5), radius: 1.05, colors: [accent.withValues(alpha: 0.12), Colors.transparent]),
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Colors.black.withValues(alpha: 0.02), accent.withValues(alpha: 0.024), Colors.black.withValues(alpha: 0.14)],
+                        stops: const [0.0, 0.38, 1.0],
+                      ),
                     ),
                   ),
                 ),
