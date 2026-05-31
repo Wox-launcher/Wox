@@ -50,6 +50,11 @@ func MoveResizeWindow(managedWindow ManagedWindow, rect WindowRect) error {
 	return ErrWindowManagementUnsupported
 }
 
+// MaximizeWindow is not implemented on Linux yet.
+func MaximizeWindow(managedWindow ManagedWindow) error {
+	return ErrWindowManagementUnsupported
+}
+
 // MinimizeWindow is not implemented on Linux yet.
 func MinimizeWindow(managedWindow ManagedWindow) error {
 	return ErrWindowManagementUnsupported

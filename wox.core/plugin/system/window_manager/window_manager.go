@@ -385,6 +385,16 @@ func (p *WindowManagerPlugin) applyCommand(ctx context.Context, command windowMa
 		return
 	}
 
+	if command.Op == operationMaximize {
+		p.storeRestoreRect(managedWindow, managedWindow.Bounds)
+		if err := window.MaximizeWindow(managedWindow); err == nil {
+			return
+		} else if !errors.Is(err, window.ErrWindowManagementUnsupported) {
+			p.notifyFailure(ctx, err)
+			return
+		}
+	}
+
 	targetRect, err := p.targetRect(ctx, command.Op, managedWindow, p.getGap(ctx))
 	if err != nil {
 		p.notifyFailure(ctx, err)

@@ -547,6 +547,18 @@ int moveResizeWindowForManagement(const char *windowId, int pid, int x, int y, i
     return SetWindowPos(hwnd, HWND_TOP, x, y, width, height, SWP_SHOWWINDOW) ? 1 : -1;
 }
 
+int maximizeWindowForManagement(const char *windowId, int pid)
+{
+    HWND hwnd = resolveWindowForManagement(windowId, pid);
+    if (!hwnd)
+    {
+        return 0;
+    }
+
+    ShowWindow(hwnd, SW_MAXIMIZE);
+    return 1;
+}
+
 int minimizeWindowForManagement(const char *windowId, int pid)
 {
     HWND hwnd = resolveWindowForManagement(windowId, pid);
