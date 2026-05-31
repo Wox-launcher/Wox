@@ -18,12 +18,14 @@ import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/color_util.dart';
-import 'package:wox/utils/wox_setting_focus_util.dart';
-
 import 'package:wox/utils/wox_dialog_util.dart';
+import 'package:wox/utils/wox_setting_focus_util.dart';
 
 import 'wox_setting_plugin_item_view.dart';
 import 'wox_setting_plugin_table_update_view.dart';
+
+typedef WoxSettingPluginTableCreateDialogBuilder = Future<void> Function(BuildContext context, Future<String?> Function(Map<String, dynamic> row) saveRow);
+typedef WoxSettingPluginTableEditDialogBuilder = Future<void> Function(BuildContext context, Map<String, dynamic> row, Future<String?> Function(Map<String, dynamic> row) saveRow);
 
 class WoxSettingPluginTable extends WoxSettingPluginItem {
   static const int tableMaxHeightMin = 120;
@@ -43,6 +45,8 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
   final List<Widget> trailingActions;
   final int minimumRowCount;
   final String minimumRowDeleteMessage;
+  final WoxSettingPluginTableCreateDialogBuilder? customCreateDialogBuilder;
+  final WoxSettingPluginTableEditDialogBuilder? customEditDialogBuilder;
   final Widget? Function(PluginSettingValueTableColumn column, Map<String, dynamic> row)? customCellBuilder;
   final Future<List<PluginSettingTableValidationError>> Function(Map<String, dynamic> rowValues)? onUpdateValidate;
   final int? autoOpenEditRowIndex;
@@ -67,6 +71,8 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     this.trailingActions = const [],
     this.minimumRowCount = 0,
     this.minimumRowDeleteMessage = "",
+    this.customCreateDialogBuilder,
+    this.customEditDialogBuilder,
     this.customCellBuilder,
     this.onUpdateValidate,
     this.autoOpenEditRowIndex,
@@ -540,35 +546,58 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     return -1;
   }
 
+  // Persists a new row using the latest table snapshot so custom create dialogs
+  // can reuse the same save path as the shared table editor.
+  Future<String?> _saveNewRow(Map<String, dynamic> row) async {
+    final rows = decodeRowsJson(getSetting(item.key));
+    rows.add(Map<String, dynamic>.from(row));
+
+    for (final element in rows) {
+      if (element is Map<String, dynamic>) {
+        element.remove(rowUniqueIdKey);
+      } else if (element is Map) {
+        element.remove(rowUniqueIdKey);
+      }
+    }
+
+    return updateConfig(item.key, json.encode(rows));
+  }
+
+  // Saves an edited row by re-matching the original snapshot instead of trusting
+  // stale row indices from the visible table.
+  Future<String?> _saveEditedRow(Map<String, dynamic> originalRow, Map<String, dynamic> updatedValues) async {
+    final freshRows = decodeRowsJson(getSetting(item.key));
+    final idx = _findRowIndex(freshRows, originalRow);
+    if (idx < 0) {
+      return "Failed to save row: the original row was not found";
+    }
+
+    final updatedRow = Map<String, dynamic>.from(updatedValues);
+    updatedRow.remove(rowUniqueIdKey);
+    freshRows[idx] = updatedRow;
+
+    return updateConfig(item.key, json.encode(freshRows));
+  }
+
   Future<void> _showEditRowDialog(BuildContext context, Map<String, dynamic> row) async {
     final originalRow = json.decode(json.encode(row)) as Map<String, dynamic>;
     originalRow.remove(rowUniqueIdKey);
 
-    await showWoxDialog(
+    if (customEditDialogBuilder != null) {
+      await customEditDialogBuilder!(context, Map<String, dynamic>.from(originalRow), (updatedRow) => _saveEditedRow(originalRow, updatedRow));
+      WoxSettingFocusUtil.restoreIfInSettingView();
+      return;
+    }
+
+    await showDialog(
       context: context,
       barrierColor: getThemePopupBarrierColor(),
       builder: (context) {
         return WoxSettingPluginTableUpdate(
           item: item,
-          row: row,
+          row: Map<String, dynamic>.from(originalRow),
           onUpdateValidate: onUpdateValidate,
-          onUpdate: (key, value) async {
-            final freshRows = decodeRowsJson(getSetting(key));
-
-            final idx = _findRowIndex(freshRows, originalRow);
-            if (idx < 0) {
-              // Report row-match failures instead of saving unchanged data and closing
-              // the dialog. A stale table snapshot previously looked like a successful
-              // save while the visible row stayed unchanged.
-              return "Failed to save row: the original row was not found";
-            }
-
-            final updatedRow = Map<String, dynamic>.from(value);
-            updatedRow.remove(rowUniqueIdKey);
-            freshRows[idx] = updatedRow;
-
-            return updateConfig(key, json.encode(freshRows));
-          },
+          onUpdate: (key, value) async => _saveEditedRow(originalRow, value),
         );
       },
     );
@@ -1025,25 +1054,17 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
       height: 30,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       onPressed: () async {
-        await showWoxDialog(
+        if (customCreateDialogBuilder != null) {
+          await customCreateDialogBuilder!(context, _saveNewRow);
+          WoxSettingFocusUtil.restoreIfInSettingView();
+          return;
+        }
+
+        await showDialog(
           context: context,
           barrierColor: getThemePopupBarrierColor(),
           builder: (context) {
-            return WoxSettingPluginTableUpdate(
-              item: item,
-              row: const {},
-              onUpdateValidate: onUpdateValidate,
-              onUpdate: (key, row) async {
-                final rows = decodeRowsJson(getSetting(key));
-                rows.add(row);
-                //remove the unique key
-                for (final element in rows) {
-                  element.remove(rowUniqueIdKey);
-                }
-
-                return updateConfig(key, json.encode(rows));
-              },
-            );
+            return WoxSettingPluginTableUpdate(item: item, row: const {}, onUpdateValidate: onUpdateValidate, onUpdate: (key, row) async => _saveNewRow(row));
           },
         );
         WoxSettingFocusUtil.restoreIfInSettingView();
