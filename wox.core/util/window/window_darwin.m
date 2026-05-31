@@ -472,6 +472,43 @@ int moveResizeWindowForManagement(const char *windowId, int pid, int x, int y, i
     }
 }
 
+// maximizeWindowForManagement uses the native zoom button so macOS tracks the window as zoomed.
+int maximizeWindowForManagement(const char *windowId, int pid) {
+    @autoreleasepool {
+        if (!AXIsProcessTrusted()) {
+            return -2;
+        }
+
+        AXUIElementRef window = copyWindowForId((pid_t)pid, parseWindowId(windowId));
+        if (!window) {
+            return 0;
+        }
+
+        NSRunningApplication *application = [NSRunningApplication runningApplicationWithProcessIdentifier:(pid_t)pid];
+        activateRunningApplication(application);
+        AXUIElementSetAttributeValue(window, kAXMinimizedAttribute, kCFBooleanFalse);
+
+        CFTypeRef zoomButtonValue = NULL;
+        AXError zoomButtonErr = AXUIElementCopyAttributeValue(window, kAXZoomButtonAttribute, &zoomButtonValue);
+        if (zoomButtonErr != kAXErrorSuccess || !zoomButtonValue) {
+            if (zoomButtonValue) {
+                CFRelease(zoomButtonValue);
+            }
+            CFRelease(window);
+            return -4;
+        }
+
+        AXError pressErr = AXUIElementPerformAction((AXUIElementRef)zoomButtonValue, kAXPressAction);
+        CFRelease(zoomButtonValue);
+        CFRelease(window);
+
+        if (pressErr != kAXErrorSuccess) {
+            return -4;
+        }
+        return 1;
+    }
+}
+
 int minimizeWindowForManagement(const char *windowId, int pid) {
     @autoreleasepool {
         if (!AXIsProcessTrusted()) {

@@ -38,6 +38,7 @@ int getManagedWindowForManagement(const char* windowId, int pid, WoxManagedWindo
 int listDisplaysForManagement(WoxDisplayInfoC** outDisplays, int* outCount);
 void freeDisplaysForManagement(WoxDisplayInfoC* displays);
 int moveResizeWindowForManagement(const char* windowId, int pid, int x, int y, int width, int height);
+int maximizeWindowForManagement(const char* windowId, int pid);
 int minimizeWindowForManagement(const char* windowId, int pid);
 int activateWindowByPid(int pid);
 int isOpenSaveDialog();
@@ -214,9 +215,16 @@ func MoveResizeWindow(managedWindow ManagedWindow, rect WindowRect) error {
 	return nil
 }
 
-// MaximizeWindow falls back to explicit sizing on macOS because this package has no native zoom bridge yet.
+// MaximizeWindow triggers the native zoom control so macOS keeps window state in sync.
 func MaximizeWindow(managedWindow ManagedWindow) error {
-	return ErrWindowManagementUnsupported
+	cWindowId := C.CString(managedWindow.Id)
+	defer C.free(unsafe.Pointer(cWindowId))
+
+	result := int(C.maximizeWindowForManagement(cWindowId, C.int(managedWindow.Pid)))
+	if result != 1 {
+		return windowManagementErrorFromCode(result)
+	}
+	return nil
 }
 
 // MinimizeWindow minimizes the captured Accessibility window.
@@ -240,6 +248,8 @@ func windowManagementErrorFromCode(code int) error {
 		return ErrWindowManagementPermissionDenied
 	case -3:
 		return ErrWindowManagementDisplayNotFound
+	case -4:
+		return ErrWindowManagementUnsupported
 	default:
 		return fmt.Errorf("window management failed with code %d", code)
 	}
