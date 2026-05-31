@@ -640,6 +640,10 @@ Future<void> tapSettingNavItem(WidgetTester tester, WoxSettingController setting
     await tester.scrollUntilVisible(navItemFinder, 120, scrollable: navScrollable, duration: const Duration(milliseconds: 100), continuous: true);
   }
   expect(navItemFinder, findsOneWidget);
+  // Off-screen settings entries can end up barely inside the scroll viewport.
+  // Align the target without pumpAndSettle so the following tap lands on the row.
+  await Scrollable.ensureVisible(tester.element(navItemFinder), duration: Duration.zero, alignment: 0.5);
+  await tester.pump(const Duration(milliseconds: 100));
   // Avoid tester.ensureVisible which calls pumpAndSettle (10-min timeout).
   // If the cursor blink timer is still active from the query box, pumpAndSettle
   // will never settle. Nav items are always visible in the fixed sidebar.

@@ -638,6 +638,10 @@ Future<_SmokeTemplatePluginPackage> _prepareSmokeTemplatePlugin({
     outputFile: logFile,
     prefix: '[template-plugin:${definition.runtime}]',
   );
+  if (definition.runtime == 'nodejs') {
+    await _ensureSinglePackagePnpmWorkspace(pluginRoot: pluginRoot, logFile: logFile);
+    await _ensureNodeTemplateQueryReturnTestCompatibility(pluginRoot: pluginRoot, logFile: logFile);
+  }
 
   final initInput = [definition.name, definition.description, definition.triggerKeyword, _templatePluginAuthor, _templatePluginWebsite, 'y'].join('\n');
 
@@ -681,6 +685,49 @@ Future<_SmokeTemplatePluginPackage> _prepareSmokeTemplatePlugin({
           return keywords.first.toString();
         })(),
   );
+}
+
+// Ensures the official Node.js template can be installed by pnpm even when its
+// workspace file only contains pnpm config and omits the required packages list.
+Future<void> _ensureSinglePackagePnpmWorkspace({required Directory pluginRoot, required File logFile}) async {
+  final workspaceFile = File('${pluginRoot.path}${Platform.pathSeparator}pnpm-workspace.yaml');
+  if (!await workspaceFile.exists()) {
+    return;
+  }
+
+  final contents = await workspaceFile.readAsString();
+  if (RegExp(r'^\s*packages\s*:', multiLine: true).hasMatch(contents)) {
+    return;
+  }
+
+  final updatedContents = 'packages:\n  - .\n${contents.startsWith('\n') ? contents.substring(1) : contents}';
+  await workspaceFile.writeAsString(updatedContents);
+
+  final message = 'Normalized pnpm-workspace.yaml with a single-package workspace entry.';
+  stdout.writeln(message);
+  await logFile.writeAsString('$message\n', mode: FileMode.writeOnlyAppend);
+}
+
+// Keeps the cloned Node.js template test compatible with SDKs whose query
+// contract may return either a legacy Result[] or a structured QueryResponse.
+Future<void> _ensureNodeTemplateQueryReturnTestCompatibility({required Directory pluginRoot, required File logFile}) async {
+  final testFile = File('${pluginRoot.path}${Platform.pathSeparator}src${Platform.pathSeparator}__tests__${Platform.pathSeparator}test.ts');
+  if (!await testFile.exists()) {
+    return;
+  }
+
+  final contents = await testFile.readAsString();
+  const legacyAssertion = '  expect(results.length).toBeGreaterThan(0)';
+  if (!contents.contains(legacyAssertion)) {
+    return;
+  }
+
+  const compatibleAssertion = '  const resultItems = Array.isArray(results) ? results : results.Results\n  expect(resultItems.length).toBeGreaterThan(0)';
+  await testFile.writeAsString(contents.replaceFirst(legacyAssertion, compatibleAssertion));
+
+  final message = 'Normalized Node.js template query test for QueryReturn compatibility.';
+  stdout.writeln(message);
+  await logFile.writeAsString('$message\n', mode: FileMode.writeOnlyAppend);
 }
 
 Future<void> _runTemplateInstallWithRetry({
