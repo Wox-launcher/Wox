@@ -10,7 +10,6 @@ import 'package:wox/entity/wox_toolbar.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
-import 'package:wox/api/wox_api.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/utils/color_util.dart';
 import 'package:wox/utils/wox_text_measure_util.dart';
@@ -103,48 +102,6 @@ class WoxQueryToolbarView extends StatelessWidget {
                             ),
                           ),
                         ),
-                      if (isTextOverflow && !controller.hasVisibleToolbarMsg) ...[
-                        SizedBox(width: metrics.toolbarIconSpacing),
-                        Theme(
-                          data: Theme.of(context).copyWith(
-                            popupMenuTheme: PopupMenuThemeData(
-                              color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarBackgroundColor),
-                              textStyle: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor), fontSize: metrics.toolbarFontSize),
-                            ),
-                          ),
-                          child: PopupMenuButton<String>(
-                            padding: EdgeInsets.zero,
-                            tooltip: '',
-                            onSelected: (value) async {
-                              await WoxApi.instance.toolbarSnooze(const UuidV4().generate(), text, value);
-                              // Hide current toolbar message immediately
-                              controller.toolbar.value = controller.toolbar.value.emptyLeftSide();
-                            },
-                            itemBuilder: (context) {
-                              final settingController = Get.find<WoxSettingController>();
-                              return [
-                                PopupMenuItem(value: '3d', child: Text(settingController.tr('toolbar_snooze_3d'))),
-                                PopupMenuItem(value: '7d', child: Text(settingController.tr('toolbar_snooze_7d'))),
-                                PopupMenuItem(value: '1m', child: Text(settingController.tr('toolbar_snooze_1m'))),
-                                PopupMenuItem(value: 'forever', child: Text(settingController.tr('toolbar_snooze_forever'))),
-                              ];
-                            },
-                            child: Builder(
-                              builder: (context) {
-                                final settingController = Get.find<WoxSettingController>();
-                                return Text(
-                                  settingController.tr('toolbar_snooze'),
-                                  style: TextStyle(
-                                    color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
-                                    fontSize: metrics.toolbarFontSize,
-                                    decoration: TextDecoration.underline,
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                      ],
                     ],
                   );
                 },

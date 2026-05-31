@@ -15,7 +15,6 @@ import (
 
 	"wox/ai"
 	"wox/common"
-	"wox/database"
 	"wox/diagnostic"
 	"wox/i18n"
 	"wox/plugin"
@@ -138,9 +137,6 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/test/trigger/selection_hotkey": handleTestTriggerSelectionHotkey,
 	"/test/screen/mouse":             handleTestMouseScreen,
 	"/test/trigger/tray_query":       handleTestTriggerTrayQuery,
-
-	// toolbar snooze/mute
-	"/toolbar/snooze": handleToolbarSnooze,
 }
 
 const traceIdHeader = "TraceId"
@@ -2290,48 +2286,6 @@ func handlePluginDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeSuccessResponse(w, pluginDto)
-
-}
-
-func handleToolbarSnooze(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-
-	body, _ := io.ReadAll(r.Body)
-	textResult := gjson.GetBytes(body, "text")
-	if !textResult.Exists() {
-		writeErrorResponse(w, "text is empty")
-		return
-	}
-	durationResult := gjson.GetBytes(body, "duration")
-	if !durationResult.Exists() {
-		writeErrorResponse(w, "duration is empty")
-		return
-	}
-
-	text := textResult.String()
-	dur := durationResult.String()
-
-	var untilMillis int64
-	switch dur {
-	case "3d":
-		untilMillis = time.Now().Add(3 * 24 * time.Hour).UnixMilli()
-	case "7d":
-		untilMillis = time.Now().Add(7 * 24 * time.Hour).UnixMilli()
-	case "1m":
-		untilMillis = time.Now().Add(30 * 24 * time.Hour).UnixMilli()
-	case "forever":
-		untilMillis = 0
-	default:
-		writeErrorResponse(w, "unknown duration")
-		return
-	}
-
-	if err := database.SnoozeToolbarText(ctx, text, untilMillis); err != nil {
-		writeErrorResponse(w, err.Error())
-		return
-	}
-
-	writeSuccessResponse(w, "")
 }
 
 func handleVersion(w http.ResponseWriter, r *http.Request) {
