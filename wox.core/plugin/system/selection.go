@@ -297,9 +297,11 @@ func (i *SelectionPlugin) triggerSpaceQuickLook() {
 		QuerySelection: selected,
 	})
 	plugin.GetPluginManager().GetUI().ShowApp(ctx, common.ShowContext{
-		HideQueryBox: true,
-		HideToolbar:  true,
-		ShowSource:   common.ShowSourceSelection,
+		HideQueryBox:   true,
+		HideToolbar:    true,
+		ShowSource:     common.ShowSourceSelection,
+		WindowWidth:    1000,
+		MaxResultCount: 12,
 	})
 }
 
