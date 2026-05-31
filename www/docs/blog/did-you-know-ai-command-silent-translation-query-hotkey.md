@@ -21,15 +21,16 @@ The key is to make the AI command's default action explicit. In the AI Commands 
 
 `Run And Paste` waits for the final AI answer, writes that final text to the clipboard, then simulates paste back into the active window that was captured before Wox opened. It does not paste partial streaming output.
 
-Next, bind a Query Hotkey to the command:
+Next, create a Query Hotkey, choose the **Silent Run** preset, and bind it to the command:
 
 | Query Hotkey field | Example value |
 | --- | --- |
+| Preset | `Silent Run` |
 | Hotkey | Any available shortcut, such as `ctrl+shift+t` |
 | Query | `ai translate {wox:selected_text}` |
-| Silent | Enabled |
+| Optional tweaks | Switch to `Custom` only if you need to override display behavior |
 
-When Silent is enabled, Wox executes the single matching result directly. It does not add hidden paste behavior on its own. In this setup, Silent simply runs the AI command's configured default action, and that default action is `Run And Paste`.
+The Silent Run preset already enables silent execution, so in many cases you only need to fill in the hotkey and query. Silent execution does not add hidden paste behavior on its own. In this setup, it simply runs the AI command's configured default action, and that default action is `Run And Paste`.
 
 The result is a compact workflow:
 
