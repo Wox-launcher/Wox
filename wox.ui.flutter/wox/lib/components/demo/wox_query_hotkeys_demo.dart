@@ -1,5 +1,9 @@
 part of 'wox_demo.dart';
 
+// The shared settings-page preview keeps the original showcase, while the
+// Query Hotkey preset pills request a single focused demo for each mode.
+enum WoxQueryHotkeysDemoMode { showcase, normal, webPanel, silent, custom }
+
 // Two-example showcase for Query Hotkeys.
 //
 // Phase timeline (total 9200 ms, looping):
@@ -27,10 +31,11 @@ part of 'wox_demo.dart';
 //
 //   Pause (0.94–1.00): brief gap before the loop restarts.
 class WoxQueryHotkeysDemo extends StatefulWidget {
-  const WoxQueryHotkeysDemo({super.key, required this.accent, required this.tr});
+  const WoxQueryHotkeysDemo({super.key, required this.accent, required this.tr, this.mode = WoxQueryHotkeysDemoMode.showcase});
 
   final Color accent;
   final String Function(String key) tr;
+  final WoxQueryHotkeysDemoMode mode;
 
   @override
   State<WoxQueryHotkeysDemo> createState() => _WoxQueryHotkeysDemoState();
@@ -42,9 +47,20 @@ class _WoxQueryHotkeysDemoState extends State<WoxQueryHotkeysDemo> with SingleTi
   @override
   void initState() {
     super.initState();
-    // Extended from 4600 ms to 9200 ms to fit both examples without
-    // compressing their individual pacing.
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 9200))..repeat();
+    _controller = AnimationController(vsync: this, duration: _durationForMode(widget.mode))..repeat();
+  }
+
+  @override
+  void didUpdateWidget(covariant WoxQueryHotkeysDemo oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.mode == widget.mode) {
+      return;
+    }
+
+    _controller
+      ..duration = _durationForMode(widget.mode)
+      ..reset()
+      ..repeat();
   }
 
   @override
@@ -56,6 +72,44 @@ class _WoxQueryHotkeysDemoState extends State<WoxQueryHotkeysDemo> with SingleTi
   double _interval(double start, double end, Curve curve) {
     final value = ((_controller.value - start) / (end - start)).clamp(0.0, 1.0).toDouble();
     return curve.transform(value);
+  }
+
+  Duration _durationForMode(WoxQueryHotkeysDemoMode mode) {
+    switch (mode) {
+      case WoxQueryHotkeysDemoMode.showcase:
+        // Extended from 4600 ms to 9200 ms to fit both examples without
+        // compressing their individual pacing.
+        return const Duration(milliseconds: 9200);
+      case WoxQueryHotkeysDemoMode.normal:
+      case WoxQueryHotkeysDemoMode.webPanel:
+      case WoxQueryHotkeysDemoMode.silent:
+      case WoxQueryHotkeysDemoMode.custom:
+        return const Duration(milliseconds: 4600);
+    }
+  }
+
+  // Single-mode previews reuse the same pacing so each preset popover stays
+  // quick to scan instead of looping through the full showcase sequence.
+  double _singleShortcutProgress() {
+    if (_controller.value < 0.10) return 0;
+    if (_controller.value < 0.16) return _interval(0.10, 0.16, Curves.easeOutCubic);
+    if (_controller.value < 0.26) return 1;
+    if (_controller.value < 0.32) return 1 - _interval(0.26, 0.32, Curves.easeInCubic);
+    return 0;
+  }
+
+  double _singleContentProgress({double start = 0.22, double end = 0.34}) {
+    if (_controller.value < start) return 0;
+    if (_controller.value < end) return _interval(start, end, Curves.easeOutCubic);
+    return 1;
+  }
+
+  bool _isSingleShortcutPressed() => _controller.value >= 0.16 && _controller.value <= 0.22;
+
+  double get _singleSceneOpacity {
+    if (_controller.value < 0.04) return _interval(0.00, 0.04, Curves.easeOutCubic);
+    if (_controller.value < 0.94) return 1.0;
+    return 1.0 - _interval(0.94, 1.00, Curves.easeInCubic);
   }
 
   // ── Example 1 animations ──────────────────────────────────────────────────
@@ -111,8 +165,213 @@ class _WoxQueryHotkeysDemoState extends State<WoxQueryHotkeysDemo> with SingleTi
 
   bool _isShortcutPressed2() => _controller.value >= 0.63 && _controller.value <= 0.70;
 
+  Widget _buildSingleModeDemo({required String hotkey, required String query, required Widget Function(String hotkeyLabel, double contentProgress) buildContent}) {
+    final hotkeyLabel = _formatDemoHotkey('', fallback: hotkey);
+
+    return AnimatedBuilder(
+      key: ValueKey('onboarding-query-hotkeys-demo-${widget.mode.name}'),
+      animation: _controller,
+      builder: (context, child) {
+        final shortcutProgress = _singleShortcutProgress();
+        final contentProgress = _singleContentProgress();
+
+        return Opacity(
+          opacity: _singleSceneOpacity,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Stack(
+              children: [
+                Positioned.fill(child: WoxDemoDesktopBackground(accent: widget.accent, isMac: Platform.isMacOS, showDefaultIcons: false)),
+                Positioned.fill(
+                  child: Padding(
+                    padding: _demoDesktopHintContentPadding(),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        WoxDemoHintCard(accent: widget.accent, icon: Icons.keyboard_command_key, title: widget.tr('onboarding_query_hotkeys_title'), from: hotkeyLabel, to: query),
+                        const SizedBox(height: 12),
+                        Expanded(
+                          child: Stack(
+                            children: [
+                              Positioned.fill(
+                                child: Opacity(
+                                  opacity: shortcutProgress,
+                                  child: Transform.translate(
+                                    offset: Offset(0, 8 * (1 - shortcutProgress)),
+                                    child: _HotkeyPressOverlay(hotkey: hotkeyLabel, accent: widget.accent, pressed: _isSingleShortcutPressed()),
+                                  ),
+                                ),
+                              ),
+                              if (contentProgress > 0.01) buildContent(hotkeyLabel, contentProgress),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildNormalDemo() {
+    return _buildSingleModeDemo(
+      hotkey: Platform.isMacOS ? 'cmd+shift+g' : 'ctrl+shift+g',
+      query: 'github repo',
+      buildContent: (hotkeyLabel, contentProgress) {
+        return Positioned.fill(
+          child: Transform.translate(
+            offset: Offset(0, 20 * (1 - contentProgress)),
+            child: Transform.scale(
+              scale: 0.95 + (0.05 * contentProgress),
+              child: WoxDemoWindow(
+                accent: widget.accent,
+                query: 'github repo',
+                opaqueBackground: true,
+                footerHotkey: _demoActionPanelHotkey(),
+                results: [
+                  WoxDemoResult(
+                    title: 'Wox repository',
+                    subtitle: 'Open Wox-launcher/Wox on GitHub',
+                    icon: const Icon(Icons.code_rounded, color: Colors.white, size: 23),
+                    selected: true,
+                    tail: hotkeyLabel,
+                  ),
+                  WoxDemoResult(
+                    title: widget.tr('onboarding_query_hotkeys_title'),
+                    subtitle: widget.tr('onboarding_query_hotkeys_body'),
+                    icon: Icon(Icons.bolt_outlined, color: widget.accent, size: 23),
+                    tail: widget.tr('ui_query_hotkeys'),
+                  ),
+                  const WoxDemoResult(title: 'Issues', subtitle: 'github repo issues', icon: Icon(Icons.bug_report_outlined, color: Color(0xFFFACC15), size: 23), tail: 'GitHub'),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildWebPanelDemo() {
+    return _buildSingleModeDemo(
+      hotkey: Platform.isMacOS ? 'cmd+shift+i' : 'ctrl+shift+i',
+      query: 'webview instagram',
+      buildContent: (hotkeyLabel, contentProgress) {
+        return Positioned(
+          top: 0,
+          bottom: 0,
+          left: 0,
+          right: 0,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 340),
+              child: Transform.translate(
+                offset: Offset(0, 20 * (1 - contentProgress)),
+                child: Transform.scale(scale: 0.95 + (0.05 * contentProgress), child: const _InstagramWebviewWindow()),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSilentDemo() {
+    return _buildSingleModeDemo(
+      hotkey: Platform.isMacOS ? 'cmd+shift+s' : 'ctrl+shift+s',
+      query: 'copy github repo',
+      buildContent: (hotkeyLabel, contentProgress) {
+        return Positioned(
+          left: 0,
+          right: 0,
+          bottom: Platform.isMacOS ? 36 : 54,
+          child: Center(
+            child: Transform.translate(
+              offset: Offset(0, 18 * (1 - contentProgress)),
+              child: Transform.scale(scale: 0.96 + (0.04 * contentProgress), child: _SilentExecutionToast(accent: widget.accent, hotkey: hotkeyLabel)),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCustomDemo() {
+    return _buildSingleModeDemo(
+      hotkey: Platform.isMacOS ? 'cmd+shift+d' : 'ctrl+shift+d',
+      query: 'daily dashboard',
+      buildContent: (hotkeyLabel, contentProgress) {
+        return Stack(
+          children: [
+            Positioned(
+              left: 18,
+              bottom: Platform.isMacOS ? 30 : 48,
+              child: Opacity(
+                opacity: contentProgress,
+                child: Transform.translate(offset: Offset(-10 * (1 - contentProgress), 10 * (1 - contentProgress)), child: _CustomModeSummaryBadge(accent: widget.accent)),
+              ),
+            ),
+            Positioned(
+              top: 6,
+              right: 16,
+              width: 320,
+              child: Transform.translate(
+                offset: Offset(18 * (1 - contentProgress), 20 * (1 - contentProgress)),
+                child: Transform.scale(
+                  alignment: Alignment.topRight,
+                  scale: 0.95 + (0.05 * contentProgress),
+                  child: WoxDemoWindow(
+                    accent: widget.accent,
+                    query: 'daily dashboard',
+                    opaqueBackground: true,
+                    showQueryBox: false,
+                    footerHotkey: hotkeyLabel,
+                    results: const [
+                      WoxDemoResult(
+                        title: 'Today',
+                        subtitle: 'Agenda, tasks, and focus notes',
+                        icon: Icon(Icons.today_rounded, color: Color(0xFF60A5FA), size: 23),
+                        selected: true,
+                        tail: 'Pinned',
+                      ),
+                      WoxDemoResult(
+                        title: 'Standup.md',
+                        subtitle: 'Open the daily standup note',
+                        icon: Icon(Icons.description_outlined, color: Color(0xFFFACC15), size: 23),
+                        tail: 'Notes',
+                      ),
+                      WoxDemoResult(title: 'Calendar', subtitle: 'Next event at 10:30', icon: Icon(Icons.event_outlined, color: Color(0xFF34D399), size: 23), tail: 'Work'),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    switch (widget.mode) {
+      case WoxQueryHotkeysDemoMode.normal:
+        return _buildNormalDemo();
+      case WoxQueryHotkeysDemoMode.webPanel:
+        return _buildWebPanelDemo();
+      case WoxQueryHotkeysDemoMode.silent:
+        return _buildSilentDemo();
+      case WoxQueryHotkeysDemoMode.custom:
+        return _buildCustomDemo();
+      case WoxQueryHotkeysDemoMode.showcase:
+        break;
+    }
+
     final hotkey1 = _formatDemoHotkey('', fallback: Platform.isMacOS ? 'cmd+shift+g' : 'ctrl+shift+g');
     // Example 2 uses a fixed illustrative hotkey; it is not tied to any user
     // configuration because its purpose is to show the hide-chrome capability
@@ -283,6 +542,106 @@ class _WoxQueryHotkeysDemoState extends State<WoxQueryHotkeysDemo> with SingleTi
           ),
         );
       },
+    );
+  }
+}
+
+// Silent execution runs the query without showing the launcher, so the preview
+// uses a compact completion toast instead of another Wox window.
+class _SilentExecutionToast extends StatelessWidget {
+  const _SilentExecutionToast({required this.accent, required this.hotkey});
+
+  final Color accent;
+  final String hotkey;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 312,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+      decoration: BoxDecoration(
+        color: getThemeBackgroundColor().withValues(alpha: 0.96),
+        border: Border.all(color: accent.withValues(alpha: 0.28)),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 24, offset: const Offset(0, 14))],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(color: accent.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(10)),
+                child: Icon(Icons.copy_all_rounded, color: accent, size: 18),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Copied GitHub repo URL', style: TextStyle(color: getThemeTextColor(), fontSize: 12, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 2),
+                    Text('Triggered by $hotkey without opening Wox', style: TextStyle(color: getThemeSubTextColor(), fontSize: 10.5, height: 1.25)),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(color: accent.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(999)),
+                child: Text('Silent', style: TextStyle(color: accent, fontSize: 10, fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+            decoration: BoxDecoration(color: getThemeTextColor().withValues(alpha: 0.05), borderRadius: BorderRadius.circular(10)),
+            child: Row(
+              children: [
+                Icon(Icons.check_circle_rounded, color: accent, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text('No launcher window appeared; the action completed in the background.', style: TextStyle(color: getThemeSubTextColor(), fontSize: 10.5, height: 1.3)),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Custom mode is about combining layout knobs, so the preview highlights a
+// narrow top-right launcher with the query box hidden but toolbar still shown.
+class _CustomModeSummaryBadge extends StatelessWidget {
+  const _CustomModeSummaryBadge({required this.accent});
+
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: getThemeBackgroundColor().withValues(alpha: 0.94),
+        border: Border.all(color: accent.withValues(alpha: 0.24)),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('Mixed layout example', style: TextStyle(color: getThemeTextColor(), fontSize: 11.5, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 4),
+          Text('Top-right  •  320 px  •  query hidden', style: TextStyle(color: getThemeSubTextColor(), fontSize: 10.5, height: 1.25)),
+          const SizedBox(height: 2),
+          Text('Toolbar still visible for action hints', style: TextStyle(color: getThemeSubTextColor(), fontSize: 10.5, height: 1.25)),
+        ],
+      ),
     );
   }
 }

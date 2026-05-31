@@ -7,6 +7,7 @@ import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/demo/wox_demo.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_table_view.dart';
 import 'package:wox/components/wox_hotkey_recorder_view.dart';
+import 'package:wox/components/wox_query_hotkey_dialog.dart';
 import 'package:wox/components/wox_switch.dart';
 import 'package:wox/components/wox_dropdown_button.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
@@ -286,6 +287,8 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                     return WoxSettingPluginTable(
                       inlineTitleActions: true,
                       tableWidth: GENERAL_SETTING_TABLE_WIDTH,
+                      customCreateDialogBuilder: (context, saveRow) => showWoxQueryHotkeyDialog(context: context, onSave: saveRow),
+                      customEditDialogBuilder: (context, row, saveRow) => showWoxQueryHotkeyDialog(context: context, initialRow: row, onSave: saveRow),
                       titleActions: [
                         _buildDemoTitleAction(
                           triggerKey: 'settings-query-hotkeys-demo-trigger',
