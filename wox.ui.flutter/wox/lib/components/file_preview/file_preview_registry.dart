@@ -5,6 +5,7 @@ import 'package:wox/components/file_preview/image_file_preview_renderer.dart';
 import 'package:wox/components/file_preview/markdown_file_preview_renderer.dart';
 import 'package:wox/components/file_preview/office_file_preview_renderer.dart';
 import 'package:wox/components/file_preview/pdf_file_preview_renderer.dart';
+import 'package:wox/components/file_preview/rdp_file_preview_renderer.dart';
 import 'package:wox/components/file_preview/shortcut_file_preview_renderer.dart';
 import 'package:wox/components/file_preview/video_file_preview_renderer.dart';
 import 'package:wox/components/file_preview/zip_file_preview_renderer.dart';
@@ -36,6 +37,7 @@ final defaultWoxFilePreviewRegistry = WoxFilePreviewRegistry(
     OfficeFilePreviewRenderer(),
     ExecutableFilePreviewRenderer(),
     ShortcutFilePreviewRenderer(),
+    RdpFilePreviewRenderer(),
     ZipFilePreviewRenderer(),
     CodeFilePreviewRenderer(),
   ],
