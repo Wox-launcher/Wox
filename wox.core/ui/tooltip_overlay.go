@@ -11,8 +11,7 @@ import (
 type tooltipOverlayRequest struct {
 	Name         string  `json:"name"`
 	Text         string  `json:"text"`
-	X            float64 `json:"x"`
-	Y            float64 `json:"y"`
+	Side         string  `json:"side"`
 	AnchorX      float64 `json:"anchorX"`
 	AnchorY      float64 `json:"anchorY"`
 	AnchorWidth  float64 `json:"anchorWidth"`
@@ -36,8 +35,7 @@ func handleTooltipOverlayShow(w http.ResponseWriter, r *http.Request) {
 	tooltip.Show(ctx, tooltip.OverlayOptions{
 		Name:         request.Name,
 		Text:         request.Text,
-		X:            request.X,
-		Y:            request.Y,
+		Side:         request.Side,
 		AnchorX:      request.AnchorX,
 		AnchorY:      request.AnchorY,
 		AnchorWidth:  request.AnchorWidth,

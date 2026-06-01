@@ -75,6 +75,8 @@ typedef struct {
     float offsetX;
     float offsetY;
     float width;         // 0 = auto
+    float minWidth;      // 0 = platform default minimum width
+    float maxWidth;      // 0 = no cap for auto width
     float height;        // 0 = auto
     float maxHeight;     // 0 = no cap for auto height
     bool followScroll;
@@ -525,6 +527,39 @@ static int MeasureTextHeightW(HDC hdc, const WCHAR *text, int width)
     return h > 0 ? h : 0;
 }
 
+static int MeasureTextNaturalWidthW(HDC hdc, const WCHAR *text)
+{
+    if (!text || !*text)
+        return 0;
+
+    int maxWidth = 0;
+    const WCHAR *lineStart = text;
+    const WCHAR *p = text;
+    while (1)
+    {
+        if (*p == L'\r' || *p == L'\n' || *p == L'\0')
+        {
+            int len = (int)(p - lineStart);
+            RECT rc = {0, 0, 0, 0};
+            if (len > 0 && DrawTextW(hdc, lineStart, len, &rc, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX))
+            {
+                int lineWidth = rc.right - rc.left;
+                if (lineWidth > maxWidth)
+                    maxWidth = lineWidth;
+            }
+
+            if (*p == L'\r' && *(p + 1) == L'\n')
+                p++;
+            if (*p == L'\0')
+                break;
+            lineStart = p + 1;
+        }
+        p++;
+    }
+
+    return maxWidth > 0 ? maxWidth : 0;
+}
+
 static float GetSystemMessageFontSizePt(void)
 {
     NONCLIENTMETRICSW ncm;
@@ -629,6 +664,8 @@ typedef struct OverlayWindow
     float offsetX;
     float offsetY;
     float width;
+    float minWidth;
+    float maxWidth;
     float height;
     float maxHeight;
     BOOL followScroll;
@@ -721,6 +758,8 @@ typedef struct OverlayPayload
     float offsetX;
     float offsetY;
     float width;
+    float minWidth;
+    float maxWidth;
     float height;
     float maxHeight;
     BOOL followScroll;
@@ -1733,14 +1772,14 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
     }
 
     int width = 0;
-    if (ow->width > 0)
+    BOOL hasExplicitWidth = ow->width > 0.0f;
+    if (hasExplicitWidth)
         width = (int)roundf(ow->width * (float)ow->dpi / 96.0f);
-    if (width <= 0)
-        width = MulDiv(DEFAULT_WINDOW_WIDTH_DIP, (int)ow->dpi, 96);
-
     int minWidth = MulDiv(MIN_WINDOW_WIDTH_DIP, (int)ow->dpi, 96);
-    if (width < minWidth)
-        width = minWidth;
+    BOOL hasCustomMinWidth = ow->minWidth > 0.0f;
+    if (hasCustomMinWidth)
+        minWidth = (int)roundf(ow->minWidth * (float)ow->dpi / 96.0f);
+    BOOL hasTooltip = ow->tooltip && *ow->tooltip;
 
     int iconSize = (ow->iconBitmap ? (int)roundf(iconSizeDip * (float)ow->dpi / 96.0f) : 0);
     int iconGap = (ow->iconBitmap ? MulDiv(ICON_GAP_DIP, (int)ow->dpi, 96) : 0);
@@ -1753,20 +1792,57 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
     int closePad = ow->closable ? MulDiv(CLOSE_PAD_DIP, (int)ow->dpi, 96) : 0;
 
     float tooltipIconSizeDip = (ow->tooltipIconSize > 0.0f) ? ow->tooltipIconSize : DEFAULT_ICON_SIZE_DIP;
-    int tooltipIconSize = (ow->tooltip ? (int)roundf(tooltipIconSizeDip * (float)ow->dpi / 96.0f) : 0);
-    int tooltipIconGap = (ow->tooltip ? MulDiv(ICON_GAP_DIP, (int)ow->dpi, 96) : 0);
+    int tooltipIconSize = (hasTooltip ? (int)roundf(tooltipIconSizeDip * (float)ow->dpi / 96.0f) : 0);
+    int tooltipIconGap = (hasTooltip ? MulDiv(ICON_GAP_DIP, (int)ow->dpi, 96) : 0);
 
     int rightReserved = rightPad;
     if (ow->closable)
         rightReserved += closePad + closeSize;
-    if (ow->tooltip)
+    if (hasTooltip)
         rightReserved += tooltipIconGap + tooltipIconSize;
 
     int textLeft = leftPad + iconSize + iconGap;
+    int maxWidth = 0;
+    int maxTextWidth = 0;
+    int naturalTextWidth = 0;
+    if (!ow->transparent && !hasExplicitWidth && ow->maxWidth > 0.0f)
+    {
+        maxWidth = (int)roundf(ow->maxWidth * (float)ow->dpi / 96.0f);
+        maxTextWidth = maxWidth - textLeft - rightReserved;
+        if (maxWidth > 0 && maxTextWidth > 0)
+        {
+            HDC hdc = GetDC(NULL);
+            if (hdc)
+            {
+                HGDIOBJ oldFont = NULL;
+                if (ow->messageFont)
+                    oldFont = SelectObject(hdc, ow->messageFont);
+                naturalTextWidth = MeasureTextNaturalWidthW(hdc, ow->message ? ow->message : L"");
+                if (oldFont)
+                    SelectObject(hdc, oldFont);
+                ReleaseDC(NULL, hdc);
+            }
+            if (naturalTextWidth < 1)
+                naturalTextWidth = 1;
+            width = textLeft + rightReserved + min(naturalTextWidth, maxTextWidth);
+        }
+    }
+    if (width <= 0)
+        width = MulDiv(DEFAULT_WINDOW_WIDTH_DIP, (int)ow->dpi, 96);
+    if (width < minWidth)
+        width = minWidth;
+
     int textRight = width - rightReserved;
     int textWidth = textRight - textLeft;
-    if (textWidth < MulDiv(60, (int)ow->dpi, 96))
-        textWidth = MulDiv(60, (int)ow->dpi, 96);
+    int minTextWidth = MulDiv(60, (int)ow->dpi, 96);
+    if (hasCustomMinWidth)
+        minTextWidth = max(1, minWidth - textLeft - rightReserved);
+    if (textWidth < minTextWidth)
+    {
+        textWidth = minTextWidth;
+        if (width < textLeft + rightReserved + textWidth)
+            width = textLeft + rightReserved + textWidth;
+    }
 
     int textHeight = 0;
     HDC hdc = GetDC(NULL);
@@ -1872,7 +1948,7 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
         UpdateCopyButtonRect(ow, width, height, ow->dpi);
         UpdateTextScrollbarRects(ow, width, height, copyButtonReserve, ow->dpi);
 
-        if (ow->tooltip)
+        if (hasTooltip)
         {
             int tx = textLeft + textWidth + tooltipIconGap;
             // Center vertically in content area?
@@ -2125,6 +2201,8 @@ static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BO
     ow->offsetX = payload->offsetX;
     ow->offsetY = payload->offsetY;
     ow->width = payload->width;
+    ow->minWidth = payload->minWidth;
+    ow->maxWidth = payload->maxWidth;
     ow->height = payload->height;
     ow->maxHeight = payload->maxHeight;
     ow->followScroll = payload->followScroll;
@@ -2676,7 +2754,7 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             }
         }
 
-        if (ow->tooltip && ow->tooltipIconBitmap)
+        if (ow->tooltip && *ow->tooltip && ow->tooltipIconBitmap)
         {
             HDC memDC = CreateCompatibleDC(hdc);
             if (memDC)
@@ -3478,7 +3556,7 @@ void ShowOverlay(OverlayOptions opts)
     payload->name = DupUtf8ToWide(opts.name);
     payload->title = DupUtf8ToWide(opts.title);
     payload->message = DupUtf8ToWide(opts.message);
-    payload->tooltip = DupUtf8ToWide(opts.tooltip);
+    payload->tooltip = (opts.tooltip && opts.tooltip[0]) ? DupUtf8ToWide(opts.tooltip) : NULL;
     payload->copyButtonTooltip = DupUtf8ToWide(opts.copyButtonTooltip);
     payload->copyButtonSuccessTooltip = DupUtf8ToWide(opts.copyButtonSuccessTooltip);
     payload->iconFilePath = DupUtf8ToWide(opts.iconFilePath);
@@ -3504,6 +3582,8 @@ void ShowOverlay(OverlayOptions opts)
     payload->offsetX = opts.offsetX;
     payload->offsetY = opts.offsetY;
     payload->width = opts.width;
+    payload->minWidth = opts.minWidth;
+    payload->maxWidth = opts.maxWidth;
     payload->height = opts.height;
     payload->maxHeight = opts.maxHeight;
     payload->followScroll = opts.followScroll ? TRUE : FALSE;

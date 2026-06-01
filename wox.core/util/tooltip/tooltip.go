@@ -3,30 +3,44 @@ package tooltip
 import (
 	"context"
 	"math"
+	"strings"
 	"unicode"
 	"unicode/utf8"
 
 	"wox/util/overlay"
+	"wox/util/screen"
 )
 
 const tooltipOverlayPrefix = "wox_tooltip_"
 const (
-	tooltipFontSizePt       = 10
-	tooltipMaxWidthDip      = 300
-	tooltipMinWidthDip      = 100
+	tooltipFontSizePt       = 9
+	tooltipMaxWidthDip      = 400
+	tooltipMaxHeightDip     = 600
+	tooltipMinWidthDip      = 1
 	tooltipPaddingXDip      = 24
-	tooltipPaddingYDip      = 20
-	tooltipLineHeightDip    = 14
-	tooltipHeightSlackDip   = 4
-	tooltipAsciiWidthFactor = 0.56
-	tooltipWideWidthFactor  = 1.0
+	tooltipPaddingYDip      = 22
+	tooltipLineHeightDip    = 16
+	tooltipHeightSlackDip   = 6
+	tooltipGapDip           = 6
+	tooltipMarginDip        = 8
+	tooltipTrackingSlackDip = 20
+	tooltipAsciiWidthFactor = 0.68
+	tooltipWideWidthFactor  = 1.1
 	tooltipSpaceWidthFactor = 0.34
+)
+
+const (
+	tooltipSideLeft   = "left"
+	tooltipSideTop    = "top"
+	tooltipSideRight  = "right"
+	tooltipSideBottom = "bottom"
 )
 
 // OverlayOptions describes a lightweight native tooltip request.
 type OverlayOptions struct {
 	Name          string
 	Text          string
+	Side          string
 	X             float64
 	Y             float64
 	TooltipWidth  float64
@@ -46,7 +60,8 @@ func Show(ctx context.Context, opts OverlayOptions) {
 	if opts.Name == "" {
 		opts.Name = tooltipOverlayPrefix + "default"
 	}
-	width, trackingHeight := estimateBounds(opts.Text)
+	width, estimatedHeight := estimateBounds(opts.Text)
+	placement := computePlacement(opts, width, estimatedHeight)
 
 	overlay.Show(overlay.OverlayOptions{
 		Name:             opts.Name,
@@ -54,14 +69,16 @@ func Show(ctx context.Context, opts OverlayOptions) {
 		Message:          opts.Text,
 		Topmost:          true,
 		AbsolutePosition: true,
-		Anchor:           overlay.AnchorTopLeft,
-		OffsetX:          opts.X,
-		OffsetY:          opts.Y,
-		Width:            width,
+		Anchor:           placement.overlayAnchor,
+		OffsetX:          placement.offsetX,
+		OffsetY:          placement.offsetY,
+		MinWidth:         tooltipMinWidthDip,
+		MaxWidth:         tooltipMaxWidthDip,
+		MaxHeight:        tooltipMaxHeightDip,
 		FontSize:         tooltipFontSizePt,
 		CornerRadius:     8,
 	})
-	startVisibilityTracking(opts.withBounds(width, trackingHeight))
+	startVisibilityTracking(opts.withBounds(placement.trackingX, placement.trackingY, width, placement.trackingHeight))
 
 	_ = ctx
 }
@@ -75,12 +92,13 @@ func Close(name string) {
 	overlay.Close(name)
 }
 
-func (opts OverlayOptions) withBounds(width float64, height float64) OverlayOptions {
+func (opts OverlayOptions) withBounds(x float64, y float64, width float64, height float64) OverlayOptions {
 	return OverlayOptions{
 		Name:          opts.Name,
 		Text:          opts.Text,
-		X:             opts.X,
-		Y:             opts.Y,
+		Side:          opts.Side,
+		X:             x,
+		Y:             y,
 		TooltipWidth:  width,
 		TooltipHeight: height,
 		AnchorX:       opts.AnchorX,
@@ -88,6 +106,216 @@ func (opts OverlayOptions) withBounds(width float64, height float64) OverlayOpti
 		AnchorWidth:   opts.AnchorWidth,
 		AnchorHeight:  opts.AnchorHeight,
 	}
+}
+
+type tooltipRect struct {
+	X      float64
+	Y      float64
+	Width  float64
+	Height float64
+}
+
+func (r tooltipRect) right() float64 {
+	return r.X + r.Width
+}
+
+func (r tooltipRect) bottom() float64 {
+	return r.Y + r.Height
+}
+
+func (r tooltipRect) isEmpty() bool {
+	return r.Width <= 0 || r.Height <= 0
+}
+
+type tooltipPlacement struct {
+	overlayAnchor  int
+	offsetX        float64
+	offsetY        float64
+	trackingX      float64
+	trackingY      float64
+	trackingHeight float64
+}
+
+// computePlacement keeps side-specific tooltip positioning in the native tooltip
+// layer so Flutter only needs to report the anchor bounds.
+func computePlacement(opts OverlayOptions, width float64, height float64) tooltipPlacement {
+	anchor := tooltipRect{
+		X:      opts.AnchorX,
+		Y:      opts.AnchorY,
+		Width:  opts.AnchorWidth,
+		Height: opts.AnchorHeight,
+	}
+	if anchor.isEmpty() {
+		return tooltipPlacement{
+			overlayAnchor:  overlay.AnchorTopLeft,
+			offsetX:        opts.X,
+			offsetY:        opts.Y,
+			trackingX:      opts.X,
+			trackingY:      opts.Y,
+			trackingHeight: expandTrackingHeight(height),
+		}
+	}
+
+	side, explicitSide := normalizeSide(opts.Side)
+	workArea := resolveTooltipWorkArea(anchor)
+	if !explicitSide {
+		spaceBelow := workArea.bottom() - anchor.bottom()
+		spaceAbove := anchor.Y - workArea.Y
+		if !workArea.isEmpty() && spaceBelow < height+tooltipGapDip && spaceAbove > spaceBelow {
+			side = tooltipSideTop
+		} else {
+			side = tooltipSideBottom
+		}
+	}
+
+	trackingHeight := expandTrackingHeight(height)
+	centerX := anchor.X + anchor.Width/2
+	centerY := anchor.Y + anchor.Height/2
+	if !workArea.isEmpty() {
+		centerX = clampTooltipCoordinate(centerX, workArea.X+tooltipMarginDip+width/2, workArea.right()-tooltipMarginDip-width/2)
+		centerY = clampTooltipCoordinate(centerY, workArea.Y+tooltipMarginDip+trackingHeight/2, workArea.bottom()-tooltipMarginDip-trackingHeight/2)
+	}
+
+	switch side {
+	case tooltipSideLeft:
+		offsetX := anchor.X - tooltipGapDip
+		return tooltipPlacement{
+			overlayAnchor:  overlay.AnchorRightCenter,
+			offsetX:        offsetX,
+			offsetY:        centerY,
+			trackingX:      offsetX - width,
+			trackingY:      centerY - trackingHeight/2,
+			trackingHeight: trackingHeight,
+		}
+	case tooltipSideTop:
+		offsetY := anchor.Y - tooltipGapDip
+		return tooltipPlacement{
+			overlayAnchor:  overlay.AnchorBottomCenter,
+			offsetX:        centerX,
+			offsetY:        offsetY,
+			trackingX:      centerX - width/2,
+			trackingY:      offsetY - trackingHeight,
+			trackingHeight: trackingHeight,
+		}
+	case tooltipSideRight:
+		offsetX := anchor.right() + tooltipGapDip
+		return tooltipPlacement{
+			overlayAnchor:  overlay.AnchorLeftCenter,
+			offsetX:        offsetX,
+			offsetY:        centerY,
+			trackingX:      offsetX,
+			trackingY:      centerY - trackingHeight/2,
+			trackingHeight: trackingHeight,
+		}
+	default:
+		offsetY := anchor.bottom() + tooltipGapDip
+		return tooltipPlacement{
+			overlayAnchor:  overlay.AnchorTopCenter,
+			offsetX:        centerX,
+			offsetY:        offsetY,
+			trackingX:      centerX - width/2,
+			trackingY:      offsetY,
+			trackingHeight: trackingHeight,
+		}
+	}
+}
+
+func expandTrackingHeight(height float64) float64 {
+	trackingHeight := height + tooltipTrackingSlackDip
+	if trackingHeight > tooltipMaxHeightDip {
+		return tooltipMaxHeightDip
+	}
+	return trackingHeight
+}
+
+func normalizeSide(side string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(side)) {
+	case tooltipSideLeft:
+		return tooltipSideLeft, true
+	case tooltipSideTop:
+		return tooltipSideTop, true
+	case tooltipSideRight:
+		return tooltipSideRight, true
+	case tooltipSideBottom:
+		return tooltipSideBottom, true
+	default:
+		return "", false
+	}
+}
+
+// resolveTooltipWorkArea returns the logical work area for the display that owns
+// the anchor, matching the coordinate space reported by the Flutter launcher.
+func resolveTooltipWorkArea(anchor tooltipRect) tooltipRect {
+	displays, err := screen.ListDisplays()
+	if err != nil || len(displays) == 0 {
+		return tooltipRect{}
+	}
+
+	display := selectTooltipDisplay(anchor, displays)
+	workArea := display.WorkArea
+	if workArea.IsEmpty() {
+		workArea = display.Bounds
+	}
+	return screenRectToTooltipRect(workArea)
+}
+
+// selectTooltipDisplay prefers the display containing the anchor and otherwise
+// falls back to the nearest display so off-edge anchors still get sane clamping.
+func selectTooltipDisplay(anchor tooltipRect, displays []screen.Display) screen.Display {
+	centerX := anchor.X + anchor.Width/2
+	centerY := anchor.Y + anchor.Height/2
+	best := displays[0]
+	bestDistance := math.MaxFloat64
+
+	for _, display := range displays {
+		if displayRectContainsPoint(display.Bounds, centerX, centerY) {
+			return display
+		}
+
+		distance := distanceSquaredToDisplay(display.Bounds, centerX, centerY)
+		if distance < bestDistance || (distance == bestDistance && display.Primary) {
+			best = display
+			bestDistance = distance
+		}
+	}
+
+	return best
+}
+
+func screenRectToTooltipRect(rect screen.Rect) tooltipRect {
+	return tooltipRect{
+		X:      float64(rect.X),
+		Y:      float64(rect.Y),
+		Width:  float64(rect.Width),
+		Height: float64(rect.Height),
+	}
+}
+
+func displayRectContainsPoint(rect screen.Rect, x float64, y float64) bool {
+	return x >= float64(rect.X) && x < float64(rect.Right()) && y >= float64(rect.Y) && y < float64(rect.Bottom())
+}
+
+func distanceSquaredToDisplay(rect screen.Rect, x float64, y float64) float64 {
+	dx := distanceToRange(x, float64(rect.X), float64(rect.Right()))
+	dy := distanceToRange(y, float64(rect.Y), float64(rect.Bottom()))
+	return dx*dx + dy*dy
+}
+
+func distanceToRange(value float64, minValue float64, maxValue float64) float64 {
+	if value < minValue {
+		return minValue - value
+	}
+	if value > maxValue {
+		return value - maxValue
+	}
+	return 0
+}
+
+func clampTooltipCoordinate(value float64, minValue float64, maxValue float64) float64 {
+	if maxValue < minValue {
+		return minValue
+	}
+	return math.Max(minValue, math.Min(maxValue, value))
 }
 
 func estimateBounds(text string) (float64, float64) {
