@@ -65,7 +65,15 @@ func (i *PluginInstallerPlugin) Query(ctx context.Context, query plugin.Query) p
 		query.Selection.Type == selection.SelectionTypeFile &&
 		len(query.Selection.FilePaths) == 1 &&
 		strings.HasSuffix(query.Selection.FilePaths[0], ".wox") {
-		return plugin.NewQueryResponse(i.queryForSelectionFile(ctx, query.Selection.FilePaths[0]))
+		results := i.queryForSelectionFile(ctx, query.Selection.FilePaths[0])
+		// Preview panel takes 60% of the width so plugin detail is given more room.
+		ratio := 0.4
+		return plugin.QueryResponse{
+			Results: results,
+			Layout: plugin.QueryLayout{
+				ResultPreviewWidthRatio: &ratio,
+			},
+		}
 	}
 
 	return plugin.QueryResponse{}

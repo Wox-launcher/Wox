@@ -36,6 +36,8 @@ var screenshotOCREnabledSettingKey = "ocr_enabled"
 var screenshotDefaultRetentionDays = 30
 var screenshotOCRSidecarVersion = 1
 
+const screenshotPermissionDeniedErrorCode = "permission_denied"
+
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &ScreenshotPlugin{})
 }
@@ -629,6 +631,10 @@ func (p *ScreenshotPlugin) screenshotHistoryResult(item screenshotHistoryItem) p
 		Icon:       iconImage,
 		Group:      group,
 		GroupScore: groupScore,
+		DragData: &plugin.QueryResultDragData{
+			Type:  plugin.QueryResultDragDataTypeFiles,
+			Files: []string{item.path},
+		},
 		Preview: plugin.WoxPreview{
 			PreviewType: plugin.WoxPreviewTypeImage,
 			PreviewData: previewImage.String(),
@@ -754,6 +760,16 @@ func (p *ScreenshotPlugin) pinScreenshotToScreen(ctx context.Context, screenshot
 	return nil
 }
 
+// notifyCaptureFailure maps screenshot bridge errors to the clearest user-visible notification.
+func (p *ScreenshotPlugin) notifyCaptureFailure(ctx context.Context, errorCode string) {
+	switch errorCode {
+	case screenshotPermissionDeniedErrorCode:
+		p.api.Notify(ctx, p.api.GetTranslation(ctx, "plugin_screenshot_permission_denied"))
+	default:
+		p.api.Notify(ctx, p.api.GetTranslation(ctx, "plugin_screenshot_capture_failed"))
+	}
+}
+
 func (p *ScreenshotPlugin) captureScreenshot(ctx context.Context, actionContext plugin.ActionContext) {
 	request := common.DefaultCaptureScreenshotRequest()
 	result, err := plugin.GetPluginManager().GetUI().CaptureScreenshot(ctx, request)
@@ -761,7 +777,7 @@ func (p *ScreenshotPlugin) captureScreenshot(ctx context.Context, actionContext 
 		// The screenshot session spans Go, Flutter, and the native bridge, so transport failures need a local
 		// notification here instead of silently falling through to keep the action predictable for the user.
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("capture screenshot request failed: %s", err.Error()))
-		p.api.Notify(ctx, "plugin_screenshot_capture_failed")
+		p.notifyCaptureFailure(ctx, "")
 		return
 	}
 
@@ -771,7 +787,7 @@ func (p *ScreenshotPlugin) captureScreenshot(ctx context.Context, actionContext 
 		// Go treats a completed export as success and only surfaces clipboard warnings separately.
 		if result.ScreenshotPath == "" {
 			p.api.Log(ctx, plugin.LogLevelError, "screenshot completed without an export path")
-			p.api.Notify(ctx, "plugin_screenshot_capture_failed")
+			p.notifyCaptureFailure(ctx, "")
 			return
 		}
 		if err := p.ensureScreenshotHistoryThumbnailsForPath(ctx, result.ScreenshotPath); err != nil {
@@ -803,11 +819,11 @@ func (p *ScreenshotPlugin) captureScreenshot(ctx context.Context, actionContext 
 			errText = "screenshot session failed"
 		}
 		p.api.Log(ctx, plugin.LogLevelError, errText)
-		p.api.Notify(ctx, "plugin_screenshot_capture_failed")
+		p.notifyCaptureFailure(ctx, result.ErrorCode)
 	case common.CaptureScreenshotStatusCancelled:
 		return
 	default:
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("unexpected screenshot status: %s", result.Status))
-		p.api.Notify(ctx, "plugin_screenshot_capture_failed")
+		p.notifyCaptureFailure(ctx, "")
 	}
 }

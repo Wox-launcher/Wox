@@ -71,9 +71,10 @@ func (m *mockAPI) Log(ctx context.Context, level plugin.LogLevel, msg string) {
 		println("LOG:", msg)
 	}
 }
-func (m *mockAPI) Notify(ctx context.Context, msg string)                {}
-func (m *mockAPI) GetTranslation(ctx context.Context, key string) string { return key }
-func (m *mockAPI) GetSetting(ctx context.Context, key string) string     { return "" }
+func (m *mockAPI) Notify(ctx context.Context, msg string)                                 {}
+func (m *mockAPI) PushAttention(ctx context.Context, request plugin.PushAttentionRequest) {}
+func (m *mockAPI) GetTranslation(ctx context.Context, key string) string                  { return key }
+func (m *mockAPI) GetSetting(ctx context.Context, key string) string                      { return "" }
 func (m *mockAPI) SaveSetting(ctx context.Context, key string, value string, isGlobal bool) {
 }
 func (m *mockAPI) GetAllSettings(ctx context.Context) map[string]string     { return nil }

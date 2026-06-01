@@ -3,9 +3,9 @@
 name: Mark stale issues
 
 on:
-  # schedule:
-  #   - cron: "30 1 * * *"
-  #   - cron: "30 12 * * *"
+  schedule:
+    - cron: "30 1 * * *"
+    - cron: "30 12 * * *"
   workflow_dispatch:
 
 jobs:
@@ -17,12 +17,12 @@ jobs:
     steps:
       - uses: actions/stale@v8
         with:
-          stale-issue-message: "This issue is stale because it has been open 15 days with no activity. Remove stale label or comment or this will be closed in 5 days. If you are still using version v1, please switch to v2 and check if the issue persists. If it does, please reopen the issue. Thank you."
-          days-before-stale: 15
+          stale-issue-message: "This issue is stale because it has been open 25 days with no activity. Remove stale label or comment or this will be closed in 5 days."
+          days-before-stale: 25
           days-before-close: 5
           days-before-pr-close: -1
           exempt-all-milestones: false
-          close-issue-message: "This issue was closed because it has been stale for 20 days with no activity. If you feel this issue still needs attention please feel free to reopen."
+          close-issue-message: "This issue was closed because it has been stale 30 days with no activity. If you feel this issue still needs attention please feel free to reopen."
           stale-pr-label: "no-pr-activity"
           exempt-issue-labels: "KeepRefresh"
           exempt-pr-labels: "KeepRefresh"

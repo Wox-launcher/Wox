@@ -9,6 +9,7 @@ project(runner LANGUAGES CXX)
 add_executable(${BINARY_NAME} WIN32
   "flutter_window.cpp"
   "main.cpp"
+  "result_drag_bridge.cpp"
   "utils.cpp"
   "win32_window.cpp"
   "wox_preview_handler_plugin.cpp"

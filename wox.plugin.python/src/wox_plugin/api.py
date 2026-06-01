@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Awaitable, Callable, Dict, List, Optional, Protocol
 
 from .models.ai import AIModel, ChatStreamCallback, Conversation
+from .models.attention import PushAttentionRequest
 from .models.context import Context
 from .models.log import LogLevel
 from .models.mru import MRUData
@@ -59,7 +60,7 @@ class PublicAPI(Protocol):
     initialization via PluginInitParams.
 
     Method categories:
-        - UI Control: show_app, hide_app, is_visible, notify
+        - UI Control: show_app, hide_app, is_visible, notify, push_attention
         - Query: change_query, refresh_query, push_results
         - Settings: get_setting, save_setting, on_setting_changed, on_get_dynamic_setting
         - Logging: log
@@ -197,6 +198,16 @@ class PublicAPI(Protocol):
         Example:
             await api.notify(ctx, "Download complete!")
             await api.notify(ctx, "i18n:plugin.download_complete")
+        """
+        ...
+
+    async def push_attention(self, ctx: Context, request: PushAttentionRequest) -> None:
+        """
+        Push a persistent attention item into Wox.
+
+        Unlike notify(), this survives until the user handles it. Wox stores the
+        item, shows an unread badge near the query box, and opens the attention
+        inbox when the badge is clicked.
         """
         ...
 

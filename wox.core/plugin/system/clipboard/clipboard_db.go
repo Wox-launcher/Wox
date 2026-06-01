@@ -3,6 +3,7 @@ package system
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"path"
 	"strings"
@@ -22,8 +23,9 @@ type ClipboardDB struct {
 type ClipboardRecord struct {
 	ID         string
 	Type       string
-	Content    string  // For text content or metadata
-	FilePath   string  // For image files
+	Content    string // For text content or metadata
+	FilePath   string // For image files
+	FilePaths  []string
 	ImageHash  *string // For image deduplication hash, nullable
 	IconData   *string // For storing icon data (base64 or file path), nullable
 	Width      *int    // For image width, nullable
@@ -92,11 +94,13 @@ func (c *ClipboardDB) initTables(ctx context.Context) error {
 		type TEXT NOT NULL,
 		content TEXT,
 		file_path TEXT,
+		file_paths TEXT,
 		image_hash TEXT,
 		icon_data TEXT,
 		width INTEGER,
 		height INTEGER,
 		file_size INTEGER,
+		alias TEXT,
 		ocr_text TEXT,
 		timestamp INTEGER NOT NULL,
 		is_favorite BOOLEAN DEFAULT FALSE,
@@ -116,6 +120,7 @@ func (c *ClipboardDB) initTables(ctx context.Context) error {
 
 	// Add new columns if they don't exist (for migration from older versions)
 	alterTableSQLs := []string{
+		`ALTER TABLE clipboard_history ADD COLUMN file_paths TEXT`,
 		`ALTER TABLE clipboard_history ADD COLUMN icon_data TEXT`,
 		`ALTER TABLE clipboard_history ADD COLUMN width INTEGER`,
 		`ALTER TABLE clipboard_history ADD COLUMN height INTEGER`,
@@ -149,13 +154,18 @@ func (c *ClipboardDB) initTables(ctx context.Context) error {
 
 // Insert adds a new clipboard record to the database
 func (c *ClipboardDB) Insert(ctx context.Context, record ClipboardRecord) error {
+	filePathsJSON, err := marshalClipboardFilePaths(record.FilePaths)
+	if err != nil {
+		return err
+	}
+
 	insertSQL := `
-	INSERT INTO clipboard_history (id, type, content, file_path, image_hash, icon_data, width, height, file_size, alias, ocr_text, timestamp, is_favorite, created_at)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	INSERT INTO clipboard_history (id, type, content, file_path, file_paths, image_hash, icon_data, width, height, file_size, alias, ocr_text, timestamp, is_favorite, created_at)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
-	_, err := c.db.ExecContext(ctx, insertSQL,
-		record.ID, record.Type, record.Content, record.FilePath, record.ImageHash, record.IconData,
+	_, err = c.db.ExecContext(ctx, insertSQL,
+		record.ID, record.Type, record.Content, record.FilePath, filePathsJSON, record.ImageHash, record.IconData,
 		record.Width, record.Height, record.FileSize, record.Alias, record.OCRText,
 		record.Timestamp, record.IsFavorite, record.CreatedAt)
 
@@ -164,14 +174,19 @@ func (c *ClipboardDB) Insert(ctx context.Context, record ClipboardRecord) error 
 
 // Update modifies an existing clipboard record
 func (c *ClipboardDB) Update(ctx context.Context, record ClipboardRecord) error {
+	filePathsJSON, err := marshalClipboardFilePaths(record.FilePaths)
+	if err != nil {
+		return err
+	}
+
 	updateSQL := `
 	UPDATE clipboard_history
-	SET type = ?, content = ?, file_path = ?, image_hash = ?, icon_data = ?, width = ?, height = ?, file_size = ?, alias = ?, ocr_text = ?, timestamp = ?, is_favorite = ?
+	SET type = ?, content = ?, file_path = ?, file_paths = ?, image_hash = ?, icon_data = ?, width = ?, height = ?, file_size = ?, alias = ?, ocr_text = ?, timestamp = ?, is_favorite = ?
 	WHERE id = ?
 	`
 
-	_, err := c.db.ExecContext(ctx, updateSQL,
-		record.Type, record.Content, record.FilePath, record.ImageHash, record.IconData,
+	_, err = c.db.ExecContext(ctx, updateSQL,
+		record.Type, record.Content, record.FilePath, filePathsJSON, record.ImageHash, record.IconData,
 		record.Width, record.Height, record.FileSize, record.Alias, record.OCRText,
 		record.Timestamp, record.IsFavorite, record.ID)
 
@@ -216,7 +231,7 @@ func (c *ClipboardDB) Delete(ctx context.Context, id string) error {
 // GetRecent retrieves recent clipboard records with pagination
 func (c *ClipboardDB) GetRecent(ctx context.Context, limit, offset int) ([]ClipboardRecord, error) {
 	querySQL := `
-	SELECT id, type, content, file_path, image_hash, icon_data, width, height, file_size, alias, ocr_text, timestamp, is_favorite, created_at
+	SELECT id, type, content, file_path, file_paths, image_hash, icon_data, width, height, file_size, alias, ocr_text, timestamp, is_favorite, created_at
 	FROM clipboard_history
 	ORDER BY timestamp DESC
 	LIMIT ? OFFSET ?
@@ -234,7 +249,7 @@ func (c *ClipboardDB) GetRecent(ctx context.Context, limit, offset int) ([]Clipb
 // GetRecentByType retrieves recent clipboard records for one content type.
 func (c *ClipboardDB) GetRecentByType(ctx context.Context, recordType string, limit, offset int) ([]ClipboardRecord, error) {
 	querySQL := `
-	SELECT id, type, content, file_path, image_hash, icon_data, width, height, file_size, alias, ocr_text, timestamp, is_favorite, created_at
+	SELECT id, type, content, file_path, file_paths, image_hash, icon_data, width, height, file_size, alias, ocr_text, timestamp, is_favorite, created_at
 	FROM clipboard_history
 	WHERE type = ?
 	ORDER BY timestamp DESC
@@ -253,7 +268,7 @@ func (c *ClipboardDB) GetRecentByType(ctx context.Context, recordType string, li
 // SearchText searches for text content in clipboard history
 func (c *ClipboardDB) SearchText(ctx context.Context, searchTerm string, limit int) ([]ClipboardRecord, error) {
 	querySQL := `
-	SELECT id, type, content, file_path, image_hash, icon_data, width, height, file_size, alias, ocr_text, timestamp, is_favorite, created_at
+	SELECT id, type, content, file_path, file_paths, image_hash, icon_data, width, height, file_size, alias, ocr_text, timestamp, is_favorite, created_at
 	FROM clipboard_history
 	WHERE type = ? AND (content LIKE ? OR alias LIKE ?)
 	ORDER BY timestamp DESC
@@ -273,7 +288,7 @@ func (c *ClipboardDB) SearchText(ctx context.Context, searchTerm string, limit i
 // SearchByType searches clipboard content and aliases inside one content type.
 func (c *ClipboardDB) SearchByType(ctx context.Context, searchTerm string, recordType string, limit int) ([]ClipboardRecord, error) {
 	querySQL := `
-	SELECT id, type, content, file_path, image_hash, icon_data, width, height, file_size, alias, ocr_text, timestamp, is_favorite, created_at
+	SELECT id, type, content, file_path, file_paths, image_hash, icon_data, width, height, file_size, alias, ocr_text, timestamp, is_favorite, created_at
 	FROM clipboard_history
 	WHERE type = ? AND (content LIKE ? OR alias LIKE ? OR ocr_text LIKE ?)
 	ORDER BY timestamp DESC
@@ -293,22 +308,27 @@ func (c *ClipboardDB) SearchByType(ctx context.Context, searchTerm string, recor
 // GetByID retrieves a specific record by ID
 func (c *ClipboardDB) GetByID(ctx context.Context, id string) (*ClipboardRecord, error) {
 	querySQL := `
-	SELECT id, type, content, file_path, image_hash, icon_data, width, height, file_size, alias, ocr_text, timestamp, is_favorite, created_at
+	SELECT id, type, content, file_path, file_paths, image_hash, icon_data, width, height, file_size, alias, ocr_text, timestamp, is_favorite, created_at
 	FROM clipboard_history
 	WHERE id = ?
 	`
 
 	row := c.db.QueryRowContext(ctx, querySQL, id)
 	record := &ClipboardRecord{}
+	var filePathsJSON sql.NullString
 
 	err := row.Scan(&record.ID, &record.Type, &record.Content,
-		&record.FilePath, &record.ImageHash, &record.IconData, &record.Width, &record.Height, &record.FileSize, &record.Alias, &record.OCRText,
+		&record.FilePath, &filePathsJSON, &record.ImageHash, &record.IconData, &record.Width, &record.Height, &record.FileSize, &record.Alias, &record.OCRText,
 		&record.Timestamp, &record.IsFavorite, &record.CreatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
+		return nil, err
+	}
+
+	if record.FilePaths, err = unmarshalClipboardFilePaths(filePathsJSON); err != nil {
 		return nil, err
 	}
 
@@ -325,12 +345,14 @@ func (c *ClipboardDB) DeleteExpired(ctx context.Context, textDays, imageDays int
 	DELETE FROM clipboard_history 
 	WHERE is_favorite = FALSE AND (
 		(type = ? AND timestamp < ?) OR
+		(type = ? AND timestamp < ?) OR
 		(type = ? AND timestamp < ?)
 	)
 	`
 
 	result, err := c.db.ExecContext(ctx, deleteSQL,
 		string(clipboard.ClipboardTypeText), textCutoff,
+		string(clipboard.ClipboardTypeFile), textCutoff,
 		string(clipboard.ClipboardTypeImage), imageCutoff)
 
 	if err != nil {
@@ -410,6 +432,13 @@ func (c *ClipboardDB) GetStats(ctx context.Context) (map[string]int, error) {
 	}
 	stats["images"] = imageCount
 
+	var fileCount int
+	err = c.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM clipboard_history WHERE type = ?`, string(clipboard.ClipboardTypeFile)).Scan(&fileCount)
+	if err != nil {
+		return nil, err
+	}
+	stats["files"] = fileCount
+
 	return stats, nil
 }
 
@@ -437,9 +466,14 @@ func (c *ClipboardDB) scanRecords(rows *sql.Rows) ([]ClipboardRecord, error) {
 
 	for rows.Next() {
 		var record ClipboardRecord
+		var filePathsJSON sql.NullString
 		err := rows.Scan(&record.ID, &record.Type, &record.Content,
-			&record.FilePath, &record.ImageHash, &record.IconData, &record.Width, &record.Height, &record.FileSize, &record.Alias, &record.OCRText,
+			&record.FilePath, &filePathsJSON, &record.ImageHash, &record.IconData, &record.Width, &record.Height, &record.FileSize, &record.Alias, &record.OCRText,
 			&record.Timestamp, &record.IsFavorite, &record.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		record.FilePaths, err = unmarshalClipboardFilePaths(filePathsJSON)
 		if err != nil {
 			return nil, err
 		}
@@ -447,4 +481,31 @@ func (c *ClipboardDB) scanRecords(rows *sql.Rows) ([]ClipboardRecord, error) {
 	}
 
 	return records, rows.Err()
+}
+
+func marshalClipboardFilePaths(filePaths []string) (*string, error) {
+	if len(filePaths) == 0 {
+		return nil, nil
+	}
+
+	data, err := json.Marshal(filePaths)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal clipboard file paths: %w", err)
+	}
+
+	jsonValue := string(data)
+	return &jsonValue, nil
+}
+
+func unmarshalClipboardFilePaths(filePathsJSON sql.NullString) ([]string, error) {
+	if !filePathsJSON.Valid || strings.TrimSpace(filePathsJSON.String) == "" {
+		return nil, nil
+	}
+
+	var filePaths []string
+	if err := json.Unmarshal([]byte(filePathsJSON.String), &filePaths); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal clipboard file paths: %w", err)
+	}
+
+	return filePaths, nil
 }

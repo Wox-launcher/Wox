@@ -152,7 +152,9 @@ class _WoxPluginStoreDemoState extends State<WoxPluginStoreDemo> with SingleTick
     // "wpm install" opens the store browser, then the selected plugin detail
     // appears beside the list instead of reducing the flow to a plain result row.
     const target = 'wpm install';
-    final t = _interval(0.50, 0.75, Curves.linear);
+    // Keep typing speed aligned with the theme-install section. The previous
+    // 0.50-0.75 window made plugin typing noticeably slower per character.
+    final t = _interval(0.50, 0.63, Curves.linear);
     return target.substring(0, (t * target.length).floor().clamp(0, target.length));
   }
 

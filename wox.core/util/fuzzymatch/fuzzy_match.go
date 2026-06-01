@@ -35,6 +35,12 @@ const (
 	bonusExactMatch     = 100 // Exact match bonus
 )
 
+const (
+	optimalAlignmentTextLimit    = 64
+	optimalAlignmentPatternLimit = 8
+	optimalAlignmentStateSize    = optimalAlignmentTextLimit * optimalAlignmentPatternLimit
+)
+
 // FuzzyMatch performs fuzzy matching between pattern and text
 // It supports:
 // - Multi-factor scoring similar to fzf
@@ -158,20 +164,28 @@ func fuzzyMatchASCII(text string, pattern string) FuzzyMatchResult {
 		}
 	}
 
-	if patternIdx != patternLen {
-		return FuzzyMatchResult{IsMatch: false, Score: 0}
+	if patternIdx == patternLen {
+		var score int64
+		if shouldUseOptimalAlignment(textLen, patternLen) {
+			bestScore, ok := calculateBestAlignmentScoreASCII(text, pattern)
+			if ok {
+				score = bestScore
+			}
+		} else {
+			score = calculateScoreASCII(text, matchedSlice, patternLen)
+		}
+
+		minScore := calculateMinScoreThreshold(patternLen, textLen)
+		if score >= minScore {
+			return FuzzyMatchResult{IsMatch: true, Score: score}
+		}
 	}
 
-	// Calculate score
-	score := calculateScoreASCII(text, matchedSlice, patternLen)
-
-	// Apply minimum score threshold
-	minScore := calculateMinScoreThreshold(patternLen, textLen)
-	if score < minScore {
-		return FuzzyMatchResult{IsMatch: false, Score: 0}
+	if containsFoldASCII(text, pattern) {
+		return FuzzyMatchResult{IsMatch: true, Score: int64(patternLen)}
 	}
 
-	return FuzzyMatchResult{IsMatch: true, Score: score}
+	return FuzzyMatchResult{IsMatch: false, Score: 0}
 }
 
 // equalFoldASCII checks if two ASCII strings are equal (case-insensitive)
@@ -200,6 +214,31 @@ func hasPrefixFoldASCII(a, b string) bool {
 	return true
 }
 
+// containsFoldASCII checks if an ASCII string contains another (case-insensitive).
+func containsFoldASCII(s, substr string) bool {
+	if len(substr) == 0 {
+		return true
+	}
+	if len(substr) > len(s) {
+		return false
+	}
+
+	for start := 0; start <= len(s)-len(substr); start++ {
+		matched := true
+		for offset := 0; offset < len(substr); offset++ {
+			if toLowerByte(s[start+offset]) != toLowerByte(substr[offset]) {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return true
+		}
+	}
+
+	return false
+}
+
 // toLowerByte converts ASCII byte to lowercase
 func toLowerByte(b byte) byte {
 	if b >= 'A' && b <= 'Z' {
@@ -208,7 +247,275 @@ func toLowerByte(b byte) byte {
 	return b
 }
 
-// calculateScoreASCII calculates match score for ASCII fuzzy match
+// shouldUseOptimalAlignment keeps DP-style scoring on short texts where it materially helps ranking.
+func shouldUseOptimalAlignment(textLen, patternLen int) bool {
+	return patternLen > 1 && patternLen <= optimalAlignmentPatternLimit && textLen <= optimalAlignmentTextLimit
+}
+
+// calculateMatchBonusASCII returns bonuses tied to a single ASCII match position.
+func calculateMatchBonusASCII(text string, matchIdx int) int64 {
+	bonus := int64(0)
+	if matchIdx == 0 {
+		bonus += bonusFirstCharMatch
+	}
+	if matchIdx == 0 {
+		return bonus
+	}
+
+	prevChar := text[matchIdx-1]
+	currChar := text[matchIdx]
+	if prevChar >= 'a' && prevChar <= 'z' && currChar >= 'A' && currChar <= 'Z' {
+		bonus += bonusCamelCase
+	}
+	if isDelimiterByte(prevChar) {
+		bonus += bonusBoundary
+	}
+	if !isAlnumByte(prevChar) && isAlnumByte(currChar) {
+		bonus += bonusNonWord
+	}
+
+	return bonus
+}
+
+// calculateMatchBonus returns bonuses tied to a single normalized rune match position.
+func calculateMatchBonus(originalRunes []rune, matchIdx int) int64 {
+	bonus := int64(0)
+	if matchIdx == 0 {
+		bonus += bonusFirstCharMatch
+	}
+	if matchIdx == 0 {
+		return bonus
+	}
+
+	prevChar := originalRunes[matchIdx-1]
+	currChar := originalRunes[matchIdx]
+	if unicode.IsLower(prevChar) && unicode.IsUpper(currChar) {
+		bonus += bonusCamelCase
+	}
+	if isDelimiter(prevChar) {
+		bonus += bonusBoundary
+	}
+	if !unicode.IsLetter(prevChar) && !unicode.IsNumber(prevChar) &&
+		(unicode.IsLetter(currChar) || unicode.IsNumber(currChar)) {
+		bonus += bonusNonWord
+	}
+
+	return bonus
+}
+
+// calculateLeadingGapPenalty caps the front-of-string penalty so early misses do not dominate ranking.
+func calculateLeadingGapPenalty(matchIdx int) int64 {
+	if matchIdx <= 0 {
+		return 0
+	}
+
+	penalty := int64(matchIdx) * scoreGapExtension
+	if penalty < -15 {
+		penalty = -15
+	}
+	return penalty
+}
+
+// calculateGapPenalty returns the penalty between two matched positions.
+func calculateGapPenalty(prevMatchIdx, matchIdx int) int64 {
+	gap := matchIdx - prevMatchIdx - 1
+	if gap <= 0 {
+		return 0
+	}
+
+	return scoreGapStart + int64(gap-1)*scoreGapExtension
+}
+
+// calculateTrailingGapPenalty softens unmatched suffixes so suffix noise is less punishing than leading noise.
+func calculateTrailingGapPenalty(textLen, matchIdx int) int64 {
+	if matchIdx < 0 || matchIdx >= textLen-1 {
+		return 0
+	}
+
+	trailingGap := textLen - matchIdx - 1
+	penalty := int64(trailingGap) * scoreGapExtension / 2
+	if penalty < -10 {
+		penalty = -10
+	}
+	return penalty
+}
+
+// calculateMatchRatioBonus rewards compact matches regardless of the chosen alignment.
+func calculateMatchRatioBonus(patternLen, textLen int) int64 {
+	matchRatio := float64(patternLen) / float64(textLen)
+	if matchRatio > 0.5 {
+		return int64(matchRatio * 10)
+	}
+	return 0
+}
+
+// calculateBestAlignmentScoreASCII finds the highest scoring ASCII alignment for short texts.
+func calculateBestAlignmentScoreASCII(text string, pattern string) (int64, bool) {
+	textLen := len(text)
+	patternLen := len(pattern)
+	if patternLen == 0 || patternLen > textLen || patternLen > optimalAlignmentPatternLimit || textLen > optimalAlignmentTextLimit {
+		return 0, false
+	}
+
+	var scores [optimalAlignmentStateSize]int64
+	var seen [optimalAlignmentStateSize]bool
+
+	for textIdx := 0; textIdx < textLen; textIdx++ {
+		if toLowerByte(text[textIdx]) != toLowerByte(pattern[0]) {
+			continue
+		}
+
+		stateIdx := textIdx
+		scores[stateIdx] = scoreMatch + calculateMatchBonusASCII(text, textIdx) + calculateLeadingGapPenalty(textIdx)
+		seen[stateIdx] = true
+	}
+
+	for patternIdx := 1; patternIdx < patternLen; patternIdx++ {
+		rowFound := false
+		rowBase := patternIdx * textLen
+		prevRowBase := (patternIdx - 1) * textLen
+
+		for textIdx := patternIdx; textIdx < textLen; textIdx++ {
+			if toLowerByte(text[textIdx]) != toLowerByte(pattern[patternIdx]) {
+				continue
+			}
+
+			bestScore := int64(0)
+			foundScore := false
+			matchBonus := scoreMatch + calculateMatchBonusASCII(text, textIdx)
+
+			for prevIdx := patternIdx - 1; prevIdx < textIdx; prevIdx++ {
+				stateIdx := prevRowBase + prevIdx
+				if !seen[stateIdx] {
+					continue
+				}
+
+				score := scores[stateIdx] + matchBonus + calculateGapPenalty(prevIdx, textIdx)
+				if textIdx == prevIdx+1 {
+					score += bonusConsecutive
+				}
+				if !foundScore || score > bestScore {
+					bestScore = score
+					foundScore = true
+				}
+			}
+
+			if foundScore {
+				scores[rowBase+textIdx] = bestScore
+				seen[rowBase+textIdx] = true
+				rowFound = true
+			}
+		}
+
+		if !rowFound {
+			return 0, false
+		}
+	}
+
+	bestScore := int64(0)
+	found := false
+	lastRowBase := (patternLen - 1) * textLen
+	matchRatioBonus := calculateMatchRatioBonus(patternLen, textLen)
+	for textIdx := patternLen - 1; textIdx < textLen; textIdx++ {
+		stateIdx := lastRowBase + textIdx
+		if !seen[stateIdx] {
+			continue
+		}
+
+		score := scores[stateIdx] + calculateTrailingGapPenalty(textLen, textIdx) + matchRatioBonus
+		if !found || score > bestScore {
+			bestScore = score
+			found = true
+		}
+	}
+
+	return bestScore, found
+}
+
+// calculateBestAlignmentScore finds the highest scoring normalized alignment for short texts.
+func calculateBestAlignmentScore(originalRunes []rune, textRunes []rune, patternRunes []rune) (int64, bool) {
+	textLen := len(textRunes)
+	patternLen := len(patternRunes)
+	if patternLen == 0 || patternLen > textLen || patternLen > optimalAlignmentPatternLimit || textLen > optimalAlignmentTextLimit {
+		return 0, false
+	}
+
+	var scores [optimalAlignmentStateSize]int64
+	var seen [optimalAlignmentStateSize]bool
+
+	for textIdx := 0; textIdx < textLen; textIdx++ {
+		if textRunes[textIdx] != patternRunes[0] {
+			continue
+		}
+
+		stateIdx := textIdx
+		scores[stateIdx] = scoreMatch + calculateMatchBonus(originalRunes, textIdx) + calculateLeadingGapPenalty(textIdx)
+		seen[stateIdx] = true
+	}
+
+	for patternIdx := 1; patternIdx < patternLen; patternIdx++ {
+		rowFound := false
+		rowBase := patternIdx * textLen
+		prevRowBase := (patternIdx - 1) * textLen
+
+		for textIdx := patternIdx; textIdx < textLen; textIdx++ {
+			if textRunes[textIdx] != patternRunes[patternIdx] {
+				continue
+			}
+
+			bestScore := int64(0)
+			foundScore := false
+			matchBonus := scoreMatch + calculateMatchBonus(originalRunes, textIdx)
+
+			for prevIdx := patternIdx - 1; prevIdx < textIdx; prevIdx++ {
+				stateIdx := prevRowBase + prevIdx
+				if !seen[stateIdx] {
+					continue
+				}
+
+				score := scores[stateIdx] + matchBonus + calculateGapPenalty(prevIdx, textIdx)
+				if textIdx == prevIdx+1 {
+					score += bonusConsecutive
+				}
+				if !foundScore || score > bestScore {
+					bestScore = score
+					foundScore = true
+				}
+			}
+
+			if foundScore {
+				scores[rowBase+textIdx] = bestScore
+				seen[rowBase+textIdx] = true
+				rowFound = true
+			}
+		}
+
+		if !rowFound {
+			return 0, false
+		}
+	}
+
+	bestScore := int64(0)
+	found := false
+	lastRowBase := (patternLen - 1) * textLen
+	matchRatioBonus := calculateMatchRatioBonus(patternLen, textLen)
+	for textIdx := patternLen - 1; textIdx < textLen; textIdx++ {
+		stateIdx := lastRowBase + textIdx
+		if !seen[stateIdx] {
+			continue
+		}
+
+		score := scores[stateIdx] + calculateTrailingGapPenalty(textLen, textIdx) + matchRatioBonus
+		if !found || score > bestScore {
+			bestScore = score
+			found = true
+		}
+	}
+
+	return bestScore, found
+}
+
+// calculateScoreASCII calculates match score for ASCII fuzzy match.
 func calculateScoreASCII(text string, matchedIndexes []int, patternLen int) int64 {
 	if len(matchedIndexes) == 0 {
 		return 0
@@ -218,73 +525,20 @@ func calculateScoreASCII(text string, matchedIndexes []int, patternLen int) int6
 	prevMatchIdx := -1
 
 	for i, matchIdx := range matchedIndexes {
-		score += scoreMatch
-
-		// First char bonus
-		if matchIdx == 0 {
-			score += bonusFirstCharMatch
-		}
-
-		// Boundary bonus
-		if matchIdx > 0 {
-			prevChar := text[matchIdx-1]
-			currChar := text[matchIdx]
-
-			// CamelCase
-			if prevChar >= 'a' && prevChar <= 'z' && currChar >= 'A' && currChar <= 'Z' {
-				score += bonusCamelCase
-			}
-
-			// After delimiter
-			if isDelimiterByte(prevChar) {
-				score += bonusBoundary
-			}
-
-			// Non-word to word
-			if !isAlnumByte(prevChar) && isAlnumByte(currChar) {
-				score += bonusNonWord
-			}
-		}
-
-		// Consecutive bonus
+		score += scoreMatch + calculateMatchBonusASCII(text, matchIdx)
 		if i > 0 && matchIdx == prevMatchIdx+1 {
 			score += bonusConsecutive
 		}
-
-		// Gap penalty
 		if prevMatchIdx >= 0 {
-			gap := matchIdx - prevMatchIdx - 1
-			if gap > 0 {
-				score += scoreGapStart + int64(gap-1)*scoreGapExtension
-			}
-		} else if matchIdx > 0 {
-			penalty := int64(matchIdx) * scoreGapExtension
-			if penalty < -15 {
-				penalty = -15
-			}
-			score += penalty
+			score += calculateGapPenalty(prevMatchIdx, matchIdx)
+		} else {
+			score += calculateLeadingGapPenalty(matchIdx)
 		}
-
 		prevMatchIdx = matchIdx
 	}
 
-	// Trailing gap penalty
-	textLen := len(text)
-	if prevMatchIdx >= 0 && prevMatchIdx < textLen-1 {
-		trailingGap := textLen - prevMatchIdx - 1
-		penalty := int64(trailingGap) * scoreGapExtension / 2
-		if penalty < -10 {
-			penalty = -10
-		}
-		score += penalty
-	}
-
-	// Match ratio bonus
-	matchRatio := float64(patternLen) / float64(textLen)
-	if matchRatio > 0.5 {
-		score += int64(matchRatio * 10)
-	}
-
+	score += calculateTrailingGapPenalty(len(text), prevMatchIdx)
+	score += calculateMatchRatioBonus(patternLen, len(text))
 	return score
 }
 
@@ -735,6 +989,21 @@ func fuzzyMatchCore(originalRunes []rune, textRunes []rune, patternRunes []rune)
 		return FuzzyMatchResult{IsMatch: false, Score: 0}
 	}
 
+	if shouldUseOptimalAlignment(textLen, patternLen) {
+		score, ok := calculateBestAlignmentScore(originalRunes, textRunes, patternRunes)
+		putIntBuffer(matchedIndexesPtr)
+		if !ok {
+			return FuzzyMatchResult{IsMatch: false, Score: 0}
+		}
+
+		minScore := calculateMinScoreThreshold(patternLen, textLen)
+		if score < minScore {
+			return FuzzyMatchResult{IsMatch: false, Score: 0}
+		}
+
+		return FuzzyMatchResult{IsMatch: true, Score: score}
+	}
+
 	// Phase 2: heuristic optimization (improve match positions)
 	// Try to shift matches to better positions (boundaries) if possible
 	improveMatchPositions(originalRunes, textRunes, patternRunes, matchedIndexes)
@@ -827,79 +1096,21 @@ func calculateScore(originalRunes []rune, textRunes []rune, matchedIndexes []int
 	prevMatchIdx := -1
 
 	for i, matchIdx := range matchedIndexes {
-		// Base score for each match
-		score += scoreMatch
-
-		// Bonus for first character match
-		if matchIdx == 0 {
-			score += bonusFirstCharMatch
-		}
-
-		// Bonus for boundary matches (after delimiter, camelCase, etc.)
-		if matchIdx > 0 {
-			prevChar := originalRunes[matchIdx-1]
-			currChar := originalRunes[matchIdx]
-
-			// CamelCase bonus
-			if unicode.IsLower(prevChar) && unicode.IsUpper(currChar) {
-				score += bonusCamelCase
-			}
-
-			// Boundary bonus (after delimiter)
-			if isDelimiter(prevChar) {
-				score += bonusBoundary
-			}
-
-			// Non-word to word transition
-			if !unicode.IsLetter(prevChar) && !unicode.IsNumber(prevChar) &&
-				(unicode.IsLetter(currChar) || unicode.IsNumber(currChar)) {
-				score += bonusNonWord
-			}
-		}
-
-		// Consecutive match bonus
+		score += scoreMatch + calculateMatchBonus(originalRunes, matchIdx)
 		if i > 0 && matchIdx == prevMatchIdx+1 {
 			score += bonusConsecutive
 		}
-
-		// Gap penalty
 		if prevMatchIdx >= 0 {
-			gap := matchIdx - prevMatchIdx - 1
-			if gap > 0 {
-				score += scoreGapStart + int64(gap-1)*scoreGapExtension
-			}
-		} else if matchIdx > 0 {
-			// Leading gap penalty (characters before first match)
-			leadingGap := matchIdx
-			if leadingGap > 0 {
-				penalty := int64(leadingGap) * scoreGapExtension
-				if penalty < -15 {
-					penalty = -15 // Cap the penalty
-				}
-				score += penalty
-			}
+			score += calculateGapPenalty(prevMatchIdx, matchIdx)
+		} else {
+			score += calculateLeadingGapPenalty(matchIdx)
 		}
 
 		prevMatchIdx = matchIdx
 	}
 
-	// Trailing gap penalty (unmatched characters at the end)
-	textLen := len(textRunes)
-	if prevMatchIdx >= 0 && prevMatchIdx < textLen-1 {
-		trailingGap := textLen - prevMatchIdx - 1
-		penalty := int64(trailingGap) * scoreGapExtension / 2 // Half penalty for trailing
-		if penalty < -10 {
-			penalty = -10
-		}
-		score += penalty
-	}
-
-	// Bonus for matching a higher percentage of the text
-	matchRatio := float64(patternLen) / float64(textLen)
-	if matchRatio > 0.5 {
-		score += int64(matchRatio * 10)
-	}
-
+	score += calculateTrailingGapPenalty(len(textRunes), prevMatchIdx)
+	score += calculateMatchRatioBonus(patternLen, len(textRunes))
 	return score
 }
 

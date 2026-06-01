@@ -105,6 +105,20 @@ class WoxDemoWindow extends StatelessWidget {
   final bool showQueryBox;
   final bool showToolbar;
 
+  // Keep demo windows aligned with the theme editor preview by using a similar
+  // mica-like surface tint over a blurred backdrop when transparency is used.
+  Color _micaSurfaceColor(Color appColor, {required bool forceOpaque}) {
+    if (forceOpaque || appColor.a >= 0.96) {
+      return appColor.withValues(alpha: 1);
+    }
+
+    final isDarkSurface = appColor.computeLuminance() < 0.5;
+    final tint = isDarkSurface ? const Color(0xFF202020) : const Color(0xFFF2F2F2);
+    final mixed = Color.lerp(appColor.withValues(alpha: 1), tint, 0.18) ?? appColor;
+    final alpha = (0.64 + appColor.a * 0.18).clamp(0.64, 0.86).toDouble();
+    return mixed.withValues(alpha: alpha);
+  }
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -147,29 +161,29 @@ class WoxDemoWindow extends StatelessWidget {
                 // switch without needing an extra widget layer.
                 final demoTheme = _InheritedDemoTheme.of(innerCtx);
                 final effectiveAccent = demoTheme?.accent ?? accent;
-                final effectiveBg =
-                    demoTheme != null
-                        ? demoTheme.background
-                        : (opaqueBackground ? getThemeBackgroundColor().withValues(alpha: 1) : getThemeBackgroundColor().withValues(alpha: 0.86));
+                final baseBg = demoTheme?.background ?? getThemeBackgroundColor();
+                final effectiveBg = _micaSurfaceColor(baseBg, forceOpaque: opaqueBackground);
                 final effectiveBorderColor = (demoTheme?.textColor ?? getThemeTextColor()).withValues(alpha: 0.10);
-                return Container(
-                  decoration: BoxDecoration(
-                    // Feature refinement: the main-hotkey desktop scene needs an
-                    // opaque launcher surface so the simulated desktop does not
-                    // wash through Wox. Other onboarding previews keep their
-                    // existing translucent treatment unless they opt in.
-                    color: effectiveBg,
-                    border: Border.all(color: effectiveBorderColor),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
+                return ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: BackdropFilter(
+                    filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
                     child: Stack(
                       children: [
                         Positioned.fill(
                           child: DecoratedBox(
+                            decoration: BoxDecoration(color: effectiveBg, border: Border.all(color: effectiveBorderColor), borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                        Positioned.fill(
+                          child: DecoratedBox(
                             decoration: BoxDecoration(
-                              gradient: RadialGradient(center: const Alignment(0.6, -0.5), radius: 1.05, colors: [effectiveAccent.withValues(alpha: 0.12), Colors.transparent]),
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [Colors.black.withValues(alpha: 0.02), effectiveAccent.withValues(alpha: 0.024), Colors.black.withValues(alpha: 0.14)],
+                                stops: const [0.0, 0.38, 1.0],
+                              ),
                             ),
                           ),
                         ),

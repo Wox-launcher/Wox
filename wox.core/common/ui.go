@@ -81,6 +81,7 @@ type UI interface {
 	UninstallTheme(ctx context.Context, theme Theme)
 	RestoreTheme(ctx context.Context)
 	Notify(ctx context.Context, msg NotifyMsg)
+	UpdateAttentionUnreadCount(ctx context.Context, unreadCount int)
 	ShowToolbarMsg(ctx context.Context, msg interface{})
 	ClearToolbarMsg(ctx context.Context, toolbarMsgId string)
 	UpdateDiagnosticStatus(ctx context.Context, enabled bool)
@@ -113,8 +114,12 @@ type UI interface {
 }
 
 type ActiveWindowSnapshot struct {
-	Name             string   // active window name before wox is activated
-	Pid              int      // active window pid before wox is activated
+	Name string // active window name before wox is activated
+	Pid  int    // active window pid before wox is activated
+	// WindowId identifies the exact top-level window captured before Wox is activated.
+	// Pid is process-scoped, so it cannot distinguish multiple windows owned by the same app.
+	// Windows stores the top-level HWND as a decimal string; macOS stores the CGWindowID from the focused AX window.
+	WindowId         string
 	Icon             WoxImage // active window icon before wox is activated
 	IsOpenSaveDialog bool     // is active window open/save dialog before wox is activated
 }

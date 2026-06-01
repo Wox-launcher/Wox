@@ -247,6 +247,59 @@ func TestIsStringMatchScore(t *testing.T) {
 	}
 }
 
+// bestASCIIAlignmentScoreExhaustive finds the highest valid ASCII alignment score for a small test case.
+func bestASCIIAlignmentScoreExhaustive(text string, pattern string) int64 {
+	if len(pattern) == 0 || len(pattern) > len(text) {
+		return 0
+	}
+
+	matchedIndexes := make([]int, len(pattern))
+	bestScore := int64(0)
+	found := false
+
+	var search func(textStart int, patternIdx int)
+	search = func(textStart int, patternIdx int) {
+		if patternIdx == len(pattern) {
+			score := calculateScoreASCII(text, matchedIndexes, len(pattern))
+			if !found || score > bestScore {
+				bestScore = score
+				found = true
+			}
+			return
+		}
+
+		remaining := len(pattern) - patternIdx
+		maxStart := len(text) - remaining
+		for textIdx := textStart; textIdx <= maxStart; textIdx++ {
+			if toLowerByte(text[textIdx]) != toLowerByte(pattern[patternIdx]) {
+				continue
+			}
+
+			matchedIndexes[patternIdx] = textIdx
+			search(textIdx+1, patternIdx+1)
+		}
+	}
+
+	search(0, 0)
+	return bestScore
+}
+
+func TestFuzzyMatchASCIIPathUsesBestAlignmentScoreOnShortText(t *testing.T) {
+	result := FuzzyMatch("a_b_abc", "abc", false)
+	assert.True(t, result.IsMatch)
+
+	bestScore := bestASCIIAlignmentScoreExhaustive("a_b_abc", "abc")
+	assert.Equal(t, bestScore, result.Score, "ASCII fast path should keep the best scoring alignment for short texts")
+}
+
+func TestFuzzyMatchASCIIPathPreservesSubstringFallbackParity(t *testing.T) {
+	asciiResult := FuzzyMatch("zzabzz", "ab", false)
+	unicodeResult := FuzzyMatch("zzábzz", "ab", false)
+
+	assert.True(t, unicodeResult.IsMatch, "normalized path should keep substring fallback coverage for short contained patterns")
+	assert.Equal(t, unicodeResult, asciiResult, "ASCII fast path should stay in sync with the normalized path and Dart matcher for short contained substrings")
+}
+
 // cpu: Apple M1 Max
 // BenchmarkIsStringMatchScore-10    	 1959001	       618.8 ns/op	       0 B/op	       0 allocs/op
 func BenchmarkIsStringMatchScore(b *testing.B) {

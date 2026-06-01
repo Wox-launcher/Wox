@@ -1026,7 +1026,7 @@ func (m *Manager) buildMetadataBackedQueryLayout(ctx context.Context, pluginInst
 		logger.Error(ctx, fmt.Sprintf("failed to parse icon: %s", parseErr.Error()))
 	}
 
-	defaultWidthRatio := 0.5
+	defaultWidthRatio := 0.4
 	layout.ResultPreviewWidthRatio = &defaultWidthRatio
 
 	featureParams, isResultPreviewWidthRatioEnabled, err := pluginInstance.Metadata.GetFeatureParamsForResultPreviewWidthRatioCommand(query.Command)
@@ -1134,6 +1134,9 @@ func (m *Manager) buildPluginQueryEnv(ctx context.Context, pluginInstance *Insta
 	}
 	if queryEnvParams.RequireActiveWindowPid {
 		query.Env.ActiveWindowPid = currentEnv.ActiveWindowPid
+	}
+	if queryEnvParams.RequireActiveWindowId {
+		query.Env.ActiveWindowId = currentEnv.ActiveWindowId
 	}
 	if queryEnvParams.RequireActiveWindowIcon {
 		query.Env.ActiveWindowIcon = currentEnv.ActiveWindowIcon
@@ -1943,6 +1946,32 @@ func (m *Manager) buildResultUI(resultCache *QueryResultCache, queryId string) Q
 	return resultUI
 }
 
+func normalizeQueryResultDragData(dragData *QueryResultDragData) *QueryResultDragData {
+	if dragData == nil || dragData.Type != QueryResultDragDataTypeFiles {
+		return nil
+	}
+
+	files := make([]string, 0, len(dragData.Files))
+	for _, rawPath := range dragData.Files {
+		cleanPath := filepath.Clean(strings.TrimSpace(rawPath))
+		if cleanPath == "." || !filepath.IsAbs(cleanPath) {
+			continue
+		}
+		if _, err := os.Stat(cleanPath); err != nil {
+			continue
+		}
+		files = append(files, cleanPath)
+	}
+	if len(files) == 0 {
+		return nil
+	}
+
+	return &QueryResultDragData{
+		Type:  QueryResultDragDataTypeFiles,
+		Files: files,
+	}
+}
+
 // Equal scores must still produce a deterministic order because the result cache is backed by a map.
 func compareQueryResultCachesForDisplay(a *QueryResultCache, b *QueryResultCache) int {
 	switch {
@@ -2094,6 +2123,7 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	// hard-coded list size made grid icons blurry because the UI had to scale 40px
 	// raster caches into much larger cells.
 	result.Icon = m.convertResultIcon(ctx, pluginInstance, query, layout, result.Id, result.Icon)
+	result.DragData = normalizeQueryResultDragData(result.DragData)
 	for i := range result.Tails {
 		if result.Tails[i].Type == QueryResultTailTypeImage {
 			result.Tails[i].Image = common.ConvertIcon(ctx, result.Tails[i].Image, pluginInstance.PluginDirectory)
@@ -2457,6 +2487,14 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 		resultCache.Result.Preview = preview
 	}
 
+	// Update drag data in cache if present. An empty or invalid payload clears the
+	// current drag surface instead of leaving stale file paths on a live result.
+	if result.DragData != nil {
+		dragData := normalizeQueryResultDragData(result.DragData)
+		result.DragData = dragData
+		resultCache.Result.DragData = dragData
+	}
+
 	// Update icon in cache if present
 	if result.Icon != nil {
 		// Updated result icons must keep the same surface-aware size as initial results;
@@ -2533,6 +2571,12 @@ func (m *Manager) GetUpdatableResult(ctx context.Context, resultId string) *Upda
 	subTitle := resultCache.Result.SubTitle
 	icon := resultCache.Result.Icon
 	preview := resultCache.Result.Preview
+	var dragData *QueryResultDragData
+	if resultCache.Result.DragData != nil {
+		dragDataCopy := *resultCache.Result.DragData
+		dragDataCopy.Files = append([]string(nil), resultCache.Result.DragData.Files...)
+		dragData = &dragDataCopy
+	}
 
 	// Make a copy of tails to avoid modifying cache when developer appends to it
 	// Filter out system tails (they will be added back in polish)
@@ -2560,6 +2604,7 @@ func (m *Manager) GetUpdatableResult(ctx context.Context, resultId string) *Upda
 		Preview:  &preview,
 		Tails:    &tails,
 		Actions:  &actions,
+		DragData: dragData,
 	}
 }
 
@@ -2958,6 +3003,7 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 		activeWindowSnapshot := m.GetUI().GetActiveWindowSnapshot(ctx)
 		query.Env.ActiveWindowTitle = activeWindowSnapshot.Name
 		query.Env.ActiveWindowPid = activeWindowSnapshot.Pid
+		query.Env.ActiveWindowId = activeWindowSnapshot.WindowId
 		query.Env.ActiveWindowIcon = activeWindowSnapshot.Icon
 		query.Env.ActiveWindowIsOpenSaveDialog = activeWindowSnapshot.IsOpenSaveDialog
 		query.Env.ActiveBrowserUrl = m.getActiveBrowserUrl(ctx)
@@ -2985,6 +3031,7 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 		activeWindowSnapshot := m.GetUI().GetActiveWindowSnapshot(ctx)
 		query.Env.ActiveWindowTitle = activeWindowSnapshot.Name
 		query.Env.ActiveWindowPid = activeWindowSnapshot.Pid
+		query.Env.ActiveWindowId = activeWindowSnapshot.WindowId
 		query.Env.ActiveWindowIcon = activeWindowSnapshot.Icon
 		query.Env.ActiveWindowIsOpenSaveDialog = activeWindowSnapshot.IsOpenSaveDialog
 		query.Env.ActiveBrowserUrl = m.getActiveBrowserUrl(ctx)

@@ -19,30 +19,18 @@ That means `webview x` opens X in Wox, and `webview ig` opens Instagram in Wox.
 
 ![Wox WebView opened by a query hotkey](/images/did-you-know-wox-webview-hotkey.png)
 
-The part that makes this feel fast is Query Hotkeys. Instead of opening Wox and typing `webview x` every time, bind a hotkey directly to that query:
+The part that makes this feel fast is Query Hotkeys. Instead of opening Wox and typing `webview x` every time, create a Query Hotkey, choose the **Preview Query** preset, and bind it directly to that query:
 
 | Query Hotkey field | Example value |
 | --- | --- |
+| Preset | `Preview Query` |
 | Hotkey | Any available shortcut, such as `ctrl+shift+x` |
 | Query | `webview x` |
-| Position | A fixed position such as `top_right` |
-| Hide Query Box | Enabled |
-| Hide Toolbar | Enabled |
-| Width | A compact width, such as `420` |
-| Max Result Count | `5` is enough |
+| Optional tweaks | Change position, width, or result count if you want a different panel shape |
 
-With the query box and toolbar hidden, the result preview becomes the focus. A quick hotkey opens the site as a compact, launcher-sized web panel instead of sending you to a full browser window.
+The Preview Query preset already hides the query box and toolbar and starts with preview-friendly defaults, so in many cases you only need to fill in the hotkey and query. A quick hotkey opens the site as a compact, launcher-sized web panel instead of sending you to a full browser window.
 
-Use the same pattern for Instagram:
-
-| Query Hotkey field | Example value |
-| --- | --- |
-| Hotkey | Any available shortcut, such as `ctrl+shift+i` |
-| Query | `webview ig` |
-| Position | A fixed position such as `top_right` |
-| Hide Query Box | Enabled |
-| Hide Toolbar | Enabled |
-| Width | A compact width, such as `420` |
+Use the same pattern for Instagram: create another Query Hotkey with the **Preview Query** preset, then set the query to `webview ig`.
 
 You can also edit the WebView plugin settings to add your own site keyword and URL. After that, bind another Query Hotkey to `webview <keyword>`.
 

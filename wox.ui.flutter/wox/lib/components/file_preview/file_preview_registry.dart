@@ -1,10 +1,15 @@
+import 'package:wox/components/file_preview/audio_file_preview_renderer.dart';
+import 'package:wox/components/file_preview/calendar_contact_file_preview_renderer.dart';
 import 'package:wox/components/file_preview/code_file_preview_renderer.dart';
+import 'package:wox/components/file_preview/delimited_file_preview_renderer.dart';
 import 'package:wox/components/file_preview/executable_file_preview_renderer.dart';
 import 'package:wox/components/file_preview/file_preview_renderer.dart';
+import 'package:wox/components/file_preview/font_file_preview_renderer.dart';
 import 'package:wox/components/file_preview/image_file_preview_renderer.dart';
 import 'package:wox/components/file_preview/markdown_file_preview_renderer.dart';
 import 'package:wox/components/file_preview/office_file_preview_renderer.dart';
 import 'package:wox/components/file_preview/pdf_file_preview_renderer.dart';
+import 'package:wox/components/file_preview/rdp_file_preview_renderer.dart';
 import 'package:wox/components/file_preview/shortcut_file_preview_renderer.dart';
 import 'package:wox/components/file_preview/video_file_preview_renderer.dart';
 import 'package:wox/components/file_preview/zip_file_preview_renderer.dart';
@@ -33,10 +38,15 @@ final defaultWoxFilePreviewRegistry = WoxFilePreviewRegistry(
     MarkdownFilePreviewRenderer(),
     ImageFilePreviewRenderer(),
     VideoFilePreviewRenderer(),
+    AudioFilePreviewRenderer(),
     OfficeFilePreviewRenderer(),
     ExecutableFilePreviewRenderer(),
     ShortcutFilePreviewRenderer(),
+    RdpFilePreviewRenderer(),
     ZipFilePreviewRenderer(),
+    FontFilePreviewRenderer(),
+    CalendarContactFilePreviewRenderer(),
+    DelimitedFilePreviewRenderer(),
     CodeFilePreviewRenderer(),
   ],
 );

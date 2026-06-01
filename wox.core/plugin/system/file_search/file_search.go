@@ -358,6 +358,10 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 			SubTitle: item.Path,
 			Icon:     icon,
 			Actions:  actions,
+			DragData: &plugin.QueryResultDragData{
+				Type:  plugin.QueryResultDragDataTypeFiles,
+				Files: []string{item.Path},
+			},
 		})
 	}
 	diagnostics.buildElapsedMs = util.GetSystemTimestamp() - buildStartedAt

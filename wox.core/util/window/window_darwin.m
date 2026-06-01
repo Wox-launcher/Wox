@@ -1,8 +1,34 @@
 #include <ApplicationServices/ApplicationServices.h>
 #include <Cocoa/Cocoa.h>
 #include <ScriptingBridge/ScriptingBridge.h>
+#include <math.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
+
+typedef struct {
+    int x;
+    int y;
+    int width;
+    int height;
+} WoxWindowRectC;
+
+typedef struct {
+    char id[64];
+    WoxWindowRectC bounds;
+    WoxWindowRectC workArea;
+    int isPrimary;
+} WoxDisplayInfoC;
+
+typedef struct {
+    char id[64];
+    int pid;
+    WoxWindowRectC bounds;
+    WoxDisplayInfoC display;
+    int isMinimized;
+} WoxManagedWindowC;
+
+extern AXError _AXUIElementGetWindow(AXUIElementRef element, CGWindowID *identifier);
 
 static char* copyPathFromAXValue(CFTypeRef value);
 char* getFinderWindowPathByPid(int pid);
@@ -135,6 +161,368 @@ int getActiveWindowPid() {
         }
 
         return [activeApp processIdentifier];
+    }
+}
+
+static void copyCString(char *dest, size_t destSize, const char *value) {
+    if (destSize == 0) {
+        return;
+    }
+    if (!value) {
+        dest[0] = '\0';
+        return;
+    }
+    strncpy(dest, value, destSize - 1);
+    dest[destSize - 1] = '\0';
+}
+
+static CGFloat desktopTopForScreens(NSArray<NSScreen *> *screens) {
+    CGFloat desktopTop = 0;
+    for (NSScreen *screen in screens) {
+        desktopTop = MAX(desktopTop, NSMaxY([screen frame]));
+    }
+    return desktopTop;
+}
+
+static WoxWindowRectC rectFromAppKitRect(NSRect rect, CGFloat desktopTop) {
+    WoxWindowRectC result;
+    result.x = (int)llround(rect.origin.x);
+    result.y = (int)llround(desktopTop - NSMaxY(rect));
+    result.width = (int)llround(rect.size.width);
+    result.height = (int)llround(rect.size.height);
+    return result;
+}
+
+static WoxWindowRectC rectFromCGPointAndCGSize(CGPoint point, CGSize size) {
+    WoxWindowRectC result;
+    result.x = (int)llround(point.x);
+    result.y = (int)llround(point.y);
+    result.width = (int)llround(size.width);
+    result.height = (int)llround(size.height);
+    return result;
+}
+
+static BOOL pointInRect(CGPoint point, WoxWindowRectC rect) {
+    return point.x >= rect.x && point.x < rect.x + rect.width && point.y >= rect.y && point.y < rect.y + rect.height;
+}
+
+static void fillDisplayInfoFromScreen(NSScreen *screen, BOOL isPrimary, CGFloat desktopTop, WoxDisplayInfoC *outDisplay) {
+    NSNumber *screenNumber = [[screen deviceDescription] objectForKey:@"NSScreenNumber"];
+    NSString *screenId = [screenNumber stringValue];
+    copyCString(outDisplay->id, sizeof(outDisplay->id), [screenId UTF8String]);
+    outDisplay->bounds = rectFromAppKitRect([screen frame], desktopTop);
+    outDisplay->workArea = rectFromAppKitRect([screen visibleFrame], desktopTop);
+    outDisplay->isPrimary = isPrimary ? 1 : 0;
+}
+
+static BOOL fillDisplayInfoForRect(WoxWindowRectC windowRect, WoxDisplayInfoC *outDisplay) {
+    NSArray<NSScreen *> *screens = [NSScreen screens];
+    if ([screens count] == 0) {
+        return NO;
+    }
+
+    CGFloat desktopTop = desktopTopForScreens(screens);
+    CGPoint center = CGPointMake(windowRect.x + windowRect.width / 2.0, windowRect.y + windowRect.height / 2.0);
+    NSScreen *primary = [NSScreen mainScreen];
+
+    NSScreen *fallback = [screens objectAtIndex:0];
+    for (NSScreen *screen in screens) {
+        WoxWindowRectC bounds = rectFromAppKitRect([screen frame], desktopTop);
+        if (pointInRect(center, bounds)) {
+            fillDisplayInfoFromScreen(screen, screen == primary, desktopTop, outDisplay);
+            return YES;
+        }
+    }
+
+    fillDisplayInfoFromScreen(fallback, fallback == primary, desktopTop, outDisplay);
+    return YES;
+}
+
+static CGWindowID parseWindowId(const char *windowId) {
+    if (!windowId || strlen(windowId) == 0) {
+        return 0;
+    }
+    return (CGWindowID)strtoul(windowId, NULL, 10);
+}
+
+static BOOL getAXWindowId(AXUIElementRef window, CGWindowID *outWindowId) {
+    if (!window || !outWindowId) {
+        return NO;
+    }
+    return _AXUIElementGetWindow(window, outWindowId) == kAXErrorSuccess && *outWindowId != 0;
+}
+
+static AXUIElementRef copyWindowForId(pid_t pid, CGWindowID targetWindowId) {
+    if (pid <= 0) {
+        return NULL;
+    }
+
+    AXUIElementRef app = AXUIElementCreateApplication(pid);
+    if (!app) {
+        return NULL;
+    }
+
+    AXUIElementRef matchedWindow = NULL;
+    CFTypeRef windowsValue = NULL;
+    CFIndex windowCount = 0;
+    if (AXUIElementCopyAttributeValue(app, kAXWindowsAttribute, &windowsValue) == kAXErrorSuccess && windowsValue && CFGetTypeID(windowsValue) == CFArrayGetTypeID()) {
+        CFArrayRef windows = (CFArrayRef)windowsValue;
+        windowCount = CFArrayGetCount(windows);
+        if (targetWindowId != 0) {
+            for (CFIndex i = 0; i < windowCount; i++) {
+                AXUIElementRef candidate = (AXUIElementRef)CFArrayGetValueAtIndex(windows, i);
+                CGWindowID candidateId = 0;
+                if (getAXWindowId(candidate, &candidateId) && candidateId == targetWindowId) {
+                    matchedWindow = (AXUIElementRef)CFRetain(candidate);
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!matchedWindow && targetWindowId == 0) {
+        CFTypeRef focusedValue = NULL;
+        if (AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute, &focusedValue) == kAXErrorSuccess && focusedValue) {
+            matchedWindow = (AXUIElementRef)focusedValue;
+        } else if (windowsValue && windowCount > 0) {
+            AXUIElementRef firstWindow = (AXUIElementRef)CFArrayGetValueAtIndex((CFArrayRef)windowsValue, 0);
+            matchedWindow = (AXUIElementRef)CFRetain(firstWindow);
+        }
+    }
+    if (windowsValue) {
+        CFRelease(windowsValue);
+    }
+
+    CFRelease(app);
+    return matchedWindow;
+}
+
+static BOOL getAXWindowRect(AXUIElementRef window, WoxWindowRectC *outRect) {
+    if (!window || !outRect) {
+        return NO;
+    }
+
+    CFTypeRef positionValue = NULL;
+    CFTypeRef sizeValue = NULL;
+    CGPoint position = CGPointZero;
+    CGSize size = CGSizeZero;
+
+    if (AXUIElementCopyAttributeValue(window, kAXPositionAttribute, &positionValue) != kAXErrorSuccess || !positionValue) {
+        return NO;
+    }
+    if (AXUIElementCopyAttributeValue(window, kAXSizeAttribute, &sizeValue) != kAXErrorSuccess || !sizeValue) {
+        CFRelease(positionValue);
+        return NO;
+    }
+
+    BOOL ok = AXValueGetValue((AXValueRef)positionValue, kAXValueCGPointType, &position) && AXValueGetValue((AXValueRef)sizeValue, kAXValueCGSizeType, &size);
+    CFRelease(positionValue);
+    CFRelease(sizeValue);
+
+    if (!ok) {
+        return NO;
+    }
+
+    *outRect = rectFromCGPointAndCGSize(position, size);
+    return YES;
+}
+
+char *getActiveWindowIdForManagement() {
+    @autoreleasepool {
+        AXUIElementRef systemWide = AXUIElementCreateSystemWide();
+        if (!systemWide) {
+            return strdup("");
+        }
+
+        AXUIElementRef focusedWindow = NULL;
+        if (AXUIElementCopyAttributeValue(systemWide, kAXFocusedWindowAttribute, (CFTypeRef *)&focusedWindow) != kAXErrorSuccess || !focusedWindow) {
+            CFRelease(systemWide);
+            return strdup("");
+        }
+
+        CGWindowID windowId = 0;
+        BOOL ok = getAXWindowId(focusedWindow, &windowId);
+        CFRelease(focusedWindow);
+        CFRelease(systemWide);
+        if (!ok) {
+            return strdup("");
+        }
+
+        NSString *windowIdString = [NSString stringWithFormat:@"%u", windowId];
+        return strdup([windowIdString UTF8String]);
+    }
+}
+
+int getManagedWindowForManagement(const char *windowId, int pid, WoxManagedWindowC *outWindow) {
+    @autoreleasepool {
+        if (!AXIsProcessTrusted()) {
+            return -2;
+        }
+        if (!outWindow) {
+            return -1;
+        }
+
+        CGWindowID targetWindowId = parseWindowId(windowId);
+        AXUIElementRef window = copyWindowForId((pid_t)pid, targetWindowId);
+        if (!window) {
+            return 0;
+        }
+
+        WoxWindowRectC rect;
+        if (!getAXWindowRect(window, &rect)) {
+            CFRelease(window);
+            return -1;
+        }
+
+        CGWindowID actualWindowId = targetWindowId;
+        if (actualWindowId == 0) {
+            getAXWindowId(window, &actualWindowId);
+        }
+
+        memset(outWindow, 0, sizeof(WoxManagedWindowC));
+        NSString *windowIdString = [NSString stringWithFormat:@"%u", actualWindowId];
+        copyCString(outWindow->id, sizeof(outWindow->id), [windowIdString UTF8String]);
+        outWindow->pid = pid;
+        outWindow->bounds = rect;
+        outWindow->isMinimized = 0;
+        if (!fillDisplayInfoForRect(rect, &outWindow->display)) {
+            CFRelease(window);
+            return -3;
+        }
+
+        CFRelease(window);
+        return 1;
+    }
+}
+
+int listDisplaysForManagement(WoxDisplayInfoC **outDisplays, int *outCount) {
+    @autoreleasepool {
+        if (!outDisplays || !outCount) {
+            return -1;
+        }
+
+        NSArray<NSScreen *> *screens = [NSScreen screens];
+        NSUInteger count = [screens count];
+        if (count == 0) {
+            return -3;
+        }
+
+        WoxDisplayInfoC *displays = (WoxDisplayInfoC *)calloc(count, sizeof(WoxDisplayInfoC));
+        if (!displays) {
+            return -1;
+        }
+
+        CGFloat desktopTop = desktopTopForScreens(screens);
+        NSScreen *primary = [NSScreen mainScreen];
+        for (NSUInteger i = 0; i < count; i++) {
+            NSScreen *screen = [screens objectAtIndex:i];
+            fillDisplayInfoFromScreen(screen, screen == primary, desktopTop, &displays[i]);
+        }
+
+        *outDisplays = displays;
+        *outCount = (int)count;
+        return 1;
+    }
+}
+
+void freeDisplaysForManagement(WoxDisplayInfoC *displays) {
+    if (displays) {
+        free(displays);
+    }
+}
+
+int moveResizeWindowForManagement(const char *windowId, int pid, int x, int y, int width, int height) {
+    @autoreleasepool {
+        if (!AXIsProcessTrusted()) {
+            return -2;
+        }
+
+        AXUIElementRef window = copyWindowForId((pid_t)pid, parseWindowId(windowId));
+        if (!window) {
+            return 0;
+        }
+
+        CGPoint position = CGPointMake(x, y);
+        CGSize size = CGSizeMake(MAX(1, width), MAX(1, height));
+        AXValueRef positionValue = AXValueCreate(kAXValueCGPointType, &position);
+        AXValueRef sizeValue = AXValueCreate(kAXValueCGSizeType, &size);
+        if (!positionValue || !sizeValue) {
+            if (positionValue) {
+                CFRelease(positionValue);
+            }
+            if (sizeValue) {
+                CFRelease(sizeValue);
+            }
+            CFRelease(window);
+            return -1;
+        }
+
+        AXUIElementSetAttributeValue(window, kAXMinimizedAttribute, kCFBooleanFalse);
+
+        AXError positionErr = AXUIElementSetAttributeValue(window, kAXPositionAttribute, positionValue);
+        AXError sizeErr = AXUIElementSetAttributeValue(window, kAXSizeAttribute, sizeValue);
+        CFRelease(positionValue);
+        CFRelease(sizeValue);
+        CFRelease(window);
+
+        if (positionErr != kAXErrorSuccess || sizeErr != kAXErrorSuccess) {
+            return -1;
+        }
+        return 1;
+    }
+}
+
+// maximizeWindowForManagement uses the native zoom button so macOS tracks the window as zoomed.
+int maximizeWindowForManagement(const char *windowId, int pid) {
+    @autoreleasepool {
+        if (!AXIsProcessTrusted()) {
+            return -2;
+        }
+
+        AXUIElementRef window = copyWindowForId((pid_t)pid, parseWindowId(windowId));
+        if (!window) {
+            return 0;
+        }
+
+        NSRunningApplication *application = [NSRunningApplication runningApplicationWithProcessIdentifier:(pid_t)pid];
+        activateRunningApplication(application);
+        AXUIElementSetAttributeValue(window, kAXMinimizedAttribute, kCFBooleanFalse);
+
+        CFTypeRef zoomButtonValue = NULL;
+        AXError zoomButtonErr = AXUIElementCopyAttributeValue(window, kAXZoomButtonAttribute, &zoomButtonValue);
+        if (zoomButtonErr != kAXErrorSuccess || !zoomButtonValue) {
+            if (zoomButtonValue) {
+                CFRelease(zoomButtonValue);
+            }
+            CFRelease(window);
+            return -4;
+        }
+
+        AXError pressErr = AXUIElementPerformAction((AXUIElementRef)zoomButtonValue, kAXPressAction);
+        CFRelease(zoomButtonValue);
+        CFRelease(window);
+
+        if (pressErr != kAXErrorSuccess) {
+            return -4;
+        }
+        return 1;
+    }
+}
+
+int minimizeWindowForManagement(const char *windowId, int pid) {
+    @autoreleasepool {
+        if (!AXIsProcessTrusted()) {
+            return -2;
+        }
+
+        AXUIElementRef window = copyWindowForId((pid_t)pid, parseWindowId(windowId));
+        if (!window) {
+            return 0;
+        }
+
+        AXError err = AXUIElementSetAttributeValue(window, kAXMinimizedAttribute, kCFBooleanTrue);
+        CFRelease(window);
+        return err == kAXErrorSuccess ? 1 : -1;
     }
 }
 

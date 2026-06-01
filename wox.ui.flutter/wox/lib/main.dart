@@ -114,9 +114,8 @@ Future<void> initialServices(List<String> arguments) async {
   var woxAIChatController = WoxAIChatController();
   Get.put(woxAIChatController);
 
-  //load lang
   var langCode = WoxSettingUtil.instance.currentSetting.langCode;
-  unawaited(woxSettingController.loadLang(langCode));
+  await woxSettingController.loadLang(langCode);
 }
 
 Future<void> initDeepLink() async {

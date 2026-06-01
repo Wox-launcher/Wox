@@ -20,6 +20,7 @@
 #include <objidl.h>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "result_drag_bridge.h"
 #include "utils.h"
 #include "wox_preview_handler_plugin.h"
 #include "wox_webview/wox_webview_plugin.h"
@@ -4161,6 +4162,7 @@ bool FlutterWindow::OnCreate()
   RegisterPlugins(flutter_controller_->engine());
   RegisterWoxWebviewPlugin(flutter_controller_->engine()->GetRegistrarForPlugin("WoxWebviewPlugin"));
   RegisterWoxPreviewHandlerPlugin(flutter_controller_->engine()->GetRegistrarForPlugin("WoxPreviewHandlerPlugin"));
+  RegisterResultDragBridge(flutter_controller_->engine()->messenger(), GetHandle());
 
   // Set up window manager method channel
   window_manager_channel_ = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(

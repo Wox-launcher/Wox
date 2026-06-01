@@ -65,9 +65,10 @@ func (a *aiCommandTestAPI) Notify(ctx context.Context, description string) {
 	default:
 	}
 }
-func (a *aiCommandTestAPI) Log(ctx context.Context, level plugin.LogLevel, msg string) {}
-func (a *aiCommandTestAPI) GetTranslation(ctx context.Context, key string) string      { return key }
-func (a *aiCommandTestAPI) GetSetting(ctx context.Context, key string) string          { return a.settings[key] }
+func (a *aiCommandTestAPI) PushAttention(ctx context.Context, request plugin.PushAttentionRequest) {}
+func (a *aiCommandTestAPI) Log(ctx context.Context, level plugin.LogLevel, msg string)             {}
+func (a *aiCommandTestAPI) GetTranslation(ctx context.Context, key string) string                  { return key }
+func (a *aiCommandTestAPI) GetSetting(ctx context.Context, key string) string                      { return a.settings[key] }
 func (a *aiCommandTestAPI) SaveSetting(ctx context.Context, key string, value string, isPlatformSpecific bool) {
 	a.settings[key] = value
 }

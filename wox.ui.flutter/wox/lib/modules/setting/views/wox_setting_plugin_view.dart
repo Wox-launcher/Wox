@@ -1207,6 +1207,15 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
               if (e == "requireActiveWindowPid") {
                 return privacyItem(Icons.window, controller.tr('ui_plugin_privacy_window_pid'), controller.tr('ui_plugin_privacy_window_pid_desc'));
               }
+              if (e == "requireActiveWindowId") {
+                return privacyItem(Icons.window, controller.tr('ui_plugin_privacy_window_id'), controller.tr('ui_plugin_privacy_window_id_desc'));
+              }
+              if (e == "requireActiveWindowIcon") {
+                return privacyItem(Icons.window, controller.tr('ui_plugin_privacy_window_icon'), controller.tr('ui_plugin_privacy_window_icon_desc'));
+              }
+              if (e == "requireActiveWindowIsOpenSaveDialog") {
+                return privacyItem(Icons.folder_open, controller.tr('ui_plugin_privacy_open_save_dialog'), controller.tr('ui_plugin_privacy_open_save_dialog_desc'));
+              }
               if (e == "requireActiveBrowserUrl") {
                 return privacyItem(Icons.web_sharp, controller.tr('ui_plugin_privacy_browser_url'), controller.tr('ui_plugin_privacy_browser_url_desc'));
               }

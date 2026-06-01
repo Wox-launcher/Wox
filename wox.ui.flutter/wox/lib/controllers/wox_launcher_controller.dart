@@ -53,6 +53,7 @@ import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/env.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/picker.dart';
+import 'package:wox/utils/result_drag_platform_bridge.dart';
 import 'package:wox/utils/wox_hotkey_recording_bus.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
 import 'package:wox/utils/wox_setting_util.dart';
@@ -65,7 +66,7 @@ import 'package:wox/utils/window_flicker_detector.dart';
 import 'package:wox/utils/color_util.dart';
 
 class WoxLauncherController extends GetxController {
-  static const int _slowLauncherActivationWarningThresholdMs = 20;
+  static const int _slowLauncherActivationWarningThresholdMs = 50;
   static const String localActionTogglePreviewFullscreenId = "__local_toggle_preview_fullscreen__";
   static const String localActionPreviewSearchId = "__local_preview_search__";
   static const String localActionOpenUpdateId = "__local_open_update__";
@@ -149,12 +150,13 @@ class WoxLauncherController extends GetxController {
   final isPreviewFullscreen = false.obs;
   final Map<String, StreamController<Map<String, dynamic>>> terminalChunkControllers = {};
   final Map<String, StreamController<Map<String, dynamic>>> terminalStateControllers = {};
-  double lastResultPreviewRatioBeforePreviewFullscreen = 0.5;
-  double preferredResultPreviewRatio = 0.5;
+  static const double defaultResultPreviewRatio = 0.4;
+  double lastResultPreviewRatioBeforePreviewFullscreen = defaultResultPreviewRatio;
+  double preferredResultPreviewRatio = defaultResultPreviewRatio;
 
   /// The ratio of result panel width to total width, value range: 0.0-1.0
   /// e.g., 0.3 means result panel takes 30% width, preview panel takes 70%
-  final resultPreviewRatio = 0.5.obs;
+  final resultPreviewRatio = defaultResultPreviewRatio.obs;
 
   // result related variables
   late final WoxListController<WoxQueryResult> resultListViewController;
@@ -229,6 +231,7 @@ class WoxLauncherController extends GetxController {
   /// The icon at end of query box.
   final queryIcon = QueryIconInfo.empty().obs;
   final glanceItems = <GlanceItem>[].obs;
+  final attentionUnreadCount = 0.obs;
   Timer? glanceRefreshTimer;
   QueryContext backendQueryContext = QueryContext.empty();
   String backendQueryContextQueryId = "";
@@ -284,6 +287,10 @@ class WoxLauncherController extends GetxController {
   bool get shouldShowGlance {
     final setting = WoxSettingUtil.instance.currentSetting;
     return setting.enableGlance && isGlobalInputQuery(currentQuery.value) && queryIcon.value.icon.imageData.isEmpty && glanceItems.isNotEmpty && !isLoading.value;
+  }
+
+  bool get shouldShowAttentionBadge {
+    return attentionUnreadCount.value > 0 && isGlobalInputQuery(currentQuery.value) && !isLoading.value;
   }
 
   bool shouldShowGlanceIcon(GlanceItem item) {
@@ -1037,6 +1044,40 @@ class WoxLauncherController extends GetxController {
     }
   }
 
+  void updateAttentionUnreadCount(String traceId, int unreadCount) {
+    final nextCount = unreadCount < 0 ? 0 : unreadCount;
+    if (attentionUnreadCount.value == nextCount) {
+      return;
+    }
+
+    attentionUnreadCount.value = nextCount;
+    Logger.instance.info(traceId, "attention unread count changed: count=$nextCount");
+  }
+
+  Future<void> activateAttentionQuery(String traceId) async {
+    await onQueryChanged(traceId, PlainQuery.text("attention "), "attention badge clicked", moveCursorToEnd: true);
+    await focusQueryBox();
+  }
+
+  String get attentionHotkey => Platform.isMacOS ? "cmd+u" : "alt+u";
+
+  String get attentionHotkeyLabel => Platform.isMacOS ? "Cmd+U" : "Alt+U";
+
+  // executeAttentionHotkey only works while the badge is visible, matching the on-screen affordance.
+  bool executeAttentionHotkey(String traceId, HotKey hotkey) {
+    if (!shouldShowAttentionBadge) {
+      return false;
+    }
+
+    final parsed = WoxHotkey.parseHotkeyFromString(attentionHotkey);
+    if (parsed == null || !parsed.isNormalHotkey || !WoxHotkey.equals(parsed.normalHotkey, hotkey)) {
+      return false;
+    }
+
+    unawaited(activateAttentionQuery(traceId));
+    return true;
+  }
+
   Future<void> activateBugReportQuery(String traceId) async {
     // Feature: clicking the bug indicator should enter the system plugin using
     // Wox's normal trigger-keyword semantics, which require the trailing space.
@@ -1725,6 +1766,7 @@ class WoxLauncherController extends GetxController {
     latestQueryHistories.assignAll(params.queryHistories);
     lastLaunchMode = params.launchMode;
     lastStartPage = params.startPage;
+    updateAttentionUnreadCount(traceId, params.attentionUnreadCount);
     if (currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code) {
       canArrowUpHistory = true;
       if (lastLaunchMode == WoxLaunchModeEnum.WOX_LAUNCH_MODE_CONTINUE.code) {
@@ -2719,6 +2761,10 @@ class WoxLauncherController extends GetxController {
       final data = msg.data as Map<String, dynamic>? ?? {};
       updateDiagnosticStatus(msg.traceId, data["enabled"] == true);
       responseWoxWebsocketRequest(msg, true, null);
+    } else if (msg.method == "AttentionUnreadCountChanged") {
+      final data = msg.data as Map<String, dynamic>? ?? {};
+      updateAttentionUnreadCount(msg.traceId, (data["unreadCount"] as num?)?.toInt() ?? 0);
+      responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "RecordHotkey") {
       final data = msg.data as Map<String, dynamic>? ?? {};
       final hotkey = data["Hotkey"]?.toString() ?? "";
@@ -3048,7 +3094,7 @@ class WoxLauncherController extends GetxController {
   }
 
   double getPreferredResultPreviewRatio() {
-    return preferredResultPreviewRatio > 0 ? preferredResultPreviewRatio : 0.5;
+    return preferredResultPreviewRatio > 0 ? preferredResultPreviewRatio : defaultResultPreviewRatio;
   }
 
   bool enterPreviewFullscreen(String traceId) {
@@ -3366,11 +3412,9 @@ class WoxLauncherController extends GetxController {
     }
 
     final metrics = WoxInterfaceSizeUtil.instance.current;
-    final textHeightFactor = metrics.queryBoxTextHeightFactor;
     final painter = TextPainter(
-      text: TextSpan(text: normalizedText.isEmpty ? ' ' : normalizedText, style: TextStyle(fontSize: metrics.queryBoxFontSize, height: textHeightFactor)),
+      text: TextSpan(text: normalizedText.isEmpty ? ' ' : normalizedText, style: TextStyle(fontSize: metrics.queryBoxFontSize)),
       textDirection: TextDirection.ltr,
-      strutStyle: StrutStyle(fontSize: metrics.queryBoxFontSize, height: textHeightFactor, leading: 0, forceStrutHeight: true),
       textScaler: TextScaler.noScaling,
     )..layout(minWidth: 0, maxWidth: queryBoxTextWrapWidth);
 
@@ -3463,6 +3507,11 @@ class WoxLauncherController extends GetxController {
 
       if (updatableResult.actions != null) {
         updatedData.actions = updatableResult.actions!;
+        needUpdate = true;
+      }
+
+      if (updatableResult.hasDragDataUpdate) {
+        updatedData.dragData = updatableResult.dragData?.isFiles == true ? updatableResult.dragData : null;
         needUpdate = true;
       }
 
@@ -3972,6 +4021,19 @@ class WoxLauncherController extends GetxController {
     refreshActionsForActiveResult(traceId, preserveSelection: false);
   }
 
+  Future<void> startResultDrag(String traceId, WoxListItem<WoxQueryResult> item) async {
+    if (item.isGroup || item.data.dragData == null || !item.data.dragData!.isFiles) {
+      return;
+    }
+
+    final status = await ResultDragPlatformBridge.instance.startFileDrag(traceId, item.data.dragData!.files);
+    if (status == ResultDragStatus.success || status == ResultDragStatus.cancel) {
+      // Keep launcher visible only when the user releases inside Wox itself,
+      // which native drag reports as cancel_in_source.
+      await hideApp(traceId);
+    }
+  }
+
   void onResultItemsEmpty(String traceId) {
     // Hide preview panel when there are no results after filtering
     // otherwise in selection mode, when no result filtered, preview may still be shown
@@ -4159,7 +4221,7 @@ class WoxLauncherController extends GetxController {
 
   /// Update the result preview width ratio based on the query
   void updateResultPreviewWidthRatioOnQueryChanged(String traceId, PlainQuery query, QueryLayout queryLayout) {
-    double nextRatio = 0.5;
+    double nextRatio = defaultResultPreviewRatio;
     if (query.isEmpty) {
       preferredResultPreviewRatio = nextRatio;
       if (isPreviewFullscreen.value) {
@@ -4178,11 +4240,24 @@ class WoxLauncherController extends GetxController {
       }
       return;
     }
+    // Selection queries default to a 6:4 split (list 40%, preview 60%).
+    // Only apply when the backend did not return an explicit ratio; an explicit
+    // zero means the plugin wants a preview-only layout and must be respected.
+    if (query.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code && queryLayout.resultPreviewWidthRatio == null) {
+      nextRatio = defaultResultPreviewRatio;
+      preferredResultPreviewRatio = nextRatio;
+      if (isPreviewFullscreen.value) {
+        lastResultPreviewRatioBeforePreviewFullscreen = nextRatio;
+      } else {
+        resultPreviewRatio.value = nextRatio;
+      }
+      return;
+    }
 
-    nextRatio = queryLayout.resultPreviewWidthRatio ?? 0.5;
+    nextRatio = queryLayout.resultPreviewWidthRatio ?? defaultResultPreviewRatio;
     Logger.instance.debug(traceId, "update result preview width ratio: $nextRatio");
     if (nextRatio < 0 || nextRatio > 1) {
-      nextRatio = 0.5;
+      nextRatio = defaultResultPreviewRatio;
     }
     preferredResultPreviewRatio = nextRatio;
     if (isPreviewFullscreen.value) {

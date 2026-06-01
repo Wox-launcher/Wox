@@ -38,6 +38,8 @@ typedef struct {
     float offsetX;
     float offsetY;
     float width;         // 0 = auto
+    float minWidth;      // 0 = platform default minimum width
+    float maxWidth;      // 0 = no cap for auto width
     float height;        // 0 = auto
     float maxHeight;     // 0 = no cap for auto height
     bool followScroll;
@@ -1346,8 +1348,6 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         if (!self.closeButton.hidden) padRight += kCloseSize + kCloseMargin;
         if (!self.tooltipIconView.hidden) padRight += tooltipIconSize + tooltipIconGap;
 
-        CGFloat contentWidth = windowWidth - padLeft - padRight;
-        
         // Setup TextView string
         NSDictionary *attrs = @{
             NSFontAttributeName: [NSFont systemFontOfSize:fontSize],
@@ -1355,6 +1355,19 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         };
         NSAttributedString *attrStr = [[NSAttributedString alloc] initWithString:msg attributes:attrs];
         [self.messageView.textStorage setAttributedString:attrStr];
+
+        if (opts.width <= 0 && opts.maxWidth > 0) {
+            CGFloat maxTextWidth = MAX(1, opts.maxWidth - padLeft - padRight);
+            NSRect naturalTextRect = [msg boundingRectWithSize:NSMakeSize(CGFLOAT_MAX, CGFLOAT_MAX)
+                                                       options:NSStringDrawingUsesLineFragmentOrigin
+                                                    attributes:attrs];
+            CGFloat naturalTextWidth = MAX(1, ceil(naturalTextRect.size.width));
+            windowWidth = padLeft + padRight + MIN(naturalTextWidth, maxTextWidth);
+        }
+        if (opts.minWidth > 0) {
+            windowWidth = MAX(windowWidth, opts.minWidth);
+        }
+        CGFloat contentWidth = windowWidth - padLeft - padRight;
         
         // Measure Height
         NSSize textSize = [self.messageView.layoutManager usedRectForTextContainer:self.messageView.textContainer].size; 
