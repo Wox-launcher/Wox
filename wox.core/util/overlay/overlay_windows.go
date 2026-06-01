@@ -35,6 +35,8 @@ typedef struct {
     float offsetX;
     float offsetY;
     float width;
+    float minWidth;
+    float maxWidth;
     float height;
     float maxHeight;
     bool followScroll;
@@ -149,6 +151,8 @@ func Show(opts OverlayOptions) {
 		offsetX:                  C.float(opts.OffsetX),
 		offsetY:                  C.float(opts.OffsetY),
 		width:                    C.float(opts.Width),
+		minWidth:                 C.float(opts.MinWidth),
+		maxWidth:                 C.float(opts.MaxWidth),
 		height:                   C.float(opts.Height),
 		maxHeight:                C.float(opts.MaxHeight),
 		followScroll:             C.bool(opts.FollowScroll),

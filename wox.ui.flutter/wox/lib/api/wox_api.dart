@@ -135,12 +135,11 @@ class WoxApi {
     await WoxHttpUtil.instance.postData(traceId, "/on/show", {}, sessionId: sessionId);
   }
 
-  Future<void> showTooltipOverlay(String traceId, String name, String text, double x, double y, double anchorX, double anchorY, double anchorWidth, double anchorHeight) async {
+  Future<void> showTooltipOverlay(String traceId, String name, String text, String side, double anchorX, double anchorY, double anchorWidth, double anchorHeight) async {
     await WoxHttpUtil.instance.postData(traceId, "/tooltip/show", {
       "name": name,
       "text": text,
-      "x": x,
-      "y": y,
+      "side": side,
       "anchorX": anchorX,
       "anchorY": anchorY,
       "anchorWidth": anchorWidth,

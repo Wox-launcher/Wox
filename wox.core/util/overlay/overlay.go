@@ -136,6 +136,10 @@ type OverlayOptions struct {
 	AspectRatio float64
 	// Width of the overlay. If 0, it auto-sizes based on content/default.
 	Width float64
+	// MinWidth overrides the platform default minimum width when auto-sizing overlays. If 0, platform defaults are used.
+	MinWidth float64
+	// MaxWidth caps auto-sized overlays. It does not replace Width; callers can omit Width to grow with content until this cap.
+	MaxWidth float64
 	// Height of the overlay. If 0, it auto-sizes based on content.
 	Height float64
 	// MaxHeight caps auto-sized overlays. It does not replace Height; callers can omit Height to grow with content until this cap.
