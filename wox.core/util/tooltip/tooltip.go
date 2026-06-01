@@ -13,7 +13,7 @@ import (
 
 const tooltipOverlayPrefix = "wox_tooltip_"
 const (
-	tooltipFontSizePt       = 9
+	tooltipBaseFontSizePt   = 9
 	tooltipMaxWidthDip      = 400
 	tooltipMaxHeightDip     = 600
 	tooltipMinWidthDip      = 1
@@ -75,7 +75,7 @@ func Show(ctx context.Context, opts OverlayOptions) {
 		MinWidth:         tooltipMinWidthDip,
 		MaxWidth:         tooltipMaxWidthDip,
 		MaxHeight:        tooltipMaxHeightDip,
-		FontSize:         tooltipFontSizePt,
+		FontSize:         tooltipFontSizePt(),
 		CornerRadius:     8,
 	})
 	startVisibilityTracking(opts.withBounds(placement.trackingX, placement.trackingY, width, placement.trackingHeight))
@@ -364,20 +364,21 @@ func estimateLineWidth(text string) float64 {
 		return 0
 	}
 
+	fontSize := tooltipFontSizePt()
 	width := 0.0
 	for _, r := range text {
 		switch {
 		case unicode.IsSpace(r):
-			width += tooltipFontSizePt * tooltipSpaceWidthFactor
+			width += fontSize * tooltipSpaceWidthFactor
 		case r <= unicode.MaxASCII:
-			width += tooltipFontSizePt * tooltipAsciiWidthFactor
+			width += fontSize * tooltipAsciiWidthFactor
 		default:
-			width += tooltipFontSizePt * tooltipWideWidthFactor
+			width += fontSize * tooltipWideWidthFactor
 		}
 	}
 
 	if width == 0 {
-		return float64(utf8.RuneCountInString(text)) * tooltipFontSizePt * tooltipAsciiWidthFactor
+		return float64(utf8.RuneCountInString(text)) * fontSize * tooltipAsciiWidthFactor
 	}
 	return width
 }

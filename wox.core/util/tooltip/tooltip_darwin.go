@@ -1,4 +1,4 @@
-//go:build windows
+//go:build darwin
 
 package tooltip
 
@@ -10,6 +10,7 @@ import (
 	"wox/util/overlay"
 )
 
+// tracker keeps the latest tooltip tracking bounds while the polling goroutine runs.
 type tracker struct {
 	mu     sync.RWMutex
 	opts   OverlayOptions
@@ -22,9 +23,10 @@ var (
 )
 
 func tooltipFontSizePt() float64 {
-	return tooltipBaseFontSizePt
+	return tooltipBaseFontSizePt + 2
 }
 
+// startVisibilityTracking mirrors the Windows tooltip lifetime behavior on macOS.
 func startVisibilityTracking(opts OverlayOptions) {
 	if opts.Name == "" {
 		return
@@ -44,6 +46,7 @@ func startVisibilityTracking(opts OverlayOptions) {
 	trackersMu.Unlock()
 }
 
+// stopVisibilityTracking cancels cursor polling for a tooltip overlay.
 func stopVisibilityTracking(name string) {
 	trackersMu.Lock()
 	current, exists := trackers[name]
@@ -56,6 +59,7 @@ func stopVisibilityTracking(name string) {
 	}
 }
 
+// run closes the tooltip once the cursor leaves both the anchor and tooltip bounds.
 func (current *tracker) run() {
 	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
@@ -81,6 +85,7 @@ func (current *tracker) run() {
 	}
 }
 
+// isCursorInsideTooltipOrAnchor checks cursor position in the shared top-left desktop coordinate space.
 func isCursorInsideTooltipOrAnchor(opts OverlayOptions) (bool, bool) {
 	point, ok := mouse.CurrentPosition()
 	if !ok {

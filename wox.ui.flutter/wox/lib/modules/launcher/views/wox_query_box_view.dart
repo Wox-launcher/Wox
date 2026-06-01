@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -15,6 +16,7 @@ import 'package:wox/components/wox_tooltip.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_glance.dart';
 import 'package:wox/entity/wox_hotkey.dart';
+import 'package:wox/modules/launcher/views/wox_glance_item_view.dart';
 import 'package:wox/utils/color_util.dart';
 import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/log.dart';
@@ -140,6 +142,20 @@ class WoxQueryBoxView extends StatelessWidget {
     // deletion instead of a KeyEvent or selector intent. Rewriting the formatter value here keeps
     // the native word-deletion contract at the only layer that still observes the committed edit.
     return buildQueryBoxWordDeletionValue(oldValue, forward: forward);
+  }
+
+  /// Focuses the query box from trailing blank-space clicks without moving the cursor.
+  void _handleQueryBoxBlankAreaTap() {
+    unawaited(controller.focusQueryBox());
+  }
+
+  /// Selects query text from double-clicks on the trailing blank area.
+  void _handleQueryBoxBlankAreaTextSelection() {
+    unawaited(
+      controller.focusQueryBox().then((_) {
+        controller.selectQueryBoxAllText(const UuidV4().generate());
+      }),
+    );
   }
 
   double _getQueryBoxRightAccessoryWidth(BuildContext context, dynamic currentTheme) {
@@ -306,17 +322,26 @@ class WoxQueryBoxView extends StatelessWidget {
     }
 
     return Positioned(
-      left: 8 + textWidth,
+      left: 100 + textWidth,
       top: 0,
       width: blankWidth,
       height: boxHeight,
-      child: MouseRegion(
-        child: WoxDragMoveArea(
-          onDragStart: controller.windowDriver.startDragging,
-          onDragEnd: () {
-            controller.focusQueryBox();
-          },
-          child: SizedBox(width: blankWidth, height: boxHeight),
+      child: TextFieldTapRegion(
+        // Treat the blank overlay as part of the query editor so single clicks
+        // do not look like outside taps and momentarily disturb text selection.
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: _handleQueryBoxBlankAreaTap,
+          onDoubleTap: _handleQueryBoxBlankAreaTextSelection,
+          child: MouseRegion(
+            child: WoxDragMoveArea(
+              onDragStart: controller.windowDriver.startDragging,
+              onDragEnd: () {
+                controller.focusQueryBox();
+              },
+              child: SizedBox(width: blankWidth, height: boxHeight),
+            ),
+          ),
         ),
       ),
     );
@@ -737,62 +762,6 @@ class WoxQueryBoxView extends StatelessWidget {
   }
 
   Widget _buildGlanceItem(dynamic currentTheme, GlanceItem item) {
-    final baseTextColor = safeFromCssColor(currentTheme.queryBoxFontColor);
-    // Glance now has no status field in v1; keeping one quiet opacity preserves
-    // the auxiliary feel without exposing unused state semantics in the API.
-    const textAlpha = 0.8;
-    final textColor = baseTextColor.withValues(alpha: textAlpha);
-    var isHovered = false;
-
-    // Glance is auxiliary status, so the default state is fully transparent and
-    // visually merges with the query box; hover is only a light affordance.
-    // Glance items are the launcher chrome shown in the screenshot. Using
-    // WoxTooltip here keeps plugin/system glance hints visually aligned with
-    // other launcher overlays instead of falling back to Material Tooltip.
-    return WoxTooltip(
-      message: item.tooltip.isNotEmpty ? item.tooltip : item.text,
-      preferSide: WoxTooltipSide.top,
-      child: StatefulBuilder(
-        builder: (context, setHovered) {
-          final metrics = WoxInterfaceSizeUtil.instance.current;
-          final textStyle = TextStyle(color: textColor, fontSize: metrics.scaledSpacing(15));
-          final itemWidth = _getGlanceItemWidth(context, item, textStyle);
-          final iconVisible = controller.shouldShowGlanceIcon(item);
-
-          return MouseRegion(
-            cursor: item.action == null ? SystemMouseCursors.basic : SystemMouseCursors.click,
-            onEnter: (_) => setHovered(() => isHovered = true),
-            onExit: (_) => setHovered(() => isHovered = false),
-            child: GestureDetector(
-              onTap: item.action == null ? null : () => controller.executeGlanceDefaultAction(const UuidV4().generate(), item),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 120),
-                width: itemWidth,
-                height: metrics.scaledSpacing(30),
-                padding: EdgeInsets.symmetric(horizontal: metrics.scaledSpacing(8)),
-                decoration: BoxDecoration(
-                  color: isHovered ? baseTextColor.withValues(alpha: 0.10) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(5),
-                  border: Border.all(color: isHovered ? baseTextColor.withValues(alpha: 0.08) : Colors.transparent),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (iconVisible) ...[
-                      Opacity(
-                        opacity: textAlpha * 0.9,
-                        child: WoxImageView(woxImage: item.icon, width: metrics.scaledSpacing(16), height: metrics.scaledSpacing(16), svgColor: textColor),
-                      ),
-                      SizedBox(width: metrics.scaledSpacing(5)),
-                    ],
-                    Flexible(child: Text(item.text, overflow: TextOverflow.ellipsis, maxLines: 1, style: textStyle)),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
+    return WoxGlanceItemView(currentTheme: currentTheme, item: item, controller: controller, getItemWidth: _getGlanceItemWidth);
   }
 }

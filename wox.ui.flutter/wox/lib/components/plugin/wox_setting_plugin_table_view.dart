@@ -274,16 +274,11 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Flexible(
-          // Table cells often truncate text, so keep the full value discoverable
-          // through WoxTooltip instead of mixing in Material Tooltip overlays.
-          child: WoxTooltip(
-            message: translatedLabel,
-            child: Text(
-              translatedLabel,
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-              style: TextStyle(color: getThemeTextColor().withValues(alpha: 0.88), fontSize: 13, fontWeight: FontWeight.w600),
-            ),
+          child: Text(
+            translatedLabel,
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+            style: TextStyle(color: getThemeTextColor().withValues(alpha: 0.88), fontSize: 13, fontWeight: FontWeight.w600),
           ),
         ),
         if (column.tooltip != "") WoxTooltipIconView(tooltip: tr(column.tooltip), paddingRight: 0, color: getThemeTextColor().withValues(alpha: 0.72)),
