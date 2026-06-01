@@ -331,7 +331,7 @@
             <point key="canvasLocation" x="142" y="-258"/>
         </menu>
         <window title="APP_NAME" allowsToolTipsWhenApplicationIsInactive="NO" autorecalculatesKeyViewLoop="NO" releasedWhenClosed="NO" animationBehavior="default" id="QvC-M9-y7g" customClass="MainFlutterWindow" customModule="Runner" customModuleProvider="target">
-            <windowStyleMask key="styleMask" titled="YES" closable="YES" miniaturizable="YES" resizable="YES"/>
+            <windowStyleMask key="styleMask" titled="YES" closable="YES" miniaturizable="YES"/>
             <rect key="contentRect" x="335" y="390" width="800" height="600"/>
             <rect key="screenRect" x="0.0" y="0.0" width="2560" height="1577"/>
             <view key="contentView" wantsLayer="YES" id="EiT-Mj-1SZ">

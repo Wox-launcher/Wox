@@ -1141,7 +1141,7 @@ private final class ScrollingCaptureOverlaySession {
 }
 
 @main
-class AppDelegate: FlutterAppDelegate {
+class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
   // The screenshot capture helpers run inside Swift `throws` / `async throws` contexts. The
   // previous implementation threw `FlutterError` directly, but the macOS Flutter SDK exposes it
   // as an Objective-C channel payload rather than a Swift `Error`, which now fails compilation.
@@ -1205,6 +1205,10 @@ class AppDelegate: FlutterAppDelegate {
   private var activeScrollingCaptureOverlaySession: ScrollingCaptureOverlaySession?
   private var activeScrollingCaptureTraceId = ""
   private var nativeOverlayDismissTimeoutWorkItem: DispatchWorkItem?
+
+  private func disableUserWindowResizing(_ window: NSWindow) {
+    window.styleMask.remove(.resizable)
+  }
 
   // Carries both a resolved file path and whether macOS' image wallpaper extension owns the current Space.
   private struct WallpaperStoreResolution {
@@ -2007,6 +2011,7 @@ class AppDelegate: FlutterAppDelegate {
     if savedState.hadAcrylicEffect {
       applyAcrylicEffect(to: window)
     }
+    disableUserWindowResizing(window)
     screenshotPresentationState = nil
     isCapturePresentationActive = false
     captureWorkspaceBounds = .zero
@@ -2607,7 +2612,7 @@ class AppDelegate: FlutterAppDelegate {
   }
 
   // Handle window loss of focus
-  @objc private func windowDidResignKey(_: Notification) {
+  @objc func windowDidResignKey(_: Notification) {
     log("Window did resign key (blur)")
     if mainFlutterWindow?.isVisible == true {
       shouldRestorePreviousAppOnHide = false
@@ -2620,6 +2625,10 @@ class AppDelegate: FlutterAppDelegate {
 
   override func applicationDidFinishLaunching(_ notification: Notification) {
     let controller = mainFlutterWindow?.contentViewController as! FlutterViewController
+    if let mainFlutterWindow {
+      mainFlutterWindow.delegate = self
+      disableUserWindowResizing(mainFlutterWindow)
+    }
 
     // Try to make Flutter view background transparent
     let flutterView = controller.view
@@ -3185,7 +3194,7 @@ class AppDelegate: FlutterAppDelegate {
           window.titlebarAppearsTransparent = true
           window.styleMask.insert(.fullSizeContentView)
           window.styleMask.insert(.nonactivatingPanel)
-          window.styleMask.remove(.resizable)
+          self?.disableUserWindowResizing(window)
 
           // Hide windows buttons
           window.titleVisibility = .hidden
@@ -3212,5 +3221,11 @@ class AppDelegate: FlutterAppDelegate {
     }
 
     super.applicationDidFinishLaunching(notification)
+  }
+
+  func windowWillResize(_ sender: NSWindow, to _: NSSize) -> NSSize {
+    // User-driven resizing is disabled for both the launcher query window and the settings view.
+    // Programmatic size changes still go through setSize/setBounds above.
+    return sender.frame.size
   }
 }
