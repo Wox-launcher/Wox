@@ -489,6 +489,10 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         if (@available(macOS 10.14, *)) {
             self.messageView.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
         }
+        // NSTextView adds line-fragment padding by default. The overlay width is measured from
+        // the text itself, so leaving that hidden padding in place makes short tooltip text wrap
+        // on macOS while the Windows DrawText path stays on one line.
+        self.messageView.textContainer.lineFragmentPadding = 0;
         [self.contentView addSubview:self.messageView];
 
         // Close Button (HandCursorButton)
@@ -1536,9 +1540,21 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
     CGFloat finalX = px + ox + opts.offsetX;
     CGFloat finalY = py + oy + opts.offsetY;
     if (opts.absolutePosition) {
+        // Match the Windows absolute-position contract: offset values name the
+        // requested anchor point in top-left desktop coordinates, not always the
+        // overlay's top-left corner. Tooltips rely on BottomCenter/LeftCenter
+        // anchors so they can sit above or beside the hovered launcher item.
+        CGFloat absoluteTopLeftX = opts.offsetX;
+        if (col == 1) absoluteTopLeftX -= windowWidth / 2;
+        else if (col == 2) absoluteTopLeftX -= windowWidth;
+
+        CGFloat absoluteTopLeftY = opts.offsetY;
+        if (row == 1) absoluteTopLeftY -= windowHeight / 2;
+        else if (row == 2) absoluteTopLeftY -= windowHeight;
+
         CGFloat mainScreenH = [NSScreen mainScreen].frame.size.height;
-        finalX = opts.offsetX;
-        finalY = mainScreenH - opts.offsetY - windowHeight;
+        finalX = absoluteTopLeftX;
+        finalY = mainScreenH - absoluteTopLeftY - windowHeight;
     }
     if (preserveLiveFollowFrame) {
         finalX = liveFollowOrigin.x;
