@@ -1464,7 +1464,7 @@ func handleLogClear(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleLogOpen(w http.ResponseWriter, r *http.Request) {
-	logFile := filepath.Join(util.GetLocation().GetLogDirectory(), "log")
+	logFile := util.GetLogger().CurrentLogPath()
 	file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		writeErrorResponse(w, err.Error())

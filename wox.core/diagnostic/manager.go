@@ -275,7 +275,8 @@ func (m *Manager) Export(ctx context.Context) (string, error) {
 	zipWriter := zip.NewWriter(file)
 	defer zipWriter.Close()
 
-	addExistingFile(zipWriter, filepath.Join(util.GetLocation().GetLogDirectory(), "log"), "log/log")
+	currentLogPath := util.GetLogger().CurrentLogPath()
+	addExistingFile(zipWriter, currentLogPath, "log/"+filepath.Base(currentLogPath))
 	addExistingFile(zipWriter, filepath.Join(util.GetLocation().GetLogDirectory(), "ui.log"), "log/ui.log")
 	addExistingFile(zipWriter, filepath.Join(util.GetLocation().GetLogDirectory(), "crash.log"), "log/crash.log")
 	addExistingFile(zipWriter, m.SupervisorLogPath(), "diagnostics/supervisor.log")
