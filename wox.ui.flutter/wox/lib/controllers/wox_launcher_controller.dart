@@ -236,6 +236,7 @@ class WoxLauncherController extends GetxController {
   Timer? glanceRefreshTimer;
   QueryContext backendQueryContext = QueryContext.empty();
   String backendQueryContextQueryId = "";
+  final queryCompletionHint = Rxn<QueryCompletionHint>();
 
   /// The result of the doctor check.
   var doctorCheckPassed = true;
@@ -528,6 +529,7 @@ class WoxLauncherController extends GetxController {
         WoxApi.instance.onQueryBoxFocus(traceId);
       }
     });
+    queryBoxTextFieldController.addListener(syncQueryBoxCompletionHint);
 
     // Add scroll listener to update quick select numbers when scrolling
     resultListViewController.scrollController.addListener(() {
@@ -550,6 +552,84 @@ class WoxLauncherController extends GetxController {
       style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxTextSelectionColor)),
       enabled: queryBoxFocusNode.hasFocus,
     );
+    syncQueryBoxCompletionHint();
+  }
+
+  bool isQueryBoxComposing() {
+    final composing = queryBoxTextFieldController.value.composing;
+    return composing.start >= 0 && composing.end >= 0;
+  }
+
+  bool isQueryBoxCursorAtEnd() {
+    final selection = queryBoxTextFieldController.selection;
+    return selection.isValid && selection.isCollapsed && selection.extentOffset == queryBoxTextFieldController.text.length;
+  }
+
+  bool isQueryCompletionHintEnabled() {
+    return WoxSettingUtil.instance.currentSetting.enableQueryCompletionHint;
+  }
+
+  bool isQueryCompletionHintValid(QueryCompletionHint hint) {
+    final currentText = queryBoxTextFieldController.text;
+    return isQueryCompletionHintEnabled() &&
+        currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code &&
+        currentText == hint.inputPrefix &&
+        hint.suffix.isNotEmpty &&
+        hint.completionText.startsWith(currentText) &&
+        isQueryBoxCursorAtEnd() &&
+        !isQueryBoxComposing();
+  }
+
+  void syncQueryBoxCompletionHint() {
+    final hint = queryCompletionHint.value;
+    final suffix = hint != null && isQueryCompletionHintValid(hint) ? hint.suffix : "";
+    queryBoxTextFieldController.updateCompletionHint(
+      suffix: suffix,
+      style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxFontColor).withValues(alpha: 0.38)),
+    );
+  }
+
+  void clearQueryCompletionHint() {
+    queryCompletionHint.value = null;
+    syncQueryBoxCompletionHint();
+  }
+
+  bool applyQueryCompletionHintForQueryId(String traceId, String queryId, QueryCompletionHint? hint) {
+    if (currentQuery.value.queryId != queryId) {
+      Logger.instance.debug(traceId, "ignore stale query completion hint: response queryId=$queryId, current queryId=${currentQuery.value.queryId}");
+      return false;
+    }
+
+    if (hint == null || !isQueryCompletionHintValid(hint)) {
+      clearQueryCompletionHint();
+      return false;
+    }
+
+    queryCompletionHint.value = hint;
+    syncQueryBoxCompletionHint();
+    return true;
+  }
+
+  bool reuseQueryCompletionHintForText(String value) {
+    if (!isQueryCompletionHintEnabled()) {
+      clearQueryCompletionHint();
+      return false;
+    }
+
+    final hint = queryCompletionHint.value;
+    if (hint == null || value.length <= hint.inputPrefix.length || !value.startsWith(hint.inputPrefix) || !hint.completionText.startsWith(value)) {
+      return false;
+    }
+
+    final suffix = hint.completionText.substring(value.length);
+    if (suffix.isEmpty) {
+      clearQueryCompletionHint();
+      return true;
+    }
+
+    queryCompletionHint.value = QueryCompletionHint(inputPrefix: value, completionText: hint.completionText, suffix: suffix, source: hint.source, score: hint.score);
+    syncQueryBoxCompletionHint();
+    return true;
   }
 
   void markLinuxQueryBoxSubmitKeyHandled() {
@@ -2434,6 +2514,32 @@ class WoxLauncherController extends GetxController {
     );
   }
 
+  Future<bool> acceptQueryCompletionHint(String traceId) async {
+    final hint = queryCompletionHint.value;
+    if (hint == null || !isQueryCompletionHintValid(hint)) {
+      syncQueryBoxCompletionHint();
+      return false;
+    }
+
+    final nextQueryRefinements =
+        shouldPreserveQueryRefinementsForTextChange(currentQuery.value, hint.completionText)
+            ? cloneQueryRefinementPayload(currentQuery.value.queryRefinements)
+            : <String, String>{};
+    await onQueryChanged(
+      traceId,
+      PlainQuery(
+        queryId: const UuidV4().generate(),
+        queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code,
+        queryText: hint.completionText,
+        querySelection: Selection.empty(),
+        queryRefinements: nextQueryRefinements,
+      ),
+      "accept query completion hint",
+      moveCursorToEnd: true,
+    );
+    return true;
+  }
+
   void onQueryBoxTextChanged(String value) {
     final traceId = const UuidV4().generate();
     canArrowUpHistory = false;
@@ -2451,6 +2557,7 @@ class WoxLauncherController extends GetxController {
     } else {
       final nextQueryRefinements =
           shouldPreserveQueryRefinementsForTextChange(currentQuery.value, value) ? cloneQueryRefinementPayload(currentQuery.value.queryRefinements) : <String, String>{};
+      final skipCompletionHint = reuseQueryCompletionHintForText(value);
       onQueryChanged(
         traceId,
         PlainQuery(
@@ -2461,6 +2568,8 @@ class WoxLauncherController extends GetxController {
           queryRefinements: nextQueryRefinements,
         ),
         "user input changed",
+        skipCompletionHint: skipCompletionHint,
+        preserveCompletionHint: skipCompletionHint,
       );
     }
   }
@@ -2472,6 +2581,7 @@ class WoxLauncherController extends GetxController {
     currentQuery.value.queryId = queryId;
     backendQueryContext = QueryContext.empty();
     backendQueryContextQueryId = "";
+    clearQueryCompletionHint();
     clearQueryRefinements(traceId);
     prepareQueryLayoutOnQueryChanged(traceId, currentQuery.value);
 
@@ -2511,8 +2621,16 @@ class WoxLauncherController extends GetxController {
     }
   }
 
-  Future<void> onQueryChanged(String traceId, PlainQuery query, String changeReason, {bool moveCursorToEnd = false}) async {
+  Future<void> onQueryChanged(
+    String traceId,
+    PlainQuery query,
+    String changeReason, {
+    bool moveCursorToEnd = false,
+    bool skipCompletionHint = false,
+    bool preserveCompletionHint = false,
+  }) async {
     Logger.instance.debug(traceId, "query changed: ${query.queryText}, reason: $changeReason");
+    final shouldSkipCompletionHint = skipCompletionHint || !isQueryCompletionHintEnabled();
 
     if (query.queryId == "") {
       query.queryId = const UuidV4().generate();
@@ -2535,6 +2653,11 @@ class WoxLauncherController extends GetxController {
     currentQuery.value = query;
     backendQueryContext = QueryContext.empty();
     backendQueryContextQueryId = "";
+    if (preserveCompletionHint) {
+      syncQueryBoxCompletionHint();
+    } else {
+      clearQueryCompletionHint();
+    }
     prepareQueryRefinementsOnQueryChanged(traceId, query);
     isCurrentQueryReturned = false;
     isShowActionPanel.value = false;
@@ -2592,6 +2715,7 @@ class WoxLauncherController extends GetxController {
               "queryText": query.queryText,
               "querySelection": query.querySelection.toJson(),
               "queryRefinements": query.queryRefinements,
+              "skipCompletionHint": shouldSkipCompletionHint,
             },
           ),
         );
@@ -2646,6 +2770,7 @@ class WoxLauncherController extends GetxController {
           "queryText": query.queryText,
           "querySelection": query.querySelection.toJson(),
           "queryRefinements": query.queryRefinements,
+          "skipCompletionHint": shouldSkipCompletionHint,
         },
       ),
     );
@@ -2800,6 +2925,21 @@ class WoxLauncherController extends GetxController {
     if (msg.method == WoxMsgMethodEnum.WOX_MSG_METHOD_TERMINAL_STATE.code) {
       final data = msg.data as Map<String, dynamic>? ?? {};
       handleTerminalState(data);
+      return;
+    }
+    if (msg.method == WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY_COMPLETION_HINT.code) {
+      if (msg.sendTimestamp > 0) {
+        final latency = DateTime.now().millisecondsSinceEpoch - msg.sendTimestamp;
+        if (latency > 10) {
+          Logger.instance.info(msg.traceId, "📨 Query completion hint WebSocket latency (Wox→UI): ${latency}ms");
+        }
+      }
+
+      final data = msg.data as Map<String, dynamic>? ?? {};
+      final queryId = data['QueryId'] as String? ?? "";
+      final hintData = data['CompletionHint'];
+      final hint = hintData is Map ? QueryCompletionHint.fromJson(Map<String, dynamic>.from(hintData)) : null;
+      applyQueryCompletionHintForQueryId(msg.traceId, queryId, hint);
       return;
     }
 

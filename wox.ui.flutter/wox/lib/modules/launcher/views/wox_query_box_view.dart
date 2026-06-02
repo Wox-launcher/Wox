@@ -384,6 +384,16 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                   return KeyEventResult.ignored;
                 }
 
+                if (event is KeyDownEvent &&
+                    event.logicalKey == LogicalKeyboardKey.tab &&
+                    HardwareKeyboard.instance.isShiftPressed &&
+                    !HardwareKeyboard.instance.isControlPressed &&
+                    !HardwareKeyboard.instance.isAltPressed &&
+                    !HardwareKeyboard.instance.isMetaPressed) {
+                  unawaited(controller.autoCompleteQuery(const UuidV4().generate()));
+                  return KeyEventResult.handled;
+                }
+
                 var isAnyModifierPressed = WoxHotkey.isAnyModifierPressed();
                 if (!isAnyModifierPressed) {
                   if (event is KeyDownEvent) {
@@ -426,7 +436,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                         }
                         break;
                       case LogicalKeyboardKey.tab:
-                        controller.autoCompleteQuery(const UuidV4().generate());
+                        unawaited(controller.acceptQueryCompletionHint(const UuidV4().generate()));
                         return KeyEventResult.handled;
                       case LogicalKeyboardKey.home:
                         controller.moveQueryBoxCursorToStart();

@@ -659,6 +659,8 @@
   "ui_app_font_family": "字体",
   "ui_app_font_family_tips": "为 Wox 界面选择系统字体",
   "ui_app_font_family_system_default": "跟随系统默认",
+  "ui_query_completion_hint": "输入补全提示",
+  "ui_query_completion_hint_tips": "根据命令和查询历史在输入框中显示灰色补全提示，按 Tab 接受。",
   "ui_glance_enable": "速览信息",
   "ui_glance_enable_tips": "在搜索框右侧显示简短、实时、低打扰的信息，帮你一眼确认状态。",
   "ui_glance_primary": "速览项",

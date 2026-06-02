@@ -209,6 +209,19 @@ class WoxSettingUIView extends WoxSettingBaseView {
                   );
                 }),
               ),
+              formField(
+                settingKey: "EnableQueryCompletionHint",
+                label: controller.tr("ui_query_completion_hint"),
+                tips: controller.tr("ui_query_completion_hint_tips"),
+                child: Obx(() {
+                  return WoxSwitch(
+                    value: controller.woxSetting.value.enableQueryCompletionHint,
+                    onChanged: (bool value) {
+                      controller.updateConfig("EnableQueryCompletionHint", value.toString());
+                    },
+                  );
+                }),
+              ),
             ],
           ),
           formSection(

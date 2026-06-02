@@ -2052,6 +2052,9 @@ class WoxSettingController extends GetxController {
     Logger.instance.setLogLevel(woxSetting.value.logLevel);
     if (Get.isRegistered<WoxLauncherController>()) {
       final launcherController = Get.find<WoxLauncherController>();
+      if (!woxSetting.value.enableQueryCompletionHint) {
+        launcherController.clearQueryCompletionHint();
+      }
       unawaited(launcherController.refreshGlance(traceId, "settingsChanged"));
       // Interface size changes are launcher-only; the settings view keeps its
       // fixed sizing while the launcher recalculates dimensions from metrics as
@@ -2152,6 +2155,13 @@ const List<_BuiltInSettingSearchDefinition> _builtInSettingSearchDefinitions = [
     searchKeywords: ['Interface Size', 'density', 'compact', 'comfortable'],
   ),
   _BuiltInSettingSearchDefinition(settingKey: 'AppFontFamily', navPath: 'ui', titleKey: 'ui_app_font_family', subtitleKey: 'ui_app_font_family_tips', searchKeywords: ['font']),
+  _BuiltInSettingSearchDefinition(
+    settingKey: 'EnableQueryCompletionHint',
+    navPath: 'ui',
+    titleKey: 'ui_query_completion_hint',
+    subtitleKey: 'ui_query_completion_hint_tips',
+    searchKeywords: ['completion', 'hint', 'autocomplete', 'inline completion'],
+  ),
   _BuiltInSettingSearchDefinition(
     settingKey: 'MaxResultCount',
     navPath: 'ui',

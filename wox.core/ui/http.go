@@ -11,6 +11,7 @@ import (
 	"wox/ui/dto"
 	"wox/util"
 
+	"github.com/google/uuid"
 	"github.com/olahol/melody"
 	"github.com/rs/cors"
 	"github.com/samber/lo"
@@ -43,6 +44,11 @@ type QueryResponse struct {
 	Layout      plugin.QueryLayout       `json:"Layout"`
 	Context     plugin.QueryContext      `json:"Context"`
 	IsFinal     bool                     `json:"IsFinal"` // indicates if this is the final batch of results
+}
+
+type QueryCompletionHintPayload struct {
+	QueryId        string                      `json:"QueryId"`
+	CompletionHint *plugin.QueryCompletionHint `json:"CompletionHint,omitempty"`
 }
 
 type RestResponse struct {
@@ -215,6 +221,26 @@ func responseUIQueryResponse(ctx context.Context, request WebsocketMsg, queryId 
 			Layout:      response.Layout,
 			Context:     response.Context,
 			IsFinal:     isFinal,
+		},
+	})
+}
+
+func responseUIQueryCompletionHint(ctx context.Context, request WebsocketMsg, queryId string, hint *plugin.QueryCompletionHint) {
+	if hint == nil {
+		return
+	}
+
+	responseUI(ctx, WebsocketMsg{
+		RequestId:     uuid.NewString(),
+		TraceId:       util.GetContextTraceId(ctx),
+		SessionId:     request.SessionId,
+		Type:          WebsocketMsgTypeResponse,
+		Method:        "QueryCompletionHint",
+		Success:       true,
+		SendTimestamp: util.GetSystemTimestamp(),
+		Data: QueryCompletionHintPayload{
+			QueryId:        queryId,
+			CompletionHint: hint,
 		},
 	})
 }

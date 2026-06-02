@@ -800,6 +800,7 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 	settingDto.UiDensity = woxSetting.UiDensity.Get()
 	settingDto.ThemeId = woxSetting.ThemeId.Get()
 	settingDto.AppFontFamily = woxSetting.AppFontFamily.Get()
+	settingDto.EnableQueryCompletionHint = woxSetting.EnableQueryCompletionHint.Get()
 	settingDto.EnableGlance = woxSetting.EnableGlance.Get()
 	settingDto.PrimaryGlance = woxSetting.PrimaryGlance.Get()
 	settingDto.HideGlanceIcon = woxSetting.HideGlanceIcon.Get()
@@ -1054,6 +1055,8 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 	case "AppFontFamily":
 		vs = font.NormalizeConfiguredFontFamily(vs, font.GetSystemFontFamilies(ctx))
 		woxSetting.AppFontFamily.Set(vs)
+	case "EnableQueryCompletionHint":
+		woxSetting.EnableQueryCompletionHint.Set(vb)
 	case "EnableGlance":
 		woxSetting.EnableGlance.Set(vb)
 	case "PrimaryGlance":

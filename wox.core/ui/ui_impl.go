@@ -625,6 +625,7 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 		}
 		queryRefinements = parsedRefinements
 	}
+	skipCompletionHint := gjson.GetBytes(queryRequestJson, "skipCompletionHint").Bool()
 
 	var changedQuery common.PlainQuery
 	switch queryType {
@@ -689,6 +690,18 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 		logger.Error(ctx, queryErr.Error())
 		responseUIError(ctx, request, queryErr.Error())
 		return
+	}
+
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	if !skipCompletionHint && woxSetting.EnableQueryCompletionHint.Get() {
+		util.Go(ctx, "query completion hint", func() {
+			responseUIQueryCompletionHint(
+				ctx,
+				request,
+				queryId,
+				plugin.BuildQueryCompletionHintForInputPrefix(query, ownerPlugin, woxSetting.QueryHistories.Get(), changedQuery.QueryText),
+			)
+		})
 	}
 
 	plugin.GetPluginManager().HandleQueryLifecycle(ctx, query, ownerPlugin)

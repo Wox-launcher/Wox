@@ -49,11 +49,12 @@ type WoxSetting struct {
 	// The setting is stored as an enum instead of individual dimensions so Go
 	// window estimates and Flutter rendering can derive the same compact,
 	// normal, and comfortable sizes without expanding the settings DTO.
-	UiDensity     *WoxSettingValue[UiDensity]
-	ThemeId       *WoxSettingValue[string]
-	AppFontFamily *PlatformValue[string]
-	EnableGlance  *WoxSettingValue[bool]
-	PrimaryGlance *WoxSettingValue[GlanceRef]
+	UiDensity                 *WoxSettingValue[UiDensity]
+	ThemeId                   *WoxSettingValue[string]
+	AppFontFamily             *PlatformValue[string]
+	EnableQueryCompletionHint *WoxSettingValue[bool]
+	EnableGlance              *WoxSettingValue[bool]
+	PrimaryGlance             *WoxSettingValue[GlanceRef]
 	// HideGlanceIcon is a presentation-only switch for the query-box glance.
 	// Glance providers still return icons for metadata and future surfaces, but
 	// the launcher can render a quieter text-only accessory when users prefer it.
@@ -272,6 +273,7 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 		UiDensity:                 NewWoxSettingValueWithValidator(store, "UiDensity", UiDensityNormal, IsValidUiDensity),
 		ThemeId:                   NewWoxSettingValue(store, "ThemeId", DefaultThemeId),
 		AppFontFamily:             NewPlatformValue(store, "AppFontFamily", "", "", ""),
+		EnableQueryCompletionHint: NewWoxSettingValue(store, "EnableQueryCompletionHint", false),
 		EnableGlance:              NewWoxSettingValue(store, "EnableGlance", false),
 		PrimaryGlance:             NewWoxSettingValue(store, "PrimaryGlance", GlanceRef{PluginId: "e3ad9f18-fbbe-4f22-8c1b-8274c751f6e6", GlanceId: "time"}),
 		HideGlanceIcon:            NewWoxSettingValue(store, "HideGlanceIcon", false),

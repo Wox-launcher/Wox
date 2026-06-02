@@ -659,6 +659,8 @@
   "ui_app_font_family": "Font family",
   "ui_app_font_family_tips": "Choose a system font for the Wox interface",
   "ui_app_font_family_system_default": "System default",
+  "ui_query_completion_hint": "Inline completion hint",
+  "ui_query_completion_hint_tips": "Show gray inline suggestions from commands and query history. Press Tab to accept.",
   "ui_max_result_count": "Maximum results",
   "ui_max_result_count_tips": "Maximum number of results to display in the list (5-15 items)",
   "ui_glance_enable": "Glance",
