@@ -699,7 +699,7 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 				ctx,
 				request,
 				queryId,
-				plugin.BuildQueryCompletionHintForInputPrefix(query, ownerPlugin, woxSetting.QueryHistories.Get(), changedQuery.QueryText),
+				plugin.BuildQueryCompletionHintForInputPrefix(query, ownerPlugin, setting.GetSettingManager().GetLatestQueryHistory(ctx, plugin.QueryCompletionHistoryLimit), changedQuery.QueryText),
 			)
 		})
 	}

@@ -1,7 +1,9 @@
 package plugin
 
 import (
+	"sort"
 	"strings"
+	"unicode/utf8"
 	"wox/setting"
 )
 
@@ -10,6 +12,19 @@ type QueryCompletionSource = string
 const (
 	QueryCompletionSourceCommand QueryCompletionSource = "command"
 	QueryCompletionSourceHistory QueryCompletionSource = "history"
+)
+
+const (
+	// QueryCompletionHistoryLimit bounds the history window scanned for inline hints.
+	QueryCompletionHistoryLimit = 100
+
+	queryCompletionVariableMarker       = "{wox:"
+	queryCompletionGlobalHistoryMinLen  = 3
+	queryCompletionPluginHistoryMinLen  = 2
+	queryCompletionCommandScoreBase     = 20000
+	queryCompletionHistoryScoreBase     = 10000
+	queryCompletionRankBonusMax         = 100
+	queryCompletionHistoryInputBonusMax = 20
 )
 
 // QueryCompletionHint carries the single inline completion candidate for the current query.
@@ -34,7 +49,9 @@ func BuildQueryCompletionHintForInputPrefix(query Query, queryPlugin *Instance, 
 
 	var best *QueryCompletionHint
 	accept := func(candidate QueryCompletionHint) {
-		if candidate.Suffix == "" || !strings.HasPrefix(candidate.CompletionText, candidate.InputPrefix) {
+		if candidate.Suffix == "" ||
+			!strings.HasPrefix(candidate.CompletionText, candidate.InputPrefix) ||
+			strings.Contains(candidate.CompletionText, queryCompletionVariableMarker) {
 			return
 		}
 		if best == nil || candidate.Score > best.Score {
@@ -57,36 +74,46 @@ func buildCommandCompletionHints(query Query, queryPlugin *Instance, inputPrefix
 		return nil
 	}
 
-	var hints []QueryCompletionHint
+	type commandMatch struct {
+		command MetadataCommand
+		index   int
+	}
+	var matches []commandMatch
 	for index, command := range queryPlugin.GetQueryCommands() {
 		if command.Command == "" || command.Command == query.Search || !strings.HasPrefix(command.Command, query.Search) {
 			continue
 		}
 
-		completionText := query.TriggerKeyword + " " + command.Command + " "
-		if !strings.HasPrefix(completionText, inputPrefix) {
-			continue
-		}
+		matches = append(matches, commandMatch{command: command, index: index})
+	}
+	if len(matches) != 1 {
+		return nil
+	}
 
-		hints = append(hints, QueryCompletionHint{
+	match := matches[0]
+	completionText := query.TriggerKeyword + " " + match.command.Command + " "
+	if !strings.HasPrefix(completionText, inputPrefix) {
+		return nil
+	}
+
+	return []QueryCompletionHint{
+		{
 			InputPrefix:    inputPrefix,
 			CompletionText: completionText,
 			Suffix:         completionText[len(inputPrefix):],
 			Source:         QueryCompletionSourceCommand,
-			Score:          10000 + len(query.Search)*100 - index,
-		})
+			Score:          queryCompletionCommandScoreBase + effectiveCompletionInputLen(query.Search)*100 + rankBonus(match.index),
+		},
 	}
-	return hints
 }
 
 func buildHistoryCompletionHints(query Query, queryPlugin *Instance, histories []setting.QueryHistory, inputPrefix string) []QueryCompletionHint {
-	if len(histories) == 0 || shouldDelayHistoryCompletionForCommandPrefix(query, queryPlugin) {
+	if len(histories) == 0 || !hasEnoughHistoryCompletionInput(query) || shouldDelayHistoryCompletionForCommandPrefix(query, queryPlugin) {
 		return nil
 	}
 
-	minTimestamp, maxTimestamp := historyTimestampRange(histories)
 	var hints []QueryCompletionHint
-	for index, history := range histories {
+	for index, history := range latestQueryCompletionHistories(histories) {
 		if history.Query.QueryType != QueryTypeInput {
 			continue
 		}
@@ -101,36 +128,74 @@ func buildHistoryCompletionHints(query Query, queryPlugin *Instance, histories [
 			CompletionText: completionText,
 			Suffix:         completionText[len(inputPrefix):],
 			Source:         QueryCompletionSourceHistory,
-			Score:          9000 + len(inputPrefix)*200 + historyRecencyScore(history.Timestamp, minTimestamp, maxTimestamp) + index,
+			Score:          queryCompletionHistoryScoreBase + historyInputBonus(query) + rankBonus(index),
 		})
 	}
 	return hints
 }
 
 func shouldDelayHistoryCompletionForCommandPrefix(query Query, queryPlugin *Instance) bool {
-	return queryPlugin != nil && query.TriggerKeyword != "" && query.Command == "" && !strings.HasSuffix(query.RawQuery, " ") && len(query.Search) < 3
-}
+	if queryPlugin == nil || query.TriggerKeyword == "" || query.Command != "" || strings.HasSuffix(query.RawQuery, " ") {
+		return false
+	}
 
-func historyTimestampRange(histories []setting.QueryHistory) (int64, int64) {
-	minTimestamp := int64(0)
-	maxTimestamp := int64(0)
-	for _, history := range histories {
-		if history.Timestamp <= 0 {
+	// In the command position, command metadata is more reliable than history.
+	// Delay history while the input still looks like a command name so Tab does
+	// not jump from a partial command straight into old command arguments.
+	for _, command := range queryPlugin.GetQueryCommands() {
+		if command.Command == "" {
 			continue
 		}
-		if minTimestamp == 0 || history.Timestamp < minTimestamp {
-			minTimestamp = history.Timestamp
-		}
-		if history.Timestamp > maxTimestamp {
-			maxTimestamp = history.Timestamp
+		if command.Command == query.Search || strings.HasPrefix(command.Command, query.Search) {
+			return true
 		}
 	}
-	return minTimestamp, maxTimestamp
+	return false
 }
 
-func historyRecencyScore(timestamp int64, minTimestamp int64, maxTimestamp int64) int {
-	if timestamp <= 0 || minTimestamp <= 0 || maxTimestamp <= minTimestamp {
+// hasEnoughHistoryCompletionInput keeps history hints quiet until the user gives a clear prefix.
+func hasEnoughHistoryCompletionInput(query Query) bool {
+	minLen := queryCompletionGlobalHistoryMinLen
+	effectiveInput := query.RawQuery
+	if query.TriggerKeyword != "" {
+		minLen = queryCompletionPluginHistoryMinLen
+		effectiveInput = query.Search
+	}
+
+	return effectiveCompletionInputLen(effectiveInput) >= minLen
+}
+
+// latestQueryCompletionHistories returns the newest bounded history window for stable hint ranking.
+func latestQueryCompletionHistories(histories []setting.QueryHistory) []setting.QueryHistory {
+	latest := append([]setting.QueryHistory(nil), histories...)
+	sort.SliceStable(latest, func(i, j int) bool {
+		return latest[i].Timestamp > latest[j].Timestamp
+	})
+	if len(latest) > QueryCompletionHistoryLimit {
+		return latest[:QueryCompletionHistoryLimit]
+	}
+	return latest
+}
+
+// historyInputBonus rewards clearer prefixes without letting history outrank command hints.
+func historyInputBonus(query Query) int {
+	inputLen := effectiveCompletionInputLen(query.RawQuery)
+	if query.TriggerKeyword != "" {
+		inputLen = effectiveCompletionInputLen(query.Search)
+	}
+	if inputLen > queryCompletionHistoryInputBonusMax {
+		inputLen = queryCompletionHistoryInputBonusMax
+	}
+	return inputLen * 20
+}
+
+func effectiveCompletionInputLen(value string) int {
+	return utf8.RuneCountInString(strings.TrimSpace(value))
+}
+
+func rankBonus(index int) int {
+	if index >= queryCompletionRankBonusMax {
 		return 0
 	}
-	return int((timestamp - minTimestamp) * 100 / (maxTimestamp - minTimestamp))
+	return queryCompletionRankBonusMax - index
 }

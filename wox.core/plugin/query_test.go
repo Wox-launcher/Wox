@@ -22,6 +22,18 @@ func getFakePluginInstances() []*Instance {
 						Command:     "uninstall",
 						Description: common.I18nString("Uninstall Wox plugins"),
 					},
+					{
+						Command:     "dev.list",
+						Description: common.I18nString("List dev plugins"),
+					},
+					{
+						Command:     "dev.remove",
+						Description: common.I18nString("Remove dev plugin"),
+					},
+					{
+						Command:     "dev.reload",
+						Description: common.I18nString("Reload dev plugin"),
+					},
 				},
 			},
 			Setting: &setting.PluginSetting{},
@@ -69,12 +81,12 @@ func Test_BuildQueryCompletionHint_Command(t *testing.T) {
 }
 
 func Test_BuildQueryCompletionHint_History(t *testing.T) {
-	q, pluginInstance := newQueryInputWithPlugins("wpm ins", getFakePluginInstances())
+	q, pluginInstance := newQueryInputWithPlugins("wpm xyz", getFakePluginInstances())
 	histories := []setting.QueryHistory{
 		{
 			Query: common.PlainQuery{
 				QueryType: QueryTypeInput,
-				QueryText: "wpm install github",
+				QueryText: "wpm xyz github",
 			},
 			Timestamp: 1,
 		},
@@ -83,8 +95,8 @@ func Test_BuildQueryCompletionHint_History(t *testing.T) {
 	hint := BuildQueryCompletionHint(q, pluginInstance, histories)
 
 	assert.NotNil(t, hint)
-	assert.Equal(t, "wpm install github", hint.CompletionText)
-	assert.Equal(t, "tall github", hint.Suffix)
+	assert.Equal(t, "wpm xyz github", hint.CompletionText)
+	assert.Equal(t, " github", hint.Suffix)
 	assert.Equal(t, QueryCompletionSourceHistory, hint.Source)
 }
 
@@ -130,6 +142,102 @@ func Test_BuildQueryCompletionHint_NoHintForNonPrefixHistory(t *testing.T) {
 	hint := BuildQueryCompletionHint(q, pluginInstance, histories)
 
 	assert.Nil(t, hint)
+}
+
+func Test_BuildQueryCompletionHint_NoCommandHintForAmbiguousCommandPrefix(t *testing.T) {
+	q, pluginInstance := newQueryInputWithPlugins("wpm d", getFakePluginInstances())
+
+	hint := BuildQueryCompletionHint(q, pluginInstance, nil)
+
+	assert.Nil(t, hint)
+}
+
+func Test_BuildQueryCompletionHint_CommandHintWhenPrefixBecomesUnique(t *testing.T) {
+	q, pluginInstance := newQueryInputWithPlugins("wpm dev.rel", getFakePluginInstances())
+
+	hint := BuildQueryCompletionHint(q, pluginInstance, nil)
+
+	assert.NotNil(t, hint)
+	assert.Equal(t, "wpm dev.reload ", hint.CompletionText)
+	assert.Equal(t, "oad ", hint.Suffix)
+	assert.Equal(t, QueryCompletionSourceCommand, hint.Source)
+}
+
+func Test_BuildQueryCompletionHint_NoGlobalHistoryForShortInput(t *testing.T) {
+	q, pluginInstance := newQueryInputWithPlugins("gi", getFakePluginInstances())
+	histories := []setting.QueryHistory{
+		{
+			Query: common.PlainQuery{
+				QueryType: QueryTypeInput,
+				QueryText: "git status",
+			},
+			Timestamp: 1,
+		},
+	}
+
+	hint := BuildQueryCompletionHint(q, pluginInstance, histories)
+
+	assert.Nil(t, hint)
+}
+
+func Test_BuildQueryCompletionHint_GlobalHistoryAfterMinimumInput(t *testing.T) {
+	q, pluginInstance := newQueryInputWithPlugins("git", getFakePluginInstances())
+	histories := []setting.QueryHistory{
+		{
+			Query: common.PlainQuery{
+				QueryType: QueryTypeInput,
+				QueryText: "git status",
+			},
+			Timestamp: 1,
+		},
+	}
+
+	hint := BuildQueryCompletionHint(q, pluginInstance, histories)
+
+	assert.NotNil(t, hint)
+	assert.Equal(t, "git status", hint.CompletionText)
+	assert.Equal(t, " status", hint.Suffix)
+	assert.Equal(t, QueryCompletionSourceHistory, hint.Source)
+}
+
+func Test_BuildQueryCompletionHint_CommandPrefixBeatsLongerHistory(t *testing.T) {
+	q, pluginInstance := newQueryInputWithPlugins("wpm ins", getFakePluginInstances())
+	histories := []setting.QueryHistory{
+		{
+			Query: common.PlainQuery{
+				QueryType: QueryTypeInput,
+				QueryText: "wpm install github",
+			},
+			Timestamp: 1,
+		},
+	}
+
+	hint := BuildQueryCompletionHint(q, pluginInstance, histories)
+
+	assert.NotNil(t, hint)
+	assert.Equal(t, "wpm install ", hint.CompletionText)
+	assert.Equal(t, "tall ", hint.Suffix)
+	assert.Equal(t, QueryCompletionSourceCommand, hint.Source)
+}
+
+func Test_BuildQueryCompletionHint_CommandArgumentHistory(t *testing.T) {
+	q, pluginInstance := newQueryInputWithPlugins("wpm install gi", getFakePluginInstances())
+	histories := []setting.QueryHistory{
+		{
+			Query: common.PlainQuery{
+				QueryType: QueryTypeInput,
+				QueryText: "wpm install github",
+			},
+			Timestamp: 1,
+		},
+	}
+
+	hint := BuildQueryCompletionHint(q, pluginInstance, histories)
+
+	assert.NotNil(t, hint)
+	assert.Equal(t, "wpm install github", hint.CompletionText)
+	assert.Equal(t, "thub", hint.Suffix)
+	assert.Equal(t, QueryCompletionSourceHistory, hint.Source)
 }
 
 func Test_BuildQueryCompletionHint_NoHintWhenOriginalInputPrefixDoesNotMatchCompletion(t *testing.T) {
