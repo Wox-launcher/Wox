@@ -720,7 +720,7 @@ func queryPipelinePluginLabel(ctx context.Context, pluginInstance *plugin.Instan
 	return fmt.Sprintf("%s(%s)", name, pluginInstance.Metadata.Id)
 }
 
-func appendQueryDebugTails(ctx context.Context, sessionId string, queryId string, snapshot []plugin.QueryResultUI) []plugin.QueryResultUI {
+func appendQueryDebugTails(ctx context.Context, sessionId string, queryId string, snapshot []plugin.QueryResultUI, firstVisibleFlushElapsedMs int64) []plugin.QueryResultUI {
 	if len(snapshot) == 0 {
 		return snapshot
 	}
@@ -738,7 +738,7 @@ func appendQueryDebugTails(ctx context.Context, sessionId string, queryId string
 
 		resultCopy := result
 		resultCopy.Tails = append([]plugin.QueryResultTail{}, result.Tails...)
-		if batch, queryElapsed, ok := plugin.GetPluginManager().GetQueryResultDebugInfo(sessionId, queryId, result.Id); ok {
+		if batch, queryElapsed, pluginQueryElapsed, pluginQueryElapsedSet, ok := plugin.GetPluginManager().GetQueryResultDebugInfo(sessionId, queryId, result.Id); ok {
 			category := plugin.QueryResultTailTextCategoryDefault
 			if queryElapsed > 10 {
 				category = plugin.QueryResultTailTextCategoryWarning
@@ -747,11 +747,25 @@ func appendQueryDebugTails(ctx context.Context, sessionId string, queryId string
 				category = plugin.QueryResultTailTextCategoryDanger
 			}
 
-			resultCopy.Tails = append(
-				resultCopy.Tails,
-				plugin.NewQueryResultTailText(fmt.Sprintf("P%d", batch)),
-				plugin.NewQueryResultTailTextWithCategory(fmt.Sprintf("%dms", queryElapsed), category),
-			)
+			batchTail := plugin.NewQueryResultTailText(fmt.Sprintf("B%d", batch))
+			batchTail.Tooltip = fmt.Sprintf("First flush: %dms", firstVisibleFlushElapsedMs)
+			elapsedTail := plugin.NewQueryResultTailTextWithCategory(fmt.Sprintf("%dms", queryElapsed), category)
+			elapsedTail.Tooltip = "Response received elapsed since query start"
+			resultCopy.Tails = append(resultCopy.Tails, batchTail, elapsedTail)
+
+			if pluginQueryElapsedSet {
+				pluginQueryCategory := plugin.QueryResultTailTextCategoryDefault
+				if pluginQueryElapsed > 10 {
+					pluginQueryCategory = plugin.QueryResultTailTextCategoryWarning
+				}
+				if pluginQueryElapsed > 20 {
+					pluginQueryCategory = plugin.QueryResultTailTextCategoryDanger
+				}
+
+				pluginQueryTail := plugin.NewQueryResultTailTextWithCategory(fmt.Sprintf("%dms", pluginQueryElapsed), pluginQueryCategory)
+				pluginQueryTail.Tooltip = "Raw Plugin.Query duration"
+				resultCopy.Tails = append(resultCopy.Tails, pluginQueryTail)
+			}
 		}
 		annotated[i] = resultCopy
 	}

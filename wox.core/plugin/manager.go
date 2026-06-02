@@ -1174,6 +1174,7 @@ func (m *Manager) finalizePluginQueryResponse(ctx context.Context, pluginInstanc
 		defaultActions := m.getDefaultActions(ctx, pluginInstance, query, response.Results[i].Title, response.Results[i].SubTitle)
 		response.Results[i].Actions = append(response.Results[i].Actions, defaultActions...)
 		response.Results[i] = m.PolishResult(ctx, pluginInstance, query, response.Layout, response.Results[i])
+		m.RecordQueryResultPluginQueryElapsed(query.SessionId, query.Id, response.Results[i].Id, pluginQueryCost)
 	}
 
 	if query.Type == QueryTypeSelection && query.Search != "" {
@@ -1781,6 +1782,24 @@ func (m *Manager) RecordQueryResultQueryElapsed(sessionId string, queryId string
 	}
 }
 
+// RecordQueryResultPluginQueryElapsed stores the raw Plugin.Query duration for debug tails.
+func (m *Manager) RecordQueryResultPluginQueryElapsed(sessionId string, queryId string, resultId string, elapsedMs int64) {
+	if sessionId == "" || queryId == "" || resultId == "" {
+		return
+	}
+
+	resultCache, found := m.findResultCacheInSession(sessionId, queryId, resultId)
+	if !found {
+		return
+	}
+	if resultCache.PluginQueryElapsedSet {
+		return
+	}
+
+	resultCache.PluginQueryElapsed = elapsedMs
+	resultCache.PluginQueryElapsedSet = true
+}
+
 func (m *Manager) RecordQueryResultFlushBatch(sessionId string, queryId string, results []QueryResultUI, batch int) {
 	if sessionId == "" || queryId == "" || len(results) == 0 || batch <= 0 {
 		return
@@ -1808,16 +1827,16 @@ func (m *Manager) RecordQueryResultFlushBatch(sessionId string, queryId string, 
 	}
 }
 
-func (m *Manager) GetQueryResultDebugInfo(sessionId string, queryId string, resultId string) (batch int, queryElapsed int64, ok bool) {
+func (m *Manager) GetQueryResultDebugInfo(sessionId string, queryId string, resultId string) (batch int, queryElapsed int64, pluginQueryElapsed int64, pluginQueryElapsedSet bool, ok bool) {
 	resultCache, found := m.findResultCacheInSession(sessionId, queryId, resultId)
 	if !found {
-		return 0, 0, false
+		return 0, 0, 0, false, false
 	}
 	if resultCache.FlushBatch <= 0 || !resultCache.QueryElapsedSet {
-		return 0, 0, false
+		return 0, 0, 0, false, false
 	}
 
-	return resultCache.FlushBatch, resultCache.QueryElapsed, true
+	return resultCache.FlushBatch, resultCache.QueryElapsed, resultCache.PluginQueryElapsed, resultCache.PluginQueryElapsedSet, true
 }
 
 func (m *Manager) findResultCacheInSession(sessionId string, queryId string, resultId string) (*QueryResultCache, bool) {

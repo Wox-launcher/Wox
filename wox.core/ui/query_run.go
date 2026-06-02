@@ -29,6 +29,10 @@ type queryRun struct {
 	ownerPlugin *plugin.Instance
 	// startTimestamp records the query start time for elapsed metrics and debug tails.
 	startTimestamp int64
+	// firstFlushDelayMs records the first visible flush delay chosen for this query.
+	firstFlushDelayMs int64
+	// firstVisibleFlushElapsedMs records when the first non-empty snapshot is sent.
+	firstVisibleFlushElapsedMs int64
 	// resultFlushBatch tracks the visible snapshot batch number shown in dev performance tails.
 	resultFlushBatch int
 	// totalResultCount counts all accepted results for fallback decisions and completion logging.
@@ -57,10 +61,10 @@ func newQueryRun(ctx context.Context, request WebsocketMsg, query plugin.Query, 
 
 func (r *queryRun) start() {
 	r.startTimestamp = util.GetSystemTimestamp()
-	firstFlushDelayMs := plugin.GetPluginManager().GetQueryFirstFlushDelayMs(r.query)
-	logger.Info(r.ctx, fmt.Sprintf("query %s: %s, first flush delay: %d ms", r.query.Type, r.query.String(), firstFlushDelayMs))
+	r.firstFlushDelayMs = plugin.GetPluginManager().GetQueryFirstFlushDelayMs(r.query)
+	logger.Info(r.ctx, fmt.Sprintf("query %s: %s, first flush delay: %d ms", r.query.Type, r.query.String(), r.firstFlushDelayMs))
 
-	r.resultDebouncer = util.NewDebouncer(firstFlushDelayMs, resultDebounceIntervalMs, r.flush)
+	r.resultDebouncer = util.NewDebouncer(r.firstFlushDelayMs, resultDebounceIntervalMs, r.flush)
 	r.resultDebouncer.Start(r.ctx)
 	logger.Info(r.ctx, fmt.Sprintf("query %s: %s, result flushed (new start)", r.query.Type, r.query.String()))
 
@@ -164,19 +168,23 @@ func (r *queryRun) flush(results []plugin.QueryResultUI, reason string) {
 	}
 
 	logger.Info(r.ctx, fmt.Sprintf("query %s: %s, result flushed (reason: %s, isFinal: %v), current: %d, total results: %d", r.query.Type, r.query.String(), reason, isFinal, len(results), r.totalResultCount))
+	if len(results) > 0 {
+		if r.resultFlushBatch == 0 {
+			r.firstVisibleFlushElapsedMs = util.GetSystemTimestamp() - r.startTimestamp
+		}
+		r.resultFlushBatch++
+		plugin.GetPluginManager().RecordQueryResultFlushBatch(r.sessionId, r.queryId, results, r.resultFlushBatch)
+	}
+
 	// Bug fix: core query pipelines are concurrent, so backend "current query"
 	// state can move while an older or newer pipeline is still flushing. Send
 	// the queryId-specific snapshot and let Flutter decide whether it is still
 	// the visible query; otherwise the current query can miss its final response
 	// and keep the loading indicator alive.
 	snapshot := plugin.GetPluginManager().BuildQueryResultsSnapshot(r.sessionId, r.queryId)
-	if len(snapshot) > 0 {
-		r.resultFlushBatch++
-		plugin.GetPluginManager().RecordQueryResultFlushBatch(r.sessionId, r.queryId, snapshot, r.resultFlushBatch)
-	}
 	responseSnapshot := snapshot
 	if util.IsDev() {
-		responseSnapshot = appendQueryDebugTails(r.ctx, r.sessionId, r.queryId, snapshot)
+		responseSnapshot = appendQueryDebugTails(r.ctx, r.sessionId, r.queryId, snapshot, r.firstVisibleFlushElapsedMs)
 	}
 	responseUIQueryResponse(r.ctx, r.request, r.queryId, plugin.QueryResponseUI{
 		Results:     responseSnapshot,
