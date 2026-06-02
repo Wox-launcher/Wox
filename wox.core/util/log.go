@@ -270,8 +270,8 @@ func createLogger(logFolder string, initialLevel zapcore.Level) (*zap.Logger, io
 	fileWriter := &Lumberjack{
 		Filename:  path.Join(logFolder, "log"),
 		LocalTime: true,
-		MaxSize:   500, // megabytes
-		MaxAge:    30,  // days
+		MaxSize:   100, // megabytes
+		MaxAge:    7,   // days
 	}
 	writeSyncer := zapcore.AddSync(fileWriter)
 	atomicLevel := zap.NewAtomicLevelAt(initialLevel)
