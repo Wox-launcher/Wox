@@ -1,0 +1,4 @@
+interface:
+  display_name: "Wox Multiple Window Merge"
+  short_description: "Merge master into multi-window Wox"
+  default_prompt: "Use $wox-multiple-window-merge to merge master into the Wox multiple-window branch and resolve conflicts."
