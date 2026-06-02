@@ -51,8 +51,10 @@ static constexpr UINT kScreenshotSelectionDimRegionUpdateMessage = WM_APP + 0x52
 static constexpr UINT kScreenshotSelectionHoverMoveMessage = WM_APP + 0x53;
 static constexpr UINT kScreenshotDisplaySnapshotPayloadReadyMessage = WM_APP + 0x54;
 static constexpr UINT_PTR kScreenshotSelectionHoverProbeTimerId = 0xA13;
+static constexpr UINT_PTR kDelayedResizeRepaintNudgeTimerId = 0xA14;
 static constexpr UINT kScreenshotSelectionHoverProbeDelayMs = 60;
 static constexpr UINT kScreenshotSelectionStartupHoverProbeDelayMs = 1200;
+static constexpr UINT kDelayedResizeRepaintNudgeDelayMs = 100;
 static constexpr wchar_t kScrollingCaptureOverlayWindowClassName[] = L"WoxScrollingCaptureOverlayWindow";
 static constexpr wchar_t kScreenshotSelectionInputWindowClassName[] = L"WoxScreenshotSelectionInputWindow";
 static constexpr wchar_t kScreenshotSelectionBorderWindowClassName[] = L"WoxScreenshotSelectionBorderWindow";
@@ -1160,6 +1162,63 @@ void FlutterWindow::SyncFlutterChildWindowToClientArea(HWND hwnd, const char *so
       << ", client=" << RectToString(client_rect)
       << ", child=" << RectToString(child_rect);
   Log(oss.str());
+}
+
+void FlutterWindow::ScheduleDelayedResizeRepaintNudge(HWND hwnd)
+{
+  if (hwnd == nullptr || !IsWindow(hwnd))
+  {
+    return;
+  }
+
+  KillTimer(hwnd, kDelayedResizeRepaintNudgeTimerId);
+  SetTimer(hwnd, kDelayedResizeRepaintNudgeTimerId, kDelayedResizeRepaintNudgeDelayMs, nullptr);
+}
+
+void FlutterWindow::RunDelayedResizeRepaintNudge(HWND hwnd)
+{
+  KillTimer(hwnd, kDelayedResizeRepaintNudgeTimerId);
+  if (hwnd == nullptr || !IsWindow(hwnd) || IsWindowVisible(hwnd) == 0)
+  {
+    return;
+  }
+
+  RECT rect{};
+  if (!GetWindowRect(hwnd, &rect))
+  {
+    return;
+  }
+
+  const int width = rect.right - rect.left;
+  const int height = rect.bottom - rect.top;
+  if (width <= 0 || height <= 0)
+  {
+    return;
+  }
+
+  // Windows can occasionally present the new top-level HWND size before the
+  // Flutter child and engine have accepted the same geometry. The short +1/-1
+  // round trip creates a real WM_SIZE after the normal resize without leaving
+  // the launcher at an inflated size.
+  SyncFlutterChildWindowToClientArea(hwnd, "delayedResizeRepaintNudge", false);
+  if (flutter_controller_)
+  {
+    flutter_controller_->ForceRedraw();
+  }
+
+  SetWindowPos(hwnd, nullptr, rect.left, rect.top, width, height + 1, SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+  SyncFlutterChildWindowToClientArea(hwnd, "delayedResizeRepaintNudge+1", false);
+  if (flutter_controller_)
+  {
+    flutter_controller_->ForceRedraw();
+  }
+
+  SetWindowPos(hwnd, nullptr, rect.left, rect.top, width, height, SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+  SyncFlutterChildWindowToClientArea(hwnd, "delayedResizeRepaintNudgeRestore", false);
+  if (flutter_controller_)
+  {
+    flutter_controller_->ForceRedraw();
+  }
 }
 
 void FlutterWindow::FocusFlutterViewOrRoot(HWND hwnd)
@@ -4255,9 +4314,13 @@ void FlutterWindow::OnDestroy()
 
   // Restore original window procedure
   HWND hwnd = GetHandle();
-  if (hwnd != nullptr && original_window_proc_ != nullptr)
+  if (hwnd != nullptr)
   {
-    SetWindowLongPtr(hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(original_window_proc_));
+    KillTimer(hwnd, kDelayedResizeRepaintNudgeTimerId);
+    if (original_window_proc_ != nullptr)
+    {
+      SetWindowLongPtr(hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(original_window_proc_));
+    }
   }
 
   if (flutter_controller_)
@@ -4342,6 +4405,12 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message, WPARAM const wparam
   switch (message)
   {
   case WM_TIMER:
+    if (wparam == kDelayedResizeRepaintNudgeTimerId)
+    {
+      RunDelayedResizeRepaintNudge(hwnd);
+      return 0;
+    }
+
     if (wparam == kRestoreForegroundTimerId1 || wparam == kRestoreForegroundTimerId2)
     {
       KillTimer(hwnd, static_cast<UINT_PTR>(wparam));
@@ -5184,6 +5253,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
           {
             flutter_controller_->ForceRedraw();
           }
+          ScheduleDelayedResizeRepaintNudge(hwnd);
 
           result->Success();
         }
@@ -5262,6 +5332,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
           {
             flutter_controller_->ForceRedraw();
           }
+          ScheduleDelayedResizeRepaintNudge(hwnd);
 
           result->Success();
         }
