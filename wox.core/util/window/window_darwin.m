@@ -34,6 +34,8 @@ static char* copyPathFromAXValue(CFTypeRef value);
 char* getFinderWindowPathByPid(int pid);
 int isOpenSaveDialogByPid(int pid);
 
+static CFStringRef const woxAXFullScreenAttribute = CFSTR("AXFullScreen");
+
 static void activateRunningApplication(NSRunningApplication *application) {
     if (application == nil) {
         return;
@@ -327,6 +329,104 @@ static BOOL getAXWindowRect(AXUIElementRef window, WoxWindowRectC *outRect) {
     return YES;
 }
 
+// readAXWindowFullScreenState reads the undocumented-but-standard Accessibility fullscreen flag.
+static BOOL readAXWindowFullScreenState(AXUIElementRef window, BOOL *outFullScreen) {
+    if (!window || !outFullScreen) {
+        return NO;
+    }
+
+    CFTypeRef fullScreenValue = NULL;
+    if (AXUIElementCopyAttributeValue(window, woxAXFullScreenAttribute, &fullScreenValue) != kAXErrorSuccess || !fullScreenValue) {
+        return NO;
+    }
+
+    BOOL ok = NO;
+    if (CFGetTypeID(fullScreenValue) == CFBooleanGetTypeID()) {
+        *outFullScreen = CFBooleanGetValue((CFBooleanRef)fullScreenValue);
+        ok = YES;
+    }
+    CFRelease(fullScreenValue);
+    return ok;
+}
+
+// waitForAXWindowFullScreenState gives macOS time to leave the fullscreen Space before resizing.
+static BOOL waitForAXWindowFullScreenState(AXUIElementRef window, BOOL expectedFullScreen) {
+    const int maxAttempts = 20;
+    const useconds_t interval = 50000;
+
+    for (int attempt = 0; attempt < maxAttempts; attempt++) {
+        BOOL isFullScreen = NO;
+        if (readAXWindowFullScreenState(window, &isFullScreen) && isFullScreen == expectedFullScreen) {
+            return YES;
+        }
+        usleep(interval);
+    }
+    return NO;
+}
+
+// exitAXWindowFullScreenIfNeeded restores fullscreen windows so AX position/size changes can apply.
+static BOOL exitAXWindowFullScreenIfNeeded(AXUIElementRef window, BOOL *outExitedFullScreen) {
+    if (outExitedFullScreen) {
+        *outExitedFullScreen = NO;
+    }
+
+    BOOL isFullScreen = NO;
+    if (!readAXWindowFullScreenState(window, &isFullScreen) || !isFullScreen) {
+        return YES;
+    }
+    if (outExitedFullScreen) {
+        *outExitedFullScreen = YES;
+    }
+
+    if (AXUIElementSetAttributeValue(window, woxAXFullScreenAttribute, kCFBooleanFalse) == kAXErrorSuccess && waitForAXWindowFullScreenState(window, NO)) {
+        return YES;
+    }
+
+    if (readAXWindowFullScreenState(window, &isFullScreen) && !isFullScreen) {
+        return YES;
+    }
+
+    CFTypeRef fullScreenButtonValue = NULL;
+    AXError buttonErr = AXUIElementCopyAttributeValue(window, kAXFullScreenButtonAttribute, &fullScreenButtonValue);
+    if (buttonErr != kAXErrorSuccess || !fullScreenButtonValue) {
+        if (fullScreenButtonValue) {
+            CFRelease(fullScreenButtonValue);
+        }
+        return NO;
+    }
+
+    AXError pressErr = AXUIElementPerformAction((AXUIElementRef)fullScreenButtonValue, kAXPressAction);
+    CFRelease(fullScreenButtonValue);
+    return pressErr == kAXErrorSuccess && waitForAXWindowFullScreenState(window, NO);
+}
+
+// copyWindowAfterFullScreenExit handles macOS recreating the AX window with a new CGWindowID.
+static AXUIElementRef copyWindowAfterFullScreenExit(pid_t pid, CGWindowID targetWindowId) {
+    const int maxAttempts = 30;
+    const useconds_t interval = 50000;
+
+    for (int attempt = 0; attempt < maxAttempts; attempt++) {
+        AXUIElementRef window = copyWindowForId(pid, targetWindowId);
+        if (window) {
+            return window;
+        }
+        usleep(interval);
+    }
+
+    if (targetWindowId == 0) {
+        return NULL;
+    }
+
+    for (int attempt = 0; attempt < maxAttempts; attempt++) {
+        AXUIElementRef window = copyWindowForId(pid, 0);
+        if (window) {
+            return window;
+        }
+        usleep(interval);
+    }
+    return NULL;
+}
+
 char *getActiveWindowIdForManagement() {
     @autoreleasepool {
         AXUIElementRef systemWide = AXUIElementCreateSystemWide();
@@ -437,9 +537,24 @@ int moveResizeWindowForManagement(const char *windowId, int pid, int x, int y, i
             return -2;
         }
 
-        AXUIElementRef window = copyWindowForId((pid_t)pid, parseWindowId(windowId));
+        CGWindowID targetWindowId = parseWindowId(windowId);
+        AXUIElementRef window = copyWindowForId((pid_t)pid, targetWindowId);
         if (!window) {
             return 0;
+        }
+
+        BOOL exitedFullScreen = NO;
+        if (!exitAXWindowFullScreenIfNeeded(window, &exitedFullScreen)) {
+            CFRelease(window);
+            return -1;
+        }
+
+        if (exitedFullScreen) {
+            CFRelease(window);
+            window = copyWindowAfterFullScreenExit((pid_t)pid, targetWindowId);
+            if (!window) {
+                return 0;
+            }
         }
 
         CGPoint position = CGPointMake(x, y);

@@ -43,7 +43,8 @@ const (
 	aiCommandLoadingOverlayOffsetY    = 18
 	aiCommandLoadingOverlayMinWidth   = 128
 	aiCommandLoadingOverlayMaxWidth   = 220
-	aiCommandResultOverlayWidth       = 520
+	aiCommandResultOverlayMinWidth    = 220
+	aiCommandResultOverlayMaxWidth    = 420
 	aiCommandResultOverlayMaxHeight   = 600
 	aiCommandResultOverlayMinUpdateMs = 80
 )
@@ -405,7 +406,8 @@ func (c *Plugin) showAICommandResultOverlay(ctx context.Context, name string, po
 		Message:       message,
 		Loading:       streamResult.Status == common.ChatStreamStatusStreaming && copyText == "",
 		Topmost:       true,
-		Width:         aiCommandResultOverlayWidth,
+		MinWidth:      aiCommandResultOverlayMinWidth,
+		MaxWidth:      aiCommandResultOverlayMaxWidth,
 		MaxHeight:     aiCommandResultOverlayMaxHeight,
 		FontSize:      12,
 		Movable:       true,
