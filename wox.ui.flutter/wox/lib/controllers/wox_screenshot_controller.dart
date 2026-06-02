@@ -90,6 +90,7 @@ class WoxScreenshotController extends GetxController {
   List<DisplaySnapshot>? _preparedSnapshots;
   Timer? _scrollingCaptureFrameDebounce;
   StreamSubscription<ScrollingCaptureWheelEvent>? _scrollingCaptureWheelSubscription;
+  StreamSubscription<void>? _captureWorkspaceEscapeSubscription;
   Rect? _scrollingCaptureControlsBounds;
   Rect? _pendingScrollingCaptureSelection;
   _ScrollingCaptureDirection? _pendingScrollingCaptureDirection;
@@ -520,6 +521,19 @@ class WoxScreenshotController extends GetxController {
     // The screenshot editor now uses an independent native window. Keep the existing launcher
     // visible so silent screenshot query hotkeys do not alter the user's current query window.
     await _ensureScreenshotWindow(traceId);
+    _listenForNativeCaptureWorkspaceEscape(traceId);
+  }
+
+  void _listenForNativeCaptureWorkspaceEscape(String traceId) {
+    _captureWorkspaceEscapeSubscription?.cancel();
+    _captureWorkspaceEscapeSubscription = ScreenshotPlatformBridge.instance.captureWorkspaceEscapes().listen((_) {
+      final completer = _sessionCompleter;
+      if (!isSessionActive.value || completer == null || completer.isCompleted) {
+        return;
+      }
+
+      unawaited(cancelSession(traceId, reason: 'native_keyboard_escape'));
+    });
   }
 
   Future<void> cancelSession(String traceId, {String reason = 'unspecified'}) async {
@@ -1540,6 +1554,8 @@ class WoxScreenshotController extends GetxController {
     _isScreenshotWindowPresented = false;
     _releaseSnapshotImageCaches(displaySnapshots);
     _clearNativePreparationState();
+    _captureWorkspaceEscapeSubscription?.cancel();
+    _captureWorkspaceEscapeSubscription = null;
     _disposeScrollingCaptureFrames();
     isScrollingCaptureUpdating.value = false;
     selectedAnnotationId.value = null;

@@ -584,7 +584,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
       return;
     }
 
-    await showDialog(
+    await showWoxDialog(
       context: context,
       barrierColor: getThemePopupBarrierColor(),
       builder: (context) {
@@ -1055,7 +1055,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
           return;
         }
 
-        await showDialog(
+        await showWoxDialog(
           context: context,
           barrierColor: getThemePopupBarrierColor(),
           builder: (context) {

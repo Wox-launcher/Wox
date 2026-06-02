@@ -14,6 +14,7 @@ import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_setting.dart';
 import 'package:wox/utils/colors.dart';
+import 'package:wox/utils/wox_dialog_util.dart';
 
 enum _QueryHotkeyPreset { normal, webPanel, silent, custom }
 
@@ -22,7 +23,7 @@ Future<void> showWoxQueryHotkeyDialog({
   Map<String, dynamic> initialRow = const {},
   required Future<String?> Function(Map<String, dynamic> row) onSave,
 }) async {
-  await showDialog(context: context, barrierColor: getThemePopupBarrierColor(), builder: (context) => WoxQueryHotkeyDialog(initialRow: initialRow, onSave: onSave));
+  await showWoxDialog(context: context, barrierColor: getThemePopupBarrierColor(), builder: (context) => WoxQueryHotkeyDialog(initialRow: initialRow, onSave: onSave));
 }
 
 class WoxQueryHotkeyDialog extends StatefulWidget {

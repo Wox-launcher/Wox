@@ -48,6 +48,13 @@ abstract class ScreenshotPlatformBridge {
     }
   }
 
+  static void emitCaptureWorkspaceEscapeForPlatform() {
+    final bridge = _instance;
+    if (bridge is MethodChannelScreenshotPlatformBridge) {
+      bridge._emitCaptureWorkspaceEscape();
+    }
+  }
+
   static void setInstanceForTest(ScreenshotPlatformBridge bridge) {
     _instance = bridge;
   }
@@ -87,6 +94,8 @@ abstract class ScreenshotPlatformBridge {
 
   Stream<ScreenshotSelectionDisplayHint> selectionDisplayHints() => const Stream<ScreenshotSelectionDisplayHint>.empty();
 
+  Stream<void> captureWorkspaceEscapes() => const Stream<void>.empty();
+
   Future<void> dismissCaptureWorkspacePresentation({int? windowHandle});
 
   Future<void> dismissNativeSelectionOverlays();
@@ -121,6 +130,7 @@ class MethodChannelScreenshotPlatformBridge implements ScreenshotPlatformBridge 
   late final MethodChannel _channel = MethodChannel(_resolveChannelName());
   late final StreamController<ScreenshotSelectionDisplayHint> _selectionDisplayHintController = StreamController<ScreenshotSelectionDisplayHint>.broadcast();
   late final StreamController<ScrollingCaptureWheelEvent> _scrollingCaptureWheelController = StreamController<ScrollingCaptureWheelEvent>.broadcast();
+  late final StreamController<void> _captureWorkspaceEscapeController = StreamController<void>.broadcast();
 
   MethodChannelScreenshotPlatformBridge() {
     if (Platform.isMacOS) {
@@ -251,6 +261,9 @@ class MethodChannelScreenshotPlatformBridge implements ScreenshotPlatformBridge 
   Stream<ScreenshotSelectionDisplayHint> selectionDisplayHints() => _selectionDisplayHintController.stream;
 
   @override
+  Stream<void> captureWorkspaceEscapes() => _captureWorkspaceEscapeController.stream;
+
+  @override
   Stream<ScrollingCaptureWheelEvent> scrollingCaptureWheelEvents() => _scrollingCaptureWheelController.stream;
 
   void _emitScrollingCaptureWheelEvent([Object? arguments]) {
@@ -262,6 +275,10 @@ class MethodChannelScreenshotPlatformBridge implements ScreenshotPlatformBridge 
     // controller code focused on prewarm policy rather than transport-specific null checks.
     final normalized = arguments.map<String, dynamic>((key, value) => MapEntry(key.toString(), value));
     _selectionDisplayHintController.add(ScreenshotSelectionDisplayHint.fromJson(normalized));
+  }
+
+  void _emitCaptureWorkspaceEscape() {
+    _captureWorkspaceEscapeController.add(null);
   }
 
   @override
@@ -355,6 +372,11 @@ class MethodChannelScreenshotPlatformBridge implements ScreenshotPlatformBridge 
   Future<void> _handleMacOSScreenshotEvent(MethodCall call) async {
     if (call.method == 'onScrollingCaptureWheel') {
       _emitScrollingCaptureWheelEvent(call.arguments);
+      return;
+    }
+
+    if (call.method == 'onCaptureWorkspaceEscape') {
+      _emitCaptureWorkspaceEscape();
       return;
     }
 

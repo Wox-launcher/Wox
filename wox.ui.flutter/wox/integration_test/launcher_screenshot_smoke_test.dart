@@ -105,6 +105,14 @@ class _FakeScreenshotBridge implements ScreenshotPlatformBridge {
   }
 
   @override
+  Stream<void> captureWorkspaceEscapes() {
+    if (delegateNativePresentation) {
+      return _delegate.captureWorkspaceEscapes();
+    }
+    return const Stream<void>.empty();
+  }
+
+  @override
   Future<void> dismissCaptureWorkspacePresentation({int? windowHandle}) async {
     if (delegateNativePresentation) {
       await _delegate.dismissCaptureWorkspacePresentation(windowHandle: windowHandle);

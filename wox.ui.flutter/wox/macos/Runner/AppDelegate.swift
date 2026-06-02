@@ -1205,6 +1205,7 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
   private var activeScrollingCaptureOverlaySession: ScrollingCaptureOverlaySession?
   private var activeScrollingCaptureTraceId = ""
   private var nativeOverlayDismissTimeoutWorkItem: DispatchWorkItem?
+  private var captureWorkspaceKeyboardMonitor: Any?
 
   private func disableUserWindowResizing(_ window: NSWindow) {
     window.styleMask.remove(.resizable)
@@ -1928,6 +1929,7 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
     window.level = requestedScreenshotLevel
 
     isCapturePresentationActive = true
+    installCaptureWorkspaceKeyboardMonitor()
     captureWorkspaceBounds = bounds
     captureWorkspaceScale = 1
     return [
@@ -1965,6 +1967,7 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
   }
 
   private func dismissCaptureWorkspacePresentation(on window: NSWindow) {
+    removeCaptureWorkspaceKeyboardMonitor()
     dismissScrollingCaptureOverlay()
     cachedDisplayCaptures.removeAll()
     guard let savedState = screenshotPresentationState else {
@@ -2049,6 +2052,33 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
       "panelBecomesKeyOnlyIfNeeded": (window as? NSPanel)?.becomesKeyOnlyIfNeeded as Any,
       "panelIsFloating": (window as? NSPanel)?.isFloatingPanel as Any,
     ]
+  }
+
+  private func installCaptureWorkspaceKeyboardMonitor() {
+    guard captureWorkspaceKeyboardMonitor == nil else {
+      return
+    }
+
+    // The screenshot editor runs in a borderless RegularWindowController window. AppKit can leave
+    // Escape outside Flutter's responder chain, so keep cancellation at the same native layer that
+    // owns screenshot presentation while forwarding the result through Dart's normal session cleanup.
+    captureWorkspaceKeyboardMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
+      guard let self, self.isCapturePresentationActive, event.keyCode == 53 else {
+        return event
+      }
+
+      self.screenshotEventChannel?.invokeMethod("onCaptureWorkspaceEscape", arguments: nil)
+      return nil
+    }
+  }
+
+  private func removeCaptureWorkspaceKeyboardMonitor() {
+    guard let captureWorkspaceKeyboardMonitor else {
+      return
+    }
+
+    NSEvent.removeMonitor(captureWorkspaceKeyboardMonitor)
+    self.captureWorkspaceKeyboardMonitor = nil
   }
 
   private func currentMouseLocation() -> CGPoint {
@@ -2196,9 +2226,6 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
       )
     }
 
-    let excludedApplications = shareableContent.applications.filter {
-      $0.bundleIdentifier == Bundle.main.bundleIdentifier
-    }
     var cachedCaptures: [CachedDisplayCapture] = []
 
     for display in shareableContent.displays {
@@ -2214,12 +2241,11 @@ class AppDelegate: FlutterAppDelegate, NSWindowDelegate {
         continue
       }
 
-      // ScreenCaptureKit replaces CGDisplayCreateImage on modern macOS. We exclude the current
-      // Wox process here so the screenshot workspace does not appear in the captured background
-      // after the launcher window is hidden and resized across the virtual desktop.
+      // ScreenCaptureKit replaces CGDisplayCreateImage on modern macOS. Do not exclude Wox
+      // windows here; separate preview windows are independent user-visible content.
       let contentFilter = SCContentFilter(
         display: display,
-        excludingApplications: excludedApplications,
+        excludingApplications: [],
         exceptingWindows: []
       )
       let scale = CGFloat(contentFilter.pointPixelScale)
