@@ -494,22 +494,7 @@ class _ReleaseNotesSectionView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Container(
-              width: metrics.scaledSpacing(28),
-              height: metrics.scaledSpacing(28),
-              decoration: BoxDecoration(
-                color: style.color.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: style.color.withValues(alpha: 0.28)),
-              ),
-              child: Icon(style.icon, color: style.color, size: metrics.scaledSpacing(17)),
-            ),
-            SizedBox(width: metrics.scaledSpacing(10)),
-            Text(title, style: TextStyle(color: fontColor, fontSize: metrics.scaledSpacing(18), fontWeight: FontWeight.w800, height: 1.1)),
-          ],
-        ),
+        Row(children: [Text(title, style: TextStyle(color: fontColor, fontSize: metrics.scaledSpacing(18), fontWeight: FontWeight.w800, height: 1.1))]),
         SizedBox(height: metrics.scaledSpacing(10)),
         ...section.items.map((item) => _ReleaseNotesItemView(item: item, tagColumnWidth: tagColumnWidth, tagTextStyle: tagTextStyle, fontColor: fontColor, fontSize: fontSize)),
       ],

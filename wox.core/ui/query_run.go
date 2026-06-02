@@ -139,6 +139,13 @@ func (r *queryRun) showFallbackResults() {
 		return
 	}
 	r.fallbackHandled = true
+	if !r.query.IsGlobalQuery() {
+		// Fallback is for global discovery only. Once a trigger keyword has put
+		// the query inside one plugin, empty results should stay owned by that
+		// plugin instead of falling back to command suggestions.
+		logger.Info(r.ctx, "no result, skip fallback for plugin-scoped query")
+		return
+	}
 
 	fallbackResponse := plugin.GetPluginManager().QueryFallback(r.ctx, r.query, r.ownerPlugin)
 	if len(fallbackResponse.Results) > 0 {

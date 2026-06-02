@@ -165,6 +165,10 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 @end
 
 @implementation HandCursorButton
+- (BOOL)acceptsFirstResponder {
+  return NO;
+}
+
 - (void)updateTrackingAreas {
   [super updateTrackingAreas];
   for (NSTrackingArea *area in self.trackingAreas) {
@@ -187,6 +191,36 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 
 - (void)cursorUpdate:(NSEvent *)event {
   [[NSCursor pointingHandCursor] set];
+}
+@end
+
+@interface OverlayCloseButton : HandCursorButton
+@property(nonatomic, assign) BOOL pointerInside;
+- (void)updateAppearance;
+@end
+
+@implementation OverlayCloseButton
+- (void)updateAppearance {
+    if (!self.layer) return;
+    CGFloat alpha = self.highlighted ? 0.34 : (self.pointerInside ? 0.24 : 0.12);
+    self.layer.backgroundColor = [NSColor colorWithWhite:1.0 alpha:alpha].CGColor;
+}
+
+- (void)setHighlighted:(BOOL)highlighted {
+    [super setHighlighted:highlighted];
+    [self updateAppearance];
+}
+
+- (void)mouseEntered:(NSEvent *)event {
+    [super mouseEntered:event];
+    self.pointerInside = YES;
+    [self updateAppearance];
+}
+
+- (void)mouseExited:(NSEvent *)event {
+    [super mouseExited:event];
+    self.pointerInside = NO;
+    [self updateAppearance];
 }
 @end
 
@@ -496,7 +530,7 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         [self.contentView addSubview:self.messageView];
 
         // Close Button (HandCursorButton)
-        self.closeButton = [[HandCursorButton alloc] initWithFrame:NSMakeRect(0, 0, kCloseSize, kCloseSize)];
+        self.closeButton = [[OverlayCloseButton alloc] initWithFrame:NSMakeRect(0, 0, kCloseSize, kCloseSize)];
         [self.closeButton setBezelStyle:NSBezelStyleRegularSquare];
         [self.closeButton setButtonType:NSButtonTypeMomentaryLight];
         [self.closeButton setTitle:@"×"];
@@ -505,9 +539,12 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         [self.closeButton setAction:@selector(onClose)];
         [self.closeButton setHidden:NO];
         [self.closeButton setBordered:NO];
+        self.closeButton.focusRingType = NSFocusRingTypeNone;
         [self.closeButton setWantsLayer:YES];
-        self.closeButton.layer.backgroundColor = [NSColor colorWithWhite:1.0 alpha:0.3].CGColor;
         self.closeButton.layer.cornerRadius = kCloseSize / 2;
+        if ([self.closeButton isKindOfClass:[OverlayCloseButton class]]) {
+            [(OverlayCloseButton *)self.closeButton updateAppearance];
+        }
         
         NSMutableAttributedString *attributedTitle = [[NSMutableAttributedString alloc] initWithString:@"×"];
         [attributedTitle addAttribute:NSForegroundColorAttributeName value:[NSColor whiteColor] range:NSMakeRange(0, attributedTitle.length)];
@@ -522,6 +559,7 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         [self.copyButton setAction:@selector(onClick)];
         [self.copyButton setHidden:YES];
         [self.copyButton setBordered:NO];
+        self.copyButton.focusRingType = NSFocusRingTypeNone;
         [self.copyButton setWantsLayer:YES];
         self.copyButton.layer.backgroundColor = [NSColor colorWithWhite:1.0 alpha:0.14].CGColor;
         self.copyButton.layer.borderColor = [NSColor colorWithWhite:1.0 alpha:0.24].CGColor;

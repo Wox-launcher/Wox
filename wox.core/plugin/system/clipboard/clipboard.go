@@ -586,17 +586,21 @@ func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 	}
 
 	if query.Search == "" {
-		// Get favorites first from settings
-		favorites, err := c.getFavoriteItems(ctx)
-		if err != nil {
-			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to get favorites: %s", err.Error()))
-		} else {
-			for _, favoriteItem := range favorites {
-				if !clipboardRecordMatchesType(favoriteItem.Type, favoriteItem.Content, selectedType) {
-					continue
+		if selectedType == clipboardTypeRefinementAll {
+			// The default clipboard view keeps favorites first. Explicit type
+			// refinements should narrow history instead of jumping to the
+			// high-score Favorites group; users can still use "cb fav" for that.
+			favorites, err := c.getFavoriteItems(ctx)
+			if err != nil {
+				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to get favorites: %s", err.Error()))
+			} else {
+				for _, favoriteItem := range favorites {
+					if !clipboardRecordMatchesType(favoriteItem.Type, favoriteItem.Content, selectedType) {
+						continue
+					}
+					record := c.convertFavoriteToRecord(favoriteItem)
+					results = append(results, c.convertRecordToResult(ctx, record, query))
 				}
-				record := c.convertFavoriteToRecord(favoriteItem)
-				results = append(results, c.convertRecordToResult(ctx, record, query))
 			}
 		}
 
