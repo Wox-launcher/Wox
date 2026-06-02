@@ -1347,8 +1347,9 @@ class WoxLauncherController extends GetxController {
       return;
     }
 
-    // When there are results (e.g. MRU), keep the right-side hotkeys and only show the warning on the left.
-    // When there are no results, show a direct action to open the doctor page.
+    // Doctor warnings are global launcher issues. Keep their action visible even
+    // when MRU/results are present so Enter resolves the warning instead of
+    // acting on an unrelated result.
     if (activeResultViewController.items.isEmpty) {
       final updateAction = buildUpdateToolbarAction();
       final actions = <ToolbarActionInfo>[];
@@ -1359,18 +1360,7 @@ class WoxLauncherController extends GetxController {
 
       toolbar.value = ToolbarInfo(text: doctorCheckInfo.value.message, icon: doctorCheckInfo.value.icon, actions: actions);
     } else {
-      final updateAction = buildUpdateToolbarAction();
-      if (updateAction == null) {
-        toolbar.value = toolbar.value.copyWith(text: doctorCheckInfo.value.message, icon: doctorCheckInfo.value.icon);
-      } else {
-        final mergedActions = List<ToolbarActionInfo>.from(toolbar.value.actions ?? []);
-        final updateHotkey = updateAction.hotkey.toLowerCase();
-        final hasUpdateAction = mergedActions.any((action) => action.hotkey.toLowerCase() == updateHotkey || action.name == updateAction.name);
-        if (!hasUpdateAction) {
-          mergedActions.insert(0, updateAction);
-        }
-        toolbar.value = toolbar.value.copyWith(text: doctorCheckInfo.value.message, icon: doctorCheckInfo.value.icon, actions: mergedActions);
-      }
+      toolbar.value = toolbar.value.copyWith(text: doctorCheckInfo.value.message, icon: doctorCheckInfo.value.icon, actions: buildToolbarActionsForCurrentState(getActiveResult()));
     }
 
     lastAppliedDoctorToolbarMessage = doctorCheckInfo.value.message;
@@ -1400,8 +1390,8 @@ class WoxLauncherController extends GetxController {
 
   ToolbarActionInfo buildDoctorToolbarAction() {
     return ToolbarActionInfo(
-      name: tr("plugin_doctor_check"),
-      hotkey: "enter",
+      name: tr("plugin_doctor_handle"),
+      hotkey: "ctrl+enter",
       action: () {
         openDoctorFromToolbar(const UuidV4().generate());
       },
@@ -1427,17 +1417,15 @@ class WoxLauncherController extends GetxController {
       );
     }
 
-    if (!hasVisibleToolbarMsg && currentQuery.value.isEmpty && !doctorCheckInfo.value.allPassed && activeResultViewController.items.isEmpty) {
+    if (!hasVisibleToolbarMsg && currentQuery.value.isEmpty && !doctorCheckInfo.value.allPassed) {
       actions.add(
         WoxResultAction.local(
           id: localActionOpenDoctorId,
-          name: tr("plugin_doctor_check"),
-          hotkey: "enter",
+          name: tr("plugin_doctor_handle"),
+          hotkey: "ctrl+enter",
           icon: doctorCheckInfo.value.icon,
-          isDefault: true,
-          // Bug fix: the doctor toolbar previously had only a click callback, so Enter rendered
-          // as available but could not execute. Register the same route as a local default action
-          // so keyboard execution and the visible toolbar action use the same action pipeline.
+          // Ctrl+Enter keeps Doctor handling available without stealing the
+          // normal Enter default action from the selected result.
           handler: (traceId) {
             openDoctorFromToolbar(traceId);
             return true;
@@ -1644,7 +1632,8 @@ class WoxLauncherController extends GetxController {
       orderedActions = [...localActions, ...toolbarMsgActions];
     } else {
       final resultActions = buildResultActionsForCurrentState(activeResult, localActions: localActions, toolbarMsgActions: toolbarMsgActions);
-      orderedActions = hasVisibleToolbarMsg ? [...resultActions, ...localActions, ...toolbarMsgActions] : [...localActions, ...resultActions];
+      final showLocalActionsOnToolbarRight = hasVisibleToolbarMsg || (currentQuery.value.isEmpty && !doctorCheckInfo.value.allPassed);
+      orderedActions = showLocalActionsOnToolbarRight ? [...resultActions, ...localActions, ...toolbarMsgActions] : [...localActions, ...resultActions];
     }
 
     final toolbarActions = orderedActions.where((action) => action.hotkey.isNotEmpty).map((action) => ToolbarActionInfo(name: tr(action.name), hotkey: action.hotkey)).toList();

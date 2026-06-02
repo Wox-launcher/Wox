@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
@@ -209,6 +209,15 @@ class WoxScreenshotController extends GetxController {
 
       final rawSnapshots = await _hydrateRawSnapshots(metadataSnapshots);
       await _presentFlutterCaptureWorkspace(traceId, rawSnapshots, nativeWorkspaceBounds);
+    } on PlatformException catch (e) {
+      // Native screenshot errors carry user-actionable codes, such as macOS screen recording
+      // permission denial. Preserve the code so the backend can show the specific guidance.
+      Logger.instance.error(traceId, 'Failed to start screenshot session: ${e.code}: ${e.message ?? e.toString()}');
+      final failed = CaptureScreenshotResult.failed(errorCode: e.code, errorMessage: e.message ?? e.toString());
+      await _restoreWindowState(traceId);
+      _resetSessionState();
+      _sessionCompleter = null;
+      return failed;
     } catch (e) {
       Logger.instance.error(traceId, 'Failed to start screenshot session: $e');
       final failed = CaptureScreenshotResult.failed(errorCode: 'capture_failed', errorMessage: e.toString());
