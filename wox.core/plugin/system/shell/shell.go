@@ -446,7 +446,7 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 					Name:                   "i18n:plugin_shell_execute_background",
 					Icon:                   common.OpenIcon,
 					PreventHideAfterAction: false,
-					Hotkey:                 "ctrl+enter",
+					Hotkey:                 util.PrimaryHotkey("enter"),
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						util.Go(ctx, "execute shell command in background", func() {
 							s.executeCommandInBackground(ctx, contextData)
@@ -595,7 +595,7 @@ func (s *ShellPlugin) queryCommands(ctx context.Context, query plugin.Query, int
 					Name:                   "i18n:plugin_shell_execute_background",
 					Icon:                   common.OpenIcon,
 					PreventHideAfterAction: false,
-					Hotkey:                 "ctrl+enter",
+					Hotkey:                 util.PrimaryHotkey("enter"),
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						util.Go(ctx, "execute shell command in background", func() {
 							s.executeCommandInBackground(ctx, contextData)

@@ -70,7 +70,7 @@ class _WoxOnboardingViewState extends State<WoxOnboardingView> {
     // focused while the shared Wox preview still demonstrates the real layout.
     const _OnboardingStep(id: 'glance', titleKey: 'onboarding_glance_title'),
     // Feature change: action panel intro was merged into the welcome step demo
-    // so the anatomy animation flows directly into the Alt+J reveal, giving
+    // so the anatomy animation flows directly into the primary-modifier J reveal, giving
     // users the full search-to-action story without an extra navigation step.
     // Feature change: the previous Advanced Queries page bundled three
     // unrelated workflows. Splitting them into dedicated steps lets each query

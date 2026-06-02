@@ -762,7 +762,7 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 					a.api.Notify(ctx, err.Error())
 				}
 			},
-			Hotkey:                 "ctrl+m",
+			Hotkey:                 util.PrimaryHotkey("m"),
 			PreventHideAfterAction: true,
 		})
 	}

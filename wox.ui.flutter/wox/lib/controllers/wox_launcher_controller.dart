@@ -56,6 +56,7 @@ import 'package:wox/utils/picker.dart';
 import 'package:wox/utils/result_drag_platform_bridge.dart';
 import 'package:wox/utils/wox_hotkey_recording_bus.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
+import 'package:wox/utils/wox_platform_hotkey_util.dart';
 import 'package:wox/utils/wox_setting_util.dart';
 import 'package:wox/utils/webview/wox_webview_util.dart';
 
@@ -844,9 +845,9 @@ class WoxLauncherController extends GetxController {
     return false;
   }
 
-  String get queryRefinementToggleHotkey => Platform.isMacOS ? "cmd+f" : "alt+f";
+  String get queryRefinementToggleHotkey => WoxPlatformHotkeyUtil.primaryHotkey("f");
 
-  String get queryRefinementToggleHotkeyLabel => Platform.isMacOS ? "Cmd+F" : "Alt+F";
+  String get queryRefinementToggleHotkeyLabel => WoxPlatformHotkeyUtil.primaryHotkeyLabel("f");
 
   bool executeQueryRefinementToggleHotkey(String traceId, HotKey hotkey) {
     if (!shouldShowQueryRefinementAffordance) {
@@ -1059,9 +1060,9 @@ class WoxLauncherController extends GetxController {
     await focusQueryBox();
   }
 
-  String get attentionHotkey => Platform.isMacOS ? "cmd+u" : "alt+u";
+  String get attentionHotkey => WoxPlatformHotkeyUtil.primaryHotkey("u");
 
-  String get attentionHotkeyLabel => Platform.isMacOS ? "Cmd+U" : "Alt+U";
+  String get attentionHotkeyLabel => WoxPlatformHotkeyUtil.primaryHotkeyLabel("u");
 
   // executeAttentionHotkey only works while the badge is visible, matching the on-screen affordance.
   bool executeAttentionHotkey(String traceId, HotKey hotkey) {
@@ -1085,22 +1086,22 @@ class WoxLauncherController extends GetxController {
     await focusQueryBox();
   }
 
-  String get previewFullscreenHotkey => "ctrl+b";
+  String get previewFullscreenHotkey => WoxPlatformHotkeyUtil.primaryHotkey("b");
 
-  String get previewFullscreenHotkeyLabel => "Ctrl+B";
+  String get previewFullscreenHotkeyLabel => WoxPlatformHotkeyUtil.primaryHotkeyLabel("b");
 
-  String get previewSearchHotkey => Platform.isMacOS ? "cmd+shift+f" : "ctrl+shift+f";
+  String get previewSearchHotkey => WoxPlatformHotkeyUtil.primaryHotkey("shift+f");
 
-  String get previewSearchHotkeyLabel => Platform.isMacOS ? "Cmd+Shift+F" : "Ctrl+Shift+F";
+  String get previewSearchHotkeyLabel => WoxPlatformHotkeyUtil.primaryHotkeyLabel("shift+f");
 
-  String get previewInspectorHotkey => Platform.isMacOS ? "cmd+alt+i" : "";
-  String get previewRefreshHotkey => Platform.isMacOS ? "cmd+r" : "";
-  String get previewBackHotkey => Platform.isMacOS ? "cmd+[" : "";
-  String get previewForwardHotkey => Platform.isMacOS ? "cmd+]" : "";
+  String get previewInspectorHotkey => WoxPlatformHotkeyUtil.primaryHotkey("alt+i");
+  String get previewRefreshHotkey => WoxPlatformHotkeyUtil.primaryHotkey("r");
+  String get previewBackHotkey => WoxPlatformHotkeyUtil.primaryHotkey("[");
+  String get previewForwardHotkey => WoxPlatformHotkeyUtil.primaryHotkey("]");
 
-  String get moreActionsHotkey => Platform.isMacOS ? "cmd+j" : "alt+j";
+  String get moreActionsHotkey => WoxPlatformHotkeyUtil.primaryHotkey("j");
 
-  String get moreActionsHotkeyLabel => Platform.isMacOS ? "Cmd+J" : "Alt+J";
+  String get moreActionsHotkeyLabel => WoxPlatformHotkeyUtil.primaryHotkeyLabel("j");
 
   String? getVisibleResultQueryId() {
     for (final item in activeResultViewController.items) {
@@ -1381,7 +1382,7 @@ class WoxLauncherController extends GetxController {
 
     return ToolbarActionInfo(
       name: tr("plugin_doctor_go_to_update"),
-      hotkey: "ctrl+u",
+      hotkey: WoxPlatformHotkeyUtil.primaryHotkey("u"),
       action: () {
         openUpdateFromToolbar(const UuidV4().generate());
       },
@@ -1391,7 +1392,7 @@ class WoxLauncherController extends GetxController {
   ToolbarActionInfo buildDoctorToolbarAction() {
     return ToolbarActionInfo(
       name: tr("plugin_doctor_handle"),
-      hotkey: "ctrl+enter",
+      hotkey: WoxPlatformHotkeyUtil.primaryHotkey("enter"),
       action: () {
         openDoctorFromToolbar(const UuidV4().generate());
       },
@@ -1422,10 +1423,10 @@ class WoxLauncherController extends GetxController {
         WoxResultAction.local(
           id: localActionOpenDoctorId,
           name: tr("plugin_doctor_handle"),
-          hotkey: "ctrl+enter",
+          hotkey: WoxPlatformHotkeyUtil.primaryHotkey("enter"),
           icon: doctorCheckInfo.value.icon,
-          // Ctrl+Enter keeps Doctor handling available without stealing the
-          // normal Enter default action from the selected result.
+          // The primary-modifier Enter shortcut keeps Doctor handling available
+          // without stealing the normal Enter default action from the selected result.
           handler: (traceId) {
             openDoctorFromToolbar(traceId);
             return true;
@@ -4298,13 +4299,9 @@ class WoxLauncherController extends GetxController {
 
   // Quick select related methods
 
-  /// Check if the quick select modifier key is pressed (Cmd on macOS, Alt on Windows/Linux)
+  /// Check if the quick select primary modifier key is pressed.
   bool isQuickSelectModifierPressed() {
-    if (Platform.isMacOS) {
-      return HardwareKeyboard.instance.isMetaPressed;
-    } else {
-      return HardwareKeyboard.instance.isAltPressed;
-    }
+    return WoxPlatformHotkeyUtil.isPrimaryModifierPressed;
   }
 
   /// Start the quick select timer when modifier key is pressed

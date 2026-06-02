@@ -14,6 +14,7 @@ import 'package:wox/entity/wox_plugin_setting.dart';
 import 'package:wox/entity/wox_query.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
+import 'package:wox/utils/wox_platform_hotkey_util.dart';
 import 'package:wox/utils/wox_text_measure_util.dart';
 
 /// A form panel for collecting form action values
@@ -52,7 +53,8 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
       return 60;
     }
 
-    return WoxTextMeasureUtil.measureTextWidth(context: context, text: trimmed, style: TextStyle(fontSize: _labelFontSize, fontWeight: FontWeight.w600)) + _metrics.scaledSpacing(8);
+    return WoxTextMeasureUtil.measureTextWidth(context: context, text: trimmed, style: TextStyle(fontSize: _labelFontSize, fontWeight: FontWeight.w600)) +
+        _metrics.scaledSpacing(8);
   }
 
   @override
@@ -150,7 +152,7 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
   @override
   Widget build(BuildContext context) {
     return CallbackShortcuts(
-      bindings: {const SingleActivator(LogicalKeyboardKey.enter, control: true): _handleSave},
+      bindings: {WoxPlatformHotkeyUtil.primaryActivator(LogicalKeyboardKey.enter): _handleSave},
       child: WoxPlatformFocus(
         focusNode: _formFocusNode,
         autofocus: true,
@@ -186,7 +188,7 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
                 ),
                 SizedBox(width: _metrics.scaledSpacing(12)),
                 WoxButton.primary(
-                  text: "${_tr("ui_save")} (Ctrl+Enter)",
+                  text: "${_tr("ui_save")} (${WoxPlatformHotkeyUtil.primaryHotkeyLabel("enter")})",
                   fontSize: _bodyFontSize,
                   padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(28), vertical: _metrics.scaledSpacing(12)),
                   onPressed: _handleSave,
@@ -240,7 +242,10 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              SizedBox(width: _maxLabelWidth, child: Text(_tr(item.label), style: TextStyle(color: _textColor.withValues(alpha: 0.92), fontSize: _labelFontSize, fontWeight: FontWeight.w600))),
+              SizedBox(
+                width: _maxLabelWidth,
+                child: Text(_tr(item.label), style: TextStyle(color: _textColor.withValues(alpha: 0.92), fontSize: _labelFontSize, fontWeight: FontWeight.w600)),
+              ),
               SizedBox(width: _labelGap),
               WoxCheckbox(
                 size: _metrics.quickSelectSize,
@@ -270,7 +275,10 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              SizedBox(width: _maxLabelWidth, child: Text(_tr(item.label), style: TextStyle(color: _textColor.withValues(alpha: 0.92), fontSize: _labelFontSize, fontWeight: FontWeight.w600))),
+              SizedBox(
+                width: _maxLabelWidth,
+                child: Text(_tr(item.label), style: TextStyle(color: _textColor.withValues(alpha: 0.92), fontSize: _labelFontSize, fontWeight: FontWeight.w600)),
+              ),
               SizedBox(width: _labelGap),
               Expanded(
                 // Form actions live inside the launcher action panel, so their
@@ -312,7 +320,10 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              SizedBox(width: _maxLabelWidth, child: Text(_tr(item.label), style: TextStyle(color: _textColor.withValues(alpha: 0.92), fontSize: _labelFontSize, fontWeight: FontWeight.w600))),
+              SizedBox(
+                width: _maxLabelWidth,
+                child: Text(_tr(item.label), style: TextStyle(color: _textColor.withValues(alpha: 0.92), fontSize: _labelFontSize, fontWeight: FontWeight.w600)),
+              ),
               SizedBox(width: _labelGap),
               Expanded(
                 child: WoxDropdownButton<String>(
@@ -358,7 +369,10 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(padding: EdgeInsets.only(left: _maxLabelWidth + _labelGap), child: Text(_tr(item.content), style: TextStyle(color: _textColor.withValues(alpha: 0.6), fontSize: _helpFontSize))),
+          Padding(
+            padding: EdgeInsets.only(left: _maxLabelWidth + _labelGap),
+            child: Text(_tr(item.content), style: TextStyle(color: _textColor.withValues(alpha: 0.6), fontSize: _helpFontSize)),
+          ),
           if (item.tooltip.isNotEmpty)
             Padding(
               padding: EdgeInsets.only(top: _metrics.scaledSpacing(4), left: _maxLabelWidth + _labelGap),

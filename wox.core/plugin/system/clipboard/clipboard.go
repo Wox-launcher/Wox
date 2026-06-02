@@ -437,10 +437,7 @@ func (c *ClipboardPlugin) buildClipboardTypeRefinement() plugin.QueryRefinement 
 }
 
 func clipboardTypeRefinementHotkey() string {
-	if util.IsMacOS() {
-		return "cmd+t"
-	}
-	return "alt+t"
+	return util.PrimaryHotkey("t")
 }
 
 func (c *ClipboardPlugin) getSelectedClipboardType(query plugin.Query) string {
@@ -1080,7 +1077,7 @@ func (c *ClipboardPlugin) convertFileRecord(ctx context.Context, record Clipboar
 		Name:                   "i18n:plugin_clipboard_delete",
 		Icon:                   common.TrashIcon,
 		PreventHideAfterAction: true,
-		Hotkey:                 "Ctrl+D",
+		Hotkey:                 util.PrimaryHotkey("d"),
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			if err := c.deleteRecord(ctx, record); err != nil {
 				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to delete record: %s", err.Error()))
@@ -1289,7 +1286,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 		Name:                   "i18n:plugin_clipboard_delete",
 		Icon:                   common.TrashIcon,
 		PreventHideAfterAction: true,
-		Hotkey:                 "Ctrl+D",
+		Hotkey:                 util.PrimaryHotkey("d"),
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			if err := c.deleteRecord(ctx, record); err != nil {
 				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to delete record: %s", err.Error()))
@@ -1591,7 +1588,7 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 				Name:                   "i18n:plugin_clipboard_delete",
 				Icon:                   common.TrashIcon,
 				PreventHideAfterAction: true,
-				Hotkey:                 "Ctrl+D",
+				Hotkey:                 util.PrimaryHotkey("d"),
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					if err := c.deleteRecord(ctx, record); err != nil {
 						c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to delete record: %s", err.Error()))

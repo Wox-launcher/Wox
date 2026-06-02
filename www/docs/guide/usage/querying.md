@@ -52,7 +52,7 @@ Use a keyword when fallback results are noisy or when you know exactly which plu
 | `Esc` | Hide Wox or go back from a nested view |
 | `Up` / `Down` | Move through results |
 | `Enter` | Run the selected result's primary action |
-| `Alt + J` / `Command + J` | Open the Action Panel |
+| Windows/Linux: `Ctrl + J`; macOS: `Command + J` | Open the Action Panel |
 | `Tab` | Complete the suggested query when available |
 
 ## Hotkey Settings

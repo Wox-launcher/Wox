@@ -52,7 +52,7 @@ wpm install browser
 | `Esc` | 隐藏 Wox，或从嵌套视图返回 |
 | `Up` / `Down` | 在结果中移动 |
 | `Enter` | 执行选中结果的主要动作 |
-| `Alt + J` / `Command + J` | 打开操作面板 |
+| Windows/Linux: `Ctrl + J`；macOS: `Command + J` | 打开操作面板 |
 | `Tab` | 在可用时补全建议查询 |
 
 ## 热键设置

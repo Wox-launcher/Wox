@@ -10,6 +10,7 @@ import 'package:wox/enums/wox_image_type_enum.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/wox_hotkey_display_util.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
+import 'package:wox/utils/wox_platform_hotkey_util.dart';
 import 'package:wox/utils/wox_system_wallpaper_util.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 

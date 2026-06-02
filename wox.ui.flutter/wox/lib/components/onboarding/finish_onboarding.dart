@@ -1,9 +1,8 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:wox/components/demo/wox_demo.dart';
 import 'package:wox/components/onboarding/wox_onboarding_step_layout.dart';
 import 'package:wox/entity/wox_image.dart';
+import 'package:wox/utils/wox_platform_hotkey_util.dart';
 
 class WoxFinishOnboarding extends StatelessWidget {
   const WoxFinishOnboarding({
@@ -49,7 +48,7 @@ class WoxFinishOnboarding extends StatelessWidget {
                 title: tr('onboarding_action_panel_title'),
                 subtitle: tr('onboarding_action_panel_description'),
                 icon: Icon(Icons.play_arrow_rounded, color: accent, size: 23),
-                tail: Platform.isMacOS ? 'Cmd+J' : 'Alt+J',
+                tail: WoxPlatformHotkeyUtil.primaryHotkeyLabel('j'),
               ),
               WoxDemoResult(
                 title: tr('onboarding_query_hotkeys_title'),

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -310,7 +309,7 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					shell.OpenFileInFolder(item.Path)
 				},
-				Hotkey: "ctrl+enter",
+				Hotkey: util.PrimaryHotkey("enter"),
 			},
 			{
 				Name: "i18n:plugin_clipboard_delete",
@@ -341,7 +340,7 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 						c.api.Notify(ctx, err.Error())
 					}
 				},
-				Hotkey:                 "ctrl+m",
+				Hotkey:                 util.PrimaryHotkey("m"),
 				PreventHideAfterAction: true,
 			})
 		}
@@ -451,10 +450,7 @@ func (c *FileSearchPlugin) buildFileSearchSortRefinement() plugin.QueryRefinemen
 }
 
 func fileSearchPlatformHotkey(key string) string {
-	if runtime.GOOS == "darwin" {
-		return "cmd+" + key
-	}
-	return "alt+" + key
+	return util.PrimaryHotkey(key)
 }
 
 func selectedFileSearchType(query plugin.Query) string {
@@ -1480,7 +1476,7 @@ func (c *FileSearchPlugin) toolbarMsgActions(ctx context.Context, hasPermissionE
 		{
 			Name:   "i18n:plugin_file_status_open_privacy_settings",
 			Icon:   common.PermissionIcon,
-			Hotkey: "ctrl+enter",
+			Hotkey: util.PrimaryHotkey("enter"),
 			Action: func(ctx context.Context, actionContext plugin.ToolbarMsgActionContext) {
 				permission.OpenPrivacySecuritySettings(ctx)
 			},

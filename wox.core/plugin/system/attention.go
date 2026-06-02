@@ -151,7 +151,7 @@ func (a *AttentionPlugin) buildItemActions(ctx context.Context, item database.At
 			Icon:                   common.PluginInstalledIcon,
 			IsDefault:              len(actions) == 0,
 			PreventHideAfterAction: true,
-			Hotkey:                 "ctrl+enter",
+			Hotkey:                 util.PrimaryHotkey("enter"),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				a.markReadAndPublish(ctx, item.IdentityKey)
 				a.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
