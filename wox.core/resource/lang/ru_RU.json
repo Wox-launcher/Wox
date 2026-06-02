@@ -859,6 +859,7 @@
   "plugin_file_status_open_privacy_settings": "Открыть Конфиденциальность и безопасность",
   "plugin_file_status_error": "Поиску файлов нужно внимание",
   "plugin_file_status_error_subtitle": "Не удалось проиндексировать %d каталогов.",
+  "plugin_file_status_error_reason_access_denied": "Доступ запрещен",
   "plugin_attention_plugin_name": "Внимание",
   "plugin_attention_plugin_description": "Постоянные элементы от плагинов, требующие вашего внимания",
   "plugin_attention_group_unread": "Непрочитанные",

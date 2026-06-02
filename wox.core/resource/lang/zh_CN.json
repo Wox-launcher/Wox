@@ -898,6 +898,7 @@
   "plugin_file_status_open_privacy_settings": "打开隐私与安全",
   "plugin_file_status_error": "文件搜索需要处理",
   "plugin_file_status_error_subtitle": "有 %d 个目录索引失败。",
+  "plugin_file_status_error_reason_access_denied": "访问被拒绝",
   "plugin_file_index_files": "重新索引文件",
   "plugin_file_index_files_failed": "重新开始文件索引失败",
   "plugin_attention_plugin_name": "关注事项",

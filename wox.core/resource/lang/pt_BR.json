@@ -859,6 +859,7 @@
   "plugin_file_status_open_privacy_settings": "Abrir Privacidade e Segurança",
   "plugin_file_status_error": "A busca de arquivos precisa de atenção",
   "plugin_file_status_error_subtitle": "%d diretórios falharam ao indexar.",
+  "plugin_file_status_error_reason_access_denied": "Acesso negado",
   "plugin_attention_plugin_name": "Atenção",
   "plugin_attention_plugin_description": "Itens persistentes de plugins que precisam da sua atenção",
   "plugin_attention_group_unread": "Não lidos",

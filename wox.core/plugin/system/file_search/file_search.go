@@ -41,6 +41,7 @@ const (
 	incrementalToolbarMinimumShowMs  int64 = 1000
 	fullIndexCompletionToolbarHoldMs int64 = 1000 * 5
 	toolbarActivityPathMaxChars            = 42
+	toolbarErrorReasonMaxChars             = 28
 	fileSearchResultLimit                  = 100
 	fileSearchRefinedCandidateLimit        = 300
 )
@@ -892,7 +893,7 @@ func (c *FileSearchPlugin) buildToolbarMsgFromStatus(ctx context.Context, status
 	}
 
 	if status.ErrorRootCount > 0 && !status.IsIndexing {
-		title = decorateRootErrorToolbarTitle(title, status)
+		title = c.decorateRootErrorToolbarTitle(ctx, title, status)
 	}
 
 	return plugin.ToolbarMsg{
@@ -1401,15 +1402,73 @@ func trimToolbarMiddle(value string, maxChars int) string {
 	return util.EllipsisMiddle(value, maxChars)
 }
 
-func decorateRootErrorToolbarTitle(title string, status filesearch.StatusSnapshot) string {
+func (c *FileSearchPlugin) decorateRootErrorToolbarTitle(ctx context.Context, title string, status filesearch.StatusSnapshot) string {
+	parts := make([]string, 0, 2)
 	errorRootPath := shortenToolbarPath(status.ErrorRootPath, toolbarActivityPathMaxChars)
-	if errorRootPath == "" {
+	if errorRootPath != "" {
+		parts = append(parts, errorRootPath)
+	}
+
+	errorReason := c.buildRootErrorToolbarReason(ctx, status.LastError)
+	if errorReason != "" {
+		parts = append(parts, errorReason)
+	}
+
+	if len(parts) == 0 {
 		return title
 	}
-	// A generic "needs attention" banner was too vague when one configured root
-	// failed. Appending the failing root path makes the recovery target explicit
-	// without expanding the toolbar into a multi-line error surface.
-	return title + " · " + errorRootPath
+	// A generic "needs attention" banner is too vague when one configured root
+	// fails. Keep the root and a short cause visible without turning the toolbar
+	// into the full diagnostic surface.
+	return title + " · " + strings.Join(parts, " · ")
+}
+
+// buildRootErrorToolbarReason condenses persisted scanner errors into a short
+// cause that can fit beside the failing root in the launcher toolbar.
+func (c *FileSearchPlugin) buildRootErrorToolbarReason(ctx context.Context, message string) string {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return ""
+	}
+
+	normalized := strings.ToLower(message)
+	if strings.Contains(normalized, "access is denied") || strings.Contains(normalized, "permission denied") || strings.Contains(normalized, "operation not permitted") {
+		return c.getToolbarTranslation(ctx, "plugin_file_status_error_reason_access_denied", "Access denied")
+	}
+
+	return trimToolbarMiddle(lastToolbarErrorSegment(message), toolbarErrorReasonMaxChars)
+}
+
+// getToolbarTranslation keeps toolbar helpers usable in tests that do not wire
+// the full plugin translation service.
+func (c *FileSearchPlugin) getToolbarTranslation(ctx context.Context, key string, fallback string) string {
+	if c == nil || c.api == nil {
+		return fallback
+	}
+
+	translation := strings.TrimSpace(c.api.GetTranslation(ctx, key))
+	if translation == "" || translation == key {
+		return fallback
+	}
+	return translation
+}
+
+// lastToolbarErrorSegment keeps generic error fallbacks compact while retaining
+// the usually actionable suffix from wrapped Go errors.
+func lastToolbarErrorSegment(message string) string {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return ""
+	}
+
+	parts := strings.Split(message, ":")
+	for index := len(parts) - 1; index >= 0; index-- {
+		part := strings.TrimSpace(parts[index])
+		if part != "" {
+			return part
+		}
+	}
+	return message
 }
 
 func (c *FileSearchPlugin) toolbarMsgActions(ctx context.Context, hasPermissionError bool) []plugin.ToolbarMsgAction {
