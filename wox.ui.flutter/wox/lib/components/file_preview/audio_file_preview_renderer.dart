@@ -37,7 +37,10 @@ class AudioFilePreviewRenderer implements WoxFilePreviewRenderer {
         sections: [
           WoxFilePreviewSection(
             title: context.tr("ui_file_preview_audio_player"),
-            child: SizedBox(height: 86, child: WoxWebViewPreview(previewData: jsonEncode(previewData.toJson()), showToolbar: false)),
+            child: SizedBox(
+              height: 86,
+              child: WoxWebViewPreview(previewData: jsonEncode(previewData.toJson()), launcherController: context.launcherController, showToolbar: false),
+            ),
           ),
         ],
       ),

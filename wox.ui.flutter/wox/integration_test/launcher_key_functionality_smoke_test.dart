@@ -75,7 +75,7 @@ void registerLauncherKeyFunctionalitySmokeTests() {
 
         expect(settingController.woxSetting.value.mainHotkey, recordedHotkey);
       } finally {
-        if (launcherController.isInSettingView.value) {
+        if (launcherController.isSettingWindowOpen.value) {
           await closeSettings(tester, settingController, launcherController);
         }
         await updateSettingDirect('MainHotkey', originalMainHotkey);
