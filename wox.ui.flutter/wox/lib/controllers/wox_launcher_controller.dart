@@ -3580,39 +3580,61 @@ class WoxLauncherController extends GetxController {
       return;
     }
 
-    final getCurrentSizeStartUs = tracker.checkpointUs();
-    final currentSize = await windowManager.getSize();
-    tracker.setElapsedUs("getCurrentSizeUs", getCurrentSizeStartUs);
-    final isSameSize = isWindowSizeEffectivelyEqual(currentSize, targetSize);
-    tracker.setDouble("beforeWidth", currentSize.width);
-    tracker.setDouble("beforeHeight", currentSize.height);
-    tracker.setDouble("targetWidth", targetSize.width);
-    tracker.setDouble("targetHeight", targetSize.height);
-    tracker.setBool("sameSize", isSameSize);
-    Logger.instance.debug(
-      traceId,
-      "resize requested: reason=$reason, before=${formatWindowSize(currentSize)}, target=${formatWindowSize(targetSize)}, sameSize=$isSameSize, forceDwmRecomposition=$forceDwmRecomposition",
-    );
-
-    if (isSameSize && !forceDwmRecomposition) {
-      committedWindowHeight = targetSize.height;
-      Logger.instance.debug(traceId, "resize skipped: reason=$reason, before=${formatWindowSize(currentSize)}, target=${formatWindowSize(targetSize)}, sameSize=true");
-      tracker.setBool("skippedSameSize", true);
-      tracker.setElapsedUs("totalUs", totalStartUs);
-      tracker.log();
-      return;
-    }
-
+    // Claim the resize request before the first native await so slower older
+    // requests cannot become "latest" after a newer shrink/expand request.
     final currentResizeToken = ++resizeRequestToken;
     ongoingResizeTargetSize = targetSize;
 
     try {
+      final getCurrentSizeStartUs = tracker.checkpointUs();
+      final currentSize = await windowManager.getSize();
+      tracker.setElapsedUs("getCurrentSizeUs", getCurrentSizeStartUs);
+      if (resizeRequestToken != currentResizeToken) {
+        Logger.instance.debug(traceId, "resize skipped: reason=$reason, target=${formatWindowSize(targetSize)}, supersededBeforeSet=true");
+        tracker.setDouble("targetWidth", targetSize.width);
+        tracker.setDouble("targetHeight", targetSize.height);
+        tracker.setBool("skippedSuperseded", true);
+        tracker.setBool("skippedBeforePlatformSet", true);
+        tracker.setElapsedUs("totalUs", totalStartUs);
+        tracker.log();
+        return;
+      }
+
+      final isSameSize = isWindowSizeEffectivelyEqual(currentSize, targetSize);
+      tracker.setDouble("beforeWidth", currentSize.width);
+      tracker.setDouble("beforeHeight", currentSize.height);
+      tracker.setDouble("targetWidth", targetSize.width);
+      tracker.setDouble("targetHeight", targetSize.height);
+      tracker.setBool("sameSize", isSameSize);
+      Logger.instance.debug(
+        traceId,
+        "resize requested: reason=$reason, before=${formatWindowSize(currentSize)}, target=${formatWindowSize(targetSize)}, sameSize=$isSameSize, forceDwmRecomposition=$forceDwmRecomposition",
+      );
+
+      if (isSameSize && !forceDwmRecomposition) {
+        committedWindowHeight = targetSize.height;
+        Logger.instance.debug(traceId, "resize skipped: reason=$reason, before=${formatWindowSize(currentSize)}, target=${formatWindowSize(targetSize)}, sameSize=true");
+        tracker.setBool("skippedSameSize", true);
+        tracker.setElapsedUs("totalUs", totalStartUs);
+        tracker.log();
+        return;
+      }
+
       if (isQueryBoxAtBottom.value) {
         // When the query box is anchored to the bottom, grow the window upward.
         // Use getPosition + getSize to compute the current bottom edge, then adjust top to grow upward.
         final getPositionStartUs = tracker.checkpointUs();
         final pos = await windowManager.getPosition();
         tracker.setElapsedUs("getPositionUs", getPositionStartUs);
+        if (resizeRequestToken != currentResizeToken) {
+          Logger.instance.debug(traceId, "resize skipped: reason=$reason, target=${formatWindowSize(targetSize)}, supersededBeforeSet=true");
+          tracker.setBool("skippedSuperseded", true);
+          tracker.setBool("skippedBeforePlatformSet", true);
+          tracker.setElapsedUs("totalUs", totalStartUs);
+          tracker.log();
+          return;
+        }
+
         double currentBottom = pos.dy + currentSize.height;
 
         if (currentBottom <= 0) {
