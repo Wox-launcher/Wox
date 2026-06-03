@@ -26,6 +26,7 @@ import (
 	"wox/util"
 	"wox/util/notifier"
 	"wox/util/selection"
+	"wox/util/timetracking"
 	"wox/util/window"
 
 	"github.com/Masterminds/semver/v3"
@@ -1069,36 +1070,99 @@ func (m *Manager) mergeQueryLayouts(metadataLayout QueryLayout, responseLayout Q
 }
 
 func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, query Query) (response QueryResponse) {
+	pluginLabel := queryDiagnosticPluginLabel(pluginInstance)
+	queryForPluginStart := util.GetSystemTimestamp()
+	queryForPluginTimingStart := time.Now()
+	if tracker := timetracking.New("query_for_plugin_start"); tracker.Enabled() {
+		tracker.SetRawString("queryId", query.Id)
+		tracker.SetRawString("plugin", pluginLabel)
+		tracker.Log(ctx)
+	}
 	input := pluginQueryInput{
 		query:        query,
 		queryContext: BuildQueryContext(query, pluginInstance),
 	}
 	defer util.GoRecover(ctx, fmt.Sprintf("<%s> query panic", pluginInstance.GetName(ctx)), func(err error) {
+		if tracker := timetracking.New("query_for_plugin_recovered"); tracker.Enabled() {
+			tracker.SetRawString("queryId", query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.SetInt64("elapsedMs", util.GetSystemTimestamp()-queryForPluginStart)
+			tracker.Log(ctx)
+		}
 		response = m.buildFailedPluginQueryResponse(ctx, pluginInstance, input.query, input.metadataLayout, input.queryContext, err)
 	})
 
+	inputStart := util.GetSystemTimestamp()
 	input = m.buildPluginQueryInput(ctx, pluginInstance, query)
+	if tracker := timetracking.New("build_plugin_query_input"); tracker.Enabled() {
+		tracker.SetRawString("queryId", query.Id)
+		tracker.SetRawString("plugin", pluginLabel)
+		tracker.SetBool("blocked", input.blocked)
+		tracker.SetInt64("costMs", util.GetSystemTimestamp()-inputStart)
+		tracker.Log(ctx)
+	}
 	if input.blocked {
+		if tracker := timetracking.New("query_for_plugin_blocked"); tracker.Enabled() {
+			tracker.SetRawString("queryId", query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.SetInt("resultCount", len(input.blockedResponse.Results))
+			tracker.SetInt64("elapsedMs", util.GetSystemTimestamp()-queryForPluginStart)
+			tracker.Log(ctx)
+		}
 		return input.blockedResponse
 	}
 
 	response, pluginQueryCost, recovered := m.executePluginQuery(ctx, pluginInstance, input.query, input.metadataLayout, input.queryContext)
 	if recovered {
+		if tracker := timetracking.New("query_for_plugin_plugin_recovered"); tracker.Enabled() {
+			tracker.SetRawString("queryId", query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.SetInt64("elapsedMs", util.GetSystemTimestamp()-queryForPluginStart)
+			tracker.Log(ctx)
+		}
 		return response
 	}
 
-	return m.finalizePluginQueryResponse(ctx, pluginInstance, input.query, response, input.metadataLayout, input.queryContext, pluginQueryCost)
+	finalizeStart := util.GetSystemTimestamp()
+	finalizeTimingStart := time.Now()
+	response = m.finalizePluginQueryResponse(ctx, pluginInstance, input.query, response, input.metadataLayout, input.queryContext, pluginQueryCost)
+	if tracker := timetracking.New("query_for_plugin_finish"); tracker.Enabled() {
+		tracker.SetRawString("queryId", query.Id)
+		tracker.SetRawString("plugin", pluginLabel)
+		tracker.SetInt("resultCount", len(response.Results))
+		tracker.SetInt64("finalizeCostMs", util.GetSystemTimestamp()-finalizeStart)
+		tracker.SetInt64("finalizeCostUs", time.Since(finalizeTimingStart).Microseconds())
+		tracker.SetInt64("totalMs", util.GetSystemTimestamp()-queryForPluginStart)
+		tracker.SetInt64("totalUs", time.Since(queryForPluginTimingStart).Microseconds())
+		tracker.Log(ctx)
+	}
+	return response
 }
 
 func (m *Manager) buildPluginQueryInput(ctx context.Context, pluginInstance *Instance, query Query) pluginQueryInput {
+	pluginLabel := queryDiagnosticPluginLabel(pluginInstance)
+	layoutStart := util.GetSystemTimestamp()
+	metadataLayout := m.buildMetadataBackedQueryLayout(ctx, pluginInstance, query)
+	layoutCost := util.GetSystemTimestamp() - layoutStart
+	contextStart := util.GetSystemTimestamp()
+	queryContext := BuildQueryContext(query, pluginInstance)
+	contextCost := util.GetSystemTimestamp() - contextStart
 	input := pluginQueryInput{
 		query:          query,
-		metadataLayout: m.buildMetadataBackedQueryLayout(ctx, pluginInstance, query),
-		queryContext:   BuildQueryContext(query, pluginInstance),
+		metadataLayout: metadataLayout,
+		queryContext:   queryContext,
+	}
+	if tracker := timetracking.New("build_plugin_query_input_base"); tracker.Enabled() {
+		tracker.SetRawString("queryId", query.Id)
+		tracker.SetRawString("plugin", pluginLabel)
+		tracker.SetInt64("layoutMs", layoutCost)
+		tracker.SetInt64("contextMs", contextCost)
+		tracker.Log(ctx)
 	}
 
 	// Query requirements are checked before calling Plugin.Query so plugins do not
 	// need to duplicate settings-gate UI rows in every implementation.
+	requirementStart := util.GetSystemTimestamp()
 	if requirementResult, blocked := m.buildQueryRequirementSettingsResult(ctx, pluginInstance, query); blocked {
 		input.blocked = true
 		input.blockedResponse = QueryResponse{
@@ -1106,10 +1170,31 @@ func (m *Manager) buildPluginQueryInput(ctx context.Context, pluginInstance *Ins
 			Layout:  input.metadataLayout,
 			Context: input.queryContext,
 		}
+		if tracker := timetracking.New("build_plugin_query_input_requirement"); tracker.Enabled() {
+			tracker.SetRawString("queryId", query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.SetBool("blocked", true)
+			tracker.SetInt64("costMs", util.GetSystemTimestamp()-requirementStart)
+			tracker.Log(ctx)
+		}
 		return input
 	}
+	if tracker := timetracking.New("build_plugin_query_input_requirement"); tracker.Enabled() {
+		tracker.SetRawString("queryId", query.Id)
+		tracker.SetRawString("plugin", pluginLabel)
+		tracker.SetBool("blocked", false)
+		tracker.SetInt64("costMs", util.GetSystemTimestamp()-requirementStart)
+		tracker.Log(ctx)
+	}
 
+	envStart := util.GetSystemTimestamp()
 	input.query = m.buildPluginQueryEnv(ctx, pluginInstance, query)
+	if tracker := timetracking.New("build_plugin_query_env"); tracker.Enabled() {
+		tracker.SetRawString("queryId", query.Id)
+		tracker.SetRawString("plugin", pluginLabel)
+		tracker.SetInt64("costMs", util.GetSystemTimestamp()-envStart)
+		tracker.Log(ctx)
+	}
 	return input
 }
 
@@ -1153,40 +1238,166 @@ func (m *Manager) buildPluginQueryEnv(ctx context.Context, pluginInstance *Insta
 
 func (m *Manager) executePluginQuery(ctx context.Context, pluginInstance *Instance, query Query, metadataLayout QueryLayout, queryContext QueryContext) (response QueryResponse, pluginQueryCost int64, recovered bool) {
 	logger.Info(ctx, fmt.Sprintf("<%s> start query: %s", pluginInstance.GetName(ctx), query.RawQuery))
+	pluginLabel := queryDiagnosticPluginLabel(pluginInstance)
 	start := util.GetSystemTimestamp()
+	if tracker := timetracking.New("plugin_query_start"); tracker.Enabled() {
+		tracker.SetRawString("queryId", query.Id)
+		tracker.SetRawString("plugin", pluginLabel)
+		tracker.SetRawString("rawQuery", query.RawQuery)
+		tracker.Log(ctx)
+	}
 	defer util.GoRecover(ctx, fmt.Sprintf("<%s> query panic", pluginInstance.GetName(ctx)), func(err error) {
 		recovered = true
+		if tracker := timetracking.New("plugin_query_recovered"); tracker.Enabled() {
+			tracker.SetRawString("queryId", query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.SetInt64("elapsedMs", util.GetSystemTimestamp()-start)
+			tracker.Log(ctx)
+		}
 		response = m.buildFailedPluginQueryResponse(ctx, pluginInstance, query, metadataLayout, queryContext, err)
 	})
 	response = pluginInstance.Plugin.Query(ctx, query)
 	pluginQueryCost = util.GetSystemTimestamp() - start
+	if tracker := timetracking.New("plugin_query_end"); tracker.Enabled() {
+		tracker.SetRawString("queryId", query.Id)
+		tracker.SetRawString("plugin", pluginLabel)
+		tracker.SetInt("resultCount", len(response.Results))
+		tracker.SetInt64("costMs", pluginQueryCost)
+		tracker.Log(ctx)
+	}
 	return response, pluginQueryCost, false
 }
 
 func (m *Manager) finalizePluginQueryResponse(ctx context.Context, pluginInstance *Instance, query Query, response QueryResponse, metadataLayout QueryLayout, queryContext QueryContext, pluginQueryCost int64) QueryResponse {
+	pluginLabel := queryDiagnosticPluginLabel(pluginInstance)
+	finalizeStart := util.GetSystemTimestamp()
+	finalizeTimingStart := time.Now()
+	layoutStart := util.GetSystemTimestamp()
+	layoutTimingStart := time.Now()
 	response.Layout = m.mergeQueryLayouts(metadataLayout, response.Layout)
+	layoutCost := util.GetSystemTimestamp() - layoutStart
+	layoutCostUs := time.Since(layoutTimingStart).Microseconds()
 	response.Context = queryContext
 	// Keep the plugin latency EWMA scoped to Plugin.Query itself.
 	// Manager-side polishing is shared overhead layered on top of plugin execution.
+	latencyStart := util.GetSystemTimestamp()
+	latencyTimingStart := time.Now()
 	m.updatePluginQueryLatency(pluginInstance.Metadata.Id, float64(pluginQueryCost))
+	latencyCost := util.GetSystemTimestamp() - latencyStart
+	latencyCostUs := time.Since(latencyTimingStart).Microseconds()
 
+	resultsStart := util.GetSystemTimestamp()
+	resultsTimingStart := time.Now()
+	var totalDefaultActionsCost int64
+	var totalDefaultActionsCostUs int64
+	var totalPolishCost int64
+	var totalPolishCostUs int64
+	var totalRecordPluginElapsedCost int64
+	var totalRecordPluginElapsedCostUs int64
+	var maxResultCost int64
+	var maxResultCostUs int64
+	var maxResultIndex int
+	var maxResultId string
+	var maxResultTitle string
+	var resultsAggregate timetracking.ResultsPolishAggregate
+	collectResultTiming := util.IsDev()
+	openPluginSettingActionStart := time.Now()
+	openPluginSettingAction := m.newOpenPluginSettingAction(ctx, pluginInstance)
+	openPluginSettingActionUs := time.Since(openPluginSettingActionStart).Microseconds()
 	for i := range response.Results {
-		defaultActions := m.getDefaultActions(ctx, pluginInstance, query, response.Results[i].Title, response.Results[i].SubTitle)
+		resultStart := util.GetSystemTimestamp()
+		resultTimingStart := time.Now()
+		defaultActionsStart := util.GetSystemTimestamp()
+		defaultActionsTimingStart := time.Now()
+		defaultActions := m.getDefaultActionsWithOpenPluginSettingAction(ctx, pluginInstance, query, response.Results[i].Title, response.Results[i].SubTitle, openPluginSettingAction)
+		defaultActionsCost := util.GetSystemTimestamp() - defaultActionsStart
+		defaultActionsCostUs := time.Since(defaultActionsTimingStart).Microseconds()
+		totalDefaultActionsCost += defaultActionsCost
+		totalDefaultActionsCostUs += defaultActionsCostUs
 		response.Results[i].Actions = append(response.Results[i].Actions, defaultActions...)
-		response.Results[i] = m.PolishResult(ctx, pluginInstance, query, response.Layout, response.Results[i])
+		polishStart := util.GetSystemTimestamp()
+		polishTimingStart := time.Now()
+		var polishTiming timetracking.ResultPolishTiming
+		response.Results[i], polishTiming = m.polishResult(ctx, pluginInstance, query, response.Layout, response.Results[i], collectResultTiming)
+		polishCost := util.GetSystemTimestamp() - polishStart
+		polishCostUs := time.Since(polishTimingStart).Microseconds()
+		totalPolishCost += polishCost
+		totalPolishCostUs += polishCostUs
+		recordPluginElapsedStart := util.GetSystemTimestamp()
+		recordPluginElapsedTimingStart := time.Now()
 		m.RecordQueryResultPluginQueryElapsed(query.SessionId, query.Id, response.Results[i].Id, pluginQueryCost)
+		recordPluginElapsedCost := util.GetSystemTimestamp() - recordPluginElapsedStart
+		recordPluginElapsedCostUs := time.Since(recordPluginElapsedTimingStart).Microseconds()
+		totalRecordPluginElapsedCost += recordPluginElapsedCost
+		totalRecordPluginElapsedCostUs += recordPluginElapsedCostUs
+		resultCost := util.GetSystemTimestamp() - resultStart
+		resultCostUs := time.Since(resultTimingStart).Microseconds()
+		if resultCost > maxResultCost || (resultCost == maxResultCost && resultCostUs > maxResultCostUs) {
+			maxResultCost = resultCost
+			maxResultCostUs = resultCostUs
+			maxResultIndex = i
+			maxResultId = response.Results[i].Id
+			maxResultTitle = response.Results[i].Title
+		}
+		if collectResultTiming {
+			resultsAggregate.Add(timetracking.ResultIdentity{
+				Index: i,
+				Id:    response.Results[i].Id,
+				Title: response.Results[i].Title,
+			}, defaultActionsCostUs, recordPluginElapsedCostUs, resultCostUs, polishTiming)
+		}
 	}
+	resultsCost := util.GetSystemTimestamp() - resultsStart
+	resultsCostUs := time.Since(resultsTimingStart).Microseconds()
 
+	filterStart := util.GetSystemTimestamp()
+	filterTimingStart := time.Now()
 	if query.Type == QueryTypeSelection && query.Search != "" {
 		response.Results = lo.Filter(response.Results, func(item QueryResult, _ int) bool {
 			return IsStringMatch(ctx, item.Title, query.Search)
 		})
 	}
+	filterCost := util.GetSystemTimestamp() - filterStart
+	filterCostUs := time.Since(filterTimingStart).Microseconds()
+	finalizeCost := util.GetSystemTimestamp() - finalizeStart
+	finalizeCostUs := time.Since(finalizeTimingStart).Microseconds()
 
 	if pluginQueryCost >= 10 {
 		logger.Debug(ctx, fmt.Sprintf("<%s> finish query, result count: %d, cost: %dms, query is slow", pluginInstance.GetName(ctx), len(response.Results), pluginQueryCost))
 	} else {
 		logger.Debug(ctx, fmt.Sprintf("<%s> finish query, result count: %d, cost: %dms", pluginInstance.GetName(ctx), len(response.Results), pluginQueryCost))
+	}
+	if collectResultTiming {
+		resultsAggregate.Log(ctx, query.Id, pluginLabel)
+	}
+	if tracker := timetracking.New("finalize_done"); tracker.Enabled() {
+		tracker.SetRawString("queryId", query.Id)
+		tracker.SetRawString("plugin", pluginLabel)
+		tracker.SetInt("resultCount", len(response.Results))
+		tracker.SetInt64("pluginQueryMs", pluginQueryCost)
+		tracker.SetInt64("layoutMs", layoutCost)
+		tracker.SetInt64("layoutUs", layoutCostUs)
+		tracker.SetInt64("latencyMs", latencyCost)
+		tracker.SetInt64("latencyUs", latencyCostUs)
+		tracker.SetInt64("openSettingActionUs", openPluginSettingActionUs)
+		tracker.SetInt64("resultsMs", resultsCost)
+		tracker.SetInt64("resultsUs", resultsCostUs)
+		tracker.SetInt64("defaultActionsMs", totalDefaultActionsCost)
+		tracker.SetInt64("defaultActionsUs", totalDefaultActionsCostUs)
+		tracker.SetInt64("polishMs", totalPolishCost)
+		tracker.SetInt64("polishUs", totalPolishCostUs)
+		tracker.SetInt64("recordPluginElapsedMs", totalRecordPluginElapsedCost)
+		tracker.SetInt64("recordPluginElapsedUs", totalRecordPluginElapsedCostUs)
+		tracker.SetInt64("filterMs", filterCost)
+		tracker.SetInt64("filterUs", filterCostUs)
+		tracker.SetInt64("maxResultMs", maxResultCost)
+		tracker.SetInt64("maxResultUs", maxResultCostUs)
+		tracker.SetInt("maxResultIndex", maxResultIndex)
+		tracker.SetRawString("maxResultId", maxResultId)
+		tracker.SetString("maxResultTitle", maxResultTitle)
+		tracker.SetInt64("totalMs", finalizeCost)
+		tracker.SetInt64("totalUs", finalizeCostUs)
+		tracker.Log(ctx)
 	}
 
 	return response
@@ -1224,6 +1435,10 @@ func (m *Manager) GetResultForFailedQuery(ctx context.Context, pluginMetadata Me
 }
 
 func (m *Manager) getDefaultActions(ctx context.Context, pluginInstance *Instance, query Query, title, subTitle string) (defaultActions []QueryResultAction) {
+	return m.getDefaultActionsWithOpenPluginSettingAction(ctx, pluginInstance, query, title, subTitle, m.newOpenPluginSettingAction(ctx, pluginInstance))
+}
+
+func (m *Manager) getDefaultActionsWithOpenPluginSettingAction(ctx context.Context, pluginInstance *Instance, query Query, title, subTitle string, openPluginSettingAction QueryResultAction) (defaultActions []QueryResultAction) {
 	// Declare both actions first
 	var addToFavoriteAction func(context.Context, ActionContext)
 	var removeFromFavoriteAction func(context.Context, ActionContext)
@@ -1292,7 +1507,7 @@ func (m *Manager) getDefaultActions(ctx context.Context, pluginInstance *Instanc
 		})
 	}
 
-	defaultActions = append(defaultActions, m.newOpenPluginSettingAction(ctx, pluginInstance))
+	defaultActions = append(defaultActions, openPluginSettingAction)
 
 	return defaultActions
 }
@@ -1607,14 +1822,30 @@ func (m *Manager) clearLazyResultIconsForSessionExcept(sessionId string, keepQue
 	}
 }
 
-func (m *Manager) convertResultIcon(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, resultId string, icon common.WoxImage) common.WoxImage {
+func (m *Manager) convertResultIcon(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, resultId string, resultTitle string, icon common.WoxImage) common.WoxImage {
+	return m.convertResultIconWithRecorder(ctx, pluginInstance, query, layout, resultId, resultTitle, icon, nil)
+}
+
+// convertResultIconWithRecorder lets the finalize hot path aggregate icon conversion diagnostics instead of logging inside each conversion.
+func (m *Manager) convertResultIconWithRecorder(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, resultId string, resultTitle string, icon common.WoxImage, recorder func(timetracking.IconConversionDiagnostics, timetracking.IconConversionTimingSummary)) common.WoxImage {
 	resultIconSize := m.getResultIconSizeForQuery(pluginInstance, query, layout)
 	pluginDirectory := ""
 	if pluginInstance != nil {
 		pluginDirectory = pluginInstance.PluginDirectory
 	}
 
-	convertedIcon := common.ConvertIconWithSizeMaybeLazy(ctx, icon, pluginDirectory, resultIconSize)
+	diagnostics := timetracking.IconConversionDiagnostics{}
+	if recorder != nil {
+		diagnostics = timetracking.IconConversionDiagnostics{
+			Purpose:     "result_icon",
+			QueryId:     query.Id,
+			Plugin:      queryDiagnosticPluginLabel(pluginInstance),
+			ResultId:    resultId,
+			ResultTitle: resultTitle,
+			Recorder:    recorder,
+		}
+	}
+	convertedIcon := common.ConvertIconWithSizeMaybeLazyWithDiagnostics(ctx, icon, pluginDirectory, resultIconSize, diagnostics)
 	if convertedIcon.ImageType != common.WoxImageTypeLazyLoad {
 		return convertedIcon
 	}
@@ -1639,6 +1870,10 @@ func (m *Manager) convertResultIcon(ctx context.Context, pluginInstance *Instanc
 
 	// If a result cannot be tokenized, keep old behavior instead of leaking an
 	// unregistered lazy marker to Flutter.
+	if recorder != nil {
+		diagnostics.Purpose = "result_icon_lazy_fallback"
+		return common.ConvertIconWithSizeWithDiagnostics(ctx, *payload.Source, pluginDirectory, targetSize, diagnostics)
+	}
 	return common.ConvertIconWithSize(ctx, *payload.Source, pluginDirectory, targetSize)
 }
 
@@ -2022,9 +2257,36 @@ func compareQueryResultCachesForDisplay(a *QueryResultCache, b *QueryResultCache
 	return strings.Compare(a.Result.Id, b.Result.Id)
 }
 
-// BuildQueryResultsSnapshot builds a snapshot of query results for the given session and query id.
+// BuildQueryResultsSnapshot builds a snapshot of all cached query results for the given session and query id.
 // Results are grouped by their group name, and both groups and results within groups are sorted by score.
 func (m *Manager) BuildQueryResultsSnapshot(sessionId string, queryId string) []QueryResultUI {
+	return m.buildQueryResultsSnapshot(sessionId, queryId, nil)
+}
+
+// BuildQueryResultsSnapshotForResultIds builds a query snapshot limited to results accepted by the query runner.
+func (m *Manager) BuildQueryResultsSnapshotForResultIds(sessionId string, queryId string, resultIds []string) []QueryResultUI {
+	if len(resultIds) == 0 {
+		return []QueryResultUI{}
+	}
+
+	includedResultIds := make(map[string]struct{}, len(resultIds))
+	for _, resultId := range resultIds {
+		if resultId == "" {
+			continue
+		}
+		includedResultIds[resultId] = struct{}{}
+	}
+	if len(includedResultIds) == 0 {
+		return []QueryResultUI{}
+	}
+
+	return m.buildQueryResultsSnapshot(sessionId, queryId, func(resultId string) bool {
+		_, ok := includedResultIds[resultId]
+		return ok
+	})
+}
+
+func (m *Manager) buildQueryResultsSnapshot(sessionId string, queryId string, shouldIncludeResult func(string) bool) []QueryResultUI {
 	if queryId == "" {
 		return []QueryResultUI{}
 	}
@@ -2037,7 +2299,10 @@ func (m *Manager) BuildQueryResultsSnapshot(sessionId string, queryId string) []
 	}
 
 	var resultCaches []*QueryResultCache
-	set.Results.Range(func(_ string, resultCache *QueryResultCache) bool {
+	set.Results.Range(func(resultId string, resultCache *QueryResultCache) bool {
+		if shouldIncludeResult != nil && !shouldIncludeResult(resultId) {
+			return true
+		}
 		resultCaches = append(resultCaches, resultCache)
 		return true
 	})
@@ -2112,6 +2377,27 @@ func (m *Manager) BuildQueryResultsSnapshot(sessionId string, queryId string) []
 }
 
 func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, result QueryResult) QueryResult {
+	result, timing := m.polishResult(ctx, pluginInstance, query, layout, result, false)
+	m.logPolishResultTiming(ctx, query, queryDiagnosticPluginLabel(pluginInstance), result, timing)
+	return result
+}
+
+func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, result QueryResult, collectIconTiming bool) (QueryResult, timetracking.ResultPolishTiming) {
+	polishStart := util.GetSystemTimestamp()
+	polishTimingStart := time.Now()
+	var IconConversion timetracking.IconConversionTimingSummary
+	var IconConversionSet bool
+	var iconRecorder func(timetracking.IconConversionDiagnostics, timetracking.IconConversionTimingSummary)
+	if collectIconTiming {
+		iconRecorder = func(_ timetracking.IconConversionDiagnostics, timing timetracking.IconConversionTimingSummary) {
+			IconConversion = timing
+			IconConversionSet = true
+		}
+	}
+	actionSetupStart := util.GetSystemTimestamp()
+	actionSetupTimingStart := time.Now()
+	actionDefaultsStart := util.GetSystemTimestamp()
+	actionDefaultsTimingStart := time.Now()
 	// set default id
 	if result.Id == "" {
 		result.Id = uuid.NewString()
@@ -2132,23 +2418,62 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 			}
 		}
 	}
+	ActionDefaultsCost := util.GetSystemTimestamp() - actionDefaultsStart
+	ActionDefaultsCostUs := time.Since(actionDefaultsTimingStart).Microseconds()
+	actionIconStart := util.GetSystemTimestamp()
+	actionIconTimingStart := time.Now()
+	ActionIconCount := 0
 	for actionIndex := range result.Actions {
 		if !result.Actions[actionIndex].Icon.IsEmpty() {
+			ActionIconCount++
 			result.Actions[actionIndex].Icon = common.ConvertIcon(ctx, result.Actions[actionIndex].Icon, pluginInstance.PluginDirectory)
 		}
 	}
+	ActionIconCost := util.GetSystemTimestamp() - actionIconStart
+	ActionIconCostUs := time.Since(actionIconTimingStart).Microseconds()
+	actionCallbackStart := util.GetSystemTimestamp()
+	actionCallbackTimingStart := time.Now()
 	m.attachExternalActionCallbacks(pluginInstance, result.Actions)
+	ActionCallbackCost := util.GetSystemTimestamp() - actionCallbackStart
+	ActionCallbackCostUs := time.Since(actionCallbackTimingStart).Microseconds()
+	ActionSetupCost := util.GetSystemTimestamp() - actionSetupStart
+	ActionSetupCostUs := time.Since(actionSetupTimingStart).Microseconds()
+
+	visualStart := util.GetSystemTimestamp()
+	visualTimingStart := time.Now()
 	// Result icons are converted for the visual surface selected by metadata. The old
 	// hard-coded list size made grid icons blurry because the UI had to scale 40px
 	// raster caches into much larger cells.
-	result.Icon = m.convertResultIcon(ctx, pluginInstance, query, layout, result.Id, result.Icon)
+	ResultIconType := result.Icon.ImageType
+	resultIconStart := util.GetSystemTimestamp()
+	resultIconTimingStart := time.Now()
+	result.Icon = m.convertResultIconWithRecorder(ctx, pluginInstance, query, layout, result.Id, result.Title, result.Icon, iconRecorder)
+	ResultIconCost := util.GetSystemTimestamp() - resultIconStart
+	ResultIconCostUs := time.Since(resultIconTimingStart).Microseconds()
+	ConvertedResultIconType := result.Icon.ImageType
+	dragStart := util.GetSystemTimestamp()
+	dragTimingStart := time.Now()
 	result.DragData = normalizeQueryResultDragData(result.DragData)
+	DragCost := util.GetSystemTimestamp() - dragStart
+	DragCostUs := time.Since(dragTimingStart).Microseconds()
+	tailIconStart := util.GetSystemTimestamp()
+	tailIconTimingStart := time.Now()
+	TailImageCount := 0
 	for i := range result.Tails {
 		if result.Tails[i].Type == QueryResultTailTypeImage {
+			TailImageCount++
 			result.Tails[i].Image = common.ConvertIcon(ctx, result.Tails[i].Image, pluginInstance.PluginDirectory)
 		}
 	}
+	TailIconCost := util.GetSystemTimestamp() - tailIconStart
+	TailIconCostUs := time.Since(tailIconTimingStart).Microseconds()
+	VisualCost := util.GetSystemTimestamp() - visualStart
+	VisualCostUs := time.Since(visualTimingStart).Microseconds()
 
+	previewStart := util.GetSystemTimestamp()
+	previewTimingStart := time.Now()
+	previewDefaultStart := util.GetSystemTimestamp()
+	previewDefaultTimingStart := time.Now()
 	// add default preview for selection query if no preview is set
 	if query.Type == QueryTypeSelection && result.Preview.PreviewType == "" {
 		if query.Selection.Type == selection.SelectionTypeText {
@@ -2169,12 +2494,28 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 			}
 		}
 	}
+	PreviewDefaultCost := util.GetSystemTimestamp() - previewDefaultStart
+	PreviewDefaultCostUs := time.Since(previewDefaultTimingStart).Microseconds()
+	previewNormalizeStart := util.GetSystemTimestamp()
+	previewNormalizeTimingStart := time.Now()
 	result.Preview = m.normalizeListPreviewData(ctx, pluginInstance, result.Preview)
+	PreviewNormalizeCost := util.GetSystemTimestamp() - previewNormalizeStart
+	PreviewNormalizeCostUs := time.Since(previewNormalizeTimingStart).Microseconds()
+	PreviewCost := util.GetSystemTimestamp() - previewStart
+	PreviewCostUs := time.Since(previewTimingStart).Microseconds()
 
+	translationStart := util.GetSystemTimestamp()
+	translationTimingStart := time.Now()
+	translationTextStart := util.GetSystemTimestamp()
+	translationTextTimingStart := time.Now()
 	// translate title
 	result.Title = m.translatePlugin(ctx, pluginInstance, result.Title)
 	// translate subtitle
 	result.SubTitle = m.translatePlugin(ctx, pluginInstance, result.SubTitle)
+	TranslationTextCost := util.GetSystemTimestamp() - translationTextStart
+	TranslationTextCostUs := time.Since(translationTextTimingStart).Microseconds()
+	translationTailStart := util.GetSystemTimestamp()
+	translationTailTimingStart := time.Now()
 	// translate tail text and assign IDs if not present
 	for i := range result.Tails {
 		if result.Tails[i].Id == "" {
@@ -2187,7 +2528,15 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 			result.Tails[i].Tooltip = m.translatePlugin(ctx, pluginInstance, result.Tails[i].Tooltip)
 		}
 	}
+	TranslationTailCost := util.GetSystemTimestamp() - translationTailStart
+	TranslationTailCostUs := time.Since(translationTailTimingStart).Microseconds()
+	translationPreviewMetaStart := util.GetSystemTimestamp()
+	translationPreviewMetaTimingStart := time.Now()
 	result.Preview = m.normalizePreviewMetadata(ctx, pluginInstance, result.Preview)
+	TranslationPreviewMetaCost := util.GetSystemTimestamp() - translationPreviewMetaStart
+	TranslationPreviewMetaCostUs := time.Since(translationPreviewMetaTimingStart).Microseconds()
+	translationActionStart := util.GetSystemTimestamp()
+	translationActionTimingStart := time.Now()
 	// translate action names
 	for actionIndex := range result.Actions {
 		result.Actions[actionIndex].Name = m.translatePlugin(ctx, pluginInstance, result.Actions[actionIndex].Name)
@@ -2199,13 +2548,29 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 			}
 		}
 	}
+	TranslationActionCost := util.GetSystemTimestamp() - translationActionStart
+	TranslationActionCostUs := time.Since(translationActionTimingStart).Microseconds()
+	translationPreviewDataStart := util.GetSystemTimestamp()
+	translationPreviewDataTimingStart := time.Now()
 	// translate preview data if preview type is text
 	if result.Preview.PreviewType == WoxPreviewTypeText || result.Preview.PreviewType == WoxPreviewTypeMarkdown {
 		result.Preview.PreviewData = m.translatePlugin(ctx, pluginInstance, result.Preview.PreviewData)
 	}
+	TranslationPreviewDataCost := util.GetSystemTimestamp() - translationPreviewDataStart
+	TranslationPreviewDataCostUs := time.Since(translationPreviewDataTimingStart).Microseconds()
+	translationGroupStart := util.GetSystemTimestamp()
+	translationGroupTimingStart := time.Now()
 	// translate group name
 	result.Group = m.translatePlugin(ctx, pluginInstance, result.Group)
+	TranslationGroupCost := util.GetSystemTimestamp() - translationGroupStart
+	TranslationGroupCostUs := time.Since(translationGroupTimingStart).Microseconds()
+	TranslationCost := util.GetSystemTimestamp() - translationStart
+	TranslationCostUs := time.Since(translationTimingStart).Microseconds()
 
+	actionNormalizeStart := util.GetSystemTimestamp()
+	actionNormalizeTimingStart := time.Now()
+	actionDefaultStart := util.GetSystemTimestamp()
+	actionDefaultTimingStart := time.Now()
 	// set first action as default if no default action is set
 	defaultActionCount := lo.CountBy(result.Actions, func(item QueryResultAction) bool {
 		return item.IsDefault
@@ -2216,12 +2581,20 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 			result.Actions[0].Hotkey = "Enter"
 		}
 	}
+	ActionDefaultCost := util.GetSystemTimestamp() - actionDefaultStart
+	ActionDefaultCostUs := time.Since(actionDefaultTimingStart).Microseconds()
 
+	actionSortStart := util.GetSystemTimestamp()
+	actionSortTimingStart := time.Now()
 	//move default action to first one of the actions
 	sort.Slice(result.Actions, func(i, j int) bool {
 		return result.Actions[i].IsDefault
 	})
+	ActionSortCost := util.GetSystemTimestamp() - actionSortStart
+	ActionSortCostUs := time.Since(actionSortTimingStart).Microseconds()
 
+	hotkeyNormalizeStart := util.GetSystemTimestamp()
+	hotkeyNormalizeTimingStart := time.Now()
 	// normalize hotkeys for all actions
 	for actionIndex := range result.Actions {
 		var action = result.Actions[actionIndex]
@@ -2234,7 +2607,15 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 		// normalize hotkey for platform specific modifiers
 		result.Actions[actionIndex].Hotkey = normalizeHotkeyForPlatform(result.Actions[actionIndex].Hotkey)
 	}
+	HotkeyNormalizeCost := util.GetSystemTimestamp() - hotkeyNormalizeStart
+	HotkeyNormalizeCostUs := time.Since(hotkeyNormalizeTimingStart).Microseconds()
+	ActionNormalizeCost := util.GetSystemTimestamp() - actionNormalizeStart
+	ActionNormalizeCostUs := time.Since(actionNormalizeTimingStart).Microseconds()
 
+	previewRemoteStart := util.GetSystemTimestamp()
+	previewRemoteTimingStart := time.Now()
+	previewGlobalStart := util.GetSystemTimestamp()
+	previewGlobalTimingStart := time.Now()
 	// if query is input and trigger keyword is global, disable preview and group.
 	// Core-owned interactive previews keep their preview even in global queries
 	// because stripping it would hide the form that can unblock the query.
@@ -2246,11 +2627,15 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 		result.Group = ""
 		result.GroupScore = 0
 	}
+	PreviewGlobalCost := util.GetSystemTimestamp() - previewGlobalStart
+	PreviewGlobalCostUs := time.Since(previewGlobalTimingStart).Microseconds()
 
 	// store preview for ui invoke later
 	// because preview may contain some heavy data (E.g. image or large text),
 	// we will store preview in cache and only send preview to ui when user select the result
 	var originalPreview = result.Preview
+	previewWrapStart := util.GetSystemTimestamp()
+	previewWrapTimingStart := time.Now()
 	// Core-owned interactive previews intentionally bypass remote wrapping so the UI
 	// can detect the type before deciding whether grid previews are allowed.
 	if !result.Preview.IsEmpty() &&
@@ -2264,8 +2649,20 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 			PreviewData: fmt.Sprintf("/preview?sessionId=%s&queryId=%s&id=%s", query.SessionId, query.Id, result.Id),
 		}
 	}
+	PreviewWrapCost := util.GetSystemTimestamp() - previewWrapStart
+	PreviewWrapCostUs := time.Since(previewWrapTimingStart).Microseconds()
+	PreviewRemoteCost := util.GetSystemTimestamp() - previewRemoteStart
+	PreviewRemoteCostUs := time.Since(previewRemoteTimingStart).Microseconds()
 
+	scoreStart := util.GetSystemTimestamp()
+	scoreTimingStart := time.Now()
+	scoreFeatureStart := util.GetSystemTimestamp()
+	scoreFeatureTimingStart := time.Now()
 	ignoreAutoScore := pluginInstance.Metadata.IsSupportFeature(MetadataFeatureIgnoreAutoScore)
+	ScoreFeatureCost := util.GetSystemTimestamp() - scoreFeatureStart
+	ScoreFeatureCostUs := time.Since(scoreFeatureTimingStart).Microseconds()
+	autoScoreStart := util.GetSystemTimestamp()
+	autoScoreTimingStart := time.Now()
 	if !ignoreAutoScore {
 		score := m.calculateResultScore(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle, query.RawQuery)
 		if score > 0 {
@@ -2273,6 +2670,10 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 			result.Score += score
 		}
 	}
+	AutoScoreCost := util.GetSystemTimestamp() - autoScoreStart
+	AutoScoreCostUs := time.Since(autoScoreTimingStart).Microseconds()
+	favoriteStart := util.GetSystemTimestamp()
+	favoriteTimingStart := time.Now()
 	// check if result is favorite result
 	// favorite result will not be affected by ignoreAutoScore setting, so we add score here
 	isFavorite := setting.GetSettingManager().IsPinedResult(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle)
@@ -2298,17 +2699,193 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 			})
 		}
 	}
+	FavoriteCost := util.GetSystemTimestamp() - favoriteStart
+	FavoriteCostUs := time.Since(favoriteTimingStart).Microseconds()
 
+	devScoreTailStart := util.GetSystemTimestamp()
+	devScoreTailTimingStart := time.Now()
 	result.Tails = m.appendDevScoreTail(ctx, result.Tails, result.Score)
+	DevScoreTailCost := util.GetSystemTimestamp() - devScoreTailStart
+	DevScoreTailCostUs := time.Since(devScoreTailTimingStart).Microseconds()
+	ScoreCost := util.GetSystemTimestamp() - scoreStart
+	ScoreCostUs := time.Since(scoreTimingStart).Microseconds()
 
+	cacheStart := util.GetSystemTimestamp()
+	cacheTimingStart := time.Now()
 	// Create cache at the end
 	resultCopy := result
 	// Because we may have replaced preview with remote preview
 	// we need to restore the original preview in the cache
 	resultCopy.Preview = originalPreview
 	m.storeQueryResult(ctx, pluginInstance, query, layout, resultCopy)
+	CacheCost := util.GetSystemTimestamp() - cacheStart
+	CacheCostUs := time.Since(cacheTimingStart).Microseconds()
+	polishCost := util.GetSystemTimestamp() - polishStart
+	polishCostUs := time.Since(polishTimingStart).Microseconds()
+	return result, timetracking.ResultPolishTiming{
+		TotalCost:                    polishCost,
+		TotalCostUs:                  polishCostUs,
+		ActionSetupCost:              ActionSetupCost,
+		ActionSetupCostUs:            ActionSetupCostUs,
+		ActionDefaultsCost:           ActionDefaultsCost,
+		ActionDefaultsCostUs:         ActionDefaultsCostUs,
+		ActionIconCost:               ActionIconCost,
+		ActionIconCostUs:             ActionIconCostUs,
+		ActionCallbackCost:           ActionCallbackCost,
+		ActionCallbackCostUs:         ActionCallbackCostUs,
+		ActionIconCount:              ActionIconCount,
+		VisualCost:                   VisualCost,
+		VisualCostUs:                 VisualCostUs,
+		ResultIconCost:               ResultIconCost,
+		ResultIconCostUs:             ResultIconCostUs,
+		ResultIconType:               ResultIconType,
+		ConvertedResultIconType:      ConvertedResultIconType,
+		IconConversion:               IconConversion,
+		IconConversionSet:            IconConversionSet,
+		DragCost:                     DragCost,
+		DragCostUs:                   DragCostUs,
+		TailIconCost:                 TailIconCost,
+		TailIconCostUs:               TailIconCostUs,
+		TailImageCount:               TailImageCount,
+		PreviewCost:                  PreviewCost,
+		PreviewCostUs:                PreviewCostUs,
+		PreviewDefaultCost:           PreviewDefaultCost,
+		PreviewDefaultCostUs:         PreviewDefaultCostUs,
+		PreviewNormalizeCost:         PreviewNormalizeCost,
+		PreviewNormalizeCostUs:       PreviewNormalizeCostUs,
+		TranslationCost:              TranslationCost,
+		TranslationCostUs:            TranslationCostUs,
+		TranslationTextCost:          TranslationTextCost,
+		TranslationTextCostUs:        TranslationTextCostUs,
+		TranslationTailCost:          TranslationTailCost,
+		TranslationTailCostUs:        TranslationTailCostUs,
+		TranslationPreviewMetaCost:   TranslationPreviewMetaCost,
+		TranslationPreviewMetaCostUs: TranslationPreviewMetaCostUs,
+		TranslationActionCost:        TranslationActionCost,
+		TranslationActionCostUs:      TranslationActionCostUs,
+		TranslationPreviewDataCost:   TranslationPreviewDataCost,
+		TranslationPreviewDataCostUs: TranslationPreviewDataCostUs,
+		TranslationGroupCost:         TranslationGroupCost,
+		TranslationGroupCostUs:       TranslationGroupCostUs,
+		ActionNormalizeCost:          ActionNormalizeCost,
+		ActionNormalizeCostUs:        ActionNormalizeCostUs,
+		ActionDefaultCost:            ActionDefaultCost,
+		ActionDefaultCostUs:          ActionDefaultCostUs,
+		ActionSortCost:               ActionSortCost,
+		ActionSortCostUs:             ActionSortCostUs,
+		HotkeyNormalizeCost:          HotkeyNormalizeCost,
+		HotkeyNormalizeCostUs:        HotkeyNormalizeCostUs,
+		PreviewRemoteCost:            PreviewRemoteCost,
+		PreviewRemoteCostUs:          PreviewRemoteCostUs,
+		PreviewGlobalCost:            PreviewGlobalCost,
+		PreviewGlobalCostUs:          PreviewGlobalCostUs,
+		PreviewWrapCost:              PreviewWrapCost,
+		PreviewWrapCostUs:            PreviewWrapCostUs,
+		ScoreCost:                    ScoreCost,
+		ScoreCostUs:                  ScoreCostUs,
+		ScoreFeatureCost:             ScoreFeatureCost,
+		ScoreFeatureCostUs:           ScoreFeatureCostUs,
+		AutoScoreCost:                AutoScoreCost,
+		AutoScoreCostUs:              AutoScoreCostUs,
+		FavoriteCost:                 FavoriteCost,
+		FavoriteCostUs:               FavoriteCostUs,
+		DevScoreTailCost:             DevScoreTailCost,
+		DevScoreTailCostUs:           DevScoreTailCostUs,
+		CacheCost:                    CacheCost,
+		CacheCostUs:                  CacheCostUs,
+		PreviewDataLen:               len(originalPreview.PreviewData),
+	}
+}
 
-	return result
+// logPolishResultTiming preserves the existing slow-result diagnostic for paths that are not already aggregated by query finalize.
+func (m *Manager) logPolishResultTiming(ctx context.Context, query Query, pluginLabel string, result QueryResult, timing timetracking.ResultPolishTiming) {
+	if !util.IsDev() {
+		return
+	}
+	if timing.TotalCost < 1 && timing.TotalCostUs < 500 {
+		return
+	}
+
+	tracker := timetracking.New("polish_result_done")
+	if !tracker.Enabled() {
+		return
+	}
+	tracker.SetRawString("queryId", query.Id)
+	tracker.SetRawString("plugin", pluginLabel)
+	tracker.SetRawString("resultId", result.Id)
+	tracker.SetString("title", result.Title)
+	tracker.SetInt64("totalMs", timing.TotalCost)
+	tracker.SetInt64("totalUs", timing.TotalCostUs)
+	tracker.SetInt64("actionSetupMs", timing.ActionSetupCost)
+	tracker.SetInt64("actionSetupUs", timing.ActionSetupCostUs)
+	tracker.SetInt64("actionDefaultsMs", timing.ActionDefaultsCost)
+	tracker.SetInt64("actionDefaultsUs", timing.ActionDefaultsCostUs)
+	tracker.SetInt64("actionIconMs", timing.ActionIconCost)
+	tracker.SetInt64("actionIconUs", timing.ActionIconCostUs)
+	tracker.SetInt64("actionCallbackMs", timing.ActionCallbackCost)
+	tracker.SetInt64("actionCallbackUs", timing.ActionCallbackCostUs)
+	tracker.SetInt("actionIconCount", timing.ActionIconCount)
+	tracker.SetInt64("visualMs", timing.VisualCost)
+	tracker.SetInt64("visualUs", timing.VisualCostUs)
+	tracker.SetInt64("resultIconMs", timing.ResultIconCost)
+	tracker.SetInt64("resultIconUs", timing.ResultIconCostUs)
+	tracker.SetRawString("resultIconType", timing.ResultIconType)
+	tracker.SetRawString("convertedResultIconType", timing.ConvertedResultIconType)
+	tracker.SetInt64("dragMs", timing.DragCost)
+	tracker.SetInt64("dragUs", timing.DragCostUs)
+	tracker.SetInt64("tailIconMs", timing.TailIconCost)
+	tracker.SetInt64("tailIconUs", timing.TailIconCostUs)
+	tracker.SetInt("tailImageCount", timing.TailImageCount)
+	tracker.SetInt64("previewMs", timing.PreviewCost)
+	tracker.SetInt64("previewUs", timing.PreviewCostUs)
+	tracker.SetInt64("previewDefaultMs", timing.PreviewDefaultCost)
+	tracker.SetInt64("previewDefaultUs", timing.PreviewDefaultCostUs)
+	tracker.SetInt64("previewNormalizeMs", timing.PreviewNormalizeCost)
+	tracker.SetInt64("previewNormalizeUs", timing.PreviewNormalizeCostUs)
+	tracker.SetInt64("translationMs", timing.TranslationCost)
+	tracker.SetInt64("translationUs", timing.TranslationCostUs)
+	tracker.SetInt64("translationTextMs", timing.TranslationTextCost)
+	tracker.SetInt64("translationTextUs", timing.TranslationTextCostUs)
+	tracker.SetInt64("translationTailMs", timing.TranslationTailCost)
+	tracker.SetInt64("translationTailUs", timing.TranslationTailCostUs)
+	tracker.SetInt64("translationPreviewMetaMs", timing.TranslationPreviewMetaCost)
+	tracker.SetInt64("translationPreviewMetaUs", timing.TranslationPreviewMetaCostUs)
+	tracker.SetInt64("translationActionMs", timing.TranslationActionCost)
+	tracker.SetInt64("translationActionUs", timing.TranslationActionCostUs)
+	tracker.SetInt64("translationPreviewDataMs", timing.TranslationPreviewDataCost)
+	tracker.SetInt64("translationPreviewDataUs", timing.TranslationPreviewDataCostUs)
+	tracker.SetInt64("translationGroupMs", timing.TranslationGroupCost)
+	tracker.SetInt64("translationGroupUs", timing.TranslationGroupCostUs)
+	tracker.SetInt64("actionNormalizeMs", timing.ActionNormalizeCost)
+	tracker.SetInt64("actionNormalizeUs", timing.ActionNormalizeCostUs)
+	tracker.SetInt64("actionDefaultMs", timing.ActionDefaultCost)
+	tracker.SetInt64("actionDefaultUs", timing.ActionDefaultCostUs)
+	tracker.SetInt64("actionSortMs", timing.ActionSortCost)
+	tracker.SetInt64("actionSortUs", timing.ActionSortCostUs)
+	tracker.SetInt64("hotkeyNormalizeMs", timing.HotkeyNormalizeCost)
+	tracker.SetInt64("hotkeyNormalizeUs", timing.HotkeyNormalizeCostUs)
+	tracker.SetInt64("previewRemoteMs", timing.PreviewRemoteCost)
+	tracker.SetInt64("previewRemoteUs", timing.PreviewRemoteCostUs)
+	tracker.SetInt64("previewGlobalMs", timing.PreviewGlobalCost)
+	tracker.SetInt64("previewGlobalUs", timing.PreviewGlobalCostUs)
+	tracker.SetInt64("previewWrapMs", timing.PreviewWrapCost)
+	tracker.SetInt64("previewWrapUs", timing.PreviewWrapCostUs)
+	tracker.SetInt64("scoreMs", timing.ScoreCost)
+	tracker.SetInt64("scoreUs", timing.ScoreCostUs)
+	tracker.SetInt64("scoreFeatureMs", timing.ScoreFeatureCost)
+	tracker.SetInt64("scoreFeatureUs", timing.ScoreFeatureCostUs)
+	tracker.SetInt64("autoScoreMs", timing.AutoScoreCost)
+	tracker.SetInt64("autoScoreUs", timing.AutoScoreCostUs)
+	tracker.SetInt64("favoriteMs", timing.FavoriteCost)
+	tracker.SetInt64("favoriteUs", timing.FavoriteCostUs)
+	tracker.SetInt64("devScoreTailMs", timing.DevScoreTailCost)
+	tracker.SetInt64("devScoreTailUs", timing.DevScoreTailCostUs)
+	tracker.SetInt64("cacheMs", timing.CacheCost)
+	tracker.SetInt64("cacheUs", timing.CacheCostUs)
+	tracker.SetInt("actions", len(result.Actions))
+	tracker.SetInt("tails", len(result.Tails))
+	tracker.SetInt("previewDataLen", timing.PreviewDataLen)
+	tracker.Log(ctx)
 }
 
 func (m *Manager) getResultIconSizeForQuery(pluginInstance *Instance, query Query, layout QueryLayout) int {
@@ -2516,9 +3093,18 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 
 	// Update icon in cache if present
 	if result.Icon != nil {
+		// GetUpdatableResult returns the current icon as a non-nil field, and
+		// callers often pass it back after changing only tails or actions. Treat an
+		// unchanged icon as a no-op so refresh updates do not repeatedly touch the
+		// image conversion/cache path.
+		if result.Icon.ImageType == resultCache.Result.Icon.ImageType && result.Icon.ImageData == resultCache.Result.Icon.ImageData {
+			result.Icon = nil
+			return result
+		}
+
 		// Updated result icons must keep the same surface-aware size as initial results;
 		// otherwise a grid plugin can become blurry after sending an icon update.
-		convertedIcon := m.convertResultIcon(ctx, pluginInstance, resultCache.Query, resultCache.Layout, result.Id, *result.Icon)
+		convertedIcon := m.convertResultIcon(ctx, pluginInstance, resultCache.Query, resultCache.Layout, result.Id, resultCache.Result.Title, *result.Icon)
 		result.Icon = &convertedIcon
 		resultCache.Result.Icon = *result.Icon
 	}
@@ -2628,13 +3214,28 @@ func (m *Manager) GetUpdatableResult(ctx context.Context, resultId string) *Upda
 }
 
 func (m *Manager) Query(ctx context.Context, query Query) (resultsChan chan QueryResponseUI, fallbackReadyChan chan bool, doneChan chan bool) {
+	queryStart := util.GetSystemTimestamp()
+	if tracker := timetracking.New("manager_query_enter"); tracker.Enabled() {
+		tracker.SetRawString("queryId", query.Id)
+		tracker.SetRawString("query", query.String())
+		tracker.Log(ctx)
+	}
+
 	resultsChan = make(chan QueryResponseUI, 10)
 	fallbackReadyChan = make(chan bool, 1)
 	doneChan = make(chan bool, 1)
 
 	tracker := newQueryTracker(fallbackReadyChan, doneChan)
 	execution := newQueryExecution(ctx, m, query, resultsChan, tracker)
-	execution.start()
+	// Start scheduling asynchronously so the query runner can begin consuming
+	// fast plugin responses before the full plugin eligibility scan finishes.
+	go execution.start()
+	if tracker := timetracking.New("manager_query_exit"); tracker.Enabled() {
+		tracker.SetRawString("queryId", query.Id)
+		tracker.SetRawString("query", query.String())
+		tracker.SetInt64("costMs", util.GetSystemTimestamp()-queryStart)
+		tracker.Log(ctx)
+	}
 
 	return
 }
@@ -2653,16 +3254,44 @@ func newQueryExecution(ctx context.Context, manager *Manager, query Query, resul
 }
 
 func (e *queryExecution) start() {
+	cacheStart := util.GetSystemTimestamp()
 	e.manager.startSessionQueryCache(e.query)
+	if tracker := timetracking.New("start_session_query_cache"); tracker.Enabled() {
+		tracker.SetRawString("queryId", e.query.Id)
+		tracker.SetInt64("costMs", util.GetSystemTimestamp()-cacheStart)
+		tracker.Log(e.ctx)
+	}
 	e.scheduleStart = util.GetSystemTimestamp()
+	if tracker := timetracking.New("schedule_start"); tracker.Enabled() {
+		tracker.SetRawString("queryId", e.query.Id)
+		tracker.SetRawString("query", e.query.String())
+		tracker.SetInt("totalPlugins", e.totalPlugins)
+		tracker.Log(e.ctx)
+	}
 	e.startScheduleWatchdog()
 	defer e.stopScheduleWatchdog()
 
 	e.schedulePlugins()
 
 	// Queries with no runnable plugins should still notify both phases immediately.
+	notifyStart := util.GetSystemTimestamp()
 	e.tracker.notifyIfEmpty()
-	logger.Debug(e.ctx, fmt.Sprintf("query scheduler finished: query=%s checked=%d/%d scheduled=%d elapsed=%dms", e.query.String(), e.checkedPlugins.Load(), e.totalPlugins, e.scheduledPlugins.Load(), util.GetSystemTimestamp()-e.scheduleStart))
+	if tracker := timetracking.New("notify_if_empty"); tracker.Enabled() {
+		tracker.SetRawString("queryId", e.query.Id)
+		tracker.SetInt64("costMs", util.GetSystemTimestamp()-notifyStart)
+		tracker.SetInt("remaining", int(e.tracker.remaining.Load()))
+		tracker.SetInt("fallbackRemaining", int(e.tracker.fallbackRemaining.Load()))
+		tracker.Log(e.ctx)
+	}
+	if tracker := timetracking.New("schedule_done"); tracker.Enabled() {
+		tracker.SetRawString("queryId", e.query.Id)
+		tracker.SetRawString("query", e.query.String())
+		tracker.SetInt("checked", int(e.checkedPlugins.Load()))
+		tracker.SetInt("totalPlugins", e.totalPlugins)
+		tracker.SetInt("scheduled", int(e.scheduledPlugins.Load()))
+		tracker.SetInt64("elapsedMs", util.GetSystemTimestamp()-e.scheduleStart)
+		tracker.Log(e.ctx)
+	}
 }
 
 func (e *queryExecution) startScheduleWatchdog() {
@@ -2698,8 +3327,20 @@ func (e *queryExecution) schedulePlugins() {
 
 func (e *queryExecution) schedulePlugin(pluginInstance *Instance) (queryPluginJob, bool) {
 	e.checkedPlugins.Add(1)
-	e.lastCheckedPlugin.Store(queryDiagnosticPluginLabel(pluginInstance))
-	if !e.manager.canOperateQuery(e.ctx, pluginInstance, e.query) {
+	pluginLabel := queryDiagnosticPluginLabel(pluginInstance)
+	e.lastCheckedPlugin.Store(pluginLabel)
+	checkStart := util.GetSystemTimestamp()
+	canOperate := e.manager.canOperateQuery(e.ctx, pluginInstance, e.query)
+	if tracker := timetracking.New("can_operate_query"); tracker.Enabled() {
+		tracker.SetRawString("queryId", e.query.Id)
+		tracker.SetRawString("plugin", pluginLabel)
+		tracker.SetBool("operable", canOperate)
+		tracker.SetInt64("costMs", util.GetSystemTimestamp()-checkStart)
+		tracker.SetInt("checked", int(e.checkedPlugins.Load()))
+		tracker.SetInt("totalPlugins", e.totalPlugins)
+		tracker.Log(e.ctx)
+	}
+	if !canOperate {
 		return queryPluginJob{}, false
 	}
 	e.scheduledPlugins.Add(1)
@@ -2713,45 +3354,113 @@ func (e *queryExecution) schedulePlugin(pluginInstance *Instance) (queryPluginJo
 		blocksFallback: !supportsDebounce,
 	}
 	if !supportsDebounce {
+		if tracker := timetracking.New("schedule_plugin"); tracker.Enabled() {
+			tracker.SetRawString("queryId", e.query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.SetBool("debounced", false)
+			tracker.SetBool("blocksFallback", job.blocksFallback)
+			tracker.SetInt("scheduled", int(e.scheduledPlugins.Load()))
+			tracker.Log(e.ctx)
+		}
 		return job, true
 	}
 
 	debounceParams, err := pluginInstance.Metadata.GetFeatureParamsForDebounce()
 	if err != nil {
 		logger.Error(e.ctx, fmt.Sprintf("[%s] %s, query directly", pluginInstance.GetName(e.ctx), err))
+		if tracker := timetracking.New("schedule_plugin"); tracker.Enabled() {
+			tracker.SetRawString("queryId", e.query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.SetBool("debounced", false)
+			tracker.SetBool("debounceConfigError", true)
+			tracker.SetBool("blocksFallback", job.blocksFallback)
+			tracker.SetInt("scheduled", int(e.scheduledPlugins.Load()))
+			tracker.Log(e.ctx)
+		}
 		return job, true
 	}
 
 	job.debounced = true
 	job.intervalMs = debounceParams.IntervalMs
+	if tracker := timetracking.New("schedule_plugin"); tracker.Enabled() {
+		tracker.SetRawString("queryId", e.query.Id)
+		tracker.SetRawString("plugin", pluginLabel)
+		tracker.SetBool("debounced", true)
+		tracker.SetInt("intervalMs", job.intervalMs)
+		tracker.SetBool("blocksFallback", job.blocksFallback)
+		tracker.SetInt("scheduled", int(e.scheduledPlugins.Load()))
+		tracker.Log(e.ctx)
+	}
 	return job, true
 }
 
 func (e *queryExecution) startPluginJob(job queryPluginJob) {
 	e.tracker.startJob(job.blocksFallback)
+	pluginLabel := queryDiagnosticPluginLabel(job.pluginInstance)
+	if tracker := timetracking.New("tracker_start_job"); tracker.Enabled() {
+		tracker.SetRawString("queryId", e.query.Id)
+		tracker.SetRawString("plugin", pluginLabel)
+		tracker.SetBool("blocksFallback", job.blocksFallback)
+		tracker.SetInt("remaining", int(e.tracker.remaining.Load()))
+		tracker.SetInt("fallbackRemaining", int(e.tracker.fallbackRemaining.Load()))
+		tracker.Log(e.ctx)
+	}
 	if job.debounced {
+		if tracker := timetracking.New("start_plugin_job"); tracker.Enabled() {
+			tracker.SetRawString("queryId", e.query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.SetRawString("mode", "debounced")
+			tracker.SetInt("intervalMs", job.intervalMs)
+			tracker.Log(e.ctx)
+		}
 		e.replaceDebouncedJob(job)
 		return
+	}
+	if tracker := timetracking.New("start_plugin_job"); tracker.Enabled() {
+		tracker.SetRawString("queryId", e.query.Id)
+		tracker.SetRawString("plugin", pluginLabel)
+		tracker.SetRawString("mode", "immediate")
+		tracker.Log(e.ctx)
 	}
 	e.runPluginJob(job)
 }
 
 func (e *queryExecution) replaceDebouncedJob(job queryPluginJob) {
 	pluginInstance := job.pluginInstance
+	pluginLabel := queryDiagnosticPluginLabel(pluginInstance)
 	logger.Debug(e.ctx, fmt.Sprintf("[%s] debounce query, will execute in %d ms", pluginInstance.GetName(e.ctx), job.intervalMs))
+	if tracker := timetracking.New("debounce_schedule"); tracker.Enabled() {
+		tracker.SetRawString("queryId", e.query.Id)
+		tracker.SetRawString("plugin", pluginLabel)
+		tracker.SetInt("intervalMs", job.intervalMs)
+		tracker.Log(e.ctx)
+	}
 	if v, ok := e.manager.debounceQueryTimer.Load(pluginInstance.Metadata.Id); ok {
 		if v.timer.Stop() {
 			v.onStop()
 		}
 	}
 
+	debounceScheduledAt := util.GetSystemTimestamp()
 	timer := time.AfterFunc(time.Duration(job.intervalMs)*time.Millisecond, func() {
+		if tracker := timetracking.New("debounce_fire"); tracker.Enabled() {
+			tracker.SetRawString("queryId", e.query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.SetInt64("waitedMs", util.GetSystemTimestamp()-debounceScheduledAt)
+			tracker.Log(e.ctx)
+		}
 		e.runPluginJob(job)
 	})
 	onStop := func() {
 		// A newer query replaced this debounced run before it started. Mark this
 		// job as finished for the current query lifecycle so counters do not hang.
 		logger.Debug(e.ctx, fmt.Sprintf("[%s] previous debounced query cancelled", pluginInstance.GetName(e.ctx)))
+		if tracker := timetracking.New("debounce_cancel"); tracker.Enabled() {
+			tracker.SetRawString("queryId", e.query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.SetInt64("waitedMs", util.GetSystemTimestamp()-debounceScheduledAt)
+			tracker.Log(e.ctx)
+		}
 		e.tracker.finishJob(job.blocksFallback)
 	}
 	e.manager.debounceQueryTimer.Store(pluginInstance.Metadata.Id, &debounceTimer{
@@ -2762,23 +3471,90 @@ func (e *queryExecution) replaceDebouncedJob(job queryPluginJob) {
 
 func (e *queryExecution) runPluginJob(job queryPluginJob) {
 	pluginInstance := job.pluginInstance
+	pluginLabel := queryDiagnosticPluginLabel(pluginInstance)
+	enqueueStart := util.GetSystemTimestamp()
+	if tracker := timetracking.New("plugin_job_enqueue"); tracker.Enabled() {
+		tracker.SetRawString("queryId", e.query.Id)
+		tracker.SetRawString("plugin", pluginLabel)
+		tracker.SetBool("debounced", job.debounced)
+		tracker.SetBool("blocksFallback", job.blocksFallback)
+		tracker.Log(e.ctx)
+	}
 	util.Go(e.ctx, fmt.Sprintf("[%s] parallel query", pluginInstance.GetName(e.ctx)), func() {
+		jobStart := util.GetSystemTimestamp()
+		jobTimingStart := time.Now()
+		if tracker := timetracking.New("plugin_job_run"); tracker.Enabled() {
+			tracker.SetRawString("queryId", e.query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.SetInt64("queuedMs", jobStart-enqueueStart)
+			tracker.Log(e.ctx)
+		}
 		// QueryResponse keeps result rows and query-scoped UI metadata together.
 		// Sending one normalized response through the query pipeline prevents the
 		// UI from applying refinements or layout from a different query execution.
+		queryForPluginStart := util.GetSystemTimestamp()
 		queryResponse := e.manager.queryForPlugin(e.ctx, pluginInstance, e.query)
+		if tracker := timetracking.New("query_for_plugin_done"); tracker.Enabled() {
+			tracker.SetRawString("queryId", e.query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.SetInt("resultCount", len(queryResponse.Results))
+			tracker.SetInt64("costMs", util.GetSystemTimestamp()-queryForPluginStart)
+			tracker.Log(e.ctx)
+		}
 		// Bug diagnostics: queryForPlugin logs before response conversion and
 		// tracker completion. These boundaries make it clear whether a future
 		// spinner is stuck while converting/sending results or while marking the
 		// plugin as finished for the query lifecycle.
+		toUIStart := util.GetSystemTimestamp()
+		toUITimingStart := time.Now()
 		queryResponseUI := queryResponse.ToUI()
+		toUICost := util.GetSystemTimestamp() - toUIStart
+		toUICostUs := time.Since(toUITimingStart).Microseconds()
 		logger.Debug(e.ctx, fmt.Sprintf("<%s> query response converted for UI, result count: %d", pluginInstance.GetName(e.ctx), len(queryResponseUI.Results)))
+		if tracker := timetracking.New("to_ui"); tracker.Enabled() {
+			tracker.SetRawString("queryId", e.query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.SetInt("resultCount", len(queryResponseUI.Results))
+			tracker.SetInt64("costMs", toUICost)
+			tracker.SetInt64("costUs", toUICostUs)
+			tracker.Log(e.ctx)
+		}
+		sendStart := util.GetSystemTimestamp()
+		sendTimingStart := time.Now()
 		e.resultsChan <- queryResponseUI
+		sendCost := util.GetSystemTimestamp() - sendStart
+		sendCostUs := time.Since(sendTimingStart).Microseconds()
 		logger.Debug(e.ctx, fmt.Sprintf("<%s> query response delivered to query pipeline", pluginInstance.GetName(e.ctx)))
+		if tracker := timetracking.New("channel_send"); tracker.Enabled() {
+			tracker.SetRawString("queryId", e.query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.SetInt("resultCount", len(queryResponseUI.Results))
+			tracker.SetInt64("costMs", sendCost)
+			tracker.SetInt64("costUs", sendCostUs)
+			tracker.SetInt64("elapsedSinceJobStartMs", util.GetSystemTimestamp()-jobStart)
+			tracker.SetInt64("elapsedSinceJobStartUs", time.Since(jobTimingStart).Microseconds())
+			tracker.Log(e.ctx)
+		}
+		finishStart := util.GetSystemTimestamp()
 		e.tracker.finishJob(job.blocksFallback)
+		finishCost := util.GetSystemTimestamp() - finishStart
 		logger.Debug(e.ctx, fmt.Sprintf("<%s> query tracker finished, blocks fallback: %v", pluginInstance.GetName(e.ctx), job.blocksFallback))
+		if tracker := timetracking.New("tracker_finish_job"); tracker.Enabled() {
+			tracker.SetRawString("queryId", e.query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.SetBool("blocksFallback", job.blocksFallback)
+			tracker.SetInt("remaining", int(e.tracker.remaining.Load()))
+			tracker.SetInt("fallbackRemaining", int(e.tracker.fallbackRemaining.Load()))
+			tracker.SetInt64("costMs", finishCost)
+			tracker.Log(e.ctx)
+		}
 	}, func() {
 		logger.Warn(e.ctx, fmt.Sprintf("<%s> query goroutine recovered, force finishing tracker", pluginInstance.GetName(e.ctx)))
+		if tracker := timetracking.New("plugin_job_recovered"); tracker.Enabled() {
+			tracker.SetRawString("queryId", e.query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.Log(e.ctx)
+		}
 		e.tracker.finishJob(job.blocksFallback)
 	})
 }

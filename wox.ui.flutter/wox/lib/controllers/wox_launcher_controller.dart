@@ -46,6 +46,7 @@ import 'package:wox/enums/wox_position_type_enum.dart';
 import 'package:wox/enums/wox_query_refinement_type_enum.dart';
 import 'package:wox/enums/wox_query_type_enum.dart';
 import 'package:wox/enums/wox_result_action_type_enum.dart';
+import 'package:wox/enums/wox_result_tail_text_category_enum.dart';
 import 'package:wox/enums/wox_selection_type_enum.dart';
 import 'package:wox/enums/wox_show_source_enum.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
@@ -68,6 +69,9 @@ import 'package:wox/utils/color_util.dart';
 
 class WoxLauncherController extends GetxController {
   static const int _slowLauncherActivationWarningThresholdMs = 50;
+  static const int _firstPaintWarningThresholdMs = 50;
+  static const int _firstPaintDangerThresholdMs = 100;
+  static const String _firstPaintTailTooltip = "First paint elapsed since query start";
   static const String localActionTogglePreviewFullscreenId = "__local_toggle_preview_fullscreen__";
   static const String localActionPreviewSearchId = "__local_preview_search__";
   static const String localActionOpenUpdateId = "__local_open_update__";
@@ -228,6 +232,8 @@ class WoxLauncherController extends GetxController {
 
   // Performance metrics: Map<traceId, startTime>
   final Map<String, int> queryStartTimeMap = {};
+  // UI-only first paint metric, kept so later backend batches do not overwrite the local tail.
+  final Map<String, int> queryFirstPaintElapsedByQueryId = {};
 
   /// The icon at end of query box.
   final queryIcon = QueryIconInfo.empty().obs;
@@ -1339,7 +1345,8 @@ class WoxLauncherController extends GetxController {
     //    Following resetActiveResult in updateActiveResultIndex will trigger the callback
     // 2. We need update items in both list and grid controllers, because metdata query (grid and list layout change relay on this) may after results arrival,
     //    at this point, we don't know which layout this query will use, so we update both
-    final listItems = receivedResults.map((e) => WoxListItem.fromQueryResult(e)).toList();
+    final displayResults = appendFirstPaintPerformanceTailForQuery(queryId, receivedResults);
+    final listItems = displayResults.map((e) => WoxListItem.fromQueryResult(e)).toList();
     final preResizeTargetHeight = getPreResizeTargetHeightForIncomingResults(listItems);
     if (preResizeTargetHeight != null) {
       // Bug fix: empty and stale visible snapshots used to swap content before
@@ -1357,6 +1364,61 @@ class WoxLauncherController extends GetxController {
     updateDoctorToolbarIfNeeded(traceId);
 
     unawaited(resizeHeightForResultUpdate(traceId: traceId, reason: "query results updated"));
+  }
+
+  // Re-attach the UI-only first paint tail when a later backend batch replaces the result list.
+  List<WoxQueryResult> appendFirstPaintPerformanceTailForQuery(String queryId, List<WoxQueryResult> results) {
+    if (!WoxSettingUtil.instance.currentSetting.showPerformanceTail) {
+      return results;
+    }
+
+    final firstPaintElapsed = queryFirstPaintElapsedByQueryId[queryId];
+    if (firstPaintElapsed == null) {
+      return results;
+    }
+
+    for (final result in results) {
+      appendFirstPaintPerformanceTail(result, firstPaintElapsed);
+    }
+    return results;
+  }
+
+  // Appends the first paint tail once while preserving all backend-provided tails.
+  void appendFirstPaintPerformanceTail(WoxQueryResult result, int firstPaintElapsed) {
+    if (result.isGroup) {
+      return;
+    }
+
+    result.tails =
+        result.tails.where((tail) => tail.tooltip != _firstPaintTailTooltip).toList()
+          ..add(WoxListItemTail.text("${firstPaintElapsed}ms", textCategory: getFirstPaintTailTextCategory(firstPaintElapsed))..tooltip = _firstPaintTailTooltip);
+  }
+
+  // First paint covers the UI frame lifecycle, so its thresholds are wider than backend query timings.
+  String getFirstPaintTailTextCategory(int firstPaintElapsed) {
+    if (firstPaintElapsed > _firstPaintDangerThresholdMs) {
+      return woxListItemTailTextCategoryDanger;
+    }
+    if (firstPaintElapsed > _firstPaintWarningThresholdMs) {
+      return woxListItemTailTextCategoryWarning;
+    }
+    return woxListItemTailTextCategoryDefault;
+  }
+
+  // Updates already-rendered rows immediately after Flutter reports the first painted frame.
+  void applyFirstPaintPerformanceTailToVisibleResults(String traceId, String queryId, int firstPaintElapsed) {
+    if (!WoxSettingUtil.instance.currentSetting.showPerformanceTail) {
+      return;
+    }
+    if (currentQuery.value.queryId != queryId) {
+      return;
+    }
+
+    final visibleResults = activeResultViewController.items.where((item) => item.value.data.queryId == queryId && !item.value.data.isGroup).map((item) => item.value.data).toList();
+    for (final result in visibleResults) {
+      appendFirstPaintPerformanceTail(result, firstPaintElapsed);
+      updateResult(traceId, UpdatableResult(id: result.id, tails: result.tails));
+    }
   }
 
   void updateActiveResultIndex(String traceId) {
@@ -2651,6 +2713,7 @@ class WoxLauncherController extends GetxController {
     }
 
     currentQuery.value = query;
+    queryFirstPaintElapsedByQueryId.clear();
     backendQueryContext = QueryContext.empty();
     backendQueryContextQueryId = "";
     if (preserveCompletionHint) {
@@ -3005,13 +3068,21 @@ class WoxLauncherController extends GetxController {
       final queryStartTime = queryStartTimeMap[msg.traceId];
       if (results.isNotEmpty && queryStartTime != null) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          // Check if this traceId still exists (not removed by Complete Paint)
-          if (queryStartTimeMap.containsKey(msg.traceId)) {
-            final firstPaintTime = DateTime.now().millisecondsSinceEpoch - queryStartTime;
-            Logger.instance.info(msg.traceId, "⚡ FIRST PAINT: ${firstPaintTime}ms (${results.length} results rendered)");
-            // Remove after recording First Paint to avoid recording it again
-            queryStartTimeMap.remove(msg.traceId);
+          final startTime = queryStartTimeMap[msg.traceId];
+          if (startTime == null) {
+            return;
           }
+          if (currentQuery.value.queryId != queryId) {
+            queryStartTimeMap.remove(msg.traceId);
+            return;
+          }
+
+          final firstPaintTime = DateTime.now().millisecondsSinceEpoch - startTime;
+          queryFirstPaintElapsedByQueryId[queryId] = firstPaintTime;
+          Logger.instance.info(msg.traceId, "⚡ FIRST PAINT: ${firstPaintTime}ms (${results.length} results rendered)");
+          applyFirstPaintPerformanceTailToVisibleResults(msg.traceId, queryId, firstPaintTime);
+          // Remove after recording First Paint to avoid recording it again
+          queryStartTimeMap.remove(msg.traceId);
         });
       }
 

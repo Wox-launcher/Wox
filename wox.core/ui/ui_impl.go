@@ -15,6 +15,7 @@ import (
 	"wox/util"
 	"wox/util/notifier"
 	"wox/util/selection"
+	"wox/util/timetracking"
 
 	"github.com/google/uuid"
 	"github.com/samber/lo"
@@ -487,6 +488,14 @@ func onUIWebsocketRequest(ctx context.Context, request WebsocketMsg) {
 	if request.Method != "Log" {
 		logger.Debug(ctx, fmt.Sprintf("got <%s> request from ui", request.Method))
 	}
+	if request.Method == "Query" {
+		tracker := timetracking.New("ui_request_dispatch_enter")
+		if tracker.Enabled() {
+			tracker.SetRawString("queryId", websocketMsgStringParam(request, "queryId"))
+			tracker.SetRawString("method", request.Method)
+			tracker.Log(ctx)
+		}
+	}
 
 	// we handle time/amount sensitive requests in websocket, other requests in http (see router.go)
 	switch request.Method {
@@ -574,7 +583,9 @@ func handleWebsocketLog(ctx context.Context, request WebsocketMsg) {
 }
 
 func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
+	handlerStart := util.GetSystemTimestamp()
 	sessionId := request.SessionId
+	queryIdParamStart := util.GetSystemTimestamp()
 	queryId, queryIdErr := getWebsocketMsgParameter(ctx, request, "queryId")
 	if queryIdErr != nil {
 		logger.Error(ctx, queryIdErr.Error())
@@ -583,35 +594,54 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 	} else {
 		ctx = util.WithQueryIdContext(ctx, queryId)
 	}
+	queryIdParamCost := util.GetSystemTimestamp() - queryIdParamStart
+	if tracker := timetracking.New("handle_query_enter"); tracker.Enabled() {
+		tracker.SetRawString("queryId", queryId)
+		tracker.SetRawString("requestId", request.RequestId)
+		tracker.SetRawString("sessionId", sessionId)
+		tracker.SetInt64("queryIdParamMs", queryIdParamCost)
+		tracker.Log(ctx)
+	}
 
+	queryTypeParamStart := util.GetSystemTimestamp()
 	queryType, queryTypeErr := getWebsocketMsgParameter(ctx, request, "queryType")
 	if queryTypeErr != nil {
 		logger.Error(ctx, queryTypeErr.Error())
 		responseUIError(ctx, request, queryTypeErr.Error())
 		return
 	}
+	queryTypeParamCost := util.GetSystemTimestamp() - queryTypeParamStart
+	queryTextParamStart := util.GetSystemTimestamp()
 	queryText, queryTextErr := getWebsocketMsgParameter(ctx, request, "queryText")
 	if queryTextErr != nil {
 		logger.Error(ctx, queryTextErr.Error())
 		responseUIError(ctx, request, queryTextErr.Error())
 		return
 	}
+	queryTextParamCost := util.GetSystemTimestamp() - queryTextParamStart
+	querySelectionParamStart := util.GetSystemTimestamp()
 	querySelectionJson, querySelectionErr := getWebsocketMsgParameter(ctx, request, "querySelection")
 	if querySelectionErr != nil {
 		logger.Error(ctx, querySelectionErr.Error())
 		responseUIError(ctx, request, querySelectionErr.Error())
 		return
 	}
+	querySelectionParamCost := util.GetSystemTimestamp() - querySelectionParamStart
 	var querySelection selection.Selection
+	selectionParseStart := util.GetSystemTimestamp()
 	json.Unmarshal([]byte(querySelectionJson), &querySelection)
+	selectionParseCost := util.GetSystemTimestamp() - selectionParseStart
 
 	queryRefinements := map[string]string{}
+	requestDataMarshalStart := util.GetSystemTimestamp()
 	queryRequestJson, queryRequestMarshalErr := json.Marshal(request.Data)
 	if queryRequestMarshalErr != nil {
 		logger.Error(ctx, queryRequestMarshalErr.Error())
 		responseUIError(ctx, request, queryRequestMarshalErr.Error())
 		return
 	}
+	requestDataMarshalCost := util.GetSystemTimestamp() - requestDataMarshalStart
+	refinementsParseStart := util.GetSystemTimestamp()
 	refinementsData := gjson.GetBytes(queryRequestJson, "queryRefinements")
 	if refinementsData.Exists() {
 		// queryRefinements is optional for compatibility with older UI clients.
@@ -625,7 +655,24 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 		}
 		queryRefinements = parsedRefinements
 	}
+	refinementsParseCost := util.GetSystemTimestamp() - refinementsParseStart
 	skipCompletionHint := gjson.GetBytes(queryRequestJson, "skipCompletionHint").Bool()
+	if tracker := timetracking.New("handle_query_parse"); tracker.Enabled() {
+		tracker.SetRawString("queryId", queryId)
+		tracker.SetRawString("queryType", queryType)
+		tracker.SetString("queryText", queryText)
+		tracker.SetInt("queryTextLen", len(queryText))
+		tracker.SetInt("selectionBytes", len(querySelectionJson))
+		tracker.SetInt64("queryIdParamMs", queryIdParamCost)
+		tracker.SetInt64("queryTypeParamMs", queryTypeParamCost)
+		tracker.SetInt64("queryTextParamMs", queryTextParamCost)
+		tracker.SetInt64("querySelectionParamMs", querySelectionParamCost)
+		tracker.SetInt64("selectionParseMs", selectionParseCost)
+		tracker.SetInt64("requestDataMarshalMs", requestDataMarshalCost)
+		tracker.SetInt64("refinementsParseMs", refinementsParseCost)
+		tracker.SetInt64("totalMs", util.GetSystemTimestamp()-handlerStart)
+		tracker.Log(ctx)
+	}
 
 	var changedQuery common.PlainQuery
 	switch queryType {
@@ -680,6 +727,7 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 		return
 	}
 
+	newQueryStart := util.GetSystemTimestamp()
 	query, ownerPlugin, queryErr := plugin.GetPluginManager().NewQuery(ctx, changedQuery)
 	if queryErr != nil {
 		if conflictErr, ok := plugin.AsTriggerKeywordConflictError(queryErr); ok {
@@ -691,7 +739,16 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 		responseUIError(ctx, request, queryErr.Error())
 		return
 	}
+	if tracker := timetracking.New("handle_query_new_query"); tracker.Enabled() {
+		tracker.SetRawString("queryId", queryId)
+		tracker.SetRawString("query", query.String())
+		tracker.SetRawString("ownerPlugin", queryPipelinePluginLabel(ctx, ownerPlugin))
+		tracker.SetInt64("costMs", util.GetSystemTimestamp()-newQueryStart)
+		tracker.SetInt64("elapsedMs", util.GetSystemTimestamp()-handlerStart)
+		tracker.Log(ctx)
+	}
 
+	completionHintScheduleStart := util.GetSystemTimestamp()
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	if !skipCompletionHint && woxSetting.EnableQueryCompletionHint.Get() {
 		util.Go(ctx, "query completion hint", func() {
@@ -703,9 +760,28 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 			)
 		})
 	}
+	if tracker := timetracking.New("handle_query_completion_hint_schedule"); tracker.Enabled() {
+		tracker.SetRawString("queryId", queryId)
+		tracker.SetBool("enabled", woxSetting.EnableQueryCompletionHint.Get())
+		tracker.SetBool("skipped", skipCompletionHint)
+		tracker.SetInt64("costMs", util.GetSystemTimestamp()-completionHintScheduleStart)
+		tracker.Log(ctx)
+	}
 
+	lifecycleStart := util.GetSystemTimestamp()
 	plugin.GetPluginManager().HandleQueryLifecycle(ctx, query, ownerPlugin)
+	if tracker := timetracking.New("handle_query_lifecycle"); tracker.Enabled() {
+		tracker.SetRawString("queryId", queryId)
+		tracker.SetInt64("costMs", util.GetSystemTimestamp()-lifecycleStart)
+		tracker.SetInt64("elapsedMs", util.GetSystemTimestamp()-handlerStart)
+		tracker.Log(ctx)
+	}
 
+	if tracker := timetracking.New("handle_query_run_starting"); tracker.Enabled() {
+		tracker.SetRawString("queryId", queryId)
+		tracker.SetInt64("elapsedMs", util.GetSystemTimestamp()-handlerStart)
+		tracker.Log(ctx)
+	}
 	newQueryRun(ctx, request, query, ownerPlugin).start()
 }
 
@@ -749,9 +825,7 @@ func appendQueryDebugTails(ctx context.Context, sessionId string, queryId string
 
 			batchTail := plugin.NewQueryResultTailText(fmt.Sprintf("B%d", batch))
 			batchTail.Tooltip = fmt.Sprintf("First flush: %dms", firstVisibleFlushElapsedMs)
-			elapsedTail := plugin.NewQueryResultTailTextWithCategory(fmt.Sprintf("%dms", queryElapsed), category)
-			elapsedTail.Tooltip = "Response received elapsed since query start"
-			resultCopy.Tails = append(resultCopy.Tails, batchTail, elapsedTail)
+			resultCopy.Tails = append(resultCopy.Tails, batchTail)
 
 			if pluginQueryElapsedSet {
 				pluginQueryCategory := plugin.QueryResultTailTextCategoryDefault
@@ -766,6 +840,10 @@ func appendQueryDebugTails(ctx context.Context, sessionId string, queryId string
 				pluginQueryTail.Tooltip = "Raw Plugin.Query duration"
 				resultCopy.Tails = append(resultCopy.Tails, pluginQueryTail)
 			}
+
+			elapsedTail := plugin.NewQueryResultTailTextWithCategory(fmt.Sprintf("%dms", queryElapsed), category)
+			elapsedTail.Tooltip = "Response received elapsed since query start"
+			resultCopy.Tails = append(resultCopy.Tails, elapsedTail)
 		}
 		annotated[i] = resultCopy
 	}

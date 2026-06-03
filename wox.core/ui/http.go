@@ -10,6 +10,7 @@ import (
 	"wox/setting/definition"
 	"wox/ui/dto"
 	"wox/util"
+	"wox/util/timetracking"
 
 	"github.com/google/uuid"
 	"github.com/olahol/melody"
@@ -105,24 +106,50 @@ func serveAndWait(ctx context.Context, port int) {
 	})
 
 	m.HandleMessage(func(s *melody.Session, msg []byte) {
+		receivedAt := util.GetSystemTimestamp()
 		ctxNew := util.NewTraceContext()
+		msgText := string(msg)
 
-		if strings.Contains(string(msg), string(WebsocketMsgTypeRequest)) {
+		if strings.Contains(msgText, string(WebsocketMsgTypeRequest)) {
 			var request WebsocketMsg
+			unmarshalStart := util.GetSystemTimestamp()
 			unmarshalErr := json.Unmarshal(msg, &request)
 			if unmarshalErr != nil {
 				logger.Error(ctxNew, fmt.Sprintf("failed to unmarshal websocket request: %s", unmarshalErr.Error()))
 				return
 			}
+			requestCtx := util.WithSessionContext(
+				util.NewTraceContextWith(request.TraceId),
+				request.SessionId,
+			)
+			if request.Method == "Query" {
+				tracker := timetracking.New("websocket_request_unmarshal")
+				if tracker.Enabled() {
+					tracker.SetRawString("queryId", websocketMsgStringParam(request, "queryId"))
+					tracker.SetRawString("method", request.Method)
+					tracker.SetRawString("queryType", websocketMsgStringParam(request, "queryType"))
+					tracker.SetString("queryText", websocketMsgStringParam(request, "queryText"))
+					tracker.SetInt("payloadBytes", len(msg))
+					tracker.SetInt64("costMs", util.GetSystemTimestamp()-unmarshalStart)
+					tracker.SetInt64("sinceReceiveMs", util.GetSystemTimestamp()-receivedAt)
+					tracker.Log(requestCtx)
+				}
+			}
+			dispatchStart := util.GetSystemTimestamp()
 			util.Go(ctxNew, "handle ui query", func() {
-				traceCtx := util.NewTraceContextWith(request.TraceId)
-				sessionCtx := util.WithSessionContext(
-					traceCtx,
-					request.SessionId,
-				)
-				onUIWebsocketRequest(sessionCtx, request)
+				if request.Method == "Query" {
+					tracker := timetracking.New("websocket_request_handler_start")
+					if tracker.Enabled() {
+						tracker.SetRawString("queryId", websocketMsgStringParam(request, "queryId"))
+						tracker.SetRawString("method", request.Method)
+						tracker.SetInt64("queuedMs", util.GetSystemTimestamp()-dispatchStart)
+						tracker.SetInt64("sinceReceiveMs", util.GetSystemTimestamp()-receivedAt)
+						tracker.Log(requestCtx)
+					}
+				}
+				onUIWebsocketRequest(requestCtx, request)
 			})
-		} else if strings.Contains(string(msg), string(WebsocketMsgTypeResponse)) {
+		} else if strings.Contains(msgText, string(WebsocketMsgTypeResponse)) {
 			var response WebsocketMsg
 			unmarshalErr := json.Unmarshal(msg, &response)
 			if unmarshalErr != nil {
@@ -180,13 +207,51 @@ func responseUI(ctx context.Context, response WebsocketMsg) {
 		return
 	}
 
+	responseStart := util.GetSystemTimestamp()
+	var queryId string
+	var responseCount int
+	var isFinal bool
+	var isQueryResponse bool
+	if util.IsDev() {
+		queryId, responseCount, isFinal, isQueryResponse = responseUIQueryTimingInfo(response)
+	}
 	response.Type = WebsocketMsgTypeResponse
+	marshalStart := util.GetSystemTimestamp()
 	marshalData, marshalErr := json.Marshal(response)
 	if marshalErr != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to marshal websocket response: %s", marshalErr.Error()))
 		return
 	}
-	m.Broadcast(marshalData)
+	marshalCost := util.GetSystemTimestamp() - marshalStart
+	if isQueryResponse {
+		tracker := timetracking.New("response_ui_marshal")
+		if tracker.Enabled() {
+			tracker.SetRawString("queryId", queryId)
+			tracker.SetInt("responseCount", responseCount)
+			tracker.SetBool("isFinal", isFinal)
+			tracker.SetInt("payloadBytes", len(marshalData))
+			tracker.SetInt64("costMs", marshalCost)
+			tracker.Log(ctx)
+		}
+	}
+	broadcastStart := util.GetSystemTimestamp()
+	broadcastErr := m.Broadcast(marshalData)
+	broadcastCost := util.GetSystemTimestamp() - broadcastStart
+	if isQueryResponse {
+		tracker := timetracking.New("response_ui_broadcast")
+		if tracker.Enabled() {
+			tracker.SetRawString("queryId", queryId)
+			tracker.SetInt("responseCount", responseCount)
+			tracker.SetBool("isFinal", isFinal)
+			tracker.SetInt("payloadBytes", len(marshalData))
+			tracker.SetInt64("costMs", broadcastCost)
+			tracker.SetInt64("totalMs", util.GetSystemTimestamp()-responseStart)
+			tracker.Log(ctx)
+		}
+	}
+	if broadcastErr != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to broadcast websocket response: %s", broadcastErr.Error()))
+	}
 }
 
 func responseUISuccessWithData(ctx context.Context, request WebsocketMsg, data any) {
@@ -206,6 +271,24 @@ func responseUIQueryResults(ctx context.Context, request WebsocketMsg, queryId s
 }
 
 func responseUIQueryResponse(ctx context.Context, request WebsocketMsg, queryId string, response plugin.QueryResponseUI, isFinal bool) {
+	payloadStart := util.GetSystemTimestamp()
+	sendTimestamp := util.GetSystemTimestamp()
+	queryPayload := QueryResponse{
+		QueryId:     queryId,
+		Results:     response.Results,
+		Refinements: response.Refinements,
+		Layout:      response.Layout,
+		Context:     response.Context,
+		IsFinal:     isFinal,
+	}
+	if tracker := timetracking.New("response_ui_query_payload"); tracker.Enabled() {
+		tracker.SetRawString("queryId", queryId)
+		tracker.SetInt("responseCount", len(response.Results))
+		tracker.SetBool("isFinal", isFinal)
+		tracker.SetInt64("buildCostMs", util.GetSystemTimestamp()-payloadStart)
+		tracker.SetInt64("sendTimestamp", sendTimestamp)
+		tracker.Log(ctx)
+	}
 	responseUI(ctx, WebsocketMsg{
 		RequestId:     request.RequestId,
 		TraceId:       util.GetContextTraceId(ctx),
@@ -213,16 +296,39 @@ func responseUIQueryResponse(ctx context.Context, request WebsocketMsg, queryId 
 		Type:          WebsocketMsgTypeResponse,
 		Method:        request.Method,
 		Success:       true,
-		SendTimestamp: util.GetSystemTimestamp(), // Only set timestamp for Query responses
-		Data: QueryResponse{
-			QueryId:     queryId,
-			Results:     response.Results,
-			Refinements: response.Refinements,
-			Layout:      response.Layout,
-			Context:     response.Context,
-			IsFinal:     isFinal,
-		},
+		SendTimestamp: sendTimestamp, // Only set timestamp for Query responses
+		Data:          queryPayload,
 	})
+}
+
+// websocketMsgStringParam reads lightweight query diagnostics from websocket data before the normal typed handler parses it.
+func websocketMsgStringParam(msg WebsocketMsg, key string) string {
+	dataMap, ok := msg.Data.(map[string]any)
+	if !ok {
+		return ""
+	}
+	if value, exists := dataMap[key]; exists {
+		return fmt.Sprint(value)
+	}
+	if len(key) > 0 {
+		upperKey := strings.ToUpper(key[:1]) + key[1:]
+		if value, exists := dataMap[upperKey]; exists {
+			return fmt.Sprint(value)
+		}
+	}
+	return ""
+}
+
+// responseUIQueryTimingInfo extracts query response dimensions so generic websocket response logging can stay query-scoped.
+func responseUIQueryTimingInfo(response WebsocketMsg) (queryId string, responseCount int, isFinal bool, ok bool) {
+	if response.Method != "Query" {
+		return "", 0, false, false
+	}
+	queryResponse, ok := response.Data.(QueryResponse)
+	if !ok {
+		return "", 0, false, false
+	}
+	return queryResponse.QueryId, len(queryResponse.Results), queryResponse.IsFinal, true
 }
 
 func responseUIQueryCompletionHint(ctx context.Context, request WebsocketMsg, queryId string, hint *plugin.QueryCompletionHint) {
