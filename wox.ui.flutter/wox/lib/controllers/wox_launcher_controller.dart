@@ -1359,8 +1359,9 @@ class WoxLauncherController extends GetxController {
     updateDoctorToolbarIfNeeded(traceId);
     tracker.setElapsedUs("toolbarUs", toolbarStartUs);
 
-    unawaited(resizeHeightForResultUpdate(traceId: traceId, reason: "query results updated"));
-    tracker.setBool("resizeScheduled", true);
+    final resizeStartUs = tracker.checkpointUs();
+    await resizeHeightForResultUpdate(traceId: traceId, reason: "query results updated");
+    tracker.setElapsedUs("resizeUs", resizeStartUs);
     tracker.setElapsedUs("totalUs", totalStartUs);
     tracker.log();
     return true;
@@ -3646,8 +3647,31 @@ class WoxLauncherController extends GetxController {
           await windowManager.setBounds(Offset(pos.dx, newTop), targetSize);
           tracker.setElapsedUs("setBoundsUs", setBoundsStartUs);
           final getResizedSizeStartUs = tracker.checkpointUs();
-          final resizedSize = await windowManager.getSize();
+          var resizedSize = await windowManager.getSize();
           tracker.setElapsedUs("getResizedSizeUs", getResizedSizeStartUs);
+          if (!isWindowSizeEffectivelyEqual(resizedSize, targetSize)) {
+            // Native resize can report success before the top-level HWND reaches the requested size.
+            // Reapplying once keeps result-driven launcher resizing deterministic without blocking the normal path.
+            Logger.instance.warn(
+              traceId,
+              "resize readback mismatch: reason=$reason, target=${formatWindowSize(targetSize)}, after=${formatWindowSize(resizedSize)}, retry=setBounds",
+            );
+            final retrySetBoundsStartUs = tracker.checkpointUs();
+            await Future.delayed(const Duration(milliseconds: 16));
+            if (resizeRequestToken != currentResizeToken) {
+              Logger.instance.debug(traceId, "resize skipped: reason=$reason, target=${formatWindowSize(targetSize)}, supersededBeforeRetry=true");
+              tracker.setBool("skippedSuperseded", true);
+              tracker.setBool("skippedBeforePlatformRetry", true);
+              tracker.setElapsedUs("totalUs", totalStartUs);
+              tracker.log();
+              return;
+            }
+            await windowManager.setBounds(Offset(pos.dx, newTop), targetSize);
+            tracker.setElapsedUs("retrySetBoundsUs", retrySetBoundsStartUs);
+            final getRetriedSizeStartUs = tracker.checkpointUs();
+            resizedSize = await windowManager.getSize();
+            tracker.setElapsedUs("getRetriedSizeUs", getRetriedSizeStartUs);
+          }
           Logger.instance.debug(
             traceId,
             "resize applied: reason=$reason, before=${formatWindowSize(currentSize)}, target=${formatWindowSize(targetSize)}, after=${formatWindowSize(resizedSize)}, mode=setBounds, growUpward=true",
@@ -3669,8 +3693,28 @@ class WoxLauncherController extends GetxController {
       await windowManager.setSize(targetSize);
       tracker.setElapsedUs("setSizeUs", setSizeStartUs);
       final getResizedSizeStartUs = tracker.checkpointUs();
-      final resizedSize = await windowManager.getSize();
+      var resizedSize = await windowManager.getSize();
       tracker.setElapsedUs("getResizedSizeUs", getResizedSizeStartUs);
+      if (!isWindowSizeEffectivelyEqual(resizedSize, targetSize)) {
+        // Native resize can report success before the top-level HWND reaches the requested size.
+        // Reapplying once keeps result-driven launcher resizing deterministic without blocking the normal path.
+        Logger.instance.warn(traceId, "resize readback mismatch: reason=$reason, target=${formatWindowSize(targetSize)}, after=${formatWindowSize(resizedSize)}, retry=setSize");
+        final retrySetSizeStartUs = tracker.checkpointUs();
+        await Future.delayed(const Duration(milliseconds: 16));
+        if (resizeRequestToken != currentResizeToken) {
+          Logger.instance.debug(traceId, "resize skipped: reason=$reason, target=${formatWindowSize(targetSize)}, supersededBeforeRetry=true");
+          tracker.setBool("skippedSuperseded", true);
+          tracker.setBool("skippedBeforePlatformRetry", true);
+          tracker.setElapsedUs("totalUs", totalStartUs);
+          tracker.log();
+          return;
+        }
+        await windowManager.setSize(targetSize);
+        tracker.setElapsedUs("retrySetSizeUs", retrySetSizeStartUs);
+        final getRetriedSizeStartUs = tracker.checkpointUs();
+        resizedSize = await windowManager.getSize();
+        tracker.setElapsedUs("getRetriedSizeUs", getRetriedSizeStartUs);
+      }
       Logger.instance.debug(
         traceId,
         "resize applied: reason=$reason, before=${formatWindowSize(currentSize)}, target=${formatWindowSize(targetSize)}, after=${formatWindowSize(resizedSize)}, mode=setSize, growUpward=false",
@@ -4603,9 +4647,9 @@ class WoxLauncherController extends GetxController {
 
   // Quick select related methods
 
-  /// Check if the quick select primary modifier key is pressed.
+  /// Check if the quick select modifier key is still pressed.
   bool isQuickSelectModifierPressed() {
-    return WoxPlatformHotkeyUtil.isPrimaryModifierPressed;
+    return Platform.isMacOS ? HardwareKeyboard.instance.isMetaPressed : HardwareKeyboard.instance.isAltPressed;
   }
 
   /// Start the quick select timer when modifier key is pressed

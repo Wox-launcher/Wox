@@ -231,14 +231,14 @@ class WoxHotkey {
 
     List<HotKeyModifier> modifiers = [];
 
-    if (HardwareKeyboard.instance.isAltPressed) {
-      modifiers.add(HotKeyModifier.alt);
-    }
     if (HardwareKeyboard.instance.isControlPressed) {
       modifiers.add(HotKeyModifier.control);
     }
     if (HardwareKeyboard.instance.isShiftPressed) {
       modifiers.add(HotKeyModifier.shift);
+    }
+    if (HardwareKeyboard.instance.isAltPressed) {
+      modifiers.add(HotKeyModifier.alt);
     }
     if (HardwareKeyboard.instance.isMetaPressed) {
       modifiers.add(HotKeyModifier.meta);

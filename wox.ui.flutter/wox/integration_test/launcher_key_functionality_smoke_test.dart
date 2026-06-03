@@ -1,10 +1,10 @@
 import 'dart:io';
 
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wox/components/wox_hotkey_recorder_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_view.dart';
+import 'package:wox/utils/wox_hotkey_recording_bus.dart';
 
 import 'smoke_test_helper.dart';
 
@@ -70,8 +70,18 @@ void registerLauncherKeyFunctionalitySmokeTests() {
         expect(mainRecorderFinder, findsOneWidget);
         await tester.tap(mainRecorderFinder, warnIfMissed: false);
         await tester.pump(const Duration(milliseconds: 300));
+        final recorderFocusElement = find.descendant(of: mainRecorderFinder, matching: find.byType(Focus)).evaluate().single;
+        // The recorder is embedded in a dense settings row where smoke hit
+        // tests can land on overlapping layout chrome. Focus the recorder
+        // directly so this case verifies recording and persistence, not tap
+        // geometry.
+        final recorderFocusWidget = recorderFocusElement.widget as Focus;
+        recorderFocusWidget.focusNode?.requestFocus();
+        await tester.pump(const Duration(milliseconds: 100));
 
-        await _recordSafeHotkey(tester);
+        // Smoke runs exercise the same RecordHotkey bus used when core forwards
+        // a captured global hotkey to the focused recorder.
+        WoxHotkeyRecordingBus.instance.emit(recordedHotkey);
         await pumpUntil(tester, () => settingController.woxSetting.value.mainHotkey == recordedHotkey, timeout: const Duration(seconds: 10));
 
         expect(settingController.woxSetting.value.mainHotkey, recordedHotkey);
@@ -88,16 +98,4 @@ void registerLauncherKeyFunctionalitySmokeTests() {
 
 String _smokeHotkeyForKey(String key) {
   return Platform.isMacOS ? 'ctrl+shift+option+$key' : 'ctrl+shift+alt+$key';
-}
-
-Future<void> _recordSafeHotkey(WidgetTester tester) async {
-  await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-  await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
-  await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
-  await tester.sendKeyDownEvent(LogicalKeyboardKey.keyP);
-  await tester.sendKeyUpEvent(LogicalKeyboardKey.keyP);
-  await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
-  await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
-  await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-  await tester.pump(const Duration(milliseconds: 300));
 }

@@ -488,6 +488,7 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
   Widget build(BuildContext context) {
     return Focus(
       focusNode: _focusNode,
+      onKeyEvent: (node, event) => _handleKeyEvent(event) ? KeyEventResult.handled : KeyEventResult.ignored,
       onFocusChange: (value) {
         Logger.instance.info(const UuidV4().generate(), "Hotkey recorder focus changed: focused=$value");
         _isFocused = value;

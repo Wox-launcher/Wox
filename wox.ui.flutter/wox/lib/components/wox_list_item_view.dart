@@ -57,12 +57,11 @@ class WoxListItemView extends StatelessWidget {
     );
   }
 
-  Widget buildTails() {
+  Widget buildTails({required double maxTailWidth}) {
     final metrics = _metrics;
     final tailTextColor = isActive ? woxTheme.resultItemActiveTailTextColorParsed : woxTheme.resultItemTailTextColorParsed;
     final activeBgColor = woxTheme.resultItemActiveBackgroundColorParsed;
     final actionBgColor = woxTheme.actionContainerBackgroundColorParsed;
-    final maxTailWidth = WoxSettingUtil.instance.currentSetting.appWidth / 3;
     final maxTextTailWidth = math.max(0.0, maxTailWidth - _tailPadding.horizontal - _tailItemPadding.horizontal);
 
     final children = <Widget>[];
@@ -225,9 +224,6 @@ class WoxListItemView extends StatelessWidget {
       ),
     );
 
-    // Build tails widget
-    final Widget? tailsWidget = item.tails.isNotEmpty ? buildTails() : null;
-
     // Build quick select widget
     final Widget? quickSelectWidget = (item.isShowQuickSelect && item.quickSelectNumber.isNotEmpty) ? buildQuickSelectNumber() : null;
 
@@ -242,7 +238,16 @@ class WoxListItemView extends StatelessWidget {
                 left: WoxInterfaceSizeUtil.instance.current.scaledSpacing(woxTheme.resultItemPaddingLeft.toDouble() + maxBorderWidth),
               )
               : EdgeInsets.only(left: WoxInterfaceSizeUtil.instance.current.scaledSpacing(maxBorderWidth)),
-      child: Row(children: [iconWidget, textWidget, if (tailsWidget != null) tailsWidget, if (quickSelectWidget != null) quickSelectWidget]),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final rowWidth = constraints.maxWidth.isFinite ? constraints.maxWidth : WoxSettingUtil.instance.currentSetting.appWidth.toDouble();
+          // Preview and action layouts can be narrower than the configured app width, so cap tails by the actual row width while keeping them as a trailing non-flex child.
+          final maxTailWidth = math.min(WoxSettingUtil.instance.currentSetting.appWidth / 3, math.max(0.0, rowWidth / 3));
+          final Widget? tailsWidget = item.tails.isNotEmpty ? buildTails(maxTailWidth: maxTailWidth) : null;
+
+          return Row(children: [iconWidget, textWidget, if (tailsWidget != null) tailsWidget, if (quickSelectWidget != null) quickSelectWidget]);
+        },
+      ),
     );
 
     if (borderRadius != BorderRadius.zero) {
