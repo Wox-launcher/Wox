@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"wox/common"
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/ui/dto"
@@ -39,13 +40,19 @@ type WebsocketMsg struct {
 }
 
 type QueryResponse struct {
-	QueryId     string                   `json:"QueryId"`
-	Results     []plugin.QueryResultUI   `json:"Results"`
-	Refinements []plugin.QueryRefinement `json:"Refinements"`
-	Layout      plugin.QueryLayout       `json:"Layout"`
-	Context     plugin.QueryContext      `json:"Context"`
-	IsFinal     bool                     `json:"IsFinal"` // indicates if this is the final batch of results
+	QueryId        string                     `json:"QueryId"`
+	Results        []plugin.QueryResultUI     `json:"Results"`
+	Refinements    []plugin.QueryRefinement   `json:"Refinements"`
+	Layout         plugin.QueryLayout         `json:"Layout"`
+	Context        plugin.QueryContext        `json:"Context"`
+	IsFinal        bool                       `json:"IsFinal"` // indicates if this is the final batch of results
+	ActionIconRefs map[string]common.WoxImage `json:"ActionIconRefs,omitempty"`
 }
+
+const (
+	queryActionIconRefType       = "iconref"
+	queryActionIconRefMinDataLen = 128
+)
 
 type QueryCompletionHintPayload struct {
 	QueryId        string                      `json:"QueryId"`
@@ -212,8 +219,12 @@ func responseUI(ctx context.Context, response WebsocketMsg) {
 	var responseCount int
 	var isFinal bool
 	var isQueryResponse bool
+	var queryResponse QueryResponse
 	if util.IsDev() {
 		queryId, responseCount, isFinal, isQueryResponse = responseUIQueryTimingInfo(response)
+		if isQueryResponse {
+			queryResponse, _ = response.Data.(QueryResponse)
+		}
 	}
 	response.Type = WebsocketMsgTypeResponse
 	marshalStart := util.GetSystemTimestamp()
@@ -252,6 +263,9 @@ func responseUI(ctx context.Context, response WebsocketMsg) {
 	if broadcastErr != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to broadcast websocket response: %s", broadcastErr.Error()))
 	}
+	if isQueryResponse {
+		logQueryPayloadBreakdown(ctx, queryResponse, len(marshalData))
+	}
 }
 
 func responseUISuccessWithData(ctx context.Context, request WebsocketMsg, data any) {
@@ -281,10 +295,12 @@ func responseUIQueryResponse(ctx context.Context, request WebsocketMsg, queryId 
 		Context:     response.Context,
 		IsFinal:     isFinal,
 	}
+	queryPayload = compactQueryActionIcons(queryPayload)
 	if tracker := timetracking.New("response_ui_query_payload"); tracker.Enabled() {
 		tracker.SetRawString("queryId", queryId)
 		tracker.SetInt("responseCount", len(response.Results))
 		tracker.SetBool("isFinal", isFinal)
+		tracker.SetInt("actionIconRefCount", len(queryPayload.ActionIconRefs))
 		tracker.SetInt64("buildCostMs", util.GetSystemTimestamp()-payloadStart)
 		tracker.SetInt64("sendTimestamp", sendTimestamp)
 		tracker.Log(ctx)
@@ -329,6 +345,157 @@ func responseUIQueryTimingInfo(response WebsocketMsg) (queryId string, responseC
 		return "", 0, false, false
 	}
 	return queryResponse.QueryId, len(queryResponse.Results), queryResponse.IsFinal, true
+}
+
+// compactQueryActionIcons replaces repeated large action icons with response-local references.
+func compactQueryActionIcons(response QueryResponse) QueryResponse {
+	type iconStats struct {
+		count int
+		icon  common.WoxImage
+	}
+
+	statsByKey := map[string]iconStats{}
+	for _, result := range response.Results {
+		for _, action := range result.Actions {
+			icon := action.Icon
+			if !shouldReferenceActionIcon(icon) {
+				continue
+			}
+			key := actionIconReferenceKey(icon)
+			stats := statsByKey[key]
+			stats.count++
+			stats.icon = icon
+			statsByKey[key] = stats
+		}
+	}
+
+	if len(statsByKey) == 0 {
+		return response
+	}
+
+	refByKey := map[string]string{}
+	iconRefs := map[string]common.WoxImage{}
+	var results []plugin.QueryResultUI
+	for resultIndex, result := range response.Results {
+		var actions []plugin.QueryResultActionUI
+		for actionIndex, action := range result.Actions {
+			icon := action.Icon
+			key := actionIconReferenceKey(icon)
+			stats, ok := statsByKey[key]
+			if !ok || stats.count < 2 {
+				continue
+			}
+
+			if results == nil {
+				results = append([]plugin.QueryResultUI(nil), response.Results...)
+			}
+			if actions == nil {
+				actions = append([]plugin.QueryResultActionUI(nil), result.Actions...)
+			}
+
+			refId, exists := refByKey[key]
+			if !exists {
+				refId = fmt.Sprintf("a%d", len(refByKey)+1)
+				refByKey[key] = refId
+				iconRefs[refId] = stats.icon
+			}
+			actions[actionIndex].Icon = common.WoxImage{ImageType: queryActionIconRefType, ImageData: refId}
+		}
+		if actions != nil {
+			results[resultIndex].Actions = actions
+		}
+	}
+
+	if len(iconRefs) == 0 {
+		return response
+	}
+	response.Results = results
+	response.ActionIconRefs = iconRefs
+	return response
+}
+
+func shouldReferenceActionIcon(icon common.WoxImage) bool {
+	return !icon.IsEmpty() && len(icon.ImageData) >= queryActionIconRefMinDataLen
+}
+
+func actionIconReferenceKey(icon common.WoxImage) string {
+	return string(icon.ImageType) + "\x00" + icon.ImageData
+}
+
+func logQueryPayloadBreakdown(ctx context.Context, response QueryResponse, payloadBytes int) {
+	tracker := timetracking.New("response_ui_payload_breakdown")
+	if !tracker.Enabled() {
+		return
+	}
+
+	start := util.GetSystemTimestamp()
+	resultsBytes := marshalSize(response.Results)
+	refinementsBytes := marshalSize(response.Refinements)
+	layoutBytes := marshalSize(response.Layout)
+	contextBytes := marshalSize(response.Context)
+	actionIconRefsBytes := marshalSize(response.ActionIconRefs)
+	maxResultBytes := 0
+	maxResultIndex := -1
+	maxResultTitle := ""
+	totalActions := 0
+	maxActions := 0
+	totalTails := 0
+	maxTails := 0
+	totalIconChars := 0
+	totalActionIconChars := 0
+	totalPreviewChars := 0
+	for i, result := range response.Results {
+		resultBytes := marshalSize(result)
+		if resultBytes > maxResultBytes {
+			maxResultBytes = resultBytes
+			maxResultIndex = i
+			maxResultTitle = result.Title
+		}
+		totalActions += len(result.Actions)
+		if len(result.Actions) > maxActions {
+			maxActions = len(result.Actions)
+		}
+		totalTails += len(result.Tails)
+		if len(result.Tails) > maxTails {
+			maxTails = len(result.Tails)
+		}
+		totalIconChars += len(result.Icon.ImageData)
+		totalPreviewChars += len(result.Preview.PreviewData)
+		for _, action := range result.Actions {
+			totalActionIconChars += len(action.Icon.ImageData)
+		}
+	}
+
+	tracker.SetRawString("queryId", response.QueryId)
+	tracker.SetBool("isFinal", response.IsFinal)
+	tracker.SetInt("payloadBytes", payloadBytes)
+	tracker.SetInt("resultCount", len(response.Results))
+	tracker.SetInt("resultsBytes", resultsBytes)
+	tracker.SetInt("refinementsBytes", refinementsBytes)
+	tracker.SetInt("layoutBytes", layoutBytes)
+	tracker.SetInt("contextBytes", contextBytes)
+	tracker.SetInt("actionIconRefsBytes", actionIconRefsBytes)
+	tracker.SetInt("actionIconRefCount", len(response.ActionIconRefs))
+	tracker.SetInt("maxResultBytes", maxResultBytes)
+	tracker.SetInt("maxResultIndex", maxResultIndex)
+	tracker.SetString("maxResultTitle", maxResultTitle)
+	tracker.SetInt("totalActions", totalActions)
+	tracker.SetInt("maxActions", maxActions)
+	tracker.SetInt("totalTails", totalTails)
+	tracker.SetInt("maxTails", maxTails)
+	tracker.SetInt("totalIconChars", totalIconChars)
+	tracker.SetInt("totalActionIconChars", totalActionIconChars)
+	tracker.SetInt("totalPreviewChars", totalPreviewChars)
+	tracker.SetInt64("costMs", util.GetSystemTimestamp()-start)
+	tracker.Log(ctx)
+}
+
+func marshalSize(value any) int {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return 0
+	}
+	return len(data)
 }
 
 func responseUIQueryCompletionHint(ctx context.Context, request WebsocketMsg, queryId string, hint *plugin.QueryCompletionHint) {

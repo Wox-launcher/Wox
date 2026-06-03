@@ -65,37 +65,28 @@ class WoxListItemView extends StatelessWidget {
     final maxTailWidth = WoxSettingUtil.instance.currentSetting.appWidth / 3;
     final maxTextTailWidth = math.max(0.0, maxTailWidth - _tailPadding.horizontal - _tailItemPadding.horizontal);
 
+    final children = <Widget>[];
+    for (final tail in item.tails) {
+      Widget? child;
+      if (tail.type == WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_TEXT.code && tail.text != null) {
+        child = buildTailTooltip(tail, buildTextTailTag(tail.text!, tail.textCategory, tailTextColor, maxTextTailWidth));
+      } else if (tail.type == WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_HOTKEY.code && tail.hotkey != null) {
+        child = buildTailTooltip(
+          tail,
+          WoxHotkeyView(hotkey: tail.hotkey!, backgroundColor: isActive ? activeBgColor : actionBgColor, borderColor: tailTextColor, textColor: tailTextColor),
+        );
+      } else if (tail.type == WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_IMAGE.code && tail.image != null && tail.image!.imageData.isNotEmpty) {
+        child = buildTailTooltip(tail, WoxImageView(woxImage: tail.image!, width: tail.imageWidth ?? metrics.tailImageSize, height: tail.imageHeight ?? metrics.tailImageSize));
+      }
+
+      if (child != null) {
+        children.add(Padding(padding: _tailItemPadding, child: child));
+      }
+    }
+
     return ConstrainedBox(
       constraints: BoxConstraints(maxWidth: maxTailWidth),
-      child: Padding(
-        padding: _tailPadding,
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              for (final tail in item.tails)
-                if (tail.type == WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_TEXT.code && tail.text != null)
-                  Padding(padding: _tailItemPadding, child: buildTailTooltip(tail, buildTextTailTag(tail.text!, tail.textCategory, tailTextColor, maxTextTailWidth)))
-                else if (tail.type == WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_HOTKEY.code && tail.hotkey != null)
-                  Padding(
-                    padding: _tailItemPadding,
-                    child: buildTailTooltip(
-                      tail,
-                      WoxHotkeyView(hotkey: tail.hotkey!, backgroundColor: isActive ? activeBgColor : actionBgColor, borderColor: tailTextColor, textColor: tailTextColor),
-                    ),
-                  )
-                else if (tail.type == WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_IMAGE.code && tail.image != null && tail.image!.imageData.isNotEmpty)
-                  Padding(
-                    padding: _tailItemPadding,
-                    child: buildTailTooltip(
-                      tail,
-                      WoxImageView(woxImage: tail.image!, width: tail.imageWidth ?? metrics.tailImageSize, height: tail.imageHeight ?? metrics.tailImageSize),
-                    ),
-                  ),
-            ],
-          ),
-        ),
-      ),
+      child: Padding(padding: _tailPadding, child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: children))),
     );
   }
 
