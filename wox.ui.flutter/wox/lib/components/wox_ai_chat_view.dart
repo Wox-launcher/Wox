@@ -104,7 +104,7 @@ class WoxAIChatView extends StatelessWidget {
                   return KeyEventResult.ignored;
                 }
 
-                // Show chat select panel on Cmd+J
+                // Show chat select panel on the primary-modifier action hotkey.
                 if (controller.launcherController.isActionHotkey(pressedHotkey)) {
                   controller.showChatSelectPanel();
                   return KeyEventResult.handled;

@@ -44,6 +44,7 @@ import 'package:wox/enums/wox_position_type_enum.dart';
 import 'package:wox/enums/wox_query_refinement_type_enum.dart';
 import 'package:wox/enums/wox_query_type_enum.dart';
 import 'package:wox/enums/wox_result_action_type_enum.dart';
+import 'package:wox/enums/wox_result_tail_text_category_enum.dart';
 import 'package:wox/enums/wox_selection_type_enum.dart';
 import 'package:wox/enums/wox_show_source_enum.dart';
 import 'package:wox/modules/onboarding/views/wox_onboarding_view.dart';
@@ -60,7 +61,9 @@ import 'package:wox/utils/picker.dart';
 import 'package:wox/utils/result_drag_platform_bridge.dart';
 import 'package:wox/utils/wox_hotkey_recording_bus.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
+import 'package:wox/utils/wox_platform_hotkey_util.dart';
 import 'package:wox/utils/wox_setting_util.dart';
+import 'package:wox/utils/wox_time_tracker.dart';
 import 'package:wox/utils/webview/wox_webview_util.dart';
 
 import 'package:wox/utils/wox_websocket_msg_util.dart';
@@ -84,6 +87,10 @@ class WoxLauncherController extends GetxController {
   }
 
   static const int _slowLauncherActivationWarningThresholdMs = 50;
+  static const int _onReceivedWarningThresholdMs = 50;
+  static const int _onReceivedDangerThresholdMs = 100;
+  static const String _onReceivedTailTooltip = "onReceivedQueryResults elapsed since Flutter query request";
+  static const String _queryActionIconRefType = "iconref";
   static const String localActionTogglePreviewFullscreenId = "__local_toggle_preview_fullscreen__";
   static const String localActionPreviewSearchId = "__local_preview_search__";
   static const String localActionOpenUpdateId = "__local_open_update__";
@@ -236,6 +243,9 @@ class WoxLauncherController extends GetxController {
 
   // Performance metrics: Map<traceId, startTime>
   final Map<String, int> queryStartTimeMap = {};
+  // UI-only onReceivedQueryResults metric per result, kept so later backend
+  // snapshots can preserve each row's first UI receive boundary.
+  final Map<String, int> queryOnReceivedElapsedByResultKey = {};
 
   /// The icon at end of query box.
   final queryIcon = QueryIconInfo.empty().obs;
@@ -244,6 +254,7 @@ class WoxLauncherController extends GetxController {
   Timer? glanceRefreshTimer;
   QueryContext backendQueryContext = QueryContext.empty();
   String backendQueryContextQueryId = "";
+  final queryCompletionHint = Rxn<QueryCompletionHint>();
 
   /// The result of the doctor check.
   var doctorCheckPassed = true;
@@ -532,6 +543,7 @@ class WoxLauncherController extends GetxController {
         WoxApi.instance.onQueryBoxFocus(traceId, sessionId: sessionId);
       }
     });
+    queryBoxTextFieldController.addListener(syncQueryBoxCompletionHint);
 
     // Add scroll listener to update quick select numbers when scrolling
     resultListViewController.scrollController.addListener(() {
@@ -554,6 +566,84 @@ class WoxLauncherController extends GetxController {
       style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxTextSelectionColor)),
       enabled: queryBoxFocusNode.hasFocus,
     );
+    syncQueryBoxCompletionHint();
+  }
+
+  bool isQueryBoxComposing() {
+    final composing = queryBoxTextFieldController.value.composing;
+    return composing.start >= 0 && composing.end >= 0;
+  }
+
+  bool isQueryBoxCursorAtEnd() {
+    final selection = queryBoxTextFieldController.selection;
+    return selection.isValid && selection.isCollapsed && selection.extentOffset == queryBoxTextFieldController.text.length;
+  }
+
+  bool isQueryCompletionHintEnabled() {
+    return WoxSettingUtil.instance.currentSetting.enableQueryCompletionHint;
+  }
+
+  bool isQueryCompletionHintValid(QueryCompletionHint hint) {
+    final currentText = queryBoxTextFieldController.text;
+    return isQueryCompletionHintEnabled() &&
+        currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code &&
+        currentText == hint.inputPrefix &&
+        hint.suffix.isNotEmpty &&
+        hint.completionText.startsWith(currentText) &&
+        isQueryBoxCursorAtEnd() &&
+        !isQueryBoxComposing();
+  }
+
+  void syncQueryBoxCompletionHint() {
+    final hint = queryCompletionHint.value;
+    final suffix = hint != null && isQueryCompletionHintValid(hint) ? hint.suffix : "";
+    queryBoxTextFieldController.updateCompletionHint(
+      suffix: suffix,
+      style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxFontColor).withValues(alpha: 0.38)),
+    );
+  }
+
+  void clearQueryCompletionHint() {
+    queryCompletionHint.value = null;
+    syncQueryBoxCompletionHint();
+  }
+
+  bool applyQueryCompletionHintForQueryId(String traceId, String queryId, QueryCompletionHint? hint) {
+    if (currentQuery.value.queryId != queryId) {
+      Logger.instance.debug(traceId, "ignore stale query completion hint: response queryId=$queryId, current queryId=${currentQuery.value.queryId}");
+      return false;
+    }
+
+    if (hint == null || !isQueryCompletionHintValid(hint)) {
+      clearQueryCompletionHint();
+      return false;
+    }
+
+    queryCompletionHint.value = hint;
+    syncQueryBoxCompletionHint();
+    return true;
+  }
+
+  bool reuseQueryCompletionHintForText(String value) {
+    if (!isQueryCompletionHintEnabled()) {
+      clearQueryCompletionHint();
+      return false;
+    }
+
+    final hint = queryCompletionHint.value;
+    if (hint == null || value.length <= hint.inputPrefix.length || !value.startsWith(hint.inputPrefix) || !hint.completionText.startsWith(value)) {
+      return false;
+    }
+
+    final suffix = hint.completionText.substring(value.length);
+    if (suffix.isEmpty) {
+      clearQueryCompletionHint();
+      return true;
+    }
+
+    queryCompletionHint.value = QueryCompletionHint(inputPrefix: value, completionText: hint.completionText, suffix: suffix, source: hint.source, score: hint.score);
+    syncQueryBoxCompletionHint();
+    return true;
   }
 
   void markLinuxQueryBoxSubmitKeyHandled() {
@@ -849,9 +939,9 @@ class WoxLauncherController extends GetxController {
     return false;
   }
 
-  String get queryRefinementToggleHotkey => Platform.isMacOS ? "cmd+f" : "alt+f";
+  String get queryRefinementToggleHotkey => WoxPlatformHotkeyUtil.primaryHotkey("f");
 
-  String get queryRefinementToggleHotkeyLabel => Platform.isMacOS ? "Cmd+F" : "Alt+F";
+  String get queryRefinementToggleHotkeyLabel => WoxPlatformHotkeyUtil.primaryHotkeyLabel("f");
 
   bool executeQueryRefinementToggleHotkey(String traceId, HotKey hotkey) {
     if (!shouldShowQueryRefinementAffordance) {
@@ -1064,9 +1154,9 @@ class WoxLauncherController extends GetxController {
     await focusQueryBox();
   }
 
-  String get attentionHotkey => Platform.isMacOS ? "cmd+u" : "alt+u";
+  String get attentionHotkey => WoxPlatformHotkeyUtil.primaryHotkey("u");
 
-  String get attentionHotkeyLabel => Platform.isMacOS ? "Cmd+U" : "Alt+U";
+  String get attentionHotkeyLabel => WoxPlatformHotkeyUtil.primaryHotkeyLabel("u");
 
   // executeAttentionHotkey only works while the badge is visible, matching the on-screen affordance.
   bool executeAttentionHotkey(String traceId, HotKey hotkey) {
@@ -1090,22 +1180,22 @@ class WoxLauncherController extends GetxController {
     await focusQueryBox();
   }
 
-  String get previewFullscreenHotkey => "ctrl+b";
+  String get previewFullscreenHotkey => WoxPlatformHotkeyUtil.primaryHotkey("b");
 
-  String get previewFullscreenHotkeyLabel => "Ctrl+B";
+  String get previewFullscreenHotkeyLabel => WoxPlatformHotkeyUtil.primaryHotkeyLabel("b");
 
-  String get previewSearchHotkey => Platform.isMacOS ? "cmd+shift+f" : "ctrl+shift+f";
+  String get previewSearchHotkey => WoxPlatformHotkeyUtil.primaryHotkey("shift+f");
 
-  String get previewSearchHotkeyLabel => Platform.isMacOS ? "Cmd+Shift+F" : "Ctrl+Shift+F";
+  String get previewSearchHotkeyLabel => WoxPlatformHotkeyUtil.primaryHotkeyLabel("shift+f");
 
-  String get previewInspectorHotkey => Platform.isMacOS ? "cmd+alt+i" : "";
-  String get previewRefreshHotkey => Platform.isMacOS ? "cmd+r" : "";
-  String get previewBackHotkey => Platform.isMacOS ? "cmd+[" : "";
-  String get previewForwardHotkey => Platform.isMacOS ? "cmd+]" : "";
+  String get previewInspectorHotkey => WoxPlatformHotkeyUtil.primaryHotkey("alt+i");
+  String get previewRefreshHotkey => WoxPlatformHotkeyUtil.primaryHotkey("r");
+  String get previewBackHotkey => WoxPlatformHotkeyUtil.primaryHotkey("[");
+  String get previewForwardHotkey => WoxPlatformHotkeyUtil.primaryHotkey("]");
 
-  String get moreActionsHotkey => Platform.isMacOS ? "cmd+j" : "alt+j";
+  String get moreActionsHotkey => WoxPlatformHotkeyUtil.primaryHotkey("j");
 
-  String get moreActionsHotkeyLabel => Platform.isMacOS ? "Cmd+J" : "Alt+J";
+  String get moreActionsHotkeyLabel => WoxPlatformHotkeyUtil.primaryHotkeyLabel("j");
 
   String? getVisibleResultQueryId() {
     for (final item in activeResultViewController.items) {
@@ -1185,40 +1275,17 @@ class WoxLauncherController extends GetxController {
     await resizeHeight(traceId: traceId, reason: reason, overrideTargetHeight: targetHeight);
   }
 
-  double calculateWindowHeightForIncomingResults(List<WoxListItem<WoxQueryResult>> incomingItems) {
-    double? overrideGridHeight;
-    if (isInGridMode()) {
-      overrideGridHeight = resultGridViewController.calculateGridHeightForItems(incomingItems);
-      if (overrideGridHeight == 0) {
-        // Grid row height is measured by the view after layout. When that value
-        // is not ready yet, fall back to the list-height estimate so the first
-        // batch still expands the window before painting.
-        overrideGridHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(incomingItems.length);
-      }
-    }
-
-    return calculateWindowHeight(overrideItemCount: incomingItems.length, overrideGridHeight: overrideGridHeight);
-  }
-
-  double? getPreResizeTargetHeightForIncomingResults(List<WoxListItem<WoxQueryResult>> incomingItems) {
-    final shouldPrepareWindowGrowth = activeResultViewController.items.isEmpty || hasVisibleStaleResultsDuringQueryTransition;
-    if (!shouldPrepareWindowGrowth) {
-      return null;
-    }
-
-    final incomingTargetHeight = calculateWindowHeightForIncomingResults(incomingItems);
-    final currentVisibleHeight = calculateWindowHeight();
-    if (incomingTargetHeight <= currentVisibleHeight) {
-      return null;
-    }
-
-    return incomingTargetHeight;
-  }
-
   /// Triggered when received query results from the server.
-  Future<void> onReceivedQueryResults(String traceId, String queryId, List<WoxQueryResult> receivedResults, {required bool isFinal}) async {
+  Future<bool> onReceivedQueryResults(String traceId, String queryId, List<WoxQueryResult> receivedResults, {required bool isFinal, int? backendQueryStartTimestampMs}) async {
+    final tracker = WoxTimeTracker.start(traceId, "ui_query_result_apply");
+    final totalStartUs = tracker.checkpointUs();
+    tracker.setRawString("queryId", queryId);
+    tracker.setInt("resultCount", receivedResults.length);
+    tracker.setBool("isFinal", isFinal);
+
     // Cancel loading timer and hide loading animation when results are received
     if (queryId == currentQuery.value.queryId) {
+      final stateStartUs = tracker.checkpointUs();
       if (receivedResults.isNotEmpty || isFinal) {
         clearQueryResultsTimer.cancel();
         resetPendingResultPlaceholder();
@@ -1232,17 +1299,25 @@ class WoxLauncherController extends GetxController {
         loadingTimer?.cancel();
         isLoading.value = false;
       }
+      tracker.setElapsedUs("queryStateUs", stateStartUs);
     } else {
       Logger.instance.error(traceId, "query id is not matched, ignore the results");
-      return;
+      tracker.setBool("staleQuery", true);
+      tracker.setElapsedUs("totalUs", totalStartUs);
+      tracker.log();
+      return false;
     }
 
     if (receivedResults.isEmpty && !isFinal) {
       Logger.instance.debug(traceId, "ignore non-final empty query results");
-      return;
+      tracker.setBool("ignoredEmptyNonFinal", true);
+      tracker.setElapsedUs("totalUs", totalStartUs);
+      tracker.log();
+      return false;
     }
 
     if (receivedResults.isEmpty) {
+      final emptyApplyStartUs = tracker.checkpointUs();
       // Empty responses must clear stale items from the previous query state,
       // otherwise plugin-scoped toolbar messages cannot be shown without results.
       resultListViewController.clearItems();
@@ -1255,32 +1330,97 @@ class WoxLauncherController extends GetxController {
       // Bug fix: empty terminal snapshots used to wait until the next frame
       // before shrinking, which still let the old geometry flash once. Resize
       // in the same async flow so the empty state is committed immediately.
+      tracker.setElapsedUs("emptyApplyUs", emptyApplyStartUs);
+      final resizeStartUs = tracker.checkpointUs();
       await resizeHeightForResultUpdate(traceId: traceId, reason: "empty query results received");
-      return;
+      tracker.setElapsedUs("resizeUs", resizeStartUs);
+      tracker.setElapsedUs("totalUs", totalStartUs);
+      tracker.log();
+      return true;
     }
 
     // 1. Use silent mode to avoid triggering onItemActive callback during updateItems (which may cause a little performance issue)
     //    Following resetActiveResult in updateActiveResultIndex will trigger the callback
     // 2. We need update items in both list and grid controllers, because metdata query (grid and list layout change relay on this) may after results arrival,
     //    at this point, we don't know which layout this query will use, so we update both
-    final listItems = receivedResults.map((e) => WoxListItem.fromQueryResult(e)).toList();
-    final preResizeTargetHeight = getPreResizeTargetHeightForIncomingResults(listItems);
-    if (preResizeTargetHeight != null) {
-      // Bug fix: empty and stale visible snapshots used to swap content before
-      // the window had grown to the new result height. Expanding first avoids
-      // exposing the acrylic background while Flutter is still painting the new
-      // result frame.
-      final targetHeight = preResizeTargetHeight;
-      await resizeHeight(traceId: traceId, reason: "prepare height before first result paint", overrideTargetHeight: targetHeight);
-    }
+    final appendTailStartUs = tracker.checkpointUs();
+    final displayResults = appendOnReceivedPerformanceTailForQuery(traceId, queryId, receivedResults, backendQueryStartTimestampMs: backendQueryStartTimestampMs);
+    tracker.setElapsedUs("appendTailUs", appendTailStartUs);
+    final listItemStartUs = tracker.checkpointUs();
+    final listItems = displayResults.map((e) => WoxListItem.fromQueryResult(e)).toList();
+    tracker.setElapsedUs("listItemMapUs", listItemStartUs);
 
+    final listUpdateStartUs = tracker.checkpointUs();
     resultListViewController.updateItems(traceId, listItems, silent: true);
+    tracker.setElapsedUs("listUpdateUs", listUpdateStartUs);
+    final gridUpdateStartUs = tracker.checkpointUs();
     resultGridViewController.updateItems(traceId, listItems, silent: true);
+    tracker.setElapsedUs("gridUpdateUs", gridUpdateStartUs);
 
+    final activeIndexStartUs = tracker.checkpointUs();
     updateActiveResultIndex(traceId);
+    tracker.setElapsedUs("activeIndexUs", activeIndexStartUs);
+    final toolbarStartUs = tracker.checkpointUs();
     updateDoctorToolbarIfNeeded(traceId);
+    tracker.setElapsedUs("toolbarUs", toolbarStartUs);
 
     unawaited(resizeHeightForResultUpdate(traceId: traceId, reason: "query results updated"));
+    tracker.setBool("resizeScheduled", true);
+    tracker.setElapsedUs("totalUs", totalStartUs);
+    tracker.log();
+    return true;
+  }
+
+  // Re-attach the UI-only onReceived tail when a later backend batch replaces the result list.
+  List<WoxQueryResult> appendOnReceivedPerformanceTailForQuery(String traceId, String queryId, List<WoxQueryResult> results, {int? backendQueryStartTimestampMs}) {
+    final setting = WoxSettingUtil.instance.currentSetting;
+    if (!Env.isDev || !setting.showPerformanceTail || !setting.showPerformanceTailUiReceived) {
+      return results;
+    }
+
+    // Prefer the backend query start so this UI tail is comparable with the
+    // backend "response received" tail, which uses queryRun.startTimestamp.
+    final queryStartTime = backendQueryStartTimestampMs != null && backendQueryStartTimestampMs > 0 ? backendQueryStartTimestampMs : queryStartTimeMap[traceId];
+    if (queryStartTime == null) {
+      return results;
+    }
+    final currentOnReceivedElapsed = DateTime.now().millisecondsSinceEpoch - queryStartTime;
+
+    for (final result in results) {
+      final resultKey = getOnReceivedResultKey(queryId, result);
+      final onReceivedElapsed = resultKey.isEmpty ? currentOnReceivedElapsed : queryOnReceivedElapsedByResultKey.putIfAbsent(resultKey, () => currentOnReceivedElapsed);
+      appendOnReceivedPerformanceTail(result, onReceivedElapsed);
+    }
+    return results;
+  }
+
+  String getOnReceivedResultKey(String queryId, WoxQueryResult result) {
+    if (result.id.isEmpty) {
+      return "";
+    }
+    return "$queryId:${result.id}";
+  }
+
+  // Appends the onReceived tail once while preserving all backend-provided tails.
+  void appendOnReceivedPerformanceTail(WoxQueryResult result, int onReceivedElapsed) {
+    if (result.isGroup) {
+      return;
+    }
+
+    result.tails =
+        result.tails.where((tail) => tail.tooltip != _onReceivedTailTooltip).toList()
+          ..add(WoxListItemTail.text("${onReceivedElapsed}ms", textCategory: getOnReceivedTailTextCategory(onReceivedElapsed))..tooltip = _onReceivedTailTooltip);
+  }
+
+  // This dev metric stops at onReceivedQueryResults, before resize and frame paint.
+  String getOnReceivedTailTextCategory(int onReceivedElapsed) {
+    if (onReceivedElapsed > _onReceivedDangerThresholdMs) {
+      return woxListItemTailTextCategoryDanger;
+    }
+    if (onReceivedElapsed > _onReceivedWarningThresholdMs) {
+      return woxListItemTailTextCategoryWarning;
+    }
+    return woxListItemTailTextCategoryDefault;
   }
 
   void updateActiveResultIndex(String traceId) {
@@ -1386,7 +1526,7 @@ class WoxLauncherController extends GetxController {
 
     return ToolbarActionInfo(
       name: tr("plugin_doctor_go_to_update"),
-      hotkey: "ctrl+u",
+      hotkey: WoxPlatformHotkeyUtil.primaryHotkey("u"),
       action: () {
         openUpdateFromToolbar(const UuidV4().generate());
       },
@@ -1396,7 +1536,7 @@ class WoxLauncherController extends GetxController {
   ToolbarActionInfo buildDoctorToolbarAction() {
     return ToolbarActionInfo(
       name: tr("plugin_doctor_handle"),
-      hotkey: "ctrl+enter",
+      hotkey: WoxPlatformHotkeyUtil.primaryHotkey("enter"),
       action: () {
         openDoctorFromToolbar(const UuidV4().generate());
       },
@@ -1427,10 +1567,10 @@ class WoxLauncherController extends GetxController {
         WoxResultAction.local(
           id: localActionOpenDoctorId,
           name: tr("plugin_doctor_handle"),
-          hotkey: "ctrl+enter",
+          hotkey: WoxPlatformHotkeyUtil.primaryHotkey("enter"),
           icon: doctorCheckInfo.value.icon,
-          // Ctrl+Enter keeps Doctor handling available without stealing the
-          // normal Enter default action from the selected result.
+          // The primary-modifier Enter shortcut keeps Doctor handling available
+          // without stealing the normal Enter default action from the selected result.
           handler: (traceId) {
             openDoctorFromToolbar(traceId);
             return true;
@@ -1792,6 +1932,7 @@ class WoxLauncherController extends GetxController {
 
     // Apply position+size together before showing to avoid opening with stale width.
     await windowDriver.setBounds(targetPosition, Size(targetWidth, targetHeight));
+    committedWindowHeight = targetHeight;
 
     // Set always-on-top BEFORE show() so the TOPMOST flag is already in place
     // when the window becomes visible, avoiding transient blur on Windows.
@@ -2375,6 +2516,32 @@ class WoxLauncherController extends GetxController {
     );
   }
 
+  Future<bool> acceptQueryCompletionHint(String traceId) async {
+    final hint = queryCompletionHint.value;
+    if (hint == null || !isQueryCompletionHintValid(hint)) {
+      syncQueryBoxCompletionHint();
+      return false;
+    }
+
+    final nextQueryRefinements =
+        shouldPreserveQueryRefinementsForTextChange(currentQuery.value, hint.completionText)
+            ? cloneQueryRefinementPayload(currentQuery.value.queryRefinements)
+            : <String, String>{};
+    await onQueryChanged(
+      traceId,
+      PlainQuery(
+        queryId: const UuidV4().generate(),
+        queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code,
+        queryText: hint.completionText,
+        querySelection: Selection.empty(),
+        queryRefinements: nextQueryRefinements,
+      ),
+      "accept query completion hint",
+      moveCursorToEnd: true,
+    );
+    return true;
+  }
+
   void onQueryBoxTextChanged(String value) {
     final traceId = const UuidV4().generate();
     canArrowUpHistory = false;
@@ -2392,6 +2559,7 @@ class WoxLauncherController extends GetxController {
     } else {
       final nextQueryRefinements =
           shouldPreserveQueryRefinementsForTextChange(currentQuery.value, value) ? cloneQueryRefinementPayload(currentQuery.value.queryRefinements) : <String, String>{};
+      final skipCompletionHint = reuseQueryCompletionHintForText(value);
       onQueryChanged(
         traceId,
         PlainQuery(
@@ -2402,6 +2570,8 @@ class WoxLauncherController extends GetxController {
           queryRefinements: nextQueryRefinements,
         ),
         "user input changed",
+        skipCompletionHint: skipCompletionHint,
+        preserveCompletionHint: skipCompletionHint,
       );
     }
   }
@@ -2413,6 +2583,7 @@ class WoxLauncherController extends GetxController {
     currentQuery.value.queryId = queryId;
     backendQueryContext = QueryContext.empty();
     backendQueryContextQueryId = "";
+    clearQueryCompletionHint();
     clearQueryRefinements(traceId);
     prepareQueryLayoutOnQueryChanged(traceId, currentQuery.value);
 
@@ -2452,8 +2623,16 @@ class WoxLauncherController extends GetxController {
     }
   }
 
-  Future<void> onQueryChanged(String traceId, PlainQuery query, String changeReason, {bool moveCursorToEnd = false}) async {
+  Future<void> onQueryChanged(
+    String traceId,
+    PlainQuery query,
+    String changeReason, {
+    bool moveCursorToEnd = false,
+    bool skipCompletionHint = false,
+    bool preserveCompletionHint = false,
+  }) async {
     Logger.instance.debug(traceId, "query changed: ${query.queryText}, reason: $changeReason");
+    final shouldSkipCompletionHint = skipCompletionHint || !isQueryCompletionHintEnabled();
 
     if (query.queryId == "") {
       query.queryId = const UuidV4().generate();
@@ -2462,8 +2641,14 @@ class WoxLauncherController extends GetxController {
     clearHoveredResult();
 
     currentQuery.value = query;
+    queryOnReceivedElapsedByResultKey.clear();
     backendQueryContext = QueryContext.empty();
     backendQueryContextQueryId = "";
+    if (preserveCompletionHint) {
+      syncQueryBoxCompletionHint();
+    } else {
+      clearQueryCompletionHint();
+    }
     prepareQueryRefinementsOnQueryChanged(traceId, query);
     isCurrentQueryReturned = false;
     isShowActionPanel.value = false;
@@ -2521,6 +2706,7 @@ class WoxLauncherController extends GetxController {
               "queryText": query.queryText,
               "querySelection": query.querySelection.toJson(),
               "queryRefinements": query.queryRefinements,
+              "skipCompletionHint": shouldSkipCompletionHint,
             },
           ),
         );
@@ -2575,6 +2761,7 @@ class WoxLauncherController extends GetxController {
           "queryText": query.queryText,
           "querySelection": query.querySelection.toJson(),
           "queryRefinements": query.queryRefinements,
+          "skipCompletionHint": shouldSkipCompletionHint,
         },
       ),
     );
@@ -2731,91 +2918,142 @@ class WoxLauncherController extends GetxController {
       handleTerminalState(data);
       return;
     }
-
-    if (msg.method == WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY.code) {
-      // Log WebSocket latency (Wox -> UI) only for Query method
+    if (msg.method == WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY_COMPLETION_HINT.code) {
       if (msg.sendTimestamp > 0) {
-        final receiveTimestamp = DateTime.now().millisecondsSinceEpoch;
-        final latency = receiveTimestamp - msg.sendTimestamp;
+        final latency = DateTime.now().millisecondsSinceEpoch - msg.sendTimestamp;
         if (latency > 10) {
-          Logger.instance.info(msg.traceId, "📨 WebSocket latency (Wox→UI): ${latency}ms");
+          Logger.instance.info(msg.traceId, "📨 Query completion hint WebSocket latency (Wox→UI): ${latency}ms");
         }
       }
+
+      final data = msg.data as Map<String, dynamic>? ?? {};
+      final queryId = data['QueryId'] as String? ?? "";
+      final hintData = data['CompletionHint'];
+      final hint = hintData is Map ? QueryCompletionHint.fromJson(Map<String, dynamic>.from(hintData)) : null;
+      applyQueryCompletionHintForQueryId(msg.traceId, queryId, hint);
+      return;
+    }
+
+    if (msg.method == WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY.code) {
+      final receiveTimestampMs = DateTime.now().millisecondsSinceEpoch;
+      var websocketLatencyMs = -1;
+
+      // Log WebSocket latency (Wox -> UI) only for Query method
+      if (msg.sendTimestamp > 0) {
+        websocketLatencyMs = receiveTimestampMs - msg.sendTimestamp;
+        if (websocketLatencyMs > 10) {
+          Logger.instance.info(msg.traceId, "📨 WebSocket latency (Wox→UI): ${websocketLatencyMs}ms");
+        }
+      }
+
+      final applyTracker = WoxTimeTracker.start(msg.traceId, "ui_query_response_apply");
+      final responseApplyStartUs = applyTracker.checkpointUs();
 
       // Parse QueryResponse object
       final queryResponse = msg.data as Map<String, dynamic>;
       final resultsData = queryResponse['Results'] as List<dynamic>;
       final queryId = queryResponse['QueryId'] as String? ?? "";
       final isFinal = queryResponse['IsFinal'] as bool? ?? false;
+      final backendQueryStartTimestampMs = queryResponse['QueryStartTimestamp'] as int? ?? 0;
+      applyTracker.setRawString("queryId", queryId);
+      applyTracker.setBool("isFinal", isFinal);
+      applyTracker.setInt("backendQueryStartTimestampMs", backendQueryStartTimestampMs);
+      applyTracker.setInt("rawResultCount", resultsData.length);
+      final actionIconRefsStartUs = applyTracker.checkpointUs();
+      final actionIconRefs = _parseQueryActionIconRefs(queryResponse['ActionIconRefs']);
+      if (actionIconRefs.isNotEmpty) {
+        _resolveQueryActionIconRefs(resultsData, actionIconRefs);
+      }
+      applyTracker.setInt("actionIconRefCount", actionIconRefs.length);
+      applyTracker.setElapsedUs("actionIconRefsRestoreUs", actionIconRefsStartUs);
+
+      final receiveTracker = WoxTimeTracker.start(msg.traceId, "ui_query_response_receive");
+      receiveTracker.setRawString("queryId", queryId);
+      receiveTracker.setBool("isFinal", isFinal);
+      receiveTracker.setInt("rawResultCount", resultsData.length);
+      receiveTracker.setInt("actionIconRefCount", actionIconRefs.length);
+      if (websocketLatencyMs >= 0) {
+        receiveTracker.setInt("backendSendLatencyMs", websocketLatencyMs);
+      }
+      receiveTracker.log();
+      _scheduleQueryEventLoopTurnTiming(
+        traceId: msg.traceId,
+        stage: "ui_query_receive_next_turn",
+        queryId: queryId,
+        resultCount: resultsData.length,
+        isFinal: isFinal,
+        scheduledTimestampMs: receiveTimestampMs,
+      );
+
       final contextData = queryResponse['Context'];
       if (contextData is Map && contextData.isNotEmpty) {
         // Core owns the final query classification after shortcut expansion
         // and trigger-keyword parsing. Apply it before layout/results so Glance
         // and plugin identity do not depend on Flutter's local guess.
+        final contextStartUs = applyTracker.checkpointUs();
         applyQueryContextForQueryId(msg.traceId, queryId, QueryContext.fromJson(Map<String, dynamic>.from(contextData)));
+        applyTracker.setElapsedUs("contextApplyUs", contextStartUs);
       }
       final layoutData = queryResponse['Layout'];
       if (layoutData is Map && layoutData.isNotEmpty) {
         // QueryResponse layout replaces the old /query/metadata side request.
         // Apply it before results so list/grid switches happen under the same
         // query id and stale rows cannot be rendered with the new layout.
+        final layoutStartUs = applyTracker.checkpointUs();
         applyQueryLayoutForQueryId(msg.traceId, queryId, QueryLayout.fromJson(Map<String, dynamic>.from(layoutData)));
+        applyTracker.setElapsedUs("layoutApplyUs", layoutStartUs);
       }
       if (queryResponse.containsKey('Refinements')) {
+        final refinementsStartUs = applyTracker.checkpointUs();
         final refinementsData = queryResponse['Refinements'];
         final refinements =
             refinementsData is List
                 ? refinementsData.whereType<Map>().map((item) => WoxQueryRefinement.fromJson(Map<String, dynamic>.from(item))).toList()
                 : <WoxQueryRefinement>[];
         applyQueryRefinementsForQueryId(msg.traceId, queryId, refinements);
+        applyTracker.setInt("refinementCount", refinements.length);
+        applyTracker.setElapsedUs("refinementsApplyUs", refinementsStartUs);
       }
 
+      final resultParseStartUs = applyTracker.checkpointUs();
       var results = <WoxQueryResult>[];
       for (var item in resultsData) {
         results.add(WoxQueryResult.fromJson(item));
       }
+      applyTracker.setInt("resultCount", results.length);
+      applyTracker.setElapsedUs("resultParseUs", resultParseStartUs);
 
       Logger.instance.info(msg.traceId, "Received websocket message: ${msg.method}, results count: ${results.length}, isFinal: $isFinal");
 
       // Process results first
-      await onReceivedQueryResults(msg.traceId, queryId, results, isFinal: isFinal);
+      final onReceivedStartUs = applyTracker.checkpointUs();
+      final didApplyResults = await onReceivedQueryResults(msg.traceId, queryId, results, isFinal: isFinal, backendQueryStartTimestampMs: backendQueryStartTimestampMs);
+      applyTracker.setElapsedUs("onReceivedUs", onReceivedStartUs);
+      applyTracker.setBool("resultApplied", didApplyResults);
+      if (!didApplyResults) {
+        applyTracker.setBool("skippedAfterResultApply", true);
+        applyTracker.setElapsedUs("totalUs", responseApplyStartUs);
+        applyTracker.log();
+        queryStartTimeMap.remove(msg.traceId);
+        return;
+      }
 
       // If this is the final final response, we must stop loading animation explicitly
       // This handles cases where results are empty but the query is finished
       // We explicitly check if this final response belongs to the current query
       if (isFinal && queryId == currentQuery.value.queryId) {
+        final finalLoadingStartUs = applyTracker.checkpointUs();
         loadingTimer?.cancel();
         if (isLoading.value) {
           isLoading.value = false;
         }
+        applyTracker.setElapsedUs("finalLoadingUs", finalLoadingStartUs);
       }
+      applyTracker.setElapsedUs("totalUs", responseApplyStartUs);
+      applyTracker.log();
 
-      // Record First Paint after results are rendered (use post-frame callback)
-      final queryStartTime = queryStartTimeMap[msg.traceId];
-      if (results.isNotEmpty && queryStartTime != null) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          // Check if this traceId still exists (not removed by Complete Paint)
-          if (queryStartTimeMap.containsKey(msg.traceId)) {
-            final firstPaintTime = DateTime.now().millisecondsSinceEpoch - queryStartTime;
-            Logger.instance.info(msg.traceId, "⚡ FIRST PAINT: ${firstPaintTime}ms (${results.length} results rendered)");
-            // Remove after recording First Paint to avoid recording it again
-            queryStartTimeMap.remove(msg.traceId);
-          }
-        });
-      }
-
-      // Record Complete Paint when backend signals final batch
-      if (isFinal && queryStartTime != null) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          // Check if this traceId still exists (might be removed by First Paint)
-          final startTime = queryStartTimeMap[msg.traceId];
-          if (startTime != null) {
-            final completePaintTime = DateTime.now().millisecondsSinceEpoch - startTime;
-            Logger.instance.info(msg.traceId, "🎨 COMPLETE PAINT: ${completePaintTime}ms (total ${activeResultViewController.items.length} results rendered)");
-            // Clean up to avoid memory leak
-            queryStartTimeMap.remove(msg.traceId);
-          }
-        });
+      if (isFinal) {
+        queryStartTimeMap.remove(msg.traceId);
       }
     }
   }
@@ -3215,7 +3453,12 @@ class WoxLauncherController extends GetxController {
   }
 
   Future<void> resizeHeight({required String traceId, String reason = "unspecified", bool forceDwmRecomposition = false, double? overrideTargetHeight}) async {
-    final currentSize = await windowDriver.getSize();
+    final tracker = WoxTimeTracker.start(traceId, "ui_resize_height");
+    final totalStartUs = tracker.checkpointUs();
+    tracker.setString("reason", reason);
+    tracker.setBool("forceDwmRecomposition", forceDwmRecomposition);
+    tracker.setBool("hasOverrideTargetHeight", overrideTargetHeight != null);
+
     var totalHeight = overrideTargetHeight ?? calculateWindowHeight();
 
     // Force DWM to recompose Acrylic by adding a single pixel to bypass caching identical sizes
@@ -3225,34 +3468,73 @@ class WoxLauncherController extends GetxController {
 
     double targetWidth = forceWindowWidth != 0 ? forceWindowWidth : WoxSettingUtil.instance.currentSetting.appWidth.toDouble();
     final targetSize = Size(targetWidth, totalHeight.toDouble());
-    final isSameSize = isWindowSizeEffectivelyEqual(currentSize, targetSize);
-    Logger.instance.debug(
-      traceId,
-      "resize requested: reason=$reason, before=${formatWindowSize(currentSize)}, target=${formatWindowSize(targetSize)}, sameSize=$isSameSize, forceDwmRecomposition=$forceDwmRecomposition",
-    );
-
-    if (isSameSize && !forceDwmRecomposition) {
-      committedWindowHeight = targetSize.height;
-      Logger.instance.debug(traceId, "resize skipped: reason=$reason, before=${formatWindowSize(currentSize)}, target=${formatWindowSize(targetSize)}, sameSize=true");
-      return;
-    }
 
     if (!forceDwmRecomposition && ongoingResizeTargetSize != null && isWindowSizeEffectivelyEqual(ongoingResizeTargetSize!, targetSize)) {
-      Logger.instance.debug(
-        traceId,
-        "resize skipped: reason=$reason, before=${formatWindowSize(currentSize)}, target=${formatWindowSize(targetSize)}, duplicateTargetInFlight=true",
-      );
+      Logger.instance.debug(traceId, "resize skipped: reason=$reason, target=${formatWindowSize(targetSize)}, duplicateTargetInFlight=true");
+      tracker.setDouble("targetWidth", targetSize.width);
+      tracker.setDouble("targetHeight", targetSize.height);
+      tracker.setBool("skippedDuplicateTarget", true);
+      tracker.setBool("skippedBeforePlatformSize", true);
+      tracker.setElapsedUs("totalUs", totalStartUs);
+      tracker.log();
       return;
     }
 
+    // Claim the resize request before the first native await so slower older
+    // requests cannot become "latest" after a newer shrink/expand request.
     final currentResizeToken = ++resizeRequestToken;
     ongoingResizeTargetSize = targetSize;
 
     try {
+      final getCurrentSizeStartUs = tracker.checkpointUs();
+      final currentSize = await windowDriver.getSize();
+      tracker.setElapsedUs("getCurrentSizeUs", getCurrentSizeStartUs);
+      if (resizeRequestToken != currentResizeToken) {
+        Logger.instance.debug(traceId, "resize skipped: reason=$reason, target=${formatWindowSize(targetSize)}, supersededBeforeSet=true");
+        tracker.setDouble("targetWidth", targetSize.width);
+        tracker.setDouble("targetHeight", targetSize.height);
+        tracker.setBool("skippedSuperseded", true);
+        tracker.setBool("skippedBeforePlatformSet", true);
+        tracker.setElapsedUs("totalUs", totalStartUs);
+        tracker.log();
+        return;
+      }
+
+      final isSameSize = isWindowSizeEffectivelyEqual(currentSize, targetSize);
+      tracker.setDouble("beforeWidth", currentSize.width);
+      tracker.setDouble("beforeHeight", currentSize.height);
+      tracker.setDouble("targetWidth", targetSize.width);
+      tracker.setDouble("targetHeight", targetSize.height);
+      tracker.setBool("sameSize", isSameSize);
+      Logger.instance.debug(
+        traceId,
+        "resize requested: reason=$reason, before=${formatWindowSize(currentSize)}, target=${formatWindowSize(targetSize)}, sameSize=$isSameSize, forceDwmRecomposition=$forceDwmRecomposition",
+      );
+
+      if (isSameSize && !forceDwmRecomposition) {
+        committedWindowHeight = targetSize.height;
+        Logger.instance.debug(traceId, "resize skipped: reason=$reason, before=${formatWindowSize(currentSize)}, target=${formatWindowSize(targetSize)}, sameSize=true");
+        tracker.setBool("skippedSameSize", true);
+        tracker.setElapsedUs("totalUs", totalStartUs);
+        tracker.log();
+        return;
+      }
+
       if (isQueryBoxAtBottom.value) {
         // When the query box is anchored to the bottom, grow the window upward.
         // Use getPosition + getSize to compute the current bottom edge, then adjust top to grow upward.
+        final getPositionStartUs = tracker.checkpointUs();
         final pos = await windowDriver.getPosition();
+        tracker.setElapsedUs("getPositionUs", getPositionStartUs);
+        if (resizeRequestToken != currentResizeToken) {
+          Logger.instance.debug(traceId, "resize skipped: reason=$reason, target=${formatWindowSize(targetSize)}, supersededBeforeSet=true");
+          tracker.setBool("skippedSuperseded", true);
+          tracker.setBool("skippedBeforePlatformSet", true);
+          tracker.setElapsedUs("totalUs", totalStartUs);
+          tracker.log();
+          return;
+        }
+
         double currentBottom = pos.dy + currentSize.height;
 
         if (currentBottom <= 0) {
@@ -3260,8 +3542,12 @@ class WoxLauncherController extends GetxController {
         } else {
           double newTop = currentBottom - totalHeight;
           // Apply position and size together to avoid intermediate-frame flicker.
+          final setBoundsStartUs = tracker.checkpointUs();
           await windowDriver.setBounds(Offset(pos.dx, newTop), targetSize);
+          tracker.setElapsedUs("setBoundsUs", setBoundsStartUs);
+          final getResizedSizeStartUs = tracker.checkpointUs();
           final resizedSize = await windowDriver.getSize();
+          tracker.setElapsedUs("getResizedSizeUs", getResizedSizeStartUs);
           Logger.instance.debug(
             traceId,
             "resize applied: reason=$reason, before=${formatWindowSize(currentSize)}, target=${formatWindowSize(targetSize)}, after=${formatWindowSize(resizedSize)}, mode=setBounds, growUpward=true",
@@ -3269,18 +3555,34 @@ class WoxLauncherController extends GetxController {
 
           committedWindowHeight = targetSize.height;
           windowFlickerDetector.recordResize(totalHeight.toInt());
+          tracker.setRawString("mode", "setBounds");
+          tracker.setBool("growUpward", true);
+          tracker.setDouble("afterWidth", resizedSize.width);
+          tracker.setDouble("afterHeight", resizedSize.height);
+          tracker.setElapsedUs("totalUs", totalStartUs);
+          tracker.log();
           return;
         }
       }
 
+      final setSizeStartUs = tracker.checkpointUs();
       await windowDriver.setSize(targetSize);
+      tracker.setElapsedUs("setSizeUs", setSizeStartUs);
+      final getResizedSizeStartUs = tracker.checkpointUs();
       final resizedSize = await windowDriver.getSize();
+      tracker.setElapsedUs("getResizedSizeUs", getResizedSizeStartUs);
       Logger.instance.debug(
         traceId,
         "resize applied: reason=$reason, before=${formatWindowSize(currentSize)}, target=${formatWindowSize(targetSize)}, after=${formatWindowSize(resizedSize)}, mode=setSize, growUpward=false",
       );
       committedWindowHeight = targetSize.height;
       windowFlickerDetector.recordResize(totalHeight.toInt());
+      tracker.setRawString("mode", "setSize");
+      tracker.setBool("growUpward", false);
+      tracker.setDouble("afterWidth", resizedSize.width);
+      tracker.setDouble("afterHeight", resizedSize.height);
+      tracker.setElapsedUs("totalUs", totalStartUs);
+      tracker.log();
     } finally {
       if (resizeRequestToken == currentResizeToken) {
         ongoingResizeTargetSize = null;
@@ -4174,13 +4476,9 @@ class WoxLauncherController extends GetxController {
 
   // Quick select related methods
 
-  /// Check if the quick select modifier key is pressed (Cmd on macOS, Alt on Windows/Linux)
+  /// Check if the quick select primary modifier key is pressed.
   bool isQuickSelectModifierPressed() {
-    if (Platform.isMacOS) {
-      return HardwareKeyboard.instance.isMetaPressed;
-    } else {
-      return HardwareKeyboard.instance.isAltPressed;
-    }
+    return WoxPlatformHotkeyUtil.isPrimaryModifierPressed;
   }
 
   /// Start the quick select timer when modifier key is pressed
@@ -4198,6 +4496,75 @@ class WoxLauncherController extends GetxController {
         Logger.instance.debug(traceId, "Quick select: activating mode");
         activateQuickSelectMode(traceId);
       }
+    });
+  }
+
+  // Core sends repeated action icons as response-local references to keep large
+  // query payloads smaller. Resolve them before normal result parsing so the
+  // rest of the UI still deals with ordinary WoxImage objects.
+  Map<String, WoxImage> _parseQueryActionIconRefs(dynamic rawRefs) {
+    if (rawRefs is! Map) {
+      return <String, WoxImage>{};
+    }
+
+    final refs = <String, WoxImage>{};
+    for (final entry in rawRefs.entries) {
+      final rawIcon = entry.value;
+      if (rawIcon is Map) {
+        refs[entry.key.toString()] = WoxImage.fromJson(Map<String, dynamic>.from(rawIcon));
+      }
+    }
+    return refs;
+  }
+
+  void _resolveQueryActionIconRefs(List<dynamic> resultsData, Map<String, WoxImage> refs) {
+    for (final rawResult in resultsData) {
+      if (rawResult is! Map) {
+        continue;
+      }
+
+      final actions = rawResult['Actions'];
+      if (actions is! List) {
+        continue;
+      }
+
+      for (final rawAction in actions) {
+        if (rawAction is! Map) {
+          continue;
+        }
+
+        final rawIcon = rawAction['Icon'];
+        if (rawIcon is! Map || rawIcon['ImageType'] != _queryActionIconRefType) {
+          continue;
+        }
+
+        final resolvedIcon = refs[rawIcon['ImageData']?.toString() ?? ""];
+        if (resolvedIcon != null) {
+          rawAction['Icon'] = resolvedIcon.toJson();
+        }
+      }
+    }
+  }
+
+  void _scheduleQueryEventLoopTurnTiming({
+    required String traceId,
+    required String stage,
+    required String queryId,
+    required int resultCount,
+    required bool isFinal,
+    required int scheduledTimestampMs,
+  }) {
+    if (!Env.isDev) {
+      return;
+    }
+
+    Timer.run(() {
+      final tracker = WoxTimeTracker.start(traceId, stage);
+      tracker.setRawString("queryId", queryId);
+      tracker.setInt("resultCount", resultCount);
+      tracker.setBool("isFinal", isFinal);
+      tracker.setInt("delayMs", DateTime.now().millisecondsSinceEpoch - scheduledTimestampMs);
+      tracker.log();
     });
   }
 

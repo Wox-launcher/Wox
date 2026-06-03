@@ -107,7 +107,7 @@ func (p *BugReportPlugin) buildActions(enabled bool) []plugin.QueryResultAction 
 		actions = append(actions, plugin.QueryResultAction{
 			Name:                   "i18n:plugin_bug_report_action_disable",
 			Icon:                   common.TrashIcon,
-			Hotkey:                 "ctrl+enter",
+			Hotkey:                 util.PrimaryHotkey("enter"),
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				p.disable(ctx)

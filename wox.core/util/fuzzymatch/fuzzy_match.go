@@ -798,7 +798,40 @@ func matchPinyinStrict(text string, patternRunes []rune) FuzzyMatchResult {
 						if matchASCIIPrefix(patternRunes[state.patternIdx:], syllable[:remainingRunes]) {
 							// Sub-case A: Length 1 (First Letter)
 							if remainingRunes == 1 {
-								if state.matchMode != ModeFullPinyin {
+								// Keep result counts stable while the user is still typing the current syllable.
+								// For example, "shij" is an intermediate form of "shi"+"ji..." and should already
+								// match titles such as "视觉" or "世纪", otherwise typing the next "i" makes many
+								// results suddenly appear. Only allow this when there was no skipped syllable, so
+								// non-trailing mixed patterns such as "nhao" for "你好" stay rejected.
+								if state.matchMode == ModeFullPinyin && state.consecutiveSkipped == 0 {
+									newScore := state.score + scoreMatch
+									if state.matchedSyllables > 0 {
+										newScore += bonusConsecutive
+									}
+
+									newPatternIdx := state.patternIdx + 1
+									newMatchedSyllables := state.matchedSyllables + 1
+									idx := (newPatternIdx*cols1+newMatchedSyllables)*cols2 + ModeFullPinyin*4 + 0
+
+									if generation[idx] != currentGen || newScore > bestScores[idx] {
+										newState := pinyinSearchState{
+											patternIdx:          newPatternIdx,
+											consecutiveSkipped:  0,
+											matchedSyllables:    newMatchedSyllables,
+											score:               newScore,
+											lastMatchWasPartial: true,
+											matchMode:           ModeFullPinyin,
+										}
+										if generation[idx] == currentGen {
+											nextStates[bestIndex[idx]] = newState
+										} else {
+											bestIndex[idx] = len(nextStates)
+											generation[idx] = currentGen
+											nextStates = append(nextStates, newState)
+										}
+										bestScores[idx] = newScore
+									}
+								} else if state.matchMode != ModeFullPinyin {
 									newScore := state.score + scoreMatch + 5
 									if state.matchedSyllables > 0 && state.consecutiveSkipped == 0 {
 										newScore += bonusConsecutive

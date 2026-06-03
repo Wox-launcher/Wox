@@ -395,7 +395,7 @@ void registerLauncherCoreSmokeTests() {
       expect(controller.queryBoxTextFieldController.text, equals('main query xyz123'));
     });
 
-    testWidgets('T2-13: Action panel opens with Alt+J', (tester) async {
+    testWidgets('T2-13: Action panel opens with primary modifier + J', (tester) async {
       final controller = await launchAndShowLauncher(tester, windowSize: smokeLargeWindowSize);
 
       await queryAndWaitForResults(tester, controller, 'wox launcher test xyz123');

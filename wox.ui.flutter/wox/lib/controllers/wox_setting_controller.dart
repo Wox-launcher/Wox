@@ -2052,6 +2052,9 @@ class WoxSettingController extends GetxController {
     Logger.instance.setLogLevel(woxSetting.value.logLevel);
     if (Get.isRegistered<WoxLauncherController>()) {
       final launcherController = Get.find<WoxLauncherController>();
+      if (!woxSetting.value.enableQueryCompletionHint) {
+        launcherController.clearQueryCompletionHint();
+      }
       unawaited(launcherController.refreshGlance(traceId, "settingsChanged"));
       // Interface size changes are launcher-only; the settings view keeps its
       // fixed sizing while the launcher recalculates dimensions from metrics as
@@ -2153,6 +2156,13 @@ const List<_BuiltInSettingSearchDefinition> _builtInSettingSearchDefinitions = [
   ),
   _BuiltInSettingSearchDefinition(settingKey: 'AppFontFamily', navPath: 'ui', titleKey: 'ui_app_font_family', subtitleKey: 'ui_app_font_family_tips', searchKeywords: ['font']),
   _BuiltInSettingSearchDefinition(
+    settingKey: 'EnableQueryCompletionHint',
+    navPath: 'ui',
+    titleKey: 'ui_query_completion_hint',
+    subtitleKey: 'ui_query_completion_hint_tips',
+    searchKeywords: ['completion', 'hint', 'autocomplete', 'inline completion'],
+  ),
+  _BuiltInSettingSearchDefinition(
     settingKey: 'MaxResultCount',
     navPath: 'ui',
     titleKey: 'ui_max_result_count',
@@ -2206,6 +2216,34 @@ const List<_BuiltInSettingSearchDefinition> _builtInSettingSearchDefinitions = [
     titleKey: 'ui_debug_show_performance_tail',
     subtitleKey: 'ui_debug_show_performance_tail_tips',
     searchKeywords: ['performance'],
+  ),
+  _BuiltInSettingSearchDefinition(
+    settingKey: 'ShowPerformanceTailBatch',
+    navPath: 'debug',
+    titleKey: 'ui_debug_show_performance_tail_batch',
+    subtitleKey: 'ui_debug_show_performance_tail_batch_tips',
+    searchKeywords: ['performance', 'batch'],
+  ),
+  _BuiltInSettingSearchDefinition(
+    settingKey: 'ShowPerformanceTailPluginQuery',
+    navPath: 'debug',
+    titleKey: 'ui_debug_show_performance_tail_plugin_query',
+    subtitleKey: 'ui_debug_show_performance_tail_plugin_query_tips',
+    searchKeywords: ['performance', 'plugin', 'query'],
+  ),
+  _BuiltInSettingSearchDefinition(
+    settingKey: 'ShowPerformanceTailBackendPrepared',
+    navPath: 'debug',
+    titleKey: 'ui_debug_show_performance_tail_backend_prepared',
+    subtitleKey: 'ui_debug_show_performance_tail_backend_prepared_tips',
+    searchKeywords: ['performance', 'backend', 'send'],
+  ),
+  _BuiltInSettingSearchDefinition(
+    settingKey: 'ShowPerformanceTailUiReceived',
+    navPath: 'debug',
+    titleKey: 'ui_debug_show_performance_tail_ui_received',
+    subtitleKey: 'ui_debug_show_performance_tail_ui_received_tips',
+    searchKeywords: ['performance', 'ui', 'received'],
   ),
   _BuiltInSettingSearchDefinition(
     settingKey: 'EnableAnonymousUsageStats',

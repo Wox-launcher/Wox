@@ -42,11 +42,12 @@ type WoxSettingDto struct {
 	// UiDensity is a compact enum rather than per-control dimensions because
 	// backend window sizing and Flutter rendering both derive their local
 	// metrics from the same three scale buckets.
-	UiDensity     setting.UiDensity
-	ThemeId       string
-	AppFontFamily string
-	EnableGlance  bool
-	PrimaryGlance setting.GlanceRef
+	UiDensity                 setting.UiDensity
+	ThemeId                   string
+	AppFontFamily             string
+	EnableQueryCompletionHint bool
+	EnableGlance              bool
+	PrimaryGlance             setting.GlanceRef
 	// HideGlanceIcon is kept beside the Glance selection because Flutter needs
 	// it with the rest of the UI settings to render the query-box accessory.
 	HideGlanceIcon bool
@@ -54,6 +55,10 @@ type WoxSettingDto struct {
 	// Debug display switches are only shown by the dev UI, but the DTO keeps
 	// them beside other settings so backend tail rendering and Flutter toggles
 	// stay synchronized through the existing settings API.
-	ShowScoreTail       bool
-	ShowPerformanceTail bool
+	ShowScoreTail                      bool
+	ShowPerformanceTail                bool
+	ShowPerformanceTailBatch           bool
+	ShowPerformanceTailPluginQuery     bool
+	ShowPerformanceTailBackendPrepared bool
+	ShowPerformanceTailUiReceived      bool
 }

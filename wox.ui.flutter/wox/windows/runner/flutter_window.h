@@ -180,6 +180,10 @@ private:
 
   // Sync the hosted Flutter child window with the root client area.
   void SyncFlutterChildWindowToClientArea(HWND hwnd, const char *source, bool engine_handled);
+  // Schedules a delayed one-pixel native resize round trip to wake Flutter/DWM after Windows resize.
+  void ScheduleDelayedResizeRepaintNudge(HWND hwnd);
+  // Runs the delayed resize nudge and restores the original native window size.
+  void RunDelayedResizeRepaintNudge(HWND hwnd);
   void FocusFlutterViewOrRoot(HWND hwnd);
 
   // Helpers for logging native geometry.

@@ -121,6 +121,24 @@ class QueryHistory {
   }
 }
 
+class QueryCompletionHint {
+  late String inputPrefix;
+  late String completionText;
+  late String suffix;
+  late String source;
+  late int score;
+
+  QueryCompletionHint({required this.inputPrefix, required this.completionText, required this.suffix, required this.source, required this.score});
+
+  QueryCompletionHint.fromJson(Map<String, dynamic> json) {
+    inputPrefix = json['InputPrefix'] ?? "";
+    completionText = json['CompletionText'] ?? "";
+    suffix = json['Suffix'] ?? "";
+    source = json['Source'] ?? "";
+    score = (json['Score'] as num?)?.toInt() ?? 0;
+  }
+}
+
 class WoxQueryResult {
   late String queryId;
   late String id;

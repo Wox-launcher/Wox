@@ -8,7 +8,7 @@ enum WoxQueryHotkeysDemoMode { showcase, normal, webPanel, silent, custom }
 //
 // Phase timeline (total 9200 ms, looping):
 //
-//   Example 1 – "Ctrl+Shift+G → github repo" (0.00–0.47):
+//   Example 1 – "Primary+Shift+G → github repo" (0.00–0.47):
 //     Demonstrates a basic hotkey that opens Wox with a preset query.
 //     0.00–0.09  Static hint card; hotkey badge fades in.
 //     0.09–0.15  Hotkey overlay rises in.
@@ -20,7 +20,7 @@ enum WoxQueryHotkeysDemoMode { showcase, normal, webPanel, silent, custom }
 //   Crossfade (0.43–0.55):
 //     Example 1 fades out while example 2 fades in.
 //
-//   Example 2 – "Ctrl+Shift+I → webview instagram" (0.55–0.94):
+//   Example 2 – "Primary+Shift+I → webview instagram" (0.55–0.94):
 //     Demonstrates hiding the query box and toolbar so the entire Wox
 //     window becomes a borderless embedded webpage (webview plugin).
 //     0.55–0.63  Hotkey overlay rises in.
@@ -220,7 +220,7 @@ class _WoxQueryHotkeysDemoState extends State<WoxQueryHotkeysDemo> with SingleTi
 
   Widget _buildNormalDemo() {
     return _buildSingleModeDemo(
-      hotkey: Platform.isMacOS ? 'cmd+shift+g' : 'ctrl+shift+g',
+      hotkey: WoxPlatformHotkeyUtil.primaryHotkey('shift+g'),
       query: 'github repo',
       buildContent: (hotkeyLabel, contentProgress) {
         return Positioned.fill(
@@ -259,7 +259,7 @@ class _WoxQueryHotkeysDemoState extends State<WoxQueryHotkeysDemo> with SingleTi
 
   Widget _buildWebPanelDemo() {
     return _buildSingleModeDemo(
-      hotkey: Platform.isMacOS ? 'cmd+shift+i' : 'ctrl+shift+i',
+      hotkey: WoxPlatformHotkeyUtil.primaryHotkey('shift+i'),
       query: 'webview instagram',
       buildContent: (hotkeyLabel, contentProgress) {
         return Positioned(
@@ -283,7 +283,7 @@ class _WoxQueryHotkeysDemoState extends State<WoxQueryHotkeysDemo> with SingleTi
 
   Widget _buildSilentDemo() {
     return _buildSingleModeDemo(
-      hotkey: Platform.isMacOS ? 'cmd+shift+s' : 'ctrl+shift+s',
+      hotkey: WoxPlatformHotkeyUtil.primaryHotkey('shift+s'),
       query: 'copy github repo',
       buildContent: (hotkeyLabel, contentProgress) {
         return Positioned(
@@ -303,7 +303,7 @@ class _WoxQueryHotkeysDemoState extends State<WoxQueryHotkeysDemo> with SingleTi
 
   Widget _buildCustomDemo() {
     return _buildSingleModeDemo(
-      hotkey: Platform.isMacOS ? 'cmd+shift+d' : 'ctrl+shift+d',
+      hotkey: WoxPlatformHotkeyUtil.primaryHotkey('shift+d'),
       query: 'daily dashboard',
       buildContent: (hotkeyLabel, contentProgress) {
         return Stack(
@@ -372,11 +372,11 @@ class _WoxQueryHotkeysDemoState extends State<WoxQueryHotkeysDemo> with SingleTi
         break;
     }
 
-    final hotkey1 = _formatDemoHotkey('', fallback: Platform.isMacOS ? 'cmd+shift+g' : 'ctrl+shift+g');
+    final hotkey1 = _formatDemoHotkey('', fallback: WoxPlatformHotkeyUtil.primaryHotkey('shift+g'));
     // Example 2 uses a fixed illustrative hotkey; it is not tied to any user
     // configuration because its purpose is to show the hide-chrome capability
     // rather than the exact shortcut value.
-    const hotkey2 = 'Ctrl+Shift+I';
+    final hotkey2 = WoxPlatformHotkeyUtil.primaryHotkeyLabel('shift+i');
 
     return AnimatedBuilder(
       key: const ValueKey('onboarding-query-hotkeys-demo'),
@@ -395,7 +395,7 @@ class _WoxQueryHotkeysDemoState extends State<WoxQueryHotkeysDemo> with SingleTi
             children: [
               Positioned.fill(child: WoxDemoDesktopBackground(accent: widget.accent, isMac: Platform.isMacOS, showDefaultIcons: false)),
 
-              // ── Example 1: Ctrl+Shift+G opens a normal Wox query ───────────
+              // ── Example 1: primary modifier + Shift+G opens a normal Wox query ───────────
               if (ex1 > 0.01)
                 Positioned.fill(
                   child: Opacity(
@@ -470,7 +470,7 @@ class _WoxQueryHotkeysDemoState extends State<WoxQueryHotkeysDemo> with SingleTi
                   ),
                 ),
 
-              // ── Example 2: Ctrl+Shift+X opens a borderless webview ─────────
+              // ── Example 2: primary modifier + Shift+I opens a borderless webview ─────────
               // Demonstrates that hideQueryBox + hideToolbar lets the entire
               // Wox window become a frameless embedded webpage, ideal for
               // quick browsing via the webview plugin.

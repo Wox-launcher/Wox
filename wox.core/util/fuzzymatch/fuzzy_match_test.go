@@ -204,6 +204,28 @@ func TestStringMatcherPinyin(t *testing.T) {
 	}
 }
 
+func TestStringMatcherPinyinAllowsTrailingIncompleteSyllable(t *testing.T) {
+	cases := []struct {
+		pattern string
+		text    string
+	}{
+		{"shij", "视觉中国"},
+		{"shij", "世纪"},
+		{"shij", "史记"},
+		{"shij", "Python计算机视觉编程"},
+	}
+
+	for _, c := range cases {
+		result := FuzzyMatch(c.text, c.pattern, true)
+		assert.True(t, result.IsMatch, "pattern %q should match text %q", c.pattern, c.text)
+		assert.GreaterOrEqual(t, result.Score, int64(50), "pattern %q should pass strict plugin score threshold for text %q", c.pattern, c.text)
+	}
+}
+
+func TestStringMatcherPinyinRejectsNonTrailingMixedMode(t *testing.T) {
+	assert.False(t, FuzzyMatch("你好", "nhao", true).IsMatch)
+}
+
 func TestStringMatcher(t *testing.T) {
 
 	cases := []struct {

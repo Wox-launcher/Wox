@@ -77,7 +77,7 @@ class _WoxAICommandDefaultActionDemoState extends State<WoxAICommandDefaultActio
 
   bool _isReplaced() => widget.mode == WoxAICommandDefaultActionDemoMode.runAndPaste && _controller.value >= 0.62 && _controller.value < 0.96;
 
-  String _hotkey() => _formatDemoHotkey('', fallback: Platform.isMacOS ? 'cmd+shift+t' : 'ctrl+shift+t');
+  String _hotkey() => _formatDemoHotkey('', fallback: WoxPlatformHotkeyUtil.primaryHotkey('shift+t'));
 
   String _text(String key) => widget.tr(key);
 

@@ -5,7 +5,7 @@ The Action Panel is the second step for a result. `Enter` runs the primary actio
 ## Open It
 
 1. Highlight a result.
-2. Press `Alt + J` on Windows/Linux or `Command + J` on macOS.
+2. Press `Ctrl + J` on Windows/Linux or `Command + J` on macOS.
 3. Pick an action with the keyboard and press `Enter`.
 
 ## Common Actions

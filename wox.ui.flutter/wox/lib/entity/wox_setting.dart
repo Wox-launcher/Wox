@@ -31,6 +31,7 @@ class WoxSetting {
   late String uiDensity;
   late String themeId;
   late String appFontFamily;
+  late bool enableQueryCompletionHint;
   late bool enableGlance;
   late GlanceRef primaryGlance;
   late bool hideGlanceIcon;
@@ -43,6 +44,10 @@ class WoxSetting {
   late String customNodejsPath;
   late bool showScoreTail;
   late bool showPerformanceTail;
+  late bool showPerformanceTailBatch;
+  late bool showPerformanceTailPluginQuery;
+  late bool showPerformanceTailBackendPrepared;
+  late bool showPerformanceTailUiReceived;
 
   WoxSetting({
     required this.enableAutostart,
@@ -69,6 +74,7 @@ class WoxSetting {
     required this.uiDensity,
     required this.themeId,
     required this.appFontFamily,
+    required this.enableQueryCompletionHint,
     required this.enableGlance,
     required this.primaryGlance,
     required this.hideGlanceIcon,
@@ -81,6 +87,10 @@ class WoxSetting {
     required this.customNodejsPath,
     required this.showScoreTail,
     required this.showPerformanceTail,
+    required this.showPerformanceTailBatch,
+    required this.showPerformanceTailPluginQuery,
+    required this.showPerformanceTailBackendPrepared,
+    required this.showPerformanceTailUiReceived,
   });
 
   WoxSetting.fromJson(Map<String, dynamic> json) {
@@ -148,6 +158,7 @@ class WoxSetting {
     uiDensity = json['UiDensity'] ?? 'normal';
     themeId = json['ThemeId'];
     appFontFamily = json['AppFontFamily'] ?? '';
+    enableQueryCompletionHint = json['EnableQueryCompletionHint'] ?? false;
     enableGlance = json['EnableGlance'] ?? true;
     primaryGlance = GlanceRef.fromJson(json['PrimaryGlance']);
     hideGlanceIcon = json['HideGlanceIcon'] ?? false;
@@ -160,6 +171,10 @@ class WoxSetting {
     customNodejsPath = json['CustomNodejsPath'] ?? '';
     showScoreTail = json['ShowScoreTail'] ?? false;
     showPerformanceTail = json['ShowPerformanceTail'] ?? false;
+    showPerformanceTailBatch = json['ShowPerformanceTailBatch'] ?? true;
+    showPerformanceTailPluginQuery = json['ShowPerformanceTailPluginQuery'] ?? true;
+    showPerformanceTailBackendPrepared = json['ShowPerformanceTailBackendPrepared'] ?? true;
+    showPerformanceTailUiReceived = json['ShowPerformanceTailUiReceived'] ?? true;
   }
 
   Map<String, dynamic> toJson() {
@@ -188,6 +203,7 @@ class WoxSetting {
     data['UiDensity'] = uiDensity;
     data['ThemeId'] = themeId;
     data['AppFontFamily'] = appFontFamily;
+    data['EnableQueryCompletionHint'] = enableQueryCompletionHint;
     data['EnableGlance'] = enableGlance;
     data['PrimaryGlance'] = primaryGlance.toJson();
     data['HideGlanceIcon'] = hideGlanceIcon;
@@ -200,6 +216,10 @@ class WoxSetting {
     data['CustomNodejsPath'] = customNodejsPath;
     data['ShowScoreTail'] = showScoreTail;
     data['ShowPerformanceTail'] = showPerformanceTail;
+    data['ShowPerformanceTailBatch'] = showPerformanceTailBatch;
+    data['ShowPerformanceTailPluginQuery'] = showPerformanceTailPluginQuery;
+    data['ShowPerformanceTailBackendPrepared'] = showPerformanceTailBackendPrepared;
+    data['ShowPerformanceTailUiReceived'] = showPerformanceTailUiReceived;
     return data;
   }
 }

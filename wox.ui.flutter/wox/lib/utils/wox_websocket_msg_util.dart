@@ -61,18 +61,35 @@ class WoxWebsocketMsgUtil {
     _channel = WebSocketChannel.connect(uri);
     _subscription = _channel!.stream.listen(
       (event) {
+        final eventReceivedMs = DateTime.now().millisecondsSinceEpoch;
+        final eventReceivedUs = DateTime.now().microsecondsSinceEpoch;
+        final payloadChars = event is String ? event.length : 0;
         isConnecting = false;
         connectionAttempts = 1;
-        var msg = WoxWebsocketMsg.fromJson(jsonDecode(event));
+        final jsonDecodeStartUs = DateTime.now().microsecondsSinceEpoch;
+        final decoded = jsonDecode(event);
+        final jsonDecodeUs = DateTime.now().microsecondsSinceEpoch - jsonDecodeStartUs;
+        final fromJsonStartUs = DateTime.now().microsecondsSinceEpoch;
+        var msg = WoxWebsocketMsg.fromJson(decoded);
+        final fromJsonUs = DateTime.now().microsecondsSinceEpoch - fromJsonStartUs;
+        if (Env.isDev && msg.method == WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY.code) {
+          final backendToStreamMs = msg.sendTimestamp > 0 ? eventReceivedMs - msg.sendTimestamp : -1;
+          Logger.instance.debug(
+            msg.traceId,
+            "query_timing source=ui stage=ui_websocket_stream_receive traceId=${msg.traceId} method=${msg.method} payloadChars=$payloadChars backendToStreamMs=$backendToStreamMs jsonDecodeUs=$jsonDecodeUs fromJsonUs=$fromJsonUs streamParseUs=${DateTime.now().microsecondsSinceEpoch - eventReceivedUs}",
+          );
+        }
+        if (msg.sessionId.isNotEmpty && msg.sessionId != Env.sessionId && !msg.sessionId.startsWith(_coreSessionPrefix)) {
+          return;
+        }
+        if (msg.success == false) {
+          Logger.instance.error(msg.traceId, "Received error websocket message: ${msg.toJson()}");
+          return;
+        }
 
         if (_completers.containsKey(msg.requestId)) {
           _completers[msg.requestId]!.complete(msg);
           _completers.remove(msg.requestId);
-          return;
-        }
-
-        if (msg.success == false) {
-          Logger.instance.error(msg.traceId, "Received error websocket message: ${msg.toJson()}");
           return;
         }
 
@@ -168,9 +185,9 @@ class WoxWebsocketMsgUtil {
     if (msg.sessionId.isEmpty) {
       msg.sessionId = sessionId ?? Env.sessionId;
     }
-    final payload = jsonEncode(msg);
 
     if (msg.type == WoxMsgTypeEnum.WOX_MSG_TYPE_RESPONSE.code) {
+      final payload = jsonEncode(msg);
       _channel?.sink.add(payload);
       return;
     }
@@ -179,10 +196,12 @@ class WoxWebsocketMsgUtil {
     // because query result may return multiple times
     if (msg.method == WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY.code) {
       msg.sendTimestamp = DateTime.now().millisecondsSinceEpoch;
+      final payload = jsonEncode(msg);
       _channel?.sink.add(payload);
       return;
     }
 
+    final payload = jsonEncode(msg);
     Completer completer = Completer();
     _completers[msg.requestId] = completer;
     _channel?.sink.add(payload);

@@ -512,8 +512,8 @@ class WoxMultipleWindowStyle {
   }
 
   static int? _macOSWindowHandleOf(Object controller) {
-    if (controller is macos_windowing.WindowControllerMacOS) {
-      final handle = controller.windowHandle;
+    if (controller is macos_windowing.RegularWindowControllerMacOS) {
+      final handle = controller.getWindowHandle();
       if (handle.address != 0) {
         return handle.address;
       }
@@ -522,8 +522,8 @@ class WoxMultipleWindowStyle {
   }
 
   static ffi.Pointer<ffi.Void>? _windowHandleOf(Object controller) {
-    if (controller is win32_windowing.WindowControllerWin32) {
-      return controller.windowHandle;
+    if (controller is win32_windowing.RegularWindowControllerWin32) {
+      return controller.getWindowHandle();
     }
     return null;
   }

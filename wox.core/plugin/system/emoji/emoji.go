@@ -458,7 +458,7 @@ func (e *EmojiPlugin) createEmojiResult(ctx context.Context, entry EmojiData, is
 			{
 				Name:   "i18n:plugin_emoji_copy_large",
 				Icon:   common.NewWoxImageEmoji("🖼️"),
-				Hotkey: "ctrl+enter",
+				Hotkey: util.PrimaryHotkey("enter"),
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					img, err := getNativeEmojiImage(emoji, 200)
 					if err != nil {

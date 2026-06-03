@@ -11,8 +11,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdarg.h>
-#include <stdio.h>
 #include <wchar.h>
 #include <math.h>
 
@@ -92,65 +90,6 @@ typedef struct {
 } OverlayOptions;
 
 extern bool overlayClickCallbackCGO(char* name);
-
-static BOOL BuildTooltipLogPath(WCHAR *path, DWORD pathLen)
-{
-    DWORD n = GetEnvironmentVariableW(L"USERPROFILE", path, pathLen);
-    if (n == 0 || n >= pathLen)
-    {
-        DWORD t = GetTempPathW(pathLen, path);
-        if (t == 0 || t >= pathLen)
-            return FALSE;
-        wcscat_s(path, pathLen, L"wox");
-        CreateDirectoryW(path, NULL);
-        wcscat_s(path, pathLen, L"\\log");
-        CreateDirectoryW(path, NULL);
-        wcscat_s(path, pathLen, L"\\overlay_tooltip.log");
-        return TRUE;
-    }
-
-    wcscat_s(path, pathLen, L"\\.wox");
-    CreateDirectoryW(path, NULL);
-    wcscat_s(path, pathLen, L"\\log");
-    CreateDirectoryW(path, NULL);
-    wcscat_s(path, pathLen, L"\\overlay_tooltip.log");
-    return TRUE;
-}
-
-static void LogOverlayTooltip(const WCHAR *fmt, ...)
-{
-    WCHAR path[MAX_PATH];
-    if (!BuildTooltipLogPath(path, MAX_PATH))
-        return;
-
-    WCHAR msg[512];
-    va_list args;
-    va_start(args, fmt);
-    _vsnwprintf(msg, 511, fmt, args);
-    msg[511] = L'\0';
-    va_end(args);
-
-    WCHAR line[520];
-    size_t len = wcslen(msg);
-    if (len > 510)
-        len = 510;
-    wcsncpy_s(line, 520, msg, len);
-    line[len++] = L'\r';
-    line[len++] = L'\n';
-    line[len] = L'\0';
-
-    char utf8[2048];
-    int utf8Len = WideCharToMultiByte(CP_UTF8, 0, line, -1, utf8, (int)sizeof(utf8), NULL, NULL);
-    if (utf8Len <= 0)
-        return;
-
-    HANDLE h = CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (h == INVALID_HANDLE_VALUE)
-        return;
-    DWORD written = 0;
-    WriteFile(h, utf8, (DWORD)(utf8Len - 1), &written, NULL);
-    CloseHandle(h);
-}
 
 // -----------------------------------------------------------------------------
 // Accent / Acrylic
@@ -2462,9 +2401,6 @@ static void ShowTooltipWindow(OverlayWindow *ow, HWND owner, RECT anchorRect, co
     SetWindowPos(ow->tooltipHwnd, HWND_TOPMOST, x, y, width, height,
                  SWP_NOACTIVATE | SWP_SHOWWINDOW);
     InvalidateRect(ow->tooltipHwnd, NULL, TRUE);
-
-    LogOverlayTooltip(L"[WoxOverlayTooltip] show x=%d y=%d w=%d h=%d icon=(%d,%d,%d,%d) topmost=1",
-                      x, y, width, height, tl.x, tl.y, br.x, br.y);
 }
 
 static void HideTooltipWindow(OverlayWindow *ow)
@@ -2472,7 +2408,6 @@ static void HideTooltipWindow(OverlayWindow *ow)
     if (!ow || !ow->tooltipHwnd)
         return;
     ShowWindow(ow->tooltipHwnd, SW_HIDE);
-    LogOverlayTooltip(L"[WoxOverlayTooltip] hide");
 }
 
 static LRESULT CALLBACK TooltipWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -2603,7 +2538,6 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
         if (ow->tooltipHwnd)
         {
             SetWindowPos(ow->tooltipHwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-            LogOverlayTooltip(L"[WoxOverlayTooltip] created hwnd=%p text=%ls", ow->tooltipHwnd, ow->tooltip ? ow->tooltip : L"(null)");
         }
         return 0;
     }

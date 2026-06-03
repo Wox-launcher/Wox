@@ -11,7 +11,7 @@ part of 'wox_demo.dart';
 //              Each token keeps the color it had on the anatomy card.
 //   0.57–0.65  Three plugin-store results appear together.
 //   0.65–0.70  Brief pause — results fully visible.
-//   0.70–0.83  Footer Alt+J hotkey highlights (key-press visual).
+//   0.70–0.83  Footer primary-modifier J hotkey highlights (key-press visual).
 //   0.72–0.79  Action panel slides in from bottom-right (665ms rise).
 //   0.79–0.95  Action panel holds fully visible (1520ms ≈ 1.5s).
 //   0.95–0.99  Action panel fades out.
@@ -123,8 +123,8 @@ class _WoxQueryConceptDemoState extends State<WoxQueryConceptDemo> with SingleTi
   }
 
   // ── Action panel ──────────────────────────────────────────────────────────
-  // The footer hotkey label highlights when the user would press Alt+J, then
-  // the action panel slides in. This teaches the full query→action flow that
+  // The footer hotkey label highlights when the user would press the primary
+  // modifier + J, then the action panel slides in. This teaches the full query→action flow that
   // was previously shown on a separate onboarding step.
   //
   // Footer is pressed from 0.70–0.83: during the key-hold approach (0.70–0.72)
@@ -392,7 +392,7 @@ class _ConceptDemoWindow extends StatelessWidget {
   final double resultsOpacity;
   // Progress driving the action panel slide-in (0=hidden, 1=fully visible).
   final double actionPanelProgress;
-  // Whether the footer Alt+J key should render in its "pressed" highlight state.
+  // Whether the footer primary-modifier J key should render in its "pressed" highlight state.
   final bool isFooterHotkeyPressed;
   final Color triggerKeywordColor;
   final Color commandColor;

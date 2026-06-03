@@ -24,6 +24,7 @@ import (
 	"wox/util/filesearch"
 	"wox/util/nativecontextmenu"
 	"wox/util/shell"
+	"wox/util/timetracking"
 	"wox/util/window"
 
 	"github.com/fsnotify/fsnotify"
@@ -466,6 +467,7 @@ func (a *ApplicationPlugin) isCachedIconSourceFresh(ctx context.Context, cached 
 }
 
 func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
+	queryTimingStart := time.Now()
 	// clean cache and reindex apps
 	if query.Command == appCommandReindex {
 		reindexId := uuid.NewString()
@@ -505,17 +507,21 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) plugi
 	}
 
 	isLaunchpadQuery := query.Command == appCommandLaunchpad
+	queryStartedAt := util.GetSystemTimestamp()
 
 	// Query against a stable snapshot so reindexing or settings changes do not
 	// force extra work in the middle of a keystroke.
+	snapshotStart := time.Now()
 	entries, generation := a.getQueryEntriesSnapshot()
+	snapshotUs := time.Since(snapshotStart).Microseconds()
 	startedAt := time.Now().UnixNano()
-	queryStartedAt := util.GetSystemTimestamp()
 
 	// When the user grows the same search prefix, most fuzzy searches can reuse
 	// the previous matched subset. Pinyin has a separate guard inside
 	// getReusableQueryMatches because syllable-boundary typing is not monotonic.
+	reuseStart := time.Now()
 	cachedMatches, canReuseCachedMatches := a.getReusableQueryMatches(ctx, query, generation)
+	reuseUs := time.Since(reuseStart).Microseconds()
 
 	matchedIndexes := make([]int, 0, len(entries))
 	matchCapacity := len(entries)
@@ -523,19 +529,30 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) plugi
 		matchCapacity = appQueryResultLimitInGloablQuery
 	}
 	matches := make([]appQueryMatch, 0, matchCapacity)
+	var scannedEntries int
+	var resolveDisplayUs int64
+	var scoreMatchUs int64
+	var scoreCandidateCount int
 
+	matchStart := time.Now()
 	matchEntry := func(entryIndex int) {
+		scannedEntries++
 		entry := entries[entryIndex]
 		if isLaunchpadQuery && !a.shouldShowInLaunchpad(entry.info) {
 			return
 		}
 
+		resolveDisplayStart := time.Now()
 		displayName, displayPath, searchCandidates := a.resolveQueryEntryDisplay(ctx, entry)
+		resolveDisplayUs += time.Since(resolveDisplayStart).Microseconds()
 
 		isMatch := false
 		bestScore := int64(0)
 		for _, candidate := range searchCandidates {
+			scoreCandidateCount++
+			scoreMatchStart := time.Now()
 			matched, score := plugin.IsStringMatchScore(ctx, candidate, query.Search)
+			scoreMatchUs += time.Since(scoreMatchStart).Microseconds()
 			if !matched {
 				continue
 			}
@@ -572,9 +589,12 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) plugi
 			matchEntry(entryIndex)
 		}
 	}
+	matchUs := time.Since(matchStart).Microseconds()
 
 	limitGlobalQueryResults := query.IsGlobalQuery()
+	selectStart := time.Now()
 	selectedMatches, droppedDefaultIconCount := selectAppQueryMatches(matches, limitGlobalQueryResults)
+	selectUs := time.Since(selectStart).Microseconds()
 	if limitGlobalQueryResults && len(matches) > len(selectedMatches) {
 		a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf(
 			"app global query capped results: matched=%d returned=%d limit=%d dropped_default_icon=%d cost=%dms",
@@ -586,8 +606,19 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) plugi
 		))
 	}
 
+	buildResultsStart := time.Now()
+	var actionBuildUs int64
+	var iconSelectUs int64
+	var trackedStoreUs int64
+	var maxBuildResultUs int64
+	var maxBuildResultTitle string
+	var maxBuildActionUs int64
+	var maxBuildIconUs int64
+	var maxBuildTrackUs int64
 	results := make([]plugin.QueryResult, 0, len(selectedMatches))
 	for _, match := range selectedMatches {
+		resultBuildStart := time.Now()
+		var resultTrackStoreUs int64
 		entry := match.entry
 		resultID := uuid.NewString()
 		contextData := common.ContextData{
@@ -595,12 +626,19 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) plugi
 			"path": entry.info.Path,
 			"type": entry.info.Type,
 		}
+		actionBuildStart := time.Now()
 		actions := a.buildAppActions(entry.info, match.displayName, contextData)
+		resultActionBuildUs := time.Since(actionBuildStart).Microseconds()
+		actionBuildUs += resultActionBuildUs
+		iconSelectStart := time.Now()
+		icon := a.getQueryResultIcon(entry.info, isLaunchpadQuery)
+		resultIconSelectUs := time.Since(iconSelectStart).Microseconds()
+		iconSelectUs += resultIconSelectUs
 		result := plugin.QueryResult{
 			Id:       resultID,
 			Title:    match.displayName,
 			SubTitle: match.displayPath,
-			Icon:     a.getQueryResultIcon(entry.info, isLaunchpadQuery),
+			Icon:     icon,
 			Score:    match.score,
 			Actions:  actions,
 		}
@@ -609,20 +647,35 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) plugi
 		// The normal app query tracks visible rows so CPU/memory tails and terminate actions stay fresh,
 		// but those running-state updates make a Launchpad-style grid noisy and can resize cells while browsing.
 		if !isLaunchpadQuery {
+			trackedStoreStart := time.Now()
 			a.trackedResults.Store(result.Id, entry.info)
+			resultTrackStoreUs = time.Since(trackedStoreStart).Microseconds()
+			trackedStoreUs += resultTrackStoreUs
 		}
 
 		results = append(results, result)
+		resultBuildUs := time.Since(resultBuildStart).Microseconds()
+		if resultBuildUs > maxBuildResultUs {
+			maxBuildResultUs = resultBuildUs
+			maxBuildResultTitle = match.displayName
+			maxBuildActionUs = resultActionBuildUs
+			maxBuildIconUs = resultIconSelectUs
+			maxBuildTrackUs = resultTrackStoreUs
+		}
 	}
+	buildResultsUs := time.Since(buildResultsStart).Microseconds()
 
+	storeCacheStart := time.Now()
 	a.storeQueryMatches(query, appQuerySessionCache{
 		generation: generation,
 		search:     query.Search,
 		matches:    matchedIndexes,
 		startedAt:  startedAt,
 	})
+	storeCacheUs := time.Since(storeCacheStart).Microseconds()
 
 	response := plugin.NewQueryResponse(results)
+	layoutStart := time.Now()
 	if isLaunchpadQuery {
 		gridLayout := plugin.MetadataFeatureParamsGridLayout{
 			Columns:     7,
@@ -631,6 +684,40 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) plugi
 			ItemMargin:  4,
 		}
 		response.Layout = plugin.QueryLayout{GridLayout: &gridLayout}
+	}
+	layoutUs := time.Since(layoutStart).Microseconds()
+	queryTracker := timetracking.New("app_query_done")
+	if queryTracker.Enabled() {
+		queryTracker.SetRawString("queryId", query.Id)
+		queryTracker.SetString("search", query.Search)
+		queryTracker.SetInt("entries", len(entries))
+		queryTracker.SetInt("scanned", scannedEntries)
+		queryTracker.SetBool("reused", canReuseCachedMatches)
+		queryTracker.SetInt("cachedMatches", len(cachedMatches))
+		queryTracker.SetInt("matched", len(matches))
+		queryTracker.SetInt("selected", len(selectedMatches))
+		queryTracker.SetInt("droppedDefaultIcon", droppedDefaultIconCount)
+		queryTracker.SetInt64("snapshotUs", snapshotUs)
+		queryTracker.SetInt64("reuseUs", reuseUs)
+		queryTracker.SetInt64("matchUs", matchUs)
+		queryTracker.SetInt64("resolveDisplayUs", resolveDisplayUs)
+		queryTracker.SetInt64("scoreMatchUs", scoreMatchUs)
+		queryTracker.SetInt("scoreCandidates", scoreCandidateCount)
+		queryTracker.SetInt64("selectUs", selectUs)
+		queryTracker.SetInt64("buildResultsUs", buildResultsUs)
+		queryTracker.SetInt64("actionBuildUs", actionBuildUs)
+		queryTracker.SetInt64("iconSelectUs", iconSelectUs)
+		queryTracker.SetInt64("trackedStoreUs", trackedStoreUs)
+		queryTracker.SetInt64("storeCacheUs", storeCacheUs)
+		queryTracker.SetInt64("layoutUs", layoutUs)
+		queryTracker.SetInt64("maxBuildResultUs", maxBuildResultUs)
+		queryTracker.SetString("maxBuildResultTitle", maxBuildResultTitle)
+		queryTracker.SetInt64("maxBuildActionUs", maxBuildActionUs)
+		queryTracker.SetInt64("maxBuildIconUs", maxBuildIconUs)
+		queryTracker.SetInt64("maxBuildTrackUs", maxBuildTrackUs)
+		queryTracker.SetInt64("totalUs", time.Since(queryTimingStart).Microseconds())
+		queryTracker.SetInt64("totalMs", util.GetSystemTimestamp()-queryStartedAt)
+		queryTracker.Log(ctx)
 	}
 	return response
 }
@@ -762,7 +849,7 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 					a.api.Notify(ctx, err.Error())
 				}
 			},
-			Hotkey:                 "ctrl+m",
+			Hotkey:                 util.PrimaryHotkey("m"),
 			PreventHideAfterAction: true,
 		})
 	}
@@ -1889,6 +1976,10 @@ func (a *ApplicationPlugin) refreshRunningApps(ctx context.Context) {
 			toUpdate = append(toUpdate, updateItem{resultId, appInfo})
 		}
 
+		// Only populate fields changed by this refresh tick. GetUpdatableResult
+		// returns all current fields as non-nil, and passing that full payload back
+		// would repolish unchanged icons/actions on every CPU/memory refresh.
+		update := plugin.UpdatableResult{Id: resultId}
 		// Track if we need to update the UI
 		needsUpdate := false
 
@@ -1896,7 +1987,7 @@ func (a *ApplicationPlugin) refreshRunningApps(ctx context.Context) {
 		if appInfo.Pid > 0 {
 			// App is running - update CPU/memory tails
 			tails := a.getRunningProcessResult(appInfo)
-			updatableResult.Tails = &tails
+			update.Tails = &tails
 			needsUpdate = true // Always update when running (CPU/memory changes)
 
 			// Add terminate action if not exists
@@ -1911,9 +2002,13 @@ func (a *ApplicationPlugin) refreshRunningApps(ctx context.Context) {
 			}
 
 			if !hasTerminateAction {
+				actions := []plugin.QueryResultAction{}
+				if updatableResult.Actions != nil {
+					actions = append(actions, (*updatableResult.Actions)...)
+				}
 				// Capture current Pid for the closure
 				currentAppPid := appInfo.Pid
-				*updatableResult.Actions = append(*updatableResult.Actions, plugin.QueryResultAction{
+				actions = append(actions, plugin.QueryResultAction{
 					Name: "i18n:plugin_app_terminate",
 					Icon: common.TerminateAppIcon,
 					ContextData: common.ContextData{
@@ -1936,21 +2031,23 @@ func (a *ApplicationPlugin) refreshRunningApps(ctx context.Context) {
 						}
 					},
 				})
+				update.Actions = &actions
 			}
 		} else if pidChanged {
 			// App just stopped running - clear tails and remove terminate action
 			emptyTails := []plugin.QueryResultTail{}
-			updatableResult.Tails = &emptyTails
+			update.Tails = &emptyTails
 			needsUpdate = true
 
 			// Remove terminate action if exists
 			if updatableResult.Actions != nil {
 				originalLen := len(*updatableResult.Actions)
-				*updatableResult.Actions = lo.Filter(*updatableResult.Actions, func(action plugin.QueryResultAction, _ int) bool {
+				actions := lo.Filter(*updatableResult.Actions, func(action plugin.QueryResultAction, _ int) bool {
 					return action.ContextData["action"] != "terminate"
 				})
 				// Only mark as needing update if we actually removed an action
-				if len(*updatableResult.Actions) != originalLen {
+				if len(actions) != originalLen {
+					update.Actions = &actions
 					needsUpdate = true
 				}
 			}
@@ -1959,7 +2056,7 @@ func (a *ApplicationPlugin) refreshRunningApps(ctx context.Context) {
 		// Only push update to UI if something actually changed
 		if needsUpdate {
 			// If UpdateResult returns false, the result is no longer visible in UI
-			if !a.api.UpdateResult(ctx, *updatableResult) {
+			if !a.api.UpdateResult(ctx, update) {
 				toRemove = append(toRemove, resultId)
 			}
 		}

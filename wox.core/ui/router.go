@@ -800,11 +800,16 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 	settingDto.UiDensity = woxSetting.UiDensity.Get()
 	settingDto.ThemeId = woxSetting.ThemeId.Get()
 	settingDto.AppFontFamily = woxSetting.AppFontFamily.Get()
+	settingDto.EnableQueryCompletionHint = woxSetting.EnableQueryCompletionHint.Get()
 	settingDto.EnableGlance = woxSetting.EnableGlance.Get()
 	settingDto.PrimaryGlance = woxSetting.PrimaryGlance.Get()
 	settingDto.HideGlanceIcon = woxSetting.HideGlanceIcon.Get()
 	settingDto.ShowScoreTail = woxSetting.ShowScoreTail.Get()
 	settingDto.ShowPerformanceTail = woxSetting.ShowPerformanceTail.Get()
+	settingDto.ShowPerformanceTailBatch = woxSetting.ShowPerformanceTailBatch.Get()
+	settingDto.ShowPerformanceTailPluginQuery = woxSetting.ShowPerformanceTailPluginQuery.Get()
+	settingDto.ShowPerformanceTailBackendPrepared = woxSetting.ShowPerformanceTailBackendPrepared.Get()
+	settingDto.ShowPerformanceTailUiReceived = woxSetting.ShowPerformanceTailUiReceived.Get()
 
 	writeSuccessResponse(w, settingDto)
 }
@@ -1054,6 +1059,8 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 	case "AppFontFamily":
 		vs = font.NormalizeConfiguredFontFamily(vs, font.GetSystemFontFamilies(ctx))
 		woxSetting.AppFontFamily.Set(vs)
+	case "EnableQueryCompletionHint":
+		woxSetting.EnableQueryCompletionHint.Set(vb)
 	case "EnableGlance":
 		woxSetting.EnableGlance.Set(vb)
 	case "PrimaryGlance":
@@ -1078,6 +1085,14 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 		// dev builds. Keeping the check in the backend prevents hidden UI tabs
 		// from being the only guard for noisy query-result tags.
 		woxSetting.ShowPerformanceTail.Set(vb)
+	case "ShowPerformanceTailBatch":
+		woxSetting.ShowPerformanceTailBatch.Set(vb)
+	case "ShowPerformanceTailPluginQuery":
+		woxSetting.ShowPerformanceTailPluginQuery.Set(vb)
+	case "ShowPerformanceTailBackendPrepared":
+		woxSetting.ShowPerformanceTailBackendPrepared.Set(vb)
+	case "ShowPerformanceTailUiReceived":
+		woxSetting.ShowPerformanceTailUiReceived.Set(vb)
 	case "EnableAnonymousUsageStats":
 		woxSetting.EnableAnonymousUsageStats.Set(vb)
 		// When disabled, delete telemetry state to stop tracking
@@ -1461,7 +1476,7 @@ func handleLogClear(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleLogOpen(w http.ResponseWriter, r *http.Request) {
-	logFile := filepath.Join(util.GetLocation().GetLogDirectory(), "log")
+	logFile := util.GetLogger().CurrentLogPath()
 	file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		writeErrorResponse(w, err.Error())

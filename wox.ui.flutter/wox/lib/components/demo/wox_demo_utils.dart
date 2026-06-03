@@ -14,7 +14,7 @@ String _demoActionPanelHotkey() {
   // onboarding's configured Action Panel hotkey. Using the platform default
   // keeps the launcher toolbar visible and truthful enough for feature previews
   // while avoiding a dependency on the onboarding controller.
-  return _formatDemoHotkey('', fallback: Platform.isMacOS ? 'cmd+j' : 'alt+j');
+  return _formatDemoHotkey('', fallback: WoxPlatformHotkeyUtil.primaryHotkey('j'));
 }
 
 double _demoDesktopHintTopInset() {

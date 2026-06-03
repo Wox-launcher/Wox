@@ -10,6 +10,7 @@ import 'package:uuid/v4.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_query.dart';
 import 'package:wox/enums/wox_query_type_enum.dart';
+import 'package:wox/utils/wox_platform_hotkey_util.dart';
 
 import 'smoke_test_helper.dart';
 
@@ -60,7 +61,7 @@ void registerLauncherRefinementSmokeTests() {
       await tester.pump(const Duration(milliseconds: 100));
       expect(find.byType(WoxQueryRefinementBarView), findsNothing);
 
-      final refinementHotkey = WoxHotkey.parseHotkeyFromString('alt+t')!.normalHotkey!;
+      final refinementHotkey = WoxHotkey.parseHotkeyFromString(WoxPlatformHotkeyUtil.primaryHotkey('t'))!.normalHotkey!;
       expect(controller.executeQueryRefinementHotkey(const UuidV4().generate(), refinementHotkey), isTrue);
       expect(controller.currentQuery.value.queryRefinements['type'], equals('text'));
       expect(controller.getQueryRefinementAffordanceLabel(), equals('Text'));
@@ -87,7 +88,7 @@ List<WoxQueryRefinement> _buildSyntheticRefinements() {
       title: 'Type',
       type: 'singleSelect',
       defaultValue: const ['all'],
-      hotkey: 'alt+t',
+      hotkey: WoxPlatformHotkeyUtil.primaryHotkey('t'),
       persist: false,
       options: [
         WoxQueryRefinementOption(value: 'all', title: 'All', icon: emptyIcon, keywords: const [], count: null),

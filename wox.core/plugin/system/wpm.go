@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/user"
 	"path"
-	"runtime"
 	"sort"
 	"strings"
 	texttmpl "text/template"
@@ -406,10 +405,7 @@ func (w *WPMPlugin) buildInstallStatusRefinement() plugin.QueryRefinement {
 }
 
 func wpmInstallStatusRefinementHotkey() string {
-	if runtime.GOOS == "darwin" {
-		return "cmd+s"
-	}
-	return "alt+s"
+	return util.PrimaryHotkey("s")
 }
 
 func selectedWPMInstallStatus(query plugin.Query) string {
