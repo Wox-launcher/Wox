@@ -63,8 +63,12 @@ type WoxSetting struct {
 	// Development-only debug display switches. Score and performance tails were
 	// previously hard-coded around dev-only code paths, so storing the switches
 	// here gives the settings UI and backend rendering one shared source of truth.
-	ShowScoreTail       *WoxSettingValue[bool]
-	ShowPerformanceTail *WoxSettingValue[bool]
+	ShowScoreTail                      *WoxSettingValue[bool]
+	ShowPerformanceTail                *WoxSettingValue[bool]
+	ShowPerformanceTailBatch           *WoxSettingValue[bool]
+	ShowPerformanceTailPluginQuery     *WoxSettingValue[bool]
+	ShowPerformanceTailBackendPrepared *WoxSettingValue[bool]
+	ShowPerformanceTailUiReceived      *WoxSettingValue[bool]
 
 	// Window position for last location mode
 	LastWindowX *WoxSettingValue[int]
@@ -265,36 +269,40 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 		LangCode: NewWoxSettingValueWithValidator(store, "LangCode", defaultLangCode, func(code i18n.LangCode) bool {
 			return i18n.IsSupportedLangCode(string(code))
 		}),
-		LaunchMode:                NewWoxSettingValue(store, "LaunchMode", LaunchModeContinue),
-		StartPage:                 NewWoxSettingValue(store, "StartPage", StartPageMRU),
-		ShowPosition:              NewWoxSettingValue(store, "ShowPosition", PositionTypeMouseScreen),
-		AppWidth:                  NewWoxSettingValue(store, "AppWidth", 750),
-		MaxResultCount:            NewWoxSettingValue(store, "MaxResultCount", 8),
-		UiDensity:                 NewWoxSettingValueWithValidator(store, "UiDensity", UiDensityNormal, IsValidUiDensity),
-		ThemeId:                   NewWoxSettingValue(store, "ThemeId", DefaultThemeId),
-		AppFontFamily:             NewPlatformValue(store, "AppFontFamily", "", "", ""),
-		EnableQueryCompletionHint: NewWoxSettingValue(store, "EnableQueryCompletionHint", false),
-		EnableGlance:              NewWoxSettingValue(store, "EnableGlance", false),
-		PrimaryGlance:             NewWoxSettingValue(store, "PrimaryGlance", GlanceRef{PluginId: "e3ad9f18-fbbe-4f22-8c1b-8274c751f6e6", GlanceId: "time"}),
-		HideGlanceIcon:            NewWoxSettingValue(store, "HideGlanceIcon", false),
-		ShowScoreTail:             NewWoxSettingValue(store, "ShowScoreTail", false),
-		ShowPerformanceTail:       NewWoxSettingValue(store, "ShowPerformanceTail", false),
-		EnableAutostart:           NewPlatformValue(store, "EnableAutostart", false, false, false),
-		HttpProxyEnabled:          NewPlatformValue(store, "HttpProxyEnabled", false, false, false),
-		HttpProxyUrl:              NewPlatformValue(store, "HttpProxyUrl", "", "", ""),
-		CustomPythonPath:          NewPlatformValue(store, "CustomPythonPath", "", "", ""),
-		CustomNodejsPath:          NewPlatformValue(store, "CustomNodejsPath", "", "", ""),
-		EnableAutoBackup:          NewWoxSettingValue(store, "EnableAutoBackup", true),
-		EnableAutoUpdate:          NewWoxSettingValue(store, "EnableAutoUpdate", true),
-		LastWindowX:               NewWoxSettingValue(store, "LastWindowX", -1),
-		LastWindowY:               NewWoxSettingValue(store, "LastWindowY", -1),
-		QueryHotkeys:              NewPlatformValue(store, "QueryHotkeys", []QueryHotkey{}, []QueryHotkey{}, []QueryHotkey{}),
-		QueryShortcuts:            NewWoxSettingValue(store, "QueryShortcuts", []QueryShortcut{}),
-		TrayQueries:               NewWoxSettingValue(store, "TrayQueries", []TrayQuery{}),
-		AIProviders:               NewWoxSettingValue(store, "AIProviders", []AIProvider{}),
-		QueryHistories:            NewWoxSettingValue(store, "QueryHistories", []QueryHistory{}),
-		PinedResults:              NewWoxSettingValue(store, "PinedResults", util.NewHashMap[ResultHash, bool]()),
-		ActionedResults:           NewWoxSettingValue(store, "ActionedResults", util.NewHashMap[ResultHash, []ActionedResult]()),
-		EnableAnonymousUsageStats: NewWoxSettingValue(store, "EnableAnonymousUsageStats", true),
+		LaunchMode:                         NewWoxSettingValue(store, "LaunchMode", LaunchModeContinue),
+		StartPage:                          NewWoxSettingValue(store, "StartPage", StartPageMRU),
+		ShowPosition:                       NewWoxSettingValue(store, "ShowPosition", PositionTypeMouseScreen),
+		AppWidth:                           NewWoxSettingValue(store, "AppWidth", 750),
+		MaxResultCount:                     NewWoxSettingValue(store, "MaxResultCount", 8),
+		UiDensity:                          NewWoxSettingValueWithValidator(store, "UiDensity", UiDensityNormal, IsValidUiDensity),
+		ThemeId:                            NewWoxSettingValue(store, "ThemeId", DefaultThemeId),
+		AppFontFamily:                      NewPlatformValue(store, "AppFontFamily", "", "", ""),
+		EnableQueryCompletionHint:          NewWoxSettingValue(store, "EnableQueryCompletionHint", false),
+		EnableGlance:                       NewWoxSettingValue(store, "EnableGlance", false),
+		PrimaryGlance:                      NewWoxSettingValue(store, "PrimaryGlance", GlanceRef{PluginId: "e3ad9f18-fbbe-4f22-8c1b-8274c751f6e6", GlanceId: "time"}),
+		HideGlanceIcon:                     NewWoxSettingValue(store, "HideGlanceIcon", false),
+		ShowScoreTail:                      NewWoxSettingValue(store, "ShowScoreTail", false),
+		ShowPerformanceTail:                NewWoxSettingValue(store, "ShowPerformanceTail", false),
+		ShowPerformanceTailBatch:           NewWoxSettingValue(store, "ShowPerformanceTailBatch", true),
+		ShowPerformanceTailPluginQuery:     NewWoxSettingValue(store, "ShowPerformanceTailPluginQuery", true),
+		ShowPerformanceTailBackendPrepared: NewWoxSettingValue(store, "ShowPerformanceTailBackendPrepared", true),
+		ShowPerformanceTailUiReceived:      NewWoxSettingValue(store, "ShowPerformanceTailUiReceived", true),
+		EnableAutostart:                    NewPlatformValue(store, "EnableAutostart", false, false, false),
+		HttpProxyEnabled:                   NewPlatformValue(store, "HttpProxyEnabled", false, false, false),
+		HttpProxyUrl:                       NewPlatformValue(store, "HttpProxyUrl", "", "", ""),
+		CustomPythonPath:                   NewPlatformValue(store, "CustomPythonPath", "", "", ""),
+		CustomNodejsPath:                   NewPlatformValue(store, "CustomNodejsPath", "", "", ""),
+		EnableAutoBackup:                   NewWoxSettingValue(store, "EnableAutoBackup", true),
+		EnableAutoUpdate:                   NewWoxSettingValue(store, "EnableAutoUpdate", true),
+		LastWindowX:                        NewWoxSettingValue(store, "LastWindowX", -1),
+		LastWindowY:                        NewWoxSettingValue(store, "LastWindowY", -1),
+		QueryHotkeys:                       NewPlatformValue(store, "QueryHotkeys", []QueryHotkey{}, []QueryHotkey{}, []QueryHotkey{}),
+		QueryShortcuts:                     NewWoxSettingValue(store, "QueryShortcuts", []QueryShortcut{}),
+		TrayQueries:                        NewWoxSettingValue(store, "TrayQueries", []TrayQuery{}),
+		AIProviders:                        NewWoxSettingValue(store, "AIProviders", []AIProvider{}),
+		QueryHistories:                     NewWoxSettingValue(store, "QueryHistories", []QueryHistory{}),
+		PinedResults:                       NewWoxSettingValue(store, "PinedResults", util.NewHashMap[ResultHash, bool]()),
+		ActionedResults:                    NewWoxSettingValue(store, "ActionedResults", util.NewHashMap[ResultHash, []ActionedResult]()),
+		EnableAnonymousUsageStats:          NewWoxSettingValue(store, "EnableAnonymousUsageStats", true),
 	}
 }

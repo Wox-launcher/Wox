@@ -41,6 +41,62 @@ class WoxSettingDebugView extends WoxSettingBaseView {
               },
             ),
           ),
+          formField(
+            settingKey: "ShowPerformanceTailBatch",
+            label: controller.tr("ui_debug_show_performance_tail_batch"),
+            tips: controller.tr("ui_debug_show_performance_tail_batch_tips"),
+            child: WoxSwitch(
+              value: controller.woxSetting.value.showPerformanceTailBatch,
+              onChanged:
+                  controller.woxSetting.value.showPerformanceTail
+                      ? (bool value) {
+                        controller.updateConfig("ShowPerformanceTailBatch", value.toString());
+                      }
+                      : null,
+            ),
+          ),
+          formField(
+            settingKey: "ShowPerformanceTailPluginQuery",
+            label: controller.tr("ui_debug_show_performance_tail_plugin_query"),
+            tips: controller.tr("ui_debug_show_performance_tail_plugin_query_tips"),
+            child: WoxSwitch(
+              value: controller.woxSetting.value.showPerformanceTailPluginQuery,
+              onChanged:
+                  controller.woxSetting.value.showPerformanceTail
+                      ? (bool value) {
+                        controller.updateConfig("ShowPerformanceTailPluginQuery", value.toString());
+                      }
+                      : null,
+            ),
+          ),
+          formField(
+            settingKey: "ShowPerformanceTailBackendPrepared",
+            label: controller.tr("ui_debug_show_performance_tail_backend_prepared"),
+            tips: controller.tr("ui_debug_show_performance_tail_backend_prepared_tips"),
+            child: WoxSwitch(
+              value: controller.woxSetting.value.showPerformanceTailBackendPrepared,
+              onChanged:
+                  controller.woxSetting.value.showPerformanceTail
+                      ? (bool value) {
+                        controller.updateConfig("ShowPerformanceTailBackendPrepared", value.toString());
+                      }
+                      : null,
+            ),
+          ),
+          formField(
+            settingKey: "ShowPerformanceTailUiReceived",
+            label: controller.tr("ui_debug_show_performance_tail_ui_received"),
+            tips: controller.tr("ui_debug_show_performance_tail_ui_received_tips"),
+            child: WoxSwitch(
+              value: controller.woxSetting.value.showPerformanceTailUiReceived,
+              onChanged:
+                  controller.woxSetting.value.showPerformanceTail
+                      ? (bool value) {
+                        controller.updateConfig("ShowPerformanceTailUiReceived", value.toString());
+                      }
+                      : null,
+            ),
+          ),
         ],
       );
     });

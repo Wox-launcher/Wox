@@ -391,10 +391,11 @@ type QueryResultUI struct {
 }
 
 type QueryResponseUI struct {
-	Results     []QueryResultUI
-	Refinements []QueryRefinement
-	Layout      QueryLayout
-	Context     QueryContext
+	Results             []QueryResultUI
+	Refinements         []QueryRefinement
+	Layout              QueryLayout
+	Context             QueryContext
+	QueryStartTimestamp int64 // end-to-end query start timestamp, preferably from Flutter request send time
 }
 
 // PushResultsPayload is used to push additional results to UI for a query.
@@ -467,7 +468,10 @@ type QueryResultCache struct {
 	Layout         QueryLayout // query layout used when polishing this result, so later updates keep the same surface sizing
 	// FlushBatch is the debouncer batch that first sent this result in a visible response.
 	FlushBatch int
-	// QueryElapsed is the elapsed time when queryRun received the plugin response.
+	// BatchQueueElapsed is the elapsed time when queryRun put this result into the debouncer queue.
+	BatchQueueElapsed    int64
+	BatchQueueElapsedSet bool
+	// QueryElapsed is the elapsed time when queryRun received the plugin response, measured from the end-to-end query start.
 	QueryElapsed    int64
 	QueryElapsedSet bool
 	// PluginQueryElapsed is only the raw Plugin.Query duration, excluding manager polish and UI conversion.

@@ -138,16 +138,17 @@ class WoxWebsocketMsgUtil {
   // send message to websocket server
   Future<dynamic> sendMessage(WoxWebsocketMsg msg) async {
     msg.sessionId = Env.sessionId;
-    final payload = jsonEncode(msg);
 
     // if query message, send it directly, no need to wait for response
     // because query result may return multiple times
     if (msg.method == WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY.code) {
       msg.sendTimestamp = DateTime.now().millisecondsSinceEpoch;
+      final payload = jsonEncode(msg);
       _channel?.sink.add(payload);
       return;
     }
 
+    final payload = jsonEncode(msg);
     Completer completer = Completer();
     _completers[msg.requestId] = completer;
     _channel?.sink.add(payload);

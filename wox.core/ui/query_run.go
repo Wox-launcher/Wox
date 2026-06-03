@@ -29,7 +29,8 @@ type queryRun struct {
 	query plugin.Query
 	// ownerPlugin is set for plugin-scoped queries and nil for global queries.
 	ownerPlugin *plugin.Instance
-	// startTimestamp records the query start time for elapsed metrics and debug tails.
+	// startTimestamp records the end-to-end query start time for elapsed metrics and debug tails.
+	// Prefer the Flutter request send timestamp; fall back to backend start for non-UI callers.
 	startTimestamp int64
 	// firstFlushDelayMs records the first visible flush delay chosen for this query.
 	firstFlushDelayMs int64
@@ -69,12 +70,18 @@ func newQueryRun(ctx context.Context, request WebsocketMsg, query plugin.Query, 
 }
 
 func (r *queryRun) start() {
-	r.startTimestamp = util.GetSystemTimestamp()
+	backendStartTimestamp := util.GetSystemTimestamp()
+	r.startTimestamp = r.request.SendTimestamp
+	if r.startTimestamp <= 0 {
+		r.startTimestamp = backendStartTimestamp
+	}
 	r.firstFlushDelayMs = plugin.GetPluginManager().GetQueryFirstFlushDelayMs(r.query)
 	logger.Info(r.ctx, fmt.Sprintf("query %s: %s, first flush delay: %d ms", r.query.Type, r.query.String(), r.firstFlushDelayMs))
 	if tracker := timetracking.New("query_run_start"); tracker.Enabled() {
 		tracker.SetRawString("queryId", r.queryId)
 		tracker.SetRawString("query", r.query.String())
+		tracker.SetBool("usesClientStartTimestamp", r.request.SendTimestamp > 0)
+		tracker.SetInt64("clientToBackendStartMs", backendStartTimestamp-r.startTimestamp)
 		tracker.SetInt64("firstFlushDelayMs", r.firstFlushDelayMs)
 		tracker.Log(r.ctx)
 	}
@@ -172,16 +179,18 @@ func (r *queryRun) addResponse(response plugin.QueryResponseUI) {
 		response.Results[index].QueryId = r.queryId
 	}
 	r.recordAcceptedResultIds(response.Results)
+	addStart := util.GetSystemTimestamp()
+	batchQueueElapsed := addStart - r.startTimestamp
 	recordStart := util.GetSystemTimestamp()
-	plugin.GetPluginManager().RecordQueryResultQueryElapsed(r.sessionId, r.queryId, response.Results, receivedElapsed)
+	plugin.GetPluginManager().RecordQueryResultQueryElapsed(r.sessionId, r.queryId, response.Results, receivedElapsed, batchQueueElapsed)
 	if tracker := timetracking.New("record_query_elapsed"); tracker.Enabled() {
 		tracker.SetRawString("queryId", r.queryId)
 		tracker.SetInt("resultCount", len(response.Results))
+		tracker.SetInt64("batchQueueElapsedMs", batchQueueElapsed)
 		tracker.SetInt64("costMs", util.GetSystemTimestamp()-recordStart)
 		tracker.Log(r.ctx)
 	}
 	r.totalResultCount += len(response.Results)
-	addStart := util.GetSystemTimestamp()
 	r.resultDebouncer.Add(r.ctx, response.Results)
 	if tracker := timetracking.New("debouncer_add"); tracker.Enabled() {
 		tracker.SetRawString("queryId", r.queryId)
@@ -326,22 +335,25 @@ func (r *queryRun) flush(results []plugin.QueryResultUI, reason string) {
 	}
 	responseSnapshot := snapshot
 	if util.IsDev() {
+		backendPreparedElapsedMs := util.GetSystemTimestamp() - r.startTimestamp
 		debugTailStart := util.GetSystemTimestamp()
-		responseSnapshot = appendQueryDebugTails(r.ctx, r.sessionId, r.queryId, snapshot, r.firstVisibleFlushElapsedMs)
+		responseSnapshot = appendQueryDebugTails(r.ctx, r.sessionId, r.queryId, snapshot, r.firstVisibleFlushElapsedMs, backendPreparedElapsedMs)
 		if tracker := timetracking.New("append_debug_tails"); tracker.Enabled() {
 			tracker.SetRawString("queryId", r.queryId)
 			tracker.SetInt("snapshotCount", len(snapshot))
 			tracker.SetInt("responseCount", len(responseSnapshot))
+			tracker.SetInt64("backendPreparedElapsedMs", backendPreparedElapsedMs)
 			tracker.SetInt64("costMs", util.GetSystemTimestamp()-debugTailStart)
 			tracker.Log(r.ctx)
 		}
 	}
 	sendStart := util.GetSystemTimestamp()
 	responseUIQueryResponse(r.ctx, r.request, r.queryId, plugin.QueryResponseUI{
-		Results:     responseSnapshot,
-		Refinements: r.latestResponse.Refinements,
-		Layout:      r.latestResponse.Layout,
-		Context:     r.latestResponse.Context,
+		Results:             responseSnapshot,
+		Refinements:         r.latestResponse.Refinements,
+		Layout:              r.latestResponse.Layout,
+		Context:             r.latestResponse.Context,
+		QueryStartTimestamp: r.startTimestamp,
 	}, isFinal)
 	if tracker := timetracking.New("send_ui_response"); tracker.Enabled() {
 		tracker.SetRawString("queryId", r.queryId)

@@ -40,13 +40,14 @@ type WebsocketMsg struct {
 }
 
 type QueryResponse struct {
-	QueryId        string                     `json:"QueryId"`
-	Results        []plugin.QueryResultUI     `json:"Results"`
-	Refinements    []plugin.QueryRefinement   `json:"Refinements"`
-	Layout         plugin.QueryLayout         `json:"Layout"`
-	Context        plugin.QueryContext        `json:"Context"`
-	IsFinal        bool                       `json:"IsFinal"` // indicates if this is the final batch of results
-	ActionIconRefs map[string]common.WoxImage `json:"ActionIconRefs,omitempty"`
+	QueryId             string                     `json:"QueryId"`
+	Results             []plugin.QueryResultUI     `json:"Results"`
+	Refinements         []plugin.QueryRefinement   `json:"Refinements"`
+	Layout              plugin.QueryLayout         `json:"Layout"`
+	Context             plugin.QueryContext        `json:"Context"`
+	IsFinal             bool                       `json:"IsFinal"` // indicates if this is the final batch of results
+	QueryStartTimestamp int64                      `json:"QueryStartTimestamp,omitempty"`
+	ActionIconRefs      map[string]common.WoxImage `json:"ActionIconRefs,omitempty"`
 }
 
 const (
@@ -288,12 +289,13 @@ func responseUIQueryResponse(ctx context.Context, request WebsocketMsg, queryId 
 	payloadStart := util.GetSystemTimestamp()
 	sendTimestamp := util.GetSystemTimestamp()
 	queryPayload := QueryResponse{
-		QueryId:     queryId,
-		Results:     response.Results,
-		Refinements: response.Refinements,
-		Layout:      response.Layout,
-		Context:     response.Context,
-		IsFinal:     isFinal,
+		QueryId:             queryId,
+		Results:             response.Results,
+		Refinements:         response.Refinements,
+		Layout:              response.Layout,
+		Context:             response.Context,
+		IsFinal:             isFinal,
+		QueryStartTimestamp: response.QueryStartTimestamp,
 	}
 	queryPayload = compactQueryActionIcons(queryPayload)
 	if tracker := timetracking.New("response_ui_query_payload"); tracker.Enabled() {

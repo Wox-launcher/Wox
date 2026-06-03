@@ -796,12 +796,18 @@ func queryPipelinePluginLabel(ctx context.Context, pluginInstance *plugin.Instan
 	return fmt.Sprintf("%s(%s)", name, pluginInstance.Metadata.Id)
 }
 
-func appendQueryDebugTails(ctx context.Context, sessionId string, queryId string, snapshot []plugin.QueryResultUI, firstVisibleFlushElapsedMs int64) []plugin.QueryResultUI {
+func appendQueryDebugTails(ctx context.Context, sessionId string, queryId string, snapshot []plugin.QueryResultUI, firstVisibleFlushElapsedMs int64, backendPreparedElapsedMs int64) []plugin.QueryResultUI {
 	if len(snapshot) == 0 {
 		return snapshot
 	}
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	if !woxSetting.ShowPerformanceTail.Get() {
+		return snapshot
+	}
+	showBatchTail := woxSetting.ShowPerformanceTailBatch.Get()
+	showPluginQueryTail := woxSetting.ShowPerformanceTailPluginQuery.Get()
+	showBackendPreparedTail := woxSetting.ShowPerformanceTailBackendPrepared.Get()
+	if !showBatchTail && !showPluginQueryTail && !showBackendPreparedTail {
 		return snapshot
 	}
 
@@ -814,20 +820,17 @@ func appendQueryDebugTails(ctx context.Context, sessionId string, queryId string
 
 		resultCopy := result
 		resultCopy.Tails = append([]plugin.QueryResultTail{}, result.Tails...)
-		if batch, queryElapsed, pluginQueryElapsed, pluginQueryElapsedSet, ok := plugin.GetPluginManager().GetQueryResultDebugInfo(sessionId, queryId, result.Id); ok {
-			category := plugin.QueryResultTailTextCategoryDefault
-			if queryElapsed > 10 {
-				category = plugin.QueryResultTailTextCategoryWarning
-			}
-			if queryElapsed > 20 {
-				category = plugin.QueryResultTailTextCategoryDanger
+		if batch, _, batchQueueElapsed, batchQueueElapsedSet, pluginQueryElapsed, pluginQueryElapsedSet, ok := plugin.GetPluginManager().GetQueryResultDebugInfo(sessionId, queryId, result.Id); ok {
+			if showBatchTail {
+				batchTail := plugin.NewQueryResultTailText(fmt.Sprintf("B%d", batch))
+				batchTail.Tooltip = fmt.Sprintf("First flush: %dms", firstVisibleFlushElapsedMs)
+				if batchQueueElapsedSet {
+					batchTail.Tooltip = fmt.Sprintf("First flush: %dms\nQueued for batch: %dms", firstVisibleFlushElapsedMs, batchQueueElapsed)
+				}
+				resultCopy.Tails = append(resultCopy.Tails, batchTail)
 			}
 
-			batchTail := plugin.NewQueryResultTailText(fmt.Sprintf("B%d", batch))
-			batchTail.Tooltip = fmt.Sprintf("First flush: %dms", firstVisibleFlushElapsedMs)
-			resultCopy.Tails = append(resultCopy.Tails, batchTail)
-
-			if pluginQueryElapsedSet {
+			if showPluginQueryTail && pluginQueryElapsedSet {
 				pluginQueryCategory := plugin.QueryResultTailTextCategoryDefault
 				if pluginQueryElapsed > 10 {
 					pluginQueryCategory = plugin.QueryResultTailTextCategoryWarning
@@ -841,9 +844,19 @@ func appendQueryDebugTails(ctx context.Context, sessionId string, queryId string
 				resultCopy.Tails = append(resultCopy.Tails, pluginQueryTail)
 			}
 
-			elapsedTail := plugin.NewQueryResultTailTextWithCategory(fmt.Sprintf("%dms", queryElapsed), category)
-			elapsedTail.Tooltip = "Response received elapsed since query start"
-			resultCopy.Tails = append(resultCopy.Tails, elapsedTail)
+			if showBackendPreparedTail {
+				backendPreparedCategory := plugin.QueryResultTailTextCategoryDefault
+				if backendPreparedElapsedMs > 10 {
+					backendPreparedCategory = plugin.QueryResultTailTextCategoryWarning
+				}
+				if backendPreparedElapsedMs > 20 {
+					backendPreparedCategory = plugin.QueryResultTailTextCategoryDanger
+				}
+
+				elapsedTail := plugin.NewQueryResultTailTextWithCategory(fmt.Sprintf("%dms", backendPreparedElapsedMs), backendPreparedCategory)
+				elapsedTail.Tooltip = "Backend ready to send elapsed since Flutter query request"
+				resultCopy.Tails = append(resultCopy.Tails, elapsedTail)
+			}
 		}
 		annotated[i] = resultCopy
 	}

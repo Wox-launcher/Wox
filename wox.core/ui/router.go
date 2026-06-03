@@ -806,6 +806,10 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 	settingDto.HideGlanceIcon = woxSetting.HideGlanceIcon.Get()
 	settingDto.ShowScoreTail = woxSetting.ShowScoreTail.Get()
 	settingDto.ShowPerformanceTail = woxSetting.ShowPerformanceTail.Get()
+	settingDto.ShowPerformanceTailBatch = woxSetting.ShowPerformanceTailBatch.Get()
+	settingDto.ShowPerformanceTailPluginQuery = woxSetting.ShowPerformanceTailPluginQuery.Get()
+	settingDto.ShowPerformanceTailBackendPrepared = woxSetting.ShowPerformanceTailBackendPrepared.Get()
+	settingDto.ShowPerformanceTailUiReceived = woxSetting.ShowPerformanceTailUiReceived.Get()
 
 	writeSuccessResponse(w, settingDto)
 }
@@ -1081,6 +1085,14 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 		// dev builds. Keeping the check in the backend prevents hidden UI tabs
 		// from being the only guard for noisy query-result tags.
 		woxSetting.ShowPerformanceTail.Set(vb)
+	case "ShowPerformanceTailBatch":
+		woxSetting.ShowPerformanceTailBatch.Set(vb)
+	case "ShowPerformanceTailPluginQuery":
+		woxSetting.ShowPerformanceTailPluginQuery.Set(vb)
+	case "ShowPerformanceTailBackendPrepared":
+		woxSetting.ShowPerformanceTailBackendPrepared.Set(vb)
+	case "ShowPerformanceTailUiReceived":
+		woxSetting.ShowPerformanceTailUiReceived.Set(vb)
 	case "EnableAnonymousUsageStats":
 		woxSetting.EnableAnonymousUsageStats.Set(vb)
 		// When disabled, delete telemetry state to stop tracking

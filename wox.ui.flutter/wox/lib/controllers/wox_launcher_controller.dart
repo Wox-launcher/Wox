@@ -72,7 +72,7 @@ class WoxLauncherController extends GetxController {
   static const int _slowLauncherActivationWarningThresholdMs = 50;
   static const int _onReceivedWarningThresholdMs = 50;
   static const int _onReceivedDangerThresholdMs = 100;
-  static const String _onReceivedTailTooltip = "onReceivedQueryResults elapsed since query start";
+  static const String _onReceivedTailTooltip = "onReceivedQueryResults elapsed since Flutter query request";
   static const String _queryActionIconRefType = "iconref";
   static const String localActionTogglePreviewFullscreenId = "__local_toggle_preview_fullscreen__";
   static const String localActionPreviewSearchId = "__local_preview_search__";
@@ -234,9 +234,9 @@ class WoxLauncherController extends GetxController {
 
   // Performance metrics: Map<traceId, startTime>
   final Map<String, int> queryStartTimeMap = {};
-  // UI-only onReceivedQueryResults metric, kept so later backend batches can
-  // reattach the same local tail when replacing the visible result list.
-  final Map<String, int> queryOnReceivedElapsedByQueryId = {};
+  // UI-only onReceivedQueryResults metric per result, kept so later backend
+  // snapshots can preserve each row's first UI receive boundary.
+  final Map<String, int> queryOnReceivedElapsedByResultKey = {};
 
   /// The icon at end of query box.
   final queryIcon = QueryIconInfo.empty().obs;
@@ -1271,7 +1271,7 @@ class WoxLauncherController extends GetxController {
   }
 
   /// Triggered when received query results from the server.
-  Future<bool> onReceivedQueryResults(String traceId, String queryId, List<WoxQueryResult> receivedResults, {required bool isFinal}) async {
+  Future<bool> onReceivedQueryResults(String traceId, String queryId, List<WoxQueryResult> receivedResults, {required bool isFinal, int? backendQueryStartTimestampMs}) async {
     final tracker = WoxTimeTracker.start(traceId, "ui_query_result_apply");
     final totalStartUs = tracker.checkpointUs();
     tracker.setRawString("queryId", queryId);
@@ -1339,7 +1339,7 @@ class WoxLauncherController extends GetxController {
     // 2. We need update items in both list and grid controllers, because metdata query (grid and list layout change relay on this) may after results arrival,
     //    at this point, we don't know which layout this query will use, so we update both
     final appendTailStartUs = tracker.checkpointUs();
-    final displayResults = appendOnReceivedPerformanceTailForQuery(traceId, queryId, receivedResults);
+    final displayResults = appendOnReceivedPerformanceTailForQuery(traceId, queryId, receivedResults, backendQueryStartTimestampMs: backendQueryStartTimestampMs);
     tracker.setElapsedUs("appendTailUs", appendTailStartUs);
     final listItemStartUs = tracker.checkpointUs();
     final listItems = displayResults.map((e) => WoxListItem.fromQueryResult(e)).toList();
@@ -1367,26 +1367,33 @@ class WoxLauncherController extends GetxController {
   }
 
   // Re-attach the UI-only onReceived tail when a later backend batch replaces the result list.
-  List<WoxQueryResult> appendOnReceivedPerformanceTailForQuery(String traceId, String queryId, List<WoxQueryResult> results) {
-    if (!Env.isDev || !WoxSettingUtil.instance.currentSetting.showPerformanceTail) {
+  List<WoxQueryResult> appendOnReceivedPerformanceTailForQuery(String traceId, String queryId, List<WoxQueryResult> results, {int? backendQueryStartTimestampMs}) {
+    final setting = WoxSettingUtil.instance.currentSetting;
+    if (!Env.isDev || !setting.showPerformanceTail || !setting.showPerformanceTailUiReceived) {
       return results;
     }
 
-    var onReceivedElapsed = queryOnReceivedElapsedByQueryId[queryId];
-    if (onReceivedElapsed == null) {
-      final queryStartTime = queryStartTimeMap[traceId];
-      if (queryStartTime == null) {
-        return results;
-      }
-
-      onReceivedElapsed = DateTime.now().millisecondsSinceEpoch - queryStartTime;
-      queryOnReceivedElapsedByQueryId[queryId] = onReceivedElapsed;
+    // Prefer the backend query start so this UI tail is comparable with the
+    // backend "response received" tail, which uses queryRun.startTimestamp.
+    final queryStartTime = backendQueryStartTimestampMs != null && backendQueryStartTimestampMs > 0 ? backendQueryStartTimestampMs : queryStartTimeMap[traceId];
+    if (queryStartTime == null) {
+      return results;
     }
+    final currentOnReceivedElapsed = DateTime.now().millisecondsSinceEpoch - queryStartTime;
 
     for (final result in results) {
+      final resultKey = getOnReceivedResultKey(queryId, result);
+      final onReceivedElapsed = resultKey.isEmpty ? currentOnReceivedElapsed : queryOnReceivedElapsedByResultKey.putIfAbsent(resultKey, () => currentOnReceivedElapsed);
       appendOnReceivedPerformanceTail(result, onReceivedElapsed);
     }
     return results;
+  }
+
+  String getOnReceivedResultKey(String queryId, WoxQueryResult result) {
+    if (result.id.isEmpty) {
+      return "";
+    }
+    return "$queryId:${result.id}";
   }
 
   // Appends the onReceived tail once while preserving all backend-provided tails.
@@ -2704,7 +2711,7 @@ class WoxLauncherController extends GetxController {
     }
 
     currentQuery.value = query;
-    queryOnReceivedElapsedByQueryId.clear();
+    queryOnReceivedElapsedByResultKey.clear();
     backendQueryContext = QueryContext.empty();
     backendQueryContextQueryId = "";
     if (preserveCompletionHint) {
@@ -3017,8 +3024,10 @@ class WoxLauncherController extends GetxController {
       final resultsData = queryResponse['Results'] as List<dynamic>;
       final queryId = queryResponse['QueryId'] as String? ?? "";
       final isFinal = queryResponse['IsFinal'] as bool? ?? false;
+      final backendQueryStartTimestampMs = queryResponse['QueryStartTimestamp'] as int? ?? 0;
       applyTracker.setRawString("queryId", queryId);
       applyTracker.setBool("isFinal", isFinal);
+      applyTracker.setInt("backendQueryStartTimestampMs", backendQueryStartTimestampMs);
       applyTracker.setInt("rawResultCount", resultsData.length);
       final actionIconRefsStartUs = applyTracker.checkpointUs();
       final actionIconRefs = _parseQueryActionIconRefs(queryResponse['ActionIconRefs']);
@@ -3088,7 +3097,7 @@ class WoxLauncherController extends GetxController {
 
       // Process results first
       final onReceivedStartUs = applyTracker.checkpointUs();
-      final didApplyResults = await onReceivedQueryResults(msg.traceId, queryId, results, isFinal: isFinal);
+      final didApplyResults = await onReceivedQueryResults(msg.traceId, queryId, results, isFinal: isFinal, backendQueryStartTimestampMs: backendQueryStartTimestampMs);
       applyTracker.setElapsedUs("onReceivedUs", onReceivedStartUs);
       applyTracker.setBool("resultApplied", didApplyResults);
       if (!didApplyResults) {

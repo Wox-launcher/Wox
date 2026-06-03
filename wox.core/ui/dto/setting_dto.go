@@ -55,6 +55,10 @@ type WoxSettingDto struct {
 	// Debug display switches are only shown by the dev UI, but the DTO keeps
 	// them beside other settings so backend tail rendering and Flutter toggles
 	// stay synchronized through the existing settings API.
-	ShowScoreTail       bool
-	ShowPerformanceTail bool
+	ShowScoreTail                      bool
+	ShowPerformanceTail                bool
+	ShowPerformanceTailBatch           bool
+	ShowPerformanceTailPluginQuery     bool
+	ShowPerformanceTailBackendPrepared bool
+	ShowPerformanceTailUiReceived      bool
 }
