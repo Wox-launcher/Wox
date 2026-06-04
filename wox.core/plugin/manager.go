@@ -1669,6 +1669,17 @@ func (m *Manager) normalizePreviewMetadata(ctx context.Context, pluginInstance *
 	return preview
 }
 
+// shouldHidePreviewForGlobalQuery keeps global search compact while preserving core-owned unblocker previews.
+func shouldHidePreviewForGlobalQuery(query Query, preview WoxPreview) bool {
+	if !query.IsGlobalQuery() {
+		return false
+	}
+
+	return preview.PreviewType != WoxPreviewTypeQueryRequirementSettings &&
+		preview.PreviewType != WoxPreviewTypeThemeEdit &&
+		preview.PreviewType != WoxPreviewTypeTriggerKeywordConflict
+}
+
 func (m *Manager) calculateResultScore(ctx context.Context, pluginId, title, subTitle string, currentQuery string) int64 {
 	var score int64 = 0
 
@@ -2620,13 +2631,8 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 	previewRemoteTimingStart := time.Now()
 	previewGlobalStart := util.GetSystemTimestamp()
 	previewGlobalTimingStart := time.Now()
-	// if query is input and trigger keyword is global, disable preview and group.
-	// Core-owned interactive previews keep their preview even in global queries
-	// because stripping it would hide the form that can unblock the query.
-	if query.IsGlobalQuery() &&
-		result.Preview.PreviewType != WoxPreviewTypeQueryRequirementSettings &&
-		result.Preview.PreviewType != WoxPreviewTypeThemeEdit &&
-		result.Preview.PreviewType != WoxPreviewTypeTriggerKeywordConflict {
+	// If query is input and trigger keyword is global, disable preview and group.
+	if shouldHidePreviewForGlobalQuery(query, result.Preview) {
 		result.Preview = WoxPreview{}
 		result.Group = ""
 		result.GroupScore = 0
@@ -3077,12 +3083,17 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 
 	// Translate preview properties if present
 	if result.Preview != nil {
-		// Updated previews must use the same list normalization as initial
-		// query results. Long-running actions commonly update list rows in place,
-		// so icon conversion and row text translation cannot live only in the
-		// first result-processing path.
-		preview := m.normalizeListPreviewData(ctx, pluginInstance, *result.Preview)
-		preview = m.normalizePreviewMetadata(ctx, pluginInstance, preview)
+		preview := *result.Preview
+		if shouldHidePreviewForGlobalQuery(resultCache.Query, preview) {
+			preview = WoxPreview{}
+		} else {
+			// Updated previews must use the same list normalization as initial
+			// query results. Long-running actions commonly update list rows in place,
+			// so icon conversion and row text translation cannot live only in the
+			// first result-processing path.
+			preview = m.normalizeListPreviewData(ctx, pluginInstance, preview)
+			preview = m.normalizePreviewMetadata(ctx, pluginInstance, preview)
+		}
 		result.Preview = &preview
 		resultCache.Result.Preview = preview
 	}

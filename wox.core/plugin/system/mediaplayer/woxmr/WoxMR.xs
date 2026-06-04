@@ -6,6 +6,7 @@
 const char *wox_mr_get_now_playing_json(void);
 void wox_mr_free(char *p);
 int wox_mr_toggle(void);
+int wox_mr_control(const char *command);
 
 MODULE = WoxMR    PACKAGE = WoxMR
 
@@ -31,6 +32,16 @@ toggle()
     CODE:
     {
         RETVAL = wox_mr_toggle();
+    }
+    OUTPUT:
+        RETVAL
+
+int
+control(command)
+        const char *command
+    CODE:
+    {
+        RETVAL = wox_mr_control(command);
     }
     OUTPUT:
         RETVAL

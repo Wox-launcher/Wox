@@ -29,6 +29,10 @@ func (w *WindowsRetriever) GetCurrentMedia(ctx context.Context) (*MediaInfo, err
 	return nil, errors.New("GetCurrentMedia not implemented on Windows")
 }
 
+func (w *WindowsRetriever) ControlMedia(ctx context.Context, command string) error {
+	return errors.New("ControlMedia not implemented on Windows")
+}
+
 func (w *WindowsRetriever) TogglePlayPause(ctx context.Context) error {
 	return errors.New("TogglePlayPause not implemented on Windows")
 }

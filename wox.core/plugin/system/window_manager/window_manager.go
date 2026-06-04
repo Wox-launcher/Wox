@@ -20,9 +20,10 @@ import (
 )
 
 const (
-	windowManagerSettingGap = "gap"
-	windowManagerDefaultGap = 0
-	windowManagerMaxGap     = 64
+	windowManagerSettingGap    = "gap"
+	windowManagerDefaultGap    = 0
+	windowManagerMaxGap        = 64
+	windowManagerMoveTolerance = 2
 )
 
 type windowOperation string
@@ -385,6 +386,8 @@ func targetWindowIconTail(icon common.WoxImage) []plugin.QueryResultTail {
 
 // applyCommand hides Wox before moving the captured window so the launcher never becomes the target.
 func (p *WindowManagerPlugin) applyCommand(ctx context.Context, command windowManagerCommand, env plugin.QueryEnv) {
+	p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager apply command: command=%s op=%s activeWindowId=%s activeWindowPid=%d activeWindowTitle=%q", command.Command, command.Op, env.ActiveWindowId, env.ActiveWindowPid, env.ActiveWindowTitle))
+
 	p.api.HideApp(ctx)
 	time.Sleep(120 * time.Millisecond)
 
@@ -393,6 +396,7 @@ func (p *WindowManagerPlugin) applyCommand(ctx context.Context, command windowMa
 		p.notifyFailure(ctx, err)
 		return
 	}
+	p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager resolved target: id=%s pid=%d title=%q bounds=%+v displayId=%s workArea=%+v", managedWindow.Id, managedWindow.Pid, managedWindow.Title, managedWindow.Bounds, managedWindow.Display.Id, managedWindow.Display.WorkArea))
 
 	if command.Op == operationRestore {
 		p.restoreWindow(ctx, managedWindow)
@@ -417,15 +421,28 @@ func (p *WindowManagerPlugin) applyCommand(ctx context.Context, command windowMa
 		}
 	}
 
-	targetRect, err := p.targetRect(ctx, command.Op, managedWindow, p.getGap(ctx))
+	gap := p.getGap(ctx)
+	targetRect, err := p.targetRect(ctx, command.Op, managedWindow, gap)
 	if err != nil {
 		p.notifyFailure(ctx, err)
 		return
 	}
+	p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager target rect: command=%s gap=%d target=%+v", command.Command, gap, targetRect))
 
 	p.storeRestoreRect(managedWindow, managedWindow.Bounds)
 	if err := window.MoveResizeWindow(managedWindow, targetRect); err != nil {
 		p.notifyFailure(ctx, err)
+		return
+	}
+
+	updatedWindow, err := window.GetManagedWindow(managedWindow.Id, managedWindow.Pid, managedWindow.Title)
+	if err != nil {
+		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager failed to verify moved window: id=%s pid=%d err=%s", managedWindow.Id, managedWindow.Pid, err.Error()))
+		return
+	}
+	p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager applied rect: command=%s before=%+v target=%+v after=%+v", command.Command, managedWindow.Bounds, targetRect, updatedWindow.Bounds))
+	if !windowRectApproximatelyEqual(updatedWindow.Bounds, targetRect) {
+		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager target mismatch after move: command=%s target=%+v after=%+v", command.Command, targetRect, updatedWindow.Bounds))
 	}
 }
 
@@ -548,6 +565,21 @@ func findWindowManagerCommand(commandName string) (windowManagerCommand, bool) {
 // hasActiveWindow accepts either exact window id or process id for best-effort fallback.
 func hasActiveWindow(env plugin.QueryEnv) bool {
 	return strings.TrimSpace(env.ActiveWindowId) != "" || env.ActiveWindowPid > 0
+}
+
+// windowRectApproximatelyEqual allows small macOS Accessibility rounding differences.
+func windowRectApproximatelyEqual(actual window.WindowRect, expected window.WindowRect) bool {
+	return absInt(actual.X-expected.X) <= windowManagerMoveTolerance &&
+		absInt(actual.Y-expected.Y) <= windowManagerMoveTolerance &&
+		absInt(actual.Width-expected.Width) <= windowManagerMoveTolerance &&
+		absInt(actual.Height-expected.Height) <= windowManagerMoveTolerance
+}
+
+func absInt(value int) int {
+	if value < 0 {
+		return -value
+	}
+	return value
 }
 
 // restoreKey prefers the platform window id so multiple windows from one app do not share restore state.

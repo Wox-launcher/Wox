@@ -151,6 +151,11 @@ _FolderPreviewData _loadFolderPreview(Directory directory) {
   var directoryCount = 0;
 
   for (final entity in directory.listSync(followLinks: false)) {
+    final entryName = path.basename(entity.path);
+    if (entryName.startsWith(".")) {
+      continue;
+    }
+
     final stat = entity.statSync();
     final isDirectory = stat.type == FileSystemEntityType.directory;
     if (isDirectory) {
@@ -159,7 +164,7 @@ _FolderPreviewData _loadFolderPreview(Directory directory) {
       fileCount++;
     }
 
-    entries.add(_FolderPreviewEntry(name: path.basename(entity.path), size: stat.size, isDirectory: isDirectory, modified: stat.modified));
+    entries.add(_FolderPreviewEntry(name: entryName, size: stat.size, isDirectory: isDirectory, modified: stat.modified));
   }
 
   entries.sort((a, b) {

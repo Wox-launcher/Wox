@@ -3,6 +3,7 @@ name: Update plugin store
 on:
   schedule:
     - cron: "0 */3 * * *"
+  workflow_dispatch:
 
 permissions:
   # create-pull-request needs explicit write permissions when it uses GITHUB_TOKEN to update the plugin-store branch and PR.
