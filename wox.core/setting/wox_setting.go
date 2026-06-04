@@ -74,9 +74,10 @@ type WoxSetting struct {
 	LastWindowX *WoxSettingValue[int]
 	LastWindowY *WoxSettingValue[int]
 
-	QueryHistories  *WoxSettingValue[[]QueryHistory]
-	PinedResults    *WoxSettingValue[*util.HashMap[ResultHash, bool]]
-	ActionedResults *WoxSettingValue[*util.HashMap[ResultHash, []ActionedResult]]
+	QueryHistories           *WoxSettingValue[[]QueryHistory]
+	QueryCompletionFeedbacks *WoxSettingValue[[]QueryCompletionFeedback]
+	PinedResults             *WoxSettingValue[*util.HashMap[ResultHash, bool]]
+	ActionedResults          *WoxSettingValue[*util.HashMap[ResultHash, []ActionedResult]]
 
 	// Anonymous usage statistics
 	EnableAnonymousUsageStats *WoxSettingValue[bool]
@@ -243,6 +244,15 @@ type QueryHistory struct {
 	Timestamp int64
 }
 
+// QueryCompletionFeedback records accepted inline completion hints for local ranking.
+type QueryCompletionFeedback struct {
+	CompletionText        string
+	LastInputPrefix       string
+	Source                string
+	AcceptCount           int
+	LastAcceptedTimestamp int64
+}
+
 func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 	usePinYin := false
 	defaultLangCode := i18n.LangCodeEnUs
@@ -301,6 +311,7 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 		TrayQueries:                        NewWoxSettingValue(store, "TrayQueries", []TrayQuery{}),
 		AIProviders:                        NewWoxSettingValue(store, "AIProviders", []AIProvider{}),
 		QueryHistories:                     NewWoxSettingValue(store, "QueryHistories", []QueryHistory{}),
+		QueryCompletionFeedbacks:           NewWoxSettingValue(store, "QueryCompletionFeedback", []QueryCompletionFeedback{}),
 		PinedResults:                       NewWoxSettingValue(store, "PinedResults", util.NewHashMap[ResultHash, bool]()),
 		ActionedResults:                    NewWoxSettingValue(store, "ActionedResults", util.NewHashMap[ResultHash, []ActionedResult]()),
 		EnableAnonymousUsageStats:          NewWoxSettingValue(store, "EnableAnonymousUsageStats", true),

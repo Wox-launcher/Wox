@@ -2574,6 +2574,8 @@ class WoxLauncherController extends GetxController {
       return false;
     }
 
+    unawaited(recordQueryCompletionHintAccepted(traceId, hint));
+
     final nextQueryRefinements =
         shouldPreserveQueryRefinementsForTextChange(currentQuery.value, hint.completionText)
             ? cloneQueryRefinementPayload(currentQuery.value.queryRefinements)
@@ -2591,6 +2593,23 @@ class WoxLauncherController extends GetxController {
       moveCursorToEnd: true,
     );
     return true;
+  }
+
+  // Records accepted inline completions without blocking the query text update.
+  Future<void> recordQueryCompletionHintAccepted(String traceId, QueryCompletionHint hint) async {
+    try {
+      await WoxWebsocketMsgUtil.instance.sendMessage(
+        WoxWebsocketMsg(
+          requestId: const UuidV4().generate(),
+          traceId: traceId,
+          type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
+          method: WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY_COMPLETION_HINT_ACCEPTED.code,
+          data: {"inputPrefix": hint.inputPrefix, "completionText": hint.completionText, "source": hint.source},
+        ),
+      );
+    } catch (e) {
+      Logger.instance.debug(traceId, "Failed to record query completion hint acceptance: $e");
+    }
   }
 
   void onQueryBoxTextChanged(String value) {

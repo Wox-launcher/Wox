@@ -503,6 +503,8 @@ func onUIWebsocketRequest(ctx context.Context, request WebsocketMsg) {
 		handleWebsocketLog(ctx, request)
 	case "Query":
 		handleWebsocketQuery(ctx, request)
+	case "QueryCompletionHintAccepted":
+		handleWebsocketQueryCompletionHintAccepted(ctx, request)
 	case "QueryMRU":
 		handleWebsocketQueryMRU(ctx, request)
 	case "Action":
@@ -756,7 +758,13 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 				ctx,
 				request,
 				queryId,
-				plugin.BuildQueryCompletionHintForInputPrefix(query, ownerPlugin, setting.GetSettingManager().GetLatestQueryHistory(ctx, plugin.QueryCompletionHistoryLimit), changedQuery.QueryText),
+				plugin.BuildQueryCompletionHintForInputPrefixWithFeedback(
+					query,
+					ownerPlugin,
+					setting.GetSettingManager().GetLatestQueryHistory(ctx, plugin.QueryCompletionHistoryLimit),
+					setting.GetSettingManager().GetQueryCompletionFeedbacks(ctx),
+					changedQuery.QueryText,
+				),
 			)
 		})
 	}
@@ -965,6 +973,35 @@ func handleWebsocketQueryMRU(ctx context.Context, request WebsocketMsg) {
 	mruResults := plugin.GetPluginManager().QueryMRU(ctx, request.SessionId, queryId)
 	logger.Info(ctx, fmt.Sprintf("found %d MRU results via websocket", len(mruResults)))
 	responseUISuccessWithData(ctx, request, mruResults)
+}
+
+// handleWebsocketQueryCompletionHintAccepted records positive feedback from accepted inline hints.
+func handleWebsocketQueryCompletionHintAccepted(ctx context.Context, request WebsocketMsg) {
+	inputPrefix, inputPrefixErr := getWebsocketMsgParameter(ctx, request, "inputPrefix")
+	if inputPrefixErr != nil {
+		logger.Error(ctx, inputPrefixErr.Error())
+		responseUIError(ctx, request, inputPrefixErr.Error())
+		return
+	}
+
+	completionText, completionTextErr := getWebsocketMsgParameter(ctx, request, "completionText")
+	if completionTextErr != nil {
+		logger.Error(ctx, completionTextErr.Error())
+		responseUIError(ctx, request, completionTextErr.Error())
+		return
+	}
+
+	source, sourceErr := getWebsocketMsgParameter(ctx, request, "source")
+	if sourceErr != nil {
+		logger.Error(ctx, sourceErr.Error())
+		responseUIError(ctx, request, sourceErr.Error())
+		return
+	}
+
+	if !setting.GetSettingManager().RecordQueryCompletionFeedback(ctx, inputPrefix, completionText, source) {
+		logger.Debug(ctx, fmt.Sprintf("ignore invalid query completion feedback: inputPrefix=%q, completionText=%q, source=%q", inputPrefix, completionText, source))
+	}
+	responseUISuccess(ctx, request)
 }
 
 func handleWebsocketTerminalSubscribe(ctx context.Context, request WebsocketMsg) {
