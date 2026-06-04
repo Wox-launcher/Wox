@@ -542,7 +542,7 @@
     "Id": "2f326a0c-cd9f-4ddf-9b45-f8abf082283f",
     "Name": "i18n:plugin_name",
     "Author": "Wox-launcher",
-    "Version": "0.2.1",
+    "Version": "0.2.2",
     "MinWoxVersion": "2.0.0",
     "Runtime": "nodejs",
     "Description": "i18n:plugin_desc",
@@ -558,7 +558,7 @@
       "Linux"
     ],
     "DateCreated": "2026-03-08 15:56:00",
-    "DateUpdated": "2026-04-29 04:12:20",
+    "DateUpdated": "2026-06-04 16:01:06",
     "I18n": {
       "en_US": {
         "plugin_name": "Codex Usage",
