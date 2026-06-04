@@ -70,8 +70,6 @@ import 'package:wox/utils/color_util.dart';
 
 class WoxLauncherController extends GetxController {
   static const int _slowLauncherActivationWarningThresholdMs = 50;
-  static const int _onReceivedWarningThresholdMs = 50;
-  static const int _onReceivedDangerThresholdMs = 100;
   static const String _onReceivedTailTooltip = "onReceivedQueryResults elapsed since Flutter query request";
   static const String _queryActionIconRefType = "iconref";
   static const String localActionTogglePreviewFullscreenId = "__local_toggle_preview_fullscreen__";
@@ -1410,12 +1408,6 @@ class WoxLauncherController extends GetxController {
 
   // This dev metric stops at onReceivedQueryResults, before resize and frame paint.
   String getOnReceivedTailTextCategory(int onReceivedElapsed) {
-    if (onReceivedElapsed > _onReceivedDangerThresholdMs) {
-      return woxListItemTailTextCategoryDanger;
-    }
-    if (onReceivedElapsed > _onReceivedWarningThresholdMs) {
-      return woxListItemTailTextCategoryWarning;
-    }
     return woxListItemTailTextCategoryDefault;
   }
 

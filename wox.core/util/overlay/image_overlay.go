@@ -17,6 +17,7 @@ import (
 	"wox/common"
 	"wox/i18n"
 	"wox/util"
+	"wox/util/imagecache"
 	"wox/util/screen"
 )
 
@@ -224,6 +225,7 @@ func prepareURLImageOverlay(ctx context.Context, imageURL string) (OverlayImage,
 			// Reusing the downloaded file keeps repeated overlay opens on the same file-backed
 			// native path as local screenshots instead of repeating decode and bridge encoding.
 			util.GetLogger().Info(ctx, fmt.Sprintf("image overlay url cache hit: url=%s, path=%s, fileBytes=%d, size=%dx%d, headerCost=%s", imageURL, cachePath, cachedInfo.Size(), width, height, time.Since(headerStart)))
+			imagecache.Touch(ctx, cachePath, cachedInfo)
 			return NewFileIcon(cachePath), float64(width), float64(height), nil
 		}
 		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to read cached image overlay header, refreshing cache: url=%s path=%s err=%s", imageURL, cachePath, headerErr.Error()))

@@ -17,6 +17,7 @@ import (
 	"wox/plugin"
 	"wox/util"
 	"wox/util/clipboard"
+	"wox/util/imagecache"
 	"wox/util/keyboard"
 	"wox/util/window"
 
@@ -36,7 +37,8 @@ func getWebsiteIconWithCache(ctx context.Context, websiteUrl string) (common.Wox
 	// check if existed in cache
 	iconPathMd5 := fmt.Sprintf("%x", md5.Sum([]byte(hostUrl)))
 	iconCachePath := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("website_icon_%s.png", iconPathMd5))
-	if _, statErr := os.Stat(iconCachePath); statErr == nil {
+	if info, statErr := os.Stat(iconCachePath); statErr == nil {
+		imagecache.Touch(ctx, iconCachePath, info)
 		return common.WoxImage{
 			ImageType: common.WoxImageTypeAbsolutePath,
 			ImageData: iconCachePath,
@@ -91,7 +93,8 @@ func GetWebsiteIconFromCacheOnly(ctx context.Context, websiteUrl string) (common
 	hostUrl := parseUrl.Scheme + "://" + parseUrl.Host
 	iconPathMd5 := fmt.Sprintf("%x", md5.Sum([]byte(hostUrl)))
 	iconCachePath := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("website_icon_%s.png", iconPathMd5))
-	if _, statErr := os.Stat(iconCachePath); statErr == nil {
+	if info, statErr := os.Stat(iconCachePath); statErr == nil {
+		imagecache.Touch(ctx, iconCachePath, info)
 		return common.NewWoxImageAbsolutePath(iconCachePath), true
 	}
 	return common.WoxImage{}, false
@@ -123,22 +126,27 @@ func PrefetchWebsiteIcons(ctx context.Context, urls []string) {
 				httpCache := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("website_icon_%s.png", fmt.Sprintf("%x", md5.Sum([]byte(httpKey)))))
 				httpsCache := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("website_icon_%s.png", fmt.Sprintf("%x", md5.Sum([]byte(httpsKey)))))
 
-				// if both exist, skip
-				if _, err1 := os.Stat(httpCache); err1 == nil {
-					if _, err2 := os.Stat(httpsCache); err2 == nil {
-						continue
-					}
+				httpInfo, httpErr := os.Stat(httpCache)
+				httpsInfo, httpsErr := os.Stat(httpsCache)
+				if httpErr == nil {
+					imagecache.Touch(ctx, httpCache, httpInfo)
+				}
+				if httpsErr == nil {
+					imagecache.Touch(ctx, httpsCache, httpsInfo)
+				}
+				if httpErr == nil && httpsErr == nil {
+					continue
 				}
 
 				googleFaviconUrl := fmt.Sprintf("https://www.google.com/s2/favicons?sz=96&domain_url=%s", url.QueryEscape(domain))
 				// ensure https cache
-				if _, err := os.Stat(httpsCache); os.IsNotExist(err) {
+				if os.IsNotExist(httpsErr) {
 					gctx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
 					_ = util.HttpDownload(gctx, googleFaviconUrl, httpsCache)
 					cancel()
 				}
 				// ensure http cache (copy from https if available; otherwise download again)
-				if _, err := os.Stat(httpCache); os.IsNotExist(err) {
+				if os.IsNotExist(httpErr) {
 					if _, ok := os.Stat(httpsCache); ok == nil {
 						if data, rErr := os.ReadFile(httpsCache); rErr == nil {
 							_ = os.WriteFile(httpCache, data, os.ModePerm)
