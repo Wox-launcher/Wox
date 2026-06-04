@@ -47,6 +47,7 @@ const (
 	scoreTailContextDataKey      = "system:score"
 	previewDataMaxSize           = 1024
 	maxCachedQueriesPerSession   = 32
+	globalQueryPluginScoreLimit  = 200
 )
 
 type debounceTimer struct {
@@ -1680,6 +1681,15 @@ func shouldHidePreviewForGlobalQuery(query Query, preview WoxPreview) bool {
 		preview.PreviewType != WoxPreviewTypeTriggerKeywordConflict
 }
 
+// limitGlobalQueryPluginScore keeps plugin-provided global scores within Wox's shared ranking scale.
+func limitGlobalQueryPluginScore(query Query, score int64) int64 {
+	if !query.IsGlobalQuery() || score <= globalQueryPluginScoreLimit {
+		return score
+	}
+
+	return globalQueryPluginScoreLimit
+}
+
 func (m *Manager) calculateResultScore(ctx context.Context, pluginId, title, subTitle string, currentQuery string) int64 {
 	var score int64 = 0
 
@@ -2666,6 +2676,7 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 
 	scoreStart := util.GetSystemTimestamp()
 	scoreTimingStart := time.Now()
+	result.Score = limitGlobalQueryPluginScore(query, result.Score)
 	scoreFeatureStart := util.GetSystemTimestamp()
 	scoreFeatureTimingStart := time.Now()
 	ignoreAutoScore := pluginInstance.Metadata.IsSupportFeature(MetadataFeatureIgnoreAutoScore)

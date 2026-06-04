@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:path/path.dart' as path;
+import 'package:wox/components/file_preview/file_preview_media_source.dart';
 import 'package:wox/components/file_preview/file_preview_renderer.dart';
 import 'package:wox/components/wox_webview_preview.dart';
 import 'package:wox/entity/wox_preview.dart';
@@ -32,11 +32,10 @@ class AudioFilePreviewRenderer implements WoxFilePreviewRenderer {
     );
   }
 
-  // Data URLs keep audio preview behavior consistent across native WebView
-  // implementations and avoid autoplay from the WebView default media page.
+  // Use Wox core's loopback media endpoint so large audio files stream through
+  // browser range requests instead of becoming a data URL in Flutter memory.
   String _buildPausedAudioPreviewHtml(File file) {
-    final mimeType = _resolveAudioMimeType(path.extension(file.path).replaceFirst(".", "").toLowerCase());
-    final source = "data:$mimeType;base64,${base64Encode(file.readAsBytesSync())}";
+    final source = buildFilePreviewMediaSource(file);
     return '''
 <!doctype html>
 <html>
@@ -67,18 +66,5 @@ audio {
 </body>
 </html>
 ''';
-  }
-
-  String _resolveAudioMimeType(String extension) {
-    return switch (extension) {
-      "mp3" => "audio/mpeg",
-      "wav" => "audio/wav",
-      "m4a" => "audio/mp4",
-      "aac" => "audio/aac",
-      "flac" => "audio/flac",
-      "ogg" => "audio/ogg",
-      "opus" => "audio/ogg",
-      _ => "audio/mpeg",
-    };
   }
 }

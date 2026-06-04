@@ -2,9 +2,11 @@ package ui
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -109,6 +111,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/ping":                        handlePing,
 	"/preview":                     handlePreview,
 	"/preview/image/overlay":       handlePreviewImageOverlay,
+	"/preview/file/media":          handlePreviewFileMedia,
 	"/image/file/icon":             handleFileIcon,
 	"/image/lazy/load":             handleLazyImageLoad,
 	"/open":                        handleOpen,
@@ -220,6 +223,89 @@ func handleFileIcon(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeSuccessResponse(w, icon)
+}
+
+func handlePreviewFileMedia(w http.ResponseWriter, r *http.Request) {
+	// Media previews need ordinary HTTP range requests so large video files can
+	// stream into WebView without loading the whole file into Flutter memory.
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	encodedPath := strings.TrimSpace(r.URL.Query().Get("path"))
+	if encodedPath == "" {
+		http.Error(w, "path is empty", http.StatusBadRequest)
+		return
+	}
+
+	decodedPath, err := base64.URLEncoding.DecodeString(encodedPath)
+	if err != nil {
+		http.Error(w, "path is invalid", http.StatusBadRequest)
+		return
+	}
+
+	filePath := string(decodedPath)
+	if filePath == "" {
+		http.Error(w, "path is empty", http.StatusBadRequest)
+		return
+	}
+	if !filepath.IsAbs(filePath) {
+		http.Error(w, "path must be absolute", http.StatusBadRequest)
+		return
+	}
+
+	stat, err := os.Stat(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, "failed to stat file", http.StatusInternalServerError)
+		return
+	}
+	if stat.IsDir() {
+		http.Error(w, "path is a directory", http.StatusBadRequest)
+		return
+	}
+
+	file, err := os.Open(filePath)
+	if err != nil {
+		http.Error(w, "failed to open file", http.StatusInternalServerError)
+		return
+	}
+	defer file.Close()
+
+	if contentType := resolvePreviewFileMediaContentType(filePath); contentType != "" {
+		w.Header().Set("Content-Type", contentType)
+	}
+	w.Header().Set("Accept-Ranges", "bytes")
+	http.ServeContent(w, r, filepath.Base(filePath), stat.ModTime(), file)
+}
+
+func resolvePreviewFileMediaContentType(filePath string) string {
+	switch strings.ToLower(filepath.Ext(filePath)) {
+	case ".mp4", ".m4v":
+		return "video/mp4"
+	case ".mov":
+		return "video/quicktime"
+	case ".webm":
+		return "video/webm"
+	case ".mp3":
+		return "audio/mpeg"
+	case ".wav":
+		return "audio/wav"
+	case ".m4a":
+		return "audio/mp4"
+	case ".aac":
+		return "audio/aac"
+	case ".flac":
+		return "audio/flac"
+	case ".ogg", ".opus":
+		return "audio/ogg"
+	}
+
+	return mime.TypeByExtension(strings.ToLower(filepath.Ext(filePath)))
 }
 
 func handleLazyImageLoad(w http.ResponseWriter, r *http.Request) {

@@ -30,7 +30,7 @@ const (
 	mediaControlNext     = "next"
 	mediaControlPrevious = "previous"
 
-	mediaControlGlobalResultScore int64 = 100
+	mediaControlGlobalResultScore int64 = 200
 
 	recordArtworkSize = 96
 
