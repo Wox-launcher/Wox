@@ -3280,6 +3280,10 @@ func newQueryExecution(ctx context.Context, manager *Manager, query Query, resul
 }
 
 func (e *queryExecution) start() {
+	// Keep completion signals behind the scheduler scan. Fast global plugins can
+	// otherwise finish before later eligible plugins are even counted.
+	e.tracker.startJob(true)
+
 	cacheStart := util.GetSystemTimestamp()
 	e.manager.startSessionQueryCache(e.query)
 	if tracker := timetracking.New("start_session_query_cache"); tracker.Enabled() {
@@ -3298,17 +3302,8 @@ func (e *queryExecution) start() {
 	defer e.stopScheduleWatchdog()
 
 	e.schedulePlugins()
+	e.tracker.finishJob(true)
 
-	// Queries with no runnable plugins should still notify both phases immediately.
-	notifyStart := util.GetSystemTimestamp()
-	e.tracker.notifyIfEmpty()
-	if tracker := timetracking.New("notify_if_empty"); tracker.Enabled() {
-		tracker.SetRawString("queryId", e.query.Id)
-		tracker.SetInt64("costMs", util.GetSystemTimestamp()-notifyStart)
-		tracker.SetInt("remaining", int(e.tracker.remaining.Load()))
-		tracker.SetInt("fallbackRemaining", int(e.tracker.fallbackRemaining.Load()))
-		tracker.Log(e.ctx)
-	}
 	if tracker := timetracking.New("schedule_done"); tracker.Enabled() {
 		tracker.SetRawString("queryId", e.query.Id)
 		tracker.SetRawString("query", e.query.String())
@@ -3712,16 +3707,6 @@ func (t *queryTracker) finishJob(blocksFallback bool) {
 	}
 	// done fires only after every job completes, including debounced ones.
 	if t.remaining.Add(-1) == 0 {
-		t.done <- true
-	}
-}
-
-func (t *queryTracker) notifyIfEmpty() {
-	// When nothing was scheduled, both phases are already complete.
-	if t.fallbackRemaining.Load() == 0 {
-		t.fallbackReady <- true
-	}
-	if t.remaining.Load() == 0 {
 		t.done <- true
 	}
 }
