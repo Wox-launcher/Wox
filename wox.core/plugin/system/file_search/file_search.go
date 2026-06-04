@@ -356,8 +356,12 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 		queryResults = append(queryResults, plugin.QueryResult{
 			Title:    item.Name,
 			SubTitle: item.Path,
-			Icon:     icon,
-			Actions:  actions,
+			Preview: plugin.WoxPreview{
+				PreviewType: plugin.WoxPreviewTypeFile,
+				PreviewData: item.Path,
+			},
+			Icon:    icon,
+			Actions: actions,
 			DragData: &plugin.QueryResultDragData{
 				Type:  plugin.QueryResultDragDataTypeFiles,
 				Files: []string{item.Path},

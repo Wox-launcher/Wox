@@ -13,12 +13,14 @@ private enum WoxWebViewSessionPolicy {
 
 private struct WoxWebViewPreviewRequest {
   let urlString: String
+  let htmlString: String
   let injectCss: String
   let cacheDisabled: Bool
   let cacheKey: String
 
   init(args: [String: Any]) {
     urlString = args["url"] as? String ?? ""
+    htmlString = args["html"] as? String ?? ""
     injectCss = args["injectCss"] as? String ?? ""
     cacheDisabled = args["cacheDisabled"] as? Bool ?? false
     cacheKey = args["cacheKey"] as? String ?? ""
@@ -31,17 +33,25 @@ private struct WoxWebViewPreviewRequest {
   var cacheSignature: String {
     "\(injectCss)|\(mobileUserAgent)"
   }
+
+  var contentKey: String {
+    if !htmlString.isEmpty {
+      return "html|\(htmlString)"
+    }
+
+    return "url|\(urlString)"
+  }
 }
 
 private final class WoxCachedWebViewEntry {
   let webView: WKWebView
   let signature: String
-  var currentURL: String
+  var currentContentKey: String
 
-  init(webView: WKWebView, signature: String, currentURL: String) {
+  init(webView: WKWebView, signature: String, currentContentKey: String) {
     self.webView = webView
     self.signature = signature
-    self.currentURL = currentURL
+    self.currentContentKey = currentContentKey
   }
 }
 
@@ -63,9 +73,9 @@ private enum WoxWebViewStore {
 
     let normalizedKey = request.cacheKey.trimmingCharacters(in: .whitespacesAndNewlines)
     if let cached = entries[normalizedKey], cached.signature == request.cacheSignature {
-      let shouldReload = cached.currentURL != request.urlString
+      let shouldReload = cached.currentContentKey != request.contentKey
       if shouldReload {
-        cached.currentURL = request.urlString
+        cached.currentContentKey = request.contentKey
       }
       return (cached.webView, shouldReload)
     }
@@ -74,7 +84,7 @@ private enum WoxWebViewStore {
     entries[normalizedKey] = WoxCachedWebViewEntry(
       webView: webView,
       signature: request.cacheSignature,
-      currentURL: request.urlString
+      currentContentKey: request.contentKey
     )
     return (webView, true)
   }
@@ -381,6 +391,11 @@ final class WoxWebViewPreviewNativeView: NSView, WKNavigationDelegate, WKUIDeleg
   }
 
   private func configure(with request: WoxWebViewPreviewRequest, shouldReload: Bool) {
+    if shouldReload, !request.htmlString.isEmpty {
+      webView.loadHTMLString(request.htmlString, baseURL: nil)
+      return
+    }
+
     guard shouldReload, let url = URL(string: request.urlString) else {
       return
     }
