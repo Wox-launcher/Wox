@@ -1,10 +1,12 @@
 {
   "Version": "2.1.2-beta.1",
   "MacArm64DownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.1.2-beta.1/wox-mac-arm64.dmg",
-  "MacArm64Checksum": "",
+  "MacArm64Checksum": "66af8f3e7f5eca4b4cf6fa72b4d6c5a0",
   "WindowsDownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.1.2-beta.1/wox-windows-amd64.exe",
-  "WindowsChecksum": "",
+  "WindowsChecksum": "5d694e5ee00ca17ec1cdefc576353801",
   "LinuxDownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.1.2-beta.1/wox-linux-amd64",
-  "LinuxChecksum": "",
-  "ReleaseNotes": ""
+  "LinuxChecksum": "345b3cab337a02783198ac5586201b8f",
+  "ReleaseNotes": "\n- Add\n  - [`Theme`] Add a theme editor with live launcher preview, color controls, save-as and overwrite flows, and wallpaper-aware previews for customizing Wox themes #4421\n  - [`Window Manager`] Add a Window Manager plugin to move, resize, minimize, maximize, restore, and send the active window between displays from launcher commands.\n  - [`Selection`] Add Space Quick Look on Windows so users can preview a selected file from File Explorer or open/save dialogs by pressing Space.\n    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/selection_quick_look.mp4)\n  - [`Attention`] Add persistent Attention items so plugins can surface follow-up tasks with an unread badge and an inbox that keeps items until users open or mark them read.\n  - [`Result Drag`] Add native file drag export for launcher results, allowing file-backed results from Clipboard and plugins to be dragged directly to folders or other apps.\n  - [`Update`] Add update channels so users can stay on stable releases or opt into beta prereleases.\n\n- Improve\n  - [`Preview`] Expand file preview support to code, executable, image, markdown, PDF, shortcuts, video, zip, Office, audio, font, calendar/contact, delimited data, and RDP files, with a wider default preview panel.\n  - [`Query Hotkey`] Improve query hotkey setup with a dedicated dialog, names, tooltips, presets documentation, and cleaner variable editing.\n  - [`Converter`] Improve storage and time conversion with decimal and binary byte aliases, unit-symbol tails, and broader timezone aliases.\n  - [`Search`] Improve fuzzy matching for short text with optimal alignment scoring.\n  - [`Query Box`] Improve text input and layout consistency across interface sizes #4423\n  - [`Clipboard`] Improve file clipboard records with support for multiple file paths and draggable file payloads.\n  - [`Image`] Improve emoji and URL image loading with caching and download support.\n  - [`Update`] Improve update-available notification wording across languages.\n\n- Fix\n  - [`Screenshot`] Fix permission-denied capture feedback with localized notifications #4433\n  - [`Hotkey`] Fix arrow-key hotkey recognition when alternate key names are reported by the platform.\n  - [`Security`] Fix Windows file reveal behavior to use the Windows Shell API instead of interpolated PowerShell command text, preventing crafted file paths from being interpreted as commands when opening a file's containing folder.",
+  "MacAmd64DownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.1.2-beta.1/wox-mac-amd64.dmg",
+  "MacAmd64Checksum": "0d74b593999036ad89b44e3a75df33cd"
 }
