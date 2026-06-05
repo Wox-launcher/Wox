@@ -3,6 +3,8 @@ package hotkey
 import (
 	"context"
 	"fmt"
+	"sync"
+	"time"
 	"wox/util"
 	"wox/util/keyboard"
 )
@@ -13,7 +15,15 @@ import (
 // is used directly and the standard check is skipped. Platforms that have a
 // fundamentally different hotkey model (e.g. Wayland's portal-based registration)
 // should set this in their init() to avoid incorrect or harmful probe behaviour.
-var platformHotkeyAvailableCheck func(ctx context.Context, hotkeyStr string) (available bool, handled bool)
+var (
+	platformHotkeyAvailableCheck func(ctx context.Context, hotkeyStr string) (available bool, handled bool)
+	availabilityProbeMu          sync.Mutex
+)
+
+const (
+	availabilityProbeMaxAttempts = 3
+	availabilityProbeRetryDelay  = 75 * time.Millisecond
+)
 
 type Hotkey struct {
 	// combineKey is the original hotkey string used for registration, e.g. "Ctrl+Shift+A".
@@ -56,23 +66,31 @@ func (h *Hotkey) Register(ctx context.Context, combineKey string, callback func(
 }
 
 func (h *Hotkey) Unregister(ctx context.Context) {
+	_ = h.unregister(ctx)
+}
+
+// unregister releases the active registration and returns the native failure for callers that need probe diagnostics.
+func (h *Hotkey) unregister(ctx context.Context) error {
 	if h.isDoubleKey {
 		util.GetLogger().Info(ctx, fmt.Sprintf("unregister double hotkey: %s", h.combineKey))
 		unregisterDoubleHotKey(h.doubleModifierKey)
 		h.isDoubleKey = false
 		h.doubleModifierKey = keyboard.KeyUnknown
-		return
+		return nil
 	}
 
 	if h.registration == nil {
-		return
+		return nil
 	}
 
 	util.GetLogger().Info(ctx, fmt.Sprintf("unregister normal hotkey: %s", h.combineKey))
 	if err := h.registration.Unregister(); err != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to unregister hotkey: %s", err.Error()))
+		h.registration = nil
+		return err
 	}
 	h.registration = nil
+	return nil
 }
 
 func IsHotkeyAvailable(ctx context.Context, hotkeyStr string) (isAvailable bool) {
@@ -86,11 +104,36 @@ func IsHotkeyAvailable(ctx context.Context, hotkeyStr string) (isAvailable bool)
 		}
 	}
 
-	hk := Hotkey{}
-	registerErr := hk.Register(ctx, hotkeyStr, func() {})
-	if registerErr == nil {
-		isAvailable = true
-		hk.Unregister(ctx)
+	// The probe uses real global registration. Serialize and retry briefly so
+	// rapid recorder validation cannot observe a hotkey that the previous probe
+	// has just released but the OS has not made available yet.
+	availabilityProbeMu.Lock()
+	defer availabilityProbeMu.Unlock()
+
+	var lastRegisterErr error
+	for attempt := 1; attempt <= availabilityProbeMaxAttempts; attempt++ {
+		hk := Hotkey{}
+		registerErr := hk.Register(ctx, hotkeyStr, func() {})
+		if registerErr == nil {
+			if unregisterErr := hk.unregister(ctx); unregisterErr != nil {
+				util.GetLogger().Warn(ctx, fmt.Sprintf("hotkey availability probe failed to unregister: hotkey=%s err=%s", hotkeyStr, unregisterErr.Error()))
+				return false
+			}
+			if attempt > 1 {
+				util.GetLogger().Info(ctx, fmt.Sprintf("hotkey availability probe recovered after retry: hotkey=%s attempt=%d", hotkeyStr, attempt))
+			}
+			return true
+		}
+
+		lastRegisterErr = registerErr
+		if attempt < availabilityProbeMaxAttempts {
+			util.GetLogger().Warn(ctx, fmt.Sprintf("hotkey availability probe register failed, retrying: hotkey=%s attempt=%d err=%s", hotkeyStr, attempt, registerErr.Error()))
+			time.Sleep(availabilityProbeRetryDelay)
+		}
 	}
-	return
+
+	if lastRegisterErr != nil {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("hotkey availability probe unavailable after retries: hotkey=%s attempts=%d err=%s", hotkeyStr, availabilityProbeMaxAttempts, lastRegisterErr.Error()))
+	}
+	return false
 }

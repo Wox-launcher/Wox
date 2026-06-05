@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <stdio.h>
 
 extern void keyboardHotkeyTriggeredCGO(int id);
 extern int keyboardHookEventCGO(int eventKind, unsigned int keyCode, unsigned int modifiers, unsigned int character);
@@ -24,6 +25,12 @@ static char *copyErrorMessage(const char *message) {
     }
     memcpy(copy, message, len);
     return copy;
+}
+
+static char *copyStatusErrorMessage(const char *message, OSStatus status) {
+    char buffer[128];
+    snprintf(buffer, sizeof(buffer), "%s (status=%d)", message, (int)status);
+    return copyErrorMessage(buffer);
 }
 
 static UInt32 toCarbonModifiers(unsigned int modifiers) {
@@ -137,7 +144,7 @@ int woxDarwinEnsureKeyboardReady(char **errorOut) {
             OSStatus status = InstallApplicationEventHandler(&hotkeyHandler, 1, &eventType, NULL, &gHotkeyHandler);
             if (status != noErr) {
                 if (errorOut) {
-                    *errorOut = copyErrorMessage("failed to install macOS hotkey handler");
+                    *errorOut = copyStatusErrorMessage("failed to install macOS hotkey handler", status);
                 }
                 return 0;
             }
@@ -157,7 +164,7 @@ int woxDarwinRegisterHotkey(int id, unsigned int modifiers, unsigned int keyCode
         OSStatus status = RegisterEventHotKey((UInt32)keyCode, toCarbonModifiers(modifiers), hotkeyID, GetApplicationEventTarget(), 0, &hotkeyRef);
         if (status != noErr || hotkeyRef == NULL) {
             if (errorOut) {
-                *errorOut = copyErrorMessage("failed to register macOS hotkey");
+                *errorOut = copyStatusErrorMessage("failed to register macOS hotkey", status);
             }
             return 0;
         }
@@ -182,7 +189,7 @@ int woxDarwinUnregisterHotkey(int id, char **errorOut) {
         [gHotkeyRefs removeObjectForKey:@(id)];
         if (status != noErr) {
             if (errorOut) {
-                *errorOut = copyErrorMessage("failed to unregister macOS hotkey");
+                *errorOut = copyStatusErrorMessage("failed to unregister macOS hotkey", status);
             }
             return 0;
         }

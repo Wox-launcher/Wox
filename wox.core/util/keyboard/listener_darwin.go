@@ -168,7 +168,7 @@ func runDarwinKeyboardCall(call func(errorOut **C.char) C.int) error {
 		}
 		if result == 0 {
 			if errorOut != nil {
-				callErr = fmt.Errorf(C.GoString(errorOut))
+				callErr = fmt.Errorf("%s", C.GoString(errorOut))
 			} else {
 				callErr = fmt.Errorf("native keyboard call failed")
 			}
