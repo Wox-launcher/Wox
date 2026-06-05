@@ -2,11 +2,21 @@ import 'package:file_picker/file_picker.dart';
 
 class FileSelectorParams {
   late bool isDirectory;
+  List<String>? allowedExtensions;
+  bool allowMultiple = false;
 
-  FileSelectorParams({required this.isDirectory});
+  FileSelectorParams({
+    required this.isDirectory,
+    this.allowedExtensions,
+    this.allowMultiple = false,
+  });
 
   FileSelectorParams.fromJson(Map<String, dynamic> json) {
-    isDirectory = json['IsDirectory'];
+    isDirectory = json['IsDirectory'] ?? true;
+    if (json['AllowedExtensions'] != null) {
+      allowedExtensions = List<String>.from(json['AllowedExtensions']);
+    }
+    allowMultiple = json['AllowMultiple'] ?? false;
   }
 }
 
@@ -17,11 +27,14 @@ class FileSelector {
       if (selectedDirectory != null) {
         return [selectedDirectory];
       }
+      return [];
     }
 
+    final hasExtensions = params.allowedExtensions != null && params.allowedExtensions!.isNotEmpty;
     final result = await FilePicker.platform.pickFiles(
-      type: FileType.any,
-      allowMultiple: false,
+      type: hasExtensions ? FileType.custom : FileType.any,
+      allowedExtensions: hasExtensions ? params.allowedExtensions : null,
+      allowMultiple: params.allowMultiple,
     );
 
     if (result != null && result.files.isNotEmpty) {

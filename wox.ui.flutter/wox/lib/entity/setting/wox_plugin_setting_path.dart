@@ -9,6 +9,9 @@ class PluginSettingValuePath {
   late String defaultValue;
   late String tooltip;
   late List<PluginSettingValidatorItem> validators;
+  late bool isDirectory;
+  late List<String> allowedExtensions;
+  late bool allowMultiple;
 
   late PluginSettingValueStyle style;
 
@@ -18,6 +21,9 @@ class PluginSettingValuePath {
     suffix = json['Suffix'];
     defaultValue = json['DefaultValue'];
     tooltip = json['Tooltip'];
+    isDirectory = json['IsDirectory'] ?? true;
+    allowedExtensions = json['AllowedExtensions'] != null ? List<String>.from(json['AllowedExtensions']) : [];
+    allowMultiple = json['AllowMultiple'] ?? false;
 
     // Style is deprecated in plugin SDKs; ignore plugin JSON and let the UI layout own spacing and width.
     style = PluginSettingValueStyle.defaults();
