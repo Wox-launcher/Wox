@@ -77,7 +77,8 @@ class _HotkeyTracker {
   final Set<PhysicalKeyboardKey> _realPressedModifiers = {};
   final Set<PhysicalKeyboardKey> _synthesizedPressedModifiers = {};
   final Map<PhysicalKeyboardKey, int> _synthesizedModifierReleaseTimestamp = {};
-  final Map<LogicalKeyboardKey, int> _lastKeyUpTimestamp = {};
+  final Map<HotKeyModifier, int> _lastModifierTapTimestamp = {};
+  final Set<HotKeyModifier> _invalidModifierTaps = {};
   PhysicalKeyboardKey? _pendingOutOfOrderKey;
   int? _pendingOutOfOrderKeyTimestamp;
   static const int _doubleClickThreshold = 500; // milliseconds
@@ -89,7 +90,8 @@ class _HotkeyTracker {
     _realPressedModifiers.clear();
     _synthesizedPressedModifiers.clear();
     _synthesizedModifierReleaseTimestamp.clear();
-    _lastKeyUpTimestamp.clear();
+    _lastModifierTapTimestamp.clear();
+    _invalidModifierTaps.clear();
     _clearPendingOutOfOrderKey();
   }
 
@@ -121,6 +123,25 @@ class _HotkeyTracker {
   void _clearPendingOutOfOrderKey() {
     _pendingOutOfOrderKey = null;
     _pendingOutOfOrderKeyTimestamp = null;
+  }
+
+  /// Returns the currently pressed modifier categories, collapsing left/right physical keys.
+  Set<HotKeyModifier> _pressedModifierTypes() {
+    final modifiers = <HotKeyModifier>{};
+    for (final key in _pressedModifiers) {
+      final modifier = WoxHotkey.convertToModifier(key);
+      if (modifier != null) {
+        modifiers.add(modifier);
+      }
+    }
+    return modifiers;
+  }
+
+  /// Marks any held modifiers as part of a combination and clears pending pure-tap state.
+  void _invalidateActiveModifierTaps() {
+    final modifiers = _pressedModifierTypes();
+    _invalidModifierTaps.addAll(modifiers);
+    _lastModifierTapTimestamp.clear();
   }
 
   /// Keep a short-lived non-modifier key only for macOS cmd+space, where Flutter can report Space before synthesized Cmd.
@@ -171,7 +192,20 @@ class _HotkeyTracker {
     // Track modifier key states manually (more reliable than HardwareKeyboard.instance
     // which gets corrupted by synthesized events)
     if (WoxHotkey.isModifierKey(keyEvent.physicalKey)) {
+      final modifier = WoxHotkey.convertToModifier(keyEvent.physicalKey);
+      if (modifier == null) {
+        return const _HotkeyTrackerResult();
+      }
+
       if (keyEvent is KeyDownEvent) {
+        final activeModifiersBeforeDown = _pressedModifierTypes();
+        if (!keyEvent.synthesized && activeModifiersBeforeDown.isNotEmpty) {
+          _invalidModifierTaps
+            ..addAll(activeModifiersBeforeDown)
+            ..add(modifier);
+        }
+        _lastModifierTapTimestamp.removeWhere((tapModifier, _) => tapModifier != modifier);
+
         _synthesizedModifierReleaseTimestamp.remove(keyEvent.physicalKey);
         if (keyEvent.synthesized) {
           _synthesizedPressedModifiers.add(keyEvent.physicalKey);
@@ -191,23 +225,36 @@ class _HotkeyTracker {
             _synthesizedModifierReleaseTimestamp[keyEvent.physicalKey] = DateTime.now().millisecondsSinceEpoch;
           }
         } else {
+          final wasPressed = _realPressedModifiers.contains(keyEvent.physicalKey) || _synthesizedPressedModifiers.contains(keyEvent.physicalKey);
+          if (!wasPressed) {
+            return const _HotkeyTrackerResult();
+          }
+
           _realPressedModifiers.remove(keyEvent.physicalKey);
           _synthesizedPressedModifiers.remove(keyEvent.physicalKey);
           _synthesizedModifierReleaseTimestamp.remove(keyEvent.physicalKey);
+          _lastModifierTapTimestamp.removeWhere((tapModifier, _) => tapModifier != modifier);
+
+          if (_invalidModifierTaps.remove(modifier)) {
+            _lastModifierTapTimestamp.remove(modifier);
+            _syncPressedModifiers();
+            return const _HotkeyTrackerResult();
+          }
 
           // Check for double-click modifier keys
           final now = DateTime.now().millisecondsSinceEpoch;
-          final lastPress = _lastKeyUpTimestamp[keyEvent.logicalKey] ?? 0;
+          final lastPress = _lastModifierTapTimestamp[modifier] ?? 0;
 
           if (now - lastPress <= _doubleClickThreshold) {
             // Double click detected
-            final modifierStr = WoxHotkey.getModifierStr(WoxHotkey.convertToModifier(keyEvent.physicalKey)!);
+            final modifierStr = WoxHotkey.getModifierStr(modifier);
+            _lastModifierTapTimestamp.remove(modifier);
             _syncPressedModifiers();
             _clearPendingOutOfOrderKey();
             return _HotkeyTrackerResult(hotkey: "$modifierStr+$modifierStr", handled: true);
           }
 
-          _lastKeyUpTimestamp[keyEvent.logicalKey] = now;
+          _lastModifierTapTimestamp[modifier] = now;
         }
       }
       _syncPressedModifiers();
@@ -220,24 +267,23 @@ class _HotkeyTracker {
       return const _HotkeyTrackerResult();
     }
 
+    _invalidateActiveModifierTaps();
+
     // Handle normal hotkeys (modifier + key)
     if (keyEvent is! KeyUpEvent && WoxHotkey.isAllowedKey(keyEvent.physicalKey)) {
       if (!Platform.isWindows && _pressedModifiers.isEmpty) {
         return _HotkeyTrackerResult(handled: _stagePendingOutOfOrderKey(keyEvent));
       }
 
-      // On Windows, rely on native modifier states from message loop.
-      // Win key events may not always be delivered as normal Flutter key events.
       final modifiers = <HotKeyModifier>[];
-      if (Platform.isWindows) {
-        modifiers.addAll(WoxHotkey.getPressedModifiers());
-      } else {
-        // On other platforms, use tracker-maintained modifier states.
-        for (var key in _pressedModifiers) {
-          final modifier = WoxHotkey.convertToModifier(key);
-          if (modifier != null && !modifiers.contains(modifier)) {
-            modifiers.add(modifier);
-          }
+      // Use the recorder-local snapshot on every platform. HardwareKeyboard can
+      // retain stale Windows modifier state after global-hotkey focus changes,
+      // which would make the next recorded key include a modifier the user did
+      // not press in this recording session.
+      for (var key in _pressedModifiers) {
+        final modifier = WoxHotkey.convertToModifier(key);
+        if (modifier != null && !modifiers.contains(modifier)) {
+          modifiers.add(modifier);
         }
       }
 

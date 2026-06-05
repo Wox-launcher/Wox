@@ -655,7 +655,7 @@ class _WoxSettingViewState extends State<WoxSettingView> {
                 await controller.switchToThemeList(false);
               },
             ),
-            _NavItem(id: 'themes.edit', icon: Icons.tune_outlined, title: controller.tr('ui_theme_editor_title'), body: const WoxSettingThemeEditorView()),
+            _NavItem(id: 'themes.edit', icon: Icons.format_paint_outlined, title: controller.tr('ui_theme_editor_title'), body: const WoxSettingThemeEditorView()),
           ],
         ),
         _NavItem(id: 'usage', icon: Icons.query_stats_outlined, title: controller.tr('ui_usage'), body: const WoxSettingUsageView()),
