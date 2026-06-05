@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:wox/components/wox_path_finder_view.dart';
+import 'package:wox/components/wox_path_finder.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_path.dart';
 import 'package:wox/entity/validator/wox_setting_validator.dart';
 
@@ -20,10 +20,10 @@ class WoxSettingPluginPath extends StatefulWidget {
 }
 
 class _WoxSettingPluginPathState extends State<WoxSettingPluginPath> with WoxSettingPluginItemMixin<WoxSettingPluginPath> {
-  late final TextEditingController _controller;
-  late final FocusNode _focusNode;
+  late String _currentValue;
   late String _errorMessage;
   bool _hasInteracted = false;
+  final _focusNode = FocusNode();
 
   @override
   double get labelWidth => widget.labelWidth;
@@ -31,17 +31,16 @@ class _WoxSettingPluginPathState extends State<WoxSettingPluginPath> with WoxSet
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(text: widget.value);
-    _focusNode = FocusNode();
-    _focusNode.addListener(_onFocusChange);
+    _currentValue = widget.value;
     _errorMessage = "";
+    _focusNode.addListener(_onFocusChange);
   }
 
   @override
   void didUpdateWidget(covariant WoxSettingPluginPath oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.value != widget.value && widget.value != _controller.text) {
-      _controller.text = widget.value;
+    if (oldWidget.value != widget.value) {
+      _currentValue = widget.value;
       _errorMessage = _hasInteracted ? _validateValue(widget.value) : "";
     }
   }
@@ -50,7 +49,6 @@ class _WoxSettingPluginPathState extends State<WoxSettingPluginPath> with WoxSet
   void dispose() {
     _focusNode.removeListener(_onFocusChange);
     _focusNode.dispose();
-    _controller.dispose();
     super.dispose();
   }
 
@@ -59,11 +57,10 @@ class _WoxSettingPluginPathState extends State<WoxSettingPluginPath> with WoxSet
   }
 
   Future<void> _onFocusChange() async {
-    if (!_focusNode.hasFocus) {
-      final validationError = _validateValue(_controller.text);
+    if (!_focusNode.hasFocus && _hasInteracted) {
+      final validationError = _validateValue(_currentValue);
       if (mounted) {
         setState(() {
-          _hasInteracted = true;
           _errorMessage = validationError;
         });
       }
@@ -71,7 +68,7 @@ class _WoxSettingPluginPathState extends State<WoxSettingPluginPath> with WoxSet
         return;
       }
 
-      final saveError = await updateConfig(widget.onUpdate, widget.item.key, _controller.text);
+      final saveError = await updateConfig(widget.onUpdate, widget.item.key, _currentValue);
       if (!mounted) {
         return;
       }
@@ -97,10 +94,16 @@ class _WoxSettingPluginPathState extends State<WoxSettingPluginPath> with WoxSet
               Flexible(
                 fit: hasExplicitWidth ? FlexFit.loose : FlexFit.tight,
                 child: WoxPathFinder(
-                  controller: _controller,
-                  focusNode: _focusNode,
+                  value: _currentValue,
+                  enabled: true,
+                  showOpenButton: false,
                   width: fieldWidth,
+                  focusNode: _focusNode,
+                  isDirectory: widget.item.isDirectory,
+                  allowedExtensions: widget.item.allowedExtensions.isEmpty ? null : widget.item.allowedExtensions,
+                  allowMultiple: widget.item.allowMultiple,
                   onChanged: (value) {
+                    _currentValue = value;
                     final validationError = _validateValue(value);
                     if (_hasInteracted && _errorMessage == validationError) {
                       return;
