@@ -70,7 +70,7 @@ class _WoxOnboardingViewState extends State<WoxOnboardingView> {
     // focused while the shared Wox preview still demonstrates the real layout.
     const _OnboardingStep(id: 'glance', titleKey: 'onboarding_glance_title'),
     // Feature change: action panel intro was merged into the welcome step demo
-    // so the anatomy animation flows directly into the Alt+J reveal, giving
+    // so the anatomy animation flows directly into the primary-modifier J reveal, giving
     // users the full search-to-action story without an extra navigation step.
     // Feature change: the previous Advanced Queries page bundled three
     // unrelated workflows. Splitting them into dedicated steps lets each query
@@ -645,56 +645,8 @@ class _OnboardingBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      // The onboarding background now carries the product-tour feeling instead
-      // of reusing the settings page's flat surface. The glass-dark redesign
-      // keeps this layer neutral so wallpaper translucency and the shared
-      // overlay tokens drive the look rather than per-step color washes.
-      painter: _OnboardingBackdropPainter(textColor: getThemeTextColor(), backgroundColor: getThemeBackgroundColor()),
-    );
-  }
-}
-
-class _OnboardingBackdropPainter extends CustomPainter {
-  const _OnboardingBackdropPainter({required this.textColor, required this.backgroundColor});
-
-  final Color textColor;
-  final Color backgroundColor;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final base = Paint()..color = backgroundColor;
-    canvas.drawRect(Offset.zero & size, base);
-
-    // Visual refinement: the fine grid made the onboarding surface feel busy
-    // over acrylic wallpapers. Keeping only the base fill and sweep lets the
-    // demo cards remain the visual focus while preserving subtle depth.
-
-    final sweepPaint =
-        Paint()
-          ..shader = LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [textColor.withValues(alpha: 0.055), backgroundColor.withValues(alpha: 0.12), Colors.transparent],
-            stops: const [0, 0.50, 1],
-          ).createShader(Rect.fromLTWH(_onboardingSidebarWidth, 0, size.width - _onboardingSidebarWidth, size.height - _onboardingFooterHeight));
-    final path =
-        Path()
-          ..moveTo(_onboardingSidebarWidth, 0)
-          ..lineTo(size.width, 0)
-          ..lineTo(size.width, 230)
-          ..lineTo(_onboardingSidebarWidth, 520)
-          ..close();
-    canvas.drawPath(path, sweepPaint);
-
-    // Glass-dark fix: remove the standalone decorative blocks. They were meant
-    // to add depth after removing accent washes, but over a real acrylic window
-    // they read as accidental rectangular artifacts instead of natural glass.
-    // The theme background and subtle sweep are enough to preserve depth.
-  }
-
-  @override
-  bool shouldRepaint(covariant _OnboardingBackdropPainter oldDelegate) {
-    return oldDelegate.textColor != textColor || oldDelegate.backgroundColor != backgroundColor;
+    // Keep onboarding backdrop intentionally flat so acrylic/window materials
+    // do not introduce perceived texture over the walkthrough content.
+    return ColoredBox(color: getThemeBackgroundColor());
   }
 }

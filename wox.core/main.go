@@ -23,6 +23,7 @@ import (
 	"wox/ui"
 	"wox/updater"
 	"wox/util"
+	"wox/util/imagecache"
 	"wox/util/mainthread"
 	"wox/util/selection"
 
@@ -54,6 +55,8 @@ import (
 	_ "wox/plugin/system/file_search"
 
 	_ "wox/plugin/system/glance"
+
+	_ "wox/plugin/system/window_manager"
 )
 
 func main() {
@@ -232,6 +235,9 @@ func run() {
 
 	// Start MRU cleanup
 	setting.GetSettingManager().StartMRUCleanup(ctx)
+
+	// Start image cache cleanup
+	imagecache.StartCleanupRoutine(ctx)
 
 	// Start auto update checker if enabled
 	updater.StartAutoUpdateChecker(ctx)

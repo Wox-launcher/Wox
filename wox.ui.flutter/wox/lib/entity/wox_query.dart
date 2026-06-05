@@ -121,6 +121,24 @@ class QueryHistory {
   }
 }
 
+class QueryCompletionHint {
+  late String inputPrefix;
+  late String completionText;
+  late String suffix;
+  late String source;
+  late int score;
+
+  QueryCompletionHint({required this.inputPrefix, required this.completionText, required this.suffix, required this.source, required this.score});
+
+  QueryCompletionHint.fromJson(Map<String, dynamic> json) {
+    inputPrefix = json['InputPrefix'] ?? "";
+    completionText = json['CompletionText'] ?? "";
+    suffix = json['Suffix'] ?? "";
+    source = json['Source'] ?? "";
+    score = (json['Score'] as num?)?.toInt() ?? 0;
+  }
+}
+
 class WoxQueryResult {
   late String queryId;
   late String id;
@@ -134,6 +152,7 @@ class WoxQueryResult {
   late List<WoxListItemTail> tails;
 
   late List<WoxResultAction> actions;
+  WoxResultDragData? dragData;
 
   // Used by the frontend to determine if this result is a group
   late bool isGroup;
@@ -150,6 +169,7 @@ class WoxQueryResult {
     required this.groupScore,
     required this.tails,
     required this.actions,
+    this.dragData,
     required this.isGroup,
   });
 
@@ -165,6 +185,7 @@ class WoxQueryResult {
     groupScore = 0;
     tails = [];
     actions = [];
+    dragData = null;
     isGroup = false;
   }
 
@@ -178,6 +199,8 @@ class WoxQueryResult {
     score = json['Score'];
     group = json['Group'];
     groupScore = json['GroupScore'];
+    final rawDragData = json['DragData'];
+    dragData = rawDragData is Map ? WoxResultDragData.fromJson(Map<String, dynamic>.from(rawDragData)) : null;
 
     if (json['Tails'] != null) {
       tails = [];
@@ -215,7 +238,31 @@ class WoxQueryResult {
     data['GroupScore'] = groupScore;
     data['Actions'] = actions.map((v) => v.toJson()).toList();
     data['Tails'] = tails.map((v) => v.toJson()).toList();
+    data['DragData'] = dragData?.toJson();
     data['IsGroup'] = isGroup;
+    return data;
+  }
+}
+
+class WoxResultDragData {
+  static const String typeFiles = "files";
+
+  late String type;
+  late List<String> files;
+
+  WoxResultDragData({required this.type, required this.files});
+
+  WoxResultDragData.fromJson(Map<String, dynamic> json) {
+    type = json['Type'] ?? "";
+    files = List<String>.from((json['Files'] ?? const <dynamic>[]).map((filePath) => filePath.toString()));
+  }
+
+  bool get isFiles => type == typeFiles && files.isNotEmpty;
+
+  Map<String, dynamic> toJson() {
+    final Map<String, dynamic> data = <String, dynamic>{};
+    data['Type'] = type;
+    data['Files'] = files;
     return data;
   }
 }
@@ -480,6 +527,7 @@ class ShowAppParams {
   late bool hideOnBlur;
   late String showSource;
   late int activationStartedAt;
+  late int attentionUnreadCount;
 
   ShowAppParams({
     required this.selectAll,
@@ -496,6 +544,7 @@ class ShowAppParams {
     this.hideOnBlur = false,
     this.showSource = 'default',
     this.activationStartedAt = 0,
+    this.attentionUnreadCount = 0,
   });
 
   ShowAppParams.fromJson(Map<String, dynamic> json) {
@@ -522,6 +571,7 @@ class ShowAppParams {
     hideOnBlur = json['HideOnBlur'] ?? false;
     showSource = json['ShowSource'] ?? 'default';
     activationStartedAt = (json['ActivationStartedAt'] as num?)?.toInt() ?? 0;
+    attentionUnreadCount = (json['AttentionUnreadCount'] as num?)?.toInt() ?? 0;
   }
 }
 
@@ -614,8 +664,10 @@ class UpdatableResult {
   List<WoxListItemTail>? tails;
   WoxPreview? preview;
   List<WoxResultAction>? actions;
+  bool hasDragDataUpdate = false;
+  WoxResultDragData? dragData;
 
-  UpdatableResult({required this.id, this.title, this.subTitle, this.icon, this.tails, this.preview, this.actions});
+  UpdatableResult({required this.id, this.title, this.subTitle, this.icon, this.tails, this.preview, this.actions, this.hasDragDataUpdate = false, this.dragData});
 
   UpdatableResult.fromJson(Map<String, dynamic> json) {
     id = json['Id'];
@@ -644,6 +696,10 @@ class UpdatableResult {
         actions!.add(action);
       });
     }
+
+    hasDragDataUpdate = json.containsKey('DragData');
+    final rawDragData = json['DragData'];
+    dragData = rawDragData is Map ? WoxResultDragData.fromJson(Map<String, dynamic>.from(rawDragData)) : null;
   }
 }
 

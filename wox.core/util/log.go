@@ -20,7 +20,10 @@ import (
 var logInstance *Log
 var logOnce sync.Once
 
-const logCleanupInterval = 24 * time.Hour
+const (
+	logRetentionDays = 5
+	logFileBaseName  = "log"
+)
 
 type Log struct {
 	logger      *zap.Logger
@@ -36,7 +39,7 @@ func GetLogger() *Log {
 		logFolder := GetLocation().GetLogDirectory()
 		logInstance = CreateLogger(logFolder)
 		setCrashOutput(logInstance)
-		logInstance.startCleanupRoutine()
+		logInstance.startMaintenanceRoutine()
 	})
 	return logInstance
 }
@@ -85,6 +88,13 @@ func CreateLogger(logFolder string) *Log {
 
 func (l *Log) GetWriter() io.Writer {
 	return l.writer
+}
+
+func (l *Log) CurrentLogPath() string {
+	if l.fileWriter == nil {
+		return path.Join(l.logFolder, logFileBaseName)
+	}
+	return l.fileWriter.CurrentFilename()
 }
 
 func formatMsg(context context.Context, msg string, level string) string {
@@ -136,7 +146,7 @@ func (l *Log) ClearHistory() error {
 		return err
 	}
 
-	logFileName := path.Base(l.fileWriter.Filename)
+	logFileName := path.Base(l.fileWriter.CurrentFilename())
 	entries, err := os.ReadDir(l.logFolder)
 	if err != nil {
 		return err
@@ -166,26 +176,39 @@ func (l *Log) ClearHistory() error {
 	return crashFile.Close()
 }
 
-func (l *Log) startCleanupRoutine() {
+func (l *Log) startMaintenanceRoutine() {
 	ctx := NewTraceContext()
 
-	Go(ctx, "log cleanup", func() {
-		ticker := time.NewTicker(logCleanupInterval)
-		defer ticker.Stop()
+	Go(ctx, "log maintenance", func() {
+		l.runMaintenance(ctx)
 
-		for range ticker.C {
-			l.cleanupExpiredLogs(NewTraceContext())
+		for {
+			timer := time.NewTimer(durationUntilNextLocalMidnight(currentTime()))
+			<-timer.C
+			l.runMaintenance(NewTraceContext())
 		}
 	})
 }
 
-func (l *Log) cleanupExpiredLogs(ctx context.Context) {
+func (l *Log) runMaintenance(ctx context.Context) {
 	if l.fileWriter == nil {
 		return
 	}
 
 	l.clearLogMux.Lock()
 	defer l.clearLogMux.Unlock()
+
+	if err := l.fileWriter.EnsureDailyRollover(); err != nil {
+		l.Error(ctx, fmt.Sprintf("failed to roll over daily log: %s", err.Error()))
+	}
+
+	l.cleanupExpiredLogs(ctx)
+}
+
+func (l *Log) cleanupExpiredLogs(ctx context.Context) {
+	if l.fileWriter == nil {
+		return
+	}
 
 	if err := l.fileWriter.millRunOnce(); err != nil {
 		l.Error(ctx, fmt.Sprintf("failed to cleanup rotated logs: %s", err.Error()))
@@ -202,25 +225,25 @@ func (l *Log) cleanupExpiredLogs(ctx context.Context) {
 }
 
 func (l *Log) cleanupStandaloneLogFiles() (int, error) {
-	if l.fileWriter == nil || l.fileWriter.MaxAge <= 0 {
+	if l.fileWriter == nil || logRetentionDays <= 0 {
 		return 0, nil
 	}
 
-	cutoff := currentTime().Add(-time.Duration(l.fileWriter.MaxAge) * 24 * time.Hour)
+	cutoff := startOfDay(currentTime()).AddDate(0, 0, -logRetentionDays)
 	entries, err := os.ReadDir(l.logFolder)
 	if err != nil {
 		return 0, err
 	}
 
 	removedCount := 0
-	currentLogFileName := path.Base(l.fileWriter.Filename)
+	currentLogFileName := path.Base(l.fileWriter.CurrentFilename())
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
 		}
 
 		name := entry.Name()
-		if name == currentLogFileName || (name != "crash.log" && name != "update.log") {
+		if name == currentLogFileName {
 			continue
 		}
 
@@ -228,7 +251,7 @@ func (l *Log) cleanupStandaloneLogFiles() (int, error) {
 		if infoErr != nil {
 			return removedCount, infoErr
 		}
-		if !info.ModTime().Before(cutoff) {
+		if !isExpiredLogFile(name, info.ModTime(), cutoff) {
 			continue
 		}
 
@@ -251,6 +274,57 @@ func (l *Log) cleanupStandaloneLogFiles() (int, error) {
 	return removedCount, nil
 }
 
+func startOfDay(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
+}
+
+func durationUntilNextLocalMidnight(t time.Time) time.Duration {
+	nextMidnight := startOfDay(t).AddDate(0, 0, 1)
+	return nextMidnight.Sub(t)
+}
+
+// isExpiredLogFile keeps retention decisions in one place for daily log files
+// and legacy standalone logs that do not carry a date in their filename.
+func isExpiredLogFile(name string, modTime time.Time, cutoff time.Time) bool {
+	if logDate, ok := dateFromDailyLogName(name); ok {
+		return logDate.Before(cutoff)
+	}
+
+	switch name {
+	case logFileBaseName, "crash.log", "update.log":
+		return modTime.Before(cutoff)
+	default:
+		return false
+	}
+}
+
+// dateFromDailyLogName extracts the YYYYMMDD suffix from daily backup logs.
+func dateFromDailyLogName(name string) (time.Time, bool) {
+	normalizedName := strings.TrimSuffix(name, compressSuffix)
+	prefix := logFileBaseName + "."
+	if !strings.HasPrefix(normalizedName, prefix) {
+		return time.Time{}, false
+	}
+
+	datePart := strings.TrimPrefix(normalizedName, prefix)
+	if len(datePart) < len(dailyTimeFormat) {
+		return time.Time{}, false
+	}
+	if suffix := datePart[len(dailyTimeFormat):]; suffix != "" && !strings.HasPrefix(suffix, ".") {
+		return time.Time{}, false
+	}
+	datePart = datePart[:len(dailyTimeFormat)]
+	if _, err := strconv.Atoi(datePart); err != nil {
+		return time.Time{}, false
+	}
+
+	parsedDate, err := time.ParseInLocation(dailyTimeFormat, datePart, currentTime().Location())
+	if err != nil {
+		return time.Time{}, false
+	}
+	return parsedDate, true
+}
+
 func NormalizeLogLevel(level string) string {
 	normalizedLevel := strings.ToUpper(strings.TrimSpace(level))
 	if normalizedLevel == "DEBUG" {
@@ -268,10 +342,9 @@ func parseZapLevel(level string) zapcore.Level {
 
 func createLogger(logFolder string, initialLevel zapcore.Level) (*zap.Logger, io.Writer, *Lumberjack, zap.AtomicLevel) {
 	fileWriter := &Lumberjack{
-		Filename:  path.Join(logFolder, "log"),
+		Filename:  path.Join(logFolder, logFileBaseName),
 		LocalTime: true,
-		MaxSize:   500, // megabytes
-		MaxAge:    30,  // days
+		Daily:     true,
 	}
 	writeSyncer := zapcore.AddSync(fileWriter)
 	atomicLevel := zap.NewAtomicLevelAt(initialLevel)

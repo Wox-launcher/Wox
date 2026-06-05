@@ -4,6 +4,7 @@ import {
   CopyParams,
   MapString,
   PublicAPI,
+  PushAttentionRequest,
   Query,
   RefreshQueryParam,
   Result,
@@ -101,6 +102,10 @@ export class PluginAPI implements PublicAPI {
 
   async Notify(ctx: Context, message: string): Promise<void> {
     await this.invokeMethod(ctx, "Notify", { message })
+  }
+
+  async PushAttention(ctx: Context, request: PushAttentionRequest): Promise<void> {
+    await this.invokeMethod(ctx, "PushAttention", { request: JSON.stringify(request) })
   }
 
   async ShowToolbarMsg(ctx: Context, msg: unknown): Promise<void> {

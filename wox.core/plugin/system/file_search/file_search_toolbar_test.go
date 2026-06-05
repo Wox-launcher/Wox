@@ -16,6 +16,8 @@ func (a fileSearchToolbarTestAPI) ChangeQuery(ctx context.Context, query common.
 func (a fileSearchToolbarTestAPI) HideApp(ctx context.Context)                              {}
 func (a fileSearchToolbarTestAPI) ShowApp(ctx context.Context)                              {}
 func (a fileSearchToolbarTestAPI) Notify(ctx context.Context, description string)           {}
+func (a fileSearchToolbarTestAPI) PushAttention(ctx context.Context, request plugin.PushAttentionRequest) {
+}
 func (a fileSearchToolbarTestAPI) Log(ctx context.Context, level plugin.LogLevel, msg string) {
 }
 func (a fileSearchToolbarTestAPI) GetTranslation(ctx context.Context, key string) string {

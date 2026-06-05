@@ -249,7 +249,7 @@ func (c *ColorPlugin) buildColorActions(ctx context.Context, color parsedColor, 
 			Name:                   "i18n:plugin_color_delete",
 			Icon:                   common.TrashIcon,
 			PreventHideAfterAction: true,
-			Hotkey:                 "Ctrl+D",
+			Hotkey:                 util.PrimaryHotkey("d"),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				c.deleteColor(ctx, color.Hex)
 				c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: false})

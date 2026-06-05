@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -41,6 +40,7 @@ const (
 	incrementalToolbarMinimumShowMs  int64 = 1000
 	fullIndexCompletionToolbarHoldMs int64 = 1000 * 5
 	toolbarActivityPathMaxChars            = 42
+	toolbarErrorReasonMaxChars             = 28
 	fileSearchResultLimit                  = 100
 	fileSearchRefinedCandidateLimit        = 300
 )
@@ -295,69 +295,21 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 	queryResults := make([]plugin.QueryResult, 0, len(results))
 	for _, item := range results {
 		icon := resolveFileSearchResultIcon(ctx, item, fileTypeIcons, &diagnostics)
-		actions := []plugin.QueryResultAction{
-			{
-				Name: "i18n:plugin_file_open",
-				Icon: common.PreviewIcon,
-				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					shell.Open(item.Path)
-				},
-			},
-			{
-				Name: "i18n:plugin_file_open_containing_folder",
-				Icon: common.OpenContainingFolderIcon,
-				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					shell.OpenFileInFolder(item.Path)
-				},
-				Hotkey: "ctrl+enter",
-			},
-			{
-				Name: "i18n:plugin_clipboard_delete",
-				Icon: common.TrashIcon,
-				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					err := trash.MoveToTrash(item.Path)
-					if err != nil {
-						c.api.Log(ctx, plugin.LogLevelError, err.Error())
-						c.api.Notify(ctx, err.Error())
-						return
-					}
-				},
-			},
-		}
-
-		// Bug fix: Linux only has file-manager-specific fallbacks here, not a true
-		// native system context menu. Hide the action when the platform cannot
-		// deliver the behavior promised by the label instead of showing a no-op.
-		if nativecontextmenu.IsSupported() {
-			actions = append(actions, plugin.QueryResultAction{
-				Name: "i18n:plugin_file_show_context_menu",
-				Icon: common.PluginMenusIcon,
-				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					c.api.Log(ctx, plugin.LogLevelInfo, "Showing context menu for: "+item.Path)
-					err := nativecontextmenu.ShowContextMenu(item.Path)
-					if err != nil {
-						c.api.Log(ctx, plugin.LogLevelError, err.Error())
-						c.api.Notify(ctx, err.Error())
-					}
-				},
-				Hotkey:                 "ctrl+m",
-				PreventHideAfterAction: true,
-			})
-		}
-
-		actions = append(actions,
-			// Feature addition: manual full reindex belongs in the action panel
-			// of file-search results instead of appearing as a separate result.
-			// Keeping it off the main result list avoids polluting empty queries
-			// and ordinary filename searches while still making recovery easy.
-			c.buildIndexFilesAction(),
-		)
+		actions := c.buildFileSearchResultActions(ctx, item)
 
 		queryResults = append(queryResults, plugin.QueryResult{
 			Title:    item.Name,
 			SubTitle: item.Path,
-			Icon:     icon,
-			Actions:  actions,
+			Preview: plugin.WoxPreview{
+				PreviewType: plugin.WoxPreviewTypeFile,
+				PreviewData: item.Path,
+			},
+			Icon:    icon,
+			Actions: actions,
+			DragData: &plugin.QueryResultDragData{
+				Type:  plugin.QueryResultDragDataTypeFiles,
+				Files: []string{item.Path},
+			},
 		})
 	}
 	diagnostics.buildElapsedMs = util.GetSystemTimestamp() - buildStartedAt
@@ -366,6 +318,93 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 	response := plugin.NewQueryResponse(queryResults)
 	response.Refinements = c.buildFileSearchRefinements()
 	return response
+}
+
+// buildFileSearchResultActions keeps folder navigation integrated with the path-browse plugin.
+func (c *FileSearchPlugin) buildFileSearchResultActions(ctx context.Context, item filesearch.SearchResult) []plugin.QueryResultAction {
+	actions := []plugin.QueryResultAction{
+		{
+			Name: "i18n:plugin_file_open",
+			Icon: common.PreviewIcon,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				shell.Open(item.Path)
+			},
+		},
+	}
+
+	if item.IsDir {
+		actions = append(actions, plugin.QueryResultAction{
+			Name:                   "i18n:plugin_folder_enter",
+			Icon:                   common.FolderIcon,
+			Hotkey:                 util.PrimaryHotkey("enter"),
+			PreventHideAfterAction: true,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				c.api.ChangeQuery(ctx, common.PlainQuery{
+					QueryType: plugin.QueryTypeInput,
+					QueryText: ensureFileSearchFolderBrowseQuery(item.Path),
+				})
+			},
+		})
+	} else {
+		actions = append(actions, plugin.QueryResultAction{
+			Name: "i18n:plugin_file_open_containing_folder",
+			Icon: common.OpenContainingFolderIcon,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				shell.OpenFileInFolder(item.Path)
+			},
+			Hotkey: util.PrimaryHotkey("enter"),
+		})
+	}
+
+	actions = append(actions, plugin.QueryResultAction{
+		Name: "i18n:plugin_clipboard_delete",
+		Icon: common.TrashIcon,
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			err := trash.MoveToTrash(item.Path)
+			if err != nil {
+				c.api.Log(ctx, plugin.LogLevelError, err.Error())
+				c.api.Notify(ctx, err.Error())
+				return
+			}
+		},
+	})
+
+	// Bug fix: Linux only has file-manager-specific fallbacks here, not a true
+	// native system context menu. Hide the action when the platform cannot
+	// deliver the behavior promised by the label instead of showing a no-op.
+	if nativecontextmenu.IsSupported() {
+		actions = append(actions, plugin.QueryResultAction{
+			Name: "i18n:plugin_file_show_context_menu",
+			Icon: common.PluginMenusIcon,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				c.api.Log(ctx, plugin.LogLevelInfo, "Showing context menu for: "+item.Path)
+				err := nativecontextmenu.ShowContextMenu(item.Path)
+				if err != nil {
+					c.api.Log(ctx, plugin.LogLevelError, err.Error())
+					c.api.Notify(ctx, err.Error())
+				}
+			},
+			Hotkey:                 util.PrimaryHotkey("m"),
+			PreventHideAfterAction: true,
+		})
+	}
+
+	actions = append(actions,
+		// Feature addition: manual full reindex belongs in the action panel
+		// of file-search results instead of appearing as a separate result.
+		// Keeping it off the main result list avoids polluting empty queries
+		// and ordinary filename searches while still making recovery easy.
+		c.buildIndexFilesAction(),
+	)
+
+	return actions
+}
+
+func ensureFileSearchFolderBrowseQuery(folderPath string) string {
+	if strings.HasSuffix(folderPath, "/") || strings.HasSuffix(folderPath, `\`) {
+		return folderPath
+	}
+	return folderPath + string(os.PathSeparator)
 }
 
 func (c *FileSearchPlugin) buildIndexFilesAction() plugin.QueryResultAction {
@@ -446,10 +485,7 @@ func (c *FileSearchPlugin) buildFileSearchSortRefinement() plugin.QueryRefinemen
 }
 
 func fileSearchPlatformHotkey(key string) string {
-	if runtime.GOOS == "darwin" {
-		return "cmd+" + key
-	}
-	return "alt+" + key
+	return util.PrimaryHotkey(key)
 }
 
 func selectedFileSearchType(query plugin.Query) string {
@@ -888,7 +924,7 @@ func (c *FileSearchPlugin) buildToolbarMsgFromStatus(ctx context.Context, status
 	}
 
 	if status.ErrorRootCount > 0 && !status.IsIndexing {
-		title = decorateRootErrorToolbarTitle(title, status)
+		title = c.decorateRootErrorToolbarTitle(ctx, title, status)
 	}
 
 	return plugin.ToolbarMsg{
@@ -1397,15 +1433,73 @@ func trimToolbarMiddle(value string, maxChars int) string {
 	return util.EllipsisMiddle(value, maxChars)
 }
 
-func decorateRootErrorToolbarTitle(title string, status filesearch.StatusSnapshot) string {
+func (c *FileSearchPlugin) decorateRootErrorToolbarTitle(ctx context.Context, title string, status filesearch.StatusSnapshot) string {
+	parts := make([]string, 0, 2)
 	errorRootPath := shortenToolbarPath(status.ErrorRootPath, toolbarActivityPathMaxChars)
-	if errorRootPath == "" {
+	if errorRootPath != "" {
+		parts = append(parts, errorRootPath)
+	}
+
+	errorReason := c.buildRootErrorToolbarReason(ctx, status.LastError)
+	if errorReason != "" {
+		parts = append(parts, errorReason)
+	}
+
+	if len(parts) == 0 {
 		return title
 	}
-	// A generic "needs attention" banner was too vague when one configured root
-	// failed. Appending the failing root path makes the recovery target explicit
-	// without expanding the toolbar into a multi-line error surface.
-	return title + " · " + errorRootPath
+	// A generic "needs attention" banner is too vague when one configured root
+	// fails. Keep the root and a short cause visible without turning the toolbar
+	// into the full diagnostic surface.
+	return title + " · " + strings.Join(parts, " · ")
+}
+
+// buildRootErrorToolbarReason condenses persisted scanner errors into a short
+// cause that can fit beside the failing root in the launcher toolbar.
+func (c *FileSearchPlugin) buildRootErrorToolbarReason(ctx context.Context, message string) string {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return ""
+	}
+
+	normalized := strings.ToLower(message)
+	if strings.Contains(normalized, "access is denied") || strings.Contains(normalized, "permission denied") || strings.Contains(normalized, "operation not permitted") {
+		return c.getToolbarTranslation(ctx, "plugin_file_status_error_reason_access_denied", "Access denied")
+	}
+
+	return trimToolbarMiddle(lastToolbarErrorSegment(message), toolbarErrorReasonMaxChars)
+}
+
+// getToolbarTranslation keeps toolbar helpers usable in tests that do not wire
+// the full plugin translation service.
+func (c *FileSearchPlugin) getToolbarTranslation(ctx context.Context, key string, fallback string) string {
+	if c == nil || c.api == nil {
+		return fallback
+	}
+
+	translation := strings.TrimSpace(c.api.GetTranslation(ctx, key))
+	if translation == "" || translation == key {
+		return fallback
+	}
+	return translation
+}
+
+// lastToolbarErrorSegment keeps generic error fallbacks compact while retaining
+// the usually actionable suffix from wrapped Go errors.
+func lastToolbarErrorSegment(message string) string {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return ""
+	}
+
+	parts := strings.Split(message, ":")
+	for index := len(parts) - 1; index >= 0; index-- {
+		part := strings.TrimSpace(parts[index])
+		if part != "" {
+			return part
+		}
+	}
+	return message
 }
 
 func (c *FileSearchPlugin) toolbarMsgActions(ctx context.Context, hasPermissionError bool) []plugin.ToolbarMsgAction {
@@ -1417,7 +1511,7 @@ func (c *FileSearchPlugin) toolbarMsgActions(ctx context.Context, hasPermissionE
 		{
 			Name:   "i18n:plugin_file_status_open_privacy_settings",
 			Icon:   common.PermissionIcon,
-			Hotkey: "ctrl+enter",
+			Hotkey: util.PrimaryHotkey("enter"),
 			Action: func(ctx context.Context, actionContext plugin.ToolbarMsgActionContext) {
 				permission.OpenPrivacySecuritySettings(ctx)
 			},

@@ -67,6 +67,10 @@ private:
   // short-lived foreground steals from other apps. see issue #4346
   ULONGLONG blur_guard_until_tick_ = 0;
 
+  // Prevent duplicate Dart blur callbacks when Windows sends both WM_ACTIVATE
+  // and WM_ACTIVATEAPP for the same deactivation.
+  bool blur_event_sent_since_focus_ = false;
+
   struct ScreenshotPresentationState
   {
     bool active = false;
@@ -163,12 +167,19 @@ private:
   void RestorePreviousActiveWindow(HWND selfHwnd);
   HWND NormalizeToRootWindow(HWND hwnd) const;
   bool ShouldSuppressBlurForActivatedWindow(HWND selfHwnd, HWND activatedHwnd);
+  // Sends the Dart blur event when a Windows deactivation is not part of the
+  // guarded show/focus transition.
+  void NotifyWindowBlur(HWND selfHwnd, HWND activatedHwnd, const char *source);
 
   // Get the DPI scaling factor for the window
   float GetDpiScale(HWND hwnd);
 
   // Sync the hosted Flutter child window with the root client area.
   void SyncFlutterChildWindowToClientArea(HWND hwnd, const char *source, bool engine_handled);
+  // Schedules a delayed one-pixel native resize round trip to wake Flutter/DWM after Windows resize.
+  void ScheduleDelayedResizeRepaintNudge(HWND hwnd);
+  // Runs the delayed resize nudge and restores the original native window size.
+  void RunDelayedResizeRepaintNudge(HWND hwnd);
   void FocusFlutterViewOrRoot(HWND hwnd);
 
   // Helpers for logging native geometry.

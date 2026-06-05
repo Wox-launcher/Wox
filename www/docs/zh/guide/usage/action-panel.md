@@ -5,7 +5,7 @@
 ## 打开方式
 
 1. 选中一个结果。
-2. Windows/Linux 按 `Alt + J`，macOS 按 `Command + J`。
+2. Windows/Linux 按 `Ctrl + J`，macOS 按 `Command + J`。
 3. 用键盘选择动作并按 `Enter`。
 
 ## 常见动作

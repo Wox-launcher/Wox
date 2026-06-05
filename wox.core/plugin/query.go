@@ -117,14 +117,19 @@ func (q *Query) String() string {
 }
 
 type QueryEnv struct {
-	ActiveWindowTitle            string          // active window title when user query, empty if not available
-	ActiveWindowPid              int             // active window pid when user query, 0 if not available
-	ActiveWindowIcon             common.WoxImage // active window icon when user query, empty if not available
-	ActiveWindowIsOpenSaveDialog bool            // active window is open/save dialog when user query
+	ActiveWindowTitle string          // active window title when user query, empty if not available
+	ActiveWindowPid   int             // active window pid when user query, 0 if not available
+	ActiveWindowIcon  common.WoxImage // active window icon when user query, empty if not available
 
 	// active browser url when user query
 	// Only available when active window is browser and https://github.com/Wox-launcher/Wox.Chrome.Extension is installed
 	ActiveBrowserUrl string
+
+	// These fields are core-only for built-in system plugins. Do not add them
+	// to SDK models or public plugin docs unless we explicitly decide to expose
+	// the native window handle/dialog state as public plugin API.
+	ActiveWindowId               string `json:"-"` // exact top-level window id; Windows HWND, macOS CGWindowID
+	ActiveWindowIsOpenSaveDialog bool   `json:"-"` // active window is open/save dialog when user query
 }
 
 // QueryResponse is the complete plugin answer for one query execution.
@@ -201,6 +206,14 @@ type RefreshQueryParam struct {
 	PreserveSelectedIndex bool
 }
 
+const QueryResultDragDataTypeFiles = "files"
+
+// QueryResultDragData declares data the UI can export through a native drag session.
+type QueryResultDragData struct {
+	Type  string
+	Files []string
+}
+
 // Query result return from plugin
 type QueryResult struct {
 	// Result id, should be unique. It's optional, if you don't set it, Wox will assign a random id for you
@@ -220,6 +233,8 @@ type QueryResult struct {
 	// Tails are additional results associate with this result, can be displayed in result detail view
 	Tails   []QueryResultTail
 	Actions []QueryResultAction
+	// DragData declares what can be dragged out of Wox for this result.
+	DragData *QueryResultDragData
 }
 
 type QueryResultTail struct {
@@ -326,6 +341,7 @@ func (q *QueryResult) ToUI() QueryResultUI {
 		Group:      q.Group,
 		GroupScore: q.GroupScore,
 		Tails:      q.Tails,
+		DragData:   q.DragData,
 		Actions: lo.Map(q.Actions, func(action QueryResultAction, index int) QueryResultActionUI {
 			actionType := action.Type
 			if actionType == "" {
@@ -370,14 +386,16 @@ type QueryResultUI struct {
 	GroupScore int64
 	Tails      []QueryResultTail
 	Actions    []QueryResultActionUI
+	DragData   *QueryResultDragData
 	IsGroup    bool
 }
 
 type QueryResponseUI struct {
-	Results     []QueryResultUI
-	Refinements []QueryRefinement
-	Layout      QueryLayout
-	Context     QueryContext
+	Results             []QueryResultUI
+	Refinements         []QueryRefinement
+	Layout              QueryLayout
+	Context             QueryContext
+	QueryStartTimestamp int64 // end-to-end query start timestamp, preferably from Flutter request send time
 }
 
 // PushResultsPayload is used to push additional results to UI for a query.
@@ -439,17 +457,26 @@ type UpdatableResult struct {
 	Preview  *WoxPreview
 	Tails    *[]QueryResultTail
 	Actions  *[]QueryResultAction
+	DragData *QueryResultDragData
 }
 
 // store latest result value after query/refresh, so we can retrieve data later in action/refresh
 type QueryResultCache struct {
-	Result          QueryResult // store the full QueryResult including actions with callbacks
-	PluginInstance  *Instance
-	Query           Query
-	Layout          QueryLayout // query layout used when polishing this result, so later updates keep the same surface sizing
-	FlushBatch      int
+	Result         QueryResult // store the full QueryResult including actions with callbacks
+	PluginInstance *Instance
+	Query          Query
+	Layout         QueryLayout // query layout used when polishing this result, so later updates keep the same surface sizing
+	// FlushBatch is the debouncer batch that first sent this result in a visible response.
+	FlushBatch int
+	// BatchQueueElapsed is the elapsed time when queryRun put this result into the debouncer queue.
+	BatchQueueElapsed    int64
+	BatchQueueElapsedSet bool
+	// QueryElapsed is the elapsed time when queryRun received the plugin response, measured from the end-to-end query start.
 	QueryElapsed    int64
 	QueryElapsedSet bool
+	// PluginQueryElapsed is only the raw Plugin.Query duration, excluding manager polish and UI conversion.
+	PluginQueryElapsed    int64
+	PluginQueryElapsedSet bool
 }
 
 func newQueryInputWithPlugins(query string, pluginInstances []*Instance) (Query, *Instance) {

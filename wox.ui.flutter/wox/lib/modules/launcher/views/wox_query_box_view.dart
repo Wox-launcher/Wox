@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -15,6 +16,7 @@ import 'package:wox/components/wox_tooltip.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_glance.dart';
 import 'package:wox/entity/wox_hotkey.dart';
+import 'package:wox/modules/launcher/views/wox_glance_item_view.dart';
 import 'package:wox/utils/color_util.dart';
 import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/log.dart';
@@ -140,21 +142,40 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
     return buildQueryBoxWordDeletionValue(oldValue, forward: forward);
   }
 
+  /// Focuses the query box from trailing blank-space clicks without moving the cursor.
+  void _handleQueryBoxBlankAreaTap() {
+    unawaited(controller.focusQueryBox());
+  }
+
+  /// Selects query text from double-clicks on the trailing blank area.
+  void _handleQueryBoxBlankAreaTextSelection() {
+    unawaited(
+      controller.focusQueryBox().then((_) {
+        controller.selectQueryBoxAllText(const UuidV4().generate());
+      }),
+    );
+  }
+
   double _getQueryBoxRightAccessoryWidth(BuildContext context, dynamic currentTheme) {
     final metrics = WoxInterfaceSizeUtil.instance.current;
     final refinementWidth = _getRefinementAccessoryWidth(context, currentTheme);
-    final accessoryGap = refinementWidth > 0 ? metrics.scaledSpacing(8) : 0.0;
-    if (!controller.shouldShowGlance) {
-      final iconSlotWidth = controller.queryIcon.value.icon.imageData.isEmpty ? 0.0 : metrics.queryBoxRightAccessoryWidth;
-      return math.max(metrics.queryBoxRightAccessoryWidth, refinementWidth + accessoryGap + iconSlotWidth);
+    final attentionWidth = _getAttentionBadgeWidth(context, currentTheme);
+    final widths = <double>[if (refinementWidth > 0) refinementWidth, if (attentionWidth > 0) attentionWidth];
+
+    if (controller.shouldShowGlance) {
+      final visibleItems = controller.glanceItems.take(1).toList();
+      final baseTextColor = safeFromCssColor(currentTheme.queryBoxFontColor);
+      final textColor = baseTextColor.withValues(alpha: 0.8);
+      final textStyle = TextStyle(color: textColor, fontSize: metrics.queryBoxGlanceFontSize);
+      final itemWidth = visibleItems.fold<double>(0, (sum, item) => sum + _getGlanceItemWidth(context, item, textStyle));
+      widths.add(metrics.queryBoxGlanceHPadding + itemWidth + math.max(visibleItems.length - 1, 0) * metrics.queryBoxGlanceItemSpacing);
+    } else if (controller.queryIcon.value.icon.imageData.isNotEmpty) {
+      widths.add(metrics.queryBoxRightAccessoryWidth);
     }
 
-    final visibleItems = controller.glanceItems.take(1).toList();
-    final baseTextColor = safeFromCssColor(currentTheme.queryBoxFontColor);
-    final textColor = baseTextColor.withValues(alpha: 0.8);
-    final textStyle = TextStyle(color: textColor, fontSize: metrics.queryBoxGlanceFontSize);
-    final itemWidth = visibleItems.fold<double>(0, (sum, item) => sum + _getGlanceItemWidth(context, item, textStyle));
-    return refinementWidth + accessoryGap + metrics.queryBoxGlanceHPadding + itemWidth + math.max(visibleItems.length - 1, 0) * metrics.queryBoxGlanceItemSpacing;
+    final gapWidth = math.max(widths.length - 1, 0) * metrics.scaledSpacing(12);
+    final contentWidth = widths.fold<double>(0, (sum, width) => sum + width) + gapWidth;
+    return math.max(metrics.queryBoxRightAccessoryWidth, contentWidth);
   }
 
   double _getRefinementAccessoryWidth(BuildContext context, dynamic currentTheme) {
@@ -166,6 +187,26 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
     final textStyle = TextStyle(color: safeFromCssColor(currentTheme.queryBoxFontColor), fontSize: metrics.smallLabelFontSize, fontWeight: FontWeight.w700);
     final labelWidth = WoxTextMeasureUtil.measureTextWidth(context: context, text: controller.getQueryRefinementAffordanceLabel(), style: textStyle).ceilToDouble();
     return (metrics.scaledSpacing(28) + labelWidth + metrics.scaledSpacing(14)).clamp(metrics.scaledSpacing(72), metrics.scaledSpacing(150)).toDouble();
+  }
+
+  double _getAttentionBadgeWidth(BuildContext context, dynamic currentTheme) {
+    if (!controller.shouldShowAttentionBadge) {
+      return 0.0;
+    }
+
+    final metrics = WoxInterfaceSizeUtil.instance.current;
+    final countText = _getAttentionBadgeCountText();
+    final textStyle = TextStyle(color: safeFromCssColor(currentTheme.queryBoxFontColor), fontSize: metrics.smallLabelFontSize, fontWeight: FontWeight.w800);
+    final labelWidth = WoxTextMeasureUtil.measureTextWidth(context: context, text: countText, style: textStyle).ceilToDouble();
+    return (metrics.scaledSpacing(30) + labelWidth + metrics.scaledSpacing(12)).clamp(metrics.scaledSpacing(46), metrics.scaledSpacing(78)).toDouble();
+  }
+
+  String _getAttentionBadgeCountText() {
+    final count = controller.attentionUnreadCount.value;
+    if (count > 99) {
+      return "99+";
+    }
+    return count.toString();
   }
 
   double _getGlanceItemWidth(BuildContext context, GlanceItem item, TextStyle textStyle) {
@@ -190,15 +231,12 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
     // decoration padding stays fixed, preserving the normal layout and keeping
     // multi-line height calculation aligned with controller metrics.
     final metrics = WoxInterfaceSizeUtil.instance.current;
-    final textHeightFactor = metrics.queryBoxTextHeightFactor;
-    final queryBoxTextStyle = TextStyle(fontSize: metrics.queryBoxFontSize, height: textHeightFactor, color: safeFromCssColor(currentTheme.queryBoxFontColor));
-    final queryBoxStrutStyle = StrutStyle(fontSize: metrics.queryBoxFontSize, height: textHeightFactor, leading: 0, forceStrutHeight: true);
+    final queryBoxTextStyle = TextStyle(fontSize: metrics.queryBoxFontSize, color: safeFromCssColor(currentTheme.queryBoxFontColor));
 
     return MediaQuery.withNoTextScaling(
       child: ExtendedTextField(
         key: controller.queryBoxTextFieldKey,
         style: queryBoxTextStyle,
-        strutStyle: queryBoxStrutStyle,
         textAlignVertical: TextAlignVertical.center,
         decoration: InputDecoration(
           contentPadding: EdgeInsets.only(left: 8, right: rightAccessoryWidth, top: QUERY_BOX_CONTENT_PADDING_TOP, bottom: QUERY_BOX_CONTENT_PADDING_BOTTOM),
@@ -269,6 +307,43 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
     );
   }
 
+  Widget _buildQueryBoxRightBlankDragArea(BuildContext context, double boxWidth, double boxHeight, double rightAccessoryWidth, dynamic currentTheme) {
+    final metrics = WoxInterfaceSizeUtil.instance.current;
+    final text = controller.queryBoxTextFieldController.text;
+    final queryBoxTextStyle = TextStyle(fontSize: metrics.queryBoxFontSize, color: safeFromCssColor(currentTheme.queryBoxFontColor));
+    final contentWidth = (boxWidth - 8 - rightAccessoryWidth).clamp(0, double.infinity).toDouble();
+    final textWidth = text.isEmpty ? 0.0 : WoxTextMeasureUtil.measureTextWidth(context: context, text: text, style: queryBoxTextStyle).ceilToDouble();
+    final blankWidth = (contentWidth - textWidth).clamp(0, double.infinity).toDouble();
+
+    if (blankWidth <= 0) {
+      return const SizedBox.shrink();
+    }
+
+    return Positioned(
+      left: 100 + textWidth,
+      top: 0,
+      width: blankWidth,
+      height: boxHeight,
+      child: TextFieldTapRegion(
+        // Treat the blank overlay as part of the query editor so single clicks
+        // do not look like outside taps and momentarily disturb text selection.
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: _handleQueryBoxBlankAreaTap,
+          onDoubleTap: _handleQueryBoxBlankAreaTextSelection,
+          child: MouseRegion(
+            child: WoxDragMoveArea(
+              onDragEnd: () {
+                controller.focusQueryBox();
+              },
+              child: SizedBox(width: blankWidth, height: boxHeight),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (LoggerSwitch.enablePaintLog) {
@@ -307,6 +382,16 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                 if (Platform.isLinux && event is KeyUpEvent && _isSubmitKey(event.logicalKey)) {
                   controller.resetLinuxQueryBoxSubmitKeyHandling();
                   return KeyEventResult.ignored;
+                }
+
+                if (event is KeyDownEvent &&
+                    event.logicalKey == LogicalKeyboardKey.tab &&
+                    HardwareKeyboard.instance.isShiftPressed &&
+                    !HardwareKeyboard.instance.isControlPressed &&
+                    !HardwareKeyboard.instance.isAltPressed &&
+                    !HardwareKeyboard.instance.isMetaPressed) {
+                  unawaited(controller.autoCompleteQuery(const UuidV4().generate()));
+                  return KeyEventResult.handled;
                 }
 
                 var isAnyModifierPressed = WoxHotkey.isAnyModifierPressed();
@@ -351,7 +436,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                         }
                         break;
                       case LogicalKeyboardKey.tab:
-                        controller.autoCompleteQuery(const UuidV4().generate());
+                        unawaited(controller.acceptQueryCompletionHint(const UuidV4().generate()));
                         return KeyEventResult.handled;
                       case LogicalKeyboardKey.home:
                         controller.moveQueryBoxCursorToStart();
@@ -427,6 +512,10 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                   return KeyEventResult.ignored;
                 }
 
+                if (controller.executeAttentionHotkey(traceId, pressedHotkey)) {
+                  return KeyEventResult.handled;
+                }
+
                 if (controller.executeLocalActionByHotkey(traceId, pressedHotkey)) {
                   return KeyEventResult.handled;
                 }
@@ -472,7 +561,12 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
 
                     return Theme(
                       data: ThemeData(textSelectionTheme: TextSelectionThemeData(selectionColor: safeFromCssColor(currentTheme.queryBoxTextSelectionBackgroundColor))),
-                      child: _buildTextField(currentTheme, rightAccessoryWidth),
+                      child: Stack(
+                        children: [
+                          _buildTextField(currentTheme, rightAccessoryWidth),
+                          _buildQueryBoxRightBlankDragArea(context, constraints.maxWidth, queryBoxHeight, rightAccessoryWidth, currentTheme),
+                        ],
+                      ),
                     );
                   },
                 ),
@@ -482,12 +576,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
           Positioned(
             right: 6,
             height: queryBoxHeight,
-            child: WoxDragMoveArea(
-              onDragEnd: () {
-                controller.focusQueryBox();
-              },
-              child: SizedBox(width: _getQueryBoxRightAccessoryWidth(context, currentTheme), height: queryBoxHeight, child: Center(child: _buildRightAccessory(currentTheme))),
-            ),
+            child: SizedBox(width: _getQueryBoxRightAccessoryWidth(context, currentTheme), height: queryBoxHeight, child: Center(child: _buildRightAccessory(currentTheme))),
           ),
         ],
       );
@@ -524,7 +613,20 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
         }
         accessoryChildren.add(_buildGlanceItem(currentTheme, item));
       }
+      if (controller.shouldShowAttentionBadge) {
+        if (accessoryChildren.isNotEmpty) {
+          accessoryChildren.add(SizedBox(width: WoxInterfaceSizeUtil.instance.current.scaledSpacing(12)));
+        }
+        accessoryChildren.add(_buildAttentionBadge(currentTheme));
+      }
       return Row(mainAxisAlignment: MainAxisAlignment.end, children: accessoryChildren);
+    }
+
+    if (controller.shouldShowAttentionBadge) {
+      if (accessoryChildren.isNotEmpty) {
+        accessoryChildren.add(SizedBox(width: WoxInterfaceSizeUtil.instance.current.scaledSpacing(12)));
+      }
+      accessoryChildren.add(_buildAttentionBadge(currentTheme));
     }
 
     if (controller.queryIcon.value.icon.imageData.isNotEmpty) {
@@ -571,6 +673,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
 
     return WoxTooltip(
       message: tooltip,
+      preferSide: WoxTooltipSide.top,
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
         child: GestureDetector(
@@ -611,55 +714,50 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
     );
   }
 
-  Widget _buildGlanceItem(dynamic currentTheme, GlanceItem item) {
-    final baseTextColor = safeFromCssColor(currentTheme.queryBoxFontColor);
-    // Glance now has no status field in v1; keeping one quiet opacity preserves
-    // the auxiliary feel without exposing unused state semantics in the API.
-    const textAlpha = 0.8;
-    final textColor = baseTextColor.withValues(alpha: textAlpha);
+  Widget _buildAttentionBadge(dynamic currentTheme) {
     var isHovered = false;
+    final baseTextColor = safeFromCssColor(currentTheme.queryBoxFontColor);
+    final activeColor = safeFromCssColor(currentTheme.queryBoxCursorColor);
 
-    // Glance is auxiliary status, so the default state is fully transparent and
-    // visually merges with the query box; hover is only a light affordance.
-    // Glance items are the launcher chrome shown in the screenshot. Using
-    // WoxTooltip here keeps plugin/system glance hints visually aligned with
-    // other launcher overlays instead of falling back to Material Tooltip.
     return WoxTooltip(
-      message: item.tooltip.isNotEmpty ? item.tooltip : item.text,
+      message: "${controller.tr("ui_attention_unread_tooltip")} ${controller.attentionHotkeyLabel}",
+      preferSide: WoxTooltipSide.top,
       child: StatefulBuilder(
         builder: (context, setHovered) {
           final metrics = WoxInterfaceSizeUtil.instance.current;
-          final textStyle = TextStyle(color: textColor, fontSize: metrics.scaledSpacing(15));
-          final itemWidth = _getGlanceItemWidth(context, item, textStyle);
-          final iconVisible = controller.shouldShowGlanceIcon(item);
+          final badgeWidth = _getAttentionBadgeWidth(context, currentTheme);
+          final textColor = activeColor.withValues(alpha: 0.95);
 
           return MouseRegion(
-            cursor: item.action == null ? SystemMouseCursors.basic : SystemMouseCursors.click,
+            cursor: SystemMouseCursors.click,
             onEnter: (_) => setHovered(() => isHovered = true),
             onExit: (_) => setHovered(() => isHovered = false),
             child: GestureDetector(
-              onTap: item.action == null ? null : () => controller.executeGlanceDefaultAction(const UuidV4().generate(), item),
+              onTap: () => controller.activateAttentionQuery(const UuidV4().generate()),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 120),
-                width: itemWidth,
-                height: metrics.scaledSpacing(30),
+                width: badgeWidth,
+                height: metrics.scaledSpacing(28),
                 padding: EdgeInsets.symmetric(horizontal: metrics.scaledSpacing(8)),
                 decoration: BoxDecoration(
-                  color: isHovered ? baseTextColor.withValues(alpha: 0.10) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(5),
-                  border: Border.all(color: isHovered ? baseTextColor.withValues(alpha: 0.08) : Colors.transparent),
+                  color: activeColor.withValues(alpha: isHovered ? 0.18 : 0.12),
+                  borderRadius: BorderRadius.circular(7),
+                  border: Border.all(color: activeColor.withValues(alpha: isHovered ? 0.34 : 0.22)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    if (iconVisible) ...[
-                      Opacity(
-                        opacity: textAlpha * 0.9,
-                        child: WoxImageView(woxImage: item.icon, width: metrics.scaledSpacing(16), height: metrics.scaledSpacing(16), svgColor: textColor),
+                    Icon(Icons.inbox_outlined, size: metrics.scaledSpacing(15), color: textColor),
+                    SizedBox(width: metrics.scaledSpacing(4)),
+                    Flexible(
+                      child: Text(
+                        _getAttentionBadgeCountText(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: baseTextColor.withValues(alpha: 0.94), fontSize: metrics.smallLabelFontSize, fontWeight: FontWeight.w800),
                       ),
-                      SizedBox(width: metrics.scaledSpacing(5)),
-                    ],
-                    Flexible(child: Text(item.text, overflow: TextOverflow.ellipsis, maxLines: 1, style: textStyle)),
+                    ),
                   ],
                 ),
               ),
@@ -668,5 +766,9 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
         },
       ),
     );
+  }
+
+  Widget _buildGlanceItem(dynamic currentTheme, GlanceItem item) {
+    return WoxGlanceItemView(currentTheme: currentTheme, item: item, controller: controller, getItemWidth: _getGlanceItemWidth);
   }
 }

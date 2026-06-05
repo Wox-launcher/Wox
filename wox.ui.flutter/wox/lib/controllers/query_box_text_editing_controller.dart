@@ -4,10 +4,13 @@ import 'package:flutter/material.dart';
 class QueryBoxTextEditingController extends TextEditingController {
   QueryBoxTextEditingController({required TextStyle selectedTextStyle, bool enableSelectedTextStyle = true})
     : _selectedTextStyle = selectedTextStyle,
-      _enableSelectedTextStyle = enableSelectedTextStyle;
+      _enableSelectedTextStyle = enableSelectedTextStyle,
+      _completionHintStyle = const TextStyle();
 
   TextStyle _selectedTextStyle;
   bool _enableSelectedTextStyle;
+  String _completionHintSuffix = "";
+  TextStyle _completionHintStyle;
 
   TextStyle get selectedTextStyle => _selectedTextStyle;
   bool get enableSelectedTextStyle => _enableSelectedTextStyle;
@@ -23,13 +26,29 @@ class QueryBoxTextEditingController extends TextEditingController {
     notifyListeners();
   }
 
+  /// Updates the inline completion suffix rendered after the editable text.
+  void updateCompletionHint({required String suffix, required TextStyle style}) {
+    if (_completionHintSuffix == suffix && _completionHintStyle == style) {
+      return;
+    }
+
+    _completionHintSuffix = suffix;
+    _completionHintStyle = style;
+    notifyListeners();
+  }
+
   @override
   TextSpan buildTextSpan({required BuildContext context, TextStyle? style, bool withComposing = false}) {
     final selection = value.selection;
     final hasStyledSelection = _enableSelectedTextStyle && selection.isValid && !selection.isCollapsed;
 
     if (!hasStyledSelection) {
-      return super.buildTextSpan(context: context, style: style, withComposing: withComposing);
+      final textSpan = super.buildTextSpan(context: context, style: style, withComposing: withComposing);
+      if (_completionHintSuffix.isEmpty) {
+        return textSpan;
+      }
+
+      return TextSpan(style: style, children: [textSpan, TextSpan(text: _completionHintSuffix, style: _completionHintStyle)]);
     }
 
     final composing = withComposing && value.composing.isValid ? value.composing : null;
@@ -68,6 +87,10 @@ class QueryBoxTextEditingController extends TextEditingController {
       }
 
       children.add(TextSpan(text: segmentText, style: segmentStyle));
+    }
+
+    if (_completionHintSuffix.isNotEmpty) {
+      children.add(TextSpan(text: _completionHintSuffix, style: _completionHintStyle));
     }
 
     return TextSpan(style: style, children: children);

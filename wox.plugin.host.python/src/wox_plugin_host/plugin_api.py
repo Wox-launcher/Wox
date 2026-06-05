@@ -6,6 +6,7 @@ from typing import Any, Awaitable, Callable, Dict, Optional
 import websockets
 from wox_plugin import (
     AIModel,
+    PushAttentionRequest,
     ChangeQueryParam,
     ChatStreamCallback,
     Context,
@@ -115,6 +116,10 @@ class PluginAPI(PublicAPI):
     async def notify(self, ctx: Context, message: str) -> None:
         """Show a notification message"""
         await self.invoke_method(ctx, "Notify", {"message": message})
+
+    async def push_attention(self, ctx: Context, request: PushAttentionRequest) -> None:
+        """Push a persistent attention item into Wox."""
+        await self.invoke_method(ctx, "PushAttention", {"request": request.to_json()})
 
     async def show_toolbar_msg(self, ctx: Context, msg: ToolbarMsg) -> None:
         from .plugin_manager import plugin_instances

@@ -56,9 +56,9 @@ class QueryRefinement:
     id: str
     title: str
     type: QueryRefinementType
+    hotkey: str
     options: List[QueryRefinementOption] = field(default_factory=list)
     default_value: List[str] = field(default_factory=list)
-    hotkey: str = ""
     persist: bool = False
 
     def to_json(self) -> str:

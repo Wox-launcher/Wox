@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -17,6 +19,7 @@ class WoxGridView extends StatelessWidget {
   final double maxHeight;
   final VoidCallback? onItemTapped;
   final void Function(String traceId, WoxListItem<WoxQueryResult> item)? onItemSecondaryTapped;
+  final Future<void> Function(String traceId, WoxListItem<WoxQueryResult> item)? onItemDragStarted;
   final void Function(String traceId, WoxListItem<WoxQueryResult> item, WoxImage image)? onItemIconLoaded;
   final VoidCallback? onRowHeightChanged;
 
@@ -30,6 +33,7 @@ class WoxGridView extends StatelessWidget {
     required this.maxHeight,
     this.onItemTapped,
     this.onItemSecondaryTapped,
+    this.onItemDragStarted,
     this.onItemIconLoaded,
     this.onRowHeightChanged,
   });
@@ -222,6 +226,7 @@ class WoxGridView extends StatelessWidget {
           item: item,
           onItemTapped: onItemTapped,
           onItemSecondaryTapped: onItemSecondaryTapped,
+          onItemDragStarted: onItemDragStarted,
           child: Align(alignment: Alignment.topCenter, child: _buildGridItem(item.value, index, contentWidth, contentHeight, showTitle, itemPadding, itemMargin)),
         ),
       ),
@@ -324,8 +329,17 @@ class _WoxGridItemGestureWrapper extends StatefulWidget {
   final Widget child;
   final VoidCallback? onItemTapped;
   final void Function(String traceId, WoxListItem<WoxQueryResult> item)? onItemSecondaryTapped;
+  final Future<void> Function(String traceId, WoxListItem<WoxQueryResult> item)? onItemDragStarted;
 
-  const _WoxGridItemGestureWrapper({required this.controller, required this.index, required this.item, required this.child, this.onItemTapped, this.onItemSecondaryTapped});
+  const _WoxGridItemGestureWrapper({
+    required this.controller,
+    required this.index,
+    required this.item,
+    required this.child,
+    this.onItemTapped,
+    this.onItemSecondaryTapped,
+    this.onItemDragStarted,
+  });
 
   @override
   State<_WoxGridItemGestureWrapper> createState() => _WoxGridItemGestureWrapperState();
@@ -371,8 +385,25 @@ class _WoxGridItemGestureWrapperState extends State<_WoxGridItemGestureWrapper> 
     _lastPrimaryTapTime = null;
   }
 
+  void _handlePanStart() {
+    if (widget.item.value.isGroup || widget.onItemDragStarted == null) {
+      return;
+    }
+
+    final traceId = const UuidV4().generate();
+    _lastPrimaryTapTime = null;
+    widget.controller.updateActiveIndex(traceId, widget.index);
+    unawaited(widget.onItemDragStarted!(traceId, widget.item.value));
+  }
+
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(behavior: HitTestBehavior.opaque, onTapDown: (_) => _handleTapDown(), onSecondaryTapDown: (_) => _handleSecondaryTapDown(), child: widget.child);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => _handleTapDown(),
+      onSecondaryTapDown: (_) => _handleSecondaryTapDown(),
+      onPanStart: widget.onItemDragStarted == null ? null : (_) => _handlePanStart(),
+      child: widget.child,
+    );
   }
 }

@@ -135,6 +135,22 @@ class WoxApi {
     await WoxHttpUtil.instance.postData(traceId, "/on/show", {});
   }
 
+  Future<void> showTooltipOverlay(String traceId, String name, String text, String side, double anchorX, double anchorY, double anchorWidth, double anchorHeight) async {
+    await WoxHttpUtil.instance.postData(traceId, "/tooltip/show", {
+      "name": name,
+      "text": text,
+      "side": side,
+      "anchorX": anchorX,
+      "anchorY": anchorY,
+      "anchorWidth": anchorWidth,
+      "anchorHeight": anchorHeight,
+    });
+  }
+
+  Future<void> hideTooltipOverlay(String traceId, String name) async {
+    await WoxHttpUtil.instance.postData(traceId, "/tooltip/hide", {"name": name});
+  }
+
   Future<void> onQueryBoxFocus(String traceId) async {
     await WoxHttpUtil.instance.postData(traceId, "/on/querybox/focus", {});
   }
@@ -301,9 +317,5 @@ class WoxApi {
 
   Future<void> saveWindowPosition(String traceId, int x, int y) async {
     await WoxHttpUtil.instance.postData(traceId, "/setting/position", {"x": x, "y": y});
-  }
-
-  Future<void> toolbarSnooze(String traceId, String text, String duration) async {
-    await WoxHttpUtil.instance.postData(traceId, "/toolbar/snooze", {"text": text, "duration": duration});
   }
 }

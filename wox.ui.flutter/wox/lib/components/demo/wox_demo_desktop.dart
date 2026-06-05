@@ -68,7 +68,7 @@ class _DemoCursor extends StatelessWidget {
   }
 }
 
-class WoxDemoDesktopBackground extends StatelessWidget {
+class WoxDemoDesktopBackground extends StatefulWidget {
   const WoxDemoDesktopBackground({super.key, required this.accent, required this.isMac, this.showDefaultIcons = true});
 
   final Color accent;
@@ -76,25 +76,65 @@ class WoxDemoDesktopBackground extends StatelessWidget {
   final bool showDefaultIcons;
 
   @override
+  State<WoxDemoDesktopBackground> createState() => _WoxDemoDesktopBackgroundState();
+}
+
+class _WoxDemoDesktopBackgroundState extends State<WoxDemoDesktopBackground> {
+  String _systemWallpaperPath = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSystemWallpaper();
+  }
+
+  // Reuse the same wallpaper resolver as the theme editor so demo desktops
+  // match the user's real environment without introducing a new data source.
+  Future<void> _loadSystemWallpaper() async {
+    final wallpaperPath = await WoxSystemWallpaperUtil.instance.loadSystemWallpaperPath();
+    if (!mounted || wallpaperPath == null || wallpaperPath.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      _systemWallpaperPath = wallpaperPath;
+    });
+  }
+
+  Widget _buildBackdropLayer(Color fallbackColor) {
+    if (_systemWallpaperPath.isEmpty) {
+      return ColoredBox(color: fallbackColor);
+    }
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Image.file(File(_systemWallpaperPath), fit: BoxFit.cover, errorBuilder: (_, _, _) => ColoredBox(color: fallbackColor)),
+        ColoredBox(color: Colors.black.withValues(alpha: 0.34)),
+      ],
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final textColor = getThemeTextColor();
     final backgroundColor = getThemeBackgroundColor();
-    final desktopTint = Color.lerp(backgroundColor, accent, 0.10)!;
+    final deepBase = Color.lerp(backgroundColor, Colors.black, 0.38)!;
 
     return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [desktopTint, backgroundColor, textColor.withValues(alpha: 0.08)]),
-      ),
+      // Keep the simulated desktop plain and dark. A single translucent fill
+      // lets the host acrylic come through without introducing extra color flow.
+      decoration: BoxDecoration(color: deepBase.withValues(alpha: 0.88)),
       child: Stack(
         children: [
+          Positioned.fill(child: _buildBackdropLayer(deepBase.withValues(alpha: 0.88))),
           // Feature refinement: selection demos provide their own desktop files,
           // while the main-hotkey demo keeps generic icons to suggest an idle
           // system desktop. The toggle avoids duplicate icons in shared chrome.
-          if (showDefaultIcons) ...[
-            Positioned(left: 28, top: 34, child: _DesktopFolderIcon(label: 'Apps', accent: accent)),
+          if (widget.showDefaultIcons) ...[
+            Positioned(left: 28, top: 34, child: _DesktopFolderIcon(label: 'Apps', accent: widget.accent)),
             Positioned(left: 28, top: 112, child: _DesktopFolderIcon(label: 'Files', accent: const Color(0xFFFACC15))),
           ],
-          if (isMac) ...[
+          if (widget.isMac) ...[
             // UX fix: macOS onboarding previews now omit the Dock because the
             // launcher is the focus of this simulated desktop. The Dock used to
             // compete with the Wox window and looked like an unrelated action

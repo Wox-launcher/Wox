@@ -198,6 +198,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
 
     Widget contentWidget = const SizedBox();
     bool contentHandlesScrolling = false;
+    var previewTags = widget.woxPreview.previewTags;
     if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_MARKDOWN.code) {
       contentWidget = buildMarkdown(widget.woxPreview.previewData);
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TEXT.code) {
@@ -222,6 +223,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
         );
         contentWidget = filePreviewResult.content;
         contentHandlesScrolling = filePreviewResult.contentHandlesScrolling;
+        previewTags = [...widget.woxPreview.previewTags, ...filePreviewResult.previewTags];
       }
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_LIST.code) {
       try {
@@ -328,7 +330,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
     return WoxPreviewScaffold(
       woxTheme: widget.woxTheme,
       scrollController: scrollController,
-      tags: launcherController.supportsPreviewFullscreen(widget.woxPreview) && launcherController.isPreviewFullscreen.value ? const [] : widget.woxPreview.previewTags,
+      tags: launcherController.supportsPreviewFullscreen(widget.woxPreview) && launcherController.isPreviewFullscreen.value ? const [] : previewTags,
       contentHandlesScrolling: contentHandlesScrolling,
       child: contentWidget,
     );

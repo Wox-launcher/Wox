@@ -463,7 +463,7 @@ func (m *Manager) findConfiguredHotkeyConflict(ctx context.Context, hotkeyStr st
 			continue
 		}
 		if normalizeHotkeyForCompare(queryHotkey.Hotkey) == normalized {
-			return HotkeyAvailability{Available: false, ConflictType: hotkeyConflictTypeQuery, ConflictValue: queryHotkey.Query}
+			return HotkeyAvailability{Available: false, ConflictType: hotkeyConflictTypeQuery, ConflictValue: queryHotkey.DisplayName()}
 		}
 	}
 
@@ -1367,7 +1367,7 @@ func (m *Manager) toTrayIconBytes(ctx context.Context, icon common.WoxImage) []b
 		return svgBytes
 	}
 
-	img, err := icon.ToImage()
+	img, err := icon.ToImageWithoutRemoteFetch()
 	if err != nil {
 		logger.Warn(ctx, fmt.Sprintf("failed to parse tray query icon, fallback to app icon: %s", err.Error()))
 		return resource.GetAppIcon()
@@ -1504,6 +1504,7 @@ func (m *Manager) RefreshActiveWindowSnapshotBlocking(ctx context.Context) {
 
 func (m *Manager) refreshActiveWindowSnapshot(ctx context.Context, waitForDetails bool) {
 	activeWindowPid := window.GetActiveWindowPid()
+	activeWindowId := window.GetActiveWindowId()
 
 	if activeWindowPid <= 0 {
 		m.activeWindowSnapshotMu.Lock()
@@ -1524,7 +1525,7 @@ func (m *Manager) refreshActiveWindowSnapshot(ctx context.Context, waitForDetail
 	// available. Keeping old details with a new PID created mixed snapshots, and
 	// blocking here made every launcher activation wait for icon and AX dialog
 	// probes even when the UI only needed to become visible.
-	m.activeWindowSnapshot = common.ActiveWindowSnapshot{Pid: activeWindowPid}
+	m.activeWindowSnapshot = common.ActiveWindowSnapshot{Pid: activeWindowPid, WindowId: activeWindowId}
 	m.activeWindowSnapshotMu.Unlock()
 
 	if waitForDetails {

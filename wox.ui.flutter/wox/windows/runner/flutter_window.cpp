@@ -20,6 +20,7 @@
 #include <objidl.h>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "result_drag_bridge.h"
 #include "utils.h"
 #include "wox_preview_handler_plugin.h"
 #include "wox_webview/wox_webview_plugin.h"
@@ -50,8 +51,10 @@ static constexpr UINT kScreenshotSelectionDimRegionUpdateMessage = WM_APP + 0x52
 static constexpr UINT kScreenshotSelectionHoverMoveMessage = WM_APP + 0x53;
 static constexpr UINT kScreenshotDisplaySnapshotPayloadReadyMessage = WM_APP + 0x54;
 static constexpr UINT_PTR kScreenshotSelectionHoverProbeTimerId = 0xA13;
+static constexpr UINT_PTR kDelayedResizeRepaintNudgeTimerId = 0xA14;
 static constexpr UINT kScreenshotSelectionHoverProbeDelayMs = 60;
 static constexpr UINT kScreenshotSelectionStartupHoverProbeDelayMs = 1200;
+static constexpr UINT kDelayedResizeRepaintNudgeDelayMs = 100;
 static constexpr wchar_t kScrollingCaptureOverlayWindowClassName[] = L"WoxScrollingCaptureOverlayWindow";
 static constexpr wchar_t kScreenshotSelectionInputWindowClassName[] = L"WoxScreenshotSelectionInputWindow";
 static constexpr wchar_t kScreenshotSelectionBorderWindowClassName[] = L"WoxScreenshotSelectionBorderWindow";
@@ -1161,6 +1164,63 @@ void FlutterWindow::SyncFlutterChildWindowToClientArea(HWND hwnd, const char *so
   Log(oss.str());
 }
 
+void FlutterWindow::ScheduleDelayedResizeRepaintNudge(HWND hwnd)
+{
+  if (hwnd == nullptr || !IsWindow(hwnd))
+  {
+    return;
+  }
+
+  KillTimer(hwnd, kDelayedResizeRepaintNudgeTimerId);
+  SetTimer(hwnd, kDelayedResizeRepaintNudgeTimerId, kDelayedResizeRepaintNudgeDelayMs, nullptr);
+}
+
+void FlutterWindow::RunDelayedResizeRepaintNudge(HWND hwnd)
+{
+  KillTimer(hwnd, kDelayedResizeRepaintNudgeTimerId);
+  if (hwnd == nullptr || !IsWindow(hwnd) || IsWindowVisible(hwnd) == 0)
+  {
+    return;
+  }
+
+  RECT rect{};
+  if (!GetWindowRect(hwnd, &rect))
+  {
+    return;
+  }
+
+  const int width = rect.right - rect.left;
+  const int height = rect.bottom - rect.top;
+  if (width <= 0 || height <= 0)
+  {
+    return;
+  }
+
+  // Windows can occasionally present the new top-level HWND size before the
+  // Flutter child and engine have accepted the same geometry. The short +1/-1
+  // round trip creates a real WM_SIZE after the normal resize without leaving
+  // the launcher at an inflated size.
+  SyncFlutterChildWindowToClientArea(hwnd, "delayedResizeRepaintNudge", false);
+  if (flutter_controller_)
+  {
+    flutter_controller_->ForceRedraw();
+  }
+
+  SetWindowPos(hwnd, nullptr, rect.left, rect.top, width, height + 1, SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+  SyncFlutterChildWindowToClientArea(hwnd, "delayedResizeRepaintNudge+1", false);
+  if (flutter_controller_)
+  {
+    flutter_controller_->ForceRedraw();
+  }
+
+  SetWindowPos(hwnd, nullptr, rect.left, rect.top, width, height, SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+  SyncFlutterChildWindowToClientArea(hwnd, "delayedResizeRepaintNudgeRestore", false);
+  if (flutter_controller_)
+  {
+    flutter_controller_->ForceRedraw();
+  }
+}
+
 void FlutterWindow::FocusFlutterViewOrRoot(HWND hwnd)
 {
   // Keyboard shortcuts are delivered to Flutter through the hosted child HWND, not the top-level
@@ -1371,6 +1431,39 @@ bool FlutterWindow::ShouldSuppressBlurForActivatedWindow(HWND selfHwnd, HWND act
   }
 
   return false;
+}
+
+void FlutterWindow::NotifyWindowBlur(HWND selfHwnd, HWND activatedHwnd, const char *source)
+{
+  if (activatedHwnd != nullptr && ShouldSuppressBlurForActivatedWindow(selfHwnd, activatedHwnd))
+  {
+    return;
+  }
+
+  const bool in_post_show_grace = GetTickCount64() < blur_guard_until_tick_;
+  if (blur_guard_active_ || in_post_show_grace)
+  {
+    if (blur_guard_active_)
+    {
+      Log(std::string(source) + ": blur suppressed (show-to-focus transition)");
+    }
+    else
+    {
+      Log(std::string(source) + ": blur suppressed (post-show grace)");
+    }
+    return;
+  }
+
+  if (blur_event_sent_since_focus_)
+  {
+    Log(std::string(source) + ": duplicate blur suppressed");
+    return;
+  }
+
+  blur_event_sent_since_focus_ = true;
+  restore_previous_window_on_hide_ = false;
+  previous_active_window_ = nullptr;
+  SendWindowEvent("onWindowBlur");
 }
 
 void FlutterWindow::SavePreviousActiveWindow(HWND selfHwnd)
@@ -4161,6 +4254,7 @@ bool FlutterWindow::OnCreate()
   RegisterPlugins(flutter_controller_->engine());
   RegisterWoxWebviewPlugin(flutter_controller_->engine()->GetRegistrarForPlugin("WoxWebviewPlugin"));
   RegisterWoxPreviewHandlerPlugin(flutter_controller_->engine()->GetRegistrarForPlugin("WoxPreviewHandlerPlugin"));
+  RegisterResultDragBridge(flutter_controller_->engine()->messenger(), GetHandle());
 
   // Set up window manager method channel
   window_manager_channel_ = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
@@ -4220,9 +4314,13 @@ void FlutterWindow::OnDestroy()
 
   // Restore original window procedure
   HWND hwnd = GetHandle();
-  if (hwnd != nullptr && original_window_proc_ != nullptr)
+  if (hwnd != nullptr)
   {
-    SetWindowLongPtr(hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(original_window_proc_));
+    KillTimer(hwnd, kDelayedResizeRepaintNudgeTimerId);
+    if (original_window_proc_ != nullptr)
+    {
+      SetWindowLongPtr(hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(original_window_proc_));
+    }
   }
 
   if (flutter_controller_)
@@ -4307,6 +4405,12 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message, WPARAM const wparam
   switch (message)
   {
   case WM_TIMER:
+    if (wparam == kDelayedResizeRepaintNudgeTimerId)
+    {
+      RunDelayedResizeRepaintNudge(hwnd);
+      return 0;
+    }
+
     if (wparam == kRestoreForegroundTimerId1 || wparam == kRestoreForegroundTimerId2)
     {
       KillTimer(hwnd, static_cast<UINT_PTR>(wparam));
@@ -4348,32 +4452,22 @@ LRESULT CALLBACK FlutterWindow::WindowProc(HWND hwnd, UINT message, WPARAM wpara
   case WM_ACTIVATE:
     if (LOWORD(wparam) == WA_ACTIVE || LOWORD(wparam) == WA_CLICKACTIVE)
     {
+      g_window_instance->blur_event_sent_since_focus_ = false;
       // g_window_instance->SendWindowEvent("onWindowFocus");
     }
     else
     {
-      HWND activatedHwnd = reinterpret_cast<HWND>(lparam);
-      if (!g_window_instance->ShouldSuppressBlurForActivatedWindow(hwnd, activatedHwnd))
-      {
-        const bool in_post_show_grace = GetTickCount64() < g_window_instance->blur_guard_until_tick_;
-        if (g_window_instance->blur_guard_active_ || in_post_show_grace)
-        {
-          if (g_window_instance->blur_guard_active_)
-          {
-            g_window_instance->Log("WM_ACTIVATE: WA_INACTIVE suppressed (show-to-focus transition)");
-          }
-          else
-          {
-            g_window_instance->Log("WM_ACTIVATE: WA_INACTIVE suppressed (post-show grace)");
-          }
-        }
-        else
-        {
-          g_window_instance->restore_previous_window_on_hide_ = false;
-          g_window_instance->previous_active_window_ = nullptr;
-          g_window_instance->SendWindowEvent("onWindowBlur");
-        }
-      }
+      g_window_instance->NotifyWindowBlur(hwnd, reinterpret_cast<HWND>(lparam), "WM_ACTIVATE");
+    }
+    break;
+  case WM_ACTIVATEAPP:
+    if (wparam)
+    {
+      g_window_instance->blur_event_sent_since_focus_ = false;
+    }
+    else
+    {
+      g_window_instance->NotifyWindowBlur(hwnd, nullptr, "WM_ACTIVATEAPP");
     }
     break;
   }
@@ -5159,6 +5253,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
           {
             flutter_controller_->ForceRedraw();
           }
+          ScheduleDelayedResizeRepaintNudge(hwnd);
 
           result->Success();
         }
@@ -5237,6 +5332,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
           {
             flutter_controller_->ForceRedraw();
           }
+          ScheduleDelayedResizeRepaintNudge(hwnd);
 
           result->Success();
         }
@@ -5490,6 +5586,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       // grab the foreground, which causes onWindowBlur -> hideApp().
       blur_guard_active_ = true;
       blur_guard_until_tick_ = GetTickCount64() + kPostShowBlurGraceMs;
+      blur_event_sent_since_focus_ = false;
       ShowWindow(hwnd, SW_SHOW);
       result->Success();
     }
@@ -5497,6 +5594,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
     {
       blur_guard_active_ = false;
       blur_guard_until_tick_ = 0;
+      blur_event_sent_since_focus_ = true;
 
       // Flush before SW_HIDE with skipPhysicallyHeld=false so that every
       // pending keydown, including modifier keys that are still physically
@@ -5559,6 +5657,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
         FocusFlutterViewOrRoot(hwnd);
         BringWindowToTop(hwnd);
         blur_guard_active_ = false;
+        blur_event_sent_since_focus_ = false;
         result->Success();
         return;
       }
@@ -5590,6 +5689,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       {
         Log("Focus: use attach thread input");
         blur_guard_active_ = false;
+        blur_event_sent_since_focus_ = false;
         result->Success();
         return;
       }
@@ -5616,6 +5716,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       {
         Log("Focus: use Alt key injection");
         blur_guard_active_ = false;
+        blur_event_sent_since_focus_ = false;
         result->Success();
         return;
       }
@@ -5627,6 +5728,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
 
       Log("Focus: final attempt completed");
       blur_guard_active_ = false;
+      blur_event_sent_since_focus_ = false;
       result->Success();
     }
     else if (method_name == "isVisible")

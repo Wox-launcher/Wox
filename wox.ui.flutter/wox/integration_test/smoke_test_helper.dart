@@ -284,6 +284,14 @@ Future<void> restoreSmokeWindowStateForNextTest() async {
   final screen = await getMouseScreenWorkArea();
   final position = getCenteredTopLeftForWindowSize(screen, _smokeBootstrapWindowSize);
   await windowManager.setBounds(position, _smokeBootstrapWindowSize);
+  if (!await waitForWindowSize(_smokeBootstrapWindowSize, timeout: const Duration(seconds: 2))) {
+    // Windows can occasionally acknowledge setBounds before the top-level HWND
+    // leaves the previous launcher height. A single retry keeps the next smoke
+    // case from inheriting a compact window.
+    await Future.delayed(const Duration(milliseconds: 16));
+    await windowManager.setBounds(position, _smokeBootstrapWindowSize);
+    await waitForWindowSize(_smokeBootstrapWindowSize, timeout: const Duration(seconds: 2));
+  }
 }
 
 Future<void> triggerBackendShowApp(WidgetTester tester) async {
@@ -387,6 +395,27 @@ Future<void> ensureWindowSize(WidgetTester tester, Size size) async {
   // pumpAndSettle is safe here because this is called during launcher setup,
   // before any text input that would start cursor blink timers.
   await tester.pumpAndSettle();
+  if (!await waitForWindowSize(size, timeout: const Duration(seconds: 2))) {
+    // Keep smoke setup deterministic when the native runner reports success
+    // before the final HWND size is observable through getSize().
+    await Future.delayed(const Duration(milliseconds: 16));
+    await windowManager.setSize(size);
+    await tester.pump(const Duration(milliseconds: 100));
+    await waitForWindowSize(size, timeout: const Duration(seconds: 2));
+  }
+}
+
+Future<bool> waitForWindowSize(Size expected, {Duration timeout = const Duration(seconds: 5), Duration step = const Duration(milliseconds: 50), double tolerance = 2}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (DateTime.now().isBefore(deadline)) {
+    final actual = await windowManager.getSize();
+    if ((actual.width - expected.width).abs() <= tolerance && (actual.height - expected.height).abs() <= tolerance) {
+      return true;
+    }
+    await Future.delayed(step);
+  }
+
+  return false;
 }
 
 Future<void> hideLauncherByEscape(WidgetTester tester, WoxLauncherController controller, {Duration timeout = const Duration(seconds: 30)}) async {
@@ -404,7 +433,7 @@ Future<void> enterQueryTextAndWait(WidgetTester tester, WoxLauncherController co
   final extendedTextFieldFinder = find.byType(ExtendedTextField);
   expect(extendedTextFieldFinder, findsOneWidget);
 
-  await tester.tap(extendedTextFieldFinder);
+  await controller.focusQueryBox();
   await tester.pump(const Duration(milliseconds: 200));
 
   tester.testTextInput.enterText(query);
@@ -501,7 +530,7 @@ bool isSmokeDebugTextTail(WoxListItemTail tail) {
     return false;
   }
 
-  return RegExp(r'^P\d+$').hasMatch(text) || RegExp(r'^\d+ms$').hasMatch(text) || text.startsWith('score:');
+  return RegExp(r'^[BP]\d+$').hasMatch(text) || RegExp(r'^\d+ms$').hasMatch(text) || text.startsWith('score:');
 }
 
 List<WoxListItemTail> getSmokeBusinessTails(WoxQueryResult result) {
@@ -640,6 +669,10 @@ Future<void> tapSettingNavItem(WidgetTester tester, WoxSettingController setting
     await tester.scrollUntilVisible(navItemFinder, 120, scrollable: navScrollable, duration: const Duration(milliseconds: 100), continuous: true);
   }
   expect(navItemFinder, findsOneWidget);
+  // Off-screen settings entries can end up barely inside the scroll viewport.
+  // Align the target without pumpAndSettle so the following tap lands on the row.
+  await Scrollable.ensureVisible(tester.element(navItemFinder), duration: Duration.zero, alignment: 0.5);
+  await tester.pump(const Duration(milliseconds: 100));
   // Avoid tester.ensureVisible which calls pumpAndSettle (10-min timeout).
   // If the cursor blink timer is still active from the query box, pumpAndSettle
   // will never settle. Nav items are always visible in the fixed sidebar.

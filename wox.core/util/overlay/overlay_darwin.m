@@ -38,6 +38,8 @@ typedef struct {
     float offsetX;
     float offsetY;
     float width;         // 0 = auto
+    float minWidth;      // 0 = platform default minimum width
+    float maxWidth;      // 0 = no cap for auto width
     float height;        // 0 = auto
     float maxHeight;     // 0 = no cap for auto height
     bool followScroll;
@@ -163,6 +165,10 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 @end
 
 @implementation HandCursorButton
+- (BOOL)acceptsFirstResponder {
+  return NO;
+}
+
 - (void)updateTrackingAreas {
   [super updateTrackingAreas];
   for (NSTrackingArea *area in self.trackingAreas) {
@@ -185,6 +191,36 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
 
 - (void)cursorUpdate:(NSEvent *)event {
   [[NSCursor pointingHandCursor] set];
+}
+@end
+
+@interface OverlayCloseButton : HandCursorButton
+@property(nonatomic, assign) BOOL pointerInside;
+- (void)updateAppearance;
+@end
+
+@implementation OverlayCloseButton
+- (void)updateAppearance {
+    if (!self.layer) return;
+    CGFloat alpha = self.highlighted ? 0.34 : (self.pointerInside ? 0.24 : 0.12);
+    self.layer.backgroundColor = [NSColor colorWithWhite:1.0 alpha:alpha].CGColor;
+}
+
+- (void)setHighlighted:(BOOL)highlighted {
+    [super setHighlighted:highlighted];
+    [self updateAppearance];
+}
+
+- (void)mouseEntered:(NSEvent *)event {
+    [super mouseEntered:event];
+    self.pointerInside = YES;
+    [self updateAppearance];
+}
+
+- (void)mouseExited:(NSEvent *)event {
+    [super mouseExited:event];
+    self.pointerInside = NO;
+    [self updateAppearance];
 }
 @end
 
@@ -487,10 +523,14 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         if (@available(macOS 10.14, *)) {
             self.messageView.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
         }
+        // NSTextView adds line-fragment padding by default. The overlay width is measured from
+        // the text itself, so leaving that hidden padding in place makes short tooltip text wrap
+        // on macOS while the Windows DrawText path stays on one line.
+        self.messageView.textContainer.lineFragmentPadding = 0;
         [self.contentView addSubview:self.messageView];
 
         // Close Button (HandCursorButton)
-        self.closeButton = [[HandCursorButton alloc] initWithFrame:NSMakeRect(0, 0, kCloseSize, kCloseSize)];
+        self.closeButton = [[OverlayCloseButton alloc] initWithFrame:NSMakeRect(0, 0, kCloseSize, kCloseSize)];
         [self.closeButton setBezelStyle:NSBezelStyleRegularSquare];
         [self.closeButton setButtonType:NSButtonTypeMomentaryLight];
         [self.closeButton setTitle:@"×"];
@@ -499,9 +539,12 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         [self.closeButton setAction:@selector(onClose)];
         [self.closeButton setHidden:NO];
         [self.closeButton setBordered:NO];
+        self.closeButton.focusRingType = NSFocusRingTypeNone;
         [self.closeButton setWantsLayer:YES];
-        self.closeButton.layer.backgroundColor = [NSColor colorWithWhite:1.0 alpha:0.3].CGColor;
         self.closeButton.layer.cornerRadius = kCloseSize / 2;
+        if ([self.closeButton isKindOfClass:[OverlayCloseButton class]]) {
+            [(OverlayCloseButton *)self.closeButton updateAppearance];
+        }
         
         NSMutableAttributedString *attributedTitle = [[NSMutableAttributedString alloc] initWithString:@"×"];
         [attributedTitle addAttribute:NSForegroundColorAttributeName value:[NSColor whiteColor] range:NSMakeRange(0, attributedTitle.length)];
@@ -516,6 +559,7 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         [self.copyButton setAction:@selector(onClick)];
         [self.copyButton setHidden:YES];
         [self.copyButton setBordered:NO];
+        self.copyButton.focusRingType = NSFocusRingTypeNone;
         [self.copyButton setWantsLayer:YES];
         self.copyButton.layer.backgroundColor = [NSColor colorWithWhite:1.0 alpha:0.14].CGColor;
         self.copyButton.layer.borderColor = [NSColor colorWithWhite:1.0 alpha:0.24].CGColor;
@@ -1346,8 +1390,6 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         if (!self.closeButton.hidden) padRight += kCloseSize + kCloseMargin;
         if (!self.tooltipIconView.hidden) padRight += tooltipIconSize + tooltipIconGap;
 
-        CGFloat contentWidth = windowWidth - padLeft - padRight;
-        
         // Setup TextView string
         NSDictionary *attrs = @{
             NSFontAttributeName: [NSFont systemFontOfSize:fontSize],
@@ -1355,6 +1397,19 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         };
         NSAttributedString *attrStr = [[NSAttributedString alloc] initWithString:msg attributes:attrs];
         [self.messageView.textStorage setAttributedString:attrStr];
+
+        if (opts.width <= 0 && opts.maxWidth > 0) {
+            CGFloat maxTextWidth = MAX(1, opts.maxWidth - padLeft - padRight);
+            NSRect naturalTextRect = [msg boundingRectWithSize:NSMakeSize(CGFLOAT_MAX, CGFLOAT_MAX)
+                                                       options:NSStringDrawingUsesLineFragmentOrigin
+                                                    attributes:attrs];
+            CGFloat naturalTextWidth = MAX(1, ceil(naturalTextRect.size.width));
+            windowWidth = padLeft + padRight + MIN(naturalTextWidth, maxTextWidth);
+        }
+        if (opts.minWidth > 0) {
+            windowWidth = MAX(windowWidth, opts.minWidth);
+        }
+        CGFloat contentWidth = windowWidth - padLeft - padRight;
         
         // Measure Height
         NSSize textSize = [self.messageView.layoutManager usedRectForTextContainer:self.messageView.textContainer].size; 
@@ -1523,9 +1578,21 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
     CGFloat finalX = px + ox + opts.offsetX;
     CGFloat finalY = py + oy + opts.offsetY;
     if (opts.absolutePosition) {
+        // Match the Windows absolute-position contract: offset values name the
+        // requested anchor point in top-left desktop coordinates, not always the
+        // overlay's top-left corner. Tooltips rely on BottomCenter/LeftCenter
+        // anchors so they can sit above or beside the hovered launcher item.
+        CGFloat absoluteTopLeftX = opts.offsetX;
+        if (col == 1) absoluteTopLeftX -= windowWidth / 2;
+        else if (col == 2) absoluteTopLeftX -= windowWidth;
+
+        CGFloat absoluteTopLeftY = opts.offsetY;
+        if (row == 1) absoluteTopLeftY -= windowHeight / 2;
+        else if (row == 2) absoluteTopLeftY -= windowHeight;
+
         CGFloat mainScreenH = [NSScreen mainScreen].frame.size.height;
-        finalX = opts.offsetX;
-        finalY = mainScreenH - opts.offsetY - windowHeight;
+        finalX = absoluteTopLeftX;
+        finalY = mainScreenH - absoluteTopLeftY - windowHeight;
     }
     if (preserveLiveFollowFrame) {
         finalX = liveFollowOrigin.x;

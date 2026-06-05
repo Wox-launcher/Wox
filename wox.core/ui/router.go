@@ -2,9 +2,11 @@ package ui
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -15,7 +17,6 @@ import (
 
 	"wox/ai"
 	"wox/common"
-	"wox/database"
 	"wox/diagnostic"
 	"wox/i18n"
 	"wox/plugin"
@@ -105,9 +106,12 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	// others
 	"/":                            handleHome,
 	"/show":                        handleShow,
+	"/tooltip/show":                handleTooltipOverlayShow,
+	"/tooltip/hide":                handleTooltipOverlayHide,
 	"/ping":                        handlePing,
 	"/preview":                     handlePreview,
 	"/preview/image/overlay":       handlePreviewImageOverlay,
+	"/preview/file/media":          handlePreviewFileMedia,
 	"/image/file/icon":             handleFileIcon,
 	"/image/lazy/load":             handleLazyImageLoad,
 	"/open":                        handleOpen,
@@ -137,9 +141,6 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/test/trigger/selection_hotkey": handleTestTriggerSelectionHotkey,
 	"/test/screen/mouse":             handleTestMouseScreen,
 	"/test/trigger/tray_query":       handleTestTriggerTrayQuery,
-
-	// toolbar snooze/mute
-	"/toolbar/snooze": handleToolbarSnooze,
 }
 
 const traceIdHeader = "TraceId"
@@ -222,6 +223,89 @@ func handleFileIcon(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeSuccessResponse(w, icon)
+}
+
+func handlePreviewFileMedia(w http.ResponseWriter, r *http.Request) {
+	// Media previews need ordinary HTTP range requests so large video files can
+	// stream into WebView without loading the whole file into Flutter memory.
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	encodedPath := strings.TrimSpace(r.URL.Query().Get("path"))
+	if encodedPath == "" {
+		http.Error(w, "path is empty", http.StatusBadRequest)
+		return
+	}
+
+	decodedPath, err := base64.URLEncoding.DecodeString(encodedPath)
+	if err != nil {
+		http.Error(w, "path is invalid", http.StatusBadRequest)
+		return
+	}
+
+	filePath := string(decodedPath)
+	if filePath == "" {
+		http.Error(w, "path is empty", http.StatusBadRequest)
+		return
+	}
+	if !filepath.IsAbs(filePath) {
+		http.Error(w, "path must be absolute", http.StatusBadRequest)
+		return
+	}
+
+	stat, err := os.Stat(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, "failed to stat file", http.StatusInternalServerError)
+		return
+	}
+	if stat.IsDir() {
+		http.Error(w, "path is a directory", http.StatusBadRequest)
+		return
+	}
+
+	file, err := os.Open(filePath)
+	if err != nil {
+		http.Error(w, "failed to open file", http.StatusInternalServerError)
+		return
+	}
+	defer file.Close()
+
+	if contentType := resolvePreviewFileMediaContentType(filePath); contentType != "" {
+		w.Header().Set("Content-Type", contentType)
+	}
+	w.Header().Set("Accept-Ranges", "bytes")
+	http.ServeContent(w, r, filepath.Base(filePath), stat.ModTime(), file)
+}
+
+func resolvePreviewFileMediaContentType(filePath string) string {
+	switch strings.ToLower(filepath.Ext(filePath)) {
+	case ".mp4", ".m4v":
+		return "video/mp4"
+	case ".mov":
+		return "video/quicktime"
+	case ".webm":
+		return "video/webm"
+	case ".mp3":
+		return "audio/mpeg"
+	case ".wav":
+		return "audio/wav"
+	case ".m4a":
+		return "audio/mp4"
+	case ".aac":
+		return "audio/aac"
+	case ".flac":
+		return "audio/flac"
+	case ".ogg", ".opus":
+		return "audio/ogg"
+	}
+
+	return mime.TypeByExtension(strings.ToLower(filepath.Ext(filePath)))
 }
 
 func handleLazyImageLoad(w http.ResponseWriter, r *http.Request) {
@@ -802,11 +886,16 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 	settingDto.UiDensity = woxSetting.UiDensity.Get()
 	settingDto.ThemeId = woxSetting.ThemeId.Get()
 	settingDto.AppFontFamily = woxSetting.AppFontFamily.Get()
+	settingDto.EnableQueryCompletionHint = woxSetting.EnableQueryCompletionHint.Get()
 	settingDto.EnableGlance = woxSetting.EnableGlance.Get()
 	settingDto.PrimaryGlance = woxSetting.PrimaryGlance.Get()
 	settingDto.HideGlanceIcon = woxSetting.HideGlanceIcon.Get()
 	settingDto.ShowScoreTail = woxSetting.ShowScoreTail.Get()
 	settingDto.ShowPerformanceTail = woxSetting.ShowPerformanceTail.Get()
+	settingDto.ShowPerformanceTailBatch = woxSetting.ShowPerformanceTailBatch.Get()
+	settingDto.ShowPerformanceTailPluginQuery = woxSetting.ShowPerformanceTailPluginQuery.Get()
+	settingDto.ShowPerformanceTailBackendPrepared = woxSetting.ShowPerformanceTailBackendPrepared.Get()
+	settingDto.ShowPerformanceTailUiReceived = woxSetting.ShowPerformanceTailUiReceived.Get()
 
 	writeSuccessResponse(w, settingDto)
 }
@@ -897,6 +986,9 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 				Position: setting.QueryHotkeyPositionSystemDefault,
 			}
 
+			if rawName, ok := rawQueryHotkey["Name"]; ok {
+				queryHotkey.Name = strings.TrimSpace(parseString(rawName))
+			}
 			if rawHotkey, ok := rawQueryHotkey["Hotkey"]; ok {
 				queryHotkey.Hotkey = strings.TrimSpace(parseString(rawHotkey))
 			}
@@ -1053,6 +1145,8 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 	case "AppFontFamily":
 		vs = font.NormalizeConfiguredFontFamily(vs, font.GetSystemFontFamilies(ctx))
 		woxSetting.AppFontFamily.Set(vs)
+	case "EnableQueryCompletionHint":
+		woxSetting.EnableQueryCompletionHint.Set(vb)
 	case "EnableGlance":
 		woxSetting.EnableGlance.Set(vb)
 	case "PrimaryGlance":
@@ -1077,6 +1171,14 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 		// dev builds. Keeping the check in the backend prevents hidden UI tabs
 		// from being the only guard for noisy query-result tags.
 		woxSetting.ShowPerformanceTail.Set(vb)
+	case "ShowPerformanceTailBatch":
+		woxSetting.ShowPerformanceTailBatch.Set(vb)
+	case "ShowPerformanceTailPluginQuery":
+		woxSetting.ShowPerformanceTailPluginQuery.Set(vb)
+	case "ShowPerformanceTailBackendPrepared":
+		woxSetting.ShowPerformanceTailBackendPrepared.Set(vb)
+	case "ShowPerformanceTailUiReceived":
+		woxSetting.ShowPerformanceTailUiReceived.Set(vb)
 	case "EnableAnonymousUsageStats":
 		woxSetting.EnableAnonymousUsageStats.Set(vb)
 		// When disabled, delete telemetry state to stop tracking
@@ -1460,7 +1562,7 @@ func handleLogClear(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleLogOpen(w http.ResponseWriter, r *http.Request) {
-	logFile := filepath.Join(util.GetLocation().GetLogDirectory(), "log")
+	logFile := util.GetLogger().CurrentLogPath()
 	file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		writeErrorResponse(w, err.Error())
@@ -2288,48 +2390,6 @@ func handlePluginDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeSuccessResponse(w, pluginDto)
-
-}
-
-func handleToolbarSnooze(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-
-	body, _ := io.ReadAll(r.Body)
-	textResult := gjson.GetBytes(body, "text")
-	if !textResult.Exists() {
-		writeErrorResponse(w, "text is empty")
-		return
-	}
-	durationResult := gjson.GetBytes(body, "duration")
-	if !durationResult.Exists() {
-		writeErrorResponse(w, "duration is empty")
-		return
-	}
-
-	text := textResult.String()
-	dur := durationResult.String()
-
-	var untilMillis int64
-	switch dur {
-	case "3d":
-		untilMillis = time.Now().Add(3 * 24 * time.Hour).UnixMilli()
-	case "7d":
-		untilMillis = time.Now().Add(7 * 24 * time.Hour).UnixMilli()
-	case "1m":
-		untilMillis = time.Now().Add(30 * 24 * time.Hour).UnixMilli()
-	case "forever":
-		untilMillis = 0
-	default:
-		writeErrorResponse(w, "unknown duration")
-		return
-	}
-
-	if err := database.SnoozeToolbarText(ctx, text, untilMillis); err != nil {
-		writeErrorResponse(w, err.Error())
-		return
-	}
-
-	writeSuccessResponse(w, "")
 }
 
 func handleVersion(w http.ResponseWriter, r *http.Request) {

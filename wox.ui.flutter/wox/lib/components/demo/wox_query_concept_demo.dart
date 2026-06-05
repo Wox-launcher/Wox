@@ -11,7 +11,7 @@ part of 'wox_demo.dart';
 //              Each token keeps the color it had on the anatomy card.
 //   0.57–0.65  Three plugin-store results appear together.
 //   0.65–0.70  Brief pause — results fully visible.
-//   0.70–0.83  Footer Alt+J hotkey highlights (key-press visual).
+//   0.70–0.83  Footer primary-modifier J hotkey highlights (key-press visual).
 //   0.72–0.79  Action panel slides in from bottom-right (665ms rise).
 //   0.79–0.95  Action panel holds fully visible (1520ms ≈ 1.5s).
 //   0.95–0.99  Action panel fades out.
@@ -123,8 +123,8 @@ class _WoxQueryConceptDemoState extends State<WoxQueryConceptDemo> with SingleTi
   }
 
   // ── Action panel ──────────────────────────────────────────────────────────
-  // The footer hotkey label highlights when the user would press Alt+J, then
-  // the action panel slides in. This teaches the full query→action flow that
+  // The footer hotkey label highlights when the user would press the primary
+  // modifier + J, then the action panel slides in. This teaches the full query→action flow that
   // was previously shown on a separate onboarding step.
   //
   // Footer is pressed from 0.70–0.83: during the key-hold approach (0.70–0.72)
@@ -248,7 +248,9 @@ class _WoxQueryConceptDemoState extends State<WoxQueryConceptDemo> with SingleTi
                   if (_woxOpacity > 0.01)
                     Positioned.fill(
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(48, 40, 52, 36),
+                        // Keep a larger gap above the simulated taskbar so the
+                        // welcome window does not visually sit on top of it.
+                        padding: const EdgeInsets.fromLTRB(48, 34, 52, 56),
                         child: Opacity(
                           opacity: _woxOpacity,
                           child: Transform.translate(
@@ -390,7 +392,7 @@ class _ConceptDemoWindow extends StatelessWidget {
   final double resultsOpacity;
   // Progress driving the action panel slide-in (0=hidden, 1=fully visible).
   final double actionPanelProgress;
-  // Whether the footer Alt+J key should render in its "pressed" highlight state.
+  // Whether the footer primary-modifier J key should render in its "pressed" highlight state.
   final bool isFooterHotkeyPressed;
   final Color triggerKeywordColor;
   final Color commandColor;
@@ -410,6 +412,18 @@ class _ConceptDemoWindow extends StatelessWidget {
       if (n > seg1) TextSpan(text: full.substring(seg1, n.clamp(seg1, seg2)), style: TextStyle(color: commandColor, fontWeight: FontWeight.w700)),
       if (n > seg2) TextSpan(text: full.substring(seg2, n), style: TextStyle(color: searchTermColor)),
     ];
+  }
+
+  Color _conceptMicaSurfaceColor(Color appColor) {
+    if (appColor.a >= 0.96) {
+      return appColor;
+    }
+
+    final isDarkSurface = appColor.computeLuminance() < 0.5;
+    final tint = isDarkSurface ? const Color(0xFF202020) : const Color(0xFFF2F2F2);
+    final mixed = Color.lerp(appColor.withValues(alpha: 1), tint, 0.18) ?? appColor;
+    final alpha = (0.64 + appColor.a * 0.18).clamp(0.64, 0.86).toDouble();
+    return mixed.withValues(alpha: alpha);
   }
 
   @override
@@ -432,24 +446,31 @@ class _ConceptDemoWindow extends StatelessWidget {
         // identical to the real launcher's action-panel overlay.
         final panelWidth = (constraints.maxWidth * 0.42).clamp(250.0, 320.0);
 
-        return Container(
-          decoration: BoxDecoration(
-            color: getThemeBackgroundColor().withValues(alpha: 0.86),
-            border: Border.all(color: getThemeTextColor().withValues(alpha: 0.10)),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
+        final effectiveBg = _conceptMicaSurfaceColor(getThemeBackgroundColor());
+        final effectiveBorderColor = getThemeTextColor().withValues(alpha: 0.10);
+
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: BackdropFilter(
+            filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
             // Stack fills the parent so every Positioned child (query bar, footer)
             // uses the same coordinate space as the real WoxDemoWindow.
             child: Stack(
               fit: StackFit.expand,
               children: [
-                // Accent radial gradient sits behind all content.
+                Positioned.fill(
+                  child: DecoratedBox(decoration: BoxDecoration(color: effectiveBg, border: Border.all(color: effectiveBorderColor), borderRadius: BorderRadius.circular(8))),
+                ),
+                // Accent tint stays subtle so the glass blur remains legible.
                 Positioned.fill(
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      gradient: RadialGradient(center: const Alignment(0.6, -0.5), radius: 1.05, colors: [accent.withValues(alpha: 0.12), Colors.transparent]),
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Colors.black.withValues(alpha: 0.02), accent.withValues(alpha: 0.024), Colors.black.withValues(alpha: 0.14)],
+                        stops: const [0.0, 0.38, 1.0],
+                      ),
                     ),
                   ),
                 ),

@@ -397,7 +397,7 @@ export interface QueryRefinement {
   Type: QueryRefinementType
   Options: QueryRefinementOption[]
   DefaultValue?: string[]
-  Hotkey?: string
+  Hotkey: string
   Persist?: boolean
 }
 
@@ -574,6 +574,28 @@ export interface Result {
    * triggered via keyboard shortcuts or clicking.
    */
   Actions?: ResultAction[]
+
+  /**
+   * Optional native drag payload for this result.
+   *
+   * Wox currently supports file drags only. Use absolute file or directory
+   * paths so the desktop shell can transfer them to another app.
+   */
+  DragData?: ResultDragData
+}
+
+export interface ResultDragData {
+  /**
+   * Native drag payload type.
+   *
+   * Currently only `files` is supported.
+   */
+  Type: "files"
+
+  /**
+   * Absolute file or directory paths exported by the drag session.
+   */
+  Files: string[]
 }
 
 /**
@@ -707,6 +729,8 @@ export interface UpdatableResult {
   Preview?: WoxPreview
   /** Optional - update the actions */
   Actions?: ResultAction[]
+  /** Optional - update or clear native drag data */
+  DragData?: ResultDragData
 }
 
 /**
@@ -1282,6 +1306,30 @@ export interface CopyParams {
   woxImage?: WoxImage
 }
 
+export type AttentionActionType = "change_query"
+
+/**
+ * Action executed when the user opens a persistent attention item.
+ */
+export interface AttentionAction {
+  type: AttentionActionType
+  query: string
+}
+
+/**
+ * Persistent item that asks Wox to keep something visible until the user sees it.
+ *
+ * Wox stores the item, maintains unread state, and shows an unread badge near the
+ * query box like a lightweight inbox. The key is scoped to the current plugin.
+ */
+export interface PushAttentionRequest {
+  key: string
+  title: string
+  description?: string
+  icon?: WoxImage
+  action?: AttentionAction
+}
+
 /**
  * Options for the built-in screenshot workflow.
  */
@@ -1331,6 +1379,14 @@ export interface PublicAPI {
    * Notify message
    */
   Notify: (ctx: Context, message: string) => Promise<void>
+
+  /**
+   * Push a persistent attention item into Wox.
+   *
+   * Unlike Notify, this survives until the user handles it. Wox shows the unread
+   * count near the query box and opens the attention inbox when the badge is clicked.
+   */
+  PushAttention: (ctx: Context, request: PushAttentionRequest) => Promise<void>
 
   /**
    * Show or update a toolbar msg.

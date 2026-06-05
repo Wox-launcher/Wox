@@ -24,6 +24,8 @@ class WoxFuzzyMatchUtil {
   static const int _bonusConsecutive = 5;
   static const int _bonusPrefixMatch = 20;
   static const int _bonusExactMatch = 100;
+  static const int _optimalAlignmentTextLimit = 64;
+  static const int _optimalAlignmentPatternLimit = 8;
 
   static final RegExp _alphabeticRegExp = RegExp(r'^[a-zA-Z]+$');
   static final RegExp _hasChineseRegExp = RegExp(r'[\u4e00-\u9fff]');
@@ -386,6 +388,20 @@ class WoxFuzzyMatchUtil {
       return const WoxFuzzyMatchResult(isMatch: false, score: 0);
     }
 
+    if (_shouldUseOptimalAlignment(textLen: textLen, patternLen: patternLen)) {
+      final score = _calculateBestAlignmentScore(originalRunes: originalRunes, textRunes: textRunes, patternRunes: patternRunes);
+      if (score == null) {
+        return const WoxFuzzyMatchResult(isMatch: false, score: 0);
+      }
+
+      final minScore = _calculateMinScoreThreshold(patternLen: patternLen, textLen: textLen);
+      if (score < minScore) {
+        return const WoxFuzzyMatchResult(isMatch: false, score: 0);
+      }
+
+      return WoxFuzzyMatchResult(isMatch: true, score: score);
+    }
+
     final matchedPositions = _optimizeMatchPositions(originalRunes: originalRunes, textRunes: textRunes, patternRunes: patternRunes);
 
     final score = _calculateScore(originalRunes: originalRunes, textRunes: textRunes, matchedIndexes: matchedPositions, patternLen: patternLen);
@@ -445,6 +461,88 @@ class WoxFuzzyMatchUtil {
     return matchedIndexes;
   }
 
+  // Keep short labels on the best alignment path while longer labels stay on
+  // the cheaper greedy heuristic.
+  static bool _shouldUseOptimalAlignment({required int textLen, required int patternLen}) {
+    return patternLen > 1 && patternLen <= _optimalAlignmentPatternLimit && textLen <= _optimalAlignmentTextLimit;
+  }
+
+  // Dynamic programming is only used for short strings, where a globally best
+  // alignment improves ranking more than the extra work costs.
+  static int? _calculateBestAlignmentScore({required List<int> originalRunes, required List<int> textRunes, required List<int> patternRunes}) {
+    final textLen = textRunes.length;
+    final patternLen = patternRunes.length;
+    if (patternLen == 0 || patternLen > textLen || patternLen > _optimalAlignmentPatternLimit || textLen > _optimalAlignmentTextLimit) {
+      return null;
+    }
+
+    final scores = List<int?>.filled(patternLen * textLen, null);
+
+    for (var textIdx = 0; textIdx < textLen; textIdx++) {
+      if (textRunes[textIdx] != patternRunes[0]) {
+        continue;
+      }
+
+      scores[textIdx] = _scoreMatch + _calculateMatchBonus(originalRunes: originalRunes, matchIdx: textIdx) + _calculateLeadingGapPenalty(textIdx);
+    }
+
+    for (var patternIdx = 1; patternIdx < patternLen; patternIdx++) {
+      var rowFound = false;
+      final rowBase = patternIdx * textLen;
+      final prevRowBase = (patternIdx - 1) * textLen;
+
+      for (var textIdx = patternIdx; textIdx < textLen; textIdx++) {
+        if (textRunes[textIdx] != patternRunes[patternIdx]) {
+          continue;
+        }
+
+        int? bestScore;
+        final matchBonus = _scoreMatch + _calculateMatchBonus(originalRunes: originalRunes, matchIdx: textIdx);
+
+        for (var prevIdx = patternIdx - 1; prevIdx < textIdx; prevIdx++) {
+          final prevScore = scores[prevRowBase + prevIdx];
+          if (prevScore == null) {
+            continue;
+          }
+
+          var score = prevScore + matchBonus + _calculateGapPenalty(prevIdx, textIdx);
+          if (textIdx == prevIdx + 1) {
+            score += _bonusConsecutive;
+          }
+          if (bestScore == null || score > bestScore) {
+            bestScore = score;
+          }
+        }
+
+        if (bestScore != null) {
+          scores[rowBase + textIdx] = bestScore;
+          rowFound = true;
+        }
+      }
+
+      if (!rowFound) {
+        return null;
+      }
+    }
+
+    final lastRowBase = (patternLen - 1) * textLen;
+    final matchRatioBonus = _calculateMatchRatioBonus(patternLen: patternLen, textLen: textLen);
+    int? bestScore;
+    for (var textIdx = patternLen - 1; textIdx < textLen; textIdx++) {
+      final rowScore = scores[lastRowBase + textIdx];
+      if (rowScore == null) {
+        continue;
+      }
+
+      final score = rowScore + _calculateTrailingGapPenalty(textLen, textIdx) + matchRatioBonus;
+      if (bestScore == null || score > bestScore) {
+        bestScore = score;
+      }
+    }
+
+    return bestScore;
+  }
+
   static int _calculateScore({required List<int> originalRunes, required List<int> textRunes, required List<int> matchedIndexes, required int patternLen}) {
     if (matchedIndexes.isEmpty) {
       return 0;
@@ -456,66 +554,89 @@ class WoxFuzzyMatchUtil {
     for (var i = 0; i < matchedIndexes.length; i++) {
       final matchIdx = matchedIndexes[i];
 
-      score += _scoreMatch;
-
-      if (matchIdx == 0) {
-        score += _bonusFirstCharMatch;
-      }
-
-      if (matchIdx > 0) {
-        final prevChar = originalRunes[matchIdx - 1];
-        final currChar = originalRunes[matchIdx];
-
-        if (_isLowerLetter(prevChar) && _isUpperLetter(currChar)) {
-          score += _bonusCamelCase;
-        }
-
-        if (_isDelimiter(prevChar)) {
-          score += _bonusBoundary;
-        }
-
-        if (!_isLetterOrNumber(prevChar) && _isLetterOrNumber(currChar)) {
-          score += _bonusNonWord;
-        }
-      }
+      score += _scoreMatch + _calculateMatchBonus(originalRunes: originalRunes, matchIdx: matchIdx);
 
       if (i > 0 && matchIdx == prevMatchIdx + 1) {
         score += _bonusConsecutive;
       }
 
       if (prevMatchIdx >= 0) {
-        final gap = matchIdx - prevMatchIdx - 1;
-        if (gap > 0) {
-          score += _scoreGapStart + (gap - 1) * _scoreGapExtension;
-        }
-      } else if (matchIdx > 0) {
-        final leadingGap = matchIdx;
-        var penalty = leadingGap * _scoreGapExtension;
-        if (penalty < -15) {
-          penalty = -15;
-        }
-        score += penalty;
+        score += _calculateGapPenalty(prevMatchIdx, matchIdx);
+      } else {
+        score += _calculateLeadingGapPenalty(matchIdx);
       }
 
       prevMatchIdx = matchIdx;
     }
 
-    final textLen = textRunes.length;
-    if (prevMatchIdx >= 0 && prevMatchIdx < textLen - 1) {
-      final trailingGap = textLen - prevMatchIdx - 1;
-      var penalty = (trailingGap * _scoreGapExtension) ~/ 2;
-      if (penalty < -10) {
-        penalty = -10;
-      }
-      score += penalty;
-    }
-
-    final matchRatio = patternLen / textLen;
-    if (matchRatio > 0.5) {
-      score += (matchRatio * 10).toInt();
-    }
+    score += _calculateTrailingGapPenalty(textRunes.length, prevMatchIdx);
+    score += _calculateMatchRatioBonus(patternLen: patternLen, textLen: textRunes.length);
 
     return score;
+  }
+
+  static int _calculateMatchBonus({required List<int> originalRunes, required int matchIdx}) {
+    var bonus = 0;
+    if (matchIdx == 0) {
+      bonus += _bonusFirstCharMatch;
+      return bonus;
+    }
+
+    final prevChar = originalRunes[matchIdx - 1];
+    final currChar = originalRunes[matchIdx];
+    if (_isLowerLetter(prevChar) && _isUpperLetter(currChar)) {
+      bonus += _bonusCamelCase;
+    }
+    if (_isDelimiter(prevChar)) {
+      bonus += _bonusBoundary;
+    }
+    if (!_isLetterOrNumber(prevChar) && _isLetterOrNumber(currChar)) {
+      bonus += _bonusNonWord;
+    }
+
+    return bonus;
+  }
+
+  static int _calculateLeadingGapPenalty(int matchIdx) {
+    if (matchIdx <= 0) {
+      return 0;
+    }
+
+    var penalty = matchIdx * _scoreGapExtension;
+    if (penalty < -15) {
+      penalty = -15;
+    }
+    return penalty;
+  }
+
+  static int _calculateGapPenalty(int prevMatchIdx, int matchIdx) {
+    final gap = matchIdx - prevMatchIdx - 1;
+    if (gap <= 0) {
+      return 0;
+    }
+
+    return _scoreGapStart + (gap - 1) * _scoreGapExtension;
+  }
+
+  static int _calculateTrailingGapPenalty(int textLen, int matchIdx) {
+    if (matchIdx < 0 || matchIdx >= textLen - 1) {
+      return 0;
+    }
+
+    final trailingGap = textLen - matchIdx - 1;
+    var penalty = (trailingGap * _scoreGapExtension) ~/ 2;
+    if (penalty < -10) {
+      penalty = -10;
+    }
+    return penalty;
+  }
+
+  static int _calculateMatchRatioBonus({required int patternLen, required int textLen}) {
+    final matchRatio = patternLen / textLen;
+    if (matchRatio > 0.5) {
+      return (matchRatio * 10).toInt();
+    }
+    return 0;
   }
 
   static int _calculateMinScoreThreshold({required int patternLen, required int textLen}) {

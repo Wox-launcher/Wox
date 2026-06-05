@@ -36,6 +36,14 @@ class WoxHotkeyRecorder extends StatefulWidget {
   State<WoxHotkeyRecorder> createState() => _WoxHotkeyRecorderState();
 }
 
+/// Carries both the parsed hotkey and whether the original event should be consumed by the recorder.
+class _HotkeyTrackerResult {
+  final String? hotkey;
+  final bool handled;
+
+  const _HotkeyTrackerResult({this.hotkey, this.handled = false});
+}
+
 /// Internal class to track hotkey state and handle keyboard events.
 ///
 /// Why we need this instead of using WoxHotkey.parseNormalHotkeyFromEvent:
@@ -54,9 +62,11 @@ class WoxHotkeyRecorder extends StatefulWidget {
 ///
 /// Solution:
 /// This tracker manually maintains modifier key states by:
-///   1. Ignoring all synthesized events (they're Flutter's "guesses", not real user input)
-///   2. Tracking modifier keys ourselves in _pressedModifiers Set
-///   3. When a non-modifier key is pressed, we check our own _pressedModifiers instead of HardwareKeyboard.instance
+///   1. Tracking real and synthesized modifier downs separately
+///   2. Ignoring synthesized modifier ups when a real down is still active
+///   3. Keeping recently released synthesized modifiers briefly active because macOS can report Cmd up immediately before Space down for cmd+space
+///   4. Buffering a Space key that arrives just before a synthesized Cmd down in macOS cmd+space sequences
+///   5. When a non-modifier key is pressed, we check our own _pressedModifiers instead of HardwareKeyboard.instance
 ///
 /// This approach:
 ///   - Works correctly even when OS intercepts key combinations
@@ -64,50 +74,156 @@ class WoxHotkeyRecorder extends StatefulWidget {
 ///   - Is cross-platform compatible (synthesized events occur on macOS, Linux, and potentially Windows)
 class _HotkeyTracker {
   final Set<PhysicalKeyboardKey> _pressedModifiers = {};
+  final Set<PhysicalKeyboardKey> _realPressedModifiers = {};
+  final Set<PhysicalKeyboardKey> _synthesizedPressedModifiers = {};
+  final Map<PhysicalKeyboardKey, int> _synthesizedModifierReleaseTimestamp = {};
   final Map<LogicalKeyboardKey, int> _lastKeyUpTimestamp = {};
+  PhysicalKeyboardKey? _pendingOutOfOrderKey;
+  int? _pendingOutOfOrderKeyTimestamp;
   static const int _doubleClickThreshold = 500; // milliseconds
+  static const int _synthesizedModifierReleaseGrace = 120; // milliseconds
+  static const int _pendingOutOfOrderKeyGrace = 120; // milliseconds
 
   void reset() {
     _pressedModifiers.clear();
+    _realPressedModifiers.clear();
+    _synthesizedPressedModifiers.clear();
+    _synthesizedModifierReleaseTimestamp.clear();
     _lastKeyUpTimestamp.clear();
+    _clearPendingOutOfOrderKey();
   }
 
-  /// Process a keyboard event and return the detected hotkey string, or null if no hotkey detected
-  String? processKeyEvent(KeyEvent keyEvent) {
-    // Ignore synthesized events from Flutter
-    // Flutter synthesizes events when the OS intercepts certain key combinations
-    // (e.g., cmd+space on macOS, which is reserved for input method switching)
-    if (keyEvent.synthesized) {
+  /// Rebuild the active modifier snapshot from real and synthesized sources.
+  void _syncPressedModifiers() {
+    _pressedModifiers
+      ..clear()
+      ..addAll(_realPressedModifiers)
+      ..addAll(_synthesizedPressedModifiers);
+  }
+
+  /// Remove synthesized modifier releases after the short reconciliation window expires.
+  void _pruneExpiredSynthesizedModifiers() {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final expiredKeys = _synthesizedModifierReleaseTimestamp.entries.where((entry) => now - entry.value > _synthesizedModifierReleaseGrace).map((entry) => entry.key).toList();
+
+    for (final key in expiredKeys) {
+      _synthesizedModifierReleaseTimestamp.remove(key);
+      if (!_realPressedModifiers.contains(key)) {
+        _synthesizedPressedModifiers.remove(key);
+      }
+    }
+
+    if (expiredKeys.isNotEmpty) {
+      _syncPressedModifiers();
+    }
+  }
+
+  void _clearPendingOutOfOrderKey() {
+    _pendingOutOfOrderKey = null;
+    _pendingOutOfOrderKeyTimestamp = null;
+  }
+
+  /// Keep a short-lived non-modifier key only for macOS cmd+space, where Flutter can report Space before synthesized Cmd.
+  bool _stagePendingOutOfOrderKey(KeyEvent keyEvent) {
+    if (!Platform.isMacOS || keyEvent is! KeyDownEvent || keyEvent.physicalKey != PhysicalKeyboardKey.space) {
+      return false;
+    }
+
+    _pendingOutOfOrderKey = keyEvent.physicalKey;
+    _pendingOutOfOrderKeyTimestamp = DateTime.now().millisecondsSinceEpoch;
+    return true;
+  }
+
+  void _pruneExpiredPendingOutOfOrderKey() {
+    final timestamp = _pendingOutOfOrderKeyTimestamp;
+    if (timestamp == null) {
+      return;
+    }
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - timestamp > _pendingOutOfOrderKeyGrace) {
+      _clearPendingOutOfOrderKey();
+    }
+  }
+
+  String? _consumePendingOutOfOrderHotkey(KeyEvent keyEvent) {
+    _pruneExpiredPendingOutOfOrderKey();
+    final pendingKey = _pendingOutOfOrderKey;
+    if (pendingKey == null || !Platform.isMacOS || keyEvent is! KeyDownEvent || !keyEvent.synthesized) {
       return null;
     }
+
+    final modifier = WoxHotkey.convertToModifier(keyEvent.physicalKey);
+    if (modifier != HotKeyModifier.meta) {
+      return null;
+    }
+
+    _clearPendingOutOfOrderKey();
+    final hotkey = HotKey(key: pendingKey, modifiers: [HotKeyModifier.meta], scope: HotKeyScope.system);
+    return WoxHotkey.normalHotkeyToStr(hotkey);
+  }
+
+  /// Process a keyboard event and report both the detected hotkey and whether the event was handled.
+  _HotkeyTrackerResult processKeyEvent(KeyEvent keyEvent) {
+    _pruneExpiredSynthesizedModifiers();
+    _pruneExpiredPendingOutOfOrderKey();
 
     // Track modifier key states manually (more reliable than HardwareKeyboard.instance
     // which gets corrupted by synthesized events)
     if (WoxHotkey.isModifierKey(keyEvent.physicalKey)) {
       if (keyEvent is KeyDownEvent) {
-        _pressedModifiers.add(keyEvent.physicalKey);
-      } else if (keyEvent is KeyUpEvent) {
-        _pressedModifiers.remove(keyEvent.physicalKey);
-
-        // Check for double-click modifier keys
-        final now = DateTime.now().millisecondsSinceEpoch;
-        final lastPress = _lastKeyUpTimestamp[keyEvent.logicalKey] ?? 0;
-
-        if (now - lastPress <= _doubleClickThreshold) {
-          // Double click detected
-          final modifierStr = WoxHotkey.getModifierStr(WoxHotkey.convertToModifier(keyEvent.physicalKey)!);
-          return "$modifierStr+$modifierStr";
+        _synthesizedModifierReleaseTimestamp.remove(keyEvent.physicalKey);
+        if (keyEvent.synthesized) {
+          _synthesizedPressedModifiers.add(keyEvent.physicalKey);
+        } else {
+          _realPressedModifiers.add(keyEvent.physicalKey);
+          _synthesizedPressedModifiers.remove(keyEvent.physicalKey);
         }
+        _syncPressedModifiers();
 
-        _lastKeyUpTimestamp[keyEvent.logicalKey] = now;
+        final pendingHotkey = _consumePendingOutOfOrderHotkey(keyEvent);
+        if (pendingHotkey != null) {
+          return _HotkeyTrackerResult(hotkey: pendingHotkey, handled: true);
+        }
+      } else if (keyEvent is KeyUpEvent) {
+        if (keyEvent.synthesized) {
+          if (!_realPressedModifiers.contains(keyEvent.physicalKey)) {
+            _synthesizedModifierReleaseTimestamp[keyEvent.physicalKey] = DateTime.now().millisecondsSinceEpoch;
+          }
+        } else {
+          _realPressedModifiers.remove(keyEvent.physicalKey);
+          _synthesizedPressedModifiers.remove(keyEvent.physicalKey);
+          _synthesizedModifierReleaseTimestamp.remove(keyEvent.physicalKey);
+
+          // Check for double-click modifier keys
+          final now = DateTime.now().millisecondsSinceEpoch;
+          final lastPress = _lastKeyUpTimestamp[keyEvent.logicalKey] ?? 0;
+
+          if (now - lastPress <= _doubleClickThreshold) {
+            // Double click detected
+            final modifierStr = WoxHotkey.getModifierStr(WoxHotkey.convertToModifier(keyEvent.physicalKey)!);
+            _syncPressedModifiers();
+            _clearPendingOutOfOrderKey();
+            return _HotkeyTrackerResult(hotkey: "$modifierStr+$modifierStr", handled: true);
+          }
+
+          _lastKeyUpTimestamp[keyEvent.logicalKey] = now;
+        }
       }
-      return null;
+      _syncPressedModifiers();
+      return const _HotkeyTrackerResult();
+    }
+
+    // Flutter may synthesize non-modifier keys while reconciling focus state.
+    // They are not direct user input, so they should not complete a recording.
+    if (keyEvent.synthesized) {
+      return const _HotkeyTrackerResult();
     }
 
     // Handle normal hotkeys (modifier + key)
     if (keyEvent is! KeyUpEvent && WoxHotkey.isAllowedKey(keyEvent.physicalKey)) {
       if (!Platform.isWindows && _pressedModifiers.isEmpty) {
-        return null;
+        return _HotkeyTrackerResult(handled: _stagePendingOutOfOrderKey(keyEvent));
       }
 
       // On Windows, rely on native modifier states from message loop.
@@ -126,14 +242,19 @@ class _HotkeyTracker {
       }
 
       if (modifiers.isEmpty) {
-        return null;
+        return const _HotkeyTrackerResult();
       }
 
+      _clearPendingOutOfOrderKey();
       final hotkey = HotKey(key: keyEvent.physicalKey, modifiers: modifiers, scope: HotKeyScope.system);
-      return WoxHotkey.normalHotkeyToStr(hotkey);
+      return _HotkeyTrackerResult(hotkey: WoxHotkey.normalHotkeyToStr(hotkey), handled: true);
     }
 
-    return null;
+    if (keyEvent is KeyUpEvent && keyEvent.physicalKey == _pendingOutOfOrderKey) {
+      _clearPendingOutOfOrderKey();
+    }
+
+    return const _HotkeyTrackerResult();
   }
 }
 
@@ -213,13 +334,13 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
     }
 
     // Process the key event
-    final hotkeyStr = _tracker.processKeyEvent(keyEvent);
-    if (hotkeyStr == null) {
+    final result = _tracker.processKeyEvent(keyEvent);
+    if (result.hotkey == null) {
       Logger.instance.debug(const UuidV4().generate(), "Hotkey recorder did not parse a hotkey from event: $keyEvent");
-      return false;
+      return result.handled;
     }
 
-    _recordHotkey(hotkeyStr);
+    _recordHotkey(result.hotkey!);
     return true;
   }
 
@@ -278,10 +399,11 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
   }
 
   Widget _buildRecorderBox() {
+    final hasAvailabilityError = _availabilityMessage.isNotEmpty;
     return Container(
       // Match the quieter setting control treatment; focus still uses the accent color while idle borders no longer dominate the row.
       decoration: BoxDecoration(
-        border: Border.all(color: _isFocused ? getThemeActiveBackgroundColor() : getThemeSubTextColor().withValues(alpha: 0.55)),
+        border: Border.all(color: hasAvailabilityError ? Colors.red : (_isFocused ? getThemeActiveBackgroundColor() : getThemeSubTextColor().withValues(alpha: 0.55))),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Padding(
@@ -308,12 +430,13 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
   }
 
   Widget _buildFocusedHint({bool singleLine = false}) {
+    final hasAvailabilityError = _availabilityMessage.isNotEmpty;
     return Text(
-      tr("ui_hotkey_press_hint"),
+      hasAvailabilityError ? _availabilityMessage : tr("ui_hotkey_press_hint"),
       maxLines: singleLine ? 1 : null,
       softWrap: !singleLine,
       overflow: singleLine ? TextOverflow.visible : TextOverflow.clip,
-      style: TextStyle(color: Colors.grey[500], fontSize: 13),
+      style: TextStyle(color: hasAvailabilityError ? Colors.red : Colors.grey[500], fontSize: 13),
     );
   }
 
@@ -346,7 +469,7 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
       );
     }
 
-    if (_availabilityMessage.isEmpty) {
+    if (_availabilityMessage.isEmpty || _isFocused) {
       return content;
     }
 
@@ -365,6 +488,7 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
   Widget build(BuildContext context) {
     return Focus(
       focusNode: _focusNode,
+      onKeyEvent: (node, event) => _handleKeyEvent(event) ? KeyEventResult.handled : KeyEventResult.ignored,
       onFocusChange: (value) {
         Logger.instance.info(const UuidV4().generate(), "Hotkey recorder focus changed: focused=$value");
         _isFocused = value;

@@ -826,7 +826,7 @@ Events should be offered in this order:
   - overlay close, then webview fallback, then preview fallback, then query focus, then launcher hide
 - `Enter`
   - execute current result default action
-- `Alt+J`
+- Primary modifier + `J`
   - toggle action panel while preserving selection
 - `Tab` and `Shift+Tab`
   - cycle focus between query, results, preview, and overlay

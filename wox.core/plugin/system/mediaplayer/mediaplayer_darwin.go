@@ -145,11 +145,16 @@ func (d *DarwinRetriever) getScriptPath() string {
 	return path.Join(util.GetLocation().GetOthersDirectory(), "woxmr", "adapter.pl")
 }
 
-func (d *DarwinRetriever) TogglePlayPause(ctx context.Context) error {
+// ControlMedia delegates playback commands to the Perl adapter that owns MediaRemote access.
+func (d *DarwinRetriever) ControlMedia(ctx context.Context, command string) error {
 	scriptPath := d.getScriptPath()
-	cmd := exec.CommandContext(ctx, "/usr/bin/perl", scriptPath, "toggle")
+	cmd := exec.CommandContext(ctx, "/usr/bin/perl", scriptPath, command)
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to toggle via adapter: %w", err)
+		return fmt.Errorf("failed to run media command %s via adapter: %w", command, err)
 	}
 	return nil
+}
+
+func (d *DarwinRetriever) TogglePlayPause(ctx context.Context) error {
+	return d.ControlMedia(ctx, mediaControlToggle)
 }

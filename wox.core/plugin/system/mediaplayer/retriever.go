@@ -49,6 +49,9 @@ type MediaRetriever interface {
 	// GetCurrentMedia retrieves current media information
 	GetCurrentMedia(ctx context.Context) (*MediaInfo, error)
 
+	// ControlMedia sends a named playback command such as play, pause, next, or previous.
+	ControlMedia(ctx context.Context, command string) error
+
 	// TogglePlayPause toggles playback state if supported on the platform/app
 	TogglePlayPause(ctx context.Context) error
 }

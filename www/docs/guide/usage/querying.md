@@ -52,9 +52,9 @@ Use a keyword when fallback results are noisy or when you know exactly which plu
 | `Esc` | Hide Wox or go back from a nested view |
 | `Up` / `Down` | Move through results |
 | `Enter` | Run the selected result's primary action |
-| `Alt + J` / `Command + J` | Open the Action Panel |
+| Windows/Linux: `Ctrl + J`; macOS: `Command + J` | Open the Action Panel |
 | `Tab` | Complete the suggested query when available |
 
 ## Hotkey Settings
 
-Open **Settings -> General** to change the main Wox hotkey. You can also create query hotkeys that open Wox with a predefined query, position, width, or hidden toolbar/query box.
+Open **Settings -> General** to change the main Wox hotkey. You can also create Query Hotkeys with presets such as **Normal Query**, **Preview Query**, **Silent Run**, or **Custom**. Presets give you sensible defaults first, and you can still override position, width, result count, or chrome visibility when needed.

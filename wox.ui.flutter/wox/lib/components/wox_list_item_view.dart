@@ -57,45 +57,35 @@ class WoxListItemView extends StatelessWidget {
     );
   }
 
-  Widget buildTails() {
+  Widget buildTails({required double maxTailWidth}) {
     final metrics = _metrics;
     final tailTextColor = isActive ? woxTheme.resultItemActiveTailTextColorParsed : woxTheme.resultItemTailTextColorParsed;
     final activeBgColor = woxTheme.resultItemActiveBackgroundColorParsed;
     final actionBgColor = woxTheme.actionContainerBackgroundColorParsed;
-    final maxTailWidth = WoxSettingUtil.instance.currentSetting.appWidth / 3;
     final maxTextTailWidth = math.max(0.0, maxTailWidth - _tailPadding.horizontal - _tailItemPadding.horizontal);
+
+    final children = <Widget>[];
+    for (final tail in item.tails) {
+      Widget? child;
+      if (tail.type == WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_TEXT.code && tail.text != null) {
+        child = buildTailTooltip(tail, buildTextTailTag(tail.text!, tail.textCategory, tailTextColor, maxTextTailWidth));
+      } else if (tail.type == WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_HOTKEY.code && tail.hotkey != null) {
+        child = buildTailTooltip(
+          tail,
+          WoxHotkeyView(hotkey: tail.hotkey!, backgroundColor: isActive ? activeBgColor : actionBgColor, borderColor: tailTextColor, textColor: tailTextColor),
+        );
+      } else if (tail.type == WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_IMAGE.code && tail.image != null && tail.image!.imageData.isNotEmpty) {
+        child = buildTailTooltip(tail, WoxImageView(woxImage: tail.image!, width: tail.imageWidth ?? metrics.tailImageSize, height: tail.imageHeight ?? metrics.tailImageSize));
+      }
+
+      if (child != null) {
+        children.add(Padding(padding: _tailItemPadding, child: child));
+      }
+    }
 
     return ConstrainedBox(
       constraints: BoxConstraints(maxWidth: maxTailWidth),
-      child: Padding(
-        padding: _tailPadding,
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              for (final tail in item.tails)
-                if (tail.type == WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_TEXT.code && tail.text != null)
-                  Padding(padding: _tailItemPadding, child: buildTailTooltip(tail, buildTextTailTag(tail.text!, tail.textCategory, tailTextColor, maxTextTailWidth)))
-                else if (tail.type == WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_HOTKEY.code && tail.hotkey != null)
-                  Padding(
-                    padding: _tailItemPadding,
-                    child: buildTailTooltip(
-                      tail,
-                      WoxHotkeyView(hotkey: tail.hotkey!, backgroundColor: isActive ? activeBgColor : actionBgColor, borderColor: tailTextColor, textColor: tailTextColor),
-                    ),
-                  )
-                else if (tail.type == WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_IMAGE.code && tail.image != null && tail.image!.imageData.isNotEmpty)
-                  Padding(
-                    padding: _tailItemPadding,
-                    child: buildTailTooltip(
-                      tail,
-                      WoxImageView(woxImage: tail.image!, width: tail.imageWidth ?? metrics.tailImageSize, height: tail.imageHeight ?? metrics.tailImageSize),
-                    ),
-                  ),
-            ],
-          ),
-        ),
-      ),
+      child: Padding(padding: _tailPadding, child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: children))),
     );
   }
 
@@ -234,9 +224,6 @@ class WoxListItemView extends StatelessWidget {
       ),
     );
 
-    // Build tails widget
-    final Widget? tailsWidget = item.tails.isNotEmpty ? buildTails() : null;
-
     // Build quick select widget
     final Widget? quickSelectWidget = (item.isShowQuickSelect && item.quickSelectNumber.isNotEmpty) ? buildQuickSelectNumber() : null;
 
@@ -251,7 +238,16 @@ class WoxListItemView extends StatelessWidget {
                 left: WoxInterfaceSizeUtil.instance.current.scaledSpacing(woxTheme.resultItemPaddingLeft.toDouble() + maxBorderWidth),
               )
               : EdgeInsets.only(left: WoxInterfaceSizeUtil.instance.current.scaledSpacing(maxBorderWidth)),
-      child: Row(children: [iconWidget, textWidget, if (tailsWidget != null) tailsWidget, if (quickSelectWidget != null) quickSelectWidget]),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final rowWidth = constraints.maxWidth.isFinite ? constraints.maxWidth : WoxSettingUtil.instance.currentSetting.appWidth.toDouble();
+          // Preview and action layouts can be narrower than the configured app width, so cap tails by the actual row width while keeping them as a trailing non-flex child.
+          final maxTailWidth = math.min(WoxSettingUtil.instance.currentSetting.appWidth / 3, math.max(0.0, rowWidth / 3));
+          final Widget? tailsWidget = item.tails.isNotEmpty ? buildTails(maxTailWidth: maxTailWidth) : null;
+
+          return Row(children: [iconWidget, textWidget, if (tailsWidget != null) tailsWidget, if (quickSelectWidget != null) quickSelectWidget]);
+        },
+      ),
     );
 
     if (borderRadius != BorderRadius.zero) {

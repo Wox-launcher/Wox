@@ -218,6 +218,10 @@ func (s *ScriptPlugin) executeScript(ctx context.Context, request map[string]int
 			queryResult.Preview = preview
 		}
 
+		if dragData := parseScriptDragData(itemMap); dragData != nil {
+			queryResult.DragData = dragData
+		}
+
 		if tails := parseScriptTails(ctx, s.metadata, itemMap); len(tails) > 0 {
 			queryResult.Tails = tails
 		}
@@ -853,6 +857,40 @@ func parseScriptPreview(itemMap map[string]interface{}) (plugin.WoxPreview, bool
 	}
 
 	return preview, true
+}
+
+func parseScriptDragData(itemMap map[string]interface{}) *plugin.QueryResultDragData {
+	dragMap := getMapFromMap(itemMap, "dragData")
+	if dragMap == nil {
+		dragMap = getMapFromMap(itemMap, "DragData")
+	}
+	if dragMap == nil {
+		return nil
+	}
+
+	dragType := getFirstStringFromMap(dragMap, []string{"type", "Type"})
+	if dragType != plugin.QueryResultDragDataTypeFiles {
+		return nil
+	}
+
+	filesArray := getSliceFromMap(dragMap, "files")
+	if filesArray == nil {
+		filesArray = getSliceFromMap(dragMap, "Files")
+	}
+	files := make([]string, 0, len(filesArray))
+	for _, item := range filesArray {
+		if filePath, ok := item.(string); ok && strings.TrimSpace(filePath) != "" {
+			files = append(files, filePath)
+		}
+	}
+	if len(files) == 0 {
+		return nil
+	}
+
+	return &plugin.QueryResultDragData{
+		Type:  plugin.QueryResultDragDataTypeFiles,
+		Files: files,
+	}
 }
 
 func parseScriptTails(ctx context.Context, metadata plugin.Metadata, itemMap map[string]interface{}) []plugin.QueryResultTail {

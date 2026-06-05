@@ -9,13 +9,13 @@ import (
 	"strings"
 	"time"
 	"wox/common"
-	"wox/database"
 	"wox/plugin"
 	"wox/plugin/system/shell/terminal"
 	"wox/setting"
 	"wox/util"
 	"wox/util/notifier"
 	"wox/util/selection"
+	"wox/util/timetracking"
 
 	"github.com/google/uuid"
 	"github.com/samber/lo"
@@ -188,11 +188,6 @@ func (u *uiImpl) RestoreTheme(ctx context.Context) {
 }
 
 func (u *uiImpl) Notify(ctx context.Context, msg common.NotifyMsg) {
-	// Respect snooze/mute regardless of where we display (toolbar or system notification)
-	if database.IsToolbarTextMuted(ctx, msg.Text) {
-		logger.Info(ctx, "toolbar/system message muted by backend")
-		return
-	}
 	if u.IsVisible(ctx) && !u.IsInManagementView() && !plugin.GetPluginManager().HasVisibleToolbarMsg(ctx) {
 		u.invokeWebsocketMethod(ctx, "ShowToolbarMsg", msg)
 	} else {
@@ -212,6 +207,12 @@ func (u *uiImpl) Notify(ctx context.Context, msg common.NotifyMsg) {
 		}
 		notifier.Notify(icon, msg.Text)
 	}
+}
+
+func (u *uiImpl) UpdateAttentionUnreadCount(ctx context.Context, unreadCount int) {
+	u.invokeWebsocketMethod(ctx, "AttentionUnreadCountChanged", map[string]any{
+		"unreadCount": unreadCount,
+	})
 }
 
 func (u *uiImpl) ShowToolbarMsg(ctx context.Context, msg interface{}) {
@@ -453,29 +454,47 @@ func getShowAppParams(ctx context.Context, showContext common.ShowContext) map[s
 	}
 
 	params := map[string]any{
-		"SelectAll":           showContext.SelectAll,
-		"IsQueryFocus":        showContext.IsQueryFocus,
-		"HideQueryBox":        showContext.HideQueryBox,
-		"HideToolbar":         hideToolbar,
-		"QueryBoxAtBottom":    showContext.QueryBoxAtBottom,
-		"HideOnBlur":          showContext.HideOnBlur,
-		"Position":            position,
-		"TrayAnchor":          showContext.TrayAnchor,
-		"WindowWidth":         windowWidth,
-		"MaxResultCount":      maxResultCount,
-		"QueryHistories":      setting.GetSettingManager().GetLatestQueryHistory(ctx, 10),
-		"LaunchMode":          woxSetting.LaunchMode.Get(),
-		"StartPage":           woxSetting.StartPage.Get(),
-		"ShowSource":          showSource,
-		"ActivationStartedAt": showContext.ActivationStartedAt,
+		"SelectAll":            showContext.SelectAll,
+		"IsQueryFocus":         showContext.IsQueryFocus,
+		"HideQueryBox":         showContext.HideQueryBox,
+		"HideToolbar":          hideToolbar,
+		"QueryBoxAtBottom":     showContext.QueryBoxAtBottom,
+		"HideOnBlur":           showContext.HideOnBlur,
+		"Position":             position,
+		"TrayAnchor":           showContext.TrayAnchor,
+		"WindowWidth":          windowWidth,
+		"MaxResultCount":       maxResultCount,
+		"QueryHistories":       setting.GetSettingManager().GetLatestQueryHistory(ctx, 10),
+		"LaunchMode":           woxSetting.LaunchMode.Get(),
+		"StartPage":            woxSetting.StartPage.Get(),
+		"ShowSource":           showSource,
+		"ActivationStartedAt":  showContext.ActivationStartedAt,
+		"AttentionUnreadCount": getAttentionUnreadCount(ctx),
 	}
 
 	return params
 }
 
+func getAttentionUnreadCount(ctx context.Context) int {
+	count, err := plugin.GetAttentionManager().UnreadCount(ctx)
+	if err != nil {
+		logger.Warn(ctx, fmt.Sprintf("failed to count unread attention items for show app: %v", err))
+		return 0
+	}
+	return int(count)
+}
+
 func onUIWebsocketRequest(ctx context.Context, request WebsocketMsg) {
 	if request.Method != "Log" {
 		logger.Debug(ctx, fmt.Sprintf("got <%s> request from ui", request.Method))
+	}
+	if request.Method == "Query" {
+		tracker := timetracking.New("ui_request_dispatch_enter")
+		if tracker.Enabled() {
+			tracker.SetRawString("queryId", websocketMsgStringParam(request, "queryId"))
+			tracker.SetRawString("method", request.Method)
+			tracker.Log(ctx)
+		}
 	}
 
 	// we handle time/amount sensitive requests in websocket, other requests in http (see router.go)
@@ -484,6 +503,8 @@ func onUIWebsocketRequest(ctx context.Context, request WebsocketMsg) {
 		handleWebsocketLog(ctx, request)
 	case "Query":
 		handleWebsocketQuery(ctx, request)
+	case "QueryCompletionHintAccepted":
+		handleWebsocketQueryCompletionHintAccepted(ctx, request)
 	case "QueryMRU":
 		handleWebsocketQueryMRU(ctx, request)
 	case "Action":
@@ -564,7 +585,9 @@ func handleWebsocketLog(ctx context.Context, request WebsocketMsg) {
 }
 
 func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
+	handlerStart := util.GetSystemTimestamp()
 	sessionId := request.SessionId
+	queryIdParamStart := util.GetSystemTimestamp()
 	queryId, queryIdErr := getWebsocketMsgParameter(ctx, request, "queryId")
 	if queryIdErr != nil {
 		logger.Error(ctx, queryIdErr.Error())
@@ -573,35 +596,54 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 	} else {
 		ctx = util.WithQueryIdContext(ctx, queryId)
 	}
+	queryIdParamCost := util.GetSystemTimestamp() - queryIdParamStart
+	if tracker := timetracking.New("handle_query_enter"); tracker.Enabled() {
+		tracker.SetRawString("queryId", queryId)
+		tracker.SetRawString("requestId", request.RequestId)
+		tracker.SetRawString("sessionId", sessionId)
+		tracker.SetInt64("queryIdParamMs", queryIdParamCost)
+		tracker.Log(ctx)
+	}
 
+	queryTypeParamStart := util.GetSystemTimestamp()
 	queryType, queryTypeErr := getWebsocketMsgParameter(ctx, request, "queryType")
 	if queryTypeErr != nil {
 		logger.Error(ctx, queryTypeErr.Error())
 		responseUIError(ctx, request, queryTypeErr.Error())
 		return
 	}
+	queryTypeParamCost := util.GetSystemTimestamp() - queryTypeParamStart
+	queryTextParamStart := util.GetSystemTimestamp()
 	queryText, queryTextErr := getWebsocketMsgParameter(ctx, request, "queryText")
 	if queryTextErr != nil {
 		logger.Error(ctx, queryTextErr.Error())
 		responseUIError(ctx, request, queryTextErr.Error())
 		return
 	}
+	queryTextParamCost := util.GetSystemTimestamp() - queryTextParamStart
+	querySelectionParamStart := util.GetSystemTimestamp()
 	querySelectionJson, querySelectionErr := getWebsocketMsgParameter(ctx, request, "querySelection")
 	if querySelectionErr != nil {
 		logger.Error(ctx, querySelectionErr.Error())
 		responseUIError(ctx, request, querySelectionErr.Error())
 		return
 	}
+	querySelectionParamCost := util.GetSystemTimestamp() - querySelectionParamStart
 	var querySelection selection.Selection
+	selectionParseStart := util.GetSystemTimestamp()
 	json.Unmarshal([]byte(querySelectionJson), &querySelection)
+	selectionParseCost := util.GetSystemTimestamp() - selectionParseStart
 
 	queryRefinements := map[string]string{}
+	requestDataMarshalStart := util.GetSystemTimestamp()
 	queryRequestJson, queryRequestMarshalErr := json.Marshal(request.Data)
 	if queryRequestMarshalErr != nil {
 		logger.Error(ctx, queryRequestMarshalErr.Error())
 		responseUIError(ctx, request, queryRequestMarshalErr.Error())
 		return
 	}
+	requestDataMarshalCost := util.GetSystemTimestamp() - requestDataMarshalStart
+	refinementsParseStart := util.GetSystemTimestamp()
 	refinementsData := gjson.GetBytes(queryRequestJson, "queryRefinements")
 	if refinementsData.Exists() {
 		// queryRefinements is optional for compatibility with older UI clients.
@@ -614,6 +656,24 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 			return
 		}
 		queryRefinements = parsedRefinements
+	}
+	refinementsParseCost := util.GetSystemTimestamp() - refinementsParseStart
+	skipCompletionHint := gjson.GetBytes(queryRequestJson, "skipCompletionHint").Bool()
+	if tracker := timetracking.New("handle_query_parse"); tracker.Enabled() {
+		tracker.SetRawString("queryId", queryId)
+		tracker.SetRawString("queryType", queryType)
+		tracker.SetString("queryText", queryText)
+		tracker.SetInt("queryTextLen", len(queryText))
+		tracker.SetInt("selectionBytes", len(querySelectionJson))
+		tracker.SetInt64("queryIdParamMs", queryIdParamCost)
+		tracker.SetInt64("queryTypeParamMs", queryTypeParamCost)
+		tracker.SetInt64("queryTextParamMs", queryTextParamCost)
+		tracker.SetInt64("querySelectionParamMs", querySelectionParamCost)
+		tracker.SetInt64("selectionParseMs", selectionParseCost)
+		tracker.SetInt64("requestDataMarshalMs", requestDataMarshalCost)
+		tracker.SetInt64("refinementsParseMs", refinementsParseCost)
+		tracker.SetInt64("totalMs", util.GetSystemTimestamp()-handlerStart)
+		tracker.Log(ctx)
 	}
 
 	var changedQuery common.PlainQuery
@@ -669,6 +729,7 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 		return
 	}
 
+	newQueryStart := util.GetSystemTimestamp()
 	query, ownerPlugin, queryErr := plugin.GetPluginManager().NewQuery(ctx, changedQuery)
 	if queryErr != nil {
 		if conflictErr, ok := plugin.AsTriggerKeywordConflictError(queryErr); ok {
@@ -680,9 +741,55 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 		responseUIError(ctx, request, queryErr.Error())
 		return
 	}
+	if tracker := timetracking.New("handle_query_new_query"); tracker.Enabled() {
+		tracker.SetRawString("queryId", queryId)
+		tracker.SetRawString("query", query.String())
+		tracker.SetRawString("ownerPlugin", queryPipelinePluginLabel(ctx, ownerPlugin))
+		tracker.SetInt64("costMs", util.GetSystemTimestamp()-newQueryStart)
+		tracker.SetInt64("elapsedMs", util.GetSystemTimestamp()-handlerStart)
+		tracker.Log(ctx)
+	}
 
+	completionHintScheduleStart := util.GetSystemTimestamp()
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	if !skipCompletionHint && woxSetting.EnableQueryCompletionHint.Get() {
+		util.Go(ctx, "query completion hint", func() {
+			responseUIQueryCompletionHint(
+				ctx,
+				request,
+				queryId,
+				plugin.BuildQueryCompletionHintForInputPrefixWithFeedback(
+					query,
+					ownerPlugin,
+					setting.GetSettingManager().GetLatestQueryHistory(ctx, plugin.QueryCompletionHistoryLimit),
+					setting.GetSettingManager().GetQueryCompletionFeedbacks(ctx),
+					changedQuery.QueryText,
+				),
+			)
+		})
+	}
+	if tracker := timetracking.New("handle_query_completion_hint_schedule"); tracker.Enabled() {
+		tracker.SetRawString("queryId", queryId)
+		tracker.SetBool("enabled", woxSetting.EnableQueryCompletionHint.Get())
+		tracker.SetBool("skipped", skipCompletionHint)
+		tracker.SetInt64("costMs", util.GetSystemTimestamp()-completionHintScheduleStart)
+		tracker.Log(ctx)
+	}
+
+	lifecycleStart := util.GetSystemTimestamp()
 	plugin.GetPluginManager().HandleQueryLifecycle(ctx, query, ownerPlugin)
+	if tracker := timetracking.New("handle_query_lifecycle"); tracker.Enabled() {
+		tracker.SetRawString("queryId", queryId)
+		tracker.SetInt64("costMs", util.GetSystemTimestamp()-lifecycleStart)
+		tracker.SetInt64("elapsedMs", util.GetSystemTimestamp()-handlerStart)
+		tracker.Log(ctx)
+	}
 
+	if tracker := timetracking.New("handle_query_run_starting"); tracker.Enabled() {
+		tracker.SetRawString("queryId", queryId)
+		tracker.SetInt64("elapsedMs", util.GetSystemTimestamp()-handlerStart)
+		tracker.Log(ctx)
+	}
 	newQueryRun(ctx, request, query, ownerPlugin).start()
 }
 
@@ -697,12 +804,18 @@ func queryPipelinePluginLabel(ctx context.Context, pluginInstance *plugin.Instan
 	return fmt.Sprintf("%s(%s)", name, pluginInstance.Metadata.Id)
 }
 
-func appendQueryDebugTails(ctx context.Context, sessionId string, queryId string, snapshot []plugin.QueryResultUI) []plugin.QueryResultUI {
+func appendQueryDebugTails(ctx context.Context, sessionId string, queryId string, snapshot []plugin.QueryResultUI, firstVisibleFlushElapsedMs int64, backendPreparedElapsedMs int64) []plugin.QueryResultUI {
 	if len(snapshot) == 0 {
 		return snapshot
 	}
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	if !woxSetting.ShowPerformanceTail.Get() {
+		return snapshot
+	}
+	showBatchTail := woxSetting.ShowPerformanceTailBatch.Get()
+	showPluginQueryTail := woxSetting.ShowPerformanceTailPluginQuery.Get()
+	showBackendPreparedTail := woxSetting.ShowPerformanceTailBackendPrepared.Get()
+	if !showBatchTail && !showPluginQueryTail && !showBackendPreparedTail {
 		return snapshot
 	}
 
@@ -715,25 +828,52 @@ func appendQueryDebugTails(ctx context.Context, sessionId string, queryId string
 
 		resultCopy := result
 		resultCopy.Tails = append([]plugin.QueryResultTail{}, result.Tails...)
-		if batch, queryElapsed, ok := plugin.GetPluginManager().GetQueryResultDebugInfo(sessionId, queryId, result.Id); ok {
-			category := plugin.QueryResultTailTextCategoryDefault
-			if queryElapsed > 10 {
-				category = plugin.QueryResultTailTextCategoryWarning
-			}
-			if queryElapsed > 20 {
-				category = plugin.QueryResultTailTextCategoryDanger
+		if batch, _, batchQueueElapsed, batchQueueElapsedSet, pluginQueryElapsed, pluginQueryElapsedSet, ok := plugin.GetPluginManager().GetQueryResultDebugInfo(sessionId, queryId, result.Id); ok {
+			if showBatchTail {
+				batchTail := plugin.NewQueryResultTailTextWithCategory(fmt.Sprintf("B%d", batch), queryDebugBatchTailTextCategory(batch))
+				batchTail.Tooltip = fmt.Sprintf("First flush: %dms", firstVisibleFlushElapsedMs)
+				if batchQueueElapsedSet {
+					batchTail.Tooltip = fmt.Sprintf("First flush: %dms\nQueued for batch: %dms", firstVisibleFlushElapsedMs, batchQueueElapsed)
+				}
+				resultCopy.Tails = append(resultCopy.Tails, batchTail)
 			}
 
-			resultCopy.Tails = append(
-				resultCopy.Tails,
-				plugin.NewQueryResultTailText(fmt.Sprintf("P%d", batch)),
-				plugin.NewQueryResultTailTextWithCategory(fmt.Sprintf("%dms", queryElapsed), category),
-			)
+			if showPluginQueryTail && pluginQueryElapsedSet {
+				pluginQueryTail := plugin.NewQueryResultTailTextWithCategory(fmt.Sprintf("%dms", pluginQueryElapsed), queryDebugPluginQueryTailTextCategory(pluginQueryElapsed))
+				pluginQueryTail.Tooltip = "Raw Plugin.Query duration"
+				resultCopy.Tails = append(resultCopy.Tails, pluginQueryTail)
+			}
+
+			if showBackendPreparedTail {
+				backendPreparedCategory := plugin.QueryResultTailTextCategoryDefault
+				elapsedTail := plugin.NewQueryResultTailTextWithCategory(fmt.Sprintf("%dms", backendPreparedElapsedMs), backendPreparedCategory)
+				elapsedTail.Tooltip = "Backend ready to send elapsed since Flutter query request"
+				resultCopy.Tails = append(resultCopy.Tails, elapsedTail)
+			}
 		}
 		annotated[i] = resultCopy
 	}
 
 	return annotated
+}
+
+// queryDebugBatchTailTextCategory highlights results that missed the first response batch.
+func queryDebugBatchTailTextCategory(batch int) plugin.QueryResultTailTextCategory {
+	if batch > 1 {
+		return plugin.QueryResultTailTextCategoryWarning
+	}
+	return plugin.QueryResultTailTextCategoryDefault
+}
+
+// queryDebugPluginQueryTailTextCategory highlights raw plugin execution cost before backend/UI overhead.
+func queryDebugPluginQueryTailTextCategory(elapsedMs int64) plugin.QueryResultTailTextCategory {
+	if elapsedMs > 10 {
+		return plugin.QueryResultTailTextCategoryDanger
+	}
+	if elapsedMs > 5 {
+		return plugin.QueryResultTailTextCategoryWarning
+	}
+	return plugin.QueryResultTailTextCategoryDefault
 }
 
 func handleWebsocketAction(ctx context.Context, request WebsocketMsg) {
@@ -833,6 +973,35 @@ func handleWebsocketQueryMRU(ctx context.Context, request WebsocketMsg) {
 	mruResults := plugin.GetPluginManager().QueryMRU(ctx, request.SessionId, queryId)
 	logger.Info(ctx, fmt.Sprintf("found %d MRU results via websocket", len(mruResults)))
 	responseUISuccessWithData(ctx, request, mruResults)
+}
+
+// handleWebsocketQueryCompletionHintAccepted records positive feedback from accepted inline hints.
+func handleWebsocketQueryCompletionHintAccepted(ctx context.Context, request WebsocketMsg) {
+	inputPrefix, inputPrefixErr := getWebsocketMsgParameter(ctx, request, "inputPrefix")
+	if inputPrefixErr != nil {
+		logger.Error(ctx, inputPrefixErr.Error())
+		responseUIError(ctx, request, inputPrefixErr.Error())
+		return
+	}
+
+	completionText, completionTextErr := getWebsocketMsgParameter(ctx, request, "completionText")
+	if completionTextErr != nil {
+		logger.Error(ctx, completionTextErr.Error())
+		responseUIError(ctx, request, completionTextErr.Error())
+		return
+	}
+
+	source, sourceErr := getWebsocketMsgParameter(ctx, request, "source")
+	if sourceErr != nil {
+		logger.Error(ctx, sourceErr.Error())
+		responseUIError(ctx, request, sourceErr.Error())
+		return
+	}
+
+	if !setting.GetSettingManager().RecordQueryCompletionFeedback(ctx, inputPrefix, completionText, source) {
+		logger.Debug(ctx, fmt.Sprintf("ignore invalid query completion feedback: inputPrefix=%q, completionText=%q, source=%q", inputPrefix, completionText, source))
+	}
+	responseUISuccess(ctx, request)
 }
 
 func handleWebsocketTerminalSubscribe(ctx context.Context, request WebsocketMsg) {

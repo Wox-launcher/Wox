@@ -147,6 +147,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
             onItemSecondaryTapped: (traceId, item) {
               controller.openActionPanelForActiveResult(traceId);
             },
+            onItemDragStarted: controller.startResultDrag,
             onItemIconLoaded: controller.updateLazyLoadedResultIcon,
             onRowHeightChanged: () => controller.resizeHeight(traceId: const UuidV4().generate(), reason: "grid row height changed"),
           );
@@ -164,6 +165,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
           onItemSecondaryTapped: (traceId, item) {
             controller.openActionPanelForActiveResult(traceId);
           },
+          onItemDragStarted: controller.startResultDrag,
           onItemIconLoaded: controller.updateLazyLoadedResultIcon,
         );
       }),
@@ -173,16 +175,15 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
   Widget getResultView() {
     if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: result view container");
 
-    return Obx(
-      () =>
-          controller.resultListViewController.items.isNotEmpty
-              ? controller.isShowPreviewPanel.value
-                  ? controller.resultPreviewRatio.value == 0
-                      ? SizedBox()
-                      : Flexible(flex: (controller.resultPreviewRatio.value * 100).toInt(), child: getResultContainer())
-                  : Expanded(child: getResultContainer())
-              : const SizedBox(),
-    );
+    return Obx(() {
+      return controller.resultListViewController.items.isNotEmpty
+          ? controller.isShowPreviewPanel.value
+              ? controller.resultPreviewRatio.value == 0
+                  ? SizedBox()
+                  : Flexible(flex: (controller.resultPreviewRatio.value * 100).toInt(), child: getResultContainer())
+              : Expanded(child: getResultContainer())
+          : const SizedBox();
+    });
   }
 
   Widget getPreviewView() {

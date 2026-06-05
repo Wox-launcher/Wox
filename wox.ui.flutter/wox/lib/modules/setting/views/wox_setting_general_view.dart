@@ -7,6 +7,7 @@ import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/demo/wox_demo.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_table_view.dart';
 import 'package:wox/components/wox_hotkey_recorder_view.dart';
+import 'package:wox/components/wox_query_hotkey_dialog.dart';
 import 'package:wox/components/wox_switch.dart';
 import 'package:wox/components/wox_dropdown_button.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
@@ -286,6 +287,8 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                     return WoxSettingPluginTable(
                       inlineTitleActions: true,
                       tableWidth: GENERAL_SETTING_TABLE_WIDTH,
+                      customCreateDialogBuilder: (context, saveRow) => showWoxQueryHotkeyDialog(context: context, onSave: saveRow),
+                      customEditDialogBuilder: (context, row, saveRow) => showWoxQueryHotkeyDialog(context: context, initialRow: row, onSave: saveRow),
                       titleActions: [
                         _buildDemoTitleAction(
                           triggerKey: 'settings-query-hotkeys-demo-trigger',
@@ -300,6 +303,7 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                         "Tooltip": "i18n:ui_query_hotkeys_tips",
                         "UpdateDialogWidth": 760,
                         "Columns": [
+                          {"Key": "Name", "Label": "i18n:ui_query_hotkeys_name", "Tooltip": "i18n:ui_query_hotkeys_name_tooltip", "Type": "text", "Width": 140, "TextMaxLines": 1},
                           {
                             "Key": "Hotkey",
                             "Label": "i18n:ui_query_hotkeys_hotkey",
@@ -373,7 +377,14 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                             "HideInTable": true,
                             "TextMaxLines": 1,
                           },
-                          {"Key": "IsSilentExecution", "Label": "i18n:ui_query_hotkeys_silent", "Tooltip": "i18n:ui_query_hotkeys_silent_tooltip", "Width": 40, "Type": "checkbox"},
+                          {
+                            "Key": "IsSilentExecution",
+                            "Label": "i18n:ui_query_hotkeys_silent",
+                            "Tooltip": "i18n:ui_query_hotkeys_silent_tooltip",
+                            "Width": 40,
+                            "HideInTable": true,
+                            "Type": "checkbox",
+                          },
                           {"Key": "Disabled", "Label": "i18n:ui_disabled", "Tooltip": "i18n:ui_disabled_tooltip", "Width": 60, "Type": "checkbox"},
                         ],
                         "SortColumnKey": "Query",
@@ -479,6 +490,7 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                             "Label": "i18n:ui_tray_queries_hide_query_box",
                             "Tooltip": "i18n:ui_tray_queries_hide_query_box_tooltip",
                             "Width": 80,
+                            "HideInTable": true,
                             "Type": "checkbox",
                           },
                           {
@@ -486,15 +498,25 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                             "Label": "i18n:ui_tray_queries_hide_toolbar",
                             "Tooltip": "i18n:ui_tray_queries_hide_toolbar_tooltip",
                             "Width": 80,
+                            "HideInTable": true,
                             "Type": "checkbox",
                           },
-                          {"Key": "Width", "Label": "i18n:ui_tray_queries_width", "Tooltip": "i18n:ui_tray_queries_width_tooltip", "Type": "text", "Width": 40, "TextMaxLines": 1},
+                          {
+                            "Key": "Width",
+                            "Label": "i18n:ui_tray_queries_width",
+                            "Tooltip": "i18n:ui_tray_queries_width_tooltip",
+                            "Type": "text",
+                            "Width": 40,
+                            "HideInTable": true,
+                            "TextMaxLines": 1,
+                          },
                           {
                             "Key": "MaxResultCount",
                             "Label": "i18n:ui_tray_queries_max_result_count",
                             "Tooltip": "i18n:ui_tray_queries_max_result_count_tooltip",
                             "Type": "text",
                             "Width": 90,
+                            "HideInTable": true,
                             "TextMaxLines": 1,
                           },
                           {"Key": "Disabled", "Label": "i18n:ui_disabled", "Tooltip": "i18n:ui_disabled_tooltip", "Width": 50, "Type": "checkbox"},

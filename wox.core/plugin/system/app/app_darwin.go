@@ -28,6 +28,7 @@ import (
 	"wox/plugin"
 	"wox/util"
 	"wox/util/fileicon"
+	"wox/util/imagecache"
 	"wox/util/shell"
 
 	"github.com/mitchellh/go-homedir"
@@ -325,7 +326,8 @@ func (a *MacRetriever) getPrefPaneIconCachePath(prefPanePath string) string {
 
 func (a *MacRetriever) getCachedPrefPaneIconPath(prefPanePath string) (string, bool) {
 	cachePath := a.getPrefPaneIconCachePath(prefPanePath)
-	if _, err := os.Stat(cachePath); err == nil {
+	if info, err := os.Stat(cachePath); err == nil {
+		imagecache.Touch(util.NewTraceContext(), cachePath, info)
 		return cachePath, true
 	}
 	return cachePath, false

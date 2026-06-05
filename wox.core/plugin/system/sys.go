@@ -177,6 +177,24 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 		})
 
 		r.commands = append(r.commands, SysCommand{
+			Title: "test attention",
+			Icon:  attentionIcon,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				now := time.Now().Format(time.RFC3339)
+				r.api.PushAttention(ctx, plugin.PushAttentionRequest{
+					Key:         "sys_test_attention",
+					Title:       "Test attention " + now,
+					Description: "This is a persistent attention item pushed from the system test command.",
+					Icon:        &attentionIcon,
+					Action: &plugin.AttentionAction{
+						Type:  plugin.AttentionActionTypeChangeQuery,
+						Query: "attention ",
+					},
+				})
+			},
+		})
+
+		r.commands = append(r.commands, SysCommand{
 			Title:                  "test toolbar msg",
 			Icon:                   common.CPUProfileIcon,
 			PreventHideAfterAction: true,
@@ -196,7 +214,7 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 								{
 									Name:                   "Action1",
 									Icon:                   common.ExecuteRunIcon,
-									Hotkey:                 "Ctrl+1",
+									Hotkey:                 util.PrimaryHotkey("1"),
 									PreventHideAfterAction: true,
 									Action: func(ctx context.Context, actionContext plugin.ToolbarMsgActionContext) {
 										r.api.Notify(ctx, "Action 1 executed")
@@ -205,7 +223,7 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 								{
 									Name:                   "Stop and Clear",
 									Icon:                   common.ExecuteRunIcon,
-									Hotkey:                 "Ctrl+Enter",
+									Hotkey:                 util.PrimaryHotkey("enter"),
 									PreventHideAfterAction: true,
 									Action: func(ctx context.Context, actionContext plugin.ToolbarMsgActionContext) {
 										progress = 200

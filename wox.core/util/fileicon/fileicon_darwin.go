@@ -23,6 +23,7 @@ import (
 	"strings"
 	"unsafe"
 	"wox/util"
+	"wox/util/imagecache"
 	"wox/util/shell"
 
 	"github.com/disintegration/imaging"
@@ -39,7 +40,8 @@ func getFileIconImpl(ctx context.Context, filePath string, size int) (string, er
 	}
 
 	cachePath := buildPathCachePath(filePath, size, info.ModTime().UnixNano())
-	if _, err := os.Stat(cachePath); err == nil {
+	if cacheInfo, err := os.Stat(cachePath); err == nil {
+		imagecache.Touch(ctx, cachePath, cacheInfo)
 		return cachePath, nil
 	}
 
@@ -58,7 +60,8 @@ func getFileIconImpl(ctx context.Context, filePath string, size int) (string, er
 func getFileTypeIconImpl(ctx context.Context, ext string, size int) (string, error) {
 	cachePath := buildCachePath(ext, size)
 
-	if _, err := os.Stat(cachePath); err == nil {
+	if info, err := os.Stat(cachePath); err == nil {
+		imagecache.Touch(ctx, cachePath, info)
 		return cachePath, nil
 	}
 

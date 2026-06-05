@@ -10,6 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"wox/util/imagecache"
 )
 
 // getFileTypeIconImpl resolves a Linux theme icon path for a file type.
@@ -19,7 +20,8 @@ import (
 // Prefer the desktop MIME database first, then fall back to the local map.
 func getFileTypeIconImpl(ctx context.Context, ext string, size int) (string, error) {
 	cachePath := buildCachePath(ext, size)
-	if _, err := os.Stat(cachePath); err == nil {
+	if info, err := os.Stat(cachePath); err == nil {
+		imagecache.Touch(ctx, cachePath, info)
 		return cachePath, nil
 	}
 
@@ -40,7 +42,8 @@ func getFileIconImpl(ctx context.Context, filePath string, size int) (string, er
 	}
 
 	cachePath := buildPathCachePath(filePath, size, info.ModTime().UnixNano())
-	if _, err := os.Stat(cachePath); err == nil {
+	if cacheInfo, err := os.Stat(cachePath); err == nil {
+		imagecache.Touch(ctx, cachePath, cacheInfo)
 		return cachePath, nil
 	}
 

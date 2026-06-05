@@ -29,13 +29,12 @@ func setCalculatorSeparators(t *testing.T, decimalMode string, thousandsMode str
 	}
 }
 
-func TestCalculatorBasic(t *testing.T) {
-	suite := NewTestSuite(t)
-	setCalculatorSeparators(t, "Dot", "Comma")
+func waitForCalculatorReady(t *testing.T, suite *TestSuite) {
+	t.Helper()
 
-	// The first triggerless calculator expression can race the package-start plugin warmup
-	// and fall through to generic fallback providers. Wait until a simple expression is
-	// claimed by Calculator before running the broader arithmetic assertions below.
+	// Triggerless calculator expressions can race package-start plugin warmup
+	// and fall through to generic fallback providers. Wait until a simple
+	// expression is claimed by Calculator before running broader assertions.
 	if err := pollUntil(5*time.Second, 100*time.Millisecond, func() (bool, error) {
 		results, err := runQuery(suite.ctx, "1+1")
 		if err != nil {
@@ -50,6 +49,12 @@ func TestCalculatorBasic(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("calculator warm-up query did not become ready: %v", err)
 	}
+}
+
+func TestCalculatorBasic(t *testing.T) {
+	suite := NewTestSuite(t)
+	setCalculatorSeparators(t, "Dot", "Comma")
+	waitForCalculatorReady(t, suite)
 
 	tests := []QueryTest{
 		{
@@ -132,6 +137,7 @@ func TestCalculatorBasic(t *testing.T) {
 func TestCalculatorTrigonometric(t *testing.T) {
 	suite := NewTestSuite(t)
 	setCalculatorSeparators(t, "Dot", "Comma")
+	waitForCalculatorReady(t, suite)
 
 	tests := []QueryTest{
 		{
@@ -173,6 +179,7 @@ func TestCalculatorTrigonometric(t *testing.T) {
 func TestCalculatorShouldHandleQuick(t *testing.T) {
 	suite := NewTestSuite(t)
 	setCalculatorSeparators(t, "Dot", "Comma")
+	waitForCalculatorReady(t, suite)
 
 	tests := []QueryTest{
 		{
@@ -189,6 +196,7 @@ func TestCalculatorShouldHandleQuick(t *testing.T) {
 func TestCalculatorAdvanced(t *testing.T) {
 	suite := NewTestSuite(t)
 	setCalculatorSeparators(t, "Dot", "Comma")
+	waitForCalculatorReady(t, suite)
 
 	tests := []QueryTest{
 		{
@@ -307,6 +315,7 @@ func TestCalculatorAdvanced(t *testing.T) {
 func TestCalculatorSeparators(t *testing.T) {
 	suite := NewTestSuite(t)
 	setCalculatorSeparators(t, "Dot", "Comma")
+	waitForCalculatorReady(t, suite)
 	calculatorId := "bd723c38-f28d-4152-8621-76fd21d6456e"
 
 	// Find the plugin instance to ensure we update the correct setting store

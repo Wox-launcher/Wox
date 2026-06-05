@@ -26,7 +26,10 @@ if ($cmd eq 'get') {
     }
     if (!$ok) { die "toggle failed"; }
     print '{"ok":true}';
+} elsif ($cmd eq 'play' || $cmd eq 'pause' || $cmd eq 'next' || $cmd eq 'previous') {
+    my $ok = WoxMR::control($cmd);
+    if (!$ok) { die "$cmd failed"; }
+    print '{"ok":true}';
 } else {
     die "Unknown command: $cmd";
 }
-

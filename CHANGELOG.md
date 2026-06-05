@@ -2,6 +2,28 @@
 
 ## v2.1.2 - 
 
+- Add
+  - [`Theme`] Add a theme editor with live launcher preview, color controls, save-as and overwrite flows, and wallpaper-aware previews for customizing Wox themes #4421
+  - [`Window Manager`] Add a Window Manager plugin to move, resize, minimize, maximize, restore, and send the active window between displays from launcher commands.
+  - [`Selection`] Add Space Quick Look on Windows so users can preview a selected file from File Explorer or open/save dialogs by pressing Space.
+    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/selection_quick_look.mp4)
+  - [`Attention`] Add persistent Attention items so plugins can surface follow-up tasks with an unread badge and an inbox that keeps items until users open or mark them read.
+  - [`Result Drag`] Add native file drag export for launcher results, allowing file-backed results from Clipboard and plugins to be dragged directly to folders or other apps.
+
+- Improve
+  - [`Preview`] Expand file preview support to code, executable, image, markdown, PDF, shortcuts, video, zip, Office, audio, font, calendar/contact, delimited data, and RDP files, with a wider default preview panel.
+  - [`Query Hotkey`] Improve query hotkey setup with a dedicated dialog, names, tooltips, presets documentation, and cleaner variable editing.
+  - [`Converter`] Improve storage and time conversion with decimal and binary byte aliases, unit-symbol tails, and broader timezone aliases.
+  - [`Search`] Improve fuzzy matching for short text with optimal alignment scoring.
+  - [`Query Box`] Improve text input and layout consistency across interface sizes #4423
+  - [`Clipboard`] Improve file clipboard records with support for multiple file paths and draggable file payloads.
+  - [`Image`] Improve emoji and URL image loading with caching and download support.
+  - [`Update`] Improve update-available notification wording across languages.
+
+- Fix
+  - [`Screenshot`] Fix permission-denied capture feedback with localized notifications #4433
+  - [`Hotkey`] Fix arrow-key hotkey recognition when alternate key names are reported by the platform.
+  - [`Security`] Fix Windows file reveal behavior to use the Windows Shell API instead of interpolated PowerShell command text, preventing crafted file paths from being interpreted as commands when opening a file's containing folder.
 
 ## v2.1.1 - 2026-05-24
 
