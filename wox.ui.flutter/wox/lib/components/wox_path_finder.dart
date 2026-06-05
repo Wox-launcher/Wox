@@ -21,6 +21,10 @@ class WoxPathFinder extends StatefulWidget {
   final bool confirmOnChange;
   final String? changeButtonTextKey; // i18n key, defaults to ui_runtime_browse
   final double? width; // width for the text field; defaults to fill via double.infinity when placed in Expanded
+  final bool isDirectory; // true = pick directory, false = pick file
+  final List<String>? allowedExtensions; // file extension filter, e.g. ["txt", "json"]
+  final bool allowMultiple; // allow selecting multiple files
+  final FocusNode? focusNode; // optional external focus node for focus tracking
 
   const WoxPathFinder({
     super.key,
@@ -32,6 +36,10 @@ class WoxPathFinder extends StatefulWidget {
     this.confirmOnChange = false,
     this.changeButtonTextKey,
     this.width,
+    this.isDirectory = true,
+    this.allowedExtensions,
+    this.allowMultiple = false,
+    this.focusNode,
   });
 
   @override
@@ -68,9 +76,16 @@ class _WoxPathFinderState extends State<WoxPathFinder> {
     if (_picking) return;
     setState(() => _picking = true);
     try {
-      final selectedDirectory = await FileSelector.pick(const UuidV4().generate(), FileSelectorParams(isDirectory: true));
-      if (selectedDirectory.isEmpty) return;
-      final picked = selectedDirectory[0];
+      final pickedPaths = await FileSelector.pick(
+        const UuidV4().generate(),
+        FileSelectorParams(
+          isDirectory: widget.isDirectory,
+          allowedExtensions: widget.allowedExtensions,
+          allowMultiple: widget.allowMultiple,
+        ),
+      );
+      if (pickedPaths.isEmpty) return;
+      final picked = widget.allowMultiple ? pickedPaths.join(",") : pickedPaths[0];
 
       if (!mounted) return;
       if (widget.confirmOnChange) {
@@ -117,7 +132,7 @@ class _WoxPathFinderState extends State<WoxPathFinder> {
     return Row(
       children: [
         // Text field
-        Expanded(child: WoxTextField(controller: _controller, enabled: widget.enabled, width: widget.width ?? double.infinity, onChanged: (v) => widget.onChanged(v))),
+        Expanded(child: WoxTextField(controller: _controller, focusNode: widget.focusNode, enabled: widget.enabled, width: widget.width ?? double.infinity, onChanged: (v) => widget.onChanged(v))),
         if (widget.showOpenButton) ...[const SizedBox(width: 10), WoxButton.secondary(text: tr('plugin_file_open'), onPressed: _openFolder)],
         if (widget.showChangeButton) ...[const SizedBox(width: 10), WoxButton.primary(text: changeText, onPressed: _picking ? null : _browseAndMaybeConfirm)],
       ],
