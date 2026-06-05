@@ -88,7 +88,7 @@ func (p *UpdatePlugin) Query(ctx context.Context, query plugin.Query) plugin.Que
 		Title:   "", // we don't need title in update plugin
 		Icon:    updateIcon,
 		Preview: preview,
-		Actions: p.buildActions(ctx, info, autoUpdateEnabled),
+		Actions: p.buildActions(ctx, info, autoUpdateEnabled, releaseChannel),
 	}
 
 	return plugin.NewQueryResponse([]plugin.QueryResult{result})
@@ -119,7 +119,7 @@ func (p *UpdatePlugin) buildPreviewData(info updater.UpdateInfo, autoUpdateEnabl
 	return string(b)
 }
 
-func (p *UpdatePlugin) buildActions(ctx context.Context, info updater.UpdateInfo, autoUpdateEnabled bool) []plugin.QueryResultAction {
+func (p *UpdatePlugin) buildActions(ctx context.Context, info updater.UpdateInfo, autoUpdateEnabled bool, releaseChannel string) []plugin.QueryResultAction {
 	actions := []plugin.QueryResultAction{}
 
 	if !autoUpdateEnabled {
@@ -136,6 +136,7 @@ func (p *UpdatePlugin) buildActions(ctx context.Context, info updater.UpdateInfo
 					plugin.GetPluginManager().GetUI().ReloadSetting(ctx)
 					p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_checking"))
 					updater.CheckForUpdatesWithCallback(ctx, func(info updater.UpdateInfo) {
+						p.refreshVisibleUpdatePreview(ctx, actionContext, info, true, releaseChannel)
 						p.notifyUpdate(ctx, info)
 					})
 				},
@@ -173,6 +174,7 @@ func (p *UpdatePlugin) buildActions(ctx context.Context, info updater.UpdateInfo
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_checking"))
 			updater.CheckForUpdatesWithCallback(ctx, func(info updater.UpdateInfo) {
+				p.refreshVisibleUpdatePreview(ctx, actionContext, info, autoUpdateEnabled, releaseChannel)
 				p.notifyUpdate(ctx, info)
 			})
 		},
@@ -214,6 +216,33 @@ func (p *UpdatePlugin) buildActions(ctx context.Context, info updater.UpdateInfo
 	}
 
 	return actions
+}
+
+// refreshVisibleUpdatePreview keeps the current update preview in sync while a manual check/download action runs.
+func (p *UpdatePlugin) refreshVisibleUpdatePreview(ctx context.Context, actionContext plugin.ActionContext, info updater.UpdateInfo, autoUpdateEnabled bool, releaseChannel string) {
+	if actionContext.ResultId == "" {
+		return
+	}
+
+	updatable := p.api.GetUpdatableResult(ctx, actionContext.ResultId)
+	if updatable == nil {
+		return
+	}
+
+	effectiveReleaseChannel := releaseChannel
+	if info.ReleaseChannel != "" {
+		effectiveReleaseChannel = info.ReleaseChannel
+	}
+	preview := plugin.WoxPreview{
+		PreviewType:       plugin.WoxPreviewTypeUpdate,
+		PreviewData:       p.buildPreviewData(info, autoUpdateEnabled, effectiveReleaseChannel),
+		PreviewProperties: map[string]string{},
+		ScrollPosition:    "",
+	}
+	actions := p.buildActions(ctx, info, autoUpdateEnabled, effectiveReleaseChannel)
+	updatable.Preview = &preview
+	updatable.Actions = &actions
+	p.api.UpdateResult(ctx, *updatable)
 }
 
 func (p *UpdatePlugin) notifyApplyProgress(ctx context.Context, stage updater.ApplyUpdateStage) {

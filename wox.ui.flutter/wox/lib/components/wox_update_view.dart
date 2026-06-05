@@ -148,63 +148,7 @@ class _WoxUpdateViewState extends State<WoxUpdateView> {
     return Colors.green;
   }
 
-  String _releaseChannelText() {
-    switch (widget.data.releaseChannel.toLowerCase()) {
-      case 'beta':
-        return tr('plugin_update_release_channel_beta');
-      default:
-        return tr('plugin_update_release_channel_stable');
-    }
-  }
-
-  Widget _infoRow({required WoxTheme theme, required String label, required String value}) {
-    final titleColor = safeFromCssColor(theme.previewFontColor).withValues(alpha: 0.75);
-    final valueColor = safeFromCssColor(theme.previewFontColor);
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label, style: TextStyle(color: titleColor, fontSize: _metrics.smallLabelFontSize)),
-        SizedBox(width: _metrics.scaledSpacing(12)),
-        Flexible(
-          child: Text(
-            value,
-            style: TextStyle(color: valueColor, fontSize: _metrics.smallLabelFontSize, fontWeight: FontWeight.w600),
-            textAlign: TextAlign.right,
-            overflow: TextOverflow.ellipsis,
-            maxLines: 1,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget versionPanel(WoxTheme theme) {
-    final borderColor = safeFromCssColor(theme.previewSplitLineColor).withValues(alpha: 0.6);
-    final bgColor = safeFromCssColor(theme.appBackgroundColor).withValues(alpha: 0.25);
-
-    final current = widget.data.currentVersion.isNotEmpty ? widget.data.currentVersion : tr('plugin_update_unknown');
-    final latest = widget.data.latestVersion.isNotEmpty ? widget.data.latestVersion : tr('plugin_update_unknown');
-    final autoUpdateText = widget.data.autoUpdateEnabled ? tr('plugin_update_auto_update_enabled') : tr('plugin_update_auto_update_disabled');
-    final releaseChannelText = _releaseChannelText();
-
-    return Container(
-      width: _metrics.scaledSpacing(300),
-      padding: EdgeInsets.all(_metrics.scaledSpacing(12)),
-      decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderColor)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _infoRow(theme: theme, label: tr('plugin_update_current_version'), value: current),
-          SizedBox(height: _metrics.scaledSpacing(8)),
-          _infoRow(theme: theme, label: tr('plugin_update_latest_version'), value: latest),
-          SizedBox(height: _metrics.scaledSpacing(8)),
-          _infoRow(theme: theme, label: tr('plugin_update_release_channel_label'), value: releaseChannelText),
-          SizedBox(height: _metrics.scaledSpacing(8)),
-          _infoRow(theme: theme, label: tr('plugin_update_auto_update_label'), value: autoUpdateText),
-        ],
-      ),
-    );
-  }
+  bool _isBetaChannel() => widget.data.releaseChannel.toLowerCase() == 'beta';
 
   @override
   Widget build(BuildContext context) {
@@ -324,13 +268,12 @@ class _WoxUpdateViewState extends State<WoxUpdateView> {
                 ),
               ),
               SizedBox(width: _metrics.scaledSpacing(12)),
+              if (_isBetaChannel()) ...[statusPill(text: tr('plugin_update_release_channel_beta'), color: Colors.blue), SizedBox(width: _metrics.scaledSpacing(8))],
               statusPill(text: _statusText(), color: _statusColor()),
             ],
           ),
           SizedBox(height: _metrics.scaledSpacing(14)),
           Divider(color: safeFromCssColor(theme.previewSplitLineColor)),
-          SizedBox(height: _metrics.scaledSpacing(12)),
-          versionPanel(theme),
           SizedBox(height: _metrics.scaledSpacing(12)),
           Expanded(
             child: Scrollbar(
