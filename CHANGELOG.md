@@ -9,6 +9,7 @@
     ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/selection_quick_look.mp4)
   - [`Attention`] Add persistent Attention items so plugins can surface follow-up tasks with an unread badge and an inbox that keeps items until users open or mark them read.
   - [`Result Drag`] Add native file drag export for launcher results, allowing file-backed results from Clipboard and plugins to be dragged directly to folders or other apps.
+  - [`Update`] Add update channels so users can stay on stable releases or opt into beta prereleases.
 
 - Improve
   - [`Preview`] Expand file preview support to code, executable, image, markdown, PDF, shortcuts, video, zip, Office, audio, font, calendar/contact, delimited data, and RDP files, with a wider default preview panel.

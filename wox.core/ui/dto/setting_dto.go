@@ -32,6 +32,7 @@ type WoxSettingDto struct {
 	ShowPosition              setting.PositionType
 	EnableAutoBackup          bool
 	EnableAutoUpdate          bool
+	ReleaseChannel            setting.ReleaseChannel
 	EnableAnonymousUsageStats bool
 	CustomPythonPath          string
 	CustomNodejsPath          string

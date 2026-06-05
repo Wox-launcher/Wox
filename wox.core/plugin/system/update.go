@@ -25,6 +25,7 @@ type UpdatePlugin struct {
 type updatePreviewData struct {
 	CurrentVersion    string `json:"currentVersion"`
 	LatestVersion     string `json:"latestVersion"`
+	ReleaseChannel    string `json:"releaseChannel"`
 	ReleaseNotes      string `json:"releaseNotes"`
 	DownloadUrl       string `json:"downloadUrl"`
 	Status            string `json:"status"`
@@ -67,13 +68,15 @@ func (p *UpdatePlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 func (p *UpdatePlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	info := updater.GetUpdateInfo()
 	autoUpdateEnabled := true
+	releaseChannel := string(setting.ReleaseChannelStable)
 	if woxSetting := setting.GetSettingManager().GetWoxSetting(ctx); woxSetting != nil {
 		autoUpdateEnabled = woxSetting.EnableAutoUpdate.Get()
+		releaseChannel = string(woxSetting.ReleaseChannel.Get())
 	}
 
 	preview := plugin.WoxPreview{
 		PreviewType:       plugin.WoxPreviewTypeUpdate,
-		PreviewData:       p.buildPreviewData(info, autoUpdateEnabled),
+		PreviewData:       p.buildPreviewData(info, autoUpdateEnabled, releaseChannel),
 		PreviewProperties: map[string]string{},
 		ScrollPosition:    "",
 	}
@@ -91,7 +94,7 @@ func (p *UpdatePlugin) Query(ctx context.Context, query plugin.Query) plugin.Que
 	return plugin.NewQueryResponse([]plugin.QueryResult{result})
 }
 
-func (p *UpdatePlugin) buildPreviewData(info updater.UpdateInfo, autoUpdateEnabled bool) string {
+func (p *UpdatePlugin) buildPreviewData(info updater.UpdateInfo, autoUpdateEnabled bool, releaseChannel string) string {
 	errText := ""
 	if info.UpdateError != nil {
 		errText = info.UpdateError.Error()
@@ -100,6 +103,7 @@ func (p *UpdatePlugin) buildPreviewData(info updater.UpdateInfo, autoUpdateEnabl
 	data := updatePreviewData{
 		CurrentVersion:    info.CurrentVersion,
 		LatestVersion:     info.LatestVersion,
+		ReleaseChannel:    releaseChannel,
 		ReleaseNotes:      info.ReleaseNotes,
 		DownloadUrl:       info.DownloadUrl,
 		Status:            string(info.Status),

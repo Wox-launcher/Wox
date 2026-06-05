@@ -80,6 +80,45 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                   );
                 }),
               ),
+              formField(
+                settingKey: "ReleaseChannel",
+                label: controller.tr("ui_release_channel"),
+                labelWidth: GENERAL_SETTING_WIDE_LABEL_WIDTH,
+                tips: controller.tr("ui_release_channel_tips"),
+                child: Obx(() {
+                  final stableVersion = controller.getUpdateChannelVersionText("stable");
+                  final betaVersion = controller.getUpdateChannelVersionText("beta");
+
+                  return WoxDropdownButton<String>(
+                    items: [
+                      WoxDropdownItem(
+                        value: "stable",
+                        label: controller.tr("ui_release_channel_stable"),
+                        tooltip: controller.tr("ui_release_channel_stable_tips"),
+                        trailing: _buildUpdateChannelVersion(stableVersion),
+                      ),
+                      WoxDropdownItem(
+                        value: "beta",
+                        label: controller.tr("ui_release_channel_beta"),
+                        tooltip: controller.tr("ui_release_channel_beta_tips"),
+                        trailing: _buildUpdateChannelVersion(betaVersion),
+                      ),
+                    ],
+                    value: controller.woxSetting.value.releaseChannel,
+                    onChanged: (v) {
+                      if (v != null) {
+                        controller.updateConfig("ReleaseChannel", v);
+
+                        // The backend clears cached update state when the channel changes, then checks metadata asynchronously.
+                        Future.delayed(const Duration(seconds: 2), () {
+                          Get.find<WoxLauncherController>().doctorCheck();
+                        });
+                      }
+                    },
+                    isExpanded: true,
+                  );
+                }),
+              ),
             ],
           ),
           formSection(
@@ -561,5 +600,13 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
         ),
       ),
     );
+  }
+
+  Widget? _buildUpdateChannelVersion(String version) {
+    if (version.isEmpty) {
+      return null;
+    }
+
+    return Text(version, style: TextStyle(color: getThemeSubTextColor(), fontSize: 12));
   }
 }

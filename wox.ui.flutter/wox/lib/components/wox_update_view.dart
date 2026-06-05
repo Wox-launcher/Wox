@@ -13,6 +13,7 @@ import 'package:wox/utils/wox_theme_util.dart';
 class UpdatePreviewData {
   final String currentVersion;
   final String latestVersion;
+  final String releaseChannel;
   final String releaseNotes;
   final String downloadUrl;
   final String status;
@@ -23,6 +24,7 @@ class UpdatePreviewData {
   UpdatePreviewData({
     required this.currentVersion,
     required this.latestVersion,
+    required this.releaseChannel,
     required this.releaseNotes,
     required this.downloadUrl,
     required this.status,
@@ -35,6 +37,7 @@ class UpdatePreviewData {
     return UpdatePreviewData(
       currentVersion: json['currentVersion'] ?? '',
       latestVersion: json['latestVersion'] ?? '',
+      releaseChannel: json['releaseChannel'] ?? 'stable',
       releaseNotes: json['releaseNotes'] ?? '',
       downloadUrl: json['downloadUrl'] ?? '',
       status: json['status'] ?? '',
@@ -145,6 +148,15 @@ class _WoxUpdateViewState extends State<WoxUpdateView> {
     return Colors.green;
   }
 
+  String _releaseChannelText() {
+    switch (widget.data.releaseChannel.toLowerCase()) {
+      case 'beta':
+        return tr('plugin_update_release_channel_beta');
+      default:
+        return tr('plugin_update_release_channel_stable');
+    }
+  }
+
   Widget _infoRow({required WoxTheme theme, required String label, required String value}) {
     final titleColor = safeFromCssColor(theme.previewFontColor).withValues(alpha: 0.75);
     final valueColor = safeFromCssColor(theme.previewFontColor);
@@ -173,6 +185,7 @@ class _WoxUpdateViewState extends State<WoxUpdateView> {
     final current = widget.data.currentVersion.isNotEmpty ? widget.data.currentVersion : tr('plugin_update_unknown');
     final latest = widget.data.latestVersion.isNotEmpty ? widget.data.latestVersion : tr('plugin_update_unknown');
     final autoUpdateText = widget.data.autoUpdateEnabled ? tr('plugin_update_auto_update_enabled') : tr('plugin_update_auto_update_disabled');
+    final releaseChannelText = _releaseChannelText();
 
     return Container(
       width: _metrics.scaledSpacing(300),
@@ -184,6 +197,8 @@ class _WoxUpdateViewState extends State<WoxUpdateView> {
           _infoRow(theme: theme, label: tr('plugin_update_current_version'), value: current),
           SizedBox(height: _metrics.scaledSpacing(8)),
           _infoRow(theme: theme, label: tr('plugin_update_latest_version'), value: latest),
+          SizedBox(height: _metrics.scaledSpacing(8)),
+          _infoRow(theme: theme, label: tr('plugin_update_release_channel_label'), value: releaseChannelText),
           SizedBox(height: _metrics.scaledSpacing(8)),
           _infoRow(theme: theme, label: tr('plugin_update_auto_update_label'), value: autoUpdateText),
         ],
@@ -314,6 +329,8 @@ class _WoxUpdateViewState extends State<WoxUpdateView> {
           ),
           SizedBox(height: _metrics.scaledSpacing(14)),
           Divider(color: safeFromCssColor(theme.previewSplitLineColor)),
+          SizedBox(height: _metrics.scaledSpacing(12)),
+          versionPanel(theme),
           SizedBox(height: _metrics.scaledSpacing(12)),
           Expanded(
             child: Scrollbar(

@@ -35,6 +35,7 @@ type WoxSetting struct {
 	AIProviders        *WoxSettingValue[[]AIProvider]
 	EnableAutoBackup   *WoxSettingValue[bool]
 	EnableAutoUpdate   *WoxSettingValue[bool]
+	ReleaseChannel     *WoxSettingValue[ReleaseChannel]
 	CustomPythonPath   *PlatformValue[string]
 	CustomNodejsPath   *PlatformValue[string]
 
@@ -87,6 +88,7 @@ type LaunchMode = string
 type StartPage = string
 
 type UiDensity string
+type ReleaseChannel string
 
 type PositionType string
 
@@ -110,6 +112,11 @@ const (
 	UiDensityCompact     UiDensity = "compact"
 	UiDensityNormal      UiDensity = "normal"
 	UiDensityComfortable UiDensity = "comfortable"
+)
+
+const (
+	ReleaseChannelStable ReleaseChannel = "stable"
+	ReleaseChannelBeta   ReleaseChannel = "beta"
 )
 
 const (
@@ -232,6 +239,20 @@ func IsValidUiDensity(value UiDensity) bool {
 	return value == UiDensityCompact || value == UiDensityNormal || value == UiDensityComfortable
 }
 
+// NormalizeReleaseChannel converts missing or unsupported channel values to stable.
+func NormalizeReleaseChannel(value string) ReleaseChannel {
+	switch ReleaseChannel(strings.ToLower(strings.TrimSpace(value))) {
+	case ReleaseChannelBeta:
+		return ReleaseChannelBeta
+	default:
+		return ReleaseChannelStable
+	}
+}
+
+func IsValidReleaseChannel(value ReleaseChannel) bool {
+	return value == ReleaseChannelStable || value == ReleaseChannelBeta
+}
+
 // ActionedResult stores the information of an actioned result.
 type ActionedResult struct {
 	Timestamp int64
@@ -304,6 +325,7 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 		CustomNodejsPath:                   NewPlatformValue(store, "CustomNodejsPath", "", "", ""),
 		EnableAutoBackup:                   NewWoxSettingValue(store, "EnableAutoBackup", true),
 		EnableAutoUpdate:                   NewWoxSettingValue(store, "EnableAutoUpdate", true),
+		ReleaseChannel:                     NewWoxSettingValueWithValidator(store, "ReleaseChannel", ReleaseChannelStable, IsValidReleaseChannel),
 		LastWindowX:                        NewWoxSettingValue(store, "LastWindowX", -1),
 		LastWindowY:                        NewWoxSettingValue(store, "LastWindowY", -1),
 		QueryHotkeys:                       NewPlatformValue(store, "QueryHotkeys", []QueryHotkey{}, []QueryHotkey{}, []QueryHotkey{}),

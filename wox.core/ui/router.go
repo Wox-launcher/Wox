@@ -129,6 +129,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/hotkey/availability":         handleHotkeyAvailability,
 	"/glance":                      handleGlance,
 	"/glance/action":               handleGlanceAction,
+	"/updater/channel/versions":    handleUpdateChannelVersions,
 	"/deeplink":                    handleDeeplink,
 	"/version":                     handleVersion,
 
@@ -142,6 +143,8 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/test/screen/mouse":             handleTestMouseScreen,
 	"/test/trigger/tray_query":       handleTestTriggerTrayQuery,
 }
+
+var updateChannelVersionsProvider = updater.GetUpdateChannelVersions
 
 const traceIdHeader = "TraceId"
 const sessionIdHeader = "SessionId"
@@ -877,6 +880,7 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 	settingDto.ShowPosition = woxSetting.ShowPosition.Get()
 	settingDto.EnableAutoBackup = woxSetting.EnableAutoBackup.Get()
 	settingDto.EnableAutoUpdate = woxSetting.EnableAutoUpdate.Get()
+	settingDto.ReleaseChannel = woxSetting.ReleaseChannel.Get()
 	settingDto.EnableAnonymousUsageStats = woxSetting.EnableAnonymousUsageStats.Get()
 	settingDto.CustomPythonPath = woxSetting.CustomPythonPath.Get()
 	settingDto.CustomNodejsPath = woxSetting.CustomNodejsPath.Get()
@@ -904,6 +908,10 @@ func handleHotkeyAppCandidates(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, appplugin.GetHotkeyAppCandidates(getTraceContext(r)))
 }
 
+func handleUpdateChannelVersions(w http.ResponseWriter, r *http.Request) {
+	writeSuccessResponse(w, updateChannelVersionsProvider(getTraceContext(r)))
+}
+
 func handleSettingUIFontList(w http.ResponseWriter, r *http.Request) {
 	fontFamilies := font.GetSystemFontFamilies(getTraceContext(r))
 	writeSuccessResponse(w, fontFamilies)
@@ -925,6 +933,17 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 
 	ctx := getTraceContext(r)
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	if kv.Key == "ReleaseChannel" {
+		updatedValue, updateErr := updateWoxSettingValue(ctx, woxSetting, kv.Key, kv.Value)
+		if updateErr != nil {
+			writeErrorResponse(w, updateErr.Error())
+			return
+		}
+
+		GetUIManager().PostSettingUpdate(ctx, kv.Key, updatedValue)
+		writeSuccessResponse(w, "")
+		return
+	}
 
 	var vb bool
 	var vf float64
@@ -1193,6 +1212,21 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 	GetUIManager().PostSettingUpdate(getTraceContext(r), kv.Key, updatedValue)
 
 	writeSuccessResponse(w, "")
+}
+
+// updateWoxSettingValue handles small shared setting writes that need normalization.
+func updateWoxSettingValue(_ context.Context, woxSetting *setting.WoxSetting, key string, value string) (string, error) {
+	switch key {
+	case "ReleaseChannel":
+		normalizedChannel := setting.NormalizeReleaseChannel(value)
+		if err := woxSetting.ReleaseChannel.Set(normalizedChannel); err != nil {
+			return "", err
+		}
+		updater.ResetUpdateInfoForReleaseChannel(normalizedChannel)
+		return string(normalizedChannel), nil
+	default:
+		return "", fmt.Errorf("unknown setting key: %s", key)
+	}
 }
 
 func handleGlance(w http.ResponseWriter, r *http.Request) {

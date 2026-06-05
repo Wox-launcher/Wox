@@ -563,10 +563,10 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
                   )
                   : Text(item.label),
         ),
-        if (hasTrailing) ...[const SizedBox(width: 12), trailing],
+        if (hasTrailing) ...[const SizedBox(width: 16), trailing],
         // Dropdown help icons use WoxTooltip so menu rows and the rest of Wox share
         // one overlay behavior instead of mixing Material Tooltip semantics here.
-        if (hasTooltip) WoxTooltip(message: item.tooltip!, child: Icon(Icons.info_outline, size: 16, color: activeTextColor)),
+        if (hasTooltip) ...[SizedBox(width: hasTrailing ? 14 : 8), WoxTooltip(message: item.tooltip!, child: Icon(Icons.info_outline, size: 16, color: activeTextColor))],
       ],
     );
   }

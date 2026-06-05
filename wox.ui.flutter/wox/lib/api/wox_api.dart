@@ -13,6 +13,7 @@ import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/entity/wox_runtime_status.dart';
 import 'package:wox/entity/wox_setting.dart';
 import 'package:wox/entity/wox_theme.dart';
+import 'package:wox/entity/wox_update_channel_version.dart';
 import 'package:wox/entity/wox_usage_stats.dart';
 import 'package:wox/models/doctor_check_result.dart';
 import 'package:wox/utils/log.dart';
@@ -313,6 +314,10 @@ class WoxApi {
 
   Future<String> getWoxVersion(String traceId) async {
     return await WoxHttpUtil.instance.postData(traceId, "/version", null);
+  }
+
+  Future<List<WoxUpdateChannelVersion>> getUpdateChannelVersions(String traceId) async {
+    return await WoxHttpUtil.instance.postData<List<WoxUpdateChannelVersion>>(traceId, "/updater/channel/versions", null);
   }
 
   Future<void> saveWindowPosition(String traceId, int x, int y) async {

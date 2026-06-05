@@ -22,6 +22,7 @@ import 'package:wox/entity/wox_runtime_status.dart';
 import 'package:wox/entity/wox_setting.dart';
 import 'package:wox/entity/wox_setting_search.dart';
 import 'package:wox/entity/wox_theme.dart';
+import 'package:wox/entity/wox_update_channel_version.dart';
 import 'package:wox/entity/wox_usage_stats.dart';
 import 'package:wox/enums/wox_position_type_enum.dart';
 import 'package:wox/enums/wox_plugin_runtime_enum.dart';
@@ -57,6 +58,7 @@ class WoxSettingController extends GetxController {
   final restartingRuntime = ''.obs;
   final isClearingLogs = false.obs;
   final isUpdatingLogLevel = false.obs;
+  final updateChannelVersions = <WoxUpdateChannelVersion>[].obs;
 
   final usageStats = WoxUsageStats.empty().obs;
   final isUsageStatsLoading = false.obs;
@@ -163,6 +165,7 @@ class WoxSettingController extends GetxController {
     unawaited(loadUserDataLocation());
     unawaited(refreshBackups());
     unawaited(loadWoxVersion());
+    unawaited(loadUpdateChannelVersions());
     unawaited(refreshRuntimeStatuses());
     unawaited(refreshUsageStats());
     unawaited(reloadPlugins(traceId));
@@ -755,6 +758,29 @@ class WoxSettingController extends GetxController {
       woxVersion.value = '';
       Logger.instance.error(traceId, 'Failed to load Wox version: $e');
     }
+  }
+
+  /// Loads latest manifest versions for stable and beta update channels.
+  Future<void> loadUpdateChannelVersions() async {
+    final traceId = const UuidV4().generate();
+    try {
+      final versions = await WoxApi.instance.getUpdateChannelVersions(traceId);
+      updateChannelVersions.assignAll(versions);
+    } catch (e) {
+      updateChannelVersions.clear();
+      Logger.instance.error(traceId, 'Failed to load update channel versions: $e');
+    }
+  }
+
+  /// Formats a channel version for compact display inside the update channel dropdown.
+  String getUpdateChannelVersionText(String channel) {
+    for (final version in updateChannelVersions) {
+      if (version.channel == channel && version.latestVersion.trim().isNotEmpty) {
+        final latestVersion = version.latestVersion.trim();
+        return latestVersion.startsWith('v') ? latestVersion : 'v$latestVersion';
+      }
+    }
+    return '';
   }
 
   Future<void> refreshRuntimeStatuses() async {
@@ -2125,6 +2151,13 @@ const List<_BuiltInSettingSearchDefinition> _builtInSettingSearchDefinitions = [
     titleKey: 'ui_enable_auto_update',
     subtitleKey: 'ui_enable_auto_update_tips',
     searchKeywords: ['update'],
+  ),
+  _BuiltInSettingSearchDefinition(
+    settingKey: 'ReleaseChannel',
+    navPath: 'general',
+    titleKey: 'ui_release_channel',
+    subtitleKey: 'ui_release_channel_tips',
+    searchKeywords: ['update channel', 'release channel', 'stable', 'beta', 'stable channel', 'beta channel', 'prerelease'],
   ),
   _BuiltInSettingSearchDefinition(settingKey: 'MainHotkey', navPath: 'general', titleKey: 'ui_hotkey', subtitleKey: 'ui_hotkey_tips', searchKeywords: ['shortcut', 'main hotkey']),
   _BuiltInSettingSearchDefinition(
