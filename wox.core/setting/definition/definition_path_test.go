@@ -22,7 +22,10 @@ func TestUnmarshalPathType(t *testing.T) {
                 "DefaultValue":"/home/user/.config",
                 "Label":"Config Directory: ",
                 "Suffix":" (select a folder)",
-                "Tooltip":"Choose the configuration directory"
+                "Tooltip":"Choose the configuration directory",
+                "IsDirectory": true,
+                "AllowedExtensions": ["json", "yaml"],
+                "AllowMultiple": false
             }
         }
     ]
@@ -42,15 +45,21 @@ func TestUnmarshalPathType(t *testing.T) {
 	assert.Equal(t, "Config Directory: ", pathVal.Label)
 	assert.Equal(t, " (select a folder)", pathVal.Suffix)
 	assert.Equal(t, "Choose the configuration directory", pathVal.Tooltip)
+	assert.True(t, pathVal.IsDirectory)
+	assert.Equal(t, []string{"json", "yaml"}, pathVal.AllowedExtensions)
+	assert.False(t, pathVal.AllowMultiple)
 }
 
 func TestPathSettingTranslate(t *testing.T) {
 	pathVal := &PluginSettingValuePath{
-		Key:          "TestPath",
-		Label:        "label.key",
-		Suffix:       "suffix.key",
-		DefaultValue: "/tmp",
-		Tooltip:      "tooltip.key",
+		Key:              "TestPath",
+		Label:            "label.key",
+		Suffix:           "suffix.key",
+		DefaultValue:     "/tmp",
+		Tooltip:          "tooltip.key",
+		IsDirectory:      true,
+		AllowedExtensions: []string{"json"},
+		AllowMultiple:    false,
 	}
 
 	translator := func(ctx context.Context, key string) string {
@@ -67,6 +76,9 @@ func TestPathSettingTranslate(t *testing.T) {
 	assert.Equal(t, "Translated Suffix", translated.Suffix)
 	assert.Equal(t, "Translated Tooltip", translated.Tooltip)
 	assert.Equal(t, "label.key", pathVal.Label)
+	assert.True(t, translated.IsDirectory)
+	assert.Equal(t, []string{"json"}, translated.AllowedExtensions)
+	assert.False(t, translated.AllowMultiple)
 }
 
 func TestPathSettingGetKeyAndGetDefaultValue(t *testing.T) {
@@ -76,6 +88,36 @@ func TestPathSettingGetKeyAndGetDefaultValue(t *testing.T) {
 	}
 	assert.Equal(t, "/some/path", pathVal.GetDefaultValue())
 	assert.Equal(t, "MyDir", pathVal.GetKey())
+}
+
+func TestPathSettingDefaultsWhenFieldsOmitted(t *testing.T) {
+	type metadataForTest struct {
+		SettingDefinitions PluginSettingDefinitions
+	}
+
+	jsonStr := `
+{
+    "SettingDefinitions":[
+        {
+            "Type":"path",
+            "Value":{
+                "Key":"SimplePath",
+                "DefaultValue":"/tmp",
+                "Label":"Simple"
+            }
+        }
+    ]
+}
+`
+
+	var metadata metadataForTest
+	err := json.Unmarshal([]byte(jsonStr), &metadata)
+	assert.Nil(t, err)
+
+	pathVal := metadata.SettingDefinitions[0].Value.(*PluginSettingValuePath)
+	assert.False(t, pathVal.IsDirectory) // Go zero value; Flutter defaults to true
+	assert.Empty(t, pathVal.AllowedExtensions)
+	assert.False(t, pathVal.AllowMultiple)
 }
 
 func TestPathSettingInDefinitionsGetDefaultValue(t *testing.T) {
@@ -117,11 +159,14 @@ func TestPathSettingMarshal(t *testing.T) {
 			{
 				Type: PluginSettingDefinitionTypePath,
 				Value: &PluginSettingValuePath{
-					Key:          "TestDir",
-					Label:        "Test Directory",
-					Suffix:       "suffix",
-					DefaultValue: "/default",
-					Tooltip:      "tooltip",
+					Key:              "TestDir",
+					Label:            "Test Directory",
+					Suffix:           "suffix",
+					DefaultValue:     "/default",
+					Tooltip:          "tooltip",
+					IsDirectory:      false,
+					AllowedExtensions: []string{"txt", "md"},
+					AllowMultiple:    true,
 				},
 			},
 		},
@@ -139,4 +184,7 @@ func TestPathSettingMarshal(t *testing.T) {
 	pathVal := roundtripped.SettingDefinitions[0].Value.(*PluginSettingValuePath)
 	assert.Equal(t, "TestDir", pathVal.Key)
 	assert.Equal(t, "/default", pathVal.DefaultValue)
+	assert.False(t, pathVal.IsDirectory)
+	assert.Equal(t, []string{"txt", "md"}, pathVal.AllowedExtensions)
+	assert.True(t, pathVal.AllowMultiple)
 }

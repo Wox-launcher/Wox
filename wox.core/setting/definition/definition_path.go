@@ -6,12 +6,15 @@ import (
 )
 
 type PluginSettingValuePath struct {
-	Key          string
-	Label        string
-	Suffix       string
-	DefaultValue string
-	Tooltip      string
-	Validators   []validator.PluginSettingValidator
+	Key              string
+	Label            string
+	Suffix           string
+	DefaultValue     string
+	Tooltip          string
+	Validators       []validator.PluginSettingValidator
+	IsDirectory      bool     `json:"IsDirectory"`
+	AllowedExtensions []string `json:"AllowedExtensions"`
+	AllowMultiple    bool     `json:"AllowMultiple"`
 
 	Style PluginSettingValueStyle
 }
