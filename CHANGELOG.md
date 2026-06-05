@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.1.2 - 
+## v2.1.2-beta.1 - 2026-06-05
 
 - Add
   - [`Theme`] Add a theme editor with live launcher preview, color controls, save-as and overwrite flows, and wallpaper-aware previews for customizing Wox themes #4421
@@ -30,9 +30,9 @@
 
 - Add
   - [`Settings`] Add settings search so users can find built-in and plugin settings by localized text without browsing each settings page.
-![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/setting_search.png)
+    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/setting_search.png)
   - [`AI Command`] Add an AI command template dialog and default-action selector, with built-in translation and summarization command templates for faster setup.
-![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/ai_command_templates.png)
+    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/ai_command_templates.png)
   - [`Bug Report`] Add built-in diagnostics collection and a toolbar indicator so users can prepare bug reports with relevant runtime context #4416
 
 - Improve
