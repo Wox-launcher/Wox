@@ -13,7 +13,9 @@ import (
 	"wox/i18n"
 	"wox/plugin"
 	"wox/ui"
+	"wox/updater"
 	"wox/util"
+	"wox/util/clipboard"
 	"wox/util/notifier"
 	"wox/util/shell"
 
@@ -36,6 +38,8 @@ type SysCommand struct {
 	Title                  string
 	SubTitle               string
 	Icon                   common.WoxImage
+	ActionName             string
+	ActionIcon             common.WoxImage
 	PreventHideAfterAction bool
 	Action                 func(ctx context.Context, actionContext plugin.ActionContext)
 }
@@ -136,6 +140,19 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 			Icon:                   common.WoxIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, common.DefaultSettingWindowContext)
+			},
+		},
+		{
+			ID:         "copy_wox_version",
+			Title:      "i18n:plugin_sys_copy_wox_version",
+			SubTitle:   updater.CURRENT_VERSION,
+			Icon:       common.CopyIcon,
+			ActionName: "i18n:plugin_sys_copy",
+			ActionIcon: common.CopyIcon,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				if err := clipboard.WriteText(updater.CURRENT_VERSION); err != nil {
+					r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to copy Wox version: %s", err.Error()))
+				}
 			},
 		},
 		{
@@ -410,9 +427,18 @@ func (r *SysPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData
 }
 
 func (r *SysPlugin) buildCommandAction(command SysCommand, contextData common.ContextData) plugin.QueryResultAction {
+	actionName := command.ActionName
+	if actionName == "" {
+		actionName = "i18n:plugin_sys_execute"
+	}
+	actionIcon := command.ActionIcon
+	if actionIcon.IsEmpty() {
+		actionIcon = common.ExecuteRunIcon
+	}
+
 	return plugin.QueryResultAction{
-		Name:                   "i18n:plugin_sys_execute",
-		Icon:                   common.ExecuteRunIcon,
+		Name:                   actionName,
+		Icon:                   actionIcon,
 		Action:                 command.Action,
 		PreventHideAfterAction: command.PreventHideAfterAction,
 		ContextData:            contextData,
