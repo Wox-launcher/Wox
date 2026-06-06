@@ -7,6 +7,7 @@ package window
 #include <windows.h>
 #include <psapi.h>
 #include <shellapi.h>
+#include <stdint.h>
 
 typedef struct {
 	int x;
@@ -43,6 +44,7 @@ int moveResizeWindowForManagement(const char* windowId, int pid, int x, int y, i
 int maximizeWindowForManagement(const char* windowId, int pid);
 int minimizeWindowForManagement(const char* windowId, int pid);
 int activateWindowByPid(int pid);
+int focusFileExplorerContentByHwnd(uintptr_t hwnd);
 int isOpenSaveDialog();
 int isOpenSaveDialogByPid(int pid);
 int navigateActiveFileDialog(const char* path);
@@ -428,7 +430,8 @@ func selectBestExplorerShellWindowCandidate(candidates []explorerShellWindowCand
 	return bestIdx
 }
 
-// NavigateInFileExplorer navigates the active Explorer tab/window owned by pid to targetPath.
+// NavigateInFileExplorer navigates the active Explorer tab/window owned by pid to targetPath
+// and restores keyboard focus to the file list so Explorer type-to-search can continue.
 // Windows 11 Explorer tabs can share one top-level HWND while ShellWindows still exposes
 // one automation entry per tab. Navigating by pid/HWND alone can therefore hit the first
 // tab entry instead of the focused tab. We rank ShellWindows candidates with the active
@@ -593,6 +596,9 @@ func NavigateInFileExplorer(pid int, targetPath string, windowTitle string) bool
 	}
 
 	_, err = oleutil.CallMethod(wDisp, "Navigate", targetPath)
+	if err == nil {
+		C.focusFileExplorerContentByHwnd(C.uintptr_t(targetHwnd))
+	}
 	itemVar.Clear()
 
 	return err == nil

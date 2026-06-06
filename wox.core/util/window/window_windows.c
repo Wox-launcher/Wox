@@ -6,6 +6,7 @@
 #include <commdlg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <wchar.h>
 
@@ -1131,4 +1132,98 @@ int activateWindowByPid(int pid)
     }
 
     return 1; // Success
+}
+
+typedef struct
+{
+    HWND directUI;
+    HWND sysListView;
+} FindExplorerContentData;
+
+static BOOL CALLBACK findExplorerContentProc(HWND hwnd, LPARAM lParam)
+{
+    FindExplorerContentData *data = (FindExplorerContentData *)lParam;
+    WCHAR className[256];
+    if (GetClassNameW(hwnd, className, 256) == 0)
+    {
+        return TRUE;
+    }
+
+    if (wcscmp(className, L"DirectUIHWND") == 0)
+    {
+        data->directUI = hwnd;
+        return FALSE;
+    }
+
+    if (!data->sysListView && wcscmp(className, L"SysListView32") == 0)
+    {
+        data->sysListView = hwnd;
+    }
+
+    return TRUE;
+}
+
+static HWND findExplorerContentHwnd(HWND hwnd)
+{
+    FindExplorerContentData data;
+    data.directUI = NULL;
+    data.sysListView = NULL;
+    EnumChildWindows(hwnd, findExplorerContentProc, (LPARAM)&data);
+    return data.directUI ? data.directUI : data.sysListView;
+}
+
+// focusFileExplorerContentByHwnd restores keyboard focus to the file list after
+// COM navigation, which can leave Explorer active but focused on non-list chrome.
+int focusFileExplorerContentByHwnd(uintptr_t hwndValue)
+{
+    HWND hwnd = (HWND)hwndValue;
+    if (!hwnd || !IsWindow(hwnd))
+    {
+        return 0;
+    }
+
+    if (IsIconic(hwnd))
+    {
+        ShowWindow(hwnd, SW_RESTORE);
+    }
+    if (!IsWindowVisible(hwnd))
+    {
+        ShowWindow(hwnd, SW_SHOW);
+    }
+
+    DWORD currentThreadId = GetCurrentThreadId();
+    DWORD targetThreadId = GetWindowThreadProcessId(hwnd, NULL);
+    int focused = 0;
+    for (int attempt = 0; attempt < 6; attempt++)
+    {
+        HWND content = findExplorerContentHwnd(hwnd);
+        if (content)
+        {
+            BOOL attached = FALSE;
+            if (targetThreadId != 0 && targetThreadId != currentThreadId)
+            {
+                attached = AttachThreadInput(targetThreadId, currentThreadId, TRUE);
+            }
+
+            SetForegroundWindow(hwnd);
+            BringWindowToTop(hwnd);
+            SetActiveWindow(hwnd);
+            SetFocus(content);
+
+            if (attached)
+            {
+                AttachThreadInput(targetThreadId, currentThreadId, FALSE);
+            }
+            focused = 1;
+        }
+
+        // Explorer navigation is asynchronous; re-assert focus briefly so the
+        // completed folder load does not leave focus on address/search chrome.
+        if (attempt < 5)
+        {
+            Sleep(50);
+        }
+    }
+
+    return focused;
 }

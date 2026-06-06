@@ -435,6 +435,10 @@ int refreshFileExplorerMonitorStateForRawKey(int allowDesktop)
     if (hwnd == gLastExplorerHwnd && gLastExplorerPid == pid &&
         currentState == (isDialog ? stateDialog : stateExplorer))
     {
+        // The same Explorer HWND can be manually moved while it remains focused.
+        // Re-publish the activation state here so Go recalculates overlay
+        // placement from the latest window rectangle on the first typed key.
+        triggerActivation(hwnd, pid, isDialog ? 1 : 0);
         return 1;
     }
 
