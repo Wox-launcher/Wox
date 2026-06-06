@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
-import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
+import 'package:wox/components/file_preview/file_preview_media_source.dart';
 import 'package:wox/components/file_preview/file_preview_renderer.dart';
+import 'package:wox/components/wox_webview_preview.dart';
+import 'package:wox/entity/wox_preview_webview_data.dart';
 
 class PdfFilePreviewRenderer implements WoxFilePreviewRenderer {
   @override
@@ -12,9 +14,8 @@ class PdfFilePreviewRenderer implements WoxFilePreviewRenderer {
 
   @override
   WoxFilePreviewResult render(WoxFilePreviewContext context) {
-    final viewer = context.filePath.startsWith("http") ? SfPdfViewer.network(context.filePath) : SfPdfViewer.file(File(context.filePath));
-    // The PDF viewer can capture focus from the query box, so keep it excluded
-    // while still letting the viewer own its internal scrolling.
-    return WoxFilePreviewResult(content: ExcludeFocus(child: viewer), contentHandlesScrolling: true);
+    final source = context.filePath.startsWith("http") ? context.filePath : buildFilePreviewMediaSource(File(context.filePath));
+    final previewData = WoxPreviewWebviewData(url: source, cacheDisabled: true);
+    return WoxFilePreviewResult(content: WoxWebViewPreview(previewData: jsonEncode(previewData.toJson()), showToolbar: false), contentHandlesScrolling: true);
   }
 }

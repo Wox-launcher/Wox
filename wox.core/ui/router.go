@@ -288,6 +288,8 @@ func handlePreviewFileMedia(w http.ResponseWriter, r *http.Request) {
 
 func resolvePreviewFileMediaContentType(filePath string) string {
 	switch strings.ToLower(filepath.Ext(filePath)) {
+	case ".pdf":
+		return "application/pdf"
 	case ".mp4", ".m4v":
 		return "video/mp4"
 	case ".mov":
