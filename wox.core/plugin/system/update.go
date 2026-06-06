@@ -75,10 +75,9 @@ func (p *UpdatePlugin) Query(ctx context.Context, query plugin.Query) plugin.Que
 	}
 
 	preview := plugin.WoxPreview{
-		PreviewType:       plugin.WoxPreviewTypeUpdate,
-		PreviewData:       p.buildPreviewData(info, autoUpdateEnabled, releaseChannel),
-		PreviewProperties: map[string]string{},
-		ScrollPosition:    "",
+		PreviewType:    plugin.WoxPreviewTypeUpdate,
+		PreviewData:    p.buildPreviewData(info, autoUpdateEnabled, releaseChannel),
+		ScrollPosition: "",
 	}
 
 	// The update plugin renders one preview row. Keeping it as a local result
@@ -234,10 +233,9 @@ func (p *UpdatePlugin) refreshVisibleUpdatePreview(ctx context.Context, actionCo
 		effectiveReleaseChannel = info.ReleaseChannel
 	}
 	preview := plugin.WoxPreview{
-		PreviewType:       plugin.WoxPreviewTypeUpdate,
-		PreviewData:       p.buildPreviewData(info, autoUpdateEnabled, effectiveReleaseChannel),
-		PreviewProperties: map[string]string{},
-		ScrollPosition:    "",
+		PreviewType:    plugin.WoxPreviewTypeUpdate,
+		PreviewData:    p.buildPreviewData(info, autoUpdateEnabled, effectiveReleaseChannel),
+		ScrollPosition: "",
 	}
 	actions := p.buildActions(ctx, info, autoUpdateEnabled, effectiveReleaseChannel)
 	updatable.Preview = &preview

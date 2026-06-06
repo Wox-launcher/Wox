@@ -423,10 +423,10 @@ func (m *MediaPlayerPlugin) formatPreview(mediaInfo *MediaInfo) plugin.WoxPrevie
 	return plugin.WoxPreview{
 		PreviewType: plugin.WoxPreviewTypeImage,
 		PreviewData: coverImg.String(),
-		PreviewProperties: map[string]string{
-			"i18n:plugin_mediaplayer_artist":   mediaInfo.Artist,
-			"i18n:plugin_mediaplayer_album":    mediaInfo.Album,
-			"i18n:plugin_mediaplayer_duration": m.formatDuration(mediaInfo.Duration),
+		PreviewTags: []plugin.WoxPreviewTag{
+			{Label: m.formatDuration(mediaInfo.Duration), Tooltip: "i18n:plugin_mediaplayer_duration"},
+			{Label: mediaInfo.Artist, Tooltip: "i18n:plugin_mediaplayer_artist"},
+			{Label: mediaInfo.Album, Tooltip: "i18n:plugin_mediaplayer_album"},
 		},
 	}
 }

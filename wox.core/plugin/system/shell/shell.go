@@ -374,9 +374,8 @@ func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string) []pl
 			SubTitle: subTitle,
 			Icon:     shellIcon,
 			Preview: plugin.WoxPreview{
-				PreviewType:       previewType,
-				PreviewData:       previewData,
-				PreviewProperties: map[string]string{},
+				PreviewType: previewType,
+				PreviewData: previewData,
 			},
 			Actions: actions,
 		})
@@ -695,10 +694,9 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 		subTitle := startTime.Format("2006-01-02 15:04:05")
 
 		preview := plugin.WoxPreview{
-			PreviewType:       plugin.WoxPreviewTypeTerminal,
-			PreviewData:       s.buildTerminalPreviewData(session.ID, data.Command, status),
-			PreviewProperties: map[string]string{},
-			ScrollPosition:    plugin.WoxPreviewScrollPositionBottom,
+			PreviewType:    plugin.WoxPreviewTypeTerminal,
+			PreviewData:    s.buildTerminalPreviewData(session.ID, data.Command, status),
+			ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
 		}
 
 		updatable := plugin.UpdatableResult{

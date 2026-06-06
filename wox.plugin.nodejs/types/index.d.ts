@@ -471,8 +471,7 @@ export type QueryReturn = QueryResponse | LegacyQueryReturn
  *   Preview: {
  *     PreviewType: "markdown",
  *     PreviewData: "# Calculator\n\nA simple calculator app",
- *     PreviewTags: [{ Label: "System", Tooltip: "Source" }],
- *     PreviewProperties: {}
+ *     PreviewTags: [{ Label: "System", Tooltip: "Source" }]
  *   },
  *   Tails: [
  *     { Type: "text", Text: "⌘⏎ Quick Action" }
@@ -1758,24 +1757,21 @@ export interface WoxPreviewTag {
  * {
  *   PreviewType: "markdown",
  *   PreviewData: "# Title\n\nDescription with **formatting**",
- *   PreviewTags: [{ Label: "17 chars", Tooltip: "Copy characters" }],
- *   PreviewProperties: {}
+ *   PreviewTags: [{ Label: "17 chars", Tooltip: "Copy characters" }]
  * }
  *
  * // Image preview
  * {
  *   PreviewType: "image",
  *   PreviewData: "https://example.com/image.png",
- *   PreviewTags: [{ Label: "300 px", Tooltip: "Height" }],
- *   PreviewProperties: {}
+ *   PreviewTags: [{ Label: "300 px", Tooltip: "Height" }]
  * }
  *
  * // URL preview
  * {
  *   PreviewType: "url",
  *   PreviewData: "https://github.com/Wox-launcher/Wox",
- *   PreviewTags: [],
- *   PreviewProperties: {}
+ *   PreviewTags: []
  * }
  *
  * // List preview
@@ -1791,8 +1787,7 @@ export interface WoxPreviewTag {
  *       }
  *     ]
  *   } satisfies WoxPreviewListData),
- *   PreviewTags: [{ Label: "Done", Tooltip: "Status" }],
- *   PreviewProperties: {}
+ *   PreviewTags: [{ Label: "Done", Tooltip: "Status" }]
  * }
  * ```
  */
@@ -1826,7 +1821,7 @@ export interface WoxPreview {
    * the value as Label and the key as Tooltip, so existing plugins remain
    * compatible while new plugins can use the tag contract directly.
    */
-  PreviewProperties: Record<string, string>
+  PreviewProperties?: Record<string, string>
 }
 
 /**

@@ -81,10 +81,6 @@ typedef struct WoxPlaybackInfoVtbl {
 typedef struct WoxTimeSpan {
 	int64_t duration;
 } WoxTimeSpan;
-typedef struct WoxDateTimeOffset {
-	int64_t universal_time;
-	int16_t offset_minutes;
-} WoxDateTimeOffset;
 typedef struct WoxTimelinePropertiesVtbl {
 	WoxInspectableVtbl base;
 	HRESULT (STDMETHODCALLTYPE *GetStartTime)(void* self, WoxTimeSpan* value);
@@ -92,7 +88,7 @@ typedef struct WoxTimelinePropertiesVtbl {
 	HRESULT (STDMETHODCALLTYPE *GetMinSeekTime)(void* self, WoxTimeSpan* value);
 	HRESULT (STDMETHODCALLTYPE *GetMaxSeekTime)(void* self, WoxTimeSpan* value);
 	HRESULT (STDMETHODCALLTYPE *GetPosition)(void* self, WoxTimeSpan* value);
-	HRESULT (STDMETHODCALLTYPE *GetLastUpdatedTime)(void* self, WoxDateTimeOffset* value);
+	HRESULT (STDMETHODCALLTYPE *GetLastUpdatedTime)(void* self, int64_t* value);
 } WoxTimelinePropertiesVtbl;
 typedef struct WoxRandomAccessStreamReferenceVtbl {
 	WoxInspectableVtbl base;
@@ -170,6 +166,23 @@ static void wox_release(void* value) {
 	if (value != NULL) {
 		((WoxInspectableVtbl**)(value))[0]->Release(value);
 	}
+}
+static int64_t wox_now_filetime_ticks(void) {
+	FILETIME fileTime;
+	ULARGE_INTEGER ticks;
+	GetSystemTimeAsFileTime(&fileTime);
+	ticks.LowPart = fileTime.dwLowDateTime;
+	ticks.HighPart = fileTime.dwHighDateTime;
+	return (int64_t)ticks.QuadPart;
+}
+static int64_t wox_clamp_i64(int64_t value, int64_t minValue, int64_t maxValue) {
+	if (value < minValue) {
+		return minValue;
+	}
+	if (value > maxValue) {
+		return maxValue;
+	}
+	return value;
 }
 static HRESULT wox_qi(void* value, REFIID riid, void** out) {
 	*out = NULL;
@@ -733,6 +746,7 @@ static void wox_fill_media_info_from_session(void* session, WoxMediaInfo* info) 
 				WoxTimeSpan endTime;
 				WoxTimeSpan maxSeekTime;
 				WoxTimeSpan position;
+				int64_t lastUpdatedTime = 0;
 				memset(&endTime, 0, sizeof(endTime));
 				memset(&maxSeekTime, 0, sizeof(maxSeekTime));
 				memset(&position, 0, sizeof(position));
@@ -744,6 +758,19 @@ static void wox_fill_media_info_from_session(void* session, WoxMediaInfo* info) 
 				}
 				if (SUCCEEDED(((WoxTimelinePropertiesVtbl**)timeline)[0]->GetPosition(timeline, &position))) {
 					info->position = position.duration / 10000000;
+				}
+				((WoxTimelinePropertiesVtbl**)timeline)[0]->GetLastUpdatedTime(timeline, &lastUpdatedTime);
+				// Timeline position is a snapshot; while playing, advance it from LastUpdatedTime using FILETIME ticks.
+				if (info->playback_status == 4 && lastUpdatedTime > 0) {
+					int64_t now = wox_now_filetime_ticks();
+					if (now > lastUpdatedTime) {
+						info->position += (now - lastUpdatedTime) / 10000000;
+					}
+				}
+				if (info->duration > 0) {
+					info->position = wox_clamp_i64(info->position, 0, info->duration);
+				} else if (info->position < 0) {
+					info->position = 0;
 				}
 				wox_release(timeline);
 			}

@@ -712,34 +712,30 @@ func (c *Plugin) buildAIStreamPreview(ctx context.Context, streamResult common.C
 		return plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: streamResult.ToMarkdown()}
 	}
 
-	// Keep metadata in preview properties so WoxPreviewScaffold renders it as
-	// the same external pill strip used by text, clipboard, and file previews.
 	return plugin.WoxPreview{
-		PreviewType:       plugin.WoxPreviewTypeAIStream,
-		PreviewData:       string(previewData),
-		PreviewProperties: map[string]string{"i18n:plugin_ai_command_model": modelLabel},
-		ScrollPosition:    plugin.WoxPreviewScrollPositionBottom,
+		PreviewType:    plugin.WoxPreviewTypeAIStream,
+		PreviewData:    string(previewData),
+		PreviewTags:    []plugin.WoxPreviewTag{{Label: modelLabel, Tooltip: "i18n:plugin_ai_command_model"}},
+		ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
 	}
 }
 
 func (c *Plugin) buildSelectionPreview(ctx context.Context, command commandSetting, query plugin.Query) plugin.WoxPreview {
 	model := command.AIModel()
 	modelLabel := fmt.Sprintf("%s - %s", model.ProviderName(), model.Name)
-	previewProperties := map[string]string{
-		"i18n:plugin_ai_command_model": modelLabel,
-	}
+	previewTags := []plugin.WoxPreviewTag{{Label: modelLabel, Tooltip: "i18n:plugin_ai_command_model"}}
 
 	if query.Selection.Type == selection.SelectionTypeText {
-		previewProperties["i18n:plugin_ai_command_preview_selected_text"] = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_selection_characters_value"), len([]rune(query.Selection.Text)))
+		previewTags = append(previewTags, plugin.WoxPreviewTag{Label: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_selection_characters_value"), len([]rune(query.Selection.Text))), Tooltip: "i18n:plugin_ai_command_preview_selected_text"})
 		// AI command selection previews do not need a dedicated type: before the
 		// model runs, the most useful preview is the selected text itself. Reusing
 		// the shared text renderer keeps visual behavior consistent with clipboard
 		// and normal selection previews.
-		return plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeText, PreviewData: query.Selection.Text, PreviewProperties: previewProperties}
+		return plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeText, PreviewData: query.Selection.Text, PreviewTags: previewTags}
 	}
 
 	if query.Selection.Type == selection.SelectionTypeFile {
-		previewProperties["i18n:plugin_ai_command_preview_selected_files"] = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "selection_files_count_value"), len(query.Selection.FilePaths))
+		previewTags = append(previewTags, plugin.WoxPreviewTag{Label: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "selection_files_count_value"), len(query.Selection.FilePaths)), Tooltip: "i18n:plugin_ai_command_preview_selected_files"})
 		items := make([]plugin.WoxPreviewListItem, 0, len(query.Selection.FilePaths))
 		for _, filePath := range query.Selection.FilePaths {
 			icon := common.NewWoxImageFileIcon(filePath)
@@ -767,10 +763,10 @@ func (c *Plugin) buildSelectionPreview(ctx context.Context, command commandSetti
 			c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to marshal ai command file selection preview: %s", err.Error()))
 			return plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: "i18n:plugin_ai_command_enter_to_start"}
 		}
-		return plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeList, PreviewData: string(previewJson), PreviewProperties: previewProperties}
+		return plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeList, PreviewData: string(previewJson), PreviewTags: previewTags}
 	}
 
-	return plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: "i18n:plugin_ai_command_enter_to_start", PreviewProperties: previewProperties}
+	return plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: "i18n:plugin_ai_command_enter_to_start", PreviewTags: previewTags}
 }
 
 func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugin.QueryResult {
@@ -944,9 +940,9 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 		// the exact text that will be sent when the user chooses Run or Run And Paste,
 		// avoiding the previous expensive request on every query refresh.
 		Preview: plugin.WoxPreview{
-			PreviewType:       plugin.WoxPreviewTypeText,
-			PreviewData:       query.Search,
-			PreviewProperties: map[string]string{"i18n:plugin_ai_command_model": chatModelLabel},
+			PreviewType: plugin.WoxPreviewTypeText,
+			PreviewData: query.Search,
+			PreviewTags: []plugin.WoxPreviewTag{{Label: chatModelLabel, Tooltip: "i18n:plugin_ai_command_model"}},
 		},
 		Icon:    aiCommandIcon,
 		Actions: c.buildAICommandActions(ctx, aiCommandSetting, conversations, chatModelLabel, query),

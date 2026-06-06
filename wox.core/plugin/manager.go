@@ -2513,8 +2513,8 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 				// the same preview type can serve progress/status workflows too.
 				PreviewType: WoxPreviewTypeList,
 				PreviewData: m.buildSelectionFileListPreviewData(ctx, query.Selection.FilePaths),
-				PreviewProperties: map[string]string{
-					"i18n:selection_files_count": fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "selection_files_count_value"), len(query.Selection.FilePaths)),
+				PreviewTags: []WoxPreviewTag{
+					{Label: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "selection_files_count_value"), len(query.Selection.FilePaths)), Tooltip: "i18n:selection_files_count"},
 				},
 			}
 		}
