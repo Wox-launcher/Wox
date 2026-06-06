@@ -277,7 +277,13 @@ func (m *MediaPlayerPlugin) formatIcon(mediaInfo *MediaInfo) common.WoxImage {
 		return mediaIcon
 	}
 
-	coverDataURI := m.formatRecordArtworkDataURI(mediaInfo.Artwork)
+	coverDataURI, ok := m.formatRecordArtworkDataURI(mediaInfo.Artwork)
+	if !ok {
+		if mediaInfo.State == PlaybackStatePlaying {
+			return common.MediaPlayingIcon
+		}
+		return mediaIcon
+	}
 	if mediaInfo.State != PlaybackStatePlaying {
 		return common.NewWoxImageLottie(m.buildStaticRecordLottie(coverDataURI))
 	}
@@ -285,17 +291,17 @@ func (m *MediaPlayerPlugin) formatIcon(mediaInfo *MediaInfo) common.WoxImage {
 }
 
 // formatRecordArtworkDataURI normalizes album artwork before Lottie overlays are drawn on top.
-func (m *MediaPlayerPlugin) formatRecordArtworkDataURI(artwork []byte) string {
+func (m *MediaPlayerPlugin) formatRecordArtworkDataURI(artwork []byte) (string, bool) {
 	normalizedArtwork, err := buildCircularArtworkPNG(artwork)
 	if err != nil {
-		return "data:image/png;base64," + string(artwork)
+		return "", false
 	}
-	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(normalizedArtwork)
+	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(normalizedArtwork), true
 }
 
 // buildCircularArtworkPNG crops, scales, and alpha-masks the artwork so Lottie does not need image masks.
 func buildCircularArtworkPNG(artwork []byte) ([]byte, error) {
-	decodedArtwork, err := decodeArtworkBase64(artwork)
+	decodedArtwork, err := decodeArtworkImageData(artwork)
 	if err != nil {
 		return nil, err
 	}
@@ -316,18 +322,28 @@ func buildCircularArtworkPNG(artwork []byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// decodeArtworkBase64 accepts both raw base64 strings and data URI payloads.
-func decodeArtworkBase64(artwork []byte) ([]byte, error) {
+// decodeArtworkImageData accepts the macOS base64 payload and Windows raw image bytes.
+func decodeArtworkImageData(artwork []byte) ([]byte, error) {
 	encodedArtwork := strings.TrimSpace(string(artwork))
-	if commaIndex := strings.Index(encodedArtwork, ","); commaIndex >= 0 && strings.HasPrefix(strings.ToLower(encodedArtwork[:commaIndex]), "data:") {
-		encodedArtwork = encodedArtwork[commaIndex+1:]
+	if encodedArtwork != "" {
+		if commaIndex := strings.Index(encodedArtwork, ","); commaIndex >= 0 && strings.HasPrefix(strings.ToLower(encodedArtwork[:commaIndex]), "data:") {
+			encodedArtwork = encodedArtwork[commaIndex+1:]
+		}
+
+		decodedArtwork, err := base64.StdEncoding.DecodeString(encodedArtwork)
+		if err == nil {
+			return decodedArtwork, nil
+		}
+		decodedArtwork, err = base64.RawStdEncoding.DecodeString(encodedArtwork)
+		if err == nil {
+			return decodedArtwork, nil
+		}
 	}
 
-	decodedArtwork, err := base64.StdEncoding.DecodeString(encodedArtwork)
-	if err != nil {
-		decodedArtwork, err = base64.RawStdEncoding.DecodeString(encodedArtwork)
+	if len(artwork) == 0 {
+		return nil, fmt.Errorf("empty artwork")
 	}
-	return decodedArtwork, err
+	return artwork, nil
 }
 
 // centerSquare returns the largest centered square inside the source artwork bounds.
@@ -433,16 +449,34 @@ func (m *MediaPlayerPlugin) formatDuration(seconds int64) string {
 }
 
 func (m *MediaPlayerPlugin) getMediaIcon(mediaInfo *MediaInfo) common.WoxImage {
-	// Try to use artwork if available
 	if len(mediaInfo.Artwork) > 0 {
-		return common.WoxImage{
-			ImageType: common.WoxImageTypeBase64,
-			ImageData: "data:image/png;base64," + string(mediaInfo.Artwork),
+		if artworkDataURI, ok := formatArtworkDataURI(mediaInfo.Artwork); ok {
+			return common.NewWoxImageBase64(artworkDataURI)
 		}
 	}
 
-	// Fall back to default media icon
 	return mediaIcon
+}
+
+// formatArtworkDataURI validates and encodes artwork for the UI image preview contract.
+func formatArtworkDataURI(artwork []byte) (string, bool) {
+	decodedArtwork, err := decodeArtworkImageData(artwork)
+	if err != nil {
+		return "", false
+	}
+
+	_, format, err := image.DecodeConfig(bytes.NewReader(decodedArtwork))
+	if err != nil {
+		return "", false
+	}
+	if format == "jpg" {
+		format = "jpeg"
+	}
+	if format == "" {
+		format = "png"
+	}
+
+	return fmt.Sprintf("data:image/%s;base64,%s", format, base64.StdEncoding.EncodeToString(decodedArtwork)), true
 }
 
 func (m *MediaPlayerPlugin) refreshMediaPlayer(ctx context.Context) {

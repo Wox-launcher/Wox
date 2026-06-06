@@ -38,7 +38,7 @@ type MediaInfo struct {
 	State       PlaybackState `json:"state"`
 	AppName     string        `json:"appName"`     // Name of the media application
 	AppBundleID string        `json:"appBundleId"` // Bundle ID or process name
-	Artwork     []byte        `json:"artwork"`     // Album artwork as image data
+	Artwork     []byte        `json:"artwork"`     // Album artwork as raw image bytes, base64 text, or a data URI
 }
 
 // MediaRetriever defines the interface for retrieving media information across platforms
