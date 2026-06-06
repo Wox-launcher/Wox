@@ -66,6 +66,7 @@ var currentState monitorState = stateNone
 var nextRawKeyListenerID = 1
 var explorerRawKeyListeners = map[int]ExplorerRawKeyListener{}
 var dialogRawKeyListeners = map[int]ExplorerRawKeyListener{}
+var typeToSearchConsumedKeys = map[uint32]struct{}{}
 
 //export fileExplorerLogCallbackCGO
 func fileExplorerLogCallbackCGO(msg *C.char) {
@@ -163,6 +164,7 @@ func checkUpdateMonitorState() error {
 		currentState = stateNone
 		explorerActive = false
 		dialogActive = false
+		resetTypeToSearchConsumedKeysLocked()
 		stateMu.Unlock()
 	}
 
@@ -184,6 +186,9 @@ func checkUpdateMonitorState() error {
 		_ = rawKeySubscription.Close()
 		rawKeySubscription = nil
 		logFromMonitor("go raw listener: unsubscribed")
+		stateMu.Lock()
+		resetTypeToSearchConsumedKeysLocked()
+		stateMu.Unlock()
 	}
 	return nil
 }
@@ -317,7 +322,14 @@ func handleExplorerRawKeyEvent(event keyboard.RawKeyEvent) bool {
 	}
 
 	if event.Type == keyboard.EventTypeKeyUp {
+		stateMu.Lock()
+		clearTypeToSearchConsumedKeyLocked(event)
+		stateMu.Unlock()
 		return dispatchRawKeyToAllListeners(event)
+	}
+
+	if isTypeToSearchConsumedKeyDown(event) {
+		return true
 	}
 
 	// Refresh native Explorer/dialog state before consulting currentState.
@@ -356,6 +368,7 @@ func handleExplorerRawKeyEvent(event keyboard.RawKeyEvent) bool {
 	if state == stateExplorer {
 		consume = dispatchRawKeyListeners(event, explorerRawListeners) || consume
 		if shouldDispatchTypeToSearch(event) && explorerListener != nil {
+			markTypeToSearchConsumedKey(event)
 			explorerListener(key)
 			consume = true
 		}
@@ -364,6 +377,7 @@ func handleExplorerRawKeyEvent(event keyboard.RawKeyEvent) bool {
 	if state == stateDialog {
 		consume = dispatchRawKeyListeners(event, dialogRawListeners) || consume
 		if shouldDispatchTypeToSearch(event) && dialogListener != nil {
+			markTypeToSearchConsumedKey(event)
 			dialogListener(key)
 			consume = true
 		}
@@ -404,4 +418,38 @@ func shouldDispatchTypeToSearch(event keyboard.RawKeyEvent) bool {
 	return event.Type == keyboard.EventTypeKeyDown &&
 		event.Character != "" &&
 		event.Modifiers&(keyboard.ModifierCtrl|keyboard.ModifierAlt|keyboard.ModifierSuper) == 0
+}
+
+// isTypeToSearchConsumedKeyDown suppresses repeated keydown events for the key
+// that opened type-to-search before Windows delivers them to the focused Wox box.
+func isTypeToSearchConsumedKeyDown(event keyboard.RawKeyEvent) bool {
+	if event.Type != keyboard.EventTypeKeyDown {
+		return false
+	}
+
+	stateMu.RLock()
+	defer stateMu.RUnlock()
+	_, ok := typeToSearchConsumedKeys[typeToSearchKeyID(event)]
+	return ok
+}
+
+func markTypeToSearchConsumedKey(event keyboard.RawKeyEvent) {
+	stateMu.Lock()
+	typeToSearchConsumedKeys[typeToSearchKeyID(event)] = struct{}{}
+	stateMu.Unlock()
+}
+
+func clearTypeToSearchConsumedKeyLocked(event keyboard.RawKeyEvent) {
+	delete(typeToSearchConsumedKeys, typeToSearchKeyID(event))
+}
+
+func resetTypeToSearchConsumedKeysLocked() {
+	typeToSearchConsumedKeys = map[uint32]struct{}{}
+}
+
+func typeToSearchKeyID(event keyboard.RawKeyEvent) uint32 {
+	if event.NativeKeyCode != 0 {
+		return event.NativeKeyCode
+	}
+	return uint32(event.Key)
 }
