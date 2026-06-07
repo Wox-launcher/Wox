@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"syscall"
 	"unsafe"
 	"wox/util"
@@ -18,24 +17,45 @@ import (
 const (
 	coInitializeAlreadyInitialized = syscall.Errno(1)
 	coInitializeChangedMode        = syscall.Errno(0x80010106)
+	shellExecuteShowNormal         = 1
+	shellExecuteSuccessThreshold   = 32
 )
 
 var (
 	shell32                        = windows.NewLazySystemDLL("shell32.dll")
+	procShellExecuteW              = shell32.NewProc("ShellExecuteW")
 	procILCreateFromPathW          = shell32.NewProc("ILCreateFromPathW")
 	procILFree                     = shell32.NewProc("ILFree")
 	procSHOpenFolderAndSelectItems = shell32.NewProc("SHOpenFolderAndSelectItems")
 )
 
 func Open(path string) error {
-	cmd := BuildCommand("cmd", []string{"PYTHONIOENCODING=utf-8"})
-	// Set CmdLine directly to bypass Go's automatic argument escaping.
-	// This ensures our quoting is preserved so cmd.exe won't treat & as a command separator.
-	cmd.SysProcAttr.CmdLine = `cmd /C start "" ` + QuoteCmdArg(path)
-	cmd.Stdout = util.GetLogger().GetWriter()
-	cmd.Stderr = util.GetLogger().GetWriter()
-	cmd.Dir = getWorkingDirectory("cmd")
-	return cmd.Start()
+	operationPtr, err := windows.UTF16PtrFromString("open")
+	if err != nil {
+		return fmt.Errorf("encode ShellExecute operation: %w", err)
+	}
+
+	pathPtr, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return fmt.Errorf("encode ShellExecute path: %w", err)
+	}
+
+	ret, _, callErr := procShellExecuteW.Call(
+		0,
+		uintptr(unsafe.Pointer(operationPtr)),
+		uintptr(unsafe.Pointer(pathPtr)),
+		0,
+		0,
+		shellExecuteShowNormal,
+	)
+	if ret <= shellExecuteSuccessThreshold {
+		if callErr != syscall.Errno(0) {
+			return fmt.Errorf("ShellExecute open failed for %s with code %d: %w", path, ret, callErr)
+		}
+		return fmt.Errorf("ShellExecute open failed for %s with code %d", path, ret)
+	}
+
+	return nil
 }
 
 func Run(name string, arg ...string) (*exec.Cmd, error) {
@@ -134,14 +154,4 @@ func createShellItemIDList(path string) (uintptr, error) {
 // HideWindowCmd sets the SysProcAttr to hide the console window on Windows
 func HideWindowCmd(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-}
-
-// QuoteCmdArg wraps a value in double quotes for use as a cmd.exe argument,
-// escaping any embedded double quotes. This prevents cmd.exe from treating
-// characters like & as command separators in URLs.
-func QuoteCmdArg(value string) string {
-	if len(value) >= 2 && strings.HasPrefix(value, `"`) && strings.HasSuffix(value, `"`) {
-		return value
-	}
-	return `"` + strings.ReplaceAll(value, `"`, `""`) + `"`
 }
