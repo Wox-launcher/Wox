@@ -53,11 +53,11 @@ chmod +x ./wox
 
 Wox 会把设置、插件数据、缓存和日志放在应用目录之外：
 
-| 平台 | 数据目录 | 日志目录 |
+| 平台 | 数据目录 | Core 日志 |
 | --- | --- | --- |
-| Windows | `%USERPROFILE%\.wox` | `%USERPROFILE%\.wox\log` |
-| macOS | `~/.wox` | `~/.wox/log` |
-| Linux | `~/.wox` | `~/.wox/log` |
+| Windows | `%USERPROFILE%\.wox` | `%USERPROFILE%\.wox\log\wox.log` |
+| macOS | `~/.wox` | `~/.wox/log/wox.log` |
+| Linux | `~/.wox` | `~/.wox/log/wox.log` |
 
 迁移配置时，优先备份这个目录。
 

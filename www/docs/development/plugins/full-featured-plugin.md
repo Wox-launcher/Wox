@@ -265,5 +265,5 @@ When something fails:
 1. verify `plugin.json` first
 2. confirm the right runtime host is being used
 3. add plugin-side logging through the SDK API
-4. inspect Wox logs under `~/.wox/log/`
+4. inspect the core log at `~/.wox/log/wox.log`, then check UI or host logs in the same log directory if needed
 5. if the problem crosses layers, rebuild from the repository root with `make build`

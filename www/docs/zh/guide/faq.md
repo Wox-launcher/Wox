@@ -4,13 +4,13 @@
 
 ### Wox 启动不了，先看哪里？
 
-先打开日志目录：
+先打开 core 日志：
 
-| 平台 | 日志目录 |
+| 平台 | Core 日志 |
 | --- | --- |
-| Windows | `%USERPROFILE%\.wox\log` |
-| macOS | `~/.wox/log` |
-| Linux | `~/.wox/log` |
+| Windows | `%USERPROFILE%\.wox\log\wox.log` |
+| macOS | `~/.wox/log/wox.log` |
+| Linux | `~/.wox/log/wox.log` |
 
 优先看最新的 core 日志。如果 UI 能打开但某个插件失败，再看同一数据目录下的插件日志。
 

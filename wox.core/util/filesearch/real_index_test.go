@@ -875,7 +875,7 @@ func (b *realIndexLimitedBuffer) String() string {
 func loadRealIndexExecutionStats(t *testing.T) realIndexExecutionStats {
 	t.Helper()
 
-	logPath := filepath.Join(util.GetLocation().GetLogDirectory(), "log")
+	logPath := util.GetLogger().CurrentLogPath()
 	content, err := os.ReadFile(logPath)
 	if err != nil {
 		t.Fatalf("read real index log %q: %v", logPath, err)

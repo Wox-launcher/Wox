@@ -53,11 +53,11 @@ chmod +x ./wox
 
 Wox keeps settings, plugin data, cache, and logs outside the application directory:
 
-| Platform | Data directory | Logs |
+| Platform | Data directory | Core log |
 | --- | --- | --- |
-| Windows | `%USERPROFILE%\.wox` | `%USERPROFILE%\.wox\log` |
-| macOS | `~/.wox` | `~/.wox/log` |
-| Linux | `~/.wox` | `~/.wox/log` |
+| Windows | `%USERPROFILE%\.wox` | `%USERPROFILE%\.wox\log\wox.log` |
+| macOS | `~/.wox` | `~/.wox/log/wox.log` |
+| Linux | `~/.wox` | `~/.wox/log/wox.log` |
 
 Back up this directory if you want to move your configuration to another machine.
 

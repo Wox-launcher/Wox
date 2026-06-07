@@ -22,7 +22,7 @@ var logOnce sync.Once
 
 const (
 	logRetentionDays = 5
-	logFileBaseName  = "log"
+	logFileBaseName  = "wox.log"
 )
 
 type Log struct {
@@ -301,12 +301,13 @@ func isExpiredLogFile(name string, modTime time.Time, cutoff time.Time) bool {
 // dateFromDailyLogName extracts the YYYYMMDD suffix from daily backup logs.
 func dateFromDailyLogName(name string) (time.Time, bool) {
 	normalizedName := strings.TrimSuffix(name, compressSuffix)
-	prefix := logFileBaseName + "."
-	if !strings.HasPrefix(normalizedName, prefix) {
+	ext := path.Ext(logFileBaseName)
+	prefix := strings.TrimSuffix(logFileBaseName, ext) + "."
+	if !strings.HasPrefix(normalizedName, prefix) || !strings.HasSuffix(normalizedName, ext) {
 		return time.Time{}, false
 	}
 
-	datePart := strings.TrimPrefix(normalizedName, prefix)
+	datePart := strings.TrimSuffix(strings.TrimPrefix(normalizedName, prefix), ext)
 	if len(datePart) < len(dailyTimeFormat) {
 		return time.Time{}, false
 	}

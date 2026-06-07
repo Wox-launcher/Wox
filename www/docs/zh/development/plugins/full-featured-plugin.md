@@ -264,5 +264,5 @@ await this.api.Notify(ctx, `Saved to ${capture.ScreenshotPath}`)
 1. 先检查 `plugin.json`
 2. 确认实际走的是哪一个运行时宿主
 3. 在插件里通过 SDK API 打日志
-4. 查看 `~/.wox/log/` 下的日志
+4. 查看 `~/.wox/log/wox.log` core 日志，需要时再看同一日志目录里的 UI 或宿主日志
 5. 如果问题跨层，回到仓库根目录执行 `make build`

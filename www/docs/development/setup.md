@@ -148,7 +148,8 @@ Wox keeps runtime data under the user's home directory:
 
 Useful subdirectories:
 
-- `~/.wox/log/`: UI and backend logs
+- `~/.wox/log/wox.log`: core log
+- `~/.wox/log/ui.log`: UI log
 - `~/.wox/plugins/`: local plugin development directory
 
 ## Troubleshooting

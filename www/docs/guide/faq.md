@@ -4,13 +4,13 @@
 
 ### Wox does not start. Where should I look first?
 
-Open the log directory:
+Open the core log:
 
-| Platform | Logs |
+| Platform | Core log |
 | --- | --- |
-| Windows | `%USERPROFILE%\.wox\log` |
-| macOS | `~/.wox/log` |
-| Linux | `~/.wox/log` |
+| Windows | `%USERPROFILE%\.wox\log\wox.log` |
+| macOS | `~/.wox/log/wox.log` |
+| Linux | `~/.wox/log/wox.log` |
 
 Start with the newest core log. If the UI opens but a plugin fails, check the plugin-specific log directory under the same Wox data folder.
 
