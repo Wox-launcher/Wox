@@ -1,3 +1,9 @@
+class AICommandThinkingModeValue {
+  static const providerDefault = "provider_default";
+  static const thinking = "thinking";
+  static const nonThinking = "non_thinking";
+}
+
 class AICommandTemplateQueryHotkey {
   late String hotkey;
   late bool hideQueryBox;
@@ -38,6 +44,7 @@ class AICommandTemplate {
   late String author;
   late String command;
   late String prompt;
+  late String thinkingMode;
   late String defaultAction;
   late bool vision;
   late AICommandTemplateQueryHotkey recommendedQueryHotkey;
@@ -50,6 +57,7 @@ class AICommandTemplate {
     author = json["Author"] ?? "";
     command = json["Command"] ?? "";
     prompt = json["Prompt"] ?? "";
+    thinkingMode = json["ThinkingMode"] ?? "provider_default";
     defaultAction = json["DefaultAction"] ?? "run";
     vision = json["Vision"] ?? false;
     recommendedQueryHotkey = AICommandTemplateQueryHotkey.fromJson(json["RecommendedQueryHotkey"]);

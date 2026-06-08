@@ -1,8 +1,6 @@
 PODS:
   - desktop_drop (0.0.1):
     - FlutterMacOS
-  - device_info_plus (0.0.1):
-    - FlutterMacOS
   - file_picker (0.0.1):
     - FlutterMacOS
   - FlutterMacOS (1.0.0)
@@ -20,7 +18,6 @@ PODS:
 
 DEPENDENCIES:
   - desktop_drop (from `Flutter/ephemeral/.symlinks/plugins/desktop_drop/macos`)
-  - device_info_plus (from `Flutter/ephemeral/.symlinks/plugins/device_info_plus/macos`)
   - file_picker (from `Flutter/ephemeral/.symlinks/plugins/file_picker/macos`)
   - FlutterMacOS (from `Flutter/ephemeral`)
   - hotkey_manager_macos (from `Flutter/ephemeral/.symlinks/plugins/hotkey_manager_macos/macos`)
@@ -35,8 +32,6 @@ SPEC REPOS:
 EXTERNAL SOURCES:
   desktop_drop:
     :path: Flutter/ephemeral/.symlinks/plugins/desktop_drop/macos
-  device_info_plus:
-    :path: Flutter/ephemeral/.symlinks/plugins/device_info_plus/macos
   file_picker:
     :path: Flutter/ephemeral/.symlinks/plugins/file_picker/macos
   FlutterMacOS:
@@ -52,7 +47,6 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   desktop_drop: 1eeeb9484299585770b6461e4f3d60950e99efa2
-  device_info_plus: 1b14eed9bf95428983aed283a8d51cce3d8c4215
   file_picker: e716a70a9fe5fd9e09ebc922d7541464289443af
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
   HotKey: e96d8a2ddbf4591131e2bb3f54e69554d90cdca6

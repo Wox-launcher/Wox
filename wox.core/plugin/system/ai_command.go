@@ -53,6 +53,7 @@ type commandSetting struct {
 	Name          string `json:"name"`
 	Command       string `json:"command"`
 	Model         string `json:"model"`
+	ThinkingMode  string `json:"thinkingMode"`
 	Prompt        string `json:"prompt"`
 	DefaultAction string `json:"defaultAction"`
 	Vision        bool   `json:"vision"` // does the command interact with vision
@@ -99,6 +100,20 @@ func (c *commandSetting) NormalizedDefaultAction(allowPaste bool) string {
 	}
 
 	return aiCommandDefaultActionRun
+}
+
+func (c *commandSetting) NormalizedThinkingMode() common.ChatThinkingMode {
+	// Old command rows do not have thinkingMode. Provider default keeps existing
+	// behavior and avoids sending provider-specific request fields unless the row
+	// explicitly opts in.
+	switch common.ChatThinkingMode(c.ThinkingMode) {
+	case common.ChatThinkingModeThinking:
+		return common.ChatThinkingModeThinking
+	case common.ChatThinkingModeNonThinking:
+		return common.ChatThinkingModeNonThinking
+	default:
+		return common.ChatThinkingModeProviderDefault
+	}
 }
 
 func init() {
@@ -174,6 +189,18 @@ func (c *Plugin) GetMetadata() plugin.Metadata {
 									Type:  validator.PluginSettingValidatorTypeNotEmpty,
 									Value: &validator.PluginSettingValidatorNotEmpty{},
 								},
+							},
+						},
+						{
+							Key:     "thinkingMode",
+							Label:   "i18n:plugin_ai_command_thinking_mode",
+							Type:    definition.PluginSettingValueTableColumnTypeSelect,
+							Width:   130,
+							Tooltip: "i18n:plugin_ai_command_thinking_mode_tooltip",
+							SelectOptions: []definition.PluginSettingValueSelectOption{
+								{Label: "i18n:plugin_ai_command_thinking_mode_provider_default", Value: string(common.ChatThinkingModeProviderDefault)},
+								{Label: "i18n:plugin_ai_command_thinking_mode_thinking", Value: string(common.ChatThinkingModeThinking)},
+								{Label: "i18n:plugin_ai_command_thinking_mode_non_thinking", Value: string(common.ChatThinkingModeNonThinking)},
 							},
 						},
 						{
@@ -525,7 +552,7 @@ func (c *Plugin) startAICommandStream(ctx context.Context, command commandSettin
 			}
 		}
 
-		err := c.api.AIChatStream(ctx, command.AIModel(), conversations, common.EmptyChatOptions, func(streamResult common.ChatStreamData) {
+		err := c.api.AIChatStream(ctx, command.AIModel(), conversations, common.ChatOptions{ThinkingMode: command.NormalizedThinkingMode()}, func(streamResult common.ChatStreamData) {
 			if streamResult.Status == common.ChatStreamStatusStreaming && options.onStreamingStarted != nil {
 				// UX fix: silent Run And Paste hides the launcher while the model is
 				// working. Start progress feedback only after the first streaming

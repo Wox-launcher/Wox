@@ -64,6 +64,7 @@
       "Author": "Wox Launcher",
       "Command": "translate",
       "Prompt": "i18n:prompt_translate_chinese_english",
+      "ThinkingMode": "provider_default",
       "DefaultAction": "run_and_paste",
       "Vision": false,
       "RecommendedQueryHotkey": {
@@ -104,6 +105,7 @@
       "Author": "Wox Launcher",
       "Command": "summarize",
       "Prompt": "i18n:prompt_summarize_selection",
+      "ThinkingMode": "provider_default",
       "DefaultAction": "run",
       "Vision": false,
       "RecommendedQueryHotkey": {
@@ -144,6 +146,7 @@
       "Author": "Wox Launcher",
       "Command": "rewrite",
       "Prompt": "i18n:prompt_rewrite_selection",
+      "ThinkingMode": "provider_default",
       "DefaultAction": "run_and_paste",
       "Vision": false,
       "RecommendedQueryHotkey": {
@@ -184,6 +187,7 @@
       "Author": "Wox Launcher",
       "Command": "fix",
       "Prompt": "i18n:prompt_fix_writing",
+      "ThinkingMode": "provider_default",
       "DefaultAction": "run_and_paste",
       "Vision": false,
       "I18n": {
@@ -217,6 +221,7 @@
       "Author": "Wox Launcher",
       "Command": "professional",
       "Prompt": "i18n:prompt_make_professional",
+      "ThinkingMode": "provider_default",
       "DefaultAction": "run_and_paste",
       "Vision": false,
       "I18n": {
@@ -250,6 +255,7 @@
       "Author": "Wox Launcher",
       "Command": "actions",
       "Prompt": "i18n:prompt_extract_action_items",
+      "ThinkingMode": "provider_default",
       "DefaultAction": "run",
       "Vision": false,
       "I18n": {

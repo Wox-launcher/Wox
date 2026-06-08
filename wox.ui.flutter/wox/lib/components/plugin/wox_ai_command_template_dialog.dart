@@ -8,6 +8,7 @@ import 'package:wox/components/plugin/wox_ai_command_default_action_dropdown.dar
 import 'package:wox/components/wox_ai_model_selector_view.dart';
 import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_checkbox.dart';
+import 'package:wox/components/wox_dropdown_button.dart';
 import 'package:wox/components/wox_hotkey_recorder_view.dart';
 import 'package:wox/components/wox_query_variable_textfield.dart';
 import 'package:wox/components/wox_textfield.dart';
@@ -49,6 +50,7 @@ class _AICommandTemplateDialogState extends State<_AICommandTemplateDialog> {
   bool isSaving = false;
   bool createQueryHotkey = false;
   String selectedCategory = "";
+  String thinkingMode = AICommandThinkingModeValue.providerDefault;
   String defaultAction = AICommandDefaultActionValue.run;
   String queryHotkey = "";
   String hotkeyAvailabilityError = "";
@@ -128,6 +130,7 @@ class _AICommandTemplateDialogState extends State<_AICommandTemplateDialog> {
     nameController.text = template.name;
     commandController.text = template.command;
     promptController.text = template.prompt;
+    thinkingMode = _normalizeThinkingMode(template.thinkingMode);
     defaultAction = _normalizeDefaultAction(template.defaultAction);
     createQueryHotkey = template.recommendedQueryHotkey.hasQuery;
     queryHotkey = template.recommendedQueryHotkey.hotkey;
@@ -217,6 +220,13 @@ class _AICommandTemplateDialogState extends State<_AICommandTemplateDialog> {
       return value;
     }
     return AICommandDefaultActionValue.run;
+  }
+
+  String _normalizeThinkingMode(String value) {
+    if (value == AICommandThinkingModeValue.thinking || value == AICommandThinkingModeValue.nonThinking || value == AICommandThinkingModeValue.providerDefault) {
+      return value;
+    }
+    return AICommandThinkingModeValue.providerDefault;
   }
 
   String _internalHotkeyConflict(String hotkey) {
@@ -353,6 +363,7 @@ class _AICommandTemplateDialogState extends State<_AICommandTemplateDialog> {
       "name": nameController.text.trim(),
       "command": commandController.text.trim(),
       "model": selectedModelJson,
+      "thinkingMode": thinkingMode,
       "prompt": promptController.text,
       "vision": template.vision,
       "defaultAction": defaultAction,
@@ -560,6 +571,25 @@ class _AICommandTemplateDialogState extends State<_AICommandTemplateDialog> {
 
                 setState(() => selectedModelJson = modelJson);
               },
+            ),
+          ),
+          _buildField(
+            tr("plugin_ai_command_thinking_mode"),
+            WoxDropdownButton<String>(
+              width: double.infinity,
+              value: thinkingMode,
+              isExpanded: true,
+              onChanged: (value) {
+                setState(() {
+                  thinkingMode = _normalizeThinkingMode(value ?? "");
+                  errorMessage = "";
+                });
+              },
+              items: [
+                WoxDropdownItem(value: AICommandThinkingModeValue.providerDefault, label: tr("plugin_ai_command_thinking_mode_provider_default")),
+                WoxDropdownItem(value: AICommandThinkingModeValue.thinking, label: tr("plugin_ai_command_thinking_mode_thinking")),
+                WoxDropdownItem(value: AICommandThinkingModeValue.nonThinking, label: tr("plugin_ai_command_thinking_mode_non_thinking")),
+              ],
             ),
           ),
           _buildField(

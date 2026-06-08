@@ -4,6 +4,8 @@ import (
 	"context"
 	"wox/common"
 	"wox/setting"
+
+	"github.com/openai/openai-go/v3/option"
 )
 
 func init() {
@@ -30,6 +32,17 @@ func NewDeepSeekProvider(ctx context.Context, connectContext setting.AIProvider)
 	}
 
 	return &DeepSeekProvider{
-		OpenAIBaseProvider: NewOpenAIBaseProvider(connectContext),
+		OpenAIBaseProvider: NewOpenAIBaseProviderWithOptions(connectContext, OpenAIBaseProviderOptions{
+			ChatRequestOptions: func(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions) []option.RequestOption {
+				switch options.ThinkingMode {
+				case common.ChatThinkingModeThinking:
+					return []option.RequestOption{option.WithJSONSet("thinking", map[string]string{"type": "enabled"})}
+				case common.ChatThinkingModeNonThinking:
+					return []option.RequestOption{option.WithJSONSet("thinking", map[string]string{"type": "disabled"})}
+				default:
+					return nil
+				}
+			},
+		}),
 	}
 }
