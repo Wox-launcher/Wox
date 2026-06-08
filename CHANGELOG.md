@@ -2,6 +2,20 @@
 
 ## v2.1.2-beta.2 - 
 
+- Add
+  - [`Media Player`] Add Windows media session integration so users can view the current track, see artwork, and control playback with play, pause, next, and previous actions from Wox.
+
+- Improve
+  - [`Explorer`] Improve open/save dialog workflows with type-to-search hints, faster dialog path detection, quick folder jumps, and selection highlighting inside the active dialog.
+  - [`Preview`] Improve preview metadata by using tag-style pills across AI Command, Clipboard, Selection, Shell, Update, Media Player, and Node.js plugin SDK previews.
+  - [`PDF`] Improve PDF file preview by rendering PDFs through the shared WebView preview path.
+  - [`System`] Improve system commands with a copy-version action for quickly sharing the current Wox version.
+  - [`Update`] Improve manual update checks so the visible update preview and release-channel actions refresh after checking.
+  - [`Logging`] Improve log file naming and bug report guidance so users can find and upload `wox.log` more easily #4446
+
+- Fix
+  - [`Shell`] Fix Windows open actions to use ShellExecute directly and avoid blocking when launching files, URLs, or folders.
+  - [`Hotkey`] Fix hotkey recording so stale Windows modifier state does not leak into the next recorded shortcut.
 
 ## v2.1.2-beta.1 - 2026-06-05
 
