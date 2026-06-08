@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"wox/common"
 	"wox/plugin"
@@ -64,6 +65,10 @@ func (r *UrlPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	r.recentUrls = r.loadRecentUrls(ctx)
 
 	r.api.OnMRURestore(ctx, r.handleMRURestore)
+}
+
+func (r *UrlPlugin) getReg() *regexp.Regexp {
+	return util.UrlPattern()
 }
 
 func (r *UrlPlugin) loadRecentUrls(ctx context.Context) []UrlHistory {

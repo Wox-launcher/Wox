@@ -34,6 +34,8 @@ import (
 	// import all system plugins
 	_ "wox/plugin/system"
 
+	_ "wox/plugin/system/sys"
+
 	_ "wox/plugin/system/app"
 
 	_ "wox/plugin/system/calculator"
