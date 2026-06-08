@@ -1043,7 +1043,7 @@
   "plugin_explorer_setting_quick_jump_paths_tips": "После добавления папки вы сможете быстро переходить к ней в режиме поиска при наборе. Когда проводник в фокусе, также можно выполнить explorer add, чтобы быстро добавить текущий путь.",
   "plugin_explorer_setting_quick_jump_path": "Путь",
   "plugin_explorer_hint_message": "Нажмите, чтобы отфильтровать",
-  "plugin_explorer_hint_message_dialog": "Нажмите, чтобы перейти",
+  "plugin_explorer_hint_message_dialog": "Здесь доступен поиск Wox. Нажмите, чтобы искать в этой папке.",
   "plugin_indicator_activate": "Активировать",
   "plugin_indicator_activate_plugin": "Активировать плагин %s",
   "plugin_paste_to_window": "Вставить в %s",

@@ -195,6 +195,101 @@ static int isOpenSaveDialog(HWND hwnd)
     return data.found ? 1 : 0;
 }
 
+typedef struct
+{
+    DWORD pid;
+    HWND hwnd;
+} FindOpenSaveDialogByPidData;
+
+// EnumOpenSaveDialogByPidProc finds the visible file dialog owned by a process so click handlers do not depend on cached foreground state.
+static BOOL CALLBACK EnumOpenSaveDialogByPidProc(HWND hwnd, LPARAM lParam)
+{
+	FindOpenSaveDialogByPidData *data = (FindOpenSaveDialogByPidData *)lParam;
+	if (!IsWindowVisible(hwnd))
+    {
+        return TRUE;
+    }
+
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid != data->pid || !isOpenSaveDialog(hwnd))
+    {
+        return TRUE;
+    }
+
+	data->hwnd = hwnd;
+	return FALSE;
+}
+
+// findOpenSaveDialogByPid returns the visible dialog HWND for a process, preferring the foreground dialog when available.
+static HWND findOpenSaveDialogByPid(int pid)
+{
+	if (pid <= 0)
+	{
+		return NULL;
+	}
+
+	HWND target = NULL;
+    HWND foreground = GetForegroundWindow();
+    if (foreground && IsWindowVisible(foreground))
+    {
+        DWORD foregroundPid = 0;
+        GetWindowThreadProcessId(foreground, &foregroundPid);
+        if ((int)foregroundPid == pid && isOpenSaveDialog(foreground))
+        {
+            target = foreground;
+        }
+    }
+
+    if (!target)
+    {
+        FindOpenSaveDialogByPidData data;
+        data.pid = (DWORD)pid;
+        data.hwnd = NULL;
+        EnumWindows(EnumOpenSaveDialogByPidProc, (LPARAM)&data);
+        target = data.hwnd;
+	}
+
+	return target;
+}
+
+uintptr_t getOpenSaveDialogHwndByPid(int pid)
+{
+	return (uintptr_t)findOpenSaveDialogByPid(pid);
+}
+
+// getOpenSaveDialogRectByPid returns the dialog bounds in the same logical coordinate space used by Flutter window placement.
+int getOpenSaveDialogRectByPid(int pid, int *outX, int *outY, int *outW, int *outH)
+{
+	if (pid <= 0 || !outX || !outY || !outW || !outH)
+	{
+		return 0;
+	}
+
+	HWND target = findOpenSaveDialogByPid(pid);
+	if (!target)
+	{
+		logMessage("getOpenSaveDialogRectByPid: no visible dialog found pid=%d", pid);
+		return 0;
+	}
+
+    RECT rect;
+    if (!GetWindowRect(target, &rect))
+    {
+        logMessage("getOpenSaveDialogRectByPid: GetWindowRect failed hwnd=0x%p pid=%d err=%lu", target, pid, GetLastError());
+        return 0;
+    }
+
+    UINT dpi = getDpiForWindowMonitor(target);
+    float scale = (float)dpi / 96.0f;
+    *outX = (int)(rect.left / scale);
+    *outY = (int)(rect.top / scale);
+    *outW = (int)((rect.right - rect.left) / scale);
+    *outH = (int)((rect.bottom - rect.top) / scale);
+    logMessage("getOpenSaveDialogRectByPid: hwnd=0x%p pid=%d logical=(%d,%d,%d,%d) dpi=%u scale=%.2f", target, pid, *outX, *outY, *outW, *outH, dpi, scale);
+    return 1;
+}
+
 static int isFileListClassName(const WCHAR *className)
 {
     if (!className || className[0] == L'\0')

@@ -315,6 +315,10 @@ func SelectInActiveFileDialog(targetPath string) bool {
 	return int(C.selectInActiveFileDialog(cPath)) == 1
 }
 
+func HighlightInActiveFileDialog(targetPath string) bool {
+	return SelectInActiveFileDialog(targetPath)
+}
+
 // GetActiveFileDialogPath returns the currently opened directory path in the
 // active open/save dialog on macOS.
 func GetActiveFileDialogPath() string {
@@ -338,6 +342,14 @@ func GetFileDialogPathByPid(pid int) string {
 	}
 	defer C.free(unsafe.Pointer(result))
 	return strings.TrimSpace(C.GoString(result))
+}
+
+func GetFileDialogPathByWindowId(windowId string, pid int) string {
+	return ""
+}
+
+func GetLastFileDialogPathResolveDebug() string {
+	return ""
 }
 
 // NavigateInFileExplorer navigates the active Finder window to targetPath.

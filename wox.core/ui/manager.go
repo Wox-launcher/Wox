@@ -1485,6 +1485,15 @@ func (m *Manager) GetActiveWindowSnapshot(ctx context.Context) common.ActiveWind
 	return m.activeWindowSnapshot
 }
 
+// SeedActiveWindowSnapshotForQuery stores a caller-owned source window for the next plugin query.
+// Incrementing the sequence blocks older async detail refreshes from replacing it.
+func (m *Manager) SeedActiveWindowSnapshotForQuery(snapshot common.ActiveWindowSnapshot) {
+	m.activeWindowSnapshotMu.Lock()
+	m.activeWindowSnapshotSeq++
+	m.activeWindowSnapshot = snapshot
+	m.activeWindowSnapshotMu.Unlock()
+}
+
 // RefreshActiveWindowSnapshot updates the cached active window snapshot without
 // blocking launcher activation on expensive per-process details. The hotkey path
 // only needs a stable foreground PID before Wox appears; name/icon/dialog state

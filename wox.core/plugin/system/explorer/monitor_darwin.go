@@ -238,6 +238,16 @@ func GetActiveDialogRect() (int, int, int, int, bool) {
 	return 0, 0, 0, 0, false
 }
 
+// GetOpenSaveDialogRectByPid falls back to the focused dialog snapshot on macOS, where the monitor already tracks the active file dialog.
+func GetOpenSaveDialogRectByPid(pid int) (int, int, int, int, bool) {
+	return GetActiveDialogRect()
+}
+
+// GetOpenSaveDialogWindowIdByPid is empty on macOS because the active AX dialog snapshot already carries the source window.
+func GetOpenSaveDialogWindowIdByPid(pid int) string {
+	return ""
+}
+
 // AddExplorerRawKeyListener is intentionally unsupported on macOS. Finder has
 // native Quick Look, so Wox does not add a Selection Space-key listener there.
 func AddExplorerRawKeyListener(listener ExplorerRawKeyListener) (ExplorerRawKeySubscription, error) {

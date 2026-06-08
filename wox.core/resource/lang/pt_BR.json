@@ -1042,6 +1042,7 @@
   "plugin_explorer_setting_quick_jump_paths": "Caminhos de salto rápido",
   "plugin_explorer_setting_quick_jump_paths_tips": "Depois de adicionar uma pasta, você pode saltar para ela rapidamente no modo de pesquisa por digitação. Quando o explorador de arquivos estiver em foco, você também pode usar explorer add para adicionar o caminho atual rapidamente.",
   "plugin_explorer_setting_quick_jump_path": "Caminho",
+  "plugin_explorer_hint_message_dialog": "A pesquisa do Wox está disponível aqui. Clique para pesquisar esta pasta.",
   "plugin_indicator_activate": "Ativar",
   "plugin_indicator_activate_plugin": "Ativar o plugin %s",
   "plugin_paste_to_window": "Colar em %s",

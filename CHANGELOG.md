@@ -1,5 +1,8 @@
 # Changelog
 
+## v2.1.2-beta.2 - 
+
+
 ## v2.1.2-beta.1 - 2026-06-05
 
 - Add

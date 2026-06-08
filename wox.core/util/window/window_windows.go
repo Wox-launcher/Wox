@@ -3,7 +3,7 @@
 package window
 
 /*
-#cgo LDFLAGS: -lpsapi -lgdi32 -luser32 -lshell32
+#cgo LDFLAGS: -lpsapi -lgdi32 -luser32 -lshell32 -lole32 -loleaut32 -luiautomationcore
 #include <windows.h>
 #include <psapi.h>
 #include <shellapi.h>
@@ -48,7 +48,10 @@ int focusFileExplorerContentByHwnd(uintptr_t hwnd);
 int isOpenSaveDialog();
 int isOpenSaveDialogByPid(int pid);
 int navigateActiveFileDialog(const char* path);
+int selectInActiveFileDialog(const char* path);
+int highlightInActiveFileDialog(const char* path);
 char* getActiveFileDialogPath();
+char* getFileDialogPathByWindowId(const char* windowId, int pid);
 char* getFileDialogPathByPid(int pid);
 */
 import "C"
@@ -335,9 +338,24 @@ func NavigateActiveFileDialog(targetPath string) bool {
 	return int(C.navigateActiveFileDialog(cPath)) == 1
 }
 
-// SelectInActiveFileDialog is currently unsupported on Windows.
 func SelectInActiveFileDialog(targetPath string) bool {
-	return false
+	if targetPath == "" {
+		return false
+	}
+
+	cPath := C.CString(targetPath)
+	defer C.free(unsafe.Pointer(cPath))
+	return int(C.selectInActiveFileDialog(cPath)) == 1
+}
+
+func HighlightInActiveFileDialog(targetPath string) bool {
+	if targetPath == "" {
+		return false
+	}
+
+	cPath := C.CString(targetPath)
+	defer C.free(unsafe.Pointer(cPath))
+	return int(C.highlightInActiveFileDialog(cPath)) == 1
 }
 
 func GetActiveFileDialogPath() string {
@@ -354,6 +372,21 @@ func GetFileDialogPathByPid(pid int) string {
 		return ""
 	}
 	result := C.getFileDialogPathByPid(C.int(pid))
+	if result == nil {
+		return ""
+	}
+	defer C.free(unsafe.Pointer(result))
+	return strings.TrimSpace(C.GoString(result))
+}
+
+func GetFileDialogPathByWindowId(windowId string, pid int) string {
+	windowId = strings.TrimSpace(windowId)
+	if windowId == "" {
+		return ""
+	}
+	cWindowId := C.CString(windowId)
+	defer C.free(unsafe.Pointer(cWindowId))
+	result := C.getFileDialogPathByWindowId(cWindowId, C.int(pid))
 	if result == nil {
 		return ""
 	}

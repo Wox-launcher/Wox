@@ -1,12 +1,15 @@
 package explorer
 
 /*
+#include <stdint.h>
 extern void fileExplorerActivatedCallbackCGO(int pid, int isFileDialog, int x, int y, int w, int h);
 extern void fileExplorerDeactivatedCallbackCGO();
 extern void fileExplorerLogCallbackCGO(char* msg);
 int refreshFileExplorerMonitorState();
 int refreshFileExplorerMonitorStateForRawKey(int allowDesktop);
 int isForegroundExplorerFileListFocused();
+int getOpenSaveDialogRectByPid(int pid, int *x, int *y, int *w, int *h);
+uintptr_t getOpenSaveDialogHwndByPid(int pid);
 void startFileExplorerMonitor();
 void stopFileExplorerMonitor();
 */
@@ -254,6 +257,25 @@ func GetActiveDialogRect() (int, int, int, int, bool) {
 		return dialogRectX, dialogRectY, dialogRectW, dialogRectH, true
 	}
 	return 0, 0, 0, 0, false
+}
+
+// GetOpenSaveDialogRectByPid resolves the current visible file dialog for a process without relying on foreground-state cache.
+func GetOpenSaveDialogRectByPid(pid int) (int, int, int, int, bool) {
+	var x C.int
+	var y C.int
+	var w C.int
+	var h C.int
+	ok := C.getOpenSaveDialogRectByPid(C.int(pid), &x, &y, &w, &h) == 1
+	return int(x), int(y), int(w), int(h), ok
+}
+
+// GetOpenSaveDialogWindowIdByPid returns the exact dialog HWND used as QueryEnv ActiveWindowId.
+func GetOpenSaveDialogWindowIdByPid(pid int) string {
+	hwnd := uintptr(C.getOpenSaveDialogHwndByPid(C.int(pid)))
+	if hwnd == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%d", hwnd)
 }
 
 // AddExplorerRawKeyListener registers a raw-key listener for active Explorer
