@@ -119,7 +119,7 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 			Title:       "i18n:plugin_sys_lock_computer",
 			Icon:        common.LockIcon,
 			Aliases:     []string{"lock screen", "lock computer", "锁屏", "锁定"},
-			SupportedOS: []string{util.PlatformWindows, util.PlatformMacOS},
+			SupportedOS: []string{util.PlatformWindows, util.PlatformMacOS, util.PlatformLinux},
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				r.runSystemAction(ctx, "lock_computer", runLockCommand)
 			},
@@ -129,7 +129,7 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 			Title:       "i18n:plugin_sys_empty_trash",
 			Icon:        common.TrashIcon,
 			Aliases:     []string{"empty recycle bin", "trash", "recycle bin", "清空回收站", "清空废纸篓"},
-			SupportedOS: []string{util.PlatformWindows, util.PlatformMacOS},
+			SupportedOS: []string{util.PlatformWindows, util.PlatformMacOS, util.PlatformLinux},
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				r.runSystemAction(ctx, "empty_trash", runEmptyTrashCommand)
 			},
