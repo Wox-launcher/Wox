@@ -18,6 +18,7 @@ type ShellHistory struct {
 	Command          string `gorm:"not null;index"`
 	Interpreter      string `gorm:"not null"`
 	WorkingDirectory string `gorm:"type:text"`
+	Background       bool   `gorm:"not null;default:false"`
 	OutputSummary    string `gorm:"type:text"`
 	OutputPath       string `gorm:"type:text"`
 	ExitCode         int
@@ -119,6 +120,7 @@ func (m *ShellHistoryManager) ResetForReexecute(ctx context.Context, id string, 
 			"command":           command,
 			"interpreter":       interpreter,
 			"working_directory": workingDirectory,
+			"background":        false,
 		}).Error
 }
 
@@ -232,6 +234,19 @@ func (m *ShellHistoryManager) GetRecentHistory(ctx context.Context, limit int) (
 		Limit(limit).
 		Find(&histories).Error
 	return histories, err
+}
+
+// GetLatestCommandRun returns the newest history entry for a saved command identity.
+func (m *ShellHistoryManager) GetLatestCommandRun(ctx context.Context, title string, interpreter string, workingDirectory string) (*ShellHistory, error) {
+	var history ShellHistory
+	err := m.db.WithContext(ctx).
+		Where("title = ? AND interpreter = ? AND working_directory = ?", title, interpreter, workingDirectory).
+		Order("start_time DESC").
+		First(&history).Error
+	if err != nil {
+		return nil, err
+	}
+	return &history, nil
 }
 
 // shellHistoryTracker tracks a running command and periodically saves output

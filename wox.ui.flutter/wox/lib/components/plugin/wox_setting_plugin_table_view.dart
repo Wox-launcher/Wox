@@ -23,7 +23,8 @@ import 'package:wox/utils/wox_setting_focus_util.dart';
 import 'wox_setting_plugin_item_view.dart';
 import 'wox_setting_plugin_table_update_view.dart';
 
-typedef WoxSettingPluginTableCreateDialogBuilder = Future<void> Function(BuildContext context, Future<String?> Function(Map<String, dynamic> row) saveRow);
+typedef WoxSettingPluginTableCreateDialogBuilder =
+    Future<void> Function(BuildContext context, Future<String?> Function(Map<String, dynamic> row) saveRow, {Map<String, dynamic> initialRow});
 typedef WoxSettingPluginTableEditDialogBuilder = Future<void> Function(BuildContext context, Map<String, dynamic> row, Future<String?> Function(Map<String, dynamic> row) saveRow);
 
 class WoxSettingPluginTable extends WoxSettingPluginItem {
@@ -35,7 +36,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
   final PluginSettingValueTable item;
   static const String rowUniqueIdKey = "wox_table_row_id";
   final double tableWidth;
-  final operationWidth = 80.0;
+  final operationWidth = 120.0;
   final columnSpacing = 10.0;
   final columnTooltipWidth = 20.0;
   final bool readonly;
@@ -598,6 +599,38 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     WoxSettingFocusUtil.restoreIfInSettingView();
   }
 
+  // Opens the row editor with copied values while saving through the create path.
+  Future<void> _showCloneRowDialog(BuildContext context, Map<String, dynamic> row) async {
+    final clonedRow = json.decode(json.encode(row)) as Map<String, dynamic>;
+    clonedRow.remove(rowUniqueIdKey);
+
+    if (customCreateDialogBuilder != null) {
+      await customCreateDialogBuilder!(context, _saveNewRow, initialRow: Map<String, dynamic>.from(clonedRow));
+      WoxSettingFocusUtil.restoreIfInSettingView();
+      return;
+    }
+
+    if (customEditDialogBuilder != null) {
+      await customEditDialogBuilder!(context, Map<String, dynamic>.from(clonedRow), (updatedRow) => _saveNewRow(updatedRow));
+      WoxSettingFocusUtil.restoreIfInSettingView();
+      return;
+    }
+
+    await showDialog(
+      context: context,
+      barrierColor: getThemePopupBarrierColor(),
+      builder: (context) {
+        return WoxSettingPluginTableUpdate(
+          item: item,
+          row: Map<String, dynamic>.from(clonedRow),
+          onUpdateValidate: onUpdateValidate,
+          onUpdate: (key, value) async => _saveNewRow(value),
+        );
+      },
+    );
+    WoxSettingFocusUtil.restoreIfInSettingView();
+  }
+
   void _scheduleAutoOpenEditDialog(BuildContext context, List<dynamic> rows) {
     if (readonly || autoOpenEditRowIndex == null) {
       return;
@@ -642,6 +675,17 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
               onPressed: () async {
                 await _showEditRowDialog(context, row);
               },
+            ),
+            WoxTooltip(
+              message: tr("ui_clone_row"),
+              child: WoxButton.text(
+                text: '',
+                icon: Icon(Icons.content_copy, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor)),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                onPressed: () async {
+                  await _showCloneRowDialog(context, row);
+                },
+              ),
             ),
             WoxTooltip(
               message: isDeleteDisabled ? deleteDisabledMessage : "",

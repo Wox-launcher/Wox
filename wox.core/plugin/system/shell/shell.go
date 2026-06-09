@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -38,6 +39,7 @@ const (
 	shellActionInterpreterKey  = "interpreter"
 	shellActionTitleKey        = "title"
 	shellActionWorkingDirKey   = "working_directory"
+	shellActionCommandIndexKey = "command_index"
 	shellOutputSummaryMaxBytes = 64 * 1024
 
 	shellFormTitleKey       = "title"
@@ -64,12 +66,15 @@ type ShellPlugin struct {
 }
 
 type shellContextData struct {
-	Title            string `json:"title"`
-	Command          string `json:"command"`
-	Interpreter      string `json:"interpreter"`
-	WorkingDirectory string `json:"working_directory"`
-	HistoryID        string `json:"-"`
-	FromHistory      bool   `json:"-"`
+	Title             string `json:"title"`
+	Command           string `json:"command"`
+	Interpreter       string `json:"interpreter"`
+	WorkingDirectory  string `json:"working_directory"`
+	HistoryID         string `json:"-"`
+	FromHistory       bool   `json:"-"`
+	Background        bool   `json:"-"`
+	IsSavedCommand    bool   `json:"-"`
+	SavedCommandIndex int    `json:"-"`
 }
 
 type shellCommand struct {
@@ -290,6 +295,22 @@ func commandDisplayTitle(command string) string {
 	return string([]rune(command)[:48])
 }
 
+// middleEllipsis keeps both ends of long paths visible in compact result tails.
+func middleEllipsis(text string, maxRunes int) string {
+	text = strings.TrimSpace(text)
+	if maxRunes <= 0 || len([]rune(text)) <= maxRunes {
+		return text
+	}
+	if maxRunes <= 3 {
+		return strings.Repeat(".", maxRunes)
+	}
+
+	runes := []rune(text)
+	leftCount := (maxRunes - 3 + 1) / 2
+	rightCount := maxRunes - 3 - leftCount
+	return string(runes[:leftCount]) + "..." + string(runes[len(runes)-rightCount:])
+}
+
 // displayTitleForCommand prefers the user-provided title when rendering command execution results.
 func displayTitleForCommand(data shellContextData) string {
 	title := strings.TrimSpace(data.Title)
@@ -300,7 +321,7 @@ func displayTitleForCommand(data shellContextData) string {
 }
 
 // buildShellPreviewTags builds the metadata chips shown below shell previews.
-func (s *ShellPlugin) buildShellPreviewTags(data shellContextData) []plugin.WoxPreviewTag {
+func (s *ShellPlugin) buildShellPreviewTags(ctx context.Context, data shellContextData) []plugin.WoxPreviewTag {
 	interpreter := effectiveInterpreter(data.Interpreter, "")
 	workingDirectory := strings.TrimSpace(data.WorkingDirectory)
 	if workingDirectory == "" {
@@ -311,10 +332,14 @@ func (s *ShellPlugin) buildShellPreviewTags(data shellContextData) []plugin.WoxP
 		}
 	}
 
-	return []plugin.WoxPreviewTag{
+	tags := []plugin.WoxPreviewTag{
 		{Label: interpreter, Tooltip: "i18n:plugin_shell_property_interpreter"},
 		{Label: workingDirectory, Tooltip: "i18n:plugin_shell_property_working_directory"},
 	}
+	if data.Background {
+		tags = append(tags, plugin.WoxPreviewTag{Label: i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_execute_background"), Tooltip: "i18n:plugin_shell_property_execution_mode"})
+	}
+	return tags
 }
 
 // shellContextDataFromActionContext keeps reused action callbacks aligned with the latest result context.
@@ -338,6 +363,12 @@ func shellContextDataFromActionContext(actionContext plugin.ActionContext, fallb
 	}
 	if historyID := strings.TrimSpace(actionContext.ContextData[shellActionHistoryIDKey]); historyID != "" {
 		data.HistoryID = historyID
+	}
+	if commandIndex, ok := actionContext.ContextData[shellActionCommandIndexKey]; ok {
+		if index, err := strconv.Atoi(commandIndex); err == nil {
+			data.IsSavedCommand = true
+			data.SavedCommandIndex = index
+		}
 	}
 	return data
 }
@@ -415,27 +446,45 @@ func (s *ShellPlugin) resolveWorkingDirectory(ctx context.Context, workingDirect
 	return cleaned, true
 }
 
-// buildEditCommandAction lets users adjust the title, interpreter, and command before running.
+// buildEditCommandAction updates a saved command or prepares a one-off edited run.
 func (s *ShellPlugin) buildEditCommandAction(data shellContextData) plugin.QueryResultAction {
+	form := s.buildCommandEditForm(data.Title, data.Command, data.Interpreter, data.WorkingDirectory)
+	if data.IsSavedCommand {
+		form = s.buildSavedCommandEditForm(data.Title, data.Command, data.Interpreter, data.WorkingDirectory)
+	}
+
 	return plugin.QueryResultAction{
 		Id:                     "edit_command",
 		Name:                   "i18n:plugin_shell_edit_command",
 		Icon:                   common.EditIcon,
 		Type:                   plugin.QueryResultActionTypeForm,
 		PreventHideAfterAction: true,
-		ContextData:            s.buildActionContextData("", data.HistoryID, data.Command, data.Interpreter, data.Title, data.WorkingDirectory),
-		Form:                   s.buildCommandEditForm(data.Title, data.Command, data.Interpreter, data.WorkingDirectory),
+		ContextData:            s.buildActionContextDataForCommand(data),
+		Form:                   form,
 		OnSubmit: func(ctx context.Context, actionContext plugin.FormActionContext) {
 			currentData := shellContextDataFromActionContext(actionContext.ActionContext, data)
 			nextData := shellContextData{
-				Title:            strings.TrimSpace(actionContext.Values[shellFormTitleKey]),
-				Command:          strings.TrimSpace(actionContext.Values[shellFormCommandKey]),
-				Interpreter:      effectiveInterpreter(actionContext.Values[shellFormInterpreterKey], currentData.Interpreter),
-				WorkingDirectory: strings.TrimSpace(actionContext.Values[shellFormWorkingDirKey]),
-				HistoryID:        currentData.HistoryID,
+				Title:             strings.TrimSpace(actionContext.Values[shellFormTitleKey]),
+				Command:           strings.TrimSpace(actionContext.Values[shellFormCommandKey]),
+				Interpreter:       effectiveInterpreter(actionContext.Values[shellFormInterpreterKey], currentData.Interpreter),
+				WorkingDirectory:  strings.TrimSpace(actionContext.Values[shellFormWorkingDirKey]),
+				HistoryID:         currentData.HistoryID,
+				IsSavedCommand:    currentData.IsSavedCommand,
+				SavedCommandIndex: currentData.SavedCommandIndex,
 			}
 			if nextData.Command == "" {
 				s.api.Notify(ctx, "i18n:plugin_shell_command_body_required")
+				return
+			}
+			if currentData.IsSavedCommand {
+				nextData.Interpreter = strings.TrimSpace(actionContext.Values[shellFormInterpreterKey])
+				if err := s.updateConfiguredCommand(ctx, currentData.SavedCommandIndex, nextData); err != nil {
+					s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to update shell command: %s", err.Error()))
+					s.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_command_update_failed"), err.Error()))
+					return
+				}
+				s.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_command_updated"))
+				s.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
 				return
 			}
 			util.Go(ctx, "execute edited shell command", func() {
@@ -453,7 +502,7 @@ func (s *ShellPlugin) buildAddCommandAction(data shellContextData) plugin.QueryR
 		Icon:                   common.PinIcon,
 		Type:                   plugin.QueryResultActionTypeForm,
 		PreventHideAfterAction: true,
-		ContextData:            s.buildActionContextData("", data.HistoryID, data.Command, data.Interpreter, data.Title, data.WorkingDirectory),
+		ContextData:            s.buildActionContextDataForCommand(data),
 		Form:                   s.buildAddCommandForm(data.Title, data.Command, data.Interpreter, data.WorkingDirectory),
 		OnSubmit: func(ctx context.Context, actionContext plugin.FormActionContext) {
 			currentData := shellContextDataFromActionContext(actionContext.ActionContext, data)
@@ -491,7 +540,7 @@ func (s *ShellPlugin) buildRunWithInterpreterAction(data shellContextData) plugi
 		Icon:                   shellIcon,
 		Type:                   plugin.QueryResultActionTypeForm,
 		PreventHideAfterAction: true,
-		ContextData:            s.buildActionContextData("", data.HistoryID, data.Command, data.Interpreter, data.Title, data.WorkingDirectory),
+		ContextData:            s.buildActionContextDataForCommand(data),
 		Form:                   s.buildRunWithInterpreterForm(data.Interpreter),
 		OnSubmit: func(ctx context.Context, actionContext plugin.FormActionContext) {
 			currentData := shellContextDataFromActionContext(actionContext.ActionContext, data)
@@ -509,6 +558,30 @@ func (s *ShellPlugin) buildRunWithInterpreterAction(data shellContextData) plugi
 					HistoryID:        currentData.HistoryID,
 				})
 			})
+		},
+	}
+}
+
+// buildDeleteConfiguredCommandAction removes a saved shell command from settings.
+func (s *ShellPlugin) buildDeleteConfiguredCommandAction(data shellContextData) plugin.QueryResultAction {
+	return plugin.QueryResultAction{
+		Id:                     "delete_command",
+		Name:                   "i18n:plugin_shell_delete_command",
+		Icon:                   common.TrashIcon,
+		PreventHideAfterAction: true,
+		ContextData:            s.buildActionContextDataForCommand(data),
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			currentData := shellContextDataFromActionContext(actionContext, data)
+			if !currentData.IsSavedCommand {
+				return
+			}
+			if err := s.deleteConfiguredCommand(ctx, currentData.SavedCommandIndex); err != nil {
+				s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to delete shell command: %s", err.Error()))
+				s.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_command_delete_failed"), err.Error()))
+				return
+			}
+			s.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_command_deleted"))
+			s.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: false})
 		},
 	}
 }
@@ -551,6 +624,53 @@ func (s *ShellPlugin) buildCommandEditForm(title string, command string, interpr
 				Label:        "i18n:plugin_shell_form_interpreter",
 				DefaultValue: effectiveInterpreter(interpreter, ""),
 				Options:      getInterpreterOptions(),
+			},
+		},
+		{
+			Type: definition.PluginSettingDefinitionTypeTextBox,
+			Value: &definition.PluginSettingValueTextBox{
+				Key:          shellFormCommandKey,
+				Label:        "i18n:plugin_shell_form_command",
+				DefaultValue: command,
+				MaxLines:     5,
+				Validators:   requiredTextValidator(),
+			},
+		},
+		{
+			Type: definition.PluginSettingDefinitionTypeTextBox,
+			Value: &definition.PluginSettingValueTextBox{
+				Key:          shellFormWorkingDirKey,
+				Label:        "i18n:plugin_shell_form_working_directory",
+				DefaultValue: strings.TrimSpace(workingDirectory),
+				Tooltip:      "i18n:plugin_shell_form_working_directory_tooltip",
+			},
+		},
+	}
+}
+
+// buildSavedCommandEditForm builds the form used to update a command already stored in settings.
+func (s *ShellPlugin) buildSavedCommandEditForm(title string, command string, interpreter string, workingDirectory string) definition.PluginSettingDefinitions {
+	defaultTitle := strings.TrimSpace(title)
+	if defaultTitle == "" {
+		defaultTitle = commandDisplayTitle(command)
+	}
+	return definition.PluginSettingDefinitions{
+		{
+			Type: definition.PluginSettingDefinitionTypeTextBox,
+			Value: &definition.PluginSettingValueTextBox{
+				Key:          shellFormTitleKey,
+				Label:        "i18n:plugin_shell_form_command_title",
+				DefaultValue: defaultTitle,
+				Validators:   requiredTextValidator(),
+			},
+		},
+		{
+			Type: definition.PluginSettingDefinitionTypeSelect,
+			Value: &definition.PluginSettingValueSelect{
+				Key:          shellFormInterpreterKey,
+				Label:        "i18n:plugin_shell_form_interpreter",
+				DefaultValue: strings.TrimSpace(interpreter),
+				Options:      getCommandInterpreterOptions(),
 			},
 		},
 		{
@@ -635,6 +755,40 @@ func (s *ShellPlugin) buildAddCommandForm(title string, command string, interpre
 func (s *ShellPlugin) addConfiguredCommand(ctx context.Context, command shellCommand) error {
 	commands := s.loadCommands(ctx)
 	commands = append(commands, command)
+	return s.saveConfiguredCommands(ctx, commands)
+}
+
+// updateConfiguredCommand updates an existing saved command while preserving flags not exposed in the edit form.
+func (s *ShellPlugin) updateConfiguredCommand(ctx context.Context, commandIndex int, data shellContextData) error {
+	commands := s.loadCommands(ctx)
+	if commandIndex < 0 || commandIndex >= len(commands) {
+		return fmt.Errorf("command index out of range: %d", commandIndex)
+	}
+
+	commands[commandIndex].Alias = strings.TrimSpace(data.Title)
+	commands[commandIndex].Command = strings.TrimSpace(data.Command)
+	commands[commandIndex].Interpreter = strings.TrimSpace(data.Interpreter)
+	commands[commandIndex].WorkingDirectory = strings.TrimSpace(data.WorkingDirectory)
+	if commands[commandIndex].Alias == "" || commands[commandIndex].Command == "" {
+		return fmt.Errorf("command title and command cannot be empty")
+	}
+
+	return s.saveConfiguredCommands(ctx, commands)
+}
+
+// deleteConfiguredCommand removes an existing saved command from settings.
+func (s *ShellPlugin) deleteConfiguredCommand(ctx context.Context, commandIndex int) error {
+	commands := s.loadCommands(ctx)
+	if commandIndex < 0 || commandIndex >= len(commands) {
+		return fmt.Errorf("command index out of range: %d", commandIndex)
+	}
+
+	commands = append(commands[:commandIndex], commands[commandIndex+1:]...)
+	return s.saveConfiguredCommands(ctx, commands)
+}
+
+// saveConfiguredCommands writes the Shell command setting table as JSON.
+func (s *ShellPlugin) saveConfiguredCommands(ctx context.Context, commands []shellCommand) error {
 	data, err := json.Marshal(commands)
 	if err != nil {
 		return err
@@ -648,6 +802,13 @@ func (s *ShellPlugin) refreshCommandActionForms(actions []plugin.QueryResultActi
 	for i := range actions {
 		switch actions[i].Id {
 		case "edit_command":
+			if actions[i].ContextData != nil {
+				if _, ok := actions[i].ContextData[shellActionCommandIndexKey]; ok {
+					currentData := shellContextDataFromActionContext(plugin.ActionContext{ContextData: actions[i].ContextData}, data)
+					actions[i].Form = s.buildSavedCommandEditForm(currentData.Title, currentData.Command, currentData.Interpreter, currentData.WorkingDirectory)
+					continue
+				}
+			}
 			actions[i].Form = s.buildCommandEditForm(data.Title, data.Command, data.Interpreter, data.WorkingDirectory)
 		case "add_as_command":
 			actions[i].Form = s.buildAddCommandForm(data.Title, data.Command, data.Interpreter, data.WorkingDirectory)
@@ -677,11 +838,53 @@ func (s *ShellPlugin) getHistoryResultScore(timestamp int64) int64 {
 	return timestamp / 1000
 }
 
-func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string) []plugin.QueryResult {
+// buildCommandLastRunSubtitle renders the saved command's latest execution time.
+func (s *ShellPlugin) buildCommandLastRunSubtitle(ctx context.Context, title string, interpreter string, workingDirectory string) string {
+	history, err := s.historyManager.GetLatestCommandRun(ctx, strings.TrimSpace(title), strings.TrimSpace(interpreter), strings.TrimSpace(workingDirectory))
+	if err != nil || history == nil || history.StartTime <= 0 {
+		return i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_command_never_executed")
+	}
+
+	lastRun := time.Unix(history.StartTime/1000, 0).Format("2006-01-02 15:04:05")
+	return fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_command_last_run"), lastRun)
+}
+
+// buildGlobalCommandTails exposes shell metadata for saved commands shown in global search.
+func (s *ShellPlugin) buildGlobalCommandTails(ctx context.Context, interpreter string, workingDirectory string, background bool) []plugin.QueryResultTail {
+	tails := []plugin.QueryResultTail{
+		{
+			Type:    plugin.QueryResultTailTypeText,
+			Text:    strings.TrimSpace(interpreter),
+			Tooltip: i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_interpreter"),
+		},
+	}
+
+	if strings.TrimSpace(workingDirectory) != "" {
+		tails = append(tails, plugin.QueryResultTail{
+			Type:    plugin.QueryResultTailTypeText,
+			Text:    middleEllipsis(workingDirectory, 28),
+			Tooltip: strings.TrimSpace(workingDirectory),
+		})
+	}
+
+	if background {
+		tails = append(tails, plugin.QueryResultTail{
+			Type:    plugin.QueryResultTailTypeText,
+			Text:    i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_execute_background"),
+			Tooltip: i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_execution_mode"),
+		})
+	}
+	return tails
+}
+
+func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string, showPlaceholder bool) []plugin.QueryResult {
 	// Get recent history from database
 	histories, err := s.historyManager.GetRecentHistory(ctx, 10)
 	if err != nil {
 		s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to get history: %s", err.Error()))
+		if !showPlaceholder {
+			return nil
+		}
 		return []plugin.QueryResult{
 			{
 				Title:    "i18n:plugin_shell_enter_command",
@@ -693,6 +896,9 @@ func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string) []pl
 	}
 
 	if len(histories) == 0 {
+		if !showPlaceholder {
+			return nil
+		}
 		return []plugin.QueryResult{
 			{
 				Title:    "i18n:plugin_shell_enter_command",
@@ -754,6 +960,7 @@ func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string) []pl
 			WorkingDirectory: history.WorkingDirectory,
 			HistoryID:        history.ID,
 			FromHistory:      true,
+			Background:       history.Background,
 		}
 
 		// Build actions based on status
@@ -829,7 +1036,7 @@ func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string) []pl
 			Preview: plugin.WoxPreview{
 				PreviewType: previewType,
 				PreviewData: previewData,
-				PreviewTags: s.buildShellPreviewTags(historyContextData),
+				PreviewTags: s.buildShellPreviewTags(ctx, historyContextData),
 			},
 			Actions: actions,
 		})
@@ -847,7 +1054,7 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 
 	// Handle global query - check for shell commands
 	if query.IsGlobalQuery() {
-		return plugin.NewQueryResponse(s.queryCommands(ctx, query, interpreter))
+		return plugin.NewQueryResponse(s.queryCommands(ctx, query, interpreter, false))
 	}
 
 	// Get the command from the query
@@ -855,7 +1062,9 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 
 	// If no command entered, show history
 	if command == "" {
-		return plugin.NewQueryResponse(s.queryHistory(ctx, interpreter))
+		commandResults := s.queryCommands(ctx, query, interpreter, true)
+		historyResults := s.queryHistory(ctx, interpreter, len(commandResults) == 0)
+		return plugin.NewQueryResponse(append(commandResults, historyResults...))
 	}
 
 	// Create context data
@@ -957,7 +1166,7 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 			Preview: plugin.WoxPreview{
 				PreviewType:    plugin.WoxPreviewTypeText,
 				PreviewData:    i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_enter_to_execute"),
-				PreviewTags:    s.buildShellPreviewTags(contextData),
+				PreviewTags:    s.buildShellPreviewTags(ctx, contextData),
 				ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
 			},
 			Actions: actions,
@@ -982,15 +1191,15 @@ func (s *ShellPlugin) loadCommands(ctx context.Context) []shellCommand {
 	return commands
 }
 
-// queryCommands handles global query to search for configured shell commands
-func (s *ShellPlugin) queryCommands(ctx context.Context, query plugin.Query, interpreter string) []plugin.QueryResult {
+// queryCommands searches configured shell commands or returns all of them for the default Shell view.
+func (s *ShellPlugin) queryCommands(ctx context.Context, query plugin.Query, interpreter string, includeAll bool) []plugin.QueryResult {
 	commands := s.loadCommands(ctx)
 	if len(commands) == 0 {
 		return nil
 	}
 
 	search := strings.TrimSpace(query.Search)
-	if search == "" {
+	if search == "" && !includeAll {
 		return nil
 	}
 
@@ -1003,13 +1212,13 @@ func (s *ShellPlugin) queryCommands(ctx context.Context, query plugin.Query, int
 	}
 
 	var results []plugin.QueryResult
-	for _, cmd := range commands {
+	for commandIndex, cmd := range commands {
 		if !cmd.Enabled {
 			continue
 		}
 
 		// Match alias (case-insensitive, prefix match for better UX)
-		if !strings.HasPrefix(strings.ToLower(cmd.Alias), searchAlias) {
+		if searchAlias != "" && !strings.HasPrefix(strings.ToLower(cmd.Alias), searchAlias) {
 			continue
 		}
 
@@ -1024,9 +1233,19 @@ func (s *ShellPlugin) queryCommands(ctx context.Context, query plugin.Query, int
 			Interpreter:      commandInterpreter,
 			WorkingDirectory: strings.TrimSpace(cmd.WorkingDirectory),
 			FromHistory:      false,
+			Background:       cmd.Silent,
+		}
+		savedCommandData := shellContextData{
+			Title:             cmd.Alias,
+			Command:           cmd.Command,
+			Interpreter:       strings.TrimSpace(cmd.Interpreter),
+			WorkingDirectory:  strings.TrimSpace(cmd.WorkingDirectory),
+			FromHistory:       false,
+			IsSavedCommand:    true,
+			SavedCommandIndex: commandIndex,
 		}
 
-		subtitle := fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_execute_with"), commandInterpreter, finalCommand)
+		subtitle := s.buildCommandLastRunSubtitle(ctx, cmd.Alias, commandInterpreter, strings.TrimSpace(cmd.WorkingDirectory))
 
 		// Build actions based on Silent option
 		var actions []plugin.QueryResultAction
@@ -1083,20 +1302,26 @@ func (s *ShellPlugin) queryCommands(ctx context.Context, query plugin.Query, int
 				},
 			}
 		}
-		actions = append(actions, s.buildEditCommandAction(contextData), s.buildAddCommandAction(contextData), s.buildRunWithInterpreterAction(contextData))
+		actions = append(actions, s.buildEditCommandAction(savedCommandData), s.buildDeleteConfiguredCommandAction(savedCommandData), s.buildRunWithInterpreterAction(contextData))
 
 		result := plugin.QueryResult{
 			Title:    cmd.Alias,
 			SubTitle: subtitle,
 			Icon:     shellIcon,
-			Score:    100,
+			Score:    100 + int64(len(commands)-commandIndex),
 			Preview: plugin.WoxPreview{
-				PreviewType:    plugin.WoxPreviewTypeText,
-				PreviewData:    fmt.Sprintf("$ %s", finalCommand),
-				PreviewTags:    s.buildShellPreviewTags(contextData),
+				PreviewType:    plugin.WoxPreviewTypeTerminal,
+				PreviewData:    s.buildTerminalPreviewData("", finalCommand, "idle"),
+				PreviewTags:    s.buildShellPreviewTags(ctx, contextData),
 				ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
 			},
 			Actions: actions,
+		}
+		if includeAll {
+			result.Group = "i18n:plugin_shell_commands"
+			result.GroupScore = 100
+		} else {
+			result.Tails = s.buildGlobalCommandTails(ctx, commandInterpreter, strings.TrimSpace(cmd.WorkingDirectory), cmd.Silent)
 		}
 		results = append(results, result)
 	}
@@ -1186,7 +1411,7 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 		preview := plugin.WoxPreview{
 			PreviewType:    plugin.WoxPreviewTypeTerminal,
 			PreviewData:    s.buildTerminalPreviewData(session.ID, data.Command, status),
-			PreviewTags:    s.buildShellPreviewTags(data),
+			PreviewTags:    s.buildShellPreviewTags(ctx, data),
 			ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
 		}
 
@@ -1206,6 +1431,9 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 				}
 				actions[i].ContextData[shellActionSessionIDKey] = session.ID
 				actions[i].ContextData[shellActionHistoryIDKey] = historyID
+				if _, isSavedCommandAction := actions[i].ContextData[shellActionCommandIndexKey]; isSavedCommandAction {
+					continue
+				}
 				actions[i].ContextData[shellActionCommandKey] = data.Command
 				actions[i].ContextData[shellActionInterpreterKey] = data.Interpreter
 				if strings.TrimSpace(data.WorkingDirectory) != "" {
@@ -1347,6 +1575,7 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 }
 
 func (s *ShellPlugin) executeCommandInBackground(ctx context.Context, data shellContextData) {
+	data.Background = true
 	s.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Executing shell command in background: %s with interpreter: %s", data.Command, data.Interpreter))
 	if resolvedDirectory, ok := s.resolveWorkingDirectory(ctx, data.WorkingDirectory, true); ok {
 		data.WorkingDirectory = resolvedDirectory
@@ -1367,13 +1596,45 @@ func (s *ShellPlugin) executeCommandInBackground(ctx context.Context, data shell
 	s.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Background command started with PID: %d", cmd.Process.Pid))
 	s.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_execute_background_started"))
 
+	historyID := uuid.NewString()
+	startTime := time.Now()
+	historyCreated := true
+	if err := s.historyManager.Create(ctx, &ShellHistory{
+		ID:               historyID,
+		SessionID:        historyID,
+		Title:            data.Title,
+		Command:          data.Command,
+		Interpreter:      data.Interpreter,
+		WorkingDirectory: data.WorkingDirectory,
+		Background:       true,
+		Status:           "running",
+		StartTime:        startTime.UnixMilli(),
+	}); err != nil {
+		historyCreated = false
+		s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to create background shell history: %s", err.Error()))
+	}
+
 	// Optionally wait for completion in background and log result
 	util.Go(ctx, "wait for background command", func() {
 		err := cmd.Wait()
+		endTime := time.Now()
+		status := "completed"
+		exitCode := 0
 		if err != nil {
 			s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Background command failed: %s", err.Error()))
+			status = "failed"
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				exitCode = exitErr.ExitCode()
+			} else {
+				exitCode = 1
+			}
 		} else {
 			s.api.Log(ctx, plugin.LogLevelInfo, "Background command completed successfully")
+		}
+		if historyCreated {
+			if updateErr := s.historyManager.UpdateStatus(ctx, historyID, status, exitCode, endTime.UnixMilli(), endTime.Sub(startTime).Milliseconds()); updateErr != nil {
+				s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to update background shell history: %s", updateErr.Error()))
+			}
 		}
 	})
 }
@@ -1502,6 +1763,15 @@ func (s *ShellPlugin) buildActionContextData(sessionID string, historyID string,
 	return contextData
 }
 
+// buildActionContextDataForCommand includes saved-command identity when the action mutates command settings.
+func (s *ShellPlugin) buildActionContextDataForCommand(data shellContextData) map[string]string {
+	contextData := s.buildActionContextData("", data.HistoryID, data.Command, data.Interpreter, data.Title, data.WorkingDirectory)
+	if data.IsSavedCommand {
+		contextData[shellActionCommandIndexKey] = strconv.Itoa(data.SavedCommandIndex)
+	}
+	return contextData
+}
+
 func (s *ShellPlugin) deleteSessionByActionContext(ctx context.Context, actionContext plugin.ActionContext) error {
 	historyID := actionContext.ContextData[shellActionHistoryIDKey]
 	sessionID := actionContext.ContextData[shellActionSessionIDKey]
@@ -1552,6 +1822,10 @@ func (s *ShellPlugin) deleteSessionResources(ctx context.Context, historyID stri
 
 	if history != nil && sessionID == "" {
 		sessionID = history.SessionID
+	}
+
+	if history != nil && history.Background {
+		sessionID = ""
 	}
 
 	if sessionID != "" {

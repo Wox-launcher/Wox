@@ -36,7 +36,7 @@ class WoxPreviewScaffold extends StatelessWidget {
             // The framed preview body already separates content from metadata,
             // so an extra divider above the pills would add visual noise without
             // improving scanability.
-            Padding(padding: EdgeInsets.only(top: WoxInterfaceSizeUtil.instance.current.scaledSpacing(10)), child: _PreviewTagPills(woxTheme: woxTheme, tags: tags)),
+            Padding(padding: EdgeInsets.only(top: WoxInterfaceSizeUtil.instance.current.scaledSpacing(10)), child: WoxPreviewTagPills(woxTheme: woxTheme, tags: tags)),
           ],
         ],
       ),
@@ -90,11 +90,11 @@ class WoxPreviewScaffold extends StatelessWidget {
   }
 }
 
-class _PreviewTagPills extends StatelessWidget {
+class WoxPreviewTagPills extends StatelessWidget {
   final WoxTheme woxTheme;
   final List<WoxPreviewTag> tags;
 
-  const _PreviewTagPills({required this.woxTheme, required this.tags});
+  const WoxPreviewTagPills({super.key, required this.woxTheme, required this.tags});
 
   @override
   Widget build(BuildContext context) {

@@ -20,16 +20,22 @@ enum _QueryHotkeyPreset { normal, webPanel, silent, custom }
 Future<void> showWoxQueryHotkeyDialog({
   required BuildContext context,
   Map<String, dynamic> initialRow = const {},
+  bool isEditing = false,
   required Future<String?> Function(Map<String, dynamic> row) onSave,
 }) async {
-  await showDialog(context: context, barrierColor: getThemePopupBarrierColor(), builder: (context) => WoxQueryHotkeyDialog(initialRow: initialRow, onSave: onSave));
+  await showDialog(
+    context: context,
+    barrierColor: getThemePopupBarrierColor(),
+    builder: (context) => WoxQueryHotkeyDialog(initialRow: initialRow, isEditing: isEditing, onSave: onSave),
+  );
 }
 
 class WoxQueryHotkeyDialog extends StatefulWidget {
   final Map<String, dynamic> initialRow;
+  final bool isEditing;
   final Future<String?> Function(Map<String, dynamic> row) onSave;
 
-  const WoxQueryHotkeyDialog({super.key, this.initialRow = const {}, required this.onSave});
+  const WoxQueryHotkeyDialog({super.key, this.initialRow = const {}, this.isEditing = false, required this.onSave});
 
   @override
   State<WoxQueryHotkeyDialog> createState() => _WoxQueryHotkeyDialogState();
@@ -80,7 +86,7 @@ class _WoxQueryHotkeyDialogState extends State<WoxQueryHotkeyDialog> {
     super.dispose();
   }
 
-  bool get _isEditing => widget.initialRow.isNotEmpty;
+  bool get _isEditing => widget.isEditing;
 
   bool get _showsDisplayFields => _selectedPreset == _QueryHotkeyPreset.webPanel || _selectedPreset == _QueryHotkeyPreset.custom;
 
@@ -297,7 +303,7 @@ class _WoxQueryHotkeyDialogState extends State<WoxQueryHotkeyDialog> {
 
     var skippedInitialRow = false;
     for (final existing in controller.woxSetting.value.queryHotkeys) {
-      if (!skippedInitialRow && _isSameRow(existing, _initialSnapshot)) {
+      if (_isEditing && !skippedInitialRow && _isSameRow(existing, _initialSnapshot)) {
         skippedInitialRow = true;
         continue;
       }

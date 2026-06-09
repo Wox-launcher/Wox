@@ -304,11 +304,22 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
       }
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TERMINAL.code) {
       // Terminal previews have their own status bar, search state, and scrolling.
-      // Keep them out of the generic shell so the new default styling does not
-      // disturb the interactive terminal surface.
+      // Keep them out of the generic framed shell while still rendering the
+      // shared preview metadata strip below the terminal surface.
+      final terminalTags = launcherController.supportsPreviewFullscreen(widget.woxPreview) && launcherController.isPreviewFullscreen.value ? const <WoxPreviewTag>[] : previewTags;
       return Container(
         padding: launcherController.isPreviewOnlyLayout ? EdgeInsets.zero : const EdgeInsets.only(top: 10.0, bottom: 10.0, left: 10.0),
-        child: WoxTerminalPreviewView(woxPreview: widget.woxPreview, woxTheme: widget.woxTheme),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: WoxTerminalPreviewView(woxPreview: widget.woxPreview, woxTheme: widget.woxTheme)),
+            if (terminalTags.isNotEmpty)
+              Padding(
+                padding: EdgeInsets.only(top: WoxInterfaceSizeUtil.instance.current.scaledSpacing(10), right: WoxInterfaceSizeUtil.instance.current.scaledSpacing(12)),
+                child: WoxPreviewTagPills(woxTheme: widget.woxTheme, tags: terminalTags),
+              ),
+          ],
+        ),
       );
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_WEBVIEW.code) {
       // WebView owns platform view sizing and navigation, so only preserve the
