@@ -624,6 +624,8 @@ class WoxSettingController extends GetxController {
         return 'ui_theme_editor_title';
       case 'debug':
         return 'ui_debug';
+      case 'update':
+        return 'ui_update';
       case 'privacy':
         return 'ui_privacy';
       default:
@@ -2147,14 +2149,14 @@ const List<_BuiltInSettingSearchDefinition> _builtInSettingSearchDefinitions = [
   _BuiltInSettingSearchDefinition(settingKey: 'HideOnStart', navPath: 'general', titleKey: 'ui_hide_on_start', subtitleKey: 'ui_hide_on_start_tips'),
   _BuiltInSettingSearchDefinition(
     settingKey: 'EnableAutoUpdate',
-    navPath: 'general',
+    navPath: 'update',
     titleKey: 'ui_enable_auto_update',
     subtitleKey: 'ui_enable_auto_update_tips',
     searchKeywords: ['update'],
   ),
   _BuiltInSettingSearchDefinition(
     settingKey: 'ReleaseChannel',
-    navPath: 'general',
+    navPath: 'update',
     titleKey: 'ui_release_channel',
     subtitleKey: 'ui_release_channel_tips',
     searchKeywords: ['update channel', 'release channel', 'stable', 'beta', 'stable channel', 'beta channel', 'prerelease'],

@@ -10,7 +10,6 @@ import 'package:wox/components/wox_hotkey_recorder_view.dart';
 import 'package:wox/components/wox_query_hotkey_dialog.dart';
 import 'package:wox/components/wox_switch.dart';
 import 'package:wox/components/wox_dropdown_button.dart';
-import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_lang.dart';
@@ -58,64 +57,6 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                     onChanged: (bool value) {
                       controller.updateConfig("HideOnStart", value.toString());
                     },
-                  );
-                }),
-              ),
-              formField(
-                settingKey: "EnableAutoUpdate",
-                label: controller.tr("ui_enable_auto_update"),
-                labelWidth: GENERAL_SETTING_WIDE_LABEL_WIDTH,
-                tips: controller.tr("ui_enable_auto_update_tips"),
-                child: Obx(() {
-                  return WoxSwitch(
-                    value: controller.woxSetting.value.enableAutoUpdate,
-                    onChanged: (bool value) {
-                      controller.updateConfig("EnableAutoUpdate", value.toString());
-
-                      // The backend refreshes update metadata asynchronously, so keep the delayed doctor refresh after changing this setting.
-                      Future.delayed(const Duration(seconds: 2), () {
-                        Get.find<WoxLauncherController>().doctorCheck();
-                      });
-                    },
-                  );
-                }),
-              ),
-              formField(
-                settingKey: "ReleaseChannel",
-                label: controller.tr("ui_release_channel"),
-                labelWidth: GENERAL_SETTING_WIDE_LABEL_WIDTH,
-                tips: controller.tr("ui_release_channel_tips"),
-                child: Obx(() {
-                  final stableVersion = controller.getUpdateChannelVersionText("stable");
-                  final betaVersion = controller.getUpdateChannelVersionText("beta");
-
-                  return WoxDropdownButton<String>(
-                    items: [
-                      WoxDropdownItem(
-                        value: "stable",
-                        label: controller.tr("ui_release_channel_stable"),
-                        tooltip: controller.tr("ui_release_channel_stable_tips"),
-                        trailing: _buildUpdateChannelVersion(stableVersion),
-                      ),
-                      WoxDropdownItem(
-                        value: "beta",
-                        label: controller.tr("ui_release_channel_beta"),
-                        tooltip: controller.tr("ui_release_channel_beta_tips"),
-                        trailing: _buildUpdateChannelVersion(betaVersion),
-                      ),
-                    ],
-                    value: controller.woxSetting.value.releaseChannel,
-                    onChanged: (v) {
-                      if (v != null) {
-                        controller.updateConfig("ReleaseChannel", v);
-
-                        // The backend clears cached update state when the channel changes, then checks metadata asynchronously.
-                        Future.delayed(const Duration(seconds: 2), () {
-                          Get.find<WoxLauncherController>().doctorCheck();
-                        });
-                      }
-                    },
-                    isExpanded: true,
                   );
                 }),
               ),
@@ -601,13 +542,5 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
         ),
       ),
     );
-  }
-
-  Widget? _buildUpdateChannelVersion(String version) {
-    if (version.isEmpty) {
-      return null;
-    }
-
-    return Text(version, style: TextStyle(color: getThemeSubTextColor(), fontSize: 12));
   }
 }
