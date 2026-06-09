@@ -195,17 +195,26 @@ func (w *WoxImage) ToPng() (image.Image, error) {
 }
 
 func (w *WoxImage) ToImage() (image.Image, error) {
-	return w.toImage(true)
+	return w.ToImageWithContext(util.NewTraceContext())
+}
+
+// ToImageWithContext converts an image while allowing remote fetch callers to apply cancellation or timeout.
+func (w *WoxImage) ToImageWithContext(ctx context.Context) (image.Image, error) {
+	return w.toImage(ctx, true)
 }
 
 func (w *WoxImage) ToImageWithoutRemoteFetch() (image.Image, error) {
 	// Some user-visible flows, such as screenshot success notifications, only need a best-effort icon.
 	// The previous implementation always routed emoji icons through Twemoji download on cache miss, which
 	// blocked those flows on network latency. Callers that need predictable completion can use this local-only path.
-	return w.toImage(false)
+	return w.toImage(util.NewTraceContext(), false)
 }
 
-func (w *WoxImage) toImage(allowRemoteFetch bool) (image.Image, error) {
+func (w *WoxImage) toImage(ctx context.Context, allowRemoteFetch bool) (image.Image, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	if w.ImageType == WoxImageTypeAbsolutePath {
 		if isSvgFilePath(w.ImageData) {
 			svgData, err := os.ReadFile(w.ImageData)
@@ -259,7 +268,7 @@ func (w *WoxImage) toImage(allowRemoteFetch bool) (image.Image, error) {
 			return nil, err
 		}
 
-		if err := util.HttpDownload(util.NewTraceContext(), w.emojiImageDownloadURL(w.ImageData), emojiPath); err != nil {
+		if err := w.downloadEmojiImage(ctx, w.ImageData, emojiPath); err != nil {
 			return nil, err
 		}
 
@@ -281,7 +290,7 @@ func (w *WoxImage) toImage(allowRemoteFetch bool) (image.Image, error) {
 			return nil, fmt.Errorf("url image cache miss: %s", w.ImageData)
 		}
 
-		if err := w.warmURLImageCache(util.NewTraceContext(), w.ImageData, cachePath); err != nil {
+		if err := w.warmURLImageCache(ctx, w.ImageData, cachePath); err != nil {
 			return nil, err
 		}
 
@@ -298,19 +307,62 @@ func (w *WoxImage) toImage(allowRemoteFetch bool) (image.Image, error) {
 }
 
 func (w *WoxImage) emojiImageCachePath(emoji string) (string, error) {
-	emojiInfo, err := gomoji.GetInfo(emoji)
+	codePoints, err := w.emojiImageCodePointCandidates(emoji)
 	if err != nil {
 		return "", err
 	}
 
-	codePoint := strings.ToLower(emojiInfo.CodePoint)
-	return path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("emoji_%s.png", codePoint)), nil
+	return path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("emoji_%s.png", codePoints[0])), nil
 }
 
-func (w *WoxImage) emojiImageDownloadURL(emoji string) string {
-	emojiInfo, _ := gomoji.GetInfo(emoji)
-	codePoint := strings.ToLower(emojiInfo.CodePoint)
-	return fmt.Sprintf("https://cdn.jsdelivr.net/gh/twitter/twemoji@v11.0.0/36x36/%s.png", codePoint)
+// downloadEmojiImage tries Twemoji filename variants because some assets omit text/presentation variation selectors.
+func (w *WoxImage) downloadEmojiImage(ctx context.Context, emoji string, dest string) error {
+	codePoints, err := w.emojiImageCodePointCandidates(emoji)
+	if err != nil {
+		return err
+	}
+
+	var lastErr error
+	for _, codePoint := range codePoints {
+		url := fmt.Sprintf("https://cdn.jsdelivr.net/gh/twitter/twemoji@v11.0.0/36x36/%s.png", codePoint)
+		if downloadErr := util.HttpDownload(ctx, url, dest); downloadErr == nil {
+			return nil
+		} else {
+			lastErr = downloadErr
+		}
+	}
+
+	return lastErr
+}
+
+// emojiImageCodePointCandidates returns Twemoji asset names from most specific to fallback-compatible.
+func (w *WoxImage) emojiImageCodePointCandidates(emoji string) ([]string, error) {
+	emojiInfo, err := gomoji.GetInfo(emoji)
+	if err != nil {
+		return nil, err
+	}
+
+	parts := strings.Fields(strings.ToLower(emojiInfo.CodePoint))
+	if len(parts) == 0 {
+		return nil, fmt.Errorf("empty emoji codepoint: %s", emoji)
+	}
+
+	codePoint := strings.Join(parts, "-")
+	candidates := []string{codePoint}
+	withoutVariation := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part != "fe0e" && part != "fe0f" {
+			withoutVariation = append(withoutVariation, part)
+		}
+	}
+	if len(withoutVariation) > 0 {
+		fallbackCodePoint := strings.Join(withoutVariation, "-")
+		if fallbackCodePoint != codePoint {
+			candidates = append(candidates, fallbackCodePoint)
+		}
+	}
+
+	return candidates, nil
 }
 
 func (w *WoxImage) urlImageCachePath(rawURL string) (string, error) {

@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 	"wox/analytics"
 	"wox/common"
 	"wox/diagnostic"
@@ -67,6 +68,8 @@ type Manager struct {
 	activeWindowSnapshotMu  sync.RWMutex
 	activeWindowSnapshotSeq uint64
 	pendingStartupNotify    *common.NotifyMsg
+	trayEmojiWarmMu         sync.Mutex
+	trayEmojiWarmInFlight   map[string]struct{}
 }
 
 func GetUIManager() *Manager {
@@ -1369,6 +1372,9 @@ func (m *Manager) toTrayIconBytes(ctx context.Context, icon common.WoxImage) []b
 
 	img, err := icon.ToImageWithoutRemoteFetch()
 	if err != nil {
+		if icon.ImageType == common.WoxImageTypeEmoji {
+			m.warmTrayEmojiIconCache(ctx, icon)
+		}
 		logger.Warn(ctx, fmt.Sprintf("failed to parse tray query icon, fallback to app icon: %s", err.Error()))
 		return resource.GetAppIcon()
 	}
@@ -1389,6 +1395,42 @@ func (m *Manager) toTrayIconBytes(ctx context.Context, icon common.WoxImage) []b
 	}
 
 	return buf.Bytes()
+}
+
+// warmTrayEmojiIconCache keeps tray refresh local-first while still allowing emoji icons to resolve after the Twemoji PNG cache is ready.
+func (m *Manager) warmTrayEmojiIconCache(ctx context.Context, icon common.WoxImage) {
+	iconKey := icon.String()
+	m.trayEmojiWarmMu.Lock()
+	if m.trayEmojiWarmInFlight == nil {
+		m.trayEmojiWarmInFlight = map[string]struct{}{}
+	}
+	if _, exists := m.trayEmojiWarmInFlight[iconKey]; exists {
+		m.trayEmojiWarmMu.Unlock()
+		return
+	}
+	m.trayEmojiWarmInFlight[iconKey] = struct{}{}
+	m.trayEmojiWarmMu.Unlock()
+
+	util.Go(ctx, "warm tray query emoji icon cache", func() {
+		defer func() {
+			m.trayEmojiWarmMu.Lock()
+			delete(m.trayEmojiWarmInFlight, iconKey)
+			m.trayEmojiWarmMu.Unlock()
+		}()
+
+		warmCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+
+		if _, err := icon.ToImageWithContext(warmCtx); err != nil {
+			logger.Warn(ctx, fmt.Sprintf("failed to warm tray query emoji icon cache: %s", err.Error()))
+			return
+		}
+
+		if setting.GetSettingManager().GetWoxSetting(ctx).ShowTray.Get() {
+			logger.Info(ctx, fmt.Sprintf("warmed tray query emoji icon cache, refreshing tray query icons: %s", icon.ImageData))
+			m.refreshTrayQueryIcons(ctx)
+		}
+	})
 }
 
 func (m *Manager) toMacOSTrayVectorBytes(ctx context.Context, icon common.WoxImage) ([]byte, bool) {
