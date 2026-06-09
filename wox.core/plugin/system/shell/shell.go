@@ -162,6 +162,10 @@ func (s *ShellPlugin) GetMetadata() plugin.Metadata {
 									Type:  validator.PluginSettingValidatorTypeNotEmpty,
 									Value: &validator.PluginSettingValidatorNotEmpty{},
 								},
+								{
+									Type:  validator.PluginSettingValidatorTypeUnique,
+									Value: &validator.PluginSettingValidatorUnique{},
+								},
 							},
 						},
 						{
@@ -221,6 +225,23 @@ func getDefaultInterpreter() string {
 		return "bash"
 	}
 	return "bash"
+}
+
+// validateShellCommandAliases keeps command lookup deterministic because aliases are matched case-insensitively.
+func validateShellCommandAliases(ctx context.Context, commands []shellCommand) error {
+	seen := make(map[string]struct{}, len(commands))
+	for _, command := range commands {
+		alias := strings.ToLower(strings.TrimSpace(command.Alias))
+		if alias == "" {
+			continue
+		}
+		if _, exists := seen[alias]; exists {
+			return fmt.Errorf(i18n.GetI18nManager().TranslateWox(ctx, "ui_validator_value_must_be_unique"))
+		}
+		seen[alias] = struct{}{}
+	}
+
+	return nil
 }
 
 // getCommandInterpreterOptions includes the global default option for saved commands.
@@ -789,6 +810,10 @@ func (s *ShellPlugin) deleteConfiguredCommand(ctx context.Context, commandIndex 
 
 // saveConfiguredCommands writes the Shell command setting table as JSON.
 func (s *ShellPlugin) saveConfiguredCommands(ctx context.Context, commands []shellCommand) error {
+	if err := validateShellCommandAliases(ctx, commands); err != nil {
+		return err
+	}
+
 	data, err := json.Marshal(commands)
 	if err != nil {
 		return err

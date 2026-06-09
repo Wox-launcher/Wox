@@ -1677,6 +1677,7 @@
   "ui_validator_must_be_integer": "Значение должно быть целым числом",
   "ui_validator_must_be_number": "Значение должно быть числом",
   "ui_validator_value_can_not_be_empty": "Значение не может быть пустым",
+  "ui_validator_value_must_be_unique": "Значение должно быть уникальным",
   "ui_screenshot_tool_select": "Выбрать",
   "ui_screenshot_tool_rectangle": "Прямоугольник",
   "ui_screenshot_tool_ellipse": "Эллипс",

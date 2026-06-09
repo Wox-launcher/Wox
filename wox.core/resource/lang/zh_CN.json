@@ -1780,6 +1780,7 @@
   "ui_validator_must_be_integer": "值必须是整数",
   "ui_validator_must_be_number": "值必须是数字",
   "ui_validator_value_can_not_be_empty": "值不能为空",
+  "ui_validator_value_must_be_unique": "值不能重复",
   "ui_screenshot_tool_select": "选择",
   "ui_screenshot_tool_rectangle": "矩形",
   "ui_screenshot_tool_ellipse": "椭圆",

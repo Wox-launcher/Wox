@@ -2,10 +2,8 @@
 
 ## v2.1.2-beta.2 - 
 
-- Add
-  - [`Media Player`] Add Windows media session integration so users can view the current track, see artwork, and control playback with play, pause, next, and previous actions from Wox.
-
 - Improve
+  - [`Media Player`] Improve Windows media session integration so users can view the current track, see artwork, and control playback with play, pause, next, and previous actions from Wox.
   - [`Explorer`] Improve open/save dialog workflows with type-to-search hints, faster dialog path detection, quick folder jumps, and selection highlighting inside the active dialog.
   - [`Preview`] Improve preview metadata by using tag-style pills across AI Command, Clipboard, Selection, Shell, Update, Media Player, and Node.js plugin SDK previews.
   - [`PDF`] Improve PDF file preview by rendering PDFs through the shared WebView preview path.
@@ -23,7 +21,6 @@
   - [`Theme`] Add a theme editor with live launcher preview, color controls, save-as and overwrite flows, and wallpaper-aware previews for customizing Wox themes #4421
   - [`Window Manager`] Add a Window Manager plugin to move, resize, minimize, maximize, restore, and send the active window between displays from launcher commands.
   - [`Selection`] Add Space Quick Look on Windows so users can preview a selected file from File Explorer or open/save dialogs by pressing Space.
-    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/selection_quick_look.mp4)
   - [`Attention`] Add persistent Attention items so plugins can surface follow-up tasks with an unread badge and an inbox that keeps items until users open or mark them read.
   - [`Result Drag`] Add native file drag export for launcher results, allowing file-backed results from Clipboard and plugins to be dragged directly to folders or other apps.
   - [`Update`] Add update channels so users can stay on stable releases or opt into beta prereleases.

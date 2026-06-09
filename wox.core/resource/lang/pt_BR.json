@@ -1677,6 +1677,7 @@
   "ui_validator_must_be_integer": "O valor deve ser um número inteiro",
   "ui_validator_must_be_number": "O valor deve ser um número",
   "ui_validator_value_can_not_be_empty": "O valor não pode estar vazio",
+  "ui_validator_value_must_be_unique": "O valor deve ser único",
   "ui_screenshot_tool_select": "Selecionar",
   "ui_screenshot_tool_rectangle": "Retângulo",
   "ui_screenshot_tool_ellipse": "Elipse",

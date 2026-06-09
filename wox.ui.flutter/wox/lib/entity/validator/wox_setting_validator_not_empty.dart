@@ -2,7 +2,7 @@ import 'package:wox/entity/validator/wox_setting_validator.dart';
 
 class PluginSettingValidatorNotEmpty implements PluginSettingValidator {
   @override
-  String validate(dynamic value) {
+  String validate(dynamic value, {PluginSettingValidationContext? context}) {
     if (value is String) {
       if (value.trim().isEmpty) {
         return "i18n:ui_validator_value_can_not_be_empty";

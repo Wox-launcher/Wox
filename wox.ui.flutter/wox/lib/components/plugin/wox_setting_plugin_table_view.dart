@@ -574,6 +574,19 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     return updateConfig(item.key, json.encode(freshRows));
   }
 
+  List<Map<String, dynamic>> _buildValidationRows() {
+    final rows = <Map<String, dynamic>>[];
+    for (final row in decodeRowsJson(getSetting(item.key))) {
+      if (row is Map<String, dynamic>) {
+        rows.add(Map<String, dynamic>.from(row));
+      } else if (row is Map) {
+        rows.add(Map<String, dynamic>.from(row));
+      }
+    }
+
+    return rows;
+  }
+
   Future<void> _showEditRowDialog(BuildContext context, Map<String, dynamic> row) async {
     final originalRow = json.decode(json.encode(row)) as Map<String, dynamic>;
     originalRow.remove(rowUniqueIdKey);
@@ -591,6 +604,8 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
         return WoxSettingPluginTableUpdate(
           item: item,
           row: Map<String, dynamic>.from(originalRow),
+          existingRows: _buildValidationRows(),
+          originalRow: Map<String, dynamic>.from(originalRow),
           onUpdateValidate: onUpdateValidate,
           onUpdate: (key, value) async => _saveEditedRow(originalRow, value),
         );
@@ -603,6 +618,8 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
   Future<void> _showCloneRowDialog(BuildContext context, Map<String, dynamic> row) async {
     final clonedRow = json.decode(json.encode(row)) as Map<String, dynamic>;
     clonedRow.remove(rowUniqueIdKey);
+    // Original-value markers belong to edit validation; carrying them into clone creation can mask duplicates.
+    clonedRow.removeWhere((key, value) => key.startsWith("_wox_original_"));
 
     if (customCreateDialogBuilder != null) {
       await customCreateDialogBuilder!(context, _saveNewRow, initialRow: Map<String, dynamic>.from(clonedRow));
@@ -623,6 +640,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
         return WoxSettingPluginTableUpdate(
           item: item,
           row: Map<String, dynamic>.from(clonedRow),
+          existingRows: _buildValidationRows(),
           onUpdateValidate: onUpdateValidate,
           onUpdate: (key, value) async => _saveNewRow(value),
         );
@@ -1102,7 +1120,13 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
           context: context,
           barrierColor: getThemePopupBarrierColor(),
           builder: (context) {
-            return WoxSettingPluginTableUpdate(item: item, row: const {}, onUpdateValidate: onUpdateValidate, onUpdate: (key, row) async => _saveNewRow(row));
+            return WoxSettingPluginTableUpdate(
+              item: item,
+              row: const {},
+              existingRows: _buildValidationRows(),
+              onUpdateValidate: onUpdateValidate,
+              onUpdate: (key, row) async => _saveNewRow(row),
+            );
           },
         );
         WoxSettingFocusUtil.restoreIfInSettingView();

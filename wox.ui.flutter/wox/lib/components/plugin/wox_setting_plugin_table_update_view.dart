@@ -34,10 +34,20 @@ import 'package:get/get.dart';
 class WoxSettingPluginTableUpdate extends StatefulWidget {
   final PluginSettingValueTable item;
   final Map<String, dynamic> row;
+  final List<Map<String, dynamic>> existingRows;
+  final Map<String, dynamic> originalRow;
   final Future<String?> Function(String key, Map<String, dynamic> row) onUpdate;
   final Future<List<PluginSettingTableValidationError>> Function(Map<String, dynamic> rowValues)? onUpdateValidate;
 
-  const WoxSettingPluginTableUpdate({super.key, required this.item, required this.row, required this.onUpdate, this.onUpdateValidate});
+  const WoxSettingPluginTableUpdate({
+    super.key,
+    required this.item,
+    required this.row,
+    required this.onUpdate,
+    this.existingRows = const [],
+    this.originalRow = const {},
+    this.onUpdateValidate,
+  });
 
   @override
   State<WoxSettingPluginTableUpdate> createState() => _WoxSettingPluginTableUpdateState();
@@ -125,7 +135,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
         _focusNodes[column.key] = FocusNode();
         _focusNodes[column.key]!.addListener(() {
           if (!_focusNodes[column.key]!.hasFocus) {
-            setFieldValidationError(column.key, validateValue(textboxEditingController[column.key]!.text, column.validators));
+            setFieldValidationError(column.key, validateValue(textboxEditingController[column.key]!.text, column));
             setState(() {});
           }
         });
@@ -147,7 +157,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
           final focusKey = column.key + i.toString();
           _focusNodes[focusKey]!.addListener(() {
             if (!_focusNodes[focusKey]!.hasFocus) {
-              setFieldValidationError(column.key, validateValue(columnValues, column.validators));
+              setFieldValidationError(column.key, validateValue(columnValues, column));
               setState(() {});
             }
           });
@@ -296,7 +306,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
       updateTextValue(action.targetKey, mappedValue);
       final targetColumn = getColumn(action.targetKey);
       if (targetColumn != null) {
-        setFieldValidationError(action.targetKey, validateValue(mappedValue, targetColumn.validators));
+        setFieldValidationError(action.targetKey, validateValue(mappedValue, targetColumn));
       }
     }
   }
@@ -305,8 +315,12 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
     applySelectColumnChangeActions(column, force: true, initOnly: true);
   }
 
-  String validateValue(dynamic value, List<PluginSettingValidatorItem> validators) {
-    return PluginSettingValidators.validateAll(value, validators);
+  String validateValue(dynamic value, PluginSettingValueTableColumn column) {
+    return PluginSettingValidators.validateAll(
+      value,
+      column.validators,
+      context: PluginSettingValidationContext(tableRows: widget.existingRows, originalTableRow: widget.originalRow, tableColumnKey: column.key),
+    );
   }
 
   void setFieldValidationError(String key, String errorMessage) {
@@ -406,7 +420,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
     // validate field validators first
     for (var column in columns) {
       if (column.validators.isNotEmpty) {
-        setFieldValidationError(column.key, validateValue(getValue(column.key), column.validators));
+        setFieldValidationError(column.key, validateValue(getValue(column.key), column));
       }
     }
     if (fieldValidationErrors.isNotEmpty) {
@@ -508,7 +522,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
         source: source,
         onChanged: (value) {
           updateValue(column.key, value);
-          setFieldValidationError(column.key, validateValue(value, column.validators));
+          setFieldValidationError(column.key, validateValue(value, column));
           setState(() {});
         },
       ),
@@ -525,7 +539,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
             maxLines: column.textMaxLines,
             onChanged: (value) {
               updateValue(column.key, value);
-              setFieldValidationError(column.key, validateValue(value, column.validators));
+              setFieldValidationError(column.key, validateValue(value, column));
               setState(() {});
             },
           ),
@@ -539,7 +553,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
           value: getValueBool(column.key),
           onChanged: (value) {
             updateValue(column.key, value);
-            setFieldValidationError(column.key, validateValue(value, column.validators));
+            setFieldValidationError(column.key, validateValue(value, column));
             setState(() {});
           },
         );
@@ -550,7 +564,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
           tipPosition: WoxHotkeyRecorderTipPosition.right,
           onHotKeyRecorded: (hotkey) {
             updateValue(column.key, hotkey);
-            setFieldValidationError(column.key, validateValue(hotkey, column.validators));
+            setFieldValidationError(column.key, validateValue(hotkey, column));
             setState(() {});
           },
         );
@@ -565,7 +579,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
             changeButtonTextKey: 'ui_runtime_browse',
             onChanged: (path) {
               updateValue(column.key, path);
-              setFieldValidationError(column.key, validateValue(path, column.validators));
+              setFieldValidationError(column.key, validateValue(path, column));
               setState(() {});
             },
           ),
@@ -577,7 +591,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
             onChanged: (app) {
               final appJson = app.toJson();
               updateValue(column.key, appJson);
-              setFieldValidationError(column.key, validateValue(appJson, column.validators));
+              setFieldValidationError(column.key, validateValue(appJson, column));
               setState(() {});
             },
           ),
@@ -592,7 +606,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
               onChanged: (value) {
                 updateValue(column.key, value);
                 applySelectColumnChangeActions(column);
-                setFieldValidationError(column.key, validateValue(value, column.validators));
+                setFieldValidationError(column.key, validateValue(value, column));
                 setState(() {});
               },
             ),
@@ -614,7 +628,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                 onChanged: (value) {
                   updateValue(column.key, value);
                   applySelectColumnChangeActions(column);
-                  setFieldValidationError(column.key, validateValue(value ?? "", column.validators));
+                  setFieldValidationError(column.key, validateValue(value ?? "", column));
                   setState(() {});
                 },
                 items:
@@ -642,14 +656,14 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                 }
 
                 updateValue(column.key, modelJson);
-                setFieldValidationError(column.key, validateValue(modelJson, column.validators));
+                setFieldValidationError(column.key, validateValue(modelJson, column));
                 if (mounted) {
                   setState(() {});
                 }
               },
               onModelSelected: (modelJson) {
                 updateValue(column.key, modelJson);
-                setFieldValidationError(column.key, validateValue(modelJson, column.validators));
+                setFieldValidationError(column.key, validateValue(modelJson, column));
                 setState(() {});
               },
             ),
@@ -695,7 +709,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                                 selectedTools.remove(tool.name);
                               }
                               updateValue(column.key, selectedTools);
-                              setFieldValidationError(column.key, validateValue(selectedTools, column.validators));
+                              setFieldValidationError(column.key, validateValue(selectedTools, column));
                             });
                           },
                           title: tool.name,
@@ -714,7 +728,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
             value: getWoxImageValue(column.key),
             onChanged: (newImage) {
               updateValue(column.key, newImage);
-              setFieldValidationError(column.key, validateValue(newImage, column.validators));
+              setFieldValidationError(column.key, validateValue(newImage, column));
               setState(() {});
             },
           ),
@@ -738,7 +752,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                           style: TextStyle(overflow: TextOverflow.ellipsis, color: getThemeTextColor()),
                           onChanged: (value) {
                             columnValues[i] = value;
-                            setFieldValidationError(column.key, validateValue(columnValues, column.validators));
+                            setFieldValidationError(column.key, validateValue(columnValues, column));
                             setState(() {});
                           },
                         ),
@@ -750,7 +764,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                           //remove controller
                           textboxEditingController.remove(column.key + i.toString());
                           values[column.key] = columnValues;
-                          setFieldValidationError(column.key, validateValue(columnValues, column.validators));
+                          setFieldValidationError(column.key, validateValue(columnValues, column));
                           setState(() {});
                         },
                       ),
@@ -762,7 +776,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                             columnValues.add("");
                             textboxEditingController[column.key + (columnValues.length - 1).toString()] = TextEditingController();
                             values[column.key] = columnValues;
-                            setFieldValidationError(column.key, validateValue(columnValues, column.validators));
+                            setFieldValidationError(column.key, validateValue(columnValues, column));
                             setState(() {});
                           },
                         ),
@@ -776,7 +790,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                   onPressed: () {
                     columnValues.add("");
                     values[column.key] = columnValues;
-                    setFieldValidationError(column.key, validateValue(columnValues, column.validators));
+                    setFieldValidationError(column.key, validateValue(columnValues, column));
                     setState(() {});
                   },
                 ),
