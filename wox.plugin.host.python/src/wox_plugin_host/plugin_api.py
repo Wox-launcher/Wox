@@ -97,6 +97,7 @@ class PluginAPI(PublicAPI):
             "queryType": query.query_type,
             "queryText": query.query_text,
             "querySelection": (query.query_selection.__dict__ if query.query_selection else None),
+            "queryContextData": json.dumps(query.context_data or {}),
         }
         await self.invoke_method(ctx, "ChangeQuery", params)
 

@@ -100,6 +100,11 @@ type Query struct {
 	// strings to keep the plugin-facing API close to Env-style key/value data;
 	// multi-select refinements are encoded as comma-separated strings.
 	Refinements map[string]string
+
+	// ContextData carries hidden query-scoped data. Unlike Refinements, this is
+	// not rendered by the UI and is intended for plugin handoffs such as a shell
+	// working directory.
+	ContextData common.ContextData
 }
 
 func (q *Query) IsGlobalQuery() bool {

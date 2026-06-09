@@ -14,6 +14,7 @@ import (
 	"wox/common"
 	"wox/plugin"
 	"wox/plugin/system/file_search/indexpolicy"
+	shellplugin "wox/plugin/system/shell"
 	"wox/setting"
 	"wox/setting/definition"
 	"wox/setting/validator"
@@ -355,6 +356,7 @@ func (c *FileSearchPlugin) buildFileSearchResultActions(ctx context.Context, ite
 			Hotkey: util.PrimaryHotkey("enter"),
 		})
 	}
+	actions = append(actions, c.buildExecuteCommandAtLocationAction(item))
 
 	actions = append(actions, plugin.QueryResultAction{
 		Name: "i18n:plugin_clipboard_delete",
@@ -398,6 +400,46 @@ func (c *FileSearchPlugin) buildFileSearchResultActions(ctx context.Context, ite
 	)
 
 	return actions
+}
+
+// buildExecuteCommandAtLocationAction hands the selected filesystem location to Shell without exposing it in the visible query.
+func (c *FileSearchPlugin) buildExecuteCommandAtLocationAction(item filesearch.SearchResult) plugin.QueryResultAction {
+	workingDirectory := item.Path
+	if !item.IsDir {
+		workingDirectory = filepath.Dir(item.Path)
+	}
+
+	return plugin.QueryResultAction{
+		Name:                   "i18n:plugin_file_execute_command_here",
+		Icon:                   common.PluginShellIcon,
+		PreventHideAfterAction: true,
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			result, err := c.api.InvokePluginCommand(ctx, plugin.PluginCommandRequest{
+				PluginId: shellplugin.PluginID,
+				Command:  shellplugin.PluginCommandPrepareCommandAtDirectory,
+				Data: common.ContextData{
+					shellplugin.PluginCommandDataWorkingDirectory: workingDirectory,
+				},
+			})
+			if err != nil {
+				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to invoke shell plugin command: %s", err.Error()))
+				c.api.Notify(ctx, err.Error())
+				return
+			}
+			if !result.Handled {
+				message := result.Message
+				if message == "" {
+					message = "shell plugin command was not handled"
+				}
+				c.api.Log(ctx, plugin.LogLevelWarning, message)
+				c.api.Notify(ctx, message)
+				return
+			}
+			if result.Message != "" {
+				c.api.Notify(ctx, result.Message)
+			}
+		},
+	}
 }
 
 func ensureFileSearchFolderBrowseQuery(folderPath string) string {

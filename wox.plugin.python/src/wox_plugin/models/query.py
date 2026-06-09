@@ -468,6 +468,14 @@ class Query:
     comma-separated.
     """
 
+    context_data: Dict[str, str] = field(default_factory=dict)
+    """
+    Hidden query-scoped data.
+
+    Wox does not render this as UI. Plugins can use it to keep data attached
+    to a plugin-driven ChangeQuery flow, such as a shell working directory.
+    """
+
     def to_json(self) -> str:
         """
         Convert to JSON string with camelCase naming.
@@ -487,6 +495,7 @@ class Query:
                 "Command": self.command,
                 "Search": self.search,
                 "Refinements": self.refinements,
+                "ContextData": self.context_data,
             }
         )
 
@@ -526,6 +535,18 @@ class Query:
                 if values is not None:
                     refinements[key] = str(values)
 
+        context_data_raw: Any = data.get("ContextData", {})
+        if isinstance(context_data_raw, str):
+            try:
+                context_data_raw = json.loads(context_data_raw)
+            except Exception:
+                context_data_raw = {}
+        context_data: Dict[str, str] = {}
+        if isinstance(context_data_raw, dict):
+            for key, value in context_data_raw.items():
+                if isinstance(key, str) and value is not None:
+                    context_data[key] = str(value)
+
         return cls(
             id=data.get("QueryId", data.get("Id", "")),
             session_id=data.get("SessionId", ""),
@@ -537,6 +558,7 @@ class Query:
             command=data.get("Command", ""),
             search=data.get("Search", ""),
             refinements=refinements,
+            context_data=context_data,
         )
 
     def is_global_query(self) -> bool:
@@ -623,6 +645,11 @@ class ChangeQueryParam:
     Contains the text or file selection to set.
     """
 
+    context_data: Dict[str, str] = field(default_factory=dict)
+    """
+    Hidden query-scoped data to attach to the changed query.
+    """
+
     def to_json(self) -> str:
         """
         Convert to JSON string with camelCase naming.
@@ -633,6 +660,7 @@ class ChangeQueryParam:
         data = {
             "QueryType": self.query_type,
             "QueryText": self.query_text,
+            "ContextData": self.context_data,
         }
         if self.query_selection:
             data["QuerySelection"] = json.loads(self.query_selection.to_json())
@@ -654,10 +682,23 @@ class ChangeQueryParam:
         if not data.get("QueryType"):
             data["QueryType"] = QueryType.INPUT
 
+        context_data_raw: Any = data.get("ContextData", {})
+        if isinstance(context_data_raw, str):
+            try:
+                context_data_raw = json.loads(context_data_raw)
+            except Exception:
+                context_data_raw = {}
+        context_data: Dict[str, str] = {}
+        if isinstance(context_data_raw, dict):
+            for key, value in context_data_raw.items():
+                if isinstance(key, str) and value is not None:
+                    context_data[key] = str(value)
+
         return cls(
             query_type=QueryType(data.get("QueryType")),
             query_text=data.get("QueryText", ""),
             query_selection=Selection.from_json(data.get("QuerySelection", Selection().to_json())),
+            context_data=context_data,
         )
 
 

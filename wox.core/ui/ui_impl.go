@@ -77,6 +77,7 @@ func (u *uiImpl) ChangeQuery(ctx context.Context, query common.PlainQuery) {
 		"QueryType":      query.QueryType,
 		"QueryText":      query.QueryText,
 		"QuerySelection": query.QuerySelection,
+		"ContextData":    query.ContextData,
 	}
 
 	if showSource := util.GetContextShowSource(ctx); showSource != "" {
@@ -635,6 +636,7 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 	selectionParseCost := util.GetSystemTimestamp() - selectionParseStart
 
 	queryRefinements := map[string]string{}
+	contextData := common.ContextData{}
 	requestDataMarshalStart := util.GetSystemTimestamp()
 	queryRequestJson, queryRequestMarshalErr := json.Marshal(request.Data)
 	if queryRequestMarshalErr != nil {
@@ -656,6 +658,13 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 			return
 		}
 		queryRefinements = parsedRefinements
+	}
+	contextDataRaw := gjson.GetBytes(queryRequestJson, "contextData")
+	if !contextDataRaw.Exists() {
+		contextDataRaw = gjson.GetBytes(queryRequestJson, "ContextData")
+	}
+	if contextDataRaw.Exists() {
+		contextData = common.UnmarshalContextData(contextDataRaw.Raw)
 	}
 	refinementsParseCost := util.GetSystemTimestamp() - refinementsParseStart
 	skipCompletionHint := gjson.GetBytes(queryRequestJson, "skipCompletionHint").Bool()
@@ -684,6 +693,7 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 			QueryType:        plugin.QueryTypeInput,
 			QueryText:        queryText,
 			QueryRefinements: queryRefinements,
+			ContextData:      contextData,
 		}
 	case plugin.QueryTypeSelection:
 		changedQuery = common.PlainQuery{
@@ -692,6 +702,7 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 			QueryText:        queryText,
 			QuerySelection:   querySelection,
 			QueryRefinements: queryRefinements,
+			ContextData:      contextData,
 		}
 	default:
 		logger.Error(ctx, fmt.Sprintf("unsupported query type: %s", queryType))

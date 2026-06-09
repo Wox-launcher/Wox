@@ -984,6 +984,43 @@ func (m *Manager) GetPluginInstanceById(pluginId string) *Instance {
 	return nil
 }
 
+// InvokePluginCommand routes a plugin-to-plugin command to the target plugin.
+func (m *Manager) InvokePluginCommand(ctx context.Context, caller *Instance, request PluginCommandRequest) (PluginCommandResult, error) {
+	if strings.TrimSpace(request.PluginId) == "" {
+		return PluginCommandResult{}, fmt.Errorf("plugin command target is empty")
+	}
+	if strings.TrimSpace(request.Command) == "" {
+		return PluginCommandResult{}, fmt.Errorf("plugin command is empty")
+	}
+
+	target := m.GetPluginInstanceById(request.PluginId)
+	if target == nil {
+		return PluginCommandResult{}, fmt.Errorf("plugin command target not found: %s", request.PluginId)
+	}
+	if len(target.PluginCommandHandlers) == 0 {
+		return PluginCommandResult{}, fmt.Errorf("plugin command target has no handler: %s", target.Metadata.GetName(ctx))
+	}
+
+	if request.Data == nil {
+		request.Data = common.ContextData{}
+	}
+
+	callerName := ""
+	if caller != nil {
+		callerName = caller.Metadata.GetName(ctx)
+	}
+	logger.Info(ctx, fmt.Sprintf("invoke plugin command: caller=%s target=%s command=%s", callerName, target.Metadata.GetName(ctx), request.Command))
+
+	for _, handler := range target.PluginCommandHandlers {
+		result := handler(ctx, request)
+		if result.Handled {
+			return result, nil
+		}
+	}
+
+	return PluginCommandResult{Handled: false, Message: "plugin command not handled"}, nil
+}
+
 func (m *Manager) canOperateQuery(ctx context.Context, pluginInstance *Instance, query Query) bool {
 	if pluginInstance.Setting.Disabled.Get() {
 		return false
@@ -3787,6 +3824,10 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 		// an empty map so external hosts always receive an object, not JSON null.
 		refinements = map[string]string{}
 	}
+	contextData := plainQuery.ContextData
+	if contextData == nil {
+		contextData = common.ContextData{}
+	}
 
 	if plainQuery.QueryType == QueryTypeInput {
 		newQuery := plainQuery.QueryText
@@ -3803,6 +3844,7 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 		query.Id = plainQuery.QueryId
 		query.SessionId = util.GetContextSessionId(ctx)
 		query.Refinements = refinements
+		query.ContextData = contextData
 		if conflictErr := m.newTriggerKeywordConflictErrorIfNeeded(ctx, query); conflictErr != nil {
 			return query, nil, conflictErr
 		}
@@ -3829,6 +3871,7 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 			Search:         parsed.Search,
 			Selection:      plainQuery.QuerySelection,
 			Refinements:    refinements,
+			ContextData:    contextData,
 		}
 		query.SessionId = util.GetContextSessionId(ctx)
 		if conflictErr := m.newTriggerKeywordConflictErrorIfNeeded(ctx, query); conflictErr != nil {

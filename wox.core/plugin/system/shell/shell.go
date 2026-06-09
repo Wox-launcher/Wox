@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -24,6 +25,11 @@ import (
 )
 
 const (
+	PluginID                               = "8a4b5c6d-7e8f-9a0b-1c2d-3e4f5a6b7c8d"
+	PluginCommandPrepareCommandAtDirectory = "prepare_command_at_directory"
+	PluginCommandDataWorkingDirectory      = "working_directory"
+	QueryContextWorkingDirectoryKey        = "wox:shell:working_directory"
+
 	shellInterpreterSettingKey = "shell_interpreter"
 	shellCommandsSettingKey    = "shellCommands"
 	shellActionSessionIDKey    = "session_id"
@@ -91,7 +97,7 @@ type shellExecutionState struct {
 
 func (s *ShellPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:            "8a4b5c6d-7e8f-9a0b-1c2d-3e4f5a6b7c8d",
+		Id:            PluginID,
 		Name:          "i18n:plugin_shell_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",
@@ -293,6 +299,24 @@ func displayTitleForCommand(data shellContextData) string {
 	return data.Command
 }
 
+// buildShellPreviewTags builds the metadata chips shown below shell previews.
+func (s *ShellPlugin) buildShellPreviewTags(data shellContextData) []plugin.WoxPreviewTag {
+	interpreter := effectiveInterpreter(data.Interpreter, "")
+	workingDirectory := strings.TrimSpace(data.WorkingDirectory)
+	if workingDirectory == "" {
+		if currentDirectory, err := os.Getwd(); err == nil {
+			workingDirectory = currentDirectory
+		} else {
+			workingDirectory = "i18n:plugin_shell_default_working_directory"
+		}
+	}
+
+	return []plugin.WoxPreviewTag{
+		{Label: interpreter, Tooltip: "i18n:plugin_shell_property_interpreter"},
+		{Label: workingDirectory, Tooltip: "i18n:plugin_shell_property_working_directory"},
+	}
+}
+
 // shellContextDataFromActionContext keeps reused action callbacks aligned with the latest result context.
 func shellContextDataFromActionContext(actionContext plugin.ActionContext, fallback shellContextData) shellContextData {
 	data := fallback
@@ -322,6 +346,7 @@ func (s *ShellPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	s.api = initParams.API
 	s.historyManager = NewShellHistoryManager()
 	s.terminalManager = terminal.GetSessionManager()
+	s.api.OnHandlePluginCommand(ctx, s.handlePluginCommand)
 
 	// Initialize history table
 	err := s.historyManager.Init(ctx)
@@ -336,6 +361,58 @@ func (s *ShellPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	} else if deleted > 0 {
 		s.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Deleted %d old shell history records", deleted))
 	}
+}
+
+// handlePluginCommand handles plugin-to-plugin commands exposed by Shell.
+func (s *ShellPlugin) handlePluginCommand(ctx context.Context, request plugin.PluginCommandRequest) plugin.PluginCommandResult {
+	if request.Command != PluginCommandPrepareCommandAtDirectory {
+		return plugin.PluginCommandResult{Handled: false}
+	}
+
+	workingDirectory := strings.TrimSpace(request.Data[PluginCommandDataWorkingDirectory])
+	if workingDirectory == "" {
+		return plugin.PluginCommandResult{Handled: true, Message: "working directory is required"}
+	}
+	resolvedDirectory, ok := s.resolveWorkingDirectory(ctx, workingDirectory, false)
+	if !ok {
+		return plugin.PluginCommandResult{Handled: true, Message: fmt.Sprintf("invalid working directory: %s", workingDirectory)}
+	}
+
+	s.api.ChangeQuery(ctx, common.PlainQuery{
+		QueryType: plugin.QueryTypeInput,
+		QueryText: "> ",
+		ContextData: common.ContextData{
+			QueryContextWorkingDirectoryKey: resolvedDirectory,
+		},
+	})
+	return plugin.PluginCommandResult{Handled: true}
+}
+
+// resolveWorkingDirectory validates a user/plugin-provided working directory before execution.
+func (s *ShellPlugin) resolveWorkingDirectory(ctx context.Context, workingDirectory string, notify bool) (string, bool) {
+	workingDirectory = strings.TrimSpace(workingDirectory)
+	if workingDirectory == "" {
+		return "", true
+	}
+
+	cleaned, cleanErr := filepath.Abs(workingDirectory)
+	if cleanErr != nil {
+		cleaned = filepath.Clean(workingDirectory)
+	}
+	info, statErr := os.Stat(cleaned)
+	if statErr != nil || !info.IsDir() {
+		message := fmt.Sprintf("invalid shell working directory: %s", workingDirectory)
+		if statErr != nil {
+			message = fmt.Sprintf("%s (%s)", message, statErr.Error())
+		}
+		s.api.Log(ctx, plugin.LogLevelWarning, message)
+		if notify {
+			s.api.Notify(ctx, message)
+		}
+		return "", false
+	}
+
+	return cleaned, true
 }
 
 // buildEditCommandAction lets users adjust the title, interpreter, and command before running.
@@ -580,6 +657,26 @@ func (s *ShellPlugin) refreshCommandActionForms(actions []plugin.QueryResultActi
 	}
 }
 
+// getHistoryResultGroup groups shell history by recency, matching clipboard-style date buckets.
+func (s *ShellPlugin) getHistoryResultGroup(timestamp int64) (string, int64) {
+	now := util.GetSystemTimestamp()
+	if now-timestamp < 1000*60*60*24 {
+		return "i18n:plugin_shell_group_today", 90
+	}
+	if now-timestamp < 1000*60*60*24*2 {
+		return "i18n:plugin_shell_group_yesterday", 80
+	}
+	return "i18n:plugin_shell_group_history", 10
+}
+
+// getHistoryResultScore keeps default shell history ordered by most recent first.
+func (s *ShellPlugin) getHistoryResultScore(timestamp int64) int64 {
+	if timestamp <= 0 {
+		return 0
+	}
+	return timestamp / 1000
+}
+
 func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string) []plugin.QueryResult {
 	// Get recent history from database
 	histories, err := s.historyManager.GetRecentHistory(ctx, 10)
@@ -720,14 +817,19 @@ func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string) []pl
 			previewType = plugin.WoxPreviewTypeTerminal
 			previewData = s.buildTerminalPreviewData(runtimeSessionID, history.Command, history.Status)
 		}
+		group, groupScore := s.getHistoryResultGroup(history.StartTime)
 
 		results = append(results, plugin.QueryResult{
-			Title:    title,
-			SubTitle: subTitle,
-			Icon:     shellIcon,
+			Title:      title,
+			SubTitle:   subTitle,
+			Icon:       shellIcon,
+			Score:      s.getHistoryResultScore(history.StartTime),
+			Group:      group,
+			GroupScore: groupScore,
 			Preview: plugin.WoxPreview{
 				PreviewType: previewType,
 				PreviewData: previewData,
+				PreviewTags: s.buildShellPreviewTags(historyContextData),
 			},
 			Actions: actions,
 		})
@@ -757,10 +859,12 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 	}
 
 	// Create context data
+	workingDirectory := strings.TrimSpace(query.ContextData[QueryContextWorkingDirectoryKey])
 	contextData := shellContextData{
-		Command:     command,
-		Interpreter: interpreter,
-		FromHistory: false,
+		Command:          command,
+		Interpreter:      interpreter,
+		WorkingDirectory: workingDirectory,
+		FromHistory:      false,
 	}
 
 	// Build subtitle with interpreter info
@@ -772,7 +876,7 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 			Name:                   "i18n:plugin_shell_execute",
 			Icon:                   common.CorrectIcon,
 			PreventHideAfterAction: true,
-			ContextData:            s.buildActionContextData("", "", command, interpreter, "", ""),
+			ContextData:            s.buildActionContextData("", "", command, interpreter, "", workingDirectory),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if s.stopSessionByResultID(ctx, actionContext.ResultId) {
 					return
@@ -789,7 +893,7 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 			Icon:                   common.OpenIcon,
 			PreventHideAfterAction: false,
 			Hotkey:                 util.PrimaryHotkey("enter"),
-			ContextData:            s.buildActionContextData("", "", command, interpreter, "", ""),
+			ContextData:            s.buildActionContextData("", "", command, interpreter, "", workingDirectory),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				currentData := shellContextDataFromActionContext(actionContext, contextData)
 				util.Go(ctx, "execute shell command in background", func() {
@@ -802,7 +906,7 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 			Name:                   "i18n:plugin_shell_stop",
 			Icon:                   common.TerminateAppIcon,
 			PreventHideAfterAction: true,
-			ContextData:            s.buildActionContextData("", "", command, interpreter, "", ""),
+			ContextData:            s.buildActionContextData("", "", command, interpreter, "", workingDirectory),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				s.stopSessionByResultID(ctx, actionContext.ResultId)
 			},
@@ -815,7 +919,7 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 			Name:                   "i18n:plugin_shell_reexecute",
 			Icon:                   common.UpdateIcon,
 			PreventHideAfterAction: true,
-			ContextData:            s.buildActionContextData("", "", command, interpreter, "", ""),
+			ContextData:            s.buildActionContextData("", "", command, interpreter, "", workingDirectory),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if s.stopSessionByResultID(ctx, actionContext.ResultId) {
 					return
@@ -831,7 +935,7 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 			Name:                   "i18n:plugin_shell_delete",
 			Icon:                   common.TrashIcon,
 			PreventHideAfterAction: true,
-			ContextData:            s.buildActionContextData("", "", command, interpreter, "", ""),
+			ContextData:            s.buildActionContextData("", "", command, interpreter, "", workingDirectory),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				util.Go(ctx, "delete shell session from current result", func() {
 					if err := s.deleteSessionByActionContext(ctx, actionContext); err != nil {
@@ -853,6 +957,7 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 			Preview: plugin.WoxPreview{
 				PreviewType:    plugin.WoxPreviewTypeText,
 				PreviewData:    i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_enter_to_execute"),
+				PreviewTags:    s.buildShellPreviewTags(contextData),
 				ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
 			},
 			Actions: actions,
@@ -988,6 +1093,7 @@ func (s *ShellPlugin) queryCommands(ctx context.Context, query plugin.Query, int
 			Preview: plugin.WoxPreview{
 				PreviewType:    plugin.WoxPreviewTypeText,
 				PreviewData:    fmt.Sprintf("$ %s", finalCommand),
+				PreviewTags:    s.buildShellPreviewTags(contextData),
 				ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
 			},
 			Actions: actions,
@@ -1001,6 +1107,11 @@ func (s *ShellPlugin) queryCommands(ctx context.Context, query plugin.Query, int
 // executeCommandWithUpdateResult executes a shell command and updates metadata via UpdateResult.
 func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, resultId string, data shellContextData) {
 	s.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Executing shell command: %s with interpreter: %s", data.Command, data.Interpreter))
+	if resolvedDirectory, ok := s.resolveWorkingDirectory(ctx, data.WorkingDirectory, true); ok {
+		data.WorkingDirectory = resolvedDirectory
+	} else {
+		data.WorkingDirectory = ""
+	}
 
 	session, err := s.terminalManager.CreateSession(ctx, terminal.CreateSessionParams{
 		Command:          data.Command,
@@ -1075,6 +1186,7 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 		preview := plugin.WoxPreview{
 			PreviewType:    plugin.WoxPreviewTypeTerminal,
 			PreviewData:    s.buildTerminalPreviewData(session.ID, data.Command, status),
+			PreviewTags:    s.buildShellPreviewTags(data),
 			ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
 		}
 
@@ -1236,6 +1348,11 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 
 func (s *ShellPlugin) executeCommandInBackground(ctx context.Context, data shellContextData) {
 	s.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Executing shell command in background: %s with interpreter: %s", data.Command, data.Interpreter))
+	if resolvedDirectory, ok := s.resolveWorkingDirectory(ctx, data.WorkingDirectory, true); ok {
+		data.WorkingDirectory = resolvedDirectory
+	} else {
+		data.WorkingDirectory = ""
+	}
 
 	cmd := s.buildCommand(ctx, data.Interpreter, data.Command, data.WorkingDirectory)
 	setCommandProcessGroup(cmd)

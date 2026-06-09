@@ -24,6 +24,9 @@ type PlainQuery struct {
 	// public transport stays a simple string map; multi-select refinements use a
 	// comma-separated value that plugins can decode with shared helpers.
 	QueryRefinements map[string]string
+	// ContextData carries hidden query-scoped data between plugin-driven query
+	// changes and the plugin that handles the resulting query.
+	ContextData ContextData
 }
 
 var DefaultSettingWindowContext = SettingWindowContext{Path: "/"}

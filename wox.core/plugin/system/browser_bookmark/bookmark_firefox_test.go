@@ -108,6 +108,11 @@ func (m *mockAPI) OnMRURestore(
 	callback func(context.Context, plugin.MRUData) (*plugin.QueryResult, error),
 ) {
 }
+func (m *mockAPI) OnHandlePluginCommand(ctx context.Context, handler plugin.PluginCommandHandler) {
+}
+func (m *mockAPI) InvokePluginCommand(ctx context.Context, request plugin.PluginCommandRequest) (plugin.PluginCommandResult, error) {
+	return plugin.PluginCommandResult{}, nil
+}
 func (m *mockAPI) UpdateResult(ctx context.Context, result plugin.UpdatableResult) bool {
 	return false
 }

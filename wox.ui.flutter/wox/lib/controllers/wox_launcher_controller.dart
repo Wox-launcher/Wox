@@ -715,11 +715,24 @@ class WoxLauncherController extends GetxController {
     return currentScope == nextScope;
   }
 
+  // Hidden context follows the same trigger scope as refinements but is not rendered in the UI.
+  bool shouldPreserveQueryContextDataForTextChange(PlainQuery currentQueryValue, String nextText) {
+    if (currentQueryValue.contextData.isEmpty) {
+      return false;
+    }
+    return shouldPreserveQueryRefinementsForTextChange(currentQueryValue, nextText);
+  }
+
   Map<String, List<String>> cloneQueryRefinementValues(Map<String, List<String>> values) {
     return values.map((key, value) => MapEntry(key, List<String>.from(value)));
   }
 
   Map<String, String> cloneQueryRefinementPayload(Map<String, String> values) {
+    return Map<String, String>.from(values);
+  }
+
+  // Clone query context before assigning it to a new PlainQuery so later edits cannot mutate previous query snapshots.
+  Map<String, String> cloneQueryContextData(Map<String, String> values) {
     return Map<String, String>.from(values);
   }
 
@@ -2055,13 +2068,14 @@ class WoxLauncherController extends GetxController {
         WoxThemeUtil.instance.currentTheme.value.resultContainerPaddingBottom;
   }
 
-  PlainQuery cloneQuery(PlainQuery query, {String? queryId, Map<String, String>? queryRefinements}) {
+  PlainQuery cloneQuery(PlainQuery query, {String? queryId, Map<String, String>? queryRefinements, Map<String, String>? contextData}) {
     return PlainQuery(
       queryId: queryId ?? query.queryId,
       queryType: query.queryType,
       queryText: query.queryText,
       querySelection: Selection(type: query.querySelection.type, text: query.querySelection.text, filePaths: List<String>.from(query.querySelection.filePaths)),
       queryRefinements: cloneQueryRefinementPayload(queryRefinements ?? query.queryRefinements),
+      contextData: cloneQueryContextData(contextData ?? query.contextData),
     );
   }
 
@@ -2580,6 +2594,8 @@ class WoxLauncherController extends GetxController {
         shouldPreserveQueryRefinementsForTextChange(currentQuery.value, hint.completionText)
             ? cloneQueryRefinementPayload(currentQuery.value.queryRefinements)
             : <String, String>{};
+    final nextContextData =
+        shouldPreserveQueryContextDataForTextChange(currentQuery.value, hint.completionText) ? cloneQueryContextData(currentQuery.value.contextData) : <String, String>{};
     await onQueryChanged(
       traceId,
       PlainQuery(
@@ -2588,6 +2604,7 @@ class WoxLauncherController extends GetxController {
         queryText: hint.completionText,
         querySelection: Selection.empty(),
         queryRefinements: nextQueryRefinements,
+        contextData: nextContextData,
       ),
       "accept query completion hint",
       moveCursorToEnd: true,
@@ -2629,6 +2646,7 @@ class WoxLauncherController extends GetxController {
     } else {
       final nextQueryRefinements =
           shouldPreserveQueryRefinementsForTextChange(currentQuery.value, value) ? cloneQueryRefinementPayload(currentQuery.value.queryRefinements) : <String, String>{};
+      final nextContextData = shouldPreserveQueryContextDataForTextChange(currentQuery.value, value) ? cloneQueryContextData(currentQuery.value.contextData) : <String, String>{};
       final skipCompletionHint = reuseQueryCompletionHintForText(value);
       onQueryChanged(
         traceId,
@@ -2638,6 +2656,7 @@ class WoxLauncherController extends GetxController {
           queryText: value,
           querySelection: Selection.empty(),
           queryRefinements: nextQueryRefinements,
+          contextData: nextContextData,
         ),
         "user input changed",
         skipCompletionHint: skipCompletionHint,
@@ -2788,6 +2807,7 @@ class WoxLauncherController extends GetxController {
               "queryText": query.queryText,
               "querySelection": query.querySelection.toJson(),
               "queryRefinements": query.queryRefinements,
+              "contextData": query.contextData,
               "skipCompletionHint": shouldSkipCompletionHint,
             },
           ),
@@ -2843,6 +2863,7 @@ class WoxLauncherController extends GetxController {
           "queryText": query.queryText,
           "querySelection": query.querySelection.toJson(),
           "queryRefinements": query.queryRefinements,
+          "contextData": query.contextData,
           "skipCompletionHint": shouldSkipCompletionHint,
         },
       ),
@@ -2867,6 +2888,7 @@ class WoxLauncherController extends GetxController {
       queryText: currentQueryValue.queryText,
       querySelection: currentQueryValue.querySelection,
       queryRefinements: cloneQueryRefinementPayload(currentQueryValue.queryRefinements),
+      contextData: cloneQueryContextData(currentQueryValue.contextData),
     );
 
     // Re-execute the query

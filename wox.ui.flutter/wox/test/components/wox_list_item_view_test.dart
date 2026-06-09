@@ -75,6 +75,7 @@ WoxSetting _setting({required int appWidth}) {
     hideOnLostFocus: false,
     showTray: false,
     langCode: 'en_US',
+    releaseChannel: 'stable',
     queryHotkeys: [],
     queryShortcuts: [],
     trayQueries: [],

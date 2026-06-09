@@ -365,6 +365,14 @@ export interface Query {
   Refinements?: { [key: string]: string }
 
   /**
+   * Hidden query-scoped data.
+   *
+   * Wox does not render this as UI. Plugins can use it to keep data attached
+   * to a plugin-driven ChangeQuery flow, such as a shell working directory.
+   */
+  ContextData?: MapString
+
+  /**
    * Check if this is a global query (no trigger keyword).
    *
    * @returns true if triggered globally, false if triggered by keyword
@@ -1246,6 +1254,11 @@ export interface ChangeQueryParam {
    * Only used when QueryType is "selection".
    */
   QuerySelection?: Selection
+
+  /**
+   * Hidden query-scoped data to attach to the changed query.
+   */
+  ContextData?: MapString
 }
 
 export interface RefreshQueryParam {

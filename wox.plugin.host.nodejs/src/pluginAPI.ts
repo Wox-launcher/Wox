@@ -80,7 +80,8 @@ export class PluginAPI implements PublicAPI {
     await this.invokeMethod(ctx, "ChangeQuery", {
       queryType: query.QueryType,
       queryText: query.QueryText === undefined ? "" : query.QueryText,
-      querySelection: JSON.stringify(query.QuerySelection)
+      querySelection: JSON.stringify(query.QuerySelection),
+      queryContextData: JSON.stringify(query.ContextData ?? {})
     })
   }
 
