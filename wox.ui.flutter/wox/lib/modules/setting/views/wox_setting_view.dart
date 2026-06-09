@@ -415,6 +415,12 @@ class _WoxSettingViewState extends State<WoxSettingView> {
   }
 
   bool _handleHardwareKeyboardEvent(KeyEvent event) {
+    if (_isSearchFocusShortcut(event) && _isActiveSettingRoute() && !_hasSettingsDialogRoute()) {
+      if (event is KeyDownEvent || event is KeyRepeatEvent) {
+        _focusSettingSearchFromShortcut();
+      }
+      return true;
+    }
     if (controller.settingSearchFocusNode.hasFocus && (event.logicalKey == LogicalKeyboardKey.arrowDown || event.logicalKey == LogicalKeyboardKey.arrowUp)) {
       return false;
     }

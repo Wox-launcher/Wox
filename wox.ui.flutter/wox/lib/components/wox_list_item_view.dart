@@ -241,8 +241,10 @@ class WoxListItemView extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final rowWidth = constraints.maxWidth.isFinite ? constraints.maxWidth : WoxSettingUtil.instance.currentSetting.appWidth.toDouble();
+          final tailWidthRatio = isActionList ? 0.45 : 1 / 3;
           // Preview and action layouts can be narrower than the configured app width, so cap tails by the actual row width while keeping them as a trailing non-flex child.
-          final maxTailWidth = math.min(WoxSettingUtil.instance.currentSetting.appWidth / 3, math.max(0.0, rowWidth / 3));
+          // Action rows need extra room for multi-key shortcuts such as Ctrl+Shift+F inside the narrower floating action panel.
+          final maxTailWidth = math.min(WoxSettingUtil.instance.currentSetting.appWidth * tailWidthRatio, math.max(0.0, rowWidth * tailWidthRatio));
           final Widget? tailsWidget = item.tails.isNotEmpty ? buildTails(maxTailWidth: maxTailWidth) : null;
 
           return Row(children: [iconWidget, textWidget, if (tailsWidget != null) tailsWidget, if (quickSelectWidget != null) quickSelectWidget]);

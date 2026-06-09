@@ -467,7 +467,7 @@ class _WoxTerminalPreviewViewState extends State<WoxTerminalPreviewView> {
     }
 
     final fontColor = safeFromCssColor(widget.woxTheme.previewFontColor);
-    final backgroundColor = safeFromCssColor(widget.woxTheme.queryBoxBackgroundColor).withValues(alpha: 0.5);
+    final backgroundColor = fontColor.withValues(alpha: 0.035);
     final borderColor = safeFromCssColor(widget.woxTheme.previewSplitLineColor);
     final countText = localMatches.isEmpty ? "0/0" : "${currentLocalMatchIndex + 1}/${localMatches.length}";
 

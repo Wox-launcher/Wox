@@ -30,7 +30,15 @@ const (
 	shellActionHistoryIDKey    = "history_id"
 	shellActionCommandKey      = "command"
 	shellActionInterpreterKey  = "interpreter"
+	shellActionTitleKey        = "title"
+	shellActionWorkingDirKey   = "working_directory"
 	shellOutputSummaryMaxBytes = 64 * 1024
+
+	shellFormTitleKey       = "title"
+	shellFormCommandKey     = "command"
+	shellFormInterpreterKey = "interpreter"
+	shellFormWorkingDirKey  = "working_directory"
+	shellFormSilentKey      = "silent"
 )
 
 var shellIcon = common.PluginShellIcon
@@ -50,17 +58,21 @@ type ShellPlugin struct {
 }
 
 type shellContextData struct {
-	Command     string `json:"command"`
-	Interpreter string `json:"interpreter"`
-	HistoryID   string `json:"-"`
-	FromHistory bool   `json:"-"`
+	Title            string `json:"title"`
+	Command          string `json:"command"`
+	Interpreter      string `json:"interpreter"`
+	WorkingDirectory string `json:"working_directory"`
+	HistoryID        string `json:"-"`
+	FromHistory      bool   `json:"-"`
 }
 
 type shellCommand struct {
-	Alias   string `json:"Alias"`
-	Command string `json:"Command"`
-	Enabled bool   `json:"Enabled"`
-	Silent  bool   `json:"Silent"` // If true, execute in background; if false, jump to > trigger to show output
+	Alias            string `json:"Alias"`
+	Command          string `json:"Command"`
+	Interpreter      string `json:"Interpreter"`
+	WorkingDirectory string `json:"WorkingDirectory"`
+	Enabled          bool   `json:"Enabled"`
+	Silent           bool   `json:"Silent"` // If true, execute in background; if false, show output in the launcher preview.
 }
 
 type shellExecutionState struct {
@@ -155,6 +167,21 @@ func (s *ShellPlugin) GetMetadata() plugin.Metadata {
 							},
 						},
 						{
+							Key:           "Interpreter",
+							Label:         "i18n:plugin_shell_command_interpreter",
+							Tooltip:       "i18n:plugin_shell_command_interpreter_tooltip",
+							Type:          definition.PluginSettingValueTableColumnTypeSelect,
+							Width:         120,
+							SelectOptions: getCommandInterpreterOptions(),
+						},
+						{
+							Key:     "WorkingDirectory",
+							Label:   "i18n:plugin_shell_command_working_directory",
+							Tooltip: "i18n:plugin_shell_command_working_directory_tooltip",
+							Type:    definition.PluginSettingValueTableColumnTypeDirPath,
+							Width:   180,
+						},
+						{
 							Key:   "Enabled",
 							Label: "i18n:plugin_shell_command_enabled",
 							Type:  definition.PluginSettingValueTableColumnTypeCheckbox,
@@ -183,6 +210,14 @@ func getDefaultInterpreter() string {
 		return "bash"
 	}
 	return "bash"
+}
+
+// getCommandInterpreterOptions includes the global default option for saved commands.
+func getCommandInterpreterOptions() []definition.PluginSettingValueSelectOption {
+	options := []definition.PluginSettingValueSelectOption{
+		{Label: "i18n:plugin_shell_command_interpreter_default", Value: ""},
+	}
+	return append(options, getInterpreterOptions()...)
 }
 
 func getInterpreterOptions() []definition.PluginSettingValueSelectOption {
@@ -214,6 +249,75 @@ func getInterpreterOptions() []definition.PluginSettingValueSelectOption {
 	return []definition.PluginSettingValueSelectOption{}
 }
 
+// requiredTextValidator returns the shared non-empty validator for shell command forms.
+func requiredTextValidator() []validator.PluginSettingValidator {
+	return []validator.PluginSettingValidator{
+		{
+			Type:  validator.PluginSettingValidatorTypeNotEmpty,
+			Value: &validator.PluginSettingValidatorNotEmpty{},
+		},
+	}
+}
+
+// effectiveInterpreter resolves command-level interpreters before falling back to the global shell setting.
+func effectiveInterpreter(interpreter string, fallback string) string {
+	interpreter = strings.TrimSpace(interpreter)
+	if interpreter != "" {
+		return interpreter
+	}
+	fallback = strings.TrimSpace(fallback)
+	if fallback != "" {
+		return fallback
+	}
+	return getDefaultInterpreter()
+}
+
+// commandDisplayTitle derives a compact default title from a command.
+func commandDisplayTitle(command string) string {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return ""
+	}
+	if len([]rune(command)) <= 48 {
+		return command
+	}
+	return string([]rune(command)[:48])
+}
+
+// displayTitleForCommand prefers the user-provided title when rendering command execution results.
+func displayTitleForCommand(data shellContextData) string {
+	title := strings.TrimSpace(data.Title)
+	if title != "" {
+		return title
+	}
+	return data.Command
+}
+
+// shellContextDataFromActionContext keeps reused action callbacks aligned with the latest result context.
+func shellContextDataFromActionContext(actionContext plugin.ActionContext, fallback shellContextData) shellContextData {
+	data := fallback
+	if actionContext.ContextData == nil {
+		return data
+	}
+
+	if command := strings.TrimSpace(actionContext.ContextData[shellActionCommandKey]); command != "" {
+		data.Command = command
+		data.Title = strings.TrimSpace(actionContext.ContextData[shellActionTitleKey])
+	} else if title, ok := actionContext.ContextData[shellActionTitleKey]; ok {
+		data.Title = strings.TrimSpace(title)
+	}
+	if interpreter := strings.TrimSpace(actionContext.ContextData[shellActionInterpreterKey]); interpreter != "" {
+		data.Interpreter = interpreter
+	}
+	if workingDirectory, ok := actionContext.ContextData[shellActionWorkingDirKey]; ok {
+		data.WorkingDirectory = strings.TrimSpace(workingDirectory)
+	}
+	if historyID := strings.TrimSpace(actionContext.ContextData[shellActionHistoryIDKey]); historyID != "" {
+		data.HistoryID = historyID
+	}
+	return data
+}
+
 func (s *ShellPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	s.api = initParams.API
 	s.historyManager = NewShellHistoryManager()
@@ -231,6 +335,248 @@ func (s *ShellPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 		s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to enforce max history count: %s", err.Error()))
 	} else if deleted > 0 {
 		s.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Deleted %d old shell history records", deleted))
+	}
+}
+
+// buildEditCommandAction lets users adjust the title, interpreter, and command before running.
+func (s *ShellPlugin) buildEditCommandAction(data shellContextData) plugin.QueryResultAction {
+	return plugin.QueryResultAction{
+		Id:                     "edit_command",
+		Name:                   "i18n:plugin_shell_edit_command",
+		Icon:                   common.EditIcon,
+		Type:                   plugin.QueryResultActionTypeForm,
+		PreventHideAfterAction: true,
+		ContextData:            s.buildActionContextData("", data.HistoryID, data.Command, data.Interpreter, data.Title, data.WorkingDirectory),
+		Form:                   s.buildCommandEditForm(data.Title, data.Command, data.Interpreter, data.WorkingDirectory),
+		OnSubmit: func(ctx context.Context, actionContext plugin.FormActionContext) {
+			currentData := shellContextDataFromActionContext(actionContext.ActionContext, data)
+			nextData := shellContextData{
+				Title:            strings.TrimSpace(actionContext.Values[shellFormTitleKey]),
+				Command:          strings.TrimSpace(actionContext.Values[shellFormCommandKey]),
+				Interpreter:      effectiveInterpreter(actionContext.Values[shellFormInterpreterKey], currentData.Interpreter),
+				WorkingDirectory: strings.TrimSpace(actionContext.Values[shellFormWorkingDirKey]),
+				HistoryID:        currentData.HistoryID,
+			}
+			if nextData.Command == "" {
+				s.api.Notify(ctx, "i18n:plugin_shell_command_body_required")
+				return
+			}
+			util.Go(ctx, "execute edited shell command", func() {
+				s.executeCommandWithUpdateResult(ctx, actionContext.ResultId, nextData)
+			})
+		},
+	}
+}
+
+// buildAddCommandAction persists the current command as a configured Shell command.
+func (s *ShellPlugin) buildAddCommandAction(data shellContextData) plugin.QueryResultAction {
+	return plugin.QueryResultAction{
+		Id:                     "add_as_command",
+		Name:                   "i18n:plugin_shell_add_as_command",
+		Icon:                   common.PinIcon,
+		Type:                   plugin.QueryResultActionTypeForm,
+		PreventHideAfterAction: true,
+		ContextData:            s.buildActionContextData("", data.HistoryID, data.Command, data.Interpreter, data.Title, data.WorkingDirectory),
+		Form:                   s.buildAddCommandForm(data.Title, data.Command, data.Interpreter, data.WorkingDirectory),
+		OnSubmit: func(ctx context.Context, actionContext plugin.FormActionContext) {
+			currentData := shellContextDataFromActionContext(actionContext.ActionContext, data)
+			command := shellCommand{
+				Alias:            strings.TrimSpace(actionContext.Values[shellFormTitleKey]),
+				Command:          strings.TrimSpace(actionContext.Values[shellFormCommandKey]),
+				Interpreter:      strings.TrimSpace(actionContext.Values[shellFormInterpreterKey]),
+				WorkingDirectory: strings.TrimSpace(actionContext.Values[shellFormWorkingDirKey]),
+				Enabled:          true,
+				Silent:           actionContext.Values[shellFormSilentKey] == "true",
+			}
+			if command.Command == "" {
+				command.Command = currentData.Command
+			}
+			if command.Alias == "" || command.Command == "" {
+				s.api.Notify(ctx, "i18n:plugin_shell_command_required")
+				return
+			}
+			if err := s.addConfiguredCommand(ctx, command); err != nil {
+				s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to add shell command: %s", err.Error()))
+				s.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_command_add_failed"), err.Error()))
+				return
+			}
+			s.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_command_added"))
+			s.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
+		},
+	}
+}
+
+// buildRunWithInterpreterAction reruns the current command with a selected interpreter.
+func (s *ShellPlugin) buildRunWithInterpreterAction(data shellContextData) plugin.QueryResultAction {
+	return plugin.QueryResultAction{
+		Id:                     "run_with_interpreter",
+		Name:                   "i18n:plugin_shell_run_with_interpreter",
+		Icon:                   shellIcon,
+		Type:                   plugin.QueryResultActionTypeForm,
+		PreventHideAfterAction: true,
+		ContextData:            s.buildActionContextData("", data.HistoryID, data.Command, data.Interpreter, data.Title, data.WorkingDirectory),
+		Form:                   s.buildRunWithInterpreterForm(data.Interpreter),
+		OnSubmit: func(ctx context.Context, actionContext plugin.FormActionContext) {
+			currentData := shellContextDataFromActionContext(actionContext.ActionContext, data)
+			interpreter := effectiveInterpreter(actionContext.Values[shellFormInterpreterKey], currentData.Interpreter)
+			if strings.TrimSpace(currentData.Command) == "" {
+				s.api.Notify(ctx, "i18n:plugin_shell_command_body_required")
+				return
+			}
+			util.Go(ctx, "execute shell command with selected interpreter", func() {
+				s.executeCommandWithUpdateResult(ctx, actionContext.ResultId, shellContextData{
+					Title:            currentData.Title,
+					Command:          currentData.Command,
+					Interpreter:      interpreter,
+					WorkingDirectory: currentData.WorkingDirectory,
+					HistoryID:        currentData.HistoryID,
+				})
+			})
+		},
+	}
+}
+
+// buildRunWithInterpreterForm builds the interpreter selector used for one-off reruns.
+func (s *ShellPlugin) buildRunWithInterpreterForm(interpreter string) definition.PluginSettingDefinitions {
+	return definition.PluginSettingDefinitions{
+		{
+			Type: definition.PluginSettingDefinitionTypeSelect,
+			Value: &definition.PluginSettingValueSelect{
+				Key:          shellFormInterpreterKey,
+				Label:        "i18n:plugin_shell_form_interpreter",
+				DefaultValue: effectiveInterpreter(interpreter, ""),
+				Options:      getInterpreterOptions(),
+			},
+		},
+	}
+}
+
+// buildCommandEditForm builds the form used for one-off command editing.
+func (s *ShellPlugin) buildCommandEditForm(title string, command string, interpreter string, workingDirectory string) definition.PluginSettingDefinitions {
+	defaultTitle := strings.TrimSpace(title)
+	if defaultTitle == "" {
+		defaultTitle = commandDisplayTitle(command)
+	}
+	return definition.PluginSettingDefinitions{
+		{
+			Type: definition.PluginSettingDefinitionTypeTextBox,
+			Value: &definition.PluginSettingValueTextBox{
+				Key:          shellFormTitleKey,
+				Label:        "i18n:plugin_shell_form_title",
+				DefaultValue: defaultTitle,
+				Tooltip:      "i18n:plugin_shell_form_title_tooltip",
+			},
+		},
+		{
+			Type: definition.PluginSettingDefinitionTypeSelect,
+			Value: &definition.PluginSettingValueSelect{
+				Key:          shellFormInterpreterKey,
+				Label:        "i18n:plugin_shell_form_interpreter",
+				DefaultValue: effectiveInterpreter(interpreter, ""),
+				Options:      getInterpreterOptions(),
+			},
+		},
+		{
+			Type: definition.PluginSettingDefinitionTypeTextBox,
+			Value: &definition.PluginSettingValueTextBox{
+				Key:          shellFormCommandKey,
+				Label:        "i18n:plugin_shell_form_command",
+				DefaultValue: command,
+				MaxLines:     5,
+				Validators:   requiredTextValidator(),
+			},
+		},
+		{
+			Type: definition.PluginSettingDefinitionTypeTextBox,
+			Value: &definition.PluginSettingValueTextBox{
+				Key:          shellFormWorkingDirKey,
+				Label:        "i18n:plugin_shell_form_working_directory",
+				DefaultValue: strings.TrimSpace(workingDirectory),
+				Tooltip:      "i18n:plugin_shell_form_working_directory_tooltip",
+			},
+		},
+	}
+}
+
+// buildAddCommandForm builds the form used to save a command shortcut.
+func (s *ShellPlugin) buildAddCommandForm(title string, command string, interpreter string, workingDirectory string) definition.PluginSettingDefinitions {
+	alias := strings.TrimSpace(title)
+	if alias == "" {
+		alias = commandDisplayTitle(command)
+	}
+	return definition.PluginSettingDefinitions{
+		{
+			Type: definition.PluginSettingDefinitionTypeTextBox,
+			Value: &definition.PluginSettingValueTextBox{
+				Key:          shellFormTitleKey,
+				Label:        "i18n:plugin_shell_form_command_title",
+				DefaultValue: alias,
+				Validators:   requiredTextValidator(),
+			},
+		},
+		{
+			Type: definition.PluginSettingDefinitionTypeSelect,
+			Value: &definition.PluginSettingValueSelect{
+				Key:          shellFormInterpreterKey,
+				Label:        "i18n:plugin_shell_form_interpreter",
+				DefaultValue: strings.TrimSpace(interpreter),
+				Options:      getCommandInterpreterOptions(),
+			},
+		},
+		{
+			Type: definition.PluginSettingDefinitionTypeTextBox,
+			Value: &definition.PluginSettingValueTextBox{
+				Key:          shellFormCommandKey,
+				Label:        "i18n:plugin_shell_form_command",
+				DefaultValue: command,
+				MaxLines:     5,
+				Validators:   requiredTextValidator(),
+			},
+		},
+		{
+			Type: definition.PluginSettingDefinitionTypeTextBox,
+			Value: &definition.PluginSettingValueTextBox{
+				Key:          shellFormWorkingDirKey,
+				Label:        "i18n:plugin_shell_form_working_directory",
+				DefaultValue: strings.TrimSpace(workingDirectory),
+				Tooltip:      "i18n:plugin_shell_form_working_directory_tooltip",
+			},
+		},
+		{
+			Type: definition.PluginSettingDefinitionTypeCheckBox,
+			Value: &definition.PluginSettingValueCheckBox{
+				Key:          shellFormSilentKey,
+				Label:        "i18n:plugin_shell_command_silent",
+				DefaultValue: "false",
+				Tooltip:      "i18n:plugin_shell_command_silent_tooltip",
+			},
+		},
+	}
+}
+
+// addConfiguredCommand appends a shell command to the plugin setting table.
+func (s *ShellPlugin) addConfiguredCommand(ctx context.Context, command shellCommand) error {
+	commands := s.loadCommands(ctx)
+	commands = append(commands, command)
+	data, err := json.Marshal(commands)
+	if err != nil {
+		return err
+	}
+	s.api.SaveSetting(ctx, shellCommandsSettingKey, string(data), false)
+	return nil
+}
+
+// refreshCommandActionForms keeps reused form actions in sync with the latest command context.
+func (s *ShellPlugin) refreshCommandActionForms(actions []plugin.QueryResultAction, data shellContextData) {
+	for i := range actions {
+		switch actions[i].Id {
+		case "edit_command":
+			actions[i].Form = s.buildCommandEditForm(data.Title, data.Command, data.Interpreter, data.WorkingDirectory)
+		case "add_as_command":
+			actions[i].Form = s.buildAddCommandForm(data.Title, data.Command, data.Interpreter, data.WorkingDirectory)
+		case "run_with_interpreter":
+			actions[i].Form = s.buildRunWithInterpreterForm(data.Interpreter)
+		}
 	}
 }
 
@@ -301,8 +647,17 @@ func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string) []pl
 			}
 		}
 
-		title := s.buildSessionTitle(ctx, history.Command, history.Status)
+		title := s.buildSessionTitle(ctx, displayTitleForCommand(shellContextData{Title: history.Title, Command: history.Command}), history.Status)
 		subTitle := time.Unix(history.StartTime/1000, 0).Format("2006-01-02 15:04:05")
+		historyInterpreter := effectiveInterpreter(history.Interpreter, interpreter)
+		historyContextData := shellContextData{
+			Title:            history.Title,
+			Command:          history.Command,
+			Interpreter:      historyInterpreter,
+			WorkingDirectory: history.WorkingDirectory,
+			HistoryID:        history.ID,
+			FromHistory:      true,
+		}
 
 		// Build actions based on status
 		var actions []plugin.QueryResultAction
@@ -313,23 +668,19 @@ func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string) []pl
 			Name:                   "i18n:plugin_shell_reexecute",
 			Icon:                   common.UpdateIcon,
 			PreventHideAfterAction: true,
-			ContextData:            s.buildActionContextData(history.SessionID, history.ID, history.Command, interpreter),
+			ContextData:            s.buildActionContextData(history.SessionID, history.ID, history.Command, historyInterpreter, history.Title, history.WorkingDirectory),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				if s.stopSessionByHistoryID(ctx, history.ID) {
+				currentData := shellContextDataFromActionContext(actionContext, historyContextData)
+				if s.stopSessionByHistoryID(ctx, currentData.HistoryID) {
 					return
 				}
 
-				contextData := shellContextData{
-					Command:     history.Command,
-					Interpreter: interpreter,
-					HistoryID:   history.ID,
-					FromHistory: true,
-				}
 				util.Go(ctx, "re-execute shell command from history", func() {
-					s.executeCommandWithUpdateResult(ctx, actionContext.ResultId, contextData)
+					s.executeCommandWithUpdateResult(ctx, actionContext.ResultId, currentData)
 				})
 			},
 		})
+		actions = append(actions, s.buildEditCommandAction(historyContextData), s.buildAddCommandAction(historyContextData), s.buildRunWithInterpreterAction(historyContextData))
 
 		// Only add stop action if command is still running
 		if history.Status == "running" {
@@ -338,9 +689,10 @@ func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string) []pl
 				Name:                   "i18n:plugin_shell_stop",
 				Icon:                   common.TerminateAppIcon,
 				PreventHideAfterAction: true,
-				ContextData:            s.buildActionContextData(history.SessionID, history.ID, history.Command, interpreter),
+				ContextData:            s.buildActionContextData(history.SessionID, history.ID, history.Command, historyInterpreter, history.Title, history.WorkingDirectory),
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					s.stopSessionByHistoryID(ctx, history.ID)
+					currentData := shellContextDataFromActionContext(actionContext, historyContextData)
+					s.stopSessionByHistoryID(ctx, currentData.HistoryID)
 				},
 			})
 		}
@@ -350,7 +702,7 @@ func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string) []pl
 			Name:                   "i18n:plugin_shell_delete",
 			Icon:                   common.TrashIcon,
 			PreventHideAfterAction: true,
-			ContextData:            s.buildActionContextData(history.SessionID, history.ID, history.Command, interpreter),
+			ContextData:            s.buildActionContextData(history.SessionID, history.ID, history.Command, historyInterpreter, history.Title, history.WorkingDirectory),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				util.Go(ctx, "delete shell session from history", func() {
 					if err := s.deleteSessionResources(ctx, history.ID, history.SessionID, actionContext.ResultId); err != nil {
@@ -414,6 +766,84 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 	// Build subtitle with interpreter info
 	subtitle := fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_execute_with"), interpreter, command)
 
+	actions := []plugin.QueryResultAction{
+		{
+			Id:                     "execute",
+			Name:                   "i18n:plugin_shell_execute",
+			Icon:                   common.CorrectIcon,
+			PreventHideAfterAction: true,
+			ContextData:            s.buildActionContextData("", "", command, interpreter, "", ""),
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				if s.stopSessionByResultID(ctx, actionContext.ResultId) {
+					return
+				}
+				currentData := shellContextDataFromActionContext(actionContext, contextData)
+				util.Go(ctx, "execute shell command", func() {
+					s.executeCommandWithUpdateResult(ctx, actionContext.ResultId, currentData)
+				})
+			},
+		},
+		{
+			Id:                     "execute_background",
+			Name:                   "i18n:plugin_shell_execute_background",
+			Icon:                   common.OpenIcon,
+			PreventHideAfterAction: false,
+			Hotkey:                 util.PrimaryHotkey("enter"),
+			ContextData:            s.buildActionContextData("", "", command, interpreter, "", ""),
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				currentData := shellContextDataFromActionContext(actionContext, contextData)
+				util.Go(ctx, "execute shell command in background", func() {
+					s.executeCommandInBackground(ctx, currentData)
+				})
+			},
+		},
+		{
+			Id:                     "stop",
+			Name:                   "i18n:plugin_shell_stop",
+			Icon:                   common.TerminateAppIcon,
+			PreventHideAfterAction: true,
+			ContextData:            s.buildActionContextData("", "", command, interpreter, "", ""),
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				s.stopSessionByResultID(ctx, actionContext.ResultId)
+			},
+		},
+	}
+	actions = append(actions, s.buildEditCommandAction(contextData), s.buildAddCommandAction(contextData), s.buildRunWithInterpreterAction(contextData))
+	actions = append(actions,
+		plugin.QueryResultAction{
+			Id:                     "reexecute",
+			Name:                   "i18n:plugin_shell_reexecute",
+			Icon:                   common.UpdateIcon,
+			PreventHideAfterAction: true,
+			ContextData:            s.buildActionContextData("", "", command, interpreter, "", ""),
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				if s.stopSessionByResultID(ctx, actionContext.ResultId) {
+					return
+				}
+				currentData := shellContextDataFromActionContext(actionContext, contextData)
+				util.Go(ctx, "re-execute shell command", func() {
+					s.executeCommandWithUpdateResult(ctx, actionContext.ResultId, currentData)
+				})
+			},
+		},
+		plugin.QueryResultAction{
+			Id:                     "delete",
+			Name:                   "i18n:plugin_shell_delete",
+			Icon:                   common.TrashIcon,
+			PreventHideAfterAction: true,
+			ContextData:            s.buildActionContextData("", "", command, interpreter, "", ""),
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				util.Go(ctx, "delete shell session from current result", func() {
+					if err := s.deleteSessionByActionContext(ctx, actionContext); err != nil {
+						s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to delete shell session(result=%s): %s", actionContext.ResultId, err.Error()))
+						return
+					}
+					s.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: false})
+				})
+			},
+		},
+	)
+
 	return plugin.NewQueryResponse([]plugin.QueryResult{
 		{
 			Title:    command,
@@ -425,72 +855,7 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 				PreviewData:    i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_enter_to_execute"),
 				ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
 			},
-			Actions: []plugin.QueryResultAction{
-				{
-					Id:                     "execute",
-					Name:                   "i18n:plugin_shell_execute",
-					Icon:                   common.CorrectIcon,
-					PreventHideAfterAction: true,
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						if s.stopSessionByResultID(ctx, actionContext.ResultId) {
-							return
-						}
-						util.Go(ctx, "execute shell command", func() {
-							s.executeCommandWithUpdateResult(ctx, actionContext.ResultId, contextData)
-						})
-					},
-				},
-				{
-					Id:                     "execute_background",
-					Name:                   "i18n:plugin_shell_execute_background",
-					Icon:                   common.OpenIcon,
-					PreventHideAfterAction: false,
-					Hotkey:                 util.PrimaryHotkey("enter"),
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						util.Go(ctx, "execute shell command in background", func() {
-							s.executeCommandInBackground(ctx, contextData)
-						})
-					},
-				},
-				{
-					Id:                     "stop",
-					Name:                   "i18n:plugin_shell_stop",
-					Icon:                   common.TerminateAppIcon,
-					PreventHideAfterAction: true,
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						s.stopSessionByResultID(ctx, actionContext.ResultId)
-					},
-				},
-				{
-					Id:                     "reexecute",
-					Name:                   "i18n:plugin_shell_reexecute",
-					Icon:                   common.UpdateIcon,
-					PreventHideAfterAction: true,
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						if s.stopSessionByResultID(ctx, actionContext.ResultId) {
-							return
-						}
-						util.Go(ctx, "re-execute shell command", func() {
-							s.executeCommandWithUpdateResult(ctx, actionContext.ResultId, contextData)
-						})
-					},
-				},
-				{
-					Id:                     "delete",
-					Name:                   "i18n:plugin_shell_delete",
-					Icon:                   common.TrashIcon,
-					PreventHideAfterAction: true,
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						util.Go(ctx, "delete shell session from current result", func() {
-							if err := s.deleteSessionByActionContext(ctx, actionContext); err != nil {
-								s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to delete shell session(result=%s): %s", actionContext.ResultId, err.Error()))
-								return
-							}
-							s.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: false})
-						})
-					},
-				},
-			},
+			Actions: actions,
 		},
 	})
 }
@@ -545,15 +910,18 @@ func (s *ShellPlugin) queryCommands(ctx context.Context, query plugin.Query, int
 
 		// Replace {query} placeholder with query parameter
 		finalCommand := strings.ReplaceAll(cmd.Command, "{query}", queryParam)
+		commandInterpreter := effectiveInterpreter(cmd.Interpreter, interpreter)
 
 		// Create context data for execution
 		contextData := shellContextData{
-			Command:     finalCommand,
-			Interpreter: interpreter,
-			FromHistory: false,
+			Title:            cmd.Alias,
+			Command:          finalCommand,
+			Interpreter:      commandInterpreter,
+			WorkingDirectory: strings.TrimSpace(cmd.WorkingDirectory),
+			FromHistory:      false,
 		}
 
-		subtitle := fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_execute_with"), interpreter, finalCommand)
+		subtitle := fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_execute_with"), commandInterpreter, finalCommand)
 
 		// Build actions based on Silent option
 		var actions []plugin.QueryResultAction
@@ -566,26 +934,31 @@ func (s *ShellPlugin) queryCommands(ctx context.Context, query plugin.Query, int
 					Name:                   "i18n:plugin_shell_execute_background",
 					Icon:                   common.OpenIcon,
 					PreventHideAfterAction: false,
+					ContextData:            s.buildActionContextData("", "", finalCommand, commandInterpreter, cmd.Alias, cmd.WorkingDirectory),
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						currentData := shellContextDataFromActionContext(actionContext, contextData)
 						util.Go(ctx, "execute shell command in background", func() {
-							s.executeCommandInBackground(ctx, contextData)
+							s.executeCommandInBackground(ctx, currentData)
 						})
 					},
 				},
 			}
 		} else {
-			// Non-silent mode: change query to > trigger to show output
+			// Non-silent mode: execute in place so command-specific interpreters are preserved.
 			actions = []plugin.QueryResultAction{
 				{
 					Id:                     "execute",
 					Name:                   "i18n:plugin_shell_execute",
 					Icon:                   common.CorrectIcon,
 					PreventHideAfterAction: true,
+					ContextData:            s.buildActionContextData("", "", finalCommand, commandInterpreter, cmd.Alias, cmd.WorkingDirectory),
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						// Change query to > trigger with the command to show output
-						s.api.ChangeQuery(ctx, common.PlainQuery{
-							QueryType: plugin.QueryTypeInput,
-							QueryText: fmt.Sprintf("> %s", finalCommand),
+						if s.stopSessionByResultID(ctx, actionContext.ResultId) {
+							return
+						}
+						currentData := shellContextDataFromActionContext(actionContext, contextData)
+						util.Go(ctx, "execute configured shell command", func() {
+							s.executeCommandWithUpdateResult(ctx, actionContext.ResultId, currentData)
 						})
 					},
 				},
@@ -595,14 +968,17 @@ func (s *ShellPlugin) queryCommands(ctx context.Context, query plugin.Query, int
 					Icon:                   common.OpenIcon,
 					PreventHideAfterAction: false,
 					Hotkey:                 util.PrimaryHotkey("enter"),
+					ContextData:            s.buildActionContextData("", "", finalCommand, commandInterpreter, cmd.Alias, cmd.WorkingDirectory),
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						currentData := shellContextDataFromActionContext(actionContext, contextData)
 						util.Go(ctx, "execute shell command in background", func() {
-							s.executeCommandInBackground(ctx, contextData)
+							s.executeCommandInBackground(ctx, currentData)
 						})
 					},
 				},
 			}
 		}
+		actions = append(actions, s.buildEditCommandAction(contextData), s.buildAddCommandAction(contextData), s.buildRunWithInterpreterAction(contextData))
 
 		result := plugin.QueryResult{
 			Title:    cmd.Alias,
@@ -627,8 +1003,9 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 	s.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Executing shell command: %s with interpreter: %s", data.Command, data.Interpreter))
 
 	session, err := s.terminalManager.CreateSession(ctx, terminal.CreateSessionParams{
-		Command:     data.Command,
-		Interpreter: data.Interpreter,
+		Command:          data.Command,
+		Interpreter:      data.Interpreter,
+		WorkingDirectory: data.WorkingDirectory,
 	})
 	if err != nil {
 		s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to create terminal session: %s", err.Error()))
@@ -637,8 +1014,8 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 
 	startTs := util.GetSystemTimestamp()
 	historyID := data.HistoryID
-	if data.FromHistory && data.HistoryID != "" {
-		if resetErr := s.historyManager.ResetForReexecute(ctx, data.HistoryID, session.ID, data.Command, data.Interpreter, startTs, session.OutputPath); resetErr != nil {
+	if data.HistoryID != "" {
+		if resetErr := s.historyManager.ResetForReexecute(ctx, data.HistoryID, session.ID, data.Title, data.Command, data.Interpreter, data.WorkingDirectory, startTs, session.OutputPath); resetErr != nil {
 			s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to reset shell history for re-execute (id=%s): %s", data.HistoryID, resetErr.Error()))
 			historyID = ""
 		}
@@ -646,21 +1023,23 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 	if historyID == "" {
 		historyID = uuid.NewString()
 		createErr := s.historyManager.Create(ctx, &ShellHistory{
-			ID:            historyID,
-			SessionID:     session.ID,
-			Command:       data.Command,
-			Interpreter:   data.Interpreter,
-			Status:        "running",
-			StartTime:     startTs,
-			OutputSummary: "",
-			OutputPath:    session.OutputPath,
+			ID:               historyID,
+			SessionID:        session.ID,
+			Title:            data.Title,
+			Command:          data.Command,
+			Interpreter:      data.Interpreter,
+			WorkingDirectory: data.WorkingDirectory,
+			Status:           "running",
+			StartTime:        startTs,
+			OutputSummary:    "",
+			OutputPath:       session.OutputPath,
 		})
 		if createErr != nil {
 			s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to create shell history: %s", createErr.Error()))
 		}
 	}
 
-	cmd := s.buildCommand(ctx, data.Interpreter, data.Command)
+	cmd := s.buildCommand(ctx, data.Interpreter, data.Command, data.WorkingDirectory)
 	setCommandProcessGroup(cmd)
 
 	state := &shellExecutionState{
@@ -690,7 +1069,7 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 		} else {
 			status = "failed"
 		}
-		title := s.buildSessionTitle(ctx, data.Command, status)
+		title := s.buildSessionTitle(ctx, displayTitleForCommand(data), status)
 		subTitle := startTime.Format("2006-01-02 15:04:05")
 
 		preview := plugin.WoxPreview{
@@ -717,7 +1096,18 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 				actions[i].ContextData[shellActionHistoryIDKey] = historyID
 				actions[i].ContextData[shellActionCommandKey] = data.Command
 				actions[i].ContextData[shellActionInterpreterKey] = data.Interpreter
+				if strings.TrimSpace(data.WorkingDirectory) != "" {
+					actions[i].ContextData[shellActionWorkingDirKey] = data.WorkingDirectory
+				} else {
+					delete(actions[i].ContextData, shellActionWorkingDirKey)
+				}
+				if strings.TrimSpace(data.Title) != "" {
+					actions[i].ContextData[shellActionTitleKey] = data.Title
+				} else {
+					delete(actions[i].ContextData, shellActionTitleKey)
+				}
 			}
+			s.refreshCommandActionForms(actions, data)
 			if len(actions) > 0 {
 				if isRunning {
 					actions[0].Name = i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_stop")
@@ -847,7 +1237,7 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 func (s *ShellPlugin) executeCommandInBackground(ctx context.Context, data shellContextData) {
 	s.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Executing shell command in background: %s with interpreter: %s", data.Command, data.Interpreter))
 
-	cmd := s.buildCommand(ctx, data.Interpreter, data.Command)
+	cmd := s.buildCommand(ctx, data.Interpreter, data.Command, data.WorkingDirectory)
 	setCommandProcessGroup(cmd)
 
 	// Start command in background without waiting
@@ -871,27 +1261,32 @@ func (s *ShellPlugin) executeCommandInBackground(ctx context.Context, data shell
 	})
 }
 
-func (s *ShellPlugin) buildCommand(ctx context.Context, interpreter string, command string) *exec.Cmd {
+func (s *ShellPlugin) buildCommand(ctx context.Context, interpreter string, command string, workingDirectory string) *exec.Cmd {
 	command = prepareShellCommand(interpreter, command)
 
+	var cmd *exec.Cmd
 	switch interpreter {
 	case "powershell":
-		return shellutil.BuildCommandContext(ctx, "powershell", nil, "-Command", command)
+		cmd = shellutil.BuildCommandContext(ctx, "powershell", nil, "-Command", command)
 	case "cmd":
-		return shellutil.BuildCommandContext(ctx, "cmd", nil, "/C", command)
+		cmd = shellutil.BuildCommandContext(ctx, "cmd", nil, "/C", command)
 	case "bash":
-		return shellutil.BuildCommandContext(ctx, "bash", nil, "-c", command)
+		cmd = shellutil.BuildCommandContext(ctx, "bash", nil, "-c", command)
 	case "zsh":
-		return shellutil.BuildCommandContext(ctx, "zsh", nil, "-c", command)
+		cmd = shellutil.BuildCommandContext(ctx, "zsh", nil, "-c", command)
 	case "sh":
-		return shellutil.BuildCommandContext(ctx, "sh", nil, "-c", command)
+		cmd = shellutil.BuildCommandContext(ctx, "sh", nil, "-c", command)
 	case "python", "python3":
-		return shellutil.BuildCommandContext(ctx, interpreter, nil, "-c", command)
+		cmd = shellutil.BuildCommandContext(ctx, interpreter, nil, "-c", command)
 	case "node":
-		return shellutil.BuildCommandContext(ctx, "node", nil, "-e", command)
+		cmd = shellutil.BuildCommandContext(ctx, "node", nil, "-e", command)
 	default:
-		return shellutil.BuildCommandContext(ctx, interpreter, nil, "-c", command)
+		cmd = shellutil.BuildCommandContext(ctx, interpreter, nil, "-c", command)
 	}
+	if strings.TrimSpace(workingDirectory) != "" {
+		cmd.Dir = strings.TrimSpace(workingDirectory)
+	}
+	return cmd
 }
 
 func (s *ShellPlugin) pipeOutputToSession(ctx context.Context, reader io.Reader, state *shellExecutionState) {
@@ -967,7 +1362,7 @@ func (s *ShellPlugin) stopSessionByID(ctx context.Context, sessionID string) boo
 	return true
 }
 
-func (s *ShellPlugin) buildActionContextData(sessionID string, historyID string, command string, interpreter string) map[string]string {
+func (s *ShellPlugin) buildActionContextData(sessionID string, historyID string, command string, interpreter string, title string, workingDirectory string) map[string]string {
 	contextData := map[string]string{}
 	if sessionID != "" {
 		contextData[shellActionSessionIDKey] = sessionID
@@ -980,6 +1375,12 @@ func (s *ShellPlugin) buildActionContextData(sessionID string, historyID string,
 	}
 	if interpreter != "" {
 		contextData[shellActionInterpreterKey] = interpreter
+	}
+	if title != "" {
+		contextData[shellActionTitleKey] = title
+	}
+	if workingDirectory != "" {
+		contextData[shellActionWorkingDirKey] = workingDirectory
 	}
 	return contextData
 }
