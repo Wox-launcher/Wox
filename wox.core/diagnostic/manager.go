@@ -17,6 +17,7 @@ import (
 )
 
 const (
+	ArgBugReport  = "--bug-report"
 	ArgSupervisor = "--bug-aware-supervisor"
 	ArgChild      = "--bug-aware-child"
 	ArgWaitParent = "--bug-aware-wait-parent"
@@ -53,6 +54,10 @@ var manager = &Manager{}
 
 func GetManager() *Manager {
 	return manager
+}
+
+func (m *Manager) IsBugReportArg(args []string) bool {
+	return hasArg(args, ArgBugReport)
 }
 
 func (m *Manager) IsSupervisorArg(args []string) bool {

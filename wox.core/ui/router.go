@@ -104,34 +104,35 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/permission/privacy/open":       handlePermissionPrivacyOpen,
 
 	// others
-	"/":                            handleHome,
-	"/show":                        handleShow,
-	"/tooltip/show":                handleTooltipOverlayShow,
-	"/tooltip/hide":                handleTooltipOverlayHide,
-	"/ping":                        handlePing,
-	"/preview":                     handlePreview,
-	"/preview/image/overlay":       handlePreviewImageOverlay,
-	"/preview/file/media":          handlePreviewFileMedia,
-	"/image/file/icon":             handleFileIcon,
-	"/image/lazy/load":             handleLazyImageLoad,
-	"/open":                        handleOpen,
-	"/backup/now":                  handleBackupNow,
-	"/backup/restore":              handleBackupRestore,
-	"/backup/all":                  handleBackupAll,
-	"/backup/folder":               handleBackupFolder,
-	"/log/clear":                   handleLogClear,
-	"/log/open":                    handleLogOpen,
-	"/diagnostics/status":          handleDiagnosticsStatus,
-	"/diagnostics/monitor/enable":  handleDiagnosticsMonitorEnable,
-	"/diagnostics/monitor/disable": handleDiagnosticsMonitorDisable,
-	"/diagnostics/export":          handleDiagnosticsExport,
-	"/hotkey/available":            handleHotkeyAvailable,
-	"/hotkey/availability":         handleHotkeyAvailability,
-	"/glance":                      handleGlance,
-	"/glance/action":               handleGlanceAction,
-	"/updater/channel/versions":    handleUpdateChannelVersions,
-	"/deeplink":                    handleDeeplink,
-	"/version":                     handleVersion,
+	"/":                                   handleHome,
+	"/show":                               handleShow,
+	"/tooltip/show":                       handleTooltipOverlayShow,
+	"/tooltip/hide":                       handleTooltipOverlayHide,
+	"/ping":                               handlePing,
+	"/preview":                            handlePreview,
+	"/preview/image/overlay":              handlePreviewImageOverlay,
+	"/preview/file/media":                 handlePreviewFileMedia,
+	"/image/file/icon":                    handleFileIcon,
+	"/image/lazy/load":                    handleLazyImageLoad,
+	"/open":                               handleOpen,
+	"/backup/now":                         handleBackupNow,
+	"/backup/restore":                     handleBackupRestore,
+	"/backup/all":                         handleBackupAll,
+	"/backup/folder":                      handleBackupFolder,
+	"/log/clear":                          handleLogClear,
+	"/log/open":                           handleLogOpen,
+	"/diagnostics/status":                 handleDiagnosticsStatus,
+	"/diagnostics/monitor/enable":         handleDiagnosticsMonitorEnable,
+	"/diagnostics/monitor/enable-restart": handleDiagnosticsMonitorEnableRestart,
+	"/diagnostics/monitor/disable":        handleDiagnosticsMonitorDisable,
+	"/diagnostics/export":                 handleDiagnosticsExport,
+	"/hotkey/available":                   handleHotkeyAvailable,
+	"/hotkey/availability":                handleHotkeyAvailability,
+	"/glance":                             handleGlance,
+	"/glance/action":                      handleGlanceAction,
+	"/updater/channel/versions":           handleUpdateChannelVersions,
+	"/deeplink":                           handleDeeplink,
+	"/version":                            handleVersion,
 
 	// test-only triggers
 	"/test/plugin/install_local":     handleTestInstallLocalPlugin,
@@ -1625,19 +1626,46 @@ func handleDiagnosticsStatus(w http.ResponseWriter, r *http.Request) {
 
 func handleDiagnosticsMonitorEnable(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
+	state, err := enableDiagnosticsMonitor(ctx)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, state)
+}
+
+func handleDiagnosticsMonitorEnableRestart(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	state, err := enableDiagnosticsMonitor(ctx)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	if err := diagnostic.GetManager().StartSupervisorDetached(ctx, true); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, state)
+	util.Go(ctx, "restart wox for bug aware monitor", func() {
+		time.Sleep(200 * time.Millisecond)
+		GetUIManager().ExitApp(util.NewTraceContext())
+	})
+}
+
+// enableDiagnosticsMonitor keeps all HTTP entry points aligned with the system plugin's enable behavior.
+func enableDiagnosticsMonitor(ctx context.Context) (diagnostic.State, error) {
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	previousLogLevel := util.NormalizeLogLevel(woxSetting.LogLevel.Get())
 	state, err := diagnostic.GetManager().Enable(ctx, previousLogLevel)
 	if err != nil {
-		writeErrorResponse(w, err.Error())
-		return
+		return diagnostic.State{}, err
 	}
 	// New feature: API-based enabling mirrors the system plugin path so any
 	// future settings surface gets the same clean-log DEBUG session behavior.
 	woxSetting.LogLevel.Set(setting.LogLevelDebug)
 	util.GetLogger().SetLevel(setting.LogLevelDebug)
 	GetUIManager().GetUI(ctx).UpdateDiagnosticStatus(ctx, true)
-	writeSuccessResponse(w, state)
+	return state, nil
 }
 
 func handleDiagnosticsMonitorDisable(w http.ResponseWriter, r *http.Request) {
