@@ -84,7 +84,7 @@ class _ListPreviewRow extends StatelessWidget {
                     item.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: fontColor.withValues(alpha: 0.92), fontSize: metrics.resultTitleFontSize, fontWeight: FontWeight.w600, height: 1.2),
+                    style: TextStyle(color: fontColor.withValues(alpha: 0.92), fontSize: metrics.resultTitleFontSize, height: 1.2),
                   ),
                 ),
                 if (item.subtitle.isNotEmpty) ...[
@@ -150,7 +150,7 @@ class _ListPreviewRow extends StatelessWidget {
           tail.text!,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: TextStyle(color: style.textColor, fontSize: WoxInterfaceSizeUtil.instance.current.tailHotkeyFontSize, fontWeight: FontWeight.w600, height: 1.1),
+          style: TextStyle(color: style.textColor, fontSize: WoxInterfaceSizeUtil.instance.current.tailHotkeyFontSize, height: 1.1),
         ),
       ),
     );
