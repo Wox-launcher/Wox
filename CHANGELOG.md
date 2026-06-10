@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.1.2-beta.2 - 
+## v2.1.2-beta.2 - 2026-06-10
 
 - Improve
   - [`Media Player`] Improve Windows media session integration so users can view the current track, see artwork, and control playback with play, pause, next, and previous actions from Wox.
