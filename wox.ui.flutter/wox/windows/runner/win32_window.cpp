@@ -50,6 +50,42 @@ namespace
   } MY_DWM_WINDOW_CORNER_PREFERENCE;
 #endif
 
+  typedef enum
+  {
+    ACCENT_DISABLED = 0,
+    ACCENT_ENABLE_GRADIENT = 1,
+    ACCENT_ENABLE_TRANSPARENTGRADIENT = 2,
+    ACCENT_ENABLE_BLURBEHIND = 3,
+    ACCENT_ENABLE_ACRYLICBLURBEHIND = 4,
+    ACCENT_ENABLE_HOSTBACKDROP = 5,
+  } ACCENT_STATE;
+
+  typedef struct
+  {
+    ACCENT_STATE accent_state;
+    DWORD accent_flags;
+    DWORD gradient_color;
+    DWORD animation_id;
+  } ACCENT_POLICY;
+
+  typedef enum
+  {
+    WCA_UNDEFINED = 0,
+    WCA_ACCENT_POLICY = 19,
+  } WINDOWCOMPOSITIONATTRIB;
+
+  typedef struct
+  {
+    WINDOWCOMPOSITIONATTRIB attribute;
+    PVOID data;
+    SIZE_T size_of_data;
+  } WINDOWCOMPOSITIONATTRIBDATA;
+
+  using SetWindowCompositionAttribute = BOOL __stdcall(HWND hwnd, WINDOWCOMPOSITIONATTRIBDATA *data);
+
+  constexpr DWORD kWindows11BuildNumber = 22000;
+  constexpr DWORD kWin10DarkAcrylicTint = 0xCC202020;
+  constexpr DWORD kWin10LightAcrylicTint = 0xCCF5F5F5;
   constexpr const wchar_t kWindowClassName[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
 
   // The number of Win32Window objects that currently exist.
@@ -100,28 +136,75 @@ namespace
     return osvi.dwBuildNumber;
   }
 
-  // Bug fix: Windows 10 blur/acrylic paths made semi-transparent Flutter theme
-  // colors look like plain window transparency. Keep native backdrop support
-  // limited to Windows 11 Mica, where DWM provides the supported material, and
-  // leave older Windows versions on the normal opaque window background.
+  bool TryEnableAccent(HWND hwnd, ACCENT_STATE state, DWORD gradient_color, DWORD accent_flags)
+  {
+    HMODULE user32_module = GetModuleHandleW(L"user32.dll");
+    if (user32_module == nullptr)
+    {
+      return false;
+    }
+
+    auto set_window_composition_attribute = reinterpret_cast<SetWindowCompositionAttribute *>(
+        GetProcAddress(user32_module, "SetWindowCompositionAttribute"));
+    if (set_window_composition_attribute == nullptr)
+    {
+      return false;
+    }
+
+    ACCENT_POLICY policy = {};
+    policy.accent_state = state;
+    policy.accent_flags = accent_flags;
+    policy.gradient_color = gradient_color;
+
+    WINDOWCOMPOSITIONATTRIBDATA data = {};
+    data.attribute = WCA_ACCENT_POLICY;
+    data.data = &policy;
+    data.size_of_data = sizeof(policy);
+    return set_window_composition_attribute(hwnd, &data) == TRUE;
+  }
+
+  // Applies the legacy Win10 Acrylic path with a caller-provided Wox theme tint.
+  bool TryApplyWin10AcrylicBackdrop(HWND hwnd, DWORD tint)
+  {
+    if (hwnd == nullptr || GetWindowsBuildNumber() >= kWindows11BuildNumber)
+    {
+      return false;
+    }
+
+    if (TryEnableAccent(hwnd, ACCENT_ENABLE_ACRYLICBLURBEHIND, tint, 2) ||
+        TryEnableAccent(hwnd, ACCENT_ENABLE_BLURBEHIND, tint, 0))
+    {
+      MARGINS margins = {-1};
+      DwmExtendFrameIntoClientArea(hwnd, &margins);
+      return true;
+    }
+
+    return false;
+  }
+
+  // Windows 11 uses the supported DWM system backdrop API directly. On Windows 10,
+  // replicate the common Acrylic implementation used by other native components via
+  // SetWindowCompositionAttribute, with blur-behind as a safe fallback.
   void ApplyWindowBackdrop(HWND hwnd)
   {
     const DWORD build_number = GetWindowsBuildNumber();
 
-    // DWM backdrop effects are only supported on Windows 11 (build 22000) and newer.
-    if (build_number < 22000)
+    if (build_number >= kWindows11BuildNumber)
     {
+      MARGINS margins = {-1};
+      DwmExtendFrameIntoClientArea(hwnd, &margins);
+
+      int corner_preference = DWMWCP_ROUND;
+      DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corner_preference, sizeof(corner_preference));
+
+      int backdrop_type = DWMSBT_TABBEDWINDOW;
+      DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop_type, sizeof(backdrop_type));
       return;
     }
 
-    MARGINS margins = {-1};
-    DwmExtendFrameIntoClientArea(hwnd, &margins);
-
-    int cornerPreference = DWMWCP_ROUND; // Use enum value (2) from defined constants
-    DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &cornerPreference, sizeof(cornerPreference));
-
-    int backdropType = DWMSBT_TABBEDWINDOW; // Use enum value (3) from defined constants
-    DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdropType, sizeof(backdropType));
+    // Acrylic on Windows 10 typically uses an opaque-ish tint so the material reads
+    // as blurred glass rather than plain transparency under translucent app colors.
+    TryApplyWin10AcrylicBackdrop(hwnd, kWin10DarkAcrylicTint);
   }
 
 } // namespace
@@ -390,6 +473,11 @@ HWND Win32Window::GetHandle()
 void Win32Window::SetQuitOnClose(bool quit_on_close)
 {
   quit_on_close_ = quit_on_close;
+}
+
+void Win32Window::ApplyBackdropForAppearance(bool use_dark)
+{
+  TryApplyWin10AcrylicBackdrop(window_handle_, use_dark ? kWin10DarkAcrylicTint : kWin10LightAcrylicTint);
 }
 
 bool Win32Window::OnCreate()

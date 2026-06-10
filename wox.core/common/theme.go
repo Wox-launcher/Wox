@@ -6,6 +6,8 @@ import (
 	"strconv"
 )
 
+const themePlatformOverrideVariantsField = "variants"
+
 // ThemePlatformOverride preserves a raw top-level platform node from theme JSON.
 // The backend merges the node for the current OS before sending the flat theme to
 // Flutter, while keeping the raw node available so store-installed themes do not
@@ -184,8 +186,50 @@ func validateThemePlatformOverride(raw map[string]json.RawMessage, platformName 
 	}
 
 	for fieldName := range overrides {
+		if fieldName == themePlatformOverrideVariantsField {
+			if err := validateThemePlatformOverrideVariants(overrides[fieldName], platformName); err != nil {
+				return err
+			}
+			continue
+		}
 		if !themePlatformOverrideStyleFields[fieldName] {
 			return fmt.Errorf("platform theme override %q contains non-style field %q", platformName, fieldName)
+		}
+	}
+
+	return nil
+}
+
+func validateThemePlatformOverrideVariants(value json.RawMessage, platformName string) error {
+	if string(value) == "null" {
+		return fmt.Errorf("platform theme override %q variants must be a JSON object", platformName)
+	}
+
+	var variants map[string]json.RawMessage
+	if err := json.Unmarshal(value, &variants); err != nil {
+		return fmt.Errorf("platform theme override %q variants must be a JSON object: %w", platformName, err)
+	}
+	if variants == nil {
+		return fmt.Errorf("platform theme override %q variants must be a JSON object", platformName)
+	}
+
+	for variantName, variantValue := range variants {
+		if string(variantValue) == "null" {
+			return fmt.Errorf("platform theme override %q variant %q must be a JSON object", platformName, variantName)
+		}
+
+		var overrides map[string]json.RawMessage
+		if err := json.Unmarshal(variantValue, &overrides); err != nil {
+			return fmt.Errorf("platform theme override %q variant %q must be a JSON object: %w", platformName, variantName, err)
+		}
+		if overrides == nil {
+			return fmt.Errorf("platform theme override %q variant %q must be a JSON object", platformName, variantName)
+		}
+
+		for fieldName := range overrides {
+			if !themePlatformOverrideStyleFields[fieldName] {
+				return fmt.Errorf("platform theme override %q variant %q contains non-style field %q", platformName, variantName, fieldName)
+			}
 		}
 	}
 

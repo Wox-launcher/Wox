@@ -5758,6 +5758,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
         std::string appearance = *arguments;
         BOOL useDark = (appearance == "dark");
         DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &useDark, sizeof(useDark));
+        ApplyBackdropForAppearance(useDark == TRUE);
         result->Success();
       }
       else
