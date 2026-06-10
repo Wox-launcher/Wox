@@ -2163,6 +2163,13 @@ const List<_BuiltInSettingSearchDefinition> _builtInSettingSearchDefinitions = [
   ),
   _BuiltInSettingSearchDefinition(settingKey: 'MainHotkey', navPath: 'general', titleKey: 'ui_hotkey', subtitleKey: 'ui_hotkey_tips', searchKeywords: ['shortcut', 'main hotkey']),
   _BuiltInSettingSearchDefinition(
+    settingKey: 'EnableHyperKey',
+    navPath: 'general',
+    titleKey: 'ui_enable_hyper_key',
+    subtitleKey: 'ui_enable_hyper_key_tips',
+    searchKeywords: ['hyper key', 'caps lock'],
+  ),
+  _BuiltInSettingSearchDefinition(
     settingKey: 'SelectionHotkey',
     navPath: 'general',
     titleKey: 'ui_selection_hotkey',

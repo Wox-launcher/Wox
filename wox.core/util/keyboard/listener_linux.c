@@ -50,6 +50,7 @@ static int gThreadStarted = 0;
 static int gRawEnabled = 0;
 static HotkeyEntry *gHotkeys = NULL;
 static ModifierEntry gModifiers[8];
+static ModifierEntry gRawKeys[58];
 static pthread_mutex_t gRequestMutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t gRequestCond = PTHREAD_COND_INITIALIZER;
 static KeyboardRequest gRequest;
@@ -201,6 +202,30 @@ static void poll_modifier_keys(void) {
     }
 }
 
+static void poll_raw_keys(void) {
+    char keymap[32];
+    if (!gDisplay || !gRawEnabled) {
+        return;
+    }
+
+    XQueryKeymap(gDisplay, keymap);
+    for (int i = 0; i < 58; i++) {
+        if (gRawKeys[i].keycode == 0) {
+            continue;
+        }
+
+        int byte_index = gRawKeys[i].keycode / 8;
+        int bit_index = gRawKeys[i].keycode % 8;
+        int pressed = (keymap[byte_index] & (1 << bit_index)) != 0;
+        if (pressed == gRawKeys[i].pressed) {
+            continue;
+        }
+
+        gRawKeys[i].pressed = pressed;
+        keyboardHookEventCGO(pressed ? 0 : 1, gRawKeys[i].keysym, current_modifier_mask());
+    }
+}
+
 static void *keyboard_thread_main(void *arg) {
     int xfd = ConnectionNumber(gDisplay);
     while (1) {
@@ -254,6 +279,7 @@ static void *keyboard_thread_main(void *arg) {
 
         if (gRawEnabled) {
             poll_modifier_keys();
+            poll_raw_keys();
         }
     }
 
@@ -291,6 +317,20 @@ int woxLinuxEnsureKeyboardReady(char **errorOut) {
         gModifiers[i].keysym = (unsigned int)modifierSyms[i];
         gModifiers[i].keycode = XKeysymToKeycode(gDisplay, modifierSyms[i]);
         gModifiers[i].pressed = 0;
+    }
+
+    KeySym rawSyms[58] = {
+        XK_Caps_Lock,
+        XK_a, XK_b, XK_c, XK_d, XK_e, XK_f, XK_g, XK_h, XK_i, XK_j, XK_k, XK_l, XK_m,
+        XK_n, XK_o, XK_p, XK_q, XK_r, XK_s, XK_t, XK_u, XK_v, XK_w, XK_x, XK_y, XK_z,
+        XK_0, XK_1, XK_2, XK_3, XK_4, XK_5, XK_6, XK_7, XK_8, XK_9,
+        XK_space, XK_Return, XK_Escape, XK_Tab, XK_Delete, XK_Left, XK_Right, XK_Up, XK_Down,
+        XK_F1, XK_F2, XK_F3, XK_F4, XK_F5, XK_F6, XK_F7, XK_F8, XK_F9, XK_F10, XK_F11, XK_F12
+    };
+    for (int i = 0; i < 58; i++) {
+        gRawKeys[i].keysym = (unsigned int)rawSyms[i];
+        gRawKeys[i].keycode = XKeysymToKeycode(gDisplay, rawSyms[i]);
+        gRawKeys[i].pressed = 0;
     }
 
     if (pthread_create(&gThread, NULL, keyboard_thread_main, NULL) != 0) {

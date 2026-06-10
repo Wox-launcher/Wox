@@ -18,6 +18,8 @@
   "ui_attention_unread_tooltip": "Itens de atenção",
   "ui_selection_hotkey": "Atalho de seleção",
   "ui_selection_hotkey_tips": "Atalhos para executar ações em texto ou arquivos selecionados",
+  "ui_enable_hyper_key": "Hyper Key",
+  "ui_enable_hyper_key_tips": "Use Caps Lock com outra tecla como um atalho Hyper exclusivo do Wox, como Hyper+K. Pressionar apenas Caps Lock não executa nenhuma ação no Wox.",
   "ui_hotkey_ignore_apps": "Ignorar Apps no Atalho",
   "ui_hotkey_ignore_apps_tips": "Quando um destes apps estiver ativo, os atalhos globais do Wox nesta plataforma serão ignorados",
   "ui_hotkey_ignore_apps_select": "Selecionar Apps",

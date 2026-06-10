@@ -6,12 +6,12 @@ Wox already supports main hotkey, selection hotkey, query hotkeys, and double-mo
 ## Approved Approach
 Add a Wox Hyper Key mode that treats `Caps Lock + key` as a Wox-only hotkey combination. The physical Hyper Key is fixed to Caps Lock, and the stored hotkey form should preserve user intent as `hyper+key` instead of flattening it into platform modifiers.
 
-At trigger time, Wox maps `hyper+key` to the platform equivalent modifier set for matching:
+At trigger time, Wox matches `hyper+key` through its own raw Caps Lock dispatcher:
 
 - Windows/Linux: `Ctrl + Alt + Win + key`
 - macOS: `Ctrl + Option + Command + key`
 
-The UI should display Hyper Key shortcuts with a stable `Hyper` label. The storage and matching behavior matter more than decorative display for the first implementation.
+The UI should display Hyper Key shortcuts with a stable `✦` label. The storage and matching behavior matter more than decorative display for the first implementation.
 
 ## Boundaries
 - Hyper Key is always Caps Lock.
@@ -28,7 +28,7 @@ The UI should display Hyper Key shortcuts with a stable `Hyper` label. The stora
 - Native keyboard layer: use the existing raw-key listener path to detect Caps Lock state and consume Hyper Key combinations when they match Wox registrations.
 - UI recorder: when Hyper Key mode is enabled and the recorder sees Caps Lock plus an allowed key, record `hyper+key`.
 - UI display: render persisted `hyper+key` consistently in settings, result tails, and toolbar hotkey labels.
-- Availability checks: compare `hyper+key` against other Wox-owned hotkeys and against the expanded platform equivalent to avoid duplicate registrations.
+- Availability checks: compare `hyper+key` against other Wox-owned Caps Lock based hotkeys to avoid duplicate registrations.
 
 ## Expected Result
 Users can enable Hyper Key and assign shortcuts such as `hyper+k` to Wox actions. Pressing Caps Lock by itself has no Wox behavior, while pressing Caps Lock with an allowed key triggers the configured Wox hotkey without exposing a general-purpose keyboard remapper.

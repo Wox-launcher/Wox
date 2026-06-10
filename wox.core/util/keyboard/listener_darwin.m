@@ -72,6 +72,7 @@ static BOOL isModifierKeyCode(unsigned short keyCode) {
     switch (keyCode) {
         case 54:
         case 55:
+        case 57:
         case 56:
         case 58:
         case 59:
@@ -90,6 +91,8 @@ static BOOL modifierKeyPressed(unsigned short keyCode, NSEventModifierFlags flag
         case 54:
         case 55:
             return (masked & NSEventModifierFlagCommand) != 0;
+        case 57:
+            return (masked & NSEventModifierFlagCapsLock) != 0;
         case 56:
         case 60:
             return (masked & NSEventModifierFlagShift) != 0;

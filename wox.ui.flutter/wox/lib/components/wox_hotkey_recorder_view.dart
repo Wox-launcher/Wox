@@ -79,6 +79,7 @@ class _HotkeyTracker {
   final Map<PhysicalKeyboardKey, int> _synthesizedModifierReleaseTimestamp = {};
   final Map<HotKeyModifier, int> _lastModifierTapTimestamp = {};
   final Set<HotKeyModifier> _invalidModifierTaps = {};
+  bool _capsPressed = false;
   PhysicalKeyboardKey? _pendingOutOfOrderKey;
   int? _pendingOutOfOrderKeyTimestamp;
   static const int _doubleClickThreshold = 500; // milliseconds
@@ -92,8 +93,11 @@ class _HotkeyTracker {
     _synthesizedModifierReleaseTimestamp.clear();
     _lastModifierTapTimestamp.clear();
     _invalidModifierTaps.clear();
+    _capsPressed = false;
     _clearPendingOutOfOrderKey();
   }
+
+  bool get isCapsPressed => _capsPressed;
 
   /// Rebuild the active modifier snapshot from real and synthesized sources.
   void _syncPressedModifiers() {
@@ -185,9 +189,22 @@ class _HotkeyTracker {
   }
 
   /// Process a keyboard event and report both the detected hotkey and whether the event was handled.
-  _HotkeyTrackerResult processKeyEvent(KeyEvent keyEvent) {
+  bool _isHyperKeyEvent(KeyEvent keyEvent) {
+    return keyEvent.physicalKey == PhysicalKeyboardKey.capsLock || keyEvent.logicalKey == LogicalKeyboardKey.capsLock;
+  }
+
+  _HotkeyTrackerResult processKeyEvent(KeyEvent keyEvent, {required bool enableHyperKey}) {
     _pruneExpiredSynthesizedModifiers();
     _pruneExpiredPendingOutOfOrderKey();
+
+    if (_isHyperKeyEvent(keyEvent)) {
+      if (keyEvent is KeyDownEvent) {
+        _capsPressed = true;
+      } else if (keyEvent is KeyUpEvent) {
+        _capsPressed = false;
+      }
+      return const _HotkeyTrackerResult(handled: true);
+    }
 
     // Track modifier key states manually (more reliable than HardwareKeyboard.instance
     // which gets corrupted by synthesized events)
@@ -271,6 +288,12 @@ class _HotkeyTracker {
 
     // Handle normal hotkeys (modifier + key)
     if (keyEvent is! KeyUpEvent && WoxHotkey.isAllowedKey(keyEvent.physicalKey)) {
+      if (_capsPressed) {
+        _clearPendingOutOfOrderKey();
+        final hotkey = enableHyperKey ? WoxHotkey.hyperHotkeyToStr(keyEvent.physicalKey) : WoxHotkey.capsLockHotkeyToStr(keyEvent.physicalKey);
+        return _HotkeyTrackerResult(hotkey: hotkey, handled: true);
+      }
+
       if (!Platform.isWindows && _pressedModifiers.isEmpty) {
         return _HotkeyTrackerResult(handled: _stagePendingOutOfOrderKey(keyEvent));
       }
@@ -368,7 +391,7 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
   bool _handleKeyEvent(KeyEvent keyEvent) {
     if (_isFocused == false) return false;
 
-    Logger.instance.info(const UuidV4().generate(), "Hotkey recorder received Flutter key event: $keyEvent");
+    final enableHyperKey = Get.find<WoxSettingController>().woxSetting.value.enableHyperKey;
 
     // backspace to clear hotkey
     if (keyEvent.logicalKey == LogicalKeyboardKey.backspace) {
@@ -380,7 +403,7 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
     }
 
     // Process the key event
-    final result = _tracker.processKeyEvent(keyEvent);
+    final result = _tracker.processKeyEvent(keyEvent, enableHyperKey: enableHyperKey);
     if (result.hotkey == null) {
       Logger.instance.debug(const UuidV4().generate(), "Hotkey recorder did not parse a hotkey from event: $keyEvent");
       return result.handled;
@@ -455,7 +478,7 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
       child: Padding(
         padding: const EdgeInsets.fromLTRB(8.0, 4.0, 8.0, 4.0),
         child:
-            _hotKey == null || (!_hotKey!.isDoubleHotkey && !_hotKey!.isNormalHotkey && !_hotKey!.isSingleHotkey)
+            _hotKey == null || (!_hotKey!.isDoubleHotkey && !_hotKey!.isHyperHotkey && !_hotKey!.isCapsLockHotkey && !_hotKey!.isNormalHotkey && !_hotKey!.isSingleHotkey)
                 ? SizedBox(
                   width: 80,
                   height: 18,

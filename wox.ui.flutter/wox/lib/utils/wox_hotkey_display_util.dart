@@ -87,6 +87,14 @@ class WoxHotkeyDisplayUtil {
       return [for (final modifier in hotkey.normalHotkey!.modifiers ?? <HotKeyModifier>[]) modifierLabel(modifier), keyLabel(hotkey.normalHotkey!.key)];
     }
 
+    if (hotkey.isHyperHotkey) {
+      return ["✦", keyLabel(hotkey.hyperHotkey!)];
+    }
+
+    if (hotkey.isCapsLockHotkey) {
+      return ["CapsLock", keyLabel(hotkey.capsLockHotkey!)];
+    }
+
     if (hotkey.isDoubleHotkey) {
       final label = modifierLabel(hotkey.doubleHotkey!);
       return [label, label];
@@ -148,6 +156,7 @@ class WoxHotkeyDisplayUtil {
       "windows" => Platform.isWindows ? "Win" : "Super",
       "win" => Platform.isWindows ? "Win" : "Super",
       "super" => "Super",
+      "hyper" => "✦",
       "space" => "Space",
       "enter" => "⏎",
       "escape" || "esc" => "Esc",

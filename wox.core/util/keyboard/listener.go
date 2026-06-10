@@ -80,6 +80,7 @@ const (
 	KeyF10
 	KeyF11
 	KeyF12
+	KeyCapsLock
 	// KeyCtrl is Control on all supported platforms.
 	KeyCtrl
 	// KeyShift is Shift on all supported platforms.
@@ -207,6 +208,8 @@ func ParseKey(token string) (Key, error) {
 		return KeyF11, nil
 	case "f12":
 		return KeyF12, nil
+	case "capslock", "caps_lock", "caps lock":
+		return KeyCapsLock, nil
 	default:
 		return KeyUnknown, fmt.Errorf("invalid key: %s", token)
 	}

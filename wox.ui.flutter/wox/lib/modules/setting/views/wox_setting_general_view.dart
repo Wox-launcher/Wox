@@ -90,6 +90,19 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                 ),
               ),
               formField(
+                settingKey: "EnableHyperKey",
+                label: controller.tr("ui_enable_hyper_key"),
+                tips: controller.tr("ui_enable_hyper_key_tips"),
+                child: Obx(() {
+                  return WoxSwitch(
+                    value: controller.woxSetting.value.enableHyperKey,
+                    onChanged: (bool value) {
+                      controller.updateConfig("EnableHyperKey", value.toString());
+                    },
+                  );
+                }),
+              ),
+              formField(
                 settingKey: "LaunchMode",
                 label: controller.tr("ui_launch_mode"),
                 tips: controller.tr("ui_launch_mode_tips"),

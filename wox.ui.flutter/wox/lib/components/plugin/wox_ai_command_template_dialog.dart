@@ -163,11 +163,20 @@ class _AICommandTemplateDialogState extends State<_AICommandTemplateDialog> {
     final modifiers = <String>{};
     var key = "";
     for (final token in tokens) {
-      if (_isHotkeyModifierToken(token)) {
+      if (token == "hyper" || token == "capslock") {
+        modifiers.add(token);
+      } else if (_isHotkeyModifierToken(token)) {
         modifiers.add(token);
       } else if (key.isEmpty) {
         key = token;
       }
+    }
+
+    if (modifiers.contains("hyper") && key.isNotEmpty) {
+      return "hyper+$key";
+    }
+    if (modifiers.contains("capslock") && key.isNotEmpty) {
+      return "capslock+$key";
     }
 
     final parts = <String>[];
@@ -197,6 +206,9 @@ class _AICommandTemplateDialogState extends State<_AICommandTemplateDialog> {
       case "windows":
       case "super":
         return "meta";
+      case "caps_lock":
+      case "caps lock":
+        return "capslock";
       case "return":
         return "enter";
       case "arrowleft":
