@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -236,7 +237,7 @@ func validateShellCommandAliases(ctx context.Context, commands []shellCommand) e
 			continue
 		}
 		if _, exists := seen[alias]; exists {
-			return fmt.Errorf(i18n.GetI18nManager().TranslateWox(ctx, "ui_validator_value_must_be_unique"))
+			return errors.New(i18n.GetI18nManager().TranslateWox(ctx, "ui_validator_value_must_be_unique"))
 		}
 		seen[alias] = struct{}{}
 	}
@@ -870,6 +871,10 @@ func (s *ShellPlugin) buildCommandLastRunSubtitle(ctx context.Context, title str
 		return i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_command_never_executed")
 	}
 
+	if history.Status == "running" {
+		return s.formatRunningElapsedSubtitle(ctx, time.Duration(util.GetSystemTimestamp()-history.StartTime)*time.Millisecond)
+	}
+
 	lastRun := time.Unix(history.StartTime/1000, 0).Format("2006-01-02 15:04:05")
 	return fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_command_last_run"), lastRun)
 }
@@ -1432,6 +1437,9 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 		}
 		title := s.buildSessionTitle(ctx, displayTitleForCommand(data), status)
 		subTitle := startTime.Format("2006-01-02 15:04:05")
+		if isRunning {
+			subTitle = s.formatRunningElapsedSubtitle(ctx, time.Since(startTime))
+		}
 
 		preview := plugin.WoxPreview{
 			PreviewType:    plugin.WoxPreviewTypeTerminal,
@@ -1504,6 +1512,7 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 		s.terminalManager.SetState(ctx, session.ID, terminal.SessionStatusFailed, 1, err.Error())
 		tracker.stop(ctx, "failed", 1)
 		_ = updateUI()
+		s.notifyCommandFinished(ctx, data, "failed", 1)
 		return
 	}
 	stderr, err := cmd.StderrPipe()
@@ -1518,6 +1527,7 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 		s.terminalManager.SetState(ctx, session.ID, terminal.SessionStatusFailed, 1, err.Error())
 		tracker.stop(ctx, "failed", 1)
 		_ = updateUI()
+		s.notifyCommandFinished(ctx, data, "failed", 1)
 		return
 	}
 
@@ -1532,6 +1542,7 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 		s.terminalManager.SetState(ctx, session.ID, terminal.SessionStatusFailed, 1, err.Error())
 		tracker.stop(ctx, "failed", 1)
 		_ = updateUI()
+		s.notifyCommandFinished(ctx, data, "failed", 1)
 		return
 	}
 
@@ -1597,6 +1608,7 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 	s.terminalManager.SetState(ctx, session.ID, terminalStatus, exitCode, errMsg)
 	tracker.stop(ctx, historyStatus, exitCode)
 	_ = updateUI()
+	s.notifyCommandFinished(ctx, data, historyStatus, exitCode)
 }
 
 func (s *ShellPlugin) executeCommandInBackground(ctx context.Context, data shellContextData) {
@@ -1661,6 +1673,7 @@ func (s *ShellPlugin) executeCommandInBackground(ctx context.Context, data shell
 				s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to update background shell history: %s", updateErr.Error()))
 			}
 		}
+		s.notifyCommandFinished(ctx, data, status, exitCode)
 	})
 }
 
@@ -1913,6 +1926,60 @@ func (s *ShellPlugin) statusText(ctx context.Context, status string) string {
 		return i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_killed")
 	default:
 		return i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_running")
+	}
+}
+
+// formatRunningElapsedSubtitle renders the live subtitle for commands that are still running.
+func (s *ShellPlugin) formatRunningElapsedSubtitle(ctx context.Context, elapsed time.Duration) string {
+	return fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_running_elapsed"), s.formatElapsedDurationForSubtitle(ctx, elapsed))
+}
+
+// formatElapsedDurationForSubtitle rounds elapsed runtime into a stable user-facing unit.
+func (s *ShellPlugin) formatElapsedDurationForSubtitle(ctx context.Context, elapsed time.Duration) string {
+	if elapsed < 0 {
+		elapsed = 0
+	}
+
+	seconds := (elapsed.Milliseconds() + 999) / 1000
+	if seconds <= 0 {
+		seconds = 1
+	}
+	if seconds < 60 {
+		return s.formatElapsedDurationUnit(ctx, "second", seconds)
+	}
+
+	minutes := seconds / 60
+	if minutes < 60 {
+		return s.formatElapsedDurationUnit(ctx, "minute", minutes)
+	}
+
+	hours := minutes / 60
+	if hours < 24 {
+		return s.formatElapsedDurationUnit(ctx, "hour", hours)
+	}
+
+	return s.formatElapsedDurationUnit(ctx, "day", hours/24)
+}
+
+// formatElapsedDurationUnit applies singular/plural translation keys for elapsed runtime.
+func (s *ShellPlugin) formatElapsedDurationUnit(ctx context.Context, unit string, value int64) string {
+	key := fmt.Sprintf("plugin_shell_elapsed_%s", unit)
+	if value != 1 {
+		key = key + "s"
+	}
+	return fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, key), value)
+}
+
+// notifyCommandFinished reports foreground and background shell command completion.
+func (s *ShellPlugin) notifyCommandFinished(ctx context.Context, data shellContextData, status string, exitCode int) {
+	title := displayTitleForCommand(data)
+	switch status {
+	case "completed":
+		s.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_execute_completed_notify"), title))
+	case "killed":
+		s.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_execute_killed_notify"), title))
+	default:
+		s.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_execute_failed_notify"), title, exitCode))
 	}
 }
 
