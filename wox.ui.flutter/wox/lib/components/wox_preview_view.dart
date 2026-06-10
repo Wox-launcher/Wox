@@ -10,6 +10,7 @@ import 'package:wox/components/file_preview/file_preview_renderer.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_ai_chat_view.dart';
 import 'package:wox/components/wox_ai_stream_preview_view.dart';
+import 'package:wox/components/wox_hotkey_overview_preview_view.dart';
 import 'package:wox/components/wox_list_preview_view.dart';
 import 'package:wox/components/wox_markdown.dart';
 import 'package:wox/components/wox_plugin_detail_view.dart';
@@ -302,6 +303,8 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
       } catch (e) {
         contentWidget = buildText("Invalid trigger keyword conflict preview data: $e");
       }
+    } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_HOTKEY_OVERVIEW.code) {
+      return WoxHotkeyOverviewPreviewView(woxTheme: widget.woxTheme, previewData: widget.woxPreview.previewData);
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TERMINAL.code) {
       // Terminal previews have their own status bar, search state, and scrolling.
       // Keep them out of the generic framed shell while still rendering the

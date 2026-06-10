@@ -3321,6 +3321,10 @@ class WoxLauncherController extends GetxController {
         preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TRIGGER_KEYWORD_CONFLICT.code;
   }
 
+  bool isCoreReferencePreview(WoxPreview preview) {
+    return preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_HOTKEY_OVERVIEW.code;
+  }
+
   bool shouldShowPreviewPanelForPreview(WoxPreview preview) {
     if (preview.previewData.isEmpty) {
       return false;
@@ -3330,6 +3334,10 @@ class WoxLauncherController extends GetxController {
     // grid items cannot carry enough text or controls to resolve blocked queries,
     // so these system previews must be visible even while successful results use grid.
     if (isCoreInteractiveSettingsPreview(preview)) {
+      return true;
+    }
+
+    if (isCoreReferencePreview(preview)) {
       return true;
     }
 
