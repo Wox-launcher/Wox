@@ -1061,6 +1061,13 @@ func (m *Manager) PostOnOnboarding(ctx context.Context, isInOnboardingView bool)
 func (m *Manager) PostOnHotkeyRecording(ctx context.Context, isRecording bool) {
 	if impl, ok := m.ui.(*uiImpl); ok {
 		impl.isRecordingHotkey = isRecording
+		if isRecording {
+			hotkey.SetHyperKeyRecorder(func(hotkeyStr string) {
+				m.ui.RecordHotkey(util.NewTraceContext(), hotkeyStr)
+			})
+		} else {
+			hotkey.SetHyperKeyRecorder(nil)
+		}
 		logger.Info(ctx, fmt.Sprintf("hotkey recording state changed: %t", isRecording))
 	}
 }

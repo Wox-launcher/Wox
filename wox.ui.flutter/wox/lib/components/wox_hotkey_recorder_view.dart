@@ -141,6 +141,33 @@ class _HotkeyTracker {
     return modifiers;
   }
 
+  bool _isExpandedHyperModifierSet(Set<HotKeyModifier> modifiers) {
+    return modifiers.contains(HotKeyModifier.control) &&
+        modifiers.contains(HotKeyModifier.shift) &&
+        modifiers.contains(HotKeyModifier.alt) &&
+        modifiers.contains(HotKeyModifier.meta);
+  }
+
+  String _debugPhysicalKeys(Set<PhysicalKeyboardKey> keys) {
+    final labels = keys.map((key) => "${key.keyLabel}/${key.usbHidUsage}").toList()..sort();
+    return "[${labels.join(",")}]";
+  }
+
+  String _debugModifierTypes(Set<HotKeyModifier> modifiers) {
+    final labels = modifiers.map((modifier) => modifier.name).toList()..sort();
+    return "[${labels.join(",")}]";
+  }
+
+  String debugState() {
+    return "capsPressed=$_capsPressed "
+        "pressed=${_debugPhysicalKeys(_pressedModifiers)} "
+        "real=${_debugPhysicalKeys(_realPressedModifiers)} "
+        "synth=${_debugPhysicalKeys(_synthesizedPressedModifiers)} "
+        "modifierTypes=${_debugModifierTypes(_pressedModifierTypes())} "
+        "invalidModifierTaps=${_debugModifierTypes(_invalidModifierTaps)} "
+        "pendingOutOfOrderKey=${_pendingOutOfOrderKey == null ? "" : "${_pendingOutOfOrderKey!.keyLabel}/${_pendingOutOfOrderKey!.usbHidUsage}"}";
+  }
+
   /// Marks any held modifiers as part of a combination and clears pending pure-tap state.
   void _invalidateActiveModifierTaps() {
     final modifiers = _pressedModifierTypes();
@@ -193,7 +220,7 @@ class _HotkeyTracker {
     return keyEvent.physicalKey == PhysicalKeyboardKey.capsLock || keyEvent.logicalKey == LogicalKeyboardKey.capsLock;
   }
 
-  _HotkeyTrackerResult processKeyEvent(KeyEvent keyEvent, {required bool enableHyperKey}) {
+  _HotkeyTrackerResult processKeyEvent(KeyEvent keyEvent) {
     _pruneExpiredSynthesizedModifiers();
     _pruneExpiredPendingOutOfOrderKey();
 
@@ -290,8 +317,13 @@ class _HotkeyTracker {
     if (keyEvent is! KeyUpEvent && WoxHotkey.isAllowedKey(keyEvent.physicalKey)) {
       if (_capsPressed) {
         _clearPendingOutOfOrderKey();
-        final hotkey = enableHyperKey ? WoxHotkey.hyperHotkeyToStr(keyEvent.physicalKey) : WoxHotkey.capsLockHotkeyToStr(keyEvent.physicalKey);
-        return _HotkeyTrackerResult(hotkey: hotkey, handled: true);
+        return _HotkeyTrackerResult(hotkey: WoxHotkey.hyperHotkeyToStr(keyEvent.physicalKey), handled: true);
+      }
+
+      final pressedModifierTypes = _pressedModifierTypes();
+      if (_isExpandedHyperModifierSet(pressedModifierTypes)) {
+        _clearPendingOutOfOrderKey();
+        return _HotkeyTrackerResult(hotkey: WoxHotkey.hyperHotkeyToStr(keyEvent.physicalKey), handled: true);
       }
 
       if (!Platform.isWindows && _pressedModifiers.isEmpty) {
@@ -391,7 +423,11 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
   bool _handleKeyEvent(KeyEvent keyEvent) {
     if (_isFocused == false) return false;
 
-    final enableHyperKey = Get.find<WoxSettingController>().woxSetting.value.enableHyperKey;
+    final traceId = const UuidV4().generate();
+    Logger.instance.info(
+      traceId,
+      "Hotkey recorder event begin: ${_describeKeyEvent(keyEvent)} trackerBefore=${_tracker.debugState()} hardware=${_hardwareKeyboardSnapshot()} current=${_hotKey?.toStr() ?? ""}",
+    );
 
     // backspace to clear hotkey
     if (keyEvent.logicalKey == LogicalKeyboardKey.backspace) {
@@ -399,18 +435,37 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
       _availabilityMessage = "";
       widget.onHotKeyRecorded("");
       setState(() {});
+      Logger.instance.info(traceId, "Hotkey recorder cleared hotkey from Backspace");
       return true;
     }
 
     // Process the key event
-    final result = _tracker.processKeyEvent(keyEvent, enableHyperKey: enableHyperKey);
+    final result = _tracker.processKeyEvent(keyEvent);
+    Logger.instance.info(
+      traceId,
+      "Hotkey recorder event result: hotkey=${result.hotkey ?? ""} handled=${result.handled} trackerAfter=${_tracker.debugState()} hardware=${_hardwareKeyboardSnapshot()}",
+    );
     if (result.hotkey == null) {
-      Logger.instance.debug(const UuidV4().generate(), "Hotkey recorder did not parse a hotkey from event: $keyEvent");
+      Logger.instance.info(traceId, "Hotkey recorder did not parse a hotkey from event");
       return result.handled;
     }
 
     _recordHotkey(result.hotkey!);
     return true;
+  }
+
+  String _describeKeyEvent(KeyEvent keyEvent) {
+    return "type=${keyEvent.runtimeType} "
+        "physical=${keyEvent.physicalKey.keyLabel}/${keyEvent.physicalKey.usbHidUsage} "
+        "logical=${keyEvent.logicalKey.keyLabel}/${keyEvent.logicalKey.keyId} "
+        "character=${keyEvent.character ?? ""} "
+        "synthesized=${keyEvent.synthesized}";
+  }
+
+  String _hardwareKeyboardSnapshot() {
+    final keyboard = HardwareKeyboard.instance;
+    final physicalKeys = keyboard.physicalKeysPressed.map((key) => "${key.keyLabel}/${key.usbHidUsage}").toList()..sort();
+    return "control=${keyboard.isControlPressed} shift=${keyboard.isShiftPressed} alt=${keyboard.isAltPressed} meta=${keyboard.isMetaPressed} physical=[${physicalKeys.join(",")}]";
   }
 
   void _recordHotkey(String hotkeyStr) {

@@ -20,7 +20,7 @@ func newHyperKeyTracker() *hyperKeyTracker {
 	}
 }
 
-func (t *hyperKeyTracker) HandleEvent(event keyboard.RawKeyEvent) (keyboard.Key, bool) {
+func (t *hyperKeyTracker) HandleEvent(event keyboard.RawKeyEvent, replaySingleCapsTap bool) (keyboard.Key, bool) {
 	if event.Key == keyboard.KeyCapsLock {
 		if t.passthroughCapsEvents > 0 {
 			t.passthroughCapsEvents--
@@ -33,7 +33,7 @@ func (t *hyperKeyTracker) HandleEvent(event keyboard.RawKeyEvent) (keyboard.Key,
 			return keyboard.KeyUnknown, true
 		}
 
-		shouldReplayCaps := !t.comboTriggered
+		shouldReplayCaps := replaySingleCapsTap && !t.comboTriggered
 		t.capsPressed = false
 		t.comboTriggered = false
 		t.pressedKeys = map[keyboard.Key]bool{}
@@ -71,7 +71,16 @@ var (
 	hyperKeyCallbacks = map[keyboard.Key]func(){}
 	hyperKeyListener  keyboard.RawKeySubscription
 	hyperKeyState     = newHyperKeyTracker()
+	hyperKeyRecorder  func(string)
 )
+
+// SetHyperKeyRecorder forwards Hyper key combinations to the active UI recorder.
+func SetHyperKeyRecorder(recorder func(string)) {
+	hyperKeyMu.Lock()
+	hyperKeyRecorder = recorder
+	hyperKeyState = newHyperKeyTracker()
+	hyperKeyMu.Unlock()
+}
 
 func registerHyperHotKey(key keyboard.Key, callback func()) error {
 	hyperKeyMu.Lock()
@@ -87,8 +96,17 @@ func registerHyperHotKey(key keyboard.Key, callback func()) error {
 	}
 
 	listener, err := keyboard.AddRawKeyListener(func(event keyboard.RawKeyEvent) bool {
-		triggeredKey, consume := handleHyperKeyEvent(event)
+		triggeredKey, consume, recorder := handleHyperKeyEvent(event)
 		if triggeredKey == keyboard.KeyUnknown {
+			return consume
+		}
+
+		if recorder != nil {
+			if hotkeyStr := hyperKeyToHotkeyString(triggeredKey); hotkeyStr != "" {
+				util.Go(util.NewTraceContext(), "record hyper hotkey in UI", func() {
+					recorder(hotkeyStr)
+				})
+			}
 			return consume
 		}
 
@@ -132,8 +150,63 @@ func unregisterHyperHotKey(key keyboard.Key) {
 	hyperKeyMu.Unlock()
 }
 
-func handleHyperKeyEvent(event keyboard.RawKeyEvent) (keyboard.Key, bool) {
+func handleHyperKeyEvent(event keyboard.RawKeyEvent) (keyboard.Key, bool, func(string)) {
 	hyperKeyMu.Lock()
 	defer hyperKeyMu.Unlock()
-	return hyperKeyState.HandleEvent(event)
+	recorder := hyperKeyRecorder
+	triggeredKey, consume := hyperKeyState.HandleEvent(event, recorder == nil)
+	return triggeredKey, consume, recorder
+}
+
+func hyperKeyToHotkeyString(key keyboard.Key) string {
+	if character := key.Character(); character != "" {
+		return "hyper+" + character
+	}
+
+	switch key {
+	case keyboard.KeySpace:
+		return "hyper+space"
+	case keyboard.KeyReturn:
+		return "hyper+enter"
+	case keyboard.KeyEscape:
+		return "hyper+escape"
+	case keyboard.KeyTab:
+		return "hyper+tab"
+	case keyboard.KeyDelete:
+		return "hyper+delete"
+	case keyboard.KeyLeft:
+		return "hyper+left"
+	case keyboard.KeyRight:
+		return "hyper+right"
+	case keyboard.KeyUp:
+		return "hyper+up"
+	case keyboard.KeyDown:
+		return "hyper+down"
+	case keyboard.KeyF1:
+		return "hyper+f1"
+	case keyboard.KeyF2:
+		return "hyper+f2"
+	case keyboard.KeyF3:
+		return "hyper+f3"
+	case keyboard.KeyF4:
+		return "hyper+f4"
+	case keyboard.KeyF5:
+		return "hyper+f5"
+	case keyboard.KeyF6:
+		return "hyper+f6"
+	case keyboard.KeyF7:
+		return "hyper+f7"
+	case keyboard.KeyF8:
+		return "hyper+f8"
+	case keyboard.KeyF9:
+		return "hyper+f9"
+	case keyboard.KeyF10:
+		return "hyper+f10"
+	case keyboard.KeyF11:
+		return "hyper+f11"
+	case keyboard.KeyF12:
+		return "hyper+f12"
+	default:
+		return ""
+	}
 }
