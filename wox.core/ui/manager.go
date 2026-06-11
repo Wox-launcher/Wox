@@ -705,14 +705,44 @@ func (m *Manager) StartUIApp(ctx context.Context) error {
 		util.ClearWoxUIProcessPid(pid)
 		waitCtx := util.NewTraceContext()
 		diagnostic.GetManager().RecordUIExit(waitCtx, pid, waitErr, m.uiStopRequested.Load())
+		
+		// Check if this is a GPU recovery by looking for the marker file
+		markerPath := filepath.Join(filepath.Dir(util.GetLocation().GetUIAppPath()), "gpu_recovery.marker")
+		gpuRecovery := false
+		if util.IsFileExists(markerPath) {
+			gpuRecovery = true
+			logger.Info(waitCtx, "detected GPU recovery marker, will restart UI instead of quitting")
+			// Remove the marker file
+			removeErr := os.Remove(markerPath)
+			if removeErr != nil {
+				logger.Warn(waitCtx, fmt.Sprintf("failed to remove GPU recovery marker: %s", removeErr.Error()))
+			}
+		}
+		
 		if waitErr != nil {
 			logger.Warn(waitCtx, fmt.Sprintf("ui app process(%d) exited with error: %s", pid, waitErr.Error()))
-			handleUIRuntimeLaunchFailure(waitCtx, waitErr)
+			if !gpuRecovery {
+				handleUIRuntimeLaunchFailure(waitCtx, waitErr)
+			}
 		} else {
 			logger.Info(waitCtx, fmt.Sprintf("ui app process(%d) exited", pid))
 		}
-		logger.Warn(waitCtx, "ui app exited, quitting backend")
-		m.ExitApp(waitCtx)
+		
+		if gpuRecovery {
+			// This is a GPU recovery, restart the UI instead of quitting
+			logger.Info(waitCtx, "restarting UI after GPU recovery")
+			// Wait a bit for GPU to stabilize
+			time.Sleep(500 * time.Millisecond)
+			restartErr := m.StartUIApp(waitCtx)
+			if restartErr != nil {
+				logger.Error(waitCtx, fmt.Sprintf("failed to restart UI after GPU recovery: %s", restartErr.Error()))
+				m.ExitApp(waitCtx)
+			}
+		} else if !m.uiStopRequested.Load() {
+			// Normal exit, quit the backend
+			logger.Warn(waitCtx, "ui app exited, quitting backend")
+			m.ExitApp(waitCtx)
+		}
 	})
 
 	return nil

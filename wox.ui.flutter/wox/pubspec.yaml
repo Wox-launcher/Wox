@@ -60,6 +60,10 @@ dependencies:
       url: https://github.com/qianlifeng/extended_text_field.git
       ref: b9b2c8faff334c794ce70e5b6a30bda43e407009
   math_expressions: ^3.1.0
+  windows_gpu_recovery:
+    git:
+      url: https://github.com/DitriXNew/windows_gpu_recovery.git
+      ref: master
 
 dev_dependencies:
   flutter_test:
