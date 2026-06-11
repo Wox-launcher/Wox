@@ -22,7 +22,6 @@ import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/color_util.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/env.dart';
-import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_system_wallpaper_util.dart';
 
 import 'wox_setting_plugin_view.dart';
@@ -49,7 +48,6 @@ class _WoxSettingViewState extends State<WoxSettingView> {
   late final Worker _activeNavPathWorker;
   String _lastQueuedVisibleNavPath = '';
   bool _consumeSearchEscapeKeyUp = false;
-  bool _windowFallbackEscapePressPending = false;
 
   @override
   void initState() {
@@ -430,52 +428,7 @@ class _WoxSettingViewState extends State<WoxSettingView> {
     if (event is KeyUpEvent && event.logicalKey == LogicalKeyboardKey.escape && _consumeSearchEscapeKeyUp) {
       return false;
     }
-    if (_handleWindowLevelEscapeFallback(event)) {
-      return true;
-    }
     return _handleSearchKeyEvent(event) == KeyEventResult.handled;
-  }
-
-  bool _handleWindowLevelEscapeFallback(KeyEvent event) {
-    if (event.logicalKey != LogicalKeyboardKey.escape || !_isActiveSettingRoute()) {
-      return false;
-    }
-
-    if (_hasSettingsDialogRoute()) {
-      return false;
-    }
-
-    final primaryFocus = FocusManager.instance.primaryFocus;
-    if (primaryFocus != null && primaryFocus != FocusManager.instance.rootScope && primaryFocus is! FocusScopeNode) {
-      return false;
-    }
-
-    if (event is KeyDownEvent || event is KeyRepeatEvent) {
-      // Bug fix: the settings route can leave Flutter's primary focus on the
-      // route-level ModalScope instead of a concrete settings widget. The page
-      // Focus handler then never sees Escape, so the window-level handler must
-      // consume down/repeat and defer the actual exit to KeyUp to preserve the
-      // existing hold-Escape behavior.
-      _windowFallbackEscapePressPending = true;
-      return true;
-    }
-
-    if (event is KeyUpEvent) {
-      if (!_windowFallbackEscapePressPending) {
-        return false;
-      }
-      // Bug fix: only the fallback that consumed Escape down/repeat may exit on
-      // KeyUp. Dialog routes can close before the release event reaches this
-      // handler, so an unpaired KeyUp must be ignored instead of also closing
-      // settings.
-      _windowFallbackEscapePressPending = false;
-      final traceId = const UuidV4().generate();
-      Logger.instance.info(traceId, "[KEYLOG][FLUTTER-SETTING] ESC key pressed from window-level focus fallback, hiding window");
-      controller.hideWindow(traceId);
-      return true;
-    }
-
-    return false;
   }
 
   bool _isActiveSettingRoute() {
