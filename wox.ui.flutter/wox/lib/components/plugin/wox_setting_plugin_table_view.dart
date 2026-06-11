@@ -19,12 +19,14 @@ import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/color_util.dart';
 import 'package:wox/utils/wox_dialog_util.dart';
+import 'package:wox/utils/wox_hotkey_display_util.dart';
 import 'package:wox/utils/wox_setting_focus_util.dart';
 
 import 'wox_setting_plugin_item_view.dart';
 import 'wox_setting_plugin_table_update_view.dart';
 
-typedef WoxSettingPluginTableCreateDialogBuilder = Future<void> Function(BuildContext context, Future<String?> Function(Map<String, dynamic> row) saveRow);
+typedef WoxSettingPluginTableCreateDialogBuilder =
+    Future<void> Function(BuildContext context, Future<String?> Function(Map<String, dynamic> row) saveRow, {Map<String, dynamic> initialRow});
 typedef WoxSettingPluginTableEditDialogBuilder = Future<void> Function(BuildContext context, Map<String, dynamic> row, Future<String?> Function(Map<String, dynamic> row) saveRow);
 
 class WoxSettingPluginTable extends WoxSettingPluginItem {
@@ -36,7 +38,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
   final PluginSettingValueTable item;
   static const String rowUniqueIdKey = "wox_table_row_id";
   final double tableWidth;
-  final operationWidth = 80.0;
+  final operationWidth = 120.0;
   final columnSpacing = 10.0;
   final columnTooltipWidth = 20.0;
   final bool readonly;
@@ -319,7 +321,10 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
         column: column,
         isHeader: false,
         isOperation: false,
-        child: Text(value, style: TextStyle(overflow: TextOverflow.ellipsis, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor))),
+        child: Text(
+          WoxHotkeyDisplayUtil.labelFromHotkeyString(value.toString()),
+          style: TextStyle(overflow: TextOverflow.ellipsis, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor)),
+        ),
       );
     }
     if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeApp) {
@@ -574,6 +579,19 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     return updateConfig(item.key, json.encode(freshRows));
   }
 
+  List<Map<String, dynamic>> _buildValidationRows() {
+    final rows = <Map<String, dynamic>>[];
+    for (final row in decodeRowsJson(getSetting(item.key))) {
+      if (row is Map<String, dynamic>) {
+        rows.add(Map<String, dynamic>.from(row));
+      } else if (row is Map) {
+        rows.add(Map<String, dynamic>.from(row));
+      }
+    }
+
+    return rows;
+  }
+
   Future<void> _showEditRowDialog(BuildContext context, Map<String, dynamic> row) async {
     final originalRow = json.decode(json.encode(row)) as Map<String, dynamic>;
     originalRow.remove(rowUniqueIdKey);
@@ -591,8 +609,45 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
         return WoxSettingPluginTableUpdate(
           item: item,
           row: Map<String, dynamic>.from(originalRow),
+          existingRows: _buildValidationRows(),
+          originalRow: Map<String, dynamic>.from(originalRow),
           onUpdateValidate: onUpdateValidate,
           onUpdate: (key, value) async => _saveEditedRow(originalRow, value),
+        );
+      },
+    );
+    WoxSettingFocusUtil.restoreIfInSettingView();
+  }
+
+  // Opens the row editor with copied values while saving through the create path.
+  Future<void> _showCloneRowDialog(BuildContext context, Map<String, dynamic> row) async {
+    final clonedRow = json.decode(json.encode(row)) as Map<String, dynamic>;
+    clonedRow.remove(rowUniqueIdKey);
+    // Original-value markers belong to edit validation; carrying them into clone creation can mask duplicates.
+    clonedRow.removeWhere((key, value) => key.startsWith("_wox_original_"));
+
+    if (customCreateDialogBuilder != null) {
+      await customCreateDialogBuilder!(context, _saveNewRow, initialRow: Map<String, dynamic>.from(clonedRow));
+      WoxSettingFocusUtil.restoreIfInSettingView();
+      return;
+    }
+
+    if (customEditDialogBuilder != null) {
+      await customEditDialogBuilder!(context, Map<String, dynamic>.from(clonedRow), (updatedRow) => _saveNewRow(updatedRow));
+      WoxSettingFocusUtil.restoreIfInSettingView();
+      return;
+    }
+
+    await showDialog(
+      context: context,
+      barrierColor: getThemePopupBarrierColor(),
+      builder: (context) {
+        return WoxSettingPluginTableUpdate(
+          item: item,
+          row: Map<String, dynamic>.from(clonedRow),
+          existingRows: _buildValidationRows(),
+          onUpdateValidate: onUpdateValidate,
+          onUpdate: (key, value) async => _saveNewRow(value),
         );
       },
     );
@@ -643,6 +698,17 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
               onPressed: () async {
                 await _showEditRowDialog(context, row);
               },
+            ),
+            WoxTooltip(
+              message: tr("ui_clone_row"),
+              child: WoxButton.text(
+                text: '',
+                icon: Icon(Icons.content_copy, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor)),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                onPressed: () async {
+                  await _showCloneRowDialog(context, row);
+                },
+              ),
             ),
             WoxTooltip(
               message: isDeleteDisabled ? deleteDisabledMessage : "",
@@ -1059,7 +1125,13 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
           context: context,
           barrierColor: getThemePopupBarrierColor(),
           builder: (context) {
-            return WoxSettingPluginTableUpdate(item: item, row: const {}, onUpdateValidate: onUpdateValidate, onUpdate: (key, row) async => _saveNewRow(row));
+            return WoxSettingPluginTableUpdate(
+              item: item,
+              row: const {},
+              existingRows: _buildValidationRows(),
+              onUpdateValidate: onUpdateValidate,
+              onUpdate: (key, row) async => _saveNewRow(row),
+            );
           },
         );
         WoxSettingFocusUtil.restoreIfInSettingView();

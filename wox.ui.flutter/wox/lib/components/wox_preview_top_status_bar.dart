@@ -24,9 +24,9 @@ class WoxPreviewTopStatusBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final borderColor = safeFromCssColor(woxTheme.previewSplitLineColor).withValues(alpha: 0.75);
-    final backgroundColor = safeFromCssColor(woxTheme.queryBoxBackgroundColor).withValues(alpha: 0.35);
     final fontColor = safeFromCssColor(woxTheme.previewFontColor);
+    final borderColor = safeFromCssColor(woxTheme.previewSplitLineColor).withValues(alpha: 0.75);
+    final backgroundColor = fontColor.withValues(alpha: 0.035);
 
     // The preview status bar is part of the launcher preview surface, so its
     // controls follow density while colors, borders, and radii stay theme-owned.

@@ -48,6 +48,7 @@ type StoreAICommandManifest struct {
 	Author                 string
 	Command                string
 	Prompt                 string
+	ThinkingMode           string
 	DefaultAction          string
 	Vision                 bool
 	RecommendedQueryHotkey StoreAICommandQueryHotkey

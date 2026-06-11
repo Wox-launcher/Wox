@@ -10,14 +10,15 @@ const (
 )
 
 type SessionState struct {
-	SessionID   string        `json:"SessionId"`
-	Command     string        `json:"Command"`
-	Interpreter string        `json:"Interpreter"`
-	Status      SessionStatus `json:"Status"`
-	StartTime   int64         `json:"StartTime"`
-	EndTime     int64         `json:"EndTime"`
-	ExitCode    int           `json:"ExitCode"`
-	Error       string        `json:"Error"`
+	SessionID        string        `json:"SessionId"`
+	Command          string        `json:"Command"`
+	Interpreter      string        `json:"Interpreter"`
+	WorkingDirectory string        `json:"WorkingDirectory"`
+	Status           SessionStatus `json:"Status"`
+	StartTime        int64         `json:"StartTime"`
+	EndTime          int64         `json:"EndTime"`
+	ExitCode         int           `json:"ExitCode"`
+	Error            string        `json:"Error"`
 }
 
 type TerminalChunk struct {
@@ -46,6 +47,7 @@ type TerminalSearchResult struct {
 }
 
 type CreateSessionParams struct {
-	Command     string
-	Interpreter string
+	Command          string
+	Interpreter      string
+	WorkingDirectory string
 }

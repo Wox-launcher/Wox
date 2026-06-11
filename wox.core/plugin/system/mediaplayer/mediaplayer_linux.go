@@ -24,6 +24,10 @@ func (w *LinuxRetriever) GetCurrentMedia(ctx context.Context) (*MediaInfo, error
 	return nil, errors.New("GetCurrentMedia not implemented on Linux")
 }
 
+func (w *LinuxRetriever) ControlMedia(ctx context.Context, command string) error {
+	return errors.New("ControlMedia not implemented on Linux")
+}
+
 func (w *LinuxRetriever) TogglePlayPause(ctx context.Context) error {
 	return errors.New("TogglePlayPause not implemented on Linux")
 }

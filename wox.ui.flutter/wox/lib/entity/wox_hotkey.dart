@@ -6,12 +6,18 @@ import 'package:hotkey_manager/hotkey_manager.dart';
 class HotkeyX {
   String raw;
   HotKey? normalHotkey; // normal hotkey, E.g. "ctrl+shift+a"
+  KeyboardKey? hyperHotkey; // Wox Hyper Key hotkey, E.g. "hyper+a"
+  KeyboardKey? capsLockHotkey; // Caps Lock combination, E.g. "capslock+a"
   HotKeyModifier? doubleHotkey; // double hotkey, E.g. "ctrl+ctrl"
   LogicalKeyboardKey? singleHotkey; // single hotkey, E.g. "enter", usually used for default action hotkey
 
-  HotkeyX(this.raw, {this.normalHotkey, this.doubleHotkey, this.singleHotkey});
+  HotkeyX(this.raw, {this.normalHotkey, this.hyperHotkey, this.capsLockHotkey, this.doubleHotkey, this.singleHotkey});
 
   bool get isNormalHotkey => normalHotkey != null;
+
+  bool get isHyperHotkey => hyperHotkey != null;
+
+  bool get isCapsLockHotkey => capsLockHotkey != null;
 
   bool get isDoubleHotkey => doubleHotkey != null;
 
@@ -43,10 +49,16 @@ class HotkeyAvailability {
 class WoxHotkey {
   static HotkeyX? parseHotkeyFromString(String value) {
     final modifiers = <HotKeyModifier>[];
+    var isHyper = false;
+    var isCapsLockCombo = false;
     LogicalKeyboardKey? key;
-    value.split("+").forEach((element) {
-      final e = element.toLowerCase();
-      if (e == "alt" || e == "option") {
+    final tokens = value.split("+").map((element) => element.trim().toLowerCase()).where((element) => element.isNotEmpty).toList();
+    for (final e in tokens) {
+      if (e == "hyper") {
+        isHyper = true;
+      } else if ((e == "capslock" || e == "caps_lock" || e == "caps lock") && tokens.length > 1) {
+        isCapsLockCombo = true;
+      } else if (e == "alt" || e == "option") {
         modifiers.add(HotKeyModifier.alt);
       } else if (e == "control" || e == "ctrl") {
         modifiers.add(HotKeyModifier.control);
@@ -205,16 +217,24 @@ class WoxHotkey {
       } else if (e == "insert") {
         key = LogicalKeyboardKey.insert;
       }
-    });
+    }
 
     // double hotkey
     if (key == null && modifiers.length == 2 && modifiers[0] == modifiers[1]) {
       return HotkeyX(value, doubleHotkey: modifiers[0]);
     }
 
+    if (isHyper && key != null) {
+      return HotkeyX(value, hyperHotkey: key);
+    }
+
+    if (isCapsLockCombo && key != null) {
+      return HotkeyX(value, capsLockHotkey: key);
+    }
+
     // normal hotkey
     if (key != null && modifiers.isNotEmpty) {
-      return HotkeyX(value, normalHotkey: HotKey(key: key!, modifiers: modifiers));
+      return HotkeyX(value, normalHotkey: HotKey(key: key, modifiers: modifiers));
     }
 
     return HotkeyX(value, singleHotkey: key);
@@ -231,14 +251,14 @@ class WoxHotkey {
 
     List<HotKeyModifier> modifiers = [];
 
-    if (HardwareKeyboard.instance.isAltPressed) {
-      modifiers.add(HotKeyModifier.alt);
-    }
     if (HardwareKeyboard.instance.isControlPressed) {
       modifiers.add(HotKeyModifier.control);
     }
     if (HardwareKeyboard.instance.isShiftPressed) {
       modifiers.add(HotKeyModifier.shift);
+    }
+    if (HardwareKeyboard.instance.isAltPressed) {
+      modifiers.add(HotKeyModifier.alt);
     }
     if (HardwareKeyboard.instance.isMetaPressed) {
       modifiers.add(HotKeyModifier.meta);
@@ -359,29 +379,42 @@ class WoxHotkey {
       }
     }
 
-    var keyStr = hotKey.key.keyLabel.toLowerCase();
+    final keyStr = keyToStr(hotKey.key);
+
+    return "${modifiers.join("+")}+$keyStr";
+  }
+
+  static String hyperHotkeyToStr(KeyboardKey key) {
+    return "hyper+${keyToStr(key)}";
+  }
+
+  static String capsLockHotkeyToStr(KeyboardKey key) {
+    return "capslock+${keyToStr(key)}";
+  }
+
+  static String keyToStr(KeyboardKey key) {
+    var keyStr = key.keyLabel.toLowerCase();
     if (keyStr.startsWith("key ")) {
       keyStr = keyStr.substring(4);
     }
-    if (hotKey.key == PhysicalKeyboardKey.space) {
+    if (key == PhysicalKeyboardKey.space || key == LogicalKeyboardKey.space) {
       keyStr = "space";
-    } else if (hotKey.key == PhysicalKeyboardKey.enter) {
+    } else if (key == PhysicalKeyboardKey.enter || key == LogicalKeyboardKey.enter) {
       keyStr = "enter";
-    } else if (hotKey.key == PhysicalKeyboardKey.backspace) {
+    } else if (key == PhysicalKeyboardKey.backspace || key == LogicalKeyboardKey.backspace) {
       keyStr = "backspace";
-    } else if (hotKey.key == PhysicalKeyboardKey.delete) {
+    } else if (key == PhysicalKeyboardKey.delete || key == LogicalKeyboardKey.delete) {
       keyStr = "delete";
-    } else if (hotKey.key == PhysicalKeyboardKey.arrowLeft) {
+    } else if (key == PhysicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.arrowLeft) {
       keyStr = "left";
-    } else if (hotKey.key == PhysicalKeyboardKey.arrowDown) {
+    } else if (key == PhysicalKeyboardKey.arrowDown || key == LogicalKeyboardKey.arrowDown) {
       keyStr = "down";
-    } else if (hotKey.key == PhysicalKeyboardKey.arrowRight) {
+    } else if (key == PhysicalKeyboardKey.arrowRight || key == LogicalKeyboardKey.arrowRight) {
       keyStr = "right";
-    } else if (hotKey.key == PhysicalKeyboardKey.arrowUp) {
+    } else if (key == PhysicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowUp) {
       keyStr = "up";
     }
-
-    return "${modifiers.join("+")}+$keyStr";
+    return keyStr;
   }
 
   static HotKeyModifier? convertToModifier(PhysicalKeyboardKey key) {

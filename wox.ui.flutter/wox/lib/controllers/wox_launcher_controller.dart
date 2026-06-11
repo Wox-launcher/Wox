@@ -87,8 +87,6 @@ class WoxLauncherController extends GetxController {
   }
 
   static const int _slowLauncherActivationWarningThresholdMs = 50;
-  static const int _onReceivedWarningThresholdMs = 50;
-  static const int _onReceivedDangerThresholdMs = 100;
   static const String _onReceivedTailTooltip = "onReceivedQueryResults elapsed since Flutter query request";
   static const String _queryActionIconRefType = "iconref";
   static const String localActionTogglePreviewFullscreenId = "__local_toggle_preview_fullscreen__";
@@ -722,11 +720,24 @@ class WoxLauncherController extends GetxController {
     return currentScope == nextScope;
   }
 
+  // Hidden context follows the same trigger scope as refinements but is not rendered in the UI.
+  bool shouldPreserveQueryContextDataForTextChange(PlainQuery currentQueryValue, String nextText) {
+    if (currentQueryValue.contextData.isEmpty) {
+      return false;
+    }
+    return shouldPreserveQueryRefinementsForTextChange(currentQueryValue, nextText);
+  }
+
   Map<String, List<String>> cloneQueryRefinementValues(Map<String, List<String>> values) {
     return values.map((key, value) => MapEntry(key, List<String>.from(value)));
   }
 
   Map<String, String> cloneQueryRefinementPayload(Map<String, String> values) {
+    return Map<String, String>.from(values);
+  }
+
+  // Clone query context before assigning it to a new PlainQuery so later edits cannot mutate previous query snapshots.
+  Map<String, String> cloneQueryContextData(Map<String, String> values) {
     return Map<String, String>.from(values);
   }
 
@@ -1364,8 +1375,9 @@ class WoxLauncherController extends GetxController {
     updateDoctorToolbarIfNeeded(traceId);
     tracker.setElapsedUs("toolbarUs", toolbarStartUs);
 
-    unawaited(resizeHeightForResultUpdate(traceId: traceId, reason: "query results updated"));
-    tracker.setBool("resizeScheduled", true);
+    final resizeStartUs = tracker.checkpointUs();
+    await resizeHeightForResultUpdate(traceId: traceId, reason: "query results updated");
+    tracker.setElapsedUs("resizeUs", resizeStartUs);
     tracker.setElapsedUs("totalUs", totalStartUs);
     tracker.log();
     return true;
@@ -1414,12 +1426,6 @@ class WoxLauncherController extends GetxController {
 
   // This dev metric stops at onReceivedQueryResults, before resize and frame paint.
   String getOnReceivedTailTextCategory(int onReceivedElapsed) {
-    if (onReceivedElapsed > _onReceivedDangerThresholdMs) {
-      return woxListItemTailTextCategoryDanger;
-    }
-    if (onReceivedElapsed > _onReceivedWarningThresholdMs) {
-      return woxListItemTailTextCategoryWarning;
-    }
     return woxListItemTailTextCategoryDefault;
   }
 
@@ -2022,13 +2028,14 @@ class WoxLauncherController extends GetxController {
         WoxThemeUtil.instance.currentTheme.value.resultContainerPaddingBottom;
   }
 
-  PlainQuery cloneQuery(PlainQuery query, {String? queryId, Map<String, String>? queryRefinements}) {
+  PlainQuery cloneQuery(PlainQuery query, {String? queryId, Map<String, String>? queryRefinements, Map<String, String>? contextData}) {
     return PlainQuery(
       queryId: queryId ?? query.queryId,
       queryType: query.queryType,
       queryText: query.queryText,
       querySelection: Selection(type: query.querySelection.type, text: query.querySelection.text, filePaths: List<String>.from(query.querySelection.filePaths)),
       queryRefinements: cloneQueryRefinementPayload(queryRefinements ?? query.queryRefinements),
+      contextData: cloneQueryContextData(contextData ?? query.contextData),
     );
   }
 
@@ -2523,10 +2530,14 @@ class WoxLauncherController extends GetxController {
       return false;
     }
 
+    unawaited(recordQueryCompletionHintAccepted(traceId, hint));
+
     final nextQueryRefinements =
         shouldPreserveQueryRefinementsForTextChange(currentQuery.value, hint.completionText)
             ? cloneQueryRefinementPayload(currentQuery.value.queryRefinements)
             : <String, String>{};
+    final nextContextData =
+        shouldPreserveQueryContextDataForTextChange(currentQuery.value, hint.completionText) ? cloneQueryContextData(currentQuery.value.contextData) : <String, String>{};
     await onQueryChanged(
       traceId,
       PlainQuery(
@@ -2535,11 +2546,29 @@ class WoxLauncherController extends GetxController {
         queryText: hint.completionText,
         querySelection: Selection.empty(),
         queryRefinements: nextQueryRefinements,
+        contextData: nextContextData,
       ),
       "accept query completion hint",
       moveCursorToEnd: true,
     );
     return true;
+  }
+
+  // Records accepted inline completions without blocking the query text update.
+  Future<void> recordQueryCompletionHintAccepted(String traceId, QueryCompletionHint hint) async {
+    try {
+      await WoxWebsocketMsgUtil.instance.sendMessage(
+        WoxWebsocketMsg(
+          requestId: const UuidV4().generate(),
+          traceId: traceId,
+          type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
+          method: WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY_COMPLETION_HINT_ACCEPTED.code,
+          data: {"inputPrefix": hint.inputPrefix, "completionText": hint.completionText, "source": hint.source},
+        ),
+      );
+    } catch (e) {
+      Logger.instance.debug(traceId, "Failed to record query completion hint acceptance: $e");
+    }
   }
 
   void onQueryBoxTextChanged(String value) {
@@ -2559,6 +2588,7 @@ class WoxLauncherController extends GetxController {
     } else {
       final nextQueryRefinements =
           shouldPreserveQueryRefinementsForTextChange(currentQuery.value, value) ? cloneQueryRefinementPayload(currentQuery.value.queryRefinements) : <String, String>{};
+      final nextContextData = shouldPreserveQueryContextDataForTextChange(currentQuery.value, value) ? cloneQueryContextData(currentQuery.value.contextData) : <String, String>{};
       final skipCompletionHint = reuseQueryCompletionHintForText(value);
       onQueryChanged(
         traceId,
@@ -2568,6 +2598,7 @@ class WoxLauncherController extends GetxController {
           queryText: value,
           querySelection: Selection.empty(),
           queryRefinements: nextQueryRefinements,
+          contextData: nextContextData,
         ),
         "user input changed",
         skipCompletionHint: skipCompletionHint,
@@ -2706,6 +2737,7 @@ class WoxLauncherController extends GetxController {
               "queryText": query.queryText,
               "querySelection": query.querySelection.toJson(),
               "queryRefinements": query.queryRefinements,
+              "contextData": query.contextData,
               "skipCompletionHint": shouldSkipCompletionHint,
             },
           ),
@@ -2761,6 +2793,7 @@ class WoxLauncherController extends GetxController {
           "queryText": query.queryText,
           "querySelection": query.querySelection.toJson(),
           "queryRefinements": query.queryRefinements,
+          "contextData": query.contextData,
           "skipCompletionHint": shouldSkipCompletionHint,
         },
       ),
@@ -2785,6 +2818,7 @@ class WoxLauncherController extends GetxController {
       queryText: currentQueryValue.queryText,
       querySelection: currentQueryValue.querySelection,
       queryRefinements: cloneQueryRefinementPayload(currentQueryValue.queryRefinements),
+      contextData: cloneQueryContextData(currentQueryValue.contextData),
     );
 
     // Re-execute the query
@@ -3217,6 +3251,10 @@ class WoxLauncherController extends GetxController {
         preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TRIGGER_KEYWORD_CONFLICT.code;
   }
 
+  bool isCoreReferencePreview(WoxPreview preview) {
+    return preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_HOTKEY_OVERVIEW.code;
+  }
+
   bool shouldShowPreviewPanelForPreview(WoxPreview preview) {
     if (preview.previewData.isEmpty) {
       return false;
@@ -3226,6 +3264,10 @@ class WoxLauncherController extends GetxController {
     // grid items cannot carry enough text or controls to resolve blocked queries,
     // so these system previews must be visible even while successful results use grid.
     if (isCoreInteractiveSettingsPreview(preview)) {
+      return true;
+    }
+
+    if (isCoreReferencePreview(preview)) {
       return true;
     }
 
@@ -3546,8 +3588,31 @@ class WoxLauncherController extends GetxController {
           await windowDriver.setBounds(Offset(pos.dx, newTop), targetSize);
           tracker.setElapsedUs("setBoundsUs", setBoundsStartUs);
           final getResizedSizeStartUs = tracker.checkpointUs();
-          final resizedSize = await windowDriver.getSize();
+          var resizedSize = await windowDriver.getSize();
           tracker.setElapsedUs("getResizedSizeUs", getResizedSizeStartUs);
+          if (!isWindowSizeEffectivelyEqual(resizedSize, targetSize)) {
+            // Native resize can report success before the top-level HWND reaches the requested size.
+            // Reapplying once keeps result-driven launcher resizing deterministic without blocking the normal path.
+            Logger.instance.warn(
+              traceId,
+              "resize readback mismatch: reason=$reason, target=${formatWindowSize(targetSize)}, after=${formatWindowSize(resizedSize)}, retry=setBounds",
+            );
+            final retrySetBoundsStartUs = tracker.checkpointUs();
+            await Future.delayed(const Duration(milliseconds: 16));
+            if (resizeRequestToken != currentResizeToken) {
+              Logger.instance.debug(traceId, "resize skipped: reason=$reason, target=${formatWindowSize(targetSize)}, supersededBeforeRetry=true");
+              tracker.setBool("skippedSuperseded", true);
+              tracker.setBool("skippedBeforePlatformRetry", true);
+              tracker.setElapsedUs("totalUs", totalStartUs);
+              tracker.log();
+              return;
+            }
+            await windowDriver.setBounds(Offset(pos.dx, newTop), targetSize);
+            tracker.setElapsedUs("retrySetBoundsUs", retrySetBoundsStartUs);
+            final getRetriedSizeStartUs = tracker.checkpointUs();
+            resizedSize = await windowDriver.getSize();
+            tracker.setElapsedUs("getRetriedSizeUs", getRetriedSizeStartUs);
+          }
           Logger.instance.debug(
             traceId,
             "resize applied: reason=$reason, before=${formatWindowSize(currentSize)}, target=${formatWindowSize(targetSize)}, after=${formatWindowSize(resizedSize)}, mode=setBounds, growUpward=true",
@@ -3569,8 +3634,28 @@ class WoxLauncherController extends GetxController {
       await windowDriver.setSize(targetSize);
       tracker.setElapsedUs("setSizeUs", setSizeStartUs);
       final getResizedSizeStartUs = tracker.checkpointUs();
-      final resizedSize = await windowDriver.getSize();
+      var resizedSize = await windowDriver.getSize();
       tracker.setElapsedUs("getResizedSizeUs", getResizedSizeStartUs);
+      if (!isWindowSizeEffectivelyEqual(resizedSize, targetSize)) {
+        // Native resize can report success before the top-level HWND reaches the requested size.
+        // Reapplying once keeps result-driven launcher resizing deterministic without blocking the normal path.
+        Logger.instance.warn(traceId, "resize readback mismatch: reason=$reason, target=${formatWindowSize(targetSize)}, after=${formatWindowSize(resizedSize)}, retry=setSize");
+        final retrySetSizeStartUs = tracker.checkpointUs();
+        await Future.delayed(const Duration(milliseconds: 16));
+        if (resizeRequestToken != currentResizeToken) {
+          Logger.instance.debug(traceId, "resize skipped: reason=$reason, target=${formatWindowSize(targetSize)}, supersededBeforeRetry=true");
+          tracker.setBool("skippedSuperseded", true);
+          tracker.setBool("skippedBeforePlatformRetry", true);
+          tracker.setElapsedUs("totalUs", totalStartUs);
+          tracker.log();
+          return;
+        }
+        await windowDriver.setSize(targetSize);
+        tracker.setElapsedUs("retrySetSizeUs", retrySetSizeStartUs);
+        final getRetriedSizeStartUs = tracker.checkpointUs();
+        resizedSize = await windowDriver.getSize();
+        tracker.setElapsedUs("getRetriedSizeUs", getRetriedSizeStartUs);
+      }
       Logger.instance.debug(
         traceId,
         "resize applied: reason=$reason, before=${formatWindowSize(currentSize)}, target=${formatWindowSize(targetSize)}, after=${formatWindowSize(resizedSize)}, mode=setSize, growUpward=false",
@@ -4476,9 +4561,9 @@ class WoxLauncherController extends GetxController {
 
   // Quick select related methods
 
-  /// Check if the quick select primary modifier key is pressed.
+  /// Check if the quick select modifier key is still pressed.
   bool isQuickSelectModifierPressed() {
-    return WoxPlatformHotkeyUtil.isPrimaryModifierPressed;
+    return Platform.isMacOS ? HardwareKeyboard.instance.isMetaPressed : HardwareKeyboard.instance.isAltPressed;
   }
 
   /// Start the quick select timer when modifier key is pressed

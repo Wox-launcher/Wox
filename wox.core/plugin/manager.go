@@ -47,6 +47,7 @@ const (
 	scoreTailContextDataKey      = "system:score"
 	previewDataMaxSize           = 1024
 	maxCachedQueriesPerSession   = 32
+	globalQueryPluginScoreLimit  = 200
 )
 
 type debounceTimer struct {
@@ -983,6 +984,43 @@ func (m *Manager) GetPluginInstanceById(pluginId string) *Instance {
 	return nil
 }
 
+// InvokePluginCommand routes a plugin-to-plugin command to the target plugin.
+func (m *Manager) InvokePluginCommand(ctx context.Context, caller *Instance, request PluginCommandRequest) (PluginCommandResult, error) {
+	if strings.TrimSpace(request.PluginId) == "" {
+		return PluginCommandResult{}, fmt.Errorf("plugin command target is empty")
+	}
+	if strings.TrimSpace(request.Command) == "" {
+		return PluginCommandResult{}, fmt.Errorf("plugin command is empty")
+	}
+
+	target := m.GetPluginInstanceById(request.PluginId)
+	if target == nil {
+		return PluginCommandResult{}, fmt.Errorf("plugin command target not found: %s", request.PluginId)
+	}
+	if len(target.PluginCommandHandlers) == 0 {
+		return PluginCommandResult{}, fmt.Errorf("plugin command target has no handler: %s", target.Metadata.GetName(ctx))
+	}
+
+	if request.Data == nil {
+		request.Data = common.ContextData{}
+	}
+
+	callerName := ""
+	if caller != nil {
+		callerName = caller.Metadata.GetName(ctx)
+	}
+	logger.Info(ctx, fmt.Sprintf("invoke plugin command: caller=%s target=%s command=%s", callerName, target.Metadata.GetName(ctx), request.Command))
+
+	for _, handler := range target.PluginCommandHandlers {
+		result := handler(ctx, request)
+		if result.Handled {
+			return result, nil
+		}
+	}
+
+	return PluginCommandResult{Handled: false, Message: "plugin command not handled"}, nil
+}
+
 func (m *Manager) canOperateQuery(ctx context.Context, pluginInstance *Instance, query Query) bool {
 	if pluginInstance.Setting.Disabled.Get() {
 		return false
@@ -1667,6 +1705,26 @@ func (m *Manager) normalizePreviewMetadata(ctx context.Context, pluginInstance *
 		})
 	}
 	return preview
+}
+
+// shouldHidePreviewForGlobalQuery keeps global search compact while preserving core-owned unblocker previews.
+func shouldHidePreviewForGlobalQuery(query Query, preview WoxPreview) bool {
+	if !query.IsGlobalQuery() {
+		return false
+	}
+
+	return preview.PreviewType != WoxPreviewTypeQueryRequirementSettings &&
+		preview.PreviewType != WoxPreviewTypeThemeEdit &&
+		preview.PreviewType != WoxPreviewTypeTriggerKeywordConflict
+}
+
+// limitGlobalQueryPluginScore keeps plugin-provided global scores within Wox's shared ranking scale.
+func limitGlobalQueryPluginScore(query Query, score int64) int64 {
+	if !query.IsGlobalQuery() || score <= globalQueryPluginScoreLimit {
+		return score
+	}
+
+	return globalQueryPluginScoreLimit
 }
 
 func (m *Manager) calculateResultScore(ctx context.Context, pluginId, title, subTitle string, currentQuery string) int64 {
@@ -2504,8 +2562,8 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 				// the same preview type can serve progress/status workflows too.
 				PreviewType: WoxPreviewTypeList,
 				PreviewData: m.buildSelectionFileListPreviewData(ctx, query.Selection.FilePaths),
-				PreviewProperties: map[string]string{
-					"i18n:selection_files_count": fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "selection_files_count_value"), len(query.Selection.FilePaths)),
+				PreviewTags: []WoxPreviewTag{
+					{Label: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "selection_files_count_value"), len(query.Selection.FilePaths)), Tooltip: "i18n:selection_files_count"},
 				},
 			}
 		}
@@ -2632,13 +2690,8 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 	previewRemoteTimingStart := time.Now()
 	previewGlobalStart := util.GetSystemTimestamp()
 	previewGlobalTimingStart := time.Now()
-	// if query is input and trigger keyword is global, disable preview and group.
-	// Core-owned interactive previews keep their preview even in global queries
-	// because stripping it would hide the form that can unblock the query.
-	if query.IsGlobalQuery() &&
-		result.Preview.PreviewType != WoxPreviewTypeQueryRequirementSettings &&
-		result.Preview.PreviewType != WoxPreviewTypeThemeEdit &&
-		result.Preview.PreviewType != WoxPreviewTypeTriggerKeywordConflict {
+	// If query is input and trigger keyword is global, disable preview and group.
+	if shouldHidePreviewForGlobalQuery(query, result.Preview) {
 		result.Preview = WoxPreview{}
 		result.Group = ""
 		result.GroupScore = 0
@@ -2672,6 +2725,7 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 
 	scoreStart := util.GetSystemTimestamp()
 	scoreTimingStart := time.Now()
+	result.Score = limitGlobalQueryPluginScore(query, result.Score)
 	scoreFeatureStart := util.GetSystemTimestamp()
 	scoreFeatureTimingStart := time.Now()
 	ignoreAutoScore := pluginInstance.Metadata.IsSupportFeature(MetadataFeatureIgnoreAutoScore)
@@ -3089,12 +3143,17 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 
 	// Translate preview properties if present
 	if result.Preview != nil {
-		// Updated previews must use the same list normalization as initial
-		// query results. Long-running actions commonly update list rows in place,
-		// so icon conversion and row text translation cannot live only in the
-		// first result-processing path.
-		preview := m.normalizeListPreviewData(ctx, pluginInstance, *result.Preview)
-		preview = m.normalizePreviewMetadata(ctx, pluginInstance, preview)
+		preview := *result.Preview
+		if shouldHidePreviewForGlobalQuery(resultCache.Query, preview) {
+			preview = WoxPreview{}
+		} else {
+			// Updated previews must use the same list normalization as initial
+			// query results. Long-running actions commonly update list rows in place,
+			// so icon conversion and row text translation cannot live only in the
+			// first result-processing path.
+			preview = m.normalizeListPreviewData(ctx, pluginInstance, preview)
+			preview = m.normalizePreviewMetadata(ctx, pluginInstance, preview)
+		}
 		result.Preview = &preview
 		resultCache.Result.Preview = preview
 	}
@@ -3270,6 +3329,10 @@ func newQueryExecution(ctx context.Context, manager *Manager, query Query, resul
 }
 
 func (e *queryExecution) start() {
+	// Keep completion signals behind the scheduler scan. Fast global plugins can
+	// otherwise finish before later eligible plugins are even counted.
+	e.tracker.startJob(true)
+
 	cacheStart := util.GetSystemTimestamp()
 	e.manager.startSessionQueryCache(e.query)
 	if tracker := timetracking.New("start_session_query_cache"); tracker.Enabled() {
@@ -3288,17 +3351,8 @@ func (e *queryExecution) start() {
 	defer e.stopScheduleWatchdog()
 
 	e.schedulePlugins()
+	e.tracker.finishJob(true)
 
-	// Queries with no runnable plugins should still notify both phases immediately.
-	notifyStart := util.GetSystemTimestamp()
-	e.tracker.notifyIfEmpty()
-	if tracker := timetracking.New("notify_if_empty"); tracker.Enabled() {
-		tracker.SetRawString("queryId", e.query.Id)
-		tracker.SetInt64("costMs", util.GetSystemTimestamp()-notifyStart)
-		tracker.SetInt("remaining", int(e.tracker.remaining.Load()))
-		tracker.SetInt("fallbackRemaining", int(e.tracker.fallbackRemaining.Load()))
-		tracker.Log(e.ctx)
-	}
 	if tracker := timetracking.New("schedule_done"); tracker.Enabled() {
 		tracker.SetRawString("queryId", e.query.Id)
 		tracker.SetRawString("query", e.query.String())
@@ -3706,16 +3760,6 @@ func (t *queryTracker) finishJob(blocksFallback bool) {
 	}
 }
 
-func (t *queryTracker) notifyIfEmpty() {
-	// When nothing was scheduled, both phases are already complete.
-	if t.fallbackRemaining.Load() == 0 {
-		t.fallbackReady <- true
-	}
-	if t.remaining.Load() == 0 {
-		t.done <- true
-	}
-}
-
 func queryDiagnosticPluginLabel(pluginInstance *Instance) string {
 	if pluginInstance == nil {
 		return "<nil>"
@@ -3792,6 +3836,10 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 		// an empty map so external hosts always receive an object, not JSON null.
 		refinements = map[string]string{}
 	}
+	contextData := plainQuery.ContextData
+	if contextData == nil {
+		contextData = common.ContextData{}
+	}
 
 	if plainQuery.QueryType == QueryTypeInput {
 		newQuery := plainQuery.QueryText
@@ -3808,6 +3856,7 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 		query.Id = plainQuery.QueryId
 		query.SessionId = util.GetContextSessionId(ctx)
 		query.Refinements = refinements
+		query.ContextData = contextData
 		if conflictErr := m.newTriggerKeywordConflictErrorIfNeeded(ctx, query); conflictErr != nil {
 			return query, nil, conflictErr
 		}
@@ -3834,6 +3883,7 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 			Search:         parsed.Search,
 			Selection:      plainQuery.QuerySelection,
 			Refinements:    refinements,
+			ContextData:    contextData,
 		}
 		query.SessionId = util.GetContextSessionId(ctx)
 		if conflictErr := m.newTriggerKeywordConflictErrorIfNeeded(ctx, query); conflictErr != nil {

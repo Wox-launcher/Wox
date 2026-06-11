@@ -48,6 +48,15 @@ type API interface {
 	OnUnload(ctx context.Context, callback func(ctx context.Context))
 	OnMRURestore(ctx context.Context, callback func(ctx context.Context, mruData MRUData) (*QueryResult, error))
 
+	// OnHandlePluginCommand registers a handler for commands addressed to this plugin.
+	// Command names and payload keys are owned by the target plugin and should be treated
+	// as documented constants rather than dynamically registered capabilities.
+	OnHandlePluginCommand(ctx context.Context, handler PluginCommandHandler)
+
+	// InvokePluginCommand sends a command request to another loaded plugin by plugin id.
+	// It is intended for built-in plugin coordination
+	InvokePluginCommand(ctx context.Context, request PluginCommandRequest) (PluginCommandResult, error)
+
 	// ShowToolbarMsg creates or updates the toolbar msg for the current plugin query context.
 	// It is only accepted while the caller is the active plugin in the current session.
 	// Leaving that plugin query context clears the toolbar msg automatically.
@@ -377,6 +386,16 @@ func (a *APIImpl) OnDeepLink(ctx context.Context, callback func(ctx context.Cont
 
 func (a *APIImpl) OnUnload(ctx context.Context, callback func(ctx context.Context)) {
 	a.pluginInstance.UnloadCallbacks = append(a.pluginInstance.UnloadCallbacks, callback)
+}
+
+// OnHandlePluginCommand registers a handler for commands addressed to this plugin.
+func (a *APIImpl) OnHandlePluginCommand(ctx context.Context, handler PluginCommandHandler) {
+	a.pluginInstance.PluginCommandHandlers = append(a.pluginInstance.PluginCommandHandlers, handler)
+}
+
+// InvokePluginCommand sends a command request to another loaded plugin by plugin id.
+func (a *APIImpl) InvokePluginCommand(ctx context.Context, request PluginCommandRequest) (PluginCommandResult, error) {
+	return GetPluginManager().InvokePluginCommand(ctx, a.pluginInstance, request)
 }
 
 func (a *APIImpl) ShowToolbarMsg(ctx context.Context, msg ToolbarMsg) {

@@ -86,6 +86,16 @@ class _WoxTerminalPreviewViewState extends State<WoxTerminalPreviewView> {
     final nextSessionId = controller.getTerminalSessionId(widget.woxPreview);
     if (nextSessionId != sessionId) {
       bindSession();
+      return;
+    }
+
+    final nextCommand = controller.getTerminalCommand(widget.woxPreview);
+    final nextRunning = controller.getTerminalStatus(widget.woxPreview) == "running";
+    if (sessionId.isEmpty && (nextCommand != terminalCommand || nextRunning != sessionRunning)) {
+      setState(() {
+        terminalCommand = nextCommand;
+        sessionRunning = nextRunning;
+      });
     }
   }
 
@@ -110,7 +120,9 @@ class _WoxTerminalPreviewViewState extends State<WoxTerminalPreviewView> {
   void bindSession() {
     final traceId = const UuidV4().generate();
     final nextSessionId = controller.getTerminalSessionId(widget.woxPreview);
-    if (nextSessionId == sessionId) {
+    final nextCommand = controller.getTerminalCommand(widget.woxPreview);
+    final nextStatus = controller.getTerminalStatus(widget.woxPreview);
+    if (nextSessionId == sessionId && nextCommand == terminalCommand && (nextStatus == "running") == sessionRunning) {
       return;
     }
 
@@ -121,9 +133,8 @@ class _WoxTerminalPreviewViewState extends State<WoxTerminalPreviewView> {
     stateSubscription?.cancel();
 
     sessionId = nextSessionId;
-    terminalCommand = controller.getTerminalCommand(widget.woxPreview);
-    final status = controller.getTerminalStatus(widget.woxPreview);
-    sessionRunning = status == "running";
+    terminalCommand = nextCommand;
+    sessionRunning = nextStatus == "running";
     terminalText = "";
     baseCursor = 0;
     currentCursor = 0;
@@ -468,7 +479,7 @@ class _WoxTerminalPreviewViewState extends State<WoxTerminalPreviewView> {
     }
 
     final fontColor = safeFromCssColor(widget.woxTheme.previewFontColor);
-    final backgroundColor = safeFromCssColor(widget.woxTheme.queryBoxBackgroundColor).withValues(alpha: 0.5);
+    final backgroundColor = fontColor.withValues(alpha: 0.035);
     final borderColor = safeFromCssColor(widget.woxTheme.previewSplitLineColor);
     final countText = localMatches.isEmpty ? "0/0" : "${currentLocalMatchIndex + 1}/${localMatches.length}";
 

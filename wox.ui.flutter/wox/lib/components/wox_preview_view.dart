@@ -9,6 +9,7 @@ import 'package:wox/components/file_preview/file_preview_renderer.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_ai_chat_view.dart';
 import 'package:wox/components/wox_ai_stream_preview_view.dart';
+import 'package:wox/components/wox_hotkey_overview_preview_view.dart';
 import 'package:wox/components/wox_list_preview_view.dart';
 import 'package:wox/components/wox_markdown.dart';
 import 'package:wox/components/wox_plugin_detail_view.dart';
@@ -200,6 +201,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
 
     Widget contentWidget = const SizedBox();
     bool contentHandlesScrolling = false;
+    var previewTags = widget.woxPreview.previewTags;
     if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_MARKDOWN.code) {
       contentWidget = buildMarkdown(widget.woxPreview.previewData);
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TEXT.code) {
@@ -225,6 +227,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
         );
         contentWidget = filePreviewResult.content;
         contentHandlesScrolling = filePreviewResult.contentHandlesScrolling;
+        previewTags = [...widget.woxPreview.previewTags, ...filePreviewResult.previewTags];
       }
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_LIST.code) {
       try {
@@ -303,13 +306,26 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
       } catch (e) {
         contentWidget = buildText("Invalid trigger keyword conflict preview data: $e");
       }
+    } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_HOTKEY_OVERVIEW.code) {
+      return WoxHotkeyOverviewPreviewView(woxTheme: widget.woxTheme, previewData: widget.woxPreview.previewData);
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TERMINAL.code) {
       // Terminal previews have their own status bar, search state, and scrolling.
-      // Keep them out of the generic shell so the new default styling does not
-      // disturb the interactive terminal surface.
+      // Keep them out of the generic framed shell while still rendering the
+      // shared preview metadata strip below the terminal surface.
+      final terminalTags = launcherController.supportsPreviewFullscreen(widget.woxPreview) && launcherController.isPreviewFullscreen.value ? const <WoxPreviewTag>[] : previewTags;
       return Container(
         padding: launcherController.isPreviewOnlyLayout ? EdgeInsets.zero : const EdgeInsets.only(top: 10.0, bottom: 10.0, left: 10.0),
-        child: WoxTerminalPreviewView(woxPreview: widget.woxPreview, woxTheme: widget.woxTheme, controller: launcherController),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: WoxTerminalPreviewView(woxPreview: widget.woxPreview, woxTheme: widget.woxTheme, controller: launcherController)),
+            if (terminalTags.isNotEmpty)
+              Padding(
+                padding: EdgeInsets.only(top: WoxInterfaceSizeUtil.instance.current.scaledSpacing(10), right: WoxInterfaceSizeUtil.instance.current.scaledSpacing(12)),
+                child: WoxPreviewTagPills(woxTheme: widget.woxTheme, tags: terminalTags),
+              ),
+          ],
+        ),
       );
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_WEBVIEW.code) {
       // WebView owns platform view sizing and navigation, so only preserve the
@@ -331,7 +347,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
     return WoxPreviewScaffold(
       woxTheme: widget.woxTheme,
       scrollController: scrollController,
-      tags: launcherController.supportsPreviewFullscreen(widget.woxPreview) && launcherController.isPreviewFullscreen.value ? const [] : widget.woxPreview.previewTags,
+      tags: launcherController.supportsPreviewFullscreen(widget.woxPreview) && launcherController.isPreviewFullscreen.value ? const [] : previewTags,
       contentHandlesScrolling: contentHandlesScrolling,
       child: contentWidget,
     );

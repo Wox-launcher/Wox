@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 	"wox/analytics"
 	"wox/common"
 	"wox/diagnostic"
@@ -31,6 +32,7 @@ import (
 	"wox/util/hotkey"
 	"wox/util/ime"
 	"wox/util/keyboard"
+	"wox/util/osvariant"
 	"wox/util/screen"
 	"wox/util/selection"
 	"wox/util/shell"
@@ -67,6 +69,8 @@ type Manager struct {
 	activeWindowSnapshotMu  sync.RWMutex
 	activeWindowSnapshotSeq uint64
 	pendingStartupNotify    *common.NotifyMsg
+	trayEmojiWarmMu         sync.Mutex
+	trayEmojiWarmInFlight   map[string]struct{}
 }
 
 func GetUIManager() *Manager {
@@ -234,6 +238,13 @@ func (m *Manager) RegisterMainHotkey(ctx context.Context, combineKey string) err
 		}
 		return nil
 	}
+	if hotkey.IsHyperHotkeyString(combineKey) && !setting.GetSettingManager().GetWoxSetting(ctx).EnableHyperKey.Get() {
+		logger.Info(ctx, fmt.Sprintf("skip register main hyper hotkey because Hyper Key is disabled: %s", combineKey))
+		if m.mainHotkey != nil {
+			m.mainHotkey.Unregister(ctx)
+		}
+		return nil
+	}
 
 	logger.Info(ctx, fmt.Sprintf("register main hotkey: %s", combineKey))
 	// unregister previous hotkey
@@ -264,6 +275,13 @@ func (m *Manager) RegisterSelectionHotkey(ctx context.Context, combineKey string
 	if combineKey == "" {
 		// remove hotkey
 		logger.Info(ctx, "remove selection hotkey")
+		if m.selectionHotkey != nil {
+			m.selectionHotkey.Unregister(ctx)
+		}
+		return nil
+	}
+	if hotkey.IsHyperHotkeyString(combineKey) && !setting.GetSettingManager().GetWoxSetting(ctx).EnableHyperKey.Get() {
+		logger.Info(ctx, fmt.Sprintf("skip register selection hyper hotkey because Hyper Key is disabled: %s", combineKey))
 		if m.selectionHotkey != nil {
 			m.selectionHotkey.Unregister(ctx)
 		}
@@ -399,6 +417,10 @@ func (m *Manager) RegisterQueryHotkey(ctx context.Context, queryHotkey setting.Q
 		logger.Info(ctx, fmt.Sprintf("skip register query hotkey: disabled=%t hotkey=%s", queryHotkey.Disabled, queryHotkey.Hotkey))
 		return nil
 	}
+	if hotkey.IsHyperHotkeyString(combineKey) && !setting.GetSettingManager().GetWoxSetting(ctx).EnableHyperKey.Get() {
+		logger.Info(ctx, fmt.Sprintf("skip register query hyper hotkey because Hyper Key is disabled: hotkey=%s query=%s", combineKey, queryHotkey.Query))
+		return nil
+	}
 
 	hk := &hotkey.Hotkey{}
 
@@ -428,6 +450,18 @@ func (m *Manager) unregisterQueryHotkeys(ctx context.Context) {
 		hk.Unregister(ctx)
 	}
 	m.queryHotkeys = nil
+}
+
+func (m *Manager) reregisterGlobalHotkeys(ctx context.Context) {
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	_ = m.RegisterMainHotkey(ctx, woxSetting.MainHotkey.Get())
+	_ = m.RegisterSelectionHotkey(ctx, woxSetting.SelectionHotkey.Get())
+	m.unregisterQueryHotkeys(ctx)
+	for _, queryHotkey := range woxSetting.QueryHotkeys.Get() {
+		if err := m.RegisterQueryHotkey(ctx, queryHotkey); err != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to register query hotkey after Hyper Key setting update: %s", err.Error()))
+		}
+	}
 }
 
 type HotkeyAvailability struct {
@@ -465,16 +499,16 @@ func (m *Manager) IsHotkeyAvailable(ctx context.Context, hotkeyStr string) bool 
 
 // findConfiguredHotkeyConflict keeps availability checks aligned with Wox-owned hotkey settings.
 func (m *Manager) findConfiguredHotkeyConflict(ctx context.Context, hotkeyStr string) HotkeyAvailability {
-	normalized := normalizeHotkeyForCompare(hotkeyStr)
-	if normalized == "" {
+	candidateKeys := hotkeyCompareKeys(hotkeyStr)
+	if len(candidateKeys) == 0 {
 		return HotkeyAvailability{Available: true}
 	}
 
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	if normalizeHotkeyForCompare(woxSetting.MainHotkey.Get()) == normalized {
+	if hotkeyCompareKeysIntersect(candidateKeys, hotkeyCompareKeys(woxSetting.MainHotkey.Get())) {
 		return HotkeyAvailability{Available: false, ConflictType: hotkeyConflictTypeMain}
 	}
-	if normalizeHotkeyForCompare(woxSetting.SelectionHotkey.Get()) == normalized {
+	if hotkeyCompareKeysIntersect(candidateKeys, hotkeyCompareKeys(woxSetting.SelectionHotkey.Get())) {
 		return HotkeyAvailability{Available: false, ConflictType: hotkeyConflictTypeSelection}
 	}
 
@@ -482,12 +516,46 @@ func (m *Manager) findConfiguredHotkeyConflict(ctx context.Context, hotkeyStr st
 		if queryHotkey.Disabled {
 			continue
 		}
-		if normalizeHotkeyForCompare(queryHotkey.Hotkey) == normalized {
+		if hotkeyCompareKeysIntersect(candidateKeys, hotkeyCompareKeys(queryHotkey.Hotkey)) {
 			return HotkeyAvailability{Available: false, ConflictType: hotkeyConflictTypeQuery, ConflictValue: queryHotkey.DisplayName()}
 		}
 	}
 
 	return HotkeyAvailability{Available: true}
+}
+
+func hotkeyCompareKeys(hotkeyStr string) map[string]bool {
+	normalized := normalizeHotkeyForCompare(hotkeyStr)
+	if normalized == "" {
+		return map[string]bool{}
+	}
+
+	keys := map[string]bool{normalized: true}
+	if strings.HasPrefix(normalized, "hyper+") {
+		key := strings.TrimPrefix(normalized, "hyper+")
+		if key != "" {
+			keys["capslock+"+key] = true
+		}
+		return keys
+	}
+
+	if strings.HasPrefix(normalized, "capslock+") {
+		key := strings.TrimPrefix(normalized, "capslock+")
+		if key != "" {
+			keys["hyper+"+key] = true
+		}
+		return keys
+	}
+	return keys
+}
+
+func hotkeyCompareKeysIntersect(left map[string]bool, right map[string]bool) bool {
+	for key := range left {
+		if right[key] {
+			return true
+		}
+	}
+	return false
 }
 
 // normalizeHotkeyForCompare canonicalizes common aliases so stored settings and recorder output compare consistently.
@@ -507,6 +575,10 @@ func normalizeHotkeyForCompare(hotkeyStr string) string {
 	modifiers := map[string]bool{}
 	key := ""
 	for _, token := range tokens {
+		if token == "hyper" || token == "capslock" {
+			modifiers[token] = true
+			continue
+		}
 		if isHotkeyModifierToken(token) {
 			modifiers[token] = true
 			continue
@@ -514,6 +586,13 @@ func normalizeHotkeyForCompare(hotkeyStr string) string {
 		if key == "" {
 			key = token
 		}
+	}
+
+	if modifiers["hyper"] && key != "" {
+		return "hyper+" + key
+	}
+	if modifiers["capslock"] && key != "" {
+		return "capslock+" + key
 	}
 
 	parts := []string{}
@@ -540,6 +619,10 @@ func normalizeHotkeyToken(token string) string {
 		return "alt"
 	case "cmd", "command", "win", "windows", "super":
 		return "meta"
+	case "hyper":
+		return "hyper"
+	case "capslock", "caps_lock", "caps lock":
+		return "capslock"
 	case "return":
 		return "enter"
 	case "arrowleft":
@@ -745,7 +828,11 @@ func (m *Manager) parseTheme(themeJson string) (common.Theme, error) {
 }
 
 func (m *Manager) resolvePlatformTheme(ctx context.Context, theme common.Theme) common.Theme {
-	platformName, platformOverride := m.getThemePlatformOverride(theme)
+	return resolvePlatformThemeForTarget(ctx, theme, util.GetCurrentPlatform(), osvariant.GetCurrentPlatformVariant())
+}
+
+func resolvePlatformThemeForTarget(ctx context.Context, theme common.Theme, platformName string, variantName string) common.Theme {
+	platformNodeName, platformOverride := getThemePlatformOverrideForTarget(theme, platformName)
 	if platformOverride == nil || len(*platformOverride) == 0 {
 		return clearThemePlatformOverrides(theme)
 	}
@@ -756,28 +843,28 @@ func (m *Manager) resolvePlatformTheme(ctx context.Context, theme common.Theme) 
 	// platform-specific schema details.
 	themeJSON, marshalErr := json.Marshal(theme)
 	if marshalErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to marshal theme %s for platform override %s: %s", theme.ThemeId, platformName, marshalErr.Error()))
+		logger.Error(ctx, fmt.Sprintf("failed to marshal theme %s for platform override %s: %s", theme.ThemeId, platformNodeName, marshalErr.Error()))
 		return clearThemePlatformOverrides(theme)
 	}
 
 	var merged map[string]json.RawMessage
 	unmarshalErr := json.Unmarshal(themeJSON, &merged)
 	if unmarshalErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to prepare theme %s for platform override %s: %s", theme.ThemeId, platformName, unmarshalErr.Error()))
+		logger.Error(ctx, fmt.Sprintf("failed to prepare theme %s for platform override %s: %s", theme.ThemeId, platformNodeName, unmarshalErr.Error()))
 		return clearThemePlatformOverrides(theme)
 	}
 
-	// Legacy border aliases must still work inside platform overrides. If an
-	// override uses the old alias, remove the canonical base value first so the
-	// existing alias parser can treat the alias as the effective value.
-	if _, ok := (*platformOverride)["ResultItemBorderLeft"]; ok {
-		delete(merged, "ResultItemBorderLeftWidth")
-	}
-	if _, ok := (*platformOverride)["ResultItemActiveBorderLeft"]; ok {
-		delete(merged, "ResultItemActiveBorderLeftWidth")
-	}
-	for fieldName, value := range *platformOverride {
-		merged[fieldName] = value
+	applyThemeOverrideFields(merged, *platformOverride)
+
+	if variantName != "" {
+		variantOverride, variantErr := getThemePlatformVariantOverride(*platformOverride, variantName)
+		if variantErr != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to prepare theme %s for platform override %s variant %s: %s", theme.ThemeId, platformNodeName, variantName, variantErr.Error()))
+			return clearThemePlatformOverrides(theme)
+		}
+		if variantOverride != nil {
+			applyThemeOverrideFields(merged, *variantOverride)
+		}
 	}
 
 	delete(merged, "windows")
@@ -786,14 +873,14 @@ func (m *Manager) resolvePlatformTheme(ctx context.Context, theme common.Theme) 
 
 	resolvedJSON, marshalErr := json.Marshal(merged)
 	if marshalErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to encode resolved theme %s for platform override %s: %s", theme.ThemeId, platformName, marshalErr.Error()))
+		logger.Error(ctx, fmt.Sprintf("failed to encode resolved theme %s for platform override %s: %s", theme.ThemeId, platformNodeName, marshalErr.Error()))
 		return clearThemePlatformOverrides(theme)
 	}
 
 	var resolvedTheme common.Theme
 	unmarshalErr = json.Unmarshal(resolvedJSON, &resolvedTheme)
 	if unmarshalErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to resolve theme %s for platform override %s: %s", theme.ThemeId, platformName, unmarshalErr.Error()))
+		logger.Error(ctx, fmt.Sprintf("failed to resolve theme %s for platform override %s: %s", theme.ThemeId, platformNodeName, unmarshalErr.Error()))
 		return clearThemePlatformOverrides(theme)
 	}
 
@@ -801,16 +888,67 @@ func (m *Manager) resolvePlatformTheme(ctx context.Context, theme common.Theme) 
 }
 
 func (m *Manager) getThemePlatformOverride(theme common.Theme) (string, *common.ThemePlatformOverride) {
-	switch util.GetCurrentPlatform() {
+	return getThemePlatformOverrideForTarget(theme, util.GetCurrentPlatform())
+}
+
+func getThemePlatformOverrideForTarget(theme common.Theme, platformName string) (string, *common.ThemePlatformOverride) {
+	switch platformName {
 	case util.PlatformWindows:
 		return "windows", theme.Windows
 	case util.PlatformMacOS:
 		return "macos", theme.MacOS
+	case "macos":
+		return "macos", theme.MacOS
 	case util.PlatformLinux:
 		return "linux", theme.Linux
 	default:
-		return util.GetCurrentPlatform(), nil
+		return platformName, nil
 	}
+}
+
+func applyThemeOverrideFields(merged map[string]json.RawMessage, override common.ThemePlatformOverride) {
+	// Legacy border aliases must still work inside platform and variant overrides.
+	// If an override uses the old alias, remove the canonical base value first so
+	// the existing alias parser can treat the alias as the effective value.
+	if _, ok := override["ResultItemBorderLeft"]; ok {
+		delete(merged, "ResultItemBorderLeftWidth")
+	}
+	if _, ok := override["ResultItemActiveBorderLeft"]; ok {
+		delete(merged, "ResultItemActiveBorderLeftWidth")
+	}
+	for fieldName, value := range override {
+		if fieldName == "variants" {
+			continue
+		}
+		merged[fieldName] = value
+	}
+}
+
+func getThemePlatformVariantOverride(platformOverride common.ThemePlatformOverride, variantName string) (*common.ThemePlatformOverride, error) {
+	variantsValue, ok := platformOverride["variants"]
+	if !ok || string(variantsValue) == "null" {
+		return nil, nil
+	}
+
+	var variants map[string]json.RawMessage
+	if err := json.Unmarshal(variantsValue, &variants); err != nil {
+		return nil, err
+	}
+
+	variantValue, ok := variants[variantName]
+	if !ok || string(variantValue) == "null" {
+		return nil, nil
+	}
+
+	var variantOverride common.ThemePlatformOverride
+	if err := json.Unmarshal(variantValue, &variantOverride); err != nil {
+		return nil, err
+	}
+	if len(variantOverride) == 0 {
+		return nil, nil
+	}
+
+	return &variantOverride, nil
 }
 
 func clearThemePlatformOverrides(theme common.Theme) common.Theme {
@@ -992,6 +1130,13 @@ func (m *Manager) PostOnHotkeyRecording(ctx context.Context, isRecording bool) {
 			impl.isRecordingHotkey = isRecording
 		}
 		impl.sessionStatesMu.Unlock()
+		if isRecording {
+			hotkey.SetHyperKeyRecorder(func(hotkeyStr string) {
+				m.ui.RecordHotkey(util.NewTraceContext(), hotkeyStr)
+			})
+		} else {
+			hotkey.SetHyperKeyRecorder(nil)
+		}
 		logger.Info(ctx, fmt.Sprintf("hotkey recording state changed: %t", isRecording))
 	}
 }
@@ -1077,6 +1222,8 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value strin
 		m.RegisterMainHotkey(ctx, vs)
 	case "SelectionHotkey":
 		m.RegisterSelectionHotkey(ctx, vs)
+	case "EnableHyperKey":
+		m.reregisterGlobalHotkeys(ctx)
 	case "LogLevel":
 		util.GetLogger().SetLevel(vs)
 	case "QueryHotkeys":
@@ -1448,6 +1595,9 @@ func (m *Manager) toTrayIconBytes(ctx context.Context, icon common.WoxImage) []b
 
 	img, err := icon.ToImageWithoutRemoteFetch()
 	if err != nil {
+		if icon.ImageType == common.WoxImageTypeEmoji {
+			m.warmTrayEmojiIconCache(ctx, icon)
+		}
 		logger.Warn(ctx, fmt.Sprintf("failed to parse tray query icon, fallback to app icon: %s", err.Error()))
 		return resource.GetAppIcon()
 	}
@@ -1468,6 +1618,42 @@ func (m *Manager) toTrayIconBytes(ctx context.Context, icon common.WoxImage) []b
 	}
 
 	return buf.Bytes()
+}
+
+// warmTrayEmojiIconCache keeps tray refresh local-first while still allowing emoji icons to resolve after the Twemoji PNG cache is ready.
+func (m *Manager) warmTrayEmojiIconCache(ctx context.Context, icon common.WoxImage) {
+	iconKey := icon.String()
+	m.trayEmojiWarmMu.Lock()
+	if m.trayEmojiWarmInFlight == nil {
+		m.trayEmojiWarmInFlight = map[string]struct{}{}
+	}
+	if _, exists := m.trayEmojiWarmInFlight[iconKey]; exists {
+		m.trayEmojiWarmMu.Unlock()
+		return
+	}
+	m.trayEmojiWarmInFlight[iconKey] = struct{}{}
+	m.trayEmojiWarmMu.Unlock()
+
+	util.Go(ctx, "warm tray query emoji icon cache", func() {
+		defer func() {
+			m.trayEmojiWarmMu.Lock()
+			delete(m.trayEmojiWarmInFlight, iconKey)
+			m.trayEmojiWarmMu.Unlock()
+		}()
+
+		warmCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+
+		if _, err := icon.ToImageWithContext(warmCtx); err != nil {
+			logger.Warn(ctx, fmt.Sprintf("failed to warm tray query emoji icon cache: %s", err.Error()))
+			return
+		}
+
+		if setting.GetSettingManager().GetWoxSetting(ctx).ShowTray.Get() {
+			logger.Info(ctx, fmt.Sprintf("warmed tray query emoji icon cache, refreshing tray query icons: %s", icon.ImageData))
+			m.refreshTrayQueryIcons(ctx)
+		}
+	})
 }
 
 func (m *Manager) toMacOSTrayVectorBytes(ctx context.Context, icon common.WoxImage) ([]byte, bool) {
@@ -1562,6 +1748,15 @@ func (m *Manager) GetActiveWindowSnapshot(ctx context.Context) common.ActiveWind
 	m.activeWindowSnapshotMu.RLock()
 	defer m.activeWindowSnapshotMu.RUnlock()
 	return m.activeWindowSnapshot
+}
+
+// SeedActiveWindowSnapshotForQuery stores a caller-owned source window for the next plugin query.
+// Incrementing the sequence blocks older async detail refreshes from replacing it.
+func (m *Manager) SeedActiveWindowSnapshotForQuery(snapshot common.ActiveWindowSnapshot) {
+	m.activeWindowSnapshotMu.Lock()
+	m.activeWindowSnapshotSeq++
+	m.activeWindowSnapshot = snapshot
+	m.activeWindowSnapshotMu.Unlock()
 }
 
 // RefreshActiveWindowSnapshot updates the cached active window snapshot without

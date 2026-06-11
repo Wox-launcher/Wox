@@ -24,6 +24,7 @@ class WoxWindowsWebViewSession implements WoxWebViewSession {
   StreamSubscription<String>? _urlSubscription;
   StreamSubscription<dynamic>? _webMessageSubscription;
   String _currentUrl = "";
+  String _currentHtml = "";
   String _currentCss = "";
   String? _currentScriptId;
   bool _disposed = false;
@@ -85,11 +86,19 @@ class WoxWindowsWebViewSession implements WoxWebViewSession {
       _currentScriptId = await controller.addScriptToExecuteOnDocumentCreated(WoxWebViewSupport.buildInjectCssScript(previewData.injectCss));
     }
 
-    final shouldReload = _currentUrl != previewData.url || injectCssChanged;
+    final shouldReload = _currentUrl != previewData.url || _currentHtml != previewData.html || injectCssChanged;
     _currentCss = previewData.injectCss;
+
+    if (shouldReload && previewData.html.isNotEmpty) {
+      await controller.loadStringContent(previewData.html);
+      _currentHtml = previewData.html;
+      _currentUrl = previewData.url;
+      return;
+    }
 
     if (shouldReload && previewData.url.isNotEmpty) {
       await controller.loadUrl(previewData.url);
+      _currentHtml = "";
       _currentUrl = previewData.url;
     }
   }

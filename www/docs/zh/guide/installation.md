@@ -1,6 +1,6 @@
 # 安装
 
-优先选择你平时管理桌面应用的方式。包管理器更适合后续升级；Release 压缩包更适合需要便携目录的场景。
+优先选择你平时管理桌面应用的方式。包管理器更适合后续升级；Release 压缩包更适合需要便携目录的场景。Wox 默认使用稳定版更新通道。
 
 ## 包管理器
 
@@ -15,7 +15,11 @@
 
 ## 手动下载
 
-如果你的平台暂时没有包管理器入口，或你希望把 Wox 放在固定目录中运行，可以从 [GitHub Releases](https://github.com/Wox-launcher/Wox/releases) 下载最新包。
+如果你的平台暂时没有包管理器入口，或你希望把 Wox 放在固定目录中运行，可以从 [GitHub Releases](https://github.com/Wox-launcher/Wox/releases) 下载最新稳定版安装包。
+
+## 更新通道
+
+Wox 默认检查稳定版通道。如需接收测试版预发布版，打开 **设置 -> 通用 -> 更新通道** 并选择 **测试版通道**。测试版通道用户会收到 beta 预发布版和后续稳定版正式版；稳定版通道用户不会自动收到预发布版。
 
 ### Windows
 
@@ -49,11 +53,11 @@ chmod +x ./wox
 
 Wox 会把设置、插件数据、缓存和日志放在应用目录之外：
 
-| 平台 | 数据目录 | 日志目录 |
+| 平台 | 数据目录 | Core 日志 |
 | --- | --- | --- |
-| Windows | `%USERPROFILE%\.wox` | `%USERPROFILE%\.wox\log` |
-| macOS | `~/.wox` | `~/.wox/log` |
-| Linux | `~/.wox` | `~/.wox/log` |
+| Windows | `%USERPROFILE%\.wox` | `%USERPROFILE%\.wox\log\wox.log` |
+| macOS | `~/.wox` | `~/.wox/log/wox.log` |
+| Linux | `~/.wox` | `~/.wox/log/wox.log` |
 
 迁移配置时，优先备份这个目录。
 

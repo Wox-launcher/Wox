@@ -17,10 +17,12 @@ import 'package:wox/modules/setting/views/wox_setting_theme_editor_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_about_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_usage_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_privacy_view.dart';
+import 'package:wox/modules/setting/views/wox_setting_update_view.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/color_util.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/env.dart';
+import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_system_wallpaper_util.dart';
 
 import 'wox_setting_plugin_view.dart';
@@ -47,6 +49,7 @@ class _WoxSettingViewState extends State<WoxSettingView> {
   late final Worker _activeNavPathWorker;
   String _lastQueuedVisibleNavPath = '';
   bool _consumeSearchEscapeKeyUp = false;
+  bool _windowFallbackEscapePressPending = false;
 
   @override
   void initState() {
@@ -410,6 +413,12 @@ class _WoxSettingViewState extends State<WoxSettingView> {
   }
 
   bool _handleHardwareKeyboardEvent(KeyEvent event) {
+    if (_isSearchFocusShortcut(event) && _isActiveSettingRoute() && !_hasSettingsDialogRoute()) {
+      if (event is KeyDownEvent || event is KeyRepeatEvent) {
+        _focusSettingSearchFromShortcut();
+      }
+      return true;
+    }
     if (controller.settingSearchFocusNode.hasFocus && (event.logicalKey == LogicalKeyboardKey.arrowDown || event.logicalKey == LogicalKeyboardKey.arrowUp)) {
       return false;
     }
@@ -421,7 +430,64 @@ class _WoxSettingViewState extends State<WoxSettingView> {
     if (event is KeyUpEvent && event.logicalKey == LogicalKeyboardKey.escape && _consumeSearchEscapeKeyUp) {
       return false;
     }
+    if (_handleWindowLevelEscapeFallback(event)) {
+      return true;
+    }
     return _handleSearchKeyEvent(event) == KeyEventResult.handled;
+  }
+
+  bool _handleWindowLevelEscapeFallback(KeyEvent event) {
+    if (event.logicalKey != LogicalKeyboardKey.escape || !_isActiveSettingRoute()) {
+      return false;
+    }
+
+    if (_hasSettingsDialogRoute()) {
+      return false;
+    }
+
+    final primaryFocus = FocusManager.instance.primaryFocus;
+    if (primaryFocus != null && primaryFocus != FocusManager.instance.rootScope && primaryFocus is! FocusScopeNode) {
+      return false;
+    }
+
+    if (event is KeyDownEvent || event is KeyRepeatEvent) {
+      // Bug fix: the settings route can leave Flutter's primary focus on the
+      // route-level ModalScope instead of a concrete settings widget. The page
+      // Focus handler then never sees Escape, so the window-level handler must
+      // consume down/repeat and defer the actual exit to KeyUp to preserve the
+      // existing hold-Escape behavior.
+      _windowFallbackEscapePressPending = true;
+      return true;
+    }
+
+    if (event is KeyUpEvent) {
+      if (!_windowFallbackEscapePressPending) {
+        return false;
+      }
+      // Bug fix: only the fallback that consumed Escape down/repeat may exit on
+      // KeyUp. Dialog routes can close before the release event reaches this
+      // handler, so an unpaired KeyUp must be ignored instead of also closing
+      // settings.
+      _windowFallbackEscapePressPending = false;
+      final traceId = const UuidV4().generate();
+      Logger.instance.info(traceId, "[KEYLOG][FLUTTER-SETTING] ESC key pressed from window-level focus fallback, hiding window");
+      controller.hideWindow(traceId);
+      return true;
+    }
+
+    return false;
+  }
+
+  bool _isActiveSettingRoute() {
+    final route = ModalRoute.of(context);
+    return mounted && (route == null || route.isCurrent);
+  }
+
+  bool _hasSettingsDialogRoute() {
+    // Bug fix guard: dialogs are separate Navigator routes and should keep
+    // their own Escape behavior. The fallback is only for the settings page
+    // route itself after focus falls back to the route ModalScope.
+    return Get.key.currentState?.canPop() ?? false;
   }
 
   Widget _buildSearchResultIcon(WoxSettingSearchResult result, bool isSelected) {
@@ -589,7 +655,7 @@ class _WoxSettingViewState extends State<WoxSettingView> {
                 await controller.switchToThemeList(false);
               },
             ),
-            _NavItem(id: 'themes.edit', icon: Icons.tune_outlined, title: controller.tr('ui_theme_editor_title'), body: const WoxSettingThemeEditorView()),
+            _NavItem(id: 'themes.edit', icon: Icons.format_paint_outlined, title: controller.tr('ui_theme_editor_title'), body: const WoxSettingThemeEditorView()),
           ],
         ),
         _NavItem(id: 'usage', icon: Icons.query_stats_outlined, title: controller.tr('ui_usage'), body: const WoxSettingUsageView()),
@@ -598,6 +664,7 @@ class _WoxSettingViewState extends State<WoxSettingView> {
           // tails without leaking internal instrumentation switches into
           // packaged user builds.
           _NavItem(id: 'debug', icon: Icons.bug_report_outlined, title: controller.tr('ui_debug'), body: const WoxSettingDebugView()),
+        _NavItem(id: 'update', icon: Icons.autorenew_rounded, title: controller.tr('ui_update'), body: const WoxSettingUpdateView()),
         _NavItem(id: 'privacy', icon: Icons.privacy_tip_outlined, title: controller.tr('ui_privacy'), body: const WoxSettingPrivacyView()),
         _NavItem(id: 'about', icon: Icons.info_outline, title: controller.tr('ui_about'), body: const WoxSettingAboutView()),
       ];

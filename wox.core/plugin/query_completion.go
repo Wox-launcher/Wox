@@ -23,6 +23,9 @@ const (
 	queryCompletionPluginHistoryMinLen  = 2
 	queryCompletionCommandScoreBase     = 20000
 	queryCompletionHistoryScoreBase     = 10000
+	queryCompletionFeedbackScoreBase    = 5000
+	queryCompletionFeedbackAcceptBonus  = 100
+	queryCompletionFeedbackAcceptMax    = 20
 	queryCompletionRankBonusMax         = 100
 	queryCompletionHistoryInputBonusMax = 20
 )
@@ -41,8 +44,18 @@ func BuildQueryCompletionHint(query Query, queryPlugin *Instance, histories []se
 	return BuildQueryCompletionHintForInputPrefix(query, queryPlugin, histories, query.RawQuery)
 }
 
+// BuildQueryCompletionHintWithFeedback applies accepted history feedback to inline completion ranking.
+func BuildQueryCompletionHintWithFeedback(query Query, queryPlugin *Instance, histories []setting.QueryHistory, feedbacks []setting.QueryCompletionFeedback) *QueryCompletionHint {
+	return BuildQueryCompletionHintForInputPrefixWithFeedback(query, queryPlugin, histories, feedbacks, query.RawQuery)
+}
+
 // BuildQueryCompletionHintForInputPrefix uses the UI's original input as the stale-response prefix.
 func BuildQueryCompletionHintForInputPrefix(query Query, queryPlugin *Instance, histories []setting.QueryHistory, inputPrefix string) *QueryCompletionHint {
+	return BuildQueryCompletionHintForInputPrefixWithFeedback(query, queryPlugin, histories, nil, inputPrefix)
+}
+
+// BuildQueryCompletionHintForInputPrefixWithFeedback uses accepted history feedback without changing command priority.
+func BuildQueryCompletionHintForInputPrefixWithFeedback(query Query, queryPlugin *Instance, histories []setting.QueryHistory, feedbacks []setting.QueryCompletionFeedback, inputPrefix string) *QueryCompletionHint {
 	if query.Type != QueryTypeInput || query.RawQuery == "" {
 		return nil
 	}
@@ -62,7 +75,7 @@ func BuildQueryCompletionHintForInputPrefix(query Query, queryPlugin *Instance, 
 	for _, candidate := range buildCommandCompletionHints(query, queryPlugin, inputPrefix) {
 		accept(candidate)
 	}
-	for _, candidate := range buildHistoryCompletionHints(query, queryPlugin, histories, inputPrefix) {
+	for _, candidate := range buildHistoryCompletionHints(query, queryPlugin, histories, feedbacks, inputPrefix) {
 		accept(candidate)
 	}
 
@@ -107,11 +120,12 @@ func buildCommandCompletionHints(query Query, queryPlugin *Instance, inputPrefix
 	}
 }
 
-func buildHistoryCompletionHints(query Query, queryPlugin *Instance, histories []setting.QueryHistory, inputPrefix string) []QueryCompletionHint {
+func buildHistoryCompletionHints(query Query, queryPlugin *Instance, histories []setting.QueryHistory, feedbacks []setting.QueryCompletionFeedback, inputPrefix string) []QueryCompletionHint {
 	if len(histories) == 0 || !hasEnoughHistoryCompletionInput(query) || shouldDelayHistoryCompletionForCommandPrefix(query, queryPlugin) {
 		return nil
 	}
 
+	feedbackByCompletionText := queryCompletionFeedbackByText(feedbacks)
 	var hints []QueryCompletionHint
 	for index, history := range latestQueryCompletionHistories(histories) {
 		if history.Query.QueryType != QueryTypeInput {
@@ -128,7 +142,7 @@ func buildHistoryCompletionHints(query Query, queryPlugin *Instance, histories [
 			CompletionText: completionText,
 			Suffix:         completionText[len(inputPrefix):],
 			Source:         QueryCompletionSourceHistory,
-			Score:          queryCompletionHistoryScoreBase + historyInputBonus(query) + rankBonus(index),
+			Score:          queryCompletionHistoryScoreBase + queryCompletionFeedbackBonus(completionText, feedbackByCompletionText) + historyInputBonus(query) + rankBonus(index),
 		})
 	}
 	return hints
@@ -187,6 +201,36 @@ func historyInputBonus(query Query) int {
 		inputLen = queryCompletionHistoryInputBonusMax
 	}
 	return inputLen * 20
+}
+
+// queryCompletionFeedbackByText keeps the latest accepted feedback for each completion text.
+func queryCompletionFeedbackByText(feedbacks []setting.QueryCompletionFeedback) map[string]setting.QueryCompletionFeedback {
+	result := map[string]setting.QueryCompletionFeedback{}
+	for _, feedback := range feedbacks {
+		if feedback.CompletionText == "" || feedback.AcceptCount <= 0 {
+			continue
+		}
+
+		existing, exists := result[feedback.CompletionText]
+		if !exists || feedback.LastAcceptedTimestamp > existing.LastAcceptedTimestamp {
+			result[feedback.CompletionText] = feedback
+		}
+	}
+	return result
+}
+
+// queryCompletionFeedbackBonus converts accepted hint feedback into a bounded history-only score bonus.
+func queryCompletionFeedbackBonus(completionText string, feedbacks map[string]setting.QueryCompletionFeedback) int {
+	feedback, exists := feedbacks[completionText]
+	if !exists {
+		return 0
+	}
+
+	acceptCount := feedback.AcceptCount
+	if acceptCount > queryCompletionFeedbackAcceptMax {
+		acceptCount = queryCompletionFeedbackAcceptMax
+	}
+	return queryCompletionFeedbackScoreBase + acceptCount*queryCompletionFeedbackAcceptBonus
 }
 
 func effectiveCompletionInputLen(value string) int {

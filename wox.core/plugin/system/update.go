@@ -25,6 +25,7 @@ type UpdatePlugin struct {
 type updatePreviewData struct {
 	CurrentVersion    string `json:"currentVersion"`
 	LatestVersion     string `json:"latestVersion"`
+	ReleaseChannel    string `json:"releaseChannel"`
 	ReleaseNotes      string `json:"releaseNotes"`
 	DownloadUrl       string `json:"downloadUrl"`
 	Status            string `json:"status"`
@@ -67,15 +68,16 @@ func (p *UpdatePlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 func (p *UpdatePlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	info := updater.GetUpdateInfo()
 	autoUpdateEnabled := true
+	releaseChannel := string(setting.ReleaseChannelStable)
 	if woxSetting := setting.GetSettingManager().GetWoxSetting(ctx); woxSetting != nil {
 		autoUpdateEnabled = woxSetting.EnableAutoUpdate.Get()
+		releaseChannel = string(woxSetting.ReleaseChannel.Get())
 	}
 
 	preview := plugin.WoxPreview{
-		PreviewType:       plugin.WoxPreviewTypeUpdate,
-		PreviewData:       p.buildPreviewData(info, autoUpdateEnabled),
-		PreviewProperties: map[string]string{},
-		ScrollPosition:    "",
+		PreviewType:    plugin.WoxPreviewTypeUpdate,
+		PreviewData:    p.buildPreviewData(info, autoUpdateEnabled, releaseChannel),
+		ScrollPosition: "",
 	}
 
 	// The update plugin renders one preview row. Keeping it as a local result
@@ -85,13 +87,13 @@ func (p *UpdatePlugin) Query(ctx context.Context, query plugin.Query) plugin.Que
 		Title:   "", // we don't need title in update plugin
 		Icon:    updateIcon,
 		Preview: preview,
-		Actions: p.buildActions(ctx, info, autoUpdateEnabled),
+		Actions: p.buildActions(ctx, info, autoUpdateEnabled, releaseChannel),
 	}
 
 	return plugin.NewQueryResponse([]plugin.QueryResult{result})
 }
 
-func (p *UpdatePlugin) buildPreviewData(info updater.UpdateInfo, autoUpdateEnabled bool) string {
+func (p *UpdatePlugin) buildPreviewData(info updater.UpdateInfo, autoUpdateEnabled bool, releaseChannel string) string {
 	errText := ""
 	if info.UpdateError != nil {
 		errText = info.UpdateError.Error()
@@ -100,6 +102,7 @@ func (p *UpdatePlugin) buildPreviewData(info updater.UpdateInfo, autoUpdateEnabl
 	data := updatePreviewData{
 		CurrentVersion:    info.CurrentVersion,
 		LatestVersion:     info.LatestVersion,
+		ReleaseChannel:    releaseChannel,
 		ReleaseNotes:      info.ReleaseNotes,
 		DownloadUrl:       info.DownloadUrl,
 		Status:            string(info.Status),
@@ -115,7 +118,7 @@ func (p *UpdatePlugin) buildPreviewData(info updater.UpdateInfo, autoUpdateEnabl
 	return string(b)
 }
 
-func (p *UpdatePlugin) buildActions(ctx context.Context, info updater.UpdateInfo, autoUpdateEnabled bool) []plugin.QueryResultAction {
+func (p *UpdatePlugin) buildActions(ctx context.Context, info updater.UpdateInfo, autoUpdateEnabled bool, releaseChannel string) []plugin.QueryResultAction {
 	actions := []plugin.QueryResultAction{}
 
 	if !autoUpdateEnabled {
@@ -132,6 +135,7 @@ func (p *UpdatePlugin) buildActions(ctx context.Context, info updater.UpdateInfo
 					plugin.GetPluginManager().GetUI().ReloadSetting(ctx)
 					p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_checking"))
 					updater.CheckForUpdatesWithCallback(ctx, func(info updater.UpdateInfo) {
+						p.refreshVisibleUpdatePreview(ctx, actionContext, info, true, releaseChannel)
 						p.notifyUpdate(ctx, info)
 					})
 				},
@@ -169,6 +173,7 @@ func (p *UpdatePlugin) buildActions(ctx context.Context, info updater.UpdateInfo
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_checking"))
 			updater.CheckForUpdatesWithCallback(ctx, func(info updater.UpdateInfo) {
+				p.refreshVisibleUpdatePreview(ctx, actionContext, info, autoUpdateEnabled, releaseChannel)
 				p.notifyUpdate(ctx, info)
 			})
 		},
@@ -210,6 +215,32 @@ func (p *UpdatePlugin) buildActions(ctx context.Context, info updater.UpdateInfo
 	}
 
 	return actions
+}
+
+// refreshVisibleUpdatePreview keeps the current update preview in sync while a manual check/download action runs.
+func (p *UpdatePlugin) refreshVisibleUpdatePreview(ctx context.Context, actionContext plugin.ActionContext, info updater.UpdateInfo, autoUpdateEnabled bool, releaseChannel string) {
+	if actionContext.ResultId == "" {
+		return
+	}
+
+	updatable := p.api.GetUpdatableResult(ctx, actionContext.ResultId)
+	if updatable == nil {
+		return
+	}
+
+	effectiveReleaseChannel := releaseChannel
+	if info.ReleaseChannel != "" {
+		effectiveReleaseChannel = info.ReleaseChannel
+	}
+	preview := plugin.WoxPreview{
+		PreviewType:    plugin.WoxPreviewTypeUpdate,
+		PreviewData:    p.buildPreviewData(info, autoUpdateEnabled, effectiveReleaseChannel),
+		ScrollPosition: "",
+	}
+	actions := p.buildActions(ctx, info, autoUpdateEnabled, effectiveReleaseChannel)
+	updatable.Preview = &preview
+	updatable.Actions = &actions
+	p.api.UpdateResult(ctx, *updatable)
 }
 
 func (p *UpdatePlugin) notifyApplyProgress(ctx context.Context, stage updater.ApplyUpdateStage) {

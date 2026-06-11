@@ -23,6 +23,7 @@ import (
 	"time"
 	"wox/util"
 	"wox/util/fileicon"
+	"wox/util/imagecache"
 	"wox/util/timetracking"
 
 	"github.com/disintegration/imaging"
@@ -48,7 +49,6 @@ var fastPngEncoder = &png.Encoder{
 	BufferPool:       &pngBufferPool{},
 }
 
-var derivedImagePathExistenceCache = util.NewHashMap[string, struct{}]()
 var transparentPaddingBypassCache = util.NewHashMap[string, struct{}]()
 
 const (
@@ -98,22 +98,6 @@ func savePngFast(img image.Image, filename string) error {
 	return fastPngEncoder.Encode(f, img)
 }
 
-func rememberDerivedImagePathExists(path string) {
-	if path == "" {
-		return
-	}
-
-	derivedImagePathExistenceCache.Store(path, struct{}{})
-}
-
-func isKnownExistingDerivedImagePath(path string) bool {
-	if path == "" {
-		return false
-	}
-
-	return derivedImagePathExistenceCache.Exist(path)
-}
-
 func rememberTransparentPaddingBypass(imageHash string) {
 	transparentPaddingBypassCache.Store(imageHash, struct{}{})
 }
@@ -122,10 +106,10 @@ func isKnownTransparentPaddingBypass(imageHash string) bool {
 	return transparentPaddingBypassCache.Exist(imageHash)
 }
 
-// ClearConvertIconPathExistenceCache clears the in-memory positive cache for derived icon files.
-// Callers should invoke this after removing the image cache directory to avoid stale absolute paths.
+// ClearConvertIconPathExistenceCache clears image conversion memory state after image cache removal.
+// Callers should invoke this after removing the image cache directory to avoid stale conversion decisions.
 func ClearConvertIconPathExistenceCache() {
-	derivedImagePathExistenceCache.Clear()
+	imagecache.ClearDerivedPathExistenceCache()
 	transparentPaddingBypassCache.Clear()
 }
 
@@ -211,17 +195,26 @@ func (w *WoxImage) ToPng() (image.Image, error) {
 }
 
 func (w *WoxImage) ToImage() (image.Image, error) {
-	return w.toImage(true)
+	return w.ToImageWithContext(util.NewTraceContext())
+}
+
+// ToImageWithContext converts an image while allowing remote fetch callers to apply cancellation or timeout.
+func (w *WoxImage) ToImageWithContext(ctx context.Context) (image.Image, error) {
+	return w.toImage(ctx, true)
 }
 
 func (w *WoxImage) ToImageWithoutRemoteFetch() (image.Image, error) {
 	// Some user-visible flows, such as screenshot success notifications, only need a best-effort icon.
 	// The previous implementation always routed emoji icons through Twemoji download on cache miss, which
 	// blocked those flows on network latency. Callers that need predictable completion can use this local-only path.
-	return w.toImage(false)
+	return w.toImage(util.NewTraceContext(), false)
 }
 
-func (w *WoxImage) toImage(allowRemoteFetch bool) (image.Image, error) {
+func (w *WoxImage) toImage(ctx context.Context, allowRemoteFetch bool) (image.Image, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	if w.ImageType == WoxImageTypeAbsolutePath {
 		if isSvgFilePath(w.ImageData) {
 			svgData, err := os.ReadFile(w.ImageData)
@@ -258,8 +251,13 @@ func (w *WoxImage) toImage(allowRemoteFetch bool) (image.Image, error) {
 			return nil, err
 		}
 
-		if _, err := os.Stat(emojiPath); err == nil {
-			return imaging.Open(emojiPath)
+		if info, err := os.Stat(emojiPath); err == nil {
+			img, openErr := imaging.Open(emojiPath)
+			if openErr != nil {
+				return nil, openErr
+			}
+			imagecache.Touch(util.NewTraceContext(), emojiPath, info)
+			return img, nil
 		}
 
 		if !allowRemoteFetch {
@@ -270,7 +268,7 @@ func (w *WoxImage) toImage(allowRemoteFetch bool) (image.Image, error) {
 			return nil, err
 		}
 
-		if err := util.HttpDownload(util.NewTraceContext(), w.emojiImageDownloadURL(w.ImageData), emojiPath); err != nil {
+		if err := w.downloadEmojiImage(ctx, w.ImageData, emojiPath); err != nil {
 			return nil, err
 		}
 
@@ -292,7 +290,7 @@ func (w *WoxImage) toImage(allowRemoteFetch bool) (image.Image, error) {
 			return nil, fmt.Errorf("url image cache miss: %s", w.ImageData)
 		}
 
-		if err := w.warmURLImageCache(util.NewTraceContext(), w.ImageData, cachePath); err != nil {
+		if err := w.warmURLImageCache(ctx, w.ImageData, cachePath); err != nil {
 			return nil, err
 		}
 
@@ -309,19 +307,62 @@ func (w *WoxImage) toImage(allowRemoteFetch bool) (image.Image, error) {
 }
 
 func (w *WoxImage) emojiImageCachePath(emoji string) (string, error) {
-	emojiInfo, err := gomoji.GetInfo(emoji)
+	codePoints, err := w.emojiImageCodePointCandidates(emoji)
 	if err != nil {
 		return "", err
 	}
 
-	codePoint := strings.ToLower(emojiInfo.CodePoint)
-	return path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("emoji_%s.png", codePoint)), nil
+	return path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("emoji_%s.png", codePoints[0])), nil
 }
 
-func (w *WoxImage) emojiImageDownloadURL(emoji string) string {
-	emojiInfo, _ := gomoji.GetInfo(emoji)
-	codePoint := strings.ToLower(emojiInfo.CodePoint)
-	return fmt.Sprintf("https://cdn.jsdelivr.net/gh/twitter/twemoji@v11.0.0/36x36/%s.png", codePoint)
+// downloadEmojiImage tries Twemoji filename variants because some assets omit text/presentation variation selectors.
+func (w *WoxImage) downloadEmojiImage(ctx context.Context, emoji string, dest string) error {
+	codePoints, err := w.emojiImageCodePointCandidates(emoji)
+	if err != nil {
+		return err
+	}
+
+	var lastErr error
+	for _, codePoint := range codePoints {
+		url := fmt.Sprintf("https://cdn.jsdelivr.net/gh/twitter/twemoji@v11.0.0/36x36/%s.png", codePoint)
+		if downloadErr := util.HttpDownload(ctx, url, dest); downloadErr == nil {
+			return nil
+		} else {
+			lastErr = downloadErr
+		}
+	}
+
+	return lastErr
+}
+
+// emojiImageCodePointCandidates returns Twemoji asset names from most specific to fallback-compatible.
+func (w *WoxImage) emojiImageCodePointCandidates(emoji string) ([]string, error) {
+	emojiInfo, err := gomoji.GetInfo(emoji)
+	if err != nil {
+		return nil, err
+	}
+
+	parts := strings.Fields(strings.ToLower(emojiInfo.CodePoint))
+	if len(parts) == 0 {
+		return nil, fmt.Errorf("empty emoji codepoint: %s", emoji)
+	}
+
+	codePoint := strings.Join(parts, "-")
+	candidates := []string{codePoint}
+	withoutVariation := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part != "fe0e" && part != "fe0f" {
+			withoutVariation = append(withoutVariation, part)
+		}
+	}
+	if len(withoutVariation) > 0 {
+		fallbackCodePoint := strings.Join(withoutVariation, "-")
+		if fallbackCodePoint != codePoint {
+			candidates = append(candidates, fallbackCodePoint)
+		}
+	}
+
+	return candidates, nil
 }
 
 func (w *WoxImage) urlImageCachePath(rawURL string) (string, error) {
@@ -360,6 +401,7 @@ func (w *WoxImage) loadCachedURLImage(cachePath string) (image.Image, bool, erro
 		if err != nil {
 			return nil, false, err
 		}
+		imagecache.Touch(util.NewTraceContext(), cachePath, info)
 		return img, true, nil
 	}
 
@@ -367,6 +409,7 @@ func (w *WoxImage) loadCachedURLImage(cachePath string) (image.Image, bool, erro
 	if err != nil {
 		return nil, false, err
 	}
+	imagecache.Touch(util.NewTraceContext(), cachePath, info)
 	return img, true, nil
 }
 
@@ -767,6 +810,7 @@ func convertIconWithSize(ctx context.Context, image WoxImage, pluginDirectory st
 	fastCacheStart := util.GetSystemTimestamp()
 	fastCacheTimingStart := time.Now()
 	if isFinalResizeCacheImage(image, size) {
+		imagecache.Touch(ctx, image.ImageData, nil)
 		timing.CacheCost = util.GetSystemTimestamp() - fastCacheStart
 		timing.CacheCostUs = time.Since(fastCacheTimingStart).Microseconds()
 		timing.CacheHit = true
@@ -810,7 +854,7 @@ func convertIconWithSize(ctx context.Context, image WoxImage, pluginDirectory st
 
 	cacheStart := util.GetSystemTimestamp()
 	cacheTimingStart := time.Now()
-	cached, ok, cacheSource := cachedResizeImageDetailed(newImage, size)
+	cached, ok, cacheSource := cachedResizeImageDetailed(ctx, newImage, size)
 	timing.CacheCost = util.GetSystemTimestamp() - cacheStart
 	timing.CacheCostUs = time.Since(cacheTimingStart).Microseconds()
 	timing.CacheHit = ok
@@ -826,7 +870,7 @@ func convertIconWithSize(ctx context.Context, image WoxImage, pluginDirectory st
 
 	croppedCacheStart := util.GetSystemTimestamp()
 	croppedCacheTimingStart := time.Now()
-	croppedCached, croppedOk, croppedCacheSource := cachedCroppedResizeImageDetailed(newImage, size)
+	croppedCached, croppedOk, croppedCacheSource := cachedCroppedResizeImageDetailed(ctx, newImage, size)
 	timing.CacheCost += util.GetSystemTimestamp() - croppedCacheStart
 	timing.CacheCostUs += time.Since(croppedCacheTimingStart).Microseconds()
 	if croppedOk {
@@ -889,6 +933,7 @@ func convertIconWithSizeFast(ctx context.Context, image WoxImage, pluginDirector
 	}
 
 	if isFinalResizeCacheImage(image, size) {
+		imagecache.Touch(ctx, image.ImageData, nil)
 		return image
 	}
 
@@ -898,10 +943,10 @@ func convertIconWithSizeFast(ctx context.Context, image WoxImage, pluginDirector
 		return newImage
 	}
 
-	if cached, ok := cachedResizeImage(newImage, size); ok {
+	if cached, ok := cachedResizeImage(ctx, newImage, size); ok {
 		return cached
 	}
-	if cached, ok, _ := cachedCroppedResizeImageDetailed(newImage, size); ok {
+	if cached, ok, _ := cachedCroppedResizeImageDetailed(ctx, newImage, size); ok {
 		return cached
 	}
 	if allowLazy && shouldLazyLoadImageIcon(ctx, newImage, size) {
@@ -965,18 +1010,20 @@ func isFinalResizeCacheImage(image WoxImage, size int) bool {
 	return strings.HasPrefix(filename, fmt.Sprintf("%s%d_", resizeImageCachePrefix, size)) && strings.EqualFold(filepath.Ext(filename), ".png")
 }
 
-func cachedResizeImage(image WoxImage, size int) (WoxImage, bool) {
-	woxImage, ok, _ := cachedResizeImageDetailed(image, size)
+func cachedResizeImage(ctx context.Context, image WoxImage, size int) (WoxImage, bool) {
+	woxImage, ok, _ := cachedResizeImageDetailed(ctx, image, size)
 	return woxImage, ok
 }
 
-func cachedResizeImageDetailed(image WoxImage, size int) (WoxImage, bool, string) {
+func cachedResizeImageDetailed(ctx context.Context, image WoxImage, size int) (WoxImage, bool, string) {
 	resizeImgPath := resizeImageCachePath(image, size)
-	if isKnownExistingDerivedImagePath(resizeImgPath) {
+	if imagecache.IsKnownExistingDerivedPath(resizeImgPath) {
+		imagecache.Touch(ctx, resizeImgPath, nil)
 		return NewWoxImageAbsolutePath(resizeImgPath), true, "memory"
 	}
-	if _, err := os.Stat(resizeImgPath); err == nil {
-		rememberDerivedImagePathExists(resizeImgPath)
+	if info, err := os.Stat(resizeImgPath); err == nil {
+		imagecache.RememberDerivedPathExists(resizeImgPath)
+		imagecache.Touch(ctx, resizeImgPath, info)
 		return NewWoxImageAbsolutePath(resizeImgPath), true, "stat"
 	}
 	return WoxImage{}, false, "miss"
@@ -986,24 +1033,26 @@ func cachedResizeImageDetailed(image WoxImage, size int) (WoxImage, bool, string
 // before the lazy-size probe opens the original image. Warm app icons commonly
 // have both derived files already, so this avoids repeated DecodeConfig and stat
 // work on the query polish path.
-func cachedCroppedResizeImageDetailed(image WoxImage, size int) (WoxImage, bool, string) {
+func cachedCroppedResizeImageDetailed(ctx context.Context, image WoxImage, size int) (WoxImage, bool, string) {
 	if image.ImageType == WoxImageTypeEmoji || image.IsGif() {
 		return WoxImage{}, false, "skipped"
 	}
 
 	cropImgPath := cropPngTransparentPaddingCachePath(image)
 	cropCacheSource := ""
-	if isKnownExistingDerivedImagePath(cropImgPath) {
+	if imagecache.IsKnownExistingDerivedPath(cropImgPath) {
+		imagecache.Touch(ctx, cropImgPath, nil)
 		cropCacheSource = "memory"
-	} else if _, err := os.Stat(cropImgPath); err == nil {
-		rememberDerivedImagePathExists(cropImgPath)
+	} else if info, err := os.Stat(cropImgPath); err == nil {
+		imagecache.RememberDerivedPathExists(cropImgPath)
+		imagecache.Touch(ctx, cropImgPath, info)
 		cropCacheSource = "stat"
 	} else {
 		return WoxImage{}, false, "miss"
 	}
 
 	croppedImage := NewWoxImageAbsolutePath(cropImgPath)
-	if resized, ok, resizeCacheSource := cachedResizeImageDetailed(croppedImage, size); ok {
+	if resized, ok, resizeCacheSource := cachedResizeImageDetailed(ctx, croppedImage, size); ok {
 		return resized, true, fmt.Sprintf("cropped_%s_%s", cropCacheSource, resizeCacheSource)
 	}
 
@@ -1033,7 +1082,7 @@ func resizeImageWithTiming(ctx context.Context, image WoxImage, size int) (newIm
 
 	resizeImgPath := resizeImageCachePath(image, size)
 	cacheStart := util.GetSystemTimestamp()
-	if cached, ok, cacheSource := cachedResizeImageDetailed(image, size); ok {
+	if cached, ok, cacheSource := cachedResizeImageDetailed(ctx, image, size); ok {
 		timing.CacheSource = cacheSource
 		timing.Result = "cache_hit"
 		timing.DecodeMs = util.GetSystemTimestamp() - cacheStart
@@ -1080,7 +1129,7 @@ func resizeImageWithTiming(ctx context.Context, image WoxImage, size int) (newIm
 		return image, timing
 	}
 
-	rememberDerivedImagePathExists(resizeImgPath)
+	imagecache.RememberDerivedPathExists(resizeImgPath)
 	timing.Result = "saved"
 	return NewWoxImageAbsolutePath(resizeImgPath), timing
 }
@@ -1112,13 +1161,15 @@ func cropPngTransparentPaddingsWithTiming(ctx context.Context, woxImage WoxImage
 
 	//try load from cache first
 	cropImgPath := cropPngTransparentPaddingCachePath(woxImage)
-	if isKnownExistingDerivedImagePath(cropImgPath) {
+	if imagecache.IsKnownExistingDerivedPath(cropImgPath) {
+		imagecache.Touch(ctx, cropImgPath, nil)
 		timing.CacheSource = "memory"
 		timing.Result = "cache_hit"
 		return NewWoxImageAbsolutePath(cropImgPath), timing
 	}
-	if _, err := os.Stat(cropImgPath); err == nil {
-		rememberDerivedImagePathExists(cropImgPath)
+	if info, err := os.Stat(cropImgPath); err == nil {
+		imagecache.RememberDerivedPathExists(cropImgPath)
+		imagecache.Touch(ctx, cropImgPath, info)
 		timing.CacheSource = "stat"
 		timing.Result = "cache_hit"
 		return NewWoxImageAbsolutePath(cropImgPath), timing
@@ -1171,7 +1222,7 @@ func cropPngTransparentPaddingsWithTiming(ctx context.Context, woxImage WoxImage
 		return woxImage, timing
 	}
 
-	rememberDerivedImagePathExists(cropImgPath)
+	imagecache.RememberDerivedPathExists(cropImgPath)
 	timing.Result = "saved"
 	return NewWoxImageAbsolutePath(cropImgPath), timing
 }

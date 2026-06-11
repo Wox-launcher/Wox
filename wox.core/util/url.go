@@ -7,6 +7,11 @@ import (
 
 var urlPattern = regexp.MustCompile(`^(http://www\.|https://www\.|http://|https://)?([a-z0-9]+([\-\.][a-z0-9]+)*\.[a-z]{2,5}|((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?))(:[0-9]{1,5})?(/.*)?$`)
 
+// UrlPattern exposes the shared URL matcher for legacy callers that still need regexp semantics.
+func UrlPattern() *regexp.Regexp {
+	return urlPattern
+}
+
 // IsUrl keeps Wox's URL recognition rule in one place so direct URL queries
 // and clipboard link filtering do not drift. The pattern is intentionally the
 // same whole-string rule that the URL plugin used before this shared helper.

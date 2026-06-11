@@ -21,16 +21,22 @@ enum _QueryHotkeyPreset { normal, webPanel, silent, custom }
 Future<void> showWoxQueryHotkeyDialog({
   required BuildContext context,
   Map<String, dynamic> initialRow = const {},
+  bool isEditing = false,
   required Future<String?> Function(Map<String, dynamic> row) onSave,
 }) async {
-  await showWoxDialog(context: context, barrierColor: getThemePopupBarrierColor(), builder: (context) => WoxQueryHotkeyDialog(initialRow: initialRow, onSave: onSave));
+  await showWoxDialog(
+    context: context,
+    barrierColor: getThemePopupBarrierColor(),
+    builder: (context) => WoxQueryHotkeyDialog(initialRow: initialRow, isEditing: isEditing, onSave: onSave),
+  );
 }
 
 class WoxQueryHotkeyDialog extends StatefulWidget {
   final Map<String, dynamic> initialRow;
+  final bool isEditing;
   final Future<String?> Function(Map<String, dynamic> row) onSave;
 
-  const WoxQueryHotkeyDialog({super.key, this.initialRow = const {}, required this.onSave});
+  const WoxQueryHotkeyDialog({super.key, this.initialRow = const {}, this.isEditing = false, required this.onSave});
 
   @override
   State<WoxQueryHotkeyDialog> createState() => _WoxQueryHotkeyDialogState();
@@ -81,7 +87,7 @@ class _WoxQueryHotkeyDialogState extends State<WoxQueryHotkeyDialog> {
     super.dispose();
   }
 
-  bool get _isEditing => widget.initialRow.isNotEmpty;
+  bool get _isEditing => widget.isEditing;
 
   bool get _showsDisplayFields => _selectedPreset == _QueryHotkeyPreset.webPanel || _selectedPreset == _QueryHotkeyPreset.custom;
 
@@ -209,11 +215,20 @@ class _WoxQueryHotkeyDialogState extends State<WoxQueryHotkeyDialog> {
     final modifiers = <String>{};
     var key = "";
     for (final token in tokens) {
-      if (_isHotkeyModifierToken(token)) {
+      if (token == "hyper" || token == "capslock") {
+        modifiers.add(token);
+      } else if (_isHotkeyModifierToken(token)) {
         modifiers.add(token);
       } else if (key.isEmpty) {
         key = token;
       }
+    }
+
+    if (modifiers.contains("hyper") && key.isNotEmpty) {
+      return "hyper+$key";
+    }
+    if (modifiers.contains("capslock") && key.isNotEmpty) {
+      return "capslock+$key";
     }
 
     final parts = <String>[];
@@ -243,6 +258,9 @@ class _WoxQueryHotkeyDialogState extends State<WoxQueryHotkeyDialog> {
       case "windows":
       case "super":
         return "meta";
+      case "caps_lock":
+      case "caps lock":
+        return "capslock";
       case "return":
         return "enter";
       case "arrowleft":
@@ -298,7 +316,7 @@ class _WoxQueryHotkeyDialogState extends State<WoxQueryHotkeyDialog> {
 
     var skippedInitialRow = false;
     for (final existing in controller.woxSetting.value.queryHotkeys) {
-      if (!skippedInitialRow && _isSameRow(existing, _initialSnapshot)) {
+      if (_isEditing && !skippedInitialRow && _isSameRow(existing, _initialSnapshot)) {
         skippedInitialRow = true;
         continue;
       }

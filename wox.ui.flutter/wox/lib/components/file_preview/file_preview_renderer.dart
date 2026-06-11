@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_image.dart';
+import 'package:wox/entity/wox_preview.dart';
 
 typedef WoxFilePreviewTextBuilder = Widget Function(String text);
 typedef WoxFilePreviewMarkdownBuilder = Widget Function(String markdown);
@@ -13,8 +14,17 @@ typedef WoxFilePreviewTranslationFormatter = String Function(String key, [Map<St
 class WoxFilePreviewResult {
   final Widget content;
   final bool contentHandlesScrolling;
+  final List<WoxPreviewTag> previewTags;
 
-  const WoxFilePreviewResult({required this.content, this.contentHandlesScrolling = false});
+  const WoxFilePreviewResult({required this.content, this.contentHandlesScrolling = false, this.previewTags = const []});
+
+  WoxFilePreviewResult copyWith({Widget? content, bool? contentHandlesScrolling, List<WoxPreviewTag>? previewTags}) {
+    return WoxFilePreviewResult(
+      content: content ?? this.content,
+      contentHandlesScrolling: contentHandlesScrolling ?? this.contentHandlesScrolling,
+      previewTags: previewTags ?? this.previewTags,
+    );
+  }
 }
 
 // WoxFilePreviewContext carries only the shared preview helpers that file

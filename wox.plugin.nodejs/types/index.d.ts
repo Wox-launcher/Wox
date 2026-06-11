@@ -365,6 +365,14 @@ export interface Query {
   Refinements?: { [key: string]: string }
 
   /**
+   * Hidden query-scoped data.
+   *
+   * Wox does not render this as UI. Plugins can use it to keep data attached
+   * to a plugin-driven ChangeQuery flow, such as a shell working directory.
+   */
+  ContextData?: MapString
+
+  /**
    * Check if this is a global query (no trigger keyword).
    *
    * @returns true if triggered globally, false if triggered by keyword
@@ -471,8 +479,7 @@ export type QueryReturn = QueryResponse | LegacyQueryReturn
  *   Preview: {
  *     PreviewType: "markdown",
  *     PreviewData: "# Calculator\n\nA simple calculator app",
- *     PreviewTags: [{ Label: "System", Tooltip: "Source" }],
- *     PreviewProperties: {}
+ *     PreviewTags: [{ Label: "System", Tooltip: "Source" }]
  *   },
  *   Tails: [
  *     { Type: "text", Text: "⌘⏎ Quick Action" }
@@ -1247,6 +1254,11 @@ export interface ChangeQueryParam {
    * Only used when QueryType is "selection".
    */
   QuerySelection?: Selection
+
+  /**
+   * Hidden query-scoped data to attach to the changed query.
+   */
+  ContextData?: MapString
 }
 
 export interface RefreshQueryParam {
@@ -1758,24 +1770,21 @@ export interface WoxPreviewTag {
  * {
  *   PreviewType: "markdown",
  *   PreviewData: "# Title\n\nDescription with **formatting**",
- *   PreviewTags: [{ Label: "17 chars", Tooltip: "Copy characters" }],
- *   PreviewProperties: {}
+ *   PreviewTags: [{ Label: "17 chars", Tooltip: "Copy characters" }]
  * }
  *
  * // Image preview
  * {
  *   PreviewType: "image",
  *   PreviewData: "https://example.com/image.png",
- *   PreviewTags: [{ Label: "300 px", Tooltip: "Height" }],
- *   PreviewProperties: {}
+ *   PreviewTags: [{ Label: "300 px", Tooltip: "Height" }]
  * }
  *
  * // URL preview
  * {
  *   PreviewType: "url",
  *   PreviewData: "https://github.com/Wox-launcher/Wox",
- *   PreviewTags: [],
- *   PreviewProperties: {}
+ *   PreviewTags: []
  * }
  *
  * // List preview
@@ -1791,8 +1800,7 @@ export interface WoxPreviewTag {
  *       }
  *     ]
  *   } satisfies WoxPreviewListData),
- *   PreviewTags: [{ Label: "Done", Tooltip: "Status" }],
- *   PreviewProperties: {}
+ *   PreviewTags: [{ Label: "Done", Tooltip: "Status" }]
  * }
  * ```
  */
@@ -1826,7 +1834,7 @@ export interface WoxPreview {
    * the value as Label and the key as Tooltip, so existing plugins remain
    * compatible while new plugins can use the tag contract directly.
    */
-  PreviewProperties: Record<string, string>
+  PreviewProperties?: Record<string, string>
 }
 
 /**

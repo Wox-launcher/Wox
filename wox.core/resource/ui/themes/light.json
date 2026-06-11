@@ -54,5 +54,12 @@
   "ToolbarFontColor": "#454545",
   "ToolbarBackgroundColor": "rgba(255,255,255,0.5)",
   "ToolbarPaddingLeft": 10,
-  "ToolbarPaddingRight": 10
+  "ToolbarPaddingRight": 10,
+  "windows": {
+    "variants": {
+      "win10": {
+        "AppBackgroundColor": "#ECF0F080"
+      }
+    }
+  }
 }

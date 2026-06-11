@@ -2,13 +2,19 @@ import 'dart:convert';
 
 class WoxPreviewWebviewData {
   late String url;
+  late String html;
   late String injectCss;
   late bool cacheDisabled;
 
-  WoxPreviewWebviewData({required this.url, this.injectCss = "", this.cacheDisabled = false});
+  WoxPreviewWebviewData({required this.url, this.html = "", this.injectCss = "", this.cacheDisabled = false});
 
   factory WoxPreviewWebviewData.fromJson(Map<String, dynamic> json) {
-    return WoxPreviewWebviewData(url: json["url"]?.toString() ?? "", injectCss: json["injectCss"]?.toString() ?? "", cacheDisabled: json["cacheDisabled"] == true);
+    return WoxPreviewWebviewData(
+      url: json["url"]?.toString() ?? "",
+      html: json["html"]?.toString() ?? "",
+      injectCss: json["injectCss"]?.toString() ?? "",
+      cacheDisabled: json["cacheDisabled"] == true,
+    );
   }
 
   factory WoxPreviewWebviewData.fromPreviewData(String previewData) {
@@ -28,7 +34,7 @@ class WoxPreviewWebviewData {
   }
 
   Map<String, dynamic> toJson() {
-    return {"url": url, "injectCss": injectCss, "cacheDisabled": cacheDisabled, "cacheKey": resolvedCacheKey};
+    return {"url": url, "html": html, "injectCss": injectCss, "cacheDisabled": cacheDisabled, "cacheKey": resolvedCacheKey};
   }
 
   String get resolvedCacheKey {
@@ -36,6 +42,11 @@ class WoxPreviewWebviewData {
       return "";
     }
 
-    return url.trim();
+    final trimmedUrl = url.trim();
+    if (trimmedUrl.isNotEmpty) {
+      return trimmedUrl;
+    }
+
+    return html.trim();
   }
 }

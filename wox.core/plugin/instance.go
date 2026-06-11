@@ -24,6 +24,7 @@ type Instance struct {
 	DeepLinkCallbacks         []func(ctx context.Context, arguments map[string]string)
 	UnloadCallbacks           []func(ctx context.Context)
 	MRURestoreCallbacks       []func(ctx context.Context, mruData MRUData) (*QueryResult, error) // MRU restore callbacks
+	PluginCommandHandlers     []PluginCommandHandler
 	EnterPluginQueryCallbacks []func(ctx context.Context)
 	LeavePluginQueryCallbacks []func(ctx context.Context)
 

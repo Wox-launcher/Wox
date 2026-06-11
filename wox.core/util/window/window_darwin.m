@@ -329,6 +329,69 @@ static BOOL getAXWindowRect(AXUIElementRef window, WoxWindowRectC *outRect) {
     return YES;
 }
 
+static BOOL windowRectApproximatelyMatchesTarget(WoxWindowRectC rect, int x, int y, int width, int height) {
+    const int tolerance = 2;
+    return abs(rect.x - x) <= tolerance &&
+           abs(rect.y - y) <= tolerance &&
+           abs(rect.width - width) <= tolerance &&
+           abs(rect.height - height) <= tolerance;
+}
+
+static BOOL setAXWindowPosition(AXUIElementRef window, CGPoint position) {
+    AXValueRef positionValue = AXValueCreate(kAXValueCGPointType, &position);
+    if (!positionValue) {
+        return NO;
+    }
+
+    AXError err = AXUIElementSetAttributeValue(window, kAXPositionAttribute, positionValue);
+    CFRelease(positionValue);
+    return err == kAXErrorSuccess;
+}
+
+static BOOL setAXWindowSize(AXUIElementRef window, CGSize size) {
+    AXValueRef sizeValue = AXValueCreate(kAXValueCGSizeType, &size);
+    if (!sizeValue) {
+        return NO;
+    }
+
+    AXError err = AXUIElementSetAttributeValue(window, kAXSizeAttribute, sizeValue);
+    CFRelease(sizeValue);
+    return err == kAXErrorSuccess;
+}
+
+static BOOL axWindowMatchesTargetFrame(AXUIElementRef window, int x, int y, int width, int height) {
+    WoxWindowRectC rect;
+    return getAXWindowRect(window, &rect) && windowRectApproximatelyMatchesTarget(rect, x, y, width, height);
+}
+
+// Some apps, notably Finder, adjust AXPosition while applying AXSize. Keep the
+// position write last on each attempt so a successful resize does not leave the
+// window anchored at an intermediate location.
+static BOOL applyAXWindowFrame(AXUIElementRef window, int x, int y, int width, int height) {
+    const int maxAttempts = 8;
+    const useconds_t settleInterval = 50000;
+    CGPoint position = CGPointMake(x, y);
+    CGSize size = CGSizeMake(MAX(1, width), MAX(1, height));
+
+    for (int attempt = 0; attempt < maxAttempts; attempt++) {
+        if (!setAXWindowSize(window, size)) {
+            return NO;
+        }
+        usleep(settleInterval);
+
+        if (!setAXWindowPosition(window, position)) {
+            return NO;
+        }
+        usleep(settleInterval);
+
+        if (axWindowMatchesTargetFrame(window, x, y, width, height)) {
+            return YES;
+        }
+    }
+
+    return YES;
+}
+
 // readAXWindowFullScreenState reads the undocumented-but-standard Accessibility fullscreen flag.
 static BOOL readAXWindowFullScreenState(AXUIElementRef window, BOOL *outFullScreen) {
     if (!window || !outFullScreen) {
@@ -557,30 +620,14 @@ int moveResizeWindowForManagement(const char *windowId, int pid, int x, int y, i
             }
         }
 
-        CGPoint position = CGPointMake(x, y);
-        CGSize size = CGSizeMake(MAX(1, width), MAX(1, height));
-        AXValueRef positionValue = AXValueCreate(kAXValueCGPointType, &position);
-        AXValueRef sizeValue = AXValueCreate(kAXValueCGSizeType, &size);
-        if (!positionValue || !sizeValue) {
-            if (positionValue) {
-                CFRelease(positionValue);
-            }
-            if (sizeValue) {
-                CFRelease(sizeValue);
-            }
-            CFRelease(window);
-            return -1;
-        }
-
+        NSRunningApplication *application = [NSRunningApplication runningApplicationWithProcessIdentifier:(pid_t)pid];
+        activateRunningApplication(application);
         AXUIElementSetAttributeValue(window, kAXMinimizedAttribute, kCFBooleanFalse);
 
-        AXError positionErr = AXUIElementSetAttributeValue(window, kAXPositionAttribute, positionValue);
-        AXError sizeErr = AXUIElementSetAttributeValue(window, kAXSizeAttribute, sizeValue);
-        CFRelease(positionValue);
-        CFRelease(sizeValue);
+        BOOL frameApplied = applyAXWindowFrame(window, x, y, width, height);
         CFRelease(window);
 
-        if (positionErr != kAXErrorSuccess || sizeErr != kAXErrorSuccess) {
+        if (!frameApplied) {
             return -1;
         }
         return 1;

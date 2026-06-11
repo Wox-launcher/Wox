@@ -86,11 +86,23 @@ func SelectInActiveFileDialog(targetPath string) bool {
 	return false
 }
 
+func HighlightInActiveFileDialog(targetPath string) bool {
+	return false
+}
+
 func GetActiveFileDialogPath() string {
 	return ""
 }
 
 func GetFileDialogPathByPid(pid int) string {
+	return ""
+}
+
+func GetFileDialogPathByWindowId(windowId string, pid int) string {
+	return ""
+}
+
+func GetLastFileDialogPathResolveDebug() string {
 	return ""
 }
 

@@ -6,6 +6,7 @@ import 'package:wox/components/file_preview/file_preview_icon_loader.dart';
 import 'package:wox/components/file_preview/file_preview_renderer.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/entity/wox_image.dart';
+import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
 
@@ -244,5 +245,15 @@ List<WoxFilePreviewProperty> buildWoxFilePreviewCommonProperties(File file, {req
     WoxFilePreviewProperty(label: tr("ui_file_preview_property_size"), value: formatWoxFilePreviewSize(stat.size)),
     WoxFilePreviewProperty(label: tr("ui_file_preview_property_modified"), value: formatWoxFilePreviewDate(stat.modified)),
     WoxFilePreviewProperty(label: tr("ui_file_preview_property_location"), value: path.dirname(file.path)),
+  ];
+}
+
+List<WoxPreviewTag> buildWoxFilePreviewCommonTags(File file, {required String typeLabel, required WoxFilePreviewTranslationFormatter tr}) {
+  final stat = file.statSync();
+  return [
+    WoxPreviewTag(label: typeLabel, tooltip: tr("ui_file_preview_property_type")),
+    WoxPreviewTag(label: formatWoxFilePreviewSize(stat.size), tooltip: tr("ui_file_preview_property_size")),
+    WoxPreviewTag(label: formatWoxFilePreviewDate(stat.modified), tooltip: tr("ui_file_preview_property_modified")),
+    WoxPreviewTag(label: path.dirname(file.path), tooltip: tr("ui_file_preview_property_location")),
   ];
 }

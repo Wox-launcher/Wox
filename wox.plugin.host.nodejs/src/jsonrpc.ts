@@ -323,6 +323,7 @@ async function query(ctx: Context, request: PluginJsonRpcRequest) {
     Selection: parseJsonParam<Selection>(request.Params.Selection, {} as Selection),
     Env: parseJsonParam<QueryEnv>(request.Params.Env, {} as QueryEnv),
     Refinements: parseJsonParam<Record<string, string>>(request.Params.Refinements, {}),
+    ContextData: parseJsonParam<Record<string, string>>(request.Params.ContextData, {}),
     IsGlobalQuery: () => request.Params.Type === "input" && request.Params.TriggerKeyword === ""
   } as Query)
 

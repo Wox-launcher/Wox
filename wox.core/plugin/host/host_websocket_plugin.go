@@ -97,6 +97,15 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal plugin query refinements: %s", w.metadata.GetName(ctx), marshalRefinementsErr.Error()))
 		return plugin.QueryResponse{}
 	}
+	queryContextData := query.ContextData
+	if queryContextData == nil {
+		queryContextData = common.ContextData{}
+	}
+	contextDataJson, marshalContextDataErr := json.Marshal(queryContextData)
+	if marshalContextDataErr != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal plugin query context data: %s", w.metadata.GetName(ctx), marshalContextDataErr.Error()))
+		return plugin.QueryResponse{}
+	}
 
 	// Send both Id and QueryId while hosts move to QueryResponse. Older host
 	// code looked for QueryId, while the Go model field is Id.
@@ -112,6 +121,7 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 		"Selection":      string(selectionJson),
 		"Env":            string(envJson),
 		"Refinements":    string(refinementsJson),
+		"ContextData":    string(contextDataJson),
 	})
 	if queryErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] query failed: %s", w.metadata.GetName(ctx), queryErr.Error()))

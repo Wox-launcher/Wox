@@ -5,6 +5,7 @@ enum WoxMsgMethodEnum {
   WOX_MSG_METHOD_Log("Log", "Log"),
   WOX_MSG_METHOD_QUERY("Query", "Query"),
   WOX_MSG_METHOD_QUERY_COMPLETION_HINT("QueryCompletionHint", "Query completion hint"),
+  WOX_MSG_METHOD_QUERY_COMPLETION_HINT_ACCEPTED("QueryCompletionHintAccepted", "Query completion hint accepted"),
   WOX_MSG_METHOD_QUERY_MRU("QueryMRU", "Query MRU"),
   WOX_MSG_METHOD_ACTION("Action", "Action"),
   WOX_MSG_METHOD_FORM_ACTION("FormAction", "Form action"),

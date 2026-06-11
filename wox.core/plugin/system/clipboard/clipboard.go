@@ -1133,21 +1133,23 @@ func (c *ClipboardPlugin) buildClipboardFileRecordTails(filePaths []string) []pl
 }
 
 func (c *ClipboardPlugin) buildClipboardFilePreview(ctx context.Context, filePaths []string, timestamp int64) plugin.WoxPreview {
-	previewProperties := map[string]string{
-		"i18n:plugin_clipboard_copy_date": util.FormatTimestamp(timestamp),
-		"i18n:selection_files_count":      fmt.Sprintf(c.api.GetTranslation(ctx, "selection_files_count_value"), len(filePaths)),
+	previewTags := []plugin.WoxPreviewTag{
+		{Label: util.FormatTimestamp(timestamp), Tooltip: "i18n:plugin_clipboard_copy_date"},
+		{Label: fmt.Sprintf(c.api.GetTranslation(ctx, "selection_files_count_value"), len(filePaths)), Tooltip: "i18n:selection_files_count"},
 	}
 
 	if len(filePaths) == 1 {
 		singlePath := filePaths[0]
 		if util.IsFileExists(singlePath) && !util.IsDirExists(singlePath) {
-			previewProperties[c.api.GetTranslation(ctx, "selection_created_at")] = util.GetFileCreatedAt(singlePath)
-			previewProperties[c.api.GetTranslation(ctx, "selection_modified_at")] = util.GetFileModifiedAt(singlePath)
-			previewProperties[c.api.GetTranslation(ctx, "selection_size")] = util.GetFileSize(singlePath)
+			previewTags = append(previewTags,
+				plugin.WoxPreviewTag{Label: util.GetFileCreatedAt(singlePath), Tooltip: "i18n:selection_created_at"},
+				plugin.WoxPreviewTag{Label: util.GetFileModifiedAt(singlePath), Tooltip: "i18n:selection_modified_at"},
+				plugin.WoxPreviewTag{Label: util.GetFileSize(singlePath), Tooltip: "i18n:selection_size"},
+			)
 			return plugin.WoxPreview{
-				PreviewType:       plugin.WoxPreviewTypeFile,
-				PreviewData:       singlePath,
-				PreviewProperties: previewProperties,
+				PreviewType: plugin.WoxPreviewTypeFile,
+				PreviewData: singlePath,
+				PreviewTags: previewTags,
 			}
 		}
 	}
@@ -1177,16 +1179,16 @@ func (c *ClipboardPlugin) buildClipboardFilePreview(ctx context.Context, filePat
 	if err != nil {
 		c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to marshal clipboard file preview: %s", err.Error()))
 		return plugin.WoxPreview{
-			PreviewType:       plugin.WoxPreviewTypeText,
-			PreviewData:       strings.Join(filePaths, "\n"),
-			PreviewProperties: previewProperties,
+			PreviewType: plugin.WoxPreviewTypeText,
+			PreviewData: strings.Join(filePaths, "\n"),
+			PreviewTags: previewTags,
 		}
 	}
 
 	return plugin.WoxPreview{
-		PreviewType:       plugin.WoxPreviewTypeList,
-		PreviewData:       string(previewJSON),
-		PreviewProperties: previewProperties,
+		PreviewType: plugin.WoxPreviewTypeList,
+		PreviewData: string(previewJSON),
+		PreviewTags: previewTags,
 	}
 }
 
@@ -1439,12 +1441,12 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 		Preview: plugin.WoxPreview{
 			PreviewType: previewType,
 			PreviewData: previewData,
-			PreviewProperties: map[string]string{
-				"i18n:plugin_clipboard_copy_date": util.FormatTimestamp(record.Timestamp),
+			PreviewTags: []plugin.WoxPreviewTag{
+				{Label: util.FormatTimestamp(record.Timestamp), Tooltip: "i18n:plugin_clipboard_copy_date"},
 				// Preview pills show values only, so the character unit belongs in
 				// the value. Keep that unit localized instead of hard-coding a
 				// Chinese suffix into English and other languages.
-				"i18n:plugin_clipboard_copy_characters": fmt.Sprintf(c.api.GetTranslation(ctx, "plugin_clipboard_copy_characters_value"), utf8.RuneCountInString(record.Content)),
+				{Label: fmt.Sprintf(c.api.GetTranslation(ctx, "plugin_clipboard_copy_characters_value"), utf8.RuneCountInString(record.Content)), Tooltip: "i18n:plugin_clipboard_copy_characters"},
 			},
 		},
 

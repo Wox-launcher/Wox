@@ -24,7 +24,6 @@ import 'package:wox/enums/wox_result_tail_type_enum.dart';
 import 'package:wox/utils/color_util.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/log.dart';
-import 'package:wox/utils/windows/windows_window_manager.dart';
 import 'package:wox/utils/wox_dialog_util.dart';
 import 'package:wox/utils/wox_system_wallpaper_util.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
@@ -104,7 +103,6 @@ class _WoxThemeEditorState extends State<WoxThemeEditor> {
   int _previewFlashNonce = 0;
   String _previewFlashTokenKey = '';
   String _systemWallpaperPath = '';
-  bool _allowAlpha = !Platform.isWindows;
   bool _isSaving = false;
   String _errorMessage = '';
 
@@ -118,7 +116,6 @@ class _WoxThemeEditorState extends State<WoxThemeEditor> {
   void initState() {
     super.initState();
     _startEditing(widget.initialTheme);
-    unawaited(_loadAlphaCapability());
     unawaited(_loadSystemWallpaper());
   }
 
@@ -161,16 +158,6 @@ class _WoxThemeEditorState extends State<WoxThemeEditor> {
         WoxThemeUtil.instance.changeTheme(_draftTheme);
       }
     });
-  }
-
-  Future<void> _loadAlphaCapability() async {
-    if (!Platform.isWindows) {
-      return;
-    }
-    final supportsMica = await WindowsWindowManager.instance.supportsMicaBackdrop();
-    if (mounted) {
-      setState(() => _allowAlpha = supportsMica);
-    }
   }
 
   // Load the host desktop wallpaper for translucent-theme preview backdrops.
@@ -261,7 +248,7 @@ class _WoxThemeEditorState extends State<WoxThemeEditor> {
   }
 
   String _colorToCss(Color color) {
-    final alpha = _allowAlpha ? color.a.clamp(0.0, 1.0).toDouble() : 1.0;
+    final alpha = color.a.clamp(0.0, 1.0).toDouble();
     return _colorToHex(color.withValues(alpha: alpha), includeAlpha: alpha < 0.995);
   }
 
@@ -280,7 +267,7 @@ class _WoxThemeEditorState extends State<WoxThemeEditor> {
 
   HSVColor _colorToWheelHsv(Color color) {
     final hsvColor = HSVColor.fromColor(color);
-    return hsvColor.withAlpha(_allowAlpha ? color.a : 1.0);
+    return hsvColor.withAlpha(color.a);
   }
 
   Future<void> _openColorDialog(_ThemeColorToken token) async {
@@ -304,11 +291,10 @@ class _WoxThemeEditorState extends State<WoxThemeEditor> {
             }
 
             void setColor(HSVColor hsvColor) {
-              final normalizedHsvColor = hsvColor.withAlpha(_allowAlpha ? hsvColor.alpha : 1.0);
-              final color = normalizedHsvColor.toColor();
+              final color = hsvColor.toColor();
               setDialogState(() {
                 selectedColor = color;
-                selectedHsvColor = normalizedHsvColor;
+                selectedHsvColor = hsvColor;
                 syncColorTextField(color);
               });
               _updateThemeColor(token.key, _colorToCss(color));
@@ -326,11 +312,10 @@ class _WoxThemeEditorState extends State<WoxThemeEditor> {
             }
 
             void setAlpha(double alpha) {
-              final normalizedAlpha = _allowAlpha ? alpha : 1.0;
-              final color = selectedColor.withValues(alpha: normalizedAlpha);
+              final color = selectedColor.withValues(alpha: alpha);
               setDialogState(() {
                 selectedColor = color;
-                selectedHsvColor = selectedHsvColor.withAlpha(normalizedAlpha);
+                selectedHsvColor = selectedHsvColor.withAlpha(alpha);
                 syncColorTextField(color);
               });
               _updateThemeColor(token.key, _colorToCss(color));
@@ -342,13 +327,12 @@ class _WoxThemeEditorState extends State<WoxThemeEditor> {
                 return;
               }
 
-              final normalizedColor = _allowAlpha ? parsedColor : parsedColor.withValues(alpha: 1);
-              final normalizedHsvColor = _colorToWheelHsv(normalizedColor);
+              final normalizedHsvColor = _colorToWheelHsv(parsedColor);
               setDialogState(() {
-                selectedColor = normalizedColor;
+                selectedColor = parsedColor;
                 selectedHsvColor = normalizedHsvColor;
               });
-              _updateThemeColor(token.key, _colorToCss(normalizedColor));
+              _updateThemeColor(token.key, _colorToCss(parsedColor));
             }
 
             return AlertDialog(
@@ -394,10 +378,9 @@ class _WoxThemeEditorState extends State<WoxThemeEditor> {
                     _buildDialogColorSlider(_tr('ui_theme_editor_brightness'), selectedHsvColor.value, 1, (value) {
                       setBrightness(value);
                     }),
-                    if (_allowAlpha)
-                      _buildDialogColorSlider(_tr('ui_theme_editor_opacity'), selectedColor.a, 1, (value) {
-                        setAlpha(value);
-                      }),
+                    _buildDialogColorSlider(_tr('ui_theme_editor_opacity'), selectedColor.a, 1, (value) {
+                      setAlpha(value);
+                    }),
                   ],
                 ),
               ),

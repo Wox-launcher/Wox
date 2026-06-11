@@ -23,6 +23,7 @@ import (
 	"wox/ui"
 	"wox/updater"
 	"wox/util"
+	"wox/util/imagecache"
 	"wox/util/mainthread"
 	"wox/util/selection"
 
@@ -32,6 +33,8 @@ import (
 
 	// import all system plugins
 	_ "wox/plugin/system"
+
+	_ "wox/plugin/system/sys"
 
 	_ "wox/plugin/system/app"
 
@@ -81,6 +84,10 @@ func run() {
 	})
 
 	ctx := util.NewTraceContext()
+	bugReportArg := diagnostic.GetManager().IsBugReportArg(os.Args)
+	if diagnostic.GetManager().IsEnabled() {
+		util.GetLogger().SetLevel(setting.LogLevelDebug)
+	}
 	util.GetLogger().Info(ctx, "------------------------------")
 	util.GetLogger().Info(ctx, fmt.Sprintf("Wox starting: %s", updater.CURRENT_VERSION))
 	util.GetLogger().Info(ctx, fmt.Sprintf("golang version: %s", strings.ReplaceAll(runtime.Version(), "go", "")))
@@ -100,6 +107,16 @@ func run() {
 	// returns. Using os.Exit(0) is the only reliable way to terminate cleanly here.
 	if existingPort := getExistingInstancePort(ctx); existingPort > 0 {
 		util.GetLogger().Info(ctx, fmt.Sprintf("there is existing instance running, port: %d", existingPort))
+
+		if bugReportArg {
+			_, postBugReportErr := util.HttpPost(ctx, fmt.Sprintf("http://127.0.0.1:%d/diagnostics/monitor/enable-restart", existingPort), "")
+			if postBugReportErr != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("failed to enable bug aware mode in existing instance: %s", postBugReportErr.Error()))
+			} else {
+				util.GetLogger().Info(ctx, "enabled bug aware mode in existing instance, bye~")
+			}
+			os.Exit(0)
+		}
 
 		// if args has deeplink, post it to the existing instance and exit immediately
 		for _, arg := range os.Args[1:] {
@@ -127,6 +144,21 @@ func run() {
 		// Exit regardless: the main goroutine is blocked in mainthread's event loop and will
 		// never terminate on its own, so os.Exit is required to avoid a zombie process.
 		os.Exit(0)
+	}
+
+	if bugReportArg && !diagnostic.GetManager().IsChildArg(os.Args) {
+		if _, enableErr := diagnostic.GetManager().Enable(ctx, ""); enableErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to enable bug aware mode from startup arg: %s", enableErr.Error()))
+		} else {
+			util.GetLogger().SetLevel(setting.LogLevelDebug)
+			if supervisorErr := diagnostic.GetManager().StartSupervisorDetached(ctx, true); supervisorErr != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("failed to start bug aware supervisor from startup arg: %s", supervisorErr.Error()))
+			} else {
+				util.GetLogger().Info(ctx, "bug aware supervisor started from startup arg, exiting current process")
+				diagnostic.GetManager().MarkCleanExit(ctx)
+				os.Exit(0)
+			}
+		}
 	}
 
 	// User may launch Wox manually (not from bugreport) with the intent to enable bug aware mode
@@ -188,6 +220,9 @@ func run() {
 	}
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	util.GetLogger().SetLevel(woxSetting.LogLevel.Get())
+	if diagnostic.GetManager().IsEnabled() {
+		util.GetLogger().SetLevel(setting.LogLevelDebug)
+	}
 
 	// update proxy
 	if woxSetting.HttpProxyEnabled.Get() {
@@ -234,6 +269,9 @@ func run() {
 
 	// Start MRU cleanup
 	setting.GetSettingManager().StartMRUCleanup(ctx)
+
+	// Start image cache cleanup
+	imagecache.StartCleanupRoutine(ctx)
 
 	// Start auto update checker if enabled
 	updater.StartAutoUpdateChecker(ctx)

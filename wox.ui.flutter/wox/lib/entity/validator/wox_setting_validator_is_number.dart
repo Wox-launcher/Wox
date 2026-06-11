@@ -5,7 +5,7 @@ class PluginSettingValidatorIsNumber implements PluginSettingValidator {
   late bool isFloat;
 
   @override
-  String validate(dynamic value) {
+  String validate(dynamic value, {PluginSettingValidationContext? context}) {
     if (value is! String) {
       return "i18n:ui_validator_invalid_value";
     }

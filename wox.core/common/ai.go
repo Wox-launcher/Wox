@@ -11,12 +11,19 @@ import (
 type ConversationRole string
 type ProviderName string
 type ChatStreamDataStatus string
+type ChatThinkingMode string
 
 type AIChatMCPServerType string
 
 const (
 	AIChatMCPServerTypeSTDIO          AIChatMCPServerType = "stdio"
 	AIChatMCPServerTypeStreamableHTTP AIChatMCPServerType = "streamable-http"
+)
+
+const (
+	ChatThinkingModeProviderDefault ChatThinkingMode = "provider_default"
+	ChatThinkingModeThinking        ChatThinkingMode = "thinking"
+	ChatThinkingModeNonThinking     ChatThinkingMode = "non_thinking"
 )
 
 var (
@@ -167,7 +174,8 @@ type AIChater interface {
 var EmptyChatOptions = ChatOptions{}
 
 type ChatOptions struct {
-	Tools []MCPTool
+	Tools        []MCPTool
+	ThinkingMode ChatThinkingMode
 }
 
 type MCPTool struct {

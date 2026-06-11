@@ -3,10 +3,11 @@
 package window
 
 /*
-#cgo LDFLAGS: -lpsapi -lgdi32 -luser32 -lshell32
+#cgo LDFLAGS: -lpsapi -lgdi32 -luser32 -lshell32 -lole32 -loleaut32 -luiautomationcore
 #include <windows.h>
 #include <psapi.h>
 #include <shellapi.h>
+#include <stdint.h>
 
 typedef struct {
 	int x;
@@ -43,10 +44,14 @@ int moveResizeWindowForManagement(const char* windowId, int pid, int x, int y, i
 int maximizeWindowForManagement(const char* windowId, int pid);
 int minimizeWindowForManagement(const char* windowId, int pid);
 int activateWindowByPid(int pid);
+int focusFileExplorerContentByHwnd(uintptr_t hwnd);
 int isOpenSaveDialog();
 int isOpenSaveDialogByPid(int pid);
 int navigateActiveFileDialog(const char* path);
+int selectInActiveFileDialog(const char* path);
+int highlightInActiveFileDialog(const char* path);
 char* getActiveFileDialogPath();
+char* getFileDialogPathByWindowId(const char* windowId, int pid);
 char* getFileDialogPathByPid(int pid);
 */
 import "C"
@@ -333,9 +338,24 @@ func NavigateActiveFileDialog(targetPath string) bool {
 	return int(C.navigateActiveFileDialog(cPath)) == 1
 }
 
-// SelectInActiveFileDialog is currently unsupported on Windows.
 func SelectInActiveFileDialog(targetPath string) bool {
-	return false
+	if targetPath == "" {
+		return false
+	}
+
+	cPath := C.CString(targetPath)
+	defer C.free(unsafe.Pointer(cPath))
+	return int(C.selectInActiveFileDialog(cPath)) == 1
+}
+
+func HighlightInActiveFileDialog(targetPath string) bool {
+	if targetPath == "" {
+		return false
+	}
+
+	cPath := C.CString(targetPath)
+	defer C.free(unsafe.Pointer(cPath))
+	return int(C.highlightInActiveFileDialog(cPath)) == 1
 }
 
 func GetActiveFileDialogPath() string {
@@ -352,6 +372,21 @@ func GetFileDialogPathByPid(pid int) string {
 		return ""
 	}
 	result := C.getFileDialogPathByPid(C.int(pid))
+	if result == nil {
+		return ""
+	}
+	defer C.free(unsafe.Pointer(result))
+	return strings.TrimSpace(C.GoString(result))
+}
+
+func GetFileDialogPathByWindowId(windowId string, pid int) string {
+	windowId = strings.TrimSpace(windowId)
+	if windowId == "" {
+		return ""
+	}
+	cWindowId := C.CString(windowId)
+	defer C.free(unsafe.Pointer(cWindowId))
+	result := C.getFileDialogPathByWindowId(cWindowId, C.int(pid))
 	if result == nil {
 		return ""
 	}
@@ -428,7 +463,8 @@ func selectBestExplorerShellWindowCandidate(candidates []explorerShellWindowCand
 	return bestIdx
 }
 
-// NavigateInFileExplorer navigates the active Explorer tab/window owned by pid to targetPath.
+// NavigateInFileExplorer navigates the active Explorer tab/window owned by pid to targetPath
+// and restores keyboard focus to the file list so Explorer type-to-search can continue.
 // Windows 11 Explorer tabs can share one top-level HWND while ShellWindows still exposes
 // one automation entry per tab. Navigating by pid/HWND alone can therefore hit the first
 // tab entry instead of the focused tab. We rank ShellWindows candidates with the active
@@ -593,6 +629,9 @@ func NavigateInFileExplorer(pid int, targetPath string, windowTitle string) bool
 	}
 
 	_, err = oleutil.CallMethod(wDisp, "Navigate", targetPath)
+	if err == nil {
+		C.focusFileExplorerContentByHwnd(C.uintptr_t(targetHwnd))
+	}
 	itemVar.Clear()
 
 	return err == nil

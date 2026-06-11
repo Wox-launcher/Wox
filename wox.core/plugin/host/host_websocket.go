@@ -327,8 +327,9 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 				return
 			}
 			pluginInstance.API.ChangeQuery(ctx, common.PlainQuery{
-				QueryType: plugin.QueryTypeInput,
-				QueryText: queryText,
+				QueryType:   plugin.QueryTypeInput,
+				QueryText:   queryText,
+				ContextData: common.UnmarshalContextData(request.Params["queryContextData"]),
 			})
 		}
 		if queryType == plugin.QueryTypeSelection {
@@ -348,6 +349,7 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 			pluginInstance.API.ChangeQuery(ctx, common.PlainQuery{
 				QueryType:      plugin.QueryTypeSelection,
 				QuerySelection: selection,
+				ContextData:    common.UnmarshalContextData(request.Params["queryContextData"]),
 			})
 		}
 

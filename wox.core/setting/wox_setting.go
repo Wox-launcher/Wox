@@ -14,6 +14,7 @@ type WoxSetting struct {
 	EnableAutostart      *PlatformValue[bool]
 	MainHotkey           *PlatformValue[string]
 	SelectionHotkey      *PlatformValue[string]
+	EnableHyperKey       *PlatformValue[bool]
 	IgnoredHotkeyApps    *PlatformValue[[]IgnoredHotkeyApp]
 	LogLevel             *WoxSettingValue[string]
 	UsePinYin            *WoxSettingValue[bool]
@@ -35,6 +36,7 @@ type WoxSetting struct {
 	AIProviders        *WoxSettingValue[[]AIProvider]
 	EnableAutoBackup   *WoxSettingValue[bool]
 	EnableAutoUpdate   *WoxSettingValue[bool]
+	ReleaseChannel     *WoxSettingValue[ReleaseChannel]
 	CustomPythonPath   *PlatformValue[string]
 	CustomNodejsPath   *PlatformValue[string]
 
@@ -74,9 +76,10 @@ type WoxSetting struct {
 	LastWindowX *WoxSettingValue[int]
 	LastWindowY *WoxSettingValue[int]
 
-	QueryHistories  *WoxSettingValue[[]QueryHistory]
-	PinedResults    *WoxSettingValue[*util.HashMap[ResultHash, bool]]
-	ActionedResults *WoxSettingValue[*util.HashMap[ResultHash, []ActionedResult]]
+	QueryHistories           *WoxSettingValue[[]QueryHistory]
+	QueryCompletionFeedbacks *WoxSettingValue[[]QueryCompletionFeedback]
+	PinedResults             *WoxSettingValue[*util.HashMap[ResultHash, bool]]
+	ActionedResults          *WoxSettingValue[*util.HashMap[ResultHash, []ActionedResult]]
 
 	// Anonymous usage statistics
 	EnableAnonymousUsageStats *WoxSettingValue[bool]
@@ -86,6 +89,7 @@ type LaunchMode = string
 type StartPage = string
 
 type UiDensity string
+type ReleaseChannel string
 
 type PositionType string
 
@@ -109,6 +113,11 @@ const (
 	UiDensityCompact     UiDensity = "compact"
 	UiDensityNormal      UiDensity = "normal"
 	UiDensityComfortable UiDensity = "comfortable"
+)
+
+const (
+	ReleaseChannelStable ReleaseChannel = "stable"
+	ReleaseChannelBeta   ReleaseChannel = "beta"
 )
 
 const (
@@ -231,6 +240,20 @@ func IsValidUiDensity(value UiDensity) bool {
 	return value == UiDensityCompact || value == UiDensityNormal || value == UiDensityComfortable
 }
 
+// NormalizeReleaseChannel converts missing or unsupported channel values to stable.
+func NormalizeReleaseChannel(value string) ReleaseChannel {
+	switch ReleaseChannel(strings.ToLower(strings.TrimSpace(value))) {
+	case ReleaseChannelBeta:
+		return ReleaseChannelBeta
+	default:
+		return ReleaseChannelStable
+	}
+}
+
+func IsValidReleaseChannel(value ReleaseChannel) bool {
+	return value == ReleaseChannelStable || value == ReleaseChannelBeta
+}
+
 // ActionedResult stores the information of an actioned result.
 type ActionedResult struct {
 	Timestamp int64
@@ -241,6 +264,15 @@ type ActionedResult struct {
 type QueryHistory struct {
 	Query     common.PlainQuery
 	Timestamp int64
+}
+
+// QueryCompletionFeedback records accepted inline completion hints for local ranking.
+type QueryCompletionFeedback struct {
+	CompletionText        string
+	LastInputPrefix       string
+	Source                string
+	AcceptCount           int
+	LastAcceptedTimestamp int64
 }
 
 func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
@@ -256,6 +288,7 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 	return &WoxSetting{
 		MainHotkey:        NewPlatformValue(store, "MainHotkey", "alt+space", "cmd+space", "ctrl+space"),
 		SelectionHotkey:   NewPlatformValue(store, "SelectionHotkey", "ctrl+alt+space", "command+option+space", "ctrl+shift+j"),
+		EnableHyperKey:    NewPlatformValue(store, "EnableHyperKey", false, false, false),
 		IgnoredHotkeyApps: NewPlatformValue(store, "IgnoredHotkeyApps", []IgnoredHotkeyApp{}, []IgnoredHotkeyApp{}, []IgnoredHotkeyApp{}),
 		LogLevel: NewWoxSettingValueWithValidator(store, "LogLevel", LogLevelInfo, func(level string) bool {
 			return strings.EqualFold(level, LogLevelInfo) || strings.EqualFold(level, LogLevelDebug)
@@ -294,6 +327,7 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 		CustomNodejsPath:                   NewPlatformValue(store, "CustomNodejsPath", "", "", ""),
 		EnableAutoBackup:                   NewWoxSettingValue(store, "EnableAutoBackup", true),
 		EnableAutoUpdate:                   NewWoxSettingValue(store, "EnableAutoUpdate", true),
+		ReleaseChannel:                     NewWoxSettingValueWithValidator(store, "ReleaseChannel", ReleaseChannelStable, IsValidReleaseChannel),
 		LastWindowX:                        NewWoxSettingValue(store, "LastWindowX", -1),
 		LastWindowY:                        NewWoxSettingValue(store, "LastWindowY", -1),
 		QueryHotkeys:                       NewPlatformValue(store, "QueryHotkeys", []QueryHotkey{}, []QueryHotkey{}, []QueryHotkey{}),
@@ -301,6 +335,7 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 		TrayQueries:                        NewWoxSettingValue(store, "TrayQueries", []TrayQuery{}),
 		AIProviders:                        NewWoxSettingValue(store, "AIProviders", []AIProvider{}),
 		QueryHistories:                     NewWoxSettingValue(store, "QueryHistories", []QueryHistory{}),
+		QueryCompletionFeedbacks:           NewWoxSettingValue(store, "QueryCompletionFeedback", []QueryCompletionFeedback{}),
 		PinedResults:                       NewWoxSettingValue(store, "PinedResults", util.NewHashMap[ResultHash, bool]()),
 		ActionedResults:                    NewWoxSettingValue(store, "ActionedResults", util.NewHashMap[ResultHash, []ActionedResult]()),
 		EnableAnonymousUsageStats:          NewWoxSettingValue(store, "EnableAnonymousUsageStats", true),

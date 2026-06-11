@@ -19,18 +19,37 @@ class PlainQuery {
   late String queryText;
   late Selection querySelection;
   late Map<String, String> queryRefinements;
+  late Map<String, String> contextData;
 
-  PlainQuery({required this.queryId, required this.queryType, required this.queryText, required this.querySelection, Map<String, String>? queryRefinements}) {
+  PlainQuery({
+    required this.queryId,
+    required this.queryType,
+    required this.queryText,
+    required this.querySelection,
+    Map<String, String>? queryRefinements,
+    Map<String, String>? contextData,
+  }) {
     // Query refinements are exposed to plugins as a simple string map. The UI
     // may keep list selections internally, but the transport mirrors the
     // plugin-facing API and joins multi-select values at the boundary.
     this.queryRefinements = queryRefinements ?? <String, String>{};
+    this.contextData = contextData ?? <String, String>{};
   }
 
   static Map<String, String> parseQueryRefinements(dynamic rawRefinements) {
-    final rawMap = rawRefinements as Map<String, dynamic>? ?? <String, dynamic>{};
+    if (rawRefinements is String && rawRefinements.isNotEmpty) {
+      try {
+        rawRefinements = jsonDecode(rawRefinements);
+      } catch (_) {
+        rawRefinements = <String, dynamic>{};
+      }
+    }
+    if (rawRefinements is! Map) {
+      return <String, String>{};
+    }
+
     final parsed = <String, String>{};
-    for (final entry in rawMap.entries) {
+    for (final entry in rawRefinements.entries) {
       final rawValue = entry.value;
       if (rawValue == null) {
         continue;
@@ -42,12 +61,12 @@ class PlainQuery {
       if (rawValue is Iterable) {
         final encoded = rawValue.map((value) => value.toString()).where((value) => value.isNotEmpty).join(',');
         if (encoded.isNotEmpty) {
-          parsed[entry.key] = encoded;
+          parsed[entry.key.toString()] = encoded;
         }
         continue;
       }
 
-      parsed[entry.key] = rawValue.toString();
+      parsed[entry.key.toString()] = rawValue.toString();
     }
     return parsed;
   }
@@ -58,6 +77,7 @@ class PlainQuery {
     queryText = json['QueryText'];
     querySelection = Selection.fromJson(json['QuerySelection']);
     queryRefinements = parseQueryRefinements(json['QueryRefinements'] ?? json['queryRefinements']);
+    contextData = parseQueryRefinements(json['ContextData'] ?? json['contextData']);
   }
 
   Map<String, dynamic> toJson() {
@@ -67,6 +87,7 @@ class PlainQuery {
     data['QueryText'] = queryText;
     data['QuerySelection'] = querySelection.toJson();
     data['QueryRefinements'] = queryRefinements;
+    data['ContextData'] = contextData;
     return data;
   }
 

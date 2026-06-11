@@ -5,6 +5,7 @@ class WoxSetting {
   late bool enableAutostart;
   late String mainHotkey;
   late String selectionHotkey;
+  late bool enableHyperKey;
   late List<IgnoredHotkeyApp> ignoredHotkeyApps;
   late String logLevel;
   late bool usePinYin;
@@ -39,6 +40,7 @@ class WoxSetting {
   late String httpProxyUrl;
   late bool enableAutoBackup;
   late bool enableAutoUpdate;
+  late String releaseChannel;
   late bool enableAnonymousUsageStats;
   late String customPythonPath;
   late String customNodejsPath;
@@ -53,6 +55,7 @@ class WoxSetting {
     required this.enableAutostart,
     required this.mainHotkey,
     required this.selectionHotkey,
+    required this.enableHyperKey,
     required this.ignoredHotkeyApps,
     required this.logLevel,
     required this.usePinYin,
@@ -82,6 +85,7 @@ class WoxSetting {
     required this.httpProxyUrl,
     required this.enableAutoBackup,
     required this.enableAutoUpdate,
+    required this.releaseChannel,
     required this.enableAnonymousUsageStats,
     required this.customPythonPath,
     required this.customNodejsPath,
@@ -97,6 +101,7 @@ class WoxSetting {
     enableAutostart = json['EnableAutostart'] ?? false;
     mainHotkey = json['MainHotkey'];
     selectionHotkey = json['SelectionHotkey'];
+    enableHyperKey = json['EnableHyperKey'] ?? false;
     if (json['IgnoredHotkeyApps'] != null) {
       ignoredHotkeyApps = <IgnoredHotkeyApp>[];
       json['IgnoredHotkeyApps'].forEach((v) {
@@ -166,6 +171,7 @@ class WoxSetting {
     httpProxyUrl = json['HttpProxyUrl'] ?? '';
     enableAutoBackup = json['EnableAutoBackup'] ?? false;
     enableAutoUpdate = json['EnableAutoUpdate'] ?? true;
+    releaseChannel = json['ReleaseChannel'] ?? 'stable';
     enableAnonymousUsageStats = json['EnableAnonymousUsageStats'] ?? true;
     customPythonPath = json['CustomPythonPath'] ?? '';
     customNodejsPath = json['CustomNodejsPath'] ?? '';
@@ -182,6 +188,7 @@ class WoxSetting {
     data['EnableAutostart'] = enableAutostart;
     data['MainHotkey'] = mainHotkey;
     data['SelectionHotkey'] = selectionHotkey;
+    data['EnableHyperKey'] = enableHyperKey;
     data['IgnoredHotkeyApps'] = ignoredHotkeyApps;
     data['LogLevel'] = logLevel;
     data['UsePinYin'] = usePinYin;
@@ -211,6 +218,7 @@ class WoxSetting {
     data['HttpProxyUrl'] = httpProxyUrl;
     data['EnableAutoBackup'] = enableAutoBackup;
     data['EnableAutoUpdate'] = enableAutoUpdate;
+    data['ReleaseChannel'] = releaseChannel;
     data['EnableAnonymousUsageStats'] = enableAnonymousUsageStats;
     data['CustomPythonPath'] = customPythonPath;
     data['CustomNodejsPath'] = customNodejsPath;

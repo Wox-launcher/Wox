@@ -11,6 +11,7 @@ import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_runtime_status.dart';
 import 'package:wox/entity/wox_setting.dart';
 import 'package:wox/entity/wox_theme.dart';
+import 'package:wox/entity/wox_update_channel_version.dart';
 import 'package:wox/entity/wox_usage_stats.dart';
 import 'package:wox/models/doctor_check_result.dart';
 import 'package:wox/utils/log.dart';
@@ -48,6 +49,7 @@ class EntityFactory {
     'List<DoctorCheckResult>': (json) => _createList<DoctorCheckResult>(json, (e) => DoctorCheckResult.fromJson(e)),
     'List<WoxRuntimeStatus>': (json) => _createList<WoxRuntimeStatus>(json, (e) => WoxRuntimeStatus.fromJson(e)),
     'List<GlanceItem>': (json) => _createList<GlanceItem>(json, (e) => GlanceItem.fromJson(e)),
+    'List<WoxUpdateChannelVersion>': (json) => _createList<WoxUpdateChannelVersion>(json, (e) => WoxUpdateChannelVersion.fromJson(e)),
     'List<String>': (json) => _createList<String>(json, (e) => e.toString()),
   };
 

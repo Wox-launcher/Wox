@@ -130,6 +130,7 @@ func (u *uiImpl) ChangeQuery(ctx context.Context, query common.PlainQuery) {
 		"QueryType":      query.QueryType,
 		"QueryText":      query.QueryText,
 		"QuerySelection": query.QuerySelection,
+		"ContextData":    query.ContextData,
 	}
 
 	if showSource := util.GetContextShowSource(ctx); showSource != "" {
@@ -575,6 +576,8 @@ func onUIWebsocketRequest(ctx context.Context, request WebsocketMsg) {
 		handleWebsocketLog(ctx, request)
 	case "Query":
 		handleWebsocketQuery(ctx, request)
+	case "QueryCompletionHintAccepted":
+		handleWebsocketQueryCompletionHintAccepted(ctx, request)
 	case "QueryMRU":
 		handleWebsocketQueryMRU(ctx, request)
 	case "Action":
@@ -705,6 +708,7 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 	selectionParseCost := util.GetSystemTimestamp() - selectionParseStart
 
 	queryRefinements := map[string]string{}
+	contextData := common.ContextData{}
 	requestDataMarshalStart := util.GetSystemTimestamp()
 	queryRequestJson, queryRequestMarshalErr := json.Marshal(request.Data)
 	if queryRequestMarshalErr != nil {
@@ -726,6 +730,13 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 			return
 		}
 		queryRefinements = parsedRefinements
+	}
+	contextDataRaw := gjson.GetBytes(queryRequestJson, "contextData")
+	if !contextDataRaw.Exists() {
+		contextDataRaw = gjson.GetBytes(queryRequestJson, "ContextData")
+	}
+	if contextDataRaw.Exists() {
+		contextData = common.UnmarshalContextData(contextDataRaw.Raw)
 	}
 	refinementsParseCost := util.GetSystemTimestamp() - refinementsParseStart
 	skipCompletionHint := gjson.GetBytes(queryRequestJson, "skipCompletionHint").Bool()
@@ -754,6 +765,7 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 			QueryType:        plugin.QueryTypeInput,
 			QueryText:        queryText,
 			QueryRefinements: queryRefinements,
+			ContextData:      contextData,
 		}
 	case plugin.QueryTypeSelection:
 		changedQuery = common.PlainQuery{
@@ -762,6 +774,7 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 			QueryText:        queryText,
 			QuerySelection:   querySelection,
 			QueryRefinements: queryRefinements,
+			ContextData:      contextData,
 		}
 	default:
 		logger.Error(ctx, fmt.Sprintf("unsupported query type: %s", queryType))
@@ -828,7 +841,13 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 				ctx,
 				request,
 				queryId,
-				plugin.BuildQueryCompletionHintForInputPrefix(query, ownerPlugin, setting.GetSettingManager().GetLatestQueryHistory(ctx, plugin.QueryCompletionHistoryLimit), changedQuery.QueryText),
+				plugin.BuildQueryCompletionHintForInputPrefixWithFeedback(
+					query,
+					ownerPlugin,
+					setting.GetSettingManager().GetLatestQueryHistory(ctx, plugin.QueryCompletionHistoryLimit),
+					setting.GetSettingManager().GetQueryCompletionFeedbacks(ctx),
+					changedQuery.QueryText,
+				),
 			)
 		})
 	}
@@ -894,7 +913,7 @@ func appendQueryDebugTails(ctx context.Context, sessionId string, queryId string
 		resultCopy.Tails = append([]plugin.QueryResultTail{}, result.Tails...)
 		if batch, _, batchQueueElapsed, batchQueueElapsedSet, pluginQueryElapsed, pluginQueryElapsedSet, ok := plugin.GetPluginManager().GetQueryResultDebugInfo(sessionId, queryId, result.Id); ok {
 			if showBatchTail {
-				batchTail := plugin.NewQueryResultTailText(fmt.Sprintf("B%d", batch))
+				batchTail := plugin.NewQueryResultTailTextWithCategory(fmt.Sprintf("B%d", batch), queryDebugBatchTailTextCategory(batch))
 				batchTail.Tooltip = fmt.Sprintf("First flush: %dms", firstVisibleFlushElapsedMs)
 				if batchQueueElapsedSet {
 					batchTail.Tooltip = fmt.Sprintf("First flush: %dms\nQueued for batch: %dms", firstVisibleFlushElapsedMs, batchQueueElapsed)
@@ -903,28 +922,13 @@ func appendQueryDebugTails(ctx context.Context, sessionId string, queryId string
 			}
 
 			if showPluginQueryTail && pluginQueryElapsedSet {
-				pluginQueryCategory := plugin.QueryResultTailTextCategoryDefault
-				if pluginQueryElapsed > 10 {
-					pluginQueryCategory = plugin.QueryResultTailTextCategoryWarning
-				}
-				if pluginQueryElapsed > 20 {
-					pluginQueryCategory = plugin.QueryResultTailTextCategoryDanger
-				}
-
-				pluginQueryTail := plugin.NewQueryResultTailTextWithCategory(fmt.Sprintf("%dms", pluginQueryElapsed), pluginQueryCategory)
+				pluginQueryTail := plugin.NewQueryResultTailTextWithCategory(fmt.Sprintf("%dms", pluginQueryElapsed), queryDebugPluginQueryTailTextCategory(pluginQueryElapsed))
 				pluginQueryTail.Tooltip = "Raw Plugin.Query duration"
 				resultCopy.Tails = append(resultCopy.Tails, pluginQueryTail)
 			}
 
 			if showBackendPreparedTail {
 				backendPreparedCategory := plugin.QueryResultTailTextCategoryDefault
-				if backendPreparedElapsedMs > 10 {
-					backendPreparedCategory = plugin.QueryResultTailTextCategoryWarning
-				}
-				if backendPreparedElapsedMs > 20 {
-					backendPreparedCategory = plugin.QueryResultTailTextCategoryDanger
-				}
-
 				elapsedTail := plugin.NewQueryResultTailTextWithCategory(fmt.Sprintf("%dms", backendPreparedElapsedMs), backendPreparedCategory)
 				elapsedTail.Tooltip = "Backend ready to send elapsed since Flutter query request"
 				resultCopy.Tails = append(resultCopy.Tails, elapsedTail)
@@ -934,6 +938,25 @@ func appendQueryDebugTails(ctx context.Context, sessionId string, queryId string
 	}
 
 	return annotated
+}
+
+// queryDebugBatchTailTextCategory highlights results that missed the first response batch.
+func queryDebugBatchTailTextCategory(batch int) plugin.QueryResultTailTextCategory {
+	if batch > 1 {
+		return plugin.QueryResultTailTextCategoryWarning
+	}
+	return plugin.QueryResultTailTextCategoryDefault
+}
+
+// queryDebugPluginQueryTailTextCategory highlights raw plugin execution cost before backend/UI overhead.
+func queryDebugPluginQueryTailTextCategory(elapsedMs int64) plugin.QueryResultTailTextCategory {
+	if elapsedMs > 10 {
+		return plugin.QueryResultTailTextCategoryDanger
+	}
+	if elapsedMs > 5 {
+		return plugin.QueryResultTailTextCategoryWarning
+	}
+	return plugin.QueryResultTailTextCategoryDefault
 }
 
 func handleWebsocketAction(ctx context.Context, request WebsocketMsg) {
@@ -1033,6 +1056,35 @@ func handleWebsocketQueryMRU(ctx context.Context, request WebsocketMsg) {
 	mruResults := plugin.GetPluginManager().QueryMRU(ctx, request.SessionId, queryId)
 	logger.Info(ctx, fmt.Sprintf("found %d MRU results via websocket", len(mruResults)))
 	responseUISuccessWithData(ctx, request, mruResults)
+}
+
+// handleWebsocketQueryCompletionHintAccepted records positive feedback from accepted inline hints.
+func handleWebsocketQueryCompletionHintAccepted(ctx context.Context, request WebsocketMsg) {
+	inputPrefix, inputPrefixErr := getWebsocketMsgParameter(ctx, request, "inputPrefix")
+	if inputPrefixErr != nil {
+		logger.Error(ctx, inputPrefixErr.Error())
+		responseUIError(ctx, request, inputPrefixErr.Error())
+		return
+	}
+
+	completionText, completionTextErr := getWebsocketMsgParameter(ctx, request, "completionText")
+	if completionTextErr != nil {
+		logger.Error(ctx, completionTextErr.Error())
+		responseUIError(ctx, request, completionTextErr.Error())
+		return
+	}
+
+	source, sourceErr := getWebsocketMsgParameter(ctx, request, "source")
+	if sourceErr != nil {
+		logger.Error(ctx, sourceErr.Error())
+		responseUIError(ctx, request, sourceErr.Error())
+		return
+	}
+
+	if !setting.GetSettingManager().RecordQueryCompletionFeedback(ctx, inputPrefix, completionText, source) {
+		logger.Debug(ctx, fmt.Sprintf("ignore invalid query completion feedback: inputPrefix=%q, completionText=%q, source=%q", inputPrefix, completionText, source))
+	}
+	responseUISuccess(ctx, request)
 }
 
 func handleWebsocketTerminalSubscribe(ctx context.Context, request WebsocketMsg) {

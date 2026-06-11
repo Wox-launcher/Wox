@@ -148,7 +148,8 @@ Wox 会把运行时数据存到用户主目录下：
 
 常用子目录：
 
-- `~/.wox/log/`：UI 和后端日志
+- `~/.wox/log/wox.log`：core 日志
+- `~/.wox/log/ui.log`：UI 日志
 - `~/.wox/plugins/`：本地插件开发目录
 
 ## 排错建议

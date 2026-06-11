@@ -9,3 +9,7 @@ func simulateCopy() error {
 func simulatePaste() error {
 	return errors.New("not implemented")
 }
+
+func simulateCapsLockTap() error {
+	return errors.New("not implemented")
+}

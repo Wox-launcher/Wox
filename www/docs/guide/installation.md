@@ -1,6 +1,6 @@
 # Installation
 
-Choose the installer that matches how you normally manage desktop apps. Package managers are easier to update; the release archive is useful when you want a portable copy.
+Choose the installer that matches how you normally manage desktop apps. Package managers are easier to update; the release archive is useful when you want a portable copy. Wox uses the stable update channel by default.
 
 ## Package Managers
 
@@ -15,7 +15,11 @@ After installation, start Wox from your app launcher or run the installed execut
 
 ## Manual Download
 
-Download the latest package from [GitHub Releases](https://github.com/Wox-launcher/Wox/releases) if your platform does not have a package-manager entry yet or you prefer a portable setup.
+Download the latest stable package from [GitHub Releases](https://github.com/Wox-launcher/Wox/releases) if your platform does not have a package-manager entry yet or you prefer a portable setup.
+
+## Update Channels
+
+Wox checks the stable update channel by default. To receive beta prereleases, open **Settings -> General -> Update channel** and choose **Beta channel**. Beta users receive beta prereleases and later stable releases; stable users do not receive prereleases automatically.
 
 ### Windows
 
@@ -49,11 +53,11 @@ chmod +x ./wox
 
 Wox keeps settings, plugin data, cache, and logs outside the application directory:
 
-| Platform | Data directory | Logs |
+| Platform | Data directory | Core log |
 | --- | --- | --- |
-| Windows | `%USERPROFILE%\.wox` | `%USERPROFILE%\.wox\log` |
-| macOS | `~/.wox` | `~/.wox/log` |
-| Linux | `~/.wox` | `~/.wox/log` |
+| Windows | `%USERPROFILE%\.wox` | `%USERPROFILE%\.wox\log\wox.log` |
+| macOS | `~/.wox` | `~/.wox/log/wox.log` |
+| Linux | `~/.wox` | `~/.wox/log/wox.log` |
 
 Back up this directory if you want to move your configuration to another machine.
 

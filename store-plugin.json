@@ -542,7 +542,7 @@
     "Id": "2f326a0c-cd9f-4ddf-9b45-f8abf082283f",
     "Name": "i18n:plugin_name",
     "Author": "Wox-launcher",
-    "Version": "0.2.1",
+    "Version": "0.2.3",
     "MinWoxVersion": "2.0.0",
     "Runtime": "nodejs",
     "Description": "i18n:plugin_desc",
@@ -558,7 +558,7 @@
       "Linux"
     ],
     "DateCreated": "2026-03-08 15:56:00",
-    "DateUpdated": "2026-04-29 04:12:20",
+    "DateUpdated": "2026-06-09 15:59:48",
     "I18n": {
       "en_US": {
         "plugin_name": "Codex Usage",
@@ -680,7 +680,7 @@
     "Id": "6987b7b1-89da-41ef-bab3-d1ba2e3daba0",
     "Name": "Everything",
     "Author": "qianlifeng",
-    "Version": "0.1.0",
+    "Version": "0.1.1",
     "MinWoxVersion": "2.0.0",
     "Runtime": "nodejs",
     "Description": "Search files with Everything on Windows",
@@ -694,7 +694,7 @@
       "Windows"
     ],
     "DateCreated": "2026-04-22 20:40:30",
-    "DateUpdated": "2026-05-26 12:55:29"
+    "DateUpdated": "2026-06-08 12:32:36"
   },
   {
     "Id": "0057ebd4-1a85-4653-8bfa-d51557c0c7a1",

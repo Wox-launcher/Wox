@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -10,7 +11,6 @@ import 'package:wox/components/wox_hotkey_recorder_view.dart';
 import 'package:wox/components/wox_query_hotkey_dialog.dart';
 import 'package:wox/components/wox_switch.dart';
 import 'package:wox/components/wox_dropdown_button.dart';
-import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_lang.dart';
@@ -61,54 +61,11 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                   );
                 }),
               ),
-              formField(
-                settingKey: "EnableAutoUpdate",
-                label: controller.tr("ui_enable_auto_update"),
-                labelWidth: GENERAL_SETTING_WIDE_LABEL_WIDTH,
-                tips: controller.tr("ui_enable_auto_update_tips"),
-                child: Obx(() {
-                  return WoxSwitch(
-                    value: controller.woxSetting.value.enableAutoUpdate,
-                    onChanged: (bool value) {
-                      controller.updateConfig("EnableAutoUpdate", value.toString());
-
-                      // The backend refreshes update metadata asynchronously, so keep the delayed doctor refresh after changing this setting.
-                      Future.delayed(const Duration(seconds: 2), () {
-                        Get.find<WoxLauncherController>().doctorCheck();
-                      });
-                    },
-                  );
-                }),
-              ),
             ],
           ),
           formSection(
             title: controller.tr("ui_general_section_launch"),
             children: [
-              formField(
-                settingKey: "MainHotkey",
-                label: controller.tr("ui_hotkey"),
-                tips: controller.tr("ui_hotkey_tips"),
-                controlMaxWidth: 520,
-                child: WoxHotkeyRecorder(
-                  hotkey: WoxHotkey.parseHotkeyFromString(controller.woxSetting.value.mainHotkey),
-                  onHotKeyRecorded: (hotkey) {
-                    controller.updateConfig("MainHotkey", hotkey);
-                  },
-                ),
-              ),
-              formField(
-                settingKey: "SelectionHotkey",
-                label: controller.tr("ui_selection_hotkey"),
-                tips: controller.tr("ui_selection_hotkey_tips"),
-                controlMaxWidth: 520,
-                child: WoxHotkeyRecorder(
-                  hotkey: WoxHotkey.parseHotkeyFromString(controller.woxSetting.value.selectionHotkey),
-                  onHotKeyRecorded: (hotkey) {
-                    controller.updateConfig("SelectionHotkey", hotkey);
-                  },
-                ),
-              ),
               formField(
                 settingKey: "LaunchMode",
                 label: controller.tr("ui_launch_mode"),
@@ -238,6 +195,43 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
           formSection(
             title: controller.tr("ui_general_section_hotkeys"),
             children: [
+              formField(
+                settingKey: "MainHotkey",
+                label: controller.tr("ui_hotkey"),
+                tips: controller.tr("ui_hotkey_tips"),
+                controlMaxWidth: 520,
+                child: WoxHotkeyRecorder(
+                  hotkey: WoxHotkey.parseHotkeyFromString(controller.woxSetting.value.mainHotkey),
+                  onHotKeyRecorded: (hotkey) {
+                    controller.updateConfig("MainHotkey", hotkey);
+                  },
+                ),
+              ),
+              formField(
+                settingKey: "SelectionHotkey",
+                label: controller.tr("ui_selection_hotkey"),
+                tips: controller.tr("ui_selection_hotkey_tips"),
+                controlMaxWidth: 520,
+                child: WoxHotkeyRecorder(
+                  hotkey: WoxHotkey.parseHotkeyFromString(controller.woxSetting.value.selectionHotkey),
+                  onHotKeyRecorded: (hotkey) {
+                    controller.updateConfig("SelectionHotkey", hotkey);
+                  },
+                ),
+              ),
+              formField(
+                settingKey: "EnableHyperKey",
+                label: controller.tr("ui_enable_hyper_key"),
+                tips: controller.tr("ui_enable_hyper_key_tips").replaceAll("{modifiers}", _hyperKeyModifiers()),
+                child: Obx(() {
+                  return WoxSwitch(
+                    value: controller.woxSetting.value.enableHyperKey,
+                    onChanged: (bool value) {
+                      controller.updateConfig("EnableHyperKey", value.toString());
+                    },
+                  );
+                }),
+              ),
               settingTarget(
                 settingKey: "IgnoredHotkeyApps",
                 child: Padding(
@@ -287,8 +281,9 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                     return WoxSettingPluginTable(
                       inlineTitleActions: true,
                       tableWidth: GENERAL_SETTING_TABLE_WIDTH,
-                      customCreateDialogBuilder: (context, saveRow) => showWoxQueryHotkeyDialog(context: context, onSave: saveRow),
-                      customEditDialogBuilder: (context, row, saveRow) => showWoxQueryHotkeyDialog(context: context, initialRow: row, onSave: saveRow),
+                      customCreateDialogBuilder:
+                          (context, saveRow, {initialRow = const <String, dynamic>{}}) => showWoxQueryHotkeyDialog(context: context, initialRow: initialRow, onSave: saveRow),
+                      customEditDialogBuilder: (context, row, saveRow) => showWoxQueryHotkeyDialog(context: context, initialRow: row, isEditing: true, onSave: saveRow),
                       titleActions: [
                         _buildDemoTitleAction(
                           triggerKey: 'settings-query-hotkeys-demo-trigger',
@@ -561,5 +556,9 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
         ),
       ),
     );
+  }
+
+  String _hyperKeyModifiers() {
+    return Platform.isMacOS ? "Ctrl+Shift+Cmd+Option" : "Ctrl+Shift+Alt+Win";
   }
 }

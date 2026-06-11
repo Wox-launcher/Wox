@@ -26,6 +26,16 @@ func GetActiveDialogRect() (int, int, int, int, bool) {
 	return 0, 0, 0, 0, false
 }
 
+// GetOpenSaveDialogRectByPid is unsupported on Linux until the Explorer monitor exposes file dialog geometry there.
+func GetOpenSaveDialogRectByPid(pid int) (int, int, int, int, bool) {
+	return 0, 0, 0, 0, false
+}
+
+// GetOpenSaveDialogWindowIdByPid is unsupported on Linux until file dialog HWND-equivalent tracking exists.
+func GetOpenSaveDialogWindowIdByPid(pid int) string {
+	return ""
+}
+
 func AddExplorerRawKeyListener(listener ExplorerRawKeyListener) (ExplorerRawKeySubscription, error) {
 	// Stub implementation for Linux
 	return nil, nil

@@ -1,14 +1,29 @@
 # Changelog
 
-## v2.1.2 - 
+## v2.1.2-beta.2 - 2026-06-10
+
+- Improve
+  - [`Media Player`] Improve Windows media session integration so users can view the current track, see artwork, and control playback with play, pause, next, and previous actions from Wox.
+  - [`Explorer`] Improve open/save dialog workflows with type-to-search hints, faster dialog path detection, quick folder jumps, and selection highlighting inside the active dialog.
+  - [`Preview`] Improve preview metadata by using tag-style pills across AI Command, Clipboard, Selection, Shell, Update, Media Player, and Node.js plugin SDK previews.
+  - [`PDF`] Improve PDF file preview by rendering PDFs through the shared WebView preview path.
+  - [`System`] Improve system commands with a copy-version action for quickly sharing the current Wox version.
+  - [`Update`] Improve manual update checks so the visible update preview and release-channel actions refresh after checking.
+  - [`Logging`] Improve log file naming and bug report guidance so users can find and upload `wox.log` more easily #4446
+
+- Fix
+  - [`Shell`] Fix Windows open actions to use ShellExecute directly and avoid blocking when launching files, URLs, or folders.
+  - [`Hotkey`] Fix hotkey recording so stale Windows modifier state does not leak into the next recorded shortcut.
+
+## v2.1.2-beta.1 - 2026-06-05
 
 - Add
   - [`Theme`] Add a theme editor with live launcher preview, color controls, save-as and overwrite flows, and wallpaper-aware previews for customizing Wox themes #4421
   - [`Window Manager`] Add a Window Manager plugin to move, resize, minimize, maximize, restore, and send the active window between displays from launcher commands.
   - [`Selection`] Add Space Quick Look on Windows so users can preview a selected file from File Explorer or open/save dialogs by pressing Space.
-    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/selection_quick_look.mp4)
   - [`Attention`] Add persistent Attention items so plugins can surface follow-up tasks with an unread badge and an inbox that keeps items until users open or mark them read.
   - [`Result Drag`] Add native file drag export for launcher results, allowing file-backed results from Clipboard and plugins to be dragged directly to folders or other apps.
+  - [`Update`] Add update channels so users can stay on stable releases or opt into beta prereleases.
 
 - Improve
   - [`Preview`] Expand file preview support to code, executable, image, markdown, PDF, shortcuts, video, zip, Office, audio, font, calendar/contact, delimited data, and RDP files, with a wider default preview panel.
@@ -23,15 +38,15 @@
 - Fix
   - [`Screenshot`] Fix permission-denied capture feedback with localized notifications #4433
   - [`Hotkey`] Fix arrow-key hotkey recognition when alternate key names are reported by the platform.
-
+  - [`Security`] Fix Windows file reveal behavior to use the Windows Shell API instead of interpolated PowerShell command text, preventing crafted file paths from being interpreted as commands when opening a file's containing folder.
 
 ## v2.1.1 - 2026-05-24
 
 - Add
   - [`Settings`] Add settings search so users can find built-in and plugin settings by localized text without browsing each settings page.
-![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/setting_search.png)
+    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/setting_search.png)
   - [`AI Command`] Add an AI command template dialog and default-action selector, with built-in translation and summarization command templates for faster setup.
-![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/ai_command_templates.png)
+    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/ai_command_templates.png)
   - [`Bug Report`] Add built-in diagnostics collection and a toolbar indicator so users can prepare bug reports with relevant runtime context #4416
 
 - Improve

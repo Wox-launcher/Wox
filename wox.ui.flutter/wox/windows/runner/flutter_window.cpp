@@ -6028,17 +6028,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
         std::string appearance = *arguments;
         BOOL useDark = (appearance == "dark");
         DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &useDark, sizeof(useDark));
-        // Theme changes can reset the DWM material on the existing launcher HWND.
-        // Reapply the same backdrop policy used at window creation so translucent
-        // Flutter theme colors do not turn into a plain opaque surface until the
-        // next query resize refreshes the frame.
-        MARGINS margins = {-1};
-        DwmExtendFrameIntoClientArea(hwnd, &margins);
-        int backdrop_type = kDwmSystemBackdropTabbed;
-        DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop_type, sizeof(backdrop_type));
-        int corner_preference = kDwmCornerRound;
-        DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corner_preference, sizeof(corner_preference));
-        SetWindowPos(hwnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+        ApplyBackdropForAppearance(useDark == TRUE);
         result->Success();
       }
       else

@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+
+	"github.com/Masterminds/semver/v3"
 )
 
 type releaseInfo struct {
@@ -14,6 +16,9 @@ type releaseInfo struct {
 	Date      string
 	Changelog string
 }
+
+const stableManifestPath = "updater.json"
+const betaManifestPath = "updater.beta.json"
 
 func runRelease() {
 	if err := ensureGitClean(); err != nil {
@@ -51,13 +56,14 @@ func runRelease() {
 	fmt.Printf("Version:   %s\n", info.Version)
 	fmt.Printf("Date:      %s\n", info.Date)
 	fmt.Printf("Tag:       v%s\n", info.Version)
+	fmt.Printf("Manifests: %s\n", strings.Join(releaseManifestTargetsForVersion(info.Version), ", "))
 	fmt.Println("Changelog:")
 	fmt.Println(strings.Repeat("-", 40))
 	fmt.Println(strings.TrimSpace(info.Changelog))
 	fmt.Println(strings.Repeat("-", 40))
 	fmt.Println("\nThis will:")
 	fmt.Println("  1. Update wox.core/updater/version.go")
-	fmt.Println("  2. Update updater.json")
+	fmt.Println("  2. Refresh update-channel manifest(s)")
 	fmt.Println("  3. Update wox.ui.flutter/wox/pubspec.yaml")
 	fmt.Println("  4. Update assets/mac/Info.plist")
 	fmt.Println("  5. Commit changes and create tag v" + info.Version)
@@ -83,12 +89,12 @@ func runRelease() {
 	}
 	fmt.Println("✓ Updated wox.core/updater/version.go")
 
-	// Step 2: Update updater.json
+	// Step 2: Refresh update-channel manifest(s)
 	if err := updateUpdaterJson(info.Version); err != nil {
-		fmt.Printf("Error updating updater.json: %v\n", err)
+		fmt.Printf("Error updating update-channel manifest(s): %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("✓ Updated updater.json")
+	fmt.Println("✓ Refreshed update-channel manifest(s)")
 
 	// Step 3: Update pubspec.yaml
 	if err := updatePubspecYaml(info.Version); err != nil {
@@ -190,6 +196,21 @@ func validateVersion(version string) bool {
 	return matched
 }
 
+func isPrereleaseVersion(version string) bool {
+	parsedVersion, err := semver.NewVersion(version)
+	if err != nil {
+		return false
+	}
+	return parsedVersion.Prerelease() != ""
+}
+
+func releaseManifestTargetsForVersion(version string) []string {
+	if isPrereleaseVersion(version) {
+		return []string{betaManifestPath}
+	}
+	return []string{stableManifestPath, betaManifestPath}
+}
+
 func updateVersionGo(version string) error {
 	content := fmt.Sprintf(`package updater
 
@@ -211,7 +232,12 @@ func updateUpdaterJson(version string) error {
   "ReleaseNotes": ""
 }
 `, version, tag, tag, tag)
-	return os.WriteFile("../updater.json", []byte(content), 0644)
+	for _, manifest := range releaseManifestTargetsForVersion(version) {
+		if err := os.WriteFile("../"+manifest, []byte(content), 0644); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func gitCommitAndTag(version string) error {
@@ -222,6 +248,7 @@ func gitCommitAndTag(version string) error {
 		"assets/mac/Info.plist",
 		"CHANGELOG.md",
 		"updater.json",
+		"updater.beta.json",
 	}
 
 	for _, file := range files {

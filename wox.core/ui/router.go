@@ -2,15 +2,18 @@ package ui
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"wox/ai"
 	"wox/common"
@@ -102,32 +105,35 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/permission/privacy/open":       handlePermissionPrivacyOpen,
 
 	// others
-	"/":                            handleHome,
-	"/show":                        handleShow,
-	"/tooltip/show":                handleTooltipOverlayShow,
-	"/tooltip/hide":                handleTooltipOverlayHide,
-	"/ping":                        handlePing,
-	"/preview":                     handlePreview,
-	"/preview/image/overlay":       handlePreviewImageOverlay,
-	"/image/file/icon":             handleFileIcon,
-	"/image/lazy/load":             handleLazyImageLoad,
-	"/open":                        handleOpen,
-	"/backup/now":                  handleBackupNow,
-	"/backup/restore":              handleBackupRestore,
-	"/backup/all":                  handleBackupAll,
-	"/backup/folder":               handleBackupFolder,
-	"/log/clear":                   handleLogClear,
-	"/log/open":                    handleLogOpen,
-	"/diagnostics/status":          handleDiagnosticsStatus,
-	"/diagnostics/monitor/enable":  handleDiagnosticsMonitorEnable,
-	"/diagnostics/monitor/disable": handleDiagnosticsMonitorDisable,
-	"/diagnostics/export":          handleDiagnosticsExport,
-	"/hotkey/available":            handleHotkeyAvailable,
-	"/hotkey/availability":         handleHotkeyAvailability,
-	"/glance":                      handleGlance,
-	"/glance/action":               handleGlanceAction,
-	"/deeplink":                    handleDeeplink,
-	"/version":                     handleVersion,
+	"/":                                   handleHome,
+	"/show":                               handleShow,
+	"/tooltip/show":                       handleTooltipOverlayShow,
+	"/tooltip/hide":                       handleTooltipOverlayHide,
+	"/ping":                               handlePing,
+	"/preview":                            handlePreview,
+	"/preview/image/overlay":              handlePreviewImageOverlay,
+	"/preview/file/media":                 handlePreviewFileMedia,
+	"/image/file/icon":                    handleFileIcon,
+	"/image/lazy/load":                    handleLazyImageLoad,
+	"/open":                               handleOpen,
+	"/backup/now":                         handleBackupNow,
+	"/backup/restore":                     handleBackupRestore,
+	"/backup/all":                         handleBackupAll,
+	"/backup/folder":                      handleBackupFolder,
+	"/log/clear":                          handleLogClear,
+	"/log/open":                           handleLogOpen,
+	"/diagnostics/status":                 handleDiagnosticsStatus,
+	"/diagnostics/monitor/enable":         handleDiagnosticsMonitorEnable,
+	"/diagnostics/monitor/enable-restart": handleDiagnosticsMonitorEnableRestart,
+	"/diagnostics/monitor/disable":        handleDiagnosticsMonitorDisable,
+	"/diagnostics/export":                 handleDiagnosticsExport,
+	"/hotkey/available":                   handleHotkeyAvailable,
+	"/hotkey/availability":                handleHotkeyAvailability,
+	"/glance":                             handleGlance,
+	"/glance/action":                      handleGlanceAction,
+	"/updater/channel/versions":           handleUpdateChannelVersions,
+	"/deeplink":                           handleDeeplink,
+	"/version":                            handleVersion,
 
 	// test-only triggers
 	"/test/plugin/install_local":     handleTestInstallLocalPlugin,
@@ -139,6 +145,8 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/test/screen/mouse":             handleTestMouseScreen,
 	"/test/trigger/tray_query":       handleTestTriggerTrayQuery,
 }
+
+var updateChannelVersionsProvider = updater.GetUpdateChannelVersions
 
 const traceIdHeader = "TraceId"
 const sessionIdHeader = "SessionId"
@@ -220,6 +228,91 @@ func handleFileIcon(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeSuccessResponse(w, icon)
+}
+
+func handlePreviewFileMedia(w http.ResponseWriter, r *http.Request) {
+	// Media previews need ordinary HTTP range requests so large video files can
+	// stream into WebView without loading the whole file into Flutter memory.
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	encodedPath := strings.TrimSpace(r.URL.Query().Get("path"))
+	if encodedPath == "" {
+		http.Error(w, "path is empty", http.StatusBadRequest)
+		return
+	}
+
+	decodedPath, err := base64.URLEncoding.DecodeString(encodedPath)
+	if err != nil {
+		http.Error(w, "path is invalid", http.StatusBadRequest)
+		return
+	}
+
+	filePath := string(decodedPath)
+	if filePath == "" {
+		http.Error(w, "path is empty", http.StatusBadRequest)
+		return
+	}
+	if !filepath.IsAbs(filePath) {
+		http.Error(w, "path must be absolute", http.StatusBadRequest)
+		return
+	}
+
+	stat, err := os.Stat(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, "failed to stat file", http.StatusInternalServerError)
+		return
+	}
+	if stat.IsDir() {
+		http.Error(w, "path is a directory", http.StatusBadRequest)
+		return
+	}
+
+	file, err := os.Open(filePath)
+	if err != nil {
+		http.Error(w, "failed to open file", http.StatusInternalServerError)
+		return
+	}
+	defer file.Close()
+
+	if contentType := resolvePreviewFileMediaContentType(filePath); contentType != "" {
+		w.Header().Set("Content-Type", contentType)
+	}
+	w.Header().Set("Accept-Ranges", "bytes")
+	http.ServeContent(w, r, filepath.Base(filePath), stat.ModTime(), file)
+}
+
+func resolvePreviewFileMediaContentType(filePath string) string {
+	switch strings.ToLower(filepath.Ext(filePath)) {
+	case ".pdf":
+		return "application/pdf"
+	case ".mp4", ".m4v":
+		return "video/mp4"
+	case ".mov":
+		return "video/quicktime"
+	case ".webm":
+		return "video/webm"
+	case ".mp3":
+		return "audio/mpeg"
+	case ".wav":
+		return "audio/wav"
+	case ".m4a":
+		return "audio/mp4"
+	case ".aac":
+		return "audio/aac"
+	case ".flac":
+		return "audio/flac"
+	case ".ogg", ".opus":
+		return "audio/ogg"
+	}
+
+	return mime.TypeByExtension(strings.ToLower(filepath.Ext(filePath)))
 }
 
 func handleLazyImageLoad(w http.ResponseWriter, r *http.Request) {
@@ -771,6 +864,7 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 	settingDto.EnableAutostart = woxSetting.EnableAutostart.Get()
 	settingDto.MainHotkey = woxSetting.MainHotkey.Get()
 	settingDto.SelectionHotkey = woxSetting.SelectionHotkey.Get()
+	settingDto.EnableHyperKey = woxSetting.EnableHyperKey.Get()
 	settingDto.IgnoredHotkeyApps = woxSetting.IgnoredHotkeyApps.Get()
 	settingDto.LogLevel = util.NormalizeLogLevel(woxSetting.LogLevel.Get())
 	settingDto.UsePinYin = woxSetting.UsePinYin.Get()
@@ -791,6 +885,7 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 	settingDto.ShowPosition = woxSetting.ShowPosition.Get()
 	settingDto.EnableAutoBackup = woxSetting.EnableAutoBackup.Get()
 	settingDto.EnableAutoUpdate = woxSetting.EnableAutoUpdate.Get()
+	settingDto.ReleaseChannel = woxSetting.ReleaseChannel.Get()
 	settingDto.EnableAnonymousUsageStats = woxSetting.EnableAnonymousUsageStats.Get()
 	settingDto.CustomPythonPath = woxSetting.CustomPythonPath.Get()
 	settingDto.CustomNodejsPath = woxSetting.CustomNodejsPath.Get()
@@ -818,6 +913,10 @@ func handleHotkeyAppCandidates(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, appplugin.GetHotkeyAppCandidates(getTraceContext(r)))
 }
 
+func handleUpdateChannelVersions(w http.ResponseWriter, r *http.Request) {
+	writeSuccessResponse(w, updateChannelVersionsProvider(getTraceContext(r)))
+}
+
 func handleSettingUIFontList(w http.ResponseWriter, r *http.Request) {
 	fontFamilies := font.GetSystemFontFamilies(getTraceContext(r))
 	writeSuccessResponse(w, fontFamilies)
@@ -839,6 +938,17 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 
 	ctx := getTraceContext(r)
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	if kv.Key == "ReleaseChannel" {
+		updatedValue, updateErr := updateWoxSettingValue(ctx, woxSetting, kv.Key, kv.Value)
+		if updateErr != nil {
+			writeErrorResponse(w, updateErr.Error())
+			return
+		}
+
+		GetUIManager().PostSettingUpdate(ctx, kv.Key, updatedValue)
+		writeSuccessResponse(w, "")
+		return
+	}
 
 	var vb bool
 	var vf float64
@@ -858,6 +968,8 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 		woxSetting.MainHotkey.Set(vs)
 	case "SelectionHotkey":
 		woxSetting.SelectionHotkey.Set(vs)
+	case "EnableHyperKey":
+		woxSetting.EnableHyperKey.Set(vb)
 	case "IgnoredHotkeyApps":
 		var ignoredApps []setting.IgnoredHotkeyApp
 		if err := json.Unmarshal([]byte(vs), &ignoredApps); err != nil {
@@ -1107,6 +1219,21 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 	GetUIManager().PostSettingUpdate(getTraceContext(r), kv.Key, updatedValue)
 
 	writeSuccessResponse(w, "")
+}
+
+// updateWoxSettingValue handles small shared setting writes that need normalization.
+func updateWoxSettingValue(_ context.Context, woxSetting *setting.WoxSetting, key string, value string) (string, error) {
+	switch key {
+	case "ReleaseChannel":
+		normalizedChannel := setting.NormalizeReleaseChannel(value)
+		if err := woxSetting.ReleaseChannel.Set(normalizedChannel); err != nil {
+			return "", err
+		}
+		updater.ResetUpdateInfoForReleaseChannel(normalizedChannel)
+		return string(normalizedChannel), nil
+	default:
+		return "", fmt.Errorf("unknown setting key: %s", key)
+	}
 }
 
 func handleGlance(w http.ResponseWriter, r *http.Request) {
@@ -1503,19 +1630,46 @@ func handleDiagnosticsStatus(w http.ResponseWriter, r *http.Request) {
 
 func handleDiagnosticsMonitorEnable(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
+	state, err := enableDiagnosticsMonitor(ctx)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, state)
+}
+
+func handleDiagnosticsMonitorEnableRestart(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	state, err := enableDiagnosticsMonitor(ctx)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	if err := diagnostic.GetManager().StartSupervisorDetached(ctx, true); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, state)
+	util.Go(ctx, "restart wox for bug aware monitor", func() {
+		time.Sleep(200 * time.Millisecond)
+		GetUIManager().ExitApp(util.NewTraceContext())
+	})
+}
+
+// enableDiagnosticsMonitor keeps all HTTP entry points aligned with the system plugin's enable behavior.
+func enableDiagnosticsMonitor(ctx context.Context) (diagnostic.State, error) {
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	previousLogLevel := util.NormalizeLogLevel(woxSetting.LogLevel.Get())
 	state, err := diagnostic.GetManager().Enable(ctx, previousLogLevel)
 	if err != nil {
-		writeErrorResponse(w, err.Error())
-		return
+		return diagnostic.State{}, err
 	}
 	// New feature: API-based enabling mirrors the system plugin path so any
 	// future settings surface gets the same clean-log DEBUG session behavior.
 	woxSetting.LogLevel.Set(setting.LogLevelDebug)
 	util.GetLogger().SetLevel(setting.LogLevelDebug)
 	GetUIManager().GetUI(ctx).UpdateDiagnosticStatus(ctx, true)
-	writeSuccessResponse(w, state)
+	return state, nil
 }
 
 func handleDiagnosticsMonitorDisable(w http.ResponseWriter, r *http.Request) {
