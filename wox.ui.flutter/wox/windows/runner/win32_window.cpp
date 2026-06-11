@@ -86,6 +86,8 @@ namespace
   constexpr DWORD kWindows11BuildNumber = 22000;
   constexpr DWORD kWin10DarkAcrylicTint = 0xCC202020;
   constexpr DWORD kWin10LightAcrylicTint = 0xCCF5F5F5;
+  constexpr int kDwmCornerRound = 2;
+  constexpr int kDwmSystemBackdropTabbed = 3;
   constexpr const wchar_t kWindowClassName[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
 
   // The number of Win32Window objects that currently exist.
@@ -194,10 +196,10 @@ namespace
       MARGINS margins = {-1};
       DwmExtendFrameIntoClientArea(hwnd, &margins);
 
-      int corner_preference = DWMWCP_ROUND;
+      int corner_preference = kDwmCornerRound;
       DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corner_preference, sizeof(corner_preference));
 
-      int backdrop_type = DWMSBT_TABBEDWINDOW;
+      int backdrop_type = kDwmSystemBackdropTabbed;
       DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop_type, sizeof(backdrop_type));
       return;
     }
@@ -490,10 +492,10 @@ void Win32Window::ApplyBackdropForAppearance(bool use_dark)
     MARGINS margins = {-1};
     DwmExtendFrameIntoClientArea(window_handle_, &margins);
 
-    int corner_preference = DWMWCP_ROUND;
+    int corner_preference = kDwmCornerRound;
     DwmSetWindowAttribute(window_handle_, DWMWA_WINDOW_CORNER_PREFERENCE, &corner_preference, sizeof(corner_preference));
 
-    int backdrop_type = DWMSBT_TABBEDWINDOW;
+    int backdrop_type = kDwmSystemBackdropTabbed;
     DwmSetWindowAttribute(window_handle_, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop_type, sizeof(backdrop_type));
     SetWindowPos(window_handle_, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
     return;

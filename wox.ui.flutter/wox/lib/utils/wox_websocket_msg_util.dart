@@ -79,7 +79,7 @@ class WoxWebsocketMsgUtil {
             "query_timing source=ui stage=ui_websocket_stream_receive traceId=${msg.traceId} method=${msg.method} payloadChars=$payloadChars backendToStreamMs=$backendToStreamMs jsonDecodeUs=$jsonDecodeUs fromJsonUs=$fromJsonUs streamParseUs=${DateTime.now().microsecondsSinceEpoch - eventReceivedUs}",
           );
         }
-        if (msg.sessionId.isNotEmpty && msg.sessionId != Env.sessionId && !msg.sessionId.startsWith(_coreSessionPrefix)) {
+        if (!_shouldAcceptIncomingMessage(msg)) {
           return;
         }
         if (msg.success == false) {
@@ -125,6 +125,19 @@ class WoxWebsocketMsgUtil {
       return;
     }
     handler(msg);
+  }
+
+  /// Checks whether an incoming websocket message belongs to this Flutter process.
+  bool _shouldAcceptIncomingMessage(WoxWebsocketMsg msg) {
+    final targetSessionId = msg.sessionId;
+    if (targetSessionId.isEmpty || targetSessionId == Env.sessionId || targetSessionId.startsWith(_coreSessionPrefix)) {
+      return true;
+    }
+
+    // Multiple Wox windows share the same websocket connection. Secondary
+    // window sessions are not Env.sessionId, but they are registered locally
+    // and must receive their own query responses.
+    return _sessionHandlers.containsKey(targetSessionId);
   }
 
   void _reconnect() {
