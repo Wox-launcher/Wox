@@ -2,6 +2,8 @@
 
 SMOKE_FILTER := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
 SQLITE_BUILD_TAGS ?= sqlite_fts5
+FLUTTER_MASTER_COMMIT_FILE ?= .flutter-master-commit
+FLUTTER_MASTER_COMMIT ?= $(strip $(file <$(FLUTTER_MASTER_COMMIT_FILE)))
 
 # GNU Make on Windows may choose Git's sh.exe without exposing Git usr/bin to
 # recipes or $(shell ...) calls. The root build relies on sed/rm/uname before
@@ -101,12 +103,34 @@ ifeq ($(PLATFORM),windows)
 	}
 endif
 
-
+# Keep local development on the same Flutter master revision as CI because Wox
+# depends on experimental windowing APIs that can change between master commits.
+_pin_flutter_master:
+	@echo "Ensuring Flutter SDK is pinned to $(FLUTTER_MASTER_COMMIT)..."
+	@flutter_root="$$(flutter --version --machine | node -e "let input=''; process.stdin.on('data', chunk => input += chunk); process.stdin.on('end', () => { const data = JSON.parse(input); process.stdout.write(data.flutterRoot || ''); });")"; \
+	if [ -z "$$flutter_root" ]; then \
+		echo "Unable to determine Flutter SDK root from flutter --version --machine." >&2; \
+		exit 1; \
+	fi; \
+	if ! git -C "$$flutter_root" rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
+		echo "Flutter SDK root is not a git checkout: $$flutter_root" >&2; \
+		exit 1; \
+	fi; \
+	current_commit="$$(git -C "$$flutter_root" rev-parse HEAD)"; \
+	if [ "$$current_commit" = "$(FLUTTER_MASTER_COMMIT)" ]; then \
+		echo "Flutter SDK already at $(FLUTTER_MASTER_COMMIT)."; \
+	else \
+		echo "Checking out Flutter $(FLUTTER_MASTER_COMMIT) in $$flutter_root"; \
+		git -C "$$flutter_root" fetch origin "$(FLUTTER_MASTER_COMMIT)" --depth 1; \
+		git -C "$$flutter_root" checkout --detach "$(FLUTTER_MASTER_COMMIT)"; \
+	fi; \
+	flutter --version
+	flutter config --enable-windowing
 
 clean:
 	rm -rf $(RELEASE_DIR)
 
-dev: _check_deps ensure-resources
+dev: _check_deps _pin_flutter_master ensure-resources
 	$(MAKE) -C wox.core woxmr-build
 	$(MAKE) host
 

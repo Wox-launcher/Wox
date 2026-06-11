@@ -182,10 +182,14 @@ jobs:
         uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
+      - name: Read pinned Flutter commit
+        shell: bash
+        run: echo "FLUTTER_MASTER_COMMIT=$(tr -d '\r\n' < .flutter-master-commit)" >> "$GITHUB_ENV"
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: master
+          flutter-version: ${{ env.FLUTTER_MASTER_COMMIT }}
           cache: true
       - name: Install create-dmg
         run: brew install create-dmg
@@ -308,10 +312,14 @@ jobs:
         uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
+      - name: Read pinned Flutter commit
+        shell: bash
+        run: echo "FLUTTER_MASTER_COMMIT=$(tr -d '\r\n' < .flutter-master-commit)" >> "$GITHUB_ENV"
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: master
+          flutter-version: ${{ env.FLUTTER_MASTER_COMMIT }}
           cache: true
       - name: Install create-dmg
         run: brew install create-dmg
@@ -459,10 +467,15 @@ jobs:
         with:
           enable-cache: true
 
+      - name: Read pinned Flutter commit
+        shell: bash
+        run: echo "FLUTTER_MASTER_COMMIT=$(tr -d '\r\n' < .flutter-master-commit)" >> "$GITHUB_ENV"
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: master
+          flutter-version: ${{ env.FLUTTER_MASTER_COMMIT }}
           cache: true
 
       - name: Enable Flutter desktop (Windows)
@@ -594,10 +607,14 @@ jobs:
         uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
+      - name: Read pinned Flutter commit
+        shell: bash
+        run: echo "FLUTTER_MASTER_COMMIT=$(tr -d '\r\n' < .flutter-master-commit)" >> "$GITHUB_ENV"
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: master
+          flutter-version: ${{ env.FLUTTER_MASTER_COMMIT }}
           cache: true
       - name: Enable Flutter desktop (Linux)
         run: |
