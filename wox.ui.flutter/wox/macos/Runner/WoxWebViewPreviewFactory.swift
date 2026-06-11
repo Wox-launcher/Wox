@@ -4,6 +4,8 @@ import WebKit
 
 private let mobileUserAgent =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1"
+private let mobileChromeUserAgent =
+  "Mozilla/5.0 (Linux; Android 16; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36"
 private let webViewPreviewMessageHandlerName = "woxWebViewPreview"
 private let unhandledEscapeMessageType = "woxUnhandledEscape"
 private let startDraggingMessageType = "woxStartDragging"
@@ -16,6 +18,7 @@ private struct WoxWebViewPreviewRequest {
   let urlString: String
   let htmlString: String
   let injectCss: String
+  let userAgent: String
   let cacheDisabled: Bool
   let cacheKey: String
   let toolbarTriggerWidth: Double
@@ -26,6 +29,7 @@ private struct WoxWebViewPreviewRequest {
     urlString = args["url"] as? String ?? ""
     htmlString = args["html"] as? String ?? ""
     injectCss = args["injectCss"] as? String ?? ""
+    userAgent = args["userAgent"] as? String ?? ""
     cacheDisabled = args["cacheDisabled"] as? Bool ?? false
     cacheKey = args["cacheKey"] as? String ?? ""
     toolbarTriggerWidth = args["toolbarTriggerWidth"] as? Double ?? 288
@@ -38,7 +42,21 @@ private struct WoxWebViewPreviewRequest {
   }
 
   var cacheSignature: String {
-    "\(injectCss)|\(mobileUserAgent)"
+    "\(injectCss)|\(resolvedUserAgent ?? "auto")"
+  }
+
+  var resolvedUserAgent: String? {
+    let trimmed = userAgent.trimmingCharacters(in: .whitespacesAndNewlines)
+    switch trimmed {
+    case "", "auto", "desktop_safari":
+      return nil
+    case "mobile_safari":
+      return mobileUserAgent
+    case "mobile_chrome":
+      return mobileChromeUserAgent
+    default:
+      return trimmed
+    }
   }
 
   var contentKey: String {
@@ -113,9 +131,7 @@ private enum WoxWebViewStore {
     if #available(macOS 13.3, *) {
       webView.isInspectable = true
     }
-    // Preserve the plugin's mobile-preview behavior. Clearing site state is now a separate reset action, so existing sites
-    // keep their mobile layout while users still have a way to recover from stale login/session storage.
-    webView.customUserAgent = mobileUserAgent
+    webView.customUserAgent = request.resolvedUserAgent
     WoxWebViewPreviewPlugin.registerMessageSource(webView)
     return webView
   }

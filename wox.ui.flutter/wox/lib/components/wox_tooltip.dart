@@ -14,8 +14,9 @@ class WoxTooltip extends StatefulWidget {
   final Widget child;
   final Duration waitDuration;
   final WoxTooltipSide? preferSide;
+  final WoxMultipleWindowHandle? windowHandle;
 
-  const WoxTooltip({super.key, required this.message, required this.child, this.waitDuration = Duration.zero, this.preferSide});
+  const WoxTooltip({super.key, required this.message, required this.child, this.waitDuration = Duration.zero, this.preferSide, this.windowHandle});
 
   @override
   State<WoxTooltip> createState() => WoxTooltipState();
@@ -100,7 +101,7 @@ class WoxTooltipState extends State<WoxTooltip> {
     final targetRect = targetPosition & targetSize;
 
     try {
-      final secondaryWindow = WoxMultipleWindowScope.maybeHandleOf(context);
+      final secondaryWindow = widget.windowHandle ?? WoxMultipleWindowScope.maybeHandleOf(context);
       final isWindowVisible = secondaryWindow == null ? await windowManager.isVisible() : WoxMultipleWindow.isOpen(secondaryWindow.id);
       if (!mounted || !isHoveringTarget || !isWindowVisible) {
         if (!isWindowVisible) {

@@ -259,6 +259,9 @@ class WoxLauncherController extends GetxController {
   final isQueryBoxAtBottom = false.obs;
   final isQueryBoxVisible = true.obs;
   final isToolbarHiddenForce = false.obs;
+  // Keeps Windows tray-query resizes tied to the original tray click instead of
+  // transient HWND bounds from early show/resize frames.
+  TrayAnchor? activeTrayAnchor;
   double forceWindowWidth = 0;
   int forceMaxResultCount = 0;
   var forceHideOnBlur = false;
@@ -1957,6 +1960,7 @@ class WoxLauncherController extends GetxController {
     isQueryBoxVisible.value = !params.hideQueryBox;
     isToolbarHiddenForce.value = params.hideToolbar;
     isQueryBoxAtBottom.value = params.queryBoxAtBottom;
+    activeTrayAnchor = Platform.isWindows && params.showSource == WoxShowSourceEnum.WOX_SHOW_SOURCE_TRAY_QUERY.code ? params.trayAnchor : null;
     forceWindowWidth = params.windowWidth > 0 ? params.windowWidth.toDouble() : 0;
     forceMaxResultCount = params.maxResultCount;
     forceHideOnBlur = params.hideOnBlur;
@@ -2017,6 +2021,7 @@ class WoxLauncherController extends GetxController {
     isQueryBoxAtBottom.value = false;
     isQueryBoxVisible.value = true;
     isToolbarHiddenForce.value = false;
+    activeTrayAnchor = null;
     forceWindowWidth = 0;
     forceMaxResultCount = 0;
     forceHideOnBlur = false;
@@ -2028,6 +2033,12 @@ class WoxLauncherController extends GetxController {
       return Offset(params.position.x.toDouble(), params.position.y.toDouble());
     }
 
+    return resolveTrayAnchorPosition(trayAnchor, targetWidth, targetHeight);
+  }
+
+  /// Resolves a tray-query window from the backend tray anchor for both the
+  /// initial show and later bottom-anchored resize passes.
+  Offset resolveTrayAnchorPosition(TrayAnchor trayAnchor, double targetWidth, double targetHeight) {
     const double margin = 10;
     final minX = trayAnchor.screenRect.x + margin;
     final maxX = trayAnchor.screenRect.x + trayAnchor.screenRect.width - targetWidth - margin;
@@ -3540,7 +3551,10 @@ class WoxLauncherController extends GetxController {
 
     // Force DWM to recompose Acrylic by adding a single pixel to bypass caching identical sizes
     if (forceDwmRecomposition && Platform.isWindows) {
-      totalHeight += 1;
+      // A delayed DWM nudge can race with result-driven growth. Never let that
+      // nudge choose an older smaller height, or bottom-anchored tray queries
+      // visibly shrink and then expand again during their first frames.
+      totalHeight = math.max(totalHeight, math.max(committedWindowHeight ?? 0, ongoingResizeTargetSize?.height ?? 0)) + 1;
     }
 
     double targetWidth = forceWindowWidth != 0 ? forceWindowWidth : WoxSettingUtil.instance.currentSetting.appWidth.toDouble();
@@ -3598,29 +3612,34 @@ class WoxLauncherController extends GetxController {
       }
 
       if (isQueryBoxAtBottom.value) {
-        // When the query box is anchored to the bottom, grow the window upward.
-        // Use getPosition + getSize to compute the current bottom edge, then adjust top to grow upward.
-        final getPositionStartUs = tracker.checkpointUs();
-        final pos = await windowDriver.getPosition();
-        tracker.setElapsedUs("getPositionUs", getPositionStartUs);
-        if (resizeRequestToken != currentResizeToken) {
-          Logger.instance.debug(traceId, "resize skipped: reason=$reason, target=${formatWindowSize(targetSize)}, supersededBeforeSet=true");
-          tracker.setBool("skippedSuperseded", true);
-          tracker.setBool("skippedBeforePlatformSet", true);
-          tracker.setElapsedUs("totalUs", totalStartUs);
-          tracker.log();
-          return;
+        Offset? nextPosition;
+        if (activeTrayAnchor != null) {
+          nextPosition = resolveTrayAnchorPosition(activeTrayAnchor!, targetSize.width, targetSize.height);
+        } else {
+          // When the query box is anchored to the bottom, grow the window upward.
+          // Use getPosition + getSize to compute the current bottom edge, then adjust top to grow upward.
+          final getPositionStartUs = tracker.checkpointUs();
+          final pos = await windowDriver.getPosition();
+          tracker.setElapsedUs("getPositionUs", getPositionStartUs);
+          if (resizeRequestToken != currentResizeToken) {
+            Logger.instance.debug(traceId, "resize skipped: reason=$reason, target=${formatWindowSize(targetSize)}, supersededBeforeSet=true");
+            tracker.setBool("skippedSuperseded", true);
+            tracker.setBool("skippedBeforePlatformSet", true);
+            tracker.setElapsedUs("totalUs", totalStartUs);
+            tracker.log();
+            return;
+          }
+
+          final currentBottom = pos.dy + currentSize.height;
+          if (currentBottom > 0) {
+            nextPosition = Offset(pos.dx, currentBottom - totalHeight);
+          }
         }
 
-        double currentBottom = pos.dy + currentSize.height;
-
-        if (currentBottom <= 0) {
-          // Fallback if bounds are weird
-        } else {
-          double newTop = currentBottom - totalHeight;
+        if (nextPosition != null) {
           // Apply position and size together to avoid intermediate-frame flicker.
           final setBoundsStartUs = tracker.checkpointUs();
-          await windowDriver.setBounds(Offset(pos.dx, newTop), targetSize);
+          await windowDriver.setBounds(nextPosition, targetSize);
           tracker.setElapsedUs("setBoundsUs", setBoundsStartUs);
           final getResizedSizeStartUs = tracker.checkpointUs();
           var resizedSize = await windowDriver.getSize();
@@ -3642,7 +3661,7 @@ class WoxLauncherController extends GetxController {
               tracker.log();
               return;
             }
-            await windowDriver.setBounds(Offset(pos.dx, newTop), targetSize);
+            await windowDriver.setBounds(nextPosition, targetSize);
             tracker.setElapsedUs("retrySetBoundsUs", retrySetBoundsStartUs);
             final getRetriedSizeStartUs = tracker.checkpointUs();
             resizedSize = await windowDriver.getSize();
@@ -3657,6 +3676,7 @@ class WoxLauncherController extends GetxController {
           windowFlickerDetector.recordResize(totalHeight.toInt());
           tracker.setRawString("mode", "setBounds");
           tracker.setBool("growUpward", true);
+          tracker.setBool("usedTrayAnchor", activeTrayAnchor != null);
           tracker.setDouble("afterWidth", resizedSize.width);
           tracker.setDouble("afterHeight", resizedSize.height);
           tracker.setElapsedUs("totalUs", totalStartUs);

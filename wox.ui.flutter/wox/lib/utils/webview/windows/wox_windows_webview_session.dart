@@ -26,6 +26,7 @@ class WoxWindowsWebViewSession implements WoxWebViewSession {
   String _currentUrl = "";
   String _currentHtml = "";
   String _currentCss = "";
+  String _currentUserAgent = "";
   String? _currentScriptId;
   bool _disposed = false;
 
@@ -76,6 +77,13 @@ class WoxWindowsWebViewSession implements WoxWebViewSession {
 
     await ensureInitialized();
 
+    final resolvedUserAgent = WoxWebViewSupport.resolveUserAgent(previewData.userAgent);
+    final userAgentChanged = _currentUserAgent != resolvedUserAgent;
+    if (userAgentChanged) {
+      await controller.setUserAgent(resolvedUserAgent);
+      _currentUserAgent = resolvedUserAgent;
+    }
+
     final injectCssChanged = _currentCss != previewData.injectCss;
     if (injectCssChanged && _currentScriptId != null) {
       await controller.removeScriptToExecuteOnDocumentCreated(_currentScriptId!);
@@ -86,7 +94,7 @@ class WoxWindowsWebViewSession implements WoxWebViewSession {
       _currentScriptId = await controller.addScriptToExecuteOnDocumentCreated(WoxWebViewSupport.buildInjectCssScript(previewData.injectCss));
     }
 
-    final shouldReload = _currentUrl != previewData.url || _currentHtml != previewData.html || injectCssChanged;
+    final shouldReload = _currentUrl != previewData.url || _currentHtml != previewData.html || injectCssChanged || userAgentChanged;
     _currentCss = previewData.injectCss;
 
     if (shouldReload && previewData.html.isNotEmpty) {
@@ -194,9 +202,9 @@ class WoxWindowsWebViewSession implements WoxWebViewSession {
     });
     await controller.setBackgroundColor(Colors.transparent);
     await controller.setPopupWindowPolicy(WebviewPopupWindowPolicy.sameWindow);
-    // Keep the WebView plugin in its mobile-preview mode. The clear-state action handles stuck login/session data without
-    // changing the user-facing mobile layout that existing configured sites were built around.
-    await controller.setUserAgent(WoxWebViewSupport.mobileUserAgent);
+    final defaultUserAgent = WoxWebViewSupport.resolveUserAgent("");
+    await controller.setUserAgent(defaultUserAgent);
+    _currentUserAgent = defaultUserAgent;
     await controller.setCacheDisabled(!isCached);
   }
 }

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:wox/components/wox_checkbox.dart';
 import 'package:wox/components/wox_tooltip.dart';
 import 'package:wox/utils/colors.dart';
+import 'package:wox/utils/multiplewindow/wox_multiple_window.dart';
 import 'package:wox/utils/wox_setting_focus_util.dart';
 
 /// Data model for dropdown items with optional tooltip
@@ -279,6 +280,7 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
   }
 
   void _showFilterableMenu() {
+    final tooltipWindow = WoxMultipleWindowScope.maybeHandleOf(context);
     final dropdownBg = _getDropdownBackgroundColor();
     final dropdownTextColor = _getDropdownTextColor(dropdownBg);
     final searchBg =
@@ -374,7 +376,7 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
                                         color: isSelected ? getThemeActiveBackgroundColor().withValues(alpha: dropdownBg.computeLuminance() < 0.5 ? 0.25 : 0.12) : null,
                                         child: DefaultTextStyle(
                                           style: TextStyle(color: dropdownTextColor, fontSize: widget.fontSize).useSystemChineseFont(),
-                                          child: _buildDropdownMenuItem(item, dropdownTextColor),
+                                          child: _buildDropdownMenuItem(item, dropdownTextColor, tooltipWindow: tooltipWindow),
                                         ),
                                       ),
                                     );
@@ -426,6 +428,7 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
   }
 
   void _showMultiSelectMenu() {
+    final tooltipWindow = WoxMultipleWindowScope.maybeHandleOf(context);
     final dropdownBg = _getDropdownBackgroundColor();
     final dropdownTextColor = _getDropdownTextColor(dropdownBg);
     final borderColor = getThemeSubTextColor().withValues(alpha: 0.55);
@@ -472,7 +475,7 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
                                     Expanded(
                                       child: DefaultTextStyle(
                                         style: TextStyle(color: dropdownTextColor, fontSize: widget.fontSize).useSystemChineseFont(),
-                                        child: _buildDropdownMenuItem(item, dropdownTextColor),
+                                        child: _buildDropdownMenuItem(item, dropdownTextColor, tooltipWindow: tooltipWindow),
                                       ),
                                     ),
                                   ],
@@ -530,7 +533,7 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
   }
 
   // Build dropdown menu item with optional tooltip icon
-  Widget _buildDropdownMenuItem(WoxDropdownItem<T> item, Color activeTextColor) {
+  Widget _buildDropdownMenuItem(WoxDropdownItem<T> item, Color activeTextColor, {WoxMultipleWindowHandle? tooltipWindow}) {
     final hasLeading = item.leading != null;
     final hasSubtitle = item.subtitle != null && item.subtitle!.isNotEmpty;
     final hasTooltip = item.tooltip != null && item.tooltip!.isNotEmpty;
@@ -566,7 +569,10 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
         if (hasTrailing) ...[const SizedBox(width: 16), trailing],
         // Dropdown help icons use WoxTooltip so menu rows and the rest of Wox share
         // one overlay behavior instead of mixing Material Tooltip semantics here.
-        if (hasTooltip) ...[SizedBox(width: hasTrailing ? 14 : 8), WoxTooltip(message: item.tooltip!, child: Icon(Icons.info_outline, size: 16, color: activeTextColor))],
+        if (hasTooltip) ...[
+          SizedBox(width: hasTrailing ? 14 : 8),
+          WoxTooltip(message: item.tooltip!, windowHandle: tooltipWindow, child: Icon(Icons.info_outline, size: 16, color: activeTextColor)),
+        ],
       ],
     );
   }
@@ -595,6 +601,7 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
     final dropdownBg = _getDropdownBackgroundColor();
     final dropdownTextColor = _getDropdownTextColor(dropdownBg);
     final borderColor = getThemeSubTextColor().withValues(alpha: 0.55);
+    final tooltipWindow = WoxMultipleWindowScope.maybeHandleOf(context);
 
     if (widget.multiSelect) {
       final selectedItems =
@@ -639,7 +646,7 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
       // Convert WoxDropdownItem to DropdownMenuItem
       final dropdownMenuItems =
           widget.items.map((item) {
-            return DropdownMenuItem<T>(value: item.value, child: _buildDropdownMenuItem(item, dropdownTextColor));
+            return DropdownMenuItem<T>(value: item.value, child: _buildDropdownMenuItem(item, dropdownTextColor, tooltipWindow: tooltipWindow));
           }).toList();
 
       // Original non-filterable dropdown

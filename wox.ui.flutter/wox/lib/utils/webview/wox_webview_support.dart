@@ -1,7 +1,28 @@
 class WoxWebViewSupport {
   static const String mobileUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1";
+  static const String desktopEdgeUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36 Edg/149.0.0.0";
+  static const String desktopChromeUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36";
+  static const String mobileChromeUserAgent = "Mozilla/5.0 (Linux; Android 16; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36";
   static const String unhandledEscapeMessageType = "woxUnhandledEscape";
   static const String startDraggingMessageType = "woxStartDragging";
+
+  static String resolveUserAgent(String userAgent) {
+    final trimmed = userAgent.trim();
+    switch (trimmed) {
+      case "":
+      case "auto":
+      case "desktop_edge":
+        return desktopEdgeUserAgent;
+      case "desktop_chrome":
+        return desktopChromeUserAgent;
+      case "mobile_safari":
+        return mobileUserAgent;
+      case "mobile_chrome":
+        return mobileChromeUserAgent;
+      default:
+        return trimmed;
+    }
+  }
 
   static String buildInjectCssScript(String css) {
     final cssLiteral = _encodeJsString(css);

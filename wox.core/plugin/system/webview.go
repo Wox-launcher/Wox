@@ -9,6 +9,7 @@ import (
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/setting/validator"
+	"wox/util"
 	"wox/util/browser"
 )
 
@@ -16,11 +17,18 @@ const (
 	webviewSitesSettingKey          = "sites"
 	webviewDefaultAddedKey          = "defaultSiteAdded"
 	webviewDefaultInstagramAddedKey = "defaultInstagramAdded"
+	webviewUserAgentAuto            = ""
+	webviewUserAgentDesktopEdge     = "desktop_edge"
+	webviewUserAgentDesktopChrome   = "desktop_chrome"
+	webviewUserAgentDesktopSafari   = "desktop_safari"
+	webviewUserAgentMobileSafari    = "mobile_safari"
+	webviewUserAgentMobileChrome    = "mobile_chrome"
 )
 
 type webviewSite struct {
 	Keyword       string
 	Url           string
+	UserAgent     string
 	InjectCss     string
 	CacheDisabled bool
 	Icon          common.WoxImage
@@ -106,6 +114,14 @@ func (p *WebViewPlugin) GetMetadata() plugin.Metadata {
 							},
 						},
 						{
+							Key:           "UserAgent",
+							Label:         "i18n:plugin_webview_user_agent",
+							Type:          definition.PluginSettingValueTableColumnTypeSelect,
+							SelectOptions: getWebviewUserAgentOptions(),
+							HideInTable:   true,
+							Tooltip:       "i18n:plugin_webview_user_agent_tooltip",
+						},
+						{
 							Key:          "InjectCss",
 							Label:        "i18n:plugin_webview_inject_css",
 							Type:         definition.PluginSettingValueTableColumnTypeText,
@@ -131,6 +147,26 @@ func (p *WebViewPlugin) GetMetadata() plugin.Metadata {
 			},
 		},
 	}
+}
+
+func getWebviewUserAgentOptions() []definition.PluginSettingValueSelectOption {
+	options := []definition.PluginSettingValueSelectOption{
+		{Label: "i18n:plugin_webview_user_agent_auto", Value: webviewUserAgentAuto},
+	}
+
+	if util.IsMacOS() {
+		options = append(options, definition.PluginSettingValueSelectOption{Label: "i18n:plugin_webview_user_agent_desktop_safari", Value: webviewUserAgentDesktopSafari})
+	} else {
+		options = append(options,
+			definition.PluginSettingValueSelectOption{Label: "i18n:plugin_webview_user_agent_desktop_edge", Value: webviewUserAgentDesktopEdge},
+			definition.PluginSettingValueSelectOption{Label: "i18n:plugin_webview_user_agent_desktop_chrome", Value: webviewUserAgentDesktopChrome},
+		)
+	}
+
+	return append(options,
+		definition.PluginSettingValueSelectOption{Label: "i18n:plugin_webview_user_agent_mobile_safari", Value: webviewUserAgentMobileSafari},
+		definition.PluginSettingValueSelectOption{Label: "i18n:plugin_webview_user_agent_mobile_chrome", Value: webviewUserAgentMobileChrome},
+	)
 }
 
 func (p *WebViewPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
@@ -170,6 +206,7 @@ func (p *WebViewPlugin) Query(ctx context.Context, query plugin.Query) plugin.Qu
 		previewPayload, marshalErr := json.Marshal(plugin.WoxPreviewWebviewData{
 			Url:           site.Url,
 			InjectCss:     currentSite.InjectCss,
+			UserAgent:     currentSite.UserAgent,
 			CacheDisabled: currentSite.CacheDisabled,
 		})
 		if marshalErr != nil {
