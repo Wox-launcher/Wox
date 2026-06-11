@@ -12,7 +12,7 @@ class WebviewHost;
 
 enum class WebviewLoadingState { None, Loading, NavigationCompleted };
 
-enum class WebviewPointerButton { None, Primary, Secondary, Tertiary };
+enum class WebviewPointerButton { None, Primary, Secondary, Tertiary, Back, Forward };
 
 enum class WebviewPointerEventKind { Activate, Down, Enter, Leave, Up, Update };
 
@@ -54,6 +54,18 @@ struct VirtualKeyState {
   inline void set_isMiddleButtonDown(bool is_down) {
     set(COREWEBVIEW2_MOUSE_EVENT_VIRTUAL_KEYS::
             COREWEBVIEW2_MOUSE_EVENT_VIRTUAL_KEYS_MIDDLE_BUTTON,
+        is_down);
+  }
+
+  inline void set_isXButton1Down(bool is_down) {
+    set(COREWEBVIEW2_MOUSE_EVENT_VIRTUAL_KEYS::
+            COREWEBVIEW2_MOUSE_EVENT_VIRTUAL_KEYS_X_BUTTON1,
+        is_down);
+  }
+
+  inline void set_isXButton2Down(bool is_down) {
+    set(COREWEBVIEW2_MOUSE_EVENT_VIRTUAL_KEYS::
+            COREWEBVIEW2_MOUSE_EVENT_VIRTUAL_KEYS_X_BUTTON2,
         is_down);
   }
 

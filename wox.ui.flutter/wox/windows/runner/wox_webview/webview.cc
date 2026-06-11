@@ -626,6 +626,7 @@ void Webview::SetPointerButtonState(WebviewPointerButton button, bool is_down) {
   }
 
   COREWEBVIEW2_MOUSE_EVENT_KIND kind;
+  UINT32 mouse_data = 0;
   switch (button) {
     case WebviewPointerButton::Primary:
       virtual_keys_.set_isLeftButtonDown(is_down);
@@ -642,11 +643,23 @@ void Webview::SetPointerButtonState(WebviewPointerButton button, bool is_down) {
       kind = is_down ? COREWEBVIEW2_MOUSE_EVENT_KIND_MIDDLE_BUTTON_DOWN
                      : COREWEBVIEW2_MOUSE_EVENT_KIND_MIDDLE_BUTTON_UP;
       break;
+    case WebviewPointerButton::Back:
+      virtual_keys_.set_isXButton1Down(is_down);
+      kind = is_down ? COREWEBVIEW2_MOUSE_EVENT_KIND_X_BUTTON_DOWN
+                     : COREWEBVIEW2_MOUSE_EVENT_KIND_X_BUTTON_UP;
+      mouse_data = XBUTTON1;
+      break;
+    case WebviewPointerButton::Forward:
+      virtual_keys_.set_isXButton2Down(is_down);
+      kind = is_down ? COREWEBVIEW2_MOUSE_EVENT_KIND_X_BUTTON_DOWN
+                     : COREWEBVIEW2_MOUSE_EVENT_KIND_X_BUTTON_UP;
+      mouse_data = XBUTTON2;
+      break;
     default:
-      kind = static_cast<COREWEBVIEW2_MOUSE_EVENT_KIND>(0);
+      return;
   }
 
-  composition_controller_->SendMouseInput(kind, virtual_keys_.state(), 0,
+  composition_controller_->SendMouseInput(kind, virtual_keys_.state(), mouse_data,
                                           last_cursor_pos_);
 }
 

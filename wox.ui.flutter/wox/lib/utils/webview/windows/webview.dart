@@ -43,6 +43,10 @@ PointerButton getButton(int value) {
       return PointerButton.secondary;
     case kTertiaryButton:
       return PointerButton.tertiary;
+    case kBackMouseButton:
+      return PointerButton.back;
+    case kForwardMouseButton:
+      return PointerButton.forward;
     default:
       return PointerButton.none;
   }
@@ -643,6 +647,9 @@ class _WebviewState extends State<Webview> {
                       return;
                     }
                     final button = getButton(ev.buttons);
+                    if (button == PointerButton.none) {
+                      return;
+                    }
                     _downButtons[ev.pointer] = button;
                     _controller._setPointerButtonState(button, true);
                   },

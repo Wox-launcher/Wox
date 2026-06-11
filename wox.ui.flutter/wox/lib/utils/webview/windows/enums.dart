@@ -4,7 +4,7 @@ enum LoadingState { none, loading, navigationCompleted }
 
 /// Pointer button type
 // Order must match WebviewPointerButton (see webview.h)
-enum PointerButton { none, primary, secondary, tertiary }
+enum PointerButton { none, primary, secondary, tertiary, back, forward }
 
 /// Pointer Event kind
 // Order must match WebviewPointerEventKind (see webview.h)
