@@ -59,6 +59,25 @@ const char* simulateCtrlV() {
 
     return NULL;
 }
+
+const char* simulateCapsLockTap() {
+    INPUT ip[2];
+    ZeroMemory(ip, sizeof(ip));
+
+    ip[0].type = INPUT_KEYBOARD;
+    ip[0].ki.wVk = VK_CAPITAL;
+
+    ip[1].type = INPUT_KEYBOARD;
+    ip[1].ki.wVk = VK_CAPITAL;
+    ip[1].ki.dwFlags = KEYEVENTF_KEYUP;
+
+    UINT res = SendInput(2, ip, sizeof(INPUT));
+    if (res != 2) {
+        return "Failed to send all input events";
+    }
+
+    return NULL;
+}
 */
 import "C"
 import (
@@ -85,6 +104,16 @@ func simulatePaste() error {
 	if err != nil {
 		errMsg := C.GoString(err)
 		return fmt.Errorf("failed to send Ctrl+V: %v", errMsg)
+	}
+
+	return nil
+}
+
+func simulateCapsLockTap() error {
+	err := C.simulateCapsLockTap()
+	if err != nil {
+		errMsg := C.GoString(err)
+		return fmt.Errorf("failed to send CapsLock: %v", errMsg)
 	}
 
 	return nil

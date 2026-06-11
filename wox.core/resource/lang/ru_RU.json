@@ -19,7 +19,7 @@
   "ui_selection_hotkey": "Горячая клавиша выбора",
   "ui_selection_hotkey_tips": "Горячие клавиши для выполнения действий с выбранным текстом или файлами",
   "ui_enable_hyper_key": "Hyper Key",
-  "ui_enable_hyper_key_tips": "Используйте Caps Lock вместе с другой клавишей как Hyper-сочетание только для Wox, например Hyper+K. Сам по себе Caps Lock не выполняет действие Wox.",
+  "ui_enable_hyper_key_tips": "Hyper соответствует одновременному нажатию {modifiers}. Используйте его для горячих клавиш Wox, чтобы избежать конфликтов.",
   "ui_hotkey_ignore_apps": "Игнорируемые приложения для хоткея",
   "ui_hotkey_ignore_apps_tips": "Когда одно из этих приложений активно, глобальные горячие клавиши Wox на этой платформе будут игнорироваться",
   "ui_hotkey_ignore_apps_select": "Выбрать приложения",

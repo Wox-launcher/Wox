@@ -5,6 +5,8 @@ import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 
 class WoxHotkeyDisplayUtil {
+  static const String hyperKeyLabel = "Hyper";
+
   static String modifierLabel(HotKeyModifier modifier) {
     // Feature fix: modifier chips now prefer short text over platform glyphs.
     // The old macOS-style symbols were compact, but they made Windows/Linux
@@ -88,7 +90,7 @@ class WoxHotkeyDisplayUtil {
     }
 
     if (hotkey.isHyperHotkey) {
-      return ["✦", keyLabel(hotkey.hyperHotkey!)];
+      return [hyperKeyLabel, keyLabel(hotkey.hyperHotkey!)];
     }
 
     if (hotkey.isCapsLockHotkey) {
@@ -156,7 +158,7 @@ class WoxHotkeyDisplayUtil {
       "windows" => Platform.isWindows ? "Win" : "Super",
       "win" => Platform.isWindows ? "Win" : "Super",
       "super" => "Super",
-      "hyper" => "✦",
+      "hyper" => hyperKeyLabel,
       "space" => "Space",
       "enter" => "⏎",
       "escape" || "esc" => "Esc",

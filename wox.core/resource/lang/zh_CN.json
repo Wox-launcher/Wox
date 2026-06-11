@@ -20,7 +20,7 @@
   "ui_selection_hotkey": "选中查询热键",
   "ui_selection_hotkey_tips": "用于基于当前选中内容发起查询并执行操作的快捷键",
   "ui_enable_hyper_key": "Hyper Key",
-  "ui_enable_hyper_key_tips": "使用 Caps Lock 与其他按键组成仅用于 Wox 的 Hyper 快捷键，例如 Hyper+K。单独按 Caps Lock 不会触发 Wox 操作。",
+  "ui_enable_hyper_key_tips": "Hyper 键相当于同时按下 {modifiers}。用它设置 Wox 热键可以避免常见热键冲突。",
   "ui_hotkey_ignore_apps": "忽略热键应用",
   "ui_hotkey_ignore_apps_tips": "当这些应用处于前台时，本平台上的 Wox 全局快捷键将被忽略",
   "ui_hotkey_ignore_apps_select": "选择应用",

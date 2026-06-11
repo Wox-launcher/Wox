@@ -20,7 +20,7 @@
   "ui_selection_hotkey": "Selection Hotkey",
   "ui_selection_hotkey_tips": "Hotkeys to do actions on selected text or files",
   "ui_enable_hyper_key": "Hyper Key",
-  "ui_enable_hyper_key_tips": "Use Caps Lock with another key as a Wox-only Hyper shortcut, such as Hyper+K. Pressing Caps Lock alone has no Wox action.",
+  "ui_enable_hyper_key_tips": "Hyper equals pressing {modifiers} together. Use it for Wox hotkeys to avoid conflicts with common shortcuts.",
   "ui_hotkey_ignore_apps": "Ignore Hotkey Apps",
   "ui_hotkey_ignore_apps_tips": "When one of these apps is active, Wox global hotkeys on this platform will be ignored",
   "ui_hotkey_ignore_apps_select": "Select Apps",

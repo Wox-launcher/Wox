@@ -47,6 +47,25 @@ const char* simulatePaste() {
 
     return NULL;
 }
+
+const char* simulateCapsLockTap() {
+    CGEventRef pressCaps = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)57, true);
+    if (pressCaps == NULL) return "Unable to create press event for Caps Lock";
+
+    CGEventRef releaseCaps = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)57, false);
+    if (releaseCaps == NULL) {
+        CFRelease(pressCaps);
+        return "Unable to create release event for Caps Lock";
+    }
+
+    CGEventPost(kCGHIDEventTap, pressCaps);
+    CGEventPost(kCGHIDEventTap, releaseCaps);
+
+    CFRelease(pressCaps);
+    CFRelease(releaseCaps);
+
+    return NULL;
+}
 */
 import "C"
 import "fmt"
@@ -66,6 +85,16 @@ func simulatePaste() error {
 	if err != nil {
 		errMsg := C.GoString(err)
 		return fmt.Errorf("failed to send Cmd+V: %v", errMsg)
+	}
+
+	return nil
+}
+
+func simulateCapsLockTap() error {
+	err := C.simulateCapsLockTap()
+	if err != nil {
+		errMsg := C.GoString(err)
+		return fmt.Errorf("failed to send CapsLock: %v", errMsg)
 	}
 
 	return nil

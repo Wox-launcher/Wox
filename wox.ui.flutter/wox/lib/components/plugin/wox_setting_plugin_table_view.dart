@@ -18,6 +18,7 @@ import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/color_util.dart';
+import 'package:wox/utils/wox_hotkey_display_util.dart';
 import 'package:wox/utils/wox_setting_focus_util.dart';
 
 import 'wox_setting_plugin_item_view.dart';
@@ -319,7 +320,10 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
         column: column,
         isHeader: false,
         isOperation: false,
-        child: Text(value, style: TextStyle(overflow: TextOverflow.ellipsis, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor))),
+        child: Text(
+          WoxHotkeyDisplayUtil.labelFromHotkeyString(value.toString()),
+          style: TextStyle(overflow: TextOverflow.ellipsis, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor)),
+        ),
       );
     }
     if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeApp) {

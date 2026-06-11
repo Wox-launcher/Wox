@@ -8,8 +8,10 @@ import (
 )
 
 type hyperKeyTracker struct {
-	capsPressed bool
-	pressedKeys map[keyboard.Key]bool
+	capsPressed           bool
+	comboTriggered        bool
+	passthroughCapsEvents int
+	pressedKeys           map[keyboard.Key]bool
 }
 
 func newHyperKeyTracker() *hyperKeyTracker {
@@ -20,13 +22,29 @@ func newHyperKeyTracker() *hyperKeyTracker {
 
 func (t *hyperKeyTracker) HandleEvent(event keyboard.RawKeyEvent) (keyboard.Key, bool) {
 	if event.Key == keyboard.KeyCapsLock {
+		if t.passthroughCapsEvents > 0 {
+			t.passthroughCapsEvents--
+			return keyboard.KeyUnknown, false
+		}
+
 		if event.Type == keyboard.EventTypeKeyDown {
 			t.capsPressed = true
+			t.comboTriggered = false
 			return keyboard.KeyUnknown, true
 		}
 
+		shouldReplayCaps := !t.comboTriggered
 		t.capsPressed = false
+		t.comboTriggered = false
 		t.pressedKeys = map[keyboard.Key]bool{}
+		if shouldReplayCaps {
+			t.passthroughCapsEvents = 2
+			util.Go(util.NewTraceContext(), "replay single Caps Lock tap", func() {
+				if err := keyboard.SimulateCapsLockTap(); err != nil {
+					util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("failed to replay single Caps Lock tap: %s", err.Error()))
+				}
+			})
+		}
 		return keyboard.KeyUnknown, true
 	}
 
@@ -39,6 +57,7 @@ func (t *hyperKeyTracker) HandleEvent(event keyboard.RawKeyEvent) (keyboard.Key,
 		return keyboard.KeyUnknown, true
 	}
 
+	t.comboTriggered = true
 	if event.Key == keyboard.KeyUnknown || t.pressedKeys[event.Key] {
 		return keyboard.KeyUnknown, true
 	}
