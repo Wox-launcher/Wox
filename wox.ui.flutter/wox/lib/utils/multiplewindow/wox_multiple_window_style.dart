@@ -40,6 +40,7 @@ const int _mdtEffectiveDpi = 0;
 const int _offscreenCoordinate = -32000;
 const int _swHide = 0;
 const int _swShow = 5;
+const int _swRestore = 9;
 const int _hwndTopmost = -1;
 const int _hwndNoTopmost = -2;
 
@@ -139,6 +140,14 @@ typedef _SendMessageNative = ffi.IntPtr Function(ffi.Pointer<ffi.Void>, ffi.Uint
 typedef _SendMessageDart = int Function(ffi.Pointer<ffi.Void>, int, int, int);
 typedef _ShowWindowNative = ffi.Int32 Function(ffi.Pointer<ffi.Void>, ffi.Int32);
 typedef _ShowWindowDart = int Function(ffi.Pointer<ffi.Void>, int);
+typedef _SetForegroundWindowNative = ffi.Int32 Function(ffi.Pointer<ffi.Void>);
+typedef _SetForegroundWindowDart = int Function(ffi.Pointer<ffi.Void>);
+typedef _BringWindowToTopNative = ffi.Int32 Function(ffi.Pointer<ffi.Void>);
+typedef _BringWindowToTopDart = int Function(ffi.Pointer<ffi.Void>);
+typedef _GetForegroundWindowNative = ffi.Pointer<ffi.Void> Function();
+typedef _GetForegroundWindowDart = ffi.Pointer<ffi.Void> Function();
+typedef _IsChildNative = ffi.Int32 Function(ffi.Pointer<ffi.Void>, ffi.Pointer<ffi.Void>);
+typedef _IsChildDart = int Function(ffi.Pointer<ffi.Void>, ffi.Pointer<ffi.Void>);
 typedef _DwmSetWindowAttributeNative = ffi.Int32 Function(ffi.Pointer<ffi.Void>, ffi.Uint32, ffi.Pointer<ffi.Void>, ffi.Uint32);
 typedef _DwmSetWindowAttributeDart = int Function(ffi.Pointer<ffi.Void>, int, ffi.Pointer<ffi.Void>, int);
 typedef _DwmExtendFrameIntoClientAreaNative = ffi.Int32 Function(ffi.Pointer<ffi.Void>, ffi.Pointer<_Margins>);
@@ -163,6 +172,10 @@ class WoxMultipleWindowStyle {
   static final _ReleaseCaptureDart? _releaseCapture = _user32?.lookupFunction<_ReleaseCaptureNative, _ReleaseCaptureDart>("ReleaseCapture");
   static final _SendMessageDart? _sendMessage = _user32?.lookupFunction<_SendMessageNative, _SendMessageDart>("SendMessageW");
   static final _ShowWindowDart? _showWindow = _user32?.lookupFunction<_ShowWindowNative, _ShowWindowDart>("ShowWindow");
+  static final _SetForegroundWindowDart? _setForegroundWindow = _user32?.lookupFunction<_SetForegroundWindowNative, _SetForegroundWindowDart>("SetForegroundWindow");
+  static final _BringWindowToTopDart? _bringWindowToTop = _user32?.lookupFunction<_BringWindowToTopNative, _BringWindowToTopDart>("BringWindowToTop");
+  static final _GetForegroundWindowDart? _getForegroundWindow = _user32?.lookupFunction<_GetForegroundWindowNative, _GetForegroundWindowDart>("GetForegroundWindow");
+  static final _IsChildDart? _isChild = _user32?.lookupFunction<_IsChildNative, _IsChildDart>("IsChild");
   static final _DwmSetWindowAttributeDart? _dwmSetWindowAttribute = _dwmapi?.lookupFunction<_DwmSetWindowAttributeNative, _DwmSetWindowAttributeDart>("DwmSetWindowAttribute");
   static final _DwmExtendFrameIntoClientAreaDart? _dwmExtendFrameIntoClientArea = _dwmapi?.lookupFunction<_DwmExtendFrameIntoClientAreaNative, _DwmExtendFrameIntoClientAreaDart>(
     "DwmExtendFrameIntoClientArea",
@@ -456,6 +469,34 @@ class WoxMultipleWindowStyle {
       await _invokeMacOSWindowMethod<void>(controller, "focus");
       return;
     }
+
+    if (!Platform.isWindows) {
+      return;
+    }
+
+    final hwnd = _windowHandleOf(controller);
+    if (hwnd == null || hwnd.address == 0) {
+      return;
+    }
+
+    _showWindow?.call(hwnd, _swRestore);
+    _setForegroundWindow?.call(hwnd);
+    _bringWindowToTop?.call(hwnd);
+  }
+
+  /// Returns whether a managed window still owns native foreground focus.
+  static bool isForegroundWindowOrChild(Object controller) {
+    if (!Platform.isWindows) {
+      return true;
+    }
+
+    final hwnd = _windowHandleOf(controller);
+    final foreground = _getForegroundWindow?.call();
+    if (hwnd == null || hwnd.address == 0 || foreground == null || foreground.address == 0) {
+      return true;
+    }
+
+    return foreground.address == hwnd.address || (_isChild?.call(hwnd, foreground) ?? 0) != 0;
   }
 
   /// Starts native dragging for a custom Flutter-drawn title area.

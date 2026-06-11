@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:wox/utils/multiplewindow/wox_multiple_window.dart';
 import 'package:wox/utils/windows/window_manager.dart';
@@ -76,13 +79,23 @@ class WoxPrimaryWindowDriver implements WoxWindowDriver {
 class WoxSecondaryWindowDriver implements WoxWindowDriver {
   WoxSecondaryWindowDriver({required Size initialSize}) : _size = initialSize;
 
+  static const Duration _focusMonitorInterval = Duration(milliseconds: 120);
+  static const Duration _focusMonitorGrace = Duration(milliseconds: 350);
+
   WoxMultipleWindowHandle? _handle;
   bool _visible = true;
   Offset _position = Offset.zero;
   Size _size;
+  Timer? _focusMonitor;
+  int _focusMonitorToken = 0;
+  Future<void> Function()? _onBlur;
 
   void attachHandle(WoxMultipleWindowHandle handle) {
     _handle = handle;
+  }
+
+  void setOnBlur(Future<void> Function() onBlur) {
+    _onBlur = onBlur;
   }
 
   @override
@@ -98,6 +111,7 @@ class WoxSecondaryWindowDriver implements WoxWindowDriver {
   Future<void> show() async {
     _visible = true;
     await _handle?.show();
+    _startFocusMonitor();
   }
 
   @override
@@ -111,11 +125,13 @@ class WoxSecondaryWindowDriver implements WoxWindowDriver {
   Future<void> focus() async {
     _visible = true;
     await _handle?.focus();
+    _startFocusMonitor();
   }
 
   @override
   Future<void> close() async {
     _visible = false;
+    _stopFocusMonitor();
     await _handle?.close();
   }
 
@@ -146,5 +162,51 @@ class WoxSecondaryWindowDriver implements WoxWindowDriver {
   @override
   void startDragging() {
     _handle?.startDragging();
+  }
+
+  void _startFocusMonitor() {
+    if (!Platform.isWindows) {
+      return;
+    }
+
+    final handle = _handle;
+    final onBlur = _onBlur;
+    if (handle == null || onBlur == null) {
+      return;
+    }
+
+    _focusMonitor?.cancel();
+    final token = ++_focusMonitorToken;
+    final monitorStartedAt = DateTime.now();
+    var hasObservedForeground = false;
+    _focusMonitor = Timer.periodic(_focusMonitorInterval, (timer) {
+      if (!_visible || token != _focusMonitorToken) {
+        timer.cancel();
+        return;
+      }
+
+      final isForeground = handle.isForegroundWindowOrChild;
+      if (isForeground) {
+        hasObservedForeground = true;
+        return;
+      }
+
+      if (DateTime.now().difference(monitorStartedAt) < _focusMonitorGrace) {
+        return;
+      }
+
+      if (!hasObservedForeground) {
+        return;
+      }
+
+      timer.cancel();
+      unawaited(onBlur());
+    });
+  }
+
+  void _stopFocusMonitor() {
+    _focusMonitorToken++;
+    _focusMonitor?.cancel();
+    _focusMonitor = null;
   }
 }

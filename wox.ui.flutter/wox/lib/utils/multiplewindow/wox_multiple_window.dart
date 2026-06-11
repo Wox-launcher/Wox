@@ -66,6 +66,8 @@ abstract class WoxMultipleWindowHandle {
 
   int? get nativeHandle;
 
+  bool get isForegroundWindowOrChild;
+
   Future<Size> getSize();
 
   Future<Offset> getPosition();
@@ -85,6 +87,20 @@ abstract class WoxMultipleWindowHandle {
   Future<void> hide();
 
   Future<void> close();
+}
+
+class WoxMultipleWindowScope extends InheritedWidget {
+  const WoxMultipleWindowScope({super.key, required this.handle, required super.child});
+
+  final WoxMultipleWindowHandle handle;
+
+  static WoxMultipleWindowHandle? maybeHandleOf(BuildContext context) {
+    final widget = context.getElementForInheritedWidgetOfExactType<WoxMultipleWindowScope>()?.widget;
+    return widget is WoxMultipleWindowScope ? widget.handle : null;
+  }
+
+  @override
+  bool updateShouldNotify(WoxMultipleWindowScope oldWidget) => handle != oldWidget.handle;
 }
 
 class WoxMultipleWindow {
@@ -188,6 +204,7 @@ class WoxMultipleWindow {
           id: id,
           title: title,
           controller: controller,
+          handle: handle,
           navigatorKey: navigatorKey,
           theme: _theme ?? ThemeData(useMaterial3: true),
           showTitleBar: showTitleBar,
@@ -277,6 +294,9 @@ class _WoxMultipleWindowHandleImpl implements WoxMultipleWindowHandle {
 
   @override
   int? get nativeHandle => WoxMultipleWindowStyle.nativeHandleOf(controller);
+
+  @override
+  bool get isForegroundWindowOrChild => WoxMultipleWindowStyle.isForegroundWindowOrChild(controller);
 
   @override
   Future<Size> getSize() async => controller.contentSize;
@@ -391,6 +411,7 @@ class _WoxMultipleWindowRoot extends StatefulWidget {
     required this.id,
     required this.title,
     required this.controller,
+    required this.handle,
     required this.navigatorKey,
     required this.theme,
     required this.showTitleBar,
@@ -405,6 +426,7 @@ class _WoxMultipleWindowRoot extends StatefulWidget {
   final String id;
   final String title;
   final flutter_windowing.RegularWindowController controller;
+  final WoxMultipleWindowHandle handle;
   final GlobalKey<NavigatorState> navigatorKey;
   final ThemeData theme;
   final bool showTitleBar;
@@ -489,14 +511,17 @@ class _WoxMultipleWindowRootState extends State<_WoxMultipleWindowRoot> {
       theme: transparentTheme,
       home: Builder(
         builder: (context) {
-          return _WoxMultipleWindowFrame(
-            windowId: widget.id,
-            title: widget.title,
-            showTitleBar: widget.showTitleBar,
-            resizable: widget.resizable,
-            minimizable: widget.minimizable,
-            roundedCorners: widget.roundedCorners,
-            child: widget.builder(context),
+          return WoxMultipleWindowScope(
+            handle: widget.handle,
+            child: _WoxMultipleWindowFrame(
+              windowId: widget.id,
+              title: widget.title,
+              showTitleBar: widget.showTitleBar,
+              resizable: widget.resizable,
+              minimizable: widget.minimizable,
+              roundedCorners: widget.roundedCorners,
+              child: widget.builder(context),
+            ),
           );
         },
       ),

@@ -182,7 +182,6 @@ class WoxApp extends StatefulWidget {
 
 class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
   final launcherController = WoxAppRuntime.instance.primaryInstance.launcherController;
-  final screenshotController = Get.find<WoxScreenshotController>();
   final settingController = Get.find<WoxSettingController>();
 
   @override
@@ -223,34 +222,7 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
   @override
   void onWindowBlur() async {
     final traceId = UuidV4().generate();
-    Logger.instance.debug(
-      traceId,
-      "onWindowBlur triggered: forceHideOnBlur=${launcherController.forceHideOnBlur}, isShowFormActionPanel=${launcherController.isShowFormActionPanel.value}, isShowActionPanel=${launcherController.isShowActionPanel.value}",
-    );
-    // if windows is already hidden, return
-    // in Windows, when the window is hidden, the onWindowBlur event will be triggered which will cause
-    // resize function to be called, and then the focus will be got again.
-    // User will not be able to input anything because the focus is lost.
-    final isVisible = await windowManager.isVisible();
-    if (!isVisible) {
-      Logger.instance.debug(traceId, "onWindowBlur ignored: window is not visible");
-      return;
-    }
-
-    if (screenshotController.isSessionActive.value) {
-      Logger.instance.debug(traceId, "onWindowBlur ignored: independent screenshot window owns focus");
-      await screenshotController.focusSessionWindow(traceId);
-      return;
-    }
-
-    if (launcherController.forceHideOnBlur) {
-      Logger.instance.debug(traceId, "onWindowBlur triggers hideApp because forceHideOnBlur is true");
-      launcherController.hideApp(traceId);
-      return;
-    }
-
-    Logger.instance.debug(traceId, "onWindowBlur notify backend focus lost");
-    WoxApi.instance.onFocusLost(traceId);
+    await launcherController.handleWindowBlur(traceId);
   }
 
   @override

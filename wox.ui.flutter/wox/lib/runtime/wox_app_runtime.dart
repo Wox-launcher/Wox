@@ -196,6 +196,7 @@ class WoxInstanceRegistry {
     final initialSize = Size(initialWidth, 120);
     final windowDriver = WoxSecondaryWindowDriver(initialSize: initialSize);
     final launcherController = WoxLauncherController(sessionId: sessionId, windowDriver: windowDriver, isPrimaryInstance: false);
+    windowDriver.setOnBlur(() => launcherController.handleWindowBlur(const UuidV4().generate()));
     final aiChatController = WoxAIChatController(launcherController: launcherController);
     launcherController.aiChatController = aiChatController;
     final instance = WoxAppInstance(

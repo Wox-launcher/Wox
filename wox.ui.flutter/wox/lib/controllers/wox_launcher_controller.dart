@@ -131,6 +131,41 @@ class WoxLauncherController extends GetxController {
     });
   }
 
+  Future<void> handleWindowBlur(String traceId) async {
+    Logger.instance.debug(
+      traceId,
+      "onWindowBlur triggered: forceHideOnBlur=$forceHideOnBlur, isShowFormActionPanel=${isShowFormActionPanel.value}, isShowActionPanel=${isShowActionPanel.value}, sessionId=$sessionId",
+    );
+
+    // Hidden Windows can emit blur during native hide; ignore it so cleanup does
+    // not resize or refocus a launcher that is already going away.
+    if (!await windowDriver.isVisible()) {
+      Logger.instance.debug(traceId, "onWindowBlur ignored: window is not visible");
+      return;
+    }
+
+    final screenshotController = Get.find<WoxScreenshotController>();
+    if (screenshotController.isSessionActive.value) {
+      Logger.instance.debug(traceId, "onWindowBlur ignored: independent screenshot window owns focus");
+      await screenshotController.focusSessionWindow(traceId);
+      return;
+    }
+
+    if (forceHideOnBlur) {
+      Logger.instance.debug(traceId, "onWindowBlur triggers hideApp because forceHideOnBlur is true");
+      await hideApp(traceId);
+      return;
+    }
+
+    if (!isPrimaryInstance) {
+      Logger.instance.debug(traceId, "onWindowBlur ignored: secondary window has no session-scoped focus-lost backend route");
+      return;
+    }
+
+    Logger.instance.debug(traceId, "onWindowBlur notify backend focus lost");
+    await WoxApi.instance.onFocusLost(traceId);
+  }
+
   //query related variables
   final currentQuery = PlainQuery.empty().obs;
   // is current query returned results or finished without results

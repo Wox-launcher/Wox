@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
+import 'package:wox/utils/multiplewindow/wox_multiple_window.dart';
 import 'package:wox/utils/windows/window_manager.dart';
 
 enum WoxTooltipSide { left, top, right, bottom }
@@ -99,7 +100,8 @@ class WoxTooltipState extends State<WoxTooltip> {
     final targetRect = targetPosition & targetSize;
 
     try {
-      final isWindowVisible = await windowManager.isVisible();
+      final secondaryWindow = WoxMultipleWindowScope.maybeHandleOf(context);
+      final isWindowVisible = secondaryWindow == null ? await windowManager.isVisible() : WoxMultipleWindow.isOpen(secondaryWindow.id);
       if (!mounted || !isHoveringTarget || !isWindowVisible) {
         if (!isWindowVisible) {
           isHoveringTarget = false;
@@ -108,7 +110,7 @@ class WoxTooltipState extends State<WoxTooltip> {
         return;
       }
 
-      final windowPosition = await windowManager.getPosition();
+      final windowPosition = secondaryWindow == null ? await windowManager.getPosition() : await secondaryWindow.getPosition();
       if (!mounted || !isHoveringTarget) {
         await removeOverlay();
         return;
