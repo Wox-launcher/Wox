@@ -3584,6 +3584,13 @@ class WoxLauncherController extends GetxController {
         (logicalToPhysicalPixels(left.height) - logicalToPhysicalPixels(right.height)).abs() <= 1;
   }
 
+  /// Invalidates launcher-sized resize work before switching to a fixed management window.
+  void cancelLauncherResizeRequests(String traceId, String reason) {
+    resizeRequestToken++;
+    ongoingResizeTargetSize = null;
+    Logger.instance.debug(traceId, "resize cancelled: reason=$reason, management view transition");
+  }
+
   Future<void> resizeHeight({required String traceId, String reason = "unspecified", bool forceDwmRecomposition = false, double? overrideTargetHeight}) async {
     final tracker = WoxTimeTracker.start(traceId, "ui_resize_height");
     final totalStartUs = tracker.checkpointUs();
@@ -3628,17 +3635,35 @@ class WoxLauncherController extends GetxController {
     ongoingResizeTargetSize = targetSize;
 
     try {
+      bool cancelResizeIfNeeded(String phase, {bool beforeRetry = false}) {
+        final superseded = resizeRequestToken != currentResizeToken;
+        final managementViewActive = isInSettingView.value || isInOnboardingView.value;
+        if (!superseded && !managementViewActive) {
+          return false;
+        }
+
+        Logger.instance.debug(
+          traceId,
+          "resize skipped: reason=$reason, target=${formatWindowSize(targetSize)}, phase=$phase, superseded=$superseded, managementViewActive=$managementViewActive",
+        );
+        tracker.setDouble("targetWidth", targetSize.width);
+        tracker.setDouble("targetHeight", targetSize.height);
+        tracker.setBool("skippedSuperseded", superseded);
+        tracker.setBool("skippedManagementView", managementViewActive);
+        if (beforeRetry) {
+          tracker.setBool("skippedBeforePlatformRetry", true);
+        } else {
+          tracker.setBool("skippedBeforePlatformSet", true);
+        }
+        tracker.setElapsedUs("totalUs", totalStartUs);
+        tracker.log();
+        return true;
+      }
+
       final getCurrentSizeStartUs = tracker.checkpointUs();
       final currentSize = await windowManager.getSize();
       tracker.setElapsedUs("getCurrentSizeUs", getCurrentSizeStartUs);
-      if (resizeRequestToken != currentResizeToken) {
-        Logger.instance.debug(traceId, "resize skipped: reason=$reason, target=${formatWindowSize(targetSize)}, supersededBeforeSet=true");
-        tracker.setDouble("targetWidth", targetSize.width);
-        tracker.setDouble("targetHeight", targetSize.height);
-        tracker.setBool("skippedSuperseded", true);
-        tracker.setBool("skippedBeforePlatformSet", true);
-        tracker.setElapsedUs("totalUs", totalStartUs);
-        tracker.log();
+      if (cancelResizeIfNeeded("after get current size")) {
         return;
       }
 
@@ -3668,12 +3693,7 @@ class WoxLauncherController extends GetxController {
         final getPositionStartUs = tracker.checkpointUs();
         final pos = await windowManager.getPosition();
         tracker.setElapsedUs("getPositionUs", getPositionStartUs);
-        if (resizeRequestToken != currentResizeToken) {
-          Logger.instance.debug(traceId, "resize skipped: reason=$reason, target=${formatWindowSize(targetSize)}, supersededBeforeSet=true");
-          tracker.setBool("skippedSuperseded", true);
-          tracker.setBool("skippedBeforePlatformSet", true);
-          tracker.setElapsedUs("totalUs", totalStartUs);
-          tracker.log();
+        if (cancelResizeIfNeeded("after get position")) {
           return;
         }
 
@@ -3699,12 +3719,7 @@ class WoxLauncherController extends GetxController {
             );
             final retrySetBoundsStartUs = tracker.checkpointUs();
             await Future.delayed(const Duration(milliseconds: 16));
-            if (resizeRequestToken != currentResizeToken) {
-              Logger.instance.debug(traceId, "resize skipped: reason=$reason, target=${formatWindowSize(targetSize)}, supersededBeforeRetry=true");
-              tracker.setBool("skippedSuperseded", true);
-              tracker.setBool("skippedBeforePlatformRetry", true);
-              tracker.setElapsedUs("totalUs", totalStartUs);
-              tracker.log();
+            if (cancelResizeIfNeeded("before retry setBounds", beforeRetry: true)) {
               return;
             }
             await windowManager.setBounds(Offset(pos.dx, newTop), targetSize);
@@ -3742,12 +3757,7 @@ class WoxLauncherController extends GetxController {
         Logger.instance.warn(traceId, "resize readback mismatch: reason=$reason, target=${formatWindowSize(targetSize)}, after=${formatWindowSize(resizedSize)}, retry=setSize");
         final retrySetSizeStartUs = tracker.checkpointUs();
         await Future.delayed(const Duration(milliseconds: 16));
-        if (resizeRequestToken != currentResizeToken) {
-          Logger.instance.debug(traceId, "resize skipped: reason=$reason, target=${formatWindowSize(targetSize)}, supersededBeforeRetry=true");
-          tracker.setBool("skippedSuperseded", true);
-          tracker.setBool("skippedBeforePlatformRetry", true);
-          tracker.setElapsedUs("totalUs", totalStartUs);
-          tracker.log();
+        if (cancelResizeIfNeeded("before retry setSize", beforeRetry: true)) {
           return;
         }
         await windowManager.setSize(targetSize);
@@ -4058,6 +4068,7 @@ class WoxLauncherController extends GetxController {
     // platform path that did not go through the normal back button flow.
     settingController.clearSettingSearch();
     settingController.activeNavPath.value = 'general';
+    cancelLauncherResizeRequests(traceId, "enter setting view");
     isInSettingView.value = true;
     isInOnboardingView.value = false;
 
@@ -4200,6 +4211,7 @@ class WoxLauncherController extends GetxController {
     settingController.settingFocusNode.unfocus();
 
     isInSettingView.value = false;
+    cancelLauncherResizeRequests(traceId, "enter onboarding view");
     isInOnboardingView.value = true;
     await WoxApi.instance.onSetting(traceId, false);
     await WoxApi.instance.onOnboarding(traceId, true);
