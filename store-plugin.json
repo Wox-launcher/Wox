@@ -858,5 +858,37 @@
         "plugin_description": "一堆软件快捷键记不住？通过 Wox 查询并触发已配置的系统快捷键"
       }
     }
+  },
+  {
+    "Id": "2662238b-f605-4f99-a90e-e08e1dec2772",
+    "Name": "i18n:plugin_name",
+    "Author": "Wox-Launcher",
+    "Version": "0.0.1",
+    "MinWoxVersion": "2.1.0",
+    "Runtime": "nodejs",
+    "Description": "i18n:plugin_description",
+    "IconUrl": "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.WorldCup/main/images/app.svg",
+    "Website": "https://github.com/Wox-launcher/Wox.Plugin.WorldCup",
+    "DownloadUrl": "https://github.com/Wox-launcher/Wox.Plugin.WorldCup/releases/latest/download/wox.plugin.worldcup.wox",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.WorldCup/main/screenshot.png"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
+    "DateCreated": "2026-06-12 20:40:00",
+    "DateUpdated": "2026-06-12 20:40:00",
+    "I18n": {
+      "en_US": {
+        "plugin_name": "World Cup",
+        "plugin_description": "See FIFA World Cup 2026 matches, results, and live scores."
+      },
+      "zh_CN": {
+        "plugin_name": "世界杯",
+        "plugin_description": "查看 FIFA 2026 世界杯赛程、赛果和实时比分。"
+      }
+    }
   }
 ]
