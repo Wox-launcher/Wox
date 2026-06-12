@@ -23,8 +23,11 @@ class WoxWindowsWebViewSession implements WoxWebViewSession {
   StreamSubscription<HistoryChanged>? _historyChangedSubscription;
   StreamSubscription<String>? _urlSubscription;
   StreamSubscription<dynamic>? _webMessageSubscription;
+  // Current URL follows user navigation, while applied source tracks the preview payload that created the page.
+  // Cached sessions must not reload just because the site redirected or the user navigated away from the initial URL.
   String _currentUrl = "";
-  String _currentHtml = "";
+  String _appliedUrl = "";
+  String _appliedHtml = "";
   String _currentCss = "";
   String? _currentScriptId;
   bool _disposed = false;
@@ -86,19 +89,21 @@ class WoxWindowsWebViewSession implements WoxWebViewSession {
       _currentScriptId = await controller.addScriptToExecuteOnDocumentCreated(WoxWebViewSupport.buildInjectCssScript(previewData.injectCss));
     }
 
-    final shouldReload = _currentUrl != previewData.url || _currentHtml != previewData.html || injectCssChanged;
+    final shouldReload = _appliedUrl != previewData.url || _appliedHtml != previewData.html || injectCssChanged;
     _currentCss = previewData.injectCss;
 
     if (shouldReload && previewData.html.isNotEmpty) {
       await controller.loadStringContent(previewData.html);
-      _currentHtml = previewData.html;
+      _appliedHtml = previewData.html;
+      _appliedUrl = previewData.url;
       _currentUrl = previewData.url;
       return;
     }
 
     if (shouldReload && previewData.url.isNotEmpty) {
       await controller.loadUrl(previewData.url);
-      _currentHtml = "";
+      _appliedHtml = "";
+      _appliedUrl = previewData.url;
       _currentUrl = previewData.url;
     }
   }
