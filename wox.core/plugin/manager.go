@@ -1727,10 +1727,18 @@ func limitGlobalQueryPluginScore(query Query, score int64) int64 {
 	return globalQueryPluginScoreLimit
 }
 
-func (m *Manager) calculateResultScore(ctx context.Context, pluginId, title, subTitle string, currentQuery string) int64 {
+func resultScoreHash(pluginId string, result QueryResult) setting.ResultHash {
+	scoreKey := strings.TrimSpace(result.ScoreKey)
+	if scoreKey != "" {
+		return setting.NewResultHash(pluginId, scoreKey, "")
+	}
+	return setting.NewResultHash(pluginId, result.Title, result.SubTitle)
+}
+
+func (m *Manager) calculateResultScore(ctx context.Context, pluginId string, result QueryResult, currentQuery string) int64 {
 	var score int64 = 0
 
-	resultHash := setting.NewResultHash(pluginId, title, subTitle)
+	resultHash := resultScoreHash(pluginId, result)
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	actionResults, ok := woxSetting.ActionedResults.Get().Load(resultHash)
 	if !ok {
@@ -2716,13 +2724,14 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 	result.Score = limitGlobalQueryPluginScore(query, result.Score)
 	scoreFeatureStart := util.GetSystemTimestamp()
 	scoreFeatureTimingStart := time.Now()
-	ignoreAutoScore := pluginInstance.Metadata.IsSupportFeature(MetadataFeatureIgnoreAutoScore)
+	// ignoreAutoScore is a plugin-context control; global search still needs actioned-result ranking across providers.
+	ignoreAutoScore := !query.IsGlobalQuery() && pluginInstance.Metadata.IsSupportFeature(MetadataFeatureIgnoreAutoScore)
 	ScoreFeatureCost := util.GetSystemTimestamp() - scoreFeatureStart
 	ScoreFeatureCostUs := time.Since(scoreFeatureTimingStart).Microseconds()
 	autoScoreStart := util.GetSystemTimestamp()
 	autoScoreTimingStart := time.Now()
 	if !ignoreAutoScore {
-		score := m.calculateResultScore(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle, query.RawQuery)
+		score := m.calculateResultScore(ctx, pluginInstance.Metadata.Id, result, query.RawQuery)
 		if score > 0 {
 			logger.Debug(ctx, fmt.Sprintf("<%s> result(%s) add score: %d", pluginInstance.GetName(ctx), result.Title, score))
 			result.Score += score
@@ -4042,7 +4051,8 @@ func (m *Manager) SubmitFormAction(ctx context.Context, sessionId string, queryI
 func (m *Manager) postExecuteAction(ctx context.Context, resultCache *QueryResultCache, contextData map[string]string) {
 	// Add actioned result for statistics
 	meta := resultCache.PluginInstance.Metadata
-	setting.GetSettingManager().AddActionedResult(ctx, meta.Id, resultCache.Result.Title, resultCache.Result.SubTitle, resultCache.Query.RawQuery)
+	scoreHash := resultScoreHash(meta.Id, resultCache.Result)
+	setting.GetSettingManager().AddActionedResultByHash(ctx, scoreHash, resultCache.Query.RawQuery)
 
 	// Add to MRU if plugin supports it
 	if meta.IsSupportFeature(MetadataFeatureMRU) {
