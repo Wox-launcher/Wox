@@ -12,3 +12,13 @@ func SimulatePaste() error {
 func SimulateCapsLockTap() error {
 	return simulateCapsLockTap()
 }
+
+// SetCapsLockState explicitly sets the platform Caps Lock state when the OS supports it.
+func SetCapsLockState(enabled bool) error {
+	return setCapsLockState(enabled)
+}
+
+// IsKeyPressed reports whether the physical key is currently pressed when the platform supports it.
+func IsKeyPressed(key Key) bool {
+	return isKeyPressed(key)
+}

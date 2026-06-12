@@ -119,6 +119,19 @@ func simulateCapsLockTap() error {
 	return nil
 }
 
+func setCapsLockState(enabled bool) error {
+	return fmt.Errorf("not implemented")
+}
+
+func isKeyPressed(key Key) bool {
+	vkCode, err := keyToWindowsVK(key)
+	if err != nil {
+		return false
+	}
+
+	return C.isKeyPressed(C.int(vkCode)) != 0
+}
+
 // We need to wait for all modifiers to be released before simulating Ctrl+C/Ctrl+V.
 // Otherwise, if the trigger hotkey includes Alt/Shift/Win, the simulated copy/paste
 // may be interpreted as a different shortcut (e.g. Alt+Ctrl+C).
