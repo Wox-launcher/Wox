@@ -5,7 +5,6 @@ class WoxSetting {
   late bool enableAutostart;
   late String mainHotkey;
   late String selectionHotkey;
-  late bool enableHyperKey;
   late List<IgnoredHotkeyApp> ignoredHotkeyApps;
   late String logLevel;
   late bool usePinYin;
@@ -55,7 +54,6 @@ class WoxSetting {
     required this.enableAutostart,
     required this.mainHotkey,
     required this.selectionHotkey,
-    required this.enableHyperKey,
     required this.ignoredHotkeyApps,
     required this.logLevel,
     required this.usePinYin,
@@ -101,7 +99,6 @@ class WoxSetting {
     enableAutostart = json['EnableAutostart'] ?? false;
     mainHotkey = json['MainHotkey'];
     selectionHotkey = json['SelectionHotkey'];
-    enableHyperKey = json['EnableHyperKey'] ?? false;
     if (json['IgnoredHotkeyApps'] != null) {
       ignoredHotkeyApps = <IgnoredHotkeyApp>[];
       json['IgnoredHotkeyApps'].forEach((v) {
@@ -188,7 +185,6 @@ class WoxSetting {
     data['EnableAutostart'] = enableAutostart;
     data['MainHotkey'] = mainHotkey;
     data['SelectionHotkey'] = selectionHotkey;
-    data['EnableHyperKey'] = enableHyperKey;
     data['IgnoredHotkeyApps'] = ignoredHotkeyApps;
     data['LogLevel'] = logLevel;
     data['UsePinYin'] = usePinYin;

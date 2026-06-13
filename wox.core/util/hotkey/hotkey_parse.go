@@ -9,15 +9,10 @@ import (
 )
 
 type hotkeySpec struct {
-	hyper             bool
 	capsLock          bool
 	modifiers         keyboard.Modifier
 	key               keyboard.Key
 	doubleModifierKey keyboard.Key
-}
-
-func (s hotkeySpec) isHyperKey() bool {
-	return s.hyper
 }
 
 func (s hotkeySpec) isCapsLockKey() bool {
@@ -38,10 +33,6 @@ func (h *Hotkey) parseCombineKey(combineKey string) (hotkeySpec, error) {
 
 	for _, token := range tokens {
 		normalizedToken := strings.ToLower(strings.TrimSpace(token))
-		if normalizedToken == "hyper" {
-			spec.hyper = true
-			continue
-		}
 		if isCapsLockToken(normalizedToken) && len(tokens) > 1 {
 			spec.capsLock = true
 			continue
@@ -65,9 +56,6 @@ func (h *Hotkey) parseCombineKey(combineKey string) (hotkeySpec, error) {
 	}
 
 	if spec.key == keyboard.KeyUnknown {
-		if spec.hyper {
-			return hotkeySpec{}, fmt.Errorf("missing key in hyper hotkey: %s", combineKey)
-		}
 		if spec.capsLock {
 			return hotkeySpec{}, fmt.Errorf("missing key in caps lock hotkey: %s", combineKey)
 		}
@@ -78,14 +66,8 @@ func (h *Hotkey) parseCombineKey(combineKey string) (hotkeySpec, error) {
 		return hotkeySpec{}, fmt.Errorf("missing key in hotkey: %s", combineKey)
 	}
 
-	if spec.hyper && (spec.modifiers != 0 || len(modifierKeys) > 0) {
-		return hotkeySpec{}, fmt.Errorf("hyper hotkey does not support extra modifiers: %s", combineKey)
-	}
 	if spec.capsLock && (spec.modifiers != 0 || len(modifierKeys) > 0) {
 		return hotkeySpec{}, fmt.Errorf("caps lock hotkey does not support extra modifiers: %s", combineKey)
-	}
-	if spec.hyper && spec.capsLock {
-		return hotkeySpec{}, fmt.Errorf("hyper hotkey cannot also be caps lock hotkey: %s", combineKey)
 	}
 
 	return spec, nil
@@ -93,11 +75,6 @@ func (h *Hotkey) parseCombineKey(combineKey string) (hotkeySpec, error) {
 
 func isCapsLockToken(token string) bool {
 	return token == "capslock" || token == "caps_lock" || token == "caps lock"
-}
-
-func IsHyperHotkeyString(combineKey string) bool {
-	spec, err := (&Hotkey{}).parseCombineKey(combineKey)
-	return err == nil && spec.isHyperKey()
 }
 
 func IsCapsLockHotkeyString(combineKey string) bool {

@@ -163,7 +163,7 @@ class _AICommandTemplateDialogState extends State<_AICommandTemplateDialog> {
     final modifiers = <String>{};
     var key = "";
     for (final token in tokens) {
-      if (token == "hyper" || token == "capslock") {
+      if (token == "capslock") {
         modifiers.add(token);
       } else if (_isHotkeyModifierToken(token)) {
         modifiers.add(token);
@@ -172,9 +172,6 @@ class _AICommandTemplateDialogState extends State<_AICommandTemplateDialog> {
       }
     }
 
-    if (modifiers.contains("hyper") && key.isNotEmpty) {
-      return "hyper+$key";
-    }
     if (modifiers.contains("capslock") && key.isNotEmpty) {
       return "capslock+$key";
     }

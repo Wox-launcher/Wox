@@ -863,7 +863,6 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 	settingDto.EnableAutostart = woxSetting.EnableAutostart.Get()
 	settingDto.MainHotkey = woxSetting.MainHotkey.Get()
 	settingDto.SelectionHotkey = woxSetting.SelectionHotkey.Get()
-	settingDto.EnableHyperKey = woxSetting.EnableHyperKey.Get()
 	settingDto.IgnoredHotkeyApps = woxSetting.IgnoredHotkeyApps.Get()
 	settingDto.LogLevel = util.NormalizeLogLevel(woxSetting.LogLevel.Get())
 	settingDto.UsePinYin = woxSetting.UsePinYin.Get()
@@ -967,8 +966,6 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 		woxSetting.MainHotkey.Set(vs)
 	case "SelectionHotkey":
 		woxSetting.SelectionHotkey.Set(vs)
-	case "EnableHyperKey":
-		woxSetting.EnableHyperKey.Set(vb)
 	case "IgnoredHotkeyApps":
 		var ignoredApps []setting.IgnoredHotkeyApp
 		if err := json.Unmarshal([]byte(vs), &ignoredApps); err != nil {

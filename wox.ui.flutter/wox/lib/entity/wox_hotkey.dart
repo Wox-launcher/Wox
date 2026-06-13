@@ -6,16 +6,13 @@ import 'package:hotkey_manager/hotkey_manager.dart';
 class HotkeyX {
   String raw;
   HotKey? normalHotkey; // normal hotkey, E.g. "ctrl+shift+a"
-  KeyboardKey? hyperHotkey; // Wox Hyper Key hotkey, E.g. "hyper+a"
   KeyboardKey? capsLockHotkey; // Caps Lock combination, E.g. "capslock+a"
   HotKeyModifier? doubleHotkey; // double hotkey, E.g. "ctrl+ctrl"
   LogicalKeyboardKey? singleHotkey; // single hotkey, E.g. "enter", usually used for default action hotkey
 
-  HotkeyX(this.raw, {this.normalHotkey, this.hyperHotkey, this.capsLockHotkey, this.doubleHotkey, this.singleHotkey});
+  HotkeyX(this.raw, {this.normalHotkey, this.capsLockHotkey, this.doubleHotkey, this.singleHotkey});
 
   bool get isNormalHotkey => normalHotkey != null;
-
-  bool get isHyperHotkey => hyperHotkey != null;
 
   bool get isCapsLockHotkey => capsLockHotkey != null;
 
@@ -49,14 +46,11 @@ class HotkeyAvailability {
 class WoxHotkey {
   static HotkeyX? parseHotkeyFromString(String value) {
     final modifiers = <HotKeyModifier>[];
-    var isHyper = false;
     var isCapsLockCombo = false;
     LogicalKeyboardKey? key;
     final tokens = value.split("+").map((element) => element.trim().toLowerCase()).where((element) => element.isNotEmpty).toList();
     for (final e in tokens) {
-      if (e == "hyper") {
-        isHyper = true;
-      } else if ((e == "capslock" || e == "caps_lock" || e == "caps lock") && tokens.length > 1) {
+      if ((e == "capslock" || e == "caps_lock" || e == "caps lock") && tokens.length > 1) {
         isCapsLockCombo = true;
       } else if (e == "alt" || e == "option") {
         modifiers.add(HotKeyModifier.alt);
@@ -224,10 +218,6 @@ class WoxHotkey {
       return HotkeyX(value, doubleHotkey: modifiers[0]);
     }
 
-    if (isHyper && key != null) {
-      return HotkeyX(value, hyperHotkey: key);
-    }
-
     if (isCapsLockCombo && key != null) {
       return HotkeyX(value, capsLockHotkey: key);
     }
@@ -382,10 +372,6 @@ class WoxHotkey {
     final keyStr = keyToStr(hotKey.key);
 
     return "${modifiers.join("+")}+$keyStr";
-  }
-
-  static String hyperHotkeyToStr(KeyboardKey key) {
-    return "hyper+${keyToStr(key)}";
   }
 
   static String capsLockHotkeyToStr(KeyboardKey key) {

@@ -34,9 +34,6 @@ type Hotkey struct {
 	isDoubleKey       bool
 	doubleModifierKey keyboard.Key
 
-	isHyperKey bool
-	hyperKey   keyboard.Key
-
 	isCapsLockKey bool
 	capsLockKey   keyboard.Key
 }
@@ -60,18 +57,11 @@ func (h *Hotkey) Register(ctx context.Context, combineKey string, callback func(
 		return registerDoubleHotKey(spec.doubleModifierKey, callback)
 	}
 
-	if spec.isHyperKey() {
-		util.GetLogger().Info(ctx, fmt.Sprintf("register hyper hotkey: %s", combineKey))
-		h.isHyperKey = true
-		h.hyperKey = spec.key
-		return registerHyperHotKey(spec.key, callback)
-	}
-
 	if spec.isCapsLockKey() {
 		util.GetLogger().Info(ctx, fmt.Sprintf("register caps lock hotkey: %s", combineKey))
 		h.isCapsLockKey = true
 		h.capsLockKey = spec.key
-		return registerHyperHotKey(spec.key, callback)
+		return registerCapsLockComboHotKey(spec.key, callback)
 	}
 
 	registration, err := keyboard.RegisterGlobalHotkey(spec.modifiers, spec.key, callback)
@@ -99,17 +89,9 @@ func (h *Hotkey) unregister(ctx context.Context) error {
 		return nil
 	}
 
-	if h.isHyperKey {
-		util.GetLogger().Info(ctx, fmt.Sprintf("unregister hyper hotkey: %s", h.combineKey))
-		unregisterHyperHotKey(h.hyperKey)
-		h.isHyperKey = false
-		h.hyperKey = keyboard.KeyUnknown
-		return nil
-	}
-
 	if h.isCapsLockKey {
 		util.GetLogger().Info(ctx, fmt.Sprintf("unregister caps lock hotkey: %s", h.combineKey))
-		unregisterHyperHotKey(h.capsLockKey)
+		unregisterCapsLockComboHotKey(h.capsLockKey)
 		h.isCapsLockKey = false
 		h.capsLockKey = keyboard.KeyUnknown
 		return nil

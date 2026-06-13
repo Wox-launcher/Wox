@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -218,19 +217,6 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                     controller.updateConfig("SelectionHotkey", hotkey);
                   },
                 ),
-              ),
-              formField(
-                settingKey: "EnableHyperKey",
-                label: controller.tr("ui_enable_hyper_key"),
-                tips: controller.tr("ui_enable_hyper_key_tips").replaceAll("{modifiers}", _hyperKeyModifiers()),
-                child: Obx(() {
-                  return WoxSwitch(
-                    value: controller.woxSetting.value.enableHyperKey,
-                    onChanged: (bool value) {
-                      controller.updateConfig("EnableHyperKey", value.toString());
-                    },
-                  );
-                }),
               ),
               settingTarget(
                 settingKey: "IgnoredHotkeyApps",
@@ -556,9 +542,5 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
         ),
       ),
     );
-  }
-
-  String _hyperKeyModifiers() {
-    return Platform.isMacOS ? "Ctrl+Shift+Cmd+Option" : "Ctrl+Shift+Alt+Win";
   }
 }

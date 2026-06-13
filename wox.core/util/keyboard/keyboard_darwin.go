@@ -120,7 +120,7 @@ func simulateCopy() error {
 	return nil
 }
 
-// setCapsLockState uses IOHIDSystem so Hyper can undo Caps Lock state without posting another key event.
+// setCapsLockState uses IOHIDSystem so Caps Lock combos can undo Caps Lock state without posting another key event.
 func setCapsLockState(enabled bool) error {
 	value := 0
 	if enabled {

@@ -236,14 +236,6 @@ func (m *Manager) RegisterMainHotkey(ctx context.Context, combineKey string) err
 		}
 		return nil
 	}
-	if hotkey.IsHyperHotkeyString(combineKey) && !setting.GetSettingManager().GetWoxSetting(ctx).EnableHyperKey.Get() {
-		logger.Info(ctx, fmt.Sprintf("skip register main hyper hotkey because Hyper Key is disabled: %s", combineKey))
-		if m.mainHotkey != nil {
-			m.mainHotkey.Unregister(ctx)
-		}
-		return nil
-	}
-
 	logger.Info(ctx, fmt.Sprintf("register main hotkey: %s", combineKey))
 	// unregister previous hotkey
 	if m.mainHotkey != nil {
@@ -278,14 +270,6 @@ func (m *Manager) RegisterSelectionHotkey(ctx context.Context, combineKey string
 		}
 		return nil
 	}
-	if hotkey.IsHyperHotkeyString(combineKey) && !setting.GetSettingManager().GetWoxSetting(ctx).EnableHyperKey.Get() {
-		logger.Info(ctx, fmt.Sprintf("skip register selection hyper hotkey because Hyper Key is disabled: %s", combineKey))
-		if m.selectionHotkey != nil {
-			m.selectionHotkey.Unregister(ctx)
-		}
-		return nil
-	}
-
 	logger.Info(ctx, fmt.Sprintf("register selection hotkey: %s", combineKey))
 	// unregister previous hotkey
 	if m.selectionHotkey != nil {
@@ -397,11 +381,6 @@ func (m *Manager) RegisterQueryHotkey(ctx context.Context, queryHotkey setting.Q
 		logger.Info(ctx, fmt.Sprintf("skip register query hotkey: disabled=%t hotkey=%s", queryHotkey.Disabled, queryHotkey.Hotkey))
 		return nil
 	}
-	if hotkey.IsHyperHotkeyString(combineKey) && !setting.GetSettingManager().GetWoxSetting(ctx).EnableHyperKey.Get() {
-		logger.Info(ctx, fmt.Sprintf("skip register query hyper hotkey because Hyper Key is disabled: hotkey=%s query=%s", combineKey, queryHotkey.Query))
-		return nil
-	}
-
 	hk := &hotkey.Hotkey{}
 
 	err := hk.Register(ctx, combineKey, func() {
@@ -439,7 +418,7 @@ func (m *Manager) reregisterGlobalHotkeys(ctx context.Context) {
 	m.unregisterQueryHotkeys(ctx)
 	for _, queryHotkey := range woxSetting.QueryHotkeys.Get() {
 		if err := m.RegisterQueryHotkey(ctx, queryHotkey); err != nil {
-			logger.Error(ctx, fmt.Sprintf("failed to register query hotkey after Hyper Key setting update: %s", err.Error()))
+			logger.Error(ctx, fmt.Sprintf("failed to register query hotkey after global hotkey setting update: %s", err.Error()))
 		}
 	}
 }
@@ -511,21 +490,6 @@ func hotkeyCompareKeys(hotkeyStr string) map[string]bool {
 	}
 
 	keys := map[string]bool{normalized: true}
-	if strings.HasPrefix(normalized, "hyper+") {
-		key := strings.TrimPrefix(normalized, "hyper+")
-		if key != "" {
-			keys["capslock+"+key] = true
-		}
-		return keys
-	}
-
-	if strings.HasPrefix(normalized, "capslock+") {
-		key := strings.TrimPrefix(normalized, "capslock+")
-		if key != "" {
-			keys["hyper+"+key] = true
-		}
-		return keys
-	}
 	return keys
 }
 
@@ -555,7 +519,7 @@ func normalizeHotkeyForCompare(hotkeyStr string) string {
 	modifiers := map[string]bool{}
 	key := ""
 	for _, token := range tokens {
-		if token == "hyper" || token == "capslock" {
+		if token == "capslock" {
 			modifiers[token] = true
 			continue
 		}
@@ -568,9 +532,6 @@ func normalizeHotkeyForCompare(hotkeyStr string) string {
 		}
 	}
 
-	if modifiers["hyper"] && key != "" {
-		return "hyper+" + key
-	}
 	if modifiers["capslock"] && key != "" {
 		return "capslock+" + key
 	}
@@ -599,8 +560,6 @@ func normalizeHotkeyToken(token string) string {
 		return "alt"
 	case "cmd", "command", "win", "windows", "super":
 		return "meta"
-	case "hyper":
-		return "hyper"
 	case "capslock", "caps_lock", "caps lock":
 		return "capslock"
 	case "return":
@@ -1062,11 +1021,11 @@ func (m *Manager) PostOnHotkeyRecording(ctx context.Context, isRecording bool) {
 	if impl, ok := m.ui.(*uiImpl); ok {
 		impl.isRecordingHotkey = isRecording
 		if isRecording {
-			hotkey.SetHyperKeyRecorder(func(hotkeyStr string) {
+			hotkey.SetCapsLockComboRecorder(func(hotkeyStr string) {
 				m.ui.RecordHotkey(util.NewTraceContext(), hotkeyStr)
 			})
 		} else {
-			hotkey.SetHyperKeyRecorder(nil)
+			hotkey.SetCapsLockComboRecorder(nil)
 		}
 		logger.Info(ctx, fmt.Sprintf("hotkey recording state changed: %t", isRecording))
 	}
@@ -1142,8 +1101,6 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value strin
 		m.RegisterMainHotkey(ctx, vs)
 	case "SelectionHotkey":
 		m.RegisterSelectionHotkey(ctx, vs)
-	case "EnableHyperKey":
-		m.reregisterGlobalHotkeys(ctx)
 	case "LogLevel":
 		util.GetLogger().SetLevel(vs)
 	case "QueryHotkeys":

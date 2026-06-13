@@ -9,7 +9,6 @@ type WoxSettingDto struct {
 	EnableAutostart      bool
 	MainHotkey           string
 	SelectionHotkey      string
-	EnableHyperKey       bool
 	IgnoredHotkeyApps    []setting.IgnoredHotkeyApp
 	LogLevel             string
 	UsePinYin            bool
