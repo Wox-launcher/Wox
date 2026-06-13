@@ -1,5 +1,4 @@
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
@@ -168,7 +167,7 @@ class _WoxHotkeyOverviewPreviewViewState extends State<WoxHotkeyOverviewPreviewV
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          SizedBox(width: _metrics.scaledSpacing(128), child: _buildShortcutChips(entry, textColor, accentColor)),
+          SizedBox(width: _metrics.scaledSpacing(220), child: _buildShortcutChips(entry, textColor, accentColor)),
           SizedBox(width: _metrics.scaledSpacing(10)),
           Expanded(
             child: Column(
@@ -202,11 +201,17 @@ class _WoxHotkeyOverviewPreviewViewState extends State<WoxHotkeyOverviewPreviewV
 
   Widget _buildShortcutChips(_HotkeyOverviewEntry entry, Color textColor, Color accentColor) {
     final labels = entry.displayLabels;
-    return Wrap(
-      spacing: _metrics.scaledSpacing(4),
-      runSpacing: _metrics.scaledSpacing(4),
-      children: labels.map((label) => _buildShortcutChip(label, textColor, accentColor, entry.isKeyboardHotkey)).toList(),
-    );
+    final chipWidgets = <Widget>[];
+    for (final label in labels) {
+      if (chipWidgets.isNotEmpty) {
+        chipWidgets.add(SizedBox(width: _metrics.scaledSpacing(4)));
+      }
+      chipWidgets.add(_buildShortcutChip(label, textColor, accentColor, entry.isKeyboardHotkey));
+    }
+
+    // Keep one shortcut combination on a single visual line. Very long user
+    // shortcuts stay horizontally scrollable instead of making the row taller.
+    return SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(mainAxisSize: MainAxisSize.min, children: chipWidgets));
   }
 
   Widget _buildShortcutChip(String label, Color textColor, Color accentColor, bool isKeyboardHotkey) {
@@ -223,9 +228,13 @@ class _WoxHotkeyOverviewPreviewViewState extends State<WoxHotkeyOverviewPreviewV
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         textAlign: TextAlign.center,
-        style: TextStyle(color: isKeyboardHotkey ? textColor.withValues(alpha: 0.9) : accentColor, fontSize: _metrics.smallLabelFontSize, height: 1, fontWeight: FontWeight.w800),
+        style: _shortcutChipTextStyle(isKeyboardHotkey ? textColor.withValues(alpha: 0.9) : accentColor),
       ),
     );
+  }
+
+  TextStyle _shortcutChipTextStyle(Color color) {
+    return TextStyle(color: color, fontSize: _metrics.smallLabelFontSize, height: 1, fontWeight: FontWeight.w800);
   }
 
   List<_HotkeyOverviewSection> _buildSections() {
