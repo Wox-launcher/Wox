@@ -11,7 +11,6 @@ import (
 
 const (
 	darwinSyntheticCapsEventIgnoreMs        = 150
-	darwinCapsLockComboStartWindowMs        = 500
 	capsLockComboCallbackReleaseMaxWait     = 1500 * time.Millisecond
 	capsLockComboCallbackReleasePollDelay   = 15 * time.Millisecond
 	capsLockComboCallbackReleaseSettleDelay = 15 * time.Millisecond
@@ -39,6 +38,9 @@ func (t *capsLockComboTracker) HandleEvent(event keyboard.RawKeyEvent, allowCaps
 	if event.Key == keyboard.KeyCapsLock {
 		if runtime.GOOS == "darwin" {
 			return t.handleDarwinCapsLockEvent(event, allowCapsLockReplay)
+		}
+		if runtime.GOOS == "windows" {
+			return t.handleWindowsCapsLockEvent(event, allowCapsLockReplay)
 		}
 
 		return t.handleDefaultCapsLockEvent(event, allowCapsLockReplay)
@@ -82,6 +84,31 @@ func (t *capsLockComboTracker) handleDefaultCapsLockEvent(event keyboard.RawKeyE
 	return keyboard.KeyUnknown, false
 }
 
+// handleWindowsCapsLockEvent keeps Windows Caps Lock behavior aligned by setting
+// the final toggle state explicitly instead of replaying swallowed raw events.
+func (t *capsLockComboTracker) handleWindowsCapsLockEvent(event keyboard.RawKeyEvent, allowCapsLockStateUpdate bool) (keyboard.Key, bool) {
+	if event.Type == keyboard.EventTypeKeyDown {
+		t.capsPressed = true
+		t.comboTriggered = false
+		t.capsLockStateCaptured = true
+		t.capsLockStateBefore = keyboard.IsCapsLockEnabled()
+		t.capsLockStateRestored = false
+		t.pressedKeys = map[keyboard.Key]bool{}
+		return keyboard.KeyUnknown, true
+	}
+
+	targetState := t.capsLockStateBefore
+	if !t.comboTriggered {
+		targetState = !targetState
+	}
+	shouldSetState := allowCapsLockStateUpdate && t.capsLockStateCaptured
+	t.resetCapsSequence()
+	if shouldSetState {
+		setCapsLockStateAsync(targetState, "windows-caps-lock-sequence")
+	}
+	return keyboard.KeyUnknown, true
+}
+
 func (t *capsLockComboTracker) handleDefaultNonCapsLockEvent(event keyboard.RawKeyEvent) (keyboard.Key, bool) {
 	if !t.capsPressed {
 		return keyboard.KeyUnknown, false
@@ -108,6 +135,10 @@ func (t *capsLockComboTracker) handleDarwinCapsLockEvent(event keyboard.RawKeyEv
 	}
 
 	if !t.capsPressed {
+		if !event.NativeCapsLockStateAvailable || !event.NativeCapsLockPressed {
+			return keyboard.KeyUnknown, false
+		}
+
 		t.capsPressed = true
 		t.comboTriggered = false
 		t.capsPressedAt = now
@@ -131,10 +162,22 @@ func (t *capsLockComboTracker) handleDarwinCapsLockEvent(event keyboard.RawKeyEv
 // Caps Lock as lock-state transitions instead of a normal physical down/up pair.
 func (t *capsLockComboTracker) handleDarwinNonCapsLockEvent(event keyboard.RawKeyEvent, allowCapsLockStateUpdate bool) (keyboard.Key, bool) {
 	if !t.capsPressed {
-		return keyboard.KeyUnknown, false
+		if event.Type != keyboard.EventTypeKeyDown || !event.NativeCapsLockStateAvailable || !event.NativeCapsLockPressed {
+			return keyboard.KeyUnknown, false
+		}
+
+		// Recover combos when a Caps Lock state transition reset the Go state while
+		// IOHID still reports the physical Caps Lock key as held.
+		t.capsPressed = true
+		t.comboTriggered = false
+		t.capsPressedAt = util.GetSystemTimestamp()
+		t.capsLockStateCaptured = false
+		t.capsLockStateBefore = false
+		t.capsLockStateRestored = false
+		t.pressedKeys = map[keyboard.Key]bool{}
 	}
 
-	if t.comboTriggered && len(t.pressedKeys) == 0 && !keyboard.IsKeyPressed(keyboard.KeyCapsLock) {
+	if t.comboTriggered && len(t.pressedKeys) == 0 && !t.isDarwinCapsLockStillPressed(event) {
 		t.finishDarwinCapsLockComboSequence(allowCapsLockStateUpdate, "caps-released-before-next-key")
 		return keyboard.KeyUnknown, false
 	}
@@ -151,7 +194,7 @@ func (t *capsLockComboTracker) handleDarwinNonCapsLockEvent(event keyboard.RawKe
 		return keyboard.KeyUnknown, true
 	}
 
-	if !t.comboTriggered && !t.shouldTreatDarwinKeyAsCombo() {
+	if !t.comboTriggered && !t.shouldTreatDarwinKeyAsCombo(event) {
 		t.resetCapsSequence()
 		return keyboard.KeyUnknown, false
 	}
@@ -166,12 +209,14 @@ func (t *capsLockComboTracker) handleDarwinNonCapsLockEvent(event keyboard.RawKe
 	return event.Key, true
 }
 
-// shouldTreatDarwinKeyAsCombo avoids turning ordinary typing into a Caps Lock combo after a standalone Caps tap.
-func (t *capsLockComboTracker) shouldTreatDarwinKeyAsCombo() bool {
-	if t.capsPressedAt == 0 {
-		return false
-	}
-	return util.GetSystemTimestamp()-t.capsPressedAt <= darwinCapsLockComboStartWindowMs
+// shouldTreatDarwinKeyAsCombo trusts only the IOHID physical Caps Lock state.
+func (t *capsLockComboTracker) shouldTreatDarwinKeyAsCombo(event keyboard.RawKeyEvent) bool {
+	return event.NativeCapsLockStateAvailable && event.NativeCapsLockPressed
+}
+
+// isDarwinCapsLockStillPressed trusts only the IOHID physical Caps Lock state.
+func (t *capsLockComboTracker) isDarwinCapsLockStillPressed(event keyboard.RawKeyEvent) bool {
+	return event.NativeCapsLockStateAvailable && event.NativeCapsLockPressed
 }
 
 // finishDarwinCapsLockComboSequence clears the synthetic Caps Lock combo state once the combo is no longer active.
@@ -191,9 +236,13 @@ func (t *capsLockComboTracker) restoreDarwinCapsLockState(allowCapsLockStateUpda
 	targetState := t.capsLockStateBefore
 	t.capsLockStateRestored = true
 	t.ignoreCapsEventsUntil = util.GetSystemTimestamp() + darwinSyntheticCapsEventIgnoreMs
-	util.Go(util.NewTraceContext(), "restore Caps Lock state after Caps Lock combo", func() {
+	setCapsLockStateAsync(targetState, reason)
+}
+
+func setCapsLockStateAsync(targetState bool, reason string) {
+	util.Go(util.NewTraceContext(), "set Caps Lock state after Caps Lock combo", func() {
 		if err := keyboard.SetCapsLockState(targetState); err != nil {
-			util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("failed to restore Caps Lock state after Caps Lock combo: targetState=%t reason=%s err=%s", targetState, reason, err.Error()))
+			util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("failed to set Caps Lock state: targetState=%t reason=%s err=%s", targetState, reason, err.Error()))
 		}
 	})
 }

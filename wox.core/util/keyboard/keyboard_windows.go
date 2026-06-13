@@ -7,6 +7,10 @@ int isKeyPressed(int vkCode) {
     return (GetAsyncKeyState(vkCode) & 0x8000) != 0;
 }
 
+int isCapsLockEnabled() {
+    return (GetKeyState(VK_CAPITAL) & 0x0001) != 0;
+}
+
 const char* simulateCtrlC() {
     INPUT ip[4];
     ZeroMemory(ip, sizeof(ip));
@@ -78,6 +82,14 @@ const char* simulateCapsLockTap() {
 
     return NULL;
 }
+
+const char* setCapsLockState(int enabled) {
+    if (isCapsLockEnabled() == (enabled != 0)) {
+        return NULL;
+    }
+
+    return simulateCapsLockTap();
+}
 */
 import "C"
 import (
@@ -120,7 +132,22 @@ func simulateCapsLockTap() error {
 }
 
 func setCapsLockState(enabled bool) error {
-	return fmt.Errorf("not implemented")
+	value := 0
+	if enabled {
+		value = 1
+	}
+
+	err := C.setCapsLockState(C.int(value))
+	if err != nil {
+		errMsg := C.GoString(err)
+		return fmt.Errorf("failed to set CapsLock state: %v", errMsg)
+	}
+
+	return nil
+}
+
+func isCapsLockEnabled() bool {
+	return C.isCapsLockEnabled() != 0
 }
 
 func isKeyPressed(key Key) bool {

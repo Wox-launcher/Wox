@@ -302,11 +302,15 @@ const (
 )
 
 type RawKeyEvent struct {
-	Type          EventType
-	Key           Key
-	Character     string
-	Modifiers     Modifier
-	NativeKeyCode uint32
+	Type                         EventType
+	Key                          Key
+	Character                    string
+	Modifiers                    Modifier
+	NativeKeyCode                uint32
+	NativeEventType              int
+	NativeFlags                  uint64
+	NativeCapsLockStateAvailable bool
+	NativeCapsLockPressed        bool
 }
 
 type RawKeyHandler func(event RawKeyEvent) bool

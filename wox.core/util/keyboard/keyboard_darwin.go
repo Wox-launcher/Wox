@@ -106,6 +106,12 @@ const char* setCapsLockState(int enabled) {
 int isKeyPressed(unsigned short keyCode) {
     return CGEventSourceKeyState(kCGEventSourceStateHIDSystemState, (CGKeyCode)keyCode) ? 1 : 0;
 }
+
+int isCapsLockEnabled() {
+    return (CGEventSourceFlagsState(kCGEventSourceStateHIDSystemState) & kCGEventFlagMaskAlphaShift) != 0;
+}
+
+int woxDarwinIsPhysicalCapsLockPressed(int *available);
 */
 import "C"
 import "fmt"
@@ -136,8 +142,18 @@ func setCapsLockState(enabled bool) error {
 	return nil
 }
 
+func isCapsLockEnabled() bool {
+	return C.isCapsLockEnabled() != 0
+}
+
 // isKeyPressed queries the hardware key state, which differs from the Caps Lock toggle state on macOS.
 func isKeyPressed(key Key) bool {
+	if key == KeyCapsLock {
+		available := C.int(0)
+		pressed := C.woxDarwinIsPhysicalCapsLockPressed(&available)
+		return available != 0 && pressed != 0
+	}
+
 	keyCode, err := keyToDarwinKeyCode(key)
 	if err != nil {
 		return false

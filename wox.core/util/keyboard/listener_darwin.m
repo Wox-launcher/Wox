@@ -1,18 +1,23 @@
 #import <Cocoa/Cocoa.h>
 #import <Carbon/Carbon.h>
 #import <ApplicationServices/ApplicationServices.h>
+#import <IOKit/hid/IOHIDLib.h>
+#import <IOKit/hid/IOHIDKeys.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 #include <stdio.h>
 
 extern void keyboardHotkeyTriggeredCGO(int id);
-extern int keyboardHookEventCGO(int eventKind, unsigned int keyCode, unsigned int modifiers, unsigned int character);
+extern int keyboardHookEventCGO(int eventKind, unsigned int keyCode, unsigned int modifiers, unsigned int character, int nativeEventType, unsigned long long nativeFlags, int nativeCapsLockStateAvailable, int nativeCapsLockPressed);
 
 static EventHandlerRef gHotkeyHandler = NULL;
 static NSMutableDictionary<NSNumber *, NSValue *> *gHotkeyRefs = nil;
 static CFMachPortRef gRawKeyboardEventTap = NULL;
 static CFRunLoopSourceRef gRawKeyboardEventTapSource = NULL;
+static IOHIDManagerRef gPhysicalKeyboardManager = NULL;
+static BOOL gPhysicalKeyboardManagerReady = NO;
+static BOOL gPhysicalCapsLockPressed = NO;
 
 static char *copyErrorMessage(const char *message) {
     if (!message) {
@@ -132,6 +137,57 @@ static unsigned int currentCharacterCode(NSEvent *event) {
     return (unsigned int)ch;
 }
 
+static void physicalKeyboardValueCallback(void *context, IOReturn result, void *sender, IOHIDValueRef value) {
+    if (result != kIOReturnSuccess || !value) {
+        return;
+    }
+
+    IOHIDElementRef element = IOHIDValueGetElement(value);
+    if (!element) {
+        return;
+    }
+
+    if (IOHIDElementGetUsagePage(element) != kHIDPage_KeyboardOrKeypad || IOHIDElementGetUsage(element) != kHIDUsage_KeyboardCapsLock) {
+        return;
+    }
+
+    gPhysicalCapsLockPressed = IOHIDValueGetIntegerValue(value) != 0;
+    gPhysicalKeyboardManagerReady = YES;
+}
+
+static void ensurePhysicalKeyboardMonitor(void) {
+    if (gPhysicalKeyboardManager) {
+        return;
+    }
+
+    gPhysicalKeyboardManager = IOHIDManagerCreate(kCFAllocatorDefault, kIOHIDOptionsTypeNone);
+    if (!gPhysicalKeyboardManager) {
+        return;
+    }
+
+    NSDictionary *keyboardMatch = @{
+        @kIOHIDDeviceUsagePageKey: @(kHIDPage_GenericDesktop),
+        @kIOHIDDeviceUsageKey: @(kHIDUsage_GD_Keyboard),
+    };
+    IOHIDManagerSetDeviceMatching(gPhysicalKeyboardManager, (__bridge CFDictionaryRef)keyboardMatch);
+    IOHIDManagerRegisterInputValueCallback(gPhysicalKeyboardManager, physicalKeyboardValueCallback, NULL);
+    IOHIDManagerScheduleWithRunLoop(gPhysicalKeyboardManager, CFRunLoopGetMain(), kCFRunLoopCommonModes);
+    if (IOHIDManagerOpen(gPhysicalKeyboardManager, kIOHIDOptionsTypeNone) != kIOReturnSuccess) {
+        IOHIDManagerUnscheduleFromRunLoop(gPhysicalKeyboardManager, CFRunLoopGetMain(), kCFRunLoopCommonModes);
+        CFRelease(gPhysicalKeyboardManager);
+        gPhysicalKeyboardManager = NULL;
+        gPhysicalKeyboardManagerReady = NO;
+        gPhysicalCapsLockPressed = NO;
+    }
+}
+
+int woxDarwinIsPhysicalCapsLockPressed(int *available) {
+    if (available) {
+        *available = gPhysicalKeyboardManagerReady ? 1 : 0;
+    }
+    return gPhysicalCapsLockPressed ? 1 : 0;
+}
+
 static OSStatus hotkeyHandler(EventHandlerCallRef nextHandler, EventRef event, void *userData) {
     EventHotKeyID hotkeyID;
     GetEventParameter(event, kEventParamDirectObject, typeEventHotKeyID, NULL, sizeof(hotkeyID), NULL, &hotkeyID);
@@ -141,6 +197,8 @@ static OSStatus hotkeyHandler(EventHandlerCallRef nextHandler, EventRef event, v
 
 int woxDarwinEnsureKeyboardReady(char **errorOut) {
     @autoreleasepool {
+        ensurePhysicalKeyboardMonitor();
+
         if (!gHotkeyRefs) {
             gHotkeyRefs = [[NSMutableDictionary alloc] init];
         }
@@ -244,7 +302,9 @@ static CGEventRef rawKeyboardEventTapCallback(CGEventTapProxy proxy, CGEventType
             return event;
         }
 
-        int consume = keyboardHookEventCGO(eventKind, keyCode, modifiers, character);
+        int nativeCapsLockStateAvailable = gPhysicalKeyboardManagerReady ? 1 : 0;
+        int nativeCapsLockPressed = gPhysicalKeyboardManagerReady && gPhysicalCapsLockPressed ? 1 : 0;
+        int consume = keyboardHookEventCGO(eventKind, keyCode, modifiers, character, (int)type, (unsigned long long)flags, nativeCapsLockStateAvailable, nativeCapsLockPressed);
         if (consume != 0) {
             return NULL;
         }

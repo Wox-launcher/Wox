@@ -4,7 +4,7 @@ package keyboard
 
 /*
 #cgo CFLAGS: -x objective-c
-#cgo LDFLAGS: -framework Cocoa -framework Carbon -framework ApplicationServices
+#cgo LDFLAGS: -framework Cocoa -framework Carbon -framework ApplicationServices -framework IOKit
 #include <stdlib.h>
 
 int woxDarwinEnsureKeyboardReady(char **errorOut);
@@ -192,7 +192,7 @@ func keyboardHotkeyTriggeredCGO(id C.int) {
 }
 
 //export keyboardHookEventCGO
-func keyboardHookEventCGO(eventKind C.int, keyCode C.uint, modifiers C.uint, character C.uint) C.int {
+func keyboardHookEventCGO(eventKind C.int, keyCode C.uint, modifiers C.uint, character C.uint, nativeEventType C.int, nativeFlags C.ulonglong, nativeCapsLockStateAvailable C.int, nativeCapsLockPressed C.int) C.int {
 	key := darwinKeyCodeToKey(uint32(keyCode))
 	characterValue := key.Character()
 	if character != 0 {
@@ -201,10 +201,14 @@ func keyboardHookEventCGO(eventKind C.int, keyCode C.uint, modifiers C.uint, cha
 		characterValue = string(rune(character))
 	}
 	event := RawKeyEvent{
-		Key:           key,
-		Character:     characterValue,
-		Modifiers:     Modifier(modifiers),
-		NativeKeyCode: uint32(keyCode),
+		Key:                          key,
+		Character:                    characterValue,
+		Modifiers:                    Modifier(modifiers),
+		NativeKeyCode:                uint32(keyCode),
+		NativeEventType:              int(nativeEventType),
+		NativeFlags:                  uint64(nativeFlags),
+		NativeCapsLockStateAvailable: nativeCapsLockStateAvailable != 0,
+		NativeCapsLockPressed:        nativeCapsLockPressed != 0,
 	}
 	if int(eventKind) == 1 {
 		event.Type = EventTypeKeyUp
