@@ -2593,6 +2593,13 @@ static void my_application_activate(GApplication *application)
   g_signal_connect(window, "focus-out-event", G_CALLBACK(on_window_focus_out),
                    self);
 
+  // Flutter's Linux engine starts after the GTK view is realized. Wox launches
+  // hidden, so realize the window/view explicitly before local_command_line hides
+  // the window; otherwise Dart main never runs and the backend waits forever for
+  // /on/ready.
+  gtk_widget_realize(GTK_WIDGET(window));
+  gtk_widget_realize(GTK_WIDGET(view));
+
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }
 

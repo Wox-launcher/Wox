@@ -41,7 +41,6 @@ static gchar* save_icon_to_temp_file(const char* icon_data, gsize icon_data_len)
         return NULL;
     }
     
-    g_print("Icon saved to: %s\n", temp_path);
     return temp_path;
 }
 
