@@ -66,6 +66,7 @@ WoxSetting _setting({required int appWidth}) {
     enableAutostart: false,
     mainHotkey: '',
     selectionHotkey: '',
+    enableHyperKey: false,
     ignoredHotkeyApps: [],
     logLevel: 'INFO',
     usePinYin: false,

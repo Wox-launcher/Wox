@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"runtime"
 	"sync"
+	"time"
 	"wox/util"
 	"wox/util/keyboard"
 )
@@ -11,6 +12,9 @@ import (
 const (
 	darwinSyntheticCapsEventIgnoreMs = 150
 	darwinHyperComboStartWindowMs    = 500
+	hyperCallbackReleaseMaxWait      = 1500 * time.Millisecond
+	hyperCallbackReleasePollDelay    = 15 * time.Millisecond
+	hyperCallbackReleaseSettleDelay  = 15 * time.Millisecond
 )
 
 type hyperKeyTracker struct {
@@ -289,7 +293,10 @@ func ensureHyperKeyListener() error {
 		callback := hyperKeyCallbacks[triggeredKey]
 		hyperKeyMu.Unlock()
 		if callback != nil {
-			util.Go(util.NewTraceContext(), "hyper hotkey callback", callback)
+			util.Go(util.NewTraceContext(), "hyper hotkey callback", func() {
+				waitForHyperKeyRelease(triggeredKey)
+				callback()
+			})
 		}
 
 		return consume
@@ -342,6 +349,19 @@ func handleHyperKeyEvent(event keyboard.RawKeyEvent) (keyboard.Key, bool, func(s
 	recorder := hyperKeyRecorder
 	triggeredKey, consume := hyperKeyState.HandleEvent(event, recorder == nil || runtime.GOOS == "darwin")
 	return triggeredKey, consume, recorder
+}
+
+// waitForHyperKeyRelease keeps synthetic keyboard input from being swallowed by the active Hyper raw-key sequence.
+func waitForHyperKeyRelease(triggeredKey keyboard.Key) {
+	deadline := time.Now().Add(hyperCallbackReleaseMaxWait)
+	for time.Now().Before(deadline) {
+		if !keyboard.IsKeyPressed(keyboard.KeyCapsLock) && (triggeredKey == keyboard.KeyUnknown || !keyboard.IsKeyPressed(triggeredKey)) {
+			time.Sleep(hyperCallbackReleaseSettleDelay)
+			return
+		}
+
+		time.Sleep(hyperCallbackReleasePollDelay)
+	}
 }
 
 func hyperKeyToHotkeyString(key keyboard.Key) string {
