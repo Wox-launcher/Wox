@@ -51,6 +51,19 @@ var managerInstance *Manager
 var managerOnce sync.Once
 var logger *util.Log
 
+const (
+	uiGDKBackendOverrideEnv = "WOX_UI_GDK_BACKEND"
+	uiReadyTimeout          = 10 * time.Second
+)
+
+// uiLaunchConfig describes one concrete Flutter UI backend launch attempt.
+type uiLaunchConfig struct {
+	Backend string
+	Env     []string
+	Mode    string
+	Reason  string
+}
+
 type Manager struct {
 	mainHotkey       *hotkey.Hotkey
 	selectionHotkey  *hotkey.Hotkey
@@ -59,6 +72,7 @@ type Manager struct {
 	serverPort       int
 	uiProcess        *os.Process
 	uiStopRequested  atomic.Bool
+	uiReadyAt        atomic.Int64
 	themes           *util.HashMap[string, common.Theme]
 	systemThemeIds   []string
 	isUIReadyHandled bool
@@ -589,26 +603,108 @@ func (m *Manager) UpdateServerPort(port int) {
 	m.serverPort = port
 }
 
-func (m *Manager) getUILaunchEnvs(ctx context.Context) []string {
+func gdkBackendEnv(backend string) []string {
+	if backend == "" || backend == "system" {
+		return nil
+	}
+	return []string{"GDK_BACKEND=" + backend}
+}
+
+// getUILaunchConfig chooses the GTK backend for the Flutter UI and records why it was selected.
+func (m *Manager) getUILaunchConfig(ctx context.Context) (uiLaunchConfig, *uiLaunchConfig) {
+	config := uiLaunchConfig{
+		Backend: "system",
+		Mode:    "system",
+		Reason:  "non-linux platform uses the inherited desktop backend",
+	}
 	if !util.IsLinux() {
-		return nil
+		return config, nil
 	}
 
-	if os.Getenv("GDK_BACKEND") != "" {
-		return nil
+	override := strings.ToLower(strings.TrimSpace(os.Getenv(uiGDKBackendOverrideEnv)))
+	if override != "" && override != "auto" {
+		switch override {
+		case "x11", "wayland", "system":
+			config.Backend = override
+			config.Env = gdkBackendEnv(override)
+			config.Mode = "override"
+			config.Reason = fmt.Sprintf("%s=%s", uiGDKBackendOverrideEnv, override)
+			return config, nil
+		default:
+			logger.Warn(ctx, fmt.Sprintf("ignore invalid %s=%s, expected auto, system, x11, or wayland", uiGDKBackendOverrideEnv, override))
+		}
 	}
 
-	if os.Getenv("WAYLAND_DISPLAY") == "" || os.Getenv("DISPLAY") == "" {
-		return nil
+	hasWayland := os.Getenv("WAYLAND_DISPLAY") != "" || strings.EqualFold(os.Getenv("XDG_SESSION_TYPE"), "wayland")
+	hasDisplay := os.Getenv("DISPLAY") != ""
+	if hasWayland && hasDisplay {
+		config = uiLaunchConfig{
+			Backend: "x11",
+			Env:     gdkBackendEnv("x11"),
+			Mode:    "auto",
+			Reason:  "Wayland session exposes DISPLAY, so Wox first uses the XWayland path required by its current Linux window controls",
+		}
+		fallback := uiLaunchConfig{
+			Backend: "wayland",
+			Env:     gdkBackendEnv("wayland"),
+			Mode:    "auto-fallback",
+			Reason:  "XWayland UI did not become ready before timeout",
+		}
+		return config, &fallback
 	}
 
-	// Bug fix: native Wayland ignores the GTK positioning APIs that Wox uses to
-	// place the launcher window, so the first show falls back to the compositor's
-	// top-left placement. Prefer XWayland for the UI child process when both
-	// Wayland and DISPLAY are present; this keeps the existing X11 move/resize
-	// path working without changing the user's global desktop session.
-	logger.Info(ctx, "start ui with GDK_BACKEND=x11 so Linux launcher positioning uses the X11 path under Wayland")
-	return []string{"GDK_BACKEND=x11"}
+	config.Mode = "auto"
+	if hasWayland {
+		config.Reason = "Wayland session has no DISPLAY/XWayland channel, so Wox inherits the desktop backend"
+	} else if os.Getenv("GDK_BACKEND") != "" {
+		config.Reason = "non-Wayland session already defines GDK_BACKEND, so Wox inherits it"
+	} else {
+		config.Reason = "no Wayland/XWayland mixed session detected"
+	}
+	return config, nil
+}
+
+// linuxDesktopDiagnostics returns Linux session details that are useful when GTK backend selection fails.
+func linuxDesktopDiagnostics() string {
+	keys := []string{
+		"XDG_SESSION_TYPE",
+		"XDG_CURRENT_DESKTOP",
+		"XDG_SESSION_DESKTOP",
+		"DESKTOP_SESSION",
+		"GDMSESSION",
+		"WAYLAND_DISPLAY",
+		"DISPLAY",
+		"GDK_BACKEND",
+		"QT_QPA_PLATFORM",
+		"XDG_SESSION_CLASS",
+		"XDG_SESSION_ID",
+	}
+	parts := []string{fmt.Sprintf("goos=%s", runtime.GOOS), fmt.Sprintf("goarch=%s", runtime.GOARCH)}
+	for _, key := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%q", key, os.Getenv(key)))
+	}
+
+	if data, err := os.ReadFile("/etc/os-release"); err == nil {
+		for _, line := range strings.Split(string(data), "\n") {
+			if strings.HasPrefix(line, "PRETTY_NAME=") || strings.HasPrefix(line, "ID=") || strings.HasPrefix(line, "VERSION_ID=") {
+				parts = append(parts, strings.TrimSpace(line))
+			}
+		}
+	}
+
+	return strings.Join(parts, " ")
+}
+
+// logUILaunchConfig records the selected UI backend together with the desktop state that led to it.
+func logUILaunchConfig(ctx context.Context, config uiLaunchConfig, fallback *uiLaunchConfig) {
+	fallbackBackend := "none"
+	if fallback != nil {
+		fallbackBackend = fallback.Backend
+	}
+	logger.Info(ctx, fmt.Sprintf("ui launch backend selected: mode=%s backend=%s env=%v fallback=%s reason=%s", config.Mode, config.Backend, config.Env, fallbackBackend, config.Reason))
+	if util.IsLinux() {
+		logger.Info(ctx, "linux desktop environment: "+linuxDesktopDiagnostics())
+	}
 }
 
 func (m *Manager) StartUIApp(ctx context.Context) error {
@@ -629,6 +725,15 @@ func (m *Manager) StartUIApp(ctx context.Context) error {
 		}
 	}
 
+	m.uiReadyAt.Store(0)
+	m.isUIReadyHandled = false
+	config, fallback := m.getUILaunchConfig(ctx)
+	logUILaunchConfig(ctx, config, fallback)
+	return m.startUIAppWithConfig(ctx, appPath, config, fallback)
+}
+
+// startUIAppWithConfig launches the Flutter UI with one selected GTK backend and wires exit/ready monitoring.
+func (m *Manager) startUIAppWithConfig(ctx context.Context, appPath string, config uiLaunchConfig, fallback *uiLaunchConfig) error {
 	// Bug fix: on a fresh Windows 10 install the Flutter runner can fail before
 	// Dart code starts if the MSVC runtime is absent. Check the native runtime
 	// dependencies while the Go backend can still explain the cause and direct
@@ -639,8 +744,8 @@ func (m *Manager) StartUIApp(ctx context.Context) error {
 		return dependencyErr
 	}
 
-	logger.Info(ctx, fmt.Sprintf("start ui, path=%s, port=%d, pid=%d", appPath, m.serverPort, os.Getpid()))
-	cmd, cmdErr := shell.RunWithEnv(appPath, m.getUILaunchEnvs(ctx),
+	logger.Info(ctx, fmt.Sprintf("start ui, path=%s, port=%d, pid=%d, backend=%s, env=%v", appPath, m.serverPort, os.Getpid(), config.Backend, config.Env))
+	cmd, cmdErr := shell.RunWithEnv(appPath, config.Env,
 		fmt.Sprintf("%d", m.serverPort),
 		fmt.Sprintf("%d", os.Getpid()),
 		fmt.Sprintf("%t", util.IsDev()),
@@ -658,12 +763,28 @@ func (m *Manager) StartUIApp(ctx context.Context) error {
 	util.SetWoxUIProcessPid(pid)
 	util.GetLogger().Info(ctx, fmt.Sprintf("ui app pid: %d", pid))
 
+	processDone := make(chan struct{})
 	util.Go(ctx, "watch ui app", func() {
+		defer close(processDone)
 		waitErr := cmd.Wait()
 		// Clear only this exited process so a restarted UI keeps its newer PID.
 		util.ClearWoxUIProcessPid(pid)
 		waitCtx := util.NewTraceContext()
-		diagnostic.GetManager().RecordUIExit(waitCtx, pid, waitErr, m.uiStopRequested.Load())
+		stopRequested := m.uiStopRequested.Load()
+		diagnostic.GetManager().RecordUIExit(waitCtx, pid, waitErr, stopRequested)
+		if stopRequested {
+			logger.Info(waitCtx, fmt.Sprintf("ui app process(%d) exited after stop request", pid))
+			return
+		}
+		if fallback != nil && m.uiReadyAt.Load() == 0 {
+			logger.Warn(waitCtx, fmt.Sprintf("ui app process(%d) exited before ready with backend=%s, retrying with backend=%s", pid, config.Backend, fallback.Backend))
+			logUILaunchConfig(waitCtx, *fallback, nil)
+			if fallbackErr := m.startUIAppWithConfig(waitCtx, appPath, *fallback, nil); fallbackErr != nil {
+				logger.Error(waitCtx, fmt.Sprintf("failed to start fallback ui backend %s: %s", fallback.Backend, fallbackErr.Error()))
+				m.ExitApp(waitCtx)
+			}
+			return
+		}
 		if waitErr != nil {
 			logger.Warn(waitCtx, fmt.Sprintf("ui app process(%d) exited with error: %s", pid, waitErr.Error()))
 			handleUIRuntimeLaunchFailure(waitCtx, waitErr)
@@ -674,7 +795,57 @@ func (m *Manager) StartUIApp(ctx context.Context) error {
 		m.ExitApp(waitCtx)
 	})
 
+	m.scheduleUIReadyMonitor(ctx, appPath, pid, config, fallback, processDone)
 	return nil
+}
+
+// scheduleUIReadyMonitor retries the UI once in auto mode and otherwise leaves a detailed diagnostic trail.
+func (m *Manager) scheduleUIReadyMonitor(ctx context.Context, appPath string, pid int, config uiLaunchConfig, fallback *uiLaunchConfig, processDone <-chan struct{}) {
+	util.Go(ctx, "monitor ui ready", func() {
+		timer := time.NewTimer(uiReadyTimeout)
+		defer timer.Stop()
+
+		select {
+		case <-processDone:
+			return
+		case <-timer.C:
+		}
+
+		if m.uiReadyAt.Load() > 0 {
+			return
+		}
+		if m.uiProcess == nil || m.uiProcess.Pid != pid {
+			return
+		}
+
+		monitorCtx := util.NewTraceContext()
+		logger.Warn(monitorCtx, fmt.Sprintf("ui app did not become ready within %s, backend=%s, mode=%s, env=%v, reason=%s", uiReadyTimeout, config.Backend, config.Mode, config.Env, config.Reason))
+		if util.IsLinux() {
+			logger.Warn(monitorCtx, "linux desktop environment when ui ready timed out: "+linuxDesktopDiagnostics())
+		}
+		if fallback == nil {
+			return
+		}
+
+		logger.Warn(monitorCtx, fmt.Sprintf("restart ui with fallback backend=%s", fallback.Backend))
+		m.uiStopRequested.Store(true)
+		killErr := m.uiProcess.Kill()
+		if killErr != nil {
+			logger.Error(monitorCtx, fmt.Sprintf("failed to kill ui process(%d) before fallback: %s", pid, killErr.Error()))
+			return
+		}
+		select {
+		case <-processDone:
+		case <-time.After(2 * time.Second):
+			logger.Warn(monitorCtx, fmt.Sprintf("ui process(%d) did not exit within fallback wait window", pid))
+		}
+
+		logUILaunchConfig(monitorCtx, *fallback, nil)
+		if fallbackErr := m.startUIAppWithConfig(monitorCtx, appPath, *fallback, nil); fallbackErr != nil {
+			logger.Error(monitorCtx, fmt.Sprintf("failed to start fallback ui backend %s: %s", fallback.Backend, fallbackErr.Error()))
+			m.ExitApp(monitorCtx)
+		}
+	})
 }
 
 func (m *Manager) GetCurrentTheme(ctx context.Context) common.Theme {
@@ -918,6 +1089,7 @@ func (m *Manager) GetUI(ctx context.Context) common.UI {
 // called after UI is ready to show, and will execute only once
 func (m *Manager) PostUIReady(ctx context.Context) {
 	logger.Info(ctx, "app is ready to show")
+	m.uiReadyAt.Store(util.GetSystemTimestamp())
 	if m.isUIReadyHandled {
 		logger.Warn(ctx, "app is already handled ready to show event")
 		return
