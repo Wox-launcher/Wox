@@ -51,10 +51,7 @@ var managerInstance *Manager
 var managerOnce sync.Once
 var logger *util.Log
 
-const (
-	uiGDKBackendOverrideEnv = "WOX_UI_GDK_BACKEND"
-	uiReadyTimeout          = 10 * time.Second
-)
+const uiReadyTimeout = 10 * time.Second
 
 // uiLaunchConfig describes one concrete Flutter UI backend launch attempt.
 type uiLaunchConfig struct {
@@ -603,14 +600,12 @@ func (m *Manager) UpdateServerPort(port int) {
 	m.serverPort = port
 }
 
-func gdkBackendEnv(backend string) []string {
-	if backend == "" || backend == "system" {
-		return nil
-	}
-	return []string{"GDK_BACKEND=" + backend}
-}
-
 // getUILaunchConfig chooses the GTK backend for the Flutter UI and records why it was selected.
+// Linux effectively has X11, native Wayland, and XWayland, but Wox keeps its default
+// policy to two stable modes: use real X11 when the desktop is X11, and inherit native
+// Wayland when the desktop is Wayland. Wox should not force XWayland itself: it can
+// make absolute moves possible in some setups, but its pointer and monitor view can
+// disagree with the Wayland compositor that actually places the window.
 func (m *Manager) getUILaunchConfig(ctx context.Context) (uiLaunchConfig, *uiLaunchConfig) {
 	config := uiLaunchConfig{
 		Backend: "system",
@@ -621,45 +616,14 @@ func (m *Manager) getUILaunchConfig(ctx context.Context) (uiLaunchConfig, *uiLau
 		return config, nil
 	}
 
-	override := strings.ToLower(strings.TrimSpace(os.Getenv(uiGDKBackendOverrideEnv)))
-	if override != "" && override != "auto" {
-		switch override {
-		case "x11", "wayland", "system":
-			config.Backend = override
-			config.Env = gdkBackendEnv(override)
-			config.Mode = "override"
-			config.Reason = fmt.Sprintf("%s=%s", uiGDKBackendOverrideEnv, override)
-			return config, nil
-		default:
-			logger.Warn(ctx, fmt.Sprintf("ignore invalid %s=%s, expected auto, system, x11, or wayland", uiGDKBackendOverrideEnv, override))
-		}
-	}
-
 	hasWayland := os.Getenv("WAYLAND_DISPLAY") != "" || strings.EqualFold(os.Getenv("XDG_SESSION_TYPE"), "wayland")
-	hasDisplay := os.Getenv("DISPLAY") != ""
-	if hasWayland && hasDisplay {
-		config = uiLaunchConfig{
-			Backend: "x11",
-			Env:     gdkBackendEnv("x11"),
-			Mode:    "auto",
-			Reason:  "Wayland session exposes DISPLAY, so Wox first uses the XWayland path required by its current Linux window controls",
-		}
-		fallback := uiLaunchConfig{
-			Backend: "wayland",
-			Env:     gdkBackendEnv("wayland"),
-			Mode:    "auto-fallback",
-			Reason:  "XWayland UI did not become ready before timeout",
-		}
-		return config, &fallback
-	}
-
 	config.Mode = "auto"
 	if hasWayland {
-		config.Reason = "Wayland session has no DISPLAY/XWayland channel, so Wox inherits the desktop backend"
+		config.Reason = "Wayland session detected, so Wox inherits the desktop backend instead of forcing XWayland"
 	} else if os.Getenv("GDK_BACKEND") != "" {
 		config.Reason = "non-Wayland session already defines GDK_BACKEND, so Wox inherits it"
 	} else {
-		config.Reason = "no Wayland/XWayland mixed session detected"
+		config.Reason = "non-Wayland session uses the inherited desktop backend"
 	}
 	return config, nil
 }
@@ -1551,6 +1515,10 @@ func (m *Manager) getQueryHotkeyWindowPosition(ctx context.Context, queryHotkey 
 		y = bottom
 	default:
 		return common.WindowPosition{}, false
+	}
+
+	if util.IsLinux() {
+		logger.Info(ctx, fmt.Sprintf("linux-window-bounds go stage=query-hotkey screen=%d,%d %dx%d windowWidth=%d windowHeight=%d positionType=%s target=%d,%d screenDebug=%s", screenSize.X, screenSize.Y, screenSize.Width, screenSize.Height, windowWidth, windowHeight, positionType, x, y, screen.LastMouseScreenDebug()))
 	}
 
 	return common.WindowPosition{X: x, Y: y}, true

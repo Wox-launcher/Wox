@@ -1,5 +1,17 @@
 package screen
 
+var lastMouseScreenDebug string
+
+// LastMouseScreenDebug returns details about the latest Linux mouse-screen lookup.
+func LastMouseScreenDebug() string {
+	return lastMouseScreenDebug
+}
+
+// setLastMouseScreenDebug stores lookup details for nearby positioning logs.
+func setLastMouseScreenDebug(debug string) {
+	lastMouseScreenDebug = debug
+}
+
 type Size struct {
 	Width  int
 	Height int

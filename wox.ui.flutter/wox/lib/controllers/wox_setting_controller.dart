@@ -912,7 +912,7 @@ class WoxSettingController extends GetxController {
     if (key == "ShowPosition" && value == WoxPositionTypeEnum.POSITION_TYPE_LAST_LOCATION.code) {
       try {
         final launcherController = Get.find<WoxLauncherController>();
-        launcherController.saveWindowPositionIfNeeded();
+        launcherController.saveWindowPositionIfNeeded(reason: "setting-switch");
         Logger.instance.info(traceId, 'Saved current window position when switching to last_location');
       } catch (e) {
         Logger.instance.error(traceId, 'Failed to save window position when switching to last_location: $e');
