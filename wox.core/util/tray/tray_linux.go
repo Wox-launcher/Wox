@@ -16,6 +16,7 @@ typedef struct TrayIcon TrayIcon;
 TrayIcon* create_tray();
 void set_tray_icon(TrayIcon* tray, const char* icon_data, gsize icon_data_len);
 void add_menu_item(TrayIcon* tray, const char* label, int tag);
+void show_tray(TrayIcon* tray);
 void cleanup_tray(TrayIcon* tray);
 */
 import "C"
@@ -98,6 +99,8 @@ func CreateTray(appIcon []byte, onClick func(), items ...MenuItem) {
 
 		C.add_menu_item(trayIcon, cTitle, C.int(tag))
 	}
+
+	C.show_tray(trayIcon)
 }
 
 func RemoveTray() {

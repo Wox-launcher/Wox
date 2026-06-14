@@ -16,13 +16,12 @@ typedef struct TrayIcon {
     GtkMenu *menu;
     GMainContext *context;
     GMainLoop *loop;
-    GMainLoop *default_loop;
     GThread *thread;
-    GThread *default_thread;
     GMutex init_mutex;
     GCond init_cond;
     gboolean ready;
     gboolean init_success;
+    gboolean published;
     gchar *icon_dir;
     gchar *icon_path;
 } TrayIcon;
@@ -43,6 +42,17 @@ static void menu_item_callback(GtkMenuItem *item, gpointer user_data) {
     int tag = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(item), "callback_tag"));
     goTrayMenuItemActivated(tag);
     goMenuItemCallback(tag);
+}
+
+static void publish_tray_menu(TrayIcon* tray) {
+    if (!tray || !tray->indicator || !tray->menu) {
+        return;
+    }
+
+    gtk_widget_show_all(GTK_WIDGET(tray->menu));
+    app_indicator_set_menu(tray->indicator, tray->menu);
+    app_indicator_set_status(tray->indicator, APP_INDICATOR_STATUS_ACTIVE);
+    tray->published = TRUE;
 }
 
 // write_icon_file stores the tray icon as a named icon so AppIndicator can load it through its icon theme path.
@@ -94,8 +104,6 @@ static gboolean setup_tray(TrayIcon* tray) {
     }
 
     app_indicator_set_title(tray->indicator, "Wox");
-    app_indicator_set_menu(tray->indicator, tray->menu);
-    app_indicator_set_status(tray->indicator, APP_INDICATOR_STATUS_ACTIVE);
 
     return TRUE;
 }
@@ -120,22 +128,14 @@ static gpointer tray_thread_main(gpointer user_data) {
     return NULL;
 }
 
-static gpointer default_loop_thread_main(gpointer user_data) {
-    GMainLoop *loop = user_data;
-    g_main_loop_run(loop);
-    return NULL;
-}
-
 TrayIcon* create_tray() {
     TrayIcon* tray = g_new0(TrayIcon, 1);
     if (!tray) return NULL;
 
     g_mutex_init(&tray->init_mutex);
     g_cond_init(&tray->init_cond);
-    tray->context = g_main_context_new();
+    tray->context = g_main_context_ref(g_main_context_default());
     tray->loop = g_main_loop_new(tray->context, FALSE);
-    tray->default_loop = g_main_loop_new(NULL, FALSE);
-    tray->default_thread = g_thread_new("wox-tray-default", default_loop_thread_main, tray->default_loop);
     tray->thread = g_thread_new("wox-tray", tray_thread_main, tray);
 
     g_mutex_lock(&tray->init_mutex);
@@ -146,10 +146,7 @@ TrayIcon* create_tray() {
 
     if (!tray->init_success) {
         g_thread_join(tray->thread);
-        g_main_loop_quit(tray->default_loop);
-        g_thread_join(tray->default_thread);
         g_main_loop_unref(tray->loop);
-        g_main_loop_unref(tray->default_loop);
         g_main_context_unref(tray->context);
         g_cond_clear(&tray->init_cond);
         g_mutex_clear(&tray->init_mutex);
@@ -199,11 +196,10 @@ static gboolean add_menu_item_on_context(gpointer user_data) {
 
     gtk_menu_shell_append(GTK_MENU_SHELL(tray->menu), menu_item);
     gtk_widget_show(menu_item);
-    gtk_widget_show_all(GTK_WIDGET(tray->menu));
 
-    // Re-publish after mutation because some StatusNotifier hosts snapshot the DBusMenu when it is set.
-    app_indicator_set_menu(tray->indicator, tray->menu);
-    app_indicator_set_status(tray->indicator, APP_INDICATOR_STATUS_ACTIVE);
+    if (tray->published) {
+        publish_tray_menu(tray);
+    }
     goTrayMenuItemAdded(task->tag, task->label);
 
     g_free(task->label);
@@ -220,6 +216,17 @@ void add_menu_item(TrayIcon* tray, const char* label, int tag) {
     task->tag = tag;
 
     g_main_context_invoke_full(tray->context, G_PRIORITY_DEFAULT, add_menu_item_on_context, task, NULL);
+}
+
+static gboolean show_tray_on_context(gpointer user_data) {
+    publish_tray_menu(user_data);
+    return G_SOURCE_REMOVE;
+}
+
+void show_tray(TrayIcon* tray) {
+    if (!tray || !tray->context) return;
+
+    g_main_context_invoke_full(tray->context, G_PRIORITY_DEFAULT, show_tray_on_context, tray, NULL);
 }
 
 static gboolean cleanup_tray_on_context(gpointer user_data) {
@@ -263,18 +270,7 @@ void cleanup_tray(TrayIcon* tray) {
         g_thread_join(tray->thread);
     }
 
-    if (tray->default_loop) {
-        g_main_loop_quit(tray->default_loop);
-    }
-
-    if (tray->default_thread) {
-        g_thread_join(tray->default_thread);
-    }
-
     g_main_loop_unref(tray->loop);
-    if (tray->default_loop) {
-        g_main_loop_unref(tray->default_loop);
-    }
     g_main_context_unref(tray->context);
     g_cond_clear(&tray->init_cond);
     g_mutex_clear(&tray->init_mutex);
