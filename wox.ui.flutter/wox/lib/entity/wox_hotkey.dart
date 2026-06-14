@@ -1,7 +1,41 @@
 import 'dart:io';
 
 import 'package:flutter/services.dart';
-import 'package:hotkey_manager/hotkey_manager.dart';
+
+enum HotKeyModifier {
+  alt([PhysicalKeyboardKey.altLeft, PhysicalKeyboardKey.altRight]),
+  capsLock([PhysicalKeyboardKey.capsLock]),
+  control([PhysicalKeyboardKey.controlLeft, PhysicalKeyboardKey.controlRight]),
+  fn([PhysicalKeyboardKey.fn]),
+  meta([PhysicalKeyboardKey.metaLeft, PhysicalKeyboardKey.metaRight]),
+  shift([PhysicalKeyboardKey.shiftLeft, PhysicalKeyboardKey.shiftRight]);
+
+  const HotKeyModifier(this.physicalKeys);
+
+  final List<PhysicalKeyboardKey> physicalKeys;
+}
+
+enum HotKeyScope { system, inapp }
+
+class HotKey {
+  final KeyboardKey key;
+  final List<HotKeyModifier>? modifiers;
+  final HotKeyScope scope;
+
+  const HotKey({required this.key, this.modifiers, this.scope = HotKeyScope.system});
+}
+
+extension WoxKeyboardKeyExt on KeyboardKey {
+  String get keyLabel {
+    if (this is LogicalKeyboardKey) {
+      final logicalKey = this as LogicalKeyboardKey;
+      return logicalKey.keyLabel.isNotEmpty ? logicalKey.keyLabel : logicalKey.debugName ?? "Unknown";
+    }
+
+    final physicalKey = this is PhysicalKeyboardKey ? this as PhysicalKeyboardKey : null;
+    return WoxHotkey.physicalKeyLabel(physicalKey) ?? physicalKey?.debugName ?? "Unknown";
+  }
+}
 
 class HotkeyX {
   String raw;
@@ -337,6 +371,80 @@ class WoxHotkey {
     ];
 
     return allowedKeys.contains(key);
+  }
+
+  static String? physicalKeyLabel(PhysicalKeyboardKey? key) {
+    return switch (key) {
+      PhysicalKeyboardKey.keyA => "A",
+      PhysicalKeyboardKey.keyB => "B",
+      PhysicalKeyboardKey.keyC => "C",
+      PhysicalKeyboardKey.keyD => "D",
+      PhysicalKeyboardKey.keyE => "E",
+      PhysicalKeyboardKey.keyF => "F",
+      PhysicalKeyboardKey.keyG => "G",
+      PhysicalKeyboardKey.keyH => "H",
+      PhysicalKeyboardKey.keyI => "I",
+      PhysicalKeyboardKey.keyJ => "J",
+      PhysicalKeyboardKey.keyK => "K",
+      PhysicalKeyboardKey.keyL => "L",
+      PhysicalKeyboardKey.keyM => "M",
+      PhysicalKeyboardKey.keyN => "N",
+      PhysicalKeyboardKey.keyO => "O",
+      PhysicalKeyboardKey.keyP => "P",
+      PhysicalKeyboardKey.keyQ => "Q",
+      PhysicalKeyboardKey.keyR => "R",
+      PhysicalKeyboardKey.keyS => "S",
+      PhysicalKeyboardKey.keyT => "T",
+      PhysicalKeyboardKey.keyU => "U",
+      PhysicalKeyboardKey.keyV => "V",
+      PhysicalKeyboardKey.keyW => "W",
+      PhysicalKeyboardKey.keyX => "X",
+      PhysicalKeyboardKey.keyY => "Y",
+      PhysicalKeyboardKey.keyZ => "Z",
+      PhysicalKeyboardKey.digit0 => "0",
+      PhysicalKeyboardKey.digit1 => "1",
+      PhysicalKeyboardKey.digit2 => "2",
+      PhysicalKeyboardKey.digit3 => "3",
+      PhysicalKeyboardKey.digit4 => "4",
+      PhysicalKeyboardKey.digit5 => "5",
+      PhysicalKeyboardKey.digit6 => "6",
+      PhysicalKeyboardKey.digit7 => "7",
+      PhysicalKeyboardKey.digit8 => "8",
+      PhysicalKeyboardKey.digit9 => "9",
+      PhysicalKeyboardKey.f1 => "F1",
+      PhysicalKeyboardKey.f2 => "F2",
+      PhysicalKeyboardKey.f3 => "F3",
+      PhysicalKeyboardKey.f4 => "F4",
+      PhysicalKeyboardKey.f5 => "F5",
+      PhysicalKeyboardKey.f6 => "F6",
+      PhysicalKeyboardKey.f7 => "F7",
+      PhysicalKeyboardKey.f8 => "F8",
+      PhysicalKeyboardKey.f9 => "F9",
+      PhysicalKeyboardKey.f10 => "F10",
+      PhysicalKeyboardKey.f11 => "F11",
+      PhysicalKeyboardKey.f12 => "F12",
+      PhysicalKeyboardKey.enter => "Enter",
+      PhysicalKeyboardKey.escape => "Escape",
+      PhysicalKeyboardKey.backspace => "Backspace",
+      PhysicalKeyboardKey.tab => "Tab",
+      PhysicalKeyboardKey.space => "Space",
+      PhysicalKeyboardKey.delete => "Delete",
+      PhysicalKeyboardKey.arrowLeft => "Arrow Left",
+      PhysicalKeyboardKey.arrowDown => "Arrow Down",
+      PhysicalKeyboardKey.arrowRight => "Arrow Right",
+      PhysicalKeyboardKey.arrowUp => "Arrow Up",
+      PhysicalKeyboardKey.home => "Home",
+      PhysicalKeyboardKey.end => "End",
+      PhysicalKeyboardKey.pageUp => "Page Up",
+      PhysicalKeyboardKey.pageDown => "Page Down",
+      PhysicalKeyboardKey.insert => "Insert",
+      PhysicalKeyboardKey.capsLock => "CapsLock",
+      PhysicalKeyboardKey.shiftLeft || PhysicalKeyboardKey.shiftRight => "Shift",
+      PhysicalKeyboardKey.controlLeft || PhysicalKeyboardKey.controlRight => "Control",
+      PhysicalKeyboardKey.altLeft || PhysicalKeyboardKey.altRight => "Alt",
+      PhysicalKeyboardKey.metaLeft || PhysicalKeyboardKey.metaRight => "Meta",
+      _ => null,
+    };
   }
 
   static bool equals(HotKey? a, HotKey? b) {

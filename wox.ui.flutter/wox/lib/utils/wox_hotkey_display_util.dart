@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter/services.dart';
-import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 
 class WoxHotkeyDisplayUtil {

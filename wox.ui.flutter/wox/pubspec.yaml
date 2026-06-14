@@ -46,7 +46,6 @@ dependencies:
   lpinyin: ^2.0.3
   desktop_drop: ^0.7.0
   file_picker: ^10.3.8
-  hotkey_manager: ^0.2.3
   url_launcher: ^6.3.2
   flutter_image_slideshow: ^0.1.6
   dynamic_tabbar: ^1.0.9

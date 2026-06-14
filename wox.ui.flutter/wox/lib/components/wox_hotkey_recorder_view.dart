@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_hotkey_view.dart';
@@ -527,10 +526,8 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
                   child: Text(_isFocused ? tr("ui_hotkey_recording") : tr("ui_hotkey_click_to_set"), style: TextStyle(color: Colors.grey[400], fontSize: 13)),
                 )
                 : WoxHotkeyView(
-                  // Feature fix: the recorder preview used hotkey_manager's
-                  // raw key labels, which still rendered Apple-style modifier
-                  // glyphs on non-macOS. Reusing WoxHotkeyView keeps settings
-                  // and toolbar shortcut labels platform-consistent.
+                  // Reusing WoxHotkeyView keeps settings and toolbar shortcut
+                  // labels platform-consistent.
                   hotkey: _hotKey!,
                   backgroundColor: Theme.of(context).canvasColor,
                   borderColor: Theme.of(context).dividerColor,
