@@ -3,6 +3,7 @@
 #include <cairo.h>
 #include <flutter_linux/flutter_linux.h>
 #include <gdk/gdk.h>
+#include <glib-object.h>
 #include <cstdlib>
 #include <math.h>
 #include <string>
@@ -56,8 +57,28 @@ struct _MyApplication
   GtkWindow *window; // Store reference to the main window
   gulong previous_active_window;
   gboolean restore_previous_window_on_hide;
+  guint set_size_sequence;
+  gboolean has_pending_size;
+  guint pending_size_sequence;
+  int pending_size_width;
+  int pending_size_height;
+  gboolean has_pending_bounds;
+  guint pending_bounds_sequence;
+  int pending_bounds_x;
+  int pending_bounds_y;
+  int pending_bounds_width;
+  int pending_bounds_height;
   std::vector<struct CachedLinuxDisplayCapture> cached_x11_display_captures;
   struct CachedPortalCapture cached_portal_capture;
+};
+
+// PendingWindowSize carries a resize request into delayed GTK callbacks.
+struct PendingWindowSize
+{
+  MyApplication *self;
+  guint sequence;
+  int target_width;
+  int target_height;
 };
 
 // Global variable to store method channel for window events
@@ -67,10 +88,10 @@ G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
 static void log(const char *format, ...)
 {
-  // va_list args;
-  // va_start(args, format);
-  // g_logv(G_LOG_DOMAIN, G_LOG_LEVEL_MESSAGE, format, args);
-  // va_end(args);
+  va_list args;
+  va_start(args, format);
+  g_logv(G_LOG_DOMAIN, G_LOG_LEVEL_MESSAGE, format, args);
+  va_end(args);
 }
 
 // Function to draw rounded rectangle
@@ -117,6 +138,216 @@ static void set_window_shape(GtkWindow *window)
   cairo_region_destroy(region);
 
   cairo_surface_destroy(surface);
+}
+
+// log_window_bounds_state records the target and actual GTK window state so
+// Linux positioning failures can be separated between X11, Wayland, and timing.
+static void log_window_bounds_state(GtkWindow *window, const char *stage,
+                                    int target_x, int target_y,
+                                    int target_width, int target_height)
+{
+  GtkWidget *widget = GTK_WIDGET(window);
+  GdkWindow *gdk_window = gtk_widget_get_window(widget);
+  GdkDisplay *display = gtk_widget_get_display(widget);
+
+  int actual_x = 0;
+  int actual_y = 0;
+  int actual_width = 0;
+  int actual_height = 0;
+  gtk_window_get_position(window, &actual_x, &actual_y);
+  gtk_window_get_size(window, &actual_width, &actual_height);
+
+  const char *display_name = display != nullptr ? gdk_display_get_name(display) : "none";
+  const char *display_type = display != nullptr ? G_OBJECT_TYPE_NAME(display) : "none";
+  const char *window_type = gdk_window != nullptr ? G_OBJECT_TYPE_NAME(gdk_window) : "none";
+  const char *backend = window_type;
+#ifdef GDK_WINDOWING_X11
+  if (gdk_window != nullptr && GDK_IS_X11_WINDOW(gdk_window))
+  {
+    backend = "x11";
+  }
+#endif
+
+  GdkRectangle monitor_workarea = {0, 0, 0, 0};
+  int monitor_scale = 0;
+  if (display != nullptr)
+  {
+    GdkMonitor *monitor = gdk_display_get_monitor_at_point(
+        display, target_x + target_width / 2, target_y + target_height / 2);
+    if (monitor == nullptr)
+    {
+      monitor = gdk_display_get_primary_monitor(display);
+    }
+    if (monitor != nullptr)
+    {
+      gdk_monitor_get_workarea(monitor, &monitor_workarea);
+      monitor_scale = gdk_monitor_get_scale_factor(monitor);
+    }
+  }
+
+  log("linux-window-bounds stage=%s backend=%s displayType=%s display=%s "
+      "windowType=%s visible=%d realized=%d mapped=%d target=%d,%d %dx%d "
+      "actual=%d,%d %dx%d monitorWorkarea=%d,%d %dx%d monitorScale=%d",
+      stage, backend, display_type, display_name, window_type,
+      gtk_widget_get_visible(widget), gtk_widget_get_realized(widget),
+      gtk_widget_get_mapped(widget), target_x, target_y, target_width,
+      target_height, actual_x, actual_y, actual_width, actual_height,
+      monitor_workarea.x, monitor_workarea.y, monitor_workarea.width,
+      monitor_workarea.height, monitor_scale);
+}
+
+static const char *safe_string(const char *value)
+{
+  return value != nullptr ? value : "";
+}
+
+// create_linux_window_backend_info exposes GTK backend details to Dart logs so
+// visual placement bugs can be tied to X11 or Wayland behavior.
+static FlValue *create_linux_window_backend_info(GtkWindow *window)
+{
+  GtkWidget *widget = GTK_WIDGET(window);
+  GdkWindow *gdk_window = gtk_widget_get_window(widget);
+  GdkDisplay *display = gtk_widget_get_display(widget);
+
+  const char *display_name = display != nullptr ? gdk_display_get_name(display) : "none";
+  const char *display_type = display != nullptr ? G_OBJECT_TYPE_NAME(display) : "none";
+  const char *window_type = gdk_window != nullptr ? G_OBJECT_TYPE_NAME(gdk_window) : "none";
+  const char *backend = window_type;
+  gboolean is_x11 = FALSE;
+#ifdef GDK_WINDOWING_X11
+  if (gdk_window != nullptr && GDK_IS_X11_WINDOW(gdk_window))
+  {
+    backend = "x11";
+    is_x11 = TRUE;
+  }
+#endif
+
+  int actual_x = 0;
+  int actual_y = 0;
+  int actual_width = 0;
+  int actual_height = 0;
+  gtk_window_get_position(window, &actual_x, &actual_y);
+  gtk_window_get_size(window, &actual_width, &actual_height);
+
+  FlValue *result = fl_value_new_map();
+  fl_value_set_string_take(result, "backend", fl_value_new_string(backend));
+  fl_value_set_string_take(result, "isX11", fl_value_new_bool(is_x11));
+  fl_value_set_string_take(result, "displayType", fl_value_new_string(display_type));
+  fl_value_set_string_take(result, "display", fl_value_new_string(display_name));
+  fl_value_set_string_take(result, "windowType", fl_value_new_string(window_type));
+  fl_value_set_string_take(result, "visible", fl_value_new_bool(gtk_widget_get_visible(widget)));
+  fl_value_set_string_take(result, "realized", fl_value_new_bool(gtk_widget_get_realized(widget)));
+  fl_value_set_string_take(result, "mapped", fl_value_new_bool(gtk_widget_get_mapped(widget)));
+  fl_value_set_string_take(result, "x", fl_value_new_int(actual_x));
+  fl_value_set_string_take(result, "y", fl_value_new_int(actual_y));
+  fl_value_set_string_take(result, "width", fl_value_new_int(actual_width));
+  fl_value_set_string_take(result, "height", fl_value_new_int(actual_height));
+  fl_value_set_string_take(result, "gdkBackendEnv", fl_value_new_string(safe_string(g_getenv("GDK_BACKEND"))));
+  fl_value_set_string_take(result, "waylandDisplayEnv", fl_value_new_string(safe_string(g_getenv("WAYLAND_DISPLAY"))));
+  fl_value_set_string_take(result, "displayEnv", fl_value_new_string(safe_string(g_getenv("DISPLAY"))));
+
+  return result;
+}
+
+// new_pending_window_size keeps the application alive until the delayed
+// resize callback has either applied or discarded the request.
+static PendingWindowSize *new_pending_window_size(MyApplication *self,
+                                                  guint sequence,
+                                                  int target_width,
+                                                  int target_height)
+{
+  PendingWindowSize *pending_size = new PendingWindowSize;
+  pending_size->self = MY_APPLICATION(g_object_ref(self));
+  pending_size->sequence = sequence;
+  pending_size->target_width = target_width;
+  pending_size->target_height = target_height;
+  return pending_size;
+}
+
+// record_window_size_request tracks the latest native size target so delayed
+// GTK callbacks can reject stale resize or bounds requests.
+static guint record_window_size_request(MyApplication *self, int width,
+                                        int height)
+{
+  const guint sequence = ++self->set_size_sequence;
+  self->has_pending_size = TRUE;
+  self->pending_size_sequence = sequence;
+  self->pending_size_width = width;
+  self->pending_size_height = height;
+  return sequence;
+}
+
+// apply_window_size updates all GTK size hints used by the compositor. On
+// Wayland, a bare gtk_window_resize request can be superseded by a later GTK
+// configure cycle, so the default size and widget request are kept in sync.
+static void apply_window_size(GtkWindow *window, int width, int height)
+{
+  gtk_window_set_default_size(window, width, height);
+  gtk_widget_set_size_request(GTK_WIDGET(window), width, height);
+  gtk_window_resize(window, width, height);
+}
+
+// apply_pending_window_size repeats only the latest size request after GTK has
+// processed map/layout callbacks. Older callbacks are ignored so a stale small
+// query-hotkey size cannot overwrite the larger result-list size.
+static gboolean apply_pending_window_size(gpointer user_data)
+{
+  PendingWindowSize *pending_size = static_cast<PendingWindowSize *>(user_data);
+  MyApplication *self = pending_size->self;
+  if (self->window != NULL &&
+      self->has_pending_size &&
+      self->pending_size_sequence == pending_size->sequence &&
+      self->pending_size_width == pending_size->target_width &&
+      self->pending_size_height == pending_size->target_height)
+  {
+    apply_window_size(self->window, self->pending_size_width,
+                      self->pending_size_height);
+  }
+
+  g_object_unref(self);
+  delete pending_size;
+  return G_SOURCE_REMOVE;
+}
+
+// apply_window_bounds uses GTK top-level APIs so the window manager sees the move request.
+// X11 window managers normally honor both resize and move. Native Wayland compositors
+// may honor the resize but ignore the absolute move because top-level placement belongs
+// to the compositor, so Dart avoids calling this for initial native Wayland placement.
+static void apply_window_bounds(GtkWindow *window, int x, int y, int width,
+                                int height)
+{
+  apply_window_size(window, width, height);
+  gtk_window_move(window, x, y);
+}
+
+// apply_pending_window_bounds repeats the move after the GTK map cycle,
+// when early show-time moves can otherwise be ignored.
+static gboolean apply_pending_window_bounds(gpointer user_data)
+{
+  MyApplication *self = MY_APPLICATION(user_data);
+  if (self->window != NULL &&
+      self->has_pending_bounds &&
+      self->pending_bounds_sequence == self->pending_size_sequence)
+  {
+    log_window_bounds_state(self->window, "pending-before",
+                            self->pending_bounds_x, self->pending_bounds_y,
+                            self->pending_bounds_width,
+                            self->pending_bounds_height);
+    apply_window_bounds(self->window, self->pending_bounds_x,
+                        self->pending_bounds_y, self->pending_bounds_width,
+                        self->pending_bounds_height);
+    log_window_bounds_state(self->window, "pending-after",
+                            self->pending_bounds_x, self->pending_bounds_y,
+                            self->pending_bounds_width,
+                            self->pending_bounds_height);
+    self->has_pending_bounds = FALSE;
+  }
+  else if (self->has_pending_bounds)
+  {
+    self->has_pending_bounds = FALSE;
+  }
+  g_object_unref(self);
+  return G_SOURCE_REMOVE;
 }
 
 // Callback function to handle window size changes
@@ -2246,7 +2477,21 @@ static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
       double width = fl_value_get_float(fl_value_lookup_string(args, "width"));
       double height =
           fl_value_get_float(fl_value_lookup_string(args, "height"));
-      gtk_window_resize(window, (int)width, (int)height);
+      const int target_width = (int)width;
+      const int target_height = (int)height;
+      const guint sequence = record_window_size_request(self, target_width,
+                                                        target_height);
+
+      apply_window_size(window, target_width, target_height);
+      g_idle_add(apply_pending_window_size,
+                 new_pending_window_size(self, sequence, target_width,
+                                         target_height));
+      g_timeout_add(16, apply_pending_window_size,
+                    new_pending_window_size(self, sequence, target_width,
+                                            target_height));
+      g_timeout_add(80, apply_pending_window_size,
+                    new_pending_window_size(self, sequence, target_width,
+                                            target_height));
       response = FL_METHOD_RESPONSE(
           fl_method_success_response_new(fl_value_new_null()));
     }
@@ -2259,16 +2504,26 @@ static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
       double y = fl_value_get_float(fl_value_lookup_string(args, "y"));
       double width = fl_value_get_float(fl_value_lookup_string(args, "width"));
       double height = fl_value_get_float(fl_value_lookup_string(args, "height"));
-      GdkWindow *gdk_window = gtk_widget_get_window(GTK_WIDGET(window));
-      if (gdk_window != nullptr)
-      {
-        gdk_window_move_resize(gdk_window, (int)x, (int)y, (int)width, (int)height);
-      }
-      else
-      {
-        gtk_window_move(window, (int)x, (int)y);
-        gtk_window_resize(window, (int)width, (int)height);
-      }
+      self->has_pending_bounds = TRUE;
+      self->pending_bounds_sequence = record_window_size_request(self, (int)width,
+                                                                 (int)height);
+      self->pending_bounds_x = (int)x;
+      self->pending_bounds_y = (int)y;
+      self->pending_bounds_width = (int)width;
+      self->pending_bounds_height = (int)height;
+
+      log_window_bounds_state(window, "setBounds-request",
+                              self->pending_bounds_x, self->pending_bounds_y,
+                              self->pending_bounds_width,
+                              self->pending_bounds_height);
+      apply_window_bounds(window, self->pending_bounds_x, self->pending_bounds_y,
+                          self->pending_bounds_width,
+                          self->pending_bounds_height);
+      log_window_bounds_state(window, "setBounds-after-immediate",
+                              self->pending_bounds_x, self->pending_bounds_y,
+                              self->pending_bounds_width,
+                              self->pending_bounds_height);
+      g_idle_add(apply_pending_window_bounds, g_object_ref(self));
       response = FL_METHOD_RESPONSE(
           fl_method_success_response_new(fl_value_new_null()));
     }
@@ -2289,6 +2544,11 @@ static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
     g_autoptr(FlValue) result = fl_value_new_map();
     fl_value_set_string_take(result, "width", fl_value_new_int(w));
     fl_value_set_string_take(result, "height", fl_value_new_int(h));
+    response = FL_METHOD_RESPONSE(fl_method_success_response_new(result));
+  }
+  else if (strcmp(method, "getBackendInfo") == 0)
+  {
+    g_autoptr(FlValue) result = create_linux_window_backend_info(window);
     response = FL_METHOD_RESPONSE(fl_method_success_response_new(result));
   }
   else if (strcmp(method, "setPosition") == 0)
@@ -2593,6 +2853,13 @@ static void my_application_activate(GApplication *application)
   g_signal_connect(window, "focus-out-event", G_CALLBACK(on_window_focus_out),
                    self);
 
+  // Flutter's Linux engine starts after the GTK view is realized. Wox launches
+  // hidden, so realize the window/view explicitly before local_command_line hides
+  // the window; otherwise Dart main never runs and the backend waits forever for
+  // /on/ready.
+  gtk_widget_realize(GTK_WIDGET(window));
+  gtk_widget_realize(GTK_WIDGET(view));
+
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }
 
@@ -2671,6 +2938,17 @@ static void my_application_init(MyApplication *self)
   self->window = NULL;
   self->previous_active_window = 0;
   self->restore_previous_window_on_hide = FALSE;
+  self->set_size_sequence = 0;
+  self->has_pending_size = FALSE;
+  self->pending_size_sequence = 0;
+  self->pending_size_width = 0;
+  self->pending_size_height = 0;
+  self->has_pending_bounds = FALSE;
+  self->pending_bounds_sequence = 0;
+  self->pending_bounds_x = 0;
+  self->pending_bounds_y = 0;
+  self->pending_bounds_width = 0;
+  self->pending_bounds_height = 0;
 }
 
 MyApplication *my_application_new()

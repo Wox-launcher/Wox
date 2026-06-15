@@ -5,7 +5,6 @@ class WoxSetting {
   late bool enableAutostart;
   late String mainHotkey;
   late String selectionHotkey;
-  late bool enableHyperKey;
   late List<IgnoredHotkeyApp> ignoredHotkeyApps;
   late String logLevel;
   late bool usePinYin;
@@ -24,6 +23,7 @@ class WoxSetting {
   late String launchMode;
   late String startPage;
   late String showPosition;
+  late bool isLinuxWaylandSession;
   late List<AIProvider> aiProviders;
   late int appWidth;
   late int maxResultCount;
@@ -55,7 +55,6 @@ class WoxSetting {
     required this.enableAutostart,
     required this.mainHotkey,
     required this.selectionHotkey,
-    required this.enableHyperKey,
     required this.ignoredHotkeyApps,
     required this.logLevel,
     required this.usePinYin,
@@ -71,6 +70,7 @@ class WoxSetting {
     required this.launchMode,
     required this.startPage,
     required this.showPosition,
+    required this.isLinuxWaylandSession,
     required this.aiProviders,
     required this.appWidth,
     required this.maxResultCount,
@@ -101,7 +101,6 @@ class WoxSetting {
     enableAutostart = json['EnableAutostart'] ?? false;
     mainHotkey = json['MainHotkey'];
     selectionHotkey = json['SelectionHotkey'];
-    enableHyperKey = json['EnableHyperKey'] ?? false;
     if (json['IgnoredHotkeyApps'] != null) {
       ignoredHotkeyApps = <IgnoredHotkeyApp>[];
       json['IgnoredHotkeyApps'].forEach((v) {
@@ -148,6 +147,7 @@ class WoxSetting {
 
     launchMode = json['LaunchMode'] ?? 'continue';
     startPage = json['StartPage'] ?? 'mru';
+    isLinuxWaylandSession = json['IsLinuxWaylandSession'] ?? false;
 
     if (json['AIProviders'] != null) {
       aiProviders = <AIProvider>[];
@@ -188,7 +188,6 @@ class WoxSetting {
     data['EnableAutostart'] = enableAutostart;
     data['MainHotkey'] = mainHotkey;
     data['SelectionHotkey'] = selectionHotkey;
-    data['EnableHyperKey'] = enableHyperKey;
     data['IgnoredHotkeyApps'] = ignoredHotkeyApps;
     data['LogLevel'] = logLevel;
     data['UsePinYin'] = usePinYin;
@@ -204,6 +203,7 @@ class WoxSetting {
     data['LaunchMode'] = launchMode;
     data['StartPage'] = startPage;
     data['ShowPosition'] = showPosition;
+    data['IsLinuxWaylandSession'] = isLinuxWaylandSession;
     data['AIProviders'] = aiProviders;
     data['AppWidth'] = appWidth;
     data['MaxResultCount'] = maxResultCount;

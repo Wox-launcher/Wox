@@ -7,6 +7,10 @@ int isKeyPressed(int vkCode) {
     return (GetAsyncKeyState(vkCode) & 0x8000) != 0;
 }
 
+int isCapsLockEnabled() {
+    return (GetKeyState(VK_CAPITAL) & 0x0001) != 0;
+}
+
 const char* simulateCtrlC() {
     INPUT ip[4];
     ZeroMemory(ip, sizeof(ip));
@@ -78,6 +82,14 @@ const char* simulateCapsLockTap() {
 
     return NULL;
 }
+
+const char* setCapsLockState(int enabled) {
+    if (isCapsLockEnabled() == (enabled != 0)) {
+        return NULL;
+    }
+
+    return simulateCapsLockTap();
+}
 */
 import "C"
 import (
@@ -117,6 +129,34 @@ func simulateCapsLockTap() error {
 	}
 
 	return nil
+}
+
+func setCapsLockState(enabled bool) error {
+	value := 0
+	if enabled {
+		value = 1
+	}
+
+	err := C.setCapsLockState(C.int(value))
+	if err != nil {
+		errMsg := C.GoString(err)
+		return fmt.Errorf("failed to set CapsLock state: %v", errMsg)
+	}
+
+	return nil
+}
+
+func isCapsLockEnabled() bool {
+	return C.isCapsLockEnabled() != 0
+}
+
+func isKeyPressed(key Key) bool {
+	vkCode, err := keyToWindowsVK(key)
+	if err != nil {
+		return false
+	}
+
+	return C.isKeyPressed(C.int(vkCode)) != 0
 }
 
 // We need to wait for all modifiers to be released before simulating Ctrl+C/Ctrl+V.

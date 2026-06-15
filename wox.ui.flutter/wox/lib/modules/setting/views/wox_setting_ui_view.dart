@@ -97,28 +97,30 @@ class WoxSettingUIView extends WoxSettingBaseView {
           formSection(
             title: controller.tr("ui_ui_section_launcher"),
             children: [
-              // The UI page grew beyond a single visual stream after adding Glance, so related launcher appearance settings are grouped to keep scanning predictable.
-              formField(
-                settingKey: "ShowPosition",
-                label: controller.tr("ui_show_position"),
-                tips: controller.tr("ui_show_position_tips"),
-                child: Obx(() {
-                  return WoxDropdownButton<String>(
-                    items: [
-                      WoxDropdownItem(value: "mouse_screen", label: controller.tr("ui_show_position_mouse_screen")),
-                      WoxDropdownItem(value: "active_screen", label: controller.tr("ui_show_position_active_screen")),
-                      WoxDropdownItem(value: "last_location", label: controller.tr("ui_show_position_last_location")),
-                    ],
-                    value: controller.woxSetting.value.showPosition,
-                    onChanged: (v) {
-                      if (v != null) {
-                        controller.updateConfig("ShowPosition", v);
-                      }
-                    },
-                    isExpanded: true,
-                  );
-                }),
-              ),
+              if (!controller.woxSetting.value.isLinuxWaylandSession)
+                // Wayland compositors own top-level window placement, so Wox cannot honor
+                // launcher position preferences there.
+                formField(
+                  settingKey: "ShowPosition",
+                  label: controller.tr("ui_show_position"),
+                  tips: controller.tr("ui_show_position_tips"),
+                  child: Obx(() {
+                    return WoxDropdownButton<String>(
+                      items: [
+                        WoxDropdownItem(value: "mouse_screen", label: controller.tr("ui_show_position_mouse_screen")),
+                        WoxDropdownItem(value: "active_screen", label: controller.tr("ui_show_position_active_screen")),
+                        WoxDropdownItem(value: "last_location", label: controller.tr("ui_show_position_last_location")),
+                      ],
+                      value: controller.woxSetting.value.showPosition,
+                      onChanged: (v) {
+                        if (v != null) {
+                          controller.updateConfig("ShowPosition", v);
+                        }
+                      },
+                      isExpanded: true,
+                    );
+                  }),
+                ),
               formField(
                 settingKey: "ShowTray",
                 label: controller.tr("ui_show_tray"),

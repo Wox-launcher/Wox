@@ -68,6 +68,14 @@ func runShowDesktopCommand() (*exec.Cmd, error) {
 	return shell.Run("wmctrl", "-k", "on")
 }
 
+func isShowTaskViewCommandAvailable() bool {
+	return false
+}
+
+func runShowTaskViewCommand() (*exec.Cmd, error) {
+	return nil, fmt.Errorf("task view is not supported on Linux")
+}
+
 func isShowScreenSaverCommandAvailable() bool {
 	return commandExists("xdg-screensaver")
 }

@@ -110,6 +110,13 @@ static LRESULT CALLBACK lowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
     if (nCode == HC_ACTION)
     {
         KBDLLHOOKSTRUCT *event = (KBDLLHOOKSTRUCT *)lParam;
+        // Let Caps Lock events created by SetCapsLockState update the OS toggle state
+        // without re-entering Wox's Caps Lock combo state machine.
+        if (event->vkCode == VK_CAPITAL && (event->flags & LLKHF_INJECTED))
+        {
+            return CallNextHookEx(NULL, nCode, wParam, lParam);
+        }
+
         int eventKind = -1;
         if (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN)
         {

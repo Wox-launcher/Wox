@@ -484,7 +484,7 @@ class WoxSettingController extends GetxController {
   }
 
   List<WoxSettingSearchResult> _buildBuiltInSettingSearchResults() {
-    return _builtInSettingSearchDefinitions.map((definition) {
+    return _builtInSettingSearchDefinitions.where(_isBuiltInSettingSearchDefinitionVisible).map((definition) {
       final title = tr(definition.titleKey);
       final subtitle = definition.subtitleKey.isEmpty ? tr(_settingNavTitleKey(definition.navPath)) : tr(definition.subtitleKey);
       // Search refinement: subtitles are explanatory result text, not stable
@@ -503,6 +503,15 @@ class WoxSettingController extends GetxController {
         score: 0,
       );
     }).toList();
+  }
+
+  bool _isBuiltInSettingSearchDefinitionVisible(_BuiltInSettingSearchDefinition definition) {
+    // Keep search aligned with runtime-disabled Wayland settings so it does not
+    // navigate to controls hidden from their settings pages.
+    if (!woxSetting.value.isLinuxWaylandSession) {
+      return true;
+    }
+    return definition.settingKey != 'ShowPosition' && definition.settingKey != 'SelectionHotkey' && definition.settingKey != 'IgnoredHotkeyApps' && definition.settingKey != 'TrayQueries';
   }
 
   List<WoxSettingSearchResult> _buildInstalledPluginSearchResults() {
@@ -912,7 +921,7 @@ class WoxSettingController extends GetxController {
     if (key == "ShowPosition" && value == WoxPositionTypeEnum.POSITION_TYPE_LAST_LOCATION.code) {
       try {
         final launcherController = Get.find<WoxLauncherController>();
-        launcherController.saveWindowPositionIfNeeded();
+        launcherController.saveWindowPositionIfNeeded(reason: "setting-switch");
         Logger.instance.info(traceId, 'Saved current window position when switching to last_location');
       } catch (e) {
         Logger.instance.error(traceId, 'Failed to save window position when switching to last_location: $e');
@@ -2162,13 +2171,6 @@ const List<_BuiltInSettingSearchDefinition> _builtInSettingSearchDefinitions = [
     searchKeywords: ['update channel', 'release channel', 'stable', 'beta', 'stable channel', 'beta channel', 'prerelease'],
   ),
   _BuiltInSettingSearchDefinition(settingKey: 'MainHotkey', navPath: 'general', titleKey: 'ui_hotkey', subtitleKey: 'ui_hotkey_tips', searchKeywords: ['shortcut', 'main hotkey']),
-  _BuiltInSettingSearchDefinition(
-    settingKey: 'EnableHyperKey',
-    navPath: 'general',
-    titleKey: 'ui_enable_hyper_key',
-    subtitleKey: 'ui_enable_hyper_key_tips',
-    searchKeywords: ['hyper key', 'caps lock'],
-  ),
   _BuiltInSettingSearchDefinition(
     settingKey: 'SelectionHotkey',
     navPath: 'general',

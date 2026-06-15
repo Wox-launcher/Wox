@@ -1,8 +1,22 @@
 package keyboard
 
 /*
-#cgo LDFLAGS: -framework ApplicationServices
+#cgo LDFLAGS: -framework ApplicationServices -framework IOKit
 #include <ApplicationServices/ApplicationServices.h>
+#include <IOKit/IOKitLib.h>
+#include <IOKit/hidsystem/IOHIDLib.h>
+#include <IOKit/hidsystem/IOHIDParameter.h>
+#include <IOKit/hidsystem/IOHIDShared.h>
+#include <mach/mach.h>
+#include <stdbool.h>
+#include <stdio.h>
+
+static char gCapsLockStateError[256];
+
+static const char* capsLockStateError(const char* message, kern_return_t status) {
+    snprintf(gCapsLockStateError, sizeof(gCapsLockStateError), "%s (status=%d)", message, status);
+    return gCapsLockStateError;
+}
 
 const char* simulateCopy() {
     CGEventRef pressC = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)8, true);
@@ -66,6 +80,38 @@ const char* simulateCapsLockTap() {
 
     return NULL;
 }
+
+const char* setCapsLockState(int enabled) {
+    io_service_t service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching(kIOHIDSystemClass));
+    if (!service) {
+        return "Unable to find IOHIDSystem";
+    }
+
+    io_connect_t connect = IO_OBJECT_NULL;
+    kern_return_t status = IOServiceOpen(service, mach_task_self(), kIOHIDParamConnectType, &connect);
+    IOObjectRelease(service);
+    if (status != KERN_SUCCESS) {
+        return capsLockStateError("Unable to open IOHIDSystem", status);
+    }
+
+    status = IOHIDSetModifierLockState(connect, kIOHIDCapsLockState, enabled != 0);
+    IOServiceClose(connect);
+    if (status != KERN_SUCCESS) {
+        return capsLockStateError("Unable to set Caps Lock state", status);
+    }
+
+    return NULL;
+}
+
+int isKeyPressed(unsigned short keyCode) {
+    return CGEventSourceKeyState(kCGEventSourceStateHIDSystemState, (CGKeyCode)keyCode) ? 1 : 0;
+}
+
+int isCapsLockEnabled() {
+    return (CGEventSourceFlagsState(kCGEventSourceStateHIDSystemState) & kCGEventFlagMaskAlphaShift) != 0;
+}
+
+int woxDarwinIsPhysicalCapsLockPressed(int *available);
 */
 import "C"
 import "fmt"
@@ -78,6 +124,42 @@ func simulateCopy() error {
 	}
 
 	return nil
+}
+
+// setCapsLockState uses IOHIDSystem so Caps Lock combos can undo Caps Lock state without posting another key event.
+func setCapsLockState(enabled bool) error {
+	value := 0
+	if enabled {
+		value = 1
+	}
+
+	err := C.setCapsLockState(C.int(value))
+	if err != nil {
+		errMsg := C.GoString(err)
+		return fmt.Errorf("failed to set CapsLock state: %v", errMsg)
+	}
+
+	return nil
+}
+
+func isCapsLockEnabled() bool {
+	return C.isCapsLockEnabled() != 0
+}
+
+// isKeyPressed queries the hardware key state, which differs from the Caps Lock toggle state on macOS.
+func isKeyPressed(key Key) bool {
+	if key == KeyCapsLock {
+		available := C.int(0)
+		pressed := C.woxDarwinIsPhysicalCapsLockPressed(&available)
+		return available != 0 && pressed != 0
+	}
+
+	keyCode, err := keyToDarwinKeyCode(key)
+	if err != nil {
+		return false
+	}
+
+	return C.isKeyPressed(C.ushort(keyCode)) != 0
 }
 
 func simulatePaste() error {

@@ -53,6 +53,8 @@ RELEASE_DIR := release
 APPIMAGE_TOOL ?= appimagetool.AppImage
 APPIMAGE_DIR := $(RELEASE_DIR)/wox.AppDir
 APPIMAGE_NAME := wox-linux-$(ARCH).AppImage
+APPIMAGE_DESKTOP_FILE := io.github.WoxLauncher.Wox.desktop
+APPIMAGE_ICON_FILE := io.github.WoxLauncher.Wox.png
 ifeq ($(ARCH),amd64)
 	APPIMAGE_ARCH := x86_64
 else
@@ -159,13 +161,13 @@ ifeq ($(PLATFORM),linux)
 	mkdir -p $(APPIMAGE_DIR)/usr/share/applications
 	cp $(RELEASE_DIR)/wox-linux-$(ARCH) $(APPIMAGE_DIR)/usr/bin/wox
 	chmod +x $(APPIMAGE_DIR)/usr/bin/wox
-	cp assets/linux/wox.desktop $(APPIMAGE_DIR)/wox.desktop
-	cp assets/linux/wox.desktop $(APPIMAGE_DIR)/usr/share/applications/wox.desktop
+	cp assets/linux/wox.desktop $(APPIMAGE_DIR)/$(APPIMAGE_DESKTOP_FILE)
+	cp assets/linux/wox.desktop $(APPIMAGE_DIR)/usr/share/applications/$(APPIMAGE_DESKTOP_FILE)
 	cp assets/linux/AppRun $(APPIMAGE_DIR)/AppRun
 	chmod +x $(APPIMAGE_DIR)/AppRun
-	cp assets/app.png $(APPIMAGE_DIR)/wox.png
+	cp assets/app.png $(APPIMAGE_DIR)/$(APPIMAGE_ICON_FILE)
 	cp assets/app.png $(APPIMAGE_DIR)/.DirIcon
-	cp assets/app.png $(APPIMAGE_DIR)/usr/share/icons/hicolor/256x256/apps/wox.png
+	cp assets/app.png $(APPIMAGE_DIR)/usr/share/icons/hicolor/256x256/apps/$(APPIMAGE_ICON_FILE)
 	ARCH=$(APPIMAGE_ARCH) $(APPIMAGE_TOOL) $(APPIMAGE_DIR) $(RELEASE_DIR)/$(APPIMAGE_NAME)
 else
 	@echo "appimage target is only supported on Linux"

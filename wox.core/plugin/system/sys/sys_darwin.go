@@ -79,6 +79,14 @@ func runShowDesktopCommand() (*exec.Cmd, error) {
 	return runAppleScript(`tell application "System Events" to key code 103`)
 }
 
+func isShowTaskViewCommandAvailable() bool {
+	return false
+}
+
+func runShowTaskViewCommand() (*exec.Cmd, error) {
+	return nil, fmt.Errorf("task view is not supported on macOS")
+}
+
 func isShowScreenSaverCommandAvailable() bool {
 	return true
 }

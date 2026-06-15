@@ -107,13 +107,6 @@
 				// Bug fix: VS Code compounds start debug configurations in parallel, so Flutter
 				// waits for the shared core readiness task before it starts loading theme/settings.
 				"preLaunchTask": "Wait Core Dev Server",
-				// Bug fix: direct VS Code Flutter debugging bypasses wox.core's UI child
-				// launcher, so the GDK_BACKEND=x11 override in ui/manager.go would not
-				// apply. Keep debug launches on the same XWayland path under Linux
-				// Wayland so the launcher window positioning matches normal startup.
-				"env": {
-					"GDK_BACKEND": "x11"
-				},
 				// "flutterMode": "profile"
 			},
 			{

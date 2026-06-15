@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_hotkey_view.dart';
@@ -141,13 +140,6 @@ class _HotkeyTracker {
     return modifiers;
   }
 
-  bool _isExpandedHyperModifierSet(Set<HotKeyModifier> modifiers) {
-    return modifiers.contains(HotKeyModifier.control) &&
-        modifiers.contains(HotKeyModifier.shift) &&
-        modifiers.contains(HotKeyModifier.alt) &&
-        modifiers.contains(HotKeyModifier.meta);
-  }
-
   String _debugPhysicalKeys(Set<PhysicalKeyboardKey> keys) {
     final labels = keys.map((key) => "${key.keyLabel}/${key.usbHidUsage}").toList()..sort();
     return "[${labels.join(",")}]";
@@ -216,7 +208,7 @@ class _HotkeyTracker {
   }
 
   /// Process a keyboard event and report both the detected hotkey and whether the event was handled.
-  bool _isHyperKeyEvent(KeyEvent keyEvent) {
+  bool _isCapsLockKeyEvent(KeyEvent keyEvent) {
     return keyEvent.physicalKey == PhysicalKeyboardKey.capsLock || keyEvent.logicalKey == LogicalKeyboardKey.capsLock;
   }
 
@@ -224,7 +216,7 @@ class _HotkeyTracker {
     _pruneExpiredSynthesizedModifiers();
     _pruneExpiredPendingOutOfOrderKey();
 
-    if (_isHyperKeyEvent(keyEvent)) {
+    if (_isCapsLockKeyEvent(keyEvent)) {
       if (keyEvent is KeyDownEvent) {
         _capsPressed = true;
       } else if (keyEvent is KeyUpEvent) {
@@ -317,13 +309,7 @@ class _HotkeyTracker {
     if (keyEvent is! KeyUpEvent && WoxHotkey.isAllowedKey(keyEvent.physicalKey)) {
       if (_capsPressed) {
         _clearPendingOutOfOrderKey();
-        return _HotkeyTrackerResult(hotkey: WoxHotkey.hyperHotkeyToStr(keyEvent.physicalKey), handled: true);
-      }
-
-      final pressedModifierTypes = _pressedModifierTypes();
-      if (_isExpandedHyperModifierSet(pressedModifierTypes)) {
-        _clearPendingOutOfOrderKey();
-        return _HotkeyTrackerResult(hotkey: WoxHotkey.hyperHotkeyToStr(keyEvent.physicalKey), handled: true);
+        return _HotkeyTrackerResult(hotkey: WoxHotkey.capsLockHotkeyToStr(keyEvent.physicalKey), handled: true);
       }
 
       if (!Platform.isWindows && _pressedModifiers.isEmpty) {
@@ -533,17 +519,15 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
       child: Padding(
         padding: const EdgeInsets.fromLTRB(8.0, 4.0, 8.0, 4.0),
         child:
-            _hotKey == null || (!_hotKey!.isDoubleHotkey && !_hotKey!.isHyperHotkey && !_hotKey!.isCapsLockHotkey && !_hotKey!.isNormalHotkey && !_hotKey!.isSingleHotkey)
+            _hotKey == null || (!_hotKey!.isDoubleHotkey && !_hotKey!.isCapsLockHotkey && !_hotKey!.isNormalHotkey && !_hotKey!.isSingleHotkey)
                 ? SizedBox(
                   width: 80,
                   height: 18,
                   child: Text(_isFocused ? tr("ui_hotkey_recording") : tr("ui_hotkey_click_to_set"), style: TextStyle(color: Colors.grey[400], fontSize: 13)),
                 )
                 : WoxHotkeyView(
-                  // Feature fix: the recorder preview used hotkey_manager's
-                  // raw key labels, which still rendered Apple-style modifier
-                  // glyphs on non-macOS. Reusing WoxHotkeyView keeps settings
-                  // and toolbar shortcut labels platform-consistent.
+                  // Reusing WoxHotkeyView keeps settings and toolbar shortcut
+                  // labels platform-consistent.
                   hotkey: _hotKey!,
                   backgroundColor: Theme.of(context).canvasColor,
                   borderColor: Theme.of(context).dividerColor,

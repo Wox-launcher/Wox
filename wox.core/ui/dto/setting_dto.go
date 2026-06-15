@@ -9,7 +9,6 @@ type WoxSettingDto struct {
 	EnableAutostart      bool
 	MainHotkey           string
 	SelectionHotkey      string
-	EnableHyperKey       bool
 	IgnoredHotkeyApps    []setting.IgnoredHotkeyApp
 	LogLevel             string
 	UsePinYin            bool
@@ -31,6 +30,7 @@ type WoxSettingDto struct {
 	HttpProxyEnabled          bool
 	HttpProxyUrl              string
 	ShowPosition              setting.PositionType
+	IsLinuxWaylandSession     bool
 	EnableAutoBackup          bool
 	EnableAutoUpdate          bool
 	ReleaseChannel            setting.ReleaseChannel

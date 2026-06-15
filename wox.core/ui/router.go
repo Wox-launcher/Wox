@@ -863,7 +863,6 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 	settingDto.EnableAutostart = woxSetting.EnableAutostart.Get()
 	settingDto.MainHotkey = woxSetting.MainHotkey.Get()
 	settingDto.SelectionHotkey = woxSetting.SelectionHotkey.Get()
-	settingDto.EnableHyperKey = woxSetting.EnableHyperKey.Get()
 	settingDto.IgnoredHotkeyApps = woxSetting.IgnoredHotkeyApps.Get()
 	settingDto.LogLevel = util.NormalizeLogLevel(woxSetting.LogLevel.Get())
 	settingDto.UsePinYin = woxSetting.UsePinYin.Get()
@@ -882,6 +881,7 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 	settingDto.HttpProxyEnabled = woxSetting.HttpProxyEnabled.Get()
 	settingDto.HttpProxyUrl = woxSetting.HttpProxyUrl.Get()
 	settingDto.ShowPosition = woxSetting.ShowPosition.Get()
+	settingDto.IsLinuxWaylandSession = util.IsLinuxWaylandSession()
 	settingDto.EnableAutoBackup = woxSetting.EnableAutoBackup.Get()
 	settingDto.EnableAutoUpdate = woxSetting.EnableAutoUpdate.Get()
 	settingDto.ReleaseChannel = woxSetting.ReleaseChannel.Get()
@@ -960,15 +960,63 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 		vf = vf1
 	}
 
+	// Hotkeys are registered before persisting settings so a denied or failed
+	// system bind does not leave stored settings ahead of the actual OS
+	// registration. These branches return early, so the normal PostSettingUpdate
+	// path does not register the same change again.
+	if kv.Key == "MainHotkey" {
+		if vs != woxSetting.MainHotkey.Get() {
+			if err := GetUIManager().RegisterMainHotkey(ctx, vs); err != nil {
+				writeErrorResponse(w, err.Error())
+				return
+			}
+		}
+		woxSetting.MainHotkey.Set(vs)
+		writeSuccessResponse(w, "")
+		return
+	}
+
+	if kv.Key == "SelectionHotkey" {
+		if vs != woxSetting.SelectionHotkey.Get() {
+			if err := GetUIManager().RegisterSelectionHotkey(ctx, vs); err != nil {
+				writeErrorResponse(w, err.Error())
+				return
+			}
+		}
+		woxSetting.SelectionHotkey.Set(vs)
+		writeSuccessResponse(w, "")
+		return
+	}
+
+	if kv.Key == "QueryHotkeys" {
+		queryHotkeys, parseErr := parseQueryHotkeysSettingValue(vs)
+		if parseErr != nil {
+			writeErrorResponse(w, parseErr.Error())
+			return
+		}
+
+		uiManager := GetUIManager()
+		var registerErr error
+		if shouldGroupWaylandPortalHotkeys() {
+			uiManager.globalHotkeyMu.Lock()
+			registerErr = uiManager.reregisterWaylandPortalGlobalHotkeys(ctx, woxSetting.MainHotkey.Get(), woxSetting.SelectionHotkey.Get(), queryHotkeys)
+			uiManager.globalHotkeyMu.Unlock()
+		} else {
+			registerErr = uiManager.reregisterIndividualQueryHotkeys(ctx, queryHotkeys)
+		}
+		if registerErr != nil {
+			writeErrorResponse(w, registerErr.Error())
+			return
+		}
+
+		woxSetting.QueryHotkeys.Set(queryHotkeys)
+		writeSuccessResponse(w, "")
+		return
+	}
+
 	switch kv.Key {
 	case "EnableAutostart":
 		woxSetting.EnableAutostart.Set(vb)
-	case "MainHotkey":
-		woxSetting.MainHotkey.Set(vs)
-	case "SelectionHotkey":
-		woxSetting.SelectionHotkey.Set(vs)
-	case "EnableHyperKey":
-		woxSetting.EnableHyperKey.Set(vb)
 	case "IgnoredHotkeyApps":
 		var ignoredApps []setting.IgnoredHotkeyApp
 		if err := json.Unmarshal([]byte(vs), &ignoredApps); err != nil {
@@ -998,54 +1046,6 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 		woxSetting.ShowTray.Set(vb)
 	case "LangCode":
 		woxSetting.LangCode.Set(i18n.LangCode(vs))
-	case "QueryHotkeys":
-		var rawQueryHotkeys []map[string]any
-		if err := json.Unmarshal([]byte(vs), &rawQueryHotkeys); err != nil {
-			writeErrorResponse(w, err.Error())
-			return
-		}
-
-		var queryHotkeys []setting.QueryHotkey
-		for _, rawQueryHotkey := range rawQueryHotkeys {
-			queryHotkey := setting.QueryHotkey{
-				Position: setting.QueryHotkeyPositionSystemDefault,
-			}
-
-			if rawName, ok := rawQueryHotkey["Name"]; ok {
-				queryHotkey.Name = strings.TrimSpace(parseString(rawName))
-			}
-			if rawHotkey, ok := rawQueryHotkey["Hotkey"]; ok {
-				queryHotkey.Hotkey = strings.TrimSpace(parseString(rawHotkey))
-			}
-			if rawQuery, ok := rawQueryHotkey["Query"]; ok {
-				queryHotkey.Query = parseString(rawQuery)
-			}
-			if rawSilentExecution, ok := rawQueryHotkey["IsSilentExecution"]; ok {
-				queryHotkey.IsSilentExecution = parseBool(rawSilentExecution)
-			}
-			if rawHideQueryBox, ok := rawQueryHotkey["HideQueryBox"]; ok {
-				queryHotkey.HideQueryBox = parseBool(rawHideQueryBox)
-			}
-			if rawHideToolbar, ok := rawQueryHotkey["HideToolbar"]; ok {
-				queryHotkey.HideToolbar = parseBool(rawHideToolbar)
-			}
-			if rawDisabled, ok := rawQueryHotkey["Disabled"]; ok {
-				queryHotkey.Disabled = parseBool(rawDisabled)
-			}
-			if rawWidth, ok := rawQueryHotkey["Width"]; ok {
-				queryHotkey.Width = maxInt(parseInt(rawWidth), 0)
-			}
-			if rawMaxResultCount, ok := rawQueryHotkey["MaxResultCount"]; ok {
-				queryHotkey.MaxResultCount = normalizeOptionalMaxResultCount(parseInt(rawMaxResultCount))
-			}
-			if rawPosition, ok := rawQueryHotkey["Position"]; ok {
-				queryHotkey.Position = normalizeQueryHotkeyPosition(parseString(rawPosition))
-			}
-
-			queryHotkeys = append(queryHotkeys, queryHotkey)
-		}
-
-		woxSetting.QueryHotkeys.Set(queryHotkeys)
 	case "QueryShortcuts":
 		var queryShortcuts []setting.QueryShortcut
 		if err := json.Unmarshal([]byte(vs), &queryShortcuts); err != nil {
@@ -1218,6 +1218,58 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 	GetUIManager().PostSettingUpdate(getTraceContext(r), kv.Key, updatedValue)
 
 	writeSuccessResponse(w, "")
+}
+
+// parseQueryHotkeysSettingValue normalizes query hotkey payloads before both
+// pre-registration and persistence so portal errors do not leave two views
+// of the same setting.
+func parseQueryHotkeysSettingValue(value string) ([]setting.QueryHotkey, error) {
+	var rawQueryHotkeys []map[string]any
+	if err := json.Unmarshal([]byte(value), &rawQueryHotkeys); err != nil {
+		return nil, err
+	}
+
+	var queryHotkeys []setting.QueryHotkey
+	for _, rawQueryHotkey := range rawQueryHotkeys {
+		queryHotkey := setting.QueryHotkey{
+			Position: setting.QueryHotkeyPositionSystemDefault,
+		}
+
+		if rawName, ok := rawQueryHotkey["Name"]; ok {
+			queryHotkey.Name = strings.TrimSpace(parseString(rawName))
+		}
+		if rawHotkey, ok := rawQueryHotkey["Hotkey"]; ok {
+			queryHotkey.Hotkey = strings.TrimSpace(parseString(rawHotkey))
+		}
+		if rawQuery, ok := rawQueryHotkey["Query"]; ok {
+			queryHotkey.Query = parseString(rawQuery)
+		}
+		if rawSilentExecution, ok := rawQueryHotkey["IsSilentExecution"]; ok {
+			queryHotkey.IsSilentExecution = parseBool(rawSilentExecution)
+		}
+		if rawHideQueryBox, ok := rawQueryHotkey["HideQueryBox"]; ok {
+			queryHotkey.HideQueryBox = parseBool(rawHideQueryBox)
+		}
+		if rawHideToolbar, ok := rawQueryHotkey["HideToolbar"]; ok {
+			queryHotkey.HideToolbar = parseBool(rawHideToolbar)
+		}
+		if rawDisabled, ok := rawQueryHotkey["Disabled"]; ok {
+			queryHotkey.Disabled = parseBool(rawDisabled)
+		}
+		if rawWidth, ok := rawQueryHotkey["Width"]; ok {
+			queryHotkey.Width = maxInt(parseInt(rawWidth), 0)
+		}
+		if rawMaxResultCount, ok := rawQueryHotkey["MaxResultCount"]; ok {
+			queryHotkey.MaxResultCount = normalizeOptionalMaxResultCount(parseInt(rawMaxResultCount))
+		}
+		if rawPosition, ok := rawQueryHotkey["Position"]; ok {
+			queryHotkey.Position = normalizeQueryHotkeyPosition(parseString(rawPosition))
+		}
+
+		queryHotkeys = append(queryHotkeys, queryHotkey)
+	}
+
+	return queryHotkeys, nil
 }
 
 // updateWoxSettingValue handles small shared setting writes that need normalization.

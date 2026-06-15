@@ -90,6 +90,8 @@ class _WoxQueryHotkeyDialogState extends State<WoxQueryHotkeyDialog> {
 
   bool get _showsDisplayFields => _selectedPreset == _QueryHotkeyPreset.webPanel || _selectedPreset == _QueryHotkeyPreset.custom;
 
+  bool get _supportsWindowPositionSetting => !controller.woxSetting.value.isLinuxWaylandSession;
+
   bool get _showsCustomChromeFields => _selectedPreset == _QueryHotkeyPreset.custom;
 
   String tr(String key) {
@@ -214,7 +216,7 @@ class _WoxQueryHotkeyDialogState extends State<WoxQueryHotkeyDialog> {
     final modifiers = <String>{};
     var key = "";
     for (final token in tokens) {
-      if (token == "hyper" || token == "capslock") {
+      if (token == "capslock") {
         modifiers.add(token);
       } else if (_isHotkeyModifierToken(token)) {
         modifiers.add(token);
@@ -223,9 +225,6 @@ class _WoxQueryHotkeyDialogState extends State<WoxQueryHotkeyDialog> {
       }
     }
 
-    if (modifiers.contains("hyper") && key.isNotEmpty) {
-      return "hyper+$key";
-    }
     if (modifiers.contains("capslock") && key.isNotEmpty) {
       return "capslock+$key";
     }
@@ -786,7 +785,8 @@ class _WoxQueryHotkeyDialogState extends State<WoxQueryHotkeyDialog> {
                       ),
                     ),
                   if (_showsDisplayFields) ...[
-                    _buildFormRow(label: tr('ui_query_hotkeys_position'), helperMarkdown: tr('ui_query_hotkeys_position_tooltip'), child: _buildSelectControl()),
+                    if (_supportsWindowPositionSetting)
+                      _buildFormRow(label: tr('ui_query_hotkeys_position'), helperMarkdown: tr('ui_query_hotkeys_position_tooltip'), child: _buildSelectControl()),
                     _buildFormRow(
                       label: tr('ui_query_hotkeys_width'),
                       helperMarkdown: tr('ui_query_hotkeys_width_tooltip'),

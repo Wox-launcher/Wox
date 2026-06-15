@@ -742,6 +742,7 @@ class Result:
         sub_title: Secondary display text
         preview: Preview content for detail view
         score: Relevance score for sorting
+        score_key: Stable identity for actioned-result ranking
         group: Group name for categorization
         group_score: Group relevance score
         tails: Additional visual elements
@@ -838,6 +839,14 @@ class Result:
     - 0: Default/neutral
     """
 
+    score_key: str = field(default="")
+    """
+    Stable identity for actioned-result ranking.
+
+    Set this when title or sub_title changes over time but the result should
+    keep the same usage score in global search.
+    """
+
     group: str = field(default="")
     """
     Group name for categorizing results.
@@ -896,6 +905,7 @@ class Result:
             "Id": self.id,
             "SubTitle": self.sub_title,
             "Score": self.score,
+            "ScoreKey": self.score_key,
             "Group": self.group,
             "GroupScore": self.group_score,
         }
@@ -944,6 +954,7 @@ class Result:
             sub_title=data.get("SubTitle", ""),
             preview=preview,
             score=data.get("Score", 0.0),
+            score_key=data.get("ScoreKey", ""),
             group=data.get("Group", ""),
             group_score=data.get("GroupScore", 0.0),
             tails=tails,

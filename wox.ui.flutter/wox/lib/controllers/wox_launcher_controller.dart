@@ -10,7 +10,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
-import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/controllers/query_box_text_editing_controller.dart';
 import 'package:wox/controllers/wox_ai_chat_controller.dart';
@@ -25,6 +24,7 @@ import 'package:wox/entity/screenshot_session.dart';
 import 'package:wox/models/doctor_check_result.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/windows/windows_window_manager.dart';
+import 'package:wox/utils/windows/linux_window_manager.dart';
 import 'package:wox/utils/windows/window_manager.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/entity/wox_hotkey.dart';
@@ -1862,6 +1862,27 @@ class WoxLauncherController extends GetxController {
     }
   }
 
+  // Native Wayland compositors own top-level placement, so Wox should not send absolute window coordinates there.
+  // Detect this from the actual GTK/GDK backend instead of environment variables alone: a Wayland
+  // session often exposes DISPLAY for XWayland, and a forced X11 backend may still inherit
+  // WAYLAND_DISPLAY. Actual X11 backends keep the precise XRandR placement path enabled.
+  bool _isLinuxNativeWaylandBackend(Map<String, dynamic> backendInfo) {
+    final backendFields = [
+      backendInfo["backend"],
+      backendInfo["displayType"],
+      backendInfo["windowType"],
+      backendInfo["display"],
+    ].map((value) => value?.toString().toLowerCase() ?? "");
+    final isX11Value = backendInfo["isX11"];
+    final isX11 = isX11Value == true || isX11Value.toString().toLowerCase() == "true" || backendFields.any((value) => value.contains("x11"));
+    if (isX11) {
+      return false;
+    }
+
+    final waylandDisplay = backendInfo["waylandDisplayEnv"]?.toString() ?? "";
+    return waylandDisplay.isNotEmpty || backendFields.any((value) => value.contains("wayland"));
+  }
+
   Future<void> showApp(String traceId, ShowAppParams params) async {
     final screenshotController = Get.find<WoxScreenshotController>();
     if (screenshotController.isSessionActive.value) {
@@ -1966,17 +1987,61 @@ class WoxLauncherController extends GetxController {
 
     final targetHeight = calculateInitialShowWindowHeight(shouldPreserveIncomingQuery);
     final targetWidth = forceWindowWidth != 0 ? forceWindowWidth : WoxSettingUtil.instance.currentSetting.appWidth.toDouble();
+    final targetSize = Size(targetWidth, targetHeight);
     final targetPosition = resolveShowAppPosition(params, targetWidth, targetHeight);
-
-    // Handle different position types
-    // on linux, we need to show first and then set position or center it
+    final initialShowResizeToken = resizeRequestToken;
+    Map<String, dynamic> linuxBackendInfo = <String, dynamic>{};
+    var skipAbsolutePosition = false;
+    var initialShowSizeApplied = false;
     if (Platform.isLinux) {
-      await windowManager.show();
+      Logger.instance.info(
+        traceId,
+        "linux-window-bounds dart stage=showApp-target position=${targetPosition.dx},${targetPosition.dy} size=${targetWidth}x$targetHeight source=${params.showSource} positionType=${params.position.type}",
+      );
     }
 
-    // Apply position+size together before showing to avoid opening with stale width.
-    await windowManager.setBounds(targetPosition, Size(targetWidth, targetHeight));
-    committedWindowHeight = targetHeight;
+    // Linux native Wayland does not allow reliable absolute top-level placement.
+    // Show first so the compositor can choose the active monitor, then only apply the requested size.
+    // This intentionally trades exact centering for correct monitor switching. Exact centered
+    // placement on Wayland needs compositor support such as layer-shell, a GNOME Shell extension,
+    // or another compositor-specific protocol; a regular GTK client cannot do it portably.
+    if (Platform.isLinux) {
+      await windowManager.show();
+      linuxBackendInfo = await LinuxWindowManager.instance.getBackendInfo();
+      skipAbsolutePosition = _isLinuxNativeWaylandBackend(linuxBackendInfo);
+      Logger.instance.info(traceId, "linux-window-bounds dart stage=backend-info $linuxBackendInfo skipAbsolutePosition=$skipAbsolutePosition");
+    }
+
+    // Linux Wayland query results can arrive while showApp is still waiting for
+    // backend info. Keep that newer resize authoritative instead of applying
+    // the stale initial show height afterward.
+    final initialShowSizeSuperseded = Platform.isLinux && resizeRequestToken != initialShowResizeToken;
+    if (!initialShowSizeSuperseded) {
+      if (skipAbsolutePosition) {
+        await windowManager.setSize(targetSize);
+        initialShowSizeApplied = true;
+        final actualSize = await windowManager.getSize();
+        Logger.instance.info(
+          traceId,
+          "linux-window-bounds dart stage=skip-setBounds reason=native-wayland-compositor-placement positionType=${params.position.type} targetSize=${targetWidth}x$targetHeight actualSize=${actualSize.width}x${actualSize.height}",
+        );
+      } else {
+        // Apply position+size together before showing to avoid opening with stale width.
+        await windowManager.setBounds(targetPosition, targetSize);
+        initialShowSizeApplied = true;
+        if (Platform.isLinux) {
+          final actualPosition = await windowManager.getPosition();
+          final actualSize = await windowManager.getSize();
+          Logger.instance.info(
+            traceId,
+            "linux-window-bounds dart stage=after-setBounds target=${targetPosition.dx},${targetPosition.dy} ${targetWidth}x$targetHeight actual=${actualPosition.dx},${actualPosition.dy} ${actualSize.width}x${actualSize.height}",
+          );
+        }
+      }
+    }
+    if (initialShowSizeApplied || !Platform.isLinux) {
+      committedWindowHeight = targetHeight;
+    }
 
     // Set always-on-top BEFORE show() so the TOPMOST flag is already in place
     // when the window becomes visible, avoiding transient blur on Windows.
@@ -2140,6 +2205,8 @@ class WoxLauncherController extends GetxController {
     // next window transition and unexpectedly re-select query text.
     _visibleLauncherFocusToken++;
 
+    await saveWindowPositionNow(traceId, "before-hide");
+
     // hide first to avoid the potential delay caused by some heavy operations in onHide callback
     // E.g. on tray query mode, hideActionPanel will call resize height, which may cause a noticeable
     // resize animation if the window is still visible while resizing, so we hide the window first and then do the rest of the operations
@@ -2182,18 +2249,41 @@ class WoxLauncherController extends GetxController {
     await restoreQueryAfterTemporaryQuery(traceId);
   }
 
-  void saveWindowPositionIfNeeded() {
+  Future<void> saveWindowPositionNow(String traceId, String reason) async {
+    final setting = WoxSettingUtil.instance.currentSetting;
+    if (setting.showPosition != WoxPositionTypeEnum.POSITION_TYPE_LAST_LOCATION.code) {
+      return;
+    }
+
+    try {
+      Map<String, dynamic> backendInfo = <String, dynamic>{};
+      if (Platform.isLinux) {
+        backendInfo = await LinuxWindowManager.instance.getBackendInfo();
+        if (_isLinuxNativeWaylandBackend(backendInfo)) {
+          // Native Wayland positions are compositor-owned and gtk_window_get_position may return
+          // synthetic or stale coordinates, so persisting them would poison last_location.
+          Logger.instance.info(traceId, "linux-window-bounds dart stage=skip-save-last-location reason=$reason backendInfo=$backendInfo note=native-wayland-position-unreliable");
+          return;
+        }
+      }
+
+      final position = await windowManager.getPosition();
+      if (Platform.isLinux) {
+        Logger.instance.info(traceId, "linux-window-bounds dart stage=save-last-location reason=$reason position=${position.dx},${position.dy} backendInfo=$backendInfo");
+      }
+      await WoxApi.instance.saveWindowPosition(traceId, position.dx.toInt(), position.dy.toInt());
+    } catch (e) {
+      Logger.instance.error(traceId, "Failed to save window position: $e");
+    }
+  }
+
+  void saveWindowPositionIfNeeded({String reason = "delayed"}) {
     final setting = WoxSettingUtil.instance.currentSetting;
     if (setting.showPosition == WoxPositionTypeEnum.POSITION_TYPE_LAST_LOCATION.code) {
-      // Run in async task with delay to ensure window position is fully updated
+      // Run in async task with delay to ensure window position is fully updated.
       Future.delayed(const Duration(milliseconds: 500), () async {
         final traceId = const UuidV4().generate();
-        try {
-          final position = await windowManager.getPosition();
-          await WoxApi.instance.saveWindowPosition(traceId, position.dx.toInt(), position.dy.toInt());
-        } catch (e) {
-          Logger.instance.error(traceId, "Failed to save window position: $e");
-        }
+        await saveWindowPositionNow(traceId, reason);
       });
     }
   }
@@ -3584,6 +3674,13 @@ class WoxLauncherController extends GetxController {
         (logicalToPhysicalPixels(left.height) - logicalToPhysicalPixels(right.height)).abs() <= 1;
   }
 
+  /// Invalidates launcher-sized resize work before switching to a fixed management window.
+  void cancelLauncherResizeRequests(String traceId, String reason) {
+    resizeRequestToken++;
+    ongoingResizeTargetSize = null;
+    Logger.instance.debug(traceId, "resize cancelled: reason=$reason, management view transition");
+  }
+
   Future<void> resizeHeight({required String traceId, String reason = "unspecified", bool forceDwmRecomposition = false, double? overrideTargetHeight}) async {
     final tracker = WoxTimeTracker.start(traceId, "ui_resize_height");
     final totalStartUs = tracker.checkpointUs();
@@ -3611,7 +3708,10 @@ class WoxLauncherController extends GetxController {
     double targetWidth = forceWindowWidth != 0 ? forceWindowWidth : WoxSettingUtil.instance.currentSetting.appWidth.toDouble();
     final targetSize = Size(targetWidth, totalHeight.toDouble());
 
-    if (!forceDwmRecomposition && ongoingResizeTargetSize != null && isWindowSizeEffectivelyEqual(ongoingResizeTargetSize!, targetSize)) {
+    // Linux Wayland resize can race with show/hide and result updates. In that
+    // path, Dart-side target tracking can be stale while the native window is
+    // still at the old height, so Linux always sends the target to the runner.
+    if (!Platform.isLinux && !forceDwmRecomposition && ongoingResizeTargetSize != null && isWindowSizeEffectivelyEqual(ongoingResizeTargetSize!, targetSize)) {
       Logger.instance.debug(traceId, "resize skipped: reason=$reason, target=${formatWindowSize(targetSize)}, duplicateTargetInFlight=true");
       tracker.setDouble("targetWidth", targetSize.width);
       tracker.setDouble("targetHeight", targetSize.height);
@@ -3628,17 +3728,35 @@ class WoxLauncherController extends GetxController {
     ongoingResizeTargetSize = targetSize;
 
     try {
+      bool cancelResizeIfNeeded(String phase, {bool beforeRetry = false}) {
+        final superseded = resizeRequestToken != currentResizeToken;
+        final managementViewActive = isInSettingView.value || isInOnboardingView.value;
+        if (!superseded && !managementViewActive) {
+          return false;
+        }
+
+        Logger.instance.debug(
+          traceId,
+          "resize skipped: reason=$reason, target=${formatWindowSize(targetSize)}, phase=$phase, superseded=$superseded, managementViewActive=$managementViewActive",
+        );
+        tracker.setDouble("targetWidth", targetSize.width);
+        tracker.setDouble("targetHeight", targetSize.height);
+        tracker.setBool("skippedSuperseded", superseded);
+        tracker.setBool("skippedManagementView", managementViewActive);
+        if (beforeRetry) {
+          tracker.setBool("skippedBeforePlatformRetry", true);
+        } else {
+          tracker.setBool("skippedBeforePlatformSet", true);
+        }
+        tracker.setElapsedUs("totalUs", totalStartUs);
+        tracker.log();
+        return true;
+      }
+
       final getCurrentSizeStartUs = tracker.checkpointUs();
       final currentSize = await windowManager.getSize();
       tracker.setElapsedUs("getCurrentSizeUs", getCurrentSizeStartUs);
-      if (resizeRequestToken != currentResizeToken) {
-        Logger.instance.debug(traceId, "resize skipped: reason=$reason, target=${formatWindowSize(targetSize)}, supersededBeforeSet=true");
-        tracker.setDouble("targetWidth", targetSize.width);
-        tracker.setDouble("targetHeight", targetSize.height);
-        tracker.setBool("skippedSuperseded", true);
-        tracker.setBool("skippedBeforePlatformSet", true);
-        tracker.setElapsedUs("totalUs", totalStartUs);
-        tracker.log();
+      if (cancelResizeIfNeeded("after get current size")) {
         return;
       }
 
@@ -3653,7 +3771,10 @@ class WoxLauncherController extends GetxController {
         "resize requested: reason=$reason, before=${formatWindowSize(currentSize)}, target=${formatWindowSize(targetSize)}, sameSize=$isSameSize, forceDwmRecomposition=$forceDwmRecomposition",
       );
 
-      if (isSameSize && !forceDwmRecomposition) {
+      // On Linux Wayland, getSize can report the requested/default size before
+      // the mapped allocation has actually reached that size. Let the native
+      // runner apply the request; it filters stale resize sequences.
+      if (!Platform.isLinux && isSameSize && !forceDwmRecomposition) {
         committedWindowHeight = targetSize.height;
         Logger.instance.debug(traceId, "resize skipped: reason=$reason, before=${formatWindowSize(currentSize)}, target=${formatWindowSize(targetSize)}, sameSize=true");
         tracker.setBool("skippedSameSize", true);
@@ -3668,12 +3789,7 @@ class WoxLauncherController extends GetxController {
         final getPositionStartUs = tracker.checkpointUs();
         final pos = await windowManager.getPosition();
         tracker.setElapsedUs("getPositionUs", getPositionStartUs);
-        if (resizeRequestToken != currentResizeToken) {
-          Logger.instance.debug(traceId, "resize skipped: reason=$reason, target=${formatWindowSize(targetSize)}, supersededBeforeSet=true");
-          tracker.setBool("skippedSuperseded", true);
-          tracker.setBool("skippedBeforePlatformSet", true);
-          tracker.setElapsedUs("totalUs", totalStartUs);
-          tracker.log();
+        if (cancelResizeIfNeeded("after get position")) {
           return;
         }
 
@@ -3699,12 +3815,7 @@ class WoxLauncherController extends GetxController {
             );
             final retrySetBoundsStartUs = tracker.checkpointUs();
             await Future.delayed(const Duration(milliseconds: 16));
-            if (resizeRequestToken != currentResizeToken) {
-              Logger.instance.debug(traceId, "resize skipped: reason=$reason, target=${formatWindowSize(targetSize)}, supersededBeforeRetry=true");
-              tracker.setBool("skippedSuperseded", true);
-              tracker.setBool("skippedBeforePlatformRetry", true);
-              tracker.setElapsedUs("totalUs", totalStartUs);
-              tracker.log();
+            if (cancelResizeIfNeeded("before retry setBounds", beforeRetry: true)) {
               return;
             }
             await windowManager.setBounds(Offset(pos.dx, newTop), targetSize);
@@ -3742,12 +3853,7 @@ class WoxLauncherController extends GetxController {
         Logger.instance.warn(traceId, "resize readback mismatch: reason=$reason, target=${formatWindowSize(targetSize)}, after=${formatWindowSize(resizedSize)}, retry=setSize");
         final retrySetSizeStartUs = tracker.checkpointUs();
         await Future.delayed(const Duration(milliseconds: 16));
-        if (resizeRequestToken != currentResizeToken) {
-          Logger.instance.debug(traceId, "resize skipped: reason=$reason, target=${formatWindowSize(targetSize)}, supersededBeforeRetry=true");
-          tracker.setBool("skippedSuperseded", true);
-          tracker.setBool("skippedBeforePlatformRetry", true);
-          tracker.setElapsedUs("totalUs", totalStartUs);
-          tracker.log();
+        if (cancelResizeIfNeeded("before retry setSize", beforeRetry: true)) {
           return;
         }
         await windowManager.setSize(targetSize);
@@ -4058,6 +4164,7 @@ class WoxLauncherController extends GetxController {
     // platform path that did not go through the normal back button flow.
     settingController.clearSettingSearch();
     settingController.activeNavPath.value = 'general';
+    cancelLauncherResizeRequests(traceId, "enter setting view");
     isInSettingView.value = true;
     isInOnboardingView.value = false;
 
@@ -4200,6 +4307,7 @@ class WoxLauncherController extends GetxController {
     settingController.settingFocusNode.unfocus();
 
     isInSettingView.value = false;
+    cancelLauncherResizeRequests(traceId, "enter onboarding view");
     isInOnboardingView.value = true;
     await WoxApi.instance.onSetting(traceId, false);
     await WoxApi.instance.onOnboarding(traceId, true);

@@ -299,7 +299,7 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
           }
 
           unawaited(launcherController.focusLauncherKeyboardTarget());
-          launcherController.saveWindowPositionIfNeeded();
+          launcherController.saveWindowPositionIfNeeded(reason: "drag-end");
         },
         child:
             launcherController.isInOnboardingView.value

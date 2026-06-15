@@ -302,11 +302,15 @@ const (
 )
 
 type RawKeyEvent struct {
-	Type          EventType
-	Key           Key
-	Character     string
-	Modifiers     Modifier
-	NativeKeyCode uint32
+	Type                         EventType
+	Key                          Key
+	Character                    string
+	Modifiers                    Modifier
+	NativeKeyCode                uint32
+	NativeEventType              int
+	NativeFlags                  uint64
+	NativeCapsLockStateAvailable bool
+	NativeCapsLockPressed        bool
 }
 
 type RawKeyHandler func(event RawKeyEvent) bool
@@ -317,4 +321,63 @@ type RawKeySubscription interface {
 
 type HotkeyRegistration interface {
 	Unregister() error
+}
+
+type GlobalHotkeySpec struct {
+	Modifiers Modifier
+	Key       Key
+	Callback  func()
+}
+
+var registerGlobalHotkeysPlatform func(specs []GlobalHotkeySpec) (registration HotkeyRegistration, handled bool, err error)
+var isWaylandGlobalShortcutsPortalAvailablePlatform func() bool
+
+type globalHotkeyGroupRegistration struct {
+	registrations []HotkeyRegistration
+}
+
+// IsWaylandGlobalShortcutsPortalAvailable reports whether the Wayland
+// GlobalShortcuts portal is available as the active global-hotkey backend.
+func IsWaylandGlobalShortcutsPortalAvailable() bool {
+	if isWaylandGlobalShortcutsPortalAvailablePlatform == nil {
+		return false
+	}
+	return isWaylandGlobalShortcutsPortalAvailablePlatform()
+}
+
+func RegisterGlobalHotkeys(specs []GlobalHotkeySpec) (HotkeyRegistration, error) {
+	if registerGlobalHotkeysPlatform != nil {
+		if registration, handled, err := registerGlobalHotkeysPlatform(specs); handled {
+			return registration, err
+		}
+	}
+
+	group := &globalHotkeyGroupRegistration{}
+	for _, spec := range specs {
+		registration, err := RegisterGlobalHotkey(spec.Modifiers, spec.Key, spec.Callback)
+		if err != nil {
+			_ = group.Unregister()
+			return nil, err
+		}
+		group.registrations = append(group.registrations, registration)
+	}
+	return group, nil
+}
+
+func (g *globalHotkeyGroupRegistration) Unregister() error {
+	if g == nil {
+		return nil
+	}
+
+	var firstErr error
+	for _, registration := range g.registrations {
+		if registration == nil {
+			continue
+		}
+		if err := registration.Unregister(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	g.registrations = nil
+	return firstErr
 }

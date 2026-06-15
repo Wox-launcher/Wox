@@ -19,6 +19,8 @@ const (
 	DoctorCheckAccessibility          DoctorCheckType = "accessibility"
 	DoctorCheckDatabase               DoctorCheckType = "database"
 	DoctorCheckTriggerKeywordConflict DoctorCheckType = "triggerKeywordConflict"
+	DoctorCheckGnomeTrayIndicator     DoctorCheckType = "gnomeTrayIndicator"
+	DoctorCheckWaylandDesktopLaunch   DoctorCheckType = "waylandDesktopLaunch"
 )
 
 type DoctorCheckResult struct {
@@ -41,6 +43,12 @@ func RunDoctorChecks(ctx context.Context) []DoctorCheckResult {
 
 	if util.IsMacOS() {
 		results = append(results, checkAccessibilityPermission(ctx))
+	}
+	if result, ok := checkGnomeTrayIndicator(ctx); ok {
+		results = append(results, result)
+	}
+	if result, ok := checkWaylandDesktopLaunch(ctx); ok {
+		results = append(results, result)
 	}
 
 	for i := range results {

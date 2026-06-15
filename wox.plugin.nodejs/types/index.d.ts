@@ -544,6 +544,14 @@ export interface Result {
   Score?: number
 
   /**
+   * Stable identity used for actioned-result ranking.
+   *
+   * Optional. Set this when Title or SubTitle changes over time but the result
+   * should keep the same usage score in global search.
+   */
+  ScoreKey?: string
+
+  /**
    * Group name for organizing results.
    *
    * Results with the same group name are displayed together

@@ -315,6 +315,17 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 			},
 		},
 		{
+			ID:          "show-task-view",
+			Title:       "i18n:plugin_sys_show_task_view",
+			Icon:        sysDesktopIcon,
+			Aliases:     []string{"task view", "window switcher", "virtual desktop", "virtual desktops", "desktops", "任务视图", "虚拟桌面", "窗口选择", "窗口切换"},
+			SupportedOS: []string{util.PlatformWindows},
+			IsAvailable: isShowTaskViewCommandAvailable,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				r.runSystemAction(ctx, "show-task-view", runShowTaskViewCommand)
+			},
+		},
+		{
 			ID:          "show-screen-saver",
 			Title:       "i18n:plugin_sys_show_screen_saver",
 			Icon:        sysScreenSaverIcon,

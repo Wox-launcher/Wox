@@ -13,3 +13,15 @@ func simulatePaste() error {
 func simulateCapsLockTap() error {
 	return errors.New("not implemented")
 }
+
+func setCapsLockState(enabled bool) error {
+	return errors.New("not implemented")
+}
+
+func isCapsLockEnabled() bool {
+	return false
+}
+
+func isKeyPressed(key Key) bool {
+	return false
+}
