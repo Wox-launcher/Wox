@@ -30,6 +30,7 @@ type WoxSettingDto struct {
 	HttpProxyEnabled          bool
 	HttpProxyUrl              string
 	ShowPosition              setting.PositionType
+	IsLinuxWaylandSession     bool
 	EnableAutoBackup          bool
 	EnableAutoUpdate          bool
 	ReleaseChannel            setting.ReleaseChannel

@@ -82,6 +82,7 @@ WoxSetting _setting({required int appWidth}) {
     launchMode: 'continue',
     startPage: 'mru',
     showPosition: 'mouse_screen',
+    isLinuxWaylandSession: false,
     aiProviders: [],
     appWidth: appWidth,
     maxResultCount: 8,

@@ -292,7 +292,15 @@ func (m *Manager) RegisterMainHotkey(ctx context.Context, combineKey string) err
 	return nil
 }
 
+func effectiveSelectionHotkeyForRuntime(selectionHotkey string) string {
+	if util.IsLinuxWaylandSession() {
+		return ""
+	}
+	return strings.TrimSpace(selectionHotkey)
+}
+
 func (m *Manager) RegisterSelectionHotkey(ctx context.Context, combineKey string) error {
+	combineKey = effectiveSelectionHotkeyForRuntime(combineKey)
 	if shouldGroupWaylandPortalHotkeys() {
 		m.globalHotkeyMu.Lock()
 		defer m.globalHotkeyMu.Unlock()
@@ -370,7 +378,7 @@ func (m *Manager) reregisterWaylandPortalGlobalHotkeys(ctx context.Context, main
 
 	m.waylandPortalHotkeys = newGroup
 	m.mainHotkeyKey = strings.TrimSpace(mainHotkey)
-	m.selectionHotkeyKey = strings.TrimSpace(selectionHotkey)
+	m.selectionHotkeyKey = effectiveSelectionHotkeyForRuntime(selectionHotkey)
 	m.waylandPortalQueries = cloneQueryHotkeys(queryHotkeys)
 	return nil
 }
@@ -391,7 +399,7 @@ func (m *Manager) buildWaylandPortalGlobalHotkeySpecs(mainHotkey string, selecti
 		})
 	}
 
-	selectionHotkey = strings.TrimSpace(selectionHotkey)
+	selectionHotkey = effectiveSelectionHotkeyForRuntime(selectionHotkey)
 	if selectionHotkey != "" {
 		combineKey := selectionHotkey
 		specs = append(specs, hotkey.Spec{
@@ -450,6 +458,10 @@ func (m *Manager) handleMainHotkeyTrigger(combineKey string) {
 func (m *Manager) handleSelectionHotkeyTrigger(combineKey string) {
 	triggerCtx := util.NewTraceContext()
 	logger.Info(triggerCtx, fmt.Sprintf("selection hotkey callback received: hotkey=%s recordingActive=%t", combineKey, m.isHotkeyRecordingActive()))
+	if util.IsLinuxWaylandSession() {
+		logger.Info(triggerCtx, "selection hotkey ignored: selection capture is unavailable on Wayland")
+		return
+	}
 	if m.recordHotkeyIfRecording(triggerCtx, combineKey) {
 		return
 	}
@@ -485,6 +497,11 @@ func shouldGroupWaylandPortalHotkeys() bool {
 
 func (m *Manager) QuerySelection(ctx context.Context) {
 	newCtx := util.NewTraceContext()
+	if util.IsLinuxWaylandSession() {
+		logger.Info(newCtx, "skip selection query: selection capture is unavailable on Wayland")
+		return
+	}
+
 	start := util.GetSystemTimestamp()
 	selection, err := selection.GetSelected(newCtx)
 	logger.Debug(newCtx, fmt.Sprintf("took %d ms to get selection", util.GetSystemTimestamp()-start))
@@ -639,7 +656,7 @@ func (m *Manager) reregisterGlobalHotkeys(ctx context.Context) {
 	if shouldGroupWaylandPortalHotkeys() {
 		m.globalHotkeyMu.Lock()
 		defer m.globalHotkeyMu.Unlock()
-		if err := m.reregisterWaylandPortalGlobalHotkeys(ctx, woxSetting.MainHotkey.Get(), woxSetting.SelectionHotkey.Get(), woxSetting.QueryHotkeys.Get()); err != nil {
+		if err := m.reregisterWaylandPortalGlobalHotkeys(ctx, woxSetting.MainHotkey.Get(), effectiveSelectionHotkeyForRuntime(woxSetting.SelectionHotkey.Get()), woxSetting.QueryHotkeys.Get()); err != nil {
 			logger.Error(ctx, fmt.Sprintf("failed to register Wayland portal global hotkeys: %s", err.Error()))
 		}
 		return
@@ -696,7 +713,7 @@ func (m *Manager) findConfiguredHotkeyConflict(ctx context.Context, hotkeyStr st
 	if hotkeyCompareKeysIntersect(candidateKeys, hotkeyCompareKeys(woxSetting.MainHotkey.Get())) {
 		return HotkeyAvailability{Available: false, ConflictType: hotkeyConflictTypeMain}
 	}
-	if hotkeyCompareKeysIntersect(candidateKeys, hotkeyCompareKeys(woxSetting.SelectionHotkey.Get())) {
+	if hotkeyCompareKeysIntersect(candidateKeys, hotkeyCompareKeys(effectiveSelectionHotkeyForRuntime(woxSetting.SelectionHotkey.Get()))) {
 		return HotkeyAvailability{Available: false, ConflictType: hotkeyConflictTypeSelection}
 	}
 
@@ -1501,6 +1518,10 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value strin
 }
 
 func (m *Manager) refreshTrayQueryIcons(ctx context.Context) {
+	if util.IsLinuxWaylandSession() {
+		logger.Info(ctx, "skip tray query icon refresh: tray query is unavailable on Wayland")
+		return
+	}
 	if util.IsLinux() {
 		// tray query is not supported on linux yet
 		return
@@ -1547,6 +1568,11 @@ func (m *Manager) refreshTrayQueryIcons(ctx context.Context) {
 }
 
 func (m *Manager) executeTrayQuery(ctx context.Context, trayQuery setting.TrayQuery, rect tray.ClickRect) {
+	if util.IsLinuxWaylandSession() {
+		logger.Info(ctx, "skip tray query: tray query is unavailable on Wayland")
+		return
+	}
+
 	queryCtx := util.WithCoreSessionContext(ctx)
 	queryCtx = util.WithShowSourceContext(queryCtx, string(common.ShowSourceTrayQuery))
 	// ReplaceQueryVariable returns a PlainQuery whose type may be QueryTypeSelection
@@ -2093,6 +2119,11 @@ func (m *Manager) shouldIgnoreHotkeyTrigger(ctx context.Context) bool {
 		// hotkey gate blocks all global hotkey handlers while onboarding is active.
 		logger.Info(ctx, "ignore hotkey trigger while onboarding is active")
 		return true
+	}
+
+	if util.IsLinuxWaylandSession() {
+		logger.Info(ctx, "skip ignored hotkey app check: active window identity is unavailable on Wayland")
+		return false
 	}
 
 	ignoredApps := setting.GetSettingManager().GetWoxSetting(ctx).IgnoredHotkeyApps.Get()

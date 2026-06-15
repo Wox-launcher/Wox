@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"wox/common"
 	"wox/plugin"
@@ -118,7 +119,8 @@ func (a *LinuxRetriever) ParseAppInfo(ctx context.Context, path string) (appInfo
 	}
 
 	icon := appIcon
-	if iconPath := resolveLinuxDesktopIcon(entry.Icon); iconPath != "" {
+	iconPath := resolveLinuxDesktopIcon(entry.Icon)
+	if iconPath != "" {
 		icon = common.NewWoxImageAbsolutePath(iconPath)
 	}
 
@@ -130,6 +132,7 @@ func (a *LinuxRetriever) ParseAppInfo(ctx context.Context, path string) (appInfo
 		SearchableNames: entry.SearchableNames,
 		Path:            filepath.Clean(path),
 		Icon:            icon,
+		IconSourcePath:  iconPath,
 		Type:            AppTypeDesktop,
 		IsDefaultIcon:   icon.ImageData == appIcon.ImageData,
 	}, nil
@@ -325,11 +328,16 @@ func resolveLinuxDesktopIcon(iconValue string) string {
 	if ext := filepath.Ext(iconValue); ext != "" {
 		iconNames = append(iconNames, strings.TrimSuffix(iconValue, ext))
 	}
+	for _, iconName := range append([]string{}, iconNames...) {
+		if !strings.HasSuffix(iconName, "-symbolic") {
+			iconNames = append(iconNames, iconName+"-symbolic")
+		}
+	}
 	iconNames = util.UniqueStrings(iconNames)
 
 	// Bug fix: Linux launchers expose themed icon names rather than file paths.
-	// Resolving common hicolor/Adwaita/pixmaps locations is enough to surface real
-	// app icons for standard installs without introducing a heavier GTK dependency.
+	// Resolve through the desktop icon themes so Flatpak, GNOME, and KDE launchers
+	// can reuse the same icon assets that the shell already displays.
 	for _, root := range searchRoots {
 		for _, iconName := range iconNames {
 			if resolved := resolveLinuxNamedIconFromRoot(root, iconName); resolved != "" {
@@ -343,19 +351,135 @@ func resolveLinuxDesktopIcon(iconValue string) string {
 
 func linuxDesktopIconSearchRoots() []string {
 	homeDir, _ := os.UserHomeDir()
-	paths := []string{
-		filepath.Join(homeDir, ".local", "share", "icons", "hicolor"),
-		filepath.Join(homeDir, ".local", "share", "icons", "Adwaita"),
-		filepath.Join(homeDir, ".icons", "hicolor"),
-		filepath.Join(homeDir, ".icons", "Adwaita"),
-		"/usr/local/share/icons/hicolor",
-		"/usr/local/share/icons/Adwaita",
-		"/usr/share/icons/hicolor",
-		"/usr/share/icons/Adwaita",
-		"/usr/local/share/pixmaps",
-		"/usr/share/pixmaps",
+	dataRoots := linuxDesktopIconDataRoots(homeDir)
+	themeParentRoots := linuxDesktopIconThemeParentRoots(dataRoots, homeDir)
+	preferredThemes := linuxDesktopPreferredIconThemes(homeDir)
+
+	paths := []string{}
+	for _, theme := range preferredThemes {
+		for _, themeParentRoot := range themeParentRoots {
+			paths = append(paths, filepath.Join(themeParentRoot, theme))
+		}
 	}
+
+	paths = append(paths, linuxDesktopInstalledIconThemeRoots(themeParentRoots)...)
+
+	for _, theme := range []string{"hicolor", "Adwaita", "AdwaitaLegacy"} {
+		for _, themeParentRoot := range themeParentRoots {
+			paths = append(paths, filepath.Join(themeParentRoot, theme))
+		}
+	}
+
+	for _, dataRoot := range dataRoots {
+		paths = append(paths, filepath.Join(dataRoot, "pixmaps"))
+	}
+	if homeDir != "" {
+		paths = append(paths, filepath.Join(homeDir, ".icons"))
+	}
+
 	return util.UniqueStrings(paths)
+}
+
+// linuxDesktopIconDataRoots returns the XDG data roots that can contain icon themes.
+func linuxDesktopIconDataRoots(homeDir string) []string {
+	xdgDataHome := strings.TrimSpace(os.Getenv("XDG_DATA_HOME"))
+	if xdgDataHome == "" && homeDir != "" {
+		xdgDataHome = filepath.Join(homeDir, ".local", "share")
+	}
+
+	xdgDataDirs := strings.Split(strings.TrimSpace(os.Getenv("XDG_DATA_DIRS")), ":")
+	if len(xdgDataDirs) == 1 && xdgDataDirs[0] == "" {
+		xdgDataDirs = []string{"/usr/local/share", "/usr/share"}
+	}
+
+	dataRoots := []string{xdgDataHome}
+	dataRoots = append(dataRoots, xdgDataDirs...)
+	return util.UniqueStrings(dataRoots)
+}
+
+// linuxDesktopIconThemeParentRoots maps XDG data roots to their icon theme directories.
+func linuxDesktopIconThemeParentRoots(dataRoots []string, homeDir string) []string {
+	themeParentRoots := []string{}
+	for _, dataRoot := range dataRoots {
+		themeParentRoots = append(themeParentRoots, filepath.Join(dataRoot, "icons"))
+	}
+	if homeDir != "" {
+		themeParentRoots = append(themeParentRoots, filepath.Join(homeDir, ".icons"))
+	}
+	return util.UniqueStrings(themeParentRoots)
+}
+
+// linuxDesktopPreferredIconThemes reads common desktop settings so KDE/GNOME
+// themed icons are preferred over generic fallback themes.
+func linuxDesktopPreferredIconThemes(homeDir string) []string {
+	if homeDir == "" {
+		return nil
+	}
+
+	themes := []string{}
+	for _, configPath := range []string{
+		filepath.Join(homeDir, ".config", "gtk-4.0", "settings.ini"),
+		filepath.Join(homeDir, ".config", "gtk-3.0", "settings.ini"),
+	} {
+		if value := readLinuxDesktopConfigValue(configPath, "Settings", "gtk-icon-theme-name"); value != "" {
+			themes = append(themes, value)
+		}
+	}
+
+	if value := readLinuxDesktopConfigValue(filepath.Join(homeDir, ".config", "kdeglobals"), "Icons", "Theme"); value != "" {
+		themes = append(themes, value)
+	}
+
+	return util.UniqueStrings(themes)
+}
+
+// readLinuxDesktopConfigValue reads simple INI-style key/value settings used by
+// GTK and KDE config files without depending on a desktop-specific library.
+func readLinuxDesktopConfigValue(configPath string, section string, key string) string {
+	file, err := os.Open(configPath)
+	if err != nil {
+		return ""
+	}
+	defer file.Close()
+
+	prefix := key + "="
+	currentSection := ""
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			currentSection = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(line, "["), "]"))
+			continue
+		}
+		if section != "" && currentSection != section {
+			continue
+		}
+		if strings.HasPrefix(line, prefix) {
+			return strings.TrimSpace(strings.TrimPrefix(line, prefix))
+		}
+	}
+	return ""
+}
+
+// linuxDesktopInstalledIconThemeRoots adds installed icon themes under icon
+// theme parent roots, covering KDE themes such as Breeze and Oxygen.
+func linuxDesktopInstalledIconThemeRoots(themeParentRoots []string) []string {
+	paths := []string{}
+	for _, iconRoot := range themeParentRoots {
+		iconRoot = strings.TrimSpace(iconRoot)
+		entries, err := os.ReadDir(iconRoot)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			paths = append(paths, filepath.Join(iconRoot, entry.Name()))
+		}
+	}
+	sort.Strings(paths)
+	return paths
 }
 
 func resolveLinuxNamedIconFromRoot(root string, iconName string) string {
@@ -371,7 +495,7 @@ func resolveLinuxNamedIconFromRoot(root string, iconName string) string {
 
 	extensions := []string{".png", ".svg", ".xpm"}
 	sizeDirs := []string{"512x512", "256x256", "128x128", "96x96", "64x64", "48x48", "32x32", "24x24", "22x22", "16x16", "scalable"}
-	categories := []string{"apps", "mimetypes"}
+	categories := []string{"apps", "actions", "preferences", "devices", "places", "status", "categories", "mimetypes", "emblems", "applets", "legacy", "symbolic"}
 
 	for _, sizeDir := range sizeDirs {
 		for _, category := range categories {
@@ -380,6 +504,26 @@ func resolveLinuxNamedIconFromRoot(root string, iconName string) string {
 				if fileExists(candidate) {
 					return candidate
 				}
+			}
+		}
+	}
+
+	for _, category := range categories {
+		for _, sizeDir := range sizeDirs {
+			for _, extension := range extensions {
+				candidate := filepath.Join(root, category, sizeDir, iconName+extension)
+				if fileExists(candidate) {
+					return candidate
+				}
+			}
+		}
+	}
+
+	for _, category := range categories {
+		for _, extension := range extensions {
+			candidate := filepath.Join(root, category, iconName+extension)
+			if fileExists(candidate) {
+				return candidate
 			}
 		}
 	}

@@ -484,7 +484,7 @@ class WoxSettingController extends GetxController {
   }
 
   List<WoxSettingSearchResult> _buildBuiltInSettingSearchResults() {
-    return _builtInSettingSearchDefinitions.map((definition) {
+    return _builtInSettingSearchDefinitions.where(_isBuiltInSettingSearchDefinitionVisible).map((definition) {
       final title = tr(definition.titleKey);
       final subtitle = definition.subtitleKey.isEmpty ? tr(_settingNavTitleKey(definition.navPath)) : tr(definition.subtitleKey);
       // Search refinement: subtitles are explanatory result text, not stable
@@ -503,6 +503,15 @@ class WoxSettingController extends GetxController {
         score: 0,
       );
     }).toList();
+  }
+
+  bool _isBuiltInSettingSearchDefinitionVisible(_BuiltInSettingSearchDefinition definition) {
+    // Keep search aligned with runtime-disabled Wayland settings so it does not
+    // navigate to controls hidden from their settings pages.
+    if (!woxSetting.value.isLinuxWaylandSession) {
+      return true;
+    }
+    return definition.settingKey != 'ShowPosition' && definition.settingKey != 'SelectionHotkey' && definition.settingKey != 'IgnoredHotkeyApps' && definition.settingKey != 'TrayQueries';
   }
 
   List<WoxSettingSearchResult> _buildInstalledPluginSearchResults() {

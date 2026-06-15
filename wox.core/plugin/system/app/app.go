@@ -75,21 +75,7 @@ type appCacheFile struct {
 }
 
 // Bump this when cached appInfo fields or preprocessed icon semantics change.
-// Version 5 refreshes macOS searchable_names after localized aliases started
-// reading Finder display names plus every InfoPlist.loctable/InfoPlist.strings
-// localization. Keeping v4 would leave existing caches without names such as
-// Korean Calculator.
-// Version 6 refreshes Windows Settings entries after replacing legacy Control
-// Panel file icons with built-in SVGs and adding System subpages. Keeping v5
-// would continue loading old cached absolute icon paths and omit the new
-// ms-settings rows until the user manually reindexed apps.
-// Version 7 refreshes Windows Settings searchable aliases. Version 6 caches
-// created before the alias table was complete would keep opening the new pages
-// but miss English terms such as "display" for localized Settings titles.
-// Version 8 refreshes app entries with icon-source metadata. The old cache only
-// tracked the shortcut/file path mtime, so updated executable icons behind
-// unchanged .lnk files could keep showing stale cached PNGs.
-const appCacheVersion = 8
+const appCacheVersion = 11
 
 const (
 	appCommandReindex   = "reindex"

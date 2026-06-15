@@ -23,6 +23,7 @@ class WoxSetting {
   late String launchMode;
   late String startPage;
   late String showPosition;
+  late bool isLinuxWaylandSession;
   late List<AIProvider> aiProviders;
   late int appWidth;
   late int maxResultCount;
@@ -69,6 +70,7 @@ class WoxSetting {
     required this.launchMode,
     required this.startPage,
     required this.showPosition,
+    required this.isLinuxWaylandSession,
     required this.aiProviders,
     required this.appWidth,
     required this.maxResultCount,
@@ -145,6 +147,7 @@ class WoxSetting {
 
     launchMode = json['LaunchMode'] ?? 'continue';
     startPage = json['StartPage'] ?? 'mru';
+    isLinuxWaylandSession = json['IsLinuxWaylandSession'] ?? false;
 
     if (json['AIProviders'] != null) {
       aiProviders = <AIProvider>[];
@@ -200,6 +203,7 @@ class WoxSetting {
     data['LaunchMode'] = launchMode;
     data['StartPage'] = startPage;
     data['ShowPosition'] = showPosition;
+    data['IsLinuxWaylandSession'] = isLinuxWaylandSession;
     data['AIProviders'] = aiProviders;
     data['AppWidth'] = appWidth;
     data['MaxResultCount'] = maxResultCount;
