@@ -18,6 +18,13 @@
 #include <dwmapi.h>
 #include <gdiplus.h>
 #include <objidl.h>
+#include <d3d11.h>
+#include <dxgi.h>
+#include <wrl/client.h>
+#include <cstdio>
+#include <windows_gpu_recovery/gpu_recovery_message.h>
+#pragma comment(lib, "dxgi.lib")
+#pragma comment(lib, "d3d11.lib")
 
 #include "flutter/generated_plugin_registrant.h"
 #include "result_drag_bridge.h"
@@ -90,6 +97,22 @@ static DWORD GetWindowsBuildNumberForCapabilities()
     }
   }
   return osvi.dwBuildNumber;
+}
+
+/// Writes a marker file next to the exe so the new Dart VM knows
+/// it was restarted due to GPU recovery.
+static void SetRecoveryFlag() {
+  wchar_t exe_path[MAX_PATH];
+  GetModuleFileNameW(nullptr, exe_path, MAX_PATH);
+  wchar_t* last_slash = wcsrchr(exe_path, L'\\');
+  if (last_slash) *(last_slash + 1) = L'\0';
+  wcscat_s(exe_path, L"gpu_recovery.marker");
+  FILE* f = nullptr;
+  _wfopen_s(&f, exe_path, L"w");
+  if (f) {
+    fprintf(f, "1");
+    fclose(f);
+  }
 }
 
 static void EnsureGdiplusInitialized()
@@ -4334,6 +4357,21 @@ void FlutterWindow::OnDestroy()
 LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message, WPARAM const wparam, LPARAM const lparam) noexcept
 {
+  // Handle GPU recovery message FIRST, before any other processing
+  if (message == WM_GPU_RECOVERY) {
+    fprintf(stderr, "[GPU_RECOVERY] WM_GPU_RECOVERY received\n");
+    fflush(stderr);
+
+    // Write recovery marker and exit - let Go backend restart us
+    SetRecoveryFlag();
+    fprintf(stderr, "[GPU_RECOVERY] Exiting for GPU recovery...\n");
+    fflush(stderr);
+    
+    // Exit the process - Go backend will restart us
+    PostQuitMessage(0);
+    return 0;
+  }
+
   if (message == kScrollingCaptureWheelMessage)
   {
     EmitScrollingCaptureWheelEvent(static_cast<int>(lparam));
