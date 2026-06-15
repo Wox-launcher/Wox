@@ -9,6 +9,7 @@
 #include <desktop_drop/desktop_drop_plugin.h>
 #include <protocol_handler_windows/protocol_handler_windows_plugin_c_api.h>
 #include <url_launcher_windows/url_launcher_windows.h>
+#include <windows_gpu_recovery/windows_gpu_recovery_plugin_c_api.h>
 
 void RegisterPlugins(flutter::PluginRegistry* registry) {
   DesktopDropPluginRegisterWithRegistrar(
@@ -17,4 +18,6 @@ void RegisterPlugins(flutter::PluginRegistry* registry) {
       registry->GetRegistrarForPlugin("ProtocolHandlerWindowsPluginCApi"));
   UrlLauncherWindowsRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("UrlLauncherWindows"));
+  WindowsGpuRecoveryPluginCApiRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("WindowsGpuRecoveryPluginCApi"));
 }

@@ -877,6 +877,15 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.1.5"
+  windows_gpu_recovery:
+    dependency: "direct main"
+    description:
+      path: "."
+      ref: master
+      resolved-ref: "5d4f3101af0c1a28b80500703c0fd95844545a1e"
+      url: "https://github.com/DitriXNew/windows_gpu_recovery.git"
+    source: git
+    version: "0.1.0"
   xdg_directories:
     dependency: transitive
     description:

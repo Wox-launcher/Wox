@@ -6,6 +6,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   desktop_drop
   protocol_handler_windows
   url_launcher_windows
+  windows_gpu_recovery
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
