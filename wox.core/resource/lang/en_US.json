@@ -1210,6 +1210,7 @@
   "plugin_sys_log_out_confirm_subtitle": "Press Enter again to log out",
   "plugin_sys_eject_all_disks": "Eject All Disks",
   "plugin_sys_show_desktop": "Show Desktop",
+  "plugin_sys_show_task_view": "Task View",
   "plugin_sys_show_screen_saver": "Show Screen Saver",
   "plugin_sys_quit_all_applications": "Quit All Applications",
   "plugin_sys_hide_all_apps_except_frontmost": "Hide All Apps Except Frontmost",

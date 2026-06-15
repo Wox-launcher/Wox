@@ -1211,6 +1211,7 @@
   "plugin_sys_log_out_confirm_subtitle": "再次按回车以注销当前用户",
   "plugin_sys_eject_all_disks": "弹出所有磁盘",
   "plugin_sys_show_desktop": "显示桌面",
+  "plugin_sys_show_task_view": "任务视图",
   "plugin_sys_show_screen_saver": "显示屏幕保护",
   "plugin_sys_quit_all_applications": "退出所有应用",
   "plugin_sys_hide_all_apps_except_frontmost": "隐藏除当前应用外的所有应用",

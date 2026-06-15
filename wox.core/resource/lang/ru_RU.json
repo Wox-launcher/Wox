@@ -1092,6 +1092,7 @@
   "plugin_sys_log_out_confirm_subtitle": "Нажмите Enter еще раз, чтобы выйти из системы",
   "plugin_sys_eject_all_disks": "Извлечь все диски",
   "plugin_sys_show_desktop": "Показать рабочий стол",
+  "plugin_sys_show_task_view": "Представление задач",
   "plugin_sys_show_screen_saver": "Показать заставку",
   "plugin_sys_quit_all_applications": "Закрыть все приложения",
   "plugin_sys_hide_all_apps_except_frontmost": "Скрыть все приложения кроме активного",
