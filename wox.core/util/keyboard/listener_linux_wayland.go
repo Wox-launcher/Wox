@@ -4,6 +4,7 @@ package keyboard
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -24,10 +25,14 @@ const (
 )
 
 type waylandHotkeyRegistration struct {
+	shortcutID string
+	callback   func()
+}
+
+type waylandHotkeySessionRegistration struct {
 	conn         *dbus.Conn
 	sessionPath  dbus.ObjectPath
-	shortcutID   string
-	callback     func()
+	shortcutIDs  []string
 	unregisterMu sync.Once
 }
 
@@ -40,24 +45,60 @@ var (
 	waylandPortalMu            sync.Mutex
 	waylandPortalConn          *dbus.Conn
 	waylandPortalSignals       chan *dbus.Signal
-	waylandPortalRegistrations = map[dbus.ObjectPath]*waylandHotkeyRegistration{}
+	waylandPortalRegistrations = map[dbus.ObjectPath]map[string]*waylandHotkeyRegistration{}
 	waylandPortalCounter       uint64
 
 	// waylandPortalUnavailable is set to true the first time ensureWaylandPortalReady
-	// determines that the XDG GlobalShortcuts portal is not available on this system
-	// (e.g. xdg-desktop-portal-gnome < 47 which lacks the implementation).
+	// determines that the XDG GlobalShortcuts portal is not available on this system.
 	// Subsequent calls short-circuit immediately instead of repeating the probe.
 	waylandPortalUnavailable bool
 )
 
 func registerGlobalHotkeyLinuxWayland(modifiers Modifier, key Key, callback func()) (HotkeyRegistration, error) {
-	if callback == nil {
-		return nil, fmt.Errorf("hotkey callback is required")
+	return registerGlobalHotkeysLinuxWayland([]GlobalHotkeySpec{
+		{
+			Modifiers: modifiers,
+			Key:       key,
+			Callback:  callback,
+		},
+	})
+}
+
+func registerGlobalHotkeysLinuxWayland(specs []GlobalHotkeySpec) (HotkeyRegistration, error) {
+	if len(specs) == 0 {
+		return &waylandHotkeySessionRegistration{}, nil
 	}
 
-	preferredTrigger, err := formatWaylandPreferredTrigger(modifiers, key)
-	if err != nil {
-		return nil, err
+	shortcutSpecs := make([]portalShortcutSpec, 0, len(specs))
+	registrations := make(map[string]*waylandHotkeyRegistration, len(specs))
+	preferredTriggers := make(map[string]string, len(specs))
+
+	for _, spec := range specs {
+		if spec.Callback == nil {
+			return nil, fmt.Errorf("hotkey callback is required")
+		}
+
+		preferredTrigger, err := formatWaylandPreferredTrigger(spec.Modifiers, spec.Key)
+		if err != nil {
+			return nil, err
+		}
+		shortcutID := portalShortcutIDForTrigger(preferredTrigger)
+		if _, exists := registrations[shortcutID]; exists {
+			return nil, fmt.Errorf("duplicate wayland global hotkey shortcut id: %s", shortcutID)
+		}
+
+		registrations[shortcutID] = &waylandHotkeyRegistration{
+			shortcutID: shortcutID,
+			callback:   spec.Callback,
+		}
+		preferredTriggers[shortcutID] = preferredTrigger
+		shortcutSpecs = append(shortcutSpecs, portalShortcutSpec{
+			ID: shortcutID,
+			Options: map[string]dbus.Variant{
+				"description":       dbus.MakeVariant("Wox global hotkey"),
+				"preferred_trigger": dbus.MakeVariant(preferredTrigger),
+			},
+		})
 	}
 
 	conn, err := ensureWaylandPortalReady()
@@ -85,38 +126,57 @@ func registerGlobalHotkeyLinuxWayland(modifiers Modifier, key Key, callback func
 		return nil, err
 	}
 
-	registration := &waylandHotkeyRegistration{
-		conn:        conn,
-		sessionPath: sessionPath,
-		shortcutID:  nextPortalToken("shortcut"),
-		callback:    callback,
-	}
-
-	bindRequestHandle, err := bindWaylandShortcut(conn, registration.sessionPath, registration.shortcutID, preferredTrigger)
+	bindRequestHandle, err := bindWaylandShortcuts(conn, sessionPath, shortcutSpecs)
 	if err != nil {
-		_ = registration.closeSession()
+		_ = closeWaylandPortalSession(conn, sessionPath)
 		return nil, err
 	}
 
-	responseCode, _, err = waitPortalRequestResponse(conn, bindRequestHandle)
+	responseCode, bindResults, err := waitPortalRequestResponse(conn, bindRequestHandle)
 	if err != nil {
-		_ = registration.closeSession()
+		_ = closeWaylandPortalSession(conn, sessionPath)
 		return nil, err
 	}
 	if responseCode != 0 {
-		_ = registration.closeSession()
+		_ = closeWaylandPortalSession(conn, sessionPath)
 		return nil, fmt.Errorf("wayland global hotkey bind request failed with response code %d", responseCode)
 	}
 
+	for shortcutID := range registrations {
+		triggerDescription, ok := portalResponseShortcutTriggerDescription(bindResults, shortcutID)
+		if !ok {
+			_ = closeWaylandPortalSession(conn, sessionPath)
+			return nil, fmt.Errorf("wayland global hotkey was not bound by portal")
+		}
+		if strings.TrimSpace(triggerDescription) == "" {
+			_ = closeWaylandPortalSession(conn, sessionPath)
+			return nil, fmt.Errorf("wayland global hotkey portal returned an empty trigger description")
+		}
+	}
+
 	waylandPortalMu.Lock()
-	waylandPortalRegistrations[registration.sessionPath] = registration
+	waylandPortalRegistrations[sessionPath] = registrations
 	waylandPortalMu.Unlock()
 
-	return registration, nil
+	shortcutIDs := make([]string, 0, len(registrations))
+	for shortcutID := range registrations {
+		shortcutIDs = append(shortcutIDs, shortcutID)
+		triggerDescription, _ := portalResponseShortcutTriggerDescription(bindResults, shortcutID)
+		preferredTrigger := preferredTriggers[shortcutID]
+		util.GetLogger().Info(util.NewTraceContext(), fmt.Sprintf(
+			"[hotkey] wayland portal registered: session=%s shortcut=%s trigger=%s trigger_description=%s",
+			sessionPath, shortcutID, preferredTrigger, triggerDescription))
+	}
+
+	return &waylandHotkeySessionRegistration{
+		conn:        conn,
+		sessionPath: sessionPath,
+		shortcutIDs: shortcutIDs,
+	}, nil
 }
 
-func (r *waylandHotkeyRegistration) Unregister() error {
-	if r == nil {
+func (r *waylandHotkeySessionRegistration) Unregister() error {
+	if r == nil || r.sessionPath == "" {
 		return nil
 	}
 
@@ -125,13 +185,16 @@ func (r *waylandHotkeyRegistration) Unregister() error {
 		waylandPortalMu.Lock()
 		delete(waylandPortalRegistrations, r.sessionPath)
 		waylandPortalMu.Unlock()
-		unregisterErr = r.closeSession()
+		unregisterErr = closeWaylandPortalSession(r.conn, r.sessionPath)
 	})
 	return unregisterErr
 }
 
-func (r *waylandHotkeyRegistration) closeSession() error {
-	call := r.conn.Object(portalBusName, r.sessionPath).Call(portalSessionIFace+".Close", 0)
+func closeWaylandPortalSession(conn *dbus.Conn, sessionPath dbus.ObjectPath) error {
+	if conn == nil || sessionPath == "" {
+		return nil
+	}
+	call := conn.Object(portalBusName, sessionPath).Call(portalSessionIFace+".Close", 0)
 	return call.Err
 }
 
@@ -142,13 +205,16 @@ func addRawKeyListenerLinuxWayland(handler RawKeyHandler) (RawKeySubscription, e
 	return nil, unsupportedWaylandRawListenerError()
 }
 
-// IsWaylandPortalAvailable returns true when the XDG GlobalShortcuts portal
-// has been successfully initialised at least once. It is safe to call from
-// any goroutine.
-func IsWaylandPortalAvailable() bool {
-	waylandPortalMu.Lock()
-	defer waylandPortalMu.Unlock()
-	return waylandPortalConn != nil
+func isWaylandGlobalShortcutsPortalAvailableLinux() bool {
+	if !IsWaylandSession() {
+		return false
+	}
+	if _, err := ensureWaylandPortalReady(); err != nil {
+		util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf(
+			"[hotkey] wayland global shortcuts portal is not available: %s", err.Error()))
+		return false
+	}
+	return true
 }
 
 func ensureWaylandPortalReady() (*dbus.Conn, error) {
@@ -186,7 +252,6 @@ func ensureWaylandPortalReady() (*dbus.Conn, error) {
 	}
 
 	if err := conn.AddMatchSignal(
-		dbus.WithMatchObjectPath(portalObjectPath),
 		dbus.WithMatchInterface(portalGlobalShortcutsIFace),
 		dbus.WithMatchMember("Activated"),
 	); err != nil {
@@ -212,6 +277,8 @@ func processWaylandPortalSignals(signals <-chan *dbus.Signal) {
 
 		sessionPath, ok := signal.Body[0].(dbus.ObjectPath)
 		if !ok {
+			util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf(
+				"[hotkey] wayland portal activation had invalid session handle: value=%#v", signal.Body[0]))
 			continue
 		}
 
@@ -221,16 +288,37 @@ func processWaylandPortalSignals(signals <-chan *dbus.Signal) {
 		}
 
 		waylandPortalMu.Lock()
-		registration := waylandPortalRegistrations[sessionPath]
+		sessionRegistrations := waylandPortalRegistrations[sessionPath]
+		registration := sessionRegistrations[shortcutID]
 		waylandPortalMu.Unlock()
-		if registration == nil || registration.shortcutID != shortcutID || registration.callback == nil {
+		if registration == nil || registration.callback == nil {
+			util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf(
+				"[hotkey] wayland portal activation ignored: session=%s shortcut=%s registered=%t",
+				sessionPath, shortcutID, registration != nil))
 			continue
 		}
 
+		util.GetLogger().Info(util.NewTraceContext(), fmt.Sprintf(
+			"[hotkey] wayland portal activated: session=%s shortcut=%s", sessionPath, shortcutID))
 		util.Go(util.NewTraceContext(), "wayland global hotkey callback", func() {
 			registration.callback()
 		})
 	}
+}
+
+// portalShortcutIDForTrigger keeps the shortcut id stable across restarts so
+// portal permission stores can associate the same configured shortcut with Wox.
+func portalShortcutIDForTrigger(preferredTrigger string) string {
+	var builder strings.Builder
+	builder.WriteString("wox_shortcut_")
+	for _, r := range preferredTrigger {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			builder.WriteRune(r)
+			continue
+		}
+		builder.WriteByte('_')
+	}
+	return builder.String()
 }
 
 func createWaylandGlobalShortcutsSession(conn *dbus.Conn, handleToken string, sessionToken string) (dbus.ObjectPath, error) {
@@ -254,17 +342,7 @@ func createWaylandGlobalShortcutsSession(conn *dbus.Conn, handleToken string, se
 	return requestHandle, nil
 }
 
-func bindWaylandShortcut(conn *dbus.Conn, sessionPath dbus.ObjectPath, shortcutID string, preferredTrigger string) (dbus.ObjectPath, error) {
-	shortcuts := []portalShortcutSpec{
-		{
-			ID: shortcutID,
-			Options: map[string]dbus.Variant{
-				"description":       dbus.MakeVariant("Wox global hotkey"),
-				"preferred_trigger": dbus.MakeVariant(preferredTrigger),
-			},
-		},
-	}
-
+func bindWaylandShortcuts(conn *dbus.Conn, sessionPath dbus.ObjectPath, shortcuts []portalShortcutSpec) (dbus.ObjectPath, error) {
 	options := map[string]dbus.Variant{
 		"handle_token": dbus.MakeVariant(nextPortalToken("bind")),
 	}
@@ -285,6 +363,153 @@ func bindWaylandShortcut(conn *dbus.Conn, sessionPath dbus.ObjectPath, shortcutI
 		return "", fmt.Errorf("failed to decode wayland global hotkey bind request handle: %w", err)
 	}
 	return requestHandle, nil
+}
+
+// portalResponseShortcutTriggerDescription validates the portal's accepted
+// shortcut list so a confirmed dialog with no actual trigger does not look like success.
+func portalResponseShortcutTriggerDescription(results map[string]dbus.Variant, shortcutID string) (string, bool) {
+	shortcutsVariant, ok := results["shortcuts"]
+	if !ok {
+		util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf(
+			"[hotkey] wayland portal bind response did not include shortcuts: shortcut=%s response=%#v",
+			shortcutID, results))
+		return "", false
+	}
+
+	shortcutsValue := shortcutsVariant.Value()
+	triggerDescription, ok := shortcutResultTriggerDescription(reflect.ValueOf(shortcutsValue), shortcutID)
+	if !ok {
+		util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf(
+			"[hotkey] wayland portal bind response did not include shortcut: shortcut=%s response=%#v",
+			shortcutID, shortcutsValue))
+		return "", false
+	}
+	if strings.TrimSpace(triggerDescription) == "" {
+		util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf(
+			"[hotkey] wayland portal bind response included shortcut without trigger description: shortcut=%s response=%#v",
+			shortcutID, shortcutsValue))
+	}
+	return triggerDescription, true
+}
+
+// shortcutResultTriggerDescription inspects the godbus-decoded a(sa{sv}) tuples
+// and returns the user-readable trigger assigned by the portal for our shortcut.
+func shortcutResultTriggerDescription(value reflect.Value, shortcutID string) (string, bool) {
+	if !value.IsValid() {
+		return "", false
+	}
+	for value.Kind() == reflect.Interface || value.Kind() == reflect.Pointer {
+		if value.IsNil() {
+			return "", false
+		}
+		value = value.Elem()
+	}
+
+	if value.Kind() != reflect.Slice && value.Kind() != reflect.Array {
+		return "", false
+	}
+
+	for i := 0; i < value.Len(); i++ {
+		item := value.Index(i)
+		skipItem := false
+		for item.Kind() == reflect.Interface || item.Kind() == reflect.Pointer {
+			if item.IsNil() {
+				skipItem = true
+				break
+			}
+			item = item.Elem()
+		}
+		if skipItem {
+			continue
+		}
+
+		var id string
+		var options reflect.Value
+		switch item.Kind() {
+		case reflect.Struct:
+			if item.NumField() > 0 {
+				id, _ = reflectStringValue(item.Field(0))
+			}
+			if item.NumField() > 1 {
+				options = item.Field(1)
+			}
+		case reflect.Slice, reflect.Array:
+			if item.Len() > 0 {
+				id, _ = reflectStringValue(item.Index(0))
+			}
+			if item.Len() > 1 {
+				options = item.Index(1)
+			}
+		}
+
+		if id == shortcutID {
+			triggerDescription, _ := reflectOptionStringValue(options, "trigger_description")
+			return triggerDescription, true
+		}
+	}
+	return "", false
+}
+
+func reflectStringValue(value reflect.Value) (string, bool) {
+	if !value.IsValid() {
+		return "", false
+	}
+	for value.Kind() == reflect.Interface || value.Kind() == reflect.Pointer {
+		if value.IsNil() {
+			return "", false
+		}
+		value = value.Elem()
+	}
+	if value.Kind() != reflect.String {
+		return "", false
+	}
+	return value.String(), true
+}
+
+func reflectOptionStringValue(value reflect.Value, key string) (string, bool) {
+	if !value.IsValid() {
+		return "", false
+	}
+	for value.Kind() == reflect.Interface || value.Kind() == reflect.Pointer {
+		if value.IsNil() {
+			return "", false
+		}
+		value = value.Elem()
+	}
+
+	if value.CanInterface() {
+		if options, ok := value.Interface().(map[string]dbus.Variant); ok {
+			optionValue, exists := options[key]
+			if !exists {
+				return "", false
+			}
+			if optionString, ok := optionValue.Value().(string); ok {
+				return optionString, true
+			}
+			return "", false
+		}
+	}
+
+	if value.Kind() != reflect.Map {
+		return "", false
+	}
+	for _, mapKey := range value.MapKeys() {
+		optionKey, ok := reflectStringValue(mapKey)
+		if !ok || optionKey != key {
+			continue
+		}
+		optionValue := value.MapIndex(mapKey)
+		if optionValue.CanInterface() {
+			if variant, ok := optionValue.Interface().(dbus.Variant); ok {
+				if optionString, ok := variant.Value().(string); ok {
+					return optionString, true
+				}
+				return "", false
+			}
+		}
+		return reflectStringValue(optionValue)
+	}
+	return "", false
 }
 
 func waitPortalRequestResponse(conn *dbus.Conn, requestHandle dbus.ObjectPath) (uint32, map[string]dbus.Variant, error) {
@@ -337,20 +562,14 @@ func parsePortalSessionHandle(results map[string]dbus.Variant) (dbus.ObjectPath,
 		return "", fmt.Errorf("portal response did not include a session handle")
 	}
 
-	switch sessionHandle := sessionHandleVariant.Value().(type) {
-	case dbus.ObjectPath:
-		if sessionHandle == "" {
-			return "", fmt.Errorf("portal response returned an empty session handle")
-		}
-		return sessionHandle, nil
-	case string:
-		if sessionHandle == "" {
-			return "", fmt.Errorf("portal response returned an empty session handle")
-		}
-		return dbus.ObjectPath(sessionHandle), nil
-	default:
+	sessionHandle, ok := sessionHandleVariant.Value().(string)
+	if !ok {
 		return "", fmt.Errorf("portal response returned an invalid session handle type")
 	}
+	if sessionHandle == "" {
+		return "", fmt.Errorf("portal response returned an empty session handle")
+	}
+	return dbus.ObjectPath(sessionHandle), nil
 }
 
 func formatWaylandPreferredTrigger(modifiers Modifier, key Key) (string, error) {

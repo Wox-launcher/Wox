@@ -3,78 +3,48 @@ package autostart
 import (
 	"fmt"
 	"os"
-	"path/filepath"
-	"text/template"
+	"wox/util"
 )
 
 func setAutostart(enable bool) error {
-	homeDir, err := os.UserHomeDir()
+	desktopFilePath, err := util.LinuxAutostartDesktopEntryPath()
 	if err != nil {
-		return fmt.Errorf("failed to get user home directory: %w", err)
+		return err
 	}
-
-	autostartDir := filepath.Join(homeDir, ".config", "autostart")
-	desktopFilePath := filepath.Join(autostartDir, "wox-launcher.desktop")
 
 	if enable {
-		if err := os.MkdirAll(autostartDir, 0755); err != nil {
-			return fmt.Errorf("failed to create autostart directory: %w", err)
+		if err := util.WriteLinuxDesktopEntry(desktopFilePath, false, true); err != nil {
+			return err
 		}
-		return createDesktopFile(desktopFilePath)
-	} else {
-		return os.Remove(desktopFilePath)
-	}
-}
-
-func createDesktopFile(desktopFilePath string) error {
-	desktopFileContent := `[Desktop Entry]
-Type=Application
-Name=Wox Launcher
-Exec={{ .ExePath }}
-Hidden=false
-NoDisplay=false
-X-GNOME-Autostart-enabled=true
-`
-
-	tmpl, err := template.New("desktop").Parse(desktopFileContent)
-	if err != nil {
-		return fmt.Errorf("failed to parse desktop file template: %w", err)
+		return nil
 	}
 
-	file, err := os.Create(desktopFilePath)
-	if err != nil {
-		return fmt.Errorf("failed to create desktop file: %w", err)
-	}
-	defer file.Close()
-
-	exePath, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("failed to get executable path: %w", err)
-	}
-
-	err = tmpl.Execute(file, struct{ ExePath string }{ExePath: exePath})
-	if err != nil {
-		return fmt.Errorf("failed to write desktop file: %w", err)
-	}
-
-	return nil
+	return removeFileIfExists(desktopFilePath)
 }
 
 func isAutostart() (bool, error) {
-	homeDir, err := os.UserHomeDir()
+	desktopFilePath, err := util.LinuxAutostartDesktopEntryPath()
 	if err != nil {
-		return false, fmt.Errorf("failed to get user home directory: %w", err)
+		return false, err
 	}
 
-	desktopFilePath := filepath.Join(homeDir, ".config", "autostart", "wox-launcher.desktop")
+	return fileExists(desktopFilePath)
+}
 
-	_, err = os.Stat(desktopFilePath)
+func fileExists(path string) (bool, error) {
+	_, err := os.Stat(path)
 	if os.IsNotExist(err) {
 		return false, nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("failed to check autostart file: %w", err)
+		return false, fmt.Errorf("failed to check file: %w", err)
 	}
-
 	return true, nil
+}
+
+func removeFileIfExists(path string) error {
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove file: %w", err)
+	}
+	return nil
 }

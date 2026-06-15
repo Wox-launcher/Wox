@@ -38,6 +38,17 @@ type Hotkey struct {
 	capsLockKey   keyboard.Key
 }
 
+type Spec struct {
+	CombineKey string
+	Callback   func()
+}
+
+type Group struct {
+	combineKeys  []string
+	registration keyboard.HotkeyRegistration
+	hotkeys      []*Hotkey
+}
+
 func (h *Hotkey) Register(ctx context.Context, combineKey string, callback func()) error {
 	spec, parseErr := h.parseCombineKey(combineKey)
 	if parseErr != nil {
@@ -73,6 +84,80 @@ func (h *Hotkey) Register(ctx context.Context, combineKey string, callback func(
 	h.isDoubleKey = false
 	h.registration = registration
 	return nil
+}
+
+// RegisterGroup registers multiple normal hotkeys as one native registration
+// when the platform supports it. It falls back to individual registrations when
+// a shortcut uses a special Wox-only mode such as double modifier keys.
+func RegisterGroup(ctx context.Context, specs []Spec) (*Group, error) {
+	group := &Group{}
+	keyboardSpecs := make([]keyboard.GlobalHotkeySpec, 0, len(specs))
+
+	parser := &Hotkey{}
+	for _, spec := range specs {
+		parsed, parseErr := parser.parseCombineKey(spec.CombineKey)
+		if parseErr != nil {
+			group.Unregister(ctx)
+			return nil, parseErr
+		}
+		if validateErr := validateHotkeySpec(parsed); validateErr != nil {
+			group.Unregister(ctx)
+			return nil, validateErr
+		}
+
+		if parsed.isDoubleModifier() || parsed.isCapsLockKey() {
+			hk := &Hotkey{}
+			if err := hk.Register(ctx, spec.CombineKey, spec.Callback); err != nil {
+				group.Unregister(ctx)
+				return nil, err
+			}
+			group.hotkeys = append(group.hotkeys, hk)
+			continue
+		}
+
+		keyboardSpecs = append(keyboardSpecs, keyboard.GlobalHotkeySpec{
+			Modifiers: parsed.modifiers,
+			Key:       parsed.key,
+			Callback:  spec.Callback,
+		})
+		group.combineKeys = append(group.combineKeys, spec.CombineKey)
+	}
+
+	if len(keyboardSpecs) > 0 {
+		registration, err := keyboard.RegisterGlobalHotkeys(keyboardSpecs)
+		if err != nil {
+			group.Unregister(ctx)
+			return nil, err
+		}
+		group.registration = registration
+		for _, combineKey := range group.combineKeys {
+			util.GetLogger().Info(ctx, fmt.Sprintf("register normal hotkey: %s", combineKey))
+		}
+	}
+
+	return group, nil
+}
+
+func (g *Group) Unregister(ctx context.Context) {
+	if g == nil {
+		return
+	}
+
+	if g.registration != nil {
+		for _, combineKey := range g.combineKeys {
+			util.GetLogger().Info(ctx, fmt.Sprintf("unregister normal hotkey: %s", combineKey))
+		}
+		if err := g.registration.Unregister(); err != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to unregister hotkey group: %s", err.Error()))
+		}
+		g.registration = nil
+		g.combineKeys = nil
+	}
+
+	for _, hk := range g.hotkeys {
+		hk.Unregister(ctx)
+	}
+	g.hotkeys = nil
 }
 
 func (h *Hotkey) Unregister(ctx context.Context) {

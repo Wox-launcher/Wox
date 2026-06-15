@@ -1,7 +1,9 @@
 [Desktop Entry]
 Type=Application
 Name=Wox
-Exec=wox
-Icon=wox
+Exec=wox %u
+Icon=io.github.WoxLauncher.Wox
 Categories=Utility;
+MimeType=x-scheme-handler/wox;
 Terminal=false
+StartupWMClass=wox

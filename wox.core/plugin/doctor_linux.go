@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"wox/util"
 	"wox/util/browser"
 )
 
@@ -39,6 +40,34 @@ func checkGnomeTrayIndicator(ctx context.Context) (DoctorCheckResult, bool) {
 		Action: func(ctx context.Context, actionContext ActionContext) {
 			_ = browser.OpenURL(gnomeAppIndicatorExtensionURL, "")
 		},
+	}, true
+}
+
+// checkWaylandDesktopLaunch verifies that Wayland portal permissions can be
+// associated with Wox's stable desktop identity.
+func checkWaylandDesktopLaunch(ctx context.Context) (DoctorCheckResult, bool) {
+	if !util.IsLinuxWaylandSession() {
+		return DoctorCheckResult{}, false
+	}
+
+	if util.IsLinuxLaunchedFromStableDesktopEntry() {
+		return DoctorCheckResult{
+			Name:        "i18n:plugin_doctor_wayland_desktop_launch",
+			Type:        DoctorCheckWaylandDesktopLaunch,
+			Passed:      true,
+			Description: "i18n:plugin_doctor_wayland_desktop_launch_ok",
+			ActionName:  "",
+			Action:      func(ctx context.Context, actionContext ActionContext) {},
+		}, true
+	}
+
+	return DoctorCheckResult{
+		Name:        "i18n:plugin_doctor_wayland_desktop_launch",
+		Type:        DoctorCheckWaylandDesktopLaunch,
+		Passed:      false,
+		Description: "i18n:plugin_doctor_wayland_desktop_launch_missing",
+		ActionName:  "",
+		Action:      func(ctx context.Context, actionContext ActionContext) {},
 	}, true
 }
 

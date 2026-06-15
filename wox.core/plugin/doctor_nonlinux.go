@@ -7,3 +7,7 @@ import "context"
 func checkGnomeTrayIndicator(ctx context.Context) (DoctorCheckResult, bool) {
 	return DoctorCheckResult{}, false
 }
+
+func checkWaylandDesktopLaunch(ctx context.Context) (DoctorCheckResult, bool) {
+	return DoctorCheckResult{}, false
+}
