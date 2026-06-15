@@ -57,13 +57,28 @@ struct _MyApplication
   GtkWindow *window; // Store reference to the main window
   gulong previous_active_window;
   gboolean restore_previous_window_on_hide;
+  guint set_size_sequence;
+  gboolean has_pending_size;
+  guint pending_size_sequence;
+  int pending_size_width;
+  int pending_size_height;
   gboolean has_pending_bounds;
+  guint pending_bounds_sequence;
   int pending_bounds_x;
   int pending_bounds_y;
   int pending_bounds_width;
   int pending_bounds_height;
   std::vector<struct CachedLinuxDisplayCapture> cached_x11_display_captures;
   struct CachedPortalCapture cached_portal_capture;
+};
+
+// PendingWindowSize carries a resize request into delayed GTK callbacks.
+struct PendingWindowSize
+{
+  MyApplication *self;
+  guint sequence;
+  int target_width;
+  int target_height;
 };
 
 // Global variable to store method channel for window events
@@ -234,6 +249,66 @@ static FlValue *create_linux_window_backend_info(GtkWindow *window)
   return result;
 }
 
+// new_pending_window_size keeps the application alive until the delayed
+// resize callback has either applied or discarded the request.
+static PendingWindowSize *new_pending_window_size(MyApplication *self,
+                                                  guint sequence,
+                                                  int target_width,
+                                                  int target_height)
+{
+  PendingWindowSize *pending_size = new PendingWindowSize;
+  pending_size->self = MY_APPLICATION(g_object_ref(self));
+  pending_size->sequence = sequence;
+  pending_size->target_width = target_width;
+  pending_size->target_height = target_height;
+  return pending_size;
+}
+
+// record_window_size_request tracks the latest native size target so delayed
+// GTK callbacks can reject stale resize or bounds requests.
+static guint record_window_size_request(MyApplication *self, int width,
+                                        int height)
+{
+  const guint sequence = ++self->set_size_sequence;
+  self->has_pending_size = TRUE;
+  self->pending_size_sequence = sequence;
+  self->pending_size_width = width;
+  self->pending_size_height = height;
+  return sequence;
+}
+
+// apply_window_size updates all GTK size hints used by the compositor. On
+// Wayland, a bare gtk_window_resize request can be superseded by a later GTK
+// configure cycle, so the default size and widget request are kept in sync.
+static void apply_window_size(GtkWindow *window, int width, int height)
+{
+  gtk_window_set_default_size(window, width, height);
+  gtk_widget_set_size_request(GTK_WIDGET(window), width, height);
+  gtk_window_resize(window, width, height);
+}
+
+// apply_pending_window_size repeats only the latest size request after GTK has
+// processed map/layout callbacks. Older callbacks are ignored so a stale small
+// query-hotkey size cannot overwrite the larger result-list size.
+static gboolean apply_pending_window_size(gpointer user_data)
+{
+  PendingWindowSize *pending_size = static_cast<PendingWindowSize *>(user_data);
+  MyApplication *self = pending_size->self;
+  if (self->window != NULL &&
+      self->has_pending_size &&
+      self->pending_size_sequence == pending_size->sequence &&
+      self->pending_size_width == pending_size->target_width &&
+      self->pending_size_height == pending_size->target_height)
+  {
+    apply_window_size(self->window, self->pending_size_width,
+                      self->pending_size_height);
+  }
+
+  g_object_unref(self);
+  delete pending_size;
+  return G_SOURCE_REMOVE;
+}
+
 // apply_window_bounds uses GTK top-level APIs so the window manager sees the move request.
 // X11 window managers normally honor both resize and move. Native Wayland compositors
 // may honor the resize but ignore the absolute move because top-level placement belongs
@@ -241,7 +316,7 @@ static FlValue *create_linux_window_backend_info(GtkWindow *window)
 static void apply_window_bounds(GtkWindow *window, int x, int y, int width,
                                 int height)
 {
-  gtk_window_resize(window, width, height);
+  apply_window_size(window, width, height);
   gtk_window_move(window, x, y);
 }
 
@@ -250,7 +325,9 @@ static void apply_window_bounds(GtkWindow *window, int x, int y, int width,
 static gboolean apply_pending_window_bounds(gpointer user_data)
 {
   MyApplication *self = MY_APPLICATION(user_data);
-  if (self->window != NULL && self->has_pending_bounds)
+  if (self->window != NULL &&
+      self->has_pending_bounds &&
+      self->pending_bounds_sequence == self->pending_size_sequence)
   {
     log_window_bounds_state(self->window, "pending-before",
                             self->pending_bounds_x, self->pending_bounds_y,
@@ -263,6 +340,10 @@ static gboolean apply_pending_window_bounds(gpointer user_data)
                             self->pending_bounds_x, self->pending_bounds_y,
                             self->pending_bounds_width,
                             self->pending_bounds_height);
+    self->has_pending_bounds = FALSE;
+  }
+  else if (self->has_pending_bounds)
+  {
     self->has_pending_bounds = FALSE;
   }
   g_object_unref(self);
@@ -2396,7 +2477,21 @@ static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
       double width = fl_value_get_float(fl_value_lookup_string(args, "width"));
       double height =
           fl_value_get_float(fl_value_lookup_string(args, "height"));
-      gtk_window_resize(window, (int)width, (int)height);
+      const int target_width = (int)width;
+      const int target_height = (int)height;
+      const guint sequence = record_window_size_request(self, target_width,
+                                                        target_height);
+
+      apply_window_size(window, target_width, target_height);
+      g_idle_add(apply_pending_window_size,
+                 new_pending_window_size(self, sequence, target_width,
+                                         target_height));
+      g_timeout_add(16, apply_pending_window_size,
+                    new_pending_window_size(self, sequence, target_width,
+                                            target_height));
+      g_timeout_add(80, apply_pending_window_size,
+                    new_pending_window_size(self, sequence, target_width,
+                                            target_height));
       response = FL_METHOD_RESPONSE(
           fl_method_success_response_new(fl_value_new_null()));
     }
@@ -2410,6 +2505,8 @@ static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
       double width = fl_value_get_float(fl_value_lookup_string(args, "width"));
       double height = fl_value_get_float(fl_value_lookup_string(args, "height"));
       self->has_pending_bounds = TRUE;
+      self->pending_bounds_sequence = record_window_size_request(self, (int)width,
+                                                                 (int)height);
       self->pending_bounds_x = (int)x;
       self->pending_bounds_y = (int)y;
       self->pending_bounds_width = (int)width;
@@ -2841,7 +2938,13 @@ static void my_application_init(MyApplication *self)
   self->window = NULL;
   self->previous_active_window = 0;
   self->restore_previous_window_on_hide = FALSE;
+  self->set_size_sequence = 0;
+  self->has_pending_size = FALSE;
+  self->pending_size_sequence = 0;
+  self->pending_size_width = 0;
+  self->pending_size_height = 0;
   self->has_pending_bounds = FALSE;
+  self->pending_bounds_sequence = 0;
   self->pending_bounds_x = 0;
   self->pending_bounds_y = 0;
   self->pending_bounds_width = 0;

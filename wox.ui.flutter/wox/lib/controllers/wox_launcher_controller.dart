@@ -1989,8 +1989,10 @@ class WoxLauncherController extends GetxController {
     final targetWidth = forceWindowWidth != 0 ? forceWindowWidth : WoxSettingUtil.instance.currentSetting.appWidth.toDouble();
     final targetSize = Size(targetWidth, targetHeight);
     final targetPosition = resolveShowAppPosition(params, targetWidth, targetHeight);
+    final initialShowResizeToken = resizeRequestToken;
     Map<String, dynamic> linuxBackendInfo = <String, dynamic>{};
     var skipAbsolutePosition = false;
+    var initialShowSizeApplied = false;
     if (Platform.isLinux) {
       Logger.instance.info(
         traceId,
@@ -2010,26 +2012,36 @@ class WoxLauncherController extends GetxController {
       Logger.instance.info(traceId, "linux-window-bounds dart stage=backend-info $linuxBackendInfo skipAbsolutePosition=$skipAbsolutePosition");
     }
 
-    if (skipAbsolutePosition) {
-      await windowManager.setSize(targetSize);
-      final actualSize = await windowManager.getSize();
-      Logger.instance.info(
-        traceId,
-        "linux-window-bounds dart stage=skip-setBounds reason=native-wayland-compositor-placement positionType=${params.position.type} targetSize=${targetWidth}x$targetHeight actualSize=${actualSize.width}x${actualSize.height}",
-      );
-    } else {
-      // Apply position+size together before showing to avoid opening with stale width.
-      await windowManager.setBounds(targetPosition, targetSize);
-      if (Platform.isLinux) {
-        final actualPosition = await windowManager.getPosition();
+    // Linux Wayland query results can arrive while showApp is still waiting for
+    // backend info. Keep that newer resize authoritative instead of applying
+    // the stale initial show height afterward.
+    final initialShowSizeSuperseded = Platform.isLinux && resizeRequestToken != initialShowResizeToken;
+    if (!initialShowSizeSuperseded) {
+      if (skipAbsolutePosition) {
+        await windowManager.setSize(targetSize);
+        initialShowSizeApplied = true;
         final actualSize = await windowManager.getSize();
         Logger.instance.info(
           traceId,
-          "linux-window-bounds dart stage=after-setBounds target=${targetPosition.dx},${targetPosition.dy} ${targetWidth}x$targetHeight actual=${actualPosition.dx},${actualPosition.dy} ${actualSize.width}x${actualSize.height}",
+          "linux-window-bounds dart stage=skip-setBounds reason=native-wayland-compositor-placement positionType=${params.position.type} targetSize=${targetWidth}x$targetHeight actualSize=${actualSize.width}x${actualSize.height}",
         );
+      } else {
+        // Apply position+size together before showing to avoid opening with stale width.
+        await windowManager.setBounds(targetPosition, targetSize);
+        initialShowSizeApplied = true;
+        if (Platform.isLinux) {
+          final actualPosition = await windowManager.getPosition();
+          final actualSize = await windowManager.getSize();
+          Logger.instance.info(
+            traceId,
+            "linux-window-bounds dart stage=after-setBounds target=${targetPosition.dx},${targetPosition.dy} ${targetWidth}x$targetHeight actual=${actualPosition.dx},${actualPosition.dy} ${actualSize.width}x${actualSize.height}",
+          );
+        }
       }
     }
-    committedWindowHeight = targetHeight;
+    if (initialShowSizeApplied || !Platform.isLinux) {
+      committedWindowHeight = targetHeight;
+    }
 
     // Set always-on-top BEFORE show() so the TOPMOST flag is already in place
     // when the window becomes visible, avoiding transient blur on Windows.
@@ -3696,7 +3708,10 @@ class WoxLauncherController extends GetxController {
     double targetWidth = forceWindowWidth != 0 ? forceWindowWidth : WoxSettingUtil.instance.currentSetting.appWidth.toDouble();
     final targetSize = Size(targetWidth, totalHeight.toDouble());
 
-    if (!forceDwmRecomposition && ongoingResizeTargetSize != null && isWindowSizeEffectivelyEqual(ongoingResizeTargetSize!, targetSize)) {
+    // Linux Wayland resize can race with show/hide and result updates. In that
+    // path, Dart-side target tracking can be stale while the native window is
+    // still at the old height, so Linux always sends the target to the runner.
+    if (!Platform.isLinux && !forceDwmRecomposition && ongoingResizeTargetSize != null && isWindowSizeEffectivelyEqual(ongoingResizeTargetSize!, targetSize)) {
       Logger.instance.debug(traceId, "resize skipped: reason=$reason, target=${formatWindowSize(targetSize)}, duplicateTargetInFlight=true");
       tracker.setDouble("targetWidth", targetSize.width);
       tracker.setDouble("targetHeight", targetSize.height);
@@ -3756,7 +3771,10 @@ class WoxLauncherController extends GetxController {
         "resize requested: reason=$reason, before=${formatWindowSize(currentSize)}, target=${formatWindowSize(targetSize)}, sameSize=$isSameSize, forceDwmRecomposition=$forceDwmRecomposition",
       );
 
-      if (isSameSize && !forceDwmRecomposition) {
+      // On Linux Wayland, getSize can report the requested/default size before
+      // the mapped allocation has actually reached that size. Let the native
+      // runner apply the request; it filters stale resize sequences.
+      if (!Platform.isLinux && isSameSize && !forceDwmRecomposition) {
         committedWindowHeight = targetSize.height;
         Logger.instance.debug(traceId, "resize skipped: reason=$reason, before=${formatWindowSize(currentSize)}, target=${formatWindowSize(targetSize)}, sameSize=true");
         tracker.setBool("skippedSameSize", true);
