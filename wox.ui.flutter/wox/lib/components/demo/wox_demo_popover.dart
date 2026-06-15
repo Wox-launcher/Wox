@@ -46,7 +46,7 @@ class _WoxDemoPopoverState extends State<WoxDemoPopover> {
     _hoveringTarget = true;
     _hideTimer?.cancel();
     _showTimer?.cancel();
-    _showTimer = Timer(widget.showDelay, _showEntry);
+    _showTimer = Timer(widget.showDelay, () => unawaited(_showEntry()));
   }
 
   void _scheduleHide({required bool fromPopover}) {
@@ -64,9 +64,18 @@ class _WoxDemoPopoverState extends State<WoxDemoPopover> {
     });
   }
 
-  void _showEntry() {
+  Future<void> _showEntry() async {
     if (!mounted || _entry != null || !_hoveringTarget) {
       return;
+    }
+
+    // The popover is inserted only after the shared wallpaper is decoded; otherwise
+    // the desktop demo visibly paints its dark fallback before the image arrives.
+    if (!WoxSystemWallpaperUtil.instance.isCachedSystemWallpaperImageReady) {
+      await WoxSystemWallpaperUtil.instance.preloadSystemWallpaperImageProvider(context);
+      if (!mounted || _entry != null || !_hoveringTarget) {
+        return;
+      }
     }
 
     final overlay = Overlay.of(context, rootOverlay: true);
