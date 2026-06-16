@@ -7,21 +7,13 @@ import 'package:wox/components/wox_checkbox_tile.dart';
 import 'package:wox/components/wox_textfield.dart';
 import 'package:wox/modules/setting/views/wox_setting_base.dart';
 import 'package:wox/utils/colors.dart';
+import 'package:wox/utils/consts.dart';
 
 class WoxSettingCloudSyncView extends WoxSettingBaseView {
   const WoxSettingCloudSyncView({super.key});
 
-  Widget buildCloudSyncInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(width: 140, child: Text(label, style: TextStyle(color: getThemeSubTextColor(), fontSize: 12))),
-          Expanded(child: Text(value, style: TextStyle(color: getThemeTextColor(), fontSize: 12))),
-        ],
-      ),
-    );
+  Widget buildCloudSyncInfoValue(String value, {Color? color}) {
+    return Text(value, style: TextStyle(color: color ?? getThemeTextColor(), fontSize: 13, height: 1.35));
   }
 
   String formatCloudSyncTime(int timestamp) {
@@ -184,135 +176,180 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
     );
   }
 
-  Widget buildCloudSyncSection(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Obx(() {
-          final status = controller.cloudSyncStatus.value;
-          final state = status.state;
-          final isLoading = controller.isCloudSyncStatusLoading.value;
-          final statusError = controller.cloudSyncStatusError.value;
-          final actionError = controller.cloudSyncActionError.value;
-          final isBusy = controller.isCloudSyncActionLoading.value;
-          final isEnabled = status.enabled && statusError.isEmpty;
-          final hasKey = status.keyStatus.available;
+  Widget buildCloudSyncStatusSection() {
+    return Obx(() {
+      final status = controller.cloudSyncStatus.value;
+      final state = status.state;
+      final isLoading = controller.isCloudSyncStatusLoading.value;
+      final statusError = controller.cloudSyncStatusError.value;
+      final statusValue = status.enabled ? controller.tr("ui_cloud_sync_enabled") : controller.tr("ui_cloud_sync_disabled");
+      final hasKey = status.keyStatus.available;
+      final keyStatusValue = hasKey ? controller.tr("ui_cloud_sync_key_available") : controller.tr("ui_cloud_sync_key_missing");
 
-          final statusValue = status.enabled ? controller.tr("ui_cloud_sync_enabled") : controller.tr("ui_cloud_sync_disabled");
-          final keyStatusValue = hasKey ? controller.tr("ui_cloud_sync_key_available") : controller.tr("ui_cloud_sync_key_missing");
+      return formSection(
+        title: controller.tr("ui_cloud_sync_status_label"),
+        children: [
+          if (isLoading) Padding(padding: const EdgeInsets.only(bottom: 12), child: buildCloudSyncInfoValue(controller.tr("ui_cloud_sync_loading"), color: getThemeSubTextColor())),
+          if (statusError.isNotEmpty) Padding(padding: const EdgeInsets.only(bottom: 12), child: buildCloudSyncInfoValue(normalizeCloudSyncError(statusError), color: Colors.red)),
+          formField(label: controller.tr("ui_cloud_sync_status_label"), labelWidth: GENERAL_SETTING_WIDE_LABEL_WIDTH, child: buildCloudSyncInfoValue(statusValue)),
+          formField(
+            label: controller.tr("ui_cloud_sync_device_id"),
+            labelWidth: GENERAL_SETTING_WIDE_LABEL_WIDTH,
+            child: buildCloudSyncInfoValue(status.deviceId.isNotEmpty ? status.deviceId : '-'),
+          ),
+          formField(label: controller.tr("ui_cloud_sync_key_status"), labelWidth: GENERAL_SETTING_WIDE_LABEL_WIDTH, child: buildCloudSyncInfoValue(keyStatusValue)),
+          if (hasKey)
+            formField(
+              label: controller.tr("ui_cloud_sync_key_version"),
+              labelWidth: GENERAL_SETTING_WIDE_LABEL_WIDTH,
+              child: buildCloudSyncInfoValue(status.keyStatus.version.toString()),
+            ),
+          if (state != null) ...[
+            formField(
+              label: controller.tr("ui_cloud_sync_bootstrapped"),
+              labelWidth: GENERAL_SETTING_WIDE_LABEL_WIDTH,
+              child: buildCloudSyncInfoValue(state.bootstrapped ? controller.tr("ui_cloud_sync_enabled") : controller.tr("ui_cloud_sync_disabled")),
+            ),
+            formField(
+              label: controller.tr("ui_cloud_sync_last_push"),
+              labelWidth: GENERAL_SETTING_WIDE_LABEL_WIDTH,
+              child: buildCloudSyncInfoValue(formatCloudSyncTime(state.lastPushTs)),
+            ),
+            formField(
+              label: controller.tr("ui_cloud_sync_last_pull"),
+              labelWidth: GENERAL_SETTING_WIDE_LABEL_WIDTH,
+              child: buildCloudSyncInfoValue(formatCloudSyncTime(state.lastPullTs)),
+            ),
+            formField(
+              label: controller.tr("ui_cloud_sync_backoff_until"),
+              labelWidth: GENERAL_SETTING_WIDE_LABEL_WIDTH,
+              child: buildCloudSyncInfoValue(formatCloudSyncTime(state.backoffUntil)),
+            ),
+            formField(label: controller.tr("ui_cloud_sync_retry_count"), labelWidth: GENERAL_SETTING_WIDE_LABEL_WIDTH, child: buildCloudSyncInfoValue(state.retryCount.toString())),
+            if (state.lastError.isNotEmpty)
+              formField(
+                label: controller.tr("ui_cloud_sync_last_error"),
+                labelWidth: GENERAL_SETTING_WIDE_LABEL_WIDTH,
+                child: buildCloudSyncInfoValue(state.lastError, color: Colors.red),
+              ),
+          ],
+        ],
+      );
+    });
+  }
 
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (isLoading) ...[Text(controller.tr("ui_cloud_sync_loading"), style: TextStyle(color: getThemeSubTextColor(), fontSize: 12)), const SizedBox(height: 8)],
-              if (statusError.isNotEmpty) ...[Text(normalizeCloudSyncError(statusError), style: const TextStyle(color: Colors.red, fontSize: 12)), const SizedBox(height: 8)],
-              buildCloudSyncInfoRow(controller.tr("ui_cloud_sync_status_label"), statusValue),
-              buildCloudSyncInfoRow(controller.tr("ui_cloud_sync_device_id"), status.deviceId.isNotEmpty ? status.deviceId : '-'),
-              buildCloudSyncInfoRow(controller.tr("ui_cloud_sync_key_status"), keyStatusValue),
-              if (hasKey) buildCloudSyncInfoRow(controller.tr("ui_cloud_sync_key_version"), status.keyStatus.version.toString()),
-              if (state != null) ...[
-                buildCloudSyncInfoRow(controller.tr("ui_cloud_sync_last_push"), formatCloudSyncTime(state.lastPushTs)),
-                buildCloudSyncInfoRow(controller.tr("ui_cloud_sync_last_pull"), formatCloudSyncTime(state.lastPullTs)),
-                buildCloudSyncInfoRow(controller.tr("ui_cloud_sync_backoff_until"), formatCloudSyncTime(state.backoffUntil)),
-                buildCloudSyncInfoRow(controller.tr("ui_cloud_sync_retry_count"), state.retryCount.toString()),
-                buildCloudSyncInfoRow(
-                  controller.tr("ui_cloud_sync_bootstrapped"),
-                  state.bootstrapped ? controller.tr("ui_cloud_sync_enabled") : controller.tr("ui_cloud_sync_disabled"),
-                ),
-                if (state.lastError.isNotEmpty) buildCloudSyncInfoRow(controller.tr("ui_cloud_sync_last_error"), state.lastError),
+  Widget buildCloudSyncActionSection(BuildContext context) {
+    return Obx(() {
+      final status = controller.cloudSyncStatus.value;
+      final isBusy = controller.isCloudSyncActionLoading.value;
+      final actionError = controller.cloudSyncActionError.value;
+      final isEnabled = status.enabled && controller.cloudSyncStatusError.value.isEmpty;
+      final hasKey = status.keyStatus.available;
+
+      return formSection(
+        title: controller.tr("ui_operation"),
+        children: [
+          formField(
+            label: controller.tr("ui_cloud_sync_status_label"),
+            labelWidth: GENERAL_SETTING_WIDE_LABEL_WIDTH,
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                WoxButton.secondary(text: controller.tr("ui_cloud_sync_refresh"), onPressed: isBusy ? null : () => controller.refreshCloudSyncStatus()),
+                WoxButton.primary(text: controller.tr("ui_cloud_sync_push"), onPressed: isEnabled && hasKey && !isBusy ? () => controller.cloudSyncPush() : null),
+                WoxButton.secondary(text: controller.tr("ui_cloud_sync_pull"), onPressed: isEnabled && hasKey && !isBusy ? () => controller.cloudSyncPull() : null),
               ],
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  WoxButton.secondary(text: controller.tr("ui_cloud_sync_refresh"), onPressed: isBusy ? null : () => controller.refreshCloudSyncStatus()),
-                  WoxButton.primary(text: controller.tr("ui_cloud_sync_push"), onPressed: isEnabled && hasKey && !isBusy ? () => controller.cloudSyncPush() : null),
-                  WoxButton.secondary(text: controller.tr("ui_cloud_sync_pull"), onPressed: isEnabled && hasKey && !isBusy ? () => controller.cloudSyncPull() : null),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  WoxButton.secondary(
-                    text: controller.tr("ui_cloud_sync_recovery_code"),
+            ),
+          ),
+          formField(
+            label: controller.tr("ui_cloud_sync_key_status"),
+            labelWidth: GENERAL_SETTING_WIDE_LABEL_WIDTH,
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                WoxButton.secondary(
+                  text: controller.tr("ui_cloud_sync_recovery_code"),
+                  onPressed:
+                      isEnabled && !isBusy
+                          ? () async {
+                            final code = await controller.cloudSyncGenerateRecoveryCode();
+                            if (!context.mounted) {
+                              return;
+                            }
+                            if (code != null && code.isNotEmpty) {
+                              await showRecoveryCodeDialog(context, code);
+                            }
+                          }
+                          : null,
+                ),
+                if (!hasKey)
+                  WoxButton.primary(
+                    text: controller.tr("ui_cloud_sync_init_key"),
                     onPressed:
                         isEnabled && !isBusy
                             ? () async {
-                              final code = await controller.cloudSyncGenerateRecoveryCode();
-                              if (!context.mounted) {
+                              final input = await showCloudSyncInitKeyDialog(context);
+                              if (input == null) {
                                 return;
                               }
-                              if (code != null && code.isNotEmpty) {
-                                await showRecoveryCodeDialog(context, code);
+                              final recoveryCode = input["recoveryCode"] ?? '';
+                              if (recoveryCode.isEmpty) {
+                                return;
                               }
+                              await controller.cloudSyncInitKey(recoveryCode, input["deviceName"] ?? '');
                             }
                             : null,
                   ),
-                  if (!hasKey)
-                    WoxButton.primary(
-                      text: controller.tr("ui_cloud_sync_init_key"),
-                      onPressed:
-                          isEnabled && !isBusy
-                              ? () async {
-                                final input = await showCloudSyncInitKeyDialog(context);
-                                if (input == null) {
-                                  return;
-                                }
-                                final recoveryCode = input["recoveryCode"] ?? '';
-                                if (recoveryCode.isEmpty) {
-                                  return;
-                                }
-                                await controller.cloudSyncInitKey(recoveryCode, input["deviceName"] ?? '');
-                              }
-                              : null,
-                    ),
-                  if (!hasKey)
-                    WoxButton.secondary(
-                      text: controller.tr("ui_cloud_sync_fetch_key"),
-                      onPressed:
-                          isEnabled && !isBusy
-                              ? () async {
-                                final recoveryCode = await showCloudSyncFetchKeyDialog(context);
-                                if (recoveryCode == null || recoveryCode.isEmpty) {
-                                  return;
-                                }
-                                await controller.cloudSyncFetchKey(recoveryCode);
-                              }
-                              : null,
-                    ),
+                if (!hasKey)
                   WoxButton.secondary(
-                    text: controller.tr("ui_cloud_sync_reset"),
+                    text: controller.tr("ui_cloud_sync_fetch_key"),
                     onPressed:
                         isEnabled && !isBusy
                             ? () async {
-                              final token = await controller.cloudSyncPrepareReset();
-                              if (token == null || token.isEmpty) {
+                              final recoveryCode = await showCloudSyncFetchKeyDialog(context);
+                              if (recoveryCode == null || recoveryCode.isEmpty) {
                                 return;
                               }
-                              if (!context.mounted) {
-                                return;
-                              }
-                              final confirmed = await showCloudSyncResetDialog(context);
-                              if (!context.mounted) {
-                                return;
-                              }
-                              if (confirmed == true) {
-                                await controller.cloudSyncReset(token);
-                              }
+                              await controller.cloudSyncFetchKey(recoveryCode);
                             }
                             : null,
                   ),
-                ],
-              ),
-              if (actionError.isNotEmpty) ...[const SizedBox(height: 8), Text(actionError, style: const TextStyle(color: Colors.red, fontSize: 12))],
-            ],
-          );
-        }),
-      ],
-    );
+                WoxButton.secondary(
+                  text: controller.tr("ui_cloud_sync_reset"),
+                  onPressed:
+                      isEnabled && !isBusy
+                          ? () async {
+                            final token = await controller.cloudSyncPrepareReset();
+                            if (token == null || token.isEmpty) {
+                              return;
+                            }
+                            if (!context.mounted) {
+                              return;
+                            }
+                            final confirmed = await showCloudSyncResetDialog(context);
+                            if (!context.mounted) {
+                              return;
+                            }
+                            if (confirmed == true) {
+                              await controller.cloudSyncReset(token);
+                            }
+                          }
+                          : null,
+                ),
+              ],
+            ),
+          ),
+          if (actionError.isNotEmpty)
+            formField(
+              label: controller.tr("ui_cloud_sync_last_error"),
+              labelWidth: GENERAL_SETTING_WIDE_LABEL_WIDTH,
+              child: buildCloudSyncInfoValue(actionError, color: Colors.red),
+            ),
+        ],
+      );
+    });
   }
 
   Widget buildCloudSyncPluginExclusions() {
@@ -374,9 +411,22 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
   @override
   Widget build(BuildContext context) {
     return form(
+      width: GENERAL_SETTING_WIDE_FORM_WIDTH,
+      title: controller.tr("ui_cloud_sync"),
       children: [
-        formField(label: controller.tr("ui_cloud_sync"), child: buildCloudSyncSection(context)),
-        formField(label: controller.tr("ui_cloud_sync_plugin_exclusions"), child: buildCloudSyncPluginExclusions(), tips: controller.tr("ui_cloud_sync_plugin_exclusions_tips")),
+        buildCloudSyncStatusSection(),
+        buildCloudSyncActionSection(context),
+        formSection(
+          title: controller.tr("ui_cloud_sync_plugin_exclusions"),
+          children: [
+            formField(
+              label: controller.tr("ui_cloud_sync_plugin_exclusions"),
+              labelWidth: GENERAL_SETTING_WIDE_LABEL_WIDTH,
+              child: buildCloudSyncPluginExclusions(),
+              tips: controller.tr("ui_cloud_sync_plugin_exclusions_tips"),
+            ),
+          ],
+        ),
       ],
     );
   }
