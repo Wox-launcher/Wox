@@ -46,6 +46,8 @@ class WoxSettingController extends GetxController {
   static const double _settingSearchResultEstimatedRowExtent = 52.0;
   static const Duration _accountBillingPollInterval = Duration(seconds: 5);
   static const Duration _accountBillingWaitTimeout = Duration(minutes: 5);
+  static const Duration _cloudSyncStatusPollInterval = Duration(seconds: 2);
+  static const Duration _cloudSyncStatusWaitTimeout = Duration(minutes: 5);
 
   final activeNavPath = 'general'.obs;
   final woxSetting = WoxSettingUtil.instance.currentSetting.obs;
@@ -73,7 +75,9 @@ class WoxSettingController extends GetxController {
   final accountSubscriptionError = ''.obs;
   final isAccountBillingWaiting = false.obs;
   final accountBillingWaitingMessageKey = ''.obs;
-  final isCloudSyncPluginListLoading = false.obs;
+  // Installed plugin details are stored in a plain list, so this signal lets views
+  // rebuild after background refreshes without showing a transient loading state.
+  final installedPluginListRevision = 0.obs;
 
   final usageStats = WoxUsageStats.empty().obs;
   final isUsageStatsLoading = false.obs;
@@ -151,10 +155,13 @@ class WoxSettingController extends GetxController {
   String _pendingPluginSettingKey = '';
   Timer? _settingHighlightTimer;
   Timer? _accountBillingPollTimer;
+  Timer? _cloudSyncStatusPollTimer;
   DateTime? _accountBillingWaitDeadline;
+  DateTime? _cloudSyncStatusWaitDeadline;
   String _accountBillingWaitTimeoutMessageKey = '';
   bool Function(WoxAccountStatus status)? _accountBillingWaitComplete;
   bool _isAccountBillingPolling = false;
+  bool _isCloudSyncStatusPolling = false;
 
   @override
   void onInit() {
@@ -163,6 +170,10 @@ class WoxSettingController extends GetxController {
   }
 
   void _handleActiveNavPathChanged(String path) {
+    if (path != 'data.cloudsync') {
+      _stopCloudSyncStatusWaiting();
+    }
+
     if (path != 'ui') {
       // The Glance preview belongs to the UI settings page only. Clearing the
       // entry flag on navigation keeps the next visit a fresh real API snapshot
@@ -405,7 +416,11 @@ class WoxSettingController extends GetxController {
 
     switch (result.type) {
       case WoxSettingSearchTargetType.builtInSetting:
-        activeNavPath.value = result.navPath;
+        if (result.navPath == 'data.cloudsync') {
+          await switchToCloudSyncView(const UuidV4().generate());
+        } else {
+          activeNavPath.value = result.navPath;
+        }
         _pendingBuiltInSettingKey = result.settingKey;
         _highlightSettingTarget(result.highlightTargetId);
         _schedulePendingBuiltInSettingFocus();
@@ -646,6 +661,10 @@ class WoxSettingController extends GetxController {
         return 'ui_network';
       case 'data':
         return 'ui_data';
+      case 'data.backup':
+        return 'ui_data_backup_restore_nav';
+      case 'data.cloudsync':
+        return 'ui_cloud_sync';
       case 'plugins.runtime':
         return 'ui_runtime_settings';
       case 'themes.store':
@@ -1027,6 +1046,8 @@ class WoxSettingController extends GetxController {
     } catch (e) {
       installedPlugins.clear();
       Logger.instance.error(traceId, 'Failed to load installed plugins: $e');
+    } finally {
+      installedPluginListRevision.value++;
     }
   }
 
@@ -1237,12 +1258,8 @@ class WoxSettingController extends GetxController {
 
   Future<void> switchToCloudSyncView(String traceId) async {
     activeNavPath.value = 'data.cloudsync';
-    isCloudSyncPluginListLoading.value = true;
-    try {
-      await Future.wait([refreshAccountStatus(), refreshCloudSyncStatus(), loadInstalledPlugins(traceId)]);
-    } finally {
-      isCloudSyncPluginListLoading.value = false;
-    }
+    await Future.wait([refreshAccountStatus(), refreshCloudSyncStatus(), loadInstalledPlugins(traceId)]);
+    _updateCloudSyncStatusWaiting();
   }
 
   GlobalKey getPluginListItemKey(String pluginId) {
@@ -2062,9 +2079,11 @@ class WoxSettingController extends GetxController {
     }
   }
 
-  Future<void> refreshCloudSyncStatus() async {
+  Future<void> refreshCloudSyncStatus({bool showLoading = true}) async {
     final traceId = const UuidV4().generate();
-    isCloudSyncStatusLoading.value = true;
+    if (showLoading) {
+      isCloudSyncStatusLoading.value = true;
+    }
     cloudSyncStatusError.value = '';
     try {
       final status = await WoxApi.instance.getCloudSyncStatus(traceId);
@@ -2075,7 +2094,9 @@ class WoxSettingController extends GetxController {
       cloudSyncStatusError.value = e.toString();
       Logger.instance.error(traceId, 'Failed to load cloud sync status: $e');
     } finally {
-      isCloudSyncStatusLoading.value = false;
+      if (showLoading) {
+        isCloudSyncStatusLoading.value = false;
+      }
     }
   }
 
@@ -2410,6 +2431,7 @@ class WoxSettingController extends GetxController {
     try {
       await WoxApi.instance.cloudSyncBootstrapStart(traceId, recoveryCode);
       await Future.wait([refreshAccountStatus(), refreshCloudSyncStatus()]);
+      _updateCloudSyncStatusWaiting();
       return true;
     } catch (e) {
       cloudSyncActionError.value = e.toString();
@@ -2417,6 +2439,61 @@ class WoxSettingController extends GetxController {
       return false;
     } finally {
       isCloudSyncActionLoading.value = false;
+    }
+  }
+
+  // Starts a bounded status poll while first-time bootstrap work continues in the backend.
+  void _updateCloudSyncStatusWaiting() {
+    if (!_shouldPollCloudSyncStatus(accountStatus.value, cloudSyncStatus.value)) {
+      _stopCloudSyncStatusWaiting();
+      return;
+    }
+    if (_cloudSyncStatusPollTimer != null) {
+      return;
+    }
+
+    _cloudSyncStatusWaitDeadline = DateTime.now().add(_cloudSyncStatusWaitTimeout);
+    unawaited(_pollCloudSyncStatus());
+    _cloudSyncStatusPollTimer = Timer.periodic(_cloudSyncStatusPollInterval, (_) => unawaited(_pollCloudSyncStatus()));
+  }
+
+  // Keeps polling scoped to the bootstrap-pending state, which completes in the backend without a UI push event.
+  bool _shouldPollCloudSyncStatus(WoxAccountStatus account, WoxCloudSyncStatus status) {
+    final state = status.state;
+    return activeNavPath.value == 'data.cloudsync' &&
+        account.loggedIn &&
+        account.syncEligible &&
+        account.syncEnabled &&
+        status.keyStatus.available &&
+        state != null &&
+        !state.bootstrapped &&
+        state.lastError.isEmpty;
+  }
+
+  void _stopCloudSyncStatusWaiting() {
+    _cloudSyncStatusPollTimer?.cancel();
+    _cloudSyncStatusPollTimer = null;
+    _cloudSyncStatusWaitDeadline = null;
+  }
+
+  Future<void> _pollCloudSyncStatus() async {
+    if (_isCloudSyncStatusPolling) {
+      return;
+    }
+    _isCloudSyncStatusPolling = true;
+    try {
+      await Future.wait([refreshAccountStatus(), refreshCloudSyncStatus(showLoading: false)]);
+      if (!_shouldPollCloudSyncStatus(accountStatus.value, cloudSyncStatus.value)) {
+        _stopCloudSyncStatusWaiting();
+        return;
+      }
+
+      final deadline = _cloudSyncStatusWaitDeadline;
+      if (deadline != null && DateTime.now().isAfter(deadline)) {
+        _stopCloudSyncStatusWaiting();
+      }
+    } finally {
+      _isCloudSyncStatusPolling = false;
     }
   }
 
@@ -2475,6 +2552,22 @@ class WoxSettingController extends GetxController {
     } catch (e) {
       cloudSyncActionError.value = e.toString();
       Logger.instance.error(traceId, 'Cloud sync pull failed: $e');
+    } finally {
+      isCloudSyncActionLoading.value = false;
+    }
+  }
+
+  Future<void> cloudSyncSyncNow() async {
+    final traceId = const UuidV4().generate();
+    isCloudSyncActionLoading.value = true;
+    cloudSyncActionError.value = '';
+    try {
+      await WoxApi.instance.cloudSyncPush(traceId);
+      await WoxApi.instance.cloudSyncPull(traceId);
+      await refreshCloudSyncStatus();
+    } catch (e) {
+      cloudSyncActionError.value = e.toString();
+      Logger.instance.error(traceId, 'Cloud sync now failed: $e');
     } finally {
       isCloudSyncActionLoading.value = false;
     }
@@ -2650,6 +2743,7 @@ class WoxSettingController extends GetxController {
   void onClose() {
     _settingHighlightTimer?.cancel();
     _accountBillingPollTimer?.cancel();
+    _cloudSyncStatusPollTimer?.cancel();
     pluginListScrollController.dispose();
     themeListScrollController.dispose();
     filterThemeKeywordController.dispose();
@@ -2799,6 +2893,38 @@ const List<_BuiltInSettingSearchDefinition> _builtInSettingSearchDefinitions = [
     titleKey: 'ui_cloud_sync_server_url',
     subtitleKey: 'ui_cloud_sync_server_url_tips',
     searchKeywords: ['cloud sync', 'sync server', 'server url'],
+  ),
+  _BuiltInSettingSearchDefinition(
+    settingKey: 'CloudSyncAccount',
+    navPath: 'data.cloudsync',
+    titleKey: 'ui_cloud_sync_account',
+    searchKeywords: ['cloud sync', 'account', 'login', 'register', 'email', 'password'],
+  ),
+  _BuiltInSettingSearchDefinition(
+    settingKey: 'CloudSyncSubscriptionStatus',
+    navPath: 'data.cloudsync',
+    titleKey: 'ui_cloud_sync_subscription_status',
+    searchKeywords: ['cloud sync', 'subscription', 'billing', 'subscribe', 'plan'],
+  ),
+  _BuiltInSettingSearchDefinition(
+    settingKey: 'CloudSyncBillingHelp',
+    navPath: 'data.cloudsync',
+    titleKey: 'ui_cloud_sync_billing_help',
+    subtitleKey: 'ui_cloud_sync_billing_help_tips',
+    searchKeywords: ['cloud sync', 'billing', 'support', 'contact support', 'customer service'],
+  ),
+  _BuiltInSettingSearchDefinition(
+    settingKey: 'CloudSyncStatus',
+    navPath: 'data.cloudsync',
+    titleKey: 'ui_cloud_sync_sync_status',
+    searchKeywords: ['cloud sync', 'sync status', 'sync now'],
+  ),
+  _BuiltInSettingSearchDefinition(
+    settingKey: 'CloudSyncDisabledPlugins',
+    navPath: 'data.cloudsync',
+    titleKey: 'ui_cloud_sync_plugin_exclusions',
+    subtitleKey: 'ui_cloud_sync_plugin_exclusions_tips',
+    searchKeywords: ['cloud sync', 'plugin sync', 'plugin exclusions', 'exclude plugin'],
   ),
   _BuiltInSettingSearchDefinition(
     settingKey: 'ShowScoreTail',

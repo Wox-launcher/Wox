@@ -1479,9 +1479,6 @@ func handleAccountLogin(w http.ResponseWriter, r *http.Request) {
 
 func handleAccountLogout(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
-	if cloudService := cloudsync.GetService(); cloudService != nil && cloudService.Manager != nil {
-		cloudService.Manager.Stop(ctx)
-	}
 	service := account.GetService()
 	if service == nil {
 		writeSuccessResponse(w, "")
@@ -1490,6 +1487,11 @@ func handleAccountLogout(w http.ResponseWriter, r *http.Request) {
 	if err := service.Logout(ctx); err != nil {
 		writeErrorResponse(w, err.Error())
 		return
+	}
+	if cloudService := cloudsync.GetService(); cloudService != nil {
+		if err := cloudService.ResetLocalState(ctx); err != nil {
+			util.GetLogger().Warn(ctx, fmt.Sprintf("failed to reset cloud sync state during logout: %v", err))
+		}
 	}
 	writeSuccessResponse(w, "")
 }
@@ -1643,8 +1645,8 @@ func applyCloudSyncServerURL(ctx context.Context, url string) error {
 	}
 
 	if cloudService := cloudsync.GetService(); cloudService != nil {
-		if cloudService.Manager != nil {
-			cloudService.Manager.Stop(ctx)
+		if err := cloudService.ResetLocalState(ctx); err != nil {
+			util.GetLogger().Warn(ctx, fmt.Sprintf("failed to reset cloud sync state after server change: %v", err))
 		}
 		if cloudService.Client != nil {
 			cloudService.Client.SetBaseURL(baseURL)
@@ -1668,6 +1670,11 @@ func resolveCloudSyncServerURL(url string) string {
 
 func handleSyncStatus(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
+	accountService := account.GetService()
+	if accountService == nil || !accountService.Status(ctx).LoggedIn {
+		writeSuccessResponse(w, cloudsync.ServiceStatus{Enabled: false})
+		return
+	}
 	service := cloudsync.GetService()
 	if service == nil {
 		writeSuccessResponse(w, cloudsync.ServiceStatus{Enabled: false})
@@ -1747,11 +1754,6 @@ func startSyncBootstrap(ctx context.Context, recoveryCode string) error {
 		if _, err := service.KeyManager.FetchWithRecoveryCode(ctx, recoveryCode); err != nil {
 			return err
 		}
-		if status.HasRemoteData {
-			if err := service.Manager.RestoreSnapshot(ctx); err != nil {
-				return err
-			}
-		}
 	} else {
 		if status.HasRemoteData {
 			return fmt.Errorf("cloud sync key is missing")
@@ -1760,6 +1762,7 @@ func startSyncBootstrap(ctx context.Context, recoveryCode string) error {
 			return err
 		}
 	}
+	cloudsync.MarkCloudSyncBootstrapPending(ctx)
 
 	accountService := account.GetService()
 	if accountService != nil {
@@ -1767,11 +1770,51 @@ func startSyncBootstrap(ctx context.Context, recoveryCode string) error {
 			return err
 		}
 	}
-	if !status.HasRemoteData && service.Manager != nil {
-		service.Manager.PushPending(ctx, "bootstrap")
+
+	if status.HasRemoteData {
+		scheduleCloudSyncBootstrapRestore(ctx, service)
+		return nil
 	}
 	service.StartManager(ctx)
+	scheduleCloudSyncBootstrapInitialPush(ctx, service)
 	return nil
+}
+
+// scheduleCloudSyncBootstrapRestore restores remote data before starting the regular sync manager.
+func scheduleCloudSyncBootstrapRestore(ctx context.Context, service *cloudsync.Service) {
+	util.Go(ctx, "cloud sync bootstrap restore", func() {
+		if service == nil || service.Manager == nil {
+			return
+		}
+
+		if err := service.Manager.RestoreSnapshot(ctx); err != nil {
+			cloudsync.RecordCloudSyncBootstrapFailure(ctx, err)
+			util.GetLogger().Error(ctx, fmt.Sprintf("cloud sync bootstrap restore failed: %v", err))
+			return
+		}
+		service.StartManager(ctx)
+	})
+}
+
+// scheduleCloudSyncBootstrapInitialPush performs the first local-to-cloud push after the dialog can close.
+func scheduleCloudSyncBootstrapInitialPush(ctx context.Context, service *cloudsync.Service) {
+	util.Go(ctx, "cloud sync bootstrap initial push", func() {
+		if service == nil || service.Manager == nil {
+			return
+		}
+
+		service.Manager.PushPending(ctx, "bootstrap")
+		state, err := cloudsync.LoadCloudSyncState(ctx)
+		if err != nil {
+			cloudsync.RecordCloudSyncBootstrapFailure(ctx, err)
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to load cloud sync bootstrap state: %v", err))
+			return
+		}
+		if state.LastError != "" {
+			return
+		}
+		cloudsync.MarkCloudSyncBootstrapComplete(ctx)
+	})
 }
 
 func ensureSyncBootstrapAllowed(ctx context.Context) error {

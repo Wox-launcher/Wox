@@ -53,6 +53,26 @@ func (s *Service) StartManager(ctx context.Context) {
 	s.Manager.Start(ctx)
 }
 
+// ResetLocalState clears sync runtime and account-scoped local state during logout or account-server changes.
+func (s *Service) ResetLocalState(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	var resetErr error
+	if s.Manager != nil {
+		s.Manager.Stop(ctx)
+	}
+	if s.KeyManager != nil {
+		if err := s.KeyManager.ClearLocalKey(ctx); err != nil {
+			resetErr = err
+		}
+	}
+	if err := ResetCloudSyncState(ctx); err != nil {
+		return err
+	}
+	return resetErr
+}
+
 func (s *Service) Status(ctx context.Context) ServiceStatus {
 	status := ServiceStatus{Enabled: s != nil}
 	if s == nil {

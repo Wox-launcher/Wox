@@ -556,10 +556,8 @@ func (m *CloudSyncManager) recordPushSuccess(ctx context.Context, resp *CloudSyn
 			if resp.ServerTs > 0 {
 				state.LastPushTs = resp.ServerTs
 			}
-			if resp.NextCursor != "" {
-				state.Cursor = resp.NextCursor
-			}
 		}
+		// Push revisions are not pull acknowledgements; pull advances the cursor after applying remote records.
 	})
 }
 

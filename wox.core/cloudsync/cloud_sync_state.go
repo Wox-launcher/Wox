@@ -60,6 +60,11 @@ func SaveCloudSyncState(ctx context.Context, state *database.CloudSyncState) err
 	return db.Save(state).Error
 }
 
+// ResetCloudSyncState clears account-scoped sync progress so the next login starts from a clean bootstrap state.
+func ResetCloudSyncState(ctx context.Context) error {
+	return SaveCloudSyncState(ctx, &database.CloudSyncState{ID: cloudSyncStateID})
+}
+
 func UpdateCloudSyncState(ctx context.Context, update func(state *database.CloudSyncState)) (*database.CloudSyncState, error) {
 	state, err := LoadCloudSyncState(ctx)
 	if err != nil {
@@ -75,4 +80,38 @@ func UpdateCloudSyncState(ctx context.Context, update func(state *database.Cloud
 	}
 
 	return state, nil
+}
+
+// MarkCloudSyncBootstrapPending keeps the UI in a syncing state until background bootstrap work completes.
+func MarkCloudSyncBootstrapPending(ctx context.Context) {
+	_, _ = UpdateCloudSyncState(ctx, func(state *database.CloudSyncState) {
+		state.Bootstrapped = false
+		state.LastError = ""
+		state.BackoffUntil = 0
+		state.RetryCount = 0
+	})
+}
+
+// MarkCloudSyncBootstrapComplete marks bootstrap complete after background restore or initial push finishes.
+func MarkCloudSyncBootstrapComplete(ctx context.Context) {
+	_, _ = UpdateCloudSyncState(ctx, func(state *database.CloudSyncState) {
+		state.Bootstrapped = true
+		state.LastError = ""
+		state.BackoffUntil = 0
+		state.RetryCount = 0
+	})
+}
+
+// RecordCloudSyncBootstrapFailure persists background bootstrap errors for the settings UI.
+func RecordCloudSyncBootstrapFailure(ctx context.Context, err error) {
+	if err == nil {
+		return
+	}
+
+	_, _ = UpdateCloudSyncState(ctx, func(state *database.CloudSyncState) {
+		state.Bootstrapped = false
+		state.LastError = err.Error()
+		state.RetryCount++
+		state.BackoffUntil = 0
+	})
 }

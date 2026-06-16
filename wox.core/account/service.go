@@ -571,11 +571,11 @@ func (s *Service) doEnvelopeRequest(ctx context.Context, req *http.Request) (res
 		if resp.StatusCode == http.StatusUnauthorized || (envelopeErr == nil && envelope.Code == "unauthorized") {
 			return responseEnvelope{}, errAccountUnauthorized
 		}
-		if envelopeErr == nil && envelope.Code != "" {
-			return responseEnvelope{}, errors.New(envelope.Code)
-		}
 		if envelopeErr == nil && envelope.Message != "" {
 			return responseEnvelope{}, errors.New(envelope.Message)
+		}
+		if envelopeErr == nil && envelope.Code != "" {
+			return responseEnvelope{}, errors.New(envelope.Code)
 		}
 		return responseEnvelope{}, fmt.Errorf("account request failed (%d): %s", resp.StatusCode, strings.TrimSpace(string(responsePayload)))
 	}

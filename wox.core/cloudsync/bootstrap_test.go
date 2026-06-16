@@ -111,6 +111,49 @@ func TestRestoreSnapshotDoesNotMarkBootstrappedWhenApplyFails(t *testing.T) {
 	}
 }
 
+func TestCloudSyncPushPendingDoesNotAdvancePullRevisionCursor(t *testing.T) {
+	ctx := context.Background()
+	initCloudSyncTestDatabase(t)
+
+	if err := SaveCloudSyncState(ctx, &database.CloudSyncState{ID: cloudSyncStateID, Cursor: "10"}); err != nil {
+		t.Fatalf("save state: %v", err)
+	}
+	store := &testCloudSyncOplogStore{
+		pending: []database.Oplog{
+			{
+				ID:         1,
+				EntityType: EntityWoxSetting,
+				Operation:  OpUpsert,
+				Key:        "ThemeId",
+				Value:      "dark",
+				Timestamp:  123,
+			},
+		},
+	}
+	manager := NewCloudSyncManager(DefaultCloudSyncConfig(), CloudSyncDependencies{
+		Client:         &testCloudSyncClient{},
+		Crypto:         testCloudSyncCrypto{},
+		DeviceProvider: testCloudSyncDeviceProvider{deviceID: "device-a"},
+		OplogStore:     store,
+	})
+
+	manager.PushPending(ctx, "test")
+
+	state, err := LoadCloudSyncState(ctx)
+	if err != nil {
+		t.Fatalf("load state: %v", err)
+	}
+	if state.Cursor != "10" {
+		t.Fatalf("state cursor = %q, want unchanged revision cursor 10", state.Cursor)
+	}
+	if state.LastPushTs == 0 {
+		t.Fatal("state last push timestamp was not updated")
+	}
+	if len(store.synced) != 1 || store.synced[0] != 1 {
+		t.Fatalf("synced oplogs = %#v, want [1]", store.synced)
+	}
+}
+
 func initCloudSyncTestDatabase(t *testing.T) {
 	t.Helper()
 	t.Setenv(util.TestWoxDataDirEnv, filepath.Join(t.TempDir(), "wox"))

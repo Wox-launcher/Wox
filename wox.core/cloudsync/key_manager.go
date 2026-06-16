@@ -99,6 +99,14 @@ func (m *KeyManager) GetStatus(ctx context.Context) CloudSyncKeyStatus {
 	return CloudSyncKeyStatus{Available: true, Version: material.Version}
 }
 
+// ClearLocalKey removes the cached data encryption key for the signed-out account.
+func (m *KeyManager) ClearLocalKey(ctx context.Context) error {
+	if m == nil || m.keyring == nil {
+		return nil
+	}
+	return m.keyring.Delete(ctx, keyringKeyDEK)
+}
+
 // RemoteStatus checks whether the signed-in account already has a sync key on the server.
 func (m *KeyManager) RemoteStatus(ctx context.Context) (CloudSyncKeyStatus, error) {
 	if m.keyClient == nil {
