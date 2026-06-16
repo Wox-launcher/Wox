@@ -1,53 +1,60 @@
 # Querying
 
-## Basic Usage
+Open Wox, type what you want, then act on the selected result. The launcher does not require you to remember every plugin keyword, but keywords are useful when you want a specific plugin to handle the query.
 
-Wox is triggered by a hotkey (defaults vary by platform). Once opened, you can type to search for applications, files, bookmarks, and more.
+## Query Types
 
-## Query Structure
+| Type | Example | Notes |
+| --- | --- | --- |
+| Global search | `chrome` | Lets global plugins compete for results, such as apps, calculator, converter, and web search. |
+| Keyword query | `f invoice` | Sends the query to a plugin with a trigger keyword. |
+| Command query | `wpm install` | Runs a command inside a plugin. |
+| Selection query | Select text, then trigger Wox selection actions | Used by plugins that can work with selected text or files. |
 
-A query in Wox typically consists of three parts:
+## Keywords and Commands
 
-1. **Trigger Keyword**: Used to activate a specific plugin (e.g., `wpm` for plugin management).
-2. **Command**: Some plugins support specific commands (e.g., `install` in `wpm install`).
-3. **Search Term**: The actual content you want to search for or process.
+A keyword is the first word in the query. If it matches a plugin trigger, Wox sends the rest of the query to that plugin.
 
-Example: `wpm install wox`
+```text
+wpm install browser
+```
 
-- `wpm`: Trigger keyword
-- `install`: Command
-- `wox`: Search term
+| Part | Meaning |
+| --- | --- |
+| `wpm` | Plugin Manager trigger |
+| `install` | Plugin Manager command |
+| `browser` | Search term passed to the command |
 
-## Global Trigger
+Common built-in keywords:
 
-Some plugins support a global trigger `*`, meaning they can be triggered by any query that doesn't match other specific keywords. This is commonly used for file search or application launching.
+| Keyword | Plugin |
+| --- | --- |
+| `f` | File search |
+| `cb` | Clipboard history |
+| `emoji` | Emoji search |
+| `chat` | AI chat |
+| `wpm`, `store`, `pm` | Plugin Manager |
+| `calculator` | Calculator / converter explicit mode |
 
-## Built-in Everything file search (Windows)
+## Fallback Results
 
-Wox ships a built-in file plugin (trigger keyword: `f`) that uses the Everything engine on Windows. To use it:
+Some plugins listen to normal text without a keyword. That is why typing `Chrome`, `100 + 20`, `1km to m`, or a web search can produce useful results immediately.
 
-- Install and run [Everything](https://www.voidtools.com/) so its service is active and indexed.
-- Leave Everything running in the background; Wox calls its APIs for instant file results.
+Use a keyword when fallback results are noisy or when you know exactly which plugin should answer.
 
 ## Shortcuts
 
-Wox supports various shortcuts to improve your efficiency:
+| Shortcut | Description |
+| --- | --- |
+| Windows: `Alt + Space` | Toggle Wox visibility |
+| macOS: `Command + Space` | Toggle Wox visibility |
+| Linux: `Ctrl + Space` | Toggle Wox visibility |
+| `Esc` | Hide Wox or go back from a nested view |
+| `Up` / `Down` | Move through results |
+| `Enter` | Run the selected result's primary action |
+| Windows/Linux: `Ctrl + J`; macOS: `Command + J` | Open the Action Panel |
+| `Tab` | Complete the suggested query when available |
 
-| Shortcut                   | Description                                                    |
-| -------------------------- | -------------------------------------------------------------- |
-| Windows: `Alt + Space`     | Toggle Wox visibility (default)                               |
-| macOS: `Cmd + Space`       | Toggle Wox visibility (default)                               |
-| Linux: `Ctrl + Space`      | Toggle Wox visibility (default)                               |
-| `Esc`                      | Hide Wox                                                       |
-| `Up` / `Down`              | Navigate through results                                       |
-| `Enter`                    | Execute the selected result's default action                   |
-| `Alt/Cmd + J`              | Open the result's context menu (Action Panel)                  |
-| `Tab`                      | Autocomplete the query                                         |
+## Hotkey Settings
 
-## Hotkeys
-
-You can customize the global hotkey to toggle Wox in the settings.
-
-1. Open Wox Settings.
-2. Go to the **General** tab.
-3. Click on the **Hotkey** field and press your desired key combination.
+Open **Settings -> General** to change the main Wox hotkey. You can also create Query Hotkeys with presets such as **Normal Query**, **Preview Query**, **Silent Run**, or **Custom**. Presets give you sensible defaults first, and you can still override position, width, result count, or chrome visibility when needed.

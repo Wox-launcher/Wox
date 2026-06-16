@@ -11,8 +11,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdarg.h>
-#include <stdio.h>
 #include <wchar.h>
 #include <math.h>
 
@@ -52,83 +50,46 @@ typedef struct {
     char* message;
     unsigned char* iconData;
     int iconLen;
+    char* iconFilePath;
+    bool transparent;
+    bool hitTestIconOnly;
+    float iconX;
+    float iconY;
+    float iconWidth;
+    float iconHeight;
     bool closable;
+    bool closeOnEscape;
+    bool loading;
+    bool topmost;
+    bool absolutePosition;
+    bool preservePosition;
     int stickyWindowPid; // 0 = Screen, >0 = Window
     int anchor;          // 0-8
     int autoCloseSeconds;
     bool movable;
+    bool resizable;
+    float cornerRadius;
+    float aspectRatio;
     float offsetX;
     float offsetY;
     float width;         // 0 = auto
+    float minWidth;      // 0 = platform default minimum width
+    float maxWidth;      // 0 = no cap for auto width
     float height;        // 0 = auto
+    float maxHeight;     // 0 = no cap for auto height
+    bool followScroll;
     float fontSize;      // 0 = system default, unit: pt
     float iconSize;      // 0 = default (16), unit: DIP
     char* tooltip;
     unsigned char* tooltipIconData;
     int tooltipIconLen;
     float tooltipIconSize;
+    bool showCopyButton;
+    char* copyButtonTooltip;
+    char* copyButtonSuccessTooltip;
 } OverlayOptions;
 
-extern void overlayClickCallbackCGO(char* name);
-
-static BOOL BuildTooltipLogPath(WCHAR *path, DWORD pathLen)
-{
-    DWORD n = GetEnvironmentVariableW(L"USERPROFILE", path, pathLen);
-    if (n == 0 || n >= pathLen)
-    {
-        DWORD t = GetTempPathW(pathLen, path);
-        if (t == 0 || t >= pathLen)
-            return FALSE;
-        wcscat_s(path, pathLen, L"wox");
-        CreateDirectoryW(path, NULL);
-        wcscat_s(path, pathLen, L"\\log");
-        CreateDirectoryW(path, NULL);
-        wcscat_s(path, pathLen, L"\\overlay_tooltip.log");
-        return TRUE;
-    }
-
-    wcscat_s(path, pathLen, L"\\.wox");
-    CreateDirectoryW(path, NULL);
-    wcscat_s(path, pathLen, L"\\log");
-    CreateDirectoryW(path, NULL);
-    wcscat_s(path, pathLen, L"\\overlay_tooltip.log");
-    return TRUE;
-}
-
-static void LogOverlayTooltip(const WCHAR *fmt, ...)
-{
-    WCHAR path[MAX_PATH];
-    if (!BuildTooltipLogPath(path, MAX_PATH))
-        return;
-
-    WCHAR msg[512];
-    va_list args;
-    va_start(args, fmt);
-    _vsnwprintf(msg, 511, fmt, args);
-    msg[511] = L'\0';
-    va_end(args);
-
-    WCHAR line[520];
-    size_t len = wcslen(msg);
-    if (len > 510)
-        len = 510;
-    wcsncpy_s(line, 520, msg, len);
-    line[len++] = L'\r';
-    line[len++] = L'\n';
-    line[len] = L'\0';
-
-    char utf8[2048];
-    int utf8Len = WideCharToMultiByte(CP_UTF8, 0, line, -1, utf8, (int)sizeof(utf8), NULL, NULL);
-    if (utf8Len <= 0)
-        return;
-
-    HANDLE h = CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (h == INVALID_HANDLE_VALUE)
-        return;
-    DWORD written = 0;
-    WriteFile(h, utf8, (DWORD)(utf8Len - 1), &written, NULL);
-    CloseHandle(h);
-}
+extern bool overlayClickCallbackCGO(char* name);
 
 // -----------------------------------------------------------------------------
 // Accent / Acrylic
@@ -224,11 +185,26 @@ static BOOL TryEnableAcrylic(HWND hwnd)
 #define ICON_GAP_DIP 10
 #define CLOSE_SIZE_DIP 20
 #define CLOSE_PAD_DIP 10
+#define COPY_BUTTON_SIZE_DIP 24
+#define COPY_BUTTON_PAD_DIP 12
+#define COPY_BUTTON_TEXT_GAP_DIP 8
+#define SCROLLBAR_WIDTH_DIP 3
+#define SCROLLBAR_HIT_WIDTH_DIP 14
+#define SCROLLBAR_MIN_THUMB_DIP 24
 #define TOOLTIP_GAP_DIP 6
 #define CORNER_RADIUS_DIP 10
+#define RESIZE_GRIP_DIP 10
+#define MIN_RESIZE_SIZE_DIP 64
+#define IMAGE_SHADOW_PADDING_DIP 20
+#define IMAGE_SHADOW_MAX_ALPHA 96
+#define WHEEL_ZOOM_STEP 1.12f
 
 #define TIMER_AUTOCLOSE 1
 #define TIMER_TRACK 2
+#define TIMER_LIVE_FOLLOW 3
+#define TIMER_COPY_FEEDBACK 4
+#define TIMER_REPAINT 5
+#define PREDICTIVE_CORRECTION_THRESHOLD_PX 48
 
 #define WM_WOX_OVERLAY_COMMAND (WM_APP + 0x610)
 #define WM_WOX_OVERLAY_REPOSITION (WM_APP + 0x611)
@@ -318,6 +294,81 @@ static HBITMAP Create32BitDIBSection(HDC hdc, int width, int height, void **bits
     return CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, bits, NULL, 0);
 }
 
+static HBITMAP CreateBitmapFromWicDecoder(IWICImagingFactory *factory, IWICBitmapDecoder *decoder, int *outW, int *outH)
+{
+    if (!factory || !decoder)
+        return NULL;
+
+    IWICBitmapFrameDecode *frame = NULL;
+    HRESULT hr = IWICBitmapDecoder_GetFrame(decoder, 0, &frame);
+    if (FAILED(hr) || !frame)
+        return NULL;
+
+    IWICFormatConverter *converter = NULL;
+    hr = IWICImagingFactory_CreateFormatConverter(factory, &converter);
+    if (FAILED(hr) || !converter)
+    {
+        IWICBitmapFrameDecode_Release(frame);
+        return NULL;
+    }
+
+    hr = IWICFormatConverter_Initialize(converter, (IWICBitmapSource *)frame,
+                                        &GUID_WICPixelFormat32bppBGRA, WICBitmapDitherTypeNone,
+                                        NULL, 0.0, WICBitmapPaletteTypeCustom);
+    if (FAILED(hr))
+    {
+        IWICFormatConverter_Release(converter);
+        IWICBitmapFrameDecode_Release(frame);
+        return NULL;
+    }
+
+    UINT w = 0, h = 0;
+    IWICBitmapSource_GetSize((IWICBitmapSource *)converter, &w, &h);
+    if (w == 0 || h == 0)
+    {
+        IWICFormatConverter_Release(converter);
+        IWICBitmapFrameDecode_Release(frame);
+        return NULL;
+    }
+
+    HDC hdc = GetDC(NULL);
+    void *bits = NULL;
+    HBITMAP dib = Create32BitDIBSection(hdc, (int)w, (int)h, &bits);
+    ReleaseDC(NULL, hdc);
+    if (!dib || !bits)
+    {
+        if (dib)
+            DeleteObject(dib);
+        IWICFormatConverter_Release(converter);
+        IWICBitmapFrameDecode_Release(frame);
+        return NULL;
+    }
+
+    WICRect rc;
+    rc.X = 0;
+    rc.Y = 0;
+    rc.Width = (INT)w;
+    rc.Height = (INT)h;
+    hr = IWICBitmapSource_CopyPixels((IWICBitmapSource *)converter, &rc, w * 4, w * h * 4, (BYTE *)bits);
+    if (FAILED(hr))
+    {
+        DeleteObject(dib);
+        dib = NULL;
+    }
+    else
+    {
+        if (outW)
+            *outW = (int)w;
+        if (outH)
+            *outH = (int)h;
+    }
+
+    IWICFormatConverter_Release(converter);
+    IWICBitmapFrameDecode_Release(frame);
+
+    return dib;
+}
+
 static HBITMAP CreateBitmapFromPngData(const unsigned char *data, int len, int *outW, int *outH)
 {
     if (outW)
@@ -367,94 +418,42 @@ static HBITMAP CreateBitmapFromPngData(const unsigned char *data, int len, int *
         return NULL;
     }
 
-    IWICBitmapFrameDecode *frame = NULL;
-    hr = IWICBitmapDecoder_GetFrame(decoder, 0, &frame);
-    if (FAILED(hr) || !frame)
-    {
-        IWICBitmapDecoder_Release(decoder);
-        IStream_Release(stream);
-        IWICImagingFactory_Release(factory);
-        return NULL;
-    }
-
-    IWICFormatConverter *converter = NULL;
-    hr = IWICImagingFactory_CreateFormatConverter(factory, &converter);
-    if (FAILED(hr) || !converter)
-    {
-        IWICBitmapFrameDecode_Release(frame);
-        IWICBitmapDecoder_Release(decoder);
-        IStream_Release(stream);
-        IWICImagingFactory_Release(factory);
-        return NULL;
-    }
-
-    hr = IWICFormatConverter_Initialize(converter, (IWICBitmapSource *)frame,
-                                        &GUID_WICPixelFormat32bppBGRA, WICBitmapDitherTypeNone,
-                                        NULL, 0.0, WICBitmapPaletteTypeCustom);
-    if (FAILED(hr))
-    {
-        IWICFormatConverter_Release(converter);
-        IWICBitmapFrameDecode_Release(frame);
-        IWICBitmapDecoder_Release(decoder);
-        IStream_Release(stream);
-        IWICImagingFactory_Release(factory);
-        return NULL;
-    }
-
-    UINT w = 0, h = 0;
-    IWICBitmapSource_GetSize((IWICBitmapSource *)converter, &w, &h);
-    if (w == 0 || h == 0)
-    {
-        IWICFormatConverter_Release(converter);
-        IWICBitmapFrameDecode_Release(frame);
-        IWICBitmapDecoder_Release(decoder);
-        IStream_Release(stream);
-        IWICImagingFactory_Release(factory);
-        return NULL;
-    }
-
-    HDC hdc = GetDC(NULL);
-    void *bits = NULL;
-    HBITMAP dib = Create32BitDIBSection(hdc, (int)w, (int)h, &bits);
-    ReleaseDC(NULL, hdc);
-    if (!dib || !bits)
-    {
-        if (dib)
-            DeleteObject(dib);
-        IWICFormatConverter_Release(converter);
-        IWICBitmapFrameDecode_Release(frame);
-        IWICBitmapDecoder_Release(decoder);
-        IStream_Release(stream);
-        IWICImagingFactory_Release(factory);
-        return NULL;
-    }
-
-    WICRect rc;
-    rc.X = 0;
-    rc.Y = 0;
-    rc.Width = (INT)w;
-    rc.Height = (INT)h;
-    hr = IWICBitmapSource_CopyPixels((IWICBitmapSource *)converter, &rc, w * 4, w * h * 4, (BYTE *)bits);
-    if (FAILED(hr))
-    {
-        DeleteObject(dib);
-        dib = NULL;
-    }
-    else
-    {
-        if (outW)
-            *outW = (int)w;
-        if (outH)
-            *outH = (int)h;
-    }
-
-    IWICFormatConverter_Release(converter);
-    IWICBitmapFrameDecode_Release(frame);
+    HBITMAP bitmap = CreateBitmapFromWicDecoder(factory, decoder, outW, outH);
     IWICBitmapDecoder_Release(decoder);
     IStream_Release(stream);
     IWICImagingFactory_Release(factory);
+    return bitmap;
+}
 
-    return dib;
+static HBITMAP CreateBitmapFromImageFilePath(const WCHAR *path, int *outW, int *outH)
+{
+    if (outW)
+        *outW = 0;
+    if (outH)
+        *outH = 0;
+    if (!path || !*path)
+        return NULL;
+
+    IWICImagingFactory *factory = NULL;
+    HRESULT hr = CoCreateInstance(&CLSID_WICImagingFactory, NULL, CLSCTX_INPROC_SERVER,
+                                  &IID_IWICImagingFactory, (LPVOID *)&factory);
+    if (FAILED(hr) || !factory)
+        return NULL;
+
+    IWICBitmapDecoder *decoder = NULL;
+    // File-backed pinned screenshots bypass the Go PNG re-encode path and let WIC
+    // decode the capture from disk, matching the macOS AppKit file-source path.
+    hr = IWICImagingFactory_CreateDecoderFromFilename(factory, path, NULL, GENERIC_READ, WICDecodeMetadataCacheOnLoad, &decoder);
+    if (FAILED(hr) || !decoder)
+    {
+        IWICImagingFactory_Release(factory);
+        return NULL;
+    }
+
+    HBITMAP bitmap = CreateBitmapFromWicDecoder(factory, decoder, outW, outH);
+    IWICBitmapDecoder_Release(decoder);
+    IWICImagingFactory_Release(factory);
+    return bitmap;
 }
 
 static int MeasureTextHeightW(HDC hdc, const WCHAR *text, int width)
@@ -465,6 +464,39 @@ static int MeasureTextHeightW(HDC hdc, const WCHAR *text, int width)
     DrawTextW(hdc, text, -1, &rc, DT_CALCRECT | DT_WORDBREAK | DT_EDITCONTROL | DT_NOPREFIX);
     int h = rc.bottom - rc.top;
     return h > 0 ? h : 0;
+}
+
+static int MeasureTextNaturalWidthW(HDC hdc, const WCHAR *text)
+{
+    if (!text || !*text)
+        return 0;
+
+    int maxWidth = 0;
+    const WCHAR *lineStart = text;
+    const WCHAR *p = text;
+    while (1)
+    {
+        if (*p == L'\r' || *p == L'\n' || *p == L'\0')
+        {
+            int len = (int)(p - lineStart);
+            RECT rc = {0, 0, 0, 0};
+            if (len > 0 && DrawTextW(hdc, lineStart, len, &rc, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX))
+            {
+                int lineWidth = rc.right - rc.left;
+                if (lineWidth > maxWidth)
+                    maxWidth = lineWidth;
+            }
+
+            if (*p == L'\r' && *(p + 1) == L'\n')
+                p++;
+            if (*p == L'\0')
+                break;
+            lineStart = p + 1;
+        }
+        p++;
+    }
+
+    return maxWidth > 0 ? maxWidth : 0;
 }
 
 static float GetSystemMessageFontSizePt(void)
@@ -533,26 +565,49 @@ static void ClampWindowToWorkArea(const RECT *work, int *x, int *y, int width, i
 typedef struct OverlayWindow
 {
     HWND hwnd;
+    HWND shadowHwnd;
     WCHAR *name;
     WCHAR *title;
     WCHAR *message;
     WCHAR *tooltip;
+    WCHAR *copyButtonTooltip;
+    WCHAR *copyButtonSuccessTooltip;
+    WCHAR *activeTooltip;
     HBITMAP iconBitmap;
     int iconWidth;
     int iconHeight;
+    BOOL transparent;
+    BOOL hitTestIconOnly;
+    float iconX;
+    float iconY;
+    float iconDrawWidth;
+    float iconDrawHeight;
+    RECT iconRect;
     HBITMAP tooltipIconBitmap;
     int tooltipIconWidth;
     int tooltipIconHeight;
     float tooltipIconSize;
     BOOL closable;
+    BOOL closeOnEscape;
+    BOOL loading;
+    BOOL topmost;
+    BOOL absolutePosition;
+    BOOL preservePosition;
     BOOL movable;
+    BOOL resizable;
+    float cornerRadius;
+    float aspectRatio;
     int autoCloseSeconds;
     int stickyWindowPid;
     int anchor;
     float offsetX;
     float offsetY;
     float width;
+    float minWidth;
+    float maxWidth;
     float height;
+    float maxHeight;
+    BOOL followScroll;
     float fontSize; // pt, <=0 means system default
     float iconSize; // DIP, <=0 means default
 
@@ -562,15 +617,37 @@ typedef struct OverlayWindow
     float appliedFontSize;
 
     RECT closeRect;
+    RECT copyButtonRect;
+    RECT textRect;
+    RECT textScrollbarTrackRect;
+    RECT textScrollbarThumbRect;
+    int textContentHeight;
+    int textScrollOffset;
+    int textMaxScrollOffset;
+    BOOL textUserScrolled;
+    BOOL textScrollbarHover;
+    BOOL textScrollbarDragging;
+    POINT textScrollbarDragStart;
+    int textScrollbarDragStartOffset;
+    BOOL repaintPending;
+    BOOL layoutSizeChanged;
     BOOL mouseInside;
     BOOL closeHover;
     BOOL closePressed;
+    BOOL showCopyButton;
+    BOOL copyButtonHover;
+    BOOL copyButtonPressed;
+    BOOL copyButtonFeedback;
     BOOL dragging;
     BOOL autoClosePending;
     POINT dragStart;
     POINT dragWindowOrigin;
     RECT lastTargetRect;
     BOOL hasLastTargetRect;
+    RECT predictiveAnchorTargetRect;
+    POINT predictiveAnchorMouse;
+    BOOL hasPredictiveAnchor;
+    BOOL liveFollowActive;
     BOOL hiddenForMove;
     BOOL targetReady;
     
@@ -590,22 +667,44 @@ typedef struct OverlayPayload
     WCHAR *title;
     WCHAR *message;
     WCHAR *tooltip;
+    WCHAR *copyButtonTooltip;
+    WCHAR *copyButtonSuccessTooltip;
     unsigned char *iconData;
     int iconLen;
+    WCHAR *iconFilePath;
+    BOOL transparent;
+    BOOL hitTestIconOnly;
+    float iconX;
+    float iconY;
+    float iconWidth;
+    float iconHeight;
     unsigned char *tooltipIconData;
     int tooltipIconLen;
     float tooltipIconSize;
     BOOL closable;
+    BOOL closeOnEscape;
+    BOOL loading;
+    BOOL topmost;
+    BOOL absolutePosition;
+    BOOL preservePosition;
     int stickyWindowPid;
     int anchor;
     int autoCloseSeconds;
     BOOL movable;
+    BOOL resizable;
+    float cornerRadius;
+    float aspectRatio;
     float offsetX;
     float offsetY;
     float width;
+    float minWidth;
+    float maxWidth;
     float height;
+    float maxHeight;
+    BOOL followScroll;
     float fontSize;
     float iconSize;
+    BOOL showCopyButton;
 } OverlayPayload;
 
 typedef struct OverlayCommand
@@ -617,6 +716,7 @@ typedef struct OverlayCommand
 
 static OverlayWindow *g_overlays = NULL;
 static const WCHAR *g_overlayClassName = L"WoxOverlayWindow";
+static const WCHAR *g_shadowClassName = L"WoxOverlayShadowWindow";
 static const WCHAR *g_controllerClassName = L"WoxOverlayController";
 static const WCHAR *g_tooltipClassName = L"WoxOverlayTooltip";
 static HANDLE g_threadReadyEvent = NULL;
@@ -630,8 +730,14 @@ static INIT_ONCE g_initOnce = INIT_ONCE_STATIC_INIT;
 // Forward Decls
 // -----------------------------------------------------------------------------
 static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+static LRESULT CALLBACK ShadowWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 static LRESULT CALLBACK OverlayControllerProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 static DWORD WINAPI OverlayThreadProc(LPVOID param);
+static BOOL GetTargetContentRect(HWND target, RECT *outRect);
+static void StartLiveFollowTimerIfNeeded(OverlayWindow *ow);
+static void StopLiveFollowTimer(OverlayWindow *ow);
+static void RepositionOverlayToTargetRect(OverlayWindow *ow, const RECT *targetRect, BOOL preserveSmallPredictiveCorrection);
+static void ShowOverlayWindowWithFocusPolicy(OverlayWindow *ow);
 
 // -----------------------------------------------------------------------------
 // Overlay Helpers
@@ -800,6 +906,33 @@ static void SetOverlayZOrder(HWND hwnd, HWND target)
     }
 }
 
+static LRESULT GetResizeHitTest(OverlayWindow *ow, POINT pt)
+{
+    if (!ow || !ow->resizable)
+        return HTCLIENT;
+
+    RECT client;
+    GetClientRect(ow->hwnd, &client);
+    int grip = MulDiv(RESIZE_GRIP_DIP, (int)(ow->dpi ? ow->dpi : 96), 96);
+    BOOL left = pt.x <= grip;
+    BOOL right = pt.x >= client.right - grip;
+    BOOL top = pt.y <= grip;
+    BOOL bottom = pt.y >= client.bottom - grip;
+
+    // Feature change: transparent image overlays are borderless, so Windows needs explicit
+    // non-client hit-test results to start native edge and corner resizing without interfering
+    // with the existing interior drag-to-move behavior.
+    if (top && left) return HTTOPLEFT;
+    if (top && right) return HTTOPRIGHT;
+    if (bottom && left) return HTBOTTOMLEFT;
+    if (bottom && right) return HTBOTTOMRIGHT;
+    if (left) return HTLEFT;
+    if (right) return HTRIGHT;
+    if (top) return HTTOP;
+    if (bottom) return HTBOTTOM;
+    return HTCLIENT;
+}
+
 static void StartAutoCloseTimer(OverlayWindow *ow)
 {
     if (!ow || !ow->hwnd)
@@ -823,6 +956,103 @@ static void StartTrackTimer(OverlayWindow *ow)
     }
 }
 
+static BOOL IsLeftButtonDown(void)
+{
+    return (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+}
+
+static BOOL GetTargetContentRect(HWND target, RECT *outRect)
+{
+    if (!target || !IsWindow(target) || !outRect)
+        return FALSE;
+
+    RECT targetRect;
+    RECT clientRect;
+    if (GetClientRect(target, &clientRect))
+    {
+        POINT tl = {clientRect.left, clientRect.top};
+        POINT br = {clientRect.right, clientRect.bottom};
+        ClientToScreen(target, &tl);
+        ClientToScreen(target, &br);
+        targetRect.left = tl.x;
+        targetRect.top = tl.y;
+        targetRect.right = br.x;
+        targetRect.bottom = br.y;
+    }
+    else if (!GetWindowRect(target, &targetRect))
+    {
+        return FALSE;
+    }
+
+    if (targetRect.right - targetRect.left <= 1 || targetRect.bottom - targetRect.top <= 1)
+        return FALSE;
+
+    *outRect = targetRect;
+    return TRUE;
+}
+
+static void RefreshPredictiveAnchor(OverlayWindow *ow, const RECT *targetRect)
+{
+    if (!ow || !targetRect || !IsLeftButtonDown())
+        return;
+
+    // Predictive follow stores the latest trusted window sample with the cursor
+    // position observed at the same time. Later timer ticks can then move the
+    // sticky overlay from mouse deltas instead of waiting for lower-frequency
+    // location events from the window manager.
+    ow->predictiveAnchorTargetRect = *targetRect;
+    GetCursorPos(&ow->predictiveAnchorMouse);
+    ow->hasPredictiveAnchor = TRUE;
+}
+
+static BOOL GetPredictiveTargetRect(OverlayWindow *ow, RECT *outRect)
+{
+    if (!ow || !outRect || !ow->hasPredictiveAnchor)
+        return FALSE;
+
+    POINT cursor;
+    if (!GetCursorPos(&cursor))
+        return FALSE;
+
+    int dx = cursor.x - ow->predictiveAnchorMouse.x;
+    int dy = cursor.y - ow->predictiveAnchorMouse.y;
+    *outRect = ow->predictiveAnchorTargetRect;
+    OffsetRect(outRect, dx, dy);
+    return TRUE;
+}
+
+static void StartLiveFollowTimerIfNeeded(OverlayWindow *ow)
+{
+    if (!ow || !ow->hwnd || ow->liveFollowActive || ow->stickyWindowPid <= 0 || !IsLeftButtonDown())
+        return;
+
+    // Optimization: Windows location hooks can still be coalesced during native
+    // dragging. A 16ms live-follow timer keeps generic sticky overlays moving at
+    // frame cadence, while real window samples continue to calibrate the anchor.
+    SetTimer(ow->hwnd, TIMER_LIVE_FOLLOW, 16, NULL);
+    ow->liveFollowActive = TRUE;
+}
+
+static void StopLiveFollowTimer(OverlayWindow *ow)
+{
+    if (!ow || !ow->hwnd || !ow->liveFollowActive)
+        return;
+
+    KillTimer(ow->hwnd, TIMER_LIVE_FOLLOW);
+    ow->liveFollowActive = FALSE;
+    ow->hasPredictiveAnchor = FALSE;
+}
+
+static void ShowOverlayWindowWithFocusPolicy(OverlayWindow *ow)
+{
+    if (!ow || !ow->hwnd)
+        return;
+
+    // CloseOnEscape means "close if this overlay already has focus"; showing or refreshing
+    // the overlay must not steal focus from the user's active app.
+    ShowWindow(ow->hwnd, SW_SHOWNOACTIVATE);
+}
+
 static void UpdateCloseRect(OverlayWindow *ow, int width, int height, UINT dpi)
 {
     RECT r = {0, 0, 0, 0};
@@ -840,6 +1070,163 @@ static void UpdateCloseRect(OverlayWindow *ow, int width, int height, UINT dpi)
     r.right = x + closeSize;
     r.bottom = y + closeSize;
     ow->closeRect = r;
+}
+
+// UpdateCopyButtonRect keeps the optional copy affordance anchored inside the HUD surface.
+static void UpdateCopyButtonRect(OverlayWindow *ow, int width, int height, UINT dpi)
+{
+    RECT r = {0, 0, 0, 0};
+    if (!ow->showCopyButton)
+    {
+        ow->copyButtonRect = r;
+        return;
+    }
+
+    int buttonSize = MulDiv(COPY_BUTTON_SIZE_DIP, (int)dpi, 96);
+    int buttonPad = MulDiv(COPY_BUTTON_PAD_DIP, (int)dpi, 96);
+    int x = width - buttonPad - buttonSize;
+    int y = height - buttonPad - buttonSize;
+    r.left = x;
+    r.top = y;
+    r.right = x + buttonSize;
+    r.bottom = y + buttonSize;
+    ow->copyButtonRect = r;
+}
+
+static void UpdateTextScrollbarRects(OverlayWindow *ow, int width, int height, int copyButtonReserve, UINT dpi)
+{
+    RECT empty = {0, 0, 0, 0};
+    ow->textScrollbarTrackRect = empty;
+    ow->textScrollbarThumbRect = empty;
+    if (!ow || ow->textMaxScrollOffset <= 0 || ow->textContentHeight <= 0)
+        return;
+
+    int barWidth = MulDiv(SCROLLBAR_WIDTH_DIP, (int)dpi, 96);
+    if (barWidth < 2)
+        barWidth = 2;
+    int rightPad = MulDiv(CLOSE_PAD_DIP, (int)dpi, 96);
+    int trackRight = width - rightPad;
+    int trackLeft = trackRight - barWidth;
+
+    int top = ow->textRect.top;
+    if (ow->closable)
+        top = max(top, ow->closeRect.bottom + MulDiv(8, (int)dpi, 96));
+    int bottom = height - MulDiv(PADDING_Y_DIP, (int)dpi, 96) - copyButtonReserve;
+    if (ow->showCopyButton)
+        bottom = min(bottom, ow->copyButtonRect.top - MulDiv(8, (int)dpi, 96));
+    if (bottom <= top)
+        return;
+
+    RECT track = {trackLeft, top, trackRight, bottom};
+    ow->textScrollbarTrackRect = track;
+
+    int trackHeight = bottom - top;
+    int visibleTextHeight = ow->textRect.bottom - ow->textRect.top;
+    int thumbHeight = (int)roundf((float)visibleTextHeight * (float)trackHeight / (float)ow->textContentHeight);
+    int minThumbHeight = MulDiv(SCROLLBAR_MIN_THUMB_DIP, (int)dpi, 96);
+    if (thumbHeight < minThumbHeight)
+        thumbHeight = minThumbHeight;
+    if (thumbHeight > trackHeight)
+        thumbHeight = trackHeight;
+
+    int maxThumbTravel = trackHeight - thumbHeight;
+    int thumbTop = top;
+    if (maxThumbTravel > 0 && ow->textMaxScrollOffset > 0)
+        thumbTop += (int)roundf((float)ow->textScrollOffset * (float)maxThumbTravel / (float)ow->textMaxScrollOffset);
+    RECT thumb = {trackLeft, thumbTop, trackRight, thumbTop + thumbHeight};
+    ow->textScrollbarThumbRect = thumb;
+}
+
+static BOOL PointInTextScrollbarHitRect(OverlayWindow *ow, POINT pt)
+{
+    if (!ow || ow->textMaxScrollOffset <= 0)
+        return FALSE;
+    RECT hit = ow->textScrollbarTrackRect;
+    if (hit.bottom <= hit.top || hit.right <= hit.left)
+        return FALSE;
+    int hitWidth = MulDiv(SCROLLBAR_HIT_WIDTH_DIP, (int)ow->dpi, 96);
+    int center = (hit.left + hit.right) / 2;
+    hit.left = center - hitWidth / 2;
+    hit.right = hit.left + hitWidth;
+    return PtInRect(&hit, pt);
+}
+
+static void DrawTextScrollbar(HDC hdc, OverlayWindow *ow)
+{
+    if (!ow || ow->textMaxScrollOffset <= 0)
+        return;
+    RECT thumb = ow->textScrollbarThumbRect;
+    if (thumb.right <= thumb.left || thumb.bottom <= thumb.top)
+        return;
+
+    HBRUSH brush = CreateSolidBrush((ow->textScrollbarHover || ow->textScrollbarDragging) ? RGB(190, 190, 190) : RGB(140, 140, 140));
+    if (!brush)
+        return;
+    FillRect(hdc, &thumb, brush);
+    DeleteObject(brush);
+}
+
+// Updates the text viewport and keeps follow mode paused when the user scrolls away.
+static void ScrollOverlayText(OverlayWindow *ow, int delta, BOOL userInitiated)
+{
+    if (!ow || ow->textMaxScrollOffset <= 0 || delta == 0)
+        return;
+
+    int nextOffset = ow->textScrollOffset + delta;
+    if (nextOffset < 0)
+        nextOffset = 0;
+    if (nextOffset > ow->textMaxScrollOffset)
+        nextOffset = ow->textMaxScrollOffset;
+    if (nextOffset == ow->textScrollOffset)
+        return;
+
+    ow->textScrollOffset = nextOffset;
+    if (userInitiated && ow->followScroll)
+        ow->textUserScrolled = ow->textScrollOffset < ow->textMaxScrollOffset;
+    RECT client;
+    GetClientRect(ow->hwnd, &client);
+    int copyButtonReserve = ow->showCopyButton ? MulDiv(COPY_BUTTON_SIZE_DIP + COPY_BUTTON_TEXT_GAP_DIP, (int)ow->dpi, 96) : 0;
+    UpdateTextScrollbarRects(ow, client.right - client.left, client.bottom - client.top, copyButtonReserve, ow->dpi);
+    InvalidateRect(ow->hwnd, NULL, FALSE);
+}
+
+static void ScheduleOverlayRepaint(OverlayWindow *ow)
+{
+    if (!ow || !ow->hwnd || ow->repaintPending)
+        return;
+
+    ow->repaintPending = TRUE;
+    SetTimer(ow->hwnd, TIMER_REPAINT, 16, NULL);
+}
+
+static void SetTextScrollOffsetFromThumbPoint(OverlayWindow *ow, POINT pt)
+{
+    if (!ow || ow->textMaxScrollOffset <= 0)
+        return;
+
+    int trackHeight = ow->textScrollbarTrackRect.bottom - ow->textScrollbarTrackRect.top;
+    int thumbHeight = ow->textScrollbarThumbRect.bottom - ow->textScrollbarThumbRect.top;
+    int travel = trackHeight - thumbHeight;
+    if (travel <= 0)
+        return;
+
+    int dy = pt.y - ow->textScrollbarDragStart.y;
+    int nextOffset = ow->textScrollbarDragStartOffset + (int)roundf((float)dy * (float)ow->textMaxScrollOffset / (float)travel);
+    if (nextOffset < 0)
+        nextOffset = 0;
+    if (nextOffset > ow->textMaxScrollOffset)
+        nextOffset = ow->textMaxScrollOffset;
+    if (nextOffset == ow->textScrollOffset)
+        return;
+
+    ow->textScrollOffset = nextOffset;
+    if (ow->followScroll)
+        ow->textUserScrolled = ow->textScrollOffset < ow->textMaxScrollOffset;
+    RECT client;
+    GetClientRect(ow->hwnd, &client);
+    int copyButtonReserve = ow->showCopyButton ? MulDiv(COPY_BUTTON_SIZE_DIP + COPY_BUTTON_TEXT_GAP_DIP, (int)ow->dpi, 96) : 0;
+    UpdateTextScrollbarRects(ow, client.right - client.left, client.bottom - client.top, copyButtonReserve, ow->dpi);
+    InvalidateRect(ow->hwnd, NULL, FALSE);
 }
 
 static void ComputeOverlayPosition(OverlayWindow *ow, const RECT *targetRect, int width, int height, int *outX, int *outY)
@@ -885,6 +1272,45 @@ static void ComputeOverlayPosition(OverlayWindow *ow, const RECT *targetRect, in
         *outY = py + oy + offY;
 }
 
+static void RepositionOverlayToTargetRect(OverlayWindow *ow, const RECT *targetRect, BOOL preserveSmallPredictiveCorrection)
+{
+    if (!ow || !ow->hwnd || !targetRect)
+        return;
+
+    RECT client;
+    GetClientRect(ow->hwnd, &client);
+    int width = client.right - client.left;
+    int height = client.bottom - client.top;
+    int x = 0;
+    int y = 0;
+    ComputeOverlayPosition(ow, targetRect, width, height, &x, &y);
+    RECT workArea = GetWorkAreaForRect(targetRect);
+    ClampWindowToWorkArea(&workArea, &x, &y, width, height);
+
+    if (preserveSmallPredictiveCorrection && ow->liveFollowActive && ow->hasPredictiveAnchor && IsLeftButtonDown())
+    {
+        RECT current;
+        if (GetWindowRect(ow->hwnd, &current))
+        {
+            int correctionX = x - current.left;
+            int correctionY = y - current.top;
+            if (abs(correctionX) <= PREDICTIVE_CORRECTION_THRESHOLD_PX &&
+                abs(correctionY) <= PREDICTIVE_CORRECTION_THRESHOLD_PX)
+            {
+                // Optimization: WinEvent location samples are still needed to
+                // refresh the predictive anchor, but small corrections should not
+                // pull the overlay back to an older point while the live timer is
+                // already following mouse movement. Large corrections still apply
+                // so snapping, monitor changes, and real drift can recover.
+                x = current.left;
+                y = current.top;
+            }
+        }
+    }
+
+    SetWindowPos(ow->hwnd, NULL, x, y, 0, 0, SWP_NOACTIVATE | SWP_NOSIZE | SWP_NOZORDER);
+}
+
 static void ApplyCornerRadius(HWND hwnd, UINT dpi, int width, int height)
 {
     UINT pref = DWMWCP_ROUND;
@@ -900,13 +1326,371 @@ static void ApplyCornerRadius(HWND hwnd, UINT dpi, int width, int height)
     }
 }
 
-static void ShowTooltipWindow(OverlayWindow *ow, HWND owner, POINT clientPt);
+static int GetTransparentImageShadowPadding(UINT dpi)
+{
+    return MulDiv(IMAGE_SHADOW_PADDING_DIP, (int)(dpi ? dpi : 96), 96);
+}
+
+static void DestroyTransparentImageShadow(OverlayWindow *ow)
+{
+    if (ow && ow->shadowHwnd)
+    {
+        DestroyWindow(ow->shadowHwnd);
+        ow->shadowHwnd = NULL;
+    }
+}
+
+static BOOL EnsureTransparentImageShadowWindow(OverlayWindow *ow)
+{
+    if (!ow || !ow->hwnd)
+        return FALSE;
+    if (ow->shadowHwnd && IsWindow(ow->shadowHwnd))
+        return TRUE;
+
+    ow->shadowHwnd = CreateWindowExW(
+        WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST,
+        g_shadowClassName,
+        L"Wox image overlay shadow",
+        WS_POPUP,
+        0, 0, 0, 0,
+        NULL, NULL, GetModuleHandleW(NULL), NULL);
+
+    return ow->shadowHwnd != NULL;
+}
+
+static void UpdateTransparentImageShadow(OverlayWindow *ow)
+{
+    if (!ow || !ow->transparent || !ow->hwnd || !IsWindow(ow->hwnd))
+    {
+        DestroyTransparentImageShadow(ow);
+        return;
+    }
+
+    RECT windowRect;
+    if (!GetWindowRect(ow->hwnd, &windowRect))
+        return;
+
+    int imageW = windowRect.right - windowRect.left;
+    int imageH = windowRect.bottom - windowRect.top;
+    if (imageW <= 0 || imageH <= 0)
+        return;
+
+    UINT dpi = ow->dpi ? ow->dpi : GetWindowDpiSafe(ow->hwnd, 96);
+    int pad = GetTransparentImageShadowPadding(dpi);
+    int shadowW = imageW + pad * 2;
+    int shadowH = imageH + pad * 2;
+    if (pad <= 0 || shadowW <= 0 || shadowH <= 0)
+        return;
+
+    if (!EnsureTransparentImageShadowWindow(ow))
+        return;
+
+    HDC screenDC = GetDC(NULL);
+    if (!screenDC)
+        return;
+
+    HDC memDC = CreateCompatibleDC(screenDC);
+    if (!memDC)
+    {
+        ReleaseDC(NULL, screenDC);
+        return;
+    }
+
+    void *bits = NULL;
+    HBITMAP bitmap = Create32BitDIBSection(screenDC, shadowW, shadowH, &bits);
+    if (!bitmap || !bits)
+    {
+        if (bitmap)
+            DeleteObject(bitmap);
+        DeleteDC(memDC);
+        ReleaseDC(NULL, screenDC);
+        return;
+    }
+
+    uint32_t *pixels = (uint32_t *)bits;
+    ZeroMemory(pixels, (SIZE_T)shadowW * (SIZE_T)shadowH * sizeof(uint32_t));
+    const int left = pad;
+    const int top = pad;
+    const int right = pad + imageW;
+    const int bottom = pad + imageH;
+    const double maxAlpha = (double)IMAGE_SHADOW_MAX_ALPHA;
+
+    for (int y = 0; y < shadowH; y++)
+    {
+        for (int x = 0; x < shadowW; x++)
+        {
+            int dx = 0;
+            if (x < left)
+                dx = left - x;
+            else if (x >= right)
+                dx = x - right + 1;
+
+            int dy = 0;
+            if (y < top)
+                dy = top - y;
+            else if (y >= bottom)
+                dy = y - bottom + 1;
+
+            if (dx == 0 && dy == 0)
+                continue;
+
+            double distance = sqrt((double)(dx * dx + dy * dy));
+            if (distance > (double)pad)
+                continue;
+
+            double t = 1.0 - distance / (double)pad;
+            BYTE alpha = (BYTE)round(maxAlpha * t * t);
+            if (alpha == 0)
+                continue;
+
+            pixels[(SIZE_T)y * (SIZE_T)shadowW + (SIZE_T)x] = ((uint32_t)alpha << 24);
+        }
+    }
+
+    HGDIOBJ old = SelectObject(memDC, bitmap);
+    POINT dst = {windowRect.left - pad, windowRect.top - pad};
+    SIZE size = {shadowW, shadowH};
+    POINT src = {0, 0};
+    BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    UpdateLayeredWindow(ow->shadowHwnd, screenDC, &dst, &size, memDC, &src, 0, &blend, ULW_ALPHA);
+    SetWindowPos(ow->shadowHwnd, ow->hwnd, dst.x, dst.y, shadowW, shadowH, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+
+    if (old)
+        SelectObject(memDC, old);
+    DeleteObject(bitmap);
+    DeleteDC(memDC);
+    ReleaseDC(NULL, screenDC);
+}
+
+static void MoveTransparentImageShadow(OverlayWindow *ow)
+{
+    if (!ow || !ow->transparent || !ow->hwnd || !ow->shadowHwnd || !IsWindow(ow->shadowHwnd))
+        return;
+
+    RECT windowRect;
+    if (!GetWindowRect(ow->hwnd, &windowRect))
+        return;
+
+    int imageW = windowRect.right - windowRect.left;
+    int imageH = windowRect.bottom - windowRect.top;
+    if (imageW <= 0 || imageH <= 0)
+        return;
+
+    UINT dpi = ow->dpi ? ow->dpi : GetWindowDpiSafe(ow->hwnd, 96);
+    int pad = GetTransparentImageShadowPadding(dpi);
+    int shadowW = imageW + pad * 2;
+    int shadowH = imageH + pad * 2;
+    if (pad <= 0 || shadowW <= 0 || shadowH <= 0)
+        return;
+
+    // Optimization: dragging does not change image size, so the expensive shadow bitmap can stay
+    // cached in the layered shadow HWND. Moving that HWND with the image avoids per-mouse-move
+    // DIB allocation and reduces flicker when crossing monitors.
+    SetWindowPos(ow->shadowHwnd, ow->hwnd, windowRect.left - pad, windowRect.top - pad, shadowW, shadowH, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+}
+
+static BOOL UpdateTransparentImageLayer(OverlayWindow *ow)
+{
+    if (!ow || !ow->transparent || !ow->hwnd || !IsWindow(ow->hwnd) || !ow->iconBitmap)
+        return FALSE;
+
+    RECT windowRect;
+    if (!GetWindowRect(ow->hwnd, &windowRect))
+        return FALSE;
+
+    int imageW = windowRect.right - windowRect.left;
+    int imageH = windowRect.bottom - windowRect.top;
+    if (imageW <= 0 || imageH <= 0)
+        return FALSE;
+
+    HDC screenDC = GetDC(NULL);
+    if (!screenDC)
+        return FALSE;
+
+    HDC layerDC = CreateCompatibleDC(screenDC);
+    if (!layerDC)
+    {
+        ReleaseDC(NULL, screenDC);
+        return FALSE;
+    }
+
+    void *bits = NULL;
+    HBITMAP layerBitmap = Create32BitDIBSection(screenDC, imageW, imageH, &bits);
+    if (!layerBitmap || !bits)
+    {
+        if (layerBitmap)
+            DeleteObject(layerBitmap);
+        DeleteDC(layerDC);
+        ReleaseDC(NULL, screenDC);
+        return FALSE;
+    }
+    ZeroMemory(bits, (SIZE_T)imageW * (SIZE_T)imageH * sizeof(uint32_t));
+
+    HGDIOBJ oldLayer = SelectObject(layerDC, layerBitmap);
+    HDC imageDC = CreateCompatibleDC(screenDC);
+    HGDIOBJ oldImage = NULL;
+    if (imageDC)
+    {
+        oldImage = SelectObject(imageDC, ow->iconBitmap);
+        BLENDFUNCTION imageBlend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+        AlphaBlend(layerDC, 0, 0, imageW, imageH, imageDC, 0, 0, ow->iconWidth, ow->iconHeight, imageBlend);
+    }
+
+    POINT dst = {windowRect.left, windowRect.top};
+    SIZE size = {imageW, imageH};
+    POINT src = {0, 0};
+    BLENDFUNCTION layerBlend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    // Bug fix: regular WM_PAINT on a WS_EX_LAYERED image window can leave old scaled frames behind
+    // during fast wheel zoom. Submitting the whole ARGB surface through UpdateLayeredWindow replaces
+    // the previous pixels atomically, matching the shadow window's stable update path.
+    BOOL updated = UpdateLayeredWindow(ow->hwnd, screenDC, &dst, &size, layerDC, &src, 0, &layerBlend, ULW_ALPHA);
+
+    if (oldImage)
+        SelectObject(imageDC, oldImage);
+    if (imageDC)
+        DeleteDC(imageDC);
+    if (oldLayer)
+        SelectObject(layerDC, oldLayer);
+    DeleteObject(layerBitmap);
+    DeleteDC(layerDC);
+    ReleaseDC(NULL, screenDC);
+    return updated;
+}
+
+static void ApplyAspectRatioToSizingRect(OverlayWindow *ow, WPARAM edge, RECT *rect)
+{
+    if (!ow || !rect || ow->aspectRatio <= 0.0f)
+        return;
+
+    int width = rect->right - rect->left;
+    int height = rect->bottom - rect->top;
+    if (width <= 0 || height <= 0)
+        return;
+
+    BOOL left = edge == WMSZ_LEFT || edge == WMSZ_TOPLEFT || edge == WMSZ_BOTTOMLEFT;
+    BOOL right = edge == WMSZ_RIGHT || edge == WMSZ_TOPRIGHT || edge == WMSZ_BOTTOMRIGHT;
+    BOOL top = edge == WMSZ_TOP || edge == WMSZ_TOPLEFT || edge == WMSZ_TOPRIGHT;
+    BOOL bottom = edge == WMSZ_BOTTOM || edge == WMSZ_BOTTOMLEFT || edge == WMSZ_BOTTOMRIGHT;
+    BOOL horizontal = left || right;
+    BOOL vertical = top || bottom;
+
+    int newWidth = width;
+    int newHeight = height;
+    if (horizontal)
+    {
+        newHeight = (int)roundf((float)newWidth / ow->aspectRatio);
+    }
+    else if (vertical)
+    {
+        newWidth = (int)roundf((float)newHeight * ow->aspectRatio);
+    }
+
+    UINT dpi = ow->dpi ? ow->dpi : 96;
+    int minSize = MulDiv(MIN_RESIZE_SIZE_DIP, (int)dpi, 96);
+    if (newWidth < minSize)
+    {
+        newWidth = minSize;
+        newHeight = (int)roundf((float)newWidth / ow->aspectRatio);
+    }
+    if (newHeight < minSize)
+    {
+        newHeight = minSize;
+        newWidth = (int)roundf((float)newHeight * ow->aspectRatio);
+    }
+
+    // Feature change: the native sizing rectangle is corrected before WM_SIZE so transparent image
+    // overlays scale uniformly while the existing WM_SIZE path can still refresh the bitmap bounds
+    // and rounded window region from one consistent final size.
+    if (left)
+    {
+        rect->left = rect->right - newWidth;
+    }
+    else if (right)
+    {
+        rect->right = rect->left + newWidth;
+    }
+    else
+    {
+        int cx = (rect->left + rect->right) / 2;
+        rect->left = cx - newWidth / 2;
+        rect->right = rect->left + newWidth;
+    }
+
+    if (top)
+    {
+        rect->top = rect->bottom - newHeight;
+    }
+    else if (bottom)
+    {
+        rect->bottom = rect->top + newHeight;
+    }
+    else
+    {
+        int cy = (rect->top + rect->bottom) / 2;
+        rect->top = cy - newHeight / 2;
+        rect->bottom = rect->top + newHeight;
+    }
+}
+
+static BOOL ZoomResizableImageOverlayAtScreenPoint(OverlayWindow *ow, POINT screenPt, int wheelDelta)
+{
+    if (!ow || !ow->hwnd || !ow->transparent || !ow->resizable || !ow->iconBitmap || wheelDelta == 0)
+        return FALSE;
+
+    RECT wr;
+    if (!GetWindowRect(ow->hwnd, &wr))
+        return FALSE;
+
+    int currentWidth = wr.right - wr.left;
+    int currentHeight = wr.bottom - wr.top;
+    if (currentWidth <= 0 || currentHeight <= 0)
+        return FALSE;
+
+    UINT dpi = ow->dpi ? ow->dpi : GetWindowDpiSafe(ow->hwnd, 96);
+    int minSize = MulDiv(MIN_RESIZE_SIZE_DIP, (int)dpi, 96);
+    float factor = powf(WHEEL_ZOOM_STEP, (float)wheelDelta / (float)WHEEL_DELTA);
+    int newWidth = (int)roundf((float)currentWidth * factor);
+    int newHeight = (int)roundf((float)currentHeight * factor);
+
+    if (ow->aspectRatio > 0.0f)
+    {
+        newWidth = max(minSize, newWidth);
+        newHeight = (int)roundf((float)newWidth / ow->aspectRatio);
+        if (newHeight < minSize)
+        {
+            newHeight = minSize;
+            newWidth = (int)roundf((float)newHeight * ow->aspectRatio);
+        }
+    }
+    else
+    {
+        newWidth = max(minSize, newWidth);
+        newHeight = max(minSize, newHeight);
+    }
+
+    float anchorX = (float)(screenPt.x - wr.left) / (float)currentWidth;
+    float anchorY = (float)(screenPt.y - wr.top) / (float)currentHeight;
+    anchorX = min(1.0f, max(0.0f, anchorX));
+    anchorY = min(1.0f, max(0.0f, anchorY));
+
+    // Feature change: transparent image overlays could only be resized from their edges, which is
+    // slow when inspecting preview images. Wheel zoom uses the same aspect/min-size constraints and
+    // keeps the pixel under the cursor anchored so the overlay scales in place instead of jumping.
+    int newX = screenPt.x - (int)roundf((float)newWidth * anchorX);
+    int newY = screenPt.y - (int)roundf((float)newHeight * anchorY);
+    SetWindowPos(ow->hwnd, NULL, newX, newY, newWidth, newHeight, SWP_NOACTIVATE | SWP_NOZORDER);
+    return TRUE;
+}
+
+static void ShowTooltipWindow(OverlayWindow *ow, HWND owner, RECT anchorRect, const WCHAR *text);
 static void HideTooltipWindow(OverlayWindow *ow);
 
 static void ApplyOverlayLayout(OverlayWindow *ow)
 {
     if (!ow || !ow->hwnd)
         return;
+
+    BOOL shouldFollowScroll = ow->followScroll && !ow->textUserScrolled;
 
     ow->dpi = GetWindowDpiSafe(ow->hwnd, ow->dpi ? ow->dpi : GetSystemDpiSafe());
     float fontSizePt = (ow->fontSize > 0.0f) ? ow->fontSize : GetSystemMessageFontSizePt();
@@ -927,14 +1711,14 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
     }
 
     int width = 0;
-    if (ow->width > 0)
+    BOOL hasExplicitWidth = ow->width > 0.0f;
+    if (hasExplicitWidth)
         width = (int)roundf(ow->width * (float)ow->dpi / 96.0f);
-    if (width <= 0)
-        width = MulDiv(DEFAULT_WINDOW_WIDTH_DIP, (int)ow->dpi, 96);
-
     int minWidth = MulDiv(MIN_WINDOW_WIDTH_DIP, (int)ow->dpi, 96);
-    if (width < minWidth)
-        width = minWidth;
+    BOOL hasCustomMinWidth = ow->minWidth > 0.0f;
+    if (hasCustomMinWidth)
+        minWidth = (int)roundf(ow->minWidth * (float)ow->dpi / 96.0f);
+    BOOL hasTooltip = ow->tooltip && *ow->tooltip;
 
     int iconSize = (ow->iconBitmap ? (int)roundf(iconSizeDip * (float)ow->dpi / 96.0f) : 0);
     int iconGap = (ow->iconBitmap ? MulDiv(ICON_GAP_DIP, (int)ow->dpi, 96) : 0);
@@ -947,20 +1731,57 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
     int closePad = ow->closable ? MulDiv(CLOSE_PAD_DIP, (int)ow->dpi, 96) : 0;
 
     float tooltipIconSizeDip = (ow->tooltipIconSize > 0.0f) ? ow->tooltipIconSize : DEFAULT_ICON_SIZE_DIP;
-    int tooltipIconSize = (ow->tooltip ? (int)roundf(tooltipIconSizeDip * (float)ow->dpi / 96.0f) : 0);
-    int tooltipIconGap = (ow->tooltip ? MulDiv(ICON_GAP_DIP, (int)ow->dpi, 96) : 0);
+    int tooltipIconSize = (hasTooltip ? (int)roundf(tooltipIconSizeDip * (float)ow->dpi / 96.0f) : 0);
+    int tooltipIconGap = (hasTooltip ? MulDiv(ICON_GAP_DIP, (int)ow->dpi, 96) : 0);
 
     int rightReserved = rightPad;
     if (ow->closable)
         rightReserved += closePad + closeSize;
-    if (ow->tooltip)
+    if (hasTooltip)
         rightReserved += tooltipIconGap + tooltipIconSize;
 
     int textLeft = leftPad + iconSize + iconGap;
+    int maxWidth = 0;
+    int maxTextWidth = 0;
+    int naturalTextWidth = 0;
+    if (!ow->transparent && !hasExplicitWidth && ow->maxWidth > 0.0f)
+    {
+        maxWidth = (int)roundf(ow->maxWidth * (float)ow->dpi / 96.0f);
+        maxTextWidth = maxWidth - textLeft - rightReserved;
+        if (maxWidth > 0 && maxTextWidth > 0)
+        {
+            HDC hdc = GetDC(NULL);
+            if (hdc)
+            {
+                HGDIOBJ oldFont = NULL;
+                if (ow->messageFont)
+                    oldFont = SelectObject(hdc, ow->messageFont);
+                naturalTextWidth = MeasureTextNaturalWidthW(hdc, ow->message ? ow->message : L"");
+                if (oldFont)
+                    SelectObject(hdc, oldFont);
+                ReleaseDC(NULL, hdc);
+            }
+            if (naturalTextWidth < 1)
+                naturalTextWidth = 1;
+            width = textLeft + rightReserved + min(naturalTextWidth, maxTextWidth);
+        }
+    }
+    if (width <= 0)
+        width = MulDiv(DEFAULT_WINDOW_WIDTH_DIP, (int)ow->dpi, 96);
+    if (width < minWidth)
+        width = minWidth;
+
     int textRight = width - rightReserved;
     int textWidth = textRight - textLeft;
-    if (textWidth < MulDiv(60, (int)ow->dpi, 96))
-        textWidth = MulDiv(60, (int)ow->dpi, 96);
+    int minTextWidth = MulDiv(60, (int)ow->dpi, 96);
+    if (hasCustomMinWidth)
+        minTextWidth = max(1, minWidth - textLeft - rightReserved);
+    if (textWidth < minTextWidth)
+    {
+        textWidth = minTextWidth;
+        if (width < textLeft + rightReserved + textWidth)
+            width = textLeft + rightReserved + textWidth;
+    }
 
     int textHeight = 0;
     HDC hdc = GetDC(NULL);
@@ -983,78 +1804,158 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
     if (tooltipIconSize > contentHeight)
         contentHeight = tooltipIconSize;
 
+    int copyButtonReserve = 0;
+    if (ow->showCopyButton)
+        copyButtonReserve = MulDiv(COPY_BUTTON_SIZE_DIP + COPY_BUTTON_TEXT_GAP_DIP, (int)ow->dpi, 96);
+
     int height = 0;
     if (ow->height > 0)
         height = (int)roundf(ow->height * (float)ow->dpi / 96.0f);
     if (height <= 0)
-        height = topPad + bottomPad + contentHeight;
-
-    UpdateCloseRect(ow, width, height, ow->dpi);
-
-    if (ow->tooltip)
     {
-        int tx = textLeft + textWidth + tooltipIconGap;
-        // Center vertically in content area?
-        // Content area starts at topPad. contentHeight is height of content.
-        // Center of content area: topPad + contentHeight / 2
-        int cy = topPad + contentHeight / 2;
-        int ty = cy - tooltipIconSize / 2;
-        if (ty < topPad) ty = topPad;
-
-        RECT r = {tx, ty, tx + tooltipIconSize, ty + tooltipIconSize};
-        ow->tooltipRect = r;
+        height = topPad + bottomPad + contentHeight;
+        height += copyButtonReserve;
+        if (ow->maxHeight > 0)
+        {
+            int maxHeight = (int)roundf(ow->maxHeight * (float)ow->dpi / 96.0f);
+            if (maxHeight > 0 && height > maxHeight)
+                height = maxHeight;
+        }
+    }
+    if (ow->transparent)
+    {
+        // Bug fix: transparent image overlays must keep the whole client area as the screenshot.
+        // Expanding this layered client area for an inline shadow becomes opaque black padding, so
+        // the image HWND stays pure and a separate per-pixel shadow HWND provides separation.
+        int drawW = ow->iconBitmap ? (int)roundf(((ow->iconDrawWidth > 0.0f) ? ow->iconDrawWidth : iconSizeDip) * (float)ow->dpi / 96.0f) : 0;
+        int drawH = ow->iconBitmap ? (int)roundf(((ow->iconDrawHeight > 0.0f) ? ow->iconDrawHeight : iconSizeDip) * (float)ow->dpi / 96.0f) : 0;
+        int iconX = (int)roundf(ow->iconX * (float)ow->dpi / 96.0f);
+        int iconY = (int)roundf(ow->iconY * (float)ow->dpi / 96.0f);
+        if (ow->resizable)
+        {
+            iconX = 0;
+            iconY = 0;
+            drawW = width;
+            drawH = height;
+        }
+        RECT iconRect = {iconX, iconY, iconX + drawW, iconY + drawH};
+        ow->iconRect = iconRect;
+        RECT empty = {0, 0, 0, 0};
+        ow->closeRect = empty;
+        ow->tooltipRect = empty;
+        ow->copyButtonRect = empty;
+        ow->textRect = empty;
+        ow->textScrollbarTrackRect = empty;
+        ow->textScrollbarThumbRect = empty;
+        ow->textContentHeight = 0;
+        ow->textScrollOffset = 0;
+        ow->textMaxScrollOffset = 0;
+        ow->textUserScrolled = FALSE;
     }
     else
     {
-        RECT r = {0,0,0,0};
-        ow->tooltipRect = r;
+        int textBottom = height - bottomPad - copyButtonReserve;
+        if (textBottom < topPad)
+            textBottom = topPad;
+        int visibleTextHeight = textBottom - topPad;
+
+        ow->textRect.left = textLeft;
+        ow->textRect.top = topPad;
+        ow->textRect.right = textLeft + textWidth;
+        ow->textRect.bottom = textBottom;
+        ow->textContentHeight = textHeight;
+        ow->textMaxScrollOffset = (visibleTextHeight > 0 && textHeight > visibleTextHeight) ? (textHeight - visibleTextHeight) : 0;
+        if (ow->textMaxScrollOffset <= 0)
+        {
+            ow->textScrollOffset = 0;
+            ow->textUserScrolled = FALSE;
+        }
+        else if (shouldFollowScroll)
+        {
+            ow->textScrollOffset = ow->textMaxScrollOffset;
+        }
+        else if (ow->textScrollOffset > ow->textMaxScrollOffset)
+        {
+            ow->textScrollOffset = ow->textMaxScrollOffset;
+        }
+        if (ow->textScrollOffset < 0)
+            ow->textScrollOffset = 0;
+        if (ow->followScroll && ow->textScrollOffset >= ow->textMaxScrollOffset)
+            ow->textUserScrolled = FALSE;
+
+        UpdateCloseRect(ow, width, height, ow->dpi);
+        UpdateCopyButtonRect(ow, width, height, ow->dpi);
+        UpdateTextScrollbarRects(ow, width, height, copyButtonReserve, ow->dpi);
+
+        if (hasTooltip)
+        {
+            int tx = textLeft + textWidth + tooltipIconGap;
+            // Center vertically in content area?
+            // Content area starts at topPad. contentHeight is height of content.
+            // Center of content area: topPad + contentHeight / 2
+            int cy = topPad + contentHeight / 2;
+            int ty = cy - tooltipIconSize / 2;
+            if (ty < topPad) ty = topPad;
+
+            RECT r = {tx, ty, tx + tooltipIconSize, ty + tooltipIconSize};
+            ow->tooltipRect = r;
+        }
+        else
+        {
+            RECT r = {0,0,0,0};
+            ow->tooltipRect = r;
+        }
     }
 
     RECT targetRect;
     BOOL targetFound = FALSE;
+    BOOL preserveLiveFollowFrame = ow->stickyWindowPid > 0 && ow->liveFollowActive;
     if (ow->stickyWindowPid > 0)
     {
         HWND target = NULL;
         if (FindWindowByPid(ow->stickyWindowPid, &target))
         {
-            targetFound = TRUE;
-            RECT clientRect;
-            if (GetClientRect(target, &clientRect))
-            {
-                POINT tl = {clientRect.left, clientRect.top};
-                POINT br = {clientRect.right, clientRect.bottom};
-                ClientToScreen(target, &tl);
-                ClientToScreen(target, &br);
-                targetRect.left = tl.x;
-                targetRect.top = tl.y;
-                targetRect.right = br.x;
-                targetRect.bottom = br.y;
-            }
-            else
-            {
-                GetWindowRect(target, &targetRect);
-            }
-
-            if (targetRect.right - targetRect.left <= 1 || targetRect.bottom - targetRect.top <= 1)
-            {
-                SystemParametersInfo(SPI_GETWORKAREA, 0, &targetRect, 0);
-                targetFound = FALSE;
-            }
-            else
+            ow->targetHwnd = target;
+            if (GetTargetContentRect(target, &targetRect))
             {
                 targetFound = TRUE;
+                if (IsLeftButtonDown())
+                {
+                    // Optimization: pet frame refreshes can arrive while the user
+                    // is already dragging the target window. Seeding the predictive
+                    // anchor from this layout path reduces initial lag before the
+                    // first WinEvent location notification is delivered.
+                    RefreshPredictiveAnchor(ow, &targetRect);
+                    StartLiveFollowTimerIfNeeded(ow);
+                }
+            }
+            else
+            {
+                SystemParametersInfo(SPI_GETWORKAREA, 0, &targetRect, 0);
             }
             SetOverlayZOrder(ow->hwnd, target);
         }
         else
         {
+            ow->targetHwnd = NULL;
             SystemParametersInfo(SPI_GETWORKAREA, 0, &targetRect, 0);
             SetOverlayZOrder(ow->hwnd, NULL);
         }
     }
     else
     {
-        SystemParametersInfo(SPI_GETWORKAREA, 0, &targetRect, 0);
+        if (ow->absolutePosition)
+        {
+            // Bug fix: pinned screenshots pass desktop-absolute selection coordinates. The old
+            // screen branch anchored those offsets to the primary work area and then clamped them,
+            // which moved pins from secondary/negative-coordinate monitors back onto the main
+            // screen. A zero-origin target lets the already-absolute offset land unchanged.
+            SetRect(&targetRect, 0, 0, 0, 0);
+        }
+        else
+        {
+            SystemParametersInfo(SPI_GETWORKAREA, 0, &targetRect, 0);
+        }
         SetOverlayZOrder(ow->hwnd, NULL);
     }
 
@@ -1072,10 +1973,59 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
     }
 
     RECT workArea = GetWorkAreaForRect(&targetRect);
-    ClampWindowToWorkArea(&workArea, &x, &y, width, height);
+    if (!ow->absolutePosition)
+    {
+        ClampWindowToWorkArea(&workArea, &x, &y, width, height);
+    }
+    if (preserveLiveFollowFrame)
+    {
+        RECT current;
+        if (GetWindowRect(ow->hwnd, &current))
+        {
+            // Bug fix: content refreshes should not re-anchor a sticky overlay
+            // from a stale window sample during live follow. Preserve the current
+            // predicted origin and let the live timer own position updates while
+            // this layout pass only updates size and drawing metrics.
+            x = current.left;
+            y = current.top;
+        }
+    }
+    else if (ow->preservePosition)
+    {
+        RECT current;
+        if (GetWindowRect(ow->hwnd, &current))
+        {
+            // Some callers refresh only the content of an existing overlay. Keep the
+            // current user-visible position instead of reapplying the original anchor.
+            x = current.left;
+            y = current.top;
+        }
+    }
+
+    RECT currentWindowRect;
+    ow->layoutSizeChanged = TRUE;
+    if (GetWindowRect(ow->hwnd, &currentWindowRect))
+    {
+        ow->layoutSizeChanged = (currentWindowRect.right - currentWindowRect.left) != width || (currentWindowRect.bottom - currentWindowRect.top) != height;
+    }
 
     SetWindowPos(ow->hwnd, NULL, x, y, width, height, SWP_NOACTIVATE | SWP_NOZORDER);
-    ApplyCornerRadius(ow->hwnd, ow->dpi, width, height);
+    if (ow->transparent)
+    {
+        // Feature change: the screenshot surface remains a clean image-only layered window. The
+        // visible depth now comes from an independent shadow HWND, so no region or client padding
+        // is applied to the pin window itself.
+        SetWindowRgn(ow->hwnd, NULL, TRUE);
+        UINT pref = DWMWCP_DONOTROUND;
+        DwmSetWindowAttribute(ow->hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &pref, sizeof(pref));
+        UpdateTransparentImageLayer(ow);
+        UpdateTransparentImageShadow(ow);
+    }
+    else
+    {
+        DestroyTransparentImageShadow(ow);
+        ApplyCornerRadius(ow->hwnd, ow->dpi, width, height);
+    }
 
     if (ow->tooltipHwnd)
     {
@@ -1093,6 +2043,8 @@ static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BO
     if (!ow || !payload)
         return;
 
+    int previousStickyWindowPid = ow->stickyWindowPid;
+
     if (!isNew)
     {
         if (ow->title)
@@ -1101,6 +2053,10 @@ static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BO
             free(ow->message);
         if (ow->tooltip)
             free(ow->tooltip);
+        if (ow->copyButtonTooltip)
+            free(ow->copyButtonTooltip);
+        if (ow->copyButtonSuccessTooltip)
+            free(ow->copyButtonSuccessTooltip);
     }
 
     if (isNew)
@@ -1111,6 +2067,9 @@ static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BO
     ow->title = payload->title;
     ow->message = payload->message;
     ow->tooltip = payload->tooltip;
+    ow->copyButtonTooltip = payload->copyButtonTooltip;
+    ow->copyButtonSuccessTooltip = payload->copyButtonSuccessTooltip;
+    ow->activeTooltip = NULL;
 
     if (ow->iconBitmap)
         DeleteObject(ow->iconBitmap);
@@ -1118,11 +2077,12 @@ static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BO
     ow->iconWidth = 0;
     ow->iconHeight = 0;
 
-    if (payload->iconData && payload->iconLen > 0)
+    if ((payload->iconFilePath && payload->iconFilePath[0]) || (payload->iconData && payload->iconLen > 0))
     {
         int iw = 0;
         int ih = 0;
-        HBITMAP bmp = CreateBitmapFromPngData(payload->iconData, payload->iconLen, &iw, &ih);
+        BOOL useFileIcon = payload->iconFilePath && payload->iconFilePath[0];
+        HBITMAP bmp = useFileIcon ? CreateBitmapFromImageFilePath(payload->iconFilePath, &iw, &ih) : CreateBitmapFromPngData(payload->iconData, payload->iconLen, &iw, &ih);
         if (bmp)
         {
             ow->iconBitmap = bmp;
@@ -1152,24 +2112,86 @@ static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BO
 
     if (payload->iconData)
         free(payload->iconData);
+    if (payload->iconFilePath)
+        free(payload->iconFilePath);
 
     if (payload->tooltipIconData)
         free(payload->tooltipIconData);
 
     ow->closable = payload->closable;
+    ow->closeOnEscape = payload->closeOnEscape;
+    ow->loading = payload->loading;
+    ow->topmost = payload->topmost;
+    ow->absolutePosition = payload->absolutePosition;
+    ow->preservePosition = payload->preservePosition;
+    ow->transparent = payload->transparent;
+    ow->hitTestIconOnly = payload->hitTestIconOnly;
+    ow->iconX = payload->iconX;
+    ow->iconY = payload->iconY;
+    ow->iconDrawWidth = payload->iconWidth;
+    ow->iconDrawHeight = payload->iconHeight;
     ow->stickyWindowPid = payload->stickyWindowPid;
     ow->anchor = payload->anchor;
     ow->autoCloseSeconds = payload->autoCloseSeconds;
     ow->movable = payload->movable;
+    ow->resizable = payload->resizable;
+    ow->cornerRadius = payload->cornerRadius;
+    ow->aspectRatio = payload->aspectRatio > 0.0f ? payload->aspectRatio : 0.0f;
     ow->offsetX = payload->offsetX;
     ow->offsetY = payload->offsetY;
     ow->width = payload->width;
+    ow->minWidth = payload->minWidth;
+    ow->maxWidth = payload->maxWidth;
     ow->height = payload->height;
+    ow->maxHeight = payload->maxHeight;
+    ow->followScroll = payload->followScroll;
     ow->fontSize = payload->fontSize;
     ow->iconSize = payload->iconSize;
     ow->tooltipIconSize = payload->tooltipIconSize;
+    ow->showCopyButton = payload->showCopyButton;
+    ow->copyButtonHover = FALSE;
+    ow->copyButtonPressed = FALSE;
+    ow->copyButtonFeedback = FALSE;
     ow->hasLastTargetRect = FALSE;
     ow->hiddenForMove = FALSE;
+    if (ow->hwnd)
+    {
+        LONG_PTR style = GetWindowLongPtrW(ow->hwnd, GWL_STYLE);
+        LONG_PTR updatedStyle = (ow->resizable && !ow->transparent) ? (style | WS_THICKFRAME) : (style & ~WS_THICKFRAME);
+        if (updatedStyle != style)
+        {
+            // Bug fix: reused image overlay windows can switch between HUD and transparent image
+            // modes. Keep the thick frame off transparent screenshots so the pinned image is the
+            // full client surface instead of being inset behind a system-drawn border.
+            SetWindowLongPtrW(ow->hwnd, GWL_STYLE, updatedStyle);
+            SetWindowPos(ow->hwnd, NULL, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+        }
+
+        LONG_PTR exStyle = GetWindowLongPtrW(ow->hwnd, GWL_EXSTYLE);
+        LONG_PTR updatedExStyle = ow->transparent ? (exStyle | WS_EX_LAYERED) : (exStyle & ~WS_EX_LAYERED);
+        if (updatedExStyle != exStyle)
+        {
+            // Bug fix: URL image overlays can reuse a non-transparent loading window for the final
+            // transparent image. Keep the extended layered style aligned with the current payload so
+            // the image surface can use the atomic UpdateLayeredWindow path instead of stale paint.
+            SetWindowLongPtrW(ow->hwnd, GWL_EXSTYLE, updatedExStyle);
+        }
+    }
+    if (!isNew && previousStickyWindowPid != ow->stickyWindowPid)
+    {
+        // Bug fix: predictive anchors are tied to a specific target window. When
+        // an overlay is reused for a different sticky PID, keep the generic API
+        // simple by clearing the old live-follow state at the platform boundary.
+        StopLiveFollowTimer(ow);
+        if (ow->locationHook)
+        {
+            UnhookWinEvent(ow->locationHook);
+            ow->locationHook = NULL;
+        }
+        ow->hasPredictiveAnchor = FALSE;
+        ow->targetHwnd = NULL;
+    }
 
     if (ow->title && ow->hwnd)
         SetWindowTextW(ow->hwnd, ow->title);
@@ -1208,15 +2230,77 @@ static void DrawCloseButton(HDC hdc, const RECT *rect, UINT dpi, BOOL hover, BOO
     DeleteObject(pen);
 }
 
-static void HandleOverlayClick(OverlayWindow *ow)
+// DrawCopyButton renders a small native copy affordance without requiring callers to pass an icon.
+static void DrawCopyButton(HDC hdc, const RECT *rect, UINT dpi, BOOL hover, BOOL pressed, BOOL feedback)
+{
+    if (!rect)
+        return;
+
+    int radius = MulDiv(6, (int)dpi, 96);
+    COLORREF bg = feedback ? RGB(47, 111, 84) : (pressed ? RGB(76, 76, 76) : (hover ? RGB(58, 58, 58) : RGB(44, 44, 44)));
+    HBRUSH brush = CreateSolidBrush(bg);
+    HPEN borderPen = CreatePen(PS_SOLID, 1, RGB(92, 92, 92));
+    HGDIOBJ oldBrush = SelectObject(hdc, brush);
+    HGDIOBJ oldPen = SelectObject(hdc, borderPen);
+    RoundRect(hdc, rect->left, rect->top, rect->right, rect->bottom, radius, radius);
+    if (oldBrush)
+        SelectObject(hdc, oldBrush);
+    if (oldPen)
+        SelectObject(hdc, oldPen);
+    DeleteObject(brush);
+    DeleteObject(borderPen);
+
+    int pad = MulDiv(7, (int)dpi, 96);
+    int offset = MulDiv(3, (int)dpi, 96);
+
+    if (feedback)
+    {
+        int fontHeight = -MulDiv(15, (int)dpi, 72);
+        HFONT iconFont = CreateFontW(fontHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                     DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                     CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe MDL2 Assets");
+        HGDIOBJ oldFont = iconFont ? SelectObject(hdc, iconFont) : NULL;
+        SetBkMode(hdc, TRANSPARENT);
+        SetTextColor(hdc, RGB(245, 245, 245));
+        RECT glyphRect = *rect;
+        DrawTextW(hdc, L"\xE73E", -1, &glyphRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        if (oldFont)
+            SelectObject(hdc, oldFont);
+        if (iconFont)
+            DeleteObject(iconFont);
+    }
+    else
+    {
+        int thickness = MulDiv(2, (int)dpi, 96);
+        if (thickness < 1)
+            thickness = 1;
+        HPEN iconPen = CreatePen(PS_SOLID, thickness, RGB(232, 232, 232));
+        HGDIOBJ oldIconPen = SelectObject(hdc, iconPen);
+        HGDIOBJ oldNullBrush = SelectObject(hdc, GetStockObject(NULL_BRUSH));
+
+        RECT back = {rect->left + pad, rect->top + pad + offset, rect->right - pad - offset, rect->bottom - pad};
+        RECT front = {rect->left + pad + offset, rect->top + pad, rect->right - pad, rect->bottom - pad - offset};
+        Rectangle(hdc, back.left, back.top, back.right, back.bottom);
+        Rectangle(hdc, front.left, front.top, front.right, front.bottom);
+
+        if (oldNullBrush)
+            SelectObject(hdc, oldNullBrush);
+        if (oldIconPen)
+            SelectObject(hdc, oldIconPen);
+        DeleteObject(iconPen);
+    }
+}
+
+static BOOL HandleOverlayClick(OverlayWindow *ow)
 {
     if (!ow || !ow->name)
-        return;
+        return FALSE;
     char *nameUtf8 = DupWideToUtf8(ow->name);
     if (!nameUtf8)
-        return;
-    overlayClickCallbackCGO(nameUtf8);
+        return FALSE;
+    BOOL ok = overlayClickCallbackCGO(nameUtf8) ? TRUE : FALSE;
     free(nameUtf8);
+    return ok;
 }
 
 static HFONT g_tooltipFont = NULL;
@@ -1252,11 +2336,13 @@ static void MeasureTooltipTextRect(HDC hdc, const WCHAR *text, int maxWidth, REC
         *outRect = rc;
 }
 
-static void ShowTooltipWindow(OverlayWindow *ow, HWND owner, POINT clientPt)
+static void ShowTooltipWindow(OverlayWindow *ow, HWND owner, RECT anchorRect, const WCHAR *text)
 {
-    if (!ow || !ow->tooltipHwnd || !ow->tooltip || !*ow->tooltip)
+    (void)owner;
+    if (!ow || !ow->tooltipHwnd || !text || !*text)
         return;
 
+    ow->activeTooltip = (WCHAR *)text;
     UINT dpi = ow->dpi ? ow->dpi : GetWindowDpiSafe(owner, 96);
     int pad = MulDiv(8, (int)dpi, 96);
     int maxWidth = MulDiv(400, (int)dpi, 96);
@@ -1270,7 +2356,7 @@ static void ShowTooltipWindow(OverlayWindow *ow, HWND owner, POINT clientPt)
         HGDIOBJ oldFont = NULL;
         if (font)
             oldFont = SelectObject(hdc, font);
-        MeasureTooltipTextRect(hdc, ow->tooltip, maxWidth, &textRc);
+        MeasureTooltipTextRect(hdc, text, maxWidth, &textRc);
         if (oldFont)
             SelectObject(hdc, oldFont);
         ReleaseDC(NULL, hdc);
@@ -1286,7 +2372,7 @@ static void ShowTooltipWindow(OverlayWindow *ow, HWND owner, POINT clientPt)
     int width = textW + pad * 2;
     int height = textH + pad * 2;
 
-    RECT iconRc = ow->tooltipRect;
+    RECT iconRc = anchorRect;
     POINT tl = {iconRc.left, iconRc.top};
     POINT br = {iconRc.right, iconRc.bottom};
     ClientToScreen(owner, &tl);
@@ -1315,9 +2401,6 @@ static void ShowTooltipWindow(OverlayWindow *ow, HWND owner, POINT clientPt)
     SetWindowPos(ow->tooltipHwnd, HWND_TOPMOST, x, y, width, height,
                  SWP_NOACTIVATE | SWP_SHOWWINDOW);
     InvalidateRect(ow->tooltipHwnd, NULL, TRUE);
-
-    LogOverlayTooltip(L"[WoxOverlayTooltip] show x=%d y=%d w=%d h=%d icon=(%d,%d,%d,%d) topmost=1",
-                      x, y, width, height, tl.x, tl.y, br.x, br.y);
 }
 
 static void HideTooltipWindow(OverlayWindow *ow)
@@ -1325,7 +2408,6 @@ static void HideTooltipWindow(OverlayWindow *ow)
     if (!ow || !ow->tooltipHwnd)
         return;
     ShowWindow(ow->tooltipHwnd, SW_HIDE);
-    LogOverlayTooltip(L"[WoxOverlayTooltip] hide");
 }
 
 static LRESULT CALLBACK TooltipWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -1367,7 +2449,7 @@ static LRESULT CALLBACK TooltipWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
 
         RECT textRc = rc;
         InflateRect(&textRc, -pad, -pad);
-        DrawTextW(hdc, ow->tooltip ? ow->tooltip : L"", -1, &textRc,
+        DrawTextW(hdc, ow->activeTooltip ? ow->activeTooltip : L"", -1, &textRc,
                   DT_LEFT | DT_WORDBREAK | DT_NOPREFIX);
 
         if (oldFont)
@@ -1418,29 +2500,32 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
     {
         BOOL dark = TRUE;
         DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
-        UINT cornerPreference = DWMWCP_ROUND;
+        UINT cornerPreference = (ow && ow->transparent) ? DWMWCP_DONOTROUND : DWMWCP_ROUND;
         DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &cornerPreference, sizeof(cornerPreference));
 
-        BOOL accentOk = TryEnableAcrylic(hwnd);
-        if (!accentOk)
-            accentOk = TryEnableHostBackdrop(hwnd);
-
-        if (accentOk)
+        if (!(ow && ow->transparent))
         {
-            MARGINS margins = {0, 0, 0, 0};
-            DwmExtendFrameIntoClientArea(hwnd, &margins);
+            BOOL accentOk = TryEnableAcrylic(hwnd);
+            if (!accentOk)
+                accentOk = TryEnableHostBackdrop(hwnd);
 
-            UINT noneBackdrop = DWMSBT_NONE;
-            DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &noneBackdrop, sizeof(noneBackdrop));
-        }
-        else
-        {
-            UINT backdrop = DWMSBT_TRANSIENTWINDOW;
-            HRESULT hrBackdrop = DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop, sizeof(backdrop));
-            if (SUCCEEDED(hrBackdrop))
+            if (accentOk)
             {
-                MARGINS margins = {-1};
+                MARGINS margins = {0, 0, 0, 0};
                 DwmExtendFrameIntoClientArea(hwnd, &margins);
+
+                UINT noneBackdrop = DWMSBT_NONE;
+                DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &noneBackdrop, sizeof(noneBackdrop));
+            }
+            else
+            {
+                UINT backdrop = DWMSBT_TRANSIENTWINDOW;
+                HRESULT hrBackdrop = DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop, sizeof(backdrop));
+                if (SUCCEEDED(hrBackdrop))
+                {
+                    MARGINS margins = {-1};
+                    DwmExtendFrameIntoClientArea(hwnd, &margins);
+                }
             }
         }
 
@@ -1453,7 +2538,6 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
         if (ow->tooltipHwnd)
         {
             SetWindowPos(ow->tooltipHwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-            LogOverlayTooltip(L"[WoxOverlayTooltip] created hwnd=%p text=%ls", ow->tooltipHwnd, ow->tooltip ? ow->tooltip : L"(null)");
         }
         return 0;
     }
@@ -1464,6 +2548,19 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
         if (!ow)
             return 0;
         ow->dpi = HIWORD(wParam);
+        if (ow->dragging)
+        {
+            // Bug fix: crossing monitors with different DPI sends WM_DPICHANGED while the custom
+            // drag loop is still positioning the overlay from raw screen pixels. Re-running the
+            // normal anchor layout here snaps preview overlays back to the primary work area, so
+            // keep the drag-owned frame and only refresh DPI-sensitive transparent drawing assets.
+            if (ow->transparent)
+            {
+                UpdateTransparentImageLayer(ow);
+                UpdateTransparentImageShadow(ow);
+            }
+            return 0;
+        }
         RECT *suggested = (RECT *)lParam;
         if (suggested)
         {
@@ -1475,6 +2572,42 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
         ApplyOverlayLayout(ow);
         InvalidateRect(hwnd, NULL, TRUE);
         return 0;
+    }
+    case WM_GETMINMAXINFO:
+    {
+        if (ow && ow->resizable)
+        {
+            MINMAXINFO *mmi = (MINMAXINFO *)lParam;
+            UINT dpi = ow->dpi ? ow->dpi : GetWindowDpiSafe(hwnd, 96);
+            int minSize = MulDiv(MIN_RESIZE_SIZE_DIP, (int)dpi, 96);
+            mmi->ptMinTrackSize.x = minSize;
+            mmi->ptMinTrackSize.y = minSize;
+            return 0;
+        }
+        break;
+    }
+    case WM_SIZING:
+    {
+        if (ow && ow->transparent && ow->resizable && ow->aspectRatio > 0.0f)
+        {
+            ApplyAspectRatioToSizingRect(ow, wParam, (RECT *)lParam);
+            return TRUE;
+        }
+        break;
+    }
+    case WM_SIZE:
+    {
+        if (ow && ow->transparent && ow->resizable)
+        {
+            RECT client;
+            GetClientRect(hwnd, &client);
+            ow->iconRect = client;
+            SetWindowRgn(hwnd, NULL, TRUE);
+            UpdateTransparentImageLayer(ow);
+            UpdateTransparentImageShadow(ow);
+            return 0;
+        }
+        break;
     }
     case WM_PAINT:
     {
@@ -1496,38 +2629,41 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             BufferedPaintClear(paintBuf, &client);
         }
 
+        if (ow->transparent)
+        {
+            // Bug fix: transparent image overlays are painted by UpdateTransparentImageLayer.
+            // Leaving WM_PAINT to AlphaBlend into a layered client DC during rapid wheel zoom caused
+            // stale scaled image rectangles to remain in DWM composition until a later repaint.
+            if (paintBuf)
+                EndBufferedPaint(paintBuf, FALSE);
+            EndPaint(hwnd, &ps);
+            return 0;
+        }
+
         int leftPad = MulDiv(PADDING_X_DIP, (int)ow->dpi, 96);
-        int rightPad = MulDiv(PADDING_X_DIP, (int)ow->dpi, 96);
         int topPad = MulDiv(PADDING_Y_DIP, (int)ow->dpi, 96);
         int bottomPad = MulDiv(PADDING_Y_DIP, (int)ow->dpi, 96);
 
         float iconSizeDip = (ow->iconSize > 0.0f) ? ow->iconSize : DEFAULT_ICON_SIZE_DIP;
         int iconSize = (ow->iconBitmap ? (int)roundf(iconSizeDip * (float)ow->dpi / 96.0f) : 0);
-        int iconGap = (ow->iconBitmap ? MulDiv(ICON_GAP_DIP, (int)ow->dpi, 96) : 0);
-
-        float tooltipIconSizeDip = (ow->tooltipIconSize > 0.0f) ? ow->tooltipIconSize : DEFAULT_ICON_SIZE_DIP;
-        int tooltipIconSize = (ow->tooltip ? (int)roundf(tooltipIconSizeDip * (float)ow->dpi / 96.0f) : 0);
-        int tooltipIconGap = (ow->tooltip ? MulDiv(ICON_GAP_DIP, (int)ow->dpi, 96) : 0);
-
-        int closeSize = ow->closable ? MulDiv(CLOSE_SIZE_DIP, (int)ow->dpi, 96) : 0;
-        int closePad = ow->closable ? MulDiv(CLOSE_PAD_DIP, (int)ow->dpi, 96) : 0;
-
-        int rightReserved = rightPad;
-        if (ow->closable)
-            rightReserved += closePad + closeSize;
-        if (ow->tooltip)
-            rightReserved += tooltipIconGap + tooltipIconSize;
-
-        int textLeft = leftPad + iconSize + iconGap;
-        int textRight = width - rightReserved;
-        RECT textRect = {textLeft, topPad, textRight, height - bottomPad};
 
         SetBkMode(hdc, TRANSPARENT);
         SetTextColor(hdc, RGB(240, 240, 240));
         if (ow->messageFont)
             SelectObject(hdc, ow->messageFont);
-        DrawTextW(hdc, ow->message ? ow->message : L"", -1, &textRect,
+        RECT textRect = ow->textRect;
+        int savedDc = SaveDC(hdc);
+        if (savedDc)
+            IntersectClipRect(hdc, textRect.left, textRect.top, textRect.right, textRect.bottom);
+        RECT drawTextRect = textRect;
+        drawTextRect.top -= ow->textScrollOffset;
+        drawTextRect.bottom = drawTextRect.top + ow->textContentHeight + MulDiv(4, (int)ow->dpi, 96);
+        DrawTextW(hdc, ow->message ? ow->message : L"", -1, &drawTextRect,
                   DT_LEFT | DT_TOP | DT_WORDBREAK | DT_EDITCONTROL | DT_NOPREFIX);
+        if (savedDc)
+            RestoreDC(hdc, savedDc);
+
+        DrawTextScrollbar(hdc, ow);
 
         if (ow->iconBitmap)
         {
@@ -1552,7 +2688,7 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             }
         }
 
-        if (ow->tooltip && ow->tooltipIconBitmap)
+        if (ow->tooltip && *ow->tooltip && ow->tooltipIconBitmap)
         {
             HDC memDC = CreateCompatibleDC(hdc);
             if (memDC)
@@ -1574,6 +2710,11 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             DrawCloseButton(hdc, &ow->closeRect, ow->dpi, ow->closeHover, ow->closePressed);
         }
 
+        if (ow->showCopyButton)
+        {
+            DrawCopyButton(hdc, &ow->copyButtonRect, ow->dpi, ow->copyButtonHover, ow->copyButtonPressed, ow->copyButtonFeedback);
+        }
+
         if (paintBuf)
         {
             EndBufferedPaint(paintBuf, TRUE);
@@ -1582,10 +2723,52 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
         EndPaint(hwnd, &ps);
         return 0;
     }
+    case WM_NCHITTEST:
+    {
+        if (ow && ow->resizable)
+        {
+            POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            ScreenToClient(hwnd, &pt);
+            LRESULT resizeHit = GetResizeHitTest(ow, pt);
+            if (resizeHit != HTCLIENT)
+                return resizeHit;
+        }
+        if (ow && ow->transparent && ow->hitTestIconOnly)
+        {
+            POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            ScreenToClient(hwnd, &pt);
+            if (!PtInRect(&ow->iconRect, pt))
+                return HTTRANSPARENT;
+        }
+        break;
+    }
     case WM_SETCURSOR:
     {
         if (!ow)
             break;
+        switch (LOWORD(lParam))
+        {
+        case HTTOPLEFT:
+        case HTBOTTOMRIGHT:
+            // Feature change: resize hit testing is custom for borderless image overlays, so set
+            // the matching system cursors explicitly instead of relying on the hidden frame.
+            SetCursor(LoadCursor(NULL, IDC_SIZENWSE));
+            return TRUE;
+        case HTTOPRIGHT:
+        case HTBOTTOMLEFT:
+            SetCursor(LoadCursor(NULL, IDC_SIZENESW));
+            return TRUE;
+        case HTLEFT:
+        case HTRIGHT:
+            SetCursor(LoadCursor(NULL, IDC_SIZEWE));
+            return TRUE;
+        case HTTOP:
+        case HTBOTTOM:
+            SetCursor(LoadCursor(NULL, IDC_SIZENS));
+            return TRUE;
+        default:
+            break;
+        }
         if (LOWORD(lParam) == HTCLIENT)
         {
             POINT pt;
@@ -1593,6 +2776,16 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             {
                 ScreenToClient(hwnd, &pt);
                 if (ow->closable && PtInRect(&ow->closeRect, pt))
+                {
+                    SetCursor(LoadCursor(NULL, IDC_HAND));
+                    return TRUE;
+                }
+                if (ow->showCopyButton && PtInRect(&ow->copyButtonRect, pt))
+                {
+                    SetCursor(LoadCursor(NULL, IDC_HAND));
+                    return TRUE;
+                }
+                if (PointInTextScrollbarHitRect(ow, pt))
                 {
                     SetCursor(LoadCursor(NULL, IDC_HAND));
                     return TRUE;
@@ -1613,15 +2806,28 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
         }
 
         POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-        if (ow->tooltipHwnd && ow->tooltip && *ow->tooltip)
+        if (ow->textScrollbarDragging)
         {
-            BOOL hoverTooltip = PtInRect(&ow->tooltipRect, pt);
+            SetTextScrollOffsetFromThumbPoint(ow, pt);
+            return 0;
+        }
+
+        BOOL scrollbarHoverNow = PointInTextScrollbarHitRect(ow, pt);
+        if (scrollbarHoverNow != ow->textScrollbarHover)
+        {
+            ow->textScrollbarHover = scrollbarHoverNow;
+            InvalidateRect(hwnd, NULL, FALSE);
+        }
+
+        if (ow->tooltipHwnd)
+        {
+            BOOL hoverTooltip = ow->tooltip && *ow->tooltip && PtInRect(&ow->tooltipRect, pt);
             if (hoverTooltip != ow->tooltipHover)
             {
                 ow->tooltipHover = hoverTooltip;
                 if (hoverTooltip)
                 {
-                    ShowTooltipWindow(ow, hwnd, pt);
+                    ShowTooltipWindow(ow, hwnd, ow->tooltipRect, ow->tooltip);
                 }
                 else
                 {
@@ -1635,6 +2841,21 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             ow->closeHover = hoverNow;
             InvalidateRect(hwnd, NULL, FALSE);
         }
+        BOOL copyHoverNow = ow->showCopyButton && PtInRect(&ow->copyButtonRect, pt);
+        if (copyHoverNow != ow->copyButtonHover)
+        {
+            ow->copyButtonHover = copyHoverNow;
+            if (copyHoverNow)
+            {
+                const WCHAR *copyTooltip = ow->copyButtonFeedback && ow->copyButtonSuccessTooltip && *ow->copyButtonSuccessTooltip ? ow->copyButtonSuccessTooltip : ow->copyButtonTooltip;
+                ShowTooltipWindow(ow, hwnd, ow->copyButtonRect, copyTooltip);
+            }
+            else if (!ow->tooltipHover)
+            {
+                HideTooltipWindow(ow);
+            }
+            InvalidateRect(hwnd, NULL, FALSE);
+        }
 
         if (ow->dragging)
         {
@@ -1644,6 +2865,10 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             int dy = screenPt.y - ow->dragStart.y;
             SetWindowPos(hwnd, NULL, ow->dragWindowOrigin.x + dx, ow->dragWindowOrigin.y + dy, 0, 0,
                          SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOSIZE);
+            // Feature change: pinned screenshots use a companion shadow HWND. Moving only the image
+            // would leave the shadow behind. Dragging changes only origin, so move the cached
+            // shadow surface instead of rebuilding it for every mouse event.
+            MoveTransparentImageShadow(ow);
         }
         return 0;
     }
@@ -1653,7 +2878,9 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             break;
         ow->mouseInside = FALSE;
         ow->closeHover = FALSE;
-        if (ow->tooltipHwnd && ow->tooltipHover)
+        ow->copyButtonHover = FALSE;
+        ow->textScrollbarHover = FALSE;
+        if (ow->tooltipHwnd)
         {
             ow->tooltipHover = FALSE;
             HideTooltipWindow(ow);
@@ -1666,14 +2893,79 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
         }
         return 0;
     }
+    case WM_MOUSEWHEEL:
+    {
+        if (!ow)
+            break;
+        if (ow->textMaxScrollOffset > 0)
+        {
+            int wheelDelta = GET_WHEEL_DELTA_WPARAM(wParam);
+            int lineStep = MulDiv(18, (int)(ow->dpi ? ow->dpi : GetWindowDpiSafe(hwnd, 96)), 96);
+            int units = wheelDelta / WHEEL_DELTA;
+            if (units != 0)
+            {
+                ScrollOverlayText(ow, -units * lineStep * 3, TRUE);
+                return 0;
+            }
+        }
+        POINT screenPt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+        if (ZoomResizableImageOverlayAtScreenPoint(ow, screenPt, GET_WHEEL_DELTA_WPARAM(wParam)))
+            return 0;
+        break;
+    }
     case WM_LBUTTONDOWN:
     {
         if (!ow)
             break;
+        if (ow->closeOnEscape)
+        {
+            // Focus-sensitive overlays must receive Escape themselves. Setting focus only when this
+            // option is enabled keeps notification overlays non-activating while pinned screenshots
+            // close one focused image at a time.
+            SetFocus(hwnd);
+        }
         POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
         if (ow->closable && PtInRect(&ow->closeRect, pt))
         {
             ow->closePressed = TRUE;
+            SetCapture(hwnd);
+            InvalidateRect(hwnd, NULL, FALSE);
+            return 0;
+        }
+        if (ow->showCopyButton && PtInRect(&ow->copyButtonRect, pt))
+        {
+            ow->copyButtonPressed = TRUE;
+            SetCapture(hwnd);
+            InvalidateRect(hwnd, NULL, FALSE);
+            return 0;
+        }
+        if (PointInTextScrollbarHitRect(ow, pt))
+        {
+            if (!PtInRect(&ow->textScrollbarThumbRect, pt))
+            {
+                int thumbHeight = ow->textScrollbarThumbRect.bottom - ow->textScrollbarThumbRect.top;
+                int targetTop = pt.y - thumbHeight / 2;
+                int trackTop = ow->textScrollbarTrackRect.top;
+                int trackHeight = ow->textScrollbarTrackRect.bottom - ow->textScrollbarTrackRect.top;
+                int travel = trackHeight - thumbHeight;
+                if (travel > 0)
+                {
+                    if (targetTop < trackTop)
+                        targetTop = trackTop;
+                    if (targetTop > trackTop + travel)
+                        targetTop = trackTop + travel;
+                    ow->textScrollOffset = (int)roundf((float)(targetTop - trackTop) * (float)ow->textMaxScrollOffset / (float)travel);
+                    if (ow->followScroll)
+                        ow->textUserScrolled = ow->textScrollOffset < ow->textMaxScrollOffset;
+                    RECT client;
+                    GetClientRect(hwnd, &client);
+                    int copyButtonReserve = ow->showCopyButton ? MulDiv(COPY_BUTTON_SIZE_DIP + COPY_BUTTON_TEXT_GAP_DIP, (int)ow->dpi, 96) : 0;
+                    UpdateTextScrollbarRects(ow, client.right - client.left, client.bottom - client.top, copyButtonReserve, ow->dpi);
+                }
+            }
+            ow->textScrollbarDragging = TRUE;
+            ow->textScrollbarDragStart = pt;
+            ow->textScrollbarDragStartOffset = ow->textScrollOffset;
             SetCapture(hwnd);
             InvalidateRect(hwnd, NULL, FALSE);
             return 0;
@@ -1696,9 +2988,12 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             break;
         POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
         BOOL wasClosePressed = ow->closePressed;
+        BOOL wasCopyButtonPressed = ow->copyButtonPressed;
         BOOL wasDragging = ow->dragging;
         ow->closePressed = FALSE;
+        ow->copyButtonPressed = FALSE;
         ow->dragging = FALSE;
+        ow->textScrollbarDragging = FALSE;
         if (GetCapture() == hwnd)
             ReleaseCapture();
         InvalidateRect(hwnd, NULL, FALSE);
@@ -1709,11 +3004,36 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             return 0;
         }
 
-        if (!wasDragging)
+        if (wasCopyButtonPressed && ow->showCopyButton && PtInRect(&ow->copyButtonRect, pt))
+        {
+            if (HandleOverlayClick(ow))
+            {
+                ow->copyButtonFeedback = TRUE;
+                KillTimer(hwnd, TIMER_COPY_FEEDBACK);
+                SetTimer(hwnd, TIMER_COPY_FEEDBACK, 1200, NULL);
+                if (ow->copyButtonHover && ow->copyButtonSuccessTooltip && *ow->copyButtonSuccessTooltip)
+                    ShowTooltipWindow(ow, hwnd, ow->copyButtonRect, ow->copyButtonSuccessTooltip);
+                InvalidateRect(hwnd, NULL, FALSE);
+            }
+            return 0;
+        }
+
+        if (!wasDragging && !ow->showCopyButton)
         {
             HandleOverlayClick(ow);
         }
         return 0;
+    }
+    case WM_KEYDOWN:
+    {
+        if (ow && ow->closeOnEscape && wParam == VK_ESCAPE)
+        {
+            // Escape is intentionally scoped to the overlay window that currently has focus instead
+            // of being handled by a global keyboard hook that would close every pinned screenshot.
+            DestroyWindow(hwnd);
+            return 0;
+        }
+        break;
     }
     case WM_TIMER:
     {
@@ -1740,7 +3060,7 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
                 HWND target = NULL;
                 if (FindWindowByPid(ow->stickyWindowPid, &target))
                 {
-                    if (ow->targetHwnd != target)
+                    if (ow->targetHwnd != target || !ow->locationHook)
                     {
                         if (ow->locationHook) UnhookWinEvent(ow->locationHook);
                         ow->targetHwnd = target;
@@ -1749,6 +3069,7 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
                         ow->locationHook = SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, 
                                                            NULL, OverlayLocationChangeHook, pid, tid, WINEVENT_OUTOFCONTEXT);
                     }
+                    StartLiveFollowTimerIfNeeded(ow);
                     SendMessage(hwnd, WM_WOX_OVERLAY_REPOSITION, 0, 0);
                 }
                 else
@@ -1763,6 +3084,47 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             }
             return 0;
         }
+        if (wParam == TIMER_LIVE_FOLLOW)
+        {
+            if (!IsLeftButtonDown() || ow->dragging)
+            {
+                StopLiveFollowTimer(ow);
+                SendMessage(hwnd, WM_WOX_OVERLAY_REPOSITION, 0, 0);
+                return 0;
+            }
+
+            RECT targetRect;
+            BOOL targetFound = GetPredictiveTargetRect(ow, &targetRect);
+            if (!targetFound && ow->targetHwnd && IsWindow(ow->targetHwnd))
+                targetFound = GetTargetContentRect(ow->targetHwnd, &targetRect);
+            if (!targetFound)
+                return 0;
+
+            // Optimization: live follow uses mouse-predicted geometry for smooth
+            // movement between lower-frequency location events. Real samples keep
+            // updating the anchor through WM_WOX_OVERLAY_REPOSITION.
+            RepositionOverlayToTargetRect(ow, &targetRect, FALSE);
+            SetOverlayZOrder(hwnd, ow->targetHwnd);
+            if (!IsWindowVisible(hwnd))
+                ShowOverlayWindowWithFocusPolicy(ow);
+            return 0;
+        }
+        if (wParam == TIMER_COPY_FEEDBACK)
+        {
+            KillTimer(hwnd, TIMER_COPY_FEEDBACK);
+            ow->copyButtonFeedback = FALSE;
+            if (ow->copyButtonHover && ow->copyButtonTooltip && *ow->copyButtonTooltip)
+                ShowTooltipWindow(ow, hwnd, ow->copyButtonRect, ow->copyButtonTooltip);
+            InvalidateRect(hwnd, NULL, FALSE);
+            return 0;
+        }
+        if (wParam == TIMER_REPAINT)
+        {
+            KillTimer(hwnd, TIMER_REPAINT);
+            ow->repaintPending = FALSE;
+            RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+            return 0;
+        }
         break;
     }
     case WM_WOX_OVERLAY_REPOSITION:
@@ -1772,42 +3134,22 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
 
         HWND target = ow->targetHwnd;
         RECT targetRect;
-        RECT clientRect;
-        if (GetClientRect(target, &clientRect))
-        {
-            POINT tl = {clientRect.left, clientRect.top};
-            POINT br = {clientRect.right, clientRect.bottom};
-            ClientToScreen(target, &tl);
-            ClientToScreen(target, &br);
-            targetRect.left = tl.x;
-            targetRect.top = tl.y;
-            targetRect.right = br.x;
-            targetRect.bottom = br.y;
-        }
-        else
-        {
-            GetWindowRect(target, &targetRect);
-        }
-
-        if (targetRect.right - targetRect.left <= 1 || targetRect.bottom - targetRect.top <= 1)
+        if (!GetTargetContentRect(target, &targetRect))
         {
             return 0;
         }
 
-        RECT client;
-        GetClientRect(hwnd, &client);
-        int width = client.right - client.left;
-        int height = client.bottom - client.top;
-        int x = 0;
-        int y = 0;
-        ComputeOverlayPosition(ow, &targetRect, width, height, &x, &y);
-        RECT workArea = GetWorkAreaForRect(&targetRect);
-        ClampWindowToWorkArea(&workArea, &x, &y, width, height);
+        if (IsLeftButtonDown())
+        {
+            RefreshPredictiveAnchor(ow, &targetRect);
+            StartLiveFollowTimerIfNeeded(ow);
+        }
+
         SetOverlayZOrder(hwnd, target);
-        SetWindowPos(hwnd, NULL, x, y, 0, 0, SWP_NOACTIVATE | SWP_NOSIZE | SWP_NOZORDER);
+        RepositionOverlayToTargetRect(ow, &targetRect, TRUE);
         
         if (!IsWindowVisible(hwnd))
-             ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+             ShowOverlayWindowWithFocusPolicy(ow);
 
         return 0;
     }
@@ -1822,6 +3164,9 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             }
             KillTimer(hwnd, TIMER_AUTOCLOSE);
             KillTimer(hwnd, TIMER_TRACK);
+            KillTimer(hwnd, TIMER_LIVE_FOLLOW);
+            KillTimer(hwnd, TIMER_REPAINT);
+            DestroyTransparentImageShadow(ow);
             RemoveOverlay(ow);
             if (ow->messageFont)
                 DeleteObject(ow->messageFont);
@@ -1855,7 +3200,21 @@ static void HandleShowCommand(OverlayPayload *payload)
     if (!payload || !payload->name)
     {
         if (payload)
+        {
+            if (payload->title)
+                free(payload->title);
+            if (payload->message)
+                free(payload->message);
+            if (payload->tooltip)
+                free(payload->tooltip);
+            if (payload->iconData)
+                free(payload->iconData);
+            if (payload->iconFilePath)
+                free(payload->iconFilePath);
+            if (payload->tooltipIconData)
+                free(payload->tooltipIconData);
             free(payload);
+        }
         return;
     }
 
@@ -1864,8 +3223,22 @@ static void HandleShowCommand(OverlayPayload *payload)
     {
         ApplyPayloadToOverlay(ow, payload, FALSE);
         ApplyOverlayLayout(ow);
-        ShowWindow(ow->hwnd, SW_SHOWNOACTIVATE);
-        InvalidateRect(ow->hwnd, NULL, TRUE);
+        ShowOverlayWindowWithFocusPolicy(ow);
+        if (ow->layoutSizeChanged)
+        {
+            // Size changes expose new client area immediately. Force that frame to paint now,
+            // while same-size streaming updates stay coalesced to keep scrolling responsive.
+            if (ow->repaintPending)
+            {
+                KillTimer(ow->hwnd, TIMER_REPAINT);
+                ow->repaintPending = FALSE;
+            }
+            RedrawWindow(ow->hwnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+        }
+        else
+        {
+            ScheduleOverlayRepaint(ow);
+        }
         return;
     }
 
@@ -1882,6 +3255,8 @@ static void HandleShowCommand(OverlayPayload *payload)
             free(payload->tooltip);
         if (payload->iconData)
             free(payload->iconData);
+        if (payload->iconFilePath)
+            free(payload->iconFilePath);
         if (payload->tooltipIconData)
             free(payload->tooltipIconData);
         free(payload);
@@ -1890,8 +3265,12 @@ static void HandleShowCommand(OverlayPayload *payload)
 
     ApplyPayloadToOverlay(ow, payload, TRUE);
 
-    DWORD exStyle = WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
-    if (ow->stickyWindowPid <= 0)
+    DWORD exStyle = WS_EX_TOOLWINDOW;
+    if (!ow->closeOnEscape)
+        exStyle |= WS_EX_NOACTIVATE;
+    if (ow->transparent)
+        exStyle |= WS_EX_LAYERED;
+    if (ow->topmost || ow->stickyWindowPid <= 0)
         exStyle |= WS_EX_TOPMOST;
 
     HWND owner = NULL;
@@ -1904,18 +3283,26 @@ static void HandleShowCommand(OverlayPayload *payload)
         }
     }
 
+    DWORD style = WS_POPUP;
+    if (ow->resizable && !ow->transparent)
+    {
+        // Bug fix: transparent pinned screenshots must be exactly the image surface. Applying the
+        // system thick frame to that path created a visible non-client border and shrank the client
+        // bitmap, so only non-transparent overlays may ask Windows to draw a resize frame.
+        style |= WS_THICKFRAME;
+    }
+
     ow->hwnd = CreateWindowExW(exStyle, g_overlayClassName, ow->title ? ow->title : L"",
-                               WS_POPUP, 0, 0, 0, 0, owner, NULL, GetModuleHandleW(NULL), ow);
+                               style, 0, 0, 0, 0, owner, NULL, GetModuleHandleW(NULL), ow);
     if (!ow->hwnd)
     {
         DWORD err = GetLastError();
-
         if (owner && (err == 5 || err == ERROR_ACCESS_DENIED))
         {
             owner = NULL;
             exStyle |= WS_EX_TOPMOST;
             ow->hwnd = CreateWindowExW(exStyle, g_overlayClassName, ow->title ? ow->title : L"",
-                                       WS_POPUP, 0, 0, 0, 0, owner, NULL, GetModuleHandleW(NULL), ow);
+                                       style, 0, 0, 0, 0, owner, NULL, GetModuleHandleW(NULL), ow);
         }
     }
 
@@ -1936,7 +3323,6 @@ static void HandleShowCommand(OverlayPayload *payload)
         free(ow);
         return;
     }
-
     AddOverlay(ow);
     ApplyOverlayLayout(ow);
     if (ow->stickyWindowPid > 0 && !ow->targetReady)
@@ -1946,7 +3332,7 @@ static void HandleShowCommand(OverlayPayload *payload)
     }
     else
     {
-        ShowWindow(ow->hwnd, SW_SHOWNOACTIVATE);
+        ShowOverlayWindowWithFocusPolicy(ow);
         UpdateWindow(ow->hwnd);
     }
 
@@ -1986,6 +3372,17 @@ static LRESULT CALLBACK OverlayControllerProc(HWND hwnd, UINT uMsg, WPARAM wPara
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
 
+static LRESULT CALLBACK ShadowWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    if (uMsg == WM_NCHITTEST)
+    {
+        // Feature change: the shadow is only a visual depth cue for pinned screenshots. It must
+        // never steal mouse input from the image overlay or the app behind it.
+        return HTTRANSPARENT;
+    }
+    return DefWindowProc(hwnd, uMsg, wParam, lParam);
+}
+
 static DWORD WINAPI OverlayThreadProc(LPVOID param)
 {
     (void)param;
@@ -2007,6 +3404,15 @@ static DWORD WINAPI OverlayThreadProc(LPVOID param)
     wc.lpszClassName = g_overlayClassName;
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
     RegisterClassExW(&wc);
+
+    WNDCLASSEXW wcShadow;
+    ZeroMemory(&wcShadow, sizeof(wcShadow));
+    wcShadow.cbSize = sizeof(wcShadow);
+    wcShadow.lpfnWndProc = ShadowWindowProc;
+    wcShadow.hInstance = GetModuleHandleW(NULL);
+    wcShadow.lpszClassName = g_shadowClassName;
+    wcShadow.hCursor = LoadCursor(NULL, IDC_ARROW);
+    RegisterClassExW(&wcShadow);
 
     WNDCLASSEXW wc2;
     ZeroMemory(&wc2, sizeof(wc2));
@@ -2084,19 +3490,41 @@ void ShowOverlay(OverlayOptions opts)
     payload->name = DupUtf8ToWide(opts.name);
     payload->title = DupUtf8ToWide(opts.title);
     payload->message = DupUtf8ToWide(opts.message);
-    payload->tooltip = DupUtf8ToWide(opts.tooltip);
+    payload->tooltip = (opts.tooltip && opts.tooltip[0]) ? DupUtf8ToWide(opts.tooltip) : NULL;
+    payload->copyButtonTooltip = DupUtf8ToWide(opts.copyButtonTooltip);
+    payload->copyButtonSuccessTooltip = DupUtf8ToWide(opts.copyButtonSuccessTooltip);
+    payload->iconFilePath = DupUtf8ToWide(opts.iconFilePath);
+    payload->transparent = opts.transparent ? TRUE : FALSE;
+    payload->hitTestIconOnly = opts.hitTestIconOnly ? TRUE : FALSE;
+    payload->iconX = opts.iconX;
+    payload->iconY = opts.iconY;
+    payload->iconWidth = opts.iconWidth;
+    payload->iconHeight = opts.iconHeight;
     payload->closable = opts.closable ? TRUE : FALSE;
+    payload->closeOnEscape = opts.closeOnEscape ? TRUE : FALSE;
+    payload->loading = opts.loading ? TRUE : FALSE;
+    payload->topmost = opts.topmost ? TRUE : FALSE;
+    payload->absolutePosition = opts.absolutePosition ? TRUE : FALSE;
+    payload->preservePosition = opts.preservePosition ? TRUE : FALSE;
     payload->stickyWindowPid = opts.stickyWindowPid;
     payload->anchor = opts.anchor;
     payload->autoCloseSeconds = opts.autoCloseSeconds;
     payload->movable = opts.movable ? TRUE : FALSE;
+    payload->resizable = opts.resizable ? TRUE : FALSE;
+    payload->cornerRadius = opts.cornerRadius;
+    payload->aspectRatio = opts.aspectRatio;
     payload->offsetX = opts.offsetX;
     payload->offsetY = opts.offsetY;
     payload->width = opts.width;
+    payload->minWidth = opts.minWidth;
+    payload->maxWidth = opts.maxWidth;
     payload->height = opts.height;
+    payload->maxHeight = opts.maxHeight;
+    payload->followScroll = opts.followScroll ? TRUE : FALSE;
     payload->fontSize = opts.fontSize;
     payload->iconSize = opts.iconSize;
     payload->tooltipIconSize = opts.tooltipIconSize;
+    payload->showCopyButton = opts.showCopyButton ? TRUE : FALSE;
 
     if (opts.iconData && opts.iconLen > 0)
     {
@@ -2131,6 +3559,8 @@ void ShowOverlay(OverlayOptions opts)
             free(payload->tooltip);
         if (payload->iconData)
             free(payload->iconData);
+        if (payload->iconFilePath)
+            free(payload->iconFilePath);
         if (payload->tooltipIconData)
             free(payload->tooltipIconData);
         free(payload);
@@ -2151,6 +3581,8 @@ void ShowOverlay(OverlayOptions opts)
             free(payload->tooltip);
         if (payload->iconData)
             free(payload->iconData);
+        if (payload->iconFilePath)
+            free(payload->iconFilePath);
         if (payload->tooltipIconData)
             free(payload->tooltipIconData);
         free(payload);

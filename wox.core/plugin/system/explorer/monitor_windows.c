@@ -36,18 +36,14 @@ static UINT getDpiForWindowMonitor(HWND hwnd)
 
 extern void fileExplorerActivatedCallbackCGO(int pid, int isFileDialog, int x, int y, int w, int h);
 extern void fileExplorerDeactivatedCallbackCGO();
-extern void fileExplorerKeyDownCallbackCGO(char key);
 extern void fileExplorerLogCallbackCGO(char *msg);
 
 static HWINEVENTHOOK gForegroundHook = NULL;
 static HWINEVENTHOOK gObjectShowHook = NULL;
-static HHOOK gKeyboardHook = NULL;
 static HANDLE gMonitorThread = NULL;
 static DWORD gMonitorThreadId = 0;
 static DWORD gLastExplorerPid = 0;
 static HWND gLastExplorerHwnd = NULL;
-static DWORD gLastKeyLogTick = 0;
-static DWORD gLastEnsureActivateTick = 0;
 
 // State tracking for the current foreground window type.
 enum ForegroundState
@@ -57,8 +53,6 @@ enum ForegroundState
     stateDialog = 2
 };
 static enum ForegroundState currentState = stateNone;
-
-static void ensureForegroundActivation();
 
 static void logMessage(const char *fmt, ...)
 {
@@ -132,6 +126,50 @@ static BOOL CALLBACK EnumChildClassProc(HWND hwnd, LPARAM lParam)
     return TRUE;
 }
 
+static BOOL CALLBACK EnumDesktopViewProc(HWND hwnd, LPARAM lParam)
+{
+    FindChildClassData *data = (FindChildClassData *)lParam;
+    WCHAR className[256];
+    if (GetClassNameW(hwnd, className, 256) == 0)
+    {
+        logMessage("EnumDesktopViewProc: GetClassNameW failed err=%lu", GetLastError());
+        return TRUE;
+    }
+
+    if (_wcsicmp(className, L"SHELLDLL_DefView") == 0)
+    {
+        data->found = TRUE;
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+static int isDesktopShellWindow(HWND hwnd)
+{
+    if (!hwnd)
+    {
+        return 0;
+    }
+
+    WCHAR className[256];
+    if (GetClassNameW(hwnd, className, 256) == 0)
+    {
+        logMessage("isDesktopShellWindow: GetClassNameW failed err=%lu", GetLastError());
+        return 0;
+    }
+
+    if (_wcsicmp(className, L"Progman") != 0 && _wcsicmp(className, L"WorkerW") != 0)
+    {
+        return 0;
+    }
+
+    FindChildClassData data;
+    data.found = FALSE;
+    EnumChildWindows(hwnd, EnumDesktopViewProc, (LPARAM)&data);
+    return data.found ? 1 : 0;
+}
+
 static int isOpenSaveDialog(HWND hwnd)
 {
     if (!hwnd)
@@ -157,66 +195,171 @@ static int isOpenSaveDialog(HWND hwnd)
     return data.found ? 1 : 0;
 }
 
-static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
+typedef struct
 {
-    if (nCode == HC_ACTION)
+    DWORD pid;
+    HWND hwnd;
+} FindOpenSaveDialogByPidData;
+
+// EnumOpenSaveDialogByPidProc finds the visible file dialog owned by a process so click handlers do not depend on cached foreground state.
+static BOOL CALLBACK EnumOpenSaveDialogByPidProc(HWND hwnd, LPARAM lParam)
+{
+	FindOpenSaveDialogByPidData *data = (FindOpenSaveDialogByPidData *)lParam;
+	if (!IsWindowVisible(hwnd))
     {
-        if (wParam == WM_KEYDOWN)
+        return TRUE;
+    }
+
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid != data->pid || !isOpenSaveDialog(hwnd))
+    {
+        return TRUE;
+    }
+
+	data->hwnd = hwnd;
+	return FALSE;
+}
+
+// findOpenSaveDialogByPid returns the visible dialog HWND for a process, preferring the foreground dialog when available.
+static HWND findOpenSaveDialogByPid(int pid)
+{
+	if (pid <= 0)
+	{
+		return NULL;
+	}
+
+	HWND target = NULL;
+    HWND foreground = GetForegroundWindow();
+    if (foreground && IsWindowVisible(foreground))
+    {
+        DWORD foregroundPid = 0;
+        GetWindowThreadProcessId(foreground, &foregroundPid);
+        if ((int)foregroundPid == pid && isOpenSaveDialog(foreground))
         {
-            ensureForegroundActivation();
-            KBDLLHOOKSTRUCT *p = (KBDLLHOOKSTRUCT *)lParam;
-            DWORD vkCode = p->vkCode;
-
-            // Ignore special keys (Ctrl, Alt)
-            if (GetAsyncKeyState(VK_CONTROL) & 0x8000)
-            {
-                DWORD now = GetTickCount();
-                if (now - gLastKeyLogTick > 1000)
-                {
-                    gLastKeyLogTick = now;
-                    logMessage("LowLevelKeyboardProc: ignore key vk=0x%02lX (CTRL down)", vkCode);
-                }
-                return CallNextHookEx(NULL, nCode, wParam, lParam);
-            }
-            if (GetAsyncKeyState(VK_MENU) & 0x8000)
-            {
-                DWORD now = GetTickCount();
-                if (now - gLastKeyLogTick > 1000)
-                {
-                    gLastKeyLogTick = now;
-                    logMessage("LowLevelKeyboardProc: ignore key vk=0x%02lX (ALT down)", vkCode);
-                }
-                return CallNextHookEx(NULL, nCode, wParam, lParam);
-            }
-
-            // Map VK to Char
-            // Basic mapping for A-Z, 0-9
-            if ((vkCode >= 0x41 && vkCode <= 0x5A) || // A-Z
-                (vkCode >= 0x30 && vkCode <= 0x39))
-            { // 0-9
-                char c = (char)vkCode;
-                logMessage("LowLevelKeyboardProc: key vk=0x%02lX char=%c state=%d", vkCode, c, currentState);
-                fileExplorerKeyDownCallbackCGO(c);
-                // Only consume the key when Explorer/Dialog is the active foreground window.
-                // This prevents the system beep from Explorer's built-in type-to-search,
-                // while still allowing keys to pass through to other apps (including Wox's query box).
-                if (currentState == stateExplorer || currentState == stateDialog)
-                {
-                    return 1;
-                }
-            }
-            else
-            {
-                DWORD now = GetTickCount();
-                if (now - gLastKeyLogTick > 1000)
-                {
-                    gLastKeyLogTick = now;
-                    logMessage("LowLevelKeyboardProc: ignore key vk=0x%02lX (non-alnum)", vkCode);
-                }
-            }
+            target = foreground;
         }
     }
-    return CallNextHookEx(NULL, nCode, wParam, lParam);
+
+    if (!target)
+    {
+        FindOpenSaveDialogByPidData data;
+        data.pid = (DWORD)pid;
+        data.hwnd = NULL;
+        EnumWindows(EnumOpenSaveDialogByPidProc, (LPARAM)&data);
+        target = data.hwnd;
+	}
+
+	return target;
+}
+
+uintptr_t getOpenSaveDialogHwndByPid(int pid)
+{
+	return (uintptr_t)findOpenSaveDialogByPid(pid);
+}
+
+// getOpenSaveDialogRectByPid returns the dialog bounds in the same logical coordinate space used by Flutter window placement.
+int getOpenSaveDialogRectByPid(int pid, int *outX, int *outY, int *outW, int *outH)
+{
+	if (pid <= 0 || !outX || !outY || !outW || !outH)
+	{
+		return 0;
+	}
+
+	HWND target = findOpenSaveDialogByPid(pid);
+	if (!target)
+	{
+		logMessage("getOpenSaveDialogRectByPid: no visible dialog found pid=%d", pid);
+		return 0;
+	}
+
+    RECT rect;
+    if (!GetWindowRect(target, &rect))
+    {
+        logMessage("getOpenSaveDialogRectByPid: GetWindowRect failed hwnd=0x%p pid=%d err=%lu", target, pid, GetLastError());
+        return 0;
+    }
+
+    UINT dpi = getDpiForWindowMonitor(target);
+    float scale = (float)dpi / 96.0f;
+    *outX = (int)(rect.left / scale);
+    *outY = (int)(rect.top / scale);
+    *outW = (int)((rect.right - rect.left) / scale);
+    *outH = (int)((rect.bottom - rect.top) / scale);
+    logMessage("getOpenSaveDialogRectByPid: hwnd=0x%p pid=%d logical=(%d,%d,%d,%d) dpi=%u scale=%.2f", target, pid, *outX, *outY, *outW, *outH, dpi, scale);
+    return 1;
+}
+
+static int isFileListClassName(const WCHAR *className)
+{
+    if (!className || className[0] == L'\0')
+    {
+        return 0;
+    }
+
+    // DirectUIHWND: Modern Windows Explorer file list view (Windows 10/11)
+    if (_wcsicmp(className, L"DirectUIHWND") == 0)
+    {
+        return 1;
+    }
+
+    // SysListView32: Classic/legacy list view control
+    if (_wcsicmp(className, L"SysListView32") == 0)
+    {
+        return 1;
+    }
+
+    // SysTreeView32: Navigation pane tree view (also valid for type-to-search)
+    if (_wcsicmp(className, L"SysTreeView32") == 0)
+    {
+        return 1;
+    }
+
+    return 0;
+}
+
+// Whitelist approach: returns 1 only when the focused control is the file list view.
+// This ensures type-to-search does NOT trigger from the search bar, address bar,
+// rename input, or any other non-file-list control.
+static int hasFocusedFileList()
+{
+    HWND foreground = GetForegroundWindow();
+    if (!foreground)
+    {
+        return 0;
+    }
+
+    DWORD threadId = GetWindowThreadProcessId(foreground, NULL);
+    if (threadId == 0)
+    {
+        return 0;
+    }
+
+    GUITHREADINFO guiInfo;
+    guiInfo.cbSize = sizeof(GUITHREADINFO);
+    if (!GetGUIThreadInfo(threadId, &guiInfo))
+    {
+        return 0;
+    }
+
+    HWND focus = guiInfo.hwndFocus;
+    if (!focus)
+    {
+        return 0;
+    }
+
+    // Only check the focused HWND itself — do NOT walk up parents.
+    // When the file list has focus, the focused HWND is DirectUIHWND itself.
+    // When renaming a file, the focused HWND is an Edit control (child of DirectUIHWND),
+    // so it correctly won't match the whitelist.
+    WCHAR className[128];
+    int len = GetClassNameW(focus, className, (int)(sizeof(className) / sizeof(className[0])));
+    if (len > 0 && isFileListClassName(className))
+    {
+        return 1;
+    }
+
+    return 0;
 }
 
 static int isExplorerProcess(DWORD pid)
@@ -306,28 +449,104 @@ static int classifyExplorerWindow(HWND hwnd)
 
 static void updateHooksForExplorer(int isExplorerActive)
 {
-    if (isExplorerActive)
+    (void)isExplorerActive;
+}
+
+// Keep the keyboard-hook focus check side-effect free. WinEvent callbacks own
+// Explorer/dialog activation state transitions on Windows.
+static int isForegroundExplorerOrDialogWindow(HWND hwnd)
+{
+    if (!hwnd)
     {
-        if (!gKeyboardHook)
-        {
-            gKeyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, GetModuleHandle(NULL), 0);
-            if (!gKeyboardHook)
-            {
-                logMessage("SetWindowsHookEx(WH_KEYBOARD_LL) failed err=%lu", GetLastError());
-            }
-            else
-            {
-                logMessage("Keyboard hook installed");
-            }
-        }
+        return 0;
     }
-    else
+
+    int classResult = classifyExplorerWindow(hwnd);
+    int isDesktop = isDesktopShellWindow(hwnd);
+    if (classResult == -1 && !isDesktop)
     {
-        if (gKeyboardHook)
-        {
-            logMessage("Keyboard hook kept (inactive)");
-        }
+        return 0;
     }
+
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid == 0)
+    {
+        return 0;
+    }
+
+    int isExplorer = isExplorerProcess(pid);
+    int isDialog = isOpenSaveDialog(hwnd);
+    if (isExplorer && (classResult != -1 || isDesktop))
+    {
+        return 1;
+    }
+    if (isDialog)
+    {
+        return 1;
+    }
+
+    return 0;
+}
+
+static void triggerActivation(HWND hwnd, DWORD pid, int isDialog);
+
+// WinEvent foreground/show notifications are not enough on their own to keep
+// Explorer state in sync. After Wox shows and hides, Explorer can regain focus
+// without a fresh activation callback for the same HWND. The old implementation
+// recovered on the next key press; keep that behavior here so raw-key dispatch
+// does not get stuck in stateNone after the first type-to-search cycle.
+int refreshFileExplorerMonitorStateForRawKey(int allowDesktop)
+{
+    HWND hwnd = GetForegroundWindow();
+    DWORD pid = 0;
+    int isDialog = 0;
+
+    if (!hwnd)
+    {
+        return 0;
+    }
+
+    int classResult = classifyExplorerWindow(hwnd);
+    int isDesktop = allowDesktop ? isDesktopShellWindow(hwnd) : 0;
+    if (classResult == -1 && !isDesktop)
+    {
+        return 0;
+    }
+
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid == 0)
+    {
+        return 0;
+    }
+
+    int isExplorer = isExplorerProcess(pid);
+    isDialog = isOpenSaveDialog(hwnd);
+    if (!((isExplorer && (classResult != -1 || isDesktop)) || isDialog))
+    {
+        return 0;
+    }
+
+    if (hwnd == gLastExplorerHwnd && gLastExplorerPid == pid &&
+        currentState == (isDialog ? stateDialog : stateExplorer))
+    {
+        // The same Explorer HWND can be manually moved while it remains focused.
+        // Re-publish the activation state here so Go recalculates overlay
+        // placement from the latest window rectangle on the first typed key.
+        triggerActivation(hwnd, pid, isDialog ? 1 : 0);
+        return 1;
+    }
+
+    gLastExplorerPid = pid;
+    gLastExplorerHwnd = hwnd;
+    logMessage("refreshFileExplorerMonitorState: reactivate hwnd=0x%p pid=%lu dialog=%d desktop=%d previous=%d", hwnd, pid, isDialog, isDesktop, currentState);
+    triggerActivation(hwnd, pid, isDialog ? 1 : 0);
+    return 1;
+}
+
+int refreshFileExplorerMonitorState()
+{
+    return refreshFileExplorerMonitorStateForRawKey(0);
 }
 
 static void triggerActivation(HWND hwnd, DWORD pid, int isDialog)
@@ -360,72 +579,6 @@ static void triggerActivation(HWND hwnd, DWORD pid, int isDialog)
         // Fallback if GetWindowRect fails
         fileExplorerActivatedCallbackCGO((int)pid, isDialog, 0, 0, 0, 0);
     }
-}
-
-static void ensureForegroundActivation()
-{
-    DWORD now = GetTickCount();
-    if (now - gLastEnsureActivateTick < 200)
-    {
-        return;
-    }
-    gLastEnsureActivateTick = now;
-
-    HWND hwnd = GetForegroundWindow();
-    if (!hwnd)
-    {
-        return;
-    }
-
-    int classResult = classifyExplorerWindow(hwnd);
-    if (classResult == -1)
-    {
-        return;
-    }
-
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hwnd, &pid);
-    if (pid == 0)
-    {
-        return;
-    }
-
-    int isExplorer = isExplorerProcess(pid);
-    int isDialog = isOpenSaveDialog(hwnd);
-    int isValid = 0;
-    if (isExplorer)
-    {
-        if (classResult != -1)
-        {
-            isValid = 1;
-        }
-    }
-    else if (isDialog)
-    {
-        isValid = 1;
-    }
-
-    if (!isValid && isExplorer && isDialog)
-    {
-        isValid = 1;
-    }
-
-    if (!isValid)
-    {
-        return;
-    }
-
-    updateHooksForExplorer(1);
-
-    if (hwnd == gLastExplorerHwnd && gLastExplorerPid != 0)
-    {
-        return;
-    }
-
-    gLastExplorerPid = pid;
-    gLastExplorerHwnd = hwnd;
-    logMessage("ensureForegroundActivation: reactivate hwnd=0x%p pid=%lu dialog=%d", hwnd, pid, isDialog);
-    triggerActivation(hwnd, pid, isDialog ? 1 : 0);
 }
 
 static void CALLBACK foregroundChangedProc(
@@ -727,16 +880,19 @@ static DWORD WINAPI monitorThreadProc(LPVOID param)
         logMessage("ObjectShow WinEvent hook removed");
     }
 
-    if (gKeyboardHook)
-    {
-        UnhookWindowsHookEx(gKeyboardHook);
-        gKeyboardHook = NULL;
-        logMessage("Keyboard hook removed (thread exit)");
-    }
-
     gLastExplorerPid = 0;
     gLastExplorerHwnd = NULL;
     return 0;
+}
+
+int isForegroundExplorerFileListFocused()
+{
+    HWND hwnd = GetForegroundWindow();
+    if (!isForegroundExplorerOrDialogWindow(hwnd))
+    {
+        return 0;
+    }
+    return hasFocusedFileList();
 }
 
 void startFileExplorerMonitor()

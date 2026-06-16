@@ -1,0 +1,102 @@
+name: Smoke
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      smoke_filter:
+        description: Optional test name filter passed to make smoke
+        type: string
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smoke-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: Run smoke tests
+    runs-on: windows-latest
+    timeout-minutes: 90
+
+    steps:
+      # Keep GitHub-owned setup actions on Node 24-compatible majors; the Go, Node, and Python toolchain versions remain pinned by their inputs.
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: wox.core/go.mod
+          cache: true
+          cache-dependency-path: wox.core/go.sum
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.5
+
+      - name: Install make (Windows)
+        shell: pwsh
+        run: choco install -y make
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: |
+            wox.plugin.host.nodejs/pnpm-lock.yaml
+            wox.plugin.nodejs/pnpm-lock.yaml
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Enable Flutter desktop (Windows)
+        shell: bash
+        run: flutter config --enable-windows-desktop
+
+      - name: Prepare development environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          make dev
+
+      - name: Run smoke tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd wox.test
+          filter="${{ github.event.inputs.smoke_filter || '' }}"
+          if [ -n "$filter" ]; then
+            make smoke "$filter"
+          else
+            make smoke
+          fi
+
+      - name: Upload smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-artifacts-${{ github.run_id }}
+          path: wox.test/artifacts/
+          if-no-files-found: warn
+          retention-days: 14

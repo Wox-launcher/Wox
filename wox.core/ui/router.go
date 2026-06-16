@@ -2,10 +2,11 @@ package ui
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -17,18 +18,25 @@ import (
 	"wox/ai"
 	"wox/cloudsync"
 	"wox/common"
-	"wox/database"
+	"wox/diagnostic"
 	"wox/i18n"
 	"wox/plugin"
-	"wox/plugin/host"
+	pluginhost "wox/plugin/host"
+	appplugin "wox/plugin/system/app"
 	"wox/setting"
+	"wox/telemetry"
 	"wox/ui/dto"
 	"wox/updater"
 	"wox/util"
 	"wox/util/font"
-	"wox/util/hotkey"
+	"wox/util/overlay"
+	"wox/util/permission"
+	"wox/util/screen"
+	utilselection "wox/util/selection"
 	"wox/util/shell"
+	"wox/util/tray"
 
+	"github.com/google/uuid"
 	"github.com/jinzhu/copier"
 	"github.com/samber/lo"
 	"github.com/tidwall/gjson"
@@ -51,16 +59,19 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/theme/install":   handleThemeInstall,
 	"/theme/uninstall": handleThemeUninstall,
 	"/theme/apply":     handleThemeApply,
+	"/theme/save":      handleThemeSave,
 
 	// settings
 	"/setting/wox":                      handleSettingWox,
 	"/setting/wox/update":               handleSettingWoxUpdate,
+	"/setting/hotkey/apps":              handleHotkeyAppCandidates,
 	"/setting/ui/fonts":                 handleSettingUIFontList,
 	"/setting/plugin/update":            handleSettingPluginUpdate,
 	"/setting/userdata/location":        handleUserDataLocation,
 	"/setting/userdata/location/update": handleUserDataLocationUpdate,
 	"/setting/position":                 handleSaveWindowPosition,
 	"/runtime/status":                   handleRuntimeStatus,
+	"/runtime/restart":                  handleRuntimeRestart,
 	"/sync/status":                      handleSyncStatus,
 	"/sync/push":                        handleSyncPush,
 	"/sync/pull":                        handleSyncPull,
@@ -71,51 +82,79 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/sync/key/reset":                   handleSyncKeyReset,
 
 	// events
-	"/on/focus/lost":     handleOnFocusLost,
-	"/on/ready":          handleOnUIReady,
-	"/on/show":           handleOnShow,
-	"/on/querybox/focus": handleOnQueryBoxFocus,
-	"/on/hide":           handleOnHide,
-	"/on/setting":        handleOnSetting,
-	"/usage/stats":       handleUsageStats,
+	"/on/focus/lost":       handleOnFocusLost,
+	"/on/ready":            handleOnUIReady,
+	"/on/show":             handleOnShow,
+	"/on/querybox/focus":   handleOnQueryBoxFocus,
+	"/on/hide":             handleOnHide,
+	"/on/setting":          handleOnSetting,
+	"/on/hotkey/recording": handleOnHotkeyRecording,
+	"/on/onboarding":       handleOnOnboarding,
+	"/usage/stats":         handleUsageStats,
 
 	// lang
 	"/lang/available": handleLangAvailable,
 	"/lang/json":      handleLangJson,
 
 	// ai
-	"/ai/providers":     handleAIProviders,
-	"/ai/models":        handleAIModels,
-	"/ai/model/default": handleAIDefaultModel,
-	"/ai/ping":          handleAIPing,
-	"/ai/chat":          handleAIChat,
-	"/ai/mcp/tools":     handleAIMCPServerTools,
-	"/ai/mcp/tools/all": handleAIMCPServerToolsAll,
-	"/ai/agents":        handleAIAgents,
+	"/ai/providers":      handleAIProviders,
+	"/ai/commands/store": handleAICommandStore,
+	"/ai/models":         handleAIModels,
+	"/ai/model/default":  handleAIDefaultModel,
+	"/ai/ping":           handleAIPing,
+	"/ai/chat":           handleAIChat,
+	"/ai/mcp/tools":      handleAIMCPServerTools,
+	"/ai/mcp/tools/all":  handleAIMCPServerToolsAll,
+	"/ai/agents":         handleAIAgents,
 
 	// doctor
-	"/doctor/check": handleDoctorCheck,
+	"/doctor/check":                  handleDoctorCheck,
+	"/permission/accessibility/open": handlePermissionAccessibilityOpen,
+	"/permission/privacy/open":       handlePermissionPrivacyOpen,
 
 	// others
-	"/":                 handleHome,
-	"/show":             handleShow,
-	"/ping":             handlePing,
-	"/preview":          handlePreview,
-	"/open":             handleOpen,
-	"/backup/now":       handleBackupNow,
-	"/backup/restore":   handleBackupRestore,
-	"/backup/all":       handleBackupAll,
-	"/backup/folder":    handleBackupFolder,
-	"/log/clear":        handleLogClear,
-	"/log/open":         handleLogOpen,
-	"/hotkey/available": handleHotkeyAvailable,
-	"/query/metadata":   handleQueryMetadata,
-	"/deeplink":         handleDeeplink,
-	"/version":          handleVersion,
+	"/":                                   handleHome,
+	"/show":                               handleShow,
+	"/tooltip/show":                       handleTooltipOverlayShow,
+	"/tooltip/hide":                       handleTooltipOverlayHide,
+	"/ping":                               handlePing,
+	"/preview":                            handlePreview,
+	"/preview/image/overlay":              handlePreviewImageOverlay,
+	"/preview/file/media":                 handlePreviewFileMedia,
+	"/image/file/icon":                    handleFileIcon,
+	"/image/lazy/load":                    handleLazyImageLoad,
+	"/open":                               handleOpen,
+	"/backup/now":                         handleBackupNow,
+	"/backup/restore":                     handleBackupRestore,
+	"/backup/all":                         handleBackupAll,
+	"/backup/folder":                      handleBackupFolder,
+	"/log/clear":                          handleLogClear,
+	"/log/open":                           handleLogOpen,
+	"/diagnostics/status":                 handleDiagnosticsStatus,
+	"/diagnostics/monitor/enable":         handleDiagnosticsMonitorEnable,
+	"/diagnostics/monitor/enable-restart": handleDiagnosticsMonitorEnableRestart,
+	"/diagnostics/monitor/disable":        handleDiagnosticsMonitorDisable,
+	"/diagnostics/export":                 handleDiagnosticsExport,
+	"/hotkey/available":                   handleHotkeyAvailable,
+	"/hotkey/availability":                handleHotkeyAvailability,
+	"/glance":                             handleGlance,
+	"/glance/action":                      handleGlanceAction,
+	"/updater/channel/versions":           handleUpdateChannelVersions,
+	"/deeplink":                           handleDeeplink,
+	"/version":                            handleVersion,
 
-	// toolbar snooze/mute
-	"/toolbar/snooze": handleToolbarSnooze,
+	// test-only triggers
+	"/test/plugin/install_local":     handleTestInstallLocalPlugin,
+	"/test/trigger/open_setting":     handleTestTriggerOpenSetting,
+	"/test/trigger/open_onboarding":  handleTestTriggerOpenOnboarding,
+	"/test/trigger/query_hotkey":     handleTestTriggerQueryHotkey,
+	"/test/trigger/screenshot":       handleTestTriggerScreenshot,
+	"/test/trigger/selection_hotkey": handleTestTriggerSelectionHotkey,
+	"/test/screen/mouse":             handleTestMouseScreen,
+	"/test/trigger/tray_query":       handleTestTriggerTrayQuery,
 }
+
+var updateChannelVersionsProvider = updater.GetUpdateChannelVersions
 
 const traceIdHeader = "TraceId"
 const sessionIdHeader = "SessionId"
@@ -149,6 +188,168 @@ func handlePing(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, "pong")
 }
 
+type fileIconRequest struct {
+	Path string `json:"path"`
+	Size int    `json:"size"`
+}
+
+func handleFileIcon(w http.ResponseWriter, r *http.Request) {
+	// File previews run in Flutter, but icon extraction already belongs to core's
+	// platform-specific fileicon pipeline. Keep this endpoint small so previews
+	// reuse the same cached icon artifacts as launcher results.
+	ctx := getTraceContext(r)
+	filePath := strings.TrimSpace(r.URL.Query().Get("path"))
+	size := 0
+	if rawSize := strings.TrimSpace(r.URL.Query().Get("size")); rawSize != "" {
+		if parsedSize, err := strconv.Atoi(rawSize); err == nil {
+			size = parsedSize
+		}
+	}
+
+	if r.Body != nil {
+		var request fileIconRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err == nil {
+			if filePath == "" {
+				filePath = strings.TrimSpace(request.Path)
+			}
+			if size <= 0 {
+				size = request.Size
+			}
+		}
+	}
+
+	if filePath == "" {
+		writeErrorResponse(w, "path is empty")
+		return
+	}
+	if size <= 0 {
+		size = common.ResultListIconSize
+	}
+	if size > common.ResultGridIconSize {
+		size = common.ResultGridIconSize
+	}
+
+	icon := common.ConvertIconWithSize(ctx, common.NewWoxImageFileIcon(filePath), "", size)
+	if icon.IsEmpty() || icon.ImageType == common.WoxImageTypeFileIcon {
+		writeErrorResponse(w, "failed to resolve file icon")
+		return
+	}
+
+	writeSuccessResponse(w, icon)
+}
+
+func handlePreviewFileMedia(w http.ResponseWriter, r *http.Request) {
+	// Media previews need ordinary HTTP range requests so large video files can
+	// stream into WebView without loading the whole file into Flutter memory.
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	encodedPath := strings.TrimSpace(r.URL.Query().Get("path"))
+	if encodedPath == "" {
+		http.Error(w, "path is empty", http.StatusBadRequest)
+		return
+	}
+
+	decodedPath, err := base64.URLEncoding.DecodeString(encodedPath)
+	if err != nil {
+		http.Error(w, "path is invalid", http.StatusBadRequest)
+		return
+	}
+
+	filePath := string(decodedPath)
+	if filePath == "" {
+		http.Error(w, "path is empty", http.StatusBadRequest)
+		return
+	}
+	if !filepath.IsAbs(filePath) {
+		http.Error(w, "path must be absolute", http.StatusBadRequest)
+		return
+	}
+
+	stat, err := os.Stat(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, "failed to stat file", http.StatusInternalServerError)
+		return
+	}
+	if stat.IsDir() {
+		http.Error(w, "path is a directory", http.StatusBadRequest)
+		return
+	}
+
+	file, err := os.Open(filePath)
+	if err != nil {
+		http.Error(w, "failed to open file", http.StatusInternalServerError)
+		return
+	}
+	defer file.Close()
+
+	if contentType := resolvePreviewFileMediaContentType(filePath); contentType != "" {
+		w.Header().Set("Content-Type", contentType)
+	}
+	w.Header().Set("Accept-Ranges", "bytes")
+	http.ServeContent(w, r, filepath.Base(filePath), stat.ModTime(), file)
+}
+
+func resolvePreviewFileMediaContentType(filePath string) string {
+	switch strings.ToLower(filepath.Ext(filePath)) {
+	case ".pdf":
+		return "application/pdf"
+	case ".mp4", ".m4v":
+		return "video/mp4"
+	case ".mov":
+		return "video/quicktime"
+	case ".webm":
+		return "video/webm"
+	case ".mp3":
+		return "audio/mpeg"
+	case ".wav":
+		return "audio/wav"
+	case ".m4a":
+		return "audio/mp4"
+	case ".aac":
+		return "audio/aac"
+	case ".flac":
+		return "audio/flac"
+	case ".ogg", ".opus":
+		return "audio/ogg"
+	}
+
+	return mime.TypeByExtension(strings.ToLower(filepath.Ext(filePath)))
+}
+
+func handleLazyImageLoad(w http.ResponseWriter, r *http.Request) {
+	// Result icon lazy loading is intentionally an internal UI/core endpoint.
+	// Plugins still return ordinary WoxImage values, while Flutter exchanges the
+	// manager-issued token for a resized cache image only after the widget exists.
+	ctx := getTraceContext(r)
+	token := strings.TrimSpace(r.URL.Query().Get("token"))
+	if token == "" && r.Body != nil {
+		var request struct {
+			Token string `json:"token"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err == nil {
+			token = strings.TrimSpace(request.Token)
+		}
+	}
+	if token == "" {
+		writeErrorResponse(w, "token is empty")
+		return
+	}
+
+	icon, err := plugin.GetPluginManager().LoadLazyResultIcon(ctx, token)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, icon)
+}
+
 func handlePreview(w http.ResponseWriter, r *http.Request) {
 	sessionId := r.URL.Query().Get("sessionId")
 	queryId := r.URL.Query().Get("queryId")
@@ -173,6 +374,48 @@ func handlePreview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeSuccessResponse(w, preview)
+}
+
+type previewImageOverlayRequest struct {
+	Image common.WoxImage
+}
+
+func handlePreviewImageOverlay(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeErrorResponse(w, fmt.Sprintf("failed to read preview image overlay request: %s", err.Error()))
+		return
+	}
+
+	var request previewImageOverlayRequest
+	if err := json.Unmarshal(body, &request); err != nil {
+		writeErrorResponse(w, fmt.Sprintf("failed to parse preview image overlay request: %s", err.Error()))
+		return
+	}
+	if request.Image.IsEmpty() {
+		writeErrorResponse(w, "preview image is empty")
+		return
+	}
+
+	// Refactor: image preview routing now calls the single shared overlay entry directly. The
+	// overlay utility decides whether URL sources need loading/cache behavior, while non-URL sources
+	// are displayed immediately through the same API.
+	if err := overlay.ShowImageOverlay(ctx, overlay.ImageOverlayOptions{
+		Title:         "Wox image preview",
+		Image:         request.Image,
+		FitToScreen:   true,
+		Topmost:       true,
+		Movable:       true,
+		CloseOnEscape: true,
+		Anchor:        overlay.AnchorCenter,
+	}); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+
+	writeSuccessResponse(w, "")
 }
 
 func handleTheme(w http.ResponseWriter, r *http.Request) {
@@ -201,6 +444,10 @@ func handlePluginStore(w http.ResponseWriter, r *http.Request) {
 			plugins[i].Icon = common.NewWoxImageUrl(manifests[i].IconUrl)
 		}
 		plugins[i].IsInstalled = isInstalled
+		plugins[i].IsUpgradable = false
+		if isInstalled {
+			plugins[i].IsUpgradable = plugin.IsVersionUpgradable(pluginInstance.Metadata.Version, manifests[i].Version)
+		}
 		plugins[i].Name = manifests[i].GetName(getCtx)
 		plugins[i].NameEn = manifests[i].GetNameEn(getCtx)
 		plugins[i].Description = manifests[i].GetDescription(getCtx)
@@ -246,13 +493,16 @@ func convertPluginInstanceToDto(ctx context.Context, pluginInstance *plugin.Inst
 	installedPlugin.IsDisable = pluginInstance.Setting.Disabled.Get()
 	installedPlugin.TriggerKeywords = pluginInstance.GetTriggerKeywords()
 	installedPlugin.Commands = pluginInstance.GetQueryCommands()
+	installedPlugin.Glances = translatePluginGlances(ctx, pluginInstance)
 
 	//load screenshot urls from store if exist
 	storePlugin, foundErr := plugin.GetStoreManager().GetStorePluginManifestById(ctx, pluginInstance.Metadata.Id)
 	if foundErr == nil {
 		installedPlugin.ScreenshotUrls = storePlugin.ScreenshotUrls
+		installedPlugin.IsUpgradable = plugin.IsVersionUpgradable(pluginInstance.Metadata.Version, storePlugin.Version)
 	} else {
 		installedPlugin.ScreenshotUrls = []string{}
+		installedPlugin.IsUpgradable = false
 	}
 
 	// load icon
@@ -267,6 +517,18 @@ func convertPluginInstanceToDto(ctx context.Context, pluginInstance *plugin.Inst
 	installedPlugin = convertPluginDto(ctx, installedPlugin, pluginInstance)
 
 	return installedPlugin, nil
+}
+
+func translatePluginGlances(ctx context.Context, pluginInstance *plugin.Instance) []plugin.MetadataGlance {
+	glances := make([]plugin.MetadataGlance, 0, len(pluginInstance.Metadata.Glances))
+	for _, glance := range pluginInstance.Metadata.Glances {
+		// Glance definitions are metadata used by settings. Translating them here
+		// keeps Flutter dropdowns simple while preserving i18n keys in plugin.json.
+		glance.Name = common.I18nString(pluginInstance.TranslateMetadataText(ctx, glance.Name))
+		glance.Description = common.I18nString(pluginInstance.TranslateMetadataText(ctx, glance.Description))
+		glances = append(glances, glance)
+	}
+	return glances
 }
 
 func handlePluginInstall(w http.ResponseWriter, r *http.Request) {
@@ -390,8 +652,16 @@ func handleThemeStore(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
 
 	storeThemes := GetStoreManager().GetThemes()
-	var themes = make([]dto.ThemeDto, len(storeThemes))
-	copyErr := copier.Copy(&themes, &storeThemes)
+	effectiveStoreThemes := make([]common.Theme, 0, len(storeThemes))
+	for _, storeTheme := range storeThemes {
+		// New feature: store themes stay raw for install/persistence, but preview
+		// responses should match the current OS so users see the style that will be
+		// applied on this machine.
+		effectiveStoreThemes = append(effectiveStoreThemes, GetUIManager().resolvePlatformTheme(ctx, storeTheme))
+	}
+
+	var themes = make([]dto.ThemeDto, len(effectiveStoreThemes))
+	copyErr := copier.Copy(&themes, &effectiveStoreThemes)
 	if copyErr != nil {
 		writeErrorResponse(w, copyErr.Error())
 		return
@@ -521,6 +791,79 @@ func handleThemeApply(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, "")
 }
 
+type saveThemeRequest struct {
+	Name      string       `json:"Name"`
+	Theme     common.Theme `json:"Theme"`
+	Overwrite bool         `json:"Overwrite"`
+}
+
+// handleThemeSave persists an edited draft as either a new user theme or an overwrite of the current user theme.
+func handleThemeSave(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeErrorResponse(w, "failed to read theme save request: "+err.Error())
+		return
+	}
+
+	var request saveThemeRequest
+	if err := json.Unmarshal(body, &request); err != nil {
+		writeErrorResponse(w, "failed to parse theme save request: "+err.Error())
+		return
+	}
+
+	themeName := strings.TrimSpace(request.Name)
+	if themeName == "" {
+		writeErrorResponse(w, "theme name is empty")
+		return
+	}
+
+	theme := request.Theme
+	if theme.AppBackgroundColor == "" {
+		writeErrorResponse(w, "theme data is empty")
+		return
+	}
+
+	if request.Overwrite {
+		if strings.TrimSpace(theme.ThemeId) == "" {
+			writeErrorResponse(w, "theme id is empty")
+			return
+		}
+		if GetUIManager().IsSystemTheme(theme.ThemeId) {
+			writeErrorResponse(w, "can't overwrite system theme")
+			return
+		}
+	} else {
+		theme.ThemeId = uuid.NewString()
+	}
+	theme.ThemeName = themeName
+	if strings.TrimSpace(theme.ThemeAuthor) == "" {
+		theme.ThemeAuthor = "Wox Launcher"
+	}
+	if strings.TrimSpace(theme.ThemeUrl) == "" {
+		theme.ThemeUrl = "https://github.com/Wox-launcher/Wox"
+	}
+	if strings.TrimSpace(theme.Version) == "" {
+		theme.Version = "1.0.0"
+	}
+	theme.IsSystem = false
+	theme.IsInstalled = true
+	theme.IsAutoAppearance = false
+	theme.DarkThemeId = ""
+	theme.LightThemeId = ""
+	theme.Windows = nil
+	theme.MacOS = nil
+	theme.Linux = nil
+
+	if installErr := GetStoreManager().Install(ctx, theme); installErr != nil {
+		writeErrorResponse(w, "can't save theme: "+installErr.Error())
+		return
+	}
+
+	writeSuccessResponse(w, theme)
+}
+
 func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
@@ -529,10 +872,12 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 	settingDto.EnableAutostart = woxSetting.EnableAutostart.Get()
 	settingDto.MainHotkey = woxSetting.MainHotkey.Get()
 	settingDto.SelectionHotkey = woxSetting.SelectionHotkey.Get()
+	settingDto.IgnoredHotkeyApps = woxSetting.IgnoredHotkeyApps.Get()
 	settingDto.LogLevel = util.NormalizeLogLevel(woxSetting.LogLevel.Get())
 	settingDto.UsePinYin = woxSetting.UsePinYin.Get()
 	settingDto.SwitchInputMethodABC = woxSetting.SwitchInputMethodABC.Get()
 	settingDto.HideOnStart = woxSetting.HideOnStart.Get()
+	settingDto.OnboardingFinished = woxSetting.OnboardingFinished.Get()
 	settingDto.HideOnLostFocus = woxSetting.HideOnLostFocus.Get()
 	settingDto.ShowTray = woxSetting.ShowTray.Get()
 	settingDto.LangCode = woxSetting.LangCode.Get()
@@ -545,27 +890,40 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 	settingDto.HttpProxyEnabled = woxSetting.HttpProxyEnabled.Get()
 	settingDto.HttpProxyUrl = woxSetting.HttpProxyUrl.Get()
 	settingDto.ShowPosition = woxSetting.ShowPosition.Get()
+	settingDto.IsLinuxWaylandSession = util.IsLinuxWaylandSession()
 	settingDto.EnableAutoBackup = woxSetting.EnableAutoBackup.Get()
 	settingDto.EnableAutoUpdate = woxSetting.EnableAutoUpdate.Get()
+	settingDto.ReleaseChannel = woxSetting.ReleaseChannel.Get()
+	settingDto.EnableAnonymousUsageStats = woxSetting.EnableAnonymousUsageStats.Get()
 	settingDto.CustomPythonPath = woxSetting.CustomPythonPath.Get()
 	settingDto.CustomNodejsPath = woxSetting.CustomNodejsPath.Get()
 	settingDto.CloudSyncDisabledPlugins = woxSetting.CloudSyncDisabledPlugins.Get()
 
-	settingDto.EnableMCPServer = woxSetting.EnableMCPServer.Get()
-	settingDto.MCPServerPort = woxSetting.MCPServerPort.Get()
-
 	settingDto.AppWidth = woxSetting.AppWidth.Get()
 	settingDto.MaxResultCount = woxSetting.MaxResultCount.Get()
+	settingDto.UiDensity = woxSetting.UiDensity.Get()
 	settingDto.ThemeId = woxSetting.ThemeId.Get()
-	appFontFamily := woxSetting.AppFontFamily.Get()
-	systemFontFamilies := font.GetSystemFontFamilies(ctx)
-	normalizedAppFontFamily := font.NormalizeConfiguredFontFamily(appFontFamily, systemFontFamilies)
-	if normalizedAppFontFamily != appFontFamily {
-		woxSetting.AppFontFamily.Set(normalizedAppFontFamily)
-	}
-	settingDto.AppFontFamily = normalizedAppFontFamily
+	settingDto.AppFontFamily = woxSetting.AppFontFamily.Get()
+	settingDto.EnableQueryCompletionHint = woxSetting.EnableQueryCompletionHint.Get()
+	settingDto.EnableGlance = woxSetting.EnableGlance.Get()
+	settingDto.PrimaryGlance = woxSetting.PrimaryGlance.Get()
+	settingDto.HideGlanceIcon = woxSetting.HideGlanceIcon.Get()
+	settingDto.ShowScoreTail = woxSetting.ShowScoreTail.Get()
+	settingDto.ShowPerformanceTail = woxSetting.ShowPerformanceTail.Get()
+	settingDto.ShowPerformanceTailBatch = woxSetting.ShowPerformanceTailBatch.Get()
+	settingDto.ShowPerformanceTailPluginQuery = woxSetting.ShowPerformanceTailPluginQuery.Get()
+	settingDto.ShowPerformanceTailBackendPrepared = woxSetting.ShowPerformanceTailBackendPrepared.Get()
+	settingDto.ShowPerformanceTailUiReceived = woxSetting.ShowPerformanceTailUiReceived.Get()
 
 	writeSuccessResponse(w, settingDto)
+}
+
+func handleHotkeyAppCandidates(w http.ResponseWriter, r *http.Request) {
+	writeSuccessResponse(w, appplugin.GetHotkeyAppCandidates(getTraceContext(r)))
+}
+
+func handleUpdateChannelVersions(w http.ResponseWriter, r *http.Request) {
+	writeSuccessResponse(w, updateChannelVersionsProvider(getTraceContext(r)))
 }
 
 func handleSettingUIFontList(w http.ResponseWriter, r *http.Request) {
@@ -589,6 +947,17 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 
 	ctx := getTraceContext(r)
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	if kv.Key == "ReleaseChannel" {
+		updatedValue, updateErr := updateWoxSettingValue(ctx, woxSetting, kv.Key, kv.Value)
+		if updateErr != nil {
+			writeErrorResponse(w, updateErr.Error())
+			return
+		}
+
+		GetUIManager().PostSettingUpdate(ctx, kv.Key, updatedValue)
+		writeSuccessResponse(w, "")
+		return
+	}
 
 	var vb bool
 	var vf float64
@@ -601,13 +970,70 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 		vf = vf1
 	}
 
+	// Hotkeys are registered before persisting settings so a denied or failed
+	// system bind does not leave stored settings ahead of the actual OS
+	// registration. These branches return early, so the normal PostSettingUpdate
+	// path does not register the same change again.
+	if kv.Key == "MainHotkey" {
+		if vs != woxSetting.MainHotkey.Get() {
+			if err := GetUIManager().RegisterMainHotkey(ctx, vs); err != nil {
+				writeErrorResponse(w, err.Error())
+				return
+			}
+		}
+		woxSetting.MainHotkey.Set(vs)
+		writeSuccessResponse(w, "")
+		return
+	}
+
+	if kv.Key == "SelectionHotkey" {
+		if vs != woxSetting.SelectionHotkey.Get() {
+			if err := GetUIManager().RegisterSelectionHotkey(ctx, vs); err != nil {
+				writeErrorResponse(w, err.Error())
+				return
+			}
+		}
+		woxSetting.SelectionHotkey.Set(vs)
+		writeSuccessResponse(w, "")
+		return
+	}
+
+	if kv.Key == "QueryHotkeys" {
+		queryHotkeys, parseErr := parseQueryHotkeysSettingValue(vs)
+		if parseErr != nil {
+			writeErrorResponse(w, parseErr.Error())
+			return
+		}
+
+		uiManager := GetUIManager()
+		var registerErr error
+		if shouldGroupWaylandPortalHotkeys() {
+			uiManager.globalHotkeyMu.Lock()
+			registerErr = uiManager.reregisterWaylandPortalGlobalHotkeys(ctx, woxSetting.MainHotkey.Get(), woxSetting.SelectionHotkey.Get(), queryHotkeys)
+			uiManager.globalHotkeyMu.Unlock()
+		} else {
+			registerErr = uiManager.reregisterIndividualQueryHotkeys(ctx, queryHotkeys)
+		}
+		if registerErr != nil {
+			writeErrorResponse(w, registerErr.Error())
+			return
+		}
+
+		woxSetting.QueryHotkeys.Set(queryHotkeys)
+		writeSuccessResponse(w, "")
+		return
+	}
+
 	switch kv.Key {
 	case "EnableAutostart":
 		woxSetting.EnableAutostart.Set(vb)
-	case "MainHotkey":
-		woxSetting.MainHotkey.Set(vs)
-	case "SelectionHotkey":
-		woxSetting.SelectionHotkey.Set(vs)
+	case "IgnoredHotkeyApps":
+		var ignoredApps []setting.IgnoredHotkeyApp
+		if err := json.Unmarshal([]byte(vs), &ignoredApps); err != nil {
+			writeErrorResponse(w, err.Error())
+			return
+		}
+		woxSetting.IgnoredHotkeyApps.Set(normalizeIgnoredHotkeyApps(ignoredApps))
 	case "LogLevel":
 		updatedValue = util.NormalizeLogLevel(vs)
 		if err := woxSetting.LogLevel.Set(updatedValue); err != nil {
@@ -620,19 +1046,16 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 		woxSetting.SwitchInputMethodABC.Set(vb)
 	case "HideOnStart":
 		woxSetting.HideOnStart.Set(vb)
+	case "OnboardingFinished":
+		// The guide writes completion through the existing settings endpoint so
+		// skip and finish share one durable state transition with no extra API.
+		woxSetting.OnboardingFinished.Set(vb)
 	case "HideOnLostFocus":
 		woxSetting.HideOnLostFocus.Set(vb)
 	case "ShowTray":
 		woxSetting.ShowTray.Set(vb)
 	case "LangCode":
 		woxSetting.LangCode.Set(i18n.LangCode(vs))
-	case "QueryHotkeys":
-		var queryHotkeys []setting.QueryHotkey
-		if err := json.Unmarshal([]byte(vs), &queryHotkeys); err != nil {
-			writeErrorResponse(w, err.Error())
-			return
-		}
-		woxSetting.QueryHotkeys.Set(queryHotkeys)
 	case "QueryShortcuts":
 		var queryShortcuts []setting.QueryShortcut
 		if err := json.Unmarshal([]byte(vs), &queryShortcuts); err != nil {
@@ -640,6 +1063,13 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		woxSetting.QueryShortcuts.Set(queryShortcuts)
+	case "CloudSyncDisabledPlugins":
+		var disabledPlugins []string
+		if err := json.Unmarshal([]byte(vs), &disabledPlugins); err != nil {
+			writeErrorResponse(w, err.Error())
+			return
+		}
+		woxSetting.CloudSyncDisabledPlugins.Set(disabledPlugins)
 	case "TrayQueries":
 		var rawTrayQueries []map[string]any
 		if err := json.Unmarshal([]byte(vs), &rawTrayQueries); err != nil {
@@ -654,34 +1084,24 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 				Query: query,
 			}
 
+			if rawHideQueryBox, ok := rawTrayQuery["HideQueryBox"]; ok {
+				trayQuery.HideQueryBox = parseBool(rawHideQueryBox)
+			}
+
+			if rawHideToolbar, ok := rawTrayQuery["HideToolbar"]; ok {
+				trayQuery.HideToolbar = parseBool(rawHideToolbar)
+			}
+
 			if rawDisabled, ok := rawTrayQuery["Disabled"]; ok {
-				switch disabled := rawDisabled.(type) {
-				case bool:
-					trayQuery.Disabled = disabled
-				case string:
-					if parsed, parseErr := strconv.ParseBool(disabled); parseErr == nil {
-						trayQuery.Disabled = parsed
-					}
-				}
+				trayQuery.Disabled = parseBool(rawDisabled)
 			}
 
 			if rawWidth, ok := rawTrayQuery["Width"]; ok {
-				switch width := rawWidth.(type) {
-				case float64:
-					trayQuery.Width = int(width)
-				case int:
-					trayQuery.Width = width
-				case string:
-					width = strings.TrimSpace(width)
-					if width != "" {
-						if parsed, parseErr := strconv.Atoi(width); parseErr == nil {
-							trayQuery.Width = parsed
-						}
-					}
-				}
-				if trayQuery.Width < 0 {
-					trayQuery.Width = 0
-				}
+				trayQuery.Width = maxInt(parseInt(rawWidth), 0)
+			}
+
+			if rawMaxResultCount, ok := rawTrayQuery["MaxResultCount"]; ok {
+				trayQuery.MaxResultCount = normalizeOptionalMaxResultCount(parseInt(rawMaxResultCount))
 			}
 
 			if rawIcon, ok := rawTrayQuery["Icon"]; ok {
@@ -719,16 +1139,28 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 	case "EnableAutoUpdate":
 		woxSetting.EnableAutoUpdate.Set(vb)
 	case "CustomPythonPath":
+		if strings.TrimSpace(vs) != "" {
+			// Bug fix: reject unsupported custom Python paths at save time. The
+			// old flow persisted any path and only failed later when the host
+			// tried to start, so this backend guard keeps API callers and the UI
+			// on the same minimum-version contract.
+			if _, validateErr := pluginhost.ValidatePythonExecutable(ctx, vs); validateErr != nil {
+				writeErrorResponse(w, validateErr.Error())
+				return
+			}
+		}
 		woxSetting.CustomPythonPath.Set(vs)
 	case "CustomNodejsPath":
-		woxSetting.CustomNodejsPath.Set(vs)
-	case "CloudSyncDisabledPlugins":
-		var disabledPlugins []string
-		if err := json.Unmarshal([]byte(vs), &disabledPlugins); err != nil {
-			writeErrorResponse(w, err.Error())
-			return
+		if strings.TrimSpace(vs) != "" {
+			// Feature: Node.js custom paths use the same save-time validation as
+			// Python. Checking the version here prevents non-UI API callers from
+			// persisting a Node.js executable that the host will immediately reject.
+			if _, validateErr := pluginhost.ValidateNodejsExecutable(ctx, vs); validateErr != nil {
+				writeErrorResponse(w, validateErr.Error())
+				return
+			}
 		}
-		woxSetting.CloudSyncDisabledPlugins.Set(disabledPlugins)
+		woxSetting.CustomNodejsPath.Set(vs)
 
 	case "HttpProxyEnabled":
 		woxSetting.HttpProxyEnabled.Set(vb)
@@ -739,20 +1171,186 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 		woxSetting.AppWidth.Set(int(vf))
 	case "MaxResultCount":
 		woxSetting.MaxResultCount.Set(int(vf))
+	case "UiDensity":
+		// New launcher presentation setting: store only the normalized density
+		// enum. The old fixed-size behavior maps to normal, while unsupported
+		// values fall back here before they can desync Go height estimates from
+		// Flutter's rendered metrics.
+		normalizedDensity := setting.NormalizeUiDensity(vs)
+		updatedValue = string(normalizedDensity)
+		if err := woxSetting.UiDensity.Set(normalizedDensity); err != nil {
+			writeErrorResponse(w, err.Error())
+			return
+		}
 	case "ThemeId":
 		woxSetting.ThemeId.Set(vs)
 	case "AppFontFamily":
+		vs = font.NormalizeConfiguredFontFamily(vs, font.GetSystemFontFamilies(ctx))
 		woxSetting.AppFontFamily.Set(vs)
-	case "EnableMCPServer":
-		woxSetting.EnableMCPServer.Set(vb)
-	case "MCPServerPort":
-		woxSetting.MCPServerPort.Set(int(vf))
+	case "EnableQueryCompletionHint":
+		woxSetting.EnableQueryCompletionHint.Set(vb)
+	case "EnableGlance":
+		woxSetting.EnableGlance.Set(vb)
+	case "PrimaryGlance":
+		var glance setting.GlanceRef
+		if err := json.Unmarshal([]byte(vs), &glance); err != nil {
+			writeErrorResponse(w, err.Error())
+			return
+		}
+		woxSetting.PrimaryGlance.Set(glance)
+	case "HideGlanceIcon":
+		// This setting only changes the launcher presentation. Persisting it in
+		// the shared settings API keeps the behavior consistent after reloads
+		// without asking Glance providers to omit useful icon metadata.
+		woxSetting.HideGlanceIcon.Set(vb)
+	case "ShowScoreTail":
+		// New dev setting: score tails used to be compiled into a helper but
+		// effectively disabled by commented call sites. Persisting this switch
+		// lets developers opt in without editing code for each debug session.
+		woxSetting.ShowScoreTail.Set(vb)
+	case "ShowPerformanceTail":
+		// New dev setting: performance tags were previously always appended in
+		// dev builds. Keeping the check in the backend prevents hidden UI tabs
+		// from being the only guard for noisy query-result tags.
+		woxSetting.ShowPerformanceTail.Set(vb)
+	case "ShowPerformanceTailBatch":
+		woxSetting.ShowPerformanceTailBatch.Set(vb)
+	case "ShowPerformanceTailPluginQuery":
+		woxSetting.ShowPerformanceTailPluginQuery.Set(vb)
+	case "ShowPerformanceTailBackendPrepared":
+		woxSetting.ShowPerformanceTailBackendPrepared.Set(vb)
+	case "ShowPerformanceTailUiReceived":
+		woxSetting.ShowPerformanceTailUiReceived.Set(vb)
+	case "EnableAnonymousUsageStats":
+		woxSetting.EnableAnonymousUsageStats.Set(vb)
+		// When disabled, delete telemetry state to stop tracking
+		if !vb {
+			telemetry.DeleteTelemetryState(ctx)
+		}
 	default:
 		writeErrorResponse(w, "unknown setting key: "+kv.Key)
 		return
 	}
 
 	GetUIManager().PostSettingUpdate(getTraceContext(r), kv.Key, updatedValue)
+
+	writeSuccessResponse(w, "")
+}
+
+// parseQueryHotkeysSettingValue normalizes query hotkey payloads before both
+// pre-registration and persistence so portal errors do not leave two views
+// of the same setting.
+func parseQueryHotkeysSettingValue(value string) ([]setting.QueryHotkey, error) {
+	var rawQueryHotkeys []map[string]any
+	if err := json.Unmarshal([]byte(value), &rawQueryHotkeys); err != nil {
+		return nil, err
+	}
+
+	var queryHotkeys []setting.QueryHotkey
+	for _, rawQueryHotkey := range rawQueryHotkeys {
+		queryHotkey := setting.QueryHotkey{
+			Position: setting.QueryHotkeyPositionSystemDefault,
+		}
+
+		if rawName, ok := rawQueryHotkey["Name"]; ok {
+			queryHotkey.Name = strings.TrimSpace(parseString(rawName))
+		}
+		if rawHotkey, ok := rawQueryHotkey["Hotkey"]; ok {
+			queryHotkey.Hotkey = strings.TrimSpace(parseString(rawHotkey))
+		}
+		if rawQuery, ok := rawQueryHotkey["Query"]; ok {
+			queryHotkey.Query = parseString(rawQuery)
+		}
+		if rawSilentExecution, ok := rawQueryHotkey["IsSilentExecution"]; ok {
+			queryHotkey.IsSilentExecution = parseBool(rawSilentExecution)
+		}
+		if rawHideQueryBox, ok := rawQueryHotkey["HideQueryBox"]; ok {
+			queryHotkey.HideQueryBox = parseBool(rawHideQueryBox)
+		}
+		if rawHideToolbar, ok := rawQueryHotkey["HideToolbar"]; ok {
+			queryHotkey.HideToolbar = parseBool(rawHideToolbar)
+		}
+		if rawDisabled, ok := rawQueryHotkey["Disabled"]; ok {
+			queryHotkey.Disabled = parseBool(rawDisabled)
+		}
+		if rawWidth, ok := rawQueryHotkey["Width"]; ok {
+			queryHotkey.Width = maxInt(parseInt(rawWidth), 0)
+		}
+		if rawMaxResultCount, ok := rawQueryHotkey["MaxResultCount"]; ok {
+			queryHotkey.MaxResultCount = normalizeOptionalMaxResultCount(parseInt(rawMaxResultCount))
+		}
+		if rawPosition, ok := rawQueryHotkey["Position"]; ok {
+			queryHotkey.Position = normalizeQueryHotkeyPosition(parseString(rawPosition))
+		}
+
+		queryHotkeys = append(queryHotkeys, queryHotkey)
+	}
+
+	return queryHotkeys, nil
+}
+
+// updateWoxSettingValue handles small shared setting writes that need normalization.
+func updateWoxSettingValue(_ context.Context, woxSetting *setting.WoxSetting, key string, value string) (string, error) {
+	switch key {
+	case "ReleaseChannel":
+		normalizedChannel := setting.NormalizeReleaseChannel(value)
+		if err := woxSetting.ReleaseChannel.Set(normalizedChannel); err != nil {
+			return "", err
+		}
+		updater.ResetUpdateInfoForReleaseChannel(normalizedChannel)
+		return string(normalizedChannel), nil
+	default:
+		return "", fmt.Errorf("unknown setting key: %s", key)
+	}
+}
+
+func handleGlance(w http.ResponseWriter, r *http.Request) {
+	type glanceRequest struct {
+		Glances []setting.GlanceRef
+		Reason  plugin.GlanceRefreshReason
+	}
+
+	var request glanceRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+
+	keys := make([]plugin.GlanceKey, 0, len(request.Glances))
+	for _, glance := range request.Glances {
+		if glance.IsEmpty() {
+			continue
+		}
+		keys = append(keys, plugin.GlanceKey{PluginId: glance.PluginId, GlanceId: glance.GlanceId})
+	}
+
+	// Glance data is requested by the UI only for user-selected slots. Keeping
+	// this pull path in HTTP avoids giving plugins a persistent UI push channel.
+	items := plugin.GetPluginManager().GetGlanceItems(getTraceContext(r), keys, request.Reason)
+	writeSuccessResponse(w, items)
+}
+
+func handleGlanceAction(w http.ResponseWriter, r *http.Request) {
+	type glanceActionRequest struct {
+		PluginId string
+		GlanceId string
+		ActionId string
+	}
+
+	var request glanceActionRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	if request.PluginId == "" || request.GlanceId == "" || request.ActionId == "" {
+		writeErrorResponse(w, "pluginId, glanceId and actionId are required")
+		return
+	}
+
+	if err := plugin.GetPluginManager().ExecuteGlanceAction(getTraceContext(r), request.PluginId, request.GlanceId, request.ActionId); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
 
 	writeSuccessResponse(w, "")
 }
@@ -920,6 +1518,30 @@ func handleSyncKeyReset(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, resp)
 }
 
+func normalizeIgnoredHotkeyApps(apps []setting.IgnoredHotkeyApp) []setting.IgnoredHotkeyApp {
+	normalized := make([]setting.IgnoredHotkeyApp, 0, len(apps))
+	seen := make(map[string]bool)
+
+	for _, app := range apps {
+		app.Name = strings.TrimSpace(app.Name)
+		app.Identity = strings.TrimSpace(app.Identity)
+		app.Path = strings.TrimSpace(app.Path)
+		if app.Identity == "" {
+			continue
+		}
+
+		key := strings.ToLower(app.Identity)
+		if seen[key] {
+			continue
+		}
+
+		seen[key] = true
+		normalized = append(normalized, app)
+	}
+
+	return normalized
+}
+
 func handleRuntimeStatus(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
 	instances := plugin.GetPluginManager().GetPluginInstances()
@@ -935,11 +1557,18 @@ func handleRuntimeStatus(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		sort.Strings(pluginNames)
+		runtimeStatus := runtimeHost.RuntimeStatus(ctx)
 
 		statuses = append(statuses, dto.RuntimeStatusDto{
 			Runtime:           runtime,
 			IsStarted:         runtimeHost.IsStarted(ctx),
-			HostVersion:       getRuntimeHostVersion(ctx, runtime),
+			HostVersion:       getRuntimeHostVersion(ctx, runtime, runtimeStatus.ExecutablePath),
+			StatusCode:        string(runtimeStatus.StatusCode),
+			StatusMessage:     localizeRuntimeStatusMessage(ctx, runtime, runtimeStatus),
+			ExecutablePath:    runtimeStatus.ExecutablePath,
+			LastStartError:    runtimeStatus.LastStartError,
+			CanRestart:        runtimeStatus.CanRestart,
+			InstallUrl:        runtimeStatus.InstallUrl,
 			LoadedPluginCount: len(pluginNames),
 			LoadedPluginNames: pluginNames,
 		})
@@ -952,20 +1581,52 @@ func handleRuntimeStatus(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, statuses)
 }
 
-func getRuntimeHostVersion(ctx context.Context, runtime string) string {
+func localizeRuntimeStatusMessage(ctx context.Context, runtime string, status plugin.RuntimeHostStatus) string {
+	runtimeName := runtime
+	switch strings.ToUpper(runtime) {
+	case string(plugin.PLUGIN_RUNTIME_NODEJS):
+		runtimeName = "Node.js"
+	case string(plugin.PLUGIN_RUNTIME_PYTHON):
+		runtimeName = "Python"
+	}
+
+	// Feature: /runtime/status returns localized user-facing status text, while
+	// LastStartError keeps raw technical details only for true host startup
+	// failures. This prevents English executable resolver messages from leaking
+	// into localized settings UI.
+	switch status.StatusCode {
+	case plugin.RuntimeHostStatusRunning:
+		return i18n.GetI18nManager().TranslateWox(ctx, "ui_runtime_status_running")
+	case plugin.RuntimeHostStatusExecutableMissing:
+		return strings.ReplaceAll(i18n.GetI18nManager().TranslateWox(ctx, "ui_runtime_status_executable_missing_detail"), "{runtime}", runtimeName)
+	case plugin.RuntimeHostStatusUnsupportedVersion:
+		return strings.ReplaceAll(i18n.GetI18nManager().TranslateWox(ctx, "ui_runtime_status_unsupported_version_detail"), "{runtime}", runtimeName)
+	case plugin.RuntimeHostStatusStartFailed:
+		return i18n.GetI18nManager().TranslateWox(ctx, "ui_runtime_status_start_failed_detail")
+	case plugin.RuntimeHostStatusStopped:
+		return i18n.GetI18nManager().TranslateWox(ctx, "ui_runtime_status_stopped")
+	default:
+		return status.StatusMessage
+	}
+}
+
+func getRuntimeHostVersion(ctx context.Context, runtime string, executablePath string) string {
+	if executablePath == "" {
+		return ""
+	}
+
 	runtimeUpper := strings.ToUpper(runtime)
 	switch runtimeUpper {
 	case string(plugin.PLUGIN_RUNTIME_NODEJS):
-		return getNodejsHostVersion(ctx)
+		return getNodejsHostVersion(ctx, executablePath)
 	case string(plugin.PLUGIN_RUNTIME_PYTHON):
-		return getPythonHostVersion(ctx)
+		return getPythonHostVersion(ctx, executablePath)
 	default:
 		return ""
 	}
 }
 
-func getNodejsHostVersion(ctx context.Context) string {
-	nodePath := host.FindNodejsPath(ctx)
+func getNodejsHostVersion(ctx context.Context, nodePath string) string {
 	versionOutput, err := shell.RunOutput(nodePath, "-v")
 	if err != nil {
 		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to get nodejs host version: %s", err))
@@ -975,8 +1636,7 @@ func getNodejsHostVersion(ctx context.Context) string {
 	return strings.TrimSpace(string(versionOutput))
 }
 
-func getPythonHostVersion(ctx context.Context) string {
-	pythonPath := host.FindPythonPath(ctx)
+func getPythonHostVersion(ctx context.Context, pythonPath string) string {
 	versionOutput, err := shell.RunOutput(pythonPath, "--version")
 	version := strings.TrimSpace(string(versionOutput))
 	if err != nil || version == "" {
@@ -989,6 +1649,33 @@ func getPythonHostVersion(ctx context.Context) string {
 	}
 
 	return strings.TrimPrefix(version, "Python ")
+}
+
+func handleRuntimeRestart(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+
+	body, _ := io.ReadAll(r.Body)
+	runtimeResult := gjson.GetBytes(body, "Runtime")
+	if !runtimeResult.Exists() {
+		writeErrorResponse(w, "Runtime is required")
+		return
+	}
+
+	runtime := plugin.ConvertToRuntime(runtimeResult.String())
+	if runtime != plugin.PLUGIN_RUNTIME_NODEJS && runtime != plugin.PLUGIN_RUNTIME_PYTHON {
+		writeErrorResponse(w, fmt.Sprintf("runtime %s does not support restart from settings", runtime))
+		return
+	}
+
+	// Feature: expose a small restart endpoint so users can recover after fixing
+	// Node.js/Python paths without restarting Wox. Reusing the plugin manager
+	// keeps loaded plugin restoration in one place.
+	if err := plugin.GetPluginManager().RestartHostForRuntime(ctx, runtime, nil, nil); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+
+	writeSuccessResponse(w, "")
 }
 
 func handleSettingPluginUpdate(w http.ResponseWriter, r *http.Request) {
@@ -1102,7 +1789,9 @@ func handleBackupRestore(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleBackupAll(w http.ResponseWriter, r *http.Request) {
-	backups, err := setting.GetSettingManager().FindAllBackups(getTraceContext(r))
+	ctx := getTraceContext(r)
+
+	backups, err := setting.GetSettingManager().FindAllBackups(ctx)
 	if err != nil {
 		writeErrorResponse(w, err.Error())
 		return
@@ -1145,7 +1834,7 @@ func handleLogClear(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleLogOpen(w http.ResponseWriter, r *http.Request) {
-	logFile := filepath.Join(util.GetLocation().GetLogDirectory(), "log")
+	logFile := util.GetLogger().CurrentLogPath()
 	file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		writeErrorResponse(w, err.Error())
@@ -1161,6 +1850,84 @@ func handleLogOpen(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, "")
 }
 
+func handleDiagnosticsStatus(w http.ResponseWriter, r *http.Request) {
+	state := diagnostic.GetManager().LoadState()
+	writeSuccessResponse(w, map[string]any{
+		"enabled":        state.Enabled,
+		"lastCleanExit":  state.LastCleanExit,
+		"lastExportPath": state.LastExportPath,
+	})
+}
+
+func handleDiagnosticsMonitorEnable(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	state, err := enableDiagnosticsMonitor(ctx)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, state)
+}
+
+func handleDiagnosticsMonitorEnableRestart(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	state, err := enableDiagnosticsMonitor(ctx)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	if err := diagnostic.GetManager().StartSupervisorDetached(ctx, true); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, state)
+	util.Go(ctx, "restart wox for bug aware monitor", func() {
+		time.Sleep(200 * time.Millisecond)
+		GetUIManager().ExitApp(util.NewTraceContext())
+	})
+}
+
+// enableDiagnosticsMonitor keeps all HTTP entry points aligned with the system plugin's enable behavior.
+func enableDiagnosticsMonitor(ctx context.Context) (diagnostic.State, error) {
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	previousLogLevel := util.NormalizeLogLevel(woxSetting.LogLevel.Get())
+	state, err := diagnostic.GetManager().Enable(ctx, previousLogLevel)
+	if err != nil {
+		return diagnostic.State{}, err
+	}
+	// New feature: API-based enabling mirrors the system plugin path so any
+	// future settings surface gets the same clean-log DEBUG session behavior.
+	woxSetting.LogLevel.Set(setting.LogLevelDebug)
+	util.GetLogger().SetLevel(setting.LogLevelDebug)
+	GetUIManager().GetUI(ctx).UpdateDiagnosticStatus(ctx, true)
+	return state, nil
+}
+
+func handleDiagnosticsMonitorDisable(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	state, err := diagnostic.GetManager().Disable(ctx)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	if state.PreviousLogLevel != "" {
+		setting.GetSettingManager().GetWoxSetting(ctx).LogLevel.Set(state.PreviousLogLevel)
+		util.GetLogger().SetLevel(state.PreviousLogLevel)
+	}
+	GetUIManager().GetUI(ctx).UpdateDiagnosticStatus(ctx, false)
+	writeSuccessResponse(w, state)
+}
+
+func handleDiagnosticsExport(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	exportPath, err := diagnostic.GetManager().Export(ctx)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, exportPath)
+}
+
 func handleHotkeyAvailable(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
 
@@ -1171,18 +1938,300 @@ func handleHotkeyAvailable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isAvailable := hotkey.IsHotkeyAvailable(ctx, hotkeyResult.String())
+	isAvailable := GetUIManager().IsHotkeyAvailable(ctx, hotkeyResult.String())
 	writeSuccessResponse(w, isAvailable)
+}
+
+func handleHotkeyAvailability(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+
+	body, _ := io.ReadAll(r.Body)
+	hotkeyResult := gjson.GetBytes(body, "hotkey")
+	if !hotkeyResult.Exists() {
+		writeErrorResponse(w, "hotkey is empty")
+		return
+	}
+
+	availability := GetUIManager().CheckHotkeyAvailability(ctx, hotkeyResult.String())
+	writeSuccessResponse(w, availability)
 }
 
 func handleShow(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
-	GetUIManager().GetUI(ctx).ShowApp(ctx, common.ShowContext{SelectAll: true})
+	GetUIManager().GetUI(ctx).ShowApp(ctx, common.ShowContext{
+		SelectAll: true,
+	})
+	writeSuccessResponse(w, "")
+}
+
+func ensureTestTriggerEnabled(w http.ResponseWriter) bool {
+	if util.IsDev() || util.IsTestMode() {
+		return true
+	}
+
+	writeErrorResponse(w, "test trigger endpoints are only available in dev/test mode")
+	return false
+}
+
+func handleTestTriggerQueryHotkey(w http.ResponseWriter, r *http.Request) {
+	if !ensureTestTriggerEnabled(w) {
+		return
+	}
+
+	type request struct {
+		Query             string
+		IsSilentExecution bool
+		HideQueryBox      bool
+		HideToolbar       bool
+		Width             int
+		MaxResultCount    int
+		Position          string
+	}
+
+	var req request
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	if strings.TrimSpace(req.Query) == "" {
+		writeErrorResponse(w, "query is empty")
+		return
+	}
+
+	ctx := getTraceContext(r)
+	err := GetUIManager().triggerQueryHotkey(ctx, setting.QueryHotkey{
+		Query:             req.Query,
+		IsSilentExecution: req.IsSilentExecution,
+		HideQueryBox:      req.HideQueryBox,
+		HideToolbar:       req.HideToolbar,
+		Width:             req.Width,
+		MaxResultCount:    normalizeOptionalMaxResultCount(req.MaxResultCount),
+		Position:          normalizeQueryHotkeyPosition(req.Position),
+	})
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+
+	writeSuccessResponse(w, "")
+}
+
+func handleTestInstallLocalPlugin(w http.ResponseWriter, r *http.Request) {
+	if !ensureTestTriggerEnabled(w) {
+		return
+	}
+
+	type request struct {
+		FilePath string
+	}
+
+	var req request
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+
+	filePath := filepath.Clean(strings.TrimSpace(req.FilePath))
+	if filePath == "" {
+		writeErrorResponse(w, "filePath is empty")
+		return
+	}
+	if _, err := os.Stat(filePath); err != nil {
+		writeErrorResponse(w, fmt.Sprintf("plugin package does not exist: %s", filePath))
+		return
+	}
+
+	ctx := getTraceContext(r)
+	if err := plugin.GetStoreManager().InstallFromLocal(ctx, filePath); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+
+	writeSuccessResponse(w, "")
+}
+
+func handleTestTriggerOpenSetting(w http.ResponseWriter, r *http.Request) {
+	if !ensureTestTriggerEnabled(w) {
+		return
+	}
+
+	type request struct {
+		Path   string
+		Param  string
+		Source string
+	}
+
+	var req request
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+
+	ctx := getTraceContext(r)
+	GetUIManager().GetUI(ctx).OpenSettingWindow(ctx, common.SettingWindowContext{
+		Path:   strings.TrimSpace(req.Path),
+		Param:  strings.TrimSpace(req.Param),
+		Source: common.SettingWindowSource(strings.TrimSpace(req.Source)),
+	})
+	writeSuccessResponse(w, "")
+}
+
+func handleTestTriggerOpenOnboarding(w http.ResponseWriter, r *http.Request) {
+	if !ensureTestTriggerEnabled(w) {
+		return
+	}
+
+	ctx := getTraceContext(r)
+	GetUIManager().GetUI(ctx).OpenOnboardingWindow(ctx)
+	writeSuccessResponse(w, "")
+}
+
+func handleTestTriggerSelectionHotkey(w http.ResponseWriter, r *http.Request) {
+	if !ensureTestTriggerEnabled(w) {
+		return
+	}
+
+	type request struct {
+		Type      string
+		Text      string
+		FilePaths []string
+	}
+
+	var req request
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+
+	selected := utilselection.Selection{
+		Type:      utilselection.SelectionType(req.Type),
+		Text:      req.Text,
+		FilePaths: req.FilePaths,
+	}
+	switch selected.Type {
+	case utilselection.SelectionTypeText, utilselection.SelectionTypeFile:
+	default:
+		writeErrorResponse(w, "selection type is invalid")
+		return
+	}
+	if selected.IsEmpty() {
+		writeErrorResponse(w, "selection is empty")
+		return
+	}
+
+	ctx := getTraceContext(r)
+	uiManager := GetUIManager()
+	uiManager.RefreshActiveWindowSnapshot(ctx)
+	uiManager.GetUI(ctx).ChangeQuery(ctx, common.PlainQuery{
+		QueryType:      plugin.QueryTypeSelection,
+		QuerySelection: selected,
+	})
+	time.Sleep(150 * time.Millisecond)
+	uiManager.GetUI(ctx).ShowApp(ctx, common.ShowContext{
+		ShowSource: common.ShowSourceSelection,
+	})
+
+	writeSuccessResponse(w, "")
+}
+
+func handleTestTriggerScreenshot(w http.ResponseWriter, r *http.Request) {
+	if !ensureTestTriggerEnabled(w) {
+		return
+	}
+
+	ctx := getTraceContext(r)
+	// The screenshot smoke path needs a backend-triggered session so integration tests can verify
+	// the same Go -> WebSocket -> Flutter round-trip used by the real system plugin action.
+	result, err := GetUIManager().GetUI(ctx).CaptureScreenshot(ctx, common.DefaultCaptureScreenshotRequest())
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+
+	writeSuccessResponse(w, result)
+}
+
+func handleTestMouseScreen(w http.ResponseWriter, r *http.Request) {
+	if !ensureTestTriggerEnabled(w) {
+		return
+	}
+
+	writeSuccessResponse(w, screen.GetMouseScreen())
+}
+
+func handleTestTriggerTrayQuery(w http.ResponseWriter, r *http.Request) {
+	if !ensureTestTriggerEnabled(w) {
+		return
+	}
+
+	type rectRequest struct {
+		X      int
+		Y      int
+		Width  int
+		Height int
+	}
+
+	type request struct {
+		Query          string
+		Width          int
+		HideQueryBox   bool
+		HideToolbar    bool
+		Disabled       bool
+		MaxResultCount int
+		Rect           rectRequest
+	}
+
+	var req request
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	if strings.TrimSpace(req.Query) == "" {
+		writeErrorResponse(w, "query is empty")
+		return
+	}
+
+	clickRect := tray.ClickRect{
+		X:      req.Rect.X,
+		Y:      req.Rect.Y,
+		Width:  req.Rect.Width,
+		Height: req.Rect.Height,
+	}
+	if clickRect.Width <= 0 {
+		clickRect.Width = 40
+	}
+	if clickRect.Height <= 0 {
+		clickRect.Height = 40
+	}
+
+	ctx := getTraceContext(r)
+	GetUIManager().executeTrayQuery(ctx, setting.TrayQuery{
+		Query:          req.Query,
+		Width:          req.Width,
+		HideQueryBox:   req.HideQueryBox,
+		HideToolbar:    req.HideToolbar,
+		MaxResultCount: normalizeOptionalMaxResultCount(req.MaxResultCount),
+		Disabled:       req.Disabled,
+	}, clickRect)
+
 	writeSuccessResponse(w, "")
 }
 
 func handleOnUIReady(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
+	type uiReadyRequest struct {
+		Pid int
+	}
+	var request uiReadyRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil && err != io.EOF {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	if request.Pid > 0 {
+		// Dev mode usually starts Flutter outside the core process tree, so the
+		// ready callback is the reliable boundary where core can learn the UI PID.
+		util.SetWoxUIProcessPid(request.Pid)
+	}
 	GetUIManager().PostUIReady(ctx)
 	writeSuccessResponse(w, "")
 }
@@ -1258,101 +2307,31 @@ func handleOnSetting(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, "")
 }
 
-func handleQueryMetadata(w http.ResponseWriter, r *http.Request) {
+func handleOnHotkeyRecording(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
-
-	type metadataResponse struct {
-		Icon             common.WoxImage
-		WidthRatio       float64
-		IsGridLayout     bool
-		GridLayoutParams plugin.MetadataFeatureParamsGridLayout
-	}
-	var metadata metadataResponse
-	metadata.WidthRatio = 0.5 // default width ratio
-
 	body, _ := io.ReadAll(r.Body)
-	queryResult := gjson.GetBytes(body, "query")
-	if !queryResult.Exists() {
-		writeErrorResponse(w, "query is empty")
+	isRecordingResult := gjson.GetBytes(body, "isRecording")
+	if !isRecordingResult.Exists() {
+		writeErrorResponse(w, "isRecording is required")
 		return
 	}
 
-	var plainQuery common.PlainQuery
-	unmarshalErr := json.Unmarshal([]byte(queryResult.String()), &plainQuery)
-	if unmarshalErr != nil {
-		logger.Error(ctx, unmarshalErr.Error())
-		writeErrorResponse(w, unmarshalErr.Error())
-		return
-	}
-	query, pluginInstance, err := plugin.GetPluginManager().NewQuery(ctx, plainQuery)
-	if err != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to new query: %s", err.Error()))
-		writeSuccessResponse(w, metadataResponse{})
-		return
-	}
+	logger.Info(ctx, fmt.Sprintf("received hotkey recording state from UI: isRecording=%t", isRecordingResult.Bool()))
+	GetUIManager().PostOnHotkeyRecording(ctx, isRecordingResult.Bool())
+	writeSuccessResponse(w, "")
+}
 
-	if pluginInstance == nil {
-		// this query is not for any plugin (now a global query)
-		writeSuccessResponse(w, metadataResponse{})
+func handleOnOnboarding(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	body, _ := io.ReadAll(r.Body)
+	inOnboardingViewResult := gjson.GetBytes(body, "inOnboardingView")
+	if !inOnboardingViewResult.Exists() {
+		writeErrorResponse(w, "inOnboardingView is required")
 		return
 	}
 
-	iconImg, parseErr := common.ParseWoxImage(pluginInstance.Metadata.Icon)
-	if parseErr == nil {
-		metadata.Icon = common.ConvertIcon(ctx, iconImg, pluginInstance.PluginDirectory)
-	} else {
-		logger.Error(ctx, fmt.Sprintf("failed to parse icon: %s", parseErr.Error()))
-	}
-
-	featureParams, err := pluginInstance.Metadata.GetFeatureParamsForResultPreviewWidthRatio()
-	if err == nil {
-		metadata.WidthRatio = featureParams.WidthRatio
-	} else {
-		if !errors.Is(err, plugin.ErrFeatureNotSupported) {
-			logger.Error(ctx, fmt.Sprintf("failed to get feature params for result preview width ratio: %s", err.Error()))
-		}
-	}
-
-	featureParamsGridLayout, err := pluginInstance.Metadata.GetFeatureParamsForGridLayout()
-	if err == nil {
-		// Check if current command is in the allowed commands list
-		currentCommand := query.Command
-
-		shouldEnableGrid := true
-		if len(featureParamsGridLayout.Commands) > 0 {
-			// Check if first element starts with "!" to determine mode
-			if strings.HasPrefix(featureParamsGridLayout.Commands[0], "!") {
-				// Exclusion mode: grid enabled for all commands except those starting with "!"
-				shouldEnableGrid = true
-				for _, cmd := range featureParamsGridLayout.Commands {
-					if strings.TrimPrefix(cmd, "!") == currentCommand {
-						shouldEnableGrid = false
-						break
-					}
-				}
-			} else {
-				// Inclusion mode: grid enabled only for commands in the list
-				shouldEnableGrid = false
-				for _, cmd := range featureParamsGridLayout.Commands {
-					if cmd == currentCommand {
-						shouldEnableGrid = true
-						break
-					}
-				}
-			}
-		}
-
-		if shouldEnableGrid {
-			metadata.IsGridLayout = true
-			metadata.GridLayoutParams = featureParamsGridLayout
-		}
-	} else {
-		if !errors.Is(err, plugin.ErrFeatureNotSupported) {
-			logger.Error(ctx, fmt.Sprintf("failed to get feature params for grid layout: %s", err.Error()))
-		}
-	}
-
-	writeSuccessResponse(w, metadata)
+	GetUIManager().PostOnOnboarding(ctx, inOnboardingViewResult.Bool())
+	writeSuccessResponse(w, "")
 }
 
 func handleDeeplink(w http.ResponseWriter, r *http.Request) {
@@ -1373,6 +2352,11 @@ func handleDeeplink(w http.ResponseWriter, r *http.Request) {
 func handleAIProviders(w http.ResponseWriter, r *http.Request) {
 	providers := ai.GetAllProviders()
 	writeSuccessResponse(w, providers)
+}
+
+func handleAICommandStore(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	writeSuccessResponse(w, ai.GetStoreManager().GetCommands(ctx))
 }
 
 func handleAIModels(w http.ResponseWriter, r *http.Request) {
@@ -1559,6 +2543,23 @@ func handleDoctorCheck(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, results)
 }
 
+func handlePermissionAccessibilityOpen(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	// The onboarding permission page should be non-blocking: opening System
+	// Settings is a best-effort side effect and the guide remains skippable if
+	// the platform has no corresponding permission panel.
+	permission.GrantAccessibilityPermission(ctx)
+	writeSuccessResponse(w, "")
+}
+
+func handlePermissionPrivacyOpen(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	// Full Disk Access cannot be detected reliably here, so onboarding only
+	// opens the privacy page and explains the File Search impact in UI text.
+	permission.OpenPrivacySecuritySettings(ctx)
+	writeSuccessResponse(w, "")
+}
+
 func handleUserDataLocation(w http.ResponseWriter, r *http.Request) {
 	location := util.GetLocation()
 	writeSuccessResponse(w, location.GetUserDataDirectory())
@@ -1593,6 +2594,76 @@ func handleUserDataLocationUpdate(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, "User data directory updated successfully")
 }
 
+func parseString(value any) string {
+	if s, ok := value.(string); ok {
+		return s
+	}
+	return fmt.Sprint(value)
+}
+
+func parseBool(value any) bool {
+	switch v := value.(type) {
+	case bool:
+		return v
+	case string:
+		parsed, err := strconv.ParseBool(strings.TrimSpace(v))
+		return err == nil && parsed
+	default:
+		return false
+	}
+}
+
+func parseInt(value any) int {
+	switch v := value.(type) {
+	case float64:
+		return int(v)
+	case float32:
+		return int(v)
+	case int:
+		return v
+	case int32:
+		return int(v)
+	case int64:
+		return int(v)
+	case string:
+		parsed, err := strconv.Atoi(strings.TrimSpace(v))
+		if err == nil {
+			return parsed
+		}
+	}
+
+	return 0
+}
+
+func normalizeOptionalMaxResultCount(value int) int {
+	if value <= 0 {
+		return 0
+	}
+	return clampInt(value, 5, 15)
+}
+
+func normalizeQueryHotkeyPosition(value string) setting.QueryHotkeyPosition {
+	switch setting.QueryHotkeyPosition(strings.TrimSpace(value)) {
+	case setting.QueryHotkeyPositionTopLeft,
+		setting.QueryHotkeyPositionTopCenter,
+		setting.QueryHotkeyPositionTopRight,
+		setting.QueryHotkeyPositionCenter,
+		setting.QueryHotkeyPositionBottomLeft,
+		setting.QueryHotkeyPositionBottomCenter,
+		setting.QueryHotkeyPositionBottomRight:
+		return setting.QueryHotkeyPosition(strings.TrimSpace(value))
+	default:
+		return setting.QueryHotkeyPositionSystemDefault
+	}
+}
+
+func maxInt(a int, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 func handlePluginDetail(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
 
@@ -1618,48 +2689,6 @@ func handlePluginDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeSuccessResponse(w, pluginDto)
-
-}
-
-func handleToolbarSnooze(w http.ResponseWriter, r *http.Request) {
-	ctx := getTraceContext(r)
-
-	body, _ := io.ReadAll(r.Body)
-	textResult := gjson.GetBytes(body, "text")
-	if !textResult.Exists() {
-		writeErrorResponse(w, "text is empty")
-		return
-	}
-	durationResult := gjson.GetBytes(body, "duration")
-	if !durationResult.Exists() {
-		writeErrorResponse(w, "duration is empty")
-		return
-	}
-
-	text := textResult.String()
-	dur := durationResult.String()
-
-	var untilMillis int64
-	switch dur {
-	case "3d":
-		untilMillis = time.Now().Add(3 * 24 * time.Hour).UnixMilli()
-	case "7d":
-		untilMillis = time.Now().Add(7 * 24 * time.Hour).UnixMilli()
-	case "1m":
-		untilMillis = time.Now().Add(30 * 24 * time.Hour).UnixMilli()
-	case "forever":
-		untilMillis = 0
-	default:
-		writeErrorResponse(w, "unknown duration")
-		return
-	}
-
-	if err := database.SnoozeToolbarText(ctx, text, untilMillis); err != nil {
-		writeErrorResponse(w, err.Error())
-		return
-	}
-
-	writeSuccessResponse(w, "")
 }
 
 func handleVersion(w http.ResponseWriter, r *http.Request) {

@@ -1,0 +1,6 @@
+name: wox_test
+description: Wox end-to-end orchestration utilities
+publish_to: "none"
+
+environment:
+  sdk: ">=3.7.0 <4.0.0"

@@ -9,7 +9,7 @@ import (
 
 // TestLocation is a test-specific implementation of Location that uses isolated directories
 type TestLocation struct {
-	config *TestConfig
+	config         *TestConfig
 	*util.Location // Embed the original Location
 }
 
@@ -19,15 +19,15 @@ func NewTestLocation(config *TestConfig) (*TestLocation, error) {
 	if err := config.SetupTestEnvironment(); err != nil {
 		return nil, fmt.Errorf("failed to setup test environment: %w", err)
 	}
-	
+
 	// Create a new location instance
 	originalLocation := util.GetLocation()
-	
+
 	testLocation := &TestLocation{
 		config:   config,
 		Location: originalLocation,
 	}
-	
+
 	return testLocation, nil
 }
 
@@ -108,6 +108,10 @@ func (tl *TestLocation) GetBackupDirectory() string {
 	return filepath.Join(tl.GetWoxDataDirectory(), "backup")
 }
 
+func (tl *TestLocation) GetFileSearchDirectory() string {
+	return filepath.Join(tl.GetWoxDataDirectory(), "filesearch")
+}
+
 func (tl *TestLocation) GetAppLockPath() string {
 	return filepath.Join(tl.GetWoxDataDirectory(), "wox.lock")
 }
@@ -136,20 +140,21 @@ func (tl *TestLocation) InitTestDirectories() error {
 		tl.GetCacheDirectory(),
 		tl.GetImageCacheDirectory(),
 		tl.GetBackupDirectory(),
+		tl.GetFileSearchDirectory(),
 	}
-	
+
 	for _, dir := range directories {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return fmt.Errorf("failed to create directory %s: %w", dir, err)
 		}
 	}
-	
+
 	// Create the shortcut file
 	shortcutPath := tl.GetUserDataDirectoryShortcutPath()
 	if err := os.WriteFile(shortcutPath, []byte(tl.GetUserDataDirectory()), 0644); err != nil {
 		return fmt.Errorf("failed to create shortcut file: %w", err)
 	}
-	
+
 	return nil
 }
 

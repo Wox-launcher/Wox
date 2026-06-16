@@ -60,6 +60,22 @@ func (h *HashMap[K, V]) Load(k K) (V, bool) {
 	return v, ok
 }
 
+// LoadOrStore returns the existing value for the key if present. Otherwise it
+// stores and returns the given value under one write lock so callers do not need
+// an external lock around a load-then-store sequence.
+func (h *HashMap[K, V]) LoadOrStore(k K, v V) (actual V, loaded bool) {
+	h.rw.Lock()
+	defer h.rw.Unlock()
+
+	actual, loaded = h.inner[k]
+	if loaded {
+		return actual, true
+	}
+
+	h.inner[k] = v
+	return v, false
+}
+
 func (h *HashMap[K, V]) Keys() []K {
 	h.rw.RLock()
 	defer h.rw.RUnlock()

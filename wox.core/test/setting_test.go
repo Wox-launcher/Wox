@@ -26,11 +26,11 @@ func NewConfigBlackboxTestSuite(t *testing.T) *ConfigBlackboxTestSuite {
 
 	// Create isolated test directory for config tests
 	testConfig := GetCurrentTestConfig()
-	suite.testDir = filepath.Join(testConfig.TestDataDirectory, "config_blackbox_test")
-	err := os.MkdirAll(suite.testDir, 0755)
+	testDir, err := os.MkdirTemp(testConfig.TestDataDirectory, "config_blackbox_test-")
 	if err != nil {
 		t.Fatalf("Failed to create test directory: %v", err)
 	}
+	suite.testDir = testDir
 
 	return suite
 }
@@ -39,8 +39,8 @@ func NewConfigBlackboxTestSuite(t *testing.T) *ConfigBlackboxTestSuite {
 func (suite *ConfigBlackboxTestSuite) createTestDatabase(dbPath string) (*gorm.DB, error) {
 	// Import required packages for database setup
 	dsn := dbPath + "?" +
-		"_journal_mode=WAL&" +
-		"_synchronous=NORMAL&" +
+		"_journal_mode=DELETE&" +
+		"_synchronous=FULL&" +
 		"_cache_size=1000&" +
 		"_foreign_keys=true&" +
 		"_busy_timeout=5000"
@@ -298,6 +298,11 @@ func (suite *ConfigBlackboxTestSuite) testDatabaseCorruptionScenarios(t *testing
 			if err != nil {
 				t.Fatalf("Failed to create test database: %v", err)
 			}
+			sqlDB, err := testDB.DB()
+			if err != nil {
+				t.Fatalf("Failed to access sql database: %v", err)
+			}
+			defer sqlDB.Close()
 
 			// Setup corruption scenario
 			if tc.setupDB != nil {
@@ -326,13 +331,17 @@ func (suite *ConfigBlackboxTestSuite) testDatabaseCorruptionScenarios(t *testing
 func (suite *ConfigBlackboxTestSuite) runLoadWoxSettingTest(t *testing.T, name string, setupDB func(*gorm.DB) error, expectError, expectDefaults bool, description string) {
 	// Create isolated test database
 	testDBPath := filepath.Join(suite.testDir, name+".db")
-	defer os.Remove(testDBPath)
 
 	// Initialize test database
 	testDB, err := suite.createTestDatabase(testDBPath)
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
+	sqlDB, err := testDB.DB()
+	if err != nil {
+		t.Fatalf("Failed to access sql database: %v", err)
+	}
+	defer sqlDB.Close()
 
 	// Setup test data
 	if setupDB != nil {

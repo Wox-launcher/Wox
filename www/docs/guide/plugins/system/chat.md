@@ -1,30 +1,27 @@
 # Chat Plugin
 
-Chat lets you talk to AI models inside Wox, with optional Agents and MCP tools.
+Chat opens an AI conversation inside Wox. Configure an AI provider before using it.
 
-## What it does
+## Quick Start
 
-- Chat with configured AI models
-- Switch Agents (prompt/model/tools presets)
-- Use MCP tools in conversations
-- Keep conversation history
-
-## Quick start
-
-```
+```text
 chat How do I use Wox?
 ```
 
+You can continue from chat history, switch agents, and use configured MCP tools when the selected agent supports them.
+
+![AI Chat plugin conversation](/images/system-plugin-ai-chat.png)
+
 ## Settings
 
-- **Default model**: the model used when you start a new chat
-- **Agents**: name, icon, prompt, model, tools
-- **MCP servers**: configure tool providers
-- **Auto focus**: focus chat input when opening chat
-- **Fallback entry**: when nothing else matches, Wox shows a “Chat for …” result
+| Setting | Use |
+| --- | --- |
+| Default model | Model used for a new conversation |
+| Agents | Saved prompt, model, icon, and tool presets |
+| MCP servers | Tool providers available to agents |
+| Auto focus | Focus the chat input when opening chat |
+| Fallback entry | Show a chat result when no other plugin has a better match |
 
-## Notes
+## Privacy
 
-- Configure API keys in **AI Provider** settings before use.
-- Messages are sent to the model provider; avoid sensitive content.
-- Online models require network access.
+Chat messages are sent to the selected model provider. Do not paste secrets, private documents, or selected text into online models unless that is acceptable for your workflow.

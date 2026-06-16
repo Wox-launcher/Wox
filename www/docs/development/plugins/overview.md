@@ -12,6 +12,8 @@ Wox plugins are categorized by their installation type:
 
 Wox supports two different plugin implementation approaches:
 
+If you use Codex or another compatible agent, see [AI Skills For Plugin Development](./ai-skills.md).
+
 ### Script Plugin
 
 Script plugins are lightweight, single-file plugins that are perfect for simple automation tasks and quick utilities.
@@ -50,7 +52,7 @@ Full-featured plugins are comprehensive plugins designed for complex application
 
 - **Complete Architecture**: Runs through dedicated plugin host processes
 - **Persistent Running**: Plugins remain loaded and running, supporting state management
-- **Rich APIs**: Supports AI integration, preview functionality, settings interface and other advanced features
+- **Rich APIs**: Supports AI integration, previews, settings UI, MRU, deep links, screenshot capture, and other advanced features
 - **WebSocket Communication**: Efficient communication with Wox core through WebSocket
 - **Async Support**: Full support for asynchronous operations
 - **Lifecycle Management**: Complete plugin initialization, query, and unload lifecycle

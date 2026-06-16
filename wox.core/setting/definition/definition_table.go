@@ -14,6 +14,8 @@ const (
 	PluginSettingValueTableColumnTypeDirPath                PluginSettingValueTableColumnType = "dirPath"
 	PluginSettingValueTableColumnTypeSelect                 PluginSettingValueTableColumnType = "select"
 	PluginSettingValueTableColumnTypeSelectAIModel          PluginSettingValueTableColumnType = "selectAIModel"
+	PluginSettingValueTableColumnTypeQueryHotkeyQuery       PluginSettingValueTableColumnType = "queryHotkeyQuery"
+	PluginSettingValueTableColumnTypeAICommandPrompt        PluginSettingValueTableColumnType = "aiCommandPrompt"
 	PluginSettingValueTableColumnTypeAIModelStatus          PluginSettingValueTableColumnType = "aiModelStatus"
 	PluginSettingValueTableColumnTypeAIMCPServerTools       PluginSettingValueTableColumnType = "aiMCPServerTools"
 	PluginSettingValueTableColumnTypeAISelectMCPServerTools PluginSettingValueTableColumnType = "aiSelectMCPServerTools"
@@ -35,7 +37,7 @@ type PluginSettingValueTable struct {
 	SortOrder     string // asc or desc
 	MaxHeight     int    // Max table height in px, <= 0 means use UI default
 
-	Style PluginSettingValueStyle
+	Style PluginSettingValueStyle `json:"-"` // Deprecated: ignored on load so Wox keeps setting layouts consistent.
 }
 
 type PluginSettingValueTableColumn struct {
@@ -46,13 +48,13 @@ type PluginSettingValueTableColumn struct {
 	Type          PluginSettingValueTableColumnType
 	Validators    []validator.PluginSettingValidator // validators for this setting, every validator should be satisfied
 	SelectOptions []PluginSettingValueSelectOption   // Only used when Type is PluginSettingValueTableColumnTypeSelect
-	TextMaxLines  int                                // Only used when Type is PluginSettingValueTableColumnTypeText
+	TextMaxLines  int                                // Only used by text-like table columns
 	HideInTable   bool                               // Hide this column in the table, but still show it in the setting dialog
 	HideInUpdate  bool                               // Hide this column in the update/add dialog, but still show it in the table
 }
 
 func (p *PluginSettingValueTable) GetPluginSettingType() PluginSettingDefinitionType {
-	return PluginSettingDefinitionTypeNewLine
+	return PluginSettingDefinitionTypeTable
 }
 
 func (p *PluginSettingValueTable) GetKey() string {
@@ -66,6 +68,7 @@ func (p *PluginSettingValueTable) GetDefaultValue() string {
 func (p *PluginSettingValueTable) Translate(translator func(ctx context.Context, key string) string) PluginSettingDefinitionValue {
 	copy := *p
 	copy.Title = translator(context.Background(), p.Title)
+	copy.Tooltip = translator(context.Background(), p.Tooltip)
 	// Deep copy Columns
 	copy.Columns = make([]PluginSettingValueTableColumn, len(p.Columns))
 	for i := range p.Columns {
@@ -76,6 +79,8 @@ func (p *PluginSettingValueTable) Translate(translator func(ctx context.Context,
 		for j := range p.Columns[i].SelectOptions {
 			copy.Columns[i].SelectOptions[j].Label = translator(context.Background(), p.Columns[i].SelectOptions[j].Label)
 			copy.Columns[i].SelectOptions[j].Value = p.Columns[i].SelectOptions[j].Value
+			copy.Columns[i].SelectOptions[j].Icon = p.Columns[i].SelectOptions[j].Icon
+			copy.Columns[i].SelectOptions[j].IsSelectAll = p.Columns[i].SelectOptions[j].IsSelectAll
 		}
 	}
 	return &copy

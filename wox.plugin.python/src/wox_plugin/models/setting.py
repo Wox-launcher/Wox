@@ -93,8 +93,9 @@ class PluginSettingValueStyle:
     """
     Style configuration for plugin setting UI elements.
 
-    Controls the layout and spacing of setting items in the
-    settings panel.
+    Deprecated:
+        Wox ignores plugin-provided pixel styling when rendering settings.
+        Let Wox own spacing and width so plugin settings remain visually consistent.
 
     Attributes:
         padding_left: Left padding in pixels
@@ -102,14 +103,8 @@ class PluginSettingValueStyle:
         padding_right: Right padding in pixels
         padding_bottom: Bottom padding in pixels
         width: Width of the setting element (0 = default)
-        label_width: Width of the label column (0 = default)
 
-    Example usage:
-        style = PluginSettingValueStyle(
-            padding_left=20,
-            padding_top=10,
-            width=300
-        )
+    This class is kept only for compatibility with older plugins.
     """
 
     padding_left: int = field(default=0)
@@ -148,21 +143,6 @@ class PluginSettingValueStyle:
     A value of 0 uses the default/automatic width.
     """
 
-    label_width: int = field(default=0)
-    """
-    Width of the label column in pixels.
-
-    Controls how much horizontal space the label takes.
-    A value of 0 uses the default width.
-    """
-
-    i18n_override_map: Dict[str, "PluginSettingValueStyle"] = field(default_factory=dict)
-    """
-    Override style for different languages.
-
-    Key is the language code (e.g. "zh_CN"), value is the style override.
-    """
-
     def to_dict(self) -> Dict[str, Any]:
         """
         Convert to dictionary with camelCase naming.
@@ -176,8 +156,6 @@ class PluginSettingValueStyle:
             "PaddingRight": self.padding_right,
             "PaddingBottom": self.padding_bottom,
             "Width": self.width,
-            "LabelWidth": self.label_width,
-            "I18nOverrideMap": {k: v.to_dict() for k, v in self.i18n_override_map.items()},
         }
 
     @classmethod
@@ -197,8 +175,6 @@ class PluginSettingValueStyle:
             padding_right=data.get("PaddingRight", 0),
             padding_bottom=data.get("PaddingBottom", 0),
             width=data.get("Width", 0),
-            label_width=data.get("LabelWidth", 0),
-            i18n_override_map={k: cls.from_dict(v) for k, v in data.get("I18nOverrideMap", {}).items()},
         )
 
 
@@ -256,6 +232,58 @@ class PluginSettingDefinitionValue:
 
 
 @dataclass
+class PluginQueryRequirement:
+    """
+    A setting requirement that must pass before Wox runs a plugin query.
+
+    Query requirements are evaluated by Wox core before `query()` is called.
+    They are intended for credentials, directories, or other settings that make
+    the query impossible to run when missing.
+    """
+
+    setting_key: str
+    validators: List[Dict[str, Any]] = field(default_factory=list)
+    message: str = field(default="")
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Convert to dictionary with Wox plugin.json field names.
+        """
+        return {
+            "SettingKey": self.setting_key,
+            "Validators": self.validators,
+            "Message": self.message,
+        }
+
+
+@dataclass
+class PluginQueryRequirements:
+    """
+    Query-scoped plugin setting requirements.
+
+    any_query applies to every query, query_without_command applies only when
+    the query has no command, and query_with_command applies only for the
+    matching command key.
+    """
+
+    any_query: List[PluginQueryRequirement] = field(default_factory=list)
+    query_without_command: List[PluginQueryRequirement] = field(default_factory=list)
+    query_with_command: Dict[str, List[PluginQueryRequirement]] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Convert to dictionary with Wox plugin.json field names.
+        """
+        return {
+            "AnyQuery": [item.to_dict() for item in self.any_query],
+            "QueryWithoutCommand": [item.to_dict() for item in self.query_without_command],
+            "QueryWithCommand": {
+                command: [item.to_dict() for item in requirements] for command, requirements in self.query_with_command.items()
+            },
+        }
+
+
+@dataclass
 class PluginSettingValueTextBox(PluginSettingDefinitionValue):
     """
     Text box setting for single or multi-line text input.
@@ -269,7 +297,7 @@ class PluginSettingValueTextBox(PluginSettingDefinitionValue):
         suffix: Optional suffix text (e.g., unit, placeholder)
         tooltip: Help text shown on hover
         max_lines: Maximum number of lines (1 = single-line, >1 = multi-line)
-        style: Visual styling options
+        style: Deprecated visual styling options. Wox ignores these values.
 
     Example usage:
         # Single-line text box
@@ -325,9 +353,7 @@ class PluginSettingValueTextBox(PluginSettingDefinitionValue):
 
     style: PluginSettingValueStyle = field(default_factory=PluginSettingValueStyle)
     """
-    Visual styling options.
-
-    Controls padding, width, and other layout properties.
+    Deprecated visual styling options. Wox ignores these values.
     """
 
     def to_dict(self) -> Dict[str, Any]:
@@ -344,7 +370,6 @@ class PluginSettingValueTextBox(PluginSettingDefinitionValue):
             "DefaultValue": self.default_value,
             "Tooltip": self.tooltip,
             "MaxLines": self.max_lines,
-            "Style": self.style.to_dict(),
         }
 
 
@@ -360,7 +385,7 @@ class PluginSettingValueCheckBox(PluginSettingDefinitionValue):
         key: Setting identifier
         label: Display label for the checkbox
         tooltip: Help text shown on hover
-        style: Visual styling options
+        style: Deprecated visual styling options. Wox ignores these values.
 
     Example usage:
         setting = PluginSettingValueCheckBox(
@@ -393,9 +418,7 @@ class PluginSettingValueCheckBox(PluginSettingDefinitionValue):
 
     style: PluginSettingValueStyle = field(default_factory=PluginSettingValueStyle)
     """
-    Visual styling options.
-
-    Controls padding, width, and other layout properties.
+    Deprecated visual styling options. Wox ignores these values.
     """
 
     def to_dict(self) -> Dict[str, Any]:
@@ -410,7 +433,6 @@ class PluginSettingValueCheckBox(PluginSettingDefinitionValue):
             "Label": self.label,
             "DefaultValue": self.default_value,
             "Tooltip": self.tooltip,
-            "Style": self.style.to_dict(),
         }
 
 
@@ -426,7 +448,7 @@ class PluginSettingValueLabel(PluginSettingDefinitionValue):
         key: Setting identifier (unused for labels, can be empty)
         content: The text content to display
         tooltip: Help text shown on hover
-        style: Visual styling options
+        style: Deprecated visual styling options. Wox ignores these values.
 
     Example usage:
         setting = PluginSettingValueLabel(
@@ -453,9 +475,7 @@ class PluginSettingValueLabel(PluginSettingDefinitionValue):
 
     style: PluginSettingValueStyle = field(default_factory=PluginSettingValueStyle)
     """
-    Visual styling options.
-
-    Controls padding, width, and other layout properties.
+    Deprecated visual styling options. Wox ignores these values.
     """
 
     def to_dict(self) -> Dict[str, Any]:
@@ -468,7 +488,6 @@ class PluginSettingValueLabel(PluginSettingDefinitionValue):
         return {
             "Content": self.content,
             "Tooltip": self.tooltip,
-            "Style": self.style.to_dict(),
         }
 
 
@@ -596,7 +615,6 @@ class PluginSettingDefinitionItem:
                 default_value=value_data.get("DefaultValue", ""),
                 tooltip=value_data.get("Tooltip", ""),
                 max_lines=value_data.get("MaxLines", 1),
-                style=PluginSettingValueStyle.from_dict(value_data.get("Style", {})),
             )
         elif setting_type == PluginSettingDefinitionType.CHECKBOX:
             value = PluginSettingValueCheckBox(
@@ -604,14 +622,12 @@ class PluginSettingDefinitionItem:
                 label=value_data.get("Label", ""),
                 default_value=value_data.get("DefaultValue", ""),
                 tooltip=value_data.get("Tooltip", ""),
-                style=PluginSettingValueStyle.from_dict(value_data.get("Style", {})),
             )
         elif setting_type == PluginSettingDefinitionType.LABEL:
             value = PluginSettingValueLabel(
                 key=value_data.get("Key", ""),
                 content=value_data.get("Content", ""),
                 tooltip=value_data.get("Tooltip", ""),
-                style=PluginSettingValueStyle.from_dict(value_data.get("Style", {})),
             )
         else:
             # Default to basic value

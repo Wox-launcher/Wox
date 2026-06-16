@@ -1,69 +1,165 @@
 package hotkey
 
 import (
-	"context"
-	"time"
+	"sync"
 	"wox/util"
-
-	hook "github.com/robotn/gohook"
-	"golang.design/x/hotkey"
+	"wox/util/keyboard"
 )
 
-var initialized = false
-var lastKeyUpTimestamp = util.NewHashMap[uint16, int64]()
-var keyCallback = util.NewHashMap[uint16, func()]()
+type doubleTapState struct {
+	isPressed         bool
+	currentTapInvalid bool
+	hasCompletedTap   bool
+	lastTapAt         int64
+}
 
-func registerDoubleHotKey(ctx context.Context, modifier hotkey.Modifier, callback func()) error {
-	keyCode, err := getModifierKeyCode(ctx, modifier)
-	if err != nil {
-		return err
+type doubleTapTracker struct {
+	mu     sync.Mutex
+	states map[keyboard.Key]doubleTapState
+}
+
+func newDoubleTapTracker() *doubleTapTracker {
+	return &doubleTapTracker{
+		states: map[keyboard.Key]doubleTapState{},
 	}
-	keyCallback.Store(keyCode, callback)
+}
 
-	if initialized {
+func (t *doubleTapTracker) Register(modifierKey keyboard.Key) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if _, exists := t.states[modifierKey]; !exists {
+		t.states[modifierKey] = doubleTapState{}
+	}
+}
+
+func (t *doubleTapTracker) Unregister(modifierKey keyboard.Key) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	delete(t.states, modifierKey)
+}
+
+func (t *doubleTapTracker) Len() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	return len(t.states)
+}
+
+func (t *doubleTapTracker) HandleEvent(event keyboard.RawKeyEvent, now int64) []keyboard.Key {
+	if event.Key == keyboard.KeyUnknown {
 		return nil
 	}
-	initialized = true
 
-	util.Go(context.Background(), "double key listener", func() {
-		evChan := hook.Start()
-		for {
-			select {
-			case ev := <-evChan:
-				if ev.Kind == hook.KeyUp {
-					// util.GetLogger().Info(ctx, fmt.Sprintf("hotkey event received, ev: %v", ev.Keycode))
-					if cb, callbackExist := keyCallback.Load(ev.Keycode); callbackExist {
-						var keyUpMaxInterval int64 = 500
-						if v, ok := lastKeyUpTimestamp.Load(ev.Keycode); ok {
-							if util.GetSystemTimestamp()-v < keyUpMaxInterval {
-								lastKeyUpTimestamp.Delete(ev.Keycode)
-								util.Go(context.Background(), "double hotkey callback", func() {
-									cb()
-								})
-							}
-						}
+	t.mu.Lock()
+	defer t.mu.Unlock()
 
-						lastKeyUpTimestamp.Store(ev.Keycode, util.GetSystemTimestamp())
-					} else {
-						lastKeyUpTimestamp.Clear()
-					}
-				}
-			default:
-				// avoid 100% cpu usage
-				time.Sleep(20 * time.Millisecond)
-			}
+	for modifierKey, state := range t.states {
+		if modifierKey == event.Key {
+			continue
 		}
-	})
 
+		// Any other key means the sequence is no longer a pure double tap.
+		state.hasCompletedTap = false
+		if state.isPressed {
+			state.currentTapInvalid = true
+		}
+		t.states[modifierKey] = state
+	}
+
+	state, exists := t.states[event.Key]
+	if !exists {
+		return nil
+	}
+
+	switch event.Type {
+	case keyboard.EventTypeKeyDown:
+		if !state.isPressed {
+			state.isPressed = true
+			state.currentTapInvalid = false
+		}
+		t.states[event.Key] = state
+		return nil
+	case keyboard.EventTypeKeyUp:
+		if !state.isPressed {
+			// Ignore duplicate key-up events from the OS. A tap must start with a
+			// fresh key-down, otherwise a single release can look like a double tap.
+			return nil
+		}
+
+		state.isPressed = false
+		if state.currentTapInvalid {
+			state.currentTapInvalid = false
+			state.hasCompletedTap = false
+			t.states[event.Key] = state
+			return nil
+		}
+
+		if state.hasCompletedTap && now-state.lastTapAt < 500 {
+			state.hasCompletedTap = false
+			t.states[event.Key] = state
+			return []keyboard.Key{event.Key}
+		}
+
+		state.hasCompletedTap = true
+		state.lastTapAt = now
+		t.states[event.Key] = state
+		return nil
+	default:
+		return nil
+	}
+}
+
+var (
+	doubleKeyCallbacks = util.NewHashMap[keyboard.Key, func()]()
+	doubleKeyListener  keyboard.RawKeySubscription
+	doubleKeyTracker   = newDoubleTapTracker()
+)
+
+func registerDoubleHotKey(modifierKey keyboard.Key, callback func()) error {
+	doubleKeyCallbacks.Store(modifierKey, callback)
+	doubleKeyTracker.Register(modifierKey)
+
+	if doubleKeyListener != nil {
+		return nil
+	}
+
+	listener, err := keyboard.AddRawKeyListener(func(event keyboard.RawKeyEvent) bool {
+		triggeredKeys := doubleKeyTracker.HandleEvent(event, util.GetSystemTimestamp())
+		for _, triggeredKey := range triggeredKeys {
+			callback, ok := doubleKeyCallbacks.Load(triggeredKey)
+			if !ok || callback == nil {
+				continue
+			}
+
+			util.Go(util.NewTraceContext(), "double hotkey callback", func() {
+				callback()
+			})
+		}
+
+		return false
+	})
+	if err != nil {
+		doubleKeyCallbacks.Delete(modifierKey)
+		doubleKeyTracker.Unregister(modifierKey)
+		return err
+	}
+
+	doubleKeyListener = listener
 	return nil
 }
 
-func unregisterDoubleHotkey(ctx context.Context, modifier hotkey.Modifier) error {
-	keyCode, err := getModifierKeyCode(ctx, modifier)
-	if err != nil {
-		return err
+func unregisterDoubleHotKey(modifierKey keyboard.Key) {
+	doubleKeyCallbacks.Delete(modifierKey)
+	doubleKeyTracker.Unregister(modifierKey)
+
+	if doubleKeyCallbacks.Len() > 0 {
+		return
 	}
 
-	keyCallback.Delete(keyCode)
-	return nil
+	if doubleKeyListener != nil {
+		_ = doubleKeyListener.Close()
+		doubleKeyListener = nil
+	}
 }

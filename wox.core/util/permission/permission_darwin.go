@@ -14,10 +14,16 @@ package permission
 //     NSURL *url = [NSURL URLWithString:@"x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"];
 //     [[NSWorkspace sharedWorkspace] openURL:url];
 // }
+//
+// void openPrivacySecurityPreferences() {
+//     NSURL *url = [NSURL URLWithString:@"x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension"];
+//     [[NSWorkspace sharedWorkspace] openURL:url];
+// }
 import "C"
 
 import (
 	"context"
+	"wox/util/mainthread"
 )
 
 func HasAccessibilityPermission(ctx context.Context) bool {
@@ -25,5 +31,13 @@ func HasAccessibilityPermission(ctx context.Context) bool {
 }
 
 func GrantAccessibilityPermission(ctx context.Context) {
-	C.openAccessibilityPreferences()
+	mainthread.Call(func() {
+		C.openAccessibilityPreferences()
+	})
+}
+
+func OpenPrivacySecuritySettings(ctx context.Context) {
+	mainthread.Call(func() {
+		C.openPrivacySecurityPreferences()
+	})
 }

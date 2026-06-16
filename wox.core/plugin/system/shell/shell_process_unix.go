@@ -7,6 +7,10 @@ import (
 	"syscall"
 )
 
+func prepareShellCommand(interpreter string, command string) string {
+	return command
+}
+
 func setCommandProcessGroup(cmd *exec.Cmd) {
 	if cmd == nil {
 		return
@@ -22,4 +26,8 @@ func killProcessGroup(cmd *exec.Cmd) error {
 		return nil
 	}
 	return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+}
+
+func decodeShellOutputChunk(chunk []byte) string {
+	return string(chunk)
 }

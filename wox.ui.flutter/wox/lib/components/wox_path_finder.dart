@@ -4,7 +4,9 @@ import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_textfield.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
+import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/picker.dart';
+import 'package:wox/utils/wox_setting_focus_util.dart';
 
 /// Reusable directory path picker field
 /// - Shows a text field with consistent Wox border style
@@ -66,10 +68,7 @@ class _WoxPathFinderState extends State<WoxPathFinder> {
     if (_picking) return;
     setState(() => _picking = true);
     try {
-      final selectedDirectory = await FileSelector.pick(
-        const UuidV4().generate(),
-        FileSelectorParams(isDirectory: true),
-      );
+      final selectedDirectory = await FileSelector.pick(const UuidV4().generate(), FileSelectorParams(isDirectory: true));
       if (selectedDirectory.isEmpty) return;
       final picked = selectedDirectory[0];
 
@@ -77,23 +76,26 @@ class _WoxPathFinderState extends State<WoxPathFinder> {
       if (widget.confirmOnChange) {
         await showDialog(
           context: context,
-          builder: (ctx) => AlertDialog(
-            content: Text(tr("ui_data_config_location_change_confirm").replaceAll("{0}", picked)),
-            actions: [
-              WoxButton.secondary(
-                text: tr("ui_data_config_location_change_cancel"),
-                onPressed: () => Navigator.pop(ctx),
+          barrierColor: getThemePopupBarrierColor(),
+          builder:
+              (ctx) => AlertDialog(
+                backgroundColor: getThemePopupSurfaceColor(),
+                surfaceTintColor: Colors.transparent,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: getThemePopupOutlineColor())),
+                content: Text(tr("ui_data_config_location_change_confirm").replaceAll("{0}", picked)),
+                actions: [
+                  WoxButton.secondary(text: tr("ui_data_config_location_change_cancel"), onPressed: () => Navigator.pop(ctx)),
+                  WoxButton.primary(
+                    text: tr("ui_data_config_location_change_confirm_button"),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      widget.onChanged(picked);
+                    },
+                  ),
+                ],
               ),
-              WoxButton.primary(
-                text: tr("ui_data_config_location_change_confirm_button"),
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  widget.onChanged(picked);
-                },
-              ),
-            ],
-          ),
         );
+        WoxSettingFocusUtil.restoreIfInSettingView();
       } else {
         widget.onChanged(picked);
       }
@@ -115,28 +117,9 @@ class _WoxPathFinderState extends State<WoxPathFinder> {
     return Row(
       children: [
         // Text field
-        Expanded(
-          child: WoxTextField(
-            controller: _controller,
-            enabled: widget.enabled,
-            width: widget.width ?? double.infinity,
-            onChanged: (v) => widget.onChanged(v),
-          ),
-        ),
-        if (widget.showOpenButton) ...[
-          const SizedBox(width: 10),
-          WoxButton.secondary(
-            text: tr('plugin_file_open'),
-            onPressed: _openFolder,
-          ),
-        ],
-        if (widget.showChangeButton) ...[
-          const SizedBox(width: 10),
-          WoxButton.primary(
-            text: changeText,
-            onPressed: _picking ? null : _browseAndMaybeConfirm,
-          ),
-        ],
+        Expanded(child: WoxTextField(controller: _controller, enabled: widget.enabled, width: widget.width ?? double.infinity, onChanged: (v) => widget.onChanged(v))),
+        if (widget.showOpenButton) ...[const SizedBox(width: 10), WoxButton.secondary(text: tr('plugin_file_open'), onPressed: _openFolder)],
+        if (widget.showChangeButton) ...[const SizedBox(width: 10), WoxButton.primary(text: changeText, onPressed: _picking ? null : _browseAndMaybeConfirm)],
       ],
     );
   }

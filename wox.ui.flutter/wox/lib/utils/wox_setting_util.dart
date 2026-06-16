@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/entity/wox_setting.dart';
 
@@ -12,6 +13,11 @@ class WoxSettingUtil {
 
   Future<void> loadSetting(String traceId) async {
     _currentSetting = await WoxApi.instance.loadSetting(traceId);
+  }
+
+  @visibleForTesting
+  void setCurrentSettingForTesting(WoxSetting setting) {
+    _currentSetting = setting;
   }
 
   WoxSetting get currentSetting => _currentSetting;

@@ -1,8 +1,20 @@
 package screen
 
 /*
+// Build fix: this package calls GetDeviceCaps in the DPI fallback path. The
+// dependency used to be implicit through larger Windows builds, which was not
+// enough for standalone screen probes or package-level checks, so declare gdi32
+// at the package boundary that actually owns the call.
+#cgo windows LDFLAGS: -lgdi32
 #include <windows.h>
 #include <shellscalingapi.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+
+#ifndef DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+#define DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 ((HANDLE)-4)
+#endif
 
 typedef struct {
     int width;
@@ -10,6 +22,66 @@ typedef struct {
     int x;
     int y;
 } ScreenInfo;
+
+typedef struct {
+    char id[64];
+    int x;
+    int y;
+    int width;
+    int height;
+    int workX;
+    int workY;
+    int workWidth;
+    int workHeight;
+    int pixelX;
+    int pixelY;
+    int pixelWidth;
+    int pixelHeight;
+    int pixelWorkX;
+    int pixelWorkY;
+    int pixelWorkWidth;
+    int pixelWorkHeight;
+    double scale;
+    int primary;
+} ScreenDisplayInfo;
+
+// Bug fix: keep the Go core in the same PerMonitorV2 coordinate space as the
+// Flutter Windows runner. The previous core process could stay DPI-unaware in
+// development builds, so Windows virtualized GetMonitorInfo/GetCursorPos while
+// the UI runner used DPI-aware coordinates; a left high-DPI monitor could be
+// reported near -5120 here and then fail Flutter's -2560 logical monitor match.
+// Requesting process DPI awareness before any screen query makes the monitor
+// bounds passed over the websocket compatible with setBounds. The manifest added
+// to release builds makes packaged startup deterministic, while this runtime
+// path covers go run/go test and old launchers that do not carry that manifest.
+void enableProcessPerMonitorDpiAwareness() {
+    HMODULE user32 = LoadLibraryA("user32.dll");
+    if (user32) {
+        typedef BOOL (WINAPI *SetProcessDpiAwarenessContextFunc)(HANDLE);
+        SetProcessDpiAwarenessContextFunc setProcessDpiAwarenessContext =
+            (SetProcessDpiAwarenessContextFunc)GetProcAddress(user32, "SetProcessDpiAwarenessContext");
+        if (setProcessDpiAwarenessContext) {
+            if (setProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)) {
+                FreeLibrary(user32);
+                return;
+            }
+        }
+        FreeLibrary(user32);
+    }
+
+    HMODULE shcore = LoadLibraryA("Shcore.dll");
+    if (shcore) {
+        typedef HRESULT (WINAPI *SetProcessDpiAwarenessFunc)(int);
+        SetProcessDpiAwarenessFunc setProcessDpiAwareness =
+            (SetProcessDpiAwarenessFunc)GetProcAddress(shcore, "SetProcessDpiAwareness");
+        if (setProcessDpiAwareness) {
+            // PROCESS_PER_MONITOR_DPI_AWARE keeps older Windows versions out of
+            // system-DPI virtualization when PerMonitorV2 is unavailable.
+            setProcessDpiAwareness(2);
+        }
+        FreeLibrary(shcore);
+    }
+}
 
 // IMPORTANT: Understanding Physical vs Logical Coordinates in Windows
 //
@@ -130,8 +202,90 @@ ScreenInfo getActiveScreenSize() {
     // Fallback to mouse screen
     return getMouseScreenSize();
 }
+
+typedef struct {
+    ScreenDisplayInfo* displays;
+    int maxCount;
+    int count;
+} MonitorEnumContext;
+
+static int physicalToLogical(int value, float scale) {
+    return (int)(value / scale);
+}
+
+static BOOL CALLBACK enumerateMonitors(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData) {
+    MonitorEnumContext* ctx = (MonitorEnumContext*)dwData;
+    if (ctx->count >= ctx->maxCount) {
+        return FALSE;
+    }
+
+    MONITORINFOEXW mi;
+    ZeroMemory(&mi, sizeof(mi));
+    mi.cbSize = sizeof(mi);
+    if (!GetMonitorInfoW(hMonitor, (MONITORINFO*)&mi)) {
+        return TRUE;
+    }
+
+    UINT dpi = GetDpiForMonitorCompat(hMonitor);
+    float scale = (float)dpi / 96.0f;
+    if (scale <= 0.0f) {
+        scale = 1.0f;
+    }
+
+    ScreenDisplayInfo info;
+    ZeroMemory(&info, sizeof(info));
+
+    int utf8Len = WideCharToMultiByte(CP_UTF8, 0, mi.szDevice, -1, info.id, sizeof(info.id), NULL, NULL);
+    if (utf8Len <= 0) {
+        strcpy_s(info.id, sizeof(info.id), "monitor");
+    }
+
+    info.pixelX = mi.rcMonitor.left;
+    info.pixelY = mi.rcMonitor.top;
+    info.pixelWidth = mi.rcMonitor.right - mi.rcMonitor.left;
+    info.pixelHeight = mi.rcMonitor.bottom - mi.rcMonitor.top;
+    info.pixelWorkX = mi.rcWork.left;
+    info.pixelWorkY = mi.rcWork.top;
+    info.pixelWorkWidth = mi.rcWork.right - mi.rcWork.left;
+    info.pixelWorkHeight = mi.rcWork.bottom - mi.rcWork.top;
+
+    info.x = physicalToLogical(info.pixelX, scale);
+    info.y = physicalToLogical(info.pixelY, scale);
+    info.width = physicalToLogical(info.pixelWidth, scale);
+    info.height = physicalToLogical(info.pixelHeight, scale);
+    info.workX = physicalToLogical(info.pixelWorkX, scale);
+    info.workY = physicalToLogical(info.pixelWorkY, scale);
+    info.workWidth = physicalToLogical(info.pixelWorkWidth, scale);
+    info.workHeight = physicalToLogical(info.pixelWorkHeight, scale);
+    info.scale = scale;
+    info.primary = (mi.dwFlags & MONITORINFOF_PRIMARY) != 0 ? 1 : 0;
+
+    ctx->displays[ctx->count++] = info;
+    return TRUE;
+}
+
+int listDisplays(ScreenDisplayInfo* displays, int maxCount) {
+    if (!displays || maxCount <= 0) {
+        return 0;
+    }
+
+    MonitorEnumContext ctx;
+    ctx.displays = displays;
+    ctx.maxCount = maxCount;
+    ctx.count = 0;
+
+    EnumDisplayMonitors(NULL, NULL, enumerateMonitors, (LPARAM)&ctx);
+    return ctx.count;
+}
 */
 import "C"
+import "fmt"
+
+const maxDisplayCount = 16
+
+func init() {
+	C.enableProcessPerMonitorDpiAwareness()
+}
 
 func GetMouseScreen() Size {
 	screenInfo := C.getMouseScreenSize()
@@ -151,4 +305,49 @@ func GetActiveScreen() Size {
 		X:      int(screenInfo.x),
 		Y:      int(screenInfo.y),
 	}
+}
+
+func listDisplays() ([]Display, error) {
+	buffer := make([]C.ScreenDisplayInfo, maxDisplayCount)
+	count := int(C.listDisplays(&buffer[0], C.int(len(buffer))))
+	if count < 0 {
+		return nil, fmt.Errorf("failed to enumerate displays")
+	}
+
+	displays := make([]Display, 0, count)
+	for i := 0; i < count; i++ {
+		info := buffer[i]
+		displays = append(displays, Display{
+			ID:   C.GoString(&info.id[0]),
+			Name: C.GoString(&info.id[0]),
+			Bounds: Rect{
+				X:      int(info.x),
+				Y:      int(info.y),
+				Width:  int(info.width),
+				Height: int(info.height),
+			},
+			WorkArea: Rect{
+				X:      int(info.workX),
+				Y:      int(info.workY),
+				Width:  int(info.workWidth),
+				Height: int(info.workHeight),
+			},
+			PixelBounds: Rect{
+				X:      int(info.pixelX),
+				Y:      int(info.pixelY),
+				Width:  int(info.pixelWidth),
+				Height: int(info.pixelHeight),
+			},
+			PixelWorkArea: Rect{
+				X:      int(info.pixelWorkX),
+				Y:      int(info.pixelWorkY),
+				Width:  int(info.pixelWorkWidth),
+				Height: int(info.pixelWorkHeight),
+			},
+			Scale:   float64(info.scale),
+			Primary: int(info.primary) == 1,
+		})
+	}
+
+	return displays, nil
 }

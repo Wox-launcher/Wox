@@ -11,6 +11,7 @@ const (
 	ContextKeyComponentName = "component"
 	ContextKeySessionId     = "session"
 	ContextKeyQueryId       = "query"
+	ContextKeyShowSource    = "show_source"
 )
 
 func NewTraceContext() context.Context {
@@ -42,6 +43,10 @@ func WithQueryIdContext(ctx context.Context, queryId string) context.Context {
 	return context.WithValue(ctx, ContextKeyQueryId, queryId)
 }
 
+func WithShowSourceContext(ctx context.Context, showSource string) context.Context {
+	return context.WithValue(ctx, ContextKeyShowSource, showSource)
+}
+
 func GetContextSessionId(ctx context.Context) string {
 	if sessionId, ok := ctx.Value(ContextKeySessionId).(string); ok {
 		return sessionId
@@ -52,6 +57,13 @@ func GetContextSessionId(ctx context.Context) string {
 func GetContextQueryId(ctx context.Context) string {
 	if queryId, ok := ctx.Value(ContextKeyQueryId).(string); ok {
 		return queryId
+	}
+	return ""
+}
+
+func GetContextShowSource(ctx context.Context) string {
+	if showSource, ok := ctx.Value(ContextKeyShowSource).(string); ok {
+		return showSource
 	}
 	return ""
 }

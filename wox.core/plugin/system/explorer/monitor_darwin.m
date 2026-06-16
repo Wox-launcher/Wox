@@ -4,7 +4,6 @@
 
 extern void fileExplorerActivatedCallbackCGO(int pid, int isFileDialog, int x, int y, int w, int h);
 extern void fileExplorerDeactivatedCallbackCGO(void);
-extern void fileExplorerKeyDownCallbackCGO(char key);
 
 typedef NS_ENUM(NSInteger, MonitorContextState) {
     MonitorContextStateNone = 0,
@@ -13,7 +12,6 @@ typedef NS_ENUM(NSInteger, MonitorContextState) {
 };
 
 static id gAppActivationObserver = nil;
-static id gKeyDownObserver = nil;
 static AXObserverRef gFrontmostWindowObserver = NULL;
 static pid_t gObservedPid = 0;
 static pid_t gCurrentPid = 0;
@@ -820,6 +818,14 @@ static void syncFrontmostWindowObserver() {
     startFrontmostWindowObserver(pid);
 }
 
+int refreshFileExplorerMonitorState() {
+    @autoreleasepool {
+        syncFrontmostWindowObserver();
+        evaluateFrontmostApplicationState();
+        return gCurrentState != MonitorContextStateNone ? 1 : 0;
+    }
+}
+
 void startFileExplorerMonitor() {
     @autoreleasepool {
         if (!gAppActivationObserver) {
@@ -830,60 +836,6 @@ void startFileExplorerMonitor() {
                         usingBlock:^(NSNotification *notification) {
                 syncFrontmostWindowObserver();
                 evaluateFrontmostApplicationState();
-            }];
-        }
-
-        if (!gKeyDownObserver) {
-            gKeyDownObserver = [NSEvent addGlobalMonitorForEventsMatchingMask:NSEventMaskKeyDown
-                                                                      handler:^(NSEvent *event) {
-                if (!event) {
-                    return;
-                }
-
-                NSEventModifierFlags flags = event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
-                if ((flags & NSEventModifierFlagControl) ||
-                    (flags & NSEventModifierFlagOption) ||
-                    (flags & NSEventModifierFlagCommand)) {
-                    return;
-                }
-
-                NSString *chars = event.charactersIgnoringModifiers;
-                if (!chars || chars.length == 0) {
-                    return;
-                }
-
-                unichar ch = [chars characterAtIndex:0];
-                if (ch > 0x7F || !isalnum((int)ch)) {
-                    return;
-                }
-
-                syncFrontmostWindowObserver();
-                evaluateFrontmostApplicationState();
-                if (gCurrentState == MonitorContextStateNone) {
-                    logMessage(@"key: ignored key=%c state=none pid=%d", (char)ch, (int)gCurrentPid);
-                    return;
-                }
-
-                NSInteger eventWindowNumber = [event windowNumber];
-                if (eventWindowNumber > 0) {
-                    pid_t eventOwnerPid = getWindowOwnerPidByWindowID((uint32_t)eventWindowNumber);
-                    // Drop keys from a different window owner (e.g. iTerm2
-                    // hotkey/floating window) even if Finder stays frontmost.
-                    if (eventOwnerPid > 0 && gCurrentPid > 0 && eventOwnerPid != gCurrentPid) {
-                        deactivateIfNeeded();
-                        return;
-                    }
-                }
-
-                pid_t focusedPid = getKeyboardFocusedApplicationPid();
-                // Extra guard for windows that do not expose a stable window id.
-                if (focusedPid > 0 && gCurrentPid > 0 && focusedPid != gCurrentPid) {
-                    deactivateIfNeeded();
-                    return;
-                }
-
-                logMessage(@"key: forward key=%c state=%ld pid=%d", (char)ch, (long)gCurrentState, (int)gCurrentPid);
-                fileExplorerKeyDownCallbackCGO((char)ch);
             }];
         }
 
@@ -917,10 +869,6 @@ void stopFileExplorerMonitor() {
         gCurrentW = 0;
         gCurrentH = 0;
 
-        if (gKeyDownObserver) {
-            [NSEvent removeMonitor:gKeyDownObserver];
-            gKeyDownObserver = nil;
-        }
         if (gAppActivationObserver) {
             [[NSWorkspace sharedWorkspace].notificationCenter removeObserver:gAppActivationObserver];
             gAppActivationObserver = nil;

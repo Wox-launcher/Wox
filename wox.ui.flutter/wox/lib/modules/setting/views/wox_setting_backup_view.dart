@@ -66,7 +66,7 @@ class WoxSettingBackupView extends WoxSettingBaseView {
             );
           }),
           tips: null,
-          customTips: buildAutoBackupTips(),
+          tipsWidget: buildAutoBackupTips(),
         ),
         formField(
           label: controller.tr("ui_data_backup_list_title"),
@@ -97,7 +97,7 @@ class WoxSettingBackupView extends WoxSettingBaseView {
             );
           }),
           tips: null,
-          customTips: buildAutoBackupTips(),
+          tipsWidget: buildAutoBackupTips(),
         ),
         formField(
           label: controller.tr("ui_data_backup_list_title"),

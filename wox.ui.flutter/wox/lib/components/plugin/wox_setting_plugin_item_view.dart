@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:wox/components/wox_markdown.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/wox_plugin_setting.dart';
 import 'package:wox/utils/colors.dart';
+import 'package:wox/utils/consts.dart';
 
 abstract class WoxSettingPluginItem extends StatelessWidget {
+  static const double defaultLabelGap = 12;
   final String value;
-  final Function onUpdate;
+  final Future<String?> Function(String key, String value) onUpdate;
+  final double labelWidth;
 
-  const WoxSettingPluginItem({super.key, required this.value, required this.onUpdate});
+  const WoxSettingPluginItem({super.key, required this.value, required this.onUpdate, required this.labelWidth});
 
-  Future<void> updateConfig(String key, String value) async {
-    onUpdate(key, value);
+  Future<String?> updateConfig(String key, String value) async {
+    return onUpdate(key, value);
   }
 
   String getSetting(String key) {
@@ -22,46 +26,212 @@ abstract class WoxSettingPluginItem extends StatelessWidget {
     return Get.find<WoxSettingController>().tr(key);
   }
 
-  PluginSettingValueStyle resolveStyle(PluginSettingValueStyle style) {
-    final woxSettingController = Get.find<WoxSettingController>();
-    return style.resolve(woxSettingController.woxSetting.value.langCode);
-  }
-
-  Widget withFlexible(List<Widget> children) {
-    return Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: children);
-  }
-
-  Widget layout({required List<Widget> children, required PluginSettingValueStyle style}) {
-    final resolvedStyle = resolveStyle(style);
-
-    if (resolvedStyle.hasAnyPadding()) {
-      return Padding(
-        padding: EdgeInsets.only(top: resolvedStyle.paddingTop, bottom: resolvedStyle.paddingBottom, left: resolvedStyle.paddingLeft, right: resolvedStyle.paddingRight),
-        child: withFlexible(children),
-      );
+  static Widget validationMessage(String message, String Function(String key) translator) {
+    if (message.trim().isEmpty) {
+      return const SizedBox.shrink();
     }
 
-    return withFlexible(children);
+    return Padding(padding: const EdgeInsets.only(top: 4), child: Text(translator(message), style: const TextStyle(color: Colors.red, fontSize: 12)));
   }
 
-  Widget label(String text, PluginSettingValueStyle style) {
-    if (text != "") {
-      final resolvedStyle = resolveStyle(style);
+  Widget tooltipText(String tooltip) {
+    if (tooltip.trim().isEmpty) {
+      return const SizedBox.shrink();
+    }
 
-      if (resolvedStyle.labelWidth > 0) {
-        return Padding(
-          padding: const EdgeInsets.only(right: 4),
-          child: SizedBox(
-            width: resolvedStyle.labelWidth,
-            child: Text(text, style: TextStyle(overflow: TextOverflow.ellipsis, color: getThemeTextColor(), fontSize: 13), textAlign: TextAlign.right),
-          ),
-        );
-      } else {
-        return Padding(padding: const EdgeInsets.only(right: 4), child: Text(text, style: TextStyle(color: getThemeTextColor(), fontSize: 13)));
-      }
+    final accentColor = getThemeActiveBackgroundColor();
+
+    return Padding(
+      padding: EdgeInsets.only(top: 2),
+      child: ExcludeFocus(
+        child: WoxMarkdownView(
+          data: tr(tooltip),
+          fontColor: getThemeSubTextColor(),
+          fontSize: SETTING_TOOLTIP_DEFAULT_SIZE,
+          linkColor: accentColor,
+          linkHoverColor: accentColor.withValues(alpha: 0.8),
+          selectable: true,
+        ),
+      ),
+    );
+  }
+
+  Widget applyStylePadding({required PluginSettingValueStyle style, required Widget child}) {
+    return Padding(padding: EdgeInsets.only(top: style.paddingTop, bottom: style.paddingBottom, left: style.paddingLeft, right: style.paddingRight), child: child);
+  }
+
+  Widget layout({
+    required String label,
+    required Widget child,
+    required PluginSettingValueStyle style,
+    String tooltip = "",
+    bool includeBottomSpacing = true,
+    List<Widget> labelActions = const [],
+  }) {
+    final hasLabel = label.trim().isNotEmpty;
+    final tipsWidget = tooltip.trim().isNotEmpty ? tooltipText(tooltip) : null;
+    final bottomSpacing = includeBottomSpacing ? 10.0 : 0.0;
+    // Text-only labels need a small top offset to align with controls. Title-side
+    // actions are taller, so keep them centered with 24px controls instead.
+    final labelTopPadding = labelActions.isEmpty ? 6.0 : 1.0;
+
+    if (!hasLabel) {
+      final content = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [child, if (tipsWidget != null) tipsWidget]);
+      final wrappedContent = bottomSpacing > 0 ? Padding(padding: EdgeInsets.only(bottom: bottomSpacing), child: content) : content;
+      return applyStylePadding(style: style, child: wrappedContent);
+    }
+
+    return applyStylePadding(
+      style: style,
+      child: Padding(
+        padding: EdgeInsets.only(bottom: bottomSpacing),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Plugin setting panes and table-edit dialogs are narrower than top-level
+            // settings, so the classic label/control split keeps controls aligned while
+            // leaving the right column to carry longer descriptions.
+            SizedBox(
+              width: labelWidth,
+              child: Padding(
+                padding: EdgeInsets.only(top: labelTopPadding),
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: getThemeTextColor(), fontSize: 13, fontWeight: FontWeight.w500)),
+                    ),
+                    if (labelActions.isNotEmpty) ...[const SizedBox(width: 6), ...labelActions],
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: defaultLabelGap),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  child,
+                  if (tipsWidget != null)
+                    Padding(padding: const EdgeInsets.only(top: 4), child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 620), child: tipsWidget)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget suffix(String text) {
+    if (text != "") {
+      return Padding(padding: const EdgeInsets.only(left: 4), child: Text(text, style: TextStyle(color: getThemeTextColor(), fontSize: 13)));
     }
 
     return const SizedBox.shrink();
+  }
+}
+
+mixin WoxSettingPluginItemMixin<T extends StatefulWidget> on State<T> {
+  double get labelWidth;
+
+  Future<String?> updateConfig(Future<String?> Function(String key, String value) onUpdate, String key, String value) async {
+    return onUpdate(key, value);
+  }
+
+  String tr(String key) {
+    return Get.find<WoxSettingController>().tr(key);
+  }
+
+  Widget validationMessage(String message) {
+    return WoxSettingPluginItem.validationMessage(message, tr);
+  }
+
+  Widget tooltipText(String tooltip) {
+    if (tooltip.trim().isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final accentColor = getThemeActiveBackgroundColor();
+
+    return Padding(
+      padding: EdgeInsets.only(top: 2),
+      child: ExcludeFocus(
+        child: WoxMarkdownView(
+          data: tr(tooltip),
+          fontColor: getThemeSubTextColor(),
+          fontSize: SETTING_TOOLTIP_DEFAULT_SIZE,
+          linkColor: accentColor,
+          linkHoverColor: accentColor.withValues(alpha: 0.8),
+          selectable: true,
+        ),
+      ),
+    );
+  }
+
+  Widget applyStylePadding({required PluginSettingValueStyle style, required Widget child}) {
+    return Padding(padding: EdgeInsets.only(top: style.paddingTop, bottom: style.paddingBottom, left: style.paddingLeft, right: style.paddingRight), child: child);
+  }
+
+  Widget layout({
+    required String label,
+    required Widget child,
+    required PluginSettingValueStyle style,
+    String tooltip = "",
+    bool includeBottomSpacing = true,
+    List<Widget> labelActions = const [],
+  }) {
+    final hasLabel = label.trim().isNotEmpty;
+    final tipsWidget = tooltip.trim().isNotEmpty ? tooltipText(tooltip) : null;
+    final bottomSpacing = includeBottomSpacing ? 10.0 : 0.0;
+    // Text-only labels need a small top offset to align with controls. Title-side
+    // actions are taller, so keep them centered with 24px controls instead.
+    final labelTopPadding = labelActions.isEmpty ? 6.0 : 1.0;
+
+    if (!hasLabel) {
+      final content = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [child, if (tipsWidget != null) tipsWidget]);
+      final wrappedContent = bottomSpacing > 0 ? Padding(padding: EdgeInsets.only(bottom: bottomSpacing), child: content) : content;
+      return applyStylePadding(style: style, child: wrappedContent);
+    }
+
+    return applyStylePadding(
+      style: style,
+      child: Padding(
+        padding: EdgeInsets.only(bottom: bottomSpacing),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Plugin setting panes and table-edit dialogs are narrower than top-level
+            // settings, so the classic label/control split keeps controls aligned while
+            // leaving the right column to carry longer descriptions.
+            SizedBox(
+              width: labelWidth,
+              child: Padding(
+                padding: EdgeInsets.only(top: labelTopPadding),
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: getThemeTextColor(), fontSize: 13, fontWeight: FontWeight.w500)),
+                    ),
+                    if (labelActions.isNotEmpty) ...[const SizedBox(width: 6), ...labelActions],
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: WoxSettingPluginItem.defaultLabelGap),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  child,
+                  if (tipsWidget != null)
+                    Padding(padding: const EdgeInsets.only(top: 4), child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 620), child: tipsWidget)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget suffix(String text) {

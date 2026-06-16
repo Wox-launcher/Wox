@@ -1,19 +1,32 @@
-# Create Theme with AI
+# Theme Generation
 
-> Please note that this feature requires the configuration of AI settings to be used. If you have not configured AI settings, please refer to the [AI Settings](./settings.md) documentation.
+AI theme generation creates a Wox theme from a short description. Configure [AI Settings](./settings.md) first.
 
-Wox provides a unique feature that allows you to create themes using AI. This feature can be accessed using the `theme ai` command followed by your theme description. The AI will interpret your description and create a theme based on it.
+## Generate a Theme
 
-## Usage
+Open Wox and run:
 
-For example, if you want to create a theme with a macaroon color scheme, you can use the command:
-
-```
-theme ai macaroon color
+```text
+theme ai dark graphite with teal accents
 ```
 
-The AI will then generate a theme that matches the macaroon color scheme.
+Try prompts that describe contrast, mood, and accent colors:
 
-This feature provides a quick and easy way to create unique and personalized themes for your Wox launcher. Enjoy the flexibility and creativity that comes with AI-powered theme creation.
+```text
+theme ai light theme, warm background, blue accent, low contrast borders
+theme ai high contrast black theme with orange selection
+theme ai macOS style translucent gray with green accent
+```
 
 ![AI Theme](/images/ai_theme.jpg)
+
+## Review Before Keeping
+
+AI-generated themes can be close but still need judgment. Check:
+
+- Search text is readable in normal and selected states.
+- The selected result is obvious.
+- Subtitles, tails, and action labels have enough contrast.
+- The theme still works in the window size you normally use.
+
+If the generated theme is not right, run another prompt with more concrete color and contrast instructions.

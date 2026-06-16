@@ -19,6 +19,8 @@ class WoxTextField extends StatelessWidget {
   final Widget? suffixIcon;
   final EdgeInsetsGeometry? contentPadding;
   final FocusNode? focusNode;
+  final Key? textFieldKey;
+  final GestureTapCallback? onTap;
 
   const WoxTextField({
     super.key,
@@ -37,6 +39,8 @@ class WoxTextField extends StatelessWidget {
     this.suffixIcon,
     this.contentPadding,
     this.focusNode,
+    this.textFieldKey,
+    this.onTap,
   });
 
   @override
@@ -45,11 +49,13 @@ class WoxTextField extends StatelessWidget {
     final borderColor = getThemeSubTextColor();
 
     final textField = TextField(
+      key: textFieldKey,
       controller: controller,
       enabled: enabled,
       onChanged: onChanged,
       onEditingComplete: onEditingComplete,
       onSubmitted: onSubmitted,
+      onTap: onTap,
       maxLines: maxLines,
       minLines: minLines,
       autofocus: autofocus,
@@ -74,14 +80,9 @@ class WoxTextField extends StatelessWidget {
     return SizedBox(
       width: width ?? 300.0,
       child: Container(
-        decoration: BoxDecoration(
-          border: Border.all(color: borderColor),
-          borderRadius: BorderRadius.circular(4),
-        ),
+        decoration: BoxDecoration(border: Border.all(color: borderColor), borderRadius: BorderRadius.circular(4)),
         child: TextSelectionTheme(
-          data: TextSelectionThemeData(
-            selectionColor: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxTextSelectionBackgroundColor),
-          ),
+          data: TextSelectionThemeData(selectionColor: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxTextSelectionBackgroundColor)),
           child: textField,
         ),
       ),

@@ -15,6 +15,30 @@ _Bool hasClipboardChanged() {
     return 0;
 }
 
+// GetClipboardContentType returns 0=empty, 1=text, 2=image, 3=file
+int GetClipboardContentType() {
+    NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+
+    // Check for file URLs first (highest priority)
+    NSArray *fileClasses = [NSArray arrayWithObject:[NSURL class]];
+    if ([pasteboard canReadObjectForClasses:fileClasses options:nil]) {
+        return 3;
+    }
+
+    // Check for image types
+    NSArray *imageTypes = [NSArray arrayWithObjects:NSPasteboardTypePNG, NSPasteboardTypeTIFF, nil];
+    if ([pasteboard availableTypeFromArray:imageTypes] != nil) {
+        return 2;
+    }
+
+    // Check for text
+    if ([pasteboard availableTypeFromArray:[NSArray arrayWithObject:NSPasteboardTypeString]] != nil) {
+        return 1;
+    }
+
+    return 0;
+}
+
 const char* GetClipboardText() {
     @try {
         NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
@@ -91,6 +115,32 @@ void WriteClipboardText(const char *text) {
     [pasteboard clearContents];
     NSString *string = [NSString stringWithUTF8String:text];
     [pasteboard setString:string forType:NSPasteboardTypeString];
+}
+
+void WriteClipboardFiles(const char **filePaths, int count) {
+    NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+    [pasteboard clearContents];
+
+    NSMutableArray *urls = [NSMutableArray arrayWithCapacity:count];
+    for (int i = 0; i < count; i++) {
+        if (filePaths[i] == NULL) {
+            continue;
+        }
+
+        NSString *path = [NSString stringWithUTF8String:filePaths[i]];
+        if (path == nil || [path length] == 0) {
+            continue;
+        }
+
+        NSURL *url = [NSURL fileURLWithPath:path];
+        if (url != nil) {
+            [urls addObject:url];
+        }
+    }
+
+    if ([urls count] > 0) {
+        [pasteboard writeObjects:urls];
+    }
 }
 
 void WriteClipboardImage(const char *imageData, int length) {

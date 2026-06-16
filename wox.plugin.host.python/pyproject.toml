@@ -6,7 +6,11 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = "GPL-3.0"
 authors = [{ name = "Wox Team", email = "qianlifeng@gmail.com" }]
-dependencies = ["loguru", "websockets", "wox-plugin==0.0.70"]
+dependencies = ["loguru", "websockets", "wox-plugin"]
+
+[tool.uv.sources]
+# Host builds must use the in-repo SDK so protocol and model changes are validated before SDK releases.
+wox-plugin = { path = "../wox.plugin.python" }
 
 [project.scripts]
 run = "wox_plugin_host.__main__:run"

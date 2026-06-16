@@ -6,6 +6,7 @@ from typing import Any, Awaitable, Callable, Dict, Optional
 import websockets
 from wox_plugin import (
     AIModel,
+    PushAttentionRequest,
     ChangeQueryParam,
     ChatStreamCallback,
     Context,
@@ -19,6 +20,9 @@ from wox_plugin import (
     RefreshQueryParam,
     Result,
     ResultActionType,
+    ScreenshotOption,
+    ScreenshotResult,
+    ToolbarMsg,
     UpdatableResult,
     WoxImage,
 )
@@ -39,6 +43,8 @@ class PluginAPI(PublicAPI):
         ] = {}
         self.deep_link_callbacks: Dict[str, Callable[[Context, Dict[str, str]], Awaitable[None] | None]] = {}
         self.unload_callbacks: Dict[str, Callable[[Context], Awaitable[None] | None]] = {}
+        self.enter_plugin_query_callbacks: Dict[str, Callable[[Context], Awaitable[None] | None]] = {}
+        self.leave_plugin_query_callbacks: Dict[str, Callable[[Context], Awaitable[None] | None]] = {}
         self.llm_stream_callbacks: Dict[str, ChatStreamCallback] = {}
         self.mru_restore_callbacks: Dict[str, Callable[[Context, MRUData], Optional[Result] | Awaitable[Optional[Result]]]] = {}
 
@@ -91,6 +97,7 @@ class PluginAPI(PublicAPI):
             "queryType": query.query_type,
             "queryText": query.query_text,
             "querySelection": (query.query_selection.__dict__ if query.query_selection else None),
+            "queryContextData": json.dumps(query.context_data or {}),
         }
         await self.invoke_method(ctx, "ChangeQuery", params)
 
@@ -110,6 +117,27 @@ class PluginAPI(PublicAPI):
     async def notify(self, ctx: Context, message: str) -> None:
         """Show a notification message"""
         await self.invoke_method(ctx, "Notify", {"message": message})
+
+    async def push_attention(self, ctx: Context, request: PushAttentionRequest) -> None:
+        """Push a persistent attention item into Wox."""
+        await self.invoke_method(ctx, "PushAttention", {"request": request.to_json()})
+
+    async def show_toolbar_msg(self, ctx: Context, msg: ToolbarMsg) -> None:
+        from .plugin_manager import plugin_instances
+
+        plugin_instance = plugin_instances.get(self.plugin_id)
+        if plugin_instance:
+            for action in msg.actions:
+                action_id = action.id or str(uuid.uuid4())
+                action.id = action_id
+                callback = action.action
+                if callable(callback):
+                    plugin_instance.toolbar_msg_actions[action_id] = callback
+
+        await self.invoke_method(ctx, "ShowToolbarMsg", {"msg": json.loads(msg.to_json())})
+
+    async def clear_toolbar_msg(self, ctx: Context, toolbar_msg_id: str) -> None:
+        await self.invoke_method(ctx, "ClearToolbarMsg", {"toolbarMsgId": toolbar_msg_id})
 
     async def log(self, ctx: Context, level: LogLevel, msg: str) -> None:
         """Write log"""
@@ -168,6 +196,16 @@ class PluginAPI(PublicAPI):
         callback_id = str(uuid.uuid4())
         self.unload_callbacks[callback_id] = callback
         await self.invoke_method(ctx, "OnUnload", {"callbackId": callback_id})
+
+    async def on_enter_plugin_query(self, ctx: Context, callback: Callable[[Context], Awaitable[None] | None]) -> None:
+        callback_id = str(uuid.uuid4())
+        self.enter_plugin_query_callbacks[callback_id] = callback
+        await self.invoke_method(ctx, "OnEnterPluginQuery", {"callbackId": callback_id})
+
+    async def on_leave_plugin_query(self, ctx: Context, callback: Callable[[Context], Awaitable[None] | None]) -> None:
+        callback_id = str(uuid.uuid4())
+        self.leave_plugin_query_callbacks[callback_id] = callback
+        await self.invoke_method(ctx, "OnLeavePluginQuery", {"callbackId": callback_id})
 
     async def register_query_commands(self, ctx: Context, commands: list[MetadataCommand]) -> None:
         """Register query commands"""
@@ -322,4 +360,28 @@ class PluginAPI(PublicAPI):
                 "text": params.text,
                 "woxImage": (json.dumps(params.wox_image) if params.wox_image else ""),
             },
+        )
+
+    async def screenshot(self, ctx: Context, option: ScreenshotOption) -> ScreenshotResult:
+        """Start the built-in screenshot workflow."""
+        # The Python SDK exposes snake_case dataclass fields, while core accepts the public JSON
+        # option names. Serializing through to_dict keeps future screenshot fields explicit instead
+        # of silently dropping everything at the host boundary.
+        option_payload = option.to_dict() if hasattr(option, "to_dict") else {}
+        response = await self.invoke_method(
+            ctx,
+            "Screenshot",
+            {
+                # Keep options as one JSON object so future fields do not change the method signature.
+                "option": json.dumps(option_payload),
+            },
+        )
+
+        if not isinstance(response, dict):
+            return ScreenshotResult(success=False, errmsg="invalid screenshot response")
+
+        return ScreenshotResult(
+            success=bool(response.get("Success", False)),
+            screenshot_path=str(response.get("ScreenshotPath", "") or ""),
+            errmsg=str(response.get("ErrMsg", "") or ""),
         )

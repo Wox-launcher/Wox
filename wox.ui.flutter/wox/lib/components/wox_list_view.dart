@@ -1,18 +1,21 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
-import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_list_item_view.dart';
 import 'package:wox/components/wox_platform_focus.dart';
 import 'package:wox/controllers/wox_list_controller.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/wox_hotkey.dart';
+import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_list_item.dart';
 import 'package:wox/enums/wox_direction_enum.dart';
 import 'package:wox/enums/wox_list_view_type_enum.dart';
 import 'package:wox/utils/wox_theme_util.dart';
+import 'package:wox/utils/wox_interface_size_util.dart';
 import 'package:wox/utils/color_util.dart';
 
 class WoxListView<T> extends StatelessWidget {
@@ -21,6 +24,9 @@ class WoxListView<T> extends StatelessWidget {
   final bool showFilter;
   final double maxHeight;
   final VoidCallback? onItemTapped;
+  final void Function(String traceId, WoxListItem<T> item)? onItemSecondaryTapped;
+  final Future<void> Function(String traceId, WoxListItem<T> item)? onItemDragStarted;
+  final void Function(String traceId, WoxListItem<T> item, WoxImage image)? onItemIconLoaded;
   final bool Function(String traceId, HotKey hotkey)? onFilteHotkeyPressed;
 
   const WoxListView({
@@ -30,14 +36,47 @@ class WoxListView<T> extends StatelessWidget {
     this.showFilter = true,
     required this.maxHeight,
     this.onItemTapped,
+    this.onItemSecondaryTapped,
+    this.onItemDragStarted,
+    this.onItemIconLoaded,
     this.onFilteHotkeyPressed,
   });
+
+  void _scrollByPointerDelta(double deltaY) {
+    if (!controller.scrollController.hasClients) {
+      return;
+    }
+
+    final position = controller.scrollController.position;
+    final targetOffset = (position.pixels + deltaY).clamp(position.minScrollExtent, position.maxScrollExtent).toDouble();
+    if ((targetOffset - position.pixels).abs() < 0.01) {
+      return;
+    }
+
+    // Pointer scrolling used to reuse active-item navigation, which made pointer devices move
+    // selection one item at a time instead of scrolling the list surface. Mapping the native
+    // delta to the controller offset keeps keyboard navigation unchanged while giving wheel and
+    // trackpad gestures the continuous scrolling behavior users expect.
+    controller.scrollController.jumpTo(targetOffset);
+  }
+
+  void _handlePointerSignal(PointerSignalEvent event) {
+    if (event is PointerScrollEvent) {
+      _scrollByPointerDelta(event.scrollDelta.dy);
+    }
+  }
+
+  // PointerPanZoomUpdateEvent is fired when user scrolls with trackpad or touch screen, which provides a more natural scrolling experience on those devices compared to PointerScrollEvent. However, it is only supported on Flutter 3.7 and above, so we need to handle both events to ensure smooth scrolling across all platforms.
+  void _handlePointerPanZoomUpdate(PointerPanZoomUpdateEvent event) {
+    _scrollByPointerDelta(-event.panDelta.dy);
+  }
 
   @override
   Widget build(BuildContext context) {
     // Fast path: when showFilter is false, we don't need LayoutBuilder
     // because we don't need to measure available space for filter
     if (!showFilter) {
+      final metrics = WoxInterfaceSizeUtil.instance.metrics.value;
       final itemHeight =
           listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code || listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_CHAT.code
               ? WoxThemeUtil.instance.getActionItemHeight()
@@ -49,23 +88,23 @@ class WoxListView<T> extends StatelessWidget {
           thumbVisibility: true,
           controller: controller.scrollController,
           child: Listener(
-            onPointerSignal: (event) {
-              if (event is PointerScrollEvent) {
-                controller.updateActiveIndexByDirection(
-                  const UuidV4().generate(),
-                  event.scrollDelta.dy > 0 ? WoxDirectionEnum.WOX_DIRECTION_DOWN.code : WoxDirectionEnum.WOX_DIRECTION_UP.code,
-                );
-              }
-            },
+            onPointerSignal: _handlePointerSignal,
+            onPointerPanZoomUpdate: _handlePointerPanZoomUpdate,
             child: Obx(
               () =>
                   controller.items.isEmpty && controller.filterBoxController.text.isNotEmpty
-                      ? SizedBox(
-                        height: itemHeight,
-                        child: Center(
-                          child: Text(
-                            Get.find<WoxSettingController>().tr('ui_no_matches'),
-                            style: TextStyle(fontSize: 14.0, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxFontColor).withValues(alpha: 0.5)),
+                      ? SingleChildScrollView(
+                        controller: controller.scrollController,
+                        child: SizedBox(
+                          height: itemHeight,
+                          child: Center(
+                            child: Text(
+                              Get.find<WoxSettingController>().tr('ui_no_matches'),
+                              style: TextStyle(
+                                fontSize: metrics.listEmptyStateFontSize,
+                                color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxFontColor).withValues(alpha: 0.5),
+                              ),
+                            ),
                           ),
                         ),
                       )
@@ -101,6 +140,8 @@ class WoxListView<T> extends StatelessWidget {
                               onItemTapped: () {
                                 onItemTapped?.call();
                               },
+                              onItemSecondaryTapped: onItemSecondaryTapped,
+                              onItemDragStarted: onItemDragStarted,
                               child: GetBuilder<WoxListController<T>>(
                                 id: controller.buildItemUpdateId(index),
                                 init: controller,
@@ -114,6 +155,7 @@ class WoxListView<T> extends StatelessWidget {
                                       isActive: controller.activeIndex.value == index,
                                       isHovered: controller.hoveredIndex.value == index,
                                       listViewType: listViewType,
+                                      onIconLoaded: (traceId, _, image) => onItemIconLoaded?.call(traceId, item.value, image),
                                     ),
                               ),
                             ),
@@ -131,8 +173,9 @@ class WoxListView<T> extends StatelessWidget {
     // Slow path: with filter, need LayoutBuilder to measure available space
     return LayoutBuilder(
       builder: (context, constraints) {
-        const filterTopPadding = 6.0;
-        const filterFieldHeight = 40.0;
+        final metrics = WoxInterfaceSizeUtil.instance.metrics.value;
+        final filterTopPadding = metrics.scaledSpacing(6);
+        final filterFieldHeight = metrics.actionItemBaseHeight;
         final hasBoundedHeight = constraints.hasBoundedHeight;
         if (hasBoundedHeight && constraints.maxHeight <= 0) {
           return const SizedBox.shrink();
@@ -154,23 +197,23 @@ class WoxListView<T> extends StatelessWidget {
             thumbVisibility: true,
             controller: controller.scrollController,
             child: Listener(
-              onPointerSignal: (event) {
-                if (event is PointerScrollEvent) {
-                  controller.updateActiveIndexByDirection(
-                    const UuidV4().generate(),
-                    event.scrollDelta.dy > 0 ? WoxDirectionEnum.WOX_DIRECTION_DOWN.code : WoxDirectionEnum.WOX_DIRECTION_UP.code,
-                  );
-                }
-              },
+              onPointerSignal: _handlePointerSignal,
+              onPointerPanZoomUpdate: _handlePointerPanZoomUpdate,
               child: Obx(
                 () =>
                     controller.items.isEmpty && controller.filterBoxController.text.isNotEmpty
-                        ? SizedBox(
-                          height: itemHeight,
-                          child: Center(
-                            child: Text(
-                              Get.find<WoxSettingController>().tr('ui_no_matches'),
-                              style: TextStyle(fontSize: 14.0, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxFontColor).withValues(alpha: 0.5)),
+                        ? SingleChildScrollView(
+                          controller: controller.scrollController,
+                          child: SizedBox(
+                            height: itemHeight,
+                            child: Center(
+                              child: Text(
+                                Get.find<WoxSettingController>().tr('ui_no_matches'),
+                                style: TextStyle(
+                                  fontSize: metrics.listEmptyStateFontSize,
+                                  color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxFontColor).withValues(alpha: 0.5),
+                                ),
+                              ),
                             ),
                           ),
                         )
@@ -208,6 +251,8 @@ class WoxListView<T> extends StatelessWidget {
                                   onItemTapped: () {
                                     onItemTapped?.call();
                                   },
+                                  onItemSecondaryTapped: onItemSecondaryTapped,
+                                  onItemDragStarted: onItemDragStarted,
                                   child: GetBuilder<WoxListController<T>>(
                                     id: controller.buildItemUpdateId(index),
                                     init: controller,
@@ -221,6 +266,7 @@ class WoxListView<T> extends StatelessWidget {
                                           isActive: controller.activeIndex.value == index,
                                           isHovered: controller.hoveredIndex.value == index,
                                           listViewType: listViewType,
+                                          onIconLoaded: (traceId, _, image) => onItemIconLoaded?.call(traceId, item.value, image),
                                         ),
                                   ),
                                 ),
@@ -272,6 +318,23 @@ class WoxListView<T> extends StatelessWidget {
                 }
               }
 
+              // Emacs-style navigation: Ctrl+N / Ctrl+P move through items
+              // just like Arrow Down / Arrow Up.
+              if ((event is KeyDownEvent || event is KeyRepeatEvent) &&
+                  HardwareKeyboard.instance.isControlPressed &&
+                  !HardwareKeyboard.instance.isShiftPressed &&
+                  !HardwareKeyboard.instance.isAltPressed &&
+                  !HardwareKeyboard.instance.isMetaPressed) {
+                switch (event.logicalKey) {
+                  case LogicalKeyboardKey.keyN:
+                    controller.updateActiveIndexByDirection(traceId, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
+                    return KeyEventResult.handled;
+                  case LogicalKeyboardKey.keyP:
+                    controller.updateActiveIndexByDirection(traceId, WoxDirectionEnum.WOX_DIRECTION_UP.code);
+                    return KeyEventResult.handled;
+                }
+              }
+
               var pressedHotkey = WoxHotkey.parseNormalHotkeyFromEvent(event);
               if (pressedHotkey == null) {
                 return KeyEventResult.ignored;
@@ -303,14 +366,22 @@ class WoxListView<T> extends StatelessWidget {
               }
             },
             child: Padding(
-              padding: const EdgeInsets.only(top: filterTopPadding),
+              padding: EdgeInsets.only(top: filterTopPadding),
               child: SizedBox(
                 height: filterFieldHeight,
                 child: TextField(
-                  style: TextStyle(fontSize: 14.0, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionQueryBoxFontColor)),
+                  // The action filter belongs to the launcher action surface,
+                  // so its height and font follow density while plugin/settings
+                  // forms keep their independent control sizing.
+                  style: TextStyle(fontSize: metrics.resultSubtitleFontSize, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionQueryBoxFontColor)),
                   decoration: InputDecoration(
                     isCollapsed: true,
-                    contentPadding: const EdgeInsets.only(left: 8, right: 8, top: 20, bottom: 18),
+                    contentPadding: EdgeInsets.only(
+                      left: metrics.scaledSpacing(8),
+                      right: metrics.scaledSpacing(8),
+                      top: metrics.scaledSpacing(20),
+                      bottom: metrics.scaledSpacing(18),
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(WoxThemeUtil.instance.currentTheme.value.actionQueryBoxBorderRadius.toDouble()),
                       borderSide: BorderSide.none,
@@ -344,8 +415,18 @@ class _WoxListItemGestureWrapper<T> extends StatefulWidget {
   final Rx<WoxListItem<T>> item;
   final Widget child;
   final VoidCallback? onItemTapped;
+  final void Function(String traceId, WoxListItem<T> item)? onItemSecondaryTapped;
+  final Future<void> Function(String traceId, WoxListItem<T> item)? onItemDragStarted;
 
-  const _WoxListItemGestureWrapper({required this.controller, required this.index, required this.item, required this.child, this.onItemTapped});
+  const _WoxListItemGestureWrapper({
+    required this.controller,
+    required this.index,
+    required this.item,
+    required this.child,
+    this.onItemTapped,
+    this.onItemSecondaryTapped,
+    this.onItemDragStarted,
+  });
 
   @override
   State<_WoxListItemGestureWrapper<T>> createState() => _WoxListItemGestureWrapperState<T>();
@@ -354,6 +435,11 @@ class _WoxListItemGestureWrapper<T> extends StatefulWidget {
 class _WoxListItemGestureWrapperState<T> extends State<_WoxListItemGestureWrapper<T>> {
   DateTime? _lastTapTime;
   static const _doubleClickThreshold = Duration(milliseconds: 200);
+
+  void _activateItem(String traceId) {
+    widget.controller.updateActiveIndex(traceId, widget.index);
+    widget.controller.onItemActive?.call(traceId, widget.item.value);
+  }
 
   void _handleTapDown() {
     if (widget.item.value.isGroup) {
@@ -372,16 +458,42 @@ class _WoxListItemGestureWrapperState<T> extends State<_WoxListItemGestureWrappe
     }
 
     // Single click
-    widget.controller.updateActiveIndex(traceId, widget.index);
-    widget.controller.onItemActive?.call(traceId, widget.item.value);
-
+    _activateItem(traceId);
     widget.onItemTapped?.call();
 
     _lastTapTime = now;
   }
 
+  void _handleSecondaryTapDown() {
+    if (widget.item.value.isGroup) {
+      return;
+    }
+
+    final traceId = const UuidV4().generate();
+    _activateItem(traceId);
+    widget.onItemSecondaryTapped?.call(traceId, widget.item.value);
+    _lastTapTime = null;
+  }
+
+  void _handlePanStart() {
+    if (widget.item.value.isGroup || widget.onItemDragStarted == null) {
+      return;
+    }
+
+    final traceId = const UuidV4().generate();
+    _lastTapTime = null;
+    _activateItem(traceId);
+    unawaited(widget.onItemDragStarted!(traceId, widget.item.value));
+  }
+
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(behavior: HitTestBehavior.opaque, onTapDown: (_) => _handleTapDown(), child: widget.child);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => _handleTapDown(),
+      onSecondaryTapDown: (_) => _handleSecondaryTapDown(),
+      onPanStart: widget.onItemDragStarted == null ? null : (_) => _handlePanStart(),
+      child: widget.child,
+    );
   }
 }

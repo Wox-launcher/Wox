@@ -107,10 +107,10 @@ class MRUData:
     @classmethod
     def from_dict(cls, data: dict) -> "MRUData":
         """
-        Create MRUData from dictionary with camelCase naming.
+        Create MRUData from dictionary with PascalCase naming.
 
         Args:
-            data: Dictionary with MRU data (camelCase keys)
+            data: Dictionary with MRU data (PascalCase keys)
 
         Returns:
             A new MRUData instance
@@ -132,10 +132,10 @@ class MRUData:
 
     def to_dict(self) -> dict:
         """
-        Convert MRUData to dictionary with camelCase naming.
+        Convert MRUData to dictionary with PascalCase naming.
 
         Returns:
-            Dictionary representation with camelCase keys
+            Dictionary representation with PascalCase keys
         """
         return {
             "PluginID": self.plugin_id,

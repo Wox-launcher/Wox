@@ -83,6 +83,10 @@ func HttpGetWithHeaders(ctx context.Context, url string, headers map[string]stri
 }
 
 func HttpPost(ctx context.Context, url string, body any) ([]byte, error) {
+	return HttpPostWithHeaders(ctx, url, body, nil)
+}
+
+func HttpPostWithHeaders(ctx context.Context, url string, body any, headers map[string]string) ([]byte, error) {
 	jsonData, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
@@ -93,6 +97,12 @@ func HttpPost(ctx context.Context, url string, body any) ([]byte, error) {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+
+	if headers != nil {
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+	}
 
 	return doRequest(req)
 }

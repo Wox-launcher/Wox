@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@wox-launcher/wox-plugin':
-        specifier: ^0.0.111
-        version: 0.0.111
+        specifier: file:../wox.plugin.nodejs
+        version: file:../wox.plugin.nodejs
       dayjs:
         specifier: ^1.11.13
         version: 1.11.13
@@ -813,8 +813,9 @@ packages:
     resolution: {integrity: sha512-B4YKZMm/EqMptKSFyAq4q2SlgJe+VCmEH6Y8gf/E1pTlWbsUJpuH1ymik2Ex3aYO5mCWwV1kaSYHSQOT8+4vHA==}
     hasBin: true
 
-  '@wox-launcher/wox-plugin@0.0.111':
-    resolution: {integrity: sha512-U+uQInllTtfacwOIC1Qbjp2/CfLOZGnfK5dZq+Bir6fEbL3SJ393TeHt/9yKOBpRi0sMWyQ2h2m59hl01Ykjdg==}
+  '@wox-launcher/wox-plugin@file:../wox.plugin.nodejs':
+    resolution: {directory: ../wox.plugin.nodejs, type: directory}
+    name: '@wox-launcher/wox-plugin'
 
   JSONStream@1.3.5:
     resolution: {integrity: sha512-E+iruNOY8VV9s4JEbe1aNEm6MiszPRr/UfcHMz0TQh1BXSxHK+ASV1R6W4HpjBhSeS+54PIsAMCBmwD06LLsqQ==}
@@ -2926,7 +2927,7 @@ snapshots:
 
   '@vercel/ncc@0.38.0': {}
 
-  '@wox-launcher/wox-plugin@0.0.111': {}
+  '@wox-launcher/wox-plugin@file:../wox.plugin.nodejs': {}
 
   JSONStream@1.3.5:
     dependencies:

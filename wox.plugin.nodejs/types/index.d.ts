@@ -55,13 +55,15 @@ export type Platform = "windows" | "darwin" | "linux"
  *     await this.api.Log(ctx, "Info", "Plugin initialized")
  *   }
  *
- *   async query(ctx: Context, query: Query): Promise<Result[]> {
- *     return [{
+ *   async query(ctx: Context, query: Query): Promise<QueryResponse> {
+ *     // QueryResponse requires Wox >= 2.0.4. Return Result[] instead when
+ *     // your plugin must keep running on older Wox releases.
+ *     return { Results: [{
  *       Title: "Hello World",
  *       SubTitle: "My first result",
  *       Icon: { ImageType: "emoji", ImageData: "👋" },
  *       Score: 100
- *     }]
+ *     }] }
  *   }
  * }
  * ```
@@ -101,21 +103,23 @@ export interface Plugin {
    * Query handler that returns results based on user input.
    *
    * Called whenever the user types a query that triggers this plugin.
-   * The plugin should return a list of matching results sorted by relevance.
+   * The plugin should return matching results sorted by relevance.
+   * QueryResponse requires Wox >= 2.0.4; return Result[] directly when the
+   * plugin must support older Wox releases.
    *
    * @param ctx - Request context with trace ID for logging
    * @param query - The query object containing search text, type, environment
-   * @returns Array of results to display to the user
+   * @returns QueryResponse for Wox >= 2.0.4, or Result[] for older-compatible plugins
    *
    * @example
    * ```typescript
-   * async query(ctx: Context, query: Query): Promise<Result[]> {
+   * async query(ctx: Context, query: Query): Promise<QueryResponse> {
    *   if (query.Type === "selection") {
-   *     return this.handleSelection(query.Selection)
+   *     return { Results: this.handleSelection(query.Selection) }
    *   }
    *
    *   const searchTerm = query.Search.toLowerCase()
-   *   return this.items
+   *   const results = this.items
    *     .filter(item => item.name.toLowerCase().includes(searchTerm))
    *     .map(item => ({
    *       Title: item.name,
@@ -132,10 +136,12 @@ export interface Plugin {
    *         }
    *       ]
    *     }))
+   *
+   *   return { Results: results }
    * }
    * ```
    */
-  query: (ctx: Context, query: Query) => Promise<Result[]>
+  query: (ctx: Context, query: Query) => Promise<QueryReturn>
 }
 
 /**
@@ -146,7 +152,7 @@ export interface Plugin {
  *
  * @example
  * ```typescript
- * async query(ctx: Context, query: Query): Promise<Result[]> {
+ * async query(ctx: Context, query: Query): Promise<QueryResponse> {
  *   if (query.Type === "selection") {
  *     const selection = query.Selection
  *     if (selection.Type === "text") {
@@ -155,7 +161,7 @@ export interface Plugin {
  *       console.log("Selected files:", selection.FilePaths)
  *     }
  *   }
- *   return []
+ *   return { Results: [] }
  * }
  * ```
  */
@@ -193,11 +199,11 @@ export interface Selection {
  * @example
  * ```typescript
  * // Show different results based on active window
- * async query(ctx: Context, query: Query): Promise<Result[]> {
+ * async query(ctx: Context, query: Query): Promise<QueryResponse> {
  *   if (query.Env.ActiveWindowTitle.includes("Visual Studio")) {
- *     return this.getVSCodeActions()
+ *     return { Results: this.getVSCodeActions() }
  *   }
- *   return []
+ *   return { Results: [] }
  * }
  * ```
  */
@@ -245,7 +251,7 @@ export interface QueryEnv {
  *
  * @example
  * ```typescript
- * async query(ctx: Context, query: Query): Promise<Result[]> {
+ * async query(ctx: Context, query: Query): Promise<QueryResponse> {
  *   // Handle input query
  *   if (query.Type === "input") {
  *     console.log("Search:", query.Search)
@@ -272,6 +278,14 @@ export interface Query {
    * Pass this ID when calling UpdateResult or PushResults.
    */
   Id: string
+
+  /**
+   * UI session identifier for this query.
+   *
+   * Stable for the lifetime of the Wox UI instance that issued the query.
+   * Use this when query-scoped state must stay tied to one visible session.
+   */
+  SessionId?: string
 
   /**
    * Query type.
@@ -341,12 +355,112 @@ export interface Query {
   Env: QueryEnv
 
   /**
+   * Selected query refinement values keyed by refinement id.
+   *
+   * These values come from the QueryResponse.Refinements controls returned by
+   * the plugin on previous query updates. Wox treats them as opaque strings;
+   * the plugin owns the filtering or sorting semantics. Multi-select
+   * refinements are comma-separated.
+   */
+  Refinements?: { [key: string]: string }
+
+  /**
+   * Hidden query-scoped data.
+   *
+   * Wox does not render this as UI. Plugins can use it to keep data attached
+   * to a plugin-driven ChangeQuery flow, such as a shell working directory.
+   */
+  ContextData?: MapString
+
+  /**
    * Check if this is a global query (no trigger keyword).
    *
    * @returns true if triggered globally, false if triggered by keyword
    */
   IsGlobalQuery(): boolean
 }
+
+export type QueryRefinementType = "singleSelect" | "multiSelect" | "toggle" | "sort"
+
+/**
+ * One selectable value inside a query refinement control.
+ */
+export interface QueryRefinementOption {
+  Value: string
+  Title: string
+  Icon?: WoxImage
+  Keywords?: string[]
+  Count?: number
+}
+
+/**
+ * Query-scoped control displayed near the query box or result list.
+ *
+ * Plugins return refinements with QueryResponse, and Wox sends selected values
+ * back through Query.Refinements on the next query.
+ */
+export interface QueryRefinement {
+  Id: string
+  Title: string
+  Type: QueryRefinementType
+  Options: QueryRefinementOption[]
+  DefaultValue?: string[]
+  Hotkey: string
+  Persist?: boolean
+}
+
+/**
+ * Optional grid presentation hints for the current query response.
+ *
+ * Prefer this QueryResponse layout field over plugin.json `gridLayout`. The
+ * metadata feature is deprecated because it only describes static plugin or
+ * command defaults, while QueryResponse can choose the layout per query.
+ */
+export interface QueryGridLayout {
+  Columns?: number
+  ImageWidth?: number
+  ImageHeight?: number
+  ItemPadding?: number
+  ItemMargin?: number
+  AspectRatio?: number
+  Commands?: string[]
+}
+
+/**
+ * Optional presentation hints that apply to one query response.
+ *
+ * Use this object for result preview width and grid layout. The older
+ * plugin.json `resultPreviewWidthRatio` and `gridLayout` metadata features are
+ * deprecated and remain only for compatibility with existing plugins.
+ */
+export interface QueryLayout {
+  Icon?: WoxImage
+  ResultPreviewWidthRatio?: number
+  GridLayout?: QueryGridLayout
+}
+
+/**
+ * Complete response from plugin.query().
+ *
+ * Requires Wox >= 2.0.4. Set plugin.json MinWoxVersion to at least 2.0.4 when
+ * returning this shape; return Result[] directly if the plugin must support
+ * older Wox releases.
+ */
+export interface QueryResponse {
+  Results: Result[]
+  Refinements?: QueryRefinement[]
+  Layout?: QueryLayout
+}
+
+/**
+ * @deprecated Returning Result[] from query() is still accepted by the host for
+ * compatibility. Use QueryResponse only when plugin.json MinWoxVersion is at
+ * least 2.0.4 so results, refinements, and layout hints stay in one response
+ * object.
+ */
+export type LegacyQueryReturn = Result[]
+
+export type QueryReturn = QueryResponse | LegacyQueryReturn
 
 /**
  * A search result displayed to the user.
@@ -365,7 +479,7 @@ export interface Query {
  *   Preview: {
  *     PreviewType: "markdown",
  *     PreviewData: "# Calculator\n\nA simple calculator app",
- *     PreviewProperties: {}
+ *     PreviewTags: [{ Label: "System", Tooltip: "Source" }]
  *   },
  *   Tails: [
  *     { Type: "text", Text: "⌘⏎ Quick Action" }
@@ -430,6 +544,14 @@ export interface Result {
   Score?: number
 
   /**
+   * Stable identity used for actioned-result ranking.
+   *
+   * Optional. Set this when Title or SubTitle changes over time but the result
+   * should keep the same usage score in global search.
+   */
+  ScoreKey?: string
+
+  /**
    * Group name for organizing results.
    *
    * Results with the same group name are displayed together
@@ -467,6 +589,28 @@ export interface Result {
    * triggered via keyboard shortcuts or clicking.
    */
   Actions?: ResultAction[]
+
+  /**
+   * Optional native drag payload for this result.
+   *
+   * Wox currently supports file drags only. Use absolute file or directory
+   * paths so the desktop shell can transfer them to another app.
+   */
+  DragData?: ResultDragData
+}
+
+export interface ResultDragData {
+  /**
+   * Native drag payload type.
+   *
+   * Currently only `files` is supported.
+   */
+  Type: "files"
+
+  /**
+   * Absolute file or directory paths exported by the drag session.
+   */
+  Files: string[]
 }
 
 /**
@@ -482,9 +626,11 @@ export interface Result {
  * { Type: "text", Text: "✓ Verified", Id: "status-tail" }
  *
  * // Image tail for icon
- * { Type: "image", Image: { ImageType: "emoji", ImageData: "🔥" } }
+ * { Type: "image", Image: { ImageType: "emoji", ImageData: "🔥" }, ImageWidth: 24, ImageHeight: 24, Tooltip: "Hot" }
  * ```
  */
+export type ResultTailTextCategory = "default" | "danger" | "warning" | "success"
+
 export interface ResultTail {
   /**
    * The type of tail content.
@@ -502,11 +648,40 @@ export interface ResultTail {
   Text?: string
 
   /**
+   * Semantic color category for text tails.
+   *
+   * Only used when Type is "text". If omitted, Wox uses the default text-tail style.
+   */
+  TextCategory?: ResultTailTextCategory
+
+  /**
    * Image content for image tails.
    *
    * Only used when Type is "image".
    */
   Image?: WoxImage
+
+  /**
+   * Optional width for image tails.
+   *
+   * Only used when Type is "image". If omitted, Wox uses the default tail image width.
+   */
+  ImageWidth?: number
+
+  /**
+   * Optional height for image tails.
+   *
+   * Only used when Type is "image". If omitted, Wox uses the default tail image height.
+   */
+  ImageHeight?: number
+
+  /**
+   * Optional hover text for this tail.
+   *
+   * Use this for compact or icon-only tails so users can understand the tail
+   * without plugins replacing the visual affordance with longer text.
+   */
+  Tooltip?: string
 
   /**
    * Unique identifier for this tail.
@@ -569,6 +744,8 @@ export interface UpdatableResult {
   Preview?: WoxPreview
   /** Optional - update the actions */
   Actions?: ResultAction[]
+  /** Optional - update or clear native drag data */
+  DragData?: ResultDragData
 }
 
 /**
@@ -872,6 +1049,94 @@ export interface FormActionContext extends ActionContext {
 }
 
 /**
+ * Context passed back to a toolbar msg action callback.
+ */
+export interface ToolbarMsgActionContext {
+  /**
+   * Id of the toolbar msg that owns the action.
+   */
+  ToolbarMsgId: string
+  /**
+   * Id of the toolbar msg action that was invoked.
+   */
+  ToolbarMsgActionId: string
+  /**
+   * Arbitrary string data attached to the action.
+   */
+  ContextData: MapString
+}
+
+/**
+ * Action rendered on the toolbar while a toolbar msg is visible.
+ */
+export interface ToolbarMsgAction {
+  /**
+   * Unique action id. Wox will backfill one when omitted.
+   */
+  Id?: string
+  /**
+   * Action label shown in the toolbar.
+   */
+  Name: string
+  /**
+   * Optional action icon.
+   */
+  Icon?: WoxImage
+  /**
+   * Optional hotkey displayed in the toolbar.
+   */
+  Hotkey?: string
+  /**
+   * Whether this action should be treated as the default action.
+   */
+  IsDefault?: boolean
+  /**
+   * When true, Wox keeps the launcher visible after the action runs.
+   */
+  PreventHideAfterAction?: boolean
+  /**
+   * Arbitrary string data passed back through ToolbarMsgActionContext.
+   */
+  ContextData?: MapString
+  /**
+   * Action callback invoked when the user triggers the toolbar action.
+   */
+  Action: (ctx: Context, actionContext: ToolbarMsgActionContext) => Promise<void> | void
+}
+
+/**
+ * Toolbar msg payload displayed in the launcher toolbar.
+ */
+export interface ToolbarMsg {
+  /**
+   * Unique toolbar msg id within the current plugin.
+   *
+   * Reusing the same id updates the existing toolbar msg in place.
+   */
+  Id: string
+  /**
+   * Primary text shown in the toolbar.
+   */
+  Title: string
+  /**
+   * Optional icon shown before the title.
+   */
+  Icon?: WoxImage
+  /**
+   * Optional 0-100 progress value for determinate progress.
+   */
+  Progress?: number
+  /**
+   * Shows an indeterminate spinner when the work is in progress but no percentage is available yet.
+   */
+  Indeterminate?: boolean
+  /**
+   * Optional toolbar actions rendered on the right side of the toolbar.
+   */
+  Actions?: ToolbarMsgAction[]
+}
+
+/**
  * Most Recently Used (MRU) item data.
  *
  * Wox keeps track of recently selected items and can restore them
@@ -997,6 +1262,11 @@ export interface ChangeQueryParam {
    * Only used when QueryType is "selection".
    */
   QuerySelection?: Selection
+
+  /**
+   * Hidden query-scoped data to attach to the changed query.
+   */
+  ContextData?: MapString
 }
 
 export interface RefreshQueryParam {
@@ -1056,6 +1326,54 @@ export interface CopyParams {
   woxImage?: WoxImage
 }
 
+export type AttentionActionType = "change_query"
+
+/**
+ * Action executed when the user opens a persistent attention item.
+ */
+export interface AttentionAction {
+  type: AttentionActionType
+  query: string
+}
+
+/**
+ * Persistent item that asks Wox to keep something visible until the user sees it.
+ *
+ * Wox stores the item, maintains unread state, and shows an unread badge near the
+ * query box like a lightweight inbox. The key is scoped to the current plugin.
+ */
+export interface PushAttentionRequest {
+  key: string
+  title: string
+  description?: string
+  icon?: WoxImage
+  action?: AttentionAction
+}
+
+/**
+ * Options for the built-in screenshot workflow.
+ */
+export interface ScreenshotOption {
+  /**
+   * Hide annotation tools and keep only caller identity, cancel, and confirm controls.
+   */
+  HideAnnotationToolbar?: boolean
+  /**
+   * Complete the screenshot automatically after the user finishes drawing a valid selection.
+   */
+  AutoConfirm?: boolean
+}
+
+/**
+ * Result of a plugin-triggered screenshot workflow.
+ * Contains the screenshot file path and any error message if the workflow failed.
+ */
+export interface ScreenshotResult {
+  Success: boolean
+  ScreenshotPath: string
+  ErrMsg: string
+}
+
 export interface PublicAPI {
   /**
    * Change Wox query
@@ -1081,6 +1399,29 @@ export interface PublicAPI {
    * Notify message
    */
   Notify: (ctx: Context, message: string) => Promise<void>
+
+  /**
+   * Push a persistent attention item into Wox.
+   *
+   * Unlike Notify, this survives until the user handles it. Wox shows the unread
+   * count near the query box and opens the attention inbox when the badge is clicked.
+   */
+  PushAttention: (ctx: Context, request: PushAttentionRequest) => Promise<void>
+
+  /**
+   * Show or update a toolbar msg.
+   *
+   * Reusing the same Id updates the current status instead of creating a duplicate.
+   * Plugin-scoped status is only accepted while the user stays in this plugin query.
+   */
+  ShowToolbarMsg: (ctx: Context, status: ToolbarMsg) => Promise<void>
+
+  /**
+   * Clear a toolbar msg by Id.
+   *
+   * The toolbar msg must belong to the current plugin.
+   */
+  ClearToolbarMsg: (ctx: Context, toolbarMsgId: string) => Promise<void>
 
   /**
    * Write log
@@ -1125,6 +1466,16 @@ export interface PublicAPI {
    * Register on load event
    */
   OnUnload: (ctx: Context, callback: (ctx: Context) => Promise<void>) => Promise<void>
+
+  /**
+   * Register a callback for entering this plugin query context.
+   */
+  OnEnterPluginQuery: (ctx: Context, callback: (ctx: Context) => Promise<void> | void) => Promise<void>
+
+  /**
+   * Register a callback for leaving this plugin query context.
+   */
+  OnLeavePluginQuery: (ctx: Context, callback: (ctx: Context) => Promise<void> | void) => Promise<void>
 
   /**
    * Register query commands
@@ -1260,6 +1611,13 @@ export interface PublicAPI {
    * @param params CopyParams
    */
   Copy: (ctx: Context, params: CopyParams) => Promise<void>
+
+  /**
+   * Start the built-in screenshot workflow.
+   * @param ctx Context
+   * @param option Screenshot options
+   */
+  Screenshot: (ctx: Context, option: ScreenshotOption) => Promise<ScreenshotResult>
 }
 
 /**
@@ -1347,8 +1705,66 @@ export interface WoxImage {
  * - `image`: Image preview
  * - `url`: Website URL preview
  * - `file`: File preview
+ * - `list`: Structured row-list preview
  */
-export type WoxPreviewType = "markdown" | "text" | "image" | "url" | "file"
+export type WoxPreviewType = "markdown" | "text" | "image" | "url" | "file" | "list"
+
+/**
+ * One row in a `list` preview.
+ *
+ * Tails intentionally reuse ResultTail so progress/status chips render the
+ * same way in preview rows and normal result rows.
+ */
+export interface WoxPreviewListItem {
+  /**
+   * Optional row icon.
+   */
+  icon?: WoxImage
+
+  /**
+   * Primary row text.
+   */
+  title: string
+
+  /**
+   * Secondary row text.
+   */
+  subtitle?: string
+
+  /**
+   * Optional status chips or small images shown at the end of the row.
+   */
+  tails?: ResultTail[]
+}
+
+/**
+ * Structured data for `list` previews.
+ *
+ * Plugins should JSON.stringify this object into WoxPreview.PreviewData. The
+ * row-based shape replaces the old file-only preview so plugins can dynamically
+ * show progress, status, selected files, or other scannable lists.
+ */
+export interface WoxPreviewListData {
+  items: WoxPreviewListItem[]
+}
+
+/**
+ * Metadata tag shown below preview content.
+ *
+ * The preview footer now renders compact tags instead of a key/value table, so
+ * Label is the visible chip text and Tooltip provides optional hover context.
+ */
+export interface WoxPreviewTag {
+  /**
+   * Visible text shown inside the metadata tag.
+   */
+  Label: string
+
+  /**
+   * Optional hover text for the metadata tag.
+   */
+  Tooltip?: string
+}
 
 /**
  * Preview panel content for a result.
@@ -1362,21 +1778,37 @@ export type WoxPreviewType = "markdown" | "text" | "image" | "url" | "file"
  * {
  *   PreviewType: "markdown",
  *   PreviewData: "# Title\n\nDescription with **formatting**",
- *   PreviewProperties: {}
+ *   PreviewTags: [{ Label: "17 chars", Tooltip: "Copy characters" }]
  * }
  *
  * // Image preview
  * {
  *   PreviewType: "image",
  *   PreviewData: "https://example.com/image.png",
- *   PreviewProperties: { "height": "300" }
+ *   PreviewTags: [{ Label: "300 px", Tooltip: "Height" }]
  * }
  *
  * // URL preview
  * {
  *   PreviewType: "url",
  *   PreviewData: "https://github.com/Wox-launcher/Wox",
- *   PreviewProperties: {}
+ *   PreviewTags: []
+ * }
+ *
+ * // List preview
+ * {
+ *   PreviewType: "list",
+ *   PreviewData: JSON.stringify({
+ *     items: [
+ *       {
+ *         icon: { ImageType: "emoji", ImageData: "✓" },
+ *         title: "photo.jpg",
+ *         subtitle: "Saved 42 KB",
+ *         tails: [{ Type: "text", Text: "Done", TextCategory: "success" }]
+ *       }
+ *     ]
+ *   } satisfies WoxPreviewListData),
+ *   PreviewTags: [{ Label: "Done", Tooltip: "Status" }]
  * }
  * ```
  */
@@ -1396,20 +1828,21 @@ export interface WoxPreview {
    * - `image`: Image URL, path, or base64 data
    * - `url`: Website URL to preview
    * - `file`: File path to preview
+   * - `list`: JSON string encoded from WoxPreviewListData
    */
   PreviewData: string
   /**
-   * Additional properties for the preview.
-   *
-   * Type-specific options like height, width, scroll position, etc.
-   *
-   * @example
-   * ```typescript
-   * { "height": "400", "width": "600" }
-   * { "scrollPosition": "top" }
-   * ```
+   * Metadata tags shown below the preview content.
    */
-  PreviewProperties: Record<string, string>
+  PreviewTags?: WoxPreviewTag[]
+  /**
+   * @deprecated Use PreviewTags instead.
+   *
+   * The launcher still maps each legacy key/value pair to a metadata tag with
+   * the value as Label and the key as Tooltip, so existing plugins remain
+   * compatible while new plugins can use the tag contract directly.
+   */
+  PreviewProperties?: Record<string, string>
 }
 
 /**

@@ -9,8 +9,8 @@ void sendFilesViaAirDrop(const char **filePaths, int count);
 */
 import "C"
 import (
-	"golang.design/x/hotkey/mainthread"
 	"unsafe"
+	"wox/util/mainthread"
 )
 
 func Airdrop(filePaths []string) {

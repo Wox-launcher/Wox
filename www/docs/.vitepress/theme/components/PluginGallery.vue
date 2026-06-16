@@ -1,35 +1,22 @@
-<script setup>
-import { computed, ref, onMounted } from "vue";
-import { useData } from "vitepress";
+<script setup lang="ts">
+import { computed, onMounted, ref } from "vue";
+import { useData, withBase } from "vitepress";
+import { fetchStorePlugins, localizePlugin, type LocalizedStorePluginManifest } from "./pluginStore";
 
-const plugins = ref([]);
+const plugins = ref<LocalizedStorePluginManifest[]>([]);
 const searchQuery = ref("");
 const { lang } = useData();
 
-onMounted(async () => {
-  try {
-    const res = await fetch("https://raw.githubusercontent.com/Wox-launcher/Wox/master/store-plugin.json");
-    plugins.value = await res.json();
-  } catch (e) {
-    console.error(e);
-  }
-});
-
-const currentLangCode = computed(() => {
-  const l = (lang.value || "").toLowerCase();
-  if (l.startsWith("zh")) return "zh_CN";
-  if (l.startsWith("pt")) return "pt_BR";
-  if (l.startsWith("ru")) return "ru_RU";
-  return "en_US";
-});
-
 const uiText = computed(() => {
-  const l = (lang.value || "").toLowerCase();
-  if (l.startsWith("zh")) {
+  const normalizedLang = (lang.value || "").toLowerCase();
+
+  if (normalizedLang.startsWith("zh")) {
     return {
       searchPlaceholder: "搜索插件...",
-      by: "作者：",
+      by: "作者",
       install: "安装",
+      source: "官网",
+      empty: "没有找到匹配的插件。",
     };
   }
 
@@ -37,40 +24,37 @@ const uiText = computed(() => {
     searchPlaceholder: "Search plugins...",
     by: "by",
     install: "Install",
+    source: "Website",
+    empty: "No plugins match your search.",
   };
 });
 
-const translate = (plugin, value) => {
-  const raw = String(value || "");
-  if (!raw.startsWith("i18n:")) return raw;
-
-  const key = raw.slice(5);
-  const i18n = plugin?.I18n || {};
-  const current = i18n[currentLangCode.value]?.[key];
-  if (current) return current;
-  const fallback = i18n["en_US"]?.[key];
-  if (fallback) return fallback;
-  return raw;
-};
-
-const localizedPlugins = computed(() => {
-  return plugins.value.map((p) => {
-    return {
-      ...p,
-      LocalizedName: translate(p, p.Name),
-      LocalizedDescription: translate(p, p.Description),
-    };
-  });
+onMounted(async () => {
+  try {
+    const storePlugins = await fetchStorePlugins();
+    plugins.value = storePlugins.map((plugin) => localizePlugin(plugin, lang.value));
+  } catch (error) {
+    console.error(error);
+  }
 });
 
 const filteredPlugins = computed(() => {
-  const q = searchQuery.value.toLowerCase();
-  return localizedPlugins.value.filter((p) => p.LocalizedName.toLowerCase().includes(q) || p.LocalizedDescription.toLowerCase().includes(q));
+  const query = searchQuery.value.trim().toLowerCase();
+  if (!query) return plugins.value;
+
+  return plugins.value.filter((plugin) => {
+    return [plugin.LocalizedName, plugin.LocalizedDescription, plugin.Author, plugin.Runtime].filter(Boolean).some((value) => value!.toLowerCase().includes(query));
+  });
 });
 
-const openLink = (url) => {
-  if (url) window.open(url, "_blank");
-};
+function pluginDetailHref(pluginId: string) {
+  const prefix = (lang.value || "").toLowerCase().startsWith("zh") ? "/zh/store/plugin.html" : "/store/plugin.html";
+  return withBase(`${prefix}?id=${encodeURIComponent(pluginId)}`);
+}
+
+function installHref(pluginName: string) {
+  return `wox://query?q=${encodeURIComponent(`wpm install ${pluginName}`)}`;
+}
 </script>
 
 <template>
@@ -79,23 +63,42 @@ const openLink = (url) => {
       <input v-model="searchQuery" type="text" :placeholder="uiText.searchPlaceholder" class="search-input" />
     </div>
 
-    <div class="grid">
-      <div v-for="plugin in filteredPlugins" :key="plugin.Id" class="card" @click="openLink(plugin.Website)">
+    <div v-if="filteredPlugins.length" class="grid">
+      <article
+        v-for="plugin in filteredPlugins"
+        :key="plugin.Id"
+        class="card"
+        tabindex="0"
+        @keydown.enter="() => (window.location.href = pluginDetailHref(plugin.Id))"
+      >
+        <a :href="pluginDetailHref(plugin.Id)" class="card-link" :aria-label="plugin.LocalizedName"></a>
+
         <div class="card-header">
-          <img v-if="plugin.IconUrl" :src="plugin.IconUrl" class="icon" alt="icon" />
+          <img v-if="plugin.IconUrl" :src="plugin.IconUrl" class="icon" alt="plugin icon" />
           <div v-else class="icon-placeholder">{{ plugin.IconEmoji || "🧩" }}</div>
+
           <div class="title-area">
             <h3 class="name">{{ plugin.LocalizedName }}</h3>
             <span class="author">{{ uiText.by }} {{ plugin.Author }}</span>
           </div>
         </div>
+
         <p class="description">{{ plugin.LocalizedDescription }}</p>
+
         <div class="footer">
           <span class="version">v{{ plugin.Version }}</span>
-          <a :href="`wox://query?q=wpm install ${plugin.Id}`" class="download-btn" @click.stop>{{ uiText.install }}</a>
+
+          <div class="actions">
+            <a v-if="plugin.Website" :href="plugin.Website" class="secondary-btn" target="_blank" rel="noreferrer" @click.stop>
+              {{ uiText.source }}
+            </a>
+            <a :href="installHref(plugin.LocalizedName)" class="primary-btn" @click.stop>{{ uiText.install }}</a>
+          </div>
         </div>
-      </div>
+      </article>
     </div>
+
+    <div v-else class="empty-state">{{ uiText.empty }}</div>
   </div>
 </template>
 
@@ -110,18 +113,21 @@ const openLink = (url) => {
 
 .search-input {
   width: 100%;
-  padding: 12px 16px;
+  padding: 14px 16px;
   border: 1px solid var(--vp-c-divider);
-  border-radius: 8px;
-  background-color: var(--vp-c-bg-alt);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent), var(--vp-c-bg-alt);
   color: var(--vp-c-text-1);
   font-size: 16px;
-  transition: border-color 0.2s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
 
 .search-input:focus {
-  border-color: var(--vp-c-brand);
+  border-color: var(--vp-c-brand-1);
   outline: none;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--vp-c-brand-1) 18%, transparent);
 }
 
 .grid {
@@ -143,107 +149,179 @@ const openLink = (url) => {
 }
 
 .card {
-  background-color: var(--vp-c-bg-soft);
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 12px;
-  padding: 20px;
-  transition: transform 0.2s, box-shadow 0.2s;
-  cursor: pointer;
+  position: relative;
   display: flex;
   flex-direction: column;
+  min-height: 280px;
+  padding: 22px;
+  border: 1px solid color-mix(in srgb, var(--vp-c-divider) 84%, white 16%);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at top right, rgba(100, 108, 255, 0.12), transparent 34%), linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 32%), var(--vp-c-bg-soft);
+  cursor: pointer;
+  transition:
+    transform 0.2s,
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
 
 .card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
-  border-color: var(--vp-c-brand);
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--vp-c-brand-1) 45%, var(--vp-c-divider));
+  box-shadow: 0 18px 34px rgba(15, 23, 42, 0.1);
+}
+
+.card-link {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+}
+
+.card:focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: 3px;
+}
+
+.actions,
+.actions a {
+  position: relative;
+  z-index: 3;
 }
 
 .card-header {
   display: flex;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
+}
+
+.icon,
+.icon-placeholder {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  margin-right: 14px;
+  flex-shrink: 0;
 }
 
 .icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 10px;
-  margin-right: 12px;
   object-fit: cover;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.14);
 }
 
 .icon-placeholder {
-  width: 48px;
-  height: 48px;
-  border-radius: 10px;
-  margin-right: 12px;
-  background-color: var(--vp-c-bg-mute);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
+  background: color-mix(in srgb, var(--vp-c-brand-1) 22%, var(--vp-c-bg-mute));
+  font-size: 28px;
 }
 
 .title-area {
   flex: 1;
-  overflow: hidden;
+  min-width: 0;
 }
 
 .name {
   margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   color: var(--vp-c-text-1);
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.2;
 }
 
 .author {
-  font-size: 12px;
+  display: inline-block;
+  margin-top: 6px;
   color: var(--vp-c-text-2);
+  font-size: 13px;
 }
 
 .description {
-  font-size: 14px;
-  color: var(--vp-c-text-2);
-  margin: 0 0 16px 0;
-  line-height: 1.5;
   flex: 1;
+  margin: 0 0 16px;
+  color: var(--vp-c-text-2);
+  font-size: 14px;
+  line-height: 1.6;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
   overflow: hidden;
+}
+
+.version {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--vp-c-brand-1) 10%, var(--vp-c-bg-mute));
+  color: var(--vp-c-text-2);
+  font-size: 12px;
 }
 
 .footer {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin-top: auto;
 }
 
-.version {
-  font-size: 12px;
-  color: var(--vp-c-text-3);
-  background-color: var(--vp-c-bg-mute);
-  padding: 2px 6px;
-  border-radius: 4px;
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
-.download-btn {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--vp-c-brand);
+.primary-btn,
+.secondary-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
   text-decoration: none;
-  padding: 4px 12px;
-  border-radius: 16px;
-  background-color: var(--vp-c-brand-dimm);
-  transition: background-color 0.2s;
+  font-size: 13px;
+  font-weight: 600;
+  transition:
+    transform 0.2s,
+    background-color 0.2s,
+    border-color 0.2s;
 }
 
-.download-btn:hover {
-  background-color: var(--vp-c-brand-soft);
+.primary-btn {
+  background: var(--vp-c-brand-1);
+  color: white;
+}
+
+.primary-btn:hover {
+  background: var(--vp-c-brand-2);
+  color: white;
+}
+
+.secondary-btn {
+  border: 1px solid var(--vp-c-divider);
+  background: var(--vp-c-bg);
+  color: var(--vp-c-text-1);
+}
+
+.secondary-btn:hover,
+.primary-btn:hover {
+  transform: translateY(-1px);
+}
+
+.secondary-btn:hover {
+  color: var(--vp-c-text-1);
+}
+
+.empty-state {
+  padding: 48px 24px;
+  border: 1px dashed var(--vp-c-divider);
+  border-radius: 20px;
+  color: var(--vp-c-text-2);
+  text-align: center;
 }
 </style>

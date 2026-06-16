@@ -4,7 +4,14 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 	"wox/util/shell"
+)
+
+var (
+	cachedLang   string
+	cachedRegion string
+	localeOnce   sync.Once
 )
 
 func IsZhCN() bool {
@@ -14,6 +21,13 @@ func IsZhCN() bool {
 
 // GetLocale returns the user's language and region
 func GetLocale() (string, string) {
+	localeOnce.Do(func() {
+		cachedLang, cachedRegion = detectLocale()
+	})
+	return cachedLang, cachedRegion
+}
+
+func detectLocale() (string, string) {
 	osHost := runtime.GOOS
 	defaultLang := "en"
 	defaultLoc := "US"

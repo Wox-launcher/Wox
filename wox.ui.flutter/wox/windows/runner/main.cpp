@@ -1,6 +1,8 @@
 #include <flutter/dart_project.h>
 #include <windows.h>
 
+#include <string>
+
 #include "flutter_window.h"
 #include "utils.h"
 
@@ -28,9 +30,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     CreateAndAttachConsole();
   }
 
-  // Initialize COM, so that it is available for use in the library and/or
-  // plugins.
-  ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+  // Initialize OLE because result export uses DoDragDrop on the UI thread.
+  HRESULT ole_result = ::OleInitialize(nullptr);
 
   flutter::DartProject project(L"data");
 
@@ -44,6 +45,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   Win32Window::Size size(1280, 720);
   if (!window.Create(L"wox-ui", origin, size))
   {
+    if (SUCCEEDED(ole_result))
+    {
+      ::OleUninitialize();
+    }
     return EXIT_FAILURE;
   }
 
@@ -69,40 +74,13 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   ::MSG msg = {};
   while (::GetMessage(&msg, nullptr, 0, 0) > 0)
   {
-    // Send keyboard events directly to Flutter (Windows-specific workaround)
-    // This bypasses Flutter's broken child window keyboard event handling
-    if (msg.message == WM_KEYDOWN || msg.message == WM_SYSKEYDOWN ||
-        msg.message == WM_KEYUP || msg.message == WM_SYSKEYUP)
-    {
-      char keyName[256];
-      GetKeyNameTextA(static_cast<LONG>(msg.lParam), keyName, sizeof(keyName));
-      char hwndStr[32];
-      sprintf_s(hwndStr, "%p", msg.hwnd);
-
-      std::string eventType = (msg.message == WM_KEYDOWN || msg.message == WM_SYSKEYDOWN) ? "WM_KEYDOWN" : "WM_KEYUP";
-      std::string logMsg = "[KEYLOG][MSGLOOP] " + eventType + ": vk=" + std::to_string(msg.wParam) +
-                           " (" + keyName + ") hwnd=" + hwndStr;
-      window.Log(logMsg);
-
-      // Send to Flutter via our custom channel
-      window.SendKeyboardEvent(msg.message, msg.wParam, msg.lParam);
-    }
-
-    // prevent the error/beep sound when alt+number/letter is pressed
-    // Also prevent WM_CHAR generation for Alt combinations
-    if (msg.message == WM_SYSKEYDOWN || msg.message == WM_SYSKEYUP)
-    {
-      // Don't call TranslateMessage for SYSKEYDOWN/UP to prevent WM_CHAR generation
-      // This prevents Alt+J from typing 'j' into the text field
-      ::DispatchMessage(&msg);
-      window.Log("[KEYLOG][MSGLOOP] Dispatched SYSKEY without TranslateMessage");
-      continue;
-    }
-
     ::TranslateMessage(&msg);
     ::DispatchMessage(&msg);
   }
 
-  ::CoUninitialize();
+  if (SUCCEEDED(ole_result))
+  {
+    ::OleUninitialize();
+  }
   return EXIT_SUCCESS;
 }

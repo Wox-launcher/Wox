@@ -1,6 +1,7 @@
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_query.dart';
+import 'package:wox/enums/wox_result_tail_text_category_enum.dart';
 import 'package:wox/enums/wox_result_tail_type_enum.dart';
 
 class WoxListItem<T> {
@@ -76,16 +77,7 @@ class WoxListItem<T> {
       }
     }
 
-    return WoxListItem<WoxResultAction>(
-      id: action.id,
-      icon: action.icon,
-      title: action.name,
-      subTitle: "",
-      tails: tails,
-      isGroup: false,
-      hotkey: action.hotkey,
-      data: action,
-    );
+    return WoxListItem<WoxResultAction>(id: action.id, icon: action.icon, title: action.name, subTitle: "", tails: tails, isGroup: false, hotkey: action.hotkey, data: action);
   }
 
   @override
@@ -97,10 +89,23 @@ class WoxListItem<T> {
 class WoxListItemTail {
   late String type; // see @WoxListItemTailTypeEnum
   late String? text;
+  late String textCategory;
   late WoxImage? image;
   late HotkeyX? hotkey;
+  late double? imageWidth;
+  late double? imageHeight;
+  late String? tooltip;
 
-  WoxListItemTail({required this.type, this.text, this.image, this.hotkey});
+  WoxListItemTail({
+    required this.type,
+    this.text,
+    this.textCategory = woxListItemTailTextCategoryDefault,
+    this.image,
+    this.hotkey,
+    this.imageWidth,
+    this.imageHeight,
+    this.tooltip,
+  });
 
   WoxListItemTail.fromJson(Map<String, dynamic> json) {
     type = json['Type'];
@@ -109,12 +114,17 @@ class WoxListItemTail {
     } else {
       text = null;
     }
+    textCategory = WoxListItemTailTextCategoryEnum.ensureCode(json['TextCategory']);
 
     if (json['Image'] != null) {
       image = WoxImage.fromJson(json['Image']);
     } else {
       image = null;
     }
+
+    imageWidth = (json['ImageWidth'] as num?)?.toDouble();
+    imageHeight = (json['ImageHeight'] as num?)?.toDouble();
+    tooltip = json['Tooltip'];
 
     if (json['Hotkey'] != null) {
       hotkey = WoxHotkey.parseHotkeyFromString(json['Hotkey']);
@@ -132,12 +142,17 @@ class WoxListItemTail {
     } else {
       data['Text'] = null;
     }
+    data['TextCategory'] = type == WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_TEXT.code ? textCategory : null;
 
     if (image != null) {
       data['Image'] = image!.toJson();
     } else {
       data['Image'] = null;
     }
+
+    data['ImageWidth'] = imageWidth;
+    data['ImageHeight'] = imageHeight;
+    data['Tooltip'] = tooltip;
 
     if (hotkey != null) {
       data['Hotkey'] = hotkey!.toString();
@@ -147,15 +162,15 @@ class WoxListItemTail {
     return data;
   }
 
-  factory WoxListItemTail.text(String text) {
-    return WoxListItemTail(type: WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_TEXT.code, text: text);
+  factory WoxListItemTail.text(String text, {String textCategory = woxListItemTailTextCategoryDefault}) {
+    return WoxListItemTail(type: WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_TEXT.code, text: text, textCategory: textCategory);
   }
 
   factory WoxListItemTail.hotkey(HotkeyX hotkey) {
     return WoxListItemTail(type: WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_HOTKEY.code, hotkey: hotkey);
   }
 
-  factory WoxListItemTail.image(WoxImage image) {
-    return WoxListItemTail(type: WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_IMAGE.code, image: image);
+  factory WoxListItemTail.image(WoxImage image, {double? width, double? height}) {
+    return WoxListItemTail(type: WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_IMAGE.code, image: image, imageWidth: width, imageHeight: height);
   }
 }

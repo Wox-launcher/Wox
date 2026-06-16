@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"wox/util"
 )
 
@@ -39,7 +40,6 @@ log() {
   local now
   now=$(date "+%Y-%m-%d %H:%M:%S")
   echo "$now $1" >> "$LOG_FILE"
-  echo "$1"
 }
 
 log "Update process started for version $VERSION"
@@ -251,14 +251,15 @@ func (u *MacOSUpdater) ApplyUpdate(ctx context.Context, pid int, oldPath, newPat
 	reportApplyProgress(progress, ApplyUpdateStageReplacing)
 	util.GetLogger().Info(ctx, "starting update process")
 	cmd := exec.Command(
-		"bash", "-s", "--",
+		"bash", "-c", macosUpdateScript, "wox-update",
 		updateLogFile,
 		currentUpdateInfo.LatestVersion,
 		extractedAppPath,
 		fmt.Sprintf("%d", pid),
 		oldPath,
 	)
-	cmd.Stdin = strings.NewReader(macosUpdateScript)
+	// Detach the updater process so it can finish replacing the app after Wox exits.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	reportApplyProgress(progress, ApplyUpdateStageRestarting)
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start update process: %w", err)

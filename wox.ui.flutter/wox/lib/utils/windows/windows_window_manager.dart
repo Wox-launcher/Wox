@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/utils/log.dart';
+import 'package:wox/utils/screenshot/screenshot_platform_bridge.dart';
 import 'package:wox/utils/windows/base_window_manager.dart';
 
 /// Modifier key states from Windows
@@ -55,7 +56,7 @@ class WindowsWindowManager extends BaseWindowManager {
       case 'log':
         // Log messages from native code
         final message = call.arguments as String;
-        Logger.instance.info(const UuidV4().generate(), " [NATIVE] $message");
+        Logger.instance.info(const UuidV4().generate(), "[NATIVE] $message");
         break;
       case 'onKeyboardEvent':
         // Handle keyboard events from Windows message loop
@@ -76,6 +77,18 @@ class WindowsWindowManager extends BaseWindowManager {
         for (final listener in _keyboardEventListeners) {
           listener(eventType, keyCode, scanCode, _currentModifierStates);
         }
+        break;
+      case 'onScrollingCaptureWheel':
+        // Windows scrolling capture follows the macOS model: once Flutter is reduced to the compact
+        // preview window, native code observes wheel input over the selected desktop region and
+        // forwards the normalized delta so Dart can choose append vs prepend stitching.
+        ScreenshotPlatformBridge.emitScrollingCaptureWheelEventForPlatform(call.arguments);
+        break;
+      case 'onSelectionDisplayHint':
+        // Windows sends a single native screenshot hint when the overlay appears. That lets the
+        // screenshot controller prewarm the likely display without putting PNG hydration on the
+        // drag-move path.
+        ScreenshotPlatformBridge.emitSelectionDisplayHintForPlatform(call.arguments as Map<dynamic, dynamic>);
         break;
       default:
         Logger.instance.warn(const UuidV4().generate(), "Unhandled method call: ${call.method}");
@@ -141,6 +154,31 @@ class WindowsWindowManager extends BaseWindowManager {
     } catch (e) {
       Logger.instance.error(const UuidV4().generate(), "Error centering window: $e");
       rethrow;
+    }
+  }
+
+  /// Caps a preferred size to the cursor display work area.
+  Future<Size> constrainSizeToCursorDisplayWorkArea(Size preferredSize, {double maxWorkAreaFraction = 1}) async {
+    try {
+      final Map<dynamic, dynamic> result = await _channel.invokeMethod('constrainSizeToCursorDisplayWorkArea', {
+        'width': preferredSize.width,
+        'height': preferredSize.height,
+        'maxWorkAreaFraction': maxWorkAreaFraction,
+      });
+      return Size((result['width'] as num).toDouble(), (result['height'] as num).toDouble());
+    } catch (e) {
+      Logger.instance.error(const UuidV4().generate(), "Error constraining size to cursor display work area: $e");
+      return preferredSize;
+    }
+  }
+
+  /// Returns true when the OS supports the native Mica backdrop used by translucent themes.
+  Future<bool> supportsMicaBackdrop() async {
+    try {
+      return await _channel.invokeMethod('supportsMicaBackdrop');
+    } catch (e) {
+      Logger.instance.error(const UuidV4().generate(), "Error checking Mica backdrop support: $e");
+      return false;
     }
   }
 

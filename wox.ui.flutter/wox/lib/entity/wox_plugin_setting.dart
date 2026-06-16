@@ -51,63 +51,22 @@ class PluginSettingValueStyle {
   late double paddingRight;
   late double paddingBottom;
   late double width;
-  late double labelWidth;
 
-  late Map<String, PluginSettingValueStyle> i18nOverrideMap;
+  PluginSettingValueStyle.defaults() {
+    paddingLeft = 0;
+    paddingTop = 0;
+    paddingRight = 0;
+    paddingBottom = 0;
+    width = 0;
+  }
 
   PluginSettingValueStyle.fromJson(Map<String, dynamic> json) {
-    if (json['PaddingLeft'] == null) {
-      paddingLeft = 0;
-    } else {
-      paddingLeft = (json['PaddingLeft'] as int).toDouble();
-    }
-
-    if (json['PaddingTop'] == null) {
-      paddingTop = 0;
-    } else {
-      paddingTop = (json['PaddingTop'] as int).toDouble();
-    }
-
-    if (json['PaddingRight'] == null) {
-      paddingRight = 0;
-    } else {
-      paddingRight = (json['PaddingRight'] as int).toDouble();
-    }
-
-    if (json['PaddingBottom'] == null) {
-      paddingBottom = 0;
-    } else {
-      paddingBottom = (json['PaddingBottom'] as int).toDouble();
-    }
-
-    if (json['Width'] == null) {
-      width = 0;
-    } else {
-      width = (json['Width'] as int).toDouble();
-    }
-
-    if (json['LabelWidth'] == null) {
-      labelWidth = 0;
-    } else {
-      labelWidth = (json['LabelWidth'] as int).toDouble();
-    }
-
-    i18nOverrideMap = {};
-    if (json['I18nOverrideMap'] != null) {
-      (json['I18nOverrideMap'] as Map<String, dynamic>).forEach((key, value) {
-        i18nOverrideMap[key] = PluginSettingValueStyle.fromJson(value);
-      });
-    }
-  }
-
-  bool hasAnyPadding() {
-    return paddingLeft > 0 || paddingTop > 0 || paddingRight > 0 || paddingBottom > 0;
-  }
-
-  PluginSettingValueStyle resolve(String langCode) {
-    if (i18nOverrideMap.containsKey(langCode)) {
-      return i18nOverrideMap[langCode]!;
-    }
-    return this;
+    // Plugin-provided pixel styling is deprecated and intentionally ignored so
+    // old plugins stay loadable while Wox keeps setting pages visually consistent.
+    paddingLeft = 0;
+    paddingTop = 0;
+    paddingRight = 0;
+    paddingBottom = 0;
+    width = 0;
   }
 }

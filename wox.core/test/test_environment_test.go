@@ -34,6 +34,13 @@ func TestEnvironmentSetup(t *testing.T) {
 		t.Fatal("Failed to create test suite")
 	}
 
+	if got := os.Getenv("WOX_TEST_DATA_DIR"); got != config.TestDataDirectory {
+		t.Fatalf("expected WOX_TEST_DATA_DIR=%q, got %q", config.TestDataDirectory, got)
+	}
+	if got := os.Getenv("WOX_TEST_USER_DIR"); got != config.TestUserDirectory {
+		t.Fatalf("expected WOX_TEST_USER_DIR=%q, got %q", config.TestUserDirectory, got)
+	}
+
 	// Check that directories were created
 	if _, err := os.Stat(config.TestDataDirectory); os.IsNotExist(err) {
 		t.Errorf("Test data directory was not created: %s", config.TestDataDirectory)

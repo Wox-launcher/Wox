@@ -37,43 +37,46 @@ func (l *Location) Init() error {
 		return fmt.Errorf("failed to get user home dir: %w", err)
 	}
 
+	woxDataDirectory := GetTestWoxDataDirectoryOverride()
+	if woxDataDirectory == "" {
+		woxDataDirectory = path.Join(dirname, ".wox")
+	}
+
 	// check if wox data directory exists, if not, create it
-	l.woxDataDirectory = path.Join(dirname, ".wox")
+	l.woxDataDirectory = woxDataDirectory
 	if directoryErr := l.EnsureDirectoryExist(l.woxDataDirectory); directoryErr != nil {
 		return directoryErr
 	}
 
 	l.userDataDirectoryShortcutPath = path.Join(l.woxDataDirectory, ".userdata.location")
-	if _, statErr := os.Stat(l.userDataDirectoryShortcutPath); os.IsNotExist(statErr) {
-		// shortcut file does not exist, create and write default data directory path to it
-		file, createErr := os.Create(l.userDataDirectoryShortcutPath)
-		if createErr != nil {
-			return fmt.Errorf("failed to create shortcut file: %w", createErr)
+	userDataDirectoryOverride := GetTestUserDataDirectoryOverride()
+	if userDataDirectoryOverride != "" {
+		l.userDataDirectory = userDataDirectoryOverride
+	} else {
+		if _, statErr := os.Stat(l.userDataDirectoryShortcutPath); os.IsNotExist(statErr) {
+			// shortcut file does not exist, create and write default data directory path to it
+			file, createErr := os.Create(l.userDataDirectoryShortcutPath)
+			if createErr != nil {
+				return fmt.Errorf("failed to create shortcut file: %w", createErr)
+			}
+			defer file.Close()
+
+			// write data directory path to file
+			_, writeErr := file.WriteString(path.Join(l.woxDataDirectory, "wox-user"))
+			if writeErr != nil {
+				return fmt.Errorf("failed to write user data directory path to shortcut file: %w", writeErr)
+			}
 		}
-		defer file.Close()
 
-		// write data directory path to file
-		_, writeErr := file.WriteString(path.Join(l.woxDataDirectory, "wox-user"))
-		if writeErr != nil {
-			return fmt.Errorf("failed to write user data directory path to shortcut file: %w", writeErr)
+		// read data directory path from file
+		readFile, readFileErr := os.ReadFile(l.userDataDirectoryShortcutPath)
+		if readFileErr != nil {
+			return fmt.Errorf("failed to read shortcut file: %w", readFileErr)
 		}
+		userDataDirectory, _ := homedir.Expand(string(readFile))
+		userDataDirectory = strings.ReplaceAll(userDataDirectory, "\n", "")
+		l.userDataDirectory = userDataDirectory
 	}
-
-	// read data directory path from shortcut file
-	file, openErr := os.Open(l.userDataDirectoryShortcutPath)
-	if openErr != nil {
-		return fmt.Errorf("failed to open shortcut file: %w", openErr)
-	}
-	defer file.Close()
-
-	// read data directory path from file
-	readFile, readFileErr := os.ReadFile(l.userDataDirectoryShortcutPath)
-	if readFileErr != nil {
-		return fmt.Errorf("failed to read shortcut file: %w", readFileErr)
-	}
-	userDataDirectory, _ := homedir.Expand(string(readFile))
-	userDataDirectory = strings.ReplaceAll(userDataDirectory, "\n", "")
-	l.userDataDirectory = userDataDirectory
 
 	if directoryErr := l.EnsureDirectoryExist(l.userDataDirectory); directoryErr != nil {
 		return directoryErr
@@ -123,10 +126,7 @@ func (l *Location) Init() error {
 	if directoryErr := l.EnsureDirectoryExist(l.GetBackupDirectory()); directoryErr != nil {
 		return directoryErr
 	}
-	if directoryErr := l.EnsureDirectoryExist(l.GetAIDirectory()); directoryErr != nil {
-		return directoryErr
-	}
-	if directoryErr := l.EnsureDirectoryExist(l.GetAISkillsDirectory()); directoryErr != nil {
+	if directoryErr := l.EnsureDirectoryExist(l.GetFileSearchDirectory()); directoryErr != nil {
 		return directoryErr
 	}
 
@@ -220,12 +220,8 @@ func (l *Location) GetBackupDirectory() string {
 	return path.Join(l.woxDataDirectory, "backup")
 }
 
-func (l *Location) GetAIDirectory() string {
-	return path.Join(l.woxDataDirectory, "ai")
-}
-
-func (l *Location) GetAISkillsDirectory() string {
-	return path.Join(l.GetAIDirectory(), "skills")
+func (l *Location) GetFileSearchDirectory() string {
+	return path.Join(l.woxDataDirectory, "filesearch")
 }
 
 func (l *Location) GetUIAppPath() string {

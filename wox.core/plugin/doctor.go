@@ -15,9 +15,12 @@ import (
 type DoctorCheckType string
 
 const (
-	DoctorCheckUpdate        DoctorCheckType = "update"
-	DoctorCheckAccessibility DoctorCheckType = "accessibility"
-	DoctorCheckDatabase      DoctorCheckType = "database"
+	DoctorCheckUpdate                 DoctorCheckType = "update"
+	DoctorCheckAccessibility          DoctorCheckType = "accessibility"
+	DoctorCheckDatabase               DoctorCheckType = "database"
+	DoctorCheckTriggerKeywordConflict DoctorCheckType = "triggerKeywordConflict"
+	DoctorCheckGnomeTrayIndicator     DoctorCheckType = "gnomeTrayIndicator"
+	DoctorCheckWaylandDesktopLaunch   DoctorCheckType = "waylandDesktopLaunch"
 )
 
 type DoctorCheckResult struct {
@@ -35,10 +38,21 @@ func RunDoctorChecks(ctx context.Context) []DoctorCheckResult {
 	results := []DoctorCheckResult{
 		checkWoxVersion(ctx),
 		checkDatabaseHealth(ctx),
+		checkTriggerKeywordConflicts(ctx),
 	}
 
 	if util.IsMacOS() {
 		results = append(results, checkAccessibilityPermission(ctx))
+	}
+	if result, ok := checkGnomeTrayIndicator(ctx); ok {
+		results = append(results, result)
+	}
+	if result, ok := checkWaylandDesktopLaunch(ctx); ok {
+		results = append(results, result)
+	}
+
+	for i := range results {
+		results[i] = translateDoctorCheckResult(ctx, results[i])
 	}
 
 	//sort by status, false first
@@ -49,14 +63,72 @@ func RunDoctorChecks(ctx context.Context) []DoctorCheckResult {
 	return results
 }
 
+func checkTriggerKeywordConflicts(ctx context.Context) DoctorCheckResult {
+	conflicts := GetPluginManager().findTriggerKeywordConflicts("")
+	if len(conflicts) == 0 {
+		return DoctorCheckResult{
+			Name:        "i18n:plugin_doctor_trigger_keyword_conflict",
+			Type:        DoctorCheckTriggerKeywordConflict,
+			Passed:      true,
+			Description: "i18n:plugin_doctor_trigger_keyword_conflict_ok",
+			ActionName:  "",
+			Action:      func(ctx context.Context, actionContext ActionContext) {},
+		}
+	}
+
+	description := fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_trigger_keyword_conflict_found"), formatTriggerKeywordConflictDetails(ctx, conflicts))
+	firstPlugin := conflicts[0].PluginInstances[0]
+
+	// Doctor reports duplicate concrete triggers before the user hits the ambiguous
+	// query path. Opening one involved plugin setting gives the user a direct place
+	// to change the trigger keyword without adding a new settings API surface.
+	return DoctorCheckResult{
+		Name:                   "i18n:plugin_doctor_trigger_keyword_conflict",
+		Type:                   DoctorCheckTriggerKeywordConflict,
+		Passed:                 false,
+		Description:            description,
+		ActionName:             "i18n:plugin_doctor_trigger_keyword_conflict_action",
+		PreventHideAfterAction: true,
+		Action: func(ctx context.Context, actionContext ActionContext) {
+			GetPluginManager().GetUI().OpenSettingWindow(ctx, common.SettingWindowContext{
+				Path:  "/plugin/setting",
+				Param: firstPlugin.Metadata.Id,
+			})
+		},
+	}
+}
+
+func translateDoctorCheckResult(ctx context.Context, result DoctorCheckResult) DoctorCheckResult {
+	// Bug fix: doctor checks are consumed by both plugin query results and the /doctor/check API.
+	// The query-result path can resolve i18n keys later, but the toolbar renders API descriptions
+	// directly, so normalize every user-visible doctor field before returning the shared result.
+	result.Name = translateDoctorCheckText(ctx, result.Name)
+	result.Description = translateDoctorCheckText(ctx, result.Description)
+	result.ActionName = translateDoctorCheckText(ctx, result.ActionName)
+	return result
+}
+
+func translateDoctorCheckText(ctx context.Context, text string) string {
+	if text == "" {
+		return ""
+	}
+
+	return i18n.GetI18nManager().TranslateWox(ctx, text)
+}
+
 func checkWoxVersion(ctx context.Context) DoctorCheckResult {
 	updateInfo := updater.GetUpdateInfo()
 	if updateInfo.Status == updater.UpdateStatusError || updateInfo.UpdateError != nil {
+		description := i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version_update_error")
+		if updateInfo.UpdateError != nil {
+			description = updateInfo.UpdateError.Error()
+		}
+
 		return DoctorCheckResult{
 			Name:        i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version"),
 			Type:        DoctorCheckUpdate,
 			Passed:      false,
-			Description: updateInfo.UpdateError.Error(),
+			Description: description,
 			ActionName:  "",
 			Action: func(ctx context.Context, actionContext ActionContext) {
 			},

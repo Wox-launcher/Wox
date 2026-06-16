@@ -34,6 +34,9 @@ func (e emptyAPIImpl) ShowApp(ctx context.Context) {
 func (e emptyAPIImpl) Notify(ctx context.Context, message string) {
 }
 
+func (e emptyAPIImpl) PushAttention(ctx context.Context, request plugin.PushAttentionRequest) {
+}
+
 func (e emptyAPIImpl) Log(ctx context.Context, level plugin.LogLevel, msg string) {
 }
 
@@ -57,6 +60,18 @@ func (e emptyAPIImpl) OnDeepLink(ctx context.Context, callback func(context.Cont
 func (e emptyAPIImpl) OnUnload(ctx context.Context, callback func(context.Context)) {
 }
 
+func (e emptyAPIImpl) ShowToolbarMsg(ctx context.Context, msg plugin.ToolbarMsg) {
+}
+
+func (e emptyAPIImpl) ClearToolbarMsg(ctx context.Context, toolbarMsgId string) {
+}
+
+func (e emptyAPIImpl) OnEnterPluginQuery(ctx context.Context, callback func(context.Context)) {
+}
+
+func (e emptyAPIImpl) OnLeavePluginQuery(ctx context.Context, callback func(context.Context)) {
+}
+
 func (e emptyAPIImpl) RegisterQueryCommands(ctx context.Context, commands []plugin.MetadataCommand) {
 }
 
@@ -65,6 +80,13 @@ func (e emptyAPIImpl) AIChatStream(ctx context.Context, model common.Model, conv
 }
 
 func (e emptyAPIImpl) OnMRURestore(ctx context.Context, callback func(context.Context, plugin.MRUData) (*plugin.QueryResult, error)) {
+}
+
+func (e emptyAPIImpl) OnHandlePluginCommand(ctx context.Context, handler plugin.PluginCommandHandler) {
+}
+
+func (e emptyAPIImpl) InvokePluginCommand(ctx context.Context, request plugin.PluginCommandRequest) (plugin.PluginCommandResult, error) {
+	return plugin.PluginCommandResult{}, nil
 }
 
 func (e emptyAPIImpl) UpdateResult(ctx context.Context, result plugin.UpdatableResult) bool {
@@ -86,7 +108,14 @@ func (e emptyAPIImpl) IsVisible(ctx context.Context) bool {
 func (e emptyAPIImpl) RefreshQuery(ctx context.Context, params plugin.RefreshQueryParam) {
 }
 
+func (e emptyAPIImpl) RefreshGlance(ctx context.Context, ids []string) {
+}
+
 func (e emptyAPIImpl) Copy(ctx context.Context, params plugin.CopyParams) {
+}
+
+func (e emptyAPIImpl) Screenshot(ctx context.Context, option plugin.ScreenshotOption) plugin.ScreenshotResult {
+	return plugin.ScreenshotResult{}
 }
 
 func TestMacRetriever_ParseAppInfo(t *testing.T) {

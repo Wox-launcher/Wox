@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_image_view.dart';
+import 'package:wox/components/wox_tooltip.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/enums/wox_image_type_enum.dart';
@@ -26,6 +27,8 @@ class WoxImageSelector extends StatelessWidget {
   final double previewSize;
 
   const WoxImageSelector({super.key, required this.value, required this.onChanged, this.previewSize = 80});
+
+  static const List<String> supportedUploadExtensions = ["png", "jpg", "jpeg", "gif", "bmp", "webp", "ico", "svg"];
 
   static const List<EmojiGroupData> emojiGroups = [
     EmojiGroupData(
@@ -438,11 +441,39 @@ class WoxImageSelector extends StatelessWidget {
     return Get.find<WoxSettingController>().tr(key);
   }
 
+  bool _isSvgFile(String filePath) {
+    return filePath.toLowerCase().endsWith(".svg");
+  }
+
+  Future<WoxImage?> _pickUploadedImage() async {
+    final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: supportedUploadExtensions, allowMultiple: false);
+
+    if (result == null || result.files.isEmpty || result.files.first.path == null) {
+      return null;
+    }
+
+    final filePath = result.files.first.path!;
+    final file = File(filePath);
+    if (!await file.exists()) {
+      return null;
+    }
+
+    if (_isSvgFile(filePath)) {
+      final svgContent = await file.readAsString();
+      return WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code, imageData: svgContent);
+    }
+
+    final bytes = await file.readAsBytes();
+    final base64Image = base64Encode(bytes);
+    return WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_BASE64.code, imageData: "data:image/png;base64,$base64Image");
+  }
+
   Future<String?> showEmojiPicker(BuildContext context) async {
     final initialEmoji = value.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code ? value.imageData : null;
 
     return showDialog<String>(
       context: context,
+      barrierColor: getThemePopupBarrierColor(),
       builder: (context) {
         return EmojiPickerDialog(initialEmoji: initialEmoji, tr: tr);
       },
@@ -481,16 +512,9 @@ class WoxImageSelector extends StatelessWidget {
               icon: Icon(Icons.file_upload_outlined, size: 14, color: getThemeTextColor()),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               onPressed: () async {
-                final result = await FilePicker.platform.pickFiles(type: FileType.image, allowMultiple: false);
-
-                if (result != null && result.files.isNotEmpty && result.files.first.path != null) {
-                  final filePath = result.files.first.path!;
-                  final file = File(filePath);
-                  if (await file.exists()) {
-                    final bytes = await file.readAsBytes();
-                    final base64Image = base64Encode(bytes);
-                    onChanged(WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_BASE64.code, imageData: "data:image/png;base64,$base64Image"));
-                  }
+                final selectedImage = await _pickUploadedImage();
+                if (selectedImage != null) {
+                  onChanged(selectedImage);
                 }
               },
             ),
@@ -531,21 +555,19 @@ class EmojiPickerDialogState extends State<EmojiPickerDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final themeBackground = getThemeBackgroundColor();
-    final isDarkTheme = themeBackground.computeLuminance() < 0.5;
-    final baseSurface = themeBackground.withAlpha(255);
+    final darkTheme = isThemeDark();
     final accentColor = getThemeActiveBackgroundColor();
     final textColor = getThemeTextColor();
     final subTextColor = getThemeSubTextColor();
-    final cardColor = (isDarkTheme ? baseSurface.lighter(12) : baseSurface.darker(6)).withAlpha(255);
-    final outlineColor = accentColor.withValues(alpha: isDarkTheme ? 0.22 : 0.15);
-    final panelBackground = isDarkTheme ? cardColor.lighter(6).withAlpha(255) : cardColor.darker(2).withAlpha(255);
+    final cardColor = getThemePopupSurfaceColor();
+    final outlineColor = getThemePopupOutlineColor();
+    final panelBackground = darkTheme ? cardColor.lighter(6).withAlpha(255) : cardColor.darker(2).withAlpha(255);
     final chipBorderColor = getThemeDividerColor().withValues(alpha: 0.45);
-    final selectedChipColor = accentColor.withValues(alpha: isDarkTheme ? 0.30 : 0.20);
+    final selectedChipColor = accentColor.withValues(alpha: darkTheme ? 0.30 : 0.20);
     final currentGroup = WoxImageSelector.emojiGroups[selectedGroupIndex];
     final baseTheme = Theme.of(context);
     final dialogTheme = baseTheme.copyWith(
-      colorScheme: ColorScheme.fromSeed(seedColor: accentColor, brightness: isDarkTheme ? Brightness.dark : Brightness.light),
+      colorScheme: ColorScheme.fromSeed(seedColor: accentColor, brightness: darkTheme ? Brightness.dark : Brightness.light),
       scaffoldBackgroundColor: Colors.transparent,
       cardColor: cardColor,
       shadowColor: textColor.withAlpha(50),
@@ -580,7 +602,9 @@ class EmojiPickerDialogState extends State<EmojiPickerDialog> {
                 Row(
                   children: [
                     Expanded(child: Text(widget.tr("ui_select_emoji"), style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: textColor))),
-                    IconButton(onPressed: () => Navigator.pop(context), tooltip: widget.tr("ui_cancel"), icon: Icon(Icons.close_rounded, color: subTextColor)),
+                    // Dialog chrome also uses WoxTooltip so close affordances do not
+                    // fall back to the platform Material tooltip style.
+                    WoxTooltip(message: widget.tr("ui_cancel"), child: IconButton(onPressed: () => Navigator.pop(context), icon: Icon(Icons.close_rounded, color: subTextColor))),
                   ],
                 ),
                 const SizedBox(height: 8),

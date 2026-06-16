@@ -1,4 +1,22 @@
-.PHONY: clean build help woxmr-build
+.PHONY: clean build help woxmr-build filesearch-real-index filesearch-real-index-release
+
+SQLITE_BUILD_TAGS ?= sqlite_fts5
+FILESEARCH_REAL_INDEX_ROOT ?= ~/
+FILESEARCH_REAL_INDEX_KEYWORD ?= Wox
+FILESEARCH_REAL_INDEX_ARTIFACT ?=
+# Default to the same no-optimization flags used by the debugger-launched Wox
+# core. That makes the local benchmark match the development app's real full
+# index latency; use filesearch-real-index-release for an optimized baseline.
+FILESEARCH_REAL_INDEX_GCFLAGS ?= all=-N -l
+FILESEARCH_REAL_INDEX_TAGS := $(strip $(SQLITE_BUILD_TAGS) filesearch_real_index)
+FILESEARCH_REAL_INDEX_ARGS := -filesearch-real-index -filesearch-real-index-root "$(FILESEARCH_REAL_INDEX_ROOT)" -filesearch-real-index-keyword "$(FILESEARCH_REAL_INDEX_KEYWORD)"
+ifneq ($(strip $(FILESEARCH_REAL_INDEX_ARTIFACT)),)
+FILESEARCH_REAL_INDEX_ARGS += -filesearch-real-index-artifact "$(FILESEARCH_REAL_INDEX_ARTIFACT)"
+endif
+FILESEARCH_REAL_INDEX_GOFLAGS :=
+ifneq ($(strip $(FILESEARCH_REAL_INDEX_GCFLAGS)),)
+FILESEARCH_REAL_INDEX_GOFLAGS += -gcflags="$(FILESEARCH_REAL_INDEX_GCFLAGS)"
+endif
 
 # Determine the current platform
 ifeq ($(OS),Windows_NT)
@@ -25,6 +43,17 @@ endif
 
 RELEASE_DIR := ../release
 
+# GNU Make on Windows can detect Git's sh.exe while still leaving Git's
+# usr/bin tools out of PATH. The build uses sed/rm and POSIX env assignments, so
+# add the sibling usr/bin directory when that shell is in use instead of
+# requiring every PowerShell session to configure the same PATH manually.
+ifeq ($(OS),Windows_NT)
+    GIT_USR_BIN := $(patsubst %/bin/sh.exe,%/usr/bin,$(SHELL))
+    ifneq ($(GIT_USR_BIN),$(SHELL))
+        export PATH := $(GIT_USR_BIN);$(PATH)
+    endif
+endif
+
 # Extract version string from updater/version.go
 # Expected format: const CURRENT_VERSION = "x.y.z[-prerelease]"
 VERSION := $(shell sed -n 's/^const CURRENT_VERSION = "\(.*\)"/\1/p' updater/version.go)
@@ -33,6 +62,8 @@ help:
 	@echo "Available commands:"
 	@echo "  make clean         - Clean build artifacts"
 	@echo "  make build         - Build Flutter UI for current platform ($(PLATFORM))"
+	@echo "  make filesearch-real-index - Capture debugger-aligned filesearch/fd/rg comparison for $(FILESEARCH_REAL_INDEX_ROOT), keyword $(FILESEARCH_REAL_INDEX_KEYWORD)"
+	@echo "  make filesearch-real-index-release - Capture optimized filesearch/fd/rg comparison for $(FILESEARCH_REAL_INDEX_ROOT), keyword $(FILESEARCH_REAL_INDEX_KEYWORD)"
 	@echo "  make woxmr-build   - Build and install WoxMR.bundle for current platform ($(PLATFORM))"
 
 clean:
@@ -43,19 +74,35 @@ build: clean
 	$(MAKE) woxmr-build
 ifeq ($(PLATFORM),windows)
 	# Generate Windows VERSIONINFO using the version from updater.CURRENT_VERSION
-	cd . && go run github.com/josephspurrier/goversioninfo/cmd/goversioninfo \
+	cd . && go run github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.5.0 \
 		-o resource_windows.syso -64 -icon resource/app.ico \
+		-manifest resource/wox.exe.manifest \
 		-product-name "Wox" -description "Wox" -internal-name "Wox" -original-name "wox-windows-$(GOARCH).exe" \
 		-product-version "$(VERSION)" -file-version "$(VERSION)" \
 		-propagate-ver-strings
-	CGO_ENABLED=1 GOOS=windows GOARCH=$(GOARCH) go build -ldflags "-H windowsgui -s -w -X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-windows-$(GOARCH).exe
+	CGO_ENABLED=1 GOOS=windows GOARCH=$(GOARCH) go build -tags "$(SQLITE_BUILD_TAGS)" -ldflags "-H windowsgui -s -w -X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-windows-$(GOARCH).exe
 endif
 ifeq ($(PLATFORM),linux)
-	CGO_ENABLED=1 GOOS=linux GOARCH=$(GOARCH) go build -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-linux-$(GOARCH)
+	CGO_ENABLED=1 GOOS=linux GOARCH=$(GOARCH) go build -tags "$(SQLITE_BUILD_TAGS)" -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-linux-$(GOARCH)
 endif
 ifeq ($(PLATFORM),macos)
-	CGO_ENABLED=1 GOOS=darwin GOARCH=$(GOARCH) CGO_CFLAGS="-mmacosx-version-min=10.15" CGO_LDFLAGS="-mmacosx-version-min=10.15" go build -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-mac-$(GOARCH)
+	CGO_ENABLED=1 GOOS=darwin GOARCH=$(GOARCH) CGO_CFLAGS="-mmacosx-version-min=10.15" CGO_LDFLAGS="-mmacosx-version-min=10.15 -Wl,-no_warn_duplicate_libraries" go build -tags "$(SQLITE_BUILD_TAGS)" -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-mac-$(GOARCH)
 endif
+
+# Feature addition: real-root filesearch comparisons are intentionally exposed
+# through a local Make target instead of the normal test surface, so CI keeps
+# running deterministic tests while developers can opt into the expensive
+# workstation-sized scan with one command and a Makefile-controlled root. The
+# default target mirrors debugger-launched Wox because that is the app runtime
+# developers are comparing against during local profiling.
+filesearch-real-index:
+	@echo "Capturing filesearch real-index comparison for $(FILESEARCH_REAL_INDEX_ROOT) with keyword $(FILESEARCH_REAL_INDEX_KEYWORD), gcflags=$(if $(strip $(FILESEARCH_REAL_INDEX_GCFLAGS)),$(FILESEARCH_REAL_INDEX_GCFLAGS),<default>)"
+	WOX_FILESEARCH_REAL_INDEX_GCFLAGS="$(FILESEARCH_REAL_INDEX_GCFLAGS)" go test $(FILESEARCH_REAL_INDEX_GOFLAGS) -tags "$(FILESEARCH_REAL_INDEX_TAGS)" ./util/filesearch -run TestCaptureFileSearchRealIndexForProjectsRoot -count=1 -v -args $(FILESEARCH_REAL_INDEX_ARGS)
+
+# Diagnostic addition: keep the optimized baseline explicit so performance work
+# can separate debugger overhead from release-shaped scanner behavior.
+filesearch-real-index-release:
+	$(MAKE) filesearch-real-index FILESEARCH_REAL_INDEX_GCFLAGS=
 
 # -----------------------------
 # MediaRemote XS (Perl) builder

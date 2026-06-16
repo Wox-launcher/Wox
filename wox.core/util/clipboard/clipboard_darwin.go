@@ -9,8 +9,10 @@ const char* GetClipboardText();
 char* GetAllClipboardFilePaths();
 unsigned char *GetClipboardImage(size_t *length);
 void WriteClipboardText(const char *text);
+void WriteClipboardFiles(const char **filePaths, int count);
 void WriteClipboardImage(const char *imageData, int length);
 _Bool hasClipboardChanged();
+int GetClipboardContentType();
 */
 import "C"
 import (
@@ -24,6 +26,21 @@ import (
 
 	"github.com/samber/lo"
 )
+
+// readClipboardContentType detects the current clipboard content type.
+func readClipboardContentType() Type {
+	t := C.GetClipboardContentType()
+	switch int(t) {
+	case 1:
+		return ClipboardTypeText
+	case 2:
+		return ClipboardTypeImage
+	case 3:
+		return ClipboardTypeFile
+	default:
+		return ""
+	}
+}
 
 func readText() (string, error) {
 	text := C.GetClipboardText()
@@ -73,6 +90,28 @@ func writeTextData(text string) error {
 	return nil
 }
 
+func writeFilePaths(filePaths []string) error {
+	cFilePaths := make([]*C.char, 0, len(filePaths))
+	for _, filePath := range filePaths {
+		trimmedPath := strings.TrimSpace(filePath)
+		if trimmedPath == "" {
+			continue
+		}
+		cFilePaths = append(cFilePaths, C.CString(trimmedPath))
+	}
+
+	for _, cFilePath := range cFilePaths {
+		defer C.free(unsafe.Pointer(cFilePath))
+	}
+
+	if len(cFilePaths) == 0 {
+		return errors.New("file paths are empty")
+	}
+
+	C.WriteClipboardFiles((**C.char)(unsafe.Pointer(&cFilePaths[0])), C.int(len(cFilePaths)))
+	return nil
+}
+
 func writeImageData(img image.Image) error {
 	buf := new(bytes.Buffer)
 	err := png.Encode(buf, img)
@@ -96,4 +135,8 @@ func writeImageBytes(pngData []byte, dibData []byte) error {
 
 func isClipboardChanged() bool {
 	return bool(C.hasClipboardChanged())
+}
+
+func buildWatchSnapshot() string {
+	return ""
 }

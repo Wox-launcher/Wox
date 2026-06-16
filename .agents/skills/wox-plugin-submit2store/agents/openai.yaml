@@ -1,0 +1,4 @@
+interface:
+  display_name: "Wox Plugin Submit To Store"
+  short_description: "Check listing and submit a Wox plugin PR"
+  default_prompt: "Use $wox-plugin-submit2store to check whether this plugin is already in the Wox store and submit a store PR if needed."

@@ -1,131 +1,132 @@
 # Contributing to Wox
 
-Thank you for your interest in contributing to Wox! This document provides guidelines and instructions for contributing to the project.
+This guide covers the practical contribution flow for Wox contributors.
 
-## Getting Started
+## Before you start
 
-1. **Fork the Repository**: Start by forking the [Wox repository](https://github.com/Wox-launcher/Wox) on GitHub.
+1. Fork [Wox-launcher/Wox](https://github.com/Wox-launcher/Wox) on GitHub
+2. Clone your fork locally
+3. Follow [Development Setup](./setup.md)
 
-2. **Clone Your Fork**: Clone your fork to your local machine.
+```bash
+git clone https://github.com/YOUR-USERNAME/Wox.git
+cd Wox
+make dev
+```
 
-   ```bash
-   git clone https://github.com/YOUR-USERNAME/Wox.git
-   cd Wox
-   ```
+## How to work in this repository
 
-3. **Set Up Development Environment**: Follow the instructions in the [Development Setup](./setup.md) document to set up your development environment.
-   ```bash
-   make dev
-   ```
+Wox is a multi-project repository. A small change in one layer can easily break another layer if the contract drifts. Keep that in mind when scoping and verifying your change.
 
-## Development Workflow
+A useful rule of thumb:
 
-### Branching Strategy
+- change only one behavior at a time
+- verify at the highest layer your change touches
+- update docs when user-facing behavior, APIs, or workflow changed
 
-- `master`: The main branch that contains the latest stable code
-- `feature/*`: Feature branches for new features
-- `bugfix/*`: Bugfix branches for bug fixes
+## Typical workflow
 
-### Making Changes
+1. Create a branch from `master`
 
-1. **Create a Branch**: Create a new branch for your changes.
+```bash
+git checkout -b feature/your-change
+```
 
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
+2. Make the change in the correct layer
 
-2. **Make Your Changes**: Implement your changes, following the coding standards and guidelines.
+- `wox.core/` for backend logic, built-in plugins, settings, contracts
+- `wox.ui.flutter/wox/` for launcher UI, settings UI, screenshot UI, platform presentation
+- `wox.plugin.host.*` for plugin runtime bridge behavior
+- `wox.plugin.*` for public plugin SDK changes
+- `www/docs/` for documentation
 
-3. **Test Your Changes**: Run tests to ensure your changes don't break existing functionality.
+3. Run focused verification while you work
 
-   ```bash
-   make test
-   ```
+Examples:
 
-4. **Commit Your Changes**: Commit your changes with a clear and descriptive commit message.
+```bash
+make -C wox.core build
+make -C wox.plugin.host.nodejs build
+make -C wox.ui.flutter/wox build
+```
 
-   ```bash
-   git commit -m "feat: add new feature"
-   ```
+4. Run broader verification before opening a PR
 
-   Please follow the [Conventional Commits](https://www.conventionalcommits.org/) specification for your commit messages:
+```bash
+make build
+```
 
-   - `feat`: A new feature
-   - `fix`: A bug fix
-   - `docs`: Documentation only changes
-   - `style`: Changes that do not affect the meaning of the code
-   - `refactor`: A code change that neither fixes a bug nor adds a feature
-   - `perf`: A code change that improves performance
-   - `test`: Adding missing tests or correcting existing tests
-   - `chore`: Changes to the build process or auxiliary tools
+Use `make smoke` when you changed a user-facing desktop flow and need end-to-end coverage.
 
-5. **Push Your Changes**: Push your changes to your fork.
+## Testing expectations
 
-   ```bash
-   git push origin feature/your-feature-name
-   ```
+Use the smallest verification that proves the change is correct, then finish with the broadest verification needed for the layer you touched.
 
-6. **Create a Pull Request**: Create a pull request from your branch to the main Wox repository.
+Useful commands:
 
-## Pull Request Guidelines
+```bash
+make test
+make smoke
+make build
+```
 
-When creating a pull request, please:
+In practice:
 
-1. **Provide a Clear Description**: Describe what your changes do and why they should be included.
-2. **Reference Related Issues**: If your PR fixes an issue, reference it using the GitHub issue number.
-3. **Include Tests**: If your changes include new functionality, include tests that cover the new code.
-4. **Update Documentation**: If your changes require documentation updates, include those in your PR.
+- `make test` is the default backend regression check
+- `make smoke` is valuable for launcher, screenshot, settings, and other real UI workflows
+- `make build` is the final cross-project guardrail for shared contract changes
 
-## Code Style Guidelines
+## Commit messages
 
-### Go Code
+Use [Conventional Commits](https://www.conventionalcommits.org/):
 
-- Follow the [Go Code Review Comments](https://github.com/golang/go/wiki/CodeReviewComments)
-- Use `gofmt` to format your code
-- Write meaningful comments and documentation
+- `feat`
+- `fix`
+- `docs`
+- `refactor`
+- `perf`
+- `test`
+- `chore`
 
-### Flutter/Dart Code
+Examples:
 
-- Follow the [Dart Style Guide](https://dart.dev/guides/language/effective-dart/style)
-- Use `dart format` to format your code
-- Write meaningful comments and documentation
+```bash
+git commit -m "feat(plugin): add screenshot API"
+git commit -m "fix(webview): restore open in browser action"
+git commit -m "docs(development): refresh contributor setup guide"
+```
 
-### JavaScript/TypeScript Code
+## Pull requests
 
-- Follow the [Airbnb JavaScript Style Guide](https://github.com/airbnb/javascript)
-- Use ESLint to lint your code
-- Write meaningful comments and documentation
+A good pull request should make review easy:
 
-### Python Code
+- explain the behavior change, not just the files you touched
+- link the related issue or discussion when available
+- describe how you verified the change
+- include screenshots or recordings for visible UI changes
+- update docs when the workflow, API, or visible behavior changed
 
-- Follow [PEP 8](https://www.python.org/dev/peps/pep-0008/)
-- Use `black` to format your code
-- Write meaningful comments and documentation
+## Code style
 
-## Testing
+Follow the conventions already used in the repository:
 
-- Write unit tests for your code
-- Run existing tests to ensure your changes don't break existing functionality
-- Consider adding integration tests for complex features
+- Go: `gofmt`
+- Dart: `dart format`
+- TypeScript/JavaScript: existing repo lint/style rules
+- Python: existing repo formatter/style rules
 
-## Documentation
+Prefer simple control flow and keep changes local to the layer that owns the behavior.
 
-- Update documentation for any changes to existing features
-- Add documentation for new features
-- Use clear and concise language
+## Documentation changes
 
-## Community
+Documentation source files live under `www/docs`.
 
-- Join the [Wox Discussions](https://github.com/Wox-launcher/Wox/discussions) to ask questions and get help
-- Be respectful and considerate of others
+To preview the docs locally:
 
-## Reporting Issues
+```bash
+cd www
+pnpm install
+pnpm docs:dev
+```
 
-If you find a bug or have a feature request, please:
-
-1. Check if the issue already exists in the [GitHub Issues](https://github.com/Wox-launcher/Wox/issues)
-2. If not, create a new issue with a clear description and steps to reproduce
-
-## License
-
-By contributing to Wox, you agree that your contributions will be licensed under the project's license.
+If you changed commands, APIs, setup instructions, or plugin behavior, update the corresponding docs in the same pull request.

@@ -46,10 +46,7 @@ class WoxThemeAutoPreview extends StatelessWidget {
     ];
 
     return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        color: safeFromCssColor(lightTheme.appBackgroundColor),
-      ),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), color: safeFromCssColor(lightTheme.appBackgroundColor)),
       clipBehavior: Clip.antiAlias,
       child: Stack(
         children: [
@@ -57,28 +54,18 @@ class WoxThemeAutoPreview extends StatelessWidget {
           Positioned.fill(
             child: ClipPath(
               clipper: _TopLeftDiagonalClipper(),
-              child: Container(
-                color: safeFromCssColor(lightTheme.appBackgroundColor),
-                child: _buildPreviewContent(lightTheme, previewTexts),
-              ),
+              child: Container(color: safeFromCssColor(lightTheme.appBackgroundColor), child: _buildPreviewContent(lightTheme, previewTexts)),
             ),
           ),
           // Dark theme (bottom-right triangle)
           Positioned.fill(
             child: ClipPath(
               clipper: _BottomRightDiagonalClipper(),
-              child: Container(
-                color: safeFromCssColor(darkTheme.appBackgroundColor),
-                child: _buildPreviewContent(darkTheme, previewTexts),
-              ),
+              child: Container(color: safeFromCssColor(darkTheme.appBackgroundColor), child: _buildPreviewContent(darkTheme, previewTexts)),
             ),
           ),
           // Diagonal line
-          Positioned.fill(
-            child: CustomPaint(
-              painter: _DiagonalLinePainter(),
-            ),
-          ),
+          Positioned.fill(child: CustomPaint(painter: _DiagonalLinePainter())),
         ],
       ),
     );
@@ -95,18 +82,12 @@ class WoxThemeAutoPreview extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
           child: Container(
             height: 40,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(theme.queryBoxBorderRadius.toDouble()),
-              color: queryBoxColor,
-            ),
+            decoration: BoxDecoration(borderRadius: BorderRadius.circular(theme.queryBoxBorderRadius.toDouble()), color: queryBoxColor),
             child: Align(
               alignment: Alignment.centerLeft,
               child: Padding(
                 padding: const EdgeInsets.only(left: 10),
-                child: Text(
-                  tr("ui_theme_preview_title"),
-                  style: TextStyle(color: safeFromCssColor(theme.queryBoxFontColor)),
-                ),
+                child: Text(tr("ui_theme_preview_title"), style: TextStyle(color: safeFromCssColor(theme.queryBoxFontColor))),
               ),
             ),
           ),
@@ -118,25 +99,13 @@ class WoxThemeAutoPreview extends StatelessWidget {
               return Container(
                 height: 60,
                 margin: const EdgeInsets.symmetric(vertical: 0, horizontal: 10),
-                decoration: BoxDecoration(
-                  color: isActive ? resultItemActiveColor : resultItemColor,
-                ),
+                decoration: BoxDecoration(color: isActive ? resultItemActiveColor : resultItemColor),
                 child: ListTile(
-                  leading: WoxImageView(
-                    woxImage: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code, imageData: QUERY_ICON_SELECTION_FILE),
-                    width: 30,
-                  ),
-                  title: Text(
-                    previewTexts[index],
-                    style: TextStyle(
-                      color: safeFromCssColor(isActive ? theme.resultItemActiveTitleColor : theme.resultItemTitleColor),
-                    ),
-                  ),
+                  leading: WoxImageView(woxImage: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code, imageData: QUERY_ICON_SELECTION_FILE), width: 30, height: 30),
+                  title: Text(previewTexts[index], style: TextStyle(color: safeFromCssColor(isActive ? theme.resultItemActiveTitleColor : theme.resultItemTitleColor))),
                   subtitle: Text(
                     tr("ui_theme_preview_subtitle").replaceAll("{index}", "${index + 1}"),
-                    style: TextStyle(
-                      color: safeFromCssColor(isActive ? theme.resultItemActiveSubTitleColor : theme.resultItemSubTitleColor),
-                    ),
+                    style: TextStyle(color: safeFromCssColor(isActive ? theme.resultItemActiveSubTitleColor : theme.resultItemSubTitleColor)),
                   ),
                 ),
               );
@@ -147,30 +116,18 @@ class WoxThemeAutoPreview extends StatelessWidget {
           height: WoxThemeUtil.instance.getToolbarHeight(),
           decoration: BoxDecoration(
             color: safeFromCssColor(theme.toolbarBackgroundColor.isEmpty ? theme.appBackgroundColor : theme.toolbarBackgroundColor),
-            border: Border(
-              top: BorderSide(
-                color: safeFromCssColor(theme.toolbarFontColor).withOpacity(0.1),
-                width: 1,
-              ),
-            ),
+            border: Border(top: BorderSide(color: safeFromCssColor(theme.toolbarFontColor).withOpacity(0.1), width: 1)),
           ),
           child: Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: theme.toolbarPaddingLeft.toDouble(),
-            ),
+            padding: EdgeInsets.symmetric(horizontal: theme.toolbarPaddingLeft.toDouble()),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const Row(
-                  children: [],
-                ),
+                const Row(children: []),
                 Row(
                   children: [
-                    Text(
-                      tr("ui_theme_preview_open"),
-                      style: TextStyle(color: safeFromCssColor(theme.toolbarFontColor)),
-                    ),
+                    Text(tr("ui_theme_preview_open"), style: TextStyle(color: safeFromCssColor(theme.toolbarFontColor))),
                     const SizedBox(width: 8),
                     WoxHotkeyView(
                       hotkey: WoxHotkey.parseHotkeyFromString("Enter")!,
@@ -254,11 +211,12 @@ class WoxThemeAutoPreview extends StatelessWidget {
 class _TopLeftDiagonalClipper extends CustomClipper<Path> {
   @override
   Path getClip(Size size) {
-    final path = Path()
-      ..moveTo(0, 0)
-      ..lineTo(size.width, 0)
-      ..lineTo(0, size.height)
-      ..close();
+    final path =
+        Path()
+          ..moveTo(0, 0)
+          ..lineTo(size.width, 0)
+          ..lineTo(0, size.height)
+          ..close();
     return path;
   }
 
@@ -269,11 +227,12 @@ class _TopLeftDiagonalClipper extends CustomClipper<Path> {
 class _BottomRightDiagonalClipper extends CustomClipper<Path> {
   @override
   Path getClip(Size size) {
-    final path = Path()
-      ..moveTo(size.width, 0)
-      ..lineTo(size.width, size.height)
-      ..lineTo(0, size.height)
-      ..close();
+    final path =
+        Path()
+          ..moveTo(size.width, 0)
+          ..lineTo(size.width, size.height)
+          ..lineTo(0, size.height)
+          ..close();
     return path;
   }
 
@@ -284,15 +243,12 @@ class _BottomRightDiagonalClipper extends CustomClipper<Path> {
 class _DiagonalLinePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.black.withOpacity(0.15)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-    canvas.drawLine(
-      Offset(size.width, 0),
-      Offset(0, size.height),
-      paint,
-    );
+    final paint =
+        Paint()
+          ..color = Colors.black.withOpacity(0.15)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2;
+    canvas.drawLine(Offset(size.width, 0), Offset(0, size.height), paint);
   }
 
   @override

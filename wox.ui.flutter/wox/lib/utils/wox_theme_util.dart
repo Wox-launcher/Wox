@@ -3,6 +3,7 @@ import 'package:wox/api/wox_api.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/windows/window_manager.dart';
+import 'package:wox/utils/wox_interface_size_util.dart';
 import 'package:wox/utils/wox_setting_util.dart';
 
 class WoxThemeUtil {
@@ -32,19 +33,22 @@ class WoxThemeUtil {
   Rx<WoxTheme> get currentTheme => _currentTheme;
 
   double getQueryBoxHeight() {
-    return QUERY_BOX_BASE_HEIGHT + currentTheme.value.appPaddingTop + currentTheme.value.appPaddingBottom;
+    // Density owns the launcher content height while theme padding remains
+    // explicit. This preserves normal-density visuals and lets compact or
+    // comfortable rows reuse existing theme spacing without extra DTO fields.
+    return WoxInterfaceSizeUtil.instance.current.queryBoxBaseHeight + currentTheme.value.appPaddingTop + currentTheme.value.appPaddingBottom;
   }
 
   double getResultItemHeight() {
-    return RESULT_ITEM_BASE_HEIGHT + currentTheme.value.resultItemPaddingTop + currentTheme.value.resultItemPaddingBottom;
+    return WoxInterfaceSizeUtil.instance.current.resultItemBaseHeight + currentTheme.value.resultItemPaddingTop + currentTheme.value.resultItemPaddingBottom;
   }
 
   double getActionItemHeight() {
-    return ACTION_ITEM_BASE_HEIGHT;
+    return WoxInterfaceSizeUtil.instance.current.actionItemBaseHeight;
   }
 
   double getToolbarHeight() {
-    return TOOLBAR_HEIGHT;
+    return WoxInterfaceSizeUtil.instance.current.toolbarHeight;
   }
 
   double getResultListViewHeightByCount(int count) {

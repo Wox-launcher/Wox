@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 	"wox/plugin"
 	"wox/plugin/system/converter/core"
@@ -18,49 +19,96 @@ import (
 
 type CurrencyModule struct {
 	*regexBaseModule
-	rates *util.HashMap[string, float64]
+	rates         *util.HashMap[string, float64]
+	rateUpdatedAt atomic.Int64
 }
+
+var supportedCurrencyCodes = []string{
+	"usd", "eur", "gbp", "jpy", "cny", "aud", "cad",
+	"hkd", "sgd", "chf", "nzd", "sek", "nok", "dkk",
+	"pln", "czk", "huf", "ron", "bgn", "isk", "try",
+	"inr", "krw", "mxn", "brl", "zar", "thb", "myr",
+	"idr", "ils", "php",
+}
+
+// Use one supported-currency pattern for tokenizer and handlers. The previous
+// duplicated regex fragments made it easy to add a rate without making the
+// query parseable, so this shared pattern keeps both stages in sync.
+var supportedCurrencyPattern = `(?i)(` + strings.Join(supportedCurrencyCodes, "|") + `)`
 
 func NewCurrencyModule(ctx context.Context, api plugin.API) *CurrencyModule {
 	m := &CurrencyModule{
 		rates: util.NewHashMap[string, float64](),
 	}
 
-	m.rates.Store("USD", 1.0)   // Base currency
-	m.rates.Store("EUR", 0.85)  // Approximate
-	m.rates.Store("GBP", 0.73)  // Approximate
-	m.rates.Store("JPY", 110.0) // Approximate
-	m.rates.Store("CNY", 6.45)  // Approximate
-	m.rates.Store("AUD", 1.35)  // Approximate
-	m.rates.Store("CAD", 1.25)  // Approximate
+	// Keep offline fallback rates aligned with the tokenizer-supported currency list.
+	// The old hard-coded seven-currency list rejected common queries such as
+	// "10000hkd in cny" before the converter could calculate anything. These
+	// approximate USD-based rates let common currencies work until HKAB/ECB sync
+	// replaces them with live data.
+	defaultRates := map[string]float64{
+		"USD": 1.0,     // Base currency
+		"EUR": 0.92,    // Approximate
+		"GBP": 0.79,    // Approximate
+		"JPY": 150.0,   // Approximate
+		"CNY": 7.2,     // Approximate
+		"AUD": 1.52,    // Approximate
+		"CAD": 1.36,    // Approximate
+		"HKD": 7.82,    // Approximate
+		"SGD": 1.34,    // Approximate
+		"CHF": 0.88,    // Approximate
+		"NZD": 1.65,    // Approximate
+		"SEK": 10.5,    // Approximate
+		"NOK": 10.8,    // Approximate
+		"DKK": 6.85,    // Approximate
+		"PLN": 4.0,     // Approximate
+		"CZK": 23.0,    // Approximate
+		"HUF": 360.0,   // Approximate
+		"RON": 4.6,     // Approximate
+		"BGN": 1.8,     // Approximate
+		"ISK": 140.0,   // Approximate
+		"TRY": 32.0,    // Approximate
+		"INR": 83.0,    // Approximate
+		"KRW": 1350.0,  // Approximate
+		"MXN": 17.0,    // Approximate
+		"BRL": 5.0,     // Approximate
+		"ZAR": 18.5,    // Approximate
+		"THB": 36.0,    // Approximate
+		"MYR": 4.7,     // Approximate
+		"IDR": 15600.0, // Approximate
+		"ILS": 3.7,     // Approximate
+		"PHP": 56.0,    // Approximate
+	}
+	for currency, rate := range defaultRates {
+		m.rates.Store(currency, rate)
+	}
 
 	const (
-		currencyPattern = `(?i)(usd|eur|gbp|jpy|cny|aud|cad)`
-		numberPattern   = `([0-9]+(?:\.[0-9]+)?)`
+		numberPattern = `([0-9]+(?:\.[0-9]+)?)`
 	)
 
 	// Initialize pattern handlers with atomic patterns
 	handlers := []*patternHandler{
 		{
-			Pattern:     numberPattern + `\s*` + currencyPattern,
+			Pattern:     numberPattern + `\s*` + supportedCurrencyPattern,
 			Priority:    1000,
 			Description: "Handle currency amount (e.g., 10 USD)",
 			Handler:     m.handleSingleCurrency,
 		},
 		{
-			Pattern:     `in\s+` + currencyPattern,
+			Pattern:     `in\s+` + supportedCurrencyPattern,
 			Priority:    900,
 			Description: "Handle 'in' conversion format (e.g., in EUR)",
 			Handler:     m.handleInConversion,
 		},
 		{
-			Pattern:     `to\s+` + currencyPattern,
+			Pattern:     `to\s+` + supportedCurrencyPattern,
 			Priority:    800,
 			Description: "Handle 'to' conversion format (e.g., to EUR)",
 			Handler:     m.handleToConversion,
 		},
 		{
-			Pattern:     `=\s*\?\s*` + currencyPattern,
+			Pattern:     `=\s*\?\s*` + supportedCurrencyPattern,
 			Priority:    700,
 			Description: "Handle '=?' conversion format (e.g., =?EUR)",
 			Handler:     m.handleToConversion,
@@ -71,40 +119,89 @@ func NewCurrencyModule(ctx context.Context, api plugin.API) *CurrencyModule {
 	return m
 }
 
+// exchangeRateSource keeps a parser paired with its display name so refresh
+// logs and future result metadata can identify where the live rates came from.
+type exchangeRateSource struct {
+	name  string
+	parse func(context.Context) (map[string]float64, error)
+}
+
 func (m *CurrencyModule) StartExchangeRateSyncSchedule(ctx context.Context) {
 	util.Go(ctx, "currency_exchange_rate_sync", func() {
-		// Try multiple data sources
-		sources := []func(context.Context) (map[string]float64, error){
-			m.parseExchangeRateFromHKAB,
-			m.parseExchangeRateFromECB,
+		// Try named data sources so successful refreshes can be surfaced in the
+		// result tail. Previously users could see a converted value without any
+		// signal that live rates had actually refreshed.
+		sources := []exchangeRateSource{
+			{name: "HKAB", parse: m.parseExchangeRateFromHKAB},
+			{name: "ECB", parse: m.parseExchangeRateFromECB},
 		}
 
 		for _, source := range sources {
-			rates, err := source(ctx)
-			if err == nil && len(rates) > 0 {
-				for k, v := range rates {
-					m.rates.Store(k, v)
-				}
-				util.GetLogger().Info(ctx, "Successfully updated rates from source")
-				break
+			rates, err := source.parse(ctx)
+			if err != nil {
+				util.GetLogger().Warn(ctx, fmt.Sprintf("Failed to update rates from %s: %s", source.name, err.Error()))
+				continue
 			}
-			util.GetLogger().Warn(ctx, fmt.Sprintf("Failed to update rates from source: %s", err.Error()))
+			if len(rates) == 0 {
+				// Treat an empty response as a failed refresh. The previous loop
+				// only checked err and could log a successful update without any
+				// usable rates, which made rate freshness hard to trust.
+				util.GetLogger().Warn(ctx, fmt.Sprintf("Failed to update rates from %s: no rates parsed", source.name))
+				continue
+			}
+
+			m.applyLiveRates(rates)
+			m.logLiveRateUpdate(ctx, source.name, rates)
+			break
 		}
 
 		for range time.NewTicker(1 * time.Hour).C {
 			for _, source := range sources {
-				rates, err := source(ctx)
-				if err == nil && len(rates) > 0 {
-					for k, v := range rates {
-						m.rates.Store(k, v)
-					}
-					util.GetLogger().Info(ctx, "Successfully updated rates from source")
-					break
+				rates, err := source.parse(ctx)
+				if err != nil {
+					util.GetLogger().Warn(ctx, fmt.Sprintf("Failed to update rates from %s: %s", source.name, err.Error()))
+					continue
 				}
-				util.GetLogger().Warn(ctx, fmt.Sprintf("Failed to update rates from source: %s", err.Error()))
+				if len(rates) == 0 {
+					// Keep hourly refresh semantics identical to startup: an empty
+					// parse must not advance the refresh timestamp or produce a
+					// misleading "updated" log line.
+					util.GetLogger().Warn(ctx, fmt.Sprintf("Failed to update rates from %s: no rates parsed", source.name))
+					continue
+				}
+
+				m.applyLiveRates(rates)
+				m.logLiveRateUpdate(ctx, source.name, rates)
+				break
 			}
 		}
 	})
+}
+
+func (m *CurrencyModule) applyLiveRates(rates map[string]float64) {
+	// Record the refresh timestamp only after rates are stored. That keeps the UI
+	// tail tied to data the converter can actually use, instead of showing a
+	// misleading "fresh" marker for a failed refresh attempt.
+	for k, v := range rates {
+		m.rates.Store(k, v)
+	}
+	m.rateUpdatedAt.Store(util.GetSystemTimestamp())
+}
+
+func (m *CurrencyModule) logLiveRateUpdate(ctx context.Context, source string, rates map[string]float64) {
+	// Include the currencies involved in the most common local verification path.
+	// A plain source-level success log was not enough to tell whether a specific
+	// query such as "1000hkd in cny" had both currencies from the live feed.
+	_, hasHKD := rates["HKD"]
+	_, hasCNY := rates["CNY"]
+	util.GetLogger().Info(ctx, fmt.Sprintf("Successfully updated %d rates from %s (HKD=%t, CNY=%t)", len(rates), source, hasHKD, hasCNY))
+}
+
+// LastRateUpdatedAt returns the last successful live-rate refresh time in
+// milliseconds. A zero value means the module is still using startup fallback
+// rates, which the converter exposes as a warning tail.
+func (m *CurrencyModule) LastRateUpdatedAt() int64 {
+	return m.rateUpdatedAt.Load()
 }
 
 func (m *CurrencyModule) Convert(ctx context.Context, value core.Result, toUnit core.Unit) (core.Result, error) {
@@ -191,6 +288,9 @@ func (m *CurrencyModule) handleToConversion(ctx context.Context, matches []strin
 
 func (m *CurrencyModule) formatWithCurrencySymbol(amount decimal.Decimal, currency string) string {
 	var symbol string
+	// Format newly supported currencies with recognizable symbols or code prefixes.
+	// A bare numeric result was not enough once the converter accepted more
+	// currencies because several share the same local symbol.
 	switch currency {
 	case "USD":
 		symbol = "$"
@@ -206,6 +306,54 @@ func (m *CurrencyModule) formatWithCurrencySymbol(amount decimal.Decimal, curren
 		symbol = "A$"
 	case "CAD":
 		symbol = "C$"
+	case "HKD":
+		symbol = "HK$"
+	case "SGD":
+		symbol = "S$"
+	case "CHF":
+		symbol = "CHF "
+	case "NZD":
+		symbol = "NZ$"
+	case "SEK":
+		symbol = "kr "
+	case "NOK":
+		symbol = "kr "
+	case "DKK":
+		symbol = "kr "
+	case "PLN":
+		symbol = "zł "
+	case "CZK":
+		symbol = "Kč "
+	case "HUF":
+		symbol = "Ft "
+	case "RON":
+		symbol = "lei "
+	case "BGN":
+		symbol = "лв "
+	case "ISK":
+		symbol = "kr "
+	case "TRY":
+		symbol = "₺"
+	case "INR":
+		symbol = "₹"
+	case "KRW":
+		symbol = "₩"
+	case "MXN":
+		symbol = "MX$"
+	case "BRL":
+		symbol = "R$"
+	case "ZAR":
+		symbol = "R "
+	case "THB":
+		symbol = "฿"
+	case "MYR":
+		symbol = "RM "
+	case "IDR":
+		symbol = "Rp "
+	case "ILS":
+		symbol = "₪"
+	case "PHP":
+		symbol = "₱"
 	default:
 		symbol = ""
 	}
@@ -294,11 +442,17 @@ func (m *CurrencyModule) parseExchangeRateFromHKAB(ctx context.Context) (rates m
 
 	// Set base USD rate
 	rates["USD"] = 1.0
+	usdToHkd := usdRate / 100.0
+
+	// HKAB quotes every listed foreign currency in HKD, so HKD itself is not a
+	// table row. The old live refresh therefore left HKD on the startup fallback
+	// after a successful HKAB sync; derive HKD per USD from the USD row so HKD
+	// queries use the same live snapshot as the other HKAB currencies.
+	rates["HKD"] = usdToHkd
 
 	// Second pass: calculate all rates relative to USD
 	for currency, rate := range rawRates {
 		// Convert rates relative to USD
-		usdToHkd := usdRate / 100.0
 		currencyToHkd := rate / 100.0
 		currencyPerUsd := usdToHkd / currencyToHkd
 		rates[currency] = currencyPerUsd
@@ -388,24 +542,30 @@ func (m *CurrencyModule) parseExchangeRateFromECB(ctx context.Context) (rates ma
 }
 
 func (m *CurrencyModule) TokenPatterns() []core.TokenPattern {
+	// Currency tokens must carry their owner module into parsing. Without this,
+	// the generic parser can retry earlier regex modules and let short unit aliases
+	// reinterpret strings like "1000hkd" before currency conversion runs.
 	return []core.TokenPattern{
 		{
-			Pattern:   `([0-9]+(?:\.[0-9]+)?)\s*(?i)(usd|eur|gbp|jpy|cny|aud|cad)`,
+			Pattern:   `([0-9]+(?:\.[0-9]+)?)\s*` + supportedCurrencyPattern,
 			Type:      core.IdentToken,
 			Priority:  1000,
 			FullMatch: false,
+			Module:    m,
 		},
 		{
-			Pattern:   `(?i)(?:in|to)\s+(usd|eur|gbp|jpy|cny|aud|cad)`,
+			Pattern:   `(?i)(?:in|to)\s+` + supportedCurrencyPattern,
 			Type:      core.ConversionToken,
 			Priority:  900,
 			FullMatch: false,
+			Module:    m,
 		},
 		{
-			Pattern:   `(?i)=\s*\?\s*(usd|eur|gbp|jpy|cny|aud|cad)`,
+			Pattern:   `(?i)=\s*\?\s*` + supportedCurrencyPattern,
 			Type:      core.ConversionToken,
 			Priority:  800,
 			FullMatch: false,
+			Module:    m,
 		},
 	}
 }

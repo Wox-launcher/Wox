@@ -12,18 +12,14 @@ import (
 )
 
 const (
-	webSearchDefaultBrowserSettingKey = "defaultBrowser"
-
-	webSearchBrowserUseDefault = "default"
-	webSearchBrowserSystem     = "system"
-	webSearchBrowserChrome     = "chrome"
-	webSearchBrowserEdge       = "edge"
-	webSearchBrowserFirefox    = "firefox"
-	webSearchBrowserBrave      = "brave"
-	webSearchBrowserOpera      = "opera"
-	webSearchBrowserVivaldi    = "vivaldi"
-	webSearchBrowserChromium   = "chromium"
-	webSearchBrowserSafari     = "safari"
+	webSearchBrowserChrome   = "chrome"
+	webSearchBrowserEdge     = "edge"
+	webSearchBrowserFirefox  = "firefox"
+	webSearchBrowserBrave    = "brave"
+	webSearchBrowserOpera    = "opera"
+	webSearchBrowserVivaldi  = "vivaldi"
+	webSearchBrowserChromium = "chromium"
+	webSearchBrowserSafari   = "safari"
 )
 
 type webSearchBrowserOption struct {

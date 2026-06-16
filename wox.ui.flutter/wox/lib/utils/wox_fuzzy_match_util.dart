@@ -10,10 +10,7 @@ class WoxFuzzyMatchResult {
   final bool isMatch;
   final int score;
 
-  const WoxFuzzyMatchResult({
-    required this.isMatch,
-    required this.score,
-  });
+  const WoxFuzzyMatchResult({required this.isMatch, required this.score});
 }
 
 class WoxFuzzyMatchUtil {
@@ -27,9 +24,12 @@ class WoxFuzzyMatchUtil {
   static const int _bonusConsecutive = 5;
   static const int _bonusPrefixMatch = 20;
   static const int _bonusExactMatch = 100;
+  static const int _optimalAlignmentTextLimit = 64;
+  static const int _optimalAlignmentPatternLimit = 8;
 
   static final RegExp _alphabeticRegExp = RegExp(r'^[a-zA-Z]+$');
   static final RegExp _hasChineseRegExp = RegExp(r'[\u4e00-\u9fff]');
+  static final RegExp _chineseRegExp = RegExp(r'[\u4e00-\u9fff]');
 
   static final RegExp _isLowerLetterRegExp = RegExp(r'^\p{Ll}$', unicode: true);
   static final RegExp _isUpperLetterRegExp = RegExp(r'^\p{Lu}$', unicode: true);
@@ -101,23 +101,11 @@ class WoxFuzzyMatchUtil {
     0x00DF: 0x0073, // ß -> s
   };
 
-  static bool isFuzzyMatch({
-    required String text,
-    required String pattern,
-    required bool usePinYin,
-  }) {
-    return match(
-      text: text,
-      pattern: pattern,
-      usePinYin: usePinYin,
-    ).isMatch;
+  static bool isFuzzyMatch({required String text, required String pattern, required bool usePinYin}) {
+    return match(text: text, pattern: pattern, usePinYin: usePinYin).isMatch;
   }
 
-  static WoxFuzzyMatchResult match({
-    required String text,
-    required String pattern,
-    required bool usePinYin,
-  }) {
+  static WoxFuzzyMatchResult match({required String text, required String pattern, required bool usePinYin}) {
     if (pattern.isEmpty) {
       return const WoxFuzzyMatchResult(isMatch: true, score: 0);
     }
@@ -129,24 +117,14 @@ class WoxFuzzyMatchUtil {
     final normalizedPattern = _normalizeString(pattern);
 
     if (normalizedText == normalizedPattern) {
-      return WoxFuzzyMatchResult(
-        isMatch: true,
-        score: _bonusExactMatch + normalizedPattern.runes.length * _scoreMatch,
-      );
+      return WoxFuzzyMatchResult(isMatch: true, score: _bonusExactMatch + normalizedPattern.runes.length * _scoreMatch);
     }
 
     if (normalizedText.startsWith(normalizedPattern)) {
-      return WoxFuzzyMatchResult(
-        isMatch: true,
-        score: _bonusPrefixMatch + normalizedPattern.runes.length * _scoreMatch + _bonusFirstCharMatch,
-      );
+      return WoxFuzzyMatchResult(isMatch: true, score: _bonusPrefixMatch + normalizedPattern.runes.length * _scoreMatch + _bonusFirstCharMatch);
     }
 
-    final coreResult = _fuzzyMatchCore(
-      originalText: text,
-      normalizedText: normalizedText,
-      normalizedPattern: normalizedPattern,
-    );
+    final coreResult = _fuzzyMatchCore(originalText: text, normalizedText: normalizedText, normalizedPattern: normalizedPattern);
     if (coreResult.isMatch) {
       return coreResult;
     }
@@ -159,137 +137,233 @@ class WoxFuzzyMatchUtil {
     }
 
     if (normalizedText.contains(normalizedPattern)) {
-      return WoxFuzzyMatchResult(
-        isMatch: true,
-        score: normalizedPattern.runes.length,
-      );
+      return WoxFuzzyMatchResult(isMatch: true, score: normalizedPattern.runes.length);
     }
 
     return const WoxFuzzyMatchResult(isMatch: false, score: 0);
   }
 
-  static WoxFuzzyMatchResult _matchPinyinStrict(
-    String text,
-    String normalizedPattern,
-  ) {
-    final pinyinText = PinyinHelper.getPinyin(
-      text,
-      separator: ' ',
-      format: PinyinFormat.WITHOUT_TONE,
-    );
-    final parts = pinyinText.split(' ').where((part) => part.isNotEmpty && _alphabeticRegExp.hasMatch(part)).toList(growable: false);
-
-    if (parts.isEmpty) {
+  static WoxFuzzyMatchResult _matchPinyinStrict(String text, String normalizedPattern) {
+    final segments = _buildPinyinSegments(text);
+    if (segments.isEmpty) {
       return const WoxFuzzyMatchResult(isMatch: false, score: 0);
     }
 
-    final firstLetters = parts.map((p) => p[0].toLowerCase()).join();
-    if (normalizedPattern == firstLetters) {
-      return WoxFuzzyMatchResult(
-        isMatch: true,
-        score: _bonusExactMatch + normalizedPattern.runes.length * _scoreMatch,
-      );
-    }
-    if (firstLetters.startsWith(normalizedPattern)) {
-      return WoxFuzzyMatchResult(
-        isMatch: true,
-        score: _bonusPrefixMatch + normalizedPattern.runes.length * _scoreMatch + _bonusFirstCharMatch,
-      );
+    final patternRunes = normalizedPattern.runes.toList(growable: false);
+    var matched = false;
+    var bestScore = 0;
+
+    // Bug fix: keep the Dart matcher aligned with Go's segment graph. The old
+    // Dart-only first-letter string check missed initials that start after
+    // skipped syllables, so action filtering could not find Chinese phrases like
+    // "移除" inside longer labels. The state search below mirrors Go's skip and
+    // mode rules so initials can start later without making mixed pinyin modes
+    // too permissive for short queries.
+    if (patternRunes.length <= segments.length) {
+      var firstLetterMatch = true;
+      for (var i = 0; i < patternRunes.length; i++) {
+        if (!segments[i].firstLetters.contains(patternRunes[i])) {
+          firstLetterMatch = false;
+          break;
+        }
+      }
+
+      if (firstLetterMatch) {
+        bestScore =
+            patternRunes.length == segments.length
+                ? _bonusExactMatch + patternRunes.length * _scoreMatch
+                : _bonusPrefixMatch + patternRunes.length * _scoreMatch + _bonusFirstCharMatch;
+        matched = true;
+      }
     }
 
-    final firstLettersFuzzyResult = _fuzzyMatchCore(
-      originalText: firstLetters,
-      normalizedText: firstLetters,
-      normalizedPattern: normalizedPattern,
-    );
-    if (firstLettersFuzzyResult.isMatch) {
-      return firstLettersFuzzyResult;
+    var states = <_PinyinSearchState>[
+      const _PinyinSearchState(patternIdx: 0, consecutiveSkipped: 0, matchedSyllables: 0, score: 0, lastMatchWasPartial: false, matchMode: _pinyinModeAny),
+    ];
+
+    for (final segment in segments) {
+      final nextStates = <_PinyinSearchState>[];
+      final bestStateByKey = <String, int>{};
+      final bestScoreByKey = <String, int>{};
+
+      void addState(_PinyinSearchState newState) {
+        final key = '${newState.patternIdx}:${newState.matchedSyllables}:${newState.matchMode}:${newState.consecutiveSkipped}';
+        final currentScore = bestScoreByKey[key];
+        if (currentScore != null && currentScore >= newState.score) {
+          return;
+        }
+        final existingIndex = bestStateByKey[key];
+        if (existingIndex == null) {
+          bestStateByKey[key] = nextStates.length;
+          bestScoreByKey[key] = newState.score;
+          nextStates.add(newState);
+        } else {
+          bestScoreByKey[key] = newState.score;
+          nextStates[existingIndex] = newState;
+        }
+      }
+
+      for (final state in states) {
+        if (state.patternIdx == patternRunes.length && state.matchedSyllables > 0) {
+          final finalScore = state.score + (state.matchedSyllables == segments.length && !state.lastMatchWasPartial ? _bonusExactMatch : 0);
+          if (!matched || finalScore > bestScore) {
+            bestScore = finalScore;
+            matched = true;
+          }
+          continue;
+        }
+
+        if (state.matchedSyllables == 0 || state.consecutiveSkipped < _maxConsecutiveSkippedSyllables) {
+          final newSkips = state.consecutiveSkipped + 1;
+          addState(state.copyWith(consecutiveSkipped: newSkips > _maxConsecutiveSkippedSyllables ? _maxConsecutiveSkippedSyllables : newSkips, lastMatchWasPartial: false));
+        }
+
+        if (state.patternIdx >= patternRunes.length) {
+          continue;
+        }
+
+        for (var syllableIdx = 0; syllableIdx < segment.syllables.length; syllableIdx++) {
+          final syllable = segment.syllables[syllableIdx];
+          final syllableRunes = syllable.runes.toList(growable: false);
+          final remainingRunes = patternRunes.length - state.patternIdx;
+          final syllableLen = syllableRunes.length;
+
+          if (remainingRunes >= syllableLen && _matchASCIIPrefix(patternRunes, state.patternIdx, syllableRunes, syllableLen)) {
+            if (syllableLen == 1 || state.matchMode != _pinyinModeFirstLetter) {
+              addState(
+                _PinyinSearchState(
+                  patternIdx: state.patternIdx + syllableLen,
+                  consecutiveSkipped: 0,
+                  matchedSyllables: state.matchedSyllables + 1,
+                  score: state.score + _scoreMatch * 2 + (state.matchedSyllables > 0 && state.consecutiveSkipped == 0 ? _bonusConsecutive : 0),
+                  lastMatchWasPartial: false,
+                  matchMode: syllableLen > 1 && segment.isChinese ? _pinyinModeFullPinyin : state.matchMode,
+                ),
+              );
+            }
+          }
+
+          if (remainingRunes < syllableLen && _matchASCIIPrefix(patternRunes, state.patternIdx, syllableRunes, remainingRunes)) {
+            if (remainingRunes == 1) {
+              if (state.matchMode != _pinyinModeFullPinyin) {
+                addState(
+                  _PinyinSearchState(
+                    patternIdx: state.patternIdx + 1,
+                    consecutiveSkipped: 0,
+                    matchedSyllables: state.matchedSyllables + 1,
+                    score: state.score + _scoreMatch + 5 + (state.matchedSyllables > 0 && state.consecutiveSkipped == 0 ? _bonusConsecutive : 0),
+                    lastMatchWasPartial: true,
+                    matchMode: _pinyinModeFirstLetter,
+                  ),
+                );
+              }
+            } else if (state.matchMode != _pinyinModeFirstLetter && state.consecutiveSkipped == 0) {
+              addState(
+                _PinyinSearchState(
+                  patternIdx: state.patternIdx + remainingRunes,
+                  consecutiveSkipped: 0,
+                  matchedSyllables: state.matchedSyllables + 1,
+                  score: state.score + remainingRunes * _scoreMatch + (state.matchedSyllables > 0 ? _bonusConsecutive : 0),
+                  lastMatchWasPartial: true,
+                  matchMode: _pinyinModeFullPinyin,
+                ),
+              );
+            }
+          }
+
+          if (remainingRunes > 1 && syllableLen > 1 && patternRunes[state.patternIdx] == segment.firstLetters[syllableIdx] && state.matchMode != _pinyinModeFullPinyin) {
+            addState(
+              _PinyinSearchState(
+                patternIdx: state.patternIdx + 1,
+                consecutiveSkipped: 0,
+                matchedSyllables: state.matchedSyllables + 1,
+                score: state.score + _scoreMatch + 5 + (state.matchedSyllables > 0 && state.consecutiveSkipped == 0 ? _bonusConsecutive : 0),
+                lastMatchWasPartial: false,
+                matchMode: _pinyinModeFirstLetter,
+              ),
+            );
+          }
+        }
+      }
+
+      states = nextStates;
+      if (states.isEmpty) {
+        break;
+      }
     }
 
-    final syllableResult = _matchSyllables(parts, normalizedPattern);
-    if (syllableResult.isMatch) {
-      return syllableResult;
+    for (final state in states) {
+      if (state.patternIdx == patternRunes.length && state.matchedSyllables > 0) {
+        final finalScore = state.score + (state.matchedSyllables == segments.length && !state.lastMatchWasPartial ? _bonusExactMatch : 0);
+        if (!matched || finalScore > bestScore) {
+          bestScore = finalScore;
+          matched = true;
+        }
+      }
     }
 
-    return const WoxFuzzyMatchResult(isMatch: false, score: 0);
+    return WoxFuzzyMatchResult(isMatch: matched, score: bestScore);
   }
 
   static const int _maxConsecutiveSkippedSyllables = 3;
+  static const int _pinyinModeAny = 0;
+  static const int _pinyinModeFirstLetter = 1;
+  static const int _pinyinModeFullPinyin = 2;
 
-  static WoxFuzzyMatchResult _matchSyllables(
-    List<String> parts,
-    String pattern,
-  ) {
-    if (pattern.isEmpty || parts.isEmpty) {
-      return const WoxFuzzyMatchResult(isMatch: false, score: 0);
+  static List<_PinyinSegment> _buildPinyinSegments(String text) {
+    final segments = <_PinyinSegment>[];
+    final asciiBuilder = StringBuffer();
+
+    void flushAscii() {
+      if (asciiBuilder.isEmpty) {
+        return;
+      }
+      final raw = asciiBuilder.toString();
+      final normalized = _normalizeString(raw);
+      if (normalized.isNotEmpty) {
+        segments.add(_PinyinSegment(syllables: [normalized], firstLetters: [normalized.runes.first], isChinese: false));
+      }
+      asciiBuilder.clear();
     }
 
-    var patternPos = 0;
-    var partIdx = 0;
-    var matchedSyllables = 0;
-    var totalSkippedSyllables = 0;
-    var consecutiveSkipped = 0;
-    var lastMatchWasPartial = false;
-
-    while (patternPos < pattern.length && partIdx < parts.length) {
-      final partLower = parts[partIdx].toLowerCase();
-      final remaining = pattern.substring(patternPos);
-
-      if (remaining.startsWith(partLower)) {
-        patternPos += partLower.length;
-        matchedSyllables++;
-        partIdx++;
-        lastMatchWasPartial = false;
-        consecutiveSkipped = 0;
-        continue;
-      }
-
-      if (partLower.startsWith(remaining)) {
-        if (matchedSyllables > 0 && remaining.length == 1) {
-          return const WoxFuzzyMatchResult(isMatch: false, score: 0);
+    // Match the Go matcher shape by treating each Han character as a pinyin
+    // segment and merging adjacent non-Chinese text into one segment. Keeping
+    // this structure local avoids special cases in action/result filtering.
+    for (final rune in text.runes) {
+      final char = String.fromCharCode(rune);
+      if (_chineseRegExp.hasMatch(char)) {
+        flushAscii();
+        final syllables = PinyinHelper.convertToPinyinArray(
+          char,
+          PinyinFormat.WITHOUT_TONE,
+        ).map(_normalizeString).where((part) => part.isNotEmpty && _alphabeticRegExp.hasMatch(part)).toList(growable: false);
+        if (syllables.isEmpty) {
+          segments.add(_PinyinSegment(syllables: [char], firstLetters: [rune], isChinese: true));
+        } else {
+          segments.add(_PinyinSegment(syllables: syllables, firstLetters: syllables.map((part) => part.runes.first).toList(growable: false), isChinese: true));
         }
-        patternPos += remaining.length;
-        matchedSyllables++;
-        lastMatchWasPartial = true;
-        partIdx++;
-        consecutiveSkipped = 0;
-        continue;
-      }
-
-      totalSkippedSyllables++;
-      consecutiveSkipped++;
-      partIdx++;
-
-      if (matchedSyllables > 0 && consecutiveSkipped > _maxConsecutiveSkippedSyllables) {
-        return const WoxFuzzyMatchResult(isMatch: false, score: 0);
+      } else {
+        asciiBuilder.write(char);
       }
     }
+    flushAscii();
 
-    if (patternPos != pattern.length) {
-      return const WoxFuzzyMatchResult(isMatch: false, score: 0);
-    }
-
-    if (matchedSyllables == 0) {
-      return const WoxFuzzyMatchResult(isMatch: false, score: 0);
-    }
-
-    var score = matchedSyllables * _scoreMatch * 2;
-    if (totalSkippedSyllables == 0) {
-      score += _bonusConsecutive * matchedSyllables;
-    }
-
-    if (!lastMatchWasPartial && partIdx == parts.length && totalSkippedSyllables == 0) {
-      score += _bonusExactMatch;
-    }
-
-    return WoxFuzzyMatchResult(isMatch: true, score: score);
+    return segments;
   }
 
-  static WoxFuzzyMatchResult _fuzzyMatchCore({
-    required String originalText,
-    required String normalizedText,
-    required String normalizedPattern,
-  }) {
+  static bool _matchASCIIPrefix(List<int> patternRunes, int patternOffset, List<int> syllableRunes, int length) {
+    if (patternOffset + length > patternRunes.length || length > syllableRunes.length) {
+      return false;
+    }
+    for (var i = 0; i < length; i++) {
+      if (_toLowerASCII(patternRunes[patternOffset + i]) != _toLowerASCII(syllableRunes[i])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static WoxFuzzyMatchResult _fuzzyMatchCore({required String originalText, required String normalizedText, required String normalizedPattern}) {
     final textRunes = normalizedText.runes.toList(growable: false);
     final patternRunes = normalizedPattern.runes.toList(growable: false);
     final originalRunes = originalText.runes.toList(growable: false);
@@ -314,23 +388,25 @@ class WoxFuzzyMatchUtil {
       return const WoxFuzzyMatchResult(isMatch: false, score: 0);
     }
 
-    final matchedPositions = _optimizeMatchPositions(
-      originalRunes: originalRunes,
-      textRunes: textRunes,
-      patternRunes: patternRunes,
-    );
+    if (_shouldUseOptimalAlignment(textLen: textLen, patternLen: patternLen)) {
+      final score = _calculateBestAlignmentScore(originalRunes: originalRunes, textRunes: textRunes, patternRunes: patternRunes);
+      if (score == null) {
+        return const WoxFuzzyMatchResult(isMatch: false, score: 0);
+      }
 
-    final score = _calculateScore(
-      originalRunes: originalRunes,
-      textRunes: textRunes,
-      matchedIndexes: matchedPositions,
-      patternLen: patternLen,
-    );
+      final minScore = _calculateMinScoreThreshold(patternLen: patternLen, textLen: textLen);
+      if (score < minScore) {
+        return const WoxFuzzyMatchResult(isMatch: false, score: 0);
+      }
 
-    final minScore = _calculateMinScoreThreshold(
-      patternLen: patternLen,
-      textLen: textLen,
-    );
+      return WoxFuzzyMatchResult(isMatch: true, score: score);
+    }
+
+    final matchedPositions = _optimizeMatchPositions(originalRunes: originalRunes, textRunes: textRunes, patternRunes: patternRunes);
+
+    final score = _calculateScore(originalRunes: originalRunes, textRunes: textRunes, matchedIndexes: matchedPositions, patternLen: patternLen);
+
+    final minScore = _calculateMinScoreThreshold(patternLen: patternLen, textLen: textLen);
     if (score < minScore) {
       return const WoxFuzzyMatchResult(isMatch: false, score: 0);
     }
@@ -338,11 +414,7 @@ class WoxFuzzyMatchUtil {
     return WoxFuzzyMatchResult(isMatch: true, score: score);
   }
 
-  static List<int> _optimizeMatchPositions({
-    required List<int> originalRunes,
-    required List<int> textRunes,
-    required List<int> patternRunes,
-  }) {
+  static List<int> _optimizeMatchPositions({required List<int> originalRunes, required List<int> textRunes, required List<int> patternRunes}) {
     final textLen = textRunes.length;
     final patternLen = patternRunes.length;
     final matchedIndexes = List<int>.filled(patternLen, 0);
@@ -389,12 +461,89 @@ class WoxFuzzyMatchUtil {
     return matchedIndexes;
   }
 
-  static int _calculateScore({
-    required List<int> originalRunes,
-    required List<int> textRunes,
-    required List<int> matchedIndexes,
-    required int patternLen,
-  }) {
+  // Keep short labels on the best alignment path while longer labels stay on
+  // the cheaper greedy heuristic.
+  static bool _shouldUseOptimalAlignment({required int textLen, required int patternLen}) {
+    return patternLen > 1 && patternLen <= _optimalAlignmentPatternLimit && textLen <= _optimalAlignmentTextLimit;
+  }
+
+  // Dynamic programming is only used for short strings, where a globally best
+  // alignment improves ranking more than the extra work costs.
+  static int? _calculateBestAlignmentScore({required List<int> originalRunes, required List<int> textRunes, required List<int> patternRunes}) {
+    final textLen = textRunes.length;
+    final patternLen = patternRunes.length;
+    if (patternLen == 0 || patternLen > textLen || patternLen > _optimalAlignmentPatternLimit || textLen > _optimalAlignmentTextLimit) {
+      return null;
+    }
+
+    final scores = List<int?>.filled(patternLen * textLen, null);
+
+    for (var textIdx = 0; textIdx < textLen; textIdx++) {
+      if (textRunes[textIdx] != patternRunes[0]) {
+        continue;
+      }
+
+      scores[textIdx] = _scoreMatch + _calculateMatchBonus(originalRunes: originalRunes, matchIdx: textIdx) + _calculateLeadingGapPenalty(textIdx);
+    }
+
+    for (var patternIdx = 1; patternIdx < patternLen; patternIdx++) {
+      var rowFound = false;
+      final rowBase = patternIdx * textLen;
+      final prevRowBase = (patternIdx - 1) * textLen;
+
+      for (var textIdx = patternIdx; textIdx < textLen; textIdx++) {
+        if (textRunes[textIdx] != patternRunes[patternIdx]) {
+          continue;
+        }
+
+        int? bestScore;
+        final matchBonus = _scoreMatch + _calculateMatchBonus(originalRunes: originalRunes, matchIdx: textIdx);
+
+        for (var prevIdx = patternIdx - 1; prevIdx < textIdx; prevIdx++) {
+          final prevScore = scores[prevRowBase + prevIdx];
+          if (prevScore == null) {
+            continue;
+          }
+
+          var score = prevScore + matchBonus + _calculateGapPenalty(prevIdx, textIdx);
+          if (textIdx == prevIdx + 1) {
+            score += _bonusConsecutive;
+          }
+          if (bestScore == null || score > bestScore) {
+            bestScore = score;
+          }
+        }
+
+        if (bestScore != null) {
+          scores[rowBase + textIdx] = bestScore;
+          rowFound = true;
+        }
+      }
+
+      if (!rowFound) {
+        return null;
+      }
+    }
+
+    final lastRowBase = (patternLen - 1) * textLen;
+    final matchRatioBonus = _calculateMatchRatioBonus(patternLen: patternLen, textLen: textLen);
+    int? bestScore;
+    for (var textIdx = patternLen - 1; textIdx < textLen; textIdx++) {
+      final rowScore = scores[lastRowBase + textIdx];
+      if (rowScore == null) {
+        continue;
+      }
+
+      final score = rowScore + _calculateTrailingGapPenalty(textLen, textIdx) + matchRatioBonus;
+      if (bestScore == null || score > bestScore) {
+        bestScore = score;
+      }
+    }
+
+    return bestScore;
+  }
+
+  static int _calculateScore({required List<int> originalRunes, required List<int> textRunes, required List<int> matchedIndexes, required int patternLen}) {
     if (matchedIndexes.isEmpty) {
       return 0;
     }
@@ -405,72 +554,92 @@ class WoxFuzzyMatchUtil {
     for (var i = 0; i < matchedIndexes.length; i++) {
       final matchIdx = matchedIndexes[i];
 
-      score += _scoreMatch;
-
-      if (matchIdx == 0) {
-        score += _bonusFirstCharMatch;
-      }
-
-      if (matchIdx > 0) {
-        final prevChar = originalRunes[matchIdx - 1];
-        final currChar = originalRunes[matchIdx];
-
-        if (_isLowerLetter(prevChar) && _isUpperLetter(currChar)) {
-          score += _bonusCamelCase;
-        }
-
-        if (_isDelimiter(prevChar)) {
-          score += _bonusBoundary;
-        }
-
-        if (!_isLetterOrNumber(prevChar) && _isLetterOrNumber(currChar)) {
-          score += _bonusNonWord;
-        }
-      }
+      score += _scoreMatch + _calculateMatchBonus(originalRunes: originalRunes, matchIdx: matchIdx);
 
       if (i > 0 && matchIdx == prevMatchIdx + 1) {
         score += _bonusConsecutive;
       }
 
       if (prevMatchIdx >= 0) {
-        final gap = matchIdx - prevMatchIdx - 1;
-        if (gap > 0) {
-          score += _scoreGapStart + (gap - 1) * _scoreGapExtension;
-        }
-      } else if (matchIdx > 0) {
-        final leadingGap = matchIdx;
-        var penalty = leadingGap * _scoreGapExtension;
-        if (penalty < -15) {
-          penalty = -15;
-        }
-        score += penalty;
+        score += _calculateGapPenalty(prevMatchIdx, matchIdx);
+      } else {
+        score += _calculateLeadingGapPenalty(matchIdx);
       }
 
       prevMatchIdx = matchIdx;
     }
 
-    final textLen = textRunes.length;
-    if (prevMatchIdx >= 0 && prevMatchIdx < textLen - 1) {
-      final trailingGap = textLen - prevMatchIdx - 1;
-      var penalty = (trailingGap * _scoreGapExtension) ~/ 2;
-      if (penalty < -10) {
-        penalty = -10;
-      }
-      score += penalty;
-    }
-
-    final matchRatio = patternLen / textLen;
-    if (matchRatio > 0.5) {
-      score += (matchRatio * 10).toInt();
-    }
+    score += _calculateTrailingGapPenalty(textRunes.length, prevMatchIdx);
+    score += _calculateMatchRatioBonus(patternLen: patternLen, textLen: textRunes.length);
 
     return score;
   }
 
-  static int _calculateMinScoreThreshold({
-    required int patternLen,
-    required int textLen,
-  }) {
+  static int _calculateMatchBonus({required List<int> originalRunes, required int matchIdx}) {
+    var bonus = 0;
+    if (matchIdx == 0) {
+      bonus += _bonusFirstCharMatch;
+      return bonus;
+    }
+
+    final prevChar = originalRunes[matchIdx - 1];
+    final currChar = originalRunes[matchIdx];
+    if (_isLowerLetter(prevChar) && _isUpperLetter(currChar)) {
+      bonus += _bonusCamelCase;
+    }
+    if (_isDelimiter(prevChar)) {
+      bonus += _bonusBoundary;
+    }
+    if (!_isLetterOrNumber(prevChar) && _isLetterOrNumber(currChar)) {
+      bonus += _bonusNonWord;
+    }
+
+    return bonus;
+  }
+
+  static int _calculateLeadingGapPenalty(int matchIdx) {
+    if (matchIdx <= 0) {
+      return 0;
+    }
+
+    var penalty = matchIdx * _scoreGapExtension;
+    if (penalty < -15) {
+      penalty = -15;
+    }
+    return penalty;
+  }
+
+  static int _calculateGapPenalty(int prevMatchIdx, int matchIdx) {
+    final gap = matchIdx - prevMatchIdx - 1;
+    if (gap <= 0) {
+      return 0;
+    }
+
+    return _scoreGapStart + (gap - 1) * _scoreGapExtension;
+  }
+
+  static int _calculateTrailingGapPenalty(int textLen, int matchIdx) {
+    if (matchIdx < 0 || matchIdx >= textLen - 1) {
+      return 0;
+    }
+
+    final trailingGap = textLen - matchIdx - 1;
+    var penalty = (trailingGap * _scoreGapExtension) ~/ 2;
+    if (penalty < -10) {
+      penalty = -10;
+    }
+    return penalty;
+  }
+
+  static int _calculateMatchRatioBonus({required int patternLen, required int textLen}) {
+    final matchRatio = patternLen / textLen;
+    if (matchRatio > 0.5) {
+      return (matchRatio * 10).toInt();
+    }
+    return 0;
+  }
+
+  static int _calculateMinScoreThreshold({required int patternLen, required int textLen}) {
     if (patternLen == 1) {
       if (textLen <= 2) {
         return _scoreMatch;
@@ -577,5 +746,54 @@ class WoxFuzzyMatchUtil {
       builder.writeCharCode(mapped);
     }
     return builder.toString();
+  }
+
+  static int _toLowerASCII(int rune) {
+    if (rune >= 0x41 && rune <= 0x5A) {
+      return rune + 0x20;
+    }
+    return rune;
+  }
+}
+
+class _PinyinSegment {
+  // Segment-level pinyin data mirrors Go's PinyinSegment so the Dart and Go
+  // matchers make the same decisions for skipped syllables and initials.
+  final List<String> syllables;
+  final List<int> firstLetters;
+  final bool isChinese;
+
+  const _PinyinSegment({required this.syllables, required this.firstLetters, required this.isChinese});
+}
+
+class _PinyinSearchState {
+  // Search state mirrors Go's pinyinSearchState. Keeping the mode in the state
+  // preserves the existing restriction against noisy mixed first-letter/full-pinyin
+  // matches while allowing later phrase initials such as "yc".
+  final int patternIdx;
+  final int consecutiveSkipped;
+  final int matchedSyllables;
+  final int score;
+  final bool lastMatchWasPartial;
+  final int matchMode;
+
+  const _PinyinSearchState({
+    required this.patternIdx,
+    required this.consecutiveSkipped,
+    required this.matchedSyllables,
+    required this.score,
+    required this.lastMatchWasPartial,
+    required this.matchMode,
+  });
+
+  _PinyinSearchState copyWith({int? patternIdx, int? consecutiveSkipped, int? matchedSyllables, int? score, bool? lastMatchWasPartial, int? matchMode}) {
+    return _PinyinSearchState(
+      patternIdx: patternIdx ?? this.patternIdx,
+      consecutiveSkipped: consecutiveSkipped ?? this.consecutiveSkipped,
+      matchedSyllables: matchedSyllables ?? this.matchedSyllables,
+      score: score ?? this.score,
+      lastMatchWasPartial: lastMatchWasPartial ?? this.lastMatchWasPartial,
+      matchMode: matchMode ?? this.matchMode,
+    );
   }
 }

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 	"wox/common"
+	"wox/i18n"
 	"wox/plugin"
 	"wox/util"
 	"wox/util/clipboard"
@@ -44,6 +45,16 @@ func (s *ScriptHost) Stop(ctx context.Context) {
 func (s *ScriptHost) IsStarted(ctx context.Context) bool {
 	// Script host is always "started" since it doesn't maintain persistent connections
 	return true
+}
+
+func (s *ScriptHost) RuntimeStatus(ctx context.Context) plugin.RuntimeHostStatus {
+	// Script plugins are run directly per invocation, so exposing a running
+	// status preserves the shared host contract without adding fake restart UI.
+	return plugin.RuntimeHostStatus{
+		StatusCode:    plugin.RuntimeHostStatusRunning,
+		StatusMessage: "Script runtime does not use a persistent host process.",
+		CanRestart:    false,
+	}
 }
 
 func (s *ScriptHost) LoadPlugin(ctx context.Context, metadata plugin.Metadata, pluginDirectory string) (plugin.Plugin, error) {
@@ -90,7 +101,7 @@ func (s *ScriptPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	util.GetLogger().Debug(ctx, fmt.Sprintf("Script plugin %s initialized", s.metadata.GetName(ctx)))
 }
 
-func (s *ScriptPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+func (s *ScriptPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	// Prepare JSON-RPC request
 	request := map[string]interface{}{
 		"jsonrpc": "2.0",
@@ -109,11 +120,42 @@ func (s *ScriptPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Q
 	if err != nil {
 		requestJSON, _ := json.Marshal(request)
 		util.GetLogger().Error(ctx, fmt.Sprintf("script plugin query failed for %s: %s, raw request: %s", s.metadata.GetName(ctx), err.Error(), requestJSON))
+
+		// Check if this is a missing runtime error
+		if runtimeName := s.detectMissingRuntime(ctx, err); runtimeName != "" {
+			displayRuntimeName, installURL := s.getRuntimeDisplayName(runtimeName)
+			var actions []plugin.QueryResultAction
+			if installURL != "" {
+				actions = append(actions, plugin.QueryResultAction{
+					Name: "i18n:plugin_script_runtime_install_action",
+					Icon: common.InstallIcon,
+					Action: func(actionCtx context.Context, _ plugin.ActionContext) {
+						if openErr := shell.Open(installURL); openErr != nil {
+							util.GetLogger().Error(actionCtx, fmt.Sprintf("script plugin %s failed to open runtime install url %s: %s", s.metadata.GetName(actionCtx), installURL, openErr.Error()))
+						}
+					},
+				})
+			}
+			util.GetLogger().Info(ctx, fmt.Sprintf("script plugin %s missing runtime: %s", s.metadata.GetName(ctx), runtimeName))
+			return plugin.NewQueryResponse([]plugin.QueryResult{
+				{
+					Title:    s.metadata.GetName(ctx),
+					SubTitle: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_script_runtime_missing_subtitle"), displayRuntimeName),
+					Icon:     s.metadata.GetIconOrDefault(s.metadata.Directory, common.NewWoxImageEmoji("⚠️")),
+					Preview: plugin.WoxPreview{
+						PreviewType: plugin.WoxPreviewTypeMarkdown,
+						PreviewData: s.buildMissingRuntimeMarkdown(ctx, runtimeName),
+					},
+					Actions: actions,
+				},
+			})
+		}
+
 		s.api.Notify(ctx, err.Error())
-		return []plugin.QueryResult{}
+		return plugin.QueryResponse{}
 	}
 
-	return results
+	return plugin.NewQueryResponse(results)
 }
 
 // executeScript executes the script with the given JSON-RPC request and returns the results
@@ -157,6 +199,7 @@ func (s *ScriptPlugin) executeScript(ctx context.Context, request map[string]int
 			Title:    getStringFromMap(itemMap, "title"),
 			SubTitle: getStringFromMap(itemMap, "subtitle"),
 			Score:    int64(getFloatFromMap(itemMap, "score")),
+			ScoreKey: getFirstStringFromMap(itemMap, []string{"scoreKey", "score_key", "ScoreKey"}),
 		}
 
 		// Icon: WoxImage.String() format, e.g. "base64:data:image/png;base64,xxx" or "emoji:🧮"
@@ -174,6 +217,10 @@ func (s *ScriptPlugin) executeScript(ctx context.Context, request map[string]int
 
 		if preview, ok := parseScriptPreview(itemMap); ok {
 			queryResult.Preview = preview
+		}
+
+		if dragData := parseScriptDragData(itemMap); dragData != nil {
+			queryResult.DragData = dragData
 		}
 
 		if tails := parseScriptTails(ctx, s.metadata, itemMap); len(tails) > 0 {
@@ -573,6 +620,69 @@ func (s *ScriptPlugin) mapInterpreterWithCustomPath(ctx context.Context, interpr
 	return interpreter
 }
 
+// detectMissingRuntime checks if a script execution error is caused by a missing runtime.
+// Returns the runtime name (e.g., "python", "nodejs") if a missing runtime is detected, or empty string otherwise.
+func (s *ScriptPlugin) detectMissingRuntime(ctx context.Context, err error) string {
+	if err == nil {
+		return ""
+	}
+
+	errMsg := err.Error()
+
+	// On Windows, exit status 9009 means "command not found"
+	// Also check for common "executable file not found" error messages
+	isMissingRuntime := strings.Contains(errMsg, "exit status 9009") ||
+		strings.Contains(errMsg, "executable file not found") ||
+		strings.Contains(errMsg, "no such file or directory") ||
+		strings.Contains(errMsg, "not found in %PATH%") ||
+		strings.Contains(errMsg, "not found in $PATH")
+
+	if !isMissingRuntime {
+		return ""
+	}
+
+	return s.getScriptRuntimeName()
+}
+
+// getScriptRuntimeName returns the runtime name based on the script file extension
+func (s *ScriptPlugin) getScriptRuntimeName() string {
+	ext := strings.ToLower(filepath.Ext(s.scriptPath))
+	switch ext {
+	case ".py":
+		return "python"
+	case ".js":
+		return "nodejs"
+	default:
+		if ext != "" {
+			return strings.TrimPrefix(ext, ".")
+		}
+		return "unknown"
+	}
+}
+
+func (s *ScriptPlugin) getRuntimeDisplayName(runtimeName string) (string, string) {
+	switch strings.ToLower(runtimeName) {
+	case "python":
+		return "Python", "https://www.python.org/downloads/"
+	case "nodejs", "node":
+		return "Node.js", "https://nodejs.org/"
+	default:
+		return runtimeName, ""
+	}
+}
+
+func (s *ScriptPlugin) buildMissingRuntimeMarkdown(ctx context.Context, runtimeName string) string {
+	switch strings.ToLower(runtimeName) {
+	case "python":
+		return i18n.GetI18nManager().TranslateWox(ctx, "plugin_script_runtime_python_missing_markdown")
+	case "nodejs", "node":
+		return i18n.GetI18nManager().TranslateWox(ctx, "plugin_script_runtime_nodejs_missing_markdown")
+	default:
+		displayRuntimeName, _ := s.getRuntimeDisplayName(runtimeName)
+		return fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_script_runtime_missing_markdown"), displayRuntimeName, displayRuntimeName, displayRuntimeName)
+	}
+}
+
 // Helper functions to safely extract values from maps
 func getStringFromMap(m map[string]interface{}, key string) string {
 	if value, exists := m[key]; exists {
@@ -593,6 +703,19 @@ func getFloatFromMap(m map[string]interface{}, key string) float64 {
 		}
 	}
 	return 0
+}
+
+func getFirstFloatPtrFromMap(m map[string]interface{}, keys []string) *float64 {
+	for _, key := range keys {
+		if _, exists := m[key]; !exists {
+			continue
+		}
+
+		value := getFloatFromMap(m, key)
+		return &value
+	}
+
+	return nil
 }
 
 func getSliceFromMap(m map[string]interface{}, key string) []interface{} {
@@ -687,11 +810,40 @@ func parseScriptPreview(itemMap map[string]interface{}) (plugin.WoxPreview, bool
 	if propertiesMap == nil {
 		propertiesMap = getMapFromMap(previewMap, "PreviewProperties")
 	}
+	tagsArray := getSliceFromMap(previewMap, "tags")
+	if tagsArray == nil {
+		tagsArray = getSliceFromMap(previewMap, "preview_tags")
+	}
+	if tagsArray == nil {
+		tagsArray = getSliceFromMap(previewMap, "previewTags")
+	}
+	if tagsArray == nil {
+		tagsArray = getSliceFromMap(previewMap, "PreviewTags")
+	}
 
 	preview := plugin.WoxPreview{
 		PreviewType:    previewType,
 		PreviewData:    previewData,
 		ScrollPosition: scrollPosition,
+	}
+	if len(tagsArray) > 0 {
+		// Script previews now accept explicit tags because the launcher metadata
+		// UI is tag-based. Keep the parser permissive across naming styles so
+		// shell scripts do not need a Go-specific payload shape.
+		preview.PreviewTags = make([]plugin.WoxPreviewTag, 0, len(tagsArray))
+		for _, item := range tagsArray {
+			tagMap, ok := item.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			preview.PreviewTags = append(preview.PreviewTags, plugin.WoxPreviewTag{
+				Label: getFirstStringFromMap(tagMap, []string{"label", "Label"}),
+				Tooltip: getFirstStringFromMap(tagMap, []string{
+					"tooltip",
+					"Tooltip",
+				}),
+			})
+		}
 	}
 	if len(propertiesMap) > 0 {
 		preview.PreviewProperties = make(map[string]string, len(propertiesMap))
@@ -706,6 +858,40 @@ func parseScriptPreview(itemMap map[string]interface{}) (plugin.WoxPreview, bool
 	}
 
 	return preview, true
+}
+
+func parseScriptDragData(itemMap map[string]interface{}) *plugin.QueryResultDragData {
+	dragMap := getMapFromMap(itemMap, "dragData")
+	if dragMap == nil {
+		dragMap = getMapFromMap(itemMap, "DragData")
+	}
+	if dragMap == nil {
+		return nil
+	}
+
+	dragType := getFirstStringFromMap(dragMap, []string{"type", "Type"})
+	if dragType != plugin.QueryResultDragDataTypeFiles {
+		return nil
+	}
+
+	filesArray := getSliceFromMap(dragMap, "files")
+	if filesArray == nil {
+		filesArray = getSliceFromMap(dragMap, "Files")
+	}
+	files := make([]string, 0, len(filesArray))
+	for _, item := range filesArray {
+		if filePath, ok := item.(string); ok && strings.TrimSpace(filePath) != "" {
+			files = append(files, filePath)
+		}
+	}
+	if len(files) == 0 {
+		return nil
+	}
+
+	return &plugin.QueryResultDragData{
+		Type:  plugin.QueryResultDragDataTypeFiles,
+		Files: files,
+	}
 }
 
 func parseScriptTails(ctx context.Context, metadata plugin.Metadata, itemMap map[string]interface{}) []plugin.QueryResultTail {
@@ -737,19 +923,25 @@ func parseScriptTails(ctx context.Context, metadata plugin.Metadata, itemMap map
 				continue
 			}
 			tails = append(tails, plugin.QueryResultTail{
-				Id:    getFirstStringFromMap(tailMap, []string{"id", "Id"}),
-				Type:  plugin.QueryResultTailTypeImage,
-				Image: img,
+				Id:          getFirstStringFromMap(tailMap, []string{"id", "Id"}),
+				Type:        plugin.QueryResultTailTypeImage,
+				Image:       img,
+				ImageWidth:  getFirstFloatPtrFromMap(tailMap, []string{"imageWidth", "ImageWidth", "width", "Width"}),
+				ImageHeight: getFirstFloatPtrFromMap(tailMap, []string{"imageHeight", "ImageHeight", "height", "Height"}),
+				Tooltip:     getFirstStringFromMap(tailMap, []string{"tooltip", "Tooltip"}),
 			})
 		default:
 			text := getFirstStringFromMap(tailMap, []string{"text", "Text"})
 			if text == "" {
 				continue
 			}
+			textCategory := getFirstStringFromMap(tailMap, []string{"textCategory", "TextCategory", "category", "Category"})
 			tails = append(tails, plugin.QueryResultTail{
-				Id:   getFirstStringFromMap(tailMap, []string{"id", "Id"}),
-				Type: plugin.QueryResultTailTypeText,
-				Text: text,
+				Id:           getFirstStringFromMap(tailMap, []string{"id", "Id"}),
+				Type:         plugin.QueryResultTailTypeText,
+				Text:         text,
+				TextCategory: plugin.QueryResultTailTextCategory(textCategory),
+				Tooltip:      getFirstStringFromMap(tailMap, []string{"tooltip", "Tooltip"}),
 			})
 		}
 

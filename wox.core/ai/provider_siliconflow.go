@@ -14,13 +14,19 @@ type SiliconFlowProvider struct {
 	*OpenAIBaseProvider
 }
 
+const siliconFlowDefaultHost = "https://api.siliconflow.cn/v1"
+
 func (p *SiliconFlowProvider) GetIcon() common.WoxImage {
-	return common.WoxImage{}
+	return common.NewWoxImageSvg(`<svg height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><title>SiliconCloud</title><path clip-rule="evenodd" d="M22.956 6.521H12.522c-.577 0-1.044.468-1.044 1.044v3.13c0 .577-.466 1.044-1.043 1.044H1.044c-.577 0-1.044.467-1.044 1.044v4.174C0 17.533.467 18 1.044 18h10.434c.577 0 1.044-.467 1.044-1.043v-3.13c0-.578.466-1.044 1.043-1.044h9.391c.577 0 1.044-.467 1.044-1.044V7.565c0-.576-.467-1.044-1.044-1.044z" fill="#6E29F6" fill-rule="evenodd"></path></svg>`)
+}
+
+func (p *SiliconFlowProvider) GetDefaultHost() string {
+	return siliconFlowDefaultHost
 }
 
 func NewSiliconFlowProvider(ctx context.Context, connectContext setting.AIProvider) Provider {
 	if connectContext.Host == "" {
-		connectContext.Host = "https://api.siliconflow.cn/v1"
+		connectContext.Host = siliconFlowDefaultHost
 	}
 
 	return &SiliconFlowProvider{

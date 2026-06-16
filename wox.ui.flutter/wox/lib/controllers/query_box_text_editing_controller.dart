@@ -2,33 +2,53 @@ import 'package:flutter/material.dart';
 
 /// A [TextEditingController] that applies a custom style to the currently selected text.
 class QueryBoxTextEditingController extends TextEditingController {
-  QueryBoxTextEditingController({required TextStyle selectedTextStyle}) : _selectedTextStyle = selectedTextStyle;
+  QueryBoxTextEditingController({required TextStyle selectedTextStyle, bool enableSelectedTextStyle = true})
+    : _selectedTextStyle = selectedTextStyle,
+      _enableSelectedTextStyle = enableSelectedTextStyle,
+      _completionHintStyle = const TextStyle();
 
   TextStyle _selectedTextStyle;
+  bool _enableSelectedTextStyle;
+  String _completionHintSuffix = "";
+  TextStyle _completionHintStyle;
 
   TextStyle get selectedTextStyle => _selectedTextStyle;
+  bool get enableSelectedTextStyle => _enableSelectedTextStyle;
 
-  /// Updates the style used for rendering selected text and notifies listeners when it changes.
-  void updateSelectedTextStyle(TextStyle style) {
-    if (_selectedTextStyle == style) {
+  /// Updates how selected text should be rendered and notifies listeners when it changes.
+  void updateSelectedTextStyle({required TextStyle style, required bool enabled}) {
+    if (_selectedTextStyle == style && _enableSelectedTextStyle == enabled) {
       return;
     }
 
     _selectedTextStyle = style;
+    _enableSelectedTextStyle = enabled;
+    notifyListeners();
+  }
+
+  /// Updates the inline completion suffix rendered after the editable text.
+  void updateCompletionHint({required String suffix, required TextStyle style}) {
+    if (_completionHintSuffix == suffix && _completionHintStyle == style) {
+      return;
+    }
+
+    _completionHintSuffix = suffix;
+    _completionHintStyle = style;
     notifyListeners();
   }
 
   @override
   TextSpan buildTextSpan({required BuildContext context, TextStyle? style, bool withComposing = false}) {
     final selection = value.selection;
-    final hasStyledSelection = selection.isValid && !selection.isCollapsed;
+    final hasStyledSelection = _enableSelectedTextStyle && selection.isValid && !selection.isCollapsed;
 
     if (!hasStyledSelection) {
-      return super.buildTextSpan(
-        context: context,
-        style: style,
-        withComposing: withComposing,
-      );
+      final textSpan = super.buildTextSpan(context: context, style: style, withComposing: withComposing);
+      if (_completionHintSuffix.isEmpty) {
+        return textSpan;
+      }
+
+      return TextSpan(style: style, children: [textSpan, TextSpan(text: _completionHintSuffix, style: _completionHintStyle)]);
     }
 
     final composing = withComposing && value.composing.isValid ? value.composing : null;
@@ -67,6 +87,10 @@ class QueryBoxTextEditingController extends TextEditingController {
       }
 
       children.add(TextSpan(text: segmentText, style: segmentStyle));
+    }
+
+    if (_completionHintSuffix.isNotEmpty) {
+      children.add(TextSpan(text: _completionHintSuffix, style: _completionHintStyle));
     }
 
     return TextSpan(style: style, children: children);

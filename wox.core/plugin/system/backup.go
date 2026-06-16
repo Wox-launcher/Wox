@@ -53,11 +53,11 @@ func (c *BackupPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	c.api = initParams.API
 }
 
-func (c *BackupPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+func (c *BackupPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	if query.TriggerKeyword == "restore" {
-		return c.restore(ctx, query)
+		return plugin.NewQueryResponse(c.restore(ctx, query))
 	} else {
-		return c.backup(ctx, query)
+		return plugin.NewQueryResponse(c.backup(ctx, query))
 	}
 }
 

@@ -14,8 +14,9 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: "Home", link: "/" },
-          { text: "Guide", link: "/guide/installation" },
+          { text: "Guide", link: "/guide/introduction" },
           { text: "Development", link: "/development/setup" },
+          { text: "Blog", link: "/blog/" },
           { text: "Plugin Store", link: "/store/plugins" },
           { text: "Theme Store", link: "/store/themes" },
         ],
@@ -76,10 +77,23 @@ export default defineConfig({
               text: "Plugin Development",
               items: [
                 { text: "Overview", link: "/development/plugins/overview" },
+                { text: "AI skills", link: "/development/plugins/ai-skills" },
                 { text: "Specification", link: "/development/plugins/specification" },
                 { text: "Query Model", link: "/development/plugins/query-model" },
                 { text: "Script Plugin", link: "/development/plugins/script-plugin" },
                 { text: "Full-featured Plugin", link: "/development/plugins/full-featured-plugin" },
+              ],
+            },
+          ],
+          "/blog/": [
+            {
+              text: "Blog",
+              items: [
+                { text: "Overview", link: "/blog/" },
+                { text: "Did You Know: Wox Can Preview Files with the Space Key", link: "/blog/did-you-know-selection-space-quick-look" },
+                { text: "Did You Know: Wox Can Bring Back a Launchpad-Style App Grid", link: "/blog/did-you-know-wox-app-launchpad" },
+                { text: "Did You Know: Wox Can Translate Selected Text Silently", link: "/blog/did-you-know-ai-command-silent-translation-query-hotkey" },
+                { text: "Did You Know: Wox Can Browse Websites with Query Hotkeys", link: "/blog/did-you-know-wox-query-hotkey-webview" },
               ],
             },
           ],
@@ -108,8 +122,9 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: "首页", link: "/zh/" },
-          { text: "指南", link: "/zh/guide/installation" },
+          { text: "指南", link: "/zh/guide/introduction" },
           { text: "开发", link: "/zh/development/setup" },
+          { text: "博客", link: "/zh/blog/" },
           { text: "插件商店", link: "/zh/store/plugins" },
           { text: "主题商店", link: "/zh/store/themes" },
         ],
@@ -118,6 +133,7 @@ export default defineConfig({
             {
               text: "指南",
               items: [
+                { text: "简介", link: "/zh/guide/introduction" },
                 { text: "安装", link: "/zh/guide/installation" },
                 { text: "常见问题", link: "/zh/guide/faq" },
               ],
@@ -169,10 +185,23 @@ export default defineConfig({
               text: "插件开发",
               items: [
                 { text: "概览", link: "/zh/development/plugins/overview" },
+                { text: "AI 技能", link: "/zh/development/plugins/ai-skills" },
                 { text: "规范", link: "/zh/development/plugins/specification" },
                 { text: "查询模型", link: "/zh/development/plugins/query-model" },
                 { text: "脚本插件", link: "/zh/development/plugins/script-plugin" },
                 { text: "全功能插件", link: "/zh/development/plugins/full-featured-plugin" },
+              ],
+            },
+          ],
+          "/zh/blog/": [
+            {
+              text: "博客",
+              items: [
+                { text: "总览", link: "/zh/blog/" },
+                { text: "你知道吗：Wox 可以用空格键快速预览文件", link: "/zh/blog/did-you-know-selection-space-quick-look" },
+                { text: "你知道吗：Wox 可以找回类似 Launchpad 的应用网格", link: "/zh/blog/did-you-know-wox-app-launchpad" },
+                { text: "你知道吗：Wox 可以用快捷键静默翻译选中文本", link: "/zh/blog/did-you-know-ai-command-silent-translation-query-hotkey" },
+                { text: "你知道吗：Wox 可以用快捷键查询快速浏览网页", link: "/zh/blog/did-you-know-wox-query-hotkey-webview" },
               ],
             },
           ],

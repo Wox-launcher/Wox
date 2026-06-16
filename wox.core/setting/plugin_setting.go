@@ -1,10 +1,5 @@
 package setting
 
-type PluginQueryCommand struct {
-	Command     string
-	Description string
-}
-
 type PluginSetting struct {
 	// Is this plugin disabled by user
 	Disabled *PluginSettingValue[bool]
@@ -14,11 +9,6 @@ type PluginSetting struct {
 	// So don't use this property directly, use Instance.TriggerKeywords instead
 	TriggerKeywords *PluginSettingValue[[]string]
 
-	// plugin author can register query command dynamically
-	// the final query command will be the combination of plugin's metadata commands defined in plugin.json and customized query command registered here
-	//
-	// So don't use this directly, use Instance.GetQueryCommands instead
-	QueryCommands *PluginSettingValue[[]PluginQueryCommand]
 
 	store                     *PluginSettingStore
 	defaultSettingsInMetadata map[string]string
@@ -30,7 +20,6 @@ func NewPluginSetting(store *PluginSettingStore, defaultSettingsInMetadata map[s
 		defaultSettingsInMetadata: defaultSettingsInMetadata,
 		Disabled:                  NewPluginSettingValue(store, "Disabled", false),
 		TriggerKeywords:           NewPluginSettingValue(store, "TriggerKeywords", []string{}),
-		QueryCommands:             NewPluginSettingValue(store, "QueryCommands", []PluginQueryCommand{}),
 	}
 }
 

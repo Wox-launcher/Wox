@@ -253,11 +253,15 @@ wheels = [
 
 [[package]]
 name = "wox-plugin"
-version = "0.0.70"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/ed/87/97b05bbfc6bc7b863f7db60f99e239d2a8d1a537e665a0c2830dff52705b/wox_plugin-0.0.70.tar.gz", hash = "sha256:13897b100ca5c4180decb57d20afdd1382b28accb55b343e19b0daa7917161a4", size = 66702 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/14/2f/49b43c45f6e5904d5367f0c0bb2342b0da5c1570aa3da3c30d476a1d0434/wox_plugin-0.0.70-py3-none-any.whl", hash = "sha256:44aae9de2227207ea1133441588203f972bc8977d3d91c3a566ed897c7d5252b", size = 46692 },
+version = "0.0.81"
+source = { directory = "../wox.plugin.python" }
+
+[package.metadata]
+requires-dist = [
+    { name = "hatchling", marker = "extra == 'dev'" },
+    { name = "mypy", marker = "extra == 'dev'" },
+    { name = "ruff", marker = "extra == 'dev'" },
+    { name = "twine", marker = "extra == 'dev'" },
 ]
 
 [[package]]
@@ -284,5 +288,5 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'" },
     { name = "shiv", marker = "extra == 'dev'" },
     { name = "websockets" },
-    { name = "wox-plugin", specifier = "==0.0.70" },
+    { name = "wox-plugin", directory = "../wox.plugin.python" },
 ]

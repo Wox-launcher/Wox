@@ -9,9 +9,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"unsafe"
 	"wox/util"
+	"wox/util/imagecache"
 
 	"github.com/disintegration/imaging"
 	win "github.com/lxn/win"
@@ -22,11 +24,12 @@ import (
 // and converting it to PNG, cached on disk by extension.
 
 var (
-	shell32          = syscall.NewLazyDLL("shell32.dll")
-	user32           = syscall.NewLazyDLL("user32.dll")
-	shGetFileInfo    = shell32.NewProc("SHGetFileInfoW")
-	extractIconEx    = shell32.NewProc("ExtractIconExW")
+	shell32             = syscall.NewLazyDLL("shell32.dll")
+	user32              = syscall.NewLazyDLL("user32.dll")
+	shGetFileInfo       = shell32.NewProc("SHGetFileInfoW")
+	extractIconEx       = shell32.NewProc("ExtractIconExW")
 	privateExtractIcons = user32.NewProc("PrivateExtractIconsW")
+	shellIconMu         sync.Mutex
 )
 
 type shFileInfo struct {
@@ -38,10 +41,13 @@ type shFileInfo struct {
 }
 
 const (
-	SHGFI_ICON              = 0x000000100
-	SHGFI_LARGEICON         = 0x000000000
-	SHGFI_USEFILEATTRIBUTES = 0x000000010
-	FILE_ATTRIBUTE_NORMAL   = 0x00000080
+	SHGFI_ICON                           = 0x000000100
+	SHGFI_LARGEICON                      = 0x000000000
+	SHGFI_USEFILEATTRIBUTES              = 0x000000010
+	FILE_ATTRIBUTE_NORMAL                = 0x00000080
+	FILE_ATTRIBUTE_OFFLINE               = 0x00001000
+	FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS = 0x00400000
+	FILE_ATTRIBUTE_RECALL_ON_OPEN        = 0x00040000
 )
 
 // expandEnvVars expands Windows environment variables in a string
@@ -136,6 +142,12 @@ func getIconFromSHGetFileInfo(ext string) (win.HICON, error) {
 	}
 
 	var shfi shFileInfo
+	shellIconMu.Lock()
+	defer shellIconMu.Unlock()
+	// Bug fix: application indexing can request many file-type icons in
+	// parallel during smoke startup. Serializing the shell icon fallback avoids
+	// concurrent SHGetFileInfoW access that can terminate the Windows process
+	// before Go error handling can recover.
 	ret, _, _ := shGetFileInfo.Call(
 		uintptr(unsafe.Pointer(lpPath)),
 		0,
@@ -151,18 +163,31 @@ func getIconFromSHGetFileInfo(ext string) (win.HICON, error) {
 	return shfi.HIcon, nil
 }
 
-func getFileIconImpl(ctx context.Context, filePath string) (string, error) {
-	const size = 48
-	cachePath := buildPathCachePath(filePath, size)
-
-	if _, err := os.Stat(cachePath); err == nil {
-		return cachePath, nil
-	}
+func getFileIconImpl(ctx context.Context, filePath string, size int) (string, error) {
 	if strings.TrimSpace(filePath) == "" {
 		return "", errors.New("empty path")
 	}
-	if _, err := os.Stat(filePath); err != nil {
+
+	fi, err := os.Stat(filePath)
+	if err != nil {
 		return "", err
+	}
+
+	cachePath := buildPathCachePath(filePath, size, fi.ModTime().UnixNano())
+	if info, err := os.Stat(cachePath); err == nil {
+		imagecache.Touch(ctx, cachePath, info)
+		return cachePath, nil
+	}
+
+	// Check if the file is an offline file (e.g. OneDrive, Phone Link)
+	// If it is, avoid reading its contents to extract high res icons, to prevent triggering an automatic file download.
+	if sys, ok := fi.Sys().(*syscall.Win32FileAttributeData); ok {
+		if (sys.FileAttributes&FILE_ATTRIBUTE_OFFLINE != 0) ||
+			(sys.FileAttributes&FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS != 0) ||
+			(sys.FileAttributes&FILE_ATTRIBUTE_RECALL_ON_OPEN != 0) {
+			util.GetLogger().Debug(ctx, "File is offline, falling back to extension icon to avoid download: "+filePath)
+			return getFileTypeIconImpl(ctx, filepath.Ext(filePath), size)
+		}
 	}
 
 	img, err := getHighResIcon(ctx, filePath)
@@ -170,10 +195,8 @@ func getFileIconImpl(ctx context.Context, filePath string) (string, error) {
 		img, err = getIconUsingExtractIconEx(ctx, filePath)
 	}
 	if err != nil {
-		img, err = getWindowsDefaultIcon(ctx)
-	}
-	if err != nil {
-		return "", err
+		util.GetLogger().Debug(ctx, "No embedded file icon found, fallback to associated file type icon: "+filePath)
+		return GetFileTypeIconWithSize(ctx, filepath.Ext(filePath), size)
 	}
 
 	if mkdirErr := os.MkdirAll(filepath.Dir(cachePath), 0o755); mkdirErr != nil {
@@ -324,33 +347,38 @@ func getStandardDefaultIcon(ctx context.Context) (image.Image, error) {
 	return convertIconToImage(ctx, shfi.HIcon)
 }
 
-func getFileTypeIconImpl(ctx context.Context, ext string) (string, error) {
-	const size = 48
+func getFileTypeIconImpl(ctx context.Context, ext string, size int) (string, error) {
 	cachePath := buildCachePath(ext, size)
 
 	// Check cache first
-	if _, err := os.Stat(cachePath); err == nil {
+	if info, err := os.Stat(cachePath); err == nil {
+		imagecache.Touch(ctx, cachePath, info)
 		return cachePath, nil
 	}
 
 	// Try registry method first (more accurate for associated file types)
 	var hIcon win.HICON
 	var err error
+	var img image.Image
 
 	hIcon, err = getIconFromRegistry(ext)
 	if err != nil {
-		// Fallback to SHGetFileInfo
-		hIcon, err = getIconFromSHGetFileInfo(ext)
+		// Bug fix: SHGetFileInfoW can terminate the Windows smoke process for
+		// some transient extension lookups before Go can recover. When registry
+		// association lookup fails, use Wox's default shell icon extraction
+		// instead of the unsafe shell file-type fallback.
+		img, err = getHighResDefaultIcon(ctx)
 		if err != nil {
-			return "", errors.New("failed to get file type icon for " + ext + ": " + err.Error())
+			return "", errors.New("failed to get fallback file type icon for " + ext + ": " + err.Error())
 		}
-	}
-	defer win.DestroyIcon(hIcon)
-
-	// Convert HICON to image
-	img, convErr := convertIconToImage(ctx, hIcon)
-	if convErr != nil {
-		return "", errors.New("failed to convert icon to image for " + ext + ": " + convErr.Error())
+	} else {
+		defer win.DestroyIcon(hIcon)
+		var convErr error
+		// Convert HICON to image
+		img, convErr = convertIconToImage(ctx, hIcon)
+		if convErr != nil {
+			return "", errors.New("failed to convert icon to image for " + ext + ": " + convErr.Error())
+		}
 	}
 
 	// Ensure cache dir exists and save
@@ -426,4 +454,54 @@ func convertIconToImage(ctx context.Context, hIcon win.HICON) (image.Image, erro
 	}
 
 	return img, nil
+}
+
+// HasDedicatedExecutableIcon reports whether an executable icon differs from the generic Windows .exe icon.
+func HasDedicatedExecutableIcon(ctx context.Context, filePath string) (bool, error) {
+	if !strings.EqualFold(filepath.Ext(filePath), ".exe") {
+		return true, nil
+	}
+
+	fileIcon, err := getHighResIcon(ctx, filePath)
+	if err != nil {
+		fileIcon, err = getIconUsingExtractIconEx(ctx, filePath)
+		if err != nil {
+			return false, nil
+		}
+	}
+
+	defaultIcon, err := getWindowsDefaultIcon(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	return !iconsEqual(fileIcon, defaultIcon), nil
+}
+
+func iconsEqual(left image.Image, right image.Image) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+
+	leftIcon := normalizeIcon(left)
+	rightIcon := normalizeIcon(right)
+	bounds := leftIcon.Bounds()
+	if bounds != rightIcon.Bounds() {
+		return false
+	}
+
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			if leftIcon.At(x, y) != rightIcon.At(x, y) {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+func normalizeIcon(icon image.Image) *image.NRGBA {
+	const iconSize = 48
+	return imaging.Resize(imaging.Clone(icon), iconSize, iconSize, imaging.Lanczos)
 }

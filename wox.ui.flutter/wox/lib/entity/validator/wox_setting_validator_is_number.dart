@@ -5,18 +5,18 @@ class PluginSettingValidatorIsNumber implements PluginSettingValidator {
   late bool isFloat;
 
   @override
-  String validate(dynamic value) {
+  String validate(dynamic value, {PluginSettingValidationContext? context}) {
     if (value is! String) {
-      return "invalid value";
+      return "i18n:ui_validator_invalid_value";
     }
 
     if (isInteger) {
       if (int.tryParse(value) == null) {
-        return "Value must be an integer";
+        return "i18n:ui_validator_must_be_integer";
       }
     } else if (isFloat) {
       if (double.tryParse(value) == null) {
-        return "Value must be a number";
+        return "i18n:ui_validator_must_be_number";
       }
     }
     return "";

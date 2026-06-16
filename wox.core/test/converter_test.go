@@ -148,6 +148,16 @@ func TestConverterCurrency(t *testing.T) {
 			SkipReason: "Network connectivity required for exchange rates",
 		},
 		{
+			Name:           "HKD to CNY",
+			Query:          "1000hkd in cny",
+			ExpectedTitle:  "¥",
+			ExpectedAction: "Copy",
+			TitleCheck: func(title string) bool {
+				return len(title) > 1 && strings.HasPrefix(title, "¥") && title[len("¥")] >= '0' && title[len("¥")] <= '9'
+			},
+			Timeout: 30 * time.Second,
+		},
+		{
 			Name:           "complex convert",
 			Query:          "12% of $321 in jpy",
 			ExpectedTitle:  "",
@@ -391,6 +401,126 @@ func TestConverterBase(t *testing.T) {
 			TitleCheck: func(title string) bool {
 				return title == "15 dec"
 			},
+		},
+	}
+
+	suite.RunQueryTests(tests)
+}
+
+func TestConverterStorageQueryIntentParity(t *testing.T) {
+	suite := NewTestSuite(t)
+
+	tests := []QueryTest{
+		{
+			Name:           "To conversion syntax parses Byte base unit to Decimal storage unit",
+			Query:          "32 bytes to gb",
+			ExpectedTitle:  "0.000000032 GB",
+			ExpectedAction: "Copy",
+		},
+		{
+			Name:           "Equals-question conversion syntax matches Decimal storage unit output",
+			Query:          "32 bytes =? gb",
+			ExpectedTitle:  "0.000000032 GB",
+			ExpectedAction: "Copy",
+		},
+		{
+			Name:           "Compact byte input parses with equals-question conversion syntax",
+			Query:          "32bytes =? gb",
+			ExpectedTitle:  "0.000000032 GB",
+			ExpectedAction: "Copy",
+		},
+	}
+
+	suite.RunQueryTests(tests)
+}
+
+func TestConverterUnits(t *testing.T) {
+	suite := NewTestSuite(t)
+
+	tests := []QueryTest{
+		{
+			Name:           "Length conversion",
+			Query:          "10cm to mm",
+			ExpectedTitle:  "100 millimeters",
+			ExpectedAction: "Copy",
+		},
+		{
+			Name:           "Weight conversion",
+			Query:          "100lb to kg",
+			ExpectedTitle:  "",
+			ExpectedAction: "Copy",
+			TitleCheck: func(title string) bool {
+				return strings.Contains(title, "45.36") && strings.Contains(title, "kilograms")
+			},
+		},
+		{
+			Name:           "Temperature conversion",
+			Query:          "32f to c",
+			ExpectedTitle:  "0 celsius",
+			ExpectedAction: "Copy",
+		},
+		{
+			Name:           "Storage Unit full-word form renders Unit symbol form output",
+			Query:          "1 gigabyte to gibibyte",
+			ExpectedTitle:  "0.9313225746154785 GiB",
+			ExpectedAction: "Copy",
+		},
+		{
+			Name:           "Storage Unit symbol form renders Unit symbol form output",
+			Query:          "1 GB to MiB",
+			ExpectedTitle:  "953.67431640625 MiB",
+			ExpectedAction: "Copy",
+		},
+		{
+			Name:           "Storage Byte base unit symbol alias renders symbolized output",
+			Query:          "32 b to bytes",
+			ExpectedTitle:  "32 B",
+			ExpectedAction: "Copy",
+		},
+		{
+			Name:           "Storage Byte base unit singular alias renders symbolized output",
+			Query:          "1 byte to b",
+			ExpectedTitle:  "1 B",
+			ExpectedAction: "Copy",
+		},
+		{
+			Name:           "Storage Byte base unit plural alias renders symbolized output",
+			Query:          "2 bytes to byte",
+			ExpectedTitle:  "2 B",
+			ExpectedAction: "Copy",
+		},
+		{
+			Name:           "Storage Decimal storage unit uses GB output",
+			Query:          "32 bytes to gb",
+			ExpectedTitle:  "0.000000032 GB",
+			ExpectedAction: "Copy",
+		},
+		{
+			Name:           "Storage Binary storage unit uses GiB output",
+			Query:          "32 bytes to gib",
+			ExpectedTitle:  "",
+			ExpectedAction: "Copy",
+			TitleCheck: func(title string) bool {
+				return strings.Contains(title, "0.0000000298023224") && strings.Contains(title, "GiB")
+			},
+		},
+		{
+			Name:           "Storage gb ambiguity resolves to Decimal storage unit bytes",
+			Query:          "1 gb to bytes",
+			ExpectedTitle:  "1000000000 B",
+			ExpectedAction: "Copy",
+		},
+		{
+			Name:           "Storage gib preserves Binary storage unit bytes",
+			Query:          "1 gib to bytes",
+			ExpectedTitle:  "1073741824 B",
+			ExpectedAction: "Copy",
+		},
+		{
+			Name:           "Storage Decimal to Binary storage unit explicit control",
+			Query:          "1 gb to gib",
+			ExpectedTitle:  "0.9313225746154785 GiB",
+			ExpectedAction: "Copy",
 		},
 	}
 

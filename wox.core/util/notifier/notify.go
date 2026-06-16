@@ -20,7 +20,7 @@ func Notify(icon image.Image, message string) {
 		overlay.Show(overlay.OverlayOptions{
 			Name:             "wox_notifier",
 			Message:          message,
-			Icon:             icon,
+			Icon:             overlay.NewImageIcon(icon),
 			Closable:         true,
 			Anchor:           overlay.AnchorBottomCenter,
 			OffsetY:          -80,

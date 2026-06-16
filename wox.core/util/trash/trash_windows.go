@@ -4,6 +4,7 @@ package trash
 
 import (
 	"fmt"
+	"path/filepath"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -36,6 +37,8 @@ func MoveToTrash(path string) error {
 	if path == "" {
 		return fmt.Errorf("trash path is empty")
 	}
+
+	path = filepath.Clean(filepath.FromSlash(path))
 
 	pathUTF16, err := windows.UTF16FromString(path)
 	if err != nil {

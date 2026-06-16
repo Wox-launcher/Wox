@@ -6,15 +6,49 @@ to interact with Wox. The API is passed to plugins during initialization
 and provides access to UI control, settings, logging, and more.
 """
 
+from dataclasses import dataclass
 from typing import Awaitable, Callable, Dict, List, Optional, Protocol
 
 from .models.ai import AIModel, ChatStreamCallback, Conversation
+from .models.attention import PushAttentionRequest
 from .models.context import Context
 from .models.log import LogLevel
 from .models.mru import MRUData
-from .models.query import ChangeQueryParam, MetadataCommand, Query, RefreshQueryParam, CopyParams
+from .models.query import ChangeQueryParam, CopyParams, MetadataCommand, Query, RefreshQueryParam
 from .models.result import Result, UpdatableResult  # noqa: F401
 from .models.setting import PluginSettingDefinitionItem
+from .models.toolbar_msg import ToolbarMsg
+
+
+@dataclass
+class ScreenshotOption:
+    """
+    Options for the built-in screenshot workflow.
+    """
+
+    hide_annotation_toolbar: bool = False
+    auto_confirm: bool = False
+
+    def to_dict(self) -> Dict[str, bool]:
+        """
+        Convert Pythonic field names to the public API JSON fields expected by Wox core.
+        """
+
+        return {
+            "HideAnnotationToolbar": self.hide_annotation_toolbar,
+            "AutoConfirm": self.auto_confirm,
+        }
+
+
+@dataclass
+class ScreenshotResult:
+    """
+    Result of a plugin-triggered screenshot workflow.
+    """
+
+    success: bool = False
+    screenshot_path: str = ""
+    errmsg: str = ""
 
 
 class PublicAPI(Protocol):
@@ -26,7 +60,7 @@ class PublicAPI(Protocol):
     initialization via PluginInitParams.
 
     Method categories:
-        - UI Control: show_app, hide_app, is_visible, notify
+        - UI Control: show_app, hide_app, is_visible, notify, push_attention
         - Query: change_query, refresh_query, push_results
         - Settings: get_setting, save_setting, on_setting_changed, on_get_dynamic_setting
         - Logging: log
@@ -37,6 +71,7 @@ class PublicAPI(Protocol):
         - Callbacks: on_unload, on_deep_link
         - Commands: register_query_commands
         - Clipboard: copy
+        - Screenshot: screenshot
 
     Example:
         class MyPlugin:
@@ -47,10 +82,12 @@ class PublicAPI(Protocol):
                 await self.api.on_setting_changed(ctx, self._on_setting_changed)
                 await self.api.on_unload(ctx, self._on_unload)
 
-            async def query(self, ctx: Context, query: Query) -> List[Result]:
+            async def query(self, ctx: Context, query: Query) -> QueryResponse:
+                # QueryResponse requires Wox >= 2.0.4. Return List[Result]
+                # instead when supporting older Wox releases.
                 # Use API methods
                 await self.api.log(ctx, LogLevel.INFO, "Processing query")
-                return results
+                return QueryResponse(results=results)
     """
 
     async def change_query(self, ctx: Context, query: ChangeQueryParam) -> None:
@@ -161,6 +198,39 @@ class PublicAPI(Protocol):
         Example:
             await api.notify(ctx, "Download complete!")
             await api.notify(ctx, "i18n:plugin.download_complete")
+        """
+        ...
+
+    async def push_attention(self, ctx: Context, request: PushAttentionRequest) -> None:
+        """
+        Push a persistent attention item into Wox.
+
+        Unlike notify(), this survives until the user handles it. Wox stores the
+        item, shows an unread badge near the query box, and opens the attention
+        inbox when the badge is clicked.
+        """
+        ...
+
+    async def show_toolbar_msg(self, ctx: Context, msg: ToolbarMsg) -> None:
+        """
+        Show or update a toolbar msg for the current plugin.
+
+        Reusing the same msg id replaces the previous content.
+        Plugin-scoped messages are only accepted while the user stays in this plugin query.
+
+        Args:
+            ctx: Context
+            msg: Toolbar msg payload to display in the launcher toolbar
+        """
+        ...
+
+    async def clear_toolbar_msg(self, ctx: Context, toolbar_msg_id: str) -> None:
+        """
+        Clear a toolbar msg by id.
+
+        Args:
+            ctx: Context
+            toolbar_msg_id: Id of the toolbar msg owned by the current plugin
         """
         ...
 
@@ -358,6 +428,18 @@ class PublicAPI(Protocol):
         """
         ...
 
+    async def on_enter_plugin_query(self, ctx: Context, callback: Callable[[Context], Awaitable[None] | None]) -> None:
+        """
+        Register a callback for entering this plugin query context.
+        """
+        ...
+
+    async def on_leave_plugin_query(self, ctx: Context, callback: Callable[[Context], Awaitable[None] | None]) -> None:
+        """
+        Register a callback for leaving this plugin query context.
+        """
+        ...
+
     async def register_query_commands(self, ctx: Context, commands: List[MetadataCommand]) -> None:
         """
         Register query commands.
@@ -544,11 +626,13 @@ class PublicAPI(Protocol):
             bool: True if accepted, False if query changed
 
         Example:
-            async def query_with_streaming(ctx: Context, query: Query) -> List[Result]:
+            async def query_with_streaming(ctx: Context, query: Query) -> QueryResponse:
+                # QueryResponse requires Wox >= 2.0.4. Return List[Result]
+                # instead when supporting older Wox releases.
                 # Return initial results immediately
                 initial_results = await get_quick_results(query)
                 asyncio.create_task(fetch_more_results(ctx, query))
-                return initial_results
+                return QueryResponse(results=initial_results)
 
             async def fetch_more_results(ctx: Context, query: Query):
                 # Fetch and push results as they arrive
@@ -601,5 +685,18 @@ class PublicAPI(Protocol):
                 type=CopyType.IMAGE,
                 wox_image=WoxImage.new_absolute("/path/to/image.png").to_dict()
             ))
+        """
+        ...
+
+    async def screenshot(self, ctx: Context, option: ScreenshotOption) -> ScreenshotResult:
+        """
+        Start the built-in screenshot workflow.
+
+        Args:
+            ctx: Context
+            option: Screenshot options
+
+        Returns:
+            ScreenshotResult: success state, saved PNG path, and error message
         """
         ...

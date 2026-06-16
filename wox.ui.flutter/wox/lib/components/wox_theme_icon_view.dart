@@ -25,38 +25,17 @@ class WoxThemeIconView extends StatelessWidget {
     return Container(
       width: width,
       height: height,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        color: backgroundColor,
-      ),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), color: backgroundColor),
       child: Padding(
         padding: const EdgeInsets.only(left: 4, right: 4, top: 4),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // Query box
-            Container(
-              width: width,
-              height: 10,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(4),
-                color: queryBoxColor,
-              ),
-            ),
+            Container(width: width, height: 10, decoration: BoxDecoration(borderRadius: BorderRadius.circular(4), color: queryBoxColor)),
             const SizedBox(height: 4),
             // Result items
-            Column(
-              children: [
-                Container(
-                  height: 5,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(2),
-                    color: resultItemActiveColor,
-                  ),
-                ),
-                const SizedBox(height: 6),
-              ],
-            ),
+            Column(children: [Container(height: 5, decoration: BoxDecoration(borderRadius: BorderRadius.circular(2), color: resultItemActiveColor))]),
           ],
         ),
       ),

@@ -1,40 +1,547 @@
 :root {
-  --vp-c-brand-1: #646cff;
-  --vp-c-brand-2: #747bff;
-  --vp-c-brand-3: #535bf2;
+  /* Keep VitePress active links aligned with Wox while muting the old neon green, which was too bright on large filled controls and dark panels. */
+  --vp-c-brand-1: #0c8a77;
+  --vp-c-brand-2: #0f9a84;
+  --vp-c-brand-3: #13aa91;
+  --wox-home-accent: #13aa91;
+  --wox-home-accent-strong: #0c8a77;
+  --wox-home-panel: rgba(255, 255, 255, 0.74);
+  --wox-home-panel-soft: rgba(246, 247, 250, 0.9);
+  --wox-home-border: rgba(60, 60, 67, 0.14);
+  --wox-home-text-soft: rgba(60, 60, 67, 0.72);
 }
 
-.VPImage.image-src {
-  border-radius: 12px;
-  width: clamp(220px, 32vw, 520px);
-  max-width: 100%;
+.dark {
+  /* Dark mode uses a slightly deeper accent so plugin install buttons do not glow against the near-black store background. */
+  --vp-c-brand-1: #0f9a84;
+  --vp-c-brand-2: #13aa91;
+  --vp-c-brand-3: #0c8a77;
+  --wox-home-panel: rgba(25, 27, 34, 0.78);
+  --wox-home-panel-soft: rgba(28, 30, 38, 0.92);
+  --wox-home-border: rgba(255, 255, 255, 0.12);
+  --wox-home-text-soft: rgba(235, 235, 245, 0.72);
+}
+
+.VPHome {
+  padding-bottom: 72px;
+}
+
+.VPHome .VPHomeHero {
+  display: none;
+}
+
+/* The new homepage avoids the default VitePress hero/features because those blocks made the official site feel template-driven; these custom primitives keep the page product-led and easy to extend. */
+.wox-home {
+  width: min(1180px, calc(100vw - 48px));
+  margin: 0 auto;
+  padding: 48px 0 0;
+  color: var(--vp-c-text-1);
+}
+
+.wox-hero {
+  display: grid;
+  grid-template-columns: minmax(560px, 0.95fr) minmax(480px, 1.05fr);
+  gap: clamp(32px, 4vw, 56px);
+  align-items: center;
+}
+
+.wox-hero-copy {
+  max-width: 620px;
+}
+
+/* The logo mark anchors the label to Wox itself, which makes the custom hero feel branded instead of like a generic marketing eyebrow. */
+.wox-home-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 18px;
+  color: var(--wox-home-accent-strong);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.wox-logo-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: var(--vp-c-text-1);
+  color: var(--vp-c-bg);
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1;
+  text-transform: none;
+}
+
+.dark .wox-home-label {
+  color: var(--wox-home-accent);
+}
+
+.wox-hero h1 {
+  margin: 0;
+  max-width: 620px;
+  font-size: clamp(46px, 7.2vw, 84px);
+  line-height: 0.98;
+  letter-spacing: 0;
+}
+
+.wox-hero h1 span {
+  display: block;
+}
+
+.wox-nowrap {
+  white-space: nowrap;
+}
+
+.wox-home-zh .wox-hero h1 {
+  max-width: 680px;
+  font-size: clamp(42px, 5.6vw, 72px);
+  line-height: 1.04;
+}
+
+.wox-hero-lede {
+  margin: 28px 0 0;
+  color: var(--wox-home-text-soft);
+  font-size: clamp(19px, 2vw, 24px);
+  line-height: 1.55;
+}
+
+.wox-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 34px;
+}
+
+.wox-home a.wox-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 44px;
+  padding: 0 20px;
+  border: 1px solid var(--wox-home-border);
+  border-radius: 8px;
+  background: var(--wox-home-panel);
+  color: var(--vp-c-text-1);
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.wox-button-icon {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  color: currentColor;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.wox-home a.wox-button:hover {
+  border-color: color-mix(in srgb, var(--wox-home-accent) 62%, var(--wox-home-border));
+  background: var(--wox-home-panel-soft);
+  color: var(--vp-c-text-1);
+  text-decoration: none;
+  transform: translateY(-1px);
+}
+
+.wox-home a.wox-button-primary {
+  border-color: transparent;
+  background: var(--wox-home-accent);
+  color: #061412;
+}
+
+.wox-home a.wox-button-primary:hover {
+  background: #31e0bd;
+  color: #061412;
+}
+
+.wox-home a.wox-button-subtle {
+  color: var(--wox-home-text-soft);
+}
+
+.wox-hero-poster {
+  position: relative;
+  margin: 0;
+}
+
+.wox-hero-poster img {
+  display: block;
+  width: 100%;
   height: auto;
-  margin-left: clamp(0px, 4vw, 40px);
-  margin-top: clamp(12px, 3vw, 40px);
+  border: 1px solid var(--wox-home-border);
+  border-radius: 8px;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.28);
 }
 
-@media (max-width: 980px) {
-  .VPImage.image-src {
-    width: min(420px, 80%);
-    margin: 16px auto 0;
+.wox-section {
+  margin-top: clamp(76px, 10vw, 128px);
+}
+
+.wox-section-compact {
+  margin-top: clamp(56px, 8vw, 92px);
+}
+
+.wox-section-heading {
+  max-width: 900px;
+}
+
+.wox-section h2 {
+  margin: 0;
+  font-size: clamp(32px, 4.6vw, 58px);
+  line-height: 1.05;
+  letter-spacing: 0;
+}
+
+.wox-section p {
+  max-width: 760px;
+  color: var(--wox-home-text-soft);
+  font-size: 18px;
+  line-height: 1.7;
+}
+
+/* Short section summaries should read as a single thought on desktop; mobile keeps normal wrapping through the responsive override below. */
+.wox-section-heading p {
+  max-width: none;
+  white-space: nowrap;
+}
+
+.wox-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 34px;
+}
+
+/* Feature cards replace the old emoji cards with concrete product details; the index number keeps the visual system reusable without depending on unfinished artwork. */
+.wox-feature-card {
+  min-height: 230px;
+  padding: 28px;
+  border: 1px solid var(--wox-home-border);
+  border-radius: 8px;
+  background: var(--wox-home-panel);
+}
+
+.wox-feature-index {
+  display: block;
+  color: var(--wox-home-accent-strong);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.dark .wox-feature-index {
+  color: var(--wox-home-accent);
+}
+
+.wox-feature-card h3 {
+  margin: 42px 0 0;
+  font-size: 23px;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.wox-feature-card p {
+  margin: 16px 0 0;
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+.wox-split-section {
+  display: grid;
+  /* Match split-section screenshot columns to the carousel stage width so the
+  homepage keeps one consistent visual rhythm from plugins through themes. */
+  grid-template-columns: minmax(0, 0.72fr) minmax(560px, 1.28fr);
+  gap: clamp(32px, 6vw, 76px);
+  align-items: center;
+}
+
+.wox-split-section-reverse {
+  grid-template-columns: minmax(560px, 1.28fr) minmax(0, 0.72fr);
+}
+
+.wox-split-section-reverse > :first-child {
+  order: 2;
+}
+
+.wox-check-list {
+  display: grid;
+  gap: 14px;
+  margin: 28px 0 0;
+  padding: 0 !important;
+  list-style: none !important;
+}
+
+.wox-check-list li {
+  position: relative;
+  padding-left: 22px;
+  color: var(--vp-c-text-1);
+  line-height: 1.65;
+  list-style: none !important;
+}
+
+.wox-check-list li::marker {
+  content: "";
+}
+
+.wox-check-list li::before {
+  position: absolute;
+  top: 0.72em;
+  left: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--wox-home-accent);
+  content: "";
+}
+
+/* Image placeholders are intentional: they hold the final screenshot rhythm now, and the user can replace each block with an image without changing the surrounding content. */
+.wox-shot-placeholder {
+  display: grid;
+  min-height: 360px;
+  align-content: center;
+  gap: 14px;
+  padding: 36px;
+  border: 1px dashed color-mix(in srgb, var(--wox-home-accent) 58%, var(--wox-home-border));
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(25, 211, 173, 0.13), transparent 42%), var(--wox-home-panel-soft);
+}
+
+.wox-shot-placeholder span {
+  color: var(--wox-home-accent-strong);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.dark .wox-shot-placeholder span {
+  color: var(--wox-home-accent);
+}
+
+.wox-shot-placeholder strong {
+  max-width: 360px;
+  color: var(--vp-c-text-1);
+  font-size: clamp(28px, 4vw, 46px);
+  line-height: 1.08;
+  letter-spacing: 0;
+}
+
+/* Real screenshots use the same framed slot as the placeholders, but keep the image itself uncropped so product details remain inspectable on the homepage. */
+.wox-feature-shot {
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--wox-home-border);
+  border-radius: 8px;
+  background: var(--wox-home-panel-soft);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.22);
+}
+
+.wox-feature-shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 6px;
+}
+
+.wox-feature-shot figcaption {
+  margin: 12px 4px 2px;
+  color: var(--wox-home-text-soft);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.wox-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.wox-mini-grid > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--wox-home-border);
+  border-radius: 8px;
+  background: var(--wox-home-panel);
+  color: var(--vp-c-text-1);
+  font-weight: 700;
+}
+
+/* Mini-grid icons use recognizable product-shaped marks instead of letter placeholders, so each SDK/store option is easier to scan at a glance. */
+.wox-mini-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(25, 211, 173, 0.1);
+}
+
+.wox-mini-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.wox-mini-icon-node {
+  background: rgba(94, 165, 63, 0.14);
+}
+
+.wox-mini-icon-node svg path:first-child {
+  fill: #5ea43f;
+}
+
+.wox-mini-icon-node svg path:last-child {
+  fill: #f7fff4;
+}
+
+.wox-mini-icon-python {
+  background: linear-gradient(135deg, rgba(55, 118, 171, 0.18), rgba(255, 212, 59, 0.16));
+}
+
+.wox-mini-icon-python svg path:first-child {
+  fill: #3776ab;
+}
+
+.wox-mini-icon-python svg path:last-child {
+  fill: #ffd43b;
+}
+
+.wox-mini-icon-script {
+  background: rgba(25, 211, 173, 0.12);
+}
+
+.wox-mini-icon-script svg path {
+  fill: none;
+  stroke: var(--wox-home-accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.wox-mini-icon-store {
+  background: rgba(25, 211, 173, 0.12);
+}
+
+.wox-mini-icon-store svg path {
+  fill: none;
+  stroke: var(--wox-home-accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.wox-closing {
+  display: grid;
+  justify-items: center;
+  padding: clamp(44px, 7vw, 72px);
+  border: 1px solid var(--wox-home-border);
+  border-radius: 8px;
+  background: var(--wox-home-panel-soft);
+  text-align: center;
+}
+
+.wox-closing h2 {
+  max-width: 760px;
+}
+
+.wox-closing p {
+  max-width: 620px;
+  margin: 20px auto 0;
+}
+
+@media (min-width: 960px) {
+  body.plugin-detail-page .VPDoc:not(.has-sidebar) .container {
+    max-width: min(1480px, calc(100vw - 64px));
+  }
+
+  body.plugin-detail-page .VPDoc:not(.has-sidebar) .content {
+    max-width: none;
+    width: 100%;
+  }
+
+  body.plugin-detail-page .VPDoc .content-container {
+    max-width: none;
   }
 }
 
-@media (max-width: 600px) {
-  .VPImage.image-src {
-    width: min(320px, 90%);
-    margin: 12px auto 0;
+@media (max-width: 1180px) {
+  .wox-hero,
+  .wox-split-section {
+    grid-template-columns: 1fr;
   }
-}
 
-/* Allow hero text to wrap on smaller screens for better balance */
-@media (max-width: 1280px) {
-  .VPHero .text {
+  .wox-hero-copy {
+    max-width: 760px;
+  }
+
+  .wox-split-section-reverse > :first-child {
+    order: 0;
+  }
+
+  .wox-feature-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .wox-section-heading p {
     white-space: normal;
   }
 }
 
+@media (max-width: 720px) {
+  .wox-home {
+    width: min(100% - 28px, 1180px);
+    padding-top: 42px;
+  }
 
-.VPHomeFeatures {
-  margin-top:20px;
+  .wox-hero h1 {
+    font-size: 46px;
+  }
+
+  .wox-nowrap {
+    white-space: normal;
+  }
+
+  .wox-hero-lede,
+  .wox-section p {
+    font-size: 16px;
+  }
+
+  .wox-hero-actions {
+    flex-direction: column;
+  }
+
+  .wox-button {
+    width: 100%;
+  }
+
+  .wox-hero-poster img {
+    border-radius: 6px;
+  }
+
+  .wox-feature-card,
+  .wox-shot-placeholder,
+  .wox-closing {
+    padding: 22px;
+  }
+
+  .wox-shot-placeholder {
+    min-height: 260px;
+  }
+
+  .wox-mini-grid {
+    grid-template-columns: 1fr;
+  }
 }

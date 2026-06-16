@@ -16,14 +16,14 @@ import (
 
 // MRUItem represents a Most Recently Used item
 type MRUItem struct {
-	Hash        string             `json:"hash"`
-	PluginID    string             `json:"pluginId"`
-	Title       string             `json:"title"`
-	SubTitle    string             `json:"subTitle"`
-	Icon        common.WoxImage    `json:"icon"`
-	ContextData common.ContextData `json:"contextData"`
-	LastUsed    int64              `json:"lastUsed"`
-	UseCount    int                `json:"useCount"`
+	Hash        string
+	PluginID    string
+	Title       string
+	SubTitle    string
+	Icon        common.WoxImage
+	ContextData common.ContextData
+	LastUsed    int64
+	UseCount    int
 }
 
 // MRUManager manages Most Recently Used items

@@ -1,4 +1,4 @@
-.PHONY: clean build help
+.PHONY: clean build help fix_linux_rpath
 
 # Determine the current platform
 ifeq ($(OS),Windows_NT)
@@ -15,6 +15,12 @@ endif
 
 UI_FLUTTER_DIR := ../../wox.core/resource/ui/flutter
 
+fix_linux_rpath:
+	@command -v patchelf >/dev/null 2>&1 || { echo "patchelf is required to fix Linux shared library rpath." >&2; exit 1; }
+	@for so_file in build/linux/x64/release/bundle/lib/*.so; do \
+		patchelf --set-rpath '$$ORIGIN' "$$so_file"; \
+	done
+
 help:
 	@echo "Available commands:"
 	@echo "  make clean      - Clean build artifacts"
@@ -26,6 +32,12 @@ clean:
 
 build: clean
 	flutter build $(FLUTTER_TARGET)
+
+ifeq ($(FLUTTER_TARGET),linux)
+	$(MAKE) fix_linux_rpath
+	chmod +x build/$(FLUTTER_TARGET)/x64/release/bundle/wox-ui
+endif
+
 	mkdir -p $(UI_FLUTTER_DIR)
 ifeq ($(FLUTTER_TARGET),windows)
 	cp -r build/$(FLUTTER_TARGET)/x64/runner/Release $(UI_FLUTTER_DIR)/wox

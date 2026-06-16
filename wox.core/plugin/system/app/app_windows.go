@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bufio"
 	"context"
 	"encoding/csv"
 	"encoding/json"
@@ -94,6 +95,21 @@ func (a *WindowsRetriever) GetPlatform() string {
 	return util.PlatformWindows
 }
 
+func getWindowsSystemRoot() string {
+	systemRoot := strings.TrimSpace(os.Getenv("SystemRoot"))
+	if systemRoot == "" {
+		systemRoot = `C:\Windows`
+	}
+
+	return filepath.Clean(systemRoot)
+}
+
+func isWindowsSystem32Path(appPath string) bool {
+	system32Path := strings.ToLower(filepath.Clean(filepath.Join(getWindowsSystemRoot(), "System32")))
+	cleanPath := strings.ToLower(filepath.Clean(appPath))
+	return strings.HasPrefix(cleanPath, system32Path+"\\") || cleanPath == system32Path
+}
+
 func (a *WindowsRetriever) GetAppDirectories(ctx context.Context) []appDirectory {
 	// get the start menu and program files directories for current user
 	usr, _ := user.Current()
@@ -102,10 +118,19 @@ func (a *WindowsRetriever) GetAppDirectories(ctx context.Context) []appDirectory
 			Path:           usr.HomeDir + "\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs",
 			Recursive:      true,
 			RecursiveDepth: 2,
+			trackChanges:   true,
 		},
 		{
+			Path:           usr.HomeDir + "\\AppData\\Local\\Programs",
+			Recursive:      true,
+			RecursiveDepth: 3,
+			trackChanges:   true,
+		},
+		{
+			// Exclude Programs because it is tracked separately above with trackChanges support.
+			// Excluding it here avoids double-scanning the same executables during full indexing.
 			Path:              usr.HomeDir + "\\AppData\\Local",
-			RecursiveExcludes: []string{"Temp"},
+			RecursiveExcludes: []string{"Temp", "Programs"},
 			Recursive:         true,
 			RecursiveDepth:    4,
 		},
@@ -113,6 +138,7 @@ func (a *WindowsRetriever) GetAppDirectories(ctx context.Context) []appDirectory
 			Path:           "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs",
 			Recursive:      true,
 			RecursiveDepth: 2,
+			trackChanges:   true,
 		},
 		{
 			Path:           "C:\\Program Files",
@@ -125,15 +151,22 @@ func (a *WindowsRetriever) GetAppDirectories(ctx context.Context) []appDirectory
 			RecursiveDepth: 2,
 		},
 		{
+			// Many built-in launchable tools like mstsc.exe only live in System32.
+			Path:           filepath.Join(getWindowsSystemRoot(), "System32"),
+			Recursive:      false,
+			RecursiveDepth: 0,
+		},
+		{
 			Path:           usr.HomeDir + "\\Desktop",
 			Recursive:      false,
 			RecursiveDepth: 0,
+			trackChanges:   true,
 		},
 	}
 }
 
 func (a *WindowsRetriever) GetAppExtensions(ctx context.Context) []string {
-	return []string{"exe", "lnk"}
+	return []string{"exe", "lnk", "url"}
 }
 
 func (a *WindowsRetriever) ParseAppInfo(ctx context.Context, path string) (appInfo, error) {
@@ -144,8 +177,35 @@ func (a *WindowsRetriever) ParseAppInfo(ctx context.Context, path string) (appIn
 	if strings.HasSuffix(lowerPath, ".exe") {
 		return a.parseExe(ctx, path)
 	}
+	if strings.HasSuffix(lowerPath, ".url") {
+		return a.parseUrlShortcut(ctx, path)
+	}
 
 	return appInfo{}, errors.New("not implemented")
+}
+
+func resolveAppIdentityForPlatform(ctx context.Context, info appInfo) string {
+	if info.Type == AppTypeUWP || info.Type == AppTypeWindowsSetting {
+		return ""
+	}
+
+	lowerPath := strings.ToLower(strings.TrimSpace(info.Path))
+	switch {
+	case strings.HasSuffix(lowerPath, ".exe"):
+		return strings.ToLower(filepath.Base(lowerPath))
+	case strings.HasSuffix(lowerPath, ".lnk"):
+		targetPath, err := resolveShortcutTarget(ctx, info.Path)
+		if err != nil {
+			return ""
+		}
+		targetPath = strings.ToLower(strings.TrimSpace(targetPath))
+		if !strings.HasSuffix(targetPath, ".exe") {
+			return ""
+		}
+		return filepath.Base(targetPath)
+	default:
+		return ""
+	}
 }
 
 func (a *WindowsRetriever) parseShortcut(ctx context.Context, appPath string) (appInfo, error) {
@@ -155,7 +215,9 @@ func (a *WindowsRetriever) parseShortcut(ctx context.Context, appPath string) (a
 	}
 
 	icon := appIcon
+	iconSourcePath := appPath
 	if targetPath != "" && strings.HasSuffix(strings.ToLower(targetPath), ".exe") {
+		iconSourcePath = targetPath
 		if iconPath, iconErr := fileicon.GetFileIconByPath(ctx, targetPath); iconErr != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("Error getting icon for %s, use default icon: %s", targetPath, iconErr.Error()))
 		} else {
@@ -170,11 +232,15 @@ func (a *WindowsRetriever) parseShortcut(ctx context.Context, appPath string) (a
 	displayName := strings.TrimSuffix(filepath.Base(appPath), filepath.Ext(appPath))
 
 	return appInfo{
-		Name:          displayName,
-		Path:          filepath.Clean(appPath),
-		Icon:          icon,
-		Type:          AppTypeDesktop,
-		IsDefaultIcon: icon.ImageData == appIcon.ImageData,
+		Name: displayName,
+		Path: filepath.Clean(appPath),
+		Icon: icon,
+		// Bug fix: .lnk files often keep the same timestamp when an updater
+		// replaces the target executable. Store the actual icon source so app
+		// cache reuse can notice target icon changes without a full reindex.
+		IconSourcePath: filepath.Clean(iconSourcePath),
+		Type:           AppTypeDesktop,
+		IsDefaultIcon:  icon.ImageData == appIcon.ImageData,
 	}, nil
 }
 
@@ -195,12 +261,81 @@ func (a *WindowsRetriever) parseExe(ctx context.Context, appPath string) (appInf
 		util.GetLogger().Debug(ctx, fmt.Sprintf("Using exe filename as display name: %s", displayName))
 	}
 
+	hasDedicatedIcon, iconCheckErr := fileicon.HasDedicatedExecutableIcon(ctx, appPath)
+	if iconCheckErr != nil {
+		util.GetLogger().Debug(ctx, fmt.Sprintf("Failed to classify executable icon for %s: %s", appPath, iconCheckErr.Error()))
+	}
+	// Filter generic System32 executables to reduce noise after adding System32 to the app index.
+	if isWindowsSystem32Path(appPath) && !hasDedicatedIcon {
+		return appInfo{}, fmt.Errorf("%w: system32 executable without dedicated icon", errSkipAppIndexing)
+	}
+
 	return appInfo{
-		Name:          displayName,
-		Path:          filepath.Clean(appPath),
-		Icon:          icon,
-		Type:          AppTypeDesktop,
-		IsDefaultIcon: icon.ImageData == appIcon.ImageData,
+		Name:           displayName,
+		Path:           filepath.Clean(appPath),
+		Icon:           icon,
+		IconSourcePath: filepath.Clean(appPath),
+		Type:           AppTypeDesktop,
+		IsDefaultIcon:  icon.ImageData == appIcon.ImageData,
+	}, nil
+}
+
+// parseUrlShortcut parses a .url (Internet Shortcut) file, commonly created by Steam for game shortcuts.
+// The .url file is an INI-format text file containing fields like URL, IconFile, and IconIndex.
+func (a *WindowsRetriever) parseUrlShortcut(ctx context.Context, appPath string) (appInfo, error) {
+	f, openErr := os.Open(appPath)
+	if openErr != nil {
+		return appInfo{}, fmt.Errorf("failed to open url shortcut %s: %w", appPath, openErr)
+	}
+	defer f.Close()
+
+	var targetURL string
+	var iconFile string
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if strings.HasPrefix(strings.ToLower(line), "url=") {
+			targetURL = line[4:]
+		} else if strings.HasPrefix(strings.ToLower(line), "iconfile=") {
+			iconFile = line[9:]
+		}
+	}
+	if scanErr := scanner.Err(); scanErr != nil {
+		return appInfo{}, fmt.Errorf("failed to read url shortcut %s: %w", appPath, scanErr)
+	}
+	if targetURL == "" {
+		return appInfo{}, fmt.Errorf("url shortcut %s has no URL field", appPath)
+	}
+
+	// Resolve icon: prefer IconFile from the .url, fall back to file association icon
+	icon := appIcon
+	iconSourcePath := appPath
+	if iconFile != "" {
+		if iconPath, iconErr := fileicon.GetFileIconByPath(ctx, iconFile); iconErr != nil {
+			util.GetLogger().Debug(ctx, fmt.Sprintf("Failed to get icon from IconFile %s: %s", iconFile, iconErr.Error()))
+		} else {
+			icon = common.NewWoxImageAbsolutePath(iconPath)
+			iconSourcePath = iconFile
+		}
+	}
+	// If IconFile didn't yield an icon, try the .url file itself
+	if icon.ImageData == appIcon.ImageData {
+		if iconPath, iconErr := fileicon.GetFileIconByPath(ctx, appPath); iconErr != nil {
+			util.GetLogger().Debug(ctx, fmt.Sprintf("Failed to get icon for url shortcut %s: %s", appPath, iconErr.Error()))
+		} else {
+			icon = common.NewWoxImageAbsolutePath(iconPath)
+		}
+	}
+
+	displayName := strings.TrimSuffix(filepath.Base(appPath), filepath.Ext(appPath))
+
+	return appInfo{
+		Name:           displayName,
+		Path:           filepath.Clean(appPath),
+		Icon:           icon,
+		IconSourcePath: filepath.Clean(iconSourcePath),
+		Type:           AppTypeDesktop,
+		IsDefaultIcon:  icon.ImageData == appIcon.ImageData,
 	}, nil
 }
 

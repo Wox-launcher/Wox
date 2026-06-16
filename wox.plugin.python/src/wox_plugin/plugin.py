@@ -6,13 +6,16 @@ The Plugin protocol specifies the required methods for plugin lifecycle and
 query handling.
 """
 
-from typing import Protocol, List
+from typing import Protocol, List, Union
 from dataclasses import dataclass
 
 from .models.context import Context
 from .models.query import Query
 from .models.result import Result
+from .models.query_response import QueryResponse
 from .api import PublicAPI
+
+QueryReturn = Union[QueryResponse, List[Result]]
 
 
 @dataclass
@@ -102,7 +105,9 @@ class Plugin(Protocol):
                 self.api = params.api
                 self.data = load_data()
 
-            async def query(self, ctx: Context, query: Query) -> List[Result]:
+            async def query(self, ctx: Context, query: Query) -> QueryResponse:
+                # QueryResponse requires Wox >= 2.0.4. Return List[Result]
+                # directly when supporting older Wox releases.
                 # Handle user query
                 results = []
                 for item in self.data:
@@ -112,7 +117,7 @@ class Plugin(Protocol):
                             sub_title=item.description,
                             icon=WoxImage.new_emoji("🔍")
                         ))
-                return results
+                return QueryResponse(results=results)
     """
 
     async def init(self, ctx: Context, init_params: PluginInitParams) -> None:
@@ -152,7 +157,7 @@ class Plugin(Protocol):
         """
         ...
 
-    async def query(self, ctx: Context, query: Query) -> List[Result]:
+    async def query(self, ctx: Context, query: Query) -> QueryReturn:
         """
         Handle user query and return results.
 
@@ -161,19 +166,21 @@ class Plugin(Protocol):
         - The query changes (while still matching your plugin)
         - The query is refreshed (via api.refresh_query())
 
-        The method should return a list of Result objects that match
-        the user's query. Results are sorted by their score field
-        (higher scores appear first).
+        The method should return matching Result objects sorted by their score
+        field (higher scores appear first). QueryResponse requires Wox >= 2.0.4;
+        return List[Result] directly when the plugin must support older Wox
+        releases.
 
         Args:
             ctx: Context for this query request
             query: The query object containing search text and metadata
 
         Returns:
-            List of Result objects matching the query
+            QueryResponse for Wox >= 2.0.4, or List[Result] for
+            older-compatible plugins
 
         Example:
-            async def query(self, ctx: Context, query: Query) -> List[Result]:
+            async def query(self, ctx: Context, query: Query) -> QueryResponse:
                 results = []
 
                 # Get the search text
@@ -196,7 +203,13 @@ class Plugin(Protocol):
                             ]
                         ))
 
-                return results
+                return QueryResponse(results=results)
+
+        Compatibility:
+            Returning List[Result] directly is deprecated but remains the
+            compatibility path for older Wox releases. Use QueryResponse only
+            when plugin.json MinWoxVersion is at least 2.0.4 so results,
+            refinements, and layout hints stay in one payload.
 
         Query structure:
             - query.trigger_keyword: Your plugin's trigger keyword (if set)

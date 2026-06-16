@@ -41,14 +41,29 @@ type Data interface {
 }
 
 func Read() (Data, error) {
-	imageData, imgErr := readImage()
-	if imgErr == nil {
-		return &ImageData{
-			Image: imageData,
-		}, nil
+	contentType := readClipboardContentType()
+	switch contentType {
+	case ClipboardTypeText:
+		text, err := readText()
+		if err != nil {
+			return nil, err
+		}
+		return &TextData{Text: text}, nil
+	case ClipboardTypeImage:
+		img, err := readImage()
+		if err != nil {
+			return nil, err
+		}
+		return &ImageData{Image: img}, nil
+	case ClipboardTypeFile:
+		paths, err := readFilePaths()
+		if err != nil {
+			return nil, err
+		}
+		return &FilePathData{FilePaths: paths}, nil
+	default:
+		return nil, noDataErr
 	}
-
-	return ReadFilesAndText()
 }
 
 func ReadFilesAndText() (Data, error) {
@@ -72,10 +87,25 @@ func ReadFilesAndText() (Data, error) {
 func Write(data Data) error {
 	lastWriteTimestamp.Store(time.Now().UnixMilli())
 	if data.GetType() == ClipboardTypeText {
-		return writeTextData(data.String())
+		err := writeTextData(data.String())
+		if err != nil {
+			util.GetLogger().Error(context.Background(), fmt.Sprintf("clipboard: write text failed: %v", err))
+		}
+		return err
 	}
 	if data.GetType() == ClipboardTypeImage {
-		return writeImageData(data.(*ImageData).Image)
+		err := writeImageData(data.(*ImageData).Image)
+		if err != nil {
+			util.GetLogger().Error(context.Background(), fmt.Sprintf("clipboard: write image failed: %v", err))
+		}
+		return err
+	}
+	if data.GetType() == ClipboardTypeFile {
+		err := writeFilePaths(data.(*FilePathData).FilePaths)
+		if err != nil {
+			util.GetLogger().Error(context.Background(), fmt.Sprintf("clipboard: write file paths failed: %v", err))
+		}
+		return err
 	}
 
 	return errors.New("not implemented")
@@ -83,7 +113,11 @@ func Write(data Data) error {
 
 func WriteImageBytes(pngData []byte, dibData []byte) error {
 	lastWriteTimestamp.Store(time.Now().UnixMilli())
-	return writeImageBytes(pngData, dibData)
+	err := writeImageBytes(pngData, dibData)
+	if err != nil {
+		util.GetLogger().Error(context.Background(), fmt.Sprintf("clipboard: write image bytes failed: %v", err))
+	}
+	return err
 }
 
 func Watch(cb func(Data)) {
@@ -121,18 +155,40 @@ func watchChange() {
 	// Debounce: wait briefly to let the clipboard settle.
 	// When the user rapidly copies items, this avoids opening the clipboard
 	// while the source application is still writing, reducing lock contention.
-	time.Sleep(50 * time.Millisecond)
+	settleStart := time.Now()
+	settleChanges := 0
+	for {
+		time.Sleep(50 * time.Millisecond)
+		// If the clipboard changed during the sleep, it means the user is still copying or the source app is still writing.
+		// We loop until it settles (no sequence number change for 50ms).
+		if !isClipboardChanged() {
+			break
+		}
+		settleChanges++
 
-	// If the clipboard changed again during the debounce window, skip this read.
-	// The next polling cycle will pick up the latest change.
-	if isClipboardChanged() {
-		return
+		// Unblock after maximum 1 second to prevent permanent deadlocks
+		// from badly behaving apps that continuously update the clipboard.
+		if time.Since(settleStart) > time.Second {
+			util.GetLogger().Warn(context.Background(), "clipboard: debounce timeout exceeded, reading anyway")
+			break
+		}
+	}
+	if settleChanges > 0 {
+		util.GetLogger().Warn(
+			context.Background(),
+			fmt.Sprintf("clipboard: debounce observed %d additional changes before read (elapsed=%s)", settleChanges, time.Since(settleStart).String()),
+		)
 	}
 
 	start := time.Now()
 	data, err := Read()
 	if err != nil {
-		util.GetLogger().Warn(context.Background(), fmt.Sprintf("clipboard: changed but failed to read: %v", err))
+		snapshot := buildWatchSnapshot()
+		if snapshot != "" {
+			util.GetLogger().Warn(context.Background(), fmt.Sprintf("clipboard: changed but failed to read: %v %s", err, snapshot))
+		} else {
+			util.GetLogger().Warn(context.Background(), fmt.Sprintf("clipboard: changed but failed to read: %v", err))
+		}
 		return
 	}
 

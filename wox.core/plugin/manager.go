@@ -26,6 +26,7 @@ import (
 	"wox/util"
 	"wox/util/notifier"
 	"wox/util/selection"
+	"wox/util/timetracking"
 	"wox/util/window"
 
 	"github.com/Masterminds/semver/v3"
@@ -43,34 +44,117 @@ const (
 	// ContextData key/value for favorite tail
 	favoriteTailContextDataKey   = "system:favorite"
 	favoriteTailContextDataValue = "true"
+	scoreTailContextDataKey      = "system:score"
 	previewDataMaxSize           = 1024
+	maxCachedQueriesPerSession   = 32
+	globalQueryPluginScoreLimit  = 200
 )
-
-func serializeContextData(contextData map[string]string) string {
-	if len(contextData) == 0 {
-		return ""
-	}
-	data, err := json.Marshal(contextData)
-	if err != nil {
-		return ""
-	}
-	return string(data)
-}
 
 type debounceTimer struct {
 	timer  *time.Timer
 	onStop func()
 }
 
+type lazyResultIconEntry struct {
+	SessionId       string
+	QueryId         string
+	ResultId        string
+	OriginalIcon    common.WoxImage
+	PluginDirectory string
+	TargetSize      int
+	CreatedAt       int64
+
+	mu       sync.Mutex
+	resolved bool
+	icon     common.WoxImage
+}
+
+// queryPluginJob is the scheduler's normalized decision for one plugin.
+// Keeping the debounce and fallback flags together makes the lifecycle rule
+// explicit: debounced jobs still affect done, but they do not block fallback.
+type queryPluginJob struct {
+	// pluginInstance is the runnable plugin selected by the scheduler.
+	pluginInstance *Instance
+	// blocksFallback decides whether this job must finish before fallback can be shown.
+	blocksFallback bool
+	// debounced means the job starts from a debounce timer instead of immediately.
+	debounced bool
+	// intervalMs is only used for debounced jobs and stores the timer delay.
+	intervalMs int
+}
+
+// pluginQueryInput is the prepared input for one plugin query execution.
+// It keeps metadata-derived UI state, the filtered plugin query, and optional
+// requirement-blocking response together so queryForPlugin can read as stages.
+type pluginQueryInput struct {
+	// query is the plugin-facing query after env filtering.
+	query Query
+	// metadataLayout is the layout derived from plugin metadata before Plugin.Query runs.
+	metadataLayout QueryLayout
+	// queryContext is the backend-owned query classification returned to Flutter.
+	queryContext QueryContext
+	// blocked means query requirements produced a settings row instead of calling Plugin.Query.
+	blocked bool
+	// blockedResponse is returned directly when requirements prevent Plugin.Query.
+	blockedResponse QueryResponse
+}
+
+// queryExecution owns the per-query plugin scheduling state for Manager.Query.
+// Manager.Query keeps the public channel contract, while this type keeps the
+// scheduling counters, watchdog, debounce replacement, and plugin goroutines in
+// one readable lifecycle.
+type queryExecution struct {
+	// ctx carries query trace/session metadata through scheduling and plugin goroutines.
+	ctx context.Context
+	// manager owns plugin instances, debounce timers, and query cache helpers.
+	manager *Manager
+	// query is the parsed backend query shared by all scheduled plugin jobs.
+	query Query
+	// resultsChan receives normalized plugin responses in the public Manager.Query contract.
+	resultsChan chan QueryResponseUI
+	// tracker emits fallback-ready and done lifecycle signals for this query.
+	tracker *queryTracker
+	// scheduleStart is the scheduler-only timing boundary used by watchdog logs.
+	scheduleStart int64
+	// totalPlugins is the number of instances scanned by this execution.
+	totalPlugins int
+	// checkedPlugins counts instances whose eligibility has been evaluated.
+	checkedPlugins atomic.Int32
+	// scheduledPlugins counts instances accepted for immediate or debounced execution.
+	scheduledPlugins atomic.Int32
+	// scheduleComplete stops the watchdog from reporting after scheduling returns.
+	scheduleComplete atomic.Bool
+	// lastCheckedPlugin records the latest eligibility boundary for scheduler diagnostics.
+	lastCheckedPlugin atomic.Value
+	// scheduleWatchdog warns if plugin eligibility scanning stalls before channels return.
+	scheduleWatchdog *time.Timer
+}
+
+// queryTracker splits query completion into two phases:
+// 1. fallbackReady: all fallback-blocking jobs have finished.
+// 2. done: all jobs have finished, including debounced jobs that may return later.
+//
+// Debounced plugins are counted only in remaining. This lets the UI show fallback
+// once the immediate plugins are done, while still keeping the query open for late
+// debounced results to arrive.
+type queryTracker struct {
+	remaining         *atomic.Int32
+	fallbackRemaining *atomic.Int32
+	fallbackReady     chan bool
+	done              chan bool
+}
+
 type QueryResultSet struct {
-	Query   Query
-	Results *util.HashMap[string, *QueryResultCache]
+	Query     Query
+	StartedAt int64
+	Results   *util.HashMap[string, *QueryResultCache]
 }
 
 func newQueryResultSet(query Query) *QueryResultSet {
 	set := &QueryResultSet{
-		Query:   query,
-		Results: util.NewHashMap[string, *QueryResultCache](),
+		Query:     query,
+		StartedAt: util.GetSystemTimestamp(),
+		Results:   util.NewHashMap[string, *QueryResultCache](),
 	}
 	return set
 }
@@ -80,9 +164,10 @@ type Manager struct {
 	systemPluginsWg sync.WaitGroup // waits for all system plugins to finish loading
 	ui              common.UI
 
-	// ui session based query result cache. [SessionId] => QueryResultSet
-	// one ui session can only have one active query at a time
-	sessionQueryResultCache *util.HashMap[string, *QueryResultSet]
+	// Query pipelines are concurrent in core even though Flutter displays only
+	// one active query. Key by session and query id so a late pipeline cannot
+	// overwrite the result snapshot needed by another query's final response.
+	sessionQueryResultCache *util.HashMap[string, *util.HashMap[string, *QueryResultSet]]
 
 	debounceQueryTimer *util.HashMap[string, *debounceTimer]
 	aiProviders        *util.HashMap[string, ai.Provider]
@@ -95,16 +180,39 @@ type Manager struct {
 
 	// Plugin query latency tracking (EWMA per plugin)
 	pluginQueryLatency *util.HashMap[string, *util.EWMA]
+
+	toolbarMsgActions   *util.HashMap[string, *toolbarMsgActionEntry]
+	pluginToolbarMsgIds *util.HashMap[string, string]
+	glanceActions       *util.HashMap[string, GlanceAction]
+
+	// sessionPluginQueries tracks which plugin query is currently active for each UI session (sessionId -> state)
+	sessionPluginQueries *util.HashMap[string, *sessionPluginQueryState]
+
+	// lazyResultIcons keeps core-owned icon tokens for large raster result icons.
+	// Plugins still return ordinary WoxImage values; manager creates these tokens
+	// only after result IDs, query IDs, and surface sizes are known.
+	lazyResultIcons *util.HashMap[string, *lazyResultIconEntry]
 }
+
+const (
+	systemActionPinInQueryID        = "__system_pin_in_query__"
+	systemActionUnpinInQueryID      = "__system_unpin_in_query__"
+	systemActionOpenPluginSettingID = "__system_open_plugin_setting__"
+)
 
 func GetPluginManager() *Manager {
 	managerOnce.Do(func() {
 		managerInstance = &Manager{
-			sessionQueryResultCache: util.NewHashMap[string, *QueryResultSet](),
+			sessionQueryResultCache: util.NewHashMap[string, *util.HashMap[string, *QueryResultSet]](),
 			debounceQueryTimer:      util.NewHashMap[string, *debounceTimer](),
 			aiProviders:             util.NewHashMap[string, ai.Provider](),
 			scriptReloadTimers:      util.NewHashMap[string, *time.Timer](),
 			pluginQueryLatency:      util.NewHashMap[string, *util.EWMA](),
+			toolbarMsgActions:       util.NewHashMap[string, *toolbarMsgActionEntry](),
+			pluginToolbarMsgIds:     util.NewHashMap[string, string](),
+			glanceActions:           util.NewHashMap[string, GlanceAction](),
+			sessionPluginQueries:    util.NewHashMap[string, *sessionPluginQueryState](),
+			lazyResultIcons:         util.NewHashMap[string, *lazyResultIconEntry](),
 		}
 		logger = util.GetLogger()
 	})
@@ -301,6 +409,13 @@ func (m *Manager) ReloadPlugin(ctx context.Context, metadata Metadata) error {
 }
 
 func (m *Manager) loadHostPlugin(ctx context.Context, host Host, metadata Metadata) error {
+	// Plugin loading is the final shared gate for startup, local installs, and dev
+	// reloads. Install-time checks can be bypassed by existing files on disk, so
+	// keep this guard here to prevent incompatible plugins from entering runtime hosts.
+	if err := ensureWoxVersionSupported(metadata.GetName(ctx), metadata.MinWoxVersion); err != nil {
+		return err
+	}
+
 	loadStartTimestamp := util.GetSystemTimestamp()
 	plugin, loadErr := host.LoadPlugin(ctx, metadata, metadata.Directory)
 	if loadErr != nil {
@@ -385,6 +500,69 @@ func (m *Manager) UnloadPlugin(ctx context.Context, pluginInstance *Instance) {
 	m.instances = newInstances
 }
 
+func (m *Manager) RestartHostForRuntime(ctx context.Context, runtime Runtime, skipPluginIDs []string, progressCallback UninstallProgressCallback) error {
+	pluginHost, exist := lo.Find(AllHosts, func(item Host) bool {
+		return strings.EqualFold(string(item.GetRuntime(ctx)), string(runtime))
+	})
+	if !exist {
+		return fmt.Errorf("unsupported runtime: %s", runtime)
+	}
+
+	skipPluginIDSet := make(map[string]struct{}, len(skipPluginIDs))
+	for _, pluginID := range skipPluginIDs {
+		skipPluginIDSet[pluginID] = struct{}{}
+	}
+
+	var reloadMetadataList []Metadata
+	var nextInstances []*Instance
+	for _, instance := range m.instances {
+		if !strings.EqualFold(instance.Metadata.Runtime, string(runtime)) {
+			nextInstances = append(nextInstances, instance)
+			continue
+		}
+		if _, shouldSkip := skipPluginIDSet[instance.Metadata.Id]; shouldSkip {
+			continue
+		}
+		reloadMetadataList = append(reloadMetadataList, instance.Metadata)
+	}
+
+	// Bug fix: a shared runtime host can keep process-wide native modules loaded even after one
+	// plugin unregisters. Restart the host so uninstall can retry with fresh process state.
+	pluginHost.Stop(ctx)
+
+	if progressCallback != nil {
+		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_uninstall_progress_starting_host"))
+	}
+	if err := pluginHost.Start(ctx); err != nil {
+		return fmt.Errorf("failed to restart %s host: %w", runtime, err)
+	}
+
+	// Replace stale runtime instances only after the new host is available, then rebuild the
+	// remaining plugins from metadata so the shared runtime returns to a consistent state.
+	m.instances = nextInstances
+
+	if len(reloadMetadataList) == 0 {
+		return nil
+	}
+
+	var reloadErrors []string
+	for _, metadata := range reloadMetadataList {
+		if progressCallback != nil {
+			progressCallback(fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_uninstall_progress_restoring_runtime_plugin"), metadata.GetName(ctx)))
+		}
+		if err := m.loadHostPlugin(ctx, pluginHost, metadata); err != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to reload %s plugin %s(%s) after host restart: %s", runtime, metadata.GetName(ctx), metadata.Version, err.Error()))
+			reloadErrors = append(reloadErrors, fmt.Sprintf("%s(%s)", metadata.GetName(ctx), metadata.Version))
+		}
+	}
+
+	if len(reloadErrors) > 0 {
+		return fmt.Errorf("failed to reload %s host plugins after restart: %s", runtime, strings.Join(reloadErrors, ", "))
+	}
+
+	return nil
+}
+
 func (m *Manager) loadSystemPlugins(ctx context.Context) {
 	start := util.GetSystemTimestamp()
 	logger.Info(ctx, fmt.Sprintf("start loading system plugins, found %d system plugins", len(AllSystemPlugin)))
@@ -392,7 +570,9 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 	// Add all plugins to wait group before starting goroutines
 	m.systemPluginsWg.Add(len(AllSystemPlugin))
 
-	for _, p := range AllSystemPlugin {
+	loadedInstances := make([]*Instance, len(AllSystemPlugin))
+	for i, p := range AllSystemPlugin {
+		index := i
 		plugin := p
 		metadata := plugin.GetMetadata()
 		pluginName := metadata.GetName(ctx)
@@ -401,7 +581,12 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 			defer m.systemPluginsWg.Done()
 
 			metadata := plugin.GetMetadata()
-			metadata.LoadSystemI18nFromDirectory(ctx)
+			// System plugins use Wox's central i18n keys directly. The old path
+			// flattened every central language file into every system plugin metadata,
+			// which duplicated the same translation maps across all system plugins.
+			// Metadata.translate already falls back to TranslateWox, so keeping the
+			// central translations owned by the i18n manager preserves behavior while
+			// avoiding the per-plugin live heap copy.
 			instance := &Instance{
 				Metadata:              metadata,
 				Plugin:                plugin,
@@ -429,8 +614,20 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 			// This ensures the plugin is fully initialized before it can be queried
 			m.initPlugin(util.NewTraceContext(), instance)
 
-			m.instances = append(m.instances, instance)
+			// Bug fix: system plugins initialize in parallel, but appending to the
+			// shared manager slice from those goroutines races and can drop a
+			// plugin from one CI run. Store each initialized instance in a stable
+			// slot, then publish the slice on this goroutine after the wait so
+			// global queries always see the full system plugin set.
+			loadedInstances[index] = instance
 		})
+	}
+
+	m.systemPluginsWg.Wait()
+	for _, instance := range loadedInstances {
+		if instance != nil {
+			m.instances = append(m.instances, instance)
+		}
 	}
 
 	logger.Debug(ctx, fmt.Sprintf("finish loading system plugins, cost %d ms", util.GetSystemTimestamp()-start))
@@ -473,6 +670,12 @@ func (m *Manager) ParseMetadata(ctx context.Context, pluginDirectory string) (Me
 	if !IsAllSupportedOS(metadata.SupportedOS) {
 		return Metadata{}, fmt.Errorf("unsupported os in plugin.json file (%s), os=%s", pluginDirectory, metadata.SupportedOS)
 	}
+	if err := metadata.ValidateGlances(); err != nil {
+		// Global Glance selections are persisted as PluginId + GlanceId, so the
+		// backend must reject ambiguous plugin-local ids before settings can point
+		// at a candidate that cannot be resolved deterministically.
+		return Metadata{}, fmt.Errorf("invalid glances in plugin.json file (%s): %w", pluginDirectory, err)
+	}
 
 	metadata.Directory = pluginDirectory
 	metadata.LoadPluginI18nFromDirectory(ctx)
@@ -481,9 +684,8 @@ func (m *Manager) ParseMetadata(ctx context.Context, pluginDirectory string) (Me
 }
 
 // ParseScriptMetadata parses metadata from script plugin file comments
-// Supports two formats:
+// Supports formats:
 // 1. JSON block format (preferred): # { ... } with complete plugin.json structure
-// 2. Legacy @wox.xxx format: individual @wox.id, @wox.name, etc. annotations
 func (m *Manager) ParseScriptMetadata(ctx context.Context, scriptPath string) (Metadata, error) {
 	content, err := os.ReadFile(scriptPath)
 	if err != nil {
@@ -587,7 +789,10 @@ func (m *Manager) validateAndSetScriptMetadataDefaults(metadata Metadata) (Metad
 		metadata.Icon = "emoji:📝"
 	}
 	if metadata.MinWoxVersion == "" {
-		metadata.MinWoxVersion = "2.0.0"
+		// Script plugins can omit MinWoxVersion in their inline metadata. Use the
+		// same default as packaged plugins so the later compatibility check has a
+		// concrete semantic floor instead of treating the field as absent.
+		metadata.MinWoxVersion = defaultMinWoxVersion
 	}
 	if metadata.Version == "" {
 		metadata.Version = "1.0.0"
@@ -770,14 +975,67 @@ func (m *Manager) GetPluginInstances() []*Instance {
 	return m.instances
 }
 
+func (m *Manager) GetPluginInstanceById(pluginId string) *Instance {
+	for _, instance := range m.instances {
+		if instance.Metadata.Id == pluginId {
+			return instance
+		}
+	}
+	return nil
+}
+
+// InvokePluginCommand routes a plugin-to-plugin command to the target plugin.
+func (m *Manager) InvokePluginCommand(ctx context.Context, caller *Instance, request PluginCommandRequest) (PluginCommandResult, error) {
+	if strings.TrimSpace(request.PluginId) == "" {
+		return PluginCommandResult{}, fmt.Errorf("plugin command target is empty")
+	}
+	if strings.TrimSpace(request.Command) == "" {
+		return PluginCommandResult{}, fmt.Errorf("plugin command is empty")
+	}
+
+	target := m.GetPluginInstanceById(request.PluginId)
+	if target == nil {
+		return PluginCommandResult{}, fmt.Errorf("plugin command target not found: %s", request.PluginId)
+	}
+	if len(target.PluginCommandHandlers) == 0 {
+		return PluginCommandResult{}, fmt.Errorf("plugin command target has no handler: %s", target.Metadata.GetName(ctx))
+	}
+
+	if request.Data == nil {
+		request.Data = common.ContextData{}
+	}
+
+	callerName := ""
+	if caller != nil {
+		callerName = caller.Metadata.GetName(ctx)
+	}
+	logger.Info(ctx, fmt.Sprintf("invoke plugin command: caller=%s target=%s command=%s", callerName, target.Metadata.GetName(ctx), request.Command))
+
+	for _, handler := range target.PluginCommandHandlers {
+		result := handler(ctx, request)
+		if result.Handled {
+			return result, nil
+		}
+	}
+
+	return PluginCommandResult{Handled: false, Message: "plugin command not handled"}, nil
+}
+
 func (m *Manager) canOperateQuery(ctx context.Context, pluginInstance *Instance, query Query) bool {
 	if pluginInstance.Setting.Disabled.Get() {
 		return false
 	}
 
 	if query.Type == QueryTypeSelection {
-		isPluginSupportSelection := pluginInstance.Metadata.IsSupportFeature(MetadataFeatureQuerySelection)
-		return isPluginSupportSelection
+		// If the selection query carries a trigger keyword (parsed from QueryText),
+		// only route it to the plugin that owns that keyword, so users can configure
+		// a hotkey like "select " to target one specific plugin instead of all.
+		if query.TriggerKeyword != "" {
+			return lo.Contains(pluginInstance.GetTriggerKeywords(), query.TriggerKeyword)
+		}
+		// No trigger keyword: fall back to old behavior - deliver to all plugins
+		// that have declared the querySelection feature.
+		return pluginInstance.Metadata.IsSupportFeature(MetadataFeatureQuerySelection)
 	}
 
 	var validGlobalQuery = lo.Contains(pluginInstance.GetTriggerKeywords(), "*") && query.TriggerKeyword == ""
@@ -789,71 +1047,412 @@ func (m *Manager) canOperateQuery(ctx context.Context, pluginInstance *Instance,
 	return true
 }
 
-func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, query Query) (results []QueryResult) {
+// buildMetadataBackedQueryLayout converts the static plugin metadata that used
+// to be fetched through /query/metadata into the QueryResponse layout channel.
+// Keeping this in the query pipeline removes the extra UI HTTP request while
+// preserving command-scoped preview ratios and grid layout behavior.
+func (m *Manager) buildMetadataBackedQueryLayout(ctx context.Context, pluginInstance *Instance, query Query) QueryLayout {
+	layout := QueryLayout{}
+	if pluginInstance == nil {
+		return layout
+	}
+
+	iconImg, parseErr := common.ParseWoxImage(pluginInstance.Metadata.Icon)
+	if parseErr == nil {
+		convertedIcon := common.ConvertIcon(ctx, iconImg, pluginInstance.PluginDirectory)
+		layout.Icon = &convertedIcon
+	} else {
+		logger.Error(ctx, fmt.Sprintf("failed to parse icon: %s", parseErr.Error()))
+	}
+
+	defaultWidthRatio := 0.4
+	layout.ResultPreviewWidthRatio = &defaultWidthRatio
+
+	featureParams, isResultPreviewWidthRatioEnabled, err := pluginInstance.Metadata.GetFeatureParamsForResultPreviewWidthRatioCommand(query.Command)
+	if err == nil && isResultPreviewWidthRatioEnabled {
+		// Command-scoped preview width still belongs to the plugin metadata
+		// contract. Moving it into QueryResponse keeps zero-width preview-only
+		// commands working without requiring the UI to race a side request.
+		widthRatio := featureParams.WidthRatio
+		layout.ResultPreviewWidthRatio = &widthRatio
+	} else if err != nil && !errors.Is(err, ErrFeatureNotSupported) {
+		logger.Error(ctx, fmt.Sprintf("failed to get feature params for result preview width ratio: %s", err.Error()))
+	}
+
+	featureParamsGridLayout, isGridLayoutEnabled, err := pluginInstance.Metadata.GetFeatureParamsForGridLayoutCommand(query.Command)
+	if err == nil && isGridLayoutEnabled {
+		layout.GridLayout = &featureParamsGridLayout
+	} else if err != nil && !errors.Is(err, ErrFeatureNotSupported) {
+		logger.Error(ctx, fmt.Sprintf("failed to get feature params for grid layout: %s", err.Error()))
+	}
+
+	return layout
+}
+
+func (m *Manager) mergeQueryLayouts(metadataLayout QueryLayout, responseLayout QueryLayout) QueryLayout {
+	merged := metadataLayout
+
+	if responseLayout.Icon != nil && !responseLayout.Icon.IsEmpty() {
+		merged.Icon = responseLayout.Icon
+	}
+	if responseLayout.ResultPreviewWidthRatio != nil {
+		// QueryResponse layout can override metadata defaults. A nil pointer
+		// means unset, while a non-nil zero is an intentional preview-only ratio.
+		merged.ResultPreviewWidthRatio = responseLayout.ResultPreviewWidthRatio
+	}
+	if responseLayout.GridLayout != nil {
+		merged.GridLayout = responseLayout.GridLayout
+	}
+
+	return merged
+}
+
+func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, query Query) (response QueryResponse) {
+	pluginLabel := queryDiagnosticPluginLabel(pluginInstance)
+	queryForPluginStart := util.GetSystemTimestamp()
+	queryForPluginTimingStart := time.Now()
+	if tracker := timetracking.New("query_for_plugin_start"); tracker.Enabled() {
+		tracker.SetRawString("queryId", query.Id)
+		tracker.SetRawString("plugin", pluginLabel)
+		tracker.Log(ctx)
+	}
+	input := pluginQueryInput{
+		query:        query,
+		queryContext: BuildQueryContext(query, pluginInstance),
+	}
 	defer util.GoRecover(ctx, fmt.Sprintf("<%s> query panic", pluginInstance.GetName(ctx)), func(err error) {
-		// if plugin query panic, return error result
-		failedResult := m.GetResultForFailedQuery(ctx, pluginInstance.Metadata, query, err)
-		results = []QueryResult{
-			m.PolishResult(ctx, pluginInstance, query, failedResult),
+		if tracker := timetracking.New("query_for_plugin_recovered"); tracker.Enabled() {
+			tracker.SetRawString("queryId", query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.SetInt64("elapsedMs", util.GetSystemTimestamp()-queryForPluginStart)
+			tracker.Log(ctx)
 		}
+		response = m.buildFailedPluginQueryResponse(ctx, pluginInstance, input.query, input.metadataLayout, input.queryContext, err)
 	})
 
-	logger.Info(ctx, fmt.Sprintf("<%s> start query: %s", pluginInstance.GetName(ctx), query.RawQuery))
-	start := util.GetSystemTimestamp()
+	inputStart := util.GetSystemTimestamp()
+	input = m.buildPluginQueryInput(ctx, pluginInstance, query)
+	if tracker := timetracking.New("build_plugin_query_input"); tracker.Enabled() {
+		tracker.SetRawString("queryId", query.Id)
+		tracker.SetRawString("plugin", pluginLabel)
+		tracker.SetBool("blocked", input.blocked)
+		tracker.SetInt64("costMs", util.GetSystemTimestamp()-inputStart)
+		tracker.Log(ctx)
+	}
+	if input.blocked {
+		if tracker := timetracking.New("query_for_plugin_blocked"); tracker.Enabled() {
+			tracker.SetRawString("queryId", query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.SetInt("resultCount", len(input.blockedResponse.Results))
+			tracker.SetInt64("elapsedMs", util.GetSystemTimestamp()-queryForPluginStart)
+			tracker.Log(ctx)
+		}
+		return input.blockedResponse
+	}
 
-	// set query env base on plugin's feature
+	response, pluginQueryCost, recovered := m.executePluginQuery(ctx, pluginInstance, input.query, input.metadataLayout, input.queryContext)
+	if recovered {
+		if tracker := timetracking.New("query_for_plugin_plugin_recovered"); tracker.Enabled() {
+			tracker.SetRawString("queryId", query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.SetInt64("elapsedMs", util.GetSystemTimestamp()-queryForPluginStart)
+			tracker.Log(ctx)
+		}
+		return response
+	}
+
+	finalizeStart := util.GetSystemTimestamp()
+	finalizeTimingStart := time.Now()
+	response = m.finalizePluginQueryResponse(ctx, pluginInstance, input.query, response, input.metadataLayout, input.queryContext, pluginQueryCost)
+	if tracker := timetracking.New("query_for_plugin_finish"); tracker.Enabled() {
+		tracker.SetRawString("queryId", query.Id)
+		tracker.SetRawString("plugin", pluginLabel)
+		tracker.SetInt("resultCount", len(response.Results))
+		tracker.SetInt64("finalizeCostMs", util.GetSystemTimestamp()-finalizeStart)
+		tracker.SetInt64("finalizeCostUs", time.Since(finalizeTimingStart).Microseconds())
+		tracker.SetInt64("totalMs", util.GetSystemTimestamp()-queryForPluginStart)
+		tracker.SetInt64("totalUs", time.Since(queryForPluginTimingStart).Microseconds())
+		tracker.Log(ctx)
+	}
+	return response
+}
+
+func (m *Manager) buildPluginQueryInput(ctx context.Context, pluginInstance *Instance, query Query) pluginQueryInput {
+	pluginLabel := queryDiagnosticPluginLabel(pluginInstance)
+	layoutStart := util.GetSystemTimestamp()
+	metadataLayout := m.buildMetadataBackedQueryLayout(ctx, pluginInstance, query)
+	layoutCost := util.GetSystemTimestamp() - layoutStart
+	contextStart := util.GetSystemTimestamp()
+	queryContext := BuildQueryContext(query, pluginInstance)
+	contextCost := util.GetSystemTimestamp() - contextStart
+	input := pluginQueryInput{
+		query:          query,
+		metadataLayout: metadataLayout,
+		queryContext:   queryContext,
+	}
+	if tracker := timetracking.New("build_plugin_query_input_base"); tracker.Enabled() {
+		tracker.SetRawString("queryId", query.Id)
+		tracker.SetRawString("plugin", pluginLabel)
+		tracker.SetInt64("layoutMs", layoutCost)
+		tracker.SetInt64("contextMs", contextCost)
+		tracker.Log(ctx)
+	}
+
+	// Query requirements are checked before calling Plugin.Query so plugins do not
+	// need to duplicate settings-gate UI rows in every implementation.
+	requirementStart := util.GetSystemTimestamp()
+	if requirementResult, blocked := m.buildQueryRequirementSettingsResult(ctx, pluginInstance, query); blocked {
+		input.blocked = true
+		input.blockedResponse = QueryResponse{
+			Results: []QueryResult{m.PolishResult(ctx, pluginInstance, query, input.metadataLayout, requirementResult)},
+			Layout:  input.metadataLayout,
+			Context: input.queryContext,
+		}
+		if tracker := timetracking.New("build_plugin_query_input_requirement"); tracker.Enabled() {
+			tracker.SetRawString("queryId", query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.SetBool("blocked", true)
+			tracker.SetInt64("costMs", util.GetSystemTimestamp()-requirementStart)
+			tracker.Log(ctx)
+		}
+		return input
+	}
+	if tracker := timetracking.New("build_plugin_query_input_requirement"); tracker.Enabled() {
+		tracker.SetRawString("queryId", query.Id)
+		tracker.SetRawString("plugin", pluginLabel)
+		tracker.SetBool("blocked", false)
+		tracker.SetInt64("costMs", util.GetSystemTimestamp()-requirementStart)
+		tracker.Log(ctx)
+	}
+
+	envStart := util.GetSystemTimestamp()
+	input.query = m.buildPluginQueryEnv(ctx, pluginInstance, query)
+	if tracker := timetracking.New("build_plugin_query_env"); tracker.Enabled() {
+		tracker.SetRawString("queryId", query.Id)
+		tracker.SetRawString("plugin", pluginLabel)
+		tracker.SetInt64("costMs", util.GetSystemTimestamp()-envStart)
+		tracker.Log(ctx)
+	}
+	return input
+}
+
+func (m *Manager) buildPluginQueryEnv(ctx context.Context, pluginInstance *Instance, query Query) Query {
+	// Query env is intentionally opt-in per plugin because active-window and
+	// browser context can be expensive or sensitive. Keep only the fields the
+	// plugin declared so the SDK contract stays narrow.
 	currentEnv := query.Env
-	newEnv := QueryEnv{}
-	if pluginInstance.Metadata.IsSupportFeature(MetadataFeatureQueryEnv) {
-		queryEnvParams, err := pluginInstance.Metadata.GetFeatureParamsForQueryEnv()
-		if err != nil {
-			logger.Error(ctx, fmt.Sprintf("<%s> invalid query env config: %s", pluginInstance.GetName(ctx), err))
-		} else {
-			if queryEnvParams.RequireActiveWindowName {
-				newEnv.ActiveWindowTitle = currentEnv.ActiveWindowTitle
-			}
-			if queryEnvParams.RequireActiveWindowPid {
-				newEnv.ActiveWindowPid = currentEnv.ActiveWindowPid
-			}
-			if queryEnvParams.RequireActiveWindowIcon {
-				newEnv.ActiveWindowIcon = currentEnv.ActiveWindowIcon
-			}
-			if queryEnvParams.RequireActiveWindowIsOpenSaveDialog {
-				newEnv.ActiveWindowIsOpenSaveDialog = currentEnv.ActiveWindowIsOpenSaveDialog
-			}
-			if queryEnvParams.RequireActiveBrowserUrl {
-				newEnv.ActiveBrowserUrl = currentEnv.ActiveBrowserUrl
-			}
-		}
+	query.Env = QueryEnv{}
+	if !pluginInstance.Metadata.IsSupportFeature(MetadataFeatureQueryEnv) {
+		return query
 	}
-	query.Env = newEnv
 
-	results = pluginInstance.Plugin.Query(ctx, query)
-	pluginQueryCost := util.GetSystemTimestamp() - start
+	queryEnvParams, err := pluginInstance.Metadata.GetFeatureParamsForQueryEnv()
+	if err != nil {
+		logger.Error(ctx, fmt.Sprintf("<%s> invalid query env config: %s", pluginInstance.GetName(ctx), err))
+		return query
+	}
 
+	if queryEnvParams.RequireActiveWindowName {
+		query.Env.ActiveWindowTitle = currentEnv.ActiveWindowTitle
+	}
+	if queryEnvParams.RequireActiveWindowPid {
+		query.Env.ActiveWindowPid = currentEnv.ActiveWindowPid
+	}
+	if queryEnvParams.RequireActiveWindowId {
+		query.Env.ActiveWindowId = currentEnv.ActiveWindowId
+	}
+	if queryEnvParams.RequireActiveWindowIcon {
+		query.Env.ActiveWindowIcon = currentEnv.ActiveWindowIcon
+	}
+	if queryEnvParams.RequireActiveWindowIsOpenSaveDialog {
+		query.Env.ActiveWindowIsOpenSaveDialog = currentEnv.ActiveWindowIsOpenSaveDialog
+	}
+	if queryEnvParams.RequireActiveBrowserUrl {
+		query.Env.ActiveBrowserUrl = currentEnv.ActiveBrowserUrl
+	}
+
+	return query
+}
+
+func (m *Manager) executePluginQuery(ctx context.Context, pluginInstance *Instance, query Query, metadataLayout QueryLayout, queryContext QueryContext) (response QueryResponse, pluginQueryCost int64, recovered bool) {
+	logger.Info(ctx, fmt.Sprintf("<%s> start query: %s", pluginInstance.GetName(ctx), query.RawQuery))
+	pluginLabel := queryDiagnosticPluginLabel(pluginInstance)
+	start := util.GetSystemTimestamp()
+	if tracker := timetracking.New("plugin_query_start"); tracker.Enabled() {
+		tracker.SetRawString("queryId", query.Id)
+		tracker.SetRawString("plugin", pluginLabel)
+		tracker.SetRawString("rawQuery", query.RawQuery)
+		tracker.Log(ctx)
+	}
+	defer util.GoRecover(ctx, fmt.Sprintf("<%s> query panic", pluginInstance.GetName(ctx)), func(err error) {
+		recovered = true
+		if tracker := timetracking.New("plugin_query_recovered"); tracker.Enabled() {
+			tracker.SetRawString("queryId", query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.SetInt64("elapsedMs", util.GetSystemTimestamp()-start)
+			tracker.Log(ctx)
+		}
+		response = m.buildFailedPluginQueryResponse(ctx, pluginInstance, query, metadataLayout, queryContext, err)
+	})
+	response = pluginInstance.Plugin.Query(ctx, query)
+	pluginQueryCost = util.GetSystemTimestamp() - start
+	if tracker := timetracking.New("plugin_query_end"); tracker.Enabled() {
+		tracker.SetRawString("queryId", query.Id)
+		tracker.SetRawString("plugin", pluginLabel)
+		tracker.SetInt("resultCount", len(response.Results))
+		tracker.SetInt64("costMs", pluginQueryCost)
+		tracker.Log(ctx)
+	}
+	return response, pluginQueryCost, false
+}
+
+func (m *Manager) finalizePluginQueryResponse(ctx context.Context, pluginInstance *Instance, query Query, response QueryResponse, metadataLayout QueryLayout, queryContext QueryContext, pluginQueryCost int64) QueryResponse {
+	pluginLabel := queryDiagnosticPluginLabel(pluginInstance)
+	finalizeStart := util.GetSystemTimestamp()
+	finalizeTimingStart := time.Now()
+	layoutStart := util.GetSystemTimestamp()
+	layoutTimingStart := time.Now()
+	response.Layout = m.mergeQueryLayouts(metadataLayout, response.Layout)
+	layoutCost := util.GetSystemTimestamp() - layoutStart
+	layoutCostUs := time.Since(layoutTimingStart).Microseconds()
+	response.Context = queryContext
+	// Keep the plugin latency EWMA scoped to Plugin.Query itself.
+	// Manager-side polishing is shared overhead layered on top of plugin execution.
+	latencyStart := util.GetSystemTimestamp()
+	latencyTimingStart := time.Now()
 	m.updatePluginQueryLatency(pluginInstance.Metadata.Id, float64(pluginQueryCost))
+	latencyCost := util.GetSystemTimestamp() - latencyStart
+	latencyCostUs := time.Since(latencyTimingStart).Microseconds()
 
-	if pluginQueryCost >= 10 {
-		logger.Debug(ctx, fmt.Sprintf("<%s> finish query, result count: %d, cost: %dms, query is slow", pluginInstance.GetName(ctx), len(results), pluginQueryCost))
-	} else {
-		logger.Debug(ctx, fmt.Sprintf("<%s> finish query, result count: %d, cost: %dms", pluginInstance.GetName(ctx), len(results), pluginQueryCost))
-	}
-
-	for i := range results {
-		if results[i].Group == "" {
-			defaultActions := m.getDefaultActions(ctx, pluginInstance, query, results[i].Title, results[i].SubTitle)
-			results[i].Actions = append(results[i].Actions, defaultActions...)
+	resultsStart := util.GetSystemTimestamp()
+	resultsTimingStart := time.Now()
+	var totalDefaultActionsCost int64
+	var totalDefaultActionsCostUs int64
+	var totalPolishCost int64
+	var totalPolishCostUs int64
+	var totalRecordPluginElapsedCost int64
+	var totalRecordPluginElapsedCostUs int64
+	var maxResultCost int64
+	var maxResultCostUs int64
+	var maxResultIndex int
+	var maxResultId string
+	var maxResultTitle string
+	var resultsAggregate timetracking.ResultsPolishAggregate
+	collectResultTiming := util.IsDev()
+	openPluginSettingActionStart := time.Now()
+	openPluginSettingAction := m.newOpenPluginSettingAction(ctx, pluginInstance)
+	openPluginSettingActionUs := time.Since(openPluginSettingActionStart).Microseconds()
+	for i := range response.Results {
+		resultStart := util.GetSystemTimestamp()
+		resultTimingStart := time.Now()
+		defaultActionsStart := util.GetSystemTimestamp()
+		defaultActionsTimingStart := time.Now()
+		defaultActions := m.getDefaultActionsWithOpenPluginSettingAction(ctx, pluginInstance, query, response.Results[i].Title, response.Results[i].SubTitle, openPluginSettingAction)
+		defaultActionsCost := util.GetSystemTimestamp() - defaultActionsStart
+		defaultActionsCostUs := time.Since(defaultActionsTimingStart).Microseconds()
+		totalDefaultActionsCost += defaultActionsCost
+		totalDefaultActionsCostUs += defaultActionsCostUs
+		response.Results[i].Actions = append(response.Results[i].Actions, defaultActions...)
+		polishStart := util.GetSystemTimestamp()
+		polishTimingStart := time.Now()
+		var polishTiming timetracking.ResultPolishTiming
+		response.Results[i], polishTiming = m.polishResult(ctx, pluginInstance, query, response.Layout, response.Results[i], collectResultTiming)
+		polishCost := util.GetSystemTimestamp() - polishStart
+		polishCostUs := time.Since(polishTimingStart).Microseconds()
+		totalPolishCost += polishCost
+		totalPolishCostUs += polishCostUs
+		recordPluginElapsedStart := util.GetSystemTimestamp()
+		recordPluginElapsedTimingStart := time.Now()
+		m.RecordQueryResultPluginQueryElapsed(query.SessionId, query.Id, response.Results[i].Id, pluginQueryCost)
+		recordPluginElapsedCost := util.GetSystemTimestamp() - recordPluginElapsedStart
+		recordPluginElapsedCostUs := time.Since(recordPluginElapsedTimingStart).Microseconds()
+		totalRecordPluginElapsedCost += recordPluginElapsedCost
+		totalRecordPluginElapsedCostUs += recordPluginElapsedCostUs
+		resultCost := util.GetSystemTimestamp() - resultStart
+		resultCostUs := time.Since(resultTimingStart).Microseconds()
+		if resultCost > maxResultCost || (resultCost == maxResultCost && resultCostUs > maxResultCostUs) {
+			maxResultCost = resultCost
+			maxResultCostUs = resultCostUs
+			maxResultIndex = i
+			maxResultId = response.Results[i].Id
+			maxResultTitle = response.Results[i].Title
 		}
-		results[i] = m.PolishResult(ctx, pluginInstance, query, results[i])
+		if collectResultTiming {
+			resultsAggregate.Add(timetracking.ResultIdentity{
+				Index: i,
+				Id:    response.Results[i].Id,
+				Title: response.Results[i].Title,
+			}, defaultActionsCostUs, recordPluginElapsedCostUs, resultCostUs, polishTiming)
+		}
 	}
+	resultsCost := util.GetSystemTimestamp() - resultsStart
+	resultsCostUs := time.Since(resultsTimingStart).Microseconds()
 
+	filterStart := util.GetSystemTimestamp()
+	filterTimingStart := time.Now()
 	if query.Type == QueryTypeSelection && query.Search != "" {
-		results = lo.Filter(results, func(item QueryResult, _ int) bool {
+		response.Results = lo.Filter(response.Results, func(item QueryResult, _ int) bool {
 			return IsStringMatch(ctx, item.Title, query.Search)
 		})
 	}
+	filterCost := util.GetSystemTimestamp() - filterStart
+	filterCostUs := time.Since(filterTimingStart).Microseconds()
+	finalizeCost := util.GetSystemTimestamp() - finalizeStart
+	finalizeCostUs := time.Since(finalizeTimingStart).Microseconds()
 
-	return results
+	if pluginQueryCost >= 10 {
+		logger.Debug(ctx, fmt.Sprintf("<%s> finish query, result count: %d, cost: %dms, query is slow", pluginInstance.GetName(ctx), len(response.Results), pluginQueryCost))
+	} else {
+		logger.Debug(ctx, fmt.Sprintf("<%s> finish query, result count: %d, cost: %dms", pluginInstance.GetName(ctx), len(response.Results), pluginQueryCost))
+	}
+	if collectResultTiming {
+		resultsAggregate.Log(ctx, query.Id, pluginLabel)
+	}
+	if tracker := timetracking.New("finalize_done"); tracker.Enabled() {
+		tracker.SetRawString("queryId", query.Id)
+		tracker.SetRawString("plugin", pluginLabel)
+		tracker.SetInt("resultCount", len(response.Results))
+		tracker.SetInt64("pluginQueryMs", pluginQueryCost)
+		tracker.SetInt64("layoutMs", layoutCost)
+		tracker.SetInt64("layoutUs", layoutCostUs)
+		tracker.SetInt64("latencyMs", latencyCost)
+		tracker.SetInt64("latencyUs", latencyCostUs)
+		tracker.SetInt64("openSettingActionUs", openPluginSettingActionUs)
+		tracker.SetInt64("resultsMs", resultsCost)
+		tracker.SetInt64("resultsUs", resultsCostUs)
+		tracker.SetInt64("defaultActionsMs", totalDefaultActionsCost)
+		tracker.SetInt64("defaultActionsUs", totalDefaultActionsCostUs)
+		tracker.SetInt64("polishMs", totalPolishCost)
+		tracker.SetInt64("polishUs", totalPolishCostUs)
+		tracker.SetInt64("recordPluginElapsedMs", totalRecordPluginElapsedCost)
+		tracker.SetInt64("recordPluginElapsedUs", totalRecordPluginElapsedCostUs)
+		tracker.SetInt64("filterMs", filterCost)
+		tracker.SetInt64("filterUs", filterCostUs)
+		tracker.SetInt64("maxResultMs", maxResultCost)
+		tracker.SetInt64("maxResultUs", maxResultCostUs)
+		tracker.SetInt("maxResultIndex", maxResultIndex)
+		tracker.SetRawString("maxResultId", maxResultId)
+		tracker.SetString("maxResultTitle", maxResultTitle)
+		tracker.SetInt64("totalMs", finalizeCost)
+		tracker.SetInt64("totalUs", finalizeCostUs)
+		tracker.Log(ctx)
+	}
+
+	return response
+}
+
+func (m *Manager) buildFailedPluginQueryResponse(ctx context.Context, pluginInstance *Instance, query Query, metadataLayout QueryLayout, queryContext QueryContext, err error) QueryResponse {
+	// Panic fallback keeps one failed plugin from breaking the whole query run.
+	// The failed row is polished like normal results so actions, icons, and cache
+	// behavior stay compatible with the existing result pipeline.
+	failedResult := m.GetResultForFailedQuery(ctx, pluginInstance.Metadata, query, err)
+	return QueryResponse{
+		Results: []QueryResult{
+			m.PolishResult(ctx, pluginInstance, query, metadataLayout, failedResult),
+		},
+		Layout:  metadataLayout,
+		Context: queryContext,
+	}
 }
 
 func (m *Manager) GetResultForFailedQuery(ctx context.Context, pluginMetadata Metadata, query Query, err error) QueryResult {
@@ -874,6 +1473,10 @@ func (m *Manager) GetResultForFailedQuery(ctx context.Context, pluginMetadata Me
 }
 
 func (m *Manager) getDefaultActions(ctx context.Context, pluginInstance *Instance, query Query, title, subTitle string) (defaultActions []QueryResultAction) {
+	return m.getDefaultActionsWithOpenPluginSettingAction(ctx, pluginInstance, query, title, subTitle, m.newOpenPluginSettingAction(ctx, pluginInstance))
+}
+
+func (m *Manager) getDefaultActionsWithOpenPluginSettingAction(ctx context.Context, pluginInstance *Instance, query Query, title, subTitle string, openPluginSettingAction QueryResultAction) (defaultActions []QueryResultAction) {
 	// Declare both actions first
 	var addToFavoriteAction func(context.Context, ActionContext)
 	var removeFromFavoriteAction func(context.Context, ActionContext)
@@ -924,6 +1527,7 @@ func (m *Manager) getDefaultActions(ctx context.Context, pluginInstance *Instanc
 
 	if setting.GetSettingManager().IsPinedResult(ctx, pluginInstance.Metadata.Id, title, subTitle) {
 		defaultActions = append(defaultActions, QueryResultAction{
+			Id:                     systemActionUnpinInQueryID,
 			Name:                   "i18n:plugin_manager_unpin_in_query",
 			Icon:                   common.UnpinIcon,
 			IsSystemAction:         true,
@@ -932,6 +1536,7 @@ func (m *Manager) getDefaultActions(ctx context.Context, pluginInstance *Instanc
 		})
 	} else {
 		defaultActions = append(defaultActions, QueryResultAction{
+			Id:                     systemActionPinInQueryID,
 			Name:                   "i18n:plugin_manager_pin_in_query",
 			Icon:                   common.PinIcon,
 			IsSystemAction:         true,
@@ -940,7 +1545,25 @@ func (m *Manager) getDefaultActions(ctx context.Context, pluginInstance *Instanc
 		})
 	}
 
+	defaultActions = append(defaultActions, openPluginSettingAction)
+
 	return defaultActions
+}
+
+func (m *Manager) newOpenPluginSettingAction(ctx context.Context, pluginInstance *Instance) QueryResultAction {
+	return QueryResultAction{
+		Id:                     systemActionOpenPluginSettingID,
+		Name:                   fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_sys_open_plugin_settings"), pluginInstance.GetName(ctx)),
+		Icon:                   common.SettingIcon,
+		IsSystemAction:         true,
+		PreventHideAfterAction: true,
+		Action: func(ctx context.Context, actionContext ActionContext) {
+			m.ui.OpenSettingWindow(ctx, common.SettingWindowContext{
+				Path:  "/plugin/setting",
+				Param: pluginInstance.Metadata.Id,
+			})
+		},
+	}
 }
 
 func (m *Manager) formatFileListPreview(ctx context.Context, filePaths []string) string {
@@ -968,10 +1591,154 @@ func (m *Manager) formatFileListPreview(ctx context.Context, filePaths []string)
 	return sb.String()
 }
 
-func (m *Manager) calculateResultScore(ctx context.Context, pluginId, title, subTitle string, currentQuery string) int64 {
+func (m *Manager) buildSelectionFileListPreviewData(ctx context.Context, filePaths []string) string {
+	items := make([]WoxPreviewListItem, 0, len(filePaths))
+	for _, filePath := range filePaths {
+		icon := common.ConvertIcon(ctx, common.NewWoxImageFileIcon(filePath), "")
+		extension := strings.TrimPrefix(filepath.Ext(filePath), ".")
+		typeLabel := strings.ToUpper(extension)
+		if typeLabel == "" {
+			typeLabel = "FILE"
+		}
+
+		items = append(items, WoxPreviewListItem{
+			Icon:     &icon,
+			Title:    filepath.Base(filePath),
+			Subtitle: filepath.Dir(filePath),
+			Tails:    []QueryResultTail{NewQueryResultTailText(typeLabel)},
+		})
+	}
+
+	// Selection file previews now use the generic list contract. The previous
+	// file-path-only payload could not express progress/status rows, so core maps
+	// file selections into normal preview rows instead of keeping a file-specific
+	// renderer alive.
+	previewData, err := json.Marshal(WoxPreviewListData{Items: items})
+	if err != nil {
+		// Selection previews used to be markdown strings, which forced the UI to
+		// render paths as generic text. Fall back to that stable legacy format if
+		// JSON encoding ever fails so selection query preview still works.
+		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to marshal selection list preview data: %s", err.Error()))
+		return m.formatFileListPreview(ctx, filePaths)
+	}
+
+	return string(previewData)
+}
+
+func (m *Manager) normalizeListPreviewData(ctx context.Context, pluginInstance *Instance, preview WoxPreview) WoxPreview {
+	if preview.PreviewType != WoxPreviewTypeList || preview.PreviewData == "" {
+		return preview
+	}
+
+	var data WoxPreviewListData
+	if err := json.Unmarshal([]byte(preview.PreviewData), &data); err != nil {
+		// Leave malformed payloads untouched so the UI can show its existing
+		// preview error. Core only normalizes well-formed list rows.
+		return preview
+	}
+
+	for itemIndex := range data.Items {
+		item := &data.Items[itemIndex]
+		item.Title = m.translatePlugin(ctx, pluginInstance, item.Title)
+		item.Subtitle = m.translatePlugin(ctx, pluginInstance, item.Subtitle)
+
+		if item.Icon != nil && !item.Icon.IsEmpty() {
+			convertedIcon := common.ConvertIcon(ctx, *item.Icon, pluginInstance.PluginDirectory)
+			item.Icon = &convertedIcon
+		}
+
+		for tailIndex := range item.Tails {
+			tail := &item.Tails[tailIndex]
+			if tail.Type == QueryResultTailTypeText {
+				tail.Text = m.translatePlugin(ctx, pluginInstance, tail.Text)
+			}
+			if tail.Type == QueryResultTailTypeImage {
+				tail.Image = common.ConvertIcon(ctx, tail.Image, pluginInstance.PluginDirectory)
+			}
+		}
+	}
+
+	// Re-encode after translation and icon normalization so preview rows render
+	// with the same i18n and image behavior as top-level result rows.
+	normalizedData, err := json.Marshal(data)
+	if err != nil {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to marshal normalized list preview data: %s", err.Error()))
+		return preview
+	}
+
+	preview.PreviewData = string(normalizedData)
+	return preview
+}
+
+func (m *Manager) normalizePreviewMetadata(ctx context.Context, pluginInstance *Instance, preview WoxPreview) WoxPreview {
+	// PreviewTags are the UI-facing metadata contract. Translate them in core so
+	// Flutter only consumes one tag list and does not need to know about the
+	// deprecated key/value PreviewProperties compatibility shape.
+	for i := range preview.PreviewTags {
+		preview.PreviewTags[i].Label = m.translatePlugin(ctx, pluginInstance, preview.PreviewTags[i].Label)
+		if preview.PreviewTags[i].Tooltip != "" {
+			preview.PreviewTags[i].Tooltip = m.translatePlugin(ctx, pluginInstance, preview.PreviewTags[i].Tooltip)
+		}
+	}
+
+	if len(preview.PreviewProperties) == 0 {
+		return preview
+	}
+
+	translatedProperties := make(map[string]string, len(preview.PreviewProperties))
+	for key, value := range preview.PreviewProperties {
+		// Legacy properties only supported i18n on the key. Keep values as final
+		// display labels so older plugins retain their existing text semantics.
+		translatedProperties[m.translatePlugin(ctx, pluginInstance, key)] = value
+	}
+	preview.PreviewProperties = translatedProperties
+
+	if len(preview.PreviewTags) > 0 {
+		return preview
+	}
+
+	preview.PreviewTags = make([]WoxPreviewTag, 0, len(preview.PreviewProperties))
+	for key, value := range preview.PreviewProperties {
+		preview.PreviewTags = append(preview.PreviewTags, WoxPreviewTag{
+			Label:   value,
+			Tooltip: key,
+		})
+	}
+	return preview
+}
+
+// shouldHidePreviewForGlobalQuery keeps global search compact while preserving core-owned unblocker previews.
+func shouldHidePreviewForGlobalQuery(query Query, preview WoxPreview) bool {
+	if !query.IsGlobalQuery() {
+		return false
+	}
+
+	return preview.PreviewType != WoxPreviewTypeQueryRequirementSettings &&
+		preview.PreviewType != WoxPreviewTypeThemeEdit &&
+		preview.PreviewType != WoxPreviewTypeTriggerKeywordConflict
+}
+
+// limitGlobalQueryPluginScore keeps plugin-provided global scores within Wox's shared ranking scale.
+func limitGlobalQueryPluginScore(query Query, score int64) int64 {
+	if !query.IsGlobalQuery() || score <= globalQueryPluginScoreLimit {
+		return score
+	}
+
+	return globalQueryPluginScoreLimit
+}
+
+func resultScoreHash(pluginId string, result QueryResult) setting.ResultHash {
+	scoreKey := strings.TrimSpace(result.ScoreKey)
+	if scoreKey != "" {
+		return setting.NewResultHash(pluginId, scoreKey, "")
+	}
+	return setting.NewResultHash(pluginId, result.Title, result.SubTitle)
+}
+
+func (m *Manager) calculateResultScore(ctx context.Context, pluginId string, result QueryResult, currentQuery string) int64 {
 	var score int64 = 0
 
-	resultHash := setting.NewResultHash(pluginId, title, subTitle)
+	resultHash := resultScoreHash(pluginId, result)
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	actionResults, ok := woxSetting.ActionedResults.Get().Load(resultHash)
 	if !ok {
@@ -1012,28 +1779,72 @@ func (m *Manager) calculateResultScore(ctx context.Context, pluginId, title, sub
 }
 
 func (m *Manager) startSessionQueryCache(query Query) {
-	m.sessionQueryResultCache.Store(query.SessionId, newQueryResultSet(query))
-}
-
-func (m *Manager) getQueryResultSet(sessionId string) (*QueryResultSet, bool) {
-	return m.sessionQueryResultCache.Load(sessionId)
-}
-
-func (m *Manager) getQueryResultSetForQuery(query Query) (*QueryResultSet, bool) {
 	if query.Id == "" {
+		return
+	}
+
+	sessionQueries, _ := m.sessionQueryResultCache.LoadOrStore(query.SessionId, util.NewHashMap[string, *QueryResultSet]())
+
+	// Bug fix: a UI session can have multiple backend query pipelines in flight
+	// because WebSocket requests and plugin responses are handled concurrently.
+	// Store every query under its own query id so a late old query cannot erase
+	// the result cache required to send the newer query's final response.
+	sessionQueries.Store(query.Id, newQueryResultSet(query))
+	m.clearLazyResultIconsForSessionExcept(query.SessionId, query.Id)
+	m.pruneSessionQueryCache(sessionQueries, query.Id)
+}
+
+// pruneSessionQueryCache ensures the number of cached queries for a session does not exceed the defined maximum.·
+func (m *Manager) pruneSessionQueryCache(sessionQueries *util.HashMap[string, *QueryResultSet], keepQueryId string) {
+	if sessionQueries.Len() <= maxCachedQueriesPerSession {
+		return
+	}
+
+	type cachedQueryEntry struct {
+		queryId   string
+		startedAt int64
+	}
+	var entries []cachedQueryEntry
+	sessionQueries.Range(func(queryId string, set *QueryResultSet) bool {
+		if queryId != keepQueryId {
+			entries = append(entries, cachedQueryEntry{queryId: queryId, startedAt: set.StartedAt})
+		}
+		return true
+	})
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].startedAt < entries[j].startedAt
+	})
+
+	// Query caches are now keyed by query id, so without a small cap every typed
+	// character would leave a completed result set behind. Keep the newest sets
+	// plus the query that was just started; old non-current responses are still
+	// safe to drop because Flutter ignores them by query id.
+	for sessionQueries.Len() > maxCachedQueriesPerSession && len(entries) > 0 {
+		if entries[0].queryId == keepQueryId {
+			entries = entries[1:]
+			continue
+		}
+		sessionQueries.Delete(entries[0].queryId)
+		entries = entries[1:]
+	}
+}
+
+func (m *Manager) getQueryResultSet(sessionId string, queryId string) (*QueryResultSet, bool) {
+	if queryId == "" {
 		return nil, false
 	}
-	set, ok := m.sessionQueryResultCache.Load(query.SessionId)
+	sessionQueries, ok := m.sessionQueryResultCache.Load(sessionId)
 	if !ok {
 		return nil, false
 	}
-	if set.Query.Id != query.Id {
-		return nil, false
-	}
-	return set, true
+	return sessionQueries.Load(queryId)
 }
 
-func (m *Manager) storeQueryResult(ctx context.Context, pluginInstance *Instance, query Query, resultOriginal QueryResult) {
+func (m *Manager) getQueryResultSetForQuery(query Query) (*QueryResultSet, bool) {
+	return m.getQueryResultSet(query.SessionId, query.Id)
+}
+
+func (m *Manager) storeQueryResult(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, resultOriginal QueryResult) {
 	if query.Id == "" {
 		logger.Warn(ctx, "query id is empty, skip result cache")
 		return
@@ -1052,26 +1863,320 @@ func (m *Manager) storeQueryResult(ctx context.Context, pluginInstance *Instance
 		Result:         resultOriginal,
 		PluginInstance: pluginInstance,
 		Query:          query,
+		Layout:         layout,
 	})
 
+}
+
+func (m *Manager) clearLazyResultIconsForSessionExcept(sessionId string, keepQueryId string) {
+	if sessionId == "" {
+		return
+	}
+
+	// Lazy image tokens are scoped to the polished query result that created them.
+	// When the same launcher session starts a newer query, old tokens should stop
+	// resolving so a late Flutter image request cannot hydrate an icon for stale UI.
+	var tokensToDelete []string
+	m.lazyResultIcons.Range(func(token string, entry *lazyResultIconEntry) bool {
+		if entry != nil && entry.SessionId == sessionId && entry.QueryId != keepQueryId {
+			tokensToDelete = append(tokensToDelete, token)
+		}
+		return true
+	})
+	for _, token := range tokensToDelete {
+		m.lazyResultIcons.Delete(token)
+	}
+}
+
+func (m *Manager) convertResultIcon(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, resultId string, resultTitle string, icon common.WoxImage) common.WoxImage {
+	return m.convertResultIconWithRecorder(ctx, pluginInstance, query, layout, resultId, resultTitle, icon, nil)
+}
+
+// convertResultIconWithRecorder lets the finalize hot path aggregate icon conversion diagnostics instead of logging inside each conversion.
+func (m *Manager) convertResultIconWithRecorder(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, resultId string, resultTitle string, icon common.WoxImage, recorder func(timetracking.IconConversionDiagnostics, timetracking.IconConversionTimingSummary)) common.WoxImage {
+	resultIconSize := m.getResultIconSizeForQuery(pluginInstance, query, layout)
+	pluginDirectory := ""
+	if pluginInstance != nil {
+		pluginDirectory = pluginInstance.PluginDirectory
+	}
+
+	diagnostics := timetracking.IconConversionDiagnostics{}
+	if recorder != nil {
+		diagnostics = timetracking.IconConversionDiagnostics{
+			Purpose:     "result_icon",
+			QueryId:     query.Id,
+			Plugin:      queryDiagnosticPluginLabel(pluginInstance),
+			ResultId:    resultId,
+			ResultTitle: resultTitle,
+			Recorder:    recorder,
+		}
+	}
+	convertedIcon := common.ConvertIconWithSizeMaybeLazyWithDiagnostics(ctx, icon, pluginDirectory, resultIconSize, diagnostics)
+	if convertedIcon.ImageType != common.WoxImageTypeLazyLoad {
+		return convertedIcon
+	}
+
+	// Lazy load markers are returned when the plugin-provided icon is too large to send directly through the WebSocket. They contain the original source plus a token that can be used to retrieve the converted thumbnail later. If parsing fails, fall back to returning the lazy marker itself so at least some icon gets to Flutter instead of nothing.
+	payload, payloadErr := common.ParseWoxLazyLoadImagePayload(convertedIcon)
+	if payloadErr != nil || payload.Source == nil || payload.Source.IsEmpty() {
+		return convertedIcon
+	}
+
+	targetSize := payload.TargetSize
+	if targetSize <= 0 {
+		targetSize = resultIconSize
+	}
+	// Result icon conversion is the only place that has both plugin path context
+	// and stable result/query IDs. Common returns only a source-bearing lazy marker;
+	// manager owns token registration because it also owns the result cache.
+	registeredIcon := m.registerLazyResultIcon(ctx, pluginInstance, query, resultId, *payload.Source, pluginDirectory, targetSize)
+	if !registeredIcon.IsEmpty() {
+		return registeredIcon
+	}
+
+	// If a result cannot be tokenized, keep old behavior instead of leaking an
+	// unregistered lazy marker to Flutter.
+	if recorder != nil {
+		diagnostics.Purpose = "result_icon_lazy_fallback"
+		return common.ConvertIconWithSizeWithDiagnostics(ctx, *payload.Source, pluginDirectory, targetSize, diagnostics)
+	}
+	return common.ConvertIconWithSize(ctx, *payload.Source, pluginDirectory, targetSize)
+}
+
+func (m *Manager) registerLazyResultIcon(ctx context.Context, pluginInstance *Instance, query Query, resultId string, normalized common.WoxImage, pluginDirectory string, size int) common.WoxImage {
+	if query.SessionId == "" || query.Id == "" || resultId == "" {
+		return common.WoxImage{}
+	}
+
+	// Store the original normalized image, not a pre-decoded bitmap. The expensive
+	// decode/crop/resize work is intentionally deferred until Flutter asks for this
+	// token from a visible result image widget.
+	token := uuid.NewString()
+	m.lazyResultIcons.Store(token, &lazyResultIconEntry{
+		SessionId:       query.SessionId,
+		QueryId:         query.Id,
+		ResultId:        resultId,
+		OriginalIcon:    normalized,
+		PluginDirectory: pluginDirectory,
+		TargetSize:      size,
+		CreatedAt:       util.GetSystemTimestamp(),
+	})
+
+	pluginName := "<unknown>"
+	if pluginInstance != nil {
+		pluginName = pluginInstance.GetName(ctx)
+	}
+	logger.Debug(ctx, fmt.Sprintf("<%s> result(%s) icon deferred as lazyloadimage, size: %d", pluginName, resultId, size))
+	return common.NewWoxImageLazyLoad(token, common.ImageThumbnailPlaceholderIcon, size)
+}
+
+func (m *Manager) LoadLazyResultIcon(ctx context.Context, token string) (common.WoxImage, error) {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return common.ImageThumbnailPlaceholderIcon, fmt.Errorf("lazy image token is empty")
+	}
+
+	entry, found := m.lazyResultIcons.Load(token)
+	if !found || entry == nil {
+		return common.ImageThumbnailPlaceholderIcon, fmt.Errorf("lazy image token not found")
+	}
+
+	resultCache, cacheFound := m.findResultCacheInSession(entry.SessionId, entry.QueryId, entry.ResultId)
+	if !cacheFound {
+		m.lazyResultIcons.Delete(token)
+		return common.ImageThumbnailPlaceholderIcon, fmt.Errorf("lazy image result is no longer cached")
+	}
+
+	if resultCache.Result.Icon.ImageType != common.WoxImageTypeLazyLoad {
+		m.lazyResultIcons.Delete(token)
+		if !resultCache.Result.Icon.IsEmpty() {
+			return resultCache.Result.Icon, nil
+		}
+		return common.ImageThumbnailPlaceholderIcon, nil
+	}
+	payload, payloadErr := common.ParseWoxLazyLoadImagePayload(resultCache.Result.Icon)
+	if payloadErr != nil || payload.Token != token {
+		m.lazyResultIcons.Delete(token)
+		return common.ImageThumbnailPlaceholderIcon, fmt.Errorf("lazy image token is stale")
+	}
+
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	if entry.resolved {
+		return entry.icon, nil
+	}
+
+	startedAt := util.GetSystemTimestamp()
+	// Lazy load requests intentionally use the original synchronous converter
+	// because this path runs after Flutter has built an image widget for the
+	// result. That keeps the query response fast while still reusing the existing
+	// crop/resize/cache behavior for the actual thumbnail artifact.
+	converted := common.ConvertIconWithSize(ctx, entry.OriginalIcon, entry.PluginDirectory, entry.TargetSize)
+	if converted.IsEmpty() || converted.ImageType == common.WoxImageTypeLazyLoad {
+		converted = common.ImageThumbnailPlaceholderIcon
+	}
+
+	entry.icon = converted
+	entry.resolved = true
+	resultCache.Result.Icon = converted
+	logger.Debug(ctx, fmt.Sprintf("lazy result icon hydrated, result: %s, elapsed: %dms", entry.ResultId, util.GetSystemTimestamp()-startedAt))
+	return converted, nil
+}
+
+func (m *Manager) getCachedLayoutForPluginQuery(ctx context.Context, pluginInstance *Instance, query Query) QueryLayout {
+	if pluginInstance == nil {
+		return QueryLayout{}
+	}
+
+	set, ok := m.getQueryResultSetForQuery(query)
+	if !ok {
+		return m.buildMetadataBackedQueryLayout(ctx, pluginInstance, query)
+	}
+
+	var cachedLayout QueryLayout
+	set.Results.Range(func(_ string, resultCache *QueryResultCache) bool {
+		if resultCache == nil || resultCache.PluginInstance == nil {
+			return true
+		}
+		if resultCache.PluginInstance.Metadata.Id != pluginInstance.Metadata.Id {
+			return true
+		}
+		cachedLayout = resultCache.Layout
+		return false
+	})
+	if cachedLayout.GridLayout != nil || cachedLayout.Icon != nil || cachedLayout.ResultPreviewWidthRatio != nil {
+		return cachedLayout
+	}
+
+	// PushResults and late updates do not carry a new layout payload. Reusing the
+	// cached QueryResponse layout keeps dynamically declared grid results at the
+	// same icon size; metadata remains only as the legacy fallback when nothing
+	// from the current query has been cached yet.
+	return m.buildMetadataBackedQueryLayout(ctx, pluginInstance, query)
+}
+
+// RecordQueryResultQueryElapsed stores backend receive and batch queue timings for debug tails.
+func (m *Manager) RecordQueryResultQueryElapsed(sessionId string, queryId string, results []QueryResultUI, elapsedMs int64, batchQueueElapsedMs int64) {
+	if sessionId == "" || queryId == "" || len(results) == 0 {
+		return
+	}
+
+	set, found := m.getQueryResultSet(sessionId, queryId)
+	if !found {
+		return
+	}
+
+	for _, result := range results {
+		if result.Id == "" {
+			continue
+		}
+
+		resultCache, ok := set.Results.Load(result.Id)
+		if !ok {
+			continue
+		}
+		if !resultCache.QueryElapsedSet {
+			resultCache.QueryElapsed = elapsedMs
+			resultCache.QueryElapsedSet = true
+		}
+
+		if !resultCache.BatchQueueElapsedSet {
+			resultCache.BatchQueueElapsed = batchQueueElapsedMs
+			resultCache.BatchQueueElapsedSet = true
+		}
+	}
+}
+
+// RecordQueryResultPluginQueryElapsed stores the raw Plugin.Query duration for debug tails.
+func (m *Manager) RecordQueryResultPluginQueryElapsed(sessionId string, queryId string, resultId string, elapsedMs int64) {
+	if sessionId == "" || queryId == "" || resultId == "" {
+		return
+	}
+
+	resultCache, found := m.findResultCacheInSession(sessionId, queryId, resultId)
+	if !found {
+		return
+	}
+	if resultCache.PluginQueryElapsedSet {
+		return
+	}
+
+	resultCache.PluginQueryElapsed = elapsedMs
+	resultCache.PluginQueryElapsedSet = true
+}
+
+func (m *Manager) RecordQueryResultFlushBatch(sessionId string, queryId string, results []QueryResultUI, batch int) {
+	if sessionId == "" || queryId == "" || len(results) == 0 || batch <= 0 {
+		return
+	}
+
+	set, found := m.getQueryResultSet(sessionId, queryId)
+	if !found {
+		return
+	}
+
+	for _, result := range results {
+		if result.Id == "" {
+			continue
+		}
+
+		resultCache, ok := set.Results.Load(result.Id)
+		if !ok {
+			continue
+		}
+		if resultCache.FlushBatch > 0 {
+			continue
+		}
+
+		resultCache.FlushBatch = batch
+	}
+}
+
+func (m *Manager) GetQueryResultDebugInfo(sessionId string, queryId string, resultId string) (batch int, queryElapsed int64, batchQueueElapsed int64, batchQueueElapsedSet bool, pluginQueryElapsed int64, pluginQueryElapsedSet bool, ok bool) {
+	resultCache, found := m.findResultCacheInSession(sessionId, queryId, resultId)
+	if !found {
+		return 0, 0, 0, false, 0, false, false
+	}
+	if resultCache.FlushBatch <= 0 || !resultCache.QueryElapsedSet {
+		return 0, 0, 0, false, 0, false, false
+	}
+
+	return resultCache.FlushBatch, resultCache.QueryElapsed, resultCache.BatchQueueElapsed, resultCache.BatchQueueElapsedSet, resultCache.PluginQueryElapsed, resultCache.PluginQueryElapsedSet, true
 }
 
 func (m *Manager) findResultCacheInSession(sessionId string, queryId string, resultId string) (*QueryResultCache, bool) {
 	if resultId == "" {
 		return nil, false
 	}
-	set, found := m.sessionQueryResultCache.Load(sessionId)
+	if queryId != "" {
+		set, found := m.getQueryResultSet(sessionId, queryId)
+		if !found {
+			return nil, false
+		}
+		resultCache, found := set.Results.Load(resultId)
+		if !found {
+			return nil, false
+		}
+		return resultCache, true
+	}
+
+	sessionQueries, found := m.sessionQueryResultCache.Load(sessionId)
 	if !found {
 		return nil, false
 	}
-	if queryId != "" && set.Query.Id != queryId {
+	var foundCache *QueryResultCache
+	sessionQueries.Range(func(_ string, set *QueryResultSet) bool {
+		resultCache, found := set.Results.Load(resultId)
+		if !found {
+			return true
+		}
+		foundCache = resultCache
+		return false
+	})
+	if foundCache == nil {
 		return nil, false
 	}
-	resultCache, found := set.Results.Load(resultId)
-	if !found {
-		return nil, false
-	}
-	return resultCache, true
+	return foundCache, true
 }
 
 func (m *Manager) findResultCacheById(resultId string) (*QueryResultCache, bool) {
@@ -1080,12 +2185,18 @@ func (m *Manager) findResultCacheById(resultId string) (*QueryResultCache, bool)
 	}
 
 	var foundCache *QueryResultCache
-	m.sessionQueryResultCache.Range(func(_ string, set *QueryResultSet) bool {
-		resultCache, found := set.Results.Load(resultId)
-		if !found {
+	m.sessionQueryResultCache.Range(func(_ string, sessionQueries *util.HashMap[string, *QueryResultSet]) bool {
+		sessionQueries.Range(func(_ string, set *QueryResultSet) bool {
+			resultCache, found := set.Results.Load(resultId)
+			if !found {
+				return true
+			}
+			foundCache = resultCache
+			return false
+		})
+		if foundCache == nil {
 			return true
 		}
-		foundCache = resultCache
 		return false
 	})
 
@@ -1112,9 +2223,9 @@ func (m *Manager) GetSessionIdByQueryId(queryId string) string {
 		return ""
 	}
 	var sessionId string
-	m.sessionQueryResultCache.Range(func(_ string, set *QueryResultSet) bool {
-		if set.Query.Id == queryId {
-			sessionId = set.Query.SessionId
+	m.sessionQueryResultCache.Range(func(candidateSessionId string, sessionQueries *util.HashMap[string, *QueryResultSet]) bool {
+		if _, ok := sessionQueries.Load(queryId); ok {
+			sessionId = candidateSessionId
 			return false
 		}
 		return true
@@ -1138,20 +2249,17 @@ func (m *Manager) GetQueryInfoByResultId(resultId string) (string, string) {
 	return resultCache.Query.SessionId, resultCache.Query.Id
 }
 
-func (m *Manager) IsCurrentQuery(sessionId string, queryId string) bool {
-	if queryId == "" {
-		return false
-	}
-	set, found := m.sessionQueryResultCache.Load(sessionId)
-	if !found {
-		return false
-	}
-	return set.Query.Id == queryId
-}
-
 func (m *Manager) buildResultUI(resultCache *QueryResultCache, queryId string) QueryResultUI {
 	uiResult := resultCache.Result
-	if !uiResult.Preview.IsEmpty() && uiResult.Preview.PreviewType != WoxPreviewTypeRemote && len(uiResult.Preview.PreviewData) > previewDataMaxSize {
+	// Core-owned interactive previews must keep their concrete preview type in the
+	// result payload. If they were wrapped as remote previews, Flutter could not
+	// choose the dedicated fullscreen/editing surface before loading the preview.
+	if !uiResult.Preview.IsEmpty() &&
+		uiResult.Preview.PreviewType != WoxPreviewTypeRemote &&
+		uiResult.Preview.PreviewType != WoxPreviewTypeQueryRequirementSettings &&
+		uiResult.Preview.PreviewType != WoxPreviewTypeThemeEdit &&
+		uiResult.Preview.PreviewType != WoxPreviewTypeTriggerKeywordConflict &&
+		len(uiResult.Preview.PreviewData) > previewDataMaxSize {
 		uiResult.Preview = WoxPreview{
 			PreviewType: WoxPreviewTypeRemote,
 			PreviewData: fmt.Sprintf("/preview?sessionId=%s&queryId=%s&id=%s", resultCache.Query.SessionId, queryId, uiResult.Id),
@@ -1162,29 +2270,120 @@ func (m *Manager) buildResultUI(resultCache *QueryResultCache, queryId string) Q
 	return resultUI
 }
 
-// BuildQueryResultsSnapshot builds a snapshot of query results for the given session and query id.
+func normalizeQueryResultDragData(dragData *QueryResultDragData) *QueryResultDragData {
+	if dragData == nil || dragData.Type != QueryResultDragDataTypeFiles {
+		return nil
+	}
+
+	files := make([]string, 0, len(dragData.Files))
+	for _, rawPath := range dragData.Files {
+		cleanPath := filepath.Clean(strings.TrimSpace(rawPath))
+		if cleanPath == "." || !filepath.IsAbs(cleanPath) {
+			continue
+		}
+		if _, err := os.Stat(cleanPath); err != nil {
+			continue
+		}
+		files = append(files, cleanPath)
+	}
+	if len(files) == 0 {
+		return nil
+	}
+
+	return &QueryResultDragData{
+		Type:  QueryResultDragDataTypeFiles,
+		Files: files,
+	}
+}
+
+// Equal scores must still produce a deterministic order because the result cache is backed by a map.
+func compareQueryResultCachesForDisplay(a *QueryResultCache, b *QueryResultCache) int {
+	switch {
+	case a.Result.Score > b.Result.Score:
+		return -1
+	case a.Result.Score < b.Result.Score:
+		return 1
+	}
+
+	if diff := strings.Compare(a.Result.Title, b.Result.Title); diff != 0 {
+		return diff
+	}
+	if diff := strings.Compare(a.Result.SubTitle, b.Result.SubTitle); diff != 0 {
+		return diff
+	}
+
+	pluginIdA := ""
+	if a.PluginInstance != nil {
+		pluginIdA = a.PluginInstance.Metadata.Id
+	}
+	pluginIdB := ""
+	if b.PluginInstance != nil {
+		pluginIdB = b.PluginInstance.Metadata.Id
+	}
+	if diff := strings.Compare(pluginIdA, pluginIdB); diff != 0 {
+		return diff
+	}
+
+	return strings.Compare(a.Result.Id, b.Result.Id)
+}
+
+// BuildQueryResultsSnapshot builds a snapshot of all cached query results for the given session and query id.
 // Results are grouped by their group name, and both groups and results within groups are sorted by score.
 func (m *Manager) BuildQueryResultsSnapshot(sessionId string, queryId string) []QueryResultUI {
+	return m.buildQueryResultsSnapshot(sessionId, queryId, nil)
+}
+
+// BuildQueryResultsSnapshotForResultIds builds a query snapshot limited to results accepted by the query runner.
+func (m *Manager) BuildQueryResultsSnapshotForResultIds(sessionId string, queryId string, resultIds []string) []QueryResultUI {
+	if len(resultIds) == 0 {
+		return []QueryResultUI{}
+	}
+
+	includedResultIds := make(map[string]struct{}, len(resultIds))
+	for _, resultId := range resultIds {
+		if resultId == "" {
+			continue
+		}
+		includedResultIds[resultId] = struct{}{}
+	}
+	if len(includedResultIds) == 0 {
+		return []QueryResultUI{}
+	}
+
+	return m.buildQueryResultsSnapshot(sessionId, queryId, func(resultId string) bool {
+		_, ok := includedResultIds[resultId]
+		return ok
+	})
+}
+
+func (m *Manager) buildQueryResultsSnapshot(sessionId string, queryId string, shouldIncludeResult func(string) bool) []QueryResultUI {
 	if queryId == "" {
 		return []QueryResultUI{}
 	}
-	set, found := m.sessionQueryResultCache.Load(sessionId)
-	if !found || set.Query.Id != queryId {
+	// Bug fix: snapshot lookup must use the query id, not the session's latest
+	// query. Multiple backend query pipelines can finish out of order, while
+	// Flutter filters visibility by QueryId after the response is delivered.
+	set, found := m.getQueryResultSet(sessionId, queryId)
+	if !found {
 		return []QueryResultUI{}
 	}
 
-	var results []QueryResultUI
-	set.Results.Range(func(_ string, resultCache *QueryResultCache) bool {
-		results = append(results, m.buildResultUI(resultCache, queryId))
+	var resultCaches []*QueryResultCache
+	set.Results.Range(func(resultId string, resultCache *QueryResultCache) bool {
+		if shouldIncludeResult != nil && !shouldIncludeResult(resultId) {
+			return true
+		}
+		resultCaches = append(resultCaches, resultCache)
 		return true
 	})
 
-	if len(results) == 0 {
+	if len(resultCaches) == 0 {
 		return []QueryResultUI{}
 	}
 
 	groupScores := map[string]int64{}
-	for _, result := range results {
+	for _, resultCache := range resultCaches {
+		result := resultCache.Result
 		if score, ok := groupScores[result.Group]; !ok || result.GroupScore > score {
 			groupScores[result.Group] = result.GroupScore
 		}
@@ -1203,20 +2402,21 @@ func (m *Manager) BuildQueryResultsSnapshot(sessionId string, queryId string) []
 		return scoreA > scoreB
 	})
 
-	groupedResults := make(map[string][]QueryResultUI)
-	for _, result := range results {
-		groupedResults[result.Group] = append(groupedResults[result.Group], result)
+	groupedResults := make(map[string][]*QueryResultCache)
+	for _, result := range resultCaches {
+		group := result.Result.Group
+		groupedResults[group] = append(groupedResults[group], result)
 	}
 
 	for group := range groupedResults {
 		groupResults := groupedResults[group]
-		sort.SliceStable(groupResults, func(i, j int) bool {
-			return groupResults[i].Score > groupResults[j].Score
+		sort.Slice(groupResults, func(i, j int) bool {
+			return compareQueryResultCachesForDisplay(groupResults[i], groupResults[j]) < 0
 		})
 		groupedResults[group] = groupResults
 	}
 
-	finalResults := make([]QueryResultUI, 0, len(results)+len(groups))
+	finalResults := make([]QueryResultUI, 0, len(resultCaches)+len(groups))
 	for _, group := range groups {
 		groupResults := groupedResults[group]
 		if len(groupResults) == 0 {
@@ -1238,13 +2438,36 @@ func (m *Manager) BuildQueryResultsSnapshot(sessionId string, queryId string) []
 				IsGroup:    true,
 			})
 		}
-		finalResults = append(finalResults, groupResults...)
+		for _, resultCache := range groupResults {
+			finalResults = append(finalResults, m.buildResultUI(resultCache, queryId))
+		}
 	}
 
 	return finalResults
 }
 
-func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, query Query, result QueryResult) QueryResult {
+func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, result QueryResult) QueryResult {
+	result, timing := m.polishResult(ctx, pluginInstance, query, layout, result, false)
+	m.logPolishResultTiming(ctx, query, queryDiagnosticPluginLabel(pluginInstance), result, timing)
+	return result
+}
+
+func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, result QueryResult, collectIconTiming bool) (QueryResult, timetracking.ResultPolishTiming) {
+	polishStart := util.GetSystemTimestamp()
+	polishTimingStart := time.Now()
+	var IconConversion timetracking.IconConversionTimingSummary
+	var IconConversionSet bool
+	var iconRecorder func(timetracking.IconConversionDiagnostics, timetracking.IconConversionTimingSummary)
+	if collectIconTiming {
+		iconRecorder = func(_ timetracking.IconConversionDiagnostics, timing timetracking.IconConversionTimingSummary) {
+			IconConversion = timing
+			IconConversionSet = true
+		}
+	}
+	actionSetupStart := util.GetSystemTimestamp()
+	actionSetupTimingStart := time.Now()
+	actionDefaultsStart := util.GetSystemTimestamp()
+	actionDefaultsTimingStart := time.Now()
 	// set default id
 	if result.Id == "" {
 		result.Id = uuid.NewString()
@@ -1265,14 +2488,62 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 			}
 		}
 	}
-	// convert icon
-	result.Icon = common.ConvertIcon(ctx, result.Icon, pluginInstance.PluginDirectory)
+	ActionDefaultsCost := util.GetSystemTimestamp() - actionDefaultsStart
+	ActionDefaultsCostUs := time.Since(actionDefaultsTimingStart).Microseconds()
+	actionIconStart := util.GetSystemTimestamp()
+	actionIconTimingStart := time.Now()
+	ActionIconCount := 0
+	for actionIndex := range result.Actions {
+		if !result.Actions[actionIndex].Icon.IsEmpty() {
+			ActionIconCount++
+			result.Actions[actionIndex].Icon = common.ConvertIcon(ctx, result.Actions[actionIndex].Icon, pluginInstance.PluginDirectory)
+		}
+	}
+	ActionIconCost := util.GetSystemTimestamp() - actionIconStart
+	ActionIconCostUs := time.Since(actionIconTimingStart).Microseconds()
+	actionCallbackStart := util.GetSystemTimestamp()
+	actionCallbackTimingStart := time.Now()
+	m.attachExternalActionCallbacks(pluginInstance, result.Actions)
+	ActionCallbackCost := util.GetSystemTimestamp() - actionCallbackStart
+	ActionCallbackCostUs := time.Since(actionCallbackTimingStart).Microseconds()
+	ActionSetupCost := util.GetSystemTimestamp() - actionSetupStart
+	ActionSetupCostUs := time.Since(actionSetupTimingStart).Microseconds()
+
+	visualStart := util.GetSystemTimestamp()
+	visualTimingStart := time.Now()
+	// Result icons are converted for the visual surface selected by metadata. The old
+	// hard-coded list size made grid icons blurry because the UI had to scale 40px
+	// raster caches into much larger cells.
+	ResultIconType := result.Icon.ImageType
+	resultIconStart := util.GetSystemTimestamp()
+	resultIconTimingStart := time.Now()
+	result.Icon = m.convertResultIconWithRecorder(ctx, pluginInstance, query, layout, result.Id, result.Title, result.Icon, iconRecorder)
+	ResultIconCost := util.GetSystemTimestamp() - resultIconStart
+	ResultIconCostUs := time.Since(resultIconTimingStart).Microseconds()
+	ConvertedResultIconType := result.Icon.ImageType
+	dragStart := util.GetSystemTimestamp()
+	dragTimingStart := time.Now()
+	result.DragData = normalizeQueryResultDragData(result.DragData)
+	DragCost := util.GetSystemTimestamp() - dragStart
+	DragCostUs := time.Since(dragTimingStart).Microseconds()
+	tailIconStart := util.GetSystemTimestamp()
+	tailIconTimingStart := time.Now()
+	TailImageCount := 0
 	for i := range result.Tails {
 		if result.Tails[i].Type == QueryResultTailTypeImage {
+			TailImageCount++
 			result.Tails[i].Image = common.ConvertIcon(ctx, result.Tails[i].Image, pluginInstance.PluginDirectory)
 		}
 	}
+	TailIconCost := util.GetSystemTimestamp() - tailIconStart
+	TailIconCostUs := time.Since(tailIconTimingStart).Microseconds()
+	VisualCost := util.GetSystemTimestamp() - visualStart
+	VisualCostUs := time.Since(visualTimingStart).Microseconds()
 
+	previewStart := util.GetSystemTimestamp()
+	previewTimingStart := time.Now()
+	previewDefaultStart := util.GetSystemTimestamp()
+	previewDefaultTimingStart := time.Now()
 	// add default preview for selection query if no preview is set
 	if query.Type == QueryTypeSelection && result.Preview.PreviewType == "" {
 		if query.Selection.Type == selection.SelectionTypeText {
@@ -1283,16 +2554,38 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 		}
 		if query.Selection.Type == selection.SelectionTypeFile {
 			result.Preview = WoxPreview{
-				PreviewType: WoxPreviewTypeMarkdown,
-				PreviewData: m.formatFileListPreview(ctx, query.Selection.FilePaths),
+				// Selection-file preview is now expressed as generic list rows so
+				// the same preview type can serve progress/status workflows too.
+				PreviewType: WoxPreviewTypeList,
+				PreviewData: m.buildSelectionFileListPreviewData(ctx, query.Selection.FilePaths),
+				PreviewTags: []WoxPreviewTag{
+					{Label: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "selection_files_count_value"), len(query.Selection.FilePaths)), Tooltip: "i18n:selection_files_count"},
+				},
 			}
 		}
 	}
+	PreviewDefaultCost := util.GetSystemTimestamp() - previewDefaultStart
+	PreviewDefaultCostUs := time.Since(previewDefaultTimingStart).Microseconds()
+	previewNormalizeStart := util.GetSystemTimestamp()
+	previewNormalizeTimingStart := time.Now()
+	result.Preview = m.normalizeListPreviewData(ctx, pluginInstance, result.Preview)
+	PreviewNormalizeCost := util.GetSystemTimestamp() - previewNormalizeStart
+	PreviewNormalizeCostUs := time.Since(previewNormalizeTimingStart).Microseconds()
+	PreviewCost := util.GetSystemTimestamp() - previewStart
+	PreviewCostUs := time.Since(previewTimingStart).Microseconds()
 
+	translationStart := util.GetSystemTimestamp()
+	translationTimingStart := time.Now()
+	translationTextStart := util.GetSystemTimestamp()
+	translationTextTimingStart := time.Now()
 	// translate title
 	result.Title = m.translatePlugin(ctx, pluginInstance, result.Title)
 	// translate subtitle
 	result.SubTitle = m.translatePlugin(ctx, pluginInstance, result.SubTitle)
+	TranslationTextCost := util.GetSystemTimestamp() - translationTextStart
+	TranslationTextCostUs := time.Since(translationTextTimingStart).Microseconds()
+	translationTailStart := util.GetSystemTimestamp()
+	translationTailTimingStart := time.Now()
 	// translate tail text and assign IDs if not present
 	for i := range result.Tails {
 		if result.Tails[i].Id == "" {
@@ -1301,14 +2594,19 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 		if result.Tails[i].Type == QueryResultTailTypeText {
 			result.Tails[i].Text = m.translatePlugin(ctx, pluginInstance, result.Tails[i].Text)
 		}
+		if result.Tails[i].Tooltip != "" {
+			result.Tails[i].Tooltip = m.translatePlugin(ctx, pluginInstance, result.Tails[i].Tooltip)
+		}
 	}
-	// translate preview properties
-	var previewProperties = make(map[string]string)
-	for key, value := range result.Preview.PreviewProperties {
-		translatedKey := m.translatePlugin(ctx, pluginInstance, key)
-		previewProperties[translatedKey] = value
-	}
-	result.Preview.PreviewProperties = previewProperties
+	TranslationTailCost := util.GetSystemTimestamp() - translationTailStart
+	TranslationTailCostUs := time.Since(translationTailTimingStart).Microseconds()
+	translationPreviewMetaStart := util.GetSystemTimestamp()
+	translationPreviewMetaTimingStart := time.Now()
+	result.Preview = m.normalizePreviewMetadata(ctx, pluginInstance, result.Preview)
+	TranslationPreviewMetaCost := util.GetSystemTimestamp() - translationPreviewMetaStart
+	TranslationPreviewMetaCostUs := time.Since(translationPreviewMetaTimingStart).Microseconds()
+	translationActionStart := util.GetSystemTimestamp()
+	translationActionTimingStart := time.Now()
 	// translate action names
 	for actionIndex := range result.Actions {
 		result.Actions[actionIndex].Name = m.translatePlugin(ctx, pluginInstance, result.Actions[actionIndex].Name)
@@ -1320,13 +2618,29 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 			}
 		}
 	}
+	TranslationActionCost := util.GetSystemTimestamp() - translationActionStart
+	TranslationActionCostUs := time.Since(translationActionTimingStart).Microseconds()
+	translationPreviewDataStart := util.GetSystemTimestamp()
+	translationPreviewDataTimingStart := time.Now()
 	// translate preview data if preview type is text
 	if result.Preview.PreviewType == WoxPreviewTypeText || result.Preview.PreviewType == WoxPreviewTypeMarkdown {
 		result.Preview.PreviewData = m.translatePlugin(ctx, pluginInstance, result.Preview.PreviewData)
 	}
+	TranslationPreviewDataCost := util.GetSystemTimestamp() - translationPreviewDataStart
+	TranslationPreviewDataCostUs := time.Since(translationPreviewDataTimingStart).Microseconds()
+	translationGroupStart := util.GetSystemTimestamp()
+	translationGroupTimingStart := time.Now()
 	// translate group name
 	result.Group = m.translatePlugin(ctx, pluginInstance, result.Group)
+	TranslationGroupCost := util.GetSystemTimestamp() - translationGroupStart
+	TranslationGroupCostUs := time.Since(translationGroupTimingStart).Microseconds()
+	TranslationCost := util.GetSystemTimestamp() - translationStart
+	TranslationCostUs := time.Since(translationTimingStart).Microseconds()
 
+	actionNormalizeStart := util.GetSystemTimestamp()
+	actionNormalizeTimingStart := time.Now()
+	actionDefaultStart := util.GetSystemTimestamp()
+	actionDefaultTimingStart := time.Now()
 	// set first action as default if no default action is set
 	defaultActionCount := lo.CountBy(result.Actions, func(item QueryResultAction) bool {
 		return item.IsDefault
@@ -1337,12 +2651,20 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 			result.Actions[0].Hotkey = "Enter"
 		}
 	}
+	ActionDefaultCost := util.GetSystemTimestamp() - actionDefaultStart
+	ActionDefaultCostUs := time.Since(actionDefaultTimingStart).Microseconds()
 
+	actionSortStart := util.GetSystemTimestamp()
+	actionSortTimingStart := time.Now()
 	//move default action to first one of the actions
 	sort.Slice(result.Actions, func(i, j int) bool {
 		return result.Actions[i].IsDefault
 	})
+	ActionSortCost := util.GetSystemTimestamp() - actionSortStart
+	ActionSortCostUs := time.Since(actionSortTimingStart).Microseconds()
 
+	hotkeyNormalizeStart := util.GetSystemTimestamp()
+	hotkeyNormalizeTimingStart := time.Now()
 	// normalize hotkeys for all actions
 	for actionIndex := range result.Actions {
 		var action = result.Actions[actionIndex]
@@ -1355,33 +2677,70 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 		// normalize hotkey for platform specific modifiers
 		result.Actions[actionIndex].Hotkey = normalizeHotkeyForPlatform(result.Actions[actionIndex].Hotkey)
 	}
+	HotkeyNormalizeCost := util.GetSystemTimestamp() - hotkeyNormalizeStart
+	HotkeyNormalizeCostUs := time.Since(hotkeyNormalizeTimingStart).Microseconds()
+	ActionNormalizeCost := util.GetSystemTimestamp() - actionNormalizeStart
+	ActionNormalizeCostUs := time.Since(actionNormalizeTimingStart).Microseconds()
 
-	// if query is input and trigger keyword is global, disable preview and group
-	if query.IsGlobalQuery() {
+	previewRemoteStart := util.GetSystemTimestamp()
+	previewRemoteTimingStart := time.Now()
+	previewGlobalStart := util.GetSystemTimestamp()
+	previewGlobalTimingStart := time.Now()
+	// If query is input and trigger keyword is global, disable preview and group.
+	if shouldHidePreviewForGlobalQuery(query, result.Preview) {
 		result.Preview = WoxPreview{}
 		result.Group = ""
 		result.GroupScore = 0
 	}
+	PreviewGlobalCost := util.GetSystemTimestamp() - previewGlobalStart
+	PreviewGlobalCostUs := time.Since(previewGlobalTimingStart).Microseconds()
 
 	// store preview for ui invoke later
 	// because preview may contain some heavy data (E.g. image or large text),
 	// we will store preview in cache and only send preview to ui when user select the result
 	var originalPreview = result.Preview
-	if !result.Preview.IsEmpty() && result.Preview.PreviewType != WoxPreviewTypeRemote && len(result.Preview.PreviewData) > previewDataMaxSize {
+	previewWrapStart := util.GetSystemTimestamp()
+	previewWrapTimingStart := time.Now()
+	// Core-owned interactive previews intentionally bypass remote wrapping so the UI
+	// can detect the type before deciding whether grid previews are allowed.
+	if !result.Preview.IsEmpty() &&
+		result.Preview.PreviewType != WoxPreviewTypeRemote &&
+		result.Preview.PreviewType != WoxPreviewTypeQueryRequirementSettings &&
+		result.Preview.PreviewType != WoxPreviewTypeThemeEdit &&
+		result.Preview.PreviewType != WoxPreviewTypeTriggerKeywordConflict &&
+		len(result.Preview.PreviewData) > previewDataMaxSize {
 		result.Preview = WoxPreview{
 			PreviewType: WoxPreviewTypeRemote,
 			PreviewData: fmt.Sprintf("/preview?sessionId=%s&queryId=%s&id=%s", query.SessionId, query.Id, result.Id),
 		}
 	}
+	PreviewWrapCost := util.GetSystemTimestamp() - previewWrapStart
+	PreviewWrapCostUs := time.Since(previewWrapTimingStart).Microseconds()
+	PreviewRemoteCost := util.GetSystemTimestamp() - previewRemoteStart
+	PreviewRemoteCostUs := time.Since(previewRemoteTimingStart).Microseconds()
 
-	ignoreAutoScore := pluginInstance.Metadata.IsSupportFeature(MetadataFeatureIgnoreAutoScore)
+	scoreStart := util.GetSystemTimestamp()
+	scoreTimingStart := time.Now()
+	result.Score = limitGlobalQueryPluginScore(query, result.Score)
+	scoreFeatureStart := util.GetSystemTimestamp()
+	scoreFeatureTimingStart := time.Now()
+	// ignoreAutoScore is a plugin-context control; global search still needs actioned-result ranking across providers.
+	ignoreAutoScore := !query.IsGlobalQuery() && pluginInstance.Metadata.IsSupportFeature(MetadataFeatureIgnoreAutoScore)
+	ScoreFeatureCost := util.GetSystemTimestamp() - scoreFeatureStart
+	ScoreFeatureCostUs := time.Since(scoreFeatureTimingStart).Microseconds()
+	autoScoreStart := util.GetSystemTimestamp()
+	autoScoreTimingStart := time.Now()
 	if !ignoreAutoScore {
-		score := m.calculateResultScore(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle, query.RawQuery)
+		score := m.calculateResultScore(ctx, pluginInstance.Metadata.Id, result, query.RawQuery)
 		if score > 0 {
 			logger.Debug(ctx, fmt.Sprintf("<%s> result(%s) add score: %d", pluginInstance.GetName(ctx), result.Title, score))
 			result.Score += score
 		}
 	}
+	AutoScoreCost := util.GetSystemTimestamp() - autoScoreStart
+	AutoScoreCostUs := time.Since(autoScoreTimingStart).Microseconds()
+	favoriteStart := util.GetSystemTimestamp()
+	favoriteTimingStart := time.Now()
 	// check if result is favorite result
 	// favorite result will not be affected by ignoreAutoScore setting, so we add score here
 	isFavorite := setting.GetSettingManager().IsPinedResult(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle)
@@ -1407,15 +2766,215 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 			})
 		}
 	}
+	FavoriteCost := util.GetSystemTimestamp() - favoriteStart
+	FavoriteCostUs := time.Since(favoriteTimingStart).Microseconds()
 
+	devScoreTailStart := util.GetSystemTimestamp()
+	devScoreTailTimingStart := time.Now()
+	result.Tails = m.appendDevScoreTail(ctx, result.Tails, result.Score)
+	DevScoreTailCost := util.GetSystemTimestamp() - devScoreTailStart
+	DevScoreTailCostUs := time.Since(devScoreTailTimingStart).Microseconds()
+	ScoreCost := util.GetSystemTimestamp() - scoreStart
+	ScoreCostUs := time.Since(scoreTimingStart).Microseconds()
+
+	cacheStart := util.GetSystemTimestamp()
+	cacheTimingStart := time.Now()
 	// Create cache at the end
 	resultCopy := result
 	// Because we may have replaced preview with remote preview
 	// we need to restore the original preview in the cache
 	resultCopy.Preview = originalPreview
-	m.storeQueryResult(ctx, pluginInstance, query, resultCopy)
+	m.storeQueryResult(ctx, pluginInstance, query, layout, resultCopy)
+	CacheCost := util.GetSystemTimestamp() - cacheStart
+	CacheCostUs := time.Since(cacheTimingStart).Microseconds()
+	polishCost := util.GetSystemTimestamp() - polishStart
+	polishCostUs := time.Since(polishTimingStart).Microseconds()
+	return result, timetracking.ResultPolishTiming{
+		TotalCost:                    polishCost,
+		TotalCostUs:                  polishCostUs,
+		ActionSetupCost:              ActionSetupCost,
+		ActionSetupCostUs:            ActionSetupCostUs,
+		ActionDefaultsCost:           ActionDefaultsCost,
+		ActionDefaultsCostUs:         ActionDefaultsCostUs,
+		ActionIconCost:               ActionIconCost,
+		ActionIconCostUs:             ActionIconCostUs,
+		ActionCallbackCost:           ActionCallbackCost,
+		ActionCallbackCostUs:         ActionCallbackCostUs,
+		ActionIconCount:              ActionIconCount,
+		VisualCost:                   VisualCost,
+		VisualCostUs:                 VisualCostUs,
+		ResultIconCost:               ResultIconCost,
+		ResultIconCostUs:             ResultIconCostUs,
+		ResultIconType:               ResultIconType,
+		ConvertedResultIconType:      ConvertedResultIconType,
+		IconConversion:               IconConversion,
+		IconConversionSet:            IconConversionSet,
+		DragCost:                     DragCost,
+		DragCostUs:                   DragCostUs,
+		TailIconCost:                 TailIconCost,
+		TailIconCostUs:               TailIconCostUs,
+		TailImageCount:               TailImageCount,
+		PreviewCost:                  PreviewCost,
+		PreviewCostUs:                PreviewCostUs,
+		PreviewDefaultCost:           PreviewDefaultCost,
+		PreviewDefaultCostUs:         PreviewDefaultCostUs,
+		PreviewNormalizeCost:         PreviewNormalizeCost,
+		PreviewNormalizeCostUs:       PreviewNormalizeCostUs,
+		TranslationCost:              TranslationCost,
+		TranslationCostUs:            TranslationCostUs,
+		TranslationTextCost:          TranslationTextCost,
+		TranslationTextCostUs:        TranslationTextCostUs,
+		TranslationTailCost:          TranslationTailCost,
+		TranslationTailCostUs:        TranslationTailCostUs,
+		TranslationPreviewMetaCost:   TranslationPreviewMetaCost,
+		TranslationPreviewMetaCostUs: TranslationPreviewMetaCostUs,
+		TranslationActionCost:        TranslationActionCost,
+		TranslationActionCostUs:      TranslationActionCostUs,
+		TranslationPreviewDataCost:   TranslationPreviewDataCost,
+		TranslationPreviewDataCostUs: TranslationPreviewDataCostUs,
+		TranslationGroupCost:         TranslationGroupCost,
+		TranslationGroupCostUs:       TranslationGroupCostUs,
+		ActionNormalizeCost:          ActionNormalizeCost,
+		ActionNormalizeCostUs:        ActionNormalizeCostUs,
+		ActionDefaultCost:            ActionDefaultCost,
+		ActionDefaultCostUs:          ActionDefaultCostUs,
+		ActionSortCost:               ActionSortCost,
+		ActionSortCostUs:             ActionSortCostUs,
+		HotkeyNormalizeCost:          HotkeyNormalizeCost,
+		HotkeyNormalizeCostUs:        HotkeyNormalizeCostUs,
+		PreviewRemoteCost:            PreviewRemoteCost,
+		PreviewRemoteCostUs:          PreviewRemoteCostUs,
+		PreviewGlobalCost:            PreviewGlobalCost,
+		PreviewGlobalCostUs:          PreviewGlobalCostUs,
+		PreviewWrapCost:              PreviewWrapCost,
+		PreviewWrapCostUs:            PreviewWrapCostUs,
+		ScoreCost:                    ScoreCost,
+		ScoreCostUs:                  ScoreCostUs,
+		ScoreFeatureCost:             ScoreFeatureCost,
+		ScoreFeatureCostUs:           ScoreFeatureCostUs,
+		AutoScoreCost:                AutoScoreCost,
+		AutoScoreCostUs:              AutoScoreCostUs,
+		FavoriteCost:                 FavoriteCost,
+		FavoriteCostUs:               FavoriteCostUs,
+		DevScoreTailCost:             DevScoreTailCost,
+		DevScoreTailCostUs:           DevScoreTailCostUs,
+		CacheCost:                    CacheCost,
+		CacheCostUs:                  CacheCostUs,
+		PreviewDataLen:               len(originalPreview.PreviewData),
+	}
+}
 
-	return result
+// logPolishResultTiming preserves the existing slow-result diagnostic for paths that are not already aggregated by query finalize.
+func (m *Manager) logPolishResultTiming(ctx context.Context, query Query, pluginLabel string, result QueryResult, timing timetracking.ResultPolishTiming) {
+	if !util.IsDev() {
+		return
+	}
+	if timing.TotalCost < 1 && timing.TotalCostUs < 500 {
+		return
+	}
+
+	tracker := timetracking.New("polish_result_done")
+	if !tracker.Enabled() {
+		return
+	}
+	tracker.SetRawString("queryId", query.Id)
+	tracker.SetRawString("plugin", pluginLabel)
+	tracker.SetRawString("resultId", result.Id)
+	tracker.SetString("title", result.Title)
+	tracker.SetInt64("totalMs", timing.TotalCost)
+	tracker.SetInt64("totalUs", timing.TotalCostUs)
+	tracker.SetInt64("actionSetupMs", timing.ActionSetupCost)
+	tracker.SetInt64("actionSetupUs", timing.ActionSetupCostUs)
+	tracker.SetInt64("actionDefaultsMs", timing.ActionDefaultsCost)
+	tracker.SetInt64("actionDefaultsUs", timing.ActionDefaultsCostUs)
+	tracker.SetInt64("actionIconMs", timing.ActionIconCost)
+	tracker.SetInt64("actionIconUs", timing.ActionIconCostUs)
+	tracker.SetInt64("actionCallbackMs", timing.ActionCallbackCost)
+	tracker.SetInt64("actionCallbackUs", timing.ActionCallbackCostUs)
+	tracker.SetInt("actionIconCount", timing.ActionIconCount)
+	tracker.SetInt64("visualMs", timing.VisualCost)
+	tracker.SetInt64("visualUs", timing.VisualCostUs)
+	tracker.SetInt64("resultIconMs", timing.ResultIconCost)
+	tracker.SetInt64("resultIconUs", timing.ResultIconCostUs)
+	tracker.SetRawString("resultIconType", timing.ResultIconType)
+	tracker.SetRawString("convertedResultIconType", timing.ConvertedResultIconType)
+	tracker.SetInt64("dragMs", timing.DragCost)
+	tracker.SetInt64("dragUs", timing.DragCostUs)
+	tracker.SetInt64("tailIconMs", timing.TailIconCost)
+	tracker.SetInt64("tailIconUs", timing.TailIconCostUs)
+	tracker.SetInt("tailImageCount", timing.TailImageCount)
+	tracker.SetInt64("previewMs", timing.PreviewCost)
+	tracker.SetInt64("previewUs", timing.PreviewCostUs)
+	tracker.SetInt64("previewDefaultMs", timing.PreviewDefaultCost)
+	tracker.SetInt64("previewDefaultUs", timing.PreviewDefaultCostUs)
+	tracker.SetInt64("previewNormalizeMs", timing.PreviewNormalizeCost)
+	tracker.SetInt64("previewNormalizeUs", timing.PreviewNormalizeCostUs)
+	tracker.SetInt64("translationMs", timing.TranslationCost)
+	tracker.SetInt64("translationUs", timing.TranslationCostUs)
+	tracker.SetInt64("translationTextMs", timing.TranslationTextCost)
+	tracker.SetInt64("translationTextUs", timing.TranslationTextCostUs)
+	tracker.SetInt64("translationTailMs", timing.TranslationTailCost)
+	tracker.SetInt64("translationTailUs", timing.TranslationTailCostUs)
+	tracker.SetInt64("translationPreviewMetaMs", timing.TranslationPreviewMetaCost)
+	tracker.SetInt64("translationPreviewMetaUs", timing.TranslationPreviewMetaCostUs)
+	tracker.SetInt64("translationActionMs", timing.TranslationActionCost)
+	tracker.SetInt64("translationActionUs", timing.TranslationActionCostUs)
+	tracker.SetInt64("translationPreviewDataMs", timing.TranslationPreviewDataCost)
+	tracker.SetInt64("translationPreviewDataUs", timing.TranslationPreviewDataCostUs)
+	tracker.SetInt64("translationGroupMs", timing.TranslationGroupCost)
+	tracker.SetInt64("translationGroupUs", timing.TranslationGroupCostUs)
+	tracker.SetInt64("actionNormalizeMs", timing.ActionNormalizeCost)
+	tracker.SetInt64("actionNormalizeUs", timing.ActionNormalizeCostUs)
+	tracker.SetInt64("actionDefaultMs", timing.ActionDefaultCost)
+	tracker.SetInt64("actionDefaultUs", timing.ActionDefaultCostUs)
+	tracker.SetInt64("actionSortMs", timing.ActionSortCost)
+	tracker.SetInt64("actionSortUs", timing.ActionSortCostUs)
+	tracker.SetInt64("hotkeyNormalizeMs", timing.HotkeyNormalizeCost)
+	tracker.SetInt64("hotkeyNormalizeUs", timing.HotkeyNormalizeCostUs)
+	tracker.SetInt64("previewRemoteMs", timing.PreviewRemoteCost)
+	tracker.SetInt64("previewRemoteUs", timing.PreviewRemoteCostUs)
+	tracker.SetInt64("previewGlobalMs", timing.PreviewGlobalCost)
+	tracker.SetInt64("previewGlobalUs", timing.PreviewGlobalCostUs)
+	tracker.SetInt64("previewWrapMs", timing.PreviewWrapCost)
+	tracker.SetInt64("previewWrapUs", timing.PreviewWrapCostUs)
+	tracker.SetInt64("scoreMs", timing.ScoreCost)
+	tracker.SetInt64("scoreUs", timing.ScoreCostUs)
+	tracker.SetInt64("scoreFeatureMs", timing.ScoreFeatureCost)
+	tracker.SetInt64("scoreFeatureUs", timing.ScoreFeatureCostUs)
+	tracker.SetInt64("autoScoreMs", timing.AutoScoreCost)
+	tracker.SetInt64("autoScoreUs", timing.AutoScoreCostUs)
+	tracker.SetInt64("favoriteMs", timing.FavoriteCost)
+	tracker.SetInt64("favoriteUs", timing.FavoriteCostUs)
+	tracker.SetInt64("devScoreTailMs", timing.DevScoreTailCost)
+	tracker.SetInt64("devScoreTailUs", timing.DevScoreTailCostUs)
+	tracker.SetInt64("cacheMs", timing.CacheCost)
+	tracker.SetInt64("cacheUs", timing.CacheCostUs)
+	tracker.SetInt("actions", len(result.Actions))
+	tracker.SetInt("tails", len(result.Tails))
+	tracker.SetInt("previewDataLen", timing.PreviewDataLen)
+	tracker.Log(ctx)
+}
+
+func (m *Manager) getResultIconSizeForQuery(pluginInstance *Instance, query Query, layout QueryLayout) int {
+	if pluginInstance == nil {
+		return common.ResultListIconSize
+	}
+
+	// QueryResponse layout is now the preferred grid source. The previous check
+	// only read deprecated metadata, which made plugins that migrated to
+	// QueryResponse render grid images at list size before Flutter placed them
+	// into grid cells.
+	if layout.GridLayout != nil {
+		return common.ResultGridIconSize
+	}
+
+	// Legacy metadata remains a compatibility fallback for older plugins that
+	// still declare gridLayout in plugin.json while they migrate to QueryResponse.
+	if _, isGridLayout, err := pluginInstance.Metadata.GetFeatureParamsForGridLayoutCommand(query.Command); err == nil && isGridLayout {
+		return common.ResultGridIconSize
+	}
+
+	return common.ResultListIconSize
 }
 
 func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Instance, result UpdatableResult) UpdatableResult {
@@ -1436,6 +2995,8 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 			}
 			if actions[actionIndex].Icon.IsEmpty() {
 				actions[actionIndex].Icon = common.ExecuteRunIcon
+			} else {
+				actions[actionIndex].Icon = common.ConvertIcon(ctx, actions[actionIndex].Icon, pluginInstance.PluginDirectory)
 			}
 			if actions[actionIndex].Type == "" {
 				if len(actions[actionIndex].Form) > 0 || actions[actionIndex].OnSubmit != nil {
@@ -1445,26 +3006,7 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 				}
 			}
 		}
-
-		// For external plugins (Node.js/Python), create proxy action callbacks
-		// These callbacks will invoke the host's action method, which will then
-		// call the actual cached callback in the plugin host
-		if proxyCreator, ok := pluginInstance.Plugin.(ActionProxyCreator); ok {
-			for actionIndex := range actions {
-				// Always create proxy callback for external plugins
-				// because the Action field is not serialized and will be nil
-				if actions[actionIndex].Type == QueryResultActionTypeExecute && actions[actionIndex].Action == nil {
-					actions[actionIndex].Action = proxyCreator.CreateActionProxy(actions[actionIndex].Id)
-				}
-			}
-		}
-		if proxyCreator, ok := pluginInstance.Plugin.(FormActionProxyCreator); ok {
-			for actionIndex := range actions {
-				if actions[actionIndex].Type == QueryResultActionTypeForm && actions[actionIndex].OnSubmit == nil {
-					actions[actionIndex].OnSubmit = proxyCreator.CreateFormActionProxy(actions[actionIndex].Id)
-				}
-			}
-		}
+		m.attachExternalActionCallbacks(pluginInstance, actions)
 
 		// Set first action as default if no default action is set
 		defaultActionCount := lo.CountBy(actions, func(item QueryResultAction) bool {
@@ -1561,6 +3103,9 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 			if tails[i].Type == QueryResultTailTypeText {
 				tails[i].Text = m.translatePlugin(ctx, pluginInstance, tails[i].Text)
 			}
+			if tails[i].Tooltip != "" {
+				tails[i].Tooltip = m.translatePlugin(ctx, pluginInstance, tails[i].Tooltip)
+			}
 			if tails[i].Type == QueryResultTailTypeImage {
 				tails[i].Image = common.ConvertIcon(ctx, tails[i].Image, pluginInstance.PluginDirectory)
 			}
@@ -1587,6 +3132,8 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 			}
 		}
 
+		tails = m.appendDevScoreTail(ctx, tails, resultCache.Result.Score)
+
 		result.Tails = &tails
 		resultCache.Result.Tails = tails
 	}
@@ -1594,24 +3141,99 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 	// Translate preview properties if present
 	if result.Preview != nil {
 		preview := *result.Preview
-		var previewProperties = make(map[string]string)
-		for key, value := range preview.PreviewProperties {
-			translatedKey := m.translatePlugin(ctx, pluginInstance, key)
-			previewProperties[translatedKey] = value
+		if shouldHidePreviewForGlobalQuery(resultCache.Query, preview) {
+			preview = WoxPreview{}
+		} else {
+			// Updated previews must use the same list normalization as initial
+			// query results. Long-running actions commonly update list rows in place,
+			// so icon conversion and row text translation cannot live only in the
+			// first result-processing path.
+			preview = m.normalizeListPreviewData(ctx, pluginInstance, preview)
+			preview = m.normalizePreviewMetadata(ctx, pluginInstance, preview)
 		}
-		preview.PreviewProperties = previewProperties
 		result.Preview = &preview
 		resultCache.Result.Preview = preview
 	}
 
+	// Update drag data in cache if present. An empty or invalid payload clears the
+	// current drag surface instead of leaving stale file paths on a live result.
+	if result.DragData != nil {
+		dragData := normalizeQueryResultDragData(result.DragData)
+		result.DragData = dragData
+		resultCache.Result.DragData = dragData
+	}
+
 	// Update icon in cache if present
 	if result.Icon != nil {
-		convertedIcon := common.ConvertIcon(ctx, *result.Icon, pluginInstance.PluginDirectory)
+		// GetUpdatableResult returns the current icon as a non-nil field, and
+		// callers often pass it back after changing only tails or actions. Treat an
+		// unchanged icon as a no-op so refresh updates do not repeatedly touch the
+		// image conversion/cache path.
+		if result.Icon.ImageType == resultCache.Result.Icon.ImageType && result.Icon.ImageData == resultCache.Result.Icon.ImageData {
+			result.Icon = nil
+			return result
+		}
+
+		// Updated result icons must keep the same surface-aware size as initial results;
+		// otherwise a grid plugin can become blurry after sending an icon update.
+		convertedIcon := m.convertResultIcon(ctx, pluginInstance, resultCache.Query, resultCache.Layout, result.Id, resultCache.Result.Title, *result.Icon)
 		result.Icon = &convertedIcon
 		resultCache.Result.Icon = *result.Icon
 	}
 
 	return result
+}
+
+func (m *Manager) serializeContextData(contextData map[string]string) string {
+	if len(contextData) == 0 {
+		return ""
+	}
+	data, err := json.Marshal(contextData)
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
+func (m *Manager) appendDevScoreTail(ctx context.Context, tails []QueryResultTail, score int64) []QueryResultTail {
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	if !util.IsDev() || !woxSetting.ShowScoreTail.Get() {
+		return tails
+	}
+
+	for _, tail := range tails {
+		if tail.ContextData[scoreTailContextDataKey] == "true" {
+			return tails
+		}
+	}
+
+	return append(tails, QueryResultTail{
+		Type:         QueryResultTailTypeText,
+		Text:         fmt.Sprintf("score:%d", score),
+		ContextData:  common.ContextData{scoreTailContextDataKey: "true"},
+		IsSystemTail: true,
+	})
+}
+
+// For external plugins (Node.js/Python), create proxy action callbacks
+// These callbacks will invoke the host's action method, which will then
+// call the actual cached callback in the plugin host
+func (m *Manager) attachExternalActionCallbacks(pluginInstance *Instance, actions []QueryResultAction) {
+	if proxyCreator, ok := pluginInstance.Plugin.(ActionProxyCreator); ok {
+		for actionIndex := range actions {
+			if actions[actionIndex].Type == QueryResultActionTypeExecute && actions[actionIndex].Action == nil {
+				actions[actionIndex].Action = proxyCreator.CreateActionProxy(actions[actionIndex].Id)
+			}
+		}
+	}
+
+	if proxyCreator, ok := pluginInstance.Plugin.(FormActionProxyCreator); ok {
+		for actionIndex := range actions {
+			if actions[actionIndex].Type == QueryResultActionTypeForm && actions[actionIndex].OnSubmit == nil {
+				actions[actionIndex].OnSubmit = proxyCreator.CreateFormActionProxy(actions[actionIndex].Id)
+			}
+		}
+	}
 }
 
 func (m *Manager) GetUpdatableResult(ctx context.Context, resultId string) *UpdatableResult {
@@ -1626,6 +3248,12 @@ func (m *Manager) GetUpdatableResult(ctx context.Context, resultId string) *Upda
 	subTitle := resultCache.Result.SubTitle
 	icon := resultCache.Result.Icon
 	preview := resultCache.Result.Preview
+	var dragData *QueryResultDragData
+	if resultCache.Result.DragData != nil {
+		dragDataCopy := *resultCache.Result.DragData
+		dragDataCopy.Files = append([]string(nil), resultCache.Result.DragData.Files...)
+		dragData = &dragDataCopy
+	}
 
 	// Make a copy of tails to avoid modifying cache when developer appends to it
 	// Filter out system tails (they will be added back in polish)
@@ -1653,71 +3281,359 @@ func (m *Manager) GetUpdatableResult(ctx context.Context, resultId string) *Upda
 		Preview:  &preview,
 		Tails:    &tails,
 		Actions:  &actions,
+		DragData: dragData,
 	}
 }
 
-func (m *Manager) Query(ctx context.Context, query Query) (resultsChan chan []QueryResultUI, doneChan chan bool) {
-	resultsChan = make(chan []QueryResultUI, 10)
-	doneChan = make(chan bool)
+func (m *Manager) Query(ctx context.Context, query Query) (resultsChan chan QueryResponseUI, fallbackReadyChan chan bool, doneChan chan bool) {
+	queryStart := util.GetSystemTimestamp()
+	if tracker := timetracking.New("manager_query_enter"); tracker.Enabled() {
+		tracker.SetRawString("queryId", query.Id)
+		tracker.SetRawString("query", query.String())
+		tracker.Log(ctx)
+	}
 
-	m.startSessionQueryCache(query)
+	resultsChan = make(chan QueryResponseUI, 10)
+	fallbackReadyChan = make(chan bool, 1)
+	doneChan = make(chan bool, 1)
 
-	counter := &atomic.Int32{}
-	counter.Store(int32(len(m.instances)))
-
-	for _, pluginInstance := range m.instances {
-		if !m.canOperateQuery(ctx, pluginInstance, query) {
-			counter.Add(-1)
-			if counter.Load() == 0 {
-				doneChan <- true
-			}
-			continue
-		}
-
-		if pluginInstance.Metadata.IsSupportFeature(MetadataFeatureDebounce) {
-			debounceParams, err := pluginInstance.Metadata.GetFeatureParamsForDebounce()
-			if err == nil {
-				logger.Debug(ctx, fmt.Sprintf("[%s] debounce query, will execute in %d ms", pluginInstance.GetName(ctx), debounceParams.IntervalMs))
-				if v, ok := m.debounceQueryTimer.Load(pluginInstance.Metadata.Id); ok {
-					if v.timer.Stop() {
-						v.onStop()
-					}
-				}
-
-				timer := time.AfterFunc(time.Duration(debounceParams.IntervalMs)*time.Millisecond, func() {
-					m.queryParallel(ctx, pluginInstance, query, resultsChan, doneChan, counter)
-				})
-				onStop := func() {
-					logger.Debug(ctx, fmt.Sprintf("[%s] previous debounced query cancelled", pluginInstance.GetName(ctx)))
-					counter.Add(-1)
-					if counter.Load() == 0 {
-						doneChan <- true
-					}
-				}
-				m.debounceQueryTimer.Store(pluginInstance.Metadata.Id, &debounceTimer{
-					timer:  timer,
-					onStop: onStop,
-				})
-				continue
-			} else {
-				logger.Error(ctx, fmt.Sprintf("[%s] %s, query directlly", pluginInstance.GetName(ctx), err))
-			}
-		}
-
-		m.queryParallel(ctx, pluginInstance, query, resultsChan, doneChan, counter)
+	tracker := newQueryTracker(fallbackReadyChan, doneChan)
+	execution := newQueryExecution(ctx, m, query, resultsChan, tracker)
+	// Start scheduling asynchronously so the query runner can begin consuming
+	// fast plugin responses before the full plugin eligibility scan finishes.
+	go execution.start()
+	if tracker := timetracking.New("manager_query_exit"); tracker.Enabled() {
+		tracker.SetRawString("queryId", query.Id)
+		tracker.SetRawString("query", query.String())
+		tracker.SetInt64("costMs", util.GetSystemTimestamp()-queryStart)
+		tracker.Log(ctx)
 	}
 
 	return
 }
 
+func newQueryExecution(ctx context.Context, manager *Manager, query Query, resultsChan chan QueryResponseUI, tracker *queryTracker) *queryExecution {
+	execution := &queryExecution{
+		ctx:          ctx,
+		manager:      manager,
+		query:        query,
+		resultsChan:  resultsChan,
+		tracker:      tracker,
+		totalPlugins: len(manager.instances),
+	}
+	execution.lastCheckedPlugin.Store("")
+	return execution
+}
+
+func (e *queryExecution) start() {
+	// Keep completion signals behind the scheduler scan. Fast global plugins can
+	// otherwise finish before later eligible plugins are even counted.
+	e.tracker.startJob(true)
+
+	cacheStart := util.GetSystemTimestamp()
+	e.manager.startSessionQueryCache(e.query)
+	if tracker := timetracking.New("start_session_query_cache"); tracker.Enabled() {
+		tracker.SetRawString("queryId", e.query.Id)
+		tracker.SetInt64("costMs", util.GetSystemTimestamp()-cacheStart)
+		tracker.Log(e.ctx)
+	}
+	e.scheduleStart = util.GetSystemTimestamp()
+	if tracker := timetracking.New("schedule_start"); tracker.Enabled() {
+		tracker.SetRawString("queryId", e.query.Id)
+		tracker.SetRawString("query", e.query.String())
+		tracker.SetInt("totalPlugins", e.totalPlugins)
+		tracker.Log(e.ctx)
+	}
+	e.startScheduleWatchdog()
+	defer e.stopScheduleWatchdog()
+
+	e.schedulePlugins()
+	e.tracker.finishJob(true)
+
+	if tracker := timetracking.New("schedule_done"); tracker.Enabled() {
+		tracker.SetRawString("queryId", e.query.Id)
+		tracker.SetRawString("query", e.query.String())
+		tracker.SetInt("checked", int(e.checkedPlugins.Load()))
+		tracker.SetInt("totalPlugins", e.totalPlugins)
+		tracker.SetInt("scheduled", int(e.scheduledPlugins.Load()))
+		tracker.SetInt64("elapsedMs", util.GetSystemTimestamp()-e.scheduleStart)
+		tracker.Log(e.ctx)
+	}
+}
+
+func (e *queryExecution) startScheduleWatchdog() {
+	// Bug diagnostics: an intermittent launcher spinner can happen before the
+	// caller receives result/done channels. Track the scheduler scan separately
+	// so the next log capture can tell whether eligibility checks got stuck on a
+	// specific plugin instead of blaming the plugin that already finished.
+	e.scheduleWatchdog = time.AfterFunc(250*time.Millisecond, func() {
+		if e.scheduleComplete.Load() {
+			return
+		}
+		lastPlugin, _ := e.lastCheckedPlugin.Load().(string)
+		logger.Warn(e.ctx, fmt.Sprintf("query scheduler still scanning plugins: query=%s checked=%d/%d scheduled=%d last_plugin=%s elapsed=%dms", e.query.String(), e.checkedPlugins.Load(), e.totalPlugins, e.scheduledPlugins.Load(), lastPlugin, util.GetSystemTimestamp()-e.scheduleStart))
+	})
+}
+
+func (e *queryExecution) stopScheduleWatchdog() {
+	e.scheduleComplete.Store(true)
+	if e.scheduleWatchdog != nil {
+		e.scheduleWatchdog.Stop()
+	}
+}
+
+func (e *queryExecution) schedulePlugins() {
+	for _, pluginInstance := range e.manager.instances {
+		job, ok := e.schedulePlugin(pluginInstance)
+		if !ok {
+			continue
+		}
+		e.startPluginJob(job)
+	}
+}
+
+func (e *queryExecution) schedulePlugin(pluginInstance *Instance) (queryPluginJob, bool) {
+	e.checkedPlugins.Add(1)
+	pluginLabel := queryDiagnosticPluginLabel(pluginInstance)
+	e.lastCheckedPlugin.Store(pluginLabel)
+	checkStart := util.GetSystemTimestamp()
+	canOperate := e.manager.canOperateQuery(e.ctx, pluginInstance, e.query)
+	if tracker := timetracking.New("can_operate_query"); tracker.Enabled() {
+		tracker.SetRawString("queryId", e.query.Id)
+		tracker.SetRawString("plugin", pluginLabel)
+		tracker.SetBool("operable", canOperate)
+		tracker.SetInt64("costMs", util.GetSystemTimestamp()-checkStart)
+		tracker.SetInt("checked", int(e.checkedPlugins.Load()))
+		tracker.SetInt("totalPlugins", e.totalPlugins)
+		tracker.Log(e.ctx)
+	}
+	if !canOperate {
+		return queryPluginJob{}, false
+	}
+	e.scheduledPlugins.Add(1)
+
+	// Debounced plugins are treated as late work: they still participate in final
+	// query completion, but they do not delay fallback. This mirrors the previous
+	// inline scheduler behavior while making the job lifecycle explicit.
+	supportsDebounce := pluginInstance.Metadata.IsSupportFeature(MetadataFeatureDebounce)
+	job := queryPluginJob{
+		pluginInstance: pluginInstance,
+		blocksFallback: !supportsDebounce,
+	}
+	if !supportsDebounce {
+		if tracker := timetracking.New("schedule_plugin"); tracker.Enabled() {
+			tracker.SetRawString("queryId", e.query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.SetBool("debounced", false)
+			tracker.SetBool("blocksFallback", job.blocksFallback)
+			tracker.SetInt("scheduled", int(e.scheduledPlugins.Load()))
+			tracker.Log(e.ctx)
+		}
+		return job, true
+	}
+
+	debounceParams, err := pluginInstance.Metadata.GetFeatureParamsForDebounce()
+	if err != nil {
+		logger.Error(e.ctx, fmt.Sprintf("[%s] %s, query directly", pluginInstance.GetName(e.ctx), err))
+		if tracker := timetracking.New("schedule_plugin"); tracker.Enabled() {
+			tracker.SetRawString("queryId", e.query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.SetBool("debounced", false)
+			tracker.SetBool("debounceConfigError", true)
+			tracker.SetBool("blocksFallback", job.blocksFallback)
+			tracker.SetInt("scheduled", int(e.scheduledPlugins.Load()))
+			tracker.Log(e.ctx)
+		}
+		return job, true
+	}
+
+	job.debounced = true
+	job.intervalMs = debounceParams.IntervalMs
+	if tracker := timetracking.New("schedule_plugin"); tracker.Enabled() {
+		tracker.SetRawString("queryId", e.query.Id)
+		tracker.SetRawString("plugin", pluginLabel)
+		tracker.SetBool("debounced", true)
+		tracker.SetInt("intervalMs", job.intervalMs)
+		tracker.SetBool("blocksFallback", job.blocksFallback)
+		tracker.SetInt("scheduled", int(e.scheduledPlugins.Load()))
+		tracker.Log(e.ctx)
+	}
+	return job, true
+}
+
+func (e *queryExecution) startPluginJob(job queryPluginJob) {
+	e.tracker.startJob(job.blocksFallback)
+	pluginLabel := queryDiagnosticPluginLabel(job.pluginInstance)
+	if tracker := timetracking.New("tracker_start_job"); tracker.Enabled() {
+		tracker.SetRawString("queryId", e.query.Id)
+		tracker.SetRawString("plugin", pluginLabel)
+		tracker.SetBool("blocksFallback", job.blocksFallback)
+		tracker.SetInt("remaining", int(e.tracker.remaining.Load()))
+		tracker.SetInt("fallbackRemaining", int(e.tracker.fallbackRemaining.Load()))
+		tracker.Log(e.ctx)
+	}
+	if job.debounced {
+		if tracker := timetracking.New("start_plugin_job"); tracker.Enabled() {
+			tracker.SetRawString("queryId", e.query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.SetRawString("mode", "debounced")
+			tracker.SetInt("intervalMs", job.intervalMs)
+			tracker.Log(e.ctx)
+		}
+		e.replaceDebouncedJob(job)
+		return
+	}
+	if tracker := timetracking.New("start_plugin_job"); tracker.Enabled() {
+		tracker.SetRawString("queryId", e.query.Id)
+		tracker.SetRawString("plugin", pluginLabel)
+		tracker.SetRawString("mode", "immediate")
+		tracker.Log(e.ctx)
+	}
+	e.runPluginJob(job)
+}
+
+func (e *queryExecution) replaceDebouncedJob(job queryPluginJob) {
+	pluginInstance := job.pluginInstance
+	pluginLabel := queryDiagnosticPluginLabel(pluginInstance)
+	logger.Debug(e.ctx, fmt.Sprintf("[%s] debounce query, will execute in %d ms", pluginInstance.GetName(e.ctx), job.intervalMs))
+	if tracker := timetracking.New("debounce_schedule"); tracker.Enabled() {
+		tracker.SetRawString("queryId", e.query.Id)
+		tracker.SetRawString("plugin", pluginLabel)
+		tracker.SetInt("intervalMs", job.intervalMs)
+		tracker.Log(e.ctx)
+	}
+	if v, ok := e.manager.debounceQueryTimer.Load(pluginInstance.Metadata.Id); ok {
+		if v.timer.Stop() {
+			v.onStop()
+		}
+	}
+
+	debounceScheduledAt := util.GetSystemTimestamp()
+	timer := time.AfterFunc(time.Duration(job.intervalMs)*time.Millisecond, func() {
+		if tracker := timetracking.New("debounce_fire"); tracker.Enabled() {
+			tracker.SetRawString("queryId", e.query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.SetInt64("waitedMs", util.GetSystemTimestamp()-debounceScheduledAt)
+			tracker.Log(e.ctx)
+		}
+		e.runPluginJob(job)
+	})
+	onStop := func() {
+		// A newer query replaced this debounced run before it started. Mark this
+		// job as finished for the current query lifecycle so counters do not hang.
+		logger.Debug(e.ctx, fmt.Sprintf("[%s] previous debounced query cancelled", pluginInstance.GetName(e.ctx)))
+		if tracker := timetracking.New("debounce_cancel"); tracker.Enabled() {
+			tracker.SetRawString("queryId", e.query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.SetInt64("waitedMs", util.GetSystemTimestamp()-debounceScheduledAt)
+			tracker.Log(e.ctx)
+		}
+		e.tracker.finishJob(job.blocksFallback)
+	}
+	e.manager.debounceQueryTimer.Store(pluginInstance.Metadata.Id, &debounceTimer{
+		timer:  timer,
+		onStop: onStop,
+	})
+}
+
+func (e *queryExecution) runPluginJob(job queryPluginJob) {
+	pluginInstance := job.pluginInstance
+	pluginLabel := queryDiagnosticPluginLabel(pluginInstance)
+	enqueueStart := util.GetSystemTimestamp()
+	if tracker := timetracking.New("plugin_job_enqueue"); tracker.Enabled() {
+		tracker.SetRawString("queryId", e.query.Id)
+		tracker.SetRawString("plugin", pluginLabel)
+		tracker.SetBool("debounced", job.debounced)
+		tracker.SetBool("blocksFallback", job.blocksFallback)
+		tracker.Log(e.ctx)
+	}
+	util.Go(e.ctx, fmt.Sprintf("[%s] parallel query", pluginInstance.GetName(e.ctx)), func() {
+		jobStart := util.GetSystemTimestamp()
+		jobTimingStart := time.Now()
+		if tracker := timetracking.New("plugin_job_run"); tracker.Enabled() {
+			tracker.SetRawString("queryId", e.query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.SetInt64("queuedMs", jobStart-enqueueStart)
+			tracker.Log(e.ctx)
+		}
+		// QueryResponse keeps result rows and query-scoped UI metadata together.
+		// Sending one normalized response through the query pipeline prevents the
+		// UI from applying refinements or layout from a different query execution.
+		queryForPluginStart := util.GetSystemTimestamp()
+		queryResponse := e.manager.queryForPlugin(e.ctx, pluginInstance, e.query)
+		if tracker := timetracking.New("query_for_plugin_done"); tracker.Enabled() {
+			tracker.SetRawString("queryId", e.query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.SetInt("resultCount", len(queryResponse.Results))
+			tracker.SetInt64("costMs", util.GetSystemTimestamp()-queryForPluginStart)
+			tracker.Log(e.ctx)
+		}
+		// Bug diagnostics: queryForPlugin logs before response conversion and
+		// tracker completion. These boundaries make it clear whether a future
+		// spinner is stuck while converting/sending results or while marking the
+		// plugin as finished for the query lifecycle.
+		toUIStart := util.GetSystemTimestamp()
+		toUITimingStart := time.Now()
+		queryResponseUI := queryResponse.ToUI()
+		toUICost := util.GetSystemTimestamp() - toUIStart
+		toUICostUs := time.Since(toUITimingStart).Microseconds()
+		logger.Debug(e.ctx, fmt.Sprintf("<%s> query response converted for UI, result count: %d", pluginInstance.GetName(e.ctx), len(queryResponseUI.Results)))
+		if tracker := timetracking.New("to_ui"); tracker.Enabled() {
+			tracker.SetRawString("queryId", e.query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.SetInt("resultCount", len(queryResponseUI.Results))
+			tracker.SetInt64("costMs", toUICost)
+			tracker.SetInt64("costUs", toUICostUs)
+			tracker.Log(e.ctx)
+		}
+		sendStart := util.GetSystemTimestamp()
+		sendTimingStart := time.Now()
+		e.resultsChan <- queryResponseUI
+		sendCost := util.GetSystemTimestamp() - sendStart
+		sendCostUs := time.Since(sendTimingStart).Microseconds()
+		logger.Debug(e.ctx, fmt.Sprintf("<%s> query response delivered to query pipeline", pluginInstance.GetName(e.ctx)))
+		if tracker := timetracking.New("channel_send"); tracker.Enabled() {
+			tracker.SetRawString("queryId", e.query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.SetInt("resultCount", len(queryResponseUI.Results))
+			tracker.SetInt64("costMs", sendCost)
+			tracker.SetInt64("costUs", sendCostUs)
+			tracker.SetInt64("elapsedSinceJobStartMs", util.GetSystemTimestamp()-jobStart)
+			tracker.SetInt64("elapsedSinceJobStartUs", time.Since(jobTimingStart).Microseconds())
+			tracker.Log(e.ctx)
+		}
+		finishStart := util.GetSystemTimestamp()
+		e.tracker.finishJob(job.blocksFallback)
+		finishCost := util.GetSystemTimestamp() - finishStart
+		logger.Debug(e.ctx, fmt.Sprintf("<%s> query tracker finished, blocks fallback: %v", pluginInstance.GetName(e.ctx), job.blocksFallback))
+		if tracker := timetracking.New("tracker_finish_job"); tracker.Enabled() {
+			tracker.SetRawString("queryId", e.query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.SetBool("blocksFallback", job.blocksFallback)
+			tracker.SetInt("remaining", int(e.tracker.remaining.Load()))
+			tracker.SetInt("fallbackRemaining", int(e.tracker.fallbackRemaining.Load()))
+			tracker.SetInt64("costMs", finishCost)
+			tracker.Log(e.ctx)
+		}
+	}, func() {
+		logger.Warn(e.ctx, fmt.Sprintf("<%s> query goroutine recovered, force finishing tracker", pluginInstance.GetName(e.ctx)))
+		if tracker := timetracking.New("plugin_job_recovered"); tracker.Enabled() {
+			tracker.SetRawString("queryId", e.query.Id)
+			tracker.SetRawString("plugin", pluginLabel)
+			tracker.Log(e.ctx)
+		}
+		e.tracker.finishJob(job.blocksFallback)
+	})
+}
+
 func (m *Manager) QuerySilent(ctx context.Context, query Query) bool {
 	var startTimestamp = util.GetSystemTimestamp()
 	var results []QueryResultUI
-	resultChan, doneChan := m.Query(ctx, query)
+	resultChan, _, doneChan := m.Query(ctx, query)
 	for {
 		select {
 		case r := <-resultChan:
-			results = append(results, r...)
+			results = append(results, r.Results...)
 		case <-doneChan:
 			logger.Info(ctx, fmt.Sprintf("silent query done, total results: %d, cost %d ms", len(results), util.GetSystemTimestamp()-startTimestamp))
 
@@ -1750,14 +3666,22 @@ func (m *Manager) QuerySilent(ctx context.Context, query Query) bool {
 	}
 }
 
-func (m *Manager) QueryFallback(ctx context.Context, query Query, queryPlugin *Instance) (results []QueryResultUI) {
+func (m *Manager) QueryFallback(ctx context.Context, query Query, queryPlugin *Instance) (response QueryResponseUI) {
+	response.Context = BuildQueryContext(query, queryPlugin)
+	if queryPlugin != nil {
+		// Fallback command rows are still part of the same plugin query surface.
+		// Attach metadata-backed layout here so early fallback does not erase
+		// the QueryResponse layout sent before the plugin result finishes.
+		response.Layout = m.buildMetadataBackedQueryLayout(ctx, queryPlugin, query)
+	}
+
 	var queryResults []QueryResult
 	if query.IsGlobalQuery() {
 		for _, pluginInstance := range m.instances {
 			if v, ok := pluginInstance.Plugin.(FallbackSearcher); ok {
 				fallbackResults := v.QueryFallback(ctx, query)
 				for _, fallbackResult := range fallbackResults {
-					polishedFallbackResult := m.PolishResult(ctx, pluginInstance, query, fallbackResult)
+					polishedFallbackResult := m.PolishResult(ctx, pluginInstance, query, QueryLayout{}, fallbackResult)
 					queryResults = append(queryResults, polishedFallbackResult)
 				}
 				continue
@@ -1765,7 +3689,10 @@ func (m *Manager) QueryFallback(ctx context.Context, query Query, queryPlugin *I
 		}
 	} else {
 		if query.Command != "" {
-			return results
+			return response
+		}
+		if queryPlugin == nil {
+			return response
 		}
 
 		// search query commands
@@ -1792,33 +3719,53 @@ func (m *Manager) QueryFallback(ctx context.Context, query Query, queryPlugin *I
 			}
 		})
 		for i := range queryResults {
-			queryResults[i] = m.PolishResult(ctx, queryPlugin, query, queryResults[i])
+			queryResults[i] = m.PolishResult(ctx, queryPlugin, query, response.Layout, queryResults[i])
 		}
 	}
 
 	queryResultsUI := lo.Map(queryResults, func(item QueryResult, index int) QueryResultUI {
 		return item.ToUI()
 	})
-	results = append(results, queryResultsUI...)
-	return results
+	response.Results = append(response.Results, queryResultsUI...)
+	return response
 }
 
-func (m *Manager) queryParallel(ctx context.Context, pluginInstance *Instance, query Query, results chan []QueryResultUI, done chan bool, counter *atomic.Int32) {
-	util.Go(ctx, fmt.Sprintf("[%s] parallel query", pluginInstance.GetName(ctx)), func() {
-		queryResults := m.queryForPlugin(ctx, pluginInstance, query)
-		results <- lo.Map(queryResults, func(item QueryResult, index int) QueryResultUI {
-			return item.ToUI()
-		})
-		counter.Add(-1)
-		if counter.Load() == 0 {
-			done <- true
-		}
-	}, func() {
-		counter.Add(-1)
-		if counter.Load() == 0 {
-			done <- true
-		}
-	})
+func newQueryTracker(fallbackReady chan bool, done chan bool) *queryTracker {
+	return &queryTracker{
+		remaining:         &atomic.Int32{},
+		fallbackRemaining: &atomic.Int32{},
+		fallbackReady:     fallbackReady,
+		done:              done,
+	}
+}
+
+func (t *queryTracker) startJob(blocksFallback bool) {
+	t.remaining.Add(1)
+	if blocksFallback {
+		t.fallbackRemaining.Add(1)
+	}
+}
+
+func (t *queryTracker) finishJob(blocksFallback bool) {
+	// fallbackReady fires once the last fallback-blocking job completes.
+	if blocksFallback && t.fallbackRemaining.Add(-1) == 0 {
+		t.fallbackReady <- true
+	}
+	// done fires only after every job completes, including debounced ones.
+	if t.remaining.Add(-1) == 0 {
+		t.done <- true
+	}
+}
+
+func queryDiagnosticPluginLabel(pluginInstance *Instance) string {
+	if pluginInstance == nil {
+		return "<nil>"
+	}
+	name := string(pluginInstance.Metadata.Name)
+	if name == "" {
+		name = pluginInstance.Metadata.Id
+	}
+	return fmt.Sprintf("%s(%s)", name, pluginInstance.Metadata.Id)
 }
 
 func (m *Manager) translatePlugin(ctx context.Context, pluginInstance *Instance, key string) string {
@@ -1843,8 +3790,8 @@ func (m *Manager) updatePluginQueryLatency(pluginId string, costMs float64) {
 }
 
 func (m *Manager) GetQueryFirstFlushDelayMs(query Query) int64 {
-	const minDelay int64 = 6
-	const maxDelay int64 = 54
+	const minDelay int64 = 11 // most plugins can return results within 10ms, so we set min delay to 11ms to avoid unnecessary flush
+	const maxDelay int64 = 54 //
 	const defaultDelay int64 = 32
 
 	var totalAvg float64
@@ -1880,6 +3827,17 @@ func (m *Manager) GetQueryFirstFlushDelayMs(query Query) int64 {
 }
 
 func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Query, *Instance, error) {
+	refinements := plainQuery.QueryRefinements
+	if refinements == nil {
+		// Query refinements are optional in older UI requests. Normalize nil to
+		// an empty map so external hosts always receive an object, not JSON null.
+		refinements = map[string]string{}
+	}
+	contextData := plainQuery.ContextData
+	if contextData == nil {
+		contextData = common.ContextData{}
+	}
+
 	if plainQuery.QueryType == QueryTypeInput {
 		newQuery := plainQuery.QueryText
 		woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
@@ -1894,9 +3852,15 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 		query, instance := newQueryInputWithPlugins(newQuery, GetPluginManager().GetPluginInstances())
 		query.Id = plainQuery.QueryId
 		query.SessionId = util.GetContextSessionId(ctx)
+		query.Refinements = refinements
+		query.ContextData = contextData
+		if conflictErr := m.newTriggerKeywordConflictErrorIfNeeded(ctx, query); conflictErr != nil {
+			return query, nil, conflictErr
+		}
 		activeWindowSnapshot := m.GetUI().GetActiveWindowSnapshot(ctx)
 		query.Env.ActiveWindowTitle = activeWindowSnapshot.Name
 		query.Env.ActiveWindowPid = activeWindowSnapshot.Pid
+		query.Env.ActiveWindowId = activeWindowSnapshot.WindowId
 		query.Env.ActiveWindowIcon = activeWindowSnapshot.Icon
 		query.Env.ActiveWindowIsOpenSaveDialog = activeWindowSnapshot.IsOpenSaveDialog
 		query.Env.ActiveBrowserUrl = m.getActiveBrowserUrl(ctx)
@@ -1904,21 +3868,33 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 	}
 
 	if plainQuery.QueryType == QueryTypeSelection {
+		// selection query also supports query text for plugins to parse trigger keyword and command
+		parsed, instance := newQueryInputWithPlugins(plainQuery.QueryText, GetPluginManager().GetPluginInstances())
+
 		query := Query{
-			Id:        plainQuery.QueryId,
-			Type:      QueryTypeSelection,
-			RawQuery:  plainQuery.QueryText,
-			Search:    plainQuery.QueryText,
-			Selection: plainQuery.QuerySelection,
+			Id:             plainQuery.QueryId,
+			Type:           QueryTypeSelection,   // override: this is a selection query, not input
+			RawQuery:       plainQuery.QueryText, // keep the original unmodified text
+			TriggerKeyword: parsed.TriggerKeyword,
+			Command:        parsed.Command,
+			Search:         parsed.Search,
+			Selection:      plainQuery.QuerySelection,
+			Refinements:    refinements,
+			ContextData:    contextData,
 		}
 		query.SessionId = util.GetContextSessionId(ctx)
+		if conflictErr := m.newTriggerKeywordConflictErrorIfNeeded(ctx, query); conflictErr != nil {
+			return query, nil, conflictErr
+		}
 		activeWindowSnapshot := m.GetUI().GetActiveWindowSnapshot(ctx)
 		query.Env.ActiveWindowTitle = activeWindowSnapshot.Name
 		query.Env.ActiveWindowPid = activeWindowSnapshot.Pid
+		query.Env.ActiveWindowId = activeWindowSnapshot.WindowId
 		query.Env.ActiveWindowIcon = activeWindowSnapshot.Icon
 		query.Env.ActiveWindowIsOpenSaveDialog = activeWindowSnapshot.IsOpenSaveDialog
 		query.Env.ActiveBrowserUrl = m.getActiveBrowserUrl(ctx)
-		return query, nil, nil
+
+		return query, instance, nil
 	}
 
 	return Query{}, nil, errors.New("invalid query type")
@@ -1957,7 +3933,11 @@ func (m *Manager) expandQueryShortcut(ctx context.Context, query string, querySh
 			continue
 		}
 
-		if strings.HasPrefix(query, shortcut.Shortcut) {
+		// Query shortcuts are command-style aliases for the first query token. Plain
+		// prefix matching made short aliases such as "th" rewrite normal queries like
+		// "theme xx", so the shortcut must end at the query boundary while still
+		// supporting "th args".
+		if query == shortcut.Shortcut || strings.HasPrefix(query, shortcut.Shortcut+" ") {
 			if !shortcut.HasPlaceholder() {
 				newQuery = strings.Replace(query, shortcut.Shortcut, shortcut.Query, 1)
 				break
@@ -2071,7 +4051,8 @@ func (m *Manager) SubmitFormAction(ctx context.Context, sessionId string, queryI
 func (m *Manager) postExecuteAction(ctx context.Context, resultCache *QueryResultCache, contextData map[string]string) {
 	// Add actioned result for statistics
 	meta := resultCache.PluginInstance.Metadata
-	setting.GetSettingManager().AddActionedResult(ctx, meta.Id, resultCache.Result.Title, resultCache.Result.SubTitle, resultCache.Query.RawQuery)
+	scoreHash := resultScoreHash(meta.Id, resultCache.Result)
+	setting.GetSettingManager().AddActionedResultByHash(ctx, scoreHash, resultCache.Query.RawQuery)
 
 	// Add to MRU if plugin supports it
 	if meta.IsSupportFeature(MetadataFeatureMRU) {
@@ -2132,37 +4113,77 @@ func (m *Manager) GetResultPreview(ctx context.Context, sessionId string, queryI
 		preview.PreviewData = m.translatePlugin(ctx, resultCache.PluginInstance, preview.PreviewData)
 	}
 
+	preview = m.normalizePreviewMetadata(ctx, resultCache.PluginInstance, preview)
 	return preview, nil
 }
 
-func (m *Manager) ReplaceQueryVariable(ctx context.Context, query string) string {
-	if strings.Contains(query, QueryVariableSelectedText) {
+func (m *Manager) ReplaceQueryVariable(ctx context.Context, queryText string) common.PlainQuery {
+	// Track whether {wox:selected_file} was resolved so we can promote the query to
+	// QueryTypeSelection. Plugins that handle file selections expect a Selection context,
+	// not raw file paths embedded in a text query.
+	var resolvedFileSelection *selection.Selection
+
+	if strings.Contains(queryText, QueryVariableSelectedText) {
 		selected, selectedErr := selection.GetSelected(ctx)
 		if selectedErr != nil {
 			logger.Error(ctx, fmt.Sprintf("failed to get selected text: %s", selectedErr.Error()))
 		} else {
 			if selected.Type == selection.SelectionTypeText {
-				query = strings.ReplaceAll(query, QueryVariableSelectedText, selected.Text)
+				queryText = strings.ReplaceAll(queryText, QueryVariableSelectedText, selected.Text)
 			} else {
 				logger.Error(ctx, fmt.Sprintf("selected data is not text, type: %s", selected.Type))
 			}
 		}
 	}
 
-	if strings.Contains(query, QueryVariableActiveBrowserUrl) {
+	// Replace selected file variable. When resolved, capture the selection so the caller
+	// can promote the query to QueryTypeSelection instead of embedding paths as plain text.
+	// Also strip the placeholder from queryText so the remaining text (e.g. a trigger keyword)
+	// is still passed as QueryText and can be used for plugin routing in NewQuery.
+	if strings.Contains(queryText, QueryVariableSelectedFile) {
+		selected, selectedErr := selection.GetSelected(ctx)
+		if selectedErr != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to get selected file: %s", selectedErr.Error()))
+		} else {
+			if selected.Type == selection.SelectionTypeFile {
+				resolvedFileSelection = &selected
+				queryText = strings.ReplaceAll(queryText, QueryVariableSelectedFile, "")
+			} else {
+				logger.Error(ctx, fmt.Sprintf("selected data is not file, type: %s", selected.Type))
+			}
+		}
+	}
+
+	if strings.Contains(queryText, QueryVariableActiveBrowserUrl) {
 		activeBrowserUrl := m.activeBrowserUrl
-		query = strings.ReplaceAll(query, QueryVariableActiveBrowserUrl, activeBrowserUrl)
+		queryText = strings.ReplaceAll(queryText, QueryVariableActiveBrowserUrl, activeBrowserUrl)
 	}
 
 	// Replace file explorer path variable if present
-	if strings.Contains(query, QueryVariableFileExplorerPath) {
+	if strings.Contains(queryText, QueryVariableFileExplorerPath) {
 		startTime := time.Now()
 		explorerPath := m.getActiveFileExplorerPath(ctx)
-		query = strings.ReplaceAll(query, QueryVariableFileExplorerPath, explorerPath)
+		queryText = strings.ReplaceAll(queryText, QueryVariableFileExplorerPath, explorerPath)
 		logger.Debug(ctx, fmt.Sprintf("replaced file explorer path variable in %d ms", time.Since(startTime).Milliseconds()))
 	}
 
-	return query
+	// If {wox:selected_file} was successfully resolved, promote to QueryTypeSelection
+	// so that selection-aware plugins receive a proper file selection context rather
+	// than raw path strings in a text query.
+	// QueryText carries the remainder of the template string (e.g. a trigger keyword like "files")
+	// so that NewQuery can parse it and route the query to the right plugin.
+	if resolvedFileSelection != nil {
+		return common.PlainQuery{
+			QueryType:      QueryTypeSelection,
+			QueryText:      queryText,
+			QuerySelection: *resolvedFileSelection,
+		}
+	}
+
+	return common.PlainQuery{
+		QueryType: QueryTypeInput,
+		QueryText: queryText,
+	}
 }
 
 func (m *Manager) IsHostStarted(ctx context.Context, runtime Runtime) bool {
@@ -2177,6 +4198,49 @@ func (m *Manager) IsHostStarted(ctx context.Context, runtime Runtime) bool {
 	}
 
 	return false
+}
+
+func (m *Manager) RuntimeStatusForRuntime(ctx context.Context, runtime Runtime) (RuntimeHostStatus, bool) {
+	pluginHost, exist := lo.Find(AllHosts, func(item Host) bool {
+		return strings.EqualFold(string(item.GetRuntime(ctx)), string(runtime))
+	})
+	if !exist {
+		return RuntimeHostStatus{}, false
+	}
+
+	// Feature: callers that present install/load failures can reuse the same
+	// structured runtime diagnosis as /runtime/status instead of parsing wrapped
+	// startup errors that are meant for logs.
+	return pluginHost.RuntimeStatus(ctx), true
+}
+
+// EnsureHostStarted makes runtime startup an explicit, reusable preflight for
+// install and load paths that need a live plugin host before mutating plugin files.
+func (m *Manager) EnsureHostStarted(ctx context.Context, runtime Runtime) error {
+	if runtime == PLUGIN_RUNTIME_GO || runtime == PLUGIN_RUNTIME_SCRIPT {
+		return nil
+	}
+
+	pluginHost, exist := lo.Find(AllHosts, func(item Host) bool {
+		return strings.EqualFold(string(item.GetRuntime(ctx)), string(runtime))
+	})
+	if !exist {
+		return fmt.Errorf("unsupported runtime: %s", runtime)
+	}
+
+	if pluginHost.IsStarted(ctx) {
+		return nil
+	}
+
+	// Bug fix: install flows previously stopped at a generic "runtime is not started"
+	// check, which blocked recovery after users corrected a Node.js/Python path.
+	// Starting the host here preserves the explicit preflight while returning the
+	// concrete startup or websocket connection error from the host layer.
+	if err := pluginHost.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start host for runtime %s: %w", runtime, err)
+	}
+
+	return nil
 }
 
 func (m *Manager) IsTriggerKeywordAIChat(ctx context.Context, triggerKeyword string) bool {
@@ -2293,7 +4357,7 @@ func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string
 			util.GetLogger().Debug(ctx, fmt.Sprintf("mru item restored: %s", item.Title))
 
 			// Build a stable dedupe key using restored values, which are language-independent for Go plugins
-			key := fmt.Sprintf("%s|%s|%s|%s", item.PluginID, restored.Title, restored.SubTitle, serializeContextData(item.ContextData))
+			key := fmt.Sprintf("%s|%s|%s|%s", item.PluginID, restored.Title, restored.SubTitle, m.serializeContextData(item.ContextData))
 			if seen[key] {
 				util.GetLogger().Debug(ctx, fmt.Sprintf("duplicate mru item, skip restore mru item: %s", item.Title))
 				continue
@@ -2318,7 +4382,7 @@ func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string
 			// Add the remove action to the result
 			restored.Actions = append(restored.Actions, removeMRUAction)
 
-			polishedResult := m.PolishResult(ctx, pluginInstance, query, *restored)
+			polishedResult := m.PolishResult(ctx, pluginInstance, query, QueryLayout{}, *restored)
 			results = append(results, polishedResult.ToUI())
 		}
 	}
@@ -2418,4 +4482,429 @@ func normalizeHotkeyForPlatform(hotkey string) string {
 	}
 
 	return strings.Join(parts, "+")
+}
+
+type toolbarMsgActionEntry struct {
+	PluginId string
+	Actions  map[string]ToolbarMsgAction
+}
+
+func glanceActionCacheKey(pluginId, glanceId, actionId string) string {
+	return pluginId + "\x00" + glanceId + "\x00" + actionId
+}
+
+func (m *Manager) clearGlanceActions(pluginId string, glanceIds []string) {
+	// A refreshed glance may return no items, so stale callbacks must be removed
+	// before the new response is normalized instead of relying on UI visibility.
+	prefixes := make([]string, 0, len(glanceIds))
+	for _, glanceId := range glanceIds {
+		prefixes = append(prefixes, glanceActionCacheKey(pluginId, glanceId, ""))
+	}
+
+	for _, key := range m.glanceActions.Keys() {
+		for _, prefix := range prefixes {
+			if strings.HasPrefix(key, prefix) {
+				m.glanceActions.Delete(key)
+				break
+			}
+		}
+	}
+}
+
+func (m *Manager) GetGlanceItems(ctx context.Context, keys []GlanceKey, reason GlanceRefreshReason) []GlanceItemUI {
+	requestIdsByPlugin := map[string][]string{}
+	requested := map[string]bool{}
+	for _, key := range keys {
+		if key.PluginId == "" || key.GlanceId == "" {
+			continue
+		}
+		cacheKey := key.PluginId + "\x00" + key.GlanceId
+		if requested[cacheKey] {
+			continue
+		}
+		requested[cacheKey] = true
+		requestIdsByPlugin[key.PluginId] = append(requestIdsByPlugin[key.PluginId], key.GlanceId)
+	}
+
+	var uiItems []GlanceItemUI
+	for pluginId, ids := range requestIdsByPlugin {
+		pluginInstance := m.GetPluginInstanceById(pluginId)
+		if pluginInstance == nil || pluginInstance.Setting.Disabled.Get() {
+			continue
+		}
+		provider, ok := pluginInstance.Plugin.(GlanceProvider)
+		if !ok {
+			continue
+		}
+
+		declared := map[string]bool{}
+		var declaredIds []string
+		for _, id := range ids {
+			if pluginInstance.Metadata.HasGlance(id) {
+				declared[id] = true
+				declaredIds = append(declaredIds, id)
+			}
+		}
+		if len(declaredIds) == 0 {
+			continue
+		}
+
+		// Global Glance is a pull-based API. Calling the plugin only for user-selected
+		// ids keeps third-party providers from occupying the query-box accessory area
+		// unless the setting explicitly points at them.
+		m.clearGlanceActions(pluginId, declaredIds)
+		response := provider.Glance(ctx, GlanceRequest{Ids: declaredIds, Reason: reason})
+		for _, item := range response.Items {
+			if !declared[item.Id] {
+				continue
+			}
+			uiItems = append(uiItems, m.normalizeGlanceItem(ctx, pluginInstance, item))
+		}
+	}
+	return uiItems
+}
+
+func (m *Manager) normalizeGlanceItem(ctx context.Context, pluginInstance *Instance, item GlanceItem) GlanceItemUI {
+	uiItem := GlanceItemUI{
+		PluginId: pluginInstance.Metadata.Id,
+		Id:       item.Id,
+		Text:     pluginInstance.translateMetadataText(ctx, common.I18nString(item.Text)),
+		Icon:     common.ConvertIcon(ctx, item.Icon, pluginInstance.PluginDirectory),
+		Tooltip:  pluginInstance.translateMetadataText(ctx, common.I18nString(item.Tooltip)),
+	}
+
+	if item.Action != nil {
+		// Glance intentionally exposes only one action in v1. A single optional
+		// callback keeps the query-box accessory glanceable instead of turning it
+		// into a secondary action menu.
+		action := *item.Action
+		if action.Id == "" {
+			action.Id = uuid.NewString()
+		}
+		action.Name = pluginInstance.translateMetadataText(ctx, common.I18nString(action.Name))
+		action.ContextData = common.ContextData(lo.Assign(map[string]string{}, action.ContextData))
+		if !action.Icon.IsEmpty() {
+			action.Icon = common.ConvertIcon(ctx, action.Icon, pluginInstance.PluginDirectory)
+		}
+		m.glanceActions.Store(glanceActionCacheKey(pluginInstance.Metadata.Id, item.Id, action.Id), action)
+		uiItem.Action = &GlanceActionUI{
+			Id:                     action.Id,
+			Name:                   action.Name,
+			Icon:                   action.Icon,
+			PreventHideAfterAction: action.PreventHideAfterAction,
+			ContextData:            common.ContextData(lo.Assign(map[string]string{}, action.ContextData)),
+		}
+	}
+
+	return uiItem
+}
+
+func (m *Manager) ExecuteGlanceAction(ctx context.Context, pluginId string, glanceId string, actionId string) error {
+	action, found := m.glanceActions.Load(glanceActionCacheKey(pluginId, glanceId, actionId))
+	if !found {
+		return fmt.Errorf("glance action not found: %s/%s/%s", pluginId, glanceId, actionId)
+	}
+	if action.Action == nil {
+		return fmt.Errorf("glance action callback missing: %s", actionId)
+	}
+	action.Action(ctx, GlanceActionContext{
+		PluginId:    pluginId,
+		GlanceId:    glanceId,
+		ActionId:    actionId,
+		ContextData: common.ContextData(lo.Assign(map[string]string{}, action.ContextData)),
+	})
+	return nil
+}
+
+type sessionPluginQueryState struct {
+	PluginId string
+	QueryId  string
+}
+
+// ShowToolbarMsg normalizes action callbacks, replaces the current toolbar msg owned by this plugin,
+// and forwards the latest snapshot to UI.
+func (m *Manager) ShowToolbarMsg(ctx context.Context, pluginInstance *Instance, msg ToolbarMsg) {
+	if pluginInstance == nil {
+		return
+	}
+	resolvedCtx, ok := m.resolveActiveToolbarMsgContext(ctx, pluginInstance.Metadata.Id)
+	if !ok {
+		return
+	}
+	if msg.Id == "" {
+		msg.Id = uuid.NewString()
+	}
+
+	normalized := m.normalizeToolbarMsg(resolvedCtx, pluginInstance, msg)
+	m.clearCurrentPluginToolbarMsgAction(pluginInstance.Metadata.Id)
+
+	actionEntry := &toolbarMsgActionEntry{
+		PluginId: pluginInstance.Metadata.Id,
+		Actions:  make(map[string]ToolbarMsgAction, len(normalized.Actions)),
+	}
+	for _, action := range normalized.Actions {
+		actionEntry.Actions[action.Id] = action
+	}
+
+	m.toolbarMsgActions.Store(normalized.Id, actionEntry)
+	m.pluginToolbarMsgIds.Store(pluginInstance.Metadata.Id, normalized.Id)
+	m.GetUI().ShowToolbarMsg(resolvedCtx, normalized.toToolbarMsgUI())
+}
+
+// ClearToolbarMsg removes the toolbar msg action callbacks owned by the current plugin and asks UI
+// to clear the matching toolbar msg if it is still visible.
+func (m *Manager) ClearToolbarMsg(ctx context.Context, pluginInstance *Instance, toolbarMsgId string) {
+	if pluginInstance == nil || toolbarMsgId == "" {
+		return
+	}
+	resolvedCtx, ok := m.resolveActiveToolbarMsgContext(ctx, pluginInstance.Metadata.Id)
+	if !ok {
+		resolvedCtx = ctx
+	}
+
+	if currentToolbarMsgId, found := m.pluginToolbarMsgIds.Load(pluginInstance.Metadata.Id); found && currentToolbarMsgId == toolbarMsgId {
+		m.pluginToolbarMsgIds.Delete(pluginInstance.Metadata.Id)
+	}
+	m.toolbarMsgActions.Delete(toolbarMsgId)
+	m.GetUI().ClearToolbarMsg(resolvedCtx, toolbarMsgId)
+}
+
+// ExecuteToolbarMsgAction resolves the current toolbar msg action callback and invokes it.
+func (m *Manager) ExecuteToolbarMsgAction(ctx context.Context, sessionId string, toolbarMsgId string, actionId string) error {
+	entry, found := m.toolbarMsgActions.Load(toolbarMsgId)
+	if !found {
+		return fmt.Errorf("toolbar msg not found: %s", toolbarMsgId)
+	}
+
+	action, found := entry.Actions[actionId]
+	if !found {
+		return fmt.Errorf("toolbar msg action not found: %s", actionId)
+	}
+	if action.Action == nil {
+		return fmt.Errorf("toolbar msg action callback missing: %s", actionId)
+	}
+
+	actionCtx := ToolbarMsgActionContext{
+		ToolbarMsgId:       toolbarMsgId,
+		ToolbarMsgActionId: actionId,
+		ContextData:        common.ContextData(lo.Assign(map[string]string{}, action.ContextData)),
+	}
+
+	callbackCtx := ctx
+	if sessionId != "" {
+		callbackCtx = util.WithSessionContext(callbackCtx, sessionId)
+	}
+	action.Action(callbackCtx, actionCtx)
+	return nil
+}
+
+// HasVisibleToolbarMsg reports whether backend currently tracks any persistent toolbar msg. This is
+// an approximation used for routing Notify() calls without maintaining toolbar visibility policy.
+func (m *Manager) HasVisibleToolbarMsg(ctx context.Context) bool {
+	return m.pluginToolbarMsgIds.Len() > 0
+}
+
+func (m *Manager) clearCurrentPluginToolbarMsgAction(pluginId string) {
+	if pluginId == "" {
+		return
+	}
+
+	currentToolbarMsgId, found := m.pluginToolbarMsgIds.Load(pluginId)
+	if !found || currentToolbarMsgId == "" {
+		return
+	}
+
+	m.pluginToolbarMsgIds.Delete(pluginId)
+	m.toolbarMsgActions.Delete(currentToolbarMsgId)
+}
+
+func (m *Manager) clearCurrentPluginToolbarMsg(ctx context.Context, pluginId string) {
+	if pluginId == "" {
+		return
+	}
+
+	currentToolbarMsgId, found := m.pluginToolbarMsgIds.Load(pluginId)
+	if !found || currentToolbarMsgId == "" {
+		return
+	}
+
+	m.clearCurrentPluginToolbarMsgAction(pluginId)
+	m.GetUI().ClearToolbarMsg(ctx, currentToolbarMsgId)
+}
+
+func (m *Manager) resolveActiveToolbarMsgContext(ctx context.Context, pluginId string) (context.Context, bool) {
+	sessionId := util.GetContextSessionId(ctx)
+	if sessionId != "" {
+		return ctx, m.isPluginActiveInSession(sessionId, pluginId)
+	}
+
+	activeSessionId, activeQueryId, found := m.findActivePluginQuery(pluginId)
+	if !found {
+		return nil, false
+	}
+
+	resolvedCtx := util.WithSessionContext(ctx, activeSessionId)
+	if activeQueryId != "" {
+		resolvedCtx = util.WithQueryIdContext(resolvedCtx, activeQueryId)
+	}
+	return resolvedCtx, true
+}
+
+// normalizeToolbarMsg translates user-facing text, normalizes UI-facing icons, clones context data,
+// and backfills host proxies for external plugin action callbacks.
+func (m *Manager) normalizeToolbarMsg(ctx context.Context, pluginInstance *Instance, msg ToolbarMsg) ToolbarMsg {
+	normalizedIcon := common.ConvertIcon(ctx, msg.Icon, pluginInstance.PluginDirectory)
+
+	normalized := ToolbarMsg{
+		Id:            msg.Id,
+		Title:         pluginInstance.translateMetadataText(ctx, common.I18nString(msg.Title)),
+		Icon:          normalizedIcon,
+		Progress:      msg.Progress,
+		Indeterminate: msg.Indeterminate,
+		Actions:       make([]ToolbarMsgAction, 0, len(msg.Actions)),
+	}
+
+	for _, action := range msg.Actions {
+		if action.Id == "" {
+			action.Id = uuid.NewString()
+		}
+		action.Name = pluginInstance.translateMetadataText(ctx, common.I18nString(action.Name))
+		action.ContextData = common.ContextData(lo.Assign(map[string]string{}, action.ContextData))
+		if !action.Icon.IsEmpty() {
+			// Action icons share the same toolbar payload path as the message icon. Normalize them
+			// before storing callbacks so plugin-relative assets stay usable when actions are shown.
+			action.Icon = common.ConvertIcon(ctx, action.Icon, pluginInstance.PluginDirectory)
+		}
+
+		if action.Action == nil {
+			if proxyCreator, ok := pluginInstance.Plugin.(ToolbarMsgActionProxyCreator); ok {
+				action.Action = proxyCreator.CreateToolbarMsgActionProxy(action.Id)
+			}
+		}
+
+		normalized.Actions = append(normalized.Actions, action)
+	}
+
+	return normalized
+}
+
+// toToolbarMsgUI strips callbacks and returns a UI-safe snapshot.
+func (m ToolbarMsg) toToolbarMsgUI() ToolbarMsgUI {
+	uiMsg := ToolbarMsgUI{
+		Id:            m.Id,
+		Title:         m.Title,
+		Icon:          m.Icon,
+		Progress:      m.Progress,
+		Indeterminate: m.Indeterminate,
+		Actions:       make([]ToolbarMsgActionUI, 0, len(m.Actions)),
+	}
+	for _, action := range m.Actions {
+		uiMsg.Actions = append(uiMsg.Actions, ToolbarMsgActionUI{
+			Id:                     action.Id,
+			Name:                   action.Name,
+			Icon:                   action.Icon,
+			Hotkey:                 action.Hotkey,
+			IsDefault:              action.IsDefault,
+			PreventHideAfterAction: action.PreventHideAfterAction,
+			ContextData:            common.ContextData(lo.Assign(map[string]string{}, action.ContextData)),
+		})
+	}
+	return uiMsg
+}
+
+// HandleQueryLifecycle updates the active plugin query for the session and fires enter/leave callbacks
+// when the owning plugin changes. Leaving a plugin query also clears its toolbar msg snapshot.
+func (m *Manager) HandleQueryLifecycle(ctx context.Context, query Query, pluginInstance *Instance) {
+	sessionId := query.SessionId
+	if sessionId == "" {
+		return
+	}
+
+	nextPluginId := ""
+	if pluginInstance != nil && query.Type == QueryTypeInput && query.TriggerKeyword != "" {
+		nextPluginId = pluginInstance.Metadata.Id
+	}
+
+	prevState, hasPrev := m.sessionPluginQueries.Load(sessionId)
+	prevPluginId := ""
+	prevQueryId := ""
+	if hasPrev {
+		prevPluginId = prevState.PluginId
+		prevQueryId = prevState.QueryId
+	}
+
+	if prevPluginId == nextPluginId {
+		if nextPluginId == "" {
+			m.sessionPluginQueries.Delete(sessionId)
+		} else {
+			m.sessionPluginQueries.Store(sessionId, &sessionPluginQueryState{PluginId: nextPluginId, QueryId: query.Id})
+		}
+		return
+	}
+
+	// Switch the active owner first so background plugin callbacks cannot re-resolve the
+	// previous plugin after we leave its query context.
+	if nextPluginId == "" {
+		m.sessionPluginQueries.Delete(sessionId)
+	} else {
+		m.sessionPluginQueries.Store(sessionId, &sessionPluginQueryState{PluginId: nextPluginId, QueryId: query.Id})
+	}
+
+	if prevPluginId != "" {
+		leaveCtx := util.WithQueryIdContext(util.WithSessionContext(ctx, sessionId), prevQueryId)
+		m.clearCurrentPluginToolbarMsg(leaveCtx, prevPluginId)
+
+		if prevInstance := m.getPluginInstance(prevPluginId); prevInstance != nil {
+			for _, callback := range prevInstance.LeavePluginQueryCallbacks {
+				util.Go(leaveCtx, fmt.Sprintf("[%s] leave plugin query callback", prevInstance.GetName(leaveCtx)), func() {
+					callback(leaveCtx)
+				})
+			}
+		}
+	}
+
+	if nextPluginId == "" {
+		return
+	}
+
+	if nextInstance := m.getPluginInstance(nextPluginId); nextInstance != nil {
+		enterCtx := util.WithQueryIdContext(util.WithSessionContext(ctx, sessionId), query.Id)
+		for _, callback := range nextInstance.EnterPluginQueryCallbacks {
+			util.Go(enterCtx, fmt.Sprintf("[%s] enter plugin query callback", nextInstance.GetName(enterCtx)), func() {
+				callback(enterCtx)
+			})
+		}
+	}
+}
+
+// isPluginActiveInSession reports whether the given plugin currently owns the session query context.
+func (m *Manager) isPluginActiveInSession(sessionId string, pluginId string) bool {
+	if sessionId == "" || pluginId == "" {
+		return false
+	}
+
+	state, found := m.sessionPluginQueries.Load(sessionId)
+	return found && state.PluginId == pluginId
+}
+
+// findActivePluginQuery returns one active session/query pair for the plugin.
+// Toolbar msg routing uses this to resolve the UI session when plugins fire status updates
+// without carrying a session-bound context.
+func (m *Manager) findActivePluginQuery(pluginId string) (string, string, bool) {
+	if pluginId == "" {
+		return "", "", false
+	}
+
+	var sessionId string
+	var queryId string
+	m.sessionPluginQueries.Range(func(currentSessionId string, state *sessionPluginQueryState) bool {
+		if state != nil && state.PluginId == pluginId {
+			sessionId = currentSessionId
+			queryId = state.QueryId
+			return false
+		}
+		return true
+	})
+
+	return sessionId, queryId, sessionId != ""
 }

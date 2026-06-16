@@ -7,18 +7,23 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
+	"wox/setting"
 	"wox/setting/definition"
+	"wox/setting/validator"
+	"wox/ui"
 	"wox/util"
 	"wox/util/overlay"
 	"wox/util/shell"
 	"wox/util/window"
 
 	"github.com/google/uuid"
+	"golang.org/x/sync/singleflight"
 )
 
 type openSaveFolder struct {
@@ -42,7 +47,12 @@ const (
 	enableTypeToSearchSettingKey = "enableTypeToSearch"
 	quickJumpPathsSettingKey     = "quickJumpPaths"
 
-	explorerCommandAdd = "add"
+	explorerCommandAdd              = "add"
+	explorerDialogHintOverlayName   = "explorer_dialog_hint"
+	explorerDialogHintQueryText     = "explorer "
+	explorerDialogHintMaxWidth      = 420
+	explorerDialogHintVerticalInset = 40
+	explorerDialogPathCacheDuration = 30 * time.Second
 )
 
 func init() {
@@ -53,9 +63,20 @@ type overlayRuntime struct {
 	stopCh chan struct{}
 }
 
+type openSaveDialogPathCache struct {
+	pid       int
+	title     string
+	windowId  string
+	path      string
+	expiresAt time.Time
+}
+
 type ExplorerPlugin struct {
-	api            plugin.API
-	overlayRuntime atomic.Pointer[overlayRuntime]
+	api                    plugin.API
+	overlayRuntime         atomic.Pointer[overlayRuntime]
+	dialogPathCacheMu      sync.Mutex
+	dialogPathCache        openSaveDialogPathCache
+	dialogPathResolveGroup singleflight.Group
 }
 
 func (c *ExplorerPlugin) GetMetadata() plugin.Metadata {
@@ -102,6 +123,12 @@ func (c *ExplorerPlugin) GetMetadata() plugin.Metadata {
 							Key:   "Path",
 							Label: "i18n:plugin_explorer_setting_quick_jump_path",
 							Type:  definition.PluginSettingValueTableColumnTypeDirPath,
+							Validators: []validator.PluginSettingValidator{
+								{
+									Type:  validator.PluginSettingValidatorTypeNotEmpty,
+									Value: &validator.PluginSettingValidatorNotEmpty{},
+								},
+							},
 						},
 					},
 				},
@@ -113,6 +140,7 @@ func (c *ExplorerPlugin) GetMetadata() plugin.Metadata {
 				Params: map[string]any{
 					"requireActiveWindowName":             true,
 					"requireActiveWindowPid":              true,
+					"requireActiveWindowId":               true,
 					"requireActiveWindowIsOpenSaveDialog": true,
 				},
 			},
@@ -142,16 +170,16 @@ func (c *ExplorerPlugin) Init(ctx context.Context, initParams plugin.InitParams)
 	})
 }
 
-func (c *ExplorerPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+func (c *ExplorerPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	if !c.shouldHandleQuery(ctx, query) {
-		return []plugin.QueryResult{}
+		return plugin.QueryResponse{}
 	}
 
 	if strings.EqualFold(query.Command, explorerCommandAdd) {
-		return c.queryAddQuickJumpPath(ctx, query)
+		return plugin.NewQueryResponse(c.queryAddQuickJumpPath(ctx, query))
 	}
 
-	return c.queryExplorerResults(ctx, query)
+	return plugin.NewQueryResponse(c.queryExplorerResults(ctx, query))
 }
 
 func (c *ExplorerPlugin) shouldHandleQuery(ctx context.Context, query plugin.Query) bool {
@@ -270,7 +298,6 @@ func (c *ExplorerPlugin) queryDirectoryEntriesAtPath(ctx context.Context, query 
 		results = append(results, c.buildDirectoryEntryResult(query, entry.Name(), fullPath, isDir, icon, matchScore))
 	}
 
-	c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer current directory query resolved: path=%q search=%q totalEntries=%d matched=%d", dirPath, search, len(entries), len(results)))
 	return results
 }
 
@@ -310,6 +337,9 @@ func (c *ExplorerPlugin) revealEntry(ctx context.Context, env plugin.QueryEnv, f
 
 		// For current directory search results in open/save, select the item without entering it.
 		if window.SelectInActiveFileDialog(entryPath) {
+			util.Go(ctx, "highlight open/save dialog entry", func() {
+				window.HighlightInActiveFileDialog(entryPath)
+			})
 			return
 		}
 
@@ -460,6 +490,113 @@ func (c *ExplorerPlugin) getJumpFolderCandidates(ctx context.Context, env plugin
 	return candidates
 }
 
+// getCachedOpenSaveDialogPath returns a recently resolved dialog folder for fast typing in the same dialog query session.
+func (c *ExplorerPlugin) getCachedOpenSaveDialogPath(pid int, title string, windowId string) (string, bool) {
+	now := time.Now()
+	c.dialogPathCacheMu.Lock()
+	defer c.dialogPathCacheMu.Unlock()
+
+	sameDialog := c.dialogPathCache.pid == pid && c.dialogPathCache.path != ""
+	if sameDialog {
+		if windowId != "" || c.dialogPathCache.windowId != "" {
+			sameDialog = c.dialogPathCache.windowId == windowId
+		} else {
+			sameDialog = c.dialogPathCache.title == title
+		}
+	}
+	if !sameDialog || now.After(c.dialogPathCache.expiresAt) {
+		return "", false
+	}
+
+	info, err := os.Stat(c.dialogPathCache.path)
+	if err != nil || !info.IsDir() {
+		c.dialogPathCache = openSaveDialogPathCache{}
+		return "", false
+	}
+
+	c.dialogPathCache.expiresAt = now.Add(explorerDialogPathCacheDuration)
+	return c.dialogPathCache.path, true
+}
+
+// setCachedOpenSaveDialogPath stores the slow UIA fallback result so subsequent query changes avoid re-reading the dialog tree.
+func (c *ExplorerPlugin) setCachedOpenSaveDialogPath(pid int, title string, windowId string, path string) {
+	path = strings.TrimSpace(path)
+	if pid <= 0 || path == "" {
+		return
+	}
+
+	c.dialogPathCacheMu.Lock()
+	defer c.dialogPathCacheMu.Unlock()
+	c.dialogPathCache = openSaveDialogPathCache{
+		pid:       pid,
+		title:     title,
+		windowId:  windowId,
+		path:      path,
+		expiresAt: time.Now().Add(explorerDialogPathCacheDuration),
+	}
+}
+
+// clearOpenSaveDialogPathCache drops stale dialog paths when a new hint-driven query session starts.
+func (c *ExplorerPlugin) clearOpenSaveDialogPathCache(pid int) {
+	c.dialogPathCacheMu.Lock()
+	defer c.dialogPathCacheMu.Unlock()
+	if pid <= 0 || c.dialogPathCache.pid == pid {
+		c.dialogPathCache = openSaveDialogPathCache{}
+	}
+}
+
+func (c *ExplorerPlugin) resolveOpenSaveDialogPath(ctx context.Context, env plugin.QueryEnv) string {
+	if cachedPath, ok := c.getCachedOpenSaveDialogPath(env.ActiveWindowPid, env.ActiveWindowTitle, env.ActiveWindowId); ok {
+		return cachedPath
+	}
+
+	key := fmt.Sprintf("%d:%s:%s", env.ActiveWindowPid, env.ActiveWindowTitle, env.ActiveWindowId)
+	value, _, _ := c.dialogPathResolveGroup.Do(key, func() (any, error) {
+		if cachedPath, ok := c.getCachedOpenSaveDialogPath(env.ActiveWindowPid, env.ActiveWindowTitle, env.ActiveWindowId); ok {
+			return cachedPath, nil
+		}
+
+		if strings.TrimSpace(env.ActiveWindowId) != "" {
+			if dialogPath := strings.TrimSpace(window.GetFileDialogPathByWindowId(env.ActiveWindowId, env.ActiveWindowPid)); dialogPath != "" {
+				c.setCachedOpenSaveDialogPath(env.ActiveWindowPid, env.ActiveWindowTitle, env.ActiveWindowId, dialogPath)
+				return dialogPath, nil
+			}
+			return "", nil
+		}
+
+		if dialogPath := strings.TrimSpace(window.GetFileDialogPathByPid(env.ActiveWindowPid)); dialogPath != "" {
+			c.setCachedOpenSaveDialogPath(env.ActiveWindowPid, env.ActiveWindowTitle, env.ActiveWindowId, dialogPath)
+			return dialogPath, nil
+		}
+
+		if dialogPath := strings.TrimSpace(window.GetActiveFileDialogPath()); dialogPath != "" {
+			c.setCachedOpenSaveDialogPath(env.ActiveWindowPid, env.ActiveWindowTitle, env.ActiveWindowId, dialogPath)
+			return dialogPath, nil
+		}
+		return "", nil
+	})
+
+	dialogPath, _ := value.(string)
+	dialogPath = strings.TrimSpace(dialogPath)
+	return dialogPath
+}
+
+// prefetchOpenSaveDialogPath resolves the dialog folder while the hint is visible, hiding the slow fallback from the first typed query.
+func (c *ExplorerPlugin) prefetchOpenSaveDialogPath(ctx context.Context, pid int, title string, windowId string) {
+	if pid <= 0 {
+		return
+	}
+
+	util.Go(ctx, "prefetch open/save dialog path", func() {
+		c.resolveOpenSaveDialogPath(ctx, plugin.QueryEnv{
+			ActiveWindowPid:              pid,
+			ActiveWindowTitle:            title,
+			ActiveWindowId:               windowId,
+			ActiveWindowIsOpenSaveDialog: true,
+		})
+	})
+}
+
 func (c *ExplorerPlugin) getCurrentFileExplorerPath(ctx context.Context, env plugin.QueryEnv) string {
 	isFileExplorerPid := false
 	if env.ActiveWindowPid > 0 {
@@ -470,18 +607,15 @@ func (c *ExplorerPlugin) getCurrentFileExplorerPath(ctx context.Context, env plu
 		}
 	}
 
-	shouldUseDialogPath := env.ActiveWindowIsOpenSaveDialog && !isFileExplorerPid
-	if env.ActiveWindowIsOpenSaveDialog && isFileExplorerPid {
+	isOpenSaveDialog := env.ActiveWindowIsOpenSaveDialog
+	shouldUseDialogPath := isOpenSaveDialog && !isFileExplorerPid
+	if isOpenSaveDialog && isFileExplorerPid {
 		c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer ignored open/save flag for finder pid=%d", env.ActiveWindowPid))
 	}
 
 	if shouldUseDialogPath {
-		if dialogPath := strings.TrimSpace(window.GetFileDialogPathByPid(env.ActiveWindowPid)); dialogPath != "" {
+		if dialogPath := c.resolveOpenSaveDialogPath(ctx, env); dialogPath != "" {
 			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer path resolved from file dialog by pid: pid=%d path=%q", env.ActiveWindowPid, dialogPath))
-			return dialogPath
-		}
-		if dialogPath := strings.TrimSpace(window.GetActiveFileDialogPath()); dialogPath != "" {
-			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer path resolved from active file dialog: path=%q", dialogPath))
 			return dialogPath
 		}
 	}
@@ -516,13 +650,13 @@ func (c *ExplorerPlugin) getCurrentFileExplorerPath(ctx context.Context, env plu
 	// Compatibility fallback for edge cases where open/save detection flag is false
 	// but the active PID still owns an open/save dialog.
 	if util.IsWindows() && !shouldUseDialogPath {
-		if dialogPath := strings.TrimSpace(window.GetFileDialogPathByPid(env.ActiveWindowPid)); dialogPath != "" {
+		if dialogPath := c.resolveOpenSaveDialogPath(ctx, env); dialogPath != "" {
 			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer path resolved from file dialog compatibility fallback: pid=%d path=%q", env.ActiveWindowPid, dialogPath))
 			return dialogPath
 		}
 	}
 
-	c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Explorer path resolve failed: pid=%d title=%q isOpenSaveDialog=%v", env.ActiveWindowPid, env.ActiveWindowTitle, env.ActiveWindowIsOpenSaveDialog))
+	c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Explorer path resolve failed: pid=%d title=%q isOpenSaveDialog=%v", env.ActiveWindowPid, env.ActiveWindowTitle, isOpenSaveDialog))
 	return ""
 }
 
@@ -532,12 +666,15 @@ func (c *ExplorerPlugin) jumpToFolder(ctx context.Context, env plugin.QueryEnv, 
 			c.activateOwnerWindow(ctx, env.ActiveWindowPid)
 			if !window.NavigateActiveFileDialog(folderPath) {
 				c.api.Log(ctx, plugin.LogLevelError, "Failed to navigate open/save dialog to path: "+folderPath)
+				c.clearOpenSaveDialogPathCache(env.ActiveWindowPid)
+				return
 			}
+			c.setCachedOpenSaveDialogPath(env.ActiveWindowPid, env.ActiveWindowTitle, env.ActiveWindowId, folderPath)
+			c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
 			return
 		}
 
-		if window.NavigateInFileExplorerByPid(env.ActiveWindowPid, folderPath) {
-			window.ActivateWindowByPid(env.ActiveWindowPid)
+		if window.NavigateInFileExplorer(env.ActiveWindowPid, folderPath, env.ActiveWindowTitle) {
 			return
 		}
 
@@ -638,11 +775,17 @@ func (c *ExplorerPlugin) normalizePathKey(path string) string {
 	return path
 }
 
+func (c *ExplorerPlugin) typeToSearchDebugLog(ctx context.Context, format string, args ...any) {
+	// c.api.Log(ctx, plugin.LogLevelDebug, "typeToSearch: "+fmt.Sprintf(format, args...))
+}
+
 func (c *ExplorerPlugin) stopOverlayListener() {
-	c.api.Log(context.Background(), plugin.LogLevelInfo, "typeToSearch: stop monitor")
+	c.typeToSearchDebugLog(context.Background(), "stop monitor")
 	StopExplorerMonitor()
 	StopExplorerOpenSaveMonitor()
 	setExplorerMonitorLogger(nil)
+	overlay.Close(explorerDialogHintOverlayName)
+	c.clearOpenSaveDialogPathCache(0)
 
 	if runtime := c.overlayRuntime.Swap(nil); runtime != nil {
 		close(runtime.stopCh)
@@ -653,9 +796,9 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 	c.stopOverlayListener()
 
 	setExplorerMonitorLogger(func(msg string) {
-		c.api.Log(ctx, plugin.LogLevelDebug, "typeToSearch: "+msg)
+		c.typeToSearchDebugLog(ctx, "%s", msg)
 	})
-	c.api.Log(ctx, plugin.LogLevelInfo, "typeToSearch: start monitor")
+	c.typeToSearchDebugLog(ctx, "start monitor")
 
 	runtime := &overlayRuntime{stopCh: make(chan struct{})}
 	c.overlayRuntime.Store(runtime)
@@ -671,6 +814,8 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 		eventType overlayEventType
 		key       string
 		ctx       context.Context
+		pid       int
+		isDialog  bool
 	}
 
 	events := make(chan overlayEvent, 64)
@@ -682,11 +827,14 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 	}
 
 	onActivated := func(pid int) {
-		c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("typeToSearch: activated pid=%d", pid))
-		pushEvent(overlayEvent{eventType: overlayEventActivate})
+		c.typeToSearchDebugLog(ctx, "activated pid=%d", pid)
+		pushEvent(overlayEvent{eventType: overlayEventActivate, pid: pid})
+	}
+	onDialogActivated := func(pid int) {
+		pushEvent(overlayEvent{eventType: overlayEventActivate, pid: pid, isDialog: true})
 	}
 	onDeactivated := func() {
-		c.api.Log(ctx, plugin.LogLevelDebug, "typeToSearch: deactivated")
+		c.typeToSearchDebugLog(ctx, "deactivated")
 		pushEvent(overlayEvent{eventType: overlayEventDeactivate})
 	}
 	onKey := func(key string) {
@@ -700,6 +848,7 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 			active         bool
 			waitingVisible bool
 			waitingSince   time.Time
+			handoffUntil   time.Time
 			pending        string
 			pendingCtx     context.Context
 		)
@@ -707,29 +856,119 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 		resetState := func() {
 			waitingVisible = false
 			waitingSince = time.Time{}
+			handoffUntil = time.Time{}
 			pending = ""
 			pendingCtx = nil
 		}
 
+		changeExplorerQuery := func(localCtx context.Context) {
+			if pending == "" {
+				return
+			}
+			queryText := "explorer " + pending
+			c.typeToSearchDebugLog(localCtx, "changeQuery %q", queryText)
+			c.api.ChangeQuery(localCtx, common.PlainQuery{
+				QueryType: plugin.QueryTypeInput,
+				QueryText: queryText,
+			})
+		}
+
+		// Open/save dialogs default to the filename input. Keep that native focus
+		// intact unless the user explicitly clicks the Wox hint.
+		openDialogQuery := func(localCtx context.Context, pid int) {
+			if pid <= 0 {
+				return
+			}
+			if isDialog, err := window.IsOpenSaveDialogByPid(pid); err != nil || !isDialog {
+				return
+			}
+
+			dialogWindowId := GetOpenSaveDialogWindowIdByPid(pid)
+			x, y, w, h, ok := GetOpenSaveDialogRectByPid(pid)
+			if !ok || w <= 0 || h <= 0 {
+				return
+			}
+
+			overlay.Close(explorerDialogHintOverlayName)
+			woxSetting := setting.GetSettingManager().GetWoxSetting(localCtx)
+			initialWindowHeight := getExplorerInitialWindowHeight(localCtx)
+			position := getExplorerWindowPosition(common.WindowRect{X: x, Y: y, Width: w, Height: h}, woxSetting.AppWidth.Get()/2, initialWindowHeight)
+			plugin.GetPluginManager().GetUI().ShowApp(localCtx, common.ShowContext{
+				HideToolbar:      true,
+				QueryBoxAtBottom: true,
+				HideOnBlur:       true,
+				ShowSource:       common.ShowSourceExplorer,
+				WindowPosition:   &position,
+				WindowWidth:      woxSetting.AppWidth.Get() / 2,
+			})
+			// ShowApp refreshes foreground state, so seed the dialog owner after
+			// Wox is visible and before ChangeQuery builds the plugin QueryEnv.
+			ui.GetUIManager().SeedActiveWindowSnapshotForQuery(common.ActiveWindowSnapshot{
+				Name:             window.GetWindowNameByPid(pid),
+				Pid:              pid,
+				WindowId:         dialogWindowId,
+				IsOpenSaveDialog: true,
+			})
+			c.api.ChangeQuery(localCtx, common.PlainQuery{
+				QueryType: plugin.QueryTypeInput,
+				QueryText: explorerDialogHintQueryText,
+			})
+		}
+
+		// The dialog hint is passive: it advertises Wox search without turning
+		// ordinary filename typing into an Explorer query.
+		showDialogHint := func(localCtx context.Context, pid int) {
+			if pid <= 0 || c.api.IsVisible(localCtx) {
+				return
+			}
+
+			title := window.GetWindowNameByPid(pid)
+			dialogWindowId := GetOpenSaveDialogWindowIdByPid(pid)
+			c.prefetchOpenSaveDialogPath(localCtx, pid, title, dialogWindowId)
+			overlay.Show(overlay.OverlayOptions{
+				Name:             explorerDialogHintOverlayName,
+				Message:          c.api.GetTranslation(localCtx, "plugin_explorer_hint_message_dialog"),
+				StickyWindowPid:  pid,
+				Anchor:           overlay.AnchorBottomCenter,
+				OffsetY:          explorerDialogHintVerticalInset,
+				Topmost:          true,
+				FontSize:         12,
+				MaxWidth:         explorerDialogHintMaxWidth,
+				AutoCloseSeconds: 0,
+				OnClick: func() bool {
+					clickCtx := context.WithValue(ctx, util.ContextKeyTraceId, uuid.NewString())
+					clickCtx = util.WithCoreSessionContext(clickCtx)
+					openDialogQuery(clickCtx, pid)
+					return true
+				},
+			})
+		}
+
 		showOverlay := func(localCtx context.Context) bool {
+			overlay.Close(explorerDialogHintOverlayName)
 			x, y, w, h, ok := GetActiveExplorerRect()
 			if !ok {
 				x, y, w, h, ok = GetActiveDialogRect()
 				if !ok {
-					c.api.Log(localCtx, plugin.LogLevelInfo, "typeToSearch: showOverlay skipped (no active explorer/dialog rect)")
+					c.typeToSearchDebugLog(localCtx, "showOverlay skipped (no active explorer/dialog rect)")
 					return false
 				}
 			}
 			if w <= 0 || h <= 0 {
-				c.api.Log(localCtx, plugin.LogLevelInfo, fmt.Sprintf("typeToSearch: showOverlay skipped (invalid rect w=%d h=%d)", w, h))
+				c.typeToSearchDebugLog(localCtx, "showOverlay skipped (invalid rect w=%d h=%d)", w, h)
 				return false
 			}
-			c.api.Log(localCtx, plugin.LogLevelInfo, fmt.Sprintf("typeToSearch: showOverlay explorerRect=(%d,%d,%d,%d)", x, y, w, h))
+			c.typeToSearchDebugLog(localCtx, "showOverlay explorerRect=(%d,%d,%d,%d)", x, y, w, h)
+			woxSetting := setting.GetSettingManager().GetWoxSetting(localCtx)
+			initialWindowHeight := getExplorerInitialWindowHeight(localCtx)
+			position := getExplorerWindowPosition(common.WindowRect{X: x, Y: y, Width: w, Height: h}, woxSetting.AppWidth.Get()/2, initialWindowHeight)
 			plugin.GetPluginManager().GetUI().ShowApp(localCtx, common.ShowContext{
-				SelectAll: false,
-				// LayoutModeExplorer: Flutter computes sticky bottom-right position from this rect.
-				WindowRect: &common.WindowRect{X: x, Y: y, Width: w, Height: h},
-				LayoutMode: common.LayoutModeExplorer,
+				HideToolbar:      true,
+				QueryBoxAtBottom: true,
+				HideOnBlur:       true,
+				ShowSource:       common.ShowSourceExplorer,
+				WindowPosition:   &position,
+				WindowWidth:      woxSetting.AppWidth.Get() / 2,
 			})
 			return true
 		}
@@ -744,16 +983,25 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 			case ev := <-events:
 				switch ev.eventType {
 				case overlayEventActivate:
+					c.typeToSearchDebugLog(ctx, "event activate active=%v waitingVisible=%v pending=%q", active, waitingVisible, pending)
 					active = true
-					// Don't reset state when we're waiting for the overlay to become visible.
-					// ShowApp steals focus from Explorer, which triggers deactivated → activated cycling.
-					// Resetting here would clear pending keys before the ticker can send changeQuery.
-					if !waitingVisible {
+					if ev.isDialog {
+						showDialogHint(ctx, ev.pid)
+					} else {
+						overlay.Close(explorerDialogHintOverlayName)
+					}
+					// Bug fix: keep pending keys while waiting for visible and during the handoff
+					// grace window. ShowApp can trigger activation churn before all fast-typed
+					// keys have either been pushed through ChangeQuery or handed to Flutter's
+					// EditableText, so the old eager reset still dropped early characters.
+					if !waitingVisible && handoffUntil.IsZero() {
 						resetState()
 					}
 				case overlayEventDeactivate:
+					c.typeToSearchDebugLog(ctx, "event deactivate active=%v waitingVisible=%v pending=%q", active, waitingVisible, pending)
 					active = false
-					if !waitingVisible {
+					overlay.Close(explorerDialogHintOverlayName)
+					if !waitingVisible && handoffUntil.IsZero() {
 						resetState()
 					}
 				case overlayEventKey:
@@ -761,23 +1009,40 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 					if localCtx == nil {
 						localCtx = ctx
 					}
-					if !active || ev.key == "" {
-						c.api.Log(localCtx, plugin.LogLevelDebug, fmt.Sprintf("typeToSearch: ignore key=%q active=%v", ev.key, active))
+					visible := c.api.IsVisible(localCtx)
+					c.typeToSearchDebugLog(localCtx, "event key=%q active=%v visible=%v waitingVisible=%v pending=%q", ev.key, active, visible, waitingVisible, pending)
+					inHandoff := !handoffUntil.IsZero() && time.Now().Before(handoffUntil)
+					canCaptureHandoffKey := waitingVisible || inHandoff
+					if (!active && !canCaptureHandoffKey) || ev.key == "" {
+						c.typeToSearchDebugLog(localCtx, "ignore key=%q active=%v waitingVisible=%v handoff=%v", ev.key, active, waitingVisible, inHandoff)
 						continue
 					}
-					if c.api.IsVisible(localCtx) {
-						c.api.Log(localCtx, plugin.LogLevelDebug, fmt.Sprintf("typeToSearch: ignore key=%q (wox visible)", ev.key))
+					if visible {
+						if !canCaptureHandoffKey {
+							c.typeToSearchDebugLog(localCtx, "ignore key=%q (wox visible)", ev.key)
+							continue
+						}
+						// Bug fix: Finder-to-Wox focus handoff is not atomic on macOS. Wox can
+						// become visible before the ticker starts the grace window and before
+						// Flutter's EditableText is ready, so fast typing after the first key was
+						// ignored here and also missed by Flutter. Treat waitingVisible as part of
+						// the handoff and push the full query immediately.
+						pending += strings.ToLower(ev.key)
+						changeExplorerQuery(localCtx)
+						waitingVisible = false
+						waitingSince = time.Time{}
+						handoffUntil = time.Now().Add(350 * time.Millisecond)
 						continue
 					}
 					if pendingCtx == nil {
 						pendingCtx = localCtx
-						c.api.Log(pendingCtx, plugin.LogLevelInfo, fmt.Sprintf("typeToSearch: begin key=%q", ev.key))
+						c.typeToSearchDebugLog(pendingCtx, "begin key=%q", ev.key)
 					}
 					pending += strings.ToLower(ev.key)
-					c.api.Log(pendingCtx, plugin.LogLevelDebug, fmt.Sprintf("typeToSearch: pending=%q", pending))
+					c.typeToSearchDebugLog(pendingCtx, "pending=%q", pending)
 					if !waitingVisible {
 						if !showOverlay(pendingCtx) {
-							c.api.Log(pendingCtx, plugin.LogLevelInfo, "typeToSearch: showOverlay failed")
+							c.typeToSearchDebugLog(pendingCtx, "showOverlay failed")
 							resetState()
 							continue
 						}
@@ -786,6 +1051,10 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 					}
 				}
 			case <-ticker.C:
+				if !handoffUntil.IsZero() && time.Now().After(handoffUntil) {
+					resetState()
+					continue
+				}
 				if !waitingVisible {
 					continue
 				}
@@ -793,20 +1062,21 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 				if tickCtx == nil {
 					tickCtx = ctx
 				}
-				if c.api.IsVisible(tickCtx) {
-					if pending != "" {
-						queryText := "explorer " + pending
-						c.api.Log(tickCtx, plugin.LogLevelInfo, fmt.Sprintf("typeToSearch: changeQuery %q", queryText))
-						c.api.ChangeQuery(tickCtx, common.PlainQuery{
-							QueryType: plugin.QueryTypeInput,
-							QueryText: queryText,
-						})
-					}
-					resetState()
+				visible := c.api.IsVisible(tickCtx)
+				c.typeToSearchDebugLog(tickCtx, "ticker waitingVisible=%v visible=%v pending=%q active=%v", waitingVisible, visible, pending, active)
+				if visible {
+					changeExplorerQuery(tickCtx)
+					// Keep a short raw-key capture window after the first ChangeQuery. The
+					// previous immediate reset assumed Flutter had already taken keyboard focus,
+					// but macOS can still deliver the next few Finder key events before the
+					// launcher text input is ready, which dropped characters in fast typing.
+					waitingVisible = false
+					waitingSince = time.Time{}
+					handoffUntil = time.Now().Add(350 * time.Millisecond)
 					continue
 				}
 				if !waitingSince.IsZero() && time.Since(waitingSince) > 2*time.Second {
-					c.api.Log(tickCtx, plugin.LogLevelDebug, "typeToSearch: timeout waiting for wox visible")
+					c.typeToSearchDebugLog(tickCtx, "timeout waiting for wox visible")
 					resetState()
 				}
 			}
@@ -817,5 +1087,33 @@ func (c *ExplorerPlugin) startOverlayListener(ctx context.Context) {
 	StartExplorerMonitor(onActivated, onDeactivated, onKey)
 
 	// Start monitoring open/save dialogs
-	StartExplorerOpenSaveMonitor(onActivated, onDeactivated, onKey)
+	StartExplorerOpenSaveMonitor(onDialogActivated, onDeactivated, onKey)
+}
+
+func getExplorerInitialWindowHeight(ctx context.Context) int {
+	theme := ui.GetUIManager().GetCurrentTheme(ctx)
+	// Explorer overlays position Wox before Flutter paints the query box. Using
+	// the shared density helper keeps compact and comfortable launcher sizes from
+	// appearing offset while preserving theme padding exactly as before.
+	queryBoxHeight := ui.DensityQueryBoxBaseHeight(ctx) + theme.AppPaddingTop + theme.AppPaddingBottom
+	if queryBoxHeight <= 0 {
+		queryBoxHeight = 80
+	}
+	return queryBoxHeight
+}
+
+func getExplorerWindowPosition(anchorRect common.WindowRect, windowWidth int, windowHeight int) common.WindowPosition {
+	const margin = 20
+
+	x := anchorRect.X + anchorRect.Width - windowWidth - margin
+	if x < anchorRect.X+10 {
+		x = anchorRect.X + 10
+	}
+
+	y := anchorRect.Y + anchorRect.Height - windowHeight - margin
+	if y < anchorRect.Y+10 {
+		y = anchorRect.Y + 10
+	}
+
+	return common.WindowPosition{X: x, Y: y}
 }

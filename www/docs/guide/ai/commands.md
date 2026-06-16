@@ -1,54 +1,64 @@
 # AI Commands
 
-Wox allows you to integrate AI capabilities directly into your workflow.
+AI Commands turn a saved prompt into a reusable Wox command. They are useful when you often send the same kind of text to a model: rewrite selected text, summarize a diff, translate a paragraph, or explain an error.
 
-## Auto Git Commit Message
+Configure [AI Settings](./settings.md) first.
 
-This feature allows you to automatically generate a commit message using Wox AI Command from terminal.
+## Create a Command
 
-### Setup
+1. Open **Settings -> Plugins -> AI Command**.
+2. Open the command list.
+3. Add a command with a name, query keyword, model, and prompt.
+4. Use `%s` in the prompt where Wox should insert your input.
 
-1. **Add AI command**
+![AI git msg setting](/images/ai_auto_git_msg_setting.png)
 
-   - Query `aicommand` in Wox and select `Open AI Commands settings`
-   - In the Settings tab, click on the `Add` button
-   - Add the following information:
+## Example: Commit Message From a Diff
 
-     - **Name**: `git commit msg`
-     - **Query**: `commit`
-     - **Model**: `<your choice>`
-     - **Prompt**:
+Command settings:
 
-       ```
-       Below I will give you a git diff output, please help me write a commit msg targeting these changes. Requirements are as follows:
-        - The first line should be a description no more than 50 words, followed by a blank line, and then 2-3 detailed descriptions.
-        - Do not respond with anything except the commit msg.
+| Field | Value |
+| --- | --- |
+| Name | `git commit msg` |
+| Query | `commit` |
+| Vision | `No` |
 
-       Here is my input:
-       %s
-       ```
+Prompt:
 
-     - **Vision**: No
+```text
+Write a Git commit message for this diff.
 
-   ![AI git msg setting](/images/ai_auto_git_msg_setting.png)
+Rules:
+- First line: imperative mood, 50 characters or fewer.
+- Then a blank line.
+- Then 2-3 bullet points explaining the concrete changes.
+- Output only the commit message.
 
-2. **Config bash scripts**
-   To use this feature, you can add the following script to your `.bashrc` or `.zshrc` file:
+Diff:
+%s
+```
 
-   ```bash
-   commit() {
-       open "wox://query?q=ai commit $(cat)"
-   }
-   ```
+Add a macOS shell helper:
 
-### Usage
+```bash
+commit() {
+  local input
+  input="$(cat)"
+  python3 -c 'import sys, urllib.parse; print("wox://query?q=ai%20commit%20" + urllib.parse.quote(sys.stdin.read()))' <<< "$input" | xargs open
+}
+```
 
-After setting up, you can use this feature in your git project by executing the following command:
+Use it from a Git repository:
 
 ```bash
 git diff | commit
 ```
 
-This command will automatically call Wox and generate a commit message for you.
-
 ![AI git msg](/images/ai_auto_git_msg.png)
+
+## Good Command Prompts
+
+- Say what the output should be.
+- Say what should not be included.
+- Keep reusable rules in the saved prompt and pass only the changing input at runtime.
+- Do not pass private content to online providers unless that is acceptable for your workflow.

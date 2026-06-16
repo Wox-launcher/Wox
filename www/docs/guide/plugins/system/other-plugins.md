@@ -1,17 +1,20 @@
 # Other System Plugins
 
-Short notes on auxiliary system plugins.
+These built-ins are smaller, but they are often the pieces that make Wox feel like a command center instead of only a launcher.
 
-## Plugin List
+| Plugin | Trigger | Use |
+| --- | --- | --- |
+| AI Command | `ai` | Run saved AI prompts from Wox or selected text |
+| Backup | `backup`, `restore` | Export and restore Wox settings |
+| Browser | Contextual | Search or switch browser tabs when browser integration is available |
+| Doctor | `doctor` | Check common setup, permission, runtime, and update issues |
+| MediaPlayer | `media` | Play, pause, skip, or adjust active media |
+| Plugin Manager | `wpm`, `store`, `pm` | Install, update, uninstall, create, or inspect plugins |
+| Screenshot | `screenshot` | Capture screenshots and browse screenshot history |
+| Selection | Selection query | Act on selected text or files from another app |
+| Shell | `>` / global command detection | Run shell commands and reuse shell history |
+| Sys | Global | Run system actions such as power and settings commands |
+| Theme | `theme` | Apply, install, remove, restore, or generate themes |
+| Update | `update`, `upgrade` | Check for Wox updates |
 
-- **AI Command**: Run preconfigured AI commands. Type `ai` to list commands, then choose one to run.
-- **Backup**: Export or restore Wox settings.
-- **Browser**: Search and switch browser tabs (requires browser integration; results show when a supported browser is active).
-- **Browser Bookmark**: Search browser bookmarks by name or URL.
-- **Doctor**: Diagnose common issues and show recommendations.
-- **MediaPlayer**: Control media playback (play/pause, next/prev, volume).
-- **Plugin Installer**: Install and manage plugins.
-- **Selection**: Actions for selected text/files.
-- **Shell**: Run shell commands directly in Wox.
-- **Sys**: System operations (power, settings, info).
-- **Theme**: Manage themes.
+If you do not use one of these workflows, disable the plugin in settings to keep results quieter.

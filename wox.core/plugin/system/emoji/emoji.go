@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"wox/common"
 	"wox/plugin"
 	"wox/setting"
@@ -41,8 +42,10 @@ type emojiUsage struct {
 }
 
 type EmojiPlugin struct {
-	api    plugin.API
-	emojis []EmojiData
+	api           plugin.API
+	emojis        []EmojiData
+	emojiLoadOnce sync.Once
+	emojiLoadErr  error
 
 	// emoji -> custom descriptions added by user
 	customDescriptions map[string][]string
@@ -90,15 +93,6 @@ func (e *EmojiPlugin) GetMetadata() plugin.Metadata {
 		},
 		Features: []plugin.MetadataFeature{
 			{
-				Name: plugin.MetadataFeatureGridLayout,
-				Params: map[string]any{
-					"Columns":     12,
-					"ItemPadding": 12,
-					"ItemMargin":  6,
-					"ShowTitle":   false,
-				},
-			},
-			{
 				Name: plugin.MetadataFeatureAI,
 			},
 		},
@@ -107,22 +101,38 @@ func (e *EmojiPlugin) GetMetadata() plugin.Metadata {
 
 func (e *EmojiPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	e.api = initParams.API
+	e.emojis = nil
+	e.emojiLoadOnce = sync.Once{}
+	e.emojiLoadErr = nil
 	e.customDescriptions = make(map[string][]string)
 	e.loadCustomDescriptions(ctx)
-	e.loadEmojis(ctx)
+	// Emoji data is intentionally lazy-loaded on the first emoji query. The old
+	// startup path parsed the full embedded emoji catalog for every launch, which
+	// kept several megabytes of emoji search data live even when the user never
+	// opened the emoji plugin. Resetting the lazy state here preserves plugin
+	// reload behavior while moving that cost to the feature that actually uses it.
 }
 
-func (e *EmojiPlugin) loadEmojis(ctx context.Context) {
+func (e *EmojiPlugin) ensureEmojisLoaded(ctx context.Context) bool {
+	e.emojiLoadOnce.Do(func() {
+		e.emojiLoadErr = e.loadEmojis(ctx)
+	})
+	if e.emojiLoadErr != nil {
+		e.api.Log(ctx, plugin.LogLevelError, e.emojiLoadErr.Error())
+		return false
+	}
+	return true
+}
+
+func (e *EmojiPlugin) loadEmojis(ctx context.Context) error {
 	data, err := emojiFS.ReadFile("emoji-data.json")
 	if err != nil {
-		e.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to read emoji data: %v", err))
-		return
+		return fmt.Errorf("failed to read emoji data: %w", err)
 	}
 
 	jsonResult := gjson.ParseBytes(data)
 	if !jsonResult.IsArray() {
-		e.api.Log(ctx, plugin.LogLevelError, "Failed to parse emoji data: root is not array")
-		return
+		return fmt.Errorf("failed to parse emoji data: root is not array")
 	}
 
 	seen := make(map[string]bool)
@@ -166,9 +176,14 @@ func (e *EmojiPlugin) loadEmojis(ctx context.Context) {
 
 	e.applyCustomDescriptions(ctx)
 	e.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Loaded %d emojis", len(e.emojis)))
+	return nil
 }
 
-func (e *EmojiPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+func (e *EmojiPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
+	if !e.ensureEmojisLoaded(ctx) {
+		return e.newEmojiQueryResponse(nil)
+	}
+
 	var results []plugin.QueryResult
 	search := strings.ToLower(strings.TrimSpace(query.Search))
 
@@ -227,7 +242,19 @@ func (e *EmojiPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 
 	e.maybeStartAIMatch(ctx, query, search, existingEmojiSet, &results)
 
-	return results
+	return e.newEmojiQueryResponse(results)
+}
+
+func (e *EmojiPlugin) newEmojiQueryResponse(results []plugin.QueryResult) plugin.QueryResponse {
+	response := plugin.NewQueryResponse(results)
+	gridLayout := plugin.MetadataFeatureParamsGridLayout{
+		Columns:     10,
+		ItemPadding: 12,
+		ItemMargin:  6,
+		ShowTitle:   false,
+	}
+	response.Layout = plugin.QueryLayout{GridLayout: &gridLayout}
+	return response
 }
 
 func (e *EmojiPlugin) maybeStartAIMatch(ctx context.Context, query plugin.Query, search string, existingEmojiSet map[string]bool, results *[]plugin.QueryResult) {
@@ -431,7 +458,7 @@ func (e *EmojiPlugin) createEmojiResult(ctx context.Context, entry EmojiData, is
 			{
 				Name:   "i18n:plugin_emoji_copy_large",
 				Icon:   common.NewWoxImageEmoji("🖼️"),
-				Hotkey: "ctrl+enter",
+				Hotkey: util.PrimaryHotkey("enter"),
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					img, err := getNativeEmojiImage(emoji, 200)
 					if err != nil {

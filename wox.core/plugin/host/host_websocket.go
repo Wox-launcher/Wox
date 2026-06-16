@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 	"wox/common"
 	"wox/plugin"
@@ -24,6 +25,13 @@ type WebsocketHost struct {
 	host        plugin.Host
 	requestMap  *util.HashMap[string, chan JsonRpcResponse]
 	hostProcess *os.Process
+	statusLock  sync.RWMutex
+
+	// Runtime status needs the exact executable and startup error. The previous
+	// IsStarted-only state collapsed missing interpreters, process launch
+	// failures, and websocket connection failures into the same stopped state.
+	executablePath string
+	lastStartError string
 }
 
 func (w *WebsocketHost) getHostName(ctx context.Context) string {
@@ -31,9 +39,13 @@ func (w *WebsocketHost) getHostName(ctx context.Context) string {
 }
 
 func (w *WebsocketHost) StartHost(ctx context.Context, executablePath string, entry string, envs []string, executableArgs ...string) error {
+	w.setStartState(executablePath, "")
+
 	port, portErr := util.GetAvailableTcpPort(ctx)
 	if portErr != nil {
-		return fmt.Errorf("failed to get available port: %w", portErr)
+		startErr := fmt.Errorf("failed to get available port: %w", portErr)
+		w.setStartState(executablePath, startErr.Error())
+		return startErr
 	}
 
 	util.GetLogger().Info(ctx, fmt.Sprintf("<%s> starting host on port %d", w.getHostName(ctx), port))
@@ -49,14 +61,24 @@ func (w *WebsocketHost) StartHost(ctx context.Context, executablePath string, en
 
 	cmd, err := shell.RunWithEnv(executablePath, envs, args...)
 	if err != nil {
-		return fmt.Errorf("failed to start host: %w", err)
+		startErr := fmt.Errorf("failed to start host process with %s: %w", executablePath, err)
+		w.setStartState(executablePath, startErr.Error())
+		return startErr
 	}
 	util.GetLogger().Info(ctx, fmt.Sprintf("<%s> host pid: %d", w.getHostName(ctx), cmd.Process.Pid))
 
 	time.Sleep(time.Second) // wait for host to start
-	w.startWebsocketServer(ctx, port)
+	if connectErr := w.startWebsocketServer(ctx, port); connectErr != nil {
+		if killErr := cmd.Process.Kill(); killErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("<%s> failed to kill disconnected host process(%d): %s", w.getHostName(ctx), cmd.Process.Pid, killErr))
+		}
+		startErr := fmt.Errorf("host process started but websocket connection failed: %w", connectErr)
+		w.setStartState(executablePath, startErr.Error())
+		return startErr
+	}
 
 	w.hostProcess = cmd.Process
+	w.setStartState(executablePath, "")
 	return nil
 }
 
@@ -71,10 +93,37 @@ func (w *WebsocketHost) StopHost(ctx context.Context) {
 			util.GetLogger().Info(ctx, fmt.Sprintf("<%s> killed host process(%d)", w.getHostName(ctx), pid))
 		}
 	}
+	// Bug fix: StopHost used to leave the websocket client object in place, so
+	// status checks could briefly report a killed host as still connected. Clear
+	// local process state immediately; a fresh StartHost creates a new client.
+	w.hostProcess = nil
+	w.ws = nil
 }
 
 func (w *WebsocketHost) IsHostStarted(ctx context.Context) bool {
 	return w.ws != nil && w.ws.IsConnected()
+}
+
+func (w *WebsocketHost) GetExecutablePath() string {
+	w.statusLock.RLock()
+	defer w.statusLock.RUnlock()
+
+	return w.executablePath
+}
+
+func (w *WebsocketHost) GetLastStartError() string {
+	w.statusLock.RLock()
+	defer w.statusLock.RUnlock()
+
+	return w.lastStartError
+}
+
+func (w *WebsocketHost) setStartState(executablePath string, lastStartError string) {
+	w.statusLock.Lock()
+	defer w.statusLock.Unlock()
+
+	w.executablePath = executablePath
+	w.lastStartError = lastStartError
 }
 
 func (w *WebsocketHost) LoadPlugin(ctx context.Context, metadata plugin.Metadata, pluginDirectory string) (plugin.Plugin, error) {
@@ -145,27 +194,55 @@ func (w *WebsocketHost) invokeMethod(ctx context.Context, metadata plugin.Metada
 	}
 }
 
-func (w *WebsocketHost) startWebsocketServer(ctx context.Context, port int) {
+func (w *WebsocketHost) decodeHostResult(result any, target any) error {
+	if result == nil {
+		return fmt.Errorf("result is nil")
+	}
+
+	var raw []byte
+	switch typed := result.(type) {
+	case string:
+		raw = []byte(typed)
+	default:
+		marshalResult, marshalErr := json.Marshal(typed)
+		if marshalErr != nil {
+			return fmt.Errorf("failed to marshal host result: %w", marshalErr)
+		}
+		raw = marshalResult
+	}
+
+	if err := json.Unmarshal(raw, target); err != nil {
+		return fmt.Errorf("failed to unmarshal host result: %w", err)
+	}
+
+	return nil
+}
+
+func (w *WebsocketHost) startWebsocketServer(ctx context.Context, port int) error {
 	w.ws = util.NewWebsocketClient(fmt.Sprintf("ws://127.0.0.1:%d", port))
 	w.ws.OnMessage(ctx, func(data []byte) {
 		util.Go(ctx, fmt.Sprintf("<%s> onMessage", w.getHostName(ctx)), func() {
 			w.onMessage(string(data))
 		})
 	})
-	const maxAttempts = 10
+	const maxAttempts = 30
 	const baseDelay = 200 * time.Millisecond
+	var lastErr error
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		connErr := w.ws.Connect(ctx)
 		if connErr == nil {
-			return
+			return nil
 		}
+		lastErr = connErr
 		if attempt == maxAttempts {
 			util.GetLogger().Error(ctx, fmt.Sprintf("<%s> failed to connect to host after %d attempts: %s", w.getHostName(ctx), maxAttempts, connErr))
-			return
+			break
 		}
 		util.GetLogger().Info(ctx, fmt.Sprintf("<%s> failed to connect to host (attempt %d/%d): %s", w.getHostName(ctx), attempt, maxAttempts, connErr))
 		time.Sleep(time.Duration(attempt) * baseDelay)
 	}
+
+	return fmt.Errorf("failed to connect to host websocket on port %d after %d attempts: %w", port, maxAttempts, lastErr)
 }
 
 func (w *WebsocketHost) onMessage(data string) {
@@ -250,8 +327,9 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 				return
 			}
 			pluginInstance.API.ChangeQuery(ctx, common.PlainQuery{
-				QueryType: plugin.QueryTypeInput,
-				QueryText: queryText,
+				QueryType:   plugin.QueryTypeInput,
+				QueryText:   queryText,
+				ContextData: common.UnmarshalContextData(request.Params["queryContextData"]),
 			})
 		}
 		if queryType == plugin.QueryTypeSelection {
@@ -271,6 +349,7 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 			pluginInstance.API.ChangeQuery(ctx, common.PlainQuery{
 				QueryType:      plugin.QueryTypeSelection,
 				QuerySelection: selection,
+				ContextData:    common.UnmarshalContextData(request.Params["queryContextData"]),
 			})
 		}
 
@@ -310,6 +389,20 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 
 		pluginInstance.API.Copy(ctx, params)
 		w.sendResponseToHost(ctx, request, "")
+	case "Screenshot":
+		var option plugin.ScreenshotOption
+		if optionStr, exists := request.Params["option"]; exists && strings.TrimSpace(optionStr) != "" {
+			// The public plugin API keeps screenshot options in a single JSON object so new fields
+			// can be added without growing the websocket method signature for every SDK runtime.
+			if err := json.Unmarshal([]byte(optionStr), &option); err != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal screenshot option: %s", request.PluginName, err))
+				w.sendResponseErrToHost(ctx, request, fmt.Errorf("failed to unmarshal screenshot option: %w", err))
+				return
+			}
+		}
+
+		result := pluginInstance.API.Screenshot(ctx, option)
+		w.sendResponseToHost(ctx, request, result)
 	case "Notify":
 		message, exist := request.Params["message"]
 		if !exist {
@@ -317,6 +410,45 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 			return
 		}
 		pluginInstance.API.Notify(ctx, message)
+		w.sendResponseToHost(ctx, request, "")
+	case "PushAttention":
+		rawRequest, exist := request.Params["request"]
+		if !exist {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] PushAttention method must have a request parameter", request.PluginName))
+			return
+		}
+
+		var attentionRequest plugin.PushAttentionRequest
+		if err := json.Unmarshal([]byte(rawRequest), &attentionRequest); err != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal push attention request: %s", request.PluginName, err))
+			w.sendResponseErrToHost(ctx, request, fmt.Errorf("failed to unmarshal push attention request: %w", err))
+			return
+		}
+
+		pluginInstance.API.PushAttention(ctx, attentionRequest)
+		w.sendResponseToHost(ctx, request, "")
+	case "ShowToolbarMsg":
+		rawMsg, exist := request.Params["msg"]
+		if !exist {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] ShowToolbarMsg method must have a msg parameter", request.PluginName))
+			return
+		}
+
+		var msg plugin.ToolbarMsg
+		if err := json.Unmarshal([]byte(rawMsg), &msg); err != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal toolbar msg: %s", request.PluginName, err))
+			return
+		}
+
+		pluginInstance.API.ShowToolbarMsg(ctx, msg)
+		w.sendResponseToHost(ctx, request, "")
+	case "ClearToolbarMsg":
+		toolbarMsgId, exist := request.Params["toolbarMsgId"]
+		if !exist {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] ClearToolbarMsg method must have a toolbarMsgId parameter", request.PluginName))
+			return
+		}
+		pluginInstance.API.ClearToolbarMsg(ctx, toolbarMsgId)
 		w.sendResponseToHost(ctx, request, "")
 	case "Log":
 		msg, exist := request.Params["msg"]
@@ -407,15 +539,14 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 				}
 			}
 
-			// validate the result is a valid definition.PluginSettingDefinitionItem json string
 			var setting definition.PluginSettingDefinitionItem
-			unmarshalErr := json.Unmarshal([]byte(result.(string)), &setting)
-			if unmarshalErr != nil {
-				util.GetLogger().Error(callbackCtx, fmt.Sprintf("[%s] failed to unmarshal dynamic setting: %s", request.PluginName, unmarshalErr))
+			decodeErr := w.decodeHostResult(result, &setting)
+			if decodeErr != nil {
+				util.GetLogger().Error(callbackCtx, fmt.Sprintf("[%s] failed to decode dynamic setting: %s", request.PluginName, decodeErr))
 				return definition.PluginSettingDefinitionItem{
 					Type: definition.PluginSettingDefinitionTypeLabel,
 					Value: &definition.PluginSettingValueLabel{
-						Content: fmt.Sprintf("failed to unmarshal dynamic setting: %s", unmarshalErr),
+						Content: fmt.Sprintf("failed to decode dynamic setting: %s", decodeErr),
 					},
 				}
 			}
@@ -458,6 +589,34 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 			})
 		})
 		w.sendResponseToHost(ctx, request, "")
+	case "OnEnterPluginQuery":
+		callbackId, exist := request.Params["callbackId"]
+		if !exist {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] OnEnterPluginQuery method must have a callbackId parameter", request.PluginName))
+			return
+		}
+
+		metadata := pluginInstance.Metadata
+		pluginInstance.API.OnEnterPluginQuery(ctx, func(callbackCtx context.Context) {
+			w.invokeMethod(callbackCtx, metadata, "onEnterPluginQuery", map[string]string{
+				"CallbackId": callbackId,
+			})
+		})
+		w.sendResponseToHost(ctx, request, "")
+	case "OnLeavePluginQuery":
+		callbackId, exist := request.Params["callbackId"]
+		if !exist {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] OnLeavePluginQuery method must have a callbackId parameter", request.PluginName))
+			return
+		}
+
+		metadata := pluginInstance.Metadata
+		pluginInstance.API.OnLeavePluginQuery(ctx, func(callbackCtx context.Context) {
+			w.invokeMethod(callbackCtx, metadata, "onLeavePluginQuery", map[string]string{
+				"CallbackId": callbackId,
+			})
+		})
+		w.sendResponseToHost(ctx, request, "")
 	case "OnMRURestore":
 		callbackId, exist := request.Params["callbackId"]
 		if !exist {
@@ -475,7 +634,7 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 
 			result, invokeErr := w.invokeMethod(callbackCtx, metadata, "onMRURestore", map[string]string{
 				"CallbackId": callbackId,
-				"mruData":    string(mruDataJson),
+				"MRUData":    string(mruDataJson),
 			})
 			if invokeErr != nil {
 				util.GetLogger().Error(callbackCtx, fmt.Sprintf("[%s] failed to invoke MRU restore callback: %s", request.PluginName, invokeErr))
@@ -486,18 +645,11 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 				return nil, nil
 			}
 
-			// Parse the result back to QueryResult
 			var queryResult plugin.QueryResult
-			resultStr, ok := result.(string)
-			if !ok {
-				util.GetLogger().Error(callbackCtx, fmt.Sprintf("[%s] MRU restore result is not a string", request.PluginName))
-				return nil, fmt.Errorf("MRU restore result is not a string")
-			}
-
-			unmarshalErr := json.Unmarshal([]byte(resultStr), &queryResult)
-			if unmarshalErr != nil {
-				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal MRU restore result: %s", request.PluginName, unmarshalErr))
-				return nil, unmarshalErr
+			decodeErr := w.decodeHostResult(result, &queryResult)
+			if decodeErr != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to decode MRU restore result: %s", request.PluginName, decodeErr))
+				return nil, decodeErr
 			}
 
 			return &queryResult, nil
@@ -576,43 +728,30 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 			return
 		}
 
-		for i, r := range results {
-			result := r
-			for j, action := range result.Actions {
-				capturedAction := action
-				if capturedAction.Type == plugin.QueryResultActionTypeForm {
-					result.Actions[j].OnSubmit = func(ctx context.Context, actionContext plugin.FormActionContext) {
-						valuesJson, _ := json.Marshal(actionContext.Values)
-						_, actionErr := w.invokeMethod(ctx, pluginInstance.Metadata, "formAction", map[string]string{
-							"ResultId":       actionContext.ResultId,
-							"ActionId":       capturedAction.Id,
-							"ResultActionId": actionContext.ResultActionId,
-							"ContextData":    actionContext.ContextData.Marshal(),
-							"Values":         string(valuesJson),
-						})
-						if actionErr != nil {
-							util.GetLogger().Error(ctx, fmt.Sprintf("[%s] form action failed: %s", pluginInstance.Metadata.GetName(ctx), actionErr.Error()))
-						}
-					}
-				} else {
-					result.Actions[j].Action = func(ctx context.Context, actionContext plugin.ActionContext) {
-						_, actionErr := w.invokeMethod(ctx, pluginInstance.Metadata, "action", map[string]string{
-							"ResultId":       actionContext.ResultId,
-							"ActionId":       capturedAction.Id,
-							"ResultActionId": actionContext.ResultActionId,
-							"ContextData":    actionContext.ContextData.Marshal(),
-						})
-						if actionErr != nil {
-							util.GetLogger().Error(ctx, fmt.Sprintf("[%s] action failed: %s", pluginInstance.Metadata.GetName(ctx), actionErr.Error()))
-						}
-					}
-				}
-			}
-			results[i] = result
-		}
-
 		success := pluginInstance.API.PushResults(ctx, query, results)
 		w.sendResponseToHost(ctx, request, success)
+	case "ExecuteToolbarMsgAction":
+		toolbarMsgId, exist := request.Params["toolbarMsgId"]
+		if !exist {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] ExecuteToolbarMsgAction method must have a toolbarMsgId parameter", request.PluginName))
+			return
+		}
+
+		actionId, exist := request.Params["actionId"]
+		if !exist {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] ExecuteToolbarMsgAction method must have an actionId parameter", request.PluginName))
+			return
+		}
+
+		sessionId := util.GetContextSessionId(ctx)
+		executeErr := plugin.GetPluginManager().ExecuteToolbarMsgAction(ctx, sessionId, toolbarMsgId, actionId)
+		if executeErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] execute toolbar msg action failed: %s", request.PluginName, executeErr))
+			w.sendResponseErrToHost(ctx, request, executeErr)
+			return
+		}
+
+		w.sendResponseToHost(ctx, request, "")
 	case "AIChatStream":
 		callbackId, exist := request.Params["callbackId"]
 		if !exist {
@@ -699,6 +838,26 @@ func (w *WebsocketHost) sendResponseToHost(ctx context.Context, request JsonRpcR
 	sendErr := w.ws.Send(ctx, responseJson)
 	if sendErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to send response: %s", request.PluginName, sendErr))
+		return
+	}
+}
+
+func (w *WebsocketHost) sendResponseErrToHost(ctx context.Context, request JsonRpcRequest, responseErr error) {
+	response := JsonRpcResponse{
+		Id:     request.Id,
+		Method: request.Method,
+		Type:   JsonRpcTypeResponse,
+		Error:  responseErr.Error(),
+	}
+	responseJson, marshalErr := json.Marshal(response)
+	if marshalErr != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal error response: %s", request.PluginName, marshalErr))
+		return
+	}
+
+	sendErr := w.ws.Send(ctx, responseJson)
+	if sendErr != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to send error response: %s", request.PluginName, sendErr))
 		return
 	}
 }

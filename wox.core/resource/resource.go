@@ -5,7 +5,9 @@ import (
 	"embed"
 	"fmt"
 	"os"
+	"os/exec"
 	"path"
+	"path/filepath"
 	"strings"
 	"wox/util"
 )
@@ -27,9 +29,6 @@ var appIconWindows []byte
 
 //go:embed others
 var OthersFS embed.FS
-
-//go:embed ai
-var AISkillsFS embed.FS
 
 var embedThemes = []string{}
 
@@ -74,19 +73,6 @@ func Extract(ctx context.Context) error {
 	othersErr := extractFiles(ctx, OthersFS, othersDirectory, "others", true)
 	if othersErr != nil {
 		return othersErr
-	}
-
-	// ai skills and prompts
-	aiDirectory := util.GetLocation().GetAIDirectory()
-	if util.IsDirExists(aiDirectory) {
-		rmErr := os.RemoveAll(aiDirectory)
-		if rmErr != nil {
-			return rmErr
-		}
-	}
-	aiSkillsErr := extractFiles(ctx, AISkillsFS, aiDirectory, "ai", true)
-	if aiSkillsErr != nil {
-		return aiSkillsErr
 	}
 
 	// themes
@@ -180,4 +166,36 @@ func GetAppIcon() []byte {
 	}
 
 	return appIcon
+}
+
+// EnsureLinuxDesktopIcon installs Wox's icon into the user icon theme so the
+// generated desktop entry resolves correctly for AppImage and manual binaries.
+func EnsureLinuxDesktopIcon(ctx context.Context) {
+	if !util.IsLinux() {
+		return
+	}
+
+	iconPath, err := util.LinuxDesktopIconPath()
+	if err != nil {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to get Linux desktop icon path: %s", err.Error()))
+		return
+	}
+
+	if err := os.MkdirAll(filepath.Dir(iconPath), 0755); err != nil {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to create Linux desktop icon directory: %s", err.Error()))
+		return
+	}
+	if err := os.WriteFile(iconPath, appIcon, 0644); err != nil {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to write Linux desktop icon: %s", err.Error()))
+		return
+	}
+
+	iconThemePath, err := util.LinuxIconThemePath()
+	if err != nil {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to get Linux icon theme path: %s", err.Error()))
+		return
+	}
+	if err := exec.Command("gtk-update-icon-cache", "-q", "-t", "-f", iconThemePath).Run(); err != nil {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to update Linux icon cache: %s", err.Error()))
+	}
 }

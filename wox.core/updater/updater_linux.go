@@ -6,7 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
+	"syscall"
 	"wox/util"
 )
 
@@ -21,6 +21,8 @@ PID="$1"
 OLD_PATH="$2"
 NEW_PATH="$3"
 LOG_FILE="$4"
+
+trap 'rm -f "$0"' EXIT
 
 if [ -z "$PID" ] || [ -z "$OLD_PATH" ] || [ -z "$NEW_PATH" ]; then
   echo "$(date "+%Y-%m-%d %H:%M:%S") missing required args" >> "$LOG_FILE"
@@ -42,25 +44,29 @@ log "Update process started"
 log "Old path: $OLD_PATH"
 log "New path: $NEW_PATH"
 
-while ps -p "$PID" > /dev/null 2>&1 || pgrep -f "$(basename "$OLD_PATH")" > /dev/null 2>&1; do
+WAIT_COUNT=0
+while ps -p "$PID" > /dev/null 2>&1; do
+	if [ $((WAIT_COUNT % 5)) -eq 0 ]; then
+		log "Waiting for application process $PID to exit"
+	fi
   sleep 1
+	WAIT_COUNT=$((WAIT_COUNT + 1))
 done
 
 log "Application exited, replacing executable"
-cp "$NEW_PATH" "$OLD_PATH"
+# Remove the old file first to avoid ETXTBSY error (AppImage FUSE mount may still hold the file open)
+rm -f "$OLD_PATH"
+CP_OUTPUT=$(cp "$NEW_PATH" "$OLD_PATH" 2>&1)
 if [ $? -ne 0 ]; then
-  log "Failed to copy executable, trying with sudo"
-  sudo cp "$NEW_PATH" "$OLD_PATH"
-  if [ $? -ne 0 ]; then
-    log "ERROR: Failed to copy executable"
-    exit 1
-  fi
+  log "Failed to copy executable: $CP_OUTPUT"
+  log "ERROR: Failed to copy executable"
+  exit 1
 fi
 
-chmod +x "$OLD_PATH" || sudo chmod +x "$OLD_PATH"
+chmod +x "$OLD_PATH"
 
 log "Launching updated application"
-"$OLD_PATH" --updated >/dev/null 2>&1 &
+"$OLD_PATH" --updated >> "$LOG_FILE" 2>&1 &
 log "Update process completed"
 `
 
@@ -76,10 +82,18 @@ func (u *LinuxUpdater) ApplyUpdate(ctx context.Context, pid int, oldPath, newPat
 	reportApplyProgress(progress, ApplyUpdateStageRestarting)
 	util.GetLogger().Info(ctx, "starting Linux update process")
 	logPath := filepath.Join(util.GetLocation().GetLogDirectory(), "update.log")
-	cmd := exec.Command("bash", "-s", "--", fmt.Sprintf("%d", pid), oldPath, newPath, logPath)
-	cmd.Stdin = strings.NewReader(linuxUpdateScript)
+	scriptPath, err := writeLinuxUpdateScript()
+	if err != nil {
+		return fmt.Errorf("failed to create Linux update script: %w", err)
+	}
+	cmd := exec.Command("bash", scriptPath, fmt.Sprintf("%d", pid), oldPath, newPath, logPath)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := cmd.Start(); err != nil {
+		_ = os.Remove(scriptPath)
 		return fmt.Errorf("failed to start update process: %w", err)
+	}
+	if cmd.Process != nil {
+		_ = cmd.Process.Release()
 	}
 
 	// Exit the application
@@ -90,4 +104,29 @@ func (u *LinuxUpdater) ApplyUpdate(ctx context.Context, pid int, oldPath, newPat
 }
 
 func cleanupBackupExecutable(_ context.Context) {
+}
+
+func writeLinuxUpdateScript() (string, error) {
+	tempFile, err := os.CreateTemp("", "wox_update_*.sh")
+	if err != nil {
+		return "", err
+	}
+
+	if _, err := tempFile.WriteString(linuxUpdateScript); err != nil {
+		_ = tempFile.Close()
+		_ = os.Remove(tempFile.Name())
+		return "", err
+	}
+
+	if err := tempFile.Close(); err != nil {
+		_ = os.Remove(tempFile.Name())
+		return "", err
+	}
+
+	if err := os.Chmod(tempFile.Name(), 0o700); err != nil {
+		_ = os.Remove(tempFile.Name())
+		return "", err
+	}
+
+	return tempFile.Name(), nil
 }

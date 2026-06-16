@@ -3,14 +3,17 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_hotkey_view.dart';
+import 'package:wox/components/wox_drag_move_view.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_hotkey.dart';
+import 'package:wox/entity/wox_toolbar.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_theme_util.dart';
-import 'package:wox/api/wox_api.dart';
+import 'package:wox/utils/wox_interface_size_util.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/utils/color_util.dart';
+import 'package:wox/utils/wox_text_measure_util.dart';
 
 class WoxQueryToolbarView extends GetView<WoxLauncherController> {
   const WoxQueryToolbarView({super.key});
@@ -18,18 +21,20 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
   bool get hasResultItems => controller.resultListViewController.items.isNotEmpty;
 
   bool get hasLeftMessage {
-    final toolbarInfo = controller.toolbar.value;
-    return toolbarInfo.text != null && toolbarInfo.text!.isNotEmpty;
+    final text = controller.resolvedToolbarText;
+    return text != null && text.isNotEmpty;
   }
 
   Widget leftPart(double maxLeftWidth) {
     if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: toolbar view - left part");
 
     return Obx(() {
-      final toolbarInfo = controller.toolbar.value;
+      final text = controller.resolvedToolbarText;
+      final hasToolbarProgress = controller.hasVisibleToolbarMsg && (controller.resolvedToolbarProgress != null || controller.resolvedToolbarIndeterminate);
+      final metrics = WoxInterfaceSizeUtil.instance.current;
 
       // If no message, return empty widget
-      if (toolbarInfo.text == null || toolbarInfo.text!.isEmpty) {
+      if (text == null || text.isEmpty) {
         return const SizedBox.shrink();
       }
 
@@ -39,47 +44,56 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (toolbarInfo.icon != null) Padding(padding: const EdgeInsets.only(right: 8), child: WoxImageView(woxImage: toolbarInfo.icon!, width: 24, height: 24)),
+            if (controller.resolvedToolbarIcon != null)
+              Padding(
+                padding: EdgeInsets.only(right: metrics.toolbarIconSpacing),
+                child: WoxImageView(woxImage: controller.resolvedToolbarIcon!, width: metrics.toolbarIconSize, height: metrics.toolbarIconSize),
+              ),
             // Text area flexes inside the capped max width and will ellipsize when needed
             Flexible(
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final textSpan = TextSpan(text: toolbarInfo.text ?? '', style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor)));
-                  final textPainter = TextPainter(text: textSpan, maxLines: 1, textDirection: TextDirection.ltr)..layout(maxWidth: constraints.maxWidth);
-
-                  final isTextOverflow = textPainter.didExceedMaxLines;
+                  final textStyle = TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor), fontSize: metrics.toolbarFontSize);
+                  final isTextOverflow = WoxTextMeasureUtil.isTextOverflow(context: context, text: text, style: textStyle, maxWidth: constraints.maxWidth);
 
                   return Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Flexible(
-                        child: Text(
-                          toolbarInfo.text ?? '',
-                          style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor)),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
+                      Flexible(child: Text(text, style: textStyle, overflow: TextOverflow.ellipsis, maxLines: 1)),
+                      if (hasToolbarProgress)
+                        Padding(
+                          padding: EdgeInsets.only(left: metrics.toolbarIconSpacing),
+                          child: SizedBox(
+                            width: metrics.toolbarProgressSize,
+                            height: metrics.toolbarProgressSize,
+                            child: CircularProgressIndicator(
+                              strokeWidth: metrics.toolbarProgressStrokeWidth,
+                              value: controller.resolvedToolbarIndeterminate ? null : (controller.resolvedToolbarProgress ?? 0).clamp(0, 100) / 100,
+                              valueColor: AlwaysStoppedAnimation<Color>(safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor)),
+                              backgroundColor: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor).withValues(alpha: 0.2),
+                            ),
+                          ),
                         ),
-                      ),
-                      if (isTextOverflow)
+                      if (isTextOverflow && !controller.hasVisibleToolbarMsg)
                         MouseRegion(
                           cursor: SystemMouseCursors.click,
                           child: GestureDetector(
                             onTap: () {
-                              Clipboard.setData(ClipboardData(text: toolbarInfo.text ?? ''));
+                              Clipboard.setData(ClipboardData(text: text));
                               controller.toolbarCopyText.value = 'toolbar_copied';
                               Future.delayed(const Duration(seconds: 3), () {
                                 controller.toolbarCopyText.value = 'toolbar_copy';
                               });
                             },
                             child: Padding(
-                              padding: const EdgeInsets.only(left: 8.0),
+                              padding: EdgeInsets.only(left: metrics.toolbarIconSpacing),
                               child: Obx(() {
                                 final settingController = Get.find<WoxSettingController>();
                                 return Text(
                                   settingController.tr(controller.toolbarCopyText.value),
                                   style: TextStyle(
                                     color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
-                                    fontSize: 12,
+                                    fontSize: metrics.toolbarFontSize,
                                     decoration: TextDecoration.underline,
                                   ),
                                 );
@@ -87,49 +101,6 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
                             ),
                           ),
                         ),
-                      if (isTextOverflow) ...[
-                        const SizedBox(width: 8),
-                        Theme(
-                          data: Theme.of(context).copyWith(
-                            popupMenuTheme: PopupMenuThemeData(
-                              color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarBackgroundColor),
-                              textStyle: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor), fontSize: 12),
-                            ),
-                          ),
-                          child: PopupMenuButton<String>(
-                            padding: EdgeInsets.zero,
-                            tooltip: '',
-                            onSelected: (value) async {
-                              final text = toolbarInfo.text ?? '';
-                              await WoxApi.instance.toolbarSnooze(const UuidV4().generate(), text, value);
-                              // Hide current toolbar message immediately
-                              controller.toolbar.value = controller.toolbar.value.emptyLeftSide();
-                            },
-                            itemBuilder: (context) {
-                              final settingController = Get.find<WoxSettingController>();
-                              return [
-                                PopupMenuItem(value: '3d', child: Text(settingController.tr('toolbar_snooze_3d'))),
-                                PopupMenuItem(value: '7d', child: Text(settingController.tr('toolbar_snooze_7d'))),
-                                PopupMenuItem(value: '1m', child: Text(settingController.tr('toolbar_snooze_1m'))),
-                                PopupMenuItem(value: 'forever', child: Text(settingController.tr('toolbar_snooze_forever'))),
-                              ];
-                            },
-                            child: Builder(
-                              builder: (context) {
-                                final settingController = Get.find<WoxSettingController>();
-                                return Text(
-                                  settingController.tr('toolbar_snooze'),
-                                  style: TextStyle(
-                                    color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
-                                    fontSize: 12,
-                                    decoration: TextDecoration.underline,
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                      ],
                     ],
                   );
                 },
@@ -142,29 +113,20 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
   }
 
   /// Calculate the precise width of a single action (name + hotkey + spacing)
-  double _calculateActionWidth(String actionName, HotkeyX hotkey) {
-    // Use TextPainter to precisely measure text width (works for all languages)
-    final textSpan = TextSpan(text: actionName, style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor)));
-    final textPainter = TextPainter(text: textSpan, maxLines: 1, textDirection: TextDirection.ltr)..layout();
+  double _calculateActionWidth(BuildContext context, String actionName, HotkeyX hotkey) {
+    final nameWidth = WoxTextMeasureUtil.measureTextWidth(
+      context: context,
+      text: actionName,
+      style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor), fontSize: WoxInterfaceSizeUtil.instance.current.toolbarFontSize),
+    );
 
-    final nameWidth = textPainter.width;
+    // Feature fix: modifier labels now vary by platform, so the toolbar's
+    // fit calculation must use the same dynamic chip width as WoxHotkeyView
+    // instead of the old glyph-only constant width.
+    final hotkeyWidth = WoxHotkeyView.measureHotkeyWidth(context, hotkey);
+    final metrics = WoxInterfaceSizeUtil.instance.current;
 
-    // Calculate hotkey width
-    double hotkeyWidth = 0;
-    if (hotkey.isNormalHotkey) {
-      // Each key is 28px wide, spacing between keys is 4px
-      final keyCount = (hotkey.normalHotkey!.modifiers?.length ?? 0) + 1;
-      hotkeyWidth = keyCount * 28.0 + (keyCount - 1) * 4.0;
-    } else if (hotkey.isDoubleHotkey) {
-      // Two keys, each 28px wide, 4px spacing
-      hotkeyWidth = 28.0 * 2 + 4.0;
-    } else if (hotkey.isSingleHotkey) {
-      // Single key, 28px wide
-      hotkeyWidth = 28.0;
-    }
-
-    // Total: name + 8px spacing + hotkey + 16px spacing between actions
-    return nameWidth + 8.0 + hotkeyWidth + 16.0;
+    return nameWidth + metrics.toolbarActionNameHotkeySpacing + hotkeyWidth + metrics.toolbarActionSpacing;
   }
 
   Widget rightPart() {
@@ -187,7 +149,7 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
           for (var actionInfo in toolbarInfo.actions!) {
             var hotkey = WoxHotkey.parseHotkeyFromString(actionInfo.hotkey);
             if (hotkey != null) {
-              final calculatedWidth = _calculateActionWidth(actionInfo.name, hotkey);
+              final calculatedWidth = _calculateActionWidth(context, actionInfo.name, hotkey);
               actionData.add({'info': actionInfo, 'hotkey': hotkey, 'width': calculatedWidth});
             }
           }
@@ -224,37 +186,97 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
           // Build widgets for the actions to show
           List<Widget> actionWidgets = [];
           for (var actionData in actionsToShow) {
-            final actionInfo = actionData['info'];
+            final actionInfo = actionData['info'] as ToolbarActionInfo;
             final hotkey = actionData['hotkey'] as HotkeyX;
 
             if (actionWidgets.isNotEmpty) {
-              actionWidgets.add(const SizedBox(width: 16));
+              actionWidgets.add(SizedBox(width: WoxInterfaceSizeUtil.instance.current.toolbarActionSpacing));
             }
 
-            actionWidgets.add(
-              Text(
-                actionInfo.name,
-                style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor)),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-              ),
-            );
-            actionWidgets.add(const SizedBox(width: 8));
-            actionWidgets.add(
-              WoxHotkeyView(
-                hotkey: hotkey,
-                backgroundColor:
-                    hasResultItems
-                        ? safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarBackgroundColor)
-                        : safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.appBackgroundColor).withValues(alpha: 0.1),
-                borderColor: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
-                textColor: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
-              ),
-            );
+            actionWidgets.add(_buildClickableToolbarAction(actionInfo, hotkey));
           }
 
-          return Align(alignment: Alignment.centerRight, child: Row(mainAxisSize: MainAxisSize.min, children: actionWidgets));
+          return Row(
+            children: [
+              Expanded(
+                child: WoxDragMoveArea(
+                  child: Container(color: Colors.transparent),
+                  onDragEnd: () {
+                    controller.focusQueryBox();
+                  },
+                ),
+              ),
+              Row(mainAxisSize: MainAxisSize.min, children: actionWidgets),
+            ],
+          );
         },
+      );
+    });
+  }
+
+  Widget _buildClickableToolbarAction(ToolbarActionInfo actionInfo, HotkeyX hotkey) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          controller.handleToolbarActionTap(const UuidV4().generate(), actionInfo);
+        },
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              actionInfo.name,
+              style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor), fontSize: WoxInterfaceSizeUtil.instance.current.toolbarFontSize),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
+            SizedBox(width: WoxInterfaceSizeUtil.instance.current.toolbarActionNameHotkeySpacing),
+            WoxHotkeyView(
+              hotkey: hotkey,
+              backgroundColor:
+                  hasResultItems
+                      ? safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarBackgroundColor)
+                      : safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.appBackgroundColor).withValues(alpha: 0.1),
+              borderColor: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
+              textColor: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget bugAwareIndicator() {
+    return Obx(() {
+      if (!controller.hasBugAwareToolbarIndicator) {
+        return const SizedBox.shrink();
+      }
+
+      final metrics = WoxInterfaceSizeUtil.instance.current;
+      final settingController = Get.find<WoxSettingController>();
+      const iconColor = Color(0xFFE5484D);
+
+      // Feature: bug aware mode needs a launcher-owned entry point that is
+      // always visible while monitoring is enabled. It cannot reuse
+      // ShowToolbarMsg because plugin messages are transient and may be
+      // cleared by unrelated plugin actions.
+      return Tooltip(
+        message: settingController.tr("ui_bug_aware_enabled_tooltip"),
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              controller.activateBugReportQuery(const UuidV4().generate());
+            },
+            child: SizedBox(
+              width: metrics.toolbarIconSize,
+              height: metrics.toolbarIconSize,
+              child: Icon(Icons.bug_report_outlined, size: metrics.toolbarIconSize, color: iconColor),
+            ),
+          ),
+        ),
       );
     });
   }
@@ -264,33 +286,38 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
     if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: query toolbar view - container");
 
     return Obx(() {
+      final metrics = WoxInterfaceSizeUtil.instance.metrics.value;
+      final baseToolbarColor = hasResultItems ? safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarBackgroundColor) : Colors.transparent;
+      // Feature update: bug aware mode is now indicated only by the fixed red
+      // icon. Keeping the toolbar background unchanged avoids making normal
+      // result actions look like warnings while diagnostics are enabled.
+      final toolbarColor = baseToolbarColor;
+      final toolbarBorderColor = hasResultItems ? safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor).withValues(alpha: 0.1) : Colors.transparent;
       return SizedBox(
         height: WoxThemeUtil.instance.getToolbarHeight(),
         child: Container(
-          decoration: BoxDecoration(
-            color: hasResultItems ? safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarBackgroundColor) : Colors.transparent,
-            border: Border(
-              top: BorderSide(
-                color: hasResultItems ? safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor).withValues(alpha: 0.1) : Colors.transparent,
-                width: 1,
-              ),
-            ),
-          ),
+          decoration: BoxDecoration(color: toolbarColor, border: Border(top: BorderSide(color: toolbarBorderColor, width: 1))),
           child: Padding(
             padding: EdgeInsets.only(
-              left: WoxThemeUtil.instance.currentTheme.value.toolbarPaddingLeft.toDouble(),
-              right: WoxThemeUtil.instance.currentTheme.value.toolbarPaddingRight.toDouble(),
+              left: WoxInterfaceSizeUtil.instance.current.scaledSpacing(WoxThemeUtil.instance.currentTheme.value.toolbarPaddingLeft.toDouble()),
+              right: WoxInterfaceSizeUtil.instance.current.scaledSpacing(WoxThemeUtil.instance.currentTheme.value.toolbarPaddingRight.toDouble()),
             ),
             child: LayoutBuilder(
               builder: (context, constraints) {
                 // Limit left message to a max fraction so right side always has room
-                final double leftMaxWidth = constraints.maxWidth - 200 /* width of more actions hotkey */;
+                // Toolbar text, icons, and hotkey chips use density metrics now,
+                // so reserve the right-action area with the same scale instead
+                // of the old normal-only 200px estimate.
+                final bugAwareIndicatorWidth = controller.hasBugAwareToolbarIndicator ? metrics.toolbarIconSize + metrics.toolbarIconSpacing : 0.0;
+                final double leftMaxWidth = (constraints.maxWidth - metrics.toolbarRightReservedWidth - bugAwareIndicatorWidth).clamp(0.0, constraints.maxWidth).toDouble();
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
+                    bugAwareIndicator(),
+                    if (controller.hasBugAwareToolbarIndicator) SizedBox(width: metrics.toolbarIconSpacing),
                     // Left part takes only the space it needs up to leftMaxWidth
                     leftPart(leftMaxWidth),
-                    if (hasLeftMessage) const SizedBox(width: 16),
+                    if (hasLeftMessage) SizedBox(width: metrics.toolbarActionSpacing),
                     // Right part fills remaining space and aligns content to the right
                     Expanded(child: rightPart()),
                   ],

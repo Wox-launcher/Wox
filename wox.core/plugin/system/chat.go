@@ -60,10 +60,6 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 				},
 			},
 			{
-				Type:  definition.PluginSettingDefinitionTypeNewLine,
-				Value: &definition.PluginSettingValueNewLine{},
-			},
-			{
 				Type: definition.PluginSettingDefinitionTypeCheckBox,
 				Value: &definition.PluginSettingValueCheckBox{
 					Key:          "enable_auto_focus_to_chat_input",
@@ -71,10 +67,6 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 					Label:        "i18n:plugin_ai_chat_query_focus",
 					Tooltip:      "i18n:plugin_ai_chat_query_focus_tooltip",
 				},
-			},
-			{
-				Type:  definition.PluginSettingDefinitionTypeNewLine,
-				Value: &definition.PluginSettingValueNewLine{},
 			},
 			{
 				Type: definition.PluginSettingDefinitionTypeSelectAIModel,
@@ -697,7 +689,8 @@ func (r *AIChatPlugin) getNewChatPreviewData(ctx context.Context) plugin.QueryRe
 	}
 }
 
-func (r *AIChatPlugin) Query(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {
+func (r *AIChatPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
+	var results []plugin.QueryResult
 	r.resultChatIdMap.Clear()
 
 	if query.Search == "" {
@@ -795,7 +788,7 @@ func (r *AIChatPlugin) Query(ctx context.Context, query plugin.Query) (results [
 		})
 	}
 
-	return results
+	return plugin.NewQueryResponse(results)
 }
 
 func (r *AIChatPlugin) summarizeChat(ctx context.Context, chat common.AIChatData) {

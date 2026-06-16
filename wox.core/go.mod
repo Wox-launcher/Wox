@@ -1,6 +1,6 @@
 module wox
 
-go 1.25
+go 1.26
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
@@ -10,7 +10,7 @@ require (
 	github.com/forPelevin/gomoji v1.4.1
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/go-ole/go-ole v1.3.0
-	github.com/godbus/dbus/v5 v5.2.0
+	github.com/godbus/dbus/v5 v5.2.2
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/gotk3/gotk3 v0.6.5-0.20240618185848-ff349ae13f56
@@ -24,7 +24,6 @@ require (
 	github.com/openai/openai-go/v3 v3.11.0
 	github.com/otiai10/copy v1.14.1
 	github.com/petermattis/goid v0.0.0-20251121121749-a11dd1a45f9a
-	github.com/robotn/gohook v0.42.3
 	github.com/rs/cors v1.11.1
 	github.com/samber/lo v1.52.0
 	github.com/saracen/fastzip v0.2.0
@@ -39,9 +38,9 @@ require (
 	github.com/wissance/stringFormatter v1.6.1
 	github.com/zalando/go-keyring v0.2.1
 	go.uber.org/zap v1.27.1
-	golang.design/x/hotkey v0.4.1
 	golang.org/x/crypto v0.44.0
 	golang.org/x/image v0.34.0
+	golang.org/x/sync v0.19.0
 	golang.org/x/sys v0.39.0
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.31.1
@@ -65,13 +64,10 @@ require (
 	github.com/saracen/zipextra v0.0.0-20250129175152-f1aa42d25216 // indirect
 	github.com/tidwall/match v1.2.0 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
-	github.com/vcaesar/keycode v0.10.1 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.design/x/mainthread v0.3.0 // indirect
 	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
-	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/text v0.32.0 // indirect
 	google.golang.org/protobuf v1.36.8 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect

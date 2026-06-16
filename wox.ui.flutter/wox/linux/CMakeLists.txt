@@ -56,6 +56,7 @@ pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
 pkg_check_modules(GLIB REQUIRED IMPORTED_TARGET glib-2.0)
 pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0)
 pkg_check_modules(X11 REQUIRED IMPORTED_TARGET x11)
+pkg_check_modules(XTEST REQUIRED IMPORTED_TARGET xtst)
 
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
@@ -136,3 +137,4 @@ target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GLIB)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GIO)
 # 链接X11库
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::X11)
+target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::XTEST)

@@ -14,7 +14,7 @@ type PluginSettingValueTextBox struct {
 	MaxLines     int                                // max lines for textbox, default 1
 	Validators   []validator.PluginSettingValidator // validators for this setting, every validator should be satisfied
 
-	Style PluginSettingValueStyle
+	Style PluginSettingValueStyle `json:"-"` // Deprecated: ignored on load so Wox keeps setting layouts consistent.
 }
 
 func (p *PluginSettingValueTextBox) GetPluginSettingType() PluginSettingDefinitionType {

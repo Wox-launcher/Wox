@@ -41,7 +41,8 @@ func (r *DoctorPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	r.api = initParams.API
 }
 
-func (r *DoctorPlugin) Query(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {
+func (r *DoctorPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
+	var results []plugin.QueryResult
 	checkResults := plugin.RunDoctorChecks(ctx)
 
 	for _, check := range checkResults {
@@ -68,5 +69,5 @@ func (r *DoctorPlugin) Query(ctx context.Context, query plugin.Query) (results [
 		results = append(results, result)
 	}
 
-	return results
+	return plugin.NewQueryResponse(results)
 }

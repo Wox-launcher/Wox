@@ -1,15 +1,20 @@
 package clipboard
 
+/*
+#cgo LDFLAGS: -luser32 -lkernel32 -lshell32 -lole32
+#include <stdlib.h>
+#include "clipboard_windows.h"
+*/
+import "C"
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"image"
 	"image/png"
-	"syscall"
+	"strings"
+	"sync/atomic"
 	"time"
-	"unicode/utf16"
 	"unsafe"
 
 	"wox/util"
@@ -17,199 +22,328 @@ import (
 	"golang.org/x/image/bmp"
 )
 
-var (
-	user32                     = syscall.MustLoadDLL("user32")
-	openClipboard              = user32.MustFindProc("OpenClipboard")
-	closeClipboard             = user32.MustFindProc("CloseClipboard")
-	emptyClipboard             = user32.MustFindProc("EmptyClipboard")
-	getClipboardData           = user32.MustFindProc("GetClipboardData")
-	setClipboardData           = user32.MustFindProc("SetClipboardData")
-	isClipboardFormatAvailable = user32.MustFindProc("IsClipboardFormatAvailable")
-	getClipboardSequenceNumber = user32.MustFindProc("GetClipboardSequenceNumber")
-	registerClipboardFormat    = user32.MustFindProc("RegisterClipboardFormatW")
-
-	kernel32 = syscall.NewLazyDLL("kernel32")
-	gLock    = kernel32.NewProc("GlobalLock")
-	gUnlock  = kernel32.NewProc("GlobalUnlock")
-	gAlloc   = kernel32.NewProc("GlobalAlloc")
-	gFree    = kernel32.NewProc("GlobalFree")
-	gSize    = kernel32.NewProc("GlobalSize")
-	memMove  = kernel32.NewProc("RtlMoveMemory")
-
-	shell32       = syscall.NewLazyDLL("shell32.dll")
-	dragQueryFile = shell32.NewProc("DragQueryFileW")
-)
-
-type bitmapHeader struct {
-	Size          uint32
-	Width         int32
-	Height        int32
-	PLanes        uint16
-	BitCount      uint16
-	Compression   uint32
-	SizeImage     uint32
-	XPelsPerMeter int32
-	YPelsPerMeter int32
-	ClrUsed       uint32
-	ClrImportant  uint32
-}
-
 const (
-	cFmtUnicodeText = 13
-	gmemMoveable    = 0x0002
-	cFmtHdrop       = 15
+	clipboardDiagLogThrottleMs = 2000
 )
 
 var lastSeqNum uint32
+var lastClipboardDiagLogTs int64
 
-func openClipboardWithRetry() (uintptr, error) {
-	var r uintptr
-	var err error
-	for i := 0; i < 5; i++ {
-		r, _, err = openClipboard.Call(0)
-		if r != 0 {
-			return r, nil
-		}
-		time.Sleep(time.Millisecond * time.Duration(10+i*10))
+// readClipboardContentType detects the current clipboard content type without reading data.
+func readClipboardContentType() Type {
+	t := C.clipboardGetContentType()
+	switch int(t) {
+	case 1:
+		return ClipboardTypeText
+	case 2:
+		return ClipboardTypeImage
+	case 3:
+		return ClipboardTypeFile
+	default:
+		return ""
 	}
-	return 0, fmt.Errorf("failed to open clipboard after retries: %w", err)
 }
 
 func readText() (string, error) {
-	avail, _, _ := isClipboardFormatAvailable.Call(cFmtUnicodeText)
-	if avail == 0 {
-		return "", noDataErr
+	var cText *C.wchar_t
+	var cLen C.int
+	ret := C.clipboardReadText(&cText, &cLen)
+	if ret != 0 {
+		if ret == -1 {
+			return "", noDataErr
+		}
+		return "", fmt.Errorf("clipboard: readText failed (code=%d)", int(ret))
 	}
+	defer C.free(unsafe.Pointer(cText))
 
-	start := time.Now()
-
-	// use an inner function to minimize clipboard lock time
-	var raw []uint16
-	var sizeBytes uintptr
-
-	readErr := func() error {
-		_, err := openClipboardWithRetry()
-		if err != nil {
-			return err
-		}
-		defer closeClipboard.Call()
-
-		hMem, _, err := getClipboardData.Call(cFmtUnicodeText)
-		if hMem == 0 {
-			return fmt.Errorf("failed to get clipboard data: %w", err)
-		}
-
-		sizeBytes, _, _ = gSize.Call(hMem)
-		if sizeBytes == 0 {
-			return errors.New("failed to get global memory size")
-		}
-
-		p, _, err := gLock.Call(hMem)
-		if p == 0 {
-			return fmt.Errorf("failed to lock global memory: %w", err)
-		}
-		defer gUnlock.Call(hMem)
-
-		const maxClipboardTextBytes = 32 * 1024 * 1024
-		toCopyBytes := sizeBytes
-		if toCopyBytes > maxClipboardTextBytes {
-			toCopyBytes = maxClipboardTextBytes
-			util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("clipboard: CF_UNICODETEXT too large (%d bytes), truncating to %d bytes", sizeBytes, maxClipboardTextBytes))
-		}
-
-		charCount := int(toCopyBytes / 2)
-		if charCount <= 0 {
-			return noDataErr
-		}
-
-		// copy data to local slice while clipboard is open
-		raw = make([]uint16, charCount)
-		copy(raw, (*[1 << 30]uint16)(unsafe.Pointer(p))[:charCount:charCount])
-
-		return nil
-	}()
-
-	if d := time.Since(start); d > 200*time.Millisecond {
-		util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("clipboard: readText held clipboard for %s (size=%d bytes)", d.String(), sizeBytes))
-	}
-
-	if readErr == noDataErr {
-		return "", noDataErr
-	}
-	if readErr != nil {
-		return "", readErr
-	}
-
-	if len(raw) == 0 {
+	if cLen == 0 {
 		return "", nil
 	}
 
-	end := 0
-	for end < len(raw) && raw[end] != 0 {
-		end++
+	// Convert wchar_t (UTF-16) to Go string
+	length := int(cLen)
+	u16 := make([]uint16, length)
+	for i := 0; i < length; i++ {
+		u16[i] = *(*uint16)(unsafe.Pointer(uintptr(unsafe.Pointer(cText)) + uintptr(i)*2))
 	}
-	return string(utf16.Decode(raw[:end])), nil
+
+	return string(utf16Decode(u16)), nil
+}
+
+func readFilePaths() ([]string, error) {
+	var cPaths *C.wchar_t
+	var cLen C.int
+	ret := C.clipboardReadFilePaths(&cPaths, &cLen)
+	if ret != 0 {
+		if ret == -1 {
+			return nil, noDataErr
+		}
+		return nil, fmt.Errorf("clipboard: readFilePaths failed (code=%d)", int(ret))
+	}
+	defer C.free(unsafe.Pointer(cPaths))
+
+	totalChars := int(cLen)
+	if totalChars <= 0 {
+		return nil, noDataErr
+	}
+
+	// Read all wchar_t into a slice
+	u16 := make([]uint16, totalChars)
+	for i := 0; i < totalChars; i++ {
+		u16[i] = *(*uint16)(unsafe.Pointer(uintptr(unsafe.Pointer(cPaths)) + uintptr(i)*2))
+	}
+
+	// Parse null-separated, double-null-terminated strings
+	var paths []string
+	start := 0
+	for i := 0; i < len(u16); i++ {
+		if u16[i] == 0 {
+			if i > start {
+				paths = append(paths, string(utf16Decode(u16[start:i])))
+			}
+			start = i + 1
+			// Double null = end of list
+			if start < len(u16) && u16[start] == 0 {
+				break
+			}
+		}
+	}
+
+	if len(paths) == 0 {
+		return nil, noDataErr
+	}
+
+	return paths, nil
+}
+
+func readImage() (image.Image, error) {
+	var cData *C.uchar
+	var cLen C.int
+	var cIsPNG C.int
+	var cInfo C.BitmapInfo
+	ret := C.clipboardReadImage(&cData, &cLen, &cIsPNG, &cInfo)
+	if ret != 0 {
+		if ret == -1 {
+			return nil, noDataErr
+		}
+		return nil, fmt.Errorf("clipboard: readImage failed (code=%d)", int(ret))
+	}
+	defer C.free(unsafe.Pointer(cData))
+
+	dataLen := int(cLen)
+	data := C.GoBytes(unsafe.Pointer(cData), cLen)
+
+	// PNG format: decode directly
+	if int(cIsPNG) != 0 {
+		img, err := png.Decode(bytes.NewReader(data))
+		if err != nil {
+			return nil, fmt.Errorf("clipboard: failed to decode PNG data (%d bytes): %w", dataLen, err)
+		}
+		logClipboardDiagnostic(fmt.Sprintf("clipboard: decoded PNG image %dx%d (%d bytes)",
+			img.Bounds().Dx(), img.Bounds().Dy(), dataLen))
+		return img, nil
+	}
+
+	// DIB format: decode based on header info
+	headerSize := int(cInfo.headerSize)
+	width := int(cInfo.width)
+	height := int(cInfo.height)
+	bitCount := int(cInfo.bitCount)
+	compression := int(cInfo.compression)
+	clrUsed := int(cInfo.clrUsed)
+	sizeImage := int(cInfo.sizeImage)
+
+	// 32-bit images: manual decoder (common from Chrome/Edge, Go's bmp.Decode often fails)
+	if bitCount == 32 {
+		return decode32bppDIB(data, headerSize, width, height, compression)
+	}
+
+	// Non-32bpp: construct BMP file header and use standard decoder
+	return decodeNon32bppDIB(data, headerSize, width, height, bitCount, compression, sizeImage, clrUsed)
+}
+
+// decode32bppDIB manually decodes a 32-bit per pixel DIB from raw data.
+func decode32bppDIB(data []byte, headerSize, width, height, compression int) (image.Image, error) {
+	isTopDown := height < 0
+	if isTopDown {
+		height = -height
+	}
+
+	if width <= 0 || height <= 0 || width > 32768 || height > 32768 {
+		return nil, fmt.Errorf("clipboard: invalid 32bpp image dimensions: %dx%d", width, height)
+	}
+
+	// Calculate pixel data offset
+	offset := headerSize
+	// Handle BI_BITFIELDS (Compression=3) with BITMAPINFOHEADER (Size=40):
+	// 3 DWORD color masks follow the header
+	if compression == 3 && headerSize == 40 {
+		offset += 12
+	}
+
+	if offset > len(data) {
+		return nil, fmt.Errorf("clipboard: invalid 32bpp DIB pixel offset: offset=%d dataLen=%d", offset, len(data))
+	}
+
+	img := image.NewNRGBA(image.Rect(0, 0, width, height))
+	stride := width * 4
+	pixelData := data[offset:]
+	truncatedRows := 0
+
+	for y := 0; y < height; y++ {
+		destY := y
+		if !isTopDown {
+			destY = height - 1 - y
+		}
+
+		srcRow := y * stride
+		destRow := destY * img.Stride
+
+		if srcRow+width*4 > len(pixelData) {
+			truncatedRows++
+			continue
+		}
+
+		for x := 0; x < width; x++ {
+			// Input is BGRA/BGRX
+			b := pixelData[srcRow+x*4+0]
+			g := pixelData[srcRow+x*4+1]
+			r := pixelData[srcRow+x*4+2]
+			a := pixelData[srcRow+x*4+3]
+
+			// Output is NRGBA
+			img.Pix[destRow+x*4+0] = r
+			img.Pix[destRow+x*4+1] = g
+			img.Pix[destRow+x*4+2] = b
+			img.Pix[destRow+x*4+3] = a
+		}
+	}
+
+	if truncatedRows > 0 {
+		logClipboardDiagnostic(fmt.Sprintf("clipboard: decoded 32bpp image with truncated rows=%d width=%d height=%d pixelDataLen=%d",
+			truncatedRows, width, height, len(pixelData)))
+	}
+	logClipboardDiagnostic(fmt.Sprintf("clipboard: decoded 32bpp image width=%d height=%d dataLen=%d",
+		width, height, len(data)))
+	return img, nil
+}
+
+// decodeNon32bppDIB constructs a BMP file header and uses the standard bmp.Decode.
+func decodeNon32bppDIB(data []byte, headerSize, width, height, bitCount, compression, sizeImage, clrUsed int) (image.Image, error) {
+	const fileHeaderLen = 14
+
+	// Calculate image pixel data size if not specified
+	if sizeImage == 0 && compression == 0 {
+		absHeight := height
+		if absHeight < 0 {
+			absHeight = -absHeight
+		}
+		stride := (width*bitCount + 31) / 32 * 4
+		sizeImage = stride * absHeight
+	}
+
+	// Calculate offset to pixel data
+	offset := uint32(fileHeaderLen) + uint32(headerSize)
+	if compression == 3 && headerSize == 40 {
+		offset += 12
+	}
+	if bitCount <= 8 {
+		colors := uint32(clrUsed)
+		if colors == 0 {
+			colors = 1 << uint(bitCount)
+		}
+		offset += colors * 4
+	}
+
+	fileSize := offset + uint32(sizeImage)
+
+	// Construct BMP file
+	buf := new(bytes.Buffer)
+	binary.Write(buf, binary.LittleEndian, uint16('B')|(uint16('M')<<8)) // bfType
+	binary.Write(buf, binary.LittleEndian, uint32(fileSize))             // bfSize
+	binary.Write(buf, binary.LittleEndian, uint32(0))                    // bfReserved1, bfReserved2
+	binary.Write(buf, binary.LittleEndian, uint32(offset))               // bfOffBits
+
+	// Write DIB data from our copy
+	dibSize := fileSize - fileHeaderLen
+	if int(dibSize) > len(data) {
+		dibSize = uint32(len(data))
+	}
+	buf.Write(data[:dibSize])
+
+	decoded, decodeErr := bmp.Decode(buf)
+	if decodeErr != nil {
+		return nil, fmt.Errorf("clipboard: failed to decode BMP (headerSize=%d bitCount=%d compression=%d): %w",
+			headerSize, bitCount, compression, decodeErr)
+	}
+	logClipboardDiagnostic(fmt.Sprintf("clipboard: decoded non-32bpp image width=%d height=%d bitCount=%d dataLen=%d",
+		decoded.Bounds().Dx(), decoded.Bounds().Dy(), bitCount, len(data)))
+	return decoded, nil
 }
 
 func writeTextData(text string) error {
 	start := time.Now()
 
-	_, err := openClipboardWithRetry()
-	if err != nil {
-		return err
-	}
-	defer closeClipboard.Call()
-
-	rEmpty, _, err := emptyClipboard.Call()
-	if rEmpty == 0 {
-		return fmt.Errorf("failed to clear clipboard: %w", err)
-	}
-
 	if len(text) == 0 {
+		cText := (*C.wchar_t)(unsafe.Pointer(&[]uint16{0}[0]))
+		ret := C.clipboardWriteText(cText, 0)
+		if ret != 0 {
+			return fmt.Errorf("clipboard: writeText(empty) failed (code=%d)", int(ret))
+		}
 		return nil
 	}
 
-	s, err := syscall.UTF16FromString(text)
-	if err != nil {
-		return fmt.Errorf("failed to convert string to UTF16: %w", err)
-	}
-
-	hMem, _, err := gAlloc.Call(gmemMoveable, uintptr(len(s)*int(unsafe.Sizeof(s[0]))))
-	if hMem == 0 {
-		return fmt.Errorf("failed to allocate global memory: %w", err)
-	}
-
-	p, _, err := gLock.Call(hMem)
-	if p == 0 {
-		gFree.Call(hMem)
-		return fmt.Errorf("failed to lock global memory: %w", err)
-	}
-	defer gUnlock.Call(hMem)
-
-	memMove.Call(p, uintptr(unsafe.Pointer(&s[0])), uintptr(len(s)*int(unsafe.Sizeof(s[0]))))
-
-	v, _, err := setClipboardData.Call(cFmtUnicodeText, hMem)
-	if v == 0 {
-		gFree.Call(hMem)
-		return fmt.Errorf("failed to set clipboard data: %w", err)
-	}
-
-	// update lastSeqNum to avoid trigger watchChange by itself
-	if r, _, _ := getClipboardSequenceNumber.Call(); r != 0 {
-		lastSeqNum = uint32(r)
-	}
+	u16 := utf16Encode(text)
+	cText := (*C.wchar_t)(unsafe.Pointer(&u16[0]))
+	ret := C.clipboardWriteText(cText, C.int(len(u16)))
 
 	if d := time.Since(start); d > 200*time.Millisecond {
-		util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("clipboard: writeTextData held clipboard for %s (chars=%d)", d.String(), len(s)))
+		util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("clipboard: writeTextData took %s (chars=%d)", d.String(), len(u16)))
 	}
 
+	if ret != 0 {
+		return fmt.Errorf("clipboard: writeText failed (code=%d)", int(ret))
+	}
+
+	// Update lastSeqNum to avoid triggering watchChange on our own writes
+	lastSeqNum = uint32(C.clipboardGetSequenceNumber())
+	return nil
+}
+
+func writeFilePaths(filePaths []string) error {
+	trimmedPaths := make([]string, 0, len(filePaths))
+	for _, filePath := range filePaths {
+		trimmedPath := strings.TrimSpace(filePath)
+		if trimmedPath == "" {
+			continue
+		}
+		trimmedPaths = append(trimmedPaths, trimmedPath)
+	}
+
+	if len(trimmedPaths) == 0 {
+		return fmt.Errorf("clipboard: file paths are empty")
+	}
+
+	buffer := make([]uint16, 0)
+	for _, filePath := range trimmedPaths {
+		encodedPath := utf16Encode(filePath)
+		buffer = append(buffer, encodedPath...)
+	}
+	buffer = append(buffer, 0)
+
+	ret := C.clipboardWriteFilePaths((*C.wchar_t)(unsafe.Pointer(&buffer[0])), C.int(len(buffer)))
+	if ret != 0 {
+		return fmt.Errorf("clipboard: writeFilePaths failed (code=%d)", int(ret))
+	}
+
+	lastSeqNum = uint32(C.clipboardGetSequenceNumber())
 	return nil
 }
 
 func writeImageData(img image.Image) error {
-	const fileHeaderLen = 14 // BMP file header length to skip
+	const fileHeaderLen = 14
 
-	// Encode outside clipboard lock to minimize time we hold the global clipboard mutex.
+	// Encode outside clipboard lock
 	var pngData []byte
 	pngBuf := new(bytes.Buffer)
 	if err := png.Encode(pngBuf, img); err == nil {
@@ -218,11 +352,11 @@ func writeImageData(img image.Image) error {
 
 	bmpBuf := new(bytes.Buffer)
 	if err := bmp.Encode(bmpBuf, img); err != nil {
-		return fmt.Errorf("failed to encode image: %w", err)
+		return fmt.Errorf("clipboard: failed to encode image to BMP: %w", err)
 	}
 	bmpData := bmpBuf.Bytes()
 	if len(bmpData) <= fileHeaderLen {
-		return fmt.Errorf("invalid BMP data: too short")
+		return fmt.Errorf("clipboard: invalid BMP data: too short")
 	}
 	dibData := bmpData[fileHeaderLen:]
 
@@ -230,403 +364,105 @@ func writeImageData(img image.Image) error {
 }
 
 func writeImageBytes(pngData []byte, dibData []byte) error {
-	const cFmtDIB = 8
-
 	if len(dibData) == 0 {
-		return errors.New("dib data is empty")
+		return fmt.Errorf("clipboard: DIB data is empty")
 	}
 
 	start := time.Now()
 
-	_, err := openClipboardWithRetry()
-	if err != nil {
-		return err
-	}
-	defer closeClipboard.Call()
-
-	rEmpty, _, err := emptyClipboard.Call()
-	if rEmpty == 0 {
-		return fmt.Errorf("failed to clear clipboard: %w", err)
-	}
-
-	// Write PNG format for transparency support
+	var cPNG *C.uchar
+	cPNGLen := C.int(0)
 	if len(pngData) > 0 {
-		pngFormatName, _ := syscall.UTF16PtrFromString("PNG")
-		pngFormat, _, _ := registerClipboardFormat.Call(uintptr(unsafe.Pointer(pngFormatName)))
-		if pngFormat != 0 {
-			hMemPng, _, _ := gAlloc.Call(gmemMoveable, uintptr(len(pngData)))
-			if hMemPng != 0 {
-				pMemPng, _, _ := gLock.Call(hMemPng)
-				if pMemPng == 0 {
-					gFree.Call(hMemPng)
-				} else {
-					memMove.Call(pMemPng, uintptr(unsafe.Pointer(&pngData[0])), uintptr(len(pngData)))
-					gUnlock.Call(hMemPng)
-					if v, _, _ := setClipboardData.Call(pngFormat, hMemPng); v == 0 {
-						gFree.Call(hMemPng)
-					}
-				}
-			}
-		}
+		cPNG = (*C.uchar)(unsafe.Pointer(&pngData[0]))
+		cPNGLen = C.int(len(pngData))
 	}
+	cDIB := (*C.uchar)(unsafe.Pointer(&dibData[0]))
+	cDIBLen := C.int(len(dibData))
 
-	// Also write DIB format for compatibility with apps that don't support PNG
-	hMem, _, err := gAlloc.Call(gmemMoveable, uintptr(len(dibData)))
-	if hMem == 0 {
-		return fmt.Errorf("failed to allocate global memory: %w", err)
-	}
-
-	pMem, _, err := gLock.Call(hMem)
-	if pMem == 0 {
-		gFree.Call(hMem)
-		return fmt.Errorf("failed to lock global memory: %w", err)
-	}
-
-	memMove.Call(pMem, uintptr(unsafe.Pointer(&dibData[0])), uintptr(len(dibData)))
-	gUnlock.Call(hMem)
-
-	ret, _, err := setClipboardData.Call(cFmtDIB, hMem)
-	if ret == 0 {
-		gFree.Call(hMem)
-		return fmt.Errorf("failed to set clipboard data: %w", err)
-	}
-
-	// update lastSeqNum to avoid trigger watchChange by itself
-	if r, _, _ := getClipboardSequenceNumber.Call(); r != 0 {
-		lastSeqNum = uint32(r)
-	}
+	ret := C.clipboardWriteImage(cPNG, cPNGLen, cDIB, cDIBLen)
 
 	if d := time.Since(start); d > 200*time.Millisecond {
-		util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("clipboard: writeImageData held clipboard for %s (pngBytes=%d dibBytes=%d)", d.String(), len(pngData), len(dibData)))
+		util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("clipboard: writeImageBytes took %s (pngBytes=%d dibBytes=%d)", d.String(), len(pngData), len(dibData)))
 	}
 
+	if ret != 0 {
+		return fmt.Errorf("clipboard: writeImage failed (code=%d)", int(ret))
+	}
+
+	// Update lastSeqNum to avoid triggering watchChange on our own writes
+	lastSeqNum = uint32(C.clipboardGetSequenceNumber())
 	return nil
 }
 
-func readFilePaths() ([]string, error) {
-	avail, _, _ := isClipboardFormatAvailable.Call(cFmtHdrop)
-	if avail == 0 {
-		return nil, noDataErr
-	}
-
-	start := time.Now()
-	var rawData []byte
-	var sizeBytes uintptr
-
-	readErr := func() error {
-		_, err := openClipboardWithRetry()
-		if err != nil {
-			return err
-		}
-		defer closeClipboard.Call()
-
-		hDrop, _, err := getClipboardData.Call(cFmtHdrop)
-		if hDrop == 0 {
-			return fmt.Errorf("failed to get clipboard data: %w", err)
-		}
-
-		sizeBytes, _, _ = gSize.Call(hDrop)
-		if sizeBytes == 0 {
-			return errors.New("failed to get global memory size")
-		}
-
-		p, _, err := gLock.Call(hDrop)
-		if p == 0 {
-			return fmt.Errorf("failed to lock global memory: %w", err)
-		}
-		defer gUnlock.Call(hDrop)
-
-		// Copy all data to local slice
-		const maxClipboardFileBytes = 32 * 1024 * 1024
-		toCopyBytes := sizeBytes
-		if toCopyBytes > maxClipboardFileBytes {
-			toCopyBytes = maxClipboardFileBytes
-			util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("clipboard: CF_HDROP too large (%d bytes), truncating", sizeBytes))
-		}
-
-		rawData = make([]byte, toCopyBytes)
-		copy(rawData, (*[1 << 30]byte)(unsafe.Pointer(p))[:toCopyBytes:toCopyBytes])
-
-		return nil
-	}()
-
-	if d := time.Since(start); d > 200*time.Millisecond {
-		util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("clipboard: readFilePaths held clipboard for %s (size=%d bytes)", d.String(), sizeBytes))
-	}
-
-	if readErr != nil {
-		return nil, readErr
-	}
-
-	if len(rawData) < 20 { // DROPFILES struct is 20 bytes
-		return nil, fmt.Errorf("invalid DROPFILES data size")
-	}
-
-	// Manual parse DROPFILES
-	pFiles := binary.LittleEndian.Uint32(rawData[0:4])
-	fWide := binary.LittleEndian.Uint32(rawData[16:20])
-
-	if int(pFiles) >= len(rawData) {
-		return nil, fmt.Errorf("invalid pFiles offset")
-	}
-
-	var resultFiles []string
-	fileData := rawData[pFiles:]
-
-	if fWide != 0 {
-		// Unicode
-		if len(fileData)%2 != 0 {
-			fileData = fileData[:len(fileData)-1]
-		}
-
-		u16s := (*[1 << 29]uint16)(unsafe.Pointer(&fileData[0]))[: len(fileData)/2 : len(fileData)/2]
-
-		start := 0
-		for i := 0; i < len(u16s); i++ {
-			if u16s[i] == 0 {
-				if i > start {
-					resultFiles = append(resultFiles, string(utf16.Decode(u16s[start:i])))
-				}
-				start = i + 1
-				// Check for double null (end of list)
-				if start < len(u16s) && u16s[start] == 0 {
-					break
-				}
-			}
-		}
-	} else {
-		// ANSI (simple fallback)
-		parts := bytes.Split(fileData, []byte{0})
-		for _, p := range parts {
-			if len(p) > 0 {
-				resultFiles = append(resultFiles, string(p))
-			}
-		}
-	}
-
-	return resultFiles, nil
-}
-
-func readImage() (image.Image, error) {
-	return readBmpImage()
-}
-
-func readBmpImage() (image.Image, error) {
-	const (
-		fileHeaderLen = 14
-		cFmtDIB       = 8
-	)
-
-	avail, _, _ := isClipboardFormatAvailable.Call(cFmtDIB)
-	if avail == 0 {
-		return nil, noDataErr
-	}
-
-	// First, quickly read clipboard data into local memory, then close clipboard immediately
-	// to avoid blocking other applications from accessing the clipboard during image processing
-	var dibDataCopy []byte
-	var headerCopy bitmapHeader
-
-	err := func() error {
-		_, err := openClipboardWithRetry()
-		if err != nil {
-			return err
-		}
-		defer closeClipboard.Call()
-
-		hClipDat, _, err := getClipboardData.Call(cFmtDIB)
-		if err != nil && hClipDat == 0 {
-			return errors.New("not dib format data: " + err.Error())
-		}
-		if hClipDat == 0 {
-			return errors.New("getClipboardData returned 0")
-		}
-
-		pMemBlk, _, err := gLock.Call(hClipDat)
-		if pMemBlk == 0 {
-			return errors.New("failed to call global lock: " + err.Error())
-		}
-		defer gUnlock.Call(hClipDat)
-
-		// Copy header first
-		headerCopy = *(*bitmapHeader)(unsafe.Pointer(pMemBlk))
-
-		// Calculate the total size of DIB data we need to copy
-		var dibSize uint32
-		if headerCopy.BitCount == 32 {
-			// For 32-bit images, calculate size based on dimensions
-			width := int(headerCopy.Width)
-			height := int(headerCopy.Height)
-			if height < 0 {
-				height = -height
-			}
-			headerOffset := headerCopy.Size
-			if headerCopy.Compression == 3 && headerCopy.Size == 40 {
-				headerOffset += 12
-			}
-			dibSize = headerOffset + uint32(width*height*4)
-		} else {
-			// For other bit depths, calculate using standard BMP formula
-			imageSize := headerCopy.SizeImage
-			if imageSize == 0 && headerCopy.Compression == 0 {
-				stride := (int(headerCopy.Width)*int(headerCopy.BitCount) + 31) / 32 * 4
-				h := headerCopy.Height
-				if h < 0 {
-					h = -h
-				}
-				imageSize = uint32(stride * int(h))
-			}
-			offset := headerCopy.Size
-			if headerCopy.Compression == 3 && headerCopy.Size == 40 {
-				offset += 12
-			}
-			if headerCopy.BitCount <= 8 {
-				colors := headerCopy.ClrUsed
-				if colors == 0 {
-					colors = 1 << headerCopy.BitCount
-				}
-				offset += colors * 4
-			}
-			dibSize = offset + imageSize
-		}
-
-		// Copy all DIB data to local memory
-		const maxClipboardDIBBytes = 128 * 1024 * 1024
-		if dibSize == 0 || dibSize > maxClipboardDIBBytes {
-			return fmt.Errorf("invalid DIB size: %d bytes", dibSize)
-		}
-		srcData := (*[1 << 30]byte)(unsafe.Pointer(pMemBlk))[:dibSize:dibSize]
-		dibDataCopy = make([]byte, dibSize)
-		copy(dibDataCopy, srcData)
-
-		return nil
-	}()
-
-	if err != nil {
-		return nil, err
-	}
-
-	// Now process the copied data without holding the clipboard open
-
-	// Manual Decoder for 32-bit Images (Common in modern Windows apps like Chrome/Edge)
-	// The standard Go bmp.Decode often fails with "unsupported BMP image" for these.
-	if headerCopy.BitCount == 32 {
-		width := int(headerCopy.Width)
-		height := int(headerCopy.Height)
-		isTopDown := height < 0
-		if isTopDown {
-			height = -height
-		}
-
-		// Validation: prevent unreasonable dimensions
-		if width <= 0 || height <= 0 || width > 32768 || height > 32768 {
-			return nil, fmt.Errorf("invalid image dimensions: %dx%d", width, height)
-		}
-
-		// Calculate offset to pixel data
-		headerSize := headerCopy.Size
-		offset := headerSize
-
-		// Handle BI_BITFIELDS (Compression=3) with BITMAPINFOHEADER (Size=40)
-		// In this case, 3 DWORD color masks follow the header.
-		if headerCopy.Compression == 3 && headerSize == 40 {
-			offset += 12
-		}
-
-		img := image.NewNRGBA(image.Rect(0, 0, width, height))
-
-		// 32bpp stride is always width * 4
-		stride := width * 4
-
-		// Use the copied data instead of direct memory access
-		pixelData := dibDataCopy[offset:]
-
-		for y := 0; y < height; y++ {
-			// DIBs are usually bottom-up
-			destY := y
-			if !isTopDown {
-				destY = height - 1 - y
-			}
-
-			srcRow := y * stride
-			destRow := destY * img.Stride
-
-			for x := 0; x < width; x++ {
-				// Input is BGRA or BGRX
-				b := pixelData[srcRow+x*4+0]
-				g := pixelData[srcRow+x*4+1]
-				r := pixelData[srcRow+x*4+2]
-				a := pixelData[srcRow+x*4+3]
-
-				// Set to NRGBA
-				img.Pix[destRow+x*4+0] = r
-				img.Pix[destRow+x*4+1] = g
-				img.Pix[destRow+x*4+2] = b
-				img.Pix[destRow+x*4+3] = a
-			}
-		}
-		return img, nil
-	}
-
-	// Fallback for non-32bpp images (e.g. 24bpp) where standard decoder might still work,
-	// or properly constructing the file header for them.
-	// Re-implementing the BMP file construction for fallback.
-
-	// Get the total size of the DIB data (including header, palette, and pixel data)
-	imageSize := headerCopy.SizeImage
-	if imageSize == 0 && headerCopy.Compression == 0 { // BI_RGB
-		stride := (int(headerCopy.Width)*int(headerCopy.BitCount) + 31) / 32 * 4
-		imageSize = uint32(stride * int(map[bool]int32{true: headerCopy.Height, false: -headerCopy.Height}[headerCopy.Height > 0]))
-	}
-
-	// Offset Calculation Logic for File Header
-	offset := uint32(fileHeaderLen) + headerCopy.Size
-
-	// + Palette/Masks:
-	if headerCopy.Compression == 3 && headerCopy.Size == 40 {
-		offset += 12
-	}
-
-	// If BitCount <= 8, a color table follows.
-	if headerCopy.BitCount <= 8 {
-		colors := headerCopy.ClrUsed
-		if colors == 0 {
-			colors = 1 << headerCopy.BitCount
-		}
-		offset += colors * 4
-	}
-
-	// Total file size
-	fileSize := offset + imageSize
-
-	// Construct BMP file in memory using the copied data
-	buf := new(bytes.Buffer)
-	binary.Write(buf, binary.LittleEndian, uint16('B')|(uint16('M')<<8)) // bfType
-	binary.Write(buf, binary.LittleEndian, uint32(fileSize))             // bfSize
-	binary.Write(buf, binary.LittleEndian, uint32(0))                    // bfReserved1, bfReserved2
-	binary.Write(buf, binary.LittleEndian, uint32(offset))               // bfOffBits
-
-	// Write the DIB data from our local copy
-	dibSize := fileSize - fileHeaderLen
-	if int(dibSize) > len(dibDataCopy) {
-		dibSize = uint32(len(dibDataCopy))
-	}
-	buf.Write(dibDataCopy[:dibSize])
-
-	return bmp.Decode(buf)
-}
-
 func isClipboardChanged() bool {
-	r, _, _ := getClipboardSequenceNumber.Call()
-	if r == 0 {
+	seqNum := uint32(C.clipboardGetSequenceNumber())
+	if seqNum == 0 {
 		return false
 	}
-
-	seqNum := uint32(r)
 	if seqNum != lastSeqNum {
 		lastSeqNum = seqNum
 		return true
 	}
-
 	return false
+}
+
+func buildWatchSnapshot() string {
+	buf := make([]byte, 1024)
+	n := C.clipboardGetDiagnosticInfo((*C.char)(unsafe.Pointer(&buf[0])), C.int(len(buf)))
+	if n <= 0 {
+		return ""
+	}
+	return string(buf[:int(n)])
+}
+
+func logClipboardDiagnostic(message string) {
+	if !shouldEmitClipboardDiagLog() {
+		return
+	}
+	util.GetLogger().Warn(util.NewTraceContext(), message)
+}
+
+func shouldEmitClipboardDiagLog() bool {
+	now := time.Now().UnixMilli()
+	last := atomic.LoadInt64(&lastClipboardDiagLogTs)
+	if now-last < clipboardDiagLogThrottleMs {
+		return false
+	}
+	return atomic.CompareAndSwapInt64(&lastClipboardDiagLogTs, last, now)
+}
+
+// utf16Decode converts a UTF-16 slice to a Go string.
+func utf16Decode(s []uint16) string {
+	runes := make([]rune, 0, len(s))
+	for i := 0; i < len(s); {
+		r := rune(s[i])
+		if r >= 0xD800 && r <= 0xDBFF && i+1 < len(s) {
+			r2 := rune(s[i+1])
+			if r2 >= 0xDC00 && r2 <= 0xDFFF {
+				r = (r-0xD800)*0x400 + (r2 - 0xDC00) + 0x10000
+				i += 2
+				runes = append(runes, r)
+				continue
+			}
+		}
+		runes = append(runes, r)
+		i++
+	}
+	return string(runes)
+}
+
+// utf16Encode converts a Go string to a null-terminated UTF-16 slice.
+func utf16Encode(s string) []uint16 {
+	result := make([]uint16, 0, len(s)+1)
+	for _, r := range s {
+		if r >= 0x10000 {
+			r -= 0x10000
+			result = append(result, uint16(r/0x400+0xD800))
+			result = append(result, uint16(r%0x400+0xDC00))
+		} else {
+			result = append(result, uint16(r))
+		}
+	}
+	result = append(result, 0)
+	return result
 }

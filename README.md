@@ -1,56 +1,47 @@
 # Wox
 
 [![Build status](https://github.com/Wox-launcher/Wox/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/Wox-launcher/Wox/actions)
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/Wox-launcher/wox?include_prereleases)](https://github.com/Wox-launcher/Wox/releases)
-[![Github All Releases](https://img.shields.io/github/downloads/Wox-launcher/Wox/total.svg)](https://github.com/Wox-launcher/Wox/releases)
+[![GitHub release](https://img.shields.io/github/v/release/Wox-launcher/wox)](https://github.com/Wox-launcher/Wox/releases)
+[![Downloads](https://img.shields.io/github/downloads/Wox-launcher/Wox/total.svg)](https://github.com/Wox-launcher/Wox/releases)
 
-**Wox** is a cross-platform launcher that simply works. It's an open-source alternative to [Alfred](https://www.alfredapp.com/) and [Raycast](http://www.raycast.com/)
+Wox is an open-source cross-platform launcher for macOS, Linux, and Windows. It is designed for fast local search, extensibility through plugins, and a lightweight distribution model that can run from a single executable.
 
-![Snapshot](https://raw.githubusercontent.com/Wox-launcher/Wox/master/screenshots/app.png)
+It is a practical alternative to [Alfred](https://www.alfredapp.com/) and [Raycast](https://www.raycast.com/).
 
-[More screenshots](https://github.com/Wox-launcher/Wox/tree/master/screenshots)
+![Wox screenshot](https://raw.githubusercontent.com/Wox-launcher/Wox/master/screenshots/poster.png)
 
-## Features
+## Highlights
 
-- Search for applications, folders, files and more
-- AI Chat with MCP support
-- [Plugins](https://wox-launcher.github.io/Wox/store/plugins.html) and [Themes](https://wox-launcher.github.io/Wox/store/themes.html)
-- Single executable file, no installation required
-- Develop plugins with Javascript, Python
+- Search and launch applications, files, folders, and commands
+- AI chat with MCP integration and multiple provider backends
+- Extensible plugin system with Python and JavaScript SDKs
+- Theme support with online plugin and theme stores
+- Cross-platform packaging with no mandatory installation flow
 
 ## Install
 
-| Platform      | Method   | Command/Instructions                                                                                      |
-| ------------- | -------- | --------------------------------------------------------------------------------------------------------- |
-| All Platforms | Manual   | Download from [releases](https://github.com/Wox-launcher/Wox/releases) and run the single executable file |
-| macOS         | Homebrew | `brew tap wox-launcher/wox && brew install wox`                                                           |
-| Arch Linux    | AUR      | `yay -S wox-bin` or use your preferred AUR helper                                                         |
+| Platform | Method | Command or instructions |
+| --- | --- | --- |
+| macOS | Homebrew | `brew install --cask wox` |
+| Windows | Winget | `winget install -e --id Wox.Wox` |
+| Windows | Scoop | `scoop install extras/wox` |
+| macOS / Linux / Windows | Manual | Download the latest stable package from [Releases](https://github.com/Wox-launcher/Wox/releases) and run it directly |
 
-## Linux Dependencies
-
-| Dependency | Link                                        | Description                                  | Install                     |
-| ---------- | ------------------------------------------- | -------------------------------------------- | --------------------------- |
-| keybinder  | https://github.com/kupferlauncher/keybinder | For recording the double modifier key hotkey | `apt install keybinder-3.0` |
-
-Due to the large number of Linux distributions, we only test Wox on Ubuntu. We cannot guarantee that it will work properly on other Linux platforms.
-
-## Usages
-
-| Action        | Shortcut                                             |
-| ------------- | ---------------------------------------------------- |
-| Toggle App    | <kbd>Alt</kbd>/<kbd>Command</kbd> + <kbd>Space</kbd> |
-| Show Actions  | <kbd>Alt</kbd>/<kbd>Command</kbd> + <kbd>J</kbd>     |
-| Cancel/Return | <kbd>Esc</kbd>                                       |
-
-## Contribution
-
-- First and most importantly, star it!
-- Send PR
-- Join [discussions](https://github.com/Wox-launcher/Wox/discussions)
 
 ## Documentation
 
-- [Doc](https://wox-launcher.github.io/Wox/)
+- [Project documentation](https://wox-launcher.github.io/Wox/)
+- [Plugin store](https://wox-launcher.github.io/Wox/store/plugins.html)
+- [Theme store](https://wox-launcher.github.io/Wox/store/themes.html)
+
+## Contributing
+
+Contributions are welcome through issues, discussions, and pull requests.
+
+- [Discussions](https://github.com/Wox-launcher/Wox/discussions)
+- [Reddit](https://www.reddit.com/r/WoxLauncher/)
+- [Issues](https://github.com/Wox-launcher/Wox/issues)
+- [Pull requests](https://github.com/Wox-launcher/Wox/pulls)
 
 ## Sponsors
 
@@ -60,11 +51,11 @@ Due to the large number of Linux distributions, we only test Wox on Ubuntu. We c
       <img src="https://github.com/SignPath.png" width="40" alt="SignPath">
     </td>
     <td>
-      Free code signing on Windows provided by <a href="https://signpath.io">SignPath.io</a>, certificate by <a href="https://signpath.org">SignPath Foundation</a>
+      Free code signing on Windows provided by <a href="https://signpath.io">SignPath.io</a>, with certificates from <a href="https://signpath.org">SignPath Foundation</a>.
     </td>
   </tr>
 </table>
 
 ## Project Activity
 
-![Alt](https://repobeats.axiom.co/api/embed/426a758ebe040d1931da135e5011b6c5c9058041.svg "Repobeats analytics image")
+![Repobeats analytics](https://repobeats.axiom.co/api/embed/1d640adea6ab4acf0b5c7142d256ccd61e97ad30.svg "Repobeats analytics image")

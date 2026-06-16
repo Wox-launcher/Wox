@@ -1,55 +1,63 @@
 # Deep Link
 
-Wox supports deep linking, allowing you to trigger Wox queries from external applications or scripts.
-
-## URL Scheme
-
-The URL scheme for Wox is `wox://`.
+Deep links let another app or script open Wox with a prepared query. This is useful for terminal aliases, browser shortcuts, automation tools, and app-specific launch buttons.
 
 ## Format
 
-```
-wox://query?q=<query>
+```text
+wox://query?q=<url-encoded-query>
 ```
 
-- `q`: The query string you want to execute. It should be URL-encoded.
+The `q` value is the exact query text Wox should place into the launcher. URL-encode spaces and symbols.
 
 ## Examples
 
-### Open Wox with a pre-filled query
+Open Plugin Manager with an install query:
 
-```
+```text
 wox://query?q=wpm%20install
 ```
 
-This will open Wox and type `wpm install` into the search box.
+Open file search:
 
-### Trigger a specific plugin
-
-```
-wox://query?q=calc%201%2B1
+```text
+wox://query?q=f%20invoice
 ```
 
-This will open Wox and calculate `1+1` using the calculator plugin (assuming `calc` is the trigger).
+Run a calculation:
 
-## Usage in Scripts
+```text
+wox://query?q=100%20%2B%2020
+```
 
-You can use deep links in your shell scripts or other automation tools.
+Start an AI chat:
 
-**macOS:**
+```text
+wox://query?q=chat%20summarize%20this
+```
+
+## From Scripts
+
+macOS:
 
 ```bash
-open "wox://query?q=test"
+open "wox://query?q=f%20invoice"
 ```
 
-**Windows:**
+Windows PowerShell:
 
 ```powershell
-start "wox://query?q=test"
+Start-Process "wox://query?q=f%20invoice"
 ```
 
-**Linux:**
+Linux:
 
 ```bash
-xdg-open "wox://query?q=test"
+xdg-open "wox://query?q=f%20invoice"
 ```
+
+## Encoding Notes
+
+- Encode spaces as `%20`.
+- Encode `+` as `%2B` when it is part of a calculation.
+- Keep secrets out of deep links; URLs can be recorded by shells, browsers, or automation logs.

@@ -11,6 +11,7 @@ import (
 )
 
 var noSelection = errors.New("no selection")
+var ErrSelectionUnsupported = errors.New("selection retrieval unsupported")
 var lastClipboardChangeTimestamp int64 = 0
 
 type SelectionType string

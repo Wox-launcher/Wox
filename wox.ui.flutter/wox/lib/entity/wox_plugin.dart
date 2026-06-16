@@ -1,4 +1,5 @@
 import 'wox_image.dart';
+import 'wox_glance.dart';
 import 'wox_plugin_setting.dart';
 
 class PluginDetail {
@@ -22,9 +23,11 @@ class PluginDetail {
   late bool isDev;
   late bool isInstalled;
   late bool isDisable;
+  late bool isUpgradable;
   late List<PluginSettingDefinitionItem> settingDefinitions;
   late PluginSetting setting;
   late List<MetadataFeature> features;
+  late List<MetadataGlance> glances;
 
   PluginDetail.empty() {
     id = '';
@@ -47,9 +50,11 @@ class PluginDetail {
     isDev = false;
     isInstalled = false;
     isDisable = false;
+    isUpgradable = false;
     settingDefinitions = <PluginSettingDefinitionItem>[];
     setting = PluginSetting.empty();
     features = <MetadataFeature>[];
+    glances = <MetadataGlance>[];
   }
 
   PluginDetail.fromJson(Map<String, dynamic> json) {
@@ -69,6 +74,7 @@ class PluginDetail {
     isDev = json['IsDev'] ?? false;
     isInstalled = json['IsInstalled'] ?? false;
     isDisable = json['IsDisable'] ?? false;
+    isUpgradable = json['IsUpgradable'] ?? false;
 
     if (json['TriggerKeywords'] != null) {
       triggerKeywords = (json['TriggerKeywords'] as List).map((e) => e.toString()).toList();
@@ -120,6 +126,15 @@ class PluginDetail {
     } else {
       features = <MetadataFeature>[];
     }
+
+    if (json['Glances'] != null) {
+      glances = <MetadataGlance>[];
+      json['Glances'].forEach((v) {
+        glances.add(MetadataGlance.fromJson(v));
+      });
+    } else {
+      glances = <MetadataGlance>[];
+    }
   }
 }
 
@@ -143,13 +158,11 @@ class MetadataCommand {
 class PluginSetting {
   late bool disabled;
   late List<String> triggerKeywords;
-  late List<PluginQueryCommand> queryCommands;
   late Map<String, String> settings;
 
   PluginSetting.empty() {
     disabled = false;
     triggerKeywords = <String>[];
-    queryCommands = <PluginQueryCommand>[];
     settings = <String, String>{};
   }
 
@@ -162,30 +175,11 @@ class PluginSetting {
       triggerKeywords = (json['TriggerKeywords'] as List).map((e) => e.toString()).toList();
     }
 
-    if (json['QueryCommands'] == null) {
-      queryCommands = <PluginQueryCommand>[];
-    } else {
-      queryCommands = <PluginQueryCommand>[];
-      json['QueryCommands'].forEach((v) {
-        queryCommands.add(PluginQueryCommand.fromJson(v));
-      });
-    }
-
     if (json['Settings'] == null) {
       settings = <String, String>{};
     } else {
       settings = json['Settings'].cast<String, String>();
     }
-  }
-}
-
-class PluginQueryCommand {
-  late String command;
-  late String description;
-
-  PluginQueryCommand.fromJson(Map<String, dynamic> json) {
-    command = json['Command'];
-    description = json['Description'];
   }
 }
 

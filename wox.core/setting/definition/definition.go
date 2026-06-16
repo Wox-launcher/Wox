@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"wox/i18n"
 	"wox/util"
 
 	"github.com/tidwall/gjson"
@@ -41,16 +40,15 @@ type PluginSettingDefinitionItem struct {
 	IsPlatformSpecific  bool // if true, this setting may be different in different platforms
 }
 
+// Deprecated: plugin-provided pixel styling is ignored when settings are loaded.
+// Wox owns setting-page layout so third-party plugins cannot break visual consistency.
 type PluginSettingValueStyle struct {
 	PaddingLeft   int
 	PaddingTop    int
 	PaddingRight  int
 	PaddingBottom int
 
-	Width      int
-	LabelWidth int // if has label, E.g. select, checkbox, textbox
-
-	I18nOverrideMap map[i18n.LangCode]PluginSettingValueStyle // override for different languages
+	Width int
 }
 
 func (n *PluginSettingDefinitionItem) UnmarshalJSON(b []byte) error {

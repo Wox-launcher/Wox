@@ -11,7 +11,7 @@ and trigger keywords.
 import json
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 
 class SelectionType(str, Enum):
@@ -153,16 +153,18 @@ class Selection:
         file_paths: List of selected file paths (when type is FILE)
 
     Example usage:
-        async def query(ctx: Context, query: Query) -> List[Result]:
+        async def query(ctx: Context, query: Query) -> QueryResponse:
+            # QueryResponse requires Wox >= 2.0.4. Return List[Result] directly
+            # when supporting older Wox releases.
             if query.type == QueryType.SELECTION:
                 if query.selection.type == SelectionType.TEXT:
                     # Process selected text
                     text = query.selection.text
-                    return [process_text(text)]
+                    return QueryResponse(results=[process_text(text)])
                 elif query.selection.type == SelectionType.FILE:
                     # Process selected files
                     files = query.selection.file_paths
-                    return [process_files(files)]
+                    return QueryResponse(results=[process_files(files)])
     """
 
     type: SelectionType = field(default=SelectionType.TEXT)
@@ -352,6 +354,7 @@ class Query:
 
     Attributes:
         id: Unique identifier for this query instance
+        session_id: UI session identifier for this query instance
         type: The type of query (INPUT or SELECTION)
         raw_query: The full raw query text as typed by the user
         selection: Selected content (for SELECTION type queries)
@@ -359,9 +362,12 @@ class Query:
         trigger_keyword: The trigger keyword if present (empty for global queries)
         command: The command keyword after trigger keyword
         search: The search text after command (empty if only command)
+        refinements: Selected query refinement values keyed by refinement id
 
     Example usage:
-        async def query(ctx: Context, query: Query) -> List[Result]:
+        async def query(ctx: Context, query: Query) -> QueryResponse:
+            # QueryResponse requires Wox >= 2.0.4. Return List[Result] directly
+            # when supporting older Wox releases.
             # For a query like ">todo add buy groceries"
             # trigger_keyword = "todo"
             # command = "add"
@@ -413,6 +419,15 @@ class Query:
     and other contextual information.
     """
 
+    session_id: str = field(default="")
+    """
+    UI session identifier for this query.
+
+    The value is stable for the lifetime of the Wox UI instance that issued
+    the query and is useful when query-scoped state must stay tied to one
+    visible session.
+    """
+
     trigger_keyword: str = field(default="")
     """
     The trigger keyword for plugin-specific queries.
@@ -443,6 +458,24 @@ class Query:
     Example: For ">todo add buy groceries", search = "buy groceries"
     """
 
+    refinements: Dict[str, str] = field(default_factory=dict)
+    """
+    Selected query refinement values keyed by refinement id.
+
+    Wox treats these values as opaque strings and sends them back from
+    QueryResponse.refinements controls, so each plugin owns the filtering or
+    sorting semantics for its commands. Multi-select refinements are
+    comma-separated.
+    """
+
+    context_data: Dict[str, str] = field(default_factory=dict)
+    """
+    Hidden query-scoped data.
+
+    Wox does not render this as UI. Plugins can use it to keep data attached
+    to a plugin-driven ChangeQuery flow, such as a shell working directory.
+    """
+
     def to_json(self) -> str:
         """
         Convert to JSON string with camelCase naming.
@@ -453,6 +486,7 @@ class Query:
         return json.dumps(
             {
                 "QueryId": self.id,
+                "SessionId": self.session_id,
                 "Type": self.type,
                 "RawQuery": self.raw_query,
                 "Selection": json.loads(self.selection.to_json()),
@@ -460,6 +494,8 @@ class Query:
                 "TriggerKeyword": self.trigger_keyword,
                 "Command": self.command,
                 "Search": self.search,
+                "Refinements": self.refinements,
+                "ContextData": self.context_data,
             }
         )
 
@@ -479,8 +515,41 @@ class Query:
         if not data.get("Type"):
             data["Type"] = QueryType.INPUT
 
+        refinements_raw: Any = data.get("Refinements", {})
+        if isinstance(refinements_raw, str):
+            try:
+                refinements_raw = json.loads(refinements_raw)
+            except Exception:
+                refinements_raw = {}
+        refinements: Dict[str, str] = {}
+        if isinstance(refinements_raw, dict):
+            for key, values in refinements_raw.items():
+                if not isinstance(key, str):
+                    continue
+                if isinstance(values, list):
+                    # Protocol migration: older hosts sent selected
+                    # refinements as arrays. Join them once at the SDK boundary
+                    # so plugin authors consume a simple dict[str, str].
+                    refinements[key] = ",".join(str(value) for value in values if value is not None and str(value))
+                    continue
+                if values is not None:
+                    refinements[key] = str(values)
+
+        context_data_raw: Any = data.get("ContextData", {})
+        if isinstance(context_data_raw, str):
+            try:
+                context_data_raw = json.loads(context_data_raw)
+            except Exception:
+                context_data_raw = {}
+        context_data: Dict[str, str] = {}
+        if isinstance(context_data_raw, dict):
+            for key, value in context_data_raw.items():
+                if isinstance(key, str) and value is not None:
+                    context_data[key] = str(value)
+
         return cls(
-            id=data.get("QueryId", ""),
+            id=data.get("QueryId", data.get("Id", "")),
+            session_id=data.get("SessionId", ""),
             type=QueryType(data.get("Type")),
             raw_query=data.get("RawQuery", ""),
             selection=Selection.from_json(data.get("Selection", Selection().to_json())),
@@ -488,6 +557,8 @@ class Query:
             trigger_keyword=data.get("TriggerKeyword", ""),
             command=data.get("Command", ""),
             search=data.get("Search", ""),
+            refinements=refinements,
+            context_data=context_data,
         )
 
     def is_global_query(self) -> bool:
@@ -574,6 +645,11 @@ class ChangeQueryParam:
     Contains the text or file selection to set.
     """
 
+    context_data: Dict[str, str] = field(default_factory=dict)
+    """
+    Hidden query-scoped data to attach to the changed query.
+    """
+
     def to_json(self) -> str:
         """
         Convert to JSON string with camelCase naming.
@@ -584,6 +660,7 @@ class ChangeQueryParam:
         data = {
             "QueryType": self.query_type,
             "QueryText": self.query_text,
+            "ContextData": self.context_data,
         }
         if self.query_selection:
             data["QuerySelection"] = json.loads(self.query_selection.to_json())
@@ -605,10 +682,23 @@ class ChangeQueryParam:
         if not data.get("QueryType"):
             data["QueryType"] = QueryType.INPUT
 
+        context_data_raw: Any = data.get("ContextData", {})
+        if isinstance(context_data_raw, str):
+            try:
+                context_data_raw = json.loads(context_data_raw)
+            except Exception:
+                context_data_raw = {}
+        context_data: Dict[str, str] = {}
+        if isinstance(context_data_raw, dict):
+            for key, value in context_data_raw.items():
+                if isinstance(key, str) and value is not None:
+                    context_data[key] = str(value)
+
         return cls(
             query_type=QueryType(data.get("QueryType")),
             query_text=data.get("QueryText", ""),
             query_selection=Selection.from_json(data.get("QuerySelection", Selection().to_json())),
+            context_data=context_data,
         )
 
 

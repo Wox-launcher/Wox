@@ -25,6 +25,10 @@
 			"path": "wox.plugin.host.nodejs"
 		},
 		{
+			"name": "wox.test",
+			"path": "wox.test"
+		},
+		{
 			"name": "wox.ui.flutter",
 			"path": "wox.ui.flutter/wox"
 		}
@@ -37,14 +41,13 @@
 			}
 		],
 		"dart.lineLength": 180,
-		"swift.lineLength": 180,
-		"objective-c.lineLength": 180,
 		"files.exclude": {
 			"wox.plugin.host.nodejs": true,
 			"wox.plugin.host.python": true,
 			"wox.plugin.nodejs": true,
 			"wox.plugin.python": true,
 			"wox.ui.flutter": true,
+			"wox.test": true,
 			"wox.core": true
 		},
 		"[python]": {
@@ -55,8 +58,12 @@
 			},
 			"editor.defaultFormatter": "charliermarsh.ruff"
 		},
+		"[swift]": {
+			"editor.defaultFormatter": "swiftlang.swift-vscode"
+		},
 		"makefile.configureOnOpen": false,
-		"editor.formatOnSave": true
+		"editor.formatOnSave": true,
+		"go.lintOnSave": "off"
 	},
 	"extensions": {
 		"recommendations": [
@@ -84,6 +91,10 @@
 				"request": "launch",
 				"mode": "auto",
 				"program": "${workspaceFolder:wox.core}",
+				// Filesearch's SQLite-first index requires FTS5 support at runtime.
+				// Keep the development launch configuration aligned with Makefile builds
+				// so VS Code runs do not start a backend that silently lacks the search schema.
+				"buildFlags": "-tags=sqlite_fts5",
 				"env": {
 					"CGO_ENABLED": "1"
 				}
@@ -93,6 +104,9 @@
 				"cwd": "${workspaceFolder:wox.ui.flutter}",
 				"request": "launch",
 				"type": "dart",
+				// Bug fix: VS Code compounds start debug configurations in parallel, so Flutter
+				// waits for the shared core readiness task before it starts loading theme/settings.
+				"preLaunchTask": "Wait Core Dev Server",
 				// "flutterMode": "profile"
 			},
 			{
@@ -114,6 +128,35 @@
 					"Run Flutter"
 				],
 				"stopAll": true
+			}
+		]
+	},
+	"tasks": {
+		"version": "2.0.0",
+		"tasks": [
+			{
+				"label": "Wait Core Dev Server",
+				"type": "process",
+				// Bug fix: Flutter launch must wait for the backend socket instead of assuming
+				// compound launch order. Polling /ping keeps the task independent from Go log
+				// formatting and avoids platform-specific shells so Windows VS Code uses the same
+				// readiness gate as macOS/Linux.
+				"command": "node",
+				"args": [
+					"-e",
+					"const http=require('http');let attempts=0;const max=600;function check(){attempts++;const req=http.get('http://127.0.0.1:34987/ping',res=>{res.resume();if(res.statusCode>=200&&res.statusCode<300){console.log('core ready');process.exit(0);}retry();});req.on('error',retry);req.setTimeout(1000,()=>{req.destroy();retry();});}function retry(){if(attempts>=max){console.error('core did not become ready on http://127.0.0.1:34987/ping');process.exit(1);}setTimeout(check,200);}check();"
+				],
+				// UX fix: this readiness probe is expected to run on every Flutter debug
+				// launch, so keep its terminal hidden unless VS Code needs to report a
+				// task failure. Reusing a dedicated panel also prevents utility output
+				// from interleaving with developer terminals.
+				"presentation": {
+					"reveal": "never",
+					"panel": "dedicated",
+					"clear": true,
+					"showReuseMessage": false
+				},
+				"problemMatcher": []
 			}
 		]
 	}

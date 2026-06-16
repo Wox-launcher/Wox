@@ -1,0 +1,49 @@
+name: Bug report
+description: Create a report to help us improve
+title: "[Bug]: "
+labels: []
+assignees:
+  - qianlifeng
+
+body:
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      description: Select your operating system
+      options:
+        - macOS
+        - Windows
+        - Linux
+    validations:
+      required: true
+
+  - type: input
+    id: wox_version
+    attributes:
+      label: Wox Version
+      description: You can find it in Wox Settings -> About
+      placeholder: v2.0.0
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and concise description of what the bug is.
+      placeholder: What happened? What did you expect?
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ### Logs
+        Please upload the Wox log to help identify your bug.
+        Attach the log file in the **Description** editor area where GitHub shows:
+        `Paste, drop, or click to add files`
+
+        Log path:
+        - `~/.wox/log/wox.log` if you use macOS or Linux
+        - `C:\Users\<yourname>\.wox\log\wox.log` if you use Windows

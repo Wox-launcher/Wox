@@ -19,28 +19,70 @@ uv add wox-plugin
 
 ## Usage
 
-```python
-from wox_plugin import BasePlugin, Query, Result, Context, PluginInitParams
+This example returns `QueryResponse`, so the plugin's `plugin.json` should set
+`MinWoxVersion` to `2.0.4` or newer. Return `list[Result]` directly if you need
+the same plugin build to run on older Wox releases.
 
-class MyPlugin(BasePlugin):
+```python
+from wox_plugin import Query, QueryResponse, Result, Context, PluginInitParams, WoxImage
+
+class MyPlugin:
     async def init(self, ctx: Context, params: PluginInitParams) -> None:
         self.api = params.API
         
-    async def query(self, ctx: Context, query: Query) -> list[Result]:
+    async def query(self, ctx: Context, query: Query) -> QueryResponse:
         # Your plugin logic here
         results = []
         results.append(
             Result(
                 title="Hello Wox",
-                subtitle="This is a sample result",
-                icon="path/to/icon.png",
+                sub_title="This is a sample result",
+                icon=WoxImage.new_emoji("🔍"),
                 score=100
             )
         )
-        return results
+        return QueryResponse(results=results)
 
 # MUST HAVE! The plugin class will be automatically loaded by Wox
 plugin = MyPlugin()
+```
+
+Returning `list[Result]` directly is deprecated. The Python host still accepts
+it for compatibility with older Wox releases. Use `QueryResponse` only when
+`plugin.json` declares `MinWoxVersion` >= `2.0.4` so results, refinements, and
+layout hints are carried together.
+
+When a plugin needs to control the preview width or grid layout, set
+`QueryResponse.layout.result_preview_width_ratio` or
+`QueryResponse.layout.grid_layout`. The older `resultPreviewWidthRatio` and
+`gridLayout` metadata features are deprecated because they can only describe
+static plugin or command defaults.
+
+## Query Requirements
+
+Plugins can declare settings that must be configured before Wox calls `query()`:
+
+```json
+{
+  "QueryRequirements": {
+    "AnyQuery": [
+      {
+        "SettingKey": "apiKey",
+        "Validators": [{ "Type": "not_empty" }],
+        "Message": "i18n:my_plugin_api_key_required"
+      }
+    ],
+    "QueryWithoutCommand": [],
+    "QueryWithCommand": {
+      "download": [
+        {
+          "SettingKey": "downloadPath",
+          "Validators": [{ "Type": "not_empty" }]
+        }
+      ]
+    }
+  }
+}
 ```
 
 ## License

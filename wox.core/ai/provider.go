@@ -13,6 +13,7 @@ var providerFactories = map[common.ProviderName]func(ctx context.Context, provid
 
 type Provider interface {
 	GetIcon() common.WoxImage
+	GetDefaultHost() string
 	ChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions) (ChatStream, error)
 	Models(ctx context.Context) ([]common.Model, error)
 	Ping(ctx context.Context) error
@@ -35,7 +36,11 @@ func GetAllProviders() []common.AIProviderInfo {
 	providers := []common.AIProviderInfo{}
 	for name, factory := range providerFactories {
 		provider := factory(context.Background(), setting.AIProvider{Name: name})
-		providers = append(providers, common.AIProviderInfo{Name: name, Icon: provider.GetIcon()})
+		providers = append(providers, common.AIProviderInfo{
+			Name:        name,
+			Icon:        provider.GetIcon(),
+			DefaultHost: provider.GetDefaultHost(),
+		})
 	}
 	return providers
 }

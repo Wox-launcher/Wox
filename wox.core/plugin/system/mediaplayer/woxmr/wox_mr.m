@@ -3,6 +3,7 @@
 #import <CoreFoundation/CoreFoundation.h>
 #include <dlfcn.h>
 #include <stdlib.h>
+#include <string.h>
 
 // Dynamic symbols for MediaRemote (private)
 static void (*MRMediaRemoteGetNowPlayingInfo)(dispatch_queue_t, void (^)(NSDictionary *)) = NULL;
@@ -14,6 +15,10 @@ static bool (*MRMediaRemoteSendCommand)(int, id) = NULL; // MRCommand, userInfo
 static const int kMRPlay = 0;
 static const int kMRPause = 1;
 static const int kMRTogglePlayPause = 2;
+static const int kMRNextTrack = 4;
+static const int kMRPreviousTrack = 5;
+
+int wox_mr_toggle(void);
 
 static bool load_mediaremote_once() {
     static dispatch_once_t once;
@@ -46,30 +51,75 @@ static double mr_get_rate_now(void) {
     return -1.0;
 }
 
+static bool ensure_mediaremote_send_command(void) {
+    (void)load_mediaremote_once();
+    if (!MRMediaRemoteSendCommand) {
+        void *h = dlopen("/System/Library/PrivateFrameworks/MediaRemote.framework/MediaRemote", RTLD_LAZY);
+        if (h) MRMediaRemoteSendCommand = dlsym(h, "MRMediaRemoteSendCommand");
+    }
+    return MRMediaRemoteSendCommand != NULL;
+}
+
+static void wait_for_media_command_propagation(NSTimeInterval timeout) {
+    if (!MRMediaRemoteGetNowPlayingApplicationPID) return;
+
+    __block BOOL doneWait = NO;
+    MRMediaRemoteGetNowPlayingApplicationPID(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^(int pid){ doneWait = YES; });
+    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
+    while (!doneWait && [[NSDate date] compare:deadline] == NSOrderedAscending) {
+        [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
+    }
+}
+
+static int send_mediaremote_command(int command) {
+    if (!ensure_mediaremote_send_command()) return 0;
+
+    bool ok = MRMediaRemoteSendCommand(command, nil);
+    if (ok) wait_for_media_command_propagation(0.5);
+    return ok ? 1 : 0;
+}
+
+static bool media_command_code_for_name(const char *command, int *code) {
+    if (!command || !code) return false;
+    if (strcmp(command, "play") == 0) {
+        *code = kMRPlay;
+        return true;
+    }
+    if (strcmp(command, "pause") == 0) {
+        *code = kMRPause;
+        return true;
+    }
+    if (strcmp(command, "toggle") == 0) {
+        *code = kMRTogglePlayPause;
+        return true;
+    }
+    if (strcmp(command, "next") == 0) {
+        *code = kMRNextTrack;
+        return true;
+    }
+    if (strcmp(command, "previous") == 0) {
+        *code = kMRPreviousTrack;
+        return true;
+    }
+    return false;
+}
+
+// Exported API: run an explicit MediaRemote command.
+int wox_mr_control(const char *command) {
+    @autoreleasepool {
+        int code = 0;
+        if (!media_command_code_for_name(command, &code)) return 0;
+        if (code == kMRTogglePlayPause) return wox_mr_toggle();
+        return send_mediaremote_command(code);
+    }
+}
 
 // Exported API: toggle play/pause via MediaRemoteSendCommand
 int wox_mr_toggle(void) {
     @autoreleasepool {
-        // Ensure MediaRemote is loaded and try to resolve sendCommand if needed
-        (void)load_mediaremote_once();
-        if (!MRMediaRemoteSendCommand) {
-            void *h = dlopen("/System/Library/PrivateFrameworks/MediaRemote.framework/MediaRemote", RTLD_LAZY);
-            if (h) MRMediaRemoteSendCommand = dlsym(h, "MRMediaRemoteSendCommand");
-        }
-        if (!MRMediaRemoteSendCommand) return 0;
-        // First try toggle
-        if (MRMediaRemoteSendCommand(kMRTogglePlayPause, nil)) {
-            // wait a short moment for command to propagate
-            if (MRMediaRemoteGetNowPlayingApplicationPID) {
-                __block BOOL doneWait = NO;
-                MRMediaRemoteGetNowPlayingApplicationPID(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^(int pid){ doneWait = YES; });
-                NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:0.5];
-                while (!doneWait && [[NSDate date] compare:deadline] == NSOrderedAscending) {
-                    [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
-                }
-            }
-            return 1;
-        }
+        // First try toggle.
+        if (send_mediaremote_command(kMRTogglePlayPause)) return 1;
+
         // Fallback: query isPlaying and send explicit Play/Pause
         __block NSNumber *isPlaying = nil;
         __block BOOL done = NO;
@@ -84,16 +134,7 @@ int wox_mr_toggle(void) {
             }
         }
         int cmd = (isPlaying && [isPlaying boolValue]) ? kMRPause : kMRPlay;
-        bool ok = MRMediaRemoteSendCommand(cmd, nil);
-        if (ok && MRMediaRemoteGetNowPlayingApplicationPID) {
-            __block BOOL doneWait2 = NO;
-            MRMediaRemoteGetNowPlayingApplicationPID(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^(int pid){ doneWait2 = YES; });
-            NSDate *deadline2 = [NSDate dateWithTimeIntervalSinceNow:0.5];
-            while (!doneWait2 && [[NSDate date] compare:deadline2] == NSOrderedAscending) {
-                [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
-            }
-        }
-        return ok ? 1 : 0;
+        return send_mediaremote_command(cmd);
     }
 }
 
@@ -198,4 +239,3 @@ const char *wox_mr_get_now_playing_json(void) {
 void wox_mr_free(char *p) {
     if (p) free(p);
 }
-

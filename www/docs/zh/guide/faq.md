@@ -1,43 +1,73 @@
-# 常见问题 (FAQ)
+# 常见问题
 
-## 通用
+## 启动和日志
 
-### Wox 无法启动？
+### Wox 启动不了，先看哪里？
 
-检查日志文件：
+先打开 core 日志：
 
-- Windows: `%USERPROFILE%\\.wox\\log`
-- macOS/Linux: `~/.wox/log`
+| 平台 | Core 日志 |
+| --- | --- |
+| Windows | `%USERPROFILE%\.wox\log\wox.log` |
+| macOS | `~/.wox/log/wox.log` |
+| Linux | `~/.wox/log/wox.log` |
+
+优先看最新的 core 日志。如果 UI 能打开但某个插件失败，再看同一数据目录下的插件日志。
 
 ### 如何重置 Wox？
 
-删除用户数据目录：
+退出 Wox 后删除用户数据目录：
 
-- Windows: `%USERPROFILE%\\.wox`
-- macOS/Linux: `~/.wox`
+| 平台 | 数据目录 |
+| --- | --- |
+| Windows | `%USERPROFILE%\.wox` |
+| macOS | `~/.wox` |
+| Linux | `~/.wox` |
+
+这会删除设置、已安装插件、插件数据、缓存和日志。
+
+## 搜索
+
+### 为什么应用、文件或书签搜不到？
+
+- 新安装的应用可能需要几秒钟才完成索引。
+- 文件搜索只会返回配置根目录下、且 Wox 有权限读取的路径。
+- 浏览器书签来自受支持的浏览器 profile，浏览器同步可能有延迟。
+- 打开对应插件设置，确认插件处于启用状态。
+
+### 为什么结果太杂？
+
+明确使用插件关键字。例如 `f report` 搜文件，`cb report` 搜剪贴板。全局查询会让多个插件一起回答，这是预期行为。
 
 ## 插件
 
-### 插件安装失败？
+### 插件安装失败怎么办？
 
-- 检查您的网络连接。
-- 如果插件需要，请确保已安装所需的运行时（Python/Node.js）。
-- 查看日志以获取详细的错误信息。
+1. 确认能访问插件商店和插件 release 地址。
+2. 检查插件是否需要 Node.js 或 Python。
+3. 打开 Wox 日志目录，查看最新 core 日志和 plugin host 日志。
+4. 如果刚安装运行时，重启 Wox 后再执行一次 `wpm`。
 
 ### 如何更新插件？
 
-使用 `wpm update` 命令更新所有插件或特定插件。
+运行 `wpm`，选中插件，在有可用更新时执行更新动作。也可以从插件管理器设置中管理已安装插件。
 
-### Everything 插件?
+## 文件搜索
 
-Wox 内置文件插件（触发 `f`）依赖 Everything 引擎。请安装并运行 [Everything](https://www.voidtools.com/)，确保其服务已启动并完成索引；让 Everything 在后台运行，Wox 会调用其 API 进行查询。
+### Wox 必须安装 Everything 吗？
+
+不必须。Wox 有自己的 File 插件，会索引你在插件设置中配置的根目录。只有当你想在 Wox 之外也使用 Everything 时，才需要安装 [Everything](https://www.voidtools.com/)。
+
+### macOS 文件搜索为什么提示权限？
+
+macOS 可能会限制 Desktop、Documents、Downloads、外置磁盘等位置。若搜索状态或日志提示权限问题，在 **系统设置 -> 隐私与安全性** 中给 Wox 对应的文件访问权限。
 
 ## 自定义
 
-### 如何更改主题？
+### 如何修改主题？
 
-在 Wox 中输入 `theme` 列出可用主题，或前往 设置 -> 主题 进行选择。
+在 Wox 中运行 `theme`，或打开 **设置 -> 主题**。
 
-### 如何更改快捷键？
+### 如何修改快捷键？
 
-前往 设置 -> 常规 -> 快捷键。
+打开 **设置 -> 常规**，编辑快捷键字段。

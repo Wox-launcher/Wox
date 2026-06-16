@@ -5,7 +5,7 @@ package tray
 // #include <stdlib.h>
 // void createTray(const char *iconBytes, int length);
 // void addMenuItem(const char *title, int tag);
-// void addQueryTray(const char *iconBytes, int length, int tag, const char *tooltip);
+// void addQueryTray(const char *iconBytes, int length, int tag, const char *tooltip, int menuTag, const char *menuTitle);
 // void clearQueryTrayIcons();
 // void removeTray();
 import "C"
@@ -13,13 +13,14 @@ import (
 	"sync"
 	"unsafe"
 
-	"golang.design/x/hotkey/mainthread"
+	"wox/util/mainthread"
 )
 
 var (
 	trayMu            sync.Mutex
 	trayMenuFuncs     = make(map[int]func())
 	trayQueryFuncs    = make(map[int]func(ClickRect))
+	queryMenuTags     []int
 	trayNextTag       int
 	leftClickCallback func()
 )
@@ -82,6 +83,10 @@ func CreateTray(appIcon []byte, onClick func(), items ...MenuItem) {
 	mainthread.Call(func() {
 		trayMu.Lock()
 		leftClickCallback = onClick
+		trayMenuFuncs = make(map[int]func())
+		trayQueryFuncs = make(map[int]func(ClickRect))
+		queryMenuTags = nil
+		trayNextTag = 0
 		trayMu.Unlock()
 
 		iconBytesC := C.CBytes(appIcon)
@@ -113,10 +118,13 @@ func SetQueryIcons(items []QueryIconItem) {
 
 	trayMu.Lock()
 	trayQueryFuncs = make(map[int]func(ClickRect))
+	for _, tag := range queryMenuTags {
+		delete(trayMenuFuncs, tag)
+	}
+	queryMenuTags = nil
 	trayMu.Unlock()
 
 	for _, item := range items {
-		itemCopy := item
 		if len(item.Icon) == 0 || item.Callback == nil {
 			continue
 		}
@@ -125,17 +133,30 @@ func SetQueryIcons(items []QueryIconItem) {
 		trayMu.Lock()
 		tag = trayNextTag
 		trayNextTag++
-		trayQueryFuncs[tag] = itemCopy.Callback
+		trayQueryFuncs[tag] = item.Callback
 		trayMu.Unlock()
 
+		menuTag := -1
+		if item.ContextMenuTitle != "" && item.ContextMenuCallback != nil {
+			trayMu.Lock()
+			menuTag = trayNextTag
+			trayNextTag++
+			trayMenuFuncs[menuTag] = item.ContextMenuCallback
+			queryMenuTags = append(queryMenuTags, menuTag)
+			trayMu.Unlock()
+		}
+
 		mainthread.Call(func() {
-			iconBytesC := C.CBytes(itemCopy.Icon)
+			iconBytesC := C.CBytes(item.Icon)
 			defer C.free(iconBytesC)
 
-			tooltipC := C.CString(itemCopy.Tooltip)
+			tooltipC := C.CString(item.Tooltip)
 			defer C.free(unsafe.Pointer(tooltipC))
 
-			C.addQueryTray((*C.char)(iconBytesC), C.int(len(item.Icon)), C.int(tag), tooltipC)
+			menuTitleC := C.CString(item.ContextMenuTitle)
+			defer C.free(unsafe.Pointer(menuTitleC))
+
+			C.addQueryTray((*C.char)(iconBytesC), C.int(len(item.Icon)), C.int(tag), tooltipC, C.int(menuTag), menuTitleC)
 		})
 	}
 }

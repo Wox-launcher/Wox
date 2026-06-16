@@ -8,21 +8,25 @@ import (
 )
 
 type Instance struct {
-	Plugin             Plugin                 // plugin implementation
-	API                API                    // APIs exposed to plugin
-	Metadata           Metadata               // metadata parsed from plugin.json
-	IsSystemPlugin     bool                   // is system plugin, see `plugin.md` for more detail
-	IsDevPlugin        bool                   // plugins loaded from `local plugin directories` which defined in wpm settings
-	DevPluginDirectory string                 // absolute path to dev plugin directory defined in wpm settings
-	PluginDirectory    string                 // absolute path to plugin directory
-	Host               Host                   // plugin host to run this plugin
-	Setting            *setting.PluginSetting // setting for this plugin
+	Plugin               Plugin                 // plugin implementation
+	API                  API                    // APIs exposed to plugin
+	Metadata             Metadata               // metadata parsed from plugin.json
+	IsSystemPlugin       bool                   // is system plugin, see `plugin.md` for more detail
+	IsDevPlugin          bool                   // plugins loaded from `local plugin directories` which defined in wpm settings
+	DevPluginDirectory   string                 // absolute path to dev plugin directory defined in wpm settings
+	PluginDirectory      string                 // absolute path to plugin directory
+	Host                 Host                   // plugin host to run this plugin
+	Setting              *setting.PluginSetting // setting for this plugin
+	RuntimeQueryCommands []MetadataCommand      // query commands registered at runtime
 
-	DynamicSettingCallbacks []func(ctx context.Context, key string) definition.PluginSettingDefinitionItem // dynamic setting callbacks
-	SettingChangeCallbacks  []func(ctx context.Context, key string, value string)
-	DeepLinkCallbacks       []func(ctx context.Context, arguments map[string]string)
-	UnloadCallbacks         []func(ctx context.Context)
-	MRURestoreCallbacks     []func(ctx context.Context, mruData MRUData) (*QueryResult, error) // MRU restore callbacks
+	DynamicSettingCallbacks   []func(ctx context.Context, key string) definition.PluginSettingDefinitionItem // dynamic setting callbacks
+	SettingChangeCallbacks    []func(ctx context.Context, key string, value string)
+	DeepLinkCallbacks         []func(ctx context.Context, arguments map[string]string)
+	UnloadCallbacks           []func(ctx context.Context)
+	MRURestoreCallbacks       []func(ctx context.Context, mruData MRUData) (*QueryResult, error) // MRU restore callbacks
+	PluginCommandHandlers     []PluginCommandHandler
+	EnterPluginQueryCallbacks []func(ctx context.Context)
+	LeavePluginQueryCallbacks []func(ctx context.Context)
 
 	// for measure performance
 	LoadStartTimestamp    int64
@@ -33,6 +37,10 @@ type Instance struct {
 
 func (i *Instance) translateMetadataText(ctx context.Context, text common.I18nString) string {
 	return i.Metadata.translate(ctx, text)
+}
+
+func (i *Instance) TranslateMetadataText(ctx context.Context, text common.I18nString) string {
+	return i.translateMetadataText(ctx, text)
 }
 
 func (i *Instance) GetName(ctx context.Context) string {
@@ -55,28 +63,32 @@ func (i *Instance) GetTriggerKeywords() []string {
 	return i.Metadata.TriggerKeywords
 }
 
-// query commands to query this plugin. Maybe plugin author dynamical registered or pre-defined in plugin.json
+// query commands to query this plugin. Commands come from plugin metadata and runtime registration only.
 func (i *Instance) GetQueryCommands() []MetadataCommand {
-	settingCommandsCount := 0
-	if i.Setting != nil && i.Setting.QueryCommands != nil {
-		settingCommandsCount = len(i.Setting.QueryCommands.Get())
-	}
+	commands := make([]MetadataCommand, 0, len(i.Metadata.Commands)+len(i.RuntimeQueryCommands))
+	seen := make(map[string]struct{}, len(i.Metadata.Commands)+len(i.RuntimeQueryCommands))
+	translateCtx := context.Background()
 
-	commands := make([]MetadataCommand, 0, len(i.Metadata.Commands)+settingCommandsCount)
-	commands = append(commands, i.Metadata.Commands...)
-	if i.Setting != nil && i.Setting.QueryCommands != nil {
-		for _, command := range i.Setting.QueryCommands.Get() {
-			commands = append(commands, MetadataCommand{
-				Command:     command.Command,
-				Description: common.I18nString(command.Description),
-			})
+	appendCommand := func(command MetadataCommand) {
+		if command.Command == "" {
+			return
 		}
+		if _, exists := seen[command.Command]; exists {
+			return
+		}
+		seen[command.Command] = struct{}{}
+		command.Description = common.I18nString(i.translateMetadataText(translateCtx, command.Description))
+		commands = append(commands, command)
 	}
 
-	ctx := context.Background()
-	for commandIndex := range commands {
-		commands[commandIndex].Description = common.I18nString(i.translateMetadataText(ctx, commands[commandIndex].Description))
+	for _, command := range i.Metadata.Commands {
+		appendCommand(command)
 	}
+
+	for _, command := range i.RuntimeQueryCommands {
+		appendCommand(command)
+	}
+
 	return commands
 }
 

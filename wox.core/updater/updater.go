@@ -31,7 +31,8 @@ const (
 
 var currentUpdateInfo = UpdateInfo{Status: UpdateStatusNone} // global variable to store update info
 
-const versionManifestUrl = "https://raw.githubusercontent.com/Wox-launcher/Wox/master/updater.json"
+const stableVersionManifestUrl = "https://raw.githubusercontent.com/Wox-launcher/Wox/master/updater.json"
+const betaVersionManifestUrl = "https://raw.githubusercontent.com/Wox-launcher/Wox/master/updater.beta.json"
 
 type VersionManifest struct {
 	Version string
@@ -54,6 +55,7 @@ type VersionManifest struct {
 type UpdateInfo struct {
 	CurrentVersion string
 	LatestVersion  string
+	ReleaseChannel string
 	ReleaseNotes   string
 	DownloadUrl    string
 	Checksum       string // Checksum for verification
@@ -63,7 +65,14 @@ type UpdateInfo struct {
 	HasUpdate      bool // Whether there is an update available
 }
 
+type UpdateChannelVersion struct {
+	Channel       string
+	LatestVersion string
+	Error         string
+}
+
 type UpdateInfoCallback func(info UpdateInfo)
+type versionManifestFetcher func(ctx context.Context, releaseChannel setting.ReleaseChannel) (VersionManifest, error)
 
 type ApplyUpdateStage string
 
@@ -100,10 +109,17 @@ func CheckForUpdates(ctx context.Context) {
 func CheckForUpdatesWithCallback(ctx context.Context, callback UpdateInfoCallback) {
 	util.GetLogger().Info(ctx, "start checking for updates")
 
-	setting := setting.GetSettingManager().GetWoxSetting(ctx)
-	if setting != nil && !setting.EnableAutoUpdate.Get() {
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	releaseChannel := setting.ReleaseChannelStable
+	if woxSetting != nil {
+		releaseChannel = woxSetting.ReleaseChannel.Get()
+	}
+	resetCurrentUpdateInfoForReleaseChannel(releaseChannel)
+
+	if woxSetting != nil && !woxSetting.EnableAutoUpdate.Get() {
 		util.GetLogger().Info(ctx, "auto update is disabled, skipping")
 		currentUpdateInfo.Status = UpdateStatusNone
+		currentUpdateInfo.ReleaseChannel = string(releaseChannel)
 		currentUpdateInfo.HasUpdate = false
 		currentUpdateInfo.DownloadedPath = ""
 		currentUpdateInfo.UpdateError = errors.New(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version_auto_update_disabled"))
@@ -129,7 +145,7 @@ func CheckForUpdatesWithCallback(ctx context.Context, callback UpdateInfoCallbac
 		return
 	}
 
-	currentUpdateInfo = parseLatestVersion(ctx)
+	currentUpdateInfo = parseLatestVersion(ctx, releaseChannel)
 	if callback != nil {
 		callback(currentUpdateInfo)
 	}
@@ -141,39 +157,79 @@ func CheckForUpdatesWithCallback(ctx context.Context, callback UpdateInfoCallbac
 	downloadUpdate(ctx, callback)
 }
 
-func parseLatestVersion(ctx context.Context) UpdateInfo {
+func resetCurrentUpdateInfoForReleaseChannel(releaseChannel setting.ReleaseChannel) {
+	normalizedChannel := setting.NormalizeReleaseChannel(string(releaseChannel))
+	if currentUpdateInfo.ReleaseChannel == "" {
+		currentUpdateInfo.ReleaseChannel = string(normalizedChannel)
+		return
+	}
+	if currentUpdateInfo.ReleaseChannel == string(normalizedChannel) {
+		return
+	}
+
+	currentUpdateInfo = UpdateInfo{
+		ReleaseChannel: string(normalizedChannel),
+		Status:         UpdateStatusNone,
+	}
+}
+
+// ResetUpdateInfoForReleaseChannel clears cached update state after a user switches release channels.
+func ResetUpdateInfoForReleaseChannel(releaseChannel setting.ReleaseChannel) {
+	resetCurrentUpdateInfoForReleaseChannel(releaseChannel)
+}
+
+func parseLatestVersion(ctx context.Context, releaseChannel setting.ReleaseChannel) UpdateInfo {
 	util.GetLogger().Info(ctx, "start parsing lastest version")
-	latestVersion, err := getLatestVersion(ctx)
+	latestVersion, err := getLatestVersion(ctx, releaseChannel)
 	if err != nil {
 		util.GetLogger().Error(ctx, err.Error())
 		return UpdateInfo{
-			Status:      UpdateStatusError,
-			UpdateError: err,
+			ReleaseChannel: string(setting.NormalizeReleaseChannel(string(releaseChannel))),
+			Status:         UpdateStatusError,
+			UpdateError:    err,
 		}
 	}
 
+	return buildUpdateInfoFromManifest(ctx, CURRENT_VERSION, releaseChannel, latestVersion)
+}
+
+func buildUpdateInfoFromManifest(ctx context.Context, currentVersion string, releaseChannel setting.ReleaseChannel, latestVersion VersionManifest) UpdateInfo {
+	normalizedChannel := setting.NormalizeReleaseChannel(string(releaseChannel))
+
 	// compare with current version
-	existingVersion, existingErr := semver.NewVersion(CURRENT_VERSION)
+	existingVersion, existingErr := semver.NewVersion(currentVersion)
 	if existingErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to parse current version: %s", existingErr.Error()))
 		return UpdateInfo{
-			Status:      UpdateStatusError,
-			UpdateError: fmt.Errorf("failed to parse current version: %s", existingErr.Error()),
+			ReleaseChannel: string(normalizedChannel),
+			Status:         UpdateStatusError,
+			UpdateError:    fmt.Errorf("failed to parse current version: %s", existingErr.Error()),
 		}
 	}
 	newVersion, newErr := semver.NewVersion(latestVersion.Version)
 	if newErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to parse latest version: %s", newErr.Error()))
 		return UpdateInfo{
-			Status:      UpdateStatusError,
-			UpdateError: fmt.Errorf("failed to parse latest version: %s", newErr.Error()),
+			ReleaseChannel: string(normalizedChannel),
+			Status:         UpdateStatusError,
+			UpdateError:    fmt.Errorf("failed to parse latest version: %s", newErr.Error()),
 		}
 	}
 
 	info := UpdateInfo{
 		CurrentVersion: existingVersion.String(),
 		LatestVersion:  newVersion.String(),
+		ReleaseChannel: string(normalizedChannel),
 		ReleaseNotes:   latestVersion.ReleaseNotes,
+	}
+
+	if normalizedChannel == setting.ReleaseChannelStable && newVersion.Prerelease() != "" {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("stable update channel ignored prerelease manifest version: %s", newVersion.String()))
+		info.LatestVersion = existingVersion.String()
+		info.ReleaseNotes = ""
+		info.Status = UpdateStatusNone
+		info.HasUpdate = false
+		return info
 	}
 
 	if newVersion.LessThan(existingVersion) || newVersion.Equal(existingVersion) {
@@ -219,8 +275,55 @@ func parseLatestVersion(ctx context.Context) UpdateInfo {
 	return info
 }
 
-func getLatestVersion(ctx context.Context) (VersionManifest, error) {
-	body, err := util.HttpGet(ctx, versionManifestUrl)
+func manifestURLForReleaseChannel(releaseChannel setting.ReleaseChannel) string {
+	switch setting.NormalizeReleaseChannel(string(releaseChannel)) {
+	case setting.ReleaseChannelBeta:
+		return betaVersionManifestUrl
+	default:
+		return stableVersionManifestUrl
+	}
+}
+
+// getUpdateChannelVersions reads both channel manifests while keeping stable protected from prerelease manifests.
+func getUpdateChannelVersions(ctx context.Context, fetchManifest versionManifestFetcher) []UpdateChannelVersion {
+	channels := []setting.ReleaseChannel{setting.ReleaseChannelStable, setting.ReleaseChannelBeta}
+	versions := make([]UpdateChannelVersion, 0, len(channels))
+	for _, releaseChannel := range channels {
+		normalizedChannel := setting.NormalizeReleaseChannel(string(releaseChannel))
+		channelVersion := UpdateChannelVersion{Channel: string(normalizedChannel)}
+		manifest, err := fetchManifest(ctx, normalizedChannel)
+		if err != nil {
+			channelVersion.Error = err.Error()
+			versions = append(versions, channelVersion)
+			continue
+		}
+
+		latestVersion, parseErr := semver.NewVersion(manifest.Version)
+		if parseErr != nil {
+			channelVersion.Error = fmt.Sprintf("failed to parse latest version: %s", parseErr.Error())
+			versions = append(versions, channelVersion)
+			continue
+		}
+
+		if normalizedChannel == setting.ReleaseChannelStable && latestVersion.Prerelease() != "" {
+			channelVersion.Error = fmt.Sprintf("stable update channel ignored prerelease manifest version: %s", latestVersion.String())
+			versions = append(versions, channelVersion)
+			continue
+		}
+
+		channelVersion.LatestVersion = latestVersion.String()
+		versions = append(versions, channelVersion)
+	}
+	return versions
+}
+
+// GetUpdateChannelVersions returns the latest manifest version for each update channel.
+func GetUpdateChannelVersions(ctx context.Context) []UpdateChannelVersion {
+	return getUpdateChannelVersions(ctx, getLatestVersion)
+}
+
+func getLatestVersion(ctx context.Context, releaseChannel setting.ReleaseChannel) (VersionManifest, error) {
+	body, err := util.HttpGet(ctx, manifestURLForReleaseChannel(releaseChannel))
 	if err != nil {
 		return VersionManifest{}, fmt.Errorf("failed to download version manifest file: %w", err)
 	}

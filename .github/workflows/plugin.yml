@@ -3,16 +3,26 @@ name: Update plugin store
 on:
   schedule:
     - cron: "0 */3 * * *"
+  workflow_dispatch:
+
+permissions:
+  # create-pull-request needs explicit write permissions when it uses GITHUB_TOKEN to update the plugin-store branch and PR.
+  contents: write
+  pull-requests: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      # checkout v6 can persist its own Git auth, while create-pull-request configures another auth header; disabling persistence avoids duplicate Authorization headers.
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - name: Check plugin updates
         run: make plugins
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v6
+        # v8 runs on Node 24; v6 still used Node 20 and would reintroduce the action-runtime deprecation warning.
+        uses: peter-evans/create-pull-request@v8
         with:
           title: "[Bot] Update plugin store manifests"
           commit-message: "[Bot] Update plugin store manifests"

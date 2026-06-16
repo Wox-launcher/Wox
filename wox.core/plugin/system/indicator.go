@@ -8,6 +8,7 @@ import (
 	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
+	"wox/util"
 
 	"github.com/google/uuid"
 	"github.com/samber/lo"
@@ -56,16 +57,20 @@ func (i *IndicatorPlugin) Init(ctx context.Context, initParams plugin.InitParams
 	i.api.OnMRURestore(ctx, i.handleMRURestore)
 }
 
-func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	search := strings.TrimSpace(query.Search)
 	if search == "" {
-		return nil
+		return plugin.QueryResponse{}
 	}
 
 	pluginInstances := plugin.GetPluginManager().GetPluginInstances()
 
 	var results []plugin.QueryResult
 	for _, pluginInstance := range pluginInstances {
+		storePlugin, storeErr := plugin.GetStoreManager().GetStorePluginManifestById(ctx, pluginInstance.Metadata.Id)
+		hasStorePlugin := storeErr == nil
+		upgradeTails := i.buildIndicatorUpgradeTails(pluginInstance.Metadata.Version, storePlugin.Version, hasStorePlugin)
+
 		primaryTriggerKeyword := lo.FindOrElse(pluginInstance.GetTriggerKeywords(), "", func(triggerKeyword string) bool {
 			return triggerKeyword != "*"
 		})
@@ -133,28 +138,34 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 			resultBaseScore = 10
 		}
 
+		actions := []plugin.QueryResultAction{
+			{
+				Name:                   "i18n:plugin_indicator_activate",
+				PreventHideAfterAction: true,
+				ContextData: common.ContextData{
+					"triggerKeyword": triggerKeywordToUse,
+					"pluginId":       pluginInstance.Metadata.Id,
+				},
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					i.api.ChangeQuery(ctx, common.PlainQuery{
+						QueryType: plugin.QueryTypeInput,
+						QueryText: fmt.Sprintf("%s ", triggerKeywordToUse),
+					})
+				},
+			},
+		}
+		if hasStorePlugin && plugin.IsVersionUpgradable(pluginInstance.Metadata.Version, storePlugin.Version) {
+			actions = append(actions, i.createIndicatorUpgradeAction(storePlugin))
+		}
+
 		results = append(results, plugin.QueryResult{
 			Id:       uuid.NewString(),
 			Title:    triggerKeywordToUse,
 			SubTitle: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_indicator_activate_plugin"), pluginName),
 			Score:    resultBaseScore,
 			Icon:     pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, indicatorIcon),
-			Actions: []plugin.QueryResultAction{
-				{
-					Name:                   "i18n:plugin_indicator_activate",
-					PreventHideAfterAction: true,
-					ContextData: common.ContextData{
-						"triggerKeyword": triggerKeywordToUse,
-						"pluginId":       pluginInstance.Metadata.Id,
-					},
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						i.api.ChangeQuery(ctx, common.PlainQuery{
-							QueryType: plugin.QueryTypeInput,
-							QueryText: fmt.Sprintf("%s ", triggerKeywordToUse),
-						})
-					},
-				},
-			},
+			Tails:    upgradeTails,
+			Actions:  actions,
 		})
 
 		var commandsToShow []matchedCommand
@@ -180,28 +191,90 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 			if len(matchedCommands) > 0 {
 				commandScore = commandScore + 1
 			}
+			commandActions := []plugin.QueryResultAction{
+				{
+					Name:                   "i18n:plugin_indicator_activate",
+					PreventHideAfterAction: true,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						i.api.ChangeQuery(ctx, common.PlainQuery{
+							QueryType: plugin.QueryTypeInput,
+							QueryText: fmt.Sprintf("%s %s ", triggerKeywordToUse, metadataCommand.Command),
+						})
+					},
+				},
+			}
+			if hasStorePlugin && plugin.IsVersionUpgradable(pluginInstance.Metadata.Version, storePlugin.Version) {
+				commandActions = append(commandActions, i.createIndicatorUpgradeAction(storePlugin))
+			}
+
 			results = append(results, plugin.QueryResult{
 				Id:       uuid.NewString(),
 				Title:    fmt.Sprintf("%s %s ", triggerKeywordToUse, metadataCommand.Command),
 				SubTitle: string(metadataCommand.Description),
 				Score:    commandScore,
 				Icon:     pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, indicatorIcon),
-				Actions: []plugin.QueryResultAction{
-					{
-						Name:                   "i18n:plugin_indicator_activate",
-						PreventHideAfterAction: true,
-						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							i.api.ChangeQuery(ctx, common.PlainQuery{
-								QueryType: plugin.QueryTypeInput,
-								QueryText: fmt.Sprintf("%s %s ", triggerKeywordToUse, metadataCommand.Command),
-							})
-						},
-					},
-				},
+				Tails:    upgradeTails,
+				Actions:  commandActions,
 			})
 		}
 	}
-	return results
+	return plugin.NewQueryResponse(results)
+}
+
+func (i *IndicatorPlugin) buildIndicatorUpgradeTails(installedVersion string, storeVersion string, hasStoreVersion bool) []plugin.QueryResultTail {
+	if !hasStoreVersion || !plugin.IsVersionUpgradable(installedVersion, storeVersion) {
+		return nil
+	}
+
+	return []plugin.QueryResultTail{
+		{
+			Type:  plugin.QueryResultTailTypeImage,
+			Image: common.UpgradeIcon,
+		},
+		{
+			Type: plugin.QueryResultTailTypeText,
+			Text: fmt.Sprintf("v%s -> v%s", installedVersion, storeVersion),
+		},
+	}
+}
+
+func (i *IndicatorPlugin) createIndicatorUpgradeAction(storePlugin plugin.StorePluginManifest) plugin.QueryResultAction {
+	return plugin.QueryResultAction{
+		Name:                   "i18n:plugin_wpm_upgrade",
+		Icon:                   common.UpdateIcon,
+		PreventHideAfterAction: true,
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			pluginName := storePlugin.GetName(ctx)
+			i.api.Notify(ctx, fmt.Sprintf(
+				i.api.GetTranslation(ctx, "i18n:plugin_installer_action_start"),
+				i.api.GetTranslation(ctx, "i18n:plugin_installer_upgrade"),
+				pluginName,
+			))
+
+			util.Go(ctx, "upgrade plugin from indicator", func() {
+				pluginName := storePlugin.GetName(ctx)
+				installErr := plugin.GetStoreManager().InstallWithProgress(ctx, storePlugin, func(message string) {
+					i.api.Notify(ctx, fmt.Sprintf("%s: %s", pluginName, message))
+				})
+
+				if installErr != nil {
+					i.api.Notify(ctx, fmt.Sprintf(
+						i.api.GetTranslation(ctx, "i18n:plugin_installer_action_failed"),
+						i.api.GetTranslation(ctx, "i18n:plugin_installer_upgrade"),
+						formatPluginInstallError(ctx, i.api, storePlugin.Runtime, pluginName, storePlugin.Version, installErr),
+					))
+					return
+				}
+
+				i.api.Notify(ctx, fmt.Sprintf(
+					i.api.GetTranslation(ctx, "i18n:plugin_installer_action_success"),
+					pluginName,
+					i.api.GetTranslation(ctx, "i18n:plugin_installer_verb_upgrade_past"),
+				))
+				i.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
+			})
+		},
+	}
 }
 
 func (i *IndicatorPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
@@ -236,24 +309,35 @@ func (i *IndicatorPlugin) handleMRURestore(ctx context.Context, mruData plugin.M
 	}
 
 	translatedName := pluginInstance.GetName(ctx)
+	upgradeTails := []plugin.QueryResultTail(nil)
+	actions := []plugin.QueryResultAction{
+		{
+			Name:                   "i18n:plugin_indicator_activate",
+			PreventHideAfterAction: true,
+			ContextData:            mruData.ContextData,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				i.api.ChangeQuery(ctx, common.PlainQuery{
+					QueryType: plugin.QueryTypeInput,
+					QueryText: fmt.Sprintf("%s ", triggerKeyword),
+				})
+			},
+		},
+	}
+	storePlugin, storeErr := plugin.GetStoreManager().GetStorePluginManifestById(ctx, pluginInstance.Metadata.Id)
+	if storeErr == nil {
+		upgradeTails = i.buildIndicatorUpgradeTails(pluginInstance.Metadata.Version, storePlugin.Version, true)
+		if plugin.IsVersionUpgradable(pluginInstance.Metadata.Version, storePlugin.Version) {
+			actions = append(actions, i.createIndicatorUpgradeAction(storePlugin))
+		}
+	}
+
 	result := &plugin.QueryResult{
 		Id:       uuid.NewString(),
 		Title:    triggerKeyword,
 		SubTitle: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_indicator_activate_plugin"), translatedName),
 		Icon:     pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, indicatorIcon),
-		Actions: []plugin.QueryResultAction{
-			{
-				Name:                   "i18n:plugin_indicator_activate",
-				PreventHideAfterAction: true,
-				ContextData:            mruData.ContextData,
-				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					i.api.ChangeQuery(ctx, common.PlainQuery{
-						QueryType: plugin.QueryTypeInput,
-						QueryText: fmt.Sprintf("%s ", triggerKeyword),
-					})
-				},
-			},
-		},
+		Tails:    upgradeTails,
+		Actions:  actions,
 	}
 
 	return result, nil

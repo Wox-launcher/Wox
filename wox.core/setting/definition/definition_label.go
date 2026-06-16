@@ -7,9 +7,10 @@ import (
 )
 
 type PluginSettingValueLabel struct {
-	Content string
-	Tooltip string
-	Style   PluginSettingValueStyle
+	Content           string
+	Tooltip           string
+	ReserveLabelSpace bool
+	Style             PluginSettingValueStyle `json:"-"` // Deprecated: ignored on load so Wox keeps setting layouts consistent.
 }
 
 func (p *PluginSettingValueLabel) GetPluginSettingType() PluginSettingDefinitionType {

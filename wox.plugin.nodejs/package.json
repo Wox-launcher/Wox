@@ -1,6 +1,6 @@
 {
   "name": "@wox-launcher/wox-plugin",
-  "version": "0.0.114",
+  "version": "0.0.133",
   "description": "All nodejs plugin for Wox should use types in this package",
   "repository": {
     "type": "git",
@@ -15,10 +15,10 @@
   ],
   "scripts": {
     "build": "pnpm clean && tsc",
-    "clean": "node -e \"var { rmdirSync, existsSync } = require('fs'), path = require('path'); ['./dist'].forEach(fPath => {if (existsSync(path.join(__dirname, fPath))) rmdirSync(path.join(__dirname, fPath), { recursive: true })}); process.exit(0);\"",
+    "clean": "node ./scripts/clean.mjs",
     "clean:all": "npm run clean && (rm -r ./node_modules || true)",
     "lint": "eslint --ext .ts --fix src/**/*.ts",
-    "pub": "pnpm build && pnpm version patch && pnpm publish --no-git-checks --access public"
+    "pub": "pnpm build && pnpm publish --no-git-checks --access public"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^7.13.1",
@@ -28,5 +28,5 @@
     "prettier": "3.3.2",
     "typescript": "^5.4.5"
   },
-  "dependencies": {}
+  "packageManager": "pnpm@8.15.5+sha1.a58c038faac410c947dbdb93eb30994037d0fce2"
 }

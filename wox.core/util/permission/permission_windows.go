@@ -9,3 +9,7 @@ func HasAccessibilityPermission(ctx context.Context) bool {
 func GrantAccessibilityPermission(ctx context.Context) {
 
 }
+
+func OpenPrivacySecuritySettings(ctx context.Context) {
+
+}

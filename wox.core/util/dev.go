@@ -1,5 +1,7 @@
 package util
 
+const DefaultDevServerPort = 34987
+
 // will set by -X flag on build
 var ProdEnv string
 

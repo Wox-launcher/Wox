@@ -1,17 +1,30 @@
 import { logger } from "./logger"
 import path from "path"
 import { PluginAPI } from "./pluginAPI"
-import { ActionContext, Context, FormActionContext, MapString, Plugin, PluginInitParams, Query, QueryEnv, Result, ResultAction, Selection, MRUData } from "@wox-launcher/wox-plugin"
+import { ActionContext, Context, FormActionContext, MapString, Plugin, PluginInitParams, Query, QueryEnv, QueryResponse, QueryReturn, Result, ResultAction, Selection, MRUData } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
 import * as crypto from "crypto"
 import { AI } from "@wox-launcher/wox-plugin/types/ai"
-import { PluginInstance, PluginJsonRpcRequest } from "./types"
+import { PluginInstance, PluginJsonRpcRequest, ToolbarMsgActionContext } from "./types"
 
 export const pluginInstances = new Map<PluginJsonRpcRequest["PluginId"], PluginInstance>()
 
 export const PluginJsonRpcTypeRequest: string = "WOX_JSONRPC_REQUEST"
 export const PluginJsonRpcTypeResponse: string = "WOX_JSONRPC_RESPONSE"
 export const PluginJsonRpcTypeSystemLog: string = "WOX_JSONRPC_SYSTEM_LOG"
+
+const legacyQueryReturnWarnings = new Set<string>()
+
+function parseJsonParam<T>(raw: string | undefined, fallback: T): T {
+  if (!raw) {
+    return fallback
+  }
+  try {
+    return JSON.parse(raw) as T
+  } catch {
+    return fallback
+  }
+}
 
 function parseContextData(raw?: string): MapString {
   if (!raw) {
@@ -21,6 +34,60 @@ function parseContextData(raw?: string): MapString {
     return JSON.parse(raw) as MapString
   } catch {
     return {}
+  }
+}
+
+function cacheResultActions(plugin: PluginInstance, result: Result): void {
+  if (result.Id === undefined || result.Id === null) {
+    result.Id = crypto.randomUUID()
+  }
+
+  if (!result.Actions) {
+    return
+  }
+
+  result.Actions.forEach(action => {
+    if (action.Id === undefined || action.Id === null) {
+      action.Id = crypto.randomUUID()
+    }
+
+    const actionType = action.Type ?? "execute"
+    if (actionType === "form") {
+      const submit = (action as Extract<ResultAction, { Type: "form" }>).OnSubmit
+      if (submit) {
+        plugin.FormActions.set(action.Id, submit)
+      }
+      return
+    }
+
+    const exec = (action as Extract<ResultAction, { Type?: "execute" }>).Action
+    if (exec) {
+      plugin.Actions.set(action.Id, exec)
+    }
+  })
+}
+
+function normalizeQueryResponse(ctx: Context, pluginName: string, rawResponse: QueryReturn | undefined | null): QueryResponse {
+  if (!rawResponse) {
+    logger.info(ctx, `plugin query didn't return results: ${pluginName}`)
+    return { Results: [], Refinements: [], Layout: {} }
+  }
+
+  // Compatibility bridge: old SDK plugins returned Result[] directly. The
+  // host keeps that deprecated shape working, but Go core only receives the
+  // new QueryResponse object so future query-scoped metadata has one path.
+  if (Array.isArray(rawResponse)) {
+    if (!legacyQueryReturnWarnings.has(pluginName)) {
+      legacyQueryReturnWarnings.add(pluginName)
+      logger.info(ctx, `<${pluginName}> returned deprecated Result[] from query(); return QueryResponse instead`)
+    }
+    return { Results: rawResponse, Refinements: [], Layout: {} }
+  }
+
+  return {
+    Results: rawResponse.Results ?? [],
+    Refinements: rawResponse.Refinements ?? [],
+    Layout: rawResponse.Layout ?? {}
   }
 }
 
@@ -40,6 +107,8 @@ export async function handleRequestFromWox(ctx: Context, request: PluginJsonRpcR
       return action(ctx, request)
     case "formAction":
       return formAction(ctx, request)
+    case "toolbarMsgAction":
+      return toolbarMsgAction(ctx, request)
     case "unloadPlugin":
       return unloadPlugin(ctx, request)
     case "onPluginSettingChange":
@@ -50,6 +119,10 @@ export async function handleRequestFromWox(ctx: Context, request: PluginJsonRpcR
       return onDeepLink(ctx, request)
     case "onUnload":
       return onUnload(ctx, request)
+    case "onEnterPluginQuery":
+      return onEnterPluginQuery(ctx, request)
+    case "onLeavePluginQuery":
+      return onLeavePluginQuery(ctx, request)
     case "onLLMStream":
       return onLLMStream(ctx, request)
     case "onMRURestore":
@@ -77,7 +150,8 @@ async function loadPlugin(ctx: Context, request: PluginJsonRpcRequest) {
     API: {} as PluginAPI,
     ModulePath: modulePath,
     Actions: new Map<Result["Id"], (ctx: Context, actionContext: ActionContext) => Promise<void>>(),
-    FormActions: new Map<Result["Id"], (ctx: Context, actionContext: FormActionContext) => Promise<void>>()
+    FormActions: new Map<Result["Id"], (ctx: Context, actionContext: FormActionContext) => Promise<void>>(),
+    ToolbarMsgActions: new Map<string, (ctx: Context, actionContext: ToolbarMsgActionContext) => Promise<void> | void>()
   })
 }
 
@@ -178,6 +252,28 @@ async function onUnload(ctx: Context, request: PluginJsonRpcRequest) {
   await plugin.API.unloadCallbacks.get(callbackId)?.(ctx)
 }
 
+async function onEnterPluginQuery(ctx: Context, request: PluginJsonRpcRequest) {
+  const plugin = pluginInstances.get(request.PluginId)
+  if (plugin === undefined || plugin === null) {
+    logger.error(ctx, `plugin not found: ${request.PluginName}, forget to load plugin?`)
+    throw new Error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
+  }
+
+  const callbackId = request.Params.CallbackId
+  await plugin.API.enterPluginQueryCallbacks.get(callbackId)?.(ctx)
+}
+
+async function onLeavePluginQuery(ctx: Context, request: PluginJsonRpcRequest) {
+  const plugin = pluginInstances.get(request.PluginId)
+  if (plugin === undefined || plugin === null) {
+    logger.error(ctx, `plugin not found: ${request.PluginName}, forget to load plugin?`)
+    throw new Error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
+  }
+
+  const callbackId = request.Params.CallbackId
+  await plugin.API.leavePluginQueryCallbacks.get(callbackId)?.(ctx)
+}
+
 async function onLLMStream(ctx: Context, request: PluginJsonRpcRequest) {
   const plugin = pluginInstances.get(request.PluginId)
   if (plugin === undefined || plugin === null) {
@@ -216,50 +312,28 @@ async function query(ctx: Context, request: PluginJsonRpcRequest) {
   plugin.Actions.clear()
   plugin.FormActions.clear()
 
-  const results = await query(ctx, {
-    Id: request.Params.QueryId ?? "",
+  const rawResponse = await query(ctx, {
+    Id: request.Params.QueryId ?? request.Params.Id ?? "",
+    SessionId: request.Params.SessionId ?? "",
     Type: request.Params.Type,
     RawQuery: request.Params.RawQuery,
     TriggerKeyword: request.Params.TriggerKeyword,
     Command: request.Params.Command,
     Search: request.Params.Search,
-    Selection: JSON.parse(request.Params.Selection) as Selection,
-    Env: JSON.parse(request.Params.Env) as QueryEnv,
+    Selection: parseJsonParam<Selection>(request.Params.Selection, {} as Selection),
+    Env: parseJsonParam<QueryEnv>(request.Params.Env, {} as QueryEnv),
+    Refinements: parseJsonParam<Record<string, string>>(request.Params.Refinements, {}),
+    ContextData: parseJsonParam<Record<string, string>>(request.Params.ContextData, {}),
     IsGlobalQuery: () => request.Params.Type === "input" && request.Params.TriggerKeyword === ""
   } as Query)
 
-  if (!results) {
-    logger.info(ctx, `plugin query didn't return results: ${request.PluginName}`)
-    return []
-  }
+  const response = normalizeQueryResponse(ctx, request.PluginName, rawResponse)
 
-  results.forEach(result => {
-    if (result.Id === undefined || result.Id === null) {
-      result.Id = crypto.randomUUID()
-    }
-    if (result.Actions) {
-      result.Actions.forEach(action => {
-        if (action.Id === undefined || action.Id === null) {
-          action.Id = crypto.randomUUID()
-        }
-
-        const actionType = action.Type ?? "execute"
-        if (actionType === "form") {
-          const submit = (action as Extract<ResultAction, { Type: "form" }>).OnSubmit
-          if (submit) {
-            plugin.FormActions.set(action.Id, submit)
-          }
-        } else {
-          const exec = (action as Extract<ResultAction, { Type?: "execute" }>).Action
-          if (exec) {
-            plugin.Actions.set(action.Id, exec)
-          }
-        }
-      })
-    }
+  response.Results.forEach(result => {
+    cacheResultActions(plugin, result)
   })
 
-  return results
+  return response
 }
 
 async function action(ctx: Context, request: PluginJsonRpcRequest) {
@@ -286,6 +360,30 @@ async function action(ctx: Context, request: PluginJsonRpcRequest) {
   })
 
   return
+}
+
+async function toolbarMsgAction(ctx: Context, request: PluginJsonRpcRequest) {
+  const plugin = pluginInstances.get(request.PluginId)
+  if (plugin === undefined || plugin === null) {
+    logger.error(ctx, `plugin not found: ${request.PluginName}, forget to load plugin?`)
+    throw new Error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
+  }
+
+  const pluginAction = plugin.ToolbarMsgActions.get(request.Params.ActionId)
+  if (pluginAction === undefined || pluginAction === null) {
+    logger.error(ctx, `<${request.PluginName}> toolbar msg action not found: ${request.Params.ActionId}`)
+    return
+  }
+
+  const actionContext: ToolbarMsgActionContext = {
+    ToolbarMsgId: request.Params.ToolbarMsgId,
+    ToolbarMsgActionId: request.Params.ToolbarMsgActionId ?? request.Params.ActionId,
+    ContextData: parseContextData(request.Params.ContextData)
+  }
+
+  Promise.resolve(pluginAction(ctx, actionContext)).catch(err => {
+    logger.error(ctx, `<${request.PluginName}> toolbar msg action failed: ${String(err)}`)
+  })
 }
 
 async function formAction(ctx: Context, request: PluginJsonRpcRequest) {
@@ -322,15 +420,16 @@ async function onMRURestore(ctx: Context, request: PluginJsonRpcRequest): Promis
     throw new Error(`plugin instance not found: ${request.PluginId}`)
   }
 
-  const callbackId = request.Params.callbackId
-  const mruDataRaw = JSON.parse(request.Params.mruData)
+  const callbackId = request.Params.CallbackId
+  const rawMRUData = request.Params.MRUData ?? "{}"
+  const mruDataRaw = JSON.parse(rawMRUData)
 
   // Convert raw data to MRUData type
   const mruData: MRUData = {
-    PluginID: mruDataRaw.PluginID || "",
-    Title: mruDataRaw.Title || "",
-    SubTitle: mruDataRaw.SubTitle || "",
-    Icon: mruDataRaw.Icon || { ImageType: "absolute", ImageData: "" },
+    PluginID: mruDataRaw.PluginID ?? "",
+    Title: mruDataRaw.Title ?? "",
+    SubTitle: mruDataRaw.SubTitle ?? "",
+    Icon: mruDataRaw.Icon ?? { ImageType: "absolute", ImageData: "" },
     ContextData: typeof mruDataRaw.ContextData === "string" ? parseContextData(mruDataRaw.ContextData) : mruDataRaw.ContextData ?? {}
   }
 
@@ -341,6 +440,9 @@ async function onMRURestore(ctx: Context, request: PluginJsonRpcRequest): Promis
 
   try {
     const result = await callback(ctx, mruData)
+    if (result) {
+      cacheResultActions(pluginInstance, result)
+    }
     return result
   } catch (error) {
     logger.error(ctx, `MRU restore callback error: ${error}`)

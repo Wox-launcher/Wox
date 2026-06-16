@@ -1,49 +1,45 @@
 # AI Settings
 
-To use Wox's AI features (such as AI theme generation and automatic Git commit message generation), you need to configure your AI provider settings first.
+AI features are optional. Configure a provider only if you want to use AI Chat, AI Commands, AI-assisted emoji search, or AI theme generation.
 
-## Configuration Steps
+## Add a Provider
 
-1. Open Wox settings
-2. Select "AI" from the left sidebar
-3. Click the "+ Add" button in the top right corner
-4. Fill in the following information in the popup dialog:
-
-   - **Provider Name**: Choose your AI provider (e.g., OpenAI)
-   - **API Key**: Enter your API key
-   - **Host**: (Optional) Enter your custom API endpoint if you're using Ollama
-
-5. Click "Confirm" to save the settings
+1. Open **Settings**.
+2. Go to **AI**.
+3. Click **Add**.
+4. Enter the provider name, API key, model information, and custom host if your provider needs one.
+5. Save the provider and select it in the feature that should use it.
 
 ![AI Settings](/images/ai_setting.png)
 
-## Getting API Keys
+## What the Settings Mean
 
-### OpenAI
+| Field | Use |
+| --- | --- |
+| Provider name | A label you recognize in Wox settings. |
+| API key | The credential Wox sends to the provider. |
+| Host | Optional API endpoint for compatible services, proxies, or local providers. |
+| Model | The model used by chat, commands, or generation features. |
 
-1. Visit [OpenAI API Keys](https://platform.openai.com/account/api-keys)
-2. Sign in to your OpenAI account
-3. Click "Create new secret key"
-4. Copy the generated key and paste it into the API Key field in Wox
+## Security Notes
 
-## Important Notes
-
-- Keep your API keys secure and never share them
-- Be mindful of API usage costs if you're using a paid service
-- Some features may require specific API access levels - ensure your API key has the necessary permissions
+- Treat API keys like passwords.
+- Paid providers may bill each request, including AI Commands and theme generation.
+- Custom hosts should be trusted; Wox sends your prompt content to that endpoint.
+- Avoid sending sensitive clipboard text, selected text, or private files to online models unless you understand the provider policy.
 
 ## Related Features
 
-After configuring AI settings, you can use the following features:
-
-- [Create themes with AI](./theme.md)
-- [Auto-generate Git commit messages](./commands.md#auto-git-commit-message)
+- [AI Chat](../plugins/system/chat.md)
+- [Theme generation](./theme.md)
+- [AI Commands](./commands.md)
 
 ## Troubleshooting
 
-If you encounter issues:
+If an AI feature does not return anything, check these first:
 
-1. Verify your API key is correct and active
-2. Check your internet connection
-3. Ensure your API key has sufficient permissions
-4. If using a custom host, verify the endpoint URL is correct
+1. The provider is enabled and selected by the feature.
+2. The API key is valid.
+3. The model name is accepted by the provider.
+4. The custom host URL is reachable.
+5. Network access is available.

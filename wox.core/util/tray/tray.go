@@ -13,7 +13,9 @@ type ClickRect struct {
 }
 
 type QueryIconItem struct {
-	Icon     []byte
-	Tooltip  string
-	Callback func(ClickRect)
+	Icon                []byte
+	Tooltip             string
+	Callback            func(ClickRect)
+	ContextMenuTitle    string
+	ContextMenuCallback func()
 }

@@ -7,10 +7,12 @@ Previews allow plugins to show detailed information, images, files, and web
 content in a dedicated preview panel when a result is selected.
 """
 
-from typing import Dict
 from dataclasses import dataclass, field
 from enum import Enum
 import json
+from typing import Any, Dict, List, Optional
+
+from .image import WoxImage
 
 
 class WoxPreviewType(str, Enum):
@@ -23,6 +25,7 @@ class WoxPreviewType(str, Enum):
     - IMAGE: Display an image (using WoxImage)
     - URL: Load and display a web page
     - FILE: Display a file (various formats supported)
+    - LIST: Display structured rows using WoxPreviewListData JSON
     - REMOTE: Load preview data from a remote URL
     """
 
@@ -106,6 +109,29 @@ class WoxPreviewType(str, Enum):
         )
     """
 
+    LIST = "list"
+    """
+    Display a structured list of preview rows.
+
+    The preview_data should be WoxPreviewListData.to_json(). This generic row
+    shape replaces the old file-only preview so plugins can show progress,
+    status, or selected files with the same visual contract.
+
+    Example:
+        data = WoxPreviewListData(items=[
+            WoxPreviewListItem(
+                icon=WoxImage.new_emoji("✓"),
+                title="photo.jpg",
+                subtitle="Saved 42 KB",
+                tails=[ResultTail(text="Done", text_category=ResultTailTextCategory.SUCCESS)]
+            )
+        ])
+        preview = WoxPreview(
+            preview_type=WoxPreviewType.LIST,
+            preview_data=data.to_json()
+        )
+    """
+
     REMOTE = "remote"
     """
     Load preview data from a remote URL.
@@ -120,6 +146,89 @@ class WoxPreviewType(str, Enum):
             preview_data="https://api.example.com/preview/123"
         )
     """
+
+
+@dataclass
+class WoxPreviewListItem:
+    """
+    One row in WoxPreviewType.LIST.
+
+    Tails accept ResultTail-compatible objects. The preview model keeps this
+    loose at runtime to avoid a circular import with the result model while the
+    JSON contract still matches normal result tails.
+    """
+
+    icon: Optional[WoxImage] = field(default=None)
+    title: str = field(default="")
+    subtitle: str = field(default="")
+    tails: List[Any] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        data: Dict[str, Any] = {"title": self.title}
+        if self.icon is not None:
+            data["icon"] = self.icon.to_dict()
+        if self.subtitle:
+            data["subtitle"] = self.subtitle
+        if self.tails:
+            data["tails"] = [_tail_to_dict(tail) for tail in self.tails]
+        return data
+
+    @classmethod
+    def from_json(cls, json_data: Dict[str, Any]) -> "WoxPreviewListItem":
+        raw_icon = json_data.get("icon")
+        raw_tails = json_data.get("tails", [])
+        return cls(
+            icon=WoxImage.from_dict(raw_icon) if isinstance(raw_icon, dict) else None,
+            title=str(json_data.get("title", "")),
+            subtitle=str(json_data.get("subtitle", "")),
+            tails=list(raw_tails) if isinstance(raw_tails, list) else [],
+        )
+
+
+@dataclass
+class WoxPreviewListData:
+    """
+    Structured data for WoxPreviewType.LIST.
+
+    The payload is row-based instead of file-path-based so long-running actions
+    can update progress/status previews without custom markdown formatting.
+    """
+
+    items: List[WoxPreviewListItem] = field(default_factory=list)
+
+    def to_json(self) -> str:
+        """
+        Convert to the JSON payload expected by WoxPreview.preview_data.
+        """
+        return json.dumps({"items": [item.to_dict() for item in self.items]})
+
+    @classmethod
+    def from_json(cls, json_data: Dict[str, Any]) -> "WoxPreviewListData":
+        """
+        Create list preview data from a decoded JSON object.
+        """
+        raw_items = json_data.get("items", [])
+        return cls(
+            items=[WoxPreviewListItem.from_json(item) for item in raw_items if isinstance(item, dict)]
+            if isinstance(raw_items, list)
+            else []
+        )
+
+    @classmethod
+    def from_preview_data(cls, preview_data: str) -> "WoxPreviewListData":
+        """
+        Decode the string stored in WoxPreview.preview_data.
+        """
+        decoded = json.loads(preview_data)
+        return cls.from_json(decoded if isinstance(decoded, dict) else {})
+
+
+def _tail_to_dict(tail: Any) -> Dict[str, Any]:
+    if hasattr(tail, "to_json"):
+        return json.loads(tail.to_json())
+    if isinstance(tail, dict):
+        return tail
+    raise TypeError(f"Unsupported list preview tail payload: {type(tail)!r}")
 
 
 class WoxPreviewScrollPosition(str, Enum):
@@ -139,6 +248,32 @@ class WoxPreviewScrollPosition(str, Enum):
 
 
 @dataclass
+class WoxPreviewTag:
+    """
+    Metadata tag shown below preview content.
+
+    The UI now renders preview metadata as compact tags instead of a key/value
+    table, so the visible label is separate from the optional tooltip text.
+    """
+
+    label: str = field(default="")
+    tooltip: str = field(default="")
+
+    def to_dict(self) -> Dict[str, str]:
+        return {
+            "Label": self.label,
+            "Tooltip": self.tooltip,
+        }
+
+    @classmethod
+    def from_json(cls, json_data: Dict[str, Any]) -> "WoxPreviewTag":
+        return cls(
+            label=str(json_data.get("Label", "")),
+            tooltip=str(json_data.get("Tooltip", "")),
+        )
+
+
+@dataclass
 class WoxPreview:
     """
     Preview model for displaying rich content in Wox results.
@@ -150,7 +285,8 @@ class WoxPreview:
     Attributes:
         preview_type: The type of preview content to display
         preview_data: The actual content data (format depends on preview_type)
-        preview_properties: Optional properties for preview customization
+        preview_tags: Optional metadata tags shown below preview content
+        preview_properties: Deprecated key/value metadata kept for compatibility
         scroll_position: Initial scroll position when preview is shown
 
     Example usage:
@@ -191,21 +327,17 @@ class WoxPreview:
     - IMAGE: WoxImage serialized as "type:value" string
     - URL: HTTP/HTTPS URL
     - FILE: File system path
+    - LIST: WoxPreviewListData JSON string
     - REMOTE: URL that returns WoxPreview JSON
     """
 
     preview_properties: Dict[str, str] = field(default_factory=dict)
     """
-    Optional properties for preview customization.
+    Deprecated: use preview_tags instead.
 
-    This dictionary can contain additional properties that modify
-    how the preview is displayed. The available properties depend
-    on the preview_type and Wox version.
-
-    Common properties may include:
-    - "height": Maximum height for the preview
-    - "theme": Theme override for code blocks
-    - Custom plugin-specific properties
+    The launcher still maps each legacy key/value pair to a metadata tag with
+    the value as the visible label and the key as the tooltip, so older plugins
+    keep their current display while new plugins can use preview_tags directly.
     """
 
     scroll_position: WoxPreviewScrollPosition = field(default=WoxPreviewScrollPosition.BOTTOM)
@@ -214,6 +346,15 @@ class WoxPreview:
 
     Controls where the content is scrolled when the preview appears.
     Default is BOTTOM which scrolls to the end of the content.
+    """
+
+    preview_tags: List[WoxPreviewTag] = field(default_factory=list)
+    """
+    Metadata tags shown below the preview content.
+
+    This field is intentionally appended after existing constructor fields so
+    older positional WoxPreview(...) calls keep their argument meanings while
+    new plugins can pass preview_tags by keyword.
     """
 
     def to_json(self) -> str:
@@ -230,6 +371,7 @@ class WoxPreview:
             {
                 "PreviewType": self.preview_type,
                 "PreviewData": self.preview_data,
+                "PreviewTags": [tag.to_dict() for tag in self.preview_tags],
                 "PreviewProperties": self.preview_properties,
                 "ScrollPosition": self.scroll_position,
             }
@@ -257,6 +399,9 @@ class WoxPreview:
         return cls(
             preview_type=WoxPreviewType(data.get("PreviewType")),
             preview_data=data.get("PreviewData", ""),
+            preview_tags=[WoxPreviewTag.from_json(item) for item in data.get("PreviewTags", []) if isinstance(item, dict)]
+            if isinstance(data.get("PreviewTags", []), list)
+            else [],
             preview_properties=data.get("PreviewProperties", {}),
             scroll_position=WoxPreviewScrollPosition(data.get("ScrollPosition")),
         )

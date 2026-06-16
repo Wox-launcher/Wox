@@ -4,7 +4,7 @@
 // Note that this is v2.0 of lumberjack, and should be imported using gopkg.in
 // thusly:
 //
-//   import "gopkg.in/natefinch/lumberjack.v2"
+//	import "gopkg.in/natefinch/lumberjack.v2"
 //
 // The package name remains simply lumberjack, and the code resides at
 // https://github.com/natefinch/lumberjack under the v2.0 branch.
@@ -40,6 +40,7 @@ const (
 	backupTimeFormat = "0102_150405"
 	compressSuffix   = ".gz"
 	defaultMaxSize   = 100
+	dailyTimeFormat  = "20060102"
 )
 
 // ensure we always implement io.WriteCloser
@@ -67,7 +68,7 @@ var _ io.WriteCloser = (*Lumberjack)(nil)
 // `/var/log/foo/server.log`, a backup created at 6:30pm on Nov 11 2016 would
 // use the filename `/var/log/foo/server-2016-11-04T18-30-00.000.log`
 //
-// Cleaning Up Old Log Files
+// # Cleaning Up Old Log Files
 //
 // Whenever a new logfile gets created, old log files may be deleted.  The most
 // recent files according to the encoded timestamp will be retained, up to a
@@ -108,9 +109,14 @@ type Lumberjack struct {
 	// using gzip.
 	Compress bool `json:"compress" yaml:"compress"`
 
-	size int64
-	file *os.File
-	mu   sync.Mutex
+	// Daily keeps Filename as the current log and moves old daily logs to
+	// date-stamped backup files when the local date changes.
+	Daily bool `json:"daily" yaml:"daily"`
+
+	size      int64
+	file      *os.File
+	dailyDate string
+	mu        sync.Mutex
 
 	millCh    chan bool
 	startMill sync.Once
@@ -138,7 +144,7 @@ func (l *Lumberjack) Write(p []byte) (n int, err error) {
 	defer l.mu.Unlock()
 
 	writeLen := int64(len(p))
-	if writeLen > l.max() {
+	if l.sizeRotationEnabled() && writeLen > l.max() {
 		return 0, fmt.Errorf(
 			"write length %d exceeds maximum file size %d", writeLen, l.max(),
 		)
@@ -150,7 +156,11 @@ func (l *Lumberjack) Write(p []byte) (n int, err error) {
 		}
 	}
 
-	if l.size+writeLen > l.max() {
+	if err := l.rotateForDateIfNeeded(len(p)); err != nil {
+		return 0, err
+	}
+
+	if l.sizeRotationEnabled() && l.size+writeLen > l.max() {
 		if err := l.rotate(); err != nil {
 			return 0, err
 		}
@@ -190,6 +200,20 @@ func (l *Lumberjack) Rotate() error {
 	return l.rotate()
 }
 
+// EnsureDailyRollover switches to the current day's log file even when no log
+// line is being written at midnight.
+func (l *Lumberjack) EnsureDailyRollover() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if !l.Daily {
+		return nil
+	}
+	if l.file == nil {
+		return l.openExistingOrNew(0)
+	}
+	return l.rotateForDateIfNeeded(0)
+}
+
 // rotate closes the current file, moves it aside with a timestamp in the name,
 // (if it exists), opens a new file with the original filename, and then runs
 // post-rotation processing and removal.
@@ -202,6 +226,23 @@ func (l *Lumberjack) rotate() error {
 	}
 	l.mill()
 	return nil
+}
+
+// rotateForDateIfNeeded closes yesterday's log and opens today's file before
+// the current write, so daily logs are split by calendar day instead of size.
+func (l *Lumberjack) rotateForDateIfNeeded(writeLen int) error {
+	if !l.Daily || l.file == nil {
+		return nil
+	}
+	if l.dailyDate == l.currentDate() {
+		return nil
+	}
+	if err := l.close(); err != nil {
+		return err
+	}
+	l.size = 0
+	l.mill()
+	return l.openExistingOrNew(writeLen)
 }
 
 // openNew opens a new log file for writing, moving any old log file out of the
@@ -220,8 +261,11 @@ func (l *Lumberjack) openNew() error {
 		mode = info.Mode()
 		// move the existing file
 		newname := backupName(name, l.LocalTime)
-		if err := os.Rename(name, newname); err != nil {
-			return fmt.Errorf("can't rename log file: %s", err)
+		if l.Daily {
+			newname = dailyBackupName(name, l.dateFromTime(info.ModTime()))
+		}
+		if err := moveExistingLog(name, newname); err != nil {
+			return fmt.Errorf("can't move log file: %s", err)
 		}
 
 		//// this is a no-op anywhere but linux
@@ -239,6 +283,7 @@ func (l *Lumberjack) openNew() error {
 	}
 	l.file = f
 	l.size = 0
+	l.dailyDate = l.currentDate()
 	return nil
 }
 
@@ -259,6 +304,42 @@ func backupName(name string, local bool) string {
 	return filepath.Join(dir, fmt.Sprintf("%s.%s%s", prefix, timestamp, ext))
 }
 
+func dailyBackupName(name string, date string) string {
+	dir := filepath.Dir(name)
+	filename := filepath.Base(name)
+	ext := filepath.Ext(filename)
+	prefix := filename[:len(filename)-len(ext)]
+
+	return filepath.Join(dir, fmt.Sprintf("%s.%s%s", prefix, date, ext))
+}
+
+func moveExistingLog(src string, dst string) error {
+	if err := os.Rename(src, dst); err == nil {
+		return nil
+	}
+
+	if _, err := os.Stat(dst); err != nil {
+		return err
+	}
+
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	dstFile, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return err
+	}
+	defer dstFile.Close()
+
+	if _, err := io.Copy(dstFile, srcFile); err != nil {
+		return err
+	}
+	return os.Remove(src)
+}
+
 // openExistingOrNew opens the logfile if it exists and if the current write
 // would not put it over MaxSize.  If there is no such file or the write would
 // put it over the MaxSize, a new file is created.
@@ -274,7 +355,14 @@ func (l *Lumberjack) openExistingOrNew(writeLen int) error {
 		return fmt.Errorf("error getting log file info: %s", err)
 	}
 
-	if info.Size()+int64(writeLen) >= l.max() {
+	if l.Daily {
+		l.dailyDate = l.dateFromTime(info.ModTime())
+		if l.dailyDate != l.currentDate() {
+			return l.openNew()
+		}
+	}
+
+	if l.sizeRotationEnabled() && info.Size()+int64(writeLen) >= l.max() {
 		return l.rotate()
 	}
 
@@ -296,6 +384,24 @@ func (l *Lumberjack) filename() string {
 	}
 	name := filepath.Base(os.Args[0]) + "-lumberjack.log"
 	return filepath.Join(os.TempDir(), name)
+}
+
+// CurrentFilename returns the active log filename for the current rotation date.
+func (l *Lumberjack) CurrentFilename() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.filename()
+}
+
+func (l *Lumberjack) currentDate() string {
+	return l.dateFromTime(currentTime())
+}
+
+func (l *Lumberjack) dateFromTime(t time.Time) string {
+	if !l.LocalTime {
+		t = t.UTC()
+	}
+	return t.Format(dailyTimeFormat)
 }
 
 // millRunOnce performs compression and removal of stale log files.
@@ -405,17 +511,17 @@ func (l *Lumberjack) oldLogFiles() ([]logInfo, error) {
 	}
 	logFiles := []logInfo{}
 
-	prefix, ext := l.prefixAndExt()
+	prefixes, ext := l.prefixesAndExt()
 
 	for _, f := range files {
 		if f.IsDir() {
 			continue
 		}
-		if t, err := l.timeFromName(f.Name(), prefix, ext); err == nil {
+		if t, err := l.timeFromNameWithPrefixes(f.Name(), prefixes, ext); err == nil {
 			logFiles = append(logFiles, logInfo{t, f})
 			continue
 		}
-		if t, err := l.timeFromName(f.Name(), prefix, ext+compressSuffix); err == nil {
+		if t, err := l.timeFromNameWithPrefixes(f.Name(), prefixes, ext+compressSuffix); err == nil {
 			logFiles = append(logFiles, logInfo{t, f})
 			continue
 		}
@@ -426,6 +532,21 @@ func (l *Lumberjack) oldLogFiles() ([]logInfo, error) {
 	sort.Sort(byFormatTime(logFiles))
 
 	return logFiles, nil
+}
+
+func (l *Lumberjack) timeFromNameWithPrefixes(filename string, prefixes []string, ext string) (time.Time, error) {
+	var lastErr error
+	for _, prefix := range prefixes {
+		timestamp, err := l.timeFromName(filename, prefix, ext)
+		if err == nil {
+			return timestamp, nil
+		}
+		lastErr = err
+	}
+	if lastErr == nil {
+		lastErr = errors.New("mismatched prefix")
+	}
+	return time.Time{}, lastErr
 }
 
 // timeFromName extracts the formatted time from the filename by stripping off
@@ -450,18 +571,21 @@ func (l *Lumberjack) max() int64 {
 	return int64(l.MaxSize) * int64(megabyte)
 }
 
+func (l *Lumberjack) sizeRotationEnabled() bool {
+	return !l.Daily
+}
+
 // dir returns the directory for the current filename.
 func (l *Lumberjack) dir() string {
 	return filepath.Dir(l.filename())
 }
 
-// prefixAndExt returns the filename part and extension part from the Lumberjack's
-// filename.
-func (l *Lumberjack) prefixAndExt() (prefix, ext string) {
+// prefixesAndExt returns the filename prefixes and extension for rotated files.
+func (l *Lumberjack) prefixesAndExt() (prefixes []string, ext string) {
 	filename := filepath.Base(l.filename())
 	ext = filepath.Ext(filename)
-	prefix = filename[:len(filename)-len(ext)] + "-"
-	return prefix, ext
+	prefix := filename[:len(filename)-len(ext)]
+	return []string{prefix + ".", prefix + "-"}, ext
 }
 
 // compressLogFile compresses the given log file, removing the
