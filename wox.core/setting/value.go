@@ -89,6 +89,19 @@ func NewWoxSettingValue[T any](store *WoxSettingStore, key string, defaultValue 
 	}
 }
 
+// NewLocalWoxSettingValue creates a Wox setting that is persisted only on the
+// current device and is excluded from cloud sync replication.
+func NewLocalWoxSettingValue[T any](store *WoxSettingStore, key string, defaultValue T) *WoxSettingValue[T] {
+	return &WoxSettingValue[T]{
+		SettingValue: &SettingValue[T]{
+			settingStore: store,
+			key:          key,
+			defaultValue: defaultValue,
+			syncable:     false,
+		},
+	}
+}
+
 func NewWoxSettingValueWithValidator[T any](store *WoxSettingStore, key string, defaultValue T, validator ValidatorFunc[T]) *WoxSettingValue[T] {
 	return &WoxSettingValue[T]{
 		SettingValue: &SettingValue[T]{

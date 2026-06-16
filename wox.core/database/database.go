@@ -71,6 +71,19 @@ type CloudSyncState struct {
 	Bootstrapped bool
 }
 
+type AccountState struct {
+	ID                           uint `gorm:"primaryKey"`
+	UserID                       string
+	Email                        string
+	EmailVerified                bool
+	SubscriptionStatus           string
+	SubscriptionCurrentPeriodEnd int64
+	SyncEligible                 bool
+	SyncEnabled                  bool
+	SessionExpired               bool
+	UpdatedAt                    int64
+}
+
 type MRURecord struct {
 	Hash        string `gorm:"primaryKey"` // MD5 hash of pluginId+title+subTitle
 	PluginID    string `gorm:"not null"`
@@ -164,6 +177,7 @@ func Init(ctx context.Context) error {
 		&PluginSetting{},
 		&Oplog{},
 		&CloudSyncState{},
+		&AccountState{},
 		&MRURecord{},
 		&AttentionItem{},
 		&MigrationRecord{},

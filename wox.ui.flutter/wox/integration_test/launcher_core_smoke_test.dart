@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:uuid/v4.dart';
+import 'package:wox/components/wox_dialog.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_preview.dart';
@@ -215,15 +216,16 @@ void registerLauncherCoreSmokeTests() {
             // Smoke-only dialog route: this keeps the test focused on the
             // Navigator stack behavior that regressed, without depending on a
             // particular settings pane being visible or scrollable.
-            return AlertDialog(
+            return WoxDialog(
               title: const Text('Settings smoke dialog'),
+              content: const SizedBox.shrink(),
               actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(settingController.tr('ui_ok')))],
             );
           },
         ),
       );
       await tester.pump(const Duration(milliseconds: 400));
-      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(find.byType(WoxDialog), findsOneWidget);
 
       await tester.sendKeyDownEvent(LogicalKeyboardKey.escape);
       await tester.pump(const Duration(milliseconds: 100));
@@ -233,7 +235,7 @@ void registerLauncherCoreSmokeTests() {
       // Regression guard: dialogs are Navigator routes above the settings page.
       // The page-level Escape fallback must let the dialog route consume Escape
       // first instead of sending the whole settings window back to the launcher.
-      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.byType(WoxDialog), findsNothing);
       expect(await windowManager.isVisible(), isTrue);
       expect(controller.isInSettingView.value, isTrue);
       expect(find.byType(WoxSettingView), findsOneWidget);
@@ -733,7 +735,7 @@ void registerLauncherCoreSmokeTests() {
       // Query hotkeys have a dense row editor, so their table config should be
       // able to opt into a wider add/update dialog without changing the shared
       // default used by smaller tables.
-      expect(tester.getSize(find.byType(AlertDialog).last).width, greaterThan(760));
+      expect(tester.getSize(find.byType(WoxDialog).last).width, greaterThan(760));
 
       final queryField = find.byKey(const ValueKey('query-variable-text-field-Query'));
       expect(queryField, findsOneWidget);

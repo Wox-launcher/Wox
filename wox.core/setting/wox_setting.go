@@ -39,6 +39,9 @@ type WoxSetting struct {
 	CustomPythonPath   *PlatformValue[string]
 	CustomNodejsPath   *PlatformValue[string]
 
+	// CloudSyncServerUrl is a local-only development override. It must not be
+	// synced because each device may target a different test server.
+	CloudSyncServerUrl       *WoxSettingValue[string]
 	CloudSyncDisabledPlugins *WoxSettingValue[[]string]
 
 	// HTTP proxy settings
@@ -325,6 +328,7 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 		HttpProxyUrl:                       NewPlatformValue(store, "HttpProxyUrl", "", "", ""),
 		CustomPythonPath:                   NewPlatformValue(store, "CustomPythonPath", "", "", ""),
 		CustomNodejsPath:                   NewPlatformValue(store, "CustomNodejsPath", "", "", ""),
+		CloudSyncServerUrl:                 NewLocalWoxSettingValue(store, "CloudSyncServerUrl", ""),
 		CloudSyncDisabledPlugins:           NewWoxSettingValue(store, "CloudSyncDisabledPlugins", []string{}),
 		EnableAutoBackup:                   NewWoxSettingValue(store, "EnableAutoBackup", true),
 		EnableAutoUpdate:                   NewWoxSettingValue(store, "EnableAutoUpdate", true),

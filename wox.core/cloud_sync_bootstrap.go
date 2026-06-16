@@ -2,32 +2,27 @@ package main
 
 import (
 	"context"
-	"os"
 	"strings"
+	"wox/account"
 	"wox/cloudsync"
 	"wox/cloudsync/settingadapter"
+	"wox/setting"
 	"wox/updater"
 	"wox/util"
 )
 
-const (
-	cloudSyncBaseURLEnv = "WOX_CLOUD_SYNC_URL"
-	cloudSyncTokenEnv   = "WOX_CLOUD_SYNC_TOKEN"
-)
+const defaultCloudSyncBaseURL = "https://sync.woxlauncher.com"
 
 func initCloudSync(ctx context.Context) {
-	baseURL := strings.TrimSpace(os.Getenv(cloudSyncBaseURLEnv))
-	if baseURL == "" {
-		return
-	}
-
-	token := strings.TrimSpace(os.Getenv(cloudSyncTokenEnv))
-	authProvider := cloudsync.StaticAuthProvider{Token: token}
+	baseURL := resolveCloudSyncBaseURL(ctx)
+	accountService := account.NewService(baseURL)
+	account.SetService(accountService)
+	accountService.StartTokenRefresh(ctx)
 	deviceProvider := cloudsync.NewFileDeviceProvider("")
 
 	client, err := cloudsync.NewCloudSyncHTTPClient(cloudsync.CloudSyncHTTPClientConfig{
 		BaseURL:        baseURL,
-		AuthProvider:   authProvider,
+		AuthProvider:   accountService,
 		DeviceProvider: deviceProvider,
 		AppVersion:     updater.CURRENT_VERSION,
 		Platform:       util.GetCurrentPlatform(),
@@ -60,7 +55,24 @@ func initCloudSync(ctx context.Context) {
 	}
 	cloudsync.SetService(service)
 
-	if keyManager.GetStatus(ctx).Available {
+	accountStatus := accountService.Status(ctx)
+	if accountStatus.LoggedIn && accountStatus.SyncEligible && accountStatus.SyncEnabled && keyManager.GetStatus(ctx).Available {
 		manager.Start(ctx)
 	}
+}
+
+// resolveCloudSyncBaseURL applies the local development override while keeping
+// the official sync endpoint as the normal production default.
+func resolveCloudSyncBaseURL(ctx context.Context) string {
+	settingManager := setting.GetSettingManager()
+	if settingManager == nil {
+		return defaultCloudSyncBaseURL
+	}
+
+	configuredURL := strings.TrimSpace(settingManager.GetWoxSetting(ctx).CloudSyncServerUrl.Get())
+	if configuredURL == "" {
+		return defaultCloudSyncBaseURL
+	}
+
+	return strings.TrimRight(configuredURL, "/")
 }

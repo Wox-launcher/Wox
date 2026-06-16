@@ -99,6 +99,14 @@ func (m *KeyManager) GetStatus(ctx context.Context) CloudSyncKeyStatus {
 	return CloudSyncKeyStatus{Available: true, Version: material.Version}
 }
 
+// RemoteStatus checks whether the signed-in account already has a sync key on the server.
+func (m *KeyManager) RemoteStatus(ctx context.Context) (CloudSyncKeyStatus, error) {
+	if m.keyClient == nil {
+		return CloudSyncKeyStatus{}, fmt.Errorf("cloud sync key client not configured")
+	}
+	return m.keyClient.Status(ctx)
+}
+
 func (m *KeyManager) InitWithRecoveryCode(ctx context.Context, recoveryCode string, deviceName string) (*CloudSyncKeyInitResponse, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -158,7 +166,6 @@ func (m *KeyManager) InitWithRecoveryCode(ctx context.Context, recoveryCode stri
 	}
 
 	m.markBootstrapped(ctx)
-	m.tryStartManager(ctx)
 	return resp, nil
 }
 
@@ -195,7 +202,6 @@ func (m *KeyManager) FetchWithRecoveryCode(ctx context.Context, recoveryCode str
 	}
 
 	m.markBootstrapped(ctx)
-	m.tryStartManager(ctx)
 	return resp, nil
 }
 
@@ -262,12 +268,6 @@ func (m *KeyManager) markBootstrapped(ctx context.Context) {
 	_, _ = UpdateCloudSyncState(ctx, func(state *database.CloudSyncState) {
 		state.Bootstrapped = true
 	})
-}
-
-func (m *KeyManager) tryStartManager(ctx context.Context) {
-	if service := GetService(); service != nil {
-		service.StartManager(ctx)
-	}
 }
 
 type keyMaterial struct {

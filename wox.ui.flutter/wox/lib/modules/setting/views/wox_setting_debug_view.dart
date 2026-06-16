@@ -1,18 +1,77 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:wox/components/wox_button.dart';
+import 'package:wox/components/wox_dialog.dart';
 import 'package:wox/components/wox_switch.dart';
+import 'package:wox/components/wox_textfield.dart';
 import 'package:wox/modules/setting/views/wox_setting_base.dart';
+import 'package:wox/utils/colors.dart';
 
 class WoxSettingDebugView extends WoxSettingBaseView {
   const WoxSettingDebugView({super.key});
 
+  Future<String?> showCloudSyncServerUrlDialog(BuildContext context) async {
+    final urlController = TextEditingController(text: controller.woxSetting.value.cloudSyncServerUrl);
+    try {
+      return await showDialog<String>(
+        context: context,
+        barrierColor: getThemePopupBarrierColor(),
+        builder: (context) {
+          return WoxDialog(
+            title: Text(controller.tr("ui_cloud_sync_server_url")),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                WoxTextField(controller: urlController, hintText: "http://127.0.0.1:8787", width: 420),
+                const SizedBox(height: 8),
+                Text(controller.tr("ui_cloud_sync_server_url_tips"), style: TextStyle(color: getThemeSubTextColor(), fontSize: 12)),
+              ],
+            ),
+            actions: [
+              WoxButton.secondary(text: controller.tr("ui_cloud_sync_cancel"), onPressed: () => Navigator.pop(context)),
+              WoxButton.primary(text: controller.tr("ui_cloud_sync_confirm"), onPressed: () => Navigator.pop(context, urlController.text.trim())),
+            ],
+          );
+        },
+      );
+    } finally {
+      urlController.dispose();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Obx(() {
+      final configuredUrl = controller.woxSetting.value.cloudSyncServerUrl.trim();
+      final displayUrl = configuredUrl.isEmpty ? "https://sync.woxlauncher.com" : configuredUrl;
       return form(
         title: controller.tr("ui_debug"),
         description: controller.tr("ui_debug_description"),
         children: [
+          formField(
+            settingKey: "CloudSyncServerUrl",
+            label: controller.tr("ui_cloud_sync_server_url"),
+            tips: controller.tr("ui_cloud_sync_server_url_tips"),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(displayUrl, style: TextStyle(color: getThemeTextColor(), fontSize: 13)),
+                WoxButton.secondary(
+                  text: controller.tr("ui_cloud_sync_server_url_update"),
+                  onPressed: () async {
+                    final url = await showCloudSyncServerUrlDialog(context);
+                    if (url == null) {
+                      return;
+                    }
+                    await controller.updateCloudSyncServerUrl(url);
+                  },
+                ),
+              ],
+            ),
+          ),
           formField(
             settingKey: "ShowScoreTail",
             label: controller.tr("ui_debug_show_score_tail"),

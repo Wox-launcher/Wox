@@ -4,15 +4,23 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"wox/util"
 )
 
 type CloudSyncAuthProvider interface {
 	AccessToken(ctx context.Context) (string, error)
+}
+
+type CloudSyncRefreshAuthProvider interface {
+	CloudSyncAuthProvider
+	RefreshAccessToken(ctx context.Context) (string, error)
+	MarkSessionExpired(ctx context.Context)
 }
 
 type StaticAuthProvider struct {
@@ -35,6 +43,7 @@ type CloudSyncHTTPClientConfig struct {
 
 type CloudSyncHTTPClient struct {
 	baseURL        string
+	baseURLMu      sync.RWMutex
 	authProvider   CloudSyncAuthProvider
 	deviceProvider CloudSyncDeviceProvider
 	appVersion     string
@@ -42,8 +51,15 @@ type CloudSyncHTTPClient struct {
 	httpClient     *http.Client
 }
 
+type responseEnvelope struct {
+	Status  int             `json:"status"`
+	Code    string          `json:"code"`
+	Message string          `json:"message"`
+	Data    json.RawMessage `json:"data"`
+}
+
 func NewCloudSyncHTTPClient(config CloudSyncHTTPClientConfig) (*CloudSyncHTTPClient, error) {
-	baseURL := strings.TrimRight(strings.TrimSpace(config.BaseURL), "/")
+	baseURL := normalizeBaseURL(config.BaseURL)
 	if baseURL == "" {
 		return nil, fmt.Errorf("cloud sync base url is empty")
 	}
@@ -56,6 +72,28 @@ func NewCloudSyncHTTPClient(config CloudSyncHTTPClientConfig) (*CloudSyncHTTPCli
 		platform:       strings.TrimSpace(config.Platform),
 		httpClient:     config.HTTPClient,
 	}, nil
+}
+
+func (c *CloudSyncHTTPClient) SetBaseURL(baseURL string) {
+	if c == nil {
+		return
+	}
+	c.baseURLMu.Lock()
+	defer c.baseURLMu.Unlock()
+	c.baseURL = normalizeBaseURL(baseURL)
+}
+
+func (c *CloudSyncHTTPClient) BaseURL() string {
+	if c == nil {
+		return ""
+	}
+	c.baseURLMu.RLock()
+	defer c.baseURLMu.RUnlock()
+	return c.baseURL
+}
+
+func normalizeBaseURL(baseURL string) string {
+	return strings.TrimRight(strings.TrimSpace(baseURL), "/")
 }
 
 func (c *CloudSyncHTTPClient) Push(ctx context.Context, req CloudSyncPushRequest) (*CloudSyncPushResponse, error) {
@@ -80,6 +118,14 @@ func (c *CloudSyncHTTPClient) Snapshot(ctx context.Context, req CloudSyncPullReq
 		return nil, err
 	}
 	return &resp, nil
+}
+
+func (c *CloudSyncHTTPClient) Status(ctx context.Context) (CloudSyncKeyStatus, error) {
+	var resp CloudSyncKeyStatus
+	if err := c.post(ctx, "/v1/sync/key/status", map[string]any{}, &resp); err != nil {
+		return CloudSyncKeyStatus{}, err
+	}
+	return resp, nil
 }
 
 func (c *CloudSyncHTTPClient) InitKey(ctx context.Context, req CloudSyncKeyInitRequest) (*CloudSyncKeyInitResponse, error) {
@@ -115,11 +161,31 @@ func (c *CloudSyncHTTPClient) ResetKey(ctx context.Context, req CloudSyncKeyRese
 }
 
 func (c *CloudSyncHTTPClient) post(ctx context.Context, path string, body any, target any) error {
-	url := c.baseURL + path
 	payload, err := json.Marshal(body)
 	if err != nil {
 		return fmt.Errorf("failed to encode request: %w", err)
 	}
+
+	if err := c.postWithToken(ctx, path, payload, target, ""); err != nil {
+		if errors.Is(err, errCloudSyncUnauthorized) {
+			if refreshProvider, ok := c.authProvider.(CloudSyncRefreshAuthProvider); ok {
+				token, refreshErr := refreshProvider.RefreshAccessToken(ctx)
+				if refreshErr != nil {
+					refreshProvider.MarkSessionExpired(ctx)
+					return err
+				}
+				return c.postWithToken(ctx, path, payload, target, token)
+			}
+		}
+		return err
+	}
+	return nil
+}
+
+var errCloudSyncUnauthorized = fmt.Errorf("cloud sync unauthorized")
+
+func (c *CloudSyncHTTPClient) postWithToken(ctx context.Context, path string, payload []byte, target any, tokenOverride string) error {
+	url := c.BaseURL() + path
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
 	if err != nil {
@@ -129,9 +195,15 @@ func (c *CloudSyncHTTPClient) post(ctx context.Context, path string, body any, t
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
-	if token, err := c.resolveAccessToken(ctx); err != nil {
-		return err
-	} else if token != "" {
+	token := tokenOverride
+	if token == "" {
+		resolvedToken, err := c.resolveAccessToken(ctx)
+		if err != nil {
+			return err
+		}
+		token = resolvedToken
+	}
+	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
@@ -168,16 +240,41 @@ func (c *CloudSyncHTTPClient) post(ctx context.Context, path string, body any, t
 	}
 	defer resp.Body.Close()
 
+	responsePayload, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	var envelope responseEnvelope
+	envelopeErr := json.Unmarshal(responsePayload, &envelope)
+	if resp.StatusCode == http.StatusUnauthorized {
+		return errCloudSyncUnauthorized
+	}
 	if resp.StatusCode >= 400 {
-		return fmt.Errorf("cloud sync request failed (%d): %s", resp.StatusCode, readResponseBody(resp.Body))
+		if envelopeErr == nil && envelope.Code != "" {
+			return errors.New(envelope.Code)
+		}
+		if envelopeErr == nil && envelope.Message != "" {
+			return errors.New(envelope.Message)
+		}
+		return fmt.Errorf("cloud sync request failed (%d): %s", resp.StatusCode, strings.TrimSpace(string(responsePayload)))
 	}
 
 	if target == nil {
 		return nil
 	}
 
-	decoder := json.NewDecoder(resp.Body)
-	if err := decoder.Decode(target); err != nil {
+	if envelopeErr == nil && envelope.Code != "" {
+		if len(envelope.Data) == 0 || string(envelope.Data) == "null" {
+			return nil
+		}
+		if err := json.Unmarshal(envelope.Data, target); err != nil {
+			return fmt.Errorf("failed to decode response: %w", err)
+		}
+		return nil
+	}
+
+	if err := json.Unmarshal(responsePayload, target); err != nil {
 		return fmt.Errorf("failed to decode response: %w", err)
 	}
 
@@ -196,12 +293,4 @@ func (c *CloudSyncHTTPClient) resolveDeviceID(ctx context.Context) (string, erro
 		return "", nil
 	}
 	return c.deviceProvider.DeviceID(ctx)
-}
-
-func readResponseBody(reader io.Reader) string {
-	payload, err := io.ReadAll(reader)
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(payload))
 }

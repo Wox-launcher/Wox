@@ -3043,6 +3043,9 @@ class WoxLauncherController extends GetxController {
       final screenshotController = Get.find<WoxScreenshotController>();
       final result = await screenshotController.startCaptureSession(msg.traceId, CaptureScreenshotRequest.fromJson(msg.data));
       responseWoxWebsocketRequest(msg, true, result.toJson());
+    } else if (msg.method == "FocusSettingWindow") {
+      await focusSettingWindow();
+      responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "OpenSettingWindow") {
       openSetting(msg.traceId, SettingWindowContext.fromJson(msg.data));
       responseWoxWebsocketRequest(msg, true, null);
@@ -3087,6 +3090,9 @@ class WoxLauncherController extends GetxController {
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "ReloadSetting") {
       await Get.find<WoxSettingController>().reloadSetting(msg.traceId);
+      responseWoxWebsocketRequest(msg, true, null);
+    } else if (msg.method == "RefreshAccountStatus") {
+      unawaited(refreshAccountStatusAfterBillingDeeplink(msg.traceId));
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "UpdateResult") {
       final success = updateResult(msg.traceId, UpdatableResult.fromJson(msg.data));
@@ -4263,6 +4269,31 @@ class WoxLauncherController extends GetxController {
         settingController.settingSearchFocusNode.requestFocus();
         Logger.instance.info(traceId, "[SETTING] Windows focus requested after delay");
       });
+    }
+  }
+
+  // Focuses an existing settings window without changing its active page.
+  Future<void> focusSettingWindow() async {
+    if (!isInSettingView.value) {
+      return;
+    }
+
+    final settingController = Get.find<WoxSettingController>();
+    await windowManager.show();
+    await windowManager.focus();
+    await windowManager.setAlwaysOnTop(false);
+    if (settingController.settingFocusNode.canRequestFocus) {
+      settingController.settingFocusNode.requestFocus();
+    }
+  }
+
+  // Refreshes billing-adjacent state after core handles a billing callback.
+  Future<void> refreshAccountStatusAfterBillingDeeplink(String traceId) async {
+    final settingController = Get.find<WoxSettingController>();
+    try {
+      await Future.wait([settingController.refreshAccountStatus(), settingController.refreshCloudSyncStatus()]);
+    } catch (e) {
+      Logger.instance.error(traceId, "Failed to refresh account status after billing deeplink: $e");
     }
   }
 

@@ -34,6 +34,10 @@ class EntityFactory {
     'WoxUsageStats': (json) => WoxUsageStats.fromJson(json),
     'HotkeyAvailability': (json) => HotkeyAvailability.fromJson(json),
     'WoxCloudSyncStatus': (json) => WoxCloudSyncStatus.fromJson(json),
+    'WoxCloudSyncBootstrapStatus': (json) => WoxCloudSyncBootstrapStatus.fromJson(json),
+    'WoxAccountStatus': (json) => WoxAccountStatus.fromJson(json),
+    'WoxAccountActionResult': (json) => WoxAccountActionResult.fromJson(json),
+    'WoxBillingSession': (json) => WoxBillingSession.fromJson(json),
   };
 
   // List factories
@@ -132,6 +136,8 @@ class EntityFactory {
         return false as T;
       case 'Map<String, dynamic>':
         return <String, dynamic>{} as T;
+      case 'WoxBillingSession':
+        return WoxBillingSession(url: '') as T;
       default:
         // For complex objects, return null and let the caller handle it
         return null as T;

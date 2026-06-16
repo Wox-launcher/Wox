@@ -44,6 +44,8 @@ class WoxThemeEditorDraftSession {
 
 class WoxSettingController extends GetxController {
   static const double _settingSearchResultEstimatedRowExtent = 52.0;
+  static const Duration _accountBillingPollInterval = Duration(seconds: 5);
+  static const Duration _accountBillingWaitTimeout = Duration(minutes: 5);
 
   final activeNavPath = 'general'.obs;
   final woxSetting = WoxSettingUtil.instance.currentSetting.obs;
@@ -62,10 +64,15 @@ class WoxSettingController extends GetxController {
   final isUpdatingLogLevel = false.obs;
   final updateChannelVersions = <WoxUpdateChannelVersion>[].obs;
   final cloudSyncStatus = WoxCloudSyncStatus.empty().obs;
+  final accountStatus = WoxAccountStatus.empty().obs;
   final isCloudSyncStatusLoading = false.obs;
   final cloudSyncStatusError = ''.obs;
   final isCloudSyncActionLoading = false.obs;
   final cloudSyncActionError = ''.obs;
+  final accountActionError = ''.obs;
+  final accountSubscriptionError = ''.obs;
+  final isAccountBillingWaiting = false.obs;
+  final accountBillingWaitingMessageKey = ''.obs;
   final isCloudSyncPluginListLoading = false.obs;
 
   final usageStats = WoxUsageStats.empty().obs;
@@ -143,6 +150,11 @@ class WoxSettingController extends GetxController {
   String _pendingBuiltInSettingKey = '';
   String _pendingPluginSettingKey = '';
   Timer? _settingHighlightTimer;
+  Timer? _accountBillingPollTimer;
+  DateTime? _accountBillingWaitDeadline;
+  String _accountBillingWaitTimeoutMessageKey = '';
+  bool Function(WoxAccountStatus status)? _accountBillingWaitComplete;
+  bool _isAccountBillingPolling = false;
 
   @override
   void onInit() {
@@ -1227,7 +1239,7 @@ class WoxSettingController extends GetxController {
     activeNavPath.value = 'data.cloudsync';
     isCloudSyncPluginListLoading.value = true;
     try {
-      await Future.wait([refreshCloudSyncStatus(), loadInstalledPlugins(traceId)]);
+      await Future.wait([refreshAccountStatus(), refreshCloudSyncStatus(), loadInstalledPlugins(traceId)]);
     } finally {
       isCloudSyncPluginListLoading.value = false;
     }
@@ -2067,6 +2079,377 @@ class WoxSettingController extends GetxController {
     }
   }
 
+  Future<void> refreshAccountStatus() async {
+    final traceId = const UuidV4().generate();
+    try {
+      accountStatus.value = await WoxApi.instance.getAccountStatus(traceId);
+      Logger.instance.info(traceId, 'Account status loaded');
+    } catch (e) {
+      accountStatus.value = WoxAccountStatus.empty();
+      Logger.instance.error(traceId, 'Failed to load account status: $e');
+    }
+  }
+
+  // Maps Wox locale identifiers to the sync account API language set.
+  String accountRequestLang() {
+    final langCode = woxSetting.value.langCode.toLowerCase().replaceAll('_', '-');
+    if (langCode.startsWith('zh')) {
+      return 'zh';
+    }
+    return 'en';
+  }
+
+  Future<WoxAccountActionResult> accountRegister(String email, String password) async {
+    final traceId = const UuidV4().generate();
+    isCloudSyncActionLoading.value = true;
+    accountActionError.value = '';
+    accountSubscriptionError.value = '';
+    cloudSyncActionError.value = '';
+    try {
+      final result = await WoxApi.instance.accountRegister(traceId, email, password, accountRequestLang());
+      await refreshAccountStatus();
+      return result;
+    } catch (e) {
+      accountActionError.value = e.toString();
+      Logger.instance.error(traceId, 'Account register failed: $e');
+      return WoxAccountActionResult.empty();
+    } finally {
+      isCloudSyncActionLoading.value = false;
+    }
+  }
+
+  Future<WoxAccountActionResult> accountVerifyEmail(String email, String code) async {
+    final traceId = const UuidV4().generate();
+    isCloudSyncActionLoading.value = true;
+    accountActionError.value = '';
+    accountSubscriptionError.value = '';
+    cloudSyncActionError.value = '';
+    try {
+      final result = await WoxApi.instance.accountVerifyEmail(traceId, email, code, accountRequestLang());
+      if (result.isOk) {
+        await Future.wait([refreshAccountStatus(), refreshCloudSyncStatus()]);
+      }
+      return result;
+    } catch (e) {
+      accountActionError.value = e.toString();
+      Logger.instance.error(traceId, 'Account verify email failed: $e');
+      return WoxAccountActionResult.empty();
+    } finally {
+      isCloudSyncActionLoading.value = false;
+    }
+  }
+
+  Future<WoxAccountActionResult> accountLogin(String email, String password) async {
+    final traceId = const UuidV4().generate();
+    isCloudSyncActionLoading.value = true;
+    accountActionError.value = '';
+    accountSubscriptionError.value = '';
+    cloudSyncActionError.value = '';
+    try {
+      final result = await WoxApi.instance.accountLogin(traceId, email, password, accountRequestLang());
+      if (result.isOk) {
+        await Future.wait([refreshAccountStatus(), refreshCloudSyncStatus()]);
+      } else {
+        await refreshAccountStatus();
+      }
+      return result;
+    } catch (e) {
+      accountActionError.value = e.toString();
+      Logger.instance.error(traceId, 'Account login failed: $e');
+      return WoxAccountActionResult.empty();
+    } finally {
+      isCloudSyncActionLoading.value = false;
+    }
+  }
+
+  Future<void> accountLogout() async {
+    final traceId = const UuidV4().generate();
+    isCloudSyncActionLoading.value = true;
+    accountActionError.value = '';
+    accountSubscriptionError.value = '';
+    cloudSyncActionError.value = '';
+    try {
+      _stopAccountBillingWaiting();
+      await WoxApi.instance.accountLogout(traceId);
+      await Future.wait([refreshAccountStatus(), refreshCloudSyncStatus()]);
+    } catch (e) {
+      accountActionError.value = e.toString();
+      Logger.instance.error(traceId, 'Account logout failed: $e');
+    } finally {
+      isCloudSyncActionLoading.value = false;
+    }
+  }
+
+  Future<void> accountResendVerification(String email) async {
+    final traceId = const UuidV4().generate();
+    isCloudSyncActionLoading.value = true;
+    accountActionError.value = '';
+    accountSubscriptionError.value = '';
+    cloudSyncActionError.value = '';
+    try {
+      await WoxApi.instance.accountResendVerification(traceId, email, accountRequestLang());
+    } catch (e) {
+      accountActionError.value = e.toString();
+      Logger.instance.error(traceId, 'Account resend verification failed: $e');
+    } finally {
+      isCloudSyncActionLoading.value = false;
+    }
+  }
+
+  Future<bool> accountPasswordResetRequest(String email) async {
+    final traceId = const UuidV4().generate();
+    isCloudSyncActionLoading.value = true;
+    accountActionError.value = '';
+    accountSubscriptionError.value = '';
+    cloudSyncActionError.value = '';
+    try {
+      await WoxApi.instance.accountPasswordResetRequest(traceId, email, accountRequestLang());
+      return true;
+    } catch (e) {
+      accountActionError.value = e.toString();
+      Logger.instance.error(traceId, 'Account password reset request failed: $e');
+      return false;
+    } finally {
+      isCloudSyncActionLoading.value = false;
+    }
+  }
+
+  Future<void> accountPasswordResetConfirm(String token, String password) async {
+    final traceId = const UuidV4().generate();
+    isCloudSyncActionLoading.value = true;
+    accountActionError.value = '';
+    accountSubscriptionError.value = '';
+    cloudSyncActionError.value = '';
+    try {
+      await WoxApi.instance.accountPasswordResetConfirm(traceId, token, password, accountRequestLang());
+    } catch (e) {
+      accountActionError.value = e.toString();
+      Logger.instance.error(traceId, 'Account password reset confirm failed: $e');
+    } finally {
+      isCloudSyncActionLoading.value = false;
+    }
+  }
+
+  Future<bool> accountChangePassword(String currentPassword, String newPassword) async {
+    final traceId = const UuidV4().generate();
+    isCloudSyncActionLoading.value = true;
+    accountActionError.value = '';
+    accountSubscriptionError.value = '';
+    cloudSyncActionError.value = '';
+    try {
+      await WoxApi.instance.accountChangePassword(traceId, currentPassword, newPassword, accountRequestLang());
+      return true;
+    } catch (e) {
+      accountActionError.value = e.toString();
+      Logger.instance.error(traceId, 'Account change password failed: $e');
+      return false;
+    } finally {
+      isCloudSyncActionLoading.value = false;
+    }
+  }
+
+  Future<void> accountOpenCheckout() async {
+    final traceId = const UuidV4().generate();
+    isCloudSyncActionLoading.value = true;
+    accountActionError.value = '';
+    accountSubscriptionError.value = '';
+    cloudSyncActionError.value = '';
+    try {
+      _stopAccountBillingWaiting();
+      final session = await WoxApi.instance.accountBillingCheckout(traceId);
+      await _openExternalBillingUrl(traceId, session.url);
+      _startAccountBillingWaiting(
+        messageKey: "ui_cloud_sync_subscription_waiting_payment",
+        timeoutMessageKey: "ui_cloud_sync_subscription_payment_timeout",
+        complete: (status) => status.syncEligible,
+      );
+    } catch (e) {
+      _stopAccountBillingWaiting();
+      accountSubscriptionError.value = e.toString();
+      Logger.instance.error(traceId, 'Open billing checkout failed: $e');
+    } finally {
+      isCloudSyncActionLoading.value = false;
+    }
+  }
+
+  Future<void> accountOpenBillingPortal() async {
+    final traceId = const UuidV4().generate();
+    isCloudSyncActionLoading.value = true;
+    accountActionError.value = '';
+    accountSubscriptionError.value = '';
+    cloudSyncActionError.value = '';
+    try {
+      _stopAccountBillingWaiting();
+      final initialStatusFingerprint = _accountBillingStatusFingerprint(accountStatus.value);
+      final session = await WoxApi.instance.accountBillingPortal(traceId);
+      await _openExternalBillingUrl(traceId, session.url);
+      _startAccountBillingWaiting(
+        messageKey: "ui_cloud_sync_subscription_waiting_update",
+        timeoutMessageKey: "ui_cloud_sync_subscription_update_timeout",
+        complete: (status) => _accountBillingStatusFingerprint(status) != initialStatusFingerprint,
+      );
+    } catch (e) {
+      _stopAccountBillingWaiting();
+      accountSubscriptionError.value = e.toString();
+      Logger.instance.error(traceId, 'Open billing portal failed: $e');
+    } finally {
+      isCloudSyncActionLoading.value = false;
+    }
+  }
+
+  // Pulls the latest subscription state from the account server and refreshes dependent sync status.
+  Future<void> accountRefreshSubscriptionStatus() async {
+    final traceId = const UuidV4().generate();
+    isCloudSyncActionLoading.value = true;
+    accountActionError.value = '';
+    accountSubscriptionError.value = '';
+    cloudSyncActionError.value = '';
+    try {
+      _stopAccountBillingWaiting();
+      accountStatus.value = await WoxApi.instance.accountRefresh(traceId);
+      await refreshCloudSyncStatus();
+    } catch (e) {
+      accountSubscriptionError.value = e.toString();
+      Logger.instance.error(traceId, 'Refresh account subscription status failed: $e');
+    } finally {
+      isCloudSyncActionLoading.value = false;
+    }
+  }
+
+  Future<void> _openExternalBillingUrl(String traceId, String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      throw Exception('invalid billing url');
+    }
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened) {
+      throw Exception('failed to open billing url');
+    }
+  }
+
+  // Starts a bounded wait after a Stripe page opens so webhook-driven account changes are pulled into the UI.
+  void _startAccountBillingWaiting({required String messageKey, required String timeoutMessageKey, required bool Function(WoxAccountStatus status) complete}) {
+    _accountBillingPollTimer?.cancel();
+    _accountBillingWaitDeadline = DateTime.now().add(_accountBillingWaitTimeout);
+    _accountBillingWaitTimeoutMessageKey = timeoutMessageKey;
+    _accountBillingWaitComplete = complete;
+    isAccountBillingWaiting.value = true;
+    accountBillingWaitingMessageKey.value = messageKey;
+    accountSubscriptionError.value = '';
+    unawaited(_pollAccountBillingStatus());
+    _accountBillingPollTimer = Timer.periodic(_accountBillingPollInterval, (_) => unawaited(_pollAccountBillingStatus()));
+  }
+
+  void _stopAccountBillingWaiting() {
+    _accountBillingPollTimer?.cancel();
+    _accountBillingPollTimer = null;
+    _accountBillingWaitDeadline = null;
+    _accountBillingWaitTimeoutMessageKey = '';
+    _accountBillingWaitComplete = null;
+    isAccountBillingWaiting.value = false;
+    accountBillingWaitingMessageKey.value = '';
+  }
+
+  // Polls account status until the expected billing change is visible or the bounded wait expires.
+  Future<void> _pollAccountBillingStatus() async {
+    if (!isAccountBillingWaiting.value || _isAccountBillingPolling) {
+      return;
+    }
+    _isAccountBillingPolling = true;
+    try {
+      final traceId = const UuidV4().generate();
+      try {
+        accountStatus.value = await WoxApi.instance.accountRefresh(traceId);
+        Logger.instance.info(traceId, 'Account billing status refreshed');
+      } catch (e) {
+        Logger.instance.error(traceId, 'Failed to refresh account billing status: $e');
+      }
+
+      final complete = _accountBillingWaitComplete;
+      if (complete != null && complete(accountStatus.value)) {
+        _stopAccountBillingWaiting();
+        accountSubscriptionError.value = '';
+        await refreshCloudSyncStatus();
+        return;
+      }
+
+      final deadline = _accountBillingWaitDeadline;
+      if (deadline != null && DateTime.now().isAfter(deadline)) {
+        final timeoutMessageKey = _accountBillingWaitTimeoutMessageKey;
+        _stopAccountBillingWaiting();
+        accountSubscriptionError.value = timeoutMessageKey.isEmpty ? '' : tr(timeoutMessageKey);
+      }
+    } finally {
+      _isAccountBillingPolling = false;
+    }
+  }
+
+  String _accountBillingStatusFingerprint(WoxAccountStatus status) {
+    return '${status.subscriptionStatus}|${status.subscriptionCurrentPeriodEnd}|${status.syncEligible}|${status.syncEnabled}|${status.sessionExpired}';
+  }
+
+  Future<WoxCloudSyncBootstrapStatus?> cloudSyncBootstrapStatus() async {
+    final traceId = const UuidV4().generate();
+    isCloudSyncActionLoading.value = true;
+    cloudSyncActionError.value = '';
+    try {
+      return await WoxApi.instance.cloudSyncBootstrapStatus(traceId);
+    } catch (e) {
+      cloudSyncActionError.value = e.toString();
+      Logger.instance.error(traceId, 'Cloud sync bootstrap status failed: $e');
+      return null;
+    } finally {
+      isCloudSyncActionLoading.value = false;
+    }
+  }
+
+  Future<bool> cloudSyncBootstrapStart(String recoveryCode) async {
+    final traceId = const UuidV4().generate();
+    isCloudSyncActionLoading.value = true;
+    cloudSyncActionError.value = '';
+    try {
+      await WoxApi.instance.cloudSyncBootstrapStart(traceId, recoveryCode);
+      await Future.wait([refreshAccountStatus(), refreshCloudSyncStatus()]);
+      return true;
+    } catch (e) {
+      cloudSyncActionError.value = e.toString();
+      Logger.instance.error(traceId, 'Cloud sync bootstrap start failed: $e');
+      return false;
+    } finally {
+      isCloudSyncActionLoading.value = false;
+    }
+  }
+
+  Future<void> cloudSyncEnable() async {
+    final traceId = const UuidV4().generate();
+    isCloudSyncActionLoading.value = true;
+    cloudSyncActionError.value = '';
+    try {
+      await WoxApi.instance.cloudSyncEnable(traceId);
+      await Future.wait([refreshAccountStatus(), refreshCloudSyncStatus()]);
+    } catch (e) {
+      cloudSyncActionError.value = e.toString();
+      Logger.instance.error(traceId, 'Cloud sync enable failed: $e');
+    } finally {
+      isCloudSyncActionLoading.value = false;
+    }
+  }
+
+  Future<void> cloudSyncDisable() async {
+    final traceId = const UuidV4().generate();
+    isCloudSyncActionLoading.value = true;
+    cloudSyncActionError.value = '';
+    try {
+      await WoxApi.instance.cloudSyncDisable(traceId);
+      await Future.wait([refreshAccountStatus(), refreshCloudSyncStatus()]);
+    } catch (e) {
+      cloudSyncActionError.value = e.toString();
+      Logger.instance.error(traceId, 'Cloud sync disable failed: $e');
+    } finally {
+      isCloudSyncActionLoading.value = false;
+    }
+  }
+
   Future<void> cloudSyncPush() async {
     final traceId = const UuidV4().generate();
     isCloudSyncActionLoading.value = true;
@@ -2118,7 +2501,7 @@ class WoxSettingController extends GetxController {
     cloudSyncActionError.value = '';
     try {
       await WoxApi.instance.cloudSyncKeyInit(traceId, recoveryCode, deviceName);
-      await refreshCloudSyncStatus();
+      await Future.wait([refreshAccountStatus(), refreshCloudSyncStatus()]);
     } catch (e) {
       cloudSyncActionError.value = e.toString();
       Logger.instance.error(traceId, 'Cloud sync key init failed: $e');
@@ -2133,7 +2516,7 @@ class WoxSettingController extends GetxController {
     cloudSyncActionError.value = '';
     try {
       await WoxApi.instance.cloudSyncKeyFetch(traceId, recoveryCode);
-      await refreshCloudSyncStatus();
+      await Future.wait([refreshAccountStatus(), refreshCloudSyncStatus()]);
     } catch (e) {
       cloudSyncActionError.value = e.toString();
       Logger.instance.error(traceId, 'Cloud sync key fetch failed: $e');
@@ -2179,6 +2562,11 @@ class WoxSettingController extends GetxController {
 
   Future<void> updateCloudSyncDisabledPlugins(List<String> pluginIds) async {
     await updateConfig("CloudSyncDisabledPlugins", jsonEncode(pluginIds));
+  }
+
+  Future<void> updateCloudSyncServerUrl(String url) async {
+    await updateConfig("CloudSyncServerUrl", url.trim());
+    await Future.wait([refreshAccountStatus(), refreshCloudSyncStatus()]);
   }
 
   Future<void> clearLogs() async {
@@ -2261,6 +2649,7 @@ class WoxSettingController extends GetxController {
   @override
   void onClose() {
     _settingHighlightTimer?.cancel();
+    _accountBillingPollTimer?.cancel();
     pluginListScrollController.dispose();
     themeListScrollController.dispose();
     filterThemeKeywordController.dispose();
@@ -2403,6 +2792,13 @@ const List<_BuiltInSettingSearchDefinition> _builtInSettingSearchDefinitions = [
     titleKey: 'ui_runtime_nodejs_path',
     subtitleKey: 'ui_runtime_nodejs_path_tips',
     searchKeywords: ['nodejs', 'node'],
+  ),
+  _BuiltInSettingSearchDefinition(
+    settingKey: 'CloudSyncServerUrl',
+    navPath: 'debug',
+    titleKey: 'ui_cloud_sync_server_url',
+    subtitleKey: 'ui_cloud_sync_server_url_tips',
+    searchKeywords: ['cloud sync', 'sync server', 'server url'],
   ),
   _BuiltInSettingSearchDefinition(
     settingKey: 'ShowScoreTail',

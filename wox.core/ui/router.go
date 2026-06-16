@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"wox/account"
 	"wox/ai"
 	"wox/cloudsync"
 	"wox/common"
@@ -72,7 +73,23 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/setting/position":                 handleSaveWindowPosition,
 	"/runtime/status":                   handleRuntimeStatus,
 	"/runtime/restart":                  handleRuntimeRestart,
+	"/account/status":                   handleAccountStatus,
+	"/account/refresh":                  handleAccountRefresh,
+	"/account/register":                 handleAccountRegister,
+	"/account/verify_email":             handleAccountVerifyEmail,
+	"/account/login":                    handleAccountLogin,
+	"/account/logout":                   handleAccountLogout,
+	"/account/resend_verification":      handleAccountResendVerification,
+	"/account/change_password":          handleAccountChangePassword,
+	"/account/password_reset/request":   handleAccountPasswordResetRequest,
+	"/account/password_reset/confirm":   handleAccountPasswordResetConfirm,
+	"/account/billing/checkout":         handleAccountBillingCheckout,
+	"/account/billing/portal":           handleAccountBillingPortal,
 	"/sync/status":                      handleSyncStatus,
+	"/sync/bootstrap/status":            handleSyncBootstrapStatus,
+	"/sync/bootstrap/start":             handleSyncBootstrapStart,
+	"/sync/enable":                      handleSyncEnable,
+	"/sync/disable":                     handleSyncDisable,
 	"/sync/push":                        handleSyncPush,
 	"/sync/pull":                        handleSyncPull,
 	"/sync/key/init":                    handleSyncKeyInit,
@@ -897,6 +914,7 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 	settingDto.EnableAnonymousUsageStats = woxSetting.EnableAnonymousUsageStats.Get()
 	settingDto.CustomPythonPath = woxSetting.CustomPythonPath.Get()
 	settingDto.CustomNodejsPath = woxSetting.CustomNodejsPath.Get()
+	settingDto.CloudSyncServerUrl = woxSetting.CloudSyncServerUrl.Get()
 	settingDto.CloudSyncDisabledPlugins = woxSetting.CloudSyncDisabledPlugins.Get()
 
 	settingDto.AppWidth = woxSetting.AppWidth.Get()
@@ -1063,6 +1081,13 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		woxSetting.QueryShortcuts.Set(queryShortcuts)
+	case "CloudSyncServerUrl":
+		cloudSyncServerURL := strings.TrimSpace(vs)
+		woxSetting.CloudSyncServerUrl.Set(cloudSyncServerURL)
+		if err := applyCloudSyncServerURL(ctx, cloudSyncServerURL); err != nil {
+			writeErrorResponse(w, err.Error())
+			return
+		}
 	case "CloudSyncDisabledPlugins":
 		var disabledPlugins []string
 		if err := json.Unmarshal([]byte(vs), &disabledPlugins); err != nil {
@@ -1355,15 +1380,452 @@ func handleGlanceAction(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, "")
 }
 
+func handleAccountStatus(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	service := account.GetService()
+	if service == nil {
+		writeSuccessResponse(w, account.Status{})
+		return
+	}
+	writeSuccessResponse(w, service.Status(ctx))
+}
+
+// Refreshes account data from the server before returning the latest local status.
+func handleAccountRefresh(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	service := account.GetService()
+	if service == nil {
+		writeErrorResponse(w, "account service is not configured")
+		return
+	}
+	if err := service.RefreshAccount(ctx); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, service.Status(ctx))
+}
+
+func handleAccountRegister(w http.ResponseWriter, r *http.Request) {
+	type request struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+		Lang     string `json:"lang"`
+	}
+	var payload request
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	service := account.GetService()
+	if service == nil {
+		writeErrorResponse(w, "account service is not configured")
+		return
+	}
+	result, err := service.Register(getTraceContext(r), payload.Email, payload.Password, accountRequestLang(payload.Lang))
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, result)
+}
+
+func handleAccountVerifyEmail(w http.ResponseWriter, r *http.Request) {
+	type request struct {
+		Email string `json:"email"`
+		Code  string `json:"code"`
+		Lang  string `json:"lang"`
+	}
+	var payload request
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	service := account.GetService()
+	if service == nil {
+		writeErrorResponse(w, "account service is not configured")
+		return
+	}
+	result, err := service.VerifyEmail(getTraceContext(r), payload.Email, payload.Code, accountRequestLang(payload.Lang))
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, result)
+}
+
+func handleAccountLogin(w http.ResponseWriter, r *http.Request) {
+	type request struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+		Lang     string `json:"lang"`
+	}
+	var payload request
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	service := account.GetService()
+	if service == nil {
+		writeErrorResponse(w, "account service is not configured")
+		return
+	}
+	result, err := service.Login(getTraceContext(r), payload.Email, payload.Password, accountRequestLang(payload.Lang))
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, result)
+}
+
+func handleAccountLogout(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	if cloudService := cloudsync.GetService(); cloudService != nil && cloudService.Manager != nil {
+		cloudService.Manager.Stop(ctx)
+	}
+	service := account.GetService()
+	if service == nil {
+		writeSuccessResponse(w, "")
+		return
+	}
+	if err := service.Logout(ctx); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, "")
+}
+
+func handleAccountResendVerification(w http.ResponseWriter, r *http.Request) {
+	type request struct {
+		Email string `json:"email"`
+		Lang  string `json:"lang"`
+	}
+	var payload request
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	service := account.GetService()
+	if service == nil {
+		writeErrorResponse(w, "account service is not configured")
+		return
+	}
+	if err := service.ResendVerification(getTraceContext(r), payload.Email, accountRequestLang(payload.Lang)); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, "")
+}
+
+func handleAccountPasswordResetRequest(w http.ResponseWriter, r *http.Request) {
+	type request struct {
+		Email string `json:"email"`
+		Lang  string `json:"lang"`
+	}
+	var payload request
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	service := account.GetService()
+	if service == nil {
+		writeErrorResponse(w, "account service is not configured")
+		return
+	}
+	if err := service.RequestPasswordReset(getTraceContext(r), payload.Email, accountRequestLang(payload.Lang)); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, "")
+}
+
+func handleAccountPasswordResetConfirm(w http.ResponseWriter, r *http.Request) {
+	type request struct {
+		Token    string `json:"token"`
+		Password string `json:"password"`
+		Lang     string `json:"lang"`
+	}
+	var payload request
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	service := account.GetService()
+	if service == nil {
+		writeErrorResponse(w, "account service is not configured")
+		return
+	}
+	if err := service.ConfirmPasswordReset(getTraceContext(r), payload.Token, payload.Password, accountRequestLang(payload.Lang)); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, "")
+}
+
+func handleAccountChangePassword(w http.ResponseWriter, r *http.Request) {
+	type request struct {
+		CurrentPassword string `json:"current_password"`
+		NewPassword     string `json:"new_password"`
+		Lang            string `json:"lang"`
+	}
+	var payload request
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	service := account.GetService()
+	if service == nil {
+		writeErrorResponse(w, "account service is not configured")
+		return
+	}
+	if err := service.ChangePassword(getTraceContext(r), payload.CurrentPassword, payload.NewPassword, accountRequestLang(payload.Lang)); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, "")
+}
+
+func handleAccountBillingCheckout(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	service := account.GetService()
+	if service == nil {
+		writeErrorResponse(w, "account service is not configured")
+		return
+	}
+	session, err := service.CreateCheckoutSession(ctx)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, session)
+}
+
+func handleAccountBillingPortal(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	service := account.GetService()
+	if service == nil {
+		writeErrorResponse(w, "account service is not configured")
+		return
+	}
+	session, err := service.CreatePortalSession(ctx)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, session)
+}
+
+// accountRequestLang maps Wox locale codes to the language set supported by the sync account API.
+func accountRequestLang(lang string) string {
+	normalized := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(lang), "_", "-"))
+	if normalized == "" {
+		normalized = strings.ToLower(strings.ReplaceAll(string(i18n.GetI18nManager().GetCurrentLangCode()), "_", "-"))
+	}
+	if strings.HasPrefix(normalized, "zh") {
+		return "zh"
+	}
+	return "en"
+}
+
+func applyCloudSyncServerURL(ctx context.Context, url string) error {
+	baseURL := resolveCloudSyncServerURL(url)
+	changed := false
+
+	accountService := account.GetService()
+	if accountService != nil && accountService.BaseURL() != baseURL {
+		changed = true
+	}
+	if cloudService := cloudsync.GetService(); cloudService != nil && cloudService.Client != nil && cloudService.Client.BaseURL() != baseURL {
+		changed = true
+	}
+
+	if !changed {
+		return nil
+	}
+
+	if cloudService := cloudsync.GetService(); cloudService != nil {
+		if cloudService.Manager != nil {
+			cloudService.Manager.Stop(ctx)
+		}
+		if cloudService.Client != nil {
+			cloudService.Client.SetBaseURL(baseURL)
+		}
+	}
+
+	if accountService == nil {
+		return nil
+	}
+	accountService.SetBaseURL(baseURL)
+	return accountService.ResetLocalSession(ctx)
+}
+
+func resolveCloudSyncServerURL(url string) string {
+	trimmed := strings.TrimRight(strings.TrimSpace(url), "/")
+	if trimmed == "" {
+		return "https://sync.woxlauncher.com"
+	}
+	return trimmed
+}
+
 func handleSyncStatus(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
 	service := cloudsync.GetService()
 	if service == nil {
-		writeErrorResponse(w, "cloud sync is not configured")
+		writeSuccessResponse(w, cloudsync.ServiceStatus{Enabled: false})
 		return
 	}
 
 	writeSuccessResponse(w, service.Status(ctx))
+}
+
+type syncBootstrapStatusResponse struct {
+	HasRemoteData bool `json:"has_remote_data"`
+	HasRemoteKey  bool `json:"has_remote_key"`
+}
+
+func handleSyncBootstrapStatus(w http.ResponseWriter, r *http.Request) {
+	status, err := resolveSyncBootstrapStatus(getTraceContext(r))
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, status)
+}
+
+func handleSyncBootstrapStart(w http.ResponseWriter, r *http.Request) {
+	type request struct {
+		RecoveryCode string `json:"recovery_code"`
+	}
+
+	var payload request
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	if strings.TrimSpace(payload.RecoveryCode) == "" {
+		writeErrorResponse(w, "recovery_code is empty")
+		return
+	}
+
+	if err := startSyncBootstrap(getTraceContext(r), payload.RecoveryCode); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, "")
+}
+
+func resolveSyncBootstrapStatus(ctx context.Context) (syncBootstrapStatusResponse, error) {
+	if err := ensureSyncBootstrapAllowed(ctx); err != nil {
+		return syncBootstrapStatusResponse{}, err
+	}
+	service := cloudsync.GetService()
+	if service == nil || service.Manager == nil || service.KeyManager == nil {
+		return syncBootstrapStatusResponse{}, fmt.Errorf("cloud sync is not configured")
+	}
+
+	hasRemoteData, err := service.Manager.HasRemoteSnapshotData(ctx)
+	if err != nil {
+		return syncBootstrapStatusResponse{}, err
+	}
+	remoteKeyStatus, err := service.KeyManager.RemoteStatus(ctx)
+	if err != nil {
+		return syncBootstrapStatusResponse{}, err
+	}
+	return syncBootstrapStatusResponse{HasRemoteData: hasRemoteData, HasRemoteKey: remoteKeyStatus.Available}, nil
+}
+
+func startSyncBootstrap(ctx context.Context, recoveryCode string) error {
+	status, err := resolveSyncBootstrapStatus(ctx)
+	if err != nil {
+		return err
+	}
+	service := cloudsync.GetService()
+	if service == nil || service.Manager == nil || service.KeyManager == nil {
+		return fmt.Errorf("cloud sync is not configured")
+	}
+
+	if status.HasRemoteKey {
+		if _, err := service.KeyManager.FetchWithRecoveryCode(ctx, recoveryCode); err != nil {
+			return err
+		}
+		if status.HasRemoteData {
+			if err := service.Manager.RestoreSnapshot(ctx); err != nil {
+				return err
+			}
+		}
+	} else {
+		if status.HasRemoteData {
+			return fmt.Errorf("cloud sync key is missing")
+		}
+		if _, err := service.KeyManager.InitWithRecoveryCode(ctx, recoveryCode, ""); err != nil {
+			return err
+		}
+	}
+
+	accountService := account.GetService()
+	if accountService != nil {
+		if err := accountService.SetSyncEnabled(ctx, true); err != nil {
+			return err
+		}
+	}
+	if !status.HasRemoteData && service.Manager != nil {
+		service.Manager.PushPending(ctx, "bootstrap")
+	}
+	service.StartManager(ctx)
+	return nil
+}
+
+func ensureSyncBootstrapAllowed(ctx context.Context) error {
+	accountService := account.GetService()
+	accountStatus := account.Status{}
+	if accountService != nil {
+		accountStatus = accountService.Status(ctx)
+	}
+	if accountService == nil || !accountStatus.LoggedIn {
+		return fmt.Errorf("account is not logged in")
+	}
+	if !accountStatus.SyncEligible {
+		return fmt.Errorf("subscription_required")
+	}
+	return nil
+}
+
+func handleSyncEnable(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	accountService := account.GetService()
+	accountStatus := account.Status{}
+	if accountService != nil {
+		accountStatus = accountService.Status(ctx)
+	}
+	if accountService == nil || !accountStatus.LoggedIn {
+		writeErrorResponse(w, "account is not logged in")
+		return
+	}
+	if !accountStatus.SyncEligible {
+		writeErrorResponse(w, "subscription_required")
+		return
+	}
+	if err := accountService.SetSyncEnabled(ctx, true); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	if service := cloudsync.GetService(); service != nil && service.KeyManager != nil && service.KeyManager.GetStatus(ctx).Available {
+		service.StartManager(ctx)
+	}
+	writeSuccessResponse(w, "")
+}
+
+func handleSyncDisable(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	if service := cloudsync.GetService(); service != nil && service.Manager != nil {
+		service.Manager.Stop(ctx)
+	}
+	if accountService := account.GetService(); accountService != nil {
+		if err := accountService.SetSyncEnabled(ctx, false); err != nil {
+			writeErrorResponse(w, err.Error())
+			return
+		}
+	}
+	writeSuccessResponse(w, "")
 }
 
 func handleSyncPush(w http.ResponseWriter, r *http.Request) {
@@ -1420,6 +1882,10 @@ func handleSyncKeyInit(w http.ResponseWriter, r *http.Request) {
 		writeErrorResponse(w, err.Error())
 		return
 	}
+	if accountService := account.GetService(); accountService != nil {
+		_ = accountService.SetSyncEnabled(ctx, true)
+	}
+	service.StartManager(ctx)
 
 	writeSuccessResponse(w, resp)
 }
@@ -1451,6 +1917,10 @@ func handleSyncKeyFetch(w http.ResponseWriter, r *http.Request) {
 		writeErrorResponse(w, err.Error())
 		return
 	}
+	if accountService := account.GetService(); accountService != nil {
+		_ = accountService.SetSyncEnabled(ctx, true)
+	}
+	service.StartManager(ctx)
 
 	writeSuccessResponse(w, resp)
 }

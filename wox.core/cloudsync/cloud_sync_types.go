@@ -74,6 +74,7 @@ type CloudSyncClient interface {
 }
 
 type CloudSyncKeyClient interface {
+	Status(ctx context.Context) (CloudSyncKeyStatus, error)
 	InitKey(ctx context.Context, req CloudSyncKeyInitRequest) (*CloudSyncKeyInitResponse, error)
 	FetchKey(ctx context.Context, req CloudSyncKeyFetchRequest) (*CloudSyncKeyFetchResponse, error)
 	PrepareKeyReset(ctx context.Context) (*CloudSyncKeyResetPrepareResponse, error)

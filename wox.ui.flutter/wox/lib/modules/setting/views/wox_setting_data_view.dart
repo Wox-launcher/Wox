@@ -6,6 +6,7 @@ import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_table_view.dart';
 import 'package:wox/components/wox_button.dart';
+import 'package:wox/components/wox_dialog.dart';
 import 'package:wox/components/wox_dropdown_button.dart';
 import 'package:wox/components/wox_loading_indicator.dart';
 import 'package:wox/components/wox_switch.dart';
@@ -118,10 +119,7 @@ class WoxSettingDataView extends WoxSettingBaseView {
               context: context,
               barrierColor: getThemePopupBarrierColor(),
               builder: (context) {
-                return AlertDialog(
-                  backgroundColor: getThemePopupSurfaceColor(),
-                  surfaceTintColor: Colors.transparent,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: getThemePopupOutlineColor())),
+                return WoxDialog(
                   title: Text(controller.tr("ui_data_backup_restore_confirm_title")),
                   content: Text(controller.tr("ui_data_backup_restore_confirm_message")),
                   actions: [
@@ -259,10 +257,7 @@ class WoxSettingDataView extends WoxSettingBaseView {
                           context: context,
                           barrierColor: getThemePopupBarrierColor(),
                           builder:
-                              (dialogContext) => AlertDialog(
-                                backgroundColor: getThemePopupSurfaceColor(),
-                                surfaceTintColor: Colors.transparent,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: getThemePopupOutlineColor())),
+                              (dialogContext) => WoxDialog(
                                 content: Text(controller.tr("ui_data_config_location_change_confirm").replaceAll("{0}", picked)),
                                 actions: [
                                   WoxButton.secondary(text: controller.tr("ui_data_config_location_change_cancel"), onPressed: () => Navigator.pop(dialogContext)),
@@ -354,10 +349,7 @@ class WoxSettingDataView extends WoxSettingBaseView {
                                   context: context,
                                   barrierColor: getThemePopupBarrierColor(),
                                   builder: (dialogContext) {
-                                    return AlertDialog(
-                                      backgroundColor: getThemePopupSurfaceColor(),
-                                      surfaceTintColor: Colors.transparent,
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: getThemePopupOutlineColor())),
+                                    return WoxDialog(
                                       title: Text(controller.tr("ui_data_log_clear_confirm_title")),
                                       content: Text(controller.tr("ui_data_log_clear_confirm_message")),
                                       actions: [

@@ -291,6 +291,82 @@ func (m *CloudSyncManager) Pull(ctx context.Context, reason string) {
 	}
 }
 
+// HasRemoteSnapshotData checks for any server-side sync records without applying them locally.
+func (m *CloudSyncManager) HasRemoteSnapshotData(ctx context.Context) (bool, error) {
+	if m.client == nil {
+		return false, fmt.Errorf("cloud sync client not configured")
+	}
+	if m.deviceProvider == nil {
+		return false, fmt.Errorf("cloud sync device provider not configured")
+	}
+	deviceId, err := m.deviceProvider.DeviceID(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to get device id: %w", err)
+	}
+	resp, err := m.client.Snapshot(ctx, CloudSyncPullRequest{DeviceID: deviceId, Cursor: "", Limit: 1})
+	if err != nil {
+		return false, fmt.Errorf("cloud sync snapshot check failed: %w", err)
+	}
+	return len(resp.Records) > 0, nil
+}
+
+// RestoreSnapshot applies the full server snapshot locally without treating snapshot offsets as incremental pull cursors.
+func (m *CloudSyncManager) RestoreSnapshot(ctx context.Context) error {
+	if m.client == nil {
+		return fmt.Errorf("cloud sync client not configured")
+	}
+	if m.crypto == nil {
+		return fmt.Errorf("cloud sync crypto not configured")
+	}
+	if m.deviceProvider == nil {
+		return fmt.Errorf("cloud sync device provider not configured")
+	}
+	if m.applier == nil {
+		return fmt.Errorf("cloud sync applier not configured")
+	}
+
+	deviceId, err := m.deviceProvider.DeviceID(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get device id: %w", err)
+	}
+
+	cursor := ""
+	for {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		resp, err := m.client.Snapshot(ctx, CloudSyncPullRequest{
+			DeviceID: deviceId,
+			Cursor:   cursor,
+			Limit:    m.config.PullLimit,
+		})
+		if err != nil {
+			return fmt.Errorf("cloud sync snapshot failed: %w", err)
+		}
+		if len(resp.Records) > 0 {
+			if err := m.applyRecords(ctx, resp.Records); err != nil {
+				return fmt.Errorf("failed to apply remote snapshot: %w", err)
+			}
+		}
+		cursor = resp.NextCursor
+		if !resp.HasMore {
+			break
+		}
+	}
+
+	_, err = UpdateCloudSyncState(ctx, func(s *database.CloudSyncState) {
+		s.LastPullTs = util.GetSystemTimestamp()
+		s.LastError = ""
+		s.BackoffUntil = 0
+		s.RetryCount = 0
+		s.Bootstrapped = true
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update cloud sync state: %w", err)
+	}
+	return nil
+}
+
 func (m *CloudSyncManager) applyRecords(ctx context.Context, records []CloudSyncRecord) error {
 	disabled := m.disabledPluginSet(ctx)
 	for _, record := range records {
