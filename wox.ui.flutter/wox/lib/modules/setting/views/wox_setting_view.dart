@@ -65,6 +65,7 @@ class _WoxSettingViewState extends State<WoxSettingView> {
         unawaited(_preloadThemeEditorWallpaper());
       }
     });
+    _scheduleInitialSearchFocus();
   }
 
   @override
@@ -151,6 +152,45 @@ class _WoxSettingViewState extends State<WoxSettingView> {
     // should keep the user's current sidebar scroll offset instead of being
     // re-aligned on every click.
     return targetTop >= viewportTop - visibilityTolerance && targetBottom <= viewportBottom + visibilityTolerance;
+  }
+
+  // Focuses the search field after the settings route is actually mounted. The
+  // native window focus, route-level autofocus, and TextField attachment can
+  // land in different frames on desktop platforms, so a short guarded retry
+  // makes the default entry focus deterministic without stealing focus from a
+  // control the user already selected.
+  void _scheduleInitialSearchFocus({int attempt = 0}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_isActiveSettingRoute() || _hasSettingsDialogRoute() || controller.settingSearchFocusNode.hasFocus) {
+        return;
+      }
+      if (!_canMoveInitialFocusToSearch()) {
+        return;
+      }
+
+      controller.settingSearchFocusNode.requestFocus();
+
+      if (controller.settingSearchFocusNode.hasFocus || attempt >= 10) {
+        return;
+      }
+      Future.delayed(const Duration(milliseconds: 60), () {
+        if (mounted) {
+          _scheduleInitialSearchFocus(attempt: attempt + 1);
+        }
+      });
+    });
+  }
+
+  bool _canMoveInitialFocusToSearch() {
+    final primaryFocus = FocusManager.instance.primaryFocus;
+    if (primaryFocus == null || primaryFocus == FocusManager.instance.rootScope || primaryFocus is FocusScopeNode || primaryFocus == controller.settingFocusNode) {
+      return true;
+    }
+
+    // A detached focus node usually belongs to the previous launcher route
+    // during the settings transition. It should not block the first search
+    // focus request, unlike a live settings control the user clicked.
+    return primaryFocus.context == null;
   }
 
   void _queueActiveNavItemVisibleForBuild() {
