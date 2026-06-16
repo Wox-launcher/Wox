@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
@@ -71,8 +72,9 @@ func (p *UpdatePlugin) Query(ctx context.Context, query plugin.Query) plugin.Que
 	releaseChannel := string(setting.ReleaseChannelStable)
 	if woxSetting := setting.GetSettingManager().GetWoxSetting(ctx); woxSetting != nil {
 		autoUpdateEnabled = woxSetting.EnableAutoUpdate.Get()
-		releaseChannel = string(woxSetting.ReleaseChannel.Get())
+		releaseChannel = string(setting.NormalizeReleaseChannel(string(woxSetting.ReleaseChannel.Get())))
 	}
+	channelVersions := p.getActionChannelVersions(ctx)
 
 	preview := plugin.WoxPreview{
 		PreviewType:    plugin.WoxPreviewTypeUpdate,
@@ -87,7 +89,7 @@ func (p *UpdatePlugin) Query(ctx context.Context, query plugin.Query) plugin.Que
 		Title:   "", // we don't need title in update plugin
 		Icon:    updateIcon,
 		Preview: preview,
-		Actions: p.buildActions(ctx, info, autoUpdateEnabled, releaseChannel),
+		Actions: p.buildActions(ctx, info, autoUpdateEnabled, releaseChannel, channelVersions),
 	}
 
 	return plugin.NewQueryResponse([]plugin.QueryResult{result})
@@ -118,7 +120,14 @@ func (p *UpdatePlugin) buildPreviewData(info updater.UpdateInfo, autoUpdateEnabl
 	return string(b)
 }
 
-func (p *UpdatePlugin) buildActions(ctx context.Context, info updater.UpdateInfo, autoUpdateEnabled bool, releaseChannel string) []plugin.QueryResultAction {
+// getActionChannelVersions keeps action labels responsive when remote manifests are slow or unavailable.
+func (p *UpdatePlugin) getActionChannelVersions(ctx context.Context) []updater.UpdateChannelVersion {
+	channelVersionCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	return updater.GetUpdateChannelVersions(channelVersionCtx)
+}
+
+func (p *UpdatePlugin) buildActions(ctx context.Context, info updater.UpdateInfo, autoUpdateEnabled bool, releaseChannel string, channelVersions []updater.UpdateChannelVersion) []plugin.QueryResultAction {
 	actions := []plugin.QueryResultAction{}
 
 	if !autoUpdateEnabled {
@@ -135,11 +144,12 @@ func (p *UpdatePlugin) buildActions(ctx context.Context, info updater.UpdateInfo
 					plugin.GetPluginManager().GetUI().ReloadSetting(ctx)
 					p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_checking"))
 					updater.CheckForUpdatesWithCallback(ctx, func(info updater.UpdateInfo) {
-						p.refreshVisibleUpdatePreview(ctx, actionContext, info, true, releaseChannel)
+						p.refreshVisibleUpdatePreview(ctx, actionContext, info, true, releaseChannel, channelVersions)
 						p.notifyUpdate(ctx, info)
 					})
 				},
 			},
+			p.buildSwitchReleaseChannelAction(ctx, autoUpdateEnabled, releaseChannel, channelVersions),
 			plugin.QueryResultAction{
 				Icon:                   common.SettingIcon,
 				Name:                   "i18n:plugin_update_action_open_settings",
@@ -173,12 +183,13 @@ func (p *UpdatePlugin) buildActions(ctx context.Context, info updater.UpdateInfo
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_checking"))
 			updater.CheckForUpdatesWithCallback(ctx, func(info updater.UpdateInfo) {
-				p.refreshVisibleUpdatePreview(ctx, actionContext, info, autoUpdateEnabled, releaseChannel)
+				p.refreshVisibleUpdatePreview(ctx, actionContext, info, autoUpdateEnabled, releaseChannel, channelVersions)
 				p.notifyUpdate(ctx, info)
 			})
 		},
 	}
 	actions = append(actions, checkAction)
+	actions = append(actions, p.buildSwitchReleaseChannelAction(ctx, autoUpdateEnabled, releaseChannel, channelVersions))
 
 	if info.DownloadUrl != "" {
 		actions = append(actions, plugin.QueryResultAction{
@@ -217,8 +228,74 @@ func (p *UpdatePlugin) buildActions(ctx context.Context, info updater.UpdateInfo
 	return actions
 }
 
+// buildSwitchReleaseChannelAction keeps the update result as the one-click place for changing update channels.
+func (p *UpdatePlugin) buildSwitchReleaseChannelAction(ctx context.Context, autoUpdateEnabled bool, releaseChannel string, channelVersions []updater.UpdateChannelVersion) plugin.QueryResultAction {
+	currentChannel := setting.NormalizeReleaseChannel(releaseChannel)
+	targetChannel := setting.ReleaseChannelStable
+	if currentChannel == setting.ReleaseChannelStable {
+		targetChannel = setting.ReleaseChannelBeta
+	}
+
+	return plugin.QueryResultAction{
+		Id:                     fmt.Sprintf("switch_to_%s_channel", targetChannel),
+		Name:                   p.switchReleaseChannelActionName(ctx, targetChannel, updateChannelLatestVersion(channelVersions, targetChannel)),
+		Icon:                   common.StarIcon,
+		PreventHideAfterAction: true,
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+			if woxSetting == nil {
+				return
+			}
+
+			if err := woxSetting.ReleaseChannel.Set(targetChannel); err != nil {
+				p.api.Notify(ctx, err.Error())
+				return
+			}
+
+			updater.ResetUpdateInfoForReleaseChannel(targetChannel)
+			plugin.GetPluginManager().GetUI().ReloadSetting(ctx)
+			p.refreshVisibleUpdatePreview(ctx, actionContext, updater.GetUpdateInfo(), autoUpdateEnabled, string(targetChannel), channelVersions)
+			if !autoUpdateEnabled {
+				return
+			}
+
+			p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_checking"))
+			updater.CheckForUpdatesWithCallback(ctx, func(info updater.UpdateInfo) {
+				p.refreshVisibleUpdatePreview(ctx, actionContext, info, autoUpdateEnabled, string(targetChannel), channelVersions)
+				p.notifyUpdate(ctx, info)
+			})
+		},
+	}
+}
+
+// switchReleaseChannelActionName formats the target channel action with a manifest version when it is available.
+func (p *UpdatePlugin) switchReleaseChannelActionName(ctx context.Context, targetChannel setting.ReleaseChannel, latestVersion string) string {
+	key := "plugin_update_action_switch_to_stable_channel"
+	versionKey := "plugin_update_action_switch_to_stable_channel_with_version"
+	if targetChannel == setting.ReleaseChannelBeta {
+		key = "plugin_update_action_switch_to_beta_channel"
+		versionKey = "plugin_update_action_switch_to_beta_channel_with_version"
+	}
+
+	if latestVersion == "" {
+		return i18n.GetI18nManager().TranslateWox(ctx, key)
+	}
+	return fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, versionKey), latestVersion)
+}
+
+// updateChannelLatestVersion finds the latest version already loaded for a release channel.
+func updateChannelLatestVersion(channelVersions []updater.UpdateChannelVersion, releaseChannel setting.ReleaseChannel) string {
+	targetChannel := setting.NormalizeReleaseChannel(string(releaseChannel))
+	for _, channelVersion := range channelVersions {
+		if setting.NormalizeReleaseChannel(channelVersion.Channel) == targetChannel {
+			return channelVersion.LatestVersion
+		}
+	}
+	return ""
+}
+
 // refreshVisibleUpdatePreview keeps the current update preview in sync while a manual check/download action runs.
-func (p *UpdatePlugin) refreshVisibleUpdatePreview(ctx context.Context, actionContext plugin.ActionContext, info updater.UpdateInfo, autoUpdateEnabled bool, releaseChannel string) {
+func (p *UpdatePlugin) refreshVisibleUpdatePreview(ctx context.Context, actionContext plugin.ActionContext, info updater.UpdateInfo, autoUpdateEnabled bool, releaseChannel string, channelVersions []updater.UpdateChannelVersion) {
 	if actionContext.ResultId == "" {
 		return
 	}
@@ -237,7 +314,7 @@ func (p *UpdatePlugin) refreshVisibleUpdatePreview(ctx context.Context, actionCo
 		PreviewData:    p.buildPreviewData(info, autoUpdateEnabled, effectiveReleaseChannel),
 		ScrollPosition: "",
 	}
-	actions := p.buildActions(ctx, info, autoUpdateEnabled, effectiveReleaseChannel)
+	actions := p.buildActions(ctx, info, autoUpdateEnabled, effectiveReleaseChannel, channelVersions)
 	updatable.Preview = &preview
 	updatable.Actions = &actions
 	p.api.UpdateResult(ctx, *updatable)
