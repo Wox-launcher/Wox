@@ -117,7 +117,3 @@ func RemoveTray() {
 func SetQueryIcons(items []QueryIconItem) {
 	// Linux query tray icons are not implemented yet.
 }
-
-func SetQueryIcons(items []QueryIconItem) {
-	// Linux query tray icons are not implemented yet.
-}
