@@ -49,7 +49,7 @@ func (s *WoxSettingStore) Get(key string, target interface{}) error {
 }
 
 func (s *WoxSettingStore) Set(key string, value interface{}) error {
-	strValue, err := serializeValue(value)
+	strValue, err := SerializeValue(value)
 	if err != nil {
 		return fmt.Errorf("failed to serialize value: %w", err)
 	}
@@ -82,7 +82,7 @@ func (s *WoxSettingStore) DeleteWithSync(key string, syncable bool) error {
 }
 
 func (s *WoxSettingStore) logOplog(key string, value interface{}, op string) error {
-	strValue, err := serializeValue(value)
+	strValue, err := SerializeValue(value)
 	if err != nil {
 		return fmt.Errorf("failed to serialize value for oplog: %w", err)
 	}
@@ -121,7 +121,7 @@ func (s *PluginSettingStore) Get(key string, target interface{}) error {
 }
 
 func (s *PluginSettingStore) Set(key string, value interface{}) error {
-	strValue, err := serializeValue(value)
+	strValue, err := SerializeValue(value)
 	if err != nil {
 		return fmt.Errorf("failed to serialize plugin setting value: %w", err)
 	}
@@ -173,7 +173,7 @@ func (s *PluginSettingStore) DeleteWithSync(key string, syncable bool) error {
 }
 
 func (s *PluginSettingStore) logOplog(key string, value interface{}, op string) error {
-	strValue, err := serializeValue(value)
+	strValue, err := SerializeValue(value)
 	if err != nil {
 		return fmt.Errorf("failed to serialize plugin setting value for oplog: %w", err)
 	}
@@ -259,7 +259,7 @@ func writeImmediateDeleteCloudSyncOplog(db *gorm.DB, oplog database.Oplog) error
 	})
 }
 
-func serializeValue(value interface{}) (string, error) {
+func SerializeValue(value interface{}) (string, error) {
 	if value == nil {
 		return "", nil
 	}

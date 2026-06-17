@@ -2,6 +2,7 @@ package setting
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"wox/util"
 )
@@ -35,47 +36,14 @@ type WoxSettingValue[T any] struct {
 }
 
 // platform specific setting value. Don't set this value directly, use get,set instead
+// The physical storage key of a platform setting is automatically suffixed with @windows, @darwin, or @linux based on the current platform.
 type PlatformValue[T any] struct {
-	*WoxSettingValue[struct {
-		MacValue   T
-		WinValue   T
-		LinuxValue T
-	}]
+	*WoxSettingValue[T]
 }
 
 type PluginSettingValue[T any] struct {
 	*SettingValue[T]
 	pluginId string
-}
-
-func (p *PlatformValue[T]) Get() T {
-	if util.IsWindows() {
-		return p.SettingValue.Get().WinValue
-	} else if util.IsMacOS() {
-		return p.SettingValue.Get().MacValue
-	} else if util.IsLinux() {
-		return p.SettingValue.Get().LinuxValue
-	}
-
-	panic("unknown platform")
-}
-
-func (p *PlatformValue[T]) Set(t T) {
-	if util.IsWindows() {
-		p.value.WinValue = t
-		p.SettingValue.Set(p.value)
-		return
-	} else if util.IsMacOS() {
-		p.value.MacValue = t
-		p.SettingValue.Set(p.value)
-		return
-	} else if util.IsLinux() {
-		p.value.LinuxValue = t
-		p.SettingValue.Set(p.value)
-		return
-	}
-
-	panic("unknown platform")
 }
 
 func NewWoxSettingValue[T any](store *WoxSettingStore, key string, defaultValue T) *WoxSettingValue[T] {
@@ -115,17 +83,38 @@ func NewWoxSettingValueWithValidator[T any](store *WoxSettingStore, key string, 
 }
 
 func NewPlatformValue[T any](store *WoxSettingStore, key string, winValue T, macValue T, linuxValue T) *PlatformValue[T] {
-	return &PlatformValue[T]{
-		WoxSettingValue: NewWoxSettingValue(store, key, struct {
-			MacValue   T
-			WinValue   T
-			LinuxValue T
-		}{
-			MacValue:   macValue,
-			WinValue:   winValue,
-			LinuxValue: linuxValue,
-		}),
+	currentDefaultValue := linuxValue
+	if util.IsWindows() {
+		currentDefaultValue = winValue
+	} else if util.IsMacOS() {
+		currentDefaultValue = macValue
 	}
+
+	// PlatformValue binds its physical storage key once at construction, so the
+	// inherited Get/Set methods operate on MainHotkey@darwin-style keys directly.
+	return &PlatformValue[T]{
+		WoxSettingValue: NewWoxSettingValue(store, PlatformSettingKey(key, util.GetCurrentPlatform()), currentDefaultValue),
+	}
+}
+
+// PlatformSettingKey builds the same physical key shape used by plugin platform settings.
+func PlatformSettingKey(baseKey string, platform string) string {
+	return fmt.Sprintf("%s@%s", baseKey, strings.ToLower(strings.TrimSpace(platform)))
+}
+
+// SplitPlatformSettingKey parses keys like MainHotkey@darwin.
+func SplitPlatformSettingKey(key string) (string, string, bool) {
+	index := strings.LastIndex(key, "@")
+	if index <= 0 || index == len(key)-1 {
+		return "", "", false
+	}
+
+	baseKey := key[:index]
+	platform := strings.ToLower(strings.TrimSpace(key[index+1:]))
+	if !util.IsSupportedPlatform(platform) {
+		return "", "", false
+	}
+	return baseKey, platform, true
 }
 
 func NewPluginSettingValue[T any](store *PluginSettingStore, key string, defaultValue T) *PluginSettingValue[T] {

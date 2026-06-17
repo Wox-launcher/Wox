@@ -1502,6 +1502,15 @@ func (m *Manager) HideTray() {
 }
 
 func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value string) {
+	// If the setting key is platform-specific, only apply it if it matches the current platform.
+	// Cloud sync may send settings for other platforms, which should be ignored here.
+	if baseKey, platform, ok := setting.SplitPlatformSettingKey(key); ok {
+		if platform != util.GetCurrentPlatform() {
+			return
+		}
+		key = baseKey
+	}
+
 	var vb bool
 	var vs = value
 	if vb1, err := strconv.ParseBool(vs); err == nil {
