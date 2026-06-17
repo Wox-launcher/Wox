@@ -47,6 +47,7 @@ type CloudSyncHistoryRecord struct {
 	DurationMs   int64
 	ItemCount    int
 	EntityCounts map[string]int
+	Keys         []CloudSyncRecordKey
 	Error        string
 }
 
@@ -258,6 +259,7 @@ type CloudSyncProgressNotifier interface {
 type CloudSyncHistoryStore interface {
 	Record(ctx context.Context, record CloudSyncHistoryRecord) error
 	ListRecent(ctx context.Context, limit int) ([]CloudSyncHistoryRecord, error)
+	Get(ctx context.Context, id uint) (*CloudSyncHistoryRecord, error)
 }
 
 type CloudSyncPluginExclusionProvider interface {

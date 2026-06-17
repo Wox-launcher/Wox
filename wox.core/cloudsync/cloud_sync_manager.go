@@ -270,10 +270,11 @@ func (m *CloudSyncManager) pushPendingLocked(ctx context.Context, reason string)
 	startedAt := util.GetSystemTimestamp()
 	uploaded := 0
 	entityCounts := map[string]int{}
+	historyKeys := []CloudSyncRecordKey{}
 	historyStatus := ""
 	var historyErr error
 	defer func() {
-		m.recordOperationHistory(ctx, CloudSyncProgressOperationPush, reason, startedAt, uploaded, entityCounts, historyStatus, historyErr)
+		m.recordOperationHistory(ctx, CloudSyncProgressOperationPush, reason, startedAt, uploaded, entityCounts, historyKeys, historyStatus, historyErr)
 	}()
 	fail := func(err error) {
 		historyStatus = CloudSyncHistoryStatusFailed
@@ -362,6 +363,7 @@ func (m *CloudSyncManager) pushPendingLocked(ctx context.Context, reason string)
 		}
 		uploaded += len(changes)
 		addCloudSyncChangeEntityCounts(entityCounts, changes)
+		historyKeys = append(historyKeys, cloudSyncChangeRecordKeys(changes)...)
 
 		if err := m.oplogStore.MarkSynced(ctx, oplogIds); err != nil {
 			fail(fmt.Errorf("failed to mark oplogs synced: %w", err))
@@ -387,10 +389,11 @@ func (m *CloudSyncManager) Pull(ctx context.Context, reason string) {
 	startedAt := util.GetSystemTimestamp()
 	pulled := 0
 	entityCounts := map[string]int{}
+	historyKeys := []CloudSyncRecordKey{}
 	historyStatus := ""
 	var historyErr error
 	defer func() {
-		m.recordOperationHistory(ctx, CloudSyncProgressOperationPull, reason, startedAt, pulled, entityCounts, historyStatus, historyErr)
+		m.recordOperationHistory(ctx, CloudSyncProgressOperationPull, reason, startedAt, pulled, entityCounts, historyKeys, historyStatus, historyErr)
 	}()
 	fail := func(err error) {
 		historyStatus = CloudSyncHistoryStatusFailed
@@ -448,6 +451,7 @@ func (m *CloudSyncManager) Pull(ctx context.Context, reason string) {
 			m.setProgressFromRecord(CloudSyncProgressOperationPull, resp.Records[0], pulled, 0)
 			pulled += len(resp.Records)
 			addCloudSyncRecordEntityCounts(entityCounts, resp.Records)
+			historyKeys = append(historyKeys, cloudSyncRecordKeys(resp.Records)...)
 			if err := m.applyRecords(ctx, resp.Records); err != nil {
 				fail(fmt.Errorf("failed to apply remote records: %w", err))
 				return
@@ -903,7 +907,7 @@ func (m *CloudSyncManager) recordFailure(ctx context.Context, err error) {
 }
 
 // recordOperationHistory keeps user-visible sync history separate from sync cursor/state semantics.
-func (m *CloudSyncManager) recordOperationHistory(ctx context.Context, operation string, reason string, startedAt int64, itemCount int, entityCounts map[string]int, status string, err error) {
+func (m *CloudSyncManager) recordOperationHistory(ctx context.Context, operation string, reason string, startedAt int64, itemCount int, entityCounts map[string]int, keys []CloudSyncRecordKey, status string, err error) {
 	if m.historyStore == nil {
 		return
 	}
@@ -927,6 +931,7 @@ func (m *CloudSyncManager) recordOperationHistory(ctx context.Context, operation
 		DurationMs:   finishedAt - startedAt,
 		ItemCount:    itemCount,
 		EntityCounts: copyCloudSyncEntityCounts(entityCounts),
+		Keys:         append([]CloudSyncRecordKey(nil), keys...),
 	}
 	if err != nil {
 		record.Error = err.Error()
@@ -1000,6 +1005,32 @@ func addCloudSyncRecordEntityCounts(counts map[string]int, records []CloudSyncRe
 			counts[record.EntityType]++
 		}
 	}
+}
+
+func cloudSyncChangeRecordKeys(changes []CloudSyncChange) []CloudSyncRecordKey {
+	keys := make([]CloudSyncRecordKey, 0, len(changes))
+	for _, change := range changes {
+		keys = append(keys, CloudSyncRecordKey{
+			EntityType: change.EntityType,
+			PluginID:   change.PluginID,
+			Key:        change.Key,
+			Op:         change.Op,
+		})
+	}
+	return keys
+}
+
+func cloudSyncRecordKeys(records []CloudSyncRecord) []CloudSyncRecordKey {
+	keys := make([]CloudSyncRecordKey, 0, len(records))
+	for _, record := range records {
+		keys = append(keys, CloudSyncRecordKey{
+			EntityType: record.EntityType,
+			PluginID:   record.PluginID,
+			Key:        record.Key,
+			Op:         record.Op,
+		})
+	}
+	return keys
 }
 
 func copyCloudSyncEntityCounts(counts map[string]int) map[string]int {

@@ -53,6 +53,10 @@ func (s *DefaultCloudSyncHistoryStore) Record(ctx context.Context, record CloudS
 	if err != nil {
 		return fmt.Errorf("failed to encode cloud sync history entity counts: %w", err)
 	}
+	recordKeysJSON, err := json.Marshal(record.Keys)
+	if err != nil {
+		return fmt.Errorf("failed to encode cloud sync history record keys: %w", err)
+	}
 
 	row := database.CloudSyncHistory{
 		Operation:        record.Operation,
@@ -63,6 +67,7 @@ func (s *DefaultCloudSyncHistoryStore) Record(ctx context.Context, record CloudS
 		DurationMs:       record.DurationMs,
 		ItemCount:        record.ItemCount,
 		EntityCountsJSON: string(entityCountsJSON),
+		RecordKeysJSON:   string(recordKeysJSON),
 		Error:            record.Error,
 	}
 	if err := db.Create(&row).Error; err != nil {
@@ -91,28 +96,65 @@ func (s *DefaultCloudSyncHistoryStore) ListRecent(ctx context.Context, limit int
 
 	records := make([]CloudSyncHistoryRecord, 0, len(rows))
 	for _, row := range rows {
-		entityCounts := map[string]int{}
-		if row.EntityCountsJSON != "" {
-			if err := json.Unmarshal([]byte(row.EntityCountsJSON), &entityCounts); err != nil {
-				return nil, fmt.Errorf("failed to decode cloud sync history entity counts: %w", err)
-			}
+		record, err := decodeCloudSyncHistoryRow(row)
+		if err != nil {
+			return nil, err
 		}
-
-		records = append(records, CloudSyncHistoryRecord{
-			ID:           row.ID,
-			Operation:    row.Operation,
-			Reason:       row.Reason,
-			Status:       row.Status,
-			StartedAt:    row.StartedAt,
-			FinishedAt:   row.FinishedAt,
-			DurationMs:   row.DurationMs,
-			ItemCount:    row.ItemCount,
-			EntityCounts: entityCounts,
-			Error:        row.Error,
-		})
+		records = append(records, record)
 	}
 
 	return records, nil
+}
+
+// Get returns one local sync history row by id for detail queries.
+func (s *DefaultCloudSyncHistoryStore) Get(ctx context.Context, id uint) (*CloudSyncHistoryRecord, error) {
+	_ = ctx
+
+	db := database.GetDB()
+	if db == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+
+	var row database.CloudSyncHistory
+	if err := db.First(&row, id).Error; err != nil {
+		return nil, err
+	}
+
+	record, err := decodeCloudSyncHistoryRow(row)
+	if err != nil {
+		return nil, err
+	}
+	return &record, nil
+}
+
+func decodeCloudSyncHistoryRow(row database.CloudSyncHistory) (CloudSyncHistoryRecord, error) {
+	entityCounts := map[string]int{}
+	if row.EntityCountsJSON != "" {
+		if err := json.Unmarshal([]byte(row.EntityCountsJSON), &entityCounts); err != nil {
+			return CloudSyncHistoryRecord{}, fmt.Errorf("failed to decode cloud sync history entity counts: %w", err)
+		}
+	}
+
+	recordKeys := []CloudSyncRecordKey{}
+	if row.RecordKeysJSON != "" {
+		if err := json.Unmarshal([]byte(row.RecordKeysJSON), &recordKeys); err != nil {
+			return CloudSyncHistoryRecord{}, fmt.Errorf("failed to decode cloud sync history record keys: %w", err)
+		}
+	}
+
+	return CloudSyncHistoryRecord{
+		ID:           row.ID,
+		Operation:    row.Operation,
+		Reason:       row.Reason,
+		Status:       row.Status,
+		StartedAt:    row.StartedAt,
+		FinishedAt:   row.FinishedAt,
+		DurationMs:   row.DurationMs,
+		ItemCount:    row.ItemCount,
+		EntityCounts: entityCounts,
+		Keys:         recordKeys,
+		Error:        row.Error,
+	}, nil
 }
 
 func (s *DefaultCloudSyncHistoryStore) trimLocked(db *gorm.DB) error {

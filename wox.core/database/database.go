@@ -82,7 +82,8 @@ type CloudSyncHistory struct {
 	FinishedAt       int64
 	DurationMs       int64
 	ItemCount        int
-	EntityCountsJSON string
+	EntityCountsJSON string `gorm:"type:text"`
+	RecordKeysJSON   string `gorm:"type:text"`
 	Error            string
 }
 

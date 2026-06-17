@@ -24,6 +24,9 @@ const (
 	cloudSyncHistoryResultLimit = 10
 	cloudSyncStatusResultScore  = 1000
 	cloudSyncHistoryGroupScore  = 900
+	cloudSyncHistoryDetailScore = 800
+	cloudSyncDefaultQuery       = "sync"
+	cloudSyncHistoryCommand     = "history"
 )
 
 func init() {
@@ -74,6 +77,9 @@ func (p *CloudSyncPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 	if !ok {
 		return plugin.QueryResponse{}
 	}
+	if historyID, ok := parseCloudSyncHistoryDetailQuery(query.Search); ok {
+		return plugin.NewQueryResponse(p.historyDetailResults(ctx, historyID))
+	}
 
 	result := plugin.QueryResult{
 		Title:      p.statusTitle(accountStatus, status),
@@ -96,7 +102,7 @@ func (p *CloudSyncPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 	}
 
 	results := []plugin.QueryResult{result}
-	results = append(results, p.historyResults(ctx)...)
+	results = append(results, p.historyResults(ctx, query)...)
 	return plugin.NewQueryResponse(results)
 }
 
@@ -174,7 +180,7 @@ func (p *CloudSyncPlugin) statusTails(ctx context.Context, accountStatus account
 }
 
 // historyResults appends recent local push/pull attempts without changing sync state or protocol behavior.
-func (p *CloudSyncPlugin) historyResults(ctx context.Context) []plugin.QueryResult {
+func (p *CloudSyncPlugin) historyResults(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	service := cloudsync.GetService()
 	if service == nil || service.HistoryStore == nil {
 		return nil
@@ -188,6 +194,7 @@ func (p *CloudSyncPlugin) historyResults(ctx context.Context) []plugin.QueryResu
 
 	results := make([]plugin.QueryResult, 0, len(records))
 	for index, record := range records {
+		recordID := record.ID
 		results = append(results, plugin.QueryResult{
 			Id:         fmt.Sprintf("cloudsync-history-%d", record.ID),
 			Title:      p.historyTitle(ctx, record),
@@ -197,9 +204,77 @@ func (p *CloudSyncPlugin) historyResults(ctx context.Context) []plugin.QueryResu
 			Group:      "i18n:plugin_cloudsync_history_group",
 			GroupScore: cloudSyncHistoryGroupScore,
 			Tails:      p.historyTails(ctx, record),
+			Actions: []plugin.QueryResultAction{
+				{
+					Name:                   "i18n:plugin_cloudsync_history_action_view_details",
+					Icon:                   common.SearchIcon,
+					IsDefault:              true,
+					PreventHideAfterAction: true,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						p.changeQueryToHistoryDetails(ctx, query, recordID)
+					},
+				},
+			},
 		})
 	}
 	return results
+}
+
+// historyDetailResults renders the keys touched by one history row without exposing synced values.
+func (p *CloudSyncPlugin) historyDetailResults(ctx context.Context, historyID uint) []plugin.QueryResult {
+	service := cloudsync.GetService()
+	if service == nil || service.HistoryStore == nil {
+		return nil
+	}
+
+	record, err := service.HistoryStore.Get(ctx, historyID)
+	if err != nil {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to load cloud sync history detail: %v", err))
+		return []plugin.QueryResult{{
+			Id:         fmt.Sprintf("cloudsync-history-%d-detail-error", historyID),
+			Title:      p.tr(ctx, "plugin_cloudsync_history_detail_not_found"),
+			Icon:       cloudSyncIcon,
+			Score:      cloudSyncHistoryDetailScore,
+			Group:      "i18n:plugin_cloudsync_history_detail_group",
+			GroupScore: cloudSyncHistoryGroupScore,
+		}}
+	}
+
+	if len(record.Keys) == 0 {
+		return []plugin.QueryResult{{
+			Id:         fmt.Sprintf("cloudsync-history-%d-detail-empty", historyID),
+			Title:      p.tr(ctx, "plugin_cloudsync_history_detail_empty"),
+			SubTitle:   p.historySubtitle(ctx, *record),
+			Icon:       p.historyIcon(*record),
+			Score:      cloudSyncHistoryDetailScore,
+			Group:      "i18n:plugin_cloudsync_history_detail_group",
+			GroupScore: cloudSyncHistoryGroupScore,
+		}}
+	}
+
+	results := make([]plugin.QueryResult, 0, len(record.Keys))
+	for index, key := range record.Keys {
+		results = append(results, plugin.QueryResult{
+			Id:         fmt.Sprintf("cloudsync-history-%d-detail-%d", historyID, index),
+			Title:      cloudSyncHistoryKeyTitle(key),
+			SubTitle:   p.historyKeySubtitle(ctx, key),
+			Icon:       p.historyIcon(*record),
+			Score:      cloudSyncHistoryDetailScore - int64(index),
+			Group:      "i18n:plugin_cloudsync_history_detail_group",
+			GroupScore: cloudSyncHistoryGroupScore,
+		})
+	}
+	return results
+}
+
+func (p *CloudSyncPlugin) changeQueryToHistoryDetails(ctx context.Context, query plugin.Query, historyID uint) {
+	if p.api == nil {
+		return
+	}
+	p.api.ChangeQuery(ctx, common.PlainQuery{
+		QueryType: plugin.QueryTypeInput,
+		QueryText: fmt.Sprintf("%s %s %d", cloudSyncQueryKeyword(query), cloudSyncHistoryCommand, historyID),
+	})
 }
 
 // historyIcon gives push and pull rows distinct scan targets while keeping unknown operations on the base sync icon.
@@ -341,6 +416,26 @@ func (p *CloudSyncPlugin) historyEntityLabel(ctx context.Context, entityType str
 	}
 }
 
+func (p *CloudSyncPlugin) historyKeySubtitle(ctx context.Context, key cloudsync.CloudSyncRecordKey) string {
+	parts := []string{p.historyEntityLabel(ctx, key.EntityType)}
+	if key.PluginID != "" {
+		parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_history_label_plugin", p.historyPluginLabel(ctx, key.PluginID)))
+	}
+	if key.Op != "" {
+		parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_history_label_operation", key.Op))
+	}
+	return strings.Join(parts, " | ")
+}
+
+func (p *CloudSyncPlugin) historyPluginLabel(ctx context.Context, pluginID string) string {
+	if instance := plugin.GetPluginManager().GetPluginInstanceById(pluginID); instance != nil {
+		if name := strings.TrimSpace(instance.GetName(ctx)); name != "" {
+			return name
+		}
+	}
+	return pluginID
+}
+
 // historyReasonLabel maps internal trigger reasons to labels a normal user can understand.
 func (p *CloudSyncPlugin) historyReasonLabel(ctx context.Context, reason string) string {
 	switch reason {
@@ -414,6 +509,35 @@ func historyTimestamp(record cloudsync.CloudSyncHistoryRecord) int64 {
 		return record.FinishedAt
 	}
 	return record.StartedAt
+}
+
+func parseCloudSyncHistoryDetailQuery(search string) (uint, bool) {
+	parts := strings.Fields(search)
+	if len(parts) != 2 || parts[0] != cloudSyncHistoryCommand {
+		return 0, false
+	}
+	id, err := strconv.ParseUint(parts[1], 10, 64)
+	if err != nil || id == 0 {
+		return 0, false
+	}
+	return uint(id), true
+}
+
+func cloudSyncQueryKeyword(query plugin.Query) string {
+	if query.TriggerKeyword != "" {
+		return query.TriggerKeyword
+	}
+	return cloudSyncDefaultQuery
+}
+
+func cloudSyncHistoryKeyTitle(key cloudsync.CloudSyncRecordKey) string {
+	if key.Key != "" {
+		return key.Key
+	}
+	if key.PluginID != "" {
+		return key.PluginID
+	}
+	return key.EntityType
 }
 
 // formatHistoryDuration keeps short sync attempts readable without locale-specific formatting.
