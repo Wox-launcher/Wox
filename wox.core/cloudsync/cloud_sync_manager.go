@@ -374,9 +374,15 @@ func (m *CloudSyncManager) applyRecords(ctx context.Context, records []CloudSync
 	disabled := m.disabledPluginSet(ctx)
 	appliedWoxSetting := false
 	appliedPluginSetting := false
+	appliedInstalledPlugin := false
+	appliedInstalledTheme := false
 	for _, record := range records {
-		if record.EntityType == EntityPluginSetting {
-			if _, blocked := disabled[record.PluginID]; blocked {
+		if record.EntityType == EntityPluginSetting || record.EntityType == EntityInstalledPlugin {
+			pluginID := record.PluginID
+			if record.EntityType == EntityInstalledPlugin && pluginID == "" {
+				pluginID = record.Key
+			}
+			if _, blocked := disabled[pluginID]; blocked {
 				continue
 			}
 		}
@@ -405,24 +411,39 @@ func (m *CloudSyncManager) applyRecords(ctx context.Context, records []CloudSync
 				return err
 			}
 			appliedPluginSetting = true
+		case EntityInstalledPlugin:
+			if err := m.applier.ApplyInstalledPlugin(ctx, record.Key, record.Op, rawValue); err != nil {
+				return err
+			}
+			appliedInstalledPlugin = true
+		case EntityInstalledTheme:
+			if err := m.applier.ApplyInstalledTheme(ctx, record.Key, record.Op, rawValue); err != nil {
+				return err
+			}
+			appliedInstalledTheme = true
 		default:
 			util.GetLogger().Warn(ctx, fmt.Sprintf("unknown cloud sync entity type: %s", record.EntityType))
 		}
 	}
 
-	m.reloadAppliedSettings(ctx, appliedWoxSetting, appliedPluginSetting)
+	m.reloadAppliedSettings(ctx, appliedWoxSetting, appliedPluginSetting, appliedInstalledPlugin, appliedInstalledTheme)
 	return nil
 }
 
-func (m *CloudSyncManager) reloadAppliedSettings(ctx context.Context, reloadWoxSettings bool, reloadPluginSettings bool) {
+// reloadAppliedSettings refreshes UI caches once per applied remote batch
+// instead of once per individual record.
+func (m *CloudSyncManager) reloadAppliedSettings(ctx context.Context, reloadWoxSettings bool, reloadPluginSettings bool, reloadInstalledPlugins bool, reloadInstalledThemes bool) {
 	if m.settingReloader == nil {
 		return
 	}
 	if reloadWoxSettings {
 		m.settingReloader.ReloadSetting(ctx)
 	}
-	if reloadPluginSettings {
+	if reloadPluginSettings || reloadInstalledPlugins {
 		m.settingReloader.ReloadSettingPlugins(ctx)
+	}
+	if reloadInstalledThemes {
+		m.settingReloader.ReloadSettingThemes(ctx)
 	}
 }
 
@@ -494,8 +515,12 @@ func (m *CloudSyncManager) filterOplogsByDisabledPlugins(ctx context.Context, op
 	eligible := make([]database.Oplog, 0, len(oplogs))
 	var dropped []uint
 	for _, oplog := range oplogs {
-		if oplog.EntityType == EntityPluginSetting {
-			if _, blocked := disabled[oplog.EntityID]; blocked {
+		if oplog.EntityType == EntityPluginSetting || oplog.EntityType == EntityInstalledPlugin {
+			pluginID := oplog.EntityID
+			if pluginID == "" {
+				pluginID = oplog.Key
+			}
+			if _, blocked := disabled[pluginID]; blocked {
 				dropped = append(dropped, oplog.ID)
 				continue
 			}

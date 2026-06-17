@@ -9,6 +9,7 @@ import (
 	"path"
 	"sync"
 	"time"
+	"wox/cloudsync"
 	"wox/common"
 	"wox/i18n"
 	"wox/util"
@@ -104,9 +105,23 @@ func (s *Store) GetStoreTheme(ctx context.Context, store storeManifest) ([]commo
 }
 
 func (s *Store) Install(ctx context.Context, theme common.Theme) error {
+	return s.install(ctx, theme, true, true)
+}
+
+// InstallLocal installs a theme from cloud sync without selecting it as the
+// active theme; ThemeId sync owns the active-theme choice.
+func (s *Store) InstallLocal(ctx context.Context, theme common.Theme) error {
+	return s.install(ctx, theme, false, false)
+}
+
+// install shares persistence for user installs and cloud restores while
+// controlling whether the theme should be applied and synced.
+func (s *Store) install(ctx context.Context, theme common.Theme, syncInstall bool, applyTheme bool) error {
 	logger.Info(ctx, fmt.Sprintf("start to install theme %s(%s)", theme.ThemeId, theme.ThemeAuthor))
 
 	themePath := path.Join(util.GetLocation().GetThemeDirectory(), fmt.Sprintf("%s.json", theme.ThemeId))
+	theme.IsInstalled = true
+	theme.IsSystem = false
 
 	themeJson, err := json.Marshal(theme)
 	if err != nil {
@@ -118,12 +133,31 @@ func (s *Store) Install(ctx context.Context, theme common.Theme) error {
 		return writeErr
 	}
 
-	GetUIManager().AddTheme(ctx, theme)
+	if applyTheme {
+		GetUIManager().AddTheme(ctx, theme)
+	} else {
+		GetUIManager().themes.Store(theme.ThemeId, theme)
+	}
+	if syncInstall {
+		s.logInstalledThemeUpsert(ctx, theme)
+	}
 
 	return nil
 }
 
 func (s *Store) Uninstall(ctx context.Context, theme common.Theme) error {
+	return s.uninstall(ctx, theme, true)
+}
+
+// UninstallLocal removes a theme from cloud sync without writing a new delete
+// oplog.
+func (s *Store) UninstallLocal(ctx context.Context, theme common.Theme) error {
+	return s.uninstall(ctx, theme, false)
+}
+
+// uninstall shares user and cloud removal paths while controlling whether the
+// removal is synced.
+func (s *Store) uninstall(ctx context.Context, theme common.Theme, syncInstall bool) error {
 	logger.Info(ctx, fmt.Sprintf("uninstalling theme: %s", theme.ThemeName))
 
 	if GetUIManager().IsSystemTheme(theme.ThemeId) {
@@ -132,16 +166,59 @@ func (s *Store) Uninstall(ctx context.Context, theme common.Theme) error {
 
 	themePath := path.Join(util.GetLocation().GetThemeDirectory(), fmt.Sprintf("%s.json", theme.ThemeId))
 
-	removeErr := trash.MoveToTrash(themePath)
-	if removeErr != nil {
-		return removeErr
+	if util.IsFileExists(themePath) {
+		removeErr := trash.MoveToTrash(themePath)
+		if removeErr != nil {
+			return removeErr
+		}
 	}
 
 	GetUIManager().RemoveTheme(ctx, theme)
+	if syncInstall {
+		s.logInstalledThemeDelete(ctx, theme.ThemeId)
+	}
 
 	return nil
 }
 
 func (s *Store) GetThemes() []common.Theme {
 	return s.themes
+}
+
+// QueueInstalledThemesForSync seeds user themes into the oplog during first-time
+// cloud sync bootstrap.
+func (s *Store) QueueInstalledThemesForSync(ctx context.Context) {
+	GetUIManager().themes.Range(func(key string, theme common.Theme) bool {
+		if theme.IsSystem {
+			return true
+		}
+		s.logInstalledThemeUpsert(ctx, theme)
+		return true
+	})
+}
+
+// logInstalledThemeUpsert records full theme JSON so custom themes can restore
+// without relying on the remote theme store.
+func (s *Store) logInstalledThemeUpsert(ctx context.Context, theme common.Theme) {
+	themeJSON, err := json.Marshal(theme)
+	if err != nil {
+		logger.Warn(ctx, fmt.Sprintf("failed to encode installed theme sync value for %s: %s", theme.ThemeId, err.Error()))
+		return
+	}
+	value := cloudsync.InstalledThemeValue{
+		ID:      theme.ThemeId,
+		Version: theme.Version,
+		Source:  cloudsync.InstallSyncSourceUser,
+		Theme:   themeJSON,
+	}
+	if err := cloudsync.LogInstalledThemeUpsert(ctx, value); err != nil {
+		logger.Warn(ctx, fmt.Sprintf("failed to log installed theme sync value for %s: %s", theme.ThemeId, err.Error()))
+	}
+}
+
+// logInstalledThemeDelete records successful user-triggered theme removals.
+func (s *Store) logInstalledThemeDelete(ctx context.Context, themeID string) {
+	if err := cloudsync.LogInstalledThemeDelete(ctx, themeID); err != nil {
+		logger.Warn(ctx, fmt.Sprintf("failed to log installed theme delete for %s: %s", themeID, err.Error()))
+	}
 }

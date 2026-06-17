@@ -111,6 +111,9 @@ type UI interface {
 	// ReloadSetting asks the UI to reload Wox settings from backend.
 	ReloadSetting(ctx context.Context)
 
+	// ReloadSettingThemes asks the UI to refresh theme lists.
+	ReloadSettingThemes(ctx context.Context)
+
 	// RefreshGlance asks the UI to pull the latest Global Glance items. The
 	// backend sends ids only; UI still applies user slot settings before rendering.
 	RefreshGlance(ctx context.Context, pluginId string, ids []string)

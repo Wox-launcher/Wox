@@ -251,6 +251,22 @@ func (a *testCloudSyncApplier) ApplyPluginSetting(ctx context.Context, pluginID 
 	return nil
 }
 
+func (a *testCloudSyncApplier) ApplyInstalledPlugin(ctx context.Context, pluginID string, op string, rawValue string) error {
+	_ = ctx
+	_ = pluginID
+	_ = op
+	_ = rawValue
+	return a.err
+}
+
+func (a *testCloudSyncApplier) ApplyInstalledTheme(ctx context.Context, themeID string, op string, rawValue string) error {
+	_ = ctx
+	_ = themeID
+	_ = op
+	_ = rawValue
+	return a.err
+}
+
 type testCloudSyncOplogStore struct {
 	pending []database.Oplog
 	synced  []uint

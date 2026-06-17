@@ -243,6 +243,22 @@ func (a *routerCloudSyncApplier) ApplyPluginSetting(ctx context.Context, pluginI
 	return nil
 }
 
+func (a *routerCloudSyncApplier) ApplyInstalledPlugin(ctx context.Context, pluginID string, op string, rawValue string) error {
+	_ = ctx
+	_ = pluginID
+	_ = op
+	_ = rawValue
+	return nil
+}
+
+func (a *routerCloudSyncApplier) ApplyInstalledTheme(ctx context.Context, themeID string, op string, rawValue string) error {
+	_ = ctx
+	_ = themeID
+	_ = op
+	_ = rawValue
+	return nil
+}
+
 type routerCloudSyncOplogStore struct{}
 
 func (s *routerCloudSyncOplogStore) LoadPending(ctx context.Context, limit int) ([]database.Oplog, error) {

@@ -56,10 +56,20 @@ func initCloudSync(ctx context.Context) {
 		DeviceProvider: deviceProvider,
 	}
 	cloudsync.SetService(service)
+}
+
+// startCloudSyncManagerIfReady starts background sync after plugins and UI are
+// ready enough to apply install-list records safely.
+func startCloudSyncManagerIfReady(ctx context.Context) {
+	service := cloudsync.GetService()
+	accountService := account.GetService()
+	if service == nil || service.Manager == nil || service.KeyManager == nil || accountService == nil {
+		return
+	}
 
 	accountStatus := accountService.Status(ctx)
-	if accountStatus.LoggedIn && accountStatus.SyncEligible && accountStatus.SyncEnabled && keyManager.GetStatus(ctx).Available {
-		manager.Start(ctx)
+	if accountStatus.LoggedIn && accountStatus.SyncEligible && accountStatus.SyncEnabled && service.KeyManager.GetStatus(ctx).Available {
+		service.StartManager(ctx)
 	}
 }
 

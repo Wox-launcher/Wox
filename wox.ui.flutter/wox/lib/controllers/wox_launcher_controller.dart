@@ -3091,6 +3091,9 @@ class WoxLauncherController extends GetxController {
     } else if (msg.method == "ReloadSetting") {
       await Get.find<WoxSettingController>().reloadSetting(msg.traceId);
       responseWoxWebsocketRequest(msg, true, null);
+    } else if (msg.method == "ReloadSettingThemes") {
+      await Get.find<WoxSettingController>().refreshThemeList();
+      responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "RefreshAccountStatus") {
       unawaited(refreshAccountStatusAfterBillingDeeplink(msg.traceId));
       responseWoxWebsocketRequest(msg, true, null);

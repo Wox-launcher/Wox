@@ -264,6 +264,10 @@ func (u *uiImpl) ReloadSetting(ctx context.Context) {
 	u.invokeWebsocketMethod(ctx, "ReloadSetting", nil)
 }
 
+func (u *uiImpl) ReloadSettingThemes(ctx context.Context) {
+	u.invokeWebsocketMethod(ctx, "ReloadSettingThemes", nil)
+}
+
 func (u *uiImpl) RefreshAccountStatus(ctx context.Context) {
 	u.invokeWebsocketMethod(ctx, "RefreshAccountStatus", nil)
 }

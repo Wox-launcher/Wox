@@ -2,14 +2,20 @@ package cloudsync
 
 import (
 	"context"
+	"encoding/json"
 	"wox/database"
 )
 
 const (
-	EntityWoxSetting    = "wox_setting"
-	EntityPluginSetting = "plugin_setting"
-	OpUpsert            = "upsert"
-	OpDelete            = "delete"
+	EntityWoxSetting      = "wox_setting"
+	EntityPluginSetting   = "plugin_setting"
+	EntityInstalledPlugin = "installed_plugin"
+	EntityInstalledTheme  = "installed_theme"
+	OpUpsert              = "upsert"
+	OpDelete              = "delete"
+
+	InstallSyncSourceStore = "store"
+	InstallSyncSourceUser  = "user"
 )
 
 type CloudSyncEncryptedValue struct {
@@ -93,6 +99,8 @@ type CloudSyncCrypto interface {
 type CloudSyncApplier interface {
 	ApplyWoxSetting(ctx context.Context, key string, op string, rawValue string) error
 	ApplyPluginSetting(ctx context.Context, pluginID string, key string, op string, rawValue string) error
+	ApplyInstalledPlugin(ctx context.Context, pluginID string, op string, rawValue string) error
+	ApplyInstalledTheme(ctx context.Context, themeID string, op string, rawValue string) error
 }
 
 // CloudSyncSettingReloader lets the sync manager refresh UI-side cached settings
@@ -100,6 +108,25 @@ type CloudSyncApplier interface {
 type CloudSyncSettingReloader interface {
 	ReloadSetting(ctx context.Context)
 	ReloadSettingPlugins(ctx context.Context)
+	ReloadSettingThemes(ctx context.Context)
+}
+
+// InstalledPluginValue stores enough source data to reproduce a store plugin
+// installation on another device.
+type InstalledPluginValue struct {
+	ID       string          `json:"id"`
+	Version  string          `json:"version,omitempty"`
+	Source   string          `json:"source,omitempty"`
+	Manifest json.RawMessage `json:"manifest,omitempty"`
+}
+
+// InstalledThemeValue stores the full theme payload so user-edited themes can
+// be restored without depending on the remote theme store.
+type InstalledThemeValue struct {
+	ID      string          `json:"id"`
+	Version string          `json:"version,omitempty"`
+	Source  string          `json:"source,omitempty"`
+	Theme   json.RawMessage `json:"theme,omitempty"`
 }
 
 type CloudSyncKDF struct {
