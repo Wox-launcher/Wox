@@ -95,6 +95,13 @@ type CloudSyncApplier interface {
 	ApplyPluginSetting(ctx context.Context, pluginID string, key string, op string, rawValue string) error
 }
 
+// CloudSyncSettingReloader lets the sync manager refresh UI-side cached settings
+// after remote records have been applied locally.
+type CloudSyncSettingReloader interface {
+	ReloadSetting(ctx context.Context)
+	ReloadSettingPlugins(ctx context.Context)
+}
+
 type CloudSyncKDF struct {
 	Alg         string `json:"alg"`
 	Version     int    `json:"version"`

@@ -39,17 +39,19 @@ type CloudSyncDependencies struct {
 	OplogStore        CloudSyncOplogStore
 	Notifier          CloudSyncChangeNotifier
 	ExclusionProvider CloudSyncPluginExclusionProvider
+	SettingReloader   CloudSyncSettingReloader
 }
 
 type CloudSyncManager struct {
-	config         CloudSyncConfig
-	client         CloudSyncClient
-	crypto         CloudSyncCrypto
-	deviceProvider CloudSyncDeviceProvider
-	applier        CloudSyncApplier
-	oplogStore     CloudSyncOplogStore
-	notifier       CloudSyncChangeNotifier
-	exclusions     CloudSyncPluginExclusionProvider
+	config          CloudSyncConfig
+	client          CloudSyncClient
+	crypto          CloudSyncCrypto
+	deviceProvider  CloudSyncDeviceProvider
+	applier         CloudSyncApplier
+	oplogStore      CloudSyncOplogStore
+	notifier        CloudSyncChangeNotifier
+	exclusions      CloudSyncPluginExclusionProvider
+	settingReloader CloudSyncSettingReloader
 
 	mu        sync.Mutex
 	pushMu    sync.Mutex
@@ -64,15 +66,16 @@ type CloudSyncManager struct {
 func NewCloudSyncManager(config CloudSyncConfig, deps CloudSyncDependencies) *CloudSyncManager {
 	normalized := normalizeCloudSyncConfig(config)
 	return &CloudSyncManager{
-		config:         normalized,
-		client:         deps.Client,
-		crypto:         deps.Crypto,
-		deviceProvider: deps.DeviceProvider,
-		applier:        deps.Applier,
-		oplogStore:     deps.OplogStore,
-		notifier:       deps.Notifier,
-		exclusions:     deps.ExclusionProvider,
-		rand:           rand.New(rand.NewSource(time.Now().UnixNano())),
+		config:          normalized,
+		client:          deps.Client,
+		crypto:          deps.Crypto,
+		deviceProvider:  deps.DeviceProvider,
+		applier:         deps.Applier,
+		oplogStore:      deps.OplogStore,
+		notifier:        deps.Notifier,
+		exclusions:      deps.ExclusionProvider,
+		settingReloader: deps.SettingReloader,
+		rand:            rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 
@@ -369,6 +372,8 @@ func (m *CloudSyncManager) RestoreSnapshot(ctx context.Context) error {
 
 func (m *CloudSyncManager) applyRecords(ctx context.Context, records []CloudSyncRecord) error {
 	disabled := m.disabledPluginSet(ctx)
+	appliedWoxSetting := false
+	appliedPluginSetting := false
 	for _, record := range records {
 		if record.EntityType == EntityPluginSetting {
 			if _, blocked := disabled[record.PluginID]; blocked {
@@ -394,16 +399,31 @@ func (m *CloudSyncManager) applyRecords(ctx context.Context, records []CloudSync
 			if err := m.applier.ApplyWoxSetting(ctx, record.Key, record.Op, rawValue); err != nil {
 				return err
 			}
+			appliedWoxSetting = true
 		case EntityPluginSetting:
 			if err := m.applier.ApplyPluginSetting(ctx, record.PluginID, record.Key, record.Op, rawValue); err != nil {
 				return err
 			}
+			appliedPluginSetting = true
 		default:
 			util.GetLogger().Warn(ctx, fmt.Sprintf("unknown cloud sync entity type: %s", record.EntityType))
 		}
 	}
 
+	m.reloadAppliedSettings(ctx, appliedWoxSetting, appliedPluginSetting)
 	return nil
+}
+
+func (m *CloudSyncManager) reloadAppliedSettings(ctx context.Context, reloadWoxSettings bool, reloadPluginSettings bool) {
+	if m.settingReloader == nil {
+		return
+	}
+	if reloadWoxSettings {
+		m.settingReloader.ReloadSetting(ctx)
+	}
+	if reloadPluginSettings {
+		m.settingReloader.ReloadSettingPlugins(ctx)
+	}
 }
 
 func (m *CloudSyncManager) buildPushBatch(ctx context.Context, oplogs []database.Oplog) ([]CloudSyncChange, []uint, error) {

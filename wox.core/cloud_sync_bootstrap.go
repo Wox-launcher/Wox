@@ -7,6 +7,7 @@ import (
 	"wox/cloudsync"
 	"wox/cloudsync/settingadapter"
 	"wox/setting"
+	"wox/ui"
 	"wox/updater"
 	"wox/util"
 )
@@ -45,6 +46,7 @@ func initCloudSync(ctx context.Context) {
 		OplogStore:        cloudsync.NewDefaultOplogStore(),
 		Notifier:          settingadapter.NewCloudSyncOplogNotifier(),
 		ExclusionProvider: settingadapter.NewCloudSyncPluginExclusionProvider(),
+		SettingReloader:   ui.GetUIManager().GetUI(ctx),
 	})
 
 	service := &cloudsync.Service{
