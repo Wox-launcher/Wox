@@ -121,6 +121,7 @@ func (m *CloudSyncManager) Start(ctx context.Context) {
 
 	util.Go(runCtx, "cloud sync initial pull", func() {
 		m.Pull(runCtx, "startup")
+		m.PushMissingLocalSnapshot(runCtx, "startup-missing-keys")
 	})
 
 	util.Go(runCtx, "cloud sync pull ticker", func() {
@@ -193,6 +194,51 @@ func (m *CloudSyncManager) PushLocalSnapshot(ctx context.Context, reason string)
 	m.setProgress(CloudSyncProgress{Operation: CloudSyncProgressOperationSnapshot})
 	if err := m.snapshotter.EnqueueLocalSnapshot(ctx); err != nil {
 		m.recordFailure(ctx, fmt.Errorf("failed to enqueue local snapshot: %w", err))
+		m.clearProgress(CloudSyncProgressOperationSnapshot)
+		return
+	}
+
+	m.clearProgress(CloudSyncProgressOperationSnapshot)
+	m.pushPendingLocked(ctx, reason)
+}
+
+// PushMissingLocalSnapshot uploads persisted local records whose identities do not exist on the server yet.
+func (m *CloudSyncManager) PushMissingLocalSnapshot(ctx context.Context, reason string) {
+	m.pushMu.Lock()
+	defer m.pushMu.Unlock()
+
+	if err := m.ensureConfigured(); err != nil {
+		m.recordFailure(ctx, err)
+		return
+	}
+	if m.snapshotter == nil {
+		m.recordFailure(ctx, fmt.Errorf("cloud sync local snapshotter not configured"))
+		return
+	}
+
+	if m.isBackoffActive(ctx) {
+		return
+	}
+
+	deviceId, err := m.deviceProvider.DeviceID(ctx)
+	if err != nil {
+		m.recordFailure(ctx, fmt.Errorf("failed to get device id: %w", err))
+		return
+	}
+
+	resp, err := m.client.ListRecordKeys(ctx, CloudSyncRecordKeyListRequest{DeviceID: deviceId})
+	if err != nil {
+		m.recordFailure(ctx, fmt.Errorf("cloud sync record key list failed: %w", err))
+		return
+	}
+	var remoteKeys []CloudSyncRecordKey
+	if resp != nil {
+		remoteKeys = resp.Keys
+	}
+
+	m.setProgress(CloudSyncProgress{Operation: CloudSyncProgressOperationSnapshot})
+	if err := m.snapshotter.EnqueueMissingLocalSnapshot(ctx, remoteKeys); err != nil {
+		m.recordFailure(ctx, fmt.Errorf("failed to enqueue missing local snapshot: %w", err))
 		m.clearProgress(CloudSyncProgressOperationSnapshot)
 		return
 	}

@@ -88,10 +88,26 @@ type CloudSyncPullResponse struct {
 	HasMore    bool              `json:"has_more"`
 }
 
+type CloudSyncRecordKey struct {
+	EntityType string `json:"entity_type"`
+	PluginID   string `json:"plugin_id"`
+	Key        string `json:"key"`
+	Op         string `json:"op"`
+}
+
+type CloudSyncRecordKeyListRequest struct {
+	DeviceID string `json:"device_id"`
+}
+
+type CloudSyncRecordKeyListResponse struct {
+	Keys []CloudSyncRecordKey `json:"keys"`
+}
+
 type CloudSyncClient interface {
 	Push(ctx context.Context, req CloudSyncPushRequest) (*CloudSyncPushResponse, error)
 	Pull(ctx context.Context, req CloudSyncPullRequest) (*CloudSyncPullResponse, error)
 	Snapshot(ctx context.Context, req CloudSyncPullRequest) (*CloudSyncPullResponse, error)
+	ListRecordKeys(ctx context.Context, req CloudSyncRecordKeyListRequest) (*CloudSyncRecordKeyListResponse, error)
 }
 
 type CloudSyncKeyClient interface {
@@ -202,6 +218,7 @@ type CloudSyncPendingCounter interface {
 
 type CloudSyncLocalSnapshotter interface {
 	EnqueueLocalSnapshot(ctx context.Context) error
+	EnqueueMissingLocalSnapshot(ctx context.Context, remoteKeys []CloudSyncRecordKey) error
 }
 
 type CloudSyncChangeNotifier interface {

@@ -185,8 +185,7 @@ func (s *Store) GetThemes() []common.Theme {
 	return s.themes
 }
 
-// QueueInstalledThemesForSync seeds user themes into the oplog during first-time
-// cloud sync bootstrap.
+// QueueInstalledThemesForSync seeds user themes into the oplog.
 func (s *Store) QueueInstalledThemesForSync(ctx context.Context) {
 	GetUIManager().themes.Range(func(key string, theme common.Theme) bool {
 		if theme.IsSystem {

@@ -120,6 +120,14 @@ func (c *CloudSyncHTTPClient) Snapshot(ctx context.Context, req CloudSyncPullReq
 	return &resp, nil
 }
 
+func (c *CloudSyncHTTPClient) ListRecordKeys(ctx context.Context, req CloudSyncRecordKeyListRequest) (*CloudSyncRecordKeyListResponse, error) {
+	var resp CloudSyncRecordKeyListResponse
+	if err := c.post(ctx, "/v1/sync/record-keys", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 func (c *CloudSyncHTTPClient) Status(ctx context.Context) (CloudSyncKeyStatus, error) {
 	var resp CloudSyncKeyStatus
 	if err := c.post(ctx, "/v1/sync/key/status", map[string]any{}, &resp); err != nil {

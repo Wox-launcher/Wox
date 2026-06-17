@@ -196,6 +196,12 @@ func (c *testCloudSyncClient) Snapshot(ctx context.Context, req CloudSyncPullReq
 	return resp, nil
 }
 
+func (c *testCloudSyncClient) ListRecordKeys(ctx context.Context, req CloudSyncRecordKeyListRequest) (*CloudSyncRecordKeyListResponse, error) {
+	_ = ctx
+	_ = req
+	return &CloudSyncRecordKeyListResponse{}, nil
+}
+
 type testCloudSyncCrypto struct{}
 
 func (testCloudSyncCrypto) Encrypt(ctx context.Context, plaintext string, aad string) (*CloudSyncEncryptedValue, error) {

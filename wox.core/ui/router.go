@@ -1803,7 +1803,6 @@ func scheduleCloudSyncBootstrapInitialPush(ctx context.Context, service *cloudsy
 			return
 		}
 
-		queueInstalledAssetsForCloudSync(ctx)
 		service.Manager.PushLocalSnapshot(ctx, "bootstrap")
 		state, err := cloudsync.LoadCloudSyncState(ctx)
 		if err != nil {
@@ -1816,13 +1815,6 @@ func scheduleCloudSyncBootstrapInitialPush(ctx context.Context, service *cloudsy
 		}
 		cloudsync.MarkCloudSyncBootstrapComplete(ctx)
 	})
-}
-
-// queueInstalledAssetsForCloudSync snapshots current install-list state before
-// the first bootstrap push so existing plugins and themes are represented.
-func queueInstalledAssetsForCloudSync(ctx context.Context) {
-	plugin.GetStoreManager().QueueInstalledPluginsForSync(ctx)
-	GetStoreManager().QueueInstalledThemesForSync(ctx)
 }
 
 func ensureSyncBootstrapAllowed(ctx context.Context) error {

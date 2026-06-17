@@ -170,6 +170,12 @@ func (c *routerCloudSyncClient) Snapshot(ctx context.Context, req cloudsync.Clou
 	return &cloudsync.CloudSyncPullResponse{}, nil
 }
 
+func (c *routerCloudSyncClient) ListRecordKeys(ctx context.Context, req cloudsync.CloudSyncRecordKeyListRequest) (*cloudsync.CloudSyncRecordKeyListResponse, error) {
+	_ = ctx
+	_ = req
+	return &cloudsync.CloudSyncRecordKeyListResponse{}, nil
+}
+
 type routerCloudSyncKeyClient struct {
 	status    cloudsync.CloudSyncKeyStatus
 	initCalls int
@@ -278,6 +284,12 @@ type routerCloudSyncSnapshotter struct{}
 
 func (routerCloudSyncSnapshotter) EnqueueLocalSnapshot(ctx context.Context) error {
 	_ = ctx
+	return nil
+}
+
+func (routerCloudSyncSnapshotter) EnqueueMissingLocalSnapshot(ctx context.Context, remoteKeys []cloudsync.CloudSyncRecordKey) error {
+	_ = ctx
+	_ = remoteKeys
 	return nil
 }
 

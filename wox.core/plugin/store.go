@@ -266,8 +266,7 @@ func (s *Store) GetStorePluginManifestById(ctx context.Context, id string) (Stor
 	return StorePluginManifest{}, fmt.Errorf("plugin %s not found", id)
 }
 
-// QueueInstalledPluginsForSync seeds current store-installed plugins into the
-// oplog during first-time cloud sync bootstrap.
+// QueueInstalledPluginsForSync seeds current store-installed plugins into the oplog.
 func (s *Store) QueueInstalledPluginsForSync(ctx context.Context) {
 	for _, instance := range GetPluginManager().GetPluginInstances() {
 		if instance.IsSystemPlugin || instance.IsDevPlugin || s.isCloudSyncDisabled(ctx, instance.Metadata.Id) {
