@@ -280,6 +280,12 @@ func (s *routerCloudSyncOplogStore) MarkSynced(ctx context.Context, ids []uint) 
 	return nil
 }
 
+func (s *routerCloudSyncOplogStore) MarkPushFailed(ctx context.Context, failures []cloudsync.CloudSyncOplogPushFailure) error {
+	_ = ctx
+	_ = failures
+	return nil
+}
+
 type routerCloudSyncSnapshotter struct{}
 
 func (routerCloudSyncSnapshotter) EnqueueLocalSnapshot(ctx context.Context) error {

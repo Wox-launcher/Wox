@@ -266,7 +266,11 @@ type testCloudSyncClient struct {
 func (c *testCloudSyncClient) Push(ctx context.Context, req CloudSyncPushRequest) (*CloudSyncPushResponse, error) {
 	_ = ctx
 	c.pushRequests = append(c.pushRequests, req)
-	return &CloudSyncPushResponse{NextCursor: "pushed"}, nil
+	applied := make([]CloudSyncAppliedChange, 0, len(req.Changes))
+	for _, change := range req.Changes {
+		applied = append(applied, CloudSyncAppliedChange{ChangeID: change.ChangeID, Status: "ok"})
+	}
+	return &CloudSyncPushResponse{Applied: applied, NextCursor: "pushed"}, nil
 }
 
 func (c *testCloudSyncClient) Pull(ctx context.Context, req CloudSyncPullRequest) (*CloudSyncPullResponse, error) {
@@ -364,8 +368,9 @@ func (a *testCloudSyncApplier) ApplyInstalledTheme(ctx context.Context, themeID 
 }
 
 type testCloudSyncOplogStore struct {
-	pending []database.Oplog
-	synced  []uint
+	pending  []database.Oplog
+	synced   []uint
+	failures []CloudSyncOplogPushFailure
 }
 
 type testCloudSyncSnapshotter struct{}
@@ -430,6 +435,12 @@ func (s *testCloudSyncOplogStore) LoadPending(ctx context.Context, limit int) ([
 func (s *testCloudSyncOplogStore) MarkSynced(ctx context.Context, ids []uint) error {
 	_ = ctx
 	s.synced = append(s.synced, ids...)
+	return nil
+}
+
+func (s *testCloudSyncOplogStore) MarkPushFailed(ctx context.Context, failures []CloudSyncOplogPushFailure) error {
+	_ = ctx
+	s.failures = append(s.failures, failures...)
 	return nil
 }
 

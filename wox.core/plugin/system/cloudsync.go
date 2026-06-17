@@ -240,7 +240,7 @@ func (p *CloudSyncPlugin) historyDetailResults(ctx context.Context, historyID ui
 		}}
 	}
 
-	if len(record.Keys) == 0 {
+	if len(record.Details) == 0 {
 		return []plugin.QueryResult{{
 			Id:         fmt.Sprintf("cloudsync-history-%d-detail-empty", historyID),
 			Title:      p.tr(ctx, "plugin_cloudsync_history_detail_empty"),
@@ -252,16 +252,17 @@ func (p *CloudSyncPlugin) historyDetailResults(ctx context.Context, historyID ui
 		}}
 	}
 
-	results := make([]plugin.QueryResult, 0, len(record.Keys))
-	for index, key := range record.Keys {
+	results := make([]plugin.QueryResult, 0, len(record.Details))
+	for index, detail := range record.Details {
 		results = append(results, plugin.QueryResult{
 			Id:         fmt.Sprintf("cloudsync-history-%d-detail-%d", historyID, index),
-			Title:      cloudSyncHistoryKeyTitle(key),
-			SubTitle:   p.historyKeySubtitle(ctx, key),
+			Title:      p.historyDetailTitle(ctx, detail),
+			SubTitle:   p.historyDetailSubtitle(ctx, detail),
 			Icon:       p.historyIcon(*record),
 			Score:      cloudSyncHistoryDetailScore - int64(index),
 			Group:      "i18n:plugin_cloudsync_history_detail_group",
 			GroupScore: cloudSyncHistoryGroupScore,
+			Tails:      p.historyDetailTails(ctx, detail),
 		})
 	}
 	return results
@@ -294,6 +295,8 @@ func (p *CloudSyncPlugin) historyTitle(ctx context.Context, record cloudsync.Clo
 	switch {
 	case record.Operation == cloudsync.CloudSyncProgressOperationPush && record.Status == cloudsync.CloudSyncHistoryStatusSucceeded:
 		return p.tr(ctx, "plugin_cloudsync_history_push_succeeded")
+	case record.Operation == cloudsync.CloudSyncProgressOperationPush && record.Status == cloudsync.CloudSyncHistoryStatusPartialSucceeded:
+		return p.tr(ctx, "plugin_cloudsync_history_push_partial_succeeded")
 	case record.Operation == cloudsync.CloudSyncProgressOperationPush && record.Status == cloudsync.CloudSyncHistoryStatusFailed:
 		return p.tr(ctx, "plugin_cloudsync_history_push_failed")
 	case record.Operation == cloudsync.CloudSyncProgressOperationPull && record.Status == cloudsync.CloudSyncHistoryStatusSucceeded:
@@ -319,8 +322,8 @@ func (p *CloudSyncPlugin) historySubtitle(ctx context.Context, record cloudsync.
 	}
 	parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_history_label_time", p.formatTimestamp(ctx, historyTimestamp(record))))
 	parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_history_label_duration", formatHistoryDuration(record.DurationMs)))
-	if record.Status == cloudsync.CloudSyncHistoryStatusFailed && record.Error != "" {
-		parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_label_error", truncateCloudSyncHistoryError(record.Error)))
+	if record.Status != cloudsync.CloudSyncHistoryStatusSucceeded && record.Error != "" {
+		parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_label_error", formatCloudSyncHistoryError(record.Error)))
 	}
 
 	return strings.Join(parts, " | ")
@@ -330,6 +333,9 @@ func (p *CloudSyncPlugin) historySubtitle(ctx context.Context, record cloudsync.
 func (p *CloudSyncPlugin) historyTails(ctx context.Context, record cloudsync.CloudSyncHistoryRecord) []plugin.QueryResultTail {
 	if record.Status == cloudsync.CloudSyncHistoryStatusFailed {
 		return []plugin.QueryResultTail{plugin.NewQueryResultTailTextWithCategory(p.tr(ctx, "plugin_cloudsync_history_tail_failed"), plugin.QueryResultTailTextCategoryDanger)}
+	}
+	if record.Status == cloudsync.CloudSyncHistoryStatusPartialSucceeded {
+		return []plugin.QueryResultTail{plugin.NewQueryResultTailTextWithCategory(p.tr(ctx, "plugin_cloudsync_history_tail_partial_succeeded"), plugin.QueryResultTailTextCategoryWarning)}
 	}
 	return []plugin.QueryResultTail{plugin.NewQueryResultTailTextWithCategory(p.tr(ctx, "plugin_cloudsync_history_tail_succeeded"), plugin.QueryResultTailTextCategorySuccess)}
 }
@@ -416,15 +422,40 @@ func (p *CloudSyncPlugin) historyEntityLabel(ctx context.Context, entityType str
 	}
 }
 
-func (p *CloudSyncPlugin) historyKeySubtitle(ctx context.Context, key cloudsync.CloudSyncRecordKey) string {
-	parts := []string{p.historyEntityLabel(ctx, key.EntityType)}
-	if key.PluginID != "" {
-		parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_history_label_plugin", p.historyPluginLabel(ctx, key.PluginID)))
+func (p *CloudSyncPlugin) historyDetailSubtitle(ctx context.Context, detail cloudsync.CloudSyncHistoryRecordDetail) string {
+	parts := []string{p.historyEntityLabel(ctx, detail.EntityType)}
+	if detail.PluginID != "" {
+		parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_history_label_plugin", p.historyPluginLabel(ctx, detail.PluginID)))
 	}
-	if key.Op != "" {
-		parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_history_label_operation", key.Op))
+	if detail.Op != "" {
+		parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_history_label_operation", detail.Op))
+	}
+	if detail.Status != "" {
+		parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_history_label_status", p.historyDetailStatusLabel(ctx, detail.Status)))
+	}
+	if detail.Error != "" {
+		parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_label_error", formatCloudSyncHistoryError(detail.Error)))
 	}
 	return strings.Join(parts, " | ")
+}
+
+func (p *CloudSyncPlugin) historyDetailStatusLabel(ctx context.Context, status string) string {
+	switch status {
+	case cloudsync.CloudSyncHistoryStatusSucceeded:
+		return p.tr(ctx, "plugin_cloudsync_history_tail_succeeded")
+	case cloudsync.CloudSyncHistoryStatusFailed:
+		return p.tr(ctx, "plugin_cloudsync_history_tail_failed")
+	default:
+		return status
+	}
+}
+
+// historyDetailTails mirrors the per-record outcome instead of the aggregate history status.
+func (p *CloudSyncPlugin) historyDetailTails(ctx context.Context, detail cloudsync.CloudSyncHistoryRecordDetail) []plugin.QueryResultTail {
+	if detail.Status == cloudsync.CloudSyncHistoryStatusFailed {
+		return []plugin.QueryResultTail{plugin.NewQueryResultTailTextWithCategory(p.tr(ctx, "plugin_cloudsync_history_tail_failed"), plugin.QueryResultTailTextCategoryDanger)}
+	}
+	return []plugin.QueryResultTail{plugin.NewQueryResultTailTextWithCategory(p.tr(ctx, "plugin_cloudsync_history_tail_succeeded"), plugin.QueryResultTailTextCategorySuccess)}
 }
 
 func (p *CloudSyncPlugin) historyPluginLabel(ctx context.Context, pluginID string) string {
@@ -447,8 +478,12 @@ func (p *CloudSyncPlugin) historyReasonLabel(ctx context.Context, reason string)
 		return p.tr(ctx, "plugin_cloudsync_history_reason_startup_missing_keys")
 	case "periodic":
 		return p.tr(ctx, "plugin_cloudsync_history_reason_periodic")
-	case "first", "tick":
-		return p.tr(ctx, "plugin_cloudsync_history_reason_auto")
+	case "deferred-push":
+		return p.tr(ctx, "plugin_cloudsync_history_reason_deferred_push")
+	case "first":
+		return p.tr(ctx, "plugin_cloudsync_history_reason_first")
+	case "tick":
+		return p.tr(ctx, "plugin_cloudsync_history_reason_tick")
 	case "bootstrap":
 		return p.tr(ctx, "plugin_cloudsync_history_reason_bootstrap")
 	case "done":
@@ -530,14 +565,17 @@ func cloudSyncQueryKeyword(query plugin.Query) string {
 	return cloudSyncDefaultQuery
 }
 
-func cloudSyncHistoryKeyTitle(key cloudsync.CloudSyncRecordKey) string {
-	if key.Key != "" {
-		return key.Key
+func (p *CloudSyncPlugin) historyDetailTitle(ctx context.Context, detail cloudsync.CloudSyncHistoryRecordDetail) string {
+	if detail.EntityType == cloudsync.EntityInstalledPlugin && detail.Key != "" {
+		return p.historyPluginLabel(ctx, detail.Key)
 	}
-	if key.PluginID != "" {
-		return key.PluginID
+	if detail.Key != "" {
+		return detail.Key
 	}
-	return key.EntityType
+	if detail.PluginID != "" {
+		return detail.PluginID
+	}
+	return detail.EntityType
 }
 
 // formatHistoryDuration keeps short sync attempts readable without locale-specific formatting.
@@ -559,4 +597,32 @@ func truncateCloudSyncHistoryError(message string) string {
 		return message
 	}
 	return string(runes[:maxErrorLength]) + "..."
+}
+
+func formatCloudSyncHistoryError(message string) string {
+	return truncateCloudSyncHistoryError(stripCloudSyncHistoryErrorCode(message))
+}
+
+func stripCloudSyncHistoryErrorCode(message string) string {
+	parts := strings.SplitN(message, ": ", 2)
+	if len(parts) != 2 {
+		return message
+	}
+	if isCloudSyncErrorCode(parts[0]) {
+		return parts[1]
+	}
+	return message
+}
+
+func isCloudSyncErrorCode(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' {
+			continue
+		}
+		return false
+	}
+	return true
 }

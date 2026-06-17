@@ -53,7 +53,11 @@ func (s *DefaultCloudSyncHistoryStore) Record(ctx context.Context, record CloudS
 	if err != nil {
 		return fmt.Errorf("failed to encode cloud sync history entity counts: %w", err)
 	}
-	recordKeysJSON, err := json.Marshal(record.Keys)
+	details := record.Details
+	if len(details) == 0 {
+		details = cloudSyncHistoryDetailsFromKeys(record.Keys, record.Status)
+	}
+	recordKeysJSON, err := json.Marshal(details)
 	if err != nil {
 		return fmt.Errorf("failed to encode cloud sync history record keys: %w", err)
 	}
@@ -135,14 +139,15 @@ func decodeCloudSyncHistoryRow(row database.CloudSyncHistory) (CloudSyncHistoryR
 		}
 	}
 
-	recordKeys := []CloudSyncRecordKey{}
+	recordDetails := []CloudSyncHistoryRecordDetail{}
 	if row.RecordKeysJSON != "" {
-		if err := json.Unmarshal([]byte(row.RecordKeysJSON), &recordKeys); err != nil {
+		if err := json.Unmarshal([]byte(row.RecordKeysJSON), &recordDetails); err != nil {
 			return CloudSyncHistoryRecord{}, fmt.Errorf("failed to decode cloud sync history record keys: %w", err)
 		}
 	}
+	recordKeys := cloudSyncHistoryKeysFromDetails(recordDetails)
 
-	return CloudSyncHistoryRecord{
+	record := CloudSyncHistoryRecord{
 		ID:           row.ID,
 		Operation:    row.Operation,
 		Reason:       row.Reason,
@@ -153,8 +158,57 @@ func decodeCloudSyncHistoryRow(row database.CloudSyncHistory) (CloudSyncHistoryR
 		ItemCount:    row.ItemCount,
 		EntityCounts: entityCounts,
 		Keys:         recordKeys,
+		Details:      recordDetails,
 		Error:        row.Error,
-	}, nil
+	}
+	record.Details = normalizeCloudSyncHistoryDetails(record.Details, record.Status)
+	return record, nil
+}
+
+// cloudSyncHistoryDetailsFromKeys upgrades legacy key-only history rows to item details.
+func cloudSyncHistoryDetailsFromKeys(keys []CloudSyncRecordKey, status string) []CloudSyncHistoryRecordDetail {
+	details := make([]CloudSyncHistoryRecordDetail, 0, len(keys))
+	for _, key := range keys {
+		details = append(details, CloudSyncHistoryRecordDetail{
+			EntityType: key.EntityType,
+			PluginID:   key.PluginID,
+			Key:        key.Key,
+			Op:         key.Op,
+			Status:     normalizeCloudSyncHistoryDetailStatus(status),
+		})
+	}
+	return details
+}
+
+// cloudSyncHistoryKeysFromDetails preserves the old Keys API for existing callers.
+func cloudSyncHistoryKeysFromDetails(details []CloudSyncHistoryRecordDetail) []CloudSyncRecordKey {
+	keys := make([]CloudSyncRecordKey, 0, len(details))
+	for _, detail := range details {
+		keys = append(keys, CloudSyncRecordKey{
+			EntityType: detail.EntityType,
+			PluginID:   detail.PluginID,
+			Key:        detail.Key,
+			Op:         detail.Op,
+		})
+	}
+	return keys
+}
+
+// normalizeCloudSyncHistoryDetails fills status for rows written before item-level outcomes existed.
+func normalizeCloudSyncHistoryDetails(details []CloudSyncHistoryRecordDetail, recordStatus string) []CloudSyncHistoryRecordDetail {
+	for i := range details {
+		if details[i].Status == "" {
+			details[i].Status = normalizeCloudSyncHistoryDetailStatus(recordStatus)
+		}
+	}
+	return details
+}
+
+func normalizeCloudSyncHistoryDetailStatus(status string) string {
+	if status == CloudSyncHistoryStatusFailed {
+		return CloudSyncHistoryStatusFailed
+	}
+	return CloudSyncHistoryStatusSucceeded
 }
 
 func (s *DefaultCloudSyncHistoryStore) trimLocked(db *gorm.DB) error {

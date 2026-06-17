@@ -50,15 +50,18 @@ type PluginSetting struct {
 }
 
 type Oplog struct {
-	ID            uint `gorm:"primaryKey;autoIncrement"`
-	EntityType    string
-	EntityID      string
-	Operation     string
-	Key           string
-	Value         string
-	Timestamp     int64
-	SyncAfter     int64 `gorm:"index;default:0"`
-	SyncedToCloud bool  `gorm:"default:false"`
+	ID                       uint `gorm:"primaryKey;autoIncrement"`
+	EntityType               string
+	EntityID                 string
+	Operation                string
+	Key                      string
+	Value                    string
+	Timestamp                int64
+	SyncAfter                int64  `gorm:"index;default:0"`
+	SyncedToCloud            bool   `gorm:"default:false"`
+	CloudSyncDiscarded       bool   `gorm:"default:false"`
+	CloudSyncPushFailedCount int    `gorm:"default:0"`
+	CloudSyncLastPushError   string `gorm:"default:''"`
 }
 
 type CloudSyncState struct {

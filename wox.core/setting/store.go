@@ -219,7 +219,8 @@ func upsertDeferredCloudSyncOplog(db *gorm.DB, oplog database.Oplog, syncAfter i
 	return db.Transaction(func(tx *gorm.DB) error {
 		var existing database.Oplog
 		err := tx.Where(
-			"synced_to_cloud = ? AND entity_type = ? AND entity_id = ? AND operation = ? AND key = ? AND sync_after > ?",
+			"synced_to_cloud = ? AND cloud_sync_discarded = ? AND entity_type = ? AND entity_id = ? AND operation = ? AND key = ? AND sync_after > ?",
+			false,
 			false,
 			oplog.EntityType,
 			oplog.EntityID,
@@ -246,7 +247,8 @@ func upsertDeferredCloudSyncOplog(db *gorm.DB, oplog database.Oplog, syncAfter i
 func writeImmediateDeleteCloudSyncOplog(db *gorm.DB, oplog database.Oplog) error {
 	return db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&database.Oplog{}).Where(
-			"synced_to_cloud = ? AND entity_type = ? AND entity_id = ? AND operation = ? AND key = ?",
+			"synced_to_cloud = ? AND cloud_sync_discarded = ? AND entity_type = ? AND entity_id = ? AND operation = ? AND key = ?",
+			false,
 			false,
 			oplog.EntityType,
 			oplog.EntityID,

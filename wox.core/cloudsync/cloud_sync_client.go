@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"wox/i18n"
 	"wox/util"
 )
 
@@ -202,6 +203,7 @@ func (c *CloudSyncHTTPClient) postWithToken(ctx context.Context, path string, pa
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept-Language", strings.ReplaceAll(string(i18n.GetI18nManager().GetCurrentLangCode()), "_", "-"))
 
 	token := tokenOverride
 	if token == "" {

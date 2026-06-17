@@ -3,8 +3,10 @@ package cloudsync
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -13,6 +15,8 @@ import (
 
 	"github.com/google/uuid"
 )
+
+const cloudSyncMaxOplogPushFailures = 3
 
 type CloudSyncConfig struct {
 	DebounceMs               int64
@@ -133,7 +137,7 @@ func (m *CloudSyncManager) Start(ctx context.Context) {
 			case <-runCtx.Done():
 				return
 			case <-ticker.C:
-				m.PushPending(runCtx, "auto")
+				m.PushPending(runCtx, "deferred-push")
 			}
 		}
 	})
@@ -268,13 +272,14 @@ func (m *CloudSyncManager) PushMissingLocalSnapshot(ctx context.Context, reason 
 
 func (m *CloudSyncManager) pushPendingLocked(ctx context.Context, reason string) {
 	startedAt := util.GetSystemTimestamp()
-	uploaded := 0
+	historyItemCount := 0
 	entityCounts := map[string]int{}
 	historyKeys := []CloudSyncRecordKey{}
+	historyDetails := []CloudSyncHistoryRecordDetail{}
 	historyStatus := ""
 	var historyErr error
 	defer func() {
-		m.recordOperationHistory(ctx, CloudSyncProgressOperationPush, reason, startedAt, uploaded, entityCounts, historyKeys, historyStatus, historyErr)
+		m.recordOperationHistory(ctx, CloudSyncProgressOperationPush, reason, startedAt, historyItemCount, entityCounts, historyKeys, historyDetails, historyStatus, historyErr)
 	}()
 	fail := func(err error) {
 		historyStatus = CloudSyncHistoryStatusFailed
@@ -361,21 +366,47 @@ func (m *CloudSyncManager) pushPendingLocked(ctx context.Context, reason string)
 			fail(fmt.Errorf("cloud sync push failed: %w", err))
 			return
 		}
-		uploaded += len(changes)
-		addCloudSyncChangeEntityCounts(entityCounts, changes)
-		historyKeys = append(historyKeys, cloudSyncChangeRecordKeys(changes)...)
 
-		if err := m.oplogStore.MarkSynced(ctx, oplogIds); err != nil {
-			fail(fmt.Errorf("failed to mark oplogs synced: %w", err))
+		syncedIds, rejectedFailures, err := m.resolvePushResults(resp, changes, oplogIds, eligible)
+		if err != nil {
+			fail(err)
 			return
 		}
+		if len(syncedIds) > 0 {
+			if err := m.oplogStore.MarkSynced(ctx, syncedIds); err != nil {
+				fail(fmt.Errorf("failed to mark oplogs synced: %w", err))
+				return
+			}
+			syncedChanges := cloudSyncChangesForIDs(changes, oplogIds, syncedIds)
+			addCloudSyncChangeEntityCounts(entityCounts, syncedChanges)
+			historyKeys = append(historyKeys, cloudSyncChangeRecordKeys(syncedChanges)...)
+		}
+		if len(rejectedFailures) > 0 {
+			if err := m.oplogStore.MarkPushFailed(ctx, rejectedFailures); err != nil {
+				fail(fmt.Errorf("failed to mark oplogs failed: %w", err))
+				return
+			}
+			historyStatus = CloudSyncHistoryStatusFailed
+			if len(syncedIds) > 0 {
+				historyStatus = CloudSyncHistoryStatusPartialSucceeded
+			}
+			historyErr = errors.New(lastCloudSyncOplogPushFailureError(rejectedFailures))
+		}
+		if len(syncedIds) > 0 || len(rejectedFailures) > 0 {
+			historyDetails = append(historyDetails, cloudSyncPushHistoryDetails(changes, oplogIds, syncedIds, rejectedFailures)...)
+			historyItemCount = len(historyDetails)
+		}
 
-		if len(oplogIds) > 0 {
-			processed += len(oplogIds)
-			m.setProgressFromOplog(CloudSyncProgressOperationPush, eligible[len(oplogIds)-1], processed, total)
+		processed += len(syncedIds) + countDiscardedOplogPushFailures(rejectedFailures)
+		if processed > 0 {
+			progressIndex := min(processed-1, len(eligible)-1)
+			m.setProgressFromOplog(CloudSyncProgressOperationPush, eligible[progressIndex], processed, total)
 		}
 		m.recordPushSuccess(ctx, resp)
 
+		if len(rejectedFailures) > 0 {
+			return
+		}
 		if len(eligible) <= len(oplogIds) {
 			return
 		}
@@ -393,7 +424,7 @@ func (m *CloudSyncManager) Pull(ctx context.Context, reason string) {
 	historyStatus := ""
 	var historyErr error
 	defer func() {
-		m.recordOperationHistory(ctx, CloudSyncProgressOperationPull, reason, startedAt, pulled, entityCounts, historyKeys, historyStatus, historyErr)
+		m.recordOperationHistory(ctx, CloudSyncProgressOperationPull, reason, startedAt, pulled, entityCounts, historyKeys, nil, historyStatus, historyErr)
 	}()
 	fail := func(err error) {
 		historyStatus = CloudSyncHistoryStatusFailed
@@ -725,6 +756,144 @@ func (m *CloudSyncManager) buildPushBatch(ctx context.Context, oplogs []database
 	return changes, oplogIds, nil
 }
 
+// resolvePushResults maps server per-change results back to local oplog IDs and advances local failure counters.
+func (m *CloudSyncManager) resolvePushResults(resp *CloudSyncPushResponse, changes []CloudSyncChange, oplogIds []uint, oplogs []database.Oplog) ([]uint, []CloudSyncOplogPushFailure, error) {
+	if resp == nil {
+		return nil, nil, errors.New("cloud sync push response is empty")
+	}
+	if len(resp.Applied) == 0 && len(changes) > 0 {
+		return nil, nil, errors.New("cloud sync push response has no per-change results")
+	}
+
+	oplogByID := map[uint]database.Oplog{}
+	for _, oplog := range oplogs {
+		oplogByID[oplog.ID] = oplog
+	}
+	changeIDToOplogID := map[string]uint{}
+	for i, change := range changes {
+		if i >= len(oplogIds) {
+			return nil, nil, errors.New("cloud sync push batch result mapping is invalid")
+		}
+		changeIDToOplogID[change.ChangeID] = oplogIds[i]
+	}
+
+	seen := map[string]struct{}{}
+	var synced []uint
+	var failures []CloudSyncOplogPushFailure
+	for _, result := range resp.Applied {
+		oplogID, ok := changeIDToOplogID[result.ChangeID]
+		if !ok {
+			return nil, nil, fmt.Errorf("cloud sync push response referenced unknown change %s", result.ChangeID)
+		}
+		seen[result.ChangeID] = struct{}{}
+		switch result.Status {
+		case "ok":
+			synced = append(synced, oplogID)
+		case "rejected":
+			oplog, ok := oplogByID[oplogID]
+			if !ok {
+				return nil, nil, fmt.Errorf("cloud sync push response referenced unknown oplog %d", oplogID)
+			}
+			failedCount := oplog.CloudSyncPushFailedCount + 1
+			failures = append(failures, CloudSyncOplogPushFailure{
+				ID:          oplogID,
+				FailedCount: failedCount,
+				LastError:   cloudSyncAppliedChangeError(result),
+				Discarded:   failedCount >= cloudSyncMaxOplogPushFailures,
+			})
+		default:
+			return nil, nil, fmt.Errorf("cloud sync push response has unsupported change status %q", result.Status)
+		}
+	}
+	for _, change := range changes {
+		if _, ok := seen[change.ChangeID]; !ok {
+			return nil, nil, fmt.Errorf("cloud sync push response missing result for change %s", change.ChangeID)
+		}
+	}
+	return synced, failures, nil
+}
+
+// cloudSyncAppliedChangeError uses the server-localized message for user-facing diagnostics.
+func cloudSyncAppliedChangeError(result CloudSyncAppliedChange) string {
+	if result.Message != "" {
+		return result.Message
+	}
+	if result.Code != "" {
+		return result.Code
+	}
+	return "cloud sync change rejected"
+}
+
+// cloudSyncChangesForIDs preserves batch order when recording counts and history for successful rows only.
+func cloudSyncChangesForIDs(changes []CloudSyncChange, oplogIds []uint, selectedIds []uint) []CloudSyncChange {
+	if len(selectedIds) == 0 {
+		return nil
+	}
+	selected := make([]CloudSyncChange, 0, len(selectedIds))
+	for i, oplogID := range oplogIds {
+		if i < len(changes) && slices.Contains(selectedIds, oplogID) {
+			selected = append(selected, changes[i])
+		}
+	}
+	return selected
+}
+
+// cloudSyncPushHistoryDetails records per-item outcomes in original batch order for the detail view.
+func cloudSyncPushHistoryDetails(changes []CloudSyncChange, oplogIds []uint, syncedIds []uint, failures []CloudSyncOplogPushFailure) []CloudSyncHistoryRecordDetail {
+	failureByID := map[uint]CloudSyncOplogPushFailure{}
+	for _, failure := range failures {
+		failureByID[failure.ID] = failure
+	}
+
+	details := make([]CloudSyncHistoryRecordDetail, 0, len(syncedIds)+len(failures))
+	for i, oplogID := range oplogIds {
+		if i >= len(changes) {
+			continue
+		}
+		status := ""
+		errorMessage := ""
+		if slices.Contains(syncedIds, oplogID) {
+			status = CloudSyncHistoryStatusSucceeded
+		}
+		if failure, ok := failureByID[oplogID]; ok {
+			status = CloudSyncHistoryStatusFailed
+			errorMessage = failure.LastError
+		}
+		if status == "" {
+			continue
+		}
+		details = append(details, CloudSyncHistoryRecordDetail{
+			EntityType: changes[i].EntityType,
+			PluginID:   changes[i].PluginID,
+			Key:        changes[i].Key,
+			Op:         changes[i].Op,
+			Status:     status,
+			Error:      errorMessage,
+		})
+	}
+	return details
+}
+
+func countDiscardedOplogPushFailures(failures []CloudSyncOplogPushFailure) int {
+	count := 0
+	for _, failure := range failures {
+		if failure.Discarded {
+			count++
+		}
+	}
+	return count
+}
+
+// lastCloudSyncOplogPushFailureError returns the most recent rejection reason for operation history.
+func lastCloudSyncOplogPushFailureError(failures []CloudSyncOplogPushFailure) string {
+	for i := len(failures) - 1; i >= 0; i-- {
+		if failures[i].LastError != "" {
+			return failures[i].LastError
+		}
+	}
+	return "cloud sync change rejected"
+}
+
 func (m *CloudSyncManager) oplogToChange(ctx context.Context, oplog database.Oplog) (CloudSyncChange, error) {
 	pluginId := ""
 	if oplog.EntityType == EntityPluginSetting {
@@ -907,7 +1076,7 @@ func (m *CloudSyncManager) recordFailure(ctx context.Context, err error) {
 }
 
 // recordOperationHistory keeps user-visible sync history separate from sync cursor/state semantics.
-func (m *CloudSyncManager) recordOperationHistory(ctx context.Context, operation string, reason string, startedAt int64, itemCount int, entityCounts map[string]int, keys []CloudSyncRecordKey, status string, err error) {
+func (m *CloudSyncManager) recordOperationHistory(ctx context.Context, operation string, reason string, startedAt int64, itemCount int, entityCounts map[string]int, keys []CloudSyncRecordKey, details []CloudSyncHistoryRecordDetail, status string, err error) {
 	if m.historyStore == nil {
 		return
 	}
@@ -917,7 +1086,7 @@ func (m *CloudSyncManager) recordOperationHistory(ctx context.Context, operation
 	if status == CloudSyncHistoryStatusSucceeded && itemCount == 0 {
 		return
 	}
-	if status != CloudSyncHistoryStatusSucceeded && status != CloudSyncHistoryStatusFailed {
+	if status != CloudSyncHistoryStatusSucceeded && status != CloudSyncHistoryStatusPartialSucceeded && status != CloudSyncHistoryStatusFailed {
 		return
 	}
 
@@ -932,6 +1101,7 @@ func (m *CloudSyncManager) recordOperationHistory(ctx context.Context, operation
 		ItemCount:    itemCount,
 		EntityCounts: copyCloudSyncEntityCounts(entityCounts),
 		Keys:         append([]CloudSyncRecordKey(nil), keys...),
+		Details:      append([]CloudSyncHistoryRecordDetail(nil), details...),
 	}
 	if err != nil {
 		record.Error = err.Error()

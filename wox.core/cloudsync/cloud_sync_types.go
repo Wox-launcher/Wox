@@ -22,8 +22,9 @@ const (
 	CloudSyncProgressOperationPull     = "pull"
 	CloudSyncProgressOperationRestore  = "restore"
 
-	CloudSyncHistoryStatusSucceeded = "succeeded"
-	CloudSyncHistoryStatusFailed    = "failed"
+	CloudSyncHistoryStatusSucceeded        = "succeeded"
+	CloudSyncHistoryStatusPartialSucceeded = "partial_succeeded"
+	CloudSyncHistoryStatusFailed           = "failed"
 )
 
 type CloudSyncProgress struct {
@@ -48,7 +49,18 @@ type CloudSyncHistoryRecord struct {
 	ItemCount    int
 	EntityCounts map[string]int
 	Keys         []CloudSyncRecordKey
+	Details      []CloudSyncHistoryRecordDetail
 	Error        string
+}
+
+// CloudSyncHistoryRecordDetail stores item-level sync outcomes for one history row.
+type CloudSyncHistoryRecordDetail struct {
+	EntityType string `json:"entity_type"`
+	PluginID   string `json:"plugin_id,omitempty"`
+	Key        string `json:"key"`
+	Op         string `json:"op"`
+	Status     string `json:"status,omitempty"`
+	Error      string `json:"error,omitempty"`
 }
 
 type CloudSyncEncryptedValue struct {
@@ -71,6 +83,8 @@ type CloudSyncAppliedChange struct {
 	ChangeID string `json:"change_id"`
 	Status   string `json:"status"`
 	ServerTs int64  `json:"server_ts"`
+	Code     string `json:"code,omitempty"`
+	Message  string `json:"message,omitempty"`
 }
 
 type CloudSyncPushRequest struct {
@@ -236,10 +250,19 @@ type CloudSyncKeyResetResponse struct {
 type CloudSyncOplogStore interface {
 	LoadPending(ctx context.Context, limit int) ([]database.Oplog, error)
 	MarkSynced(ctx context.Context, ids []uint) error
+	MarkPushFailed(ctx context.Context, failures []CloudSyncOplogPushFailure) error
 }
 
 type CloudSyncPendingCounter interface {
 	CountPending(ctx context.Context) (int, error)
+}
+
+// CloudSyncOplogPushFailure stores the next local retry state for one server-rejected oplog.
+type CloudSyncOplogPushFailure struct {
+	ID          uint
+	FailedCount int
+	LastError   string
+	Discarded   bool
 }
 
 type CloudSyncLocalSnapshotter interface {
