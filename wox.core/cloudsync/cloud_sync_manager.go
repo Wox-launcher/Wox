@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"strings"
 	"sync"
 	"time"
 	"wox/database"
@@ -244,7 +245,7 @@ func (m *CloudSyncManager) PushMissingLocalSnapshot(ctx context.Context, reason 
 		return
 	}
 
-	resp, err := m.client.ListRecordKeys(ctx, CloudSyncRecordKeyListRequest{DeviceID: deviceId})
+	resp, err := m.client.ListRecordKeys(ctx, CloudSyncRecordKeyListRequest{DeviceID: deviceId, Platform: util.GetCurrentPlatform()})
 	if err != nil {
 		m.recordFailure(ctx, fmt.Errorf("cloud sync record key list failed: %w", err))
 		return
@@ -352,6 +353,7 @@ func (m *CloudSyncManager) pushPendingLocked(ctx context.Context, reason string)
 
 		resp, err := m.client.Push(ctx, CloudSyncPushRequest{
 			DeviceID: deviceId,
+			Platform: util.GetCurrentPlatform(),
 			Changes:  changes,
 		})
 		if err != nil {
@@ -433,6 +435,7 @@ func (m *CloudSyncManager) Pull(ctx context.Context, reason string) {
 
 		resp, err := m.client.Pull(ctx, CloudSyncPullRequest{
 			DeviceID: deviceId,
+			Platform: util.GetCurrentPlatform(),
 			Cursor:   cursor,
 			Limit:    m.config.PullLimit,
 		})
@@ -482,7 +485,7 @@ func (m *CloudSyncManager) HasRemoteSnapshotData(ctx context.Context) (bool, err
 	if err != nil {
 		return false, fmt.Errorf("failed to get device id: %w", err)
 	}
-	resp, err := m.client.Snapshot(ctx, CloudSyncPullRequest{DeviceID: deviceId, Cursor: "", Limit: 1})
+	resp, err := m.client.Snapshot(ctx, CloudSyncPullRequest{DeviceID: deviceId, Platform: util.GetCurrentPlatform(), Cursor: "", Limit: 1})
 	if err != nil {
 		return false, fmt.Errorf("cloud sync snapshot check failed: %w", err)
 	}
@@ -519,6 +522,7 @@ func (m *CloudSyncManager) RestoreSnapshot(ctx context.Context) error {
 		}
 		resp, err := m.client.Snapshot(ctx, CloudSyncPullRequest{
 			DeviceID: deviceId,
+			Platform: util.GetCurrentPlatform(),
 			Cursor:   cursor,
 			Limit:    m.config.PullLimit,
 		})
@@ -569,6 +573,9 @@ func (m *CloudSyncManager) applyRecords(ctx context.Context, records []CloudSync
 				continue
 			}
 		}
+		if !isSyncRecordForCurrentPlatform(record) {
+			continue
+		}
 
 		var rawValue string
 		if record.Op == OpUpsert {
@@ -613,6 +620,29 @@ func (m *CloudSyncManager) applyRecords(ctx context.Context, records []CloudSync
 
 	m.reloadAppliedSettings(ctx, appliedWoxSetting, appliedPluginSetting, appliedInstalledPlugin, appliedInstalledTheme, themeSettingChanged)
 	return nil
+}
+
+func isSyncRecordForCurrentPlatform(record CloudSyncRecord) bool {
+	switch record.EntityType {
+	case EntityWoxSetting, EntityPluginSetting:
+		platform, ok := splitSyncPlatformKey(record.Key)
+		return !ok || platform == util.GetCurrentPlatform()
+	default:
+		return true
+	}
+}
+
+func splitSyncPlatformKey(key string) (string, bool) {
+	index := strings.LastIndex(key, "@")
+	if index <= 0 || index == len(key)-1 {
+		return "", false
+	}
+
+	platform := strings.ToLower(strings.TrimSpace(key[index+1:]))
+	if !util.IsSupportedPlatform(platform) {
+		return "", false
+	}
+	return platform, true
 }
 
 func themeSettingWillChange(record CloudSyncRecord, rawValue string) bool {

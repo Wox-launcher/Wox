@@ -154,6 +154,95 @@ func TestCloudSyncPushPendingDoesNotAdvancePullRevisionCursor(t *testing.T) {
 	}
 }
 
+func TestCloudSyncRequestsIncludeCurrentPlatform(t *testing.T) {
+	ctx := context.Background()
+	initCloudSyncTestDatabase(t)
+
+	store := &testCloudSyncOplogStore{
+		pending: []database.Oplog{
+			{
+				ID:         1,
+				EntityType: EntityWoxSetting,
+				Operation:  OpUpsert,
+				Key:        "ThemeId",
+				Value:      "dark",
+				Timestamp:  123,
+			},
+		},
+	}
+	client := &testCloudSyncClient{}
+	manager := NewCloudSyncManager(DefaultCloudSyncConfig(), CloudSyncDependencies{
+		Client:         client,
+		Crypto:         testCloudSyncCrypto{},
+		DeviceProvider: testCloudSyncDeviceProvider{deviceID: "device-a"},
+		OplogStore:     store,
+		Snapshotter:    &testCloudSyncSnapshotter{},
+		Applier:        &testCloudSyncApplier{},
+	})
+
+	manager.PushPending(ctx, "test")
+	manager.Pull(ctx, "test")
+	if _, err := manager.HasRemoteSnapshotData(ctx); err != nil {
+		t.Fatalf("HasRemoteSnapshotData failed: %v", err)
+	}
+	manager.PushMissingLocalSnapshot(ctx, "test")
+
+	currentPlatform := util.GetCurrentPlatform()
+	if len(client.pushRequests) == 0 || !allPushRequestsUsePlatform(client.pushRequests, currentPlatform) {
+		t.Fatalf("push platform = %#v, want %s", client.pushRequests, currentPlatform)
+	}
+	if len(client.pullRequests) == 0 || !allPullRequestsUsePlatform(client.pullRequests, currentPlatform) {
+		t.Fatalf("pull platform = %#v, want %s", client.pullRequests, currentPlatform)
+	}
+	if len(client.snapshotRequests) == 0 || !allPullRequestsUsePlatform(client.snapshotRequests, currentPlatform) {
+		t.Fatalf("snapshot platform = %#v, want %s", client.snapshotRequests, currentPlatform)
+	}
+	if len(client.recordKeyRequests) == 0 || !allRecordKeyRequestsUsePlatform(client.recordKeyRequests, currentPlatform) {
+		t.Fatalf("record-key platform = %#v, want %s", client.recordKeyRequests, currentPlatform)
+	}
+}
+
+func TestApplyRecordsSkipsSettingsForOtherPlatforms(t *testing.T) {
+	ctx := context.Background()
+	initCloudSyncTestDatabase(t)
+
+	currentPlatform := util.GetCurrentPlatform()
+	otherPlatform := testOtherPlatform()
+	applier := &testCloudSyncApplier{}
+	manager := NewCloudSyncManager(DefaultCloudSyncConfig(), CloudSyncDependencies{
+		Crypto:  testCloudSyncCrypto{},
+		Applier: applier,
+	})
+
+	records := []CloudSyncRecord{
+		{EntityType: EntityWoxSetting, Key: "ThemeId", Op: OpUpsert, Value: &CloudSyncEncryptedValue{KeyVersion: 1, Ciphertext: "theme"}},
+		{EntityType: EntityWoxSetting, Key: "MainHotkey@" + currentPlatform, Op: OpUpsert, Value: &CloudSyncEncryptedValue{KeyVersion: 1, Ciphertext: "current-hotkey"}},
+		{EntityType: EntityWoxSetting, Key: "MainHotkey@" + otherPlatform, Op: OpUpsert, Value: &CloudSyncEncryptedValue{KeyVersion: 1, Ciphertext: "other-hotkey"}},
+		{EntityType: EntityPluginSetting, PluginID: "browser", Key: "defaultBrowser@" + currentPlatform, Op: OpUpsert, Value: &CloudSyncEncryptedValue{KeyVersion: 1, Ciphertext: "current-browser"}},
+		{EntityType: EntityPluginSetting, PluginID: "browser", Key: "defaultBrowser@" + otherPlatform, Op: OpUpsert, Value: &CloudSyncEncryptedValue{KeyVersion: 1, Ciphertext: "other-browser"}},
+	}
+
+	if err := manager.applyRecords(ctx, records); err != nil {
+		t.Fatalf("apply records: %v", err)
+	}
+
+	if got := applier.wox["ThemeId"]; got != "theme" {
+		t.Fatalf("common wox setting = %q, want theme", got)
+	}
+	if got := applier.wox["MainHotkey@"+currentPlatform]; got != "current-hotkey" {
+		t.Fatalf("current wox setting = %q, want current-hotkey", got)
+	}
+	if _, exists := applier.wox["MainHotkey@"+otherPlatform]; exists {
+		t.Fatalf("other platform wox setting was applied: %#v", applier.wox)
+	}
+	if got := applier.plugins["browser:defaultBrowser@"+currentPlatform]; got != "current-browser" {
+		t.Fatalf("current plugin setting = %q, want current-browser", got)
+	}
+	if _, exists := applier.plugins["browser:defaultBrowser@"+otherPlatform]; exists {
+		t.Fatalf("other platform plugin setting was applied: %#v", applier.plugins)
+	}
+}
+
 func initCloudSyncTestDatabase(t *testing.T) {
 	t.Helper()
 	t.Setenv(util.TestWoxDataDirEnv, filepath.Join(t.TempDir(), "wox"))
@@ -171,6 +260,7 @@ type testCloudSyncClient struct {
 	snapshotRequests  []CloudSyncPullRequest
 	pushRequests      []CloudSyncPushRequest
 	pullRequests      []CloudSyncPullRequest
+	recordKeyRequests []CloudSyncRecordKeyListRequest
 }
 
 func (c *testCloudSyncClient) Push(ctx context.Context, req CloudSyncPushRequest) (*CloudSyncPushResponse, error) {
@@ -198,7 +288,7 @@ func (c *testCloudSyncClient) Snapshot(ctx context.Context, req CloudSyncPullReq
 
 func (c *testCloudSyncClient) ListRecordKeys(ctx context.Context, req CloudSyncRecordKeyListRequest) (*CloudSyncRecordKeyListResponse, error) {
 	_ = ctx
-	_ = req
+	c.recordKeyRequests = append(c.recordKeyRequests, req)
 	return &CloudSyncRecordKeyListResponse{}, nil
 }
 
@@ -276,6 +366,57 @@ func (a *testCloudSyncApplier) ApplyInstalledTheme(ctx context.Context, themeID 
 type testCloudSyncOplogStore struct {
 	pending []database.Oplog
 	synced  []uint
+}
+
+type testCloudSyncSnapshotter struct{}
+
+func (s *testCloudSyncSnapshotter) EnqueueLocalSnapshot(ctx context.Context) error {
+	_ = ctx
+	return nil
+}
+
+func (s *testCloudSyncSnapshotter) EnqueueMissingLocalSnapshot(ctx context.Context, remoteKeys []CloudSyncRecordKey) error {
+	_ = ctx
+	_ = remoteKeys
+	return nil
+}
+
+func testOtherPlatform() string {
+	switch util.GetCurrentPlatform() {
+	case util.PlatformWindows:
+		return util.PlatformMacOS
+	case util.PlatformMacOS:
+		return util.PlatformWindows
+	default:
+		return util.PlatformMacOS
+	}
+}
+
+func allPushRequestsUsePlatform(requests []CloudSyncPushRequest, platform string) bool {
+	for _, request := range requests {
+		if request.Platform != platform {
+			return false
+		}
+	}
+	return true
+}
+
+func allPullRequestsUsePlatform(requests []CloudSyncPullRequest, platform string) bool {
+	for _, request := range requests {
+		if request.Platform != platform {
+			return false
+		}
+	}
+	return true
+}
+
+func allRecordKeyRequestsUsePlatform(requests []CloudSyncRecordKeyListRequest, platform string) bool {
+	for _, request := range requests {
+		if request.Platform != platform {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *testCloudSyncOplogStore) LoadPending(ctx context.Context, limit int) ([]database.Oplog, error) {

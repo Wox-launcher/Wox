@@ -70,6 +70,9 @@ func (s *LocalSnapshotter) collectLocalSnapshotOplogs(ctx context.Context) ([]da
 	oplogs := make([]database.Oplog, 0, len(woxSettings)+len(pluginSettings))
 
 	for _, item := range woxSettings {
+		if !isCurrentPlatformSettingKey(item.Key) {
+			continue
+		}
 		if syncable, ok := syncableWoxSettings[item.Key]; ok && !syncable {
 			continue
 		}
@@ -84,6 +87,9 @@ func (s *LocalSnapshotter) collectLocalSnapshotOplogs(ctx context.Context) ([]da
 	}
 
 	for _, item := range pluginSettings {
+		if !isCurrentPlatformSettingKey(item.Key) {
+			continue
+		}
 		if _, blocked := disabledPlugins[item.PluginID]; blocked {
 			continue
 		}
@@ -236,6 +242,11 @@ func cloudSyncOplogIdentity(oplog database.Oplog) string {
 
 func cloudSyncIdentity(entityType string, pluginID string, key string) string {
 	return entityType + "\x00" + pluginID + "\x00" + key
+}
+
+func isCurrentPlatformSettingKey(key string) bool {
+	_, platform, ok := setting.SplitPlatformSettingKey(key)
+	return !ok || platform == util.GetCurrentPlatform()
 }
 
 type syncableWoxSettingValue interface {

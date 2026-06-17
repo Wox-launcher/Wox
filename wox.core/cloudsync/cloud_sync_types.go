@@ -74,6 +74,7 @@ type CloudSyncAppliedChange struct {
 
 type CloudSyncPushRequest struct {
 	DeviceID string            `json:"device_id"`
+	Platform string            `json:"platform"`
 	Changes  []CloudSyncChange `json:"changes"`
 }
 
@@ -85,6 +86,7 @@ type CloudSyncPushResponse struct {
 
 type CloudSyncPullRequest struct {
 	DeviceID string `json:"device_id"`
+	Platform string `json:"platform"`
 	Cursor   string `json:"cursor"`
 	Limit    int    `json:"limit"`
 }
@@ -114,6 +116,7 @@ type CloudSyncRecordKey struct {
 
 type CloudSyncRecordKeyListRequest struct {
 	DeviceID string `json:"device_id"`
+	Platform string `json:"platform"`
 }
 
 type CloudSyncRecordKeyListResponse struct {
