@@ -49,7 +49,7 @@ func initCloudSync(ctx context.Context) {
 		Notifier:          settingadapter.NewCloudSyncOplogNotifier(),
 		ProgressNotifier:  cloudSyncUIProgressNotifier{},
 		ExclusionProvider: settingadapter.NewCloudSyncPluginExclusionProvider(),
-		SettingReloader:   ui.GetUIManager().GetUI(ctx),
+		SettingReloader:   cloudSyncUISettingReloader{},
 		HistoryStore:      historyStore,
 	})
 
@@ -83,6 +83,24 @@ type cloudSyncUIProgressNotifier struct{}
 // CloudSyncProgressChanged forwards transient sync progress over the existing UI websocket channel.
 func (cloudSyncUIProgressNotifier) CloudSyncProgressChanged(ctx context.Context, progress cloudsync.CloudSyncProgress) {
 	ui.GetUIManager().GetUI(ctx).CloudSyncProgressChanged(ctx, progress)
+}
+
+type cloudSyncUISettingReloader struct{}
+
+func (cloudSyncUISettingReloader) ReloadSetting(ctx context.Context) {
+	ui.GetUIManager().GetUI(ctx).ReloadSetting(ctx)
+}
+
+func (cloudSyncUISettingReloader) ReloadSettingPlugins(ctx context.Context) {
+	ui.GetUIManager().GetUI(ctx).ReloadSettingPlugins(ctx)
+}
+
+func (cloudSyncUISettingReloader) ReloadSettingThemes(ctx context.Context) {
+	ui.GetUIManager().GetUI(ctx).ReloadSettingThemes(ctx)
+}
+
+func (cloudSyncUISettingReloader) ApplyCurrentTheme(ctx context.Context) {
+	ui.GetUIManager().ApplyCurrentTheme(ctx)
 }
 
 // resolveCloudSyncBaseURL applies the local development override while keeping

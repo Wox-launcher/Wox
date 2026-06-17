@@ -57,7 +57,8 @@ type Oplog struct {
 	Key           string
 	Value         string
 	Timestamp     int64
-	SyncedToCloud bool `gorm:"default:false"`
+	SyncAfter     int64 `gorm:"index;default:0"`
+	SyncedToCloud bool  `gorm:"default:false"`
 }
 
 type CloudSyncState struct {

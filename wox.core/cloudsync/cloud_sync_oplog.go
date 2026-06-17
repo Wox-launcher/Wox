@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"wox/database"
+	"wox/util"
 )
 
 type DefaultOplogStore struct{}
@@ -19,8 +20,9 @@ func (s *DefaultOplogStore) LoadPending(ctx context.Context, limit int) ([]datab
 		return nil, fmt.Errorf("database not initialized")
 	}
 
+	now := util.GetSystemTimestamp()
 	var oplogs []database.Oplog
-	query := db.Where("synced_to_cloud = ?", false).Order("id asc")
+	query := db.Where("synced_to_cloud = ? AND (sync_after IS NULL OR sync_after = 0 OR sync_after <= ?)", false, now).Order("id asc")
 	if limit > 0 {
 		query = query.Limit(limit)
 	}
@@ -31,7 +33,7 @@ func (s *DefaultOplogStore) LoadPending(ctx context.Context, limit int) ([]datab
 	return oplogs, nil
 }
 
-// CountPending returns the current number of local oplogs waiting for cloud upload.
+// CountPending returns the current number of due local oplogs waiting for cloud upload.
 func (s *DefaultOplogStore) CountPending(ctx context.Context) (int, error) {
 	_ = ctx
 	db := database.GetDB()
@@ -39,8 +41,9 @@ func (s *DefaultOplogStore) CountPending(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("database not initialized")
 	}
 
+	now := util.GetSystemTimestamp()
 	var count int64
-	if err := db.Model(&database.Oplog{}).Where("synced_to_cloud = ?", false).Count(&count).Error; err != nil {
+	if err := db.Model(&database.Oplog{}).Where("synced_to_cloud = ? AND (sync_after IS NULL OR sync_after = 0 OR sync_after <= ?)", false, now).Count(&count).Error; err != nil {
 		return 0, err
 	}
 	return int(count), nil

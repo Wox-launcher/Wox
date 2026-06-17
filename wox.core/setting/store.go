@@ -2,6 +2,7 @@ package setting
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -92,14 +93,9 @@ func (s *WoxSettingStore) logOplog(key string, value interface{}, op string) err
 		Operation:  op,
 		Key:        key,
 		Value:      strValue,
-		Timestamp:  util.GetSystemTimestamp(),
 	}
 
-	if err := s.db.Create(&oplog).Error; err != nil {
-		return err
-	}
-	cloudsync.NotifyOplogChanged()
-	return nil
+	return writeCloudSyncOplog(s.db, oplog)
 }
 
 // PluginSettingStore defines the interface for plugin settings
@@ -188,14 +184,79 @@ func (s *PluginSettingStore) logOplog(key string, value interface{}, op string) 
 		Operation:  op,
 		Key:        key,
 		Value:      strValue,
-		Timestamp:  util.GetSystemTimestamp(),
 	}
 
-	if err := s.db.Create(&oplog).Error; err != nil {
-		return err
+	return writeCloudSyncOplog(s.db, oplog)
+}
+
+// writeCloudSyncOplog persists a local sync row according to the built-in CloudSync timing policy.
+func writeCloudSyncOplog(db *gorm.DB, oplog database.Oplog) error {
+	now := util.GetSystemTimestamp()
+	oplog.Timestamp = now
+
+	if oplog.Operation == cloudsync.OpDelete {
+		if err := writeImmediateDeleteCloudSyncOplog(db, oplog); err != nil {
+			return err
+		}
+		cloudsync.NotifyOplogChanged()
+		return nil
 	}
-	cloudsync.NotifyOplogChanged()
-	return nil
+
+	policy := cloudsync.ResolveOplogSyncPolicy(oplog.EntityType, oplog.EntityID, oplog.Key, oplog.Operation)
+	if policy.Delay <= 0 {
+		if err := db.Create(&oplog).Error; err != nil {
+			return err
+		}
+		cloudsync.NotifyOplogChanged()
+		return nil
+	}
+
+	return upsertDeferredCloudSyncOplog(db, oplog, now+policy.Delay.Milliseconds(), now)
+}
+
+// upsertDeferredCloudSyncOplog coalesces high-churn settings while their pending row is still safely before its due time.
+func upsertDeferredCloudSyncOplog(db *gorm.DB, oplog database.Oplog, syncAfter int64, now int64) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		var existing database.Oplog
+		err := tx.Where(
+			"synced_to_cloud = ? AND entity_type = ? AND entity_id = ? AND operation = ? AND key = ? AND sync_after > ?",
+			false,
+			oplog.EntityType,
+			oplog.EntityID,
+			oplog.Operation,
+			oplog.Key,
+			now,
+		).Order("sync_after asc, id asc").First(&existing).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			oplog.SyncAfter = syncAfter
+			return tx.Create(&oplog).Error
+		}
+		if err != nil {
+			return err
+		}
+
+		return tx.Model(&database.Oplog{}).Where("id = ?", existing.ID).Updates(map[string]interface{}{
+			"value":     oplog.Value,
+			"timestamp": now,
+		}).Error
+	})
+}
+
+// writeImmediateDeleteCloudSyncOplog prevents an older delayed upsert from resurrecting a deleted setting remotely.
+func writeImmediateDeleteCloudSyncOplog(db *gorm.DB, oplog database.Oplog) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&database.Oplog{}).Where(
+			"synced_to_cloud = ? AND entity_type = ? AND entity_id = ? AND operation = ? AND key = ?",
+			false,
+			oplog.EntityType,
+			oplog.EntityID,
+			cloudsync.OpUpsert,
+			oplog.Key,
+		).Update("synced_to_cloud", true).Error; err != nil {
+			return err
+		}
+		return tx.Create(&oplog).Error
+	})
 }
 
 func serializeValue(value interface{}) (string, error) {

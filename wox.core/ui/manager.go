@@ -1312,6 +1312,22 @@ func (m *Manager) ChangeTheme(ctx context.Context, theme common.Theme) {
 	}
 }
 
+// ApplyCurrentTheme pushes the currently configured theme to Flutter without writing ThemeId again.
+func (m *Manager) ApplyCurrentTheme(ctx context.Context) {
+	theme := m.GetCurrentTheme(ctx)
+	if theme.ThemeId == "" {
+		logger.Warn(ctx, "skip applying current theme: configured theme not found")
+		return
+	}
+
+	if impl, ok := m.GetUI(ctx).(*uiImpl); ok {
+		impl.ChangeThemeWithoutSave(ctx, theme)
+		return
+	}
+
+	logger.Warn(ctx, "skip applying current theme: UI does not support applying without saving")
+}
+
 func (m *Manager) GetUI(ctx context.Context) common.UI {
 	return m.ui
 }

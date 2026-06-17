@@ -14,20 +14,22 @@ import (
 )
 
 type CloudSyncConfig struct {
-	DebounceMs    int64
-	MaxBatchCount int
-	MaxBatchBytes int
-	PullInterval  time.Duration
-	PullLimit     int
+	DebounceMs               int64
+	MaxBatchCount            int
+	MaxBatchBytes            int
+	PullInterval             time.Duration
+	PullLimit                int
+	DeferredPushPollInterval time.Duration
 }
 
 func DefaultCloudSyncConfig() CloudSyncConfig {
 	return CloudSyncConfig{
-		DebounceMs:    2000,
-		MaxBatchCount: 100,
-		MaxBatchBytes: 1 * 1024 * 1024,
-		PullInterval:  5 * time.Minute,
-		PullLimit:     200,
+		DebounceMs:               2000,
+		MaxBatchCount:            100,
+		MaxBatchBytes:            1 * 1024 * 1024,
+		PullInterval:             5 * time.Minute,
+		PullLimit:                200,
+		DeferredPushPollInterval: time.Minute,
 	}
 }
 
@@ -121,6 +123,19 @@ func (m *CloudSyncManager) Start(ctx context.Context) {
 			}
 		})
 	}
+
+	util.Go(runCtx, "cloud sync deferred push ticker", func() {
+		ticker := time.NewTicker(m.config.DeferredPushPollInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-runCtx.Done():
+				return
+			case <-ticker.C:
+				m.PushPending(runCtx, "auto")
+			}
+		}
+	})
 
 	util.Go(runCtx, "cloud sync initial pull", func() {
 		m.Pull(runCtx, "startup")
@@ -543,6 +558,7 @@ func (m *CloudSyncManager) applyRecords(ctx context.Context, records []CloudSync
 	appliedPluginSetting := false
 	appliedInstalledPlugin := false
 	appliedInstalledTheme := false
+	themeSettingChanged := false
 	for _, record := range records {
 		if record.EntityType == EntityPluginSetting || record.EntityType == EntityInstalledPlugin {
 			pluginID := record.PluginID
@@ -569,10 +585,12 @@ func (m *CloudSyncManager) applyRecords(ctx context.Context, records []CloudSync
 
 		switch record.EntityType {
 		case EntityWoxSetting:
+			willChangeCurrentTheme := themeSettingWillChange(record, rawValue)
 			if err := m.applier.ApplyWoxSetting(ctx, record.Key, record.Op, rawValue); err != nil {
 				return err
 			}
 			appliedWoxSetting = true
+			themeSettingChanged = themeSettingChanged || willChangeCurrentTheme
 		case EntityPluginSetting:
 			if err := m.applier.ApplyPluginSetting(ctx, record.PluginID, record.Key, record.Op, rawValue); err != nil {
 				return err
@@ -593,13 +611,35 @@ func (m *CloudSyncManager) applyRecords(ctx context.Context, records []CloudSync
 		}
 	}
 
-	m.reloadAppliedSettings(ctx, appliedWoxSetting, appliedPluginSetting, appliedInstalledPlugin, appliedInstalledTheme)
+	m.reloadAppliedSettings(ctx, appliedWoxSetting, appliedPluginSetting, appliedInstalledPlugin, appliedInstalledTheme, themeSettingChanged)
 	return nil
+}
+
+func themeSettingWillChange(record CloudSyncRecord, rawValue string) bool {
+	if record.EntityType != EntityWoxSetting || record.Key != "ThemeId" {
+		return false
+	}
+
+	db := database.GetDB()
+	if db == nil {
+		return true
+	}
+
+	var stored database.WoxSetting
+	err := db.Where("key = ?", record.Key).First(&stored).Error
+	switch record.Op {
+	case OpUpsert:
+		return err != nil || stored.Value != rawValue
+	case OpDelete:
+		return err == nil
+	default:
+		return false
+	}
 }
 
 // reloadAppliedSettings refreshes UI caches once per applied remote batch
 // instead of once per individual record.
-func (m *CloudSyncManager) reloadAppliedSettings(ctx context.Context, reloadWoxSettings bool, reloadPluginSettings bool, reloadInstalledPlugins bool, reloadInstalledThemes bool) {
+func (m *CloudSyncManager) reloadAppliedSettings(ctx context.Context, reloadWoxSettings bool, reloadPluginSettings bool, reloadInstalledPlugins bool, reloadInstalledThemes bool, applyCurrentTheme bool) {
 	if m.settingReloader == nil {
 		return
 	}
@@ -611,6 +651,11 @@ func (m *CloudSyncManager) reloadAppliedSettings(ctx context.Context, reloadWoxS
 	}
 	if reloadInstalledThemes {
 		m.settingReloader.ReloadSettingThemes(ctx)
+	}
+	if applyCurrentTheme {
+		if themeApplier, ok := m.settingReloader.(CloudSyncCurrentThemeApplier); ok {
+			themeApplier.ApplyCurrentTheme(ctx)
+		}
 	}
 }
 
@@ -955,6 +1000,9 @@ func normalizeCloudSyncConfig(config CloudSyncConfig) CloudSyncConfig {
 	}
 	if normalized.PullLimit <= 0 {
 		normalized.PullLimit = defaults.PullLimit
+	}
+	if normalized.DeferredPushPollInterval <= 0 {
+		normalized.DeferredPushPollInterval = defaults.DeferredPushPollInterval
 	}
 
 	return normalized

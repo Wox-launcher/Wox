@@ -159,6 +159,11 @@ type CloudSyncSettingReloader interface {
 	ReloadSettingThemes(ctx context.Context)
 }
 
+// CloudSyncCurrentThemeApplier applies the current ThemeId after remote setting changes.
+type CloudSyncCurrentThemeApplier interface {
+	ApplyCurrentTheme(ctx context.Context)
+}
+
 // InstalledPluginValue stores enough source data to reproduce a store plugin
 // installation on another device.
 type InstalledPluginValue struct {
