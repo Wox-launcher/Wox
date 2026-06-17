@@ -273,7 +273,6 @@ func run() {
 
 	shareUI := ui.GetUIManager().GetUI(ctx)
 	plugin.GetPluginManager().Start(ctx, shareUI)
-	startCloudSyncManagerIfReady(ctx)
 
 	selection.InitSelection()
 

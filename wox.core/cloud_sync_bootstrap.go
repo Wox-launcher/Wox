@@ -63,21 +63,6 @@ func initCloudSync(ctx context.Context) {
 	cloudsync.SetService(service)
 }
 
-// startCloudSyncManagerIfReady starts background sync after plugins and UI are
-// ready enough to apply install-list records safely.
-func startCloudSyncManagerIfReady(ctx context.Context) {
-	service := cloudsync.GetService()
-	accountService := account.GetService()
-	if service == nil || service.Manager == nil || service.KeyManager == nil || accountService == nil {
-		return
-	}
-
-	accountStatus := accountService.Status(ctx)
-	if accountStatus.LoggedIn && accountStatus.SyncEligible && accountStatus.SyncEnabled && service.KeyManager.GetStatus(ctx).Available {
-		service.StartManager(ctx)
-	}
-}
-
 type cloudSyncUIProgressNotifier struct{}
 
 // CloudSyncProgressChanged forwards transient sync progress over the existing UI websocket channel.

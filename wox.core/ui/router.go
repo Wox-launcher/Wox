@@ -2746,7 +2746,23 @@ func handleOnUIReady(w http.ResponseWriter, r *http.Request) {
 		util.SetWoxUIProcessPid(request.Pid)
 	}
 	GetUIManager().PostUIReady(ctx)
+	startCloudSyncManagerAfterUIReady(ctx)
 	writeSuccessResponse(w, "")
+}
+
+// startCloudSyncManagerAfterUIReady starts startup sync only after Flutter can
+// acknowledge websocket requests emitted while applying pulled settings.
+func startCloudSyncManagerAfterUIReady(ctx context.Context) {
+	service := cloudsync.GetService()
+	accountService := account.GetService()
+	if service == nil || service.Manager == nil || service.KeyManager == nil || accountService == nil {
+		return
+	}
+
+	accountStatus := accountService.Status(ctx)
+	if accountStatus.LoggedIn && accountStatus.SyncEligible && accountStatus.SyncEnabled && service.KeyManager.GetStatus(ctx).Available {
+		service.StartManager(ctx)
+	}
 }
 
 func handleOnFocusLost(w http.ResponseWriter, r *http.Request) {
