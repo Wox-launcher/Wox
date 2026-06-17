@@ -132,6 +132,7 @@ func initSyncBootstrapRouterTest(t *testing.T, accountState database.AccountStat
 		DeviceProvider: deviceProvider,
 		Applier:        &routerCloudSyncApplier{},
 		OplogStore:     &routerCloudSyncOplogStore{},
+		Snapshotter:    routerCloudSyncSnapshotter{},
 	})
 	cloudsync.SetService(&cloudsync.Service{Manager: manager, Client: nil, KeyManager: keyManager, DeviceProvider: deviceProvider})
 }
@@ -270,6 +271,13 @@ func (s *routerCloudSyncOplogStore) LoadPending(ctx context.Context, limit int) 
 func (s *routerCloudSyncOplogStore) MarkSynced(ctx context.Context, ids []uint) error {
 	_ = ctx
 	_ = ids
+	return nil
+}
+
+type routerCloudSyncSnapshotter struct{}
+
+func (routerCloudSyncSnapshotter) EnqueueLocalSnapshot(ctx context.Context) error {
+	_ = ctx
 	return nil
 }
 

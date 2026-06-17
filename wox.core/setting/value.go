@@ -203,6 +203,10 @@ func (v *SettingValue[T]) Key() string {
 	return v.key
 }
 
+func (v *SettingValue[T]) IsSyncable() bool {
+	return v.syncable
+}
+
 func (v *SettingValue[T]) SetLocal(newValue T) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()

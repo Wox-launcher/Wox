@@ -37,45 +37,53 @@ type CloudSyncDependencies struct {
 	DeviceProvider    CloudSyncDeviceProvider
 	Applier           CloudSyncApplier
 	OplogStore        CloudSyncOplogStore
+	Snapshotter       CloudSyncLocalSnapshotter
 	Notifier          CloudSyncChangeNotifier
+	ProgressNotifier  CloudSyncProgressNotifier
 	ExclusionProvider CloudSyncPluginExclusionProvider
 	SettingReloader   CloudSyncSettingReloader
 }
 
 type CloudSyncManager struct {
-	config          CloudSyncConfig
-	client          CloudSyncClient
-	crypto          CloudSyncCrypto
-	deviceProvider  CloudSyncDeviceProvider
-	applier         CloudSyncApplier
-	oplogStore      CloudSyncOplogStore
-	notifier        CloudSyncChangeNotifier
-	exclusions      CloudSyncPluginExclusionProvider
-	settingReloader CloudSyncSettingReloader
+	config           CloudSyncConfig
+	client           CloudSyncClient
+	crypto           CloudSyncCrypto
+	deviceProvider   CloudSyncDeviceProvider
+	applier          CloudSyncApplier
+	oplogStore       CloudSyncOplogStore
+	snapshotter      CloudSyncLocalSnapshotter
+	notifier         CloudSyncChangeNotifier
+	progressNotifier CloudSyncProgressNotifier
+	exclusions       CloudSyncPluginExclusionProvider
+	settingReloader  CloudSyncSettingReloader
 
-	mu        sync.Mutex
-	pushMu    sync.Mutex
-	pullMu    sync.Mutex
-	randMu    sync.Mutex
-	rand      *rand.Rand
-	debouncer *util.Debouncer[struct{}]
-	cancel    context.CancelFunc
-	started   bool
+	mu         sync.Mutex
+	pushMu     sync.Mutex
+	pullMu     sync.Mutex
+	progressMu sync.RWMutex
+	progress   CloudSyncProgress
+	randMu     sync.Mutex
+	rand       *rand.Rand
+	debouncer  *util.Debouncer[struct{}]
+	cancel     context.CancelFunc
+	started    bool
 }
 
 func NewCloudSyncManager(config CloudSyncConfig, deps CloudSyncDependencies) *CloudSyncManager {
 	normalized := normalizeCloudSyncConfig(config)
 	return &CloudSyncManager{
-		config:          normalized,
-		client:          deps.Client,
-		crypto:          deps.Crypto,
-		deviceProvider:  deps.DeviceProvider,
-		applier:         deps.Applier,
-		oplogStore:      deps.OplogStore,
-		notifier:        deps.Notifier,
-		exclusions:      deps.ExclusionProvider,
-		settingReloader: deps.SettingReloader,
-		rand:            rand.New(rand.NewSource(time.Now().UnixNano())),
+		config:           normalized,
+		client:           deps.Client,
+		crypto:           deps.Crypto,
+		deviceProvider:   deps.DeviceProvider,
+		applier:          deps.Applier,
+		oplogStore:       deps.OplogStore,
+		snapshotter:      deps.Snapshotter,
+		notifier:         deps.Notifier,
+		progressNotifier: deps.ProgressNotifier,
+		exclusions:       deps.ExclusionProvider,
+		rand:             rand.New(rand.NewSource(time.Now().UnixNano())),
+		settingReloader:  deps.SettingReloader,
 	}
 }
 
@@ -88,7 +96,11 @@ func (m *CloudSyncManager) Start(ctx context.Context) {
 	m.started = true
 	runCtx, cancel := context.WithCancel(ctx)
 	m.cancel = cancel
-	m.debouncer = util.NewDebouncer[struct{}](m.config.DebounceMs, m.config.DebounceMs, func(_ []struct{}, reason string) {
+	m.debouncer = util.NewDebouncer[struct{}](m.config.DebounceMs, m.config.DebounceMs, func(items []struct{}, reason string) {
+		// The shared debouncer emits empty ticks; cloud sync only reacts to oplog notifications.
+		if len(items) == 0 {
+			return
+		}
 		m.PushPending(runCtx, reason)
 	})
 	m.debouncer.Start(runCtx)
@@ -146,10 +158,50 @@ func (m *CloudSyncManager) Stop(ctx context.Context) {
 	}
 }
 
+// Progress returns the in-flight sync operation progress without persisting transient UI state.
+func (m *CloudSyncManager) Progress() CloudSyncProgress {
+	m.progressMu.RLock()
+	defer m.progressMu.RUnlock()
+	return m.progress
+}
+
 func (m *CloudSyncManager) PushPending(ctx context.Context, reason string) {
 	m.pushMu.Lock()
 	defer m.pushMu.Unlock()
 
+	m.pushPendingLocked(ctx, reason)
+}
+
+// PushLocalSnapshot queues the current local settings before reusing the normal pending-oplog push path.
+func (m *CloudSyncManager) PushLocalSnapshot(ctx context.Context, reason string) {
+	m.pushMu.Lock()
+	defer m.pushMu.Unlock()
+
+	if err := m.ensureConfigured(); err != nil {
+		m.recordFailure(ctx, err)
+		return
+	}
+	if m.snapshotter == nil {
+		m.recordFailure(ctx, fmt.Errorf("cloud sync local snapshotter not configured"))
+		return
+	}
+
+	if m.isBackoffActive(ctx) {
+		return
+	}
+
+	m.setProgress(CloudSyncProgress{Operation: CloudSyncProgressOperationSnapshot})
+	if err := m.snapshotter.EnqueueLocalSnapshot(ctx); err != nil {
+		m.recordFailure(ctx, fmt.Errorf("failed to enqueue local snapshot: %w", err))
+		m.clearProgress(CloudSyncProgressOperationSnapshot)
+		return
+	}
+
+	m.clearProgress(CloudSyncProgressOperationSnapshot)
+	m.pushPendingLocked(ctx, reason)
+}
+
+func (m *CloudSyncManager) pushPendingLocked(ctx context.Context, reason string) {
 	if err := m.ensureConfigured(); err != nil {
 		m.recordFailure(ctx, err)
 		return
@@ -158,6 +210,15 @@ func (m *CloudSyncManager) PushPending(ctx context.Context, reason string) {
 	if m.isBackoffActive(ctx) {
 		return
 	}
+
+	total := m.countPendingOplogs(ctx)
+	processed := 0
+	progressStarted := false
+	defer func() {
+		if progressStarted {
+			m.clearProgress(CloudSyncProgressOperationPush)
+		}
+	}()
 
 	for {
 		if ctx.Err() != nil {
@@ -173,15 +234,22 @@ func (m *CloudSyncManager) PushPending(ctx context.Context, reason string) {
 			return
 		}
 
+		if !progressStarted {
+			progressStarted = true
+			m.setProgress(CloudSyncProgress{Operation: CloudSyncProgressOperationPush, Current: processed, Total: total})
+		}
+		m.setProgressFromOplog(CloudSyncProgressOperationPush, pending[0], processed, total)
 		eligible, dropped := m.filterOplogsByDisabledPlugins(ctx, pending)
 		if len(dropped) > 0 {
 			if err := m.oplogStore.MarkSynced(ctx, dropped); err != nil {
 				util.GetLogger().Warn(ctx, fmt.Sprintf("failed to drop disabled plugin oplogs: %v", err))
 			}
+			processed += len(dropped)
 		}
 
 		if len(eligible) == 0 {
 			if len(dropped) > 0 {
+				m.setProgress(CloudSyncProgress{Operation: CloudSyncProgressOperationPush, Current: processed, Total: total})
 				continue
 			}
 			return
@@ -196,6 +264,7 @@ func (m *CloudSyncManager) PushPending(ctx context.Context, reason string) {
 			return
 		}
 
+		m.setProgressFromOplog(CloudSyncProgressOperationPush, eligible[0], processed, total)
 		deviceId, err := m.deviceProvider.DeviceID(ctx)
 		if err != nil {
 			m.recordFailure(ctx, fmt.Errorf("failed to get device id: %w", err))
@@ -216,6 +285,10 @@ func (m *CloudSyncManager) PushPending(ctx context.Context, reason string) {
 			return
 		}
 
+		if len(oplogIds) > 0 {
+			processed += len(oplogIds)
+			m.setProgressFromOplog(CloudSyncProgressOperationPush, eligible[len(oplogIds)-1], processed, total)
+		}
 		m.recordPushSuccess(ctx, resp)
 
 		if len(eligible) <= len(oplogIds) {
@@ -240,6 +313,10 @@ func (m *CloudSyncManager) Pull(ctx context.Context, reason string) {
 	if m.isBackoffActive(ctx) {
 		return
 	}
+
+	defer m.clearProgress(CloudSyncProgressOperationPull)
+	pulled := 0
+	m.setProgress(CloudSyncProgress{Operation: CloudSyncProgressOperationPull, Current: pulled})
 
 	state, err := LoadCloudSyncState(ctx)
 	if err != nil {
@@ -270,10 +347,13 @@ func (m *CloudSyncManager) Pull(ctx context.Context, reason string) {
 		}
 
 		if len(resp.Records) > 0 {
+			m.setProgressFromRecord(CloudSyncProgressOperationPull, resp.Records[0], pulled, 0)
 			if err := m.applyRecords(ctx, resp.Records); err != nil {
 				m.recordFailure(ctx, fmt.Errorf("failed to apply remote records: %w", err))
 				return
 			}
+			pulled += len(resp.Records)
+			m.setProgressFromRecord(CloudSyncProgressOperationPull, resp.Records[len(resp.Records)-1], pulled, 0)
 		}
 
 		cursor = resp.NextCursor
@@ -334,6 +414,9 @@ func (m *CloudSyncManager) RestoreSnapshot(ctx context.Context) error {
 	}
 
 	cursor := ""
+	defer m.clearProgress(CloudSyncProgressOperationRestore)
+	restored := 0
+	m.setProgress(CloudSyncProgress{Operation: CloudSyncProgressOperationRestore, Current: restored})
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -347,9 +430,12 @@ func (m *CloudSyncManager) RestoreSnapshot(ctx context.Context) error {
 			return fmt.Errorf("cloud sync snapshot failed: %w", err)
 		}
 		if len(resp.Records) > 0 {
+			m.setProgressFromRecord(CloudSyncProgressOperationRestore, resp.Records[0], restored, 0)
 			if err := m.applyRecords(ctx, resp.Records); err != nil {
 				return fmt.Errorf("failed to apply remote snapshot: %w", err)
 			}
+			restored += len(resp.Records)
+			m.setProgressFromRecord(CloudSyncProgressOperationRestore, resp.Records[len(resp.Records)-1], restored, 0)
 		}
 		cursor = resp.NextCursor
 		if !resp.HasMore {
@@ -550,6 +636,75 @@ func (m *CloudSyncManager) disabledPluginSet(ctx context.Context) map[string]str
 	}
 
 	return disabled
+}
+
+func (m *CloudSyncManager) countPendingOplogs(ctx context.Context) int {
+	counter, ok := m.oplogStore.(CloudSyncPendingCounter)
+	if !ok {
+		return 0
+	}
+
+	total, err := counter.CountPending(ctx)
+	if err != nil {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to count pending cloud sync oplogs: %v", err))
+		return 0
+	}
+	return total
+}
+
+func (m *CloudSyncManager) setProgress(progress CloudSyncProgress) {
+	progress.Active = true
+	m.progressMu.Lock()
+	m.progress = progress
+	m.progressMu.Unlock()
+	m.notifyProgressChanged(progress)
+}
+
+func (m *CloudSyncManager) clearProgress(operation string) {
+	m.progressMu.Lock()
+	if operation == "" || m.progress.Operation == operation {
+		m.progress = CloudSyncProgress{}
+		m.progressMu.Unlock()
+		m.notifyProgressChanged(CloudSyncProgress{})
+		return
+	}
+	m.progressMu.Unlock()
+}
+
+func (m *CloudSyncManager) setProgressFromOplog(operation string, oplog database.Oplog, current int, total int) {
+	pluginId := ""
+	if oplog.EntityType == EntityPluginSetting {
+		pluginId = oplog.EntityID
+	}
+	m.setProgress(CloudSyncProgress{
+		Operation:  operation,
+		EntityType: oplog.EntityType,
+		PluginID:   pluginId,
+		Key:        oplog.Key,
+		Current:    current,
+		Total:      total,
+	})
+}
+
+func (m *CloudSyncManager) setProgressFromRecord(operation string, record CloudSyncRecord, current int, total int) {
+	m.setProgress(CloudSyncProgress{
+		Operation:  operation,
+		EntityType: record.EntityType,
+		PluginID:   record.PluginID,
+		Key:        record.Key,
+		Current:    current,
+		Total:      total,
+	})
+}
+
+func (m *CloudSyncManager) notifyProgressChanged(progress CloudSyncProgress) {
+	if m.progressNotifier == nil {
+		return
+	}
+
+	util.Go(context.Background(), "cloud sync progress changed", func() {
+		m.progressNotifier.CloudSyncProgressChanged(context.Background(), progress)
+	})
 }
 
 func (m *CloudSyncManager) ensureConfigured() error {

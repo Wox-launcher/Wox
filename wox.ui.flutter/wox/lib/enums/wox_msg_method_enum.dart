@@ -15,7 +15,8 @@ enum WoxMsgMethodEnum {
   WOX_MSG_METHOD_TERMINAL_UNSUBSCRIBE("TerminalUnsubscribe", "Terminal unsubscribe"),
   WOX_MSG_METHOD_TERMINAL_SEARCH("TerminalSearch", "Terminal search"),
   WOX_MSG_METHOD_TERMINAL_CHUNK("TerminalChunk", "Terminal chunk"),
-  WOX_MSG_METHOD_TERMINAL_STATE("TerminalState", "Terminal state");
+  WOX_MSG_METHOD_TERMINAL_STATE("TerminalState", "Terminal state"),
+  WOX_MSG_METHOD_CLOUD_SYNC_PROGRESS_CHANGED("CloudSyncProgressChanged", "Cloud sync progress changed");
 
   final String code;
   final String value;

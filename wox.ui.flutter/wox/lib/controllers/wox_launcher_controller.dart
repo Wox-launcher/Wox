@@ -3097,6 +3097,12 @@ class WoxLauncherController extends GetxController {
     } else if (msg.method == "RefreshAccountStatus") {
       unawaited(refreshAccountStatusAfterBillingDeeplink(msg.traceId));
       responseWoxWebsocketRequest(msg, true, null);
+    } else if (msg.method == WoxMsgMethodEnum.WOX_MSG_METHOD_CLOUD_SYNC_PROGRESS_CHANGED.code) {
+      final data = msg.data as Map<String, dynamic>? ?? {};
+      if (Get.isRegistered<WoxSettingController>()) {
+        Get.find<WoxSettingController>().applyCloudSyncProgress(data);
+      }
+      responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "UpdateResult") {
       final success = updateResult(msg.traceId, UpdatableResult.fromJson(msg.data));
       responseWoxWebsocketRequest(msg, true, success);

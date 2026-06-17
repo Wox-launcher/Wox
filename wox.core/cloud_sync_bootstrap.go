@@ -44,7 +44,9 @@ func initCloudSync(ctx context.Context) {
 		DeviceProvider:    deviceProvider,
 		Applier:           settingadapter.NewLocalSettingApplier(),
 		OplogStore:        cloudsync.NewDefaultOplogStore(),
+		Snapshotter:       settingadapter.NewLocalSnapshotter(),
 		Notifier:          settingadapter.NewCloudSyncOplogNotifier(),
+		ProgressNotifier:  cloudSyncUIProgressNotifier{},
 		ExclusionProvider: settingadapter.NewCloudSyncPluginExclusionProvider(),
 		SettingReloader:   ui.GetUIManager().GetUI(ctx),
 	})
@@ -71,6 +73,13 @@ func startCloudSyncManagerIfReady(ctx context.Context) {
 	if accountStatus.LoggedIn && accountStatus.SyncEligible && accountStatus.SyncEnabled && service.KeyManager.GetStatus(ctx).Available {
 		service.StartManager(ctx)
 	}
+}
+
+type cloudSyncUIProgressNotifier struct{}
+
+// CloudSyncProgressChanged forwards transient sync progress over the existing UI websocket channel.
+func (cloudSyncUIProgressNotifier) CloudSyncProgressChanged(ctx context.Context, progress cloudsync.CloudSyncProgress) {
+	ui.GetUIManager().GetUI(ctx).CloudSyncProgressChanged(ctx, progress)
 }
 
 // resolveCloudSyncBaseURL applies the local development override while keeping

@@ -31,6 +31,21 @@ func (s *DefaultOplogStore) LoadPending(ctx context.Context, limit int) ([]datab
 	return oplogs, nil
 }
 
+// CountPending returns the current number of local oplogs waiting for cloud upload.
+func (s *DefaultOplogStore) CountPending(ctx context.Context) (int, error) {
+	_ = ctx
+	db := database.GetDB()
+	if db == nil {
+		return 0, fmt.Errorf("database not initialized")
+	}
+
+	var count int64
+	if err := db.Model(&database.Oplog{}).Where("synced_to_cloud = ?", false).Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return int(count), nil
+}
+
 func (s *DefaultOplogStore) MarkSynced(ctx context.Context, ids []uint) error {
 	_ = ctx
 	if len(ids) == 0 {

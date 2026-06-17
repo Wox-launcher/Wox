@@ -16,7 +16,22 @@ const (
 
 	InstallSyncSourceStore = "store"
 	InstallSyncSourceUser  = "user"
+
+	CloudSyncProgressOperationSnapshot = "snapshot"
+	CloudSyncProgressOperationPush     = "push"
+	CloudSyncProgressOperationPull     = "pull"
+	CloudSyncProgressOperationRestore  = "restore"
 )
+
+type CloudSyncProgress struct {
+	Active     bool   `json:"active"`
+	Operation  string `json:"operation,omitempty"`
+	EntityType string `json:"entity_type,omitempty"`
+	PluginID   string `json:"plugin_id,omitempty"`
+	Key        string `json:"key,omitempty"`
+	Current    int    `json:"current"`
+	Total      int    `json:"total,omitempty"`
+}
 
 type CloudSyncEncryptedValue struct {
 	KeyVersion int    `json:"key_version"`
@@ -181,8 +196,20 @@ type CloudSyncOplogStore interface {
 	MarkSynced(ctx context.Context, ids []uint) error
 }
 
+type CloudSyncPendingCounter interface {
+	CountPending(ctx context.Context) (int, error)
+}
+
+type CloudSyncLocalSnapshotter interface {
+	EnqueueLocalSnapshot(ctx context.Context) error
+}
+
 type CloudSyncChangeNotifier interface {
 	Changes() <-chan struct{}
+}
+
+type CloudSyncProgressNotifier interface {
+	CloudSyncProgressChanged(ctx context.Context, progress CloudSyncProgress)
 }
 
 type CloudSyncPluginExclusionProvider interface {

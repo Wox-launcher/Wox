@@ -42,7 +42,7 @@ class WoxThemeEditorDraftSession {
   const WoxThemeEditorDraftSession({required this.restoreTheme, required this.sourceTheme, required this.draftTheme});
 }
 
-class WoxSettingController extends GetxController {
+class WoxSettingController extends GetxController with WidgetsBindingObserver {
   static const double _settingSearchResultEstimatedRowExtent = 52.0;
   static const Duration _accountBillingPollInterval = Duration(seconds: 5);
   static const Duration _accountBillingWaitTimeout = Duration(minutes: 5);
@@ -162,11 +162,21 @@ class WoxSettingController extends GetxController {
   bool Function(WoxAccountStatus status)? _accountBillingWaitComplete;
   bool _isAccountBillingPolling = false;
   bool _isCloudSyncStatusPolling = false;
+  bool _isRefreshingAccountStatusOnResume = false;
 
   @override
   void onInit() {
     super.onInit();
+    WidgetsBinding.instance.addObserver(this);
     ever<String>(activeNavPath, _handleActiveNavPathChanged);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) {
+      return;
+    }
+    unawaited(_refreshCloudSyncAccountStatusOnResume());
   }
 
   void _handleActiveNavPathChanged(String path) {
@@ -2100,6 +2110,11 @@ class WoxSettingController extends GetxController {
     }
   }
 
+  void applyCloudSyncProgress(Map<String, dynamic> data) {
+    final progress = WoxCloudSyncProgress.fromJson(data);
+    cloudSyncStatus.value = cloudSyncStatus.value.withProgress(progress.active ? progress : null);
+  }
+
   Future<void> refreshAccountStatus() async {
     final traceId = const UuidV4().generate();
     try {
@@ -2337,6 +2352,30 @@ class WoxSettingController extends GetxController {
     }
   }
 
+  // Refreshes subscription state when users return from external billing pages that did not trigger a deeplink callback.
+  Future<void> _refreshCloudSyncAccountStatusOnResume() async {
+    if (activeNavPath.value != 'data.cloudsync' ||
+        !accountStatus.value.loggedIn ||
+        isAccountBillingWaiting.value ||
+        isCloudSyncActionLoading.value ||
+        _isRefreshingAccountStatusOnResume) {
+      return;
+    }
+
+    _isRefreshingAccountStatusOnResume = true;
+    final traceId = const UuidV4().generate();
+    try {
+      accountStatus.value = await WoxApi.instance.accountRefresh(traceId);
+      await refreshCloudSyncStatus(showLoading: false);
+      _updateCloudSyncStatusWaiting();
+      Logger.instance.info(traceId, 'Account subscription status refreshed after app resume');
+    } catch (e) {
+      Logger.instance.error(traceId, 'Failed to refresh account subscription status after app resume: $e');
+    } finally {
+      _isRefreshingAccountStatusOnResume = false;
+    }
+  }
+
   Future<void> _openExternalBillingUrl(String traceId, String url) async {
     final uri = Uri.tryParse(url);
     if (uri == null) {
@@ -2533,12 +2572,13 @@ class WoxSettingController extends GetxController {
     cloudSyncActionError.value = '';
     try {
       await WoxApi.instance.cloudSyncPush(traceId);
-      await refreshCloudSyncStatus();
+      await refreshCloudSyncStatus(showLoading: false);
     } catch (e) {
       cloudSyncActionError.value = e.toString();
       Logger.instance.error(traceId, 'Cloud sync push failed: $e');
     } finally {
       isCloudSyncActionLoading.value = false;
+      await refreshCloudSyncStatus(showLoading: false);
     }
   }
 
@@ -2548,12 +2588,13 @@ class WoxSettingController extends GetxController {
     cloudSyncActionError.value = '';
     try {
       await WoxApi.instance.cloudSyncPull(traceId);
-      await refreshCloudSyncStatus();
+      await refreshCloudSyncStatus(showLoading: false);
     } catch (e) {
       cloudSyncActionError.value = e.toString();
       Logger.instance.error(traceId, 'Cloud sync pull failed: $e');
     } finally {
       isCloudSyncActionLoading.value = false;
+      await refreshCloudSyncStatus(showLoading: false);
     }
   }
 
@@ -2564,12 +2605,13 @@ class WoxSettingController extends GetxController {
     try {
       await WoxApi.instance.cloudSyncPush(traceId);
       await WoxApi.instance.cloudSyncPull(traceId);
-      await refreshCloudSyncStatus();
+      await refreshCloudSyncStatus(showLoading: false);
     } catch (e) {
       cloudSyncActionError.value = e.toString();
       Logger.instance.error(traceId, 'Cloud sync now failed: $e');
     } finally {
       isCloudSyncActionLoading.value = false;
+      await refreshCloudSyncStatus(showLoading: false);
     }
   }
 
@@ -2658,8 +2700,16 @@ class WoxSettingController extends GetxController {
   }
 
   Future<void> updateCloudSyncServerUrl(String url) async {
-    await updateConfig("CloudSyncServerUrl", url.trim());
-    await Future.wait([refreshAccountStatus(), refreshCloudSyncStatus()]);
+    final currentUrl = woxSetting.value.cloudSyncServerUrl.trim();
+    final nextUrl = url.trim();
+    if (currentUrl == nextUrl) {
+      return;
+    }
+    await updateConfig("CloudSyncServerUrl", nextUrl);
+    // A sync endpoint change invalidates account-scoped local state. Reuse the
+    // normal logout path so the Cloud Sync page immediately reflects that the
+    // current account session is no longer active for this endpoint.
+    await accountLogout();
   }
 
   Future<void> clearLogs() async {
@@ -2741,6 +2791,7 @@ class WoxSettingController extends GetxController {
 
   @override
   void onClose() {
+    WidgetsBinding.instance.removeObserver(this);
     _settingHighlightTimer?.cancel();
     _accountBillingPollTimer?.cancel();
     _cloudSyncStatusPollTimer?.cancel();

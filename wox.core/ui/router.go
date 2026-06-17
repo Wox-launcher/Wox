@@ -1804,7 +1804,7 @@ func scheduleCloudSyncBootstrapInitialPush(ctx context.Context, service *cloudsy
 		}
 
 		queueInstalledAssetsForCloudSync(ctx)
-		service.Manager.PushPending(ctx, "bootstrap")
+		service.Manager.PushLocalSnapshot(ctx, "bootstrap")
 		state, err := cloudsync.LoadCloudSyncState(ctx)
 		if err != nil {
 			cloudsync.RecordCloudSyncBootstrapFailure(ctx, err)

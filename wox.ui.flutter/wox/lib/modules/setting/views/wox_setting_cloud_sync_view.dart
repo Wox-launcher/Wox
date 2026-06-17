@@ -61,6 +61,57 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
     return state.lastPullTs > state.lastPushTs ? state.lastPullTs : state.lastPushTs;
   }
 
+  String formatCloudSyncProgress(WoxCloudSyncProgress? progress, {required bool isBusy}) {
+    if (progress == null || !progress.active || progress.operation.isEmpty) {
+      return isBusy ? controller.tr("ui_cloud_sync_progress_starting") : '';
+    }
+
+    final countText = progress.total > 0 ? "${progress.current}/${progress.total}" : progress.current.toString();
+    switch (progress.operation) {
+      case 'snapshot':
+        return controller.tr("ui_cloud_sync_progress_snapshot");
+      case 'push':
+        return controller
+            .tr("ui_cloud_sync_progress_uploading")
+            .replaceAll("{target}", cloudSyncProgressTarget(progress))
+            .replaceAll("{count}", countText);
+      case 'pull':
+        return controller
+            .tr("ui_cloud_sync_progress_downloading")
+            .replaceAll("{target}", cloudSyncProgressTarget(progress))
+            .replaceAll("{count}", countText);
+      case 'restore':
+        return controller.tr("ui_cloud_sync_progress_restoring").replaceAll("{count}", countText);
+      default:
+        return controller.tr("ui_cloud_sync_progress_starting");
+    }
+  }
+
+  String cloudSyncProgressTarget(WoxCloudSyncProgress progress) {
+    if (progress.entityType == 'wox_setting') {
+      return controller.tr("ui_cloud_sync_progress_wox_setting");
+    }
+    if (progress.entityType == 'plugin_setting') {
+      final pluginName = cloudSyncProgressPluginName(progress.pluginId);
+      return controller.tr("ui_cloud_sync_progress_plugin").replaceAll("{plugin}", pluginName);
+    }
+    return controller.tr("ui_cloud_sync_progress_data");
+  }
+
+  String cloudSyncProgressPluginName(String pluginId) {
+    for (final plugin in controller.installedPlugins) {
+      if (plugin.id == pluginId) {
+        if (plugin.name.isNotEmpty) {
+          return plugin.name;
+        }
+        if (plugin.nameEn.isNotEmpty) {
+          return plugin.nameEn;
+        }
+      }
+    }
+    return pluginId.isNotEmpty ? pluginId : controller.tr("ui_cloud_sync_progress_data");
+  }
+
   String normalizeAccountActionError(String error) {
     if (error.contains('invalid_current_password')) {
       return controller.tr("ui_cloud_sync_account_current_password_invalid");
@@ -584,15 +635,16 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
                   if (status.hasRemoteData)
                     WoxButton.text(
                       text: controller.tr("ui_cloud_sync_forgot_recovery_code"),
-                      onPressed: isSubmitting
-                          ? null
-                          : () async {
-                              final started = await showCloudSyncForgotRecoveryCodeDialog(context);
-                              if (!context.mounted || started != true) {
-                                return;
-                              }
-                              Navigator.pop(context);
-                            },
+                      onPressed:
+                          isSubmitting
+                              ? null
+                              : () async {
+                                final started = await showCloudSyncForgotRecoveryCodeDialog(context);
+                                if (!context.mounted || started != true) {
+                                  return;
+                                }
+                                Navigator.pop(context);
+                              },
                     ),
                   Row(
                     mainAxisSize: MainAxisSize.min,
@@ -628,6 +680,7 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
       final actionError = controller.cloudSyncActionError.value;
       final stateError = state?.lastError ?? '';
       final lastSyncTime = formatCloudSyncTime(lastCloudSyncTimestamp(state));
+      final progressText = formatCloudSyncProgress(status.progress, isBusy: isBusy);
       final isSynced = account.syncEnabled && status.keyStatus.available && state != null && state.bootstrapped;
       final isBootstrapInProgress = account.syncEnabled && status.keyStatus.available && state != null && !state.bootstrapped && stateError.isEmpty;
       final String statusText;
@@ -654,6 +707,11 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
         statusColor = Colors.red;
         statusDetailText = normalizeCloudSyncError(stateError);
         statusDetailColor = Colors.red;
+      } else if (progressText.isNotEmpty) {
+        statusText = controller.tr("ui_cloud_sync_syncing");
+        statusColor = getThemeSubTextColor();
+        statusDetailText = progressText;
+        statusDetailColor = getThemeSubTextColor();
       } else if (isBootstrapInProgress) {
         statusText = controller.tr("ui_cloud_sync_syncing");
         statusColor = getThemeSubTextColor();
@@ -774,6 +832,12 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
                       ),
                     ),
                     const SizedBox(width: 10),
+                    if (!subscriptionActive)
+                      WoxButton.secondary(
+                        text: controller.tr("ui_cloud_sync_refresh_status"),
+                        onPressed: isBusy || isBillingWaiting ? null : () => controller.accountRefreshSubscriptionStatus(),
+                      ),
+                    if (!subscriptionActive) const SizedBox(width: 8),
                     if (!subscriptionActive)
                       WoxButton.primary(text: controller.tr("ui_cloud_sync_subscribe"), onPressed: isBusy || isBillingWaiting ? null : () => controller.accountOpenCheckout()),
                     if (subscriptionActive) buildSubscriptionActionMenu(isBusy: isBusy, isBillingWaiting: isBillingWaiting),

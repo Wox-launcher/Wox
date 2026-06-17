@@ -268,6 +268,10 @@ func (u *uiImpl) ReloadSettingThemes(ctx context.Context) {
 	u.invokeWebsocketMethod(ctx, "ReloadSettingThemes", nil)
 }
 
+func (u *uiImpl) CloudSyncProgressChanged(ctx context.Context, progress any) {
+	u.invokeWebsocketMethod(ctx, "CloudSyncProgressChanged", progress)
+}
+
 func (u *uiImpl) RefreshAccountStatus(ctx context.Context) {
 	u.invokeWebsocketMethod(ctx, "RefreshAccountStatus", nil)
 }

@@ -17,6 +17,7 @@ type ServiceStatus struct {
 	DeviceID  string              `json:"device_id,omitempty"`
 	KeyStatus CloudSyncKeyStatus  `json:"key_status"`
 	State     *CloudSyncStateView `json:"state,omitempty"`
+	Progress  *CloudSyncProgress  `json:"progress,omitempty"`
 }
 
 type CloudSyncStateView struct {
@@ -87,6 +88,13 @@ func (s *Service) Status(ctx context.Context) ServiceStatus {
 
 	if s.KeyManager != nil {
 		status.KeyStatus = s.KeyManager.GetStatus(ctx)
+	}
+
+	if s.Manager != nil {
+		progress := s.Manager.Progress()
+		if progress.Active {
+			status.Progress = &progress
+		}
 	}
 
 	if state, err := LoadCloudSyncState(ctx); err == nil && state != nil {

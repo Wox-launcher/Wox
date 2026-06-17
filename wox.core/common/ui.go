@@ -114,6 +114,9 @@ type UI interface {
 	// ReloadSettingThemes asks the UI to refresh theme lists.
 	ReloadSettingThemes(ctx context.Context)
 
+	// CloudSyncProgressChanged pushes transient sync progress to the settings UI.
+	CloudSyncProgressChanged(ctx context.Context, progress any)
+
 	// RefreshGlance asks the UI to pull the latest Global Glance items. The
 	// backend sends ids only; UI still applies user slot settings before rendering.
 	RefreshGlance(ctx context.Context, pluginId string, ids []string)

@@ -3,21 +3,60 @@ class WoxCloudSyncStatus {
   final String deviceId;
   final WoxCloudSyncKeyStatus keyStatus;
   final WoxCloudSyncState? state;
+  final WoxCloudSyncProgress? progress;
 
-  WoxCloudSyncStatus({required this.enabled, required this.deviceId, required this.keyStatus, required this.state});
+  WoxCloudSyncStatus({required this.enabled, required this.deviceId, required this.keyStatus, required this.state, required this.progress});
 
   factory WoxCloudSyncStatus.empty() {
-    return WoxCloudSyncStatus(enabled: false, deviceId: '', keyStatus: WoxCloudSyncKeyStatus.empty(), state: null);
+    return WoxCloudSyncStatus(enabled: false, deviceId: '', keyStatus: WoxCloudSyncKeyStatus.empty(), state: null, progress: null);
   }
 
   factory WoxCloudSyncStatus.fromJson(Map<String, dynamic> json) {
     final keyStatusJson = json['key_status'];
     final stateJson = json['state'];
+    final progressJson = json['progress'];
     return WoxCloudSyncStatus(
       enabled: json['enabled'] ?? false,
       deviceId: json['device_id'] ?? '',
       keyStatus: keyStatusJson is Map<String, dynamic> ? WoxCloudSyncKeyStatus.fromJson(keyStatusJson) : WoxCloudSyncKeyStatus.empty(),
       state: stateJson is Map<String, dynamic> ? WoxCloudSyncState.fromJson(stateJson) : null,
+      progress: progressJson is Map<String, dynamic> ? WoxCloudSyncProgress.fromJson(progressJson) : null,
+    );
+  }
+
+  WoxCloudSyncStatus withProgress(WoxCloudSyncProgress? progress) {
+    return WoxCloudSyncStatus(enabled: enabled, deviceId: deviceId, keyStatus: keyStatus, state: state, progress: progress);
+  }
+}
+
+class WoxCloudSyncProgress {
+  final bool active;
+  final String operation;
+  final String entityType;
+  final String pluginId;
+  final String key;
+  final int current;
+  final int total;
+
+  WoxCloudSyncProgress({
+    required this.active,
+    required this.operation,
+    required this.entityType,
+    required this.pluginId,
+    required this.key,
+    required this.current,
+    required this.total,
+  });
+
+  factory WoxCloudSyncProgress.fromJson(Map<String, dynamic> json) {
+    return WoxCloudSyncProgress(
+      active: json['active'] ?? false,
+      operation: json['operation'] ?? '',
+      entityType: json['entity_type'] ?? '',
+      pluginId: json['plugin_id'] ?? '',
+      key: json['key'] ?? '',
+      current: json['current'] ?? 0,
+      total: json['total'] ?? 0,
     );
   }
 }
