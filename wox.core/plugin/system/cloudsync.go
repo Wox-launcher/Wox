@@ -3,6 +3,8 @@ package system
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strconv"
 	"strings"
 	"wox/account"
 	"wox/cloudsync"
@@ -12,7 +14,17 @@ import (
 	"wox/util"
 )
 
-var cloudSyncIcon = common.PluginCloudSyncIcon
+var (
+	cloudSyncIcon     = common.PluginCloudSyncIcon
+	cloudSyncPushIcon = common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect x="8" y="14" width="48" height="36" rx="10" fill="#2563eb"/><path fill="#dbeafe" d="M22 42h21a8 8 0 0 0 1.4-15.9A13 13 0 0 0 19.1 29A6.5 6.5 0 0 0 22 42"/><path fill="#1d4ed8" d="M31 40h4V30h5l-7-7l-7 7h5z"/></svg>`)
+	cloudSyncPullIcon = common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect x="8" y="14" width="48" height="36" rx="10" fill="#059669"/><path fill="#d1fae5" d="M22 42h21a8 8 0 0 0 1.4-15.9A13 13 0 0 0 19.1 29A6.5 6.5 0 0 0 22 42"/><path fill="#047857" d="M31 23h4v10h5l-7 7l-7-7h5z"/></svg>`)
+)
+
+const (
+	cloudSyncHistoryResultLimit = 10
+	cloudSyncStatusResultScore  = 1000
+	cloudSyncHistoryGroupScore  = 900
+)
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &CloudSyncPlugin{})
@@ -44,6 +56,11 @@ func (p *CloudSyncPlugin) GetMetadata() plugin.Metadata {
 			"Macos",
 			"Linux",
 		},
+		Features: []plugin.MetadataFeature{
+			{
+				Name: plugin.MetadataFeatureIgnoreAutoScore,
+			},
+		},
 	}
 }
 
@@ -59,10 +76,12 @@ func (p *CloudSyncPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 	}
 
 	result := plugin.QueryResult{
-		Title:    p.statusTitle(accountStatus, status),
-		SubTitle: p.statusSubtitle(ctx, accountStatus, status),
-		Icon:     cloudSyncIcon,
-		Tails:    p.statusTails(ctx, accountStatus, status),
+		Title:      p.statusTitle(accountStatus, status),
+		SubTitle:   p.statusSubtitle(ctx, accountStatus, status),
+		Icon:       cloudSyncIcon,
+		Score:      cloudSyncStatusResultScore,
+		GroupScore: cloudSyncStatusResultScore,
+		Tails:      p.statusTails(ctx, accountStatus, status),
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:                   "i18n:plugin_cloudsync_action_sync_now",
@@ -76,7 +95,9 @@ func (p *CloudSyncPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 		},
 	}
 
-	return plugin.NewQueryResponse([]plugin.QueryResult{result})
+	results := []plugin.QueryResult{result}
+	results = append(results, p.historyResults(ctx)...)
+	return plugin.NewQueryResponse(results)
 }
 
 // resolveSearchableStatus enforces the product gate before this system plugin returns any result.
@@ -152,6 +173,92 @@ func (p *CloudSyncPlugin) statusTails(ctx context.Context, accountStatus account
 	return []plugin.QueryResultTail{plugin.NewQueryResultTailTextWithCategory(i18n.GetI18nManager().TranslateWox(ctx, "plugin_cloudsync_tail_active"), plugin.QueryResultTailTextCategorySuccess)}
 }
 
+// historyResults appends recent local push/pull attempts without changing sync state or protocol behavior.
+func (p *CloudSyncPlugin) historyResults(ctx context.Context) []plugin.QueryResult {
+	service := cloudsync.GetService()
+	if service == nil || service.HistoryStore == nil {
+		return nil
+	}
+
+	records, err := service.HistoryStore.ListRecent(ctx, cloudSyncHistoryResultLimit)
+	if err != nil {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to load cloud sync history: %v", err))
+		return nil
+	}
+
+	results := make([]plugin.QueryResult, 0, len(records))
+	for index, record := range records {
+		results = append(results, plugin.QueryResult{
+			Id:         fmt.Sprintf("cloudsync-history-%d", record.ID),
+			Title:      p.historyTitle(ctx, record),
+			SubTitle:   p.historySubtitle(ctx, record),
+			Icon:       p.historyIcon(record),
+			Score:      cloudSyncHistoryGroupScore - int64(index),
+			Group:      "i18n:plugin_cloudsync_history_group",
+			GroupScore: cloudSyncHistoryGroupScore,
+			Tails:      p.historyTails(ctx, record),
+		})
+	}
+	return results
+}
+
+// historyIcon gives push and pull rows distinct scan targets while keeping unknown operations on the base sync icon.
+func (p *CloudSyncPlugin) historyIcon(record cloudsync.CloudSyncHistoryRecord) common.WoxImage {
+	switch record.Operation {
+	case cloudsync.CloudSyncProgressOperationPush:
+		return cloudSyncPushIcon
+	case cloudsync.CloudSyncProgressOperationPull:
+		return cloudSyncPullIcon
+	default:
+		return cloudSyncIcon
+	}
+}
+
+// historyTitle maps one local history row to a short scan-friendly result title.
+func (p *CloudSyncPlugin) historyTitle(ctx context.Context, record cloudsync.CloudSyncHistoryRecord) string {
+	switch {
+	case record.Operation == cloudsync.CloudSyncProgressOperationPush && record.Status == cloudsync.CloudSyncHistoryStatusSucceeded:
+		return p.tr(ctx, "plugin_cloudsync_history_push_succeeded")
+	case record.Operation == cloudsync.CloudSyncProgressOperationPush && record.Status == cloudsync.CloudSyncHistoryStatusFailed:
+		return p.tr(ctx, "plugin_cloudsync_history_push_failed")
+	case record.Operation == cloudsync.CloudSyncProgressOperationPull && record.Status == cloudsync.CloudSyncHistoryStatusSucceeded:
+		return p.tr(ctx, "plugin_cloudsync_history_pull_succeeded")
+	case record.Operation == cloudsync.CloudSyncProgressOperationPull && record.Status == cloudsync.CloudSyncHistoryStatusFailed:
+		return p.tr(ctx, "plugin_cloudsync_history_pull_failed")
+	case record.Status == cloudsync.CloudSyncHistoryStatusFailed:
+		return p.tr(ctx, "plugin_cloudsync_history_sync_failed")
+	default:
+		return p.tr(ctx, "plugin_cloudsync_history_sync_succeeded")
+	}
+}
+
+// historySubtitle summarizes diagnostic fields without exposing synced keys or plaintext values.
+func (p *CloudSyncPlugin) historySubtitle(ctx context.Context, record cloudsync.CloudSyncHistoryRecord) string {
+	parts := []string{}
+	if record.Reason != "" {
+		parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_history_label_source", p.historyReasonLabel(ctx, record.Reason)))
+	}
+	parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_history_label_count", strconv.Itoa(record.ItemCount)))
+	if types := p.formatHistoryEntityCounts(ctx, record.EntityCounts); types != "" {
+		parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_history_label_types", types))
+	}
+	parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_history_label_time", p.formatTimestamp(ctx, historyTimestamp(record))))
+	parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_history_label_duration", formatHistoryDuration(record.DurationMs)))
+	if record.Status == cloudsync.CloudSyncHistoryStatusFailed && record.Error != "" {
+		parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_label_error", truncateCloudSyncHistoryError(record.Error)))
+	}
+
+	return strings.Join(parts, " | ")
+}
+
+// historyTails mirrors history status as a semantic chip in the launcher row.
+func (p *CloudSyncPlugin) historyTails(ctx context.Context, record cloudsync.CloudSyncHistoryRecord) []plugin.QueryResultTail {
+	if record.Status == cloudsync.CloudSyncHistoryStatusFailed {
+		return []plugin.QueryResultTail{plugin.NewQueryResultTailTextWithCategory(p.tr(ctx, "plugin_cloudsync_history_tail_failed"), plugin.QueryResultTailTextCategoryDanger)}
+	}
+	return []plugin.QueryResultTail{plugin.NewQueryResultTailTextWithCategory(p.tr(ctx, "plugin_cloudsync_history_tail_succeeded"), plugin.QueryResultTailTextCategorySuccess)}
+}
+
 // syncNow performs one bidirectional manual sync and refreshes the current launcher row when done.
 func (p *CloudSyncPlugin) syncNow(ctx context.Context) {
 	service := cloudsync.GetService()
@@ -205,6 +312,61 @@ func (p *CloudSyncPlugin) formatTimestamp(ctx context.Context, timestamp int64) 
 	return util.FormatTimestamp(timestamp)
 }
 
+// formatHistoryEntityCounts renders entity-type counts with stable labels and ordering.
+func (p *CloudSyncPlugin) formatHistoryEntityCounts(ctx context.Context, counts map[string]int) string {
+	if len(counts) == 0 {
+		return ""
+	}
+
+	parts := []string{}
+	for _, entityType := range sortedCloudSyncHistoryEntityTypes(counts) {
+		parts = append(parts, fmt.Sprintf("%s %d", p.historyEntityLabel(ctx, entityType), counts[entityType]))
+	}
+	return strings.Join(parts, ", ")
+}
+
+// historyEntityLabel keeps raw sync entity identifiers out of the normal user-facing path.
+func (p *CloudSyncPlugin) historyEntityLabel(ctx context.Context, entityType string) string {
+	switch entityType {
+	case cloudsync.EntityWoxSetting:
+		return p.tr(ctx, "plugin_cloudsync_history_entity_wox_setting")
+	case cloudsync.EntityPluginSetting:
+		return p.tr(ctx, "plugin_cloudsync_history_entity_plugin_setting")
+	case cloudsync.EntityInstalledPlugin:
+		return p.tr(ctx, "plugin_cloudsync_history_entity_installed_plugin")
+	case cloudsync.EntityInstalledTheme:
+		return p.tr(ctx, "plugin_cloudsync_history_entity_installed_theme")
+	default:
+		return entityType
+	}
+}
+
+// historyReasonLabel maps internal trigger reasons to labels a normal user can understand.
+func (p *CloudSyncPlugin) historyReasonLabel(ctx context.Context, reason string) string {
+	switch reason {
+	case "manual":
+		return p.tr(ctx, "plugin_cloudsync_history_reason_manual")
+	case "startup":
+		return p.tr(ctx, "plugin_cloudsync_history_reason_startup")
+	case "startup-missing-keys":
+		return p.tr(ctx, "plugin_cloudsync_history_reason_startup_missing_keys")
+	case "periodic":
+		return p.tr(ctx, "plugin_cloudsync_history_reason_periodic")
+	case "first", "tick":
+		return p.tr(ctx, "plugin_cloudsync_history_reason_auto")
+	case "bootstrap":
+		return p.tr(ctx, "plugin_cloudsync_history_reason_bootstrap")
+	case "done":
+		return p.tr(ctx, "plugin_cloudsync_history_reason_shutdown")
+	default:
+		return reason
+	}
+}
+
+func (p *CloudSyncPlugin) tr(ctx context.Context, key string) string {
+	return i18n.GetI18nManager().TranslateWox(ctx, key)
+}
+
 func (p *CloudSyncPlugin) notify(ctx context.Context, key string) {
 	p.notifyText(ctx, i18n.GetI18nManager().TranslateWox(ctx, key))
 }
@@ -213,4 +375,64 @@ func (p *CloudSyncPlugin) notifyText(ctx context.Context, text string) {
 	if p.api != nil {
 		p.api.Notify(ctx, text)
 	}
+}
+
+// sortedCloudSyncHistoryEntityTypes keeps the common entity types in product order and unknown types deterministic.
+func sortedCloudSyncHistoryEntityTypes(counts map[string]int) []string {
+	ordered := []string{
+		cloudsync.EntityWoxSetting,
+		cloudsync.EntityPluginSetting,
+		cloudsync.EntityInstalledPlugin,
+		cloudsync.EntityInstalledTheme,
+	}
+	seen := map[string]struct{}{}
+	result := []string{}
+	for _, entityType := range ordered {
+		if counts[entityType] > 0 {
+			result = append(result, entityType)
+			seen[entityType] = struct{}{}
+		}
+	}
+
+	other := []string{}
+	for entityType, count := range counts {
+		if count <= 0 {
+			continue
+		}
+		if _, ok := seen[entityType]; ok {
+			continue
+		}
+		other = append(other, entityType)
+	}
+	sort.Strings(other)
+	return append(result, other...)
+}
+
+// historyTimestamp prefers completion time because it matches when the user sees the outcome.
+func historyTimestamp(record cloudsync.CloudSyncHistoryRecord) int64 {
+	if record.FinishedAt > 0 {
+		return record.FinishedAt
+	}
+	return record.StartedAt
+}
+
+// formatHistoryDuration keeps short sync attempts readable without locale-specific formatting.
+func formatHistoryDuration(durationMs int64) string {
+	if durationMs < 1000 {
+		return fmt.Sprintf("%dms", durationMs)
+	}
+	if durationMs%1000 == 0 {
+		return fmt.Sprintf("%ds", durationMs/1000)
+	}
+	return fmt.Sprintf("%.1fs", float64(durationMs)/1000)
+}
+
+// truncateCloudSyncHistoryError keeps long backend errors from crowding the launcher row.
+func truncateCloudSyncHistoryError(message string) string {
+	const maxErrorLength = 120
+	runes := []rune(message)
+	if len(runes) <= maxErrorLength {
+		return message
+	}
+	return string(runes[:maxErrorLength]) + "..."
 }

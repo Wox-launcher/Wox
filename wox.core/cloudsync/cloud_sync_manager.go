@@ -42,6 +42,7 @@ type CloudSyncDependencies struct {
 	ProgressNotifier  CloudSyncProgressNotifier
 	ExclusionProvider CloudSyncPluginExclusionProvider
 	SettingReloader   CloudSyncSettingReloader
+	HistoryStore      CloudSyncHistoryStore
 }
 
 type CloudSyncManager struct {
@@ -56,6 +57,7 @@ type CloudSyncManager struct {
 	progressNotifier CloudSyncProgressNotifier
 	exclusions       CloudSyncPluginExclusionProvider
 	settingReloader  CloudSyncSettingReloader
+	historyStore     CloudSyncHistoryStore
 
 	mu         sync.Mutex
 	pushMu     sync.Mutex
@@ -84,6 +86,7 @@ func NewCloudSyncManager(config CloudSyncConfig, deps CloudSyncDependencies) *Cl
 		exclusions:       deps.ExclusionProvider,
 		rand:             rand.New(rand.NewSource(time.Now().UnixNano())),
 		settingReloader:  deps.SettingReloader,
+		historyStore:     deps.HistoryStore,
 	}
 }
 
@@ -248,8 +251,22 @@ func (m *CloudSyncManager) PushMissingLocalSnapshot(ctx context.Context, reason 
 }
 
 func (m *CloudSyncManager) pushPendingLocked(ctx context.Context, reason string) {
-	if err := m.ensureConfigured(); err != nil {
+	startedAt := util.GetSystemTimestamp()
+	uploaded := 0
+	entityCounts := map[string]int{}
+	historyStatus := ""
+	var historyErr error
+	defer func() {
+		m.recordOperationHistory(ctx, CloudSyncProgressOperationPush, reason, startedAt, uploaded, entityCounts, historyStatus, historyErr)
+	}()
+	fail := func(err error) {
+		historyStatus = CloudSyncHistoryStatusFailed
+		historyErr = err
 		m.recordFailure(ctx, err)
+	}
+
+	if err := m.ensureConfigured(); err != nil {
+		fail(err)
 		return
 	}
 
@@ -268,12 +285,13 @@ func (m *CloudSyncManager) pushPendingLocked(ctx context.Context, reason string)
 
 	for {
 		if ctx.Err() != nil {
+			historyStatus = "cancelled"
 			return
 		}
 
 		pending, err := m.oplogStore.LoadPending(ctx, m.config.MaxBatchCount*4)
 		if err != nil {
-			m.recordFailure(ctx, fmt.Errorf("failed to load pending oplogs: %w", err))
+			fail(fmt.Errorf("failed to load pending oplogs: %w", err))
 			return
 		}
 		if len(pending) == 0 {
@@ -303,7 +321,7 @@ func (m *CloudSyncManager) pushPendingLocked(ctx context.Context, reason string)
 
 		changes, oplogIds, err := m.buildPushBatch(ctx, eligible)
 		if err != nil {
-			m.recordFailure(ctx, fmt.Errorf("failed to build push batch: %w", err))
+			fail(fmt.Errorf("failed to build push batch: %w", err))
 			return
 		}
 		if len(changes) == 0 {
@@ -313,7 +331,7 @@ func (m *CloudSyncManager) pushPendingLocked(ctx context.Context, reason string)
 		m.setProgressFromOplog(CloudSyncProgressOperationPush, eligible[0], processed, total)
 		deviceId, err := m.deviceProvider.DeviceID(ctx)
 		if err != nil {
-			m.recordFailure(ctx, fmt.Errorf("failed to get device id: %w", err))
+			fail(fmt.Errorf("failed to get device id: %w", err))
 			return
 		}
 
@@ -322,12 +340,14 @@ func (m *CloudSyncManager) pushPendingLocked(ctx context.Context, reason string)
 			Changes:  changes,
 		})
 		if err != nil {
-			m.recordFailure(ctx, fmt.Errorf("cloud sync push failed: %w", err))
+			fail(fmt.Errorf("cloud sync push failed: %w", err))
 			return
 		}
+		uploaded += len(changes)
+		addCloudSyncChangeEntityCounts(entityCounts, changes)
 
 		if err := m.oplogStore.MarkSynced(ctx, oplogIds); err != nil {
-			m.recordFailure(ctx, fmt.Errorf("failed to mark oplogs synced: %w", err))
+			fail(fmt.Errorf("failed to mark oplogs synced: %w", err))
 			return
 		}
 
@@ -347,12 +367,26 @@ func (m *CloudSyncManager) Pull(ctx context.Context, reason string) {
 	m.pullMu.Lock()
 	defer m.pullMu.Unlock()
 
-	if err := m.ensureConfigured(); err != nil {
+	startedAt := util.GetSystemTimestamp()
+	pulled := 0
+	entityCounts := map[string]int{}
+	historyStatus := ""
+	var historyErr error
+	defer func() {
+		m.recordOperationHistory(ctx, CloudSyncProgressOperationPull, reason, startedAt, pulled, entityCounts, historyStatus, historyErr)
+	}()
+	fail := func(err error) {
+		historyStatus = CloudSyncHistoryStatusFailed
+		historyErr = err
 		m.recordFailure(ctx, err)
+	}
+
+	if err := m.ensureConfigured(); err != nil {
+		fail(err)
 		return
 	}
 	if m.applier == nil {
-		m.recordFailure(ctx, fmt.Errorf("cloud sync applier not configured"))
+		fail(fmt.Errorf("cloud sync applier not configured"))
 		return
 	}
 
@@ -361,24 +395,24 @@ func (m *CloudSyncManager) Pull(ctx context.Context, reason string) {
 	}
 
 	defer m.clearProgress(CloudSyncProgressOperationPull)
-	pulled := 0
 	m.setProgress(CloudSyncProgress{Operation: CloudSyncProgressOperationPull, Current: pulled})
 
 	state, err := LoadCloudSyncState(ctx)
 	if err != nil {
-		m.recordFailure(ctx, fmt.Errorf("failed to load cloud sync state: %w", err))
+		fail(fmt.Errorf("failed to load cloud sync state: %w", err))
 		return
 	}
 
 	deviceId, err := m.deviceProvider.DeviceID(ctx)
 	if err != nil {
-		m.recordFailure(ctx, fmt.Errorf("failed to get device id: %w", err))
+		fail(fmt.Errorf("failed to get device id: %w", err))
 		return
 	}
 
 	cursor := state.Cursor
 	for {
 		if ctx.Err() != nil {
+			historyStatus = "cancelled"
 			return
 		}
 
@@ -388,17 +422,18 @@ func (m *CloudSyncManager) Pull(ctx context.Context, reason string) {
 			Limit:    m.config.PullLimit,
 		})
 		if err != nil {
-			m.recordFailure(ctx, fmt.Errorf("cloud sync pull failed: %w", err))
+			fail(fmt.Errorf("cloud sync pull failed: %w", err))
 			return
 		}
 
 		if len(resp.Records) > 0 {
 			m.setProgressFromRecord(CloudSyncProgressOperationPull, resp.Records[0], pulled, 0)
+			pulled += len(resp.Records)
+			addCloudSyncRecordEntityCounts(entityCounts, resp.Records)
 			if err := m.applyRecords(ctx, resp.Records); err != nil {
-				m.recordFailure(ctx, fmt.Errorf("failed to apply remote records: %w", err))
+				fail(fmt.Errorf("failed to apply remote records: %w", err))
 				return
 			}
-			pulled += len(resp.Records)
 			m.setProgressFromRecord(CloudSyncProgressOperationPull, resp.Records[len(resp.Records)-1], pulled, 0)
 		}
 
@@ -410,7 +445,7 @@ func (m *CloudSyncManager) Pull(ctx context.Context, reason string) {
 			s.BackoffUntil = 0
 			s.RetryCount = 0
 		}); err != nil {
-			m.recordFailure(ctx, fmt.Errorf("failed to update cloud sync state: %w", err))
+			fail(fmt.Errorf("failed to update cloud sync state: %w", err))
 			return
 		}
 
@@ -792,6 +827,41 @@ func (m *CloudSyncManager) recordFailure(ctx context.Context, err error) {
 	})
 }
 
+// recordOperationHistory keeps user-visible sync history separate from sync cursor/state semantics.
+func (m *CloudSyncManager) recordOperationHistory(ctx context.Context, operation string, reason string, startedAt int64, itemCount int, entityCounts map[string]int, status string, err error) {
+	if m.historyStore == nil {
+		return
+	}
+	if status == "" {
+		status = CloudSyncHistoryStatusSucceeded
+	}
+	if status == CloudSyncHistoryStatusSucceeded && itemCount == 0 {
+		return
+	}
+	if status != CloudSyncHistoryStatusSucceeded && status != CloudSyncHistoryStatusFailed {
+		return
+	}
+
+	finishedAt := util.GetSystemTimestamp()
+	record := CloudSyncHistoryRecord{
+		Operation:    operation,
+		Reason:       reason,
+		Status:       status,
+		StartedAt:    startedAt,
+		FinishedAt:   finishedAt,
+		DurationMs:   finishedAt - startedAt,
+		ItemCount:    itemCount,
+		EntityCounts: copyCloudSyncEntityCounts(entityCounts),
+	}
+	if err != nil {
+		record.Error = err.Error()
+	}
+
+	if recordErr := m.historyStore.Record(ctx, record); recordErr != nil {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to record cloud sync history: %v", recordErr))
+	}
+}
+
 func (m *CloudSyncManager) recordPushSuccess(ctx context.Context, resp *CloudSyncPushResponse) {
 	_, _ = UpdateCloudSyncState(ctx, func(state *database.CloudSyncState) {
 		state.LastError = ""
@@ -839,6 +909,32 @@ func (m *CloudSyncManager) randInt63n(n int64) int64 {
 
 func buildCloudSyncAAD(entityType string, pluginId string, key string, op string) string {
 	return fmt.Sprintf("%s:%s:%s:%s", entityType, pluginId, key, op)
+}
+
+func addCloudSyncChangeEntityCounts(counts map[string]int, changes []CloudSyncChange) {
+	for _, change := range changes {
+		if change.EntityType != "" {
+			counts[change.EntityType]++
+		}
+	}
+}
+
+func addCloudSyncRecordEntityCounts(counts map[string]int, records []CloudSyncRecord) {
+	for _, record := range records {
+		if record.EntityType != "" {
+			counts[record.EntityType]++
+		}
+	}
+}
+
+func copyCloudSyncEntityCounts(counts map[string]int) map[string]int {
+	copied := map[string]int{}
+	for entityType, count := range counts {
+		if entityType != "" && count > 0 {
+			copied[entityType] = count
+		}
+	}
+	return copied
 }
 
 func normalizeCloudSyncConfig(config CloudSyncConfig) CloudSyncConfig {

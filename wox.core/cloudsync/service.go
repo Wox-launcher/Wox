@@ -10,6 +10,7 @@ type Service struct {
 	Client         *CloudSyncHTTPClient
 	KeyManager     *KeyManager
 	DeviceProvider CloudSyncDeviceProvider
+	HistoryStore   CloudSyncHistoryStore
 }
 
 type ServiceStatus struct {

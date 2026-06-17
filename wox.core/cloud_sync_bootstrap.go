@@ -37,6 +37,7 @@ func initCloudSync(ctx context.Context) {
 		KeyClient:      client,
 		DeviceProvider: deviceProvider,
 	})
+	historyStore := cloudsync.NewDefaultCloudSyncHistoryStore()
 
 	manager := cloudsync.NewCloudSyncManager(cloudsync.DefaultCloudSyncConfig(), cloudsync.CloudSyncDependencies{
 		Client:            client,
@@ -49,6 +50,7 @@ func initCloudSync(ctx context.Context) {
 		ProgressNotifier:  cloudSyncUIProgressNotifier{},
 		ExclusionProvider: settingadapter.NewCloudSyncPluginExclusionProvider(),
 		SettingReloader:   ui.GetUIManager().GetUI(ctx),
+		HistoryStore:      historyStore,
 	})
 
 	service := &cloudsync.Service{
@@ -56,6 +58,7 @@ func initCloudSync(ctx context.Context) {
 		Client:         client,
 		KeyManager:     keyManager,
 		DeviceProvider: deviceProvider,
+		HistoryStore:   historyStore,
 	}
 	cloudsync.SetService(service)
 }

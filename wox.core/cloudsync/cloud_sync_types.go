@@ -21,6 +21,9 @@ const (
 	CloudSyncProgressOperationPush     = "push"
 	CloudSyncProgressOperationPull     = "pull"
 	CloudSyncProgressOperationRestore  = "restore"
+
+	CloudSyncHistoryStatusSucceeded = "succeeded"
+	CloudSyncHistoryStatusFailed    = "failed"
 )
 
 type CloudSyncProgress struct {
@@ -31,6 +34,20 @@ type CloudSyncProgress struct {
 	Key        string `json:"key,omitempty"`
 	Current    int    `json:"current"`
 	Total      int    `json:"total,omitempty"`
+}
+
+// CloudSyncHistoryRecord is a local-only summary of one push or pull attempt.
+type CloudSyncHistoryRecord struct {
+	ID           uint
+	Operation    string
+	Reason       string
+	Status       string
+	StartedAt    int64
+	FinishedAt   int64
+	DurationMs   int64
+	ItemCount    int
+	EntityCounts map[string]int
+	Error        string
 }
 
 type CloudSyncEncryptedValue struct {
@@ -227,6 +244,12 @@ type CloudSyncChangeNotifier interface {
 
 type CloudSyncProgressNotifier interface {
 	CloudSyncProgressChanged(ctx context.Context, progress CloudSyncProgress)
+}
+
+// CloudSyncHistoryStore persists local sync attempt summaries for diagnostic UI surfaces.
+type CloudSyncHistoryStore interface {
+	Record(ctx context.Context, record CloudSyncHistoryRecord) error
+	ListRecent(ctx context.Context, limit int) ([]CloudSyncHistoryRecord, error)
 }
 
 type CloudSyncPluginExclusionProvider interface {

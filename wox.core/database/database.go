@@ -71,6 +71,20 @@ type CloudSyncState struct {
 	Bootstrapped bool
 }
 
+// CloudSyncHistory stores local device sync attempts for user-visible diagnostics.
+type CloudSyncHistory struct {
+	ID               uint `gorm:"primaryKey;autoIncrement"`
+	Operation        string
+	Reason           string
+	Status           string
+	StartedAt        int64 `gorm:"index"`
+	FinishedAt       int64
+	DurationMs       int64
+	ItemCount        int
+	EntityCountsJSON string
+	Error            string
+}
+
 type AccountState struct {
 	ID                           uint `gorm:"primaryKey"`
 	UserID                       string
@@ -177,6 +191,7 @@ func Init(ctx context.Context) error {
 		&PluginSetting{},
 		&Oplog{},
 		&CloudSyncState{},
+		&CloudSyncHistory{},
 		&AccountState{},
 		&MRURecord{},
 		&AttentionItem{},
