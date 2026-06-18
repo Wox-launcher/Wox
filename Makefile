@@ -305,12 +305,6 @@ release-continue:
 	git tag -f -a "$$tag" -m "Release $$tag"; \
 	git push origin "refs/tags/$$tag" --force; \
 	echo "Re-pushed $$tag."; \
-	if command -v gh >/dev/null 2>&1; then \
-		echo "Recent Release workflow runs:"; \
-		gh run list --workflow Release --limit 3; \
-	else \
-		echo "Open GitHub Actions to watch the new Release workflow run."; \
-	fi
 
 plugins:
 	cd ci && go run . plugin
