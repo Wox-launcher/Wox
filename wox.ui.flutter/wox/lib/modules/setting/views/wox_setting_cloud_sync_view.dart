@@ -8,6 +8,7 @@ import 'package:wox/components/plugin/wox_setting_plugin_table_view.dart';
 import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_dialog.dart';
 import 'package:wox/components/wox_textfield.dart';
+import 'package:wox/components/wox_tooltip.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_cloud_sync.dart';
@@ -17,14 +18,14 @@ import 'package:wox/utils/consts.dart';
 
 enum _CloudSyncAccountAction { changePassword, logout }
 
-enum _CloudSyncSubscriptionAction { refreshStatus, manageSubscription }
+enum _CloudSyncSubscriptionAction { refreshStatus, subscribePro, manageSubscription }
 
 class WoxSettingCloudSyncView extends WoxSettingBaseView {
   const WoxSettingCloudSyncView({super.key});
 
   static const String _pluginExclusionTableKey = "CloudSyncDisabledPluginsTable";
   static const String _pluginExclusionPluginIdKey = "PluginId";
-  static const double _cloudSyncLabelWidth = 420.0;
+  static const double _cloudSyncLabelWidth = 520.0;
   static const double _cloudSyncValueWidth = GENERAL_SETTING_WIDE_FORM_WIDTH - _cloudSyncLabelWidth - 32.0;
 
   Widget buildCloudSyncInfoValue(String value, {Color? color, int? maxLines, TextOverflow? overflow}) {
@@ -806,7 +807,6 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
       final billingWaitingMessageKey = controller.accountBillingWaitingMessageKey.value;
       final subscriptionError = controller.accountSubscriptionError.value;
       final isPro = account.isPro;
-      final syncLimit = account.syncLimits.deviceLimit;
       final billingWaitingText = billingWaitingMessageKey.isNotEmpty ? controller.tr(billingWaitingMessageKey) : controller.tr("ui_cloud_sync_subscription_waiting_payment");
       final subscriptionStatusText =
           isBillingWaiting
@@ -815,7 +815,7 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
               ? normalizeAccountActionError(subscriptionError)
               : isPro
               ? controller.tr("ui_cloud_sync_plan_pro_status")
-              : controller.tr("ui_cloud_sync_plan_free_status").replaceAll("{count}", account.deviceCount.toString()).replaceAll("{limit}", (syncLimit ?? 2).toString());
+              : controller.tr("ui_cloud_sync_plan_free_status");
       final subscriptionStatusColor =
           isBillingWaiting
               ? getThemeSubTextColor()
@@ -839,6 +839,7 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
               settingKey: "CloudSyncSubscriptionStatus",
               label: controller.tr("ui_cloud_sync_plan_status"),
               labelWidth: _cloudSyncLabelWidth,
+              tips: controller.tr("ui_cloud_sync_plan_status_tips"),
               child: SizedBox(
                 width: _cloudSyncValueWidth,
                 child: Row(
@@ -851,16 +852,8 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
                         child: buildCloudSyncInfoValue(subscriptionStatusText, color: subscriptionStatusColor, maxLines: 1, overflow: TextOverflow.ellipsis),
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    if (!isPro)
-                      WoxButton.secondary(
-                        text: controller.tr("ui_cloud_sync_refresh_status"),
-                        onPressed: isBusy || isBillingWaiting ? null : () => controller.accountRefreshSubscriptionStatus(),
-                      ),
-                    if (!isPro) const SizedBox(width: 8),
-                    if (!isPro)
-                      WoxButton.primary(text: controller.tr("ui_cloud_sync_subscribe"), onPressed: isBusy || isBillingWaiting ? null : () => controller.accountOpenCheckout()),
-                    if (isPro) buildSubscriptionActionMenu(isBusy: isBusy, isBillingWaiting: isBillingWaiting),
+                    const SizedBox(width: 6),
+                    buildSubscriptionActionMenu(isPro: isPro, isBusy: isBusy, isBillingWaiting: isBillingWaiting),
                   ],
                 ),
               ),
@@ -955,7 +948,7 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
   }
 
   // Keeps subscription-only actions next to the subscription status instead of mixing them into account commands.
-  Widget buildSubscriptionActionMenu({required bool isBusy, required bool isBillingWaiting}) {
+  Widget buildSubscriptionActionMenu({required bool isPro, required bool isBusy, required bool isBillingWaiting}) {
     final textStyle = TextStyle(color: getThemeTextColor(), fontSize: 13);
     return PopupMenuButton<_CloudSyncSubscriptionAction>(
       enabled: !isBusy,
@@ -969,6 +962,9 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
           case _CloudSyncSubscriptionAction.refreshStatus:
             await controller.accountRefreshSubscriptionStatus();
             break;
+          case _CloudSyncSubscriptionAction.subscribePro:
+            await controller.accountOpenCheckout();
+            break;
           case _CloudSyncSubscriptionAction.manageSubscription:
             await controller.accountOpenBillingPortal();
             break;
@@ -976,11 +972,15 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
       },
       itemBuilder:
           (context) => [
-            PopupMenuItem(value: _CloudSyncSubscriptionAction.refreshStatus, child: Text(controller.tr("ui_cloud_sync_refresh_status"), style: textStyle)),
             PopupMenuItem(
-              value: _CloudSyncSubscriptionAction.manageSubscription,
+              value: _CloudSyncSubscriptionAction.refreshStatus,
               enabled: !isBillingWaiting,
-              child: Text(controller.tr("ui_cloud_sync_manage_subscription"), style: textStyle),
+              child: Text(controller.tr("ui_cloud_sync_refresh_status"), style: textStyle),
+            ),
+            PopupMenuItem(
+              value: isPro ? _CloudSyncSubscriptionAction.manageSubscription : _CloudSyncSubscriptionAction.subscribePro,
+              enabled: !isBillingWaiting,
+              child: Text(isPro ? controller.tr("ui_cloud_sync_manage_subscription") : _cloudSyncSubscribeProLabel(), style: textStyle),
             ),
           ],
       child: Container(
@@ -990,6 +990,14 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
         child: Icon(Icons.arrow_drop_down, size: 20, color: getThemeTextColor().withValues(alpha: isBusy ? 0.36 : 0.76)),
       ),
     );
+  }
+
+  String _cloudSyncSubscribeProLabel() {
+    final priceText = _cloudSyncPlanPriceText(controller.cloudSyncBillingPlan.value.pro.price);
+    if (priceText.isEmpty || priceText == controller.tr("ui_cloud_sync_plan_price_loading") || priceText == controller.tr("ui_cloud_sync_plan_price_unavailable")) {
+      return controller.tr("ui_cloud_sync_subscribe");
+    }
+    return controller.tr("ui_cloud_sync_subscribe_with_price").replaceAll("{price}", priceText);
   }
 
   Widget buildCloudSyncIntroSection() {
@@ -1165,6 +1173,12 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
           ),
           _buildCloudSyncPlanTableRow(
             compact: compact,
+            label: controller.tr("ui_cloud_sync_plan_row_sync_mode"),
+            freeValue: controller.tr("ui_cloud_sync_plan_feature_manual_sync"),
+            proValue: controller.tr("ui_cloud_sync_plan_feature_auto_sync"),
+          ),
+          _buildCloudSyncPlanTableRow(
+            compact: compact,
             label: controller.tr("ui_cloud_sync_plan_row_frequency"),
             freeValue: controller.tr("ui_cloud_sync_plan_feature_hourly"),
             proValue: controller.tr("ui_cloud_sync_plan_feature_unlimited_sync"),
@@ -1275,6 +1289,12 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
   Widget buildCloudSyncDeviceSection() {
     return Obx(() {
       final devices = controller.cloudSyncDeviceList.value.devices;
+      final account = controller.accountStatus.value;
+      final deviceLimitText = (account.syncLimits.deviceLimit ?? 2).toString();
+      final deviceTips =
+          account.isPro
+              ? controller.tr("ui_cloud_sync_devices_pro_tips")
+              : controller.tr("ui_cloud_sync_devices_free_tips").replaceAll("{count}", account.deviceCount.toString()).replaceAll("{limit}", deviceLimitText);
       final isBusy = controller.isCloudSyncActionLoading.value;
       return formSection(
         title: controller.tr("ui_cloud_sync_devices"),
@@ -1283,7 +1303,7 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
             settingKey: "CloudSyncDevices",
             label: controller.tr("ui_cloud_sync_devices"),
             labelWidth: _cloudSyncLabelWidth,
-            tips: controller.tr("ui_cloud_sync_devices_tips"),
+            tips: deviceTips,
             child: SizedBox(
               width: _cloudSyncValueWidth,
               child: Align(
@@ -1343,12 +1363,32 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
           const SizedBox(width: 18),
           Text(formatCloudSyncTime(device.lastSeenAt), style: TextStyle(color: getThemeSubTextColor(), fontSize: 12, height: 1.25), maxLines: 1, overflow: TextOverflow.ellipsis),
           const SizedBox(width: 10),
-          WoxButton.secondary(
-            text: device.revoked ? controller.tr("ui_cloud_sync_devices_revoked") : controller.tr("ui_cloud_sync_devices_revoke"),
-            onPressed: isBusy || device.current || device.revoked ? null : () => controller.cloudSyncRevokeDevice(device.deviceId),
-          ),
+          if (device.revoked)
+            _buildCloudSyncDeviceRevokedStatus()
+          else
+            WoxButton.secondary(
+              text: controller.tr("ui_cloud_sync_devices_revoke"),
+              onPressed: isBusy || device.current ? null : () => controller.cloudSyncRevokeDevice(device.deviceId),
+            ),
         ],
       ),
+    );
+  }
+
+  // Shows revoked devices as a read-only state instead of a disabled action button.
+  Widget _buildCloudSyncDeviceRevokedStatus() {
+    final color = getThemeSubTextColor();
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(controller.tr("ui_cloud_sync_devices_revoked"), style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600, height: 1.25)),
+        const SizedBox(width: 5),
+        WoxTooltip(
+          message: controller.tr("ui_cloud_sync_devices_revoked_tips"),
+          preferSide: WoxTooltipSide.left,
+          child: Icon(Icons.info_outline, size: 14, color: color.withValues(alpha: 0.82)),
+        ),
+      ],
     );
   }
 

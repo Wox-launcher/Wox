@@ -1075,7 +1075,7 @@ func (m *CloudSyncManager) recordFailure(ctx context.Context, err error) {
 	}
 
 	_, _ = UpdateCloudSyncState(ctx, func(state *database.CloudSyncState) {
-		state.LastError = err.Error()
+		state.LastError = userFacingCloudSyncError(err)
 		var requestErr *CloudSyncRequestError
 		if errors.As(err, &requestErr) && requestErr.Code == "device_revoked" {
 			state.RetryCount = 0
@@ -1098,6 +1098,15 @@ func (m *CloudSyncManager) recordFailure(ctx context.Context, err error) {
 func isCloudSyncDeviceRevokedError(err error) bool {
 	var requestErr *CloudSyncRequestError
 	return errors.As(err, &requestErr) && requestErr.Code == "device_revoked"
+}
+
+// userFacingCloudSyncError keeps server-localized messages visible without leaking local wrapper text or protocol codes.
+func userFacingCloudSyncError(err error) string {
+	var requestErr *CloudSyncRequestError
+	if errors.As(err, &requestErr) && strings.TrimSpace(requestErr.Message) != "" {
+		return requestErr.Message
+	}
+	return err.Error()
 }
 
 // recordOperationHistory keeps user-visible sync history separate from sync cursor/state semantics.
@@ -1129,7 +1138,7 @@ func (m *CloudSyncManager) recordOperationHistory(ctx context.Context, operation
 		Details:      append([]CloudSyncHistoryRecordDetail(nil), details...),
 	}
 	if err != nil {
-		record.Error = err.Error()
+		record.Error = userFacingCloudSyncError(err)
 	}
 
 	if recordErr := m.historyStore.Record(ctx, record); recordErr != nil {

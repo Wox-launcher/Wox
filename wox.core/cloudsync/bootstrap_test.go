@@ -5,7 +5,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -308,7 +307,7 @@ func TestCloudSyncManagerStopsWhenDeviceRevoked(t *testing.T) {
 		manager.mu.Lock()
 		started := manager.started
 		manager.mu.Unlock()
-		if strings.Contains(state.LastError, "device_revoked") && !started {
+		if state.LastError == "revoked" && !started {
 			return
 		}
 		time.Sleep(20 * time.Millisecond)
@@ -318,7 +317,7 @@ func TestCloudSyncManagerStopsWhenDeviceRevoked(t *testing.T) {
 	manager.mu.Lock()
 	started := manager.started
 	manager.mu.Unlock()
-	t.Fatalf("last error = %q, started = %v, want device_revoked and stopped", state.LastError, started)
+	t.Fatalf("last error = %q, started = %v, want revoked and stopped", state.LastError, started)
 }
 
 func TestApplyRecordsSkipsSettingsForOtherPlatforms(t *testing.T) {

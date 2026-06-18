@@ -122,7 +122,7 @@ func TestHandleSyncDevicesListUpdatesCurrentDeviceBeforeListing(t *testing.T) {
 
 func TestHandleSyncDeviceJoinUsesCurrentDeviceAndStartsManager(t *testing.T) {
 	client := &routerCloudSyncClient{}
-	initSyncBootstrapRouterTest(t, database.AccountState{LoggedIn: true, Email: "u@example.com", SyncEligible: true, SyncEnabled: true}, client)
+	initSyncBootstrapRouterTest(t, database.AccountState{LoggedIn: true, Email: "u@example.com", SyncEligible: true, SyncPlan: "pro", SyncEnabled: true}, client)
 
 	request := httptest.NewRequest(http.MethodPost, "/sync/devices/join", nil)
 	response := httptest.NewRecorder()

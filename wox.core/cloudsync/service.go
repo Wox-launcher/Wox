@@ -88,7 +88,7 @@ func (s *Service) UpdateCurrentDevice(ctx context.Context) error {
 	return nil
 }
 
-// JoinCurrentDevice restores cloud sync eligibility for this local device only.
+// JoinCurrentDevice restores cloud sync eligibility for this local device only; callers decide whether background sync may run for the active plan.
 func (s *Service) JoinCurrentDevice(ctx context.Context) error {
 	if s == nil {
 		return fmt.Errorf("cloud sync is not configured")
@@ -118,7 +118,6 @@ func (s *Service) JoinCurrentDevice(ctx context.Context) error {
 		state.BackoffUntil = 0
 		state.RetryCount = 0
 	})
-	s.StartManager(ctx)
 	return nil
 }
 

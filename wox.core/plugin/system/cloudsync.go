@@ -75,7 +75,7 @@ func (p *CloudSyncPlugin) Init(ctx context.Context, initParams plugin.InitParams
 func (p *CloudSyncPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	accountStatus, status, ok := p.resolveSearchableStatus(ctx)
 	if !ok {
-		return plugin.QueryResponse{}
+		return plugin.NewQueryResponse([]plugin.QueryResult{p.loginRequiredResult(ctx)})
 	}
 	if historyID, ok := parseCloudSyncHistoryDetailQuery(query.Search); ok {
 		return plugin.NewQueryResponse(p.historyDetailResults(ctx, historyID))
@@ -106,26 +106,32 @@ func (p *CloudSyncPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 	return plugin.NewQueryResponse(results)
 }
 
-// resolveSearchableStatus enforces the product gate before this system plugin returns any result.
+// resolveSearchableStatus only requires a signed-in sync account so free users can inspect local history.
 func (p *CloudSyncPlugin) resolveSearchableStatus(ctx context.Context) (account.Status, cloudsync.ServiceStatus, bool) {
 	accountService := account.GetService()
 	if accountService == nil {
 		return account.Status{}, cloudsync.ServiceStatus{}, false
 	}
 	accountStatus := accountService.Status(ctx)
-	if !accountStatus.LoggedIn || !accountStatus.SyncEligible {
+	if !accountStatus.LoggedIn {
 		return account.Status{}, cloudsync.ServiceStatus{}, false
 	}
 
 	service := cloudsync.GetService()
-	if service == nil || service.KeyManager == nil || service.Manager == nil {
-		return account.Status{}, cloudsync.ServiceStatus{}, false
+	if service == nil {
+		return accountStatus, cloudsync.ServiceStatus{}, true
 	}
-	status := service.Status(ctx)
-	if !status.KeyStatus.Available {
-		return account.Status{}, cloudsync.ServiceStatus{}, false
+	return accountStatus, service.Status(ctx), true
+}
+
+func (p *CloudSyncPlugin) loginRequiredResult(ctx context.Context) plugin.QueryResult {
+	return plugin.QueryResult{
+		Title:      p.tr(ctx, "plugin_cloudsync_login_required_title"),
+		SubTitle:   p.tr(ctx, "plugin_cloudsync_login_required_subtitle"),
+		Icon:       cloudSyncIcon,
+		Score:      cloudSyncStatusResultScore,
+		GroupScore: cloudSyncStatusResultScore,
 	}
-	return accountStatus, status, true
 }
 
 // statusTitle maps the persisted sync state to a single scan-friendly result title.
@@ -157,7 +163,7 @@ func (p *CloudSyncPlugin) statusSubtitle(ctx context.Context, accountStatus acco
 		parts = append(parts, i18n.GetI18nManager().TranslateWox(ctx, "plugin_cloudsync_detail_disabled"))
 	}
 	if status.State != nil && status.State.LastError != "" {
-		parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_label_error", status.State.LastError))
+		parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_label_error", formatCloudSyncError(status.State.LastError)))
 	}
 	if status.State != nil && status.State.BackoffUntil > util.GetSystemTimestamp() {
 		parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_label_retry_after", util.FormatTimestamp(status.State.BackoffUntil)))
@@ -321,10 +327,9 @@ func (p *CloudSyncPlugin) historySubtitle(ctx context.Context, record cloudsync.
 	if types := p.formatHistoryEntityCounts(ctx, record.EntityCounts); types != "" {
 		parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_history_label_types", types))
 	}
-	parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_history_label_time", p.formatTimestamp(ctx, historyTimestamp(record))))
 	parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_history_label_duration", formatHistoryDuration(record.DurationMs)))
 	if record.Status != cloudsync.CloudSyncHistoryStatusSucceeded && record.Error != "" {
-		parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_label_error", formatCloudSyncHistoryError(record.Error)))
+		parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_label_error", formatCloudSyncError(record.Error)))
 	}
 
 	return strings.Join(parts, " | ")
@@ -332,13 +337,14 @@ func (p *CloudSyncPlugin) historySubtitle(ctx context.Context, record cloudsync.
 
 // historyTails mirrors history status as a semantic chip in the launcher row.
 func (p *CloudSyncPlugin) historyTails(ctx context.Context, record cloudsync.CloudSyncHistoryRecord) []plugin.QueryResultTail {
+	tails := []plugin.QueryResultTail{plugin.NewQueryResultTailText(p.formatTimestamp(ctx, historyTimestamp(record)))}
 	if record.Status == cloudsync.CloudSyncHistoryStatusFailed {
-		return []plugin.QueryResultTail{plugin.NewQueryResultTailTextWithCategory(p.tr(ctx, "plugin_cloudsync_history_tail_failed"), plugin.QueryResultTailTextCategoryDanger)}
+		return append(tails, plugin.NewQueryResultTailTextWithCategory(p.tr(ctx, "plugin_cloudsync_history_tail_failed"), plugin.QueryResultTailTextCategoryDanger))
 	}
 	if record.Status == cloudsync.CloudSyncHistoryStatusPartialSucceeded {
-		return []plugin.QueryResultTail{plugin.NewQueryResultTailTextWithCategory(p.tr(ctx, "plugin_cloudsync_history_tail_partial_succeeded"), plugin.QueryResultTailTextCategoryWarning)}
+		return append(tails, plugin.NewQueryResultTailTextWithCategory(p.tr(ctx, "plugin_cloudsync_history_tail_partial_succeeded"), plugin.QueryResultTailTextCategoryWarning))
 	}
-	return []plugin.QueryResultTail{plugin.NewQueryResultTailTextWithCategory(p.tr(ctx, "plugin_cloudsync_history_tail_succeeded"), plugin.QueryResultTailTextCategorySuccess)}
+	return append(tails, plugin.NewQueryResultTailTextWithCategory(p.tr(ctx, "plugin_cloudsync_history_tail_succeeded"), plugin.QueryResultTailTextCategorySuccess))
 }
 
 // syncNow performs one bidirectional manual sync and refreshes the current launcher row when done.
@@ -351,17 +357,20 @@ func (p *CloudSyncPlugin) syncNow(ctx context.Context) {
 
 	p.notify(ctx, "plugin_cloudsync_notify_syncing")
 	util.Go(ctx, "cloud sync manual sync", func() {
-		if accountService := account.GetService(); accountService != nil && accountService.Status(ctx).SyncEnabled {
-			service.StartManager(ctx)
+		if accountService := account.GetService(); accountService != nil {
+			accountStatus := accountService.Status(ctx)
+			if accountStatus.SyncEnabled && accountStatus.Plan == "pro" {
+				service.StartManager(ctx)
+			}
 		}
 		service.Manager.Pull(ctx, "manual")
 		service.Manager.PushPending(ctx, "manual")
 
 		state, err := cloudsync.LoadCloudSyncState(ctx)
 		if err != nil {
-			p.notifyText(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_cloudsync_notify_failed"), err.Error()))
+			p.notifyText(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_cloudsync_notify_failed"), formatCloudSyncError(err.Error())))
 		} else if state.LastError != "" {
-			p.notifyText(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_cloudsync_notify_failed"), state.LastError))
+			p.notifyText(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_cloudsync_notify_failed"), formatCloudSyncError(state.LastError)))
 		} else {
 			p.notify(ctx, "plugin_cloudsync_notify_done")
 		}
@@ -435,7 +444,7 @@ func (p *CloudSyncPlugin) historyDetailSubtitle(ctx context.Context, detail clou
 		parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_history_label_status", p.historyDetailStatusLabel(ctx, detail.Status)))
 	}
 	if detail.Error != "" {
-		parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_label_error", formatCloudSyncHistoryError(detail.Error)))
+		parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_label_error", formatCloudSyncError(detail.Error)))
 	}
 	return strings.Join(parts, " | ")
 }
@@ -600,19 +609,32 @@ func truncateCloudSyncHistoryError(message string) string {
 	return string(runes[:maxErrorLength]) + "..."
 }
 
-func formatCloudSyncHistoryError(message string) string {
-	return truncateCloudSyncHistoryError(stripCloudSyncHistoryErrorCode(message))
+func formatCloudSyncError(message string) string {
+	return truncateCloudSyncHistoryError(stripCloudSyncErrorDecorations(message))
 }
 
-func stripCloudSyncHistoryErrorCode(message string) string {
-	parts := strings.SplitN(message, ": ", 2)
-	if len(parts) != 2 {
-		return message
+func stripCloudSyncErrorDecorations(message string) string {
+	result := strings.TrimSpace(message)
+	for {
+		parts := strings.SplitN(result, ": ", 2)
+		if len(parts) != 2 {
+			return result
+		}
+		head := strings.TrimSpace(parts[0])
+		if !isCloudSyncErrorCode(head) && !isCloudSyncErrorWrapper(head) {
+			return result
+		}
+		result = strings.TrimSpace(parts[1])
 	}
-	if isCloudSyncErrorCode(parts[0]) {
-		return parts[1]
+}
+
+func isCloudSyncErrorWrapper(value string) bool {
+	switch value {
+	case "cloud sync push failed", "cloud sync pull failed", "cloud sync record key list failed", "cloud sync device update failed", "cloud sync device join failed":
+		return true
+	default:
+		return false
 	}
-	return message
 }
 
 func isCloudSyncErrorCode(value string) bool {

@@ -1794,7 +1794,7 @@ func startSyncBootstrap(ctx context.Context, recoveryCode string) error {
 		scheduleCloudSyncBootstrapRestore(ctx, service)
 		return nil
 	}
-	service.StartManager(ctx)
+	startCloudSyncManagerIfAutoSyncAllowed(ctx, service)
 	scheduleCloudSyncBootstrapInitialPush(ctx, service)
 	return nil
 }
@@ -1811,7 +1811,7 @@ func scheduleCloudSyncBootstrapRestore(ctx context.Context, service *cloudsync.S
 			util.GetLogger().Error(ctx, fmt.Sprintf("cloud sync bootstrap restore failed: %v", err))
 			return
 		}
-		service.StartManager(ctx)
+		startCloudSyncManagerIfAutoSyncAllowed(ctx, service)
 	})
 }
 
@@ -1871,7 +1871,7 @@ func handleSyncEnable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if service := cloudsync.GetService(); service != nil && service.KeyManager != nil && service.KeyManager.GetStatus(ctx).Available {
-		service.StartManager(ctx)
+		startCloudSyncManagerIfAutoSyncAllowed(ctx, service)
 	}
 	writeSuccessResponse(w, "")
 }
@@ -1915,6 +1915,7 @@ func handleSyncDeviceJoin(w http.ResponseWriter, r *http.Request) {
 		writeErrorResponse(w, err.Error())
 		return
 	}
+	startCloudSyncManagerIfAutoSyncAllowed(ctx, service)
 	writeSuccessResponse(w, "")
 }
 
@@ -1926,7 +1927,7 @@ func handleSyncPush(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	service.StartManager(ctx)
+	startCloudSyncManagerIfAutoSyncAllowed(ctx, service)
 	service.Manager.PushPending(ctx, "manual")
 	writeSuccessResponse(w, "")
 }
@@ -1939,7 +1940,7 @@ func handleSyncPull(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	service.StartManager(ctx)
+	startCloudSyncManagerIfAutoSyncAllowed(ctx, service)
 	service.Manager.Pull(ctx, "manual")
 	writeSuccessResponse(w, "")
 }
@@ -1975,7 +1976,7 @@ func handleSyncKeyInit(w http.ResponseWriter, r *http.Request) {
 	if accountService := account.GetService(); accountService != nil {
 		_ = accountService.SetSyncEnabled(ctx, true)
 	}
-	service.StartManager(ctx)
+	startCloudSyncManagerIfAutoSyncAllowed(ctx, service)
 
 	writeSuccessResponse(w, resp)
 }
@@ -2010,7 +2011,7 @@ func handleSyncKeyFetch(w http.ResponseWriter, r *http.Request) {
 	if accountService := account.GetService(); accountService != nil {
 		_ = accountService.SetSyncEnabled(ctx, true)
 	}
-	service.StartManager(ctx)
+	startCloudSyncManagerIfAutoSyncAllowed(ctx, service)
 
 	writeSuccessResponse(w, resp)
 }
@@ -2876,9 +2877,29 @@ func startCloudSyncManagerAfterUIReady(ctx context.Context) {
 	}
 
 	accountStatus := accountService.Status(ctx)
-	if accountStatus.LoggedIn && accountStatus.SyncEligible && accountStatus.SyncEnabled && service.KeyManager.GetStatus(ctx).Available {
+	if accountStatus.LoggedIn && accountStatus.SyncEligible && accountStatus.SyncEnabled && cloudSyncAutoSyncAllowed(accountStatus) && service.KeyManager.GetStatus(ctx).Available {
 		service.StartManager(ctx)
 	}
+}
+
+// startCloudSyncManagerIfAutoSyncAllowed keeps Free plans on manual sync while still allowing Pro users to resume background sync after setup or recovery.
+func startCloudSyncManagerIfAutoSyncAllowed(ctx context.Context, service *cloudsync.Service) {
+	if service == nil || service.Manager == nil {
+		return
+	}
+	accountService := account.GetService()
+	if accountService == nil {
+		return
+	}
+	accountStatus := accountService.Status(ctx)
+	if !accountStatus.LoggedIn || !accountStatus.SyncEligible || !accountStatus.SyncEnabled || !cloudSyncAutoSyncAllowed(accountStatus) {
+		return
+	}
+	service.StartManager(ctx)
+}
+
+func cloudSyncAutoSyncAllowed(accountStatus account.Status) bool {
+	return accountStatus.Plan == "pro"
 }
 
 func handleOnFocusLost(w http.ResponseWriter, r *http.Request) {
