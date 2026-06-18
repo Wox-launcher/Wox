@@ -46,7 +46,6 @@ func initCloudSync(ctx context.Context) {
 		Applier:           settingadapter.NewLocalSettingApplier(),
 		OplogStore:        cloudsync.NewDefaultOplogStore(),
 		Snapshotter:       settingadapter.NewLocalSnapshotter(),
-		Notifier:          settingadapter.NewCloudSyncOplogNotifier(),
 		ProgressNotifier:  cloudSyncUIProgressNotifier{},
 		ExclusionProvider: settingadapter.NewCloudSyncPluginExclusionProvider(),
 		SettingReloader:   cloudSyncUISettingReloader{},

@@ -150,6 +150,7 @@ func (p *CloudSyncPlugin) statusSubtitle(ctx context.Context, accountStatus acco
 	parts := []string{
 		p.labelValue(ctx, "plugin_cloudsync_label_account", accountStatus.Email),
 		p.labelValue(ctx, "plugin_cloudsync_label_last_sync", p.formatTimestamp(ctx, p.lastSyncTimestamp(status.State))),
+		p.labelValue(ctx, "plugin_cloudsync_label_pending", strconv.Itoa(status.PendingCount)),
 	}
 
 	if !accountStatus.SyncEnabled {
@@ -476,10 +477,10 @@ func (p *CloudSyncPlugin) historyReasonLabel(ctx context.Context, reason string)
 		return p.tr(ctx, "plugin_cloudsync_history_reason_startup")
 	case "startup-missing-keys":
 		return p.tr(ctx, "plugin_cloudsync_history_reason_startup_missing_keys")
-	case "periodic":
-		return p.tr(ctx, "plugin_cloudsync_history_reason_periodic")
-	case "deferred-push":
-		return p.tr(ctx, "plugin_cloudsync_history_reason_deferred_push")
+	case "periodic-pull":
+		return p.tr(ctx, "plugin_cloudsync_history_reason_periodic_pull")
+	case "periodic-push":
+		return p.tr(ctx, "plugin_cloudsync_history_reason_periodic_push")
 	case "first":
 		return p.tr(ctx, "plugin_cloudsync_history_reason_first")
 	case "tick":

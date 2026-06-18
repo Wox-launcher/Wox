@@ -19,22 +19,18 @@ import (
 const cloudSyncMaxOplogPushFailures = 3
 
 type CloudSyncConfig struct {
-	DebounceMs               int64
-	MaxBatchCount            int
-	MaxBatchBytes            int
-	PullInterval             time.Duration
-	PullLimit                int
-	DeferredPushPollInterval time.Duration
+	MaxBatchCount int
+	MaxBatchBytes int
+	PullLimit     int
+	SyncInterval  time.Duration
 }
 
 func DefaultCloudSyncConfig() CloudSyncConfig {
 	return CloudSyncConfig{
-		DebounceMs:               2000,
-		MaxBatchCount:            100,
-		MaxBatchBytes:            1 * 1024 * 1024,
-		PullInterval:             5 * time.Minute,
-		PullLimit:                200,
-		DeferredPushPollInterval: time.Minute,
+		MaxBatchCount: 100,
+		MaxBatchBytes: 1 * 1024 * 1024,
+		PullLimit:     200,
+		SyncInterval:  5 * time.Minute,
 	}
 }
 
@@ -45,7 +41,6 @@ type CloudSyncDependencies struct {
 	Applier           CloudSyncApplier
 	OplogStore        CloudSyncOplogStore
 	Snapshotter       CloudSyncLocalSnapshotter
-	Notifier          CloudSyncChangeNotifier
 	ProgressNotifier  CloudSyncProgressNotifier
 	ExclusionProvider CloudSyncPluginExclusionProvider
 	SettingReloader   CloudSyncSettingReloader
@@ -60,7 +55,6 @@ type CloudSyncManager struct {
 	applier          CloudSyncApplier
 	oplogStore       CloudSyncOplogStore
 	snapshotter      CloudSyncLocalSnapshotter
-	notifier         CloudSyncChangeNotifier
 	progressNotifier CloudSyncProgressNotifier
 	exclusions       CloudSyncPluginExclusionProvider
 	settingReloader  CloudSyncSettingReloader
@@ -73,7 +67,6 @@ type CloudSyncManager struct {
 	progress   CloudSyncProgress
 	randMu     sync.Mutex
 	rand       *rand.Rand
-	debouncer  *util.Debouncer[struct{}]
 	cancel     context.CancelFunc
 	started    bool
 }
@@ -88,7 +81,6 @@ func NewCloudSyncManager(config CloudSyncConfig, deps CloudSyncDependencies) *Cl
 		applier:          deps.Applier,
 		oplogStore:       deps.OplogStore,
 		snapshotter:      deps.Snapshotter,
-		notifier:         deps.Notifier,
 		progressNotifier: deps.ProgressNotifier,
 		exclusions:       deps.ExclusionProvider,
 		rand:             rand.New(rand.NewSource(time.Now().UnixNano())),
@@ -106,59 +98,47 @@ func (m *CloudSyncManager) Start(ctx context.Context) {
 	m.started = true
 	runCtx, cancel := context.WithCancel(ctx)
 	m.cancel = cancel
-	m.debouncer = util.NewDebouncer[struct{}](m.config.DebounceMs, m.config.DebounceMs, func(items []struct{}, reason string) {
-		// The shared debouncer emits empty ticks; cloud sync only reacts to oplog notifications.
-		if len(items) == 0 {
-			return
-		}
-		m.PushPending(runCtx, reason)
-	})
-	m.debouncer.Start(runCtx)
 	m.mu.Unlock()
 
-	if m.notifier != nil {
-		util.Go(runCtx, "cloud sync oplog watcher", func() {
-			for {
-				select {
-				case <-runCtx.Done():
-					return
-				case <-m.notifier.Changes():
-					m.debouncer.Add(runCtx, []struct{}{{}})
-				}
-			}
-		})
+	util.Go(runCtx, "cloud sync loop", func() {
+		m.runSyncLoop(runCtx)
+	})
+}
+
+// runSyncLoop keeps scheduled pull and push work serialized so shared sync state
+// is updated in one predictable order.
+func (m *CloudSyncManager) runSyncLoop(ctx context.Context) {
+	m.syncOnce(ctx, "startup", "startup-missing-keys", true)
+
+	ticker := time.NewTicker(m.config.SyncInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			m.syncOnce(ctx, "periodic-pull", "periodic-push", false)
+		}
+	}
+}
+
+// syncOnce performs one ordered sync pass and preserves the startup missing-key
+// snapshot behavior separately from normal periodic pushes.
+func (m *CloudSyncManager) syncOnce(ctx context.Context, pullReason string, pushReason string, pushMissingSnapshot bool) {
+	if ctx.Err() != nil {
+		return
 	}
 
-	util.Go(runCtx, "cloud sync deferred push ticker", func() {
-		ticker := time.NewTicker(m.config.DeferredPushPollInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-runCtx.Done():
-				return
-			case <-ticker.C:
-				m.PushPending(runCtx, "deferred-push")
-			}
-		}
-	})
+	m.Pull(ctx, pullReason)
+	if ctx.Err() != nil {
+		return
+	}
 
-	util.Go(runCtx, "cloud sync initial pull", func() {
-		m.Pull(runCtx, "startup")
-		m.PushMissingLocalSnapshot(runCtx, "startup-missing-keys")
-	})
-
-	util.Go(runCtx, "cloud sync pull ticker", func() {
-		ticker := time.NewTicker(m.config.PullInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-runCtx.Done():
-				return
-			case <-ticker.C:
-				m.Pull(runCtx, "periodic")
-			}
-		}
-	})
+	if pushMissingSnapshot {
+		m.PushMissingLocalSnapshot(ctx, pushReason)
+		return
+	}
+	m.PushPending(ctx, pushReason)
 }
 
 func (m *CloudSyncManager) Stop(ctx context.Context) {
@@ -170,15 +150,10 @@ func (m *CloudSyncManager) Stop(ctx context.Context) {
 	m.started = false
 	cancel := m.cancel
 	m.cancel = nil
-	debouncer := m.debouncer
-	m.debouncer = nil
 	m.mu.Unlock()
 
 	if cancel != nil {
 		cancel()
-	}
-	if debouncer != nil {
-		debouncer.Done(ctx)
 	}
 }
 
@@ -1217,23 +1192,17 @@ func normalizeCloudSyncConfig(config CloudSyncConfig) CloudSyncConfig {
 	normalized := config
 	defaults := DefaultCloudSyncConfig()
 
-	if normalized.DebounceMs <= 0 {
-		normalized.DebounceMs = defaults.DebounceMs
-	}
 	if normalized.MaxBatchCount <= 0 {
 		normalized.MaxBatchCount = defaults.MaxBatchCount
 	}
 	if normalized.MaxBatchBytes <= 0 {
 		normalized.MaxBatchBytes = defaults.MaxBatchBytes
 	}
-	if normalized.PullInterval <= 0 {
-		normalized.PullInterval = defaults.PullInterval
-	}
 	if normalized.PullLimit <= 0 {
 		normalized.PullLimit = defaults.PullLimit
 	}
-	if normalized.DeferredPushPollInterval <= 0 {
-		normalized.DeferredPushPollInterval = defaults.DeferredPushPollInterval
+	if normalized.SyncInterval <= 0 {
+		normalized.SyncInterval = defaults.SyncInterval
 	}
 
 	return normalized

@@ -1672,6 +1672,7 @@
   "plugin_cloudsync_action_sync_now": "Синхронизировать сейчас",
   "plugin_cloudsync_label_account": "Аккаунт",
   "plugin_cloudsync_label_last_sync": "Последняя синхронизация",
+  "plugin_cloudsync_label_pending": "Ожидают синхронизации",
   "plugin_cloudsync_label_error": "Ошибка",
   "plugin_cloudsync_label_retry_after": "Повтор после",
   "plugin_cloudsync_detail_disabled": "Ручная синхронизация все еще доступна",

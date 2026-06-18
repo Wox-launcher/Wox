@@ -198,7 +198,6 @@ func writeCloudSyncOplog(db *gorm.DB, oplog database.Oplog) error {
 		if err := writeImmediateDeleteCloudSyncOplog(db, oplog); err != nil {
 			return err
 		}
-		cloudsync.NotifyOplogChanged()
 		return nil
 	}
 
@@ -207,7 +206,6 @@ func writeCloudSyncOplog(db *gorm.DB, oplog database.Oplog) error {
 		if err := db.Create(&oplog).Error; err != nil {
 			return err
 		}
-		cloudsync.NotifyOplogChanged()
 		return nil
 	}
 

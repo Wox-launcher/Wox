@@ -270,10 +270,6 @@ type CloudSyncLocalSnapshotter interface {
 	EnqueueMissingLocalSnapshot(ctx context.Context, remoteKeys []CloudSyncRecordKey) error
 }
 
-type CloudSyncChangeNotifier interface {
-	Changes() <-chan struct{}
-}
-
 type CloudSyncProgressNotifier interface {
 	CloudSyncProgressChanged(ctx context.Context, progress CloudSyncProgress)
 }

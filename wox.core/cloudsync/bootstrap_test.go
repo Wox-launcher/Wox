@@ -3,8 +3,11 @@ package cloudsync
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 	"wox/database"
 	"wox/util"
 )
@@ -202,6 +205,51 @@ func TestCloudSyncRequestsIncludeCurrentPlatform(t *testing.T) {
 	}
 }
 
+func TestCloudSyncStartRunsSingleOrderedSyncLoop(t *testing.T) {
+	ctx := context.Background()
+	initCloudSyncTestDatabase(t)
+
+	client := &loopCloudSyncClient{}
+	store := &loopCloudSyncOplogStore{}
+	history := &loopCloudSyncHistoryStore{}
+	manager := NewCloudSyncManager(CloudSyncConfig{
+		SyncInterval: 20 * time.Millisecond,
+		PullLimit:    1,
+	}, CloudSyncDependencies{
+		Client:         client,
+		Crypto:         testCloudSyncCrypto{},
+		DeviceProvider: testCloudSyncDeviceProvider{deviceID: "device-a"},
+		OplogStore:     store,
+		Snapshotter:    &testCloudSyncSnapshotter{},
+		Applier:        &testCloudSyncApplier{},
+		HistoryStore:   history,
+	})
+
+	manager.Start(ctx)
+	manager.Start(ctx)
+	defer manager.Stop(ctx)
+
+	records := history.waitForRecords(t, 4, time.Second)
+	expected := []loopCloudSyncHistoryEntry{
+		{operation: CloudSyncProgressOperationPull, reason: "startup"},
+		{operation: CloudSyncProgressOperationPush, reason: "startup-missing-keys"},
+		{operation: CloudSyncProgressOperationPull, reason: "periodic-pull"},
+		{operation: CloudSyncProgressOperationPush, reason: "periodic-push"},
+	}
+	for i, want := range expected {
+		if records[i] != want {
+			t.Fatalf("history[%d] = %#v, want %#v; all records = %#v", i, records[i], want, records)
+		}
+	}
+
+	manager.Stop(ctx)
+	recordCountAfterStop := history.count()
+	time.Sleep(120 * time.Millisecond)
+	if got := history.count(); got != recordCountAfterStop {
+		t.Fatalf("history count after Stop = %d, want %d", got, recordCountAfterStop)
+	}
+}
+
 func TestApplyRecordsSkipsSettingsForOtherPlatforms(t *testing.T) {
 	ctx := context.Background()
 	initCloudSyncTestDatabase(t)
@@ -245,7 +293,11 @@ func TestApplyRecordsSkipsSettingsForOtherPlatforms(t *testing.T) {
 
 func initCloudSyncTestDatabase(t *testing.T) {
 	t.Helper()
-	t.Setenv(util.TestWoxDataDirEnv, filepath.Join(t.TempDir(), "wox"))
+	woxDataDir, err := os.MkdirTemp("", "wox-cloudsync-test-*")
+	if err != nil {
+		t.Fatalf("create wox data directory: %v", err)
+	}
+	t.Setenv(util.TestWoxDataDirEnv, woxDataDir)
 	t.Setenv(util.TestUserDataDirEnv, filepath.Join(t.TempDir(), "user"))
 	if err := util.GetLocation().Init(); err != nil {
 		t.Fatalf("init location: %v", err)
@@ -253,6 +305,16 @@ func initCloudSyncTestDatabase(t *testing.T) {
 	if err := database.Init(context.Background()); err != nil {
 		t.Fatalf("init database: %v", err)
 	}
+	t.Cleanup(func() {
+		db := database.GetDB()
+		if db == nil {
+			return
+		}
+		sqlDB, err := db.DB()
+		if err == nil {
+			_ = sqlDB.Close()
+		}
+	})
 }
 
 type testCloudSyncClient struct {
@@ -446,6 +508,150 @@ func (s *testCloudSyncOplogStore) MarkPushFailed(ctx context.Context, failures [
 
 type testCloudSyncKeyring struct {
 	values map[string]string
+}
+
+type loopCloudSyncClient struct {
+	mu sync.Mutex
+}
+
+func (c *loopCloudSyncClient) Push(ctx context.Context, req CloudSyncPushRequest) (*CloudSyncPushResponse, error) {
+	_ = ctx
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	applied := make([]CloudSyncAppliedChange, 0, len(req.Changes))
+	for _, change := range req.Changes {
+		applied = append(applied, CloudSyncAppliedChange{ChangeID: change.ChangeID, Status: "ok"})
+	}
+	return &CloudSyncPushResponse{Applied: applied}, nil
+}
+
+func (c *loopCloudSyncClient) Pull(ctx context.Context, req CloudSyncPullRequest) (*CloudSyncPullResponse, error) {
+	_ = ctx
+	_ = req
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return &CloudSyncPullResponse{
+		Records: []CloudSyncRecord{
+			{
+				EntityType: EntityWoxSetting,
+				Key:        "ThemeId",
+				Op:         OpUpsert,
+				Value:      &CloudSyncEncryptedValue{KeyVersion: 1, Ciphertext: "remote-theme"},
+			},
+		},
+		NextCursor: "pulled",
+	}, nil
+}
+
+func (c *loopCloudSyncClient) Snapshot(ctx context.Context, req CloudSyncPullRequest) (*CloudSyncPullResponse, error) {
+	_ = ctx
+	_ = req
+	return &CloudSyncPullResponse{}, nil
+}
+
+func (c *loopCloudSyncClient) ListRecordKeys(ctx context.Context, req CloudSyncRecordKeyListRequest) (*CloudSyncRecordKeyListResponse, error) {
+	_ = ctx
+	_ = req
+	return &CloudSyncRecordKeyListResponse{}, nil
+}
+
+type loopCloudSyncOplogStore struct {
+	mu     sync.Mutex
+	nextID uint
+}
+
+func (s *loopCloudSyncOplogStore) LoadPending(ctx context.Context, limit int) ([]database.Oplog, error) {
+	_ = ctx
+	_ = limit
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.nextID++
+	return []database.Oplog{
+		{
+			ID:         s.nextID,
+			EntityType: EntityWoxSetting,
+			Operation:  OpUpsert,
+			Key:        "ThemeId",
+			Value:      "dark",
+			Timestamp:  util.GetSystemTimestamp(),
+		},
+	}, nil
+}
+
+func (s *loopCloudSyncOplogStore) MarkSynced(ctx context.Context, ids []uint) error {
+	_ = ctx
+	_ = ids
+	return nil
+}
+
+func (s *loopCloudSyncOplogStore) MarkPushFailed(ctx context.Context, failures []CloudSyncOplogPushFailure) error {
+	_ = ctx
+	_ = failures
+	return nil
+}
+
+type loopCloudSyncHistoryEntry struct {
+	operation string
+	reason    string
+}
+
+type loopCloudSyncHistoryStore struct {
+	mu      sync.Mutex
+	records []loopCloudSyncHistoryEntry
+}
+
+func (s *loopCloudSyncHistoryStore) Record(ctx context.Context, record CloudSyncHistoryRecord) error {
+	_ = ctx
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.records = append(s.records, loopCloudSyncHistoryEntry{
+		operation: record.Operation,
+		reason:    record.Reason,
+	})
+	return nil
+}
+
+func (s *loopCloudSyncHistoryStore) ListRecent(ctx context.Context, limit int) ([]CloudSyncHistoryRecord, error) {
+	_ = ctx
+	_ = limit
+	return nil, nil
+}
+
+func (s *loopCloudSyncHistoryStore) Get(ctx context.Context, id uint) (*CloudSyncHistoryRecord, error) {
+	_ = ctx
+	_ = id
+	return nil, nil
+}
+
+func (s *loopCloudSyncHistoryStore) waitForRecords(t *testing.T, count int, timeout time.Duration) []loopCloudSyncHistoryEntry {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		s.mu.Lock()
+		if len(s.records) >= count {
+			records := append([]loopCloudSyncHistoryEntry(nil), s.records...)
+			s.mu.Unlock()
+			return records
+		}
+		s.mu.Unlock()
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	t.Fatalf("timed out waiting for %d history records; got %#v", count, s.records)
+	return nil
+}
+
+func (s *loopCloudSyncHistoryStore) count() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.records)
 }
 
 func (k *testCloudSyncKeyring) Get(ctx context.Context, key string) (string, error) {

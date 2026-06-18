@@ -1671,6 +1671,7 @@
   "plugin_cloudsync_action_sync_now": "Sincronizar agora",
   "plugin_cloudsync_label_account": "Conta",
   "plugin_cloudsync_label_last_sync": "Última sincronização",
+  "plugin_cloudsync_label_pending": "Sincronizações pendentes",
   "plugin_cloudsync_label_error": "Erro",
   "plugin_cloudsync_label_retry_after": "Tentar novamente após",
   "plugin_cloudsync_detail_disabled": "A sincronização manual ainda está disponível",

@@ -14,11 +14,12 @@ type Service struct {
 }
 
 type ServiceStatus struct {
-	Enabled   bool                `json:"enabled"`
-	DeviceID  string              `json:"device_id,omitempty"`
-	KeyStatus CloudSyncKeyStatus  `json:"key_status"`
-	State     *CloudSyncStateView `json:"state,omitempty"`
-	Progress  *CloudSyncProgress  `json:"progress,omitempty"`
+	Enabled      bool                `json:"enabled"`
+	DeviceID     string              `json:"device_id,omitempty"`
+	KeyStatus    CloudSyncKeyStatus  `json:"key_status"`
+	State        *CloudSyncStateView `json:"state,omitempty"`
+	Progress     *CloudSyncProgress  `json:"progress,omitempty"`
+	PendingCount int                 `json:"pending_count"`
 }
 
 type CloudSyncStateView struct {
@@ -92,6 +93,7 @@ func (s *Service) Status(ctx context.Context) ServiceStatus {
 	}
 
 	if s.Manager != nil {
+		status.PendingCount = s.Manager.countPendingOplogs(ctx)
 		progress := s.Manager.Progress()
 		if progress.Active {
 			status.Progress = &progress

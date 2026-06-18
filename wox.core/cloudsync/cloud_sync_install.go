@@ -68,6 +68,5 @@ func logInstallOplog(ctx context.Context, entityType string, entityID string, va
 	if err := db.Create(&oplog).Error; err != nil {
 		return err
 	}
-	NotifyOplogChanged()
 	return nil
 }
