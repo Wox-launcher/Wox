@@ -138,11 +138,57 @@ type CloudSyncRecordKeyListResponse struct {
 	Keys []CloudSyncRecordKey `json:"keys"`
 }
 
+type CloudSyncDevice struct {
+	DeviceID   string `json:"device_id"`
+	DeviceName string `json:"device_name"`
+	Platform   string `json:"platform"`
+	CreatedAt  int64  `json:"created_at"`
+	UpdatedAt  int64  `json:"updated_at"`
+	LastSeenAt int64  `json:"last_seen_at"`
+	RevokedAt  int64  `json:"revoked_at"`
+	Current    bool   `json:"current"`
+}
+
+type CloudSyncDeviceListRequest struct {
+	DeviceID string `json:"device_id"`
+}
+
+type CloudSyncDeviceListResponse struct {
+	Devices         []CloudSyncDevice `json:"devices"`
+	CurrentDeviceID string            `json:"current_device_id"`
+	DeviceLimit     *int              `json:"device_limit"`
+	DeviceCount     int               `json:"device_count"`
+}
+
+type CloudSyncDeviceRevokeRequest struct {
+	DeviceID       string `json:"device_id"`
+	TargetDeviceID string `json:"target_device_id"`
+}
+
+type CloudSyncDeviceRevokeResponse struct {
+	OK        bool  `json:"ok"`
+	RevokedAt int64 `json:"revoked_at"`
+}
+
+type CloudSyncDeviceUpdateRequest struct {
+	DeviceID   string `json:"device_id"`
+	DeviceName string `json:"device_name"`
+	Platform   string `json:"platform"`
+}
+
+type CloudSyncDeviceUpdateResponse struct {
+	DeviceID   string `json:"device_id"`
+	DeviceName string `json:"device_name"`
+	Platform   string `json:"platform"`
+	LastSeenAt int64  `json:"last_seen_at"`
+}
+
 type CloudSyncClient interface {
 	Push(ctx context.Context, req CloudSyncPushRequest) (*CloudSyncPushResponse, error)
 	Pull(ctx context.Context, req CloudSyncPullRequest) (*CloudSyncPullResponse, error)
 	Snapshot(ctx context.Context, req CloudSyncPullRequest) (*CloudSyncPullResponse, error)
 	ListRecordKeys(ctx context.Context, req CloudSyncRecordKeyListRequest) (*CloudSyncRecordKeyListResponse, error)
+	UpdateDevice(ctx context.Context, req CloudSyncDeviceUpdateRequest) (*CloudSyncDeviceUpdateResponse, error)
 }
 
 type CloudSyncKeyClient interface {
@@ -151,6 +197,12 @@ type CloudSyncKeyClient interface {
 	FetchKey(ctx context.Context, req CloudSyncKeyFetchRequest) (*CloudSyncKeyFetchResponse, error)
 	PrepareKeyReset(ctx context.Context) (*CloudSyncKeyResetPrepareResponse, error)
 	ResetKey(ctx context.Context, req CloudSyncKeyResetRequest) (*CloudSyncKeyResetResponse, error)
+}
+
+type CloudSyncDeviceClient interface {
+	ListDevices(ctx context.Context, req CloudSyncDeviceListRequest) (*CloudSyncDeviceListResponse, error)
+	UpdateDevice(ctx context.Context, req CloudSyncDeviceUpdateRequest) (*CloudSyncDeviceUpdateResponse, error)
+	RevokeDevice(ctx context.Context, req CloudSyncDeviceRevokeRequest) (*CloudSyncDeviceRevokeResponse, error)
 }
 
 type CloudSyncDeviceProvider interface {

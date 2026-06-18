@@ -80,6 +80,9 @@ class WoxAccountStatus {
   final String subscriptionStatus;
   final int subscriptionCurrentPeriodEnd;
   final bool syncEligible;
+  final String plan;
+  final WoxSyncLimits syncLimits;
+  final int deviceCount;
   final bool syncEnabled;
   final bool sessionExpired;
 
@@ -91,6 +94,9 @@ class WoxAccountStatus {
     required this.subscriptionStatus,
     required this.subscriptionCurrentPeriodEnd,
     required this.syncEligible,
+    required this.plan,
+    required this.syncLimits,
+    required this.deviceCount,
     required this.syncEnabled,
     required this.sessionExpired,
   });
@@ -104,6 +110,9 @@ class WoxAccountStatus {
       subscriptionStatus: 'none',
       subscriptionCurrentPeriodEnd: 0,
       syncEligible: false,
+      plan: 'free',
+      syncLimits: WoxSyncLimits.free(),
+      deviceCount: 0,
       syncEnabled: false,
       sessionExpired: false,
     );
@@ -118,8 +127,146 @@ class WoxAccountStatus {
       subscriptionStatus: json['subscription_status'] ?? 'none',
       subscriptionCurrentPeriodEnd: json['subscription_current_period_end'] ?? 0,
       syncEligible: json['sync_eligible'] ?? false,
+      plan: json['plan'] ?? 'free',
+      syncLimits: json['sync_limits'] is Map<String, dynamic> ? WoxSyncLimits.fromJson(json['sync_limits']) : WoxSyncLimits.free(),
+      deviceCount: json['device_count'] ?? 0,
       syncEnabled: json['sync_enabled'] ?? false,
       sessionExpired: json['session_expired'] ?? false,
+    );
+  }
+
+  bool get isPro => plan == 'pro';
+}
+
+class WoxSyncLimits {
+  final int? deviceLimit;
+  final int? syncIntervalSeconds;
+  final int? syncWindowSeconds;
+
+  WoxSyncLimits({required this.deviceLimit, required this.syncIntervalSeconds, required this.syncWindowSeconds});
+
+  factory WoxSyncLimits.free() {
+    return WoxSyncLimits(deviceLimit: 2, syncIntervalSeconds: 3600, syncWindowSeconds: 600);
+  }
+
+  factory WoxSyncLimits.fromJson(Map<String, dynamic> json) {
+    return WoxSyncLimits(deviceLimit: json['device_limit'], syncIntervalSeconds: json['sync_interval_seconds'], syncWindowSeconds: json['sync_window_seconds']);
+  }
+}
+
+class WoxBillingPlan {
+  final WoxBillingPlanTier free;
+  final WoxBillingPlanTier pro;
+
+  WoxBillingPlan({required this.free, required this.pro});
+
+  factory WoxBillingPlan.empty() {
+    return WoxBillingPlan(
+      free: WoxBillingPlanTier(price: WoxBillingPlanPrice(currency: 'usd', unitAmount: 0, interval: 'month', formatted: r'$0/month'), limits: WoxSyncLimits.free()),
+      pro: WoxBillingPlanTier(price: WoxBillingPlanPrice.empty(), limits: WoxSyncLimits(deviceLimit: null, syncIntervalSeconds: null, syncWindowSeconds: null)),
+    );
+  }
+
+  factory WoxBillingPlan.fromJson(Map<String, dynamic> json) {
+    final freeJson = json['free'];
+    final proJson = json['pro'];
+    return WoxBillingPlan(
+      free: freeJson is Map<String, dynamic> ? WoxBillingPlanTier.fromJson(freeJson) : WoxBillingPlan.empty().free,
+      pro: proJson is Map<String, dynamic> ? WoxBillingPlanTier.fromJson(proJson) : WoxBillingPlan.empty().pro,
+    );
+  }
+}
+
+class WoxBillingPlanTier {
+  final WoxBillingPlanPrice price;
+  final WoxSyncLimits limits;
+
+  WoxBillingPlanTier({required this.price, required this.limits});
+
+  factory WoxBillingPlanTier.fromJson(Map<String, dynamic> json) {
+    final priceJson = json['price'];
+    final limitsJson = json['limits'];
+    return WoxBillingPlanTier(
+      price: priceJson is Map<String, dynamic> ? WoxBillingPlanPrice.fromJson(priceJson) : WoxBillingPlanPrice.empty(),
+      limits: limitsJson is Map<String, dynamic> ? WoxSyncLimits.fromJson(limitsJson) : WoxSyncLimits(deviceLimit: null, syncIntervalSeconds: null, syncWindowSeconds: null),
+    );
+  }
+}
+
+class WoxBillingPlanPrice {
+  final String currency;
+  final int? unitAmount;
+  final String interval;
+  final String formatted;
+
+  WoxBillingPlanPrice({required this.currency, required this.unitAmount, required this.interval, required this.formatted});
+
+  factory WoxBillingPlanPrice.empty() {
+    return WoxBillingPlanPrice(currency: '', unitAmount: null, interval: '', formatted: '');
+  }
+
+  factory WoxBillingPlanPrice.fromJson(Map<String, dynamic> json) {
+    return WoxBillingPlanPrice(currency: json['currency'] ?? '', unitAmount: json['unit_amount'], interval: json['interval'] ?? '', formatted: json['formatted'] ?? '');
+  }
+}
+
+class WoxCloudSyncDevice {
+  final String deviceId;
+  final String deviceName;
+  final String platform;
+  final int createdAt;
+  final int updatedAt;
+  final int lastSeenAt;
+  final int revokedAt;
+  final bool current;
+
+  WoxCloudSyncDevice({
+    required this.deviceId,
+    required this.deviceName,
+    required this.platform,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.lastSeenAt,
+    required this.revokedAt,
+    required this.current,
+  });
+
+  factory WoxCloudSyncDevice.fromJson(Map<String, dynamic> json) {
+    return WoxCloudSyncDevice(
+      deviceId: json['device_id'] ?? '',
+      deviceName: json['device_name'] ?? '',
+      platform: json['platform'] ?? '',
+      createdAt: json['created_at'] ?? 0,
+      updatedAt: json['updated_at'] ?? 0,
+      lastSeenAt: json['last_seen_at'] ?? 0,
+      revokedAt: json['revoked_at'] ?? 0,
+      current: json['current'] ?? false,
+    );
+  }
+
+  bool get revoked => revokedAt > 0;
+}
+
+class WoxCloudSyncDeviceList {
+  final List<WoxCloudSyncDevice> devices;
+  final String currentDeviceId;
+  final int? deviceLimit;
+  final int deviceCount;
+
+  WoxCloudSyncDeviceList({required this.devices, required this.currentDeviceId, required this.deviceLimit, required this.deviceCount});
+
+  factory WoxCloudSyncDeviceList.empty() {
+    return WoxCloudSyncDeviceList(devices: [], currentDeviceId: '', deviceLimit: 2, deviceCount: 0);
+  }
+
+  factory WoxCloudSyncDeviceList.fromJson(Map<String, dynamic> json) {
+    final rawDevices = json['devices'];
+    final devices = rawDevices is List ? rawDevices.whereType<Map<String, dynamic>>().map(WoxCloudSyncDevice.fromJson).toList() : <WoxCloudSyncDevice>[];
+    return WoxCloudSyncDeviceList(
+      devices: devices,
+      currentDeviceId: json['current_device_id'] ?? '',
+      deviceLimit: json['device_limit'],
+      deviceCount: json['device_count'] ?? devices.where((device) => !device.revoked).length,
     );
   }
 }

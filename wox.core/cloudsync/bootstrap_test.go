@@ -205,6 +205,38 @@ func TestCloudSyncRequestsIncludeCurrentPlatform(t *testing.T) {
 	}
 }
 
+func TestCloudSyncStartUpdatesCurrentDeviceMetadata(t *testing.T) {
+	ctx := context.Background()
+	initCloudSyncTestDatabase(t)
+
+	client := &testCloudSyncClient{}
+	manager := NewCloudSyncManager(DefaultCloudSyncConfig(), CloudSyncDependencies{
+		Client:         client,
+		Crypto:         testCloudSyncCrypto{},
+		DeviceProvider: testCloudSyncDeviceProvider{deviceID: "device-a"},
+		OplogStore:     &testCloudSyncOplogStore{},
+		Snapshotter:    &testCloudSyncSnapshotter{},
+		Applier:        &testCloudSyncApplier{},
+	})
+
+	manager.Start(ctx)
+	defer manager.Stop(ctx)
+
+	if len(client.deviceUpdateRequests) != 1 {
+		t.Fatalf("device update calls = %d, want 1", len(client.deviceUpdateRequests))
+	}
+	got := client.deviceUpdateRequests[0]
+	if got.DeviceID != "device-a" {
+		t.Fatalf("device update id = %q, want device-a", got.DeviceID)
+	}
+	if got.DeviceName != resolveDeviceName() {
+		t.Fatalf("device update name = %q, want %q", got.DeviceName, resolveDeviceName())
+	}
+	if got.Platform != util.GetCurrentPlatform() {
+		t.Fatalf("device update platform = %q, want %q", got.Platform, util.GetCurrentPlatform())
+	}
+}
+
 func TestCloudSyncStartRunsSingleOrderedSyncLoop(t *testing.T) {
 	ctx := context.Background()
 	initCloudSyncTestDatabase(t)
@@ -318,11 +350,12 @@ func initCloudSyncTestDatabase(t *testing.T) {
 }
 
 type testCloudSyncClient struct {
-	snapshotResponses []*CloudSyncPullResponse
-	snapshotRequests  []CloudSyncPullRequest
-	pushRequests      []CloudSyncPushRequest
-	pullRequests      []CloudSyncPullRequest
-	recordKeyRequests []CloudSyncRecordKeyListRequest
+	snapshotResponses    []*CloudSyncPullResponse
+	snapshotRequests     []CloudSyncPullRequest
+	pushRequests         []CloudSyncPushRequest
+	pullRequests         []CloudSyncPullRequest
+	recordKeyRequests    []CloudSyncRecordKeyListRequest
+	deviceUpdateRequests []CloudSyncDeviceUpdateRequest
 }
 
 func (c *testCloudSyncClient) Push(ctx context.Context, req CloudSyncPushRequest) (*CloudSyncPushResponse, error) {
@@ -356,6 +389,12 @@ func (c *testCloudSyncClient) ListRecordKeys(ctx context.Context, req CloudSyncR
 	_ = ctx
 	c.recordKeyRequests = append(c.recordKeyRequests, req)
 	return &CloudSyncRecordKeyListResponse{}, nil
+}
+
+func (c *testCloudSyncClient) UpdateDevice(ctx context.Context, req CloudSyncDeviceUpdateRequest) (*CloudSyncDeviceUpdateResponse, error) {
+	_ = ctx
+	c.deviceUpdateRequests = append(c.deviceUpdateRequests, req)
+	return &CloudSyncDeviceUpdateResponse{DeviceID: req.DeviceID, DeviceName: req.DeviceName, Platform: req.Platform}, nil
 }
 
 type testCloudSyncCrypto struct{}
@@ -555,6 +594,12 @@ func (c *loopCloudSyncClient) ListRecordKeys(ctx context.Context, req CloudSyncR
 	_ = ctx
 	_ = req
 	return &CloudSyncRecordKeyListResponse{}, nil
+}
+
+func (c *loopCloudSyncClient) UpdateDevice(ctx context.Context, req CloudSyncDeviceUpdateRequest) (*CloudSyncDeviceUpdateResponse, error) {
+	_ = ctx
+	_ = req
+	return &CloudSyncDeviceUpdateResponse{}, nil
 }
 
 type loopCloudSyncOplogStore struct {

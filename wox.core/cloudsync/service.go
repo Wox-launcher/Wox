@@ -2,12 +2,15 @@ package cloudsync
 
 import (
 	"context"
+	"fmt"
 	"sync"
+	"wox/util"
 )
 
 type Service struct {
 	Manager        *CloudSyncManager
 	Client         *CloudSyncHTTPClient
+	DeviceClient   CloudSyncDeviceClient
 	KeyManager     *KeyManager
 	DeviceProvider CloudSyncDeviceProvider
 	HistoryStore   CloudSyncHistoryStore
@@ -54,6 +57,34 @@ func (s *Service) StartManager(ctx context.Context) {
 		return
 	}
 	s.Manager.Start(ctx)
+}
+
+// UpdateCurrentDevice refreshes server-side metadata for the local device without requiring a sync pass.
+func (s *Service) UpdateCurrentDevice(ctx context.Context) error {
+	if s == nil {
+		return fmt.Errorf("cloud sync is not configured")
+	}
+	client := s.DeviceClient
+	if client == nil {
+		client = s.Client
+	}
+	if client == nil || s.DeviceProvider == nil {
+		return fmt.Errorf("cloud sync is not configured")
+	}
+
+	deviceID, err := s.DeviceProvider.DeviceID(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get device id: %w", err)
+	}
+	_, err = client.UpdateDevice(ctx, CloudSyncDeviceUpdateRequest{
+		DeviceID:   deviceID,
+		DeviceName: resolveDeviceName(),
+		Platform:   util.GetCurrentPlatform(),
+	})
+	if err != nil {
+		return fmt.Errorf("cloud sync device update failed: %w", err)
+	}
+	return nil
 }
 
 // ResetLocalState clears sync runtime and account-scoped local state during logout or account-server changes.

@@ -98,6 +98,11 @@ type AccountState struct {
 	SubscriptionStatus           string
 	SubscriptionCurrentPeriodEnd int64
 	SyncEligible                 bool
+	SyncPlan                     string
+	SyncDeviceLimit              int
+	SyncIntervalSeconds          int
+	SyncWindowSeconds            int
+	DeviceCount                  int
 	SyncEnabled                  bool
 	SessionExpired               bool
 	UpdatedAt                    int64

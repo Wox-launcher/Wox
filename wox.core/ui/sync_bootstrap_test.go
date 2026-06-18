@@ -87,6 +87,35 @@ func TestHandleSyncBootstrapStartInitializesKeyAndEnablesSync(t *testing.T) {
 	}
 }
 
+func TestHandleSyncDevicesListUpdatesCurrentDeviceBeforeListing(t *testing.T) {
+	client := &routerCloudSyncClient{}
+	initSyncBootstrapRouterTest(t, database.AccountState{UserID: "user-1", Email: "u@example.com", SyncEligible: true}, client)
+
+	request := httptest.NewRequest(http.MethodPost, "/sync/devices/list", nil)
+	response := httptest.NewRecorder()
+	routers["/sync/devices/list"](response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("http status = %d, want %d, body=%s", response.Code, http.StatusOK, response.Body.String())
+	}
+	if len(client.deviceUpdateRequests) != 1 {
+		t.Fatalf("device update requests = %#v, want one request", client.deviceUpdateRequests)
+	}
+	updateReq := client.deviceUpdateRequests[0]
+	if updateReq.DeviceID != "device-a" {
+		t.Fatalf("device update id = %q, want device-a", updateReq.DeviceID)
+	}
+	if updateReq.DeviceName == "" {
+		t.Fatal("device update name is empty")
+	}
+	if updateReq.Platform != util.GetCurrentPlatform() {
+		t.Fatalf("device update platform = %q, want %q", updateReq.Platform, util.GetCurrentPlatform())
+	}
+	if len(client.deviceListRequests) != 1 || client.deviceListRequests[0].DeviceID != "device-a" {
+		t.Fatalf("device list requests = %#v, want one request for current device", client.deviceListRequests)
+	}
+}
+
 func initSyncBootstrapRouterTest(t *testing.T, accountState database.AccountState, clientAndKey ...any) {
 	t.Helper()
 	t.Setenv(util.TestWoxDataDirEnv, filepath.Join(t.TempDir(), "wox"))
@@ -111,14 +140,21 @@ func initSyncBootstrapRouterTest(t *testing.T, accountState database.AccountStat
 	})
 
 	var client cloudsync.CloudSyncClient = &routerCloudSyncClient{}
+	var deviceClient cloudsync.CloudSyncDeviceClient
 	keyClient := &routerCloudSyncKeyClient{}
 	for _, item := range clientAndKey {
 		switch typed := item.(type) {
 		case cloudsync.CloudSyncClient:
 			client = typed
+			if typedDeviceClient, ok := item.(cloudsync.CloudSyncDeviceClient); ok {
+				deviceClient = typedDeviceClient
+			}
 		case *routerCloudSyncKeyClient:
 			keyClient = typed
 		}
+	}
+	if deviceClient == nil {
+		deviceClient = client.(cloudsync.CloudSyncDeviceClient)
 	}
 	deviceProvider := routerCloudSyncDeviceProvider{}
 	keyManager := cloudsync.NewKeyManager(cloudsync.KeyManagerConfig{
@@ -134,7 +170,7 @@ func initSyncBootstrapRouterTest(t *testing.T, accountState database.AccountStat
 		OplogStore:     &routerCloudSyncOplogStore{},
 		Snapshotter:    routerCloudSyncSnapshotter{},
 	})
-	cloudsync.SetService(&cloudsync.Service{Manager: manager, Client: nil, KeyManager: keyManager, DeviceProvider: deviceProvider})
+	cloudsync.SetService(&cloudsync.Service{Manager: manager, DeviceClient: deviceClient, KeyManager: keyManager, DeviceProvider: deviceProvider})
 }
 
 func postSyncBootstrapStatus() *httptest.ResponseRecorder {
@@ -145,8 +181,10 @@ func postSyncBootstrapStatus() *httptest.ResponseRecorder {
 }
 
 type routerCloudSyncClient struct {
-	snapshotResponse *cloudsync.CloudSyncPullResponse
-	snapshotRequests []cloudsync.CloudSyncPullRequest
+	snapshotResponse     *cloudsync.CloudSyncPullResponse
+	snapshotRequests     []cloudsync.CloudSyncPullRequest
+	deviceUpdateRequests []cloudsync.CloudSyncDeviceUpdateRequest
+	deviceListRequests   []cloudsync.CloudSyncDeviceListRequest
 }
 
 func (c *routerCloudSyncClient) Push(ctx context.Context, req cloudsync.CloudSyncPushRequest) (*cloudsync.CloudSyncPushResponse, error) {
@@ -174,6 +212,24 @@ func (c *routerCloudSyncClient) ListRecordKeys(ctx context.Context, req cloudsyn
 	_ = ctx
 	_ = req
 	return &cloudsync.CloudSyncRecordKeyListResponse{}, nil
+}
+
+func (c *routerCloudSyncClient) UpdateDevice(ctx context.Context, req cloudsync.CloudSyncDeviceUpdateRequest) (*cloudsync.CloudSyncDeviceUpdateResponse, error) {
+	_ = ctx
+	c.deviceUpdateRequests = append(c.deviceUpdateRequests, req)
+	return &cloudsync.CloudSyncDeviceUpdateResponse{DeviceID: req.DeviceID, DeviceName: req.DeviceName, Platform: req.Platform}, nil
+}
+
+func (c *routerCloudSyncClient) ListDevices(ctx context.Context, req cloudsync.CloudSyncDeviceListRequest) (*cloudsync.CloudSyncDeviceListResponse, error) {
+	_ = ctx
+	c.deviceListRequests = append(c.deviceListRequests, req)
+	return &cloudsync.CloudSyncDeviceListResponse{}, nil
+}
+
+func (c *routerCloudSyncClient) RevokeDevice(ctx context.Context, req cloudsync.CloudSyncDeviceRevokeRequest) (*cloudsync.CloudSyncDeviceRevokeResponse, error) {
+	_ = ctx
+	_ = req
+	return &cloudsync.CloudSyncDeviceRevokeResponse{OK: true}, nil
 }
 
 type routerCloudSyncKeyClient struct {

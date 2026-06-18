@@ -385,6 +385,10 @@ class WoxApi {
     return await WoxHttpUtil.instance.postData<WoxBillingSession>(traceId, "/account/billing/portal", null);
   }
 
+  Future<WoxBillingPlan> accountBillingPlan(String traceId) async {
+    return await WoxHttpUtil.instance.postData<WoxBillingPlan>(traceId, "/account/billing/plan", null);
+  }
+
   Future<void> cloudSyncEnable(String traceId) async {
     await WoxHttpUtil.instance.postData(traceId, "/sync/enable", null);
   }
@@ -399,6 +403,14 @@ class WoxApi {
 
   Future<void> cloudSyncPull(String traceId) async {
     await WoxHttpUtil.instance.postData(traceId, "/sync/pull", null);
+  }
+
+  Future<WoxCloudSyncDeviceList> cloudSyncDevicesList(String traceId) async {
+    return await WoxHttpUtil.instance.postData<WoxCloudSyncDeviceList>(traceId, "/sync/devices/list", null);
+  }
+
+  Future<void> cloudSyncDeviceRevoke(String traceId, String targetDeviceId) async {
+    await WoxHttpUtil.instance.postData(traceId, "/sync/devices/revoke", {"target_device_id": targetDeviceId});
   }
 
   Future<void> cloudSyncKeyInit(String traceId, String recoveryCode, String deviceName) async {

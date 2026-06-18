@@ -83,6 +83,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/account/change_password":          handleAccountChangePassword,
 	"/account/password_reset/request":   handleAccountPasswordResetRequest,
 	"/account/password_reset/confirm":   handleAccountPasswordResetConfirm,
+	"/account/billing/plan":             handleAccountBillingPlan,
 	"/account/billing/checkout":         handleAccountBillingCheckout,
 	"/account/billing/portal":           handleAccountBillingPortal,
 	"/sync/status":                      handleSyncStatus,
@@ -97,6 +98,8 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/sync/key/recovery_code":           handleSyncRecoveryCode,
 	"/sync/key/reset/prepare":           handleSyncKeyResetPrepare,
 	"/sync/key/reset":                   handleSyncKeyReset,
+	"/sync/devices/list":                handleSyncDevicesList,
+	"/sync/devices/revoke":              handleSyncDeviceRevoke,
 
 	// events
 	"/on/focus/lost":       handleOnFocusLost,
@@ -1601,6 +1604,21 @@ func handleAccountBillingCheckout(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, session)
 }
 
+func handleAccountBillingPlan(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	service := account.GetService()
+	if service == nil {
+		writeErrorResponse(w, "account service is not configured")
+		return
+	}
+	plan, err := service.GetBillingPlan(ctx)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, plan)
+}
+
 func handleAccountBillingPortal(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
 	service := account.GetService()
@@ -2028,6 +2046,75 @@ func handleSyncKeyReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	writeSuccessResponse(w, resp)
+}
+
+func handleSyncDevicesList(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	service := cloudsync.GetService()
+	if service == nil || service.DeviceProvider == nil {
+		writeErrorResponse(w, "cloud sync is not configured")
+		return
+	}
+	deviceID, err := service.DeviceProvider.DeviceID(ctx)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	deviceClient := service.DeviceClient
+	if deviceClient == nil {
+		deviceClient = service.Client
+	}
+	if deviceClient == nil {
+		writeErrorResponse(w, "cloud sync is not configured")
+		return
+	}
+	if err := service.UpdateCurrentDevice(ctx); err != nil {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to update current cloud sync device before listing devices: %v", err))
+	}
+	resp, err := deviceClient.ListDevices(ctx, cloudsync.CloudSyncDeviceListRequest{DeviceID: deviceID})
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, resp)
+}
+
+func handleSyncDeviceRevoke(w http.ResponseWriter, r *http.Request) {
+	type request struct {
+		TargetDeviceID string `json:"target_device_id"`
+	}
+
+	var payload request
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+
+	ctx := getTraceContext(r)
+	service := cloudsync.GetService()
+	if service == nil || service.DeviceProvider == nil {
+		writeErrorResponse(w, "cloud sync is not configured")
+		return
+	}
+	deviceID, err := service.DeviceProvider.DeviceID(ctx)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	deviceClient := service.DeviceClient
+	if deviceClient == nil {
+		deviceClient = service.Client
+	}
+	if deviceClient == nil {
+		writeErrorResponse(w, "cloud sync is not configured")
+		return
+	}
+	resp, err := deviceClient.RevokeDevice(ctx, cloudsync.CloudSyncDeviceRevokeRequest{DeviceID: deviceID, TargetDeviceID: payload.TargetDeviceID})
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
 	writeSuccessResponse(w, resp)
 }
 

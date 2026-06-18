@@ -55,6 +55,7 @@ func initCloudSync(ctx context.Context) {
 	service := &cloudsync.Service{
 		Manager:        manager,
 		Client:         client,
+		DeviceClient:   client,
 		KeyManager:     keyManager,
 		DeviceProvider: deviceProvider,
 		HistoryStore:   historyStore,

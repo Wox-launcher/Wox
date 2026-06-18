@@ -7,7 +7,6 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_table_view.dart';
 import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_dialog.dart';
-import 'package:wox/components/wox_panel.dart';
 import 'package:wox/components/wox_textfield.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
@@ -48,6 +47,15 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
     if (error.contains('subscription_required')) {
       return controller.tr("ui_cloud_sync_subscription_required");
     }
+    if (error.contains('device_limit_exceeded')) {
+      return controller.tr("ui_cloud_sync_device_limit_exceeded");
+    }
+    if (error.contains('device_revoked')) {
+      return controller.tr("ui_cloud_sync_device_revoked");
+    }
+    if (error.contains('free_sync_rate_limited')) {
+      return controller.tr("ui_cloud_sync_free_rate_limited");
+    }
     if (error.contains('failed to decrypt payload') || error.contains('message authentication failed')) {
       return controller.tr("ui_cloud_sync_recovery_code_invalid");
     }
@@ -71,15 +79,9 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
       case 'snapshot':
         return controller.tr("ui_cloud_sync_progress_snapshot");
       case 'push':
-        return controller
-            .tr("ui_cloud_sync_progress_uploading")
-            .replaceAll("{target}", cloudSyncProgressTarget(progress))
-            .replaceAll("{count}", countText);
+        return controller.tr("ui_cloud_sync_progress_uploading").replaceAll("{target}", cloudSyncProgressTarget(progress)).replaceAll("{count}", countText);
       case 'pull':
-        return controller
-            .tr("ui_cloud_sync_progress_downloading")
-            .replaceAll("{target}", cloudSyncProgressTarget(progress))
-            .replaceAll("{count}", countText);
+        return controller.tr("ui_cloud_sync_progress_downloading").replaceAll("{target}", cloudSyncProgressTarget(progress)).replaceAll("{count}", countText);
       case 'restore':
         return controller.tr("ui_cloud_sync_progress_restoring").replaceAll("{count}", countText);
       default:
@@ -122,16 +124,28 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
     if (error.contains('invalid_email')) {
       return controller.tr("ui_cloud_sync_account_error_invalid_email");
     }
+    if (error.contains('invalid_credentials')) {
+      return controller.tr("ui_cloud_sync_account_error_invalid_credentials");
+    }
     if (error.contains('invalid_verification_code')) {
       return controller.tr("ui_cloud_sync_account_verify_code_failed");
     }
     if (error.contains('subscription_required')) {
       return controller.tr("ui_cloud_sync_subscription_required");
     }
+    if (error.contains('device_limit_exceeded')) {
+      return controller.tr("ui_cloud_sync_device_limit_exceeded");
+    }
+    if (error.contains('device_revoked')) {
+      return controller.tr("ui_cloud_sync_device_revoked");
+    }
+    if (error.contains('free_sync_rate_limited')) {
+      return controller.tr("ui_cloud_sync_free_rate_limited");
+    }
     if (error.contains('unauthorized')) {
       return controller.tr("ui_cloud_sync_account_session_expired");
     }
-    if (error.contains('already_registered') || error.contains('already exists') || error.contains('account_exists')) {
+    if (error.contains('email_exists') || error.contains('already_registered') || error.contains('already exists') || error.contains('account_exists')) {
       return controller.tr("ui_cloud_sync_account_error_exists");
     }
     return error.replaceFirst('Exception: ', '');
@@ -786,20 +800,21 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
       final isBillingWaiting = controller.isAccountBillingWaiting.value;
       final billingWaitingMessageKey = controller.accountBillingWaitingMessageKey.value;
       final subscriptionError = controller.accountSubscriptionError.value;
-      final subscriptionActive = account.syncEligible;
+      final isPro = account.isPro;
+      final syncLimit = account.syncLimits.deviceLimit;
       final billingWaitingText = billingWaitingMessageKey.isNotEmpty ? controller.tr(billingWaitingMessageKey) : controller.tr("ui_cloud_sync_subscription_waiting_payment");
       final subscriptionStatusText =
           isBillingWaiting
               ? billingWaitingText
               : subscriptionError.isNotEmpty
               ? normalizeAccountActionError(subscriptionError)
-              : subscriptionActive
-              ? controller.tr("ui_cloud_sync_subscription_active")
-              : controller.tr("ui_cloud_sync_subscription_required");
+              : isPro
+              ? controller.tr("ui_cloud_sync_plan_pro_status")
+              : controller.tr("ui_cloud_sync_plan_free_status").replaceAll("{count}", account.deviceCount.toString()).replaceAll("{limit}", (syncLimit ?? 2).toString());
       final subscriptionStatusColor =
           isBillingWaiting
               ? getThemeSubTextColor()
-              : subscriptionError.isNotEmpty || !subscriptionActive
+              : subscriptionError.isNotEmpty
               ? Colors.red
               : null;
       return formSection(
@@ -817,7 +832,7 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
             ),
             formField(
               settingKey: "CloudSyncSubscriptionStatus",
-              label: controller.tr("ui_cloud_sync_subscription_status"),
+              label: controller.tr("ui_cloud_sync_plan_status"),
               labelWidth: _cloudSyncLabelWidth,
               child: SizedBox(
                 width: _cloudSyncValueWidth,
@@ -832,15 +847,15 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
                       ),
                     ),
                     const SizedBox(width: 10),
-                    if (!subscriptionActive)
+                    if (!isPro)
                       WoxButton.secondary(
                         text: controller.tr("ui_cloud_sync_refresh_status"),
                         onPressed: isBusy || isBillingWaiting ? null : () => controller.accountRefreshSubscriptionStatus(),
                       ),
-                    if (!subscriptionActive) const SizedBox(width: 8),
-                    if (!subscriptionActive)
+                    if (!isPro) const SizedBox(width: 8),
+                    if (!isPro)
                       WoxButton.primary(text: controller.tr("ui_cloud_sync_subscribe"), onPressed: isBusy || isBillingWaiting ? null : () => controller.accountOpenCheckout()),
-                    if (subscriptionActive) buildSubscriptionActionMenu(isBusy: isBusy, isBillingWaiting: isBillingWaiting),
+                    if (isPro) buildSubscriptionActionMenu(isBusy: isBusy, isBillingWaiting: isBillingWaiting),
                   ],
                 ),
               ),
@@ -976,9 +991,8 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
     return formSection(
       title: controller.tr("ui_cloud_sync_intro_title"),
       children: [
-        WoxPanel(
-          padding: const EdgeInsets.all(22),
-          showShadow: false,
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24),
           child: LayoutBuilder(
             builder: (context, constraints) {
               final useStackedLayout = constraints.maxWidth < 760;
@@ -1000,70 +1014,14 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
                 ),
               ];
 
-              final mainContent = Column(
+              return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildCloudSyncIntroIcon(Icons.cloud_queue_outlined, size: 56, iconSize: 28),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              controller.tr("ui_cloud_sync_intro_headline"),
-                              style: TextStyle(color: getThemeTextColor(), fontSize: 20, fontWeight: FontWeight.w700, height: 1.2),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(controller.tr("ui_cloud_sync_intro_description"), style: TextStyle(color: getThemeSubTextColor(), fontSize: 13, height: 1.4)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  Container(height: 1, color: getThemeSettingDividerColor().withValues(alpha: isThemeDark() ? 0.72 : 0.48)),
-                ],
-              );
-              final featuresContent = Column(
-                children: [
-                  for (var i = 0; i < featureItems.length; i++) ...[_buildCloudSyncIntroFeature(featureItems[i]), if (i < featureItems.length - 1) const SizedBox(height: 14)],
-                ],
-              );
-
-              final priceContent = buildCloudSyncIntroPrice();
-              if (useStackedLayout) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    mainContent,
-                    const SizedBox(height: 18),
-                    featuresContent,
-                    const SizedBox(height: 20),
-                    Container(height: 1, color: getThemeSettingDividerColor().withValues(alpha: isThemeDark() ? 0.72 : 0.48)),
-                    const SizedBox(height: 18),
-                    priceContent,
-                  ],
-                );
-              }
-
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  mainContent,
+                  _buildCloudSyncIntroHero(stacked: useStackedLayout),
                   const SizedBox(height: 18),
-                  IntrinsicHeight(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(child: featuresContent),
-                        Padding(padding: const EdgeInsets.symmetric(horizontal: 28), child: Container(width: 1, color: getThemeSettingDividerColor().withValues(alpha: 0.72))),
-                        SizedBox(width: 300, child: Center(child: priceContent)),
-                      ],
-                    ),
-                  ),
+                  _buildCloudSyncIntroFeatureSummary(featureItems, stacked: useStackedLayout),
+                  const SizedBox(height: 20),
+                  buildCloudSyncPlanComparison(),
                 ],
               );
             },
@@ -1073,70 +1031,344 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
     );
   }
 
-  /// Builds the shared icon treatment used by the cloud sync intro panel.
-  Widget _buildCloudSyncIntroIcon(IconData icon, {double size = 42, double iconSize = 22}) {
-    final accentColor = getThemeActionItemActiveColor();
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: getThemeActiveBackgroundColor().withValues(alpha: isThemeDark() ? 0.18 : 0.10),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: accentColor.withValues(alpha: isThemeDark() ? 0.34 : 0.22)),
-      ),
-      child: Icon(icon, size: iconSize, color: accentColor),
+  Widget _buildCloudSyncIntroHero({required bool stacked}) {
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(controller.tr("ui_cloud_sync_intro_headline"), style: TextStyle(color: getThemeTextColor(), fontSize: 20, fontWeight: FontWeight.w700, height: 1.2)),
+        const SizedBox(height: 8),
+        Text(controller.tr("ui_cloud_sync_intro_description"), style: TextStyle(color: getThemeSubTextColor(), fontSize: 13, height: 1.4)),
+      ],
+    );
+
+    if (stacked) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [_buildCloudSyncIntroIcon(Icons.cloud_queue_outlined, size: 52, iconSize: 27), const SizedBox(height: 14), content],
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [_buildCloudSyncIntroIcon(Icons.cloud_queue_outlined, size: 56, iconSize: 28), const SizedBox(width: 16), Expanded(child: content)],
     );
   }
 
-  /// Builds one scannable feature row in the cloud sync intro panel.
-  Widget _buildCloudSyncIntroFeature(_CloudSyncIntroFeature feature) {
+  /// Builds the shared icon treatment used by the cloud sync intro panel.
+  Widget _buildCloudSyncIntroIcon(IconData icon, {double size = 42, double iconSize = 22}) {
+    final iconColor = getThemeTextColor().withValues(alpha: isThemeDark() ? 0.76 : 0.68);
+    final outlineColor = getThemeSettingDividerColor().withValues(alpha: isThemeDark() ? 0.42 : 0.58);
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(8), border: Border.all(color: outlineColor)),
+      child: Icon(icon, size: iconSize, color: iconColor),
+    );
+  }
+
+  Widget _buildCloudSyncIntroFeatureSummary(List<_CloudSyncIntroFeature> features, {required bool stacked}) {
+    if (stacked) {
+      return Column(
+        children: [
+          for (var i = 0; i < features.length; i++) ...[_buildCloudSyncIntroFeatureTile(features[i]), if (i < features.length - 1) const SizedBox(height: 10)],
+        ],
+      );
+    }
+
+    return Row(
+      children: [
+        for (var i = 0; i < features.length; i++) ...[Expanded(child: _buildCloudSyncIntroFeatureTile(features[i])), if (i < features.length - 1) const SizedBox(width: 10)],
+      ],
+    );
+  }
+
+  /// Builds one compact capability tile in the cloud sync intro panel.
+  Widget _buildCloudSyncIntroFeatureTile(_CloudSyncIntroFeature feature) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: getThemeSettingDividerColor().withValues(alpha: isThemeDark() ? 0.36 : 0.5)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildCloudSyncIntroIcon(feature.icon, size: 34, iconSize: 17),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(feature.title, style: TextStyle(color: getThemeTextColor(), fontSize: 13, fontWeight: FontWeight.w700, height: 1.2)),
+                const SizedBox(height: 5),
+                Text(feature.description, style: TextStyle(color: getThemeSubTextColor(), fontSize: 12, height: 1.32)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget buildCloudSyncPlanComparison() {
+    return Obx(() {
+      final plan = controller.cloudSyncBillingPlan.value;
+      final proPrice = _cloudSyncPlanPriceText(plan.pro.price);
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 620;
+          return _buildCloudSyncPlanTable(compact: compact, freePrice: plan.free.price.formatted, proPrice: proPrice);
+        },
+      );
+    });
+  }
+
+  String _cloudSyncPlanPriceText(WoxBillingPlanPrice price) {
+    if (price.formatted.isNotEmpty) {
+      return price.formatted;
+    }
+    if (price.unitAmount != null && price.currency.isNotEmpty) {
+      final amount = price.unitAmount! / 100;
+      final normalizedAmount = amount == amount.roundToDouble() ? amount.toStringAsFixed(0) : amount.toStringAsFixed(2);
+      final interval = price.interval.isNotEmpty ? "/${price.interval}" : "";
+      return "${price.currency.toUpperCase()} $normalizedAmount$interval";
+    }
+    if (!controller.cloudSyncBillingPlanLoaded.value) {
+      return controller.tr("ui_cloud_sync_plan_price_loading");
+    }
+    return controller.tr("ui_cloud_sync_plan_price_unavailable");
+  }
+
+  Widget _buildCloudSyncPlanTable({required bool compact, required String freePrice, required String proPrice}) {
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: getThemeSettingDividerColor().withValues(alpha: isThemeDark() ? 0.54 : 0.64)),
+      ),
+      child: Column(
+        children: [
+          _buildCloudSyncPlanHeader(compact: compact),
+          _buildCloudSyncPlanTableRow(compact: compact, label: controller.tr("ui_cloud_sync_plan_row_price"), freeValue: freePrice, proValue: proPrice),
+          _buildCloudSyncPlanTableRow(
+            compact: compact,
+            label: controller.tr("ui_cloud_sync_plan_row_devices"),
+            freeValue: controller.tr("ui_cloud_sync_plan_feature_two_devices"),
+            proValue: controller.tr("ui_cloud_sync_plan_feature_unlimited_devices"),
+          ),
+          _buildCloudSyncPlanTableRow(
+            compact: compact,
+            label: controller.tr("ui_cloud_sync_plan_row_frequency"),
+            freeValue: controller.tr("ui_cloud_sync_plan_feature_hourly"),
+            proValue: controller.tr("ui_cloud_sync_plan_feature_unlimited_sync"),
+          ),
+          _buildCloudSyncPlanTableRow(
+            compact: compact,
+            label: controller.tr("ui_cloud_sync_plan_row_scope"),
+            freeValue: controller.tr("ui_cloud_sync_plan_scope_free"),
+            proValue: controller.tr("ui_cloud_sync_plan_feature_everything_free"),
+            isLast: true,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCloudSyncPlanHeader({required bool compact}) {
+    if (compact) {
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: Colors.transparent),
+        child: Row(
+          children: [
+            Expanded(child: _buildCloudSyncPlanHeaderCell(title: controller.tr("ui_cloud_sync_plan_free"))),
+            const SizedBox(width: 10),
+            Expanded(child: _buildCloudSyncPlanHeaderCell(title: controller.tr("ui_cloud_sync_plan_pro"), highlighted: true)),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(color: Colors.transparent),
+      child: Row(
+        children: [
+          const SizedBox(width: 132),
+          Expanded(child: _buildCloudSyncPlanHeaderCell(title: controller.tr("ui_cloud_sync_plan_free"))),
+          const SizedBox(width: 10),
+          Expanded(child: _buildCloudSyncPlanHeaderCell(title: controller.tr("ui_cloud_sync_plan_pro"), highlighted: true)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCloudSyncPlanHeaderCell({required String title, bool highlighted = false}) {
+    const tagBackgroundColor = Color(0xFF0B6BD3);
+    const tagBorderColor = Color(0xFF0757AE);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(title, style: TextStyle(color: getThemeTextColor(), fontSize: 14, fontWeight: FontWeight.w800, height: 1.2)),
+        if (highlighted) ...[
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(color: tagBackgroundColor, borderRadius: BorderRadius.circular(8), border: Border.all(color: tagBorderColor)),
+            child: Text(controller.tr("ui_cloud_sync_plan_recommended"), style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700, height: 1.1)),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildCloudSyncPlanTableRow({required bool compact, required String label, required String freeValue, required String proValue, bool isLast = false}) {
+    final borderColor = getThemeSettingDividerColor().withValues(alpha: isThemeDark() ? 0.36 : 0.5);
+    final content =
+        compact
+            ? _buildCloudSyncPlanCompactRow(label: label, freeValue: freeValue, proValue: proValue)
+            : _buildCloudSyncPlanWideRow(label: label, freeValue: freeValue, proValue: proValue);
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: compact ? 12 : 14, vertical: 12),
+      decoration: BoxDecoration(border: Border(top: BorderSide(color: borderColor), bottom: isLast ? BorderSide.none : BorderSide(color: Colors.transparent))),
+      child: content,
+    );
+  }
+
+  Widget _buildCloudSyncPlanWideRow({required String label, required String freeValue, required String proValue}) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildCloudSyncIntroIcon(feature.icon),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(feature.title, style: TextStyle(color: getThemeTextColor(), fontSize: 14, fontWeight: FontWeight.w700, height: 1.2)),
-              const SizedBox(height: 6),
-              Text(feature.description, style: TextStyle(color: getThemeSubTextColor(), fontSize: 12, height: 1.35)),
-            ],
-          ),
+        SizedBox(width: 132, child: Text(label, style: TextStyle(color: getThemeSubTextColor(), fontSize: 12, fontWeight: FontWeight.w600, height: 1.35))),
+        Expanded(child: Text(freeValue, style: TextStyle(color: getThemeTextColor(), fontSize: 13, height: 1.35))),
+        const SizedBox(width: 10),
+        Expanded(child: Text(proValue, style: TextStyle(color: getThemeTextColor(), fontSize: 13, fontWeight: FontWeight.w600, height: 1.35))),
+      ],
+    );
+  }
+
+  Widget _buildCloudSyncPlanCompactRow({required String label, required String freeValue, required String proValue}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(color: getThemeSubTextColor(), fontSize: 12, fontWeight: FontWeight.w600, height: 1.3)),
+        const SizedBox(height: 8),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: Text(freeValue, style: TextStyle(color: getThemeTextColor(), fontSize: 13, height: 1.35))),
+            const SizedBox(width: 10),
+            Expanded(child: Text(proValue, style: TextStyle(color: getThemeTextColor(), fontSize: 13, fontWeight: FontWeight.w600, height: 1.35))),
+          ],
         ),
       ],
     );
   }
 
-  /// Builds the pricing summary without implying an unconfirmed billing state.
-  Widget buildCloudSyncIntroPrice() {
-    return SizedBox(
-      width: 250,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
+  Widget buildCloudSyncDeviceSection() {
+    return Obx(() {
+      final devices = controller.cloudSyncDeviceList.value.devices;
+      final actionError = controller.cloudSyncActionError.value;
+      final isBusy = controller.isCloudSyncActionLoading.value;
+      return formSection(
+        title: controller.tr("ui_cloud_sync_devices"),
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              _buildCloudSyncIntroIcon(Icons.local_offer_outlined, size: 48, iconSize: 24),
-              const SizedBox(width: 14),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(controller.tr("ui_cloud_sync_intro_price_label"), style: TextStyle(color: getThemeSubTextColor(), fontSize: 12, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 4),
-                  Text(controller.tr("ui_cloud_sync_intro_price_value"), style: TextStyle(color: getThemeTextColor(), fontSize: 22, fontWeight: FontWeight.w700, height: 1.1)),
-                ],
+          formField(
+            settingKey: "CloudSyncDevices",
+            label: controller.tr("ui_cloud_sync_devices"),
+            labelWidth: _cloudSyncLabelWidth,
+            tipsWidget: buildCloudSyncInfoValue(controller.tr("ui_cloud_sync_devices_tips")),
+            child: SizedBox(
+              width: _cloudSyncValueWidth,
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: WoxButton.secondary(
+                  text: controller.tr("ui_cloud_sync_refresh"),
+                  icon: const Icon(Icons.refresh_outlined, size: 16),
+                  onPressed: isBusy ? null : () => controller.refreshCloudSyncDevices(),
+                ),
               ),
-            ],
+            ),
           ),
-          const SizedBox(height: 18),
-          Text(controller.tr("ui_cloud_sync_intro_price_description"), style: TextStyle(color: getThemeSubTextColor(), fontSize: 13, height: 1.45)),
+          if (actionError.isNotEmpty)
+            formField(
+              settingKey: "CloudSyncDeviceError",
+              label: "",
+              labelWidth: _cloudSyncLabelWidth,
+              child: SizedBox(
+                width: _cloudSyncValueWidth,
+                child: Align(alignment: Alignment.centerRight, child: buildCloudSyncInfoValue(normalizeCloudSyncError(actionError), color: Colors.red)),
+              ),
+            ),
+          if (devices.isEmpty)
+            formField(
+              settingKey: "CloudSyncDeviceEmpty",
+              label: "",
+              labelWidth: _cloudSyncLabelWidth,
+              child: SizedBox(
+                width: _cloudSyncValueWidth,
+                child: Align(alignment: Alignment.centerRight, child: buildCloudSyncInfoValue(controller.tr("ui_cloud_sync_devices_empty"), color: getThemeSubTextColor())),
+              ),
+            )
+          else
+            for (final device in devices) settingTarget(settingKey: "CloudSyncDevice-${device.deviceId}", child: _buildCloudSyncDeviceRow(device, isBusy: isBusy)),
+        ],
+      );
+    });
+  }
+
+  Widget _buildCloudSyncDeviceRow(WoxCloudSyncDevice device, {required bool isBusy}) {
+    final deviceTitle = device.deviceName.isNotEmpty ? device.deviceName : device.deviceId;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  device.current ? "$deviceTitle ${controller.tr("ui_cloud_sync_devices_current")}" : deviceTitle,
+                  style: TextStyle(color: getThemeTextColor(), fontSize: 13, fontWeight: FontWeight.w600, height: 1.25),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _formatCloudSyncDevicePlatform(device.platform),
+                  style: TextStyle(color: getThemeSubTextColor(), fontSize: 12, height: 1.25),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 18),
+          Text(formatCloudSyncTime(device.lastSeenAt), style: TextStyle(color: getThemeSubTextColor(), fontSize: 12, height: 1.25), maxLines: 1, overflow: TextOverflow.ellipsis),
+          const SizedBox(width: 10),
+          WoxButton.secondary(
+            text: device.revoked ? controller.tr("ui_cloud_sync_devices_revoked") : controller.tr("ui_cloud_sync_devices_revoke"),
+            onPressed: isBusy || device.current || device.revoked ? null : () => controller.cloudSyncRevokeDevice(device.deviceId),
+          ),
         ],
       ),
     );
+  }
+
+  String _formatCloudSyncDevicePlatform(String platform) {
+    switch (platform.trim().toLowerCase()) {
+      case "windows":
+        return "Windows";
+      case "darwin":
+        return "macOS";
+      case "linux":
+        return "Linux";
+      default:
+        return controller.tr("ui_cloud_sync_devices_unknown_platform");
+    }
   }
 
   Widget buildCloudSyncPluginExclusions() {
@@ -1241,6 +1473,7 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
           buildAccountSection(context),
           if (loggedIn) ...[
             buildCloudSyncStatusSection(context),
+            buildCloudSyncDeviceSection(),
             settingTarget(settingKey: "CloudSyncDisabledPlugins", child: Padding(padding: const EdgeInsets.only(bottom: 24), child: buildCloudSyncPluginExclusions())),
           ],
         ],

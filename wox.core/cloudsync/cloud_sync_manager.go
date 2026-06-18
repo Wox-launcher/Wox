@@ -100,9 +100,32 @@ func (m *CloudSyncManager) Start(ctx context.Context) {
 	m.cancel = cancel
 	m.mu.Unlock()
 
+	if err := m.updateCurrentDevice(ctx); err != nil {
+		m.recordFailure(ctx, err)
+	}
+
 	util.Go(runCtx, "cloud sync loop", func() {
 		m.runSyncLoop(runCtx)
 	})
+}
+
+func (m *CloudSyncManager) updateCurrentDevice(ctx context.Context) error {
+	if m.client == nil || m.deviceProvider == nil {
+		return nil
+	}
+	deviceID, err := m.deviceProvider.DeviceID(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get device id: %w", err)
+	}
+	_, err = m.client.UpdateDevice(ctx, CloudSyncDeviceUpdateRequest{
+		DeviceID:   deviceID,
+		DeviceName: resolveDeviceName(),
+		Platform:   util.GetCurrentPlatform(),
+	})
+	if err != nil {
+		return fmt.Errorf("cloud sync device update failed: %w", err)
+	}
+	return nil
 }
 
 // runSyncLoop keeps scheduled pull and push work serialized so shared sync state
@@ -1045,6 +1068,11 @@ func (m *CloudSyncManager) recordFailure(ctx context.Context, err error) {
 
 	_, _ = UpdateCloudSyncState(ctx, func(state *database.CloudSyncState) {
 		state.LastError = err.Error()
+		var requestErr *CloudSyncRequestError
+		if errors.As(err, &requestErr) && requestErr.Code == "free_sync_rate_limited" && requestErr.NextSyncAfter > util.GetSystemTimestamp() {
+			state.BackoffUntil = requestErr.NextSyncAfter
+			return
+		}
 		state.RetryCount++
 		state.BackoffUntil = util.GetSystemTimestamp() + m.nextBackoffMs(state.RetryCount)
 	})

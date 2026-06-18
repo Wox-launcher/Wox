@@ -59,6 +59,25 @@ type responseEnvelope struct {
 	Data    json.RawMessage `json:"data"`
 }
 
+type CloudSyncRequestError struct {
+	Code          string
+	Message       string
+	NextSyncAfter int64
+}
+
+func (e *CloudSyncRequestError) Error() string {
+	if e == nil {
+		return ""
+	}
+	if e.Message == "" {
+		return e.Code
+	}
+	if e.Code == "" {
+		return e.Message
+	}
+	return e.Code + ": " + e.Message
+}
+
 func NewCloudSyncHTTPClient(config CloudSyncHTTPClientConfig) (*CloudSyncHTTPClient, error) {
 	baseURL := normalizeBaseURL(config.BaseURL)
 	if baseURL == "" {
@@ -124,6 +143,30 @@ func (c *CloudSyncHTTPClient) Snapshot(ctx context.Context, req CloudSyncPullReq
 func (c *CloudSyncHTTPClient) ListRecordKeys(ctx context.Context, req CloudSyncRecordKeyListRequest) (*CloudSyncRecordKeyListResponse, error) {
 	var resp CloudSyncRecordKeyListResponse
 	if err := c.post(ctx, "/v1/sync/record-keys", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+func (c *CloudSyncHTTPClient) ListDevices(ctx context.Context, req CloudSyncDeviceListRequest) (*CloudSyncDeviceListResponse, error) {
+	var resp CloudSyncDeviceListResponse
+	if err := c.post(ctx, "/v1/sync/devices/list", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+func (c *CloudSyncHTTPClient) RevokeDevice(ctx context.Context, req CloudSyncDeviceRevokeRequest) (*CloudSyncDeviceRevokeResponse, error) {
+	var resp CloudSyncDeviceRevokeResponse
+	if err := c.post(ctx, "/v1/sync/devices/revoke", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+func (c *CloudSyncHTTPClient) UpdateDevice(ctx context.Context, req CloudSyncDeviceUpdateRequest) (*CloudSyncDeviceUpdateResponse, error) {
+	var resp CloudSyncDeviceUpdateResponse
+	if err := c.post(ctx, "/v1/sync/devices/update", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -262,7 +305,7 @@ func (c *CloudSyncHTTPClient) postWithToken(ctx context.Context, path string, pa
 	}
 	if resp.StatusCode >= 400 {
 		if envelopeErr == nil && envelope.Code != "" {
-			return errors.New(envelope.Code)
+			return cloudSyncRequestErrorFromEnvelope(envelope)
 		}
 		if envelopeErr == nil && envelope.Message != "" {
 			return errors.New(envelope.Message)
@@ -289,6 +332,18 @@ func (c *CloudSyncHTTPClient) postWithToken(ctx context.Context, path string, pa
 	}
 
 	return nil
+}
+
+func cloudSyncRequestErrorFromEnvelope(envelope responseEnvelope) error {
+	requestErr := &CloudSyncRequestError{Code: envelope.Code, Message: envelope.Message}
+	var details struct {
+		NextSyncAfter int64 `json:"next_sync_after"`
+	}
+	if len(envelope.Data) > 0 && string(envelope.Data) != "null" {
+		_ = json.Unmarshal(envelope.Data, &details)
+		requestErr.NextSyncAfter = details.NextSyncAfter
+	}
+	return requestErr
 }
 
 func (c *CloudSyncHTTPClient) resolveAccessToken(ctx context.Context) (string, error) {
