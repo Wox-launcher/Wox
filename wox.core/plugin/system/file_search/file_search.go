@@ -115,7 +115,8 @@ func (c *FileSearchPlugin) GetMetadata() plugin.Metadata {
 		},
 		SettingDefinitions: definition.PluginSettingDefinitions{
 			{
-				Type: definition.PluginSettingDefinitionTypeTable,
+				Type:               definition.PluginSettingDefinitionTypeTable,
+				IsPlatformSpecific: true,
 				Value: &definition.PluginSettingValueTable{
 					Key:          fileRootsSettingKey,
 					DefaultValue: defaultFileSearchRootPathsJSON(),
@@ -146,7 +147,8 @@ func (c *FileSearchPlugin) GetMetadata() plugin.Metadata {
 				},
 			},
 			{
-				Type: definition.PluginSettingDefinitionTypeTable,
+				Type:               definition.PluginSettingDefinitionTypeTable,
+				IsPlatformSpecific: true,
 				Value: &definition.PluginSettingValueTable{
 					Key:          fileIgnorePatternsSettingKey,
 					DefaultValue: defaultFileSearchIgnorePatternsJSON(),

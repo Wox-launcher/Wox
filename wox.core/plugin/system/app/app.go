@@ -253,7 +253,8 @@ func (a *ApplicationPlugin) GetMetadata() plugin.Metadata {
 		},
 		SettingDefinitions: []definition.PluginSettingDefinitionItem{
 			{
-				Type: definition.PluginSettingDefinitionTypeTable,
+				Type:               definition.PluginSettingDefinitionTypeTable,
+				IsPlatformSpecific: true,
 				Value: &definition.PluginSettingValueTable{
 					Key:     "AppDirectories",
 					Title:   "i18n:plugin_app_directories",
@@ -274,7 +275,8 @@ func (a *ApplicationPlugin) GetMetadata() plugin.Metadata {
 				},
 			},
 			{
-				Type: definition.PluginSettingDefinitionTypeTable,
+				Type:               definition.PluginSettingDefinitionTypeTable,
+				IsPlatformSpecific: true,
 				Value: &definition.PluginSettingValueTable{
 					Key:     "IgnoreRules",
 					Title:   "i18n:plugin_app_ignore_rules",

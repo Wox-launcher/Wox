@@ -65,8 +65,7 @@ func (p *WebViewPlugin) GetMetadata() plugin.Metadata {
 		},
 		SettingDefinitions: []definition.PluginSettingDefinitionItem{
 			{
-				Type:               definition.PluginSettingDefinitionTypeTable,
-				IsPlatformSpecific: true,
+				Type: definition.PluginSettingDefinitionTypeTable,
 				Value: &definition.PluginSettingValueTable{
 					Key:           webviewSitesSettingKey,
 					Title:         "i18n:plugin_webview_sites",

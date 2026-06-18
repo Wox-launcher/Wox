@@ -161,7 +161,8 @@ func (w *WPMPlugin) GetMetadata() plugin.Metadata {
 		},
 		SettingDefinitions: definition.PluginSettingDefinitions{
 			{
-				Type: definition.PluginSettingDefinitionTypeTable,
+				Type:               definition.PluginSettingDefinitionTypeTable,
+				IsPlatformSpecific: true,
 				Value: &definition.PluginSettingValueTable{
 					Key:     localPluginDirectoriesKey,
 					Title:   "i18n:plugin_wpm_local_plugin_directories",
@@ -1240,7 +1241,7 @@ func (w *WPMPlugin) saveLocalPluginDirectories(ctx context.Context) {
 		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to marshal local plugin directories: %s", marshalErr.Error()))
 		return
 	}
-	w.api.SaveSetting(ctx, localPluginDirectoriesKey, string(data), false)
+	w.api.SaveSetting(ctx, localPluginDirectoriesKey, string(data), true)
 }
 
 func (w *WPMPlugin) reloadLocalDistPlugin(ctx context.Context, localPlugin plugin.Metadata, reason string) error {
