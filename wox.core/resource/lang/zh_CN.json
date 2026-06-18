@@ -705,6 +705,8 @@
   "ui_cloud_sync_subscription_required": "验证邮箱后即可使用云同步；订阅 Pro 可移除 Free 限制。",
   "ui_cloud_sync_device_limit_exceeded": "Free 套餐最多支持 2 台有效设备，请撤销其他设备或订阅 Pro。",
   "ui_cloud_sync_device_revoked": "这台设备已被撤销云同步权限。",
+  "ui_cloud_sync_join": "加入",
+  "ui_cloud_sync_join_device_limit_exceeded": "如果您的设备数已经达到上限，请先撤销已有的同步设备。",
   "ui_cloud_sync_free_rate_limited": "Free 套餐每小时可同步一次，请稍后再试或订阅 Pro。",
   "ui_cloud_sync_subscription_waiting_payment": "等待支付完成...",
   "ui_cloud_sync_subscription_payment_timeout": "支付未完成或已超时，请重新订阅。",

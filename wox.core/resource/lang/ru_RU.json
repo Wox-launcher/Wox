@@ -696,6 +696,8 @@
   "ui_cloud_sync_subscription_required": "Для облачной синхронизации нужна активная подписка.",
   "ui_cloud_sync_device_limit_exceeded": "Free cloud sync supports up to 2 active devices. Revoke another device or upgrade to Pro.",
   "ui_cloud_sync_device_revoked": "This device has been revoked. Sign in again from an active device or revoke another device first.",
+  "ui_cloud_sync_join": "Join",
+  "ui_cloud_sync_join_device_limit_exceeded": "If your device limit has been reached, revoke an existing sync device first.",
   "ui_cloud_sync_free_rate_limited": "Free cloud sync can start once per hour. Try again later or upgrade to Pro.",
   "ui_cloud_sync_subscription_waiting_payment": "Ожидание оплаты...",
   "ui_cloud_sync_subscription_payment_timeout": "Оплата не была завершена вовремя. Попробуйте подписаться снова.",

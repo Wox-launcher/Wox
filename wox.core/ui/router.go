@@ -100,6 +100,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/sync/key/reset":                   handleSyncKeyReset,
 	"/sync/devices/list":                handleSyncDevicesList,
 	"/sync/devices/revoke":              handleSyncDeviceRevoke,
+	"/sync/devices/join":                handleSyncDeviceJoin,
 
 	// events
 	"/on/focus/lost":       handleOnFocusLost,
@@ -1885,6 +1886,34 @@ func handleSyncDisable(w http.ResponseWriter, r *http.Request) {
 			writeErrorResponse(w, err.Error())
 			return
 		}
+	}
+	writeSuccessResponse(w, "")
+}
+
+func handleSyncDeviceJoin(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	accountService := account.GetService()
+	accountStatus := account.Status{}
+	if accountService != nil {
+		accountStatus = accountService.Status(ctx)
+	}
+	if accountService == nil || !accountStatus.LoggedIn {
+		writeErrorResponse(w, "account is not logged in")
+		return
+	}
+	if !accountStatus.SyncEligible {
+		writeErrorResponse(w, "subscription_required")
+		return
+	}
+
+	service := cloudsync.GetService()
+	if service == nil {
+		writeErrorResponse(w, "cloud sync is not configured")
+		return
+	}
+	if err := service.JoinCurrentDevice(ctx); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
 	}
 	writeSuccessResponse(w, "")
 }

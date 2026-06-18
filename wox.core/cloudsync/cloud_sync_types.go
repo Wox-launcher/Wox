@@ -170,6 +170,21 @@ type CloudSyncDeviceRevokeResponse struct {
 	RevokedAt int64 `json:"revoked_at"`
 }
 
+type CloudSyncDeviceJoinRequest struct {
+	DeviceID   string `json:"device_id"`
+	DeviceName string `json:"device_name"`
+	Platform   string `json:"platform"`
+}
+
+type CloudSyncDeviceJoinResponse struct {
+	DeviceID   string `json:"device_id"`
+	DeviceName string `json:"device_name"`
+	Platform   string `json:"platform"`
+	LastSeenAt int64  `json:"last_seen_at"`
+	RevokedAt  int64  `json:"revoked_at"`
+	Current    bool   `json:"current"`
+}
+
 type CloudSyncDeviceUpdateRequest struct {
 	DeviceID   string `json:"device_id"`
 	DeviceName string `json:"device_name"`
@@ -203,6 +218,7 @@ type CloudSyncDeviceClient interface {
 	ListDevices(ctx context.Context, req CloudSyncDeviceListRequest) (*CloudSyncDeviceListResponse, error)
 	UpdateDevice(ctx context.Context, req CloudSyncDeviceUpdateRequest) (*CloudSyncDeviceUpdateResponse, error)
 	RevokeDevice(ctx context.Context, req CloudSyncDeviceRevokeRequest) (*CloudSyncDeviceRevokeResponse, error)
+	JoinDevice(ctx context.Context, req CloudSyncDeviceJoinRequest) (*CloudSyncDeviceJoinResponse, error)
 }
 
 type CloudSyncDeviceProvider interface {

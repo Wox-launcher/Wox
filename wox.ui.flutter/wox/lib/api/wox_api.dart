@@ -413,6 +413,10 @@ class WoxApi {
     await WoxHttpUtil.instance.postData(traceId, "/sync/devices/revoke", {"target_device_id": targetDeviceId});
   }
 
+  Future<void> cloudSyncDeviceJoin(String traceId) async {
+    await WoxHttpUtil.instance.postData(traceId, "/sync/devices/join", null);
+  }
+
   Future<void> cloudSyncKeyInit(String traceId, String recoveryCode, String deviceName) async {
     await WoxHttpUtil.instance.postData(traceId, "/sync/key/init", {"recovery_code": recoveryCode, "device_name": deviceName});
   }

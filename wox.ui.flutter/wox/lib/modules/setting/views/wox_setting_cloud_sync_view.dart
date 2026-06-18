@@ -693,6 +693,7 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
       final statusError = controller.cloudSyncStatusError.value;
       final actionError = controller.cloudSyncActionError.value;
       final stateError = state?.lastError ?? '';
+      final isCurrentDeviceRevoked = stateError.contains('device_revoked');
       final lastSyncTime = formatCloudSyncTime(lastCloudSyncTimestamp(state));
       final progressText = formatCloudSyncProgress(status.progress, isBusy: isBusy);
       final isSynced = account.syncEnabled && status.keyStatus.available && state != null && state.bootstrapped;
@@ -758,7 +759,8 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
         statusDetailColor = getThemeSubTextColor();
       }
       final shouldBootstrap = account.loggedIn && account.syncEligible && !isSynced && !isBootstrapInProgress;
-      final syncButtonEnabled = account.loggedIn && account.syncEligible && !isLoading && !isBusy && !isBootstrapInProgress;
+      final syncButtonEnabled = account.loggedIn && account.syncEligible && !isLoading && !isBusy && !isBootstrapInProgress && !isCurrentDeviceRevoked;
+      final joinButtonEnabled = account.loggedIn && account.syncEligible && isCurrentDeviceRevoked && !isLoading && !isBusy;
       final statusLineText = statusDetailText == null ? statusText : "$statusText, $statusDetailText";
       final statusLineColor = statusDetailColor ?? statusColor;
 
@@ -771,8 +773,11 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
             labelWidth: _cloudSyncLabelWidth,
             tipsWidget: buildCloudSyncInfoValue(statusLineText, color: statusLineColor),
             child: WoxButton.primary(
-              text: controller.tr("ui_cloud_sync_sync"),
-              onPressed: syncButtonEnabled ? () async => handleCloudSyncButtonPressed(context, shouldBootstrap: shouldBootstrap) : null,
+              text: isCurrentDeviceRevoked ? controller.tr("ui_cloud_sync_join") : controller.tr("ui_cloud_sync_sync"),
+              onPressed:
+                  isCurrentDeviceRevoked
+                      ? (joinButtonEnabled ? () => controller.cloudSyncJoinDevice() : null)
+                      : (syncButtonEnabled ? () async => handleCloudSyncButtonPressed(context, shouldBootstrap: shouldBootstrap) : null),
             ),
           ),
         ],
@@ -1270,7 +1275,6 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
   Widget buildCloudSyncDeviceSection() {
     return Obx(() {
       final devices = controller.cloudSyncDeviceList.value.devices;
-      final actionError = controller.cloudSyncActionError.value;
       final isBusy = controller.isCloudSyncActionLoading.value;
       return formSection(
         title: controller.tr("ui_cloud_sync_devices"),
@@ -1279,7 +1283,7 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
             settingKey: "CloudSyncDevices",
             label: controller.tr("ui_cloud_sync_devices"),
             labelWidth: _cloudSyncLabelWidth,
-            tipsWidget: buildCloudSyncInfoValue(controller.tr("ui_cloud_sync_devices_tips")),
+            tips: controller.tr("ui_cloud_sync_devices_tips"),
             child: SizedBox(
               width: _cloudSyncValueWidth,
               child: Align(
@@ -1292,16 +1296,6 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
               ),
             ),
           ),
-          if (actionError.isNotEmpty)
-            formField(
-              settingKey: "CloudSyncDeviceError",
-              label: "",
-              labelWidth: _cloudSyncLabelWidth,
-              child: SizedBox(
-                width: _cloudSyncValueWidth,
-                child: Align(alignment: Alignment.centerRight, child: buildCloudSyncInfoValue(normalizeCloudSyncError(actionError), color: Colors.red)),
-              ),
-            ),
           if (devices.isEmpty)
             formField(
               settingKey: "CloudSyncDeviceEmpty",

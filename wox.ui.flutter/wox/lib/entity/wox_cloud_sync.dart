@@ -74,11 +74,7 @@ class WoxCloudSyncBootstrapStatus {
 
 class WoxAccountStatus {
   final bool loggedIn;
-  final String userId;
   final String email;
-  final bool emailVerified;
-  final String subscriptionStatus;
-  final int subscriptionCurrentPeriodEnd;
   final bool syncEligible;
   final String plan;
   final WoxSyncLimits syncLimits;
@@ -88,11 +84,7 @@ class WoxAccountStatus {
 
   WoxAccountStatus({
     required this.loggedIn,
-    required this.userId,
     required this.email,
-    required this.emailVerified,
-    required this.subscriptionStatus,
-    required this.subscriptionCurrentPeriodEnd,
     required this.syncEligible,
     required this.plan,
     required this.syncLimits,
@@ -104,11 +96,7 @@ class WoxAccountStatus {
   factory WoxAccountStatus.empty() {
     return WoxAccountStatus(
       loggedIn: false,
-      userId: '',
       email: '',
-      emailVerified: false,
-      subscriptionStatus: 'none',
-      subscriptionCurrentPeriodEnd: 0,
       syncEligible: false,
       plan: 'free',
       syncLimits: WoxSyncLimits.free(),
@@ -121,11 +109,7 @@ class WoxAccountStatus {
   factory WoxAccountStatus.fromJson(Map<String, dynamic> json) {
     return WoxAccountStatus(
       loggedIn: json['logged_in'] ?? false,
-      userId: json['user_id'] ?? '',
       email: json['email'] ?? '',
-      emailVerified: json['email_verified'] ?? false,
-      subscriptionStatus: json['subscription_status'] ?? 'none',
-      subscriptionCurrentPeriodEnd: json['subscription_current_period_end'] ?? 0,
       syncEligible: json['sync_eligible'] ?? false,
       plan: json['plan'] ?? 'free',
       syncLimits: json['sync_limits'] is Map<String, dynamic> ? WoxSyncLimits.fromJson(json['sync_limits']) : WoxSyncLimits.free(),
@@ -140,17 +124,15 @@ class WoxAccountStatus {
 
 class WoxSyncLimits {
   final int? deviceLimit;
-  final int? syncIntervalSeconds;
-  final int? syncWindowSeconds;
 
-  WoxSyncLimits({required this.deviceLimit, required this.syncIntervalSeconds, required this.syncWindowSeconds});
+  WoxSyncLimits({required this.deviceLimit});
 
   factory WoxSyncLimits.free() {
-    return WoxSyncLimits(deviceLimit: 2, syncIntervalSeconds: 3600, syncWindowSeconds: 600);
+    return WoxSyncLimits(deviceLimit: 2);
   }
 
   factory WoxSyncLimits.fromJson(Map<String, dynamic> json) {
-    return WoxSyncLimits(deviceLimit: json['device_limit'], syncIntervalSeconds: json['sync_interval_seconds'], syncWindowSeconds: json['sync_window_seconds']);
+    return WoxSyncLimits(deviceLimit: json['device_limit']);
   }
 }
 
@@ -162,8 +144,8 @@ class WoxBillingPlan {
 
   factory WoxBillingPlan.empty() {
     return WoxBillingPlan(
-      free: WoxBillingPlanTier(price: WoxBillingPlanPrice(currency: 'usd', unitAmount: 0, interval: 'month', formatted: r'$0/month'), limits: WoxSyncLimits.free()),
-      pro: WoxBillingPlanTier(price: WoxBillingPlanPrice.empty(), limits: WoxSyncLimits(deviceLimit: null, syncIntervalSeconds: null, syncWindowSeconds: null)),
+      free: WoxBillingPlanTier(price: WoxBillingPlanPrice(currency: 'usd', unitAmount: 0, interval: 'month', formatted: r'$0/month')),
+      pro: WoxBillingPlanTier(price: WoxBillingPlanPrice.empty()),
     );
   }
 
@@ -179,17 +161,12 @@ class WoxBillingPlan {
 
 class WoxBillingPlanTier {
   final WoxBillingPlanPrice price;
-  final WoxSyncLimits limits;
 
-  WoxBillingPlanTier({required this.price, required this.limits});
+  WoxBillingPlanTier({required this.price});
 
   factory WoxBillingPlanTier.fromJson(Map<String, dynamic> json) {
     final priceJson = json['price'];
-    final limitsJson = json['limits'];
-    return WoxBillingPlanTier(
-      price: priceJson is Map<String, dynamic> ? WoxBillingPlanPrice.fromJson(priceJson) : WoxBillingPlanPrice.empty(),
-      limits: limitsJson is Map<String, dynamic> ? WoxSyncLimits.fromJson(limitsJson) : WoxSyncLimits(deviceLimit: null, syncIntervalSeconds: null, syncWindowSeconds: null),
-    );
+    return WoxBillingPlanTier(price: priceJson is Map<String, dynamic> ? WoxBillingPlanPrice.fromJson(priceJson) : WoxBillingPlanPrice.empty());
   }
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"wox/database"
 	"wox/util"
 )
 
@@ -84,6 +85,40 @@ func (s *Service) UpdateCurrentDevice(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("cloud sync device update failed: %w", err)
 	}
+	return nil
+}
+
+// JoinCurrentDevice restores cloud sync eligibility for this local device only.
+func (s *Service) JoinCurrentDevice(ctx context.Context) error {
+	if s == nil {
+		return fmt.Errorf("cloud sync is not configured")
+	}
+	client := s.DeviceClient
+	if client == nil {
+		client = s.Client
+	}
+	if client == nil || s.DeviceProvider == nil {
+		return fmt.Errorf("cloud sync is not configured")
+	}
+
+	deviceID, err := s.DeviceProvider.DeviceID(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get device id: %w", err)
+	}
+	_, err = client.JoinDevice(ctx, CloudSyncDeviceJoinRequest{
+		DeviceID:   deviceID,
+		DeviceName: resolveDeviceName(),
+		Platform:   util.GetCurrentPlatform(),
+	})
+	if err != nil {
+		return fmt.Errorf("cloud sync device join failed: %w", err)
+	}
+	_, _ = UpdateCloudSyncState(ctx, func(state *database.CloudSyncState) {
+		state.LastError = ""
+		state.BackoffUntil = 0
+		state.RetryCount = 0
+	})
+	s.StartManager(ctx)
 	return nil
 }
 

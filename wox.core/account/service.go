@@ -44,37 +44,30 @@ type Service struct {
 }
 
 type Status struct {
-	LoggedIn                     bool   `json:"logged_in"`
-	UserID                       string `json:"user_id"`
-	Email                        string `json:"email"`
-	EmailVerified                bool   `json:"email_verified"`
-	SubscriptionStatus           string `json:"subscription_status"`
-	SubscriptionCurrentPeriodEnd int64  `json:"subscription_current_period_end"`
-	SyncEligible                 bool   `json:"sync_eligible"`
-	Plan                         string `json:"plan"`
-	SyncLimits                   Limits `json:"sync_limits"`
-	DeviceCount                  int    `json:"device_count"`
-	SyncEnabled                  bool   `json:"sync_enabled"`
-	SessionExpired               bool   `json:"session_expired"`
+	LoggedIn       bool         `json:"logged_in"`
+	Email          string       `json:"email"`
+	SyncEligible   bool         `json:"sync_eligible"`
+	Plan           string       `json:"plan"`
+	SyncLimits     StatusLimits `json:"sync_limits"`
+	DeviceCount    int          `json:"device_count"`
+	SyncEnabled    bool         `json:"sync_enabled"`
+	SessionExpired bool         `json:"session_expired"`
 }
 
 type User struct {
-	ID                           string `json:"id"`
-	Email                        string `json:"email"`
-	EmailVerified                bool   `json:"email_verified"`
-	SubscriptionStatus           string `json:"subscription_status"`
-	SubscriptionCurrentPeriodEnd int64  `json:"subscription_current_period_end"`
-	SyncEligible                 bool   `json:"sync_eligible"`
-	Plan                         string `json:"plan"`
-	SyncLimits                   Limits `json:"sync_limits"`
-	DeviceCount                  int    `json:"device_count"`
-	CurrentDeviceID              string `json:"current_device_id"`
+	Email        string `json:"email"`
+	SyncEligible bool   `json:"sync_eligible"`
+	Plan         string `json:"plan"`
+	SyncLimits   Limits `json:"sync_limits"`
+	DeviceCount  int    `json:"device_count"`
 }
 
 type Limits struct {
-	DeviceLimit         *int `json:"device_limit"`
-	SyncIntervalSeconds *int `json:"sync_interval_seconds"`
-	SyncWindowSeconds   *int `json:"sync_window_seconds"`
+	DeviceLimit *int `json:"device_limit"`
+}
+
+type StatusLimits struct {
+	DeviceLimit *int `json:"device_limit"`
 }
 
 type AuthResponse struct {
@@ -102,8 +95,7 @@ type BillingPlan struct {
 }
 
 type BillingPlanTier struct {
-	Price  BillingPlanPrice `json:"price"`
-	Limits Limits           `json:"limits"`
+	Price BillingPlanPrice `json:"price"`
 }
 
 type BillingPlanPrice struct {
@@ -187,18 +179,14 @@ func GetService() *Service {
 func (s *Service) Status(ctx context.Context) Status {
 	state := s.loadState(ctx)
 	return Status{
-		LoggedIn:                     state.UserID != "",
-		UserID:                       state.UserID,
-		Email:                        state.Email,
-		EmailVerified:                state.EmailVerified,
-		SubscriptionStatus:           normalizeSubscriptionStatus(state.SubscriptionStatus),
-		SubscriptionCurrentPeriodEnd: state.SubscriptionCurrentPeriodEnd,
-		SyncEligible:                 state.SyncEligible,
-		Plan:                         normalizeSyncPlan(state.SyncPlan),
-		SyncLimits:                   limitsFromState(state),
-		DeviceCount:                  state.DeviceCount,
-		SyncEnabled:                  state.SyncEnabled,
-		SessionExpired:               state.SessionExpired,
+		LoggedIn:       s.isLoggedIn(ctx, state),
+		Email:          state.Email,
+		SyncEligible:   state.SyncEligible,
+		Plan:           normalizeSyncPlan(state.SyncPlan),
+		SyncLimits:     statusLimitsFromState(state),
+		DeviceCount:    state.DeviceCount,
+		SyncEnabled:    state.SyncEnabled,
+		SessionExpired: state.SessionExpired,
 	}
 }
 
@@ -309,16 +297,11 @@ func (s *Service) Logout(ctx context.Context) error {
 	_ = s.post(ctx, "/v1/account/logout", map[string]any{}, nil, token)
 	_ = s.clearTokens(ctx)
 	state := s.loadState(ctx)
-	state.UserID = ""
+	state.LoggedIn = false
 	state.Email = ""
-	state.EmailVerified = false
-	state.SubscriptionStatus = ""
-	state.SubscriptionCurrentPeriodEnd = 0
 	state.SyncEligible = false
 	state.SyncPlan = ""
 	state.SyncDeviceLimit = 0
-	state.SyncIntervalSeconds = 0
-	state.SyncWindowSeconds = 0
 	state.DeviceCount = 0
 	state.SyncEnabled = false
 	state.SessionExpired = false
@@ -332,16 +315,11 @@ func (s *Service) ResetLocalSession(ctx context.Context) error {
 	}
 	_ = s.clearTokens(ctx)
 	state := s.loadState(ctx)
-	state.UserID = ""
+	state.LoggedIn = false
 	state.Email = ""
-	state.EmailVerified = false
-	state.SubscriptionStatus = ""
-	state.SubscriptionCurrentPeriodEnd = 0
 	state.SyncEligible = false
 	state.SyncPlan = ""
 	state.SyncDeviceLimit = 0
-	state.SyncIntervalSeconds = 0
-	state.SyncWindowSeconds = 0
 	state.DeviceCount = 0
 	state.SyncEnabled = false
 	state.SessionExpired = false
@@ -396,7 +374,7 @@ func (s *Service) runTokenRefreshLoop(ctx context.Context) {
 		}
 
 		state := s.loadState(ctx)
-		if state.UserID == "" || state.SessionExpired {
+		if !s.isLoggedIn(ctx, state) || state.SessionExpired {
 			continue
 		}
 		if _, err := s.RefreshAccessToken(ctx); err != nil {
@@ -408,7 +386,7 @@ func (s *Service) runTokenRefreshLoop(ctx context.Context) {
 
 func (s *Service) nextTokenRefreshDelay(ctx context.Context) time.Duration {
 	state := s.loadState(ctx)
-	if state.UserID == "" || state.SessionExpired {
+	if !s.isLoggedIn(ctx, state) || state.SessionExpired {
 		return tokenRefreshIdleDelay
 	}
 
@@ -507,20 +485,15 @@ func (s *Service) clearTokens(ctx context.Context) error {
 
 func (s *Service) saveState(ctx context.Context, user User, syncEnabled bool, sessionExpired bool) error {
 	return saveAccountState(ctx, database.AccountState{
-		ID:                           accountStateID,
-		UserID:                       user.ID,
-		Email:                        user.Email,
-		EmailVerified:                user.EmailVerified,
-		SubscriptionStatus:           normalizeSubscriptionStatus(user.SubscriptionStatus),
-		SubscriptionCurrentPeriodEnd: user.SubscriptionCurrentPeriodEnd,
-		SyncEligible:                 user.SyncEligible,
-		SyncPlan:                     normalizeSyncPlan(user.Plan),
-		SyncDeviceLimit:              limitValue(user.SyncLimits.DeviceLimit),
-		SyncIntervalSeconds:          limitValue(user.SyncLimits.SyncIntervalSeconds),
-		SyncWindowSeconds:            limitValue(user.SyncLimits.SyncWindowSeconds),
-		DeviceCount:                  user.DeviceCount,
-		SyncEnabled:                  syncEnabled,
-		SessionExpired:               sessionExpired,
+		ID:              accountStateID,
+		LoggedIn:        true,
+		Email:           user.Email,
+		SyncEligible:    user.SyncEligible,
+		SyncPlan:        normalizeSyncPlan(user.Plan),
+		SyncDeviceLimit: limitValue(user.SyncLimits.DeviceLimit),
+		DeviceCount:     user.DeviceCount,
+		SyncEnabled:     syncEnabled,
+		SessionExpired:  sessionExpired,
 	})
 }
 
@@ -531,6 +504,24 @@ func (s *Service) loadState(ctx context.Context) database.AccountState {
 		return database.AccountState{ID: accountStateID}
 	}
 	return state
+}
+
+func (s *Service) isLoggedIn(ctx context.Context, state database.AccountState) bool {
+	if state.LoggedIn {
+		return true
+	}
+	if strings.TrimSpace(state.Email) == "" {
+		return false
+	}
+	return s.hasStoredRefreshToken(ctx)
+}
+
+func (s *Service) hasStoredRefreshToken(ctx context.Context) bool {
+	if s == nil || s.keyring == nil {
+		return false
+	}
+	token, err := s.keyring.Get(ctx, refreshTokenKey)
+	return err == nil && strings.TrimSpace(token) != ""
 }
 
 func (s *Service) post(ctx context.Context, path string, body any, target any, accessToken string) error {
@@ -667,30 +658,18 @@ func (s *Service) actionResultFromEnvelope(ctx context.Context, envelope respons
 
 func (s *Service) savePendingEmail(ctx context.Context, email string) error {
 	state := s.loadState(ctx)
-	if state.UserID != "" {
+	if s.isLoggedIn(ctx, state) {
 		return nil
 	}
+	state.LoggedIn = false
 	state.Email = email
-	state.EmailVerified = false
-	state.SubscriptionStatus = ""
-	state.SubscriptionCurrentPeriodEnd = 0
 	state.SyncEligible = false
 	state.SyncPlan = ""
 	state.SyncDeviceLimit = 0
-	state.SyncIntervalSeconds = 0
-	state.SyncWindowSeconds = 0
 	state.DeviceCount = 0
 	state.SyncEnabled = false
 	state.SessionExpired = false
 	return saveAccountState(ctx, state)
-}
-
-func normalizeSubscriptionStatus(status string) string {
-	trimmed := strings.TrimSpace(status)
-	if trimmed == "" {
-		return "none"
-	}
-	return trimmed
 }
 
 func normalizeSyncPlan(plan string) string {
@@ -707,11 +686,9 @@ func limitValue(limit *int) int {
 	return *limit
 }
 
-func limitsFromState(state database.AccountState) Limits {
-	return Limits{
-		DeviceLimit:         stateLimitPointer(state.SyncDeviceLimit),
-		SyncIntervalSeconds: stateLimitPointer(state.SyncIntervalSeconds),
-		SyncWindowSeconds:   stateLimitPointer(state.SyncWindowSeconds),
+func statusLimitsFromState(state database.AccountState) StatusLimits {
+	return StatusLimits{
+		DeviceLimit: stateLimitPointer(state.SyncDeviceLimit),
 	}
 }
 

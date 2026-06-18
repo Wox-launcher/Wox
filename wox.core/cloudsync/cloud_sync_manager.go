@@ -102,6 +102,14 @@ func (m *CloudSyncManager) Start(ctx context.Context) {
 
 	if err := m.updateCurrentDevice(ctx); err != nil {
 		m.recordFailure(ctx, err)
+		if isCloudSyncDeviceRevokedError(err) {
+			m.mu.Lock()
+			m.started = false
+			m.cancel = nil
+			m.mu.Unlock()
+			cancel()
+			return
+		}
 	}
 
 	util.Go(runCtx, "cloud sync loop", func() {
@@ -1069,6 +1077,11 @@ func (m *CloudSyncManager) recordFailure(ctx context.Context, err error) {
 	_, _ = UpdateCloudSyncState(ctx, func(state *database.CloudSyncState) {
 		state.LastError = err.Error()
 		var requestErr *CloudSyncRequestError
+		if errors.As(err, &requestErr) && requestErr.Code == "device_revoked" {
+			state.RetryCount = 0
+			state.BackoffUntil = 0
+			return
+		}
 		if errors.As(err, &requestErr) && requestErr.Code == "free_sync_rate_limited" && requestErr.NextSyncAfter > util.GetSystemTimestamp() {
 			state.BackoffUntil = requestErr.NextSyncAfter
 			return
@@ -1076,6 +1089,15 @@ func (m *CloudSyncManager) recordFailure(ctx context.Context, err error) {
 		state.RetryCount++
 		state.BackoffUntil = util.GetSystemTimestamp() + m.nextBackoffMs(state.RetryCount)
 	})
+
+	if isCloudSyncDeviceRevokedError(err) {
+		m.Stop(ctx)
+	}
+}
+
+func isCloudSyncDeviceRevokedError(err error) bool {
+	var requestErr *CloudSyncRequestError
+	return errors.As(err, &requestErr) && requestErr.Code == "device_revoked"
 }
 
 // recordOperationHistory keeps user-visible sync history separate from sync cursor/state semantics.

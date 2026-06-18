@@ -164,6 +164,14 @@ func (c *CloudSyncHTTPClient) RevokeDevice(ctx context.Context, req CloudSyncDev
 	return &resp, nil
 }
 
+func (c *CloudSyncHTTPClient) JoinDevice(ctx context.Context, req CloudSyncDeviceJoinRequest) (*CloudSyncDeviceJoinResponse, error) {
+	var resp CloudSyncDeviceJoinResponse
+	if err := c.post(ctx, "/v1/sync/devices/join", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 func (c *CloudSyncHTTPClient) UpdateDevice(ctx context.Context, req CloudSyncDeviceUpdateRequest) (*CloudSyncDeviceUpdateResponse, error) {
 	var resp CloudSyncDeviceUpdateResponse
 	if err := c.post(ctx, "/v1/sync/devices/update", req, &resp); err != nil {

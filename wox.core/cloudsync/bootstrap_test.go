@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -245,7 +246,7 @@ func TestCloudSyncStartRunsSingleOrderedSyncLoop(t *testing.T) {
 	store := &loopCloudSyncOplogStore{}
 	history := &loopCloudSyncHistoryStore{}
 	manager := NewCloudSyncManager(CloudSyncConfig{
-		SyncInterval: 20 * time.Millisecond,
+		SyncInterval: 100 * time.Millisecond,
 		PullLimit:    1,
 	}, CloudSyncDependencies{
 		Client:         client,
@@ -280,6 +281,44 @@ func TestCloudSyncStartRunsSingleOrderedSyncLoop(t *testing.T) {
 	if got := history.count(); got != recordCountAfterStop {
 		t.Fatalf("history count after Stop = %d, want %d", got, recordCountAfterStop)
 	}
+}
+
+func TestCloudSyncManagerStopsWhenDeviceRevoked(t *testing.T) {
+	ctx := context.Background()
+	initCloudSyncTestDatabase(t)
+
+	manager := NewCloudSyncManager(CloudSyncConfig{SyncInterval: time.Hour}, CloudSyncDependencies{
+		Client:         &revokedCloudSyncClient{},
+		Crypto:         testCloudSyncCrypto{},
+		DeviceProvider: testCloudSyncDeviceProvider{deviceID: "device-a"},
+		OplogStore:     &testCloudSyncOplogStore{},
+		Snapshotter:    &testCloudSyncSnapshotter{},
+		Applier:        &testCloudSyncApplier{},
+	})
+
+	manager.Start(ctx)
+	defer manager.Stop(ctx)
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		state, err := LoadCloudSyncState(ctx)
+		if err != nil {
+			t.Fatalf("load state: %v", err)
+		}
+		manager.mu.Lock()
+		started := manager.started
+		manager.mu.Unlock()
+		if strings.Contains(state.LastError, "device_revoked") && !started {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	state, _ := LoadCloudSyncState(ctx)
+	manager.mu.Lock()
+	started := manager.started
+	manager.mu.Unlock()
+	t.Fatalf("last error = %q, started = %v, want device_revoked and stopped", state.LastError, started)
 }
 
 func TestApplyRecordsSkipsSettingsForOtherPlatforms(t *testing.T) {
@@ -597,6 +636,38 @@ func (c *loopCloudSyncClient) ListRecordKeys(ctx context.Context, req CloudSyncR
 }
 
 func (c *loopCloudSyncClient) UpdateDevice(ctx context.Context, req CloudSyncDeviceUpdateRequest) (*CloudSyncDeviceUpdateResponse, error) {
+	_ = ctx
+	_ = req
+	return &CloudSyncDeviceUpdateResponse{}, nil
+}
+
+type revokedCloudSyncClient struct{}
+
+func (c *revokedCloudSyncClient) Push(ctx context.Context, req CloudSyncPushRequest) (*CloudSyncPushResponse, error) {
+	_ = ctx
+	_ = req
+	return nil, &CloudSyncRequestError{Code: "device_revoked", Message: "revoked"}
+}
+
+func (c *revokedCloudSyncClient) Pull(ctx context.Context, req CloudSyncPullRequest) (*CloudSyncPullResponse, error) {
+	_ = ctx
+	_ = req
+	return nil, &CloudSyncRequestError{Code: "device_revoked", Message: "revoked"}
+}
+
+func (c *revokedCloudSyncClient) Snapshot(ctx context.Context, req CloudSyncPullRequest) (*CloudSyncPullResponse, error) {
+	_ = ctx
+	_ = req
+	return nil, &CloudSyncRequestError{Code: "device_revoked", Message: "revoked"}
+}
+
+func (c *revokedCloudSyncClient) ListRecordKeys(ctx context.Context, req CloudSyncRecordKeyListRequest) (*CloudSyncRecordKeyListResponse, error) {
+	_ = ctx
+	_ = req
+	return nil, &CloudSyncRequestError{Code: "device_revoked", Message: "revoked"}
+}
+
+func (c *revokedCloudSyncClient) UpdateDevice(ctx context.Context, req CloudSyncDeviceUpdateRequest) (*CloudSyncDeviceUpdateResponse, error) {
 	_ = ctx
 	_ = req
 	return &CloudSyncDeviceUpdateResponse{}, nil

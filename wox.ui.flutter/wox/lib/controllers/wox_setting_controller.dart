@@ -2186,6 +2186,23 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
     }
   }
 
+  Future<void> cloudSyncJoinDevice() async {
+    final traceId = const UuidV4().generate();
+    isCloudSyncActionLoading.value = true;
+    cloudSyncActionError.value = '';
+    try {
+      await WoxApi.instance.cloudSyncDeviceJoin(traceId);
+      await Future.wait([refreshAccountStatus(), refreshCloudSyncStatus(showLoading: false), refreshCloudSyncDevices(showLoading: false)]);
+      _updateCloudSyncStatusWaiting();
+    } catch (e) {
+      final error = e.toString();
+      cloudSyncActionError.value = error.contains('device_limit_exceeded') ? tr('ui_cloud_sync_join_device_limit_exceeded') : error;
+      Logger.instance.error(traceId, 'Cloud sync device join failed: $e');
+    } finally {
+      isCloudSyncActionLoading.value = false;
+    }
+  }
+
   // Maps Wox locale identifiers to the sync account API language set.
   String accountRequestLang() {
     final langCode = woxSetting.value.langCode.toLowerCase().replaceAll('_', '-');
@@ -2508,7 +2525,7 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
   }
 
   String _accountBillingStatusFingerprint(WoxAccountStatus status) {
-    return '${status.plan}|${status.subscriptionStatus}|${status.subscriptionCurrentPeriodEnd}|${status.syncEligible}|${status.syncEnabled}|${status.sessionExpired}';
+    return '${status.plan}|${status.syncEligible}|${status.syncEnabled}|${status.sessionExpired}|${status.deviceCount}';
   }
 
   Future<WoxCloudSyncBootstrapStatus?> cloudSyncBootstrapStatus() async {

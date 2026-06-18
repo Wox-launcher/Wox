@@ -696,6 +696,8 @@
   "ui_cloud_sync_subscription_required": "Verify your email to use cloud sync. Subscribe to Pro to remove Free plan limits.",
   "ui_cloud_sync_device_limit_exceeded": "The Free plan supports up to 2 active devices. Revoke another device or subscribe to Pro.",
   "ui_cloud_sync_device_revoked": "This device has been revoked for cloud sync.",
+  "ui_cloud_sync_join": "Join",
+  "ui_cloud_sync_join_device_limit_exceeded": "If your device limit has been reached, revoke an existing sync device first.",
   "ui_cloud_sync_free_rate_limited": "The Free plan can sync once per hour. Try again later or subscribe to Pro.",
   "ui_cloud_sync_subscription_waiting_payment": "Aguardando pagamento...",
   "ui_cloud_sync_subscription_payment_timeout": "O pagamento não foi concluído a tempo. Tente assinar novamente.",

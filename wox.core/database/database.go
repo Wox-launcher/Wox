@@ -91,21 +91,16 @@ type CloudSyncHistory struct {
 }
 
 type AccountState struct {
-	ID                           uint `gorm:"primaryKey"`
-	UserID                       string
-	Email                        string
-	EmailVerified                bool
-	SubscriptionStatus           string
-	SubscriptionCurrentPeriodEnd int64
-	SyncEligible                 bool
-	SyncPlan                     string
-	SyncDeviceLimit              int
-	SyncIntervalSeconds          int
-	SyncWindowSeconds            int
-	DeviceCount                  int
-	SyncEnabled                  bool
-	SessionExpired               bool
-	UpdatedAt                    int64
+	ID              uint `gorm:"primaryKey"`
+	LoggedIn        bool
+	Email           string
+	SyncEligible    bool
+	SyncPlan        string
+	SyncDeviceLimit int
+	DeviceCount     int
+	SyncEnabled     bool
+	SessionExpired  bool
+	UpdatedAt       int64
 }
 
 type MRURecord struct {

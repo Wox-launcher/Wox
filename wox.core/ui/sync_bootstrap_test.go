@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 	"wox/account"
@@ -20,6 +21,9 @@ func TestSyncBootstrapRoutesRegistered(t *testing.T) {
 	}
 	if routers["/sync/bootstrap/start"] == nil {
 		t.Fatal("sync bootstrap start route is not registered")
+	}
+	if routers["/sync/devices/join"] == nil {
+		t.Fatal("sync device join route is not registered")
 	}
 }
 
@@ -43,7 +47,7 @@ func TestHandleSyncBootstrapStatusReportsRemoteDataAndKey(t *testing.T) {
 		},
 	}
 	keyClient := &routerCloudSyncKeyClient{status: cloudsync.CloudSyncKeyStatus{Available: true, Version: 1}}
-	initSyncBootstrapRouterTest(t, database.AccountState{UserID: "user-1", Email: "u@example.com", SyncEligible: true}, client, keyClient)
+	initSyncBootstrapRouterTest(t, database.AccountState{LoggedIn: true, Email: "u@example.com", SyncEligible: true}, client, keyClient)
 
 	response := postSyncBootstrapStatus()
 
@@ -69,7 +73,7 @@ func TestHandleSyncBootstrapStatusReportsRemoteDataAndKey(t *testing.T) {
 
 func TestHandleSyncBootstrapStartInitializesKeyAndEnablesSync(t *testing.T) {
 	keyClient := &routerCloudSyncKeyClient{status: cloudsync.CloudSyncKeyStatus{Available: false}}
-	initSyncBootstrapRouterTest(t, database.AccountState{UserID: "user-1", Email: "u@example.com", SyncEligible: true}, &routerCloudSyncClient{}, keyClient)
+	initSyncBootstrapRouterTest(t, database.AccountState{LoggedIn: true, Email: "u@example.com", SyncEligible: true}, &routerCloudSyncClient{}, keyClient)
 
 	request := httptest.NewRequest(http.MethodPost, "/sync/bootstrap/start", bytes.NewReader([]byte(`{"recovery_code":"test recovery code"}`)))
 	response := httptest.NewRecorder()
@@ -89,7 +93,7 @@ func TestHandleSyncBootstrapStartInitializesKeyAndEnablesSync(t *testing.T) {
 
 func TestHandleSyncDevicesListUpdatesCurrentDeviceBeforeListing(t *testing.T) {
 	client := &routerCloudSyncClient{}
-	initSyncBootstrapRouterTest(t, database.AccountState{UserID: "user-1", Email: "u@example.com", SyncEligible: true}, client)
+	initSyncBootstrapRouterTest(t, database.AccountState{LoggedIn: true, Email: "u@example.com", SyncEligible: true}, client)
 
 	request := httptest.NewRequest(http.MethodPost, "/sync/devices/list", nil)
 	response := httptest.NewRecorder()
@@ -116,10 +120,50 @@ func TestHandleSyncDevicesListUpdatesCurrentDeviceBeforeListing(t *testing.T) {
 	}
 }
 
+func TestHandleSyncDeviceJoinUsesCurrentDeviceAndStartsManager(t *testing.T) {
+	client := &routerCloudSyncClient{}
+	initSyncBootstrapRouterTest(t, database.AccountState{LoggedIn: true, Email: "u@example.com", SyncEligible: true, SyncEnabled: true}, client)
+
+	request := httptest.NewRequest(http.MethodPost, "/sync/devices/join", nil)
+	response := httptest.NewRecorder()
+	routers["/sync/devices/join"](response, request)
+	if service := cloudsync.GetService(); service != nil && service.Manager != nil {
+		service.Manager.Stop(context.Background())
+	}
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("http status = %d, want %d, body=%s", response.Code, http.StatusOK, response.Body.String())
+	}
+	if len(client.deviceJoinRequests) != 1 {
+		t.Fatalf("device join requests = %#v, want one request", client.deviceJoinRequests)
+	}
+	joinReq := client.deviceJoinRequests[0]
+	if joinReq.DeviceID != "device-a" {
+		t.Fatalf("device join id = %q, want device-a", joinReq.DeviceID)
+	}
+	if joinReq.DeviceName == "" {
+		t.Fatal("device join name is empty")
+	}
+	if joinReq.Platform != util.GetCurrentPlatform() {
+		t.Fatalf("device join platform = %q, want %q", joinReq.Platform, util.GetCurrentPlatform())
+	}
+	if len(client.deviceUpdateRequests) != 1 {
+		t.Fatalf("device update requests after join = %#v, want manager restart metadata update", client.deviceUpdateRequests)
+	}
+}
+
 func initSyncBootstrapRouterTest(t *testing.T, accountState database.AccountState, clientAndKey ...any) {
 	t.Helper()
-	t.Setenv(util.TestWoxDataDirEnv, filepath.Join(t.TempDir(), "wox"))
-	t.Setenv(util.TestUserDataDirEnv, filepath.Join(t.TempDir(), "user"))
+	woxDataDir, err := os.MkdirTemp("", "wox-sync-router-test-*")
+	if err != nil {
+		t.Fatalf("create wox data directory: %v", err)
+	}
+	userDataDir, err := os.MkdirTemp("", "wox-sync-router-user-test-*")
+	if err != nil {
+		t.Fatalf("create user data directory: %v", err)
+	}
+	t.Setenv(util.TestWoxDataDirEnv, filepath.Join(woxDataDir, "wox"))
+	t.Setenv(util.TestUserDataDirEnv, filepath.Join(userDataDir, "user"))
 	if err := util.GetLocation().Init(); err != nil {
 		t.Fatalf("init location: %v", err)
 	}
@@ -157,8 +201,9 @@ func initSyncBootstrapRouterTest(t *testing.T, accountState database.AccountStat
 		deviceClient = client.(cloudsync.CloudSyncDeviceClient)
 	}
 	deviceProvider := routerCloudSyncDeviceProvider{}
+	keyring := &routerCloudSyncKeyring{values: map[string]string{"dek": `{"dek":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=","version":1}`}}
 	keyManager := cloudsync.NewKeyManager(cloudsync.KeyManagerConfig{
-		Keyring:        &routerCloudSyncKeyring{},
+		Keyring:        keyring,
 		KeyClient:      keyClient,
 		DeviceProvider: deviceProvider,
 	})
@@ -185,6 +230,7 @@ type routerCloudSyncClient struct {
 	snapshotRequests     []cloudsync.CloudSyncPullRequest
 	deviceUpdateRequests []cloudsync.CloudSyncDeviceUpdateRequest
 	deviceListRequests   []cloudsync.CloudSyncDeviceListRequest
+	deviceJoinRequests   []cloudsync.CloudSyncDeviceJoinRequest
 }
 
 func (c *routerCloudSyncClient) Push(ctx context.Context, req cloudsync.CloudSyncPushRequest) (*cloudsync.CloudSyncPushResponse, error) {
@@ -230,6 +276,12 @@ func (c *routerCloudSyncClient) RevokeDevice(ctx context.Context, req cloudsync.
 	_ = ctx
 	_ = req
 	return &cloudsync.CloudSyncDeviceRevokeResponse{OK: true}, nil
+}
+
+func (c *routerCloudSyncClient) JoinDevice(ctx context.Context, req cloudsync.CloudSyncDeviceJoinRequest) (*cloudsync.CloudSyncDeviceJoinResponse, error) {
+	_ = ctx
+	c.deviceJoinRequests = append(c.deviceJoinRequests, req)
+	return &cloudsync.CloudSyncDeviceJoinResponse{DeviceID: req.DeviceID, DeviceName: req.DeviceName, Platform: req.Platform}, nil
 }
 
 type routerCloudSyncKeyClient struct {
