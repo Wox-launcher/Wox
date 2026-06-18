@@ -2,9 +2,9 @@
 
 ## v2.2.0 - 2026-06-18
 
-This stable release rolls up the v2.1.2 beta work with additional Linux Wayland, Caps Lock hotkey, update, and stability improvements.
+This stable release rolls up the v2.1.2 beta work with additional Theme Editor, Linux Wayland, Caps Lock hotkey, update, and stability improvements.
 
-![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/theme_editor.png)
+![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/theme-editor.png)
 
 - Add
   - [`Theme Editor`] Add a theme editor with live launcher preview, color controls, save-as and overwrite flows, platform-specific variants, and wallpaper-aware previews for customizing Wox themes #4421 #4415
