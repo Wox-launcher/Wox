@@ -1,12 +1,10 @@
 {
-  "Version": "2.1.2-beta.2",
-  "MacArm64DownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.1.2-beta.2/wox-mac-arm64.dmg",
-  "MacArm64Checksum": "c8a746cdead1dc7c6b46e3990824836e",
-  "WindowsDownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.1.2-beta.2/wox-windows-amd64.exe",
-  "WindowsChecksum": "153bf583985379c6734e2b34f206a976",
-  "LinuxDownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.1.2-beta.2/wox-linux-amd64",
-  "LinuxChecksum": "e89710acbc871a542a0318717be7611d",
-  "ReleaseNotes": "\n- Improve\n  - [`Media Player`] Improve Windows media session integration so users can view the current track, see artwork, and control playback with play, pause, next, and previous actions from Wox.\n  - [`Explorer`] Improve open/save dialog workflows with type-to-search hints, faster dialog path detection, quick folder jumps, and selection highlighting inside the active dialog.\n  - [`Preview`] Improve preview metadata by using tag-style pills across AI Command, Clipboard, Selection, Shell, Update, Media Player, and Node.js plugin SDK previews.\n  - [`PDF`] Improve PDF file preview by rendering PDFs through the shared WebView preview path.\n  - [`System`] Improve system commands with a copy-version action for quickly sharing the current Wox version.\n  - [`Update`] Improve manual update checks so the visible update preview and release-channel actions refresh after checking.\n  - [`Logging`] Improve log file naming and bug report guidance so users can find and upload `wox.log` more easily #4446\n\n- Fix\n  - [`Shell`] Fix Windows open actions to use ShellExecute directly and avoid blocking when launching files, URLs, or folders.\n  - [`Hotkey`] Fix hotkey recording so stale Windows modifier state does not leak into the next recorded shortcut.",
-  "MacAmd64DownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.1.2-beta.2/wox-mac-amd64.dmg",
-  "MacAmd64Checksum": "517ccea47e68104ef21666fa5bac6776"
+  "Version": "2.2.0",
+  "MacArm64DownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.2.0/wox-mac-arm64.dmg",
+  "MacArm64Checksum": "",
+  "WindowsDownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.2.0/wox-windows-amd64.exe",
+  "WindowsChecksum": "",
+  "LinuxDownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.2.0/wox-linux-amd64",
+  "LinuxChecksum": "",
+  "ReleaseNotes": ""
 }
