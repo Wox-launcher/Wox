@@ -41,15 +41,26 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
         '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}:${date.second.toString().padLeft(2, '0')}';
   }
 
-  String normalizeCloudSyncError(String error) {
-    final message = serverProvidedErrorMessage(error);
-    if (message.contains('cloud sync is not configured') || message.contains('account is not logged in')) {
+  String normalizeCloudSyncError(String error, {int? nextSyncAfter}) {
+    if (error.contains('cloud sync is not configured') || error.contains('account is not logged in')) {
       return controller.tr("ui_cloud_sync_not_configured");
     }
-    if (message.contains('failed to decrypt payload') || message.contains('message authentication failed')) {
+    if (error.contains('subscription_required')) {
+      return controller.tr("ui_cloud_sync_subscription_required");
+    }
+    if (error.contains('device_limit_exceeded')) {
+      return controller.tr("ui_cloud_sync_device_limit_exceeded");
+    }
+    if (error.contains('device_revoked')) {
+      return controller.tr("ui_cloud_sync_device_revoked");
+    }
+    if (error.contains('free_sync_rate_limited')) {
+      return appendNextSyncTime(controller.tr("ui_cloud_sync_free_rate_limited"), nextSyncAfter);
+    }
+    if (error.contains('failed to decrypt payload') || error.contains('message authentication failed')) {
       return controller.tr("ui_cloud_sync_recovery_code_invalid");
     }
-    return message;
+    return error;
   }
 
   // Removes local wrapper text while keeping the remote server's localized error message unchanged.
@@ -57,6 +68,13 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
     final message = error.replaceFirst('Exception: ', '').trim();
     final codePrefix = RegExp(r'^[a-z][a-z0-9_]*:\s*(.+)$').firstMatch(message);
     return codePrefix?.group(1)?.trim() ?? message;
+  }
+
+  String appendNextSyncTime(String message, int? nextSyncAfter) {
+    if (nextSyncAfter == null || nextSyncAfter <= DateTime.now().millisecondsSinceEpoch) {
+      return message;
+    }
+    return '$message ${controller.tr("ui_cloud_sync_next_sync_after").replaceAll("{time}", formatCloudSyncTime(nextSyncAfter))}';
   }
 
   int lastCloudSyncTimestamp(WoxCloudSyncState? state) {
@@ -680,17 +698,17 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
       } else if (statusError.isNotEmpty) {
         statusText = controller.tr("ui_cloud_sync_sync_error");
         statusColor = Colors.red;
-        statusDetailText = normalizeCloudSyncError(statusError);
+        statusDetailText = normalizeCloudSyncError(statusError, nextSyncAfter: state?.backoffUntil);
         statusDetailColor = Colors.red;
       } else if (actionError.isNotEmpty) {
         statusText = controller.tr("ui_cloud_sync_sync_error");
         statusColor = Colors.red;
-        statusDetailText = normalizeCloudSyncError(actionError);
+        statusDetailText = normalizeCloudSyncError(actionError, nextSyncAfter: state?.backoffUntil);
         statusDetailColor = Colors.red;
       } else if (stateError.isNotEmpty) {
         statusText = controller.tr("ui_cloud_sync_sync_error");
         statusColor = Colors.red;
-        statusDetailText = normalizeCloudSyncError(stateError);
+        statusDetailText = normalizeCloudSyncError(stateError, nextSyncAfter: state?.backoffUntil);
         statusDetailColor = Colors.red;
       } else if (progressText.isNotEmpty) {
         statusText = controller.tr("ui_cloud_sync_syncing");

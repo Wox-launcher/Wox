@@ -703,6 +703,7 @@
   "ui_cloud_sync_join": "Join",
   "ui_cloud_sync_join_device_limit_exceeded": "If your device limit has been reached, revoke an existing sync device first.",
   "ui_cloud_sync_free_rate_limited": "Free cloud sync can only sync once per hour.",
+  "ui_cloud_sync_next_sync_after": "Next sync available at: {time}",
   "ui_cloud_sync_subscription_waiting_payment": "Ожидание оплаты...",
   "ui_cloud_sync_subscription_payment_timeout": "Оплата не была завершена вовремя. Попробуйте подписаться снова.",
   "ui_cloud_sync_subscription_waiting_update": "Ожидание статуса подписки...",

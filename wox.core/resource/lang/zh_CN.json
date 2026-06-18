@@ -712,6 +712,7 @@
   "ui_cloud_sync_join": "加入",
   "ui_cloud_sync_join_device_limit_exceeded": "如果您的设备数已经达到上限，请先撤销已有的同步设备。",
   "ui_cloud_sync_free_rate_limited": "免费版云同步每小时只能同步一次。",
+  "ui_cloud_sync_next_sync_after": "下次可同步时间：{time}",
   "ui_cloud_sync_subscription_waiting_payment": "等待支付完成...",
   "ui_cloud_sync_subscription_payment_timeout": "支付未完成或已超时，请重新订阅。",
   "ui_cloud_sync_subscription_waiting_update": "等待订阅状态更新...",
