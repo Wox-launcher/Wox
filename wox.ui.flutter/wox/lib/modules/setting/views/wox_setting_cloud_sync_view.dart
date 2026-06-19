@@ -28,6 +28,10 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
 
   static const String _pluginExclusionTableKey = "CloudSyncDisabledPluginsTable";
   static const String _pluginExclusionPluginIdKey = "PluginId";
+  static const String _configNotesTableKey = "CloudSyncConfigNotesTable";
+  static const String _configNoteItemKey = "Item";
+  static const String _configNoteModeKey = "Mode";
+  static const String _configNoteTooltipKey = "Tooltip";
   static const double _cloudSyncLabelWidth = 520.0;
   static const double _cloudSyncValueWidth = GENERAL_SETTING_WIDE_FORM_WIDTH - _cloudSyncLabelWidth - 32.0;
 
@@ -1132,6 +1136,150 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
     }
   }
 
+  // Builds the read-only table that explains non-default cloud sync behavior.
+  Widget buildCloudSyncConfigNotes() {
+    return WoxSettingPluginTable(
+      inlineTitleActions: true,
+      readonly: true,
+      tableWidth: GENERAL_SETTING_TABLE_WIDTH,
+      value: jsonEncode(_buildCloudSyncConfigNoteRows()),
+      item: _buildCloudSyncConfigNoteTableDefinition(),
+      customCellBuilder: _buildCloudSyncConfigNoteCell,
+      onUpdate: (key, value) async => null,
+    );
+  }
+
+  // Keeps the documented sync exceptions local to this page because they are explanatory UI, not persisted settings.
+  List<Map<String, String>> _buildCloudSyncConfigNoteRows() {
+    return [
+      {
+        _configNoteItemKey: "i18n:ui_cloud_sync_config_note_clipboard",
+        _configNoteModeKey: "i18n:ui_cloud_sync_config_notes_mode_partial",
+        _configNoteTooltipKey: "ui_cloud_sync_config_note_clipboard_tips",
+      },
+      {
+        _configNoteItemKey: "i18n:ui_cloud_sync_config_note_query_hotkeys",
+        _configNoteModeKey: "i18n:ui_cloud_sync_config_notes_mode_platform",
+        _configNoteTooltipKey: "ui_cloud_sync_config_note_query_hotkeys_tips",
+      },
+      {
+        _configNoteItemKey: "i18n:ui_cloud_sync_config_note_launch_hotkeys",
+        _configNoteModeKey: "i18n:ui_cloud_sync_config_notes_mode_platform",
+        _configNoteTooltipKey: "ui_cloud_sync_config_note_launch_hotkeys_tips",
+      },
+      {
+        _configNoteItemKey: "i18n:ui_cloud_sync_config_note_ignored_hotkey_apps",
+        _configNoteModeKey: "i18n:ui_cloud_sync_config_notes_mode_platform",
+        _configNoteTooltipKey: "ui_cloud_sync_config_note_ignored_hotkey_apps_tips",
+      },
+      {
+        _configNoteItemKey: "i18n:ui_cloud_sync_config_note_autostart",
+        _configNoteModeKey: "i18n:ui_cloud_sync_config_notes_mode_platform",
+        _configNoteTooltipKey: "ui_cloud_sync_config_note_autostart_tips",
+      },
+      {
+        _configNoteItemKey: "i18n:ui_cloud_sync_config_note_http_proxy",
+        _configNoteModeKey: "i18n:ui_cloud_sync_config_notes_mode_platform",
+        _configNoteTooltipKey: "ui_cloud_sync_config_note_http_proxy_tips",
+      },
+      {
+        _configNoteItemKey: "i18n:ui_cloud_sync_config_note_runtime_paths",
+        _configNoteModeKey: "i18n:ui_cloud_sync_config_notes_mode_platform",
+        _configNoteTooltipKey: "ui_cloud_sync_config_note_runtime_paths_tips",
+      },
+      {
+        _configNoteItemKey: "i18n:ui_cloud_sync_config_note_app_font",
+        _configNoteModeKey: "i18n:ui_cloud_sync_config_notes_mode_platform",
+        _configNoteTooltipKey: "ui_cloud_sync_config_note_app_font_tips",
+      },
+      {
+        _configNoteItemKey: "i18n:ui_cloud_sync_config_note_app_indexing",
+        _configNoteModeKey: "i18n:ui_cloud_sync_config_notes_mode_platform",
+        _configNoteTooltipKey: "ui_cloud_sync_config_note_app_indexing_tips",
+      },
+      {
+        _configNoteItemKey: "i18n:ui_cloud_sync_config_note_file_search",
+        _configNoteModeKey: "i18n:ui_cloud_sync_config_notes_mode_platform",
+        _configNoteTooltipKey: "ui_cloud_sync_config_note_file_search_tips",
+      },
+      {
+        _configNoteItemKey: "i18n:ui_cloud_sync_config_note_explorer_quick_jump",
+        _configNoteModeKey: "i18n:ui_cloud_sync_config_notes_mode_platform",
+        _configNoteTooltipKey: "ui_cloud_sync_config_note_explorer_quick_jump_tips",
+      },
+      {
+        _configNoteItemKey: "i18n:ui_cloud_sync_config_note_local_plugin_directories",
+        _configNoteModeKey: "i18n:ui_cloud_sync_config_notes_mode_platform",
+        _configNoteTooltipKey: "ui_cloud_sync_config_note_local_plugin_directories_tips",
+      },
+      {
+        _configNoteItemKey: "i18n:ui_cloud_sync_config_note_folder_favorites",
+        _configNoteModeKey: "i18n:ui_cloud_sync_config_notes_mode_platform",
+        _configNoteTooltipKey: "ui_cloud_sync_config_note_folder_favorites_tips",
+      },
+      {
+        _configNoteItemKey: "i18n:ui_cloud_sync_config_note_shell",
+        _configNoteModeKey: "i18n:ui_cloud_sync_config_notes_mode_platform",
+        _configNoteTooltipKey: "ui_cloud_sync_config_note_shell_tips",
+      },
+      {
+        _configNoteItemKey: "i18n:ui_cloud_sync_config_note_browser_bookmarks",
+        _configNoteModeKey: "i18n:ui_cloud_sync_config_notes_mode_platform",
+        _configNoteTooltipKey: "ui_cloud_sync_config_note_browser_bookmarks_tips",
+      },
+      {
+        _configNoteItemKey: "i18n:ui_cloud_sync_config_note_space_quick_look",
+        _configNoteModeKey: "i18n:ui_cloud_sync_config_notes_mode_platform",
+        _configNoteTooltipKey: "ui_cloud_sync_config_note_space_quick_look_tips",
+      },
+      {
+        _configNoteItemKey: "i18n:ui_cloud_sync_config_note_plugin_install_state",
+        _configNoteModeKey: "i18n:ui_cloud_sync_config_notes_mode_reproducible",
+        _configNoteTooltipKey: "ui_cloud_sync_config_note_plugin_install_state_tips",
+      },
+      {
+        _configNoteItemKey: "i18n:ui_cloud_sync_config_note_custom_themes",
+        _configNoteModeKey: "i18n:ui_cloud_sync_config_notes_mode_synced",
+        _configNoteTooltipKey: "ui_cloud_sync_config_note_custom_themes_tips",
+      },
+    ];
+  }
+
+  // Reuses the generic settings table in read-only mode so the notes align with editable sync tables.
+  PluginSettingValueTable _buildCloudSyncConfigNoteTableDefinition() {
+    return PluginSettingValueTable.fromJson({
+      "Key": _configNotesTableKey,
+      "Title": "i18n:ui_cloud_sync_config_notes",
+      "Tooltip": "i18n:ui_cloud_sync_config_notes_tips",
+      "MaxHeight": 720,
+      "Columns": [
+        {"Key": _configNoteItemKey, "Label": "i18n:ui_cloud_sync_config_notes_item", "Type": PluginSettingValueType.pluginSettingValueTableColumnTypeText, "Width": 0},
+        {"Key": _configNoteModeKey, "Label": "i18n:ui_cloud_sync_config_notes_mode", "Type": PluginSettingValueType.pluginSettingValueTableColumnTypeText, "Width": 220},
+      ],
+    });
+  }
+
+  // Translates note rows and attaches the per-row explanation to the sync mode cell.
+  Widget? _buildCloudSyncConfigNoteCell(PluginSettingValueTableColumn column, Map<String, dynamic> row) {
+    final value = controller.tr(row[column.key]?.toString() ?? "");
+    if (column.key == _configNoteModeKey) {
+      final tooltip = controller.tr(row[_configNoteTooltipKey]?.toString() ?? "");
+      return Row(
+        children: [
+          Flexible(child: Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: getThemeTextColor()))),
+          const SizedBox(width: 5),
+          WoxTooltip(message: tooltip, preferSide: WoxTooltipSide.left, child: Icon(Icons.info_outline, size: 14, color: getThemeSubTextColor())),
+        ],
+      );
+    }
+
+    if (column.key == _configNoteItemKey) {
+      return Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: getThemeTextColor()));
+    }
+
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Obx(() {
@@ -1147,6 +1295,7 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
             buildCloudSyncStatusSection(context),
             buildCloudSyncDeviceSection(),
             settingTarget(settingKey: "CloudSyncDisabledPlugins", child: Padding(padding: const EdgeInsets.only(bottom: 24), child: buildCloudSyncPluginExclusions())),
+            settingTarget(settingKey: "CloudSyncConfigNotes", child: Padding(padding: const EdgeInsets.only(bottom: 24), child: buildCloudSyncConfigNotes())),
           ],
         ],
       );

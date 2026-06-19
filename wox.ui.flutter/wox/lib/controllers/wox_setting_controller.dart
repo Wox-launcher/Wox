@@ -3059,6 +3059,13 @@ const List<_BuiltInSettingSearchDefinition> _builtInSettingSearchDefinitions = [
     searchKeywords: ['cloud sync', 'plugin sync', 'plugin exclusions', 'exclude plugin'],
   ),
   _BuiltInSettingSearchDefinition(
+    settingKey: 'CloudSyncConfigNotes',
+    navPath: 'data.cloudsync',
+    titleKey: 'ui_cloud_sync_config_notes',
+    subtitleKey: 'ui_cloud_sync_config_notes_tips',
+    searchKeywords: ['cloud sync', 'sync notes', 'platform sync', 'partial sync'],
+  ),
+  _BuiltInSettingSearchDefinition(
     settingKey: 'ShowScoreTail',
     navPath: 'debug',
     titleKey: 'ui_debug_show_score_tail',
