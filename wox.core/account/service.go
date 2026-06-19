@@ -195,7 +195,11 @@ func (s *Service) Register(ctx context.Context, email string, password string, l
 	if err != nil {
 		return ActionResult{}, err
 	}
-	return s.actionResultFromEnvelope(ctx, envelope)
+	result, err := s.actionResultFromEnvelope(ctx, envelope)
+	if err != nil || envelope.Code != "ok" {
+		return result, err
+	}
+	return result, s.savePendingEmail(ctx, email)
 }
 
 func (s *Service) VerifyEmail(ctx context.Context, email string, code string, lang string) (ActionResult, error) {
@@ -298,7 +302,7 @@ func (s *Service) Logout(ctx context.Context) error {
 	_ = s.clearTokens(ctx)
 	state := s.loadState(ctx)
 	state.LoggedIn = false
-	state.Email = ""
+	// Keep the last account email so the login dialog can prefill it after a normal sign-out.
 	state.SyncEligible = false
 	state.SyncPlan = ""
 	state.SyncDeviceLimit = 0

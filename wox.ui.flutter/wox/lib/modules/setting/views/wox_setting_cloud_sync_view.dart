@@ -6,6 +6,7 @@ import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_table_view.dart';
 import 'package:wox/components/wox_button.dart';
+import 'package:wox/components/wox_checkbox.dart';
 import 'package:wox/components/wox_dialog.dart';
 import 'package:wox/components/wox_textfield.dart';
 import 'package:wox/components/wox_tooltip.dart';
@@ -1742,11 +1743,15 @@ class _AccountRegisterDialog extends StatefulWidget {
 }
 
 class _AccountRegisterDialogState extends State<_AccountRegisterDialog> {
+  static const _termsPath = "/terms";
+  static const _privacyPath = "/privacy";
+
   late final TextEditingController _emailController;
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   String? _validationError;
   bool _isSubmitting = false;
+  bool _hasAcceptedLegal = false;
 
   @override
   void initState() {
@@ -1760,6 +1765,11 @@ class _AccountRegisterDialogState extends State<_AccountRegisterDialog> {
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _openLegalPage(String path) async {
+    final langPrefix = widget.controller.accountRequestLang() == "zh" ? "/zh" : "";
+    await launchUrl(Uri.https("sync.woxlauncher.com", "$langPrefix$path"), mode: LaunchMode.externalApplication);
   }
 
   // Keeps registration validation and API failures inside the dialog that submitted them.
@@ -1782,6 +1792,8 @@ class _AccountRegisterDialogState extends State<_AccountRegisterDialog> {
       nextError = widget.controller.tr("ui_cloud_sync_account_password_min_length");
     } else if (password != confirmPassword) {
       nextError = widget.controller.tr("ui_cloud_sync_account_password_mismatch");
+    } else if (!_hasAcceptedLegal) {
+      nextError = widget.controller.tr("ui_cloud_sync_account_terms_required");
     }
 
     if (nextError != null) {
@@ -1821,6 +1833,8 @@ class _AccountRegisterDialogState extends State<_AccountRegisterDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final canSubmit = !_isSubmitting && _hasAcceptedLegal;
+
     return WoxDialog(
       title: Text(widget.controller.tr("ui_cloud_sync_account_register")),
       content: Column(
@@ -1838,6 +1852,50 @@ class _AccountRegisterDialogState extends State<_AccountRegisterDialog> {
             label: widget.controller.tr("ui_cloud_sync_account_confirm_password"),
             child: WoxTextField(controller: _confirmPasswordController, width: 360, obscureText: true, enabled: !_isSubmitting, onSubmitted: (_) => _submit()),
           ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: 360,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                WoxCheckbox(
+                  value: _hasAcceptedLegal,
+                  enabled: !_isSubmitting,
+                  size: 18,
+                  onChanged: (value) {
+                    setState(() {
+                      _hasAcceptedLegal = value ?? false;
+                      if (_hasAcceptedLegal && _validationError == widget.controller.tr("ui_cloud_sync_account_terms_required")) {
+                        _validationError = null;
+                      }
+                    });
+                  },
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(widget.controller.tr("ui_cloud_sync_account_accept_prefix"), style: TextStyle(color: getThemeTextColor(), fontSize: 12)),
+                      WoxButton.text(
+                        text: widget.controller.tr("ui_cloud_sync_account_terms"),
+                        fontSize: 12,
+                        padding: EdgeInsets.zero,
+                        onPressed: _isSubmitting ? null : () => _openLegalPage(_termsPath),
+                      ),
+                      Text(widget.controller.tr("ui_cloud_sync_account_accept_and"), style: TextStyle(color: getThemeTextColor(), fontSize: 12)),
+                      WoxButton.text(
+                        text: widget.controller.tr("ui_cloud_sync_account_privacy"),
+                        fontSize: 12,
+                        padding: EdgeInsets.zero,
+                        onPressed: _isSubmitting ? null : () => _openLegalPage(_privacyPath),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
           if (_validationError != null) ...[const SizedBox(height: 10), Text(_validationError!, style: const TextStyle(color: Colors.red, fontSize: 12))],
           if (_validationError == null && _isSubmitting) ...[
             const SizedBox(height: 10),
@@ -1849,7 +1907,7 @@ class _AccountRegisterDialogState extends State<_AccountRegisterDialog> {
         WoxButton.secondary(text: widget.controller.tr("ui_cloud_sync_cancel"), onPressed: _isSubmitting ? null : () => Navigator.pop(context)),
         WoxButton.primary(
           text: _isSubmitting ? widget.controller.tr("ui_cloud_sync_loading") : widget.controller.tr("ui_cloud_sync_confirm"),
-          onPressed: _isSubmitting ? null : _submit,
+          onPressed: canSubmit ? _submit : null,
         ),
       ],
     );
