@@ -1904,6 +1904,7 @@
   "plugin_cloudsync_history_push_partial_succeeded": "推送部分成功",
   "plugin_cloudsync_history_push_failed": "推送失败",
   "plugin_cloudsync_history_pull_succeeded": "拉取成功",
+  "plugin_cloudsync_history_pull_partial_succeeded": "拉取部分成功",
   "plugin_cloudsync_history_pull_failed": "拉取失败",
   "plugin_cloudsync_history_sync_succeeded": "同步成功",
   "plugin_cloudsync_history_sync_failed": "同步失败",

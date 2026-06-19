@@ -1903,6 +1903,7 @@
   "plugin_cloudsync_history_push_partial_succeeded": "Push partially succeeded",
   "plugin_cloudsync_history_push_failed": "Push failed",
   "plugin_cloudsync_history_pull_succeeded": "Pull succeeded",
+  "plugin_cloudsync_history_pull_partial_succeeded": "Pull partially succeeded",
   "plugin_cloudsync_history_pull_failed": "Pull failed",
   "plugin_cloudsync_history_sync_succeeded": "Sync succeeded",
   "plugin_cloudsync_history_sync_failed": "Sync failed",

@@ -443,12 +443,15 @@ func (m *CloudSyncManager) Pull(ctx context.Context, reason string) {
 
 	startedAt := util.GetSystemTimestamp()
 	pulled := 0
+	applied := 0
+	failed := 0
 	entityCounts := map[string]int{}
 	historyKeys := []CloudSyncRecordKey{}
+	historyDetails := []CloudSyncHistoryRecordDetail{}
 	historyStatus := ""
 	var historyErr error
 	defer func() {
-		m.recordOperationHistory(ctx, CloudSyncProgressOperationPull, reason, startedAt, pulled, entityCounts, historyKeys, nil, historyStatus, historyErr)
+		m.recordOperationHistory(ctx, CloudSyncProgressOperationPull, reason, startedAt, pulled, entityCounts, historyKeys, historyDetails, historyStatus, historyErr)
 	}()
 	fail := func(err error) {
 		historyStatus = CloudSyncHistoryStatusFailed
@@ -507,9 +510,18 @@ func (m *CloudSyncManager) Pull(ctx context.Context, reason string) {
 			pulled += len(resp.Records)
 			addCloudSyncRecordEntityCounts(entityCounts, resp.Records)
 			historyKeys = append(historyKeys, cloudSyncRecordKeys(resp.Records)...)
-			if err := m.applyRecords(ctx, resp.Records); err != nil {
-				fail(fmt.Errorf("failed to apply remote records: %w", err))
-				return
+			applyResult := m.applyRecordsWithDetails(ctx, resp.Records)
+			applied += applyResult.Succeeded
+			failed += applyResult.Failed
+			historyDetails = append(historyDetails, applyResult.Details...)
+			if applyErr := applyResult.Err(); applyErr != nil {
+				historyErr = fmt.Errorf("failed to apply remote records: %w", applyErr)
+			}
+			if failed > 0 {
+				historyStatus = CloudSyncHistoryStatusFailed
+				if applied > 0 {
+					historyStatus = CloudSyncHistoryStatusPartialSucceeded
+				}
 			}
 			m.setProgressFromRecord(CloudSyncProgressOperationPull, resp.Records[len(resp.Records)-1], pulled, 0)
 		}
@@ -527,6 +539,9 @@ func (m *CloudSyncManager) Pull(ctx context.Context, reason string) {
 		}
 
 		if !resp.HasMore {
+			if failed > 0 && applied == 0 {
+				m.recordFailure(ctx, historyErr)
+			}
 			return
 		}
 	}
@@ -616,12 +631,44 @@ func (m *CloudSyncManager) RestoreSnapshot(ctx context.Context) error {
 }
 
 func (m *CloudSyncManager) applyRecords(ctx context.Context, records []CloudSyncRecord) error {
+	return m.applyRecordsWithDetails(ctx, records).Err()
+}
+
+// cloudSyncApplyRecordsResult tracks per-item outcomes for one local apply batch.
+type cloudSyncApplyRecordsResult struct {
+	Details []CloudSyncHistoryRecordDetail
+
+	Succeeded int
+	Failed    int
+
+	err error
+}
+
+// Err returns the last per-record apply error for callers that still need aggregate failure semantics.
+func (r cloudSyncApplyRecordsResult) Err() error {
+	return r.err
+}
+
+func (r *cloudSyncApplyRecordsResult) addSucceeded(record CloudSyncRecord) {
+	r.Succeeded++
+	r.Details = append(r.Details, cloudSyncHistoryDetailFromRecord(record, CloudSyncHistoryStatusSucceeded, ""))
+}
+
+func (r *cloudSyncApplyRecordsResult) addFailed(record CloudSyncRecord, err error) {
+	r.Failed++
+	r.err = err
+	r.Details = append(r.Details, cloudSyncHistoryDetailFromRecord(record, CloudSyncHistoryStatusFailed, userFacingCloudSyncError(err)))
+}
+
+// applyRecordsWithDetails keeps applying independent remote records after one item fails.
+func (m *CloudSyncManager) applyRecordsWithDetails(ctx context.Context, records []CloudSyncRecord) cloudSyncApplyRecordsResult {
 	disabled := m.disabledPluginSet(ctx)
 	appliedWoxSetting := false
 	appliedPluginSetting := false
 	appliedInstalledPlugin := false
 	appliedInstalledTheme := false
 	themeSettingChanged := false
+	result := cloudSyncApplyRecordsResult{}
 	for _, record := range records {
 		if record.EntityType == EntityPluginSetting || record.EntityType == EntityInstalledPlugin {
 			pluginID := record.PluginID
@@ -639,12 +686,14 @@ func (m *CloudSyncManager) applyRecords(ctx context.Context, records []CloudSync
 		var rawValue string
 		if record.Op == OpUpsert {
 			if record.Value == nil {
-				return fmt.Errorf("missing encrypted value for upsert")
+				result.addFailed(record, fmt.Errorf("missing encrypted value for upsert"))
+				continue
 			}
 			aad := buildCloudSyncAAD(record.EntityType, record.PluginID, record.Key, record.Op)
 			plaintext, err := m.crypto.Decrypt(ctx, *record.Value, aad)
 			if err != nil {
-				return err
+				result.addFailed(record, err)
+				continue
 			}
 			rawValue = plaintext
 		}
@@ -653,32 +702,53 @@ func (m *CloudSyncManager) applyRecords(ctx context.Context, records []CloudSync
 		case EntityWoxSetting:
 			willChangeCurrentTheme := themeSettingWillChange(record, rawValue)
 			if err := m.applier.ApplyWoxSetting(ctx, record.Key, record.Op, rawValue); err != nil {
-				return err
+				result.addFailed(record, err)
+				continue
 			}
 			appliedWoxSetting = true
 			themeSettingChanged = themeSettingChanged || willChangeCurrentTheme
+			result.addSucceeded(record)
 		case EntityPluginSetting:
 			if err := m.applier.ApplyPluginSetting(ctx, record.PluginID, record.Key, record.Op, rawValue); err != nil {
-				return err
+				result.addFailed(record, err)
+				continue
 			}
 			appliedPluginSetting = true
+			result.addSucceeded(record)
 		case EntityInstalledPlugin:
 			if err := m.applier.ApplyInstalledPlugin(ctx, record.Key, record.Op, rawValue); err != nil {
-				return err
+				result.addFailed(record, err)
+				continue
 			}
 			appliedInstalledPlugin = true
+			result.addSucceeded(record)
 		case EntityInstalledTheme:
 			if err := m.applier.ApplyInstalledTheme(ctx, record.Key, record.Op, rawValue); err != nil {
-				return err
+				result.addFailed(record, err)
+				continue
 			}
 			appliedInstalledTheme = true
+			result.addSucceeded(record)
 		default:
 			util.GetLogger().Warn(ctx, fmt.Sprintf("unknown cloud sync entity type: %s", record.EntityType))
+			result.addSucceeded(record)
 		}
 	}
 
 	m.reloadAppliedSettings(ctx, appliedWoxSetting, appliedPluginSetting, appliedInstalledPlugin, appliedInstalledTheme, themeSettingChanged)
-	return nil
+	return result
+}
+
+// cloudSyncHistoryDetailFromRecord converts an apply attempt into persisted history detail.
+func cloudSyncHistoryDetailFromRecord(record CloudSyncRecord, status string, errorMessage string) CloudSyncHistoryRecordDetail {
+	return CloudSyncHistoryRecordDetail{
+		EntityType: record.EntityType,
+		PluginID:   record.PluginID,
+		Key:        record.Key,
+		Op:         record.Op,
+		Status:     status,
+		Error:      errorMessage,
+	}
 }
 
 func isSyncRecordForCurrentPlatform(record CloudSyncRecord) bool {

@@ -306,6 +306,8 @@ func (p *CloudSyncPlugin) historyTitle(ctx context.Context, record cloudsync.Clo
 		return p.tr(ctx, "plugin_cloudsync_history_push_failed")
 	case record.Operation == cloudsync.CloudSyncProgressOperationPull && record.Status == cloudsync.CloudSyncHistoryStatusSucceeded:
 		return p.tr(ctx, "plugin_cloudsync_history_pull_succeeded")
+	case record.Operation == cloudsync.CloudSyncProgressOperationPull && record.Status == cloudsync.CloudSyncHistoryStatusPartialSucceeded:
+		return p.tr(ctx, "plugin_cloudsync_history_pull_partial_succeeded")
 	case record.Operation == cloudsync.CloudSyncProgressOperationPull && record.Status == cloudsync.CloudSyncHistoryStatusFailed:
 		return p.tr(ctx, "plugin_cloudsync_history_pull_failed")
 	case record.Status == cloudsync.CloudSyncHistoryStatusFailed:
@@ -455,9 +457,15 @@ func (p *CloudSyncPlugin) historyDetailTails(ctx context.Context, detail cloudsy
 	return []plugin.QueryResultTail{plugin.NewQueryResultTailTextWithCategory(p.tr(ctx, "plugin_cloudsync_history_tail_succeeded"), plugin.QueryResultTailTextCategorySuccess)}
 }
 
+// historyPluginLabel resolves IDs from both installed plugins and store manifests so failed install rows stay readable.
 func (p *CloudSyncPlugin) historyPluginLabel(ctx context.Context, pluginID string) string {
 	if instance := plugin.GetPluginManager().GetPluginInstanceById(pluginID); instance != nil {
 		if name := strings.TrimSpace(instance.GetName(ctx)); name != "" {
+			return name
+		}
+	}
+	if manifest, err := plugin.GetStoreManager().GetStorePluginManifestById(ctx, pluginID); err == nil {
+		if name := strings.TrimSpace(manifest.GetName(ctx)); name != "" {
 			return name
 		}
 	}
