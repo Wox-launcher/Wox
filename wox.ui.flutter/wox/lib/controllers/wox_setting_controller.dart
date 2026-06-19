@@ -2195,8 +2195,7 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
       await Future.wait([refreshAccountStatus(), refreshCloudSyncStatus(showLoading: false), refreshCloudSyncDevices(showLoading: false)]);
       _updateCloudSyncStatusWaiting();
     } catch (e) {
-      final error = e.toString();
-      cloudSyncActionError.value = error.contains('device_limit_exceeded') ? tr('ui_cloud_sync_join_device_limit_exceeded') : error;
+      cloudSyncActionError.value = e.toString();
       Logger.instance.error(traceId, 'Cloud sync device join failed: $e');
     } finally {
       isCloudSyncActionLoading.value = false;

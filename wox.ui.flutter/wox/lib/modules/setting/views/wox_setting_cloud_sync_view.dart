@@ -42,25 +42,21 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
   }
 
   String normalizeCloudSyncError(String error) {
-    if (error.contains('cloud sync is not configured') || error.contains('account is not logged in')) {
+    final message = serverProvidedErrorMessage(error);
+    if (message.contains('cloud sync is not configured') || message.contains('account is not logged in')) {
       return controller.tr("ui_cloud_sync_not_configured");
     }
-    if (error.contains('subscription_required')) {
-      return controller.tr("ui_cloud_sync_subscription_required");
-    }
-    if (error.contains('device_limit_exceeded')) {
-      return controller.tr("ui_cloud_sync_device_limit_exceeded");
-    }
-    if (error.contains('device_revoked')) {
-      return controller.tr("ui_cloud_sync_device_revoked");
-    }
-    if (error.contains('free_sync_rate_limited')) {
-      return controller.tr("ui_cloud_sync_free_rate_limited");
-    }
-    if (error.contains('failed to decrypt payload') || error.contains('message authentication failed')) {
+    if (message.contains('failed to decrypt payload') || message.contains('message authentication failed')) {
       return controller.tr("ui_cloud_sync_recovery_code_invalid");
     }
-    return error;
+    return message;
+  }
+
+  // Removes local wrapper text while keeping the remote server's localized error message unchanged.
+  String serverProvidedErrorMessage(String error) {
+    final message = error.replaceFirst('Exception: ', '').trim();
+    final codePrefix = RegExp(r'^[a-z][a-z0-9_]*:\s*(.+)$').firstMatch(message);
+    return codePrefix?.group(1)?.trim() ?? message;
   }
 
   int lastCloudSyncTimestamp(WoxCloudSyncState? state) {
@@ -68,6 +64,11 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
       return 0;
     }
     return state.lastPullTs > state.lastPushTs ? state.lastPullTs : state.lastPushTs;
+  }
+
+  // Uses the device list so localized server messages do not hide revoked-device state.
+  bool isCurrentCloudSyncDeviceRevoked(WoxCloudSyncDeviceList deviceList) {
+    return deviceList.devices.any((device) => device.revoked && (device.current || (deviceList.currentDeviceId.isNotEmpty && device.deviceId == deviceList.currentDeviceId)));
   }
 
   String formatCloudSyncProgress(WoxCloudSyncProgress? progress, {required bool isBusy}) {
@@ -116,40 +117,7 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
   }
 
   String normalizeAccountActionError(String error) {
-    if (error.contains('invalid_current_password')) {
-      return controller.tr("ui_cloud_sync_account_current_password_invalid");
-    }
-    if (error.contains('password_too_short') || error.contains('invalid_password')) {
-      return controller.tr("ui_cloud_sync_account_password_min_length");
-    }
-    if (error.contains('invalid_email')) {
-      return controller.tr("ui_cloud_sync_account_error_invalid_email");
-    }
-    if (error.contains('invalid_credentials')) {
-      return controller.tr("ui_cloud_sync_account_error_invalid_credentials");
-    }
-    if (error.contains('invalid_verification_code')) {
-      return controller.tr("ui_cloud_sync_account_verify_code_failed");
-    }
-    if (error.contains('subscription_required')) {
-      return controller.tr("ui_cloud_sync_subscription_required");
-    }
-    if (error.contains('device_limit_exceeded')) {
-      return controller.tr("ui_cloud_sync_device_limit_exceeded");
-    }
-    if (error.contains('device_revoked')) {
-      return controller.tr("ui_cloud_sync_device_revoked");
-    }
-    if (error.contains('free_sync_rate_limited')) {
-      return controller.tr("ui_cloud_sync_free_rate_limited");
-    }
-    if (error.contains('unauthorized')) {
-      return controller.tr("ui_cloud_sync_account_session_expired");
-    }
-    if (error.contains('email_exists') || error.contains('already_registered') || error.contains('already exists') || error.contains('account_exists')) {
-      return controller.tr("ui_cloud_sync_account_error_exists");
-    }
-    return error.replaceFirst('Exception: ', '');
+    return serverProvidedErrorMessage(error);
   }
 
   Future<WoxAccountActionResult?> showAccountLoginDialog(BuildContext context) async {
@@ -694,8 +662,9 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
       final statusError = controller.cloudSyncStatusError.value;
       final actionError = controller.cloudSyncActionError.value;
       final stateError = state?.lastError ?? '';
-      final isCurrentDeviceRevoked = stateError.contains('device_revoked');
+      final isCurrentDeviceRevoked = isCurrentCloudSyncDeviceRevoked(controller.cloudSyncDeviceList.value);
       final lastSyncTime = formatCloudSyncTime(lastCloudSyncTimestamp(state));
+      final nextAvailableSyncTime = state != null && state.backoffUntil > DateTime.now().millisecondsSinceEpoch ? formatCloudSyncTime(state.backoffUntil) : '';
       final progressText = formatCloudSyncProgress(status.progress, isBusy: isBusy);
       final isSynced = account.syncEnabled && status.keyStatus.available && state != null && state.bootstrapped;
       final isBootstrapInProgress = account.syncEnabled && status.keyStatus.available && state != null && !state.bootstrapped && stateError.isEmpty;
@@ -762,7 +731,11 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
       final shouldBootstrap = account.loggedIn && account.syncEligible && !isSynced && !isBootstrapInProgress;
       final syncButtonEnabled = account.loggedIn && account.syncEligible && !isLoading && !isBusy && !isBootstrapInProgress && !isCurrentDeviceRevoked;
       final joinButtonEnabled = account.loggedIn && account.syncEligible && isCurrentDeviceRevoked && !isLoading && !isBusy;
-      final statusLineText = statusDetailText == null ? statusText : "$statusText, $statusDetailText";
+      final statusDetailParts = [
+        if (statusDetailText != null && statusDetailText.isNotEmpty) statusDetailText,
+        if (nextAvailableSyncTime.isNotEmpty) "${controller.tr("ui_cloud_sync_backoff_until")}: $nextAvailableSyncTime",
+      ];
+      final statusLineText = statusDetailParts.isEmpty ? statusText : "$statusText, ${statusDetailParts.join(" ")}";
       final statusLineColor = statusDetailColor ?? statusColor;
 
       return formSection(
@@ -1288,13 +1261,14 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
 
   Widget buildCloudSyncDeviceSection() {
     return Obx(() {
-      final devices = controller.cloudSyncDeviceList.value.devices;
+      final deviceList = controller.cloudSyncDeviceList.value;
+      final devices = deviceList.devices;
       final account = controller.accountStatus.value;
-      final deviceLimitText = (account.syncLimits.deviceLimit ?? 2).toString();
+      final deviceLimitText = (deviceList.deviceLimit ?? account.syncLimits.deviceLimit ?? 2).toString();
       final deviceTips =
           account.isPro
               ? controller.tr("ui_cloud_sync_devices_pro_tips")
-              : controller.tr("ui_cloud_sync_devices_free_tips").replaceAll("{count}", account.deviceCount.toString()).replaceAll("{limit}", deviceLimitText);
+              : controller.tr("ui_cloud_sync_devices_free_tips").replaceAll("{count}", deviceList.deviceCount.toString()).replaceAll("{limit}", deviceLimitText);
       final isBusy = controller.isCloudSyncActionLoading.value;
       return formSection(
         title: controller.tr("ui_cloud_sync_devices"),

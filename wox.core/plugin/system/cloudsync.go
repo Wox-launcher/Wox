@@ -151,11 +151,9 @@ func (p *CloudSyncPlugin) statusTitle(accountStatus account.Status, status cloud
 	return "i18n:plugin_cloudsync_status_active"
 }
 
-// statusSubtitle includes the important local timestamps without requiring a dedicated preview.
+// statusSubtitle keeps the top status row focused on actionable sync state.
 func (p *CloudSyncPlugin) statusSubtitle(ctx context.Context, accountStatus account.Status, status cloudsync.ServiceStatus) string {
 	parts := []string{
-		p.labelValue(ctx, "plugin_cloudsync_label_account", accountStatus.Email),
-		p.labelValue(ctx, "plugin_cloudsync_label_last_sync", p.formatTimestamp(ctx, p.lastSyncTimestamp(status.State))),
 		p.labelValue(ctx, "plugin_cloudsync_label_pending", strconv.Itoa(status.PendingCount)),
 	}
 
@@ -382,17 +380,6 @@ func (p *CloudSyncPlugin) syncNow(ctx context.Context) {
 
 func (p *CloudSyncPlugin) labelValue(ctx context.Context, labelKey string, value string) string {
 	return fmt.Sprintf("%s: %s", i18n.GetI18nManager().TranslateWox(ctx, labelKey), value)
-}
-
-// lastSyncTimestamp reports the latest completed sync activity regardless of sync direction.
-func (p *CloudSyncPlugin) lastSyncTimestamp(state *cloudsync.CloudSyncStateView) int64 {
-	if state == nil {
-		return 0
-	}
-	if state.LastPullTs > state.LastPushTs {
-		return state.LastPullTs
-	}
-	return state.LastPushTs
 }
 
 // formatTimestamp keeps empty sync timestamps user-facing instead of showing the Unix epoch.
