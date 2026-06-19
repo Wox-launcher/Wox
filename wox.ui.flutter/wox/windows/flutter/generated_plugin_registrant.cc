@@ -7,17 +7,17 @@
 #include "generated_plugin_registrant.h"
 
 #include <desktop_drop/desktop_drop_plugin.h>
-#include <hotkey_manager_windows/hotkey_manager_windows_plugin_c_api.h>
 #include <protocol_handler_windows/protocol_handler_windows_plugin_c_api.h>
 #include <url_launcher_windows/url_launcher_windows.h>
+#include <windows_gpu_recovery/windows_gpu_recovery_plugin_c_api.h>
 
 void RegisterPlugins(flutter::PluginRegistry* registry) {
   DesktopDropPluginRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("DesktopDropPlugin"));
-  HotkeyManagerWindowsPluginCApiRegisterWithRegistrar(
-      registry->GetRegistrarForPlugin("HotkeyManagerWindowsPluginCApi"));
   ProtocolHandlerWindowsPluginCApiRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("ProtocolHandlerWindowsPluginCApi"));
   UrlLauncherWindowsRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("UrlLauncherWindows"));
+  WindowsGpuRecoveryPluginCApiRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("WindowsGpuRecoveryPluginCApi"));
 }

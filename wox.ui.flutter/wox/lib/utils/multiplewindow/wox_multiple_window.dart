@@ -112,6 +112,15 @@ class WoxMultipleWindow {
 
   static bool canPop(String id) => _windows[id]?.navigatorKey.currentState?.canPop() ?? false;
 
+  static Future<bool> focusWindow(String id) async {
+    final record = _windows[id];
+    if (record == null) {
+      return false;
+    }
+    await record.handle.focus();
+    return true;
+  }
+
   static void popUntilRoot(String id) {
     _windows[id]?.navigatorKey.currentState?.popUntil((route) => route.isFirst);
   }

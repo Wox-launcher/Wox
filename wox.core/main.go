@@ -173,6 +173,18 @@ func run() {
 		}
 	}
 
+	resource.EnsureLinuxDesktopIcon(ctx)
+	if desktopEntryReady := util.EnsureDeepLinkProtocolHandler(ctx); desktopEntryReady && util.ShouldRelaunchLinuxFromDesktopEntry(os.Args[1:]) {
+		util.GetLogger().Info(ctx, "Wayland session started without stable desktop identity, relaunching from Linux desktop entry")
+		if relaunchErr := util.RelaunchLinuxFromDesktopEntry(ctx); relaunchErr != nil {
+			util.GetLogger().Warn(ctx, fmt.Sprintf("failed to relaunch from Linux desktop entry: %s", relaunchErr.Error()))
+		} else {
+			util.GetLogger().Info(ctx, "relaunched from Linux desktop entry, exiting current process")
+			diagnostic.GetManager().MarkCleanExit(ctx)
+			os.Exit(0)
+		}
+	}
+
 	diagnostic.GetManager().RecordRunStart(ctx, diagnostic.GetManager().IsChildArg(os.Args))
 
 	util.GetLogger().Info(ctx, "no existing instance found, proceeding with full startup")
@@ -211,8 +223,6 @@ func run() {
 		return
 	}
 
-	util.EnsureDeepLinkProtocolHandler(ctx)
-
 	settingErr := setting.GetSettingManager().Init(ctx)
 	if settingErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to initialize settings: %s", settingErr.Error()))
@@ -228,6 +238,8 @@ func run() {
 	if woxSetting.HttpProxyEnabled.Get() {
 		util.UpdateHTTPProxy(ctx, woxSetting.HttpProxyUrl.Get())
 	}
+
+	initCloudSync(ctx)
 
 	langErr := i18n.GetI18nManager().UpdateLang(ctx, woxSetting.LangCode.Get())
 	if langErr != nil {

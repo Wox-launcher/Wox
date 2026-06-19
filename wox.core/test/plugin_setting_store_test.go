@@ -25,7 +25,7 @@ func TestPluginSettingStore_DeleteAll(t *testing.T) {
 	}
 	defer sqlDB.Close()
 
-	if err := db.AutoMigrate(&database.PluginSetting{}); err != nil {
+	if err := db.AutoMigrate(&database.PluginSetting{}, &database.Oplog{}); err != nil {
 		t.Fatalf("failed to migrate schema: %v", err)
 	}
 

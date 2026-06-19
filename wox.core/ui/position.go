@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"fmt"
 	"wox/setting"
 	"wox/util"
 	"wox/util/screen"
@@ -97,12 +98,20 @@ func NewLastLocationPosition(x, y int) Position {
 
 func getWindowMouseScreenLocation(ctx context.Context, windowWidth int, maxResultCount int, showQueryBox bool, showToolbar bool) (int, int) {
 	size := screen.GetMouseScreen()
-	return getCenterLocation(ctx, size, windowWidth, maxResultCount, showQueryBox, showToolbar)
+	x, y := getCenterLocation(ctx, size, windowWidth, maxResultCount, showQueryBox, showToolbar)
+	if util.IsLinux() {
+		util.GetLogger().Info(ctx, fmt.Sprintf("linux-window-bounds go stage=mouse-screen screen=%d,%d %dx%d windowWidth=%d maxResultCount=%d showQueryBox=%t showToolbar=%t target=%d,%d screenDebug=%s", size.X, size.Y, size.Width, size.Height, windowWidth, maxResultCount, showQueryBox, showToolbar, x, y, screen.LastMouseScreenDebug()))
+	}
+	return x, y
 }
 
 func getWindowActiveScreenLocation(ctx context.Context, windowWidth int, maxResultCount int, showQueryBox bool, showToolbar bool) (int, int) {
 	size := screen.GetActiveScreen()
-	return getCenterLocation(ctx, size, windowWidth, maxResultCount, showQueryBox, showToolbar)
+	x, y := getCenterLocation(ctx, size, windowWidth, maxResultCount, showQueryBox, showToolbar)
+	if util.IsLinux() {
+		util.GetLogger().Info(ctx, fmt.Sprintf("linux-window-bounds go stage=active-screen screen=%d,%d %dx%d windowWidth=%d maxResultCount=%d showQueryBox=%t showToolbar=%t target=%d,%d screenDebug=%s", size.X, size.Y, size.Width, size.Height, windowWidth, maxResultCount, showQueryBox, showToolbar, x, y, screen.LastMouseScreenDebug()))
+	}
+	return x, y
 }
 
 func getCenterLocation(ctx context.Context, size screen.Size, windowWidth int, maxResultCount int, showQueryBox bool, showToolbar bool) (int, int) {

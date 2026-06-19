@@ -61,5 +61,8 @@
         "AppBackgroundColor": "#ECF0F080"
       }
     }
+  },
+  "linux": {
+    "AppBackgroundColor": "#F1F5F5"
   }
 }

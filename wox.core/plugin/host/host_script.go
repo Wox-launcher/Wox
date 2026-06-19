@@ -199,6 +199,7 @@ func (s *ScriptPlugin) executeScript(ctx context.Context, request map[string]int
 			Title:    getStringFromMap(itemMap, "title"),
 			SubTitle: getStringFromMap(itemMap, "subtitle"),
 			Score:    int64(getFloatFromMap(itemMap, "score")),
+			ScoreKey: getFirstStringFromMap(itemMap, []string{"scoreKey", "score_key", "ScoreKey"}),
 		}
 
 		// Icon: WoxImage.String() format, e.g. "base64:data:image/png;base64,xxx" or "emoji:🧮"

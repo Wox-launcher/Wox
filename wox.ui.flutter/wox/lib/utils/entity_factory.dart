@@ -2,6 +2,7 @@ import 'package:uuid/v4.dart';
 import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_ai_command_template.dart';
 import 'package:wox/entity/wox_backup.dart';
+import 'package:wox/entity/wox_cloud_sync.dart';
 import 'package:wox/entity/wox_glance.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_image.dart';
@@ -32,6 +33,13 @@ class EntityFactory {
     'DoctorCheckResult': (json) => DoctorCheckResult.fromJson(json),
     'WoxUsageStats': (json) => WoxUsageStats.fromJson(json),
     'HotkeyAvailability': (json) => HotkeyAvailability.fromJson(json),
+    'WoxCloudSyncStatus': (json) => WoxCloudSyncStatus.fromJson(json),
+    'WoxCloudSyncBootstrapStatus': (json) => WoxCloudSyncBootstrapStatus.fromJson(json),
+    'WoxAccountStatus': (json) => WoxAccountStatus.fromJson(json),
+    'WoxAccountActionResult': (json) => WoxAccountActionResult.fromJson(json),
+    'WoxBillingSession': (json) => WoxBillingSession.fromJson(json),
+    'WoxBillingPlan': (json) => WoxBillingPlan.fromJson(json),
+    'WoxCloudSyncDeviceList': (json) => WoxCloudSyncDeviceList.fromJson(json),
   };
 
   // List factories
@@ -130,6 +138,12 @@ class EntityFactory {
         return false as T;
       case 'Map<String, dynamic>':
         return <String, dynamic>{} as T;
+      case 'WoxBillingSession':
+        return WoxBillingSession(url: '') as T;
+      case 'WoxBillingPlan':
+        return WoxBillingPlan.empty() as T;
+      case 'WoxCloudSyncDeviceList':
+        return WoxCloudSyncDeviceList.empty() as T;
       default:
         // For complex objects, return null and let the caller handle it
         return null as T;

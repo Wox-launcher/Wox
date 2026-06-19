@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_button.dart';
+import 'package:wox/components/wox_dialog.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_tooltip.dart';
 import 'package:wox/components/wox_tooltip_icon_view.dart';
@@ -45,6 +46,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
   final bool inlineTitleActions;
   final List<Widget> titleActions;
   final List<Widget> trailingActions;
+  final bool showCloneAction;
   final int minimumRowCount;
   final String minimumRowDeleteMessage;
   final WoxSettingPluginTableCreateDialogBuilder? customCreateDialogBuilder;
@@ -71,6 +73,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     this.inlineTitleActions = false,
     this.titleActions = const [],
     this.trailingActions = const [],
+    this.showCloneAction = true,
     this.minimumRowCount = 0,
     this.minimumRowDeleteMessage = "",
     this.customCreateDialogBuilder,
@@ -699,17 +702,18 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                 await _showEditRowDialog(context, row);
               },
             ),
-            WoxTooltip(
-              message: tr("ui_clone_row"),
-              child: WoxButton.text(
-                text: '',
-                icon: Icon(Icons.content_copy, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor)),
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                onPressed: () async {
-                  await _showCloneRowDialog(context, row);
-                },
+            if (showCloneAction)
+              WoxTooltip(
+                message: tr("ui_clone_row"),
+                child: WoxButton.text(
+                  text: '',
+                  icon: Icon(Icons.content_copy, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor)),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  onPressed: () async {
+                    await _showCloneRowDialog(context, row);
+                  },
+                ),
               ),
-            ),
             WoxTooltip(
               message: isDeleteDisabled ? deleteDisabledMessage : "",
               child: WoxButton.text(
@@ -725,13 +729,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                             context: context,
                             barrierColor: getThemePopupBarrierColor(),
                             builder: (context) {
-                              final cardColor = getThemePopupSurfaceColor();
-                              final outlineColor = getThemePopupOutlineColor();
-
-                              return AlertDialog(
-                                backgroundColor: cardColor,
-                                surfaceTintColor: Colors.transparent,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: outlineColor)),
+                              return WoxDialog(
                                 content: Text(tr("ui_delete_row_confirm"), style: TextStyle(color: getThemeTextColor())),
                                 actions: [
                                   Row(

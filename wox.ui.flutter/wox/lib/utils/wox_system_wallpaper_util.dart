@@ -10,16 +10,26 @@ class WoxSystemWallpaperUtil {
   WoxSystemWallpaperUtil._privateConstructor();
 
   static final WoxSystemWallpaperUtil _instance = WoxSystemWallpaperUtil._privateConstructor();
+  static const int _wallpaperPreviewCacheWidth = 2048;
 
   static WoxSystemWallpaperUtil get instance => _instance;
 
   String _cachedWallpaperPath = '';
   bool _hasCachedWallpaperPath = false;
   Future<String?>? _loadingWallpaperPath;
+  ImageProvider? _cachedWallpaperImageProvider;
+  String _cachedWallpaperImageProviderPath = '';
+  String _cachedWallpaperImageReadyPath = '';
+  Future<void>? _precachingWallpaperImage;
   static const MethodChannel _macOSWindowManagerChannel = MethodChannel('com.wox.macos_window_manager');
+
+  ImageProvider? get cachedSystemWallpaperImageProvider => _cachedWallpaperImageProvider;
+
+  bool get isCachedSystemWallpaperImageReady => _cachedWallpaperImageProvider != null && _cachedWallpaperImageReadyPath == _cachedWallpaperImageProviderPath;
 
   // Resolve and cache the active desktop wallpaper path so theme editor previews can reuse it without rerunning platform commands.
   Future<String?> loadSystemWallpaperPath({String? traceId, bool forceRefresh = false}) async {
+    final effectiveTraceId = traceId ?? const UuidV4().generate();
     if (!forceRefresh && _hasCachedWallpaperPath) {
       return _cachedWallpaperPath.isEmpty ? null : _cachedWallpaperPath;
     }
@@ -29,7 +39,6 @@ class WoxSystemWallpaperUtil {
       return runningLoad;
     }
 
-    final effectiveTraceId = traceId ?? const UuidV4().generate();
     final future = _resolveSystemWallpaperPath(effectiveTraceId);
     _loadingWallpaperPath = future;
 
@@ -47,15 +56,82 @@ class WoxSystemWallpaperUtil {
 
   // Precache the wallpaper image once settings opens so the theme editor backdrop is ready when the editor is selected.
   Future<void> precacheSystemWallpaperPath(BuildContext context, String wallpaperPath, {String? traceId}) async {
+    final effectiveTraceId = traceId ?? const UuidV4().generate();
     if (wallpaperPath.isEmpty) {
       return;
     }
 
-    try {
-      await precacheImage(FileImage(File(wallpaperPath)), context);
-    } catch (e) {
-      Logger.instance.error(traceId ?? const UuidV4().generate(), 'Failed to precache system wallpaper: $e');
+    if (_cachedWallpaperImageReadyPath == wallpaperPath) {
+      return;
     }
+
+    final runningPrecache = _precachingWallpaperImage;
+    if (runningPrecache != null) {
+      return runningPrecache;
+    }
+
+    final provider = _getOrCreateWallpaperImageProvider(wallpaperPath);
+    final future = precacheImage(provider, context);
+    _precachingWallpaperImage = future;
+
+    try {
+      await future;
+      _cachedWallpaperImageReadyPath = wallpaperPath;
+    } catch (e) {
+      Logger.instance.error(effectiveTraceId, 'Failed to precache system wallpaper: $e');
+    } finally {
+      if (identical(_precachingWallpaperImage, future)) {
+        _precachingWallpaperImage = null;
+      }
+    }
+  }
+
+  // Load and cache the wallpaper provider immediately; decoding continues through the shared precache path.
+  Future<ImageProvider?> loadSystemWallpaperImageProvider(BuildContext context, {String? traceId, bool forceRefresh = false}) async {
+    final effectiveTraceId = traceId ?? const UuidV4().generate();
+    final wallpaperPath = await loadSystemWallpaperPath(traceId: effectiveTraceId, forceRefresh: forceRefresh);
+    if (wallpaperPath == null || wallpaperPath.isEmpty) {
+      return null;
+    }
+    if (!context.mounted) {
+      return null;
+    }
+
+    final provider = _getOrCreateWallpaperImageProvider(wallpaperPath);
+    if (forceRefresh || _cachedWallpaperImageReadyPath != wallpaperPath) {
+      unawaited(precacheSystemWallpaperPath(context, wallpaperPath, traceId: effectiveTraceId));
+    }
+    return provider;
+  }
+
+  // Wait until the wallpaper is decoded so UI that appears on demand does not paint a black placeholder first.
+  Future<ImageProvider?> preloadSystemWallpaperImageProvider(BuildContext context, {String? traceId, bool forceRefresh = false}) async {
+    final effectiveTraceId = traceId ?? const UuidV4().generate();
+    final wallpaperPath = await loadSystemWallpaperPath(traceId: effectiveTraceId, forceRefresh: forceRefresh);
+    if (wallpaperPath == null || wallpaperPath.isEmpty) {
+      return null;
+    }
+    if (!context.mounted) {
+      return null;
+    }
+
+    final provider = _getOrCreateWallpaperImageProvider(wallpaperPath);
+    await precacheSystemWallpaperPath(context, wallpaperPath, traceId: effectiveTraceId);
+    return provider;
+  }
+
+  // Reuse the same provider object for a stable path so newly mounted previews can render from cache on their first frame.
+  ImageProvider _getOrCreateWallpaperImageProvider(String wallpaperPath) {
+    final cachedProvider = _cachedWallpaperImageProvider;
+    if (cachedProvider != null && _cachedWallpaperImageProviderPath == wallpaperPath) {
+      return cachedProvider;
+    }
+
+    final provider = ResizeImage(FileImage(File(wallpaperPath)), width: _wallpaperPreviewCacheWidth);
+    _cachedWallpaperImageProvider = provider;
+    _cachedWallpaperImageProviderPath = wallpaperPath;
+    _cachedWallpaperImageReadyPath = '';
+    return provider;
   }
 
   // Pick the platform-specific wallpaper resolver and keep failures non-fatal for settings startup.

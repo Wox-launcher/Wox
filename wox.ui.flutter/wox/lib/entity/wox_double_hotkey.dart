@@ -1,4 +1,4 @@
-import 'package:hotkey_manager/hotkey_manager.dart';
+import 'package:wox/entity/wox_hotkey.dart';
 
 class WoxDoubleHotkey {
   static const String doubleClickPrefix = "double_";

@@ -5,6 +5,7 @@ import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_checkbox.dart';
 import 'package:wox/components/demo/wox_demo.dart';
+import 'package:wox/components/wox_dialog.dart';
 import 'package:wox/components/wox_dropdown_button.dart';
 import 'package:wox/components/wox_hotkey_recorder_view.dart';
 import 'package:wox/components/wox_markdown.dart';
@@ -90,6 +91,8 @@ class _WoxQueryHotkeyDialogState extends State<WoxQueryHotkeyDialog> {
   bool get _isEditing => widget.isEditing;
 
   bool get _showsDisplayFields => _selectedPreset == _QueryHotkeyPreset.webPanel || _selectedPreset == _QueryHotkeyPreset.custom;
+
+  bool get _supportsWindowPositionSetting => !controller.woxSetting.value.isLinuxWaylandSession;
 
   bool get _showsCustomChromeFields => _selectedPreset == _QueryHotkeyPreset.custom;
 
@@ -215,7 +218,7 @@ class _WoxQueryHotkeyDialogState extends State<WoxQueryHotkeyDialog> {
     final modifiers = <String>{};
     var key = "";
     for (final token in tokens) {
-      if (token == "hyper" || token == "capslock") {
+      if (token == "capslock") {
         modifiers.add(token);
       } else if (_isHotkeyModifierToken(token)) {
         modifiers.add(token);
@@ -224,9 +227,6 @@ class _WoxQueryHotkeyDialogState extends State<WoxQueryHotkeyDialog> {
       }
     }
 
-    if (modifiers.contains("hyper") && key.isNotEmpty) {
-      return "hyper+$key";
-    }
     if (modifiers.contains("capslock") && key.isNotEmpty) {
       return "capslock+$key";
     }
@@ -679,202 +679,181 @@ class _WoxQueryHotkeyDialogState extends State<WoxQueryHotkeyDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final bool darkTheme = isThemeDark();
-    final Color accentColor = getThemeActiveBackgroundColor();
-    final Color cardColor = getThemePopupSurfaceColor();
-    final Color textColor = getThemeTextColor();
-    final Color outlineColor = getThemePopupOutlineColor();
-    final baseTheme = Theme.of(context);
-    final dialogTheme = baseTheme.copyWith(
-      colorScheme: ColorScheme.fromSeed(seedColor: accentColor, brightness: darkTheme ? Brightness.dark : Brightness.light),
-      scaffoldBackgroundColor: Colors.transparent,
-      cardColor: cardColor,
-      shadowColor: textColor.withAlpha(50),
-    );
-
-    return Theme(
-      data: dialogTheme,
-      child: AlertDialog(
-        backgroundColor: cardColor,
-        surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: outlineColor)),
-        elevation: 18,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
-        contentPadding: const EdgeInsets.fromLTRB(28, 24, 28, 0),
-        actionsPadding: const EdgeInsets.fromLTRB(28, 12, 28, 24),
-        actionsAlignment: MainAxisAlignment.end,
-        content: SizedBox(
-          width: _dialogContentWidth,
-          height: _dialogContentHeight,
-          child: SingleChildScrollView(
-            child: Padding(
-              // Desktop scrollbars can overlay scroll views instead of taking
-              // layout space, so keep a small gutter on the right to prevent
-              // helper text from ending up underneath the thumb.
-              padding: const EdgeInsets.only(right: _dialogScrollGutter),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    tr(_isEditing ? 'ui_query_hotkeys_dialog_edit_title' : 'ui_query_hotkeys_dialog_create_title'),
-                    style: TextStyle(color: getThemeTextColor().withValues(alpha: 0.94), fontSize: 18, fontWeight: FontWeight.w700),
+    return WoxDialog(
+      contentPadding: const EdgeInsets.fromLTRB(28, 24, 28, 0),
+      actionsPadding: const EdgeInsets.fromLTRB(28, 12, 28, 24),
+      content: SizedBox(
+        width: _dialogContentWidth,
+        height: _dialogContentHeight,
+        child: SingleChildScrollView(
+          child: Padding(
+            // Desktop scrollbars can overlay scroll views instead of taking
+            // layout space, so keep a small gutter on the right to prevent
+            // helper text from ending up underneath the thumb.
+            padding: const EdgeInsets.only(right: _dialogScrollGutter),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  tr(_isEditing ? 'ui_query_hotkeys_dialog_edit_title' : 'ui_query_hotkeys_dialog_create_title'),
+                  style: TextStyle(color: getThemeTextColor().withValues(alpha: 0.94), fontSize: 18, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 14),
+                _buildPresetSelector(),
+                const SizedBox(height: 18),
+                _buildFormRow(
+                  label: tr('ui_query_hotkeys_name'),
+                  helperMarkdown: tr('ui_query_hotkeys_name_tooltip'),
+                  child: WoxTextField(
+                    width: double.infinity,
+                    controller: _nameController,
+                    onChanged: (value) {
+                      setState(() {
+                        _draft.name = value.trim();
+                        _saveErrorMessage = "";
+                      });
+                    },
                   ),
-                  const SizedBox(height: 14),
-                  _buildPresetSelector(),
-                  const SizedBox(height: 18),
+                ),
+                _buildFormRow(
+                  label: tr('ui_query_hotkeys_hotkey'),
+                  helperMarkdown: tr('ui_query_hotkeys_hotkey_tooltip'),
+                  error: _fieldErrors['Hotkey'] ?? '',
+                  child: WoxHotkeyRecorder(
+                    hotkey: WoxHotkey.parseHotkeyFromString(_draft.hotkey),
+                    tipPosition: WoxHotkeyRecorderTipPosition.right,
+                    recordUnavailableHotkey: true,
+                    onHotKeyRecorded: (hotkey) {
+                      _handleHotkeyChanged(hotkey);
+                    },
+                    onUnavailableHotKeyRecorded: (hotkey) {
+                      _handleHotkeyChanged(hotkey);
+                    },
+                  ),
+                ),
+                _buildFormRow(
+                  label: tr('ui_query_hotkeys_query'),
+                  helperMarkdown: tr('ui_query_hotkeys_query_tooltip'),
+                  error: _fieldErrors['Query'] ?? '',
+                  child: WoxQueryVariableTextField(
+                    key: const ValueKey('Query'),
+                    controller: _queryController,
+                    focusNode: _queryFocusNode,
+                    width: double.infinity,
+                    maxLines: 1,
+                    source: WoxQueryVariableSource.queryHotkey,
+                    onChanged: (value) {
+                      setState(() {
+                        _draft.query = value;
+                        _fieldErrors.remove('Query');
+                        _saveErrorMessage = "";
+                      });
+                    },
+                  ),
+                ),
+                if (_selectedPreset == _QueryHotkeyPreset.custom)
                   _buildFormRow(
-                    label: tr('ui_query_hotkeys_name'),
-                    helperMarkdown: tr('ui_query_hotkeys_name_tooltip'),
-                    child: WoxTextField(
-                      width: double.infinity,
-                      controller: _nameController,
+                    label: tr('ui_query_hotkeys_silent'),
+                    helperMarkdown: tr('ui_query_hotkeys_silent_tooltip'),
+                    child: _buildCheckboxControl(
+                      value: _draft.isSilentExecution,
                       onChanged: (value) {
                         setState(() {
-                          _draft.name = value.trim();
-                          _saveErrorMessage = "";
+                          _draft.isSilentExecution = value;
                         });
                       },
                     ),
                   ),
-                  _buildFormRow(
-                    label: tr('ui_query_hotkeys_hotkey'),
-                    helperMarkdown: tr('ui_query_hotkeys_hotkey_tooltip'),
-                    error: _fieldErrors['Hotkey'] ?? '',
-                    child: WoxHotkeyRecorder(
-                      hotkey: WoxHotkey.parseHotkeyFromString(_draft.hotkey),
-                      tipPosition: WoxHotkeyRecorderTipPosition.right,
-                      recordUnavailableHotkey: true,
-                      onHotKeyRecorded: (hotkey) {
-                        _handleHotkeyChanged(hotkey);
-                      },
-                      onUnavailableHotKeyRecorded: (hotkey) {
-                        _handleHotkeyChanged(hotkey);
-                      },
-                    ),
-                  ),
-                  _buildFormRow(
-                    label: tr('ui_query_hotkeys_query'),
-                    helperMarkdown: tr('ui_query_hotkeys_query_tooltip'),
-                    error: _fieldErrors['Query'] ?? '',
-                    child: WoxQueryVariableTextField(
-                      key: const ValueKey('Query'),
-                      controller: _queryController,
-                      focusNode: _queryFocusNode,
-                      width: double.infinity,
-                      maxLines: 1,
-                      source: WoxQueryVariableSource.queryHotkey,
-                      onChanged: (value) {
-                        setState(() {
-                          _draft.query = value;
-                          _fieldErrors.remove('Query');
-                          _saveErrorMessage = "";
-                        });
-                      },
-                    ),
-                  ),
-                  if (_selectedPreset == _QueryHotkeyPreset.custom)
-                    _buildFormRow(
-                      label: tr('ui_query_hotkeys_silent'),
-                      helperMarkdown: tr('ui_query_hotkeys_silent_tooltip'),
-                      child: _buildCheckboxControl(
-                        value: _draft.isSilentExecution,
-                        onChanged: (value) {
-                          setState(() {
-                            _draft.isSilentExecution = value;
-                          });
-                        },
-                      ),
-                    ),
-                  if (_showsDisplayFields) ...[
+                if (_showsDisplayFields) ...[
+                  if (_supportsWindowPositionSetting)
                     _buildFormRow(label: tr('ui_query_hotkeys_position'), helperMarkdown: tr('ui_query_hotkeys_position_tooltip'), child: _buildSelectControl()),
-                    _buildFormRow(
-                      label: tr('ui_query_hotkeys_width'),
-                      helperMarkdown: tr('ui_query_hotkeys_width_tooltip'),
-                      error: _fieldErrors['Width'] ?? '',
-                      child: WoxTextField(
-                        width: 260,
-                        controller: _widthController,
-                        onChanged: (value) {
-                          setState(() {
-                            _draft.width = value.trim();
-                            _fieldErrors.remove('Width');
-                          });
-                        },
-                      ),
+                  _buildFormRow(
+                    label: tr('ui_query_hotkeys_width'),
+                    helperMarkdown: tr('ui_query_hotkeys_width_tooltip'),
+                    error: _fieldErrors['Width'] ?? '',
+                    child: WoxTextField(
+                      width: 260,
+                      controller: _widthController,
+                      onChanged: (value) {
+                        setState(() {
+                          _draft.width = value.trim();
+                          _fieldErrors.remove('Width');
+                        });
+                      },
                     ),
-                    _buildFormRow(
-                      label: tr('ui_query_hotkeys_max_result_count'),
-                      helperMarkdown: tr('ui_query_hotkeys_max_result_count_tooltip'),
-                      error: _fieldErrors['MaxResultCount'] ?? '',
-                      child: WoxTextField(
-                        width: 260,
-                        controller: _maxResultCountController,
-                        onChanged: (value) {
-                          setState(() {
-                            _draft.maxResultCount = value.trim();
-                            _fieldErrors.remove('MaxResultCount');
-                          });
-                        },
-                      ),
+                  ),
+                  _buildFormRow(
+                    label: tr('ui_query_hotkeys_max_result_count'),
+                    helperMarkdown: tr('ui_query_hotkeys_max_result_count_tooltip'),
+                    error: _fieldErrors['MaxResultCount'] ?? '',
+                    child: WoxTextField(
+                      width: 260,
+                      controller: _maxResultCountController,
+                      onChanged: (value) {
+                        setState(() {
+                          _draft.maxResultCount = value.trim();
+                          _fieldErrors.remove('MaxResultCount');
+                        });
+                      },
                     ),
-                    if (_showsCustomChromeFields)
-                      _buildFormRow(
-                        label: tr('ui_query_hotkeys_hide_query_box'),
-                        helperMarkdown: tr('ui_query_hotkeys_hide_query_box_tooltip'),
-                        child: _buildCheckboxControl(
-                          value: _draft.hideQueryBox,
-                          onChanged: (value) {
-                            setState(() {
-                              _draft.hideQueryBox = value;
-                            });
-                          },
-                        ),
-                      ),
-                    if (_showsCustomChromeFields)
-                      _buildFormRow(
-                        label: tr('ui_query_hotkeys_hide_toolbar'),
-                        helperMarkdown: tr('ui_query_hotkeys_hide_toolbar_tooltip'),
-                        child: _buildCheckboxControl(
-                          value: _draft.hideToolbar,
-                          onChanged: (value) {
-                            setState(() {
-                              _draft.hideToolbar = value;
-                            });
-                          },
-                        ),
-                      ),
-                  ],
-                  if (_isEditing)
+                  ),
+                  if (_showsCustomChromeFields)
                     _buildFormRow(
-                      label: tr('ui_disabled'),
-                      helperMarkdown: tr('ui_disabled_tooltip'),
+                      label: tr('ui_query_hotkeys_hide_query_box'),
+                      helperMarkdown: tr('ui_query_hotkeys_hide_query_box_tooltip'),
                       child: _buildCheckboxControl(
-                        value: _draft.disabled,
+                        value: _draft.hideQueryBox,
                         onChanged: (value) {
                           setState(() {
-                            _draft.disabled = value;
+                            _draft.hideQueryBox = value;
                           });
                         },
                       ),
                     ),
-                  if (_saveErrorMessage.isNotEmpty)
-                    Padding(padding: const EdgeInsets.only(top: 12), child: Text(_saveErrorMessage, style: const TextStyle(color: Colors.red, fontSize: 12))),
+                  if (_showsCustomChromeFields)
+                    _buildFormRow(
+                      label: tr('ui_query_hotkeys_hide_toolbar'),
+                      helperMarkdown: tr('ui_query_hotkeys_hide_toolbar_tooltip'),
+                      child: _buildCheckboxControl(
+                        value: _draft.hideToolbar,
+                        onChanged: (value) {
+                          setState(() {
+                            _draft.hideToolbar = value;
+                          });
+                        },
+                      ),
+                    ),
                 ],
-              ),
+                if (_isEditing)
+                  _buildFormRow(
+                    label: tr('ui_disabled'),
+                    helperMarkdown: tr('ui_disabled_tooltip'),
+                    child: _buildCheckboxControl(
+                      value: _draft.disabled,
+                      onChanged: (value) {
+                        setState(() {
+                          _draft.disabled = value;
+                        });
+                      },
+                    ),
+                  ),
+                if (_saveErrorMessage.isNotEmpty)
+                  Padding(padding: const EdgeInsets.only(top: 12), child: Text(_saveErrorMessage, style: const TextStyle(color: Colors.red, fontSize: 12))),
+              ],
             ),
           ),
         ),
-        actions: [
-          WoxButton.secondary(text: tr('ui_cancel'), padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12), onPressed: _isSaving ? null : () => Navigator.pop(context)),
-          const SizedBox(width: 12),
-          WoxButton.primary(
-            text: _isSaving ? tr('ui_saving') : tr('ui_save'),
-            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
-            onPressed: _isSaving ? null : _save,
-          ),
-        ],
       ),
+      actions: [
+        WoxButton.secondary(text: tr('ui_cancel'), padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12), onPressed: _isSaving ? null : () => Navigator.pop(context)),
+        const SizedBox(width: 12),
+        WoxButton.primary(
+          text: _isSaving ? tr('ui_saving') : tr('ui_save'),
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+          onPressed: _isSaving ? null : _save,
+        ),
+      ],
     );
   }
 }

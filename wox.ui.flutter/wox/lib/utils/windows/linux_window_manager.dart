@@ -25,6 +25,16 @@ class LinuxWindowManager extends BaseWindowManager {
     }
   }
 
+  Future<Map<String, dynamic>> getBackendInfo() async {
+    try {
+      final Map<dynamic, dynamic> result = await _channel.invokeMethod("getBackendInfo");
+      return result.map((key, value) => MapEntry(key.toString(), value));
+    } catch (e) {
+      Logger.instance.error(const UuidV4().generate(), "Error getting Linux backend info: $e");
+      return <String, dynamic>{};
+    }
+  }
+
   @override
   Future<void> setSize(Size size) async {
     try {

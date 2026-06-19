@@ -16,7 +16,7 @@ publish_to: "none" # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 2.1.2-beta.2+1
+version: 2.2.0+1
 
 environment:
   sdk: ">=3.7.0 <4.0.0"
@@ -47,7 +47,6 @@ dependencies:
   desktop_drop: ^0.7.0
   file_picker: ^10.3.8
   ffi: ^2.1.4
-  hotkey_manager: ^0.2.3
   url_launcher: ^6.3.2
   flutter_image_slideshow: ^0.1.6
   dynamic_tabbar: ^1.0.9
@@ -61,6 +60,10 @@ dependencies:
       url: https://github.com/qianlifeng/extended_text_field.git
       ref: b9b2c8faff334c794ce70e5b6a30bda43e407009
   math_expressions: ^3.1.0
+  windows_gpu_recovery:
+    git:
+      url: https://github.com/DitriXNew/windows_gpu_recovery.git
+      ref: master
 
 dev_dependencies:
   flutter_test:

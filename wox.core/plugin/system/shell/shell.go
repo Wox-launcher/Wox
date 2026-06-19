@@ -147,7 +147,8 @@ func (s *ShellPlugin) GetMetadata() plugin.Metadata {
 				},
 			},
 			{
-				Type: definition.PluginSettingDefinitionTypeTable,
+				Type:               definition.PluginSettingDefinitionTypeTable,
+				IsPlatformSpecific: true,
 				Value: &definition.PluginSettingValueTable{
 					Key:     shellCommandsSettingKey,
 					Title:   "i18n:plugin_shell_commands",
@@ -303,6 +304,11 @@ func effectiveInterpreter(interpreter string, fallback string) string {
 		return fallback
 	}
 	return getDefaultInterpreter()
+}
+
+// savedCommandScoreKey keeps global ranking stable while the visible last-run subtitle changes.
+func savedCommandScoreKey(alias string, interpreter string, workingDirectory string) string {
+	return strings.Join([]string{"shell", "saved", strings.ToLower(strings.TrimSpace(alias)), strings.TrimSpace(interpreter), strings.TrimSpace(workingDirectory)}, "\x1f")
 }
 
 // commandDisplayTitle derives a compact default title from a command.
@@ -819,7 +825,7 @@ func (s *ShellPlugin) saveConfiguredCommands(ctx context.Context, commands []she
 	if err != nil {
 		return err
 	}
-	s.api.SaveSetting(ctx, shellCommandsSettingKey, string(data), false)
+	s.api.SaveSetting(ctx, shellCommandsSettingKey, string(data), true)
 	return nil
 }
 
@@ -1339,6 +1345,7 @@ func (s *ShellPlugin) queryCommands(ctx context.Context, query plugin.Query, int
 			SubTitle: subtitle,
 			Icon:     shellIcon,
 			Score:    100 + int64(len(commands)-commandIndex),
+			ScoreKey: savedCommandScoreKey(cmd.Alias, commandInterpreter, strings.TrimSpace(cmd.WorkingDirectory)),
 			Preview: plugin.WoxPreview{
 				PreviewType:    plugin.WoxPreviewTypeTerminal,
 				PreviewData:    s.buildTerminalPreviewData("", finalCommand, "idle"),

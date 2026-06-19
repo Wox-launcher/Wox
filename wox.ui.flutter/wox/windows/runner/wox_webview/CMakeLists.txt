@@ -35,7 +35,6 @@ add_custom_command(
   TARGET ${PROJECT_NAME}_DEPENDENCIES_DOWNLOAD PRE_BUILD
   COMMAND ${NUGET} install Microsoft.Windows.ImplementationLibrary -Version ${WIL_VERSION} -ExcludeVersion -OutputDirectory ${CMAKE_BINARY_DIR}/packages
   COMMAND ${NUGET} install Microsoft.Web.WebView2 -Version ${WEBVIEW_VERSION} -ExcludeVersion -OutputDirectory ${CMAKE_BINARY_DIR}/packages
-  DEPENDS ${NUGET}
 )
 
 add_library(${PLUGIN_NAME} SHARED
@@ -50,10 +49,6 @@ add_library(${PLUGIN_NAME} SHARED
   "util/rohelper.cc"
   "util/string_converter.cc"
 )
-
-if(MSVC)
-    target_compile_options(${PLUGIN_NAME} PRIVATE "/await")
-endif()
 
 if(NOT FLUTTER_WEBVIEW_WINDOWS_USE_TEXTURE_FALLBACK)
   message(STATUS "Building with D3D texture support.")
@@ -71,7 +66,7 @@ else()
   )
   # Enable AVX2 for pixel buffer conversions
   if(MSVC)
-    target_compile_options(${PLUGIN_NAME} PRIVATE "/arch:AVX2" "/await")
+    target_compile_options(${PLUGIN_NAME} PRIVATE "/arch:AVX2")
   endif()
 endif()
 

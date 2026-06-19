@@ -8,6 +8,7 @@ import 'package:wox/components/plugin/wox_ai_command_default_action_dropdown.dar
 import 'package:wox/components/wox_ai_model_selector_view.dart';
 import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_checkbox.dart';
+import 'package:wox/components/wox_dialog.dart';
 import 'package:wox/components/wox_dropdown_button.dart';
 import 'package:wox/components/wox_hotkey_recorder_view.dart';
 import 'package:wox/components/wox_query_variable_textfield.dart';
@@ -164,7 +165,7 @@ class _AICommandTemplateDialogState extends State<_AICommandTemplateDialog> {
     final modifiers = <String>{};
     var key = "";
     for (final token in tokens) {
-      if (token == "hyper" || token == "capslock") {
+      if (token == "capslock") {
         modifiers.add(token);
       } else if (_isHotkeyModifierToken(token)) {
         modifiers.add(token);
@@ -173,9 +174,6 @@ class _AICommandTemplateDialogState extends State<_AICommandTemplateDialog> {
       }
     }
 
-    if (modifiers.contains("hyper") && key.isNotEmpty) {
-      return "hyper+$key";
-    }
     if (modifiers.contains("capslock") && key.isNotEmpty) {
       return "capslock+$key";
     }
@@ -415,46 +413,22 @@ class _AICommandTemplateDialogState extends State<_AICommandTemplateDialog> {
   @override
   Widget build(BuildContext context) {
     return Obx(() {
-      final bool darkTheme = isThemeDark();
       final Color accentColor = getThemeActiveBackgroundColor();
-      final Color cardColor = getThemePopupSurfaceColor();
-      final Color textColor = getThemeTextColor();
-      final Color outlineColor = getThemePopupOutlineColor();
       final bool canInstall = !_hasInstallBlockingError();
-      final baseTheme = Theme.of(context);
-      final dialogTheme = baseTheme.copyWith(
-        colorScheme: ColorScheme.fromSeed(seedColor: accentColor, brightness: darkTheme ? Brightness.dark : Brightness.light),
-        scaffoldBackgroundColor: Colors.transparent,
-        cardColor: cardColor,
-        shadowColor: textColor.withAlpha(50),
-      );
 
-      return Theme(
-        data: dialogTheme,
-        child: AlertDialog(
-          backgroundColor: cardColor,
-          surfaceTintColor: Colors.transparent,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: outlineColor)),
-          elevation: 18,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
-          contentPadding: const EdgeInsets.fromLTRB(28, 24, 28, 0),
-          actionsPadding: const EdgeInsets.fromLTRB(28, 12, 38, 24),
-          actionsAlignment: MainAxisAlignment.end,
-          content: SizedBox(width: 880, height: 600, child: isLoading ? Center(child: CircularProgressIndicator(color: accentColor)) : _buildContent()),
-          actions: [
-            WoxButton.secondary(
-              text: tr("ui_cancel"),
-              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-              onPressed: isSaving ? null : () => Navigator.pop(context),
-            ),
-            const SizedBox(width: 12),
-            WoxButton.primary(
-              text: isSaving ? tr("ui_saving") : tr("ui_ai_command_template_install"),
-              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
-              onPressed: canInstall ? _install : null,
-            ),
-          ],
-        ),
+      return WoxDialog(
+        contentPadding: const EdgeInsets.fromLTRB(28, 24, 28, 0),
+        actionsPadding: const EdgeInsets.fromLTRB(28, 12, 38, 24),
+        content: SizedBox(width: 880, height: 600, child: isLoading ? Center(child: CircularProgressIndicator(color: accentColor)) : _buildContent()),
+        actions: [
+          WoxButton.secondary(text: tr("ui_cancel"), padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12), onPressed: isSaving ? null : () => Navigator.pop(context)),
+          const SizedBox(width: 12),
+          WoxButton.primary(
+            text: isSaving ? tr("ui_saving") : tr("ui_ai_command_template_install"),
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+            onPressed: canInstall ? _install : null,
+          ),
+        ],
       );
     });
   }

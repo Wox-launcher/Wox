@@ -25,7 +25,6 @@ It is a practical alternative to [Alfred](https://www.alfredapp.com/) and [Rayca
 | macOS | Homebrew | `brew install --cask wox` |
 | Windows | Winget | `winget install -e --id Wox.Wox` |
 | Windows | Scoop | `scoop install extras/wox` |
-| Arch Linux | AUR | `yay -S wox-bin` |
 | macOS / Linux / Windows | Manual | Download the latest stable package from [Releases](https://github.com/Wox-launcher/Wox/releases) and run it directly |
 
 

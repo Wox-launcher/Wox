@@ -265,14 +265,13 @@ func (r *AIChatPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 		}
 
 		if key == "mcp_servers" {
-			r.reloadMCPServers(callbackCtx)
+			r.reloadMCPServers(callbackCtx, true)
 		}
 	})
 
-	// Delay MCP servers reload to avoid websocket server initialization race condition
 	util.Go(ctx, "reload MCP servers", func() {
-		time.Sleep(time.Millisecond * 1000) // Wait for websocket server to be ready
-		r.reloadMCPServers(util.NewTraceContext())
+		// Startup only warms the core MCP tool cache; Flutter loads chat resources lazily after it is ready.
+		r.reloadMCPServers(util.NewTraceContext(), false)
 	})
 }
 
@@ -362,7 +361,7 @@ func (r *AIChatPlugin) GetDefaultModel(ctx context.Context) common.Model {
 	return common.Model{}
 }
 
-func (r *AIChatPlugin) reloadMCPServers(ctx context.Context) {
+func (r *AIChatPlugin) reloadMCPServers(ctx context.Context, notifyUI bool) {
 	r.api.Log(ctx, plugin.LogLevelInfo, "AI: Reloading MCP servers")
 
 	mcpServers, err := r.loadMCPServers(ctx)
@@ -394,7 +393,9 @@ func (r *AIChatPlugin) reloadMCPServers(ctx context.Context) {
 
 	r.mcpToolsMap = mcpTools
 
-	plugin.GetPluginManager().GetUI().ReloadChatResources(ctx, "tools")
+	if notifyUI {
+		plugin.GetPluginManager().GetUI().ReloadChatResources(ctx, "tools")
+	}
 }
 
 func (r *AIChatPlugin) loadMCPServers(ctx context.Context) ([]common.AIChatMCPServerConfig, error) {

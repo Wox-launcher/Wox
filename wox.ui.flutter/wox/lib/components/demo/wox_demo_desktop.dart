@@ -80,7 +80,7 @@ class WoxDemoDesktopBackground extends StatefulWidget {
 }
 
 class _WoxDemoDesktopBackgroundState extends State<WoxDemoDesktopBackground> {
-  String _systemWallpaperPath = '';
+  ImageProvider? _systemWallpaperImageProvider = WoxSystemWallpaperUtil.instance.cachedSystemWallpaperImageProvider;
 
   @override
   void initState() {
@@ -91,25 +91,26 @@ class _WoxDemoDesktopBackgroundState extends State<WoxDemoDesktopBackground> {
   // Reuse the same wallpaper resolver as the theme editor so demo desktops
   // match the user's real environment without introducing a new data source.
   Future<void> _loadSystemWallpaper() async {
-    final wallpaperPath = await WoxSystemWallpaperUtil.instance.loadSystemWallpaperPath();
-    if (!mounted || wallpaperPath == null || wallpaperPath.isEmpty) {
+    final wallpaperProvider = await WoxSystemWallpaperUtil.instance.loadSystemWallpaperImageProvider(context);
+    if (!mounted || wallpaperProvider == null) {
       return;
     }
 
     setState(() {
-      _systemWallpaperPath = wallpaperPath;
+      _systemWallpaperImageProvider = wallpaperProvider;
     });
   }
 
   Widget _buildBackdropLayer(Color fallbackColor) {
-    if (_systemWallpaperPath.isEmpty) {
+    final wallpaperProvider = _systemWallpaperImageProvider;
+    if (wallpaperProvider == null) {
       return ColoredBox(color: fallbackColor);
     }
 
     return Stack(
       fit: StackFit.expand,
       children: [
-        Image.file(File(_systemWallpaperPath), fit: BoxFit.cover, errorBuilder: (_, _, _) => ColoredBox(color: fallbackColor)),
+        Image(image: wallpaperProvider, fit: BoxFit.cover, errorBuilder: (_, _, _) => ColoredBox(color: fallbackColor)),
         ColoredBox(color: Colors.black.withValues(alpha: 0.34)),
       ],
     );

@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -207,72 +206,65 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                   },
                 ),
               ),
-              formField(
-                settingKey: "SelectionHotkey",
-                label: controller.tr("ui_selection_hotkey"),
-                tips: controller.tr("ui_selection_hotkey_tips"),
-                controlMaxWidth: 520,
-                child: WoxHotkeyRecorder(
-                  hotkey: WoxHotkey.parseHotkeyFromString(controller.woxSetting.value.selectionHotkey),
-                  onHotKeyRecorded: (hotkey) {
-                    controller.updateConfig("SelectionHotkey", hotkey);
-                  },
-                ),
-              ),
-              formField(
-                settingKey: "EnableHyperKey",
-                label: controller.tr("ui_enable_hyper_key"),
-                tips: controller.tr("ui_enable_hyper_key_tips").replaceAll("{modifiers}", _hyperKeyModifiers()),
-                child: Obx(() {
-                  return WoxSwitch(
-                    value: controller.woxSetting.value.enableHyperKey,
-                    onChanged: (bool value) {
-                      controller.updateConfig("EnableHyperKey", value.toString());
+              if (!controller.woxSetting.value.isLinuxWaylandSession)
+                // Wayland does not expose the active app selection to Wox, so the
+                // selection hotkey cannot produce a selection query there.
+                formField(
+                  settingKey: "SelectionHotkey",
+                  label: controller.tr("ui_selection_hotkey"),
+                  tips: controller.tr("ui_selection_hotkey_tips"),
+                  controlMaxWidth: 520,
+                  child: WoxHotkeyRecorder(
+                    hotkey: WoxHotkey.parseHotkeyFromString(controller.woxSetting.value.selectionHotkey),
+                    onHotKeyRecorded: (hotkey) {
+                      controller.updateConfig("SelectionHotkey", hotkey);
                     },
-                  );
-                }),
-              ),
-              settingTarget(
-                settingKey: "IgnoredHotkeyApps",
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 24),
-                  child: Obx(() {
-                    final rows = controller.woxSetting.value.ignoredHotkeyApps.map((app) => <String, dynamic>{"App": app.toJson()}).toList();
-
-                    return WoxSettingPluginTable(
-                      inlineTitleActions: true,
-                      tableWidth: GENERAL_SETTING_TABLE_WIDTH,
-                      value: json.encode(rows),
-                      item: PluginSettingValueTable.fromJson({
-                        "Key": "IgnoredHotkeyAppsTable",
-                        "Title": "i18n:ui_hotkey_ignore_apps",
-                        "Tooltip": "i18n:ui_hotkey_ignore_apps_tips",
-                        "MaxHeight": 220,
-                        "Columns": [
-                          {
-                            "Key": "App",
-                            "Label": "i18n:ui_hotkey_ignore_apps_app",
-                            "Tooltip": "i18n:ui_hotkey_ignore_apps_tips",
-                            "Type": "app",
-                            "Width": 420,
-                            "Validators": [
-                              {"Type": "not_empty"},
-                            ],
-                          },
-                        ],
-                        "SortColumnKey": "",
-                      }),
-                      onUpdate: (key, value) async {
-                        final decodedRows = json.decode(value) as List<dynamic>;
-                        final apps = decodedRows.map((row) => row is Map<String, dynamic> ? row["App"] : null).whereType<Map<String, dynamic>>().toList();
-
-                        await controller.updateConfig("IgnoredHotkeyApps", json.encode(apps));
-                        return null;
-                      },
-                    );
-                  }),
+                  ),
                 ),
-              ),
+              if (!controller.woxSetting.value.isLinuxWaylandSession)
+                // Wayland does not expose a stable foreground app identity for
+                // Wox, so ignored hotkey apps cannot be matched there.
+                settingTarget(
+                  settingKey: "IgnoredHotkeyApps",
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 24),
+                    child: Obx(() {
+                      final rows = controller.woxSetting.value.ignoredHotkeyApps.map((app) => <String, dynamic>{"App": app.toJson()}).toList();
+
+                      return WoxSettingPluginTable(
+                        inlineTitleActions: true,
+                        tableWidth: GENERAL_SETTING_TABLE_WIDTH,
+                        value: json.encode(rows),
+                        item: PluginSettingValueTable.fromJson({
+                          "Key": "IgnoredHotkeyAppsTable",
+                          "Title": "i18n:ui_hotkey_ignore_apps",
+                          "Tooltip": "i18n:ui_hotkey_ignore_apps_tips",
+                          "MaxHeight": 220,
+                          "Columns": [
+                            {
+                              "Key": "App",
+                              "Label": "i18n:ui_hotkey_ignore_apps_app",
+                              "Tooltip": "i18n:ui_hotkey_ignore_apps_tips",
+                              "Type": "app",
+                              "Width": 420,
+                              "Validators": [
+                                {"Type": "not_empty"},
+                              ],
+                            },
+                          ],
+                          "SortColumnKey": "",
+                        }),
+                        onUpdate: (key, value) async {
+                          final decodedRows = json.decode(value) as List<dynamic>;
+                          final apps = decodedRows.map((row) => row is Map<String, dynamic> ? row["App"] : null).whereType<Map<String, dynamic>>().toList();
+
+                          await controller.updateConfig("IgnoredHotkeyApps", json.encode(apps));
+                          return null;
+                        },
+                      );
+                    }),
+                  ),
+                ),
               settingTarget(
                 settingKey: "QueryHotkeys",
                 child: Padding(
@@ -327,6 +319,7 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                             "Type": "select",
                             "Width": 120,
                             "HideInTable": true,
+                            "HideInUpdate": controller.woxSetting.value.isLinuxWaylandSession,
                             "SelectOptions": [
                               {"Label": controller.tr("ui_query_position_system_default"), "Value": "system_default"},
                               {"Label": controller.tr("ui_query_position_top_left"), "Value": "top_left"},
@@ -446,86 +439,89 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                   }),
                 ),
               ),
-              settingTarget(
-                settingKey: "TrayQueries",
-                child: Padding(
-                  key: controller.getGeneralSectionKey('tray_queries'),
-                  padding: const EdgeInsets.only(bottom: 24),
-                  child: Obx(() {
-                    return WoxSettingPluginTable(
-                      inlineTitleActions: true,
-                      tableWidth: GENERAL_SETTING_TABLE_WIDTH,
-                      titleActions: [
-                        _buildDemoTitleAction(
-                          triggerKey: 'settings-tray-queries-demo-trigger',
-                          popoverKey: 'wox-demo-popover-trayQueries',
-                          demo: WoxTrayQueriesDemo(accent: const Color(0xFF22C55E), tr: controller.tr),
-                        ),
-                      ],
-                      value: json.encode(controller.woxSetting.value.trayQueries),
-                      autoOpenEditRowIndex: controller.pendingTrayQueryEditRowIndex.value,
-                      item: PluginSettingValueTable.fromJson({
-                        "Key": "TrayQueries",
-                        "Title": "i18n:ui_tray_queries",
-                        "Tooltip": "i18n:ui_tray_queries_tips",
-                        "Columns": [
-                          {"Key": "Icon", "Label": "i18n:ui_tray_queries_icon", "Tooltip": "i18n:ui_tray_queries_icon_tooltip", "Type": "woxImage", "Width": 40},
-                          {
-                            "Key": "Query",
-                            "Label": "i18n:ui_tray_queries_query",
-                            "Tooltip": "i18n:ui_tray_queries_query_tooltip",
-                            "Type": "text",
-                            "TextMaxLines": 1,
-                            "Validators": [
-                              {"Type": "not_empty"},
-                            ],
-                          },
-                          {
-                            "Key": "HideQueryBox",
-                            "Label": "i18n:ui_tray_queries_hide_query_box",
-                            "Tooltip": "i18n:ui_tray_queries_hide_query_box_tooltip",
-                            "Width": 80,
-                            "HideInTable": true,
-                            "Type": "checkbox",
-                          },
-                          {
-                            "Key": "HideToolbar",
-                            "Label": "i18n:ui_tray_queries_hide_toolbar",
-                            "Tooltip": "i18n:ui_tray_queries_hide_toolbar_tooltip",
-                            "Width": 80,
-                            "HideInTable": true,
-                            "Type": "checkbox",
-                          },
-                          {
-                            "Key": "Width",
-                            "Label": "i18n:ui_tray_queries_width",
-                            "Tooltip": "i18n:ui_tray_queries_width_tooltip",
-                            "Type": "text",
-                            "Width": 40,
-                            "HideInTable": true,
-                            "TextMaxLines": 1,
-                          },
-                          {
-                            "Key": "MaxResultCount",
-                            "Label": "i18n:ui_tray_queries_max_result_count",
-                            "Tooltip": "i18n:ui_tray_queries_max_result_count_tooltip",
-                            "Type": "text",
-                            "Width": 90,
-                            "HideInTable": true,
-                            "TextMaxLines": 1,
-                          },
-                          {"Key": "Disabled", "Label": "i18n:ui_disabled", "Tooltip": "i18n:ui_disabled_tooltip", "Width": 50, "Type": "checkbox"},
+              if (!controller.woxSetting.value.isLinuxWaylandSession)
+                // Tray query opens Wox relative to the tray icon, and Wayland
+                // compositors do not expose a reliable app-controlled position.
+                settingTarget(
+                  settingKey: "TrayQueries",
+                  child: Padding(
+                    key: controller.getGeneralSectionKey('tray_queries'),
+                    padding: const EdgeInsets.only(bottom: 24),
+                    child: Obx(() {
+                      return WoxSettingPluginTable(
+                        inlineTitleActions: true,
+                        tableWidth: GENERAL_SETTING_TABLE_WIDTH,
+                        titleActions: [
+                          _buildDemoTitleAction(
+                            triggerKey: 'settings-tray-queries-demo-trigger',
+                            popoverKey: 'wox-demo-popover-trayQueries',
+                            demo: WoxTrayQueriesDemo(accent: const Color(0xFF22C55E), tr: controller.tr),
+                          ),
                         ],
-                        "SortColumnKey": "",
-                      }),
-                      onUpdate: (key, value) async {
-                        await controller.updateConfig("TrayQueries", value);
-                        return null;
-                      },
-                    );
-                  }),
+                        value: json.encode(controller.woxSetting.value.trayQueries),
+                        autoOpenEditRowIndex: controller.pendingTrayQueryEditRowIndex.value,
+                        item: PluginSettingValueTable.fromJson({
+                          "Key": "TrayQueries",
+                          "Title": "i18n:ui_tray_queries",
+                          "Tooltip": "i18n:ui_tray_queries_tips",
+                          "Columns": [
+                            {"Key": "Icon", "Label": "i18n:ui_tray_queries_icon", "Tooltip": "i18n:ui_tray_queries_icon_tooltip", "Type": "woxImage", "Width": 40},
+                            {
+                              "Key": "Query",
+                              "Label": "i18n:ui_tray_queries_query",
+                              "Tooltip": "i18n:ui_tray_queries_query_tooltip",
+                              "Type": "text",
+                              "TextMaxLines": 1,
+                              "Validators": [
+                                {"Type": "not_empty"},
+                              ],
+                            },
+                            {
+                              "Key": "HideQueryBox",
+                              "Label": "i18n:ui_tray_queries_hide_query_box",
+                              "Tooltip": "i18n:ui_tray_queries_hide_query_box_tooltip",
+                              "Width": 80,
+                              "HideInTable": true,
+                              "Type": "checkbox",
+                            },
+                            {
+                              "Key": "HideToolbar",
+                              "Label": "i18n:ui_tray_queries_hide_toolbar",
+                              "Tooltip": "i18n:ui_tray_queries_hide_toolbar_tooltip",
+                              "Width": 80,
+                              "HideInTable": true,
+                              "Type": "checkbox",
+                            },
+                            {
+                              "Key": "Width",
+                              "Label": "i18n:ui_tray_queries_width",
+                              "Tooltip": "i18n:ui_tray_queries_width_tooltip",
+                              "Type": "text",
+                              "Width": 40,
+                              "HideInTable": true,
+                              "TextMaxLines": 1,
+                            },
+                            {
+                              "Key": "MaxResultCount",
+                              "Label": "i18n:ui_tray_queries_max_result_count",
+                              "Tooltip": "i18n:ui_tray_queries_max_result_count_tooltip",
+                              "Type": "text",
+                              "Width": 90,
+                              "HideInTable": true,
+                              "TextMaxLines": 1,
+                            },
+                            {"Key": "Disabled", "Label": "i18n:ui_disabled", "Tooltip": "i18n:ui_disabled_tooltip", "Width": 50, "Type": "checkbox"},
+                          ],
+                          "SortColumnKey": "",
+                        }),
+                        onUpdate: (key, value) async {
+                          await controller.updateConfig("TrayQueries", value);
+                          return null;
+                        },
+                      );
+                    }),
+                  ),
                 ),
-              ),
             ],
           ),
         ],
@@ -556,9 +552,5 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
         ),
       ),
     );
-  }
-
-  String _hyperKeyModifiers() {
-    return Platform.isMacOS ? "Ctrl+Shift+Cmd+Option" : "Ctrl+Shift+Alt+Win";
   }
 }

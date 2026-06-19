@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -10,6 +9,7 @@ import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_button.dart';
+import 'package:wox/components/wox_dialog.dart';
 import 'package:wox/components/wox_list_item_view.dart';
 import 'package:wox/components/wox_textfield.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
@@ -102,7 +102,7 @@ class _WoxThemeEditorState extends State<WoxThemeEditor> {
   int _activeGroupIndex = 0;
   int _previewFlashNonce = 0;
   String _previewFlashTokenKey = '';
-  String _systemWallpaperPath = '';
+  ImageProvider? _systemWallpaperImageProvider = WoxSystemWallpaperUtil.instance.cachedSystemWallpaperImageProvider;
   bool _isSaving = false;
   String _errorMessage = '';
 
@@ -162,11 +162,11 @@ class _WoxThemeEditorState extends State<WoxThemeEditor> {
 
   // Load the host desktop wallpaper for translucent-theme preview backdrops.
   Future<void> _loadSystemWallpaper() async {
-    final wallpaperPath = await WoxSystemWallpaperUtil.instance.loadSystemWallpaperPath();
-    if (wallpaperPath == null || !mounted) {
+    final wallpaperProvider = await WoxSystemWallpaperUtil.instance.loadSystemWallpaperImageProvider(context);
+    if (wallpaperProvider == null || !mounted) {
       return;
     }
-    setState(() => _systemWallpaperPath = wallpaperPath);
+    setState(() => _systemWallpaperImageProvider = wallpaperProvider);
   }
 
   WoxTheme _cloneTheme(WoxTheme theme) {
@@ -335,8 +335,7 @@ class _WoxThemeEditorState extends State<WoxThemeEditor> {
               _updateThemeColor(token.key, _colorToCss(parsedColor));
             }
 
-            return AlertDialog(
-              backgroundColor: getThemePopupSurfaceColor(),
+            return WoxDialog(
               title: Text(_tr(token.labelKey), style: TextStyle(color: getThemeTextColor(), fontSize: 16)),
               content: SizedBox(
                 width: 360,
@@ -514,8 +513,7 @@ class _WoxThemeEditorState extends State<WoxThemeEditor> {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) {
-            return AlertDialog(
-              backgroundColor: getThemePopupSurfaceColor(),
+            return WoxDialog(
               title: Text(_tr('ui_theme_editor_save_as_title'), style: TextStyle(color: getThemeTextColor(), fontSize: 16)),
               content: SizedBox(
                 width: 360,
@@ -823,11 +821,12 @@ class _WoxThemeEditorState extends State<WoxThemeEditor> {
   }
 
   Widget _buildSystemWallpaperBackdrop() {
-    if (_systemWallpaperPath.isEmpty) {
+    final wallpaperProvider = _systemWallpaperImageProvider;
+    if (wallpaperProvider == null) {
       return const SizedBox.shrink();
     }
 
-    return Image.file(File(_systemWallpaperPath), fit: BoxFit.cover, errorBuilder: (_, _, _) => const SizedBox.shrink());
+    return Image(image: wallpaperProvider, fit: BoxFit.cover, errorBuilder: (_, _, _) => const SizedBox.shrink());
   }
 
   Widget _buildPreviewSurface(WoxTheme theme) {

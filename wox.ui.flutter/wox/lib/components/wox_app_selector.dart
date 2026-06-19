@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_button.dart';
+import 'package:wox/components/wox_dialog.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_textfield.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
@@ -241,16 +242,9 @@ class _AppSelectorDialogState extends State<_AppSelectorDialog> {
     final borderColor = getThemePopupOutlineColor();
     final accentColor = getThemeActiveBackgroundColor();
 
-    return AlertDialog(
-      backgroundColor: getThemePopupSurfaceColor(),
-      surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: borderColor)),
-      elevation: 18,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
-      contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-      actionsPadding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
-      actionsAlignment: MainAxisAlignment.end,
+    return WoxDialog(
       title: Text(tr('ui_hotkey_ignore_apps_dialog_title'), style: TextStyle(color: textColor, fontSize: 16)),
+      titleTextStyle: TextStyle(color: textColor, fontSize: 16),
       content: SizedBox(
         width: 760,
         height: 540,

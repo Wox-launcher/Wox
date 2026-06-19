@@ -231,6 +231,8 @@ type QueryResult struct {
 	Preview  WoxPreview
 	// Score of the result, the higher the score, the more relevant the result is, more likely to be displayed on top
 	Score int64
+	// ScoreKey is an optional stable identity for actioned-result scoring when title or subtitle is dynamic.
+	ScoreKey string
 	// Group results, Wox will group results by group name
 	Group string
 	// Score of the group, the higher the score, the more relevant the group is, more likely to be displayed on top

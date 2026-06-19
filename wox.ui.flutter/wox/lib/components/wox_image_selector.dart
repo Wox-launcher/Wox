@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:wox/components/wox_button.dart';
+import 'package:wox/components/wox_dialog.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_tooltip.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
@@ -561,138 +562,119 @@ class EmojiPickerDialogState extends State<EmojiPickerDialog> {
     final textColor = getThemeTextColor();
     final subTextColor = getThemeSubTextColor();
     final cardColor = getThemePopupSurfaceColor();
-    final outlineColor = getThemePopupOutlineColor();
     final panelBackground = darkTheme ? cardColor.lighter(6).withAlpha(255) : cardColor.darker(2).withAlpha(255);
     final chipBorderColor = getThemeDividerColor().withValues(alpha: 0.45);
     final selectedChipColor = accentColor.withValues(alpha: darkTheme ? 0.30 : 0.20);
     final currentGroup = WoxImageSelector.emojiGroups[selectedGroupIndex];
-    final baseTheme = Theme.of(context);
-    final dialogTheme = baseTheme.copyWith(
-      colorScheme: ColorScheme.fromSeed(seedColor: accentColor, brightness: darkTheme ? Brightness.dark : Brightness.light),
-      scaffoldBackgroundColor: Colors.transparent,
-      cardColor: cardColor,
-      shadowColor: textColor.withAlpha(50),
-    );
 
-    return Theme(
-      data: dialogTheme,
-      child: Focus(
-        autofocus: true,
-        onKeyEvent: (node, event) {
-          if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.escape) {
-            Navigator.pop(context);
-            return KeyEventResult.handled;
-          }
-          return KeyEventResult.ignored;
-        },
-        child: AlertDialog(
-          backgroundColor: cardColor,
-          surfaceTintColor: Colors.transparent,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: outlineColor)),
-          elevation: 18,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
-          contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-          actionsPadding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
-          actionsAlignment: MainAxisAlignment.end,
-          content: SizedBox(
-            width: 760,
-            height: 500,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(child: Text(widget.tr("ui_select_emoji"), style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: textColor))),
-                    // Dialog chrome also uses WoxTooltip so close affordances do not
-                    // fall back to the platform Material tooltip style.
-                    WoxTooltip(message: widget.tr("ui_cancel"), child: IconButton(onPressed: () => Navigator.pop(context), icon: Icon(Icons.close_rounded, color: subTextColor))),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  height: 46,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: WoxImageSelector.emojiGroups.length,
-                    separatorBuilder: (context, index) => const SizedBox(width: 8),
-                    itemBuilder: (context, index) {
-                      final group = WoxImageSelector.emojiGroups[index];
-                      final selected = selectedGroupIndex == index;
-                      return InkWell(
-                        onTap: () {
-                          setState(() {
-                            selectedGroupIndex = index;
-                          });
-                        },
-                        borderRadius: BorderRadius.circular(20),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 160),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: selected ? selectedChipColor : panelBackground,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: selected ? accentColor : chipBorderColor),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(group.icon, size: 16, color: selected ? accentColor : subTextColor),
-                              const SizedBox(width: 6),
-                              Text(
-                                widget.tr(group.labelKey),
-                                style: TextStyle(color: selected ? textColor : subTextColor, fontSize: 12, fontWeight: selected ? FontWeight.w600 : FontWeight.w500),
-                              ),
-                            ],
-                          ),
+    return Focus(
+      autofocus: true,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.escape) {
+          Navigator.pop(context);
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: WoxDialog(
+        content: SizedBox(
+          width: 760,
+          height: 500,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(child: Text(widget.tr("ui_select_emoji"), style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: textColor))),
+                  // Dialog chrome also uses WoxTooltip so close affordances do not
+                  // fall back to the platform Material tooltip style.
+                  WoxTooltip(message: widget.tr("ui_cancel"), child: IconButton(onPressed: () => Navigator.pop(context), icon: Icon(Icons.close_rounded, color: subTextColor))),
+                ],
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 46,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: WoxImageSelector.emojiGroups.length,
+                  separatorBuilder: (context, index) => const SizedBox(width: 8),
+                  itemBuilder: (context, index) {
+                    final group = WoxImageSelector.emojiGroups[index];
+                    final selected = selectedGroupIndex == index;
+                    return InkWell(
+                      onTap: () {
+                        setState(() {
+                          selectedGroupIndex = index;
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(20),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 160),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: selected ? selectedChipColor : panelBackground,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: selected ? accentColor : chipBorderColor),
                         ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(group.icon, size: 16, color: selected ? accentColor : subTextColor),
+                            const SizedBox(width: 6),
+                            Text(
+                              widget.tr(group.labelKey),
+                              style: TextStyle(color: selected ? textColor : subTextColor, fontSize: 12, fontWeight: selected ? FontWeight.w600 : FontWeight.w500),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(color: panelBackground, borderRadius: BorderRadius.circular(14), border: Border.all(color: chipBorderColor)),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final rawCount = (constraints.maxWidth / 58).floor();
+                      final crossAxisCount = rawCount.clamp(6, 12).toInt();
+                      return GridView.builder(
+                        padding: const EdgeInsets.all(14),
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: crossAxisCount, childAspectRatio: 1.0, crossAxisSpacing: 8, mainAxisSpacing: 8),
+                        itemCount: currentGroup.emojis.length,
+                        itemBuilder: (context, index) {
+                          final emoji = currentGroup.emojis[index];
+                          final selected = widget.initialEmoji == emoji;
+                          return Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(10),
+                              onTap: () {
+                                Navigator.pop(context, emoji);
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 120),
+                                decoration: BoxDecoration(
+                                  color: selected ? selectedChipColor : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: selected ? accentColor : Colors.transparent),
+                                ),
+                                child: Center(child: Text(emoji, style: const TextStyle(fontSize: 26, height: 1))),
+                              ),
+                            ),
+                          );
+                        },
                       );
                     },
                   ),
                 ),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(color: panelBackground, borderRadius: BorderRadius.circular(14), border: Border.all(color: chipBorderColor)),
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        final rawCount = (constraints.maxWidth / 58).floor();
-                        final crossAxisCount = rawCount.clamp(6, 12).toInt();
-                        return GridView.builder(
-                          padding: const EdgeInsets.all(14),
-                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: crossAxisCount, childAspectRatio: 1.0, crossAxisSpacing: 8, mainAxisSpacing: 8),
-                          itemCount: currentGroup.emojis.length,
-                          itemBuilder: (context, index) {
-                            final emoji = currentGroup.emojis[index];
-                            final selected = widget.initialEmoji == emoji;
-                            return Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(10),
-                                onTap: () {
-                                  Navigator.pop(context, emoji);
-                                },
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 120),
-                                  decoration: BoxDecoration(
-                                    color: selected ? selectedChipColor : Colors.transparent,
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(color: selected ? accentColor : Colors.transparent),
-                                  ),
-                                  child: Center(child: Text(emoji, style: const TextStyle(fontSize: 26, height: 1))),
-                                ),
-                              ),
-                            );
-                          },
-                        );
-                      },
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-          actions: [WoxButton.secondary(text: widget.tr("ui_cancel"), padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12), onPressed: () => Navigator.pop(context))],
         ),
+        actions: [WoxButton.secondary(text: widget.tr("ui_cancel"), padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12), onPressed: () => Navigator.pop(context))],
       ),
     );
   }

@@ -273,7 +273,8 @@ func (c *BrowserBookmarkPlugin) getBrowserBookmarkSettingDefinitions() []definit
 
 	settings := []definition.PluginSettingDefinitionItem{
 		{
-			Type: definition.PluginSettingDefinitionTypeSelect,
+			Type:               definition.PluginSettingDefinitionTypeSelect,
+			IsPlatformSpecific: true,
 			Value: &definition.PluginSettingValueSelect{
 				Key:          browserBookmarkIndexBrowsersSettingKey,
 				Label:        "i18n:plugin_browser_bookmark_index_browsers",

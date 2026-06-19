@@ -107,6 +107,11 @@ func (m *Manager) LoadPluginSetting(ctx context.Context, pluginId string, defaul
 
 func (m *Manager) AddActionedResult(ctx context.Context, pluginId string, resultTitle string, resultSubTitle string, query string) {
 	resultHash := NewResultHash(pluginId, resultTitle, resultSubTitle)
+	m.AddActionedResultByHash(ctx, resultHash, query)
+}
+
+// AddActionedResultByHash stores an actioned result for callers that own a stable result identity.
+func (m *Manager) AddActionedResultByHash(ctx context.Context, resultHash ResultHash, query string) {
 	actionedResult := ActionedResult{
 		Timestamp: util.GetSystemTimestamp(),
 		Query:     query,

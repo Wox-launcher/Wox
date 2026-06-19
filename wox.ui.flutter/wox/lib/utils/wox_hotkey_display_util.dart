@@ -1,12 +1,9 @@
 import 'dart:io';
 
 import 'package:flutter/services.dart';
-import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 
 class WoxHotkeyDisplayUtil {
-  static const String hyperKeyLabel = "Hyper";
-
   static String modifierLabel(HotKeyModifier modifier) {
     // Feature fix: modifier chips now prefer short text over platform glyphs.
     // The old macOS-style symbols were compact, but they made Windows/Linux
@@ -26,7 +23,9 @@ class WoxHotkeyDisplayUtil {
   }
 
   static String keyLabel(KeyboardKey key) {
-    if (key == LogicalKeyboardKey.enter) {
+    if (key == LogicalKeyboardKey.space || key == PhysicalKeyboardKey.space) {
+      return "Space";
+    } else if (key == LogicalKeyboardKey.enter) {
       return "⏎";
     } else if (key == LogicalKeyboardKey.arrowUp) {
       return "↑";
@@ -87,10 +86,6 @@ class WoxHotkeyDisplayUtil {
   static List<String> labelsFromHotkey(HotkeyX hotkey) {
     if (hotkey.isNormalHotkey) {
       return [for (final modifier in hotkey.normalHotkey!.modifiers ?? <HotKeyModifier>[]) modifierLabel(modifier), keyLabel(hotkey.normalHotkey!.key)];
-    }
-
-    if (hotkey.isHyperHotkey) {
-      return [hyperKeyLabel, keyLabel(hotkey.hyperHotkey!)];
     }
 
     if (hotkey.isCapsLockHotkey) {
@@ -158,7 +153,6 @@ class WoxHotkeyDisplayUtil {
       "windows" => Platform.isWindows ? "Win" : "Super",
       "win" => Platform.isWindows ? "Win" : "Super",
       "super" => "Super",
-      "hyper" => hyperKeyLabel,
       "space" => "Space",
       "enter" => "⏎",
       "escape" || "esc" => "Esc",

@@ -36,3 +36,12 @@ func IsLinux() bool {
 func GetCurrentPlatform() string {
 	return strings.ToLower(runtime.GOOS)
 }
+
+func IsSupportedPlatform(platform string) bool {
+	switch strings.ToLower(strings.TrimSpace(platform)) {
+	case PlatformWindows, PlatformMacOS, PlatformLinux:
+		return true
+	default:
+		return false
+	}
+}

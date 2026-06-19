@@ -5,6 +5,7 @@ import 'dart:io' show pid;
 import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_ai_command_template.dart';
 import 'package:wox/entity/wox_backup.dart';
+import 'package:wox/entity/wox_cloud_sync.dart';
 import 'package:wox/entity/wox_lang.dart';
 import 'package:wox/entity/wox_glance.dart';
 import 'package:wox/entity/wox_hotkey.dart';
@@ -326,5 +327,117 @@ class WoxApi {
 
   Future<void> saveWindowPosition(String traceId, int x, int y) async {
     await WoxHttpUtil.instance.postData(traceId, "/setting/position", {"x": x, "y": y});
+  }
+
+  Future<WoxCloudSyncStatus> getCloudSyncStatus(String traceId) async {
+    return await WoxHttpUtil.instance.postData<WoxCloudSyncStatus>(traceId, "/sync/status", null);
+  }
+
+  Future<WoxCloudSyncBootstrapStatus> cloudSyncBootstrapStatus(String traceId) async {
+    return await WoxHttpUtil.instance.postData<WoxCloudSyncBootstrapStatus>(traceId, "/sync/bootstrap/status", null);
+  }
+
+  Future<void> cloudSyncBootstrapStart(String traceId, String recoveryCode) async {
+    await WoxHttpUtil.instance.postData(traceId, "/sync/bootstrap/start", {"recovery_code": recoveryCode});
+  }
+
+  Future<WoxAccountStatus> getAccountStatus(String traceId) async {
+    return await WoxHttpUtil.instance.postData<WoxAccountStatus>(traceId, "/account/status", null);
+  }
+
+  Future<WoxAccountStatus> accountRefresh(String traceId) async {
+    return await WoxHttpUtil.instance.postData<WoxAccountStatus>(traceId, "/account/refresh", null);
+  }
+
+  Future<WoxAccountActionResult> accountRegister(String traceId, String email, String password, String lang) async {
+    return await WoxHttpUtil.instance.postData<WoxAccountActionResult>(traceId, "/account/register", {"email": email, "password": password, "lang": lang});
+  }
+
+  Future<WoxAccountActionResult> accountVerifyEmail(String traceId, String email, String code, String lang) async {
+    return await WoxHttpUtil.instance.postData<WoxAccountActionResult>(traceId, "/account/verify_email", {"email": email, "code": code, "lang": lang});
+  }
+
+  Future<WoxAccountActionResult> accountLogin(String traceId, String email, String password, String lang) async {
+    return await WoxHttpUtil.instance.postData<WoxAccountActionResult>(traceId, "/account/login", {"email": email, "password": password, "lang": lang});
+  }
+
+  Future<void> accountLogout(String traceId) async {
+    await WoxHttpUtil.instance.postData(traceId, "/account/logout", null);
+  }
+
+  Future<void> accountResendVerification(String traceId, String email, String lang) async {
+    await WoxHttpUtil.instance.postData(traceId, "/account/resend_verification", {"email": email, "lang": lang});
+  }
+
+  Future<void> accountPasswordResetRequest(String traceId, String email, String lang) async {
+    await WoxHttpUtil.instance.postData(traceId, "/account/password_reset/request", {"email": email, "lang": lang});
+  }
+
+  Future<void> accountPasswordResetConfirm(String traceId, String token, String password, String lang) async {
+    await WoxHttpUtil.instance.postData(traceId, "/account/password_reset/confirm", {"token": token, "password": password, "lang": lang});
+  }
+
+  Future<void> accountChangePassword(String traceId, String currentPassword, String newPassword, String lang) async {
+    await WoxHttpUtil.instance.postData(traceId, "/account/change_password", {"current_password": currentPassword, "new_password": newPassword, "lang": lang});
+  }
+
+  Future<WoxBillingSession> accountBillingCheckout(String traceId) async {
+    return await WoxHttpUtil.instance.postData<WoxBillingSession>(traceId, "/account/billing/checkout", null);
+  }
+
+  Future<WoxBillingSession> accountBillingPortal(String traceId) async {
+    return await WoxHttpUtil.instance.postData<WoxBillingSession>(traceId, "/account/billing/portal", null);
+  }
+
+  Future<WoxBillingPlan> accountBillingPlan(String traceId) async {
+    return await WoxHttpUtil.instance.postData<WoxBillingPlan>(traceId, "/account/billing/plan", null);
+  }
+
+  Future<void> cloudSyncEnable(String traceId) async {
+    await WoxHttpUtil.instance.postData(traceId, "/sync/enable", null);
+  }
+
+  Future<void> cloudSyncDisable(String traceId) async {
+    await WoxHttpUtil.instance.postData(traceId, "/sync/disable", null);
+  }
+
+  Future<void> cloudSyncPush(String traceId) async {
+    await WoxHttpUtil.instance.postData(traceId, "/sync/push", null);
+  }
+
+  Future<void> cloudSyncPull(String traceId) async {
+    await WoxHttpUtil.instance.postData(traceId, "/sync/pull", null);
+  }
+
+  Future<WoxCloudSyncDeviceList> cloudSyncDevicesList(String traceId) async {
+    return await WoxHttpUtil.instance.postData<WoxCloudSyncDeviceList>(traceId, "/sync/devices/list", null);
+  }
+
+  Future<void> cloudSyncDeviceRevoke(String traceId, String targetDeviceId) async {
+    await WoxHttpUtil.instance.postData(traceId, "/sync/devices/revoke", {"target_device_id": targetDeviceId});
+  }
+
+  Future<void> cloudSyncDeviceJoin(String traceId) async {
+    await WoxHttpUtil.instance.postData(traceId, "/sync/devices/join", null);
+  }
+
+  Future<void> cloudSyncKeyInit(String traceId, String recoveryCode, String deviceName) async {
+    await WoxHttpUtil.instance.postData(traceId, "/sync/key/init", {"recovery_code": recoveryCode, "device_name": deviceName});
+  }
+
+  Future<void> cloudSyncKeyFetch(String traceId, String recoveryCode) async {
+    await WoxHttpUtil.instance.postData(traceId, "/sync/key/fetch", {"recovery_code": recoveryCode});
+  }
+
+  Future<String> cloudSyncRecoveryCode(String traceId) async {
+    return await WoxHttpUtil.instance.postData(traceId, "/sync/key/recovery_code", null);
+  }
+
+  Future<Map<String, dynamic>> cloudSyncKeyResetPrepare(String traceId) async {
+    return await WoxHttpUtil.instance.postData(traceId, "/sync/key/reset/prepare", null);
+  }
+
+  Future<void> cloudSyncKeyReset(String traceId, String resetToken) async {
+    await WoxHttpUtil.instance.postData(traceId, "/sync/key/reset", {"reset_token": resetToken, "confirm": true});
   }
 }

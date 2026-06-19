@@ -4,10 +4,6 @@ PODS:
   - file_picker (0.0.1):
     - FlutterMacOS
   - FlutterMacOS (1.0.0)
-  - HotKey (0.2.0)
-  - hotkey_manager_macos (0.0.1):
-    - FlutterMacOS
-    - HotKey
   - path_provider_foundation (0.0.1):
     - Flutter
     - FlutterMacOS
@@ -20,14 +16,9 @@ DEPENDENCIES:
   - desktop_drop (from `Flutter/ephemeral/.symlinks/plugins/desktop_drop/macos`)
   - file_picker (from `Flutter/ephemeral/.symlinks/plugins/file_picker/macos`)
   - FlutterMacOS (from `Flutter/ephemeral`)
-  - hotkey_manager_macos (from `Flutter/ephemeral/.symlinks/plugins/hotkey_manager_macos/macos`)
   - path_provider_foundation (from `Flutter/ephemeral/.symlinks/plugins/path_provider_foundation/darwin`)
   - protocol_handler_macos (from `Flutter/ephemeral/.symlinks/plugins/protocol_handler_macos/macos`)
   - url_launcher_macos (from `Flutter/ephemeral/.symlinks/plugins/url_launcher_macos/macos`)
-
-SPEC REPOS:
-  trunk:
-    - HotKey
 
 EXTERNAL SOURCES:
   desktop_drop:
@@ -36,8 +27,6 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/file_picker/macos
   FlutterMacOS:
     :path: Flutter/ephemeral
-  hotkey_manager_macos:
-    :path: Flutter/ephemeral/.symlinks/plugins/hotkey_manager_macos/macos
   path_provider_foundation:
     :path: Flutter/ephemeral/.symlinks/plugins/path_provider_foundation/darwin
   protocol_handler_macos:
@@ -46,15 +35,13 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/url_launcher_macos/macos
 
 SPEC CHECKSUMS:
-  desktop_drop: 1eeeb9484299585770b6461e4f3d60950e99efa2
-  file_picker: e716a70a9fe5fd9e09ebc922d7541464289443af
+  desktop_drop: 10a3e6a7fa9dbe350541f2574092fecfa345a07b
+  file_picker: 7584aae6fa07a041af2b36a2655122d42f578c1a
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
-  HotKey: e96d8a2ddbf4591131e2bb3f54e69554d90cdca6
-  hotkey_manager_macos: 1e2edb0c7ae4fe67108af44a9d3445de41404160
-  path_provider_foundation: 0b743cbb62d8e47eab856f09262bb8c1ddcfe6ba
-  protocol_handler_macos: d10a6c01d6373389ffd2278013ab4c47ed6d6daa
-  url_launcher_macos: 175a54c831f4375a6cf895875f716ee5af3888ce
+  path_provider_foundation: bb55f6dbba17d0dccd6737fe6f7f34fbd0376880
+  protocol_handler_macos: f9cd7b13bcaf6b0425f7410cbe52376cb843a936
+  url_launcher_macos: f87a979182d112f911de6820aefddaf56ee9fbfd
 
 PODFILE CHECKSUM: 9ebaf0ce3d369aaa26a9ea0e159195ed94724cf3
 
-COCOAPODS: 1.15.2
+COCOAPODS: 1.16.2

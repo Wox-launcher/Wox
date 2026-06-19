@@ -88,6 +88,32 @@ private final class WoxWeakWebViewBox {
   }
 }
 
+private final class WoxWebViewPreviewWebView: WKWebView {
+  private static let browserBackButtonNumber = 3
+  private static let browserForwardButtonNumber = 4
+
+  override func otherMouseDown(with event: NSEvent) {
+    // Flutter's AppKitView-hosted WKWebView does not always translate auxiliary mouse buttons into browser navigation.
+    // Handle standard back/forward side buttons here while leaving middle-click and unsupported buttons to WebKit.
+    switch event.buttonNumber {
+    case Self.browserBackButtonNumber:
+      if canGoBack {
+        goBack()
+        return
+      }
+    case Self.browserForwardButtonNumber:
+      if canGoForward {
+        goForward()
+        return
+      }
+    default:
+      break
+    }
+
+    super.otherMouseDown(with: event)
+  }
+}
+
 private enum WoxWebViewStore {
   private static var entries: [String: WoxCachedWebViewEntry] = [:]
 
@@ -127,7 +153,7 @@ private enum WoxWebViewStore {
       sessionPolicy: .persistent,
       injectCss: request.injectCss
     )
-    let webView = WKWebView(frame: .zero, configuration: configuration)
+    let webView = WoxWebViewPreviewWebView(frame: .zero, configuration: configuration)
     if #available(macOS 13.3, *) {
       webView.isInspectable = true
     }

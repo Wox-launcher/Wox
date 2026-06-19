@@ -21,6 +21,7 @@ class WoxTextField extends StatelessWidget {
   final FocusNode? focusNode;
   final Key? textFieldKey;
   final GestureTapCallback? onTap;
+  final bool obscureText;
 
   const WoxTextField({
     super.key,
@@ -41,6 +42,7 @@ class WoxTextField extends StatelessWidget {
     this.focusNode,
     this.textFieldKey,
     this.onTap,
+    this.obscureText = false,
   });
 
   @override
@@ -56,6 +58,7 @@ class WoxTextField extends StatelessWidget {
       onEditingComplete: onEditingComplete,
       onSubmitted: onSubmitted,
       onTap: onTap,
+      obscureText: obscureText,
       maxLines: maxLines,
       minLines: minLines,
       autofocus: autofocus,

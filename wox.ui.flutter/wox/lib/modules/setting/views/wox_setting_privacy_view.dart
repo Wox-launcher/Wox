@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:wox/components/wox_button.dart';
+import 'package:wox/components/wox_dialog.dart';
 import 'package:wox/components/wox_selectable_text.dart';
 import 'package:wox/components/wox_switch.dart';
 import 'package:wox/modules/setting/views/wox_setting_base.dart';
@@ -23,15 +24,7 @@ class WoxSettingPrivacyView extends WoxSettingBaseView {
       context: context,
       barrierColor: getThemePopupBarrierColor(),
       builder: (dialogContext) {
-        return AlertDialog(
-          backgroundColor: getThemePopupSurfaceColor(),
-          surfaceTintColor: Colors.transparent,
-          elevation: 18,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
-          contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-          actionsPadding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
-          actionsAlignment: MainAxisAlignment.end,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: getThemePopupOutlineColor())),
+        return WoxDialog(
           content: SizedBox(
             width: 450,
             child: SingleChildScrollView(

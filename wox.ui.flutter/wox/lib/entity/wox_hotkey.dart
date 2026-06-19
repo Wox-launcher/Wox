@@ -1,21 +1,52 @@
 import 'dart:io';
 
 import 'package:flutter/services.dart';
-import 'package:hotkey_manager/hotkey_manager.dart';
+
+enum HotKeyModifier {
+  alt([PhysicalKeyboardKey.altLeft, PhysicalKeyboardKey.altRight]),
+  capsLock([PhysicalKeyboardKey.capsLock]),
+  control([PhysicalKeyboardKey.controlLeft, PhysicalKeyboardKey.controlRight]),
+  fn([PhysicalKeyboardKey.fn]),
+  meta([PhysicalKeyboardKey.metaLeft, PhysicalKeyboardKey.metaRight]),
+  shift([PhysicalKeyboardKey.shiftLeft, PhysicalKeyboardKey.shiftRight]);
+
+  const HotKeyModifier(this.physicalKeys);
+
+  final List<PhysicalKeyboardKey> physicalKeys;
+}
+
+enum HotKeyScope { system, inapp }
+
+class HotKey {
+  final KeyboardKey key;
+  final List<HotKeyModifier>? modifiers;
+  final HotKeyScope scope;
+
+  const HotKey({required this.key, this.modifiers, this.scope = HotKeyScope.system});
+}
+
+extension WoxKeyboardKeyExt on KeyboardKey {
+  String get keyLabel {
+    if (this is LogicalKeyboardKey) {
+      final logicalKey = this as LogicalKeyboardKey;
+      return logicalKey.keyLabel.isNotEmpty ? logicalKey.keyLabel : logicalKey.debugName ?? "Unknown";
+    }
+
+    final physicalKey = this is PhysicalKeyboardKey ? this as PhysicalKeyboardKey : null;
+    return WoxHotkey.physicalKeyLabel(physicalKey) ?? physicalKey?.debugName ?? "Unknown";
+  }
+}
 
 class HotkeyX {
   String raw;
   HotKey? normalHotkey; // normal hotkey, E.g. "ctrl+shift+a"
-  KeyboardKey? hyperHotkey; // Wox Hyper Key hotkey, E.g. "hyper+a"
   KeyboardKey? capsLockHotkey; // Caps Lock combination, E.g. "capslock+a"
   HotKeyModifier? doubleHotkey; // double hotkey, E.g. "ctrl+ctrl"
   LogicalKeyboardKey? singleHotkey; // single hotkey, E.g. "enter", usually used for default action hotkey
 
-  HotkeyX(this.raw, {this.normalHotkey, this.hyperHotkey, this.capsLockHotkey, this.doubleHotkey, this.singleHotkey});
+  HotkeyX(this.raw, {this.normalHotkey, this.capsLockHotkey, this.doubleHotkey, this.singleHotkey});
 
   bool get isNormalHotkey => normalHotkey != null;
-
-  bool get isHyperHotkey => hyperHotkey != null;
 
   bool get isCapsLockHotkey => capsLockHotkey != null;
 
@@ -49,14 +80,11 @@ class HotkeyAvailability {
 class WoxHotkey {
   static HotkeyX? parseHotkeyFromString(String value) {
     final modifiers = <HotKeyModifier>[];
-    var isHyper = false;
     var isCapsLockCombo = false;
     LogicalKeyboardKey? key;
     final tokens = value.split("+").map((element) => element.trim().toLowerCase()).where((element) => element.isNotEmpty).toList();
     for (final e in tokens) {
-      if (e == "hyper") {
-        isHyper = true;
-      } else if ((e == "capslock" || e == "caps_lock" || e == "caps lock") && tokens.length > 1) {
+      if ((e == "capslock" || e == "caps_lock" || e == "caps lock") && tokens.length > 1) {
         isCapsLockCombo = true;
       } else if (e == "alt" || e == "option") {
         modifiers.add(HotKeyModifier.alt);
@@ -224,10 +252,6 @@ class WoxHotkey {
       return HotkeyX(value, doubleHotkey: modifiers[0]);
     }
 
-    if (isHyper && key != null) {
-      return HotkeyX(value, hyperHotkey: key);
-    }
-
     if (isCapsLockCombo && key != null) {
       return HotkeyX(value, capsLockHotkey: key);
     }
@@ -349,6 +373,80 @@ class WoxHotkey {
     return allowedKeys.contains(key);
   }
 
+  static String? physicalKeyLabel(PhysicalKeyboardKey? key) {
+    return switch (key) {
+      PhysicalKeyboardKey.keyA => "A",
+      PhysicalKeyboardKey.keyB => "B",
+      PhysicalKeyboardKey.keyC => "C",
+      PhysicalKeyboardKey.keyD => "D",
+      PhysicalKeyboardKey.keyE => "E",
+      PhysicalKeyboardKey.keyF => "F",
+      PhysicalKeyboardKey.keyG => "G",
+      PhysicalKeyboardKey.keyH => "H",
+      PhysicalKeyboardKey.keyI => "I",
+      PhysicalKeyboardKey.keyJ => "J",
+      PhysicalKeyboardKey.keyK => "K",
+      PhysicalKeyboardKey.keyL => "L",
+      PhysicalKeyboardKey.keyM => "M",
+      PhysicalKeyboardKey.keyN => "N",
+      PhysicalKeyboardKey.keyO => "O",
+      PhysicalKeyboardKey.keyP => "P",
+      PhysicalKeyboardKey.keyQ => "Q",
+      PhysicalKeyboardKey.keyR => "R",
+      PhysicalKeyboardKey.keyS => "S",
+      PhysicalKeyboardKey.keyT => "T",
+      PhysicalKeyboardKey.keyU => "U",
+      PhysicalKeyboardKey.keyV => "V",
+      PhysicalKeyboardKey.keyW => "W",
+      PhysicalKeyboardKey.keyX => "X",
+      PhysicalKeyboardKey.keyY => "Y",
+      PhysicalKeyboardKey.keyZ => "Z",
+      PhysicalKeyboardKey.digit0 => "0",
+      PhysicalKeyboardKey.digit1 => "1",
+      PhysicalKeyboardKey.digit2 => "2",
+      PhysicalKeyboardKey.digit3 => "3",
+      PhysicalKeyboardKey.digit4 => "4",
+      PhysicalKeyboardKey.digit5 => "5",
+      PhysicalKeyboardKey.digit6 => "6",
+      PhysicalKeyboardKey.digit7 => "7",
+      PhysicalKeyboardKey.digit8 => "8",
+      PhysicalKeyboardKey.digit9 => "9",
+      PhysicalKeyboardKey.f1 => "F1",
+      PhysicalKeyboardKey.f2 => "F2",
+      PhysicalKeyboardKey.f3 => "F3",
+      PhysicalKeyboardKey.f4 => "F4",
+      PhysicalKeyboardKey.f5 => "F5",
+      PhysicalKeyboardKey.f6 => "F6",
+      PhysicalKeyboardKey.f7 => "F7",
+      PhysicalKeyboardKey.f8 => "F8",
+      PhysicalKeyboardKey.f9 => "F9",
+      PhysicalKeyboardKey.f10 => "F10",
+      PhysicalKeyboardKey.f11 => "F11",
+      PhysicalKeyboardKey.f12 => "F12",
+      PhysicalKeyboardKey.enter => "Enter",
+      PhysicalKeyboardKey.escape => "Escape",
+      PhysicalKeyboardKey.backspace => "Backspace",
+      PhysicalKeyboardKey.tab => "Tab",
+      PhysicalKeyboardKey.space => "Space",
+      PhysicalKeyboardKey.delete => "Delete",
+      PhysicalKeyboardKey.arrowLeft => "Arrow Left",
+      PhysicalKeyboardKey.arrowDown => "Arrow Down",
+      PhysicalKeyboardKey.arrowRight => "Arrow Right",
+      PhysicalKeyboardKey.arrowUp => "Arrow Up",
+      PhysicalKeyboardKey.home => "Home",
+      PhysicalKeyboardKey.end => "End",
+      PhysicalKeyboardKey.pageUp => "Page Up",
+      PhysicalKeyboardKey.pageDown => "Page Down",
+      PhysicalKeyboardKey.insert => "Insert",
+      PhysicalKeyboardKey.capsLock => "CapsLock",
+      PhysicalKeyboardKey.shiftLeft || PhysicalKeyboardKey.shiftRight => "Shift",
+      PhysicalKeyboardKey.controlLeft || PhysicalKeyboardKey.controlRight => "Control",
+      PhysicalKeyboardKey.altLeft || PhysicalKeyboardKey.altRight => "Alt",
+      PhysicalKeyboardKey.metaLeft || PhysicalKeyboardKey.metaRight => "Meta",
+      _ => null,
+    };
+  }
+
   static bool equals(HotKey? a, HotKey? b) {
     if (a == null || b == null) {
       return false;
@@ -382,10 +480,6 @@ class WoxHotkey {
     final keyStr = keyToStr(hotKey.key);
 
     return "${modifiers.join("+")}+$keyStr";
-  }
-
-  static String hyperHotkeyToStr(KeyboardKey key) {
-    return "hyper+${keyToStr(key)}";
   }
 
   static String capsLockHotkeyToStr(KeyboardKey key) {

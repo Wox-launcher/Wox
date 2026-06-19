@@ -14,7 +14,6 @@ type WoxSetting struct {
 	EnableAutostart      *PlatformValue[bool]
 	MainHotkey           *PlatformValue[string]
 	SelectionHotkey      *PlatformValue[string]
-	EnableHyperKey       *PlatformValue[bool]
 	IgnoredHotkeyApps    *PlatformValue[[]IgnoredHotkeyApp]
 	LogLevel             *WoxSettingValue[string]
 	UsePinYin            *WoxSettingValue[bool]
@@ -39,6 +38,11 @@ type WoxSetting struct {
 	ReleaseChannel     *WoxSettingValue[ReleaseChannel]
 	CustomPythonPath   *PlatformValue[string]
 	CustomNodejsPath   *PlatformValue[string]
+
+	// CloudSyncServerUrl is a local-only development override. It must not be
+	// synced because each device may target a different test server.
+	CloudSyncServerUrl       *WoxSettingValue[string]
+	CloudSyncDisabledPlugins *WoxSettingValue[[]string]
 
 	// HTTP proxy settings
 	HttpProxyEnabled *PlatformValue[bool]
@@ -288,7 +292,6 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 	return &WoxSetting{
 		MainHotkey:        NewPlatformValue(store, "MainHotkey", "alt+space", "cmd+space", "ctrl+space"),
 		SelectionHotkey:   NewPlatformValue(store, "SelectionHotkey", "ctrl+alt+space", "command+option+space", "ctrl+shift+j"),
-		EnableHyperKey:    NewPlatformValue(store, "EnableHyperKey", false, false, false),
 		IgnoredHotkeyApps: NewPlatformValue(store, "IgnoredHotkeyApps", []IgnoredHotkeyApp{}, []IgnoredHotkeyApp{}, []IgnoredHotkeyApp{}),
 		LogLevel: NewWoxSettingValueWithValidator(store, "LogLevel", LogLevelInfo, func(level string) bool {
 			return strings.EqualFold(level, LogLevelInfo) || strings.EqualFold(level, LogLevelDebug)
@@ -325,6 +328,8 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 		HttpProxyUrl:                       NewPlatformValue(store, "HttpProxyUrl", "", "", ""),
 		CustomPythonPath:                   NewPlatformValue(store, "CustomPythonPath", "", "", ""),
 		CustomNodejsPath:                   NewPlatformValue(store, "CustomNodejsPath", "", "", ""),
+		CloudSyncServerUrl:                 NewLocalWoxSettingValue(store, "CloudSyncServerUrl", ""),
+		CloudSyncDisabledPlugins:           NewWoxSettingValue(store, "CloudSyncDisabledPlugins", []string{}),
 		EnableAutoBackup:                   NewWoxSettingValue(store, "EnableAutoBackup", true),
 		EnableAutoUpdate:                   NewWoxSettingValue(store, "EnableAutoUpdate", true),
 		ReleaseChannel:                     NewWoxSettingValueWithValidator(store, "ReleaseChannel", ReleaseChannelStable, IsValidReleaseChannel),

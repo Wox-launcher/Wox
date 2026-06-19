@@ -1,4 +1,4 @@
-.PHONY: build clean host _bundle_mac_app plugins help dev sdk _update_sdk_versions _sync_sdk_versions test test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release appimage smoke www
+.PHONY: build clean host _bundle_mac_app plugins help dev sdk _update_sdk_versions _sync_sdk_versions test test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue appimage smoke www
 
 SMOKE_FILTER := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
 SQLITE_BUILD_TAGS ?= sqlite_fts5
@@ -55,6 +55,8 @@ RELEASE_DIR := release
 APPIMAGE_TOOL ?= appimagetool.AppImage
 APPIMAGE_DIR := $(RELEASE_DIR)/wox.AppDir
 APPIMAGE_NAME := wox-linux-$(ARCH).AppImage
+APPIMAGE_DESKTOP_FILE := io.github.WoxLauncher.Wox.desktop
+APPIMAGE_ICON_FILE := io.github.WoxLauncher.Wox.png
 ifeq ($(ARCH),amd64)
 	APPIMAGE_ARCH := x86_64
 else
@@ -77,6 +79,7 @@ help:
 	@echo "  clean      Clean release directory"
 	@echo "  host       Build plugin hosts"
 	@echo "  release    Create a new release (reads version from CHANGELOG.md)"
+	@echo "  release-continue Re-push the existing top CHANGELOG release tag after a failed release run"
 
 _check_deps:
 	@echo "Checking required dependencies..."
@@ -183,13 +186,13 @@ ifeq ($(PLATFORM),linux)
 	mkdir -p $(APPIMAGE_DIR)/usr/share/applications
 	cp $(RELEASE_DIR)/wox-linux-$(ARCH) $(APPIMAGE_DIR)/usr/bin/wox
 	chmod +x $(APPIMAGE_DIR)/usr/bin/wox
-	cp assets/linux/wox.desktop $(APPIMAGE_DIR)/wox.desktop
-	cp assets/linux/wox.desktop $(APPIMAGE_DIR)/usr/share/applications/wox.desktop
+	cp assets/linux/wox.desktop $(APPIMAGE_DIR)/$(APPIMAGE_DESKTOP_FILE)
+	cp assets/linux/wox.desktop $(APPIMAGE_DIR)/usr/share/applications/$(APPIMAGE_DESKTOP_FILE)
 	cp assets/linux/AppRun $(APPIMAGE_DIR)/AppRun
 	chmod +x $(APPIMAGE_DIR)/AppRun
-	cp assets/app.png $(APPIMAGE_DIR)/wox.png
+	cp assets/app.png $(APPIMAGE_DIR)/$(APPIMAGE_ICON_FILE)
 	cp assets/app.png $(APPIMAGE_DIR)/.DirIcon
-	cp assets/app.png $(APPIMAGE_DIR)/usr/share/icons/hicolor/256x256/apps/wox.png
+	cp assets/app.png $(APPIMAGE_DIR)/usr/share/icons/hicolor/256x256/apps/$(APPIMAGE_ICON_FILE)
 	ARCH=$(APPIMAGE_ARCH) $(APPIMAGE_TOOL) $(APPIMAGE_DIR) $(RELEASE_DIR)/$(APPIMAGE_NAME)
 else
 	@echo "appimage target is only supported on Linux"
@@ -284,6 +287,48 @@ _bundle_mac_app:
 
 release:
 	cd ci && go run . release
+
+release-continue:
+	@tag=$$(awk '/^## v[0-9]/{ print $$2; exit }' CHANGELOG.md); \
+	if [ -z "$$tag" ]; then \
+		echo "Unable to read release tag from the top CHANGELOG.md version header." >&2; \
+		exit 1; \
+	fi; \
+	if [ -n "$$(git status --porcelain)" ]; then \
+		echo "Please commit/stash your changes before continuing release $$tag." >&2; \
+		git status --short; \
+		exit 1; \
+	fi; \
+	if ! git ls-remote --exit-code --tags origin "refs/tags/$$tag" >/dev/null 2>&1; then \
+		echo "Remote release tag $$tag does not exist. Run make release first." >&2; \
+		exit 1; \
+	fi; \
+	remote_tag=$$(git ls-remote --tags origin "refs/tags/$$tag" | awk '{ print $$1; exit }'); \
+	current_head=$$(git rev-parse --short HEAD); \
+	echo ""; \
+	echo "============================================================"; \
+	echo "Release Continue Review"; \
+	echo "============================================================"; \
+	echo "Tag:             $$tag"; \
+	echo "Current HEAD:    $$current_head"; \
+	echo "Remote tag SHA:  $$remote_tag"; \
+	echo ""; \
+	echo "This will:"; \
+	echo "  1. Recreate local annotated tag $$tag at current HEAD"; \
+	echo "  2. Force-push $$tag to origin"; \
+	echo "  3. Trigger the GitHub Release workflow again"; \
+	echo "============================================================"; \
+	printf "\nProceed with release continue? (yes/no): "; \
+	read input; \
+	input=$$(printf "%s" "$$input" | tr '[:upper:]' '[:lower:]'); \
+	if [ "$$input" != "yes" ] && [ "$$input" != "y" ]; then \
+		echo "Release continue cancelled."; \
+		exit 0; \
+	fi; \
+	echo "Continuing release $$tag from current HEAD $$current_head"; \
+	git tag -f -a "$$tag" -m "Release $$tag"; \
+	git push origin "refs/tags/$$tag" --force; \
+	echo "Re-pushed $$tag."; \
 
 plugins:
 	cd ci && go run . plugin

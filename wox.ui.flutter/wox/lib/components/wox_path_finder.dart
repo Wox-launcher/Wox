@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_button.dart';
+import 'package:wox/components/wox_dialog.dart';
 import 'package:wox/components/wox_textfield.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/utils/colors.dart';
@@ -79,10 +80,7 @@ class _WoxPathFinderState extends State<WoxPathFinder> {
           context: context,
           barrierColor: getThemePopupBarrierColor(),
           builder:
-              (ctx) => AlertDialog(
-                backgroundColor: getThemePopupSurfaceColor(),
-                surfaceTintColor: Colors.transparent,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: getThemePopupOutlineColor())),
+              (ctx) => WoxDialog(
                 content: Text(tr("ui_data_config_location_change_confirm").replaceAll("{0}", picked)),
                 actions: [
                   WoxButton.secondary(text: tr("ui_data_config_location_change_cancel"), onPressed: () => Navigator.pop(ctx)),

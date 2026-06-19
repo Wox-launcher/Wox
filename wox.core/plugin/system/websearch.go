@@ -77,8 +77,7 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 		},
 		SettingDefinitions: []definition.PluginSettingDefinitionItem{
 			{
-				Type:               definition.PluginSettingDefinitionTypeSelect,
-				IsPlatformSpecific: true,
+				Type: definition.PluginSettingDefinitionTypeSelect,
 				Value: &definition.PluginSettingValueSelect{
 					Key:          webSearchDefaultBrowserSettingKey,
 					Label:        "i18n:plugin_websearch_default_browser",
@@ -88,8 +87,7 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 				},
 			},
 			{
-				Type:               definition.PluginSettingDefinitionTypeTable,
-				IsPlatformSpecific: true,
+				Type: definition.PluginSettingDefinitionTypeTable,
 				Value: &definition.PluginSettingValueTable{
 					Key:           webSearchesSettingKey,
 					Title:         "i18n:plugin_websearch_web_searches",

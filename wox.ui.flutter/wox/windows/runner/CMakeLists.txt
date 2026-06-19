@@ -32,9 +32,6 @@ add_executable(${BINARY_NAME} WIN32
 # that need different build settings.
 apply_standard_settings(${BINARY_NAME})
 target_compile_features(${BINARY_NAME} PUBLIC cxx_std_20)
-if(MSVC)
-  target_compile_options(${BINARY_NAME} PRIVATE /await)
-endif()
 
 # Add preprocessor definitions for the build version.
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION=\"${FLUTTER_VERSION}\"")
@@ -90,7 +87,6 @@ add_custom_command(
   TARGET wox_webview_dependencies_download PRE_BUILD
   COMMAND ${WOX_WEBVIEW_NUGET} install Microsoft.Windows.ImplementationLibrary -Version ${WOX_WEBVIEW_WIL_VERSION} -ExcludeVersion -OutputDirectory ${CMAKE_BINARY_DIR}/packages
   COMMAND ${WOX_WEBVIEW_NUGET} install Microsoft.Web.WebView2 -Version ${WOX_WEBVIEW_WEBVIEW2_VERSION} -ExcludeVersion -OutputDirectory ${CMAKE_BINARY_DIR}/packages
-  DEPENDS ${WOX_WEBVIEW_NUGET}
 )
 add_dependencies(${BINARY_NAME} wox_webview_dependencies_download)
 

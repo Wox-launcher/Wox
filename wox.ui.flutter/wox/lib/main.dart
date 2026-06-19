@@ -231,7 +231,7 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
       borderWidth: WoxThemeUtil.instance.currentTheme.value.appPaddingTop.toDouble(),
       onDragEnd: () {
         unawaited(launcherController.focusLauncherKeyboardTarget());
-        launcherController.saveWindowPositionIfNeeded();
+        launcherController.saveWindowPositionIfNeeded(reason: "drag-end");
       },
       onDragStart: launcherController.windowDriver.startDragging,
       child: WoxLauncherView(controller: launcherController),

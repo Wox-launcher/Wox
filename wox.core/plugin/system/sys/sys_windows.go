@@ -112,6 +112,18 @@ func runShowDesktopCommand() (*exec.Cmd, error) {
 	return runPowerShellScript(`(New-Object -ComObject Shell.Application).ToggleDesktop()`)
 }
 
+func isShowTaskViewCommandAvailable() bool {
+	return true
+}
+
+func runShowTaskViewCommand() (*exec.Cmd, error) {
+	hr := C.wox_sys_show_task_view()
+	if hresultFailed(hr) {
+		return nil, formatHRESULTError("show task view", hr)
+	}
+	return nil, nil
+}
+
 func isShowScreenSaverCommandAvailable() bool {
 	return commandExists("powershell.exe")
 }

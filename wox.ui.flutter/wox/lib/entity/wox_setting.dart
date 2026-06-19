@@ -5,7 +5,6 @@ class WoxSetting {
   late bool enableAutostart;
   late String mainHotkey;
   late String selectionHotkey;
-  late bool enableHyperKey;
   late List<IgnoredHotkeyApp> ignoredHotkeyApps;
   late String logLevel;
   late bool usePinYin;
@@ -24,6 +23,7 @@ class WoxSetting {
   late String launchMode;
   late String startPage;
   late String showPosition;
+  late bool isLinuxWaylandSession;
   late List<AIProvider> aiProviders;
   late int appWidth;
   late int maxResultCount;
@@ -44,6 +44,8 @@ class WoxSetting {
   late bool enableAnonymousUsageStats;
   late String customPythonPath;
   late String customNodejsPath;
+  late String cloudSyncServerUrl;
+  late List<String> cloudSyncDisabledPlugins;
   late bool showScoreTail;
   late bool showPerformanceTail;
   late bool showPerformanceTailBatch;
@@ -55,7 +57,6 @@ class WoxSetting {
     required this.enableAutostart,
     required this.mainHotkey,
     required this.selectionHotkey,
-    required this.enableHyperKey,
     required this.ignoredHotkeyApps,
     required this.logLevel,
     required this.usePinYin,
@@ -71,6 +72,7 @@ class WoxSetting {
     required this.launchMode,
     required this.startPage,
     required this.showPosition,
+    required this.isLinuxWaylandSession,
     required this.aiProviders,
     required this.appWidth,
     required this.maxResultCount,
@@ -89,6 +91,8 @@ class WoxSetting {
     required this.enableAnonymousUsageStats,
     required this.customPythonPath,
     required this.customNodejsPath,
+    this.cloudSyncServerUrl = '',
+    required this.cloudSyncDisabledPlugins,
     required this.showScoreTail,
     required this.showPerformanceTail,
     required this.showPerformanceTailBatch,
@@ -101,7 +105,6 @@ class WoxSetting {
     enableAutostart = json['EnableAutostart'] ?? false;
     mainHotkey = json['MainHotkey'];
     selectionHotkey = json['SelectionHotkey'];
-    enableHyperKey = json['EnableHyperKey'] ?? false;
     if (json['IgnoredHotkeyApps'] != null) {
       ignoredHotkeyApps = <IgnoredHotkeyApp>[];
       json['IgnoredHotkeyApps'].forEach((v) {
@@ -148,6 +151,7 @@ class WoxSetting {
 
     launchMode = json['LaunchMode'] ?? 'continue';
     startPage = json['StartPage'] ?? 'mru';
+    isLinuxWaylandSession = json['IsLinuxWaylandSession'] ?? false;
 
     if (json['AIProviders'] != null) {
       aiProviders = <AIProvider>[];
@@ -175,6 +179,12 @@ class WoxSetting {
     enableAnonymousUsageStats = json['EnableAnonymousUsageStats'] ?? true;
     customPythonPath = json['CustomPythonPath'] ?? '';
     customNodejsPath = json['CustomNodejsPath'] ?? '';
+    cloudSyncServerUrl = json['CloudSyncServerUrl'] ?? '';
+    if (json['CloudSyncDisabledPlugins'] != null) {
+      cloudSyncDisabledPlugins = List<String>.from(json['CloudSyncDisabledPlugins']);
+    } else {
+      cloudSyncDisabledPlugins = <String>[];
+    }
     showScoreTail = json['ShowScoreTail'] ?? false;
     showPerformanceTail = json['ShowPerformanceTail'] ?? false;
     showPerformanceTailBatch = json['ShowPerformanceTailBatch'] ?? true;
@@ -188,7 +198,6 @@ class WoxSetting {
     data['EnableAutostart'] = enableAutostart;
     data['MainHotkey'] = mainHotkey;
     data['SelectionHotkey'] = selectionHotkey;
-    data['EnableHyperKey'] = enableHyperKey;
     data['IgnoredHotkeyApps'] = ignoredHotkeyApps;
     data['LogLevel'] = logLevel;
     data['UsePinYin'] = usePinYin;
@@ -204,6 +213,7 @@ class WoxSetting {
     data['LaunchMode'] = launchMode;
     data['StartPage'] = startPage;
     data['ShowPosition'] = showPosition;
+    data['IsLinuxWaylandSession'] = isLinuxWaylandSession;
     data['AIProviders'] = aiProviders;
     data['AppWidth'] = appWidth;
     data['MaxResultCount'] = maxResultCount;
@@ -222,6 +232,8 @@ class WoxSetting {
     data['EnableAnonymousUsageStats'] = enableAnonymousUsageStats;
     data['CustomPythonPath'] = customPythonPath;
     data['CustomNodejsPath'] = customNodejsPath;
+    data['CloudSyncServerUrl'] = cloudSyncServerUrl;
+    data['CloudSyncDisabledPlugins'] = cloudSyncDisabledPlugins;
     data['ShowScoreTail'] = showScoreTail;
     data['ShowPerformanceTail'] = showPerformanceTail;
     data['ShowPerformanceTailBatch'] = showPerformanceTailBatch;
