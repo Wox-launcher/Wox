@@ -100,6 +100,7 @@ WoxSetting _setting({required int appWidth}) {
     enableAnonymousUsageStats: false,
     customPythonPath: '',
     customNodejsPath: '',
+    cloudSyncDisabledPlugins: [],
     showScoreTail: false,
     showPerformanceTail: false,
     showPerformanceTailBatch: true,

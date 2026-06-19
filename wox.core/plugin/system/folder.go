@@ -74,7 +74,8 @@ func (p *FolderPlugin) GetMetadata() plugin.Metadata {
 		},
 		SettingDefinitions: definition.PluginSettingDefinitions{
 			{
-				Type: definition.PluginSettingDefinitionTypeTable,
+				Type:               definition.PluginSettingDefinitionTypeTable,
+				IsPlatformSpecific: true,
 				Value: &definition.PluginSettingValueTable{
 					Key:     folderFavoritesSettingKey,
 					Title:   "i18n:plugin_folder_favorites",
@@ -588,7 +589,7 @@ func (p *FolderPlugin) saveFavorites(ctx context.Context, favorites []folderFavo
 		return err
 	}
 
-	p.api.SaveSetting(ctx, folderFavoritesSettingKey, string(data), false)
+	p.api.SaveSetting(ctx, folderFavoritesSettingKey, string(data), true)
 	return nil
 }
 

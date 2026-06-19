@@ -23,7 +23,9 @@ class WoxHotkeyDisplayUtil {
   }
 
   static String keyLabel(KeyboardKey key) {
-    if (key == LogicalKeyboardKey.enter) {
+    if (key == LogicalKeyboardKey.space || key == PhysicalKeyboardKey.space) {
+      return "Space";
+    } else if (key == LogicalKeyboardKey.enter) {
       return "⏎";
     } else if (key == LogicalKeyboardKey.arrowUp) {
       return "↑";

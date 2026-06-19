@@ -37,6 +37,8 @@ type WoxSettingDto struct {
 	EnableAnonymousUsageStats bool
 	CustomPythonPath          string
 	CustomNodejsPath          string
+	CloudSyncServerUrl        string
+	CloudSyncDisabledPlugins  []string
 
 	// UI related
 	AppWidth       int

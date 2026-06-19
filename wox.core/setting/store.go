@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"wox/cloudsync"
 	"wox/database"
 	"wox/util"
 
@@ -17,6 +18,14 @@ type SettingStore interface {
 	Get(key string, target interface{}) error
 	Set(key string, value interface{}) error
 	Delete(key string) error
+}
+
+// SyncableStore defines the interface for setting stores that support syncable operations
+// Any setting store implementing this interface will invoke SetWithSync/DeleteWithSync methods (instead of Set/Delete)
+// when setting/deleting values
+type SyncableStore interface {
+	SetWithSync(key string, value interface{}, syncable bool) error
+	DeleteWithSync(key string, syncable bool) error
 }
 
 type WoxSettingStore struct {
@@ -39,7 +48,7 @@ func (s *WoxSettingStore) Get(key string, target interface{}) error {
 }
 
 func (s *WoxSettingStore) Set(key string, value interface{}) error {
-	strValue, err := serializeValue(value)
+	strValue, err := SerializeValue(value)
 	if err != nil {
 		return fmt.Errorf("failed to serialize value: %w", err)
 	}
@@ -51,21 +60,42 @@ func (s *WoxSettingStore) Delete(key string) error {
 	return s.db.Delete(&database.WoxSetting{Key: key}).Error
 }
 
-func (s *WoxSettingStore) LogOplog(key string, value interface{}) error {
-	strValue, err := serializeValue(value)
+func (s *WoxSettingStore) SetWithSync(key string, value interface{}, syncable bool) error {
+	if err := s.Set(key, value); err != nil {
+		return err
+	}
+	if !syncable {
+		return nil
+	}
+	return s.logOplog(key, value, cloudsync.OpUpsert)
+}
+
+func (s *WoxSettingStore) DeleteWithSync(key string, syncable bool) error {
+	result := s.db.Delete(&database.WoxSetting{Key: key})
+	if result.Error != nil {
+		return result.Error
+	}
+	if !syncable || result.RowsAffected == 0 {
+		return nil
+	}
+	return s.logOplog(key, nil, cloudsync.OpDelete)
+}
+
+func (s *WoxSettingStore) logOplog(key string, value interface{}, op string) error {
+	strValue, err := SerializeValue(value)
 	if err != nil {
 		return fmt.Errorf("failed to serialize value for oplog: %w", err)
 	}
 
 	oplog := database.Oplog{
-		EntityType: "setting",
+		EntityType: cloudsync.EntityWoxSetting,
 		EntityID:   key,
-		Operation:  "update",
+		Operation:  op,
+		Key:        key,
 		Value:      strValue,
-		Timestamp:  util.GetSystemTimestamp(),
 	}
 
-	return s.db.Create(&oplog).Error
+	return writeCloudSyncOplog(s.db, oplog)
 }
 
 // PluginSettingStore defines the interface for plugin settings
@@ -91,7 +121,7 @@ func (s *PluginSettingStore) Get(key string, target interface{}) error {
 }
 
 func (s *PluginSettingStore) Set(key string, value interface{}) error {
-	strValue, err := serializeValue(value)
+	strValue, err := SerializeValue(value)
 	if err != nil {
 		return fmt.Errorf("failed to serialize plugin setting value: %w", err)
 	}
@@ -104,10 +134,146 @@ func (s *PluginSettingStore) Delete(key string) error {
 }
 
 func (s *PluginSettingStore) DeleteAll() error {
-	return s.db.Where("plugin_id = ?", s.pluginId).Delete(&database.PluginSetting{}).Error
+	var settings []database.PluginSetting
+	if err := s.db.Where("plugin_id = ?", s.pluginId).Find(&settings).Error; err != nil {
+		return err
+	}
+
+	if err := s.db.Where("plugin_id = ?", s.pluginId).Delete(&database.PluginSetting{}).Error; err != nil {
+		return err
+	}
+
+	for _, setting := range settings {
+		if err := s.logOplog(setting.Key, nil, cloudsync.OpDelete); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
-func serializeValue(value interface{}) (string, error) {
+func (s *PluginSettingStore) SetWithSync(key string, value interface{}, syncable bool) error {
+	if err := s.Set(key, value); err != nil {
+		return err
+	}
+	if !syncable {
+		return nil
+	}
+	return s.logOplog(key, value, cloudsync.OpUpsert)
+}
+
+func (s *PluginSettingStore) DeleteWithSync(key string, syncable bool) error {
+	result := s.db.Delete(&database.PluginSetting{PluginID: s.pluginId, Key: key})
+	if result.Error != nil {
+		return result.Error
+	}
+	if !syncable || result.RowsAffected == 0 {
+		return nil
+	}
+	return s.logOplog(key, nil, cloudsync.OpDelete)
+}
+
+func (s *PluginSettingStore) logOplog(key string, value interface{}, op string) error {
+	strValue, err := SerializeValue(value)
+	if err != nil {
+		return fmt.Errorf("failed to serialize plugin setting value for oplog: %w", err)
+	}
+
+	oplog := database.Oplog{
+		EntityType: cloudsync.EntityPluginSetting,
+		EntityID:   s.pluginId,
+		Operation:  op,
+		Key:        key,
+		Value:      strValue,
+	}
+
+	return writeCloudSyncOplog(s.db, oplog)
+}
+
+// writeCloudSyncOplog persists a local sync row according to the built-in CloudSync timing policy.
+func writeCloudSyncOplog(db *gorm.DB, oplog database.Oplog) error {
+	now := util.GetSystemTimestamp()
+	oplog.Timestamp = now
+
+	if oplog.Operation == cloudsync.OpDelete {
+		if err := writeImmediateDeleteCloudSyncOplog(db, oplog); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	policy := cloudsync.ResolveOplogSyncPolicy(oplog.EntityType, oplog.EntityID, oplog.Key, oplog.Operation)
+	if policy.Delay <= 0 {
+		if err := db.Create(&oplog).Error; err != nil {
+			return err
+		}
+		return nil
+	}
+
+	return upsertDeferredCloudSyncOplog(db, oplog, now+policy.Delay.Milliseconds(), now)
+}
+
+// upsertDeferredCloudSyncOplog coalesces high-churn settings into one pending latest-wins row.
+func upsertDeferredCloudSyncOplog(db *gorm.DB, oplog database.Oplog, syncAfter int64, now int64) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		var existing []database.Oplog
+		if err := tx.Where(
+			"synced_to_cloud = ? AND cloud_sync_discarded = ? AND entity_type = ? AND entity_id = ? AND operation = ? AND key = ?",
+			false,
+			false,
+			oplog.EntityType,
+			oplog.EntityID,
+			oplog.Operation,
+			oplog.Key,
+		).Order("id asc").Find(&existing).Error; err != nil {
+			return err
+		}
+		if len(existing) == 0 {
+			oplog.SyncAfter = syncAfter
+			return tx.Create(&oplog).Error
+		}
+
+		keepID := existing[0].ID
+		if len(existing) > 1 {
+			supersededIDs := make([]uint, 0, len(existing)-1)
+			for _, row := range existing[1:] {
+				supersededIDs = append(supersededIDs, row.ID)
+			}
+			if err := tx.Model(&database.Oplog{}).Where("id IN ?", supersededIDs).Update("synced_to_cloud", true).Error; err != nil {
+				return err
+			}
+		}
+
+		// Keep one pending row per delayed setting identity so rate limits or offline time do not replay stale intermediate values.
+		return tx.Model(&database.Oplog{}).Where("id = ?", keepID).Updates(map[string]interface{}{
+			"value":                        oplog.Value,
+			"timestamp":                    now,
+			"sync_after":                   syncAfter,
+			"cloud_sync_push_failed_count": 0,
+			"cloud_sync_last_push_error":   "",
+		}).Error
+	})
+}
+
+// writeImmediateDeleteCloudSyncOplog prevents an older delayed upsert from resurrecting a deleted setting remotely.
+func writeImmediateDeleteCloudSyncOplog(db *gorm.DB, oplog database.Oplog) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&database.Oplog{}).Where(
+			"synced_to_cloud = ? AND cloud_sync_discarded = ? AND entity_type = ? AND entity_id = ? AND operation = ? AND key = ?",
+			false,
+			false,
+			oplog.EntityType,
+			oplog.EntityID,
+			cloudsync.OpUpsert,
+			oplog.Key,
+		).Update("synced_to_cloud", true).Error; err != nil {
+			return err
+		}
+		return tx.Create(&oplog).Error
+	})
+}
+
+func SerializeValue(value interface{}) (string, error) {
 	if value == nil {
 		return "", nil
 	}

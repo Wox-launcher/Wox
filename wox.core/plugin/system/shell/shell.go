@@ -147,7 +147,8 @@ func (s *ShellPlugin) GetMetadata() plugin.Metadata {
 				},
 			},
 			{
-				Type: definition.PluginSettingDefinitionTypeTable,
+				Type:               definition.PluginSettingDefinitionTypeTable,
+				IsPlatformSpecific: true,
 				Value: &definition.PluginSettingValueTable{
 					Key:     shellCommandsSettingKey,
 					Title:   "i18n:plugin_shell_commands",
@@ -824,7 +825,7 @@ func (s *ShellPlugin) saveConfiguredCommands(ctx context.Context, commands []she
 	if err != nil {
 		return err
 	}
-	s.api.SaveSetting(ctx, shellCommandsSettingKey, string(data), false)
+	s.api.SaveSetting(ctx, shellCommandsSettingKey, string(data), true)
 	return nil
 }
 

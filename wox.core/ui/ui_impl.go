@@ -173,6 +173,10 @@ func (u *uiImpl) OpenSettingWindow(ctx context.Context, windowContext common.Set
 	u.invokeWebsocketMethod(ctx, "OpenSettingWindow", windowContext)
 }
 
+func (u *uiImpl) FocusSettingWindow(ctx context.Context) {
+	u.invokeWebsocketMethod(ctx, "FocusSettingWindow", nil)
+}
+
 func (u *uiImpl) OpenOnboardingWindow(ctx context.Context) {
 	// Onboarding reuses the same UI process and WebSocket command path as the
 	// settings window. Keeping it here avoids a second desktop window lifecycle
@@ -258,6 +262,18 @@ func (u *uiImpl) ReloadSettingPlugins(ctx context.Context) {
 
 func (u *uiImpl) ReloadSetting(ctx context.Context) {
 	u.invokeWebsocketMethod(ctx, "ReloadSetting", nil)
+}
+
+func (u *uiImpl) ReloadSettingThemes(ctx context.Context) {
+	u.invokeWebsocketMethod(ctx, "ReloadSettingThemes", nil)
+}
+
+func (u *uiImpl) CloudSyncProgressChanged(ctx context.Context, progress any) {
+	u.invokeWebsocketMethod(ctx, "CloudSyncProgressChanged", progress)
+}
+
+func (u *uiImpl) RefreshAccountStatus(ctx context.Context) {
+	u.invokeWebsocketMethod(ctx, "RefreshAccountStatus", nil)
 }
 
 func (u *uiImpl) UpdateResult(ctx context.Context, result interface{}) bool {

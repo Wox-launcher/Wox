@@ -19,10 +19,12 @@
 //         "Style": {
 //           "Width": 400
 //         }
-//       }
+//       },
+//       "IsPlatformSpecific": false
 //     }
 //   ]
 // }
+// Cloud sync note: mark path, command, hotkey, browser profile, and app path settings with "IsPlatformSpecific": true.
 
 /**
  * Wox Script Plugin Template

@@ -115,12 +115,49 @@ Use this reference as the source of truth when authoring `SettingDefinitions` in
 
 #### Common Properties
 
-| Property | Type       | Description                                                                                                                   |
-| -------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `Type`   | `string`   | Component type. Enum: `head`, `textbox`, `checkbox`, `select`, `label`, `newline`, `table`, `selectAIModel`, `dynamic`     |
-| `Value`  | `object`   | Configuration object specific to the type.                                                                                     |
+| Property              | Type       | Description                                                                                                       |
+| --------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------- |
+| `Type`                | `string`   | Component type. Enum: `head`, `textbox`, `checkbox`, `select`, `label`, `newline`, `table`, `selectAIModel`, `dynamic` |
+| `Value`               | `object`   | Configuration object specific to the type.                                                                        |
 | `DisabledInPlatforms` | `string[]` | Optional. Platforms where this setting is disabled. Uses SDK platform names such as `windows`, `darwin`, `linux`. |
-| `IsPlatformSpecific` | `boolean` | Optional. If `true`, Wox stores different values per platform.                                                       |
+| `IsPlatformSpecific`  | `boolean`  | Optional. If `true`, Wox stores different values per platform. Normal plugin settings are eligible for cloud sync, so use this for values that should not be shared across Windows, macOS, and Linux. |
+
+#### Cloud Sync And Platform-Specific Settings
+
+Before adding a setting, decide whether cloud sync should share one value across all devices or keep a separate value per platform.
+
+- Use `IsPlatformSpecific: false` for account IDs, API keys, remote service hosts, feature toggles, and user preferences that mean the same thing on every platform.
+- Use `IsPlatformSpecific: true` for local paths, executable paths, shell commands, hotkeys, system integrations, browser profiles, application paths, and any value that is likely to be invalid on another OS.
+- `DisabledInPlatforms` only controls where a setting is disabled in the UI. It does not create separate stored values and should not be used as a substitute for `IsPlatformSpecific`.
+- When code calls `SaveSetting` / `save_setting`, pass the same platform-specific decision used by the setting metadata. Do not hardcode `false` for dynamically saved platform-specific settings.
+
+Shared value example:
+
+```json
+{
+  "Type": "textbox",
+  "Value": {
+    "Key": "api_key",
+    "Label": "API Key",
+    "DefaultValue": ""
+  },
+  "IsPlatformSpecific": false
+}
+```
+
+Platform-specific value example:
+
+```json
+{
+  "Type": "textbox",
+  "Value": {
+    "Key": "executable_path",
+    "Label": "Executable Path",
+    "DefaultValue": ""
+  },
+  "IsPlatformSpecific": true
+}
+```
 
 #### Validators
 

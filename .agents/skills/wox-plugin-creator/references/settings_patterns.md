@@ -11,6 +11,14 @@ Use it when `plugin.json` needs `SettingDefinitions`, validators, dynamic settin
 - Use `selectAIModel` when the value should come from Wox-configured AI models.
 - Use a `table` when users need to add, edit, or delete rows.
 - Use a `dynamic` placeholder when the visible setting depends on current runtime state.
+- Decide whether each setting is platform-specific before publishing it. Normal plugin settings are eligible for cloud sync, so values that only work on one OS should use `IsPlatformSpecific: true`.
+
+## Cloud Sync Decision Checklist
+
+- Keep `IsPlatformSpecific: false` for account IDs, API keys, remote service hosts, shared feature toggles, and preferences that mean the same thing on Windows, macOS, and Linux.
+- Set `IsPlatformSpecific: true` for local directories, executable paths, shell commands, hotkeys, browser profiles, app paths, and system integration settings.
+- Use `DisabledInPlatforms` only to disable a setting on selected platforms. It does not isolate stored values.
+- When saving settings from code, pass the same platform-specific flag that the setting metadata declares.
 
 ## Pattern 1: Textbox With Validators
 
@@ -228,7 +236,7 @@ async def _on_get_dynamic_setting(ctx, key):
 
 ## Pattern 6: Platform-Specific Settings
 
-Use these top-level properties on any setting item:
+Use these top-level properties on any setting item whose value should differ by platform after cloud sync:
 
 ```json
 {
@@ -246,9 +254,23 @@ Use these top-level properties on any setting item:
 - `DisabledInPlatforms`: disable the control on selected platforms
 - `IsPlatformSpecific`: store a different value per platform
 
+Do not mark shared credentials or remote service configuration as platform-specific unless the service itself requires per-platform values:
+
+```json
+{
+  "Type": "textbox",
+  "Value": {
+    "Key": "api_key",
+    "Label": "API Key",
+    "DefaultValue": ""
+  },
+  "IsPlatformSpecific": false
+}
+```
+
 ## Node.js Notes
 
-- `SaveSetting` requires `isPlatformSpecific`.
+- `SaveSetting` requires `isPlatformSpecific`. Use the same value declared by the matching setting definition, especially for settings saved from actions or dynamic UI.
 - `OnGetDynamicSetting` is the runtime hook for `dynamic`.
 - Keep settings JSON-compatible; avoid relying on repo-local type files being present.
 
@@ -256,4 +278,4 @@ Use these top-level properties on any setting item:
 
 - Helper builders are intentionally limited.
 - For `select`, `table`, validators, or `dynamic`, build `PluginSettingDefinitionItem` and value objects directly.
-- `save_setting` requires `is_platform_specific`.
+- `save_setting` requires `is_platform_specific`. Use the same value declared by the matching setting definition, especially for settings saved from actions or dynamic UI.

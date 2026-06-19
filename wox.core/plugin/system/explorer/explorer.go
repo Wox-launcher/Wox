@@ -104,7 +104,8 @@ func (c *ExplorerPlugin) GetMetadata() plugin.Metadata {
 		},
 		SettingDefinitions: definition.PluginSettingDefinitions{
 			{
-				Type: definition.PluginSettingDefinitionTypeCheckBox,
+				Type:               definition.PluginSettingDefinitionTypeCheckBox,
+				IsPlatformSpecific: true,
 				Value: &definition.PluginSettingValueCheckBox{
 					Key:          enableTypeToSearchSettingKey,
 					Label:        "i18n:plugin_explorer_setting_enable_type_to_search",
@@ -113,7 +114,8 @@ func (c *ExplorerPlugin) GetMetadata() plugin.Metadata {
 				},
 			},
 			{
-				Type: definition.PluginSettingDefinitionTypeTable,
+				Type:               definition.PluginSettingDefinitionTypeTable,
+				IsPlatformSpecific: true,
 				Value: &definition.PluginSettingValueTable{
 					Key:     quickJumpPathsSettingKey,
 					Title:   "i18n:plugin_explorer_setting_quick_jump_paths",
@@ -758,7 +760,7 @@ func (c *ExplorerPlugin) saveQuickJumpPaths(ctx context.Context, paths []string)
 		return false
 	}
 
-	c.api.SaveSetting(ctx, quickJumpPathsSettingKey, string(payload), false)
+	c.api.SaveSetting(ctx, quickJumpPathsSettingKey, string(payload), true)
 	return true
 }
 

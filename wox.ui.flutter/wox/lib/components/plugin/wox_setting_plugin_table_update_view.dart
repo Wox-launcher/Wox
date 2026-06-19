@@ -12,6 +12,7 @@ import 'package:wox/components/wox_app_selector.dart';
 import 'package:wox/components/wox_hotkey_recorder_view.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_image_selector.dart';
+import 'package:wox/components/wox_dialog.dart';
 import 'package:wox/components/wox_loading_indicator.dart';
 import 'package:wox/components/wox_query_variable_textfield.dart';
 import 'package:wox/components/wox_textfield.dart';
@@ -805,9 +806,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
   @override
   Widget build(BuildContext context) {
     return Obx(() {
-      final bool darkTheme = isThemeDark();
       final Color accentColor = getThemeActiveBackgroundColor();
-      final Color cardColor = getThemePopupSurfaceColor();
       final Color textColor = getThemeTextColor();
       final double maxLabelWidth = measureMaxLabelWidth(context);
       // Table add/update dialogs used to have only the shared adaptive width,
@@ -816,110 +815,91 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
       // tables to reserve enough room for long query fields and descriptions.
       final double dialogContentWidth =
           widget.item.updateDialogWidth > 0 ? widget.item.updateDialogWidth.toDouble() : math.max(600, maxLabelWidth + math.max(320, getMaxColumnWidth()));
-      final Color outlineColor = getThemePopupOutlineColor();
-      final baseTheme = Theme.of(context);
-      final dialogTheme = baseTheme.copyWith(
-        colorScheme: ColorScheme.fromSeed(seedColor: accentColor, brightness: darkTheme ? Brightness.dark : Brightness.light),
-        scaffoldBackgroundColor: Colors.transparent,
-        cardColor: cardColor,
-        shadowColor: textColor.withAlpha(50),
-      );
 
-      return Theme(
-        data: dialogTheme,
-        child: Focus(
-          autofocus: true,
-          onKeyEvent: (node, event) => _handleDialogKeyEvent(context, event),
-          child: AlertDialog(
-            backgroundColor: cardColor,
-            surfaceTintColor: Colors.transparent,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: outlineColor)),
-            elevation: 18,
-            insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
-            contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-            actionsPadding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
-            actionsAlignment: MainAxisAlignment.end,
-            content: SizedBox(
-              width: dialogContentWidth,
-              child: SingleChildScrollView(
-                // Desktop scrollbars overlay this scroll view, so reserve a small
-                // right gutter for long tooltips and wide inputs instead of letting
-                // the thumb cover readable text.
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 20),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 4),
-                      for (var column in columns)
-                        if (!column.hideInUpdate)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    SizedBox(
-                                      width: maxLabelWidth,
-                                      child: Text(tr(column.label), style: TextStyle(color: textColor.withValues(alpha: 0.92), fontSize: 14, fontWeight: FontWeight.w600)),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    // Table row editors use the same compact split layout as plugin
-                                    // settings because their dialogs are much narrower than full
-                                    // settings pages and need the input column to stay scannable.
-                                    buildColumn(column),
-                                  ],
-                                ),
-                                if (column.tooltip != "")
-                                  Padding(
-                                    padding: EdgeInsets.only(top: 4, left: maxLabelWidth + 10),
-                                    child: ExcludeFocus(
-                                      child: WoxMarkdownView(
-                                        data: tr(column.tooltip),
-                                        fontColor: textColor.withValues(alpha: 0.6),
-                                        fontSize: 12,
-                                        linkColor: accentColor,
-                                        linkHoverColor: accentColor.withValues(alpha: 0.8),
-                                        selectable: true,
-                                      ),
-                                    ),
-                                  ),
-                                if ((fieldValidationErrors[column.key] ?? "").isNotEmpty)
-                                  Padding(
-                                    padding: EdgeInsets.only(top: column.tooltip != "" ? 4 : 2, left: maxLabelWidth + 10),
-                                    child: Text(tr(fieldValidationErrors[column.key]!), style: const TextStyle(color: Colors.red, fontSize: 12)),
-                                  ),
-                              ],
-                            ),
-                          ),
-                      if (saveErrorMessage.isNotEmpty)
+      return Focus(
+        autofocus: true,
+        onKeyEvent: (node, event) => _handleDialogKeyEvent(context, event),
+        child: WoxDialog(
+          content: SizedBox(
+            width: dialogContentWidth,
+            child: SingleChildScrollView(
+              // Desktop scrollbars overlay this scroll view, so reserve a small
+              // right gutter for long tooltips and wide inputs instead of letting
+              // the thumb cover readable text.
+              child: Padding(
+                padding: const EdgeInsets.only(right: 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 4),
+                    for (var column in columns)
+                      if (!column.hideInUpdate)
                         Padding(
-                          padding: EdgeInsets.only(top: 2, left: maxLabelWidth + 10),
-                          child: Text(tr(saveErrorMessage), style: const TextStyle(color: Colors.red, fontSize: 12)),
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  SizedBox(
+                                    width: maxLabelWidth,
+                                    child: Text(tr(column.label), style: TextStyle(color: textColor.withValues(alpha: 0.92), fontSize: 14, fontWeight: FontWeight.w600)),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  // Table row editors use the same compact split layout as plugin
+                                  // settings because their dialogs are much narrower than full
+                                  // settings pages and need the input column to stay scannable.
+                                  buildColumn(column),
+                                ],
+                              ),
+                              if (column.tooltip != "")
+                                Padding(
+                                  padding: EdgeInsets.only(top: 4, left: maxLabelWidth + 10),
+                                  child: ExcludeFocus(
+                                    child: WoxMarkdownView(
+                                      data: tr(column.tooltip),
+                                      fontColor: textColor.withValues(alpha: 0.6),
+                                      fontSize: 12,
+                                      linkColor: accentColor,
+                                      linkHoverColor: accentColor.withValues(alpha: 0.8),
+                                      selectable: true,
+                                    ),
+                                  ),
+                                ),
+                              if ((fieldValidationErrors[column.key] ?? "").isNotEmpty)
+                                Padding(
+                                  padding: EdgeInsets.only(top: column.tooltip != "" ? 4 : 2, left: maxLabelWidth + 10),
+                                  child: Text(tr(fieldValidationErrors[column.key]!), style: const TextStyle(color: Colors.red, fontSize: 12)),
+                                ),
+                            ],
+                          ),
                         ),
-                    ],
-                  ),
+                    if (saveErrorMessage.isNotEmpty)
+                      Padding(
+                        padding: EdgeInsets.only(top: 2, left: maxLabelWidth + 10),
+                        child: Text(tr(saveErrorMessage), style: const TextStyle(color: Colors.red, fontSize: 12)),
+                      ),
+                  ],
                 ),
               ),
             ),
-            actions: [
-              WoxButton.secondary(text: tr("ui_cancel"), padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12), onPressed: () => Navigator.pop(context)),
-              const SizedBox(width: 12),
-              WoxButton.primary(
-                text: isSaving ? "${tr("ui_save")}..." : tr("ui_save"),
-                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
-                onPressed:
-                    isSaving
-                        ? null
-                        : () {
-                          _saveData(context);
-                        },
-              ),
-            ],
           ),
+          actions: [
+            WoxButton.secondary(text: tr("ui_cancel"), padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12), onPressed: () => Navigator.pop(context)),
+            const SizedBox(width: 12),
+            WoxButton.primary(
+              text: isSaving ? "${tr("ui_save")}..." : tr("ui_save"),
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+              onPressed:
+                  isSaving
+                      ? null
+                      : () {
+                        _saveData(context);
+                      },
+            ),
+          ],
         ),
       );
     });

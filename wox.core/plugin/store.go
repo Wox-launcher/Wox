@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"wox/cloudsync"
 	"wox/database"
 	"wox/i18n"
 	"wox/setting"
@@ -182,7 +183,7 @@ func (s *Store) setPluginManifests(ctx context.Context, manifests []StorePluginM
 	}
 	s.lastManifestSignature = signature
 
-	GetPluginManager().GetUI().ReloadSettingPlugins(ctx)
+	reloadSettingPlugins(ctx)
 }
 
 func (s *Store) buildManifestSignature(manifests []StorePluginManifest) string {
@@ -265,6 +266,94 @@ func (s *Store) GetStorePluginManifestById(ctx context.Context, id string) (Stor
 	return StorePluginManifest{}, fmt.Errorf("plugin %s not found", id)
 }
 
+// QueueInstalledPluginsForSync seeds current store-installed plugins into the oplog.
+func (s *Store) QueueInstalledPluginsForSync(ctx context.Context) {
+	for _, instance := range GetPluginManager().GetPluginInstances() {
+		if instance.IsSystemPlugin || instance.IsDevPlugin || s.isCloudSyncDisabled(ctx, instance.Metadata.Id) {
+			continue
+		}
+		manifest, ok := s.findSyncableStoreManifest(ctx, instance.Metadata.Id)
+		if !ok {
+			logger.Warn(ctx, fmt.Sprintf("skip plugin install sync for %s: store manifest not found", instance.Metadata.Id))
+			continue
+		}
+		s.logInstalledPluginUpsert(ctx, manifest)
+	}
+}
+
+// findSyncableStoreManifest resolves the downloadable store manifest required
+// to reproduce a plugin install on another device.
+func (s *Store) findSyncableStoreManifest(ctx context.Context, pluginID string) (StorePluginManifest, bool) {
+	if manifest, err := s.GetStorePluginManifestById(ctx, pluginID); err == nil {
+		return manifest, true
+	}
+
+	manifests := s.GetStorePluginManifests(ctx)
+	if len(manifests) > 0 {
+		s.setPluginManifests(ctx, manifests)
+	}
+	manifest, found := lo.Find(manifests, func(item StorePluginManifest) bool {
+		return item.Id == pluginID
+	})
+	return manifest, found
+}
+
+// logInstalledPluginUpsert records successful user-triggered plugin installs
+// without failing the already-completed install if oplog writing fails.
+func (s *Store) logInstalledPluginUpsert(ctx context.Context, manifest StorePluginManifest) {
+	if s.isCloudSyncDisabled(ctx, manifest.Id) {
+		return
+	}
+	manifestJSON, err := json.Marshal(manifest)
+	if err != nil {
+		logger.Warn(ctx, fmt.Sprintf("failed to encode installed plugin sync value for %s: %s", manifest.Id, err.Error()))
+		return
+	}
+	value := cloudsync.InstalledPluginValue{
+		ID:       manifest.Id,
+		Version:  manifest.Version,
+		Source:   cloudsync.InstallSyncSourceStore,
+		Manifest: manifestJSON,
+	}
+	if err := cloudsync.LogInstalledPluginUpsert(ctx, value); err != nil {
+		logger.Warn(ctx, fmt.Sprintf("failed to log installed plugin sync value for %s: %s", manifest.Id, err.Error()))
+	}
+}
+
+// logInstalledPluginDelete records successful user-triggered plugin uninstalls
+// without failing the already-completed uninstall if oplog writing fails.
+func (s *Store) logInstalledPluginDelete(ctx context.Context, pluginID string) {
+	if s.isCloudSyncDisabled(ctx, pluginID) {
+		return
+	}
+	if err := cloudsync.LogInstalledPluginDelete(ctx, pluginID); err != nil {
+		logger.Warn(ctx, fmt.Sprintf("failed to log installed plugin delete for %s: %s", pluginID, err.Error()))
+	}
+}
+
+// isCloudSyncDisabled keeps plugin install-list sync aligned with plugin
+// setting sync exclusions.
+func (s *Store) isCloudSyncDisabled(ctx context.Context, pluginID string) bool {
+	if setting.GetSettingManager() == nil {
+		return false
+	}
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	if woxSetting == nil {
+		return false
+	}
+	return lo.Contains(woxSetting.CloudSyncDisabledPlugins.Get(), pluginID)
+}
+
+// reloadSettingPlugins tolerates early restore flows before plugin manager UI
+// has been attached.
+func reloadSettingPlugins(ctx context.Context) {
+	sharedUI := GetPluginManager().GetUI()
+	if sharedUI == nil {
+		return
+	}
+	sharedUI.ReloadSettingPlugins(ctx)
+}
+
 func (s *Store) Search(ctx context.Context, keyword string) []StorePluginManifest {
 	return lo.Filter(s.pluginManifests, func(manifest StorePluginManifest, _ int) bool {
 		if !IsAnySupportedInCurrentOS(manifest.SupportedOS) {
@@ -295,7 +384,18 @@ func (s *Store) Install(ctx context.Context, manifest StorePluginManifest) error
 	return s.InstallWithProgress(ctx, manifest, nil)
 }
 
+// InstallLocal installs a plugin without writing cloud-sync install oplogs.
+func (s *Store) InstallLocal(ctx context.Context, manifest StorePluginManifest) error {
+	return s.installWithProgress(ctx, manifest, nil, false)
+}
+
 func (s *Store) InstallWithProgress(ctx context.Context, manifest StorePluginManifest, progressCallback InstallProgressCallback) error {
+	return s.installWithProgress(ctx, manifest, progressCallback, true)
+}
+
+// installWithProgress keeps local restore and user-triggered installs on the
+// same file/runtime path while controlling whether the result is synced.
+func (s *Store) installWithProgress(ctx context.Context, manifest StorePluginManifest, progressCallback InstallProgressCallback, syncInstall bool) error {
 	// Serialize all install/uninstall operations. Without this lock, a user
 	// installing two plugins in quick succession causes the operations to race:
 	// both may try to unload/reload the same runtime host, write to overlapping
@@ -357,7 +457,10 @@ func (s *Store) InstallWithProgress(ctx context.Context, manifest StorePluginMan
 		}
 	}
 
-	GetPluginManager().GetUI().ReloadSettingPlugins(ctx)
+	reloadSettingPlugins(ctx)
+	if syncInstall {
+		s.logInstalledPluginUpsert(ctx, manifest)
+	}
 	return nil
 }
 
@@ -789,7 +892,7 @@ func (s *Store) InstallFromLocalWithProgress(ctx context.Context, filePath strin
 	}
 
 	// notify UI to reload
-	GetPluginManager().GetUI().ReloadSettingPlugins(ctx)
+	reloadSettingPlugins(ctx)
 
 	if progressCallback != nil {
 		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_install_progress_complete"))
@@ -802,12 +905,29 @@ func (s *Store) Uninstall(ctx context.Context, plugin *Instance, skipCleanSettin
 	return s.UninstallWithProgress(ctx, plugin, skipCleanSetting, nil)
 }
 
+// UninstallLocal removes a plugin without writing cloud-sync install oplogs.
+func (s *Store) UninstallLocal(ctx context.Context, plugin *Instance, skipCleanSetting bool) error {
+	return s.uninstallWithProgress(ctx, plugin, skipCleanSetting, nil, false)
+}
+
 func (s *Store) UninstallWithProgress(ctx context.Context, plugin *Instance, skipCleanSetting bool, progressCallback UninstallProgressCallback) error {
+	return s.uninstallWithProgress(ctx, plugin, skipCleanSetting, progressCallback, true)
+}
+
+// uninstallWithProgress shares the same uninstall path for UI actions and
+// cloud restores while controlling whether the removal is synced.
+func (s *Store) uninstallWithProgress(ctx context.Context, plugin *Instance, skipCleanSetting bool, progressCallback UninstallProgressCallback, syncInstall bool) error {
 	// Acquire the same lock used by InstallWithProgress so that an uninstall
 	// triggered directly from the UI cannot race with an in-progress install.
 	s.installMu.Lock()
 	defer s.installMu.Unlock()
-	return s.uninstallLocked(ctx, plugin, skipCleanSetting, progressCallback)
+	if err := s.uninstallLocked(ctx, plugin, skipCleanSetting, progressCallback); err != nil {
+		return err
+	}
+	if syncInstall && !plugin.IsSystemPlugin && !plugin.IsDevPlugin {
+		s.logInstalledPluginDelete(ctx, plugin.Metadata.Id)
+	}
+	return nil
 }
 
 // uninstallLocked performs the actual uninstall work. It must only be called
@@ -884,7 +1004,7 @@ func (s *Store) uninstallLocked(ctx context.Context, plugin *Instance, skipClean
 				if restoreErr := GetPluginManager().LoadPlugin(ctx, plugin.PluginDirectory); restoreErr != nil {
 					logger.Error(ctx, fmt.Sprintf("failed to restore plugin %s(%s) after uninstall rollback: %s", plugin.Metadata.GetName(ctx), plugin.Metadata.Version, restoreErr.Error()))
 				}
-				GetPluginManager().GetUI().ReloadSettingPlugins(ctx)
+				reloadSettingPlugins(ctx)
 				return removeErr
 			}
 		}
@@ -903,7 +1023,7 @@ func (s *Store) uninstallLocked(ctx context.Context, plugin *Instance, skipClean
 		reportProgress("plugin_uninstall_progress_unloading")
 		GetPluginManager().UnloadPlugin(ctx, plugin)
 	}
-	GetPluginManager().GetUI().ReloadSettingPlugins(ctx)
+	reloadSettingPlugins(ctx)
 
 	reportProgress("plugin_uninstall_progress_complete")
 

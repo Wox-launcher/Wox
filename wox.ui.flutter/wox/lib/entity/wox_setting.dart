@@ -44,6 +44,8 @@ class WoxSetting {
   late bool enableAnonymousUsageStats;
   late String customPythonPath;
   late String customNodejsPath;
+  late String cloudSyncServerUrl;
+  late List<String> cloudSyncDisabledPlugins;
   late bool showScoreTail;
   late bool showPerformanceTail;
   late bool showPerformanceTailBatch;
@@ -89,6 +91,8 @@ class WoxSetting {
     required this.enableAnonymousUsageStats,
     required this.customPythonPath,
     required this.customNodejsPath,
+    this.cloudSyncServerUrl = '',
+    required this.cloudSyncDisabledPlugins,
     required this.showScoreTail,
     required this.showPerformanceTail,
     required this.showPerformanceTailBatch,
@@ -175,6 +179,12 @@ class WoxSetting {
     enableAnonymousUsageStats = json['EnableAnonymousUsageStats'] ?? true;
     customPythonPath = json['CustomPythonPath'] ?? '';
     customNodejsPath = json['CustomNodejsPath'] ?? '';
+    cloudSyncServerUrl = json['CloudSyncServerUrl'] ?? '';
+    if (json['CloudSyncDisabledPlugins'] != null) {
+      cloudSyncDisabledPlugins = List<String>.from(json['CloudSyncDisabledPlugins']);
+    } else {
+      cloudSyncDisabledPlugins = <String>[];
+    }
     showScoreTail = json['ShowScoreTail'] ?? false;
     showPerformanceTail = json['ShowPerformanceTail'] ?? false;
     showPerformanceTailBatch = json['ShowPerformanceTailBatch'] ?? true;
@@ -222,6 +232,8 @@ class WoxSetting {
     data['EnableAnonymousUsageStats'] = enableAnonymousUsageStats;
     data['CustomPythonPath'] = customPythonPath;
     data['CustomNodejsPath'] = customNodejsPath;
+    data['CloudSyncServerUrl'] = cloudSyncServerUrl;
+    data['CloudSyncDisabledPlugins'] = cloudSyncDisabledPlugins;
     data['ShowScoreTail'] = showScoreTail;
     data['ShowPerformanceTail'] = showPerformanceTail;
     data['ShowPerformanceTailBatch'] = showPerformanceTailBatch;

@@ -36,8 +36,11 @@ require (
 	github.com/tidwall/pretty v1.2.1
 	github.com/tmc/langchaingo v0.1.14
 	github.com/wissance/stringFormatter v1.6.1
+	github.com/zalando/go-keyring v0.2.1
 	go.uber.org/zap v1.27.1
+	golang.org/x/crypto v0.44.0
 	golang.org/x/image v0.34.0
+	golang.org/x/sync v0.19.0
 	golang.org/x/sys v0.39.0
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.31.1
@@ -45,7 +48,9 @@ require (
 )
 
 require (
+	github.com/alessio/shellescape v1.4.1 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
+	github.com/danieljoos/wincred v1.1.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
@@ -63,7 +68,6 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
-	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/text v0.32.0 // indirect
 	google.golang.org/protobuf v1.36.8 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect

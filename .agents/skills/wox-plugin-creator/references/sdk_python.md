@@ -70,7 +70,7 @@ All methods are async and require `ctx`.
 ### Settings
 
 - `get_setting(ctx, key)`: Get setting.
-- `save_setting(ctx, key, value, is_platform_specific)`: Save setting.
+- `save_setting(ctx, key, value, is_platform_specific)`: Save setting. Normal plugin settings are eligible for cloud sync, so pass `True` for platform-only values such as local paths, executable paths, shell commands, hotkeys, browser profiles, application paths, and system integrations.
 - `on_setting_changed(ctx, callback)`: Listen for changes.
 - `on_get_dynamic_setting(ctx, callback)`: Provide runtime-generated setting definitions for `dynamic` settings.
 
@@ -100,6 +100,8 @@ All methods are async and require `ctx`.
 - For advanced settings such as `select`, `table`, validators, or `dynamic`, construct `PluginSettingDefinitionItem` and the corresponding value objects directly, or emit the expected JSON shape manually.
 - For the exact `plugin.json` and validator shape, read `references/plugin_json_schema.md`.
 - For ready-to-copy advanced settings examples, read `references/settings_patterns.md`.
+- Match runtime `save_setting(ctx, key, value, is_platform_specific)` calls to the setting metadata. Do not hardcode `False` for dynamically saved settings if their `SettingDefinitions` entry uses `IsPlatformSpecific: true`.
+- `DisabledInPlatforms` only controls where the setting is disabled; it does not isolate cloud-synced values.
 - Use static `QueryRequirements` in `plugin.json` when a query requires settings such as API keys. Wox blocks the query before calling `query()` and shows the built-in `query_requirement_settings` setup preview.
 - There is no runtime `register_query_requirements` API. Declare query requirements in metadata.
 

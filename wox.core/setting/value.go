@@ -2,6 +2,7 @@ package setting
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"wox/util"
 )
@@ -23,52 +24,26 @@ type SettingValue[T any] struct {
 	mu           sync.RWMutex
 }
 
+// local setting value. Don't set this value directly, use get,set instead
+// setting value that is only stored locally and not synced
+type LocalSettingValue[T any] struct {
+	*SettingValue[T]
+}
+
+// wox setting value. Don't set this value directly, use get,set instead
 type WoxSettingValue[T any] struct {
 	*SettingValue[T]
 }
 
 // platform specific setting value. Don't set this value directly, use get,set instead
+// The physical storage key of a platform setting is automatically suffixed with @windows, @darwin, or @linux based on the current platform.
 type PlatformValue[T any] struct {
-	*WoxSettingValue[struct {
-		MacValue   T
-		WinValue   T
-		LinuxValue T
-	}]
+	*WoxSettingValue[T]
 }
 
 type PluginSettingValue[T any] struct {
 	*SettingValue[T]
 	pluginId string
-}
-
-func (p *PlatformValue[T]) Get() T {
-	if util.IsWindows() {
-		return p.SettingValue.Get().WinValue
-	} else if util.IsMacOS() {
-		return p.SettingValue.Get().MacValue
-	} else if util.IsLinux() {
-		return p.SettingValue.Get().LinuxValue
-	}
-
-	panic("unknown platform")
-}
-
-func (p *PlatformValue[T]) Set(t T) {
-	if util.IsWindows() {
-		p.value.WinValue = t
-		p.SettingValue.Set(p.value)
-		return
-	} else if util.IsMacOS() {
-		p.value.MacValue = t
-		p.SettingValue.Set(p.value)
-		return
-	} else if util.IsLinux() {
-		p.value.LinuxValue = t
-		p.SettingValue.Set(p.value)
-		return
-	}
-
-	panic("unknown platform")
 }
 
 func NewWoxSettingValue[T any](store *WoxSettingStore, key string, defaultValue T) *WoxSettingValue[T] {
@@ -77,6 +52,20 @@ func NewWoxSettingValue[T any](store *WoxSettingStore, key string, defaultValue 
 			settingStore: store,
 			key:          key,
 			defaultValue: defaultValue,
+			syncable:     true,
+		},
+	}
+}
+
+// NewLocalWoxSettingValue creates a Wox setting that is persisted only on the
+// current device and is excluded from cloud sync replication.
+func NewLocalWoxSettingValue[T any](store *WoxSettingStore, key string, defaultValue T) *WoxSettingValue[T] {
+	return &WoxSettingValue[T]{
+		SettingValue: &SettingValue[T]{
+			settingStore: store,
+			key:          key,
+			defaultValue: defaultValue,
+			syncable:     false,
 		},
 	}
 }
@@ -88,22 +77,44 @@ func NewWoxSettingValueWithValidator[T any](store *WoxSettingStore, key string, 
 			key:          key,
 			defaultValue: defaultValue,
 			validator:    validator,
+			syncable:     true,
 		},
 	}
 }
 
 func NewPlatformValue[T any](store *WoxSettingStore, key string, winValue T, macValue T, linuxValue T) *PlatformValue[T] {
-	return &PlatformValue[T]{
-		WoxSettingValue: NewWoxSettingValue(store, key, struct {
-			MacValue   T
-			WinValue   T
-			LinuxValue T
-		}{
-			MacValue:   macValue,
-			WinValue:   winValue,
-			LinuxValue: linuxValue,
-		}),
+	currentDefaultValue := linuxValue
+	if util.IsWindows() {
+		currentDefaultValue = winValue
+	} else if util.IsMacOS() {
+		currentDefaultValue = macValue
 	}
+
+	// PlatformValue binds its physical storage key once at construction, so the
+	// inherited Get/Set methods operate on MainHotkey@darwin-style keys directly.
+	return &PlatformValue[T]{
+		WoxSettingValue: NewWoxSettingValue(store, PlatformSettingKey(key, util.GetCurrentPlatform()), currentDefaultValue),
+	}
+}
+
+// PlatformSettingKey builds the same physical key shape used by plugin platform settings.
+func PlatformSettingKey(baseKey string, platform string) string {
+	return fmt.Sprintf("%s@%s", baseKey, strings.ToLower(strings.TrimSpace(platform)))
+}
+
+// SplitPlatformSettingKey parses keys like MainHotkey@darwin.
+func SplitPlatformSettingKey(key string) (string, string, bool) {
+	index := strings.LastIndex(key, "@")
+	if index <= 0 || index == len(key)-1 {
+		return "", "", false
+	}
+
+	baseKey := key[:index]
+	platform := strings.ToLower(strings.TrimSpace(key[index+1:]))
+	if !util.IsSupportedPlatform(platform) {
+		return "", "", false
+	}
+	return baseKey, platform, true
 }
 
 func NewPluginSettingValue[T any](store *PluginSettingStore, key string, defaultValue T) *PluginSettingValue[T] {
@@ -112,6 +123,7 @@ func NewPluginSettingValue[T any](store *PluginSettingStore, key string, default
 			settingStore: store,
 			key:          key,
 			defaultValue: defaultValue,
+			syncable:     true,
 		},
 		pluginId: store.pluginId,
 	}
@@ -158,7 +170,11 @@ func (v *SettingValue[T]) Set(newValue T) error {
 
 	var err error
 	if v.settingStore != nil {
-		err = v.settingStore.Set(v.key, newValue)
+		if syncStore, ok := v.settingStore.(SyncableStore); ok {
+			err = syncStore.SetWithSync(v.key, newValue, v.syncable)
+		} else {
+			err = v.settingStore.Set(v.key, newValue)
+		}
 	} else {
 		return fmt.Errorf("no store available")
 	}
@@ -168,6 +184,56 @@ func (v *SettingValue[T]) Set(newValue T) error {
 	}
 
 	v.value = newValue
+	v.isLoaded = true
+	return nil
+}
+
+func (v *SettingValue[T]) Key() string {
+	return v.key
+}
+
+func (v *SettingValue[T]) IsSyncable() bool {
+	return v.syncable
+}
+
+func (v *SettingValue[T]) SetLocal(newValue T) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+
+	if v.settingStore == nil {
+		return fmt.Errorf("no store available")
+	}
+
+	if err := v.settingStore.Set(v.key, newValue); err != nil {
+		return err
+	}
+
+	v.value = newValue
+	v.isLoaded = true
+	return nil
+}
+
+func (v *SettingValue[T]) SetFromString(strValue string) error {
+	var decoded T
+	if err := deserializeValue(strValue, &decoded); err != nil {
+		return err
+	}
+	return v.SetLocal(decoded)
+}
+
+func (v *SettingValue[T]) DeleteLocal() error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+
+	if v.settingStore == nil {
+		return fmt.Errorf("no store available")
+	}
+
+	if err := v.settingStore.Delete(v.key); err != nil {
+		return err
+	}
+
+	v.value = v.defaultValue
 	v.isLoaded = true
 	return nil
 }

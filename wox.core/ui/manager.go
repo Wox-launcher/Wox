@@ -17,6 +17,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"wox/account"
 	"wox/analytics"
 	"wox/common"
 	"wox/diagnostic"
@@ -972,22 +973,22 @@ func (m *Manager) startUIAppWithConfig(ctx context.Context, appPath string, conf
 
 		stopRequested := m.uiStopRequested.Load()
 		diagnostic.GetManager().RecordUIExit(waitCtx, pid, waitErr, stopRequested)
-    
-    markerPath := filepath.Join(filepath.Dir(util.GetLocation().GetUIAppPath()), "gpu_recovery.marker")
-    gpuRecovery := false
-    if util.IsFileExists(markerPath) {
-      gpuRecovery = true
-      logger.Info(waitCtx, "detected GPU recovery marker, will restart UI instead of quitting")
-      if removeErr := os.Remove(markerPath); removeErr != nil {
-          logger.Warn(waitCtx, fmt.Sprintf("failed to remove GPU recovery marker: %s", removeErr.Error()))
-      } 
-    }
-    
+
+		markerPath := filepath.Join(filepath.Dir(util.GetLocation().GetUIAppPath()), "gpu_recovery.marker")
+		gpuRecovery := false
+		if util.IsFileExists(markerPath) {
+			gpuRecovery = true
+			logger.Info(waitCtx, "detected GPU recovery marker, will restart UI instead of quitting")
+			if removeErr := os.Remove(markerPath); removeErr != nil {
+				logger.Warn(waitCtx, fmt.Sprintf("failed to remove GPU recovery marker: %s", removeErr.Error()))
+			}
+		}
+
 		if stopRequested {
 			logger.Info(waitCtx, fmt.Sprintf("ui app process(%d) exited after stop request", pid))
 			return
 		}
-    
+
 		if fallback != nil && m.uiReadyAt.Load() == 0 {
 			logger.Warn(waitCtx, fmt.Sprintf("ui app process(%d) exited before ready with backend=%s, retrying with backend=%s", pid, config.Backend, fallback.Backend))
 			logUILaunchConfig(waitCtx, *fallback, nil)
@@ -1006,8 +1007,8 @@ func (m *Manager) startUIAppWithConfig(ctx context.Context, appPath string, conf
 		} else {
 			logger.Info(waitCtx, fmt.Sprintf("ui app process(%d) exited", pid))
 		}
-    
-    if gpuRecovery {
+
+		if gpuRecovery {
 			// This is a GPU recovery, restart the UI instead of quitting
 			logger.Info(waitCtx, "restarting UI after GPU recovery")
 			// Wait a bit for GPU to stabilize
@@ -1311,6 +1312,22 @@ func (m *Manager) ChangeTheme(ctx context.Context, theme common.Theme) {
 	}
 }
 
+// ApplyCurrentTheme pushes the currently configured theme to Flutter without writing ThemeId again.
+func (m *Manager) ApplyCurrentTheme(ctx context.Context) {
+	theme := m.GetCurrentTheme(ctx)
+	if theme.ThemeId == "" {
+		logger.Warn(ctx, "skip applying current theme: configured theme not found")
+		return
+	}
+
+	if impl, ok := m.GetUI(ctx).(*uiImpl); ok {
+		impl.ChangeThemeWithoutSave(ctx, theme)
+		return
+	}
+
+	logger.Warn(ctx, "skip applying current theme: UI does not support applying without saving")
+}
+
 func (m *Manager) GetUI(ctx context.Context) common.UI {
 	return m.ui
 }
@@ -1485,6 +1502,15 @@ func (m *Manager) HideTray() {
 }
 
 func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value string) {
+	// If the setting key is platform-specific, only apply it if it matches the current platform.
+	// Cloud sync may send settings for other platforms, which should be ignored here.
+	if baseKey, platform, ok := setting.SplitPlatformSettingKey(key); ok {
+		if platform != util.GetCurrentPlatform() {
+			return
+		}
+		key = baseKey
+	}
+
 	var vb bool
 	var vs = value
 	if vb1, err := strconv.ParseBool(vs); err == nil {
@@ -2272,6 +2298,21 @@ func (m *Manager) ProcessDeeplink(ctx context.Context, deeplink string) {
 		binding := arguments["binding"]
 		if binding != "" {
 			keyboard.InvokeGnomeHotkeyCallback(binding)
+		}
+	}
+
+	if strings.HasPrefix(command, "billing/") {
+		ui, isUIImpl := m.ui.(*uiImpl)
+		if isUIImpl {
+			ui.FocusSettingWindow(ctx)
+		}
+		if accountService := account.GetService(); accountService != nil {
+			if err := accountService.RefreshAccount(ctx); err != nil {
+				util.GetLogger().Warn(ctx, fmt.Sprintf("failed to refresh account after billing deeplink: %v", err))
+			}
+		}
+		if isUIImpl {
+			ui.RefreshAccountStatus(ctx)
 		}
 	}
 
