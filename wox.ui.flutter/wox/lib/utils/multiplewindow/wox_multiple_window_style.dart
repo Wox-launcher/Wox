@@ -3,8 +3,8 @@
 // Native helpers for Flutter's experimental internal windowing API. This file
 // imports platform-specific `_window_*` internals to reach the HWND/NSWindow
 // handles used for frame removal, placement, topmost state, and custom
-// dragging. Recheck it when upgrading Flutter; it was first verified on Flutter
-// 3.45.0-1.0.pre-196, master revision 2731746a84.
+// dragging. Recheck it when upgrading Flutter; it was last verified on Flutter
+// 3.45.0-0.1.pre, framework revision b79192e735.
 
 import 'dart:async';
 import 'dart:ffi' as ffi;
@@ -554,7 +554,7 @@ class WoxMultipleWindowStyle {
 
   static int? _macOSWindowHandleOf(Object controller) {
     if (controller is macos_windowing.RegularWindowControllerMacOS) {
-      final handle = controller.getWindowHandle();
+      final handle = controller.windowHandle;
       if (handle.address != 0) {
         return handle.address;
       }
@@ -564,7 +564,7 @@ class WoxMultipleWindowStyle {
 
   static ffi.Pointer<ffi.Void>? _windowHandleOf(Object controller) {
     if (controller is win32_windowing.RegularWindowControllerWin32) {
-      return controller.getWindowHandle();
+      return controller.windowHandle;
     }
     return null;
   }
