@@ -20,6 +20,8 @@ enum _CloudSyncAccountAction { changePassword, logout }
 
 enum _CloudSyncSubscriptionAction { refreshStatus, subscribePro, manageSubscription }
 
+typedef _CloudSyncErrorNormalizer = String Function(String error, {int? nextSyncAfter});
+
 class WoxSettingCloudSyncView extends WoxSettingBaseView {
   const WoxSettingCloudSyncView({super.key});
 
@@ -190,59 +192,19 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
   }
 
   Future<String?> showTokenDialog(BuildContext context, String title, String hint) async {
-    final tokenController = TextEditingController();
-    try {
-      return await showDialog<String>(
-        context: context,
-        barrierColor: getThemePopupBarrierColor(),
-        builder: (context) {
-          return WoxDialog(
-            title: Text(title),
-            content: WoxTextField(controller: tokenController, hintText: hint, width: 360),
-            actions: [
-              WoxButton.secondary(text: controller.tr("ui_cloud_sync_cancel"), onPressed: () => Navigator.pop(context)),
-              WoxButton.primary(text: controller.tr("ui_cloud_sync_confirm"), onPressed: () => Navigator.pop(context, tokenController.text.trim())),
-            ],
-          );
-        },
-      );
-    } finally {
-      tokenController.dispose();
-    }
+    return await showDialog<String>(
+      context: context,
+      barrierColor: getThemePopupBarrierColor(),
+      builder: (context) => _CloudSyncTokenDialog(controller: controller, title: title, hint: hint),
+    );
   }
 
   Future<Map<String, String>?> showResetPasswordDialog(BuildContext context) async {
-    final tokenController = TextEditingController();
-    final passwordController = TextEditingController();
-    try {
-      return await showDialog<Map<String, String>>(
-        context: context,
-        barrierColor: getThemePopupBarrierColor(),
-        builder: (context) {
-          return WoxDialog(
-            title: Text(controller.tr("ui_cloud_sync_account_reset_confirm")),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                WoxTextField(controller: tokenController, hintText: controller.tr("ui_cloud_sync_account_reset_token"), width: 360),
-                const SizedBox(height: 10),
-                WoxTextField(controller: passwordController, hintText: controller.tr("ui_cloud_sync_account_new_password"), width: 360, obscureText: true),
-              ],
-            ),
-            actions: [
-              WoxButton.secondary(text: controller.tr("ui_cloud_sync_cancel"), onPressed: () => Navigator.pop(context)),
-              WoxButton.primary(
-                text: controller.tr("ui_cloud_sync_confirm"),
-                onPressed: () => Navigator.pop(context, {"token": tokenController.text.trim(), "password": passwordController.text}),
-              ),
-            ],
-          );
-        },
-      );
-    } finally {
-      tokenController.dispose();
-      passwordController.dispose();
-    }
+    return await showDialog<Map<String, String>>(
+      context: context,
+      barrierColor: getThemePopupBarrierColor(),
+      builder: (context) => _CloudSyncResetPasswordDialog(controller: controller),
+    );
   }
 
   Future<void> showRecoveryCodeDialog(BuildContext context, String code) async {
@@ -281,89 +243,15 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
   }
 
   Future<Map<String, String>?> showCloudSyncInitKeyDialog(BuildContext context) async {
-    final recoveryController = TextEditingController();
-    final deviceController = TextEditingController();
-    try {
-      return await showDialog<Map<String, String>>(
-        context: context,
-        barrierColor: getThemePopupBarrierColor(),
-        builder: (context) {
-          return WoxDialog(
-            title: Text(controller.tr("ui_cloud_sync_key_init_title")),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(controller.tr("ui_cloud_sync_recovery_code_hint"), style: TextStyle(color: getThemeSubTextColor(), fontSize: 12)),
-                const SizedBox(height: 6),
-                WoxTextField(controller: recoveryController, hintText: controller.tr("ui_cloud_sync_recovery_code_hint"), width: 360),
-                const SizedBox(height: 12),
-                Text(controller.tr("ui_cloud_sync_device_name"), style: TextStyle(color: getThemeSubTextColor(), fontSize: 12)),
-                const SizedBox(height: 6),
-                WoxTextField(controller: deviceController, hintText: controller.tr("ui_cloud_sync_device_name_hint"), width: 360),
-              ],
-            ),
-            actions: [
-              WoxButton.secondary(
-                text: controller.tr("ui_cloud_sync_cancel"),
-                onPressed: () {
-                  Navigator.pop(context);
-                },
-              ),
-              WoxButton.primary(
-                text: controller.tr("ui_cloud_sync_confirm"),
-                onPressed: () {
-                  Navigator.pop(context, {"recoveryCode": recoveryController.text.trim(), "deviceName": deviceController.text.trim()});
-                },
-              ),
-            ],
-          );
-        },
-      );
-    } finally {
-      recoveryController.dispose();
-      deviceController.dispose();
-    }
+    return await showDialog<Map<String, String>>(
+      context: context,
+      barrierColor: getThemePopupBarrierColor(),
+      builder: (context) => _CloudSyncInitKeyDialog(controller: controller),
+    );
   }
 
   Future<String?> showCloudSyncFetchKeyDialog(BuildContext context) async {
-    final recoveryController = TextEditingController();
-    try {
-      return await showDialog<String>(
-        context: context,
-        barrierColor: getThemePopupBarrierColor(),
-        builder: (context) {
-          return WoxDialog(
-            title: Text(controller.tr("ui_cloud_sync_key_fetch_title")),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(controller.tr("ui_cloud_sync_recovery_code_hint"), style: TextStyle(color: getThemeSubTextColor(), fontSize: 12)),
-                const SizedBox(height: 6),
-                WoxTextField(controller: recoveryController, hintText: controller.tr("ui_cloud_sync_recovery_code_hint"), width: 360),
-              ],
-            ),
-            actions: [
-              WoxButton.secondary(
-                text: controller.tr("ui_cloud_sync_cancel"),
-                onPressed: () {
-                  Navigator.pop(context);
-                },
-              ),
-              WoxButton.primary(
-                text: controller.tr("ui_cloud_sync_confirm"),
-                onPressed: () {
-                  Navigator.pop(context, recoveryController.text.trim());
-                },
-              ),
-            ],
-          );
-        },
-      );
-    } finally {
-      recoveryController.dispose();
-    }
+    return await showDialog<String>(context: context, barrierColor: getThemePopupBarrierColor(), builder: (context) => _CloudSyncFetchKeyDialog(controller: controller));
   }
 
   Future<bool?> showCloudSyncResetDialog(BuildContext context) async {
@@ -395,279 +283,25 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
 
   // Resets the lost encryption password path and immediately starts a new local-to-cloud sync.
   Future<bool?> showCloudSyncForgotRecoveryCodeDialog(BuildContext context) async {
-    const dialogContentWidth = 360.0;
-    final recoveryController = TextEditingController();
-    final confirmRecoveryController = TextEditingController();
-    try {
-      return await showDialog<bool>(
-        context: context,
-        barrierColor: getThemePopupBarrierColor(),
-        builder: (context) {
-          String? validationError;
-          bool isSubmitting = false;
-
-          Future<void> submit(StateSetter setDialogState) async {
-            if (isSubmitting) {
-              return;
-            }
-            final recoveryCode = recoveryController.text.trim();
-            final confirmRecoveryCode = confirmRecoveryController.text.trim();
-            String? nextError;
-            if (recoveryCode.isEmpty) {
-              nextError = controller.tr("ui_cloud_sync_recovery_code_required");
-            } else if (confirmRecoveryCode.isEmpty) {
-              nextError = controller.tr("ui_cloud_sync_recovery_code_confirm_required");
-            } else if (recoveryCode != confirmRecoveryCode) {
-              nextError = controller.tr("ui_cloud_sync_recovery_code_mismatch");
-            }
-            if (nextError != null) {
-              setDialogState(() {
-                validationError = nextError;
-              });
-              return;
-            }
-
-            setDialogState(() {
-              validationError = null;
-              isSubmitting = true;
-            });
-            final resetToken = await controller.cloudSyncPrepareReset();
-            if (!context.mounted) {
-              return;
-            }
-            if (resetToken == null) {
-              setDialogState(() {
-                validationError = normalizeCloudSyncError(controller.cloudSyncActionError.value);
-                isSubmitting = false;
-              });
-              return;
-            }
-
-            await controller.cloudSyncReset(resetToken);
-            if (!context.mounted) {
-              return;
-            }
-            if (controller.cloudSyncActionError.value.isNotEmpty) {
-              setDialogState(() {
-                validationError = normalizeCloudSyncError(controller.cloudSyncActionError.value);
-                isSubmitting = false;
-              });
-              return;
-            }
-
-            final started = await controller.cloudSyncBootstrapStart(recoveryCode);
-            if (!context.mounted) {
-              return;
-            }
-            if (started) {
-              Navigator.pop(context, true);
-              return;
-            }
-            setDialogState(() {
-              validationError = normalizeCloudSyncError(controller.cloudSyncActionError.value);
-              isSubmitting = false;
-            });
-          }
-
-          return StatefulBuilder(
-            builder: (context, setDialogState) {
-              return WoxDialog(
-                title: Text(controller.tr("ui_cloud_sync_forgot_recovery_code_title")),
-                content: SizedBox(
-                  width: dialogContentWidth,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(controller.tr("ui_cloud_sync_forgot_recovery_code_description"), style: TextStyle(color: getThemeSubTextColor(), fontSize: 12, height: 1.45)),
-                      const SizedBox(height: 12),
-                      Text(
-                        controller.tr("ui_cloud_sync_forgot_recovery_code_new_password"),
-                        style: TextStyle(color: getThemeTextColor(), fontSize: 12, fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 6),
-                      WoxTextField(
-                        controller: recoveryController,
-                        hintText: controller.tr("ui_cloud_sync_recovery_code_hint"),
-                        width: dialogContentWidth,
-                        obscureText: true,
-                        enabled: !isSubmitting,
-                        onSubmitted: (_) => submit(setDialogState),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        controller.tr("ui_cloud_sync_forgot_recovery_code_confirm_new_password"),
-                        style: TextStyle(color: getThemeTextColor(), fontSize: 12, fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 6),
-                      WoxTextField(
-                        controller: confirmRecoveryController,
-                        hintText: controller.tr("ui_cloud_sync_recovery_code_confirm_hint"),
-                        width: dialogContentWidth,
-                        obscureText: true,
-                        enabled: !isSubmitting,
-                        onSubmitted: (_) => submit(setDialogState),
-                      ),
-                      if (validationError != null) ...[const SizedBox(height: 10), Text(validationError!, style: const TextStyle(color: Colors.red, fontSize: 12))],
-                      if (validationError == null && isSubmitting) ...[
-                        const SizedBox(height: 10),
-                        Text(controller.tr("ui_cloud_sync_loading"), style: TextStyle(color: getThemeSubTextColor(), fontSize: 12)),
-                      ],
-                    ],
-                  ),
-                ),
-                actions: [
-                  WoxButton.secondary(text: controller.tr("ui_cloud_sync_cancel"), onPressed: isSubmitting ? null : () => Navigator.pop(context, false)),
-                  WoxButton.primary(
-                    text: isSubmitting ? controller.tr("ui_cloud_sync_loading") : controller.tr("ui_cloud_sync_forgot_recovery_code_start_new_sync"),
-                    onPressed: isSubmitting ? null : () => submit(setDialogState),
-                  ),
-                ],
-              );
-            },
-          );
-        },
-      );
-    } finally {
-      recoveryController.dispose();
-      confirmRecoveryController.dispose();
-    }
+    return await showDialog<bool>(
+      context: context,
+      barrierColor: getThemePopupBarrierColor(),
+      builder: (context) => _CloudSyncForgotRecoveryCodeDialog(controller: controller, normalizeCloudSyncError: normalizeCloudSyncError),
+    );
   }
 
   Future<void> showCloudSyncBootstrapDialog(BuildContext context, WoxCloudSyncBootstrapStatus status) async {
-    const dialogContentWidth = 360.0;
-    final recoveryController = TextEditingController();
-    final confirmRecoveryController = TextEditingController();
-    try {
-      await showDialog<void>(
-        context: context,
-        barrierColor: getThemePopupBarrierColor(),
-        builder: (context) {
-          String? validationError;
-          bool isSubmitting = false;
-
-          Future<void> submit(StateSetter setDialogState) async {
-            if (isSubmitting) {
-              return;
-            }
-            final recoveryCode = recoveryController.text.trim();
-            final confirmRecoveryCode = confirmRecoveryController.text.trim();
-            String? nextError;
-            if (recoveryCode.isEmpty) {
-              nextError = controller.tr("ui_cloud_sync_recovery_code_required");
-            } else if (!status.hasRemoteData && confirmRecoveryCode.isEmpty) {
-              nextError = controller.tr("ui_cloud_sync_recovery_code_confirm_required");
-            } else if (!status.hasRemoteData && recoveryCode != confirmRecoveryCode) {
-              nextError = controller.tr("ui_cloud_sync_recovery_code_mismatch");
-            }
-            if (nextError != null) {
-              setDialogState(() {
-                validationError = nextError;
-              });
-              return;
-            }
-
-            setDialogState(() {
-              validationError = null;
-              isSubmitting = true;
-            });
-            final started = await controller.cloudSyncBootstrapStart(recoveryCode);
-            if (!context.mounted) {
-              return;
-            }
-            if (started) {
-              Navigator.pop(context);
-              return;
-            }
-            setDialogState(() {
-              validationError = normalizeCloudSyncError(controller.cloudSyncActionError.value);
-              isSubmitting = false;
-            });
-          }
-
-          return StatefulBuilder(
-            builder: (context, setDialogState) {
-              return WoxDialog(
-                title: Text(status.hasRemoteData ? controller.tr("ui_cloud_sync_bootstrap_restore_title") : controller.tr("ui_cloud_sync_bootstrap_start_title")),
-                content: SizedBox(
-                  width: dialogContentWidth,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        status.hasRemoteData ? controller.tr("ui_cloud_sync_bootstrap_restore_description") : controller.tr("ui_cloud_sync_bootstrap_start_description"),
-                        style: TextStyle(color: getThemeSubTextColor(), fontSize: 12, height: 1.45),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(controller.tr("ui_cloud_sync_recovery_code"), style: TextStyle(color: getThemeTextColor(), fontSize: 12, fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 6),
-                      WoxTextField(
-                        controller: recoveryController,
-                        hintText: controller.tr("ui_cloud_sync_recovery_code_hint"),
-                        width: dialogContentWidth,
-                        obscureText: true,
-                        enabled: !isSubmitting,
-                        onSubmitted: (_) => submit(setDialogState),
-                      ),
-                      if (!status.hasRemoteData) ...[
-                        const SizedBox(height: 12),
-                        Text(controller.tr("ui_cloud_sync_recovery_code_confirm"), style: TextStyle(color: getThemeTextColor(), fontSize: 12, fontWeight: FontWeight.w600)),
-                        const SizedBox(height: 6),
-                        WoxTextField(
-                          controller: confirmRecoveryController,
-                          hintText: controller.tr("ui_cloud_sync_recovery_code_confirm_hint"),
-                          width: dialogContentWidth,
-                          obscureText: true,
-                          enabled: !isSubmitting,
-                          onSubmitted: (_) => submit(setDialogState),
-                        ),
-                      ],
-                      if (validationError != null) ...[const SizedBox(height: 10), Text(validationError!, style: const TextStyle(color: Colors.red, fontSize: 12))],
-                      if (validationError == null && isSubmitting) ...[
-                        const SizedBox(height: 10),
-                        Text(controller.tr("ui_cloud_sync_loading"), style: TextStyle(color: getThemeSubTextColor(), fontSize: 12)),
-                      ],
-                    ],
-                  ),
-                ),
-                actionsAlignment: status.hasRemoteData ? MainAxisAlignment.spaceBetween : MainAxisAlignment.end,
-                actions: [
-                  if (status.hasRemoteData)
-                    WoxButton.text(
-                      text: controller.tr("ui_cloud_sync_forgot_recovery_code"),
-                      onPressed:
-                          isSubmitting
-                              ? null
-                              : () async {
-                                final started = await showCloudSyncForgotRecoveryCodeDialog(context);
-                                if (!context.mounted || started != true) {
-                                  return;
-                                }
-                                Navigator.pop(context);
-                              },
-                    ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      WoxButton.secondary(text: controller.tr("ui_cloud_sync_cancel"), onPressed: isSubmitting ? null : () => Navigator.pop(context)),
-                      const SizedBox(width: 8),
-                      WoxButton.primary(
-                        text: isSubmitting ? controller.tr("ui_cloud_sync_loading") : controller.tr("ui_cloud_sync_confirm"),
-                        onPressed: isSubmitting ? null : () => submit(setDialogState),
-                      ),
-                    ],
-                  ),
-                ],
-              );
-            },
-          );
-        },
-      );
-    } finally {
-      recoveryController.dispose();
-      confirmRecoveryController.dispose();
-    }
+    await showDialog<void>(
+      context: context,
+      barrierColor: getThemePopupBarrierColor(),
+      builder:
+          (context) => _CloudSyncBootstrapDialog(
+            controller: controller,
+            status: status,
+            normalizeCloudSyncError: normalizeCloudSyncError,
+            showForgotRecoveryCodeDialog: showCloudSyncForgotRecoveryCodeDialog,
+          ),
+    );
   }
 
   Widget buildCloudSyncStatusSection(BuildContext context) {
@@ -829,6 +463,7 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
             formField(
               settingKey: "CloudSyncSubscriptionStatus",
               label: controller.tr("ui_cloud_sync_plan_status"),
+              labelTrailing: _buildCloudSyncPlanStatusTooltip(),
               labelWidth: _cloudSyncLabelWidth,
               tips: controller.tr("ui_cloud_sync_plan_status_tips"),
               child: SizedBox(
@@ -899,6 +534,23 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
         ],
       );
     });
+  }
+
+  Widget _buildCloudSyncPlanStatusTooltip() {
+    final plan = controller.cloudSyncBillingPlan.value;
+    final freePrice = _cloudSyncPlanPriceText(plan.free.price);
+    final proPrice = _cloudSyncPlanPriceText(plan.pro.price);
+
+    return Tooltip(
+      richMessage: WidgetSpan(child: SizedBox(width: 560, child: _buildCloudSyncPlanTable(compact: false, freePrice: freePrice, proPrice: proPrice))),
+      padding: const EdgeInsets.all(10),
+      margin: const EdgeInsets.all(12),
+      waitDuration: const Duration(milliseconds: 250),
+      showDuration: const Duration(seconds: 20),
+      preferBelow: false,
+      decoration: BoxDecoration(color: getThemePopupSurfaceColor(), borderRadius: BorderRadius.circular(8), border: Border.all(color: getThemePopupOutlineColor())),
+      child: Icon(Icons.info_outline, size: 14, color: getThemeSubTextColor().withValues(alpha: 0.82)),
+    );
   }
 
   // Keeps account-level commands reachable without making the logged-in account summary look action-heavy.
@@ -1515,6 +1167,460 @@ class _CloudSyncIntroFeature {
   final String description;
 
   const _CloudSyncIntroFeature({required this.icon, required this.title, required this.description});
+}
+
+// Owns a single token controller for the dialog route lifecycle, including close animations.
+class _CloudSyncTokenDialog extends StatefulWidget {
+  final WoxSettingController controller;
+  final String title;
+  final String hint;
+
+  const _CloudSyncTokenDialog({required this.controller, required this.title, required this.hint});
+
+  @override
+  State<_CloudSyncTokenDialog> createState() => _CloudSyncTokenDialogState();
+}
+
+class _CloudSyncTokenDialogState extends State<_CloudSyncTokenDialog> {
+  final _tokenController = TextEditingController();
+
+  @override
+  void dispose() {
+    _tokenController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return WoxDialog(
+      title: Text(widget.title),
+      content: WoxTextField(controller: _tokenController, hintText: widget.hint, width: 360),
+      actions: [
+        WoxButton.secondary(text: widget.controller.tr("ui_cloud_sync_cancel"), onPressed: () => Navigator.pop(context)),
+        WoxButton.primary(text: widget.controller.tr("ui_cloud_sync_confirm"), onPressed: () => Navigator.pop(context, _tokenController.text.trim())),
+      ],
+    );
+  }
+}
+
+// Owns reset-password field controllers until the dialog is fully disposed.
+class _CloudSyncResetPasswordDialog extends StatefulWidget {
+  final WoxSettingController controller;
+
+  const _CloudSyncResetPasswordDialog({required this.controller});
+
+  @override
+  State<_CloudSyncResetPasswordDialog> createState() => _CloudSyncResetPasswordDialogState();
+}
+
+class _CloudSyncResetPasswordDialogState extends State<_CloudSyncResetPasswordDialog> {
+  final _tokenController = TextEditingController();
+  final _passwordController = TextEditingController();
+
+  @override
+  void dispose() {
+    _tokenController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return WoxDialog(
+      title: Text(widget.controller.tr("ui_cloud_sync_account_reset_confirm")),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          WoxTextField(controller: _tokenController, hintText: widget.controller.tr("ui_cloud_sync_account_reset_token"), width: 360),
+          const SizedBox(height: 10),
+          WoxTextField(controller: _passwordController, hintText: widget.controller.tr("ui_cloud_sync_account_new_password"), width: 360, obscureText: true),
+        ],
+      ),
+      actions: [
+        WoxButton.secondary(text: widget.controller.tr("ui_cloud_sync_cancel"), onPressed: () => Navigator.pop(context)),
+        WoxButton.primary(
+          text: widget.controller.tr("ui_cloud_sync_confirm"),
+          onPressed: () => Navigator.pop(context, {"token": _tokenController.text.trim(), "password": _passwordController.text}),
+        ),
+      ],
+    );
+  }
+}
+
+// Owns the first-device key fields until the route has finished closing.
+class _CloudSyncInitKeyDialog extends StatefulWidget {
+  final WoxSettingController controller;
+
+  const _CloudSyncInitKeyDialog({required this.controller});
+
+  @override
+  State<_CloudSyncInitKeyDialog> createState() => _CloudSyncInitKeyDialogState();
+}
+
+class _CloudSyncInitKeyDialogState extends State<_CloudSyncInitKeyDialog> {
+  final _recoveryController = TextEditingController();
+  final _deviceController = TextEditingController();
+
+  @override
+  void dispose() {
+    _recoveryController.dispose();
+    _deviceController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return WoxDialog(
+      title: Text(widget.controller.tr("ui_cloud_sync_key_init_title")),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(widget.controller.tr("ui_cloud_sync_recovery_code_hint"), style: TextStyle(color: getThemeSubTextColor(), fontSize: 12)),
+          const SizedBox(height: 6),
+          WoxTextField(controller: _recoveryController, hintText: widget.controller.tr("ui_cloud_sync_recovery_code_hint"), width: 360),
+          const SizedBox(height: 12),
+          Text(widget.controller.tr("ui_cloud_sync_device_name"), style: TextStyle(color: getThemeSubTextColor(), fontSize: 12)),
+          const SizedBox(height: 6),
+          WoxTextField(controller: _deviceController, hintText: widget.controller.tr("ui_cloud_sync_device_name_hint"), width: 360),
+        ],
+      ),
+      actions: [
+        WoxButton.secondary(text: widget.controller.tr("ui_cloud_sync_cancel"), onPressed: () => Navigator.pop(context)),
+        WoxButton.primary(
+          text: widget.controller.tr("ui_cloud_sync_confirm"),
+          onPressed: () => Navigator.pop(context, {"recoveryCode": _recoveryController.text.trim(), "deviceName": _deviceController.text.trim()}),
+        ),
+      ],
+    );
+  }
+}
+
+// Owns the recovery-code fetch field until the dialog route is gone.
+class _CloudSyncFetchKeyDialog extends StatefulWidget {
+  final WoxSettingController controller;
+
+  const _CloudSyncFetchKeyDialog({required this.controller});
+
+  @override
+  State<_CloudSyncFetchKeyDialog> createState() => _CloudSyncFetchKeyDialogState();
+}
+
+class _CloudSyncFetchKeyDialogState extends State<_CloudSyncFetchKeyDialog> {
+  final _recoveryController = TextEditingController();
+
+  @override
+  void dispose() {
+    _recoveryController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return WoxDialog(
+      title: Text(widget.controller.tr("ui_cloud_sync_key_fetch_title")),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(widget.controller.tr("ui_cloud_sync_recovery_code_hint"), style: TextStyle(color: getThemeSubTextColor(), fontSize: 12)),
+          const SizedBox(height: 6),
+          WoxTextField(controller: _recoveryController, hintText: widget.controller.tr("ui_cloud_sync_recovery_code_hint"), width: 360),
+        ],
+      ),
+      actions: [
+        WoxButton.secondary(text: widget.controller.tr("ui_cloud_sync_cancel"), onPressed: () => Navigator.pop(context)),
+        WoxButton.primary(text: widget.controller.tr("ui_cloud_sync_confirm"), onPressed: () => Navigator.pop(context, _recoveryController.text.trim())),
+      ],
+    );
+  }
+}
+
+// Owns the reset bootstrap controllers and async state while the forgot-code dialog is mounted.
+class _CloudSyncForgotRecoveryCodeDialog extends StatefulWidget {
+  final WoxSettingController controller;
+  final _CloudSyncErrorNormalizer normalizeCloudSyncError;
+
+  const _CloudSyncForgotRecoveryCodeDialog({required this.controller, required this.normalizeCloudSyncError});
+
+  @override
+  State<_CloudSyncForgotRecoveryCodeDialog> createState() => _CloudSyncForgotRecoveryCodeDialogState();
+}
+
+class _CloudSyncForgotRecoveryCodeDialogState extends State<_CloudSyncForgotRecoveryCodeDialog> {
+  static const double _dialogContentWidth = 360.0;
+
+  final _recoveryController = TextEditingController();
+  final _confirmRecoveryController = TextEditingController();
+  String? _validationError;
+  bool _isSubmitting = false;
+
+  @override
+  void dispose() {
+    _recoveryController.dispose();
+    _confirmRecoveryController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_isSubmitting) {
+      return;
+    }
+
+    final recoveryCode = _recoveryController.text.trim();
+    final confirmRecoveryCode = _confirmRecoveryController.text.trim();
+    String? nextError;
+    if (recoveryCode.isEmpty) {
+      nextError = widget.controller.tr("ui_cloud_sync_recovery_code_required");
+    } else if (confirmRecoveryCode.isEmpty) {
+      nextError = widget.controller.tr("ui_cloud_sync_recovery_code_confirm_required");
+    } else if (recoveryCode != confirmRecoveryCode) {
+      nextError = widget.controller.tr("ui_cloud_sync_recovery_code_mismatch");
+    }
+    if (nextError != null) {
+      setState(() {
+        _validationError = nextError;
+      });
+      return;
+    }
+
+    setState(() {
+      _validationError = null;
+      _isSubmitting = true;
+    });
+    final resetToken = await widget.controller.cloudSyncPrepareReset();
+    if (!mounted) {
+      return;
+    }
+    if (resetToken == null) {
+      setState(() {
+        _validationError = widget.normalizeCloudSyncError(widget.controller.cloudSyncActionError.value);
+        _isSubmitting = false;
+      });
+      return;
+    }
+
+    await widget.controller.cloudSyncReset(resetToken);
+    if (!mounted) {
+      return;
+    }
+    if (widget.controller.cloudSyncActionError.value.isNotEmpty) {
+      setState(() {
+        _validationError = widget.normalizeCloudSyncError(widget.controller.cloudSyncActionError.value);
+        _isSubmitting = false;
+      });
+      return;
+    }
+
+    final started = await widget.controller.cloudSyncBootstrapStart(recoveryCode);
+    if (!mounted) {
+      return;
+    }
+    if (started) {
+      Navigator.pop(context, true);
+      return;
+    }
+    setState(() {
+      _validationError = widget.normalizeCloudSyncError(widget.controller.cloudSyncActionError.value);
+      _isSubmitting = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return WoxDialog(
+      title: Text(widget.controller.tr("ui_cloud_sync_forgot_recovery_code_title")),
+      content: SizedBox(
+        width: _dialogContentWidth,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(widget.controller.tr("ui_cloud_sync_forgot_recovery_code_description"), style: TextStyle(color: getThemeSubTextColor(), fontSize: 12, height: 1.45)),
+            const SizedBox(height: 12),
+            Text(widget.controller.tr("ui_cloud_sync_forgot_recovery_code_new_password"), style: TextStyle(color: getThemeTextColor(), fontSize: 12, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 6),
+            WoxTextField(
+              controller: _recoveryController,
+              hintText: widget.controller.tr("ui_cloud_sync_recovery_code_hint"),
+              width: _dialogContentWidth,
+              obscureText: true,
+              enabled: !_isSubmitting,
+              onSubmitted: (_) => _submit(),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              widget.controller.tr("ui_cloud_sync_forgot_recovery_code_confirm_new_password"),
+              style: TextStyle(color: getThemeTextColor(), fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 6),
+            WoxTextField(
+              controller: _confirmRecoveryController,
+              hintText: widget.controller.tr("ui_cloud_sync_recovery_code_confirm_hint"),
+              width: _dialogContentWidth,
+              obscureText: true,
+              enabled: !_isSubmitting,
+              onSubmitted: (_) => _submit(),
+            ),
+            if (_validationError != null) ...[const SizedBox(height: 10), Text(_validationError!, style: const TextStyle(color: Colors.red, fontSize: 12))],
+            if (_validationError == null && _isSubmitting) ...[
+              const SizedBox(height: 10),
+              Text(widget.controller.tr("ui_cloud_sync_loading"), style: TextStyle(color: getThemeSubTextColor(), fontSize: 12)),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        WoxButton.secondary(text: widget.controller.tr("ui_cloud_sync_cancel"), onPressed: _isSubmitting ? null : () => Navigator.pop(context, false)),
+        WoxButton.primary(
+          text: _isSubmitting ? widget.controller.tr("ui_cloud_sync_loading") : widget.controller.tr("ui_cloud_sync_forgot_recovery_code_start_new_sync"),
+          onPressed: _isSubmitting ? null : _submit,
+        ),
+      ],
+    );
+  }
+}
+
+// Owns bootstrap recovery-code controllers for both restore and first-sync flows.
+class _CloudSyncBootstrapDialog extends StatefulWidget {
+  final WoxSettingController controller;
+  final WoxCloudSyncBootstrapStatus status;
+  final _CloudSyncErrorNormalizer normalizeCloudSyncError;
+  final Future<bool?> Function(BuildContext context) showForgotRecoveryCodeDialog;
+
+  const _CloudSyncBootstrapDialog({required this.controller, required this.status, required this.normalizeCloudSyncError, required this.showForgotRecoveryCodeDialog});
+
+  @override
+  State<_CloudSyncBootstrapDialog> createState() => _CloudSyncBootstrapDialogState();
+}
+
+class _CloudSyncBootstrapDialogState extends State<_CloudSyncBootstrapDialog> {
+  static const double _dialogContentWidth = 360.0;
+
+  final _recoveryController = TextEditingController();
+  final _confirmRecoveryController = TextEditingController();
+  String? _validationError;
+  bool _isSubmitting = false;
+
+  @override
+  void dispose() {
+    _recoveryController.dispose();
+    _confirmRecoveryController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_isSubmitting) {
+      return;
+    }
+
+    final recoveryCode = _recoveryController.text.trim();
+    final confirmRecoveryCode = _confirmRecoveryController.text.trim();
+    String? nextError;
+    if (recoveryCode.isEmpty) {
+      nextError = widget.controller.tr("ui_cloud_sync_recovery_code_required");
+    } else if (!widget.status.hasRemoteData && confirmRecoveryCode.isEmpty) {
+      nextError = widget.controller.tr("ui_cloud_sync_recovery_code_confirm_required");
+    } else if (!widget.status.hasRemoteData && recoveryCode != confirmRecoveryCode) {
+      nextError = widget.controller.tr("ui_cloud_sync_recovery_code_mismatch");
+    }
+    if (nextError != null) {
+      setState(() {
+        _validationError = nextError;
+      });
+      return;
+    }
+
+    setState(() {
+      _validationError = null;
+      _isSubmitting = true;
+    });
+    final started = await widget.controller.cloudSyncBootstrapStart(recoveryCode);
+    if (!mounted) {
+      return;
+    }
+    if (started) {
+      Navigator.pop(context);
+      return;
+    }
+    setState(() {
+      _validationError = widget.normalizeCloudSyncError(widget.controller.cloudSyncActionError.value);
+      _isSubmitting = false;
+    });
+  }
+
+  Future<void> _startForgotRecoveryCodeFlow() async {
+    final started = await widget.showForgotRecoveryCodeDialog(context);
+    if (!mounted || started != true) {
+      return;
+    }
+    Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return WoxDialog(
+      title: Text(widget.status.hasRemoteData ? widget.controller.tr("ui_cloud_sync_bootstrap_restore_title") : widget.controller.tr("ui_cloud_sync_bootstrap_start_title")),
+      content: SizedBox(
+        width: _dialogContentWidth,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.status.hasRemoteData ? widget.controller.tr("ui_cloud_sync_bootstrap_restore_description") : widget.controller.tr("ui_cloud_sync_bootstrap_start_description"),
+              style: TextStyle(color: getThemeSubTextColor(), fontSize: 12, height: 1.45),
+            ),
+            const SizedBox(height: 12),
+            Text(widget.controller.tr("ui_cloud_sync_recovery_code"), style: TextStyle(color: getThemeTextColor(), fontSize: 12, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 6),
+            WoxTextField(
+              controller: _recoveryController,
+              hintText: widget.controller.tr("ui_cloud_sync_recovery_code_hint"),
+              width: _dialogContentWidth,
+              obscureText: true,
+              enabled: !_isSubmitting,
+              onSubmitted: (_) => _submit(),
+            ),
+            if (!widget.status.hasRemoteData) ...[
+              const SizedBox(height: 12),
+              Text(widget.controller.tr("ui_cloud_sync_recovery_code_confirm"), style: TextStyle(color: getThemeTextColor(), fontSize: 12, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
+              WoxTextField(
+                controller: _confirmRecoveryController,
+                hintText: widget.controller.tr("ui_cloud_sync_recovery_code_confirm_hint"),
+                width: _dialogContentWidth,
+                obscureText: true,
+                enabled: !_isSubmitting,
+                onSubmitted: (_) => _submit(),
+              ),
+            ],
+            if (_validationError != null) ...[const SizedBox(height: 10), Text(_validationError!, style: const TextStyle(color: Colors.red, fontSize: 12))],
+            if (_validationError == null && _isSubmitting) ...[
+              const SizedBox(height: 10),
+              Text(widget.controller.tr("ui_cloud_sync_loading"), style: TextStyle(color: getThemeSubTextColor(), fontSize: 12)),
+            ],
+          ],
+        ),
+      ),
+      actionsAlignment: widget.status.hasRemoteData ? MainAxisAlignment.spaceBetween : MainAxisAlignment.end,
+      actions: [
+        if (widget.status.hasRemoteData)
+          WoxButton.text(text: widget.controller.tr("ui_cloud_sync_forgot_recovery_code"), onPressed: _isSubmitting ? null : _startForgotRecoveryCodeFlow),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            WoxButton.secondary(text: widget.controller.tr("ui_cloud_sync_cancel"), onPressed: _isSubmitting ? null : () => Navigator.pop(context)),
+            const SizedBox(width: 8),
+            WoxButton.primary(
+              text: _isSubmitting ? widget.controller.tr("ui_cloud_sync_loading") : widget.controller.tr("ui_cloud_sync_confirm"),
+              onPressed: _isSubmitting ? null : _submit,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 }
 
 // Owns login field controllers so route closing animations never read disposed controllers.

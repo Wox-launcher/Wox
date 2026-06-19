@@ -2,7 +2,6 @@ package setting
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -72,10 +71,11 @@ func (s *WoxSettingStore) SetWithSync(key string, value interface{}, syncable bo
 }
 
 func (s *WoxSettingStore) DeleteWithSync(key string, syncable bool) error {
-	if err := s.Delete(key); err != nil {
-		return err
+	result := s.db.Delete(&database.WoxSetting{Key: key})
+	if result.Error != nil {
+		return result.Error
 	}
-	if !syncable {
+	if !syncable || result.RowsAffected == 0 {
 		return nil
 	}
 	return s.logOplog(key, nil, cloudsync.OpDelete)
@@ -163,10 +163,11 @@ func (s *PluginSettingStore) SetWithSync(key string, value interface{}, syncable
 }
 
 func (s *PluginSettingStore) DeleteWithSync(key string, syncable bool) error {
-	if err := s.Delete(key); err != nil {
-		return err
+	result := s.db.Delete(&database.PluginSetting{PluginID: s.pluginId, Key: key})
+	if result.Error != nil {
+		return result.Error
 	}
-	if !syncable {
+	if !syncable || result.RowsAffected == 0 {
 		return nil
 	}
 	return s.logOplog(key, nil, cloudsync.OpDelete)
@@ -212,31 +213,44 @@ func writeCloudSyncOplog(db *gorm.DB, oplog database.Oplog) error {
 	return upsertDeferredCloudSyncOplog(db, oplog, now+policy.Delay.Milliseconds(), now)
 }
 
-// upsertDeferredCloudSyncOplog coalesces high-churn settings while their pending row is still safely before its due time.
+// upsertDeferredCloudSyncOplog coalesces high-churn settings into one pending latest-wins row.
 func upsertDeferredCloudSyncOplog(db *gorm.DB, oplog database.Oplog, syncAfter int64, now int64) error {
 	return db.Transaction(func(tx *gorm.DB) error {
-		var existing database.Oplog
-		err := tx.Where(
-			"synced_to_cloud = ? AND cloud_sync_discarded = ? AND entity_type = ? AND entity_id = ? AND operation = ? AND key = ? AND sync_after > ?",
+		var existing []database.Oplog
+		if err := tx.Where(
+			"synced_to_cloud = ? AND cloud_sync_discarded = ? AND entity_type = ? AND entity_id = ? AND operation = ? AND key = ?",
 			false,
 			false,
 			oplog.EntityType,
 			oplog.EntityID,
 			oplog.Operation,
 			oplog.Key,
-			now,
-		).Order("sync_after asc, id asc").First(&existing).Error
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		).Order("id asc").Find(&existing).Error; err != nil {
+			return err
+		}
+		if len(existing) == 0 {
 			oplog.SyncAfter = syncAfter
 			return tx.Create(&oplog).Error
 		}
-		if err != nil {
-			return err
+
+		keepID := existing[0].ID
+		if len(existing) > 1 {
+			supersededIDs := make([]uint, 0, len(existing)-1)
+			for _, row := range existing[1:] {
+				supersededIDs = append(supersededIDs, row.ID)
+			}
+			if err := tx.Model(&database.Oplog{}).Where("id IN ?", supersededIDs).Update("synced_to_cloud", true).Error; err != nil {
+				return err
+			}
 		}
 
-		return tx.Model(&database.Oplog{}).Where("id = ?", existing.ID).Updates(map[string]interface{}{
-			"value":     oplog.Value,
-			"timestamp": now,
+		// Keep one pending row per delayed setting identity so rate limits or offline time do not replay stale intermediate values.
+		return tx.Model(&database.Oplog{}).Where("id = ?", keepID).Updates(map[string]interface{}{
+			"value":                        oplog.Value,
+			"timestamp":                    now,
+			"sync_after":                   syncAfter,
+			"cloud_sync_push_failed_count": 0,
+			"cloud_sync_last_push_error":   "",
 		}).Error
 	})
 }
