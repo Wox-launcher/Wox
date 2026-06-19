@@ -45,6 +45,7 @@ type CloudSyncDependencies struct {
 	ExclusionProvider CloudSyncPluginExclusionProvider
 	SettingReloader   CloudSyncSettingReloader
 	HistoryStore      CloudSyncHistoryStore
+	AutoSyncAllowed   func(ctx context.Context) bool
 }
 
 type CloudSyncManager struct {
@@ -59,6 +60,7 @@ type CloudSyncManager struct {
 	exclusions       CloudSyncPluginExclusionProvider
 	settingReloader  CloudSyncSettingReloader
 	historyStore     CloudSyncHistoryStore
+	autoSyncAllowed  func(ctx context.Context) bool
 
 	mu         sync.Mutex
 	pushMu     sync.Mutex
@@ -86,6 +88,7 @@ func NewCloudSyncManager(config CloudSyncConfig, deps CloudSyncDependencies) *Cl
 		rand:             rand.New(rand.NewSource(time.Now().UnixNano())),
 		settingReloader:  deps.SettingReloader,
 		historyStore:     deps.HistoryStore,
+		autoSyncAllowed:  deps.AutoSyncAllowed,
 	}
 }
 
@@ -139,7 +142,7 @@ func (m *CloudSyncManager) updateCurrentDevice(ctx context.Context) error {
 // runSyncLoop keeps scheduled pull and push work serialized so shared sync state
 // is updated in one predictable order.
 func (m *CloudSyncManager) runSyncLoop(ctx context.Context) {
-	m.syncOnce(ctx, "startup", "startup-missing-keys", true)
+	m.syncOnceIfAutoSyncAllowed(ctx, "startup", "startup-missing-keys", true)
 
 	ticker := time.NewTicker(m.config.SyncInterval)
 	defer ticker.Stop()
@@ -148,9 +151,24 @@ func (m *CloudSyncManager) runSyncLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			m.syncOnce(ctx, "periodic-pull", "periodic-push", false)
+			m.syncOnceIfAutoSyncAllowed(ctx, "periodic-pull", "periodic-push", false)
 		}
 	}
+}
+
+func (m *CloudSyncManager) isAutoSyncAllowed(ctx context.Context) bool {
+	if m.autoSyncAllowed == nil {
+		return true
+	}
+	return m.autoSyncAllowed(ctx)
+}
+
+// syncOnceIfAutoSyncAllowed keeps the scheduler alive while enforcing the current plan at execution time.
+func (m *CloudSyncManager) syncOnceIfAutoSyncAllowed(ctx context.Context, pullReason string, pushReason string, pushMissingSnapshot bool) {
+	if !m.isAutoSyncAllowed(ctx) {
+		return
+	}
+	m.syncOnce(ctx, pullReason, pushReason, pushMissingSnapshot)
 }
 
 // syncOnce performs one ordered sync pass and preserves the startup missing-key
@@ -1080,10 +1098,6 @@ func (m *CloudSyncManager) recordFailure(ctx context.Context, err error) {
 		if errors.As(err, &requestErr) && requestErr.Code == "device_revoked" {
 			state.RetryCount = 0
 			state.BackoffUntil = 0
-			return
-		}
-		if errors.As(err, &requestErr) && requestErr.Code == "free_sync_rate_limited" && requestErr.NextSyncAfter > util.GetSystemTimestamp() {
-			state.BackoffUntil = requestErr.NextSyncAfter
 			return
 		}
 		state.RetryCount++

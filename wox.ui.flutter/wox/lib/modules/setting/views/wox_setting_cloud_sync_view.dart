@@ -20,7 +20,7 @@ enum _CloudSyncAccountAction { changePassword, logout }
 
 enum _CloudSyncSubscriptionAction { refreshStatus, subscribePro, manageSubscription }
 
-typedef _CloudSyncErrorNormalizer = String Function(String error, {int? nextSyncAfter});
+typedef _CloudSyncErrorNormalizer = String Function(String error);
 
 class WoxSettingCloudSyncView extends WoxSettingBaseView {
   const WoxSettingCloudSyncView({super.key});
@@ -43,7 +43,7 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
         '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}:${date.second.toString().padLeft(2, '0')}';
   }
 
-  String normalizeCloudSyncError(String error, {int? nextSyncAfter}) {
+  String normalizeCloudSyncError(String error) {
     if (error.contains('cloud sync is not configured') || error.contains('account is not logged in')) {
       return controller.tr("ui_cloud_sync_not_configured");
     }
@@ -56,13 +56,10 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
     if (error.contains('device_revoked')) {
       return controller.tr("ui_cloud_sync_device_revoked");
     }
-    if (error.contains('free_sync_rate_limited')) {
-      return appendNextSyncTime(controller.tr("ui_cloud_sync_free_rate_limited"), nextSyncAfter);
-    }
     if (error.contains('failed to decrypt payload') || error.contains('message authentication failed')) {
       return controller.tr("ui_cloud_sync_recovery_code_invalid");
     }
-    return error;
+    return serverProvidedErrorMessage(error);
   }
 
   // Removes local wrapper text while keeping the remote server's localized error message unchanged.
@@ -70,13 +67,6 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
     final message = error.replaceFirst('Exception: ', '').trim();
     final codePrefix = RegExp(r'^[a-z][a-z0-9_]*:\s*(.+)$').firstMatch(message);
     return codePrefix?.group(1)?.trim() ?? message;
-  }
-
-  String appendNextSyncTime(String message, int? nextSyncAfter) {
-    if (nextSyncAfter == null || nextSyncAfter <= DateTime.now().millisecondsSinceEpoch) {
-      return message;
-    }
-    return '$message ${controller.tr("ui_cloud_sync_next_sync_after").replaceAll("{time}", formatCloudSyncTime(nextSyncAfter))}';
   }
 
   int lastCloudSyncTimestamp(WoxCloudSyncState? state) {
@@ -332,17 +322,17 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
       } else if (statusError.isNotEmpty) {
         statusText = controller.tr("ui_cloud_sync_sync_error");
         statusColor = Colors.red;
-        statusDetailText = normalizeCloudSyncError(statusError, nextSyncAfter: state?.backoffUntil);
+        statusDetailText = normalizeCloudSyncError(statusError);
         statusDetailColor = Colors.red;
       } else if (actionError.isNotEmpty) {
         statusText = controller.tr("ui_cloud_sync_sync_error");
         statusColor = Colors.red;
-        statusDetailText = normalizeCloudSyncError(actionError, nextSyncAfter: state?.backoffUntil);
+        statusDetailText = normalizeCloudSyncError(actionError);
         statusDetailColor = Colors.red;
       } else if (stateError.isNotEmpty) {
         statusText = controller.tr("ui_cloud_sync_sync_error");
         statusColor = Colors.red;
-        statusDetailText = normalizeCloudSyncError(stateError, nextSyncAfter: state?.backoffUntil);
+        statusDetailText = normalizeCloudSyncError(stateError);
         statusDetailColor = Colors.red;
       } else if (progressText.isNotEmpty) {
         statusText = controller.tr("ui_cloud_sync_syncing");
@@ -823,8 +813,8 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
           _buildCloudSyncPlanTableRow(
             compact: compact,
             label: controller.tr("ui_cloud_sync_plan_row_frequency"),
-            freeValue: controller.tr("ui_cloud_sync_plan_feature_hourly"),
-            proValue: controller.tr("ui_cloud_sync_plan_feature_unlimited_sync"),
+            freeValue: controller.tr("ui_cloud_sync_plan_feature_strict_sync_limit"),
+            proValue: controller.tr("ui_cloud_sync_plan_feature_relaxed_sync_limit"),
           ),
           _buildCloudSyncPlanTableRow(
             compact: compact,

@@ -50,6 +50,7 @@ func initCloudSync(ctx context.Context) {
 		ExclusionProvider: settingadapter.NewCloudSyncPluginExclusionProvider(),
 		SettingReloader:   cloudSyncUISettingReloader{},
 		HistoryStore:      historyStore,
+		AutoSyncAllowed:   cloudSyncAutoSyncAllowedFromAccount,
 	})
 
 	service := &cloudsync.Service{
@@ -61,6 +62,16 @@ func initCloudSync(ctx context.Context) {
 		HistoryStore:   historyStore,
 	}
 	cloudsync.SetService(service)
+}
+
+// cloudSyncAutoSyncAllowedFromAccount keeps scheduled sync execution tied to the local account plan.
+func cloudSyncAutoSyncAllowedFromAccount(ctx context.Context) bool {
+	accountService := account.GetService()
+	if accountService == nil {
+		return false
+	}
+	status := accountService.Status(ctx)
+	return status.LoggedIn && status.SyncEligible && status.SyncEnabled && status.Plan == "pro"
 }
 
 type cloudSyncUIProgressNotifier struct{}

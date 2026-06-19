@@ -60,9 +60,8 @@ type responseEnvelope struct {
 }
 
 type CloudSyncRequestError struct {
-	Code          string
-	Message       string
-	NextSyncAfter int64
+	Code    string
+	Message string
 }
 
 func (e *CloudSyncRequestError) Error() string {
@@ -343,15 +342,7 @@ func (c *CloudSyncHTTPClient) postWithToken(ctx context.Context, path string, pa
 }
 
 func cloudSyncRequestErrorFromEnvelope(envelope responseEnvelope) error {
-	requestErr := &CloudSyncRequestError{Code: envelope.Code, Message: envelope.Message}
-	var details struct {
-		NextSyncAfter int64 `json:"next_sync_after"`
-	}
-	if len(envelope.Data) > 0 && string(envelope.Data) != "null" {
-		_ = json.Unmarshal(envelope.Data, &details)
-		requestErr.NextSyncAfter = details.NextSyncAfter
-	}
-	return requestErr
+	return &CloudSyncRequestError{Code: envelope.Code, Message: envelope.Message}
 }
 
 func (c *CloudSyncHTTPClient) resolveAccessToken(ctx context.Context) (string, error) {
