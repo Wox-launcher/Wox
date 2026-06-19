@@ -932,8 +932,8 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
   Widget buildCloudSyncDeviceSection() {
     return Obx(() {
       final deviceList = controller.cloudSyncDeviceList.value;
-      final devices = deviceList.devices;
       final account = controller.accountStatus.value;
+      final devices = account.isPro ? deviceList.devices.where((device) => !device.revoked).toList() : deviceList.devices;
       final deviceLimitText = (deviceList.deviceLimit ?? account.syncLimits.deviceLimit ?? 2).toString();
       final deviceTips =
           account.isPro
@@ -971,13 +971,14 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
               ),
             )
           else
-            for (final device in devices) settingTarget(settingKey: "CloudSyncDevice-${device.deviceId}", child: _buildCloudSyncDeviceRow(device, isBusy: isBusy)),
+            for (final device in devices)
+              settingTarget(settingKey: "CloudSyncDevice-${device.deviceId}", child: _buildCloudSyncDeviceRow(device, isBusy: isBusy, showRevokeState: !account.isPro)),
         ],
       );
     });
   }
 
-  Widget _buildCloudSyncDeviceRow(WoxCloudSyncDevice device, {required bool isBusy}) {
+  Widget _buildCloudSyncDeviceRow(WoxCloudSyncDevice device, {required bool isBusy, required bool showRevokeState}) {
     final deviceTitle = device.deviceName.isNotEmpty ? device.deviceName : device.deviceId;
     return Padding(
       padding: const EdgeInsets.only(bottom: 18),
@@ -1006,14 +1007,16 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
           ),
           const SizedBox(width: 18),
           Text(formatCloudSyncTime(device.lastSeenAt), style: TextStyle(color: getThemeSubTextColor(), fontSize: 12, height: 1.25), maxLines: 1, overflow: TextOverflow.ellipsis),
-          const SizedBox(width: 10),
-          if (device.revoked)
-            _buildCloudSyncDeviceRevokedStatus()
-          else
-            WoxButton.secondary(
-              text: controller.tr("ui_cloud_sync_devices_revoke"),
-              onPressed: isBusy || device.current ? null : () => controller.cloudSyncRevokeDevice(device.deviceId),
-            ),
+          if (showRevokeState) ...[
+            const SizedBox(width: 10),
+            if (device.revoked)
+              _buildCloudSyncDeviceRevokedStatus()
+            else
+              WoxButton.secondary(
+                text: controller.tr("ui_cloud_sync_devices_revoke"),
+                onPressed: isBusy || device.current ? null : () => controller.cloudSyncRevokeDevice(device.deviceId),
+              ),
+          ],
         ],
       ),
     );
