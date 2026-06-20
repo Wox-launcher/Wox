@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
@@ -24,6 +25,14 @@ func runRelease() {
 	if err := ensureGitClean(); err != nil {
 		fmt.Println("Error: git working tree is not clean.")
 		fmt.Println("Please commit/stash your changes before running the release process.")
+		fmt.Println()
+		fmt.Println(strings.TrimSpace(err.Error()))
+		os.Exit(1)
+	}
+
+	if err := ensureRemoteBranchCurrent(); err != nil {
+		fmt.Println("Error: remote branch has changes that are not available locally.")
+		fmt.Println("Please pull the latest changes before running the release process.")
 		fmt.Println()
 		fmt.Println(strings.TrimSpace(err.Error()))
 		os.Exit(1)
@@ -141,6 +150,71 @@ func ensureGitClean() error {
 		return fmt.Errorf("Uncommitted changes detected:\n%s", output)
 	}
 	return nil
+}
+
+// ensureRemoteBranchCurrent blocks releases that would fail later because the upstream branch moved.
+func ensureRemoteBranchCurrent() error {
+	branch, err := gitOutput("branch", "--show-current")
+	if err != nil {
+		return err
+	}
+	if branch == "" {
+		return fmt.Errorf("release must run from a branch with an upstream; current HEAD is detached")
+	}
+
+	remote, err := gitOutput("config", "branch."+branch+".remote")
+	if err != nil {
+		return fmt.Errorf("failed to resolve upstream remote for branch %s: %w", branch, err)
+	}
+	if remote == "" {
+		return fmt.Errorf("branch %s has no upstream remote configured", branch)
+	}
+
+	upstream, err := gitOutput("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
+	if err != nil {
+		return fmt.Errorf("failed to resolve upstream branch for %s: %w", branch, err)
+	}
+
+	if _, err := gitOutput("fetch", "--quiet", remote); err != nil {
+		return err
+	}
+
+	counts, err := gitOutput("rev-list", "--left-right", "--count", "HEAD..."+upstream)
+	if err != nil {
+		return err
+	}
+
+	parts := strings.Fields(counts)
+	if len(parts) != 2 {
+		return fmt.Errorf("unexpected ahead/behind output for %s: %q", upstream, counts)
+	}
+
+	ahead, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return fmt.Errorf("failed to parse local-ahead count %q for %s: %w", parts[0], upstream, err)
+	}
+
+	behind, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return fmt.Errorf("failed to parse remote-ahead count %q for %s: %w", parts[1], upstream, err)
+	}
+
+	if behind > 0 {
+		return fmt.Errorf("%s has %d commit(s) not present locally; local branch %s is ahead by %d commit(s). Run `git pull --rebase` before `make release`, then retry", upstream, behind, branch, ahead)
+	}
+
+	return nil
+}
+
+// gitOutput runs git from the repository root and returns trimmed combined output.
+func gitOutput(args ...string) (string, error) {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = ".."
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("git %s failed: %v\n%s", strings.Join(args, " "), err, output)
+	}
+	return strings.TrimSpace(string(output)), nil
 }
 
 func parseLatestFromChangelog() (releaseInfo, error) {
