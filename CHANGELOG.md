@@ -1,5 +1,16 @@
 # Changelog
 
+
+## v2.3.0-beta.1 - 2026-06-20
+
+This beta release introduces Cloud Sync, giving users encrypted backup and restore for settings, installed plugins, and themes across devices.  
+
+![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/cloud_sync.png)
+
+- Add
+  - [`Cloud Sync`] Add encrypted cloud sync for settings, installed plugins, and themes, with recovery-code setup, local snapshots, sync history, account plan and device management, device join and revoke flows, and plan-aware auto-sync.
+    
+
 ## v2.2.0 - 2026-06-18
 
 This stable release rolls up the v2.1.2 beta work with additional Theme Editor, Linux Wayland, Caps Lock hotkey, update, and stability improvements.

@@ -37,6 +37,7 @@ Update `CHANGELOG.md` from the latest released version to `HEAD` and keep wordin
 4. Write changelog entries in repository style.
 
 - Preserve header pattern exactly (for example: `## v2.0.1 -`).
+- Add a short highlight paragraph directly below every release heading you create or update, before screenshots and `Add`/`Improve`/`Fix` sections. Follow the `v2.2.0` style: one concise, user-facing sentence or short paragraph that calls out the single biggest release highlight.
 - Keep section order: `Add`, `Improve`, `Fix`.
 - Use bullet nesting style already used in file.
 - Keep wording concise, user-facing, and factual.
@@ -52,6 +53,7 @@ Update `CHANGELOG.md` from the latest released version to `HEAD` and keep wordin
 
 - Ensure no duplicate bullets.
 - Ensure every bullet maps to at least one commit in range.
+- Ensure every release section you create or update has a biggest-highlight paragraph under the version heading.
 - Ensure markdown renders cleanly and section spacing matches nearby versions.
 - Avoid rewriting old release sections unless explicitly requested.
 - If a commit set only contains tiny UI-only polish, keep it out of changelog by default.
