@@ -64,7 +64,6 @@ static constexpr UINT kScreenshotSelectionStartupHoverProbeDelayMs = 1200;
 static constexpr UINT kDelayedResizeRepaintNudgeDelayMs = 100;
 static constexpr wchar_t kScrollingCaptureOverlayWindowClassName[] = L"WoxScrollingCaptureOverlayWindow";
 static constexpr wchar_t kScreenshotSelectionInputWindowClassName[] = L"WoxScreenshotSelectionInputWindow";
-static constexpr wchar_t kScreenshotSelectionBorderWindowClassName[] = L"WoxScreenshotSelectionBorderWindow";
 static constexpr double kScrollingCaptureToolbarSlotHeightDip = 72.0;
 static constexpr double kScrollingCaptureToolbarHeightDip = 56.0;
 static constexpr double kScrollingCaptureToolbarWidthDip = 124.0;
@@ -2247,19 +2246,6 @@ bool FlutterWindow::BeginScreenshotSelectionOverlay(HWND hwnd, const RECT &works
     input_class_registered = true;
   }
 
-  static bool border_class_registered = false;
-  if (!border_class_registered)
-  {
-    WNDCLASS window_class{};
-    window_class.hCursor = LoadCursor(nullptr, IDC_CROSS);
-    window_class.lpszClassName = kScreenshotSelectionBorderWindowClassName;
-    window_class.hInstance = GetModuleHandle(nullptr);
-    window_class.hbrBackground = ScreenshotSelectionBorderBrush();
-    window_class.lpfnWndProc = FlutterWindow::ScreenshotSelectionPassiveWindowProc;
-    RegisterClass(&window_class);
-    border_class_registered = true;
-  }
-
   SavePreviousActiveWindow(hwnd);
   FlushPendingChildKeyUps();
 
@@ -2328,39 +2314,6 @@ bool FlutterWindow::BeginScreenshotSelectionOverlay(HWND hwnd, const RECT &works
   // continue showing through after the snapshot has been taken.
   SetLayeredWindowAttributes(input_window, 0, 255, LWA_ALPHA);
 
-  for (int i = 0; i < 4; ++i)
-  {
-    HWND border_window = CreateWindowEx(
-        WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-        kScreenshotSelectionBorderWindowClassName,
-        L"Wox screenshot selection border",
-        WS_POPUP,
-        workspace_bounds.left,
-        workspace_bounds.top,
-        1,
-        1,
-        nullptr,
-        nullptr,
-        GetModuleHandle(nullptr),
-        nullptr);
-    if (border_window == nullptr)
-    {
-      DestroyScreenshotSelectionOverlayWindows();
-      screenshot_selection_overlay_state_ = ScreenshotSelectionOverlayState{};
-      if (error_out != nullptr)
-      {
-        *error_out = "Failed to create screenshot selection border windows";
-      }
-      if (result != nullptr)
-      {
-        result->Error("SELECTION_ERROR", "Failed to create screenshot selection border windows");
-      }
-      return false;
-    }
-
-    screenshot_selection_overlay_state_.border_windows.push_back(border_window);
-  }
-
   screenshot_selection_overlay_state_.pending_result = std::move(result);
 
   // Feature change: paint cached HBITMAP snapshots into the selector so the user sees the exact
@@ -2426,39 +2379,8 @@ void FlutterWindow::LayoutScreenshotSelectionOverlay()
     return;
   }
 
-  const RECT workspace = screenshot_selection_overlay_state_.workspace_bounds;
-  const RECT committed_selection = ClampRectToBounds(screenshot_selection_overlay_state_.selection_bounds, workspace);
-  const bool has_committed_selection = !IsRectEmptyOrInvalid(committed_selection);
-  const RECT hover_selection = ClampRectToBounds(screenshot_selection_overlay_state_.hover_selection_bounds, workspace);
-  const bool has_hover_selection = !has_committed_selection && screenshot_selection_overlay_state_.has_hover_selection && !IsRectEmptyOrInvalid(hover_selection);
-  const RECT selection = has_committed_selection ? committed_selection : hover_selection;
-  const bool has_selection = has_committed_selection || has_hover_selection;
-  auto &border_windows = screenshot_selection_overlay_state_.border_windows;
-
-  if (!has_selection)
-  {
-    for (const auto border_window : border_windows)
-    {
-      if (border_window != nullptr && IsWindow(border_window))
-      {
-        ShowWindow(border_window, SW_HIDE);
-      }
-    }
-    return;
-  }
-
-  if (border_windows.size() >= 4)
-  {
-    const int border = 2;
-    // Feature change: hover previews reuse the same tiny border windows as committed drag
-    // selections. The previous flow could only show a rectangle after mouse-down; keeping hover
-    // feedback in the lightweight border path avoids recomputing the full dim region on every
-    // mouse move while still making UIA/window targets visible before the click.
-    MoveSelectionOverlayWindow(border_windows[0], RECT{selection.left, selection.top, selection.right, selection.top + border});
-    MoveSelectionOverlayWindow(border_windows[1], RECT{selection.left, selection.bottom - border, selection.right, selection.bottom});
-    MoveSelectionOverlayWindow(border_windows[2], RECT{selection.left, selection.top, selection.left + border, selection.bottom});
-    MoveSelectionOverlayWindow(border_windows[3], RECT{selection.right - border, selection.top, selection.right, selection.bottom});
-  }
+  // Selection feedback is painted into the input HWND so the border and cut-out are committed in
+  // the same WM_PAINT frame. Callers still own the precise dirty-region invalidation.
 }
 
 // Apply a hover result from either the fast window path or the deferred UIA timer while preserving
@@ -3267,18 +3189,9 @@ bool FlutterWindow::IsScreenshotOverlayWindow(HWND hwnd)
     return true;
   }
 
-  for (const auto border_window : screenshot_selection_overlay_state_.border_windows)
-  {
-    if (hwnd == border_window)
-    {
-      return true;
-    }
-  }
-
   wchar_t class_name[128]{};
   GetClassNameW(hwnd, class_name, static_cast<int>(_countof(class_name)));
   return wcscmp(class_name, kScreenshotSelectionInputWindowClassName) == 0 ||
-         wcscmp(class_name, kScreenshotSelectionBorderWindowClassName) == 0 ||
          wcscmp(class_name, kScrollingCaptureOverlayWindowClassName) == 0 ||
          wcscmp(class_name, L"Shell_TrayWnd") == 0 ||
          wcscmp(class_name, L"Shell_SecondaryTrayWnd") == 0 ||
@@ -3758,14 +3671,6 @@ void FlutterWindow::DestroyScreenshotSelectionOverlayWindows()
   }
   screenshot_selection_overlay_state_.input_window = nullptr;
 
-  for (const auto border_window : screenshot_selection_overlay_state_.border_windows)
-  {
-    if (border_window != nullptr && IsWindow(border_window))
-    {
-      DestroyWindow(border_window);
-    }
-  }
-  screenshot_selection_overlay_state_.border_windows.clear();
 }
 
 const FlutterWindow::CachedDisplayCapture *FlutterWindow::PreferredDisplayCaptureForSelection(const RECT &selection_bounds) const
@@ -4198,6 +4103,38 @@ void FlutterWindow::PaintScreenshotSelectionOverlay(HWND hwnd)
   if (has_undim_rect)
   {
     drawSnapshotArea(undim_rect);
+  }
+
+  const RECT committed_selection = ClampRectToBounds(screenshot_selection_overlay_state_.selection_bounds, workspace);
+  const RECT hover_selection = ClampRectToBounds(screenshot_selection_overlay_state_.hover_selection_bounds, workspace);
+  const RECT selection =
+      !IsRectEmptyOrInvalid(committed_selection)
+          ? committed_selection
+          : (screenshot_selection_overlay_state_.has_hover_selection ? hover_selection : RECT{0, 0, 0, 0});
+  if (!IsRectEmptyOrInvalid(selection))
+  {
+    const int border = 2;
+    const RECT border_rects[] = {
+        RECT{selection.left, selection.top, selection.right, selection.top + border},
+        RECT{selection.left, selection.bottom - border, selection.right, selection.bottom},
+        RECT{selection.left, selection.top, selection.left + border, selection.bottom},
+        RECT{selection.right - border, selection.top, selection.right, selection.bottom}};
+    HBRUSH border_brush = ScreenshotSelectionBorderBrush();
+    for (const auto &border_rect : border_rects)
+    {
+      RECT clipped_border{};
+      if (!TryIntersectRects(border_rect, dirty_workspace_rect, &clipped_border))
+      {
+        continue;
+      }
+
+      RECT local_border{
+          clipped_border.left - surface_workspace_left,
+          clipped_border.top - surface_workspace_top,
+          clipped_border.right - surface_workspace_left,
+          clipped_border.bottom - surface_workspace_top};
+      FillRect(paint_dc, &local_border, border_brush);
+    }
   }
 
   if (buffer_dc != nullptr && buffer_bitmap != nullptr)
@@ -4664,20 +4601,6 @@ LRESULT CALLBACK FlutterWindow::ScreenshotSelectionInputWindowProc(HWND hwnd, UI
   }
 
   return DefWindowProc(hwnd, message, wparam, lparam);
-}
-
-LRESULT CALLBACK FlutterWindow::ScreenshotSelectionPassiveWindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
-{
-  switch (message)
-  {
-  case WM_NCHITTEST:
-    return HTTRANSPARENT;
-  case WM_SETCURSOR:
-    SetCursor(LoadCursor(nullptr, IDC_CROSS));
-    return TRUE;
-  default:
-    return DefWindowProc(hwnd, message, wparam, lparam);
-  }
 }
 
 LRESULT CALLBACK FlutterWindow::ScreenshotSelectionMouseHookProc(int code, WPARAM wparam, LPARAM lparam)
