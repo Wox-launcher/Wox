@@ -1,10 +1,12 @@
 {
   "Version": "2.3.0-beta.1",
   "MacArm64DownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.3.0-beta.1/wox-mac-arm64.dmg",
-  "MacArm64Checksum": "",
+  "MacArm64Checksum": "ce27aab56297a210532fe1be0ec0b125",
   "WindowsDownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.3.0-beta.1/wox-windows-amd64.exe",
-  "WindowsChecksum": "",
+  "WindowsChecksum": "47e84934d12d5bbf5683c2f8bc31eb4c",
   "LinuxDownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.3.0-beta.1/wox-linux-amd64",
-  "LinuxChecksum": "",
-  "ReleaseNotes": ""
+  "LinuxChecksum": "fb38038ae4cc86472588a111a0591e4e",
+  "ReleaseNotes": "\nThis beta release introduces Cloud Sync, giving users encrypted backup and restore for settings, installed plugins, and themes across devices.  \n\n![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/cloud_sync.png)\n\n- Add\n  - [`Cloud Sync`] Add encrypted cloud sync for settings, installed plugins, and themes, with recovery-code setup, local snapshots, sync history, account plan and device management, device join and revoke flows, and plan-aware auto-sync.\n    ",
+  "MacAmd64DownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.3.0-beta.1/wox-mac-amd64.dmg",
+  "MacAmd64Checksum": "51ae2ff9c77b7e435ff47e8d3400aec2"
 }
