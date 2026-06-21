@@ -14,7 +14,10 @@ import (
 	"time"
 )
 
-const linuxDesktopRelaunchAttemptedEnv = "WOX_LINUX_DESKTOP_RELAUNCH_ATTEMPTED"
+const (
+	linuxDesktopRelaunchAttemptedEnv = "WOX_LINUX_DESKTOP_RELAUNCH_ATTEMPTED"
+	linuxDesktopLaunchConfirmedEnv   = "WOX_LINUX_DESKTOP_ENTRY_LAUNCH_CONFIRMED"
+)
 
 // ShouldRelaunchLinuxFromDesktopEntry reports whether this process should hand
 // off startup to the stable desktop entry before full initialization.
@@ -47,7 +50,10 @@ func RelaunchLinuxFromDesktopEntry(ctx context.Context) error {
 	var launchErrors []string
 	for _, command := range commands {
 		cmd := exec.CommandContext(launchCtx, command[0], command[1:]...)
-		cmd.Env = append(os.Environ(), linuxDesktopRelaunchAttemptedEnv+"=1")
+		cmd.Env = append(os.Environ(),
+			linuxDesktopRelaunchAttemptedEnv+"=1",
+			linuxDesktopLaunchConfirmedEnv+"="+desktopFilePath,
+		)
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 
 		if err := cmd.Run(); err == nil {
@@ -78,7 +84,23 @@ func IsLinuxWaylandSession() bool {
 }
 
 func IsLinuxLaunchedFromStableDesktopEntry() bool {
-	return stableDesktopLaunchEnvMatches() || stableDesktopLaunchCgroupMatches()
+	return stableDesktopLaunchConfirmedByWox() || stableDesktopLaunchEnvMatches() || stableDesktopLaunchCgroupMatches()
+}
+
+// stableDesktopLaunchConfirmedByWox covers desktop-entry relaunches where the
+// launcher or AppImage wrapper does not preserve a useful GIO PID or cgroup.
+func stableDesktopLaunchConfirmedByWox() bool {
+	confirmedDesktopFile := os.Getenv(linuxDesktopLaunchConfirmedEnv)
+	if confirmedDesktopFile == "" {
+		return false
+	}
+
+	stableDesktopFile, err := LinuxDesktopEntryPath()
+	if err != nil {
+		return filepath.Base(confirmedDesktopFile) == LinuxDesktopFileName()
+	}
+
+	return confirmedDesktopFile == stableDesktopFile
 }
 
 func stableDesktopLaunchEnvMatches() bool {
