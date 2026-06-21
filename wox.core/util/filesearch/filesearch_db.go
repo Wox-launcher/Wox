@@ -30,6 +30,7 @@ type FileSearchDB struct {
 	bulkSyncFullRunRoots        map[string]bulkSyncFullRunRootState
 	bulkSyncEntryIndexesChecked bool
 	bulkSyncEntryIndexesDropped bool
+	entryIndexMaintenanceMu     sync.Mutex
 }
 
 const rootRecordSelectColumns = `
@@ -631,6 +632,11 @@ func (d *FileSearchDB) ApplyDirectFilesJobStream(ctx context.Context, root RootR
 	defer stageStmt.Close()
 
 	stats := JobApplyStats{}
+	streamStartedAt := util.GetSystemTimestamp()
+	directoryWriteElapsedMs := int64(0)
+	stageWriteElapsedMs := int64(0)
+	insertedDirectories := 0
+	stagedEntries := 0
 	// Direct-files jobs now own the whole directory scope. Streaming each batch
 	// into the temporary stage table keeps SQLite writes bounded without losing
 	// the single-scope stale prune that chunked jobs could not express safely.
@@ -638,6 +644,7 @@ func (d *FileSearchDB) ApplyDirectFilesJobStream(ctx context.Context, root RootR
 		if err := validateJobSnapshotBatch(job, batch); err != nil {
 			return err
 		}
+		directoryStartedAt := util.GetSystemTimestamp()
 		for _, directory := range batch.Directories {
 			if _, err := directoryStmt.ExecContext(
 				ctx,
@@ -650,9 +657,14 @@ func (d *FileSearchDB) ApplyDirectFilesJobStream(ctx context.Context, root RootR
 				return err
 			}
 		}
+		directoryWriteElapsedMs += util.GetSystemTimestamp() - directoryStartedAt
+		stageStartedAt := util.GetSystemTimestamp()
 		if err := stageEntryRecordsWithStmtTx(ctx, stageStmt, batch.Entries); err != nil {
 			return err
 		}
+		stageWriteElapsedMs += util.GetSystemTimestamp() - stageStartedAt
+		insertedDirectories += len(batch.Directories)
+		stagedEntries += len(batch.Entries)
 		stats.add(jobApplyStatsFromBatch(batch))
 		if onProgress != nil {
 			// Streaming toolbar counts are emitted only after the batch has been
@@ -663,12 +675,33 @@ func (d *FileSearchDB) ApplyDirectFilesJobStream(ctx context.Context, root RootR
 	}); err != nil {
 		return JobApplyStats{}, err
 	}
+	streamElapsedMs := util.GetSystemTimestamp() - streamStartedAt
 
+	replaceStartedAt := util.GetSystemTimestamp()
 	if err := d.replaceDirectFilesEntriesFromStageTx(ctx, tx, job.RootID, job.ScopePath); err != nil {
 		return JobApplyStats{}, err
 	}
+	replaceElapsedMs := util.GetSystemTimestamp() - replaceStartedAt
 
-	return stats, tx.Commit()
+	commitStartedAt := util.GetSystemTimestamp()
+	if err := tx.Commit(); err != nil {
+		return JobApplyStats{}, err
+	}
+	commitElapsedMs := util.GetSystemTimestamp() - commitStartedAt
+	scanBuildElapsedMs := streamElapsedMs - directoryWriteElapsedMs - stageWriteElapsedMs
+	if scanBuildElapsedMs < 0 {
+		scanBuildElapsedMs = 0
+	}
+	logFilesearchIndexPhase(ctx, "direct_files_stream", job.ScopePath, streamElapsedMs+replaceElapsedMs+commitElapsedMs, map[string]any{
+		"commit_ms":        commitElapsedMs,
+		"directories":      insertedDirectories,
+		"directory_ms":     directoryWriteElapsedMs,
+		"entries":          stagedEntries,
+		"replace_ms":       replaceElapsedMs,
+		"scan_build_ms":    scanBuildElapsedMs,
+		"stage_entries_ms": stageWriteElapsedMs,
+	})
+	return stats, nil
 }
 
 func (d *FileSearchDB) ApplySubtreeJobStream(ctx context.Context, root RootRecord, job Job, snapshot *SnapshotBuilder, onProgress func(JobApplyStats)) (JobApplyStats, error) {
@@ -712,13 +745,13 @@ func (d *FileSearchDB) ApplySubtreeJobStream(ctx context.Context, root RootRecor
 			}
 
 			directoryStartedAt := util.GetSystemTimestamp()
-			if err := upsertDirectoryRecordsBatchTx(ctx, tx, batch.Directories); err != nil {
+			if err := insertDirectoryRecordsBatchTx(ctx, tx, batch.Directories); err != nil {
 				return err
 			}
 			directoryWriteElapsedMs += util.GetSystemTimestamp() - directoryStartedAt
 
 			entryStartedAt := util.GetSystemTimestamp()
-			if err := upsertEntryFactsNoReturningBatchTx(ctx, tx, batch.Entries); err != nil {
+			if err := insertEntryFactsNoReturningBatchTx(ctx, tx, batch.Entries); err != nil {
 				return err
 			}
 			entryWriteElapsedMs += util.GetSystemTimestamp() - entryStartedAt
@@ -750,6 +783,14 @@ func (d *FileSearchDB) ApplySubtreeJobStream(ctx context.Context, root RootRecor
 		commitElapsedMs := util.GetSystemTimestamp() - commitStartedAt
 		logFilesearchSQLiteMaintenance(ctx, "subtree_stream_fresh_commit", job.ScopePath, commitElapsedMs, 1)
 		logFilesearchSQLiteMaintenance(ctx, "subtree_stream_fresh_insert", job.ScopePath, streamElapsedMs+commitElapsedMs, insertedEntries)
+		logFilesearchIndexPhase(ctx, "subtree_stream_fresh", job.ScopePath, streamElapsedMs+commitElapsedMs, map[string]any{
+			"commit_ms":     commitElapsedMs,
+			"directories":   insertedDirectories,
+			"directory_ms":  directoryWriteElapsedMs,
+			"entries":       insertedEntries,
+			"entry_ms":      entryWriteElapsedMs,
+			"scan_build_ms": scanBuildElapsedMs,
+		})
 		return stats, nil
 	}
 
@@ -765,8 +806,12 @@ func (d *FileSearchDB) ApplySubtreeJobStream(ctx context.Context, root RootRecor
 	}
 	defer stageStmt.Close()
 
+	streamStartedAt := util.GetSystemTimestamp()
 	maxScanTime := int64(0)
 	stagedEntries := 0
+	stagedDirectories := 0
+	directoryWriteElapsedMs := int64(0)
+	stageWriteElapsedMs := int64(0)
 	stats := JobApplyStats{}
 	if err := snapshot.StreamSubtreeJobBatches(ctx, *lockedRoot, job, func(batch SubtreeSnapshotBatch) error {
 		if err := validateJobSnapshotBatch(job, batch); err != nil {
@@ -775,6 +820,7 @@ func (d *FileSearchDB) ApplySubtreeJobStream(ctx context.Context, root RootRecor
 		if scanTime := subtreeBatchScanTime(batch); scanTime > maxScanTime {
 			maxScanTime = scanTime
 		}
+		directoryStartedAt := util.GetSystemTimestamp()
 		for _, directory := range batch.Directories {
 			if _, err := directoryStmt.ExecContext(
 				ctx,
@@ -787,9 +833,13 @@ func (d *FileSearchDB) ApplySubtreeJobStream(ctx context.Context, root RootRecor
 				return err
 			}
 		}
+		directoryWriteElapsedMs += util.GetSystemTimestamp() - directoryStartedAt
+		stageStartedAt := util.GetSystemTimestamp()
 		if err := stageEntryRecordsWithStmtTx(ctx, stageStmt, batch.Entries); err != nil {
 			return err
 		}
+		stageWriteElapsedMs += util.GetSystemTimestamp() - stageStartedAt
+		stagedDirectories += len(batch.Directories)
 		stagedEntries += len(batch.Entries)
 		stats.add(jobApplyStatsFromBatch(batch))
 		if onProgress != nil {
@@ -801,6 +851,11 @@ func (d *FileSearchDB) ApplySubtreeJobStream(ctx context.Context, root RootRecor
 		return nil
 	}); err != nil {
 		return JobApplyStats{}, err
+	}
+	streamElapsedMs := util.GetSystemTimestamp() - streamStartedAt
+	scanBuildElapsedMs := streamElapsedMs - directoryWriteElapsedMs - stageWriteElapsedMs
+	if scanBuildElapsedMs < 0 {
+		scanBuildElapsedMs = 0
 	}
 	logFilesearchSQLiteMaintenance(ctx, "subtree_stream_stage_entries", job.ScopePath, 0, stagedEntries)
 
@@ -814,9 +869,24 @@ func (d *FileSearchDB) ApplySubtreeJobStream(ctx context.Context, root RootRecor
 	if err := d.replaceSubtreeEntriesFromStageTx(ctx, tx, job.RootID, job.ScopePath); err != nil {
 		return JobApplyStats{}, err
 	}
-	logFilesearchSQLiteMaintenance(ctx, "subtree_stream_replace_entries", job.ScopePath, util.GetSystemTimestamp()-replaceStartedAt, stagedEntries)
+	replaceElapsedMs := util.GetSystemTimestamp() - replaceStartedAt
+	logFilesearchSQLiteMaintenance(ctx, "subtree_stream_replace_entries", job.ScopePath, replaceElapsedMs, stagedEntries)
 
-	return stats, tx.Commit()
+	commitStartedAt := util.GetSystemTimestamp()
+	if err := tx.Commit(); err != nil {
+		return JobApplyStats{}, err
+	}
+	commitElapsedMs := util.GetSystemTimestamp() - commitStartedAt
+	logFilesearchIndexPhase(ctx, "subtree_stream", job.ScopePath, streamElapsedMs+replaceElapsedMs+commitElapsedMs, map[string]any{
+		"commit_ms":        commitElapsedMs,
+		"directories":      stagedDirectories,
+		"directory_ms":     directoryWriteElapsedMs,
+		"entries":          stagedEntries,
+		"replace_ms":       replaceElapsedMs,
+		"scan_build_ms":    scanBuildElapsedMs,
+		"stage_entries_ms": stageWriteElapsedMs,
+	})
+	return stats, nil
 }
 
 func (d *FileSearchDB) ApplySubtreeJob(ctx context.Context, job Job, batch SubtreeSnapshotBatch) error {
@@ -1097,7 +1167,7 @@ func upsertDirectoryRecordsBatchTx(ctx context.Context, tx *sql.Tx, directories 
 	for start := 0; start < len(directories); {
 		chunkSize := sqliteBatchRows(len(directories)-start, directoryColumnCount)
 		end := start + chunkSize
-		if err := upsertDirectoryRecordRowsBatchTx(ctx, tx, directories[start:end]); err != nil {
+		if err := writeDirectoryRecordRowsBatchTx(ctx, tx, directories[start:end], false); err != nil {
 			return err
 		}
 		start = end
@@ -1105,7 +1175,23 @@ func upsertDirectoryRecordsBatchTx(ctx context.Context, tx *sql.Tx, directories 
 	return nil
 }
 
-func upsertDirectoryRecordRowsBatchTx(ctx context.Context, tx *sql.Tx, directories []DirectoryRecord) error {
+// insertDirectoryRecordsBatchTx skips conflict handling for fresh full-index
+// roots, where the sealed plan owns non-overlapping directory paths.
+func insertDirectoryRecordsBatchTx(ctx context.Context, tx *sql.Tx, directories []DirectoryRecord) error {
+	for start := 0; start < len(directories); {
+		chunkSize := sqliteBatchRows(len(directories)-start, directoryColumnCount)
+		end := start + chunkSize
+		if err := writeDirectoryRecordRowsBatchTx(ctx, tx, directories[start:end], true); err != nil {
+			return err
+		}
+		start = end
+	}
+	return nil
+}
+
+// writeDirectoryRecordRowsBatchTx writes one chunk of directory facts and can
+// optionally omit ON CONFLICT for fresh bulk-loads.
+func writeDirectoryRecordRowsBatchTx(ctx context.Context, tx *sql.Tx, directories []DirectoryRecord, plainInsert bool) error {
 	if len(directories) == 0 {
 		return nil
 	}
@@ -1130,18 +1216,24 @@ func upsertDirectoryRecordRowsBatchTx(ctx context.Context, tx *sql.Tx, directori
 		)
 	}
 
-	// Optimization: fresh full-index streams can contain thousands of directories.
-	// Writing them in chunks keeps the same path-conflict behavior while removing
-	// one sqlite3_step round trip per directory.
-	builder.WriteString(`
-		ON CONFLICT(path) DO UPDATE SET
-			root_id = excluded.root_id,
-			parent_path = excluded.parent_path,
-			last_scan_time = excluded.last_scan_time,
-			"exists" = excluded."exists"
-	`)
+	if !plainInsert {
+		// Optimization: fresh full-index streams can contain thousands of directories.
+		// Writing them in chunks keeps the same path-conflict behavior while removing
+		// one sqlite3_step round trip per directory.
+		builder.WriteString(`
+			ON CONFLICT(path) DO UPDATE SET
+				root_id = excluded.root_id,
+				parent_path = excluded.parent_path,
+				last_scan_time = excluded.last_scan_time,
+				"exists" = excluded."exists"
+		`)
+	}
 	if _, err := tx.ExecContext(ctx, builder.String(), args...); err != nil {
-		return fmt.Errorf("batch upsert %d directories: %w", len(directories), err)
+		operation := "upsert"
+		if plainInsert {
+			operation = "insert"
+		}
+		return fmt.Errorf("batch %s %d directories: %w", operation, len(directories), err)
 	}
 	return nil
 }

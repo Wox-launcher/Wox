@@ -3,6 +3,7 @@ package filesearch
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -248,6 +249,9 @@ func (p *SQLiteSearchProvider) collectWildcardCandidateIDs(ctx context.Context, 
 		return p.queryNameWildcardFallbackIDs(ctx, wildcardRecallLikePattern(plan.rawLower), limit)
 	}
 
+	if plan.pathLike {
+		return p.queryDirectoryPathFTSLiteralContainsIDs(ctx, literal, limit)
+	}
 	return p.queryFTSLiteralContainsIDs(ctx, targetTable, targetColumn, literal, limit)
 }
 
@@ -265,7 +269,7 @@ func (p *SQLiteSearchProvider) queryPathFTSIDs(ctx context.Context, plan *queryP
 	}
 
 	var intersected []int64
-	for _, segment := range segments {
+	for index, segment := range segments {
 		if strings.TrimSpace(segment) == "" {
 			continue
 		}
@@ -273,7 +277,14 @@ func (p *SQLiteSearchProvider) queryPathFTSIDs(ctx context.Context, plan *queryP
 		var ids []int64
 		var err error
 		if utf8LenString(segment) >= 3 {
-			ids, err = p.queryFTSLiteralContainsIDs(ctx, "entries_path_fts", "normalized_path", segment, plan.perClauseLimit)
+			ids, err = p.queryDirectoryPathFTSLiteralContainsIDs(ctx, segment, plan.perClauseLimit)
+			if err == nil && index == len(segments)-1 {
+				nameIDs, nameErr := p.queryFTSLiteralContainsIDs(ctx, "entries_name_fts", "normalized_name", segment, plan.perClauseLimit)
+				if nameErr != nil {
+					return nil, nameErr
+				}
+				ids = append(ids, nameIDs...)
+			}
 		} else {
 			ids, err = p.queryPathFallbackIDs(ctx, segment, plan.perClauseLimit)
 		}
@@ -295,7 +306,7 @@ func (p *SQLiteSearchProvider) queryPathFTSIDs(ctx context.Context, plan *queryP
 	}
 
 	if len(plan.pathQuery) >= 3 {
-		fullPathIDs, err := p.queryFTSLiteralContainsIDs(ctx, "entries_path_fts", "normalized_path", plan.pathQuery, limit)
+		fullPathIDs, err := p.queryDirectoryPathFTSLiteralContainsIDs(ctx, plan.pathQuery, limit)
 		if err != nil {
 			return nil, err
 		}
@@ -303,6 +314,45 @@ func (p *SQLiteSearchProvider) queryPathFTSIDs(ctx context.Context, plan *queryP
 	}
 
 	return trimCandidateIDs(intersected, limit), nil
+}
+
+// queryDirectoryPathFTSLiteralContainsIDs recalls entries by matching directory
+// paths, then expanding each matched directory to its subtree.
+func (p *SQLiteSearchProvider) queryDirectoryPathFTSLiteralContainsIDs(ctx context.Context, term string, limit int) ([]int64, error) {
+	term = strings.TrimSpace(term)
+	if term == "" {
+		return nil, nil
+	}
+	return p.queryDirectoryPathFTSLikeIDs(ctx, "%"+term+"%", limit)
+}
+
+// queryDirectoryPathFTSLikeIDs keeps path FTS sparse by treating matched FTS
+// rows as directory anchors instead of final entry ids.
+func (p *SQLiteSearchProvider) queryDirectoryPathFTSLikeIDs(ctx context.Context, pattern string, limit int) ([]int64, error) {
+	ids, err := p.queryIDs(ctx, `
+		WITH matched_dirs(path, path_prefix, path_upper_bound) AS (
+			SELECT d.path, d.path || ?, d.path || ? || char(1114111)
+			FROM entries_path_fts f
+			INNER JOIN entries d ON d.entry_id = f.rowid
+			WHERE f.normalized_path LIKE ? AND d.is_dir = 1
+			LIMIT ?
+		)
+		SELECT e.entry_id
+		FROM entries e
+		INNER JOIN matched_dirs d ON e.path = d.path OR (e.path >= d.path_prefix AND e.path < d.path_upper_bound)
+		ORDER BY e.entry_id ASC
+		LIMIT ?
+	`, string(filepath.Separator), string(filepath.Separator), pattern, limit, limit)
+	if !isMissingFTSContentRowError(err) {
+		return ids, err
+	}
+
+	p.scheduleFTSRepair(ctx, "entries_path_fts", err)
+	fallbackIDs, fallbackErr := p.queryDirectoryPathFallbackIDs(ctx, pattern, limit)
+	if fallbackErr != nil {
+		return nil, fmt.Errorf("fallback entries_path_fts LIKE query after stale FTS row: %w; original query error: %v", fallbackErr, err)
+	}
+	return fallbackIDs, nil
 }
 
 func (p *SQLiteSearchProvider) queryIDsByExtension(ctx context.Context, extension string, limit int) ([]int64, error) {
@@ -374,6 +424,29 @@ func (p *SQLiteSearchProvider) queryPathWildcardFallbackIDs(ctx context.Context,
 	`, pattern, limit)
 }
 
+// queryDirectoryPathFallbackIDs mirrors directory-path recall without FTS so
+// stale or unavailable path FTS rows do not break search results.
+func (p *SQLiteSearchProvider) queryDirectoryPathFallbackIDs(ctx context.Context, pattern string, limit int) ([]int64, error) {
+	pattern = strings.TrimSpace(pattern)
+	if pattern == "" {
+		return nil, nil
+	}
+	return p.queryIDs(ctx, `
+		WITH matched_dirs(path, path_prefix, path_upper_bound) AS (
+			SELECT path, path || ?, path || ? || char(1114111)
+			FROM entries
+			WHERE is_dir = 1 AND normalized_path LIKE ?
+			ORDER BY entry_id ASC
+			LIMIT ?
+		)
+		SELECT e.entry_id
+		FROM entries e
+		INNER JOIN matched_dirs d ON e.path = d.path OR (e.path >= d.path_prefix AND e.path < d.path_upper_bound)
+		ORDER BY e.entry_id ASC
+		LIMIT ?
+	`, string(filepath.Separator), string(filepath.Separator), pattern, limit, limit)
+}
+
 func (p *SQLiteSearchProvider) queryFTSLiteralContainsIDs(ctx context.Context, tableName string, columnName string, term string, limit int) ([]int64, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
@@ -426,6 +499,9 @@ func (p *SQLiteSearchProvider) queryFTSMatchIDs(ctx context.Context, tableName s
 }
 
 func (p *SQLiteSearchProvider) queryFTSLikeFallbackIDs(ctx context.Context, tableName string, pattern string, limit int) ([]int64, error) {
+	if tableName == "entries_path_fts" {
+		return p.queryDirectoryPathFallbackIDs(ctx, pattern, limit)
+	}
 	columnName, ok := ftsContentColumn(tableName)
 	if !ok {
 		return nil, fmt.Errorf("unsupported FTS fallback table %q", tableName)

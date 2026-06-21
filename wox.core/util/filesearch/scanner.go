@@ -130,7 +130,11 @@ func (s *Scanner) Start(ctx context.Context) {
 	util.Go(ctx, "filesearch scan loop", func() {
 		defer s.wg.Done()
 		util.GetLogger().Info(ctx, "filesearch scanner started")
+		if err := s.db.EnsureForegroundEntryIndexes(ctx); err != nil {
+			util.GetLogger().Warn(ctx, "filesearch failed to recover foreground entry indexes: "+err.Error())
+		}
 		s.startupRestore(ctx)
+		s.buildMaintenanceEntryIndexesAsync(util.NewTraceContext(), false)
 
 		ftsOptimizeTimer := time.NewTimer(defaultFTSOptimizeInterval)
 		defer ftsOptimizeTimer.Stop()
@@ -441,6 +445,9 @@ func (s *Scanner) executePlannedRun(ctx context.Context, kind RunKind, reason st
 		// settle, so log the boundary explicitly instead of hiding that cost in a
 		// generic "scan cycle completed" message.
 		logFilesearchSQLiteMaintenance(ctx, "bulk_finalize", string(kind), util.GetSystemTimestamp()-bulkFinalizeStartedAt, len(filesearchFTSTables))
+		logFilesearchIndexPhase(ctx, "bulk_finalize", string(kind), util.GetSystemTimestamp()-bulkFinalizeStartedAt, map[string]any{
+			"fts_tables": len(filesearchFTSTables),
+		})
 		// Run preparation, execution, and deferred bulk finalize all belong to one
 		// user-visible full-index attempt. Record that outer elapsed time here,
 		// after bulk finalize succeeds, so later optimizations can compare one
@@ -449,6 +456,7 @@ func (s *Scanner) executePlannedRun(ctx context.Context, kind RunKind, reason st
 		logFilesearchFullIndexTotal(ctx, reason, elapsedMs, len(plan.RootPlans), len(plan.Jobs), plan.TotalWorkUnits)
 		if runSucceeded {
 			s.emitCompletedFullRunSummary(ctx, plan, elapsedMs)
+			s.buildMaintenanceEntryIndexesAsync(util.NewTraceContext(), true)
 		}
 	}()
 
@@ -472,7 +480,12 @@ func (s *Scanner) executePlannedRun(ctx context.Context, kind RunKind, reason st
 		s.emitStateChange(ctx)
 		logFilesearchRunStage(ctx, kind, snapshot.ActiveStage, rootRecordForRunLog(roots, job.RootID), job, snapshot.ActiveRootIndex, snapshot.ActiveRootTotal, snapshot.RunProgressCurrent, snapshot.RunProgressTotal)
 	})
-	logFilesearchRunExecution(ctx, kind, util.GetSystemTimestamp()-executionStartedAt, len(plan.Jobs), plan.TotalWorkUnits)
+	executionElapsedMs := util.GetSystemTimestamp() - executionStartedAt
+	logFilesearchRunExecution(ctx, kind, executionElapsedMs, len(plan.Jobs), plan.TotalWorkUnits)
+	logFilesearchIndexPhase(ctx, "run_execution", string(kind), executionElapsedMs, map[string]any{
+		"jobs":  len(plan.Jobs),
+		"units": plan.TotalWorkUnits,
+	})
 	if err != nil {
 		s.handleRunFailure(ctx, run, roots)
 		return err
@@ -480,19 +493,6 @@ func (s *Scanner) executePlannedRun(ctx context.Context, kind RunKind, reason st
 	runSucceeded = true
 
 	s.clearTransientRunState()
-	if kind == RunKindFull {
-		// Bug fix: incremental dirty flushes should not restart the platform
-		// change feed. FSEvents replays from the oldest root cursor when a stream
-		// is recreated, so restarting after every small sync can replay the same
-		// event for a quiet root and keep the toolbar stuck in "Syncing file changes".
-		// Full scans already committed the searchable index and root cursors, so the
-		// feed refresh can finish as a background handoff instead of extending the
-		// user-visible index duration measured by the toolbar and real-index smoke.
-		refreshCtx := util.NewTraceContext()
-		util.Go(refreshCtx, "filesearch refresh change feed after full scan", func() {
-			s.refreshChangeFeed(refreshCtx)
-		})
-	}
 	return nil
 }
 
@@ -788,6 +788,27 @@ func rootRecordForRunLog(roots []RootRecord, rootID string) RootRecord {
 
 func (s *Scanner) refreshChangeFeed(ctx context.Context) {
 	s.refreshChangeFeedWithRoots(ctx, nil)
+}
+
+// buildMaintenanceEntryIndexesAsync keeps maintenance-only SQLite indexes off
+// the user-visible full-index critical path.
+func (s *Scanner) buildMaintenanceEntryIndexesAsync(ctx context.Context, refreshChangeFeedAfter bool) {
+	if s == nil || s.db == nil {
+		return
+	}
+	util.Go(ctx, "filesearch build maintenance entry indexes", func() {
+		if err := s.db.BuildMaintenanceEntryIndexes(ctx); err != nil {
+			util.GetLogger().Warn(ctx, "filesearch failed to build maintenance entry indexes: "+err.Error())
+			return
+		}
+		if refreshChangeFeedAfter {
+			s.refreshChangeFeed(ctx)
+		}
+		select {
+		case s.dirtyCh <- struct{}{}:
+		default:
+		}
+	})
 }
 
 func (s *Scanner) refreshChangeFeedWithRoots(ctx context.Context, roots []RootRecord) {
@@ -1566,6 +1587,18 @@ func (s *Scanner) enqueueDirtyForPath(ctx context.Context, path string) bool {
 func (s *Scanner) processDirtyQueue(ctx context.Context, now time.Time) error {
 	if s.dirtyQueue == nil {
 		return nil
+	}
+	if s.db != nil {
+		ready, err := s.db.EntryMaintenanceIndexesReady(ctx)
+		if err != nil {
+			return err
+		}
+		if !ready {
+			// Fresh full scans publish foreground search before maintenance indexes
+			// are rebuilt. Keep watcher signals queued until dirty diffs can use
+			// their scoped lookup indexes again.
+			return nil
+		}
 	}
 
 	rootDirectoryCounts, rootsByID, _, err := s.loadDirtyQueueContext(ctx)
