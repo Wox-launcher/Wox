@@ -55,6 +55,13 @@ func registerGlobalHotkeysLinux(specs []GlobalHotkeySpec) (HotkeyRegistration, b
 
 func AddRawKeyListener(handler RawKeyHandler) (RawKeySubscription, error) {
 	if IsWaylandSession() {
+		// On Wayland, the display server does not expose raw key events to
+		// applications. Try evdev direct-read as a fallback so double-modifier
+		// and CapsLock-combo hotkeys can still work when the user has read
+		// access to /dev/input/event* (membership in the 'input' group).
+		if IsEvdevRawListenerAvailable() {
+			return addRawKeyListenerLinuxEvdev(handler)
+		}
 		return addRawKeyListenerLinuxWayland(handler)
 	}
 	return addRawKeyListenerLinuxX11(handler)

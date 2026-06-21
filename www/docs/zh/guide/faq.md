@@ -71,3 +71,27 @@ macOS 可能会限制 Desktop、Documents、Downloads、外置磁盘等位置。
 ### 如何修改快捷键？
 
 打开 **设置 -> 常规**，编辑快捷键字段。
+
+## Wayland
+
+### 在 Wayland 下如何使用双修饰键热键或 CapsLock 组合键？ {#wayland-double-modifier-hotkeys}
+
+在 Wayland 下，Wox 无法像在 X11 上那样通过显示服务器全局拦截原始按键事件。为了启用双修饰键热键（如 `ctrl+ctrl`、`shift+shift`）和 CapsLock 组合键热键（如 `capslock+a`），Wox 会直接从 Linux evdev 接口读取键盘事件。
+
+这需要你的用户账户对 `/dev/input/event*` 设备有读权限，可以通过加入 `input` 组来获得。
+
+**设置步骤：**
+
+1. 将你的用户加入 `input` 组：
+
+   ```bash
+   sudo usermod -aG input $USER
+   ```
+
+2. 重新登录（或重启）使组变更生效。
+
+3. 重启 Wox。
+
+之后，双修饰键和 CapsLock 组合键热键就可以在 Wayland 下正常使用了。普通组合键热键（如 `ctrl+space`）不受此设置影响，始终通过 `org.freedesktop.portal.GlobalShortcuts` portal 工作。
+
+> **注意：** 此方案不需要 root 权限或系统守护进程。Wox 只是被动读取 evdev 事件——不会 grab、重映射或注入任何键盘输入。

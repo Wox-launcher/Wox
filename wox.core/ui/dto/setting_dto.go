@@ -17,28 +17,32 @@ type WoxSettingDto struct {
 	// OnboardingFinished is sent with the regular settings DTO so Flutter can
 	// update the guide completion flag through the existing key-value API and
 	// avoid a separate first-run state endpoint.
-	OnboardingFinished        bool
-	HideOnLostFocus           bool
-	ShowTray                  bool
-	LangCode                  i18n.LangCode
-	QueryHotkeys              []setting.QueryHotkey
-	QueryShortcuts            []setting.QueryShortcut
-	TrayQueries               []setting.TrayQuery
-	LaunchMode                setting.LaunchMode
-	StartPage                 setting.StartPage
-	AIProviders               []setting.AIProvider
-	HttpProxyEnabled          bool
-	HttpProxyUrl              string
-	ShowPosition              setting.PositionType
-	IsLinuxWaylandSession     bool
-	EnableAutoBackup          bool
-	EnableAutoUpdate          bool
-	ReleaseChannel            setting.ReleaseChannel
-	EnableAnonymousUsageStats bool
-	CustomPythonPath          string
-	CustomNodejsPath          string
-	CloudSyncServerUrl        string
-	CloudSyncDisabledPlugins  []string
+	OnboardingFinished    bool
+	HideOnLostFocus       bool
+	ShowTray              bool
+	LangCode              i18n.LangCode
+	QueryHotkeys          []setting.QueryHotkey
+	QueryShortcuts        []setting.QueryShortcut
+	TrayQueries           []setting.TrayQuery
+	LaunchMode            setting.LaunchMode
+	StartPage             setting.StartPage
+	AIProviders           []setting.AIProvider
+	HttpProxyEnabled      bool
+	HttpProxyUrl          string
+	ShowPosition          setting.PositionType
+	IsLinuxWaylandSession bool
+	// IsEvdevRawListenerAvailable reports whether evdev keyboard devices are
+	// readable (user is in the 'input' group). Flutter uses this to decide
+	// whether to show the Wayland double-modifier hotkey guidance prompt.
+	IsEvdevRawListenerAvailable bool
+	EnableAutoBackup            bool
+	EnableAutoUpdate            bool
+	ReleaseChannel              setting.ReleaseChannel
+	EnableAnonymousUsageStats   bool
+	CustomPythonPath            string
+	CustomNodejsPath            string
+	CloudSyncServerUrl          string
+	CloudSyncDisabledPlugins    []string
 
 	// UI related
 	AppWidth       int

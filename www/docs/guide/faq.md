@@ -71,3 +71,27 @@ Run `theme` in Wox or open **Settings -> Theme**.
 ### How do I change the hotkey?
 
 Open **Settings -> General** and edit the hotkey field.
+
+## Wayland
+
+### How do I use double-modifier hotkeys or CapsLock combos on Wayland? {#wayland-double-modifier-hotkeys}
+
+On Wayland, Wox cannot globally intercept raw key events through the display server like it does on X11. To enable double-modifier hotkeys (such as `ctrl+ctrl`, `shift+shift`) and CapsLock-combo hotkeys (such as `capslock+a`), Wox reads keyboard events directly from the Linux evdev interface.
+
+This requires your user account to have read access to `/dev/input/event*` devices, which is granted by membership in the `input` group.
+
+**Setup:**
+
+1. Add your user to the `input` group:
+
+   ```bash
+   sudo usermod -aG input $USER
+   ```
+
+2. Log out and log back in (or reboot) for the group change to take effect.
+
+3. Restart Wox.
+
+After that, double-modifier and CapsLock-combo hotkeys will work on Wayland. Regular combination hotkeys (like `ctrl+space`) continue to work via the `org.freedesktop.portal.GlobalShortcuts` portal regardless of this setting.
+
+> **Note:** This does NOT require root or a system daemon. Wox only reads evdev events passively — it does not grab, remap, or inject any keyboard input.

@@ -26,7 +26,10 @@ func parseModifierToken(token string) (keyboard.Modifier, keyboard.Key, bool) {
 
 func validateHotkeySpec(spec hotkeySpec) error {
 	if spec.isDoubleModifier() && keyboard.IsWaylandSession() {
-		return fmt.Errorf("double modifier hotkeys are not supported on Wayland")
+		if !keyboard.IsEvdevRawListenerAvailable() {
+			return fmt.Errorf("double modifier hotkeys require evdev access on Wayland; add user to 'input' group")
+		}
+		// evdev is available — double modifier hotkeys work via direct evdev read.
 	}
 	return nil
 }

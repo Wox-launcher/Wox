@@ -3,9 +3,11 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/demo/wox_demo.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_table_view.dart';
+import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_hotkey_recorder_view.dart';
 import 'package:wox/components/wox_query_hotkey_dialog.dart';
 import 'package:wox/components/wox_switch.dart';
@@ -206,6 +208,15 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                   },
                 ),
               ),
+              // On Wayland without evdev access, double-modifier hotkeys (e.g.
+              // double Ctrl) and CapsLock combos cannot work. Show a guiding
+              // prompt with a link to the help article.
+              if (controller.woxSetting.value.isLinuxWaylandSession &&
+                  !controller.woxSetting.value.isEvdevRawListenerAvailable)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 18),
+                  child: _buildWaylandEvdevHint(),
+                ),
               if (!controller.woxSetting.value.isLinuxWaylandSession)
                 // Wayland does not expose the active app selection to Wox, so the
                 // selection hotkey cannot produce a selection query there.
@@ -550,6 +561,45 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
             child: Icon(Icons.play_circle_outline_rounded, color: foreground.withValues(alpha: 0.88), size: 18),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildWaylandEvdevHint() {
+    final isLight = getThemeBackgroundColor().computeLuminance() > 0.5;
+    final accentColor = isLight ? const Color(0xFFB96D18) : const Color(0xFFF3B75C);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: accentColor.withValues(alpha: isLight ? 0.12 : 0.08),
+        border: Border.all(color: accentColor, width: 1),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, size: 20, color: accentColor),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              controller.tr('ui_hotkey_wayland_evdev_hint'),
+              style: TextStyle(fontSize: 13, color: getThemeTextColor()),
+            ),
+          ),
+          WoxButton.text(
+            text: controller.tr('ui_hotkey_wayland_evdev_learn_more'),
+            icon: Icon(Icons.open_in_new, size: 14, color: getThemeTextColor()),
+            onPressed: () async {
+              final uri = Uri.parse(
+                'https://wox-launcher.github.io/Wox/guide/faq#wayland-double-modifier-hotkeys',
+              );
+              if (await canLaunchUrl(uri)) {
+                await launchUrl(uri);
+              }
+            },
+          ),
+        ],
       ),
     );
   }

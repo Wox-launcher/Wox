@@ -30,6 +30,7 @@ import (
 	"wox/updater"
 	"wox/util"
 	"wox/util/font"
+	"wox/util/keyboard"
 	"wox/util/overlay"
 	"wox/util/permission"
 	"wox/util/screen"
@@ -130,6 +131,8 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 
 	// doctor
 	"/doctor/check":                  handleDoctorCheck,
+	"/doctor/ignore":                 handleDoctorIgnore,
+	"/doctor/unignore":               handleDoctorUnignore,
 	"/permission/accessibility/open": handlePermissionAccessibilityOpen,
 	"/permission/privacy/open":       handlePermissionPrivacyOpen,
 
@@ -912,6 +915,7 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 	settingDto.HttpProxyUrl = woxSetting.HttpProxyUrl.Get()
 	settingDto.ShowPosition = woxSetting.ShowPosition.Get()
 	settingDto.IsLinuxWaylandSession = util.IsLinuxWaylandSession()
+	settingDto.IsEvdevRawListenerAvailable = keyboard.IsEvdevRawListenerAvailable()
 	settingDto.EnableAutoBackup = woxSetting.EnableAutoBackup.Get()
 	settingDto.EnableAutoUpdate = woxSetting.EnableAutoUpdate.Get()
 	settingDto.ReleaseChannel = woxSetting.ReleaseChannel.Get()
@@ -3197,6 +3201,48 @@ func handleDoctorCheck(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
 	results := plugin.RunDoctorChecks(ctx)
 	writeSuccessResponse(w, results)
+}
+
+func handleDoctorIgnore(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	var req struct {
+		CheckType string `json:"checkType"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	current := woxSetting.IgnoredDoctorChecks.Get()
+	for _, t := range current {
+		if t == req.CheckType {
+			writeSuccessResponse(w, nil)
+			return
+		}
+	}
+	_ = woxSetting.IgnoredDoctorChecks.Set(append(current, req.CheckType))
+	writeSuccessResponse(w, nil)
+}
+
+func handleDoctorUnignore(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+	var req struct {
+		CheckType string `json:"checkType"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	current := woxSetting.IgnoredDoctorChecks.Get()
+	filtered := current[:0]
+	for _, t := range current {
+		if t != req.CheckType {
+			filtered = append(filtered, t)
+		}
+	}
+	_ = woxSetting.IgnoredDoctorChecks.Set(filtered)
+	writeSuccessResponse(w, nil)
 }
 
 func handlePermissionAccessibilityOpen(w http.ResponseWriter, r *http.Request) {

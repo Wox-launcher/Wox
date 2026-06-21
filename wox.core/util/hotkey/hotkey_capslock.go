@@ -39,11 +39,12 @@ func (t *capsLockComboTracker) HandleEvent(event keyboard.RawKeyEvent, allowCaps
 		if runtime.GOOS == "darwin" {
 			return t.handleDarwinCapsLockEvent(event, allowCapsLockReplay)
 		}
-		if runtime.GOOS == "windows" {
-			return t.handleWindowsCapsLockEvent(event, allowCapsLockReplay)
-		}
-
-		return t.handleDefaultCapsLockEvent(event, allowCapsLockReplay)
+		// Both Windows and Linux use the same capture-and-restore approach:
+		// capture the CapsLock state on key-down, then explicitly set the
+		// target state on key-up. On Linux, the system also sees the raw
+		// CapsLock events (evdev is read-only), so the restore step toggles
+		// the state back if a combo was triggered.
+		return t.handleStateCaptureCapsLockEvent(event, allowCapsLockReplay)
 	}
 
 	if runtime.GOOS == "darwin" {
@@ -84,9 +85,26 @@ func (t *capsLockComboTracker) handleDefaultCapsLockEvent(event keyboard.RawKeyE
 	return keyboard.KeyUnknown, false
 }
 
-// handleWindowsCapsLockEvent keeps Windows Caps Lock behavior aligned by setting
-// the final toggle state explicitly instead of replaying swallowed raw events.
-func (t *capsLockComboTracker) handleWindowsCapsLockEvent(event keyboard.RawKeyEvent, allowCapsLockStateUpdate bool) (keyboard.Key, bool) {
+// handleStateCaptureCapsLockEvent keeps Caps Lock behavior aligned by setting
+// the final toggle state explicitly after the combo sequence completes.
+//
+// On Windows: the WH_KEYBOARD_LL hook consumes the raw CapsLock event, so the
+// system never toggles. We capture the pre-toggle state on key-down and set
+// the target state explicitly on key-up.
+//
+// On Linux (evdev): we can't consume the raw event, so the kernel toggles
+// CapsLock before our handler sees the key-down. We capture the post-toggle
+// state on key-down, then on key-up we toggle back if a combo was triggered
+// (undoing the system's toggle) or leave it as-is if CapsLock was pressed
+// alone (preserving the normal toggle behavior).
+func (t *capsLockComboTracker) handleStateCaptureCapsLockEvent(event keyboard.RawKeyEvent, allowCapsLockStateUpdate bool) (keyboard.Key, bool) {
+	if t.passthroughCapsEvents > 0 {
+		// These events are from our own simulated CapsLock tap; let them
+		// pass through to the system without processing.
+		t.passthroughCapsEvents--
+		return keyboard.KeyUnknown, false
+	}
+
 	if event.Type == keyboard.EventTypeKeyDown {
 		t.capsPressed = true
 		t.comboTriggered = false
@@ -97,13 +115,30 @@ func (t *capsLockComboTracker) handleWindowsCapsLockEvent(event keyboard.RawKeyE
 		return keyboard.KeyUnknown, true
 	}
 
+	allowSetState := allowCapsLockStateUpdate && t.capsLockStateCaptured
+
+	if runtime.GOOS == "linux" {
+		// On Linux, the system already toggled CapsLock on key-down.
+		// If a combo was triggered, toggle back to undo the system's toggle.
+		// If CapsLock was pressed alone, leave the system's toggle as-is.
+		shouldUndoToggle := t.comboTriggered
+		t.resetCapsSequence()
+		if allowSetState && shouldUndoToggle {
+			t.passthroughCapsEvents = 2
+			currentState := keyboard.IsCapsLockEnabled()
+			setCapsLockStateAsync(!currentState, "linux-undo-caps-toggle")
+		}
+		return keyboard.KeyUnknown, true
+	}
+
+	// Windows: the system never toggled (event was consumed). Set the target
+	// state explicitly.
 	targetState := t.capsLockStateBefore
 	if !t.comboTriggered {
 		targetState = !targetState
 	}
-	shouldSetState := allowCapsLockStateUpdate && t.capsLockStateCaptured
 	t.resetCapsSequence()
-	if shouldSetState {
+	if allowSetState {
 		setCapsLockStateAsync(targetState, "windows-caps-lock-sequence")
 	}
 	return keyboard.KeyUnknown, true

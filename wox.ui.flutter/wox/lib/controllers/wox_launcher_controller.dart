@@ -4105,9 +4105,14 @@ class WoxLauncherController extends GetxController {
 
   /// Process doctor check results and update the doctor check info
   DoctorCheckInfo processDoctorCheckResults(List<DoctorCheckResult> results) {
-    // Check if all tests passed
+    // Ignored checks are skipped in the toolbar but remain visible in the
+    // results list so the doctor query can still show them with an Unignore
+    // action.
+    final activeResults = results.where((r) => !r.ignored).toList();
+
+    // Check if all non-ignored tests passed
     bool allPassed = true;
-    for (var result in results) {
+    for (var result in activeResults) {
       if (!result.passed) {
         allPassed = false;
         break;
@@ -4119,7 +4124,7 @@ class WoxLauncherController extends GetxController {
     WoxImage icon = WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_BASE64.code, imageData: QUERY_ICON_DOCTOR_WARNING);
     String message = "";
 
-    for (var result in results) {
+    for (var result in activeResults) {
       if (!result.passed) {
         message = result.description;
         if (result.isVersionIssue) {

@@ -8,9 +8,11 @@ import (
 	"strings"
 	"wox/util"
 	"wox/util/browser"
+	"wox/util/keyboard"
 )
 
 const gnomeAppIndicatorExtensionURL = "https://extensions.gnome.org/extension/615/appindicator-support/"
+const waylandInputGroupHelpURL = "https://wox-launcher.github.io/Wox/guide/faq#wayland-double-modifier-hotkeys"
 
 // checkGnomeTrayIndicator verifies the AppIndicator host only when Wox runs under GNOME.
 func checkGnomeTrayIndicator(ctx context.Context) (DoctorCheckResult, bool) {
@@ -90,4 +92,37 @@ func isStatusNotifierHostRegistered(ctx context.Context) bool {
 	}
 
 	return strings.Contains(strings.ToLower(string(output)), "true")
+}
+
+// checkLinuxInputGroup verifies that the user has read access to evdev keyboard
+// devices, which is required for double-modifier and CapsLock-combo hotkeys on
+// Wayland. On X11 this check is skipped because raw key events are obtained via
+// XQueryKeymap without evdev.
+func checkLinuxInputGroup(ctx context.Context) (DoctorCheckResult, bool) {
+	if !util.IsLinuxWaylandSession() {
+		return DoctorCheckResult{}, false
+	}
+
+	if keyboard.IsEvdevRawListenerAvailable() {
+		return DoctorCheckResult{
+			Name:        "i18n:plugin_doctor_linux_input_group",
+			Type:        DoctorCheckLinuxInputGroup,
+			Passed:      true,
+			Description: "i18n:plugin_doctor_linux_input_group_ok",
+			ActionName:  "",
+			Action:      func(ctx context.Context, actionContext ActionContext) {},
+		}, true
+	}
+
+	return DoctorCheckResult{
+		Name:                   "i18n:plugin_doctor_linux_input_group",
+		Type:                   DoctorCheckLinuxInputGroup,
+		Passed:                 false,
+		Description:            "i18n:plugin_doctor_linux_input_group_missing",
+		ActionName:             "i18n:plugin_doctor_linux_input_group_open_help",
+		PreventHideAfterAction: true,
+		Action: func(ctx context.Context, actionContext ActionContext) {
+			_ = browser.OpenURL(waylandInputGroupHelpURL, "")
+		},
+	}, true
 }
