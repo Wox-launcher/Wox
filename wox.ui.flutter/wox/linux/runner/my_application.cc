@@ -8,6 +8,7 @@
 #include <math.h>
 #include <string>
 #include <stdarg.h>
+#include <unistd.h>
 #include <vector>
 #ifdef GDK_WINDOWING_X11
 #include <X11/Xatom.h>
@@ -670,6 +671,72 @@ static gboolean intersect_rectangles(const GdkRectangle *first, const GdkRectang
   return TRUE;
 }
 
+// Uses GDK monitor geometry so Wayland screenshot metadata does not trigger the ScreenCast picker.
+static gboolean collect_gdk_monitor_snapshots(std::vector<PortalMonitorSnapshot> *monitors_out, GdkRectangle *union_out)
+{
+  if (monitors_out == nullptr || union_out == nullptr)
+  {
+    return FALSE;
+  }
+
+  GdkDisplay *display = gdk_display_get_default();
+  if (display == nullptr)
+  {
+    return FALSE;
+  }
+
+  const int monitor_count = gdk_display_get_n_monitors(display);
+  gboolean union_initialized = FALSE;
+  GdkRectangle logical_union{};
+  for (int index = 0; index < monitor_count; ++index)
+  {
+    GdkMonitor *monitor = gdk_display_get_monitor(display, index);
+    if (monitor == nullptr)
+    {
+      continue;
+    }
+
+    GdkRectangle geometry{};
+    gdk_monitor_get_geometry(monitor, &geometry);
+    if (geometry.width <= 0 || geometry.height <= 0)
+    {
+      continue;
+    }
+
+    monitors_out->push_back(PortalMonitorSnapshot{
+        "gdk-monitor-" + std::to_string(index),
+        geometry.x,
+        geometry.y,
+        geometry.width,
+        geometry.height,
+    });
+
+    if (!union_initialized)
+    {
+      logical_union = geometry;
+      union_initialized = TRUE;
+      continue;
+    }
+
+    const int left = MIN(logical_union.x, geometry.x);
+    const int top = MIN(logical_union.y, geometry.y);
+    const int right = MAX(logical_union.x + logical_union.width, geometry.x + geometry.width);
+    const int bottom = MAX(logical_union.y + logical_union.height, geometry.y + geometry.height);
+    logical_union.x = left;
+    logical_union.y = top;
+    logical_union.width = right - left;
+    logical_union.height = bottom - top;
+  }
+
+  if (monitors_out->empty())
+  {
+    return FALSE;
+  }
+
+  *union_out = logical_union;
+  return TRUE;
+}
+
 static gboolean encode_pixbuf_to_png_base64(GdkPixbuf *pixbuf, gchar **base64_out, gchar **error_out)
 {
   gchar *png_buffer = nullptr;
@@ -687,6 +754,49 @@ static gboolean encode_pixbuf_to_png_base64(GdkPixbuf *pixbuf, gchar **base64_ou
 
   *base64_out = g_base64_encode(reinterpret_cast<const guchar *>(png_buffer), png_size);
   g_free(png_buffer);
+  return TRUE;
+}
+
+// Writes native screenshot payloads to temp PNGs to avoid large MethodChannel base64 copies.
+static gboolean write_pixbuf_to_temp_png_file(GdkPixbuf *pixbuf, gchar **file_path_out, gchar **error_out)
+{
+  if (pixbuf == nullptr || file_path_out == nullptr)
+  {
+    if (error_out != nullptr)
+    {
+      *error_out = g_strdup("Invalid screenshot image payload");
+    }
+    return FALSE;
+  }
+
+  GError *file_error = nullptr;
+  gchar *file_path = nullptr;
+  const int file_descriptor = g_file_open_tmp("wox-screenshot-XXXXXX", &file_path, &file_error);
+  if (file_descriptor == -1)
+  {
+    if (error_out != nullptr)
+    {
+      *error_out = g_strdup(file_error != nullptr ? file_error->message : "Failed to create screenshot temp file");
+    }
+    g_clear_error(&file_error);
+    return FALSE;
+  }
+  close(file_descriptor);
+
+  GError *save_error = nullptr;
+  if (!gdk_pixbuf_save(pixbuf, file_path, "png", &save_error, nullptr))
+  {
+    if (error_out != nullptr)
+    {
+      *error_out = g_strdup(save_error != nullptr ? save_error->message : "Failed to write screenshot temp file");
+    }
+    g_clear_error(&save_error);
+    unlink(file_path);
+    g_free(file_path);
+    return FALSE;
+  }
+
+  *file_path_out = file_path;
   return TRUE;
 }
 
@@ -1714,6 +1824,45 @@ static gboolean cache_portal_capture(MyApplication *self, gchar **error_out)
     return FALSE;
   }
 
+  std::vector<PortalMonitorSnapshot> gdk_monitors;
+  GdkRectangle gdk_union{};
+  if (collect_gdk_monitor_snapshots(&gdk_monitors, &gdk_union))
+  {
+    GdkPixbuf *desktop_pixbuf = nullptr;
+    gchar *screenshot_error = nullptr;
+    const gint64 portal_screenshot_start_us = g_get_monotonic_time();
+    if (!call_portal_screenshot(connection, &desktop_pixbuf, &screenshot_error))
+    {
+      if (error_out != nullptr)
+      {
+        *error_out = g_strdup(screenshot_error != nullptr ? screenshot_error : "Failed to capture portal screenshot");
+      }
+      g_free(screenshot_error);
+      g_object_unref(connection);
+      return FALSE;
+    }
+    const gint64 portal_screenshot_elapsed_ms = (g_get_monotonic_time() - portal_screenshot_start_us) / 1000;
+
+    // Wayland does not expose pixels directly, but GDK still exposes monitor geometry without a
+    // ScreenCast source picker. Use that geometry to slice the Screenshot portal desktop image so
+    // the capture flow behaves like the macOS/Windows full-desktop annotation workspace.
+    self->cached_portal_capture.has_value = TRUE;
+    self->cached_portal_capture.is_single_desktop = FALSE;
+    self->cached_portal_capture.monitors = gdk_monitors;
+    self->cached_portal_capture.logical_union = gdk_union;
+    self->cached_portal_capture.scale_x = gdk_union.width > 0 ? static_cast<double>(gdk_pixbuf_get_width(desktop_pixbuf)) / gdk_union.width : 1.0;
+    self->cached_portal_capture.scale_y = gdk_union.height > 0 ? static_cast<double>(gdk_pixbuf_get_height(desktop_pixbuf)) / gdk_union.height : 1.0;
+    self->cached_portal_capture.desktop_pixbuf = desktop_pixbuf;
+    log("screenshot portal source mapping: source=gdk-monitor monitorCount=%zu sourceUnion=%d,%d %dx%d pixbuf=%dx%d",
+        gdk_monitors.size(),
+        gdk_union.x, gdk_union.y, gdk_union.width, gdk_union.height,
+        gdk_pixbuf_get_width(desktop_pixbuf), gdk_pixbuf_get_height(desktop_pixbuf));
+    log("screenshot native timing: stage=portal_screenshot elapsedMs=%lld", static_cast<long long>(portal_screenshot_elapsed_ms));
+    g_free(screenshot_error);
+    g_object_unref(connection);
+    return TRUE;
+  }
+
   std::vector<PortalMonitorSnapshot> monitors;
   gchar *monitor_error = nullptr;
   const gboolean metadata_ok = capture_portal_monitor_metadata(connection, &monitors, &monitor_error);
@@ -1922,13 +2071,13 @@ static gboolean build_portal_snapshot_payloads(MyApplication *self, FlValue *dis
         }
       }
 
-      gchar *image_base64 = nullptr;
+      gchar *image_file_path = nullptr;
       gchar *encode_error = nullptr;
-      if (!encode_pixbuf_to_png_base64(image_pixbuf, &image_base64, &encode_error))
+      if (!write_pixbuf_to_temp_png_file(image_pixbuf, &image_file_path, &encode_error))
       {
         if (error_out != nullptr)
         {
-          *error_out = encode_error != nullptr ? encode_error : g_strdup("Failed to encode portal screenshot");
+          *error_out = encode_error != nullptr ? encode_error : g_strdup("Failed to write portal screenshot");
         }
         else
         {
@@ -1940,8 +2089,8 @@ static gboolean build_portal_snapshot_payloads(MyApplication *self, FlValue *dis
         }
         return FALSE;
       }
-      fl_value_set_string_take(snapshot, "imageBytesBase64", fl_value_new_string(image_base64));
-      g_free(image_base64);
+      fl_value_set_string_take(snapshot, "imageFilePath", fl_value_new_string(image_file_path));
+      g_free(image_file_path);
       if (should_unref_image_pixbuf)
       {
         g_object_unref(image_pixbuf);
@@ -2008,13 +2157,13 @@ static gboolean build_portal_snapshot_payloads(MyApplication *self, FlValue *dis
           return FALSE;
         }
 
-        gchar *image_base64 = nullptr;
+        gchar *image_file_path = nullptr;
         gchar *encode_error = nullptr;
-        if (!encode_pixbuf_to_png_base64(monitor_pixbuf, &image_base64, &encode_error))
+        if (!write_pixbuf_to_temp_png_file(monitor_pixbuf, &image_file_path, &encode_error))
         {
           if (error_out != nullptr)
           {
-            *error_out = encode_error != nullptr ? encode_error : g_strdup("Failed to encode portal monitor snapshot");
+            *error_out = encode_error != nullptr ? encode_error : g_strdup("Failed to write portal monitor snapshot");
           }
           else
           {
@@ -2024,8 +2173,8 @@ static gboolean build_portal_snapshot_payloads(MyApplication *self, FlValue *dis
           return FALSE;
         }
 
-        fl_value_set_string_take(snapshot, "imageBytesBase64", fl_value_new_string(image_base64));
-        g_free(image_base64);
+        fl_value_set_string_take(snapshot, "imageFilePath", fl_value_new_string(image_file_path));
+        g_free(image_file_path);
         g_object_unref(monitor_pixbuf);
       }
 
@@ -2223,6 +2372,7 @@ static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
     const GdkRectangle *logical_selection_ptr = has_logical_selection ? &logical_selection : nullptr;
     FlValue *snapshots = nullptr;
     gchar *capture_error = nullptr;
+    const gint64 method_start_us = g_get_monotonic_time();
 #ifdef GDK_WINDOWING_X11
     GdkDisplay *display = gtk_widget_get_display(GTK_WIDGET(window));
     if (display != nullptr && GDK_IS_X11_DISPLAY(display))
@@ -2253,6 +2403,12 @@ static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
       clear_screenshot_capture_cache(self);
       if (build_portal_snapshot_payloads(self, nullptr, include_image_bytes, logical_selection_ptr, &snapshots, &capture_error))
       {
+        log("screenshot native timing: method=%s backend=portal includeImages=%d selection=%d elapsedMs=%lld snapshotCount=%zu",
+            method,
+            include_image_bytes,
+            has_logical_selection,
+            static_cast<long long>((g_get_monotonic_time() - method_start_us) / 1000),
+            fl_value_get_length(snapshots));
         response = FL_METHOD_RESPONSE(fl_method_success_response_new(snapshots));
         if (has_logical_selection)
         {
@@ -2285,6 +2441,7 @@ static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
       {
         FlValue *snapshots = nullptr;
         gchar *capture_error = nullptr;
+        const gint64 method_start_us = g_get_monotonic_time();
 #ifdef GDK_WINDOWING_X11
         GdkDisplay *display = gtk_widget_get_display(GTK_WIDGET(window));
         if (display != nullptr && GDK_IS_X11_DISPLAY(display))
@@ -2304,6 +2461,10 @@ static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
         {
           if (build_portal_snapshot_payloads(self, display_ids, TRUE, nullptr, &snapshots, &capture_error))
           {
+            log("screenshot native timing: method=%s backend=portal includeImages=1 selection=0 elapsedMs=%lld snapshotCount=%zu",
+                method,
+                static_cast<long long>((g_get_monotonic_time() - method_start_us) / 1000),
+                fl_value_get_length(snapshots));
             response = FL_METHOD_RESPONSE(fl_method_success_response_new(snapshots));
           }
           else
