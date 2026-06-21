@@ -368,6 +368,24 @@ func (u *uiImpl) CaptureScreenshot(ctx context.Context, request common.CaptureSc
 	return result, nil
 }
 
+// WriteClipboardImageFile delegates image clipboard ownership to the UI process.
+func (u *uiImpl) WriteClipboardImageFile(ctx context.Context, filePath string) error {
+	if strings.TrimSpace(filePath) == "" {
+		return errors.New("clipboard image file path is empty")
+	}
+
+	respData, err := u.invokeWebsocketMethod(ctx, "WriteClipboardImageFile", map[string]string{
+		"filePath": filePath,
+	})
+	if err != nil {
+		if message, ok := respData.(string); ok && message != "" {
+			return fmt.Errorf("%w: %s", err, message)
+		}
+		return err
+	}
+	return nil
+}
+
 func (u *uiImpl) invokeWebsocketMethod(ctx context.Context, method string, data any) (responseData any, responseErr error) {
 	requestID := uuid.NewString()
 	resultChan := make(chan WebsocketMsg)
@@ -409,6 +427,8 @@ func getWebsocketMethodTimeout(method string) time.Duration {
 		// File pickers and screenshot sessions both wait on direct user interaction,
 		// so the previous fixed 2s request timeout was not enough for these long-lived UI tasks.
 		return 180 * time.Second
+	case "WriteClipboardImageFile":
+		return 10 * time.Second
 	default:
 		return 2 * time.Second
 	}

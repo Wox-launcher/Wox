@@ -76,6 +76,8 @@ type UI interface {
 	OpenOnboardingWindow(ctx context.Context)
 	PickFiles(ctx context.Context, params PickFilesParams) []string
 	CaptureScreenshot(ctx context.Context, request CaptureScreenshotRequest) (CaptureScreenshotResult, error)
+	// WriteClipboardImageFile asks the UI process to write an image file using its native clipboard owner.
+	WriteClipboardImageFile(ctx context.Context, filePath string) error
 	GetActiveWindowSnapshot(ctx context.Context) ActiveWindowSnapshot
 	GetServerPort(ctx context.Context) int
 	GetAllThemes(ctx context.Context) []Theme

@@ -4,8 +4,6 @@ package keyboard
 
 import (
 	"fmt"
-	"os"
-	"strings"
 	"wox/util"
 )
 
@@ -21,7 +19,7 @@ func RegisterGlobalHotkey(modifiers Modifier, key Key, callback func()) (HotkeyR
 			return reg, nil
 		}
 
-		if isGnomeDesktopSession() {
+		if util.IsGnomeDesktopSession() {
 			util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf(
 				"[hotkey] wayland portal unavailable (%v), falling back to GNOME custom keybindings", err))
 			return registerGlobalHotkeyLinuxGnome(modifiers, key, callback)
@@ -44,7 +42,7 @@ func registerGlobalHotkeysLinux(specs []GlobalHotkeySpec) (HotkeyRegistration, b
 		return registration, true, nil
 	}
 
-	if isGnomeDesktopSession() {
+	if util.IsGnomeDesktopSession() {
 		util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf(
 			"[hotkey] wayland portal unavailable (%v), falling back to GNOME custom keybindings", err))
 		return nil, false, nil
@@ -63,20 +61,7 @@ func AddRawKeyListener(handler RawKeyHandler) (RawKeySubscription, error) {
 }
 
 func IsWaylandSession() bool {
-	return strings.EqualFold(os.Getenv("XDG_SESSION_TYPE"), "wayland") || os.Getenv("WAYLAND_DISPLAY") != ""
-}
-
-func isGnomeDesktopSession() bool {
-	for _, value := range []string{
-		os.Getenv("XDG_CURRENT_DESKTOP"),
-		os.Getenv("DESKTOP_SESSION"),
-		os.Getenv("GDMSESSION"),
-	} {
-		if strings.Contains(strings.ToLower(value), "gnome") {
-			return true
-		}
-	}
-	return false
+	return util.IsLinuxWaylandSession()
 }
 
 func unsupportedWaylandRawListenerError() error {

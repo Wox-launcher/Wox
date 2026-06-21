@@ -63,7 +63,7 @@ func RelaunchLinuxFromDesktopEntry(ctx context.Context) error {
 
 func linuxDesktopLaunchCommands(desktopFilePath string) [][]string {
 	commands := [][]string{}
-	if isKDEDesktopSession() {
+	if IsKDEDesktopSession() {
 		commands = append(commands, []string{"kioclient", "exec", desktopFilePath})
 	}
 
@@ -111,29 +111,4 @@ func stableDesktopLaunchCgroupMatches() bool {
 	}
 
 	return strings.Contains(string(cgroupContent), "app-"+LinuxDesktopAppID+"-")
-}
-
-func isKDEDesktopSession() bool {
-	for _, envName := range []string{"XDG_CURRENT_DESKTOP", "XDG_SESSION_DESKTOP", "DESKTOP_SESSION"} {
-		if desktopSessionContains(os.Getenv(envName), "kde", "plasma") {
-			return true
-		}
-	}
-
-	return false
-}
-
-func desktopSessionContains(session string, values ...string) bool {
-	parts := strings.FieldsFunc(strings.ToLower(session), func(r rune) bool {
-		return r == ':' || r == ';' || r == ',' || r == ' '
-	})
-	for _, part := range parts {
-		for _, value := range values {
-			if part == value {
-				return true
-			}
-		}
-	}
-
-	return false
 }

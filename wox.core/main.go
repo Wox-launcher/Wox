@@ -23,6 +23,7 @@ import (
 	"wox/ui"
 	"wox/updater"
 	"wox/util"
+	"wox/util/clipboard"
 	"wox/util/imagecache"
 	"wox/util/mainthread"
 	"wox/util/selection"
@@ -272,6 +273,7 @@ func run() {
 	}
 
 	shareUI := ui.GetUIManager().GetUI(ctx)
+	clipboard.SetNativeImageFileWriter(shareUI.WriteClipboardImageFile)
 	plugin.GetPluginManager().Start(ctx, shareUI)
 
 	selection.InitSelection()

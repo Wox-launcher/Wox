@@ -55,6 +55,7 @@ import 'package:wox/utils/env.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/picker.dart';
 import 'package:wox/utils/result_drag_platform_bridge.dart';
+import 'package:wox/utils/screenshot/screenshot_platform_bridge.dart';
 import 'package:wox/utils/wox_hotkey_recording_bus.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
 import 'package:wox/utils/wox_platform_hotkey_util.dart';
@@ -3043,6 +3044,20 @@ class WoxLauncherController extends GetxController {
       final screenshotController = Get.find<WoxScreenshotController>();
       final result = await screenshotController.startCaptureSession(msg.traceId, CaptureScreenshotRequest.fromJson(msg.data));
       responseWoxWebsocketRequest(msg, true, result.toJson());
+    } else if (msg.method == "WriteClipboardImageFile") {
+      final data = (msg.data as Map).map<String, dynamic>((key, value) => MapEntry(key.toString(), value));
+      final filePath = data['filePath'] as String? ?? data['FilePath'] as String? ?? "";
+      if (filePath.isEmpty) {
+        responseWoxWebsocketRequest(msg, false, "filePath must be a non-empty string");
+      } else {
+        try {
+          await ScreenshotPlatformBridge.instance.writeClipboardImageFile(filePath: filePath);
+          responseWoxWebsocketRequest(msg, true, null);
+        } catch (e) {
+          Logger.instance.warn(msg.traceId, "WriteClipboardImageFile failed: $e");
+          responseWoxWebsocketRequest(msg, false, e.toString());
+        }
+      }
     } else if (msg.method == "FocusSettingWindow") {
       await focusSettingWindow();
       responseWoxWebsocketRequest(msg, true, null);

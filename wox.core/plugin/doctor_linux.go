@@ -4,7 +4,6 @@ package plugin
 
 import (
 	"context"
-	"os"
 	"os/exec"
 	"strings"
 	"wox/util"
@@ -15,7 +14,7 @@ const gnomeAppIndicatorExtensionURL = "https://extensions.gnome.org/extension/61
 
 // checkGnomeTrayIndicator verifies the AppIndicator host only when Wox runs under GNOME.
 func checkGnomeTrayIndicator(ctx context.Context) (DoctorCheckResult, bool) {
-	if !isGnomeDesktopSession() {
+	if !util.IsGnomeDesktopSession() {
 		return DoctorCheckResult{}, false
 	}
 
@@ -69,29 +68,6 @@ func checkWaylandDesktopLaunch(ctx context.Context) (DoctorCheckResult, bool) {
 		ActionName:  "",
 		Action:      func(ctx context.Context, actionContext ActionContext) {},
 	}, true
-}
-
-func isGnomeDesktopSession() bool {
-	for _, envName := range []string{"XDG_CURRENT_DESKTOP", "DESKTOP_SESSION", "GDMSESSION"} {
-		if desktopSessionContainsGnome(os.Getenv(envName)) {
-			return true
-		}
-	}
-
-	return os.Getenv("GNOME_DESKTOP_SESSION_ID") != ""
-}
-
-func desktopSessionContainsGnome(session string) bool {
-	parts := strings.FieldsFunc(strings.ToLower(session), func(r rune) bool {
-		return r == ':' || r == ';' || r == ',' || r == ' '
-	})
-	for _, part := range parts {
-		if part == "gnome" {
-			return true
-		}
-	}
-
-	return false
 }
 
 func isStatusNotifierHostRegistered(ctx context.Context) bool {

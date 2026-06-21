@@ -203,6 +203,14 @@ func writeImageBytes(pngData []byte, dibData []byte) error {
 		return errors.New("clipboard: PNG data is empty")
 	}
 
+	if util.IsKDEWayland() {
+		if err := writeKDEWaylandImageBytesViaUI(pngData); err != nil {
+			return err
+		}
+		util.GetLogger().Info(util.NewTraceContext(), fmt.Sprintf("clipboard: KDE Wayland image write via Flutter, pngBytes=%d", len(pngData)))
+		return nil
+	}
+
 	linuxClipboardMu.Lock()
 	defer linuxClipboardMu.Unlock()
 
@@ -216,6 +224,41 @@ func writeImageBytes(pngData []byte, dibData []byte) error {
 			portalMimePNG: pngData,
 		},
 	)
+}
+
+// writeKDEWaylandImageBytesViaUI delegates image clipboard ownership to Flutter.
+// KWin does not reliably request image payloads from the background portal session,
+// while the focused Flutter runner already has a working GTK/native clipboard path.
+func writeKDEWaylandImageBytesViaUI(pngData []byte) error {
+	cacheDir := util.GetLocation().GetCacheDirectory()
+	if cacheDir == "" {
+		cacheDir = os.TempDir()
+	}
+	if mkdirErr := os.MkdirAll(cacheDir, 0700); mkdirErr != nil {
+		return fmt.Errorf("clipboard: failed to create temporary image directory for KDE Wayland UI write: %w", mkdirErr)
+	}
+
+	tempFile, err := os.CreateTemp(cacheDir, "wox-clipboard-*.png")
+	if err != nil {
+		return fmt.Errorf("clipboard: failed to create temporary image file for KDE Wayland UI write: %w", err)
+	}
+	tempPath := tempFile.Name()
+	defer func() {
+		_ = os.Remove(tempPath)
+	}()
+
+	if _, err = tempFile.Write(pngData); err != nil {
+		_ = tempFile.Close()
+		return fmt.Errorf("clipboard: failed to write temporary image file for KDE Wayland UI write: %w", err)
+	}
+	if err = tempFile.Close(); err != nil {
+		return fmt.Errorf("clipboard: failed to close temporary image file for KDE Wayland UI write: %w", err)
+	}
+
+	if err = writeNativeImageFile(util.NewTraceContext(), tempPath); err != nil {
+		return fmt.Errorf("clipboard: KDE Wayland Flutter image write failed: %w", err)
+	}
+	return nil
 }
 
 func isClipboardChanged() bool {
