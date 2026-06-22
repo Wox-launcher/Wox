@@ -302,6 +302,13 @@ func addRawKeyListenerLinuxEvdev(handler RawKeyHandler) (RawKeySubscription, err
 // evdevReadLoop reads input_event records from an evdev device fd and forwards
 // parsed key events to the handler. It exits when stopCh is closed or the fd
 // is closed/returns an error.
+//
+// When CapsLock combo grab is enabled (SetEvdevCapsLockGrabEnabled), the loop
+// grabs the device on CapsLock key-down (EVIOCGRAB) so the system does not see
+// subsequent combo keys, and ungrabs on CapsLock key-up. This prevents stray
+// characters from being typed into the focused application when a CapsLock
+// combo (e.g. CapsLock+A) is triggered, matching macOS/Windows behavior where
+// the event hook consumes combo events.
 func evdevReadLoop(fd int, stopCh <-chan struct{}, handler RawKeyHandler) {
 	var buf [inputEventSize]byte
 	for {
@@ -353,6 +360,14 @@ func evdevReadLoop(fd int, stopCh <-chan struct{}, handler RawKeyHandler) {
 
 		util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf(
 			"[hotkey] evdev event: key=%s type=%s code=%d", key.Character(), event.Type, code))
+
+		// Note: CapsLock combo key interception via EVIOCGRAB was considered
+		// but abandoned because the grab happens after the CapsLock key-down
+		// has already been delivered to the system, making it impossible to
+		// cleanly prevent the system from toggling CapsLock without leaving
+		// the system in an inconsistent state. Instead, CapsLock combo keys
+		// (e.g. 'A' in CapsLock+A) are handled by injecting a Backspace via
+		// uinput to delete the stray character after the combo triggers.
 
 		handler(event)
 	}

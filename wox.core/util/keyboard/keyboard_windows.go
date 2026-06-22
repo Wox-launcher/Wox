@@ -121,6 +121,13 @@ func simulatePaste() error {
 	return nil
 }
 
+// simulateBackspace is a no-op on Windows: the WH_KEYBOARD_LL hook consumes
+// CapsLock combo events before the system sees them, so no stray character
+// is typed and no backspace is needed.
+func simulateBackspace() error {
+	return nil
+}
+
 func simulateCapsLockTap() error {
 	err := C.simulateCapsLockTap()
 	if err != nil {

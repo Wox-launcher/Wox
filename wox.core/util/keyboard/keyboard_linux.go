@@ -16,6 +16,7 @@ const (
 	evKeyLeftCtrlCode = 29
 	evKeyCodeC         = 46
 	evKeyCodeV         = 47
+	evKeyBackspaceCode = 14
 	evKeyDownValue     = 1
 	evKeyUpValue       = 0
 	evSynTypeCode      = 0x00
@@ -34,6 +35,32 @@ func simulateCopy() error {
 func simulatePaste() error {
 	waitModifiersRelease()
 	return simulateCtrlKeyCombo(evKeyCodeV, "paste")
+}
+
+// simulateBackspace injects a Backspace key press+release via the uinput
+// virtual keyboard. On Linux/Wayland, when a CapsLock combo (e.g. CapsLock+A)
+// is triggered, the system also sees the combo key and types it into the
+// focused input field. This function sends a Backspace to delete that
+// stray character.
+func simulateBackspace() error {
+	fd, err := ensureUinputDevice()
+	if err != nil {
+		return err
+	}
+
+	if err := writeUinputEvent(fd, evKeyEventType, evKeyBackspaceCode, int32(evKeyDownValue)); err != nil {
+		return fmt.Errorf("backspace press failed: %w", err)
+	}
+	if err := writeUinputEvent(fd, evSynTypeCode, evSynReportCode, 0); err != nil {
+		return fmt.Errorf("syn after press failed: %w", err)
+	}
+	if err := writeUinputEvent(fd, evKeyEventType, evKeyBackspaceCode, int32(evKeyUpValue)); err != nil {
+		return fmt.Errorf("backspace release failed: %w", err)
+	}
+	if err := writeUinputEvent(fd, evSynTypeCode, evSynReportCode, 0); err != nil {
+		return fmt.Errorf("syn after release failed: %w", err)
+	}
+	return nil
 }
 
 // waitModifiersRelease waits for all physical modifier keys to be released
@@ -357,6 +384,7 @@ func ensureUinputDevice() (int, error) {
 			evKeyLeftCtrlCode,   // KEY_LEFTCTRL
 			evKeyCodeC,          // KEY_C
 			evKeyCodeV,          // KEY_V
+			evKeyBackspaceCode,  // KEY_BACKSPACE
 		}
 		for _, key := range keysToEnable {
 			_, _, errno = syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), keybit, uintptr(key))

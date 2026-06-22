@@ -8,6 +8,15 @@ func SimulatePaste() error {
 	return simulatePaste()
 }
 
+// SimulateBackspace sends a Backspace key press+release through the platform
+// input system. On Linux/Wayland this is used to undo the character that the
+// system typed when a CapsLock combo key (e.g. CapsLock+A) was pressed — since
+// evdev is read-only, the system sees the combo key and types it into the
+// focused input field.
+func SimulateBackspace() error {
+	return simulateBackspace()
+}
+
 // SimulateCapsLockTap sends one Caps Lock down/up pair through the platform input system.
 func SimulateCapsLockTap() error {
 	return simulateCapsLockTap()

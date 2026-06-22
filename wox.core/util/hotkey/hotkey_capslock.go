@@ -384,6 +384,16 @@ func ensureCapsLockComboListener() error {
 		if callback != nil {
 			util.Go(util.NewTraceContext(), "caps lock hotkey callback", func() {
 				waitForCapsLockComboRelease(triggeredKey)
+				// On Linux/Wayland, the system sees the combo key (e.g. 'A')
+				// because evdev is read-only, so it types a stray character
+				// into the focused input field. Inject a Backspace via uinput
+				// to delete it before showing the Wox UI.
+				if runtime.GOOS == "linux" {
+					if err := keyboard.SimulateBackspace(); err != nil {
+						util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf(
+							"failed to delete stray combo character: %s", err.Error()))
+					}
+				}
 				callback()
 			})
 		}
