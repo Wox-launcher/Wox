@@ -713,6 +713,8 @@ func keyToWaylandTriggerName(key Key) (string, error) {
 		return "F12", nil
 	case KeyCapsLock:
 		return "Caps_Lock", nil
+	case KeyBackquote:
+		return "grave", nil
 	default:
 		return "", fmt.Errorf("unsupported Wayland hotkey key: %d", key)
 	}

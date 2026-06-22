@@ -81,6 +81,8 @@ const (
 	KeyF11
 	KeyF12
 	KeyCapsLock
+	// KeyBackquote represents the backquote/tilde key (` ~).
+	KeyBackquote
 	// KeyCtrl is Control on all supported platforms.
 	KeyCtrl
 	// KeyShift is Shift on all supported platforms.
@@ -210,6 +212,8 @@ func ParseKey(token string) (Key, error) {
 		return KeyF12, nil
 	case "capslock", "caps_lock", "caps lock":
 		return KeyCapsLock, nil
+	case "backquote", "tilde", "~", "`":
+		return KeyBackquote, nil
 	default:
 		return KeyUnknown, fmt.Errorf("invalid key: %s", token)
 	}
@@ -289,6 +293,8 @@ func (k Key) Character() string {
 		return "8"
 	case Key9:
 		return "9"
+	case KeyBackquote:
+		return "~"
 	default:
 		return ""
 	}

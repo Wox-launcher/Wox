@@ -210,6 +210,8 @@ class WoxHotkey {
         key = LogicalKeyboardKey.tab;
       } else if (e == "capslock") {
         key = LogicalKeyboardKey.capsLock;
+      } else if (e == "backquote" || e == "tilde" || e == "~" || e == "`") {
+        key = LogicalKeyboardKey.backquote;
       } else if (e == "shiftleft") {
         key = LogicalKeyboardKey.shiftLeft;
       } else if (e == "shiftright") {
@@ -368,6 +370,7 @@ class WoxHotkey {
       PhysicalKeyboardKey.arrowDown,
       PhysicalKeyboardKey.arrowRight,
       PhysicalKeyboardKey.arrowUp,
+      PhysicalKeyboardKey.backquote,
     ];
 
     return allowedKeys.contains(key);
@@ -443,6 +446,7 @@ class WoxHotkey {
       PhysicalKeyboardKey.controlLeft || PhysicalKeyboardKey.controlRight => "Control",
       PhysicalKeyboardKey.altLeft || PhysicalKeyboardKey.altRight => "Alt",
       PhysicalKeyboardKey.metaLeft || PhysicalKeyboardKey.metaRight => "Meta",
+      PhysicalKeyboardKey.backquote => "~",
       _ => null,
     };
   }
@@ -507,6 +511,8 @@ class WoxHotkey {
       keyStr = "right";
     } else if (key == PhysicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowUp) {
       keyStr = "up";
+    } else if (key == PhysicalKeyboardKey.backquote || key == LogicalKeyboardKey.backquote) {
+      keyStr = "~";
     }
     return keyStr;
   }
