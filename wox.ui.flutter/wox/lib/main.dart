@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
-import 'package:chinese_font_library/chinese_font_library.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:protocol_handler/protocol_handler.dart';
@@ -91,6 +90,13 @@ Future<void> initialServices(List<String> arguments) async {
   final traceId = const UuidV4().generate();
 
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Desktop-tuned image cache: the launcher shows small icons, not large
+  // photos. 200 entries / 20 MB is plenty and avoids reserving the full
+  // 1000 entries / 100 MB default that mobile apps expect.
+  PaintingBinding.instance.imageCache.maximumSize = 200;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 20 * 1024 * 1024;
+
   await Logger.instance.initLogger();
   registerFlutterGlobalErrorHandlers(traceId);
   HeartbeatChecker().init();
@@ -139,8 +145,18 @@ Future<void> initWindow() async {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
+  // Platform-specific CJK font fallback list. Flutter's engine-level fallback
+  // on desktop is unreliable for CJK glyphs, so we explicitly name the system
+  // fonts that ship with each OS. This replaces chinese_font_library without
+  // pulling in any dependency or bundling font files.
+  List<String> get _cjkFontFallback {
+    if (Platform.isWindows) return ['Microsoft YaHei', 'SimSun'];
+    if (Platform.isMacOS) return ['PingFang SC', 'Heiti SC', 'STHeiti'];
+    return ['Noto Sans CJK SC', 'WenQuanYi Micro Hei', 'Droid Sans Fallback'];
+  }
+
   TextTheme buildAppTextTheme(String appFontFamily) {
-    final baseTextTheme = SystemChineseFont.textTheme(Brightness.light);
+    final baseTextTheme = Typography.material2021().black;
     final scaledTextTheme = baseTextTheme.copyWith(
       bodyLarge: baseTextTheme.bodyLarge?.copyWith(fontSize: 13),
       bodyMedium: baseTextTheme.bodyMedium?.copyWith(fontSize: 13),
@@ -150,11 +166,12 @@ class MyApp extends StatelessWidget {
       labelSmall: baseTextTheme.labelSmall?.copyWith(fontSize: 11),
     );
 
+    final fallback = _cjkFontFallback;
     if (appFontFamily.isEmpty) {
-      return scaledTextTheme;
+      return scaledTextTheme.apply(fontFamilyFallback: fallback);
     }
 
-    return scaledTextTheme.apply(fontFamily: appFontFamily);
+    return scaledTextTheme.apply(fontFamily: appFontFamily, fontFamilyFallback: fallback);
   }
 
   @override

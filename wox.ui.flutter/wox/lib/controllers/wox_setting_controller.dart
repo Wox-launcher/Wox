@@ -1072,6 +1072,15 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
     unawaited(loadStorePlugins(traceId));
   }
 
+  /// Drop store-side caches (plugins + themes) so hidden window memory is released.
+  /// Both lists are lazily reloaded by their respective load methods when the
+  /// settings view is opened again.
+  void clearStoreCache() {
+    storePlugins.clear();
+    storeThemesList.clear();
+    _hasLoadedStoreThemes = false;
+  }
+
   Future<void> refreshSettingGlancePreviewsForUIEntry(String traceId) async {
     if (_hasRefreshedSettingGlancePreviewsForUIEntry) {
       return;

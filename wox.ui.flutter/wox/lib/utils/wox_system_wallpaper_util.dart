@@ -134,6 +134,16 @@ class WoxSystemWallpaperUtil {
     return provider;
   }
 
+  /// Drop the cached wallpaper image provider so hidden-state memory does not
+  /// retain the decoded bitmap. The path cache is kept so the next settings
+  /// open skips the platform lookup; only the image provider is released.
+  void releaseImageCache() {
+    _cachedWallpaperImageProvider = null;
+    _cachedWallpaperImageProviderPath = '';
+    _cachedWallpaperImageReadyPath = '';
+    _precachingWallpaperImage = null;
+  }
+
   // Pick the platform-specific wallpaper resolver and keep failures non-fatal for settings startup.
   Future<String?> _resolveSystemWallpaperPath(String traceId) async {
     try {

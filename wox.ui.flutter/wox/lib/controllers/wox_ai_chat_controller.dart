@@ -682,4 +682,14 @@ class WoxAIChatController extends GetxController {
     aiChatScrollController.dispose();
     super.onClose();
   }
+
+  /// Drop reference lists (models, agents) so hidden window memory is released.
+  /// availableTools is intentionally kept because reloading it resets
+  /// selectedTools, which would silently change the user's tool selection.
+  /// Both lists are lazily reloaded via ensure*Loaded when the chat select
+  /// panel is opened again.
+  void clearReferenceDataCache() {
+    aiModels.clear();
+    availableAgents.clear();
+  }
 }

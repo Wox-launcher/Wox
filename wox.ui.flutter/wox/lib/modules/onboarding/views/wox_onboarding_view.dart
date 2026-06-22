@@ -264,10 +264,10 @@ class _WoxOnboardingViewState extends State<WoxOnboardingView> {
           // background once. Painting the same translucent color here as well
           // made glass themes nearly opaque, hiding the native acrylic layer.
           color: Colors.transparent,
-          // Use DefaultTextStyle.merge so that the fontFamily set by SystemChineseFont
-          // in the MaterialApp theme is preserved. DefaultTextStyle would fully replace
-          // the inherited style, losing the Chinese system font that the setting view
-          // and other views correctly inherit from the Material widget chain.
+          // Use DefaultTextStyle.merge so that the fontFamily set by the
+          // MaterialApp theme is preserved. DefaultTextStyle would fully replace
+          // the inherited style, losing the font that the setting view and other
+          // views correctly inherit from the Material widget chain.
           child: DefaultTextStyle.merge(
             style: TextStyle(color: getThemeTextColor(), fontSize: 13),
             child: Stack(

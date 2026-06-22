@@ -60,6 +60,7 @@ import 'package:wox/utils/wox_hotkey_recording_bus.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
 import 'package:wox/utils/wox_platform_hotkey_util.dart';
 import 'package:wox/utils/wox_setting_util.dart';
+import 'package:wox/utils/wox_system_wallpaper_util.dart';
 import 'package:wox/utils/wox_time_tracker.dart';
 import 'package:wox/utils/webview/wox_webview_util.dart';
 
@@ -1888,6 +1889,12 @@ class WoxLauncherController extends GetxController {
   Future<void> showApp(String traceId, ShowAppParams params) async {
     hiddenCacheClearTimer?.cancel();
 
+    // Restore image cache capacity so images can be cached again while the
+    // launcher is visible. hideApp shrinks it to zero. Values match the
+    // desktop-tuned defaults set in main.dart (200 entries / 20 MB).
+    PaintingBinding.instance.imageCache.maximumSize = 200;
+    PaintingBinding.instance.imageCache.maximumSizeBytes = 20 * 1024 * 1024;
+
     final screenshotController = Get.find<WoxScreenshotController>();
     if (screenshotController.isSessionActive.value) {
       // Screenshot completion/cancel restore decides whether the shared window should stay visible.
@@ -2228,6 +2235,10 @@ class WoxLauncherController extends GetxController {
     glanceItems.clear();
     PaintingBinding.instance.imageCache.clear();
     PaintingBinding.instance.imageCache.clearLiveImages();
+    // Shrink image cache capacity to zero so no new decoded images can accumulate
+    // while the window is hidden. showApp restores the default capacity.
+    PaintingBinding.instance.imageCache.maximumSize = 0;
+    PaintingBinding.instance.imageCache.maximumSizeBytes = 0;
     scheduleHiddenCacheClear(traceId);
 
     // Clean up quick select state
@@ -2252,6 +2263,31 @@ class WoxLauncherController extends GetxController {
     isInOnboardingView.value = false;
     await WoxApi.instance.onOnboarding(traceId, false);
     resetLayoutState(traceId);
+
+    // Release large reference lists that are lazily reloaded on next use.
+    // installedPlugins is kept because launcher trigger-keyword detection
+    // (hasLocalPluginTriggerMetadata) depends on it without an async reload.
+    Get.find<WoxSettingController>().clearStoreCache();
+    Get.find<WoxAIChatController>().clearReferenceDataCache();
+
+    // Release the wallpaper image provider so its decoded bitmap is not held
+    // while the window is hidden. The path cache is kept; only the image is
+    // released. Skipped while settings is open because the theme editor may
+    // still be rendering the wallpaper preview.
+    WoxSystemWallpaperUtil.instance.releaseImageCache();
+
+    // Close terminal preview stream controllers and clear per-query metric
+    // maps so hidden-state memory does not retain them between sessions.
+    for (final controller in terminalChunkControllers.values) {
+      controller.close();
+    }
+    for (final controller in terminalStateControllers.values) {
+      controller.close();
+    }
+    terminalChunkControllers.clear();
+    terminalStateControllers.clear();
+    queryStartTimeMap.clear();
+    queryOnReceivedElapsedByResultKey.clear();
 
     await WoxApi.instance.onHide(traceId);
     await restoreQueryAfterTemporaryQuery(traceId);

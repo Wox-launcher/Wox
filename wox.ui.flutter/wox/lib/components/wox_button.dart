@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:wox/utils/colors.dart';
-import 'package:chinese_font_library/chinese_font_library.dart';
 
 /// Button types for WoxButton
 enum WoxButtonType {
@@ -126,7 +125,7 @@ class WoxButton extends StatelessWidget {
               return getThemeTextColor();
             }),
             padding: WidgetStateProperty.all(buttonPadding),
-            textStyle: WidgetStateProperty.all(TextStyle(fontSize: fontSize, fontWeight: FontWeight.normal).useSystemChineseFont()),
+            textStyle: WidgetStateProperty.all(TextStyle(fontSize: fontSize, fontWeight: FontWeight.normal)),
             minimumSize: WidgetStateProperty.all(Size.zero),
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             overlayColor: WidgetStateProperty.all(getThemeTextColor().withValues(alpha: 0.1)),
