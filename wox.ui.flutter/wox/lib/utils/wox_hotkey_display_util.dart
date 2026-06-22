@@ -55,6 +55,8 @@ class WoxHotkeyDisplayUtil {
       return "Pause";
     } else if (key == LogicalKeyboardKey.printScreen) {
       return "PrintScreen";
+    } else if (key == LogicalKeyboardKey.backquote || key == PhysicalKeyboardKey.backquote) {
+      return "~";
     }
 
     final label = key.keyLabel;
@@ -159,6 +161,7 @@ class WoxHotkeyDisplayUtil {
       "backspace" => "Backspace",
       "delete" => "Delete",
       "tab" => "Tab",
+      "backquote" || "tilde" => "~",
       "arrowup" || "up" => "↑",
       "arrowdown" || "down" => "↓",
       "arrowleft" || "left" => "←",

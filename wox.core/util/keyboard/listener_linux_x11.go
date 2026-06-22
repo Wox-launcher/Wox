@@ -335,6 +335,8 @@ func keyToLinuxKeyCode(key Key) (uint32, error) {
 		return 0xFFC9, nil
 	case KeyCapsLock:
 		return 0xFFE5, nil
+	case KeyBackquote:
+		return 0x0060, nil
 	default:
 		return 0, fmt.Errorf("unsupported Linux hotkey key: %d", key)
 	}
@@ -466,6 +468,8 @@ func linuxKeyCodeToKey(code uint32) Key {
 		return KeyAlt
 	case 0xFFEB, 0xFFEC:
 		return KeySuper
+	case 0x0060:
+		return KeyBackquote
 	default:
 		return KeyUnknown
 	}

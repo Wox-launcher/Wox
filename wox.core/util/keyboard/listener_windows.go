@@ -327,6 +327,8 @@ func keyToWindowsVK(key Key) (uint32, error) {
 		return 0x7B, nil
 	case KeyCapsLock:
 		return 0x14, nil
+	case KeyBackquote:
+		return 0xC0, nil
 	default:
 		return 0, fmt.Errorf("unsupported Windows hotkey key: %d", key)
 	}
@@ -458,6 +460,8 @@ func windowsVKToKey(vkCode uint32) Key {
 		return KeyAlt
 	case 0x5B, 0x5C:
 		return KeySuper
+	case 0xC0:
+		return KeyBackquote
 	default:
 		return KeyUnknown
 	}

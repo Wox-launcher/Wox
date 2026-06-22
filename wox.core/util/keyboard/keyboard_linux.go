@@ -309,6 +309,8 @@ func keyToEvdevKeyCode(key Key) (uint16, error) {
 		return 125, nil
 	case KeyCapsLock:
 		return 58, nil
+	case KeyBackquote:
+		return 87, nil
 	default:
 		return 0, fmt.Errorf("no evdev key code for key: %d", key)
 	}
