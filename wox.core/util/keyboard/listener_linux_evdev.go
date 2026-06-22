@@ -358,32 +358,55 @@ func evdevReadLoop(fd int, stopCh <-chan struct{}, handler RawKeyHandler) {
 	}
 }
 
-// evdevAvailability caches the result of the first IsEvdevRawListenerAvailable
-// probe so we don't open/close /dev/input/event0 on every call.
+// evdevAvailability caches the result of the first evdev read availability
+// probe so we don't repeatedly open/close devices.
 var (
-	evdevAvailableOnce sync.Once
-	evdevAvailable     bool
+	evdevReadOnce     sync.Once
+	evdevRead         bool
+	uinputWriteOnce   sync.Once
+	uinputWrite       bool
 )
 
-// IsEvdevRawListenerAvailable reports whether the current user has read access
-// to evdev keyboard devices. On Linux this requires membership in the 'input'
-// group (or equivalent udev rules granting read access to /dev/input/event*).
+// IsEvdevReadAvailable reports whether the current user has read access
+// to evdev keyboard devices. This requires membership in the 'input' group
+// (or equivalent udev rules granting read access to /dev/input/event*).
+// This is needed for double-modifier hotkey detection (e.g. double Ctrl) and
+// CapsLock-combo hotkey detection.
 // The probe is cached for the process lifetime.
-func IsEvdevRawListenerAvailable() bool {
-	evdevAvailableOnce.Do(func() {
+func IsEvdevReadAvailable() bool {
+	evdevReadOnce.Do(func() {
 		devices, err := discoverKeyboardDevices()
 		if err != nil || len(devices) == 0 {
-			evdevAvailable = false
+			evdevRead = false
 			return
 		}
-		// Verify we can actually open one of the discovered keyboards.
 		fd, err := syscall.Open(devices[0], syscall.O_RDONLY, 0)
 		if err != nil {
-			evdevAvailable = false
+			evdevRead = false
 			return
 		}
 		syscall.Close(fd)
-		evdevAvailable = true
+		evdevRead = true
 	})
-	return evdevAvailable
+	return evdevRead
+}
+
+// IsUinputWriteAvailable reports whether the current user has write access to
+// /dev/uinput. This requires membership in the 'uinput' group. It is only
+// needed for CapsLock state restoration (when CapsLock is used as a combo
+// prefix, the system toggles caps lock, and we inject a CapsLock key event
+// via uinput to undo the toggle). If the user does not use CapsLock combo
+// hotkeys, uinput access is not required.
+// The probe is cached for the process lifetime.
+func IsUinputWriteAvailable() bool {
+	uinputWriteOnce.Do(func() {
+		fd, err := syscall.Open("/dev/uinput", syscall.O_WRONLY, 0)
+		if err != nil {
+			uinputWrite = false
+			return
+		}
+		syscall.Close(fd)
+		uinputWrite = true
+	})
+	return uinputWrite
 }

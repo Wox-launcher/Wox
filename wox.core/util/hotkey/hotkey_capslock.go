@@ -124,7 +124,12 @@ func (t *capsLockComboTracker) handleStateCaptureCapsLockEvent(event keyboard.Ra
 		shouldUndoToggle := t.comboTriggered
 		t.resetCapsSequence()
 		if allowSetState && shouldUndoToggle {
-			t.passthroughCapsEvents = 2
+			// On Linux, the CapsLock undo tap is injected via /dev/uinput,
+			// which creates a separate virtual keyboard device. Our evdev
+			// listener only reads physical keyboard devices (/dev/input/event*),
+			// so it never sees the injected events. This means we do NOT need
+			// the passthroughCapsEvents mechanism (unlike Windows where the
+			// WH_KEYBOARD_LL hook sees injected events from the same device).
 			currentState := keyboard.IsCapsLockEnabled()
 			setCapsLockStateAsync(!currentState, "linux-undo-caps-toggle")
 		}

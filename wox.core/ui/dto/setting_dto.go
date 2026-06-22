@@ -31,10 +31,10 @@ type WoxSettingDto struct {
 	HttpProxyUrl          string
 	ShowPosition          setting.PositionType
 	IsLinuxWaylandSession bool
-	// IsEvdevRawListenerAvailable reports whether evdev keyboard devices are
-	// readable (user is in the 'input' group). Flutter uses this to decide
-	// whether to show the Wayland double-modifier hotkey guidance prompt.
-	IsEvdevRawListenerAvailable bool
+	// IsEvdevReadAvailable reports whether evdev keyboard devices are readable
+	// (user is in the 'input' group). Flutter uses this to decide whether to
+	// show the Wayland double-modifier hotkey guidance prompt.
+	IsEvdevReadAvailable bool
 	EnableAutoBackup            bool
 	EnableAutoUpdate            bool
 	ReleaseChannel              setting.ReleaseChannel

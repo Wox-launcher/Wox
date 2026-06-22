@@ -212,7 +212,7 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
               // double Ctrl) and CapsLock combos cannot work. Show a guiding
               // prompt with a link to the help article.
               if (controller.woxSetting.value.isLinuxWaylandSession &&
-                  !controller.woxSetting.value.isEvdevRawListenerAvailable)
+                  !controller.woxSetting.value.isEvdevReadAvailable)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 18),
                   child: _buildWaylandEvdevHint(),

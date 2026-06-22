@@ -915,7 +915,7 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 	settingDto.HttpProxyUrl = woxSetting.HttpProxyUrl.Get()
 	settingDto.ShowPosition = woxSetting.ShowPosition.Get()
 	settingDto.IsLinuxWaylandSession = util.IsLinuxWaylandSession()
-	settingDto.IsEvdevRawListenerAvailable = keyboard.IsEvdevRawListenerAvailable()
+	settingDto.IsEvdevReadAvailable = keyboard.IsEvdevReadAvailable()
 	settingDto.EnableAutoBackup = woxSetting.EnableAutoBackup.Get()
 	settingDto.EnableAutoUpdate = woxSetting.EnableAutoUpdate.Get()
 	settingDto.ReleaseChannel = woxSetting.ReleaseChannel.Get()

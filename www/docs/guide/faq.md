@@ -78,20 +78,36 @@ Open **Settings -> General** and edit the hotkey field.
 
 On Wayland, Wox cannot globally intercept raw key events through the display server like it does on X11. To enable double-modifier hotkeys (such as `ctrl+ctrl`, `shift+shift`) and CapsLock-combo hotkeys (such as `capslock+a`), Wox reads keyboard events directly from the Linux evdev interface.
 
-This requires your user account to have read access to `/dev/input/event*` devices, which is granted by membership in the `input` group.
+The permissions required depend on which hotkey styles you want to use:
 
-**Setup:**
+#### Double-modifier hotkeys (e.g. `ctrl+ctrl`) — requires `input` group only
 
-1. Add your user to the `input` group:
+This grants read access to `/dev/input/event*` devices. Wox passively listens to keyboard events without grabbing or remapping the keyboard.
 
-   ```bash
-   sudo usermod -aG input $USER
-   ```
+```bash
+sudo usermod -aG input $USER
+```
 
-2. Log out and log back in (or reboot) for the group change to take effect.
+Log out and back in, then restart Wox.
 
-3. Restart Wox.
+#### CapsLock combo hotkeys (e.g. `capslock+a`) — requires both `input` and `uinput` groups
 
-After that, double-modifier and CapsLock-combo hotkeys will work on Wayland. Regular combination hotkeys (like `ctrl+space`) continue to work via the `org.freedesktop.portal.GlobalShortcuts` portal regardless of this setting.
+In addition to the `input` group, CapsLock combos require the `uinput` group. When CapsLock is used as a combo prefix, the system toggles the caps lock state because Wox cannot consume the raw event on Wayland. Wox undoes this toggle by injecting a CapsLock key event through a temporary uinput virtual keyboard. Without uinput, the caps lock LED would toggle every time you use a CapsLock combo.
 
-> **Note:** This does NOT require root or a system daemon. Wox only reads evdev events passively — it does not grab, remap, or inject any keyboard input.
+```bash
+sudo groupadd -r uinput 2>/dev/null
+sudo usermod -aG input,uinput $USER
+```
+
+Ensure `/dev/uinput` has the correct permissions:
+
+```bash
+echo 'KERNEL=="uinput", MODE="0660", GROUP="uinput"' | sudo tee /etc/udev/rules.d/99-uinput.rules
+sudo udevadm control --reload-rules && sudo udevadm trigger
+```
+
+Log out and back in, then restart Wox.
+
+After setup, when CapsLock is pressed alone, it toggles caps lock normally. When CapsLock is used as a combo prefix, the system's caps lock toggle is automatically undone. Regular combination hotkeys (like `ctrl+space`) continue to work via the `org.freedesktop.portal.GlobalShortcuts` portal regardless of this setting.
+
+> **Note:** Wox does NOT require root or a system daemon. It only reads evdev events passively and uses uinput solely to inject a single CapsLock key event when restoring the caps lock state after a combo.

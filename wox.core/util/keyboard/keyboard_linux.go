@@ -1,39 +1,88 @@
 package keyboard
 
 import (
-	"errors"
+	"encoding/binary"
 	"fmt"
 	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
+// Linux evdev key codes used for copy/paste injection via uinput.
+// Ctrl is held while C (copy) or V (paste) is tapped, matching the
+// Windows/Darwin implementations that use Cmd+C/Cmd+V.
+const (
+	evKeyLeftCtrlCode = 29
+	evKeyCodeC         = 46
+	evKeyCodeV         = 47
+	evKeyDownValue     = 1
+	evKeyUpValue       = 0
+	evSynTypeCode      = 0x00
+	evSynReportCode    = 0x00
+)
+
+// simulateCopy injects Ctrl+C via the uinput virtual keyboard to trigger
+// a system-level copy operation. This requires uinput write access.
 func simulateCopy() error {
-	return errors.New("not implemented")
+	waitModifiersRelease()
+	return simulateCtrlKeyCombo(evKeyCodeC, "copy")
 }
 
+// simulatePaste injects Ctrl+V via the uinput virtual keyboard to trigger
+// a system-level paste operation. This requires uinput write access.
 func simulatePaste() error {
-	return errors.New("not implemented")
+	waitModifiersRelease()
+	return simulateCtrlKeyCombo(evKeyCodeV, "paste")
 }
 
-// simulateCapsLockTap and setCapsLockState are implemented in keyboard_linux_cgo.go
-// when cgo is available (using X11 XTest extension via XWayland). When cgo is
-// disabled, they fall back to ydotool. If neither is available, they return an error.
-// These stubs are only used when cgo is disabled.
-func simulateCapsLockTap() error {
-	return simulateCapsLockTapImpl()
+// waitModifiersRelease waits for all physical modifier keys to be released
+// before injecting Ctrl+C/Ctrl+V. If the trigger hotkey includes Alt/Shift/
+// Win, the injected events could be interpreted as a different shortcut
+// (e.g. Alt+Ctrl+C) if those modifiers are still held by the user.
+func waitModifiersRelease() {
+	for i := 0; i < 20; i++ {
+		if isKeyPressed(KeyCtrl) || isKeyPressed(KeyAlt) || isKeyPressed(KeyShift) || isKeyPressed(KeySuper) {
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		break
+	}
 }
 
-func setCapsLockState(enabled bool) error {
-	return setCapsLockStateImpl(enabled)
-}
+// simulateCtrlKeyCombo injects a Ctrl+key press+release sequence via uinput.
+// The sequence is: Ctrl down → key down → syn → key up → syn → Ctrl up → syn.
+func simulateCtrlKeyCombo(keyCode int, label string) error {
+	fd, err := ensureUinputDevice()
+	if err != nil {
+		return err
+	}
 
-func simulateCopy() error {
-	return errors.New("not implemented")
-}
-
-func simulatePaste() error {
-	return errors.New("not implemented")
+	// Ctrl down
+	if err := writeUinputEvent(fd, evKeyEventType, uint16(evKeyLeftCtrlCode), int32(evKeyDownValue)); err != nil {
+		return fmt.Errorf("%s: ctrl press failed: %w", label, err)
+	}
+	// key down
+	if err := writeUinputEvent(fd, evKeyEventType, uint16(keyCode), int32(evKeyDownValue)); err != nil {
+		return fmt.Errorf("%s: key press failed: %w", label, err)
+	}
+	// sync (flush the press events)
+	if err := writeUinputEvent(fd, evSynTypeCode, evSynReportCode, 0); err != nil {
+		return fmt.Errorf("%s: syn after press failed: %w", label, err)
+	}
+	// key up
+	if err := writeUinputEvent(fd, evKeyEventType, uint16(keyCode), int32(evKeyUpValue)); err != nil {
+		return fmt.Errorf("%s: key release failed: %w", label, err)
+	}
+	// Ctrl up
+	if err := writeUinputEvent(fd, evKeyEventType, uint16(evKeyLeftCtrlCode), int32(evKeyUpValue)); err != nil {
+		return fmt.Errorf("%s: ctrl release failed: %w", label, err)
+	}
+	// sync (flush the release events)
+	if err := writeUinputEvent(fd, evSynTypeCode, evSynReportCode, 0); err != nil {
+		return fmt.Errorf("%s: syn after release failed: %w", label, err)
+	}
+	return nil
 }
 
 // evdev LED ioctl: EVIOCGLED(len) = _IOC(_IOC_READ, 'E', 0x19, len)
@@ -238,15 +287,162 @@ func keyToEvdevKeyCode(key Key) (uint16, error) {
 	}
 }
 
-// simulateCapsLockTap injects a CapsLock key press+release via ydotool, which
-// works on both X11 and Wayland. ydotool requires the ydotoold daemon to be
-// running and the user to have access to /dev/uinput.
+// uinput device management for CapsLock state restoration.
+//
+// On Linux with evdev (read-only), we cannot prevent the system from seeing
+// CapsLock key events. When CapsLock is used as a combo prefix (e.g.
+// CapsLock+A), the system toggles the caps lock state. To undo this toggle,
+// we create a temporary uinput virtual keyboard and inject a CapsLock
+// key press+release through it. This requires write access to /dev/uinput,
+// which is granted by membership in the 'uinput' group.
+//
+// We require uinput instead of just the 'input' group because:
+// 1. The 'input' group only grants read access to /dev/input/event* devices,
+//    which is sufficient for passive key event listening (double-tap detection).
+// 2. The 'uinput' group grants write access to /dev/uinput, which allows
+//    creating virtual input devices and injecting key events. This is needed
+//    to restore the CapsLock state after a combo is triggered.
+// 3. Without uinput, CapsLock+A would toggle caps lock every time the combo
+//    is used, which is not the expected behavior (matching macOS/Windows
+//    where the event is consumed before the system sees it).
+
+// uinput ioctl constants from <linux/uinput.h>
+const (
+	uiDevCreate  = 0x5501 // USB UI_DEV_CREATE
+	uiDevDestroy = 0x5502 // USB UI_DEV_DESTROY
+	uiSetEvbit   = 0x40045564 // _IOW('U', 100, int)
+	uiSetKeybit  = 0x40045565 // _IOW('U', 101, int)
+)
+
+// uinput_set_evbit and uinput_set_keybit are _IOW('U', nr, int) = (1<<30) | ('U'<<8) | nr | (4<<16)
+// but the kernel header values are 0x40045564 and 0x40045565 respectively.
+// Let me use the raw values directly.
+
+// uinputDevCreate is a lazily-created virtual keyboard used for CapsLock
+// injection. It's created on first use and kept open for the process lifetime.
+var (
+	uinputOnce     sync.Once
+	uinputFd       int
+	uinputInitErr  error
+	uinputClosed   bool
+)
+
+// ensureUinputDevice creates a uinput virtual keyboard device that supports
+// EV_KEY events with all the keys Wox needs to inject: CapsLock (for state
+// restoration), Ctrl+C (for copy), and Ctrl+V (for paste). The device is
+// created once and reused for all subsequent injections.
+func ensureUinputDevice() (int, error) {
+	uinputOnce.Do(func() {
+		fd, err := syscall.Open("/dev/uinput", syscall.O_WRONLY, 0)
+		if err != nil {
+			uinputInitErr = fmt.Errorf("cannot open /dev/uinput (add user to 'uinput' group): %w", err)
+			return
+		}
+
+		// Enable EV_KEY event type
+		// UI_SET_EVBIT = _IOW('U', 100, int)
+		evbit := uintptr(0x40045564)
+		_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), evbit, uintptr(0x01)) // EV_KEY = 1
+		if errno != 0 {
+			syscall.Close(fd)
+			uinputInitErr = fmt.Errorf("UI_SET_EVBIT failed: errno=%d", errno)
+			return
+		}
+
+		// Enable all keys we need to inject: CapsLock, LeftCtrl, C, V
+		// UI_SET_KEYBIT = _IOW('U', 101, int)
+		keybit := uintptr(0x40045565)
+		keysToEnable := []int{
+			58,                  // KEY_CAPSLOCK
+			evKeyLeftCtrlCode,   // KEY_LEFTCTRL
+			evKeyCodeC,          // KEY_C
+			evKeyCodeV,          // KEY_V
+		}
+		for _, key := range keysToEnable {
+			_, _, errno = syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), keybit, uintptr(key))
+			if errno != 0 {
+				syscall.Close(fd)
+				uinputInitErr = fmt.Errorf("UI_SET_KEYBIT(%d) failed: errno=%d", key, errno)
+				return
+			}
+		}
+
+		// Write the uinput_user_dev struct to configure the device name and
+		// other properties before creating it. The kernel header defines:
+		// struct uinput_user_dev {
+		//   char name[80];                 // 80
+		//   struct input_id id;            // 8 (4x __u16)
+		//   int ff_effects_max;            // 4
+		//   int absmax[ABS_CNT];           // 64 * 4 = 256
+		//   int absmin[ABS_CNT];           // 256
+		//   int absfuzz[ABS_CNT];          // 256
+		//   int absflat[ABS_CNT];          // 256
+		// }
+		// Total: 80 + 8 + 4 + 256*4 = 1116 bytes (verified via C sizeof).
+		var userDev [1116]byte
+		name := []byte("Wox Input Injector\x00")
+		copy(userDev[:80], name)
+
+		_, err = syscall.Write(fd, userDev[:])
+		if err != nil {
+			syscall.Close(fd)
+			uinputInitErr = fmt.Errorf("write uinput_user_dev failed: %w", err)
+			return
+		}
+
+		// Create the device: UI_DEV_CREATE = 0x5501 (no argument)
+		_, _, errno = syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), uintptr(uiDevCreate), 0)
+		if errno != 0 {
+			syscall.Close(fd)
+			uinputInitErr = fmt.Errorf("UI_DEV_CREATE failed: errno=%d", errno)
+			return
+		}
+
+		uinputFd = fd
+	})
+	return uinputFd, uinputInitErr
+}
+
+// writeUinputEvent writes a single input_event to the uinput device.
+// struct input_event { struct timeval time; __u16 type; __u16 code; __s32 value; }
+// On 64-bit Linux: 16 + 2 + 2 + 4 = 24 bytes.
+func writeUinputEvent(fd int, evType, code uint16, value int32) error {
+	var ev [24]byte
+	// timeval is zeroed (kernel fills it in)
+	// type at offset 16
+	binary.LittleEndian.PutUint16(ev[16:18], evType)
+	// code at offset 18
+	binary.LittleEndian.PutUint16(ev[18:20], code)
+	// value at offset 20
+	binary.LittleEndian.PutUint32(ev[20:24], uint32(value))
+
+	_, err := syscall.Write(fd, ev[:])
+	return err
+}
+
+// simulateCapsLockTap injects a CapsLock key press+release via the uinput
+// virtual keyboard device. This toggles the caps lock state without relying
+// on any external tools.
 func simulateCapsLockTap() error {
-	// ydotool key codes use Linux evdev key codes. KEY_CAPSLOCK = 58.
-	// Format: "58:1 58:0" means key 58 press (1) then release (0).
-	cmd := exec.Command("ydotool", "key", "58:1", "58:0")
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("ydotool caps lock tap failed (is ydotoold running?): %w", err)
+	fd, err := ensureUinputDevice()
+	if err != nil {
+		return err
+	}
+
+	// KEY_CAPSLOCK = 58, EV_KEY = 0x01
+	// value: 1 = press, 0 = release
+	if err := writeUinputEvent(fd, evKeyEventType, 58, int32(evKeyDownValue)); err != nil {
+		return fmt.Errorf("caps lock press injection failed: %w", err)
+	}
+	// EV_SYN = 0x00, SYN_REPORT = 0
+	if err := writeUinputEvent(fd, evSynTypeCode, evSynReportCode, 0); err != nil {
+		return fmt.Errorf("syn after press failed: %w", err)
+	}
+	if err := writeUinputEvent(fd, evKeyEventType, 58, int32(evKeyUpValue)); err != nil {
+		return fmt.Errorf("caps lock release injection failed: %w", err)
+	}
+	if err := writeUinputEvent(fd, evSynTypeCode, evSynReportCode, 0); err != nil {
+		return fmt.Errorf("syn after release failed: %w", err)
 	}
 	return nil
 }

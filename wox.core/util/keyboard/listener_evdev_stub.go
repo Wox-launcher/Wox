@@ -2,6 +2,10 @@
 
 package keyboard
 
-// IsEvdevRawListenerAvailable is always false on non-Linux platforms where
+// IsEvdevReadAvailable is always false on non-Linux platforms where
 // the evdev interface does not exist.
-func IsEvdevRawListenerAvailable() bool { return false }
+func IsEvdevReadAvailable() bool { return false }
+
+// IsUinputWriteAvailable is always false on non-Linux platforms where
+// the uinput interface does not exist.
+func IsUinputWriteAvailable() bool { return false }

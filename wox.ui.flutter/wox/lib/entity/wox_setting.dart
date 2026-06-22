@@ -24,7 +24,7 @@ class WoxSetting {
   late String startPage;
   late String showPosition;
   late bool isLinuxWaylandSession;
-  late bool isEvdevRawListenerAvailable;
+  late bool isEvdevReadAvailable;
   late List<AIProvider> aiProviders;
   late int appWidth;
   late int maxResultCount;
@@ -74,7 +74,7 @@ class WoxSetting {
     required this.startPage,
     required this.showPosition,
     required this.isLinuxWaylandSession,
-    required this.isEvdevRawListenerAvailable,
+    required this.isEvdevReadAvailable,
     required this.aiProviders,
     required this.appWidth,
     required this.maxResultCount,
@@ -154,7 +154,7 @@ class WoxSetting {
     launchMode = json['LaunchMode'] ?? 'continue';
     startPage = json['StartPage'] ?? 'mru';
     isLinuxWaylandSession = json['IsLinuxWaylandSession'] ?? false;
-    isEvdevRawListenerAvailable = json['IsEvdevRawListenerAvailable'] ?? false;
+    isEvdevReadAvailable = json['IsEvdevReadAvailable'] ?? false;
 
     if (json['AIProviders'] != null) {
       aiProviders = <AIProvider>[];
@@ -217,7 +217,7 @@ class WoxSetting {
     data['StartPage'] = startPage;
     data['ShowPosition'] = showPosition;
     data['IsLinuxWaylandSession'] = isLinuxWaylandSession;
-    data['IsEvdevRawListenerAvailable'] = isEvdevRawListenerAvailable;
+    data['IsEvdevReadAvailable'] = isEvdevReadAvailable;
     data['AIProviders'] = aiProviders;
     data['AppWidth'] = appWidth;
     data['MaxResultCount'] = maxResultCount;

@@ -98,12 +98,17 @@ func isStatusNotifierHostRegistered(ctx context.Context) bool {
 // devices, which is required for double-modifier and CapsLock-combo hotkeys on
 // Wayland. On X11 this check is skipped because raw key events are obtained via
 // XQueryKeymap without evdev.
+//
+// This check only verifies the 'input' group (evdev read access). The 'uinput'
+// group is checked separately when the user attempts to register a CapsLock
+// combo hotkey, since uinput is only needed for CapsLock state restoration and
+// not all users need it.
 func checkLinuxInputGroup(ctx context.Context) (DoctorCheckResult, bool) {
 	if !util.IsLinuxWaylandSession() {
 		return DoctorCheckResult{}, false
 	}
 
-	if keyboard.IsEvdevRawListenerAvailable() {
+	if keyboard.IsEvdevReadAvailable() {
 		return DoctorCheckResult{
 			Name:        "i18n:plugin_doctor_linux_input_group",
 			Type:        DoctorCheckLinuxInputGroup,

@@ -78,20 +78,36 @@ macOS 可能会限制 Desktop、Documents、Downloads、外置磁盘等位置。
 
 在 Wayland 下，Wox 无法像在 X11 上那样通过显示服务器全局拦截原始按键事件。为了启用双修饰键热键（如 `ctrl+ctrl`、`shift+shift`）和 CapsLock 组合键热键（如 `capslock+a`），Wox 会直接从 Linux evdev 接口读取键盘事件。
 
-这需要你的用户账户对 `/dev/input/event*` 设备有读权限，可以通过加入 `input` 组来获得。
+所需权限取决于你要使用哪种热键：
 
-**设置步骤：**
+#### 双修饰键热键（如 `ctrl+ctrl`）— 只需要 `input` 组
 
-1. 将你的用户加入 `input` 组：
+这授予对 `/dev/input/event*` 设备的读权限。Wox 被动监听键盘事件，不会 grab 或重映射键盘。
 
-   ```bash
-   sudo usermod -aG input $USER
-   ```
+```bash
+sudo usermod -aG input $USER
+```
 
-2. 重新登录（或重启）使组变更生效。
+重新登录，然后重启 Wox。
 
-3. 重启 Wox。
+#### CapsLock 组合键（如 `capslock+a`）— 需要 `input` 和 `uinput` 两个组
 
-之后，双修饰键和 CapsLock 组合键热键就可以在 Wayland 下正常使用了。普通组合键热键（如 `ctrl+space`）不受此设置影响，始终通过 `org.freedesktop.portal.GlobalShortcuts` portal 工作。
+除了 `input` 组之外，CapsLock 组合键还需要 `uinput` 组。当 CapsLock 被用作组合键前缀时，由于 Wox 在 Wayland 下无法拦截原始事件，系统会切换 CapsLock 状态。Wox 通过 uinput 虚拟键盘注入一个 CapsLock 按键事件来撤销这个切换。如果没有 uinput，每次使用 CapsLock 组合键时大小写灯都会被切换。
 
-> **注意：** 此方案不需要 root 权限或系统守护进程。Wox 只是被动读取 evdev 事件——不会 grab、重映射或注入任何键盘输入。
+```bash
+sudo groupadd -r uinput 2>/dev/null
+sudo usermod -aG input,uinput $USER
+```
+
+添加 udev 规则确保 `/dev/uinput` 权限正确：
+
+```bash
+echo 'KERNEL=="uinput", MODE="0660", GROUP="uinput"' | sudo tee /etc/udev/rules.d/99-uinput.rules
+sudo udevadm control --reload-rules && sudo udevadm trigger
+```
+
+重新登录，然后重启 Wox。
+
+设置完成后，单独按下 CapsLock 时正常切换大小写；将 CapsLock 用作组合键前缀时，系统的 CapsLock 切换会被自动撤销。普通组合键热键（如 `ctrl+space`）不受此设置影响，始终通过 `org.freedesktop.portal.GlobalShortcuts` portal 工作。
+
+> **注意：** 此方案不需要 root 权限或系统守护进程。Wox 只是被动读取 evdev 事件，仅在组合键触发后使用 uinput 注入一个 CapsLock 按键事件来恢复大小写状态。

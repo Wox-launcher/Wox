@@ -59,7 +59,7 @@ func AddRawKeyListener(handler RawKeyHandler) (RawKeySubscription, error) {
 		// applications. Try evdev direct-read as a fallback so double-modifier
 		// and CapsLock-combo hotkeys can still work when the user has read
 		// access to /dev/input/event* (membership in the 'input' group).
-		if IsEvdevRawListenerAvailable() {
+		if IsEvdevReadAvailable() {
 			return addRawKeyListenerLinuxEvdev(handler)
 		}
 		return addRawKeyListenerLinuxWayland(handler)
