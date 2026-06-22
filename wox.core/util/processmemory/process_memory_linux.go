@@ -1,6 +1,6 @@
 //go:build linux
 
-package util
+package processmemory
 
 func getProcessMemoryBytes(pid int) (uint64, error) {
 	// Feature split: Windows now needs a Task Manager-compatible private

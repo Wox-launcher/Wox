@@ -49,11 +49,49 @@ func NewEngineWithOptions(ctx context.Context, options EngineOptions) (*Engine, 
 	// The previous runtime mirrored every entry into a second in-memory provider,
 	// which doubled storage responsibilities and made memory usage scale with the
 	// number of indexed roots.
-	engine.scanner.Start(util.NewTraceContext())
+	if db.NeedsSearchArtifactRebuild() {
+		engine.startScannerAfterSearchArtifactRebuild(ctx)
+	} else {
+		engine.scanner.Start(util.NewTraceContext())
+	}
 	util.GetLogger().Info(ctx, "filesearch engine initialized: indexed_provider=sqlite-search")
 	engine.logInitSnapshotAsync(ctx)
 
 	return engine, nil
+}
+
+// startScannerAfterSearchArtifactRebuild keeps schema migration work off the plugin init path.
+func (e *Engine) startScannerAfterSearchArtifactRebuild(ctx context.Context) {
+	util.Go(ctx, "filesearch search artifact rebuild", func() {
+		rebuildCtx := util.NewTraceContext()
+
+		e.resetMu.Lock()
+		defer e.resetMu.Unlock()
+
+		e.mu.RLock()
+		if e.closed || e.db == nil || e.scanner == nil {
+			e.mu.RUnlock()
+			return
+		}
+		db := e.db
+		scanner := e.scanner
+		e.mu.RUnlock()
+
+		startedAt := util.GetSystemTimestamp()
+		util.GetLogger().Info(rebuildCtx, "filesearch search artifact rebuild started")
+		if err := db.RebuildSearchArtifacts(rebuildCtx); err != nil {
+			util.GetLogger().Warn(rebuildCtx, "filesearch search artifact rebuild failed: "+err.Error())
+		} else {
+			util.GetLogger().Info(rebuildCtx, fmt.Sprintf("filesearch search artifact rebuild finished, cost %d ms", util.GetSystemTimestamp()-startedAt))
+		}
+
+		e.mu.RLock()
+		shouldStartScanner := !e.closed && e.scanner == scanner
+		e.mu.RUnlock()
+		if shouldStartScanner {
+			scanner.Start(util.NewTraceContext())
+		}
+	})
 }
 
 func (e *Engine) logInitSnapshotAsync(ctx context.Context) {

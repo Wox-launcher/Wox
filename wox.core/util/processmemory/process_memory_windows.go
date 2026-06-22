@@ -1,6 +1,6 @@
 //go:build windows
 
-package util
+package processmemory
 
 import (
 	"fmt"

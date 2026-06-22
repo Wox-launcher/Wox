@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -34,6 +35,7 @@ import (
 	"wox/util/ime"
 	"wox/util/keyboard"
 	"wox/util/osvariant"
+	"wox/util/processmemory"
 	"wox/util/screen"
 	"wox/util/selection"
 	"wox/util/shell"
@@ -960,7 +962,7 @@ func (m *Manager) startUIAppWithConfig(ctx context.Context, appPath string, conf
 	// Debug Glance reads this PID to report combined core + Flutter memory.
 	// Prod launches the UI from core, while dev mode can later replace it with
 	// the PID reported by Flutter's ready callback.
-	util.SetWoxUIProcessPid(pid)
+	processmemory.SetWoxUIProcessPid(pid)
 	util.GetLogger().Info(ctx, fmt.Sprintf("ui app pid: %d", pid))
 
 	processDone := make(chan struct{})
@@ -968,7 +970,7 @@ func (m *Manager) startUIAppWithConfig(ctx context.Context, appPath string, conf
 		defer close(processDone)
 		waitErr := cmd.Wait()
 		// Clear only this exited process so a restarted UI keeps its newer PID.
-		util.ClearWoxUIProcessPid(pid)
+		processmemory.ClearWoxUIProcessPid(pid)
 		waitCtx := util.NewTraceContext()
 
 		stopRequested := m.uiStopRequested.Load()
@@ -1400,6 +1402,20 @@ func (m *Manager) PostOnHide(ctx context.Context) {
 		impl.isInOnboardingView = false
 		impl.isRecordingHotkey = false
 	}
+	m.releaseHiddenCoreMemory(ctx)
+}
+
+// releaseHiddenCoreMemory lets Go return idle heap pages after hide cleanup settles.
+func (m *Manager) releaseHiddenCoreMemory(ctx context.Context) {
+	util.Go(ctx, "release hidden core memory", func() {
+		time.Sleep(10 * time.Second)
+
+		if impl, ok := m.ui.(*uiImpl); ok && impl.IsVisible(ctx) {
+			return
+		}
+
+		debug.FreeOSMemory()
+	})
 }
 
 func (m *Manager) PostOnSetting(ctx context.Context, isInSettingView bool) {

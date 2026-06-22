@@ -14,6 +14,7 @@ import (
 	"wox/common"
 	"wox/plugin"
 	"wox/util"
+	"wox/util/processmemory"
 )
 
 const systemGlancePluginId = "e3ad9f18-fbbe-4f22-8c1b-8274c751f6e6"
@@ -216,16 +217,16 @@ func (p *GlancePlugin) woxMemoryGlance(ctx context.Context) (plugin.GlanceItem, 
 	}
 
 	corePid := os.Getpid()
-	coreBytes, err := util.GetProcessMemoryBytes(corePid)
+	coreBytes, err := processmemory.GetProcessMemoryBytes(corePid)
 	if err != nil {
 		return plugin.GlanceItem{}, false
 	}
 
 	totalBytes := coreBytes
 	parts := []string{fmt.Sprintf("Core %s (PID %d)", formatGlanceBytes(coreBytes), corePid)}
-	uiPid := util.GetWoxUIProcessPid()
+	uiPid := processmemory.GetWoxUIProcessPid()
 	if uiPid > 0 {
-		if uiBytes, uiErr := util.GetProcessMemoryBytes(uiPid); uiErr == nil {
+		if uiBytes, uiErr := processmemory.GetProcessMemoryBytes(uiPid); uiErr == nil {
 			totalBytes += uiBytes
 			parts = append(parts, fmt.Sprintf("Flutter %s (PID %d)", formatGlanceBytes(uiBytes), uiPid))
 		} else {

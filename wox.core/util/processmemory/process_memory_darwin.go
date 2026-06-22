@@ -1,6 +1,6 @@
 //go:build darwin
 
-package util
+package processmemory
 
 /*
 #include <errno.h>

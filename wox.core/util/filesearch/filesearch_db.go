@@ -17,6 +17,9 @@ import (
 type FileSearchDB struct {
 	db     *sql.DB
 	dbPath string
+	// searchArtifactsNeedRebuild is set during schema init when derived search
+	// tables must be rebuilt outside the startup-critical DB open path.
+	searchArtifactsNeedRebuild bool
 	// Bulk sync mode defers expensive FTS maintenance until the full scan cycle
 	// finishes. The previous all-at-once in-memory index build avoided per-entry
 	// write amplification, so the SQLite-first path needs an explicit bulk gate

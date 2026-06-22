@@ -235,25 +235,47 @@ func (d *FileSearchDB) ensureSQLiteSearchSchema(ctx context.Context) error {
 
 	shouldRebuildArtifacts := currentVersion < fileSearchSchemaVersion || entriesRebuilt || searchArtifactsCreated
 	if shouldRebuildArtifacts {
-		// Rebuild derived search artifacts only when schema state changed. The
-		// previous startup path rebuilt every FTS/bigram structure on every launch,
-		// which blocked the system file plugin init for minutes on large indexes
-		// and prevented `f ` from entering file-plugin query mode at all.
-		if err := rebuildAllSearchArtifactsTx(ctx, tx); err != nil {
-			return err
-		}
+		d.searchArtifactsNeedRebuild = true
 	}
 	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`PRAGMA user_version = %d`, fileSearchSchemaVersion)); err != nil {
 		return err
 	}
 	util.GetLogger().Info(ctx, fmt.Sprintf(
-		"filesearch sqlite schema ready: current_version=%d target_version=%d rebuild_artifacts=%v",
+		"filesearch sqlite schema ready: current_version=%d target_version=%d rebuild_artifacts_queued=%v",
 		currentVersion,
 		fileSearchSchemaVersion,
 		shouldRebuildArtifacts,
 	))
 
 	return tx.Commit()
+}
+
+// NeedsSearchArtifactRebuild reports whether schema init found stale derived search tables.
+func (d *FileSearchDB) NeedsSearchArtifactRebuild() bool {
+	return d != nil && d.searchArtifactsNeedRebuild
+}
+
+// RebuildSearchArtifacts refreshes derived FTS and bigram tables after DB open.
+func (d *FileSearchDB) RebuildSearchArtifacts(ctx context.Context) error {
+	if d == nil || d.db == nil {
+		return nil
+	}
+
+	tx, err := d.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := rebuildAllSearchArtifactsTx(ctx, tx); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	d.searchArtifactsNeedRebuild = false
+	return nil
 }
 
 func (d *FileSearchDB) probeFTS5(ctx context.Context) error {

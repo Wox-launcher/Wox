@@ -242,6 +242,7 @@ class WoxLauncherController extends GetxController {
   final glanceItems = <GlanceItem>[].obs;
   final attentionUnreadCount = 0.obs;
   Timer? glanceRefreshTimer;
+  Timer? hiddenCacheClearTimer;
   QueryContext backendQueryContext = QueryContext.empty();
   String backendQueryContextQueryId = "";
   final queryCompletionHint = Rxn<QueryCompletionHint>();
@@ -275,24 +276,6 @@ class WoxLauncherController extends GetxController {
   final isLoading = false.obs;
   Timer? loadingTimer;
   final loadingDelay = const Duration(milliseconds: 500);
-
-  // doctor check timer
-  Timer? doctorCheckTimer;
-  static const doctorCheckInterval = Duration(minutes: 1);
-
-  /// Start the periodic doctor check timer. Call this after controller initialization.
-  void startDoctorCheckTimer() {
-    doctorCheckTimer?.cancel();
-    doctorCheckTimer = Timer.periodic(doctorCheckInterval, (_) {
-      doctorCheck();
-    });
-  }
-
-  /// Stop the periodic doctor check timer. Call this during cleanup.
-  void stopDoctorCheckTimer() {
-    doctorCheckTimer?.cancel();
-    doctorCheckTimer = null;
-  }
 
   bool get shouldShowGlance {
     final setting = WoxSettingUtil.instance.currentSetting;
@@ -374,6 +357,24 @@ class WoxLauncherController extends GetxController {
     });
   }
 
+  // scheduleHiddenCacheClear clears Flutter caches again after hide animations settle.
+  void scheduleHiddenCacheClear(String traceId) {
+    hiddenCacheClearTimer?.cancel();
+    hiddenCacheClearTimer = Timer(const Duration(seconds: 10), () {
+      unawaited(clearHiddenCaches());
+    });
+  }
+
+  Future<void> clearHiddenCaches() async {
+    hiddenCacheClearTimer = null;
+    if (await windowManager.isVisible()) {
+      return;
+    }
+
+    PaintingBinding.instance.imageCache.clear();
+    PaintingBinding.instance.imageCache.clearLiveImages();
+  }
+
   Duration? resolveSelectedGlanceRefreshInterval() {
     final refs = selectedGlanceRefs();
     if (refs.isEmpty || !Get.isRegistered<WoxSettingController>()) {
@@ -416,7 +417,7 @@ class WoxLauncherController extends GetxController {
   /// Reset controller state for integration testing without full disposal.
   /// This clears pending timers, hides panels, and resets query state.
   Future<void> resetForIntegrationTest() async {
-    stopDoctorCheckTimer();
+    hiddenCacheClearTimer?.cancel();
     await Get.find<WoxScreenshotController>().resetForIntegrationTest();
 
     // Avoid focus restoration during smoke teardown. The regular hide helpers
@@ -1885,6 +1886,8 @@ class WoxLauncherController extends GetxController {
   }
 
   Future<void> showApp(String traceId, ShowAppParams params) async {
+    hiddenCacheClearTimer?.cancel();
+
     final screenshotController = Get.find<WoxScreenshotController>();
     if (screenshotController.isSessionActive.value) {
       // Screenshot completion/cancel restore decides whether the shared window should stay visible.
@@ -1897,7 +1900,6 @@ class WoxLauncherController extends GetxController {
         return;
       }
     }
-
     if (isInOnboardingView.value) {
       // Showing the launcher from a hotkey or the final onboarding action must
       // leave the guide state first; otherwise build routing would keep the
@@ -2222,6 +2224,11 @@ class WoxLauncherController extends GetxController {
 
     hideActionPanel(traceId);
     hideFormActionPanel(traceId, reason: "hide app");
+    glanceRefreshTimer?.cancel();
+    glanceItems.clear();
+    PaintingBinding.instance.imageCache.clear();
+    PaintingBinding.instance.imageCache.clearLiveImages();
+    scheduleHiddenCacheClear(traceId);
 
     // Clean up quick select state
     if (isQuickSelectMode.value) {
@@ -4156,8 +4163,8 @@ class WoxLauncherController extends GetxController {
 
   @override
   void dispose() {
-    stopDoctorCheckTimer();
     glanceRefreshTimer?.cancel();
+    hiddenCacheClearTimer?.cancel();
     cancelPendingResultTransitions();
     loadingTimer?.cancel();
     launcherFocusNode.dispose();

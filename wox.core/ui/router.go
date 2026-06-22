@@ -33,6 +33,7 @@ import (
 	"wox/util/keyboard"
 	"wox/util/overlay"
 	"wox/util/permission"
+	"wox/util/processmemory"
 	"wox/util/screen"
 	utilselection "wox/util/selection"
 	"wox/util/shell"
@@ -2864,7 +2865,7 @@ func handleOnUIReady(w http.ResponseWriter, r *http.Request) {
 	if request.Pid > 0 {
 		// Dev mode usually starts Flutter outside the core process tree, so the
 		// ready callback is the reliable boundary where core can learn the UI PID.
-		util.SetWoxUIProcessPid(request.Pid)
+		processmemory.SetWoxUIProcessPid(request.Pid)
 	}
 	GetUIManager().PostUIReady(ctx)
 	startCloudSyncManagerAfterUIReady(ctx)

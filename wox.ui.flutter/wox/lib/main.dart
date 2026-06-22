@@ -102,7 +102,7 @@ Future<void> initialServices(List<String> arguments) async {
   Logger.instance.setLogLevel(WoxSettingUtil.instance.currentSetting.logLevel);
 
   var launcherController = WoxLauncherController();
-  launcherController.startDoctorCheckTimer();
+  launcherController.doctorCheck();
   await launcherController.loadDiagnosticStatus(traceId);
 
   await WoxWebsocketMsgUtil.instance.initialize(Uri.parse("ws://127.0.0.1:${Env.serverPort}/ws"), onMessageReceived: launcherController.handleWebSocketMessage);
