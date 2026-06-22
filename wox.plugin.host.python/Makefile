@@ -1,6 +1,17 @@
 .PHONY: clean build install help
 
 HOSTS_DIR := ../wox.core/resource/hosts
+SDK_DIR := ../wox.plugin.python
+
+# GNU Make can run this subdirectory build directly from Windows shells where
+# Git usr/bin is missing, so expose the POSIX helpers used by rm here instead of
+# relying on the root Makefile to have normalized PATH first.
+ifeq ($(OS),Windows_NT)
+    GIT_USR_BIN := $(patsubst %/bin/sh.exe,%/usr/bin,$(SHELL))
+    ifneq ($(GIT_USR_BIN),$(SHELL))
+        export PATH := $(GIT_USR_BIN);$(PATH)
+    endif
+endif
 
 help:
 	@echo "Available commands:"
@@ -25,4 +36,7 @@ format:
 	uv run ruff format src
 
 build: clean install lint format
-	uv run shiv --compressed -c run -o $(HOSTS_DIR)/python-host.pyz .
+	# uv sources keep the development environment on the local SDK, but shiv
+	# resolves its own wheel set; pass the SDK path explicitly so the bundled
+	# host never falls back to the published PyPI SDK.
+	uv run shiv --compressed -c run -o $(HOSTS_DIR)/python-host.pyz . $(SDK_DIR)

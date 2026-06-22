@@ -1,4 +1,5 @@
 import 'wox_image.dart';
+import 'wox_glance.dart';
 import 'wox_plugin_setting.dart';
 
 class PluginDetail {
@@ -26,6 +27,7 @@ class PluginDetail {
   late List<PluginSettingDefinitionItem> settingDefinitions;
   late PluginSetting setting;
   late List<MetadataFeature> features;
+  late List<MetadataGlance> glances;
 
   PluginDetail.empty() {
     id = '';
@@ -52,6 +54,7 @@ class PluginDetail {
     settingDefinitions = <PluginSettingDefinitionItem>[];
     setting = PluginSetting.empty();
     features = <MetadataFeature>[];
+    glances = <MetadataGlance>[];
   }
 
   PluginDetail.fromJson(Map<String, dynamic> json) {
@@ -74,8 +77,7 @@ class PluginDetail {
     isUpgradable = json['IsUpgradable'] ?? false;
 
     if (json['TriggerKeywords'] != null) {
-      triggerKeywords =
-          (json['TriggerKeywords'] as List).map((e) => e.toString()).toList();
+      triggerKeywords = (json['TriggerKeywords'] as List).map((e) => e.toString()).toList();
     } else {
       triggerKeywords = <String>[];
     }
@@ -90,15 +92,13 @@ class PluginDetail {
     }
 
     if (json['SupportedOS'] != null) {
-      supportedOS =
-          (json['SupportedOS'] as List).map((e) => e.toString()).toList();
+      supportedOS = (json['SupportedOS'] as List).map((e) => e.toString()).toList();
     } else {
       supportedOS = <String>[];
     }
 
     if (json['ScreenshotUrls'] != null) {
-      screenshotUrls =
-          (json['ScreenshotUrls'] as List).map((e) => e.toString()).toList();
+      screenshotUrls = (json['ScreenshotUrls'] as List).map((e) => e.toString()).toList();
     } else {
       screenshotUrls = <String>[];
     }
@@ -125,6 +125,15 @@ class PluginDetail {
       });
     } else {
       features = <MetadataFeature>[];
+    }
+
+    if (json['Glances'] != null) {
+      glances = <MetadataGlance>[];
+      json['Glances'].forEach((v) {
+        glances.add(MetadataGlance.fromJson(v));
+      });
+    } else {
+      glances = <MetadataGlance>[];
     }
   }
 }
@@ -163,8 +172,7 @@ class PluginSetting {
     if (json['TriggerKeywords'] == null) {
       triggerKeywords = <String>[];
     } else {
-      triggerKeywords =
-          (json['TriggerKeywords'] as List).map((e) => e.toString()).toList();
+      triggerKeywords = (json['TriggerKeywords'] as List).map((e) => e.toString()).toList();
     }
 
     if (json['Settings'] == null) {

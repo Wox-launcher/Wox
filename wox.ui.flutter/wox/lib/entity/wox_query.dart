@@ -18,14 +18,66 @@ class PlainQuery {
   late WoxQueryType queryType;
   late String queryText;
   late Selection querySelection;
+  late Map<String, String> queryRefinements;
+  late Map<String, String> contextData;
 
-  PlainQuery({required this.queryId, required this.queryType, required this.queryText, required this.querySelection});
+  PlainQuery({
+    required this.queryId,
+    required this.queryType,
+    required this.queryText,
+    required this.querySelection,
+    Map<String, String>? queryRefinements,
+    Map<String, String>? contextData,
+  }) {
+    // Query refinements are exposed to plugins as a simple string map. The UI
+    // may keep list selections internally, but the transport mirrors the
+    // plugin-facing API and joins multi-select values at the boundary.
+    this.queryRefinements = queryRefinements ?? <String, String>{};
+    this.contextData = contextData ?? <String, String>{};
+  }
+
+  static Map<String, String> parseQueryRefinements(dynamic rawRefinements) {
+    if (rawRefinements is String && rawRefinements.isNotEmpty) {
+      try {
+        rawRefinements = jsonDecode(rawRefinements);
+      } catch (_) {
+        rawRefinements = <String, dynamic>{};
+      }
+    }
+    if (rawRefinements is! Map) {
+      return <String, String>{};
+    }
+
+    final parsed = <String, String>{};
+    for (final entry in rawRefinements.entries) {
+      final rawValue = entry.value;
+      if (rawValue == null) {
+        continue;
+      }
+
+      // Protocol migration: older payloads may still carry selected values as
+      // arrays. Join them here so the rest of the UI and core transport use the
+      // same map[string]string shape.
+      if (rawValue is Iterable) {
+        final encoded = rawValue.map((value) => value.toString()).where((value) => value.isNotEmpty).join(',');
+        if (encoded.isNotEmpty) {
+          parsed[entry.key.toString()] = encoded;
+        }
+        continue;
+      }
+
+      parsed[entry.key.toString()] = rawValue.toString();
+    }
+    return parsed;
+  }
 
   PlainQuery.fromJson(Map<String, dynamic> json) {
     queryId = json['QueryId'] ?? "";
     queryType = json['QueryType'];
     queryText = json['QueryText'];
     querySelection = Selection.fromJson(json['QuerySelection']);
+    queryRefinements = parseQueryRefinements(json['QueryRefinements'] ?? json['queryRefinements']);
+    contextData = parseQueryRefinements(json['ContextData'] ?? json['contextData']);
   }
 
   Map<String, dynamic> toJson() {
@@ -34,6 +86,8 @@ class PlainQuery {
     data['QueryType'] = queryType;
     data['QueryText'] = queryText;
     data['QuerySelection'] = querySelection.toJson();
+    data['QueryRefinements'] = queryRefinements;
+    data['ContextData'] = contextData;
     return data;
   }
 
@@ -88,6 +142,24 @@ class QueryHistory {
   }
 }
 
+class QueryCompletionHint {
+  late String inputPrefix;
+  late String completionText;
+  late String suffix;
+  late String source;
+  late int score;
+
+  QueryCompletionHint({required this.inputPrefix, required this.completionText, required this.suffix, required this.source, required this.score});
+
+  QueryCompletionHint.fromJson(Map<String, dynamic> json) {
+    inputPrefix = json['InputPrefix'] ?? "";
+    completionText = json['CompletionText'] ?? "";
+    suffix = json['Suffix'] ?? "";
+    source = json['Source'] ?? "";
+    score = (json['Score'] as num?)?.toInt() ?? 0;
+  }
+}
+
 class WoxQueryResult {
   late String queryId;
   late String id;
@@ -101,6 +173,7 @@ class WoxQueryResult {
   late List<WoxListItemTail> tails;
 
   late List<WoxResultAction> actions;
+  WoxResultDragData? dragData;
 
   // Used by the frontend to determine if this result is a group
   late bool isGroup;
@@ -117,6 +190,7 @@ class WoxQueryResult {
     required this.groupScore,
     required this.tails,
     required this.actions,
+    this.dragData,
     required this.isGroup,
   });
 
@@ -132,6 +206,7 @@ class WoxQueryResult {
     groupScore = 0;
     tails = [];
     actions = [];
+    dragData = null;
     isGroup = false;
   }
 
@@ -145,6 +220,8 @@ class WoxQueryResult {
     score = json['Score'];
     group = json['Group'];
     groupScore = json['GroupScore'];
+    final rawDragData = json['DragData'];
+    dragData = rawDragData is Map ? WoxResultDragData.fromJson(Map<String, dynamic>.from(rawDragData)) : null;
 
     if (json['Tails'] != null) {
       tails = [];
@@ -182,7 +259,31 @@ class WoxQueryResult {
     data['GroupScore'] = groupScore;
     data['Actions'] = actions.map((v) => v.toJson()).toList();
     data['Tails'] = tails.map((v) => v.toJson()).toList();
+    data['DragData'] = dragData?.toJson();
     data['IsGroup'] = isGroup;
+    return data;
+  }
+}
+
+class WoxResultDragData {
+  static const String typeFiles = "files";
+
+  late String type;
+  late List<String> files;
+
+  WoxResultDragData({required this.type, required this.files});
+
+  WoxResultDragData.fromJson(Map<String, dynamic> json) {
+    type = json['Type'] ?? "";
+    files = List<String>.from((json['Files'] ?? const <dynamic>[]).map((filePath) => filePath.toString()));
+  }
+
+  bool get isFiles => type == typeFiles && files.isNotEmpty;
+
+  Map<String, dynamic> toJson() {
+    final Map<String, dynamic> data = <String, dynamic>{};
+    data['Type'] = type;
+    data['Files'] = files;
     return data;
   }
 }
@@ -446,6 +547,8 @@ class ShowAppParams {
   late bool queryBoxAtBottom;
   late bool hideOnBlur;
   late String showSource;
+  late int activationStartedAt;
+  late int attentionUnreadCount;
 
   ShowAppParams({
     required this.selectAll,
@@ -461,6 +564,8 @@ class ShowAppParams {
     this.queryBoxAtBottom = false,
     this.hideOnBlur = false,
     this.showSource = 'default',
+    this.activationStartedAt = 0,
+    this.attentionUnreadCount = 0,
   });
 
   ShowAppParams.fromJson(Map<String, dynamic> json) {
@@ -486,6 +591,8 @@ class ShowAppParams {
     queryBoxAtBottom = json['QueryBoxAtBottom'] ?? false;
     hideOnBlur = json['HideOnBlur'] ?? false;
     showSource = json['ShowSource'] ?? 'default';
+    activationStartedAt = (json['ActivationStartedAt'] as num?)?.toInt() ?? 0;
+    attentionUnreadCount = (json['AttentionUnreadCount'] as num?)?.toInt() ?? 0;
   }
 }
 
@@ -512,6 +619,64 @@ class QueryIconInfo {
   }
 }
 
+/// QueryRefinement describes one plugin-owned filter or sort control.
+///
+/// The backend already transports refinements with QueryResponse. Flutter keeps
+/// the model close to result/query entities so every launcher view consumes the
+/// same parsed shape instead of re-reading raw websocket maps.
+class WoxQueryRefinement {
+  late String id;
+  late String title;
+  late String type;
+  late List<WoxQueryRefinementOption> options;
+  late List<String> defaultValue;
+  late String hotkey;
+  late bool persist;
+
+  WoxQueryRefinement({required this.id, required this.title, required this.type, required this.options, required this.defaultValue, required this.hotkey, required this.persist});
+
+  WoxQueryRefinement.fromJson(Map<String, dynamic> json) {
+    id = json['Id'] ?? json['id'] ?? "";
+    title = json['Title'] ?? json['title'] ?? "";
+    type = json['Type'] ?? json['type'] ?? "";
+    final rawOptions = json['Options'] ?? json['options'];
+    options =
+        rawOptions is List
+            ? rawOptions.whereType<Map>().map((option) => WoxQueryRefinementOption.fromJson(Map<String, dynamic>.from(option))).toList()
+            : <WoxQueryRefinementOption>[];
+    defaultValue = List<String>.from((json['DefaultValue'] ?? json['defaultValue'] ?? const <dynamic>[]).map((value) => value.toString()));
+    hotkey = json['Hotkey'] ?? json['hotkey'] ?? "";
+    persist = json['Persist'] ?? json['persist'] ?? false;
+  }
+
+  bool get isEmpty => id.isEmpty || type.isEmpty;
+}
+
+/// One option inside a query refinement control.
+///
+/// Count and keywords are optional plugin hints. The first UI pass displays the
+/// count and keeps keywords parsed so later keyboard/search affordances do not
+/// need another transport change.
+class WoxQueryRefinementOption {
+  late String value;
+  late String title;
+  late WoxImage icon;
+  late List<String> keywords;
+  late int? count;
+
+  WoxQueryRefinementOption({required this.value, required this.title, required this.icon, required this.keywords, required this.count});
+
+  WoxQueryRefinementOption.fromJson(Map<String, dynamic> json) {
+    value = json['Value'] ?? json['value'] ?? "";
+    title = json['Title'] ?? json['title'] ?? "";
+    final iconJson = json['Icon'] ?? json['icon'];
+    icon = iconJson is Map ? WoxImage.fromJson(Map<String, dynamic>.from(iconJson)) : WoxImage.empty();
+    keywords = List<String>.from((json['Keywords'] ?? json['keywords'] ?? const <dynamic>[]).map((keyword) => keyword.toString()));
+    final rawCount = json['Count'] ?? json['count'];
+    count = rawCount is int ? rawCount : int.tryParse(rawCount?.toString() ?? "");
+  }
+}
+
 class UpdatableResult {
   late String id;
   String? title;
@@ -520,8 +685,10 @@ class UpdatableResult {
   List<WoxListItemTail>? tails;
   WoxPreview? preview;
   List<WoxResultAction>? actions;
+  bool hasDragDataUpdate = false;
+  WoxResultDragData? dragData;
 
-  UpdatableResult({required this.id, this.title, this.subTitle, this.icon, this.tails, this.preview, this.actions});
+  UpdatableResult({required this.id, this.title, this.subTitle, this.icon, this.tails, this.preview, this.actions, this.hasDragDataUpdate = false, this.dragData});
 
   UpdatableResult.fromJson(Map<String, dynamic> json) {
     id = json['Id'];
@@ -550,28 +717,81 @@ class UpdatableResult {
         actions!.add(action);
       });
     }
+
+    hasDragDataUpdate = json.containsKey('DragData');
+    final rawDragData = json['DragData'];
+    dragData = rawDragData is Map ? WoxResultDragData.fromJson(Map<String, dynamic>.from(rawDragData)) : null;
   }
 }
 
-class QueryMetadata {
+/// Query-scoped presentation hints delivered with QueryResponse.
+///
+/// The old query metadata HTTP request used a different shape, so this parser
+/// accepts both field names during the transition. The nullable ratio preserves
+/// the difference between "unset" and an explicit zero preview-only layout.
+class QueryLayout {
   late WoxImage icon;
-  late double resultPreviewWidthRatio;
+  late double? resultPreviewWidthRatio;
   late bool isGridLayout;
   late GridLayoutParams gridLayoutParams;
 
-  QueryMetadata({required this.icon, required this.resultPreviewWidthRatio, required this.isGridLayout, required this.gridLayoutParams});
+  QueryLayout({required this.icon, required this.resultPreviewWidthRatio, required this.isGridLayout, required this.gridLayoutParams});
 
-  QueryMetadata.fromJson(Map<String, dynamic> json) {
-    icon = WoxImage.fromJson(json['Icon']);
-
-    if (json['WidthRatio'] != null) {
-      resultPreviewWidthRatio = json['WidthRatio'].toDouble();
+  QueryLayout.fromJson(Map<String, dynamic> json) {
+    final iconJson = json['Icon'];
+    if (iconJson is Map) {
+      icon = WoxImage.fromJson(Map<String, dynamic>.from(iconJson));
     } else {
-      resultPreviewWidthRatio = 0.5;
+      icon = WoxImage.empty();
     }
 
-    isGridLayout = json['IsGridLayout'] ?? false;
-    gridLayoutParams = GridLayoutParams.fromJson(json['GridLayoutParams'] ?? {});
+    final widthRatio = json['ResultPreviewWidthRatio'] ?? json['WidthRatio'];
+    if (widthRatio != null) {
+      resultPreviewWidthRatio = widthRatio.toDouble();
+    } else {
+      resultPreviewWidthRatio = null;
+    }
+
+    final gridLayoutJson = json['GridLayout'] ?? json['GridLayoutParams'];
+    final hasGridLayoutPayload = gridLayoutJson is Map && gridLayoutJson.isNotEmpty;
+    isGridLayout = json['IsGridLayout'] ?? hasGridLayoutPayload;
+    if (gridLayoutJson is Map) {
+      gridLayoutParams = GridLayoutParams.fromJson(Map<String, dynamic>.from(gridLayoutJson));
+    } else {
+      gridLayoutParams = GridLayoutParams.empty();
+    }
+  }
+
+  QueryLayout.empty() {
+    icon = WoxImage.empty();
+    resultPreviewWidthRatio = null;
+    isGridLayout = false;
+    gridLayoutParams = GridLayoutParams.empty();
+  }
+
+  bool get isEmpty {
+    return icon.imageData.isEmpty && resultPreviewWidthRatio == null && !isGridLayout;
+  }
+}
+
+/// Backend-owned query classification delivered with QueryResponse.
+///
+/// Flutter uses this to correct local trigger-keyword guesses after core has
+/// applied shortcuts and parsed the query against the actual plugin registry.
+class QueryContext {
+  late bool isGlobalQuery;
+  late String pluginId;
+
+  QueryContext({required this.isGlobalQuery, required this.pluginId});
+
+  QueryContext.fromJson(Map<String, dynamic> json) {
+    isGlobalQuery = json['IsGlobalQuery'] ?? false;
+    pluginId = json['PluginId'] ?? '';
+  }
+
+  QueryContext.empty() {
+    isGlobalQuery = false;
+    pluginId = '';
   }
 }
 
@@ -581,23 +801,33 @@ class GridLayoutParams {
   late bool showTitle; // whether to show title below icon
   late double itemPadding; // padding inside each item
   late double itemMargin; // margin outside each item (all sides)
+  late double aspectRatio; // width / height for each grid visual item
   late List<String> commands; // commands to enable grid layout for, empty means all
 
-  GridLayoutParams({required this.columns, required this.showTitle, required this.itemPadding, required this.itemMargin, required this.commands});
+  GridLayoutParams({required this.columns, required this.showTitle, required this.itemPadding, required this.itemMargin, required this.aspectRatio, required this.commands});
 
   GridLayoutParams.fromJson(Map<String, dynamic> json) {
     columns = json['Columns'] ?? 8;
     showTitle = json['ShowTitle'] ?? false;
-    itemPadding = (json['ItemPadding'] ?? 12).toDouble();
+    // Behavior change: the grid active state is now an outline, so missing
+    // ItemPadding should mean no extra inner gap. The old 12px fallback was
+    // tied to filled-background selection and made media/emoji grids look
+    // padded even when plugin metadata omitted ItemPadding.
+    itemPadding = (json['ItemPadding'] ?? 0).toDouble();
     itemMargin = (json['ItemMargin'] ?? 6).toDouble();
+    aspectRatio = (json['AspectRatio'] ?? 1.0).toDouble();
+    if (aspectRatio <= 0) {
+      aspectRatio = 1.0;
+    }
     commands = json['Commands'] != null ? List<String>.from(json['Commands']) : [];
   }
 
   GridLayoutParams.empty() {
     columns = 0;
     showTitle = false;
-    itemPadding = 12;
+    itemPadding = 0;
     itemMargin = 6;
+    aspectRatio = 1.0;
     commands = [];
   }
 }

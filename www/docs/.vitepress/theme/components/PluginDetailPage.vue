@@ -30,7 +30,6 @@ const uiText = computed(() => {
       runtime: "运行时",
       minWoxVersion: "最低 Wox 版本",
       pluginId: "插件 ID",
-      website: "项目地址",
       created: "创建时间",
       updated: "更新时间",
       more: "更多插件",
@@ -55,7 +54,6 @@ const uiText = computed(() => {
     runtime: "Runtime",
     minWoxVersion: "Min Wox Version",
     pluginId: "Plugin ID",
-    website: "Website",
     created: "Created",
     updated: "Updated",
     more: "More plugins",
@@ -278,6 +276,7 @@ onUnmounted(() => {
             </svg>
             <span>{{ uiText.install }}</span>
           </a>
+          <!-- Keep Website as a single top-level action; the removed sidebar duplicate made metadata feel like navigation instead of factual details. -->
           <a v-if="plugin.Website" :href="plugin.Website" target="_blank" rel="noreferrer" class="secondary-action">
             <svg viewBox="0 0 24 24" aria-hidden="true" class="action-icon">
               <path
@@ -364,14 +363,6 @@ onUnmounted(() => {
             </div>
           </dl>
         </div>
-
-        <div class="content-card compact" v-if="plugin.Website">
-          <div class="section-head">
-            <h2>{{ uiText.website }}</h2>
-          </div>
-
-          <a :href="plugin.Website" target="_blank" rel="noreferrer" class="website-link">{{ plugin.Website }}</a>
-        </div>
       </aside>
     </section>
 
@@ -409,6 +400,9 @@ onUnmounted(() => {
 
 <style scoped>
 .plugin-page {
+  --plugin-detail-card-padding: 30px;
+  --plugin-detail-gap: 24px;
+  --plugin-detail-columns: minmax(0, 1.45fr) minmax(300px, 0.9fr);
   margin: 12px 0 36px;
 }
 
@@ -427,9 +421,9 @@ onUnmounted(() => {
 
 .hero-card {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.9fr);
-  gap: 24px;
-  padding: 30px;
+  grid-template-columns: var(--plugin-detail-columns);
+  gap: var(--plugin-detail-gap);
+  padding: var(--plugin-detail-card-padding);
   border: 1px solid color-mix(in srgb, var(--vp-c-divider) 82%, white 18%);
   border-radius: 30px;
   background:
@@ -625,9 +619,11 @@ onUnmounted(() => {
 
 .content-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.85fr);
-  gap: 24px;
+  /* Match the hero card's inner grid so the Compatibility panel and Metadata card keep the same right-rail width on desktop. */
+  grid-template-columns: var(--plugin-detail-columns);
+  gap: var(--plugin-detail-gap);
   margin-top: 24px;
+  box-sizing: border-box;
 }
 
 .main-column,
@@ -742,13 +738,6 @@ onUnmounted(() => {
   text-align: right;
 }
 
-.website-link {
-  color: var(--vp-c-brand-1);
-  font-size: 14px;
-  line-height: 1.7;
-  word-break: break-word;
-}
-
 .related-section {
   margin-top: 28px;
 }
@@ -850,6 +839,10 @@ onUnmounted(() => {
   .hero-card,
   .content-grid {
     grid-template-columns: 1fr;
+  }
+
+  .content-grid {
+    padding-inline: 0;
   }
 
   .related-grid {

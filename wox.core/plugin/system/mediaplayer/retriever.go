@@ -38,7 +38,7 @@ type MediaInfo struct {
 	State       PlaybackState `json:"state"`
 	AppName     string        `json:"appName"`     // Name of the media application
 	AppBundleID string        `json:"appBundleId"` // Bundle ID or process name
-	Artwork     []byte        `json:"artwork"`     // Album artwork as image data
+	Artwork     []byte        `json:"artwork"`     // Album artwork as raw image bytes, base64 text, or a data URI
 }
 
 // MediaRetriever defines the interface for retrieving media information across platforms
@@ -48,6 +48,9 @@ type MediaRetriever interface {
 
 	// GetCurrentMedia retrieves current media information
 	GetCurrentMedia(ctx context.Context) (*MediaInfo, error)
+
+	// ControlMedia sends a named playback command such as play, pause, next, or previous.
+	ControlMedia(ctx context.Context, command string) error
 
 	// TogglePlayPause toggles playback state if supported on the platform/app
 	TogglePlayPause(ctx context.Context) error

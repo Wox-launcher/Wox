@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"unicode"
 	"wox/common"
 	"wox/setting"
 	"wox/util"
@@ -33,6 +34,38 @@ type OpenAIBaseProviderStream struct {
 	conversations     []common.Conversation
 	acc               openai.ChatCompletionAccumulator
 	accumulatedReason string // accumulated reasoning content from chunks
+	accumulatedData   string // accumulated answer content after provider-specific reasoning markers are removed
+	pendingData       string // buffered content that may contain a split content tag marker across stream chunks
+	activeContentTag  streamContentTag
+	hasContentTag     bool // true when content chunks are currently inside a configured tagged block
+	trimAnswerPrefix  bool // true after a tagged block so separator whitespace is not kept as answer text
+}
+
+type streamContentTarget string
+
+const (
+	streamContentTargetReasoning streamContentTarget = "reasoning"
+)
+
+type streamContentTag struct {
+	Start  string
+	End    string
+	Target streamContentTarget
+}
+
+var streamContentTags = []streamContentTag{
+	// Some providers expose reasoning through content tags instead of the
+	// structured delta.reasoning field. Keep tags declarative so supporting a new
+	// provider-specific marker only requires adding one entry here.
+	{Start: "<think>", End: "</think>", Target: streamContentTargetReasoning},
+}
+
+var reasoningExtraFieldNames = [...]string{
+	// OpenAI-compatible providers do not agree on one streamed reasoning field.
+	// Keep the known names in one small list so receiving chunks and empty-chunk
+	// detection stay in sync when provider-specific support is added.
+	"reasoning",
+	"reasoning_content",
 }
 
 // NewOpenAIBaseProvider creates a new OpenAI base provider
@@ -206,8 +239,12 @@ func (s *OpenAIBaseProviderStream) Receive(ctx context.Context) (common.ChatStre
 			}
 		}
 
-		// Keep reasoning and content separate
-		finalContent := s.acc.Choices[0].Message.Content
+		// Some OpenAI-compatible providers stream reasoning as tagged content
+		// instead of using delta.reasoning. Flush any incomplete marker text at
+		// stream end so normal answers are not lost, while completed tagged blocks
+		// stay separated from the user-visible answer.
+		s.flushPendingData()
+		finalContent := s.accumulatedData
 
 		util.GetLogger().Debug(ctx, "AI: Stream ended, final message received"+finalContent)
 		return common.ChatStreamData{
@@ -221,45 +258,51 @@ func (s *OpenAIBaseProviderStream) Receive(ctx context.Context) (common.ChatStre
 	chunk := s.stream.Current()
 	util.GetLogger().Debug(ctx, fmt.Sprintf("AI: Received raw chunk: %s", chunk.RawJSON()))
 
-	// Store previous content and reasoning before adding chunk
-	var previousContent string
+	// Store previous normalized content and reasoning before adding chunk so
+	// tag-only chunks do not look like user-visible answer updates.
+	previousContent := s.accumulatedData
 	var previousReasoning string
-	if len(s.acc.Choices) > 0 {
-		previousContent = s.acc.Choices[0].Message.Content
-	}
 	previousReasoning = s.accumulatedReason
 
 	// Extract reasoning from current chunk if present
 	if len(chunk.Choices) > 0 {
 		delta := chunk.Choices[0].Delta
 
-		if reasoningField, exists := delta.JSON.ExtraFields["reasoning"]; exists {
-			// The reasoning field is already a JSON string, so we need to unmarshal it
-			rawReasoning := reasoningField.Raw()
+		for _, reasoningFieldName := range reasoningExtraFieldNames {
+			if reasoningField, exists := delta.JSON.ExtraFields[reasoningFieldName]; exists {
+				// DeepSeek streams thinking as reasoning_content while some other
+				// OpenAI-compatible providers use reasoning. The old single-field
+				// branch dropped DeepSeek thinking chunks as empty stream updates,
+				// so keep the compatible field names together and parse them through
+				// the same path.
+				rawReasoning := reasoningField.Raw()
 
-			// Only process if reasoning is not null
-			if rawReasoning != "null" && rawReasoning != "" {
-				var reasoningStr string
-				if err := json.Unmarshal([]byte(rawReasoning), &reasoningStr); err == nil {
-					if reasoningStr != "" {
-						s.accumulatedReason += reasoningStr
-						util.GetLogger().Debug(ctx, fmt.Sprintf("AI: Extracted reasoning from chunk: %s", reasoningStr))
+				// Only process if reasoning is not null.
+				if rawReasoning != "null" && rawReasoning != "" {
+					var reasoningStr string
+					if err := json.Unmarshal([]byte(rawReasoning), &reasoningStr); err == nil {
+						if reasoningStr != "" {
+							s.accumulatedReason += reasoningStr
+							util.GetLogger().Debug(ctx, fmt.Sprintf("AI: Extracted reasoning from chunk field %s: %s", reasoningFieldName, reasoningStr))
+						}
+					} else {
+						util.GetLogger().Error(ctx, fmt.Sprintf("AI: Failed to unmarshal reasoning field %s: %s, error: %s", reasoningFieldName, rawReasoning, err.Error()))
 					}
-				} else {
-					util.GetLogger().Error(ctx, fmt.Sprintf("AI: Failed to unmarshal reasoning: %s, error: %s", rawReasoning, err.Error()))
 				}
 			}
+		}
+
+		if delta.Content != "" {
+			s.appendContentDelta(delta.Content)
 		}
 	}
 
 	s.acc.AddChunk(chunk)
 
-	// Check if content has changed after adding chunk
-	// This handles both regular content and reasoning content (which OpenAI SDK accumulates into Message.Content)
-	var currentContent string
-	if len(s.acc.Choices) > 0 {
-		currentContent = s.acc.Choices[0].Message.Content
-	}
+	// Check if normalized answer content has changed after processing the chunk.
+	// The OpenAI SDK accumulator still keeps the raw content for protocol state,
+	// but UI callers should receive content with configured content tags removed.
+	currentContent := s.accumulatedData
 
 	// If neither content nor reasoning has changed and there are no tool calls, skip this chunk
 	if currentContent == previousContent && s.accumulatedReason == previousReasoning && s.isChunkEmpty(chunk) {
@@ -298,6 +341,153 @@ func (s *OpenAIBaseProviderStream) Receive(ctx context.Context) (common.ChatStre
 	}
 
 	return streamData, nil
+}
+
+func (s *OpenAIBaseProviderStream) appendContentDelta(delta string) {
+	s.pendingData += delta
+
+	for s.pendingData != "" {
+		if s.hasContentTag {
+			if markerIndex := strings.Index(s.pendingData, s.activeContentTag.End); markerIndex >= 0 {
+				s.appendTaggedContent(s.pendingData[:markerIndex])
+				s.pendingData = s.pendingData[markerIndex+len(s.activeContentTag.End):]
+				s.hasContentTag = false
+				if s.accumulatedData == "" {
+					s.trimAnswerPrefix = true
+				}
+				continue
+			}
+
+			keepLength := s.contentMarkerPrefixLength(s.pendingData, []string{s.activeContentTag.End})
+			flushLength := len(s.pendingData) - keepLength
+			if flushLength > 0 {
+				s.appendTaggedContent(s.pendingData[:flushLength])
+				s.pendingData = s.pendingData[flushLength:]
+			}
+			break
+		}
+
+		tag, markerIndex, found := s.findFirstContentTagStart(s.pendingData)
+		if found {
+			s.appendNormalizedContent(s.pendingData[:markerIndex])
+			s.pendingData = s.pendingData[markerIndex+len(tag.Start):]
+			s.activeContentTag = tag
+			s.hasContentTag = true
+			continue
+		}
+
+		keepLength := s.contentMarkerPrefixLength(s.pendingData, s.contentTagStartMarkers())
+		flushLength := len(s.pendingData) - keepLength
+		if flushLength > 0 {
+			s.appendNormalizedContent(s.pendingData[:flushLength])
+			s.pendingData = s.pendingData[flushLength:]
+		}
+		break
+	}
+}
+
+func (s *OpenAIBaseProviderStream) appendNormalizedContent(content string) {
+	if content == "" {
+		return
+	}
+
+	if s.trimAnswerPrefix {
+		// Models commonly emit whitespace after a reasoning tag. Drop only that
+		// separator before the first answer token so Data starts with the actual
+		// response.
+		content = strings.TrimLeftFunc(content, unicode.IsSpace)
+		if content == "" {
+			return
+		}
+		s.trimAnswerPrefix = false
+	}
+
+	s.accumulatedData += content
+}
+
+func (s *OpenAIBaseProviderStream) appendTaggedContent(content string) {
+	if content == "" {
+		return
+	}
+
+	s.appendRoutedContent(s.activeContentTag.Target, content)
+}
+
+func (s *OpenAIBaseProviderStream) appendRoutedContent(target streamContentTarget, content string) {
+	if content == "" {
+		return
+	}
+
+	// Routed content is controlled by configuration. Today all supported routes
+	// carry reasoning, but this switch keeps the parser extensible if a future
+	// provider adds another content category.
+	switch target {
+	case streamContentTargetReasoning:
+		s.accumulatedReason += content
+	default:
+		s.accumulatedData += content
+	}
+}
+
+func (s *OpenAIBaseProviderStream) flushPendingData() {
+	if s.pendingData == "" {
+		return
+	}
+
+	if s.hasContentTag {
+		s.appendTaggedContent(s.pendingData)
+	} else {
+		s.appendNormalizedContent(s.pendingData)
+	}
+	s.pendingData = ""
+}
+
+func (s *OpenAIBaseProviderStream) findFirstContentTagStart(content string) (streamContentTag, int, bool) {
+	var matchedTag streamContentTag
+	matchedIndex := -1
+
+	for _, tag := range streamContentTags {
+		if tag.Start == "" || tag.End == "" {
+			continue
+		}
+
+		if index := strings.Index(content, tag.Start); index >= 0 && (matchedIndex == -1 || index < matchedIndex) {
+			matchedTag = tag
+			matchedIndex = index
+		}
+	}
+
+	return matchedTag, matchedIndex, matchedIndex >= 0
+}
+
+func (s *OpenAIBaseProviderStream) contentTagStartMarkers() []string {
+	markers := make([]string, 0, len(streamContentTags))
+	for _, tag := range streamContentTags {
+		if tag.Start != "" && tag.End != "" {
+			markers = append(markers, tag.Start)
+		}
+	}
+
+	return markers
+}
+
+func (s *OpenAIBaseProviderStream) contentMarkerPrefixLength(content string, markers []string) int {
+	maxPrefixLength := 0
+
+	for _, marker := range markers {
+		maxLength := len(marker) - 1
+		if len(content) < maxLength {
+			maxLength = len(content)
+		}
+
+		for length := maxLength; length > 0; length-- {
+			if strings.HasSuffix(content, marker[:length]) && length > maxPrefixLength {
+				maxPrefixLength = length
+			}
+		}
+	}
+
+	return maxPrefixLength
 }
 
 // normalizeArguments normalizes the tool call arguments
@@ -407,9 +597,13 @@ func (s *OpenAIBaseProviderStream) isChunkEmpty(chunk openai.ChatCompletionChunk
 		return false
 	}
 
-	// Check for reasoning field in ExtraFields (for reasoning models like o1, o3-mini, etc.)
-	if reasoningField, exists := delta.JSON.ExtraFields["reasoning"]; exists && reasoningField.Valid() {
-		return false
+	// Check for reasoning fields in ExtraFields. DeepSeek uses reasoning_content,
+	// while other OpenAI-compatible providers use reasoning, and both should
+	// keep streaming chunks alive even when there is no user-visible content.
+	for _, reasoningFieldName := range reasoningExtraFieldNames {
+		if reasoningField, exists := delta.JSON.ExtraFields[reasoningFieldName]; exists && reasoningField.Valid() {
+			return false
+		}
 	}
 
 	return true

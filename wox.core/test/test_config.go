@@ -1,6 +1,7 @@
 package test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -35,9 +36,11 @@ type TestConfig struct {
 
 // DefaultTestConfig returns the default test configuration
 func DefaultTestConfig() *TestConfig {
-	// Create temporary test directories
+	// Keep one stable test sandbox per go test process. The previous fixed temp
+	// directory let separate runs reuse the same SQLite/FTS files, so one malformed
+	// cleanup or interrupted run could poison later integration tests.
 	tempDir := os.TempDir()
-	testDataDir := filepath.Join(tempDir, "wox-test-data")
+	testDataDir := filepath.Join(tempDir, fmt.Sprintf("wox-test-data-%d", os.Getpid()))
 	testLogDir := filepath.Join(testDataDir, "logs")
 	testUserDir := filepath.Join(testDataDir, "user")
 

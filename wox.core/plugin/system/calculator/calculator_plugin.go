@@ -131,12 +131,12 @@ func (c *CalculatorPlugin) Init(ctx context.Context, initParams plugin.InitParam
 	c.histories = c.loadHistories(ctx)
 }
 
-func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	var results []plugin.QueryResult
 
 	if query.TriggerKeyword == "" {
 		if !c.hasOperator(query.Search) {
-			return []plugin.QueryResult{}
+			return plugin.QueryResponse{}
 		}
 
 		// Try to calculate the expression, if it fails then it's not a valid calculator expression
@@ -144,7 +144,7 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 		val, err := Calculate(query.Search, thousandsSep, decimalSep)
 		if err != nil {
 			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Calculator failed to parse expression: %v", err))
-			return []plugin.QueryResult{}
+			return plugin.QueryResponse{}
 		}
 		result := val.String()
 		formattedResult := c.formatWithSeparators(val, thousandsSep, decimalSep)
@@ -282,7 +282,7 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 		}
 	}
 
-	return results
+	return plugin.NewQueryResponse(results)
 }
 
 func (c *CalculatorPlugin) getDecimalSeparator(ctx context.Context) DecimalSeparator {

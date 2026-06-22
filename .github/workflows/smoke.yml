@@ -25,11 +25,12 @@ jobs:
     timeout-minutes: 90
 
     steps:
+      # Keep GitHub-owned setup actions on Node 24-compatible majors; the Go, Node, and Python toolchain versions remain pinned by their inputs.
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: wox.core/go.mod
           cache: true
@@ -45,7 +46,7 @@ jobs:
         run: choco install -y make
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: pnpm
@@ -54,7 +55,7 @@ jobs:
             wox.plugin.nodejs/pnpm-lock.yaml
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 

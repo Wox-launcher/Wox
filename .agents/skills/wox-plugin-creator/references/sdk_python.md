@@ -9,15 +9,21 @@
 ### Plugin Base Class
 
 ```python
-from wox_plugin import Plugin, Query, Result, Context, PluginInitParams
+from wox_plugin import Plugin, Query, QueryResponse, Result, Context, PluginInitParams
 
 class MyPlugin(Plugin):
     async def init(self, ctx: Context, params: PluginInitParams) -> None:
         self.api = params.api
 
-    async def query(self, ctx: Context, query: Query) -> list[Result]:
-        return []
+    async def query(self, ctx: Context, query: Query) -> QueryResponse:
+        return QueryResponse(results=[])
 ```
+
+Return `QueryResponse` when `plugin.json` declares `MinWoxVersion` >= `2.0.4`.
+Use `QueryResponse.layout.result_preview_width_ratio` and
+`QueryResponse.layout.grid_layout` for query-scoped layout. The older
+`resultPreviewWidthRatio` and `gridLayout` metadata features are deprecated
+because they can only describe static plugin or command defaults.
 
 ### Data Models
 
@@ -64,7 +70,7 @@ All methods are async and require `ctx`.
 ### Settings
 
 - `get_setting(ctx, key)`: Get setting.
-- `save_setting(ctx, key, value, is_platform_specific)`: Save setting.
+- `save_setting(ctx, key, value, is_platform_specific)`: Save setting. Normal plugin settings are eligible for cloud sync, so pass `True` for platform-only values such as local paths, executable paths, shell commands, hotkeys, browser profiles, application paths, and system integrations.
 - `on_setting_changed(ctx, callback)`: Listen for changes.
 - `on_get_dynamic_setting(ctx, callback)`: Provide runtime-generated setting definitions for `dynamic` settings.
 
@@ -94,6 +100,56 @@ All methods are async and require `ctx`.
 - For advanced settings such as `select`, `table`, validators, or `dynamic`, construct `PluginSettingDefinitionItem` and the corresponding value objects directly, or emit the expected JSON shape manually.
 - For the exact `plugin.json` and validator shape, read `references/plugin_json_schema.md`.
 - For ready-to-copy advanced settings examples, read `references/settings_patterns.md`.
+- Match runtime `save_setting(ctx, key, value, is_platform_specific)` calls to the setting metadata. Do not hardcode `False` for dynamically saved settings if their `SettingDefinitions` entry uses `IsPlatformSpecific: true`.
+- `DisabledInPlatforms` only controls where the setting is disabled; it does not isolate cloud-synced values.
+- Use static `QueryRequirements` in `plugin.json` when a query requires settings such as API keys. Wox blocks the query before calling `query()` and shows the built-in `query_requirement_settings` setup preview.
+- There is no runtime `register_query_requirements` API. Declare query requirements in metadata.
+
+## QueryRequirements Dataclasses
+
+```python
+from dataclasses import dataclass, field
+
+@dataclass
+class PluginQueryRequirement:
+    setting_key: str
+    validators: list[dict] = field(default_factory=list)
+    message: str = ""
+
+@dataclass
+class PluginQueryRequirements:
+    any_query: list[PluginQueryRequirement] = field(default_factory=list)
+    query_without_command: list[PluginQueryRequirement] = field(default_factory=list)
+    query_with_command: dict[str, list[PluginQueryRequirement]] = field(default_factory=dict)
+```
+
+Metadata example:
+
+```json
+{
+  "SettingDefinitions": [
+    {
+      "Type": "textbox",
+      "Value": {
+        "Key": "accessKey",
+        "Label": "i18n:access_key",
+        "DefaultValue": "",
+        "Validators": [{ "Type": "not_empty", "Value": {} }]
+      }
+    }
+  ],
+  "QueryRequirements": {
+    "AnyQuery": [
+      {
+        "SettingKey": "accessKey",
+        "Message": "i18n:access_key_required"
+      }
+    ],
+    "QueryWithoutCommand": [],
+    "QueryWithCommand": {}
+  }
+}
+```
 
 ## Dynamic Setting Example
 

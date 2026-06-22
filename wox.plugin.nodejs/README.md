@@ -12,8 +12,12 @@ npm install wox-plugin
 
 ### Basic Plugin
 
+This example returns `QueryResponse`, so the plugin's `plugin.json` should set
+`MinWoxVersion` to `2.0.4` or newer. Return `Result[]` directly if you need the
+same plugin build to run on older Wox releases.
+
 ```typescript
-import { Plugin, Context, Query, Result, NewContext, WoxImage } from "wox-plugin"
+import { Plugin, Context, Query, QueryResponse, Result, NewContext, WoxImage } from "wox-plugin"
 
 class MyPlugin implements Plugin {
   private api: PublicAPI
@@ -23,7 +27,7 @@ class MyPlugin implements Plugin {
     await this.api.Log(ctx, "Info", "MyPlugin initialized")
   }
 
-  async query(ctx: Context, query: Query): Promise<Result[]> {
+  async query(ctx: Context, query: Query): Promise<QueryResponse> {
     const results: Result[] = []
 
     for (const item of this.getItems(query.Search)) {
@@ -45,7 +49,7 @@ class MyPlugin implements Plugin {
       })
     }
 
-    return results
+    return { Results: results }
   }
 }
 ```
@@ -59,9 +63,19 @@ Every plugin must implement the `Plugin` interface:
 ```typescript
 interface Plugin {
   init: (ctx: Context, initParams: PluginInitParams) => Promise<void>
-  query: (ctx: Context, query: Query) => Promise<Result[]>
+  query: (ctx: Context, query: Query) => Promise<QueryReturn>
 }
 ```
+
+Returning `Result[]` directly is deprecated. The Node.js host still accepts it
+for compatibility with older Wox releases. Use `QueryResponse` only when
+`plugin.json` declares `MinWoxVersion` >= `2.0.4` so results, refinements, and
+layout hints are carried together.
+
+When a plugin needs to control the preview width or grid layout, set
+`QueryResponse.Layout.ResultPreviewWidthRatio` or `QueryResponse.Layout.GridLayout`.
+The older `resultPreviewWidthRatio` and `gridLayout` metadata features are
+deprecated because they can only describe static plugin or command defaults.
 
 ### Query Models
 
@@ -149,14 +163,7 @@ const settings: PluginSettingDefinitionItem[] = [
       DefaultValue: "",
       Tooltip: "Enter your API key",
       MaxLines: 1,
-      Validators: [],
-      Style: {
-        PaddingLeft: 0,
-        PaddingTop: 0,
-        PaddingRight: 0,
-        PaddingBottom: 0,
-        Width: 0
-      }
+      Validators: []
     } as PluginSettingValueTextBox,
     DisabledInPlatforms: [],
     IsPlatformSpecific: false
@@ -167,20 +174,16 @@ const settings: PluginSettingDefinitionItem[] = [
       Key: "enabled",
       Label: "Enable Feature",
       DefaultValue: "true",
-      Tooltip: "",
-      Style: {
-        PaddingLeft: 0,
-        PaddingTop: 0,
-        PaddingRight: 0,
-        PaddingBottom: 0,
-        Width: 0
-      }
+      Tooltip: ""
     } as PluginSettingValueCheckBox,
     DisabledInPlatforms: [],
     IsPlatformSpecific: false
   }
 ]
 ```
+
+`Style` is deprecated and should not be used for new settings. Wox owns setting
+spacing and control widths so plugin settings remain visually consistent.
 
 ## AI/LLM Integration
 
@@ -211,13 +214,31 @@ Plugins must declare metadata in a `plugin.json` file:
   "Name": "My Plugin",
   "Author": "Your Name",
   "Version": "1.0.0",
-  "MinWoxVersion": "2.0.0",
+  "MinWoxVersion": "2.0.4",
   "Runtime": "nodejs",
   "Entry": "main.js",
   "TriggerKeywords": ["my"],
   "Description": "My awesome Wox plugin",
   "Website": "https://github.com/user/myplugin",
-  "Icon": "https://example.com/icon.png"
+  "Icon": "https://example.com/icon.png",
+  "QueryRequirements": {
+    "AnyQuery": [
+      {
+        "SettingKey": "apiKey",
+        "Validators": [{ "Type": "not_empty" }],
+        "Message": "i18n:my_plugin_api_key_required"
+      }
+    ],
+    "QueryWithoutCommand": [],
+    "QueryWithCommand": {
+      "download": [
+        {
+          "SettingKey": "downloadPath",
+          "Validators": [{ "Type": "not_empty" }]
+        }
+      ]
+    }
+  }
 }
 ```
 
@@ -225,10 +246,10 @@ Plugins must declare metadata in a `plugin.json` file:
 
 1. User triggers Wox and types trigger keyword (e.g., "my query")
 2. Wox calls `plugin.query()` with:
-   - `query.triggerKeyword = "my"`
-   - `query.command = ""`
-   - `query.search = "query"`
-3. Plugin returns `Result[]`
+   - `query.TriggerKeyword = "my"`
+   - `query.Command = ""`
+   - `query.Search = "query"`
+3. Plugin returns `QueryResponse` when `MinWoxVersion` is at least `2.0.4`
 4. Wox displays results sorted by score
 
 ## For More Information

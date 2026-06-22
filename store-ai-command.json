@@ -1,14 +1,285 @@
-[
+{
+  "categories": [
     {
-        "Name": "Translate English to Chinese",
-        "Author": "qianlifeng",
-        "Command": "translate",
-        "Prompt": "请将以下英文翻译为中文，不要输出任何与译文无关的解释：\n%s"
+      "Id": "reading",
+      "Name": "i18n:category_reading",
+      "I18n": {
+        "en_US": {
+          "category_reading": "Reading"
+        },
+        "zh_CN": {
+          "category_reading": "阅读"
+        },
+        "pt_BR": {
+          "category_reading": "Leitura"
+        },
+        "ru_RU": {
+          "category_reading": "Чтение"
+        }
+      }
     },
     {
-        "Name": "TLDR",
-        "Author": "qianlifeng",
-        "Command": "tldr",
-        "Prompt": "Extract all facts from the text and summarize it in all relevant aspects in up to seven bullet points and a 1-liner summary. Pick a good matching emoji for every bullet point. And replay in chinese, thx.\nText: %s\nSummary:"
+      "Id": "writing",
+      "Name": "i18n:category_writing",
+      "I18n": {
+        "en_US": {
+          "category_writing": "Writing"
+        },
+        "zh_CN": {
+          "category_writing": "写作"
+        },
+        "pt_BR": {
+          "category_writing": "Escrita"
+        },
+        "ru_RU": {
+          "category_writing": "Письмо"
+        }
+      }
+    },
+    {
+      "Id": "productivity",
+      "Name": "i18n:category_productivity",
+      "I18n": {
+        "en_US": {
+          "category_productivity": "Productivity"
+        },
+        "zh_CN": {
+          "category_productivity": "效率"
+        },
+        "pt_BR": {
+          "category_productivity": "Produtividade"
+        },
+        "ru_RU": {
+          "category_productivity": "Продуктивность"
+        }
+      }
     }
-]
+  ],
+  "Templates": [
+    {
+      "Id": "translate-chinese-english",
+      "CategoryId": "reading",
+      "Name": "i18n:name_translate_chinese_english",
+      "Description": "i18n:desc_translate_chinese_english",
+      "Author": "Wox Launcher",
+      "Command": "translate",
+      "Prompt": "i18n:prompt_translate_chinese_english",
+      "ThinkingMode": "provider_default",
+      "DefaultAction": "run_and_paste",
+      "Vision": false,
+      "RecommendedQueryHotkey": {
+        "Hotkey": "ctrl+shift+t",
+        "HideQueryBox": true,
+        "HideToolbar": true,
+        "IsSilentExecution": true,
+        "Position": "system_default"
+      },
+      "I18n": {
+        "en_US": {
+          "name_translate_chinese_english": "Translate Chinese / English",
+          "desc_translate_chinese_english": "Translate selected text between Chinese and English.",
+          "prompt_translate_chinese_english": "Translate the following text between Chinese and English. If the text is Chinese, translate it into English. Otherwise, translate it into Chinese. Return only the translation:\n{wox:input_text}"
+        },
+        "zh_CN": {
+          "name_translate_chinese_english": "中英翻译",
+          "desc_translate_chinese_english": "在中文和英文之间翻译选中文本。",
+          "prompt_translate_chinese_english": "请在中文和英文之间翻译以下内容。如果输入是中文，请翻译为英文；否则翻译为中文。只返回译文，不要输出任何与译文无关的解释：\n{wox:input_text}"
+        },
+        "pt_BR": {
+          "name_translate_chinese_english": "Traduzir chines / ingles",
+          "desc_translate_chinese_english": "Traduz o texto selecionado entre chines e ingles.",
+          "prompt_translate_chinese_english": "Traduza o texto a seguir entre chines e ingles. Se o texto estiver em chines, traduza para ingles. Caso contrario, traduza para chines. Retorne apenas a traducao:\n{wox:input_text}"
+        },
+        "ru_RU": {
+          "name_translate_chinese_english": "Перевод китайский / английский",
+          "desc_translate_chinese_english": "Переводит выделенный текст между китайским и английским.",
+          "prompt_translate_chinese_english": "Переведи следующий текст между китайским и английским. Если текст на китайском, переведи его на английский. В остальных случаях переведи его на китайский. Верни только перевод:\n{wox:input_text}"
+        }
+      }
+    },
+    {
+      "Id": "summarize-selection",
+      "CategoryId": "reading",
+      "Name": "i18n:name_summarize_selection",
+      "Description": "i18n:desc_summarize_selection",
+      "Author": "Wox Launcher",
+      "Command": "summarize",
+      "Prompt": "i18n:prompt_summarize_selection",
+      "ThinkingMode": "provider_default",
+      "DefaultAction": "run",
+      "Vision": false,
+      "RecommendedQueryHotkey": {
+        "Hotkey": "ctrl+shift+s",
+        "HideQueryBox": false,
+        "HideToolbar": false,
+        "IsSilentExecution": false,
+        "Position": "system_default"
+      },
+      "I18n": {
+        "en_US": {
+          "name_summarize_selection": "Summarize Selection",
+          "desc_summarize_selection": "Summarize selected text into concise bullet points.",
+          "prompt_summarize_selection": "Extract the important facts from the following text. Return up to seven bullet points and a one-line summary:\n{wox:input_text}"
+        },
+        "zh_CN": {
+          "name_summarize_selection": "总结选中文本",
+          "desc_summarize_selection": "把选中的长文本总结成简洁要点。",
+          "prompt_summarize_selection": "请提取以下文本中的重要事实，最多输出七个要点和一句话总结：\n{wox:input_text}"
+        },
+        "pt_BR": {
+          "name_summarize_selection": "Resumir selecao",
+          "desc_summarize_selection": "Resume o texto selecionado em pontos concisos.",
+          "prompt_summarize_selection": "Extraia os fatos importantes do texto a seguir. Retorne ate sete pontos e um resumo em uma linha:\n{wox:input_text}"
+        },
+        "ru_RU": {
+          "name_summarize_selection": "Кратко изложить выделенное",
+          "desc_summarize_selection": "Сводит выделенный текст к кратким пунктам.",
+          "prompt_summarize_selection": "Извлеки важные факты из следующего текста. Верни до семи пунктов и краткое резюме в одну строку:\n{wox:input_text}"
+        }
+      }
+    },
+    {
+      "Id": "rewrite-selection",
+      "CategoryId": "writing",
+      "Name": "i18n:name_rewrite_selection",
+      "Description": "i18n:desc_rewrite_selection",
+      "Author": "Wox Launcher",
+      "Command": "rewrite",
+      "Prompt": "i18n:prompt_rewrite_selection",
+      "ThinkingMode": "provider_default",
+      "DefaultAction": "run_and_paste",
+      "Vision": false,
+      "RecommendedQueryHotkey": {
+        "Hotkey": "ctrl+shift+r",
+        "HideQueryBox": true,
+        "HideToolbar": true,
+        "IsSilentExecution": true,
+        "Position": "system_default"
+      },
+      "I18n": {
+        "en_US": {
+          "name_rewrite_selection": "Rewrite Selection",
+          "desc_rewrite_selection": "Rewrite selected text to make it clearer and more natural.",
+          "prompt_rewrite_selection": "Rewrite the following text to make it clearer, more natural, and easy to read. Preserve the original meaning. Return only the rewritten text:\n{wox:input_text}"
+        },
+        "zh_CN": {
+          "name_rewrite_selection": "重写选中文本",
+          "desc_rewrite_selection": "重写选中文本，让表达更清晰自然。",
+          "prompt_rewrite_selection": "请重写以下文本，让表达更清晰、自然、易读，并保留原意。只返回重写后的文本：\n{wox:input_text}"
+        },
+        "pt_BR": {
+          "name_rewrite_selection": "Reescrever selecao",
+          "desc_rewrite_selection": "Reescreve o texto selecionado para ficar mais claro e natural.",
+          "prompt_rewrite_selection": "Reescreva o texto a seguir para ficar mais claro, natural e facil de ler. Preserve o significado original. Retorne apenas o texto reescrito:\n{wox:input_text}"
+        },
+        "ru_RU": {
+          "name_rewrite_selection": "Переписать выделенное",
+          "desc_rewrite_selection": "Переписывает выделенный текст, делая его яснее и естественнее.",
+          "prompt_rewrite_selection": "Перепиши следующий текст, чтобы он стал яснее, естественнее и легче читался. Сохрани исходный смысл. Верни только переписанный текст:\n{wox:input_text}"
+        }
+      }
+    },
+    {
+      "Id": "fix-writing",
+      "CategoryId": "writing",
+      "Name": "i18n:name_fix_writing",
+      "Description": "i18n:desc_fix_writing",
+      "Author": "Wox Launcher",
+      "Command": "fix",
+      "Prompt": "i18n:prompt_fix_writing",
+      "ThinkingMode": "provider_default",
+      "DefaultAction": "run_and_paste",
+      "Vision": false,
+      "I18n": {
+        "en_US": {
+          "name_fix_writing": "Fix Writing",
+          "desc_fix_writing": "Fix grammar, spelling, punctuation, and wording in selected text.",
+          "prompt_fix_writing": "Fix grammar, spelling, punctuation, and wording in the following text. Preserve the original meaning and tone. Return only the corrected text:\n{wox:input_text}"
+        },
+        "zh_CN": {
+          "name_fix_writing": "修正文案",
+          "desc_fix_writing": "修正选中文本中的语法、拼写、标点和措辞问题。",
+          "prompt_fix_writing": "请修正以下文本中的语法、拼写、标点和措辞问题，保留原意和语气。只返回修正后的文本：\n{wox:input_text}"
+        },
+        "pt_BR": {
+          "name_fix_writing": "Corrigir escrita",
+          "desc_fix_writing": "Corrige gramatica, ortografia, pontuacao e redacao no texto selecionado.",
+          "prompt_fix_writing": "Corrija gramatica, ortografia, pontuacao e redacao no texto a seguir. Preserve o significado e o tom originais. Retorne apenas o texto corrigido:\n{wox:input_text}"
+        },
+        "ru_RU": {
+          "name_fix_writing": "Исправить текст",
+          "desc_fix_writing": "Исправляет грамматику, орфографию, пунктуацию и формулировки в выделенном тексте.",
+          "prompt_fix_writing": "Исправь грамматику, орфографию, пунктуацию и формулировки в следующем тексте. Сохрани исходный смысл и тон. Верни только исправленный текст:\n{wox:input_text}"
+        }
+      }
+    },
+    {
+      "Id": "make-professional",
+      "CategoryId": "writing",
+      "Name": "i18n:name_make_professional",
+      "Description": "i18n:desc_make_professional",
+      "Author": "Wox Launcher",
+      "Command": "professional",
+      "Prompt": "i18n:prompt_make_professional",
+      "ThinkingMode": "provider_default",
+      "DefaultAction": "run_and_paste",
+      "Vision": false,
+      "I18n": {
+        "en_US": {
+          "name_make_professional": "Make Professional",
+          "desc_make_professional": "Rewrite selected text in a professional workplace tone.",
+          "prompt_make_professional": "Rewrite the following text in a professional, polite, and concise workplace tone. Preserve the original meaning. Return only the rewritten text:\n{wox:input_text}"
+        },
+        "zh_CN": {
+          "name_make_professional": "改为专业语气",
+          "desc_make_professional": "把选中文本改写成更专业的工作沟通语气。",
+          "prompt_make_professional": "请将以下文本改写成专业、礼貌、简洁的工作沟通语气，并保留原意。只返回改写后的文本：\n{wox:input_text}"
+        },
+        "pt_BR": {
+          "name_make_professional": "Tornar profissional",
+          "desc_make_professional": "Reescreve o texto selecionado com um tom profissional de trabalho.",
+          "prompt_make_professional": "Reescreva o texto a seguir com um tom profissional, educado e conciso para comunicacao de trabalho. Preserve o significado original. Retorne apenas o texto reescrito:\n{wox:input_text}"
+        },
+        "ru_RU": {
+          "name_make_professional": "Сделать профессиональным",
+          "desc_make_professional": "Переписывает выделенный текст в профессиональном деловом тоне.",
+          "prompt_make_professional": "Перепиши следующий текст в профессиональном, вежливом и кратком деловом тоне. Сохрани исходный смысл. Верни только переписанный текст:\n{wox:input_text}"
+        }
+      }
+    },
+    {
+      "Id": "extract-action-items",
+      "CategoryId": "productivity",
+      "Name": "i18n:name_extract_action_items",
+      "Description": "i18n:desc_extract_action_items",
+      "Author": "Wox Launcher",
+      "Command": "actions",
+      "Prompt": "i18n:prompt_extract_action_items",
+      "ThinkingMode": "provider_default",
+      "DefaultAction": "run",
+      "Vision": false,
+      "I18n": {
+        "en_US": {
+          "name_extract_action_items": "Extract Action Items",
+          "desc_extract_action_items": "Extract tasks, owners, and deadlines from selected text.",
+          "prompt_extract_action_items": "Extract action items from the following text. Include the task, owner, and deadline when available. If something is missing, write \"Unspecified\". Return a concise bullet list:\n{wox:input_text}"
+        },
+        "zh_CN": {
+          "name_extract_action_items": "提取待办事项",
+          "desc_extract_action_items": "从选中文本中提取任务、负责人和截止时间。",
+          "prompt_extract_action_items": "请从以下文本中提取待办事项。尽量包含任务、负责人和截止时间；缺失的信息写“未指定”。请用简洁的要点列表返回：\n{wox:input_text}"
+        },
+        "pt_BR": {
+          "name_extract_action_items": "Extrair tarefas",
+          "desc_extract_action_items": "Extrai tarefas, responsaveis e prazos do texto selecionado.",
+          "prompt_extract_action_items": "Extraia itens de acao do texto a seguir. Inclua a tarefa, o responsavel e o prazo quando disponiveis. Se algo estiver faltando, escreva \"Nao especificado\". Retorne uma lista concisa em pontos:\n{wox:input_text}"
+        },
+        "ru_RU": {
+          "name_extract_action_items": "Извлечь задачи",
+          "desc_extract_action_items": "Извлекает задачи, ответственных и сроки из выделенного текста.",
+          "prompt_extract_action_items": "Извлеки задачи из следующего текста. Укажи задачу, ответственного и срок, если они доступны. Если данных нет, напиши \"Не указано\". Верни краткий маркированный список:\n{wox:input_text}"
+        }
+      }
+    }
+  ]
+}

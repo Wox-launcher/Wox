@@ -11,9 +11,15 @@
 ```typescript
 interface Plugin {
   init(ctx: Context, params: PluginInitParams): Promise<void>;
-  query(ctx: Context, query: Query): Promise<Result[]>;
+  query(ctx: Context, query: Query): Promise<QueryResponse>;
 }
 ```
+
+Return `QueryResponse` when `plugin.json` declares `MinWoxVersion` >= `2.0.4`.
+Use `QueryResponse.Layout.ResultPreviewWidthRatio` and
+`QueryResponse.Layout.GridLayout` for query-scoped layout. The older
+`resultPreviewWidthRatio` and `gridLayout` metadata features are deprecated
+because they can only describe static plugin or command defaults.
 
 ### PluginInitParams
 
@@ -89,7 +95,7 @@ The `ctx` object is required for all API calls.
 ### Settings
 
 - `GetSetting(ctx, key)`: Retrieve a stored setting.
-- `SaveSetting(ctx, key, value, isPlatformSpecific)`: Save a setting.
+- `SaveSetting(ctx, key, value, isPlatformSpecific)`: Save a setting. Normal plugin settings are eligible for cloud sync, so pass `true` for platform-only values such as local paths, executable paths, shell commands, hotkeys, browser profiles, application paths, and system integrations.
 - `OnSettingChanged(ctx, callback)`: Subscribe to setting changes.
 - `OnGetDynamicSetting(ctx, callback)`: Provide runtime-generated setting definitions for `dynamic` settings.
 
@@ -114,6 +120,54 @@ The `ctx` object is required for all API calls.
 - Read `references/plugin_json_schema.md` before writing `plugin.json` settings.
 - For ready-to-copy settings examples and advanced patterns, read `references/settings_patterns.md`.
 - `OnGetDynamicSetting` is used together with a `dynamic` entry in `SettingDefinitions`.
+- Match runtime `SaveSetting(ctx, key, value, isPlatformSpecific)` calls to the setting metadata. Do not hardcode `false` for dynamically saved settings if their `SettingDefinitions` entry uses `IsPlatformSpecific: true`.
+- `DisabledInPlatforms` only controls where the setting is disabled; it does not isolate cloud-synced values.
+- Use static `QueryRequirements` in `plugin.json` when a query requires settings such as API keys. Wox blocks the query before calling `query()` and shows the built-in `query_requirement_settings` setup preview.
+- There is no runtime `register_query_requirements` API. Declare query requirements in metadata.
+
+### QueryRequirements Types
+
+```typescript
+export interface PluginQueryRequirement {
+  SettingKey: string;
+  Validators?: PluginSettingValidator[];
+  Message?: string;
+}
+
+export interface PluginQueryRequirements {
+  AnyQuery?: PluginQueryRequirement[];
+  QueryWithoutCommand?: PluginQueryRequirement[];
+  QueryWithCommand?: Record<string, PluginQueryRequirement[]>;
+}
+```
+
+Metadata example:
+
+```json
+{
+  "SettingDefinitions": [
+    {
+      "Type": "textbox",
+      "Value": {
+        "Key": "accessKey",
+        "Label": "i18n:access_key",
+        "DefaultValue": "",
+        "Validators": [{ "Type": "not_empty", "Value": {} }]
+      }
+    }
+  ],
+  "QueryRequirements": {
+    "AnyQuery": [
+      {
+        "SettingKey": "accessKey",
+        "Message": "i18n:access_key_required"
+      }
+    ],
+    "QueryWithoutCommand": [],
+    "QueryWithCommand": {}
+  }
+}
+```
 
 ## Usage Example
 

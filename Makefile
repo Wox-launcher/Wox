@@ -1,6 +1,32 @@
-.PHONY: build clean host _bundle_mac_app plugins help dev test test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release appimage smoke
+.PHONY: build clean host _bundle_mac_app plugins help dev sdk _update_sdk_versions _sync_sdk_versions test test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue appimage smoke www
 
 SMOKE_FILTER := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
+SQLITE_BUILD_TAGS ?= sqlite_fts5
+
+# GNU Make on Windows may choose Git's sh.exe without exposing Git usr/bin to
+# recipes or $(shell ...) calls. The root build relies on sed/rm/uname before
+# dependency checks run, so normalize PATH here instead of requiring callers to
+# launch from a preconfigured MINGW64 shell.
+ifeq ($(OS),Windows_NT)
+    GIT_USR_BIN := $(patsubst %/bin/sh.exe,%/usr/bin,$(SHELL))
+    ifneq ($(GIT_USR_BIN),$(SHELL))
+        export PATH := $(GIT_USR_BIN);$(PATH)
+    endif
+endif
+
+# The previous build always preferred Corepack when the shim existed, but some
+# Node/Corepack installs expose the command while `corepack pnpm` still fails at
+# runtime. Prefer a working global pnpm first, then fall back to a working
+# Corepack shim so dependency checks and nested builds choose an executable CLI.
+PNPM ?= $(shell if command -v pnpm >/dev/null 2>&1 && pnpm --version >/dev/null 2>&1; then echo pnpm; elif command -v corepack >/dev/null 2>&1 && corepack pnpm --version >/dev/null 2>&1; then echo "corepack pnpm"; else echo pnpm; fi)
+export PNPM
+
+CURRENT_NODEJS_SDK_VERSION := $(shell node -p "require('./wox.plugin.nodejs/package.json').version")
+CURRENT_PYTHON_SDK_VERSION := $(shell sed -n 's/^version = "\(.*\)"/\1/p' wox.plugin.python/pyproject.toml)
+NEXT_NODEJS_SDK_VERSION := $(shell node -e "const parts='$(CURRENT_NODEJS_SDK_VERSION)'.split('.').map(Number); if (parts.length !== 3 || parts.some(Number.isNaN)) process.exit(1); parts[2] += 1; console.log(parts.join('.'))")
+NEXT_PYTHON_SDK_VERSION := $(shell node -e "const parts='$(CURRENT_PYTHON_SDK_VERSION)'.split('.').map(Number); if (parts.length !== 3 || parts.some(Number.isNaN)) process.exit(1); parts[2] += 1; console.log(parts.join('.'))")
+SYNC_NODEJS_SDK_VERSION ?= $(NEXT_NODEJS_SDK_VERSION)
+SYNC_PYTHON_SDK_VERSION ?= $(NEXT_PYTHON_SDK_VERSION)
 
 # Determine the current platform
 ifeq ($(OS),Windows_NT)
@@ -27,6 +53,8 @@ RELEASE_DIR := release
 APPIMAGE_TOOL ?= appimagetool.AppImage
 APPIMAGE_DIR := $(RELEASE_DIR)/wox.AppDir
 APPIMAGE_NAME := wox-linux-$(ARCH).AppImage
+APPIMAGE_DESKTOP_FILE := io.github.WoxLauncher.Wox.desktop
+APPIMAGE_ICON_FILE := io.github.WoxLauncher.Wox.png
 ifeq ($(ARCH),amd64)
 	APPIMAGE_ARCH := x86_64
 else
@@ -42,18 +70,21 @@ help:
 	@echo "  test       Run tests"
 	@echo "  build      Build all components"
 	@echo "  smoke      Run the desktop smoke E2E flow"
+	@echo "  sdk        Bump SDK patch versions, publish SDKs, sync hosts, then run dev"
 	@echo "  appimage   Build Linux AppImage"
 	@echo "  plugins    Update plugin store"
+	@echo "  www        Run docs dev server"
 	@echo "  clean      Clean release directory"
 	@echo "  host       Build plugin hosts"
 	@echo "  release    Create a new release (reads version from CHANGELOG.md)"
+	@echo "  release-continue Re-push the existing top CHANGELOG release tag after a failed release run"
 
 _check_deps:
 	@echo "Checking required dependencies..."
 	@command -v go >/dev/null 2>&1 || { echo "go is required but not installed. Visit https://golang.org/doc/install" >&2; exit 1; }
 	@command -v flutter >/dev/null 2>&1 || { echo "flutter is required but not installed. Visit https://flutter.dev/docs/get-started/install" >&2; exit 1; }
 	@command -v node >/dev/null 2>&1 || { echo "nodejs is required but not installed. Visit https://nodejs.org/" >&2; exit 1; }
-	@command -v pnpm >/dev/null 2>&1 || { echo "pnpm is required but not installed. Run: npm install -g pnpm" >&2; exit 1; }
+	@$(PNPM) --version >/dev/null 2>&1 || { echo "pnpm is required but unavailable. Install pnpm globally or enable Corepack for this Node.js installation." >&2; exit 1; }
 	@command -v uv >/dev/null 2>&1 || { echo "uv is required but not installed. Visit https://github.com/astral-sh/uv" >&2; exit 1; }
 ifeq ($(PLATFORM),linux)
 	@if ! command -v $(APPIMAGE_TOOL) >/dev/null 2>&1 && [ ! -x "$(APPIMAGE_TOOL)" ]; then \
@@ -86,6 +117,26 @@ host:
 	$(MAKE) -C wox.plugin.host.nodejs build
 	$(MAKE) -C wox.plugin.host.python build
 
+# SDK releases bump both SDK patch versions before publish because both npm and
+# PyPI reject already-published versions. The host dependency update still waits
+# until both publishes succeed so bundled hosts never point at an SDK release
+# that failed partway through the workflow.
+sdk: _update_sdk_versions
+	$(MAKE) -C wox.plugin.nodejs publish
+	$(MAKE) -C wox.plugin.python publish
+	$(MAKE) _sync_sdk_versions SYNC_NODEJS_SDK_VERSION=$(NEXT_NODEJS_SDK_VERSION) SYNC_PYTHON_SDK_VERSION=$(NEXT_PYTHON_SDK_VERSION)
+
+_update_sdk_versions:
+	@echo "Updating Node.js SDK version from $(CURRENT_NODEJS_SDK_VERSION) to $(NEXT_NODEJS_SDK_VERSION)"
+	# Use direct JSON edits here so the release flow only changes the version field instead of letting a package-manager helper normalize unrelated package.json content.
+	cd wox.plugin.nodejs && node -e "const fs=require('fs'); const p='package.json'; const data=JSON.parse(fs.readFileSync(p,'utf8')); data.version='$(NEXT_NODEJS_SDK_VERSION)'; fs.writeFileSync(p, JSON.stringify(data, null, 2) + '\n');"
+	@echo "Updating Python SDK version from $(CURRENT_PYTHON_SDK_VERSION) to $(NEXT_PYTHON_SDK_VERSION)"
+	cd wox.plugin.python && perl -0pi -e 's/^version = "[^"]+"/version = "$(NEXT_PYTHON_SDK_VERSION)"/m' pyproject.toml
+
+_sync_sdk_versions:
+	@echo "Hosts use local SDK sources; skip syncing published SDK versions into host dependencies."
+	# Hosts intentionally depend on the in-repo SDK packages so protocol changes are compiled and bundled with the matching host before any SDK release is published.
+
 # Ensure required resource directories exist with dummy files for go:embed
 ensure-resources:
 	@echo "Ensuring required resource directories exist..."
@@ -96,10 +147,11 @@ ensure-resources:
 	@mkdir -p wox.core/resource/others
 	@touch wox.core/resource/others/placeholder
 
+# Bug fix: keep the tracked others placeholder because go:embed rejects an
+# empty directory, and deleting it after tests makes the next smoke build fail.
 clean-resources:
 	@rm -f wox.core/resource/ui/flutter/placeholder
 	@rm -f wox.core/resource/hosts/placeholder
-	@rm -f wox.core/resource/others/placeholder
 
 appimage:
 ifeq ($(PLATFORM),linux)
@@ -110,13 +162,13 @@ ifeq ($(PLATFORM),linux)
 	mkdir -p $(APPIMAGE_DIR)/usr/share/applications
 	cp $(RELEASE_DIR)/wox-linux-$(ARCH) $(APPIMAGE_DIR)/usr/bin/wox
 	chmod +x $(APPIMAGE_DIR)/usr/bin/wox
-	cp assets/linux/wox.desktop $(APPIMAGE_DIR)/wox.desktop
-	cp assets/linux/wox.desktop $(APPIMAGE_DIR)/usr/share/applications/wox.desktop
+	cp assets/linux/wox.desktop $(APPIMAGE_DIR)/$(APPIMAGE_DESKTOP_FILE)
+	cp assets/linux/wox.desktop $(APPIMAGE_DIR)/usr/share/applications/$(APPIMAGE_DESKTOP_FILE)
 	cp assets/linux/AppRun $(APPIMAGE_DIR)/AppRun
 	chmod +x $(APPIMAGE_DIR)/AppRun
-	cp assets/app.png $(APPIMAGE_DIR)/wox.png
+	cp assets/app.png $(APPIMAGE_DIR)/$(APPIMAGE_ICON_FILE)
 	cp assets/app.png $(APPIMAGE_DIR)/.DirIcon
-	cp assets/app.png $(APPIMAGE_DIR)/usr/share/icons/hicolor/256x256/apps/wox.png
+	cp assets/app.png $(APPIMAGE_DIR)/usr/share/icons/hicolor/256x256/apps/$(APPIMAGE_ICON_FILE)
 	ARCH=$(APPIMAGE_ARCH) $(APPIMAGE_TOOL) $(APPIMAGE_DIR) $(RELEASE_DIR)/$(APPIMAGE_NAME)
 else
 	@echo "appimage target is only supported on Linux"
@@ -127,23 +179,26 @@ test: ensure-resources
 	@trap '$(MAKE) clean-resources' EXIT; $(MAKE) test-isolated
 
 # Test with custom environment
+# Bug fix: let the Go test config choose its per-process sandbox instead of
+# forcing one shared /tmp directory. The shared directory lets stateful plugin
+# tests leak saved settings, favorites, and histories into later make test
+# runs, which makes CI and local reruns fail for reasons unrelated to code.
 test-isolated:
-	cd wox.core && WOX_TEST_DATA_DIR=/tmp/wox-test-isolated WOX_TEST_CLEANUP=true go test ./test -v
+	cd wox.core && WOX_TEST_CLEANUP=true go test -tags "$(SQLITE_BUILD_TAGS)" ./test -v
 
 # Test without network dependencies
 test-offline:
-	cd wox.core && WOX_TEST_ENABLE_NETWORK=false go test ./test -v
+	cd wox.core && WOX_TEST_ENABLE_NETWORK=false go test -tags "$(SQLITE_BUILD_TAGS)" ./test -v
 
-# Test with verbose logging
 test-verbose:
-	cd wox.core && WOX_TEST_VERBOSE=true go test ./test -v
+	cd wox.core && WOX_TEST_VERBOSE=true go test -tags "$(SQLITE_BUILD_TAGS)" ./test -v
 
 # Test with custom directories and no cleanup (for debugging)
 test-debug:
-	cd wox.core && WOX_TEST_DATA_DIR=/tmp/wox-test-debug WOX_TEST_CLEANUP=false WOX_TEST_VERBOSE=true go test ./test -v
+	cd wox.core && WOX_TEST_DATA_DIR=/tmp/wox-test-debug WOX_TEST_CLEANUP=false WOX_TEST_VERBOSE=true go test -tags "$(SQLITE_BUILD_TAGS)" ./test -v
 
-smoke:
-	$(MAKE) -C wox.test smoke SMOKE_FILTER="$(SMOKE_FILTER)"
+smoke: ensure-resources
+	@trap '$(MAKE) clean-resources' EXIT; $(MAKE) -C wox.test smoke SMOKE_FILTER="$(SMOKE_FILTER)"
 
 %:
 	@:
@@ -209,5 +264,51 @@ _bundle_mac_app:
 release:
 	cd ci && go run . release
 
+release-continue:
+	@tag=$$(awk '/^## v[0-9]/{ print $$2; exit }' CHANGELOG.md); \
+	if [ -z "$$tag" ]; then \
+		echo "Unable to read release tag from the top CHANGELOG.md version header." >&2; \
+		exit 1; \
+	fi; \
+	if [ -n "$$(git status --porcelain)" ]; then \
+		echo "Please commit/stash your changes before continuing release $$tag." >&2; \
+		git status --short; \
+		exit 1; \
+	fi; \
+	if ! git ls-remote --exit-code --tags origin "refs/tags/$$tag" >/dev/null 2>&1; then \
+		echo "Remote release tag $$tag does not exist. Run make release first." >&2; \
+		exit 1; \
+	fi; \
+	remote_tag=$$(git ls-remote --tags origin "refs/tags/$$tag" | awk '{ print $$1; exit }'); \
+	current_head=$$(git rev-parse --short HEAD); \
+	echo ""; \
+	echo "============================================================"; \
+	echo "Release Continue Review"; \
+	echo "============================================================"; \
+	echo "Tag:             $$tag"; \
+	echo "Current HEAD:    $$current_head"; \
+	echo "Remote tag SHA:  $$remote_tag"; \
+	echo ""; \
+	echo "This will:"; \
+	echo "  1. Recreate local annotated tag $$tag at current HEAD"; \
+	echo "  2. Force-push $$tag to origin"; \
+	echo "  3. Trigger the GitHub Release workflow again"; \
+	echo "============================================================"; \
+	printf "\nProceed with release continue? (yes/no): "; \
+	read input; \
+	input=$$(printf "%s" "$$input" | tr '[:upper:]' '[:lower:]'); \
+	if [ "$$input" != "yes" ] && [ "$$input" != "y" ]; then \
+		echo "Release continue cancelled."; \
+		exit 0; \
+	fi; \
+	echo "Continuing release $$tag from current HEAD $$current_head"; \
+	git tag -f -a "$$tag" -m "Release $$tag"; \
+	git push origin "refs/tags/$$tag" --force; \
+	echo "Re-pushed $$tag."; \
+
 plugins:
 	cd ci && go run . plugin
+
+# Keep the docs dev shortcut at the repository root so contributors can discover the website workflow without duplicating the script definition from www/package.json.
+www:
+	cd www && pnpm docs:dev

@@ -134,6 +134,10 @@ const unsigned char *GenerateSFSymbolIcon(const char *symbolName, const char *co
             *length = [pngData length];
             unsigned char *bytes = (unsigned char *)malloc(*length);
             memcpy(bytes, [pngData bytes], *length);
+            // Bug fix: this file is compiled without ARC, so the rendered image
+            // must be released after the PNG bytes are copied. Keeping it alive
+            // retained native CG image memory in the core process after startup.
+            [icon release];
             
             return bytes;
         }
@@ -148,6 +152,7 @@ const unsigned char *GetPrefPaneIcon(const char *prefPanePath, size_t *length) {
         NSString *path = [NSString stringWithUTF8String:prefPanePath];
 
         NSImage *icon = nil;
+        NSImage *ownedIcon = nil;
 
         // NOTE: SF Symbol-based icons are now generated via GenerateSFSymbolIcon called from Go.
         // This function only handles traditional icon loading from plist/resources.
@@ -168,6 +173,7 @@ const unsigned char *GetPrefPaneIcon(const char *prefPanePath, size_t *length) {
                     iconPath = [iconPath stringByAppendingPathExtension:@"icns"];
                 }
                 icon = [[NSImage alloc] initWithContentsOfFile:iconPath];
+                ownedIcon = icon;
             }
         }
 
@@ -223,12 +229,32 @@ const unsigned char *GetPrefPaneIcon(const char *prefPanePath, size_t *length) {
         *length = [pngData length];
         unsigned char *bytes = (unsigned char *)malloc(*length);
         memcpy(bytes, [pngData bytes], *length);
+        // Bug fix: manual retain/release is used here. Release owned native
+        // images after rendering so cached preference-pane icons do not leave
+        // decoded CG images resident in wox.core.
+        [renderedIcon release];
+        if (ownedIcon != nil) {
+            [ownedIcon release];
+        }
 
         return bytes;
     }
 }
 
-char* GetLocalizedAppName(const char *appPath) {
+static void AddLocalizedAppName(NSMutableOrderedSet *names, NSString *name) {
+    if (names == nil || name == nil || ![name isKindOfClass:[NSString class]]) {
+        return;
+    }
+
+    NSString *trimmed = [name stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if ([trimmed length] == 0) {
+        return;
+    }
+
+    [names addObject:trimmed];
+}
+
+char* GetLocalizedAppNames(const char *appPath) {
     @autoreleasepool {
         NSString *path = [NSString stringWithUTF8String:appPath];
         if (!path) {
@@ -240,15 +266,53 @@ char* GetLocalizedAppName(const char *appPath) {
             return NULL;
         }
 
-        NSString *name = [bundle objectForInfoDictionaryKey:@"CFBundleDisplayName"];
-        if (!name || [name length] == 0) {
-            name = [bundle objectForInfoDictionaryKey:@"CFBundleName"];
+        NSMutableOrderedSet *names = [NSMutableOrderedSet orderedSet];
+
+        // Bug fix: objectForInfoDictionaryKey only returns one locale-dependent
+        // value. Users can search localized names from other macOS languages
+        // when Spotlight is disabled, so collect Finder's current display name
+        // plus every InfoPlist.loctable/InfoPlist.strings display alias.
+        AddLocalizedAppName(names, [[NSFileManager defaultManager] displayNameAtPath:path]);
+        AddLocalizedAppName(names, [bundle objectForInfoDictionaryKey:@"CFBundleDisplayName"]);
+        AddLocalizedAppName(names, [bundle objectForInfoDictionaryKey:@"CFBundleName"]);
+
+        NSString *loctablePath = [bundle pathForResource:@"InfoPlist" ofType:@"loctable"];
+        NSDictionary *loctable = loctablePath ? [NSDictionary dictionaryWithContentsOfFile:loctablePath] : nil;
+        for (id localization in loctable) {
+            if ([localization isEqual:@"LocProvenance"]) {
+                continue;
+            }
+
+            NSDictionary *localizedValues = loctable[localization];
+            if (![localizedValues isKindOfClass:[NSDictionary class]]) {
+                continue;
+            }
+
+            AddLocalizedAppName(names, localizedValues[@"CFBundleDisplayName"]);
+            AddLocalizedAppName(names, localizedValues[@"CFBundleName"]);
         }
-        if (!name || [name length] == 0) {
+
+        for (NSString *localization in [bundle localizations]) {
+            NSString *stringsPath = [bundle pathForResource:@"InfoPlist" ofType:@"strings" inDirectory:nil forLocalization:localization];
+            if (!stringsPath || [stringsPath length] == 0) {
+                continue;
+            }
+
+            NSDictionary *strings = [NSDictionary dictionaryWithContentsOfFile:stringsPath];
+            if (!strings) {
+                continue;
+            }
+
+            AddLocalizedAppName(names, strings[@"CFBundleDisplayName"]);
+            AddLocalizedAppName(names, strings[@"CFBundleName"]);
+        }
+
+        if ([names count] == 0) {
             return NULL;
         }
 
-        const char *utf8 = [name UTF8String];
+        NSString *joined = [[names array] componentsJoinedByString:@"\n"];
+        const char *utf8 = [joined UTF8String];
         if (!utf8) {
             return NULL;
         }

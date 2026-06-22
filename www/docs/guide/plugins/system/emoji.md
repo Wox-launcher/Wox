@@ -1,183 +1,46 @@
 # Emoji Plugin
 
-The Emoji plugin provides fast emoji search and insertion features.
+Use `emoji` to search and copy emoji from Wox.
 
-## Features
+## Quick Start
 
-- **Massive Emoji Library**: Contains thousands of emoji
-- **Multi-language Support**: Emoji names and categories in multiple languages
-- **Grid Layout**: Displayed in grid format for easy browsing
-- **AI Matching**: Optional AI-assisted search, supports natural language descriptions
-- **Usage Statistics**: Records emoji usage frequency, prioritizes commonly used
-- **Quick Copy**: One-click copy to clipboard
-
-## Basic Usage
-
-### Search Emoji
-
-1. Open Wox
-2. Type emoji name or keyword directly
-3. Browse search results (grid layout)
-
-```
-smile
-→ Shows all emojis related to "smile"
-
-cat
-→ Shows all emojis related to "cat"
-
-heart
-→ Shows all emojis related to "heart"
-```
-
-### Use Trigger Keyword
-
-You can also use trigger keyword `emoji`:
-
-```
+```text
 emoji smile
-→ Shows emojis related to "smile"
+emoji check
+emoji heart
+emoji flag
 ```
 
-## Display Format
+Results use a grid layout so you can scan many choices quickly. Press `Enter` to copy the selected emoji.
 
-### Grid Layout
+![Emoji plugin grid results](/images/system-plugin-emoji.png)
 
-Emoji plugin uses grid layout to display search results:
-- Displays 12 emojis per row
-- Each emoji shown as icon, no title
-- Easy to browse and select
+## AI Matching
 
-### Default Behavior
+AI matching is optional. When enabled, Wox can match descriptive phrases that are not part of the built-in emoji names.
 
-- Emoji titles not displayed
-- Only emoji icons shown
-- Hover to view details (if supported)
+1. Configure an AI provider in [AI Settings](../../ai/settings.md).
+2. Open **Settings -> Plugins -> Emoji**.
+3. Enable AI matching and choose the model.
 
-## AI Matching Feature
+Examples:
 
-### Enable AI Matching
-
-1. Open Wox settings
-2. Find **Emoji** plugin
-3. Check **Enable AI Matching**
-4. Choose AI model (if needed)
-
-### AI Matching Benefits
-
-After enabling AI matching, you can use natural language descriptions to find emojis:
-
-```
-一个开心的笑脸
-→ 😄
-
-红色的爱心
-→ ❤️
-
-哭泣的脸
-→ 😢
-
-绿色的勾
-→ ✅
-
-太阳和云
-→ ⛅
+```text
+emoji green success mark
+emoji red warning
+emoji happy face
+emoji cloudy weather
 ```
 
-### AI Model Selection
+AI matching sends your query text to the selected model. Keep it disabled if you want emoji search to stay fully local.
 
-You can choose different AI models in plugin settings:
-- Different models may have different matching effects
-- Recommend using default model
-- If matching effect isn't ideal, try other models
+## Ordering
 
-## Emoji Categories
+Frequently used emoji are promoted over time. If a common emoji is not first the first time you search, copy it normally; Wox will learn from usage.
 
-### Supported Categories
+## Actions
 
-Emoji plugin includes multiple emoji categories:
-
-| Category | Examples |
-|-----------|-----------|
-| **Face Expressions** | 😀 😂 😢 😡 |
-| **Gestures** | 👍 👎 👋 ✌️ |
-| **People** | 👨 👩 👶 👵 |
-| **Animals** | 🐱 🐶 🐼 🦊 |
-| **Food** | 🍎 🍔 🍕 🍦 |
-| **Activities** | ⚽ 🎮 🎵 🚗 |
-| **Travel** | 🚗 ✈️ 🚢 🏰 |
-| **Objects** | 💻 📱 💡 📷 |
-| **Symbols** | ❤️ ⭐ 🔥 ✅ |
-| **Flags** | 🇨🇳 🇺🇸 🇬🇧 🇯🇵 |
-
-### Multi-language Support
-
-Emoji names and categories support multiple languages:
-- Simplified Chinese
-- English
-- Other languages (depending on version)
-
-Plugin auto-displays corresponding language emoji names based on system language.
-
-## Search Tips
-
-### Keyword Search
-
-Use part of emoji name for search:
-
-```
-face
-→ Shows all face expressions
-
-love
-→ Shows all love-related emojis
-
-color
-→ Shows all colored emojis
-```
-
-### Fuzzy Matching
-
-Still finds related emojis even if not exactly accurate:
-
-```
-smil
-→ May match: 😄 😊 😃
-
-heart
-→ May match: ❤️ 💕 💖
-```
-
-### Combined Search
-
-Combine multiple keywords to narrow scope:
-
-```
-face happy
-→ Happy face expressions
-
-animal cat
-→ Cats in animals
-```
-
-## Usage Statistics
-
-### Usage Frequency
-
-Emoji plugin records emoji usage frequency:
-- More frequently used emojis get higher priority
-- Common emojis appear earlier in results
-- Newly used emojis quickly increase priority
-
-### View Statistics
-
-Usage frequency is recorded in background, not directly displayed. Search auto-prioritizes commonly used emojis.
-
-## Configuration Options
-
-### AI Matching Settings
-
-Configure in plugin settings:
+Open the Action Panel for additional options such as copying a larger emoji image, adding a keyword, or removing an item from frequent results when available.
 
 - **Enable AI Matching**: Whether to use AI-assisted search
 - **AI Model**: Choose AI model to use

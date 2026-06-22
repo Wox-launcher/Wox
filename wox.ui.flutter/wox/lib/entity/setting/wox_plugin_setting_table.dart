@@ -12,6 +12,7 @@ class PluginSettingValueTable {
   late String sortColumnKey; // The key of the column that should be used for sorting
   late String sortOrder; // asc or desc
   late int maxHeight; // Max table height in px, <= 0 means use default
+  late int updateDialogWidth; // Optional add/update dialog content width, <= 0 means use the default adaptive width
   late PluginSettingValueStyle style;
 
   PluginSettingValueTable.fromJson(Map<String, dynamic> json) {
@@ -37,11 +38,19 @@ class PluginSettingValueTable {
       maxHeight = defaultMaxHeight;
     }
 
-    if (json['Style'] != null) {
-      style = PluginSettingValueStyle.fromJson(json['Style']);
+    // Dense table editors sometimes need more horizontal room than the shared
+    // default can provide. Keep the field opt-in so existing tables continue to
+    // use the adaptive width calculation unless their config asks for a wider
+    // add/update dialog explicitly.
+    final rawUpdateDialogWidth = json['UpdateDialogWidth'];
+    if (rawUpdateDialogWidth is num) {
+      updateDialogWidth = rawUpdateDialogWidth.toInt();
     } else {
-      style = PluginSettingValueStyle.fromJson(<String, dynamic>{});
+      updateDialogWidth = 0;
     }
+
+    // Style is deprecated in plugin SDKs; ignore plugin JSON and let the UI layout own spacing and width.
+    style = PluginSettingValueStyle.defaults();
   }
 }
 
@@ -52,6 +61,8 @@ class PluginSettingValueType {
   static const pluginSettingValueTableColumnTypeDirPath = "dirPath";
   static const pluginSettingValueTableColumnTypeSelect = "select";
   static const pluginSettingValueTableColumnTypeSelectAIModel = "selectAIModel";
+  static const pluginSettingValueTableColumnTypeQueryHotkeyQuery = "queryHotkeyQuery";
+  static const pluginSettingValueTableColumnTypeAICommandPrompt = "aiCommandPrompt";
   static const pluginSettingValueTableColumnTypeAIModelStatus = "aiModelStatus";
   static const pluginSettingValueTableColumnTypeAIMCPServerTools = "aiMCPServerTools";
   static const pluginSettingValueTableColumnTypeAISelectMCPServerTools = "aiSelectMCPServerTools";
@@ -67,7 +78,7 @@ class PluginSettingValueTableColumn {
   late int width;
   late String type; //see PluginSettingValueType
   late List<PluginSettingValueSelectOption> selectOptions; // Only used when Type is PluginSettingValueTableColumnTypeSelect
-  late int textMaxLines; // Only used when Type is PluginSettingValueTableColumnTypeText
+  late int textMaxLines; // Only used by text-like table columns
   late bool hideInTable; // Hide this column in the table, but still show it in the setting dialog
   late bool hideInUpdate; // Hide this column in the update dialog
   late List<PluginSettingValidatorItem> validators;

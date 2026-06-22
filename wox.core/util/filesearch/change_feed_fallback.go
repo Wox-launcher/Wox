@@ -10,11 +10,12 @@ import (
 )
 
 type FallbackChangeFeed struct {
-	mu      sync.RWMutex
-	watcher *fsnotify.Watcher
-	roots   []RootRecord
-	signals chan ChangeSignal
-	closed  bool
+	mu          sync.RWMutex
+	watcher     *fsnotify.Watcher
+	roots       []RootRecord
+	rootMatcher rootPathMatcher
+	signals     chan ChangeSignal
+	closed      bool
 }
 
 func NewFallbackChangeFeed() *FallbackChangeFeed {
@@ -75,6 +76,10 @@ func (f *FallbackChangeFeed) Refresh(ctx context.Context, roots []RootRecord) er
 	oldWatcher := f.watcher
 	f.watcher = watcher
 	f.roots = append([]RootRecord(nil), watchedRoots...)
+	// Optimization: fallback fsnotify can be a Linux primary feed and a Windows
+	// fallback. Keep the root matcher in the same critical section as roots so
+	// each event sees a consistent immutable snapshot without copying roots.
+	f.rootMatcher = newRootPathMatcher(watchedRoots)
 	f.mu.Unlock()
 
 	if oldWatcher != nil {
@@ -86,6 +91,7 @@ func (f *FallbackChangeFeed) Refresh(ctx context.Context, roots []RootRecord) er
 		f.mu.Lock()
 		if f.watcher == watcher {
 			f.watcher = nil
+			f.rootMatcher = rootPathMatcher{}
 		}
 		f.mu.Unlock()
 		return nil
@@ -108,10 +114,12 @@ func (f *FallbackChangeFeed) Close() error {
 		err := f.watcher.Close()
 		f.watcher = nil
 		f.roots = nil
+		f.rootMatcher = rootPathMatcher{}
 		return err
 	}
 
 	f.roots = nil
+	f.rootMatcher = rootPathMatcher{}
 	return nil
 }
 
@@ -132,7 +140,7 @@ func (f *FallbackChangeFeed) watchLoop(ctx context.Context, watcher *fsnotify.Wa
 			if !ok {
 				return
 			}
-			f.handleEventForRoots(roots, event)
+			f.handleEvent(event)
 		case err, ok := <-watcher.Errors:
 			if !ok {
 				return
@@ -157,29 +165,42 @@ func (f *FallbackChangeFeed) watchLoop(ctx context.Context, watcher *fsnotify.Wa
 
 func (f *FallbackChangeFeed) handleEvent(event fsnotify.Event) {
 	f.mu.RLock()
-	roots := append([]RootRecord(nil), f.roots...)
+	matcher := f.rootMatcher
 	f.mu.RUnlock()
-	f.handleEventForRoots(roots, event)
-}
-
-func (f *FallbackChangeFeed) handleEventForRoots(roots []RootRecord, event fsnotify.Event) {
-	root, ok := findRootForPathInRoots(roots, event.Name)
-	if !ok {
+	if matcher.empty() {
 		return
 	}
 
 	cleanPath := filepath.Clean(event.Name)
+	root, ok := matcher.findClean(cleanPath)
+	if !ok {
+		return
+	}
+
 	cleanRootPath := filepath.Clean(root.Path)
+	pathIsDir, pathTypeKnown := statPathType(cleanPath)
+	if shouldSkipSystemPathForRoot(root, cleanPath, pathIsDir) {
+		// Bug fix: fallback feeds are used on Linux and as a Windows fallback, so
+		// internal Wox storage must be filtered here too. Dropping it before signal
+		// creation keeps ~/.wox/filesearch writes from waking the dirty queue.
+		return
+	}
+	semanticKind := classifyFallbackSemanticKind(event)
+
 	kind := ChangeSignalKindDirtyPath
-	if cleanPath == cleanRootPath || filepath.Dir(cleanPath) == cleanRootPath {
+	if cleanPath == cleanRootPath {
+		kind = ChangeSignalKindDirtyRoot
+	} else if filepath.Dir(cleanPath) == cleanRootPath && !pathTypeKnown && (semanticKind == ChangeSemanticKindRemove || semanticKind == ChangeSemanticKindRename) {
+		// Direct children used to force a root reconcile for every create/write.
+		// Keep root scope only when a removed direct child is already gone, because
+		// that is the one case where fallback fsnotify cannot tell whether stale
+		// recursive rows may live under the deleted path.
 		kind = ChangeSignalKindDirtyRoot
 	}
 
-	pathIsDir, pathTypeKnown := statPathType(cleanPath)
-
 	f.emit(ChangeSignal{
 		Kind:          kind,
-		SemanticKind:  classifyFallbackSemanticKind(event),
+		SemanticKind:  semanticKind,
 		RootID:        root.ID,
 		FeedType:      RootFeedTypeFallback,
 		Path:          cleanPath,

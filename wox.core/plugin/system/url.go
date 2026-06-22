@@ -28,7 +28,6 @@ type UrlHistory struct {
 
 type UrlPlugin struct {
 	api        plugin.API
-	reg        *regexp.Regexp
 	recentUrls []UrlHistory
 }
 
@@ -63,10 +62,13 @@ func (r *UrlPlugin) GetMetadata() plugin.Metadata {
 
 func (r *UrlPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	r.api = initParams.API
-	r.reg = r.getReg()
 	r.recentUrls = r.loadRecentUrls(ctx)
 
 	r.api.OnMRURestore(ctx, r.handleMRURestore)
+}
+
+func (r *UrlPlugin) getReg() *regexp.Regexp {
+	return util.UrlPattern()
 }
 
 func (r *UrlPlugin) loadRecentUrls(ctx context.Context) []UrlHistory {
@@ -85,16 +87,8 @@ func (r *UrlPlugin) loadRecentUrls(ctx context.Context) []UrlHistory {
 	return urls
 }
 
-func (r *UrlPlugin) getReg() *regexp.Regexp {
-	// based on https://gist.github.com/dperini/729294
-	// added support for IP addresses (e.g., 192.168.1.10)
-	// Pattern explanation:
-	// - First alternative: domain names with TLD (e.g., example.com)
-	// - Second alternative: IPv4 addresses (e.g., 192.168.1.10)
-	return regexp.MustCompile(`^(http://www\.|https://www\.|http://|https://)?([a-z0-9]+([\-\.][a-z0-9]+)*\.[a-z]{2,5}|((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?))(:[0-9]{1,5})?(/.*)?$`)
-}
-
-func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {
+func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
+	var results []plugin.QueryResult
 	if len(query.Search) >= 2 {
 		existingUrlHistory := lo.Filter(r.recentUrls, func(item UrlHistory, index int) bool {
 			return strings.Contains(strings.ToLower(item.Url), strings.ToLower(query.Search))
@@ -121,7 +115,7 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 				Actions: []plugin.QueryResultAction{
 					{
 						Name:        "i18n:plugin_url_open",
-						Icon:        common.OpenIcon,
+						Icon:        common.PluginBrowserIcon,
 						ContextData: contextData,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							openErr := shell.Open(history.Url)
@@ -143,9 +137,12 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 		}
 	}
 
-	if len(r.reg.FindStringIndex(query.Search)) > 0 {
+	if util.IsUrl(query.Search) {
+		// Feature change: URL detection is shared with clipboard link records,
+		// so both entry points accept and normalize the same direct URL shapes.
+		normalizedURL := util.NormalizeUrl(query.Search)
 		contextData := common.ContextData{
-			"url":   query.Search,
+			"url":   normalizedURL,
 			"title": "",
 			"type":  "direct",
 		}
@@ -161,16 +158,12 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 					Icon:        urlIcon,
 					ContextData: contextData,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						url := query.Search
-						if !strings.HasPrefix(url, "http") {
-							url = "https://" + url
-						}
-						openErr := shell.Open(url)
+						openErr := shell.Open(normalizedURL)
 						if openErr != nil {
 							r.api.Log(ctx, "Error opening URL", openErr.Error())
 						} else {
 							util.Go(ctx, "saveRecentUrl", func() {
-								r.saveRecentUrl(ctx, url)
+								r.saveRecentUrl(ctx, normalizedURL)
 							})
 						}
 					},
@@ -178,7 +171,7 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 			},
 		})
 	}
-	return
+	return plugin.NewQueryResponse(results)
 }
 
 func (r *UrlPlugin) saveRecentUrl(ctx context.Context, url string) {
@@ -280,9 +273,7 @@ func (r *UrlPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData
 	if url == "" {
 		return nil, fmt.Errorf("empty url in context data")
 	}
-	if !strings.HasPrefix(url, "http") {
-		url = "https://" + url
-	}
+	url = util.NormalizeUrl(url)
 
 	// user may have cleared icon cache, so we need to get icon again
 	if !mruData.Icon.IsValid() {

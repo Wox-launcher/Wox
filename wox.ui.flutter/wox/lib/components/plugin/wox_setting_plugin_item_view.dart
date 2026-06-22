@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:wox/components/wox_markdown.dart';
-import 'package:wox/components/wox_setting_form_field.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/wox_plugin_setting.dart';
 import 'package:wox/utils/colors.dart';
@@ -61,10 +60,20 @@ abstract class WoxSettingPluginItem extends StatelessWidget {
     return Padding(padding: EdgeInsets.only(top: style.paddingTop, bottom: style.paddingBottom, left: style.paddingLeft, right: style.paddingRight), child: child);
   }
 
-  Widget layout({required String label, required Widget child, required PluginSettingValueStyle style, String tooltip = "", bool includeBottomSpacing = true}) {
+  Widget layout({
+    required String label,
+    required Widget child,
+    required PluginSettingValueStyle style,
+    String tooltip = "",
+    bool includeBottomSpacing = true,
+    List<Widget> labelActions = const [],
+  }) {
     final hasLabel = label.trim().isNotEmpty;
     final tipsWidget = tooltip.trim().isNotEmpty ? tooltipText(tooltip) : null;
     final bottomSpacing = includeBottomSpacing ? 10.0 : 0.0;
+    // Text-only labels need a small top offset to align with controls. Title-side
+    // actions are taller, so keep them centered with 24px controls instead.
+    final labelTopPadding = labelActions.isEmpty ? 6.0 : 1.0;
 
     if (!hasLabel) {
       final content = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [child, if (tipsWidget != null) tipsWidget]);
@@ -74,7 +83,42 @@ abstract class WoxSettingPluginItem extends StatelessWidget {
 
     return applyStylePadding(
       style: style,
-      child: WoxSettingFormField(label: label, tips: tipsWidget, labelWidth: labelWidth, labelGap: defaultLabelGap, bottomSpacing: bottomSpacing, tipsTopSpacing: 0, child: child),
+      child: Padding(
+        padding: EdgeInsets.only(bottom: bottomSpacing),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Plugin setting panes and table-edit dialogs are narrower than top-level
+            // settings, so the classic label/control split keeps controls aligned while
+            // leaving the right column to carry longer descriptions.
+            SizedBox(
+              width: labelWidth,
+              child: Padding(
+                padding: EdgeInsets.only(top: labelTopPadding),
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: getThemeTextColor(), fontSize: 13, fontWeight: FontWeight.w500)),
+                    ),
+                    if (labelActions.isNotEmpty) ...[const SizedBox(width: 6), ...labelActions],
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: defaultLabelGap),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  child,
+                  if (tipsWidget != null)
+                    Padding(padding: const EdgeInsets.only(top: 4), child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 620), child: tipsWidget)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -128,10 +172,20 @@ mixin WoxSettingPluginItemMixin<T extends StatefulWidget> on State<T> {
     return Padding(padding: EdgeInsets.only(top: style.paddingTop, bottom: style.paddingBottom, left: style.paddingLeft, right: style.paddingRight), child: child);
   }
 
-  Widget layout({required String label, required Widget child, required PluginSettingValueStyle style, String tooltip = "", bool includeBottomSpacing = true}) {
+  Widget layout({
+    required String label,
+    required Widget child,
+    required PluginSettingValueStyle style,
+    String tooltip = "",
+    bool includeBottomSpacing = true,
+    List<Widget> labelActions = const [],
+  }) {
     final hasLabel = label.trim().isNotEmpty;
     final tipsWidget = tooltip.trim().isNotEmpty ? tooltipText(tooltip) : null;
     final bottomSpacing = includeBottomSpacing ? 10.0 : 0.0;
+    // Text-only labels need a small top offset to align with controls. Title-side
+    // actions are taller, so keep them centered with 24px controls instead.
+    final labelTopPadding = labelActions.isEmpty ? 6.0 : 1.0;
 
     if (!hasLabel) {
       final content = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [child, if (tipsWidget != null) tipsWidget]);
@@ -141,14 +195,41 @@ mixin WoxSettingPluginItemMixin<T extends StatefulWidget> on State<T> {
 
     return applyStylePadding(
       style: style,
-      child: WoxSettingFormField(
-        label: label,
-        tips: tipsWidget,
-        labelWidth: labelWidth,
-        labelGap: WoxSettingPluginItem.defaultLabelGap,
-        bottomSpacing: bottomSpacing,
-        tipsTopSpacing: 0,
-        child: child,
+      child: Padding(
+        padding: EdgeInsets.only(bottom: bottomSpacing),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Plugin setting panes and table-edit dialogs are narrower than top-level
+            // settings, so the classic label/control split keeps controls aligned while
+            // leaving the right column to carry longer descriptions.
+            SizedBox(
+              width: labelWidth,
+              child: Padding(
+                padding: EdgeInsets.only(top: labelTopPadding),
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: getThemeTextColor(), fontSize: 13, fontWeight: FontWeight.w500)),
+                    ),
+                    if (labelActions.isNotEmpty) ...[const SizedBox(width: 6), ...labelActions],
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: WoxSettingPluginItem.defaultLabelGap),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  child,
+                  if (tipsWidget != null)
+                    Padding(padding: const EdgeInsets.only(top: 4), child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 620), child: tipsWidget)),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

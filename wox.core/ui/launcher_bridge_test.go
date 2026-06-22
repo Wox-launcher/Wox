@@ -50,10 +50,16 @@ func (f *fakeUI) RefreshQuery(ctx context.Context, preserveSelectedIndex bool)  
 func (f *fakeUI) HideApp(ctx context.Context)                                   {}
 func (f *fakeUI) ShowApp(ctx context.Context, showContext common.ShowContext)   {}
 func (f *fakeUI) ToggleApp(ctx context.Context, showContext common.ShowContext) {}
+func (f *fakeUI) RecordHotkey(ctx context.Context, hotkey string)               {}
 func (f *fakeUI) OpenSettingWindow(ctx context.Context, windowContext common.SettingWindowContext) {
 	f.openSettingCalls = append(f.openSettingCalls, windowContext)
 }
+func (f *fakeUI) OpenOnboardingWindow(ctx context.Context)                              {}
 func (f *fakeUI) PickFiles(ctx context.Context, params common.PickFilesParams) []string { return nil }
+func (f *fakeUI) CaptureScreenshot(ctx context.Context, request common.CaptureScreenshotRequest) (common.CaptureScreenshotResult, error) {
+	return common.CaptureScreenshotResult{}, nil
+}
+func (f *fakeUI) WriteClipboardImageFile(ctx context.Context, filePath string) error { return nil }
 func (f *fakeUI) GetActiveWindowSnapshot(ctx context.Context) common.ActiveWindowSnapshot {
 	return common.ActiveWindowSnapshot{}
 }
@@ -66,6 +72,8 @@ func (f *fakeUI) InstallTheme(ctx context.Context, theme common.Theme)          
 func (f *fakeUI) UninstallTheme(ctx context.Context, theme common.Theme)           {}
 func (f *fakeUI) RestoreTheme(ctx context.Context)                                 {}
 func (f *fakeUI) Notify(ctx context.Context, msg common.NotifyMsg)                 {}
+func (f *fakeUI) UpdateAttentionUnreadCount(ctx context.Context, unreadCount int)  {}
+func (f *fakeUI) UpdateDiagnosticStatus(ctx context.Context, enabled bool)         {}
 func (f *fakeUI) ShowToolbarMsg(ctx context.Context, msg interface{})              {}
 func (f *fakeUI) ClearToolbarMsg(ctx context.Context, toolbarMsgId string)         {}
 func (f *fakeUI) UpdateResult(ctx context.Context, result interface{}) bool        { return false }
@@ -76,6 +84,9 @@ func (f *fakeUI) SendChatResponse(ctx context.Context, chatData common.AIChatDat
 func (f *fakeUI) ReloadChatResources(ctx context.Context, resourceName string)     {}
 func (f *fakeUI) ReloadSettingPlugins(ctx context.Context)                         {}
 func (f *fakeUI) ReloadSetting(ctx context.Context)                                {}
+func (f *fakeUI) ReloadSettingThemes(ctx context.Context)                          {}
+func (f *fakeUI) CloudSyncProgressChanged(ctx context.Context, progress any)       {}
+func (f *fakeUI) RefreshGlance(ctx context.Context, pluginId string, ids []string) {}
 
 var _ launcher.Runtime = (*fakeLauncherRuntime)(nil)
 var _ common.UI = (*fakeUI)(nil)

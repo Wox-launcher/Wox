@@ -1,4 +1,18 @@
-import { ChangeQueryParam, Context, CopyParams, MapString, PublicAPI, Query, RefreshQueryParam, Result, ResultAction, UpdatableResult } from "@wox-launcher/wox-plugin"
+import {
+  ChangeQueryParam,
+  Context,
+  CopyParams,
+  MapString,
+  PublicAPI,
+  PushAttentionRequest,
+  Query,
+  RefreshQueryParam,
+  Result,
+  ResultAction,
+  ScreenshotOption,
+  ScreenshotResult,
+  UpdatableResult
+} from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
 import * as crypto from "crypto"
 import { waitingForResponse } from "./index"
@@ -66,7 +80,8 @@ export class PluginAPI implements PublicAPI {
     await this.invokeMethod(ctx, "ChangeQuery", {
       queryType: query.QueryType,
       queryText: query.QueryText === undefined ? "" : query.QueryText,
-      querySelection: JSON.stringify(query.QuerySelection)
+      querySelection: JSON.stringify(query.QuerySelection),
+      queryContextData: JSON.stringify(query.ContextData ?? {})
     })
   }
 
@@ -90,10 +105,14 @@ export class PluginAPI implements PublicAPI {
     await this.invokeMethod(ctx, "Notify", { message })
   }
 
+  async PushAttention(ctx: Context, request: PushAttentionRequest): Promise<void> {
+    await this.invokeMethod(ctx, "PushAttention", { request: JSON.stringify(request) })
+  }
+
   async ShowToolbarMsg(ctx: Context, msg: unknown): Promise<void> {
     const pluginInstance = pluginInstances.get(this.pluginId)
     if (pluginInstance && msg && typeof msg === "object") {
-      const maybeMsg = msg as { Actions?: Array<{ Id?: string, Action?: unknown }> }
+      const maybeMsg = msg as { Actions?: Array<{ Id?: string; Action?: unknown }> }
       for (const action of maybeMsg.Actions ?? []) {
         if (!action.Id) {
           action.Id = crypto.randomUUID()
@@ -101,7 +120,7 @@ export class PluginAPI implements PublicAPI {
         if (typeof action.Action === "function") {
           pluginInstance.ToolbarMsgActions.set(
             action.Id,
-            action.Action as (ctx: Context, actionContext: { ToolbarMsgId: string, ToolbarMsgActionId: string, ContextData: MapString }) => Promise<void> | void
+            action.Action as (ctx: Context, actionContext: { ToolbarMsgId: string; ToolbarMsgActionId: string; ContextData: MapString }) => Promise<void> | void
           )
         }
       }
@@ -293,5 +312,13 @@ export class PluginAPI implements PublicAPI {
       text: params.text,
       woxImage: params.woxImage ? JSON.stringify(params.woxImage) : ""
     })
+  }
+
+  async Screenshot(ctx: Context, option: ScreenshotOption): Promise<ScreenshotResult> {
+    // Keep screenshot options as one JSON payload so the host/core boundary can
+    // add fields later without changing the websocket method's parameter list.
+    return (await this.invokeMethod(ctx, "Screenshot", {
+      option: JSON.stringify(option)
+    })) as ScreenshotResult
   }
 }

@@ -15,9 +15,9 @@
   "ResultContainerPaddingRight": 0,
   "ResultContainerPaddingBottom": 0,
   "ResultItemBorderRadius": 4,
-  "ResultItemPaddingLeft": 6,
+  "ResultItemPaddingLeft": 4,
   "ResultItemPaddingTop": 2,
-  "ResultItemPaddingRight": 6,
+  "ResultItemPaddingRight": 4,
   "ResultItemPaddingBottom": 2,
   "ResultItemTitleColor": "#454545",
   "ResultItemSubTitleColor": "#5f6060",
@@ -54,5 +54,15 @@
   "ToolbarFontColor": "#454545",
   "ToolbarBackgroundColor": "rgba(255,255,255,0.5)",
   "ToolbarPaddingLeft": 10,
-  "ToolbarPaddingRight": 10
+  "ToolbarPaddingRight": 10,
+  "windows": {
+    "variants": {
+      "win10": {
+        "AppBackgroundColor": "#ECF0F080"
+      }
+    }
+  },
+  "linux": {
+    "AppBackgroundColor": "#F1F5F5"
+  }
 }

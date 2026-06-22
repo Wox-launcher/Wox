@@ -131,11 +131,12 @@ func (c *BrowserPlugin) Init(ctx context.Context, initParams plugin.InitParams) 
 	})
 }
 
-func (c *BrowserPlugin) Query(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {
+func (c *BrowserPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
+	var results []plugin.QueryResult
 	// only show results when the active window is a browser in global query
 	isInBrowser := strings.ToLower(query.Env.ActiveWindowTitle) == "google chrome"
 	if query.IsGlobalQuery() && !isInBrowser {
-		return results
+		return plugin.NewQueryResponse(results)
 	}
 
 	for _, tab := range c.openedTabs {
@@ -166,7 +167,7 @@ func (c *BrowserPlugin) Query(ctx context.Context, query plugin.Query) (results 
 		})
 	}
 
-	return results
+	return plugin.NewQueryResponse(results)
 }
 
 func (c *BrowserPlugin) newWebsocketServer(ctx context.Context) error {

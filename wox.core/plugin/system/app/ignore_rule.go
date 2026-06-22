@@ -47,16 +47,19 @@ func compileAppIgnorePattern(pattern string) (*regexp.Regexp, error) {
 	return regexp.Compile("(?i)^" + escaped + "$")
 }
 
-func (a *ApplicationPlugin) getIgnoreRuleMatchers(ctx context.Context) []appIgnoreMatcher {
+func (a *ApplicationPlugin) rebuildIgnoreRuleMatchers(ctx context.Context) {
 	rawRules := strings.TrimSpace(a.api.GetSetting(ctx, "IgnoreRules"))
 	if rawRules == "" {
-		return []appIgnoreMatcher{}
+		a.queryEntriesMutex.Lock()
+		a.ignoreMatchers = nil
+		a.queryEntriesMutex.Unlock()
+		return
 	}
 
 	var rules []appIgnoreRule
 	if err := json.Unmarshal([]byte(rawRules), &rules); err != nil {
 		a.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to parse IgnoreRules: %s", err.Error()))
-		return []appIgnoreMatcher{}
+		return
 	}
 
 	normalizedRules := normalizeAppIgnoreRules(rules)
@@ -74,17 +77,22 @@ func (a *ApplicationPlugin) getIgnoreRuleMatchers(ctx context.Context) []appIgno
 		})
 	}
 
+	a.queryEntriesMutex.Lock()
+	a.ignoreMatchers = matchers
+	a.queryEntriesMutex.Unlock()
+}
+
+func (a *ApplicationPlugin) getIgnoreRuleMatchersSnapshot() []appIgnoreMatcher {
+	a.queryEntriesMutex.RLock()
+	matchers := a.ignoreMatchers
+	a.queryEntriesMutex.RUnlock()
 	return matchers
 }
 
-func (a *ApplicationPlugin) getIgnoreRuleCandidates(ctx context.Context, info appInfo) []string {
+func buildIgnoreRuleCandidates(info appInfo, displayName string) []string {
 	candidates := []string{
-		strings.TrimSpace(info.Name),
+		strings.TrimSpace(displayName),
 		strings.TrimSpace(info.Path),
-	}
-
-	if strings.HasPrefix(info.Name, "i18n:") {
-		candidates = append(candidates, strings.TrimSpace(a.api.GetTranslation(ctx, info.Name)))
 	}
 
 	filtered := make([]string, 0, len(candidates))
@@ -98,12 +106,12 @@ func (a *ApplicationPlugin) getIgnoreRuleCandidates(ctx context.Context, info ap
 	return filtered
 }
 
-func (a *ApplicationPlugin) matchIgnoreRule(ctx context.Context, info appInfo, matchers []appIgnoreMatcher) (string, bool) {
+func (a *ApplicationPlugin) matchIgnoreRuleCandidates(candidates []string, matchers []appIgnoreMatcher) (string, bool) {
 	if len(matchers) == 0 {
 		return "", false
 	}
 
-	for _, candidate := range a.getIgnoreRuleCandidates(ctx, info) {
+	for _, candidate := range candidates {
 		for _, matcher := range matchers {
 			if matcher.regex.MatchString(candidate) {
 				return matcher.pattern, true

@@ -1,7 +1,7 @@
 import { logger } from "./logger"
 import path from "path"
 import { PluginAPI } from "./pluginAPI"
-import { ActionContext, Context, FormActionContext, MapString, Plugin, PluginInitParams, Query, QueryEnv, Result, ResultAction, Selection, MRUData } from "@wox-launcher/wox-plugin"
+import { ActionContext, Context, FormActionContext, MapString, Plugin, PluginInitParams, Query, QueryEnv, QueryResponse, QueryReturn, Result, ResultAction, Selection, MRUData } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
 import * as crypto from "crypto"
 import { AI } from "@wox-launcher/wox-plugin/types/ai"
@@ -12,6 +12,19 @@ export const pluginInstances = new Map<PluginJsonRpcRequest["PluginId"], PluginI
 export const PluginJsonRpcTypeRequest: string = "WOX_JSONRPC_REQUEST"
 export const PluginJsonRpcTypeResponse: string = "WOX_JSONRPC_RESPONSE"
 export const PluginJsonRpcTypeSystemLog: string = "WOX_JSONRPC_SYSTEM_LOG"
+
+const legacyQueryReturnWarnings = new Set<string>()
+
+function parseJsonParam<T>(raw: string | undefined, fallback: T): T {
+  if (!raw) {
+    return fallback
+  }
+  try {
+    return JSON.parse(raw) as T
+  } catch {
+    return fallback
+  }
+}
 
 function parseContextData(raw?: string): MapString {
   if (!raw) {
@@ -52,6 +65,30 @@ function cacheResultActions(plugin: PluginInstance, result: Result): void {
       plugin.Actions.set(action.Id, exec)
     }
   })
+}
+
+function normalizeQueryResponse(ctx: Context, pluginName: string, rawResponse: QueryReturn | undefined | null): QueryResponse {
+  if (!rawResponse) {
+    logger.info(ctx, `plugin query didn't return results: ${pluginName}`)
+    return { Results: [], Refinements: [], Layout: {} }
+  }
+
+  // Compatibility bridge: old SDK plugins returned Result[] directly. The
+  // host keeps that deprecated shape working, but Go core only receives the
+  // new QueryResponse object so future query-scoped metadata has one path.
+  if (Array.isArray(rawResponse)) {
+    if (!legacyQueryReturnWarnings.has(pluginName)) {
+      legacyQueryReturnWarnings.add(pluginName)
+      logger.info(ctx, `<${pluginName}> returned deprecated Result[] from query(); return QueryResponse instead`)
+    }
+    return { Results: rawResponse, Refinements: [], Layout: {} }
+  }
+
+  return {
+    Results: rawResponse.Results ?? [],
+    Refinements: rawResponse.Refinements ?? [],
+    Layout: rawResponse.Layout ?? {}
+  }
 }
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -275,28 +312,28 @@ async function query(ctx: Context, request: PluginJsonRpcRequest) {
   plugin.Actions.clear()
   plugin.FormActions.clear()
 
-  const results = await query(ctx, {
-    Id: request.Params.QueryId ?? "",
+  const rawResponse = await query(ctx, {
+    Id: request.Params.QueryId ?? request.Params.Id ?? "",
+    SessionId: request.Params.SessionId ?? "",
     Type: request.Params.Type,
     RawQuery: request.Params.RawQuery,
     TriggerKeyword: request.Params.TriggerKeyword,
     Command: request.Params.Command,
     Search: request.Params.Search,
-    Selection: JSON.parse(request.Params.Selection) as Selection,
-    Env: JSON.parse(request.Params.Env) as QueryEnv,
+    Selection: parseJsonParam<Selection>(request.Params.Selection, {} as Selection),
+    Env: parseJsonParam<QueryEnv>(request.Params.Env, {} as QueryEnv),
+    Refinements: parseJsonParam<Record<string, string>>(request.Params.Refinements, {}),
+    ContextData: parseJsonParam<Record<string, string>>(request.Params.ContextData, {}),
     IsGlobalQuery: () => request.Params.Type === "input" && request.Params.TriggerKeyword === ""
   } as Query)
 
-  if (!results) {
-    logger.info(ctx, `plugin query didn't return results: ${request.PluginName}`)
-    return []
-  }
+  const response = normalizeQueryResponse(ctx, request.PluginName, rawResponse)
 
-  results.forEach(result => {
+  response.Results.forEach(result => {
     cacheResultActions(plugin, result)
   })
 
-  return results
+  return response
 }
 
 async function action(ctx: Context, request: PluginJsonRpcRequest) {

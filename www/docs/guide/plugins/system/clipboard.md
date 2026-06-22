@@ -1,30 +1,32 @@
 # Clipboard Plugin
 
-Clipboard keeps a history of text and images so you can reuse them quickly.
+Clipboard keeps recent text and image clipboard items so you can reuse them without switching to a separate clipboard manager.
 
-## What it does
+## Quick Start
 
-- Record text and image clipboard items
-- Favorites and aliases for important items
-- Grouping by favorites / recent / older
-- Primary action: copy or paste
-
-## Quick start
-
-```
+```text
 cb
 cb invoice
 cb fav
 ```
 
-- `cb` shows history
-- `cb <keyword>` filters by text or alias
-- `cb fav` shows favorites
+| Query | Result |
+| --- | --- |
+| `cb` | Show recent clipboard history |
+| `cb <keyword>` | Filter by text or alias |
+| `cb fav` | Show favorites |
 
-Press `Enter` to run the primary action (copy or paste, based on settings).
+Press `Enter` to run the configured primary action: copy the item back to the clipboard or paste it into the active app.
+
+![Clipboard plugin history results](/images/system-plugin-clipboard.png)
+
+## Actions
+
+Open the Action Panel to favorite an item, edit its alias, delete it, open a copied path, or choose copy/paste explicitly.
 
 ## Settings
 
-- **Keep text history** + retention days
-- **Keep image history** + retention days
-- **Primary action**: copy to clipboard or paste to active app
+- Keep text history and retention days.
+- Keep image history and retention days.
+- Choose whether the primary action copies or pastes.
+- Tune behavior if you want Wox to avoid storing sensitive clipboard content.

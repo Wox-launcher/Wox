@@ -314,6 +314,15 @@ class WebviewController extends ValueNotifier<WebviewValue> {
     return _methodChannel.invokeMethod('goForward');
   }
 
+  /// Moves keyboard focus into the WebView document.
+  Future<void> focus() async {
+    if (_isDisposed) {
+      return;
+    }
+    assert(value.isInitialized);
+    return _methodChannel.invokeMethod('focus');
+  }
+
   /// Adds the provided JavaScript [script] to a list of scripts that should be run after the global
   /// object has been created, but before the HTML document has been parsed and before any
   /// other script included by the HTML document is run.
@@ -389,6 +398,15 @@ class WebviewController extends ValueNotifier<WebviewValue> {
     }
     assert(value.isInitialized);
     return _methodChannel.invokeMethod('clearCache');
+  }
+
+  /// Clears persistent storage such as localStorage, IndexedDB and service worker data for a single origin.
+  Future<void> clearStorageForOrigin(String origin) async {
+    if (_isDisposed) {
+      return;
+    }
+    assert(value.isInitialized);
+    return _methodChannel.invokeMethod('clearStorageForOrigin', origin);
   }
 
   /// Toggles ignoring cache for each request. If true, cache will not be used.

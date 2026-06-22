@@ -1,55 +1,63 @@
-# Deep Link (深度链接)
+# 深度链接
 
-Wox 支持深度链接，允许您从外部应用程序或脚本触发 Wox 查询。
-
-## URL Scheme
-
-Wox 的 URL Scheme 是 `wox://`。
+深度链接允许其他应用或脚本用预设查询打开 Wox。它适合终端 alias、浏览器快捷入口、自动化工具和应用内按钮。
 
 ## 格式
 
-```
-wox://query?q=<query>
+```text
+wox://query?q=<url-encoded-query>
 ```
 
-- `q`：您想要执行的查询字符串。它应该是 URL 编码的。
+`q` 的值就是 Wox 要放入查询框的文本。空格和特殊符号需要 URL 编码。
 
 ## 示例
 
-### 使用预填充查询打开 Wox
+打开插件管理器安装查询：
 
-```
+```text
 wox://query?q=wpm%20install
 ```
 
-这将打开 Wox 并在搜索框中输入 `wpm install`。
+打开文件搜索：
 
-### 触发特定插件
-
-```
-wox://query?q=calc%201%2B1
+```text
+wox://query?q=f%20invoice
 ```
 
-这将打开 Wox 并使用计算器插件计算 `1+1`（假设 `calc` 是触发关键字）。
+执行计算：
+
+```text
+wox://query?q=100%20%2B%2020
+```
+
+启动 AI 对话：
+
+```text
+wox://query?q=chat%20summarize%20this
+```
 
 ## 在脚本中使用
 
-您可以在 Shell 脚本或其他自动化工具中使用深度链接。
-
-**macOS:**
+macOS：
 
 ```bash
-open "wox://query?q=test"
+open "wox://query?q=f%20invoice"
 ```
 
-**Windows:**
+Windows PowerShell：
 
 ```powershell
-start "wox://query?q=test"
+Start-Process "wox://query?q=f%20invoice"
 ```
 
-**Linux:**
+Linux：
 
 ```bash
-xdg-open "wox://query?q=test"
+xdg-open "wox://query?q=f%20invoice"
 ```
+
+## 编码注意事项
+
+- 空格编码为 `%20`。
+- 计算表达式里的 `+` 需要编码为 `%2B`。
+- 不要把密钥放进 deep link；URL 可能被 shell、浏览器或自动化日志记录。

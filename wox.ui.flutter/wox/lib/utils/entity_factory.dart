@@ -1,14 +1,18 @@
 import 'package:uuid/v4.dart';
 import 'package:wox/entity/wox_ai.dart';
+import 'package:wox/entity/wox_ai_command_template.dart';
 import 'package:wox/entity/wox_backup.dart';
+import 'package:wox/entity/wox_cloud_sync.dart';
+import 'package:wox/entity/wox_glance.dart';
+import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_lang.dart';
 import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/entity/wox_preview.dart';
-import 'package:wox/entity/wox_query.dart';
 import 'package:wox/entity/wox_runtime_status.dart';
 import 'package:wox/entity/wox_setting.dart';
 import 'package:wox/entity/wox_theme.dart';
+import 'package:wox/entity/wox_update_channel_version.dart';
 import 'package:wox/entity/wox_usage_stats.dart';
 import 'package:wox/models/doctor_check_result.dart';
 import 'package:wox/utils/log.dart';
@@ -27,8 +31,15 @@ class EntityFactory {
     'PluginDetail': (json) => PluginDetail.fromJson(json),
     'AIModel': (json) => AIModel.fromJson(json),
     'DoctorCheckResult': (json) => DoctorCheckResult.fromJson(json),
-    'QueryMetadata': (json) => QueryMetadata.fromJson(json),
     'WoxUsageStats': (json) => WoxUsageStats.fromJson(json),
+    'HotkeyAvailability': (json) => HotkeyAvailability.fromJson(json),
+    'WoxCloudSyncStatus': (json) => WoxCloudSyncStatus.fromJson(json),
+    'WoxCloudSyncBootstrapStatus': (json) => WoxCloudSyncBootstrapStatus.fromJson(json),
+    'WoxAccountStatus': (json) => WoxAccountStatus.fromJson(json),
+    'WoxAccountActionResult': (json) => WoxAccountActionResult.fromJson(json),
+    'WoxBillingSession': (json) => WoxBillingSession.fromJson(json),
+    'WoxBillingPlan': (json) => WoxBillingPlan.fromJson(json),
+    'WoxCloudSyncDeviceList': (json) => WoxCloudSyncDeviceList.fromJson(json),
   };
 
   // List factories
@@ -42,8 +53,11 @@ class EntityFactory {
     'List<AIMCPTool>': (json) => _createList<AIMCPTool>(json, (e) => AIMCPTool.fromJson(e)),
     'List<AIProviderInfo>': (json) => _createList<AIProviderInfo>(json, (e) => AIProviderInfo.fromJson(e)),
     'List<AIAgent>': (json) => _createList<AIAgent>(json, (e) => AIAgent.fromJson(e)),
+    'List<AICommandTemplate>': (json) => _createList<AICommandTemplate>(json, (e) => AICommandTemplate.fromJson(e)),
     'List<DoctorCheckResult>': (json) => _createList<DoctorCheckResult>(json, (e) => DoctorCheckResult.fromJson(e)),
     'List<WoxRuntimeStatus>': (json) => _createList<WoxRuntimeStatus>(json, (e) => WoxRuntimeStatus.fromJson(e)),
+    'List<GlanceItem>': (json) => _createList<GlanceItem>(json, (e) => GlanceItem.fromJson(e)),
+    'List<WoxUpdateChannelVersion>': (json) => _createList<WoxUpdateChannelVersion>(json, (e) => WoxUpdateChannelVersion.fromJson(e)),
     'List<String>': (json) => _createList<String>(json, (e) => e.toString()),
   };
 
@@ -124,6 +138,12 @@ class EntityFactory {
         return false as T;
       case 'Map<String, dynamic>':
         return <String, dynamic>{} as T;
+      case 'WoxBillingSession':
+        return WoxBillingSession(url: '') as T;
+      case 'WoxBillingPlan':
+        return WoxBillingPlan.empty() as T;
+      case 'WoxCloudSyncDeviceList':
+        return WoxCloudSyncDeviceList.empty() as T;
       default:
         // For complex objects, return null and let the caller handle it
         return null as T;

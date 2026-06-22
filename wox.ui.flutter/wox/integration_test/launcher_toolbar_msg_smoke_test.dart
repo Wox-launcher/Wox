@@ -82,5 +82,26 @@ void registerLauncherToolbarMsgSmokeTests() {
       await tester.pump();
       expect(controller.hasVisibleToolbarMsg, isFalse);
     });
+
+    testWidgets('T5-04: Bug aware mode forces persistent toolbar indicator', (tester) async {
+      final controller = await launchAndShowLauncher(tester, windowSize: smokeLargeWindowSize);
+      controller.updateDiagnosticStatus(const UuidV4().generate(), true);
+      await tester.pump();
+
+      // New feature: bug aware mode is launcher-owned UI state, so it must keep
+      // the toolbar visible without pretending to be a plugin ShowToolbarMsg.
+      expect(controller.activeResultViewController.items, isEmpty);
+      expect(controller.isShowToolbar, isTrue);
+      expect(controller.isToolbarShowedWithoutResults, isTrue);
+      expect(controller.hasBugAwareToolbarIndicator, isTrue);
+
+      await controller.activateBugReportQuery(const UuidV4().generate());
+      await tester.pump();
+      expect(controller.currentQuery.value.queryText, equals('bugreport '));
+
+      controller.updateDiagnosticStatus(const UuidV4().generate(), false);
+      await tester.pump();
+      expect(controller.hasBugAwareToolbarIndicator, isFalse);
+    });
   });
 }

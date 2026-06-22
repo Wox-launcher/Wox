@@ -34,17 +34,32 @@ func TestReconcilerSubtreeRefreshesOnlyRequestedScope(t *testing.T) {
 
 	oldScopeFilePath := filepath.Join(scopePath, "old.txt")
 	siblingStaleFilePath := filepath.Join(siblingDirPath, "stale.txt")
-	if _, err := db.db.ExecContext(ctx, `
-		INSERT INTO entries (
-			path, root_id, parent_path, name, normalized_name, normalized_path,
-			pinyin_full, pinyin_initials, is_dir, mtime, size, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),
-		         (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, oldScopeFilePath, root.ID, scopePath, "old.txt", "old.txt", "old.txt", "", "", false, int64(10), int64(1), now,
-		siblingStaleFilePath, root.ID, siblingDirPath, "stale.txt", "stale.txt", "stale.txt", "", "", false, int64(20), int64(2), now,
-	); err != nil {
-		t.Fatalf("insert entry snapshots: %v", err)
-	}
+	mustInsertEntrySnapshots(t, ctx, db,
+		EntryRecord{
+			Path:           oldScopeFilePath,
+			RootID:         root.ID,
+			ParentPath:     scopePath,
+			Name:           "old.txt",
+			NormalizedName: "old.txt",
+			NormalizedPath: "old.txt",
+			IsDir:          false,
+			Mtime:          int64(10),
+			Size:           int64(1),
+			UpdatedAt:      now,
+		},
+		EntryRecord{
+			Path:           siblingStaleFilePath,
+			RootID:         root.ID,
+			ParentPath:     siblingDirPath,
+			Name:           "stale.txt",
+			NormalizedName: "stale.txt",
+			NormalizedPath: "stale.txt",
+			IsDir:          false,
+			Mtime:          int64(20),
+			Size:           int64(2),
+			UpdatedAt:      now,
+		},
+	)
 
 	if _, err := db.db.ExecContext(ctx, `
 		INSERT INTO directories (path, root_id, parent_path, last_scan_time, "exists")
@@ -133,17 +148,32 @@ func TestReconcilerRootRefreshesWholeRoot(t *testing.T) {
 
 	oldScopeFilePath := filepath.Join(scopePath, "old.txt")
 	siblingStaleFilePath := filepath.Join(siblingDirPath, "stale.txt")
-	if _, err := db.db.ExecContext(ctx, `
-		INSERT INTO entries (
-			path, root_id, parent_path, name, normalized_name, normalized_path,
-			pinyin_full, pinyin_initials, is_dir, mtime, size, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),
-		         (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, oldScopeFilePath, root.ID, scopePath, "old.txt", "old.txt", "old.txt", "", "", false, int64(10), int64(1), now,
-		siblingStaleFilePath, root.ID, siblingDirPath, "stale.txt", "stale.txt", "stale.txt", "", "", false, int64(20), int64(2), now,
-	); err != nil {
-		t.Fatalf("insert stale entry snapshots: %v", err)
-	}
+	mustInsertEntrySnapshots(t, ctx, db,
+		EntryRecord{
+			Path:           oldScopeFilePath,
+			RootID:         root.ID,
+			ParentPath:     scopePath,
+			Name:           "old.txt",
+			NormalizedName: "old.txt",
+			NormalizedPath: "old.txt",
+			IsDir:          false,
+			Mtime:          int64(10),
+			Size:           int64(1),
+			UpdatedAt:      now,
+		},
+		EntryRecord{
+			Path:           siblingStaleFilePath,
+			RootID:         root.ID,
+			ParentPath:     siblingDirPath,
+			Name:           "stale.txt",
+			NormalizedName: "stale.txt",
+			NormalizedPath: "stale.txt",
+			IsDir:          false,
+			Mtime:          int64(20),
+			Size:           int64(2),
+			UpdatedAt:      now,
+		},
+	)
 
 	reconciler := NewReconciler(db, nil)
 	result, err := reconciler.Reconcile(ctx, ReconcileBatch{

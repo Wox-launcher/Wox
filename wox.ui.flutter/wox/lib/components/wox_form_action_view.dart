@@ -13,6 +13,8 @@ import 'package:wox/entity/setting/wox_plugin_setting_textbox.dart';
 import 'package:wox/entity/wox_plugin_setting.dart';
 import 'package:wox/entity/wox_query.dart';
 import 'package:wox/utils/colors.dart';
+import 'package:wox/utils/wox_interface_size_util.dart';
+import 'package:wox/utils/wox_platform_hotkey_util.dart';
 import 'package:wox/utils/wox_text_measure_util.dart';
 
 /// A form panel for collecting form action values
@@ -38,13 +40,21 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
   double _maxLabelWidth = 60;
   bool _formInitialized = false;
 
+  WoxInterfaceSizeMetrics get _metrics => WoxInterfaceSizeUtil.instance.current;
+  double get _bodyFontSize => _metrics.scaledSpacing(13);
+  double get _labelFontSize => _metrics.scaledSpacing(14);
+  double get _helpFontSize => _metrics.scaledSpacing(12);
+  double get _headFontSize => _metrics.scaledSpacing(15);
+  double get _labelGap => _metrics.scaledSpacing(10);
+
   double _measureLabelWidth(BuildContext context, String text) {
     final trimmed = text.trim();
     if (trimmed.isEmpty) {
       return 60;
     }
 
-    return WoxTextMeasureUtil.measureTextWidth(context: context, text: trimmed, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)) + 8;
+    return WoxTextMeasureUtil.measureTextWidth(context: context, text: trimmed, style: TextStyle(fontSize: _labelFontSize, fontWeight: FontWeight.w600)) +
+        _metrics.scaledSpacing(8);
   }
 
   @override
@@ -142,7 +152,7 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
   @override
   Widget build(BuildContext context) {
     return CallbackShortcuts(
-      bindings: {const SingleActivator(LogicalKeyboardKey.enter, control: true): _handleSave},
+      bindings: {WoxPlatformHotkeyUtil.primaryActivator(LogicalKeyboardKey.enter): _handleSave},
       child: WoxPlatformFocus(
         focusNode: _formFocusNode,
         autofocus: true,
@@ -166,13 +176,23 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
                 ),
               ),
             ),
-            const SizedBox(height: 10),
+            SizedBox(height: _labelGap),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                WoxButton.secondary(text: "${_tr("ui_cancel")} (Esc)", padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12), onPressed: widget.onCancel),
-                const SizedBox(width: 12),
-                WoxButton.primary(text: "${_tr("ui_save")} (Ctrl+Enter)", padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12), onPressed: _handleSave),
+                WoxButton.secondary(
+                  text: "${_tr("ui_cancel")} (Esc)",
+                  fontSize: _bodyFontSize,
+                  padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(22), vertical: _metrics.scaledSpacing(12)),
+                  onPressed: widget.onCancel,
+                ),
+                SizedBox(width: _metrics.scaledSpacing(12)),
+                WoxButton.primary(
+                  text: "${_tr("ui_save")} (${WoxPlatformHotkeyUtil.primaryHotkeyLabel("enter")})",
+                  fontSize: _bodyFontSize,
+                  padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(28), vertical: _metrics.scaledSpacing(12)),
+                  onPressed: _handleSave,
+                ),
               ],
             ),
           ],
@@ -201,11 +221,11 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
         final label = item.value as PluginSettingValueLabel;
         return _buildLabel(label);
       case "newline":
-        return const SizedBox(height: 8);
+        return SizedBox(height: _metrics.scaledSpacing(8));
       default:
         return Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Text(widget.translate("ui_not_supported_field"), style: TextStyle(color: getThemeTextColor(), fontSize: 12)),
+          padding: EdgeInsets.only(bottom: _metrics.scaledSpacing(8)),
+          child: Text(widget.translate("ui_not_supported_field"), style: TextStyle(color: getThemeTextColor(), fontSize: _helpFontSize)),
         );
     }
   }
@@ -215,16 +235,20 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
     final isChecked = currentValue == "true";
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: EdgeInsets.only(bottom: _labelGap),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              SizedBox(width: _maxLabelWidth, child: Text(_tr(item.label), style: TextStyle(color: _textColor.withValues(alpha: 0.92), fontSize: 14, fontWeight: FontWeight.w600))),
-              const SizedBox(width: 10),
+              SizedBox(
+                width: _maxLabelWidth,
+                child: Text(_tr(item.label), style: TextStyle(color: _textColor.withValues(alpha: 0.92), fontSize: _labelFontSize, fontWeight: FontWeight.w600)),
+              ),
+              SizedBox(width: _labelGap),
               WoxCheckbox(
+                size: _metrics.quickSelectSize,
                 value: isChecked,
                 onChanged: (value) {
                   _updateValue(item.key, value.toString());
@@ -234,8 +258,8 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
           ),
           if (item.tooltip.isNotEmpty)
             Padding(
-              padding: EdgeInsets.only(top: 4, left: _maxLabelWidth + 10),
-              child: Text(_tr(item.tooltip), style: TextStyle(color: _textColor.withValues(alpha: 0.6), fontSize: 12)),
+              padding: EdgeInsets.only(top: _metrics.scaledSpacing(4), left: _maxLabelWidth + _labelGap),
+              child: Text(_tr(item.tooltip), style: TextStyle(color: _textColor.withValues(alpha: 0.6), fontSize: _helpFontSize)),
             ),
         ],
       ),
@@ -244,32 +268,41 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
 
   Widget _buildTextbox(PluginSettingValueTextBox item, bool isFirstFocusable) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: EdgeInsets.only(bottom: _labelGap),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              SizedBox(width: _maxLabelWidth, child: Text(_tr(item.label), style: TextStyle(color: _textColor.withValues(alpha: 0.92), fontSize: 14, fontWeight: FontWeight.w600))),
-              const SizedBox(width: 10),
+              SizedBox(
+                width: _maxLabelWidth,
+                child: Text(_tr(item.label), style: TextStyle(color: _textColor.withValues(alpha: 0.92), fontSize: _labelFontSize, fontWeight: FontWeight.w600)),
+              ),
+              SizedBox(width: _labelGap),
               Expanded(
+                // Form actions live inside the launcher action panel, so their
+                // text controls follow interface density while plugin settings
+                // continue to use their existing fixed setting components.
                 child: WoxTextField(
                   controller: _textControllers[item.key],
                   focusNode: isFirstFocusable ? _firstFocusNode : null,
                   maxLines: item.maxLines > 0 ? item.maxLines : 1,
+                  style: TextStyle(color: _textColor, fontSize: _bodyFontSize),
+                  hintStyle: TextStyle(color: _textColor.withValues(alpha: 0.5), fontSize: _bodyFontSize),
+                  contentPadding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(8), vertical: _labelGap),
                   onChanged: (value) {
                     _updateValue(item.key, value);
                   },
                 ),
               ),
-              if (item.suffix.isNotEmpty) ...[const SizedBox(width: 4), Text(_tr(item.suffix), style: TextStyle(color: _textColor, fontSize: 13))],
+              if (item.suffix.isNotEmpty) ...[SizedBox(width: _metrics.scaledSpacing(4)), Text(_tr(item.suffix), style: TextStyle(color: _textColor, fontSize: _bodyFontSize))],
             ],
           ),
           if (item.tooltip.isNotEmpty)
             Padding(
-              padding: EdgeInsets.only(top: 4, left: _maxLabelWidth + 10),
-              child: Text(_tr(item.tooltip), style: TextStyle(color: _textColor.withValues(alpha: 0.6), fontSize: 12)),
+              padding: EdgeInsets.only(top: _metrics.scaledSpacing(4), left: _maxLabelWidth + _labelGap),
+              child: Text(_tr(item.tooltip), style: TextStyle(color: _textColor.withValues(alpha: 0.6), fontSize: _helpFontSize)),
             ),
         ],
       ),
@@ -280,20 +313,24 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
     final currentValue = _values[item.key] ?? item.defaultValue;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: EdgeInsets.only(bottom: _labelGap),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              SizedBox(width: _maxLabelWidth, child: Text(_tr(item.label), style: TextStyle(color: _textColor.withValues(alpha: 0.92), fontSize: 14, fontWeight: FontWeight.w600))),
-              const SizedBox(width: 10),
+              SizedBox(
+                width: _maxLabelWidth,
+                child: Text(_tr(item.label), style: TextStyle(color: _textColor.withValues(alpha: 0.92), fontSize: _labelFontSize, fontWeight: FontWeight.w600)),
+              ),
+              SizedBox(width: _labelGap),
               Expanded(
                 child: WoxDropdownButton<String>(
                   value: currentValue,
                   isExpanded: true,
-                  fontSize: 13,
+                  fontSize: _bodyFontSize,
+                  iconSize: _metrics.toolbarIconSize,
                   focusNode: isFirstFocusable ? _firstFocusNode : null,
                   onChanged: (value) {
                     if (value != null) {
@@ -306,13 +343,13 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
                       }).toList(),
                 ),
               ),
-              if (item.suffix.isNotEmpty) ...[const SizedBox(width: 4), Text(_tr(item.suffix), style: TextStyle(color: _textColor, fontSize: 13))],
+              if (item.suffix.isNotEmpty) ...[SizedBox(width: _metrics.scaledSpacing(4)), Text(_tr(item.suffix), style: TextStyle(color: _textColor, fontSize: _bodyFontSize))],
             ],
           ),
           if (item.tooltip.isNotEmpty)
             Padding(
-              padding: EdgeInsets.only(top: 4, left: _maxLabelWidth + 10),
-              child: Text(_tr(item.tooltip), style: TextStyle(color: _textColor.withValues(alpha: 0.6), fontSize: 12)),
+              padding: EdgeInsets.only(top: _metrics.scaledSpacing(4), left: _maxLabelWidth + _labelGap),
+              child: Text(_tr(item.tooltip), style: TextStyle(color: _textColor.withValues(alpha: 0.6), fontSize: _helpFontSize)),
             ),
         ],
       ),
@@ -321,22 +358,25 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
 
   Widget _buildHead(PluginSettingValueHead item) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8, top: 8),
-      child: Text(_tr(item.content), style: TextStyle(color: _textColor, fontSize: 15, fontWeight: FontWeight.w600)),
+      padding: EdgeInsets.only(bottom: _metrics.scaledSpacing(8), top: _metrics.scaledSpacing(8)),
+      child: Text(_tr(item.content), style: TextStyle(color: _textColor, fontSize: _headFontSize, fontWeight: FontWeight.w600)),
     );
   }
 
   Widget _buildLabel(PluginSettingValueLabel item) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: EdgeInsets.only(bottom: _labelGap),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(padding: EdgeInsets.only(left: _maxLabelWidth + 10), child: Text(_tr(item.content), style: TextStyle(color: _textColor.withValues(alpha: 0.6), fontSize: 12))),
+          Padding(
+            padding: EdgeInsets.only(left: _maxLabelWidth + _labelGap),
+            child: Text(_tr(item.content), style: TextStyle(color: _textColor.withValues(alpha: 0.6), fontSize: _helpFontSize)),
+          ),
           if (item.tooltip.isNotEmpty)
             Padding(
-              padding: EdgeInsets.only(top: 4, left: _maxLabelWidth + 10),
-              child: Text(_tr(item.tooltip), style: TextStyle(color: _textColor.withValues(alpha: 0.6), fontSize: 12)),
+              padding: EdgeInsets.only(top: _metrics.scaledSpacing(4), left: _maxLabelWidth + _labelGap),
+              child: Text(_tr(item.tooltip), style: TextStyle(color: _textColor.withValues(alpha: 0.6), fontSize: _helpFontSize)),
             ),
         ],
       ),

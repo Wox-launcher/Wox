@@ -2,8 +2,6 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:uuid/v4.dart';
-import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_dropdown_button.dart';
 import 'package:wox/components/wox_image_view.dart';
@@ -76,9 +74,9 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
     setState(() => _isLoading = true);
 
     try {
-      final results = await Future.wait([WoxApi.instance.findAIModels(const UuidV4().generate()), WoxApi.instance.findAIProviders(const UuidV4().generate())]);
-      allModels = results[0] as List<AIModel>;
-      allProviders = results[1] as List<AIProviderInfo>;
+      final resources = await Get.find<WoxSettingController>().loadAIModelSelectorResources();
+      allModels = resources.models;
+      allProviders = resources.providers;
       providerIcons = {for (final provider in allProviders) provider.name: provider.icon};
 
       // Extract unique providers
@@ -90,6 +88,13 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
           final modelJson = jsonDecode(widget.initialValue!);
           selectedModel = AIModel.fromJson(modelJson);
           selectedProviderKey = makeProviderKey(selectedModel?.provider ?? "", selectedModel?.providerAlias ?? "");
+          // Keep the persisted provider visible even when the live model endpoint omits it.
+          // Previously the selector fell back to another provider, so reopening a saved
+          // plugin setting could look like the model choice had not been saved.
+          final persistedProviderKey = selectedProviderKey;
+          if (persistedProviderKey != null && persistedProviderKey.isNotEmpty) {
+            providerKeys.add(persistedProviderKey);
+          }
         } catch (e) {
           // Invalid JSON, ignore
         }
@@ -121,11 +126,14 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
         }
       }
 
-      // if the initial value model is not in the list, switch to the edit mode
-      if (selectedModel != null &&
-          !allModels.any((m) => m.name == selectedModel!.name && m.provider == selectedModel!.provider && m.providerAlias == selectedModel!.providerAlias)) {
-        isEditMode = true;
-        nameController.text = selectedModel!.name;
+      // If the initial value model is not in the live list, keep it selected.
+      final initialModel = selectedModel;
+      if (initialModel != null && !allModels.any((m) => m.name == initialModel.name && m.provider == initialModel.provider && m.providerAlias == initialModel.providerAlias)) {
+        // Keep the saved custom or temporarily unavailable model in select mode.
+        // The previous edit-mode fallback made the UI show a different provider/model shape
+        // on reopen, even though the persisted setting was still correct.
+        isEditMode = false;
+        nameController.text = initialModel.name;
       }
 
       _notifyInitialModelResolved();
@@ -157,8 +165,10 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
       return Center(child: WoxLoadingIndicator(size: 16, color: getThemeActiveBackgroundColor()));
     }
 
-    // When there are no models/providers available, guide user to AI settings
-    if (providerKeys.isEmpty || allModels.isEmpty) {
+    // When there are no models/providers available, guide user to AI settings.
+    // A persisted model still counts as displayable state because the setting may
+    // be valid even while the provider API is temporarily unavailable.
+    if (providerKeys.isEmpty || (allModels.isEmpty && selectedModel == null)) {
       final bg = getThemeActiveBackgroundColor().withAlpha(70);
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -195,6 +205,15 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
       if (selectedProviderKey != null) {
         final models = allModels.where((m) => makeProviderKey(m.provider, m.providerAlias) == selectedProviderKey).toList();
         models.sort((a, b) => a.name.compareTo(b.name));
+        final model = selectedModel;
+        if (model != null &&
+            makeProviderKey(model.provider, model.providerAlias) == selectedProviderKey &&
+            !models.any((m) => m.name == model.name && m.provider == model.provider && m.providerAlias == model.providerAlias)) {
+          // Preserve the saved model as a real dropdown option when the provider API no
+          // longer returns it. This avoids showing the first available model as a false
+          // replacement for the persisted value.
+          models.insert(0, model);
+        }
         return models;
       }
 
@@ -239,7 +258,7 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
                 setState(() {
                   selectedProviderKey = providerKey;
                   // Default to first model of the provider
-                  final models = allModels.where((m) => makeProviderKey(m.provider, m.providerAlias) == providerKey).toList();
+                  final models = getProviderModels();
                   if (models.isNotEmpty) {
                     selectedModel = models.first;
                     nameController.text = models.first.name;

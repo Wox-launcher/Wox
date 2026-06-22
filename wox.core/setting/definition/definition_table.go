@@ -14,6 +14,8 @@ const (
 	PluginSettingValueTableColumnTypeDirPath                PluginSettingValueTableColumnType = "dirPath"
 	PluginSettingValueTableColumnTypeSelect                 PluginSettingValueTableColumnType = "select"
 	PluginSettingValueTableColumnTypeSelectAIModel          PluginSettingValueTableColumnType = "selectAIModel"
+	PluginSettingValueTableColumnTypeQueryHotkeyQuery       PluginSettingValueTableColumnType = "queryHotkeyQuery"
+	PluginSettingValueTableColumnTypeAICommandPrompt        PluginSettingValueTableColumnType = "aiCommandPrompt"
 	PluginSettingValueTableColumnTypeAIModelStatus          PluginSettingValueTableColumnType = "aiModelStatus"
 	PluginSettingValueTableColumnTypeAIMCPServerTools       PluginSettingValueTableColumnType = "aiMCPServerTools"
 	PluginSettingValueTableColumnTypeAISelectMCPServerTools PluginSettingValueTableColumnType = "aiSelectMCPServerTools"
@@ -35,7 +37,7 @@ type PluginSettingValueTable struct {
 	SortOrder     string // asc or desc
 	MaxHeight     int    // Max table height in px, <= 0 means use UI default
 
-	Style PluginSettingValueStyle
+	Style PluginSettingValueStyle `json:"-"` // Deprecated: ignored on load so Wox keeps setting layouts consistent.
 }
 
 type PluginSettingValueTableColumn struct {
@@ -46,7 +48,7 @@ type PluginSettingValueTableColumn struct {
 	Type          PluginSettingValueTableColumnType
 	Validators    []validator.PluginSettingValidator // validators for this setting, every validator should be satisfied
 	SelectOptions []PluginSettingValueSelectOption   // Only used when Type is PluginSettingValueTableColumnTypeSelect
-	TextMaxLines  int                                // Only used when Type is PluginSettingValueTableColumnTypeText
+	TextMaxLines  int                                // Only used by text-like table columns
 	HideInTable   bool                               // Hide this column in the table, but still show it in the setting dialog
 	HideInUpdate  bool                               // Hide this column in the update/add dialog, but still show it in the table
 }

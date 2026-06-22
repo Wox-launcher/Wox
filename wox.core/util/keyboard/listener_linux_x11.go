@@ -333,6 +333,10 @@ func keyToLinuxKeyCode(key Key) (uint32, error) {
 		return 0xFFC8, nil
 	case KeyF12:
 		return 0xFFC9, nil
+	case KeyCapsLock:
+		return 0xFFE5, nil
+	case KeyBackquote:
+		return 0x0060, nil
 	default:
 		return 0, fmt.Errorf("unsupported Linux hotkey key: %d", key)
 	}
@@ -340,6 +344,122 @@ func keyToLinuxKeyCode(key Key) (uint32, error) {
 
 func linuxKeyCodeToKey(code uint32) Key {
 	switch code {
+	case 0x0061:
+		return KeyA
+	case 0x0062:
+		return KeyB
+	case 0x0063:
+		return KeyC
+	case 0x0064:
+		return KeyD
+	case 0x0065:
+		return KeyE
+	case 0x0066:
+		return KeyF
+	case 0x0067:
+		return KeyG
+	case 0x0068:
+		return KeyH
+	case 0x0069:
+		return KeyI
+	case 0x006A:
+		return KeyJ
+	case 0x006B:
+		return KeyK
+	case 0x006C:
+		return KeyL
+	case 0x006D:
+		return KeyM
+	case 0x006E:
+		return KeyN
+	case 0x006F:
+		return KeyO
+	case 0x0070:
+		return KeyP
+	case 0x0071:
+		return KeyQ
+	case 0x0072:
+		return KeyR
+	case 0x0073:
+		return KeyS
+	case 0x0074:
+		return KeyT
+	case 0x0075:
+		return KeyU
+	case 0x0076:
+		return KeyV
+	case 0x0077:
+		return KeyW
+	case 0x0078:
+		return KeyX
+	case 0x0079:
+		return KeyY
+	case 0x007A:
+		return KeyZ
+	case 0x0030:
+		return Key0
+	case 0x0031:
+		return Key1
+	case 0x0032:
+		return Key2
+	case 0x0033:
+		return Key3
+	case 0x0034:
+		return Key4
+	case 0x0035:
+		return Key5
+	case 0x0036:
+		return Key6
+	case 0x0037:
+		return Key7
+	case 0x0038:
+		return Key8
+	case 0x0039:
+		return Key9
+	case 0x0020:
+		return KeySpace
+	case 0xFF0D:
+		return KeyReturn
+	case 0xFF1B:
+		return KeyEscape
+	case 0xFF09:
+		return KeyTab
+	case 0xFFFF:
+		return KeyDelete
+	case 0xFF51:
+		return KeyLeft
+	case 0xFF53:
+		return KeyRight
+	case 0xFF52:
+		return KeyUp
+	case 0xFF54:
+		return KeyDown
+	case 0xFFBE:
+		return KeyF1
+	case 0xFFBF:
+		return KeyF2
+	case 0xFFC0:
+		return KeyF3
+	case 0xFFC1:
+		return KeyF4
+	case 0xFFC2:
+		return KeyF5
+	case 0xFFC3:
+		return KeyF6
+	case 0xFFC4:
+		return KeyF7
+	case 0xFFC5:
+		return KeyF8
+	case 0xFFC6:
+		return KeyF9
+	case 0xFFC7:
+		return KeyF10
+	case 0xFFC8:
+		return KeyF11
+	case 0xFFC9:
+		return KeyF12
+	case 0xFFE5:
+		return KeyCapsLock
 	case 0xFFE3, 0xFFE4:
 		return KeyCtrl
 	case 0xFFE1, 0xFFE2:
@@ -348,6 +468,8 @@ func linuxKeyCodeToKey(code uint32) Key {
 		return KeyAlt
 	case 0xFFEB, 0xFFEC:
 		return KeySuper
+	case 0x0060:
+		return KeyBackquote
 	default:
 		return KeyUnknown
 	}

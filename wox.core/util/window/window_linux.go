@@ -11,12 +11,53 @@ func GetActiveWindowIcon() (image.Image, error) {
 	return nil, errors.New("not implemented")
 }
 
+// GetWindowIconByPid is a PID-based companion for asynchronous snapshot detail
+// refreshes; Linux keeps the existing unsupported behavior.
+func GetWindowIconByPid(pid int) (image.Image, error) {
+	return nil, errors.New("not implemented")
+}
+
 func GetActiveWindowName() string {
+	return ""
+}
+
+// GetWindowNameByPid is a PID-based companion for asynchronous snapshot detail
+// refreshes; Linux keeps the existing unsupported behavior.
+func GetWindowNameByPid(pid int) string {
 	return ""
 }
 
 func GetActiveWindowPid() int {
 	return -1
+}
+
+func GetActiveWindowId() string {
+	return ""
+}
+
+// GetManagedWindow is not implemented on Linux yet.
+func GetManagedWindow(windowId string, pid int, title string) (ManagedWindow, error) {
+	return ManagedWindow{}, ErrWindowManagementUnsupported
+}
+
+// ListDisplays is not implemented on Linux yet.
+func ListDisplays() ([]DisplayInfo, error) {
+	return nil, ErrWindowManagementUnsupported
+}
+
+// MoveResizeWindow is not implemented on Linux yet.
+func MoveResizeWindow(managedWindow ManagedWindow, rect WindowRect) error {
+	return ErrWindowManagementUnsupported
+}
+
+// MaximizeWindow is not implemented on Linux yet.
+func MaximizeWindow(managedWindow ManagedWindow) error {
+	return ErrWindowManagementUnsupported
+}
+
+// MinimizeWindow is not implemented on Linux yet.
+func MinimizeWindow(managedWindow ManagedWindow) error {
+	return ErrWindowManagementUnsupported
 }
 
 func GetProcessIdentity(pid int) string {
@@ -31,6 +72,12 @@ func IsOpenSaveDialog() (bool, error) {
 	return false, nil
 }
 
+// IsOpenSaveDialogByPid is a PID-based companion for asynchronous snapshot
+// detail refreshes; Linux keeps the existing unsupported behavior.
+func IsOpenSaveDialogByPid(pid int) (bool, error) {
+	return false, nil
+}
+
 func NavigateActiveFileDialog(targetPath string) bool {
 	return false
 }
@@ -39,11 +86,23 @@ func SelectInActiveFileDialog(targetPath string) bool {
 	return false
 }
 
+func HighlightInActiveFileDialog(targetPath string) bool {
+	return false
+}
+
 func GetActiveFileDialogPath() string {
 	return ""
 }
 
 func GetFileDialogPathByPid(pid int) string {
+	return ""
+}
+
+func GetFileDialogPathByWindowId(windowId string, pid int) string {
+	return ""
+}
+
+func GetLastFileDialogPathResolveDebug() string {
 	return ""
 }
 

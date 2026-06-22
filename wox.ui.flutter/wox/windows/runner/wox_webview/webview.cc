@@ -4,6 +4,7 @@
 
 #include <format>
 #include <iostream>
+#include <string_view>
 
 #include "util/composition.desktop.interop.h"
 #include "util/string_converter.h"
@@ -18,6 +19,34 @@ inline void ConvertColor(COREWEBVIEW2_COLOR& webview_color, int32_t color) {
   webview_color.G = (color >> 8) & 0xFF;
   webview_color.R = (color >> 16) & 0xFF;
   webview_color.A = (color >> 24) & 0xFF;
+}
+
+inline std::string EscapeJsonString(std::string_view input) {
+  std::string escaped;
+  escaped.reserve(input.size());
+  for (char ch : input) {
+    switch (ch) {
+      case '\\':
+        escaped += "\\\\";
+        break;
+      case '"':
+        escaped += "\\\"";
+        break;
+      case '\n':
+        escaped += "\\n";
+        break;
+      case '\r':
+        escaped += "\\r";
+        break;
+      case '\t':
+        escaped += "\\t";
+        break;
+      default:
+        escaped += ch;
+        break;
+    }
+  }
+  return escaped;
 }
 
 inline WebviewPermissionKind CW2PermissionKindToPermissionKind(
@@ -448,6 +477,20 @@ bool Webview::ClearCache() {
                                               L"{}", nullptr) == S_OK;
 }
 
+bool Webview::ClearStorageForOrigin(const std::string& origin) {
+  if (!IsValid() || origin.empty()) {
+    return false;
+  }
+
+  // Use Chromium's origin-scoped storage reset so localStorage, IndexedDB, Cache Storage and service workers are cleared
+  // together. Cookies and HTTP cache are cleared separately because this DevTools method intentionally does not cover both.
+  std::string json = std::format(
+      "{{\"origin\":\"{}\",\"storageTypes\":\"all\"}}", EscapeJsonString(origin));
+  return webview_->CallDevToolsProtocolMethod(
+             L"Storage.clearDataForOrigin", util::Utf16FromUtf8(json).c_str(),
+             nullptr) == S_OK;
+}
+
 bool Webview::SetCacheDisabled(bool disabled) {
   if (!IsValid()) {
     return false;
@@ -680,6 +723,14 @@ bool Webview::GoForward() {
     return false;
   }
   return SUCCEEDED(webview_->GoForward());
+}
+
+bool Webview::Focus() {
+  if (!IsValid()) {
+    return false;
+  }
+  return SUCCEEDED(webview_controller_->MoveFocus(
+      COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC));
 }
 
 void Webview::AddScriptToExecuteOnDocumentCreated(

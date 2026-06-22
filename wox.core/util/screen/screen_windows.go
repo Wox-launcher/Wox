@@ -1,11 +1,20 @@
 package screen
 
 /*
+// Build fix: this package calls GetDeviceCaps in the DPI fallback path. The
+// dependency used to be implicit through larger Windows builds, which was not
+// enough for standalone screen probes or package-level checks, so declare gdi32
+// at the package boundary that actually owns the call.
+#cgo windows LDFLAGS: -lgdi32
 #include <windows.h>
 #include <shellscalingapi.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifndef DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+#define DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 ((HANDLE)-4)
+#endif
 
 typedef struct {
     int width;
@@ -35,6 +44,44 @@ typedef struct {
     double scale;
     int primary;
 } ScreenDisplayInfo;
+
+// Bug fix: keep the Go core in the same PerMonitorV2 coordinate space as the
+// Flutter Windows runner. The previous core process could stay DPI-unaware in
+// development builds, so Windows virtualized GetMonitorInfo/GetCursorPos while
+// the UI runner used DPI-aware coordinates; a left high-DPI monitor could be
+// reported near -5120 here and then fail Flutter's -2560 logical monitor match.
+// Requesting process DPI awareness before any screen query makes the monitor
+// bounds passed over the websocket compatible with setBounds. The manifest added
+// to release builds makes packaged startup deterministic, while this runtime
+// path covers go run/go test and old launchers that do not carry that manifest.
+void enableProcessPerMonitorDpiAwareness() {
+    HMODULE user32 = LoadLibraryA("user32.dll");
+    if (user32) {
+        typedef BOOL (WINAPI *SetProcessDpiAwarenessContextFunc)(HANDLE);
+        SetProcessDpiAwarenessContextFunc setProcessDpiAwarenessContext =
+            (SetProcessDpiAwarenessContextFunc)GetProcAddress(user32, "SetProcessDpiAwarenessContext");
+        if (setProcessDpiAwarenessContext) {
+            if (setProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)) {
+                FreeLibrary(user32);
+                return;
+            }
+        }
+        FreeLibrary(user32);
+    }
+
+    HMODULE shcore = LoadLibraryA("Shcore.dll");
+    if (shcore) {
+        typedef HRESULT (WINAPI *SetProcessDpiAwarenessFunc)(int);
+        SetProcessDpiAwarenessFunc setProcessDpiAwareness =
+            (SetProcessDpiAwarenessFunc)GetProcAddress(shcore, "SetProcessDpiAwareness");
+        if (setProcessDpiAwareness) {
+            // PROCESS_PER_MONITOR_DPI_AWARE keeps older Windows versions out of
+            // system-DPI virtualization when PerMonitorV2 is unavailable.
+            setProcessDpiAwareness(2);
+        }
+        FreeLibrary(shcore);
+    }
+}
 
 // IMPORTANT: Understanding Physical vs Logical Coordinates in Windows
 //
@@ -235,6 +282,10 @@ import "C"
 import "fmt"
 
 const maxDisplayCount = 16
+
+func init() {
+	C.enableProcessPerMonitorDpiAwareness()
+}
 
 func GetMouseScreen() Size {
 	screenInfo := C.getMouseScreenSize()

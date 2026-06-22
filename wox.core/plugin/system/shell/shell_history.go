@@ -12,19 +12,22 @@ import (
 
 // ShellHistory represents a shell command execution history record
 type ShellHistory struct {
-	ID            string `gorm:"primaryKey"`
-	SessionID     string `gorm:"not null;index"`
-	Command       string `gorm:"not null;index"`
-	Interpreter   string `gorm:"not null"`
-	OutputSummary string `gorm:"type:text"`
-	OutputPath    string `gorm:"type:text"`
-	ExitCode      int
-	Status        string // running, completed, failed, killed
-	StartTime     int64  `gorm:"not null;index"`
-	EndTime       int64
-	Duration      int64 // Duration in milliseconds
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID               string `gorm:"primaryKey"`
+	SessionID        string `gorm:"not null;index"`
+	Title            string `gorm:"index"`
+	Command          string `gorm:"not null;index"`
+	Interpreter      string `gorm:"not null"`
+	WorkingDirectory string `gorm:"type:text"`
+	Background       bool   `gorm:"not null;default:false"`
+	OutputSummary    string `gorm:"type:text"`
+	OutputPath       string `gorm:"type:text"`
+	ExitCode         int
+	Status           string // running, completed, failed, killed
+	StartTime        int64  `gorm:"not null;index"`
+	EndTime          int64
+	Duration         int64 // Duration in milliseconds
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 // ShellHistoryManager manages shell command history in database
@@ -101,20 +104,23 @@ func (m *ShellHistoryManager) UpdateStatus(ctx context.Context, id string, statu
 }
 
 // ResetForReexecute resets an existing record to a fresh running state for re-execution
-func (m *ShellHistoryManager) ResetForReexecute(ctx context.Context, id string, sessionID string, command string, interpreter string, startTime int64, outputPath string) error {
+func (m *ShellHistoryManager) ResetForReexecute(ctx context.Context, id string, sessionID string, title string, command string, interpreter string, workingDirectory string, startTime int64, outputPath string) error {
 	return m.db.WithContext(ctx).Model(&ShellHistory{}).
 		Where("id = ?", id).
 		Updates(map[string]any{
-			"status":         "running",
-			"exit_code":      0,
-			"session_id":     sessionID,
-			"output_summary": "",
-			"output_path":    outputPath,
-			"start_time":     startTime,
-			"end_time":       0,
-			"duration":       0,
-			"command":        command,
-			"interpreter":    interpreter,
+			"status":            "running",
+			"exit_code":         0,
+			"session_id":        sessionID,
+			"output_summary":    "",
+			"output_path":       outputPath,
+			"start_time":        startTime,
+			"end_time":          0,
+			"duration":          0,
+			"title":             title,
+			"command":           command,
+			"interpreter":       interpreter,
+			"working_directory": workingDirectory,
+			"background":        false,
 		}).Error
 }
 
@@ -228,6 +234,19 @@ func (m *ShellHistoryManager) GetRecentHistory(ctx context.Context, limit int) (
 		Limit(limit).
 		Find(&histories).Error
 	return histories, err
+}
+
+// GetLatestCommandRun returns the newest history entry for a saved command identity.
+func (m *ShellHistoryManager) GetLatestCommandRun(ctx context.Context, title string, interpreter string, workingDirectory string) (*ShellHistory, error) {
+	var history ShellHistory
+	err := m.db.WithContext(ctx).
+		Where("title = ? AND interpreter = ? AND working_directory = ?", title, interpreter, workingDirectory).
+		Order("start_time DESC").
+		First(&history).Error
+	if err != nil {
+		return nil, err
+	}
+	return &history, nil
 }
 
 // shellHistoryTracker tracks a running command and periodically saves output

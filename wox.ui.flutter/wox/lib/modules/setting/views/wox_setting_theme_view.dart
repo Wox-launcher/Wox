@@ -21,8 +21,29 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
           child: Obx(() {
             return WoxTextField(
               autofocus: true,
+              controller: controller.filterThemeKeywordController,
               hintText: Strings.format(controller.tr('ui_setting_theme_search_placeholder'), [controller.filteredThemeList.length]),
-              suffixIcon: Padding(padding: const EdgeInsets.only(right: 8.0), child: Icon(Icons.search, color: getThemeTextColor())),
+              suffixIcon: SizedBox(
+                width: controller.isStoreThemeList.value ? 42 : 76,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Icon(Icons.search, color: getThemeTextColor(), size: 20),
+                    if (!controller.isStoreThemeList.value)
+                      Tooltip(
+                        message: controller.tr('ui_setting_theme_locate_current'),
+                        child: IconButton(
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+                          icon: Icon(Icons.my_location_outlined, color: getThemeTextColor(), size: 18),
+                          onPressed: () => controller.locateCurrentTheme(),
+                        ),
+                      ),
+                    const SizedBox(width: 8),
+                  ],
+                ),
+              ),
               onChanged: (value) => controller.onFilterThemes(value),
             );
           }),
@@ -263,8 +284,10 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(width: 260, child: themeList()),
-          // This is your divider
-          Container(width: 1, height: double.infinity, color: getThemeDividerColor(), margin: const EdgeInsets.only(right: 10, left: 10)),
+          // Theme apply refreshes inner list/detail builders before this root row
+          // is rebuilt, so the splitter must subscribe to the global theme directly.
+          // Use the settings divider token to match plugin panes and form sections.
+          Obx(() => Container(width: 1, height: double.infinity, color: getThemeSettingDividerColor(), margin: const EdgeInsets.only(right: 10, left: 10))),
           themeDetail(),
         ],
       ),

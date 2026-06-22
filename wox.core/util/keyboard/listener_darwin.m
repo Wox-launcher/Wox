@@ -1,15 +1,23 @@
 #import <Cocoa/Cocoa.h>
 #import <Carbon/Carbon.h>
+#import <ApplicationServices/ApplicationServices.h>
+#import <IOKit/hid/IOHIDLib.h>
+#import <IOKit/hid/IOHIDKeys.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <stdio.h>
 
 extern void keyboardHotkeyTriggeredCGO(int id);
-extern int keyboardHookEventCGO(int eventKind, unsigned int keyCode, unsigned int modifiers, unsigned int character);
+extern int keyboardHookEventCGO(int eventKind, unsigned int keyCode, unsigned int modifiers, unsigned int character, int nativeEventType, unsigned long long nativeFlags, int nativeCapsLockStateAvailable, int nativeCapsLockPressed);
 
 static EventHandlerRef gHotkeyHandler = NULL;
 static NSMutableDictionary<NSNumber *, NSValue *> *gHotkeyRefs = nil;
-static id gRawKeyboardMonitor = nil;
+static CFMachPortRef gRawKeyboardEventTap = NULL;
+static CFRunLoopSourceRef gRawKeyboardEventTapSource = NULL;
+static IOHIDManagerRef gPhysicalKeyboardManager = NULL;
+static BOOL gPhysicalKeyboardManagerReady = NO;
+static BOOL gPhysicalCapsLockPressed = NO;
 
 static char *copyErrorMessage(const char *message) {
     if (!message) {
@@ -22,6 +30,19 @@ static char *copyErrorMessage(const char *message) {
     }
     memcpy(copy, message, len);
     return copy;
+}
+
+static char *copyStatusErrorMessage(const char *message, OSStatus status) {
+    char buffer[128];
+    snprintf(buffer, sizeof(buffer), "%s (status=%d)", message, (int)status);
+    return copyErrorMessage(buffer);
+}
+
+static char *copyRawEventTapErrorMessage(const char *message) {
+    BOOL accessibilityTrusted = AXIsProcessTrusted();
+    char buffer[192];
+    snprintf(buffer, sizeof(buffer), "%s (accessibilityTrusted=%d)", message, accessibilityTrusted ? 1 : 0);
+    return copyErrorMessage(buffer);
 }
 
 static UInt32 toCarbonModifiers(unsigned int modifiers) {
@@ -41,19 +62,18 @@ static UInt32 toCarbonModifiers(unsigned int modifiers) {
     return carbon;
 }
 
-static unsigned int currentModifierMask(NSEventModifierFlags flags) {
-    NSEventModifierFlags masked = flags & NSEventModifierFlagDeviceIndependentFlagsMask;
+static unsigned int currentModifierMaskFromCGFlags(CGEventFlags flags) {
     unsigned int modifiers = 0;
-    if (masked & NSEventModifierFlagControl) {
+    if (flags & kCGEventFlagMaskControl) {
         modifiers |= 1;
     }
-    if (masked & NSEventModifierFlagShift) {
+    if (flags & kCGEventFlagMaskShift) {
         modifiers |= 2;
     }
-    if (masked & NSEventModifierFlagOption) {
+    if (flags & kCGEventFlagMaskAlternate) {
         modifiers |= 4;
     }
-    if (masked & NSEventModifierFlagCommand) {
+    if (flags & kCGEventFlagMaskCommand) {
         modifiers |= 8;
     }
     return modifiers;
@@ -63,6 +83,7 @@ static BOOL isModifierKeyCode(unsigned short keyCode) {
     switch (keyCode) {
         case 54:
         case 55:
+        case 57:
         case 56:
         case 58:
         case 59:
@@ -75,21 +96,22 @@ static BOOL isModifierKeyCode(unsigned short keyCode) {
     }
 }
 
-static BOOL modifierKeyPressed(unsigned short keyCode, NSEventModifierFlags flags) {
-    NSEventModifierFlags masked = flags & NSEventModifierFlagDeviceIndependentFlagsMask;
+static BOOL modifierKeyPressedFromCGFlags(unsigned short keyCode, CGEventFlags flags) {
     switch (keyCode) {
         case 54:
         case 55:
-            return (masked & NSEventModifierFlagCommand) != 0;
+            return (flags & kCGEventFlagMaskCommand) != 0;
+        case 57:
+            return (flags & kCGEventFlagMaskAlphaShift) != 0;
         case 56:
         case 60:
-            return (masked & NSEventModifierFlagShift) != 0;
+            return (flags & kCGEventFlagMaskShift) != 0;
         case 58:
         case 61:
-            return (masked & NSEventModifierFlagOption) != 0;
+            return (flags & kCGEventFlagMaskAlternate) != 0;
         case 59:
         case 62:
-            return (masked & NSEventModifierFlagControl) != 0;
+            return (flags & kCGEventFlagMaskControl) != 0;
         default:
             return NO;
     }
@@ -115,6 +137,57 @@ static unsigned int currentCharacterCode(NSEvent *event) {
     return (unsigned int)ch;
 }
 
+static void physicalKeyboardValueCallback(void *context, IOReturn result, void *sender, IOHIDValueRef value) {
+    if (result != kIOReturnSuccess || !value) {
+        return;
+    }
+
+    IOHIDElementRef element = IOHIDValueGetElement(value);
+    if (!element) {
+        return;
+    }
+
+    if (IOHIDElementGetUsagePage(element) != kHIDPage_KeyboardOrKeypad || IOHIDElementGetUsage(element) != kHIDUsage_KeyboardCapsLock) {
+        return;
+    }
+
+    gPhysicalCapsLockPressed = IOHIDValueGetIntegerValue(value) != 0;
+    gPhysicalKeyboardManagerReady = YES;
+}
+
+static void ensurePhysicalKeyboardMonitor(void) {
+    if (gPhysicalKeyboardManager) {
+        return;
+    }
+
+    gPhysicalKeyboardManager = IOHIDManagerCreate(kCFAllocatorDefault, kIOHIDOptionsTypeNone);
+    if (!gPhysicalKeyboardManager) {
+        return;
+    }
+
+    NSDictionary *keyboardMatch = @{
+        @kIOHIDDeviceUsagePageKey: @(kHIDPage_GenericDesktop),
+        @kIOHIDDeviceUsageKey: @(kHIDUsage_GD_Keyboard),
+    };
+    IOHIDManagerSetDeviceMatching(gPhysicalKeyboardManager, (__bridge CFDictionaryRef)keyboardMatch);
+    IOHIDManagerRegisterInputValueCallback(gPhysicalKeyboardManager, physicalKeyboardValueCallback, NULL);
+    IOHIDManagerScheduleWithRunLoop(gPhysicalKeyboardManager, CFRunLoopGetMain(), kCFRunLoopCommonModes);
+    if (IOHIDManagerOpen(gPhysicalKeyboardManager, kIOHIDOptionsTypeNone) != kIOReturnSuccess) {
+        IOHIDManagerUnscheduleFromRunLoop(gPhysicalKeyboardManager, CFRunLoopGetMain(), kCFRunLoopCommonModes);
+        CFRelease(gPhysicalKeyboardManager);
+        gPhysicalKeyboardManager = NULL;
+        gPhysicalKeyboardManagerReady = NO;
+        gPhysicalCapsLockPressed = NO;
+    }
+}
+
+int woxDarwinIsPhysicalCapsLockPressed(int *available) {
+    if (available) {
+        *available = gPhysicalKeyboardManagerReady ? 1 : 0;
+    }
+    return gPhysicalCapsLockPressed ? 1 : 0;
+}
+
 static OSStatus hotkeyHandler(EventHandlerCallRef nextHandler, EventRef event, void *userData) {
     EventHotKeyID hotkeyID;
     GetEventParameter(event, kEventParamDirectObject, typeEventHotKeyID, NULL, sizeof(hotkeyID), NULL, &hotkeyID);
@@ -124,6 +197,8 @@ static OSStatus hotkeyHandler(EventHandlerCallRef nextHandler, EventRef event, v
 
 int woxDarwinEnsureKeyboardReady(char **errorOut) {
     @autoreleasepool {
+        ensurePhysicalKeyboardMonitor();
+
         if (!gHotkeyRefs) {
             gHotkeyRefs = [[NSMutableDictionary alloc] init];
         }
@@ -135,7 +210,7 @@ int woxDarwinEnsureKeyboardReady(char **errorOut) {
             OSStatus status = InstallApplicationEventHandler(&hotkeyHandler, 1, &eventType, NULL, &gHotkeyHandler);
             if (status != noErr) {
                 if (errorOut) {
-                    *errorOut = copyErrorMessage("failed to install macOS hotkey handler");
+                    *errorOut = copyStatusErrorMessage("failed to install macOS hotkey handler", status);
                 }
                 return 0;
             }
@@ -155,7 +230,7 @@ int woxDarwinRegisterHotkey(int id, unsigned int modifiers, unsigned int keyCode
         OSStatus status = RegisterEventHotKey((UInt32)keyCode, toCarbonModifiers(modifiers), hotkeyID, GetApplicationEventTarget(), 0, &hotkeyRef);
         if (status != noErr || hotkeyRef == NULL) {
             if (errorOut) {
-                *errorOut = copyErrorMessage("failed to register macOS hotkey");
+                *errorOut = copyStatusErrorMessage("failed to register macOS hotkey", status);
             }
             return 0;
         }
@@ -180,7 +255,7 @@ int woxDarwinUnregisterHotkey(int id, char **errorOut) {
         [gHotkeyRefs removeObjectForKey:@(id)];
         if (status != noErr) {
             if (errorOut) {
-                *errorOut = copyErrorMessage("failed to unregister macOS hotkey");
+                *errorOut = copyStatusErrorMessage("failed to unregister macOS hotkey", status);
             }
             return 0;
         }
@@ -188,44 +263,99 @@ int woxDarwinUnregisterHotkey(int id, char **errorOut) {
     }
 }
 
+static CGEventRef rawKeyboardEventTapCallback(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void *refcon) {
+    @autoreleasepool {
+        if (type == kCGEventTapDisabledByTimeout || type == kCGEventTapDisabledByUserInput) {
+            if (gRawKeyboardEventTap) {
+                CGEventTapEnable(gRawKeyboardEventTap, true);
+            }
+            return event;
+        }
+
+        if (type != kCGEventKeyDown && type != kCGEventKeyUp && type != kCGEventFlagsChanged) {
+            return event;
+        }
+
+        unsigned short keyCode = (unsigned short)CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode);
+        CGEventFlags flags = CGEventGetFlags(event);
+        unsigned int modifiers = currentModifierMaskFromCGFlags(flags);
+        unsigned int character = 0;
+        int eventKind = -1;
+
+        if (type == kCGEventFlagsChanged) {
+            if (!isModifierKeyCode(keyCode)) {
+                return event;
+            }
+            eventKind = modifierKeyPressedFromCGFlags(keyCode, flags) ? 0 : 1;
+        } else if (type == kCGEventKeyDown) {
+            NSEvent *nsEvent = [NSEvent eventWithCGEvent:event];
+            if (!nsEvent) {
+                return event;
+            }
+            eventKind = 0;
+            character = currentCharacterCode(nsEvent);
+        } else if (type == kCGEventKeyUp) {
+            eventKind = 1;
+        }
+
+        if (eventKind == -1) {
+            return event;
+        }
+
+        int nativeCapsLockStateAvailable = gPhysicalKeyboardManagerReady ? 1 : 0;
+        int nativeCapsLockPressed = gPhysicalKeyboardManagerReady && gPhysicalCapsLockPressed ? 1 : 0;
+        int consume = keyboardHookEventCGO(eventKind, keyCode, modifiers, character, (int)type, (unsigned long long)flags, nativeCapsLockStateAvailable, nativeCapsLockPressed);
+        if (consume != 0) {
+            return NULL;
+        }
+        return event;
+    }
+}
+
 int woxDarwinSetRawKeyboardHookEnabled(int enabled, char **errorOut) {
     @autoreleasepool {
         if (enabled) {
-            if (!gRawKeyboardMonitor) {
-                NSEventMask mask = NSEventMaskKeyDown | NSEventMaskKeyUp | NSEventMaskFlagsChanged;
-                gRawKeyboardMonitor = [NSEvent addGlobalMonitorForEventsMatchingMask:mask handler:^(NSEvent *event) {
-                    if (!event) {
-                        return;
+            if (!gRawKeyboardEventTap) {
+                CGEventMask mask = CGEventMaskBit(kCGEventKeyDown) | CGEventMaskBit(kCGEventKeyUp) | CGEventMaskBit(kCGEventFlagsChanged);
+                gRawKeyboardEventTap = CGEventTapCreate(kCGSessionEventTap,
+                                                         kCGHeadInsertEventTap,
+                                                         kCGEventTapOptionDefault,
+                                                         mask,
+                                                         rawKeyboardEventTapCallback,
+                                                         NULL);
+                if (!gRawKeyboardEventTap) {
+                    if (errorOut) {
+                        *errorOut = copyRawEventTapErrorMessage("failed to create macOS raw keyboard event tap");
                     }
+                    return 0;
+                }
 
-                    unsigned int modifiers = currentModifierMask(event.modifierFlags);
-                    unsigned short keyCode = event.keyCode;
-
-                    if (event.type == NSEventTypeFlagsChanged) {
-                        if (!isModifierKeyCode(keyCode)) {
-                            return;
-                        }
-                        int eventKind = modifierKeyPressed(keyCode, event.modifierFlags) ? 0 : 1;
-                        keyboardHookEventCGO(eventKind, keyCode, modifiers, 0);
-                        return;
+                gRawKeyboardEventTapSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, gRawKeyboardEventTap, 0);
+                if (!gRawKeyboardEventTapSource) {
+                    CFRelease(gRawKeyboardEventTap);
+                    gRawKeyboardEventTap = NULL;
+                    if (errorOut) {
+                        *errorOut = copyErrorMessage("failed to create macOS raw keyboard event tap source");
                     }
+                    return 0;
+                }
 
-                    if (event.type == NSEventTypeKeyDown) {
-                        keyboardHookEventCGO(0, keyCode, modifiers, currentCharacterCode(event));
-                        return;
-                    }
-
-                    if (event.type == NSEventTypeKeyUp) {
-                        keyboardHookEventCGO(1, keyCode, modifiers, currentCharacterCode(event));
-                    }
-                }];
+                CFRunLoopAddSource(CFRunLoopGetMain(), gRawKeyboardEventTapSource, kCFRunLoopCommonModes);
+                CGEventTapEnable(gRawKeyboardEventTap, true);
             }
             return 1;
         }
 
-        if (gRawKeyboardMonitor) {
-            [NSEvent removeMonitor:gRawKeyboardMonitor];
-            gRawKeyboardMonitor = nil;
+        if (gRawKeyboardEventTapSource) {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), gRawKeyboardEventTapSource, kCFRunLoopCommonModes);
+            CFRelease(gRawKeyboardEventTapSource);
+            gRawKeyboardEventTapSource = NULL;
+        }
+
+        if (gRawKeyboardEventTap) {
+            CGEventTapEnable(gRawKeyboardEventTap, false);
+            CFRelease(gRawKeyboardEventTap);
+            gRawKeyboardEventTap = NULL;
         }
         return 1;
     }

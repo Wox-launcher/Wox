@@ -9,24 +9,20 @@ class WoxSettingNetworkView extends WoxSettingBaseView {
 
   @override
   Widget build(BuildContext context) {
-    final TextEditingController proxyUrlController = TextEditingController(
-      text: controller.woxSetting.value.httpProxyUrl,
-    );
+    final TextEditingController proxyUrlController = TextEditingController(text: controller.woxSetting.value.httpProxyUrl);
 
     return Obx(() {
       return form(
+        title: controller.tr("ui_network"),
+        description: controller.tr("ui_network_description"),
         children: [
           formField(
+            settingKey: "HttpProxyEnabled",
             label: controller.tr("ui_proxy_enabled"),
-            child: WoxSwitch(
-              value: controller.woxSetting.value.httpProxyEnabled,
-              onChanged: (value) => controller.updateConfig(
-                'HttpProxyEnabled',
-                value.toString(),
-              ),
-            ),
+            child: WoxSwitch(value: controller.woxSetting.value.httpProxyEnabled, onChanged: (value) => controller.updateConfig('HttpProxyEnabled', value.toString())),
           ),
           formField(
+            settingKey: "HttpProxyUrl",
             label: controller.tr("ui_proxy_url"),
             tips: controller.tr("ui_proxy_url_tips"),
             child: WoxTextField(

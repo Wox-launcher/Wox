@@ -1,54 +1,64 @@
 # AI 命令
 
-Wox 允许您将 AI 能力直接集成到您的工作流中。
+AI 命令把一段保存好的 prompt 变成可复用的 Wox 命令。适合处理重复的模型请求：改写选中文本、总结 diff、翻译段落、解释错误信息等。
 
-## 自动 Git 提交信息
+先配置 [AI 设置](./settings.md)。
 
-此功能允许您从终端使用 Wox AI 命令自动生成提交信息。
+## 创建命令
 
-### 设置
+1. 打开 **设置 -> 插件 -> AI Command**。
+2. 进入命令列表。
+3. 添加命令名称、查询关键字、模型和 prompt。
+4. 在 prompt 中用 `%s` 表示运行时输入的位置。
 
-1. **添加 AI 命令**
+![AI git msg setting](/images/ai_auto_git_msg_setting.png)
 
-   - 在 Wox 中查询 `aicommand` 并选择 `Open AI Commands settings`
-   - 在设置选项卡中，点击 `Add` 按钮
-   - 添加以下信息：
+## 示例：根据 diff 生成提交信息
 
-     - **Name**: `git commit msg`
-     - **Query**: `commit`
-     - **Model**: `<您的选择>`
-     - **Prompt**:
+命令设置：
 
-       ```
-       Below I will give you a git diff output, please help me write a commit msg targeting these changes. Requirements are as follows:
-        - The first line should be a description no more than 50 words, followed by a blank line, and then 2-3 detailed descriptions.
-        - Do not respond with anything except the commit msg.
+| 字段 | 值 |
+| --- | --- |
+| Name | `git commit msg` |
+| Query | `commit` |
+| Vision | `No` |
 
-       Here is my input:
-       %s
-       ```
+Prompt：
 
-     - **Vision**: No
+```text
+Write a Git commit message for this diff.
 
-   ![AI git msg setting](/images/ai_auto_git_msg_setting.png)
+Rules:
+- First line: imperative mood, 50 characters or fewer.
+- Then a blank line.
+- Then 2-3 bullet points explaining the concrete changes.
+- Output only the commit message.
 
-2. **配置 Bash 脚本**
-   要使用此功能，您可以将以下脚本添加到您的 `.bashrc` 或 `.zshrc` 文件中：
+Diff:
+%s
+```
 
-   ```bash
-   commit() {
-       open "wox://query?q=ai commit $(cat)"
-   }
-   ```
+添加 macOS shell helper：
 
-### 用法
+```bash
+commit() {
+  local input
+  input="$(cat)"
+  python3 -c 'import sys, urllib.parse; print("wox://query?q=ai%20commit%20" + urllib.parse.quote(sys.stdin.read()))' <<< "$input" | xargs open
+}
+```
 
-设置完成后，您可以通过执行以下命令在您的 git 项目中使用此功能：
+在 Git 仓库中使用：
 
 ```bash
 git diff | commit
 ```
 
-此命令将自动调用 Wox 并为您生成提交信息。
-
 ![AI git msg](/images/ai_auto_git_msg.png)
+
+## 好的命令 prompt
+
+- 明确说明输出应该是什么。
+- 明确说明不要包含什么。
+- 把可复用规则放在保存的 prompt 里，运行时只传变化的输入。
+- 不要把私密内容传给在线 provider，除非这符合你的工作流。

@@ -39,6 +39,18 @@ class WoxWebViewUtil {
     return (await _platform?.goForward()) ?? false;
   }
 
+  static Future<String?> getCurrentUrl() async {
+    return _platform?.getCurrentUrl();
+  }
+
+  static Future<bool> clearState() async {
+    return (await _platform?.clearState()) ?? false;
+  }
+
+  static Future<bool> focusActiveSession() async {
+    return (await _platform?.focusActiveSession()) ?? false;
+  }
+
   static Stream<void> get unhandledEscape {
     if (Platform.isMacOS) {
       return _macosPlatform.unhandledEscape;

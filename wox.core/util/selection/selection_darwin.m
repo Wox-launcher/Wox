@@ -223,4 +223,4 @@ void restoreAlertSound() {
     if (sound) {
         [sound setVolume:1.0];
     }
-} 
+}

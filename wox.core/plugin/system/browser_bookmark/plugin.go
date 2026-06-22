@@ -16,6 +16,7 @@ import (
 	"wox/setting/definition"
 	"wox/util"
 	"wox/util/browser"
+	"wox/util/imagecache"
 	"wox/util/shell"
 )
 
@@ -94,7 +95,8 @@ func (c *BrowserBookmarkPlugin) Init(ctx context.Context, initParams plugin.Init
 	c.api.OnMRURestore(ctx, c.handleMRURestore)
 }
 
-func (c *BrowserBookmarkPlugin) Query(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {
+func (c *BrowserBookmarkPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
+	var results []plugin.QueryResult
 	bookmarks := c.getBookmarksSnapshot()
 	for _, b := range bookmarks {
 		var bookmark = b
@@ -148,7 +150,7 @@ func (c *BrowserBookmarkPlugin) Query(ctx context.Context, query plugin.Query) (
 		}
 	}
 
-	return
+	return plugin.NewQueryResponse(results)
 }
 
 func (c *BrowserBookmarkPlugin) reloadBookmarks(ctx context.Context) {
@@ -195,22 +197,27 @@ func (c *BrowserBookmarkPlugin) prefetchWebsiteIcons(ctx context.Context, urls [
 				httpCache := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("website_icon_%s.png", fmt.Sprintf("%x", md5.Sum([]byte(httpKey)))))
 				httpsCache := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("website_icon_%s.png", fmt.Sprintf("%x", md5.Sum([]byte(httpsKey)))))
 
-				// if both exist, skip
-				if _, err1 := os.Stat(httpCache); err1 == nil {
-					if _, err2 := os.Stat(httpsCache); err2 == nil {
-						continue
-					}
+				httpInfo, httpErr := os.Stat(httpCache)
+				httpsInfo, httpsErr := os.Stat(httpsCache)
+				if httpErr == nil {
+					imagecache.Touch(ctx, httpCache, httpInfo)
+				}
+				if httpsErr == nil {
+					imagecache.Touch(ctx, httpsCache, httpsInfo)
+				}
+				if httpErr == nil && httpsErr == nil {
+					continue
 				}
 
 				googleFaviconURL := fmt.Sprintf("https://www.google.com/s2/favicons?sz=96&domain_url=%s", url.QueryEscape(domain))
 				// ensure https cache
-				if _, err := os.Stat(httpsCache); os.IsNotExist(err) {
+				if os.IsNotExist(httpsErr) {
 					gctx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
 					_ = util.HttpDownload(gctx, googleFaviconURL, httpsCache)
 					cancel()
 				}
 				// ensure http cache (copy from https if available; otherwise download again)
-				if _, err := os.Stat(httpCache); os.IsNotExist(err) {
+				if os.IsNotExist(httpErr) {
 					if _, ok := os.Stat(httpsCache); ok == nil {
 						if data, readErr := os.ReadFile(httpsCache); readErr == nil {
 							_ = os.WriteFile(httpCache, data, os.ModePerm)
@@ -266,7 +273,8 @@ func (c *BrowserBookmarkPlugin) getBrowserBookmarkSettingDefinitions() []definit
 
 	settings := []definition.PluginSettingDefinitionItem{
 		{
-			Type: definition.PluginSettingDefinitionTypeSelect,
+			Type:               definition.PluginSettingDefinitionTypeSelect,
+			IsPlatformSpecific: true,
 			Value: &definition.PluginSettingValueSelect{
 				Key:          browserBookmarkIndexBrowsersSettingKey,
 				Label:        "i18n:plugin_browser_bookmark_index_browsers",

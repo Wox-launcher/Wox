@@ -20,6 +20,7 @@ constexpr auto kMethodReload = "reload";
 constexpr auto kMethodStop = "stop";
 constexpr auto kMethodGoBack = "goBack";
 constexpr auto kMethodGoForward = "goForward";
+constexpr auto kMethodFocus = "focus";
 constexpr auto kMethodAddScriptToExecuteOnDocumentCreated =
     "addScriptToExecuteOnDocumentCreated";
 constexpr auto kMethodRemoveScriptToExecuteOnDocumentCreated =
@@ -42,6 +43,7 @@ constexpr auto kMethodClearVirtualHostNameMapping =
     "clearVirtualHostNameMapping";
 constexpr auto kMethodClearCookies = "clearCookies";
 constexpr auto kMethodClearCache = "clearCache";
+constexpr auto kMethodClearStorageForOrigin = "clearStorageForOrigin";
 constexpr auto kMethodSetCacheDisabled = "setCacheDisabled";
 constexpr auto kMethodSetPopupWindowPolicy = "setPopupWindowPolicy";
 constexpr auto kMethodSetFpsLimit = "setFpsLimit";
@@ -498,6 +500,14 @@ void WebviewBridge::HandleMethodCall(
     return result->Error(kMethodFailed);
   }
 
+  // focus
+  if (method_name.compare(kMethodFocus) == 0) {
+    if (webview_->Focus()) {
+      return result->Success();
+    }
+    return result->Error(kMethodFailed);
+  }
+
   // suspend
   if (method_name.compare(kMethodSuspend) == 0) {
     texture_bridge_->Stop();
@@ -666,6 +676,16 @@ void WebviewBridge::HandleMethodCall(
       return result->Success();
     }
     return result->Error(kMethodFailed);
+  }
+
+  // clearStorageForOrigin: string
+  if (method_name.compare(kMethodClearStorageForOrigin) == 0) {
+    if (const auto origin = std::get_if<std::string>(method_call.arguments())) {
+      if (webview_->ClearStorageForOrigin(*origin)) {
+        return result->Success();
+      }
+    }
+    return result->Error(kErrorInvalidArgs);
   }
 
   // setCacheDisabled: bool

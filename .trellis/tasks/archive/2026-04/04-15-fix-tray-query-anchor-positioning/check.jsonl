@@ -1,7 +1,0 @@
-{"file": ".agents/skills/finish-work/SKILL.md", "reason": "Finish work checklist"}
-{"file": ".agents/skills/check-backend/SKILL.md", "reason": "Backend check spec"}
-{"file": ".agents/skills/check-frontend/SKILL.md", "reason": "Frontend check spec"}
-{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Review Flutter launcher changes against component patterns"}
-{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Verify Dart payload changes stay typed"}
-{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Review backend logging additions"}
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Verify payload contract across layers"}

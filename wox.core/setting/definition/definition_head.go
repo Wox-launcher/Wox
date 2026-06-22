@@ -9,7 +9,7 @@ import (
 type PluginSettingValueHead struct {
 	Content string
 	Tooltip string
-	Style   PluginSettingValueStyle
+	Style   PluginSettingValueStyle `json:"-"` // Deprecated: ignored on load so Wox keeps setting layouts consistent.
 }
 
 func (p *PluginSettingValueHead) GetPluginSettingType() PluginSettingDefinitionType {

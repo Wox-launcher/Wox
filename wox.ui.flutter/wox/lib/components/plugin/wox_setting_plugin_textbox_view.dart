@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:wox/components/wox_textfield.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_textbox.dart';
@@ -86,38 +88,52 @@ class _WoxSettingPluginTextBoxState extends State<WoxSettingPluginTextBox> with 
 
   @override
   Widget build(BuildContext context) {
-    final inputWidth = widget.item.style.width > 0 ? widget.item.style.width.toDouble() : 100.0;
+    final hasExplicitWidth = widget.item.style.width > 0;
+    final requestedInputWidth = hasExplicitWidth ? widget.item.style.width.toDouble() : double.infinity;
     final maxLines = widget.item.maxLines > 0 ? widget.item.maxLines : 1;
-    return layout(
-      label: widget.item.label,
-      child: Wrap(
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              WoxTextField(
-                maxLines: maxLines,
-                controller: _controller,
-                focusNode: _focusNode,
-                width: inputWidth,
-                onChanged: (value) {
-                  final validationError = _validateValue(value);
-                  if (_hasInteracted && _errorMessage == validationError) {
-                    return;
-                  }
 
-                  setState(() {
-                    _hasInteracted = true;
-                    _errorMessage = validationError;
-                  });
-                },
+    Widget buildField(double fieldWidth) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Flexible(
+                fit: hasExplicitWidth ? FlexFit.loose : FlexFit.tight,
+                child: WoxTextField(
+                  maxLines: maxLines,
+                  controller: _controller,
+                  focusNode: _focusNode,
+                  width: fieldWidth,
+                  onChanged: (value) {
+                    final validationError = _validateValue(value);
+                    if (_hasInteracted && _errorMessage == validationError) {
+                      return;
+                    }
+
+                    setState(() {
+                      _hasInteracted = true;
+                      _errorMessage = validationError;
+                    });
+                  },
+                ),
               ),
-              validationMessage(_errorMessage),
+              suffix(widget.item.suffix),
             ],
           ),
-          suffix(widget.item.suffix),
+          validationMessage(_errorMessage),
         ],
+      );
+    }
+
+    return layout(
+      label: widget.item.label,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final effectiveWidth = hasExplicitWidth ? math.min(requestedInputWidth, constraints.maxWidth) : constraints.maxWidth;
+          return buildField(effectiveWidth);
+        },
       ),
       style: widget.item.style,
       tooltip: widget.item.tooltip,

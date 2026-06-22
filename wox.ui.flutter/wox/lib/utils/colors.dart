@@ -31,6 +31,13 @@ Color getThemeDividerColor() {
   return safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.previewSplitLineColor);
 }
 
+Color getThemeSettingDividerColor() {
+  // Settings panes previously mixed raw divider colors, dimmed divider colors,
+  // and Material defaults, so adjacent separators had visibly different weight.
+  // Use the unmodified theme divider token here to match the plugin pane splitter.
+  return getThemeDividerColor();
+}
+
 Color getThemeActionItemActiveColor() {
   return safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor);
 }

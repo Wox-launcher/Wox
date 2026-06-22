@@ -1,101 +1,53 @@
 # System Plugins Overview
 
-Wox includes multiple built-in system plugins that are available out of box. These plugins cover various aspects of your daily work and help improve productivity.
+System plugins are the built-in workflows that ship with Wox. They are normal plugins from the user's point of view: each one can return results, expose actions, keep settings, and participate in query routing.
 
-## Core Plugins
+## Everyday Plugins
 
-| Plugin Name | Description | Trigger Keyword |
-|-------------|-------------|-----------------|
-| **Application** | Search and launch applications | None (default) |
-| **Calculator** | Mathematical calculations | None (auto-detect) |
-| **Clipboard** | Clipboard history management | `cb` |
-| **Converter** | Unit, currency, and number base conversion | None (auto-detect) |
-| **WebSearch** | Web search | Custom |
+| Plugin | Trigger | Use it for |
+| --- | --- | --- |
+| [Application](./application.md) | Global | Launch apps, open app folders, activate running apps |
+| [File](./file.md) | `f` | Search indexed files and folders |
+| [WebSearch](./websearch.md) | Global / engine keyword | Search the web with configured engines |
+| [Clipboard](./clipboard.md) | `cb` | Reuse clipboard text and images |
+| [Calculator](./calculator.md) | Global / `calculator` | Evaluate expressions and copy results |
+| [Converter](./converter.md) | Global / `calculator` | Convert units, currencies, crypto, bases, and time values |
 
-## Search & File Management
+## Context Plugins
 
-| Plugin Name | Description | Trigger Keyword |
-|-------------|-------------|-----------------|
-| **File** | File search | None (default) |
-| **Explorer** | Quick folder access | None (default) |
-| **Browser Bookmark** | Browser bookmark search | None (default) |
+| Plugin | Trigger | Use it for |
+| --- | --- | --- |
+| [Browser Bookmark](./browser-bookmark.md) | Global | Open bookmarks from supported browser profiles |
+| [Explorer](./explorer.md) | Global when a file manager or open/save dialog is active | Jump between folders |
+| Browser | Contextual | Search and switch browser tabs when browser integration is available |
+| Selection | Selection query | Run actions on selected text or files |
+| MediaPlayer | `media` | Control active media playback |
 
-## AI & Tools
+## AI and Custom Workflows
 
-| Plugin Name | Description | Trigger Keyword |
-|-------------|-------------|-----------------|
-| **Chat** | AI conversations | None (UI panel) |
-| **AI Command** | AI command execution | Custom |
-| **Emoji** | Emoji search | None (default) |
+| Plugin | Trigger | Use it for |
+| --- | --- | --- |
+| [AI Chat](./chat.md) | `chat` | Talk to configured models and agents |
+| AI Command | `ai` | Run saved model prompts |
+| [Emoji](./emoji.md) | `emoji` | Search and copy emoji |
+| Plugin Manager | `wpm`, `store`, `pm` | Install, update, create, and inspect plugins |
+| Theme | `theme` | Apply, install, remove, or generate themes |
 
-## Utility Plugins
+## Maintenance Plugins
 
-| Plugin Name | Description |
-|-------------|-------------|
-| **Selection** | Quick actions on selected text |
-| **Plugin Installer** | Plugin installation management |
-| **Backup** | Settings backup & restore |
-| **Theme** | Theme management |
-| **Update** | Check for updates |
-| **Doctor** | System diagnostics |
+| Plugin | Trigger | Use it for |
+| --- | --- | --- |
+| Doctor | `doctor` | Diagnose common setup issues |
+| Update | `update`, `upgrade` | Check or apply Wox updates |
+| Backup | `backup`, `restore` | Export or restore settings |
+| Shell | `>` / global command detection | Run shell commands from Wox |
+| Sys | Global | Run system actions |
 
-## Quick Start
+## How to Tune a Plugin
 
-### Using Default Trigger Plugins
+1. Open **Settings**.
+2. Go to **Plugins**.
+3. Select the plugin.
+4. Review trigger keywords, enablement, and plugin-specific settings.
 
-Most core plugins work without keywords. Simply type relevant content in Wox:
-
-- **Launch apps**: Type app name, like "Chrome", "VSCode"
-- **Calculate**: Type expression, like "100+200", "12*5"
-- **File search**: Type file name, like "report.pdf"
-- **Unit conversion**: Type conversion, like "100 usd to cny", "1km to m"
-
-### Using Keyword Plugins
-
-Some plugins require a trigger keyword first:
-
-- **Clipboard history**: Type `cb` to view history
-- **Custom search**: Type trigger keyword first, then search content, like `g Wox Launcher`
-
-## Plugin Configuration
-
-Most system plugins can be customized in Wox settings:
-
-1. Open Wox settings
-2. Find corresponding plugin
-3. Click on plugin name to enter configuration
-4. Adjust settings as needed
-
-### Common Configuration Options
-
-- **Application**: Add custom app search directories
-- **WebSearch**: Add custom search engines
-- **Clipboard**: Adjust history retention days
-- **Converter**: Set default currency
-
-## Plugin Features
-
-### MRU (Most Recently Used)
-
-Plugins with MRU support remember your usage history and prioritize previously used results:
-
-Plugins supporting MRU:
-- Application
-- Converter
-
-### Selected Text Operations
-
-Plugins with selected text support can perform quick actions on your selected text:
-
-- WebSearch: Direct search of selected text
-- Converter: Direct unit conversion or calculation
-
-## Getting Help
-
-If you have questions about specific plugin usage, check the detailed documentation:
-
-- [Application Usage Guide](application.md)
-- [Calculator Usage Guide](calculator.md)
-- [Clipboard Usage Guide](clipboard.md)
-- [Converter Usage Guide](converter.md)
-- [WebSearch Usage Guide](websearch.md)
+Most confusion comes from global plugins competing for the same text. If a query produces too many unrelated results, use a plugin keyword such as `f`, `cb`, `emoji`, or `wpm`.

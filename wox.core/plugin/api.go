@@ -37,6 +37,7 @@ type API interface {
 	HideApp(ctx context.Context)
 	ShowApp(ctx context.Context)
 	Notify(ctx context.Context, description string)
+	PushAttention(ctx context.Context, request PushAttentionRequest)
 	Log(ctx context.Context, level LogLevel, msg string)
 	GetTranslation(ctx context.Context, key string) string
 	GetSetting(ctx context.Context, key string) string
@@ -46,6 +47,15 @@ type API interface {
 	OnDeepLink(ctx context.Context, callback func(ctx context.Context, arguments map[string]string))
 	OnUnload(ctx context.Context, callback func(ctx context.Context))
 	OnMRURestore(ctx context.Context, callback func(ctx context.Context, mruData MRUData) (*QueryResult, error))
+
+	// OnHandlePluginCommand registers a handler for commands addressed to this plugin.
+	// Command names and payload keys are owned by the target plugin and should be treated
+	// as documented constants rather than dynamically registered capabilities.
+	OnHandlePluginCommand(ctx context.Context, handler PluginCommandHandler)
+
+	// InvokePluginCommand sends a command request to another loaded plugin by plugin id.
+	// It is intended for built-in plugin coordination
+	InvokePluginCommand(ctx context.Context, request PluginCommandRequest) (PluginCommandResult, error)
 
 	// ShowToolbarMsg creates or updates the toolbar msg for the current plugin query context.
 	// It is only accepted while the caller is the active plugin in the current session.
@@ -179,15 +189,41 @@ type API interface {
 	//   }
 	RefreshQuery(ctx context.Context, param RefreshQueryParam)
 
+	// RefreshGlance asks Wox UI to pull the latest Global Glance data for this plugin.
+	// It deliberately does not push UI content so user slot settings remain authoritative.
+	RefreshGlance(ctx context.Context, ids []string)
+
 	// Copy copies the given content to the system clipboard.
 	// Supports text, image, or both simultaneously.
 	Copy(ctx context.Context, params CopyParams)
+
+	// Screenshot captures a user-selected screen area and returns the saved PNG path.
+	Screenshot(ctx context.Context, option ScreenshotOption) ScreenshotResult
 }
 
 type CopyParams struct {
 	Type     CopyType
 	Text     string
 	WoxImage *common.WoxImage
+}
+
+// ScreenshotOption controls optional screenshot behavior.
+type ScreenshotOption struct {
+	// HideAnnotationToolbar keeps plugin capture flows focused on raw image selection when callers,
+	// such as OCR plugins, do not need Wox's markup tools. Cancel and confirm remain visible so the
+	// user still has an explicit escape/finish path when AutoConfirm is not requested.
+	HideAnnotationToolbar bool `json:"hideAnnotationToolbar"`
+	// AutoConfirm completes the screenshot as soon as the user finishes drawing the selection.
+	// The previous API always required a manual confirm click, which is unnecessary for callers that
+	// only need the selected PNG path and do their own processing after capture.
+	AutoConfirm bool `json:"autoConfirm"`
+}
+
+// ScreenshotResult reports the screenshot capture outcome and saved PNG path.
+type ScreenshotResult struct {
+	Success        bool
+	ScreenshotPath string
+	ErrMsg         string
 }
 
 // APIImpl is the concrete API implementation bound to one plugin instance.
@@ -224,6 +260,42 @@ func (a *APIImpl) Notify(ctx context.Context, message string) {
 		Icon:           icon,
 		DisplaySeconds: 5,
 	})
+}
+
+// PushAttention persists a plugin-owned item and refreshes the launcher unread badge.
+func (a *APIImpl) PushAttention(ctx context.Context, request PushAttentionRequest) {
+	if a.pluginInstance == nil {
+		return
+	}
+
+	request.Title = a.GetTranslation(ctx, request.Title)
+	if request.Description != "" {
+		request.Description = a.GetTranslation(ctx, request.Description)
+	}
+
+	defaultIcon := a.pluginInstance.Metadata.GetIconOrDefault(a.pluginInstance.PluginDirectory, common.WoxIcon)
+	_, err := GetAttentionManager().Push(ctx, AttentionPluginSource{
+		PluginID:        a.pluginInstance.Metadata.Id,
+		PluginDirectory: a.pluginInstance.PluginDirectory,
+		DefaultIcon:     defaultIcon,
+	}, request)
+	if err != nil {
+		a.Log(ctx, LogLevelWarning, fmt.Sprintf("failed to push attention item: %v", err))
+		return
+	}
+
+	PublishAttentionUnreadCount(ctx)
+}
+
+// PublishAttentionUnreadCount pushes the current unread attention count to the UI.
+func PublishAttentionUnreadCount(ctx context.Context) {
+	count, err := GetAttentionManager().UnreadCount(ctx)
+	if err != nil {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to count unread attention items: %v", err))
+		return
+	}
+
+	GetPluginManager().GetUI().UpdateAttentionUnreadCount(ctx, int(count))
 }
 
 func (a *APIImpl) Log(ctx context.Context, level LogLevel, msg string) {
@@ -314,6 +386,16 @@ func (a *APIImpl) OnDeepLink(ctx context.Context, callback func(ctx context.Cont
 
 func (a *APIImpl) OnUnload(ctx context.Context, callback func(ctx context.Context)) {
 	a.pluginInstance.UnloadCallbacks = append(a.pluginInstance.UnloadCallbacks, callback)
+}
+
+// OnHandlePluginCommand registers a handler for commands addressed to this plugin.
+func (a *APIImpl) OnHandlePluginCommand(ctx context.Context, handler PluginCommandHandler) {
+	a.pluginInstance.PluginCommandHandlers = append(a.pluginInstance.PluginCommandHandlers, handler)
+}
+
+// InvokePluginCommand sends a command request to another loaded plugin by plugin id.
+func (a *APIImpl) InvokePluginCommand(ctx context.Context, request PluginCommandRequest) (PluginCommandResult, error) {
+	return GetPluginManager().InvokePluginCommand(ctx, a.pluginInstance, request)
 }
 
 func (a *APIImpl) ShowToolbarMsg(ctx context.Context, msg ToolbarMsg) {
@@ -504,13 +586,13 @@ func (a *APIImpl) PushResults(ctx context.Context, query Query, results []QueryR
 	if util.GetContextSessionId(ctx) == "" {
 		ctx = util.WithQueryIdContext(util.WithSessionContext(ctx, query.SessionId), query.Id)
 	}
-	if !GetPluginManager().IsCurrentQuery(query.SessionId, query.Id) {
-		a.Log(ctx, LogLevelWarning, "PushResults ignored: query is not active")
-		return false
-	}
 
+	// Bug fix: core no longer owns "current query" state because backend query
+	// pipelines are concurrent. Push by query id and let Flutter accept or reject
+	// the payload against the visible query, matching normal Query responses.
+	layout := GetPluginManager().getCachedLayoutForPluginQuery(ctx, a.pluginInstance, query)
 	for i := range results {
-		results[i] = GetPluginManager().PolishResult(ctx, a.pluginInstance, query, results[i])
+		results[i] = GetPluginManager().PolishResult(ctx, a.pluginInstance, query, layout, results[i])
 	}
 
 	polishedResults := GetPluginManager().BuildQueryResultsSnapshot(query.SessionId, query.Id)
@@ -531,6 +613,13 @@ func (a *APIImpl) IsVisible(ctx context.Context) bool {
 
 func (a *APIImpl) RefreshQuery(ctx context.Context, param RefreshQueryParam) {
 	GetPluginManager().GetUI().RefreshQuery(ctx, param.PreserveSelectedIndex)
+}
+
+func (a *APIImpl) RefreshGlance(ctx context.Context, ids []string) {
+	if a.pluginInstance == nil {
+		return
+	}
+	GetPluginManager().GetUI().RefreshGlance(ctx, a.pluginInstance.Metadata.Id, ids)
 }
 
 func (a *APIImpl) Copy(ctx context.Context, params CopyParams) {
@@ -555,6 +644,66 @@ func (a *APIImpl) Copy(ctx context.Context, params CopyParams) {
 			a.Log(ctx, LogLevelError, fmt.Sprintf("failed to copy image to clipboard: %v", err))
 		}
 		return
+	}
+}
+
+func (a *APIImpl) Screenshot(ctx context.Context, option ScreenshotOption) ScreenshotResult {
+	request := common.DefaultCaptureScreenshotRequest()
+	// Plugin screenshots return a saved file path and leave clipboard handling to the caller.
+	request.Output = "file"
+	// Screenshot API options are translated in core where the plugin caller is known. Keeping Flutter
+	// on a request-only contract avoids making the UI infer SDK defaults from plugin runtime details.
+	request.HideAnnotationToolbar = option.HideAnnotationToolbar
+	request.AutoConfirm = option.AutoConfirm
+	if !a.pluginInstance.IsSystemPlugin {
+		// Third-party screenshot callers need a visible identity marker in the floating toolbox.
+		// The UI cannot reliably infer the plugin from the generic CaptureScreenshot websocket method,
+		// so core resolves the metadata icon here and sends only the render-ready WoxImage.
+		callerIcon := a.pluginInstance.Metadata.GetIconOrDefault(a.pluginInstance.PluginDirectory, common.WoxIcon)
+		request.CallerIcon = &callerIcon
+	}
+
+	result, err := GetPluginManager().GetUI().CaptureScreenshot(ctx, request)
+	if err != nil {
+		return ScreenshotResult{
+			Success: false,
+			ErrMsg:  err.Error(),
+		}
+	}
+
+	switch result.Status {
+	case common.CaptureScreenshotStatusCompleted:
+		if result.ScreenshotPath == "" {
+			return ScreenshotResult{
+				Success: false,
+				ErrMsg:  "screenshot completed without an export path",
+			}
+		}
+
+		return ScreenshotResult{
+			Success:        true,
+			ScreenshotPath: result.ScreenshotPath,
+			ErrMsg:         result.ClipboardWarningMessage,
+		}
+	case common.CaptureScreenshotStatusCancelled:
+		return ScreenshotResult{
+			Success: false,
+			ErrMsg:  "cancelled",
+		}
+	case common.CaptureScreenshotStatusFailed:
+		errMsg := result.ErrorMessage
+		if errMsg == "" {
+			errMsg = "screenshot session failed"
+		}
+		return ScreenshotResult{
+			Success: false,
+			ErrMsg:  errMsg,
+		}
+	default:
+		return ScreenshotResult{
+			Success: false,
+			ErrMsg:  fmt.Sprintf("unexpected screenshot status: %s", result.Status),
+		}
 	}
 }
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
 import 'package:wox/utils/log.dart';
@@ -22,7 +24,16 @@ class MacOSWindowManager extends BaseWindowManager {
         notifyWindowBlur();
         break;
       case 'log':
-        final message = call.arguments as String? ?? "";
+        final arguments = call.arguments;
+        if (arguments is Map) {
+          // Native screenshot timing logs can carry the active request trace. Preserve that trace so
+          // UI and macOS timing probes can be filtered as one capture pipeline in ui.log.
+          final message = arguments['message'] as String? ?? "";
+          final traceId = arguments['traceId'] as String? ?? const Uuid().v4();
+          Logger.instance.debug(traceId, "[NATIVE] $message");
+          break;
+        }
+        final message = arguments as String? ?? "";
         Logger.instance.debug(const Uuid().v4(), "[NATIVE] $message");
         break;
       default:
@@ -156,7 +167,12 @@ class MacOSWindowManager extends BaseWindowManager {
   @override
   Future<void> waitUntilReadyToShow() async {
     try {
-      await _channel.invokeMethod('waitUntilReadyToShow');
+      // Bug fix: macOS smoke startup can leave the native ready-to-show method
+      // call unresolved after Flutter's best-effort `open` foreground step
+      // fails. Waiting forever prevents runApp from producing the first frame,
+      // so keep the native setup path but bound it and continue with the
+      // default window state when the platform channel does not answer.
+      await _channel.invokeMethod('waitUntilReadyToShow').timeout(const Duration(seconds: 3));
     } catch (e) {
       Logger.instance.error(const Uuid().v4(), "Error waiting until ready to show: $e");
     }

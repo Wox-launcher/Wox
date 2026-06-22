@@ -1,16 +1,14 @@
 # Wox
 
 [![Build status](https://github.com/Wox-launcher/Wox/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/Wox-launcher/Wox/actions)
-[![GitHub release](https://img.shields.io/github/v/release/Wox-launcher/wox?include_prereleases)](https://github.com/Wox-launcher/Wox/releases)
+[![GitHub release](https://img.shields.io/github/v/release/Wox-launcher/wox)](https://github.com/Wox-launcher/Wox/releases)
 [![Downloads](https://img.shields.io/github/downloads/Wox-launcher/Wox/total.svg)](https://github.com/Wox-launcher/Wox/releases)
 
 Wox is an open-source cross-platform launcher for macOS, Linux, and Windows. It is designed for fast local search, extensibility through plugins, and a lightweight distribution model that can run from a single executable.
 
 It is a practical alternative to [Alfred](https://www.alfredapp.com/) and [Raycast](https://www.raycast.com/).
 
-![Wox screenshot](https://raw.githubusercontent.com/Wox-launcher/Wox/master/screenshots/app.png)
-
-[View screenshots](https://github.com/Wox-launcher/Wox/tree/master/screenshots)
+![Wox screenshot](https://raw.githubusercontent.com/Wox-launcher/Wox/master/screenshots/poster.png)
 
 ## Highlights
 
@@ -24,17 +22,10 @@ It is a practical alternative to [Alfred](https://www.alfredapp.com/) and [Rayca
 
 | Platform | Method | Command or instructions |
 | --- | --- | --- |
-| macOS / Linux / Windows | Manual | Download the latest package from [Releases](https://github.com/Wox-launcher/Wox/releases) and run it directly |
-| macOS | Homebrew | `brew tap wox-launcher/wox && brew install wox` |
-| Arch Linux | AUR | `yay -S wox-bin` |
-
-## Default Shortcuts
-
-| Action | Shortcut |
-| --- | --- |
-| Open or hide Wox | <kbd>Alt</kbd>/<kbd>Command</kbd> + <kbd>Space</kbd> |
-| Show item actions | <kbd>Alt</kbd>/<kbd>Command</kbd> + <kbd>J</kbd> |
-| Close or go back | <kbd>Esc</kbd> |
+| macOS | Homebrew | `brew install --cask wox` |
+| Windows | Winget | `winget install -e --id Wox.Wox` |
+| Windows | Scoop | `scoop install extras/wox` |
+| macOS / Linux / Windows | Manual | Download the latest stable package from [Releases](https://github.com/Wox-launcher/Wox/releases) and run it directly |
 
 
 ## Documentation
@@ -48,6 +39,7 @@ It is a practical alternative to [Alfred](https://www.alfredapp.com/) and [Rayca
 Contributions are welcome through issues, discussions, and pull requests.
 
 - [Discussions](https://github.com/Wox-launcher/Wox/discussions)
+- [Reddit](https://www.reddit.com/r/WoxLauncher/)
 - [Issues](https://github.com/Wox-launcher/Wox/issues)
 - [Pull requests](https://github.com/Wox-launcher/Wox/pulls)
 

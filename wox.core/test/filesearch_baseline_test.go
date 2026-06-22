@@ -29,12 +29,14 @@ type fileSearchBaselineArtifact struct {
 	BaselineKind           string                     `json:"baseline_kind"`
 	SteadyStateCPUPercent  float64                    `json:"steady_state_cpu_percent"`
 	SteadyStateMemoryBytes uint64                     `json:"steady_state_memory_bytes"`
+	IndexSnapshotSummary   string                     `json:"index_snapshot_summary"`
+	IndexTopRootsSummary   string                     `json:"index_top_roots_summary"`
 	Queries                []fileSearchBaselineSample `json:"queries"`
 }
 
-func TestCaptureFileSearchMixedProviderBaseline(t *testing.T) {
+func TestCaptureFileSearchIndexedOnlyBaseline(t *testing.T) {
 	if os.Getenv("WOX_CAPTURE_FILESEARCH_BASELINE") != "1" {
-		t.Skip("set WOX_CAPTURE_FILESEARCH_BASELINE=1 to capture mixed-provider baseline")
+		t.Skip("set WOX_CAPTURE_FILESEARCH_BASELINE=1 to capture indexed-only baseline")
 	}
 
 	suite := NewTestSuite(t)
@@ -162,12 +164,18 @@ func TestCaptureFileSearchMixedProviderBaseline(t *testing.T) {
 	}
 
 	steadyStateCPU, steadyStateMemory := captureSteadyStateProcessUsage(t)
+	engine, err := getFileSearchEngine()
+	if err != nil {
+		t.Fatalf("get file search engine for baseline snapshot: %v", err)
+	}
 
 	artifact := fileSearchBaselineArtifact{
 		CapturedAt:             time.Now().UTC().Format(time.RFC3339),
-		BaselineKind:           "mixed-provider",
+		BaselineKind:           "indexed-only",
 		SteadyStateCPUPercent:  steadyStateCPU,
 		SteadyStateMemoryBytes: steadyStateMemory,
+		IndexSnapshotSummary:   engine.IndexSnapshotSummary(),
+		IndexTopRootsSummary:   engine.IndexTopRootsSummary(),
 		Queries:                samples,
 	}
 
@@ -178,7 +186,7 @@ func TestCaptureFileSearchMixedProviderBaseline(t *testing.T) {
 
 	outputPath := os.Getenv("WOX_FILESEARCH_BASELINE_PATH")
 	if outputPath == "" {
-		outputPath = filepath.Join("testdata", "filesearch_mixed_provider_baseline.json")
+		outputPath = filepath.Join("testdata", "filesearch_indexed_only_baseline.json")
 	}
 	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
 		t.Fatalf("create baseline artifact directory: %v", err)

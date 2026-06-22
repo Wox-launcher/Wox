@@ -1,4 +1,5 @@
 import 'package:wox/entity/wox_image.dart';
+import 'package:wox/entity/wox_glance.dart';
 
 class WoxSetting {
   late bool enableAutostart;
@@ -9,6 +10,10 @@ class WoxSetting {
   late bool usePinYin;
   late bool switchInputMethodABC;
   late bool hideOnStart;
+  // OnboardingFinished is carried in the normal settings model so the guide
+  // can persist skip/finish through the same key-value update path as other
+  // first-run choices.
+  late bool onboardingFinished;
   late bool hideOnLostFocus;
   late bool showTray;
   late String langCode;
@@ -18,18 +23,36 @@ class WoxSetting {
   late String launchMode;
   late String startPage;
   late String showPosition;
+  late bool isLinuxWaylandSession;
+  late bool isEvdevReadAvailable;
   late List<AIProvider> aiProviders;
   late int appWidth;
   late int maxResultCount;
+  // UiDensity is stored as a small enum so Flutter derives visual metrics
+  // locally while staying aligned with backend window-height estimates.
+  late String uiDensity;
   late String themeId;
   late String appFontFamily;
+  late bool enableQueryCompletionHint;
+  late bool enableGlance;
+  late GlanceRef primaryGlance;
+  late bool hideGlanceIcon;
   late bool httpProxyEnabled;
   late String httpProxyUrl;
   late bool enableAutoBackup;
   late bool enableAutoUpdate;
+  late String releaseChannel;
   late bool enableAnonymousUsageStats;
   late String customPythonPath;
   late String customNodejsPath;
+  late String cloudSyncServerUrl;
+  late List<String> cloudSyncDisabledPlugins;
+  late bool showScoreTail;
+  late bool showPerformanceTail;
+  late bool showPerformanceTailBatch;
+  late bool showPerformanceTailPluginQuery;
+  late bool showPerformanceTailBackendPrepared;
+  late bool showPerformanceTailUiReceived;
 
   WoxSetting({
     required this.enableAutostart,
@@ -40,6 +63,7 @@ class WoxSetting {
     required this.usePinYin,
     required this.switchInputMethodABC,
     required this.hideOnStart,
+    required this.onboardingFinished,
     required this.hideOnLostFocus,
     required this.showTray,
     required this.langCode,
@@ -49,18 +73,34 @@ class WoxSetting {
     required this.launchMode,
     required this.startPage,
     required this.showPosition,
+    required this.isLinuxWaylandSession,
+    required this.isEvdevReadAvailable,
     required this.aiProviders,
     required this.appWidth,
     required this.maxResultCount,
+    required this.uiDensity,
     required this.themeId,
     required this.appFontFamily,
+    required this.enableQueryCompletionHint,
+    required this.enableGlance,
+    required this.primaryGlance,
+    required this.hideGlanceIcon,
     required this.httpProxyEnabled,
     required this.httpProxyUrl,
     required this.enableAutoBackup,
     required this.enableAutoUpdate,
+    required this.releaseChannel,
     required this.enableAnonymousUsageStats,
     required this.customPythonPath,
     required this.customNodejsPath,
+    this.cloudSyncServerUrl = '',
+    required this.cloudSyncDisabledPlugins,
+    required this.showScoreTail,
+    required this.showPerformanceTail,
+    required this.showPerformanceTailBatch,
+    required this.showPerformanceTailPluginQuery,
+    required this.showPerformanceTailBackendPrepared,
+    required this.showPerformanceTailUiReceived,
   });
 
   WoxSetting.fromJson(Map<String, dynamic> json) {
@@ -79,6 +119,7 @@ class WoxSetting {
     usePinYin = json['UsePinYin'] ?? false;
     switchInputMethodABC = json['SwitchInputMethodABC'] ?? false;
     hideOnStart = json['HideOnStart'] ?? false;
+    onboardingFinished = json['OnboardingFinished'] ?? false;
     hideOnLostFocus = json['HideOnLostFocus'];
     showTray = json['ShowTray'] ?? false;
     langCode = json['LangCode'];
@@ -112,6 +153,8 @@ class WoxSetting {
 
     launchMode = json['LaunchMode'] ?? 'continue';
     startPage = json['StartPage'] ?? 'mru';
+    isLinuxWaylandSession = json['IsLinuxWaylandSession'] ?? false;
+    isEvdevReadAvailable = json['IsEvdevReadAvailable'] ?? false;
 
     if (json['AIProviders'] != null) {
       aiProviders = <AIProvider>[];
@@ -124,15 +167,33 @@ class WoxSetting {
 
     appWidth = json['AppWidth'];
     maxResultCount = json['MaxResultCount'];
+    uiDensity = json['UiDensity'] ?? 'normal';
     themeId = json['ThemeId'];
     appFontFamily = json['AppFontFamily'] ?? '';
+    enableQueryCompletionHint = json['EnableQueryCompletionHint'] ?? false;
+    enableGlance = json['EnableGlance'] ?? true;
+    primaryGlance = GlanceRef.fromJson(json['PrimaryGlance']);
+    hideGlanceIcon = json['HideGlanceIcon'] ?? false;
     httpProxyEnabled = json['HttpProxyEnabled'] ?? false;
     httpProxyUrl = json['HttpProxyUrl'] ?? '';
     enableAutoBackup = json['EnableAutoBackup'] ?? false;
     enableAutoUpdate = json['EnableAutoUpdate'] ?? true;
+    releaseChannel = json['ReleaseChannel'] ?? 'stable';
     enableAnonymousUsageStats = json['EnableAnonymousUsageStats'] ?? true;
     customPythonPath = json['CustomPythonPath'] ?? '';
     customNodejsPath = json['CustomNodejsPath'] ?? '';
+    cloudSyncServerUrl = json['CloudSyncServerUrl'] ?? '';
+    if (json['CloudSyncDisabledPlugins'] != null) {
+      cloudSyncDisabledPlugins = List<String>.from(json['CloudSyncDisabledPlugins']);
+    } else {
+      cloudSyncDisabledPlugins = <String>[];
+    }
+    showScoreTail = json['ShowScoreTail'] ?? false;
+    showPerformanceTail = json['ShowPerformanceTail'] ?? false;
+    showPerformanceTailBatch = json['ShowPerformanceTailBatch'] ?? true;
+    showPerformanceTailPluginQuery = json['ShowPerformanceTailPluginQuery'] ?? true;
+    showPerformanceTailBackendPrepared = json['ShowPerformanceTailBackendPrepared'] ?? true;
+    showPerformanceTailUiReceived = json['ShowPerformanceTailUiReceived'] ?? true;
   }
 
   Map<String, dynamic> toJson() {
@@ -145,6 +206,7 @@ class WoxSetting {
     data['UsePinYin'] = usePinYin;
     data['SwitchInputMethodABC'] = switchInputMethodABC;
     data['HideOnStart'] = hideOnStart;
+    data['OnboardingFinished'] = onboardingFinished;
     data['HideOnLostFocus'] = hideOnLostFocus;
     data['ShowTray'] = showTray;
     data['LangCode'] = langCode;
@@ -154,23 +216,41 @@ class WoxSetting {
     data['LaunchMode'] = launchMode;
     data['StartPage'] = startPage;
     data['ShowPosition'] = showPosition;
+    data['IsLinuxWaylandSession'] = isLinuxWaylandSession;
+    data['IsEvdevReadAvailable'] = isEvdevReadAvailable;
     data['AIProviders'] = aiProviders;
     data['AppWidth'] = appWidth;
     data['MaxResultCount'] = maxResultCount;
+    data['UiDensity'] = uiDensity;
     data['ThemeId'] = themeId;
     data['AppFontFamily'] = appFontFamily;
+    data['EnableQueryCompletionHint'] = enableQueryCompletionHint;
+    data['EnableGlance'] = enableGlance;
+    data['PrimaryGlance'] = primaryGlance.toJson();
+    data['HideGlanceIcon'] = hideGlanceIcon;
     data['HttpProxyEnabled'] = httpProxyEnabled;
     data['HttpProxyUrl'] = httpProxyUrl;
     data['EnableAutoBackup'] = enableAutoBackup;
     data['EnableAutoUpdate'] = enableAutoUpdate;
+    data['ReleaseChannel'] = releaseChannel;
     data['EnableAnonymousUsageStats'] = enableAnonymousUsageStats;
     data['CustomPythonPath'] = customPythonPath;
     data['CustomNodejsPath'] = customNodejsPath;
+    data['CloudSyncServerUrl'] = cloudSyncServerUrl;
+    data['CloudSyncDisabledPlugins'] = cloudSyncDisabledPlugins;
+    data['ShowScoreTail'] = showScoreTail;
+    data['ShowPerformanceTail'] = showPerformanceTail;
+    data['ShowPerformanceTailBatch'] = showPerformanceTailBatch;
+    data['ShowPerformanceTailPluginQuery'] = showPerformanceTailPluginQuery;
+    data['ShowPerformanceTailBackendPrepared'] = showPerformanceTailBackendPrepared;
+    data['ShowPerformanceTailUiReceived'] = showPerformanceTailUiReceived;
     return data;
   }
 }
 
 class QueryHotkey {
+  late String name;
+
   late String hotkey;
 
   late String query; // Support plugin.QueryVariable
@@ -185,6 +265,7 @@ class QueryHotkey {
   late bool disabled;
 
   QueryHotkey({
+    required this.name,
     required this.hotkey,
     required this.query,
     required this.isSilentExecution,
@@ -197,6 +278,7 @@ class QueryHotkey {
   });
 
   QueryHotkey.fromJson(Map<String, dynamic> json) {
+    name = json['Name']?.toString() ?? "";
     hotkey = json['Hotkey'];
     query = json['Query'];
     isSilentExecution = json['IsSilentExecution'] ?? false;
@@ -208,8 +290,11 @@ class QueryHotkey {
     disabled = json['Disabled'] ?? false;
   }
 
+  String get displayName => name.trim().isNotEmpty ? name.trim() : query;
+
   Map<String, dynamic> toJson() {
     final Map<String, dynamic> data = <String, dynamic>{};
+    data['Name'] = name;
     data['Hotkey'] = hotkey;
     data['Query'] = query;
     data['IsSilentExecution'] = isSilentExecution;
@@ -335,14 +420,23 @@ class TrayQuery {
 }
 
 class SettingWindowContext {
+  // Bug fix: keep tray-opened settings distinguishable from launcher-opened
+  // settings after the JSON bridge. Visibility can change during the transition,
+  // so the opener source is the stable signal for Escape exit behavior.
+  static const String sourceTray = 'tray';
+
   late String path;
   late String param;
+  // Source is optional for compatibility with older core messages; empty/default
+  // means the settings page should return to the launcher query UI.
+  late String source;
 
-  SettingWindowContext({required this.path, required this.param});
+  SettingWindowContext({required this.path, required this.param, this.source = ''});
 
   SettingWindowContext.fromJson(Map<String, dynamic> json) {
     path = json['Path'];
     param = json['Param'];
+    source = json['Source'] ?? '';
   }
 }
 

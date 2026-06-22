@@ -6,6 +6,7 @@ from typing import Any, Awaitable, Callable, Dict, Optional
 import websockets
 from wox_plugin import (
     AIModel,
+    PushAttentionRequest,
     ChangeQueryParam,
     ChatStreamCallback,
     Context,
@@ -13,13 +14,15 @@ from wox_plugin import (
     LogLevel,
     MetadataCommand,
     MRUData,
-    ToolbarMsg,
     PluginSettingDefinitionItem,
     PublicAPI,
     Query,
     RefreshQueryParam,
     Result,
     ResultActionType,
+    ScreenshotOption,
+    ScreenshotResult,
+    ToolbarMsg,
     UpdatableResult,
     WoxImage,
 )
@@ -94,6 +97,7 @@ class PluginAPI(PublicAPI):
             "queryType": query.query_type,
             "queryText": query.query_text,
             "querySelection": (query.query_selection.__dict__ if query.query_selection else None),
+            "queryContextData": json.dumps(query.context_data or {}),
         }
         await self.invoke_method(ctx, "ChangeQuery", params)
 
@@ -113,6 +117,10 @@ class PluginAPI(PublicAPI):
     async def notify(self, ctx: Context, message: str) -> None:
         """Show a notification message"""
         await self.invoke_method(ctx, "Notify", {"message": message})
+
+    async def push_attention(self, ctx: Context, request: PushAttentionRequest) -> None:
+        """Push a persistent attention item into Wox."""
+        await self.invoke_method(ctx, "PushAttention", {"request": request.to_json()})
 
     async def show_toolbar_msg(self, ctx: Context, msg: ToolbarMsg) -> None:
         from .plugin_manager import plugin_instances
@@ -352,4 +360,28 @@ class PluginAPI(PublicAPI):
                 "text": params.text,
                 "woxImage": (json.dumps(params.wox_image) if params.wox_image else ""),
             },
+        )
+
+    async def screenshot(self, ctx: Context, option: ScreenshotOption) -> ScreenshotResult:
+        """Start the built-in screenshot workflow."""
+        # The Python SDK exposes snake_case dataclass fields, while core accepts the public JSON
+        # option names. Serializing through to_dict keeps future screenshot fields explicit instead
+        # of silently dropping everything at the host boundary.
+        option_payload = option.to_dict() if hasattr(option, "to_dict") else {}
+        response = await self.invoke_method(
+            ctx,
+            "Screenshot",
+            {
+                # Keep options as one JSON object so future fields do not change the method signature.
+                "option": json.dumps(option_payload),
+            },
+        )
+
+        if not isinstance(response, dict):
+            return ScreenshotResult(success=False, errmsg="invalid screenshot response")
+
+        return ScreenshotResult(
+            success=bool(response.get("Success", False)),
+            screenshot_path=str(response.get("ScreenshotPath", "") or ""),
+            errmsg=str(response.get("ErrMsg", "") or ""),
         )

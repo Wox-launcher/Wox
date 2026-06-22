@@ -6,11 +6,13 @@ import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_loading_indicator.dart';
 import 'package:wox/components/wox_preview_top_status_bar.dart';
+import 'package:wox/components/wox_selectable_text.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/utils/color_util.dart';
+import 'package:wox/utils/wox_interface_size_util.dart';
 
 class WoxTerminalPreviewView extends StatefulWidget {
   final WoxPreview woxPreview;
@@ -63,6 +65,8 @@ class _WoxTerminalPreviewViewState extends State<WoxTerminalPreviewView> {
   List<_LocalMatch> localMatches = const [];
   int currentLocalMatchIndex = -1;
 
+  WoxInterfaceSizeMetrics get _metrics => WoxInterfaceSizeUtil.instance.current;
+
   @override
   void initState() {
     super.initState();
@@ -81,6 +85,16 @@ class _WoxTerminalPreviewViewState extends State<WoxTerminalPreviewView> {
     final nextSessionId = controller.getTerminalSessionId(widget.woxPreview);
     if (nextSessionId != sessionId) {
       bindSession();
+      return;
+    }
+
+    final nextCommand = controller.getTerminalCommand(widget.woxPreview);
+    final nextRunning = controller.getTerminalStatus(widget.woxPreview) == "running";
+    if (sessionId.isEmpty && (nextCommand != terminalCommand || nextRunning != sessionRunning)) {
+      setState(() {
+        terminalCommand = nextCommand;
+        sessionRunning = nextRunning;
+      });
     }
   }
 
@@ -105,7 +119,9 @@ class _WoxTerminalPreviewViewState extends State<WoxTerminalPreviewView> {
   void bindSession() {
     final traceId = const UuidV4().generate();
     final nextSessionId = controller.getTerminalSessionId(widget.woxPreview);
-    if (nextSessionId == sessionId) {
+    final nextCommand = controller.getTerminalCommand(widget.woxPreview);
+    final nextStatus = controller.getTerminalStatus(widget.woxPreview);
+    if (nextSessionId == sessionId && nextCommand == terminalCommand && (nextStatus == "running") == sessionRunning) {
       return;
     }
 
@@ -116,9 +132,8 @@ class _WoxTerminalPreviewViewState extends State<WoxTerminalPreviewView> {
     stateSubscription?.cancel();
 
     sessionId = nextSessionId;
-    terminalCommand = controller.getTerminalCommand(widget.woxPreview);
-    final status = controller.getTerminalStatus(widget.woxPreview);
-    sessionRunning = status == "running";
+    terminalCommand = nextCommand;
+    sessionRunning = nextStatus == "running";
     terminalText = "";
     baseCursor = 0;
     currentCursor = 0;
@@ -451,10 +466,10 @@ class _WoxTerminalPreviewViewState extends State<WoxTerminalPreviewView> {
         spans.add(TextSpan(text: terminalText.substring(cursor)));
       }
 
-      return SelectableText.rich(TextSpan(style: TextStyle(color: fontColor), children: spans));
+      return WoxSelectableText.rich(TextSpan(style: TextStyle(color: fontColor, fontSize: _metrics.resultSubtitleFontSize), children: spans));
     }
 
-    return SelectableText(terminalText, style: TextStyle(color: safeFromCssColor(widget.woxTheme.previewFontColor)));
+    return WoxSelectableText(terminalText, style: TextStyle(color: safeFromCssColor(widget.woxTheme.previewFontColor), fontSize: _metrics.resultSubtitleFontSize));
   }
 
   Widget buildSearchBar() {
@@ -463,13 +478,13 @@ class _WoxTerminalPreviewViewState extends State<WoxTerminalPreviewView> {
     }
 
     final fontColor = safeFromCssColor(widget.woxTheme.previewFontColor);
-    final backgroundColor = safeFromCssColor(widget.woxTheme.queryBoxBackgroundColor).withValues(alpha: 0.5);
+    final backgroundColor = fontColor.withValues(alpha: 0.035);
     final borderColor = safeFromCssColor(widget.woxTheme.previewSplitLineColor);
     final countText = localMatches.isEmpty ? "0/0" : "${currentLocalMatchIndex + 1}/${localMatches.length}";
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      margin: EdgeInsets.only(bottom: _metrics.scaledSpacing(8)),
+      padding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(10), vertical: _metrics.scaledSpacing(8)),
       decoration: BoxDecoration(color: backgroundColor, borderRadius: BorderRadius.circular(8), border: Border.all(color: borderColor, width: 1)),
       child: Row(
         children: [
@@ -507,7 +522,7 @@ class _WoxTerminalPreviewViewState extends State<WoxTerminalPreviewView> {
               child: TextField(
                 controller: searchController,
                 focusNode: searchFocusNode,
-                style: TextStyle(color: fontColor),
+                style: TextStyle(color: fontColor, fontSize: _metrics.resultSubtitleFontSize),
                 textInputAction: TextInputAction.search,
                 cursorColor: safeFromCssColor(widget.woxTheme.queryBoxCursorColor),
                 onChanged: (_) {
@@ -521,7 +536,9 @@ class _WoxTerminalPreviewViewState extends State<WoxTerminalPreviewView> {
                 },
                 decoration: InputDecoration(
                   isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  // Terminal preview search is part of the launcher preview
+                  // surface, so its text and tap target follow interface density.
+                  contentPadding: EdgeInsets.symmetric(horizontal: _metrics.scaledSpacing(10), vertical: _metrics.scaledSpacing(8)),
                   filled: true,
                   fillColor: safeFromCssColor(widget.woxTheme.appBackgroundColor).withValues(alpha: 0.2),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: borderColor)),
@@ -531,10 +548,10 @@ class _WoxTerminalPreviewViewState extends State<WoxTerminalPreviewView> {
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          Text(countText, style: TextStyle(color: fontColor.withValues(alpha: 0.85), fontSize: 12, fontWeight: FontWeight.w500)),
-          IconButton(onPressed: () => searchNext(backward: true), icon: const Icon(Icons.keyboard_arrow_up), color: fontColor.withValues(alpha: 0.9)),
-          IconButton(onPressed: () => searchNext(backward: false), icon: const Icon(Icons.keyboard_arrow_down), color: fontColor.withValues(alpha: 0.9)),
+          SizedBox(width: _metrics.scaledSpacing(8)),
+          Text(countText, style: TextStyle(color: fontColor.withValues(alpha: 0.85), fontSize: _metrics.smallLabelFontSize, fontWeight: FontWeight.w500)),
+          IconButton(onPressed: () => searchNext(backward: true), icon: Icon(Icons.keyboard_arrow_up, size: _metrics.toolbarIconSize), color: fontColor.withValues(alpha: 0.9)),
+          IconButton(onPressed: () => searchNext(backward: false), icon: Icon(Icons.keyboard_arrow_down, size: _metrics.toolbarIconSize), color: fontColor.withValues(alpha: 0.9)),
           IconButton(
             onPressed: () {
               setState(() {
@@ -542,9 +559,12 @@ class _WoxTerminalPreviewViewState extends State<WoxTerminalPreviewView> {
                 rebuildSearchMatches(preserveCurrent: false);
               });
             },
-            icon: Text("Aa", style: TextStyle(color: fontColor.withValues(alpha: 0.9), fontWeight: caseSensitive ? FontWeight.bold : FontWeight.normal)),
+            icon: Text(
+              "Aa",
+              style: TextStyle(color: fontColor.withValues(alpha: 0.9), fontSize: _metrics.smallLabelFontSize, fontWeight: caseSensitive ? FontWeight.bold : FontWeight.normal),
+            ),
           ),
-          IconButton(onPressed: () => closeSearchBar(focusQueryBox: false), icon: const Icon(Icons.close), color: fontColor.withValues(alpha: 0.9)),
+          IconButton(onPressed: () => closeSearchBar(focusQueryBox: false), icon: Icon(Icons.close, size: _metrics.toolbarIconSize), color: fontColor.withValues(alpha: 0.9)),
         ],
       ),
     );
@@ -559,9 +579,14 @@ class _WoxTerminalPreviewViewState extends State<WoxTerminalPreviewView> {
       final isFullscreen = controller.isPreviewFullscreen.value;
       return WoxPreviewTopStatusBar(
         woxTheme: widget.woxTheme,
-        leading: Container(width: 8, height: 8, decoration: BoxDecoration(color: statusDotColor, shape: BoxShape.circle)),
-        title: Text(commandText, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: fontColor, fontSize: 16, fontWeight: FontWeight.w600, height: 1.1)),
-        trailing: loadingHistory ? WoxLoadingIndicator(size: 12, color: fontColor.withValues(alpha: 0.8)) : null,
+        leading: Container(width: _metrics.scaledSpacing(8), height: _metrics.scaledSpacing(8), decoration: BoxDecoration(color: statusDotColor, shape: BoxShape.circle)),
+        title: Text(
+          commandText,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(color: fontColor, fontSize: _metrics.actionHeaderFontSize, fontWeight: FontWeight.w600, height: 1.1),
+        ),
+        trailing: loadingHistory ? WoxLoadingIndicator(size: _metrics.scaledSpacing(12), color: fontColor.withValues(alpha: 0.8)) : null,
         actions: [
           WoxPreviewTopStatusBarAction(tooltip: getSearchHotkeyTooltip(), onPressed: openSearchBar, icon: const Icon(Icons.search)),
           WoxPreviewTopStatusBarAction(

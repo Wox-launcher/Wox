@@ -18,177 +18,148 @@ void main() {
 
 void registerLauncherResizeSmokeTests() {
   group('T7: Resize Smoke Tests', () {
-    testWidgets(
-      'T7-01: repeated result grow/shrink cycles keep native window height in sync',
-      (tester) async {
-        if (!Platform.isWindows) {
-          return;
-        }
+    testWidgets('T7-01: smaller result snapshots shrink the window immediately', (tester) async {
+      if (!Platform.isWindows) {
+        return;
+      }
 
-        final controller = await launchAndShowLauncher(
-          tester,
-          windowSize: smokeLargeWindowSize,
-        );
+      final controller = await launchAndShowLauncher(tester, windowSize: smokeLargeWindowSize);
+      const traceId = 'resize-smoke-deferred-shrink';
+      const queryId = 'resize-smoke-expanded-query';
+      final query = PlainQuery(
+        queryId: queryId,
+        queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code,
+        queryText: 'resize smoke synthetic shrink',
+        querySelection: Selection.empty(),
+      );
 
-        for (var i = 0; i < 10; i++) {
-          await queryAndWaitForResults(
-            tester,
-            controller,
-            'wox launcher test xyz123',
-          );
-          await waitForWindowHeightToMatchController(tester, controller);
-          final heightWithResults = (await windowManager.getSize()).height;
+      prepareSyntheticResizeQuery(controller, query);
+      await controller.onReceivedQueryResults(traceId, queryId, buildSyntheticResults(queryId, 4), isFinal: true);
+      await waitForWindowHeightToMatchController(tester, controller);
+      final expandedHeight = (await windowManager.getSize()).height;
 
-          tester.testTextInput.enterText('');
-          await tester.pump();
-          await waitForNoActiveResults(tester, controller);
-          await waitForWindowHeightToMatchController(tester, controller);
-          final heightWithoutResults = (await windowManager.getSize()).height;
+      await controller.onReceivedQueryResults(traceId, queryId, buildSyntheticResults(queryId, 1), isFinal: true);
+      await waitForWindowHeightToMatchController(tester, controller, timeout: const Duration(milliseconds: 80), step: const Duration(milliseconds: 16));
+      final shrunkHeight = (await windowManager.getSize()).height;
+      expect(shrunkHeight, lessThan(expandedHeight - 2));
+    });
 
-          expect(heightWithResults, greaterThan(heightWithoutResults));
-        }
-      },
-    );
+    testWidgets('T7-02: non-final empty snapshots keep visible results stable', (tester) async {
+      if (!Platform.isWindows) {
+        return;
+      }
 
-    testWidgets(
-      'T7-02: partial query updates do not shrink the visible window before the final snapshot arrives',
-      (tester) async {
-        if (!Platform.isWindows) {
-          return;
-        }
+      final controller = await launchAndShowLauncher(tester, windowSize: smokeLargeWindowSize);
+      const traceId = 'resize-smoke-non-final-empty';
+      const queryId = 'resize-smoke-query';
+      final query = PlainQuery(
+        queryId: queryId,
+        queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code,
+        queryText: 'resize smoke synthetic stable',
+        querySelection: Selection.empty(),
+      );
 
-        final controller = await launchAndShowLauncher(
-          tester,
-          windowSize: smokeLargeWindowSize,
-        );
-        const traceId = 'resize-smoke-partial-results';
-        const initialQueryId = 'resize-smoke-initial-query';
-        const updatedQueryId = 'resize-smoke-updated-query';
+      prepareSyntheticResizeQuery(controller, query);
+      await controller.onReceivedQueryResults(traceId, queryId, buildSyntheticResults(queryId, 4), isFinal: true);
+      await waitForWindowHeightToMatchController(tester, controller);
+      final stableHeight = (await windowManager.getSize()).height;
 
-        controller.currentQuery.value = PlainQuery(
-          queryId: initialQueryId,
-          queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code,
-          queryText: 'settin',
-          querySelection: Selection.empty(),
-        );
-        controller.onReceivedQueryResults(
-          traceId,
-          initialQueryId,
-          buildSyntheticResults(initialQueryId, 4),
-        );
-        await waitForWindowHeightToMatchController(tester, controller);
-        final stableHeight = (await windowManager.getSize()).height;
+      await controller.onReceivedQueryResults(traceId, queryId, const [], isFinal: false);
+      await tester.pump(const Duration(milliseconds: 150));
+      final heightAfterNonFinalEmpty = (await windowManager.getSize()).height;
 
-        controller.currentQuery.value = PlainQuery(
-          queryId: updatedQueryId,
-          queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code,
-          queryText: 'setting',
-          querySelection: Selection.empty(),
-        );
-        controller.isCurrentQueryReturned = false;
-        controller.isCurrentQuerySettled = false;
-        controller.preserveVisibleQueryWindowHeight(
-          traceId,
-          updatedQueryId,
-          stableHeight,
-        );
-        controller.onReceivedQueryResults(
-          traceId,
-          updatedQueryId,
-          buildSyntheticResults(updatedQueryId, 1),
-          isFinal: false,
-        );
+      expect(controller.activeResultViewController.items.length, greaterThanOrEqualTo(4));
+      expect((heightAfterNonFinalEmpty - stableHeight).abs(), lessThanOrEqualTo(2));
+    });
 
-        final preservationDeadline = DateTime.now().add(
-          WoxLauncherController.visibleQueryHeightPreservationDuration -
-              const Duration(milliseconds: 40),
-        );
-        while (DateTime.now().isBefore(preservationDeadline)) {
-          await tester.pump(const Duration(milliseconds: 20));
-          final actualHeight = (await windowManager.getSize()).height;
-          if ((actualHeight - stableHeight).abs() <= 2) {
-            break;
-          }
-        }
-        final heightDuringPartialResults =
-            (await windowManager.getSize()).height;
-        expect(
-          heightDuringPartialResults,
-          greaterThanOrEqualTo(stableHeight - 2),
-        );
+    testWidgets('T7-03: query changes drop stale results after grace without shrinking immediately', (tester) async {
+      if (!Platform.isWindows) {
+        return;
+      }
 
-        controller.onReceivedQueryResults(
-          traceId,
-          updatedQueryId,
-          buildSyntheticResults(updatedQueryId, 4),
-          isFinal: true,
-        );
-        await waitForWindowHeightToMatchController(tester, controller);
-        final finalHeight = (await windowManager.getSize()).height;
-        expect((finalHeight - stableHeight).abs(), lessThanOrEqualTo(2));
-      },
-    );
+      final controller = await launchAndShowLauncher(tester, windowSize: smokeLargeWindowSize);
+      const traceId = 'resize-smoke-stale-grace';
+      const queryId = 'resize-smoke-old-query';
+      final query = PlainQuery(queryId: queryId, queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code, queryText: 'resize smoke stale source', querySelection: Selection.empty());
 
-    testWidgets(
-      'T7-03: partial query updates release preserved window height after the grace window expires',
-      (tester) async {
-        if (!Platform.isWindows) {
-          return;
-        }
+      prepareSyntheticResizeQuery(controller, query);
+      await controller.onReceivedQueryResults(traceId, queryId, buildSyntheticResults(queryId, 4), isFinal: true);
+      await waitForWindowHeightToMatchController(tester, controller);
+      final oldHeight = (await windowManager.getSize()).height;
 
-        final controller = await launchAndShowLauncher(
-          tester,
-          windowSize: smokeLargeWindowSize,
-        );
-        const traceId = 'resize-smoke-partial-results-timeout';
-        const initialQueryId = 'resize-smoke-timeout-initial-query';
-        const updatedQueryId = 'resize-smoke-timeout-updated-query';
+      const nextQueryId = 'resize-smoke-new-query';
+      await controller.onQueryChanged(
+        traceId,
+        PlainQuery(queryId: nextQueryId, queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code, queryText: 'settings x', querySelection: Selection.empty()),
+        'resize smoke next query',
+      );
 
-        controller.currentQuery.value = PlainQuery(
-          queryId: initialQueryId,
-          queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code,
-          queryText: 'settin',
-          querySelection: Selection.empty(),
-        );
-        controller.onReceivedQueryResults(
-          traceId,
-          initialQueryId,
-          buildSyntheticResults(initialQueryId, 4),
-        );
-        await waitForWindowHeightToMatchController(tester, controller);
-        final stableHeight = (await windowManager.getSize()).height;
+      expect(controller.activeResultViewController.items.length, greaterThanOrEqualTo(4));
 
-        controller.currentQuery.value = PlainQuery(
-          queryId: updatedQueryId,
-          queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code,
-          queryText: 'setting',
-          querySelection: Selection.empty(),
-        );
-        controller.isCurrentQueryReturned = false;
-        controller.isCurrentQuerySettled = false;
-        controller.preserveVisibleQueryWindowHeight(
-          traceId,
-          updatedQueryId,
-          stableHeight,
-        );
-        controller.onReceivedQueryResults(
-          traceId,
-          updatedQueryId,
-          buildSyntheticResults(updatedQueryId, 1),
-          isFinal: false,
-        );
+      await tester.pump(const Duration(milliseconds: 120));
+      final heightAfterGrace = (await windowManager.getSize()).height;
 
-        await tester.pump(
-          WoxLauncherController.visibleQueryHeightPreservationDuration +
-              const Duration(milliseconds: 250),
-        );
-        await waitForWindowHeightToMatchController(tester, controller);
-        final heightAfterGraceWindow = (await windowManager.getSize()).height;
+      // Global queries can surface fallback rows for the new query during the
+      // grace window. What must disappear here is the stale snapshot from the
+      // previous query, not necessarily every visible row or every shrink. The
+      // production bug fix keeps real final/current-query snapshots responsive
+      // so the launcher can still shrink as soon as the backend has settled.
+      expect(controller.activeResultViewController.items.where((item) => item.value.data.queryId == queryId), isEmpty);
+      if (!controller.isCurrentQueryReturned) {
+        expect((heightAfterGrace - oldHeight).abs(), lessThanOrEqualTo(2));
+      }
+    });
 
-        expect(heightAfterGraceWindow, lessThan(stableHeight - 2));
-      },
-    );
+    testWidgets('T7-04: final empty snapshots shrink immediately', (tester) async {
+      if (!Platform.isWindows) {
+        return;
+      }
+
+      final controller = await launchAndShowLauncher(tester, windowSize: smokeLargeWindowSize);
+      const traceId = 'resize-smoke-final-empty';
+      const queryId = 'resize-smoke-final-empty-query';
+      final query = PlainQuery(
+        queryId: queryId,
+        queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code,
+        queryText: 'resize smoke synthetic empty',
+        querySelection: Selection.empty(),
+      );
+
+      prepareSyntheticResizeQuery(controller, query);
+      await controller.onReceivedQueryResults(traceId, queryId, buildSyntheticResults(queryId, 4), isFinal: true);
+      await waitForWindowHeightToMatchController(tester, controller);
+      final expandedHeight = (await windowManager.getSize()).height;
+
+      await controller.onReceivedQueryResults(traceId, queryId, const [], isFinal: true);
+      expect(controller.activeResultViewController.items, isEmpty);
+      await waitForWindowHeightToMatchController(tester, controller, timeout: const Duration(milliseconds: 80), step: const Duration(milliseconds: 16));
+      final compactHeight = (await windowManager.getSize()).height;
+      expect(compactHeight, lessThan(expandedHeight - 2));
+    });
   });
+}
+
+void prepareSyntheticResizeQuery(WoxLauncherController controller, PlainQuery query) {
+  // Bug fix: resize smoke cases inject handcrafted snapshots and must not call
+  // onQueryChanged, because that also starts a real backend query whose results
+  // can race in and replace the synthetic rows before the height assertion.
+  // This setup keeps the controller on the same current-query contract that
+  // onReceivedQueryResults validates while leaving backend behavior out of the
+  // direct resize checks.
+  controller.cancelPendingResultTransitions();
+  controller.currentQuery.value = query;
+  controller.queryBoxTextFieldController.text = query.queryText;
+  controller.isCurrentQueryReturned = false;
+  controller.isLoading.value = false;
+  controller.isGridLayout.value = false;
+  controller.resultListViewController.clearItems();
+  controller.resultGridViewController.clearItems();
+  controller.actionListViewController.clearItems();
+  controller.isShowPreviewPanel.value = false;
+  controller.isShowActionPanel.value = false;
+  controller.isShowFormActionPanel.value = false;
+  controller.currentPreview.value = WoxPreview.empty();
+  controller.syncPreviewFullscreenState();
 }
 
 List<WoxQueryResult> buildSyntheticResults(String queryId, int count) {

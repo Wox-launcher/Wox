@@ -7,7 +7,7 @@ import (
 )
 
 type PluginSettingValueNewLine struct {
-	Style PluginSettingValueStyle
+	Style PluginSettingValueStyle `json:"-"` // Deprecated: ignored on load so Wox keeps setting layouts consistent.
 }
 
 func (p *PluginSettingValueNewLine) GetPluginSettingType() PluginSettingDefinitionType {

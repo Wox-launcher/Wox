@@ -10,7 +10,7 @@ type PluginSettingValueLabel struct {
 	Content           string
 	Tooltip           string
 	ReserveLabelSpace bool
-	Style             PluginSettingValueStyle
+	Style             PluginSettingValueStyle `json:"-"` // Deprecated: ignored on load so Wox keeps setting layouts consistent.
 }
 
 func (p *PluginSettingValueLabel) GetPluginSettingType() PluginSettingDefinitionType {

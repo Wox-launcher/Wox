@@ -17,6 +17,12 @@ type Reconciler struct {
 	snapshot *SnapshotBuilder
 }
 
+type ReconcileProgress struct {
+	Stage   ReplaceEntriesStage
+	Current int64
+	Total   int64
+}
+
 func NewReconciler(db *FileSearchDB, policy *policyState) *Reconciler {
 	return newReconciler(db, NewSnapshotBuilder(policy))
 }
@@ -33,6 +39,10 @@ func newReconciler(db *FileSearchDB, snapshot *SnapshotBuilder) *Reconciler {
 }
 
 func (r *Reconciler) Reconcile(ctx context.Context, batch ReconcileBatch) (ReconcileResult, error) {
+	return r.ReconcileWithProgress(ctx, batch, nil)
+}
+
+func (r *Reconciler) ReconcileWithProgress(ctx context.Context, batch ReconcileBatch, onProgress func(ReconcileProgress)) (ReconcileResult, error) {
 	result := ReconcileResult{
 		RootID: batch.RootID,
 		Mode:   batch.Mode,
@@ -47,6 +57,35 @@ func (r *Reconciler) Reconcile(ctx context.Context, batch ReconcileBatch) (Recon
 	}
 
 	switch batch.Mode {
+	case ReconcileModeDirectDelta:
+		util.GetLogger().Debug(ctx, fmt.Sprintf(
+			"filesearch reconcile direct delta started: root=%s paths=%d",
+			root.ID,
+			len(batch.DirectDeltas),
+		))
+		// Feature addition: callers that still use the legacy Reconciler API can
+		// apply exact file deltas without widening them into subtree snapshots.
+		// This keeps the old entry point behavior aligned with the planned-run
+		// executor while preserving the same root state update semantics.
+		if err := r.db.ApplyDirectDeltaJob(ctx, *root, Job{
+			Kind:         JobKindDirectDelta,
+			RootID:       root.ID,
+			ScopePath:    root.Path,
+			DirectDeltas: batch.DirectDeltas,
+		}, r.snapshot.policy); err != nil {
+			return result, err
+		}
+		if len(batch.DirectDeltas) > 0 {
+			now := util.GetSystemTimestamp()
+			root.LastReconcileAt = now
+			root.FeedState = nextFeedStateAfterSuccessfulReconcile(*root)
+			root.UpdatedAt = now
+			if err := r.db.UpdateRootState(ctx, *root); err != nil {
+				return result, err
+			}
+		}
+		result.ReloadNeeded = len(batch.DirectDeltas) > 0
+		return result, nil
 	case ReconcileModeRoot:
 		util.GetLogger().Debug(ctx, fmt.Sprintf(
 			"filesearch reconcile snapshot build started: root=%s mode=%s scope=%s",
@@ -66,7 +105,20 @@ func (r *Reconciler) Reconcile(ctx context.Context, batch ReconcileBatch) (Recon
 			len(snapshot.Directories),
 			len(snapshot.Entries),
 		))
-		if err := r.db.ReplaceRootSnapshot(ctx, *root, snapshot.Directories, snapshot.Entries, nil); err != nil {
+		// Root reconcile used to hide all SQLite work behind a generic "syncing"
+		// label, so the toolbar looked stuck even while ReplaceRootSnapshot was
+		// writing hundreds of thousands of rows. Forward the DB progress so the UI
+		// can switch from indeterminate syncing to real write progress.
+		if err := r.db.ReplaceRootSnapshot(ctx, *root, snapshot.Directories, snapshot.Entries, func(progress ReplaceEntriesProgress) {
+			if onProgress == nil {
+				return
+			}
+			onProgress(ReconcileProgress{
+				Stage:   progress.Stage,
+				Current: progress.Current,
+				Total:   progress.Total,
+			})
+		}); err != nil {
 			return result, err
 		}
 		now := util.GetSystemTimestamp()

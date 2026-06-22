@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	"image/draw"
@@ -16,12 +17,14 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 	"wox/common"
 	"wox/plugin"
 	"wox/plugin/system"
 	"wox/setting/definition"
 	"wox/util"
 	"wox/util/clipboard"
+	"wox/util/ocr"
 	"wox/util/shell"
 
 	"github.com/cdfmlr/ellipsis"
@@ -35,10 +38,20 @@ var isKeepTextHistorySettingKey = "is_keep_text_history"
 var textHistoryDaysSettingKey = "text_history_days"
 var isKeepImageHistorySettingKey = "is_keep_image_history"
 var imageHistoryDaysSettingKey = "image_history_days"
+var clipboardImageTextRecognitionSettingKey = "image_text_recognition_enabled"
 var primaryActionSettingKey = "primary_action"
 var primaryActionValueCopy = "copy"
 var primaryActionValuePaste = "paste"
 var favoritesSettingKey = "favorites"
+
+const (
+	clipboardTypeRefinementKey   = "clipboard_type"
+	clipboardTypeRefinementAll   = "all"
+	clipboardTypeRefinementFile  = "file"
+	clipboardTypeRefinementText  = "text"
+	clipboardTypeRefinementImage = "image"
+	clipboardTypeRefinementLink  = "link"
+)
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &ClipboardPlugin{
@@ -55,18 +68,20 @@ type ImageCacheEntry struct {
 
 // FavoriteClipboardItem represents a favorite clipboard item stored in settings
 type FavoriteClipboardItem struct {
-	ID        string  `json:"id"`
-	Type      string  `json:"type"`
-	Content   string  `json:"content"`
-	FilePath  string  `json:"filePath,omitempty"`
-	ImageHash *string `json:"imageHash,omitempty"`
-	IconData  *string `json:"iconData,omitempty"`
-	Width     *int    `json:"width,omitempty"`
-	Height    *int    `json:"height,omitempty"`
-	FileSize  *int64  `json:"fileSize,omitempty"`
-	Alias     *string `json:"alias,omitempty"`
-	Timestamp int64   `json:"timestamp"`
-	CreatedAt int64   `json:"createdAt"`
+	ID        string   `json:"id"`
+	Type      string   `json:"type"`
+	Content   string   `json:"content"`
+	FilePath  string   `json:"filePath,omitempty"`
+	FilePaths []string `json:"filePaths,omitempty"`
+	ImageHash *string  `json:"imageHash,omitempty"`
+	IconData  *string  `json:"iconData,omitempty"`
+	Width     *int     `json:"width,omitempty"`
+	Height    *int     `json:"height,omitempty"`
+	FileSize  *int64   `json:"fileSize,omitempty"`
+	Alias     *string  `json:"alias,omitempty"`
+	OCRText   *string  `json:"ocrText,omitempty"`
+	Timestamp int64    `json:"timestamp"`
+	CreatedAt int64    `json:"createdAt"`
 }
 
 // ClipboardDBInterface defines the interface for clipboard database operations
@@ -76,9 +91,12 @@ type ClipboardDBInterface interface {
 	UpdateTimestamp(ctx context.Context, id string, timestamp int64) error
 	UpdateContent(ctx context.Context, id string, content string) error
 	UpdateAlias(ctx context.Context, id string, alias *string) error
+	UpdateOCRText(ctx context.Context, id string, ocrText *string) error
 	Delete(ctx context.Context, id string) error
 	GetRecent(ctx context.Context, limit, offset int) ([]ClipboardRecord, error)
+	GetRecentByType(ctx context.Context, recordType string, limit, offset int) ([]ClipboardRecord, error)
 	SearchText(ctx context.Context, searchTerm string, limit int) ([]ClipboardRecord, error)
+	SearchByType(ctx context.Context, searchTerm string, recordType string, limit int) ([]ClipboardRecord, error)
 	GetByID(ctx context.Context, id string) (*ClipboardRecord, error)
 	DeleteExpired(ctx context.Context, textDays, imageDays int) (int64, error)
 	EnforceMaxCount(ctx context.Context, maxCount int) (int64, error)
@@ -140,9 +158,6 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 					Key:          isKeepTextHistorySettingKey,
 					Label:        "i18n:plugin_clipboard_enable_text_history",
 					DefaultValue: "true",
-					Style: definition.PluginSettingValueStyle{
-						PaddingRight: 10,
-					},
 				},
 			},
 			{
@@ -152,9 +167,6 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 					Label:        "i18n:plugin_clipboard_keep_text_history",
 					Suffix:       "i18n:plugin_clipboard_days",
 					DefaultValue: "90",
-					Style: definition.PluginSettingValueStyle{
-						Width: 50,
-					},
 				},
 			},
 			{
@@ -163,9 +175,6 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 					Key:          isKeepImageHistorySettingKey,
 					Label:        "i18n:plugin_clipboard_enable_image_history",
 					DefaultValue: "true",
-					Style: definition.PluginSettingValueStyle{
-						PaddingRight: 10,
-					},
 				},
 			},
 			{
@@ -175,9 +184,15 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 					Label:        "i18n:plugin_clipboard_keep_image_history",
 					Suffix:       "i18n:plugin_clipboard_days",
 					DefaultValue: "3",
-					Style: definition.PluginSettingValueStyle{
-						Width: 50,
-					},
+				},
+			},
+			{
+				Type: definition.PluginSettingDefinitionTypeCheckBox,
+				Value: &definition.PluginSettingValueCheckBox{
+					Key:          clipboardImageTextRecognitionSettingKey,
+					Label:        "i18n:plugin_clipboard_image_text_recognition",
+					Tooltip:      "i18n:plugin_clipboard_image_text_recognition_tooltip",
+					DefaultValue: "true",
 				},
 			},
 			{
@@ -231,14 +246,16 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 
 		if data.GetType() == clipboard.ClipboardTypeFile {
 			fileData := data.(*clipboard.FilePathData)
-			imageDataList := c.getImageDataListFromFilePaths(ctx, fileData.FilePaths)
-			if len(imageDataList) == 0 {
+			if c.shouldTreatFileClipboardAsImages(fileData.FilePaths) {
+				imageDataList := c.getImageDataListFromFilePaths(ctx, fileData.FilePaths)
+				if len(imageDataList) == 0 {
+					return
+				}
+				for _, imageData := range imageDataList {
+					c.processClipboardData(ctx, imageData)
+				}
 				return
 			}
-			for _, imageData := range imageDataList {
-				c.processClipboardData(ctx, imageData)
-			}
-			return
 		}
 
 		c.processClipboardData(ctx, data)
@@ -246,6 +263,7 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 }
 
 func (c *ClipboardPlugin) processClipboardData(ctx context.Context, data clipboard.Data) {
+	var fileSignature string
 	var imageHash string
 	if data.GetType() == clipboard.ClipboardTypeImage {
 		imageData := data.(*clipboard.ImageData)
@@ -266,8 +284,18 @@ func (c *ClipboardPlugin) processClipboardData(ctx context.Context, data clipboa
 	if data.GetType() == clipboard.ClipboardTypeText && !c.isKeepTextHistory(ctx) {
 		return
 	}
+	if data.GetType() == clipboard.ClipboardTypeFile && !c.isKeepTextHistory(ctx) {
+		return
+	}
 	if data.GetType() == clipboard.ClipboardTypeImage && !c.isKeepImageHistory(ctx) {
 		return
+	}
+	if data.GetType() == clipboard.ClipboardTypeFile {
+		fileData := data.(*clipboard.FilePathData)
+		if len(fileData.FilePaths) == 0 {
+			return
+		}
+		fileSignature = c.calculateFileListHash(fileData.FilePaths)
 	}
 
 	// Validate text data
@@ -279,7 +307,7 @@ func (c *ClipboardPlugin) processClipboardData(ctx context.Context, data clipboa
 	}
 
 	// Check for duplicate content by querying the most recent record
-	if c.isDuplicateContent(ctx, data, imageHash) {
+	if c.isDuplicateContent(ctx, data, imageHash, fileSignature) {
 		c.api.Log(ctx, plugin.LogLevelInfo, "duplicate clipboard content, skipping")
 		return
 	}
@@ -351,12 +379,23 @@ func (c *ClipboardPlugin) processClipboardData(ctx context.Context, data clipboa
 				Icon:    common.NewWoxImageAbsolutePath(imageIconFile),
 			}
 		}
+	} else if data.GetType() == clipboard.ClipboardTypeFile {
+		fileData := data.(*clipboard.FilePathData)
+		record.FilePaths = append([]string(nil), fileData.FilePaths...)
+		record.Content = c.buildClipboardFileRecordContent(fileData.FilePaths)
 	}
 
 	// Insert into database (non-favorite items only)
 	if err := c.db.Insert(ctx, record); err != nil {
 		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to insert clipboard record: %s", err.Error()))
 		return
+	}
+
+	if data.GetType() == clipboard.ClipboardTypeImage && c.isImageTextRecognitionEnabled(ctx) {
+		// Feature addition: clipboard image OCR is intentionally independent
+		// from screenshot OCR sidecars. The clipboard plugin owns its own index
+		// field because cb queries search clipboard records, not screenshot files.
+		c.scheduleClipboardImageTextRecognition(ctx, record.ID, record.FilePath)
 	}
 
 	// Enforce max count limit
@@ -369,12 +408,160 @@ func (c *ClipboardPlugin) processClipboardData(ctx context.Context, data clipboa
 	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("saved clipboard %s to database", data.GetType()))
 }
 
-func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+func (c *ClipboardPlugin) newClipboardQueryResponse(results []plugin.QueryResult) plugin.QueryResponse {
+	response := plugin.NewQueryResponse(results)
+	response.Refinements = []plugin.QueryRefinement{c.buildClipboardTypeRefinement()}
+	return response
+}
+
+func (c *ClipboardPlugin) buildClipboardTypeRefinement() plugin.QueryRefinement {
+	// Feature addition: clipboard now exposes type filtering through the common
+	// QueryRefinement channel instead of adding another plugin-specific command.
+	// The values stay simple strings because the UI only owns selection state;
+	// the plugin owns the filtering semantics.
+	return plugin.QueryRefinement{
+		Id:           clipboardTypeRefinementKey,
+		Title:        "i18n:plugin_clipboard_refinement_type",
+		Type:         plugin.QueryRefinementTypeSingleSelect,
+		DefaultValue: []string{clipboardTypeRefinementAll},
+		Hotkey:       clipboardTypeRefinementHotkey(),
+		Persist:      false,
+		Options: []plugin.QueryRefinementOption{
+			{Value: clipboardTypeRefinementAll, Title: "i18n:plugin_clipboard_refinement_type_all"},
+			{Value: clipboardTypeRefinementText, Title: "i18n:plugin_clipboard_refinement_type_text"},
+			{Value: clipboardTypeRefinementFile, Title: "i18n:plugin_clipboard_refinement_type_file"},
+			{Value: clipboardTypeRefinementImage, Title: "i18n:plugin_clipboard_refinement_type_image"},
+			{Value: clipboardTypeRefinementLink, Title: "i18n:plugin_clipboard_refinement_type_link"},
+		},
+	}
+}
+
+func clipboardTypeRefinementHotkey() string {
+	return util.PrimaryHotkey("t")
+}
+
+func (c *ClipboardPlugin) getSelectedClipboardType(query plugin.Query) string {
+	selectedType := query.Refinements[clipboardTypeRefinementKey]
+	if selectedType == "" {
+		return clipboardTypeRefinementAll
+	}
+
+	switch selectedType {
+	case clipboardTypeRefinementText:
+		return string(clipboard.ClipboardTypeText)
+	case clipboardTypeRefinementFile:
+		return string(clipboard.ClipboardTypeFile)
+	case clipboardTypeRefinementImage:
+		return string(clipboard.ClipboardTypeImage)
+	case clipboardTypeRefinementLink:
+		return clipboardTypeRefinementLink
+	default:
+		return clipboardTypeRefinementAll
+	}
+}
+
+func clipboardRecordMatchesType(recordType string, content string, selectedType string) bool {
+	// Feature addition: Link is a derived clipboard text subtype, not a stored
+	// database type. Keeping the check here lets favorites, recents, and search
+	// results share the same filter without changing persisted records.
+	if selectedType == clipboardTypeRefinementLink {
+		return recordType == string(clipboard.ClipboardTypeText) && util.IsUrl(content)
+	}
+	return selectedType == clipboardTypeRefinementAll || recordType == selectedType
+}
+
+func clipboardFavoriteMatchesSearch(ctx context.Context, favoriteItem FavoriteClipboardItem, search string, selectedType string) bool {
+	if !clipboardRecordMatchesType(favoriteItem.Type, favoriteItem.Content, selectedType) {
+		return false
+	}
+
+	// Preserve the historical "All" search behavior: it searched text history
+	// only. Image search becomes available only when the Image refinement is
+	// explicitly selected, which avoids surprising broad matches on metadata.
+	if selectedType == clipboardTypeRefinementAll && favoriteItem.Type != string(clipboard.ClipboardTypeText) {
+		return false
+	}
+
+	if clipboardSearchCandidateMatches(ctx, favoriteItem.Content, search) {
+		return true
+	}
+	if favoriteItem.Alias != nil && clipboardSearchCandidateMatches(ctx, *favoriteItem.Alias, search) {
+		return true
+	}
+	if favoriteItem.OCRText != nil && selectedType == string(clipboard.ClipboardTypeImage) && clipboardSearchCandidateMatches(ctx, *favoriteItem.OCRText, search) {
+		return true
+	}
+	if favoriteItem.Type == string(clipboard.ClipboardTypeFile) && clipboardFilePathsMatchSearch(ctx, clipboardFavoriteFilePaths(favoriteItem), search) {
+		return true
+	}
+
+	return false
+}
+
+func clipboardRecordMatchesSearch(ctx context.Context, record ClipboardRecord, search string, selectedType string) bool {
+	if !clipboardRecordMatchesType(record.Type, record.Content, selectedType) {
+		return false
+	}
+
+	// Preserve the historical "All" search behavior: it searched text history
+	// only. Image OCR search stays tied to the Image refinement so broad global
+	// clipboard searches do not unexpectedly surface screenshots.
+	if selectedType == clipboardTypeRefinementAll && record.Type != string(clipboard.ClipboardTypeText) {
+		return false
+	}
+
+	if clipboardSearchCandidateMatches(ctx, record.Content, search) {
+		return true
+	}
+	if record.Alias != nil && clipboardSearchCandidateMatches(ctx, *record.Alias, search) {
+		return true
+	}
+	if record.OCRText != nil && selectedType == string(clipboard.ClipboardTypeImage) && clipboardSearchCandidateMatches(ctx, *record.OCRText, search) {
+		return true
+	}
+	if record.Type == string(clipboard.ClipboardTypeFile) && clipboardFilePathsMatchSearch(ctx, clipboardRecordFilePaths(record), search) {
+		return true
+	}
+
+	return false
+}
+
+func clipboardSearchCandidateMatches(ctx context.Context, candidate string, search string) bool {
+	search = strings.TrimSpace(search)
+	if search == "" {
+		return true
+	}
+	if strings.TrimSpace(candidate) == "" {
+		return false
+	}
+
+	// Feature fix: clipboard OCR text participates in the same fuzzy matcher as
+	// other Wox results. This keeps pinyin search controlled by the global
+	// UsePinYin setting instead of using SQLite LIKE or plain substring checks.
+	matched, _ := plugin.IsStringMatchScore(ctx, candidate, search)
+	return matched
+}
+
+func clipboardFilePathsMatchSearch(ctx context.Context, filePaths []string, search string) bool {
+	for _, filePath := range filePaths {
+		if clipboardSearchCandidateMatches(ctx, filepath.Base(filePath), search) {
+			return true
+		}
+		if clipboardSearchCandidateMatches(ctx, filePath, search) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	var results []plugin.QueryResult
+	selectedType := c.getSelectedClipboardType(query)
 
 	if c.db == nil {
 		c.api.Log(ctx, plugin.LogLevelError, "database not initialized")
-		return results
+		return c.newClipboardQueryResponse(results)
 	}
 
 	if query.Command == "fav" {
@@ -382,74 +569,132 @@ func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 		favorites, err := c.getFavoriteItems(ctx)
 		if err != nil {
 			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to get favorites: %s", err.Error()))
-			return results
+			return c.newClipboardQueryResponse(results)
 		}
 
 		for _, favoriteItem := range favorites {
+			if !clipboardRecordMatchesType(favoriteItem.Type, favoriteItem.Content, selectedType) {
+				continue
+			}
 			record := c.convertFavoriteToRecord(favoriteItem)
 			results = append(results, c.convertRecordToResult(ctx, record, query))
 		}
-		return results
+		return c.newClipboardQueryResponse(results)
 	}
 
 	if query.Search == "" {
-		// Get favorites first from settings
-		favorites, err := c.getFavoriteItems(ctx)
-		if err != nil {
-			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to get favorites: %s", err.Error()))
-		} else {
-			for _, favoriteItem := range favorites {
-				record := c.convertFavoriteToRecord(favoriteItem)
-				results = append(results, c.convertRecordToResult(ctx, record, query))
+		if selectedType == clipboardTypeRefinementAll {
+			// The default clipboard view keeps favorites first. Explicit type
+			// refinements should narrow history instead of jumping to the
+			// high-score Favorites group; users can still use "cb fav" for that.
+			favorites, err := c.getFavoriteItems(ctx)
+			if err != nil {
+				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to get favorites: %s", err.Error()))
+			} else {
+				for _, favoriteItem := range favorites {
+					if !clipboardRecordMatchesType(favoriteItem.Type, favoriteItem.Content, selectedType) {
+						continue
+					}
+					record := c.convertFavoriteToRecord(favoriteItem)
+					results = append(results, c.convertRecordToResult(ctx, record, query))
+				}
 			}
 		}
 
 		// Get recent non-favorite records from database
-		recent, err := c.db.GetRecent(ctx, 50, 0)
-		if err != nil {
-			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to get recent records: %s", err.Error()))
+		var recent []ClipboardRecord
+		var recentErr error
+		if selectedType == clipboardTypeRefinementAll {
+			recent, recentErr = c.db.GetRecent(ctx, 50, 0)
+		} else if selectedType == clipboardTypeRefinementLink {
+			// Link refinement is derived from text records, so query text history
+			// first and then apply the shared URL rule in memory.
+			recent, recentErr = c.db.GetRecentByType(ctx, string(clipboard.ClipboardTypeText), 50, 0)
+		} else {
+			recent, recentErr = c.db.GetRecentByType(ctx, selectedType, 50, 0)
+		}
+		if recentErr != nil {
+			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to get recent records: %s", recentErr.Error()))
 		} else {
 			for _, record := range recent {
+				if !clipboardRecordMatchesType(record.Type, record.Content, selectedType) {
+					continue
+				}
 				// All records in database are non-favorite now
 				results = append(results, c.convertRecordToResult(ctx, record, query))
 			}
 		}
 
-		return results
+		return c.newClipboardQueryResponse(results)
 	}
 
-	// Search in text content
+	// Search historical content. The default All path keeps the old text-only
+	// behavior, while explicit type refinements narrow the search to that type.
 	var allResults []ClipboardRecord
 
 	// Search in favorites from settings
 	favorites, err := c.getFavoriteItems(ctx)
 	if err == nil {
 		for _, favoriteItem := range favorites {
-			if favoriteItem.Type == string(clipboard.ClipboardTypeText) &&
-				strings.Contains(strings.ToLower(favoriteItem.Content), strings.ToLower(query.Search)) {
+			if clipboardFavoriteMatchesSearch(ctx, favoriteItem, query.Search, selectedType) {
 				record := c.convertFavoriteToRecord(favoriteItem)
 				allResults = append(allResults, record)
 			}
 		}
 	}
 
-	// Search in database records
-	searchResults, err := c.db.SearchText(ctx, query.Search, 100)
+	// Search in database records. The old SQL LIKE path could only match raw
+	// text, so pinyin queries never reached Chinese OCR text. Fetch typed
+	// history candidates and apply the same plugin matcher used elsewhere.
+	searchResults, err := c.searchClipboardRecords(ctx, query.Search, selectedType, 100)
 	if err != nil {
-		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to search text: %s", err.Error()))
+		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to search clipboard records: %s", err.Error()))
 	} else {
 		allResults = append(allResults, searchResults...)
 	}
 
 	for _, record := range allResults {
+		if !clipboardRecordMatchesType(record.Type, record.Content, selectedType) {
+			continue
+		}
 		results = append(results, c.convertRecordToResult(ctx, record, query))
 	}
 
-	return results
+	return c.newClipboardQueryResponse(results)
+}
+
+func (c *ClipboardPlugin) searchClipboardRecords(ctx context.Context, search string, selectedType string, limit int) ([]ClipboardRecord, error) {
+	scanLimit := c.maxHistoryCount
+	if scanLimit <= 0 {
+		scanLimit = 5000
+	}
+
+	var records []ClipboardRecord
+	var err error
+	if selectedType == clipboardTypeRefinementAll || selectedType == clipboardTypeRefinementLink {
+		records, err = c.db.GetRecentByType(ctx, string(clipboard.ClipboardTypeText), scanLimit, 0)
+	} else {
+		records, err = c.db.GetRecentByType(ctx, selectedType, scanLimit, 0)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]ClipboardRecord, 0, limit)
+	for _, record := range records {
+		if !clipboardRecordMatchesSearch(ctx, record, search, selectedType) {
+			continue
+		}
+		results = append(results, record)
+		if limit > 0 && len(results) >= limit {
+			break
+		}
+	}
+	return results, nil
 }
 
 // isDuplicateContent checks if the content is duplicate by comparing with the most recent record
-func (c *ClipboardPlugin) isDuplicateContent(ctx context.Context, data clipboard.Data, imageHash string) bool {
+func (c *ClipboardPlugin) isDuplicateContent(ctx context.Context, data clipboard.Data, imageHash string, fileSignature string) bool {
 	// Check most recent record from database
 	recent, err := c.db.GetRecent(ctx, 1, 0)
 	var lastRecord *ClipboardRecord
@@ -508,6 +753,13 @@ func (c *ClipboardPlugin) isDuplicateContent(ctx context.Context, data clipboard
 		}
 	}
 
+	if data.GetType() == clipboard.ClipboardTypeFile {
+		if fileSignature != "" && c.calculateFileListHash(mostRecentRecord.FilePaths) == fileSignature {
+			c.updateRecordTimestamp(ctx, mostRecentRecord, util.GetSystemTimestamp())
+			return true
+		}
+	}
+
 	return false
 }
 
@@ -544,6 +796,52 @@ func (c *ClipboardPlugin) shortHashString(hash string) string {
 func (c *ClipboardPlugin) shortHashBytes(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:6])
+}
+
+func (c *ClipboardPlugin) calculateFileListHash(filePaths []string) string {
+	if len(filePaths) == 0 {
+		return ""
+	}
+
+	normalizedPaths := make([]string, 0, len(filePaths))
+	for _, filePath := range filePaths {
+		trimmed := strings.TrimSpace(filePath)
+		if trimmed == "" {
+			continue
+		}
+		normalizedPaths = append(normalizedPaths, filepath.Clean(trimmed))
+	}
+	if len(normalizedPaths) == 0 {
+		return ""
+	}
+
+	joinedPaths := strings.Join(normalizedPaths, "\n")
+	sum := sha256.Sum256([]byte(joinedPaths))
+	return hex.EncodeToString(sum[:])
+}
+
+func (c *ClipboardPlugin) shouldTreatFileClipboardAsImages(filePaths []string) bool {
+	// Preserve the old image-history behavior only for one copied image file.
+	// Multiple copied images should stay grouped as one file-list clipboard item.
+	if len(filePaths) != 1 {
+		return false
+	}
+
+	return c.isImageFilePath(filePaths[0])
+}
+
+func (c *ClipboardPlugin) buildClipboardFileRecordContent(filePaths []string) string {
+	if len(filePaths) == 0 {
+		return ""
+	}
+
+	firstPath := filepath.Clean(filePaths[0])
+	firstName := filepath.Base(firstPath)
+	if len(filePaths) == 1 {
+		return firstName
+	}
+
+	return fmt.Sprintf("%s (+%d)", firstName, len(filePaths)-1)
 }
 
 func resolveClipboardDirectoryPath(content string) string {
@@ -593,6 +891,8 @@ func resolveClipboardDirectoryPath(content string) string {
 func (c *ClipboardPlugin) convertRecordToResult(ctx context.Context, record ClipboardRecord, query plugin.Query) plugin.QueryResult {
 	if record.Type == string(clipboard.ClipboardTypeText) {
 		return c.convertTextRecord(ctx, record, query)
+	} else if record.Type == string(clipboard.ClipboardTypeFile) {
+		return c.convertFileRecord(ctx, record, query)
 	} else if record.Type == string(clipboard.ClipboardTypeImage) {
 		return c.convertImageRecord(ctx, record, query)
 	}
@@ -602,10 +902,304 @@ func (c *ClipboardPlugin) convertRecordToResult(ctx context.Context, record Clip
 	}
 }
 
+func clipboardRecordFilePaths(record ClipboardRecord) []string {
+	if len(record.FilePaths) > 0 {
+		return record.FilePaths
+	}
+	if record.Type == string(clipboard.ClipboardTypeFile) && strings.TrimSpace(record.FilePath) != "" {
+		return []string{record.FilePath}
+	}
+	return nil
+}
+
+func clipboardFavoriteFilePaths(item FavoriteClipboardItem) []string {
+	if len(item.FilePaths) > 0 {
+		return item.FilePaths
+	}
+	if item.Type == string(clipboard.ClipboardTypeFile) && strings.TrimSpace(item.FilePath) != "" {
+		return []string{item.FilePath}
+	}
+	return nil
+}
+
+// convertFileRecord converts a file list record to a query result.
+func (c *ClipboardPlugin) convertFileRecord(ctx context.Context, record ClipboardRecord, query plugin.Query) plugin.QueryResult {
+	filePaths := clipboardRecordFilePaths(record)
+	primaryActionCode := c.api.GetSetting(ctx, primaryActionSettingKey)
+	group, groupScore := c.getResultGroup(ctx, record)
+
+	title := record.Content
+	if record.Alias != nil && *record.Alias != "" {
+		title = *record.Alias
+	}
+	if strings.TrimSpace(title) == "" {
+		title = c.buildClipboardFileRecordContent(filePaths)
+	}
+
+	icon := c.resolveClipboardFileRecordIcon(filePaths)
+	tails := c.buildClipboardFileRecordTails(filePaths)
+
+	actions := []plugin.QueryResultAction{
+		{
+			Name:      "i18n:plugin_clipboard_primary_action_copy_to_clipboard",
+			Icon:      common.CopyIcon,
+			IsDefault: primaryActionValueCopy == primaryActionCode,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				c.moveRecordToTop(ctx, record.ID)
+				if err := clipboard.Write(&clipboard.FilePathData{FilePaths: append([]string(nil), filePaths...)}); err != nil {
+					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to restore file clipboard record: id=%s err=%s", record.ID, err.Error()))
+				}
+			},
+		},
+	}
+
+	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("active window info: name=%s, pid=%d", query.Env.ActiveWindowTitle, query.Env.ActiveWindowPid))
+	pasteToActiveWindowAction, pasteToActiveWindowErr := system.GetPasteToActiveWindowAction(ctx, c.api, query.Env.ActiveWindowTitle, query.Env.ActiveWindowPid, query.Env.ActiveWindowIcon, func() {
+		c.moveRecordToTop(ctx, record.ID)
+		if err := clipboard.Write(&clipboard.FilePathData{FilePaths: append([]string(nil), filePaths...)}); err != nil {
+			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to restore file clipboard record before paste: id=%s err=%s", record.ID, err.Error()))
+		}
+	})
+	if pasteToActiveWindowErr == nil {
+		actions = append(actions, pasteToActiveWindowAction)
+	}
+
+	if len(filePaths) == 1 {
+		singlePath := filePaths[0]
+		actions = append(actions, plugin.QueryResultAction{
+			Name: "i18n:plugin_clipboard_open_path",
+			Icon: common.OpenIcon,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				c.moveRecordToTop(ctx, record.ID)
+				if err := shell.Open(singlePath); err != nil {
+					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open clipboard file path: id=%s path=%s err=%s", record.ID, singlePath, err.Error()))
+				}
+			},
+		})
+
+		if !util.IsDirExists(singlePath) {
+			actions = append(actions, plugin.QueryResultAction{
+				Name: "i18n:selection_open_containing_folder",
+				Icon: common.OpenContainingFolderIcon,
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					c.moveRecordToTop(ctx, record.ID)
+					if err := shell.OpenFileInFolder(singlePath); err != nil {
+						c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open clipboard file in folder: id=%s path=%s err=%s", record.ID, singlePath, err.Error()))
+					}
+				},
+			})
+		}
+	}
+
+	if !record.IsFavorite {
+		actions = append(actions, plugin.QueryResultAction{
+			Name:                   "i18n:plugin_clipboard_mark_favorite",
+			Icon:                   common.PinIcon,
+			PreventHideAfterAction: true,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				if err := c.markAsFavorite(ctx, record); err != nil {
+					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to set favorite: %s", err.Error()))
+				} else {
+					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("marked record as favorite: %s", record.ID))
+					c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
+				}
+			},
+		})
+	} else {
+		actions = append(actions, plugin.QueryResultAction{
+			Name:                   "i18n:plugin_clipboard_cancel_favorite",
+			Icon:                   common.UnpinIcon,
+			PreventHideAfterAction: true,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				if err := c.cancelFavorite(ctx, record.ID); err != nil {
+					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to cancel favorite: %s", err.Error()))
+				} else {
+					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("cancelled record favorite: %s", record.ID))
+					c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
+				}
+			},
+		})
+	}
+
+	aliasDefaultValue := ""
+	if record.Alias != nil {
+		aliasDefaultValue = *record.Alias
+	}
+	actions = append(actions, plugin.QueryResultAction{
+		Name:                   "i18n:plugin_clipboard_edit_alias",
+		Icon:                   common.EditIcon,
+		Type:                   plugin.QueryResultActionTypeForm,
+		PreventHideAfterAction: true,
+		Form: definition.PluginSettingDefinitions{
+			{
+				Type: definition.PluginSettingDefinitionTypeTextBox,
+				Value: &definition.PluginSettingValueTextBox{
+					Key:          "alias",
+					Label:        "i18n:plugin_clipboard_edit_alias_label",
+					DefaultValue: aliasDefaultValue,
+					Tooltip:      "i18n:plugin_clipboard_edit_alias_hint",
+				},
+			},
+		},
+		OnSubmit: func(ctx context.Context, actionContext plugin.FormActionContext) {
+			raw := actionContext.Values["alias"]
+			var aliasPtr *string
+			if raw != "" {
+				aliasPtr = &raw
+			}
+
+			isUpdateSuccess := false
+			if record.IsFavorite {
+				if err := c.updateFavoriteAlias(ctx, record.ID, aliasPtr); err != nil {
+					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to update favorite alias: %s", err.Error()))
+					c.api.Notify(ctx, "Failed to update favorite alias: "+err.Error())
+				} else {
+					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("updated favorite record alias: %s", record.ID))
+					isUpdateSuccess = true
+				}
+			} else {
+				if err := c.db.UpdateAlias(ctx, record.ID, aliasPtr); err != nil {
+					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to update alias: %s", err.Error()))
+					c.api.Notify(ctx, "Failed to update clipboard alias: "+err.Error())
+				} else {
+					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("updated clipboard record alias: %s", record.ID))
+					isUpdateSuccess = true
+				}
+			}
+
+			if isUpdateSuccess {
+				c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
+			}
+		},
+	})
+
+	actions = append(actions, plugin.QueryResultAction{
+		Name:                   "i18n:plugin_clipboard_delete",
+		Icon:                   common.TrashIcon,
+		PreventHideAfterAction: true,
+		Hotkey:                 util.PrimaryHotkey("d"),
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			if err := c.deleteRecord(ctx, record); err != nil {
+				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to delete record: %s", err.Error()))
+				return
+			}
+			c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("deleted clipboard record: %s", record.ID))
+			c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
+		},
+	})
+
+	return plugin.QueryResult{
+		Title:      title,
+		Icon:       icon,
+		Group:      group,
+		GroupScore: groupScore,
+		Preview:    c.buildClipboardFilePreview(ctx, filePaths, record.Timestamp),
+		Score:      record.Timestamp,
+		Tails:      tails,
+		Actions:    actions,
+		DragData: &plugin.QueryResultDragData{
+			Type:  plugin.QueryResultDragDataTypeFiles,
+			Files: append([]string(nil), filePaths...),
+		},
+	}
+}
+
+func (c *ClipboardPlugin) resolveClipboardFileRecordIcon(filePaths []string) common.WoxImage {
+	if len(filePaths) == 0 {
+		return common.PluginFileIcon
+	}
+
+	if len(filePaths) > 1 {
+		return common.MultipleFileStackIcon
+	}
+
+	singlePath := strings.TrimSpace(filePaths[0])
+	if singlePath == "" {
+		return common.PluginFileIcon
+	}
+	if util.IsDirExists(singlePath) {
+		return common.FolderIcon
+	}
+
+	return common.NewWoxImageFileIcon(singlePath)
+}
+
+func (c *ClipboardPlugin) buildClipboardFileRecordTails(filePaths []string) []plugin.QueryResultTail {
+	if len(filePaths) <= 1 {
+		return nil
+	}
+
+	return []plugin.QueryResultTail{plugin.NewQueryResultTailText(strconv.Itoa(len(filePaths)))}
+}
+
+func (c *ClipboardPlugin) buildClipboardFilePreview(ctx context.Context, filePaths []string, timestamp int64) plugin.WoxPreview {
+	previewTags := []plugin.WoxPreviewTag{
+		{Label: util.FormatTimestamp(timestamp), Tooltip: "i18n:plugin_clipboard_copy_date"},
+		{Label: fmt.Sprintf(c.api.GetTranslation(ctx, "selection_files_count_value"), len(filePaths)), Tooltip: "i18n:selection_files_count"},
+	}
+
+	if len(filePaths) == 1 {
+		singlePath := filePaths[0]
+		if util.IsFileExists(singlePath) && !util.IsDirExists(singlePath) {
+			previewTags = append(previewTags,
+				plugin.WoxPreviewTag{Label: util.GetFileCreatedAt(singlePath), Tooltip: "i18n:selection_created_at"},
+				plugin.WoxPreviewTag{Label: util.GetFileModifiedAt(singlePath), Tooltip: "i18n:selection_modified_at"},
+				plugin.WoxPreviewTag{Label: util.GetFileSize(singlePath), Tooltip: "i18n:selection_size"},
+			)
+			return plugin.WoxPreview{
+				PreviewType: plugin.WoxPreviewTypeFile,
+				PreviewData: singlePath,
+				PreviewTags: previewTags,
+			}
+		}
+	}
+
+	items := make([]plugin.WoxPreviewListItem, 0, len(filePaths))
+	for _, filePath := range filePaths {
+		icon := common.NewWoxImageFileIcon(filePath)
+		extension := strings.TrimPrefix(filepath.Ext(filePath), ".")
+		typeLabel := strings.ToUpper(extension)
+		if util.IsDirExists(filePath) {
+			icon = common.FolderIcon
+			typeLabel = "DIR"
+		}
+		if typeLabel == "" {
+			typeLabel = "FILE"
+		}
+
+		items = append(items, plugin.WoxPreviewListItem{
+			Icon:     &icon,
+			Title:    filepath.Base(filePath),
+			Subtitle: filepath.Dir(filePath),
+			Tails:    []plugin.QueryResultTail{plugin.NewQueryResultTailText(typeLabel)},
+		})
+	}
+
+	previewJSON, err := json.Marshal(plugin.WoxPreviewListData{Items: items})
+	if err != nil {
+		c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to marshal clipboard file preview: %s", err.Error()))
+		return plugin.WoxPreview{
+			PreviewType: plugin.WoxPreviewTypeText,
+			PreviewData: strings.Join(filePaths, "\n"),
+			PreviewTags: previewTags,
+		}
+	}
+
+	return plugin.WoxPreview{
+		PreviewType: plugin.WoxPreviewTypeList,
+		PreviewData: string(previewJSON),
+		PreviewTags: previewTags,
+	}
+}
+
 // convertTextRecord converts a text record to a query result
 func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record ClipboardRecord, query plugin.Query) plugin.QueryResult {
 	primaryActionCode := c.api.GetSetting(ctx, primaryActionSettingKey)
 	openDirectoryPath := resolveClipboardDirectoryPath(record.Content)
+	normalizedLink := ""
+	if util.IsUrl(record.Content) {
+		normalizedLink = util.NormalizeUrl(record.Content)
+	}
 
 	actions := []plugin.QueryResultAction{
 		{
@@ -631,6 +1225,19 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 	})
 	if pasteToActiveWindowErr == nil {
 		actions = append(actions, pasteToActiveWindowAction)
+	}
+
+	if normalizedLink != "" {
+		actions = append(actions, plugin.QueryResultAction{
+			Name: "i18n:plugin_clipboard_open_link",
+			Icon: common.OpenIcon,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				c.moveRecordToTop(ctx, record.ID)
+				if err := shell.Open(normalizedLink); err != nil {
+					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open clipboard link: id=%s url=%s err=%s", record.ID, normalizedLink, err.Error()))
+				}
+			},
+		})
 	}
 
 	if openDirectoryPath != "" {
@@ -681,7 +1288,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 		Name:                   "i18n:plugin_clipboard_delete",
 		Icon:                   common.TrashIcon,
 		PreventHideAfterAction: true,
-		Hotkey:                 "Ctrl+D",
+		Hotkey:                 util.PrimaryHotkey("d"),
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			if err := c.deleteRecord(ctx, record); err != nil {
 				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to delete record: %s", err.Error()))
@@ -816,17 +1423,30 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 		title = strings.TrimSpace(ellipsis.Centering(record.Content, 80))
 	}
 
+	previewType := plugin.WoxPreviewTypeText
+	previewData := record.Content
+	if normalizedLink != "" {
+		// Feature addition: link clipboard entries use Markdown preview so the
+		// existing Flutter markdown renderer can expose a clickable URL without
+		// adding a clipboard-specific preview surface.
+		previewType = plugin.WoxPreviewTypeMarkdown
+		previewData = formatClipboardLinkMarkdown(record.Content, normalizedLink)
+	}
+
 	return plugin.QueryResult{
 		Title:      title,
 		Icon:       icon,
 		Group:      group,
 		GroupScore: groupScore,
 		Preview: plugin.WoxPreview{
-			PreviewType: plugin.WoxPreviewTypeText,
-			PreviewData: record.Content,
-			PreviewProperties: map[string]string{
-				"i18n:plugin_clipboard_copy_date":       util.FormatTimestamp(record.Timestamp),
-				"i18n:plugin_clipboard_copy_characters": fmt.Sprintf("%d", len(record.Content)),
+			PreviewType: previewType,
+			PreviewData: previewData,
+			PreviewTags: []plugin.WoxPreviewTag{
+				{Label: util.FormatTimestamp(record.Timestamp), Tooltip: "i18n:plugin_clipboard_copy_date"},
+				// Preview pills show values only, so the character unit belongs in
+				// the value. Keep that unit localized instead of hard-coding a
+				// Chinese suffix into English and other languages.
+				{Label: fmt.Sprintf(c.api.GetTranslation(ctx, "plugin_clipboard_copy_characters_value"), utf8.RuneCountInString(record.Content)), Tooltip: "i18n:plugin_clipboard_copy_characters"},
 			},
 		},
 
@@ -835,25 +1455,46 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 	}
 }
 
+func formatClipboardLinkMarkdown(rawContent string, normalizedLink string) string {
+	displayText := strings.TrimSpace(rawContent)
+	return fmt.Sprintf("[%s](%s)", escapeClipboardMarkdownLinkText(displayText), escapeClipboardMarkdownLinkDestination(normalizedLink))
+}
+
+func escapeClipboardMarkdownLinkText(text string) string {
+	replacer := strings.NewReplacer(`\`, `\\`, `[`, `\[`, `]`, `\]`)
+	return replacer.Replace(text)
+}
+
+func escapeClipboardMarkdownLinkDestination(link string) string {
+	replacer := strings.NewReplacer(" ", "%20", "(", "%28", ")", "%29")
+	return replacer.Replace(link)
+}
+
 // convertImageRecord converts an image record to a query result
 func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record ClipboardRecord, query plugin.Query) plugin.QueryResult {
 	previewWoxImage, iconWoxImage := c.generateImagePreviewAndIcon(ctx, record)
+	overlayWoxImage := common.NewWoxImageAbsolutePath(record.FilePath)
 
 	group, groupScore := c.getResultGroup(ctx, record)
 
-	// Build preview properties with available information
-	previewProperties := map[string]string{
-		"i18n:plugin_clipboard_copy_date": util.FormatTimestamp(record.Timestamp),
+	previewTags := []plugin.WoxPreviewTag{
+		{Label: util.FormatTimestamp(record.Timestamp), Tooltip: "i18n:plugin_clipboard_copy_date"},
 	}
 
-	if record.Width != nil {
-		previewProperties["i18n:plugin_clipboard_image_width"] = fmt.Sprintf("%d", *record.Width)
-	}
-	if record.Height != nil {
-		previewProperties["i18n:plugin_clipboard_image_height"] = fmt.Sprintf("%d", *record.Height)
+	if record.Width != nil && record.Height != nil {
+		// Width and height now share one value because the preview shell only
+		// shows metadata values by default. Keeping dimensions together saves
+		// pill space while preserving the exact image size in the tooltip.
+		previewTags = append(previewTags, plugin.WoxPreviewTag{Label: fmt.Sprintf("%dx%d", *record.Width, *record.Height), Tooltip: "i18n:plugin_clipboard_image_dimensions"})
 	}
 	if record.FileSize != nil {
-		previewProperties["i18n:plugin_clipboard_image_size"] = c.formatFileSize(*record.FileSize)
+		previewTags = append(previewTags, plugin.WoxPreviewTag{Label: c.formatFileSize(*record.FileSize), Tooltip: "i18n:plugin_clipboard_image_size"})
+	}
+	if record.OCRText != nil && strings.TrimSpace(*record.OCRText) != "" {
+		// Feature addition: OCR uses an explicit tag so the visible footer says
+		// "OCR" while the tooltip carries the full recognized text. Legacy
+		// PreviewProperties would show a truncated value as the tag label.
+		previewTags = append(previewTags, plugin.WoxPreviewTag{Label: "OCR", Tooltip: strings.TrimSpace(*record.OCRText)})
 	}
 
 	return plugin.QueryResult{
@@ -862,11 +1503,18 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 		Group:      group,
 		GroupScore: groupScore,
 		Preview: plugin.WoxPreview{
-			PreviewType:       plugin.WoxPreviewTypeImage,
-			PreviewData:       previewWoxImage.String(),
-			PreviewProperties: previewProperties,
+			PreviewType: plugin.WoxPreviewTypeImage,
+			PreviewData: previewWoxImage.String(),
+			// Keep the inline preview on the cached thumbnail for query performance, but route
+			// click-to-enlarge through the original PNG so the native overlay shows the real image.
+			PreviewOverlayData: overlayWoxImage.String(),
+			PreviewTags:        previewTags,
 		},
 		Score: record.Timestamp,
+		DragData: &plugin.QueryResultDragData{
+			Type:  plugin.QueryResultDragDataTypeFiles,
+			Files: []string{record.FilePath},
+		},
 		Actions: []plugin.QueryResultAction{
 			{
 				Name: "i18n:plugin_clipboard_primary_action_copy_to_clipboard",
@@ -942,7 +1590,7 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 				Name:                   "i18n:plugin_clipboard_delete",
 				Icon:                   common.TrashIcon,
 				PreventHideAfterAction: true,
-				Hotkey:                 "Ctrl+D",
+				Hotkey:                 util.PrimaryHotkey("d"),
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					if err := c.deleteRecord(ctx, record); err != nil {
 						c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to delete record: %s", err.Error()))
@@ -976,6 +1624,10 @@ func (c *ClipboardPlugin) deleteRecord(ctx context.Context, record ClipboardReco
 
 // deleteRecordAssets removes image file, preview/icon caches, and memory cache for a record
 func (c *ClipboardPlugin) deleteRecordAssets(ctx context.Context, record ClipboardRecord) {
+	if record.Type != string(clipboard.ClipboardTypeImage) {
+		return
+	}
+
 	// Remove original image file if any
 	if record.FilePath != "" && util.IsFileExists(record.FilePath) {
 		if err := os.Remove(record.FilePath); err != nil {
@@ -1195,6 +1847,48 @@ func (c *ClipboardPlugin) isKeepTextHistory(ctx context.Context) bool {
 // isKeepImageHistory checks if image history should be kept
 func (c *ClipboardPlugin) isKeepImageHistory(ctx context.Context) bool {
 	return c.api.GetSetting(ctx, isKeepImageHistorySettingKey) == "true"
+}
+
+// isImageTextRecognitionEnabled checks whether clipboard images should be OCR-indexed.
+func (c *ClipboardPlugin) isImageTextRecognitionEnabled(ctx context.Context) bool {
+	return c.api.GetSetting(ctx, clipboardImageTextRecognitionSettingKey) == "true"
+}
+
+func (c *ClipboardPlugin) scheduleClipboardImageTextRecognition(ctx context.Context, recordID string, imagePath string) {
+	if recordID == "" || imagePath == "" {
+		return
+	}
+
+	util.Go(ctx, "clipboard image text recognition", func() {
+		c.recognizeClipboardImageText(ctx, recordID, imagePath)
+	})
+}
+
+func (c *ClipboardPlugin) recognizeClipboardImageText(ctx context.Context, recordID string, imagePath string) {
+	result, err := ocr.Recognize(ctx, ocr.Request{ImagePath: imagePath})
+	if err != nil {
+		if errors.Is(err, ocr.ErrUnsupported) || errors.Is(err, ocr.ErrUnavailable) {
+			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("clipboard image text recognition skipped: id=%s err=%s", recordID, err.Error()))
+			return
+		}
+		c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("clipboard image text recognition failed: id=%s path=%s err=%s", recordID, imagePath, err.Error()))
+		return
+	}
+
+	text := strings.TrimSpace(result.Text)
+	if text == "" {
+		c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("clipboard image text recognition produced no text: id=%s engine=%s", recordID, result.Engine))
+		return
+	}
+
+	// Feature addition: update only the OCR column after insert so clipboard
+	// capture stays fast and image persistence succeeds even when system OCR
+	// is slow, missing, or returns no text.
+	if err := c.db.UpdateOCRText(ctx, recordID, &text); err != nil {
+		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to save clipboard image OCR text: id=%s err=%s", recordID, err.Error()))
+		return
+	}
+	c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("clipboard image text recognition saved: id=%s engine=%s", recordID, result.Engine))
 }
 
 // getTextHistoryDays returns the number of days to keep text history
@@ -1436,12 +2130,14 @@ func (c *ClipboardPlugin) addToFavorites(ctx context.Context, record ClipboardRe
 		Type:      record.Type,
 		Content:   record.Content,
 		FilePath:  record.FilePath,
+		FilePaths: append([]string(nil), record.FilePaths...),
 		ImageHash: record.ImageHash,
 		IconData:  record.IconData,
 		Width:     record.Width,
 		Height:    record.Height,
 		FileSize:  record.FileSize,
 		Alias:     record.Alias,
+		OCRText:   record.OCRText,
 		Timestamp: record.Timestamp,
 		CreatedAt: record.CreatedAt.Unix(),
 	}
@@ -1475,12 +2171,14 @@ func (c *ClipboardPlugin) convertFavoriteToRecord(item FavoriteClipboardItem) Cl
 		Type:       item.Type,
 		Content:    item.Content,
 		FilePath:   item.FilePath,
+		FilePaths:  append([]string(nil), item.FilePaths...),
 		ImageHash:  item.ImageHash,
 		IconData:   item.IconData,
 		Width:      item.Width,
 		Height:     item.Height,
 		FileSize:   item.FileSize,
 		Alias:      item.Alias,
+		OCRText:    item.OCRText,
 		Timestamp:  item.Timestamp,
 		IsFavorite: true,
 		CreatedAt:  time.Unix(item.CreatedAt, 0),

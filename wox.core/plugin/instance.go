@@ -24,6 +24,7 @@ type Instance struct {
 	DeepLinkCallbacks         []func(ctx context.Context, arguments map[string]string)
 	UnloadCallbacks           []func(ctx context.Context)
 	MRURestoreCallbacks       []func(ctx context.Context, mruData MRUData) (*QueryResult, error) // MRU restore callbacks
+	PluginCommandHandlers     []PluginCommandHandler
 	EnterPluginQueryCallbacks []func(ctx context.Context)
 	LeavePluginQueryCallbacks []func(ctx context.Context)
 
@@ -36,6 +37,10 @@ type Instance struct {
 
 func (i *Instance) translateMetadataText(ctx context.Context, text common.I18nString) string {
 	return i.Metadata.translate(ctx, text)
+}
+
+func (i *Instance) TranslateMetadataText(ctx context.Context, text common.I18nString) string {
+	return i.translateMetadataText(ctx, text)
 }
 
 func (i *Instance) GetName(ctx context.Context) string {

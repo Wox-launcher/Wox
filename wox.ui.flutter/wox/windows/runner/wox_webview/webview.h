@@ -141,6 +141,7 @@ class Webview {
   bool Reload();
   bool GoBack();
   bool GoForward();
+  bool Focus();
   void AddScriptToExecuteOnDocumentCreated(
       const std::string& script,
       AddScriptToExecuteOnDocumentCreatedCallback callback);
@@ -150,6 +151,7 @@ class Webview {
   bool PostWebMessage(const std::string& json);
   bool ClearCookies();
   bool ClearCache();
+  bool ClearStorageForOrigin(const std::string& origin);
   bool SetCacheDisabled(bool disabled);
   void SetPopupWindowPolicy(WebviewPopupWindowPolicy policy);
   bool SetUserAgent(const std::string& user_agent);

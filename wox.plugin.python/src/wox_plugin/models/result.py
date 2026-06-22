@@ -49,6 +49,19 @@ class ResultTailType(str, Enum):
     """
 
 
+class ResultTailTextCategory(str, Enum):
+    """
+    Semantic color category for text tails.
+
+    Use these categories to render text tails with consistent status colors.
+    """
+
+    DEFAULT = "default"
+    DANGER = "danger"
+    WARNING = "warning"
+    SUCCESS = "success"
+
+
 class ResultActionType(str, Enum):
     """
     Enumeration of result action types.
@@ -101,6 +114,38 @@ class ResultActionType(str, Enum):
 
 
 @dataclass
+class ResultDragData:
+    """
+    Native drag payload exposed by a Wox result.
+
+    Only file drag data is supported for now. Paths should be absolute file or
+    directory paths so Wox can hand them to the operating system drag session.
+    """
+
+    type: str
+    files: List[str] = field(default_factory=list)
+
+    def to_json(self) -> str:
+        data = {
+            "Type": self.type,
+            "Files": self.files,
+        }
+        return json.dumps(data)
+
+    @classmethod
+    def files_data(cls, files: List[str]) -> "ResultDragData":
+        return cls(type="files", files=files)
+
+    @classmethod
+    def from_json(cls, json_str: str) -> "ResultDragData":
+        data = json.loads(json_str)
+        return cls(
+            type=data.get("Type", data.get("type", "")),
+            files=[str(item) for item in data.get("Files", data.get("files", []))],
+        )
+
+
+@dataclass
 class ResultTail:
     """
     Tail model for Wox results.
@@ -112,9 +157,11 @@ class ResultTail:
     Attributes:
         type: The type of tail (TEXT or IMAGE)
         text: Text content (for TEXT type)
+        text_category: Semantic color category for TEXT type tails
         image: Image to display (for IMAGE type)
         image_width: Optional width for IMAGE type tails
         image_height: Optional height for IMAGE type tails
+        tooltip: Optional hover text for compact tails
         id: Unique identifier for this tail
         context_data: Additional data for later retrieval
 
@@ -123,6 +170,7 @@ class ResultTail:
         tail = ResultTail(
             type=ResultTailType.TEXT,
             text="Size: 1.2 MB",
+            text_category=ResultTailTextCategory.DEFAULT,
             id="size_info"
         )
 
@@ -130,6 +178,7 @@ class ResultTail:
         tail = ResultTail(
             type=ResultTailType.IMAGE,
             image=WoxImage.new_emoji("⭐"),
+            tooltip="Favorite",
             id="favorite_indicator"
         )
 
@@ -156,6 +205,13 @@ class ResultTail:
     Only used when type is TEXT.
     """
 
+    text_category: ResultTailTextCategory = field(default=ResultTailTextCategory.DEFAULT)
+    """
+    Semantic color category for TEXT type tails.
+
+    Use this to render status-like tails with consistent colors.
+    """
+
     image: WoxImage = field(default_factory=WoxImage)
     """
     Image for IMAGE type tails.
@@ -176,6 +232,14 @@ class ResultTail:
     Optional height for IMAGE type tails.
 
     If None, Wox uses the default tail image height.
+    """
+
+    tooltip: str = field(default="")
+    """
+    Optional hover text for this tail.
+
+    Feature change: visual tails can be icon-only. Tooltip lets plugins keep
+    compact tails readable without replacing the visual affordance with text.
     """
 
     id: str = field(default="")
@@ -223,9 +287,11 @@ class ResultTail:
             {
                 "Type": self.type,
                 "Text": self.text,
+                "TextCategory": self.text_category,
                 "Image": json.loads(self.image.to_json()),
                 "ImageWidth": self.image_width,
                 "ImageHeight": self.image_height,
+                "Tooltip": self.tooltip,
                 "Id": self.id,
                 "ContextData": self.context_data,
             }
@@ -245,15 +311,19 @@ class ResultTail:
         data = json.loads(json_str)
         if not data.get("Type"):
             data["Type"] = ResultTailType.TEXT
+        if not data.get("TextCategory"):
+            data["TextCategory"] = ResultTailTextCategory.DEFAULT
         if not data.get("Image"):
             data["Image"] = {}
 
         return cls(
             type=ResultTailType(data.get("Type")),
             text=data.get("Text", ""),
+            text_category=ResultTailTextCategory(data.get("TextCategory")),
             image=WoxImage.from_json(json.dumps(data["Image"])),
             image_width=data.get("ImageWidth"),
             image_height=data.get("ImageHeight"),
+            tooltip=data.get("Tooltip", ""),
             id=data.get("Id", ""),
             context_data=data.get("ContextData", {}) or {},
         )
@@ -672,6 +742,7 @@ class Result:
         sub_title: Secondary display text
         preview: Preview content for detail view
         score: Relevance score for sorting
+        score_key: Stable identity for actioned-result ranking
         group: Group name for categorization
         group_score: Group relevance score
         tails: Additional visual elements
@@ -768,6 +839,14 @@ class Result:
     - 0: Default/neutral
     """
 
+    score_key: str = field(default="")
+    """
+    Stable identity for actioned-result ranking.
+
+    Set this when title or sub_title changes over time but the result should
+    keep the same usage score in global search.
+    """
+
     group: str = field(default="")
     """
     Group name for categorizing results.
@@ -803,6 +882,14 @@ class Result:
     triggered by clicking or hotkeys.
     """
 
+    drag_data: Optional[ResultDragData] = None
+    """
+    Optional native drag payload for this result.
+
+    Use ResultDragData.files_data([...]) to let users drag files or directories
+    from the result into other desktop applications.
+    """
+
     def to_json(self) -> str:
         """
         Convert to JSON string with camelCase naming.
@@ -818,6 +905,7 @@ class Result:
             "Id": self.id,
             "SubTitle": self.sub_title,
             "Score": self.score,
+            "ScoreKey": self.score_key,
             "Group": self.group,
             "GroupScore": self.group_score,
         }
@@ -827,6 +915,8 @@ class Result:
             data["Tails"] = [json.loads(tail.to_json()) for tail in self.tails]
         if self.actions:
             data["Actions"] = [json.loads(action.to_json()) for action in self.actions]
+        if self.drag_data:
+            data["DragData"] = json.loads(self.drag_data.to_json())
         return json.dumps(data)
 
     @classmethod
@@ -853,6 +943,10 @@ class Result:
         if "Actions" in data:
             actions = [ResultAction.from_json(json.dumps(action)) for action in data["Actions"]]
 
+        drag_data = None
+        if "DragData" in data and data["DragData"] is not None:
+            drag_data = ResultDragData.from_json(json.dumps(data["DragData"]))
+
         return cls(
             title=data.get("Title", ""),
             icon=WoxImage.from_json(json.dumps(data.get("Icon", {}))),
@@ -860,10 +954,12 @@ class Result:
             sub_title=data.get("SubTitle", ""),
             preview=preview,
             score=data.get("Score", 0.0),
+            score_key=data.get("ScoreKey", ""),
             group=data.get("Group", ""),
             group_score=data.get("GroupScore", 0.0),
             tails=tails,
             actions=actions,
+            drag_data=drag_data,
         )
 
 
@@ -960,6 +1056,14 @@ class UpdatableResult:
     preserved by ID matching.
     """
 
+    drag_data: Optional[ResultDragData] = None
+    """
+    New native drag payload for the result.
+
+    If None, the current drag payload is kept. Pass an empty ResultDragData to
+    clear drag support for this result.
+    """
+
     def to_json(self) -> str:
         """
         Convert to JSON string with camelCase naming.
@@ -983,5 +1087,7 @@ class UpdatableResult:
             data["Preview"] = json.loads(self.preview.to_json())
         if self.actions is not None:
             data["Actions"] = [json.loads(action.to_json()) for action in self.actions]
+        if self.drag_data is not None:
+            data["DragData"] = json.loads(self.drag_data.to_json())
 
         return json.dumps(data)

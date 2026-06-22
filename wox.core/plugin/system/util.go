@@ -16,6 +16,8 @@ import (
 	"wox/i18n"
 	"wox/plugin"
 	"wox/util"
+	"wox/util/clipboard"
+	"wox/util/imagecache"
 	"wox/util/keyboard"
 	"wox/util/window"
 
@@ -35,7 +37,8 @@ func getWebsiteIconWithCache(ctx context.Context, websiteUrl string) (common.Wox
 	// check if existed in cache
 	iconPathMd5 := fmt.Sprintf("%x", md5.Sum([]byte(hostUrl)))
 	iconCachePath := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("website_icon_%s.png", iconPathMd5))
-	if _, statErr := os.Stat(iconCachePath); statErr == nil {
+	if info, statErr := os.Stat(iconCachePath); statErr == nil {
+		imagecache.Touch(ctx, iconCachePath, info)
 		return common.WoxImage{
 			ImageType: common.WoxImageTypeAbsolutePath,
 			ImageData: iconCachePath,
@@ -90,7 +93,8 @@ func GetWebsiteIconFromCacheOnly(ctx context.Context, websiteUrl string) (common
 	hostUrl := parseUrl.Scheme + "://" + parseUrl.Host
 	iconPathMd5 := fmt.Sprintf("%x", md5.Sum([]byte(hostUrl)))
 	iconCachePath := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("website_icon_%s.png", iconPathMd5))
-	if _, statErr := os.Stat(iconCachePath); statErr == nil {
+	if info, statErr := os.Stat(iconCachePath); statErr == nil {
+		imagecache.Touch(ctx, iconCachePath, info)
 		return common.NewWoxImageAbsolutePath(iconCachePath), true
 	}
 	return common.WoxImage{}, false
@@ -122,22 +126,27 @@ func PrefetchWebsiteIcons(ctx context.Context, urls []string) {
 				httpCache := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("website_icon_%s.png", fmt.Sprintf("%x", md5.Sum([]byte(httpKey)))))
 				httpsCache := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("website_icon_%s.png", fmt.Sprintf("%x", md5.Sum([]byte(httpsKey)))))
 
-				// if both exist, skip
-				if _, err1 := os.Stat(httpCache); err1 == nil {
-					if _, err2 := os.Stat(httpsCache); err2 == nil {
-						continue
-					}
+				httpInfo, httpErr := os.Stat(httpCache)
+				httpsInfo, httpsErr := os.Stat(httpsCache)
+				if httpErr == nil {
+					imagecache.Touch(ctx, httpCache, httpInfo)
+				}
+				if httpsErr == nil {
+					imagecache.Touch(ctx, httpsCache, httpsInfo)
+				}
+				if httpErr == nil && httpsErr == nil {
+					continue
 				}
 
 				googleFaviconUrl := fmt.Sprintf("https://www.google.com/s2/favicons?sz=96&domain_url=%s", url.QueryEscape(domain))
 				// ensure https cache
-				if _, err := os.Stat(httpsCache); os.IsNotExist(err) {
+				if os.IsNotExist(httpsErr) {
 					gctx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
 					_ = util.HttpDownload(gctx, googleFaviconUrl, httpsCache)
 					cancel()
 				}
 				// ensure http cache (copy from https if available; otherwise download again)
-				if _, err := os.Stat(httpCache); os.IsNotExist(err) {
+				if os.IsNotExist(httpErr) {
 					if _, ok := os.Stat(httpsCache); ok == nil {
 						if data, rErr := os.ReadFile(httpsCache); rErr == nil {
 							_ = os.WriteFile(httpCache, data, os.ModePerm)
@@ -193,19 +202,8 @@ func GetPasteToActiveWindowAction(ctx context.Context, api plugin.API, windowNam
 				actionCallback()
 			}
 			util.Go(ctx, "ai command paste", func() {
-				if windowPid > 0 {
-					if !window.ActivateWindowByPid(windowPid) {
-						api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("activate window failed, pid=%d", windowPid))
-					}
-					time.Sleep(time.Millisecond * 150)
-				} else {
-					time.Sleep(time.Millisecond * 150)
-				}
-				err := keyboard.SimulatePaste()
-				if err != nil {
-					api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("simulate paste clipboard failed, err=%s", err.Error()))
-				} else {
-					api.Log(ctx, plugin.LogLevelInfo, "simulate paste clipboard success")
+				if err := pasteToActiveWindow(ctx, api, windowPid); err != nil {
+					api.Log(ctx, plugin.LogLevelError, err.Error())
 				}
 			})
 		},
@@ -216,4 +214,37 @@ func GetPasteToActiveWindowAction(ctx context.Context, api plugin.API, windowNam
 	}
 
 	return action, nil
+}
+
+func pasteTextToActiveWindow(ctx context.Context, api plugin.API, windowName string, windowPid int, text string) error {
+	if windowName == "" && windowPid <= 0 {
+		return fmt.Errorf("no active window")
+	}
+	if text == "" {
+		return fmt.Errorf("paste text is empty")
+	}
+	if err := clipboard.WriteText(text); err != nil {
+		return fmt.Errorf("write ai command answer to clipboard failed: %w", err)
+	}
+	return pasteToActiveWindow(ctx, api, windowPid)
+}
+
+func pasteToActiveWindow(ctx context.Context, api plugin.API, windowPid int) error {
+	// Shared paste helper: AI command Run And Paste needs the same activation
+	// delay as the existing paste action, but it must prepare clipboard content
+	// only after the model has produced a final answer.
+	if windowPid > 0 {
+		if !window.ActivateWindowByPid(windowPid) {
+			api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("activate window failed, pid=%d", windowPid))
+		}
+		time.Sleep(time.Millisecond * 150)
+	} else {
+		time.Sleep(time.Millisecond * 150)
+	}
+	if err := keyboard.SimulatePaste(); err != nil {
+		return fmt.Errorf("simulate paste clipboard failed, err=%s", err.Error())
+	}
+
+	api.Log(ctx, plugin.LogLevelInfo, "simulate paste clipboard success")
+	return nil
 }

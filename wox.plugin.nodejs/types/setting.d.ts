@@ -22,18 +22,8 @@ export type PluginSettingDefinitionType = "head" | "textbox" | "checkbox" | "sel
 /**
  * Visual styling properties for a setting element.
  *
- * Controls padding, width, and label positioning.
- *
- * @example
- * ```typescript
- * const style: PluginSettingValueStyle = {
- *   PaddingLeft: 10,
- *   PaddingTop: 5,
- *   PaddingRight: 10,
- *   PaddingBottom: 5,
- *   Width: 300
- * }
- * ```
+ * @deprecated Wox ignores plugin-provided pixel styling when rendering settings.
+ * Let Wox own spacing and width so plugin settings remain visually consistent.
  */
 export interface PluginSettingValueStyle {
   /**
@@ -80,8 +70,7 @@ export interface PluginSettingDefinitionValue {}
  *     DefaultValue: "",
  *     Tooltip: "",
  *     MaxLines: 1,
- *     Validators: [],
- *     Style: {} as PluginSettingValueStyle
+ *     Validators: []
  *   } as PluginSettingValueTextBox,
  *   DisabledInPlatforms: ["linux"],
  *   IsPlatformSpecific: false
@@ -147,6 +136,45 @@ export interface MetadataCommand {
 }
 
 /**
+ * A setting requirement that must pass before Wox runs a plugin query.
+ *
+ * Query requirements are evaluated by Wox core before calling `query()`. Use
+ * them for credentials, directories, or other settings that make the query
+ * impossible to run when missing.
+ */
+export interface PluginQueryRequirement {
+  /**
+   * Setting key that must be present and valid.
+   */
+  SettingKey: string
+  /**
+   * Optional validators for this query requirement.
+   *
+   * If omitted, Wox falls back to validators declared on the matching setting
+   * definition. If neither side provides validators, the requirement is ignored
+   * and Wox logs a metadata error.
+   */
+  Validators?: PluginSettingValidator[]
+  /**
+   * Optional user-facing message. Supports i18n keys.
+   */
+  Message?: string
+}
+
+/**
+ * Query-scoped plugin setting requirements.
+ *
+ * - `AnyQuery`: checked for every query to the plugin.
+ * - `QueryWithoutCommand`: checked only when the query has no command.
+ * - `QueryWithCommand`: checked only for the matching command.
+ */
+export interface PluginQueryRequirements {
+  AnyQuery?: PluginQueryRequirement[]
+  QueryWithoutCommand?: PluginQueryRequirement[]
+  QueryWithCommand?: Record<string, PluginQueryRequirement[]>
+}
+
+/**
  * Checkbox setting value configuration.
  *
  * Represents a boolean toggle switch in the settings UI.
@@ -157,8 +185,7 @@ export interface MetadataCommand {
  *   Key: "enabled",
  *   Label: "Enable Feature",
  *   DefaultValue: "true",
- *   Tooltip: "When enabled, the feature will be active",
- *   Style: {} as PluginSettingValueStyle
+ *   Tooltip: "When enabled, the feature will be active"
  * }
  * ```
  */
@@ -180,9 +207,9 @@ export interface PluginSettingValueCheckBox extends PluginSettingDefinitionValue
    */
   Tooltip: string
   /**
-   * Visual styling for this element.
+   * @deprecated Wox ignores plugin-provided pixel styling. Let Wox own setting layout.
    */
-  Style: PluginSettingValueStyle
+  Style?: PluginSettingValueStyle
 }
 
 /**
@@ -199,8 +226,7 @@ export interface PluginSettingValueCheckBox extends PluginSettingDefinitionValue
  *   DefaultValue: "",
  *   Tooltip: "Enter your API key",
  *   MaxLines: 1,
- *   Validators: [],
- *   Style: {} as PluginSettingValueStyle
+ *   Validators: []
  * }
  * ```
  */
@@ -236,9 +262,9 @@ export interface PluginSettingValueTextBox extends PluginSettingDefinitionValue 
    */
   Validators: PluginSettingValidator[]
   /**
-   * Visual styling for this element.
+   * @deprecated Wox ignores plugin-provided pixel styling. Let Wox own setting layout.
    */
-  Style: PluginSettingValueStyle
+  Style?: PluginSettingValueStyle
 }
 
 /**
@@ -257,14 +283,12 @@ export interface PluginSettingValueTextBox extends PluginSettingDefinitionValue 
  *       DefaultValue: "loaded from callback",
  *       Tooltip: "",
  *       MaxLines: 1,
- *       Validators: [],
- *       Style: {} as PluginSettingValueStyle
+ *       Validators: []
  *     } as PluginSettingValueTextBox
  *   }
  *   return {
  *     Content: "Unknown setting",
- *     Tooltip: "",
- *     Style: {} as PluginSettingValueStyle
+ *     Tooltip: ""
  *   } as PluginSettingValueLabel
  * })
  * ```
@@ -288,8 +312,7 @@ export interface PluginSettingValueDynamic extends PluginSettingDefinitionValue 
  * ```typescript
  * const head: PluginSettingValueHead = {
  *   Content: "API Configuration",
- *   Tooltip: "Configure your API credentials",
- *   Style: { ...({} as PluginSettingValueStyle), PaddingTop: 20 }
+ *   Tooltip: "Configure your API credentials"
  * }
  * ```
  */
@@ -303,9 +326,9 @@ export interface PluginSettingValueHead extends PluginSettingDefinitionValue {
    */
   Tooltip: string
   /**
-   * Visual styling for this element.
+   * @deprecated Wox ignores plugin-provided pixel styling. Let Wox own setting layout.
    */
-  Style: PluginSettingValueStyle
+  Style?: PluginSettingValueStyle
 }
 
 /**
@@ -317,8 +340,7 @@ export interface PluginSettingValueHead extends PluginSettingDefinitionValue {
  * ```typescript
  * const label: PluginSettingValueLabel = {
  *   Content: "Note: API key is required for this feature to work.",
- *   Tooltip: "",
- *   Style: {} as PluginSettingValueStyle
+ *   Tooltip: ""
  * }
  * ```
  */
@@ -332,9 +354,9 @@ export interface PluginSettingValueLabel extends PluginSettingDefinitionValue {
    */
   Tooltip: string
   /**
-   * Visual styling for this element.
+   * @deprecated Wox ignores plugin-provided pixel styling. Let Wox own setting layout.
    */
-  Style: PluginSettingValueStyle
+  Style?: PluginSettingValueStyle
 }
 
 /**
@@ -344,16 +366,14 @@ export interface PluginSettingValueLabel extends PluginSettingDefinitionValue {
  *
  * @example
  * ```typescript
- * const newline: PluginSettingValueNewline = {
- *   Style: {} as PluginSettingValueStyle
- * }
+ * const newline: PluginSettingValueNewline = {}
  * ```
  */
 export interface PluginSettingValueNewline extends PluginSettingDefinitionValue {
   /**
-   * Visual styling for this element.
+   * @deprecated Wox ignores plugin-provided pixel styling. Let Wox own setting layout.
    */
-  Style: PluginSettingValueStyle
+  Style?: PluginSettingValueStyle
 }
 
 /**
@@ -373,8 +393,7 @@ export interface PluginSettingValueNewline extends PluginSettingDefinitionValue 
  *     { Label: "Dark", Value: "dark" },
  *     { Label: "Light", Value: "light" }
  *   ],
- *   Validators: [],
- *   Style: {} as PluginSettingValueStyle
+ *   Validators: []
  * }
  * ```
  */
@@ -411,9 +430,9 @@ export interface PluginSettingValueSelect extends PluginSettingDefinitionValue {
   Validators: PluginSettingValidator[]
 
   /**
-   * Visual styling for this element.
+   * @deprecated Wox ignores plugin-provided pixel styling. Let Wox own setting layout.
    */
-  Style: PluginSettingValueStyle
+  Style?: PluginSettingValueStyle
 }
 
 /**

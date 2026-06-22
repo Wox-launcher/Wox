@@ -1,7 +1,9 @@
 package shell
 
 import (
+	"os"
 	"os/exec"
+	"path/filepath"
 	"wox/util"
 )
 
@@ -48,7 +50,21 @@ func RunOutput(name string, arg ...string) ([]byte, error) {
 }
 
 func OpenFileInFolder(path string) error {
-	return exec.Command("xdg-open", path).Start()
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+
+	targetPath := path
+	// Bug fix: xdg-open opens files with their default application, so the old
+	// implementation launched the file itself instead of revealing its folder.
+	// Linux has no portable select-in-folder flag here, so file inputs must be
+	// normalized to their parent directory while directory inputs stay unchanged.
+	if !info.IsDir() {
+		targetPath = filepath.Dir(path)
+	}
+
+	return exec.Command("xdg-open", targetPath).Start()
 }
 
 // HideWindowCmd is a no-op on Linux as there's no console window to hide

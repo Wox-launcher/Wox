@@ -19,11 +19,12 @@ import (
 
 	// Import all system plugins to trigger their init() functions
 	// This ensures all system plugins are registered in plugin.AllSystemPlugin
-	_ "wox/plugin/system" // Contains multiple plugins: sys.go, ai_command.go, backup.go, browser.go, etc.
+	_ "wox/plugin/system" // Contains multiple root-level plugins: ai_command.go, backup.go, browser.go, etc.
 	_ "wox/plugin/system/app"
 	_ "wox/plugin/system/calculator"
 	_ "wox/plugin/system/converter"
 	_ "wox/plugin/system/file_search"
+	_ "wox/plugin/system/sys"
 )
 
 var (
@@ -105,7 +106,7 @@ func (ts *TestSuite) RunQueryTest(test QueryTest) (bool, *QueryTestFailure) {
 	}
 	ts.t.Logf("Query created successfully, executing...")
 
-	resultChan, doneChan := plugin.GetPluginManager().Query(ts.ctx, query)
+	resultChan, _, doneChan := plugin.GetPluginManager().Query(ts.ctx, query)
 
 	// Collect all results
 	var allResults []plugin.QueryResultUI
@@ -113,15 +114,15 @@ func (ts *TestSuite) RunQueryTest(test QueryTest) (bool, *QueryTestFailure) {
 CollectResults:
 	for {
 		select {
-		case results := <-resultChan:
-			allResults = append(allResults, results...)
+		case response := <-resultChan:
+			allResults = append(allResults, response.Results...)
 		case <-doneChan:
 			// Query completion only means all plugin goroutines have finished.
 			// Drain buffered results to avoid dropping late-collected plugin results.
 			for {
 				select {
-				case results := <-resultChan:
-					allResults = append(allResults, results...)
+				case response := <-resultChan:
+					allResults = append(allResults, response.Results...)
 				default:
 					break CollectResults
 				}
@@ -141,7 +142,9 @@ CollectResults:
 
 	// Try fallback results if no results found
 	if len(allResults) == 0 {
-		allResults = plugin.GetPluginManager().QueryFallback(ts.ctx, query, queryPlugin)
+		// QueryFallback now uses the QueryResponseUI envelope so layout can
+		// travel with fallback rows; this helper only needs the result rows.
+		allResults = plugin.GetPluginManager().QueryFallback(ts.ctx, query, queryPlugin).Results
 	}
 
 	// Verify results

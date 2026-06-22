@@ -4,7 +4,7 @@ package keyboard
 
 /*
 #cgo CFLAGS: -x objective-c
-#cgo LDFLAGS: -framework Cocoa -framework Carbon
+#cgo LDFLAGS: -framework Cocoa -framework Carbon -framework ApplicationServices -framework IOKit
 #include <stdlib.h>
 
 int woxDarwinEnsureKeyboardReady(char **errorOut);
@@ -168,7 +168,7 @@ func runDarwinKeyboardCall(call func(errorOut **C.char) C.int) error {
 		}
 		if result == 0 {
 			if errorOut != nil {
-				callErr = fmt.Errorf(C.GoString(errorOut))
+				callErr = fmt.Errorf("%s", C.GoString(errorOut))
 			} else {
 				callErr = fmt.Errorf("native keyboard call failed")
 			}
@@ -192,7 +192,7 @@ func keyboardHotkeyTriggeredCGO(id C.int) {
 }
 
 //export keyboardHookEventCGO
-func keyboardHookEventCGO(eventKind C.int, keyCode C.uint, modifiers C.uint, character C.uint) C.int {
+func keyboardHookEventCGO(eventKind C.int, keyCode C.uint, modifiers C.uint, character C.uint, nativeEventType C.int, nativeFlags C.ulonglong, nativeCapsLockStateAvailable C.int, nativeCapsLockPressed C.int) C.int {
 	key := darwinKeyCodeToKey(uint32(keyCode))
 	characterValue := key.Character()
 	if character != 0 {
@@ -201,10 +201,14 @@ func keyboardHookEventCGO(eventKind C.int, keyCode C.uint, modifiers C.uint, cha
 		characterValue = string(rune(character))
 	}
 	event := RawKeyEvent{
-		Key:           key,
-		Character:     characterValue,
-		Modifiers:     Modifier(modifiers),
-		NativeKeyCode: uint32(keyCode),
+		Key:                          key,
+		Character:                    characterValue,
+		Modifiers:                    Modifier(modifiers),
+		NativeKeyCode:                uint32(keyCode),
+		NativeEventType:              int(nativeEventType),
+		NativeFlags:                  uint64(nativeFlags),
+		NativeCapsLockStateAvailable: nativeCapsLockStateAvailable != 0,
+		NativeCapsLockPressed:        nativeCapsLockPressed != 0,
 	}
 	if int(eventKind) == 1 {
 		event.Type = EventTypeKeyUp
@@ -347,6 +351,10 @@ func keyToDarwinKeyCode(key Key) (uint32, error) {
 		return 103, nil
 	case KeyF12:
 		return 111, nil
+	case KeyCapsLock:
+		return 57, nil
+	case KeyBackquote:
+		return 50, nil
 	default:
 		return 0, fmt.Errorf("unsupported macOS hotkey key: %d", key)
 	}
@@ -468,6 +476,8 @@ func darwinKeyCodeToKey(keyCode uint32) Key {
 		return KeyF11
 	case 111:
 		return KeyF12
+	case 57:
+		return KeyCapsLock
 	case 55, 54:
 		return KeySuper
 	case 56, 60:
@@ -476,6 +486,8 @@ func darwinKeyCodeToKey(keyCode uint32) Key {
 		return KeyAlt
 	case 59, 62:
 		return KeyCtrl
+	case 50:
+		return KeyBackquote
 	default:
 		return KeyUnknown
 	}

@@ -1,6 +1,7 @@
 package hotkey
 
 import (
+	"fmt"
 	"sync"
 	"wox/util"
 	"wox/util/keyboard"
@@ -78,6 +79,8 @@ func (t *doubleTapTracker) HandleEvent(event keyboard.RawKeyEvent, now int64) []
 		if !state.isPressed {
 			state.isPressed = true
 			state.currentTapInvalid = false
+			util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf(
+				"[double-tap] key down: %s, hasCompletedTap=%t", event.Key.Character(), state.hasCompletedTap))
 		}
 		t.states[event.Key] = state
 		return nil
@@ -93,18 +96,24 @@ func (t *doubleTapTracker) HandleEvent(event keyboard.RawKeyEvent, now int64) []
 			state.currentTapInvalid = false
 			state.hasCompletedTap = false
 			t.states[event.Key] = state
+			util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf(
+				"[double-tap] key up: %s, tap invalid (intervening key)", event.Key.Character()))
 			return nil
 		}
 
 		if state.hasCompletedTap && now-state.lastTapAt < 500 {
 			state.hasCompletedTap = false
 			t.states[event.Key] = state
+			util.GetLogger().Info(util.NewTraceContext(), fmt.Sprintf(
+				"[double-tap] DOUBLE TAP DETECTED: %s, interval=%dms", event.Key.Character(), now-state.lastTapAt))
 			return []keyboard.Key{event.Key}
 		}
 
 		state.hasCompletedTap = true
 		state.lastTapAt = now
 		t.states[event.Key] = state
+		util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf(
+			"[double-tap] key up: %s, first tap recorded, waiting for second tap", event.Key.Character()))
 		return nil
 	default:
 		return nil

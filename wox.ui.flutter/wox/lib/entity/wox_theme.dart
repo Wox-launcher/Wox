@@ -95,68 +95,142 @@ class WoxTheme {
   late Color toolbarFontColorParsed;
   late Color toolbarBackgroundColorParsed;
 
-  WoxTheme({
-    themeId,
-    themeName,
-    themeAuthor,
-    themeUrl,
-    version,
-    description,
-    isSystem,
-    isInstalled,
-    isUpgradable,
-    isAutoAppearance,
-    darkThemeId,
-    lightThemeId,
-    appBackgroundColor,
-    appPaddingLeft,
-    appPaddingTop,
-    appPaddingRight,
-    appPaddingBottom,
-    resultContainerPaddingLeft,
-    resultContainerPaddingTop,
-    resultContainerPaddingRight,
-    resultContainerPaddingBottom,
-    resultItemBorderRadius,
-    resultItemPaddingLeft,
-    resultItemPaddingTop,
-    resultItemPaddingRight,
-    resultItemPaddingBottom,
-    resultItemTitleColor,
-    resultItemSubTitleColor,
-    resultItemBorderLeftWidth,
-    resultItemActiveBackgroundColor,
-    resultItemActiveTitleColor,
-    resultItemActiveSubTitleColor,
-    resultItemActiveBorderLeftWidth,
-    queryBoxFontColor,
-    queryBoxBackgroundColor,
-    queryBoxBorderRadius,
-    queryBoxCursorColor,
-    queryBoxTextSelectionBackgroundColor,
-    queryBoxTextSelectionColor,
-    actionContainerBackgroundColor,
-    actionContainerHeaderFontColor,
-    actionContainerPaddingLeft,
-    actionContainerPaddingTop,
-    actionContainerPaddingRight,
-    actionContainerPaddingBottom,
-    actionItemActiveBackgroundColor,
-    actionItemActiveFontColor,
-    actionItemFontColor,
-    actionQueryBoxFontColor,
-    actionQueryBoxBackgroundColor,
-    actionQueryBoxBorderRadius,
-    previewFontColor,
-    previewSplitLineColor,
-    previewPropertyTitleColor,
-    previewPropertyContentColor,
-    previewTextSelectionColor,
-    toolbarFontColor,
-    toolbarBackgroundColor,
-    toolbarPaddingLeft,
-    toolbarPaddingRight,
-  });
+  factory WoxTheme({
+    String? themeId,
+    String? themeName,
+    String? themeAuthor,
+    String? themeUrl,
+    String? version,
+    String? description,
+    bool? isSystem,
+    bool? isInstalled,
+    bool? isUpgradable,
+    bool? isAutoAppearance,
+    String? darkThemeId,
+    String? lightThemeId,
+    String? appBackgroundColor,
+    int? appPaddingLeft,
+    int? appPaddingTop,
+    int? appPaddingRight,
+    int? appPaddingBottom,
+    int? resultContainerPaddingLeft,
+    int? resultContainerPaddingTop,
+    int? resultContainerPaddingRight,
+    int? resultContainerPaddingBottom,
+    int? resultItemBorderRadius,
+    int? resultItemPaddingLeft,
+    int? resultItemPaddingTop,
+    int? resultItemPaddingRight,
+    int? resultItemPaddingBottom,
+    String? resultItemTitleColor,
+    String? resultItemSubTitleColor,
+    String? resultItemTailTextColor,
+    int? resultItemBorderLeftWidth,
+    String? resultItemActiveBackgroundColor,
+    String? resultItemActiveTitleColor,
+    String? resultItemActiveSubTitleColor,
+    String? resultItemActiveTailTextColor,
+    int? resultItemActiveBorderLeftWidth,
+    String? queryBoxFontColor,
+    String? queryBoxBackgroundColor,
+    int? queryBoxBorderRadius,
+    String? queryBoxCursorColor,
+    String? queryBoxTextSelectionBackgroundColor,
+    String? queryBoxTextSelectionColor,
+    String? actionContainerBackgroundColor,
+    String? actionContainerHeaderFontColor,
+    int? actionContainerPaddingLeft,
+    int? actionContainerPaddingTop,
+    int? actionContainerPaddingRight,
+    int? actionContainerPaddingBottom,
+    String? actionItemActiveBackgroundColor,
+    String? actionItemActiveFontColor,
+    String? actionItemFontColor,
+    String? actionQueryBoxFontColor,
+    String? actionQueryBoxBackgroundColor,
+    int? actionQueryBoxBorderRadius,
+    String? previewFontColor,
+    String? previewSplitLineColor,
+    String? previewPropertyTitleColor,
+    String? previewPropertyContentColor,
+    String? previewTextSelectionColor,
+    String? toolbarFontColor,
+    String? toolbarBackgroundColor,
+    int? toolbarPaddingLeft,
+    int? toolbarPaddingRight,
+  }) {
+    final theme = WoxTheme.empty();
+
+    // Bug fix: the auto-appearance preview/icon fallbacks only provide a small subset of fields.
+    // The previous constructor left the remaining `late` members unset, so reading `theme.isAutoAppearance`
+    // in widgets crashed before the fallback theme could render. Start from empty defaults, then override
+    // only the values supplied by the caller so every direct construction path stays safe.
+    theme.themeId = themeId ?? theme.themeId;
+    theme.themeName = themeName ?? theme.themeName;
+    theme.themeAuthor = themeAuthor ?? theme.themeAuthor;
+    theme.themeUrl = themeUrl ?? theme.themeUrl;
+    theme.version = version ?? theme.version;
+    theme.description = description ?? theme.description;
+    theme.isSystem = isSystem ?? theme.isSystem;
+    theme.isInstalled = isInstalled ?? theme.isInstalled;
+    theme.isUpgradable = isUpgradable ?? theme.isUpgradable;
+    theme.isAutoAppearance = isAutoAppearance ?? theme.isAutoAppearance;
+    theme.darkThemeId = darkThemeId ?? theme.darkThemeId;
+    theme.lightThemeId = lightThemeId ?? theme.lightThemeId;
+    theme.appBackgroundColor = appBackgroundColor ?? theme.appBackgroundColor;
+    theme.appPaddingLeft = appPaddingLeft ?? theme.appPaddingLeft;
+    theme.appPaddingTop = appPaddingTop ?? theme.appPaddingTop;
+    theme.appPaddingRight = appPaddingRight ?? theme.appPaddingRight;
+    theme.appPaddingBottom = appPaddingBottom ?? theme.appPaddingBottom;
+    theme.resultContainerPaddingLeft = resultContainerPaddingLeft ?? theme.resultContainerPaddingLeft;
+    theme.resultContainerPaddingTop = resultContainerPaddingTop ?? theme.resultContainerPaddingTop;
+    theme.resultContainerPaddingRight = resultContainerPaddingRight ?? theme.resultContainerPaddingRight;
+    theme.resultContainerPaddingBottom = resultContainerPaddingBottom ?? theme.resultContainerPaddingBottom;
+    theme.resultItemBorderRadius = resultItemBorderRadius ?? theme.resultItemBorderRadius;
+    theme.resultItemPaddingLeft = resultItemPaddingLeft ?? theme.resultItemPaddingLeft;
+    theme.resultItemPaddingTop = resultItemPaddingTop ?? theme.resultItemPaddingTop;
+    theme.resultItemPaddingRight = resultItemPaddingRight ?? theme.resultItemPaddingRight;
+    theme.resultItemPaddingBottom = resultItemPaddingBottom ?? theme.resultItemPaddingBottom;
+    theme.resultItemTitleColor = resultItemTitleColor ?? theme.resultItemTitleColor;
+    theme.resultItemSubTitleColor = resultItemSubTitleColor ?? theme.resultItemSubTitleColor;
+    theme.resultItemTailTextColor = resultItemTailTextColor ?? theme.resultItemTailTextColor;
+    theme.resultItemBorderLeftWidth = resultItemBorderLeftWidth ?? theme.resultItemBorderLeftWidth;
+    theme.resultItemActiveBackgroundColor = resultItemActiveBackgroundColor ?? theme.resultItemActiveBackgroundColor;
+    theme.resultItemActiveTitleColor = resultItemActiveTitleColor ?? theme.resultItemActiveTitleColor;
+    theme.resultItemActiveSubTitleColor = resultItemActiveSubTitleColor ?? theme.resultItemActiveSubTitleColor;
+    theme.resultItemActiveTailTextColor = resultItemActiveTailTextColor ?? theme.resultItemActiveTailTextColor;
+    theme.resultItemActiveBorderLeftWidth = resultItemActiveBorderLeftWidth ?? theme.resultItemActiveBorderLeftWidth;
+    theme.queryBoxFontColor = queryBoxFontColor ?? theme.queryBoxFontColor;
+    theme.queryBoxBackgroundColor = queryBoxBackgroundColor ?? theme.queryBoxBackgroundColor;
+    theme.queryBoxBorderRadius = queryBoxBorderRadius ?? theme.queryBoxBorderRadius;
+    theme.queryBoxCursorColor = queryBoxCursorColor ?? theme.queryBoxCursorColor;
+    theme.queryBoxTextSelectionBackgroundColor = queryBoxTextSelectionBackgroundColor ?? theme.queryBoxTextSelectionBackgroundColor;
+    theme.queryBoxTextSelectionColor = queryBoxTextSelectionColor ?? theme.queryBoxTextSelectionColor;
+    theme.actionContainerBackgroundColor = actionContainerBackgroundColor ?? theme.actionContainerBackgroundColor;
+    theme.actionContainerHeaderFontColor = actionContainerHeaderFontColor ?? theme.actionContainerHeaderFontColor;
+    theme.actionContainerPaddingLeft = actionContainerPaddingLeft ?? theme.actionContainerPaddingLeft;
+    theme.actionContainerPaddingTop = actionContainerPaddingTop ?? theme.actionContainerPaddingTop;
+    theme.actionContainerPaddingRight = actionContainerPaddingRight ?? theme.actionContainerPaddingRight;
+    theme.actionContainerPaddingBottom = actionContainerPaddingBottom ?? theme.actionContainerPaddingBottom;
+    theme.actionItemActiveBackgroundColor = actionItemActiveBackgroundColor ?? theme.actionItemActiveBackgroundColor;
+    theme.actionItemActiveFontColor = actionItemActiveFontColor ?? theme.actionItemActiveFontColor;
+    theme.actionItemFontColor = actionItemFontColor ?? theme.actionItemFontColor;
+    theme.actionQueryBoxFontColor = actionQueryBoxFontColor ?? theme.actionQueryBoxFontColor;
+    theme.actionQueryBoxBackgroundColor = actionQueryBoxBackgroundColor ?? theme.actionQueryBoxBackgroundColor;
+    theme.actionQueryBoxBorderRadius = actionQueryBoxBorderRadius ?? theme.actionQueryBoxBorderRadius;
+    theme.previewFontColor = previewFontColor ?? theme.previewFontColor;
+    theme.previewSplitLineColor = previewSplitLineColor ?? theme.previewSplitLineColor;
+    theme.previewPropertyTitleColor = previewPropertyTitleColor ?? theme.previewPropertyTitleColor;
+    theme.previewPropertyContentColor = previewPropertyContentColor ?? theme.previewPropertyContentColor;
+    theme.previewTextSelectionColor = previewTextSelectionColor ?? theme.previewTextSelectionColor;
+    theme.toolbarFontColor = toolbarFontColor ?? theme.toolbarFontColor;
+    theme.toolbarBackgroundColor = toolbarBackgroundColor ?? theme.toolbarBackgroundColor;
+    theme.toolbarPaddingLeft = toolbarPaddingLeft ?? theme.toolbarPaddingLeft;
+    theme.toolbarPaddingRight = toolbarPaddingRight ?? theme.toolbarPaddingRight;
+    theme._parseColors();
+
+    return theme;
+  }
 
   WoxTheme.fromJson(Map<String, dynamic> json) {
     themeId = json['ThemeId'];

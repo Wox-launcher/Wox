@@ -119,10 +119,11 @@ func fileExplorerDeactivatedCallbackCGO() {
 	}
 }
 
-func checkUpdateMonitorState() {
+func checkUpdateMonitorState() error {
 	stateMu.RLock()
 	needMonitor := explorerActivatedCallback != nil || explorerDeactivatedCallback != nil ||
-		dialogActivatedCallback != nil || dialogDeactivatedCallback != nil
+		dialogActivatedCallback != nil || dialogDeactivatedCallback != nil ||
+		explorerKeyListener != nil || dialogKeyListener != nil
 	needRawListener := explorerKeyListener != nil || dialogKeyListener != nil
 	stateMu.RUnlock()
 
@@ -142,15 +143,18 @@ func checkUpdateMonitorState() {
 			subscription, err := keyboard.AddRawKeyListener(handleExplorerRawKeyEvent)
 			if err == nil {
 				rawKeySubscription = subscription
+			} else {
+				return err
 			}
 		}
-		return
+		return nil
 	}
 
 	if rawKeySubscription != nil {
 		_ = rawKeySubscription.Close()
 		rawKeySubscription = nil
 	}
+	return nil
 }
 
 func StartExplorerMonitor(activated func(pid int), deactivated func(), keyListener func(string)) {
@@ -159,7 +163,7 @@ func StartExplorerMonitor(activated func(pid int), deactivated func(), keyListen
 	explorerDeactivatedCallback = deactivated
 	explorerKeyListener = keyListener
 	stateMu.Unlock()
-	checkUpdateMonitorState()
+	_ = checkUpdateMonitorState()
 }
 
 func StopExplorerMonitor() {
@@ -172,7 +176,7 @@ func StopExplorerMonitor() {
 		explorerActive = false
 	}
 	stateMu.Unlock()
-	checkUpdateMonitorState()
+	_ = checkUpdateMonitorState()
 }
 
 func GetActiveExplorerRect() (int, int, int, int, bool) {
@@ -209,7 +213,7 @@ func StartExplorerOpenSaveMonitor(activated func(pid int), deactivated func(), k
 	dialogDeactivatedCallback = deactivated
 	dialogKeyListener = keyListener
 	stateMu.Unlock()
-	checkUpdateMonitorState()
+	_ = checkUpdateMonitorState()
 }
 
 func StopExplorerOpenSaveMonitor() {
@@ -222,7 +226,7 @@ func StopExplorerOpenSaveMonitor() {
 		dialogActive = false
 	}
 	stateMu.Unlock()
-	checkUpdateMonitorState()
+	_ = checkUpdateMonitorState()
 }
 
 func GetActiveDialogRect() (int, int, int, int, bool) {
@@ -234,12 +238,33 @@ func GetActiveDialogRect() (int, int, int, int, bool) {
 	return 0, 0, 0, 0, false
 }
 
+// GetOpenSaveDialogRectByPid falls back to the focused dialog snapshot on macOS, where the monitor already tracks the active file dialog.
+func GetOpenSaveDialogRectByPid(pid int) (int, int, int, int, bool) {
+	return GetActiveDialogRect()
+}
+
+// GetOpenSaveDialogWindowIdByPid is empty on macOS because the active AX dialog snapshot already carries the source window.
+func GetOpenSaveDialogWindowIdByPid(pid int) string {
+	return ""
+}
+
+// AddExplorerRawKeyListener is intentionally unsupported on macOS. Finder has
+// native Quick Look, so Wox does not add a Selection Space-key listener there.
+func AddExplorerRawKeyListener(listener ExplorerRawKeyListener) (ExplorerRawKeySubscription, error) {
+	return nil, nil
+}
+
+// AddExplorerOpenSaveRawKeyListener is intentionally unsupported on macOS.
+func AddExplorerOpenSaveRawKeyListener(listener ExplorerRawKeyListener) (ExplorerRawKeySubscription, error) {
+	return nil, nil
+}
+
 func handleExplorerRawKeyEvent(event keyboard.RawKeyEvent) bool {
-	if event.Type != keyboard.EventTypeKeyDown || event.Character == "" {
+	if event.Key == keyboard.KeyUnknown {
 		return false
 	}
 
-	if event.Modifiers&(keyboard.ModifierCtrl|keyboard.ModifierAlt|keyboard.ModifierSuper) != 0 {
+	if event.Type == keyboard.EventTypeKeyUp {
 		return false
 	}
 
@@ -257,12 +282,20 @@ func handleExplorerRawKeyEvent(event keyboard.RawKeyEvent) bool {
 	stateMu.RUnlock()
 
 	if state == stateExplorer && explorerListener != nil {
-		explorerListener(key)
-		return false
+		if shouldDispatchTypeToSearch(event) {
+			explorerListener(key)
+		}
 	}
 	if state == stateDialog && dialogListener != nil {
-		dialogListener(key)
-		return false
+		if shouldDispatchTypeToSearch(event) {
+			dialogListener(key)
+		}
 	}
 	return false
+}
+
+func shouldDispatchTypeToSearch(event keyboard.RawKeyEvent) bool {
+	return event.Type == keyboard.EventTypeKeyDown &&
+		event.Character != "" &&
+		event.Modifiers&(keyboard.ModifierCtrl|keyboard.ModifierAlt|keyboard.ModifierSuper) == 0
 }

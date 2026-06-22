@@ -27,11 +27,8 @@ class PluginSettingValueSelect {
       options = [];
     }
 
-    if (json['Style'] != null) {
-      style = PluginSettingValueStyle.fromJson(json['Style']);
-    } else {
-      style = PluginSettingValueStyle.fromJson(<String, dynamic>{});
-    }
+    // Style is deprecated in plugin SDKs; ignore plugin JSON and let the UI layout own spacing and width.
+    style = PluginSettingValueStyle.defaults();
 
     if (json['Validators'] != null) {
       validators = (json['Validators'] as List).map((e) => PluginSettingValidatorItem.fromJson(e)).toList();

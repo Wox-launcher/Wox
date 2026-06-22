@@ -1,6 +1,0 @@
-{"file": ".agents/skills/finish-work/SKILL.md", "reason": "Finish work checklist"}
-{"file": ".agents/skills/check-backend/SKILL.md", "reason": "Backend check spec"}
-{"file": ".trellis/spec/backend/error-handling.md", "reason": "Verify final errors are contextual and not duplicated"}
-{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Verify final diagnostics use shared logger conventions"}
-{"file": "wox.core/util/filesearch/provider_everything_windows.go", "reason": "Review provider boundary after fix"}
-{"file": "wox.core/util/filesearch/everything_sdk2_windows.go", "reason": "Review fallback error mapping after fix"}

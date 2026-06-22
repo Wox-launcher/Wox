@@ -1,22 +1,26 @@
 # Action Panel
 
-The Action Panel provides additional actions for a selected result. It allows you to do more than just the default action (which is usually opening the item).
+The Action Panel is the second step for a result. `Enter` runs the primary action; the Action Panel shows the other useful actions the plugin attached to that result.
 
-## Accessing Action Panel
+## Open It
 
-1. Select a result in the main query window.
-2. Press `Alt + J` (or `Cmd + J` on macOS).
+1. Highlight a result.
+2. Press `Ctrl + J` on Windows/Linux or `Command + J` on macOS.
+3. Pick an action with the keyboard and press `Enter`.
 
 ## Common Actions
 
-The available actions depend on the type of result, but common ones include:
+Actions depend on the plugin and the selected result. Typical examples:
 
-- **Open**: Open the file, application, or URL.
-- **Copy Path**: Copy the file path to the clipboard.
-- **Copy Value**: Copy the text value to the clipboard.
-- **Open in File Explorer**: Reveal the file in the system file manager.
-- **Run as Administrator**: Run the application with elevated privileges (Windows).
+| Result | Common actions |
+| --- | --- |
+| App | Open, reveal in file manager, copy path, terminate running app |
+| File | Open, open containing folder, delete to trash, show system context menu |
+| Clipboard item | Copy, paste to active window, favorite, edit alias, delete |
+| Bookmark or URL | Open in browser |
+| Plugin store result | Install, uninstall, update, open website |
+| Calculator / converter result | Copy raw result or formatted result |
 
-## Plugin Specific Actions
+## When to Use It
 
-Plugins can define their own custom actions. For example, a package manager plugin might offer "Uninstall" or "Update" actions for a package result.
+Use the Action Panel when the default `Enter` action is not the one you want. It is also the best place to discover what a plugin can do without opening settings or documentation.

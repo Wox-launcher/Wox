@@ -4,6 +4,7 @@ import 'dart:io';
 
 const int defaultDevServerPort = 34987;
 const Duration coreStartupTimeout = Duration(minutes: 3);
+const Duration runtimeStartupTimeout = Duration(minutes: 2);
 const String testWoxDataDirEnv = 'WOX_TEST_DATA_DIR';
 const String testUserDataDirEnv = 'WOX_TEST_USER_DIR';
 const String testServerPortEnv = 'WOX_TEST_SERVER_PORT';
@@ -101,6 +102,31 @@ void _printHelp() {
   stdout.writeln('  smoke [test name]    Run the desktop smoke E2E flow');
 }
 
+List<_SmokeTemplatePluginDefinition> _templatePluginDefinitionsForSmoke(String? testName) {
+  if (testName == null) {
+    return _templatePluginDefinitions;
+  }
+
+  // Smoke coverage: runtime diagnostic tests intentionally put Node.js/Python
+  // into missing-executable states. They do not need packaged template plugins,
+  // so skip template setup and host readiness checks to let the negative runtime
+  // assertions run on machines where Node.js is actually unavailable.
+  const runtimeDiagnosticTests = ['T4-03', 'T4-04', 'T4-05'];
+  if (runtimeDiagnosticTests.any(testName.contains)) {
+    return const <_SmokeTemplatePluginDefinition>[];
+  }
+
+  // Settings-focused smoke cases use built-in settings and installed system
+  // plugins only. Skipping template packaging keeps these UI flows away from
+  // unrelated template clone/install failures on Windows.
+  const settingsFocusedTests = ['T2-15'];
+  if (settingsFocusedTests.any(testName.contains)) {
+    return const <_SmokeTemplatePluginDefinition>[];
+  }
+
+  return _templatePluginDefinitions;
+}
+
 Future<int> _runSmoke({String? testName}) async {
   final packageRoot = _resolvePackageRoot();
   final repoRoot = packageRoot.parent;
@@ -130,8 +156,9 @@ Future<int> _runSmoke({String? testName}) async {
   final testLog = File('${artifactsDir.path}${Platform.pathSeparator}flutter_test.log');
   final templatePluginLog = File('${artifactsDir.path}${Platform.pathSeparator}template_plugin.log');
 
+  final templateDefinitions = _templatePluginDefinitionsForSmoke(testName);
   final templatePlugins = <_SmokeTemplatePluginPackage>[];
-  for (final definition in _templatePluginDefinitions) {
+  for (final definition in templateDefinitions) {
     stdout.writeln('Preparing template ${definition.runtime} plugin package...');
     final templatePlugin = await _prepareSmokeTemplatePlugin(definition: definition, artifactsDir: artifactsDir, environment: environment, logFile: templatePluginLog);
     templatePlugins.add(templatePlugin);
@@ -155,6 +182,21 @@ Future<int> _runSmoke({String? testName}) async {
     if (!ready) {
       stderr.writeln('wox.core did not become ready on port $serverPort.');
       return 1;
+    }
+
+    if (templatePlugins.isNotEmpty) {
+      // Bug fix: /ping only proves the core HTTP server is ready. Template plugin
+      // installation depends on the NodeJS/Python runtime hosts, which start
+      // asynchronously after core startup, so wait for those hosts explicitly.
+      final runtimeReady = await _waitForRuntimeHostsReady(
+        serverPort: serverPort,
+        runtimes: templatePlugins.map((plugin) => plugin.definition.runtime),
+        timeout: runtimeStartupTimeout,
+      );
+      if (!runtimeReady) {
+        await _printRuntimeStartupDiagnostics(woxDataDir);
+        return 1;
+      }
     }
 
     for (final templatePlugin in templatePlugins) {
@@ -419,12 +461,167 @@ Future<bool> _isPingReady(int serverPort) async {
   }
 }
 
+class _RuntimeHostStatus {
+  const _RuntimeHostStatus({required this.runtime, required this.isStarted, required this.statusCode, required this.executablePath, required this.lastStartError});
+
+  final String runtime;
+  final bool isStarted;
+  final String statusCode;
+  final String executablePath;
+  final String lastStartError;
+}
+
+Future<bool> _waitForRuntimeHostsReady({required int serverPort, required Iterable<String> runtimes, required Duration timeout}) async {
+  final requiredRuntimes = runtimes.map((runtime) => runtime.toUpperCase()).toSet();
+  final deadline = DateTime.now().add(timeout);
+  var nextStatusLogAt = DateTime.now();
+  var lastStatusSummary = 'runtime status unavailable';
+
+  while (DateTime.now().isBefore(deadline)) {
+    final statuses = await _fetchRuntimeStatuses(serverPort);
+    if (statuses != null) {
+      lastStatusSummary = _formatRuntimeStatusSummary(statuses);
+      final startedRuntimes = statuses.where((status) => status.isStarted).map((status) => status.runtime.toUpperCase()).toSet();
+      if (requiredRuntimes.every(startedRuntimes.contains)) {
+        stdout.writeln('Runtime hosts ready: $lastStatusSummary');
+        return true;
+      }
+    }
+
+    if (!DateTime.now().isBefore(nextStatusLogAt)) {
+      stdout.writeln('Waiting for runtime hosts (${requiredRuntimes.join(', ')}): $lastStatusSummary');
+      nextStatusLogAt = DateTime.now().add(const Duration(seconds: 5));
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+  }
+
+  stderr.writeln('Runtime hosts did not become ready within ${timeout.inSeconds}s: $lastStatusSummary');
+  return false;
+}
+
+Future<List<_RuntimeHostStatus>?> _fetchRuntimeStatuses(int serverPort) async {
+  final client = HttpClient();
+  try {
+    final request = await client.getUrl(Uri.parse('http://127.0.0.1:$serverPort/runtime/status'));
+    final response = await request.close();
+    final body = await response.transform(utf8.decoder).join();
+    if (response.statusCode != 200 || !_isSuccessfulRestResponse(body)) {
+      return null;
+    }
+
+    final decoded = jsonDecode(body);
+    if (decoded is! Map<String, dynamic>) {
+      return null;
+    }
+    final data = decoded['Data'];
+    if (data is! List<dynamic>) {
+      return null;
+    }
+
+    return data
+        .whereType<Map<String, dynamic>>()
+        .map((item) {
+          return _RuntimeHostStatus(
+            runtime: item['Runtime']?.toString() ?? '',
+            isStarted: item['IsStarted'] == true,
+            statusCode: item['StatusCode']?.toString() ?? '',
+            executablePath: item['ExecutablePath']?.toString() ?? '',
+            lastStartError: item['LastStartError']?.toString() ?? '',
+          );
+        })
+        .where((status) => status.runtime.isNotEmpty)
+        .toList();
+  } catch (_) {
+    return null;
+  } finally {
+    client.close(force: true);
+  }
+}
+
+String _formatRuntimeStatusSummary(List<_RuntimeHostStatus> statuses) {
+  if (statuses.isEmpty) {
+    return 'no runtime statuses returned';
+  }
+
+  // Runtime startup diagnostics now include the structured status fields added
+  // for user-facing errors, so CI can distinguish a missing interpreter from a
+  // host process that failed after launch.
+  return statuses
+      .map((status) {
+        final parts = <String>['${status.runtime}=${status.isStarted ? 'started' : 'stopped'}'];
+        if (status.statusCode.isNotEmpty) {
+          parts.add('status=${status.statusCode}');
+        }
+        if (status.executablePath.isNotEmpty) {
+          parts.add('path=${status.executablePath}');
+        }
+        if (status.lastStartError.isNotEmpty) {
+          parts.add('error=${status.lastStartError}');
+        }
+        return parts.join(' ');
+      })
+      .join(', ');
+}
+
+Future<void> _printRuntimeStartupDiagnostics(Directory woxDataDir) async {
+  // Bug fix: runtime startup failures used to surface as a generic install
+  // error. Printing the relevant log tails in CI keeps the failure actionable
+  // without requiring a separate artifact download for the common case.
+  stdout.writeln('Runtime startup diagnostics:');
+  await _printLogTail(File('${woxDataDir.path}${Platform.pathSeparator}log${Platform.pathSeparator}log'), 'wox log');
+
+  final hostLogDir = Directory('${woxDataDir.path}${Platform.pathSeparator}log${Platform.pathSeparator}hosts');
+  if (!await hostLogDir.exists()) {
+    stdout.writeln('[host logs] directory does not exist: ${hostLogDir.path}');
+    return;
+  }
+
+  final hostLogs = await hostLogDir.list().where((entry) => entry is File && entry.path.endsWith('.log')).cast<File>().toList();
+  hostLogs.sort((a, b) => a.path.compareTo(b.path));
+  if (hostLogs.isEmpty) {
+    stdout.writeln('[host logs] no host log files found in ${hostLogDir.path}');
+    return;
+  }
+  for (final hostLog in hostLogs) {
+    await _printLogTail(hostLog, hostLog.uri.pathSegments.last);
+  }
+}
+
+Future<void> _printLogTail(File file, String label, {int maxLines = 80}) async {
+  if (!await file.exists()) {
+    stdout.writeln('[$label] file does not exist: ${file.path}');
+    return;
+  }
+
+  try {
+    final lines = await file.readAsLines();
+    final start = lines.length > maxLines ? lines.length - maxLines : 0;
+    stdout.writeln('--- $label tail (${lines.length - start} lines) ---');
+    for (final line in lines.skip(start)) {
+      stdout.writeln(line);
+    }
+    stdout.writeln('--- end $label tail ---');
+  } catch (error) {
+    stdout.writeln('[$label] failed to read ${file.path}: $error');
+  }
+}
+
 Future<_SmokeTemplatePluginPackage> _prepareSmokeTemplatePlugin({
   required _SmokeTemplatePluginDefinition definition,
   required Directory artifactsDir,
   required Map<String, String> environment,
   required File logFile,
 }) async {
+  final pluginEnvironment = Map<String, String>.from(environment);
+  if (Platform.isWindows && definition.runtime == 'nodejs') {
+    // Bug fix: pnpm's default isolated linker creates a dense symlink tree that
+    // repeatedly hits Windows EBUSY during smoke setup. Hoisted/copy mode keeps
+    // the template package build deterministic while avoiding that fragile
+    // symlink layout in the temporary artifacts directory.
+    pluginEnvironment['npm_config_node_linker'] = 'hoisted';
+    pluginEnvironment['npm_config_package_import_method'] = 'copy';
+  }
+
   final workspaceDir = Directory('${artifactsDir.path}${Platform.pathSeparator}template-plugin-workspace');
   final repoName = definition.repoUrl.split('/').last;
   final pluginRoot = Directory('${workspaceDir.path}${Platform.pathSeparator}$repoName');
@@ -437,10 +634,14 @@ Future<_SmokeTemplatePluginPackage> _prepareSmokeTemplatePlugin({
     'git',
     ['clone', '--depth', '1', definition.repoUrl, pluginRoot.path],
     workingDirectory: workspaceDir.path,
-    environment: environment,
+    environment: pluginEnvironment,
     outputFile: logFile,
     prefix: '[template-plugin:${definition.runtime}]',
   );
+  if (definition.runtime == 'nodejs') {
+    await _ensureSinglePackagePnpmWorkspace(pluginRoot: pluginRoot, logFile: logFile);
+    await _ensureNodeTemplateQueryReturnTestCompatibility(pluginRoot: pluginRoot, logFile: logFile);
+  }
 
   final initInput = [definition.name, definition.description, definition.triggerKeyword, _templatePluginAuthor, _templatePluginWebsite, 'y'].join('\n');
 
@@ -448,13 +649,20 @@ Future<_SmokeTemplatePluginPackage> _prepareSmokeTemplatePlugin({
     'make',
     ['init'],
     workingDirectory: pluginRoot.path,
-    environment: environment,
+    environment: pluginEnvironment,
     outputFile: logFile,
     prefix: '[template-plugin:${definition.runtime}]',
     stdinData: '$initInput\n',
   );
-  await _runLoggedCommand('make', ['install'], workingDirectory: pluginRoot.path, environment: environment, outputFile: logFile, prefix: '[template-plugin:${definition.runtime}]');
-  await _runLoggedCommand('make', ['package'], workingDirectory: pluginRoot.path, environment: environment, outputFile: logFile, prefix: '[template-plugin:${definition.runtime}]');
+  await _runTemplateInstallWithRetry(definition: definition, pluginRoot: pluginRoot, environment: pluginEnvironment, logFile: logFile);
+  await _runLoggedCommand(
+    'make',
+    ['package'],
+    workingDirectory: pluginRoot.path,
+    environment: pluginEnvironment,
+    outputFile: logFile,
+    prefix: '[template-plugin:${definition.runtime}]',
+  );
 
   final pluginJson = jsonDecode(await File('${pluginRoot.path}${Platform.pathSeparator}plugin.json').readAsString()) as Map<String, dynamic>;
   final packageName = definition.name.trim().toLowerCase();
@@ -477,6 +685,95 @@ Future<_SmokeTemplatePluginPackage> _prepareSmokeTemplatePlugin({
           return keywords.first.toString();
         })(),
   );
+}
+
+// Ensures the official Node.js template can be installed by pnpm even when its
+// workspace file only contains pnpm config and omits the required packages list.
+Future<void> _ensureSinglePackagePnpmWorkspace({required Directory pluginRoot, required File logFile}) async {
+  final workspaceFile = File('${pluginRoot.path}${Platform.pathSeparator}pnpm-workspace.yaml');
+  if (!await workspaceFile.exists()) {
+    return;
+  }
+
+  final contents = await workspaceFile.readAsString();
+  if (RegExp(r'^\s*packages\s*:', multiLine: true).hasMatch(contents)) {
+    return;
+  }
+
+  final updatedContents = 'packages:\n  - .\n${contents.startsWith('\n') ? contents.substring(1) : contents}';
+  await workspaceFile.writeAsString(updatedContents);
+
+  final message = 'Normalized pnpm-workspace.yaml with a single-package workspace entry.';
+  stdout.writeln(message);
+  await logFile.writeAsString('$message\n', mode: FileMode.writeOnlyAppend);
+}
+
+// Keeps the cloned Node.js template test compatible with SDKs whose query
+// contract may return either a legacy Result[] or a structured QueryResponse.
+Future<void> _ensureNodeTemplateQueryReturnTestCompatibility({required Directory pluginRoot, required File logFile}) async {
+  final testFile = File('${pluginRoot.path}${Platform.pathSeparator}src${Platform.pathSeparator}__tests__${Platform.pathSeparator}test.ts');
+  if (!await testFile.exists()) {
+    return;
+  }
+
+  final contents = await testFile.readAsString();
+  const legacyAssertion = '  expect(results.length).toBeGreaterThan(0)';
+  if (!contents.contains(legacyAssertion)) {
+    return;
+  }
+
+  const compatibleAssertion = '  const resultItems = Array.isArray(results) ? results : results.Results\n  expect(resultItems.length).toBeGreaterThan(0)';
+  await testFile.writeAsString(contents.replaceFirst(legacyAssertion, compatibleAssertion));
+
+  final message = 'Normalized Node.js template query test for QueryReturn compatibility.';
+  stdout.writeln(message);
+  await logFile.writeAsString('$message\n', mode: FileMode.writeOnlyAppend);
+}
+
+Future<void> _runTemplateInstallWithRetry({
+  required _SmokeTemplatePluginDefinition definition,
+  required Directory pluginRoot,
+  required Map<String, String> environment,
+  required File logFile,
+}) async {
+  const maxAttempts = 3;
+  for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await _runLoggedCommand(
+        'make',
+        ['install'],
+        workingDirectory: pluginRoot.path,
+        environment: environment,
+        outputFile: logFile,
+        prefix: '[template-plugin:${definition.runtime}]',
+      );
+      return;
+    } on ProcessException {
+      final canRetry = definition.runtime == 'nodejs' && attempt < maxAttempts && await _logContainsPnpmBusyFailure(logFile);
+      if (!canRetry) {
+        rethrow;
+      }
+
+      stderr.writeln('[template-plugin:${definition.runtime}] pnpm hit a transient EBUSY symlink failure; retrying install (${attempt + 1}/$maxAttempts).');
+      final nodeModules = Directory('${pluginRoot.path}${Platform.pathSeparator}node_modules');
+      if (await nodeModules.exists()) {
+        // Bug fix: Windows can leave a partially-created pnpm symlink tree after
+        // EBUSY. Removing node_modules before retrying avoids reusing the broken
+        // install state while keeping the retry scoped to smoke setup only.
+        await nodeModules.delete(recursive: true);
+      }
+      await Future<void>.delayed(Duration(seconds: attempt * 2));
+    }
+  }
+}
+
+Future<bool> _logContainsPnpmBusyFailure(File logFile) async {
+  if (!await logFile.exists()) {
+    return false;
+  }
+
+  final contents = await logFile.readAsString();
+  return contents.contains('ERR_PNPM_EBUSY') || contents.contains('EBUSY: resource busy or locked');
 }
 
 Future<void> _installLocalPluginPackage({required int serverPort, required String packagePath}) async {

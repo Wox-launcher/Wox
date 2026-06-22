@@ -12,6 +12,7 @@ class WoxWindowsWebViewPlatform implements WoxWebViewPlatform {
   final Map<String, WoxWindowsWebViewSession> _cachedSessions = {};
 
   WebviewController? _activeController;
+  WoxWindowsWebViewSession? _activeSession;
   Future<void>? _environmentInitialization;
   bool _runtimeChecked = false;
   bool _runtimeAvailable = false;
@@ -27,6 +28,7 @@ class WoxWindowsWebViewPlatform implements WoxWebViewPlatform {
     final shouldCache = cacheKey.isNotEmpty;
     final session = shouldCache ? (_cachedSessions[cacheKey] ??= WoxWindowsWebViewSession.cached(cacheKey: cacheKey)) : WoxWindowsWebViewSession.transient();
     await session.ensureInitialized();
+    await session.resume();
     await session.apply(previewData);
     return session;
   }
@@ -39,6 +41,7 @@ class WoxWindowsWebViewPlatform implements WoxWebViewPlatform {
 
     if (identical(_activeController, session.controller)) {
       _activeController = null;
+      _activeSession = null;
     }
   }
 
@@ -61,6 +64,38 @@ class WoxWindowsWebViewPlatform implements WoxWebViewPlatform {
     }
 
     await controller.goForward();
+    return true;
+  }
+
+  @override
+  Future<String?> getCurrentUrl() async {
+    return _activeSession?.currentUrl;
+  }
+
+  @override
+  Future<bool> clearState() async {
+    final session = _activeSession;
+    if (session == null) {
+      return false;
+    }
+
+    // Drop the reusable session entry after clearing so the next preview open gets a fresh WebView controller instead of
+    // inheriting navigation history or renderer-side memory that is not part of persistent browser storage.
+    final cacheKey = session.cacheKey;
+    if (cacheKey != null && identical(_cachedSessions[cacheKey], session)) {
+      _cachedSessions.remove(cacheKey);
+    }
+    return session.clearState();
+  }
+
+  @override
+  Future<bool> focusActiveSession() async {
+    final controller = _activeController;
+    if (controller == null) {
+      return false;
+    }
+
+    await controller.focus();
     return true;
   }
 
@@ -88,7 +123,15 @@ class WoxWindowsWebViewPlatform implements WoxWebViewPlatform {
 
   @override
   Future<void> releaseSession(WoxWebViewSession? session) async {
-    if (session is! WoxWindowsWebViewSession || session.isCached) {
+    if (session is! WoxWindowsWebViewSession) {
+      return;
+    }
+
+    if (session.isCached) {
+      // Cached WebViews keep their browser state, but they should not keep rendering or owning focus while Flutter no longer mounts their texture.
+      if (!identical(_activeSession, session)) {
+        await session.suspend();
+      }
       return;
     }
 
@@ -99,8 +142,10 @@ class WoxWindowsWebViewPlatform implements WoxWebViewPlatform {
   void setActiveSession(WoxWebViewSession? session) {
     if (session is WoxWindowsWebViewSession) {
       _activeController = session.controller;
+      _activeSession = session;
     } else {
       _activeController = null;
+      _activeSession = null;
     }
   }
 

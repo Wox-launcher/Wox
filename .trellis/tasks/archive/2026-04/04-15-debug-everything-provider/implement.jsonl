@@ -1,8 +1,0 @@
-{"file": ".trellis/workflow.md", "reason": "Project workflow and conventions"}
-{"file": ".trellis/spec/backend/index.md", "reason": "Backend development guide"}
-{"file": ".trellis/spec/backend/error-handling.md", "reason": "Wrap provider failures with actionable context"}
-{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Keep filesearch diagnostics trace-aware and boundary-level"}
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Preserve Windows platform split and backend verification rules"}
-{"file": "wox.core/util/filesearch/provider_everything_windows.go", "reason": "Current provider boundary and result filtering flow"}
-{"file": "wox.core/util/filesearch/everything_sdk2_windows.go", "reason": "Everything 1.4 fallback behavior and error classification"}
-{"file": "wox.core/util/filesearch/everything_sdk_windows.go", "reason": "Primary Everything SDK3 connection and search path"}

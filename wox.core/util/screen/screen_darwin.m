@@ -1,5 +1,5 @@
-#import <Cocoa/Cocoa.h>
 #import <ApplicationServices/ApplicationServices.h>
+#import <Cocoa/Cocoa.h>
 
 typedef struct {
   int width;
@@ -30,43 +30,38 @@ typedef struct {
   int primary;
 } ScreenDisplayInfo;
 
+// desktopTopForScreens anchors all macOS screen metrics to the same virtual
+// desktop top-left space consumed by the Flutter runner.
+static CGFloat desktopTopForScreens(NSArray<NSScreen *> *screens) {
+  CGFloat desktopTop = 0;
+  for (NSScreen *screen in screens) {
+    desktopTop = MAX(desktopTop, NSMaxY([screen frame]));
+  }
+  return desktopTop;
+}
+
+// screenInfoFromVisibleFrame preserves the screen's global X and converts
+// AppKit's bottom-left Y into Wox's virtual-desktop top-left Y.
+static ScreenInfo screenInfoFromVisibleFrame(NSScreen *screen,
+                                             CGFloat desktopTop) {
+  NSRect visibleFrame = [screen visibleFrame];
+  int topY = (int)llround(desktopTop - NSMaxY(visibleFrame));
+
+  return (ScreenInfo){.width = (int)llround(visibleFrame.size.width),
+                      .height = (int)llround(visibleFrame.size.height),
+                      .x = (int)llround(visibleFrame.origin.x),
+                      .y = topY};
+}
+
 ScreenInfo getMouseScreenSize() {
   NSPoint mouseLoc = [NSEvent mouseLocation];
-  NSArray *screens = [NSScreen screens];
+  NSArray<NSScreen *> *screens = [NSScreen screens];
+  CGFloat desktopTop = desktopTopForScreens(screens);
 
   for (NSScreen *screen in screens) {
     NSRect frame = [screen frame];
     if (NSMouseInRect(mouseLoc, frame, NO)) {
-      // IMPORTANT: Use visibleFrame instead of frame to exclude menu bar and
-      // dock areas This ensures window positioning calculations use only the
-      // available workspace area
-      NSRect visibleFrame = [screen visibleFrame];
-
-      // Convert from AppKit's bottom-left origin to top-left origin coordinate
-      // system
-      //
-      // Why this conversion is needed:
-      // - AppKit uses bottom-left origin with Y-axis pointing up
-      // - Go backend expects top-left origin with Y-axis pointing down
-      // (standard for most UI frameworks)
-      // - We need to return the Y offset from the physical screen top to the
-      // visible area top
-      //
-      // Calculation:
-      // - frame.size.height = total screen height (e.g., 1080 pixels)
-      // - visibleFrame.size.height = available height excluding menu bar (e.g.,
-      // 1055 pixels)
-      // - topY = frame.size.height - visibleFrame.size.height = menu bar height
-      // (e.g., 25 pixels)
-      //
-      // This topY value tells Go backend: "the usable area starts 25 pixels
-      // from the screen top"
-      int topY = frame.size.height - visibleFrame.size.height;
-
-      return (ScreenInfo){.width = visibleFrame.size.width,
-                          .height = visibleFrame.size.height,
-                          .x = visibleFrame.origin.x,
-                          .y = topY};
+      return screenInfoFromVisibleFrame(screen, desktopTop);
     }
   }
   return (ScreenInfo){.width = 0, .height = 0, .x = 0, .y = 0};
@@ -74,17 +69,9 @@ ScreenInfo getMouseScreenSize() {
 
 ScreenInfo getPrimaryScreenSize() {
   NSScreen *primaryScreen = [NSScreen mainScreen];
-  NSRect frame = [primaryScreen frame];
-  // Use visibleFrame to exclude menu bar and dock areas
-  NSRect visibleFrame = [primaryScreen visibleFrame];
-  // Convert from AppKit's bottom-left origin to top-left origin
-  // topY = distance from physical screen top to visible area top (menu bar
-  // height)
-  int topY = frame.size.height - visibleFrame.size.height;
-  return (ScreenInfo){.width = visibleFrame.size.width,
-                      .height = visibleFrame.size.height,
-                      .x = visibleFrame.origin.x,
-                      .y = topY};
+  NSArray<NSScreen *> *screens = [NSScreen screens];
+  return screenInfoFromVisibleFrame(primaryScreen,
+                                    desktopTopForScreens(screens));
 }
 
 ScreenInfo getActiveScreenSize() {
@@ -100,17 +87,9 @@ ScreenInfo getActiveScreenSize() {
     return getPrimaryScreenSize();
   }
 
-  NSRect frame = [activeScreen frame];
-  // Use visibleFrame to exclude menu bar and dock areas
-  NSRect visibleFrame = [activeScreen visibleFrame];
-  // Convert from AppKit's bottom-left origin to top-left origin
-  // topY = distance from physical screen top to visible area top (menu bar
-  // height)
-  int topY = frame.size.height - visibleFrame.size.height;
-  return (ScreenInfo){.width = visibleFrame.size.width,
-                      .height = visibleFrame.size.height,
-                      .x = visibleFrame.origin.x,
-                      .y = topY};
+  NSArray<NSScreen *> *screens = [NSScreen screens];
+  return screenInfoFromVisibleFrame(activeScreen,
+                                    desktopTopForScreens(screens));
 }
 
 int listDisplays(ScreenDisplayInfo *displays, int maxCount) {
@@ -133,7 +112,8 @@ int listDisplays(ScreenDisplayInfo *displays, int maxCount) {
   for (NSScreen *screen in screens) {
     NSRect frame = [screen frame];
     NSNumber *screenNumber = screen.deviceDescription[@"NSScreenNumber"];
-    CGDirectDisplayID displayID = (CGDirectDisplayID)[screenNumber unsignedIntValue];
+    CGDirectDisplayID displayID =
+        (CGDirectDisplayID)[screenNumber unsignedIntValue];
     CGRect pixelFrame = CGDisplayBounds(displayID);
 
     if (!initialized) {
@@ -165,7 +145,8 @@ int listDisplays(ScreenDisplayInfo *displays, int maxCount) {
     CGFloat scale = [screen backingScaleFactor];
 
     NSNumber *screenNumber = screen.deviceDescription[@"NSScreenNumber"];
-    CGDirectDisplayID displayID = (CGDirectDisplayID)[screenNumber unsignedIntValue];
+    CGDirectDisplayID displayID =
+        (CGDirectDisplayID)[screenNumber unsignedIntValue];
     CGRect pixelFrame = CGDisplayBounds(displayID);
 
     int logicalX = (int)llround(frame.origin.x - minX);

@@ -15,10 +15,10 @@
   "ResultContainerPaddingRight": 0,
   "ResultContainerPaddingBottom": 0,
   "ResultItemBorderRadius": 4,
-  "ResultItemPaddingLeft": 6,
-  "ResultItemPaddingTop": 4,
-  "ResultItemPaddingRight": 6,
-  "ResultItemPaddingBottom": 4,
+  "ResultItemPaddingLeft": 4,
+  "ResultItemPaddingTop": 2,
+  "ResultItemPaddingRight": 4,
+  "ResultItemPaddingBottom": 2,
   "ResultItemTitleColor": "#E2E8F0",
   "ResultItemSubTitleColor": "#9CA3AF",
   "ResultItemTailTextColor": "#9CA3AF",
@@ -54,5 +54,12 @@
   "ToolbarFontColor": "#E2E8F0",
   "ToolbarBackgroundColor": "rgba(35, 41, 51, 0.3)",
   "ToolbarPaddingLeft": 10,
-  "ToolbarPaddingRight": 10
+  "ToolbarPaddingRight": 10,
+  "windows": {
+    "variants": {
+      "win10": {
+        "AppBackgroundColor": "#23293373"
+      }
+    }
+  }
 }

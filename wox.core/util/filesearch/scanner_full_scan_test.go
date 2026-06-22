@@ -2,11 +2,12 @@ package filesearch
 
 import (
 	"context"
+	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 	"time"
-
-	"github.com/fsnotify/fsnotify"
 )
 
 func TestScannerScanAllRootsPersistsDirectorySnapshotsAndFullScanTimestamp(t *testing.T) {
@@ -29,7 +30,7 @@ func TestScannerScanAllRootsPersistsDirectorySnapshotsAndFullScanTimestamp(t *te
 	}
 	mustInsertRoot(t, ctx, db, root)
 
-	scanner := NewScanner(db, NewLocalIndexProvider())
+	scanner := NewScanner(db)
 	scanner.scanAllRoots(ctx)
 
 	rootAfter, err := db.FindRootByID(ctx, root.ID)
@@ -103,7 +104,7 @@ func TestScannerScanAllRootsCapturesFreshRootFeedSnapshot(t *testing.T) {
 		FSEventID: 99,
 	})
 
-	scanner := NewScanner(db, NewLocalIndexProvider())
+	scanner := NewScanner(db)
 	scanner.changeFeed = newTestSnapshotChangeFeed(func(root RootRecord) (RootFeedSnapshot, error) {
 		return RootFeedSnapshot{
 			FeedType:   RootFeedTypeFSEvents,
@@ -135,59 +136,16 @@ func TestNewScannerUsesSpecDirtyQueueDefaults(t *testing.T) {
 	db, ctx := openTestFileSearchDB(t)
 	_ = ctx
 
-	scanner := NewScanner(db, NewLocalIndexProvider())
+	scanner := NewScanner(db)
 
 	if scanner.dirtyQueueConfig.SiblingMergeThreshold != 8 {
 		t.Fatalf("expected sibling merge threshold 8, got %d", scanner.dirtyQueueConfig.SiblingMergeThreshold)
 	}
-	if scanner.dirtyQueueConfig.RootEscalationPathThreshold != 512 {
-		t.Fatalf("expected root escalation path threshold 512, got %d", scanner.dirtyQueueConfig.RootEscalationPathThreshold)
+	if scanner.dirtyQueueConfig.RootEscalationPathThreshold != 0 {
+		t.Fatalf("expected root escalation path threshold 0, got %d", scanner.dirtyQueueConfig.RootEscalationPathThreshold)
 	}
-	if scanner.dirtyQueueConfig.RootEscalationDirectoryRatio != 0.10 {
-		t.Fatalf("expected root escalation directory ratio 0.10, got %f", scanner.dirtyQueueConfig.RootEscalationDirectoryRatio)
-	}
-}
-
-func TestScannerAddWatchForNewDirectoryKeepsRootOnlyFallback(t *testing.T) {
-	db, ctx := openTestFileSearchDB(t)
-	now := time.Now().UnixMilli()
-	rootPath := filepath.Join(t.TempDir(), "root-watch-list")
-	childPath := filepath.Join(rootPath, "child")
-
-	mustMkdirAll(t, childPath)
-	mustInsertRoot(t, ctx, db, RootRecord{
-		ID:        "root-watch-list",
-		Path:      rootPath,
-		Kind:      RootKindUser,
-		Status:    RootStatusIdle,
-		CreatedAt: now,
-		UpdatedAt: now,
-	})
-
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		t.Fatalf("new watcher: %v", err)
-	}
-	defer watcher.Close()
-
-	if err := addRootOnlyWatches(watcher, []RootRecord{{
-		ID:   "root-watch-list",
-		Path: rootPath,
-	}}); err != nil {
-		t.Fatalf("add root-only watches: %v", err)
-	}
-
-	scanner := NewScanner(db, NewLocalIndexProvider())
-	if err := scanner.addWatchForNewDirectory(watcher, childPath); err != nil {
-		t.Fatalf("add watch for new directory: %v", err)
-	}
-
-	watchList := watcher.WatchList()
-	if len(watchList) != 1 {
-		t.Fatalf("expected root-only fallback to keep exactly one watch, got %d: %#v", len(watchList), watchList)
-	}
-	if watchList[0] != rootPath {
-		t.Fatalf("expected root-only watch list to contain only %q, got %#v", rootPath, watchList)
+	if scanner.dirtyQueueConfig.RootEscalationDirectoryRatio != 0 {
+		t.Fatalf("expected root escalation directory ratio 0, got %f", scanner.dirtyQueueConfig.RootEscalationDirectoryRatio)
 	}
 }
 
@@ -207,20 +165,16 @@ func TestScannerScanAllRootsLeavesExistingSearchResultsAvailableDuringVerificati
 		UpdatedAt: now,
 	})
 
-	localProvider := NewLocalIndexProvider()
-	scanner := NewScanner(db, localProvider)
+	scanner := NewScanner(db)
 	scanner.scanAllRoots(ctx)
 
-	results, err := localProvider.Search(context.Background(), SearchQuery{Raw: "existing"}, 10)
-	if err != nil {
-		t.Fatalf("search local provider after full scan: %v", err)
-	}
+	results := searchSQLiteForTest(t, db, "existing", 10)
 	if len(results) != 1 || results[0].Path != filePath {
-		t.Fatalf("expected provider reload to include %q, got %#v", filePath, results)
+		t.Fatalf("expected sqlite update to include %q, got %#v", filePath, results)
 	}
 }
 
-func TestScannerStartupRestoreLoadsProviderFromDBWithoutFullScanForFreshCursor(t *testing.T) {
+func TestScannerStartupRestoreUsesPersistedSQLiteWithoutFullScanForFreshCursor(t *testing.T) {
 	db, ctx := openTestFileSearchDB(t)
 	now := time.Now()
 	rootPath := filepath.Join(t.TempDir(), "root-startup-restore-fresh")
@@ -247,16 +201,12 @@ func TestScannerStartupRestoreLoadsProviderFromDBWithoutFullScanForFreshCursor(t
 		t.Fatalf("seed root entries for startup restore: %v", err)
 	}
 
-	localProvider := NewLocalIndexProvider()
-	scanner := NewScanner(db, localProvider)
+	scanner := NewScanner(db)
 	scanner.changeFeed = newTestSnapshotChangeFeed(nil)
 
 	scanner.startupRestore(ctx)
 
-	results, err := localProvider.Search(context.Background(), SearchQuery{Raw: "stale"}, 10)
-	if err != nil {
-		t.Fatalf("search local provider after startup restore: %v", err)
-	}
+	results := searchSQLiteForTest(t, db, "stale", 10)
 	if len(results) != 1 || results[0].Path != staleFilePath {
 		t.Fatalf("expected startup restore to load persisted entry %q, got %#v", staleFilePath, results)
 	}
@@ -270,6 +220,235 @@ func TestScannerStartupRestoreLoadsProviderFromDBWithoutFullScanForFreshCursor(t
 	}
 	if rootAfter.LastFullScanAt != lastFullScanAt {
 		t.Fatalf("expected startup restore to skip full scan and keep LastFullScanAt=%d, got %d", lastFullScanAt, rootAfter.LastFullScanAt)
+	}
+}
+
+func TestScannerFullScanUsesGlobalRunProgress(t *testing.T) {
+	db, ctx := openTestFileSearchDB(t)
+	now := time.Now().UnixMilli()
+	rootOnePath := filepath.Join(t.TempDir(), "root-global-progress-one")
+	rootTwoPath := filepath.Join(t.TempDir(), "root-global-progress-two")
+
+	mustWriteTestFile(t, filepath.Join(rootOnePath, "nested-a", "alpha.txt"), "alpha")
+	mustWriteTestFile(t, filepath.Join(rootOnePath, "nested-b", "beta.txt"), "beta")
+	mustWriteTestFile(t, filepath.Join(rootTwoPath, "gamma.txt"), "gamma")
+
+	rootOne := RootRecord{ID: "root-global-progress-one", Path: rootOnePath, Kind: RootKindUser, Status: RootStatusIdle, CreatedAt: now, UpdatedAt: now}
+	rootTwo := RootRecord{ID: "root-global-progress-two", Path: rootTwoPath, Kind: RootKindUser, Status: RootStatusIdle, CreatedAt: now, UpdatedAt: now}
+	mustInsertRoot(t, ctx, db, rootOne)
+	mustInsertRoot(t, ctx, db, rootTwo)
+
+	scanner := NewScanner(db)
+	scanner.plannerBudgetOverride = &splitBudget{
+		LeafEntryBudget:     3,
+		LeafWriteBudget:     3,
+		LeafMemoryBudget:    1 << 20,
+		DirectFileBatchSize: 1,
+	}
+	engine := &Engine{db: db, scanner: scanner}
+
+	var (
+		statusesMu sync.Mutex
+		statuses   []StatusSnapshot
+	)
+	scanner.SetStateChangeHandler(func(changeCtx context.Context) {
+		status, err := engine.GetStatus(changeCtx)
+		if err != nil {
+			t.Fatalf("get status during full scan: %v", err)
+		}
+		statusesMu.Lock()
+		statuses = append(statuses, status)
+		statusesMu.Unlock()
+	})
+
+	scanner.scanAllRoots(ctx)
+
+	statusesMu.Lock()
+	defer statusesMu.Unlock()
+
+	lastProgress := int64(-1)
+	sawExecutingProgress := false
+	for _, status := range statuses {
+		if status.RunProgressTotal <= 0 {
+			continue
+		}
+		sawExecutingProgress = true
+		if status.RunProgressCurrent < lastProgress {
+			t.Fatalf("expected run progress to stay monotonic, got %d after %d", status.RunProgressCurrent, lastProgress)
+		}
+		lastProgress = status.RunProgressCurrent
+	}
+	if !sawExecutingProgress {
+		t.Fatal("expected full scan to emit run progress snapshots")
+	}
+	if len(statuses) == 0 {
+		t.Fatal("expected full scan to emit status snapshots")
+	}
+	lastStatus := statuses[len(statuses)-1]
+	if lastStatus.RunProgressTotal <= 0 {
+		t.Fatalf("expected final run progress total > 0, got %d", lastStatus.RunProgressTotal)
+	}
+	if lastStatus.RunProgressCurrent != lastStatus.RunProgressTotal {
+		t.Fatalf("expected final run progress to complete, got %d/%d", lastStatus.RunProgressCurrent, lastStatus.RunProgressTotal)
+	}
+}
+
+func TestScannerFullScanReportsStreamingRunStages(t *testing.T) {
+	db, ctx := openTestFileSearchDB(t)
+	now := time.Now().UnixMilli()
+	rootPath := filepath.Join(t.TempDir(), "root-run-stages")
+
+	mustWriteTestFile(t, filepath.Join(rootPath, "nested-a", "alpha.txt"), "alpha")
+	mustWriteTestFile(t, filepath.Join(rootPath, "nested-b", "beta.txt"), "beta")
+
+	root := RootRecord{ID: "root-run-stages", Path: rootPath, Kind: RootKindUser, Status: RootStatusIdle, CreatedAt: now, UpdatedAt: now}
+	mustInsertRoot(t, ctx, db, root)
+
+	scanner := NewScanner(db)
+	scanner.plannerBudgetOverride = &splitBudget{
+		LeafEntryBudget:     3,
+		LeafWriteBudget:     3,
+		LeafMemoryBudget:    1 << 20,
+		DirectFileBatchSize: 1,
+	}
+	engine := &Engine{db: db, scanner: scanner}
+
+	stageSeen := map[RunStage]bool{}
+	sawPlannerActivityContext := false
+	scanner.SetStateChangeHandler(func(changeCtx context.Context) {
+		status, err := engine.GetStatus(changeCtx)
+		if err != nil {
+			t.Fatalf("get status during staged full scan: %v", err)
+		}
+		if status.ActiveStage != "" {
+			stageSeen[status.ActiveStage] = true
+		}
+		if status.ActiveStage == RunStagePlanning {
+			if status.ActiveProgressTotal <= 0 {
+				t.Fatalf("expected planner stage to expose a stable denominator, got %d", status.ActiveProgressTotal)
+			}
+			if strings.TrimSpace(status.ActiveRootPath) == "" || strings.TrimSpace(status.ActiveScopePath) == "" {
+				t.Fatalf("expected planner stage to expose active root and scope paths, got root=%q scope=%q", status.ActiveRootPath, status.ActiveScopePath)
+			}
+			sawPlannerActivityContext = true
+		}
+	})
+
+	scanner.scanAllRoots(ctx)
+
+	for _, stage := range []RunStage{RunStagePlanning, RunStageExecuting, RunStageFinalizing} {
+		if !stageSeen[stage] {
+			t.Fatalf("expected full scan to report stage %q, got %#v", stage, stageSeen)
+		}
+	}
+	if !sawPlannerActivityContext {
+		t.Fatal("expected planner stage to publish root/scope activity context")
+	}
+}
+
+func TestScannerFullScanStreamsLargeRootWithoutChangingRootIdentity(t *testing.T) {
+	db, ctx := openTestFileSearchDB(t)
+	now := time.Now().UnixMilli()
+	rootPath := filepath.Join(t.TempDir(), "root-split-identity")
+
+	mustWriteTestFile(t, filepath.Join(rootPath, "nested-a", "alpha.txt"), "alpha")
+	mustWriteTestFile(t, filepath.Join(rootPath, "nested-b", "beta.txt"), "beta")
+	mustWriteTestFile(t, filepath.Join(rootPath, "nested-c", "gamma.txt"), "gamma")
+
+	root := RootRecord{ID: "root-split-identity", Path: rootPath, Kind: RootKindUser, Status: RootStatusIdle, CreatedAt: now, UpdatedAt: now}
+	mustInsertRoot(t, ctx, db, root)
+
+	scanner := NewScanner(db)
+	scanner.plannerBudgetOverride = &splitBudget{
+		LeafEntryBudget:     3,
+		LeafWriteBudget:     3,
+		LeafMemoryBudget:    1 << 20,
+		DirectFileBatchSize: 1,
+	}
+	engine := &Engine{db: db, scanner: scanner}
+
+	scopeSet := map[string]struct{}{}
+	scanner.SetStateChangeHandler(func(changeCtx context.Context) {
+		status, err := engine.GetStatus(changeCtx)
+		if err != nil {
+			t.Fatalf("get status during split full scan: %v", err)
+		}
+		if status.ActiveStage != RunStageExecuting {
+			return
+		}
+		if strings.TrimSpace(status.ActiveScopePath) == "" {
+			return
+		}
+		scopeSet[filepath.Clean(status.ActiveScopePath)] = struct{}{}
+	})
+
+	scanner.scanAllRoots(ctx)
+
+	rootsAfter, err := db.ListRoots(ctx)
+	if err != nil {
+		t.Fatalf("list roots after split full scan: %v", err)
+	}
+	if len(rootsAfter) != 1 {
+		t.Fatalf("expected one persisted root after split full scan, got %d", len(rootsAfter))
+	}
+	if rootsAfter[0].ID != root.ID {
+		t.Fatalf("expected persisted root identity %q, got %q", root.ID, rootsAfter[0].ID)
+	}
+	expectedScopes := []string{
+		rootPath,
+		filepath.Join(rootPath, "nested-a"),
+		filepath.Join(rootPath, "nested-b"),
+		filepath.Join(rootPath, "nested-c"),
+	}
+	for _, expectedScope := range expectedScopes {
+		if _, ok := scopeSet[filepath.Clean(expectedScope)]; !ok {
+			t.Fatalf("expected streaming scope %q, got %#v", expectedScope, scopeSet)
+		}
+	}
+}
+
+func TestScannerFullScanWideDirectFilesPrunesRemovedFiles(t *testing.T) {
+	db, ctx := openTestFileSearchDB(t)
+	now := time.Now().UnixMilli()
+	rootPath := filepath.Join(t.TempDir(), "root-wide-direct-prune")
+	alphaPath := filepath.Join(rootPath, "alpha.txt")
+	betaPath := filepath.Join(rootPath, "beta.txt")
+
+	mustWriteTestFile(t, alphaPath, "alpha")
+	mustWriteTestFile(t, betaPath, "beta")
+
+	root := RootRecord{ID: "root-wide-direct-prune", Path: rootPath, Kind: RootKindUser, Status: RootStatusIdle, CreatedAt: now, UpdatedAt: now}
+	mustInsertRoot(t, ctx, db, root)
+
+	scanner := NewScanner(db)
+	scanner.plannerBudgetOverride = &splitBudget{
+		LeafEntryBudget:     2,
+		LeafWriteBudget:     2,
+		LeafMemoryBudget:    1 << 20,
+		DirectFileBatchSize: 1,
+	}
+
+	scanner.scanAllRoots(ctx)
+
+	if err := os.Remove(betaPath); err != nil {
+		t.Fatalf("remove beta file: %v", err)
+	}
+
+	scanner.scanAllRoots(ctx)
+
+	entries, err := db.ListEntriesByRoot(ctx, root.ID)
+	if err != nil {
+		t.Fatalf("list entries after direct-files rescan: %v", err)
+	}
+	seen := map[string]struct{}{}
+	for _, entry := range entries {
+		seen[entry.Path] = struct{}{}
+	}
+	if _, ok := seen[alphaPath]; !ok {
+		t.Fatalf("expected surviving direct file %q after rescan", alphaPath)
+	}
+	if _, ok := seen[betaPath]; ok {
+		t.Fatalf("expected removed direct file %q to be pruned after rescan", betaPath)
 	}
 }
 
@@ -302,24 +481,17 @@ func TestScannerStartupRestoreReconcilesFallbackRoots(t *testing.T) {
 		t.Fatalf("seed stale fallback entries: %v", err)
 	}
 
-	localProvider := NewLocalIndexProvider()
-	scanner := NewScanner(db, localProvider)
+	scanner := NewScanner(db)
 	scanner.changeFeed = newTestSnapshotChangeFeed(nil)
 
 	scanner.startupRestore(ctx)
 
-	results, err := localProvider.Search(context.Background(), SearchQuery{Raw: "actual"}, 10)
-	if err != nil {
-		t.Fatalf("search actual file after fallback startup reconcile: %v", err)
-	}
+	results := searchSQLiteForTest(t, db, "actual", 10)
 	if len(results) != 1 || results[0].Path != actualFilePath {
 		t.Fatalf("expected startup restore to reconcile fallback root to %q, got %#v", actualFilePath, results)
 	}
 
-	results, err = localProvider.Search(context.Background(), SearchQuery{Raw: "stale"}, 10)
-	if err != nil {
-		t.Fatalf("search stale file after fallback startup reconcile: %v", err)
-	}
+	results = searchSQLiteForTest(t, db, "stale", 10)
 	if len(results) != 0 {
 		t.Fatalf("expected stale fallback entry %q to be removed after startup reconcile, got %#v", staleFilePath, results)
 	}

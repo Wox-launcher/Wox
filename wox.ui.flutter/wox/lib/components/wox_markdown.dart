@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -6,8 +7,14 @@ import 'package:gpt_markdown/custom_widgets/markdown_config.dart';
 import 'package:gpt_markdown/custom_widgets/unordered_ordered_list.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:uuid/v4.dart';
+import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_loading_indicator.dart';
+import 'package:wox/components/wox_selectable_text.dart';
+import 'package:wox/entity/wox_image.dart';
+import 'package:wox/enums/wox_image_type_enum.dart';
 import 'package:wox/utils/colors.dart';
+import 'package:wox/utils/log.dart';
 
 class WoxMarkdownView extends StatelessWidget {
   final String data;
@@ -16,8 +23,18 @@ class WoxMarkdownView extends StatelessWidget {
   final Color? linkColor;
   final Color? linkHoverColor;
   final bool selectable;
+  final bool enableImageOverlay;
 
-  const WoxMarkdownView({super.key, required this.fontColor, required this.data, this.fontSize = 14, this.linkColor, this.linkHoverColor, this.selectable = true});
+  const WoxMarkdownView({
+    super.key,
+    required this.fontColor,
+    required this.data,
+    this.fontSize = 14,
+    this.linkColor,
+    this.linkHoverColor,
+    this.selectable = true,
+    this.enableImageOverlay = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -25,10 +42,16 @@ class WoxMarkdownView extends StatelessWidget {
     final fontTextStyle = baseTextStyle.copyWith(color: fontColor);
     final bool isDarkFont = fontColor.computeLuminance() < 0.5;
     final codeBackgroundColor = isDarkFont ? Colors.black.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.08);
-    final codeTextStyle = fontTextStyle.copyWith(fontSize: 13, color: fontColor);
+    // Markdown code blocks inherit the caller's density-aware font size instead
+    // of pinning preview code to the old normal-size bucket.
+    final codeFontSize = (fontSize - 1).clamp(10.0, double.infinity).toDouble();
+    final codeLabelFontSize = (fontSize - 2).clamp(9.0, double.infinity).toDouble();
+    final codeTextStyle = fontTextStyle.copyWith(fontSize: codeFontSize, color: fontColor);
     final dividerColor = getThemeDividerColor();
-    final effectiveLinkColor = linkColor ?? fontColor;
-    final effectiveLinkHoverColor = linkHoverColor ?? fontColor.withValues(alpha: 0.85);
+    // Glass themes use low-contrast active/accent colors, so markdown links no
+    // longer use caller-provided highlight colors. Keeping links text-colored
+    // and underlined makes them readable on every preview surface.
+    final effectiveLinkColor = fontColor;
 
     final themeData = GptMarkdownThemeData(
       brightness: isDarkFont ? Brightness.light : Brightness.dark,
@@ -42,7 +65,7 @@ class WoxMarkdownView extends StatelessWidget {
       hrLineThickness: 1.5,
       hrLineColor: dividerColor,
       linkColor: effectiveLinkColor,
-      linkHoverColor: effectiveLinkHoverColor,
+      linkHoverColor: effectiveLinkColor,
     );
 
     final normalizedData = normalizeMarkdownImages(data);
@@ -75,7 +98,11 @@ class WoxMarkdownView extends StatelessWidget {
             launchUrl(uri);
           }
         },
-        imageBuilder: (context, url) => buildImage(context, url),
+        // Bug fix: gpt_markdown 1.1.7 made imageBuilder a four-argument callback.
+        // Passing the new dimensions into Wox's shared image builder keeps the upgraded
+        // dependency compatible without splitting remote/local image behavior.
+        imageBuilder: (context, url, width, height) => buildImage(context, url, width: width, height: height),
+        tableBuilder: (context, rows, textStyle, config) => buildMarkdownTable(context, rows, textStyle, config, fontColor, dividerColor),
         inlineComponents: [ATagMd(), WoxImageMd(), TableMd(), StrikeMd(), BoldMd(), ItalicMd(), UnderLineMd(), LatexMath(), LatexMathMultiLine(), HighlightedText(), SourceTag()],
         unOrderedListBuilder: (context, child, config) {
           final itemText = child is MdWidget ? child.exp.trimLeft() : '';
@@ -98,7 +125,7 @@ class WoxMarkdownView extends StatelessWidget {
                 if (trimmedName.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                    child: Text(trimmedName, style: codeTextStyle.copyWith(fontSize: 12, fontWeight: FontWeight.w600)),
+                    child: Text(trimmedName, style: codeTextStyle.copyWith(fontSize: codeLabelFontSize, fontWeight: FontWeight.w600)),
                   ),
                 if (trimmedName.isNotEmpty) Divider(height: 1, color: dividerColor.withValues(alpha: 0.4)),
                 SingleChildScrollView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.all(8), child: Text(code, style: codeTextStyle)),
@@ -109,7 +136,65 @@ class WoxMarkdownView extends StatelessWidget {
       ),
     );
 
-    return DefaultTextStyle.merge(style: fontTextStyle, child: selectable ? SelectionArea(child: markdownBody) : markdownBody);
+    return DefaultTextStyle.merge(style: fontTextStyle, child: selectable ? WoxSelectionArea(child: markdownBody) : markdownBody);
+  }
+
+  Widget buildMarkdownTable(BuildContext context, List<CustomTableRow> rows, TextStyle textStyle, GptMarkdownConfig config, Color textColor, Color dividerColor) {
+    final controller = ScrollController();
+    final isLightText = textColor.computeLuminance() >= 0.5;
+    final borderColor = dividerColor.withValues(alpha: isLightText ? 0.58 : 0.42);
+    final headerBackgroundColor = isLightText ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.055);
+
+    // Bug fix: gpt_markdown's built-in table renderer reads Flutter's ambient
+    // Material theme instead of Wox's preview colors. In dark launcher previews
+    // that produced a very bright header with almost invisible text, so Wox owns
+    // the table colors here while still letting the package parse markdown cells.
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Scrollbar(
+        controller: controller,
+        child: SingleChildScrollView(
+          controller: controller,
+          scrollDirection: Axis.horizontal,
+          child: Table(
+            textDirection: config.textDirection,
+            defaultColumnWidth: CustomTableColumnWidth(),
+            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+            border: TableBorder.all(width: 1, color: borderColor),
+            children:
+                rows
+                    .map(
+                      (row) => TableRow(
+                        decoration: row.isHeader ? BoxDecoration(color: headerBackgroundColor) : null,
+                        children: row.fields.map((field) => buildMarkdownTableCell(context, row, field, textStyle, config, textColor)).toList(),
+                      ),
+                    )
+                    .toList(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget buildMarkdownTableCell(BuildContext context, CustomTableRow row, CustomTableField field, TextStyle textStyle, GptMarkdownConfig config, Color textColor) {
+    final cellStyle = textStyle.copyWith(color: textColor, fontWeight: row.isHeader ? FontWeight.w700 : textStyle.fontWeight);
+    final cellConfig = config.copyWith(style: cellStyle);
+    Widget content = Padding(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5), child: MdWidget(context, field.data.trim(), false, config: cellConfig));
+
+    switch (field.alignment) {
+      case TextAlign.center:
+        content = Center(child: content);
+        break;
+      case TextAlign.right:
+        content = Align(alignment: Alignment.centerRight, child: content);
+        break;
+      case TextAlign.left:
+      default:
+        content = Align(alignment: Alignment.centerLeft, child: content);
+        break;
+    }
+
+    return content;
   }
 
   String normalizeMarkdownImages(String input) {
@@ -127,10 +212,17 @@ class WoxMarkdownView extends StatelessWidget {
     return text;
   }
 
-  Widget buildImage(BuildContext context, String url) {
+  Widget buildImage(BuildContext context, String url, {double? width, double? height}) {
     final trimmed = url.trim();
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-      return Image.network(trimmed, fit: BoxFit.fill, errorBuilder: (context, error, stackTrace) => Text(error.toString(), style: const TextStyle(color: Colors.red)));
+      return buildImageOverlayTrigger(
+        applyMarkdownImageSize(
+          Image.network(trimmed, fit: BoxFit.fill, errorBuilder: (context, error, stackTrace) => Text(error.toString(), style: const TextStyle(color: Colors.red))),
+          width,
+          height,
+        ),
+        WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_URL.code, imageData: trimmed),
+      );
     }
 
     final resolvedPath = resolveLocalImagePath(trimmed);
@@ -138,7 +230,51 @@ class WoxMarkdownView extends StatelessWidget {
       return Text(url);
     }
     final file = File(resolvedPath);
-    return Image.file(file, fit: BoxFit.fill, errorBuilder: (context, error, stackTrace) => Text(error.toString()));
+    return buildImageOverlayTrigger(
+      applyMarkdownImageSize(Image.file(file, fit: BoxFit.fill, errorBuilder: (context, error, stackTrace) => Text(error.toString())), width, height),
+      WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_ABSOLUTE_PATH.code, imageData: resolvedPath),
+    );
+  }
+
+  Widget applyMarkdownImageSize(Widget image, double? width, double? height) {
+    if (width == null && height == null) {
+      return image;
+    }
+
+    // Bug fix: the package now owns parsing width/height metadata and passes it to the
+    // callback. Applying it at Wox's image boundary keeps package-rendered images and
+    // WoxImageMd-rendered images consistent without adding a second layout wrapper.
+    return SizedBox(width: width, height: height, child: image);
+  }
+
+  Widget buildImageOverlayTrigger(Widget image, WoxImage overlayImage) {
+    if (!enableImageOverlay) {
+      return image;
+    }
+
+    // Markdown preview images used to be static inline content even when the same preview surface
+    // could open a native overlay. This opt-in wrapper keeps settings and release-note markdown
+    // unchanged while giving preview markdown the same enlarged-image affordance as image previews.
+    return SelectionContainer.disabled(
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => unawaited(openMarkdownImageOverlay(overlayImage)), child: image),
+      ),
+    );
+  }
+
+  Future<void> openMarkdownImageOverlay(WoxImage image) async {
+    final traceId = const UuidV4().generate();
+    final start = DateTime.now();
+    try {
+      // Diagnostic logging: markdown images can be remote URLs, so keep the click boundary visible
+      // while core logs the download/decode/native overlay stages for the same trace id.
+      Logger.instance.info(traceId, "markdown image overlay click start: type=${image.imageType}, dataLength=${image.imageData.length}");
+      await WoxApi.instance.showPreviewImageOverlay(traceId, image);
+      Logger.instance.info(traceId, "markdown image overlay click finished, cost ${DateTime.now().difference(start).inMilliseconds} ms");
+    } catch (e) {
+      Logger.instance.error(traceId, "Failed to open markdown image overlay: $e");
+    }
   }
 
   String resolveLocalImagePath(String url) {
@@ -190,16 +326,20 @@ class WoxImageMd extends InlineMd {
 
     final url = text.substring(urlStart, urlEnd).trim();
 
-    double? height;
     double? width;
+    double? height;
     if (altText.isNotEmpty) {
-      var size = RegExp(r'^([0-9]+)?x?([0-9]+)?').firstMatch(altText.trim());
-      width = double.tryParse(size?[1]?.toString().trim() ?? 'a');
-      height = double.tryParse(size?[2]?.toString().trim() ?? 'a');
+      // Bug fix: WoxImageMd owns this custom image syntax, so the upstream parser cannot
+      // inject the new width/height arguments for us. Keep the existing alt-size syntax
+      // but forward those dimensions through the current four-argument ImageBuilder API.
+      final size = RegExp(r'^([0-9]+)?x?([0-9]+)?').firstMatch(altText.trim());
+      width = double.tryParse(size?.group(1)?.trim() ?? '');
+      height = double.tryParse(size?.group(2)?.trim() ?? '');
     }
 
+    final imageBuilder = config.imageBuilder;
     final Widget image =
-        config.imageBuilder?.call(context, url) ??
+        imageBuilder?.call(context, url, width, height) ??
         Image(
           image: NetworkImage(url),
           loadingBuilder: (BuildContext context, Widget child, ImageChunkEvent? loadingProgress) {
@@ -214,7 +354,7 @@ class WoxImageMd extends InlineMd {
           },
         );
 
-    final sizedImage = (width != null || height != null) ? SizedBox(width: width, height: height, child: image) : image;
-    return WidgetSpan(alignment: PlaceholderAlignment.bottom, child: sizedImage);
+    final fallbackSizedImage = imageBuilder == null && (width != null || height != null) ? SizedBox(width: width, height: height, child: image) : image;
+    return WidgetSpan(alignment: PlaceholderAlignment.bottom, child: fallbackSizedImage);
   }
 }

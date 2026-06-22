@@ -47,6 +47,16 @@ func (s *ScriptHost) IsStarted(ctx context.Context) bool {
 	return true
 }
 
+func (s *ScriptHost) RuntimeStatus(ctx context.Context) plugin.RuntimeHostStatus {
+	// Script plugins are run directly per invocation, so exposing a running
+	// status preserves the shared host contract without adding fake restart UI.
+	return plugin.RuntimeHostStatus{
+		StatusCode:    plugin.RuntimeHostStatusRunning,
+		StatusMessage: "Script runtime does not use a persistent host process.",
+		CanRestart:    false,
+	}
+}
+
 func (s *ScriptHost) LoadPlugin(ctx context.Context, metadata plugin.Metadata, pluginDirectory string) (plugin.Plugin, error) {
 	// For script plugins, the actual script file is in the user script plugins directory
 	userScriptPluginDirectory := util.GetLocation().GetUserScriptPluginsDirectory()
@@ -91,7 +101,7 @@ func (s *ScriptPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	util.GetLogger().Debug(ctx, fmt.Sprintf("Script plugin %s initialized", s.metadata.GetName(ctx)))
 }
 
-func (s *ScriptPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+func (s *ScriptPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	// Prepare JSON-RPC request
 	request := map[string]interface{}{
 		"jsonrpc": "2.0",
@@ -127,7 +137,7 @@ func (s *ScriptPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Q
 				})
 			}
 			util.GetLogger().Info(ctx, fmt.Sprintf("script plugin %s missing runtime: %s", s.metadata.GetName(ctx), runtimeName))
-			return []plugin.QueryResult{
+			return plugin.NewQueryResponse([]plugin.QueryResult{
 				{
 					Title:    s.metadata.GetName(ctx),
 					SubTitle: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_script_runtime_missing_subtitle"), displayRuntimeName),
@@ -138,14 +148,14 @@ func (s *ScriptPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Q
 					},
 					Actions: actions,
 				},
-			}
+			})
 		}
 
 		s.api.Notify(ctx, err.Error())
-		return []plugin.QueryResult{}
+		return plugin.QueryResponse{}
 	}
 
-	return results
+	return plugin.NewQueryResponse(results)
 }
 
 // executeScript executes the script with the given JSON-RPC request and returns the results
@@ -189,6 +199,7 @@ func (s *ScriptPlugin) executeScript(ctx context.Context, request map[string]int
 			Title:    getStringFromMap(itemMap, "title"),
 			SubTitle: getStringFromMap(itemMap, "subtitle"),
 			Score:    int64(getFloatFromMap(itemMap, "score")),
+			ScoreKey: getFirstStringFromMap(itemMap, []string{"scoreKey", "score_key", "ScoreKey"}),
 		}
 
 		// Icon: WoxImage.String() format, e.g. "base64:data:image/png;base64,xxx" or "emoji:🧮"
@@ -206,6 +217,10 @@ func (s *ScriptPlugin) executeScript(ctx context.Context, request map[string]int
 
 		if preview, ok := parseScriptPreview(itemMap); ok {
 			queryResult.Preview = preview
+		}
+
+		if dragData := parseScriptDragData(itemMap); dragData != nil {
+			queryResult.DragData = dragData
 		}
 
 		if tails := parseScriptTails(ctx, s.metadata, itemMap); len(tails) > 0 {
@@ -795,11 +810,40 @@ func parseScriptPreview(itemMap map[string]interface{}) (plugin.WoxPreview, bool
 	if propertiesMap == nil {
 		propertiesMap = getMapFromMap(previewMap, "PreviewProperties")
 	}
+	tagsArray := getSliceFromMap(previewMap, "tags")
+	if tagsArray == nil {
+		tagsArray = getSliceFromMap(previewMap, "preview_tags")
+	}
+	if tagsArray == nil {
+		tagsArray = getSliceFromMap(previewMap, "previewTags")
+	}
+	if tagsArray == nil {
+		tagsArray = getSliceFromMap(previewMap, "PreviewTags")
+	}
 
 	preview := plugin.WoxPreview{
 		PreviewType:    previewType,
 		PreviewData:    previewData,
 		ScrollPosition: scrollPosition,
+	}
+	if len(tagsArray) > 0 {
+		// Script previews now accept explicit tags because the launcher metadata
+		// UI is tag-based. Keep the parser permissive across naming styles so
+		// shell scripts do not need a Go-specific payload shape.
+		preview.PreviewTags = make([]plugin.WoxPreviewTag, 0, len(tagsArray))
+		for _, item := range tagsArray {
+			tagMap, ok := item.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			preview.PreviewTags = append(preview.PreviewTags, plugin.WoxPreviewTag{
+				Label: getFirstStringFromMap(tagMap, []string{"label", "Label"}),
+				Tooltip: getFirstStringFromMap(tagMap, []string{
+					"tooltip",
+					"Tooltip",
+				}),
+			})
+		}
 	}
 	if len(propertiesMap) > 0 {
 		preview.PreviewProperties = make(map[string]string, len(propertiesMap))
@@ -814,6 +858,40 @@ func parseScriptPreview(itemMap map[string]interface{}) (plugin.WoxPreview, bool
 	}
 
 	return preview, true
+}
+
+func parseScriptDragData(itemMap map[string]interface{}) *plugin.QueryResultDragData {
+	dragMap := getMapFromMap(itemMap, "dragData")
+	if dragMap == nil {
+		dragMap = getMapFromMap(itemMap, "DragData")
+	}
+	if dragMap == nil {
+		return nil
+	}
+
+	dragType := getFirstStringFromMap(dragMap, []string{"type", "Type"})
+	if dragType != plugin.QueryResultDragDataTypeFiles {
+		return nil
+	}
+
+	filesArray := getSliceFromMap(dragMap, "files")
+	if filesArray == nil {
+		filesArray = getSliceFromMap(dragMap, "Files")
+	}
+	files := make([]string, 0, len(filesArray))
+	for _, item := range filesArray {
+		if filePath, ok := item.(string); ok && strings.TrimSpace(filePath) != "" {
+			files = append(files, filePath)
+		}
+	}
+	if len(files) == 0 {
+		return nil
+	}
+
+	return &plugin.QueryResultDragData{
+		Type:  plugin.QueryResultDragDataTypeFiles,
+		Files: files,
+	}
 }
 
 func parseScriptTails(ctx context.Context, metadata plugin.Metadata, itemMap map[string]interface{}) []plugin.QueryResultTail {
@@ -850,16 +928,20 @@ func parseScriptTails(ctx context.Context, metadata plugin.Metadata, itemMap map
 				Image:       img,
 				ImageWidth:  getFirstFloatPtrFromMap(tailMap, []string{"imageWidth", "ImageWidth", "width", "Width"}),
 				ImageHeight: getFirstFloatPtrFromMap(tailMap, []string{"imageHeight", "ImageHeight", "height", "Height"}),
+				Tooltip:     getFirstStringFromMap(tailMap, []string{"tooltip", "Tooltip"}),
 			})
 		default:
 			text := getFirstStringFromMap(tailMap, []string{"text", "Text"})
 			if text == "" {
 				continue
 			}
+			textCategory := getFirstStringFromMap(tailMap, []string{"textCategory", "TextCategory", "category", "Category"})
 			tails = append(tails, plugin.QueryResultTail{
-				Id:   getFirstStringFromMap(tailMap, []string{"id", "Id"}),
-				Type: plugin.QueryResultTailTypeText,
-				Text: text,
+				Id:           getFirstStringFromMap(tailMap, []string{"id", "Id"}),
+				Type:         plugin.QueryResultTailTypeText,
+				Text:         text,
+				TextCategory: plugin.QueryResultTailTextCategory(textCategory),
+				Tooltip:      getFirstStringFromMap(tailMap, []string{"tooltip", "Tooltip"}),
 			})
 		}
 

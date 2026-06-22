@@ -324,6 +324,55 @@ int clipboardWriteText(const wchar_t *text, int textLen) {
     return 0;
 }
 
+// clipboardWriteFilePaths writes a CF_HDROP payload with a null-separated,
+// double-null-terminated UTF-16 path buffer.
+// Returns 0 on success, negative on error.
+int clipboardWriteFilePaths(const wchar_t *paths, int totalLen) {
+    if (paths == NULL || totalLen <= 1) {
+        return -1;
+    }
+
+    if (!openClipboardRetry()) {
+        return -2;
+    }
+
+    if (!EmptyClipboard()) {
+        CloseClipboard();
+        return -3;
+    }
+
+    SIZE_T dataSize = sizeof(DROPFILES) + ((SIZE_T)totalLen * sizeof(wchar_t));
+    HGLOBAL hDrop = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, dataSize);
+    if (hDrop == NULL) {
+        CloseClipboard();
+        return -4;
+    }
+
+    DROPFILES *dropFiles = (DROPFILES *)GlobalLock(hDrop);
+    if (dropFiles == NULL) {
+        GlobalFree(hDrop);
+        CloseClipboard();
+        return -5;
+    }
+
+    dropFiles->pFiles = sizeof(DROPFILES);
+    dropFiles->pt.x = 0;
+    dropFiles->pt.y = 0;
+    dropFiles->fNC = FALSE;
+    dropFiles->fWide = TRUE;
+    memcpy(((BYTE *)dropFiles) + sizeof(DROPFILES), paths, ((SIZE_T)totalLen * sizeof(wchar_t)));
+    GlobalUnlock(hDrop);
+
+    if (SetClipboardData(CF_HDROP, hDrop) == NULL) {
+        GlobalFree(hDrop);
+        CloseClipboard();
+        return -6;
+    }
+
+    CloseClipboard();
+    return 0;
+}
+
 // clipboardWriteImage writes image data to the clipboard in both PNG (registered format) and CF_DIB formats.
 // Returns 0 on success, negative on error.
 int clipboardWriteImage(const unsigned char *pngData, int pngLen,

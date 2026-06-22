@@ -52,35 +52,21 @@ class PluginSettingValueStyle {
   late double paddingBottom;
   late double width;
 
+  PluginSettingValueStyle.defaults() {
+    paddingLeft = 0;
+    paddingTop = 0;
+    paddingRight = 0;
+    paddingBottom = 0;
+    width = 0;
+  }
+
   PluginSettingValueStyle.fromJson(Map<String, dynamic> json) {
-    if (json['PaddingLeft'] == null) {
-      paddingLeft = 0;
-    } else {
-      paddingLeft = (json['PaddingLeft'] as int).toDouble();
-    }
-
-    if (json['PaddingTop'] == null) {
-      paddingTop = 0;
-    } else {
-      paddingTop = (json['PaddingTop'] as int).toDouble();
-    }
-
-    if (json['PaddingRight'] == null) {
-      paddingRight = 0;
-    } else {
-      paddingRight = (json['PaddingRight'] as int).toDouble();
-    }
-
-    if (json['PaddingBottom'] == null) {
-      paddingBottom = 0;
-    } else {
-      paddingBottom = (json['PaddingBottom'] as int).toDouble();
-    }
-
-    if (json['Width'] == null) {
-      width = 0;
-    } else {
-      width = (json['Width'] as int).toDouble();
-    }
+    // Plugin-provided pixel styling is deprecated and intentionally ignored so
+    // old plugins stay loadable while Wox keeps setting pages visually consistent.
+    paddingLeft = 0;
+    paddingTop = 0;
+    paddingRight = 0;
+    paddingBottom = 0;
+    width = 0;
   }
 }

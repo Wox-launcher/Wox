@@ -9,9 +9,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"unsafe"
 	"wox/util"
+	"wox/util/imagecache"
 
 	"github.com/disintegration/imaging"
 	win "github.com/lxn/win"
@@ -27,6 +29,7 @@ var (
 	shGetFileInfo       = shell32.NewProc("SHGetFileInfoW")
 	extractIconEx       = shell32.NewProc("ExtractIconExW")
 	privateExtractIcons = user32.NewProc("PrivateExtractIconsW")
+	shellIconMu         sync.Mutex
 )
 
 type shFileInfo struct {
@@ -139,6 +142,12 @@ func getIconFromSHGetFileInfo(ext string) (win.HICON, error) {
 	}
 
 	var shfi shFileInfo
+	shellIconMu.Lock()
+	defer shellIconMu.Unlock()
+	// Bug fix: application indexing can request many file-type icons in
+	// parallel during smoke startup. Serializing the shell icon fallback avoids
+	// concurrent SHGetFileInfoW access that can terminate the Windows process
+	// before Go error handling can recover.
 	ret, _, _ := shGetFileInfo.Call(
 		uintptr(unsafe.Pointer(lpPath)),
 		0,
@@ -154,13 +163,7 @@ func getIconFromSHGetFileInfo(ext string) (win.HICON, error) {
 	return shfi.HIcon, nil
 }
 
-func getFileIconImpl(ctx context.Context, filePath string) (string, error) {
-	const size = 48
-	cachePath := buildPathCachePath(filePath, size)
-
-	if _, err := os.Stat(cachePath); err == nil {
-		return cachePath, nil
-	}
+func getFileIconImpl(ctx context.Context, filePath string, size int) (string, error) {
 	if strings.TrimSpace(filePath) == "" {
 		return "", errors.New("empty path")
 	}
@@ -170,6 +173,12 @@ func getFileIconImpl(ctx context.Context, filePath string) (string, error) {
 		return "", err
 	}
 
+	cachePath := buildPathCachePath(filePath, size, fi.ModTime().UnixNano())
+	if info, err := os.Stat(cachePath); err == nil {
+		imagecache.Touch(ctx, cachePath, info)
+		return cachePath, nil
+	}
+
 	// Check if the file is an offline file (e.g. OneDrive, Phone Link)
 	// If it is, avoid reading its contents to extract high res icons, to prevent triggering an automatic file download.
 	if sys, ok := fi.Sys().(*syscall.Win32FileAttributeData); ok {
@@ -177,7 +186,7 @@ func getFileIconImpl(ctx context.Context, filePath string) (string, error) {
 			(sys.FileAttributes&FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS != 0) ||
 			(sys.FileAttributes&FILE_ATTRIBUTE_RECALL_ON_OPEN != 0) {
 			util.GetLogger().Debug(ctx, "File is offline, falling back to extension icon to avoid download: "+filePath)
-			return getFileTypeIconImpl(ctx, filepath.Ext(filePath))
+			return getFileTypeIconImpl(ctx, filepath.Ext(filePath), size)
 		}
 	}
 
@@ -187,7 +196,7 @@ func getFileIconImpl(ctx context.Context, filePath string) (string, error) {
 	}
 	if err != nil {
 		util.GetLogger().Debug(ctx, "No embedded file icon found, fallback to associated file type icon: "+filePath)
-		return GetFileTypeIcon(ctx, filepath.Ext(filePath))
+		return GetFileTypeIconWithSize(ctx, filepath.Ext(filePath), size)
 	}
 
 	if mkdirErr := os.MkdirAll(filepath.Dir(cachePath), 0o755); mkdirErr != nil {
@@ -338,33 +347,38 @@ func getStandardDefaultIcon(ctx context.Context) (image.Image, error) {
 	return convertIconToImage(ctx, shfi.HIcon)
 }
 
-func getFileTypeIconImpl(ctx context.Context, ext string) (string, error) {
-	const size = 48
+func getFileTypeIconImpl(ctx context.Context, ext string, size int) (string, error) {
 	cachePath := buildCachePath(ext, size)
 
 	// Check cache first
-	if _, err := os.Stat(cachePath); err == nil {
+	if info, err := os.Stat(cachePath); err == nil {
+		imagecache.Touch(ctx, cachePath, info)
 		return cachePath, nil
 	}
 
 	// Try registry method first (more accurate for associated file types)
 	var hIcon win.HICON
 	var err error
+	var img image.Image
 
 	hIcon, err = getIconFromRegistry(ext)
 	if err != nil {
-		// Fallback to SHGetFileInfo
-		hIcon, err = getIconFromSHGetFileInfo(ext)
+		// Bug fix: SHGetFileInfoW can terminate the Windows smoke process for
+		// some transient extension lookups before Go can recover. When registry
+		// association lookup fails, use Wox's default shell icon extraction
+		// instead of the unsafe shell file-type fallback.
+		img, err = getHighResDefaultIcon(ctx)
 		if err != nil {
-			return "", errors.New("failed to get file type icon for " + ext + ": " + err.Error())
+			return "", errors.New("failed to get fallback file type icon for " + ext + ": " + err.Error())
 		}
-	}
-	defer win.DestroyIcon(hIcon)
-
-	// Convert HICON to image
-	img, convErr := convertIconToImage(ctx, hIcon)
-	if convErr != nil {
-		return "", errors.New("failed to convert icon to image for " + ext + ": " + convErr.Error())
+	} else {
+		defer win.DestroyIcon(hIcon)
+		var convErr error
+		// Convert HICON to image
+		img, convErr = convertIconToImage(ctx, hIcon)
+		if convErr != nil {
+			return "", errors.New("failed to convert icon to image for " + ext + ": " + convErr.Error())
+		}
 	}
 
 	// Ensure cache dir exists and save

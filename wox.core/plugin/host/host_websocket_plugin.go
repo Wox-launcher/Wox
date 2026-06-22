@@ -73,21 +73,46 @@ func (w *WebsocketPlugin) CreateToolbarMsgActionProxy(actionId string) func(cont
 	}
 }
 
-func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	selectionJson, marshalErr := json.Marshal(query.Selection)
 	if marshalErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal plugin query selection: %s", w.metadata.GetName(ctx), marshalErr.Error()))
-		return []plugin.QueryResult{}
+		return plugin.QueryResponse{}
 	}
 
 	envJson, marshalEnvErr := json.Marshal(query.Env)
 	if marshalEnvErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal plugin query env: %s", w.metadata.GetName(ctx), marshalEnvErr.Error()))
-		return []plugin.QueryResult{}
+		return plugin.QueryResponse{}
 	}
 
+	queryRefinements := query.Refinements
+	if queryRefinements == nil {
+		// External hosts normalize legacy query returns into QueryResponse, so
+		// they also expect selected refinements to arrive as an object.
+		queryRefinements = map[string]string{}
+	}
+	refinementsJson, marshalRefinementsErr := json.Marshal(queryRefinements)
+	if marshalRefinementsErr != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal plugin query refinements: %s", w.metadata.GetName(ctx), marshalRefinementsErr.Error()))
+		return plugin.QueryResponse{}
+	}
+	queryContextData := query.ContextData
+	if queryContextData == nil {
+		queryContextData = common.ContextData{}
+	}
+	contextDataJson, marshalContextDataErr := json.Marshal(queryContextData)
+	if marshalContextDataErr != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal plugin query context data: %s", w.metadata.GetName(ctx), marshalContextDataErr.Error()))
+		return plugin.QueryResponse{}
+	}
+
+	// Send both Id and QueryId while hosts move to QueryResponse. Older host
+	// code looked for QueryId, while the Go model field is Id.
 	rawResults, queryErr := w.websocketHost.invokeMethod(ctx, w.metadata, "query", map[string]string{
 		"Id":             query.Id,
+		"QueryId":        query.Id,
+		"SessionId":      query.SessionId,
 		"Type":           query.Type,
 		"RawQuery":       query.RawQuery,
 		"TriggerKeyword": query.TriggerKeyword,
@@ -95,25 +120,29 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 		"Search":         query.Search,
 		"Selection":      string(selectionJson),
 		"Env":            string(envJson),
+		"Refinements":    string(refinementsJson),
+		"ContextData":    string(contextDataJson),
 	})
 	if queryErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] query failed: %s", w.metadata.GetName(ctx), queryErr.Error()))
-		return []plugin.QueryResult{
-			plugin.GetPluginManager().GetResultForFailedQuery(ctx, w.metadata, query, queryErr),
+		return plugin.QueryResponse{
+			Results: []plugin.QueryResult{plugin.GetPluginManager().GetResultForFailedQuery(ctx, w.metadata, query, queryErr)},
 		}
 	}
 
-	var results []plugin.QueryResult
+	var response plugin.QueryResponse
 	marshalData, marshalErr := json.Marshal(rawResults)
 	if marshalErr != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal plugin query results: %s", w.metadata.GetName(ctx), marshalErr.Error()))
-		return nil
+		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal plugin query response: %s", w.metadata.GetName(ctx), marshalErr.Error()))
+		return plugin.QueryResponse{}
 	}
-	unmarshalErr := json.Unmarshal(marshalData, &results)
+	// Node.js and Python hosts normalize legacy Result[] returns before they
+	// cross back into Go, so core only accepts the QueryResponse object here.
+	unmarshalErr := json.Unmarshal(marshalData, &response)
 	if unmarshalErr != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal query results: %s", w.metadata.GetName(ctx), unmarshalErr.Error()))
-		return []plugin.QueryResult{}
+		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal query response: %s", w.metadata.GetName(ctx), unmarshalErr.Error()))
+		return plugin.QueryResponse{}
 	}
 
-	return results
+	return response
 }

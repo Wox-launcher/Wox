@@ -35,8 +35,14 @@ func normalizePath(path string) string {
 	return cleaned
 }
 
-func buildSearchTerms(name string, path string, pinyinFull string, pinyinInitials string) []string {
-	terms := []string{name, path, pinyinFull, pinyinInitials}
+func buildSearchTerms(name string, path string, pinyinFull string, pinyinInitials string, usePinyin bool) []string {
+	terms := []string{name, path}
+	// Linear fallback searches share the same SearchQuery contract as SQLite.
+	// Keep pinyin terms out completely when the caller disabled pinyin so broad
+	// ASCII fragments from generated pinyin payloads cannot pass final scoring.
+	if usePinyin {
+		terms = append(terms, pinyinFull, pinyinInitials)
+	}
 	return util.UniqueStrings(filterNonEmpty(terms))
 }
 
@@ -50,15 +56,16 @@ func matchSearchQuery(query SearchQuery, name string, path string, pinyinFull st
 	if query.plan != nil && query.plan.pathLike {
 		return scorePathMatch(path, query.plan.pathQuery)
 	}
-	return scoreSearchTerms(query.Raw, buildSearchTerms(name, path, pinyinFull, pinyinInitials))
+	usePinyin := !query.DisablePinyin
+	return scoreSearchTerms(query.Raw, buildSearchTerms(name, path, pinyinFull, pinyinInitials, usePinyin), usePinyin)
 }
 
-func scoreSearchTerms(query string, terms []string) (bool, int64) {
+func scoreSearchTerms(query string, terms []string, usePinyin bool) (bool, int64) {
 	bestScore := int64(0)
 	matched := false
 
 	for _, term := range terms {
-		isMatch, score := util.IsStringMatchScore(term, query, true)
+		isMatch, score := util.IsStringMatchScore(term, query, usePinyin)
 		if !isMatch {
 			continue
 		}

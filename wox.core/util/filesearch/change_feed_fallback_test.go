@@ -9,7 +9,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
-func TestFallbackChangeFeedHandleEventEmitsDirtyRootForDirectChildCreate(t *testing.T) {
+func TestFallbackChangeFeedHandleEventEmitsDirtyPathForDirectChildCreate(t *testing.T) {
 	rootPath := filepath.Join(t.TempDir(), "root")
 	mustMkdirAll(t, rootPath)
 	filePath := filepath.Join(rootPath, "child.txt")
@@ -31,11 +31,38 @@ func TestFallbackChangeFeedHandleEventEmitsDirtyRootForDirectChildCreate(t *test
 	feed.handleEvent(fsnotify.Event{Name: filePath, Op: fsnotify.Create})
 
 	signal := mustReadChangeSignal(t, feed.Signals())
-	if signal.Kind != ChangeSignalKindDirtyRoot {
-		t.Fatalf("expected dirty root signal, got %q", signal.Kind)
+	if signal.Kind != ChangeSignalKindDirtyPath {
+		t.Fatalf("expected dirty path signal, got %q", signal.Kind)
 	}
 	if signal.RootID != root.ID {
 		t.Fatalf("expected root id %q, got %q", root.ID, signal.RootID)
+	}
+	if signal.Path != filePath {
+		t.Fatalf("expected dirty path %q, got %q", filePath, signal.Path)
+	}
+}
+
+func TestFallbackChangeFeedHandleEventUsesRefreshedLongestRootMatcher(t *testing.T) {
+	parentPath := filepath.Join(t.TempDir(), "workspace")
+	dynamicPath := filepath.Join(parentPath, "src")
+	mustMkdirAll(t, dynamicPath)
+	filePath := filepath.Join(dynamicPath, "main.go")
+	mustWriteTestFile(t, filePath, "package main")
+
+	feed := NewFallbackChangeFeed()
+	defer feed.Close()
+
+	parent := RootRecord{ID: "root-parent", Path: parentPath, FeedType: RootFeedTypeFallback, FeedState: RootFeedStateReady}
+	dynamic := RootRecord{ID: "root-dynamic", Path: dynamicPath, Kind: RootKindDynamic, DynamicParentRootID: parent.ID, FeedType: RootFeedTypeFallback, FeedState: RootFeedStateReady}
+	if err := feed.Refresh(context.Background(), []RootRecord{parent, dynamic}); err != nil {
+		t.Fatalf("refresh fallback change feed: %v", err)
+	}
+
+	feed.handleEvent(fsnotify.Event{Name: filePath, Op: fsnotify.Write})
+
+	signal := mustReadChangeSignal(t, feed.Signals())
+	if signal.RootID != dynamic.ID {
+		t.Fatalf("expected refreshed matcher to choose dynamic root, got %#v", signal)
 	}
 	if signal.Path != filePath {
 		t.Fatalf("expected dirty path %q, got %q", filePath, signal.Path)

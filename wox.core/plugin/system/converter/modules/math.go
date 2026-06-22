@@ -14,6 +14,14 @@ type MathModule struct {
 	*regexBaseModule
 }
 
+var supportedMathCurrencyOrCryptoPattern = buildMathCurrencyOrCryptoPattern()
+
+func buildMathCurrencyOrCryptoPattern() string {
+	codes := append([]string{}, supportedCurrencyCodes...)
+	codes = append(codes, "btc", "eth", "usdt", "bnb")
+	return `(?i)(` + strings.Join(codes, "|") + `)`
+}
+
 func NewMathModule(ctx context.Context, api plugin.API) *MathModule {
 	m := &MathModule{}
 
@@ -26,7 +34,11 @@ func NewMathModule(ctx context.Context, api plugin.API) *MathModule {
 			Handler:     m.handlePercentageOfCurrency,
 		},
 		{
-			Pattern:     `([0-9]+(?:\.[0-9]+)?)\s*%\s+of\s+([0-9]+(?:\.[0-9]+)?)\s*(?i)(usd|eur|gbp|jpy|cny|aud|cad|btc|eth|usdt|bnb)`,
+			// Share the currency list with CurrencyModule so mixed math/currency
+			// expressions accept the same common currencies as direct conversion.
+			// The old embedded list would still reject "12% of 100 HKD" after the
+			// currency converter itself learned HKD.
+			Pattern:     `([0-9]+(?:\.[0-9]+)?)\s*%\s+of\s+([0-9]+(?:\.[0-9]+)?)\s*` + supportedMathCurrencyOrCryptoPattern,
 			Priority:    1250,
 			Description: "Handle percentage of currency/crypto with unit (e.g., 12% of 321 USD, 12% of 1 BTC)",
 			Handler:     m.handlePercentageOfCurrencyOrCrypto,
@@ -164,7 +176,7 @@ func (m *MathModule) TokenPatterns() []core.TokenPattern {
 			Module:    m,
 		},
 		{
-			Pattern:   `([0-9]+(?:\.[0-9]+)?)\s*%\s+of\s+([0-9]+(?:\.[0-9]+)?)\s*(?i)(usd|eur|gbp|jpy|cny|aud|cad|btc|eth|usdt|bnb)`,
+			Pattern:   `([0-9]+(?:\.[0-9]+)?)\s*%\s+of\s+([0-9]+(?:\.[0-9]+)?)\s*` + supportedMathCurrencyOrCryptoPattern,
 			Type:      core.IdentToken,
 			Priority:  1250,
 			FullMatch: false,

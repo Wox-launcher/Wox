@@ -21,8 +21,13 @@ class WoxWindowsWebViewSession implements WoxWebViewSession {
   Future<void>? _initialization;
   StreamSubscription<AcceleratorKeyPressedEvent>? _acceleratorKeySubscription;
   StreamSubscription<HistoryChanged>? _historyChangedSubscription;
+  StreamSubscription<String>? _urlSubscription;
   StreamSubscription<dynamic>? _webMessageSubscription;
+  // Current URL follows user navigation, while applied source tracks the preview payload that created the page.
+  // Cached sessions must not reload just because the site redirected or the user navigated away from the initial URL.
   String _currentUrl = "";
+  String _appliedUrl = "";
+  String _appliedHtml = "";
   String _currentCss = "";
   String? _currentScriptId;
   bool _disposed = false;
@@ -37,8 +42,30 @@ class WoxWindowsWebViewSession implements WoxWebViewSession {
   @override
   ValueListenable<WoxWebViewNavigationState> get navigationState => _navigationState;
 
+  String? get currentUrl => _currentUrl.trim().isEmpty ? null : _currentUrl;
+
   @override
   Widget buildWidget() => SizedBox.expand(child: Webview(controller));
+
+  /// Resume the cached WebView before it is mounted into the preview tree again.
+  Future<void> resume() async {
+    if (_disposed) {
+      return;
+    }
+
+    await ensureInitialized();
+    await controller.resume();
+  }
+
+  /// Suspend a cached WebView after the preview tree releases it so it cannot keep painting or holding focus off-screen.
+  Future<void> suspend() async {
+    if (_disposed) {
+      return;
+    }
+
+    await ensureInitialized();
+    await controller.suspend();
+  }
 
   Future<void> ensureInitialized() {
     _initialization ??= _initialize();
@@ -62,13 +89,63 @@ class WoxWindowsWebViewSession implements WoxWebViewSession {
       _currentScriptId = await controller.addScriptToExecuteOnDocumentCreated(WoxWebViewSupport.buildInjectCssScript(previewData.injectCss));
     }
 
-    final shouldReload = _currentUrl != previewData.url || injectCssChanged;
+    final shouldReload = _appliedUrl != previewData.url || _appliedHtml != previewData.html || injectCssChanged;
     _currentCss = previewData.injectCss;
+
+    if (shouldReload && previewData.html.isNotEmpty) {
+      await controller.loadStringContent(previewData.html);
+      _appliedHtml = previewData.html;
+      _appliedUrl = previewData.url;
+      _currentUrl = previewData.url;
+      return;
+    }
 
     if (shouldReload && previewData.url.isNotEmpty) {
       await controller.loadUrl(previewData.url);
+      _appliedHtml = "";
+      _appliedUrl = previewData.url;
       _currentUrl = previewData.url;
     }
+  }
+
+  Future<bool> clearState() async {
+    if (_disposed) {
+      return false;
+    }
+
+    await ensureInitialized();
+    final targetUrl = _currentUrl;
+    if (targetUrl.isEmpty) {
+      return false;
+    }
+
+    final origin = _resolveHttpOrigin(targetUrl);
+    if (origin == null || origin == "null") {
+      return false;
+    }
+
+    // Clear both browser-wide network state and origin-scoped storage. Cookies/cache alone were not enough for login flows
+    // such as X because their onboarding state also lives in IndexedDB, Cache Storage and service worker registrations.
+    await controller.clearCookies();
+    await controller.clearCache();
+    await controller.clearStorageForOrigin(origin);
+
+    // Reload through a blank page so the current document's in-memory JavaScript state is discarded before the site starts
+    // a new login/session bootstrap from the cleared persistent storage.
+    await controller.loadUrl("about:blank");
+    _currentUrl = "";
+    await controller.loadUrl(targetUrl);
+    _currentUrl = targetUrl;
+    return true;
+  }
+
+  String? _resolveHttpOrigin(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null || (uri.scheme != "http" && uri.scheme != "https") || uri.host.isEmpty) {
+      return null;
+    }
+
+    return uri.origin;
   }
 
   @override
@@ -80,6 +157,7 @@ class WoxWindowsWebViewSession implements WoxWebViewSession {
     _disposed = true;
     await _acceleratorKeySubscription?.cancel();
     await _historyChangedSubscription?.cancel();
+    await _urlSubscription?.cancel();
     await _webMessageSubscription?.cancel();
     await _actions.close();
     _navigationState.dispose();
@@ -99,6 +177,11 @@ class WoxWindowsWebViewSession implements WoxWebViewSession {
     _historyChangedSubscription = controller.historyChanged.listen((event) {
       _navigationState.value = WoxWebViewNavigationState(canGoBack: event.canGoBack, canGoForward: event.canGoForward);
     });
+    _urlSubscription = controller.url.listen((url) {
+      // The floating toolbar opens the current page in the system browser. Preview data only contains the
+      // initial URL, so track WebView navigation events here and expose that simple state through the platform wrapper.
+      _currentUrl = url;
+    });
     _webMessageSubscription = controller.webMessage.listen((message) {
       if (message is! Map) {
         return;
@@ -110,6 +193,8 @@ class WoxWindowsWebViewSession implements WoxWebViewSession {
     });
     await controller.setBackgroundColor(Colors.transparent);
     await controller.setPopupWindowPolicy(WebviewPopupWindowPolicy.sameWindow);
+    // Keep the WebView plugin in its mobile-preview mode. The clear-state action handles stuck login/session data without
+    // changing the user-facing mobile layout that existing configured sites were built around.
     await controller.setUserAgent(WoxWebViewSupport.mobileUserAgent);
     await controller.setCacheDisabled(!isCached);
   }

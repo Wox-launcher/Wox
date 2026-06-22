@@ -12,10 +12,13 @@ and actions.
 
 To create a plugin, implement the `Plugin` protocol:
 
+The example below returns `QueryResponse`, so its `plugin.json` should declare
+`MinWoxVersion` >= `2.0.4`. Return `List[Result]` directly when supporting older
+Wox releases.
+
 ```python
-from wox_plugin import Plugin, PluginInitParams, Context, Query, Result
+from wox_plugin import Plugin, PluginInitParams, Context, Query, QueryResponse, Result
 from wox_plugin import WoxImage, QueryType, LogLevel
-from typing import List
 
 class MyPlugin:
     async def init(self, ctx: Context, params: PluginInitParams) -> None:
@@ -25,7 +28,7 @@ class MyPlugin:
         # Log initialization
         await self.api.log(ctx, LogLevel.INFO, "MyPlugin initialized")
 
-    async def query(self, ctx: Context, query: Query) -> List[Result]:
+    async def query(self, ctx: Context, query: Query) -> QueryResponse:
         # Return results based on query
         results = []
 
@@ -38,7 +41,7 @@ class MyPlugin:
                     score=100
                 ))
 
-        return results
+        return QueryResponse(results=results)
 ```
 
 ## Key Components
@@ -50,7 +53,7 @@ class MyPlugin:
 
 ### Public API (`PublicAPI`)
 Methods for interacting with Wox:
-- **UI Control**: `show_app()`, `hide_app()`, `is_visible()`, `notify()`
+- **UI Control**: `show_app()`, `hide_app()`, `is_visible()`, `notify()`, `push_attention()`
 - **Query**: `change_query()`, `refresh_query()`, `push_results()`
 - **Settings**: `get_setting()`, `save_setting()`, `on_setting_changed()`
 - **Logging**: `log()`
@@ -61,6 +64,7 @@ Methods for interacting with Wox:
 - **Callbacks**: `on_unload()`, `on_deep_link()`
 - **Commands**: `register_query_commands()`
 - **Clipboard**: `copy()`
+- **Screenshot**: `screenshot()`
 
 ### Models
 
@@ -73,6 +77,8 @@ Methods for interacting with Wox:
 - `ChangeQueryParam`: Parameters to change the query
 - `RefreshQueryParam`: Parameters to refresh the query
 - `CopyParams`: Parameters for clipboard operations
+- `ScreenshotOption`: Options for the screenshot workflow
+- `ScreenshotResult`: Result returned by the screenshot workflow
 
 #### Result Models (`models/result.py`)
 - `Result`: Search result with title, icon, preview, actions
@@ -82,6 +88,7 @@ Methods for interacting with Wox:
 - `FormActionContext`: Context for form submissions
 - `ResultTail`: Additional visual elements (text or image)
 - `UpdatableResult`: Result that can be updated in UI
+- `QueryResponse`: Structured query response with results, refinements, and layout hints (requires Wox >= 2.0.4)
 
 #### Image Models (`models/image.py`)
 - `WoxImage`: Image model with multiple types
@@ -90,7 +97,10 @@ Methods for interacting with Wox:
 
 #### Preview Models (`models/preview.py`)
 - `WoxPreview`: Preview content for results
-- `WoxPreviewType`: MARKDOWN, TEXT, IMAGE, URL, FILE, REMOTE
+- `WoxPreviewTag`: Metadata tag shown below preview content
+- `WoxPreviewListData`: Structured data for list previews
+- `WoxPreviewListItem`: Row data for list previews
+- `WoxPreviewType`: MARKDOWN, TEXT, IMAGE, URL, FILE, LIST, REMOTE
 - `WoxPreviewScrollPosition`: Control initial scroll position
 
 #### Setting Models (`models/setting.py`)
@@ -127,7 +137,25 @@ Plugins must declare metadata in a `plugin.json` file:
     "TriggerKeywords": ["my"],
     "Description": "My awesome Wox plugin",
     "Website": "https://github.com/user/myplugin",
-    "Icon": "https://example.com/icon.png"
+    "Icon": "https://example.com/icon.png",
+    "QueryRequirements": {
+        "AnyQuery": [
+            {
+                "SettingKey": "apiKey",
+                "Validators": [{"Type": "not_empty"}],
+                "Message": "i18n:my_plugin_api_key_required"
+            }
+        ],
+        "QueryWithoutCommand": [],
+        "QueryWithCommand": {
+            "download": [
+                {
+                    "SettingKey": "downloadPath",
+                    "Validators": [{"Type": "not_empty"}]
+                }
+            ]
+        }
+    }
 }
 ```
 
@@ -138,8 +166,18 @@ Plugins must declare metadata in a `plugin.json` file:
    - `query.trigger_keyword = "my"`
    - `query.command = ""`
    - `query.search = "query"`
-3. Plugin returns `List[Result]`
+3. Plugin returns `QueryResponse` when `MinWoxVersion` is at least `2.0.4`
 4. Wox displays results sorted by score
+
+Returning `List[Result]` directly is deprecated. The Python host still accepts it
+for compatibility with older Wox releases. Use `QueryResponse` only when
+`plugin.json` declares `MinWoxVersion` >= `2.0.4` so results, refinements, and
+layout hints are carried together.
+
+For preview width and grid presentation, prefer `QueryResponse.layout` over the
+deprecated `resultPreviewWidthRatio` and `gridLayout` metadata features. The
+metadata features remain compatible, but they are static defaults rather than
+query-scoped layout decisions.
 
 ## Actions
 
@@ -181,7 +219,7 @@ settings = [
 
 from typing import List
 
-from .api import ChatStreamCallback, PublicAPI
+from .api import ChatStreamCallback, PublicAPI, ScreenshotOption, ScreenshotResult
 from .models.ai import (
     AIModel,
     ChatStreamData,
@@ -190,13 +228,16 @@ from .models.ai import (
     ConversationRole,
     ToolCallInfo,
 )
+from .models.attention import AttentionAction, AttentionActionType, PushAttentionRequest
 from .models.context import Context
 from .models.image import WoxImage, WoxImageType
 from .models.log import LogLevel
 from .models.mru import MRUData, MRURestoreCallback
-from .models.preview import WoxPreview, WoxPreviewScrollPosition, WoxPreviewType
+from .models.preview import WoxPreview, WoxPreviewListData, WoxPreviewListItem, WoxPreviewScrollPosition, WoxPreviewTag, WoxPreviewType
 from .models.query import (
     ChangeQueryParam,
+    CopyParams,
+    CopyType,
     MetadataCommand,
     Query,
     QueryEnv,
@@ -204,8 +245,14 @@ from .models.query import (
     RefreshQueryParam,
     Selection,
     SelectionType,
-    CopyParams,
-    CopyType,
+)
+from .models.query_response import (
+    QueryGridLayout,
+    QueryLayout,
+    QueryRefinement,
+    QueryRefinementOption,
+    QueryRefinementType,
+    QueryResponse,
 )
 from .models.result import (
     ActionContext,
@@ -213,16 +260,15 @@ from .models.result import (
     Result,
     ResultAction,
     ResultActionType,
+    ResultDragData,
     ResultTail,
+    ResultTailTextCategory,
     ResultTailType,
     UpdatableResult,
 )
-from .models.toolbar_msg import (
-    ToolbarMsg,
-    ToolbarMsgAction,
-    ToolbarMsgActionContext,
-)
 from .models.setting import (
+    PluginQueryRequirement,
+    PluginQueryRequirements,
     PluginSettingDefinitionItem,
     PluginSettingDefinitionType,
     PluginSettingDefinitionValue,
@@ -234,26 +280,47 @@ from .models.setting import (
     create_label_setting,
     create_textbox_setting,
 )
-from .plugin import Plugin, PluginInitParams
+from .models.toolbar_msg import (
+    ToolbarMsg,
+    ToolbarMsgAction,
+    ToolbarMsgActionContext,
+)
+from .plugin import Plugin, PluginInitParams, QueryReturn
 
 __all__: List[str] = [
     # Plugin
     "Plugin",
     "PluginInitParams",
+    "QueryReturn",
     # API
     "PublicAPI",
     "ChatStreamCallback",
+    "ScreenshotOption",
+    "ScreenshotResult",
+    "PushAttentionRequest",
+    "AttentionAction",
+    "AttentionActionType",
     # Models
     "Context",
     "Query",
+    "QueryResponse",
+    "QueryRefinement",
+    "QueryRefinementOption",
+    "QueryRefinementType",
+    "QueryLayout",
+    "QueryGridLayout",
     "QueryEnv",
     "Selection",
     "Result",
     "WoxImage",
     "WoxPreview",
+    "WoxPreviewTag",
+    "WoxPreviewListData",
+    "WoxPreviewListItem",
     "LogLevel",
     "ResultTail",
     "ResultAction",
+    "ResultDragData",
     "ActionContext",
     "FormActionContext",
     "ResultActionType",
@@ -263,6 +330,8 @@ __all__: List[str] = [
     "ToolbarMsgActionContext",
     "MetadataCommand",
     "PluginSettingDefinitionItem",
+    "PluginQueryRequirement",
+    "PluginQueryRequirements",
     "PluginSettingValueStyle",
     # AI
     "AIModel",
@@ -291,15 +360,21 @@ __all__: List[str] = [
     "WoxImageType",
     # Preview
     "WoxPreview",
+    "WoxPreviewTag",
+    "WoxPreviewListData",
+    "WoxPreviewListItem",
     "WoxPreviewType",
     "WoxPreviewScrollPosition",
     # Result
+    "ResultTailTextCategory",
     "ResultTailType",
     # MRU
     "MRUData",
     "MRURestoreCallback",
     # Settings
     "PluginSettingDefinitionItem",
+    "PluginQueryRequirement",
+    "PluginQueryRequirements",
     "PluginSettingDefinitionType",
     "PluginSettingDefinitionValue",
     "PluginSettingValueStyle",

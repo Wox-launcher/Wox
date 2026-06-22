@@ -19,7 +19,8 @@
 #         "Style": {
 #           "Width": 400
 #         }
-#       }
+#       },
+#       "IsPlatformSpecific": false
 #     }
 #   ],
 #   "I18n": {
@@ -31,6 +32,7 @@
 #     }
 #   }
 # }
+# Cloud sync note: mark path, command, hotkey, browser profile, and app path settings with "IsPlatformSpecific": true.
 
 """
 Wox Python Script Plugin Template

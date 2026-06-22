@@ -1,7 +1,0 @@
-{"file": ".trellis/workflow.md", "reason": "Project workflow and conventions"}
-{"file": ".trellis/spec/backend/index.md", "reason": "Backend development guide"}
-{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend development guide"}
-{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Flutter launcher layout and show flow must follow component patterns"}
-{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Show payload extension must stay typed in Dart"}
-{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Backend diagnostics must use project logging patterns"}
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Tray anchor fix spans backend payload and Flutter positioning"}

@@ -1,11 +1,40 @@
 #include <ApplicationServices/ApplicationServices.h>
 #include <Cocoa/Cocoa.h>
 #include <ScriptingBridge/ScriptingBridge.h>
+#include <math.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
+
+typedef struct {
+    int x;
+    int y;
+    int width;
+    int height;
+} WoxWindowRectC;
+
+typedef struct {
+    char id[64];
+    WoxWindowRectC bounds;
+    WoxWindowRectC workArea;
+    int isPrimary;
+} WoxDisplayInfoC;
+
+typedef struct {
+    char id[64];
+    int pid;
+    WoxWindowRectC bounds;
+    WoxDisplayInfoC display;
+    int isMinimized;
+} WoxManagedWindowC;
+
+extern AXError _AXUIElementGetWindow(AXUIElementRef element, CGWindowID *identifier);
 
 static char* copyPathFromAXValue(CFTypeRef value);
 char* getFinderWindowPathByPid(int pid);
+int isOpenSaveDialogByPid(int pid);
+
+static CFStringRef const woxAXFullScreenAttribute = CFSTR("AXFullScreen");
 
 static void activateRunningApplication(NSRunningApplication *application) {
     if (application == nil) {
@@ -23,46 +52,81 @@ static void activateRunningApplication(NSRunningApplication *application) {
 #pragma clang diagnostic pop
 }
 
+static int copyApplicationIconPng(NSRunningApplication *application, unsigned char **iconData) {
+    if (!application) {
+        return 0;
+    }
+
+    NSImage *icon = [application icon];
+    if (!icon) {
+        return 0;
+    }
+
+    CGImageRef cgRef = [icon CGImageForProposedRect:NULL context:nil hints:nil];
+    NSBitmapImageRep *newRep = [[NSBitmapImageRep alloc] initWithCGImage:cgRef];
+    [newRep setSize:[icon size]];
+    NSData *pngData = [newRep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
+    if (!pngData) {
+        return 0;
+    }
+
+    NSUInteger length = [pngData length];
+    void *buffer = malloc(length);
+    if (!buffer) {
+        return 0;
+    }
+    memcpy(buffer, [pngData bytes], length);
+
+    *iconData = buffer;
+    return (int)length;
+}
+
 int getActiveWindowIcon(unsigned char **iconData) {
     @autoreleasepool {
         NSRunningApplication *activeApp = [[NSWorkspace sharedWorkspace] frontmostApplication];
-        if (!activeApp) {
-            return 0;
-        }
-
-        NSImage *icon = [activeApp icon];
-        if (!icon) {
-            return 0;
-        }
-
-        CGImageRef cgRef = [icon CGImageForProposedRect:NULL context:nil hints:nil];
-        NSBitmapImageRep *newRep = [[NSBitmapImageRep alloc] initWithCGImage:cgRef];
-        [newRep setSize:[icon size]];
-        NSData *pngData = [newRep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
-        if (!pngData) {
-            return 0;
-        }
-
-        NSUInteger length = [pngData length];
-        void *buffer = malloc(length);
-        if (!buffer) {
-            return 0;
-        }
-        memcpy(buffer, [pngData bytes], length);
-
-        *iconData = buffer;
-        return (int)length;
+        return copyApplicationIconPng(activeApp, iconData);
     }
+}
+
+int getWindowIconByPid(int pid, unsigned char **iconData) {
+    @autoreleasepool {
+        if (pid <= 0) {
+            return 0;
+        }
+
+        NSRunningApplication *app = [NSRunningApplication runningApplicationWithProcessIdentifier:(pid_t)pid];
+        return copyApplicationIconPng(app, iconData);
+    }
+}
+
+static char* copyApplicationName(NSRunningApplication *application) {
+    if (!application) {
+        return strdup("");
+    }
+
+    NSString *name = [application localizedName];
+    if (!name || [name length] == 0) {
+        return strdup("");
+    }
+
+    return strdup([name UTF8String]);
 }
 
 char* getActiveWindowName() {
     @autoreleasepool {
         NSRunningApplication *activeApp = [[NSWorkspace sharedWorkspace] frontmostApplication];
-        if (!activeApp) {
-            return "";
+        return copyApplicationName(activeApp);
+    }
+}
+
+char* getWindowNameByPid(int pid) {
+    @autoreleasepool {
+        if (pid <= 0) {
+            return strdup("");
         }
 
-        return strdup([[activeApp localizedName] UTF8String]);
+        NSRunningApplication *app = [NSRunningApplication runningApplicationWithProcessIdentifier:(pid_t)pid];
+        return copyApplicationName(app);
     }
 }
 
@@ -99,6 +163,528 @@ int getActiveWindowPid() {
         }
 
         return [activeApp processIdentifier];
+    }
+}
+
+static void copyCString(char *dest, size_t destSize, const char *value) {
+    if (destSize == 0) {
+        return;
+    }
+    if (!value) {
+        dest[0] = '\0';
+        return;
+    }
+    strncpy(dest, value, destSize - 1);
+    dest[destSize - 1] = '\0';
+}
+
+static CGFloat desktopTopForScreens(NSArray<NSScreen *> *screens) {
+    CGFloat desktopTop = 0;
+    for (NSScreen *screen in screens) {
+        desktopTop = MAX(desktopTop, NSMaxY([screen frame]));
+    }
+    return desktopTop;
+}
+
+static WoxWindowRectC rectFromAppKitRect(NSRect rect, CGFloat desktopTop) {
+    WoxWindowRectC result;
+    result.x = (int)llround(rect.origin.x);
+    result.y = (int)llround(desktopTop - NSMaxY(rect));
+    result.width = (int)llround(rect.size.width);
+    result.height = (int)llround(rect.size.height);
+    return result;
+}
+
+static WoxWindowRectC rectFromCGPointAndCGSize(CGPoint point, CGSize size) {
+    WoxWindowRectC result;
+    result.x = (int)llround(point.x);
+    result.y = (int)llround(point.y);
+    result.width = (int)llround(size.width);
+    result.height = (int)llround(size.height);
+    return result;
+}
+
+static BOOL pointInRect(CGPoint point, WoxWindowRectC rect) {
+    return point.x >= rect.x && point.x < rect.x + rect.width && point.y >= rect.y && point.y < rect.y + rect.height;
+}
+
+static void fillDisplayInfoFromScreen(NSScreen *screen, BOOL isPrimary, CGFloat desktopTop, WoxDisplayInfoC *outDisplay) {
+    NSNumber *screenNumber = [[screen deviceDescription] objectForKey:@"NSScreenNumber"];
+    NSString *screenId = [screenNumber stringValue];
+    copyCString(outDisplay->id, sizeof(outDisplay->id), [screenId UTF8String]);
+    outDisplay->bounds = rectFromAppKitRect([screen frame], desktopTop);
+    outDisplay->workArea = rectFromAppKitRect([screen visibleFrame], desktopTop);
+    outDisplay->isPrimary = isPrimary ? 1 : 0;
+}
+
+static BOOL fillDisplayInfoForRect(WoxWindowRectC windowRect, WoxDisplayInfoC *outDisplay) {
+    NSArray<NSScreen *> *screens = [NSScreen screens];
+    if ([screens count] == 0) {
+        return NO;
+    }
+
+    CGFloat desktopTop = desktopTopForScreens(screens);
+    CGPoint center = CGPointMake(windowRect.x + windowRect.width / 2.0, windowRect.y + windowRect.height / 2.0);
+    NSScreen *primary = [NSScreen mainScreen];
+
+    NSScreen *fallback = [screens objectAtIndex:0];
+    for (NSScreen *screen in screens) {
+        WoxWindowRectC bounds = rectFromAppKitRect([screen frame], desktopTop);
+        if (pointInRect(center, bounds)) {
+            fillDisplayInfoFromScreen(screen, screen == primary, desktopTop, outDisplay);
+            return YES;
+        }
+    }
+
+    fillDisplayInfoFromScreen(fallback, fallback == primary, desktopTop, outDisplay);
+    return YES;
+}
+
+static CGWindowID parseWindowId(const char *windowId) {
+    if (!windowId || strlen(windowId) == 0) {
+        return 0;
+    }
+    return (CGWindowID)strtoul(windowId, NULL, 10);
+}
+
+static BOOL getAXWindowId(AXUIElementRef window, CGWindowID *outWindowId) {
+    if (!window || !outWindowId) {
+        return NO;
+    }
+    return _AXUIElementGetWindow(window, outWindowId) == kAXErrorSuccess && *outWindowId != 0;
+}
+
+static AXUIElementRef copyWindowForId(pid_t pid, CGWindowID targetWindowId) {
+    if (pid <= 0) {
+        return NULL;
+    }
+
+    AXUIElementRef app = AXUIElementCreateApplication(pid);
+    if (!app) {
+        return NULL;
+    }
+
+    AXUIElementRef matchedWindow = NULL;
+    CFTypeRef windowsValue = NULL;
+    CFIndex windowCount = 0;
+    if (AXUIElementCopyAttributeValue(app, kAXWindowsAttribute, &windowsValue) == kAXErrorSuccess && windowsValue && CFGetTypeID(windowsValue) == CFArrayGetTypeID()) {
+        CFArrayRef windows = (CFArrayRef)windowsValue;
+        windowCount = CFArrayGetCount(windows);
+        if (targetWindowId != 0) {
+            for (CFIndex i = 0; i < windowCount; i++) {
+                AXUIElementRef candidate = (AXUIElementRef)CFArrayGetValueAtIndex(windows, i);
+                CGWindowID candidateId = 0;
+                if (getAXWindowId(candidate, &candidateId) && candidateId == targetWindowId) {
+                    matchedWindow = (AXUIElementRef)CFRetain(candidate);
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!matchedWindow && targetWindowId == 0) {
+        CFTypeRef focusedValue = NULL;
+        if (AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute, &focusedValue) == kAXErrorSuccess && focusedValue) {
+            matchedWindow = (AXUIElementRef)focusedValue;
+        } else if (windowsValue && windowCount > 0) {
+            AXUIElementRef firstWindow = (AXUIElementRef)CFArrayGetValueAtIndex((CFArrayRef)windowsValue, 0);
+            matchedWindow = (AXUIElementRef)CFRetain(firstWindow);
+        }
+    }
+    if (windowsValue) {
+        CFRelease(windowsValue);
+    }
+
+    CFRelease(app);
+    return matchedWindow;
+}
+
+static BOOL getAXWindowRect(AXUIElementRef window, WoxWindowRectC *outRect) {
+    if (!window || !outRect) {
+        return NO;
+    }
+
+    CFTypeRef positionValue = NULL;
+    CFTypeRef sizeValue = NULL;
+    CGPoint position = CGPointZero;
+    CGSize size = CGSizeZero;
+
+    if (AXUIElementCopyAttributeValue(window, kAXPositionAttribute, &positionValue) != kAXErrorSuccess || !positionValue) {
+        return NO;
+    }
+    if (AXUIElementCopyAttributeValue(window, kAXSizeAttribute, &sizeValue) != kAXErrorSuccess || !sizeValue) {
+        CFRelease(positionValue);
+        return NO;
+    }
+
+    BOOL ok = AXValueGetValue((AXValueRef)positionValue, kAXValueCGPointType, &position) && AXValueGetValue((AXValueRef)sizeValue, kAXValueCGSizeType, &size);
+    CFRelease(positionValue);
+    CFRelease(sizeValue);
+
+    if (!ok) {
+        return NO;
+    }
+
+    *outRect = rectFromCGPointAndCGSize(position, size);
+    return YES;
+}
+
+static BOOL windowRectApproximatelyMatchesTarget(WoxWindowRectC rect, int x, int y, int width, int height) {
+    const int tolerance = 2;
+    return abs(rect.x - x) <= tolerance &&
+           abs(rect.y - y) <= tolerance &&
+           abs(rect.width - width) <= tolerance &&
+           abs(rect.height - height) <= tolerance;
+}
+
+static BOOL setAXWindowPosition(AXUIElementRef window, CGPoint position) {
+    AXValueRef positionValue = AXValueCreate(kAXValueCGPointType, &position);
+    if (!positionValue) {
+        return NO;
+    }
+
+    AXError err = AXUIElementSetAttributeValue(window, kAXPositionAttribute, positionValue);
+    CFRelease(positionValue);
+    return err == kAXErrorSuccess;
+}
+
+static BOOL setAXWindowSize(AXUIElementRef window, CGSize size) {
+    AXValueRef sizeValue = AXValueCreate(kAXValueCGSizeType, &size);
+    if (!sizeValue) {
+        return NO;
+    }
+
+    AXError err = AXUIElementSetAttributeValue(window, kAXSizeAttribute, sizeValue);
+    CFRelease(sizeValue);
+    return err == kAXErrorSuccess;
+}
+
+static BOOL axWindowMatchesTargetFrame(AXUIElementRef window, int x, int y, int width, int height) {
+    WoxWindowRectC rect;
+    return getAXWindowRect(window, &rect) && windowRectApproximatelyMatchesTarget(rect, x, y, width, height);
+}
+
+// Some apps, notably Finder, adjust AXPosition while applying AXSize. Keep the
+// position write last on each attempt so a successful resize does not leave the
+// window anchored at an intermediate location.
+static BOOL applyAXWindowFrame(AXUIElementRef window, int x, int y, int width, int height) {
+    const int maxAttempts = 8;
+    const useconds_t settleInterval = 50000;
+    CGPoint position = CGPointMake(x, y);
+    CGSize size = CGSizeMake(MAX(1, width), MAX(1, height));
+
+    for (int attempt = 0; attempt < maxAttempts; attempt++) {
+        if (!setAXWindowSize(window, size)) {
+            return NO;
+        }
+        usleep(settleInterval);
+
+        if (!setAXWindowPosition(window, position)) {
+            return NO;
+        }
+        usleep(settleInterval);
+
+        if (axWindowMatchesTargetFrame(window, x, y, width, height)) {
+            return YES;
+        }
+    }
+
+    return YES;
+}
+
+// readAXWindowFullScreenState reads the undocumented-but-standard Accessibility fullscreen flag.
+static BOOL readAXWindowFullScreenState(AXUIElementRef window, BOOL *outFullScreen) {
+    if (!window || !outFullScreen) {
+        return NO;
+    }
+
+    CFTypeRef fullScreenValue = NULL;
+    if (AXUIElementCopyAttributeValue(window, woxAXFullScreenAttribute, &fullScreenValue) != kAXErrorSuccess || !fullScreenValue) {
+        return NO;
+    }
+
+    BOOL ok = NO;
+    if (CFGetTypeID(fullScreenValue) == CFBooleanGetTypeID()) {
+        *outFullScreen = CFBooleanGetValue((CFBooleanRef)fullScreenValue);
+        ok = YES;
+    }
+    CFRelease(fullScreenValue);
+    return ok;
+}
+
+// waitForAXWindowFullScreenState gives macOS time to leave the fullscreen Space before resizing.
+static BOOL waitForAXWindowFullScreenState(AXUIElementRef window, BOOL expectedFullScreen) {
+    const int maxAttempts = 20;
+    const useconds_t interval = 50000;
+
+    for (int attempt = 0; attempt < maxAttempts; attempt++) {
+        BOOL isFullScreen = NO;
+        if (readAXWindowFullScreenState(window, &isFullScreen) && isFullScreen == expectedFullScreen) {
+            return YES;
+        }
+        usleep(interval);
+    }
+    return NO;
+}
+
+// exitAXWindowFullScreenIfNeeded restores fullscreen windows so AX position/size changes can apply.
+static BOOL exitAXWindowFullScreenIfNeeded(AXUIElementRef window, BOOL *outExitedFullScreen) {
+    if (outExitedFullScreen) {
+        *outExitedFullScreen = NO;
+    }
+
+    BOOL isFullScreen = NO;
+    if (!readAXWindowFullScreenState(window, &isFullScreen) || !isFullScreen) {
+        return YES;
+    }
+    if (outExitedFullScreen) {
+        *outExitedFullScreen = YES;
+    }
+
+    if (AXUIElementSetAttributeValue(window, woxAXFullScreenAttribute, kCFBooleanFalse) == kAXErrorSuccess && waitForAXWindowFullScreenState(window, NO)) {
+        return YES;
+    }
+
+    if (readAXWindowFullScreenState(window, &isFullScreen) && !isFullScreen) {
+        return YES;
+    }
+
+    CFTypeRef fullScreenButtonValue = NULL;
+    AXError buttonErr = AXUIElementCopyAttributeValue(window, kAXFullScreenButtonAttribute, &fullScreenButtonValue);
+    if (buttonErr != kAXErrorSuccess || !fullScreenButtonValue) {
+        if (fullScreenButtonValue) {
+            CFRelease(fullScreenButtonValue);
+        }
+        return NO;
+    }
+
+    AXError pressErr = AXUIElementPerformAction((AXUIElementRef)fullScreenButtonValue, kAXPressAction);
+    CFRelease(fullScreenButtonValue);
+    return pressErr == kAXErrorSuccess && waitForAXWindowFullScreenState(window, NO);
+}
+
+// copyWindowAfterFullScreenExit handles macOS recreating the AX window with a new CGWindowID.
+static AXUIElementRef copyWindowAfterFullScreenExit(pid_t pid, CGWindowID targetWindowId) {
+    const int maxAttempts = 30;
+    const useconds_t interval = 50000;
+
+    for (int attempt = 0; attempt < maxAttempts; attempt++) {
+        AXUIElementRef window = copyWindowForId(pid, targetWindowId);
+        if (window) {
+            return window;
+        }
+        usleep(interval);
+    }
+
+    if (targetWindowId == 0) {
+        return NULL;
+    }
+
+    for (int attempt = 0; attempt < maxAttempts; attempt++) {
+        AXUIElementRef window = copyWindowForId(pid, 0);
+        if (window) {
+            return window;
+        }
+        usleep(interval);
+    }
+    return NULL;
+}
+
+char *getActiveWindowIdForManagement() {
+    @autoreleasepool {
+        AXUIElementRef systemWide = AXUIElementCreateSystemWide();
+        if (!systemWide) {
+            return strdup("");
+        }
+
+        AXUIElementRef focusedWindow = NULL;
+        if (AXUIElementCopyAttributeValue(systemWide, kAXFocusedWindowAttribute, (CFTypeRef *)&focusedWindow) != kAXErrorSuccess || !focusedWindow) {
+            CFRelease(systemWide);
+            return strdup("");
+        }
+
+        CGWindowID windowId = 0;
+        BOOL ok = getAXWindowId(focusedWindow, &windowId);
+        CFRelease(focusedWindow);
+        CFRelease(systemWide);
+        if (!ok) {
+            return strdup("");
+        }
+
+        NSString *windowIdString = [NSString stringWithFormat:@"%u", windowId];
+        return strdup([windowIdString UTF8String]);
+    }
+}
+
+int getManagedWindowForManagement(const char *windowId, int pid, WoxManagedWindowC *outWindow) {
+    @autoreleasepool {
+        if (!AXIsProcessTrusted()) {
+            return -2;
+        }
+        if (!outWindow) {
+            return -1;
+        }
+
+        CGWindowID targetWindowId = parseWindowId(windowId);
+        AXUIElementRef window = copyWindowForId((pid_t)pid, targetWindowId);
+        if (!window) {
+            return 0;
+        }
+
+        WoxWindowRectC rect;
+        if (!getAXWindowRect(window, &rect)) {
+            CFRelease(window);
+            return -1;
+        }
+
+        CGWindowID actualWindowId = targetWindowId;
+        if (actualWindowId == 0) {
+            getAXWindowId(window, &actualWindowId);
+        }
+
+        memset(outWindow, 0, sizeof(WoxManagedWindowC));
+        NSString *windowIdString = [NSString stringWithFormat:@"%u", actualWindowId];
+        copyCString(outWindow->id, sizeof(outWindow->id), [windowIdString UTF8String]);
+        outWindow->pid = pid;
+        outWindow->bounds = rect;
+        outWindow->isMinimized = 0;
+        if (!fillDisplayInfoForRect(rect, &outWindow->display)) {
+            CFRelease(window);
+            return -3;
+        }
+
+        CFRelease(window);
+        return 1;
+    }
+}
+
+int listDisplaysForManagement(WoxDisplayInfoC **outDisplays, int *outCount) {
+    @autoreleasepool {
+        if (!outDisplays || !outCount) {
+            return -1;
+        }
+
+        NSArray<NSScreen *> *screens = [NSScreen screens];
+        NSUInteger count = [screens count];
+        if (count == 0) {
+            return -3;
+        }
+
+        WoxDisplayInfoC *displays = (WoxDisplayInfoC *)calloc(count, sizeof(WoxDisplayInfoC));
+        if (!displays) {
+            return -1;
+        }
+
+        CGFloat desktopTop = desktopTopForScreens(screens);
+        NSScreen *primary = [NSScreen mainScreen];
+        for (NSUInteger i = 0; i < count; i++) {
+            NSScreen *screen = [screens objectAtIndex:i];
+            fillDisplayInfoFromScreen(screen, screen == primary, desktopTop, &displays[i]);
+        }
+
+        *outDisplays = displays;
+        *outCount = (int)count;
+        return 1;
+    }
+}
+
+void freeDisplaysForManagement(WoxDisplayInfoC *displays) {
+    if (displays) {
+        free(displays);
+    }
+}
+
+int moveResizeWindowForManagement(const char *windowId, int pid, int x, int y, int width, int height) {
+    @autoreleasepool {
+        if (!AXIsProcessTrusted()) {
+            return -2;
+        }
+
+        CGWindowID targetWindowId = parseWindowId(windowId);
+        AXUIElementRef window = copyWindowForId((pid_t)pid, targetWindowId);
+        if (!window) {
+            return 0;
+        }
+
+        BOOL exitedFullScreen = NO;
+        if (!exitAXWindowFullScreenIfNeeded(window, &exitedFullScreen)) {
+            CFRelease(window);
+            return -1;
+        }
+
+        if (exitedFullScreen) {
+            CFRelease(window);
+            window = copyWindowAfterFullScreenExit((pid_t)pid, targetWindowId);
+            if (!window) {
+                return 0;
+            }
+        }
+
+        NSRunningApplication *application = [NSRunningApplication runningApplicationWithProcessIdentifier:(pid_t)pid];
+        activateRunningApplication(application);
+        AXUIElementSetAttributeValue(window, kAXMinimizedAttribute, kCFBooleanFalse);
+
+        BOOL frameApplied = applyAXWindowFrame(window, x, y, width, height);
+        CFRelease(window);
+
+        if (!frameApplied) {
+            return -1;
+        }
+        return 1;
+    }
+}
+
+// maximizeWindowForManagement uses the native zoom button so macOS tracks the window as zoomed.
+int maximizeWindowForManagement(const char *windowId, int pid) {
+    @autoreleasepool {
+        if (!AXIsProcessTrusted()) {
+            return -2;
+        }
+
+        AXUIElementRef window = copyWindowForId((pid_t)pid, parseWindowId(windowId));
+        if (!window) {
+            return 0;
+        }
+
+        NSRunningApplication *application = [NSRunningApplication runningApplicationWithProcessIdentifier:(pid_t)pid];
+        activateRunningApplication(application);
+        AXUIElementSetAttributeValue(window, kAXMinimizedAttribute, kCFBooleanFalse);
+
+        CFTypeRef zoomButtonValue = NULL;
+        AXError zoomButtonErr = AXUIElementCopyAttributeValue(window, kAXZoomButtonAttribute, &zoomButtonValue);
+        if (zoomButtonErr != kAXErrorSuccess || !zoomButtonValue) {
+            if (zoomButtonValue) {
+                CFRelease(zoomButtonValue);
+            }
+            CFRelease(window);
+            return -4;
+        }
+
+        AXError pressErr = AXUIElementPerformAction((AXUIElementRef)zoomButtonValue, kAXPressAction);
+        CFRelease(zoomButtonValue);
+        CFRelease(window);
+
+        if (pressErr != kAXErrorSuccess) {
+            return -4;
+        }
+        return 1;
+    }
+}
+
+int minimizeWindowForManagement(const char *windowId, int pid) {
+    @autoreleasepool {
+        if (!AXIsProcessTrusted()) {
+            return -2;
+        }
+
+        AXUIElementRef window = copyWindowForId((pid_t)pid, parseWindowId(windowId));
+        if (!window) {
+            return 0;
+        }
+
+        AXError err = AXUIElementSetAttributeValue(window, kAXMinimizedAttribute, kCFBooleanTrue);
+        CFRelease(window);
+        return err == kAXErrorSuccess ? 1 : -1;
     }
 }
 
@@ -522,16 +1108,22 @@ static char* copyDirectoryPathFromDialogContext(AXUIElementRef dialogWindow, AXU
 
 int isOpenSaveDialog() {
     @autoreleasepool {
-        if (!AXIsProcessTrusted()) {
-            return 0;
-        }
-
         NSRunningApplication *activeApp = [[NSWorkspace sharedWorkspace] frontmostApplication];
         if (!activeApp) {
             return 0;
         }
 
         pid_t pid = [activeApp processIdentifier];
+        return isOpenSaveDialogByPid((int)pid);
+    }
+}
+
+int isOpenSaveDialogByPid(int pid) {
+    @autoreleasepool {
+        if (!AXIsProcessTrusted() || pid <= 0) {
+            return 0;
+        }
+
         AXUIElementRef appElement = AXUIElementCreateApplication(pid);
         if (!appElement) {
             return 0;

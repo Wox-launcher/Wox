@@ -9,9 +9,14 @@ import (
 )
 
 type hotkeySpec struct {
+	capsLock          bool
 	modifiers         keyboard.Modifier
 	key               keyboard.Key
 	doubleModifierKey keyboard.Key
+}
+
+func (s hotkeySpec) isCapsLockKey() bool {
+	return s.capsLock
 }
 
 func (s hotkeySpec) isDoubleModifier() bool {
@@ -27,6 +32,12 @@ func (h *Hotkey) parseCombineKey(combineKey string) (hotkeySpec, error) {
 	var modifierKeys []keyboard.Key
 
 	for _, token := range tokens {
+		normalizedToken := strings.ToLower(strings.TrimSpace(token))
+		if isCapsLockToken(normalizedToken) && len(tokens) > 1 {
+			spec.capsLock = true
+			continue
+		}
+
 		modifier, modifierKey, ok := parseModifierToken(token)
 		if ok {
 			spec.modifiers |= modifier
@@ -45,6 +56,9 @@ func (h *Hotkey) parseCombineKey(combineKey string) (hotkeySpec, error) {
 	}
 
 	if spec.key == keyboard.KeyUnknown {
+		if spec.capsLock {
+			return hotkeySpec{}, fmt.Errorf("missing key in caps lock hotkey: %s", combineKey)
+		}
 		if len(modifierKeys) == 2 && modifierKeys[0] == modifierKeys[1] {
 			spec.doubleModifierKey = modifierKeys[0]
 			return spec, nil
@@ -52,5 +66,18 @@ func (h *Hotkey) parseCombineKey(combineKey string) (hotkeySpec, error) {
 		return hotkeySpec{}, fmt.Errorf("missing key in hotkey: %s", combineKey)
 	}
 
+	if spec.capsLock && (spec.modifiers != 0 || len(modifierKeys) > 0) {
+		return hotkeySpec{}, fmt.Errorf("caps lock hotkey does not support extra modifiers: %s", combineKey)
+	}
+
 	return spec, nil
+}
+
+func isCapsLockToken(token string) bool {
+	return token == "capslock" || token == "caps_lock" || token == "caps lock"
+}
+
+func IsCapsLockHotkeyString(combineKey string) bool {
+	spec, err := (&Hotkey{}).parseCombineKey(combineKey)
+	return err == nil && spec.isCapsLockKey()
 }

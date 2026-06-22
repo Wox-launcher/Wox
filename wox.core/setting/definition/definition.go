@@ -40,6 +40,8 @@ type PluginSettingDefinitionItem struct {
 	IsPlatformSpecific  bool // if true, this setting may be different in different platforms
 }
 
+// Deprecated: plugin-provided pixel styling is ignored when settings are loaded.
+// Wox owns setting-page layout so third-party plugins cannot break visual consistency.
 type PluginSettingValueStyle struct {
 	PaddingLeft   int
 	PaddingTop    int

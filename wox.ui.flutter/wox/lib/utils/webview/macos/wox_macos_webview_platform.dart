@@ -41,6 +41,22 @@ class WoxMacosWebViewPlatform implements WoxWebViewPlatform {
   }
 
   @override
+  Future<String?> getCurrentUrl() async {
+    final result = await _channel.invokeMethod<String?>('getCurrentUrl');
+    return result?.trim().isEmpty == true ? null : result;
+  }
+
+  @override
+  Future<bool> clearState() async {
+    return _invoke('clearState');
+  }
+
+  @override
+  Future<bool> focusActiveSession() async {
+    return _invoke('focusActiveSession');
+  }
+
+  @override
   Future<bool> openInspector() async {
     return _invoke('openInspector');
   }

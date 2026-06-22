@@ -8,6 +8,7 @@ import (
 	"wox/plugin"
 	"wox/plugin/system/converter/core"
 	"wox/plugin/system/converter/modules"
+	"wox/util"
 	"wox/util/clipboard"
 	"wox/util/locale"
 
@@ -38,7 +39,6 @@ func (c *Converter) GetMetadata() plugin.Metadata {
 		Entry:         "",
 		TriggerKeywords: []string{
 			"*",
-			"calculator",
 		},
 		Commands: []plugin.MetadataCommand{},
 		SupportedOS: []string{
@@ -66,6 +66,11 @@ func (c *Converter) Init(ctx context.Context, initParams plugin.InitParams) {
 	registry.Register(modules.NewMathModule(ctx, c.api))
 
 	registry.Register(modules.NewBaseModule(ctx, c.api))
+
+	// Length, weight, and temperature conversions previously fell through to the
+	// calculator placeholder because Converter only knew about base/time/rates.
+	// Register the units module here so those physical conversions stay in Converter.
+	registry.Register(modules.NewUnitModule(ctx, c.api))
 
 	registry.Register(modules.NewTimeModule(ctx, c.api))
 
@@ -101,15 +106,9 @@ func (c *Converter) parseExpression(ctx context.Context, tokens []core.Token) (r
 		}
 
 		if token.Kind == core.ConversionToken {
-			// Try to find a module that can handle this token
-			var result core.Result
-			var err error
-			for _, module := range c.registry.Modules() {
-				result, err = module.Calculate(ctx, token)
-				if err == nil {
-					targetUnit = result.Unit
-					break
-				}
+			result, err := c.calculateToken(ctx, token)
+			if err == nil {
+				targetUnit = result.Unit
 			}
 			if targetUnit.Name == "" {
 				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to parse target unit from token %s", token.Str))
@@ -121,23 +120,12 @@ func (c *Converter) parseExpression(ctx context.Context, tokens []core.Token) (r
 			continue
 		}
 
-		// Try to find a module that can handle this token
-		var result core.Result
-		var err error
-		var moduleFound bool
-		for _, module := range c.registry.Modules() {
-			result, err = module.Calculate(ctx, token)
-			if err == nil {
-				moduleFound = true
-				results = append(results, result)
-				break
-			}
-		}
-
-		if !moduleFound {
+		result, err := c.calculateToken(ctx, token)
+		if err != nil {
 			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to calculate token %s: no module can handle it", token.Str))
 			return nil, nil, core.Unit{}, fmt.Errorf("no module can handle token: %s", token.Str)
 		}
+		results = append(results, result)
 	}
 
 	// If we have a target unit, convert all values to that unit
@@ -161,6 +149,27 @@ func (c *Converter) parseExpression(ctx context.Context, tokens []core.Token) (r
 	}
 
 	return results, operators, targetUnit, nil
+}
+
+func (c *Converter) calculateToken(ctx context.Context, token core.Token) (core.Result, error) {
+	// The tokenizer has already chosen the most specific pattern for this token.
+	// The old parser retried every module in registration order, which allowed
+	// broad unit/time regexes to reinterpret a currency token such as "1000hkd"
+	// before CurrencyModule could calculate it. Use the owning module first so
+	// tokenization and calculation stay on the same route.
+	if token.Module != nil {
+		return token.Module.Calculate(ctx, token)
+	}
+
+	// Older token patterns did not always populate Module. Keep this fallback so
+	// existing number/base/time expressions continue to work while each module is
+	// migrated to explicit ownership.
+	for _, module := range c.registry.Modules() {
+		if result, err := module.Calculate(ctx, token); err == nil {
+			return result, nil
+		}
+	}
+	return core.Result{}, fmt.Errorf("no module can handle token: %s", token.Str)
 }
 
 // calculateExpression calculates expressions with mixed units
@@ -334,15 +343,15 @@ func isBaseNumberUnit(unit core.Unit) bool {
 	}
 }
 
-func (c *Converter) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+func (c *Converter) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	if query.Search == "" {
-		return []plugin.QueryResult{}
+		return plugin.QueryResponse{}
 	}
 
 	tokens, err := c.tokenizer.Tokenize(ctx, query.Search)
 	if err != nil {
 		// c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Tokenize error: %v", err))
-		return []plugin.QueryResult{}
+		return plugin.QueryResponse{}
 	}
 
 	c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Tokens: %s", strings.Join(lo.Map(tokens, func(t core.Token, _ int) string { return t.String() }), ", ")))
@@ -352,12 +361,12 @@ func (c *Converter) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 	if err != nil {
 		c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Parse expression error: %v", err))
 		// For invalid expressions, return a search suggestion
-		return []plugin.QueryResult{}
+		return plugin.QueryResponse{}
 	}
 
 	if len(results) == 0 {
 		c.api.Log(ctx, plugin.LogLevelDebug, "No values parsed from expression")
-		return []plugin.QueryResult{}
+		return plugin.QueryResponse{}
 	}
 
 	c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Expression parsed: values=%s, operators=%s, targetUnit=%s", strings.Join(lo.Map(results, func(v core.Result, _ int) string { return v.DisplayValue }), ", "), strings.Join(operators, ", "), targetUnit.Name))
@@ -366,15 +375,16 @@ func (c *Converter) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 	result, err := c.calculateExpression(ctx, results, operators, targetUnit)
 	if err != nil {
 		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Calculation  expression error: %v", err))
-		return []plugin.QueryResult{}
+		return plugin.QueryResponse{}
 	} else {
 		c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Calculation result: displayValue=%s, rawValue=%s, unit=%s", result.DisplayValue, result.RawValue.String(), result.Unit.Name))
 	}
 
-	return []plugin.QueryResult{
+	return plugin.NewQueryResponse([]plugin.QueryResult{
 		{
 			Title: result.DisplayValue,
 			Icon:  common.PluginConverterIcon,
+			Tails: c.buildResultTails(ctx, result),
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:        "i18n:plugin_converter_copy_result",
@@ -385,7 +395,87 @@ func (c *Converter) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 				},
 			},
 		},
+	})
+}
+
+// buildResultTails chooses the contextual tail for the calculated converter result.
+func (c *Converter) buildResultTails(ctx context.Context, result core.Result) []plugin.QueryResultTail {
+	if timeZoneTail := c.buildTimeZoneTail(result); len(timeZoneTail) > 0 {
+		return timeZoneTail
 	}
+
+	return c.buildCurrencyRateTails(ctx, result)
+}
+
+// buildTimeZoneTail exposes the resolved IANA timezone for location-based time queries.
+func (c *Converter) buildTimeZoneTail(result core.Result) []plugin.QueryResultTail {
+	if result.Unit.Type != core.UnitTypeTime {
+		return nil
+	}
+
+	if result.Unit.Name != "UTC" && !strings.Contains(result.Unit.Name, "/") {
+		return nil
+	}
+
+	return []plugin.QueryResultTail{
+		plugin.NewQueryResultTailText(result.Unit.Name),
+	}
+}
+
+func (c *Converter) buildCurrencyRateTails(ctx context.Context, result core.Result) []plugin.QueryResultTail {
+	if result.Unit.Type != core.UnitTypeCurrency {
+		return nil
+	}
+
+	for _, module := range c.registry.Modules() {
+		currencyModule, ok := module.(*modules.CurrencyModule)
+		if !ok {
+			continue
+		}
+
+		updatedAt := currencyModule.LastRateUpdatedAt()
+		if updatedAt == 0 {
+			// Currency conversions can run from approximate startup rates before
+			// the first network refresh finishes. Show that state explicitly so
+			// users do not mistake fallback data for fresh exchange rates.
+			return []plugin.QueryResultTail{
+				plugin.NewQueryResultTailText(c.api.GetTranslation(ctx, "plugin_converter_rates_fallback")),
+			}
+		}
+
+		// Put the live-rate refresh timestamp in the result tail so users can judge
+		// how fresh the exchange rate is without opening settings or logs. Currency
+		// rates are shown as relative time only; other timestamps keep the existing
+		// absolute util.FormatTimestamp format used elsewhere in Wox.
+		relativeUpdatedAt := c.formatCurrencyRateUpdatedAgo(ctx, updatedAt)
+		return []plugin.QueryResultTail{
+			plugin.NewQueryResultTailText(fmt.Sprintf(c.api.GetTranslation(ctx, "plugin_converter_rates_updated"), relativeUpdatedAt)),
+		}
+	}
+
+	return nil
+}
+
+func (c *Converter) formatCurrencyRateUpdatedAgo(ctx context.Context, updatedAt int64) string {
+	// Keep this formatter local to converter currency tails. Reusing or changing
+	// the global timestamp formatter would accidentally alter unrelated event
+	// dates in history, screenshots, backups, and other plugins.
+	elapsedSeconds := (util.GetSystemTimestamp() - updatedAt) / 1000
+	if elapsedSeconds < 0 {
+		elapsedSeconds = 0
+	}
+
+	if elapsedSeconds < 60 {
+		return fmt.Sprintf(c.api.GetTranslation(ctx, "plugin_converter_rates_updated_seconds_ago"), elapsedSeconds)
+	}
+
+	elapsedMinutes := elapsedSeconds / 60
+	if elapsedMinutes < 60 {
+		return fmt.Sprintf(c.api.GetTranslation(ctx, "plugin_converter_rates_updated_minutes_ago"), elapsedMinutes)
+	}
+
+	elapsedHours := elapsedMinutes / 60
+	return fmt.Sprintf(c.api.GetTranslation(ctx, "plugin_converter_rates_updated_hours_ago"), elapsedHours)
 }
 
 func (c *Converter) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
@@ -394,12 +484,15 @@ func (c *Converter) handleMRURestore(ctx context.Context, mruData plugin.MRUData
 		return nil, fmt.Errorf("empty converter query in context data")
 	}
 
-	// Recalculate using the original query
-	results := c.Query(context.Background(), plugin.Query{
+	// Query now returns a QueryResponse so query-scoped metadata can travel with
+	// results. MRU restore only needs the first restored row, so unwrap Results
+	// here instead of treating the response object like the old result slice.
+	response := c.Query(context.Background(), plugin.Query{
 		Type:     plugin.QueryTypeInput,
 		RawQuery: query,
 		Search:   query,
 	})
+	results := response.Results
 	if len(results) == 0 {
 		return nil, fmt.Errorf("no result for query: %s", query)
 	}

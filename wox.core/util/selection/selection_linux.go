@@ -33,6 +33,53 @@ static GtkClipboard* woxGetClipboard(const char* selectionName) {
 	return gtk_clipboard_get(atom);
 }
 
+// woxGetWaylandDisplay opens a GDK Wayland display alongside the existing X11
+// display. GTK3 on Ubuntu supports multiple GDK backends simultaneously; a
+// display name that matches the Wayland socket (e.g. "wayland-0") is recognised
+// by the Wayland GDK backend even when GTK was initialised with X11.
+// The returned display is opened once and reused for the lifetime of the process.
+static GdkDisplay* woxGetWaylandDisplay() {
+	static GdkDisplay* wl_disp = NULL;
+	static gsize once = 0;
+
+	if (g_once_init_enter(&once)) {
+		if (woxEnsureGtkInitialized()) {
+			const char* name = getenv("WAYLAND_DISPLAY");
+			if (name == NULL) name = "wayland-0";
+			// gdk_display_open recognises the Wayland socket name and uses the
+			// Wayland GDK backend, which connects to the compositor directly.
+			wl_disp = gdk_display_open(name);
+		}
+		g_once_init_leave(&once, 1);
+	}
+	return wl_disp;
+}
+
+// woxReadWaylandPrimaryText reads the primary selection from the Wayland
+// compositor via a dedicated GDK Wayland display. This reaches the compositor's
+// zwp_primary_selection_v1 protocol directly and works for all native Wayland
+// applications, even when the main GTK instance uses the X11 GDK backend.
+static char* woxReadWaylandPrimaryText() {
+	GdkDisplay* disp = woxGetWaylandDisplay();
+	if (disp == NULL) {
+		return NULL;
+	}
+
+	GtkClipboard* clipboard = gtk_clipboard_get_for_display(disp, GDK_SELECTION_PRIMARY);
+	if (clipboard == NULL) {
+		return NULL;
+	}
+
+	gchar* text = gtk_clipboard_wait_for_text(clipboard);
+	if (text == NULL) {
+		return NULL;
+	}
+
+	char* result = strdup(text);
+	g_free(text);
+	return result;
+}
+
 static char* woxReadClipboardText(const char* selectionName) {
 	GtkClipboard* clipboard = woxGetClipboard(selectionName);
 	if (clipboard == NULL) {
@@ -162,6 +209,7 @@ const (
 )
 
 func GetSelected(ctx context.Context) (Selection, error) {
+	// Try X11 PRIMARY selection first. This works for XWayland apps and X11 sessions.
 	if text, err := readLinuxSelectionText(linuxPrimarySelection); err == nil && text != "" {
 		util.GetLogger().Debug(ctx, "selection: Successfully got text via PRIMARY selection")
 		return Selection{
@@ -171,11 +219,41 @@ func GetSelected(ctx context.Context) (Selection, error) {
 	}
 
 	if keyboard.IsWaylandSession() {
+		// X11 PRIMARY did not contain a selection. On Wayland, native apps publish
+		// their selections via the zwp_primary_selection_v1 Wayland protocol, which
+		// is NOT visible to X11 clients when GTK is using the X11 backend.
+		// Open a second GDK connection using the Wayland backend (GTK3 supports
+		// both backends simultaneously) and read the Wayland primary selection from
+		// there. This requires no external tools or additional packages.
+		if text, err := readWaylandPrimarySelectionNative(ctx); err == nil && text != "" {
+			util.GetLogger().Debug(ctx, "selection: Successfully got text via Wayland primary selection (GDK Wayland)")
+			return Selection{
+				Type: SelectionTypeText,
+				Text: text,
+			}, nil
+		}
+
 		return Selection{}, fmt.Errorf("%w: linux fallback selection is unavailable on Wayland when PRIMARY selection is empty", ErrSelectionUnsupported)
 	}
 
 	util.GetLogger().Debug(ctx, "selection: Falling back to X11 simulated Ctrl+C")
 	return getSelectedByX11Clipboard(ctx)
+}
+
+// readWaylandPrimarySelectionNative reads the current primary selection on a
+// Wayland session by opening a dedicated GDK Wayland display (separate from
+// the X11 GDK display used by the rest of the process). GTK3 on Ubuntu 24.04
+// supports both X11 and Wayland GDK backends simultaneously, so we can open a
+// second display connection pointing at the Wayland socket and read the
+// compositor's primary selection from it. No external tools are required.
+func readWaylandPrimarySelectionNative(ctx context.Context) (string, error) {
+	cText := C.woxReadWaylandPrimaryText()
+	if cText == nil {
+		util.GetLogger().Debug(ctx, "selection: GDK Wayland primary selection returned nil (no selection or backend unavailable)")
+		return "", noSelection
+	}
+	defer C.free(unsafe.Pointer(cText))
+	return C.GoString(cText), nil
 }
 
 func getSelectedByX11Clipboard(ctx context.Context) (Selection, error) {

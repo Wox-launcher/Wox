@@ -1,122 +1,131 @@
 # Wox 架构
 
-本文档提供了 Wox 项目架构的概览，解释了不同组件之间如何交互。
+这篇文档解释 Wox 在仓库里的拆分方式，以及运行时数据在各层之间如何流动。
 
-## 概览
+## 整体结构
 
-Wox 是一个基于微服务架构构建的跨平台启动器。应用程序由几个关键组件组成：
+Wox 是一个桌面启动器，核心是 Go 后端和 Flutter 桌面 UI。第三方插件不会直接运行在 Go 进程里，而是运行在独立的语言宿主中，再通过基于 WebSocket 的 JSON-RPC 和核心通信。
 
-- **wox.core**: 处理核心功能的 Go 后端
-- **wox.ui.flutter**: 提供用户界面的 Flutter 前端
-- **wox.plugin.host.python**: Python 插件宿主
-- **wox.plugin.host.nodejs**: NodeJS 插件宿主
-- **wox.plugin.python**: Python 插件库
-- **wox.plugin.nodejs**: NodeJS 插件库
+从大结构看：
 
-## 组件交互
-
-```
-┌─────────────────┐           ┌─────────────────┐
-│                 │           │                 │
-│  wox.ui.flutter │◄─────────►│    wox.core     │
-│  (Flutter UI)   │  WebSocket│   (Go Backend)  │
-│                 │    & HTTP │                 │
-└─────────────────┘           └────────┬────────┘
-                                       │
-                                       │ WebSocket
-                                       │
-                              ┌────────▼────────┐
-                              │                 │
-                              │  Plugin Hosts   │
-                              │                 │
-                              └────────┬────────┘
-                                       │
-                                       │
-                              ┌────────▼────────┐
-                              │                 │
-                              │    Plugins      │
-                              │                 │
-                              └─────────────────┘
+```text
+Flutter UI  <->  wox.core  <->  插件宿主  <->  插件
 ```
 
-### 通信流程
+## 主要组件
 
-1. **UI 到 Core**: Flutter UI 通过 WebSocket 和 HTTP 与 Go 后端通信
-2. **Core 到 Plugin Hosts**: Go 后端通过 WebSocket 与插件宿主通信
-3. **Plugin Hosts 到 Plugins**: 插件宿主加载并与插件通信
+### `wox.core`
 
-## 关键组件详解
+`wox.core` 是 Wox 的运行时中心，负责：
 
-### wox.core
+- 查询路由
+- 内置插件执行
+- 第三方插件生命周期和元数据加载
+- 设置与数据存储
+- 提供给 UI 的 WebSocket / HTTP 接口
+- 最终桌面运行时资源的打包
 
-作为应用程序中心组件的 Go 后端。它处理：
+建议优先熟悉这些目录：
 
-- 用户查询和搜索功能
-- 插件管理
-- 设置管理
-- 与 UI 和插件宿主的通信
+- `wox.core/plugin/`：插件协议、管理器、查询/结果模型、宿主桥接
+- `wox.core/common/`：共享 UI 载荷和通用运行时类型
+- `wox.core/setting/`：设置定义与持久化
+- `wox.core/resource/`：嵌入式 UI、宿主二进制、翻译和其他运行时资源
 
-关键目录：
+### `wox.ui.flutter/wox`
 
-- `wox.core/setting`: 包含设置相关的定义
-- `wox.core/plugin`: 包含 API 定义和实现
+这是用户真正看到的桌面 UI，负责渲染：
 
-### wox.ui.flutter
+- 启动器窗口
+- 结果列表和操作面板
+- 设置页面
+- 截图流程
+- webview 预览和相关原生桥接
 
-基于 Flutter 的用户界面，提供：
+UI 通过 WebSocket 和 HTTP 与 `wox.core` 通信。它不负责执行插件，重点是渲染状态、回传用户操作，并承载部分平台相关展示逻辑。
 
-- 搜索界面
-- 结果显示
-- 设置管理
-- 主题自定义
+### `wox.plugin.host.nodejs` 与 `wox.plugin.host.python`
 
-### 插件系统
+这是全功能插件的长期运行宿主进程，负责：
 
-Wox 支持多种语言编写的插件：
+- 启动对应语言运行时
+- 从 `~/.wox/plugins` 加载插件代码
+- 向插件作者暴露公共 API
+- 把插件请求和回调继续转发给 `wox.core`
 
-- **Python 插件**: 由 `wox.plugin.host.python` 管理
-- **NodeJS 插件**: 由 `wox.plugin.host.nodejs` 管理
+如果插件 API 形状改了，这一层和 core、SDK 一起对齐很关键。
 
-插件宿主负责：
+### `wox.plugin.nodejs` 与 `wox.plugin.python`
 
-- 加载插件
-- 执行插件代码
-- 将结果传回核心
+这是第三方插件作者使用的 SDK，提供：
 
-## 开发工作流
+- 类型化的查询/结果模型
+- 公共 API 包装
+- 插件启动辅助能力
 
-Wox 的开发工作流通过 Makefile 管理：
+## 运行时数据流
 
-1. `make dev`: 设置开发环境
-2. `make test`: 运行测试
-3. `make publish`: 构建并发布所有组件
-4. `make plugins`: 更新插件商店
+### 1. 查询处理
 
-## 平台特定注意事项
+用户在 Wox 输入查询后：
 
-Wox 设计为跨平台，具体注意事项如下：
+1. Flutter UI 把查询发给 `wox.core`
+2. `wox.core` 判断应该触发哪些内置插件和第三方插件
+3. 内置插件直接在 Go 内执行
+4. 第三方插件通过对应语言宿主被调用
+5. 结果被聚合后返回给 UI
+6. UI 渲染结果列表、预览、尾部信息和操作
 
-- **Windows**: 使用 `make publish` 生成标准构建产物（不再使用 UPX 压缩）
-- **macOS**: 使用 create-dmg 对应用进行打包
-- **Linux**: 使用 `make publish` 生成标准构建产物（不再使用 UPX 压缩）
+### 2. 操作执行
 
-## 数据流
+用户触发某个结果操作后：
 
-1. 用户在 UI 中输入查询
-2. 查询通过 WebSocket 发送到核心
-3. 核心处理查询并确定要调用的插件
-4. 核心向相应的插件宿主发送请求
-5. 插件宿主执行插件代码并返回结果
-6. 核心聚合结果并将其发送回 UI
-7. UI 向用户显示结果
+1. UI 把操作上下文发给 `wox.core`
+2. `wox.core` 判断这个操作属于内置插件还是宿主插件
+3. 在正确的运行时里执行
+4. 之后可以通过 `UpdateResult`、`PushResults`、`RefreshQuery`、`Notify`、`HideApp` 等 API 做后续 UI 更新
 
-## 配置和数据存储
+### 3. 插件发起的 UI 流程
 
-所有用户数据，包括设置和插件数据，都存储在用户主目录下的 `.wox` 目录中：
+有些流程不是从启动器 UI 主动开始，而是由插件发起，例如：
 
-- Windows: `C:\Users\<username>\.wox`
-- macOS/Linux: `~/.wox`
+- toolbar message
+- deep link
+- 截图
+- 剪贴板复制
+- AI 流式返回
 
-## 日志
+这类流程通常是：插件调用 SDK API，宿主转发到 `wox.core`，再由 core 协调 UI 或原生平台行为。
 
-日志存储在 `.wox/log` 目录中，可用于调试目的。
+## 为什么边界很重要
+
+很多问题一开始看起来像 UI bug，实际可能是协议或运行时边界问题。一个简单判断方法：
+
+- 查询路由、插件元数据、设置持久化、运行时契约问题，先看 `wox.core`
+- 视觉表现、交互、输入处理问题，先看 `wox.ui.flutter/wox`
+- 同一套插件 API 在不同语言 SDK 表现不一致，就一起看宿主和 SDK
+
+## 仓库级工作流
+
+跨项目开发优先使用顶层 `Makefile`：
+
+- `make dev`：准备共享资源并构建插件宿主
+- `make test`：运行 `wox.core/test` 下的 Go 测试
+- `make smoke`：运行 `wox.test` 里的桌面 smoke 测试
+- `make build`：构建完整应用和打包产物
+
+只要改动涉及共享契约，`make build` 都应该作为最后检查。
+
+## 运行时数据与日志
+
+Wox 会把运行时数据存到用户主目录：
+
+- macOS / Linux：`~/.wox`
+- Windows：`C:\Users\<username>\.wox`
+
+常用路径：
+
+- `~/.wox/plugins/`：本地第三方插件目录
+- `~/.wox/log/`：运行日志
+
+调试插件或 UI 问题时，先看日志，再从失败的真实边界往回追，效率通常最高。

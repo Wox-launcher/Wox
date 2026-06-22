@@ -14,7 +14,7 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: "Home", link: "/" },
-          { text: "Guide", link: "/guide/installation" },
+          { text: "Guide", link: "/guide/introduction" },
           { text: "Development", link: "/development/setup" },
           { text: "Blog", link: "/blog/" },
           { text: "Plugin Store", link: "/store/plugins" },
@@ -90,7 +90,10 @@ export default defineConfig({
               text: "Blog",
               items: [
                 { text: "Overview", link: "/blog/" },
-                { text: "Smoke Tests as the Last Gatekeeper", link: "/blog/smoke-tests-as-the-last-gatekeeper" },
+                { text: "Did You Know: Wox Can Preview Files with the Space Key", link: "/blog/did-you-know-selection-space-quick-look" },
+                { text: "Did You Know: Wox Can Bring Back a Launchpad-Style App Grid", link: "/blog/did-you-know-wox-app-launchpad" },
+                { text: "Did You Know: Wox Can Translate Selected Text Silently", link: "/blog/did-you-know-ai-command-silent-translation-query-hotkey" },
+                { text: "Did You Know: Wox Can Browse Websites with Query Hotkeys", link: "/blog/did-you-know-wox-query-hotkey-webview" },
               ],
             },
           ],
@@ -119,7 +122,7 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: "首页", link: "/zh/" },
-          { text: "指南", link: "/zh/guide/installation" },
+          { text: "指南", link: "/zh/guide/introduction" },
           { text: "开发", link: "/zh/development/setup" },
           { text: "博客", link: "/zh/blog/" },
           { text: "插件商店", link: "/zh/store/plugins" },
@@ -130,6 +133,7 @@ export default defineConfig({
             {
               text: "指南",
               items: [
+                { text: "简介", link: "/zh/guide/introduction" },
                 { text: "安装", link: "/zh/guide/installation" },
                 { text: "常见问题", link: "/zh/guide/faq" },
               ],
@@ -194,7 +198,10 @@ export default defineConfig({
               text: "博客",
               items: [
                 { text: "总览", link: "/zh/blog/" },
-                { text: "自动化 Smoke Test：AI 时代最后的 Gate Keeper", link: "/zh/blog/automated-smoke-test-gate-keeper" },
+                { text: "你知道吗：Wox 可以用空格键快速预览文件", link: "/zh/blog/did-you-know-selection-space-quick-look" },
+                { text: "你知道吗：Wox 可以找回类似 Launchpad 的应用网格", link: "/zh/blog/did-you-know-wox-app-launchpad" },
+                { text: "你知道吗：Wox 可以用快捷键静默翻译选中文本", link: "/zh/blog/did-you-know-ai-command-silent-translation-query-hotkey" },
+                { text: "你知道吗：Wox 可以用快捷键查询快速浏览网页", link: "/zh/blog/did-you-know-wox-query-hotkey-webview" },
               ],
             },
           ],

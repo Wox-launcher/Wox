@@ -1,0 +1,4 @@
+interface:
+  display_name: "Wox Test Ensurance"
+  short_description: "Ensure Wox test and smoke suites pass"
+  default_prompt: "Use $wox-test-ensurance to run Wox test and smoke verification and fix any failures until both suites pass."

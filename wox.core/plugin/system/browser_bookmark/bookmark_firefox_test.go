@@ -71,9 +71,10 @@ func (m *mockAPI) Log(ctx context.Context, level plugin.LogLevel, msg string) {
 		println("LOG:", msg)
 	}
 }
-func (m *mockAPI) Notify(ctx context.Context, msg string)                {}
-func (m *mockAPI) GetTranslation(ctx context.Context, key string) string { return key }
-func (m *mockAPI) GetSetting(ctx context.Context, key string) string     { return "" }
+func (m *mockAPI) Notify(ctx context.Context, msg string)                                 {}
+func (m *mockAPI) PushAttention(ctx context.Context, request plugin.PushAttentionRequest) {}
+func (m *mockAPI) GetTranslation(ctx context.Context, key string) string                  { return key }
+func (m *mockAPI) GetSetting(ctx context.Context, key string) string                      { return "" }
 func (m *mockAPI) SaveSetting(ctx context.Context, key string, value string, isGlobal bool) {
 }
 func (m *mockAPI) GetAllSettings(ctx context.Context) map[string]string     { return nil }
@@ -107,6 +108,11 @@ func (m *mockAPI) OnMRURestore(
 	callback func(context.Context, plugin.MRUData) (*plugin.QueryResult, error),
 ) {
 }
+func (m *mockAPI) OnHandlePluginCommand(ctx context.Context, handler plugin.PluginCommandHandler) {
+}
+func (m *mockAPI) InvokePluginCommand(ctx context.Context, request plugin.PluginCommandRequest) (plugin.PluginCommandResult, error) {
+	return plugin.PluginCommandResult{}, nil
+}
 func (m *mockAPI) UpdateResult(ctx context.Context, result plugin.UpdatableResult) bool {
 	return false
 }
@@ -126,5 +132,12 @@ func (m *mockAPI) IsVisible(ctx context.Context) bool {
 func (e *mockAPI) RefreshQuery(ctx context.Context, params plugin.RefreshQueryParam) {
 }
 
+func (m *mockAPI) RefreshGlance(ctx context.Context, ids []string) {
+}
+
 func (m *mockAPI) Copy(ctx context.Context, params plugin.CopyParams) {
+}
+
+func (m *mockAPI) Screenshot(ctx context.Context, option plugin.ScreenshotOption) plugin.ScreenshotResult {
+	return plugin.ScreenshotResult{}
 }

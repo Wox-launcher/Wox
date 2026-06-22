@@ -126,6 +126,50 @@ static BOOL CALLBACK EnumChildClassProc(HWND hwnd, LPARAM lParam)
     return TRUE;
 }
 
+static BOOL CALLBACK EnumDesktopViewProc(HWND hwnd, LPARAM lParam)
+{
+    FindChildClassData *data = (FindChildClassData *)lParam;
+    WCHAR className[256];
+    if (GetClassNameW(hwnd, className, 256) == 0)
+    {
+        logMessage("EnumDesktopViewProc: GetClassNameW failed err=%lu", GetLastError());
+        return TRUE;
+    }
+
+    if (_wcsicmp(className, L"SHELLDLL_DefView") == 0)
+    {
+        data->found = TRUE;
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+static int isDesktopShellWindow(HWND hwnd)
+{
+    if (!hwnd)
+    {
+        return 0;
+    }
+
+    WCHAR className[256];
+    if (GetClassNameW(hwnd, className, 256) == 0)
+    {
+        logMessage("isDesktopShellWindow: GetClassNameW failed err=%lu", GetLastError());
+        return 0;
+    }
+
+    if (_wcsicmp(className, L"Progman") != 0 && _wcsicmp(className, L"WorkerW") != 0)
+    {
+        return 0;
+    }
+
+    FindChildClassData data;
+    data.found = FALSE;
+    EnumChildWindows(hwnd, EnumDesktopViewProc, (LPARAM)&data);
+    return data.found ? 1 : 0;
+}
+
 static int isOpenSaveDialog(HWND hwnd)
 {
     if (!hwnd)
@@ -149,6 +193,101 @@ static int isOpenSaveDialog(HWND hwnd)
     data.found = FALSE;
     EnumChildWindows(hwnd, EnumChildClassProc, (LPARAM)&data);
     return data.found ? 1 : 0;
+}
+
+typedef struct
+{
+    DWORD pid;
+    HWND hwnd;
+} FindOpenSaveDialogByPidData;
+
+// EnumOpenSaveDialogByPidProc finds the visible file dialog owned by a process so click handlers do not depend on cached foreground state.
+static BOOL CALLBACK EnumOpenSaveDialogByPidProc(HWND hwnd, LPARAM lParam)
+{
+	FindOpenSaveDialogByPidData *data = (FindOpenSaveDialogByPidData *)lParam;
+	if (!IsWindowVisible(hwnd))
+    {
+        return TRUE;
+    }
+
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid != data->pid || !isOpenSaveDialog(hwnd))
+    {
+        return TRUE;
+    }
+
+	data->hwnd = hwnd;
+	return FALSE;
+}
+
+// findOpenSaveDialogByPid returns the visible dialog HWND for a process, preferring the foreground dialog when available.
+static HWND findOpenSaveDialogByPid(int pid)
+{
+	if (pid <= 0)
+	{
+		return NULL;
+	}
+
+	HWND target = NULL;
+    HWND foreground = GetForegroundWindow();
+    if (foreground && IsWindowVisible(foreground))
+    {
+        DWORD foregroundPid = 0;
+        GetWindowThreadProcessId(foreground, &foregroundPid);
+        if ((int)foregroundPid == pid && isOpenSaveDialog(foreground))
+        {
+            target = foreground;
+        }
+    }
+
+    if (!target)
+    {
+        FindOpenSaveDialogByPidData data;
+        data.pid = (DWORD)pid;
+        data.hwnd = NULL;
+        EnumWindows(EnumOpenSaveDialogByPidProc, (LPARAM)&data);
+        target = data.hwnd;
+	}
+
+	return target;
+}
+
+uintptr_t getOpenSaveDialogHwndByPid(int pid)
+{
+	return (uintptr_t)findOpenSaveDialogByPid(pid);
+}
+
+// getOpenSaveDialogRectByPid returns the dialog bounds in the same logical coordinate space used by Flutter window placement.
+int getOpenSaveDialogRectByPid(int pid, int *outX, int *outY, int *outW, int *outH)
+{
+	if (pid <= 0 || !outX || !outY || !outW || !outH)
+	{
+		return 0;
+	}
+
+	HWND target = findOpenSaveDialogByPid(pid);
+	if (!target)
+	{
+		logMessage("getOpenSaveDialogRectByPid: no visible dialog found pid=%d", pid);
+		return 0;
+	}
+
+    RECT rect;
+    if (!GetWindowRect(target, &rect))
+    {
+        logMessage("getOpenSaveDialogRectByPid: GetWindowRect failed hwnd=0x%p pid=%d err=%lu", target, pid, GetLastError());
+        return 0;
+    }
+
+    UINT dpi = getDpiForWindowMonitor(target);
+    float scale = (float)dpi / 96.0f;
+    *outX = (int)(rect.left / scale);
+    *outY = (int)(rect.top / scale);
+    *outW = (int)((rect.right - rect.left) / scale);
+    *outH = (int)((rect.bottom - rect.top) / scale);
+    logMessage("getOpenSaveDialogRectByPid: hwnd=0x%p pid=%d logical=(%d,%d,%d,%d) dpi=%u scale=%.2f", target, pid, *outX, *outY, *outW, *outH, dpi, scale);
+    return 1;
 }
 
 static int isFileListClassName(const WCHAR *className)
@@ -323,7 +462,8 @@ static int isForegroundExplorerOrDialogWindow(HWND hwnd)
     }
 
     int classResult = classifyExplorerWindow(hwnd);
-    if (classResult == -1)
+    int isDesktop = isDesktopShellWindow(hwnd);
+    if (classResult == -1 && !isDesktop)
     {
         return 0;
     }
@@ -337,7 +477,7 @@ static int isForegroundExplorerOrDialogWindow(HWND hwnd)
 
     int isExplorer = isExplorerProcess(pid);
     int isDialog = isOpenSaveDialog(hwnd);
-    if (isExplorer && classResult != -1)
+    if (isExplorer && (classResult != -1 || isDesktop))
     {
         return 1;
     }
@@ -356,7 +496,7 @@ static void triggerActivation(HWND hwnd, DWORD pid, int isDialog);
 // without a fresh activation callback for the same HWND. The old implementation
 // recovered on the next key press; keep that behavior here so raw-key dispatch
 // does not get stuck in stateNone after the first type-to-search cycle.
-int refreshFileExplorerMonitorState()
+int refreshFileExplorerMonitorStateForRawKey(int allowDesktop)
 {
     HWND hwnd = GetForegroundWindow();
     DWORD pid = 0;
@@ -368,7 +508,8 @@ int refreshFileExplorerMonitorState()
     }
 
     int classResult = classifyExplorerWindow(hwnd);
-    if (classResult == -1)
+    int isDesktop = allowDesktop ? isDesktopShellWindow(hwnd) : 0;
+    if (classResult == -1 && !isDesktop)
     {
         return 0;
     }
@@ -381,7 +522,7 @@ int refreshFileExplorerMonitorState()
 
     int isExplorer = isExplorerProcess(pid);
     isDialog = isOpenSaveDialog(hwnd);
-    if (!((isExplorer && classResult != -1) || isDialog))
+    if (!((isExplorer && (classResult != -1 || isDesktop)) || isDialog))
     {
         return 0;
     }
@@ -389,14 +530,23 @@ int refreshFileExplorerMonitorState()
     if (hwnd == gLastExplorerHwnd && gLastExplorerPid == pid &&
         currentState == (isDialog ? stateDialog : stateExplorer))
     {
+        // The same Explorer HWND can be manually moved while it remains focused.
+        // Re-publish the activation state here so Go recalculates overlay
+        // placement from the latest window rectangle on the first typed key.
+        triggerActivation(hwnd, pid, isDialog ? 1 : 0);
         return 1;
     }
 
     gLastExplorerPid = pid;
     gLastExplorerHwnd = hwnd;
-    logMessage("refreshFileExplorerMonitorState: reactivate hwnd=0x%p pid=%lu dialog=%d previous=%d", hwnd, pid, isDialog, currentState);
+    logMessage("refreshFileExplorerMonitorState: reactivate hwnd=0x%p pid=%lu dialog=%d desktop=%d previous=%d", hwnd, pid, isDialog, isDesktop, currentState);
     triggerActivation(hwnd, pid, isDialog ? 1 : 0);
     return 1;
+}
+
+int refreshFileExplorerMonitorState()
+{
+    return refreshFileExplorerMonitorStateForRawKey(0);
 }
 
 static void triggerActivation(HWND hwnd, DWORD pid, int isDialog)

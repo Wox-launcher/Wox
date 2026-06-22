@@ -5,12 +5,44 @@ package window
 #cgo LDFLAGS: -framework Foundation -framework Cocoa -framework ApplicationServices -framework ScriptingBridge
 #include <stdlib.h>
 
+typedef struct {
+	int x;
+	int y;
+	int width;
+	int height;
+} WoxWindowRectC;
+
+typedef struct {
+	char id[64];
+	WoxWindowRectC bounds;
+	WoxWindowRectC workArea;
+	int isPrimary;
+} WoxDisplayInfoC;
+
+typedef struct {
+	char id[64];
+	int pid;
+	WoxWindowRectC bounds;
+	WoxDisplayInfoC display;
+	int isMinimized;
+} WoxManagedWindowC;
+
 int getActiveWindowIcon(unsigned char **iconData);
+int getWindowIconByPid(int pid, unsigned char **iconData);
 char* getActiveWindowName();
+char* getWindowNameByPid(int pid);
 char* getProcessBundleIdentifier(int pid);
 int getActiveWindowPid();
+char* getActiveWindowIdForManagement();
+int getManagedWindowForManagement(const char* windowId, int pid, WoxManagedWindowC* outWindow);
+int listDisplaysForManagement(WoxDisplayInfoC** outDisplays, int* outCount);
+void freeDisplaysForManagement(WoxDisplayInfoC* displays);
+int moveResizeWindowForManagement(const char* windowId, int pid, int x, int y, int width, int height);
+int maximizeWindowForManagement(const char* windowId, int pid);
+int minimizeWindowForManagement(const char* windowId, int pid);
 int activateWindowByPid(int pid);
 int isOpenSaveDialog();
+int isOpenSaveDialogByPid(int pid);
 int navigateActiveFileDialog(const char* path);
 int selectInActiveFileDialog(const char* path);
 char* getActiveFileDialogPath();
@@ -26,6 +58,7 @@ import "C"
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"image"
 	"image/png"
 	"strings"
@@ -49,8 +82,47 @@ func GetActiveWindowIcon() (image.Image, error) {
 	return img, nil
 }
 
+// GetWindowIconByPid resolves the icon from the captured foreground PID instead
+// of the current foreground app, which may already be Wox by the time the
+// asynchronous launcher snapshot detail refresh runs.
+func GetWindowIconByPid(pid int) (image.Image, error) {
+	if pid <= 0 {
+		return nil, errors.New("invalid pid")
+	}
+
+	var iconData *C.uchar
+	length := C.getWindowIconByPid(C.int(pid), &iconData)
+	if length == 0 {
+		return nil, errors.New("failed to get window icon by pid")
+	}
+	defer C.free(unsafe.Pointer(iconData))
+
+	data := C.GoBytes(unsafe.Pointer(iconData), length)
+	img, err := png.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+
+	return img, nil
+}
+
 func GetActiveWindowName() string {
 	name := C.getActiveWindowName()
+	if name == nil {
+		return ""
+	}
+	defer C.free(unsafe.Pointer(name))
+	return C.GoString(name)
+}
+
+// GetWindowNameByPid mirrors GetActiveWindowName for a captured PID so delayed
+// snapshot updates do not accidentally read Wox after the launcher appears.
+func GetWindowNameByPid(pid int) string {
+	if pid <= 0 {
+		return ""
+	}
+
+	name := C.getWindowNameByPid(C.int(pid))
 	if name == nil {
 		return ""
 	}
@@ -76,6 +148,133 @@ func GetActiveWindowPid() int {
 	return int(pid)
 }
 
+// GetActiveWindowId returns the CGWindowID from the focused Accessibility window as a decimal string.
+func GetActiveWindowId() string {
+	windowId := C.getActiveWindowIdForManagement()
+	if windowId == nil {
+		return ""
+	}
+	defer C.free(unsafe.Pointer(windowId))
+	return C.GoString(windowId)
+}
+
+// GetManagedWindow resolves a captured Accessibility window and returns its current bounds.
+func GetManagedWindow(windowId string, pid int, title string) (ManagedWindow, error) {
+	cWindowId := C.CString(windowId)
+	defer C.free(unsafe.Pointer(cWindowId))
+
+	var out C.WoxManagedWindowC
+	result := int(C.getManagedWindowForManagement(cWindowId, C.int(pid), &out))
+	if result != 1 {
+		return ManagedWindow{}, windowManagementErrorFromCode(result)
+	}
+
+	return ManagedWindow{
+		Id:          C.GoString(&out.id[0]),
+		Pid:         int(out.pid),
+		Title:       title,
+		Bounds:      windowRectFromDarwinRect(out.bounds),
+		Display:     displayInfoFromDarwinDisplay(out.display),
+		IsMinimized: int(out.isMinimized) == 1,
+	}, nil
+}
+
+// ListDisplays returns macOS screen bounds and visible frames in top-left desktop coordinates.
+func ListDisplays() ([]DisplayInfo, error) {
+	var outDisplays *C.WoxDisplayInfoC
+	var outCount C.int
+	result := int(C.listDisplaysForManagement(&outDisplays, &outCount))
+	if result != 1 {
+		return nil, windowManagementErrorFromCode(result)
+	}
+	defer C.freeDisplaysForManagement(outDisplays)
+
+	count := int(outCount)
+	if count == 0 {
+		return nil, ErrWindowManagementDisplayNotFound
+	}
+
+	rawDisplays := unsafe.Slice(outDisplays, count)
+	displays := make([]DisplayInfo, 0, count)
+	for _, rawDisplay := range rawDisplays {
+		displays = append(displays, displayInfoFromDarwinDisplay(rawDisplay))
+	}
+	SortDisplays(displays)
+	return displays, nil
+}
+
+// MoveResizeWindow applies an Accessibility position and size to the target window.
+func MoveResizeWindow(managedWindow ManagedWindow, rect WindowRect) error {
+	cWindowId := C.CString(managedWindow.Id)
+	defer C.free(unsafe.Pointer(cWindowId))
+
+	result := int(C.moveResizeWindowForManagement(cWindowId, C.int(managedWindow.Pid), C.int(rect.X), C.int(rect.Y), C.int(max(1, rect.Width)), C.int(max(1, rect.Height))))
+	if result != 1 {
+		return windowManagementErrorFromCode(result)
+	}
+	return nil
+}
+
+// MaximizeWindow triggers the native zoom control so macOS keeps window state in sync.
+func MaximizeWindow(managedWindow ManagedWindow) error {
+	cWindowId := C.CString(managedWindow.Id)
+	defer C.free(unsafe.Pointer(cWindowId))
+
+	result := int(C.maximizeWindowForManagement(cWindowId, C.int(managedWindow.Pid)))
+	if result != 1 {
+		return windowManagementErrorFromCode(result)
+	}
+	return nil
+}
+
+// MinimizeWindow minimizes the captured Accessibility window.
+func MinimizeWindow(managedWindow ManagedWindow) error {
+	cWindowId := C.CString(managedWindow.Id)
+	defer C.free(unsafe.Pointer(cWindowId))
+
+	result := int(C.minimizeWindowForManagement(cWindowId, C.int(managedWindow.Pid)))
+	if result != 1 {
+		return windowManagementErrorFromCode(result)
+	}
+	return nil
+}
+
+// windowManagementErrorFromCode maps Objective-C bridge return codes to shared errors.
+func windowManagementErrorFromCode(code int) error {
+	switch code {
+	case 0:
+		return ErrWindowManagementWindowNotFound
+	case -2:
+		return ErrWindowManagementPermissionDenied
+	case -3:
+		return ErrWindowManagementDisplayNotFound
+	case -4:
+		return ErrWindowManagementUnsupported
+	default:
+		return fmt.Errorf("window management failed with code %d", code)
+	}
+}
+
+// windowRectFromDarwinRect converts the Objective-C bridge rect into the shared Go type.
+func windowRectFromDarwinRect(rect C.WoxWindowRectC) WindowRect {
+	return WindowRect{
+		X:      int(rect.x),
+		Y:      int(rect.y),
+		Width:  int(rect.width),
+		Height: int(rect.height),
+	}
+}
+
+// displayInfoFromDarwinDisplay converts NSScreen metrics into the shared Go type.
+func displayInfoFromDarwinDisplay(display C.WoxDisplayInfoC) DisplayInfo {
+	return DisplayInfo{
+		Id:        C.GoString(&display.id[0]),
+		Bounds:    windowRectFromDarwinRect(display.bounds),
+		WorkArea:  windowRectFromDarwinRect(display.workArea),
+		IsPrimary: int(display.isPrimary) == 1,
+	}
+}
+
 func ActivateWindowByPid(pid int) bool {
 	result := C.activateWindowByPid(C.int(pid))
 	return int(result) == 1
@@ -83,6 +282,15 @@ func ActivateWindowByPid(pid int) bool {
 
 func IsOpenSaveDialog() (bool, error) {
 	return int(C.isOpenSaveDialog()) == 1, nil
+}
+
+// IsOpenSaveDialogByPid checks the captured process because the active app can
+// change to Wox before the slow Accessibility dialog probe finishes.
+func IsOpenSaveDialogByPid(pid int) (bool, error) {
+	if pid <= 0 {
+		return false, nil
+	}
+	return int(C.isOpenSaveDialogByPid(C.int(pid))) == 1, nil
 }
 
 func NavigateActiveFileDialog(targetPath string) bool {
@@ -105,6 +313,10 @@ func SelectInActiveFileDialog(targetPath string) bool {
 	cPath := C.CString(targetPath)
 	defer C.free(unsafe.Pointer(cPath))
 	return int(C.selectInActiveFileDialog(cPath)) == 1
+}
+
+func HighlightInActiveFileDialog(targetPath string) bool {
+	return SelectInActiveFileDialog(targetPath)
 }
 
 // GetActiveFileDialogPath returns the currently opened directory path in the
@@ -130,6 +342,14 @@ func GetFileDialogPathByPid(pid int) string {
 	}
 	defer C.free(unsafe.Pointer(result))
 	return strings.TrimSpace(C.GoString(result))
+}
+
+func GetFileDialogPathByWindowId(windowId string, pid int) string {
+	return ""
+}
+
+func GetLastFileDialogPathResolveDebug() string {
+	return ""
 }
 
 // NavigateInFileExplorer navigates the active Finder window to targetPath.

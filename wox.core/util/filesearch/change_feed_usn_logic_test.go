@@ -102,7 +102,7 @@ func TestTranslateUSNDeltaEmitsDirtyPathAndCursor(t *testing.T) {
 		FeedType: RootFeedTypeUSN,
 	}
 
-	signal := translateUSNDelta(root, journal, `C:\root\dir\child.txt`, false, true, 555, time.Unix(100, 0))
+	signal := translateUSNDelta(root, journal, `C:\root\dir\child.txt`, false, true, 555, usnReasonFileCreate, time.Unix(100, 0))
 	if signal.Kind != ChangeSignalKindDirtyPath {
 		t.Fatalf("expected dirty path signal, got %q", signal.Kind)
 	}

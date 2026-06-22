@@ -6,18 +6,23 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_loading_indicator.dart';
+import 'package:wox/components/wox_selectable_text.dart';
+import 'package:wox/components/wox_tooltip.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_preview_webview_data.dart';
 import 'package:wox/utils/windows/window_manager.dart';
 import 'package:wox/utils/webview/wox_webview_util.dart';
 import 'package:wox/utils/webview/wox_webview_session.dart';
+import 'package:wox/utils/wox_interface_size_util.dart';
 
 class WoxWebViewPreview extends StatefulWidget {
   final String previewData;
+  final bool showToolbar;
 
-  const WoxWebViewPreview({super.key, required this.previewData});
+  const WoxWebViewPreview({super.key, required this.previewData, this.showToolbar = true});
 
   @override
   State<WoxWebViewPreview> createState() => _WoxWebViewPreviewState();
@@ -26,8 +31,10 @@ class WoxWebViewPreview extends StatefulWidget {
 class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
   static const double _toolbarBottomSpacing = 60;
   static const double _toolbarHeight = 36;
-  static const double _toolbarWidth = 176;
-  static const double _toolbarTriggerWidth = 224;
+  // These are normal-density base values; preview toolbar controls scale from
+  // them so the floating shape stays proportional to the active interface size.
+  static const double _toolbarWidth = 240;
+  static const double _toolbarTriggerWidth = 288;
   static const double _toolbarTriggerHeight = 72;
   static const Duration _toolbarAnimationDuration = Duration(milliseconds: 180);
   static const Duration _toolbarAutoHideDelay = Duration(milliseconds: 1200);
@@ -40,6 +47,12 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
   final launcherController = Get.find<WoxLauncherController>();
   Timer? _toolbarHideTimer;
   bool _isToolbarVisible = true;
+  String? _focusedHiddenQueryBoxPreviewData;
+  int _hiddenQueryBoxWebViewFocusToken = 0;
+
+  WoxInterfaceSizeMetrics get _metrics => WoxInterfaceSizeUtil.instance.current;
+
+  double _scaled(double value) => _metrics.scaledSpacing(value);
 
   WoxPreviewWebviewData get webviewData {
     return WoxPreviewWebviewData.fromPreviewData(widget.previewData);
@@ -57,8 +70,8 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
   void didUpdateWidget(covariant WoxWebViewPreview oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.previewData != widget.previewData) {
-      unawaited(_releaseCurrentSession());
-      _refreshWindowsSession();
+      _focusedHiddenQueryBoxPreviewData = null;
+      unawaited(_replaceWindowsSession());
       _showToolbarTemporarily();
     }
   }
@@ -89,6 +102,7 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
           _session = session;
           WoxWebViewUtil.setActiveSession(session);
           _subscribeSessionActions(session);
+          _focusWebViewIfQueryBoxHidden(session: session);
           return session;
         })
         .catchError((error) {
@@ -109,6 +123,15 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
     WoxWebViewUtil.clearActiveSession(session);
     _session = null;
     await WoxWebViewUtil.releaseSession(session);
+  }
+
+  Future<void> _replaceWindowsSession() async {
+    await _releaseCurrentSession();
+    if (!mounted) {
+      return;
+    }
+
+    _refreshWindowsSession();
   }
 
   void _subscribeSessionActions(WoxWebViewSession? session) {
@@ -141,10 +164,57 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
     launcherController.hideApp(traceId);
   }
 
+  void _focusWebViewIfQueryBoxHidden({WoxWebViewSession? session}) {
+    if (launcherController.isQueryBoxVisible.value || _focusedHiddenQueryBoxPreviewData == widget.previewData) {
+      return;
+    }
+
+    _focusedHiddenQueryBoxPreviewData = widget.previewData;
+    final focusToken = ++_hiddenQueryBoxWebViewFocusToken;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || launcherController.isQueryBoxVisible.value) {
+        return;
+      }
+      if (focusToken != _hiddenQueryBoxWebViewFocusToken) {
+        return;
+      }
+      if (session != null && !identical(_session, session)) {
+        return;
+      }
+
+      unawaited(_focusActiveWebView(focusToken: focusToken, session: session));
+    });
+  }
+
+  Future<void> _focusActiveWebView({required int focusToken, WoxWebViewSession? session}) async {
+    const retryDelays = [Duration.zero, Duration(milliseconds: 50), Duration(milliseconds: 100), Duration(milliseconds: 200), Duration(milliseconds: 400)];
+
+    for (final delay in retryDelays) {
+      if (delay > Duration.zero) {
+        await Future.delayed(delay);
+      }
+      if (!mounted || launcherController.isQueryBoxVisible.value || focusToken != _hiddenQueryBoxWebViewFocusToken) {
+        return;
+      }
+      if (session != null && !identical(_session, session)) {
+        return;
+      }
+
+      final focused = await WoxWebViewUtil.focusActiveSession();
+      if (focused) {
+        return;
+      }
+    }
+
+    if (mounted && !launcherController.isQueryBoxVisible.value && focusToken == _hiddenQueryBoxWebViewFocusToken) {
+      _focusedHiddenQueryBoxPreviewData = null;
+    }
+  }
+
   Widget _buildWindowsPreview(WoxPreviewWebviewData preview) {
     final future = _windowsSessionFuture;
     if (future == null) {
-      return SelectableText("WebView preview is not initialized on Windows.\nURL: ${preview.url}");
+      return WoxSelectableText("WebView preview is not initialized on Windows.\nURL: ${preview.url}");
     }
 
     return FutureBuilder<WoxWebViewSession?>(
@@ -157,7 +227,7 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
         final session = snapshot.data;
         if (session == null) {
           final message = _windowsErrorMessage ?? "WebView2 Runtime is not available on this system.";
-          return SelectableText("$message\nURL: ${preview.url}");
+          return WoxSelectableText("$message\nURL: ${preview.url}");
         }
 
         return _buildPreviewWithToolbar(child: session.buildWidget(), navigationState: session.navigationState);
@@ -166,6 +236,10 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
   }
 
   Widget _buildPreviewWithToolbar({required Widget child, ValueListenable<WoxWebViewNavigationState>? navigationState}) {
+    if (!widget.showToolbar) {
+      return child;
+    }
+
     return Stack(
       children: [
         Positioned.fill(child: child),
@@ -187,13 +261,13 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
     return Positioned(
       left: 0,
       right: 0,
-      bottom: _toolbarBottomSpacing - 18,
+      bottom: _scaled(_toolbarBottomSpacing - 18),
       child: Align(
         alignment: Alignment.bottomCenter,
         child: MouseRegion(
           onEnter: (_) => _showToolbarTemporarily(),
           onExit: (_) => _scheduleToolbarHide(),
-          child: const SizedBox(width: _toolbarTriggerWidth, height: _toolbarTriggerHeight),
+          child: SizedBox(width: _scaled(_toolbarTriggerWidth), height: _scaled(_toolbarTriggerHeight)),
         ),
       ),
     );
@@ -207,7 +281,7 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
     final shadowColor = Colors.black.withValues(alpha: isDark ? 0.22 : 0.12);
 
     return Positioned(
-      bottom: _toolbarBottomSpacing,
+      bottom: _scaled(_toolbarBottomSpacing),
       left: 0,
       right: 0,
       child: IgnorePointer(
@@ -222,20 +296,20 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
               curve: Curves.easeOutCubic,
               opacity: _isToolbarVisible ? 1 : 0,
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(_toolbarHeight / 2),
+                borderRadius: BorderRadius.circular(_scaled(_toolbarHeight) / 2),
                 child: BackdropFilter(
                   filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
                   child: DecoratedBox(
                     decoration: BoxDecoration(
                       color: backgroundColor,
-                      borderRadius: BorderRadius.circular(_toolbarHeight / 2),
+                      borderRadius: BorderRadius.circular(_scaled(_toolbarHeight) / 2),
                       border: Border.all(color: borderColor),
                       boxShadow: [BoxShadow(color: shadowColor, blurRadius: 20, offset: const Offset(0, 8))],
                     ),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: EdgeInsets.symmetric(horizontal: _scaled(6), vertical: _scaled(2)),
                       child: SizedBox(
-                        width: _toolbarWidth,
+                        width: _scaled(_toolbarWidth),
                         child: Row(
                           children: [
                             Expanded(child: _buildToolbarDragHandle()),
@@ -259,6 +333,18 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
                               enabled: navigationState?.canGoForward,
                               onPressed: _goForward,
                             ),
+                            _buildToolbarButton(
+                              icon: Icons.open_in_browser_rounded,
+                              tooltip: launcherController.tr("ui_action_webview_open_in_browser"),
+                              iconColor: iconColor,
+                              onPressed: _openInBrowser,
+                            ),
+                            _buildToolbarButton(
+                              icon: Icons.visibility_off_rounded,
+                              tooltip: launcherController.tr("ui_action_webview_hide_wox"),
+                              iconColor: iconColor,
+                              onPressed: _hideWox,
+                            ),
                             Expanded(child: _buildToolbarDragHandle()),
                           ],
                         ),
@@ -277,17 +363,22 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
   Widget _buildToolbarButton({required IconData icon, required String tooltip, required Color iconColor, required VoidCallback onPressed, bool? enabled}) {
     final isEnabled = enabled ?? true;
 
-    return IconButton(
-      tooltip: tooltip,
-      onPressed: isEnabled ? onPressed : null,
-      icon: Icon(icon),
-      iconSize: 20,
-      color: iconColor,
-      disabledColor: iconColor.withValues(alpha: 0.28),
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints.tightFor(width: 32, height: 32),
-      splashRadius: 16,
-      visualDensity: VisualDensity.compact,
+    // The floating webview toolbar used IconButton.tooltip before, which made
+    // its hover help use Material's overlay while the rest of Wox used WoxTooltip.
+    // Wrapping the button keeps the same click target and centralizes tooltip UI.
+    return WoxTooltip(
+      message: tooltip,
+      child: IconButton(
+        onPressed: isEnabled ? onPressed : null,
+        icon: Icon(icon),
+        iconSize: _scaled(20),
+        color: iconColor,
+        disabledColor: iconColor.withValues(alpha: 0.28),
+        padding: EdgeInsets.only(left: _scaled(6), right: _scaled(6)),
+        constraints: BoxConstraints.tightFor(width: _scaled(32), height: _scaled(32)),
+        splashRadius: _scaled(16),
+        visualDensity: VisualDensity.compact,
+      ),
     );
   }
 
@@ -299,16 +390,24 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
         onPanStart: (_) {
           windowManager.startDragging();
         },
-        child: const SizedBox(height: 32),
+        child: SizedBox(height: _scaled(32)),
       ),
     );
   }
 
   void _showToolbarTemporarily() {
+    if (!widget.showToolbar) {
+      return;
+    }
+
     _showToolbar();
   }
 
   void _showToolbar({bool keepVisible = false}) {
+    if (!widget.showToolbar) {
+      return;
+    }
+
     _toolbarHideTimer?.cancel();
 
     if (!_isToolbarVisible && mounted) {
@@ -323,6 +422,10 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
   }
 
   void _scheduleToolbarHide({Duration delay = _toolbarAutoHideDelay}) {
+    if (!widget.showToolbar) {
+      return;
+    }
+
     _toolbarHideTimer?.cancel();
     _toolbarHideTimer = Timer(delay, () {
       if (!mounted || !_isToolbarVisible) {
@@ -347,6 +450,35 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
     unawaited(WoxWebViewUtil.goForward());
   }
 
+  void _openInBrowser() {
+    unawaited(_openCurrentUrlInBrowser());
+  }
+
+  void _hideWox() {
+    unawaited(launcherController.hideApp(const UuidV4().generate()));
+  }
+
+  Future<void> _openCurrentUrlInBrowser() async {
+    // WebView navigation can move away from the original preview URL. Prefer the platform-reported current
+    // URL and fall back to the preview data so cached/native views still have a usable browser escape hatch.
+    final currentUrl = await WoxWebViewUtil.getCurrentUrl();
+    final uri = _resolveExternalBrowserUri(currentUrl) ?? _resolveExternalBrowserUri(webviewData.url);
+    if (uri == null) {
+      return;
+    }
+
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  Uri? _resolveExternalBrowserUri(String? url) {
+    final uri = Uri.tryParse(url?.trim() ?? "");
+    if (uri == null || uri.host.isEmpty || (uri.scheme != "http" && uri.scheme != "https")) {
+      return null;
+    }
+
+    return uri;
+  }
+
   @override
   Widget build(BuildContext context) {
     final preview = webviewData;
@@ -356,11 +488,12 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
     }
 
     if (Platform.isMacOS) {
+      _focusWebViewIfQueryBoxHidden();
       return _buildPreviewWithToolbar(
         child: AppKitView(key: ValueKey(widget.previewData), viewType: "wox/webview_preview", creationParams: preview.toJson(), creationParamsCodec: const StandardMessageCodec()),
       );
     }
 
-    return SelectableText("WebView preview is currently only available on macOS and Windows.\nURL: ${preview.url}");
+    return WoxSelectableText("WebView preview is currently only available on macOS and Windows.\nURL: ${preview.url}");
   }
 }

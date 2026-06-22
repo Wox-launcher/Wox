@@ -3,6 +3,7 @@ package setting
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 	"wox/common"
@@ -21,6 +22,8 @@ type Manager struct {
 	woxSetting *WoxSetting
 	mruManager *MRUManager
 }
+
+const queryCompletionFeedbackLimit = 1000
 
 func GetSettingManager() *Manager {
 	managerOnce.Do(func() {
@@ -104,6 +107,11 @@ func (m *Manager) LoadPluginSetting(ctx context.Context, pluginId string, defaul
 
 func (m *Manager) AddActionedResult(ctx context.Context, pluginId string, resultTitle string, resultSubTitle string, query string) {
 	resultHash := NewResultHash(pluginId, resultTitle, resultSubTitle)
+	m.AddActionedResultByHash(ctx, resultHash, query)
+}
+
+// AddActionedResultByHash stores an actioned result for callers that own a stable result identity.
+func (m *Manager) AddActionedResultByHash(ctx context.Context, resultHash ResultHash, query string) {
 	actionedResult := ActionedResult{
 		Timestamp: util.GetSystemTimestamp(),
 		Query:     query,
@@ -164,6 +172,56 @@ func (m *Manager) AddQueryHistory(ctx context.Context, query common.PlainQuery) 
 	}
 
 	m.woxSetting.QueryHistories.Set(histories)
+}
+
+// GetQueryCompletionFeedbacks returns accepted inline completion feedback for ranking.
+func (m *Manager) GetQueryCompletionFeedbacks(ctx context.Context) []QueryCompletionFeedback {
+	feedbacks := m.woxSetting.QueryCompletionFeedbacks.Get()
+	return append([]QueryCompletionFeedback(nil), feedbacks...)
+}
+
+// RecordQueryCompletionFeedback upserts one accepted inline completion hint.
+func (m *Manager) RecordQueryCompletionFeedback(ctx context.Context, inputPrefix string, completionText string, source string) bool {
+	if inputPrefix == "" || completionText == "" || completionText == inputPrefix || !strings.HasPrefix(completionText, inputPrefix) {
+		return false
+	}
+
+	feedbacks := m.woxSetting.QueryCompletionFeedbacks.Get()
+	now := util.GetSystemTimestamp()
+	updated := false
+	var acceptedFeedback QueryCompletionFeedback
+	nextFeedbacks := make([]QueryCompletionFeedback, 0, len(feedbacks)+1)
+	for _, feedback := range feedbacks {
+		if feedback.CompletionText != completionText {
+			nextFeedbacks = append(nextFeedbacks, feedback)
+			continue
+		}
+
+		feedback.LastInputPrefix = inputPrefix
+		feedback.Source = source
+		feedback.AcceptCount++
+		feedback.LastAcceptedTimestamp = now
+		acceptedFeedback = feedback
+		updated = true
+	}
+
+	if !updated {
+		acceptedFeedback = QueryCompletionFeedback{
+			CompletionText:        completionText,
+			LastInputPrefix:       inputPrefix,
+			Source:                source,
+			AcceptCount:           1,
+			LastAcceptedTimestamp: now,
+		}
+	}
+
+	feedbacks = append(nextFeedbacks, acceptedFeedback)
+	if len(feedbacks) > queryCompletionFeedbackLimit {
+		feedbacks = feedbacks[len(feedbacks)-queryCompletionFeedbackLimit:]
+	}
+
+	m.woxSetting.QueryCompletionFeedbacks.Set(feedbacks)
+	return true
 }
 
 // MRU related methods

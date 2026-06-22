@@ -5,6 +5,22 @@ class MainFlutterWindow: NSPanel {
   var isReadyToShow: Bool = false
   private var webViewPreviewChannel: FlutterMethodChannel?
 
+  override var canBecomeKey: Bool {
+    // Screenshot annotation reuses the main Flutter window as a temporary borderless panel. AppKit
+    // does not reliably treat that shell as key-capable, which leaves keyboard shortcuts like Esc
+    // outside the responder chain and produces the system alert beep instead of dismissing capture.
+    // Keep the panel explicitly key-capable so Flutter continues receiving keyboard events in both
+    // the normal launcher chrome and the temporary screenshot presentation.
+    return true
+  }
+
+  override var canBecomeMain: Bool {
+    // The screenshot workspace activates this window directly while the launcher chrome is removed.
+    // Matching canBecomeMain with canBecomeKey avoids AppKit leaving the panel in a half-active
+    // state where mouse works but keyboard focus never settles onto the Flutter content view.
+    return true
+  }
+
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
@@ -29,6 +45,12 @@ class MainFlutterWindow: NSPanel {
         result(WoxWebViewPreviewPlugin.goBack())
       case "goForward":
         result(WoxWebViewPreviewPlugin.goForward())
+      case "getCurrentUrl":
+        result(WoxWebViewPreviewPlugin.getCurrentUrl())
+      case "clearState":
+        result(WoxWebViewPreviewPlugin.clearState())
+      case "focusActiveSession":
+        result(WoxWebViewPreviewPlugin.focusActiveSession())
       default:
         result(FlutterMethodNotImplemented)
       }

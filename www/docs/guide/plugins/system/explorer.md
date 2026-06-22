@@ -1,33 +1,28 @@
 # Explorer Plugin
 
-Explorer helps you navigate folders in File Explorer/Finder and jump to folders in open/save dialogs.
+Explorer is contextual. It shows folder navigation results when a file manager or open/save dialog is active.
 
-## What it does
+## In File Explorer or Finder
 
-- When a file explorer is active, search entries in the current folder
-- When an open/save dialog is active, show recommended folders
-- Works on Windows and macOS
+Open Wox while the file manager is focused and type part of a child folder or file name:
 
-## Quick start
-
-**In File Explorer / Finder**
-
-```
+```text
 Documents
 Downloads
 project
 ```
 
-Select a folder to navigate. Use `Ctrl+Enter` to open the containing folder in a new window.
+Select a folder to navigate there. Use the Action Panel when you want to reveal or open in a separate window.
 
-**In open/save dialogs**
+## In Open/Save Dialogs
 
-Open Wox while the dialog is active to see recommended folders:
-- Recently used folders for that app
-- Open Finder windows
-- Common system folders (Desktop, Documents, Downloads, etc.)
+Open Wox while a dialog is active to jump to useful folders:
+
+- Folders already open in the file manager.
+- Recently used folders for the active app.
+- Common locations such as Desktop, Documents, and Downloads.
 
 ## Notes
 
-- Only shows results when File Explorer/Finder or an open/save dialog is active.
-- No user-facing settings.
+- Explorer results are intentionally quiet when no supported context is active.
+- Windows and macOS have the richest support; Linux support depends on the desktop environment.

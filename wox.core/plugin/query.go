@@ -14,6 +14,8 @@ type QueryResultActionType = string
 type QueryType = string
 type QueryVariable = string
 type QueryResultTailType = string
+type QueryResultTailTextCategory = string
+type QueryRefinementType = string
 
 const (
 	QueryTypeInput     QueryType = "input"     // user input query
@@ -27,6 +29,7 @@ const (
 
 const (
 	QueryVariableSelectedText     QueryVariable = "{wox:selected_text}"
+	QueryVariableSelectedFile     QueryVariable = "{wox:selected_file}"
 	QueryVariableActiveBrowserUrl QueryVariable = "{wox:active_browser_url}"
 	QueryVariableFileExplorerPath QueryVariable = "{wox:file_explorer_path}"
 )
@@ -34,6 +37,20 @@ const (
 const (
 	QueryResultTailTypeText  QueryResultTailType = "text"  // string type
 	QueryResultTailTypeImage QueryResultTailType = "image" // WoxImage type
+)
+
+const (
+	QueryResultTailTextCategoryDefault QueryResultTailTextCategory = "default"
+	QueryResultTailTextCategoryDanger  QueryResultTailTextCategory = "danger"
+	QueryResultTailTextCategoryWarning QueryResultTailTextCategory = "warning"
+	QueryResultTailTextCategorySuccess QueryResultTailTextCategory = "success"
+)
+
+const (
+	QueryRefinementTypeSingleSelect QueryRefinementType = "singleSelect"
+	QueryRefinementTypeMultiSelect  QueryRefinementType = "multiSelect"
+	QueryRefinementTypeToggle       QueryRefinementType = "toggle"
+	QueryRefinementTypeSort         QueryRefinementType = "sort"
 )
 
 // Query from Wox. See "Doc/Query.md" for details.
@@ -78,6 +95,16 @@ type Query struct {
 	// additional query environment data
 	// expose more context env data to plugin, E.g. plugin A only show result when active window title is "Chrome"
 	Env QueryEnv
+
+	// Refinements carries query-scoped UI state selected by the user. Values are
+	// strings to keep the plugin-facing API close to Env-style key/value data;
+	// multi-select refinements are encoded as comma-separated strings.
+	Refinements map[string]string
+
+	// ContextData carries hidden query-scoped data. Unlike Refinements, this is
+	// not rendered by the UI and is intended for plugin handoffs such as a shell
+	// working directory.
+	ContextData common.ContextData
 }
 
 func (q *Query) IsGlobalQuery() bool {
@@ -95,14 +122,85 @@ func (q *Query) String() string {
 }
 
 type QueryEnv struct {
-	ActiveWindowTitle            string          // active window title when user query, empty if not available
-	ActiveWindowPid              int             // active window pid when user query, 0 if not available
-	ActiveWindowIcon             common.WoxImage // active window icon when user query, empty if not available
-	ActiveWindowIsOpenSaveDialog bool            // active window is open/save dialog when user query
+	ActiveWindowTitle string          // active window title when user query, empty if not available
+	ActiveWindowPid   int             // active window pid when user query, 0 if not available
+	ActiveWindowIcon  common.WoxImage // active window icon when user query, empty if not available
 
 	// active browser url when user query
 	// Only available when active window is browser and https://github.com/Wox-launcher/Wox.Chrome.Extension is installed
 	ActiveBrowserUrl string
+
+	// These fields are core-only for built-in system plugins. Do not add them
+	// to SDK models or public plugin docs unless we explicitly decide to expose
+	// the native window handle/dialog state as public plugin API.
+	ActiveWindowId               string `json:"-"` // exact top-level window id; Windows HWND, macOS CGWindowID
+	ActiveWindowIsOpenSaveDialog bool   `json:"-"` // active window is open/save dialog when user query
+}
+
+// QueryResponse is the complete plugin answer for one query execution.
+// The old API returned only []QueryResult, which forced query-scoped UI data
+// such as refinements and layout hints into side channels. Keeping them in one
+// response lets the UI apply the controls and results from the same query id.
+type QueryResponse struct {
+	Results     []QueryResult
+	Refinements []QueryRefinement
+	Layout      QueryLayout
+	Context     QueryContext
+}
+
+func NewQueryResponse(results []QueryResult) QueryResponse {
+	return QueryResponse{Results: results}
+}
+
+// QueryLayout carries query-scoped presentation hints.
+// These fields are pointers because zero is a meaningful value for some hints:
+// ResultPreviewWidthRatio=0 intentionally gives the preview the full result
+// area. The old metadata side request could return that value explicitly; the
+// QueryResponse path must keep the same distinction between unset and zero.
+type QueryLayout struct {
+	Icon                    *common.WoxImage                 `json:"Icon,omitempty"`
+	ResultPreviewWidthRatio *float64                         `json:"ResultPreviewWidthRatio,omitempty"`
+	GridLayout              *MetadataFeatureParamsGridLayout `json:"GridLayout,omitempty"`
+}
+
+// QueryContext carries the backend's canonical classification for a query.
+// The UI can make a quick local guess for immediate rendering, but only core
+// has the final parser state after shortcuts and trigger-keyword matching.
+type QueryContext struct {
+	IsGlobalQuery bool   `json:"IsGlobalQuery"`
+	PluginId      string `json:"PluginId"`
+}
+
+// BuildQueryContext centralizes the parser result that the UI cannot reproduce
+// cheaply. In particular, shortcuts and trigger-keyword parsing happen in core,
+// so the response carries the resolved global/plugin classification back.
+func BuildQueryContext(query Query, queryPlugin *Instance) QueryContext {
+	queryContext := QueryContext{IsGlobalQuery: query.IsGlobalQuery()}
+	if !queryContext.IsGlobalQuery && queryPlugin != nil {
+		queryContext.PluginId = queryPlugin.Metadata.Id
+	}
+	return queryContext
+}
+
+// QueryRefinement describes one query-scoped control such as type filters or
+// sort modes. Options are deliberately simple values because plugins, not core,
+// interpret the selected values when the next query is executed.
+type QueryRefinement struct {
+	Id           string
+	Title        string
+	Type         QueryRefinementType
+	Options      []QueryRefinementOption
+	DefaultValue []string
+	Hotkey       string
+	Persist      bool
+}
+
+type QueryRefinementOption struct {
+	Value    string
+	Title    string
+	Icon     common.WoxImage
+	Keywords []string
+	Count    *int
 }
 
 // RefreshQueryParam contains parameters for refreshing a query
@@ -111,6 +209,14 @@ type RefreshQueryParam struct {
 	// When true, the user's current selection index in the results list is preserved
 	// When false, the selection resets to the first item (index 0)
 	PreserveSelectedIndex bool
+}
+
+const QueryResultDragDataTypeFiles = "files"
+
+// QueryResultDragData declares data the UI can export through a native drag session.
+type QueryResultDragData struct {
+	Type  string
+	Files []string
 }
 
 // Query result return from plugin
@@ -125,6 +231,8 @@ type QueryResult struct {
 	Preview  WoxPreview
 	// Score of the result, the higher the score, the more relevant the result is, more likely to be displayed on top
 	Score int64
+	// ScoreKey is an optional stable identity for actioned-result scoring when title or subtitle is dynamic.
+	ScoreKey string
 	// Group results, Wox will group results by group name
 	Group string
 	// Score of the group, the higher the score, the more relevant the group is, more likely to be displayed on top
@@ -132,16 +240,22 @@ type QueryResult struct {
 	// Tails are additional results associate with this result, can be displayed in result detail view
 	Tails   []QueryResultTail
 	Actions []QueryResultAction
+	// DragData declares what can be dragged out of Wox for this result.
+	DragData *QueryResultDragData
 }
 
 type QueryResultTail struct {
 	// Tail id, should be unique. It's optional, if you don't set it, Wox will assign a random id for you
-	Id          string
-	Type        QueryResultTailType
-	Text        string          // only available when type is QueryResultTailTypeText
-	Image       common.WoxImage // only available when type is QueryResultTailTypeImage
-	ImageWidth  *float64        // optional width for image tails
-	ImageHeight *float64        // optional height for image tails
+	Id           string
+	Type         QueryResultTailType
+	Text         string                      // only available when type is QueryResultTailTypeText
+	TextCategory QueryResultTailTextCategory // optional semantic category when type is QueryResultTailTypeText
+	Image        common.WoxImage             // only available when type is QueryResultTailTypeImage
+	ImageWidth   *float64                    // optional width for image tails
+	ImageHeight  *float64                    // optional height for image tails
+	// Tooltip is hover-only context for compact tails. This keeps visual-only tails
+	// readable without forcing plugins to trade result width for explanatory text.
+	Tooltip string
 	// Additional data associate with this tail, can be retrieved later
 	ContextData map[string]string
 
@@ -150,9 +264,18 @@ type QueryResultTail struct {
 }
 
 func NewQueryResultTailText(text string) QueryResultTail {
+	return NewQueryResultTailTextWithCategory(text, QueryResultTailTextCategoryDefault)
+}
+
+func NewQueryResultTailTextWithCategory(text string, category QueryResultTailTextCategory) QueryResultTail {
+	if category == "" {
+		category = QueryResultTailTextCategoryDefault
+	}
+
 	return QueryResultTail{
-		Type: QueryResultTailTypeText,
-		Text: text,
+		Type:         QueryResultTailTypeText,
+		Text:         text,
+		TextCategory: category,
 	}
 }
 
@@ -225,6 +348,7 @@ func (q *QueryResult) ToUI() QueryResultUI {
 		Group:      q.Group,
 		GroupScore: q.GroupScore,
 		Tails:      q.Tails,
+		DragData:   q.DragData,
 		Actions: lo.Map(q.Actions, func(action QueryResultAction, index int) QueryResultActionUI {
 			actionType := action.Type
 			if actionType == "" {
@@ -246,6 +370,17 @@ func (q *QueryResult) ToUI() QueryResultUI {
 	}
 }
 
+func (q *QueryResponse) ToUI() QueryResponseUI {
+	return QueryResponseUI{
+		Results: lo.Map(q.Results, func(result QueryResult, index int) QueryResultUI {
+			return result.ToUI()
+		}),
+		Refinements: q.Refinements,
+		Layout:      q.Layout,
+		Context:     q.Context,
+	}
+}
+
 type QueryResultUI struct {
 	QueryId    string
 	Id         string
@@ -258,7 +393,16 @@ type QueryResultUI struct {
 	GroupScore int64
 	Tails      []QueryResultTail
 	Actions    []QueryResultActionUI
+	DragData   *QueryResultDragData
 	IsGroup    bool
+}
+
+type QueryResponseUI struct {
+	Results             []QueryResultUI
+	Refinements         []QueryRefinement
+	Layout              QueryLayout
+	Context             QueryContext
+	QueryStartTimestamp int64 // end-to-end query start timestamp, preferably from Flutter request send time
 }
 
 // PushResultsPayload is used to push additional results to UI for a query.
@@ -320,6 +464,7 @@ type UpdatableResult struct {
 	Preview  *WoxPreview
 	Tails    *[]QueryResultTail
 	Actions  *[]QueryResultAction
+	DragData *QueryResultDragData
 }
 
 // store latest result value after query/refresh, so we can retrieve data later in action/refresh
@@ -327,6 +472,18 @@ type QueryResultCache struct {
 	Result         QueryResult // store the full QueryResult including actions with callbacks
 	PluginInstance *Instance
 	Query          Query
+	Layout         QueryLayout // query layout used when polishing this result, so later updates keep the same surface sizing
+	// FlushBatch is the debouncer batch that first sent this result in a visible response.
+	FlushBatch int
+	// BatchQueueElapsed is the elapsed time when queryRun put this result into the debouncer queue.
+	BatchQueueElapsed    int64
+	BatchQueueElapsedSet bool
+	// QueryElapsed is the elapsed time when queryRun received the plugin response, measured from the end-to-end query start.
+	QueryElapsed    int64
+	QueryElapsedSet bool
+	// PluginQueryElapsed is only the raw Plugin.Query duration, excluding manager polish and UI conversion.
+	PluginQueryElapsed    int64
+	PluginQueryElapsedSet bool
 }
 
 func newQueryInputWithPlugins(query string, pluginInstances []*Instance) (Query, *Instance) {

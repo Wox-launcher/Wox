@@ -50,14 +50,57 @@ type PluginSetting struct {
 }
 
 type Oplog struct {
-	ID            uint `gorm:"primaryKey;autoIncrement"`
-	EntityType    string
-	EntityID      string
-	Operation     string
-	Key           string
-	Value         string
-	Timestamp     int64
-	SyncedToCloud bool `gorm:"default:false"`
+	ID                       uint `gorm:"primaryKey;autoIncrement"`
+	EntityType               string
+	EntityID                 string
+	Operation                string
+	Key                      string
+	Value                    string
+	Timestamp                int64
+	SyncAfter                int64  `gorm:"index;default:0"`
+	SyncedToCloud            bool   `gorm:"default:false"`
+	CloudSyncDiscarded       bool   `gorm:"default:false"`
+	CloudSyncPushFailedCount int    `gorm:"default:0"`
+	CloudSyncLastPushError   string `gorm:"default:''"`
+}
+
+type CloudSyncState struct {
+	ID           uint `gorm:"primaryKey"`
+	Cursor       string
+	LastPullTs   int64
+	LastPushTs   int64
+	BackoffUntil int64
+	RetryCount   int
+	LastError    string
+	Bootstrapped bool
+}
+
+// CloudSyncHistory stores local device sync attempts for user-visible diagnostics.
+type CloudSyncHistory struct {
+	ID               uint `gorm:"primaryKey;autoIncrement"`
+	Operation        string
+	Reason           string
+	Status           string
+	StartedAt        int64 `gorm:"index"`
+	FinishedAt       int64
+	DurationMs       int64
+	ItemCount        int
+	EntityCountsJSON string `gorm:"type:text"`
+	RecordKeysJSON   string `gorm:"type:text"`
+	Error            string
+}
+
+type AccountState struct {
+	ID              uint `gorm:"primaryKey"`
+	LoggedIn        bool
+	Email           string
+	SyncEligible    bool
+	SyncPlan        string
+	SyncDeviceLimit int
+	DeviceCount     int
+	SyncEnabled     bool
+	SessionExpired  bool
+	UpdatedAt       int64
 }
 
 type MRURecord struct {
@@ -71,6 +114,22 @@ type MRURecord struct {
 	UseCount    int    `gorm:"default:1"`
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
+}
+
+// AttentionItem stores persistent plugin-sourced user attention items.
+type AttentionItem struct {
+	IdentityKey        string `gorm:"primaryKey"`
+	PluginID           string `gorm:"index;not null"`
+	Key                string `gorm:"index;not null"`
+	Title              string `gorm:"not null"`
+	Description        string
+	Icon               string
+	Action             string
+	ContentFingerprint string `gorm:"not null"`
+	IsRead             bool   `gorm:"index;not null;default:false"`
+	CreatedTimestamp   int64  `gorm:"index;not null"`
+	UpdatedTimestamp   int64  `gorm:"index;not null"`
+	ReadTimestamp      int64  `gorm:"index"`
 }
 
 // MigrationRecord tracks one-time application migrations (data/setting compatibility upgrades).
@@ -136,8 +195,11 @@ func Init(ctx context.Context) error {
 		&WoxSetting{},
 		&PluginSetting{},
 		&Oplog{},
+		&CloudSyncState{},
+		&CloudSyncHistory{},
+		&AccountState{},
 		&MRURecord{},
-		&ToolbarMute{},
+		&AttentionItem{},
 		&MigrationRecord{},
 	)
 	if err != nil {

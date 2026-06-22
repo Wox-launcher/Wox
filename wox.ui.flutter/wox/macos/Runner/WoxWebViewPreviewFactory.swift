@@ -13,12 +13,14 @@ private enum WoxWebViewSessionPolicy {
 
 private struct WoxWebViewPreviewRequest {
   let urlString: String
+  let htmlString: String
   let injectCss: String
   let cacheDisabled: Bool
   let cacheKey: String
 
   init(args: [String: Any]) {
     urlString = args["url"] as? String ?? ""
+    htmlString = args["html"] as? String ?? ""
     injectCss = args["injectCss"] as? String ?? ""
     cacheDisabled = args["cacheDisabled"] as? Bool ?? false
     cacheKey = args["cacheKey"] as? String ?? ""
@@ -31,22 +33,64 @@ private struct WoxWebViewPreviewRequest {
   var cacheSignature: String {
     "\(injectCss)|\(mobileUserAgent)"
   }
+
+  var contentKey: String {
+    if !htmlString.isEmpty {
+      return "html|\(htmlString)"
+    }
+
+    return "url|\(urlString)"
+  }
 }
 
 private final class WoxCachedWebViewEntry {
   let webView: WKWebView
   let signature: String
-  var currentURL: String
+  var currentContentKey: String
 
-  init(webView: WKWebView, signature: String, currentURL: String) {
+  init(webView: WKWebView, signature: String, currentContentKey: String) {
     self.webView = webView
     self.signature = signature
-    self.currentURL = currentURL
+    self.currentContentKey = currentContentKey
+  }
+}
+
+private final class WoxWebViewPreviewWebView: WKWebView {
+  private static let browserBackButtonNumber = 3
+  private static let browserForwardButtonNumber = 4
+
+  override func otherMouseDown(with event: NSEvent) {
+    // Flutter's AppKitView-hosted WKWebView does not always translate auxiliary mouse buttons into browser navigation.
+    // Handle standard back/forward side buttons here while leaving middle-click and unsupported buttons to WebKit.
+    switch event.buttonNumber {
+    case Self.browserBackButtonNumber:
+      if canGoBack {
+        goBack()
+        return
+      }
+    case Self.browserForwardButtonNumber:
+      if canGoForward {
+        goForward()
+        return
+      }
+    default:
+      break
+    }
+
+    super.otherMouseDown(with: event)
   }
 }
 
 private enum WoxWebViewStore {
   private static var entries: [String: WoxCachedWebViewEntry] = [:]
+
+  static func removeEntry(cacheKey: String?) {
+    guard let normalizedKey = cacheKey?.trimmingCharacters(in: .whitespacesAndNewlines), !normalizedKey.isEmpty else {
+      return
+    }
+
+    entries.removeValue(forKey: normalizedKey)
+  }
 
   static func resolveWebView(for request: WoxWebViewPreviewRequest) -> (webView: WKWebView, shouldReload: Bool) {
     guard request.hasCache else {
@@ -55,9 +99,9 @@ private enum WoxWebViewStore {
 
     let normalizedKey = request.cacheKey.trimmingCharacters(in: .whitespacesAndNewlines)
     if let cached = entries[normalizedKey], cached.signature == request.cacheSignature {
-      let shouldReload = cached.currentURL != request.urlString
+      let shouldReload = cached.currentContentKey != request.contentKey
       if shouldReload {
-        cached.currentURL = request.urlString
+        cached.currentContentKey = request.contentKey
       }
       return (cached.webView, shouldReload)
     }
@@ -66,7 +110,7 @@ private enum WoxWebViewStore {
     entries[normalizedKey] = WoxCachedWebViewEntry(
       webView: webView,
       signature: request.cacheSignature,
-      currentURL: request.urlString
+      currentContentKey: request.contentKey
     )
     return (webView, true)
   }
@@ -76,10 +120,12 @@ private enum WoxWebViewStore {
       sessionPolicy: .persistent,
       injectCss: request.injectCss
     )
-    let webView = WKWebView(frame: .zero, configuration: configuration)
+    let webView = WoxWebViewPreviewWebView(frame: .zero, configuration: configuration)
     if #available(macOS 13.3, *) {
       webView.isInspectable = true
     }
+    // Preserve the plugin's mobile-preview behavior. Clearing site state is now a separate reset action, so existing sites
+    // keep their mobile layout while users still have a way to recover from stale login/session storage.
     webView.customUserAgent = mobileUserAgent
     return webView
   }
@@ -87,6 +133,7 @@ private enum WoxWebViewStore {
 
 class WoxWebViewPreviewPlugin: NSObject {
   private static weak var activeWebView: WKWebView?
+  private static var activeCacheKey: String?
   private static var methodChannel: FlutterMethodChannel?
 
   static func register(with registrar: FlutterPluginRegistrar) {
@@ -98,21 +145,51 @@ class WoxWebViewPreviewPlugin: NSObject {
     methodChannel = channel
   }
 
-  static func setActiveWebView(_ webView: WKWebView) {
+  static func setActiveWebView(_ webView: WKWebView, cacheKey: String?) {
     activeWebView = webView
+    activeCacheKey = cacheKey
   }
 
   static func openInspector() -> Bool {
     guard let activeWebView else {
+      NSLog("WoxWebViewPreviewPlugin.openInspector skipped: no active WKWebView")
       return false
     }
 
-    let showInspectorSelector = Selector(("_showWebInspector"))
+    if #available(macOS 13.3, *) {
+      // Newer WebKit defaults embedded WKWebView inspection to disabled. Re-applying this on the active
+      // view makes cached views and views created before this action follow the same inspectable path.
+      activeWebView.isInspectable = true
+    }
+
+    // The public isInspectable flag only exposes the view to Safari's Develop menu. Wox's action is
+    // expected to open the inspector directly, so WebKit's private developer extras flag is still needed.
+    activeWebView.configuration.preferences.setValue(true, forKey: "developerExtrasEnabled")
+
+    if let inspector = activeWebView.value(forKey: "_inspector") as? NSObject {
+      let showSelector = NSSelectorFromString("show")
+      if inspector.responds(to: showSelector) {
+        inspector.perform(showSelector)
+
+        let detachSelector = NSSelectorFromString("detach")
+        if inspector.responds(to: detachSelector) {
+          // Detached inspector windows are more reliable for Wox's small, frequently resized preview
+          // panel than the inline inspector that WebKit may otherwise try to embed in the WKWebView.
+          inspector.perform(detachSelector)
+        }
+        NSLog("WoxWebViewPreviewPlugin.openInspector opened via _inspector")
+        return true
+      }
+    }
+
+    let showInspectorSelector = NSSelectorFromString("_showWebInspector")
     guard activeWebView.responds(to: showInspectorSelector) else {
+      NSLog("WoxWebViewPreviewPlugin.openInspector failed: WKWebView has no supported inspector selector")
       return false
     }
 
     activeWebView.perform(showInspectorSelector)
+    NSLog("WoxWebViewPreviewPlugin.openInspector opened via _showWebInspector")
     return true
   }
 
@@ -140,6 +217,51 @@ class WoxWebViewPreviewPlugin: NSObject {
     }
 
     activeWebView.goForward()
+    return true
+  }
+
+  static func getCurrentUrl() -> String? {
+    // Flutter preview data only records the original URL. Reading WKWebView.url keeps the external-browser
+    // toolbar action aligned with in-page navigation without adding another delegate state cache on macOS.
+    return activeWebView?.url?.absoluteString
+  }
+
+  static func focusActiveSession() -> Bool {
+    guard let activeWebView, let window = activeWebView.window else {
+      return false
+    }
+
+    return window.makeFirstResponder(activeWebView)
+  }
+
+  static func clearState() -> Bool {
+    guard let activeWebView else {
+      return false
+    }
+
+    guard let targetURL = activeWebView.url, let targetHost = targetURL.host?.lowercased() else {
+      return false
+    }
+
+    let dataStore = activeWebView.configuration.websiteDataStore
+    let dataTypes = WKWebsiteDataStore.allWebsiteDataTypes()
+    WoxWebViewStore.removeEntry(cacheKey: activeCacheKey)
+
+    // Clearing only cookies/cache is not enough for modern login flows. WKWebsiteDataStore records include IndexedDB,
+    // local storage, service workers and cache storage, so clear the current host group before forcing a fresh bootstrap.
+    dataStore.fetchDataRecords(ofTypes: dataTypes) { records in
+      let matchingRecords = records.filter { record in
+        let displayName = record.displayName.lowercased()
+        return displayName == targetHost || displayName.hasSuffix(".\(targetHost)") || targetHost.hasSuffix(".\(displayName)")
+      }
+
+      dataStore.removeData(ofTypes: dataTypes, for: matchingRecords) {
+        DispatchQueue.main.async {
+          activeWebView.stopLoading()
+          activeWebView.load(URLRequest(url: targetURL, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData))
+        }
+      }
+    }
     return true
   }
 
@@ -189,7 +311,7 @@ final class WoxWebViewPreviewNativeView: NSView, WKNavigationDelegate, WKUIDeleg
     webView = resolved.webView
     super.init(frame: frameRect)
 
-    WoxWebViewPreviewPlugin.setActiveWebView(webView)
+    WoxWebViewPreviewPlugin.setActiveWebView(webView, cacheKey: request.hasCache ? request.cacheKey : nil)
     webView.navigationDelegate = self
     webView.uiDelegate = self
     webView.autoresizingMask = [.width, .height]
@@ -295,6 +417,11 @@ final class WoxWebViewPreviewNativeView: NSView, WKNavigationDelegate, WKUIDeleg
   }
 
   private func configure(with request: WoxWebViewPreviewRequest, shouldReload: Bool) {
+    if shouldReload, !request.htmlString.isEmpty {
+      webView.loadHTMLString(request.htmlString, baseURL: nil)
+      return
+    }
+
     guard shouldReload, let url = URL(string: request.urlString) else {
       return
     }

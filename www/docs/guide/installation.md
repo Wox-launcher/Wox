@@ -1,43 +1,85 @@
 # Installation
 
-Wox is a self-contained application — no installation required. Simply download and run.
+Choose the installer that matches how you normally manage desktop apps. Package managers are easier to update; the release archive is useful when you want a portable copy. Wox uses the stable update channel by default.
 
-## Download & Run
+## Package Managers
+
+| Platform | Method | Command |
+| --- | --- | --- |
+| macOS | Homebrew | `brew install --cask wox` |
+| Windows | Winget | `winget install -e --id Wox.Wox` |
+| Windows | Scoop | `scoop install extras/wox` |
+| Arch Linux | AUR | `yay -S wox-bin` |
+
+After installation, start Wox from your app launcher or run the installed executable once. Wox creates its data directory on first launch.
+
+## Manual Download
+
+Download the latest stable package from [GitHub Releases](https://github.com/Wox-launcher/Wox/releases) if your platform does not have a package-manager entry yet or you prefer a portable setup.
+
+## Update Channels
+
+Wox checks the stable update channel by default. To receive beta prereleases, open **Settings -> General -> Update channel** and choose **Beta channel**. Beta users receive beta prereleases and later stable releases; stable users do not receive prereleases automatically.
 
 ### Windows
 
-1. Download the latest Windows build from [Releases](https://github.com/Wox-launcher/Wox/releases).
-2. Extract the archive to any folder you like.
-3. Double-click `Wox.exe` to run.
+1. Download the Windows archive from Releases.
+2. Extract it to a directory you control, such as `C:\Tools\Wox`.
+3. Run `Wox.exe`.
+
+If Windows SmartScreen asks for confirmation, check that the file came from the official Wox release page before continuing.
 
 ### macOS
 
-1. Download the latest macOS build from [Releases](https://github.com/Wox-launcher/Wox/releases).
-2. Open the downloaded image and drag Wox to the Applications folder.
-3. Open Wox from the Applications folder.
+1. Download the macOS disk image from Releases.
+2. Open the image and drag Wox into `Applications`.
+3. Start Wox from `Applications`.
+
+If macOS blocks the first launch, open Wox from Finder once and choose **Open** from the confirmation dialog.
 
 ### Linux
 
-1. Download the latest Linux build from [Releases](https://github.com/Wox-launcher/Wox/releases).
-2. Extract the archive to any directory.
-3. Run `./wox` to start Wox.
+1. Download the Linux archive from Releases.
+2. Extract it to a stable location, such as `~/Applications/wox`.
+3. Run `./wox`.
+
+If the binary is not executable after extraction, run:
+
+```bash
+chmod +x ./wox
+```
+
+## User Data
+
+Wox keeps settings, plugin data, cache, and logs outside the application directory:
+
+| Platform | Data directory | Core log |
+| --- | --- | --- |
+| Windows | `%USERPROFILE%\.wox` | `%USERPROFILE%\.wox\log\wox.log` |
+| macOS | `~/.wox` | `~/.wox/log/wox.log` |
+| Linux | `~/.wox` | `~/.wox/log/wox.log` |
+
+Back up this directory if you want to move your configuration to another machine.
 
 ## Uninstall
 
-Since Wox is self-contained, simply delete the application files to uninstall.
+Remove the application first, then decide whether to keep user data.
 
 ### Windows
 
-1. Delete the folder where you extracted Wox.
-2. Remove User Data: delete `%USERPROFILE%\.wox` if you also want to clear settings.
+- Winget: `winget uninstall -e --id Wox.Wox`
+- Scoop: `scoop uninstall wox`
+- Manual install: delete the extracted Wox directory
+- Full reset: delete `%USERPROFILE%\.wox`
 
 ### macOS
 
-1. Quit Wox.
-2. Remove Wox from Applications folder.
-3. Remove User Data: `rm -rf ~/.wox` if you also want to clear settings.
+- Homebrew: `brew uninstall --cask wox`
+- Manual install: remove Wox from `Applications`
+- Full reset: remove `~/.wox`
 
 ### Linux
 
-1. Delete the directory where you extracted Wox.
-2. Remove User Data: `rm -rf ~/.wox` if you also want to clear settings.
+- AUR: remove `wox-bin` with your AUR helper or package manager
+- Manual install: delete the extracted Wox directory
+- Full reset: remove `~/.wox`

@@ -47,6 +47,14 @@ type ChangeFeed interface {
 	Close() error
 }
 
+func NewChangeFeed() ChangeFeed {
+	// Feature change: non-file-search consumers need the same platform change
+	// source without depending on Scanner internals. Returning the existing
+	// platform feed lets app indexing reuse USN/FSEvents precision instead of
+	// adding recursive fsnotify watchers that fail on large directory trees.
+	return newPlatformChangeFeed()
+}
+
 type RootFeedSnapshot struct {
 	FeedType   RootFeedType
 	FeedCursor string

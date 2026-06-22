@@ -6,7 +6,7 @@ var AllSystemPlugin []SystemPlugin
 
 type Plugin interface {
 	Init(ctx context.Context, initParams InitParams)
-	Query(ctx context.Context, query Query) []QueryResult
+	Query(ctx context.Context, query Query) QueryResponse
 }
 
 type SystemPlugin interface {
@@ -17,6 +17,12 @@ type SystemPlugin interface {
 // When there is no result from the plugin in global query, Wox will call QueryFallback
 type FallbackSearcher interface {
 	QueryFallback(ctx context.Context, query Query) []QueryResult
+}
+
+// GlanceProvider is implemented by plugins that expose Global Glance items.
+// The method is optional so existing plugins keep the minimal Init/Query contract.
+type GlanceProvider interface {
+	Glance(ctx context.Context, request GlanceRequest) GlanceResponse
 }
 
 // ActionProxyCreator is implemented by plugins that need to create proxy callbacks for actions

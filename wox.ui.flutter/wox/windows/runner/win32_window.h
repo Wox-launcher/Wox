@@ -52,6 +52,9 @@ class Win32Window {
   // If true, closing this window will quit the application.
   void SetQuitOnClose(bool quit_on_close);
 
+  // Applies native backdrop details that depend on Wox's light/dark appearance.
+  void ApplyBackdropForAppearance(bool use_dark);
+
   // Return a RECT representing the bounds of the current client area.
   RECT GetClientArea();
 

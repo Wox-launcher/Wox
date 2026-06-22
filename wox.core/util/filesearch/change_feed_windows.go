@@ -37,9 +37,10 @@ type WindowsChangeFeed struct {
 }
 
 type usnVolumeConfig struct {
-	journal  usnJournalState
-	roots    []RootRecord
-	startUSN int64
+	journal     usnJournalState
+	roots       []RootRecord
+	rootMatcher rootPathMatcher
+	startUSN    int64
 }
 
 type usnVolumeWatcher struct {
@@ -90,6 +91,7 @@ type usnRawRecord struct {
 	fileID       usnFileID
 	parentFileID usnFileID
 	usn          int64
+	reason       uint32
 	name         string
 	fileAttrs    uint32
 }
@@ -99,6 +101,7 @@ type usnResolvedRecord struct {
 	PathKnown bool
 	PathIsDir bool
 	USN       int64
+	Reason    uint32
 }
 
 func NewWindowsChangeFeed() *WindowsChangeFeed {
@@ -148,6 +151,10 @@ func (f *WindowsChangeFeed) Refresh(ctx context.Context, roots []RootRecord) err
 	for _, config := range volumeConfigsByPath {
 		prepared := prepareUSNVolumeRefresh(config.roots, config.journal, now, defaultFeedCursorSafeWindow)
 		config.roots = prepared.roots
+		// Optimization: USN polling can resolve many paths per tick. Build the
+		// matcher once per refreshed volume so resolved records avoid repeated
+		// root scans with filepath.Rel in the hot emit loop.
+		config.rootMatcher = newRootPathMatcher(prepared.roots)
 		config.startUSN = prepared.startUSN
 		for _, signal := range prepared.signals {
 			f.emit(signal)
@@ -324,7 +331,7 @@ func (u *usnWatcherSet) runVolumeLoop(ctx context.Context, config usnVolumeConfi
 
 		currentJournal = journal
 		currentUSN = nextUSN
-		u.emitResolvedRecords(config.roots, journal, records)
+		u.emitResolvedRecords(config.roots, config.rootMatcher, journal, records)
 	}
 
 	poll()
@@ -358,20 +365,20 @@ func (u *usnWatcherSet) emitUnavailable(roots []RootRecord, reason string) {
 	}
 }
 
-func (u *usnWatcherSet) emitResolvedRecords(roots []RootRecord, journal usnJournalState, records []usnResolvedRecord) {
+func (u *usnWatcherSet) emitResolvedRecords(roots []RootRecord, matcher rootPathMatcher, journal usnJournalState, records []usnResolvedRecord) {
 	now := time.Now()
 	for _, record := range records {
-		matched := false
-		for _, root := range roots {
-			if record.PathKnown && pathWithinScope(root.Path, record.Path) {
-				u.emit(translateUSNDelta(root, journal, record.Path, record.PathIsDir, record.PathKnown, record.USN, now))
-				matched = true
-			}
-		}
-		if matched {
-			continue
-		}
 		if record.PathKnown {
+			cleanPath := filepath.Clean(record.Path)
+			if root, ok := matcher.findClean(cleanPath); ok {
+				if shouldSkipSystemPathForRoot(root, cleanPath, record.PathIsDir) {
+					continue
+				}
+				// Known USN paths must be routed to the longest matching root. The
+				// previous broadcast woke both a dynamic root and its parent, which
+				// defeated the ownership split and forced unnecessary parent rescans.
+				u.emit(translateUSNDelta(root, journal, cleanPath, record.PathIsDir, record.PathKnown, record.USN, record.Reason, now))
+			}
 			continue
 		}
 
@@ -579,6 +586,7 @@ func parseUSNRawRecord(buffer []byte) (usnRawRecord, error) {
 			fileID:       fileID,
 			parentFileID: parentFileID,
 			usn:          int64(binary.LittleEndian.Uint64(buffer[24:32])),
+			reason:       binary.LittleEndian.Uint32(buffer[40:44]),
 			name:         decodeUSNFileName(buffer[fileNameOffset : fileNameOffset+fileNameLength]),
 			fileAttrs:    binary.LittleEndian.Uint32(buffer[52:56]),
 		}, nil
@@ -602,6 +610,7 @@ func parseUSNRawRecord(buffer []byte) (usnRawRecord, error) {
 			fileID:       fileID,
 			parentFileID: parentFileID,
 			usn:          int64(binary.LittleEndian.Uint64(buffer[40:48])),
+			reason:       binary.LittleEndian.Uint32(buffer[56:60]),
 			name:         decodeUSNFileName(buffer[fileNameOffset : fileNameOffset+fileNameLength]),
 			fileAttrs:    binary.LittleEndian.Uint32(buffer[68:72]),
 		}, nil
@@ -614,6 +623,7 @@ func resolveUSNRecord(rootHandle windows.Handle, volumePath string, rawRecord us
 	record := usnResolvedRecord{
 		PathIsDir: rawRecord.fileAttrs&windows.FILE_ATTRIBUTE_DIRECTORY != 0,
 		USN:       rawRecord.usn,
+		Reason:    rawRecord.reason,
 	}
 
 	path, err := openUSNPathByID(rootHandle, rawRecord.fileID, record.PathIsDir)

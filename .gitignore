@@ -26,7 +26,6 @@ www/docs/.vitepress/dist
 .github/skills
 .codex/skills
 claude/skills
-placeholder
 crash.log
 release/
 wox.ui.macos/.build/
@@ -35,5 +34,8 @@ wox.ui.windows/bin/
 wox.ui.windows/obj/
 wox.test/artifacts
 .tmp
-docs/superpowers/
 .worktrees/
+.tmp-*
+.superpowers
+log
+docs

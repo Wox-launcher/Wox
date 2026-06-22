@@ -103,12 +103,13 @@ permissions:
   id-token: write
   attestations: write
 
+# GitHub-owned checkout/setup actions use Node 24-compatible majors here; project toolchains remain pinned by each setup step's inputs.
 jobs:
   test:
     if: ${{ inputs.run_tests }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
       - name: Install system dependencies (Linux)
         run: |
           sudo apt-get update
@@ -140,7 +141,7 @@ jobs:
             libfuse2 \
             xvfb
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: wox.core/go.mod
           cache: true
@@ -154,9 +155,9 @@ jobs:
     if: ${{ always() && inputs.build_macos_arm64 && (!inputs.run_tests || needs.test.result == 'success') }}
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: wox.core/go.mod
           cache: true
@@ -166,7 +167,7 @@ jobs:
         with:
           version: 8.15.5
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: pnpm
@@ -174,7 +175,7 @@ jobs:
             wox.plugin.host.nodejs/pnpm-lock.yaml
             wox.plugin.nodejs/pnpm-lock.yaml
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
       - name: Setup uv
@@ -278,9 +279,9 @@ jobs:
     if: ${{ always() && inputs.build_macos_amd64 && (!inputs.run_tests || needs.test.result == 'success') }}
     runs-on: macos-15-intel
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: wox.core/go.mod
           cache: true
@@ -290,7 +291,7 @@ jobs:
         with:
           version: 8.15.5
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: pnpm
@@ -298,7 +299,7 @@ jobs:
             wox.plugin.host.nodejs/pnpm-lock.yaml
             wox.plugin.nodejs/pnpm-lock.yaml
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
       - name: Setup uv
@@ -402,7 +403,7 @@ jobs:
     if: ${{ always() && inputs.build_windows_amd64 && (!inputs.run_tests || needs.test.result == 'success') }}
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
 
       - name: Install make (Windows)
         shell: pwsh
@@ -424,7 +425,7 @@ jobs:
           done
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: wox.core/go.mod
           cache: true
@@ -436,7 +437,7 @@ jobs:
           version: 8.15.5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: pnpm
@@ -445,7 +446,7 @@ jobs:
             wox.plugin.nodejs/pnpm-lock.yaml
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
@@ -532,7 +533,7 @@ jobs:
     if: ${{ always() && inputs.build_linux_amd64 && (!inputs.run_tests || needs.test.result == 'success') }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -563,7 +564,7 @@ jobs:
             libfuse2 \
             xvfb
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: wox.core/go.mod
           cache: true
@@ -572,7 +573,7 @@ jobs:
         with:
           version: 8.15.5
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: pnpm
@@ -580,7 +581,7 @@ jobs:
             wox.plugin.host.nodejs/pnpm-lock.yaml
             wox.plugin.nodejs/pnpm-lock.yaml
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
       - name: Setup uv

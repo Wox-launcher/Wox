@@ -16,7 +16,7 @@ type PluginSettingValueSelect struct {
 	Options      []PluginSettingValueSelectOption
 	Validators   []validator.PluginSettingValidator // validators for this setting, every validator should be satisfied
 
-	Style PluginSettingValueStyle
+	Style PluginSettingValueStyle `json:"-"` // Deprecated: ignored on load so Wox keeps setting layouts consistent.
 }
 
 const PluginSettingValueSelectOptionValueSelectAll = "all"

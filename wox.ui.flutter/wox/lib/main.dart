@@ -1,6 +1,7 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui';
 
-import 'package:chinese_font_library/chinese_font_library.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:protocol_handler/protocol_handler.dart';
@@ -8,26 +9,60 @@ import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_border_drag_move_view.dart';
 import 'package:wox/controllers/wox_ai_chat_controller.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
+import 'package:wox/controllers/wox_screenshot_controller.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/utils/windows/window_manager.dart';
 import 'package:wox/utils/windows/window_manager_interface.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/modules/launcher/views/wox_launcher_view.dart';
+import 'package:wox/modules/onboarding/views/wox_onboarding_view.dart';
+import 'package:wox/modules/screenshot/views/wox_screenshot_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_view.dart';
 import 'package:wox/utils/env.dart';
 import 'package:wox/utils/heartbeat_checker.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_setting_util.dart';
 import 'package:wox/utils/wox_theme_util.dart';
+import 'package:wox/utils/wox_interface_size_util.dart';
 import 'package:wox/utils/wox_websocket_msg_util.dart';
 
-void main(List<String> arguments) async {
-  await initialServices(arguments);
-  await initWindow();
+Future<void> main(List<String> arguments) async {
+  await runZonedGuarded(
+    () async {
+      await initialServices(arguments);
+      await initWindow();
 
-  await initDeepLink();
+      await initDeepLink();
 
-  runApp(const MyApp());
+      runApp(const MyApp());
+    },
+    (error, stack) {
+      Logger.instance.crash(const UuidV4().generate(), "Unhandled Flutter zone error: $error\n$stack");
+      unawaited(Logger.instance.flush());
+    },
+  );
+}
+
+void registerFlutterGlobalErrorHandlers(String traceId) {
+  final bindingType = WidgetsBinding.instance.runtimeType.toString();
+  if (Platform.environment.containsKey("FLUTTER_TEST") || bindingType.contains("TestWidgetsFlutterBinding") || bindingType.contains("LiveTestWidgetsFlutterBinding")) {
+    return;
+  }
+
+  // Bug fix: only crash handlers force synchronous disk writes. Normal errors
+  // stay buffered so plugin error storms cannot block the query input path,
+  // while framework/platform crashes still reach ui.log before process exit.
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    Logger.instance.crash(traceId, "FlutterError: ${details.exception}\n${details.stack}");
+    unawaited(Logger.instance.flush());
+  };
+
+  PlatformDispatcher.instance.onError = (error, stack) {
+    Logger.instance.crash(traceId, "PlatformDispatcher error: $error\n$stack");
+    unawaited(Logger.instance.flush());
+    return true;
+  };
 }
 
 Future<void> initArgs(List<String> arguments) async {
@@ -55,34 +90,52 @@ Future<void> initialServices(List<String> arguments) async {
   final traceId = const UuidV4().generate();
 
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Desktop-tuned image cache: the launcher shows small icons, not large
+  // photos. 200 entries / 20 MB is plenty and avoids reserving the full
+  // 1000 entries / 100 MB default that mobile apps expect.
+  PaintingBinding.instance.imageCache.maximumSize = 200;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 20 * 1024 * 1024;
+
   await Logger.instance.initLogger();
+  registerFlutterGlobalErrorHandlers(traceId);
   HeartbeatChecker().init();
   await WoxWebsocketMsgUtil.instance.init();
   await initArgs(arguments);
   await WoxThemeUtil.instance.loadTheme(traceId);
   await WoxSettingUtil.instance.loadSetting(traceId);
+  WoxInterfaceSizeUtil.instance.refreshFromDensity(WoxSettingUtil.instance.currentSetting.uiDensity);
   Logger.instance.setLogLevel(WoxSettingUtil.instance.currentSetting.logLevel);
 
   var launcherController = WoxLauncherController();
-  launcherController.startDoctorCheckTimer();
+  launcherController.doctorCheck();
+  await launcherController.loadDiagnosticStatus(traceId);
 
   await WoxWebsocketMsgUtil.instance.initialize(Uri.parse("ws://127.0.0.1:${Env.serverPort}/ws"), onMessageReceived: launcherController.handleWebSocketMessage);
   HeartbeatChecker().startChecking();
   Get.put(launcherController);
   var woxSettingController = WoxSettingController();
   Get.put(woxSettingController);
+  Get.put(WoxScreenshotController());
   var woxAIChatController = WoxAIChatController();
   Get.put(woxAIChatController);
 
-  //load lang
   var langCode = WoxSettingUtil.instance.currentSetting.langCode;
-  unawaited(woxSettingController.loadLang(langCode));
+  await woxSettingController.loadLang(langCode);
 }
 
 Future<void> initDeepLink() async {
-  // Register a custom protocol
-  // For macOS platform needs to declare the scheme in ios/Runner/Info.plist
-  await protocolHandler.register('wox');
+  // Bug fix: macOS smoke startup can leave plugin method calls unresolved when
+  // Flutter's foreground handoff fails. Deep-link registration is useful but
+  // not required for drawing the first frame, so bound the wait to avoid
+  // blocking runApp forever during startup smoke runs.
+  try {
+    // Register a custom protocol
+    // For macOS platform needs to declare the scheme in ios/Runner/Info.plist
+    await protocolHandler.register('wox').timeout(const Duration(seconds: 3));
+  } catch (e) {
+    Logger.instance.error(const UuidV4().generate(), "Error registering deep link protocol: $e");
+  }
 }
 
 Future<void> initWindow() async {
@@ -92,8 +145,18 @@ Future<void> initWindow() async {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
+  // Platform-specific CJK font fallback list. Flutter's engine-level fallback
+  // on desktop is unreliable for CJK glyphs, so we explicitly name the system
+  // fonts that ship with each OS. This replaces chinese_font_library without
+  // pulling in any dependency or bundling font files.
+  List<String> get _cjkFontFallback {
+    if (Platform.isWindows) return ['Microsoft YaHei', 'SimSun'];
+    if (Platform.isMacOS) return ['PingFang SC', 'Heiti SC', 'STHeiti'];
+    return ['Noto Sans CJK SC', 'WenQuanYi Micro Hei', 'Droid Sans Fallback'];
+  }
+
   TextTheme buildAppTextTheme(String appFontFamily) {
-    final baseTextTheme = SystemChineseFont.textTheme(Brightness.light);
+    final baseTextTheme = Typography.material2021().black;
     final scaledTextTheme = baseTextTheme.copyWith(
       bodyLarge: baseTextTheme.bodyLarge?.copyWith(fontSize: 13),
       bodyMedium: baseTextTheme.bodyMedium?.copyWith(fontSize: 13),
@@ -103,11 +166,12 @@ class MyApp extends StatelessWidget {
       labelSmall: baseTextTheme.labelSmall?.copyWith(fontSize: 11),
     );
 
+    final fallback = _cjkFontFallback;
     if (appFontFamily.isEmpty) {
-      return scaledTextTheme;
+      return scaledTextTheme.apply(fontFamilyFallback: fallback);
     }
 
-    return scaledTextTheme.apply(fontFamily: appFontFamily);
+    return scaledTextTheme.apply(fontFamily: appFontFamily, fontFamilyFallback: fallback);
   }
 
   @override
@@ -137,7 +201,9 @@ class WoxApp extends StatefulWidget {
 
 class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
   final launcherController = Get.find<WoxLauncherController>();
+  final screenshotController = Get.find<WoxScreenshotController>();
   final settingController = Get.find<WoxSettingController>();
+  bool _isRecoveringScreenshotWindowFocus = false;
 
   @override
   void initState() {
@@ -179,7 +245,7 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
     final traceId = UuidV4().generate();
     Logger.instance.debug(
       traceId,
-      "onWindowBlur triggered: forceHideOnBlur=${launcherController.forceHideOnBlur}, isShowFormActionPanel=${launcherController.isShowFormActionPanel.value}, isShowActionPanel=${launcherController.isShowActionPanel.value}, isInSettingView=${launcherController.isInSettingView.value}",
+      "onWindowBlur triggered: forceHideOnBlur=${launcherController.forceHideOnBlur}, isShowFormActionPanel=${launcherController.isShowFormActionPanel.value}, isShowActionPanel=${launcherController.isShowActionPanel.value}, isInSettingView=${launcherController.isInSettingView.value}, isInOnboardingView=${launcherController.isInOnboardingView.value}",
     );
     // if windows is already hidden, return
     // in Windows, when the window is hidden, the onWindowBlur event will be triggered which will cause
@@ -191,9 +257,19 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
       return;
     }
 
-    // if in setting view, return
-    if (launcherController.isInSettingView.value) {
-      Logger.instance.debug(traceId, "onWindowBlur ignored: setting view is active");
+    if (screenshotController.isSessionActive.value) {
+      // Ignoring blur used to leave the screenshot session alive but unfocused after the native
+      // selection overlay handed control back to Flutter. Reclaim focus here so the annotation
+      // workspace stays interactive even if macOS briefly moves key-window ownership elsewhere.
+      await _recoverScreenshotWindowFocus(traceId);
+      return;
+    }
+
+    // Settings and onboarding are management views. They intentionally ignore
+    // launcher hide-on-blur so setup is not interrupted by System Settings or
+    // other windows opened during the guide.
+    if (launcherController.isInSettingView.value || launcherController.isInOnboardingView.value) {
+      Logger.instance.debug(traceId, "onWindowBlur ignored: management view is active");
       return;
     }
 
@@ -207,19 +283,48 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
     WoxApi.instance.onFocusLost(traceId);
   }
 
+  Future<void> _recoverScreenshotWindowFocus(String traceId) async {
+    if (_isRecoveringScreenshotWindowFocus) {
+      return;
+    }
+
+    _isRecoveringScreenshotWindowFocus = true;
+    try {
+      await windowManager.focus();
+    } catch (e) {
+      Logger.instance.error(traceId, "onWindowBlur failed screenshot focus recovery: $e");
+    } finally {
+      _isRecoveringScreenshotWindowFocus = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return WoxBorderDragMoveArea(
-      borderWidth: WoxThemeUtil.instance.currentTheme.value.appPaddingTop.toDouble(),
-      onDragEnd: () {
-        if (launcherController.isInSettingView.value) {
-          return;
-        }
+    return Obx(() {
+      if (screenshotController.isSessionActive.value) {
+        // Screenshot capture needs the entire virtual-desktop surface for region selection. The
+        // launcher border drag overlays would steal edge pointer input and make secondary displays
+        // feel "dead", so the capture view bypasses them while the session is active.
+        return const WoxScreenshotView();
+      }
 
-        launcherController.focusQueryBox();
-        launcherController.saveWindowPositionIfNeeded();
-      },
-      child: Obx(() => launcherController.isInSettingView.value ? const WoxSettingView() : const WoxLauncherView()),
-    );
+      return WoxBorderDragMoveArea(
+        borderWidth: WoxThemeUtil.instance.currentTheme.value.appPaddingTop.toDouble(),
+        onDragEnd: () {
+          if (launcherController.isInSettingView.value || launcherController.isInOnboardingView.value) {
+            return;
+          }
+
+          unawaited(launcherController.focusLauncherKeyboardTarget());
+          launcherController.saveWindowPositionIfNeeded(reason: "drag-end");
+        },
+        child:
+            launcherController.isInOnboardingView.value
+                ? const WoxOnboardingView()
+                : launcherController.isInSettingView.value
+                ? const WoxSettingView()
+                : const WoxLauncherView(),
+      );
+    });
   }
 }

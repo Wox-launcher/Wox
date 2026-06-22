@@ -10,17 +10,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
-import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/controllers/query_box_text_editing_controller.dart';
 import 'package:wox/controllers/wox_ai_chat_controller.dart';
 import 'package:wox/controllers/wox_base_list_controller.dart';
 import 'package:wox/controllers/wox_grid_controller.dart';
 import 'package:wox/controllers/wox_list_controller.dart';
+import 'package:wox/controllers/wox_screenshot_controller.dart';
 import 'package:wox/entity/wox_ai.dart';
+import 'package:wox/entity/wox_glance.dart';
 import 'package:wox/entity/wox_list_item.dart';
+import 'package:wox/entity/screenshot_session.dart';
 import 'package:wox/models/doctor_check_result.dart';
 import 'package:wox/utils/wox_theme_util.dart';
+import 'package:wox/utils/windows/windows_window_manager.dart';
+import 'package:wox/utils/windows/linux_window_manager.dart';
 import 'package:wox/utils/windows/window_manager.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/entity/wox_hotkey.dart';
@@ -39,15 +43,25 @@ import 'package:wox/enums/wox_image_type_enum.dart';
 import 'package:wox/enums/wox_msg_method_enum.dart';
 import 'package:wox/enums/wox_msg_type_enum.dart';
 import 'package:wox/enums/wox_position_type_enum.dart';
+import 'package:wox/enums/wox_query_refinement_type_enum.dart';
 import 'package:wox/enums/wox_query_type_enum.dart';
 import 'package:wox/enums/wox_result_action_type_enum.dart';
+import 'package:wox/enums/wox_result_tail_text_category_enum.dart';
 import 'package:wox/enums/wox_selection_type_enum.dart';
 import 'package:wox/enums/wox_show_source_enum.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/utils/consts.dart';
+import 'package:wox/utils/env.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/picker.dart';
+import 'package:wox/utils/result_drag_platform_bridge.dart';
+import 'package:wox/utils/screenshot/screenshot_platform_bridge.dart';
+import 'package:wox/utils/wox_hotkey_recording_bus.dart';
+import 'package:wox/utils/wox_interface_size_util.dart';
+import 'package:wox/utils/wox_platform_hotkey_util.dart';
 import 'package:wox/utils/wox_setting_util.dart';
+import 'package:wox/utils/wox_system_wallpaper_util.dart';
+import 'package:wox/utils/wox_time_tracker.dart';
 import 'package:wox/utils/webview/wox_webview_util.dart';
 
 import 'package:wox/utils/wox_websocket_msg_util.dart';
@@ -57,29 +71,84 @@ import 'package:wox/utils/window_flicker_detector.dart';
 import 'package:wox/utils/color_util.dart';
 
 class WoxLauncherController extends GetxController {
+  static const int _slowLauncherActivationWarningThresholdMs = 50;
+  static const String _onReceivedTailTooltip = "onReceivedQueryResults elapsed since Flutter query request";
+  static const String _queryActionIconRefType = "iconref";
   static const String localActionTogglePreviewFullscreenId = "__local_toggle_preview_fullscreen__";
   static const String localActionPreviewSearchId = "__local_preview_search__";
   static const String localActionOpenUpdateId = "__local_open_update__";
+  static const String localActionOpenDoctorId = "__local_open_doctor__";
   static const String localActionOpenWebViewInspectorId = "__local_open_webview_inspector__";
   static const String localActionWebViewRefreshId = "__local_webview_refresh__";
   static const String localActionWebViewBackId = "__local_webview_back__";
   static const String localActionWebViewForwardId = "__local_webview_forward__";
+  static const String localActionWebViewClearStateId = "__local_webview_clear_state__";
+
+  int _captureDevLauncherVisibleActivationCost(ShowAppParams params) {
+    if (!Env.isDev || params.activationStartedAt <= 0) {
+      return -1;
+    }
+
+    // The dev warning is about when the launcher becomes visible, not when the
+    // later focus/input-ready work finishes. Capture this immediately after
+    // windowManager.show() so the toolbar value matches the user's visual boundary.
+    return DateTime.now().millisecondsSinceEpoch - params.activationStartedAt;
+  }
+
+  Future<void> _showDevLauncherActivationWarningIfSlow(String traceId, int visibleActivationCost) async {
+    if (!Env.isDev || visibleActivationCost < 0 || visibleActivationCost <= _slowLauncherActivationWarningThresholdMs) {
+      return;
+    }
+
+    final toolbarMsgId = "dev-launcher-activation-${DateTime.now().microsecondsSinceEpoch}";
+    // Development-only activation diagnostics must be emitted from Flutter after
+    // native show finishes. The Go websocket response only proves that the
+    // request was accepted, and focus timing is tracked separately from visibility.
+    await showToolbarMsg(
+      traceId,
+      ToolbarMsg(id: toolbarMsgId, title: "Dev: hotkey activation took ${visibleActivationCost}ms (>${_slowLauncherActivationWarningThresholdMs}ms)", displaySeconds: 3),
+    );
+
+    Future.delayed(const Duration(seconds: 3), () {
+      if (toolbarMsg.value.id == toolbarMsgId) {
+        unawaited(clearToolbarMsg(traceId, toolbarMsgId));
+      }
+    });
+  }
 
   //query related variables
   final currentQuery = PlainQuery.empty().obs;
   // is current query returned results or finished without results
   bool isCurrentQueryReturned = false;
-  // Whether the current query has reached a stable final snapshot.
-  bool isCurrentQuerySettled = true;
-  static const visibleQueryHeightPreservationDuration = Duration(milliseconds: 500);
+  final launcherFocusNode = FocusNode();
   final queryBoxFocusNode = FocusNode();
   final queryBoxTextFieldController = QueryBoxTextEditingController(
     selectedTextStyle: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxTextSelectionColor)),
     enableSelectedTextStyle: false,
   );
+  // Bug fix: launcher show uses a delayed focus retry for Windows, but that
+  // retry must not re-apply SelectAll after the user has already typed into the
+  // newly visible query box. This token scopes each visible-launcher focus
+  // sequence so stale retries from an older show/hide cycle cannot touch input.
+  int _visibleLauncherFocusToken = 0;
   final queryBoxScrollController = ScrollController(initialScrollOffset: 0.0);
+  // Stores the current editable text width so query box height can follow visual wrapping.
+  double queryBoxTextWrapWidth = 0;
   final queryBoxLineCount = 1.obs;
   final queryBoxTextFieldKey = GlobalKey<ExtendedTextFieldState>();
+  // Bug fix: Linux can sometimes surface Enter only as KeyRepeatEvent after the platform/IME
+  // consumed the original KeyDownEvent. The query-box view uses this per-press state to
+  // execute once from the repeat fallback and swallow later repeats without widening the
+  // workaround to other platforms or other focus handlers.
+  bool _hasHandledLinuxQueryBoxSubmitKey = false;
+
+  // Query refinements are query-response scoped controls. They are kept
+  // separate from result rows so late responses can be guarded by query id and
+  // stale plugin filters cannot leak into the next trigger keyword.
+  final queryRefinements = <WoxQueryRefinement>[].obs;
+  final queryRefinementValues = <String, List<String>>{}.obs;
+  final isQueryRefinementBarExpanded = false.obs;
+  String queryRefinementScopeKey = "";
 
   //preview related variables
   final currentPreview = WoxPreview.empty().obs;
@@ -88,12 +157,13 @@ class WoxLauncherController extends GetxController {
   final isPreviewFullscreen = false.obs;
   final Map<String, StreamController<Map<String, dynamic>>> terminalChunkControllers = {};
   final Map<String, StreamController<Map<String, dynamic>>> terminalStateControllers = {};
-  double lastResultPreviewRatioBeforePreviewFullscreen = 0.5;
-  double preferredResultPreviewRatio = 0.5;
+  static const double defaultResultPreviewRatio = 0.4;
+  double lastResultPreviewRatioBeforePreviewFullscreen = defaultResultPreviewRatio;
+  double preferredResultPreviewRatio = defaultResultPreviewRatio;
 
   /// The ratio of result panel width to total width, value range: 0.0-1.0
   /// e.g., 0.3 means result panel takes 30% width, preview panel takes 70%
-  final resultPreviewRatio = 0.5.obs;
+  final resultPreviewRatio = defaultResultPreviewRatio.obs;
 
   // result related variables
   late final WoxListController<WoxQueryResult> resultListViewController;
@@ -110,15 +180,17 @@ class WoxLauncherController extends GetxController {
   final activeFormResultId = "".obs;
   final formActionValues = <String, String>{}.obs;
 
-  /// The timer to clear query results.
-  /// On every query changed, it will reset the timer and will clear the query results after N ms.
-  /// If there is no this delay mechanism, the window will flicker for fast typing.
+  /// Grace window before dropping stale visible results for a new query.
+  /// This avoids immediate clear/fill flashes when the next snapshot arrives quickly.
   Timer clearQueryResultsTimer = Timer(const Duration(), () => {});
-  Timer visibleQueryHeightPreservationTimer = Timer(const Duration(), () => {});
-  int clearQueryResultDelay = 100; // adaptive based on flicker detection
+  static const staleVisibleResultsDuration = Duration(milliseconds: 80);
+  static const Size _onboardingWindowSize = Size(1040, 800);
   final windowFlickerDetector = WindowFlickerDetector();
   Size? ongoingResizeTargetSize;
   int resizeRequestToken = 0;
+  bool isShowingPendingResultPlaceholder = false;
+  double? pendingResultPlaceholderHeight;
+  double? committedWindowHeight;
 
   /// This flag is used to control whether the user can arrow up to show history when the app is first shown.
   var canArrowUpHistory = true;
@@ -131,6 +203,10 @@ class WoxLauncherController extends GetxController {
   var lastLaunchMode = WoxLaunchModeEnum.WOX_LAUNCH_MODE_CONTINUE.code;
   var lastStartPage = WoxStartPageEnum.WOX_START_PAGE_MRU.code;
   final isInSettingView = false.obs;
+  // Onboarding shares the settings-sized management window but stays separate
+  // from isInSettingView so build routing and tests can distinguish the guide
+  // while backend notification routing still treats it as a management surface.
+  final isInOnboardingView = false.obs;
 
   // UI Control Flags
   final isQueryBoxAtBottom = false.obs;
@@ -144,8 +220,6 @@ class WoxLauncherController extends GetxController {
   PlainQuery? queryBeforeTemporaryQuery;
   String? queryBeforeTemporaryQuerySource;
   double? windowHeightBeforeTemporaryQuery;
-  double? pendingVisibleQueryWindowHeight;
-  String? pendingVisibleQueryWindowHeightQueryId;
   // After restoring the preserved main query we create a new queryId, so the
   // original temporary-query snapshot above is no longer enough to identify
   // which follow-up ShowApp should reuse the old expanded height. These fields
@@ -160,9 +234,19 @@ class WoxLauncherController extends GetxController {
 
   // Performance metrics: Map<traceId, startTime>
   final Map<String, int> queryStartTimeMap = {};
+  // UI-only onReceivedQueryResults metric per result, kept so later backend
+  // snapshots can preserve each row's first UI receive boundary.
+  final Map<String, int> queryOnReceivedElapsedByResultKey = {};
 
   /// The icon at end of query box.
   final queryIcon = QueryIconInfo.empty().obs;
+  final glanceItems = <GlanceItem>[].obs;
+  final attentionUnreadCount = 0.obs;
+  Timer? glanceRefreshTimer;
+  Timer? hiddenCacheClearTimer;
+  QueryContext backendQueryContext = QueryContext.empty();
+  String backendQueryContextQueryId = "";
+  final queryCompletionHint = Rxn<QueryCompletionHint>();
 
   /// The result of the doctor check.
   var doctorCheckPassed = true;
@@ -172,6 +256,10 @@ class WoxLauncherController extends GetxController {
   // toolbar related variables
   final toolbar = ToolbarInfo.empty().obs;
   final toolbarMsg = ToolbarMsg.empty().obs;
+  // Feature: bug aware mode is launcher-wide diagnostic state, not a plugin
+  // toolbar message. Keeping it separate preserves ShowToolbarMsg ownership
+  // while allowing monitoring mode to keep a persistent toolbar indicator.
+  final isBugAwareModeEnabled = false.obs;
   // store i18n key instead of literal text
   final toolbarCopyText = 'toolbar_copy'.obs;
 
@@ -190,28 +278,148 @@ class WoxLauncherController extends GetxController {
   Timer? loadingTimer;
   final loadingDelay = const Duration(milliseconds: 500);
 
-  // doctor check timer
-  Timer? doctorCheckTimer;
-  static const doctorCheckInterval = Duration(minutes: 1);
+  bool get shouldShowGlance {
+    final setting = WoxSettingUtil.instance.currentSetting;
+    return setting.enableGlance && isGlobalInputQuery(currentQuery.value) && queryIcon.value.icon.imageData.isEmpty && glanceItems.isNotEmpty && !isLoading.value;
+  }
 
-  /// Start the periodic doctor check timer. Call this after controller initialization.
-  void startDoctorCheckTimer() {
-    doctorCheckTimer?.cancel();
-    doctorCheckTimer = Timer.periodic(doctorCheckInterval, (_) {
-      doctorCheck();
+  bool get shouldShowAttentionBadge {
+    return attentionUnreadCount.value > 0 && isGlobalInputQuery(currentQuery.value) && !isLoading.value;
+  }
+
+  bool shouldShowGlanceIcon(GlanceItem item) {
+    final setting = WoxSettingUtil.instance.currentSetting;
+    // Keep the render decision in one place so layout width and widget content
+    // stay synchronized when users switch Glance into text-only mode.
+    return !setting.hideGlanceIcon && item.icon.imageData.isNotEmpty;
+  }
+
+  List<GlanceRef> selectedGlanceRefs() {
+    final setting = WoxSettingUtil.instance.currentSetting;
+    final refs = <GlanceRef>[];
+    if (!setting.primaryGlance.isEmpty) {
+      refs.add(setting.primaryGlance);
+    }
+    return refs;
+  }
+
+  Future<void> refreshGlance(String traceId, String reason, {String pluginId = "", List<String> ids = const []}) async {
+    glanceRefreshTimer?.cancel();
+    final queryId = currentQuery.value.queryId;
+    final setting = WoxSettingUtil.instance.currentSetting;
+    if (!setting.enableGlance || !isGlobalInputQuery(currentQuery.value)) {
+      // Global Glance must not leak into plugin contexts because the query-box
+      // accessory is already reserved for plugin identity there.
+      glanceItems.clear();
+      return;
+    }
+
+    var refs = selectedGlanceRefs();
+    if (pluginId.isNotEmpty) {
+      refs = refs.where((ref) => ref.pluginId == pluginId && (ids.isEmpty || ids.contains(ref.glanceId))).toList();
+    }
+    if (refs.isEmpty) {
+      glanceItems.clear();
+      return;
+    }
+
+    try {
+      final items = await WoxApi.instance.getGlanceItems(traceId, refs, reason);
+      if (currentQuery.value.queryId != queryId || !isGlobalInputQuery(currentQuery.value)) {
+        // Bug fix: Glance refreshes are HTTP requests and can finish after the
+        // user has already cleared or changed the search. Ignore stale replies
+        // so an older query cannot hide or restore the accessory for the current
+        // launcher state.
+        return;
+      }
+      final byKey = {for (final item in items) '${item.pluginId}\x00${item.id}': item};
+      // Preserve slot order from settings instead of plugin response order so the
+      // primary item remains visually stable across refreshes.
+      glanceItems.assignAll(refs.map((ref) => byKey[ref.key]).whereType<GlanceItem>().where((item) => !item.isEmpty).toList());
+      scheduleNextGlanceRefresh(traceId);
+    } catch (e) {
+      Logger.instance.error(traceId, "refresh glance failed: $e");
+      if (currentQuery.value.queryId == queryId && isGlobalInputQuery(currentQuery.value)) {
+        // Bug fix: only the active query can clear the visible Glance. A failed
+        // request from an older query should not remove the accessory after the
+        // user has already returned to the empty global search box.
+        glanceItems.clear();
+      }
+    }
+  }
+
+  void scheduleNextGlanceRefresh(String traceId) {
+    final interval = resolveSelectedGlanceRefreshInterval();
+    if (interval == null || interval <= Duration.zero) {
+      return;
+    }
+    glanceRefreshTimer = Timer(interval, () {
+      unawaited(refreshGlance(const UuidV4().generate(), "interval"));
     });
   }
 
-  /// Stop the periodic doctor check timer. Call this during cleanup.
-  void stopDoctorCheckTimer() {
-    doctorCheckTimer?.cancel();
-    doctorCheckTimer = null;
+  // scheduleHiddenCacheClear clears Flutter caches again after hide animations settle.
+  void scheduleHiddenCacheClear(String traceId) {
+    hiddenCacheClearTimer?.cancel();
+    hiddenCacheClearTimer = Timer(const Duration(seconds: 10), () {
+      unawaited(clearHiddenCaches());
+    });
+  }
+
+  Future<void> clearHiddenCaches() async {
+    hiddenCacheClearTimer = null;
+    if (await windowManager.isVisible()) {
+      return;
+    }
+
+    PaintingBinding.instance.imageCache.clear();
+    PaintingBinding.instance.imageCache.clearLiveImages();
+  }
+
+  Duration? resolveSelectedGlanceRefreshInterval() {
+    final refs = selectedGlanceRefs();
+    if (refs.isEmpty || !Get.isRegistered<WoxSettingController>()) {
+      return null;
+    }
+    final settingController = Get.find<WoxSettingController>();
+    int? minIntervalMs;
+    for (final ref in refs) {
+      for (final plugin in settingController.installedPlugins) {
+        if (plugin.id != ref.pluginId) {
+          continue;
+        }
+        for (final glance in plugin.glances) {
+          if (glance.id == ref.glanceId && glance.refreshIntervalMs > 0) {
+            minIntervalMs = minIntervalMs == null ? glance.refreshIntervalMs : math.min(minIntervalMs, glance.refreshIntervalMs);
+          }
+        }
+      }
+    }
+    if (minIntervalMs == null) {
+      return null;
+    }
+    // Bug fix: the previous 60-second floor ignored metadata for live Glance
+    // metrics such as CPU and memory. Trust provider intervals so 3-second
+    // system metrics can refresh at their declared cadence.
+    return Duration(milliseconds: minIntervalMs);
+  }
+
+  Future<void> executeGlanceDefaultAction(String traceId, GlanceItem item) async {
+    final action = item.action;
+    if (action == null) {
+      return;
+    }
+    await WoxApi.instance.executeGlanceAction(traceId, item.pluginId, item.id, action.id);
+    if (!action.preventHideAfterAction) {
+      hideApp(traceId);
+    }
   }
 
   /// Reset controller state for integration testing without full disposal.
   /// This clears pending timers, hides panels, and resets query state.
   Future<void> resetForIntegrationTest() async {
-    stopDoctorCheckTimer();
+    hiddenCacheClearTimer?.cancel();
+    await Get.find<WoxScreenshotController>().resetForIntegrationTest();
 
     // Avoid focus restoration during smoke teardown. The regular hide helpers
     // call focusQueryBox(), which can outlive the test and touch a disposed
@@ -226,20 +434,24 @@ class WoxLauncherController extends GetxController {
     if (isInSettingView.value) {
       await exitSetting(const UuidV4().generate());
     }
+    if (isInOnboardingView.value) {
+      // Test teardown should not mark the guide as completed; it only clears
+      // the transient management-view state so the next smoke test starts from
+      // a clean launcher/window lifecycle.
+      isInOnboardingView.value = false;
+      await WoxApi.instance.onOnboarding(const UuidV4().generate(), false);
+    }
 
     queryBoxTextFieldController.clear();
     onQueryBoxTextChanged('');
     queryBeforeTemporaryQuery = null;
     queryBeforeTemporaryQuerySource = null;
     windowHeightBeforeTemporaryQuery = null;
-    clearVisibleQueryHeightPreservation();
     pendingRestoredQueryId = null;
     pendingRestoredQueryWindowHeight = null;
-    isCurrentQueryReturned = false;
-    isCurrentQuerySettled = true;
     isGridLayout.value = false;
-    clearQueryResultsTimer.cancel();
-    visibleQueryHeightPreservationTimer.cancel();
+    clearQueryRefinements(const UuidV4().generate());
+    cancelPendingResultTransitions();
     quickSelectTimer?.cancel();
     isQuickSelectMode.value = false;
     loadingTimer?.cancel();
@@ -250,9 +462,10 @@ class WoxLauncherController extends GetxController {
   void onInit() {
     super.onInit();
 
-    // On Linux, the IME (IBus/Fcitx) consumes the first ESC KeyDownEvent when the window
-    // gains focus (to cancel any pending composition). Flutter only receives a KeyRepeatEvent.
-    // So we must also handle KeyRepeatEvent for Escape to enable one-press hiding.
+    // On Linux, the IME (IBus/Fcitx) can consume the first keydown after focus gain.
+    // Escape still needs a focus-node fallback because the shared query-box handler only reacts
+    // to KeyDown for hide, while Enter fallback now lives in the query-box view's KeyRepeat path
+    // so the workaround stays attached to the multiline input that would otherwise insert newline.
     if (Platform.isLinux) {
       queryBoxFocusNode.onKeyEvent = (node, event) {
         if ((event is KeyDownEvent || event is KeyRepeatEvent) && event.logicalKey == LogicalKeyboardKey.escape && !WoxHotkey.isAnyModifierPressed()) {
@@ -301,7 +514,20 @@ class WoxLauncherController extends GetxController {
     queryBoxFocusNode.addListener(() {
       updateQueryBoxSelectedTextStyle();
       if (queryBoxFocusNode.hasFocus) {
+        // Reset Linux fallback state whenever focus returns because the launcher can hide before
+        // Flutter delivers the matching KeyUpEvent for Enter.
+        _hasHandledLinuxQueryBoxSubmitKey = false;
         var traceId = const UuidV4().generate();
+        final screenshotController = Get.find<WoxScreenshotController>();
+        if (screenshotController.isSessionActive.value) {
+          // Screenshot annotation reuses the same top-level window as the launcher. Letting the
+          // hidden query box reclaim focus during an active screenshot session reroutes keyboard and
+          // IME side effects back into launcher code, which can make the screenshot editor dismiss
+          // itself before the user finishes annotating. Drop that stale focus immediately instead of
+          // treating it like a real launcher activation.
+          queryBoxFocusNode.unfocus();
+          return;
+        }
         if (isShowFormActionPanel.value) {
           Logger.instance.debug(traceId, "query box gained focus while form action panel is visible, ignore auto hide");
           return;
@@ -313,6 +539,7 @@ class WoxLauncherController extends GetxController {
         WoxApi.instance.onQueryBoxFocus(traceId);
       }
     });
+    queryBoxTextFieldController.addListener(syncQueryBoxCompletionHint);
 
     // Add scroll listener to update quick select numbers when scrolling
     resultListViewController.scrollController.addListener(() {
@@ -335,41 +562,533 @@ class WoxLauncherController extends GetxController {
       style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxTextSelectionColor)),
       enabled: queryBoxFocusNode.hasFocus,
     );
+    syncQueryBoxCompletionHint();
   }
 
-  void clearVisibleQueryHeightPreservation() {
-    visibleQueryHeightPreservationTimer.cancel();
-    pendingVisibleQueryWindowHeight = null;
-    pendingVisibleQueryWindowHeightQueryId = null;
+  bool isQueryBoxComposing() {
+    final composing = queryBoxTextFieldController.value.composing;
+    return composing.start >= 0 && composing.end >= 0;
   }
 
-  void preserveVisibleQueryWindowHeight(String traceId, String queryId, double currentWindowHeight) {
-    pendingVisibleQueryWindowHeight = pendingVisibleQueryWindowHeight == null ? currentWindowHeight : math.max(pendingVisibleQueryWindowHeight!, currentWindowHeight);
-    pendingVisibleQueryWindowHeightQueryId = queryId;
-    visibleQueryHeightPreservationTimer.cancel();
-    Logger.instance.debug(
-      traceId,
-      "preserve visible query window height for ${visibleQueryHeightPreservationDuration.inMilliseconds} ms while waiting for results: $pendingVisibleQueryWindowHeight",
+  bool isQueryBoxCursorAtEnd() {
+    final selection = queryBoxTextFieldController.selection;
+    return selection.isValid && selection.isCollapsed && selection.extentOffset == queryBoxTextFieldController.text.length;
+  }
+
+  bool isQueryCompletionHintEnabled() {
+    return WoxSettingUtil.instance.currentSetting.enableQueryCompletionHint;
+  }
+
+  bool isQueryCompletionHintValid(QueryCompletionHint hint) {
+    final currentText = queryBoxTextFieldController.text;
+    return isQueryCompletionHintEnabled() &&
+        currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code &&
+        currentText == hint.inputPrefix &&
+        hint.suffix.isNotEmpty &&
+        hint.completionText.startsWith(currentText) &&
+        isQueryBoxCursorAtEnd() &&
+        !isQueryBoxComposing();
+  }
+
+  void syncQueryBoxCompletionHint() {
+    final hint = queryCompletionHint.value;
+    final suffix = hint != null && isQueryCompletionHintValid(hint) ? hint.suffix : "";
+    queryBoxTextFieldController.updateCompletionHint(
+      suffix: suffix,
+      style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxFontColor).withValues(alpha: 0.38)),
     );
-    visibleQueryHeightPreservationTimer = Timer(visibleQueryHeightPreservationDuration, () {
-      if (isClosed) {
-        return;
+  }
+
+  void clearQueryCompletionHint() {
+    queryCompletionHint.value = null;
+    syncQueryBoxCompletionHint();
+  }
+
+  bool applyQueryCompletionHintForQueryId(String traceId, String queryId, QueryCompletionHint? hint) {
+    if (currentQuery.value.queryId != queryId) {
+      Logger.instance.debug(traceId, "ignore stale query completion hint: response queryId=$queryId, current queryId=${currentQuery.value.queryId}");
+      return false;
+    }
+
+    if (hint == null || !isQueryCompletionHintValid(hint)) {
+      clearQueryCompletionHint();
+      return false;
+    }
+
+    queryCompletionHint.value = hint;
+    syncQueryBoxCompletionHint();
+    return true;
+  }
+
+  bool reuseQueryCompletionHintForText(String value) {
+    if (!isQueryCompletionHintEnabled()) {
+      clearQueryCompletionHint();
+      return false;
+    }
+
+    final hint = queryCompletionHint.value;
+    if (hint == null || value.length <= hint.inputPrefix.length || !value.startsWith(hint.inputPrefix) || !hint.completionText.startsWith(value)) {
+      return false;
+    }
+
+    final suffix = hint.completionText.substring(value.length);
+    if (suffix.isEmpty) {
+      clearQueryCompletionHint();
+      return true;
+    }
+
+    queryCompletionHint.value = QueryCompletionHint(inputPrefix: value, completionText: hint.completionText, suffix: suffix, source: hint.source, score: hint.score);
+    syncQueryBoxCompletionHint();
+    return true;
+  }
+
+  void markLinuxQueryBoxSubmitKeyHandled() {
+    _hasHandledLinuxQueryBoxSubmitKey = true;
+  }
+
+  void resetLinuxQueryBoxSubmitKeyHandling() {
+    _hasHandledLinuxQueryBoxSubmitKey = false;
+  }
+
+  bool shouldExecuteLinuxQueryBoxSubmitFromRepeat() {
+    if (_hasHandledLinuxQueryBoxSubmitKey) {
+      return false;
+    }
+
+    _hasHandledLinuxQueryBoxSubmitKey = true;
+    return true;
+  }
+
+  bool isGlobalInputQuery(PlainQuery query) {
+    if (query.queryType != WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code) {
+      return false;
+    }
+    if (backendQueryContextQueryId == query.queryId) {
+      return backendQueryContext.isGlobalQuery;
+    }
+    final normalizedQuery = expandQueryShortcutForLocalClassification(query.queryText);
+    if (!normalizedQuery.contains(" ")) {
+      return true;
+    }
+    if (!hasLocalPluginTriggerMetadata()) {
+      return false;
+    }
+    return !isKnownPluginInputQueryText(normalizedQuery);
+  }
+
+  bool isLikelyPluginInputQuery(PlainQuery query) {
+    if (query.queryType != WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code) {
+      return false;
+    }
+    final normalizedQuery = expandQueryShortcutForLocalClassification(query.queryText);
+    if (!normalizedQuery.contains(" ")) {
+      return false;
+    }
+    if (!hasLocalPluginTriggerMetadata()) {
+      // Keep plugin-looking queries in an unknown state until plugin metadata is
+      // loaded. Core's QueryContext will correct the surface once a response
+      // arrives, and this avoids clearing a plugin icon on incomplete local data.
+      return true;
+    }
+    return isKnownPluginInputQueryText(normalizedQuery);
+  }
+
+  String getQueryRefinementScopeKey(PlainQuery query) {
+    if (query.queryType != WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code) {
+      return "";
+    }
+
+    final normalizedQuery = expandQueryShortcutForLocalClassification(query.queryText).trimLeft();
+    if (normalizedQuery.isEmpty || !RegExp(r'\s').hasMatch(normalizedQuery)) {
+      return "";
+    }
+
+    return normalizedQuery.split(RegExp(r'\s+')).first;
+  }
+
+  bool shouldPreserveQueryRefinementsForTextChange(PlainQuery currentQueryValue, String nextText) {
+    final currentScope = getQueryRefinementScopeKey(currentQueryValue);
+    if (currentScope.isEmpty) {
+      return false;
+    }
+
+    final nextScope = getQueryRefinementScopeKey(
+      PlainQuery(queryId: "", queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code, queryText: nextText, querySelection: Selection.empty()),
+    );
+    return currentScope == nextScope;
+  }
+
+  // Hidden context follows the same trigger scope as refinements but is not rendered in the UI.
+  bool shouldPreserveQueryContextDataForTextChange(PlainQuery currentQueryValue, String nextText) {
+    if (currentQueryValue.contextData.isEmpty) {
+      return false;
+    }
+    return shouldPreserveQueryRefinementsForTextChange(currentQueryValue, nextText);
+  }
+
+  Map<String, List<String>> cloneQueryRefinementValues(Map<String, List<String>> values) {
+    return values.map((key, value) => MapEntry(key, List<String>.from(value)));
+  }
+
+  Map<String, String> cloneQueryRefinementPayload(Map<String, String> values) {
+    return Map<String, String>.from(values);
+  }
+
+  // Clone query context before assigning it to a new PlainQuery so later edits cannot mutate previous query snapshots.
+  Map<String, String> cloneQueryContextData(Map<String, String> values) {
+    return Map<String, String>.from(values);
+  }
+
+  List<String> decodeQueryRefinementValue(String value) {
+    if (value.isEmpty) {
+      return const <String>[];
+    }
+    return value.split(',').map((part) => part.trim()).where((part) => part.isNotEmpty).toList();
+  }
+
+  Map<String, List<String>> decodeQueryRefinementPayload(Map<String, String> payload) {
+    return payload.map((key, value) => MapEntry(key, decodeQueryRefinementValue(value)));
+  }
+
+  String encodeQueryRefinementValue(List<String> values) {
+    return values.where((value) => value.isNotEmpty).join(',');
+  }
+
+  Map<String, String> encodeQueryRefinementPayload(Map<String, List<String>> values) {
+    final payload = <String, String>{};
+    for (final entry in values.entries) {
+      // Protocol change: plugins receive refinements as map[string]string for a
+      // simpler API. The UI keeps list selections internally for multi-select
+      // controls, then encodes multi values as comma-separated strings here.
+      final encoded = encodeQueryRefinementValue(entry.value);
+      if (encoded.isNotEmpty) {
+        payload[entry.key] = encoded;
       }
-      if (currentQuery.value.queryId != queryId) {
-        return;
+    }
+    return payload;
+  }
+
+  void clearQueryRefinements(String traceId) {
+    if (queryRefinements.isEmpty && queryRefinementValues.isEmpty && queryRefinementScopeKey.isEmpty && !isQueryRefinementBarExpanded.value) {
+      return;
+    }
+
+    // Bug fix: refinement controls are owned by the plugin query that returned
+    // them. Clearing both definitions and selected values prevents filters from
+    // one trigger keyword from silently being sent to another plugin.
+    queryRefinements.clear();
+    queryRefinementValues.clear();
+    isQueryRefinementBarExpanded.value = false;
+    queryRefinementScopeKey = "";
+    unawaited(resizeHeight(traceId: traceId, reason: "query refinements cleared"));
+  }
+
+  void prepareQueryRefinementsOnQueryChanged(String traceId, PlainQuery query) {
+    final nextScopeKey = getQueryRefinementScopeKey(query);
+    queryRefinementValues.assignAll(cloneQueryRefinementValues(decodeQueryRefinementPayload(query.queryRefinements)));
+
+    if (nextScopeKey.isEmpty || (queryRefinementScopeKey.isNotEmpty && queryRefinementScopeKey != nextScopeKey)) {
+      clearQueryRefinements(traceId);
+      return;
+    }
+  }
+
+  List<String> normalizeQueryRefinementSelection(WoxQueryRefinement refinement, List<String> rawValues) {
+    final optionValues = refinement.options.map((option) => option.value).where((value) => value.isNotEmpty).toSet();
+    final allowAnyValue = optionValues.isEmpty;
+
+    List<String> normalizeValues(List<String> values) {
+      final normalized = <String>[];
+      for (final value in values) {
+        if (value.isEmpty || (!allowAnyValue && !optionValues.contains(value)) || normalized.contains(value)) {
+          continue;
+        }
+        normalized.add(value);
       }
-      if (isCurrentQuerySettled || pendingVisibleQueryWindowHeightQueryId != queryId || pendingVisibleQueryWindowHeight == null) {
-        return;
+      return normalized;
+    }
+
+    var normalized = normalizeValues(rawValues);
+    if (normalized.isEmpty) {
+      normalized = normalizeValues(refinement.defaultValue);
+    }
+
+    if ((refinement.type == WoxQueryRefinementTypeEnum.singleSelect.code || refinement.type == WoxQueryRefinementTypeEnum.sort.code) &&
+        normalized.isEmpty &&
+        refinement.options.isNotEmpty) {
+      normalized = [refinement.options.first.value];
+    }
+
+    if (refinement.type == WoxQueryRefinementTypeEnum.singleSelect.code || refinement.type == WoxQueryRefinementTypeEnum.sort.code) {
+      return normalized.take(1).toList();
+    }
+
+    return normalized;
+  }
+
+  Map<String, List<String>> normalizeQueryRefinementValues(List<WoxQueryRefinement> refinements, Map<String, List<String>> selectedValues) {
+    final normalized = <String, List<String>>{};
+    for (final refinement in refinements) {
+      if (refinement.isEmpty) {
+        continue;
       }
 
-      final preservedHeight = pendingVisibleQueryWindowHeight;
-      clearVisibleQueryHeightPreservation();
-      Logger.instance.debug(
-        traceId,
-        "release visible query height preservation after ${visibleQueryHeightPreservationDuration.inMilliseconds} ms: queryId=$queryId, preservedHeight=$preservedHeight",
-      );
-      unawaited(resizeHeight(traceId: traceId, reason: "release visible query height preservation"));
-    });
+      // Feature addition: response defaults are materialized into the next
+      // query payload so plugins receive a stable object even before the user
+      // changes a control manually.
+      final selected = normalizeQueryRefinementSelection(refinement, selectedValues[refinement.id] ?? const <String>[]);
+      if (selected.isNotEmpty) {
+        normalized[refinement.id] = selected;
+      }
+    }
+    return normalized;
+  }
+
+  bool applyQueryRefinementsForQueryId(String traceId, String queryId, List<WoxQueryRefinement> refinements) {
+    if (currentQuery.value.queryId != queryId) {
+      // QueryResponse arrives asynchronously. Guarding by query id prevents a
+      // late plugin response from replacing controls for the query the user is
+      // currently editing.
+      Logger.instance.debug(traceId, "ignore stale query refinements: response queryId=$queryId, current queryId=${currentQuery.value.queryId}");
+      return false;
+    }
+
+    applyQueryRefinementsForQuery(traceId, currentQuery.value, refinements);
+    return true;
+  }
+
+  void applyQueryRefinementsForQuery(String traceId, PlainQuery query, List<WoxQueryRefinement> refinements) {
+    final validRefinements = refinements.where((refinement) => !refinement.isEmpty).toList();
+    if (validRefinements.isEmpty) {
+      currentQuery.value = cloneQuery(query, queryRefinements: <String, String>{});
+      clearQueryRefinements(traceId);
+      return;
+    }
+
+    final normalizedValues = normalizeQueryRefinementValues(validRefinements, decodeQueryRefinementPayload(query.queryRefinements));
+    queryRefinements.assignAll(validRefinements);
+    queryRefinementValues.assignAll(normalizedValues);
+    queryRefinementScopeKey = getQueryRefinementScopeKey(query);
+    currentQuery.value = cloneQuery(query, queryRefinements: encodeQueryRefinementPayload(normalizedValues));
+    unawaited(resizeHeight(traceId: traceId, reason: "query refinements applied"));
+  }
+
+  List<String> getQueryRefinementSelectedValues(String refinementId) {
+    return List<String>.from(queryRefinementValues[refinementId] ?? const <String>[]);
+  }
+
+  void updateQueryRefinementSelection(String traceId, WoxQueryRefinement refinement, List<String> values) {
+    final normalizedValues = normalizeQueryRefinementSelection(refinement, values);
+    final nextRefinements = cloneQueryRefinementValues(decodeQueryRefinementPayload(currentQuery.value.queryRefinements));
+    if (normalizedValues.isEmpty) {
+      nextRefinements.remove(refinement.id);
+    } else {
+      nextRefinements[refinement.id] = normalizedValues;
+    }
+
+    // Feature addition: changing a refinement is equivalent to changing the
+    // query. Reusing onQueryChanged keeps loading, stale-result clearing, and
+    // websocket payload construction on the same path as text edits.
+    final nextQuery = cloneQuery(currentQuery.value, queryId: const UuidV4().generate(), queryRefinements: encodeQueryRefinementPayload(nextRefinements));
+    onQueryChanged(traceId, nextQuery, "query refinement changed");
+  }
+
+  List<String> getNextQueryRefinementHotkeyValues(WoxQueryRefinement refinement) {
+    final optionValues = refinement.options.map((option) => option.value).where((value) => value.isNotEmpty).toList();
+    final selectedValues = normalizeQueryRefinementSelection(refinement, getQueryRefinementSelectedValues(refinement.id));
+
+    if (refinement.type == WoxQueryRefinementTypeEnum.toggle.code) {
+      // Feature addition: toggle hotkeys mirror the visible toggle control,
+      // including its fallback value, so keyboard and mouse paths send the same
+      // selected value for minimal toggle definitions.
+      final toggleValue = refinement.defaultValue.firstWhereOrNull((value) => value.isNotEmpty) ?? (optionValues.isNotEmpty ? optionValues.first : "true");
+      if (selectedValues.contains(toggleValue)) {
+        return <String>[];
+      }
+      return [toggleValue];
+    }
+
+    if (refinement.type == WoxQueryRefinementTypeEnum.multiSelect.code) {
+      final allSelected = optionValues.isNotEmpty && optionValues.every(selectedValues.contains);
+      return allSelected ? <String>[] : optionValues;
+    }
+
+    if (optionValues.isEmpty) {
+      return <String>[];
+    }
+
+    final currentValue = selectedValues.isNotEmpty ? selectedValues.first : optionValues.first;
+    final currentIndex = optionValues.indexOf(currentValue);
+    return [optionValues[(currentIndex + 1) % optionValues.length]];
+  }
+
+  bool executeQueryRefinementHotkey(String traceId, HotKey hotkey) {
+    if (!shouldShowQueryRefinementAffordance) {
+      return false;
+    }
+
+    for (final refinement in queryRefinements) {
+      final parsed = WoxHotkey.parseHotkeyFromString(refinement.hotkey);
+      if (parsed == null || !parsed.isNormalHotkey) {
+        continue;
+      }
+
+      if (!WoxHotkey.equals(parsed.normalHotkey, hotkey)) {
+        continue;
+      }
+
+      // Feature addition: refinement hotkeys mutate the selected values without
+      // moving focus away from the query box. This keeps filter changes on the
+      // same keyboard-first path as result actions while still routing the next
+      // query through the normal websocket flow.
+      updateQueryRefinementSelection(traceId, refinement, getNextQueryRefinementHotkeyValues(refinement));
+      return true;
+    }
+
+    return false;
+  }
+
+  String get queryRefinementToggleHotkey => WoxPlatformHotkeyUtil.primaryHotkey("f");
+
+  String get queryRefinementToggleHotkeyLabel => WoxPlatformHotkeyUtil.primaryHotkeyLabel("f");
+
+  bool executeQueryRefinementToggleHotkey(String traceId, HotKey hotkey) {
+    if (!shouldShowQueryRefinementAffordance) {
+      return false;
+    }
+
+    final parsed = WoxHotkey.parseHotkeyFromString(queryRefinementToggleHotkey);
+    if (parsed == null || !parsed.isNormalHotkey || !WoxHotkey.equals(parsed.normalHotkey, hotkey)) {
+      return false;
+    }
+
+    toggleQueryRefinementBar(traceId);
+    return true;
+  }
+
+  void toggleQueryRefinementBar(String traceId) {
+    if (!shouldShowQueryRefinementAffordance) {
+      return;
+    }
+
+    // Visual refinement: filters are collapsed by default so normal launcher
+    // scanning stays tight. Toggling only changes chrome visibility; selected
+    // refinement values remain in the query payload either way.
+    isQueryRefinementBarExpanded.value = !isQueryRefinementBarExpanded.value;
+    unawaited(resizeHeight(traceId: traceId, reason: "query refinement bar toggled"));
+  }
+
+  bool isSameQueryRefinementSelection(List<String> left, List<String> right) {
+    if (left.length != right.length) {
+      return false;
+    }
+
+    for (final value in left) {
+      if (!right.contains(value)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool isQueryRefinementDefaultSelection(WoxQueryRefinement refinement) {
+    final selectedValues = normalizeQueryRefinementSelection(refinement, getQueryRefinementSelectedValues(refinement.id));
+    final defaultValues = normalizeQueryRefinementSelection(refinement, refinement.defaultValue);
+    return isSameQueryRefinementSelection(selectedValues, defaultValues);
+  }
+
+  List<String> getActiveQueryRefinementLabels({int limit = 2}) {
+    final labels = <String>[];
+    for (final refinement in queryRefinements) {
+      if (isQueryRefinementDefaultSelection(refinement)) {
+        continue;
+      }
+
+      final selectedValues = normalizeQueryRefinementSelection(refinement, getQueryRefinementSelectedValues(refinement.id));
+      for (final selectedValue in selectedValues) {
+        final option = refinement.options.firstWhereOrNull((item) => item.value == selectedValue);
+        labels.add(option == null ? selectedValue : tr(option.title));
+        if (labels.length >= limit) {
+          return labels;
+        }
+      }
+    }
+    return labels;
+  }
+
+  bool get hasActiveQueryRefinements {
+    return getActiveQueryRefinementLabels(limit: 1).isNotEmpty;
+  }
+
+  String getQueryRefinementAffordanceLabel() {
+    final activeLabels = getActiveQueryRefinementLabels(limit: 2);
+    if (activeLabels.isEmpty) {
+      return tr("ui_query_refinement_filters");
+    }
+
+    final hiddenCount = queryRefinements.where((refinement) => !isQueryRefinementDefaultSelection(refinement)).length - activeLabels.length;
+    if (hiddenCount > 0) {
+      return "${activeLabels.join(", ")} +$hiddenCount";
+    }
+    return activeLabels.join(", ");
+  }
+
+  bool get shouldShowQueryRefinementAffordance {
+    return isQueryBoxVisible.value && queryRefinements.isNotEmpty && !isPreviewOnlyLayout;
+  }
+
+  bool get shouldShowQueryRefinements {
+    return shouldShowQueryRefinementAffordance && isQueryRefinementBarExpanded.value;
+  }
+
+  double getQueryRefinementBarHeight() {
+    return shouldShowQueryRefinements ? WoxInterfaceSizeUtil.instance.current.queryRefinementBarHeight : 0.0;
+  }
+
+  bool hasLocalPluginTriggerMetadata() {
+    return Get.isRegistered<WoxSettingController>() && Get.find<WoxSettingController>().installedPlugins.isNotEmpty;
+  }
+
+  bool isKnownPluginInputQueryText(String queryText) {
+    final triggerKeyword = queryText.split(" ").first;
+    if (triggerKeyword.isEmpty || !Get.isRegistered<WoxSettingController>()) {
+      return false;
+    }
+    final settingController = Get.find<WoxSettingController>();
+    for (final plugin in settingController.installedPlugins) {
+      final triggerKeywords = plugin.setting.triggerKeywords.isNotEmpty ? plugin.setting.triggerKeywords : plugin.triggerKeywords;
+      if (triggerKeywords.contains(triggerKeyword)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  String expandQueryShortcutForLocalClassification(String queryText) {
+    final shortcuts = List<QueryShortcut>.from(WoxSettingUtil.instance.currentSetting.queryShortcuts);
+    shortcuts.sort((a, b) => b.shortcut.length.compareTo(a.shortcut.length));
+    for (final shortcut in shortcuts) {
+      if (shortcut.disabled) {
+        continue;
+      }
+      if (queryText != shortcut.shortcut && !queryText.startsWith("${shortcut.shortcut} ")) {
+        continue;
+      }
+
+      // Local classification mirrors core's shortcut boundary rules so Glance
+      // does not disappear for ordinary global text that merely shares a prefix.
+      if (!shortcut.query.contains("{0}")) {
+        return queryText.replaceFirst(shortcut.shortcut, shortcut.query);
+      }
+
+      final arguments = queryText.replaceFirst(shortcut.shortcut, "").trimLeft().split(" ");
+      var expandedQuery = shortcut.query;
+      for (var index = 0; index < arguments.length; index++) {
+        expandedQuery = expandedQuery.replaceAll("{$index}", arguments[index]);
+      }
+      return expandedQuery;
+    }
+    return queryText;
   }
 
   bool get isShowDoctorCheckInfo => currentQuery.value.isEmpty && !doctorCheckInfo.value.allPassed;
@@ -384,9 +1103,18 @@ class WoxLauncherController extends GetxController {
 
   bool get hasVisibleToolbarMsg => toolbarMsg.value.isPersistent;
 
-  bool get isShowToolbar => activeResultViewController.items.isNotEmpty || isShowDoctorCheckInfo || hasVisibleToolbarMsg;
+  bool get hasBugAwareToolbarIndicator => isBugAwareModeEnabled.value;
 
-  bool get isToolbarShowedWithoutResults => isShowToolbar && activeResultViewController.items.isEmpty;
+  bool get isShowToolbar => activeResultViewController.items.isNotEmpty || isShowDoctorCheckInfo || hasVisibleToolbarMsg || hasBugAwareToolbarIndicator;
+
+  bool get isToolbarVisible => isShowToolbar && !isToolbarHiddenForce.value;
+
+  bool get isToolbarShowedWithoutResults => isToolbarVisible && activeResultViewController.items.isEmpty;
+
+  // Launcher chrome is the query box and toolbar shell around result content.
+  bool get isLauncherChromeHidden => !isQueryBoxVisible.value && !isToolbarVisible;
+
+  bool get isPreviewOnlyLayout => isLauncherChromeHidden && isShowPreviewPanel.value && resultPreviewRatio.value == 0;
 
   String? get resolvedToolbarText => hasVisibleToolbarMsg ? toolbarMsg.value.displayText : toolbar.value.text;
 
@@ -396,49 +1124,209 @@ class WoxLauncherController extends GetxController {
 
   bool get resolvedToolbarIndeterminate => hasVisibleToolbarMsg && toolbarMsg.value.indeterminate;
 
-  bool isFullscreenPreviewOnly() {
-    return !isQueryBoxVisible.value && isShowPreviewPanel.value && resultPreviewRatio.value == 0;
+  Future<void> loadDiagnosticStatus(String traceId) async {
+    try {
+      final status = await WoxApi.instance.getDiagnosticStatus(traceId);
+      updateDiagnosticStatus(traceId, status["enabled"] == true, shouldResize: false);
+    } catch (e) {
+      Logger.instance.warn(traceId, "failed to load diagnostic status: $e");
+    }
   }
 
-  String get previewFullscreenHotkey => "ctrl+b";
-
-  String get previewFullscreenHotkeyLabel => "Ctrl+B";
-
-  String get previewSearchHotkey => Platform.isMacOS ? "cmd+f" : "ctrl+f";
-
-  String get previewSearchHotkeyLabel => Platform.isMacOS ? "Cmd+F" : "Ctrl+F";
-
-  String get previewInspectorHotkey => Platform.isMacOS ? "cmd+alt+i" : "";
-  String get previewRefreshHotkey => Platform.isMacOS ? "cmd+r" : "";
-  String get previewBackHotkey => Platform.isMacOS ? "cmd+[" : "";
-  String get previewForwardHotkey => Platform.isMacOS ? "cmd+]" : "";
-
-  String get moreActionsHotkey => Platform.isMacOS ? "cmd+j" : "alt+j";
-
-  String get moreActionsHotkeyLabel => Platform.isMacOS ? "Cmd+J" : "Alt+J";
-
-  /// Triggered when received query results from the server.
-  void onReceivedQueryResults(String traceId, String queryId, List<WoxQueryResult> receivedResults, {bool isFinal = true}) {
-    // Cancel loading timer and hide loading animation when results are received
-    if (queryId == currentQuery.value.queryId) {
-      isCurrentQueryReturned = true;
-      if (isFinal) {
-        isCurrentQuerySettled = true;
-        clearVisibleQueryHeightPreservation();
-      }
-      loadingTimer?.cancel();
-      isLoading.value = false;
-    } else {
-      Logger.instance.error(traceId, "query id is not matched, ignore the results");
+  void updateDiagnosticStatus(String traceId, bool enabled, {bool shouldResize = true}) {
+    if (isBugAwareModeEnabled.value == enabled) {
       return;
     }
 
-    Logger.instance.debug(
-      traceId,
-      "apply query results: queryId=$queryId, count=${receivedResults.length}, isFinal=$isFinal, settled=$isCurrentQuerySettled, preservedHeight=$pendingVisibleQueryWindowHeight",
-    );
+    // Feature: the backend owns the persistent diagnostic flag and Flutter owns
+    // the toolbar affordance. A single update path keeps startup status loading
+    // and live websocket changes consistent.
+    isBugAwareModeEnabled.value = enabled;
+    Logger.instance.info(traceId, "bug aware mode status changed: enabled=$enabled");
+    if (shouldResize) {
+      unawaited(resizeHeight(traceId: traceId, reason: "bug aware toolbar visibility changed"));
+    }
+  }
+
+  void updateAttentionUnreadCount(String traceId, int unreadCount) {
+    final nextCount = unreadCount < 0 ? 0 : unreadCount;
+    if (attentionUnreadCount.value == nextCount) {
+      return;
+    }
+
+    attentionUnreadCount.value = nextCount;
+    Logger.instance.info(traceId, "attention unread count changed: count=$nextCount");
+  }
+
+  Future<void> activateAttentionQuery(String traceId) async {
+    await onQueryChanged(traceId, PlainQuery.text("attention "), "attention badge clicked", moveCursorToEnd: true);
+    await focusQueryBox();
+  }
+
+  String get attentionHotkey => WoxPlatformHotkeyUtil.primaryHotkey("u");
+
+  String get attentionHotkeyLabel => WoxPlatformHotkeyUtil.primaryHotkeyLabel("u");
+
+  // executeAttentionHotkey only works while the badge is visible, matching the on-screen affordance.
+  bool executeAttentionHotkey(String traceId, HotKey hotkey) {
+    if (!shouldShowAttentionBadge) {
+      return false;
+    }
+
+    final parsed = WoxHotkey.parseHotkeyFromString(attentionHotkey);
+    if (parsed == null || !parsed.isNormalHotkey || !WoxHotkey.equals(parsed.normalHotkey, hotkey)) {
+      return false;
+    }
+
+    unawaited(activateAttentionQuery(traceId));
+    return true;
+  }
+
+  Future<void> activateBugReportQuery(String traceId) async {
+    // Feature: clicking the bug indicator should enter the system plugin using
+    // Wox's normal trigger-keyword semantics, which require the trailing space.
+    await onQueryChanged(traceId, PlainQuery.text("bugreport "), "bug aware toolbar indicator clicked", moveCursorToEnd: true);
+    await focusQueryBox();
+  }
+
+  String get previewFullscreenHotkey => WoxPlatformHotkeyUtil.primaryHotkey("b");
+
+  String get previewFullscreenHotkeyLabel => WoxPlatformHotkeyUtil.primaryHotkeyLabel("b");
+
+  String get previewSearchHotkey => WoxPlatformHotkeyUtil.primaryHotkey("shift+f");
+
+  String get previewSearchHotkeyLabel => WoxPlatformHotkeyUtil.primaryHotkeyLabel("shift+f");
+
+  String get previewInspectorHotkey => WoxPlatformHotkeyUtil.primaryHotkey("alt+i");
+  String get previewRefreshHotkey => WoxPlatformHotkeyUtil.primaryHotkey("r");
+  String get previewBackHotkey => WoxPlatformHotkeyUtil.primaryHotkey("[");
+  String get previewForwardHotkey => WoxPlatformHotkeyUtil.primaryHotkey("]");
+
+  String get moreActionsHotkey => WoxPlatformHotkeyUtil.primaryHotkey("j");
+
+  String get moreActionsHotkeyLabel => WoxPlatformHotkeyUtil.primaryHotkeyLabel("j");
+
+  String? getVisibleResultQueryId() {
+    for (final item in activeResultViewController.items) {
+      if (!item.value.isGroup) {
+        return item.value.data.queryId;
+      }
+    }
+    return null;
+  }
+
+  bool get hasVisibleResultsForCurrentQuery => getVisibleResultQueryId() == currentQuery.value.queryId;
+
+  bool get hasVisibleStaleResultsDuringQueryTransition {
+    return activeResultViewController.items.isNotEmpty && !isShowingPendingResultPlaceholder && !hasVisibleResultsForCurrentQuery;
+  }
+
+  void resetPendingResultPlaceholder() {
+    isShowingPendingResultPlaceholder = false;
+    pendingResultPlaceholderHeight = null;
+  }
+
+  void cancelPendingResultTransitions() {
+    clearQueryResultsTimer.cancel();
+    resetPendingResultPlaceholder();
+  }
+
+  void clearStaleResultsForLayoutTransition(String traceId) {
+    if (isCurrentQueryReturned || currentQuery.value.isEmpty || !hasVisibleStaleResultsDuringQueryTransition) {
+      return;
+    }
+
+    // Bug fix: the stale-results grace window is only safe while the result
+    // layout keeps the same meaning. When metadata switches list/grid before
+    // slow plugin results arrive, the old snapshot would be re-rendered in the
+    // new layout and look like fresh plugin content. Reuse the pending
+    // placeholder path so outdated items disappear immediately while the
+    // window height remains stable until real results replace them.
+    clearQueryResultsTimer.cancel();
+    showPendingResultPlaceholder(traceId);
+  }
+
+  // Keep a temporary "empty but still tall" transition state while a new query
+  // is waiting for results. We intentionally clear stale items, actions, and
+  // preview immediately so the UI no longer exposes outdated content, but we
+  // preserve the last committed height to avoid a shrink-then-expand flash
+  // during fast typing. This is different from the removed shrink debounce:
+  // once real results arrive, resizeHeightForResultUpdate now applies the new
+  // height immediately instead of waiting for a settle timer.
+  void showPendingResultPlaceholder(String traceId) {
+    if (isClosed || currentQuery.value.isEmpty || isCurrentQueryReturned) {
+      return;
+    }
+
+    // Reuse the most recently committed window height so the placeholder keeps
+    // the launcher geometry stable until the next snapshot replaces it.
+    pendingResultPlaceholderHeight ??= committedWindowHeight ?? calculateWindowHeight();
+    isShowingPendingResultPlaceholder = true;
+
+    Logger.instance.debug(traceId, "show pending result placeholder, preservedHeight=$pendingResultPlaceholderHeight");
+
+    resultListViewController.clearItems();
+    resultGridViewController.clearItems();
+    actionListViewController.clearItems();
+    isShowPreviewPanel.value = false;
+    isShowActionPanel.value = false;
+    syncPreviewFullscreenState();
+    refreshToolbarActionsForCurrentState(traceId);
+  }
+
+  Future<void> resizeHeightForResultUpdate({required String traceId, required String reason}) async {
+    // Bug fix: result updates used to delay shrink while still applying growth
+    // immediately. That made the window height lag behind the current result
+    // snapshot, so result-driven resize now always applies the latest target
+    // height right away. The pending-result placeholder above still handles the
+    // separate cross-query flicker case without reintroducing shrink debounce.
+    final targetHeight = calculateWindowHeight();
+    await resizeHeight(traceId: traceId, reason: reason, overrideTargetHeight: targetHeight);
+  }
+
+  /// Triggered when received query results from the server.
+  Future<bool> onReceivedQueryResults(String traceId, String queryId, List<WoxQueryResult> receivedResults, {required bool isFinal, int? backendQueryStartTimestampMs}) async {
+    final tracker = WoxTimeTracker.start(traceId, "ui_query_result_apply");
+    final totalStartUs = tracker.checkpointUs();
+    tracker.setRawString("queryId", queryId);
+    tracker.setInt("resultCount", receivedResults.length);
+    tracker.setBool("isFinal", isFinal);
+
+    // Cancel loading timer and hide loading animation when results are received
+    if (queryId == currentQuery.value.queryId) {
+      final stateStartUs = tracker.checkpointUs();
+      if (receivedResults.isNotEmpty || isFinal) {
+        clearQueryResultsTimer.cancel();
+        resetPendingResultPlaceholder();
+      }
+
+      if (receivedResults.isNotEmpty || isFinal) {
+        isCurrentQueryReturned = true;
+      }
+
+      if (receivedResults.isNotEmpty || isFinal) {
+        loadingTimer?.cancel();
+        isLoading.value = false;
+      }
+      tracker.setElapsedUs("queryStateUs", stateStartUs);
+    } else {
+      Logger.instance.error(traceId, "query id is not matched, ignore the results");
+      tracker.setBool("staleQuery", true);
+      tracker.setElapsedUs("totalUs", totalStartUs);
+      tracker.log();
+      return false;
+    }
+
+    if (receivedResults.isEmpty && !isFinal) {
+      Logger.instance.debug(traceId, "ignore non-final empty query results");
+      tracker.setBool("ignoredEmptyNonFinal", true);
+      tracker.setElapsedUs("totalUs", totalStartUs);
+      tracker.log();
+      return false;
+    }
 
     if (receivedResults.isEmpty) {
+      final emptyApplyStartUs = tracker.checkpointUs();
       // Empty responses must clear stale items from the previous query state,
       // otherwise plugin-scoped toolbar messages cannot be shown without results.
       resultListViewController.clearItems();
@@ -448,32 +1336,95 @@ class WoxLauncherController extends GetxController {
       isShowActionPanel.value = false;
       syncPreviewFullscreenState();
       refreshToolbarActionsForCurrentState(traceId);
-      SchedulerBinding.instance.addPostFrameCallback((_) {
-        resizeHeight(traceId: traceId, reason: "empty query results received");
-      });
-      return;
+      // Bug fix: empty terminal snapshots used to wait until the next frame
+      // before shrinking, which still let the old geometry flash once. Resize
+      // in the same async flow so the empty state is committed immediately.
+      tracker.setElapsedUs("emptyApplyUs", emptyApplyStartUs);
+      final resizeStartUs = tracker.checkpointUs();
+      await resizeHeightForResultUpdate(traceId: traceId, reason: "empty query results received");
+      tracker.setElapsedUs("resizeUs", resizeStartUs);
+      tracker.setElapsedUs("totalUs", totalStartUs);
+      tracker.log();
+      return true;
     }
-
-    //cancel clear results timer
-    clearQueryResultsTimer.cancel();
 
     // 1. Use silent mode to avoid triggering onItemActive callback during updateItems (which may cause a little performance issue)
     //    Following resetActiveResult in updateActiveResultIndex will trigger the callback
     // 2. We need update items in both list and grid controllers, because metdata query (grid and list layout change relay on this) may after results arrival,
     //    at this point, we don't know which layout this query will use, so we update both
-    final listItems = receivedResults.map((e) => WoxListItem.fromQueryResult(e)).toList();
+    final appendTailStartUs = tracker.checkpointUs();
+    final displayResults = appendOnReceivedPerformanceTailForQuery(traceId, queryId, receivedResults, backendQueryStartTimestampMs: backendQueryStartTimestampMs);
+    tracker.setElapsedUs("appendTailUs", appendTailStartUs);
+    final listItemStartUs = tracker.checkpointUs();
+    final listItems = displayResults.map((e) => WoxListItem.fromQueryResult(e)).toList();
+    tracker.setElapsedUs("listItemMapUs", listItemStartUs);
+
+    final listUpdateStartUs = tracker.checkpointUs();
     resultListViewController.updateItems(traceId, listItems, silent: true);
+    tracker.setElapsedUs("listUpdateUs", listUpdateStartUs);
+    final gridUpdateStartUs = tracker.checkpointUs();
     resultGridViewController.updateItems(traceId, listItems, silent: true);
+    tracker.setElapsedUs("gridUpdateUs", gridUpdateStartUs);
 
+    final activeIndexStartUs = tracker.checkpointUs();
     updateActiveResultIndex(traceId);
+    tracker.setElapsedUs("activeIndexUs", activeIndexStartUs);
+    final toolbarStartUs = tracker.checkpointUs();
     updateDoctorToolbarIfNeeded(traceId);
+    tracker.setElapsedUs("toolbarUs", toolbarStartUs);
 
-    // Schedule resize to post-frame to avoid blocking the main thread during result updates.
-    // This prevents input lag by allowing key events to be processed between the list rebuild
-    // and the window resize platform channel calls.
-    SchedulerBinding.instance.addPostFrameCallback((_) {
-      resizeHeight(traceId: traceId, reason: "query results updated");
-    });
+    final resizeStartUs = tracker.checkpointUs();
+    await resizeHeightForResultUpdate(traceId: traceId, reason: "query results updated");
+    tracker.setElapsedUs("resizeUs", resizeStartUs);
+    tracker.setElapsedUs("totalUs", totalStartUs);
+    tracker.log();
+    return true;
+  }
+
+  // Re-attach the UI-only onReceived tail when a later backend batch replaces the result list.
+  List<WoxQueryResult> appendOnReceivedPerformanceTailForQuery(String traceId, String queryId, List<WoxQueryResult> results, {int? backendQueryStartTimestampMs}) {
+    final setting = WoxSettingUtil.instance.currentSetting;
+    if (!Env.isDev || !setting.showPerformanceTail || !setting.showPerformanceTailUiReceived) {
+      return results;
+    }
+
+    // Prefer the backend query start so this UI tail is comparable with the
+    // backend "response received" tail, which uses queryRun.startTimestamp.
+    final queryStartTime = backendQueryStartTimestampMs != null && backendQueryStartTimestampMs > 0 ? backendQueryStartTimestampMs : queryStartTimeMap[traceId];
+    if (queryStartTime == null) {
+      return results;
+    }
+    final currentOnReceivedElapsed = DateTime.now().millisecondsSinceEpoch - queryStartTime;
+
+    for (final result in results) {
+      final resultKey = getOnReceivedResultKey(queryId, result);
+      final onReceivedElapsed = resultKey.isEmpty ? currentOnReceivedElapsed : queryOnReceivedElapsedByResultKey.putIfAbsent(resultKey, () => currentOnReceivedElapsed);
+      appendOnReceivedPerformanceTail(result, onReceivedElapsed);
+    }
+    return results;
+  }
+
+  String getOnReceivedResultKey(String queryId, WoxQueryResult result) {
+    if (result.id.isEmpty) {
+      return "";
+    }
+    return "$queryId:${result.id}";
+  }
+
+  // Appends the onReceived tail once while preserving all backend-provided tails.
+  void appendOnReceivedPerformanceTail(WoxQueryResult result, int onReceivedElapsed) {
+    if (result.isGroup) {
+      return;
+    }
+
+    result.tails =
+        result.tails.where((tail) => tail.tooltip != _onReceivedTailTooltip).toList()
+          ..add(WoxListItemTail.text("${onReceivedElapsed}ms", textCategory: getOnReceivedTailTextCategory(onReceivedElapsed))..tooltip = _onReceivedTailTooltip);
+  }
+
+  // This dev metric stops at onReceivedQueryResults, before resize and frame paint.
+  String getOnReceivedTailTextCategory(int onReceivedElapsed) {
+    return woxListItemTailTextCategoryDefault;
   }
 
   void updateActiveResultIndex(String traceId) {
@@ -545,38 +1496,20 @@ class WoxLauncherController extends GetxController {
       return;
     }
 
-    // When there are results (e.g. MRU), keep the right-side hotkeys and only show the warning on the left.
-    // When there are no results, show a direct action to open the doctor page.
+    // Doctor warnings are global launcher issues. Keep their action visible even
+    // when MRU/results are present so Enter resolves the warning instead of
+    // acting on an unrelated result.
     if (activeResultViewController.items.isEmpty) {
       final updateAction = buildUpdateToolbarAction();
       final actions = <ToolbarActionInfo>[];
       if (updateAction != null) {
         actions.add(updateAction);
       }
-      actions.add(
-        ToolbarActionInfo(
-          name: tr("plugin_doctor_check"),
-          hotkey: "enter",
-          action: () {
-            onQueryChanged(traceId, PlainQuery.text("doctor "), "user click doctor icon");
-          },
-        ),
-      );
+      actions.add(buildDoctorToolbarAction());
 
       toolbar.value = ToolbarInfo(text: doctorCheckInfo.value.message, icon: doctorCheckInfo.value.icon, actions: actions);
     } else {
-      final updateAction = buildUpdateToolbarAction();
-      if (updateAction == null) {
-        toolbar.value = toolbar.value.copyWith(text: doctorCheckInfo.value.message, icon: doctorCheckInfo.value.icon);
-      } else {
-        final mergedActions = List<ToolbarActionInfo>.from(toolbar.value.actions ?? []);
-        final updateHotkey = updateAction.hotkey.toLowerCase();
-        final hasUpdateAction = mergedActions.any((action) => action.hotkey.toLowerCase() == updateHotkey || action.name == updateAction.name);
-        if (!hasUpdateAction) {
-          mergedActions.insert(0, updateAction);
-        }
-        toolbar.value = toolbar.value.copyWith(text: doctorCheckInfo.value.message, icon: doctorCheckInfo.value.icon, actions: mergedActions);
-      }
+      toolbar.value = toolbar.value.copyWith(text: doctorCheckInfo.value.message, icon: doctorCheckInfo.value.icon, actions: buildToolbarActionsForCurrentState(getActiveResult()));
     }
 
     lastAppliedDoctorToolbarMessage = doctorCheckInfo.value.message;
@@ -586,6 +1519,10 @@ class WoxLauncherController extends GetxController {
     onQueryChanged(traceId, PlainQuery.text("update "), "toolbar go to update");
   }
 
+  void openDoctorFromToolbar(String traceId) {
+    onQueryChanged(traceId, PlainQuery.text("doctor "), "toolbar go to doctor");
+  }
+
   ToolbarActionInfo? buildUpdateToolbarAction() {
     if (!shouldShowUpdateActionInToolbar) {
       return null;
@@ -593,9 +1530,19 @@ class WoxLauncherController extends GetxController {
 
     return ToolbarActionInfo(
       name: tr("plugin_doctor_go_to_update"),
-      hotkey: "ctrl+u",
+      hotkey: WoxPlatformHotkeyUtil.primaryHotkey("u"),
       action: () {
         openUpdateFromToolbar(const UuidV4().generate());
+      },
+    );
+  }
+
+  ToolbarActionInfo buildDoctorToolbarAction() {
+    return ToolbarActionInfo(
+      name: tr("plugin_doctor_handle"),
+      hotkey: WoxPlatformHotkeyUtil.primaryHotkey("enter"),
+      action: () {
+        openDoctorFromToolbar(const UuidV4().generate());
       },
     );
   }
@@ -619,6 +1566,23 @@ class WoxLauncherController extends GetxController {
       );
     }
 
+    if (!hasVisibleToolbarMsg && currentQuery.value.isEmpty && !doctorCheckInfo.value.allPassed) {
+      actions.add(
+        WoxResultAction.local(
+          id: localActionOpenDoctorId,
+          name: tr("plugin_doctor_handle"),
+          hotkey: WoxPlatformHotkeyUtil.primaryHotkey("enter"),
+          icon: doctorCheckInfo.value.icon,
+          // The primary-modifier Enter shortcut keeps Doctor handling available
+          // without stealing the normal Enter default action from the selected result.
+          handler: (traceId) {
+            openDoctorFromToolbar(traceId);
+            return true;
+          },
+        ),
+      );
+    }
+
     if (!isShowPreviewPanel.value) {
       return actions;
     }
@@ -635,7 +1599,7 @@ class WoxLauncherController extends GetxController {
       );
     }
 
-    if (Platform.isMacOS && currentPreview.value.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_WEBVIEW.code) {
+    if ((Platform.isMacOS || Platform.isWindows) && currentPreview.value.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_WEBVIEW.code) {
       actions.add(
         WoxResultAction.local(
           id: localActionWebViewRefreshId,
@@ -678,8 +1642,26 @@ class WoxLauncherController extends GetxController {
           name: tr("ui_action_webview_open_inspector"),
           hotkey: previewInspectorHotkey,
           emoji: "🧰",
+          handler: (traceId) {
+            // Log the native result because macOS WebKit can reject programmatic inspector opening without
+            // throwing through MethodChannel. The previous fire-and-forget call made that failure invisible.
+            unawaited(
+              WoxWebViewUtil.openInspector()
+                  .then((opened) => Logger.instance.debug(traceId, "open webview inspector result: $opened"))
+                  .catchError((err, stack) => Logger.instance.error(traceId, "open webview inspector failed: $err")),
+            );
+            return true;
+          },
+        ),
+      );
+      actions.add(
+        WoxResultAction.local(
+          id: localActionWebViewClearStateId,
+          name: tr("ui_action_webview_clear_state"),
+          hotkey: "",
+          emoji: "🧹",
           handler: (_) {
-            unawaited(WoxWebViewUtil.openInspector());
+            unawaited(WoxWebViewUtil.clearState());
             return true;
           },
         ),
@@ -799,7 +1781,8 @@ class WoxLauncherController extends GetxController {
       orderedActions = [...localActions, ...toolbarMsgActions];
     } else {
       final resultActions = buildResultActionsForCurrentState(activeResult, localActions: localActions, toolbarMsgActions: toolbarMsgActions);
-      orderedActions = hasVisibleToolbarMsg ? [...resultActions, ...localActions, ...toolbarMsgActions] : [...localActions, ...resultActions];
+      final showLocalActionsOnToolbarRight = hasVisibleToolbarMsg || (currentQuery.value.isEmpty && !doctorCheckInfo.value.allPassed);
+      orderedActions = showLocalActionsOnToolbarRight ? [...resultActions, ...localActions, ...toolbarMsgActions] : [...localActions, ...resultActions];
     }
 
     final toolbarActions = orderedActions.where((action) => action.hotkey.isNotEmpty).map((action) => ToolbarActionInfo(name: tr(action.name), hotkey: action.hotkey)).toList();
@@ -851,10 +1834,29 @@ class WoxLauncherController extends GetxController {
   }
 
   Future<void> toggleApp(String traceId, ShowAppParams params) async {
+    final screenshotController = Get.find<WoxScreenshotController>();
+    if (screenshotController.isSessionActive.value) {
+      final wasVisible = await windowManager.isVisible();
+      // Screenshot capture owns the shared Wox window. Running the normal launcher toggle while
+      // that session is active can hide the screenshot workspace without finishing the pending
+      // CaptureScreenshot request, leaving the UI invisible until the backend times out. Treat the
+      // hotkey as "cancel screenshot first" so the session-specific restore path can recover safely.
+      await screenshotController.cancelSession(traceId, reason: 'launcher_toggle_app');
+      if (!wasVisible) {
+        final isVisibleAfterCancel = await windowManager.isVisible();
+        if (!isVisibleAfterCancel) {
+          await showApp(traceId, params);
+        }
+      }
+      return;
+    }
+
     var isVisible = await windowManager.isVisible();
     if (isVisible) {
       if (isInSettingView.value) {
         exitSetting(traceId);
+      } else if (isInOnboardingView.value) {
+        hideApp(traceId);
       } else {
         hideApp(traceId);
       }
@@ -863,11 +1865,74 @@ class WoxLauncherController extends GetxController {
     }
   }
 
+  // Native Wayland compositors own top-level placement, so Wox should not send absolute window coordinates there.
+  // Detect this from the actual GTK/GDK backend instead of environment variables alone: a Wayland
+  // session often exposes DISPLAY for XWayland, and a forced X11 backend may still inherit
+  // WAYLAND_DISPLAY. Actual X11 backends keep the precise XRandR placement path enabled.
+  bool _isLinuxNativeWaylandBackend(Map<String, dynamic> backendInfo) {
+    final backendFields = [
+      backendInfo["backend"],
+      backendInfo["displayType"],
+      backendInfo["windowType"],
+      backendInfo["display"],
+    ].map((value) => value?.toString().toLowerCase() ?? "");
+    final isX11Value = backendInfo["isX11"];
+    final isX11 = isX11Value == true || isX11Value.toString().toLowerCase() == "true" || backendFields.any((value) => value.contains("x11"));
+    if (isX11) {
+      return false;
+    }
+
+    final waylandDisplay = backendInfo["waylandDisplayEnv"]?.toString() ?? "";
+    return waylandDisplay.isNotEmpty || backendFields.any((value) => value.contains("wayland"));
+  }
+
   Future<void> showApp(String traceId, ShowAppParams params) async {
+    hiddenCacheClearTimer?.cancel();
+
+    // Restore image cache capacity so images can be cached again while the
+    // launcher is visible. hideApp shrinks it to zero. Values match the
+    // desktop-tuned defaults set in main.dart (200 entries / 20 MB).
+    PaintingBinding.instance.imageCache.maximumSize = 200;
+    PaintingBinding.instance.imageCache.maximumSizeBytes = 20 * 1024 * 1024;
+
+    final screenshotController = Get.find<WoxScreenshotController>();
+    if (screenshotController.isSessionActive.value) {
+      // Screenshot completion/cancel restore decides whether the shared window should stay visible.
+      // Showing the launcher before that cleanup finishes mixes launcher focus/layout state into the
+      // screenshot editor and can strand the session. Cancel first, then only continue if the
+      // restore path intentionally kept the window hidden.
+      await screenshotController.cancelSession(traceId, reason: 'launcher_show_app');
+      final isVisibleAfterCancel = await windowManager.isVisible();
+      if (isVisibleAfterCancel) {
+        return;
+      }
+    }
+    if (isInOnboardingView.value) {
+      // Showing the launcher from a hotkey or the final onboarding action must
+      // leave the guide state first; otherwise build routing would keep the
+      // management page mounted over fresh query results.
+      isInOnboardingView.value = false;
+      await WoxApi.instance.onOnboarding(traceId, false);
+    }
+    if (isInSettingView.value) {
+      // Bug fix: the native window can become hidden while the settings route is
+      // still mounted, for example after a management-view blur or a platform
+      // hide outside hideApp(). A later launcher show must clear that stale route;
+      // otherwise the window reopens as settings instead of the query UI.
+      isSettingOpenedFromHidden = false;
+      isInSettingView.value = false;
+      final settingController = Get.find<WoxSettingController>();
+      settingController.clearSettingSearch();
+      settingController.settingFocusNode.unfocus();
+      settingController.settingSearchFocusNode.unfocus();
+      await WoxApi.instance.onSetting(traceId, false);
+    }
+
     // update some properties to latest for later use
     latestQueryHistories.assignAll(params.queryHistories);
     lastLaunchMode = params.launchMode;
     lastStartPage = params.startPage;
+    updateAttentionUnreadCount(traceId, params.attentionUnreadCount);
     if (currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code) {
       canArrowUpHistory = true;
       if (lastLaunchMode == WoxLaunchModeEnum.WOX_LAUNCH_MODE_CONTINUE.code) {
@@ -879,7 +1944,7 @@ class WoxLauncherController extends GetxController {
     }
 
     // Query preservation has two different sources and they solve different cases:
-    // 1. Explicit incoming query source: query hotkey, selection query, and tray query inject a
+    // 1. Explicit incoming query source: query hotkey, selection query, tray query, and explorer type-to-search inject a
     //    new query for this show action, so fresh mode must preserve that incoming query.
     // 2. Continue-mode fallback: when show source is default, reopening the launcher in continue
     //    mode should keep the existing query already stored in the controller.
@@ -898,7 +1963,8 @@ class WoxLauncherController extends GetxController {
     final shouldPreserveIncomingQuery =
         params.showSource == WoxShowSourceEnum.WOX_SHOW_SOURCE_QUERY_HOTKEY.code ||
         params.showSource == WoxShowSourceEnum.WOX_SHOW_SOURCE_SELECTION.code ||
-        params.showSource == WoxShowSourceEnum.WOX_SHOW_SOURCE_TRAY_QUERY.code;
+        params.showSource == WoxShowSourceEnum.WOX_SHOW_SOURCE_TRAY_QUERY.code ||
+        params.showSource == WoxShowSourceEnum.WOX_SHOW_SOURCE_EXPLORER.code;
     final shouldPreserveQueryOnShow =
         shouldPreserveIncomingQuery || (lastLaunchMode == WoxLaunchModeEnum.WOX_LAUNCH_MODE_CONTINUE.code && (hasCurrentInputQuery || hasCurrentSelectionQuery));
 
@@ -911,7 +1977,6 @@ class WoxLauncherController extends GetxController {
 
     // Handle start page when the current show action does not carry a query into the launcher.
     if (!shouldPreserveQueryOnShow) {
-      clearVisibleQueryHeightPreservation();
       pendingRestoredQueryId = null;
       pendingRestoredQueryWindowHeight = null;
       if (lastStartPage == WoxStartPageEnum.WOX_START_PAGE_MRU.code) {
@@ -930,21 +1995,63 @@ class WoxLauncherController extends GetxController {
     forceMaxResultCount = params.maxResultCount;
     forceHideOnBlur = params.hideOnBlur;
 
-    // Handle different position types
-    // on linux, we need to show first and then set position or center it
-    if (Platform.isLinux) {
-      await windowManager.show();
-    }
     final targetHeight = calculateInitialShowWindowHeight(shouldPreserveIncomingQuery);
     final targetWidth = forceWindowWidth != 0 ? forceWindowWidth : WoxSettingUtil.instance.currentSetting.appWidth.toDouble();
+    final targetSize = Size(targetWidth, targetHeight);
     final targetPosition = resolveShowAppPosition(params, targetWidth, targetHeight);
-    Logger.instance.debug(
-      traceId,
-      "show app bounds resolved: x=${targetPosition.dx}, y=${targetPosition.dy}, width=$targetWidth, height=$targetHeight, trayAnchorBottom=${params.trayAnchor?.bottom ?? -1}",
-    );
+    final initialShowResizeToken = resizeRequestToken;
+    Map<String, dynamic> linuxBackendInfo = <String, dynamic>{};
+    var skipAbsolutePosition = false;
+    var initialShowSizeApplied = false;
+    if (Platform.isLinux) {
+      Logger.instance.info(
+        traceId,
+        "linux-window-bounds dart stage=showApp-target position=${targetPosition.dx},${targetPosition.dy} size=${targetWidth}x$targetHeight source=${params.showSource} positionType=${params.position.type}",
+      );
+    }
 
-    // Apply position+size together before showing to avoid opening with stale width.
-    await windowManager.setBounds(targetPosition, Size(targetWidth, targetHeight));
+    // Linux native Wayland does not allow reliable absolute top-level placement.
+    // Show first so the compositor can choose the active monitor, then only apply the requested size.
+    // This intentionally trades exact centering for correct monitor switching. Exact centered
+    // placement on Wayland needs compositor support such as layer-shell, a GNOME Shell extension,
+    // or another compositor-specific protocol; a regular GTK client cannot do it portably.
+    if (Platform.isLinux) {
+      await windowManager.show();
+      linuxBackendInfo = await LinuxWindowManager.instance.getBackendInfo();
+      skipAbsolutePosition = _isLinuxNativeWaylandBackend(linuxBackendInfo);
+      Logger.instance.info(traceId, "linux-window-bounds dart stage=backend-info $linuxBackendInfo skipAbsolutePosition=$skipAbsolutePosition");
+    }
+
+    // Linux Wayland query results can arrive while showApp is still waiting for
+    // backend info. Keep that newer resize authoritative instead of applying
+    // the stale initial show height afterward.
+    final initialShowSizeSuperseded = Platform.isLinux && resizeRequestToken != initialShowResizeToken;
+    if (!initialShowSizeSuperseded) {
+      if (skipAbsolutePosition) {
+        await windowManager.setSize(targetSize);
+        initialShowSizeApplied = true;
+        final actualSize = await windowManager.getSize();
+        Logger.instance.info(
+          traceId,
+          "linux-window-bounds dart stage=skip-setBounds reason=native-wayland-compositor-placement positionType=${params.position.type} targetSize=${targetWidth}x$targetHeight actualSize=${actualSize.width}x${actualSize.height}",
+        );
+      } else {
+        // Apply position+size together before showing to avoid opening with stale width.
+        await windowManager.setBounds(targetPosition, targetSize);
+        initialShowSizeApplied = true;
+        if (Platform.isLinux) {
+          final actualPosition = await windowManager.getPosition();
+          final actualSize = await windowManager.getSize();
+          Logger.instance.info(
+            traceId,
+            "linux-window-bounds dart stage=after-setBounds target=${targetPosition.dx},${targetPosition.dy} ${targetWidth}x$targetHeight actual=${actualPosition.dx},${actualPosition.dy} ${actualSize.width}x${actualSize.height}",
+          );
+        }
+      }
+    }
+    if (initialShowSizeApplied || !Platform.isLinux) {
+      committedWindowHeight = targetHeight;
+    }
 
     // Set always-on-top BEFORE show() so the TOPMOST flag is already in place
     // when the window becomes visible, avoiding transient blur on Windows.
@@ -952,6 +2059,7 @@ class WoxLauncherController extends GetxController {
       await windowManager.setAlwaysOnTop(true);
     }
     await windowManager.show();
+    final visibleActivationCost = _captureDevLauncherVisibleActivationCost(params);
     await windowManager.focus();
 
     // Workaround for Windows DWM Acrylic bug:
@@ -969,7 +2077,8 @@ class WoxLauncherController extends GetxController {
       });
     }
 
-    focusQueryBox(selectAll: params.selectAll);
+    unawaited(_focusQueryBoxAfterLauncherShow(selectAll: params.selectAll));
+    unawaited(_showDevLauncherActivationWarningIfSlow(traceId, visibleActivationCost));
 
     if (params.isQueryFocus) {
       Logger.instance.debug(traceId, "need to auto focus to chat input on show app (query focus)");
@@ -981,6 +2090,7 @@ class WoxLauncherController extends GetxController {
     }
 
     WoxApi.instance.onShow(traceId);
+    unawaited(refreshGlance(traceId, "windowShown"));
   }
 
   void resetLayoutState(String traceId) {
@@ -1033,19 +2143,22 @@ class WoxLauncherController extends GetxController {
         WoxThemeUtil.instance.currentTheme.value.resultContainerPaddingBottom;
   }
 
-  PlainQuery cloneQuery(PlainQuery query, {String? queryId}) {
+  PlainQuery cloneQuery(PlainQuery query, {String? queryId, Map<String, String>? queryRefinements, Map<String, String>? contextData}) {
     return PlainQuery(
       queryId: queryId ?? query.queryId,
       queryType: query.queryType,
       queryText: query.queryText,
       querySelection: Selection(type: query.querySelection.type, text: query.querySelection.text, filePaths: List<String>.from(query.querySelection.filePaths)),
+      queryRefinements: cloneQueryRefinementPayload(queryRefinements ?? query.queryRefinements),
+      contextData: cloneQueryContextData(contextData ?? query.contextData),
     );
   }
 
   bool shouldRestoreQueryAfterHide(String showSource) {
     return showSource == WoxShowSourceEnum.WOX_SHOW_SOURCE_TRAY_QUERY.code ||
         showSource == WoxShowSourceEnum.WOX_SHOW_SOURCE_QUERY_HOTKEY.code ||
-        showSource == WoxShowSourceEnum.WOX_SHOW_SOURCE_SELECTION.code;
+        showSource == WoxShowSourceEnum.WOX_SHOW_SOURCE_SELECTION.code ||
+        showSource == WoxShowSourceEnum.WOX_SHOW_SOURCE_EXPLORER.code;
   }
 
   void preserveQueryBeforeTemporaryQuery(String traceId, String showSource) {
@@ -1087,6 +2200,23 @@ class WoxLauncherController extends GetxController {
   }
 
   Future<void> hideApp(String traceId) async {
+    final screenshotController = Get.find<WoxScreenshotController>();
+    if (screenshotController.isSessionActive.value) {
+      // Hiding the launcher while screenshot capture is active hides the capture workspace too
+      // because both flows share the same window. The previous hide path left the screenshot
+      // session running in the background, which made later toggles feel broken until the backend
+      // CaptureScreenshot call eventually timed out. Cancel the screenshot instead of hiding it.
+      await screenshotController.cancelSession(traceId, reason: 'launcher_hide_app');
+      return;
+    }
+
+    // Bug fix: hide invalidates pending visible-launcher focus retries. Without
+    // this guard, a retry scheduled by the previous show cycle can run after the
+    // next window transition and unexpectedly re-select query text.
+    _visibleLauncherFocusToken++;
+
+    await saveWindowPositionNow(traceId, "before-hide");
+
     // hide first to avoid the potential delay caused by some heavy operations in onHide callback
     // E.g. on tray query mode, hideActionPanel will call resize height, which may cause a noticeable
     // resize animation if the window is still visible while resizing, so we hide the window first and then do the rest of the operations
@@ -1096,12 +2226,20 @@ class WoxLauncherController extends GetxController {
     if (currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code || lastLaunchMode == WoxLaunchModeEnum.WOX_LAUNCH_MODE_FRESH.code) {
       currentQuery.value = PlainQuery.emptyInput();
       queryBoxTextFieldController.clear();
-      clearVisibleQueryHeightPreservation();
       await clearQueryResults(traceId);
     }
 
     hideActionPanel(traceId);
     hideFormActionPanel(traceId, reason: "hide app");
+    glanceRefreshTimer?.cancel();
+    glanceItems.clear();
+    PaintingBinding.instance.imageCache.clear();
+    PaintingBinding.instance.imageCache.clearLiveImages();
+    // Shrink image cache capacity to zero so no new decoded images can accumulate
+    // while the window is hidden. showApp restores the default capacity.
+    PaintingBinding.instance.imageCache.maximumSize = 0;
+    PaintingBinding.instance.imageCache.maximumSizeBytes = 0;
+    scheduleHiddenCacheClear(traceId);
 
     // Clean up quick select state
     if (isQuickSelectMode.value) {
@@ -1109,27 +2247,87 @@ class WoxLauncherController extends GetxController {
     }
     quickSelectTimer?.cancel();
     isQuickSelectKeyPressed = false;
+    final wasInSettingView = isInSettingView.value;
     isSettingOpenedFromHidden = false;
     isInSettingView.value = false;
+    if (wasInSettingView) {
+      // Bug fix: hideApp can close settings through blur/tray paths without
+      // calling exitSetting. Clear the per-session search state here too so the
+      // next open is not polluted by the hidden route.
+      final settingController = Get.find<WoxSettingController>();
+      settingController.clearSettingSearch();
+      settingController.settingFocusNode.unfocus();
+      settingController.settingSearchFocusNode.unfocus();
+    }
     await WoxApi.instance.onSetting(traceId, false);
+    isInOnboardingView.value = false;
+    await WoxApi.instance.onOnboarding(traceId, false);
     resetLayoutState(traceId);
+
+    // Release large reference lists that are lazily reloaded on next use.
+    // installedPlugins is kept because launcher trigger-keyword detection
+    // (hasLocalPluginTriggerMetadata) depends on it without an async reload.
+    Get.find<WoxSettingController>().clearStoreCache();
+    Get.find<WoxAIChatController>().clearReferenceDataCache();
+
+    // Release the wallpaper image provider so its decoded bitmap is not held
+    // while the window is hidden. The path cache is kept; only the image is
+    // released. Skipped while settings is open because the theme editor may
+    // still be rendering the wallpaper preview.
+    WoxSystemWallpaperUtil.instance.releaseImageCache();
+
+    // Close terminal preview stream controllers and clear per-query metric
+    // maps so hidden-state memory does not retain them between sessions.
+    for (final controller in terminalChunkControllers.values) {
+      controller.close();
+    }
+    for (final controller in terminalStateControllers.values) {
+      controller.close();
+    }
+    terminalChunkControllers.clear();
+    terminalStateControllers.clear();
+    queryStartTimeMap.clear();
+    queryOnReceivedElapsedByResultKey.clear();
 
     await WoxApi.instance.onHide(traceId);
     await restoreQueryAfterTemporaryQuery(traceId);
   }
 
-  void saveWindowPositionIfNeeded() {
+  Future<void> saveWindowPositionNow(String traceId, String reason) async {
+    final setting = WoxSettingUtil.instance.currentSetting;
+    if (setting.showPosition != WoxPositionTypeEnum.POSITION_TYPE_LAST_LOCATION.code) {
+      return;
+    }
+
+    try {
+      Map<String, dynamic> backendInfo = <String, dynamic>{};
+      if (Platform.isLinux) {
+        backendInfo = await LinuxWindowManager.instance.getBackendInfo();
+        if (_isLinuxNativeWaylandBackend(backendInfo)) {
+          // Native Wayland positions are compositor-owned and gtk_window_get_position may return
+          // synthetic or stale coordinates, so persisting them would poison last_location.
+          Logger.instance.info(traceId, "linux-window-bounds dart stage=skip-save-last-location reason=$reason backendInfo=$backendInfo note=native-wayland-position-unreliable");
+          return;
+        }
+      }
+
+      final position = await windowManager.getPosition();
+      if (Platform.isLinux) {
+        Logger.instance.info(traceId, "linux-window-bounds dart stage=save-last-location reason=$reason position=${position.dx},${position.dy} backendInfo=$backendInfo");
+      }
+      await WoxApi.instance.saveWindowPosition(traceId, position.dx.toInt(), position.dy.toInt());
+    } catch (e) {
+      Logger.instance.error(traceId, "Failed to save window position: $e");
+    }
+  }
+
+  void saveWindowPositionIfNeeded({String reason = "delayed"}) {
     final setting = WoxSettingUtil.instance.currentSetting;
     if (setting.showPosition == WoxPositionTypeEnum.POSITION_TYPE_LAST_LOCATION.code) {
-      // Run in async task with delay to ensure window position is fully updated
+      // Run in async task with delay to ensure window position is fully updated.
       Future.delayed(const Duration(milliseconds: 500), () async {
         final traceId = const UuidV4().generate();
-        try {
-          final position = await windowManager.getPosition();
-          await WoxApi.instance.saveWindowPosition(traceId, position.dx.toInt(), position.dy.toInt());
-        } catch (e) {
-          Logger.instance.error(traceId, "Failed to save window position: $e");
-        }
+        await saveWindowPositionNow(traceId, reason);
       });
     }
   }
@@ -1201,7 +2399,39 @@ class WoxLauncherController extends GetxController {
     }
   }
 
-  Future<void> focusQueryBox({bool selectAll = false}) async {
+  /// Focuses the active launcher keyboard target.
+  /// Hidden-query preview mode has no editable query box, so it needs a stable
+  /// launcher-level focus node to keep Escape and other global keys reachable.
+  Future<void> focusLauncherKeyboardTarget({bool selectAll = false, bool Function()? shouldSelectAll}) async {
+    if (isQueryBoxVisible.value) {
+      await focusQueryBox(selectAll: selectAll, shouldSelectAll: shouldSelectAll);
+      return;
+    }
+
+    final screenshotController = Get.find<WoxScreenshotController>();
+    if (screenshotController.isSessionActive.value) {
+      return;
+    }
+
+    final isVisible = await windowManager.isVisible();
+    if (!isVisible) {
+      return;
+    }
+
+    await windowManager.focus();
+    launcherFocusNode.requestFocus();
+  }
+
+  Future<void> focusQueryBox({bool selectAll = false, bool Function()? shouldSelectAll}) async {
+    final screenshotController = Get.find<WoxScreenshotController>();
+    if (screenshotController.isSessionActive.value) {
+      // Screenshot capture owns the shared window while the annotation workspace is visible. The
+      // previous launcher helpers still tried to refocus the hidden query box from generic cleanup
+      // paths, which pulled focus/IME behavior back into the launcher and made some screenshot
+      // sessions auto-cancel. Ignore launcher focus requests until the screenshot session ends.
+      return;
+    }
+
     // only focus when window is visible
     // otherwise it will gain focus but not visible, causing some issues on windows
     // e.g. active window snapshot is wrong
@@ -1210,11 +2440,14 @@ class WoxLauncherController extends GetxController {
       return;
     }
 
-    // request focus to action query box since it will lose focus when tap
-    queryBoxFocusNode.requestFocus();
     if (!isQueryBoxVisible.value) {
+      // Hidden query-box launches usually hand keyboard ownership to the preview surface.
+      // Do not let generic launcher focus recovery pull focus back to the offstage editor.
       return;
     }
+
+    // request focus to action query box since it will lose focus when tap
+    queryBoxFocusNode.requestFocus();
 
     // force to focus the editable text state to ensure keyboard input works
     // on macos sometimes the keyboard input does not work after requestFocus in certain scenarios
@@ -1223,9 +2456,62 @@ class WoxLauncherController extends GetxController {
     final editableTextState = queryBoxTextFieldKey.currentState?.editableTextKey.currentState;
     editableTextState?.requestKeyboard();
 
-    // by default requestFocus will select all text, if selectAll is false, then restore to the previously stored cursor position
-    if (selectAll) {
+    // SelectAll is explicit: launcher activation may select the old query for
+    // overwrite, while ordinary refocus should preserve the editor's current
+    // selection/cursor.
+    // Bug fix: some show-time focus requests finish after the user has already
+    // typed the first character. Evaluate the optional SelectAll guard at the
+    // last moment so those late completions can recover keyboard focus without
+    // replacing the user's in-progress query selection.
+    final canSelectAll = shouldSelectAll?.call() ?? true;
+    if (selectAll && canSelectAll) {
       queryBoxTextFieldController.selection = TextSelection(baseOffset: 0, extentOffset: queryBoxTextFieldController.text.length);
+    }
+  }
+
+  bool _shouldSelectAllForVisibleLauncherFocus({required bool selectAll, required int focusToken, required String textBeforeFocusSequence}) {
+    if (!selectAll) {
+      return false;
+    }
+    if (focusToken != _visibleLauncherFocusToken) {
+      return false;
+    }
+
+    // Bug fix: SelectAll belongs to the launcher activation snapshot. If text
+    // changed after the window became visible, the user has already started the
+    // next query, so a delayed focus retry should only recover keyboard focus
+    // and must not select text that the user just typed.
+    return queryBoxTextFieldController.text == textBeforeFocusSequence;
+  }
+
+  Future<void> _focusQueryBoxAfterLauncherShow({required bool selectAll}) async {
+    final focusToken = ++_visibleLauncherFocusToken;
+    final textBeforeFocusSequence = queryBoxTextFieldController.text;
+
+    await focusLauncherKeyboardTarget(
+      selectAll: selectAll,
+      shouldSelectAll: () => _shouldSelectAllForVisibleLauncherFocus(selectAll: selectAll, focusToken: focusToken, textBeforeFocusSequence: textBeforeFocusSequence),
+    );
+    if (focusToken != _visibleLauncherFocusToken) {
+      return;
+    }
+
+    // Bug fix: on Windows the native show/focus call can complete before the
+    // Flutter editable text is ready to accept keyboard focus. Retry once after
+    // the first visible frame, but gate SelectAll against the original text so
+    // early user input such as "qianlifeng" cannot lose its first character.
+    if (Platform.isWindows) {
+      unawaited(
+        Future.delayed(const Duration(milliseconds: 100), () async {
+          if (focusToken != _visibleLauncherFocusToken) {
+            return;
+          }
+          await focusLauncherKeyboardTarget(
+            selectAll: selectAll,
+            shouldSelectAll: () => _shouldSelectAllForVisibleLauncherFocus(selectAll: selectAll, focusToken: focusToken, textBeforeFocusSequence: textBeforeFocusSequence),
+          );
+        }),
+      );
     }
   }
 
@@ -1267,7 +2553,16 @@ class WoxLauncherController extends GetxController {
       return null;
     }
 
-    return controller.items[controller.activeIndex.value].value.data;
+    if (isShowingPendingResultPlaceholder) {
+      return null;
+    }
+
+    final activeResult = controller.items[controller.activeIndex.value].value.data;
+    if (activeResult.queryId != currentQuery.value.queryId) {
+      return null;
+    }
+
+    return activeResult;
   }
 
   /// given a hotkey, find the action in the result
@@ -1420,6 +2715,54 @@ class WoxLauncherController extends GetxController {
     );
   }
 
+  Future<bool> acceptQueryCompletionHint(String traceId) async {
+    final hint = queryCompletionHint.value;
+    if (hint == null || !isQueryCompletionHintValid(hint)) {
+      syncQueryBoxCompletionHint();
+      return false;
+    }
+
+    unawaited(recordQueryCompletionHintAccepted(traceId, hint));
+
+    final nextQueryRefinements =
+        shouldPreserveQueryRefinementsForTextChange(currentQuery.value, hint.completionText)
+            ? cloneQueryRefinementPayload(currentQuery.value.queryRefinements)
+            : <String, String>{};
+    final nextContextData =
+        shouldPreserveQueryContextDataForTextChange(currentQuery.value, hint.completionText) ? cloneQueryContextData(currentQuery.value.contextData) : <String, String>{};
+    await onQueryChanged(
+      traceId,
+      PlainQuery(
+        queryId: const UuidV4().generate(),
+        queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code,
+        queryText: hint.completionText,
+        querySelection: Selection.empty(),
+        queryRefinements: nextQueryRefinements,
+        contextData: nextContextData,
+      ),
+      "accept query completion hint",
+      moveCursorToEnd: true,
+    );
+    return true;
+  }
+
+  // Records accepted inline completions without blocking the query text update.
+  Future<void> recordQueryCompletionHintAccepted(String traceId, QueryCompletionHint hint) async {
+    try {
+      await WoxWebsocketMsgUtil.instance.sendMessage(
+        WoxWebsocketMsg(
+          requestId: const UuidV4().generate(),
+          traceId: traceId,
+          type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
+          method: WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY_COMPLETION_HINT_ACCEPTED.code,
+          data: {"inputPrefix": hint.inputPrefix, "completionText": hint.completionText, "source": hint.source},
+        ),
+      );
+    } catch (e) {
+      Logger.instance.debug(traceId, "Failed to record query completion hint acceptance: $e");
+    }
+  }
+
   void onQueryBoxTextChanged(String value) {
     final traceId = const UuidV4().generate();
     canArrowUpHistory = false;
@@ -1435,10 +2778,23 @@ class WoxLauncherController extends GetxController {
       // or show the preview panel
       resizeHeight(traceId: traceId, reason: "selection query text changed");
     } else {
+      final nextQueryRefinements =
+          shouldPreserveQueryRefinementsForTextChange(currentQuery.value, value) ? cloneQueryRefinementPayload(currentQuery.value.queryRefinements) : <String, String>{};
+      final nextContextData = shouldPreserveQueryContextDataForTextChange(currentQuery.value, value) ? cloneQueryContextData(currentQuery.value.contextData) : <String, String>{};
+      final skipCompletionHint = reuseQueryCompletionHintForText(value);
       onQueryChanged(
         traceId,
-        PlainQuery(queryId: const UuidV4().generate(), queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code, queryText: value, querySelection: Selection.empty()),
+        PlainQuery(
+          queryId: const UuidV4().generate(),
+          queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code,
+          queryText: value,
+          querySelection: Selection.empty(),
+          queryRefinements: nextQueryRefinements,
+          contextData: nextContextData,
+        ),
         "user input changed",
+        skipCompletionHint: skipCompletionHint,
+        preserveCompletionHint: skipCompletionHint,
       );
     }
   }
@@ -1448,7 +2804,11 @@ class WoxLauncherController extends GetxController {
     var queryId = const UuidV4().generate();
     currentQuery.value = PlainQuery.emptyInput();
     currentQuery.value.queryId = queryId;
-    updatePluginMetadataOnQueryChanged(traceId, currentQuery.value);
+    backendQueryContext = QueryContext.empty();
+    backendQueryContextQueryId = "";
+    clearQueryCompletionHint();
+    clearQueryRefinements(traceId);
+    prepareQueryLayoutOnQueryChanged(traceId, currentQuery.value);
 
     try {
       final response = await WoxWebsocketMsgUtil.instance.sendMessage(
@@ -1477,7 +2837,7 @@ class WoxLauncherController extends GetxController {
       for (var result in results) {
         result.queryId = queryId;
       }
-      onReceivedQueryResults(traceId, queryId, results);
+      await onReceivedQueryResults(traceId, queryId, results, isFinal: true);
       var endTime = DateTime.now().millisecondsSinceEpoch;
       Logger.instance.debug(traceId, "queryMRU via websocket took ${endTime - startTime} ms");
     } catch (e) {
@@ -1486,8 +2846,16 @@ class WoxLauncherController extends GetxController {
     }
   }
 
-  Future<void> onQueryChanged(String traceId, PlainQuery query, String changeReason, {bool moveCursorToEnd = false}) async {
+  Future<void> onQueryChanged(
+    String traceId,
+    PlainQuery query,
+    String changeReason, {
+    bool moveCursorToEnd = false,
+    bool skipCompletionHint = false,
+    bool preserveCompletionHint = false,
+  }) async {
     Logger.instance.debug(traceId, "query changed: ${query.queryText}, reason: $changeReason");
+    final shouldSkipCompletionHint = skipCompletionHint || !isQueryCompletionHintEnabled();
 
     if (query.queryId == "") {
       query.queryId = const UuidV4().generate();
@@ -1500,14 +2868,27 @@ class WoxLauncherController extends GetxController {
       isInSettingView.value = false;
       await WoxApi.instance.onSetting(traceId, false);
     }
+    if (isInOnboardingView.value) {
+      // Query-changing commands are launcher actions. Clear onboarding first so
+      // selection/query hotkeys do not keep the guide mounted above results.
+      isInOnboardingView.value = false;
+      await WoxApi.instance.onOnboarding(traceId, false);
+    }
 
     currentQuery.value = query;
-    isCurrentQueryReturned = false;
-    isCurrentQuerySettled = query.queryType != WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code || query.queryText.isEmpty;
-    isShowActionPanel.value = false;
-    if (query.queryType != WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code) {
-      clearVisibleQueryHeightPreservation();
+    queryOnReceivedElapsedByResultKey.clear();
+    backendQueryContext = QueryContext.empty();
+    backendQueryContextQueryId = "";
+    if (preserveCompletionHint) {
+      syncQueryBoxCompletionHint();
+    } else {
+      clearQueryCompletionHint();
     }
+    prepareQueryRefinementsOnQueryChanged(traceId, query);
+    isCurrentQueryReturned = false;
+    isShowActionPanel.value = false;
+    clearQueryResultsTimer.cancel();
+    resetPendingResultPlaceholder();
     if (query.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code) {
       canArrowUpHistory = false;
     }
@@ -1519,7 +2900,6 @@ class WoxLauncherController extends GetxController {
       moveQueryBoxCursorToEnd();
     }
     updateQueryBoxLineCount(traceId, query.queryText);
-    updateQueryBoxLineCount(traceId, query.queryText);
 
     // Cancel previous loading timer and reset loading state
     loadingTimer?.cancel();
@@ -1528,32 +2908,26 @@ class WoxLauncherController extends GetxController {
       isLoading.value = false;
     }
 
-    updatePluginMetadataOnQueryChanged(traceId, query).then((isPluginQuery) {
-      if (!isPluginQuery) return;
-      if (currentQuery.value.queryId != query.queryId) return;
-      // If query has returned (isFinal received or results arrived), don't start loading animation
-      if (isCurrentQueryReturned) return;
-
-      // Logic to prevent starting the timer if results have already arrived (Race Condition Fix)
-      // Check if we currently have results for this query
-      bool hasResults = activeResultViewController.items.isNotEmpty && activeResultViewController.items.first.value.data.queryId == query.queryId;
-
+    prepareQueryLayoutOnQueryChanged(traceId, query);
+    if (!query.isEmpty && currentQuery.value.queryId == query.queryId && !isCurrentQueryReturned) {
+      // Query layout now arrives through QueryResponse instead of a pre-query
+      // metadata HTTP request. Start the delayed loading timer for any backend
+      // query and cancel it when results or a final empty response arrive.
+      final hasResults = activeResultViewController.items.isNotEmpty && activeResultViewController.items.first.value.data.queryId == query.queryId;
       if (!hasResults) {
         loadingTimer = Timer(loadingDelay, () {
           // Double check before showing loading:
           // 1. Query is still the same
           // 2. We still don't have results (or results matching this query)
-          bool stillNoResults = activeResultViewController.items.isEmpty || activeResultViewController.items.first.value.data.queryId != query.queryId;
+          final stillNoResults = activeResultViewController.items.isEmpty || activeResultViewController.items.first.value.data.queryId != query.queryId;
           if (currentQuery.value.queryId == query.queryId && stillNoResults && !isCurrentQueryReturned) {
             isLoading.value = true;
           }
         });
       }
-    });
+    }
 
     if (query.isEmpty) {
-      isCurrentQuerySettled = true;
-      clearVisibleQueryHeightPreservation();
       try {
         await WoxWebsocketMsgUtil.instance.sendMessage(
           WoxWebsocketMsg(
@@ -1561,7 +2935,15 @@ class WoxLauncherController extends GetxController {
             traceId: traceId,
             type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
             method: WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY.code,
-            data: {"queryId": query.queryId, "queryType": query.queryType, "queryText": query.queryText, "querySelection": query.querySelection.toJson()},
+            data: {
+              "queryId": query.queryId,
+              "queryType": query.queryType,
+              "queryText": query.queryText,
+              "querySelection": query.querySelection.toJson(),
+              "queryRefinements": query.queryRefinements,
+              "contextData": query.contextData,
+              "skipCompletionHint": shouldSkipCompletionHint,
+            },
           ),
         );
       } catch (e) {
@@ -1572,46 +2954,31 @@ class WoxLauncherController extends GetxController {
       if (lastStartPage == WoxStartPageEnum.WOX_START_PAGE_MRU.code) {
         queryMRU(traceId);
       } else {
+        cancelPendingResultTransitions();
         clearQueryResults(traceId);
       }
       return;
     }
 
-    // delay clear results, otherwise windows height will shrink immediately,
-    // and then the query result is received which will expand the windows height. so it will causes window flicker
-    clearQueryResultsTimer.cancel();
-
     final currentQueryId = query.queryId;
     final isVisible = await windowManager.isVisible();
     // If app is hidden (e.g. tray query will trigger change query first then showapp), clear immediately so old results won't flash when shown.
     if (!isVisible) {
-      clearVisibleQueryHeightPreservation();
+      cancelPendingResultTransitions();
       await clearQueryResults(traceId);
       Logger.instance.debug(traceId, "clear query results immediately because window is hidden");
     } else {
-      final currentWindowHeight = calculateWindowHeight();
-      preserveVisibleQueryWindowHeight(traceId, currentQueryId, currentWindowHeight);
-
-      // delay clear results, otherwise windows height will shrink immediately,
-      // and then the query result is received which will expand the windows height. so it will causes window flicker
-      // Adaptive: adjust clearQueryResultDelay based on recent resize flicker
-      // Note: clearQueryResultDelay may have been set by onRefreshQuery for longer delay
-      if (changeReason != "refresh query") {
-        final adjust = windowFlickerDetector.adjustClearDelay(clearQueryResultDelay);
-        clearQueryResultDelay = adjust.newDelay;
-        Logger.instance.debug(
-          const UuidV4().generate(),
-          "Adaptive clear delay: $clearQueryResultDelay ms (flicker=${adjust.status.flicker}, reason=${adjust.status.reason}, events=${adjust.status.events})",
-        );
-      }
-
-      clearQueryResultsTimer = Timer(Duration(milliseconds: clearQueryResultDelay), () {
+      refreshToolbarActionsForCurrentState(traceId);
+      // Delay the stale-content clear slightly so queries that return almost
+      // immediately can replace the old snapshot without showing an empty gap.
+      // If the backend is still busy after this grace window, switch into the
+      // placeholder state above so old content disappears but the window height
+      // stays stable until the fresh results arrive.
+      clearQueryResultsTimer = Timer(staleVisibleResultsDuration, () {
+        if (isClosed) return;
         if (currentQuery.value.queryId != currentQueryId) return;
-
-        final hasResultsNow = activeResultViewController.items.isNotEmpty && activeResultViewController.items.first.value.data.queryId == currentQueryId;
-        if (hasResultsNow) return;
-
-        clearQueryResults(traceId);
+        if (isCurrentQueryReturned) return;
+        showPendingResultPlaceholder(traceId);
       });
     }
 
@@ -1624,7 +2991,15 @@ class WoxLauncherController extends GetxController {
         traceId: traceId,
         type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
         method: WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY.code,
-        data: {"queryId": query.queryId, "queryType": query.queryType, "queryText": query.queryText, "querySelection": query.querySelection.toJson()},
+        data: {
+          "queryId": query.queryId,
+          "queryType": query.queryType,
+          "queryText": query.queryText,
+          "querySelection": query.querySelection.toJson(),
+          "queryRefinements": query.queryRefinements,
+          "contextData": query.contextData,
+          "skipCompletionHint": shouldSkipCompletionHint,
+        },
       ),
     );
   }
@@ -1639,10 +3014,6 @@ class WoxLauncherController extends GetxController {
       Logger.instance.debug(traceId, "preserving selected index: $savedActiveIndex");
     }
 
-    // Set longer delay for clearing results to avoid flicker
-    // since refresh query usually returns similar results
-    clearQueryResultDelay = 400;
-
     // Get current query and create a new query with the same content but new ID
     final currentQueryValue = currentQuery.value;
     final refreshedQuery = PlainQuery(
@@ -1650,6 +3021,8 @@ class WoxLauncherController extends GetxController {
       queryType: currentQueryValue.queryType,
       queryText: currentQueryValue.queryText,
       querySelection: currentQueryValue.querySelection,
+      queryRefinements: cloneQueryRefinementPayload(currentQueryValue.queryRefinements),
+      contextData: cloneQueryContextData(currentQueryValue.contextData),
     );
 
     // Re-execute the query
@@ -1691,6 +3064,12 @@ class WoxLauncherController extends GetxController {
       final preserveSelectedIndex = msg.data['preserveSelectedIndex'] as bool? ?? false;
       onRefreshQuery(msg.traceId, preserveSelectedIndex);
       responseWoxWebsocketRequest(msg, true, null);
+    } else if (msg.method == "RefreshGlance") {
+      final data = msg.data as Map<String, dynamic>? ?? {};
+      final pluginId = data['PluginId'] as String? ?? "";
+      final ids = (data['Ids'] as List<dynamic>? ?? []).map((item) => item.toString()).toList();
+      await refreshGlance(msg.traceId, "manualRefresh", pluginId: pluginId, ids: ids);
+      responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "ChangeTheme") {
       final theme = WoxTheme.fromJson(msg.data);
       WoxThemeUtil.instance.changeTheme(theme);
@@ -1704,8 +3083,32 @@ class WoxLauncherController extends GetxController {
       final pickFilesParams = FileSelectorParams.fromJson(msg.data);
       final files = await FileSelector.pick(msg.traceId, pickFilesParams);
       responseWoxWebsocketRequest(msg, true, files);
+    } else if (msg.method == "CaptureScreenshot") {
+      final screenshotController = Get.find<WoxScreenshotController>();
+      final result = await screenshotController.startCaptureSession(msg.traceId, CaptureScreenshotRequest.fromJson(msg.data));
+      responseWoxWebsocketRequest(msg, true, result.toJson());
+    } else if (msg.method == "WriteClipboardImageFile") {
+      final data = (msg.data as Map).map<String, dynamic>((key, value) => MapEntry(key.toString(), value));
+      final filePath = data['filePath'] as String? ?? data['FilePath'] as String? ?? "";
+      if (filePath.isEmpty) {
+        responseWoxWebsocketRequest(msg, false, "filePath must be a non-empty string");
+      } else {
+        try {
+          await ScreenshotPlatformBridge.instance.writeClipboardImageFile(filePath: filePath);
+          responseWoxWebsocketRequest(msg, true, null);
+        } catch (e) {
+          Logger.instance.warn(msg.traceId, "WriteClipboardImageFile failed: $e");
+          responseWoxWebsocketRequest(msg, false, e.toString());
+        }
+      }
+    } else if (msg.method == "FocusSettingWindow") {
+      await focusSettingWindow();
+      responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "OpenSettingWindow") {
       openSetting(msg.traceId, SettingWindowContext.fromJson(msg.data));
+      responseWoxWebsocketRequest(msg, true, null);
+    } else if (msg.method == "OpenOnboardingWindow") {
+      openOnboarding(msg.traceId);
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "ShowToolbarMsg") {
       await showToolbarMsg(msg.traceId, ToolbarMsg.fromJson(msg.data));
@@ -1714,6 +3117,20 @@ class WoxLauncherController extends GetxController {
       final data = msg.data as Map<String, dynamic>? ?? {};
       final toolbarMsgId = data['toolbarMsgId'] as String? ?? "";
       await clearToolbarMsg(msg.traceId, toolbarMsgId);
+      responseWoxWebsocketRequest(msg, true, null);
+    } else if (msg.method == "DiagnosticStatusChanged") {
+      final data = msg.data as Map<String, dynamic>? ?? {};
+      updateDiagnosticStatus(msg.traceId, data["enabled"] == true);
+      responseWoxWebsocketRequest(msg, true, null);
+    } else if (msg.method == "AttentionUnreadCountChanged") {
+      final data = msg.data as Map<String, dynamic>? ?? {};
+      updateAttentionUnreadCount(msg.traceId, (data["unreadCount"] as num?)?.toInt() ?? 0);
+      responseWoxWebsocketRequest(msg, true, null);
+    } else if (msg.method == "RecordHotkey") {
+      final data = msg.data as Map<String, dynamic>? ?? {};
+      final hotkey = data["Hotkey"]?.toString() ?? "";
+      Logger.instance.info(msg.traceId, "Received RecordHotkey websocket request: hotkey=$hotkey");
+      WoxHotkeyRecordingBus.instance.emit(hotkey);
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "GetCurrentQuery") {
       responseWoxWebsocketRequest(msg, true, currentQuery.value.toJson());
@@ -1732,6 +3149,18 @@ class WoxLauncherController extends GetxController {
     } else if (msg.method == "ReloadSetting") {
       await Get.find<WoxSettingController>().reloadSetting(msg.traceId);
       responseWoxWebsocketRequest(msg, true, null);
+    } else if (msg.method == "ReloadSettingThemes") {
+      await Get.find<WoxSettingController>().refreshThemeList();
+      responseWoxWebsocketRequest(msg, true, null);
+    } else if (msg.method == "RefreshAccountStatus") {
+      unawaited(refreshAccountStatusAfterBillingDeeplink(msg.traceId));
+      responseWoxWebsocketRequest(msg, true, null);
+    } else if (msg.method == WoxMsgMethodEnum.WOX_MSG_METHOD_CLOUD_SYNC_PROGRESS_CHANGED.code) {
+      final data = msg.data as Map<String, dynamic>? ?? {};
+      if (Get.isRegistered<WoxSettingController>()) {
+        Get.find<WoxSettingController>().applyCloudSyncProgress(data);
+      }
+      responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "UpdateResult") {
       final success = updateResult(msg.traceId, UpdatableResult.fromJson(msg.data));
       responseWoxWebsocketRequest(msg, true, success);
@@ -1740,7 +3169,7 @@ class WoxLauncherController extends GetxController {
       final queryId = data['QueryId'] as String? ?? "";
       final resultsData = data['Results'] as List<dynamic>? ?? [];
       final results = resultsData.map((item) => WoxQueryResult.fromJson(item)).toList();
-      final success = pushResults(msg.traceId, queryId, results);
+      final success = await pushResults(msg.traceId, queryId, results);
       responseWoxWebsocketRequest(msg, true, success);
     }
   }
@@ -1756,69 +3185,142 @@ class WoxLauncherController extends GetxController {
       handleTerminalState(data);
       return;
     }
-
-    if (msg.method == WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY.code) {
-      // Log WebSocket latency (Wox -> UI) only for Query method
+    if (msg.method == WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY_COMPLETION_HINT.code) {
       if (msg.sendTimestamp > 0) {
-        final receiveTimestamp = DateTime.now().millisecondsSinceEpoch;
-        final latency = receiveTimestamp - msg.sendTimestamp;
+        final latency = DateTime.now().millisecondsSinceEpoch - msg.sendTimestamp;
         if (latency > 10) {
-          Logger.instance.info(msg.traceId, "📨 WebSocket latency (Wox→UI): ${latency}ms");
+          Logger.instance.info(msg.traceId, "📨 Query completion hint WebSocket latency (Wox→UI): ${latency}ms");
         }
       }
+
+      final data = msg.data as Map<String, dynamic>? ?? {};
+      final queryId = data['QueryId'] as String? ?? "";
+      final hintData = data['CompletionHint'];
+      final hint = hintData is Map ? QueryCompletionHint.fromJson(Map<String, dynamic>.from(hintData)) : null;
+      applyQueryCompletionHintForQueryId(msg.traceId, queryId, hint);
+      return;
+    }
+
+    if (msg.method == WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY.code) {
+      final receiveTimestampMs = DateTime.now().millisecondsSinceEpoch;
+      var websocketLatencyMs = -1;
+
+      // Log WebSocket latency (Wox -> UI) only for Query method
+      if (msg.sendTimestamp > 0) {
+        websocketLatencyMs = receiveTimestampMs - msg.sendTimestamp;
+        if (websocketLatencyMs > 10) {
+          Logger.instance.info(msg.traceId, "📨 WebSocket latency (Wox→UI): ${websocketLatencyMs}ms");
+        }
+      }
+
+      final applyTracker = WoxTimeTracker.start(msg.traceId, "ui_query_response_apply");
+      final responseApplyStartUs = applyTracker.checkpointUs();
 
       // Parse QueryResponse object
       final queryResponse = msg.data as Map<String, dynamic>;
       final resultsData = queryResponse['Results'] as List<dynamic>;
       final queryId = queryResponse['QueryId'] as String? ?? "";
       final isFinal = queryResponse['IsFinal'] as bool? ?? false;
+      final backendQueryStartTimestampMs = queryResponse['QueryStartTimestamp'] as int? ?? 0;
+      applyTracker.setRawString("queryId", queryId);
+      applyTracker.setBool("isFinal", isFinal);
+      applyTracker.setInt("backendQueryStartTimestampMs", backendQueryStartTimestampMs);
+      applyTracker.setInt("rawResultCount", resultsData.length);
+      final actionIconRefsStartUs = applyTracker.checkpointUs();
+      final actionIconRefs = _parseQueryActionIconRefs(queryResponse['ActionIconRefs']);
+      if (actionIconRefs.isNotEmpty) {
+        _resolveQueryActionIconRefs(resultsData, actionIconRefs);
+      }
+      applyTracker.setInt("actionIconRefCount", actionIconRefs.length);
+      applyTracker.setElapsedUs("actionIconRefsRestoreUs", actionIconRefsStartUs);
 
+      final receiveTracker = WoxTimeTracker.start(msg.traceId, "ui_query_response_receive");
+      receiveTracker.setRawString("queryId", queryId);
+      receiveTracker.setBool("isFinal", isFinal);
+      receiveTracker.setInt("rawResultCount", resultsData.length);
+      receiveTracker.setInt("actionIconRefCount", actionIconRefs.length);
+      if (websocketLatencyMs >= 0) {
+        receiveTracker.setInt("backendSendLatencyMs", websocketLatencyMs);
+      }
+      receiveTracker.log();
+      _scheduleQueryEventLoopTurnTiming(
+        traceId: msg.traceId,
+        stage: "ui_query_receive_next_turn",
+        queryId: queryId,
+        resultCount: resultsData.length,
+        isFinal: isFinal,
+        scheduledTimestampMs: receiveTimestampMs,
+      );
+
+      final contextData = queryResponse['Context'];
+      if (contextData is Map && contextData.isNotEmpty) {
+        // Core owns the final query classification after shortcut expansion
+        // and trigger-keyword parsing. Apply it before layout/results so Glance
+        // and plugin identity do not depend on Flutter's local guess.
+        final contextStartUs = applyTracker.checkpointUs();
+        applyQueryContextForQueryId(msg.traceId, queryId, QueryContext.fromJson(Map<String, dynamic>.from(contextData)));
+        applyTracker.setElapsedUs("contextApplyUs", contextStartUs);
+      }
+      final layoutData = queryResponse['Layout'];
+      if (layoutData is Map && layoutData.isNotEmpty) {
+        // QueryResponse layout replaces the old /query/metadata side request.
+        // Apply it before results so list/grid switches happen under the same
+        // query id and stale rows cannot be rendered with the new layout.
+        final layoutStartUs = applyTracker.checkpointUs();
+        applyQueryLayoutForQueryId(msg.traceId, queryId, QueryLayout.fromJson(Map<String, dynamic>.from(layoutData)));
+        applyTracker.setElapsedUs("layoutApplyUs", layoutStartUs);
+      }
+      if (queryResponse.containsKey('Refinements')) {
+        final refinementsStartUs = applyTracker.checkpointUs();
+        final refinementsData = queryResponse['Refinements'];
+        final refinements =
+            refinementsData is List
+                ? refinementsData.whereType<Map>().map((item) => WoxQueryRefinement.fromJson(Map<String, dynamic>.from(item))).toList()
+                : <WoxQueryRefinement>[];
+        applyQueryRefinementsForQueryId(msg.traceId, queryId, refinements);
+        applyTracker.setInt("refinementCount", refinements.length);
+        applyTracker.setElapsedUs("refinementsApplyUs", refinementsStartUs);
+      }
+
+      final resultParseStartUs = applyTracker.checkpointUs();
       var results = <WoxQueryResult>[];
       for (var item in resultsData) {
         results.add(WoxQueryResult.fromJson(item));
       }
+      applyTracker.setInt("resultCount", results.length);
+      applyTracker.setElapsedUs("resultParseUs", resultParseStartUs);
 
       Logger.instance.info(msg.traceId, "Received websocket message: ${msg.method}, results count: ${results.length}, isFinal: $isFinal");
 
       // Process results first
-      onReceivedQueryResults(msg.traceId, queryId, results, isFinal: isFinal);
+      final onReceivedStartUs = applyTracker.checkpointUs();
+      final didApplyResults = await onReceivedQueryResults(msg.traceId, queryId, results, isFinal: isFinal, backendQueryStartTimestampMs: backendQueryStartTimestampMs);
+      applyTracker.setElapsedUs("onReceivedUs", onReceivedStartUs);
+      applyTracker.setBool("resultApplied", didApplyResults);
+      if (!didApplyResults) {
+        applyTracker.setBool("skippedAfterResultApply", true);
+        applyTracker.setElapsedUs("totalUs", responseApplyStartUs);
+        applyTracker.log();
+        queryStartTimeMap.remove(msg.traceId);
+        return;
+      }
 
       // If this is the final final response, we must stop loading animation explicitly
       // This handles cases where results are empty but the query is finished
       // We explicitly check if this final response belongs to the current query
       if (isFinal && queryId == currentQuery.value.queryId) {
+        final finalLoadingStartUs = applyTracker.checkpointUs();
         loadingTimer?.cancel();
         if (isLoading.value) {
           isLoading.value = false;
         }
+        applyTracker.setElapsedUs("finalLoadingUs", finalLoadingStartUs);
       }
+      applyTracker.setElapsedUs("totalUs", responseApplyStartUs);
+      applyTracker.log();
 
-      // Record First Paint after results are rendered (use post-frame callback)
-      final queryStartTime = queryStartTimeMap[msg.traceId];
-      if (results.isNotEmpty && queryStartTime != null) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          // Check if this traceId still exists (not removed by Complete Paint)
-          if (queryStartTimeMap.containsKey(msg.traceId)) {
-            final firstPaintTime = DateTime.now().millisecondsSinceEpoch - queryStartTime;
-            Logger.instance.info(msg.traceId, "⚡ FIRST PAINT: ${firstPaintTime}ms (${results.length} results rendered)");
-            // Remove after recording First Paint to avoid recording it again
-            queryStartTimeMap.remove(msg.traceId);
-          }
-        });
-      }
-
-      // Record Complete Paint when backend signals final batch
-      if (isFinal && queryStartTime != null) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          // Check if this traceId still exists (might be removed by First Paint)
-          final startTime = queryStartTimeMap[msg.traceId];
-          if (startTime != null) {
-            final completePaintTime = DateTime.now().millisecondsSinceEpoch - startTime;
-            Logger.instance.info(msg.traceId, "🎨 COMPLETE PAINT: ${completePaintTime}ms (total ${activeResultViewController.items.length} results rendered)");
-            // Clean up to avoid memory leak
-            queryStartTimeMap.remove(msg.traceId);
-          }
-        });
+      if (isFinal) {
+        queryStartTimeMap.remove(msg.traceId);
       }
     }
   }
@@ -1969,11 +3471,62 @@ class WoxLauncherController extends GetxController {
   }
 
   bool supportsPreviewFullscreen(WoxPreview preview) {
-    return preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TERMINAL.code || preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code;
+    return preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TERMINAL.code ||
+        preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code ||
+        preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_QUERY_REQUIREMENT_SETTINGS.code ||
+        preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_THEME_EDIT.code ||
+        preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TRIGGER_KEYWORD_CONFLICT.code;
+  }
+
+  bool isCoreInteractiveSettingsPreview(WoxPreview preview) {
+    return preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_QUERY_REQUIREMENT_SETTINGS.code ||
+        preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_THEME_EDIT.code ||
+        preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TRIGGER_KEYWORD_CONFLICT.code;
+  }
+
+  bool isCoreReferencePreview(WoxPreview preview) {
+    return preview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_HOTKEY_OVERVIEW.code;
+  }
+
+  bool shouldShowPreviewPanelForPreview(WoxPreview preview) {
+    if (preview.previewData.isEmpty) {
+      return false;
+    }
+
+    // Core interactive settings previews are the exception to the normal grid rule:
+    // grid items cannot carry enough text or controls to resolve blocked queries,
+    // so these system previews must be visible even while successful results use grid.
+    if (isCoreInteractiveSettingsPreview(preview)) {
+      return true;
+    }
+
+    if (isCoreReferencePreview(preview)) {
+      return true;
+    }
+
+    return !isInGridMode();
+  }
+
+  void syncPreviewModeForActivePreview(String traceId) {
+    if (isShowPreviewPanel.value && isCoreInteractiveSettingsPreview(currentPreview.value)) {
+      // These preview types own the full query result area. The previous generic
+      // preview behavior kept grid/list results visible, which left too little
+      // space for actionable settings forms.
+      if (!isPreviewFullscreen.value) {
+        final restoreRatio = resultPreviewRatio.value > 0 ? resultPreviewRatio.value : getPreferredResultPreviewRatio();
+        lastResultPreviewRatioBeforePreviewFullscreen = restoreRatio;
+        resultPreviewRatio.value = 0;
+        isPreviewFullscreen.value = true;
+        Logger.instance.debug(traceId, "core interactive settings preview enter fullscreen");
+      }
+      return;
+    }
+
+    syncPreviewFullscreenState();
   }
 
   double getPreferredResultPreviewRatio() {
-    return preferredResultPreviewRatio > 0 ? preferredResultPreviewRatio : 0.5;
+    return preferredResultPreviewRatio > 0 ? preferredResultPreviewRatio : defaultResultPreviewRatio;
   }
 
   bool enterPreviewFullscreen(String traceId) {
@@ -2038,6 +3591,7 @@ class WoxLauncherController extends GetxController {
 
   Future<void> clearQueryResults(String traceId) async {
     Logger.instance.debug(traceId, "clear query results");
+    cancelPendingResultTransitions();
     resultListViewController.clearItems();
     resultGridViewController.clearItems();
     actionListViewController.clearItems();
@@ -2058,7 +3612,10 @@ class WoxLauncherController extends GetxController {
   /// of reading the actual items in the active result view controller. This is
   /// used by the initial-show path to compute height with 0 results when a new
   /// query is about to be issued and old results should be ignored.
-  double calculateWindowHeight({int? overrideItemCount}) {
+  ///
+  /// [overrideGridHeight] lets callers provide a grid height that was
+  /// estimated from incoming items before those items are committed.
+  double calculateWindowHeight({int? overrideItemCount, double? overrideGridHeight}) {
     final maxResultCount = getMaxResultCount();
     final maxHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(maxResultCount);
     final itemCount = overrideItemCount ?? activeResultViewController.items.length;
@@ -2066,7 +3623,7 @@ class WoxLauncherController extends GetxController {
     double resultHeight;
 
     if (isInGridMode()) {
-      resultHeight = resultGridViewController.calculateGridHeight();
+      resultHeight = overrideGridHeight ?? resultGridViewController.calculateGridHeight();
     } else {
       resultHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(itemCount);
     }
@@ -2084,7 +3641,7 @@ class WoxLauncherController extends GetxController {
     // Only add toolbar height when toolbar is actually shown in UI.
     // Use local hasItems instead of the isShowToolbar getter so that
     // overrideItemCount is respected.
-    final showToolbar = (hasItems || isShowDoctorCheckInfo || hasVisibleToolbarMsg) && !isToolbarHiddenForce.value;
+    final showToolbar = (hasItems || isShowDoctorCheckInfo || hasVisibleToolbarMsg || hasBugAwareToolbarIndicator) && !isToolbarHiddenForce.value;
     if (showToolbar) {
       resultHeight += WoxThemeUtil.instance.getToolbarHeight();
     }
@@ -2093,12 +3650,13 @@ class WoxLauncherController extends GetxController {
       resultHeight = math.max(resultHeight, WoxThemeUtil.instance.getResultListViewHeightByCount(1));
     }
 
-    if (!isQueryBoxVisible.value && !isFullscreenPreviewOnly()) {
+    if (!isQueryBoxVisible.value && !isPreviewOnlyLayout) {
       resultHeight += WoxThemeUtil.instance.currentTheme.value.appPaddingBottom.toDouble();
     }
 
     final queryBoxHeight = isQueryBoxVisible.value ? getQueryBoxTotalHeight() : 0.0;
-    var totalHeight = queryBoxHeight + resultHeight;
+    final refinementHeight = getQueryRefinementBarHeight();
+    var totalHeight = queryBoxHeight + refinementHeight + resultHeight;
 
     // On Windows with high DPI, add one pixel to avoid fractional cut-off.
     if (Platform.isWindows) {
@@ -2113,14 +3671,8 @@ class WoxLauncherController extends GetxController {
       totalHeight -= WoxThemeUtil.instance.currentTheme.value.appPaddingBottom;
     }
 
-    final shouldPreserveVisibleQueryHeight =
-        pendingVisibleQueryWindowHeight != null &&
-        pendingVisibleQueryWindowHeightQueryId == currentQuery.value.queryId &&
-        currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code &&
-        currentQuery.value.queryText.isNotEmpty &&
-        !isCurrentQuerySettled;
-    if (shouldPreserveVisibleQueryHeight) {
-      totalHeight = math.max(totalHeight, pendingVisibleQueryWindowHeight!);
+    if (isShowingPendingResultPlaceholder && pendingResultPlaceholderHeight != null) {
+      totalHeight = math.max(totalHeight, pendingResultPlaceholderHeight!);
     }
 
     return totalHeight;
@@ -2166,6 +3718,26 @@ class WoxLauncherController extends GetxController {
     return "${size.width}x${size.height}";
   }
 
+  Future<void> _waitForNextFlutterFrame({required String traceId, required String reason}) async {
+    // Bug fix: management-window transitions need a concrete Flutter frame
+    // boundary after native geometry changes. A scheduled frame plus timeout
+    // keeps the staging path deterministic without risking a stuck open if the
+    // hidden Windows window does not produce a frame promptly.
+    final completer = Completer<void>();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!completer.isCompleted) {
+        completer.complete();
+      }
+    });
+    SchedulerBinding.instance.scheduleFrame();
+    await completer.future.timeout(
+      const Duration(milliseconds: 60),
+      onTimeout: () {
+        Logger.instance.warn(traceId, "wait for next Flutter frame timed out: $reason");
+      },
+    );
+  }
+
   int logicalToPhysicalPixels(double logicalPixels) {
     return (logicalPixels * PlatformDispatcher.instance.views.first.devicePixelRatio).round();
   }
@@ -2175,15 +3747,31 @@ class WoxLauncherController extends GetxController {
         (logicalToPhysicalPixels(left.height) - logicalToPhysicalPixels(right.height)).abs() <= 1;
   }
 
-  Future<void> resizeHeight({required String traceId, String reason = "unspecified", bool forceDwmRecomposition = false}) async {
-    // Don't resize when in setting view, setting view has its own fixed size (1200x800)
-    if (isInSettingView.value) {
-      Logger.instance.debug(traceId, "resize skipped: reason=$reason, setting view is active");
+  /// Invalidates launcher-sized resize work before switching to a fixed management window.
+  void cancelLauncherResizeRequests(String traceId, String reason) {
+    resizeRequestToken++;
+    ongoingResizeTargetSize = null;
+    Logger.instance.debug(traceId, "resize cancelled: reason=$reason, management view transition");
+  }
+
+  Future<void> resizeHeight({required String traceId, String reason = "unspecified", bool forceDwmRecomposition = false, double? overrideTargetHeight}) async {
+    final tracker = WoxTimeTracker.start(traceId, "ui_resize_height");
+    final totalStartUs = tracker.checkpointUs();
+    tracker.setString("reason", reason);
+    tracker.setBool("forceDwmRecomposition", forceDwmRecomposition);
+    tracker.setBool("hasOverrideTargetHeight", overrideTargetHeight != null);
+
+    // Don't resize when in a management view; settings and onboarding both use
+    // the same fixed 1200x800 window instead of launcher content height.
+    if (isInSettingView.value || isInOnboardingView.value) {
+      Logger.instance.debug(traceId, "resize skipped: reason=$reason, management view is active");
+      tracker.setBool("skippedManagementView", true);
+      tracker.setElapsedUs("totalUs", totalStartUs);
+      tracker.log();
       return;
     }
 
-    final currentSize = await windowManager.getSize();
-    var totalHeight = calculateWindowHeight();
+    var totalHeight = overrideTargetHeight ?? calculateWindowHeight();
 
     // Force DWM to recompose Acrylic by adding a single pixel to bypass caching identical sizes
     if (forceDwmRecomposition && Platform.isWindows) {
@@ -2192,33 +3780,92 @@ class WoxLauncherController extends GetxController {
 
     double targetWidth = forceWindowWidth != 0 ? forceWindowWidth : WoxSettingUtil.instance.currentSetting.appWidth.toDouble();
     final targetSize = Size(targetWidth, totalHeight.toDouble());
-    final isSameSize = isWindowSizeEffectivelyEqual(currentSize, targetSize);
-    Logger.instance.debug(
-      traceId,
-      "resize requested: reason=$reason, before=${formatWindowSize(currentSize)}, target=${formatWindowSize(targetSize)}, sameSize=$isSameSize, forceDwmRecomposition=$forceDwmRecomposition",
-    );
 
-    if (isSameSize && !forceDwmRecomposition) {
-      Logger.instance.debug(traceId, "resize skipped: reason=$reason, before=${formatWindowSize(currentSize)}, target=${formatWindowSize(targetSize)}, sameSize=true");
+    // Linux Wayland resize can race with show/hide and result updates. In that
+    // path, Dart-side target tracking can be stale while the native window is
+    // still at the old height, so Linux always sends the target to the runner.
+    if (!Platform.isLinux && !forceDwmRecomposition && ongoingResizeTargetSize != null && isWindowSizeEffectivelyEqual(ongoingResizeTargetSize!, targetSize)) {
+      Logger.instance.debug(traceId, "resize skipped: reason=$reason, target=${formatWindowSize(targetSize)}, duplicateTargetInFlight=true");
+      tracker.setDouble("targetWidth", targetSize.width);
+      tracker.setDouble("targetHeight", targetSize.height);
+      tracker.setBool("skippedDuplicateTarget", true);
+      tracker.setBool("skippedBeforePlatformSize", true);
+      tracker.setElapsedUs("totalUs", totalStartUs);
+      tracker.log();
       return;
     }
 
-    if (!forceDwmRecomposition && ongoingResizeTargetSize != null && isWindowSizeEffectivelyEqual(ongoingResizeTargetSize!, targetSize)) {
-      Logger.instance.debug(
-        traceId,
-        "resize skipped: reason=$reason, before=${formatWindowSize(currentSize)}, target=${formatWindowSize(targetSize)}, duplicateTargetInFlight=true",
-      );
-      return;
-    }
-
+    // Claim the resize request before the first native await so slower older
+    // requests cannot become "latest" after a newer shrink/expand request.
     final currentResizeToken = ++resizeRequestToken;
     ongoingResizeTargetSize = targetSize;
 
     try {
+      bool cancelResizeIfNeeded(String phase, {bool beforeRetry = false}) {
+        final superseded = resizeRequestToken != currentResizeToken;
+        final managementViewActive = isInSettingView.value || isInOnboardingView.value;
+        if (!superseded && !managementViewActive) {
+          return false;
+        }
+
+        Logger.instance.debug(
+          traceId,
+          "resize skipped: reason=$reason, target=${formatWindowSize(targetSize)}, phase=$phase, superseded=$superseded, managementViewActive=$managementViewActive",
+        );
+        tracker.setDouble("targetWidth", targetSize.width);
+        tracker.setDouble("targetHeight", targetSize.height);
+        tracker.setBool("skippedSuperseded", superseded);
+        tracker.setBool("skippedManagementView", managementViewActive);
+        if (beforeRetry) {
+          tracker.setBool("skippedBeforePlatformRetry", true);
+        } else {
+          tracker.setBool("skippedBeforePlatformSet", true);
+        }
+        tracker.setElapsedUs("totalUs", totalStartUs);
+        tracker.log();
+        return true;
+      }
+
+      final getCurrentSizeStartUs = tracker.checkpointUs();
+      final currentSize = await windowManager.getSize();
+      tracker.setElapsedUs("getCurrentSizeUs", getCurrentSizeStartUs);
+      if (cancelResizeIfNeeded("after get current size")) {
+        return;
+      }
+
+      final isSameSize = isWindowSizeEffectivelyEqual(currentSize, targetSize);
+      tracker.setDouble("beforeWidth", currentSize.width);
+      tracker.setDouble("beforeHeight", currentSize.height);
+      tracker.setDouble("targetWidth", targetSize.width);
+      tracker.setDouble("targetHeight", targetSize.height);
+      tracker.setBool("sameSize", isSameSize);
+      Logger.instance.debug(
+        traceId,
+        "resize requested: reason=$reason, before=${formatWindowSize(currentSize)}, target=${formatWindowSize(targetSize)}, sameSize=$isSameSize, forceDwmRecomposition=$forceDwmRecomposition",
+      );
+
+      // On Linux Wayland, getSize can report the requested/default size before
+      // the mapped allocation has actually reached that size. Let the native
+      // runner apply the request; it filters stale resize sequences.
+      if (!Platform.isLinux && isSameSize && !forceDwmRecomposition) {
+        committedWindowHeight = targetSize.height;
+        Logger.instance.debug(traceId, "resize skipped: reason=$reason, before=${formatWindowSize(currentSize)}, target=${formatWindowSize(targetSize)}, sameSize=true");
+        tracker.setBool("skippedSameSize", true);
+        tracker.setElapsedUs("totalUs", totalStartUs);
+        tracker.log();
+        return;
+      }
+
       if (isQueryBoxAtBottom.value) {
         // When the query box is anchored to the bottom, grow the window upward.
         // Use getPosition + getSize to compute the current bottom edge, then adjust top to grow upward.
+        final getPositionStartUs = tracker.checkpointUs();
         final pos = await windowManager.getPosition();
+        tracker.setElapsedUs("getPositionUs", getPositionStartUs);
+        if (cancelResizeIfNeeded("after get position")) {
+          return;
+        }
+
         double currentBottom = pos.dy + currentSize.height;
 
         if (currentBottom <= 0) {
@@ -2226,25 +3873,80 @@ class WoxLauncherController extends GetxController {
         } else {
           double newTop = currentBottom - totalHeight;
           // Apply position and size together to avoid intermediate-frame flicker.
+          final setBoundsStartUs = tracker.checkpointUs();
           await windowManager.setBounds(Offset(pos.dx, newTop), targetSize);
-          final resizedSize = await windowManager.getSize();
+          tracker.setElapsedUs("setBoundsUs", setBoundsStartUs);
+          final getResizedSizeStartUs = tracker.checkpointUs();
+          var resizedSize = await windowManager.getSize();
+          tracker.setElapsedUs("getResizedSizeUs", getResizedSizeStartUs);
+          if (!isWindowSizeEffectivelyEqual(resizedSize, targetSize)) {
+            // Native resize can report success before the top-level HWND reaches the requested size.
+            // Reapplying once keeps result-driven launcher resizing deterministic without blocking the normal path.
+            Logger.instance.warn(
+              traceId,
+              "resize readback mismatch: reason=$reason, target=${formatWindowSize(targetSize)}, after=${formatWindowSize(resizedSize)}, retry=setBounds",
+            );
+            final retrySetBoundsStartUs = tracker.checkpointUs();
+            await Future.delayed(const Duration(milliseconds: 16));
+            if (cancelResizeIfNeeded("before retry setBounds", beforeRetry: true)) {
+              return;
+            }
+            await windowManager.setBounds(Offset(pos.dx, newTop), targetSize);
+            tracker.setElapsedUs("retrySetBoundsUs", retrySetBoundsStartUs);
+            final getRetriedSizeStartUs = tracker.checkpointUs();
+            resizedSize = await windowManager.getSize();
+            tracker.setElapsedUs("getRetriedSizeUs", getRetriedSizeStartUs);
+          }
           Logger.instance.debug(
             traceId,
             "resize applied: reason=$reason, before=${formatWindowSize(currentSize)}, target=${formatWindowSize(targetSize)}, after=${formatWindowSize(resizedSize)}, mode=setBounds, growUpward=true",
           );
 
+          committedWindowHeight = targetSize.height;
           windowFlickerDetector.recordResize(totalHeight.toInt());
+          tracker.setRawString("mode", "setBounds");
+          tracker.setBool("growUpward", true);
+          tracker.setDouble("afterWidth", resizedSize.width);
+          tracker.setDouble("afterHeight", resizedSize.height);
+          tracker.setElapsedUs("totalUs", totalStartUs);
+          tracker.log();
           return;
         }
       }
 
+      final setSizeStartUs = tracker.checkpointUs();
       await windowManager.setSize(targetSize);
-      final resizedSize = await windowManager.getSize();
+      tracker.setElapsedUs("setSizeUs", setSizeStartUs);
+      final getResizedSizeStartUs = tracker.checkpointUs();
+      var resizedSize = await windowManager.getSize();
+      tracker.setElapsedUs("getResizedSizeUs", getResizedSizeStartUs);
+      if (!isWindowSizeEffectivelyEqual(resizedSize, targetSize)) {
+        // Native resize can report success before the top-level HWND reaches the requested size.
+        // Reapplying once keeps result-driven launcher resizing deterministic without blocking the normal path.
+        Logger.instance.warn(traceId, "resize readback mismatch: reason=$reason, target=${formatWindowSize(targetSize)}, after=${formatWindowSize(resizedSize)}, retry=setSize");
+        final retrySetSizeStartUs = tracker.checkpointUs();
+        await Future.delayed(const Duration(milliseconds: 16));
+        if (cancelResizeIfNeeded("before retry setSize", beforeRetry: true)) {
+          return;
+        }
+        await windowManager.setSize(targetSize);
+        tracker.setElapsedUs("retrySetSizeUs", retrySetSizeStartUs);
+        final getRetriedSizeStartUs = tracker.checkpointUs();
+        resizedSize = await windowManager.getSize();
+        tracker.setElapsedUs("getRetriedSizeUs", getRetriedSizeStartUs);
+      }
       Logger.instance.debug(
         traceId,
         "resize applied: reason=$reason, before=${formatWindowSize(currentSize)}, target=${formatWindowSize(targetSize)}, after=${formatWindowSize(resizedSize)}, mode=setSize, growUpward=false",
       );
+      committedWindowHeight = targetSize.height;
       windowFlickerDetector.recordResize(totalHeight.toInt());
+      tracker.setRawString("mode", "setSize");
+      tracker.setBool("growUpward", false);
+      tracker.setDouble("afterWidth", resizedSize.width);
+      tracker.setDouble("afterHeight", resizedSize.height);
+      tracker.setElapsedUs("totalUs", totalStartUs);
+      tracker.log();
     } finally {
       if (resizeRequestToken == currentResizeToken) {
         ongoingResizeTargetSize = null;
@@ -2252,9 +3954,39 @@ class WoxLauncherController extends GetxController {
     }
   }
 
-  void updateQueryBoxLineCount(String traceId, String text) {
+  void updateQueryBoxTextWrapWidth(String traceId, double width) {
+    if ((queryBoxTextWrapWidth - width).abs() < 1) {
+      return;
+    }
+
+    queryBoxTextWrapWidth = width;
+    updateQueryBoxLineCount(traceId, queryBoxTextFieldController.text);
+  }
+
+  int calculateQueryBoxLineCount(String text) {
     final normalizedText = text.replaceAll('\r\n', '\n');
-    final rawLineCount = normalizedText.isEmpty ? 1 : normalizedText.split('\n').length;
+    if (queryBoxTextWrapWidth <= 0) {
+      return normalizedText.isEmpty ? 1 : normalizedText.split('\n').length.clamp(1, QUERY_BOX_MAX_LINES).toInt();
+    }
+
+    final metrics = WoxInterfaceSizeUtil.instance.current;
+    final painter = TextPainter(
+      text: TextSpan(text: normalizedText.isEmpty ? ' ' : normalizedText, style: TextStyle(fontSize: metrics.queryBoxFontSize)),
+      textDirection: TextDirection.ltr,
+      textScaler: TextScaler.noScaling,
+    )..layout(minWidth: 0, maxWidth: queryBoxTextWrapWidth);
+
+    // Query text can wrap visually even when it has no explicit newline. The previous explicit-newline
+    // count kept the window one line tall, so wrapped content and the caret could move outside the
+    // visible input area. Measuring the actual layout preserves pasted multi-line text and lets long
+    // single-line queries expand up to the existing query box limit.
+    final lineCount = painter.computeLineMetrics().length.clamp(1, QUERY_BOX_MAX_LINES).toInt();
+    painter.dispose();
+    return lineCount;
+  }
+
+  void updateQueryBoxLineCount(String traceId, String text) {
+    final rawLineCount = calculateQueryBoxLineCount(text);
     final clampedLineCount = rawLineCount.clamp(1, QUERY_BOX_MAX_LINES);
     if (queryBoxLineCount.value == clampedLineCount) {
       return;
@@ -2265,17 +3997,32 @@ class WoxLauncherController extends GetxController {
 
   double getQueryBoxInputHeight() {
     final extraLines = queryBoxLineCount.value - 1;
-    return QUERY_BOX_BASE_HEIGHT + (QUERY_BOX_LINE_HEIGHT * extraLines);
+    final metrics = WoxInterfaceSizeUtil.instance.current;
+    // Density changes the query-box content height, so multi-line expansion must
+    // derive from the current metrics instead of the old normal-only constant.
+    return metrics.queryBoxBaseHeight + (metrics.queryBoxLineHeight * extraLines);
   }
 
   double getQueryBoxTotalHeight() {
     final extraLines = queryBoxLineCount.value - 1;
-    return WoxThemeUtil.instance.getQueryBoxHeight() + (QUERY_BOX_LINE_HEIGHT * extraLines);
+    return WoxThemeUtil.instance.getQueryBoxHeight() + (WoxInterfaceSizeUtil.instance.current.queryBoxLineHeight * extraLines);
   }
 
   void clearHoveredResult() {
     resultListViewController.clearHoveredResult();
     resultGridViewController.clearHoveredResult();
+  }
+
+  void updateLazyLoadedResultIcon(String traceId, WoxListItem<WoxQueryResult> item, WoxImage icon) {
+    if (icon.imageData.isEmpty) {
+      return;
+    }
+
+    // Lazy result icons are rendered through a core-owned token first, then
+    // replaced in the result model after Flutter receives the resized cache
+    // image. Updating the model avoids repeated token requests when a list/grid
+    // child is disposed and rebuilt during scrolling.
+    updateResult(traceId, UpdatableResult(id: item.id, icon: icon));
   }
 
   bool updateResult(String traceId, UpdatableResult updatableResult) {
@@ -2321,6 +4068,11 @@ class WoxLauncherController extends GetxController {
         needUpdate = true;
       }
 
+      if (updatableResult.hasDragDataUpdate) {
+        updatedData.dragData = updatableResult.dragData?.isFiles == true ? updatableResult.dragData : null;
+        needUpdate = true;
+      }
+
       if (needUpdate) {
         // Force create a new WoxListItem with updated data to trigger reactive update
         updatedResult = updatedResult.copyWith(data: updatedData);
@@ -2332,9 +4084,11 @@ class WoxLauncherController extends GetxController {
           if (updatableResult.preview != null) {
             final oldShowPreview = isShowPreviewPanel.value;
             currentPreview.value = updatableResult.preview!;
-            // Grid layout doesn't support preview panel
-            isShowPreviewPanel.value = !isInGridMode() && currentPreview.value.previewData != "";
-            syncPreviewFullscreenState();
+            // Query requirement settings override the normal grid-preview
+            // restriction so users can fix missing settings without leaving the
+            // current query.
+            isShowPreviewPanel.value = shouldShowPreviewPanelForPreview(currentPreview.value);
+            syncPreviewModeForActivePreview(traceId);
 
             // If preview panel visibility changed, resize window height
             if (oldShowPreview != isShowPreviewPanel.value) {
@@ -2357,7 +4111,7 @@ class WoxLauncherController extends GetxController {
     }
   }
 
-  bool pushResults(String traceId, String queryId, List<WoxQueryResult> results) {
+  Future<bool> pushResults(String traceId, String queryId, List<WoxQueryResult> results) async {
     if (queryId.isEmpty) {
       Logger.instance.error(traceId, "push results ignored: query id is empty");
       return false;
@@ -2388,15 +4142,20 @@ class WoxLauncherController extends GetxController {
       }
     }
 
-    onReceivedQueryResults(traceId, queryId, results);
+    await onReceivedQueryResults(traceId, queryId, results, isFinal: false);
     return true;
   }
 
   /// Process doctor check results and update the doctor check info
   DoctorCheckInfo processDoctorCheckResults(List<DoctorCheckResult> results) {
-    // Check if all tests passed
+    // Ignored checks are skipped in the toolbar but remain visible in the
+    // results list so the doctor query can still show them with an Unignore
+    // action.
+    final activeResults = results.where((r) => !r.ignored).toList();
+
+    // Check if all non-ignored tests passed
     bool allPassed = true;
-    for (var result in results) {
+    for (var result in activeResults) {
       if (!result.passed) {
         allPassed = false;
         break;
@@ -2408,7 +4167,7 @@ class WoxLauncherController extends GetxController {
     WoxImage icon = WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_BASE64.code, imageData: QUERY_ICON_DOCTOR_WARNING);
     String message = "";
 
-    for (var result in results) {
+    for (var result in activeResults) {
       if (!result.passed) {
         message = result.description;
         if (result.isVersionIssue) {
@@ -2426,13 +4185,13 @@ class WoxLauncherController extends GetxController {
 
   void doctorCheck() async {
     final traceId = const UuidV4().generate();
-    final wasToolbarVisible = isShowToolbar && !isToolbarHiddenForce.value;
+    final wasToolbarVisible = isToolbarVisible;
     var results = await WoxApi.instance.doctorCheck(traceId);
     final checkInfo = processDoctorCheckResults(results);
     doctorCheckInfo.value = checkInfo;
     updateDoctorToolbarIfNeeded(traceId);
-    final isToolbarVisible = isShowToolbar && !isToolbarHiddenForce.value;
-    if (wasToolbarVisible != isToolbarVisible) {
+    final toolbarVisible = isToolbarVisible;
+    if (wasToolbarVisible != toolbarVisible) {
       await resizeHeight(traceId: traceId, reason: "doctor check toolbar visibility changed");
     }
     Logger.instance.debug(traceId, "doctor check result: ${checkInfo.allPassed}, details: ${checkInfo.results.length} items");
@@ -2440,8 +4199,11 @@ class WoxLauncherController extends GetxController {
 
   @override
   void dispose() {
-    stopDoctorCheckTimer();
-    visibleQueryHeightPreservationTimer.cancel();
+    glanceRefreshTimer?.cancel();
+    hiddenCacheClearTimer?.cancel();
+    cancelPendingResultTransitions();
+    loadingTimer?.cancel();
+    launcherFocusNode.dispose();
     queryBoxFocusNode.dispose();
     queryBoxTextFieldController.dispose();
     actionListViewController.dispose();
@@ -2460,25 +4222,45 @@ class WoxLauncherController extends GetxController {
 
   Future<void> openSetting(String traceId, SettingWindowContext context) async {
     final settingController = Get.find<WoxSettingController>();
+    var wasWindowVisible = false;
+    try {
+      wasWindowVisible = await windowManager.isVisible();
+    } catch (_) {}
 
     // Save current position before switching (used if we return to launcher)
     try {
       positionBeforeOpenSetting = await windowManager.getPosition();
     } catch (_) {}
 
-    // Mark whether settings opened while window is hidden (e.g., from tray)
-    var isVisible = await windowManager.isVisible();
-    isSettingOpenedFromHidden = !isVisible;
-    isInSettingView.value = true;
-    await WoxApi.instance.onSetting(traceId, true);
-
-    // Preload theme/settings for settings view
-    await WoxThemeUtil.instance.loadTheme(traceId);
-    await settingController.reloadSetting(traceId);
+    // Bug fix: settings exit behavior follows the opener source instead of
+    // current visibility. Launcher-origin opens can temporarily lose native
+    // visibility, while tray-origin opens must still close directly back to
+    // hidden state.
+    isSettingOpenedFromHidden = context.source == SettingWindowContext.sourceTray;
+    // Bug fix: settings search is a per-visit affordance. Clearing it at entry
+    // protects against stale text if a previous settings route was hidden by a
+    // platform path that did not go through the normal back button flow.
+    settingController.clearSettingSearch();
     settingController.activeNavPath.value = 'general';
+    cancelLauncherResizeRequests(traceId, "enter setting view");
+    isInSettingView.value = true;
+    isInOnboardingView.value = false;
 
-    // Load settings-view data on demand instead of during app startup.
-    settingController.preloadSettingViewData(traceId, forceRefresh: true);
+    final stageWindowsSettingOpen = Platform.isWindows && wasWindowVisible;
+    await WoxApi.instance.onSetting(traceId, true);
+    await WoxApi.instance.onOnboarding(traceId, false);
+
+    // Bug fix: keep the route switch responsive by drawing settings from the
+    // cached theme/settings first. The old awaited refresh made Windows stay
+    // hidden while HTTP reloads ran; refreshing in the background keeps data
+    // fresh without delaying the first settings frame.
+    unawaited(() async {
+      try {
+        await Future.wait([WoxThemeUtil.instance.loadTheme(traceId), settingController.reloadSetting(traceId)]);
+      } catch (e) {
+        Logger.instance.error(traceId, "Failed to refresh settings window data in background: $e");
+      }
+    }());
 
     if (context.path == "/plugin/setting") {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -2491,8 +4273,13 @@ class WoxLauncherController extends GetxController {
     if (context.path == "/data") {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         await Future.delayed(const Duration(milliseconds: 100));
-        await settingController.switchToDataView(traceId);
+        await settingController.switchToBackupView(traceId);
       });
+    }
+    if (context.path == "/about") {
+      // The onboarding entry lives on About, so tests and future deep links need
+      // the same openSetting path support that plugin/data pages already have.
+      settingController.activeNavPath.value = 'about';
     }
     if (context.path == "/general" && context.param.trim().isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -2500,21 +4287,50 @@ class WoxLauncherController extends GetxController {
       });
     }
 
-    await windowManager.setSize(const Size(1200, 800));
+    const settingWindowPreferredSize = Size(1200, 800);
+    const settingWindowMaxWorkAreaFraction = 0.8;
+    final settingWindowSize =
+        Platform.isWindows
+            ? await WindowsWindowManager.instance.constrainSizeToCursorDisplayWorkArea(settingWindowPreferredSize, maxWorkAreaFraction: settingWindowMaxWorkAreaFraction)
+            : settingWindowPreferredSize;
+    if (stageWindowsSettingOpen) {
+      // Bug fix: Windows paints the native acrylic/Mica background as soon as
+      // the root HWND grows. Hide only the final geometry staging window so the
+      // user sees an immediate settings route switch, then the final 1200x800
+      // settings frame, without watching the backdrop expand first.
+      await windowManager.hide();
+    }
+    await windowManager.setSize(settingWindowSize);
     if (Platform.isLinux) {
       // On Linux we need to show first before positioning works reliably
       await windowManager.show();
-      await windowManager.center(1200, 800);
+      await windowManager.center(settingWindowSize.width, settingWindowSize.height);
     } else {
-      await windowManager.center(1200, 800);
+      await windowManager.center(settingWindowSize.width, settingWindowSize.height);
+      if (Platform.isWindows) {
+        // Bug fix: setSize/center update the native HWND immediately, but the
+        // Flutter surface may still contain the previous launcher-sized frame.
+        // Waiting for one scheduled frame makes the first visible settings
+        // frame match the final native window size instead of exposing the
+        // enlarged Windows backdrop behind stale Flutter pixels.
+        await _waitForNextFlutterFrame(traceId: traceId, reason: "settings window open");
+      }
       await windowManager.show();
     }
     await windowManager.focus();
     await windowManager.setAlwaysOnTop(false);
 
+    // Load heavier settings-page data after the window is visible. These lists
+    // (plugins, fonts, backups, usage) are not required for the first frame and
+    // should not lengthen the short Windows hide-and-resize staging path.
+    settingController.preloadSettingViewData(traceId, forceRefresh: true);
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await Future.delayed(const Duration(milliseconds: 50));
-      settingController.settingFocusNode.requestFocus();
+      // Feature: the search box is the primary settings entry point, so new
+      // settings sessions put keyboard focus there instead of the passive page
+      // focus node.
+      settingController.settingSearchFocusNode.requestFocus();
     });
 
     // On Windows, ensure focus is properly set after window is shown
@@ -2522,14 +4338,45 @@ class WoxLauncherController extends GetxController {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         await Future.delayed(const Duration(milliseconds: 100));
         await windowManager.focus();
-        settingController.settingFocusNode.requestFocus();
+        settingController.settingSearchFocusNode.requestFocus();
         Logger.instance.info(traceId, "[SETTING] Windows focus requested after delay");
       });
     }
   }
 
+  // Focuses an existing settings window without changing its active page.
+  Future<void> focusSettingWindow() async {
+    if (!isInSettingView.value) {
+      return;
+    }
+
+    final settingController = Get.find<WoxSettingController>();
+    await windowManager.show();
+    await windowManager.focus();
+    await windowManager.setAlwaysOnTop(false);
+    if (settingController.settingFocusNode.canRequestFocus) {
+      settingController.settingFocusNode.requestFocus();
+    }
+  }
+
+  // Refreshes billing-adjacent state after core handles a billing callback.
+  Future<void> refreshAccountStatusAfterBillingDeeplink(String traceId) async {
+    final settingController = Get.find<WoxSettingController>();
+    try {
+      await Future.wait([settingController.refreshAccountStatus(), settingController.refreshCloudSyncStatus()]);
+    } catch (e) {
+      Logger.instance.error(traceId, "Failed to refresh account status after billing deeplink: $e");
+    }
+  }
+
   Future<void> exitSetting(String traceId) async {
+    final settingController = Get.find<WoxSettingController>();
     closeAllDialogsInSetting();
+    // Bug fix: search text should not survive closing settings. Reset before
+    // either exit branch so returning to the launcher and hidden-window exits
+    // both reopen with a clean search field.
+    settingController.clearSettingSearch();
+    settingController.settingSearchFocusNode.unfocus();
 
     if (isSettingOpenedFromHidden) {
       // For hidden-opened settings, exit means hide the window directly
@@ -2544,7 +4391,61 @@ class WoxLauncherController extends GetxController {
     await resizeHeight(traceId: traceId, reason: "exit setting view");
     await windowManager.setPosition(positionBeforeOpenSetting);
     await windowManager.focus();
-    focusQueryBox(selectAll: true);
+    // Bug fix: leaving settings marks the launcher visible before query-box
+    // focus has finished. Await the first focus request so callers and smoke
+    // tests observe the real postcondition, then keep the delayed retry for
+    // platforms that report window focus before the launcher text field rebuilds.
+    await _focusQueryBoxAfterLauncherShow(selectAll: true);
+  }
+
+  Future<void> openOnboarding(String traceId) async {
+    final settingController = Get.find<WoxSettingController>();
+
+    closeAllDialogsInSetting();
+    // Bug fix: onboarding has its own page-level Escape handling, but the
+    // shared window can still carry focus from the launcher query box or
+    // settings view during the route swap. Drop those old focus owners before
+    // mounting the guide so their Escape-to-hide handlers cannot fire first.
+    queryBoxFocusNode.unfocus();
+    settingController.settingFocusNode.unfocus();
+
+    isInSettingView.value = false;
+    cancelLauncherResizeRequests(traceId, "enter onboarding view");
+    isInOnboardingView.value = true;
+    await WoxApi.instance.onSetting(traceId, false);
+    await WoxApi.instance.onOnboarding(traceId, true);
+
+    await WoxThemeUtil.instance.loadTheme(traceId);
+    await settingController.reloadSetting(traceId);
+
+    // Feature refinement: onboarding still uses the management-window contract,
+    // but it is narrower than settings so the shared Wox examples read closer
+    // to the real launcher width instead of stretching across a settings page.
+    await windowManager.setSize(_onboardingWindowSize);
+    if (Platform.isLinux) {
+      await windowManager.show();
+      await windowManager.center(_onboardingWindowSize.width, _onboardingWindowSize.height);
+    } else {
+      await windowManager.center(_onboardingWindowSize.width, _onboardingWindowSize.height);
+      await windowManager.show();
+    }
+    await windowManager.focus();
+    await windowManager.setAlwaysOnTop(false);
+  }
+
+  Future<void> finishOnboarding(String traceId, {required bool markFinished}) async {
+    final settingController = Get.find<WoxSettingController>();
+
+    if (markFinished) {
+      // Skip and finish deliberately share this durable state transition so the
+      // guide is never auto-shown again after the user leaves it once.
+      await settingController.updateConfig("OnboardingFinished", "true");
+    }
+
+    isInOnboardingView.value = false;
+    await WoxApi.instance.onOnboarding(traceId, false);
+    await windowManager.setAlwaysOnTop(true);
+    await WoxApi.instance.show(traceId);
   }
 
   void closeAllDialogsInSetting() {
@@ -2648,7 +4549,6 @@ class WoxLauncherController extends GetxController {
       result.value.data.preview = WoxPreview(
         previewType: WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code,
         previewData: jsonEncode(data.toJson()),
-        previewProperties: {},
         scrollPosition: WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code,
       );
 
@@ -2706,10 +4606,22 @@ class WoxLauncherController extends GetxController {
 
   void onResultItemActivated(String traceId, WoxListItem<WoxQueryResult> item) {
     currentPreview.value = item.data.preview;
-    // Grid layout doesn't support preview panel
-    isShowPreviewPanel.value = !isInGridMode() && currentPreview.value.previewData != "";
-    syncPreviewFullscreenState();
+    isShowPreviewPanel.value = shouldShowPreviewPanelForPreview(currentPreview.value);
+    syncPreviewModeForActivePreview(traceId);
     refreshActionsForActiveResult(traceId, preserveSelection: false);
+  }
+
+  Future<void> startResultDrag(String traceId, WoxListItem<WoxQueryResult> item) async {
+    if (item.isGroup || item.data.dragData == null || !item.data.dragData!.isFiles) {
+      return;
+    }
+
+    final status = await ResultDragPlatformBridge.instance.startFileDrag(traceId, item.data.dragData!.files);
+    if (status == ResultDragStatus.success || status == ResultDragStatus.cancel) {
+      // Keep launcher visible only when the user releases inside Wox itself,
+      // which native drag reports as cancel_in_source.
+      await hideApp(traceId);
+    }
   }
 
   void onResultItemsEmpty(String traceId) {
@@ -2734,6 +4646,15 @@ class WoxLauncherController extends GetxController {
   }
 
   void refreshToolbarActionsForCurrentState(String traceId) {
+    // Bug fix: when fast typing keeps the previous result snapshot visible during
+    // the stale-results grace window, clearing toolbar actions immediately makes
+    // only the footer switch to the "no result" state and causes visible flicker.
+    // Keep the current toolbar until the visible results are actually cleared or
+    // replaced so the whole launcher transitions as one snapshot.
+    if (hasVisibleStaleResultsDuringQueryTransition) {
+      return;
+    }
+
     final activeResult = getActiveResult();
     if (activeResult != null && !activeResult.isGroup) {
       updateToolbarWithActions(traceId);
@@ -2791,37 +4712,73 @@ class WoxLauncherController extends GetxController {
     onQueryChanged(traceId, woxChangeQuery, "user drop files");
   }
 
-  /// Update the plugin metadata based on the query
-  /// E.g. plugin icon, plugin features, etc.
-  Future<bool> updatePluginMetadataOnQueryChanged(String traceId, PlainQuery query) async {
-    var queryMetadata = QueryMetadata(icon: WoxImage.empty(), resultPreviewWidthRatio: 0.5, isGridLayout: false, gridLayoutParams: GridLayoutParams.empty());
-    var isPluginQuery = false;
-
-    if (!query.isEmpty && query.queryText.contains(" ")) {
-      // if there is space in the query, then this  may be a plugin query, fetch metadata
-      try {
-        queryMetadata = await WoxApi.instance.getQueryMetadata(traceId, query);
-        if (queryMetadata.icon.imageData.isNotEmpty) {
-          isPluginQuery = true;
-        }
-        Logger.instance.debug(
-          traceId,
-          "fetched query metadata: isPluginQuery=$isPluginQuery, resultPreviewWidthRatio=${queryMetadata.resultPreviewWidthRatio}, isGridLayout=${queryMetadata.isGridLayout}",
-        );
-      } catch (e) {
-        Logger.instance.error(traceId, "query metadata failed: $e");
-      }
+  void prepareQueryLayoutOnQueryChanged(String traceId, PlainQuery query) {
+    if (isLikelyPluginInputQuery(query)) {
+      // Plugin-query layout now arrives with QueryResponse. Keep the previous
+      // plugin icon/layout visible until the same query id returns its layout,
+      // matching the old metadata request behavior and avoiding an icon clear
+      // followed by an immediate reset.
+      return;
     }
 
-    updateQueryIconOnQueryChanged(traceId, query, queryMetadata);
-    updateResultPreviewWidthRatioOnQueryChanged(traceId, query, queryMetadata);
-    updateGridLayoutParamsOnQueryChanged(traceId, query, queryMetadata);
-    return isPluginQuery;
+    // Empty, global, and selection queries have deterministic local layout.
+    // Reset them immediately so stale plugin grid/ratio state does not leak
+    // into non-plugin surfaces while plugin-specific metadata waits for results.
+    applyQueryLayoutForQuery(traceId, query, QueryLayout.empty());
+  }
+
+  bool applyQueryContextForQueryId(String traceId, String queryId, QueryContext queryContext) {
+    if (currentQuery.value.queryId != queryId) {
+      // QueryContext is delivered asynchronously with QueryResponse. Guarding
+      // by query id prevents a late backend classification from changing Glance
+      // visibility or plugin identity for a newer query.
+      Logger.instance.debug(traceId, "ignore stale query context for queryId=$queryId");
+      return false;
+    }
+
+    backendQueryContext = queryContext;
+    backendQueryContextQueryId = queryId;
+    applyQueryContextForQuery(traceId, currentQuery.value, queryContext);
+    return true;
+  }
+
+  void applyQueryContextForQuery(String traceId, PlainQuery query, QueryContext queryContext) {
+    if (queryContext.isGlobalQuery) {
+      // Backend-confirmed global queries should use the global accessory area.
+      // This corrects local trigger-keyword guesses for text that contains
+      // spaces but does not actually target a plugin.
+      applyQueryLayoutForQuery(traceId, query, QueryLayout.empty());
+      return;
+    }
+
+    // Plugin and selection contexts reserve the query-box accessory for their
+    // own identity, so clear cached Glance rows even before layout arrives.
+    glanceItems.clear();
+  }
+
+  bool applyQueryLayoutForQueryId(String traceId, String queryId, QueryLayout queryLayout) {
+    if (currentQuery.value.queryId != queryId) {
+      // Layout is asynchronous just like result batches. Guarding by query id
+      // prevents a late QueryResponse from switching icon, preview ratio, or
+      // list/grid mode after the user has already typed another query.
+      Logger.instance.debug(traceId, "ignore stale query layout for queryId=$queryId");
+      return false;
+    }
+
+    applyQueryLayoutForQuery(traceId, currentQuery.value, queryLayout);
+    return true;
+  }
+
+  void applyQueryLayoutForQuery(String traceId, PlainQuery query, QueryLayout queryLayout) {
+    updateQueryIconOnQueryChanged(traceId, query, queryLayout);
+    updateResultPreviewWidthRatioOnQueryChanged(traceId, query, queryLayout);
+    updateGridLayoutParamsOnQueryChanged(traceId, query, queryLayout);
   }
 
   /// Change the query icon based on the query
-  Future<void> updateQueryIconOnQueryChanged(String traceId, PlainQuery query, QueryMetadata queryMetadata) async {
+  void updateQueryIconOnQueryChanged(String traceId, PlainQuery query, QueryLayout queryLayout) {
     if (query.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code) {
+      glanceItems.clear();
       if (query.querySelection.type == WoxSelectionTypeEnum.WOX_SELECTION_TYPE_FILE.code) {
         queryIcon.value = QueryIconInfo(icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code, imageData: QUERY_ICON_SELECTION_FILE));
       }
@@ -2832,13 +4789,20 @@ class WoxLauncherController extends GetxController {
     }
 
     if (query.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code) {
-      // if there is no space in the query, then this must be a global query
-      if (!query.queryText.contains(" ")) {
+      if (isGlobalInputQuery(query)) {
         queryIcon.value = QueryIconInfo.empty();
+        if (glanceItems.isEmpty || query.queryText.isEmpty) {
+          // Global query classification now uses plugin trigger metadata, not
+          // whitespace. Empty global input gets an explicit refresh because
+          // clearing a search can otherwise leave a stale in-flight refresh as
+          // the last Glance update and make the accessory disappear.
+          unawaited(refreshGlance(traceId, "manualRefresh"));
+        }
         return;
       }
 
-      queryIcon.value = QueryIconInfo(icon: queryMetadata.icon);
+      glanceItems.clear();
+      queryIcon.value = QueryIconInfo(icon: queryLayout.icon);
       return;
     }
 
@@ -2846,8 +4810,8 @@ class WoxLauncherController extends GetxController {
   }
 
   /// Update the result preview width ratio based on the query
-  Future<void> updateResultPreviewWidthRatioOnQueryChanged(String traceId, PlainQuery query, QueryMetadata queryMetadata) async {
-    double nextRatio = 0.5;
+  void updateResultPreviewWidthRatioOnQueryChanged(String traceId, PlainQuery query, QueryLayout queryLayout) {
+    double nextRatio = defaultResultPreviewRatio;
     if (query.isEmpty) {
       preferredResultPreviewRatio = nextRatio;
       if (isPreviewFullscreen.value) {
@@ -2857,8 +4821,20 @@ class WoxLauncherController extends GetxController {
       }
       return;
     }
-    // if there is no space in the query, then this must be a global query
-    if (!query.queryText.contains(" ")) {
+    if (isGlobalInputQuery(query)) {
+      preferredResultPreviewRatio = nextRatio;
+      if (isPreviewFullscreen.value) {
+        lastResultPreviewRatioBeforePreviewFullscreen = nextRatio;
+      } else {
+        resultPreviewRatio.value = nextRatio;
+      }
+      return;
+    }
+    // Selection queries default to a 6:4 split (list 40%, preview 60%).
+    // Only apply when the backend did not return an explicit ratio; an explicit
+    // zero means the plugin wants a preview-only layout and must be respected.
+    if (query.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code && queryLayout.resultPreviewWidthRatio == null) {
+      nextRatio = defaultResultPreviewRatio;
       preferredResultPreviewRatio = nextRatio;
       if (isPreviewFullscreen.value) {
         lastResultPreviewRatioBeforePreviewFullscreen = nextRatio;
@@ -2868,10 +4844,10 @@ class WoxLauncherController extends GetxController {
       return;
     }
 
-    Logger.instance.debug(traceId, "update result preview width ratio: ${queryMetadata.resultPreviewWidthRatio}");
-    nextRatio = queryMetadata.resultPreviewWidthRatio;
+    nextRatio = queryLayout.resultPreviewWidthRatio ?? defaultResultPreviewRatio;
+    Logger.instance.debug(traceId, "update result preview width ratio: $nextRatio");
     if (nextRatio < 0 || nextRatio > 1) {
-      nextRatio = 0.5;
+      nextRatio = defaultResultPreviewRatio;
     }
     preferredResultPreviewRatio = nextRatio;
     if (isPreviewFullscreen.value) {
@@ -2881,7 +4857,7 @@ class WoxLauncherController extends GetxController {
     }
   }
 
-  Future<void> updateGridLayoutParamsOnQueryChanged(String traceId, PlainQuery query, QueryMetadata queryMetadata) async {
+  void updateGridLayoutParamsOnQueryChanged(String traceId, PlainQuery query, QueryLayout queryLayout) {
     final wasGridLayout = isGridLayout.value;
     if (query.isEmpty) {
       isGridLayout.value = false;
@@ -2891,8 +4867,7 @@ class WoxLauncherController extends GetxController {
       }
       return;
     }
-    // if there is no space in the query, then this must be a global query
-    if (!query.queryText.contains(" ")) {
+    if (isGlobalInputQuery(query)) {
       isGridLayout.value = false;
       gridLayoutParams.value = GridLayoutParams.empty();
       if (wasGridLayout) {
@@ -2901,18 +4876,19 @@ class WoxLauncherController extends GetxController {
       return;
     }
 
-    if (queryMetadata.isGridLayout) {
+    if (queryLayout.isGridLayout) {
       isGridLayout.value = true;
-      gridLayoutParams.value = queryMetadata.gridLayoutParams;
+      gridLayoutParams.value = queryLayout.gridLayoutParams;
     } else {
       isGridLayout.value = false;
       gridLayoutParams.value = GridLayoutParams.empty();
     }
     resultGridViewController.updateGridParams(gridLayoutParams.value);
 
-    Logger.instance.debug(traceId, "update grid layout params: columns=${queryMetadata.gridLayoutParams.columns}");
+    Logger.instance.debug(traceId, "update grid layout params: columns=${queryLayout.gridLayoutParams.columns}");
 
     if (wasGridLayout != isGridLayout.value) {
+      clearStaleResultsForLayoutTransition(traceId);
       if (!isGridLayout.value) {
         resizeHeight(traceId: traceId, reason: "switch from grid layout to list layout");
       } else if (resultGridViewController.rowHeight > 0) {
@@ -2923,13 +4899,9 @@ class WoxLauncherController extends GetxController {
 
   // Quick select related methods
 
-  /// Check if the quick select modifier key is pressed (Cmd on macOS, Alt on Windows/Linux)
+  /// Check if the quick select modifier key is still pressed.
   bool isQuickSelectModifierPressed() {
-    if (Platform.isMacOS) {
-      return HardwareKeyboard.instance.isMetaPressed;
-    } else {
-      return HardwareKeyboard.instance.isAltPressed;
-    }
+    return Platform.isMacOS ? HardwareKeyboard.instance.isMetaPressed : HardwareKeyboard.instance.isAltPressed;
   }
 
   /// Start the quick select timer when modifier key is pressed
@@ -2947,6 +4919,75 @@ class WoxLauncherController extends GetxController {
         Logger.instance.debug(traceId, "Quick select: activating mode");
         activateQuickSelectMode(traceId);
       }
+    });
+  }
+
+  // Core sends repeated action icons as response-local references to keep large
+  // query payloads smaller. Resolve them before normal result parsing so the
+  // rest of the UI still deals with ordinary WoxImage objects.
+  Map<String, WoxImage> _parseQueryActionIconRefs(dynamic rawRefs) {
+    if (rawRefs is! Map) {
+      return <String, WoxImage>{};
+    }
+
+    final refs = <String, WoxImage>{};
+    for (final entry in rawRefs.entries) {
+      final rawIcon = entry.value;
+      if (rawIcon is Map) {
+        refs[entry.key.toString()] = WoxImage.fromJson(Map<String, dynamic>.from(rawIcon));
+      }
+    }
+    return refs;
+  }
+
+  void _resolveQueryActionIconRefs(List<dynamic> resultsData, Map<String, WoxImage> refs) {
+    for (final rawResult in resultsData) {
+      if (rawResult is! Map) {
+        continue;
+      }
+
+      final actions = rawResult['Actions'];
+      if (actions is! List) {
+        continue;
+      }
+
+      for (final rawAction in actions) {
+        if (rawAction is! Map) {
+          continue;
+        }
+
+        final rawIcon = rawAction['Icon'];
+        if (rawIcon is! Map || rawIcon['ImageType'] != _queryActionIconRefType) {
+          continue;
+        }
+
+        final resolvedIcon = refs[rawIcon['ImageData']?.toString() ?? ""];
+        if (resolvedIcon != null) {
+          rawAction['Icon'] = resolvedIcon.toJson();
+        }
+      }
+    }
+  }
+
+  void _scheduleQueryEventLoopTurnTiming({
+    required String traceId,
+    required String stage,
+    required String queryId,
+    required int resultCount,
+    required bool isFinal,
+    required int scheduledTimestampMs,
+  }) {
+    if (!Env.isDev) {
+      return;
+    }
+
+    Timer.run(() {
+      final tracker = WoxTimeTracker.start(traceId, stage);
+      tracker.setRawString("queryId", queryId);
+      tracker.setInt("resultCount", resultCount);
+      tracker.setBool("isFinal", isFinal);
+      tracker.setInt("delayMs", DateTime.now().millisecondsSinceEpoch - scheduledTimestampMs);
+      tracker.log();
     });
   }
 

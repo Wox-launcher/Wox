@@ -52,6 +52,7 @@ func (p *WebViewPlugin) GetMetadata() plugin.Metadata {
 		},
 		Commands: []plugin.MetadataCommand{},
 		SupportedOS: []string{
+			"Windows",
 			"Macos",
 		},
 		Features: []plugin.MetadataFeature{
@@ -64,8 +65,7 @@ func (p *WebViewPlugin) GetMetadata() plugin.Metadata {
 		},
 		SettingDefinitions: []definition.PluginSettingDefinitionItem{
 			{
-				Type:               definition.PluginSettingDefinitionTypeTable,
-				IsPlatformSpecific: true,
+				Type: definition.PluginSettingDefinitionTypeTable,
 				Value: &definition.PluginSettingValueTable{
 					Key:           webviewSitesSettingKey,
 					Title:         "i18n:plugin_webview_sites",
@@ -148,12 +148,12 @@ func (p *WebViewPlugin) Init(ctx context.Context, initParams plugin.InitParams) 
 	})
 }
 
-func (p *WebViewPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+func (p *WebViewPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	if query.Type != plugin.QueryTypeInput {
-		return nil
+		return plugin.QueryResponse{}
 	}
 	if strings.TrimSpace(query.Command) == "" {
-		return nil
+		return plugin.QueryResponse{}
 	}
 
 	var results []plugin.QueryResult
@@ -199,7 +199,7 @@ func (p *WebViewPlugin) Query(ctx context.Context, query plugin.Query) []plugin.
 		})
 	}
 
-	return results
+	return plugin.NewQueryResponse(results)
 }
 
 func (p *WebViewPlugin) registerSiteCommands(ctx context.Context) {

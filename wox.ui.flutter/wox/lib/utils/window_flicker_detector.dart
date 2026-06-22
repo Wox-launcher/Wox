@@ -1,4 +1,4 @@
-import 'package:wox/utils/consts.dart';
+import 'package:wox/utils/wox_interface_size_util.dart';
 
 class FlickerStatus {
   final bool flicker;
@@ -66,7 +66,7 @@ class WindowFlickerDetector {
   ///    - We also measure the height swing within the window (max(height)-min(height)).
   ///    - Only when BOTH are true we consider it flicker:
   ///        a) reversals >= [flickerMinDirectionChanges]
-  ///        b) swingPx >= RESULT_ITEM_BASE_HEIGHT * 3
+  ///        b) swingPx >= current density result item height * 2
   ///      Rationale: single or tiny reversals are benign; a large peak-to-peak swing
   ///      happening with reversals is what users perceive as visual flicker.
   ///
@@ -104,7 +104,10 @@ class WindowFlickerDetector {
     }
 
     final int swingPx = maxH - minH;
-    final int magnitudeThreshold = (RESULT_ITEM_BASE_HEIGHT * 2).toInt();
+    // Flicker magnitude should follow the visible row size. The old normal-only
+    // 50px threshold made compact rows too insensitive and comfortable rows too
+    // eager to classify ordinary row changes as oscillation.
+    final int magnitudeThreshold = (WoxInterfaceSizeUtil.instance.current.resultItemBaseHeight * 2).toInt();
 
     if (directionReversals >= flickerMinDirectionChanges && swingPx >= magnitudeThreshold) {
       return FlickerStatus(true, "direction_change", recent.length);

@@ -62,7 +62,7 @@ func (i *MenusPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	i.api = initParams.API
 }
 
-func (i *MenusPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+func (i *MenusPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	icon := menusIcon
 	if !query.Env.ActiveWindowIcon.IsEmpty() {
 		icon = query.Env.ActiveWindowIcon
@@ -70,7 +70,7 @@ func (i *MenusPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 
 	if query.Env.ActiveWindowPid == 0 {
 		i.api.Log(ctx, plugin.LogLevelError, "Active window pid is not available")
-		return []plugin.QueryResult{}
+		return plugin.QueryResponse{}
 	}
 
 	menuNames, ok := getMenusFromCache(query.Env.ActiveWindowPid)
@@ -79,7 +79,7 @@ func (i *MenusPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 		menuNames, err = menus.GetAppMenuTitles(query.Env.ActiveWindowPid)
 		if err != nil {
 			i.api.Log(ctx, plugin.LogLevelError, err.Error())
-			return []plugin.QueryResult{}
+			return plugin.QueryResponse{}
 		}
 		storeMenusCache(query.Env.ActiveWindowPid, menuNames)
 	}
@@ -89,7 +89,7 @@ func (i *MenusPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 		return (match && score > 20) || (!query.IsGlobalQuery() && query.Search == "")
 	})
 
-	return lo.Map(filteredMenus, func(menu string, _ int) plugin.QueryResult {
+	return plugin.NewQueryResponse(lo.Map(filteredMenus, func(menu string, _ int) plugin.QueryResult {
 		return plugin.QueryResult{
 			Title: menu,
 			Icon:  icon,
@@ -102,7 +102,7 @@ func (i *MenusPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 				},
 			},
 		}
-	})
+	}))
 }
 
 func getMenusFromCache(pid int) ([]string, bool) {

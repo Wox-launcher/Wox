@@ -12,11 +12,16 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
+	"wox/account"
 	"wox/analytics"
 	"wox/common"
+	"wox/diagnostic"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/plugin/system/shell/terminal"
@@ -28,6 +33,9 @@ import (
 	"wox/util/autostart"
 	"wox/util/hotkey"
 	"wox/util/ime"
+	"wox/util/keyboard"
+	"wox/util/osvariant"
+	"wox/util/processmemory"
 	"wox/util/screen"
 	"wox/util/selection"
 	"wox/util/shell"
@@ -46,21 +54,43 @@ var managerInstance *Manager
 var managerOnce sync.Once
 var logger *util.Log
 
-type Manager struct {
-	mainHotkey       *hotkey.Hotkey
-	selectionHotkey  *hotkey.Hotkey
-	queryHotkeys     []*hotkey.Hotkey
-	ui               common.UI
-	serverPort       int
-	uiProcess        *os.Process
-	themes           *util.HashMap[string, common.Theme]
-	systemThemeIds   []string
-	isUIReadyHandled bool
-	isSystemDark     bool
-	exitOnce         sync.Once
+const uiReadyTimeout = 10 * time.Second
 
-	activeWindowSnapshot common.ActiveWindowSnapshot // cached active window snapshot
-	pendingStartupNotify *common.NotifyMsg
+// uiLaunchConfig describes one concrete Flutter UI backend launch attempt.
+type uiLaunchConfig struct {
+	Backend string
+	Env     []string
+	Mode    string
+	Reason  string
+}
+
+type Manager struct {
+	mainHotkey           *hotkey.Hotkey
+	mainHotkeyKey        string
+	selectionHotkey      *hotkey.Hotkey
+	selectionHotkeyKey   string
+	waylandPortalHotkeys *hotkey.Group
+	waylandPortalQueries []setting.QueryHotkey
+	queryHotkeys         []*hotkey.Hotkey
+	queryHotkeySettings  []setting.QueryHotkey
+	globalHotkeyMu       sync.Mutex
+	ui                   common.UI
+	serverPort           int
+	uiProcess            *os.Process
+	uiStopRequested      atomic.Bool
+	uiReadyAt            atomic.Int64
+	themes               *util.HashMap[string, common.Theme]
+	systemThemeIds       []string
+	isUIReadyHandled     bool
+	isSystemDark         bool
+	exitOnce             sync.Once
+
+	activeWindowSnapshot    common.ActiveWindowSnapshot // cached active window snapshot
+	activeWindowSnapshotMu  sync.RWMutex
+	activeWindowSnapshotSeq uint64
+	pendingStartupNotify    *common.NotifyMsg
+	trayEmojiWarmMu         sync.Mutex
+	trayEmojiWarmInFlight   map[string]struct{}
 }
 
 func GetUIManager() *Manager {
@@ -201,8 +231,13 @@ func (m *Manager) Stop(ctx context.Context) {
 		logger.Info(ctx, "skip stopping ui app in dev mode")
 		return
 	}
+	if m.uiProcess == nil {
+		logger.Info(ctx, "skip stopping ui app because no ui process is tracked")
+		return
+	}
 
 	logger.Info(ctx, "start stopping ui app")
+	m.uiStopRequested.Store(true)
 	var pid = m.uiProcess.Pid
 	killErr := m.uiProcess.Kill()
 	if killErr != nil {
@@ -213,62 +248,263 @@ func (m *Manager) Stop(ctx context.Context) {
 }
 
 func (m *Manager) RegisterMainHotkey(ctx context.Context, combineKey string) error {
+	if shouldGroupWaylandPortalHotkeys() {
+		m.globalHotkeyMu.Lock()
+		defer m.globalHotkeyMu.Unlock()
+
+		if m.mainHotkeyKey == combineKey && m.waylandPortalHotkeys != nil {
+			logger.Info(ctx, fmt.Sprintf("main hotkey already registered: %s", combineKey))
+			return nil
+		}
+		woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+		return m.reregisterWaylandPortalGlobalHotkeys(ctx, combineKey, woxSetting.SelectionHotkey.Get(), woxSetting.QueryHotkeys.Get())
+	}
+
 	if combineKey == "" {
 		// remove hotkey
 		logger.Info(ctx, "remove main hotkey")
 		if m.mainHotkey != nil {
 			m.mainHotkey.Unregister(ctx)
+			m.mainHotkey = nil
 		}
+		m.mainHotkeyKey = ""
 		return nil
 	}
-
+	if m.mainHotkeyKey == combineKey && m.mainHotkey != nil {
+		logger.Info(ctx, fmt.Sprintf("main hotkey already registered: %s", combineKey))
+		return nil
+	}
 	logger.Info(ctx, fmt.Sprintf("register main hotkey: %s", combineKey))
-	// unregister previous hotkey
-	if m.mainHotkey != nil {
-		m.mainHotkey.Unregister(ctx)
+
+	callback := func() {
+		m.handleMainHotkeyTrigger(combineKey)
 	}
 
-	managerInstance.mainHotkey = &hotkey.Hotkey{}
-	return m.mainHotkey.Register(ctx, combineKey, func() {
-		triggerCtx := util.NewTraceContext()
-		if m.shouldIgnoreHotkeyTrigger(triggerCtx) {
-			return
-		}
-		m.ui.ToggleApp(triggerCtx, common.ShowContext{
-			SelectAll:  true,
-			ShowSource: common.ShowSourceDefault,
-		})
-	})
+	newHotkey := &hotkey.Hotkey{}
+	registerErr := newHotkey.Register(ctx, combineKey, callback)
+	if registerErr != nil {
+		return registerErr
+	}
+
+	oldHotkey := m.mainHotkey
+	m.mainHotkey = newHotkey
+	m.mainHotkeyKey = combineKey
+	if oldHotkey != nil {
+		oldHotkey.Unregister(ctx)
+	}
+	return nil
+}
+
+func effectiveSelectionHotkeyForRuntime(selectionHotkey string) string {
+	if util.IsLinuxWaylandSession() {
+		return ""
+	}
+	return strings.TrimSpace(selectionHotkey)
 }
 
 func (m *Manager) RegisterSelectionHotkey(ctx context.Context, combineKey string) error {
+	combineKey = effectiveSelectionHotkeyForRuntime(combineKey)
+	if shouldGroupWaylandPortalHotkeys() {
+		m.globalHotkeyMu.Lock()
+		defer m.globalHotkeyMu.Unlock()
+
+		if m.selectionHotkeyKey == combineKey && m.waylandPortalHotkeys != nil {
+			logger.Info(ctx, fmt.Sprintf("selection hotkey already registered: %s", combineKey))
+			return nil
+		}
+		woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+		return m.reregisterWaylandPortalGlobalHotkeys(ctx, woxSetting.MainHotkey.Get(), combineKey, woxSetting.QueryHotkeys.Get())
+	}
+
 	if combineKey == "" {
 		// remove hotkey
 		logger.Info(ctx, "remove selection hotkey")
 		if m.selectionHotkey != nil {
 			m.selectionHotkey.Unregister(ctx)
+			m.selectionHotkey = nil
 		}
+		m.selectionHotkeyKey = ""
 		return nil
 	}
-
+	if m.selectionHotkeyKey == combineKey && m.selectionHotkey != nil {
+		logger.Info(ctx, fmt.Sprintf("selection hotkey already registered: %s", combineKey))
+		return nil
+	}
 	logger.Info(ctx, fmt.Sprintf("register selection hotkey: %s", combineKey))
-	// unregister previous hotkey
-	if m.selectionHotkey != nil {
-		m.selectionHotkey.Unregister(ctx)
+
+	callback := func() {
+		m.handleSelectionHotkeyTrigger(combineKey)
 	}
 
-	managerInstance.selectionHotkey = &hotkey.Hotkey{}
-	return m.selectionHotkey.Register(ctx, combineKey, func() {
-		triggerCtx := util.NewTraceContext()
-		if m.shouldIgnoreHotkeyTrigger(triggerCtx) {
-			return
+	newHotkey := &hotkey.Hotkey{}
+	registerErr := newHotkey.Register(ctx, combineKey, callback)
+	if registerErr != nil {
+		return registerErr
+	}
+
+	oldHotkey := m.selectionHotkey
+	m.selectionHotkey = newHotkey
+	m.selectionHotkeyKey = combineKey
+	if oldHotkey != nil {
+		oldHotkey.Unregister(ctx)
+	}
+	return nil
+}
+
+// reregisterWaylandPortalGlobalHotkeys binds all Wox shortcuts in one portal
+// session whenever the Wayland GlobalShortcuts portal is the active backend.
+func (m *Manager) reregisterWaylandPortalGlobalHotkeys(ctx context.Context, mainHotkey string, selectionHotkey string, queryHotkeys []setting.QueryHotkey) error {
+	previousGroup := m.waylandPortalHotkeys
+	previousMainHotkey := m.mainHotkeyKey
+	previousSelectionHotkey := m.selectionHotkeyKey
+	previousQueryHotkeys := cloneQueryHotkeys(m.waylandPortalQueries)
+
+	if previousGroup != nil {
+		previousGroup.Unregister(ctx)
+		m.waylandPortalHotkeys = nil
+	}
+
+	newGroup, err := hotkey.RegisterGroup(ctx, m.buildWaylandPortalGlobalHotkeySpecs(mainHotkey, selectionHotkey, queryHotkeys))
+	if err != nil {
+		if previousGroup != nil {
+			restoreGroup, restoreErr := hotkey.RegisterGroup(ctx, m.buildWaylandPortalGlobalHotkeySpecs(previousMainHotkey, previousSelectionHotkey, previousQueryHotkeys))
+			if restoreErr != nil {
+				return fmt.Errorf("failed to register Wayland portal global hotkeys: %w; failed to restore previous hotkeys: %v", err, restoreErr)
+			}
+			m.waylandPortalHotkeys = restoreGroup
+			m.mainHotkeyKey = previousMainHotkey
+			m.selectionHotkeyKey = previousSelectionHotkey
+			m.waylandPortalQueries = previousQueryHotkeys
 		}
-		m.QuerySelection(triggerCtx)
+		return err
+	}
+
+	m.waylandPortalHotkeys = newGroup
+	m.mainHotkeyKey = strings.TrimSpace(mainHotkey)
+	m.selectionHotkeyKey = effectiveSelectionHotkeyForRuntime(selectionHotkey)
+	m.waylandPortalQueries = cloneQueryHotkeys(queryHotkeys)
+	return nil
+}
+
+// buildWaylandPortalGlobalHotkeySpecs keeps every Wox shortcut in the same portal
+// bind request so the compositor treats Wox shortcuts as one lifecycle.
+func (m *Manager) buildWaylandPortalGlobalHotkeySpecs(mainHotkey string, selectionHotkey string, queryHotkeys []setting.QueryHotkey) []hotkey.Spec {
+	specs := make([]hotkey.Spec, 0, 2+len(queryHotkeys))
+
+	mainHotkey = strings.TrimSpace(mainHotkey)
+	if mainHotkey != "" {
+		combineKey := mainHotkey
+		specs = append(specs, hotkey.Spec{
+			CombineKey: combineKey,
+			Callback: func() {
+				m.handleMainHotkeyTrigger(combineKey)
+			},
+		})
+	}
+
+	selectionHotkey = effectiveSelectionHotkeyForRuntime(selectionHotkey)
+	if selectionHotkey != "" {
+		combineKey := selectionHotkey
+		specs = append(specs, hotkey.Spec{
+			CombineKey: combineKey,
+			Callback: func() {
+				m.handleSelectionHotkeyTrigger(combineKey)
+			},
+		})
+	}
+
+	for _, queryHotkey := range queryHotkeys {
+		if queryHotkey.Disabled || strings.TrimSpace(queryHotkey.Hotkey) == "" {
+			continue
+		}
+		queryHotkey := queryHotkey
+		combineKey := strings.TrimSpace(queryHotkey.Hotkey)
+		specs = append(specs, hotkey.Spec{
+			CombineKey: combineKey,
+			Callback: func() {
+				m.handleQueryHotkeyTrigger(combineKey, queryHotkey)
+			},
+		})
+	}
+
+	return specs
+}
+
+func cloneQueryHotkeys(queryHotkeys []setting.QueryHotkey) []setting.QueryHotkey {
+	if len(queryHotkeys) == 0 {
+		return nil
+	}
+	return append([]setting.QueryHotkey(nil), queryHotkeys...)
+}
+
+// handleMainHotkeyTrigger runs the main shortcut callback shared by native and
+// portal-backed registrations.
+func (m *Manager) handleMainHotkeyTrigger(combineKey string) {
+	triggerCtx := util.NewTraceContext()
+	logger.Info(triggerCtx, fmt.Sprintf("main hotkey callback received: hotkey=%s recordingActive=%t", combineKey, m.isHotkeyRecordingActive()))
+	if m.recordHotkeyIfRecording(triggerCtx, combineKey) {
+		return
+	}
+	if m.shouldIgnoreHotkeyTrigger(triggerCtx) {
+		return
+	}
+	activationStartedAt := util.GetSystemTimestamp()
+	m.ui.ToggleApp(triggerCtx, common.ShowContext{
+		SelectAll:           true,
+		ShowSource:          common.ShowSourceDefault,
+		ActivationStartedAt: activationStartedAt,
 	})
+}
+
+// handleSelectionHotkeyTrigger runs the selection shortcut callback shared by
+// native and portal-backed registrations.
+func (m *Manager) handleSelectionHotkeyTrigger(combineKey string) {
+	triggerCtx := util.NewTraceContext()
+	logger.Info(triggerCtx, fmt.Sprintf("selection hotkey callback received: hotkey=%s recordingActive=%t", combineKey, m.isHotkeyRecordingActive()))
+	if util.IsLinuxWaylandSession() {
+		logger.Info(triggerCtx, "selection hotkey ignored: selection capture is unavailable on Wayland")
+		return
+	}
+	if m.recordHotkeyIfRecording(triggerCtx, combineKey) {
+		return
+	}
+	if m.shouldIgnoreHotkeyTrigger(triggerCtx) {
+		return
+	}
+	m.QuerySelection(triggerCtx)
+}
+
+// handleQueryHotkeyTrigger runs a query shortcut callback shared by native and
+// portal-backed registrations.
+func (m *Manager) handleQueryHotkeyTrigger(combineKey string, queryHotkey setting.QueryHotkey) {
+	queryCtx := util.WithCoreSessionContext(util.NewTraceContext())
+	logger.Info(queryCtx, fmt.Sprintf("query hotkey callback received: hotkey=%s query=%s recordingActive=%t", combineKey, queryHotkey.Query, m.isHotkeyRecordingActive()))
+	if m.recordHotkeyIfRecording(queryCtx, combineKey) {
+		return
+	}
+	if m.shouldIgnoreHotkeyTrigger(queryCtx) {
+		return
+	}
+	if err := m.triggerQueryHotkey(queryCtx, queryHotkey); err != nil {
+		logger.Error(queryCtx, fmt.Sprintf("failed to trigger query hotkey: %s", err.Error()))
+	}
+}
+
+// shouldGroupWaylandPortalHotkeys is true only when Wox is running on Wayland
+// and the GlobalShortcuts portal is available. The portal-backed path must bind
+// all Wox shortcuts together because portal sessions own shortcut lifetimes as
+// a group; changing one shortcut requires rebuilding the whole group.
+func shouldGroupWaylandPortalHotkeys() bool {
+	return util.IsLinuxWaylandSession() && keyboard.IsWaylandGlobalShortcutsPortalAvailable()
 }
 
 func (m *Manager) QuerySelection(ctx context.Context) {
 	newCtx := util.NewTraceContext()
+	if util.IsLinuxWaylandSession() {
+		logger.Info(newCtx, "skip selection query: selection capture is unavailable on Wayland")
+		return
+	}
+
 	start := util.GetSystemTimestamp()
 	selection, err := selection.GetSelected(newCtx)
 	logger.Debug(newCtx, fmt.Sprintf("took %d ms to get selection", util.GetSystemTimestamp()-start))
@@ -305,14 +541,13 @@ func (m *Manager) triggerSelectionQuery(ctx context.Context, selected selection.
 func (m *Manager) triggerQueryHotkey(ctx context.Context, queryHotkey setting.QueryHotkey) error {
 	queryCtx := util.WithCoreSessionContext(ctx)
 	queryCtx = util.WithShowSourceContext(queryCtx, string(common.ShowSourceQueryHotkey))
-	query := plugin.GetPluginManager().ReplaceQueryVariable(queryCtx, queryHotkey.Query)
-	plainQuery := common.PlainQuery{
-		QueryId:   uuid.NewString(),
-		QueryType: plugin.QueryTypeInput,
-		QueryText: query,
-	}
+	plainQuery := plugin.GetPluginManager().ReplaceQueryVariable(queryCtx, queryHotkey.Query)
+	plainQuery.QueryId = uuid.NewString()
 
-	m.RefreshActiveWindowSnapshot(queryCtx)
+	// Query hotkeys build the plugin query immediately, so they keep the
+	// blocking snapshot path while normal launcher activation can refresh slow
+	// details in the background.
+	m.RefreshActiveWindowSnapshotBlocking(queryCtx)
 	q, _, err := plugin.GetPluginManager().NewQuery(queryCtx, plainQuery)
 	if err != nil {
 		return err
@@ -321,9 +556,9 @@ func (m *Manager) triggerQueryHotkey(ctx context.Context, queryHotkey setting.Qu
 	if queryHotkey.IsSilentExecution {
 		success := plugin.GetPluginManager().QuerySilent(queryCtx, q)
 		if !success {
-			return fmt.Errorf("failed to execute silent query: %s", query)
+			return fmt.Errorf("failed to execute silent query: %s", plainQuery.String())
 		}
-		logger.Info(queryCtx, fmt.Sprintf("silent query executed: %s", query))
+		logger.Info(queryCtx, fmt.Sprintf("silent query executed: %s", plainQuery.String()))
 		return nil
 	}
 
@@ -354,28 +589,34 @@ func (m *Manager) triggerQueryHotkey(ctx context.Context, queryHotkey setting.Qu
 }
 
 func (m *Manager) RegisterQueryHotkey(ctx context.Context, queryHotkey setting.QueryHotkey) error {
+	if shouldGroupWaylandPortalHotkeys() {
+		m.globalHotkeyMu.Lock()
+		defer m.globalHotkeyMu.Unlock()
+
+		if m.waylandPortalHotkeys != nil {
+			logger.Info(ctx, fmt.Sprintf("query hotkey handled by Wayland portal group registration: hotkey=%s", queryHotkey.Hotkey))
+			return nil
+		}
+		woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+		return m.reregisterWaylandPortalGlobalHotkeys(ctx, woxSetting.MainHotkey.Get(), woxSetting.SelectionHotkey.Get(), woxSetting.QueryHotkeys.Get())
+	}
+
 	combineKey := strings.TrimSpace(queryHotkey.Hotkey)
 	if queryHotkey.Disabled || combineKey == "" {
 		logger.Info(ctx, fmt.Sprintf("skip register query hotkey: disabled=%t hotkey=%s", queryHotkey.Disabled, queryHotkey.Hotkey))
 		return nil
 	}
-
 	hk := &hotkey.Hotkey{}
 
 	err := hk.Register(ctx, combineKey, func() {
-		queryCtx := util.WithCoreSessionContext(util.NewTraceContext())
-		if m.shouldIgnoreHotkeyTrigger(queryCtx) {
-			return
-		}
-		if err := m.triggerQueryHotkey(queryCtx, queryHotkey); err != nil {
-			logger.Error(ctx, fmt.Sprintf("failed to trigger query hotkey: %s", err.Error()))
-		}
+		m.handleQueryHotkeyTrigger(combineKey, queryHotkey)
 	})
 	if err != nil {
 		return err
 	}
 
 	m.queryHotkeys = append(m.queryHotkeys, hk)
+	m.queryHotkeySettings = append(m.queryHotkeySettings, queryHotkey)
 	return nil
 }
 
@@ -384,6 +625,209 @@ func (m *Manager) unregisterQueryHotkeys(ctx context.Context) {
 		hk.Unregister(ctx)
 	}
 	m.queryHotkeys = nil
+	m.queryHotkeySettings = nil
+}
+
+// reregisterIndividualQueryHotkeys rebuilds non-portal query hotkeys as one
+// setting update, restoring the previous registrations if a new bind fails.
+func (m *Manager) reregisterIndividualQueryHotkeys(ctx context.Context, queryHotkeys []setting.QueryHotkey) error {
+	previousHotkeys := m.queryHotkeys
+	previousSettings := cloneQueryHotkeys(m.queryHotkeySettings)
+	m.queryHotkeys = nil
+	m.queryHotkeySettings = nil
+
+	for _, hk := range previousHotkeys {
+		hk.Unregister(ctx)
+	}
+
+	for _, queryHotkey := range queryHotkeys {
+		if err := m.RegisterQueryHotkey(ctx, queryHotkey); err != nil {
+			m.unregisterQueryHotkeys(ctx)
+			for _, previousSetting := range previousSettings {
+				if restoreErr := m.RegisterQueryHotkey(ctx, previousSetting); restoreErr != nil {
+					return fmt.Errorf("failed to register query hotkeys: %w; failed to restore previous query hotkeys: %v", err, restoreErr)
+				}
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+func (m *Manager) reregisterGlobalHotkeys(ctx context.Context) {
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	if shouldGroupWaylandPortalHotkeys() {
+		m.globalHotkeyMu.Lock()
+		defer m.globalHotkeyMu.Unlock()
+		if err := m.reregisterWaylandPortalGlobalHotkeys(ctx, woxSetting.MainHotkey.Get(), effectiveSelectionHotkeyForRuntime(woxSetting.SelectionHotkey.Get()), woxSetting.QueryHotkeys.Get()); err != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to register Wayland portal global hotkeys: %s", err.Error()))
+		}
+		return
+	}
+
+	_ = m.RegisterMainHotkey(ctx, woxSetting.MainHotkey.Get())
+	_ = m.RegisterSelectionHotkey(ctx, woxSetting.SelectionHotkey.Get())
+	if err := m.reregisterIndividualQueryHotkeys(ctx, woxSetting.QueryHotkeys.Get()); err != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to register query hotkeys after global hotkey setting update: %s", err.Error()))
+	}
+}
+
+type HotkeyAvailability struct {
+	Available     bool
+	ConflictType  string
+	ConflictValue string
+}
+
+const (
+	hotkeyConflictTypeMain      = "main"
+	hotkeyConflictTypeSelection = "selection"
+	hotkeyConflictTypeQuery     = "query"
+	hotkeyConflictTypeSystem    = "system"
+)
+
+// CheckHotkeyAvailability checks Wox-owned settings before probing the platform registry.
+func (m *Manager) CheckHotkeyAvailability(ctx context.Context, hotkeyStr string) HotkeyAvailability {
+	if conflict := m.findConfiguredHotkeyConflict(ctx, hotkeyStr); conflict.ConflictType != "" {
+		logger.Info(ctx, fmt.Sprintf("hotkey availability check: hotkey=%s available=false reason=wox_setting conflictType=%s conflictValue=%s", hotkeyStr, conflict.ConflictType, conflict.ConflictValue))
+		return conflict
+	}
+
+	isAvailable := hotkey.IsHotkeyAvailable(ctx, hotkeyStr)
+	logger.Info(ctx, fmt.Sprintf("hotkey availability check: hotkey=%s available=%t reason=platform_probe", hotkeyStr, isAvailable))
+	if !isAvailable {
+		return HotkeyAvailability{Available: false, ConflictType: hotkeyConflictTypeSystem}
+	}
+	return HotkeyAvailability{Available: true}
+}
+
+// IsHotkeyAvailable keeps the existing bool endpoint compatible with callers that only need availability.
+func (m *Manager) IsHotkeyAvailable(ctx context.Context, hotkeyStr string) bool {
+	return m.CheckHotkeyAvailability(ctx, hotkeyStr).Available
+}
+
+// findConfiguredHotkeyConflict keeps availability checks aligned with Wox-owned hotkey settings.
+func (m *Manager) findConfiguredHotkeyConflict(ctx context.Context, hotkeyStr string) HotkeyAvailability {
+	candidateKeys := hotkeyCompareKeys(hotkeyStr)
+	if len(candidateKeys) == 0 {
+		return HotkeyAvailability{Available: true}
+	}
+
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	if hotkeyCompareKeysIntersect(candidateKeys, hotkeyCompareKeys(woxSetting.MainHotkey.Get())) {
+		return HotkeyAvailability{Available: false, ConflictType: hotkeyConflictTypeMain}
+	}
+	if hotkeyCompareKeysIntersect(candidateKeys, hotkeyCompareKeys(effectiveSelectionHotkeyForRuntime(woxSetting.SelectionHotkey.Get()))) {
+		return HotkeyAvailability{Available: false, ConflictType: hotkeyConflictTypeSelection}
+	}
+
+	for _, queryHotkey := range woxSetting.QueryHotkeys.Get() {
+		if queryHotkey.Disabled {
+			continue
+		}
+		if hotkeyCompareKeysIntersect(candidateKeys, hotkeyCompareKeys(queryHotkey.Hotkey)) {
+			return HotkeyAvailability{Available: false, ConflictType: hotkeyConflictTypeQuery, ConflictValue: queryHotkey.DisplayName()}
+		}
+	}
+
+	return HotkeyAvailability{Available: true}
+}
+
+func hotkeyCompareKeys(hotkeyStr string) map[string]bool {
+	normalized := normalizeHotkeyForCompare(hotkeyStr)
+	if normalized == "" {
+		return map[string]bool{}
+	}
+
+	keys := map[string]bool{normalized: true}
+	return keys
+}
+
+func hotkeyCompareKeysIntersect(left map[string]bool, right map[string]bool) bool {
+	for key := range left {
+		if right[key] {
+			return true
+		}
+	}
+	return false
+}
+
+// normalizeHotkeyForCompare canonicalizes common aliases so stored settings and recorder output compare consistently.
+func normalizeHotkeyForCompare(hotkeyStr string) string {
+	tokens := []string{}
+	for _, token := range strings.Split(hotkeyStr, "+") {
+		normalizedToken := normalizeHotkeyToken(token)
+		if normalizedToken != "" {
+			tokens = append(tokens, normalizedToken)
+		}
+	}
+
+	if len(tokens) == 2 && tokens[0] == tokens[1] && isHotkeyModifierToken(tokens[0]) {
+		return strings.Join(tokens, "+")
+	}
+
+	modifiers := map[string]bool{}
+	key := ""
+	for _, token := range tokens {
+		if token == "capslock" {
+			modifiers[token] = true
+			continue
+		}
+		if isHotkeyModifierToken(token) {
+			modifiers[token] = true
+			continue
+		}
+		if key == "" {
+			key = token
+		}
+	}
+
+	if modifiers["capslock"] && key != "" {
+		return "capslock+" + key
+	}
+
+	parts := []string{}
+	for _, modifier := range []string{"ctrl", "shift", "alt", "meta"} {
+		if modifiers[modifier] {
+			parts = append(parts, modifier)
+		}
+	}
+	if key != "" {
+		parts = append(parts, key)
+	}
+
+	return strings.Join(parts, "+")
+}
+
+// normalizeHotkeyToken maps platform and UI aliases to one comparison token.
+func normalizeHotkeyToken(token string) string {
+	switch strings.ToLower(strings.TrimSpace(token)) {
+	case "", " ":
+		return ""
+	case "control":
+		return "ctrl"
+	case "option":
+		return "alt"
+	case "cmd", "command", "win", "windows", "super":
+		return "meta"
+	case "capslock", "caps_lock", "caps lock":
+		return "capslock"
+	case "return":
+		return "enter"
+	case "arrowleft":
+		return "left"
+	case "arrowright":
+		return "right"
+	case "arrowup":
+		return "up"
+	case "arrowdown":
+		return "down"
+	default:
+		return strings.ToLower(strings.TrimSpace(token))
+	}
+}
+
+func isHotkeyModifierToken(token string) bool {
+	return token == "ctrl" || token == "shift" || token == "alt" || token == "meta"
 }
 
 func (m *Manager) StartWebsocketAndWait(ctx context.Context) {
@@ -392,6 +836,77 @@ func (m *Manager) StartWebsocketAndWait(ctx context.Context) {
 
 func (m *Manager) UpdateServerPort(port int) {
 	m.serverPort = port
+}
+
+// getUILaunchConfig chooses the GTK backend for the Flutter UI and records why it was selected.
+// Linux effectively has X11, native Wayland, and XWayland, but Wox keeps its default
+// policy to two stable modes: use real X11 when the desktop is X11, and inherit native
+// Wayland when the desktop is Wayland. Wox should not force XWayland itself: it can
+// make absolute moves possible in some setups, but its pointer and monitor view can
+// disagree with the Wayland compositor that actually places the window.
+func (m *Manager) getUILaunchConfig(ctx context.Context) (uiLaunchConfig, *uiLaunchConfig) {
+	config := uiLaunchConfig{
+		Backend: "system",
+		Mode:    "system",
+		Reason:  "non-linux platform uses the inherited desktop backend",
+	}
+	if !util.IsLinux() {
+		return config, nil
+	}
+
+	hasWayland := os.Getenv("WAYLAND_DISPLAY") != "" || strings.EqualFold(os.Getenv("XDG_SESSION_TYPE"), "wayland")
+	config.Mode = "auto"
+	if hasWayland {
+		config.Reason = "Wayland session detected, so Wox inherits the desktop backend instead of forcing XWayland"
+	} else if os.Getenv("GDK_BACKEND") != "" {
+		config.Reason = "non-Wayland session already defines GDK_BACKEND, so Wox inherits it"
+	} else {
+		config.Reason = "non-Wayland session uses the inherited desktop backend"
+	}
+	return config, nil
+}
+
+// linuxDesktopDiagnostics returns Linux session details that are useful when GTK backend selection fails.
+func linuxDesktopDiagnostics() string {
+	keys := []string{
+		"XDG_SESSION_TYPE",
+		"XDG_CURRENT_DESKTOP",
+		"XDG_SESSION_DESKTOP",
+		"DESKTOP_SESSION",
+		"GDMSESSION",
+		"WAYLAND_DISPLAY",
+		"DISPLAY",
+		"GDK_BACKEND",
+		"QT_QPA_PLATFORM",
+		"XDG_SESSION_CLASS",
+		"XDG_SESSION_ID",
+	}
+	parts := []string{fmt.Sprintf("goos=%s", runtime.GOOS), fmt.Sprintf("goarch=%s", runtime.GOARCH)}
+	for _, key := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%q", key, os.Getenv(key)))
+	}
+
+	if data, err := os.ReadFile("/etc/os-release"); err == nil {
+		for _, line := range strings.Split(string(data), "\n") {
+			if strings.HasPrefix(line, "PRETTY_NAME=") || strings.HasPrefix(line, "ID=") || strings.HasPrefix(line, "VERSION_ID=") {
+				parts = append(parts, strings.TrimSpace(line))
+			}
+		}
+	}
+
+	return strings.Join(parts, " ")
+}
+
+// logUILaunchConfig records the selected UI backend together with the desktop state that led to it.
+func logUILaunchConfig(ctx context.Context, config uiLaunchConfig, fallback *uiLaunchConfig) {
+	fallbackBackend := "none"
+	if fallback != nil {
+		fallbackBackend = fallback.Backend
+	}
+	logger.Info(ctx, fmt.Sprintf("ui launch backend selected: mode=%s backend=%s env=%v fallback=%s reason=%s", config.Mode, config.Backend, config.Env, fallbackBackend, config.Reason))
+	if util.IsLinux() {
+		logger.Info(ctx, "linux desktop environment: "+linuxDesktopDiagnostics())
+	}
 }
 
 func (m *Manager) StartUIApp(ctx context.Context) error {
@@ -412,8 +927,27 @@ func (m *Manager) StartUIApp(ctx context.Context) error {
 		}
 	}
 
-	logger.Info(ctx, fmt.Sprintf("start ui, path=%s, port=%d, pid=%d", appPath, m.serverPort, os.Getpid()))
-	cmd, cmdErr := shell.Run(appPath,
+	m.uiReadyAt.Store(0)
+	m.isUIReadyHandled = false
+	config, fallback := m.getUILaunchConfig(ctx)
+	logUILaunchConfig(ctx, config, fallback)
+	return m.startUIAppWithConfig(ctx, appPath, config, fallback)
+}
+
+// startUIAppWithConfig launches the Flutter UI with one selected GTK backend and wires exit/ready monitoring.
+func (m *Manager) startUIAppWithConfig(ctx context.Context, appPath string, config uiLaunchConfig, fallback *uiLaunchConfig) error {
+	// Bug fix: on a fresh Windows 10 install the Flutter runner can fail before
+	// Dart code starts if the MSVC runtime is absent. Check the native runtime
+	// dependencies while the Go backend can still explain the cause and direct
+	// the user to Microsoft's installer instead of launching an opaque failing
+	// child process.
+	if dependencyErr := ensureUIRuntimeDependencies(ctx, appPath); dependencyErr != nil {
+		m.ExitApp(ctx)
+		return dependencyErr
+	}
+
+	logger.Info(ctx, fmt.Sprintf("start ui, path=%s, port=%d, pid=%d, backend=%s, env=%v", appPath, m.serverPort, os.Getpid(), config.Backend, config.Env))
+	cmd, cmdErr := shell.RunWithEnv(appPath, config.Env,
 		fmt.Sprintf("%d", m.serverPort),
 		fmt.Sprintf("%d", os.Getpid()),
 		fmt.Sprintf("%t", util.IsDev()),
@@ -423,22 +957,127 @@ func (m *Manager) StartUIApp(ctx context.Context) error {
 	}
 
 	m.uiProcess = cmd.Process
+	m.uiStopRequested.Store(false)
 	pid := cmd.Process.Pid
+	// Debug Glance reads this PID to report combined core + Flutter memory.
+	// Prod launches the UI from core, while dev mode can later replace it with
+	// the PID reported by Flutter's ready callback.
+	processmemory.SetWoxUIProcessPid(pid)
 	util.GetLogger().Info(ctx, fmt.Sprintf("ui app pid: %d", pid))
 
+	processDone := make(chan struct{})
 	util.Go(ctx, "watch ui app", func() {
+		defer close(processDone)
 		waitErr := cmd.Wait()
+		// Clear only this exited process so a restarted UI keeps its newer PID.
+		processmemory.ClearWoxUIProcessPid(pid)
 		waitCtx := util.NewTraceContext()
+
+		stopRequested := m.uiStopRequested.Load()
+		diagnostic.GetManager().RecordUIExit(waitCtx, pid, waitErr, stopRequested)
+
+		markerPath := filepath.Join(filepath.Dir(util.GetLocation().GetUIAppPath()), "gpu_recovery.marker")
+		gpuRecovery := false
+		if util.IsFileExists(markerPath) {
+			gpuRecovery = true
+			logger.Info(waitCtx, "detected GPU recovery marker, will restart UI instead of quitting")
+			if removeErr := os.Remove(markerPath); removeErr != nil {
+				logger.Warn(waitCtx, fmt.Sprintf("failed to remove GPU recovery marker: %s", removeErr.Error()))
+			}
+		}
+
+		if stopRequested {
+			logger.Info(waitCtx, fmt.Sprintf("ui app process(%d) exited after stop request", pid))
+			return
+		}
+
+		if fallback != nil && m.uiReadyAt.Load() == 0 {
+			logger.Warn(waitCtx, fmt.Sprintf("ui app process(%d) exited before ready with backend=%s, retrying with backend=%s", pid, config.Backend, fallback.Backend))
+			logUILaunchConfig(waitCtx, *fallback, nil)
+			if fallbackErr := m.startUIAppWithConfig(waitCtx, appPath, *fallback, nil); fallbackErr != nil {
+				logger.Error(waitCtx, fmt.Sprintf("failed to start fallback ui backend %s: %s", fallback.Backend, fallbackErr.Error()))
+				m.ExitApp(waitCtx)
+			}
+			return
+		}
+
 		if waitErr != nil {
 			logger.Warn(waitCtx, fmt.Sprintf("ui app process(%d) exited with error: %s", pid, waitErr.Error()))
+			if !gpuRecovery {
+				handleUIRuntimeLaunchFailure(waitCtx, waitErr)
+			}
 		} else {
 			logger.Info(waitCtx, fmt.Sprintf("ui app process(%d) exited", pid))
 		}
-		logger.Warn(waitCtx, "ui app exited, quitting backend")
-		m.ExitApp(waitCtx)
+
+		if gpuRecovery {
+			// This is a GPU recovery, restart the UI instead of quitting
+			logger.Info(waitCtx, "restarting UI after GPU recovery")
+			// Wait a bit for GPU to stabilize
+			time.Sleep(500 * time.Millisecond)
+			restartErr := m.StartUIApp(waitCtx)
+			if restartErr != nil {
+				logger.Error(waitCtx, fmt.Sprintf("failed to restart UI after GPU recovery: %s", restartErr.Error()))
+				m.ExitApp(waitCtx)
+			}
+		} else if !m.uiStopRequested.Load() {
+			// Normal exit, quit the backend
+			logger.Warn(waitCtx, "ui app exited, quitting backend")
+			m.ExitApp(waitCtx)
+		}
 	})
 
+	m.scheduleUIReadyMonitor(ctx, appPath, pid, config, fallback, processDone)
 	return nil
+}
+
+// scheduleUIReadyMonitor retries the UI once in auto mode and otherwise leaves a detailed diagnostic trail.
+func (m *Manager) scheduleUIReadyMonitor(ctx context.Context, appPath string, pid int, config uiLaunchConfig, fallback *uiLaunchConfig, processDone <-chan struct{}) {
+	util.Go(ctx, "monitor ui ready", func() {
+		timer := time.NewTimer(uiReadyTimeout)
+		defer timer.Stop()
+
+		select {
+		case <-processDone:
+			return
+		case <-timer.C:
+		}
+
+		if m.uiReadyAt.Load() > 0 {
+			return
+		}
+		if m.uiProcess == nil || m.uiProcess.Pid != pid {
+			return
+		}
+
+		monitorCtx := util.NewTraceContext()
+		logger.Warn(monitorCtx, fmt.Sprintf("ui app did not become ready within %s, backend=%s, mode=%s, env=%v, reason=%s", uiReadyTimeout, config.Backend, config.Mode, config.Env, config.Reason))
+		if util.IsLinux() {
+			logger.Warn(monitorCtx, "linux desktop environment when ui ready timed out: "+linuxDesktopDiagnostics())
+		}
+		if fallback == nil {
+			return
+		}
+
+		logger.Warn(monitorCtx, fmt.Sprintf("restart ui with fallback backend=%s", fallback.Backend))
+		m.uiStopRequested.Store(true)
+		killErr := m.uiProcess.Kill()
+		if killErr != nil {
+			logger.Error(monitorCtx, fmt.Sprintf("failed to kill ui process(%d) before fallback: %s", pid, killErr.Error()))
+			return
+		}
+		select {
+		case <-processDone:
+		case <-time.After(2 * time.Second):
+			logger.Warn(monitorCtx, fmt.Sprintf("ui process(%d) did not exit within fallback wait window", pid))
+		}
+
+		logUILaunchConfig(monitorCtx, *fallback, nil)
+		if fallbackErr := m.startUIAppWithConfig(monitorCtx, appPath, *fallback, nil); fallbackErr != nil {
+			logger.Error(monitorCtx, fmt.Sprintf("failed to start fallback ui backend %s: %s", fallback.Backend, fallbackErr.Error()))
+			m.ExitApp(monitorCtx)
+		}
+	})
 }
 
 func (m *Manager) GetCurrentTheme(ctx context.Context) common.Theme {
@@ -448,7 +1087,7 @@ func (m *Manager) GetCurrentTheme(ctx context.Context) common.Theme {
 		if v.IsAutoAppearance {
 			return m.getActualTheme(ctx, v)
 		}
-		return v
+		return m.resolvePlatformTheme(ctx, v)
 	}
 
 	return common.Theme{}
@@ -471,17 +1110,17 @@ func (m *Manager) getActualTheme(ctx context.Context, autoTheme common.Theme) co
 		result.IsAutoAppearance = autoTheme.IsAutoAppearance
 		result.DarkThemeId = autoTheme.DarkThemeId
 		result.LightThemeId = autoTheme.LightThemeId
-		return result
+		return m.resolvePlatformTheme(ctx, result)
 	}
 
 	// Fallback to auto theme if target not found
-	return autoTheme
+	return m.resolvePlatformTheme(ctx, autoTheme)
 }
 
 func (m *Manager) GetAllThemes(ctx context.Context) []common.Theme {
 	var themes []common.Theme
 	m.themes.Range(func(key string, value common.Theme) bool {
-		themes = append(themes, value)
+		themes = append(themes, m.resolvePlatformTheme(ctx, value))
 		return true
 	})
 	return themes
@@ -530,6 +1169,137 @@ func (m *Manager) parseTheme(themeJson string) (common.Theme, error) {
 	return theme, nil
 }
 
+func (m *Manager) resolvePlatformTheme(ctx context.Context, theme common.Theme) common.Theme {
+	return resolvePlatformThemeForTarget(ctx, theme, util.GetCurrentPlatform(), osvariant.GetCurrentPlatformVariant())
+}
+
+func resolvePlatformThemeForTarget(ctx context.Context, theme common.Theme, platformName string, variantName string) common.Theme {
+	platformNodeName, platformOverride := getThemePlatformOverrideForTarget(theme, platformName)
+	if platformOverride == nil || len(*platformOverride) == 0 {
+		return clearThemePlatformOverrides(theme)
+	}
+
+	// New feature: platform nodes are preserved on the stored Theme, but Flutter
+	// still expects the old flat payload. Merge the current OS override here so
+	// every caller receives the same effective style without teaching the UI about
+	// platform-specific schema details.
+	themeJSON, marshalErr := json.Marshal(theme)
+	if marshalErr != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to marshal theme %s for platform override %s: %s", theme.ThemeId, platformNodeName, marshalErr.Error()))
+		return clearThemePlatformOverrides(theme)
+	}
+
+	var merged map[string]json.RawMessage
+	unmarshalErr := json.Unmarshal(themeJSON, &merged)
+	if unmarshalErr != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to prepare theme %s for platform override %s: %s", theme.ThemeId, platformNodeName, unmarshalErr.Error()))
+		return clearThemePlatformOverrides(theme)
+	}
+
+	applyThemeOverrideFields(merged, *platformOverride)
+
+	if variantName != "" {
+		variantOverride, variantErr := getThemePlatformVariantOverride(*platformOverride, variantName)
+		if variantErr != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to prepare theme %s for platform override %s variant %s: %s", theme.ThemeId, platformNodeName, variantName, variantErr.Error()))
+			return clearThemePlatformOverrides(theme)
+		}
+		if variantOverride != nil {
+			applyThemeOverrideFields(merged, *variantOverride)
+		}
+	}
+
+	delete(merged, "windows")
+	delete(merged, "macos")
+	delete(merged, "linux")
+
+	resolvedJSON, marshalErr := json.Marshal(merged)
+	if marshalErr != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to encode resolved theme %s for platform override %s: %s", theme.ThemeId, platformNodeName, marshalErr.Error()))
+		return clearThemePlatformOverrides(theme)
+	}
+
+	var resolvedTheme common.Theme
+	unmarshalErr = json.Unmarshal(resolvedJSON, &resolvedTheme)
+	if unmarshalErr != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to resolve theme %s for platform override %s: %s", theme.ThemeId, platformNodeName, unmarshalErr.Error()))
+		return clearThemePlatformOverrides(theme)
+	}
+
+	return clearThemePlatformOverrides(resolvedTheme)
+}
+
+func (m *Manager) getThemePlatformOverride(theme common.Theme) (string, *common.ThemePlatformOverride) {
+	return getThemePlatformOverrideForTarget(theme, util.GetCurrentPlatform())
+}
+
+func getThemePlatformOverrideForTarget(theme common.Theme, platformName string) (string, *common.ThemePlatformOverride) {
+	switch platformName {
+	case util.PlatformWindows:
+		return "windows", theme.Windows
+	case util.PlatformMacOS:
+		return "macos", theme.MacOS
+	case "macos":
+		return "macos", theme.MacOS
+	case util.PlatformLinux:
+		return "linux", theme.Linux
+	default:
+		return platformName, nil
+	}
+}
+
+func applyThemeOverrideFields(merged map[string]json.RawMessage, override common.ThemePlatformOverride) {
+	// Legacy border aliases must still work inside platform and variant overrides.
+	// If an override uses the old alias, remove the canonical base value first so
+	// the existing alias parser can treat the alias as the effective value.
+	if _, ok := override["ResultItemBorderLeft"]; ok {
+		delete(merged, "ResultItemBorderLeftWidth")
+	}
+	if _, ok := override["ResultItemActiveBorderLeft"]; ok {
+		delete(merged, "ResultItemActiveBorderLeftWidth")
+	}
+	for fieldName, value := range override {
+		if fieldName == "variants" {
+			continue
+		}
+		merged[fieldName] = value
+	}
+}
+
+func getThemePlatformVariantOverride(platformOverride common.ThemePlatformOverride, variantName string) (*common.ThemePlatformOverride, error) {
+	variantsValue, ok := platformOverride["variants"]
+	if !ok || string(variantsValue) == "null" {
+		return nil, nil
+	}
+
+	var variants map[string]json.RawMessage
+	if err := json.Unmarshal(variantsValue, &variants); err != nil {
+		return nil, err
+	}
+
+	variantValue, ok := variants[variantName]
+	if !ok || string(variantValue) == "null" {
+		return nil, nil
+	}
+
+	var variantOverride common.ThemePlatformOverride
+	if err := json.Unmarshal(variantValue, &variantOverride); err != nil {
+		return nil, err
+	}
+	if len(variantOverride) == 0 {
+		return nil, nil
+	}
+
+	return &variantOverride, nil
+}
+
+func clearThemePlatformOverrides(theme common.Theme) common.Theme {
+	theme.Windows = nil
+	theme.MacOS = nil
+	theme.Linux = nil
+	return theme
+}
+
 func (m *Manager) ChangeTheme(ctx context.Context, theme common.Theme) {
 	// If it's an auto appearance theme, save the auto theme ID but apply the appropriate light/dark theme
 	if theme.IsAutoAppearance {
@@ -540,8 +1310,24 @@ func (m *Manager) ChangeTheme(ctx context.Context, theme common.Theme) {
 		m.isSystemDark = appearance.IsDark()
 		m.applyAutoAppearanceThemeIfNeed(ctx)
 	} else {
-		m.GetUI(ctx).ChangeTheme(ctx, theme)
+		m.GetUI(ctx).ChangeTheme(ctx, m.resolvePlatformTheme(ctx, theme))
 	}
+}
+
+// ApplyCurrentTheme pushes the currently configured theme to Flutter without writing ThemeId again.
+func (m *Manager) ApplyCurrentTheme(ctx context.Context) {
+	theme := m.GetCurrentTheme(ctx)
+	if theme.ThemeId == "" {
+		logger.Warn(ctx, "skip applying current theme: configured theme not found")
+		return
+	}
+
+	if impl, ok := m.GetUI(ctx).(*uiImpl); ok {
+		impl.ChangeThemeWithoutSave(ctx, theme)
+		return
+	}
+
+	logger.Warn(ctx, "skip applying current theme: UI does not support applying without saving")
 }
 
 func (m *Manager) GetUI(ctx context.Context) common.UI {
@@ -551,6 +1337,7 @@ func (m *Manager) GetUI(ctx context.Context) common.UI {
 // called after UI is ready to show, and will execute only once
 func (m *Manager) PostUIReady(ctx context.Context) {
 	logger.Info(ctx, "app is ready to show")
+	m.uiReadyAt.Store(util.GetSystemTimestamp())
 	if m.isUIReadyHandled {
 		logger.Warn(ctx, "app is already handled ready to show event")
 		return
@@ -561,6 +1348,13 @@ func (m *Manager) PostUIReady(ctx context.Context) {
 	m.applyAutoAppearanceThemeIfNeed(ctx)
 
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	if !woxSetting.OnboardingFinished.Get() {
+		// The first-run guide must win over HideOnStart so every user data
+		// directory gets one skippable setup pass before normal launcher startup.
+		m.ui.OpenOnboardingWindow(ctx)
+		return
+	}
+
 	if !woxSetting.HideOnStart.Get() {
 		m.ui.ShowApp(ctx, common.ShowContext{})
 	}
@@ -571,6 +1365,8 @@ func (m *Manager) PostOnShow(ctx context.Context) {
 	if impl, ok := m.ui.(*uiImpl); ok {
 		impl.isVisible = true
 		impl.isInSettingView = false
+		impl.isInOnboardingView = false
+		impl.isRecordingHotkey = false
 	}
 
 	analytics.TrackUIOpened(ctx)
@@ -603,12 +1399,69 @@ func (m *Manager) PostOnHide(ctx context.Context) {
 	if impl, ok := m.ui.(*uiImpl); ok {
 		impl.isVisible = false
 		impl.isInSettingView = false
+		impl.isInOnboardingView = false
+		impl.isRecordingHotkey = false
 	}
+	m.releaseHiddenCoreMemory(ctx)
+}
+
+// releaseHiddenCoreMemory lets Go return idle heap pages after hide cleanup settles.
+func (m *Manager) releaseHiddenCoreMemory(ctx context.Context) {
+	util.Go(ctx, "release hidden core memory", func() {
+		time.Sleep(10 * time.Second)
+
+		if impl, ok := m.ui.(*uiImpl); ok && impl.IsVisible(ctx) {
+			return
+		}
+
+		debug.FreeOSMemory()
+	})
 }
 
 func (m *Manager) PostOnSetting(ctx context.Context, isInSettingView bool) {
 	if impl, ok := m.ui.(*uiImpl); ok {
 		impl.isInSettingView = isInSettingView
+		if !isInSettingView {
+			impl.isRecordingHotkey = false
+		}
+		if isInSettingView {
+			// Settings can be opened while the launcher is hidden. Marking the
+			// shared window visible here keeps backend notification routing in
+			// sync without waiting for launcher-specific onShow.
+			impl.isVisible = true
+			impl.isInOnboardingView = false
+		}
+	}
+}
+
+func (m *Manager) PostOnOnboarding(ctx context.Context, isInOnboardingView bool) {
+	if impl, ok := m.ui.(*uiImpl); ok {
+		// Onboarding is a management surface like settings, but it needs its own
+		// state so Flutter can keep isInSettingView false while backend routing
+		// still suppresses toolbar notifications over the guide.
+		impl.isInOnboardingView = isInOnboardingView
+		if !isInOnboardingView {
+			impl.isRecordingHotkey = false
+		}
+		if isInOnboardingView {
+			impl.isVisible = true
+			impl.isInSettingView = false
+		}
+	}
+}
+
+// PostOnHotkeyRecording tracks recorder focus so global hotkey callbacks can feed the active recorder.
+func (m *Manager) PostOnHotkeyRecording(ctx context.Context, isRecording bool) {
+	if impl, ok := m.ui.(*uiImpl); ok {
+		impl.isRecordingHotkey = isRecording
+		if isRecording {
+			hotkey.SetCapsLockComboRecorder(func(hotkeyStr string) {
+				m.ui.RecordHotkey(util.NewTraceContext(), hotkeyStr)
+			})
+		} else {
+			hotkey.SetCapsLockComboRecorder(nil)
+		}
+		logger.Info(ctx, fmt.Sprintf("hotkey recording state changed: %t", isRecording))
 	}
 }
 
@@ -648,7 +1501,7 @@ func (m *Manager) ShowTray() {
 		}, tray.MenuItem{
 			Title: i18n.GetI18nManager().TranslateWox(ctx, "ui_tray_open_setting_window"),
 			Callback: func() {
-				m.GetUI(ctx).OpenSettingWindow(ctx, common.SettingWindowContext{})
+				m.GetUI(ctx).OpenSettingWindow(ctx, common.SettingWindowContext{Source: common.SettingWindowSourceTray})
 			},
 		}, tray.MenuItem{
 			Title: i18n.GetI18nManager().TranslateWox(ctx, "ui_tray_quit"),
@@ -665,6 +1518,15 @@ func (m *Manager) HideTray() {
 }
 
 func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value string) {
+	// If the setting key is platform-specific, only apply it if it matches the current platform.
+	// Cloud sync may send settings for other platforms, which should be ignored here.
+	if baseKey, platform, ok := setting.SplitPlatformSettingKey(key); ok {
+		if platform != util.GetCurrentPlatform() {
+			return
+		}
+		key = baseKey
+	}
+
 	var vb bool
 	var vs = value
 	if vb1, err := strconv.ParseBool(vs); err == nil {
@@ -679,19 +1541,29 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value strin
 			m.HideTray()
 		}
 	case "MainHotkey":
-		m.RegisterMainHotkey(ctx, vs)
+		if err := m.RegisterMainHotkey(ctx, vs); err != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to update main hotkey: %s", err.Error()))
+		}
 	case "SelectionHotkey":
-		m.RegisterSelectionHotkey(ctx, vs)
+		if err := m.RegisterSelectionHotkey(ctx, vs); err != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to update selection hotkey: %s", err.Error()))
+		}
 	case "LogLevel":
 		util.GetLogger().SetLevel(vs)
 	case "QueryHotkeys":
-		// unregister previous hotkeys
-		logger.Info(ctx, "post update query hotkeys, unregister previous query hotkeys")
-		m.unregisterQueryHotkeys(ctx)
+		if shouldGroupWaylandPortalHotkeys() {
+			m.globalHotkeyMu.Lock()
+			defer m.globalHotkeyMu.Unlock()
+			woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+			if err := m.reregisterWaylandPortalGlobalHotkeys(ctx, woxSetting.MainHotkey.Get(), woxSetting.SelectionHotkey.Get(), woxSetting.QueryHotkeys.Get()); err != nil {
+				logger.Error(ctx, fmt.Sprintf("failed to update Wayland portal query hotkeys: %s", err.Error()))
+			}
+			return
+		}
 
 		queryHotkeys := setting.GetSettingManager().GetWoxSetting(ctx).QueryHotkeys.Get()
-		for _, queryHotkey := range queryHotkeys {
-			m.RegisterQueryHotkey(ctx, queryHotkey)
+		if err := m.reregisterIndividualQueryHotkeys(ctx, queryHotkeys); err != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to update query hotkeys: %s", err.Error()))
 		}
 	case "TrayQueries":
 		woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
@@ -718,6 +1590,10 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value strin
 }
 
 func (m *Manager) refreshTrayQueryIcons(ctx context.Context) {
+	if util.IsLinuxWaylandSession() {
+		logger.Info(ctx, "skip tray query icon refresh: tray query is unavailable on Wayland")
+		return
+	}
 	if util.IsLinux() {
 		// tray query is not supported on linux yet
 		return
@@ -752,8 +1628,9 @@ func (m *Manager) refreshTrayQueryIcons(ctx context.Context) {
 			ContextMenuCallback: func() {
 				openSettingCtx := util.NewTraceContext()
 				m.GetUI(openSettingCtx).OpenSettingWindow(openSettingCtx, common.SettingWindowContext{
-					Path:  "/general",
-					Param: fmt.Sprintf("tray_queries:%d", trayQueryIndex),
+					Path:   "/general",
+					Param:  fmt.Sprintf("tray_queries:%d", trayQueryIndex),
+					Source: common.SettingWindowSourceTray,
 				})
 			},
 		})
@@ -763,16 +1640,21 @@ func (m *Manager) refreshTrayQueryIcons(ctx context.Context) {
 }
 
 func (m *Manager) executeTrayQuery(ctx context.Context, trayQuery setting.TrayQuery, rect tray.ClickRect) {
-	queryCtx := util.WithCoreSessionContext(ctx)
-	queryCtx = util.WithShowSourceContext(queryCtx, string(common.ShowSourceTrayQuery))
-	query := plugin.GetPluginManager().ReplaceQueryVariable(queryCtx, trayQuery.Query)
-	plainQuery := common.PlainQuery{
-		QueryId:   uuid.NewString(),
-		QueryType: plugin.QueryTypeInput,
-		QueryText: query,
+	if util.IsLinuxWaylandSession() {
+		logger.Info(ctx, "skip tray query: tray query is unavailable on Wayland")
+		return
 	}
 
-	m.RefreshActiveWindowSnapshot(queryCtx)
+	queryCtx := util.WithCoreSessionContext(ctx)
+	queryCtx = util.WithShowSourceContext(queryCtx, string(common.ShowSourceTrayQuery))
+	// ReplaceQueryVariable returns a PlainQuery whose type may be QueryTypeSelection
+	// when {wox:selected_file} was resolved, so we no longer hard-code QueryTypeInput here.
+	plainQuery := plugin.GetPluginManager().ReplaceQueryVariable(queryCtx, trayQuery.Query)
+	plainQuery.QueryId = uuid.NewString()
+
+	// Tray queries create and execute a plugin query in this call stack, so they
+	// need the fully-populated snapshot instead of the launcher fast path.
+	m.RefreshActiveWindowSnapshotBlocking(queryCtx)
 	q, _, err := plugin.GetPluginManager().NewQuery(queryCtx, plainQuery)
 	if err != nil {
 		logger.Error(queryCtx, fmt.Sprintf("failed to create tray query: %s", err.Error()))
@@ -881,7 +1763,10 @@ func (m *Manager) getTrayQueryWindowAnchorBottom(rect tray.ClickRect, screenRect
 
 func (m *Manager) getTrayQueryInitialWindowHeight(ctx context.Context, trayQuery setting.TrayQuery) int {
 	theme := m.GetCurrentTheme(ctx)
-	queryBoxHeight := 55 + theme.AppPaddingTop + theme.AppPaddingBottom
+	// Tray query popups start before Flutter has measured content, so backend
+	// positioning must use the same density-scaled base heights as the launcher
+	// render path while leaving theme padding untouched.
+	queryBoxHeight := DensityQueryBoxBaseHeight(ctx) + theme.AppPaddingTop + theme.AppPaddingBottom
 	if queryBoxHeight <= 0 {
 		queryBoxHeight = 80
 	}
@@ -890,7 +1775,7 @@ func (m *Manager) getTrayQueryInitialWindowHeight(ctx context.Context, trayQuery
 		return queryBoxHeight
 	}
 
-	resultItemHeight := 50 + theme.ResultItemPaddingTop + theme.ResultItemPaddingBottom
+	resultItemHeight := DensityResultItemBaseHeight(ctx) + theme.ResultItemPaddingTop + theme.ResultItemPaddingBottom
 	if resultItemHeight <= 0 {
 		resultItemHeight = 50
 	}
@@ -956,6 +1841,10 @@ func (m *Manager) getQueryHotkeyWindowPosition(ctx context.Context, queryHotkey 
 		y = bottom
 	default:
 		return common.WindowPosition{}, false
+	}
+
+	if util.IsLinux() {
+		logger.Info(ctx, fmt.Sprintf("linux-window-bounds go stage=query-hotkey screen=%d,%d %dx%d windowWidth=%d windowHeight=%d positionType=%s target=%d,%d screenDebug=%s", screenSize.X, screenSize.Y, screenSize.Width, screenSize.Height, windowWidth, windowHeight, positionType, x, y, screen.LastMouseScreenDebug()))
 	}
 
 	return common.WindowPosition{X: x, Y: y}, true
@@ -1048,8 +1937,11 @@ func (m *Manager) toTrayIconBytes(ctx context.Context, icon common.WoxImage) []b
 		return svgBytes
 	}
 
-	img, err := icon.ToImage()
+	img, err := icon.ToImageWithoutRemoteFetch()
 	if err != nil {
+		if icon.ImageType == common.WoxImageTypeEmoji {
+			m.warmTrayEmojiIconCache(ctx, icon)
+		}
 		logger.Warn(ctx, fmt.Sprintf("failed to parse tray query icon, fallback to app icon: %s", err.Error()))
 		return resource.GetAppIcon()
 	}
@@ -1070,6 +1962,42 @@ func (m *Manager) toTrayIconBytes(ctx context.Context, icon common.WoxImage) []b
 	}
 
 	return buf.Bytes()
+}
+
+// warmTrayEmojiIconCache keeps tray refresh local-first while still allowing emoji icons to resolve after the Twemoji PNG cache is ready.
+func (m *Manager) warmTrayEmojiIconCache(ctx context.Context, icon common.WoxImage) {
+	iconKey := icon.String()
+	m.trayEmojiWarmMu.Lock()
+	if m.trayEmojiWarmInFlight == nil {
+		m.trayEmojiWarmInFlight = map[string]struct{}{}
+	}
+	if _, exists := m.trayEmojiWarmInFlight[iconKey]; exists {
+		m.trayEmojiWarmMu.Unlock()
+		return
+	}
+	m.trayEmojiWarmInFlight[iconKey] = struct{}{}
+	m.trayEmojiWarmMu.Unlock()
+
+	util.Go(ctx, "warm tray query emoji icon cache", func() {
+		defer func() {
+			m.trayEmojiWarmMu.Lock()
+			delete(m.trayEmojiWarmInFlight, iconKey)
+			m.trayEmojiWarmMu.Unlock()
+		}()
+
+		warmCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+
+		if _, err := icon.ToImageWithContext(warmCtx); err != nil {
+			logger.Warn(ctx, fmt.Sprintf("failed to warm tray query emoji icon cache: %s", err.Error()))
+			return
+		}
+
+		if setting.GetSettingManager().GetWoxSetting(ctx).ShowTray.Get() {
+			logger.Info(ctx, fmt.Sprintf("warmed tray query emoji icon cache, refreshing tray query icons: %s", icon.ImageData))
+			m.refreshTrayQueryIcons(ctx)
+		}
+	})
 }
 
 func (m *Manager) toMacOSTrayVectorBytes(ctx context.Context, icon common.WoxImage) ([]byte, bool) {
@@ -1154,39 +2082,122 @@ func (m *Manager) ExitApp(ctx context.Context) {
 		util.GetLogger().Info(ctx, "start quitting")
 		plugin.GetPluginManager().Stop(ctx)
 		m.Stop(ctx)
+		diagnostic.GetManager().MarkCleanExit(ctx)
 		util.GetLogger().Info(ctx, "bye~")
 		os.Exit(0)
 	})
 }
 
 func (m *Manager) GetActiveWindowSnapshot(ctx context.Context) common.ActiveWindowSnapshot {
+	m.activeWindowSnapshotMu.RLock()
+	defer m.activeWindowSnapshotMu.RUnlock()
 	return m.activeWindowSnapshot
 }
 
-// RefreshActiveWindowSnapshot updates the cached active window snapshot
-// It skips updating if the active window is Wox UI itself
+// SeedActiveWindowSnapshotForQuery stores a caller-owned source window for the next plugin query.
+// Incrementing the sequence blocks older async detail refreshes from replacing it.
+func (m *Manager) SeedActiveWindowSnapshotForQuery(snapshot common.ActiveWindowSnapshot) {
+	m.activeWindowSnapshotMu.Lock()
+	m.activeWindowSnapshotSeq++
+	m.activeWindowSnapshot = snapshot
+	m.activeWindowSnapshotMu.Unlock()
+}
+
+// RefreshActiveWindowSnapshot updates the cached active window snapshot without
+// blocking launcher activation on expensive per-process details. The hotkey path
+// only needs a stable foreground PID before Wox appears; name/icon/dialog state
+// is filled later from that PID so macOS Accessibility calls cannot delay the
+// first launcher frame.
 func (m *Manager) RefreshActiveWindowSnapshot(ctx context.Context) {
-	activeWindowName := window.GetActiveWindowName()
+	m.refreshActiveWindowSnapshot(ctx, false)
+}
+
+// RefreshActiveWindowSnapshotBlocking preserves the old fully-populated snapshot
+// semantics for callers that immediately build or execute a plugin query. Those
+// callers would otherwise read a PID-only snapshot before the background detail
+// refresh has completed.
+func (m *Manager) RefreshActiveWindowSnapshotBlocking(ctx context.Context) {
+	m.refreshActiveWindowSnapshot(ctx, true)
+}
+
+func (m *Manager) refreshActiveWindowSnapshot(ctx context.Context, waitForDetails bool) {
 	activeWindowPid := window.GetActiveWindowPid()
-	if m.isUIWindow(activeWindowName, activeWindowPid) {
+	activeWindowId := window.GetActiveWindowId()
+
+	if activeWindowPid <= 0 {
+		m.activeWindowSnapshotMu.Lock()
+		m.activeWindowSnapshotSeq++
+		m.activeWindowSnapshot = common.ActiveWindowSnapshot{}
+		m.activeWindowSnapshotMu.Unlock()
 		return
 	}
 
-	m.activeWindowSnapshot.Name = activeWindowName
-	m.activeWindowSnapshot.Pid = activeWindowPid
-	if icon, err := window.GetActiveWindowIcon(); err == nil {
+	if m.isUIWindow("", activeWindowPid) {
+		return
+	}
+
+	m.activeWindowSnapshotMu.Lock()
+	m.activeWindowSnapshotSeq++
+	snapshotSeq := m.activeWindowSnapshotSeq
+	// Optimization: clear detail fields while keeping the PID immediately
+	// available. Keeping old details with a new PID created mixed snapshots, and
+	// blocking here made every launcher activation wait for icon and AX dialog
+	// probes even when the UI only needed to become visible.
+	m.activeWindowSnapshot = common.ActiveWindowSnapshot{Pid: activeWindowPid, WindowId: activeWindowId}
+	m.activeWindowSnapshotMu.Unlock()
+
+	if waitForDetails {
+		m.refreshActiveWindowSnapshotDetails(activeWindowPid, snapshotSeq)
+		return
+	}
+
+	util.Go(ctx, "refresh active window snapshot details", func() {
+		m.refreshActiveWindowSnapshotDetails(activeWindowPid, snapshotSeq)
+	})
+}
+
+func (m *Manager) refreshActiveWindowSnapshotDetails(activeWindowPid int, snapshotSeq uint64) {
+	activeWindowName := window.GetWindowNameByPid(activeWindowPid)
+
+	activeWindowIcon := common.WoxImage{}
+	if icon, err := window.GetWindowIconByPid(activeWindowPid); err == nil {
 		if woxIcon, convErr := common.NewWoxImage(icon); convErr == nil {
-			m.activeWindowSnapshot.Icon = woxIcon
+			activeWindowIcon = woxIcon
 		}
 	}
-	if isDialog, err := window.IsOpenSaveDialog(); err == nil {
-		m.activeWindowSnapshot.IsOpenSaveDialog = isDialog
-	} else {
-		m.activeWindowSnapshot.IsOpenSaveDialog = false
+
+	activeWindowIsOpenSaveDialog := false
+	if isDialog, err := window.IsOpenSaveDialogByPid(activeWindowPid); err == nil {
+		activeWindowIsOpenSaveDialog = isDialog
 	}
+
+	m.activeWindowSnapshotMu.Lock()
+	if m.activeWindowSnapshotSeq != snapshotSeq || m.activeWindowSnapshot.Pid != activeWindowPid {
+		m.activeWindowSnapshotMu.Unlock()
+		return
+	}
+	m.activeWindowSnapshot.Name = activeWindowName
+	m.activeWindowSnapshot.Icon = activeWindowIcon
+	m.activeWindowSnapshot.IsOpenSaveDialog = activeWindowIsOpenSaveDialog
+	m.activeWindowSnapshotMu.Unlock()
 }
 
 func (m *Manager) shouldIgnoreHotkeyTrigger(ctx context.Context) bool {
+	if m.isOnboardingViewActive() {
+		// Bug fix: onboarding has its own hotkey setup UI and uses the shared
+		// Wox window. The previous guard only checked ignored foreground apps,
+		// so pressing a registered global hotkey during the guide could toggle
+		// or replace the onboarding surface. Keeping the check in the common
+		// hotkey gate blocks all global hotkey handlers while onboarding is active.
+		logger.Info(ctx, "ignore hotkey trigger while onboarding is active")
+		return true
+	}
+
+	if util.IsLinuxWaylandSession() {
+		logger.Info(ctx, "skip ignored hotkey app check: active window identity is unavailable on Wayland")
+		return false
+	}
+
 	ignoredApps := setting.GetSettingManager().GetWoxSetting(ctx).IgnoredHotkeyApps.Get()
 	if len(ignoredApps) == 0 {
 		return false
@@ -1210,6 +2221,34 @@ func (m *Manager) shouldIgnoreHotkeyTrigger(ctx context.Context) bool {
 		}
 	}
 
+	return false
+}
+
+// recordHotkeyIfRecording forwards Wox-owned global hotkey presses to the active recorder instead of executing them.
+func (m *Manager) recordHotkeyIfRecording(ctx context.Context, hotkeyStr string) bool {
+	if !m.isHotkeyRecordingActive() {
+		return false
+	}
+
+	logger.Info(ctx, fmt.Sprintf("record registered hotkey while recording: %s", hotkeyStr))
+	util.Go(ctx, "record global hotkey in UI", func() {
+		m.ui.RecordHotkey(ctx, hotkeyStr)
+	})
+	return true
+}
+
+// isHotkeyRecordingActive reports whether the shared UI is currently capturing a hotkey.
+func (m *Manager) isHotkeyRecordingActive() bool {
+	if impl, ok := m.ui.(*uiImpl); ok {
+		return impl.isRecordingHotkey && impl.isVisible
+	}
+	return false
+}
+
+func (m *Manager) isOnboardingViewActive() bool {
+	if impl, ok := m.ui.(*uiImpl); ok {
+		return impl.isInOnboardingView && impl.isVisible
+	}
 	return false
 }
 
@@ -1264,6 +2303,33 @@ func (m *Manager) ProcessDeeplink(ctx context.Context, deeplink string) {
 		m.ui.ToggleApp(ctx, common.ShowContext{
 			SelectAll: true,
 		})
+	}
+
+	// wox://gnome-hotkey?binding=<url-encoded-binding>
+	// Invoked when a GNOME custom keybinding fires and the secondary wox
+	// process forwards the deeplink to the already-running instance.
+	// The binding parameter is the GNOME key string (e.g. "<Primary><Shift>k"),
+	// URL-decoded by ProcessDeeplink before it reaches here.
+	if command == "gnome-hotkey" {
+		binding := arguments["binding"]
+		if binding != "" {
+			keyboard.InvokeGnomeHotkeyCallback(binding)
+		}
+	}
+
+	if strings.HasPrefix(command, "billing/") {
+		ui, isUIImpl := m.ui.(*uiImpl)
+		if isUIImpl {
+			ui.FocusSettingWindow(ctx)
+		}
+		if accountService := account.GetService(); accountService != nil {
+			if err := accountService.RefreshAccount(ctx); err != nil {
+				util.GetLogger().Warn(ctx, fmt.Sprintf("failed to refresh account after billing deeplink: %v", err))
+			}
+		}
+		if isUIImpl {
+			ui.RefreshAccountStatus(ctx)
+		}
 	}
 
 	// wox://plugin/{pluginID}?arg1=val1&arg2=val2
@@ -1385,9 +2451,11 @@ func (m *Manager) applyAutoAppearanceThemeIfNeed(ctx context.Context) {
 
 	if targetTheme, ok := m.themes.Load(targetThemeId); ok {
 		logger.Info(ctx, fmt.Sprintf("auto apply theme: %s (isDark=%v)", targetTheme.ThemeName, m.isSystemDark))
-		// Apply theme without saving to settings, so auto appearance logic works on restart
+		// Apply the current-platform effective theme without saving to settings, so
+		// auto appearance keeps storing the auto theme ID while the UI receives the
+		// same flattened payload as normal theme changes.
 		if impl, ok := m.ui.(*uiImpl); ok {
-			impl.ChangeThemeWithoutSave(ctx, targetTheme)
+			impl.ChangeThemeWithoutSave(ctx, m.resolvePlatformTheme(ctx, targetTheme))
 		}
 	} else {
 		logger.Warn(ctx, fmt.Sprintf("target theme not found: %s", targetThemeId))

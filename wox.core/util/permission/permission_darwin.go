@@ -23,6 +23,7 @@ import "C"
 
 import (
 	"context"
+	"wox/util/mainthread"
 )
 
 func HasAccessibilityPermission(ctx context.Context) bool {
@@ -30,9 +31,13 @@ func HasAccessibilityPermission(ctx context.Context) bool {
 }
 
 func GrantAccessibilityPermission(ctx context.Context) {
-	C.openAccessibilityPreferences()
+	mainthread.Call(func() {
+		C.openAccessibilityPreferences()
+	})
 }
 
 func OpenPrivacySecuritySettings(ctx context.Context) {
-	C.openPrivacySecurityPreferences()
+	mainthread.Call(func() {
+		C.openPrivacySecurityPreferences()
+	})
 }

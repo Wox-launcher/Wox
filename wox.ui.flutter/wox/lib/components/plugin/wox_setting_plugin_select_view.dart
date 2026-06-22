@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:wox/components/wox_dropdown_button.dart';
 import 'package:wox/components/wox_image_view.dart';
@@ -96,43 +98,58 @@ class _WoxSettingPluginSelectState extends State<WoxSettingPluginSelect> with Wo
 
   @override
   Widget build(BuildContext context) {
-    final dropdownWidth = widget.item.style.width > 0 ? widget.item.style.width.toDouble() : null;
+    final hasExplicitWidth = widget.item.style.width > 0;
+    final requestedDropdownWidth = hasExplicitWidth ? widget.item.style.width.toDouble() : double.infinity;
     final valueExists = widget.item.options.any((option) => option.value == _rawValue);
     final effectiveValue = valueExists ? _rawValue : (widget.item.options.isNotEmpty ? widget.item.options.first.value : null);
 
+    Widget buildField(double fieldWidth) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          WoxDropdownButton<String>(
+            value: widget.item.isMulti ? null : effectiveValue,
+            isExpanded: true,
+            width: fieldWidth,
+            multiSelect: widget.item.isMulti,
+            multiValues: widget.item.isMulti ? _parseMultiValues(_rawValue) : const [],
+            items:
+                widget.item.options.map((e) {
+                  return WoxDropdownItem(value: e.value, label: e.label, leading: _buildOptionLeading(e), isSelectAll: e.isSelectAll);
+                }).toList(),
+            onChanged: (v) {
+              if (widget.item.isMulti) {
+                return;
+              }
+              _saveValue(v ?? "");
+            },
+            onMultiChanged: (values) {
+              if (!widget.item.isMulti) {
+                return;
+              }
+              _saveValue(_encodeMultiValues(values));
+            },
+          ),
+          validationMessage(_errorMessage),
+        ],
+      );
+    }
+
     return layout(
       label: widget.item.label,
-      child: Wrap(
-        crossAxisAlignment: WrapCrossAlignment.center,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              WoxDropdownButton<String>(
-                value: widget.item.isMulti ? null : effectiveValue,
-                isExpanded: true,
-                width: dropdownWidth,
-                multiSelect: widget.item.isMulti,
-                multiValues: widget.item.isMulti ? _parseMultiValues(_rawValue) : const [],
-                items:
-                    widget.item.options.map((e) {
-                      return WoxDropdownItem(value: e.value, label: e.label, leading: _buildOptionLeading(e), isSelectAll: e.isSelectAll);
-                    }).toList(),
-                onChanged: (v) {
-                  if (widget.item.isMulti) {
-                    return;
-                  }
-                  _saveValue(v ?? "");
-                },
-                onMultiChanged: (values) {
-                  if (!widget.item.isMulti) {
-                    return;
-                  }
-                  _saveValue(_encodeMultiValues(values));
-                },
-              ),
-              validationMessage(_errorMessage),
-            ],
+          Flexible(
+            fit: hasExplicitWidth ? FlexFit.loose : FlexFit.tight,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // Plugin selects fill the value column by default, but explicit widths
+                // are capped to the available column width to keep the pane overflow-free.
+                final effectiveWidth = hasExplicitWidth ? math.min(requestedDropdownWidth, constraints.maxWidth) : constraints.maxWidth;
+                return buildField(effectiveWidth);
+              },
+            ),
           ),
           suffix(widget.item.suffix),
         ],

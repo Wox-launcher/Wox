@@ -8,9 +8,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"wox/ai"
 	"wox/analytics"
 	"wox/common"
 	"wox/database"
+	"wox/diagnostic"
 	"wox/i18n"
 	"wox/launcher"
 	"wox/migration"
@@ -21,6 +23,8 @@ import (
 	"wox/ui"
 	"wox/updater"
 	"wox/util"
+	"wox/util/clipboard"
+	"wox/util/imagecache"
 	"wox/util/selection"
 )
 
@@ -36,6 +40,10 @@ func Run() {
 	})
 
 	ctx := util.NewTraceContext()
+	bugReportArg := diagnostic.GetManager().IsBugReportArg(os.Args)
+	if diagnostic.GetManager().IsEnabled() {
+		util.GetLogger().SetLevel(setting.LogLevelDebug)
+	}
 	util.GetLogger().Info(ctx, "------------------------------")
 	util.GetLogger().Info(ctx, fmt.Sprintf("Wox starting: %s", updater.CURRENT_VERSION))
 	util.GetLogger().Info(ctx, fmt.Sprintf("golang version: %s", strings.ReplaceAll(runtime.Version(), "go", "")))
@@ -46,6 +54,85 @@ func Run() {
 	} else {
 		util.GetLogger().Info(ctx, fmt.Sprintf("startup pid: %d, executable: <error>, args: %v", os.Getpid(), os.Args))
 	}
+
+	// Check for an existing instance before heavyweight startup. mainthread.Init
+	// keeps the process alive after Run returns, so forwarded one-shot launches
+	// must exit explicitly.
+	if existingPort := getExistingInstancePort(ctx); existingPort > 0 {
+		util.GetLogger().Info(ctx, fmt.Sprintf("there is existing instance running, port: %d", existingPort))
+
+		if bugReportArg {
+			_, postBugReportErr := util.HttpPost(ctx, fmt.Sprintf("http://127.0.0.1:%d/diagnostics/monitor/enable-restart", existingPort), "")
+			if postBugReportErr != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("failed to enable bug aware mode in existing instance: %s", postBugReportErr.Error()))
+			} else {
+				util.GetLogger().Info(ctx, "enabled bug aware mode in existing instance, bye~")
+			}
+			os.Exit(0)
+		}
+
+		for _, arg := range os.Args[1:] {
+			if strings.HasPrefix(arg, "wox://") {
+				_, postDeepLinkErr := util.HttpPost(ctx, fmt.Sprintf("http://127.0.0.1:%d/deeplink", existingPort), map[string]string{
+					"deeplink": arg,
+				})
+				if postDeepLinkErr != nil {
+					util.GetLogger().Error(ctx, fmt.Sprintf("failed to post deeplink to existing instance: %s", postDeepLinkErr.Error()))
+				} else {
+					util.GetLogger().Info(ctx, "post deeplink to existing instance successfully, bye~")
+				}
+				os.Exit(0)
+			}
+		}
+
+		_, postShowErr := util.HttpPost(ctx, fmt.Sprintf("http://127.0.0.1:%d/show", existingPort), "")
+		if postShowErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to show existing instance: %s", postShowErr.Error()))
+		} else {
+			util.GetLogger().Info(ctx, "show existing instance successfully, bye~")
+		}
+		os.Exit(0)
+	}
+
+	if bugReportArg && !diagnostic.GetManager().IsChildArg(os.Args) {
+		if _, enableErr := diagnostic.GetManager().Enable(ctx, ""); enableErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to enable bug aware mode from startup arg: %s", enableErr.Error()))
+		} else {
+			util.GetLogger().SetLevel(setting.LogLevelDebug)
+			if supervisorErr := diagnostic.GetManager().StartSupervisorDetached(ctx, true); supervisorErr != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("failed to start bug aware supervisor from startup arg: %s", supervisorErr.Error()))
+			} else {
+				util.GetLogger().Info(ctx, "bug aware supervisor started from startup arg, exiting current process")
+				diagnostic.GetManager().MarkCleanExit(ctx)
+				os.Exit(0)
+			}
+		}
+	}
+
+	if diagnostic.GetManager().IsEnabled() && !diagnostic.GetManager().IsChildArg(os.Args) {
+		if supervisorErr := diagnostic.GetManager().StartSupervisorDetached(ctx, true); supervisorErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to start bug aware supervisor: %s", supervisorErr.Error()))
+		} else {
+			util.GetLogger().Info(ctx, "bug aware supervisor started, exiting current process")
+			diagnostic.GetManager().MarkCleanExit(ctx)
+			os.Exit(0)
+		}
+	}
+
+	resource.EnsureLinuxDesktopIcon(ctx)
+	if desktopEntryReady := util.EnsureDeepLinkProtocolHandler(ctx); desktopEntryReady && util.ShouldRelaunchLinuxFromDesktopEntry(os.Args[1:]) {
+		util.GetLogger().Info(ctx, "Wayland session started without stable desktop identity, relaunching from Linux desktop entry")
+		if relaunchErr := util.RelaunchLinuxFromDesktopEntry(ctx); relaunchErr != nil {
+			util.GetLogger().Warn(ctx, fmt.Sprintf("failed to relaunch from Linux desktop entry: %s", relaunchErr.Error()))
+		} else {
+			util.GetLogger().Info(ctx, "relaunched from Linux desktop entry, exiting current process")
+			diagnostic.GetManager().MarkCleanExit(ctx)
+			os.Exit(0)
+		}
+	}
+
+	diagnostic.GetManager().RecordRunStart(ctx, diagnostic.GetManager().IsChildArg(os.Args))
+	util.GetLogger().Info(ctx, "no existing instance found, proceeding with full startup")
 
 	if err := database.Init(ctx); err != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to initialize database: %s", err.Error()))
@@ -69,38 +156,6 @@ func Run() {
 	ui.GetUIManager().UpdateServerPort(serverPort)
 	common.SetServerPort(serverPort)
 
-	// check if there is existing instance running
-	if existingPort := getExistingInstancePort(ctx); existingPort > 0 {
-		util.GetLogger().Error(ctx, fmt.Sprintf("there is existing instance running, port: %d", existingPort))
-
-		// if args has deeplink, post it to the existing instance
-		if len(os.Args) > 1 {
-			for _, arg := range os.Args {
-				if strings.HasPrefix(arg, "wox://") {
-					_, postDeepLinkErr := util.HttpPost(ctx, fmt.Sprintf("http://127.0.0.1:%d/deeplink", existingPort), map[string]string{
-						"deeplink": arg,
-					})
-					if postDeepLinkErr != nil {
-						util.GetLogger().Error(ctx, fmt.Sprintf("failed to post deeplink to existing instance: %s", postDeepLinkErr.Error()))
-					} else {
-						util.GetLogger().Info(ctx, "post deeplink to existing instance successfully, bye~")
-						return
-					}
-				}
-			}
-		}
-
-		// show existing instance if no deeplink is provided
-		_, postShowErr := util.HttpPost(ctx, fmt.Sprintf("http://127.0.0.1:%d/show", existingPort), "")
-		if postShowErr != nil {
-			util.GetLogger().Error(ctx, fmt.Sprintf("failed to show existing instance: %s", postShowErr.Error()))
-		} else {
-			util.GetLogger().Info(ctx, "show existing instance successfully, bye~")
-		}
-		return
-	}
-
-	util.GetLogger().Info(ctx, "no existing instance found")
 	writeErr := os.WriteFile(util.GetLocation().GetAppLockPath(), []byte(fmt.Sprintf("%d", serverPort)), 0644)
 	if writeErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to write lock file: %s", writeErr.Error()))
@@ -112,8 +167,6 @@ func Run() {
 		return
 	}
 
-	util.EnsureDeepLinkProtocolHandler(ctx)
-
 	settingErr := setting.GetSettingManager().Init(ctx)
 	if settingErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to initialize settings: %s", settingErr.Error()))
@@ -121,16 +174,25 @@ func Run() {
 	}
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	util.GetLogger().SetLevel(woxSetting.LogLevel.Get())
+	if diagnostic.GetManager().IsEnabled() {
+		util.GetLogger().SetLevel(setting.LogLevelDebug)
+	}
 
 	if woxSetting.HttpProxyEnabled.Get() {
 		util.UpdateHTTPProxy(ctx, woxSetting.HttpProxyUrl.Get())
 	}
+
+	initCloudSync(ctx)
 
 	langErr := i18n.GetI18nManager().UpdateLang(ctx, woxSetting.LangCode.Get())
 	if langErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to initialize lang(%s): %s", woxSetting.LangCode.Get(), langErr.Error()))
 		return
 	}
+
+	util.Go(ctx, "start ai command store manager", func() {
+		ai.GetStoreManager().Start(util.NewTraceContext())
+	})
 
 	for _, arg := range os.Args {
 		if arg == "--updated" {
@@ -174,11 +236,13 @@ func Run() {
 	}
 
 	shareUI := ui.GetUIManager().GetUI(ctx)
+	clipboard.SetNativeImageFileWriter(shareUI.WriteClipboardImageFile)
 	plugin.GetPluginManager().Start(ctx, shareUI)
 
 	selection.InitSelection()
 	setting.GetSettingManager().StartAutoBackup(ctx)
 	setting.GetSettingManager().StartMRUCleanup(ctx)
+	imagecache.StartCleanupRoutine(ctx)
 	updater.StartAutoUpdateChecker(ctx)
 
 	if util.ShouldDisableTelemetryForTest() {

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"wox/cloudsync"
 	"wox/database"
 	"wox/i18n"
 	"wox/setting"
@@ -127,6 +128,12 @@ var storeOnce sync.Once
 type Store struct {
 	pluginManifests       []StorePluginManifest
 	lastManifestSignature string // to avoid notifying UI reload if no changes
+
+	// installMu serializes install and uninstall operations so that concurrent
+	// invocations (e.g. the user quickly installs two plugins in a row) cannot
+	// interleave their file-system and plugin-manager mutations, which previously
+	// caused loading-indicator flicker and potential data corruption.
+	installMu sync.Mutex
 }
 
 func GetStoreManager() *Store {
@@ -176,7 +183,7 @@ func (s *Store) setPluginManifests(ctx context.Context, manifests []StorePluginM
 	}
 	s.lastManifestSignature = signature
 
-	GetPluginManager().GetUI().ReloadSettingPlugins(ctx)
+	reloadSettingPlugins(ctx)
 }
 
 func (s *Store) buildManifestSignature(manifests []StorePluginManifest) string {
@@ -259,6 +266,94 @@ func (s *Store) GetStorePluginManifestById(ctx context.Context, id string) (Stor
 	return StorePluginManifest{}, fmt.Errorf("plugin %s not found", id)
 }
 
+// QueueInstalledPluginsForSync seeds current store-installed plugins into the oplog.
+func (s *Store) QueueInstalledPluginsForSync(ctx context.Context) {
+	for _, instance := range GetPluginManager().GetPluginInstances() {
+		if instance.IsSystemPlugin || instance.IsDevPlugin || s.isCloudSyncDisabled(ctx, instance.Metadata.Id) {
+			continue
+		}
+		manifest, ok := s.findSyncableStoreManifest(ctx, instance.Metadata.Id)
+		if !ok {
+			logger.Warn(ctx, fmt.Sprintf("skip plugin install sync for %s: store manifest not found", instance.Metadata.Id))
+			continue
+		}
+		s.logInstalledPluginUpsert(ctx, manifest)
+	}
+}
+
+// findSyncableStoreManifest resolves the downloadable store manifest required
+// to reproduce a plugin install on another device.
+func (s *Store) findSyncableStoreManifest(ctx context.Context, pluginID string) (StorePluginManifest, bool) {
+	if manifest, err := s.GetStorePluginManifestById(ctx, pluginID); err == nil {
+		return manifest, true
+	}
+
+	manifests := s.GetStorePluginManifests(ctx)
+	if len(manifests) > 0 {
+		s.setPluginManifests(ctx, manifests)
+	}
+	manifest, found := lo.Find(manifests, func(item StorePluginManifest) bool {
+		return item.Id == pluginID
+	})
+	return manifest, found
+}
+
+// logInstalledPluginUpsert records successful user-triggered plugin installs
+// without failing the already-completed install if oplog writing fails.
+func (s *Store) logInstalledPluginUpsert(ctx context.Context, manifest StorePluginManifest) {
+	if s.isCloudSyncDisabled(ctx, manifest.Id) {
+		return
+	}
+	manifestJSON, err := json.Marshal(manifest)
+	if err != nil {
+		logger.Warn(ctx, fmt.Sprintf("failed to encode installed plugin sync value for %s: %s", manifest.Id, err.Error()))
+		return
+	}
+	value := cloudsync.InstalledPluginValue{
+		ID:       manifest.Id,
+		Version:  manifest.Version,
+		Source:   cloudsync.InstallSyncSourceStore,
+		Manifest: manifestJSON,
+	}
+	if err := cloudsync.LogInstalledPluginUpsert(ctx, value); err != nil {
+		logger.Warn(ctx, fmt.Sprintf("failed to log installed plugin sync value for %s: %s", manifest.Id, err.Error()))
+	}
+}
+
+// logInstalledPluginDelete records successful user-triggered plugin uninstalls
+// without failing the already-completed uninstall if oplog writing fails.
+func (s *Store) logInstalledPluginDelete(ctx context.Context, pluginID string) {
+	if s.isCloudSyncDisabled(ctx, pluginID) {
+		return
+	}
+	if err := cloudsync.LogInstalledPluginDelete(ctx, pluginID); err != nil {
+		logger.Warn(ctx, fmt.Sprintf("failed to log installed plugin delete for %s: %s", pluginID, err.Error()))
+	}
+}
+
+// isCloudSyncDisabled keeps plugin install-list sync aligned with plugin
+// setting sync exclusions.
+func (s *Store) isCloudSyncDisabled(ctx context.Context, pluginID string) bool {
+	if setting.GetSettingManager() == nil {
+		return false
+	}
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	if woxSetting == nil {
+		return false
+	}
+	return lo.Contains(woxSetting.CloudSyncDisabledPlugins.Get(), pluginID)
+}
+
+// reloadSettingPlugins tolerates early restore flows before plugin manager UI
+// has been attached.
+func reloadSettingPlugins(ctx context.Context) {
+	sharedUI := GetPluginManager().GetUI()
+	if sharedUI == nil {
+		return
+	}
+	sharedUI.ReloadSettingPlugins(ctx)
+}
+
 func (s *Store) Search(ctx context.Context, keyword string) []StorePluginManifest {
 	return lo.Filter(s.pluginManifests, func(manifest StorePluginManifest, _ int) bool {
 		if !IsAnySupportedInCurrentOS(manifest.SupportedOS) {
@@ -289,13 +384,39 @@ func (s *Store) Install(ctx context.Context, manifest StorePluginManifest) error
 	return s.InstallWithProgress(ctx, manifest, nil)
 }
 
+// InstallLocal installs a plugin without writing cloud-sync install oplogs.
+func (s *Store) InstallLocal(ctx context.Context, manifest StorePluginManifest) error {
+	return s.installWithProgress(ctx, manifest, nil, false)
+}
+
 func (s *Store) InstallWithProgress(ctx context.Context, manifest StorePluginManifest, progressCallback InstallProgressCallback) error {
+	return s.installWithProgress(ctx, manifest, progressCallback, true)
+}
+
+// installWithProgress keeps local restore and user-triggered installs on the
+// same file/runtime path while controlling whether the result is synced.
+func (s *Store) installWithProgress(ctx context.Context, manifest StorePluginManifest, progressCallback InstallProgressCallback, syncInstall bool) error {
+	// Serialize all install/uninstall operations. Without this lock, a user
+	// installing two plugins in quick succession causes the operations to race:
+	// both may try to unload/reload the same runtime host, write to overlapping
+	// directories, or toggle loading state concurrently — producing the
+	// "loading number alternate abnormally" symptom reported in issue #4401.
+	s.installMu.Lock()
+	defer s.installMu.Unlock()
+
 	logger.Info(ctx, fmt.Sprintf("start to install plugin %s(%s)", manifest.GetName(ctx), manifest.Version))
 
-	// check if plugin's runtime is started
-	if !GetPluginManager().IsHostStarted(ctx, manifest.Runtime) {
-		logger.Error(ctx, fmt.Sprintf("%s runtime is not started, please start first", manifest.Runtime))
-		return fmt.Errorf("%s runtime is not started, please start first", manifest.Runtime)
+	// Store installs should reject incompatible manifests before runtime startup
+	// or download work. The previous flow kept MinWoxVersion as display metadata
+	// only, which allowed users to install plugins that this Wox build cannot run.
+	if err := ensureWoxVersionSupported(manifest.GetName(ctx), manifest.MinWoxVersion); err != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to install plugin %s(%s): %s", manifest.GetName(ctx), manifest.Version, err.Error()))
+		return err
+	}
+
+	if err := GetPluginManager().EnsureHostStarted(ctx, manifest.Runtime); err != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to prepare %s runtime for plugin %s(%s): %s", manifest.Runtime, manifest.GetName(ctx), manifest.Version, err.Error()))
+		return fmt.Errorf("failed to prepare %s runtime for plugin %s(%s): %w", manifest.Runtime, manifest.GetName(ctx), manifest.Version, err)
 	}
 
 	// check if installed newer version
@@ -315,7 +436,9 @@ func (s *Store) InstallWithProgress(ctx context.Context, manifest StorePluginMan
 
 		// only uninstall for non-script plugins; script plugins will be hot-swapped with rollback
 		if manifest.Runtime != PLUGIN_RUNTIME_SCRIPT {
-			uninstallErr := s.Uninstall(ctx, installedPlugin, true)
+			// Use uninstallLocked because InstallWithProgress already holds installMu.
+			// Calling Uninstall here would deadlock.
+			uninstallErr := s.uninstallLocked(ctx, installedPlugin, true, nil)
 			if uninstallErr != nil {
 				logger.Error(ctx, fmt.Sprintf("failed to uninstall plugin %s(%s): %s", installedPlugin.Metadata.GetName(ctx), installedPlugin.Metadata.Version, uninstallErr.Error()))
 				return fmt.Errorf("failed to uninstall plugin %s(%s): %s", installedPlugin.Metadata.GetName(ctx), installedPlugin.Metadata.Version, uninstallErr.Error())
@@ -334,7 +457,10 @@ func (s *Store) InstallWithProgress(ctx context.Context, manifest StorePluginMan
 		}
 	}
 
-	GetPluginManager().GetUI().ReloadSettingPlugins(ctx)
+	reloadSettingPlugins(ctx)
+	if syncInstall {
+		s.logInstalledPluginUpsert(ctx, manifest)
+	}
 	return nil
 }
 
@@ -671,6 +797,11 @@ func (s *Store) ParsePluginManifestFromLocal(ctx context.Context, filePath strin
 	if pluginMetadata.Id == "" {
 		return Metadata{}, fmt.Errorf("plugin.json not found or invalid")
 	}
+	if pluginMetadata.MinWoxVersion == "" {
+		// Local packages created before MinWoxVersion was enforced should keep the
+		// historical compatibility floor instead of failing with an empty version.
+		pluginMetadata.MinWoxVersion = defaultMinWoxVersion
+	}
 
 	return pluginMetadata, nil
 }
@@ -680,15 +811,26 @@ func (s *Store) InstallFromLocal(ctx context.Context, filePath string) error {
 }
 
 func (s *Store) InstallFromLocalWithProgress(ctx context.Context, filePath string, progressCallback InstallProgressCallback) error {
+	// Serialize local installs with remote installs and uninstalls for the same
+	// reasons as InstallWithProgress (issue #4401).
+	s.installMu.Lock()
+	defer s.installMu.Unlock()
+
 	pluginMetadata, err := s.ParsePluginManifestFromLocal(ctx, filePath)
 	if err != nil {
 		return err
 	}
 
-	// check if plugin's runtime is started
-	if !GetPluginManager().IsHostStarted(ctx, ConvertToRuntime(pluginMetadata.Runtime)) {
-		logger.Error(ctx, fmt.Sprintf("%s runtime is not started, please start first", pluginMetadata.Runtime))
-		return fmt.Errorf("%s runtime is not started, please start first", pluginMetadata.Runtime)
+	// Local package installs must be checked before unpacking so an incompatible
+	// archive cannot replace an existing plugin or leave a partial install behind.
+	if err := ensureWoxVersionSupported(pluginMetadata.GetName(ctx), pluginMetadata.MinWoxVersion); err != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to install local plugin %s(%s): %s", pluginMetadata.GetName(ctx), pluginMetadata.Version, err.Error()))
+		return err
+	}
+
+	if err := GetPluginManager().EnsureHostStarted(ctx, ConvertToRuntime(pluginMetadata.Runtime)); err != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to prepare %s runtime for local plugin %s(%s): %s", pluginMetadata.Runtime, pluginMetadata.GetName(ctx), pluginMetadata.Version, err.Error()))
+		return fmt.Errorf("failed to prepare %s runtime for local plugin %s(%s): %w", pluginMetadata.Runtime, pluginMetadata.GetName(ctx), pluginMetadata.Version, err)
 	}
 
 	// check if installed newer version
@@ -706,7 +848,7 @@ func (s *Store) InstallFromLocalWithProgress(ctx context.Context, filePath strin
 			}
 		}
 
-		uninstallErr := s.Uninstall(ctx, installedPlugin, true)
+		uninstallErr := s.uninstallLocked(ctx, installedPlugin, true, nil)
 		if uninstallErr != nil {
 			logger.Error(ctx, fmt.Sprintf("failed to uninstall plugin %s(%s): %s", installedPlugin.Metadata.GetName(ctx), installedPlugin.Metadata.Version, uninstallErr.Error()))
 			return fmt.Errorf("failed to uninstall plugin %s(%s): %s", installedPlugin.Metadata.GetName(ctx), installedPlugin.Metadata.Version, uninstallErr.Error())
@@ -750,7 +892,7 @@ func (s *Store) InstallFromLocalWithProgress(ctx context.Context, filePath strin
 	}
 
 	// notify UI to reload
-	GetPluginManager().GetUI().ReloadSettingPlugins(ctx)
+	reloadSettingPlugins(ctx)
 
 	if progressCallback != nil {
 		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_install_progress_complete"))
@@ -763,18 +905,53 @@ func (s *Store) Uninstall(ctx context.Context, plugin *Instance, skipCleanSettin
 	return s.UninstallWithProgress(ctx, plugin, skipCleanSetting, nil)
 }
 
+// UninstallLocal removes a plugin without writing cloud-sync install oplogs.
+func (s *Store) UninstallLocal(ctx context.Context, plugin *Instance, skipCleanSetting bool) error {
+	return s.uninstallWithProgress(ctx, plugin, skipCleanSetting, nil, false)
+}
+
 func (s *Store) UninstallWithProgress(ctx context.Context, plugin *Instance, skipCleanSetting bool, progressCallback UninstallProgressCallback) error {
+	return s.uninstallWithProgress(ctx, plugin, skipCleanSetting, progressCallback, true)
+}
+
+// uninstallWithProgress shares the same uninstall path for UI actions and
+// cloud restores while controlling whether the removal is synced.
+func (s *Store) uninstallWithProgress(ctx context.Context, plugin *Instance, skipCleanSetting bool, progressCallback UninstallProgressCallback, syncInstall bool) error {
+	// Acquire the same lock used by InstallWithProgress so that an uninstall
+	// triggered directly from the UI cannot race with an in-progress install.
+	s.installMu.Lock()
+	defer s.installMu.Unlock()
+	if err := s.uninstallLocked(ctx, plugin, skipCleanSetting, progressCallback); err != nil {
+		return err
+	}
+	if syncInstall && !plugin.IsSystemPlugin && !plugin.IsDevPlugin {
+		s.logInstalledPluginDelete(ctx, plugin.Metadata.Id)
+	}
+	return nil
+}
+
+// uninstallLocked performs the actual uninstall work. It must only be called
+// while the caller already holds installMu, so it never tries to acquire the
+// lock itself. This lets InstallWithProgress call it internally without
+// deadlocking (InstallWithProgress already holds installMu).
+func (s *Store) uninstallLocked(ctx context.Context, plugin *Instance, skipCleanSetting bool, progressCallback UninstallProgressCallback) error {
 	logger.Info(ctx, fmt.Sprintf("start to uninstall plugin %s(%s)", plugin.Metadata.GetName(ctx), plugin.Metadata.Version))
-
-	if progressCallback != nil {
-		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_uninstall_progress_preparing"))
+	pluginAlreadyUnloaded := false
+	reportProgress := func(key string, args ...any) {
+		if progressCallback == nil {
+			return
+		}
+		message := i18n.GetI18nManager().TranslateWox(ctx, "i18n:"+key)
+		if len(args) > 0 {
+			message = fmt.Sprintf(message, args...)
+		}
+		progressCallback(message)
 	}
 
-	if progressCallback != nil {
-		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_uninstall_progress_removing"))
-	}
+	reportProgress("plugin_uninstall_progress_preparing")
 
 	if plugin.IsDevPlugin {
+		reportProgress("plugin_uninstall_progress_removing")
 		var wpmPlugin *Instance
 		for _, instance := range GetPluginManager().GetPluginInstances() {
 			if instance.Metadata.Id == "e2c5f005-6c73-43c8-bc53-ab04def265b2" {
@@ -789,6 +966,7 @@ func (s *Store) UninstallWithProgress(ctx context.Context, plugin *Instance, ski
 	} else {
 		// uninstall for non-dev plugins
 		if strings.EqualFold(plugin.Metadata.Runtime, string(PLUGIN_RUNTIME_SCRIPT)) {
+			reportProgress("plugin_uninstall_progress_removing")
 			// script plugin: delete the actual script file under user scripts directory
 			scriptPath := path.Join(util.GetLocation().GetUserScriptPluginsDirectory(), plugin.Metadata.Entry)
 			if util.IsFileExists(scriptPath) {
@@ -798,18 +976,42 @@ func (s *Store) UninstallWithProgress(ctx context.Context, plugin *Instance, ski
 				}
 			}
 		} else {
+			reportProgress("plugin_uninstall_progress_unloading")
+			// Bug fix: native plugins can keep DLL/.node handles open until their unload callbacks run.
+			// Release the runtime first so Windows can move the plugin directory to trash successfully.
+			GetPluginManager().UnloadPlugin(ctx, plugin)
+			pluginAlreadyUnloaded = true
+
+			reportProgress("plugin_uninstall_progress_removing")
 			removeErr := trash.MoveToTrash(plugin.PluginDirectory)
 			if removeErr != nil {
+				runtime := ConvertToRuntime(plugin.Metadata.Runtime)
+				// Bug fix: the shared runtime process may keep native files mapped even after the plugin
+				// unload callback runs. Retry deletion while the host is stopped, then always start it back.
+				reportProgress("plugin_uninstall_progress_stopping_host")
+				plugin.Host.Stop(ctx)
+				reportProgress("plugin_uninstall_progress_retrying_removal")
+				removeErr = trash.MoveToTrash(plugin.PluginDirectory)
+				restartErr := GetPluginManager().RestartHostForRuntime(ctx, runtime, []string{plugin.Metadata.Id}, progressCallback)
+				if restartErr != nil {
+					logger.Error(ctx, fmt.Sprintf("failed to restart %s host while uninstalling plugin %s(%s): %s", runtime, plugin.Metadata.GetName(ctx), plugin.Metadata.Version, restartErr.Error()))
+				}
+			}
+			if removeErr != nil {
 				logger.Error(ctx, fmt.Sprintf("failed to remove plugin directory %s: %s", plugin.PluginDirectory, removeErr.Error()))
+				// If deletion still fails, reload the plugin so the current session does not stay half-uninstalled.
+				reportProgress("plugin_uninstall_progress_restoring_plugin", plugin.Metadata.GetName(ctx))
+				if restoreErr := GetPluginManager().LoadPlugin(ctx, plugin.PluginDirectory); restoreErr != nil {
+					logger.Error(ctx, fmt.Sprintf("failed to restore plugin %s(%s) after uninstall rollback: %s", plugin.Metadata.GetName(ctx), plugin.Metadata.Version, restoreErr.Error()))
+				}
+				reloadSettingPlugins(ctx)
 				return removeErr
 			}
 		}
 	}
 
 	if !skipCleanSetting {
-		if progressCallback != nil {
-			progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_uninstall_progress_cleaning_settings"))
-		}
+		reportProgress("plugin_uninstall_progress_cleaning_settings")
 		if db := database.GetDB(); db != nil {
 			if err := setting.NewPluginSettingStore(db, plugin.Metadata.Id).DeleteAll(); err != nil {
 				logger.Error(ctx, fmt.Sprintf("failed to delete plugin settings %s(%s): %s", plugin.Metadata.GetName(ctx), plugin.Metadata.Version, err.Error()))
@@ -817,16 +1019,13 @@ func (s *Store) UninstallWithProgress(ctx context.Context, plugin *Instance, ski
 		}
 	}
 
-	if progressCallback != nil {
-		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_uninstall_progress_unloading"))
+	if !pluginAlreadyUnloaded {
+		reportProgress("plugin_uninstall_progress_unloading")
+		GetPluginManager().UnloadPlugin(ctx, plugin)
 	}
+	reloadSettingPlugins(ctx)
 
-	GetPluginManager().UnloadPlugin(ctx, plugin)
-	GetPluginManager().GetUI().ReloadSettingPlugins(ctx)
-
-	if progressCallback != nil {
-		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_uninstall_progress_complete"))
-	}
+	reportProgress("plugin_uninstall_progress_complete")
 
 	return nil
 }

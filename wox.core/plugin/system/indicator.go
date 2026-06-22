@@ -57,22 +57,18 @@ func (i *IndicatorPlugin) Init(ctx context.Context, initParams plugin.InitParams
 	i.api.OnMRURestore(ctx, i.handleMRURestore)
 }
 
-func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	search := strings.TrimSpace(query.Search)
 	if search == "" {
-		return nil
+		return plugin.QueryResponse{}
 	}
 
 	pluginInstances := plugin.GetPluginManager().GetPluginInstances()
-	storePluginManifests := plugin.GetStoreManager().GetStorePluginManifests(ctx)
-	storePluginManifestByID := make(map[string]plugin.StorePluginManifest, len(storePluginManifests))
-	for _, manifest := range storePluginManifests {
-		storePluginManifestByID[manifest.Id] = manifest
-	}
 
 	var results []plugin.QueryResult
 	for _, pluginInstance := range pluginInstances {
-		storePlugin, hasStorePlugin := storePluginManifestByID[pluginInstance.Metadata.Id]
+		storePlugin, storeErr := plugin.GetStoreManager().GetStorePluginManifestById(ctx, pluginInstance.Metadata.Id)
+		hasStorePlugin := storeErr == nil
 		upgradeTails := i.buildIndicatorUpgradeTails(pluginInstance.Metadata.Version, storePlugin.Version, hasStorePlugin)
 
 		primaryTriggerKeyword := lo.FindOrElse(pluginInstance.GetTriggerKeywords(), "", func(triggerKeyword string) bool {
@@ -222,7 +218,7 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 			})
 		}
 	}
-	return results
+	return plugin.NewQueryResponse(results)
 }
 
 func (i *IndicatorPlugin) buildIndicatorUpgradeTails(installedVersion string, storeVersion string, hasStoreVersion bool) []plugin.QueryResultTail {
@@ -265,7 +261,7 @@ func (i *IndicatorPlugin) createIndicatorUpgradeAction(storePlugin plugin.StoreP
 					i.api.Notify(ctx, fmt.Sprintf(
 						i.api.GetTranslation(ctx, "i18n:plugin_installer_action_failed"),
 						i.api.GetTranslation(ctx, "i18n:plugin_installer_upgrade"),
-						fmt.Sprintf("%s(%s): %s", pluginName, storePlugin.Version, installErr.Error()),
+						formatPluginInstallError(ctx, i.api, storePlugin.Runtime, pluginName, storePlugin.Version, installErr),
 					))
 					return
 				}

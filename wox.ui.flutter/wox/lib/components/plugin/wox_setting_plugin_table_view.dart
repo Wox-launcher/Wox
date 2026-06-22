@@ -5,7 +5,9 @@ import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_button.dart';
+import 'package:wox/components/wox_dialog.dart';
 import 'package:wox/components/wox_image_view.dart';
+import 'package:wox/components/wox_tooltip.dart';
 import 'package:wox/components/wox_tooltip_icon_view.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_select.dart';
@@ -14,12 +16,18 @@ import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_setting.dart';
 import 'package:wox/utils/colors.dart';
+import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/color_util.dart';
+import 'package:wox/utils/wox_hotkey_display_util.dart';
 import 'package:wox/utils/wox_setting_focus_util.dart';
 
 import 'wox_setting_plugin_item_view.dart';
 import 'wox_setting_plugin_table_update_view.dart';
+
+typedef WoxSettingPluginTableCreateDialogBuilder =
+    Future<void> Function(BuildContext context, Future<String?> Function(Map<String, dynamic> row) saveRow, {Map<String, dynamic> initialRow});
+typedef WoxSettingPluginTableEditDialogBuilder = Future<void> Function(BuildContext context, Map<String, dynamic> row, Future<String?> Function(Map<String, dynamic> row) saveRow);
 
 class WoxSettingPluginTable extends WoxSettingPluginItem {
   static const int tableMaxHeightMin = 120;
@@ -30,25 +38,46 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
   final PluginSettingValueTable item;
   static const String rowUniqueIdKey = "wox_table_row_id";
   final double tableWidth;
-  final operationWidth = 80.0;
+  final operationWidth = 120.0;
   final columnSpacing = 10.0;
   final columnTooltipWidth = 20.0;
   final bool readonly;
+  final bool inlineTitleActions;
+  final List<Widget> titleActions;
+  final List<Widget> trailingActions;
+  final bool showCloneAction;
+  final int minimumRowCount;
+  final String minimumRowDeleteMessage;
+  final WoxSettingPluginTableCreateDialogBuilder? customCreateDialogBuilder;
+  final WoxSettingPluginTableEditDialogBuilder? customEditDialogBuilder;
+  final Widget? Function(PluginSettingValueTableColumn column, Map<String, dynamic> row)? customCellBuilder;
   final Future<List<PluginSettingTableValidationError>> Function(Map<String, dynamic> rowValues)? onUpdateValidate;
   final int? autoOpenEditRowIndex;
   final ScrollController horizontalHeaderScrollController = ScrollController();
   final ScrollController horizontalBodyScrollController = ScrollController();
   final ScrollController verticalBodyScrollController = ScrollController();
   final ScrollController verticalPinnedBodyScrollController = ScrollController();
+  final Map<String, Future<String>> _aiModelStatusFutures = <String, Future<String>>{};
+  final Map<String, Object> _aiModelStatusErrors = <String, Object>{};
+  final Set<String> _aiModelStatusSuccessKeys = <String>{};
 
   WoxSettingPluginTable({
     super.key,
     required this.item,
     required super.value,
     required super.onUpdate,
-    super.labelWidth = 160.0,
-    this.tableWidth = 740.0,
+    super.labelWidth = PLUGIN_SETTING_LABEL_WIDTH,
+    this.tableWidth = PLUGIN_SETTING_TABLE_WIDTH,
     this.readonly = false,
+    this.inlineTitleActions = false,
+    this.titleActions = const [],
+    this.trailingActions = const [],
+    this.showCloneAction = true,
+    this.minimumRowCount = 0,
+    this.minimumRowDeleteMessage = "",
+    this.customCreateDialogBuilder,
+    this.customEditDialogBuilder,
+    this.customCellBuilder,
     this.onUpdateValidate,
     this.autoOpenEditRowIndex,
   }) {
@@ -135,6 +164,22 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     }
 
     return null;
+  }
+
+  Future<String> getAIModelStatusFuture({required String cacheKey, required String providerName, required String apiKey, required String host}) {
+    // Keep ping futures stable across hover-triggered table rebuilds so finished status dots do not flash back to the waiting state.
+    return _aiModelStatusFutures.putIfAbsent(cacheKey, () async {
+      try {
+        final result = await WoxApi.instance.pingAIModel(const UuidV4().generate(), providerName, apiKey, host);
+        _aiModelStatusErrors.remove(cacheKey);
+        _aiModelStatusSuccessKeys.add(cacheKey);
+        return result;
+      } catch (error) {
+        _aiModelStatusSuccessKeys.remove(cacheKey);
+        _aiModelStatusErrors[cacheKey] = error;
+        rethrow;
+      }
+    });
   }
 
   PluginSettingValueTableColumn buildOperationColumnDefinition() {
@@ -233,26 +278,31 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Flexible(
-          child: Tooltip(
-            message: translatedLabel,
-            child: Text(
-              translatedLabel,
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-              style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor), fontSize: 13),
-            ),
+          child: Text(
+            translatedLabel,
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+            style: TextStyle(color: getThemeTextColor().withValues(alpha: 0.88), fontSize: 13, fontWeight: FontWeight.w600),
           ),
         ),
-        if (column.tooltip != "")
-          WoxTooltipIconView(tooltip: tr(column.tooltip), paddingRight: 0, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor)),
+        if (column.tooltip != "") WoxTooltipIconView(tooltip: tr(column.tooltip), paddingRight: 0, color: getThemeTextColor().withValues(alpha: 0.72)),
       ],
     );
   }
 
   Widget buildRowCell(PluginSettingValueTableColumn column, Map<String, dynamic> row) {
     var value = row[column.key] ?? "";
+    final customCell = customCellBuilder?.call(column, row);
+    if (customCell != null) {
+      // Some built-in setting tables need domain-specific display without changing
+      // persisted values. Keeping the hook here lets callers polish cells such as
+      // global trigger keywords while the generic table still owns sizing.
+      return columnWidth(column: column, isHeader: false, isOperation: false, child: customCell);
+    }
 
-    if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeText) {
+    if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeText ||
+        column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeQueryHotkeyQuery ||
+        column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeAICommandPrompt) {
       return columnWidth(
         column: column,
         isHeader: false,
@@ -273,7 +323,10 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
         column: column,
         isHeader: false,
         isOperation: false,
-        child: Text(value, style: TextStyle(overflow: TextOverflow.ellipsis, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor))),
+        child: Text(
+          WoxHotkeyDisplayUtil.labelFromHotkeyString(value.toString()),
+          style: TextStyle(overflow: TextOverflow.ellipsis, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor)),
+        ),
       );
     }
     if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeApp) {
@@ -401,11 +454,25 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     }
     if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeAIModelStatus) {
       var providerName = row["Name"] ?? "";
-      var modelName = row["ApiKey"] ?? "";
+      var apiKey = row["ApiKey"] ?? "";
       var host = row["Host"] ?? "";
+      final statusCacheKey = json.encode([providerName, apiKey, host]);
+
+      if (_aiModelStatusErrors.containsKey(statusCacheKey)) {
+        return columnWidth(
+          column: column,
+          isHeader: false,
+          isOperation: false,
+          child: WoxTooltip(message: _aiModelStatusErrors[statusCacheKey]?.toString() ?? "", child: const Icon(Icons.circle, color: Colors.red)),
+        );
+      }
+
+      if (_aiModelStatusSuccessKeys.contains(statusCacheKey)) {
+        return columnWidth(column: column, isHeader: false, isOperation: false, child: const Icon(Icons.circle, color: Colors.green));
+      }
 
       return FutureBuilder<String>(
-        future: WoxApi.instance.pingAIModel(const UuidV4().generate(), providerName, modelName, host),
+        future: getAIModelStatusFuture(cacheKey: statusCacheKey, providerName: providerName, apiKey: apiKey, host: host),
         builder: (context, snapshot) {
           return columnWidth(
             column: column,
@@ -415,7 +482,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                 snapshot.connectionState == ConnectionState.waiting
                     ? const Icon(Icons.circle, color: Colors.grey)
                     : snapshot.error != null
-                    ? Tooltip(message: snapshot.error?.toString() ?? "", child: const Icon(Icons.circle, color: Colors.red))
+                    ? WoxTooltip(message: snapshot.error?.toString() ?? "", child: const Icon(Icons.circle, color: Colors.red))
                     : const Icon(Icons.circle, color: Colors.green),
           );
         },
@@ -438,8 +505,8 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                 snapshot.connectionState == ConnectionState.waiting
                     ? const Icon(Icons.circle, color: Colors.grey)
                     : snapshot.error != null
-                    ? Tooltip(message: snapshot.error?.toString() ?? "", child: const Icon(Icons.circle, color: Colors.red))
-                    : Tooltip(
+                    ? WoxTooltip(message: snapshot.error?.toString() ?? "", child: const Icon(Icons.circle, color: Colors.red))
+                    : WoxTooltip(
                       message: snapshot.data?.map((e) => e.name).join("\n") ?? "",
                       child: Text("${snapshot.data?.length ?? 0} tools", style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor))),
                     ),
@@ -449,7 +516,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     }
     if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeAISelectMCPServerTools) {
       final toolNames = value as List<dynamic>;
-      return Tooltip(
+      return WoxTooltip(
         message: toolNames.join("\n"),
         child: columnWidth(
           column: column,
@@ -481,9 +548,61 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     return -1;
   }
 
+  // Persists a new row using the latest table snapshot so custom create dialogs
+  // can reuse the same save path as the shared table editor.
+  Future<String?> _saveNewRow(Map<String, dynamic> row) async {
+    final rows = decodeRowsJson(getSetting(item.key));
+    rows.add(Map<String, dynamic>.from(row));
+
+    for (final element in rows) {
+      if (element is Map<String, dynamic>) {
+        element.remove(rowUniqueIdKey);
+      } else if (element is Map) {
+        element.remove(rowUniqueIdKey);
+      }
+    }
+
+    return updateConfig(item.key, json.encode(rows));
+  }
+
+  // Saves an edited row by re-matching the original snapshot instead of trusting
+  // stale row indices from the visible table.
+  Future<String?> _saveEditedRow(Map<String, dynamic> originalRow, Map<String, dynamic> updatedValues) async {
+    final freshRows = decodeRowsJson(getSetting(item.key));
+    final idx = _findRowIndex(freshRows, originalRow);
+    if (idx < 0) {
+      return "Failed to save row: the original row was not found";
+    }
+
+    final updatedRow = Map<String, dynamic>.from(updatedValues);
+    updatedRow.remove(rowUniqueIdKey);
+    freshRows[idx] = updatedRow;
+
+    return updateConfig(item.key, json.encode(freshRows));
+  }
+
+  List<Map<String, dynamic>> _buildValidationRows() {
+    final rows = <Map<String, dynamic>>[];
+    for (final row in decodeRowsJson(getSetting(item.key))) {
+      if (row is Map<String, dynamic>) {
+        rows.add(Map<String, dynamic>.from(row));
+      } else if (row is Map) {
+        rows.add(Map<String, dynamic>.from(row));
+      }
+    }
+
+    return rows;
+  }
+
   Future<void> _showEditRowDialog(BuildContext context, Map<String, dynamic> row) async {
     final originalRow = json.decode(json.encode(row)) as Map<String, dynamic>;
     originalRow.remove(rowUniqueIdKey);
+
+    if (customEditDialogBuilder != null) {
+      await customEditDialogBuilder!(context, Map<String, dynamic>.from(originalRow), (updatedRow) => _saveEditedRow(originalRow, updatedRow));
+      WoxSettingFocusUtil.restoreIfInSettingView();
+      return;
+    }
 
     await showDialog(
       context: context,
@@ -491,20 +610,46 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
       builder: (context) {
         return WoxSettingPluginTableUpdate(
           item: item,
-          row: row,
+          row: Map<String, dynamic>.from(originalRow),
+          existingRows: _buildValidationRows(),
+          originalRow: Map<String, dynamic>.from(originalRow),
           onUpdateValidate: onUpdateValidate,
-          onUpdate: (key, value) async {
-            final freshRows = decodeRowsJson(getSetting(key));
+          onUpdate: (key, value) async => _saveEditedRow(originalRow, value),
+        );
+      },
+    );
+    WoxSettingFocusUtil.restoreIfInSettingView();
+  }
 
-            final idx = _findRowIndex(freshRows, originalRow);
-            if (idx >= 0) {
-              final updatedRow = Map<String, dynamic>.from(value);
-              updatedRow.remove(rowUniqueIdKey);
-              freshRows[idx] = updatedRow;
-            }
+  // Opens the row editor with copied values while saving through the create path.
+  Future<void> _showCloneRowDialog(BuildContext context, Map<String, dynamic> row) async {
+    final clonedRow = json.decode(json.encode(row)) as Map<String, dynamic>;
+    clonedRow.remove(rowUniqueIdKey);
+    // Original-value markers belong to edit validation; carrying them into clone creation can mask duplicates.
+    clonedRow.removeWhere((key, value) => key.startsWith("_wox_original_"));
 
-            updateConfig(key, json.encode(freshRows));
-          },
+    if (customCreateDialogBuilder != null) {
+      await customCreateDialogBuilder!(context, _saveNewRow, initialRow: Map<String, dynamic>.from(clonedRow));
+      WoxSettingFocusUtil.restoreIfInSettingView();
+      return;
+    }
+
+    if (customEditDialogBuilder != null) {
+      await customEditDialogBuilder!(context, Map<String, dynamic>.from(clonedRow), (updatedRow) => _saveNewRow(updatedRow));
+      WoxSettingFocusUtil.restoreIfInSettingView();
+      return;
+    }
+
+    await showDialog(
+      context: context,
+      barrierColor: getThemePopupBarrierColor(),
+      builder: (context) {
+        return WoxSettingPluginTableUpdate(
+          item: item,
+          row: Map<String, dynamic>.from(clonedRow),
+          existingRows: _buildValidationRows(),
+          onUpdateValidate: onUpdateValidate,
+          onUpdate: (key, value) async => _saveNewRow(value),
         );
       },
     );
@@ -538,6 +683,8 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
   DataCell buildOperationCell(BuildContext context, Map<String, dynamic> row, List<dynamic> rows) {
     final originalRow = json.decode(json.encode(row)) as Map<String, dynamic>;
     originalRow.remove(rowUniqueIdKey);
+    final isDeleteDisabled = rows.length <= minimumRowCount;
+    final deleteDisabledMessage = minimumRowDeleteMessage.trim().isEmpty ? tr("ui_plugin_table_minimum_row_delete_message") : tr(minimumRowDeleteMessage);
 
     return DataCell(
       SizedBox(
@@ -554,55 +701,72 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                 await _showEditRowDialog(context, row);
               },
             ),
-            WoxButton.text(
-              text: '',
-              icon: Icon(Icons.delete, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor)),
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              onPressed: () async {
-                //confirm delete
-                await showDialog(
-                  context: context,
-                  barrierColor: getThemePopupBarrierColor(),
-                  builder: (context) {
-                    final cardColor = getThemePopupSurfaceColor();
-                    final outlineColor = getThemePopupOutlineColor();
-
-                    return AlertDialog(
-                      backgroundColor: cardColor,
-                      surfaceTintColor: Colors.transparent,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: outlineColor)),
-                      content: Text(tr("ui_delete_row_confirm"), style: TextStyle(color: getThemeTextColor())),
-                      actions: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            WoxButton.secondary(text: tr("ui_cancel"), onPressed: () => Navigator.pop(context)),
-                            const SizedBox(width: 16),
-                            WoxButton.primary(
-                              text: tr("ui_delete"),
-                              onPressed: () {
-                                Navigator.pop(context);
-
-                                // Re-read the latest rows from the current setting value
-                                final freshRows = decodeRowsJson(getSetting(item.key));
-
-                                // Find and remove the target row by matching original field values
-                                var idx = _findRowIndex(freshRows, originalRow);
-                                if (idx >= 0) {
-                                  freshRows.removeAt(idx);
-                                }
-
-                                updateConfig(item.key, json.encode(freshRows));
-                              },
-                            ),
-                          ],
-                        ),
-                      ],
-                    );
+            if (showCloneAction)
+              WoxTooltip(
+                message: tr("ui_clone_row"),
+                child: WoxButton.text(
+                  text: '',
+                  icon: Icon(Icons.content_copy, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor)),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  onPressed: () async {
+                    await _showCloneRowDialog(context, row);
                   },
-                );
-                WoxSettingFocusUtil.restoreIfInSettingView();
-              },
+                ),
+              ),
+            WoxTooltip(
+              message: isDeleteDisabled ? deleteDisabledMessage : "",
+              child: WoxButton.text(
+                text: '',
+                icon: Icon(Icons.delete, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor).withValues(alpha: isDeleteDisabled ? 0.45 : 1)),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                onPressed:
+                    isDeleteDisabled
+                        ? null
+                        : () async {
+                          //confirm delete
+                          await showDialog(
+                            context: context,
+                            barrierColor: getThemePopupBarrierColor(),
+                            builder: (context) {
+                              return WoxDialog(
+                                content: Text(tr("ui_delete_row_confirm"), style: TextStyle(color: getThemeTextColor())),
+                                actions: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: [
+                                      WoxButton.secondary(text: tr("ui_cancel"), onPressed: () => Navigator.pop(context)),
+                                      const SizedBox(width: 16),
+                                      WoxButton.primary(
+                                        text: tr("ui_delete"),
+                                        onPressed: () {
+                                          Navigator.pop(context);
+
+                                          // Re-read the latest rows before deleting so minimum-row
+                                          // constraints remain correct when the table changed while
+                                          // the confirmation dialog was open.
+                                          final freshRows = decodeRowsJson(getSetting(item.key));
+                                          if (freshRows.length <= minimumRowCount) {
+                                            return;
+                                          }
+
+                                          // Find and remove the target row by matching original field values
+                                          var idx = _findRowIndex(freshRows, originalRow);
+                                          if (idx >= 0) {
+                                            freshRows.removeAt(idx);
+                                          }
+
+                                          updateConfig(item.key, json.encode(freshRows));
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              );
+                            },
+                          );
+                          WoxSettingFocusUtil.restoreIfInSettingView();
+                        },
+              ),
             ),
           ],
         ),
@@ -616,13 +780,13 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
       column: operationColumn,
       isHeader: true,
       isOperation: true,
-      child: Tooltip(
+      child: WoxTooltip(
         message: tr("ui_operation"),
         child: Text(
           tr("ui_operation"),
           overflow: TextOverflow.ellipsis,
           maxLines: 1,
-          style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor), fontSize: 13),
+          style: TextStyle(color: getThemeTextColor().withValues(alpha: 0.88), fontSize: 13, fontWeight: FontWeight.w600),
         ),
       ),
     );
@@ -649,7 +813,9 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     Color? rightBorderColor,
     Color? bottomBorderColor,
   }) {
-    final borderColor = safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.previewSplitLineColor);
+    // Settings table grid lines should match the surrounding settings dividers.
+    // The previous local alpha made table borders look like a separate visual system.
+    final borderColor = getThemeSettingDividerColor();
 
     return DataTable(
       columnSpacing: columnSpacing,
@@ -659,7 +825,8 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
       headingRowHeight: headingRowHeight,
       dataRowMinHeight: _dataRowHeight,
       dataRowMaxHeight: _dataRowHeight,
-      headingRowColor: WidgetStateProperty.resolveWith((states) => safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor)),
+      headingRowColor: WidgetStateProperty.resolveWith((states) => getThemeTextColor().withValues(alpha: 0.055)),
+      dataRowColor: WidgetStateProperty.resolveWith((states) => getThemeTextColor().withValues(alpha: 0.018)),
       border: TableBorder(
         top: showTopBorder ? BorderSide(color: topBorderColor ?? borderColor) : BorderSide.none,
         bottom: showBottomBorder ? BorderSide(color: bottomBorderColor ?? borderColor) : BorderSide.none,
@@ -673,17 +840,18 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     );
   }
 
-  Widget buildEmptyTable() {
+  Widget buildEmptyTable({required bool showScrollbars}) {
     final visibleColumns = buildVisibleColumns();
-    final headerBorderColor = safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor);
+    final headerBorderColor = getThemeSettingDividerColor();
     if (visibleColumns.isEmpty) {
       return Center(child: Text(tr("ui_no_data"), style: TextStyle(color: getThemeSubTextColor(), fontSize: 13)));
     }
 
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxHeight: 100),
+      // The empty table includes both a header and an empty-state body; the previous 100px cap was smaller than their combined height and caused bottom overflow.
+      constraints: const BoxConstraints(maxHeight: _headerRowHeight + 82),
       child: Scrollbar(
-        thumbVisibility: true,
+        thumbVisibility: showScrollbars,
         controller: horizontalBodyScrollController,
         child: SingleChildScrollView(
           controller: horizontalBodyScrollController,
@@ -706,7 +874,22 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                   leftBorderColor: headerBorderColor,
                   rightBorderColor: headerBorderColor,
                 ),
-                Center(child: Padding(padding: const EdgeInsets.only(top: 10), child: Text(tr("ui_no_data"), style: TextStyle(color: getThemeSubTextColor(), fontSize: 13)))),
+                Container(
+                  height: 82,
+                  decoration: BoxDecoration(
+                    border: Border(left: BorderSide(color: headerBorderColor), right: BorderSide(color: headerBorderColor), bottom: BorderSide(color: headerBorderColor)),
+                  ),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.inbox_outlined, color: getThemeSubTextColor().withValues(alpha: 0.72), size: 24),
+                        const SizedBox(height: 4),
+                        Text(tr("ui_no_data"), style: TextStyle(color: getThemeSubTextColor(), fontSize: 13)),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -715,10 +898,10 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     );
   }
 
-  Widget buildTable(BuildContext context) {
+  Widget buildTable(BuildContext context, {required bool showScrollbars}) {
     final rows = decodeRowsJson(getSetting(item.key));
     if (rows.isEmpty) {
-      return buildEmptyTable();
+      return buildEmptyTable(showScrollbars: showScrollbars);
     }
 
     //give each row a unique key
@@ -745,7 +928,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
 
     final visibleColumns = buildVisibleColumns();
     if (visibleColumns.isEmpty && readonly) {
-      return buildEmptyTable();
+      return buildEmptyTable(showScrollbars: showScrollbars);
     }
 
     final pinnedColumn = !readonly ? buildOperationColumnDefinition() : visibleColumns.last;
@@ -783,7 +966,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
             : leftContentWidth > leftViewportWidth
             ? leftContentWidth
             : leftViewportWidth;
-    final headerBorderColor = safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor);
+    final headerBorderColor = getThemeSettingDividerColor();
 
     if (leftColumns.isEmpty) {
       return SizedBox(
@@ -808,6 +991,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
               height: tableBodyHeight,
               child: Scrollbar(
                 controller: verticalPinnedBodyScrollController,
+                thumbVisibility: showScrollbars,
                 child: SingleChildScrollView(
                   controller: verticalPinnedBodyScrollController,
                   physics: _tableScrollPhysics,
@@ -872,7 +1056,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                 Expanded(
                   child: Scrollbar(
                     controller: horizontalBodyScrollController,
-                    thumbVisibility: true,
+                    thumbVisibility: showScrollbars,
                     child: SingleChildScrollView(
                       controller: horizontalBodyScrollController,
                       physics: _tableScrollPhysics,
@@ -898,7 +1082,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                   width: pinnedSectionWidth,
                   child: Scrollbar(
                     controller: verticalPinnedBodyScrollController,
-                    thumbVisibility: true,
+                    thumbVisibility: showScrollbars,
                     child: SingleChildScrollView(
                       controller: verticalPinnedBodyScrollController,
                       physics: _tableScrollPhysics,
@@ -919,8 +1103,129 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     );
   }
 
+  Widget buildAddButton(BuildContext context) {
+    // Table creation should be a compact outlined action that can sit beside table
+    // titles in top-level settings instead of forcing a separate full-width row.
+    return WoxButton.secondary(
+      text: tr("ui_add"),
+      icon: Icon(Icons.add, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor)),
+      height: 30,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      onPressed: () async {
+        if (customCreateDialogBuilder != null) {
+          await customCreateDialogBuilder!(context, _saveNewRow);
+          WoxSettingFocusUtil.restoreIfInSettingView();
+          return;
+        }
+
+        await showDialog(
+          context: context,
+          barrierColor: getThemePopupBarrierColor(),
+          builder: (context) {
+            return WoxSettingPluginTableUpdate(
+              item: item,
+              row: const {},
+              existingRows: _buildValidationRows(),
+              onUpdateValidate: onUpdateValidate,
+              onUpdate: (key, row) async => _saveNewRow(row),
+            );
+          },
+        );
+        WoxSettingFocusUtil.restoreIfInSettingView();
+      },
+    );
+  }
+
+  Widget buildInlineTitleHeader(BuildContext context) {
+    final hasTitle = item.title.trim().isNotEmpty;
+    final hasTooltip = item.tooltip.trim().isNotEmpty;
+    final hasAction = !readonly || titleActions.isNotEmpty || trailingActions.isNotEmpty;
+
+    if (!hasTitle && !hasTooltip && !hasAction) {
+      return const SizedBox.shrink();
+    }
+
+    return SizedBox(
+      width: tableWidth,
+      child: Row(
+        // Long table tips can wrap to multiple lines. Bottom-align the action so its
+        // distance to the table stays fixed regardless of the description height.
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (hasTitle || titleActions.isNotEmpty)
+                  Row(
+                    mainAxisSize: MainAxisSize.max,
+                    children: [
+                      if (hasTitle)
+                        Flexible(
+                          fit: FlexFit.loose,
+                          child: Text(
+                            tr(item.title),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: getThemeTextColor(), fontSize: 13, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      if (titleActions.isNotEmpty) ...[
+                        const SizedBox(width: 6),
+                        // Feature refinement: demo triggers sit directly beside the table title so the preview affordance is attached to the feature name instead of competing with the Add button.
+                        ...titleActions,
+                      ],
+                    ],
+                  ),
+                if (hasTooltip) Padding(padding: const EdgeInsets.only(top: 4), child: tooltipText(item.tooltip)),
+              ],
+            ),
+          ),
+          if (trailingActions.isNotEmpty || !readonly) ...[
+            const SizedBox(width: 16),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final action in trailingActions) ...[action, const SizedBox(width: 8)],
+                if (!readonly) buildAddButton(context),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget buildHoverAwareTable(BuildContext context) {
+    var isHovered = false;
+
+    return StatefulBuilder(
+      builder: (context, setState) {
+        // Scrollbars are useful when the pointer is working inside a table, but keeping
+        // them visible all the time adds visual noise to long settings pages.
+        return MouseRegion(
+          onEnter: (_) => setState(() => isHovered = true),
+          onExit: (_) => setState(() => isHovered = false),
+          child: buildTable(context, showScrollbars: isHovered),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (inlineTitleActions) {
+      // Built-in settings pages use full-width table blocks; keeping title, help text,
+      // and Add in the table component makes the header match the table edge exactly.
+      return applyStylePadding(
+        style: item.style,
+        child: Padding(
+          padding: const EdgeInsets.only(top: 6, bottom: 10),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [buildInlineTitleHeader(context), const SizedBox(height: 8), buildHoverAwareTable(context)]),
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.only(top: 6),
       child: layout(
@@ -930,46 +1235,19 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (!readonly)
+            if (trailingActions.isNotEmpty || !readonly)
               SizedBox(
                 width: tableWidth,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    WoxButton.text(
-                      text: tr("ui_add"),
-                      icon: Icon(Icons.add, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor)),
-                      padding: EdgeInsets.zero,
-                      onPressed: () async {
-                        await showDialog(
-                          context: context,
-                          barrierColor: getThemePopupBarrierColor(),
-                          builder: (context) {
-                            return WoxSettingPluginTableUpdate(
-                              item: item,
-                              row: const {},
-                              onUpdateValidate: onUpdateValidate,
-                              onUpdate: (key, row) {
-                                final rows = decodeRowsJson(getSetting(key));
-                                rows.add(row);
-                                //remove the unique key
-                                for (final element in rows) {
-                                  element.remove(rowUniqueIdKey);
-                                }
-
-                                updateConfig(key, json.encode(rows));
-                              },
-                            );
-                          },
-                        );
-                        WoxSettingFocusUtil.restoreIfInSettingView();
-                      },
-                    ),
+                    for (final action in trailingActions) ...[action, const SizedBox(width: 8)],
+                    if (!readonly) buildAddButton(context),
                   ],
                 ),
               ),
-            if (!readonly) const SizedBox(height: 6),
-            buildTable(context),
+            if (trailingActions.isNotEmpty || !readonly) const SizedBox(height: 6),
+            buildHoverAwareTable(context),
           ],
         ),
       ),

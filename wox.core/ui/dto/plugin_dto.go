@@ -27,6 +27,7 @@ type PluginDto struct {
 	SettingDefinitions definition.PluginSettingDefinitions // only available when plugin is installed
 	Setting            PluginSettingDto                    // only available when plugin is installed
 	Features           []plugin.MetadataFeature            // only available when plugin is installed
+	Glances            []plugin.MetadataGlance
 	IsSystem           bool
 	IsDev              bool
 	IsInstalled        bool

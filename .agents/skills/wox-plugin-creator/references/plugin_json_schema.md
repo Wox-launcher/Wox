@@ -35,6 +35,78 @@ The `plugin.json` file must be a valid JSON object located in the root of your p
 | `Commands`           | `Command[]`            | List of specific commands provided by the plugin.                                              |
 | `Features`           | `Feature[]`            | List of advanced features enabled for the plugin.                                              |
 | `SettingDefinitions` | `Setting[]`            | Definition of user-configurable settings. See [SettingDefinitions](#settingdefinitions) below. |
+| `QueryRequirements`  | `QueryRequirements`    | Static query preconditions for required settings. See [QueryRequirements](#queryrequirements). |
+
+### QueryRequirements
+
+Use `QueryRequirements` when a plugin query cannot run until one or more settings are configured. Wox checks these requirements before calling the plugin `query()` method. If a requirement fails, Wox returns a system setup result with the `query_requirement_settings` preview and shows a focused settings form for only the missing fields.
+
+Do not return a custom "please configure this plugin" result from `query()` for these cases. Static metadata gives grid results and normal list results the same setup flow.
+
+#### Scopes
+
+| Field                 | Type                                  | Checked when                                                                 |
+| --------------------- | ------------------------------------- | ---------------------------------------------------------------------------- |
+| `AnyQuery`            | `QueryRequirement[]`                  | Every query for the plugin.                                                  |
+| `QueryWithoutCommand` | `QueryRequirement[]`                  | Query has no command. Wox checks `AnyQuery + QueryWithoutCommand`.           |
+| `QueryWithCommand`    | `map[command]QueryRequirement[]`      | Query has that command. Wox checks `AnyQuery + QueryWithCommand[command]`.   |
+
+If a query has a command that is not declared in `QueryWithCommand`, Wox checks only `AnyQuery`.
+
+#### Requirement Shape
+
+```json
+{
+  "SettingKey": "accessKey",
+  "Validators": [{ "Type": "not_empty", "Value": {} }],
+  "Message": "i18n:access_key_required"
+}
+```
+
+Rules:
+
+- `SettingKey` must match a configurable setting key from `SettingDefinitions`.
+- `Validators` is optional. If omitted or empty, Wox reuses the validators from the matching setting definition.
+- If both the requirement and setting definition have no validators, Wox logs a metadata issue and does not block the query.
+- `Message` is optional and supports `i18n:` keys. Use it for field-specific setup guidance.
+
+Example:
+
+```json
+{
+  "SettingDefinitions": [
+    {
+      "Type": "textbox",
+      "Value": {
+        "Key": "accessKey",
+        "Label": "i18n:access_key",
+        "DefaultValue": "",
+        "Tooltip": "i18n:access_key_tooltip",
+        "Validators": [{ "Type": "not_empty", "Value": {} }],
+        "Style": { "Width": 400 }
+      }
+    }
+  ],
+  "QueryRequirements": {
+    "AnyQuery": [
+      {
+        "SettingKey": "accessKey",
+        "Message": "i18n:access_key_required"
+      }
+    ],
+    "QueryWithoutCommand": [],
+    "QueryWithCommand": {
+      "download": [
+        {
+          "SettingKey": "downloadDirectory",
+          "Validators": [{ "Type": "not_empty", "Value": {} }],
+          "Message": "i18n:download_directory_required"
+        }
+      ]
+    }
+  }
+}
+```
 
 ### SettingDefinitions
 
@@ -43,12 +115,49 @@ Use this reference as the source of truth when authoring `SettingDefinitions` in
 
 #### Common Properties
 
-| Property | Type       | Description                                                                                                                   |
-| -------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `Type`   | `string`   | Component type. Enum: `head`, `textbox`, `checkbox`, `select`, `label`, `newline`, `table`, `selectAIModel`, `dynamic`     |
-| `Value`  | `object`   | Configuration object specific to the type.                                                                                     |
+| Property              | Type       | Description                                                                                                       |
+| --------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------- |
+| `Type`                | `string`   | Component type. Enum: `head`, `textbox`, `checkbox`, `select`, `label`, `newline`, `table`, `selectAIModel`, `dynamic` |
+| `Value`               | `object`   | Configuration object specific to the type.                                                                        |
 | `DisabledInPlatforms` | `string[]` | Optional. Platforms where this setting is disabled. Uses SDK platform names such as `windows`, `darwin`, `linux`. |
-| `IsPlatformSpecific` | `boolean` | Optional. If `true`, Wox stores different values per platform.                                                       |
+| `IsPlatformSpecific`  | `boolean`  | Optional. If `true`, Wox stores different values per platform. Normal plugin settings are eligible for cloud sync, so use this for values that should not be shared across Windows, macOS, and Linux. |
+
+#### Cloud Sync And Platform-Specific Settings
+
+Before adding a setting, decide whether cloud sync should share one value across all devices or keep a separate value per platform.
+
+- Use `IsPlatformSpecific: false` for account IDs, API keys, remote service hosts, feature toggles, and user preferences that mean the same thing on every platform.
+- Use `IsPlatformSpecific: true` for local paths, executable paths, shell commands, hotkeys, system integrations, browser profiles, application paths, and any value that is likely to be invalid on another OS.
+- `DisabledInPlatforms` only controls where a setting is disabled in the UI. It does not create separate stored values and should not be used as a substitute for `IsPlatformSpecific`.
+- When code calls `SaveSetting` / `save_setting`, pass the same platform-specific decision used by the setting metadata. Do not hardcode `false` for dynamically saved platform-specific settings.
+
+Shared value example:
+
+```json
+{
+  "Type": "textbox",
+  "Value": {
+    "Key": "api_key",
+    "Label": "API Key",
+    "DefaultValue": ""
+  },
+  "IsPlatformSpecific": false
+}
+```
+
+Platform-specific value example:
+
+```json
+{
+  "Type": "textbox",
+  "Value": {
+    "Key": "executable_path",
+    "Label": "Executable Path",
+    "DefaultValue": ""
+  },
+  "IsPlatformSpecific": true
+}
+```
 
 #### Validators
 
@@ -326,9 +435,13 @@ Enables automatic boosting of frequently used results.
 }
 ```
 
-### 6. Grid Layout
+### 6. Grid Layout (Deprecated)
 
 Displays results in a grid instead of a list.
+
+Prefer returning `QueryResponse.Layout.GridLayout` from the SDK query method.
+The metadata feature is deprecated because it can only express static plugin or
+command defaults, while QueryResponse can choose the layout for each query.
 
 ```json
 {
@@ -347,7 +460,7 @@ Displays results in a grid instead of a list.
 
 - `deepLink`: Handle custom URI schemes (e.g., `wox://plugin/myplugin?arg=value`).
 - `ignoreAutoScore`: Disable Wox's default frequency-based learning for this plugin.
-- `resultPreviewWidthRatio`: Customize the split ratio between result list and preview panel (0.0 - 1.0).
+- `resultPreviewWidthRatio` (deprecated): Customize the split ratio between result list and preview panel (0.0 - 1.0). Prefer `QueryResponse.Layout.ResultPreviewWidthRatio` so the ratio can change per query.
 
 ## Complete Example
 

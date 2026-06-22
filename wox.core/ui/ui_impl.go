@@ -6,30 +6,69 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"strings"
 	"time"
 	"wox/common"
-	"wox/database"
 	"wox/plugin"
 	"wox/plugin/system/shell/terminal"
 	"wox/setting"
 	"wox/util"
 	"wox/util/notifier"
 	"wox/util/selection"
+	"wox/util/timetracking"
 
 	"github.com/google/uuid"
 	"github.com/samber/lo"
 	"github.com/tidwall/gjson"
 )
 
-// This value cannot be too small; if it is, it will cause frequent result-update requests to the UI,
-// leading to constant window resizing and flickering.
-// we use 32ms here, which is roughly equivalent to 30fps.
-const resultDebounceIntervalMs = 32
+func parseQueryRefinementsFromUI(rawJson string) (map[string]string, error) {
+	refinements := map[string]string{}
+	if rawJson == "" {
+		return refinements, nil
+	}
+
+	var rawValues map[string]any
+	if err := json.Unmarshal([]byte(rawJson), &rawValues); err != nil {
+		return nil, err
+	}
+
+	for key, rawValue := range rawValues {
+		switch value := rawValue.(type) {
+		case string:
+			refinements[key] = value
+		case []any:
+			// Protocol migration: older UI builds sent refinement selections as
+			// string arrays. The public plugin API now uses map[string]string, so
+			// the UI boundary joins legacy multi-select values once instead of
+			// forcing every plugin and runtime host to understand both shapes.
+			parts := []string{}
+			for _, item := range value {
+				text := fmt.Sprint(item)
+				if text != "" {
+					parts = append(parts, text)
+				}
+			}
+			joined := strings.Join(parts, ",")
+			if joined != "" {
+				refinements[key] = joined
+			}
+		default:
+			if rawValue != nil {
+				refinements[key] = fmt.Sprint(rawValue)
+			}
+		}
+	}
+
+	return refinements, nil
+}
 
 type uiImpl struct {
-	requestMap      *util.HashMap[string, chan WebsocketMsg]
-	isVisible       bool // cached visibility state, updated by PostOnShow/PostOnHide
-	isInSettingView bool // cached setting-view state, updated by PostOnSetting
+	requestMap         *util.HashMap[string, chan WebsocketMsg]
+	isVisible          bool // cached visibility state, updated by PostOnShow/PostOnHide
+	isInSettingView    bool // cached setting-view state, updated by PostOnSetting
+	isInOnboardingView bool // cached onboarding state, updated by PostOnOnboarding
+	isRecordingHotkey  bool // cached hotkey-recorder focus state, updated by PostOnHotkeyRecording
 }
 
 func (u *uiImpl) ChangeQuery(ctx context.Context, query common.PlainQuery) {
@@ -38,6 +77,7 @@ func (u *uiImpl) ChangeQuery(ctx context.Context, query common.PlainQuery) {
 		"QueryType":      query.QueryType,
 		"QueryText":      query.QueryText,
 		"QuerySelection": query.QuerySelection,
+		"ContextData":    query.ContextData,
 	}
 
 	if showSource := util.GetContextShowSource(ctx); showSource != "" {
@@ -51,6 +91,20 @@ func (u *uiImpl) RefreshQuery(ctx context.Context, preserveSelectedIndex bool) {
 	u.invokeWebsocketMethod(ctx, "RefreshQuery", map[string]any{
 		"preserveSelectedIndex": preserveSelectedIndex,
 	})
+}
+
+func (u *uiImpl) RefreshGlance(ctx context.Context, pluginId string, ids []string) {
+	u.invokeWebsocketMethod(ctx, "RefreshGlance", map[string]any{
+		"PluginId": pluginId,
+		"Ids":      ids,
+	})
+}
+
+func (u *uiImpl) UpdateDiagnosticStatus(ctx context.Context, enabled bool) {
+	// New feature: bug aware status is a global launcher decoration, so core
+	// pushes it separately from plugin toolbar messages to avoid ownership
+	// conflicts with normal plugin status updates.
+	u.invokeWebsocketMethod(ctx, "DiagnosticStatusChanged", map[string]any{"enabled": enabled})
 }
 
 func (u *uiImpl) HideApp(ctx context.Context) {
@@ -67,6 +121,13 @@ func (u *uiImpl) ToggleApp(ctx context.Context, showContext common.ShowContext) 
 	u.invokeWebsocketMethod(ctx, "ToggleApp", getShowAppParams(ctx, showContext))
 }
 
+func (u *uiImpl) RecordHotkey(ctx context.Context, hotkey string) {
+	logger.Info(ctx, fmt.Sprintf("send RecordHotkey to UI: hotkey=%s", hotkey))
+	u.invokeWebsocketMethod(ctx, "RecordHotkey", map[string]any{
+		"Hotkey": hotkey,
+	})
+}
+
 func (u *uiImpl) GetServerPort(ctx context.Context) int {
 	return GetUIManager().serverPort
 }
@@ -81,16 +142,20 @@ func (u *uiImpl) ChangeTheme(ctx context.Context, theme common.Theme) {
 	}
 
 	// For normal themes, save and apply directly
+	// New feature: direct common.UI callers may bypass Manager.ChangeTheme, so
+	// resolve platform overrides here as well before sending the flat payload to
+	// Flutter.
+	effectiveTheme := GetUIManager().resolvePlatformTheme(ctx, theme)
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	woxSetting.ThemeId.Set(theme.ThemeId)
-	u.invokeWebsocketMethod(ctx, "ChangeTheme", theme)
+	woxSetting.ThemeId.Set(effectiveTheme.ThemeId)
+	u.invokeWebsocketMethod(ctx, "ChangeTheme", effectiveTheme)
 }
 
 // ChangeThemeWithoutSave applies the theme without saving to settings
 // This is used for auto appearance theme switching
 func (u *uiImpl) ChangeThemeWithoutSave(ctx context.Context, theme common.Theme) {
 	logger.Info(ctx, fmt.Sprintf("change theme (without save): %s", theme.ThemeName))
-	u.invokeWebsocketMethod(ctx, "ChangeTheme", theme)
+	u.invokeWebsocketMethod(ctx, "ChangeTheme", GetUIManager().resolvePlatformTheme(ctx, theme))
 }
 
 func (u *uiImpl) InstallTheme(ctx context.Context, theme common.Theme) {
@@ -108,6 +173,17 @@ func (u *uiImpl) OpenSettingWindow(ctx context.Context, windowContext common.Set
 	u.invokeWebsocketMethod(ctx, "OpenSettingWindow", windowContext)
 }
 
+func (u *uiImpl) FocusSettingWindow(ctx context.Context) {
+	u.invokeWebsocketMethod(ctx, "FocusSettingWindow", nil)
+}
+
+func (u *uiImpl) OpenOnboardingWindow(ctx context.Context) {
+	// Onboarding reuses the same UI process and WebSocket command path as the
+	// settings window. Keeping it here avoids a second desktop window lifecycle
+	// while still letting Flutter choose the dedicated onboarding view.
+	u.invokeWebsocketMethod(ctx, "OpenOnboardingWindow", nil)
+}
+
 func (u *uiImpl) GetAllThemes(ctx context.Context) []common.Theme {
 	return GetUIManager().GetAllThemes(ctx)
 }
@@ -117,19 +193,18 @@ func (u *uiImpl) RestoreTheme(ctx context.Context) {
 }
 
 func (u *uiImpl) Notify(ctx context.Context, msg common.NotifyMsg) {
-	// Respect snooze/mute regardless of where we display (toolbar or system notification)
-	if database.IsToolbarTextMuted(ctx, msg.Text) {
-		logger.Info(ctx, "toolbar/system message muted by backend")
-		return
-	}
-	if u.IsVisible(ctx) && !u.IsInSettingView() && !plugin.GetPluginManager().HasVisibleToolbarMsg(ctx) {
+	if u.IsVisible(ctx) && !u.IsInManagementView() && !plugin.GetPluginManager().HasVisibleToolbarMsg(ctx) {
 		u.invokeWebsocketMethod(ctx, "ShowToolbarMsg", msg)
 	} else {
 		var icon image.Image
 		if msg.Icon != "" {
 			wimg, parseErr := common.ParseWoxImage(msg.Icon)
 			if parseErr == nil {
-				img, imgErr := wimg.ToImage()
+				// System notifications should appear as soon as the action succeeds. The previous path used
+				// ToImage(), which could synchronously download Twemoji assets for emoji icons and delay the
+				// success notification by seconds on a cold cache. Keep the notify path local-only and let the
+				// notifier fall back to the default Wox icon when the plugin icon is not already cached.
+				img, imgErr := wimg.ToImageWithoutRemoteFetch()
 				if imgErr == nil {
 					icon = img
 				}
@@ -137,6 +212,12 @@ func (u *uiImpl) Notify(ctx context.Context, msg common.NotifyMsg) {
 		}
 		notifier.Notify(icon, msg.Text)
 	}
+}
+
+func (u *uiImpl) UpdateAttentionUnreadCount(ctx context.Context, unreadCount int) {
+	u.invokeWebsocketMethod(ctx, "AttentionUnreadCountChanged", map[string]any{
+		"unreadCount": unreadCount,
+	})
 }
 
 func (u *uiImpl) ShowToolbarMsg(ctx context.Context, msg interface{}) {
@@ -151,6 +232,12 @@ func (u *uiImpl) ClearToolbarMsg(ctx context.Context, toolbarMsgId string) {
 
 func (u *uiImpl) IsInSettingView() bool {
 	return u.isInSettingView
+}
+
+func (u *uiImpl) IsInManagementView() bool {
+	// Settings and onboarding both occupy the shared Wox window as management
+	// surfaces, so toolbar notifications should not overlay either of them.
+	return u.isInSettingView || u.isInOnboardingView
 }
 
 func (u *uiImpl) FocusToChatInput(ctx context.Context) {
@@ -175,6 +262,18 @@ func (u *uiImpl) ReloadSettingPlugins(ctx context.Context) {
 
 func (u *uiImpl) ReloadSetting(ctx context.Context) {
 	u.invokeWebsocketMethod(ctx, "ReloadSetting", nil)
+}
+
+func (u *uiImpl) ReloadSettingThemes(ctx context.Context) {
+	u.invokeWebsocketMethod(ctx, "ReloadSettingThemes", nil)
+}
+
+func (u *uiImpl) CloudSyncProgressChanged(ctx context.Context, progress any) {
+	u.invokeWebsocketMethod(ctx, "CloudSyncProgressChanged", progress)
+}
+
+func (u *uiImpl) RefreshAccountStatus(ctx context.Context) {
+	u.invokeWebsocketMethod(ctx, "RefreshAccountStatus", nil)
 }
 
 func (u *uiImpl) UpdateResult(ctx context.Context, result interface{}) bool {
@@ -240,6 +339,53 @@ func (u *uiImpl) PickFiles(ctx context.Context, params common.PickFilesParams) [
 	return result
 }
 
+func (u *uiImpl) CaptureScreenshot(ctx context.Context, request common.CaptureScreenshotRequest) (common.CaptureScreenshotResult, error) {
+	if request.SessionId == "" {
+		// The UI request itself needs a stable session identifier so Flutter can correlate this long-lived
+		// screenshot session with the same window instance that owns the current query/action context.
+		request.SessionId = util.GetContextSessionId(ctx)
+	}
+	if request.ExportFilePath == "" {
+		// Screenshot export now depends on a backend-owned file target so Flutter writes into the
+		// same woxDataDirectory policy regardless of which Go caller initiated the session.
+		exportFilePath, err := reserveScreenshotExportFilePath()
+		if err != nil {
+			return common.CaptureScreenshotResult{}, err
+		}
+		request.ExportFilePath = exportFilePath
+	}
+
+	respData, err := u.invokeWebsocketMethod(ctx, "CaptureScreenshot", request)
+	if err != nil {
+		return common.CaptureScreenshotResult{}, err
+	}
+
+	result, mapErr := decodeWebsocketResponse[common.CaptureScreenshotResult](respData)
+	if mapErr != nil {
+		return common.CaptureScreenshotResult{}, mapErr
+	}
+
+	return result, nil
+}
+
+// WriteClipboardImageFile delegates image clipboard ownership to the UI process.
+func (u *uiImpl) WriteClipboardImageFile(ctx context.Context, filePath string) error {
+	if strings.TrimSpace(filePath) == "" {
+		return errors.New("clipboard image file path is empty")
+	}
+
+	respData, err := u.invokeWebsocketMethod(ctx, "WriteClipboardImageFile", map[string]string{
+		"filePath": filePath,
+	})
+	if err != nil {
+		if message, ok := respData.(string); ok && message != "" {
+			return fmt.Errorf("%w: %s", err, message)
+		}
+		return err
+	}
+	return nil
+}
+
 func (u *uiImpl) invokeWebsocketMethod(ctx context.Context, method string, data any) (responseData any, responseErr error) {
 	requestID := uuid.NewString()
 	resultChan := make(chan WebsocketMsg)
@@ -261,11 +407,7 @@ func (u *uiImpl) invokeWebsocketMethod(ctx context.Context, method string, data 
 		return "", err
 	}
 
-	var timeout = time.Second * 2
-	if method == "PickFiles" {
-		// pick files may take a long time
-		timeout = time.Second * 180
-	}
+	timeout := getWebsocketMethodTimeout(method)
 	select {
 	case <-time.NewTimer(timeout).C:
 		logger.Error(ctx, fmt.Sprintf("invoke ui method %s response timeout", method))
@@ -277,6 +419,33 @@ func (u *uiImpl) invokeWebsocketMethod(ctx context.Context, method string, data 
 			return response.Data, nil
 		}
 	}
+}
+
+func getWebsocketMethodTimeout(method string) time.Duration {
+	switch method {
+	case "PickFiles", "CaptureScreenshot":
+		// File pickers and screenshot sessions both wait on direct user interaction,
+		// so the previous fixed 2s request timeout was not enough for these long-lived UI tasks.
+		return 180 * time.Second
+	case "WriteClipboardImageFile":
+		return 10 * time.Second
+	default:
+		return 2 * time.Second
+	}
+}
+
+func decodeWebsocketResponse[T any](data any) (T, error) {
+	var target T
+
+	jsonBytes, marshalErr := json.Marshal(data)
+	if marshalErr != nil {
+		return target, fmt.Errorf("marshal websocket response failed: %w", marshalErr)
+	}
+	if unmarshalErr := json.Unmarshal(jsonBytes, &target); unmarshalErr != nil {
+		return target, fmt.Errorf("unmarshal websocket response failed: %w", unmarshalErr)
+	}
+
+	return target, nil
 }
 
 func getShowAppParams(ctx context.Context, showContext common.ShowContext) map[string]any {
@@ -322,28 +491,47 @@ func getShowAppParams(ctx context.Context, showContext common.ShowContext) map[s
 	}
 
 	params := map[string]any{
-		"SelectAll":        showContext.SelectAll,
-		"IsQueryFocus":     showContext.IsQueryFocus,
-		"HideQueryBox":     showContext.HideQueryBox,
-		"HideToolbar":      hideToolbar,
-		"QueryBoxAtBottom": showContext.QueryBoxAtBottom,
-		"HideOnBlur":       showContext.HideOnBlur,
-		"Position":         position,
-		"TrayAnchor":       showContext.TrayAnchor,
-		"WindowWidth":      windowWidth,
-		"MaxResultCount":   maxResultCount,
-		"QueryHistories":   setting.GetSettingManager().GetLatestQueryHistory(ctx, 10),
-		"LaunchMode":       woxSetting.LaunchMode.Get(),
-		"StartPage":        woxSetting.StartPage.Get(),
-		"ShowSource":       showSource,
+		"SelectAll":            showContext.SelectAll,
+		"IsQueryFocus":         showContext.IsQueryFocus,
+		"HideQueryBox":         showContext.HideQueryBox,
+		"HideToolbar":          hideToolbar,
+		"QueryBoxAtBottom":     showContext.QueryBoxAtBottom,
+		"HideOnBlur":           showContext.HideOnBlur,
+		"Position":             position,
+		"TrayAnchor":           showContext.TrayAnchor,
+		"WindowWidth":          windowWidth,
+		"MaxResultCount":       maxResultCount,
+		"QueryHistories":       setting.GetSettingManager().GetLatestQueryHistory(ctx, 10),
+		"LaunchMode":           woxSetting.LaunchMode.Get(),
+		"StartPage":            woxSetting.StartPage.Get(),
+		"ShowSource":           showSource,
+		"ActivationStartedAt":  showContext.ActivationStartedAt,
+		"AttentionUnreadCount": getAttentionUnreadCount(ctx),
 	}
 
 	return params
 }
 
+func getAttentionUnreadCount(ctx context.Context) int {
+	count, err := plugin.GetAttentionManager().UnreadCount(ctx)
+	if err != nil {
+		logger.Warn(ctx, fmt.Sprintf("failed to count unread attention items for show app: %v", err))
+		return 0
+	}
+	return int(count)
+}
+
 func onUIWebsocketRequest(ctx context.Context, request WebsocketMsg) {
 	if request.Method != "Log" {
 		logger.Debug(ctx, fmt.Sprintf("got <%s> request from ui", request.Method))
+	}
+	if request.Method == "Query" {
+		tracker := timetracking.New("ui_request_dispatch_enter")
+		if tracker.Enabled() {
+			tracker.SetRawString("queryId", websocketMsgStringParam(request, "queryId"))
+			tracker.SetRawString("method", request.Method)
+			tracker.Log(ctx)
+		}
 	}
 
 	// we handle time/amount sensitive requests in websocket, other requests in http (see router.go)
@@ -352,6 +540,8 @@ func onUIWebsocketRequest(ctx context.Context, request WebsocketMsg) {
 		handleWebsocketLog(ctx, request)
 	case "Query":
 		handleWebsocketQuery(ctx, request)
+	case "QueryCompletionHintAccepted":
+		handleWebsocketQueryCompletionHintAccepted(ctx, request)
 	case "QueryMRU":
 		handleWebsocketQueryMRU(ctx, request)
 	case "Action":
@@ -370,7 +560,12 @@ func onUIWebsocketRequest(ctx context.Context, request WebsocketMsg) {
 }
 
 func onUIWebsocketResponse(ctx context.Context, response WebsocketMsg) {
-	logger.Debug(ctx, fmt.Sprintf("got <%s> response from ui", response.Method))
+	// ShowToolbarMsg acknowledgements arrive at very high frequency during file
+	// indexing, and logging each one added noise without helping diagnose UI
+	// behavior because the request side already knows which toolbar snapshot it sent.
+	if response.Method != "ShowToolbarMsg" {
+		logger.Debug(ctx, fmt.Sprintf("got <%s> response from ui", response.Method))
+	}
 
 	requestID := response.RequestId
 	if requestID == "" {
@@ -427,7 +622,9 @@ func handleWebsocketLog(ctx context.Context, request WebsocketMsg) {
 }
 
 func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
+	handlerStart := util.GetSystemTimestamp()
 	sessionId := request.SessionId
+	queryIdParamStart := util.GetSystemTimestamp()
 	queryId, queryIdErr := getWebsocketMsgParameter(ctx, request, "queryId")
 	if queryIdErr != nil {
 		logger.Error(ctx, queryIdErr.Error())
@@ -436,42 +633,112 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 	} else {
 		ctx = util.WithQueryIdContext(ctx, queryId)
 	}
+	queryIdParamCost := util.GetSystemTimestamp() - queryIdParamStart
+	if tracker := timetracking.New("handle_query_enter"); tracker.Enabled() {
+		tracker.SetRawString("queryId", queryId)
+		tracker.SetRawString("requestId", request.RequestId)
+		tracker.SetRawString("sessionId", sessionId)
+		tracker.SetInt64("queryIdParamMs", queryIdParamCost)
+		tracker.Log(ctx)
+	}
 
+	queryTypeParamStart := util.GetSystemTimestamp()
 	queryType, queryTypeErr := getWebsocketMsgParameter(ctx, request, "queryType")
 	if queryTypeErr != nil {
 		logger.Error(ctx, queryTypeErr.Error())
 		responseUIError(ctx, request, queryTypeErr.Error())
 		return
 	}
+	queryTypeParamCost := util.GetSystemTimestamp() - queryTypeParamStart
+	queryTextParamStart := util.GetSystemTimestamp()
 	queryText, queryTextErr := getWebsocketMsgParameter(ctx, request, "queryText")
 	if queryTextErr != nil {
 		logger.Error(ctx, queryTextErr.Error())
 		responseUIError(ctx, request, queryTextErr.Error())
 		return
 	}
+	queryTextParamCost := util.GetSystemTimestamp() - queryTextParamStart
+	querySelectionParamStart := util.GetSystemTimestamp()
 	querySelectionJson, querySelectionErr := getWebsocketMsgParameter(ctx, request, "querySelection")
 	if querySelectionErr != nil {
 		logger.Error(ctx, querySelectionErr.Error())
 		responseUIError(ctx, request, querySelectionErr.Error())
 		return
 	}
+	querySelectionParamCost := util.GetSystemTimestamp() - querySelectionParamStart
 	var querySelection selection.Selection
+	selectionParseStart := util.GetSystemTimestamp()
 	json.Unmarshal([]byte(querySelectionJson), &querySelection)
+	selectionParseCost := util.GetSystemTimestamp() - selectionParseStart
+
+	queryRefinements := map[string]string{}
+	contextData := common.ContextData{}
+	requestDataMarshalStart := util.GetSystemTimestamp()
+	queryRequestJson, queryRequestMarshalErr := json.Marshal(request.Data)
+	if queryRequestMarshalErr != nil {
+		logger.Error(ctx, queryRequestMarshalErr.Error())
+		responseUIError(ctx, request, queryRequestMarshalErr.Error())
+		return
+	}
+	requestDataMarshalCost := util.GetSystemTimestamp() - requestDataMarshalStart
+	refinementsParseStart := util.GetSystemTimestamp()
+	refinementsData := gjson.GetBytes(queryRequestJson, "queryRefinements")
+	if refinementsData.Exists() {
+		// queryRefinements is optional for compatibility with older UI clients.
+		// When present, keep the map value shape simple and let each plugin
+		// interpret single or comma-separated multi-select values.
+		parsedRefinements, parseRefinementsErr := parseQueryRefinementsFromUI(refinementsData.Raw)
+		if parseRefinementsErr != nil {
+			logger.Error(ctx, parseRefinementsErr.Error())
+			responseUIError(ctx, request, parseRefinementsErr.Error())
+			return
+		}
+		queryRefinements = parsedRefinements
+	}
+	contextDataRaw := gjson.GetBytes(queryRequestJson, "contextData")
+	if !contextDataRaw.Exists() {
+		contextDataRaw = gjson.GetBytes(queryRequestJson, "ContextData")
+	}
+	if contextDataRaw.Exists() {
+		contextData = common.UnmarshalContextData(contextDataRaw.Raw)
+	}
+	refinementsParseCost := util.GetSystemTimestamp() - refinementsParseStart
+	skipCompletionHint := gjson.GetBytes(queryRequestJson, "skipCompletionHint").Bool()
+	if tracker := timetracking.New("handle_query_parse"); tracker.Enabled() {
+		tracker.SetRawString("queryId", queryId)
+		tracker.SetRawString("queryType", queryType)
+		tracker.SetString("queryText", queryText)
+		tracker.SetInt("queryTextLen", len(queryText))
+		tracker.SetInt("selectionBytes", len(querySelectionJson))
+		tracker.SetInt64("queryIdParamMs", queryIdParamCost)
+		tracker.SetInt64("queryTypeParamMs", queryTypeParamCost)
+		tracker.SetInt64("queryTextParamMs", queryTextParamCost)
+		tracker.SetInt64("querySelectionParamMs", querySelectionParamCost)
+		tracker.SetInt64("selectionParseMs", selectionParseCost)
+		tracker.SetInt64("requestDataMarshalMs", requestDataMarshalCost)
+		tracker.SetInt64("refinementsParseMs", refinementsParseCost)
+		tracker.SetInt64("totalMs", util.GetSystemTimestamp()-handlerStart)
+		tracker.Log(ctx)
+	}
 
 	var changedQuery common.PlainQuery
 	switch queryType {
 	case plugin.QueryTypeInput:
 		changedQuery = common.PlainQuery{
-			QueryId:   queryId,
-			QueryType: plugin.QueryTypeInput,
-			QueryText: queryText,
+			QueryId:          queryId,
+			QueryType:        plugin.QueryTypeInput,
+			QueryText:        queryText,
+			QueryRefinements: queryRefinements,
+			ContextData:      contextData,
 		}
 	case plugin.QueryTypeSelection:
 		changedQuery = common.PlainQuery{
-			QueryId:        queryId,
-			QueryType:      plugin.QueryTypeSelection,
-			QueryText:      queryText,
-			QuerySelection: querySelection,
+			QueryId:          queryId,
+			QueryType:        plugin.QueryTypeSelection,
+			QueryText:        queryText,
+			QuerySelection:   querySelection,
+			QueryRefinements: queryRefinements,
+			ContextData:      contextData,
 		}
 	default:
 		logger.Error(ctx, fmt.Sprintf("unsupported query type: %s", queryType))
@@ -479,26 +746,148 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 		return
 	}
 
-	if err := executeChangedQuery(ctx, sessionId, changedQuery, func(queryId string, results []plugin.QueryResultUI, isFinal bool) {
-		responseUIQueryResults(ctx, request, queryId, results, isFinal)
-	}); err != nil {
-		logger.Error(ctx, err.Error())
-		responseUIError(ctx, request, err.Error())
+	logger.Info(ctx, fmt.Sprintf("start to handle query changed: %s, queryId: %s", changedQuery.String(), queryId))
+
+	if changedQuery.QueryType == plugin.QueryTypeInput && changedQuery.QueryText == "" {
+		emptyInputQuery := plugin.Query{
+			Id:        queryId,
+			SessionId: sessionId,
+			Type:      plugin.QueryTypeInput,
+		}
+		plugin.GetPluginManager().HandleQueryLifecycle(ctx, emptyInputQuery, nil)
+		// Bug fix: blank-page empty input still occupies the global query box.
+		// The previous zero-value QueryContext serialized as IsGlobalQuery=false,
+		// so the UI treated a cleared search as plugin/selection context and hid
+		// Glance. Return the same backend-owned classification used by normal
+		// queries so clearing search keeps the global accessory visible.
+		responseUIQueryResponse(ctx, request, queryId, plugin.QueryResponseUI{
+			Results: []plugin.QueryResultUI{},
+			Context: plugin.BuildQueryContext(emptyInputQuery, nil),
+		}, true)
+		return
 	}
-}
+	if changedQuery.QueryType == plugin.QueryTypeSelection && changedQuery.QuerySelection.String() == "" {
+		plugin.GetPluginManager().HandleQueryLifecycle(ctx, plugin.Query{
+			Id:        queryId,
+			SessionId: sessionId,
+			Type:      plugin.QueryTypeSelection,
+		}, nil)
+		responseUIQueryResults(ctx, request, queryId, []plugin.QueryResultUI{}, true)
+		return
+	}
 
-type queryResultsEmitter func(queryId string, results []plugin.QueryResultUI, isFinal bool)
+	newQueryStart := util.GetSystemTimestamp()
+	query, ownerPlugin, queryErr := plugin.GetPluginManager().NewQuery(ctx, changedQuery)
+	if queryErr != nil {
+		if conflictErr, ok := plugin.AsTriggerKeywordConflictError(queryErr); ok {
+			plugin.GetPluginManager().HandleQueryLifecycle(ctx, query, nil)
+			responseUIQueryResponse(ctx, request, queryId, plugin.GetPluginManager().BuildTriggerKeywordConflictResponse(ctx, query, conflictErr.Conflict), true)
+			return
+		}
+		logger.Error(ctx, queryErr.Error())
+		responseUIError(ctx, request, queryErr.Error())
+		return
+	}
+	if tracker := timetracking.New("handle_query_new_query"); tracker.Enabled() {
+		tracker.SetRawString("queryId", queryId)
+		tracker.SetRawString("query", query.String())
+		tracker.SetRawString("ownerPlugin", queryPipelinePluginLabel(ctx, ownerPlugin))
+		tracker.SetInt64("costMs", util.GetSystemTimestamp()-newQueryStart)
+		tracker.SetInt64("elapsedMs", util.GetSystemTimestamp()-handlerStart)
+		tracker.Log(ctx)
+	}
 
-func HandleNativeLauncherQueryChanged(ctx context.Context, changedQuery common.PlainQuery) error {
-	return executeChangedQuery(ctx, util.GetContextSessionId(ctx), changedQuery, func(queryId string, results []plugin.QueryResultUI, isFinal bool) {
-		_ = isFinal
-		plugin.GetPluginManager().GetUI().PushResults(ctx, plugin.PushResultsPayload{
-			QueryId: queryId,
-			Results: results,
+	completionHintScheduleStart := util.GetSystemTimestamp()
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	if !skipCompletionHint && woxSetting.EnableQueryCompletionHint.Get() {
+		util.Go(ctx, "query completion hint", func() {
+			responseUIQueryCompletionHint(
+				ctx,
+				request,
+				queryId,
+				plugin.BuildQueryCompletionHintForInputPrefixWithFeedback(
+					query,
+					ownerPlugin,
+					setting.GetSettingManager().GetLatestQueryHistory(ctx, plugin.QueryCompletionHistoryLimit),
+					setting.GetSettingManager().GetQueryCompletionFeedbacks(ctx),
+					changedQuery.QueryText,
+				),
+			)
 		})
-	})
+	}
+	if tracker := timetracking.New("handle_query_completion_hint_schedule"); tracker.Enabled() {
+		tracker.SetRawString("queryId", queryId)
+		tracker.SetBool("enabled", woxSetting.EnableQueryCompletionHint.Get())
+		tracker.SetBool("skipped", skipCompletionHint)
+		tracker.SetInt64("costMs", util.GetSystemTimestamp()-completionHintScheduleStart)
+		tracker.Log(ctx)
+	}
+
+	lifecycleStart := util.GetSystemTimestamp()
+	plugin.GetPluginManager().HandleQueryLifecycle(ctx, query, ownerPlugin)
+	if tracker := timetracking.New("handle_query_lifecycle"); tracker.Enabled() {
+		tracker.SetRawString("queryId", queryId)
+		tracker.SetInt64("costMs", util.GetSystemTimestamp()-lifecycleStart)
+		tracker.SetInt64("elapsedMs", util.GetSystemTimestamp()-handlerStart)
+		tracker.Log(ctx)
+	}
+
+	if tracker := timetracking.New("handle_query_run_starting"); tracker.Enabled() {
+		tracker.SetRawString("queryId", queryId)
+		tracker.SetInt64("elapsedMs", util.GetSystemTimestamp()-handlerStart)
+		tracker.Log(ctx)
+	}
+	newQueryRun(ctx, request, query, ownerPlugin).start()
 }
 
+// HandleNativeLauncherQueryChanged runs the backend query pipeline for the native launcher shell.
+func HandleNativeLauncherQueryChanged(ctx context.Context, changedQuery common.PlainQuery) error {
+	sessionId := util.GetContextSessionId(ctx)
+	if sessionId == "" {
+		return errors.New("session id is empty")
+	}
+	if changedQuery.QueryId == "" {
+		return errors.New("query id is empty")
+	}
+
+	queryId := changedQuery.QueryId
+	ctx = util.WithQueryIdContext(ctx, queryId)
+	logger.Info(ctx, fmt.Sprintf("start to handle native launcher query changed: %s, queryId: %s", changedQuery.String(), queryId))
+
+	if changedQuery.QueryType == plugin.QueryTypeInput && changedQuery.QueryText == "" {
+		plugin.GetPluginManager().HandleQueryLifecycle(ctx, plugin.Query{
+			Id:        queryId,
+			SessionId: sessionId,
+			Type:      plugin.QueryTypeInput,
+		}, nil)
+		pushNativeLauncherResults(ctx, queryId, []plugin.QueryResultUI{})
+		return nil
+	}
+	if changedQuery.QueryType == plugin.QueryTypeSelection && changedQuery.QuerySelection.String() == "" {
+		plugin.GetPluginManager().HandleQueryLifecycle(ctx, plugin.Query{
+			Id:        queryId,
+			SessionId: sessionId,
+			Type:      plugin.QueryTypeSelection,
+		}, nil)
+		pushNativeLauncherResults(ctx, queryId, []plugin.QueryResultUI{})
+		return nil
+	}
+
+	query, ownerPlugin, queryErr := plugin.GetPluginManager().NewQuery(ctx, changedQuery)
+	if queryErr != nil {
+		if conflictErr, ok := plugin.AsTriggerKeywordConflictError(queryErr); ok {
+			plugin.GetPluginManager().HandleQueryLifecycle(ctx, query, nil)
+			pushNativeLauncherResults(ctx, queryId, plugin.GetPluginManager().BuildTriggerKeywordConflictResponse(ctx, query, conflictErr.Conflict).Results)
+			return nil
+		}
+		return queryErr
+	}
+
+	plugin.GetPluginManager().HandleQueryLifecycle(ctx, query, ownerPlugin)
+	return runNativeLauncherQuery(ctx, sessionId, queryId, query, ownerPlugin)
+}
+
+// HandleNativeLauncherSelectedResultAction executes a selected result action from the native launcher shell.
 func HandleNativeLauncherSelectedResultAction(ctx context.Context, queryId string, resultId string, actionId string) error {
 	sessionId := util.GetContextSessionId(ctx)
 	if sessionId == "" {
@@ -518,112 +907,152 @@ func HandleNativeLauncherSelectedResultAction(ctx context.Context, queryId strin
 	return plugin.GetPluginManager().ExecuteAction(actionCtx, sessionId, queryId, resultId, actionId)
 }
 
-func executeChangedQuery(ctx context.Context, sessionId string, changedQuery common.PlainQuery, emit queryResultsEmitter) error {
-	if sessionId == "" {
-		return errors.New("session id is empty")
-	}
-	if changedQuery.QueryId == "" {
-		return errors.New("query id is empty")
-	}
-
-	if emit == nil {
-		emit = func(queryId string, results []plugin.QueryResultUI, isFinal bool) {}
-	}
-
-	queryId := changedQuery.QueryId
-	logger.Info(ctx, fmt.Sprintf("start to handle query changed: %s, queryId: %s", changedQuery.String(), queryId))
-
-	if changedQuery.QueryType == plugin.QueryTypeInput && changedQuery.QueryText == "" {
-		plugin.GetPluginManager().HandleQueryLifecycle(ctx, plugin.Query{
-			Id:        queryId,
-			SessionId: sessionId,
-			Type:      plugin.QueryTypeInput,
-		}, nil)
-		emit(queryId, []plugin.QueryResultUI{}, true)
-		return nil
-	}
-	if changedQuery.QueryType == plugin.QueryTypeSelection && changedQuery.QuerySelection.String() == "" {
-		plugin.GetPluginManager().HandleQueryLifecycle(ctx, plugin.Query{
-			Id:        queryId,
-			SessionId: sessionId,
-			Type:      plugin.QueryTypeSelection,
-		}, nil)
-		emit(queryId, []plugin.QueryResultUI{}, true)
-		return nil
-	}
-
-	query, queryPlugin, queryErr := plugin.GetPluginManager().NewQuery(ctx, changedQuery)
-	if queryErr != nil {
-		return queryErr
-	}
-
-	plugin.GetPluginManager().HandleQueryLifecycle(ctx, query, queryPlugin)
-
-	var totalResultCount int
+func runNativeLauncherQuery(ctx context.Context, sessionId string, queryId string, query plugin.Query, ownerPlugin *plugin.Instance) error {
+	totalResultCount := 0
+	fallbackHandled := false
 	startTimestamp := util.GetSystemTimestamp()
 	firstFlushDelayMs := plugin.GetPluginManager().GetQueryFirstFlushDelayMs(query)
-	logger.Info(ctx, fmt.Sprintf("query %s: %s, first flush delay: %d ms", query.Type, query.String(), firstFlushDelayMs))
-
 	resultDebouncer := util.NewDebouncer(firstFlushDelayMs, resultDebounceIntervalMs, func(results []plugin.QueryResultUI, reason string) {
 		isFinal := reason == "done"
-
 		if !isFinal && len(results) == 0 {
 			return
 		}
-		if !plugin.GetPluginManager().IsCurrentQuery(sessionId, queryId) {
-			return
-		}
 
-		logger.Info(ctx, fmt.Sprintf("query %s: %s, result flushed (reason: %s, isFinal: %v), current: %d, total results: %d", query.Type, query.String(), reason, isFinal, len(results), totalResultCount))
-		snapshot := plugin.GetPluginManager().BuildQueryResultsSnapshot(sessionId, queryId)
-		emit(queryId, snapshot, isFinal)
+		logger.Info(ctx, fmt.Sprintf("native launcher query %s: %s, result flushed (reason: %s, isFinal: %v), current: %d, total results: %d", query.Type, query.String(), reason, isFinal, len(results), totalResultCount))
+		pushNativeLauncherResults(ctx, queryId, plugin.GetPluginManager().BuildQueryResultsSnapshot(sessionId, queryId))
 	})
 	resultDebouncer.Start(ctx)
-	logger.Info(ctx, fmt.Sprintf("query %s: %s, result flushed (new start)", query.Type, query.String()))
-	resultChan, doneChan := plugin.GetPluginManager().Query(ctx, query)
+
+	resultChan, fallbackReadyChan, doneChan := plugin.GetPluginManager().Query(ctx, query)
+	showFallback := func() {
+		if fallbackHandled || totalResultCount > 0 || !query.IsGlobalQuery() {
+			return
+		}
+		fallbackHandled = true
+		fallbackResponse := plugin.GetPluginManager().QueryFallback(ctx, query, ownerPlugin)
+		if len(fallbackResponse.Results) == 0 {
+			return
+		}
+		for i := range fallbackResponse.Results {
+			fallbackResponse.Results[i].QueryId = queryId
+		}
+		totalResultCount += len(fallbackResponse.Results)
+		resultDebouncer.Add(ctx, fallbackResponse.Results)
+	}
+
 	for {
 		select {
-		case results := <-resultChan:
-			if !plugin.GetPluginManager().IsCurrentQuery(sessionId, queryId) {
-				resultDebouncer.Done(ctx)
-				return nil
-			}
-			if len(results) == 0 {
+		case response := <-resultChan:
+			if len(response.Results) == 0 {
 				continue
 			}
-			lo.ForEach(results, func(_ plugin.QueryResultUI, index int) {
-				results[index].QueryId = queryId
-			})
-			totalResultCount += len(results)
-			resultDebouncer.Add(ctx, results)
+			for i := range response.Results {
+				response.Results[i].QueryId = queryId
+			}
+			totalResultCount += len(response.Results)
+			resultDebouncer.Add(ctx, response.Results)
+		case <-fallbackReadyChan:
+			showFallback()
 		case <-doneChan:
-			if !plugin.GetPluginManager().IsCurrentQuery(sessionId, queryId) {
-				resultDebouncer.Done(ctx)
-				return nil
-			}
-			logger.Info(ctx, fmt.Sprintf("query done, total results: %d, cost %d ms", totalResultCount, util.GetSystemTimestamp()-startTimestamp))
-
-			if totalResultCount == 0 {
-				fallbackResults := plugin.GetPluginManager().QueryFallback(ctx, query, queryPlugin)
-				if len(fallbackResults) > 0 {
-					lo.ForEach(fallbackResults, func(_ plugin.QueryResultUI, index int) {
-						fallbackResults[index].QueryId = queryId
-					})
-					resultDebouncer.Add(ctx, fallbackResults)
-					logger.Info(ctx, fmt.Sprintf("no result, show %d fallback results", len(fallbackResults)))
-				} else {
-					logger.Info(ctx, "no result, no fallback results")
-				}
-			}
-
+			showFallback()
+			logger.Info(ctx, fmt.Sprintf("native launcher query done, total results: %d, cost %d ms", totalResultCount, util.GetSystemTimestamp()-startTimestamp))
 			resultDebouncer.Done(ctx)
 			return nil
 		case <-time.After(time.Minute):
-			logger.Info(ctx, fmt.Sprintf("query timeout, query: %s", query.String()))
 			resultDebouncer.Done(ctx)
 			return fmt.Errorf("query timeout, query: %s", query.String())
 		}
 	}
+}
+
+func pushNativeLauncherResults(ctx context.Context, queryId string, results []plugin.QueryResultUI) {
+	plugin.GetPluginManager().GetUI().PushResults(ctx, plugin.PushResultsPayload{
+		QueryId: queryId,
+		Results: results,
+	})
+}
+
+func queryPipelinePluginLabel(ctx context.Context, pluginInstance *plugin.Instance) string {
+	if pluginInstance == nil {
+		return "<global>"
+	}
+	name := pluginInstance.GetName(ctx)
+	if name == "" {
+		name = pluginInstance.Metadata.Id
+	}
+	return fmt.Sprintf("%s(%s)", name, pluginInstance.Metadata.Id)
+}
+
+func appendQueryDebugTails(ctx context.Context, sessionId string, queryId string, snapshot []plugin.QueryResultUI, firstVisibleFlushElapsedMs int64, backendPreparedElapsedMs int64) []plugin.QueryResultUI {
+	if len(snapshot) == 0 {
+		return snapshot
+	}
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	if !woxSetting.ShowPerformanceTail.Get() {
+		return snapshot
+	}
+	showBatchTail := woxSetting.ShowPerformanceTailBatch.Get()
+	showPluginQueryTail := woxSetting.ShowPerformanceTailPluginQuery.Get()
+	showBackendPreparedTail := woxSetting.ShowPerformanceTailBackendPrepared.Get()
+	if !showBatchTail && !showPluginQueryTail && !showBackendPreparedTail {
+		return snapshot
+	}
+
+	annotated := make([]plugin.QueryResultUI, len(snapshot))
+	for i, result := range snapshot {
+		if result.IsGroup {
+			annotated[i] = result
+			continue
+		}
+
+		resultCopy := result
+		resultCopy.Tails = append([]plugin.QueryResultTail{}, result.Tails...)
+		if batch, _, batchQueueElapsed, batchQueueElapsedSet, pluginQueryElapsed, pluginQueryElapsedSet, ok := plugin.GetPluginManager().GetQueryResultDebugInfo(sessionId, queryId, result.Id); ok {
+			if showBatchTail {
+				batchTail := plugin.NewQueryResultTailTextWithCategory(fmt.Sprintf("B%d", batch), queryDebugBatchTailTextCategory(batch))
+				batchTail.Tooltip = fmt.Sprintf("First flush: %dms", firstVisibleFlushElapsedMs)
+				if batchQueueElapsedSet {
+					batchTail.Tooltip = fmt.Sprintf("First flush: %dms\nQueued for batch: %dms", firstVisibleFlushElapsedMs, batchQueueElapsed)
+				}
+				resultCopy.Tails = append(resultCopy.Tails, batchTail)
+			}
+
+			if showPluginQueryTail && pluginQueryElapsedSet {
+				pluginQueryTail := plugin.NewQueryResultTailTextWithCategory(fmt.Sprintf("%dms", pluginQueryElapsed), queryDebugPluginQueryTailTextCategory(pluginQueryElapsed))
+				pluginQueryTail.Tooltip = "Raw Plugin.Query duration"
+				resultCopy.Tails = append(resultCopy.Tails, pluginQueryTail)
+			}
+
+			if showBackendPreparedTail {
+				backendPreparedCategory := plugin.QueryResultTailTextCategoryDefault
+				elapsedTail := plugin.NewQueryResultTailTextWithCategory(fmt.Sprintf("%dms", backendPreparedElapsedMs), backendPreparedCategory)
+				elapsedTail.Tooltip = "Backend ready to send elapsed since Flutter query request"
+				resultCopy.Tails = append(resultCopy.Tails, elapsedTail)
+			}
+		}
+		annotated[i] = resultCopy
+	}
+
+	return annotated
+}
+
+// queryDebugBatchTailTextCategory highlights results that missed the first response batch.
+func queryDebugBatchTailTextCategory(batch int) plugin.QueryResultTailTextCategory {
+	if batch > 1 {
+		return plugin.QueryResultTailTextCategoryWarning
+	}
+	return plugin.QueryResultTailTextCategoryDefault
+}
+
+// queryDebugPluginQueryTailTextCategory highlights raw plugin execution cost before backend/UI overhead.
+func queryDebugPluginQueryTailTextCategory(elapsedMs int64) plugin.QueryResultTailTextCategory {
+	if elapsedMs > 10 {
+		return plugin.QueryResultTailTextCategoryDanger
+	}
+	if elapsedMs > 5 {
+		return plugin.QueryResultTailTextCategoryWarning
+	}
+	return plugin.QueryResultTailTextCategoryDefault
 }
 
 func handleWebsocketAction(ctx context.Context, request WebsocketMsg) {
@@ -723,6 +1152,35 @@ func handleWebsocketQueryMRU(ctx context.Context, request WebsocketMsg) {
 	mruResults := plugin.GetPluginManager().QueryMRU(ctx, request.SessionId, queryId)
 	logger.Info(ctx, fmt.Sprintf("found %d MRU results via websocket", len(mruResults)))
 	responseUISuccessWithData(ctx, request, mruResults)
+}
+
+// handleWebsocketQueryCompletionHintAccepted records positive feedback from accepted inline hints.
+func handleWebsocketQueryCompletionHintAccepted(ctx context.Context, request WebsocketMsg) {
+	inputPrefix, inputPrefixErr := getWebsocketMsgParameter(ctx, request, "inputPrefix")
+	if inputPrefixErr != nil {
+		logger.Error(ctx, inputPrefixErr.Error())
+		responseUIError(ctx, request, inputPrefixErr.Error())
+		return
+	}
+
+	completionText, completionTextErr := getWebsocketMsgParameter(ctx, request, "completionText")
+	if completionTextErr != nil {
+		logger.Error(ctx, completionTextErr.Error())
+		responseUIError(ctx, request, completionTextErr.Error())
+		return
+	}
+
+	source, sourceErr := getWebsocketMsgParameter(ctx, request, "source")
+	if sourceErr != nil {
+		logger.Error(ctx, sourceErr.Error())
+		responseUIError(ctx, request, sourceErr.Error())
+		return
+	}
+
+	if !setting.GetSettingManager().RecordQueryCompletionFeedback(ctx, inputPrefix, completionText, source) {
+		logger.Debug(ctx, fmt.Sprintf("ignore invalid query completion feedback: inputPrefix=%q, completionText=%q, source=%q", inputPrefix, completionText, source))
+	}
+	responseUISuccess(ctx, request)
 }
 
 func handleWebsocketTerminalSubscribe(ctx context.Context, request WebsocketMsg) {

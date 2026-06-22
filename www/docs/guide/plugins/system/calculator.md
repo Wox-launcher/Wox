@@ -1,27 +1,30 @@
 # Calculator Plugin
 
-Calculator evaluates math expressions directly in Wox and keeps a small history.
+Calculator evaluates expressions directly in the launcher. It listens globally, so you can type a calculation without a keyword.
 
-## What it does
+## Quick Start
 
-- Auto-detects expressions with operators
-- Supports `+ - * / ^` and parentheses
-- Shows thousands separators by default
-- Stores recent calculations for reuse
-
-## Quick start
-
-```
+```text
 100 + 200
 2 ^ 10
 (500 - 100) / (10 + 10)
 ```
 
-## History
+Press `Enter` to copy or use the result, depending on the current action. Open the Action Panel to copy either the raw value or the formatted value.
 
-Use `calculator` to browse history. You can copy results or re-run a past expression.
+![Calculator plugin result list](/images/system-plugin-calculator.png)
+
+## Explicit Mode
+
+Use `calculator` when you want calculator history or when another global plugin is competing with the same query:
+
+```text
+calculator 12 * 12
+calculator
+```
 
 ## Notes
 
-- An operator is required to trigger calculation (e.g., `123 + 1`).
-- Copy actions include raw value and value with separators.
+- Include an operator to trigger global calculation, such as `+`, `-`, `*`, `/`, or `^`.
+- Parentheses are supported.
+- Thousands separator behavior can be changed in plugin settings.

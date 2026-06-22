@@ -8,7 +8,7 @@ package app
 
 const unsigned char *GetPrefPaneIcon(const char *prefPanePath, size_t *length);
 const unsigned char *GenerateSFSymbolIcon(const char *symbolName, const char *colorName, const char *iconStyle, size_t *length);
-char* GetLocalizedAppName(const char *appPath);
+char* GetLocalizedAppNames(const char *appPath);
 int get_process_list(struct kinfo_proc **procList, size_t *procCount);
 char* get_process_path(pid_t pid);
 */
@@ -28,6 +28,7 @@ import (
 	"wox/plugin"
 	"wox/util"
 	"wox/util/fileicon"
+	"wox/util/imagecache"
 	"wox/util/shell"
 
 	"github.com/mitchellh/go-homedir"
@@ -118,7 +119,7 @@ func (a *MacRetriever) ParseAppInfo(ctx context.Context, path string) (appInfo, 
 		a.api.Log(ctx, plugin.LogLevelError, iconErr.Error())
 	}
 	info.Icon = icon
-	if info.Icon.ImageData == defaultAppIcon {
+	if info.Icon.ImageData == defaultAppIcon || !a.hasDedicatedMacAppIcon(ctx, path) {
 		info.IsDefaultIcon = true
 	}
 
@@ -181,23 +182,44 @@ func (a *MacRetriever) getAppNameFromMdls(path string) (string, error) {
 }
 
 func (a *MacRetriever) getLocalizedAppName(appPath string) string {
+	names := a.getLocalizedAppNames(appPath)
+	if len(names) == 0 {
+		return ""
+	}
+	return names[0]
+}
+
+func (a *MacRetriever) getLocalizedAppNames(appPath string) []string {
 	cPath := C.CString(appPath)
 	defer C.free(unsafe.Pointer(cPath))
 
-	cName := C.GetLocalizedAppName(cPath)
-	if cName == nil {
-		return ""
+	cNames := C.GetLocalizedAppNames(cPath)
+	if cNames == nil {
+		return nil
 	}
-	defer C.free(unsafe.Pointer(cName))
+	defer C.free(unsafe.Pointer(cNames))
 
-	return strings.TrimSpace(C.GoString(cName))
+	var names []string
+	for _, name := range strings.Split(C.GoString(cNames), "\n") {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		names = append(names, name)
+	}
+
+	return util.UniqueStrings(names)
 }
 
 func (a *MacRetriever) getAppSearchableNames(ctx context.Context, appPath string, primaryName string) []string {
 	searchableNames := []string{
 		primaryName,
-		a.getLocalizedAppName(appPath),
 	}
+	// Bug fix: a single current-locale bundle name is not enough when Spotlight
+	// is disabled. macOS stores display names such as Korean Calculator in
+	// InfoPlist.loctable/InfoPlist.strings resources, so every localized bundle
+	// alias must be indexed.
+	searchableNames = append(searchableNames, a.getLocalizedAppNames(appPath)...)
 
 	if plistName, err := a.getAppNameFromPlist(ctx, appPath); err == nil {
 		searchableNames = append(searchableNames, plistName)
@@ -264,6 +286,18 @@ func (a *MacRetriever) getMacAppIcon(ctx context.Context, appPath string) (commo
 	}, nil
 }
 
+func (a *MacRetriever) hasDedicatedMacAppIcon(ctx context.Context, appPath string) bool {
+	// NSWorkspace can synthesize a generic app icon even when the bundle does not
+	// declare one. Launchpad should hide those entries, so use the same bundle
+	// icon resolver as fileicon's preferred extraction path instead of treating
+	// every cached absolute PNG as a real app icon.
+	if _, err := fileicon.ResolveMacAppBundleIconPath(appPath); err != nil {
+		a.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("app %s has no dedicated bundle icon: %s", appPath, err.Error()))
+		return false
+	}
+	return true
+}
+
 func (a *MacRetriever) generateSFSymbolIconBytes(symbolName, colorName, iconStyle string) (*C.uchar, C.size_t) {
 	csymbol := C.CString(symbolName)
 	defer C.free(unsafe.Pointer(csymbol))
@@ -286,11 +320,29 @@ func (a *MacRetriever) getPrefPaneIconBytes(prefPanePath string) (*C.uchar, C.si
 	return bytesPtr, length
 }
 
-func (a *MacRetriever) savePrefPaneIconToCache(ctx context.Context, prefPanePath string, iconBytes *C.uchar, length C.size_t) (string, error) {
-	// Create a cache path similar to fileicon
-	cachePath := filepath.Join(util.GetLocation().GetCacheDirectory(), "images", fmt.Sprintf("prefpane_%s.png", filepath.Base(prefPanePath)))
+func (a *MacRetriever) getPrefPaneIconCachePath(prefPanePath string) string {
+	return filepath.Join(util.GetLocation().GetCacheDirectory(), "images", fmt.Sprintf("prefpane_%s.png", filepath.Base(prefPanePath)))
+}
 
-	if _, err := os.Stat(cachePath); err == nil {
+func (a *MacRetriever) getCachedPrefPaneIconPath(prefPanePath string) (string, bool) {
+	cachePath := a.getPrefPaneIconCachePath(prefPanePath)
+	if info, err := os.Stat(cachePath); err == nil {
+		imagecache.Touch(util.NewTraceContext(), cachePath, info)
+		return cachePath, true
+	}
+	return cachePath, false
+}
+
+func (a *MacRetriever) savePrefPaneIconToCache(ctx context.Context, prefPanePath string, iconBytes *C.uchar, length C.size_t) (string, error) {
+	if iconBytes != nil {
+		defer C.free(unsafe.Pointer(iconBytes))
+	}
+	if iconBytes == nil || length == 0 {
+		return "", errors.New("empty preference pane icon bytes")
+	}
+
+	cachePath, exists := a.getCachedPrefPaneIconPath(prefPanePath)
+	if exists {
 		return cachePath, nil
 	}
 
@@ -299,8 +351,6 @@ func (a *MacRetriever) savePrefPaneIconToCache(ctx context.Context, prefPanePath
 	}
 
 	data := C.GoBytes(unsafe.Pointer(iconBytes), C.int(length))
-	C.free(unsafe.Pointer(iconBytes))
-
 	if err := os.WriteFile(cachePath, data, 0644); err != nil {
 		return "", err
 	}
@@ -400,9 +450,14 @@ func (a *MacRetriever) getSystemSettingsApps(ctx context.Context) []appInfo {
 		}
 
 		var icon common.WoxImage
-		if iconBytes, iconLen := a.generateSFSymbolIconBytes(info.SFSymbol, info.BackgroundColor, iconStyle); iconLen > 0 {
-			// Use key as cache file name to avoid conflicts
-			cacheKey := "virtual_" + key + ".prefPane"
+		// Optimization: the previous flow generated every SF Symbol icon before
+		// checking the disk cache, which left large native CG image allocations in
+		// the core process on every startup. Check the stable cache key first so
+		// cached System Settings entries do not touch AppKit image rendering.
+		cacheKey := "virtual_" + key + ".prefPane"
+		if iconPath, exists := a.getCachedPrefPaneIconPath(cacheKey); exists {
+			icon = common.NewWoxImageAbsolutePath(iconPath)
+		} else if iconBytes, iconLen := a.generateSFSymbolIconBytes(info.SFSymbol, info.BackgroundColor, iconStyle); iconLen > 0 {
 			if iconPath, err := a.savePrefPaneIconToCache(ctx, cacheKey, iconBytes, iconLen); err == nil {
 				icon = common.NewWoxImageAbsolutePath(iconPath)
 			}

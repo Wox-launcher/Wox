@@ -10,10 +10,7 @@ class PluginSettingValueLabel {
     content = json['Content'];
     tooltip = json['Tooltip'];
     reserveLabelSpace = json['ReserveLabelSpace'] ?? false;
-    if (json['Style'] != null) {
-      style = PluginSettingValueStyle.fromJson(json['Style']);
-    } else {
-      style = PluginSettingValueStyle.fromJson(<String, dynamic>{});
-    }
+    // Style is deprecated in plugin SDKs; ignore plugin JSON and let the UI layout own spacing and width.
+    style = PluginSettingValueStyle.defaults();
   }
 }
