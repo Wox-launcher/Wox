@@ -47,12 +47,12 @@ func (w HBox) Type() WidgetType { return WidgetHBox }
 
 // Text is a static text label.
 type Text struct {
-	Content   string
-	FontSize  float32
-	FontColor Color
+	Content    string
+	FontSize   float32
+	FontColor  Color
 	FontFamily string
-	Bold      bool
-	MaxWidth  float32 // 0 = no wrap
+	Bold       bool
+	MaxWidth   float32 // 0 = no wrap
 }
 
 func (w Text) Type() WidgetType { return WidgetText }
@@ -60,15 +60,15 @@ func (w Text) Type() WidgetType { return WidgetText }
 // TextBox is an editable text input field with IME support.
 // Events are delivered through the EventCallbacks set on the Window.
 type TextBox struct {
-	ID          string
-	Placeholder string
-	FontSize    float32
-	FontColor   Color
-	BgColor     Color
+	ID           string
+	Placeholder  string
+	FontSize     float32
+	FontColor    Color
+	BgColor      Color
 	CornerRadius float32
-	CursorColor Color
-	Value       string
-	Focused     bool
+	CursorColor  Color
+	Value        string
+	Focused      bool
 }
 
 func (w TextBox) Type() WidgetType { return WidgetTextBox }
@@ -76,13 +76,13 @@ func (w TextBox) Type() WidgetType { return WidgetTextBox }
 // ListBox is a scrollable list of items.
 // ItemRenderer builds a widget subtree for each visible item.
 type ListBox struct {
-	ID           string
-	Items        []ListItem
-	ItemHeight   float32
-	ScrollOffset float32
-	Selected     int // index of highlighted item, -1 = none
-	ItemRenderer func(index int, item ListItem) Widget
-	BgColor      *Color
+	ID            string
+	Items         []ListItem
+	ItemHeight    float32
+	ScrollOffset  float32
+	Selected      int // index of highlighted item, -1 = none
+	ItemRenderer  func(index int, item ListItem) Widget
+	BgColor       *Color
 	SelectedColor *Color
 }
 
@@ -90,18 +90,20 @@ func (w ListBox) Type() WidgetType { return WidgetListBox }
 
 // ListItem is a single entry in a ListBox.
 type ListItem struct {
-	Title      string
-	Subtitle   string
-	IconPNG    []byte // optional pre-rasterized icon (PNG bytes)
-	IconSVG    string // optional raw SVG (rasterized by Go side before draw)
-	Data       any    // opaque payload for the caller
+	Title    string
+	Subtitle string
+	IconPNG  []byte // optional pre-rasterized icon (PNG bytes)
+	IconKey  string // stable key for native bitmap cache
+	IconSVG  string // optional raw SVG (rasterized by Go side before draw)
+	Data     any    // opaque payload for the caller
 }
 
 // Image is a static image element (PNG bytes).
 type Image struct {
-	PNGData []byte
-	Width   float32 // 0 = natural size
-	Height  float32
+	PNGData  []byte
+	ImageKey string
+	Width    float32 // 0 = natural size
+	Height   float32
 }
 
 func (w Image) Type() WidgetType { return WidgetImage }

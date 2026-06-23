@@ -50,8 +50,12 @@ type DrawCommand struct {
 	FontFamily string
 
 	// ImageData — raw PNG bytes for DrawImage.
-	// The native layer decodes and caches textures by pointer+length.
+	// The native layer decodes and caches textures by ImageKey.
 	ImageData []byte
+
+	// ImageKey identifies stable image data so the native layer can reuse a
+	// decoded bitmap while the window is visible.
+	ImageKey string
 
 	// ImageWidth / ImageHeight — source dimensions for DrawImage.
 	// If 0, the native layer uses the decoded image's natural size.
@@ -69,7 +73,7 @@ type CommandList struct {
 func (cl *CommandList) Clear(r, g, b, a float32) {
 	cl.Commands = append(cl.Commands, DrawCommand{
 		Type: CmdClear,
-		R: r, G: g, B: b, A: a,
+		R:    r, G: g, B: b, A: a,
 	})
 }
 
@@ -77,7 +81,7 @@ func (cl *CommandList) Clear(r, g, b, a float32) {
 func (cl *CommandList) DrawRect(x, y, w, h, r, g, b, a float32) {
 	cl.Commands = append(cl.Commands, DrawCommand{
 		Type: CmdDrawRect,
-		X: x, Y: y, W: w, H: h,
+		X:    x, Y: y, W: w, H: h,
 		R: r, G: g, B: b, A: a,
 	})
 }
@@ -86,17 +90,17 @@ func (cl *CommandList) DrawRect(x, y, w, h, r, g, b, a float32) {
 func (cl *CommandList) DrawRoundedRect(x, y, w, h, radius, r, g, b, a float32) {
 	cl.Commands = append(cl.Commands, DrawCommand{
 		Type: CmdDrawRoundedRect,
-		X: x, Y: y, W: w, H: h,
+		X:    x, Y: y, W: w, H: h,
 		Radius: radius,
-		R: r, G: g, B: b, A: a,
+		R:      r, G: g, B: b, A: a,
 	})
 }
 
 // DrawText appends a text rendering command.
 func (cl *CommandList) DrawText(x, y, w, h, r, g, b, a float32, text string, fontSize float32, fontFamily string) {
 	cl.Commands = append(cl.Commands, DrawCommand{
-		Type:       CmdDrawText,
-		X: x, Y: y, W: w, H: h,
+		Type: CmdDrawText,
+		X:    x, Y: y, W: w, H: h,
 		R: r, G: g, B: b, A: a,
 		Text:       text,
 		FontSize:   fontSize,
@@ -106,20 +110,26 @@ func (cl *CommandList) DrawText(x, y, w, h, r, g, b, a float32, text string, fon
 
 // DrawImage appends an image rendering command.
 func (cl *CommandList) DrawImage(x, y, w, h float32, pngData []byte) {
+	cl.DrawImageWithKey(x, y, w, h, "", pngData)
+}
+
+// DrawImageWithKey appends an image command with a stable cache key.
+func (cl *CommandList) DrawImageWithKey(x, y, w, h float32, imageKey string, pngData []byte) {
 	cl.Commands = append(cl.Commands, DrawCommand{
-		Type:       CmdDrawImage,
-		X: x, Y: y, W: w, H: h,
-		ImageData:  pngData,
+		Type: CmdDrawImage,
+		X:    x, Y: y, W: w, H: h,
+		ImageData: pngData,
+		ImageKey:  imageKey,
 	})
 }
 
 // DrawLine appends a stroked line segment.
 func (cl *CommandList) DrawLine(x1, y1, x2, y2, width, r, g, b, a float32) {
 	cl.Commands = append(cl.Commands, DrawCommand{
-		Type:        CmdDrawLine,
-		X: x1, Y: y1, W: x2, H: y2,
+		Type: CmdDrawLine,
+		X:    x1, Y: y1, W: x2, H: y2,
 		StrokeWidth: width,
-		R: r, G: g, B: b, A: a,
+		R:           r, G: g, B: b, A: a,
 	})
 }
 
@@ -128,7 +138,7 @@ func (cl *CommandList) DrawLine(x1, y1, x2, y2, width, r, g, b, a float32) {
 func (cl *CommandList) PushClip(x, y, w, h float32) {
 	cl.Commands = append(cl.Commands, DrawCommand{
 		Type: CmdPushClip,
-		X: x, Y: y, W: w, H: h,
+		X:    x, Y: y, W: w, H: h,
 	})
 }
 

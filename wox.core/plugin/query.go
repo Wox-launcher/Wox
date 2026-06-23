@@ -387,6 +387,8 @@ type QueryResultUI struct {
 	Title      string
 	SubTitle   string
 	Icon       common.WoxImage
+	IconPNG    []byte // pre-rasterized icon bytes (filled by UI layer)
+	IconKey    string // cache key for native bitmap cache
 	Preview    WoxPreview
 	Score      int64
 	Group      string

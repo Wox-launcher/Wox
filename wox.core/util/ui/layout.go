@@ -12,9 +12,9 @@ type LayoutEngine struct {
 
 // LayoutResult holds the computed geometry and draw commands.
 type LayoutResult struct {
-	Commands    CommandList
-	Width       float32
-	Height      float32
+	Commands CommandList
+	Width    float32
+	Height   float32
 }
 
 // Layout produces a full draw command list for the given widget tree
@@ -28,9 +28,14 @@ func (e *LayoutEngine) Layout(root Widget, winW, winH float32) LayoutResult {
 		clip:     clipStack{{0, 0, winW, winH}},
 	}
 
-	// Always start by clearing the window to the theme background.
+	// Transparent backgrounds should expose the system backdrop instead of
+	// painting a full-window Direct2D tint over it.
 	bg := e.Theme.WindowBg
-	result.Commands.Clear(bg.R, bg.G, bg.B, bg.A)
+	if bg.A < 1 {
+		result.Commands.Clear(0, 0, 0, 0)
+	} else {
+		result.Commands.Clear(bg.R, bg.G, bg.B, bg.A)
+	}
 
 	// Root widget must be a container (VBox or HBox).
 	e.layoutWidget(&ctx, root, 0, 0, winW, winH)
@@ -199,11 +204,11 @@ func (e *LayoutEngine) layoutTextBox(ctx *layoutCtx, tb TextBox, x, y, w, h floa
 	textH := h
 
 	if tb.Value == "" && tb.Placeholder != "" {
-		p := ColorTextPlaceholder
-		ctx.commands.DrawText(textX, textY, textW, textH, p.R, p.G, p.B, p.A, tb.Placeholder, tb.FontSize, "")
+		p := e.Theme.TextPlaceholder
+		ctx.commands.DrawText(textX, textY, textW, textH, p.R, p.G, p.B, p.A, tb.Placeholder, tb.FontSize, e.Theme.FontFamily)
 	} else {
 		c := tb.FontColor
-		ctx.commands.DrawText(textX, textY, textW, textH, c.R, c.G, c.B, c.A, tb.Value, tb.FontSize, "")
+		ctx.commands.DrawText(textX, textY, textW, textH, c.R, c.G, c.B, c.A, tb.Value, tb.FontSize, e.Theme.FontFamily)
 	}
 
 	// Cursor — simple vertical bar at end of text (or start if empty).
@@ -263,7 +268,7 @@ func (e *LayoutEngine) layoutListBox(ctx *layoutCtx, lb ListBox, x, y, w, h floa
 		iconY := itemY + 6
 		iconSize := float32(36)
 		if len(item.IconPNG) > 0 {
-			ctx.commands.DrawImage(iconX, iconY, iconSize, iconSize, item.IconPNG)
+			ctx.commands.DrawImageWithKey(iconX, iconY, iconSize, iconSize, item.IconKey, item.IconPNG)
 		}
 
 		// Title.
@@ -281,7 +286,7 @@ func (e *LayoutEngine) layoutListBox(ctx *layoutCtx, lb ListBox, x, y, w, h floa
 	if contentH > h {
 		scrollbarX := x + w - 8
 		scrollbarH := h * (h / contentH)
-		scrollbarY := y + (h-scrollbarH) * (lb.ScrollOffset / (contentH - h))
+		scrollbarY := y + (h-scrollbarH)*(lb.ScrollOffset/(contentH-h))
 		ctx.commands.DrawRoundedRect(scrollbarX, scrollbarY, 4, scrollbarH, 2, 1, 1, 1, 0.15)
 	}
 }
@@ -297,7 +302,7 @@ func (e *LayoutEngine) layoutImage(ctx *layoutCtx, img Image, x, y, w, h float32
 		ih = h
 	}
 	if len(img.PNGData) > 0 {
-		ctx.commands.DrawImage(x, y, iw, ih, img.PNGData)
+		ctx.commands.DrawImageWithKey(x, y, iw, ih, img.ImageKey, img.PNGData)
 	}
 }
 

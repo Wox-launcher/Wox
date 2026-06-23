@@ -6,6 +6,11 @@
 #include <windowsx.h>
 #include <dwmapi.h>
 #include <d2d1.h>
+#include <d2d1_1.h>   // ID2D1Factory1, ID2D1Device, ID2D1DeviceContext, ID2D1Bitmap1
+#include <d3d11.h>     // D3D11CreateDevice, ID3D11Device
+#include <dxgi1_2.h>   // IDXGISwapChain1, CreateSwapChainForComposition
+#include <dxgi1_3.h>   // CreateDXGIFactory2 (DXGI 1.3+ supports debug factory flag)
+#include <dcomp.h>     // DCompositionCreateDevice, IDComposition*
 #include <dwrite.h>
 #include <wincodec.h>
 #include <objbase.h>
@@ -14,8 +19,57 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
+#include <stdarg.h>
+
+// ── Diagnostic logging for Mica/transparency investigation ───────────────
+// Writes to C:\Users\qianl\AppData\Local\Temp\opencode\wox-mica.log (append).
+// Gated by WOX_MICA_LOG env var so production builds stay quiet by default.
+static bool g_micaLogEnabled = false;
+static int g_frameCounter = 0;
+// Log the first N frames after each ShowWindow call so we can see what gets
+// drawn when the window reappears, not just the very first show.
+static int g_framesSinceShow = 0;
+static const int kLogFramesPerShow = 3;
+
+static void MicaLog(const char* fmt, ...) {
+    if (!g_micaLogEnabled) return;
+    static FILE* fp = nullptr;
+    static bool firstOpen = true;
+    if (!fp) {
+        fp = fopen("C:\\Users\\qianl\\AppData\\Local\\Temp\\opencode\\wox-mica.log",
+                   firstOpen ? "w" : "a");
+        firstOpen = false;
+        if (!fp) return;
+    }
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    fprintf(fp, "%02d:%02d:%02d.%03d ", st.wHour, st.wMinute, st.wSecond,
+            st.wMilliseconds);
+    va_list args;
+    va_start(args, fmt);
+    vfprintf(fp, fmt, args);
+    va_end(args);
+    fprintf(fp, "\n");
+    fflush(fp);
+}
+
+static void MicaLogInit(void) {
+    char buf[8] = {0};
+    GetEnvironmentVariableA("WOX_MICA_LOG", buf, sizeof(buf));
+    g_micaLogEnabled = (buf[0] == '1' || buf[0] == 'y' || buf[0] == 'Y');
+    MicaLog("=== MicaLog init (enabled=%d) ===", (int)g_micaLogEnabled);
+}
 
 // ── Types matching the Go CGO declarations ──────────────────────────────
+
+// Custom messages posted from other goroutines to drive show/hide/repaint on
+// the main thread. Posting to the message queue is thread-safe and ensures
+// the action runs inside RunMessageLoop's GetMessage dispatch, avoiding
+// cross-thread Win32 window calls that race with the message loop.
+#define WM_APP_SHOW    (WM_APP + 1)
+#define WM_APP_HIDE    (WM_APP + 2)
+#define WM_APP_REPAINT (WM_APP + 3)
 
 typedef struct {
     int32_t cmd_type;
@@ -30,6 +84,8 @@ typedef struct {
     int32_t fontFamilyLen;
     const uint8_t* imageData;
     int32_t imageLen;
+    const char* imageKey;
+    int32_t imageKeyLen;
     float imageWidth, imageHeight;
 } CDrawCommand;
 
@@ -39,6 +95,7 @@ typedef struct {
     float cornerRadius;
     bool frameless;
     bool transparent;
+    bool darkMode;   // tell DWM to render Mica/Acrylic in dark tone
 } CWindowConfig;
 
 typedef struct {
@@ -111,10 +168,26 @@ static float GetDPIForHWND(HWND hwnd) {
 
 // ── UIWindow: one native window with Direct2D rendering ─────────────────
 
+typedef struct UIBitmapCacheEntry {
+    char* key;
+    int32_t keyLen;
+    ID2D1Bitmap* bitmap;
+    struct UIBitmapCacheEntry* next;
+} UIBitmapCacheEntry;
+
 typedef struct {
     HWND hwnd;
-    ID2D1Factory* d2dFactory;
-    ID2D1HwndRenderTarget* rt;
+    // Direct2D/DirectWrite factories remain shared across the window lifetime.
+    ID2D1Factory1* d2dFactory;
+    ID2D1Device* d2dDevice;
+    ID2D1DeviceContext* rt;   // device-context render target bound to a swap-chain bitmap
+    IDXGISwapChain1* swapChain;
+    ID2D1Bitmap1* backBufferBitmap; // wraps the DXGI back buffer each frame
+    ID3D11Device* d3dDevice;
+    IDXGIFactory2* dxgiFactory;
+    IDCompositionDevice* dcompDevice;
+    IDCompositionTarget* dcompTarget;
+    IDCompositionVisual* dcompVisual;
     IDWriteFactory* dwriteFactory;
     IDWriteTextFormat* textFormat;
     IWICImagingFactory* wicFactory;
@@ -125,11 +198,14 @@ typedef struct {
     int32_t height;
     float cornerRadius;
     bool transparent;
+    bool darkMode;   // tracks the DWMWA_USE_IMMERSIVE_DARK_MODE state
     bool visible;
 
     // Clip stack for PushClip/PopClip
     D2D1_RECT_F clipStack[32];
     int clipDepth;
+
+    UIBitmapCacheEntry* bitmapCache;
 } UIWindow;
 
 static UIWindow* g_windows[16];
@@ -158,6 +234,78 @@ static D2D1_RECT_F ToRectF(float x, float y, float w, float h) {
     return r;
 }
 
+static ID2D1Bitmap* FindCachedBitmap(UIWindow* win, const char* key, int32_t keyLen) {
+    if (!win || !key || keyLen <= 0) return NULL;
+    for (UIBitmapCacheEntry* entry = win->bitmapCache; entry; entry = entry->next) {
+        if (entry->keyLen == keyLen && memcmp(entry->key, key, keyLen) == 0) {
+            return entry->bitmap;
+        }
+    }
+    return NULL;
+}
+
+static bool CacheBitmap(UIWindow* win, const char* key, int32_t keyLen, ID2D1Bitmap* bitmap) {
+    if (!win || !key || keyLen <= 0 || !bitmap || FindCachedBitmap(win, key, keyLen)) return false;
+
+    UIBitmapCacheEntry* entry = (UIBitmapCacheEntry*)calloc(1, sizeof(UIBitmapCacheEntry));
+    if (!entry) return false;
+    entry->key = (char*)malloc((size_t)keyLen);
+    if (!entry->key) {
+        free(entry);
+        return false;
+    }
+    memcpy(entry->key, key, (size_t)keyLen);
+    entry->keyLen = keyLen;
+    entry->bitmap = bitmap;
+    entry->next = win->bitmapCache;
+    win->bitmapCache = entry;
+    return true;
+}
+
+static void ClearBitmapCache(UIWindow* win) {
+    if (!win) return;
+    UIBitmapCacheEntry* entry = win->bitmapCache;
+    while (entry) {
+        UIBitmapCacheEntry* next = entry->next;
+        if (entry->bitmap) entry->bitmap->Release();
+        free(entry->key);
+        free(entry);
+        entry = next;
+    }
+    win->bitmapCache = NULL;
+}
+
+static DWORD GetWindowsBuildNumberCpp(void) {
+    OSVERSIONINFOEXW osvi = { 0 };
+    osvi.dwOSVersionInfoSize = sizeof(osvi);
+    // RtlGetVersion returns NTSTATUS, which is a LONG in the Windows headers.
+    // MinGW does not expose NTSTATUS from <windows.h>, so use the equivalent
+    // LONG return type to avoid pulling in <winternl.h>.
+    typedef LONG(WINAPI *pfnRtlGetVersion)(PRTL_OSVERSIONINFOW);
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    if (!ntdll) return 0;
+    pfnRtlGetVersion fn = (pfnRtlGetVersion)GetProcAddress(ntdll, "RtlGetVersion");
+    if (!fn) return 0;
+    fn((PRTL_OSVERSIONINFOW)&osvi);
+    return osvi.dwBuildNumber;
+}
+
+// Enable the native DWM system backdrop so translucent app backgrounds expose
+// the Mica material. Windows 11 (build >= 22000) uses DWMSBT_TABBEDWINDOW
+// (Mica Alt) to match the Flutter settings window; older builds get the legacy
+// acrylic fallback via SetWindowCompositionAttribute, which is applied later
+// by the host process if needed.
+static void EnableMicaBackdrop(HWND hwnd) {
+    MARGINS margins = { -1 };
+    DwmExtendFrameIntoClientArea(hwnd, &margins);
+
+    if (GetWindowsBuildNumberCpp() >= 22000) {
+        // 3 == DWMSBT_TABBEDWINDOW (Mica Alt), matches wox.ui.flutter/.../win32_window.cpp
+        int backdrop = 3;
+        DwmSetWindowAttribute(hwnd, 38 /*DWMWA_SYSTEMBACKDROP_TYPE*/, &backdrop, sizeof(backdrop));
+    }
+}
+
 // ── Window proc ─────────────────────────────────────────────────────────
 
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -176,12 +324,41 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
     }
 
     case WM_SIZE: {
-        if (win && win->rt) {
+        if (win && win->swapChain) {
             int w = LOWORD(lParam);
             int h = HIWORD(lParam);
             if (w > 0 && h > 0) {
-                D2D1_SIZE_U size = { (UINT)w, (UINT)h };
-                win->rt->Resize(&size);
+                MicaLog("WM_SIZE w=%d h=%d (resizing swap chain + bitmap)", w, h);
+                // Resize the composition swap chain. The D2D back-buffer bitmap
+                // must be recreated from the resized surface to stay in sync.
+                win->rt->SetTarget(NULL);
+                if (win->backBufferBitmap) {
+                    win->backBufferBitmap->Release();
+                    win->backBufferBitmap = NULL;
+                }
+                HRESULT resizeHr = win->swapChain->ResizeBuffers(0, w, h,
+                    DXGI_FORMAT_B8G8R8A8_UNORM, 0);
+                MicaLog("WM_SIZE ResizeBuffers hr=0x%X", (unsigned)resizeHr);
+
+                IDXGISurface* backBuffer = NULL;
+                if (SUCCEEDED(win->swapChain->GetBuffer(0, IID_PPV_ARGS(&backBuffer))) && backBuffer) {
+                    D2D1_BITMAP_PROPERTIES1 bmpProps = {};
+                    bmpProps.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
+                    bmpProps.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
+                    bmpProps.dpiX = win->dpi;
+                    bmpProps.dpiY = win->dpi;
+                    bmpProps.bitmapOptions = D2D1_BITMAP_OPTIONS_TARGET |
+                                             D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
+                    HRESULT bmpHr = win->rt->CreateBitmapFromDxgiSurface(backBuffer, &bmpProps,
+                        &win->backBufferBitmap);
+                    backBuffer->Release();
+                    MicaLog("WM_SIZE CreateBitmapFromDxgiSurface hr=0x%X bitmap=%p",
+                            (unsigned)bmpHr, win->backBufferBitmap);
+                    if (win->backBufferBitmap) {
+                        win->rt->SetTarget(win->backBufferBitmap);
+                    }
+                }
+
                 win->width = (int32_t)(w / win->scale);
                 win->height = (int32_t)(h / win->scale);
             }
@@ -241,6 +418,42 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         return 0;
     }
 
+    case WM_APP_SHOW: {
+        // Cross-thread show request: posted by uiWindowShow from a goroutine.
+        // Running ShowWindow on the main thread avoids races with the message
+        // loop and lets DWM re-attach the Mica material reliably.
+        if (win) {
+            ShowWindow(hwnd, SW_SHOW);
+            win->visible = true;
+            g_framesSinceShow = 0;
+
+            DWORD build = GetWindowsBuildNumberCpp();
+            if (build >= 22000) {
+                int backdrop = 3; // DWMSBT_TABBEDWINDOW (Mica Alt)
+                DwmSetWindowAttribute(hwnd, 38, &backdrop, sizeof(backdrop));
+                BOOL useDark = win->darkMode ? TRUE : FALSE;
+                DwmSetWindowAttribute(hwnd, 20, &useDark, sizeof(useDark));
+            }
+            MicaLog("WM_APP_SHOW: ShowWindow + re-asserted DWM backdrop");
+        }
+        return 0;
+    }
+
+    case WM_APP_HIDE: {
+        if (win) {
+            ShowWindow(hwnd, SW_HIDE);
+            win->visible = false;
+            MicaLog("WM_APP_HIDE: ShowWindow(SW_HIDE)");
+        }
+        return 0;
+    }
+
+    case WM_APP_REPAINT: {
+        // Just having a message in the queue is enough — RunMessageLoop will
+        // call onRender() after uiPumpMessages returns true.
+        return 0;
+    }
+
     case WM_NCHITTEST: {
         // Frameless window: make entire client area draggable from top
         if (win) {
@@ -272,8 +485,12 @@ static void RegisterWindowClass(void) {
 }
 
 extern "C" int32_t uiWindowCreate(CWindowConfig config) {
+    MicaLogInit();
     EnablePerMonitorDPI();
     RegisterWindowClass();
+    MicaLog("uiWindowCreate: w=%d h=%d radius=%.1f frameless=%d transparent=%d",
+            config.width, config.height, config.cornerRadius,
+            (int)config.frameless, (int)config.transparent);
 
     UIWindow* win = (UIWindow*)calloc(1, sizeof(UIWindow));
     if (!win) return 0;
@@ -282,11 +499,15 @@ extern "C" int32_t uiWindowCreate(CWindowConfig config) {
     win->height = config.height;
     win->cornerRadius = config.cornerRadius;
     win->transparent = config.transparent;
+    win->darkMode = config.darkMode;
     win->visible = false;
     win->clipDepth = 0;
 
-    // Create frameless window (no WS_EX_LAYERED — Direct2D paints directly)
-    DWORD exStyle = WS_EX_TOOLWINDOW | WS_EX_TOPMOST;
+    // Create frameless window. WS_EX_NOREDIRECTIONBITMAP is required for
+    // DirectComposition alpha compositing: without it DWM allocates a GDI
+    // redirection surface that paints solid black behind our swap chain, so
+    // the Mica backdrop never shows through translucent app backgrounds.
+    DWORD exStyle = WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOREDIRECTIONBITMAP;
     DWORD style = WS_POPUP;
 
     // Estimate DPI for initial size
@@ -310,9 +531,16 @@ extern "C" int32_t uiWindowCreate(CWindowConfig config) {
         NULL, NULL, GetModuleHandleW(NULL), NULL);
 
     if (!win->hwnd) {
+        MicaLog("uiWindowCreate: CreateWindowExW FAILED");
         free(win);
         return 0;
     }
+
+    LONG actualEx = GetWindowLongW(win->hwnd, GWL_EXSTYLE);
+    MicaLog("uiWindowCreate: hwnd=0x%p exStyle=0x%X NOREDIR=%d LAYERED=%d",
+            win->hwnd, (unsigned)actualEx,
+            (actualEx & 0x200000) ? 1 : 0,
+            (actualEx & 0x80000) ? 1 : 0);
 
     // Get actual DPI for the window
     win->dpi = GetDPIForHWND(win->hwnd);
@@ -327,8 +555,24 @@ extern "C" int32_t uiWindowCreate(CWindowConfig config) {
         DwmSetWindowAttribute(win->hwnd, 33 /*DWMWA_WINDOW_CORNER_PREFERENCE*/,
             &preference, sizeof(preference));
     }
+    EnableMicaBackdrop(win->hwnd);
 
-    // Initialize Direct2D
+    // Tell DWM whether this window should render its system backdrop (Mica)
+    // in dark or light tone. Without this, DWM follows the OS appearance, so a
+    // dark theme like glass-dark would get a light-toned Mica when the system
+    // is in light mode. DWMWA_USE_IMMERSIVE_DARK_MODE = 20.
+    BOOL useDark = config.darkMode ? TRUE : FALSE;
+    DwmSetWindowAttribute(win->hwnd, 20, &useDark, sizeof(useDark));
+
+    // Verify DWM backdrop actually applied. The Win11 build check inside
+    // EnableMicaBackdrop may have skipped the attribute on older builds.
+    int actualBackdrop = -1;
+    DwmGetWindowAttribute(win->hwnd, 38, &actualBackdrop, sizeof(actualBackdrop));
+    DWORD buildNo = GetWindowsBuildNumberCpp();
+    MicaLog("uiWindowCreate: build=%u DWMWA_SYSTEMBACKDROP_TYPE readback=%d (expect 3 on Win11)",
+            buildNo, actualBackdrop);
+
+    // Initialize Direct2D factory (ID2D1Factory1 needed for device/context).
     D2D1_FACTORY_OPTIONS opts = { D2D1_DEBUG_LEVEL_NONE };
     HRESULT hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
         opts, &win->d2dFactory);
@@ -338,35 +582,218 @@ extern "C" int32_t uiWindowCreate(CWindowConfig config) {
         return 0;
     }
 
-    // Create render target
-    D2D1_RENDER_TARGET_PROPERTIES rtProps = {};
-    rtProps.type = D2D1_RENDER_TARGET_TYPE_DEFAULT;
-    rtProps.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
-    rtProps.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
-    rtProps.dpiX = win->dpi;
-    rtProps.dpiY = win->dpi;
-    rtProps.usage = D2D1_RENDER_TARGET_USAGE_NONE;
-    rtProps.minLevel = D2D1_FEATURE_LEVEL_DEFAULT;
-
-    D2D1_HWND_RENDER_TARGET_PROPERTIES hwndProps = {};
-    hwndProps.hwnd = win->hwnd;
-    hwndProps.pixelSize.width = physW;
-    hwndProps.pixelSize.height = physH;
-    hwndProps.presentOptions = D2D1_PRESENT_OPTIONS_NONE;
-
-    hr = win->d2dFactory->CreateHwndRenderTarget(&rtProps, &hwndProps, &win->rt);
-    if (FAILED(hr)) {
+    // Create the D3D11 device + DXGI swap chain + DirectComposition visual so
+    // the Direct2D surface participates in per-pixel alpha compositing with DWM.
+    // Without this composition path a Clear(0,0,0,0) fills the window with solid
+    // black instead of exposing the native Mica backdrop.
+    // B8G8R8A8_UNORM + PREMULTIPLIED keeps the back buffer alpha-compatible so
+    // translucent app backgrounds blend with the system backdrop.
+    D3D_FEATURE_LEVEL featureLevels[] = {
+        D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0,
+        D3D_FEATURE_LEVEL_10_1, D3D_FEATURE_LEVEL_10_0,
+        D3D_FEATURE_LEVEL_9_3
+    };
+    UINT d3dFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+    hr = D3D11CreateDevice(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, d3dFlags,
+        featureLevels, ARRAYSIZE(featureLevels), D3D11_SDK_VERSION,
+        &win->d3dDevice, NULL, NULL);
+    if (FAILED(hr) || !win->d3dDevice) {
         win->d2dFactory->Release();
         DestroyWindow(win->hwnd);
         free(win);
         return 0;
     }
 
+    IDXGIDevice* dxgiDevice = NULL;
+    hr = win->d3dDevice->QueryInterface(IID_PPV_ARGS(&dxgiDevice));
+    if (FAILED(hr) || !dxgiDevice) {
+        win->d3dDevice->Release();
+        win->d2dFactory->Release();
+        DestroyWindow(win->hwnd);
+        free(win);
+        return 0;
+    }
+
+    hr = CreateDXGIFactory2(0, IID_PPV_ARGS(&win->dxgiFactory));
+    if (FAILED(hr) || !win->dxgiFactory) {
+        dxgiDevice->Release();
+        win->d3dDevice->Release();
+        win->d2dFactory->Release();
+        DestroyWindow(win->hwnd);
+        free(win);
+        return 0;
+    }
+
+    // Flip-model swap chain is required for DirectComposition. PREMULTIPLIED
+    // alpha lets the DWM blend our translucent pixels with the system backdrop.
+    DXGI_SWAP_CHAIN_DESC1 scd = {};
+    scd.Width = (UINT)physW;
+    scd.Height = (UINT)physH;
+    scd.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    scd.SampleDesc.Count = 1;
+    scd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    scd.BufferCount = 2;
+    scd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+    scd.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
+    scd.Scaling = DXGI_SCALING_STRETCH;
+
+    hr = win->dxgiFactory->CreateSwapChainForComposition(win->d3dDevice, &scd,
+        NULL, &win->swapChain);
+    if (FAILED(hr) || !win->swapChain) {
+        win->dxgiFactory->Release();
+        dxgiDevice->Release();
+        win->d3dDevice->Release();
+        win->d2dFactory->Release();
+        DestroyWindow(win->hwnd);
+        free(win);
+        return 0;
+    }
+
+    // Bridge Direct2D to the DXGI back buffer through a D2D bitmap.
+    ID2D1Device* d2dDevice = NULL;
+    hr = win->d2dFactory->CreateDevice(dxgiDevice, &d2dDevice);
+    if (FAILED(hr) || !d2dDevice) {
+        win->swapChain->Release();
+        win->dxgiFactory->Release();
+        dxgiDevice->Release();
+        win->d3dDevice->Release();
+        win->d2dFactory->Release();
+        DestroyWindow(win->hwnd);
+        free(win);
+        return 0;
+    }
+    win->d2dDevice = d2dDevice;
+
+    hr = d2dDevice->CreateDeviceContext(
+        D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &win->rt);
+    if (FAILED(hr) || !win->rt) {
+        d2dDevice->Release();
+        win->swapChain->Release();
+        win->dxgiFactory->Release();
+        dxgiDevice->Release();
+        win->d3dDevice->Release();
+        win->d2dFactory->Release();
+        DestroyWindow(win->hwnd);
+        free(win);
+        return 0;
+    }
+
+    // Set the DPI on the device context so DIP coordinates map to physical
+    // pixels correctly on high-DPI displays.
+    win->rt->SetDpi(win->dpi, win->dpi);
+
+    // Wrap the DXGI back buffer as a D2D bitmap and bind it as the render target.
+    IDXGISurface* backBuffer = NULL;
+    hr = win->swapChain->GetBuffer(0, IID_PPV_ARGS(&backBuffer));
+    if (FAILED(hr) || !backBuffer) {
+        win->rt->Release();
+        d2dDevice->Release();
+        win->swapChain->Release();
+        win->dxgiFactory->Release();
+        dxgiDevice->Release();
+        win->d3dDevice->Release();
+        win->d2dFactory->Release();
+        DestroyWindow(win->hwnd);
+        free(win);
+        return 0;
+    }
+
+    D2D1_BITMAP_PROPERTIES1 bmpProps = {};
+    bmpProps.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    bmpProps.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
+    bmpProps.dpiX = win->dpi;
+    bmpProps.dpiY = win->dpi;
+    bmpProps.bitmapOptions = D2D1_BITMAP_OPTIONS_TARGET |
+                             D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
+
+    hr = win->rt->CreateBitmapFromDxgiSurface(backBuffer, &bmpProps,
+        &win->backBufferBitmap);
+    backBuffer->Release();
+    if (FAILED(hr) || !win->backBufferBitmap) {
+        win->rt->Release();
+        d2dDevice->Release();
+        win->swapChain->Release();
+        win->dxgiFactory->Release();
+        dxgiDevice->Release();
+        win->d3dDevice->Release();
+        win->d2dFactory->Release();
+        DestroyWindow(win->hwnd);
+        free(win);
+        return 0;
+    }
+
+    win->rt->SetTarget(win->backBufferBitmap);
+
+    // Create the DirectComposition target+visual and attach the swap chain so
+    // the DWM composites our alpha-bearing surface on top of the HWND.
+    hr = DCompositionCreateDevice(dxgiDevice, IID_PPV_ARGS(&win->dcompDevice));
+    dxgiDevice->Release();
+    if (FAILED(hr) || !win->dcompDevice) {
+        win->backBufferBitmap->Release();
+        win->rt->Release();
+        d2dDevice->Release();
+        win->swapChain->Release();
+        win->dxgiFactory->Release();
+        win->d3dDevice->Release();
+        win->d2dFactory->Release();
+        DestroyWindow(win->hwnd);
+        free(win);
+        return 0;
+    }
+
+    hr = win->dcompDevice->CreateTargetForHwnd(win->hwnd, TRUE,
+        &win->dcompTarget);
+    if (FAILED(hr) || !win->dcompTarget) {
+        win->dcompDevice->Release();
+        win->backBufferBitmap->Release();
+        win->rt->Release();
+        d2dDevice->Release();
+        win->swapChain->Release();
+        win->dxgiFactory->Release();
+        win->d3dDevice->Release();
+        win->d2dFactory->Release();
+        DestroyWindow(win->hwnd);
+        free(win);
+        return 0;
+    }
+
+    hr = win->dcompDevice->CreateVisual(&win->dcompVisual);
+    if (FAILED(hr) || !win->dcompVisual) {
+        win->dcompTarget->Release();
+        win->dcompDevice->Release();
+        win->backBufferBitmap->Release();
+        win->rt->Release();
+        d2dDevice->Release();
+        win->swapChain->Release();
+        win->dxgiFactory->Release();
+        win->d3dDevice->Release();
+        win->d2dFactory->Release();
+        DestroyWindow(win->hwnd);
+        free(win);
+        return 0;
+    }
+
+    win->dcompVisual->SetContent(win->swapChain);
+    win->dcompTarget->SetRoot(win->dcompVisual);
+    hr = win->dcompDevice->Commit();
+    MicaLog("uiWindowCreate: DComp setup done. dcompDevice=0x%p target=0x%p visual=0x%p "
+            "swapChain=0x%p d2dDevice=0x%p rt=0x%p backBufferBitmap=0x%p Commit hr=0x%X",
+            win->dcompDevice, win->dcompTarget, win->dcompVisual,
+            win->swapChain, win->d2dDevice, win->rt, win->backBufferBitmap, (unsigned)hr);
+
     // Initialize DirectWrite
     hr = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, IID_IDWriteFactory,
         (IUnknown**)&win->dwriteFactory);
     if (FAILED(hr)) {
+        win->dcompVisual->Release();
+        win->dcompTarget->Release();
+        win->dcompDevice->Release();
+        win->backBufferBitmap->Release();
         win->rt->Release();
+        d2dDevice->Release();
+        win->swapChain->Release();
+        win->dxgiFactory->Release();
+        win->d3dDevice->Release();
         win->d2dFactory->Release();
         DestroyWindow(win->hwnd);
         free(win);
@@ -384,7 +811,15 @@ extern "C" int32_t uiWindowCreate(CWindowConfig config) {
     if (g_windowCount < 16) {
         g_windows[g_windowCount++] = win;
     } else {
+        win->dcompVisual->Release();
+        win->dcompTarget->Release();
+        win->dcompDevice->Release();
+        win->backBufferBitmap->Release();
         win->rt->Release();
+        win->d2dDevice->Release();
+        win->swapChain->Release();
+        win->dxgiFactory->Release();
+        win->d3dDevice->Release();
         win->dwriteFactory->Release();
         if (win->wicFactory) win->wicFactory->Release();
         win->d2dFactory->Release();
@@ -400,18 +835,37 @@ extern "C" int32_t uiWindowCreate(CWindowConfig config) {
 
 extern "C" void uiWindowShow(int32_t windowId) {
     HWND hwnd = (HWND)(intptr_t)windowId;
-    UIWindow* win = FindWindowByHWND(hwnd);
-    if (!win) return;
-    ShowWindow(hwnd, SW_SHOW);
-    win->visible = true;
+    if (!hwnd) return;
+    // Post to the message queue so ShowWindow runs on the main thread inside
+    // the message loop. Direct cross-thread ShowWindow races with GetMessage
+    // and can leave the window in a half-visible state (the "needs two hotkey
+    // presses" bug).
+    PostMessageW(hwnd, WM_APP_SHOW, 0, 0);
 }
 
 extern "C" void uiWindowHide(int32_t windowId) {
     HWND hwnd = (HWND)(intptr_t)windowId;
+    if (!hwnd) return;
+    PostMessageW(hwnd, WM_APP_HIDE, 0, 0);
+}
+
+// Toggle DWM immersive dark mode so the Mica backdrop matches the theme tone.
+// Called when the user switches between dark and light themes at runtime.
+extern "C" void uiWindowSetDarkMode(int32_t windowId, bool darkMode) {
+    HWND hwnd = (HWND)(intptr_t)windowId;
+    if (!hwnd) return;
+    BOOL useDark = darkMode ? TRUE : FALSE;
+    DwmSetWindowAttribute(hwnd, 20 /*DWMWA_USE_IMMERSIVE_DARK_MODE*/,
+        &useDark, sizeof(useDark));
+    UIWindow* win = FindWindowByHWND(hwnd);
+    if (win) win->darkMode = darkMode;
+}
+
+extern "C" void uiWindowReleaseMemory(int32_t windowId) {
+    HWND hwnd = (HWND)(intptr_t)windowId;
     UIWindow* win = FindWindowByHWND(hwnd);
     if (!win) return;
-    ShowWindow(hwnd, SW_HIDE);
-    win->visible = false;
+    ClearBitmapCache(win);
 }
 
 extern "C" void uiWindowSetPosition(int32_t windowId, int32_t x, int32_t y) {
@@ -438,15 +892,38 @@ extern "C" bool uiWindowIsVisible(int32_t windowId) {
     return win->visible;
 }
 
+// Return the current logical (DIP) window size so the Go layout pass uses the
+// real dimensions instead of a hardcoded constant.
+extern "C" void uiWindowGetSize(int32_t windowId, int32_t* outW, int32_t* outH) {
+    HWND hwnd = (HWND)(intptr_t)windowId;
+    UIWindow* win = FindWindowByHWND(hwnd);
+    if (!win || !outW || !outH) {
+        if (outW) *outW = 0;
+        if (outH) *outH = 0;
+        return;
+    }
+    *outW = win->width;
+    *outH = win->height;
+}
+
 extern "C" void uiWindowDestroy(int32_t windowId) {
     HWND hwnd = (HWND)(intptr_t)windowId;
     UIWindow* win = FindWindowByHWND(hwnd);
     if (!win) return;
 
     if (win->textFormat) win->textFormat->Release();
+    ClearBitmapCache(win);
     if (win->wicFactory) win->wicFactory->Release();
     if (win->dwriteFactory) win->dwriteFactory->Release();
+    if (win->backBufferBitmap) win->backBufferBitmap->Release();
     if (win->rt) win->rt->Release();
+    if (win->d2dDevice) win->d2dDevice->Release();
+    if (win->swapChain) win->swapChain->Release();
+    if (win->dcompVisual) win->dcompVisual->Release();
+    if (win->dcompTarget) win->dcompTarget->Release();
+    if (win->dcompDevice) win->dcompDevice->Release();
+    if (win->dxgiFactory) win->dxgiFactory->Release();
+    if (win->d3dDevice) win->d3dDevice->Release();
     if (win->d2dFactory) win->d2dFactory->Release();
 
     DestroyWindow(win->hwnd);
@@ -472,7 +949,17 @@ static ID2D1SolidColorBrush* GetBrush(UIWindow* win, D2D1_COLOR_F color) {
 }
 
 static void ExecuteCommands(UIWindow* win, const CDrawCommand* cmds, int32_t count) {
-    if (!win || !win->rt) return;
+    if (!win || !win->rt) {
+        MicaLog("ExecuteCommands: SKIP (win=%p rt=%p)", win, win ? win->rt : nullptr);
+        return;
+    }
+
+    if (g_framesSinceShow < kLogFramesPerShow) {
+        MicaLog("ExecuteCommands frame[%d] count=%d swapChain=%p backBufferBitmap=%p "
+                "dcompDevice=%p target=%p visual=%p",
+                g_frameCounter, count, win->swapChain, win->backBufferBitmap,
+                win->dcompDevice, win->dcompTarget, win->dcompVisual);
+    }
 
     win->rt->BeginDraw();
     win->rt->SetTransform(D2D1::IdentityMatrix());
@@ -486,9 +973,22 @@ static void ExecuteCommands(UIWindow* win, const CDrawCommand* cmds, int32_t cou
     for (int32_t i = 0; i < count; i++) {
         const CDrawCommand* cmd = &cmds[i];
 
+        if (g_framesSinceShow < kLogFramesPerShow) {
+            const char* names[] = {"Clear","DrawRect","DrawRoundedRect","DrawText","DrawImage","DrawLine","PushClip","PopClip","SetClipRect"};
+            const char* nm = (cmd->cmd_type >= 0 && cmd->cmd_type <= 8) ? names[cmd->cmd_type] : "?";
+            MicaLog("  cmd[%d] type=%s(%d) x=%.1f y=%.1f w=%.1f h=%.1f rgba=%.2f,%.2f,%.2f,%.2f",
+                    i, nm, cmd->cmd_type, cmd->x, cmd->y, cmd->w, cmd->h,
+                    cmd->r, cmd->g, cmd->b, cmd->a);
+        }
+
         switch (cmd->cmd_type) {
         case CmdClear: {
             win->rt->Clear(ToColorF(cmd->r, cmd->g, cmd->b, cmd->a));
+            if (g_framesSinceShow < kLogFramesPerShow) {
+                MicaLog("frame[%d] CmdClear r=%.3f g=%.3f b=%.3f a=%.3f "
+                        "(transparent when a<1 exposes Mica)",
+                        g_frameCounter, cmd->r, cmd->g, cmd->b, cmd->a);
+            }
             break;
         }
 
@@ -552,64 +1052,81 @@ static void ExecuteCommands(UIWindow* win, const CDrawCommand* cmds, int32_t cou
         }
 
         case CmdDrawImage: {
-            if (!cmd->imageData || cmd->imageLen <= 0 || !win->wicFactory) break;
+            ID2D1Bitmap* bitmap = FindCachedBitmap(win, cmd->imageKey, cmd->imageKeyLen);
+            bool bitmapFromCache = bitmap != NULL;
+            bool bitmapStoredInCache = bitmapFromCache;
+            if (!bitmap && (!cmd->imageData || cmd->imageLen <= 0 || !win->wicFactory)) break;
 
-            // Decode PNG via WIC
-            IWICStream* stream = NULL;
-            HRESULT hr = win->wicFactory->CreateStream(&stream);
-            if (FAILED(hr) || !stream) break;
-            hr = stream->InitializeFromMemory((BYTE*)cmd->imageData, (DWORD)cmd->imageLen);
-            if (FAILED(hr)) { stream->Release(); break; }
+            float w = cmd->w;
+            float h = cmd->h;
 
-            IWICBitmapDecoder* decoder = NULL;
-            hr = win->wicFactory->CreateDecoderFromStream(stream, NULL,
-                WICDecodeMetadataCacheOnLoad, &decoder);
-            if (FAILED(hr) || !decoder) { stream->Release(); break; }
+            if (!bitmap) {
+                // Decode PNG once per image key while the launcher is visible.
+                IWICStream* stream = NULL;
+                HRESULT hr = win->wicFactory->CreateStream(&stream);
+                if (FAILED(hr) || !stream) break;
+                hr = stream->InitializeFromMemory((BYTE*)cmd->imageData, (DWORD)cmd->imageLen);
+                if (FAILED(hr)) { stream->Release(); break; }
 
-            IWICBitmapFrameDecode* frame = NULL;
-            hr = decoder->GetFrame(0, &frame);
-            if (FAILED(hr) || !frame) { decoder->Release(); stream->Release(); break; }
+                IWICBitmapDecoder* decoder = NULL;
+                hr = win->wicFactory->CreateDecoderFromStream(stream, NULL,
+                    WICDecodeMetadataCacheOnLoad, &decoder);
+                if (FAILED(hr) || !decoder) { stream->Release(); break; }
 
-            UINT srcW = 0, srcH = 0;
-            frame->GetSize(&srcW, &srcH);
+                IWICBitmapFrameDecode* frame = NULL;
+                hr = decoder->GetFrame(0, &frame);
+                if (FAILED(hr) || !frame) { decoder->Release(); stream->Release(); break; }
 
-            // Convert to 32bppPBGRA for Direct2D
-            IWICFormatConverter* converter = NULL;
-            hr = win->wicFactory->CreateFormatConverter(&converter);
-            if (FAILED(hr) || !converter) {
-                frame->Release(); decoder->Release(); stream->Release(); break;
+                UINT srcW = 0, srcH = 0;
+                frame->GetSize(&srcW, &srcH);
+                if (w <= 0) w = (float)srcW;
+                if (h <= 0) h = (float)srcH;
+
+                // Convert to 32bppPBGRA for Direct2D
+                IWICFormatConverter* converter = NULL;
+                hr = win->wicFactory->CreateFormatConverter(&converter);
+                if (FAILED(hr) || !converter) {
+                    frame->Release(); decoder->Release(); stream->Release(); break;
+                }
+                hr = converter->Initialize(frame, GUID_WICPixelFormat32bppPBGRA,
+                    WICBitmapDitherTypeNone, NULL, 0.0, WICBitmapPaletteTypeCustom);
+                if (FAILED(hr)) {
+                    converter->Release(); frame->Release(); decoder->Release(); stream->Release(); break;
+                }
+
+                D2D1_BITMAP_PROPERTIES bmpProps = {};
+                bmpProps.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
+                bmpProps.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
+                bmpProps.dpiX = win->dpi;
+                bmpProps.dpiY = win->dpi;
+
+                hr = win->rt->CreateBitmapFromWicBitmap(converter, &bmpProps, &bitmap);
+
+                converter->Release();
+                frame->Release();
+                decoder->Release();
+                stream->Release();
+
+                if (FAILED(hr) || !bitmap) break;
+
+                if (cmd->imageKey && cmd->imageKeyLen > 0) {
+                    bitmapStoredInCache = CacheBitmap(win, cmd->imageKey, cmd->imageKeyLen, bitmap);
+                }
             }
-            hr = converter->Initialize(frame, GUID_WICPixelFormat32bppPBGRA,
-                WICBitmapDitherTypeNone, NULL, 0.0, WICBitmapPaletteTypeCustom);
-            if (FAILED(hr)) {
-                converter->Release(); frame->Release(); decoder->Release(); stream->Release(); break;
+
+            if (w <= 0 || h <= 0) {
+                D2D1_SIZE_F size = bitmap->GetSize();
+                w = size.width;
+                h = size.height;
             }
 
-            // Create Direct2D bitmap from WIC converter
-            float w = cmd->w > 0 ? cmd->w : (float)srcW;
-            float h = cmd->h > 0 ? cmd->h : (float)srcH;
+            D2D1_RECT_F destRect = ToRectF(cmd->x, cmd->y, w, h);
+            win->rt->DrawBitmap(bitmap, destRect, 1.0f,
+                D2D1_BITMAP_INTERPOLATION_MODE_LINEAR, NULL);
 
-            D2D1_BITMAP_PROPERTIES bmpProps = {};
-            bmpProps.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
-            bmpProps.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
-            bmpProps.dpiX = win->dpi;
-            bmpProps.dpiY = win->dpi;
-
-            ID2D1Bitmap* bitmap = NULL;
-            hr = win->rt->CreateBitmapFromWicBitmap(converter, &bmpProps, &bitmap);
-
-            if (SUCCEEDED(hr) && bitmap) {
-                // Draw bitmap scaled to target size
-                D2D1_RECT_F destRect = ToRectF(cmd->x, cmd->y, w, h);
-                win->rt->DrawBitmap(bitmap, destRect, 1.0f,
-                    D2D1_BITMAP_INTERPOLATION_MODE_LINEAR, NULL);
+            if (!bitmapStoredInCache) {
                 bitmap->Release();
             }
-
-            converter->Release();
-            frame->Release();
-            decoder->Release();
-            stream->Release();
             break;
         }
 
@@ -653,9 +1170,33 @@ static void ExecuteCommands(UIWindow* win, const CDrawCommand* cmds, int32_t cou
     win->clipDepth = 0;
 
     HRESULT hr = win->rt->EndDraw(NULL, NULL);
-    if (hr == D2DERR_RECREATE_TARGET) {
-        // TODO: recreate render target
+    if (g_framesSinceShow < kLogFramesPerShow) {
+        MicaLog("frame[%d] EndDraw hr=0x%X", g_frameCounter, (unsigned)hr);
     }
+    if (hr == D2DERR_RECREATE_TARGET) {
+        // The D2D device is lost (e.g. display mode change). Drop the device-bound
+        // back-buffer bitmap so the next frame rebuilds it from the swap chain.
+        win->rt->SetTarget(NULL);
+        if (win->backBufferBitmap) {
+            win->backBufferBitmap->Release();
+            win->backBufferBitmap = NULL;
+        }
+        return;
+    }
+
+    // Present the flip-model swap chain and commit the composition visual so
+    // the DWM composites the new alpha-bearing frame over the Mica backdrop.
+    hr = win->swapChain->Present(1, 0);
+    HRESULT commitHr = S_OK;
+    if (win->dcompDevice) {
+        commitHr = win->dcompDevice->Commit();
+    }
+    if (g_framesSinceShow < kLogFramesPerShow) {
+        MicaLog("frame[%d] Present hr=0x%X Commit hr=0x%X", g_frameCounter,
+                (unsigned)hr, (unsigned)commitHr);
+    }
+    g_frameCounter++;
+    g_framesSinceShow++;
 }
 
 extern "C" void uiWindowRender(int32_t windowId, const CDrawCommand* commands, int32_t count) {
@@ -709,9 +1250,19 @@ extern "C" CMeasureResult uiMeasureText(const char* text, int32_t textLen, float
 
 // ── Message loop ──────────────────────────────────────────────────────────
 
+// Blocking message pump: waits for messages (GetMessage) instead of busy
+// polling (PeekMessage). Returns false on WM_QUIT. After processing messages,
+// returns true so the Go side can render one frame if needed.
 extern "C" bool uiPumpMessages(void) {
     MSG msg;
-    // Process all pending messages. Returns false when WM_QUIT is seen.
+    // Block until a message arrives — avoids 100% CPU busy-poll.
+    if (GetMessageW(&msg, NULL, 0, 0) <= 0) {
+        return false; // WM_QUIT or error
+    }
+    TranslateMessage(&msg);
+    DispatchMessageW(&msg);
+
+    // Drain any remaining queued messages so input stays responsive.
     while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
         if (msg.message == WM_QUIT) {
             return false;
@@ -724,5 +1275,7 @@ extern "C" bool uiPumpMessages(void) {
 
 extern "C" void uiInvalidateWindow(int32_t windowId) {
     HWND hwnd = (HWND)(intptr_t)windowId;
-    InvalidateRect(hwnd, NULL, FALSE);
+    // Post a repaint request instead of calling InvalidateRect. The main thread
+    // picks it up in the message loop and triggers a render pass.
+    PostMessageW(hwnd, WM_APP_REPAINT, 0, 0);
 }

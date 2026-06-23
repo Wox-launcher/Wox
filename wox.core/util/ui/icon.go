@@ -59,8 +59,15 @@ func RasterizeWoxImage(img common.WoxImage) []byte {
 // RasterizeWoxImageWithSize converts a WoxImage to PNG bytes at the given
 // pixel size. Used when a specific icon size is needed.
 func RasterizeWoxImageWithSize(img common.WoxImage, size int) []byte {
+	pngBytes, _ := RasterizeWoxImageWithSizeAndKey(img, size)
+	return pngBytes
+}
+
+// RasterizeWoxImageWithSizeAndKey converts a WoxImage and returns the cache key
+// used by both the Go PNG cache and the native bitmap cache.
+func RasterizeWoxImageWithSizeAndKey(img common.WoxImage, size int) ([]byte, string) {
 	if img.IsEmpty() {
-		return nil
+		return nil, ""
 	}
 
 	// Use hash + size as cache key to avoid re-scaling
@@ -69,13 +76,13 @@ func RasterizeWoxImageWithSize(img common.WoxImage, size int) []byte {
 	iconCache.mu.RLock()
 	if cached, ok := iconCache.items[hash]; ok {
 		iconCache.mu.RUnlock()
-		return cached
+		return cached, hash
 	}
 	iconCache.mu.RUnlock()
 
 	rasterized, err := img.ToImage()
 	if err != nil || rasterized == nil {
-		return nil
+		return nil, ""
 	}
 
 	// Scale to requested size if needed
@@ -86,7 +93,7 @@ func RasterizeWoxImageWithSize(img common.WoxImage, size int) []byte {
 
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, rasterized); err != nil {
-		return nil
+		return nil, ""
 	}
 
 	pngBytes := buf.Bytes()
@@ -95,7 +102,15 @@ func RasterizeWoxImageWithSize(img common.WoxImage, size int) []byte {
 	iconCache.items[hash] = pngBytes
 	iconCache.mu.Unlock()
 
-	return pngBytes
+	return pngBytes, hash
+}
+
+// ClearIconCache releases cached PNG bytes. The launcher calls this when hidden
+// so result icons do not keep memory after the visible fast path no longer needs them.
+func ClearIconCache() {
+	iconCache.mu.Lock()
+	iconCache.items = make(map[string][]byte)
+	iconCache.mu.Unlock()
 }
 
 // scaleImage resizes an image to the given square size using nearest-neighbor.

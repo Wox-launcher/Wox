@@ -4,7 +4,7 @@ package ui
 
 /*
 #cgo CFLAGS: -DUNICODE -D_UNICODE
-#cgo LDFLAGS: -ld2d1 -ldwrite -ldwmapi -lwindowscodecs -lole32 -luuid -luser32 -lgdi32 -lshcore
+#cgo LDFLAGS: -ld2d1 -ldwrite -ldwmapi -lwindowscodecs -lole32 -luuid -luser32 -lgdi32 -lshcore -ld3d11 -ldxgi -ldcomp
 
 #include <stdlib.h>
 #include <stdint.h>
@@ -25,6 +25,8 @@ typedef struct {
     int32_t fontFamilyLen;
     const uint8_t* imageData; // PNG bytes, owned by Go
     int32_t imageLen;
+    const char* imageKey;     // UTF-8 cache key, owned by Go
+    int32_t imageKeyLen;
     float imageWidth, imageHeight;
 } CDrawCommand;
 
@@ -35,6 +37,7 @@ typedef struct {
     float cornerRadius;
     bool frameless;
     bool transparent;
+    bool darkMode;
 } CWindowConfig;
 
 // MeasureResult returns text dimensions.
@@ -48,9 +51,12 @@ extern int32_t uiWindowCreate(CWindowConfig config);
 extern void uiWindowDestroy(int32_t windowId);
 extern void uiWindowShow(int32_t windowId);
 extern void uiWindowHide(int32_t windowId);
+extern void uiWindowSetDarkMode(int32_t windowId, bool darkMode);
 extern void uiWindowSetPosition(int32_t windowId, int32_t x, int32_t y);
 extern void uiWindowSetSize(int32_t windowId, int32_t w, int32_t h);
 extern bool uiWindowIsVisible(int32_t windowId);
+extern void uiWindowGetSize(int32_t windowId, int32_t* outW, int32_t* outH);
+extern void uiWindowReleaseMemory(int32_t windowId);
 extern void uiWindowRender(int32_t windowId, const CDrawCommand* commands, int32_t count);
 extern CMeasureResult uiMeasureText(const char* text, int32_t textLen, float fontSize, const char* fontFamily, int32_t fontFamilyLen);
 
@@ -74,6 +80,9 @@ import (
 // WindowsRenderer implements the Renderer interface using Direct2D/DirectWrite.
 type WindowsRenderer struct {
 	windowID int32
+
+	nativeImageMu   sync.Mutex
+	nativeImageKeys map[string]struct{}
 }
 
 // WindowsTextMeasurer implements TextMeasurer using DirectWrite.
@@ -88,12 +97,20 @@ var (
 // NewWindowsRenderer creates a native window and returns a Renderer.
 // The window starts hidden — call Show() to display it.
 func NewWindowsRenderer(width, height int, theme Theme) (*WindowsRenderer, error) {
+	// Treat the window as dark when the theme background luminance is low.
+	// This drives DWMWA_USE_IMMERSIVE_DARK_MODE so the Mica/Acrylic backdrop
+	// renders in the tone that matches the theme.
+	bg := theme.WindowBg
+	lum := 0.2126*bg.R + 0.7152*bg.G + 0.0722*bg.B
+	darkMode := lum < 0.5
+
 	cfg := C.CWindowConfig{
 		width:        C.int32_t(width),
 		height:       C.int32_t(height),
 		cornerRadius: C.float(theme.WindowRadius),
 		frameless:    C.bool(true),
 		transparent:  C.bool(true),
+		darkMode:     C.bool(darkMode),
 	}
 
 	id := C.uiWindowCreate(cfg)
@@ -102,7 +119,10 @@ func NewWindowsRenderer(width, height int, theme Theme) (*WindowsRenderer, error
 	}
 
 	goID := int32(id)
-	r := &WindowsRenderer{windowID: goID}
+	r := &WindowsRenderer{
+		windowID:        goID,
+		nativeImageKeys: make(map[string]struct{}),
+	}
 	rendererMu.Lock()
 	rendererRegistry[goID] = r
 	rendererMu.Unlock()
@@ -123,11 +143,11 @@ func uiEventCallback(windowID C.int32_t, eventType C.int32_t, key C.int32_t, mod
 	width C.int32_t, height C.int32_t) {
 
 	ev := Event{
-		Type: EventType(eventType),
-		Key:  Key(key),
-		Mods: Modifiers(mods),
-		X:    float32(x),
-		Y:    float32(y),
+		Type:   EventType(eventType),
+		Key:    Key(key),
+		Mods:   Modifiers(mods),
+		X:      float32(x),
+		Y:      float32(y),
 		DeltaY: float32(deltaY),
 		Width:  int32(width),
 		Height: int32(height),
@@ -156,7 +176,7 @@ func (r *WindowsRenderer) Render(commands *CommandList) error {
 	// Text and image data are copied to C-allocated memory to comply with
 	// CGO's "no Go pointers in C" rule.
 	cCmds := make([]C.CDrawCommand, len(commands.Commands))
-	var cTextPtrs []*C.char    // free after Render
+	var cTextPtrs []*C.char // free after Render
 	var cImagePtrs []unsafe.Pointer
 
 	for i, cmd := range commands.Commands {
@@ -185,7 +205,21 @@ func (r *WindowsRenderer) Render(commands *CommandList) error {
 			cCmds[i].fontFamily = cstr
 			cCmds[i].fontFamilyLen = C.int32_t(len(cmd.FontFamily))
 		}
-		if len(cmd.ImageData) > 0 {
+		uploadImage := len(cmd.ImageData) > 0
+		if cmd.ImageKey != "" {
+			cstr := C.CString(cmd.ImageKey)
+			cTextPtrs = append(cTextPtrs, cstr)
+			cCmds[i].imageKey = cstr
+			cCmds[i].imageKeyLen = C.int32_t(len(cmd.ImageKey))
+
+			r.nativeImageMu.Lock()
+			_, uploaded := r.nativeImageKeys[cmd.ImageKey]
+			r.nativeImageMu.Unlock()
+			if uploaded {
+				uploadImage = false
+			}
+		}
+		if uploadImage {
 			cdata := C.CBytes(cmd.ImageData)
 			cImagePtrs = append(cImagePtrs, cdata)
 			cCmds[i].imageData = (*C.uint8_t)(cdata)
@@ -194,6 +228,14 @@ func (r *WindowsRenderer) Render(commands *CommandList) error {
 	}
 
 	C.uiWindowRender(C.int32_t(r.windowID), &cCmds[0], C.int32_t(len(cCmds)))
+
+	r.nativeImageMu.Lock()
+	for _, cmd := range commands.Commands {
+		if cmd.ImageKey != "" && len(cmd.ImageData) > 0 {
+			r.nativeImageKeys[cmd.ImageKey] = struct{}{}
+		}
+	}
+	r.nativeImageMu.Unlock()
 
 	// Free C-allocated strings and image data.
 	for _, p := range cTextPtrs {
@@ -248,6 +290,20 @@ func (r *WindowsRenderer) Hide() error {
 	return nil
 }
 
+// SetDarkMode toggles the DWM immersive dark mode attribute so the Mica
+// backdrop renders in the tone matching the active theme.
+func (r *WindowsRenderer) SetDarkMode(dark bool) {
+	C.uiWindowSetDarkMode(C.int32_t(r.windowID), C.bool(dark))
+}
+
+// ReleaseMemory drops native caches that are only useful while the launcher is visible.
+func (r *WindowsRenderer) ReleaseMemory() {
+	C.uiWindowReleaseMemory(C.int32_t(r.windowID))
+	r.nativeImageMu.Lock()
+	r.nativeImageKeys = make(map[string]struct{})
+	r.nativeImageMu.Unlock()
+}
+
 // SetPosition moves the window to absolute screen coordinates.
 func (r *WindowsRenderer) SetPosition(x, y int) error {
 	C.uiWindowSetPosition(C.int32_t(r.windowID), C.int32_t(x), C.int32_t(y))
@@ -274,17 +330,28 @@ func (r *WindowsRenderer) IsVisible() bool {
 	return bool(C.uiWindowIsVisible(C.int32_t(r.windowID)))
 }
 
+// GetSize returns the current logical (DIP) window dimensions.
+func (r *WindowsRenderer) GetSize() (int, int) {
+	var w, h C.int32_t
+	C.uiWindowGetSize(C.int32_t(r.windowID), &w, &h)
+	return int(w), int(h)
+}
+
 // RunMessageLoop runs the native Win32 message loop.
 // Blocks until Close() is called or the window is destroyed.
 // The onRender callback is invoked each frame to produce draw commands.
+// onShouldRender returns false when the window is hidden, letting the loop
+// block on GetMessage without busy-rendering an invisible surface.
 func (r *WindowsRenderer) RunMessageLoop(onRender func() *CommandList) {
 	for {
-		// Process all pending messages
+		// GetMessage blocks until a message arrives, so the loop does not
+		// busy-poll when the window is hidden or idle.
 		if !C.uiPumpMessages() {
 			break // WM_QUIT received
 		}
 
-		// Render a frame
+		// Render a frame after processing messages. The Go onRender callback
+		// decides whether to produce commands (it checks g.visible internally).
 		cmds := onRender()
 		if cmds != nil {
 			r.Render(cmds)

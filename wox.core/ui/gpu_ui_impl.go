@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 	"sync"
 	"time"
 	"wox/common"
@@ -24,17 +25,17 @@ type gpuUIImpl struct {
 	mu sync.Mutex
 
 	// Native renderer (Direct2D on Windows)
-	renderer   *ui.WindowsRenderer
-	engine     *ui.LayoutEngine
-	theme      ui.Theme
+	renderer *ui.WindowsRenderer
+	engine   *ui.LayoutEngine
+	theme    ui.Theme
 
 	// Launcher state
-	visible     bool
-	queryValue  string
-	results     []plugin.QueryResultUI
-	selectedIdx int
-	scrollOffset float32
-	currentQuery plugin.Query
+	visible          bool
+	queryValue       string
+	results          []plugin.QueryResultUI
+	selectedIdx      int
+	scrollOffset     float32
+	currentQuery     plugin.Query
 	currentSessionId string
 
 	// WebSocket UI for settings/onboarding/screenshot delegation
@@ -60,7 +61,14 @@ func NewGpuUI(ctx context.Context, wsUI *uiImpl) (*gpuUIImpl, error) {
 // Must be called on the OS main thread (via mainthread.Call).
 // The window starts hidden if HideOnStart is enabled in settings.
 func (g *gpuUIImpl) Run(ctx context.Context) {
-	// Apply the current theme (may have been set by ChangeTheme before Run)
+	// Apply the user's currently selected theme before creating the renderer.
+	// Manager.Start loads themes into the registry but does not push the active
+	// theme to gpuUIImpl, so g.theme would stay at DefaultTheme (opaque) and
+	// Clear would never go transparent, hiding the Mica backdrop.
+	currentTheme := GetUIManager().GetCurrentTheme(ctx)
+	if currentTheme.ThemeId != "" {
+		g.theme = ui.ThemeFromWoxTheme(GetUIManager().resolvePlatformTheme(ctx, currentTheme))
+	}
 	theme := g.theme
 
 	// Create the renderer now — this must be on the OS main thread.
@@ -104,12 +112,14 @@ func (g *gpuUIImpl) handleEvent(ev ui.Event) {
 				g.selectedIdx++
 			}
 			g.mu.Unlock()
+			g.requestRepaint()
 		case ui.KeyUp:
 			g.mu.Lock()
 			if g.selectedIdx > 0 {
 				g.selectedIdx--
 			}
 			g.mu.Unlock()
+			g.requestRepaint()
 		case ui.KeyEnter:
 			g.mu.Lock()
 			if g.selectedIdx >= 0 && g.selectedIdx < len(g.results) {
@@ -134,6 +144,7 @@ func (g *gpuUIImpl) handleEvent(ev ui.Event) {
 		g.visible = false
 		g.mu.Unlock()
 		if wasVisible {
+			g.releaseHiddenMemory()
 			GetUIManager().PostOnHide(ctx)
 		}
 	}
@@ -156,49 +167,97 @@ func (g *gpuUIImpl) handleEvent(ev ui.Event) {
 func (g *gpuUIImpl) buildAndRender(ctx context.Context) *ui.CommandList {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	if !g.visible {
+		return nil
+	}
 
-	// Convert query results to list items with rasterized icons
+	// Use the real window dimensions so layout matches the native surface.
+	// Falls back to the initial 800x400 before the first WM_SIZE arrives.
+	winW, winH := 800, 400
+	if g.renderer != nil {
+		if w, h := g.renderer.GetSize(); w > 0 && h > 0 {
+			winW, winH = w, h
+		}
+	}
+	t := g.theme
+
+	// Convert query results to list items. Icons are pre-rasterized by
+	// rasterizeIconsInBackground on a goroutine, so this loop only reads
+	// already-cached PNG bytes — no decoding on the main thread.
 	items := make([]ui.ListItem, len(g.results))
 	for i, r := range g.results {
-		item := ui.ListItem{
+		items[i] = ui.ListItem{
 			Title:    r.Title,
 			Subtitle: r.SubTitle,
+			IconPNG:  r.IconPNG,
+			IconKey:  r.IconKey,
 		}
-		// Rasterize the result icon to PNG for Direct2D rendering
-		if !r.Icon.IsEmpty() {
-			item.IconPNG = ui.RasterizeWoxImageWithSize(r.Icon, 36)
-		}
-		items[i] = item
 	}
 
 	root := ui.VBox{
-		Padding: 16,
+		Padding: t.WindowPadding,
 		Gap:     12,
 		Children: []ui.Widget{
 			ui.TextBox{
 				ID:           "query",
 				Placeholder:  "Type to search...",
-				FontSize:     16,
-				FontColor:    ui.ColorTextPrimary,
-				BgColor:      ui.RGBA(1, 1, 1, 0.06),
-				CornerRadius: 8,
-				CursorColor:  ui.ColorCursor,
+				FontSize:     t.FontSize,
+				FontColor:    t.QueryBoxFontColor,
+				BgColor:      t.QueryBoxBg,
+				CornerRadius: t.QueryBoxRadius,
+				CursorColor:  t.QueryBoxCursorColor,
 				Value:        g.queryValue,
 				Focused:      true,
 			},
 			ui.ListBox{
 				ID:            "results",
-				ItemHeight:    48,
+				ItemHeight:    t.ListItemHeight,
 				Items:         items,
 				ScrollOffset:  g.scrollOffset,
 				Selected:      g.selectedIdx,
-				SelectedColor: &ui.ColorSelected,
+				SelectedColor: &t.SelectedBg,
 			},
 		},
 	}
 
-	result := g.engine.Layout(root, 800, 400)
+	result := g.engine.Layout(root, float32(winW), float32(winH))
 	return &result.Commands
+}
+
+// requestRepaint posts a repaint message to the native message loop so the
+// main thread re-renders after results or query text change. Safe to call
+// from any goroutine — PostMessage is thread-safe.
+func (g *gpuUIImpl) requestRepaint() {
+	if g.renderer != nil {
+		g.renderer.RequestRepaint()
+	}
+}
+
+// rasterizeIconsInBackground pre-rasterizes result icons to PNG on a
+// background goroutine so the main render thread never blocks on icon
+// decoding. buildAndRender only reads the already-rasterized bytes.
+func (g *gpuUIImpl) rasterizeIconsInBackground(results []plugin.QueryResultUI) {
+	if len(results) == 0 {
+		return
+	}
+	go func() {
+		for i := range results {
+			r := &results[i]
+			if r.Icon.IsEmpty() {
+				continue
+			}
+			// RasterizeWoxImageWithSizeAndKey caches by hash+size, so
+			// repeated calls for the same icon are cheap (map lookup).
+			png, key := ui.RasterizeWoxImageWithSizeAndKey(r.Icon, 36)
+			g.mu.Lock()
+			if i < len(g.results) && g.results[i].Title == r.Title {
+				g.results[i].IconPNG = png
+				g.results[i].IconKey = key
+			}
+			g.mu.Unlock()
+		}
+		g.requestRepaint()
+	}()
 }
 
 // triggerQuery starts a new plugin query with the current query text.
@@ -238,6 +297,8 @@ func (g *gpuUIImpl) triggerQuery(ctx context.Context) {
 				g.mu.Lock()
 				g.results = allResults
 				g.mu.Unlock()
+				g.rasterizeIconsInBackground(allResults)
+				g.requestRepaint()
 			case <-fallbackReadyChan:
 				// drain any pending results
 				for {
@@ -248,10 +309,12 @@ func (g *gpuUIImpl) triggerQuery(ctx context.Context) {
 						goto fallbackDone
 					}
 				}
-			fallbackDone:
-				g.mu.Lock()
-				g.results = allResults
-				g.mu.Unlock()
+		fallbackDone:
+			g.mu.Lock()
+			g.results = allResults
+			g.mu.Unlock()
+			g.rasterizeIconsInBackground(allResults)
+			g.requestRepaint()
 			case <-doneChan:
 				// drain any final results
 				for {
@@ -262,10 +325,12 @@ func (g *gpuUIImpl) triggerQuery(ctx context.Context) {
 						goto queryDone
 					}
 				}
-			queryDone:
-				g.mu.Lock()
-				g.results = allResults
-				g.mu.Unlock()
+		queryDone:
+			g.mu.Lock()
+			g.results = allResults
+			g.mu.Unlock()
+			g.rasterizeIconsInBackground(allResults)
+			g.requestRepaint()
 				logger.Info(queryCtx, fmt.Sprintf("gpuUI query done: %d results", len(allResults)))
 				return
 			case <-time.After(time.Minute):
@@ -320,8 +385,20 @@ func (g *gpuUIImpl) HideApp(ctx context.Context) {
 	g.mu.Lock()
 	g.visible = false
 	g.mu.Unlock()
-	g.renderer.Hide()
+	if g.renderer != nil {
+		g.renderer.Hide()
+	}
+	g.releaseHiddenMemory()
 	GetUIManager().PostOnHide(ctx)
+}
+
+// releaseHiddenMemory drops launcher-only caches and asks Go to return idle memory.
+func (g *gpuUIImpl) releaseHiddenMemory() {
+	if g.renderer != nil {
+		g.renderer.ReleaseMemory()
+	}
+	ui.ClearIconCache()
+	debug.FreeOSMemory()
 }
 
 func (g *gpuUIImpl) ShowApp(ctx context.Context, showContext common.ShowContext) {
@@ -378,6 +455,14 @@ func (g *gpuUIImpl) ChangeTheme(ctx context.Context, theme common.Theme) {
 	g.theme = ui.ThemeFromWoxTheme(effectiveTheme)
 	if g.engine != nil {
 		g.engine.Theme = g.theme
+	}
+	// Push the theme tone to DWM so the Mica backdrop matches the theme.
+	// Without this, switching from light to dark (or vice versa) leaves the
+	// native backdrop in the previous tone until the OS appearance changes.
+	if g.renderer != nil {
+		bg := g.theme.WindowBg
+		lum := 0.2126*bg.R + 0.7152*bg.G + 0.0722*bg.B
+		g.renderer.SetDarkMode(lum < 0.5)
 	}
 	g.mu.Unlock()
 }
@@ -515,4 +600,6 @@ func (g *gpuUIImpl) SetResults(ctx context.Context, results []plugin.QueryResult
 	}
 	g.scrollOffset = 0
 	g.mu.Unlock()
+	g.rasterizeIconsInBackground(results)
+	g.requestRepaint()
 }
