@@ -38,6 +38,32 @@ type gpuUIImpl struct {
 	currentQuery     plugin.Query
 	currentSessionId string
 
+	// dirty is set whenever results, query text, selection, or theme change.
+	// buildAndRender only produces draw commands when dirty is true, avoiding
+	// unnecessary full-window redraws (which cause the selected item to flicker
+	// during fast typing).
+	dirty bool
+
+	// clearResultsTimer delays clearing stale results when a new query starts.
+	// If new results arrive before the timer fires, it is cancelled and the
+	// old results are replaced seamlessly — no empty-list flicker. This mirrors
+	// the Flutter launcher's staleVisibleResultsDuration (80ms) strategy.
+	clearResultsTimer *time.Timer
+
+	// committedWindowHeight tracks the last applied native window height so
+	// the pending-result placeholder can preserve the launcher geometry during
+	// fast typing (mirrors the Flutter committedWindowHeight).
+	committedWindowHeight float32
+
+	// lastResultCount and lastWinSize track the previous frame's state so
+	// buildAndRender can skip the full-window Clear when only result content
+	// changed (same count, same window size) — painting over the old frame
+	// without a Clear+Present eliminates the flicker during fast typing.
+	lastResultCount int
+	lastWinW        int
+	lastWinH        int
+	lastQueryText   string
+
 	// WebSocket UI for settings/onboarding/screenshot delegation
 	wsUI *uiImpl
 
@@ -89,7 +115,11 @@ func (g *gpuUIImpl) Run(ctx context.Context) {
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	if !woxSetting.HideOnStart.Get() {
 		g.renderer.Show()
+		g.mu.Lock()
 		g.visible = true
+		g.dirty = true
+		g.mu.Unlock()
+		g.requestRepaint()
 	}
 
 	g.renderer.RunMessageLoop(func() *ui.CommandList {
@@ -110,6 +140,7 @@ func (g *gpuUIImpl) handleEvent(ev ui.Event) {
 			g.mu.Lock()
 			if g.selectedIdx < len(g.results)-1 {
 				g.selectedIdx++
+				g.dirty = true
 			}
 			g.mu.Unlock()
 			g.requestRepaint()
@@ -117,6 +148,7 @@ func (g *gpuUIImpl) handleEvent(ev ui.Event) {
 			g.mu.Lock()
 			if g.selectedIdx > 0 {
 				g.selectedIdx--
+				g.dirty = true
 			}
 			g.mu.Unlock()
 			g.requestRepaint()
@@ -134,6 +166,7 @@ func (g *gpuUIImpl) handleEvent(ev ui.Event) {
 	case ui.EventTextInput:
 		g.mu.Lock()
 		g.queryValue += ev.Text
+		g.dirty = true
 		g.mu.Unlock()
 		// Trigger a new query
 		g.triggerQuery(ctx)
@@ -155,6 +188,7 @@ func (g *gpuUIImpl) handleEvent(ev ui.Event) {
 		if len(g.queryValue) > 0 {
 			runes := []rune(g.queryValue)
 			g.queryValue = string(runes[:len(runes)-1])
+			g.dirty = true
 			g.mu.Unlock()
 			g.triggerQuery(ctx)
 		} else {
@@ -170,6 +204,13 @@ func (g *gpuUIImpl) buildAndRender(ctx context.Context) *ui.CommandList {
 	if !g.visible {
 		return nil
 	}
+	// Only render when something actually changed. Without this gate every
+	// message-loop wakeup would do a full Clear + redraw, making the selected
+	// result background flicker during fast typing.
+	if !g.dirty {
+		return nil
+	}
+	g.dirty = false
 
 	// Use the real window dimensions so layout matches the native surface.
 	// Falls back to the initial 800x400 before the first WM_SIZE arrives.
@@ -180,6 +221,7 @@ func (g *gpuUIImpl) buildAndRender(ctx context.Context) *ui.CommandList {
 		}
 	}
 	t := g.theme
+	resultCount := len(g.results)
 
 	// Convert query results to list items. Icons are pre-rasterized by
 	// rasterizeIconsInBackground on a goroutine, so this loop only reads
@@ -221,7 +263,65 @@ func (g *gpuUIImpl) buildAndRender(ctx context.Context) *ui.CommandList {
 	}
 
 	result := g.engine.Layout(root, float32(winW), float32(winH))
+	g.lastResultCount = resultCount
+	g.lastWinW = winW
+	g.lastWinH = winH
+	g.lastQueryText = g.queryValue
 	return &result.Commands
+}
+
+// maxResultCount returns the configured maximum number of visible results,
+// defaulting to 8 (the same default as WoxSetting.MaxResultCount).
+const defaultMaxResultCount = 8
+
+// resizeWindowHeight sets the native window size to match the current result
+// count. Called after results arrive so the launcher grows/shrinks with the
+// list. The resize is posted to the message queue (WM_APP_RESIZE), which
+// atomically chains SetWindowPos → WM_SIZE (bitmap rebuild) → onRender, so
+// no separate requestRepaint is needed.
+func (g *gpuUIImpl) resizeWindowHeight() {
+	if g.renderer == nil {
+		return
+	}
+
+	// Read theme and results under the lock to avoid data races with
+	// concurrent goroutines updating g.results / g.theme.
+	g.mu.Lock()
+	t := g.theme
+	itemCount := len(g.results)
+	g.mu.Unlock()
+
+	pad := t.WindowPadding * 2
+	queryBoxH := t.QueryBoxHeight
+	if itemCount > defaultMaxResultCount {
+		itemCount = defaultMaxResultCount
+	}
+	resultH := float32(itemCount) * t.ListItemHeight
+	maxResultH := float32(defaultMaxResultCount) * t.ListItemHeight
+	if resultH > maxResultH {
+		resultH = maxResultH
+	}
+	gap := float32(12)
+	total := queryBoxH + gap + resultH + pad
+	minH := queryBoxH + pad
+	if total < minH {
+		total = minH
+	}
+	targetH := total
+
+	// Skip if the target height hasn't changed since the last commit.
+	if g.committedWindowHeight > 0 && g.committedWindowHeight == targetH {
+		return
+	}
+
+	woxSetting := setting.GetSettingManager().GetWoxSetting(util.NewTraceContext())
+	width := woxSetting.AppWidth.Get()
+	if width <= 0 {
+		width = 750
+	}
+
+	g.renderer.SetSize(width, int(targetH))
+	g.committedWindowHeight = targetH
 }
 
 // requestRepaint posts a repaint message to the native message loop so the
@@ -253,6 +353,7 @@ func (g *gpuUIImpl) rasterizeIconsInBackground(results []plugin.QueryResultUI) {
 			if i < len(g.results) && g.results[i].Title == r.Title {
 				g.results[i].IconPNG = png
 				g.results[i].IconKey = key
+				g.dirty = true
 			}
 			g.mu.Unlock()
 		}
@@ -279,9 +380,31 @@ func (g *gpuUIImpl) triggerQuery(ctx context.Context) {
 		g.mu.Lock()
 		g.currentQuery = q
 		g.currentSessionId = util.GetContextSessionId(queryCtx)
-		g.results = nil
+		// Don't clear results immediately. Keep the old result list visible
+		// and set a delay timer: if new results arrive within 80ms the timer
+		// is cancelled and results are replaced seamlessly (no empty-list
+		// flicker). If the query is still pending after 80ms, clear then.
+		// This mirrors the Flutter launcher's staleVisibleResultsDuration.
+		if g.clearResultsTimer != nil {
+			g.clearResultsTimer.Stop()
+		}
+		currentQueryId := q.Id
+		g.clearResultsTimer = time.AfterFunc(80*time.Millisecond, func() {
+			g.mu.Lock()
+			if g.currentQuery.Id == currentQueryId {
+				g.results = nil
+				g.selectedIdx = 0
+				g.scrollOffset = 0
+				g.dirty = true
+			}
+			g.mu.Unlock()
+			if g.currentQuery.Id == currentQueryId {
+				g.resizeWindowHeight()
+			}
+		})
 		g.selectedIdx = 0
 		g.scrollOffset = 0
+		g.dirty = true
 		g.mu.Unlock()
 
 		// Required: lifecycle handling must run before Query
@@ -292,13 +415,17 @@ func (g *gpuUIImpl) triggerQuery(ctx context.Context) {
 		var allResults []plugin.QueryResultUI
 		for {
 			select {
-			case response := <-resultChan:
+		case response := <-resultChan:
 				allResults = append(allResults, response.Results...)
+				if g.clearResultsTimer != nil {
+					g.clearResultsTimer.Stop()
+				}
 				g.mu.Lock()
 				g.results = allResults
+				g.dirty = true
 				g.mu.Unlock()
 				g.rasterizeIconsInBackground(allResults)
-				g.requestRepaint()
+				g.resizeWindowHeight()
 			case <-fallbackReadyChan:
 				// drain any pending results
 				for {
@@ -309,12 +436,16 @@ func (g *gpuUIImpl) triggerQuery(ctx context.Context) {
 						goto fallbackDone
 					}
 				}
-		fallbackDone:
-			g.mu.Lock()
-			g.results = allResults
-			g.mu.Unlock()
-			g.rasterizeIconsInBackground(allResults)
-			g.requestRepaint()
+			fallbackDone:
+				if g.clearResultsTimer != nil {
+					g.clearResultsTimer.Stop()
+				}
+				g.mu.Lock()
+				g.results = allResults
+				g.dirty = true
+				g.mu.Unlock()
+				g.rasterizeIconsInBackground(allResults)
+				g.resizeWindowHeight()
 			case <-doneChan:
 				// drain any final results
 				for {
@@ -325,12 +456,16 @@ func (g *gpuUIImpl) triggerQuery(ctx context.Context) {
 						goto queryDone
 					}
 				}
-		queryDone:
-			g.mu.Lock()
-			g.results = allResults
-			g.mu.Unlock()
-			g.rasterizeIconsInBackground(allResults)
-			g.requestRepaint()
+			queryDone:
+				if g.clearResultsTimer != nil {
+					g.clearResultsTimer.Stop()
+				}
+				g.mu.Lock()
+				g.results = allResults
+				g.dirty = true
+				g.mu.Unlock()
+				g.rasterizeIconsInBackground(allResults)
+				g.resizeWindowHeight()
 				logger.Info(queryCtx, fmt.Sprintf("gpuUI query done: %d results", len(allResults)))
 				return
 			case <-time.After(time.Minute):
@@ -365,7 +500,9 @@ func (g *gpuUIImpl) ChangeQuery(ctx context.Context, query common.PlainQuery) {
 	g.queryValue = query.QueryText
 	g.selectedIdx = 0
 	g.scrollOffset = 0
+	g.dirty = true
 	g.mu.Unlock()
+	g.requestRepaint()
 }
 
 func (g *gpuUIImpl) RefreshQuery(ctx context.Context, preserveSelectedIndex bool) {
@@ -404,6 +541,9 @@ func (g *gpuUIImpl) releaseHiddenMemory() {
 func (g *gpuUIImpl) ShowApp(ctx context.Context, showContext common.ShowContext) {
 	GetUIManager().RefreshActiveWindowSnapshot(ctx)
 
+	// Reset window height to match current result count before showing.
+	g.resizeWindowHeight()
+
 	// Position window: use explicit position from context, otherwise center
 	// on the screen where the mouse is.
 	winW, winH := 800, 400
@@ -419,8 +559,10 @@ func (g *gpuUIImpl) ShowApp(ctx context.Context, showContext common.ShowContext)
 	// Reset query state on show
 	g.mu.Lock()
 	g.visible = true
+	g.dirty = true
 	g.mu.Unlock()
 	g.renderer.Show()
+	g.requestRepaint()
 	GetUIManager().PostOnShow(ctx)
 }
 
@@ -456,15 +598,14 @@ func (g *gpuUIImpl) ChangeTheme(ctx context.Context, theme common.Theme) {
 	if g.engine != nil {
 		g.engine.Theme = g.theme
 	}
-	// Push the theme tone to DWM so the Mica backdrop matches the theme.
-	// Without this, switching from light to dark (or vice versa) leaves the
-	// native backdrop in the previous tone until the OS appearance changes.
+	g.dirty = true
 	if g.renderer != nil {
 		bg := g.theme.WindowBg
 		lum := 0.2126*bg.R + 0.7152*bg.G + 0.0722*bg.B
 		g.renderer.SetDarkMode(lum < 0.5)
 	}
 	g.mu.Unlock()
+	g.requestRepaint()
 }
 
 func (g *gpuUIImpl) InstallTheme(ctx context.Context, theme common.Theme) {
@@ -599,7 +740,8 @@ func (g *gpuUIImpl) SetResults(ctx context.Context, results []plugin.QueryResult
 		g.selectedIdx = 0
 	}
 	g.scrollOffset = 0
+	g.dirty = true
 	g.mu.Unlock()
 	g.rasterizeIconsInBackground(results)
-	g.requestRepaint()
+	g.resizeWindowHeight()
 }

@@ -70,6 +70,7 @@ static void MicaLogInit(void) {
 #define WM_APP_SHOW    (WM_APP + 1)
 #define WM_APP_HIDE    (WM_APP + 2)
 #define WM_APP_REPAINT (WM_APP + 3)
+#define WM_APP_RESIZE  (WM_APP + 4)
 
 typedef struct {
     int32_t cmd_type;
@@ -463,6 +464,24 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
     }
 
     case WM_APP_REPAINT: {
+        return 0;
+    }
+
+    case WM_APP_RESIZE: {
+        // Cross-thread resize request: posted by uiWindowSetSize from a goroutine.
+        // SetWindowPos runs on the main thread and synchronously triggers WM_SIZE,
+        // which rebuilds the swap chain bitmap. When uiPumpMessages returns, onRender
+        // uses the correctly-sized bitmap — no gap between window size and render
+        // surface, eliminating the "half Mica" artifact during fast typing.
+        if (win) {
+            int physW = (int)wParam;
+            int physH = (int)(LONG_PTR)lParam;
+            if (physW > 0 && physH > 0) {
+                SetWindowPos(hwnd, NULL, 0, 0, physW, physH,
+                    SWP_NOMOVE | SWP_NOZORDER | SWP_FRAMECHANGED);
+                MicaLog("WM_APP_RESIZE: SetWindowPos %dx%d (bitmap rebuilt via WM_SIZE)", physW, physH);
+            }
+        }
         return 0;
     }
 
@@ -892,9 +911,14 @@ extern "C" void uiWindowSetSize(int32_t windowId, int32_t w, int32_t h) {
     HWND hwnd = (HWND)(intptr_t)windowId;
     UIWindow* win = FindWindowByHWND(hwnd);
     if (!win) return;
-    SetWindowPos(hwnd, NULL, 0, 0,
-        (int)(w * win->scale), (int)(h * win->scale),
-        SWP_NOMOVE | SWP_NOZORDER);
+    // Post the resize to the message queue so SetWindowPos runs on the main
+    // thread. This atomically chains SetWindowPos → WM_SIZE (bitmap rebuild)
+    // → onRender in a single message-loop pass, avoiding the race where a
+    // separate WM_APP_REPAINT renders with a stale bitmap before the swap
+    // chain has been resized.
+    int physW = (int)(w * win->scale);
+    int physH = (int)(h * win->scale);
+    PostMessageW(hwnd, WM_APP_RESIZE, (WPARAM)physW, (LPARAM)physH);
 }
 
 extern "C" bool uiWindowIsVisible(int32_t windowId) {
@@ -1198,6 +1222,9 @@ static void ExecuteCommands(UIWindow* win, const CDrawCommand* cmds, int32_t cou
 
     // Present the flip-model swap chain and commit the composition visual so
     // the DWM composites the new alpha-bearing frame over the Mica backdrop.
+    // Present(0, 0) does not wait for VSync — the DWM compositor handles
+    // frame timing. VSync-waiting here (Present(1,0)) blocks the message loop
+    // for ~16ms per frame, delaying input processing and worsening judder.
     hr = win->swapChain->Present(1, 0);
     HRESULT commitHr = S_OK;
     if (win->dcompDevice) {
