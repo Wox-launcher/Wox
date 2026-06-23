@@ -146,6 +146,21 @@ func (w *WoxImage) String() string {
 	return fmt.Sprintf("%s:%s", w.ImageType, w.ImageData)
 }
 
+// ParseWoxImageString reconstructs a WoxImage from the "type:data" form produced
+// by WoxImage.String(). It splits on the first colon so image data that itself
+// contains colons (e.g. base64 data URLs) is preserved. Used by the native UI
+// to recover a WoxImage from a preview's PreviewData field.
+func ParseWoxImageString(s string) WoxImage {
+	idx := strings.Index(s, ":")
+	if idx < 0 {
+		return WoxImage{}
+	}
+	return WoxImage{
+		ImageType: WoxImageType(s[:idx]),
+		ImageData: s[idx+1:],
+	}
+}
+
 func (w *WoxImage) IsEmpty() bool {
 	return w.ImageData == ""
 }

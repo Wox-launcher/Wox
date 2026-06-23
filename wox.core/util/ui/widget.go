@@ -12,6 +12,7 @@ const (
 	WidgetImage
 	WidgetSeparator
 	WidgetSpacer
+	WidgetPreviewPanel
 )
 
 // Widget is the base interface for all DSL elements.
@@ -84,6 +85,9 @@ type ListBox struct {
 	ItemRenderer  func(index int, item ListItem) Widget
 	BgColor       *Color
 	SelectedColor *Color
+	// Width, when > 0, fixes the list width so an HBox parent allocates
+	// exactly this much horizontal space instead of the natural measured width.
+	Width float32
 }
 
 func (w ListBox) Type() WidgetType { return WidgetListBox }
@@ -131,3 +135,47 @@ const (
 	OrientHorizontal Orientation = iota
 	OrientVertical
 )
+
+// PreviewTag is a metadata chip rendered below the preview content.
+// Label is the visible text; Tooltip is the explanatory hover text.
+type PreviewTag struct {
+	Label   string
+	Tooltip string
+}
+
+// PreviewPanel renders the preview for the active query result.
+//
+// Supported PreviewType values:
+//   - "text":     PreviewData is plain text, auto-wrapped within the panel width.
+//   - "markdown": PreviewData is a minimal markdown subset (headings, lists, code
+//     blocks, quotes, separators). Inline styling (e.g. **bold**) is stripped.
+//   - "image":    PreviewData is a WoxImage.String() ("type:data"). The caller
+//     rasterizes it to PNG and fills ImagePNG/ImageKey; until then "Loading..."
+//     is shown.
+//   - "remote":   handled by the caller (gpuUIImpl) — it fetches the real
+//     preview via HTTP and replaces this panel before layout. If a remote
+//     panel reaches layout, "Loading..." is rendered.
+//
+// ScrollOffset shifts content vertically; the panel clips to its own rect so
+// only the visible portion is drawn.
+type PreviewPanel struct {
+	ID           string
+	PreviewType  string
+	PreviewData  string
+	PreviewTags  []PreviewTag
+	ScrollOffset float32
+	BgColor      *Color
+	SplitColor   Color
+	FontColor    Color
+	FontSize     float32
+	FontFamily   string
+	// ImagePNG / ImageKey hold the rasterized preview image for the "image" type.
+	// Filled asynchronously by the caller before requesting a repaint.
+	ImagePNG []byte
+	ImageKey string
+	// Width, when > 0, fixes the panel width so an HBox parent allocates
+	// exactly this much horizontal space instead of the natural measured width.
+	Width float32
+}
+
+func (w PreviewPanel) Type() WidgetType { return WidgetPreviewPanel }

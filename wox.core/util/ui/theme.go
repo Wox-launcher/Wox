@@ -56,6 +56,15 @@ type Theme struct {
 	CursorColor     Color
 	FontSize        float32
 	FontFamily      string
+
+	// Preview panel colors. PreviewBg fills the preview surface; PreviewSplitLine
+	// is the vertical divider between the result list and the preview; the tag
+	// colors style the metadata chips rendered below preview content.
+	PreviewBg             Color
+	PreviewSplitLineColor Color
+	PreviewFontColor      Color
+	PreviewPropertyTitle  Color
+	PreviewPropertyContent Color
 }
 
 // DefaultTheme returns a dark theme matching the current Wox launcher look.
@@ -82,5 +91,11 @@ func DefaultTheme() Theme {
 		CursorColor:       ColorCursor,
 		FontSize:          16,
 		FontFamily:        "",
+
+		PreviewBg:              RGBA(1, 1, 1, 0.04),
+		PreviewSplitLineColor:  RGBA(1, 1, 1, 0.10),
+		PreviewFontColor:       ColorTextPrimary,
+		PreviewPropertyTitle:   RGBA(1, 1, 1, 0.50),
+		PreviewPropertyContent: RGBA(1, 1, 1, 0.75),
 	}
 }

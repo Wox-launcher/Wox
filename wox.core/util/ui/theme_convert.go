@@ -111,5 +111,20 @@ func ThemeFromWoxTheme(woxTheme common.Theme) Theme {
 		t.WindowPadding = float32(woxTheme.AppPaddingLeft)
 	}
 
+	// Preview panel colors. Fall back to sensible defaults when the theme omits
+	// them so older themes still render a readable preview surface.
+	if woxTheme.PreviewFontColor != "" {
+		t.PreviewFontColor = ParseColor(woxTheme.PreviewFontColor)
+	}
+	if woxTheme.PreviewSplitLineColor != "" {
+		t.PreviewSplitLineColor = ParseColor(woxTheme.PreviewSplitLineColor)
+	}
+	if woxTheme.PreviewPropertyTitleColor != "" {
+		t.PreviewPropertyTitle = ParseColor(woxTheme.PreviewPropertyTitleColor)
+	}
+	if woxTheme.PreviewPropertyContentColor != "" {
+		t.PreviewPropertyContent = ParseColor(woxTheme.PreviewPropertyContentColor)
+	}
+
 	return t
 }

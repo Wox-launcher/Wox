@@ -2,8 +2,11 @@ package ui
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"runtime/debug"
+	"strconv"
 	"sync"
 	"time"
 	"wox/common"
@@ -73,17 +76,35 @@ type gpuUIImpl struct {
 	isInSettingView    bool
 	isInOnboardingView bool
 	isRecordingHotkey  bool
+
+	// Preview state. currentPreview holds the preview for the active result;
+	// nil means no preview is shown and the result list takes the full width.
+	// resultPreviewRatio mirrors Flutter's QueryLayout.ResultPreviewWidthRatio
+	// (default 0.4). previewScrollOffset shifts the preview content vertically.
+	currentPreview      *plugin.WoxPreview
+	resultPreviewRatio  float32
+	previewScrollOffset float32
+	previewImgPNG       []byte
+	previewImgKey       string
+	previewImgLoading   bool
+	previewUnwrapping   bool
 }
 
 // NewGpuUI creates a native launcher UI config. The actual Direct2D window
 // is created lazily in Run() to ensure it happens on the OS main thread.
 func NewGpuUI(ctx context.Context, wsUI *uiImpl) (*gpuUIImpl, error) {
 	g := &gpuUIImpl{
-		theme: ui.DefaultTheme(),
-		wsUI:  wsUI,
+		theme:               ui.DefaultTheme(),
+		wsUI:                wsUI,
+		resultPreviewRatio: defaultResultPreviewRatio,
 	}
 	return g, nil
 }
+
+// defaultResultPreviewRatio mirrors the Flutter launcher's default of 0.4
+// (result list gets 60% of the width, preview gets 40%). A query's
+// QueryLayout.ResultPreviewWidthRatio overrides this per-query.
+const defaultResultPreviewRatio = 0.4
 
 // Run starts the native message loop. Blocks until the window is closed.
 // Must be called on the OS main thread (via mainthread.Call).
@@ -143,17 +164,23 @@ func (g *gpuUIImpl) handleEvent(ev ui.Event) {
 			if g.selectedIdx < len(g.results)-1 {
 				g.selectedIdx++
 				g.dirty = true
+				g.mu.Unlock()
+				g.syncCurrentPreview(ctx)
+				g.requestRepaint()
+			} else {
+				g.mu.Unlock()
 			}
-			g.mu.Unlock()
-			g.requestRepaint()
 		case ui.KeyUp:
 			g.mu.Lock()
 			if g.selectedIdx > 0 {
 				g.selectedIdx--
 				g.dirty = true
+				g.mu.Unlock()
+				g.syncCurrentPreview(ctx)
+				g.requestRepaint()
+			} else {
+				g.mu.Unlock()
 			}
-			g.mu.Unlock()
-			g.requestRepaint()
 		case ui.KeyEnter:
 			g.mu.Lock()
 			if g.selectedIdx >= 0 && g.selectedIdx < len(g.results) {
@@ -172,6 +199,9 @@ func (g *gpuUIImpl) handleEvent(ev ui.Event) {
 		g.mu.Unlock()
 		// Trigger a new query
 		g.triggerQuery(ctx)
+
+	case ui.EventScroll:
+		g.handleScroll(ctx, ev)
 
 	case ui.EventFocusLost:
 		g.mu.Lock()
@@ -238,6 +268,55 @@ func (g *gpuUIImpl) buildAndRender(ctx context.Context) *ui.CommandList {
 		}
 	}
 
+	// Build the result area. When the active result has a preview, the result
+	// list and preview panel share the width horizontally (results on the left,
+	// preview on the right) according to resultPreviewRatio. Without a preview
+	// the list takes the full width.
+	listBox := ui.ListBox{
+		ID:            "results",
+		ItemHeight:    t.ListItemHeight,
+		Items:         items,
+		ScrollOffset:  g.scrollOffset,
+		Selected:      g.selectedIdx,
+		SelectedColor: &t.SelectedBg,
+	}
+
+	var resultArea ui.Widget
+	if g.currentPreview != nil && !g.currentPreview.IsEmpty() {
+		// The HBox lives inside the root VBox whose inner width excludes the
+		// window padding on both sides, so compute the split from the inner
+		// width, not the full window width.
+		innerW := float32(winW) - t.WindowPadding*2
+		resultW := innerW * (1 - g.resultPreviewRatio)
+		previewW := innerW * g.resultPreviewRatio
+		listBox.Width = resultW
+		previewPanel := ui.PreviewPanel{
+			ID:           "preview",
+			PreviewType:  g.currentPreview.PreviewType,
+			PreviewData:  g.currentPreview.PreviewData,
+			PreviewTags:  toUIPreviewTags(g.currentPreview.PreviewTags),
+			ScrollOffset: g.previewScrollOffset,
+			BgColor:      &t.PreviewBg,
+			SplitColor:   t.PreviewSplitLineColor,
+			FontColor:    t.PreviewFontColor,
+			FontSize:     t.FontSize,
+			FontFamily:   t.FontFamily,
+			ImagePNG:     g.previewImgPNG,
+			ImageKey:     g.previewImgKey,
+			Width:        previewW,
+		}
+		resultArea = ui.HBox{
+			Gap:     0,
+			Padding: 0,
+			Children: []ui.Widget{
+				listBox,
+				previewPanel,
+			},
+		}
+	} else {
+		resultArea = listBox
+	}
+
 	root := ui.VBox{
 		Padding: t.WindowPadding,
 		Gap:     12,
@@ -253,14 +332,7 @@ func (g *gpuUIImpl) buildAndRender(ctx context.Context) *ui.CommandList {
 				Value:        g.queryValue,
 				Focused:      true,
 			},
-			ui.ListBox{
-				ID:            "results",
-				ItemHeight:    t.ListItemHeight,
-				Items:         items,
-				ScrollOffset:  g.scrollOffset,
-				Selected:      g.selectedIdx,
-				SelectedColor: &t.SelectedBg,
-			},
+			resultArea,
 		},
 	}
 
@@ -292,6 +364,7 @@ func (g *gpuUIImpl) resizeWindowHeight() {
 	g.mu.Lock()
 	t := g.theme
 	itemCount := len(g.results)
+	hasPreview := g.currentPreview != nil && !g.currentPreview.IsEmpty()
 	lastCommittedHeight := g.committedWindowHeight
 	g.mu.Unlock()
 
@@ -307,6 +380,16 @@ func (g *gpuUIImpl) resizeWindowHeight() {
 	}
 	gap := float32(12)
 	total := queryBoxH + gap + resultH + pad
+	// When a preview is visible, give the launcher a minimum height so the
+	// preview area has enough room to be useful even when there are few results.
+	// This matches the Flutter launcher behavior where preview-only queries
+	// still reserve a usable surface.
+	if hasPreview {
+		minPreviewH := queryBoxH + gap + maxResultH + pad
+		if total < minPreviewH {
+			total = minPreviewH
+		}
+	}
 	minH := queryBoxH + pad
 	if total < minH {
 		total = minH
@@ -444,6 +527,12 @@ func (g *gpuUIImpl) triggerQuery(ctx context.Context) {
 				g.results = nil
 				g.selectedIdx = 0
 				g.scrollOffset = 0
+				g.currentPreview = nil
+				g.previewScrollOffset = 0
+				g.previewImgPNG = nil
+				g.previewImgKey = ""
+				g.previewImgLoading = false
+				g.previewUnwrapping = false
 				g.dirty = true
 				g.clearResultsTimer = nil
 				shouldRepaint = true
@@ -456,6 +545,12 @@ func (g *gpuUIImpl) triggerQuery(ctx context.Context) {
 		g.clearResultsTimer = clearTimer
 		g.selectedIdx = 0
 		g.scrollOffset = 0
+		g.currentPreview = nil
+		g.previewScrollOffset = 0
+		g.previewImgPNG = nil
+		g.previewImgKey = ""
+		g.previewImgLoading = false
+		g.previewUnwrapping = false
 		g.dirty = true
 		g.mu.Unlock()
 
@@ -465,6 +560,9 @@ func (g *gpuUIImpl) triggerQuery(ctx context.Context) {
 		resultChan, fallbackReadyChan, doneChan := plugin.GetPluginManager().Query(queryCtx, q)
 
 		var allResults []plugin.QueryResultUI
+		// firstResponse tracks whether we've seen the first QueryResponse so we
+		// can apply its QueryLayout.ResultPreviewWidthRatio once per query.
+		firstResponse := true
 		for {
 			select {
 			case response := <-resultChan:
@@ -478,11 +576,26 @@ func (g *gpuUIImpl) triggerQuery(ctx context.Context) {
 					g.clearResultsTimer.Stop()
 					g.clearResultsTimer = nil
 				}
+				// Apply the per-query result/preview width ratio from the first
+				// response that carries a Layout. Subsequent responses keep the
+				// ratio already applied; a null ratio falls back to the default.
+				if firstResponse {
+					if response.Layout.ResultPreviewWidthRatio != nil {
+						r := float32(*response.Layout.ResultPreviewWidthRatio)
+						if r > 0 {
+							g.resultPreviewRatio = r
+						}
+					} else {
+						g.resultPreviewRatio = defaultResultPreviewRatio
+					}
+					firstResponse = false
+				}
 				g.results = allResults
 				g.dirty = true
 				g.mu.Unlock()
 				g.rasterizeIconsInBackground(allResults)
 				g.resizeWindowHeight()
+				g.syncCurrentPreview(queryCtx)
 			case <-fallbackReadyChan:
 				// drain any pending results
 				for {
@@ -508,6 +621,7 @@ func (g *gpuUIImpl) triggerQuery(ctx context.Context) {
 				g.mu.Unlock()
 				g.rasterizeIconsInBackground(allResults)
 				g.resizeWindowHeight()
+				g.syncCurrentPreview(queryCtx)
 			case <-doneChan:
 				// drain any final results
 				for {
@@ -533,6 +647,7 @@ func (g *gpuUIImpl) triggerQuery(ctx context.Context) {
 				g.mu.Unlock()
 				g.rasterizeIconsInBackground(allResults)
 				g.resizeWindowHeight()
+				g.syncCurrentPreview(queryCtx)
 				logger.Info(queryCtx, fmt.Sprintf("gpuUI query done: %d results", len(allResults)))
 				return
 			case <-time.After(time.Minute):
@@ -811,4 +926,195 @@ func (g *gpuUIImpl) SetResults(ctx context.Context, results []plugin.QueryResult
 	g.mu.Unlock()
 	g.rasterizeIconsInBackground(results)
 	g.resizeWindowHeight()
+	g.syncCurrentPreview(ctx)
+}
+
+// ── Preview support ─────────────────────────────────────────────────────
+
+// toUIPreviewTags converts plugin preview tags to the ui package's PreviewTag.
+// Allocation-free when there are no tags.
+func toUIPreviewTags(tags []plugin.WoxPreviewTag) []ui.PreviewTag {
+	if len(tags) == 0 {
+		return nil
+	}
+	out := make([]ui.PreviewTag, len(tags))
+	for i, t := range tags {
+		out[i] = ui.PreviewTag{Label: t.Label, Tooltip: t.Tooltip}
+	}
+	return out
+}
+
+// syncCurrentPreview updates currentPreview from the active result and kicks
+// off any async work (image rasterization / remote unwrap) the new preview
+// needs. Safe to call when no results are selected (clears the preview).
+func (g *gpuUIImpl) syncCurrentPreview(ctx context.Context) {
+	g.mu.Lock()
+	if g.selectedIdx < 0 || g.selectedIdx >= len(g.results) {
+		g.currentPreview = nil
+		g.previewImgPNG = nil
+		g.previewImgKey = ""
+		g.previewImgLoading = false
+		g.previewUnwrapping = false
+		g.previewScrollOffset = 0
+		g.dirty = true
+		g.mu.Unlock()
+		return
+	}
+
+	preview := g.results[g.selectedIdx].Preview
+	if preview.IsEmpty() {
+		g.currentPreview = nil
+		g.previewImgPNG = nil
+		g.previewImgKey = ""
+		g.previewImgLoading = false
+		g.previewUnwrapping = false
+		g.previewScrollOffset = 0
+		g.dirty = true
+		g.mu.Unlock()
+		return
+	}
+
+	// Capture a copy so async goroutines don't race with result replacement.
+	previewCopy := preview
+	g.currentPreview = &previewCopy
+	g.previewScrollOffset = 0
+	g.previewImgPNG = nil
+	g.previewImgKey = ""
+	g.previewImgLoading = false
+	g.previewUnwrapping = false
+	previewType := previewCopy.PreviewType
+	g.dirty = true
+	g.mu.Unlock()
+
+	switch previewType {
+	case plugin.WoxPreviewTypeImage:
+		g.rasterizePreviewImageInBackground(previewCopy)
+	case plugin.WoxPreviewTypeRemote:
+		g.unwrapRemotePreview(ctx, previewCopy)
+	}
+}
+
+// rasterizePreviewImageInBackground converts the preview's WoxImage (stored in
+// PreviewData as "type:data") to PNG on a goroutine so the render thread never
+// blocks on image decoding. The result is written back to previewImgPNG/Key
+// and a repaint is requested.
+func (g *gpuUIImpl) rasterizePreviewImageInBackground(preview plugin.WoxPreview) {
+	g.mu.Lock()
+	g.previewImgLoading = true
+	g.mu.Unlock()
+
+	go func() {
+		img := common.ParseWoxImageString(preview.PreviewData)
+		if img.IsEmpty() {
+			g.mu.Lock()
+			g.previewImgLoading = false
+			g.mu.Unlock()
+			return
+		}
+		// Preview images can be large; use a generous size cap so they fit the
+		// panel without decoding at full photo resolution.
+		png, key := ui.RasterizeWoxImageWithSizeAndKey(img, 400)
+		g.mu.Lock()
+		// Only commit if the current preview is still the same one we rasterized.
+		if g.currentPreview != nil && g.currentPreview.PreviewType == plugin.WoxPreviewTypeImage &&
+			g.currentPreview.PreviewData == preview.PreviewData {
+			g.previewImgPNG = png
+			g.previewImgKey = key
+			g.previewImgLoading = false
+			g.dirty = true
+		}
+		g.mu.Unlock()
+		g.requestRepaint()
+	}()
+}
+
+// unwrapRemotePreview fetches the real preview via HTTP when core wrapped a
+// large preview as WoxPreviewTypeRemote. The PreviewData is a relative URL
+// like "/preview?sessionId=...&queryId=...&id=...". On success the returned
+// WoxPreview replaces currentPreview and any image/text handling runs as if
+// the preview had arrived inline.
+func (g *gpuUIImpl) unwrapRemotePreview(ctx context.Context, remote plugin.WoxPreview) {
+	g.mu.Lock()
+	g.previewUnwrapping = true
+	g.mu.Unlock()
+
+	go func() {
+		port := GetUIManager().serverPort
+		url := "http://127.0.0.1:" + strconv.Itoa(port) + remote.PreviewData
+
+		resp, err := http.Get(url)
+		if err != nil {
+			logger.Error(ctx, fmt.Sprintf("unwrap remote preview: %s", err.Error()))
+			g.mu.Lock()
+			g.previewUnwrapping = false
+			g.mu.Unlock()
+			return
+		}
+		defer resp.Body.Close()
+
+		var real plugin.WoxPreview
+		if err := json.NewDecoder(resp.Body).Decode(&real); err != nil {
+			logger.Error(ctx, fmt.Sprintf("decode remote preview: %s", err.Error()))
+			g.mu.Lock()
+			g.previewUnwrapping = false
+			g.mu.Unlock()
+			return
+		}
+
+		g.mu.Lock()
+		// Only apply if the user hasn't moved to a different result meanwhile.
+		if g.currentPreview != nil && g.currentPreview.PreviewType == plugin.WoxPreviewTypeRemote &&
+			g.currentPreview.PreviewData == remote.PreviewData {
+			g.currentPreview = &real
+			g.previewUnwrapping = false
+			g.dirty = true
+			previewType := real.PreviewType
+			g.mu.Unlock()
+			switch previewType {
+			case plugin.WoxPreviewTypeImage:
+				g.rasterizePreviewImageInBackground(real)
+			}
+			g.requestRepaint()
+			return
+		}
+		g.previewUnwrapping = false
+		g.mu.Unlock()
+	}()
+}
+
+// handleScroll routes mouse-wheel scrolling to the preview panel when the
+// cursor is over the preview area, otherwise to the result list. This mirrors
+// the Flutter launcher where each pane scrolls independently.
+func (g *gpuUIImpl) handleScroll(ctx context.Context, ev ui.Event) {
+	g.mu.Lock()
+	hasPreview := g.currentPreview != nil && !g.currentPreview.IsEmpty()
+	// Preview occupies the right portion of the window (after the window padding).
+	innerW := float32(ev.Width)
+	previewStartX := innerW * (1 - g.resultPreviewRatio)
+	if !hasPreview {
+		previewStartX = innerW + 1 // never match
+	}
+
+	if hasPreview && ev.X >= previewStartX {
+		// Scroll preview. DeltaY < 0 means scroll up (wheel up).
+		delta := -ev.DeltaY * 40
+		g.previewScrollOffset += delta
+		if g.previewScrollOffset < 0 {
+			g.previewScrollOffset = 0
+		}
+		g.dirty = true
+		g.mu.Unlock()
+		g.requestRepaint()
+		return
+	}
+
+	// Scroll result list.
+	delta := -ev.DeltaY * 40
+	g.scrollOffset += delta
+	if g.scrollOffset < 0 {
+		g.scrollOffset = 0
+	}
+	g.dirty = true
+	g.mu.Unlock()
+	g.requestRepaint()
 }
