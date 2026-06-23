@@ -75,6 +75,7 @@ type Manager struct {
 	queryHotkeySettings  []setting.QueryHotkey
 	globalHotkeyMu       sync.Mutex
 	ui                   common.UI
+	gpuUI                *gpuUIImpl // non-nil when using native renderer
 	serverPort           int
 	uiProcess            *os.Process
 	uiStopRequested      atomic.Bool
@@ -98,11 +99,28 @@ func GetUIManager() *Manager {
 		managerInstance = &Manager{}
 		managerInstance.mainHotkey = &hotkey.Hotkey{}
 		managerInstance.selectionHotkey = &hotkey.Hotkey{}
-		managerInstance.ui = &uiImpl{
+
+		// Create the WebSocket UI impl first — it's used as the delegate
+		// for settings/onboarding/screenshot methods.
+		wsUI := &uiImpl{
 			requestMap:      util.NewHashMap[string, chan WebsocketMsg](),
-			isVisible:       false, // Initially hidden
+			isVisible:       false,
 			isInSettingView: false,
 		}
+
+		// Create the native GPU UI impl for the launcher.
+		// On non-Windows platforms, NewGpuUI returns an error and we fall
+		// back to the WebSocket-only uiImpl.
+		ctx := util.NewTraceContext()
+		gpuUI, err := NewGpuUI(ctx, wsUI)
+		if err != nil {
+			logger.Warn(ctx, fmt.Sprintf("failed to create native UI, falling back to WebSocket UI: %s", err.Error()))
+			managerInstance.ui = wsUI
+		} else {
+			managerInstance.ui = gpuUI
+			managerInstance.gpuUI = gpuUI
+		}
+
 		terminal.GetSessionManager().SetEmitter(func(ctx context.Context, uiSessionID string, method string, data any) {
 			responseUI(ctx, WebsocketMsg{
 				RequestId: uuid.NewString(),
@@ -117,6 +135,11 @@ func GetUIManager() *Manager {
 		logger = util.GetLogger()
 	})
 	return managerInstance
+}
+
+// GpuUI returns the native GPU UI instance, or nil if using WebSocket UI.
+func (m *Manager) GpuUI() *gpuUIImpl {
+	return m.gpuUI
 }
 
 func (m *Manager) Start(ctx context.Context) error {

@@ -317,6 +317,20 @@ func run() {
 	}
 
 	if util.IsProd() {
+		// Native UI: if gpuUI is active, run its message loop on the main thread.
+		// mainthread.Init runs run() in a goroutine, so we must use mainthread.Call
+		// to get the native message loop onto the real OS main thread (required by Direct2D).
+		if gpuUI := ui.GetUIManager().GpuUI(); gpuUI != nil {
+			util.Go(ctx, "start websocket server", func() {
+				ui.GetUIManager().StartWebsocketAndWait(ctx)
+			})
+			util.GetLogger().Info(ctx, "starting native UI on main thread via mainthread.Call")
+			mainthread.Call(func() {
+				gpuUI.Run(ctx)
+			})
+			return
+		}
+
 		util.Go(ctx, "start ui", func() {
 			time.Sleep(time.Millisecond * 200) // wait websocket server start
 			appErr := ui.GetUIManager().StartUIApp(ctx)

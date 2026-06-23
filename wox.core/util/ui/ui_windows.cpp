@@ -552,14 +552,64 @@ static void ExecuteCommands(UIWindow* win, const CDrawCommand* cmds, int32_t cou
         }
 
         case CmdDrawImage: {
-            // TODO: decode PNG via WIC and draw as bitmap
-            // For now, draw a placeholder rect
-            ID2D1SolidColorBrush* brush = GetBrush(win, ToColorF(0.3f, 0.6f, 1.0f, 0.8f));
-            if (brush) {
-                win->rt->FillRoundedRectangle(
-                    D2D1::RoundedRect(ToRectF(cmd->x, cmd->y, cmd->w, cmd->h), 4, 4), brush);
-                brush->Release();
+            if (!cmd->imageData || cmd->imageLen <= 0 || !win->wicFactory) break;
+
+            // Decode PNG via WIC
+            IWICStream* stream = NULL;
+            HRESULT hr = win->wicFactory->CreateStream(&stream);
+            if (FAILED(hr) || !stream) break;
+            hr = stream->InitializeFromMemory((BYTE*)cmd->imageData, (DWORD)cmd->imageLen);
+            if (FAILED(hr)) { stream->Release(); break; }
+
+            IWICBitmapDecoder* decoder = NULL;
+            hr = win->wicFactory->CreateDecoderFromStream(stream, NULL,
+                WICDecodeMetadataCacheOnLoad, &decoder);
+            if (FAILED(hr) || !decoder) { stream->Release(); break; }
+
+            IWICBitmapFrameDecode* frame = NULL;
+            hr = decoder->GetFrame(0, &frame);
+            if (FAILED(hr) || !frame) { decoder->Release(); stream->Release(); break; }
+
+            UINT srcW = 0, srcH = 0;
+            frame->GetSize(&srcW, &srcH);
+
+            // Convert to 32bppPBGRA for Direct2D
+            IWICFormatConverter* converter = NULL;
+            hr = win->wicFactory->CreateFormatConverter(&converter);
+            if (FAILED(hr) || !converter) {
+                frame->Release(); decoder->Release(); stream->Release(); break;
             }
+            hr = converter->Initialize(frame, GUID_WICPixelFormat32bppPBGRA,
+                WICBitmapDitherTypeNone, NULL, 0.0, WICBitmapPaletteTypeCustom);
+            if (FAILED(hr)) {
+                converter->Release(); frame->Release(); decoder->Release(); stream->Release(); break;
+            }
+
+            // Create Direct2D bitmap from WIC converter
+            float w = cmd->w > 0 ? cmd->w : (float)srcW;
+            float h = cmd->h > 0 ? cmd->h : (float)srcH;
+
+            D2D1_BITMAP_PROPERTIES bmpProps = {};
+            bmpProps.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
+            bmpProps.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
+            bmpProps.dpiX = win->dpi;
+            bmpProps.dpiY = win->dpi;
+
+            ID2D1Bitmap* bitmap = NULL;
+            hr = win->rt->CreateBitmapFromWicBitmap(converter, &bmpProps, &bitmap);
+
+            if (SUCCEEDED(hr) && bitmap) {
+                // Draw bitmap scaled to target size
+                D2D1_RECT_F destRect = ToRectF(cmd->x, cmd->y, w, h);
+                win->rt->DrawBitmap(bitmap, destRect, 1.0f,
+                    D2D1_BITMAP_INTERPOLATION_MODE_LINEAR, NULL);
+                bitmap->Release();
+            }
+
+            converter->Release();
+            frame->Release();
+            decoder->Release();
+            stream->Release();
             break;
         }
 

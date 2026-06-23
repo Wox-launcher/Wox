@@ -18,7 +18,7 @@ var HostFS embed.FS
 //go:embed lang
 var LangFS embed.FS
 
-//go:embed ui
+//go:embed ui/themes
 var UIFS embed.FS
 
 //go:embed app.png
@@ -48,18 +48,10 @@ func Extract(ctx context.Context) error {
 		return extractHostErr
 	}
 
-	// ui
-	uiDiretory := util.GetLocation().GetUIDirectory()
-	if util.IsDirExists(uiDiretory) {
-		rmErr := os.RemoveAll(uiDiretory)
-		if rmErr != nil {
-			return rmErr
-		}
-	}
-	flutterErr := extractFiles(ctx, UIFS, uiDiretory, "ui/flutter", true)
-	if flutterErr != nil {
-		return flutterErr
-	}
+	// ui — Flutter UI is no longer embedded for the native launcher build.
+	// Settings Flutter process (if needed) loads from external directory.
+	// uiDiretory := util.GetLocation().GetUIDirectory()
+	// (extraction skipped — no embedded Flutter binary)
 
 	// others
 	othersDirectory := util.GetLocation().GetOthersDirectory()

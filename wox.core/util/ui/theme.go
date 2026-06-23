@@ -30,40 +30,57 @@ var (
 )
 
 // Theme holds the visual parameters that drive the draw command generation.
-// Future versions will load this from Wox's JSON theme format.
+// Loaded from Wox's JSON theme format via ThemeFromWoxTheme().
 type Theme struct {
-	WindowBg       Color
-	WindowRadius   float32
-	QueryBoxBg     Color
-	QueryBoxRadius float32
-	QueryBoxHeight float32
-	ListItemHeight float32
-	ListItemGap    float32
-	SelectedBg     Color
-	TextPrimary    Color
-	TextSecondary  Color
+	WindowBg        Color
+	WindowRadius    float32
+	WindowPadding   float32
+
+	QueryBoxBg      Color
+	QueryBoxRadius  float32
+	QueryBoxHeight  float32
+	QueryBoxFontColor Color
+	QueryBoxCursorColor Color
+
+	ListItemHeight     float32
+	ListItemRadius     float32
+	ListItemPadLeft    float32
+	ListItemPadTop     float32
+	SelectedBg         Color
+	SelectedTitleColor Color
+	SelectedSubColor   Color
+
+	TextPrimary     Color
+	TextSecondary   Color
 	TextPlaceholder Color
-	CursorColor    Color
-	FontSize       float32
-	FontFamily     string
+	CursorColor     Color
+	FontSize        float32
+	FontFamily      string
 }
 
 // DefaultTheme returns a dark theme matching the current Wox launcher look.
 func DefaultTheme() Theme {
 	return Theme{
-		WindowBg:        ColorBackground,
-		WindowRadius:    12,
-		QueryBoxBg:      RGBA(1, 1, 1, 0.06),
-		QueryBoxRadius:  8,
-		QueryBoxHeight:  44,
-		ListItemHeight:  48,
-		ListItemGap:     0,
-		SelectedBg:      ColorSelected,
-		TextPrimary:     ColorTextPrimary,
-		TextSecondary:   ColorTextSecondary,
-		TextPlaceholder: ColorTextPlaceholder,
-		CursorColor:     ColorCursor,
-		FontSize:        16,
-		FontFamily:      "", // system default
+		WindowBg:          ColorBackground,
+		WindowRadius:      12,
+		WindowPadding:     10,
+		QueryBoxBg:        RGBA(1, 1, 1, 0.06),
+		QueryBoxRadius:    8,
+		QueryBoxHeight:    44,
+		QueryBoxFontColor: ColorTextPrimary,
+		QueryBoxCursorColor: ColorCursor,
+		ListItemHeight:    48,
+		ListItemRadius:    4,
+		ListItemPadLeft:   4,
+		ListItemPadTop:    2,
+		SelectedBg:        ColorSelected,
+		SelectedTitleColor: RGB(1, 1, 1),
+		SelectedSubColor:  ColorTextPrimary,
+		TextPrimary:       ColorTextPrimary,
+		TextSecondary:     ColorTextSecondary,
+		TextPlaceholder:   ColorTextPlaceholder,
+		CursorColor:       ColorCursor,
+		FontSize:          16,
+		FontFamily:        "",
 	}
 }
