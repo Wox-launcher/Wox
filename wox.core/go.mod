@@ -39,9 +39,9 @@ require (
 	github.com/zalando/go-keyring v0.2.1
 	go.uber.org/zap v1.27.1
 	golang.org/x/crypto v0.44.0
-	golang.org/x/image v0.34.0
-	golang.org/x/sync v0.19.0
-	golang.org/x/sys v0.39.0
+	golang.org/x/image v0.43.0
+	golang.org/x/sync v0.21.0
+	golang.org/x/sys v0.46.0
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.31.1
 	howett.net/plist v1.0.1
@@ -68,7 +68,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
-	golang.org/x/text v0.32.0 // indirect
+	golang.org/x/text v0.38.0 // indirect
 	google.golang.org/protobuf v1.36.8 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
