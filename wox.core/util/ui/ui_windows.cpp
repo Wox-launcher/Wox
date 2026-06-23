@@ -419,22 +419,36 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
     }
 
     case WM_APP_SHOW: {
-        // Cross-thread show request: posted by uiWindowShow from a goroutine.
-        // Running ShowWindow on the main thread avoids races with the message
-        // loop and lets DWM re-attach the Mica material reliably.
         if (win) {
-            ShowWindow(hwnd, SW_SHOW);
-            win->visible = true;
-            g_framesSinceShow = 0;
-
             DWORD build = GetWindowsBuildNumberCpp();
             if (build >= 22000) {
+                // Re-assert DWM backdrop before showing.
                 int backdrop = 3; // DWMSBT_TABBEDWINDOW (Mica Alt)
                 DwmSetWindowAttribute(hwnd, 38, &backdrop, sizeof(backdrop));
                 BOOL useDark = win->darkMode ? TRUE : FALSE;
                 DwmSetWindowAttribute(hwnd, 20, &useDark, sizeof(useDark));
+                MARGINS margins = { -1 };
+                DwmExtendFrameIntoClientArea(hwnd, &margins);
             }
-            MicaLog("WM_APP_SHOW: ShowWindow + re-asserted DWM backdrop");
+
+            ShowWindow(hwnd, SW_SHOW);
+            win->visible = true;
+            g_framesSinceShow = 0;
+
+            // Force DWM to re-evaluate the system backdrop after SW_SHOW.
+            // A +1/-1 height nudge with SWP_FRAMECHANGED creates a real
+            // WM_SIZE cycle that makes DWM re-attach the Mica material.
+            // This mirrors the Flutter runner's delayedResizeRepaintNudge.
+            RECT rc;
+            if (GetWindowRect(hwnd, &rc)) {
+                int w = rc.right - rc.left;
+                int h = rc.bottom - rc.top;
+                SetWindowPos(hwnd, NULL, rc.left, rc.top, w, h + 1,
+                    SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+                SetWindowPos(hwnd, NULL, rc.left, rc.top, w, h,
+                    SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+            }
+            MicaLog("WM_APP_SHOW: ShowWindow + DWM backdrop + +1/-1 nudge");
         }
         return 0;
     }
@@ -449,8 +463,6 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
     }
 
     case WM_APP_REPAINT: {
-        // Just having a message in the queue is enough — RunMessageLoop will
-        // call onRender() after uiPumpMessages returns true.
         return 0;
     }
 

@@ -28,14 +28,11 @@ func (e *LayoutEngine) Layout(root Widget, winW, winH float32) LayoutResult {
 		clip:     clipStack{{0, 0, winW, winH}},
 	}
 
-	// Transparent backgrounds should expose the system backdrop instead of
-	// painting a full-window Direct2D tint over it.
+	// Use the theme background color directly, including its alpha. A
+	// translucent background (e.g. glass-dark rgba 0.52) tints the Mica
+	// backdrop with the theme's color instead of leaving it fully transparent.
 	bg := e.Theme.WindowBg
-	if bg.A < 1 {
-		result.Commands.Clear(0, 0, 0, 0)
-	} else {
-		result.Commands.Clear(bg.R, bg.G, bg.B, bg.A)
-	}
+	result.Commands.Clear(bg.R, bg.G, bg.B, bg.A)
 
 	// Root widget must be a container (VBox or HBox).
 	e.layoutWidget(&ctx, root, 0, 0, winW, winH)
