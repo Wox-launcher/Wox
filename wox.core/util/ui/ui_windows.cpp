@@ -1225,7 +1225,7 @@ static void ExecuteCommands(UIWindow* win, const CDrawCommand* cmds, int32_t cou
     // Present(0, 0) does not wait for VSync — the DWM compositor handles
     // frame timing. VSync-waiting here (Present(1,0)) blocks the message loop
     // for ~16ms per frame, delaying input processing and worsening judder.
-    hr = win->swapChain->Present(1, 0);
+    hr = win->swapChain->Present(0, 0);
     HRESULT commitHr = S_OK;
     if (win->dcompDevice) {
         commitHr = win->dcompDevice->Commit();

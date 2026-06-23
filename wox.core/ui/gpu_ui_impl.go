@@ -54,6 +54,8 @@ type gpuUIImpl struct {
 	// the pending-result placeholder can preserve the launcher geometry during
 	// fast typing (mirrors the Flutter committedWindowHeight).
 	committedWindowHeight float32
+	pendingWindowHeight   float32
+	resizeTimer           *time.Timer
 
 	// lastResultCount and lastWinSize track the previous frame's state so
 	// buildAndRender can skip the full-window Clear when only result content
@@ -273,6 +275,7 @@ func (g *gpuUIImpl) buildAndRender(ctx context.Context) *ui.CommandList {
 // maxResultCount returns the configured maximum number of visible results,
 // defaulting to 8 (the same default as WoxSetting.MaxResultCount).
 const defaultMaxResultCount = 8
+const shrinkWindowDelay = 120 * time.Millisecond
 
 // resizeWindowHeight sets the native window size to match the current result
 // count. Called after results arrive so the launcher grows/shrinks with the
@@ -289,6 +292,7 @@ func (g *gpuUIImpl) resizeWindowHeight() {
 	g.mu.Lock()
 	t := g.theme
 	itemCount := len(g.results)
+	lastCommittedHeight := g.committedWindowHeight
 	g.mu.Unlock()
 
 	pad := t.WindowPadding * 2
@@ -310,18 +314,57 @@ func (g *gpuUIImpl) resizeWindowHeight() {
 	targetH := total
 
 	// Skip if the target height hasn't changed since the last commit.
-	if g.committedWindowHeight > 0 && g.committedWindowHeight == targetH {
+	if lastCommittedHeight > 0 && lastCommittedHeight == targetH {
+		g.requestRepaint()
 		return
 	}
 
+	if lastCommittedHeight > 0 && targetH < lastCommittedHeight {
+		g.mu.Lock()
+		if g.resizeTimer != nil {
+			g.resizeTimer.Stop()
+		}
+		currentQueryId := g.currentQuery.Id
+		g.pendingWindowHeight = targetH
+		g.resizeTimer = time.AfterFunc(shrinkWindowDelay, func() {
+			g.mu.Lock()
+			shouldResize := g.currentQuery.Id == currentQueryId && g.pendingWindowHeight == targetH
+			if shouldResize {
+				g.resizeTimer = nil
+			}
+			g.mu.Unlock()
+			if shouldResize {
+				g.applyWindowHeight(targetH)
+			}
+		})
+		g.mu.Unlock()
+		g.requestRepaint()
+		return
+	}
+
+	g.mu.Lock()
+	if g.resizeTimer != nil {
+		g.resizeTimer.Stop()
+		g.resizeTimer = nil
+	}
+	g.pendingWindowHeight = 0
+	g.mu.Unlock()
+	g.applyWindowHeight(targetH)
+}
+
+// applyWindowHeight commits a native height resize and marks the next frame dirty.
+func (g *gpuUIImpl) applyWindowHeight(targetH float32) {
 	woxSetting := setting.GetSettingManager().GetWoxSetting(util.NewTraceContext())
 	width := woxSetting.AppWidth.Get()
 	if width <= 0 {
 		width = 750
 	}
-
 	g.renderer.SetSize(width, int(targetH))
+	g.mu.Lock()
 	g.committedWindowHeight = targetH
+	g.pendingWindowHeight = 0
+	g.dirty = true
+	g.mu.Unlock()
 }
 
 // requestRepaint posts a repaint message to the native message loop so the
@@ -363,13 +406,17 @@ func (g *gpuUIImpl) rasterizeIconsInBackground(results []plugin.QueryResultUI) {
 
 // triggerQuery starts a new plugin query with the current query text.
 func (g *gpuUIImpl) triggerQuery(ctx context.Context) {
-	go func() {
+	g.mu.Lock()
+	queryText := g.queryValue
+	g.mu.Unlock()
+
+	go func(queryText string) {
 		queryCtx := util.NewTraceContext()
 		queryId := uuid.NewString()
 		plainQuery := common.PlainQuery{
 			QueryId:   queryId,
 			QueryType: plugin.QueryTypeInput,
-			QueryText: g.queryValue,
+			QueryText: queryText,
 		}
 		q, ownerPlugin, err := plugin.GetPluginManager().NewQuery(queryCtx, plainQuery)
 		if err != nil {
@@ -389,19 +436,24 @@ func (g *gpuUIImpl) triggerQuery(ctx context.Context) {
 			g.clearResultsTimer.Stop()
 		}
 		currentQueryId := q.Id
-		g.clearResultsTimer = time.AfterFunc(80*time.Millisecond, func() {
+		var clearTimer *time.Timer
+		clearTimer = time.AfterFunc(80*time.Millisecond, func() {
+			shouldRepaint := false
 			g.mu.Lock()
-			if g.currentQuery.Id == currentQueryId {
+			if g.currentQuery.Id == currentQueryId && g.clearResultsTimer == clearTimer {
 				g.results = nil
 				g.selectedIdx = 0
 				g.scrollOffset = 0
 				g.dirty = true
+				g.clearResultsTimer = nil
+				shouldRepaint = true
 			}
 			g.mu.Unlock()
-			if g.currentQuery.Id == currentQueryId {
-				g.resizeWindowHeight()
+			if shouldRepaint {
+				g.requestRepaint()
 			}
 		})
+		g.clearResultsTimer = clearTimer
 		g.selectedIdx = 0
 		g.scrollOffset = 0
 		g.dirty = true
@@ -415,12 +467,17 @@ func (g *gpuUIImpl) triggerQuery(ctx context.Context) {
 		var allResults []plugin.QueryResultUI
 		for {
 			select {
-		case response := <-resultChan:
+			case response := <-resultChan:
 				allResults = append(allResults, response.Results...)
+				g.mu.Lock()
+				if g.currentQuery.Id != currentQueryId {
+					g.mu.Unlock()
+					return
+				}
 				if g.clearResultsTimer != nil {
 					g.clearResultsTimer.Stop()
+					g.clearResultsTimer = nil
 				}
-				g.mu.Lock()
 				g.results = allResults
 				g.dirty = true
 				g.mu.Unlock()
@@ -437,10 +494,15 @@ func (g *gpuUIImpl) triggerQuery(ctx context.Context) {
 					}
 				}
 			fallbackDone:
+				g.mu.Lock()
+				if g.currentQuery.Id != currentQueryId {
+					g.mu.Unlock()
+					return
+				}
 				if g.clearResultsTimer != nil {
 					g.clearResultsTimer.Stop()
+					g.clearResultsTimer = nil
 				}
-				g.mu.Lock()
 				g.results = allResults
 				g.dirty = true
 				g.mu.Unlock()
@@ -457,10 +519,15 @@ func (g *gpuUIImpl) triggerQuery(ctx context.Context) {
 					}
 				}
 			queryDone:
+				g.mu.Lock()
+				if g.currentQuery.Id != currentQueryId {
+					g.mu.Unlock()
+					return
+				}
 				if g.clearResultsTimer != nil {
 					g.clearResultsTimer.Stop()
+					g.clearResultsTimer = nil
 				}
-				g.mu.Lock()
 				g.results = allResults
 				g.dirty = true
 				g.mu.Unlock()
@@ -469,11 +536,11 @@ func (g *gpuUIImpl) triggerQuery(ctx context.Context) {
 				logger.Info(queryCtx, fmt.Sprintf("gpuUI query done: %d results", len(allResults)))
 				return
 			case <-time.After(time.Minute):
-				logger.Info(queryCtx, fmt.Sprintf("gpuUI query timeout: %s", g.queryValue))
+				logger.Info(queryCtx, fmt.Sprintf("gpuUI query timeout: %s", queryText))
 				return
 			}
 		}
-	}()
+	}(queryText)
 }
 
 // executeResult triggers the selected result's default action.
