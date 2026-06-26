@@ -890,5 +890,27 @@
         "plugin_description": "查看 FIFA 2026 世界杯赛程、赛果和实时比分。"
       }
     }
+  },
+  {
+    "Id": "c1d2e3f4-a5b6-7c8d-9e0f-1a2b3c4d5e6f",
+    "Name": "VSCode Projects",
+    "Author": "hopsiedev",
+    "Version": "1.0.1",
+    "MinWoxVersion": "2.0.0",
+    "Runtime": "script",
+    "Description": "Quickly create, open and manage your VSCode projects",
+    "IconEmoji": "💻",
+    "Website": "https://github.com/hopsiedev/Wox.Plugin.VSCodeProjects",
+    "DownloadUrl": "https://raw.githubusercontent.com/hopsiedev/Wox.Plugin.VSCodeProjects/main/Wox.Plugin.Script.VSCodeProjects.py",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/hopsiedev/Wox.Plugin.VSCodeProjects/main/preview.png"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
+    "DateCreated": "2026-06-26 00:00:00",
+    "DateUpdated": "2026-06-26 00:00:00"
   }
 ]
