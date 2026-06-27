@@ -25,10 +25,20 @@ const (
 	DoctorCheckLinuxInputGroup        DoctorCheckType = "linuxInputGroup"
 )
 
+type DoctorCheckSeverity string
+
+const (
+	DoctorCheckSeverityDefault DoctorCheckSeverity = ""
+	DoctorCheckSeverityWarning DoctorCheckSeverity = "warning"
+)
+
 type DoctorCheckResult struct {
 	Name   string
 	Type   DoctorCheckType
 	Passed bool
+	// Severity controls the visual state in the doctor query without changing
+	// whether a check should be treated as a blocking launcher warning.
+	Severity DoctorCheckSeverity
 	// Ignored is true when the user has dismissed this check type. Ignored
 	// checks are skipped in the launcher toolbar but still appear in the
 	// doctor query so the user can un-ignore them.
@@ -145,6 +155,20 @@ func translateDoctorCheckText(ctx context.Context, text string) string {
 }
 
 func checkWoxVersion(ctx context.Context) DoctorCheckResult {
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	if woxSetting != nil && !woxSetting.EnableAutoUpdate.Get() {
+		return DoctorCheckResult{
+			Name:        i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_doctor_version"),
+			Type:        DoctorCheckUpdate,
+			Passed:      true,
+			Severity:    DoctorCheckSeverityWarning,
+			Description: i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_doctor_version_auto_update_disabled"),
+			ActionName:  "",
+			Action: func(ctx context.Context, actionContext ActionContext) {
+			},
+		}
+	}
+
 	updateInfo := updater.GetUpdateInfo()
 	if updateInfo.Status == updater.UpdateStatusError || updateInfo.UpdateError != nil {
 		description := i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version_update_error")

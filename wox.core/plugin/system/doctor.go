@@ -51,6 +51,9 @@ func (r *DoctorPlugin) Query(ctx context.Context, query plugin.Query) plugin.Que
 		if check.Passed {
 			icon = common.CorrectIcon
 		}
+		if check.Severity == plugin.DoctorCheckSeverityWarning {
+			icon = common.StarIcon
+		}
 
 		actions := []plugin.QueryResultAction{
 			{
