@@ -2058,9 +2058,15 @@ class WoxLauncherController extends GetxController {
     if (!isInSettingView.value) {
       await windowManager.setAlwaysOnTop(true);
     }
+    if (Platform.isWindows) {
+      Logger.instance.debug(traceId, "windows showApp before native show/focus");
+    }
     await windowManager.show();
     final visibleActivationCost = _captureDevLauncherVisibleActivationCost(params);
     await windowManager.focus();
+    if (Platform.isWindows) {
+      Logger.instance.debug(traceId, "windows showApp after initial native focus");
+    }
 
     // Workaround for Windows DWM Acrylic bug:
     // When resizing a hidden window to its full height, DWM caching fails to compose the transparent alpha channel upon showing.
@@ -2077,7 +2083,7 @@ class WoxLauncherController extends GetxController {
       });
     }
 
-    unawaited(_focusQueryBoxAfterLauncherShow(selectAll: params.selectAll));
+    unawaited(_focusQueryBoxAfterLauncherShow(traceId: traceId, selectAll: params.selectAll));
     unawaited(_showDevLauncherActivationWarningIfSlow(traceId, visibleActivationCost));
 
     if (params.isQueryFocus) {
@@ -2402,8 +2408,17 @@ class WoxLauncherController extends GetxController {
   /// Focuses the active launcher keyboard target.
   /// Hidden-query preview mode has no editable query box, so it needs a stable
   /// launcher-level focus node to keep Escape and other global keys reachable.
-  Future<void> focusLauncherKeyboardTarget({bool selectAll = false, bool Function()? shouldSelectAll}) async {
+  Future<void> focusLauncherKeyboardTarget({bool selectAll = false, bool Function()? shouldSelectAll, bool ensureNativeWindowFocus = false}) async {
     if (isQueryBoxVisible.value) {
+      // Windows can briefly lose OS foreground after show; the delayed launcher focus retry
+      // may need to reclaim native focus before asking Flutter's query box to accept input.
+      if (ensureNativeWindowFocus && Platform.isWindows) {
+        final isVisible = await windowManager.isVisible();
+        if (!isVisible) {
+          return;
+        }
+        await windowManager.focus();
+      }
       await focusQueryBox(selectAll: selectAll, shouldSelectAll: shouldSelectAll);
       return;
     }
@@ -2484,10 +2499,13 @@ class WoxLauncherController extends GetxController {
     return queryBoxTextFieldController.text == textBeforeFocusSequence;
   }
 
-  Future<void> _focusQueryBoxAfterLauncherShow({required bool selectAll}) async {
+  Future<void> _focusQueryBoxAfterLauncherShow({required String traceId, required bool selectAll}) async {
     final focusToken = ++_visibleLauncherFocusToken;
     final textBeforeFocusSequence = queryBoxTextFieldController.text;
 
+    if (Platform.isWindows) {
+      Logger.instance.debug(traceId, "windows launcher focus sequence start: token=$focusToken, textLength=${textBeforeFocusSequence.length}");
+    }
     await focusLauncherKeyboardTarget(
       selectAll: selectAll,
       shouldSelectAll: () => _shouldSelectAllForVisibleLauncherFocus(selectAll: selectAll, focusToken: focusToken, textBeforeFocusSequence: textBeforeFocusSequence),
@@ -2506,8 +2524,10 @@ class WoxLauncherController extends GetxController {
           if (focusToken != _visibleLauncherFocusToken) {
             return;
           }
+          Logger.instance.debug(traceId, "windows launcher delayed native focus retry: token=$focusToken");
           await focusLauncherKeyboardTarget(
             selectAll: selectAll,
+            ensureNativeWindowFocus: true,
             shouldSelectAll: () => _shouldSelectAllForVisibleLauncherFocus(selectAll: selectAll, focusToken: focusToken, textBeforeFocusSequence: textBeforeFocusSequence),
           );
         }),
@@ -4395,7 +4415,7 @@ class WoxLauncherController extends GetxController {
     // focus has finished. Await the first focus request so callers and smoke
     // tests observe the real postcondition, then keep the delayed retry for
     // platforms that report window focus before the launcher text field rebuilds.
-    await _focusQueryBoxAfterLauncherShow(selectAll: true);
+    await _focusQueryBoxAfterLauncherShow(traceId: traceId, selectAll: true);
   }
 
   Future<void> openOnboarding(String traceId) async {

@@ -79,6 +79,38 @@ FlutterWindow *g_window_instance = nullptr;
 static std::once_flag g_gdiplus_init_once;
 static ULONG_PTR g_gdiplus_token = 0;
 
+// Formats HWND values for focus diagnostics without relying on platform-specific printf width.
+static std::string FormatHwnd(HWND hwnd)
+{
+  if (hwnd == nullptr)
+  {
+    return "null";
+  }
+
+  std::ostringstream stream;
+  stream << "0x" << std::hex << std::uppercase << reinterpret_cast<uintptr_t>(hwnd);
+  return stream.str();
+}
+
+// Captures the foreground/focus state around Windows show/focus/blur transitions.
+static std::string FormatFocusSnapshot(HWND selfHwnd, HWND childHwnd)
+{
+  const HWND foreground = GetForegroundWindow();
+  const HWND foreground_root = foreground == nullptr ? nullptr : GetAncestor(foreground, GA_ROOT);
+  const HWND thread_focus = GetFocus();
+  const bool is_foreground = foreground == selfHwnd || foreground == childHwnd || foreground_root == selfHwnd;
+
+  std::ostringstream stream;
+  stream << "self=" << FormatHwnd(selfHwnd)
+         << " child=" << FormatHwnd(childHwnd)
+         << " foreground=" << FormatHwnd(foreground)
+         << " foregroundRoot=" << FormatHwnd(foreground_root)
+         << " threadFocus=" << FormatHwnd(thread_focus)
+         << " visible=" << (IsWindowVisible(selfHwnd) ? "true" : "false")
+         << " isForeground=" << (is_foreground ? "true" : "false");
+  return stream.str();
+}
+
 // GetWindowsBuildNumberForCapabilities mirrors the backdrop support check without
 // exposing Win32Window internals to the Flutter method channel.
 static DWORD GetWindowsBuildNumberForCapabilities()
@@ -1459,6 +1491,7 @@ void FlutterWindow::NotifyWindowBlur(HWND selfHwnd, HWND activatedHwnd, const ch
 {
   if (activatedHwnd != nullptr && ShouldSuppressBlurForActivatedWindow(selfHwnd, activatedHwnd))
   {
+    Log(std::string(source) + ": blur suppressed (activated Wox window) activated=" + FormatHwnd(activatedHwnd) + " " + FormatFocusSnapshot(selfHwnd, child_window_));
     return;
   }
 
@@ -1467,24 +1500,25 @@ void FlutterWindow::NotifyWindowBlur(HWND selfHwnd, HWND activatedHwnd, const ch
   {
     if (blur_guard_active_)
     {
-      Log(std::string(source) + ": blur suppressed (show-to-focus transition)");
+      Log(std::string(source) + ": blur suppressed (show-to-focus transition) activated=" + FormatHwnd(activatedHwnd) + " " + FormatFocusSnapshot(selfHwnd, child_window_));
     }
     else
     {
-      Log(std::string(source) + ": blur suppressed (post-show grace)");
+      Log(std::string(source) + ": blur suppressed (post-show grace) activated=" + FormatHwnd(activatedHwnd) + " " + FormatFocusSnapshot(selfHwnd, child_window_));
     }
     return;
   }
 
   if (blur_event_sent_since_focus_)
   {
-    Log(std::string(source) + ": duplicate blur suppressed");
+    Log(std::string(source) + ": duplicate blur suppressed activated=" + FormatHwnd(activatedHwnd) + " " + FormatFocusSnapshot(selfHwnd, child_window_));
     return;
   }
 
   blur_event_sent_since_focus_ = true;
   restore_previous_window_on_hide_ = false;
   previous_active_window_ = nullptr;
+  Log(std::string(source) + ": send onWindowBlur activated=" + FormatHwnd(activatedHwnd) + " " + FormatFocusSnapshot(selfHwnd, child_window_));
   SendWindowEvent("onWindowBlur");
 }
 
@@ -5533,6 +5567,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
     else if (method_name == "show")
     {
       SavePreviousActiveWindow(hwnd);
+      Log("Show: before ShowWindow previous=" + FormatHwnd(previous_active_window_) + " " + FormatFocusSnapshot(hwnd, child_window_));
 
       // Flush stale keyboard state before showing the window.
       // If the previous hide-flush was ineffective (e.g. the engine dropped
@@ -5549,6 +5584,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       blur_guard_until_tick_ = GetTickCount64() + kPostShowBlurGraceMs;
       blur_event_sent_since_focus_ = false;
       ShowWindow(hwnd, SW_SHOW);
+      Log("Show: after ShowWindow " + FormatFocusSnapshot(hwnd, child_window_));
       result->Success();
     }
     else if (method_name == "hide")
@@ -5609,6 +5645,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
 
       // Save current foreground window before bringing Wox to front.
       SavePreviousActiveWindow(hwnd);
+      Log("Focus: begin previous=" + FormatHwnd(previous_active_window_) + " " + FormatFocusSnapshot(hwnd, child_window_));
 
       // Optimization: Try SetForegroundWindow directly first.
       // If we already have permission or are in foreground, this avoids AttachThreadInput
@@ -5617,6 +5654,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       {
         FocusFlutterViewOrRoot(hwnd);
         BringWindowToTop(hwnd);
+        Log("Focus: direct SetForegroundWindow succeeded " + FormatFocusSnapshot(hwnd, child_window_));
         blur_guard_active_ = false;
         blur_event_sent_since_focus_ = false;
         result->Success();
@@ -5648,12 +5686,13 @@ void FlutterWindow::HandleWindowManagerMethodCall(
 
       if (GetForegroundWindow() == hwnd)
       {
-        Log("Focus: use attach thread input");
+        Log("Focus: use attach thread input " + FormatFocusSnapshot(hwnd, child_window_));
         blur_guard_active_ = false;
         blur_event_sent_since_focus_ = false;
         result->Success();
         return;
       }
+      Log(std::string("Focus: attach thread input did not foreground Wox attached=") + (attached ? "true " : "false ") + FormatFocusSnapshot(hwnd, child_window_));
 
       INPUT pInputs[2];
       ZeroMemory(pInputs, sizeof(INPUT));
@@ -5675,7 +5714,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
 
       if (GetForegroundWindow() == hwnd)
       {
-        Log("Focus: use Alt key injection");
+        Log("Focus: use Alt key injection " + FormatFocusSnapshot(hwnd, child_window_));
         blur_guard_active_ = false;
         blur_event_sent_since_focus_ = false;
         result->Success();
@@ -5684,10 +5723,10 @@ void FlutterWindow::HandleWindowManagerMethodCall(
 
       Log("Focus: both methods failed, trying AllowSetForegroundWindow");
       AllowSetForegroundWindow(ASFW_ANY);
-      SetForegroundWindow(hwnd);
+      const BOOL final_set_foreground_result = SetForegroundWindow(hwnd);
       FocusFlutterViewOrRoot(hwnd);
 
-      Log("Focus: final attempt completed");
+      Log(std::string("Focus: final attempt completed setForeground=") + (final_set_foreground_result ? "true " : "false ") + FormatFocusSnapshot(hwnd, child_window_));
       blur_guard_active_ = false;
       blur_event_sent_since_focus_ = false;
       result->Success();
