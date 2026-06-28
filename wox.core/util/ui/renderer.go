@@ -45,11 +45,20 @@ type WindowLifecycle interface {
 	IsVisible() bool
 }
 
-// NativeRenderer merges Renderer, WindowLifecycle, and the extra methods the
-// gpuUIImpl needs from the platform backend. Each platform (Windows/macOS)
-// implements this via CGO and asserts conformance at compile time.
-// gpuUIImpl holds a NativeRenderer so it does not need a platform-specific
-// concrete type and can share the same code path across OSes.
+// NativeRenderer is the platform-agnostic interface implemented by each
+// native backend. gpuUIImpl holds a NativeRenderer so it does not need a
+// platform-specific concrete type and can share the same code path across OSes.
+//
+// To add a new platform (e.g. Linux):
+//  1. Create ui_<platform>.go (build tag: <platform> && cgo) with a renderer
+//     struct embedding baseRenderer.
+//  2. Create ui_<platform>.c with the platform's implementation of the
+//     uiWindow* and uiMeasureText functions declared in ui_native.h.
+//  3. Implement NewNativeRenderer to return the platform renderer.
+//  4. Implement StartEventLoop (GTK main loop, X11 event pipe, etc.).
+//  5. No changes needed to gpuUIImpl, LayoutEngine, Widget, Theme, or any
+//     other shared Go-side logic — the baseRenderer and ui_native.h
+//     abstraction handle all the shared plumbing.
 type NativeRenderer interface {
 	Renderer
 	WindowLifecycle
@@ -68,8 +77,17 @@ type NativeRenderer interface {
 	// RequestRepaint triggers a native repaint of the window surface.
 	RequestRepaint()
 
-	// RunMessageLoop enters the native message loop. On Windows this blocks
-	// until Close/WM_QUIT; on macOS it just stores onRender and returns so
-	// the Cocoa event loop ([NSApp run]) continues driving rendering.
-	RunMessageLoop(onRender func() *CommandList)
+	// StartEventLoop begins the platform's native event loop and registers
+	// an onRender callback for frame production.
+	//
+	// Blocking semantics differ by platform — callers must NOT depend on
+	// whether this method returns:
+	//   - Windows: blocks until Close() is called (Win32 GetMessage loop)
+	//   - macOS:   returns immediately (Cocoa [NSApp run] already running)
+	//   - Linux:   TBD (GTK main loop or GLib frame clock)
+	//
+	// The onRender callback is invoked when the platform requests a frame.
+	// It returns nil when the window is hidden or nothing changed; the
+	// platform decides whether to present.
+	StartEventLoop(onRender func() *CommandList)
 }

@@ -84,14 +84,16 @@ const (
 )
 
 // Modifiers holds keyboard modifier state.
+// Values match the native ABI defined in ui_native.h (ModShift=1, etc.)
+// so Go and C sides agree without translation.
 type Modifiers int32
 
 const (
 	ModNone    Modifiers = 0
-	ModShift   Modifiers = 1 << iota
-	ModControl
-	ModAlt
-	ModSuper
+	ModShift   Modifiers = 1
+	ModControl Modifiers = 2
+	ModAlt     Modifiers = 4
+	ModSuper   Modifiers = 8
 )
 
 // Event is an input event from the native layer.

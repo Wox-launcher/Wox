@@ -2,21 +2,24 @@
 
 #define WIN32_LEAN_AND_MEAN
 #define INITGUID
+
+// Single source of truth for the Go<->C ABI: shared struct definitions,
+// command/event/key enums, and function declarations.
+#include "ui_native.h"
+
 #include <windows.h>
 #include <windowsx.h>
 #include <dwmapi.h>
 #include <d2d1.h>
 #include <d2d1_1.h>   // ID2D1Factory1, ID2D1Device, ID2D1DeviceContext, ID2D1Bitmap1
 #include <d3d11.h>     // D3D11CreateDevice, ID3D11Device
-#include <dxgi1_2.h>   // IDXGISwapChain1, CreateSwapChainForComposition
-#include <dxgi1_3.h>   // CreateDXGIFactory2 (DXGI 1.3+ supports debug factory flag)
-#include <dcomp.h>     // DCompositionCreateDevice, IDComposition*
+#include <dxgi1_2.h>  // IDXGISwapChain1, CreateSwapChainForComposition
+#include <dxgi1_3.h>  // CreateDXGIFactory2 (DXGI 1.3+ supports debug factory flag)
+#include <dcomp.h>    // DCompositionCreateDevice, IDComposition*
 #include <dwrite.h>
 #include <wincodec.h>
 #include <objbase.h>
 #include <initguid.h>
-#include <stdint.h>
-#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -65,79 +68,12 @@ static void MicaLogInit(void) {
 
 // Custom messages posted from other goroutines to drive show/hide/repaint on
 // the main thread. Posting to the message queue is thread-safe and ensures
-// the action runs inside RunMessageLoop's GetMessage dispatch, avoiding
+// the action runs inside StartEventLoop's GetMessage dispatch, avoiding
 // cross-thread Win32 window calls that race with the message loop.
 #define WM_APP_SHOW    (WM_APP + 1)
 #define WM_APP_HIDE    (WM_APP + 2)
 #define WM_APP_REPAINT (WM_APP + 3)
 #define WM_APP_RESIZE  (WM_APP + 4)
-
-typedef struct {
-    int32_t cmd_type;
-    float x, y, w, h;
-    float r, g, b, a;
-    float radius;
-    float strokeWidth;
-    const char* text;
-    int32_t textLen;
-    float fontSize;
-    const char* fontFamily;
-    int32_t fontFamilyLen;
-    const uint8_t* imageData;
-    int32_t imageLen;
-    const char* imageKey;
-    int32_t imageKeyLen;
-    float imageWidth, imageHeight;
-} CDrawCommand;
-
-typedef struct {
-    int32_t width;
-    int32_t height;
-    float cornerRadius;
-    bool frameless;
-    bool transparent;
-    bool darkMode;   // tell DWM to render Mica/Acrylic in dark tone
-} CWindowConfig;
-
-typedef struct {
-    float width;
-    float height;
-} CMeasureResult;
-
-// Command types (must match Go CommandType constants)
-enum {
-    CmdClear = 0,
-    CmdDrawRect = 1,
-    CmdDrawRoundedRect = 2,
-    CmdDrawText = 3,
-    CmdDrawImage = 4,
-    CmdDrawLine = 5,
-    CmdPushClip = 6,
-    CmdPopClip = 7,
-    CmdSetClipRect = 8,
-};
-
-// Event types (must match Go EventType constants)
-enum {
-    EventKeyPress = 0,
-    EventKeyRelease = 1,
-    EventTextInput = 2,
-    EventIMECompose = 3,
-    EventClick = 4,
-    EventScroll = 5,
-    EventFocusLost = 6,
-    EventResize = 7,
-};
-
-// ── Forward declarations ────────────────────────────────────────────────
-
-// uiEventCallback is implemented in Go (via //export) with C linkage.
-// In C++ we must declare it extern "C" to avoid name mangling.
-extern "C" void uiEventCallback(int32_t windowId, int32_t eventType, int32_t key, int32_t mods,
-    char* text, int32_t textLen,
-    char* composeText, int32_t composeTextLen, int32_t composeCursor,
-    float x, float y, float deltaY,
-    int32_t width, int32_t height);
 
 // ── DPI awareness ───────────────────────────────────────────────────────
 

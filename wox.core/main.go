@@ -316,31 +316,44 @@ func run() {
 		}
 	}
 
-	// Native UI: if gpuUI is active, run its message loop on the main thread.
-	// mainthread.Init runs run() in a goroutine, so we must use mainthread.Call
-	// to get the native message loop onto the real OS main thread (required by Direct2D).
+	// Native UI: if gpuUI is active, try to create the native renderer on the
+	// main thread first. Only if that succeeds do we start the WebSocket server
+	// and enter the event loop — this avoids starting the server twice when
+	// the native renderer is unavailable (fallback path starts it once).
 	if gpuUI := ui.GetUIManager().GpuUI(); gpuUI != nil {
-		util.Go(ctx, "start websocket server", func() {
-			ui.GetUIManager().StartWebsocketAndWait(ctx)
-		})
-		util.GetLogger().Info(ctx, "starting native UI on main thread via mainthread.Call")
-		// On macOS, gpuUI.Run creates the NSPanel on the main thread and
-		// returns immediately (RunMessageLoop is a no-op — the Cocoa event
-		// loop [NSApp run] is already running via mainthread.Init). Blocking
-		// here would freeze dispatch_async blocks and prevent all UI
-		// operations. On Windows, Run blocks in the Win32 message loop.
+		util.GetLogger().Info(ctx, "initializing native UI on main thread via mainthread.Call")
+
+		// Init creates the native renderer; it returns an error on platforms
+		// without native UI support, letting us fall through cleanly.
+		var initErr error
 		mainthread.Call(func() {
-			gpuUI.Run(ctx)
+			initErr = gpuUI.Init(ctx)
 		})
-		// On macOS Run returned immediately. Block the goroutine forever
-		// to keep the process alive — the Cocoa event loop runs on the real
-		// main thread (os_main → [NSApp run]) and ExitApp's os.Exit(0)
-		// terminates everything. On Windows Run blocked until quit so this
-		// line is unreachable there.
-		if runtime.GOOS != "windows" {
-			select {}
+
+		if initErr == nil {
+			// Native renderer is ready. Start the WebSocket server (for
+			// settings/onboarding/screenshot delegation) and enter the event loop.
+			util.Go(ctx, "start websocket server", func() {
+				ui.GetUIManager().StartWebsocketAndWait(ctx)
+			})
+
+			mainthread.Call(func() {
+				gpuUI.StartEventLoop(ctx)
+			})
+
+			// On macOS StartEventLoop returned immediately (it's a no-op — the
+			// Cocoa event loop [NSApp run] is already running via mainthread.Init).
+			// Block the goroutine forever to keep the process alive. On Windows
+			// StartEventLoop blocked until quit so this line is unreachable there.
+			if runtime.GOOS != "windows" {
+				select {}
+			}
+			return
 		}
-		return
+
+		// Native renderer unavailable — fall back to WebSocket UI.
+		util.GetLogger().Warn(ctx, fmt.Sprintf("native UI unavailable (%s), falling back to WebSocket UI", initErr.Error()))
+		ui.GetUIManager().ClearGpuUI()
 	}
 
 	// Fallback: no native renderer available (e.g. unsupported platform), use websocket UI.

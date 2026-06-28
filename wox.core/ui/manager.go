@@ -76,6 +76,7 @@ type Manager struct {
 	globalHotkeyMu       sync.Mutex
 	ui                   common.UI
 	gpuUI                *gpuUIImpl // non-nil when using native renderer
+	wsUI                 *uiImpl    // WebSocket UI delegate (settings/onboarding/screenshot)
 	serverPort           int
 	uiProcess            *os.Process
 	uiStopRequested      atomic.Bool
@@ -101,12 +102,14 @@ func GetUIManager() *Manager {
 		managerInstance.selectionHotkey = &hotkey.Hotkey{}
 
 		// Create the WebSocket UI impl first — it's used as the delegate
-		// for settings/onboarding/screenshot methods.
+		// for settings/onboarding/screenshot methods, and as the fallback
+		// when the native renderer is unavailable.
 		wsUI := &uiImpl{
 			requestMap:      util.NewHashMap[string, chan WebsocketMsg](),
 			isVisible:       false,
 			isInSettingView: false,
 		}
+		managerInstance.wsUI = wsUI
 
 		// Create the native GPU UI impl for the launcher.
 		// On platforms without a native renderer (Linux etc.) NewGpuUI succeeds
@@ -142,6 +145,14 @@ func GetUIManager() *Manager {
 // GpuUI returns the native GPU UI instance, or nil if using WebSocket UI.
 func (m *Manager) GpuUI() *gpuUIImpl {
 	return m.gpuUI
+}
+
+// ClearGpuUI switches the Manager back to the WebSocket UI when the native
+// renderer failed to initialize (e.g. on platforms without native UI support).
+// After this call, GpuUI() returns nil and all UI operations go through wsUI.
+func (m *Manager) ClearGpuUI() {
+	m.gpuUI = nil
+	m.ui = m.wsUI
 }
 
 func (m *Manager) Start(ctx context.Context) error {

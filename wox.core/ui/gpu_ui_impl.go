@@ -117,10 +117,12 @@ func NewGpuUI(ctx context.Context, wsUI *uiImpl) (*gpuUIImpl, error) {
 // QueryLayout.ResultPreviewWidthRatio overrides this per-query.
 const defaultResultPreviewRatio = 0.4
 
-// Run starts the native message loop. Blocks until the window is closed.
-// Must be called on the OS main thread (via mainthread.Call).
+// Init creates the native renderer and prepares the launcher window. It
+// returns an error if the native renderer cannot be created (e.g. platform
+// without native UI support); the caller should fall back to WebSocket UI
+// in that case. Must be called on the OS main thread (via mainthread.Call).
 // The window starts hidden if HideOnStart is enabled in settings.
-func (g *gpuUIImpl) Run(ctx context.Context) {
+func (g *gpuUIImpl) Init(ctx context.Context) error {
 	// Apply the user's currently selected theme before creating the renderer.
 	// Manager.Start loads themes into the registry but does not push the active
 	// theme to gpuUIImpl, so g.theme would stay at DefaultTheme (opaque) and
@@ -132,10 +134,12 @@ func (g *gpuUIImpl) Run(ctx context.Context) {
 	theme := g.theme
 
 	// Create the renderer now — this must be on the OS main thread.
-	renderer, err := ui.NewNativeRenderer(800, 400, theme)
+	// The event callback is injected here so the renderer owns it per-instance,
+	// eliminating the old package-global SetEventHandler.
+	renderer, err := ui.NewNativeRenderer(800, 400, theme, g.handleEvent)
 	if err != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to create native renderer: %s", err.Error()))
-		return
+		return err
 	}
 	g.renderer = renderer
 	g.engine = &ui.LayoutEngine{
@@ -143,11 +147,8 @@ func (g *gpuUIImpl) Run(ctx context.Context) {
 		Measurer: renderer.TextMeasurer(),
 	}
 
-	// Set up event handler
-	ui.SetEventHandler(g.handleEvent)
-
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	logger.Info(ctx, fmt.Sprintf("Run: HideOnStart=%v", woxSetting.HideOnStart.Get()))
+	logger.Info(ctx, fmt.Sprintf("Init: HideOnStart=%v", woxSetting.HideOnStart.Get()))
 	if !woxSetting.HideOnStart.Get() {
 		g.renderer.Show()
 		g.mu.Lock()
@@ -156,10 +157,17 @@ func (g *gpuUIImpl) Run(ctx context.Context) {
 		g.mu.Unlock()
 		g.requestRepaint()
 	} else {
-		logger.Info(ctx, "Run: window starts hidden, waiting for hotkey")
+		logger.Info(ctx, "Init: window starts hidden, waiting for hotkey")
 	}
 
-	g.renderer.RunMessageLoop(func() *ui.CommandList {
+	return nil
+}
+
+// StartEventLoop enters the native event loop. Must be called after a
+// successful Init, on the OS main thread. Blocking semantics differ by
+// platform — see NativeRenderer.StartEventLoop docs.
+func (g *gpuUIImpl) StartEventLoop(ctx context.Context) {
+	g.renderer.StartEventLoop(func() *ui.CommandList {
 		return g.buildAndRender(ctx)
 	})
 }

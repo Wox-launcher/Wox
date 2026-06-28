@@ -1,72 +1,15 @@
 //go:build darwin && cgo
 
+// Single source of truth for the Go<->C ABI: shared struct definitions,
+// command/event/key enums, and function declarations.
+#include "ui_native.h"
+
 #import <Cocoa/Cocoa.h>
 #import <QuartzCore/QuartzCore.h>
 #import <CoreText/CoreText.h>
 #import <ApplicationServices/ApplicationServices.h>
-#include <stdint.h>
-#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-
-// ── Types matching the Go CGO declarations ──────────────────────────────
-
-typedef struct {
-    int32_t cmd_type;
-    float x, y, w, h;
-    float r, g, b, a;
-    float radius;
-    float strokeWidth;
-    const char* text;
-    int32_t textLen;
-    float fontSize;
-    const char* fontFamily;
-    int32_t fontFamilyLen;
-    const uint8_t* imageData;
-    int32_t imageLen;
-    const char* imageKey;
-    int32_t imageKeyLen;
-    float imageWidth, imageHeight;
-} CDrawCommand;
-
-typedef struct {
-    int32_t width;
-    int32_t height;
-    float cornerRadius;
-    bool frameless;
-    bool transparent;
-    bool darkMode;
-} CWindowConfig;
-
-typedef struct {
-    float width;
-    float height;
-} CMeasureResult;
-
-// Command types (must match Go CommandType constants)
-enum {
-    CmdClear = 0,
-    CmdDrawRect = 1,
-    CmdDrawRoundedRect = 2,
-    CmdDrawText = 3,
-    CmdDrawImage = 4,
-    CmdDrawLine = 5,
-    CmdPushClip = 6,
-    CmdPopClip = 7,
-    CmdSetClipRect = 8,
-};
-
-// Event types (must match Go EventType constants)
-enum {
-    EventKeyPress = 0,
-    EventKeyRelease = 1,
-    EventTextInput = 2,
-    EventIMECompose = 3,
-    EventClick = 4,
-    EventScroll = 5,
-    EventFocusLost = 6,
-    EventResize = 7,
-};
 
 // Map macOS keyCode to our Key enum. Values are the Carbon kVK_* virtual key
 // codes (see HIToolbox/Events.h); we inline them to avoid importing the
@@ -88,31 +31,6 @@ enum {
     kVK_PageUp_v           = 0x74,
     kVK_PageDown_v         = 0x79,
 };
-
-// Key enum values (must match Go Key constants, KeyUnknown=0)
-enum {
-    KeyEscape = 1,
-    KeyEnter = 2,
-    KeyBackspace = 3,
-    KeyTab = 4,
-    KeySpace = 5,
-    KeyUp = 6,
-    KeyDown = 7,
-    KeyLeft = 8,
-    KeyRight = 9,
-    KeyHome = 10,
-    KeyEnd = 11,
-    KeyPageUp = 12,
-    KeyPageDown = 13,
-    KeyDelete = 14,
-};
-
-// Forward declaration of the Go callback implemented via //export.
-extern void uiEventCallback(int32_t windowId, int32_t eventType, int32_t key, int32_t mods,
-    char* text, int32_t textLen,
-    char* composeText, int32_t composeTextLen, int32_t composeCursor,
-    float x, float y, float deltaY,
-    int32_t width, int32_t height);
 
 // drawRect: calls into Go to retrieve the latest command list and execute it
 // immediately on the current graphics context.
