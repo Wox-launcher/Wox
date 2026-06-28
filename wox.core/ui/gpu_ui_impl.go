@@ -51,6 +51,14 @@ type gpuUIImpl struct {
 	// EventIMECompose so composeValue stays empty there.
 	composeValue string
 
+	// Cursor / selection state for the query box. cursorPos is the byte offset
+	// of the caret; selStart/selEnd delimit the selection (-1 means no selection).
+	cursorPos     int
+	selStart      int
+	selEnd        int
+	cursorVisible bool
+	cursorTimer   *time.Timer
+
 	// dirty is set whenever results, query text, selection, or theme change.
 	// buildAndRender only produces draw commands when dirty is true, avoiding
 	// unnecessary full-window redraws (which cause the selected item to flicker
@@ -98,6 +106,16 @@ type gpuUIImpl struct {
 	previewImgKey       string
 	previewImgLoading   bool
 	previewUnwrapping   bool
+
+	// Toolbar state. currentToolbarMsg holds the plugin toolbar message (if any).
+	// hideToolbar is set by ShowContext.HideToolbar to suppress the toolbar
+	// entirely (e.g. for hotkey configs that request no chrome).
+	currentToolbarMsg *plugin.ToolbarMsgUI
+	hideToolbar       bool
+
+	// toolbarActionRects stores the screen-space rects of toolbar action buttons
+	// from the last layout pass, used for click hit-testing.
+	toolbarActionRects []float32 // flat [x0,y0,x1,y1, x0,y0,x1,y1, ...]
 }
 
 // NewGpuUI creates a native launcher UI config. The actual native window
@@ -131,6 +149,9 @@ func (g *gpuUIImpl) Init(ctx context.Context) error {
 	if currentTheme.ThemeId != "" {
 		g.theme = ui.ThemeFromWoxTheme(GetUIManager().resolvePlatformTheme(ctx, currentTheme))
 	}
+	// Apply density-scaled toolbar height so the window geometry matches
+	// the selected UI density (compact/normal/comfortable).
+	g.theme.ToolbarHeight = float32(DensityToolbarHeight(ctx))
 	theme := g.theme
 
 	// Create the renderer now — this must be on the OS main thread.
@@ -188,6 +209,7 @@ func (g *gpuUIImpl) handleEvent(ev ui.Event) {
 				g.selectedIdx++
 				g.dirty = true
 				g.mu.Unlock()
+				g.syncScrollOffsetWithSelection()
 				g.syncCurrentPreview(ctx)
 				g.requestRepaint()
 			} else {
@@ -199,6 +221,7 @@ func (g *gpuUIImpl) handleEvent(ev ui.Event) {
 				g.selectedIdx--
 				g.dirty = true
 				g.mu.Unlock()
+				g.syncScrollOffsetWithSelection()
 				g.syncCurrentPreview(ctx)
 				g.requestRepaint()
 			} else {
@@ -213,36 +236,37 @@ func (g *gpuUIImpl) handleEvent(ev ui.Event) {
 				return
 			}
 			g.mu.Unlock()
+		case ui.KeyLeft:
+			g.moveCursorLeft(ev.Mods)
+		case ui.KeyRight:
+			g.moveCursorRight(ev.Mods)
+		case ui.KeyHome:
+			g.moveCursorHome(ev.Mods)
+		case ui.KeyEnd:
+			g.moveCursorEnd(ev.Mods)
+		case ui.KeyDelete:
+			g.deleteForward(ctx)
+		case ui.KeyA:
+			if ev.Mods&ui.ModControl != 0 || ev.Mods&ui.ModSuper != 0 {
+				g.selectAll()
+			}
 		}
 
 	case ui.EventTextInput:
-		g.mu.Lock()
-		// macOS sends IME composition updates via EventIMECompose; when the
-		// input method commits, the final text arrives here. Clear the
-		// composition buffer first so it does not appear twice in the query
-		// box. Windows never sends EventIMECompose, so composeValue is empty
-		// there and this clear is a no-op.
-		g.composeValue = ""
-		g.queryValue += ev.Text
-		g.dirty = true
-		g.mu.Unlock()
-		// Trigger a new query
-		g.triggerQuery(ctx)
+		g.insertText(ctx, ev.Text)
 
 	case ui.EventIMECompose:
-		// Update the in-progress IME composition text. Does not modify
-		// queryValue — the composition is appended to it only for display in
-		// buildAndRender (queryValue + composeValue). When the IME commits,
-		// EventTextInput appends to queryValue and resets composeValue.
 		g.mu.Lock()
 		g.composeValue = ev.ComposeText
 		g.dirty = true
 		g.mu.Unlock()
-		// Don't trigger a new query — composition is not committed text yet.
 		g.requestRepaint()
 
 	case ui.EventScroll:
 		g.handleScroll(ctx, ev)
+
+	case ui.EventClick:
+		g.handleClick(ctx, ev)
 
 	case ui.EventFocusLost:
 		g.mu.Lock()
@@ -250,6 +274,7 @@ func (g *gpuUIImpl) handleEvent(ev ui.Event) {
 		g.visible = false
 		g.mu.Unlock()
 		if wasVisible {
+			g.stopCursorBlink()
 			g.releaseHiddenMemory()
 			GetUIManager().PostOnHide(ctx)
 		}
@@ -257,17 +282,270 @@ func (g *gpuUIImpl) handleEvent(ev ui.Event) {
 
 	// Handle backspace outside the switch since it comes as KeyPress not TextInput
 	if ev.Type == ui.EventKeyPress && ev.Key == ui.KeyBackspace {
-		g.mu.Lock()
-		if len(g.queryValue) > 0 {
-			runes := []rune(g.queryValue)
-			g.queryValue = string(runes[:len(runes)-1])
-			g.dirty = true
-			g.mu.Unlock()
-			g.triggerQuery(ctx)
-		} else {
-			g.mu.Unlock()
-		}
+		g.handleBackspace(ctx, ev.Mods)
 	}
+}
+
+// blinkCursor toggles cursor visibility and requests a repaint. Driven by
+// cursorTimer, which is reset on each tick while the window is visible.
+func (g *gpuUIImpl) blinkCursor() {
+	g.mu.Lock()
+	g.cursorVisible = !g.cursorVisible
+	g.dirty = true
+	visible := g.visible
+	g.mu.Unlock()
+	if visible {
+		g.requestRepaint()
+		g.mu.Lock()
+		if g.cursorTimer != nil {
+			g.cursorTimer.Reset(blinkInterval)
+		}
+		g.mu.Unlock()
+	}
+}
+
+// startCursorBlink begins the blink cycle, making the caret visible and
+// scheduling the first toggle. Safe to call repeatedly; the timer is only
+// created once.
+func (g *gpuUIImpl) startCursorBlink() {
+	g.mu.Lock()
+	g.cursorVisible = true
+	if g.cursorTimer == nil {
+		t := time.AfterFunc(blinkInterval, g.blinkCursor)
+		g.cursorTimer = t
+	} else {
+		g.cursorTimer.Reset(blinkInterval)
+	}
+	g.mu.Unlock()
+}
+
+// stopCursorBlink stops the blink timer and hides the caret.
+func (g *gpuUIImpl) stopCursorBlink() {
+	g.mu.Lock()
+	if g.cursorTimer != nil {
+		g.cursorTimer.Stop()
+		g.cursorTimer = nil
+	}
+	g.cursorVisible = false
+	g.mu.Unlock()
+}
+
+// blinkInterval is the caret blink rate (530ms, matching platform conventions).
+const blinkInterval = 530 * time.Millisecond
+
+// clearSelection resets the selection range to "no selection".
+func (g *gpuUIImpl) clearSelection() {
+	g.selStart = -1
+	g.selEnd = -1
+}
+
+// selectAll selects the entire query text and moves the caret to the end.
+func (g *gpuUIImpl) selectAll() {
+	g.mu.Lock()
+	if len(g.queryValue) > 0 {
+		g.selStart = 0
+		g.selEnd = len(g.queryValue)
+		g.cursorPos = g.selEnd
+		g.cursorVisible = true
+		g.dirty = true
+	}
+	g.mu.Unlock()
+	g.requestRepaint()
+}
+
+// moveCursorLeft moves the caret one rune left. With Shift held, the selection
+// extends instead of collapsing.
+func (g *gpuUIImpl) moveCursorLeft(mods ui.Modifiers) {
+	g.mu.Lock()
+	runes := []rune(g.queryValue)
+	// Convert cursorPos (byte offset) to rune index
+	byteIdx := g.cursorPos
+	runeIdx := len([]rune(g.queryValue[:byteIdx]))
+	if runeIdx > 0 {
+		runeIdx--
+		newByteIdx := len(string(runes[:runeIdx]))
+		if mods&ui.ModShift != 0 {
+			// Extend selection
+			if g.selStart < 0 {
+				g.selStart = g.cursorPos
+				g.selEnd = g.cursorPos
+			}
+			if g.cursorPos == g.selEnd && g.cursorPos > g.selStart {
+				g.selEnd = newByteIdx
+			} else if g.cursorPos == g.selStart {
+				g.selStart = newByteIdx
+			} else {
+				g.selStart = newByteIdx
+				g.selEnd = g.cursorPos
+			}
+		} else {
+			g.clearSelection()
+		}
+		g.cursorPos = newByteIdx
+		g.cursorVisible = true
+		g.dirty = true
+	} else if mods&ui.ModShift == 0 {
+		g.clearSelection()
+		g.dirty = true
+	}
+	g.mu.Unlock()
+	g.requestRepaint()
+}
+
+// moveCursorRight moves the caret one rune right.
+func (g *gpuUIImpl) moveCursorRight(mods ui.Modifiers) {
+	g.mu.Lock()
+	runes := []rune(g.queryValue)
+	byteIdx := g.cursorPos
+	runeIdx := len([]rune(g.queryValue[:byteIdx]))
+	if runeIdx < len(runes) {
+		runeIdx++
+		newByteIdx := len(string(runes[:runeIdx]))
+		if mods&ui.ModShift != 0 {
+			if g.selStart < 0 {
+				g.selStart = g.cursorPos
+				g.selEnd = g.cursorPos
+			}
+			if g.cursorPos == g.selEnd {
+				g.selEnd = newByteIdx
+			} else if g.cursorPos == g.selStart {
+				g.selStart = newByteIdx
+			} else {
+				g.selStart = g.cursorPos
+				g.selEnd = newByteIdx
+			}
+		} else {
+			g.clearSelection()
+		}
+		g.cursorPos = newByteIdx
+		g.cursorVisible = true
+		g.dirty = true
+	} else if mods&ui.ModShift == 0 {
+		g.clearSelection()
+		g.dirty = true
+	}
+	g.mu.Unlock()
+	g.requestRepaint()
+}
+
+// moveCursorHome moves the caret to the beginning of the text.
+func (g *gpuUIImpl) moveCursorHome(mods ui.Modifiers) {
+	g.mu.Lock()
+	if mods&ui.ModShift != 0 {
+		if g.selStart < 0 {
+			g.selStart = 0
+			g.selEnd = g.cursorPos
+		} else {
+			g.selStart = 0
+		}
+	} else {
+		g.clearSelection()
+	}
+	g.cursorPos = 0
+	g.cursorVisible = true
+	g.dirty = true
+	g.mu.Unlock()
+	g.requestRepaint()
+}
+
+// moveCursorEnd moves the caret to the end of the text.
+func (g *gpuUIImpl) moveCursorEnd(mods ui.Modifiers) {
+	g.mu.Lock()
+	end := len(g.queryValue)
+	if mods&ui.ModShift != 0 {
+		if g.selStart < 0 {
+			g.selStart = g.cursorPos
+			g.selEnd = end
+		} else {
+			g.selEnd = end
+		}
+	} else {
+		g.clearSelection()
+	}
+	g.cursorPos = end
+	g.cursorVisible = true
+	g.dirty = true
+	g.mu.Unlock()
+	g.requestRepaint()
+}
+
+// insertText handles EventTextInput: inserts committed text at the cursor
+// position, replacing any active selection, then triggers a new query.
+func (g *gpuUIImpl) insertText(ctx context.Context, text string) {
+	g.mu.Lock()
+	g.composeValue = ""
+
+	// If there's a selection, delete it first
+	if g.selStart >= 0 && g.selEnd > g.selStart {
+		g.queryValue = g.queryValue[:g.selStart] + text + g.queryValue[g.selEnd:]
+		g.cursorPos = g.selStart + len(text)
+	} else {
+		// Insert at cursor position
+		g.queryValue = g.queryValue[:g.cursorPos] + text + g.queryValue[g.cursorPos:]
+		g.cursorPos += len(text)
+	}
+	g.clearSelection()
+	g.cursorVisible = true
+	g.dirty = true
+	g.mu.Unlock()
+	g.triggerQuery(ctx)
+}
+
+// handleBackspace deletes the character before the cursor (or the selected
+// range if a selection is active).
+func (g *gpuUIImpl) handleBackspace(ctx context.Context, mods ui.Modifiers) {
+	g.mu.Lock()
+	if g.selStart >= 0 && g.selEnd > g.selStart {
+		// Delete the selection
+		g.queryValue = g.queryValue[:g.selStart] + g.queryValue[g.selEnd:]
+		g.cursorPos = g.selStart
+		g.clearSelection()
+	} else if g.cursorPos > 0 {
+		// Delete one rune before the cursor
+		runes := []rune(g.queryValue[:g.cursorPos])
+		if len(runes) > 0 {
+			newCursor := len(string(runes[:len(runes)-1]))
+			g.queryValue = g.queryValue[:newCursor] + g.queryValue[g.cursorPos:]
+			g.cursorPos = newCursor
+		}
+	} else if len(g.queryValue) > 0 {
+		// Fallback: delete last character (old behavior when cursorPos wasn't tracked)
+		runes := []rune(g.queryValue)
+		g.queryValue = string(runes[:len(runes)-1])
+	} else {
+		g.mu.Unlock()
+		return
+	}
+	g.cursorVisible = true
+	g.dirty = true
+	g.mu.Unlock()
+	g.triggerQuery(ctx)
+}
+
+// deleteForward deletes the character after the cursor (Delete key).
+func (g *gpuUIImpl) deleteForward(ctx context.Context) {
+	g.mu.Lock()
+	if g.selStart >= 0 && g.selEnd > g.selStart {
+		g.queryValue = g.queryValue[:g.selStart] + g.queryValue[g.selEnd:]
+		g.cursorPos = g.selStart
+		g.clearSelection()
+	} else if g.cursorPos < len(g.queryValue) {
+		g.queryValue = g.queryValue[:g.cursorPos] + g.queryValue[g.cursorPos+1:]
+	}
+	g.cursorVisible = true
+	g.dirty = true
+	g.mu.Unlock()
+	g.triggerQuery(ctx)
+}
+
+// buildToolbarActions returns the action buttons to render on the toolbar
+// right side. Actions come from the selected result's action list (only those
+// with hotkeys). When no result is selected or there are no actions with
+// hotkeys, returns nil.
+func (g *gpuUIImpl) buildToolbarActions(ctx context.Context) []ui.ToolbarAction {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.buildToolbarActionsLocked()
 }
 
 // buildAndRender generates the draw command list from current state.
@@ -373,22 +651,57 @@ func (g *gpuUIImpl) buildAndRender(ctx context.Context) *ui.CommandList {
 	// the composition visible (and is cleared when the IME commits).
 	displayValue := g.queryValue + g.composeValue
 
+	// Build the toolbar widget. When not visible it contributes zero height.
+	toolbar := ui.Toolbar{
+		ID:           "toolbar",
+		Height:       t.ToolbarHeight,
+		Visible:      g.toolbarVisible(),
+		BgColor:      t.ToolbarBg,
+		FontColor:    t.ToolbarFontColor,
+		PaddingLeft:  t.ToolbarPaddingLeft,
+		PaddingRight: t.ToolbarPaddingRight,
+		TopBorder:    len(g.results) > 0,
+	}
+	// Populate left area from the current toolbar message (if any).
+	if g.currentToolbarMsg != nil {
+		toolbar.LeftText = g.currentToolbarMsg.Title
+		if !g.currentToolbarMsg.Icon.IsEmpty() {
+			iconPNG, iconKey := ui.RasterizeWoxImageWithSizeAndKey(g.currentToolbarMsg.Icon, 16)
+			toolbar.LeftIcon = iconPNG
+			toolbar.LeftIconKey = iconKey
+		}
+		if g.currentToolbarMsg.Progress != nil {
+			p := *g.currentToolbarMsg.Progress
+			toolbar.Progress = &p
+		}
+		toolbar.Indeterminate = g.currentToolbarMsg.Indeterminate
+	}
+	// Populate right area with action buttons from the selected result.
+	// Use the lock-free variant because buildAndRender already holds g.mu.
+	toolbar.Actions = g.buildToolbarActionsLocked()
+
 	root := ui.VBox{
 		Padding: t.WindowPadding,
 		Gap:     12,
 		Children: []ui.Widget{
 			ui.TextBox{
-				ID:           "query",
-				Placeholder:  "Type to search...",
-				FontSize:     t.FontSize,
-				FontColor:    t.QueryBoxFontColor,
-				BgColor:      t.QueryBoxBg,
-				CornerRadius: t.QueryBoxRadius,
-				CursorColor:  t.QueryBoxCursorColor,
-				Value:        displayValue,
-				Focused:      true,
+				ID:             "query",
+				Placeholder:    "Type to search...",
+				FontSize:       t.FontSize,
+				FontColor:      t.QueryBoxFontColor,
+				BgColor:        t.QueryBoxBg,
+				CornerRadius:   t.QueryBoxRadius,
+				CursorColor:    t.QueryBoxCursorColor,
+				Value:          displayValue,
+				Focused:        true,
+				CursorPos:      g.cursorPos,
+				SelectionStart: g.selStart,
+				SelectionEnd:   g.selEnd,
+				SelectionColor: ui.Color{R: 0.3, G: 0.5, B: 0.9, A: 0.3},
+				BlinkVisible:   g.cursorVisible,
 			},
 			resultArea,
+			toolbar,
 		},
 	}
 
@@ -397,6 +710,17 @@ func (g *gpuUIImpl) buildAndRender(ctx context.Context) *ui.CommandList {
 	g.lastWinW = winW
 	g.lastWinH = winH
 	g.lastQueryText = g.queryValue
+
+	// Set the toolbar drag region so the user can move the window by dragging
+	// the toolbar area. The drag band spans the full toolbar height at the
+	// bottom of the window.
+	if g.toolbarVisible() {
+		toolbarY := float32(winH) - g.theme.ToolbarHeight - g.theme.WindowPadding
+		g.renderer.SetDragRegion(toolbarY, float32(winH))
+	} else {
+		g.renderer.SetDragRegion(0, 0)
+	}
+
 	return &result.Commands
 }
 
@@ -422,6 +746,11 @@ func (g *gpuUIImpl) resizeWindowHeight() {
 	itemCount := len(g.results)
 	hasPreview := g.currentPreview != nil && !g.currentPreview.IsEmpty()
 	lastCommittedHeight := g.committedWindowHeight
+	// Toolbar height — include it in the total when visible.
+	toolbarH := float32(0)
+	if !g.hideToolbar && (itemCount > 0 || g.currentToolbarMsg != nil) {
+		toolbarH = t.ToolbarHeight
+	}
 	g.mu.Unlock()
 
 	pad := t.WindowPadding * 2
@@ -435,7 +764,7 @@ func (g *gpuUIImpl) resizeWindowHeight() {
 		resultH = maxResultH
 	}
 	gap := float32(12)
-	total := queryBoxH + gap + resultH + pad
+	total := queryBoxH + gap + resultH + toolbarH + pad
 	// When a preview is visible, give the launcher a minimum height so the
 	// preview area has enough room to be useful even when there are few results.
 	// This matches the Flutter launcher behavior where preview-only queries
@@ -523,6 +852,21 @@ func (g *gpuUIImpl) rasterizeIconsInBackground(results []plugin.QueryResultUI) {
 		return
 	}
 	go func() {
+		// Rasterize icons at the physical pixel size matching the current
+		// DPI scale. If the display is 150% (DPI=144), icons are rasterized
+		// to 54px instead of 36px so the native layer doesn't upscale a
+		// small bitmap (which causes blurriness). Falls back to 36 on
+		// platforms where GetDPI is unavailable.
+		iconPx := 36
+		if g.renderer != nil {
+			dpi := g.renderer.GetDPI()
+			if dpi > 0 {
+				iconPx = int(36 * dpi / 96.0)
+				if iconPx < 36 {
+					iconPx = 36
+				}
+			}
+		}
 		for i := range results {
 			r := &results[i]
 			if r.Icon.IsEmpty() {
@@ -530,7 +874,7 @@ func (g *gpuUIImpl) rasterizeIconsInBackground(results []plugin.QueryResultUI) {
 			}
 			// RasterizeWoxImageWithSizeAndKey caches by hash+size, so
 			// repeated calls for the same icon are cheap (map lookup).
-			png, key := ui.RasterizeWoxImageWithSizeAndKey(r.Icon, 36)
+			png, key := ui.RasterizeWoxImageWithSizeAndKey(r.Icon, iconPx)
 			g.mu.Lock()
 			if i < len(g.results) && g.results[i].Title == r.Title {
 				g.results[i].IconPNG = png
@@ -738,6 +1082,8 @@ func (g *gpuUIImpl) ChangeQuery(ctx context.Context, query common.PlainQuery) {
 	g.queryValue = query.QueryText
 	g.selectedIdx = 0
 	g.scrollOffset = 0
+	g.cursorPos = len(query.QueryText)
+	g.clearSelection()
 	g.dirty = true
 	g.mu.Unlock()
 	g.requestRepaint()
@@ -760,6 +1106,7 @@ func (g *gpuUIImpl) HideApp(ctx context.Context) {
 	g.mu.Lock()
 	g.visible = false
 	g.mu.Unlock()
+	g.stopCursorBlink()
 	if g.renderer != nil {
 		g.renderer.Hide()
 	}
@@ -784,6 +1131,11 @@ func (g *gpuUIImpl) ShowApp(ctx context.Context, showContext common.ShowContext)
 		return
 	}
 
+	// Apply HideToolbar from the show context
+	g.mu.Lock()
+	g.hideToolbar = showContext.HideToolbar
+	g.mu.Unlock()
+
 	// Reset window height to match current result count before showing.
 	g.resizeWindowHeight()
 
@@ -803,7 +1155,18 @@ func (g *gpuUIImpl) ShowApp(ctx context.Context, showContext common.ShowContext)
 	g.mu.Lock()
 	g.visible = true
 	g.dirty = true
+	// Handle select-all on show (mirrors Flutter's selectAll param)
+	if showContext.SelectAll && len(g.queryValue) > 0 {
+		g.selStart = 0
+		g.selEnd = len(g.queryValue)
+		g.cursorPos = g.selEnd
+	} else {
+		// Place cursor at end of text
+		g.cursorPos = len(g.queryValue)
+		g.clearSelection()
+	}
 	g.mu.Unlock()
+	g.startCursorBlink()
 	g.renderer.Show()
 	g.requestRepaint()
 	GetUIManager().PostOnShow(ctx)
@@ -838,6 +1201,7 @@ func (g *gpuUIImpl) ChangeTheme(ctx context.Context, theme common.Theme) {
 	// Convert Wox theme JSON → ui.Theme and update the layout engine
 	g.mu.Lock()
 	g.theme = ui.ThemeFromWoxTheme(effectiveTheme)
+	g.theme.ToolbarHeight = float32(DensityToolbarHeight(ctx))
 	if g.engine != nil {
 		g.engine.Theme = g.theme
 	}
@@ -878,11 +1242,29 @@ func (g *gpuUIImpl) UpdateAttentionUnreadCount(ctx context.Context, unreadCount 
 }
 
 func (g *gpuUIImpl) ShowToolbarMsg(ctx context.Context, msg interface{}) {
-	g.wsUI.ShowToolbarMsg(ctx, msg)
+	toolbarMsg, ok := msg.(plugin.ToolbarMsgUI)
+	if !ok {
+		// Fallback to WS UI for unexpected types
+		g.wsUI.ShowToolbarMsg(ctx, msg)
+		return
+	}
+	g.mu.Lock()
+	g.currentToolbarMsg = &toolbarMsg
+	g.dirty = true
+	g.mu.Unlock()
+	g.resizeWindowHeight()
+	g.requestRepaint()
 }
 
 func (g *gpuUIImpl) ClearToolbarMsg(ctx context.Context, toolbarMsgId string) {
-	g.wsUI.ClearToolbarMsg(ctx, toolbarMsgId)
+	g.mu.Lock()
+	if g.currentToolbarMsg != nil && g.currentToolbarMsg.Id == toolbarMsgId {
+		g.currentToolbarMsg = nil
+		g.dirty = true
+	}
+	g.mu.Unlock()
+	g.resizeWindowHeight()
+	g.requestRepaint()
 }
 
 func (g *gpuUIImpl) IsVisible(ctx context.Context) bool {
@@ -1175,7 +1557,166 @@ func (g *gpuUIImpl) handleScroll(ctx context.Context, ev ui.Event) {
 	if g.scrollOffset < 0 {
 		g.scrollOffset = 0
 	}
+	// Clamp to the valid scroll range so the thumb never overshoots.
+	maxScroll := g.maxScrollOffset()
+	if maxScroll > 0 && g.scrollOffset > maxScroll {
+		g.scrollOffset = maxScroll
+	}
 	g.dirty = true
 	g.mu.Unlock()
 	g.requestRepaint()
+}
+
+// viewportHeight returns the vertical space available for the result list,
+// excluding the query box, gaps, padding, and toolbar (when visible).
+func (g *gpuUIImpl) viewportHeight() float32 {
+	t := g.theme
+	pad := t.WindowPadding * 2
+	queryBoxH := t.QueryBoxHeight
+	gap := float32(12)
+	toolbarH := float32(0)
+	if g.toolbarVisible() {
+		toolbarH = t.ToolbarHeight
+	}
+	h := g.committedWindowHeight - queryBoxH - gap - toolbarH - pad
+	if h < 0 {
+		h = 0
+	}
+	return h
+}
+
+// maxScrollOffset returns the maximum valid scroll offset (contentH - viewportH).
+func (g *gpuUIImpl) maxScrollOffset() float32 {
+	if len(g.results) == 0 {
+		return 0
+	}
+	itemH := g.theme.ListItemHeight
+	contentH := float32(len(g.results)) * itemH
+	viewportH := g.viewportHeight()
+	maxScroll := contentH - viewportH
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	return maxScroll
+}
+
+// handleClick processes mouse clicks. Currently only toolbar action buttons
+// are clickable; the rest of the window is passive (no list-item click handling
+// yet). toolbarActionRects is populated by buildToolbarActions during the
+// last layout pass.
+func (g *gpuUIImpl) handleClick(ctx context.Context, ev ui.Event) {
+	g.mu.Lock()
+	rects := g.toolbarActionRects
+	actions := g.buildToolbarActionsLocked()
+	g.mu.Unlock()
+
+	if len(rects) == 0 || len(actions) == 0 {
+		return
+	}
+
+	// Each rect is [x0, y0, x1, y1] in DIP.
+	for i := 0; i+3 < len(rects) && i/4 < len(actions); i += 4 {
+		if ev.X >= rects[i] && ev.X <= rects[i+2] &&
+			ev.Y >= rects[i+1] && ev.Y <= rects[i+3] {
+			action := actions[i/4]
+			if action.Action != nil {
+				action.Action()
+			}
+			return
+		}
+	}
+}
+
+// buildToolbarActionsLocked is a lock-free version of buildToolbarActions for
+// use when g.mu is already held. Returns the same action slice.
+func (g *gpuUIImpl) buildToolbarActionsLocked() []ui.ToolbarAction {
+	if g.selectedIdx < 0 || g.selectedIdx >= len(g.results) {
+		return nil
+	}
+	result := g.results[g.selectedIdx]
+	if result.Actions == nil {
+		return nil
+	}
+
+	var actions []ui.ToolbarAction
+	for _, a := range result.Actions {
+		if a.Hotkey == "" {
+			continue
+		}
+		action := a
+		actions = append(actions, ui.ToolbarAction{
+			Label:  a.Name,
+			Hotkey: a.Hotkey,
+			Action: func() {
+				actionCtx := util.NewTraceContext()
+				g.mu.Lock()
+				queryId := g.currentQuery.Id
+				sessionId := g.currentSessionId
+				g.mu.Unlock()
+				_ = plugin.GetPluginManager().ExecuteAction(actionCtx, sessionId, queryId, result.Id, action.Id)
+				g.HideApp(actionCtx)
+			},
+		})
+	}
+	return actions
+}
+
+// toolbarVisible returns true when the toolbar should be rendered. The
+// toolbar shows when there are results or a plugin toolbar message, unless
+// the caller explicitly requested HideToolbar. Mirrors the Flutter launcher's
+// isToolbarVisible logic.
+func (g *gpuUIImpl) toolbarVisible() bool {
+	if g.hideToolbar {
+		return false
+	}
+	if g.currentToolbarMsg != nil {
+		return true
+	}
+	return len(g.results) > 0
+}
+
+// toolbarHeight returns the height to allocate for the toolbar (0 when
+// not visible).
+func (g *gpuUIImpl) toolbarHeight() float32 {
+	if !g.toolbarVisible() {
+		return 0
+	}
+	return g.theme.ToolbarHeight
+}
+
+// syncScrollOffsetWithSelection adjusts scrollOffset so the selected item
+// stays within the visible viewport after arrow-key navigation. Mirrors the
+// Flutter launcher's syncScrollPositionWithActiveIndex. Must be called with
+// g.mu held.
+func (g *gpuUIImpl) syncScrollOffsetWithSelection() {
+	if g.selectedIdx < 0 || len(g.results) == 0 {
+		return
+	}
+	itemH := g.theme.ListItemHeight
+	viewportH := g.viewportHeight()
+	visibleCount := int(viewportH / itemH)
+	if visibleCount <= 0 {
+		visibleCount = 1
+	}
+
+	firstVisible := int(g.scrollOffset / itemH)
+	lastVisible := firstVisible + visibleCount
+
+	if g.selectedIdx < firstVisible {
+		// Selected is above the viewport — scroll up to align it at the top.
+		g.scrollOffset = float32(g.selectedIdx) * itemH
+	} else if g.selectedIdx >= lastVisible {
+		// Selected is below the viewport — scroll down to bring it into view.
+		g.scrollOffset = float32(g.selectedIdx-visibleCount+1) * itemH
+	}
+
+	// Clamp to valid range.
+	maxScroll := g.maxScrollOffset()
+	if g.scrollOffset < 0 {
+		g.scrollOffset = 0
+	}
+	if g.scrollOffset > maxScroll {
+		g.scrollOffset = maxScroll
+	}
+	g.dirty = true
 }

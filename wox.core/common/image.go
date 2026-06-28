@@ -446,7 +446,10 @@ func isSvgFilePath(filePath string) bool {
 }
 
 func renderSvgImage(svg string) (image.Image, error) {
-	width, height := 32, 32
+	// Rasterize at 96px to match ResultListIconSize. The previous hardcoded
+	// 32px produced tiny bitmaps that were then upscaled by the native UI,
+	// causing jagged edges on SVG icons.
+	width, height := 96, 96
 	icon, err := oksvg.ReadIconStream(strings.NewReader(svg), oksvg.WarnErrorMode)
 	if err != nil {
 		return nil, err

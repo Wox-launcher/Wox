@@ -172,6 +172,8 @@ void uiWindowSetPosition(int32_t windowId, int32_t x, int32_t y);
 void uiWindowSetSize(int32_t windowId, int32_t w, int32_t h);
 bool uiWindowIsVisible(int32_t windowId);
 void uiWindowGetSize(int32_t windowId, int32_t* outW, int32_t* outH);
+float uiWindowGetDPI(int32_t windowId);
+void uiWindowSetDragRegion(int32_t windowId, float y1, float y2);
 void uiWindowReleaseMemory(int32_t windowId);
 void uiWindowRender(int32_t windowId, const CDrawCommand* commands, int32_t count);
 CMeasureResult uiMeasureText(const char* text, int32_t textLen, float fontSize,

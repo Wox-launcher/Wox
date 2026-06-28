@@ -143,6 +143,12 @@ typedef struct {
     int clipDepth;
 
     UIBitmapCacheEntry* bitmapCache;
+
+    // Toolbar drag region in DIP (y1=top, y2=bottom). When the cursor is in
+    // this band and not on an interactive element, WM_NCHITTEST returns
+    // HTCAPTION so the user can drag the frameless window from the toolbar.
+    float dragY1;
+    float dragY2;
 } UIWindow;
 
 static UIWindow* g_windows[16];
@@ -308,15 +314,39 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             // Map VK codes to our Key enum (simplified �?full mapping later)
             int32_t key = 0;
             switch (wParam) {
-                case VK_ESCAPE: key = 1; break;
-                case VK_RETURN: key = 2; break;
-                case VK_BACK:   key = 3; break;
-                case VK_TAB:    key = 4; break;
-                case VK_SPACE:  key = 5; break;
-                case VK_UP:     key = 6; break;
-                case VK_DOWN:   key = 7; break;
-                case VK_LEFT:   key = 8; break;
-                case VK_RIGHT:  key = 9; break;
+                case VK_ESCAPE: key = KeyEscape; break;
+                case VK_RETURN:  key = KeyEnter; break;
+                case VK_BACK:    key = KeyBackspace; break;
+                case VK_TAB:     key = KeyTab; break;
+                case VK_SPACE:   key = KeySpace; break;
+                case VK_UP:      key = KeyUp; break;
+                case VK_DOWN:    key = KeyDown; break;
+                case VK_LEFT:    key = KeyLeft; break;
+                case VK_RIGHT:   key = KeyRight; break;
+                case VK_HOME:    key = KeyHome; break;
+                case VK_END:     key = KeyEnd; break;
+                case VK_PRIOR:   key = KeyPageUp; break;
+                case VK_NEXT:    key = KeyPageDown; break;
+                case VK_DELETE:   key = KeyDelete; break;
+                case VK_F1:  key = KeyF1; break;
+                case VK_F2:  key = KeyF2; break;
+                case VK_F3:  key = KeyF3; break;
+                case VK_F4:  key = KeyF4; break;
+                case VK_F5:  key = KeyF5; break;
+                case VK_F6:  key = KeyF6; break;
+                case VK_F7:  key = KeyF7; break;
+                case VK_F8:  key = KeyF8; break;
+                case VK_F9:  key = KeyF9; break;
+                case VK_F10: key = KeyF10; break;
+                case VK_F11: key = KeyF11; break;
+                case VK_F12: key = KeyF12; break;
+                default:
+                    if (wParam >= 0x41 && wParam <= 0x5A) {
+                        key = (int32_t)(KeyA + (wParam - 0x41));
+                    } else if (wParam >= 0x30 && wParam <= 0x39) {
+                        key = (int32_t)(Key0 + (wParam - 0x30));
+                    }
+                    break;
             }
             int32_t mods = 0;
             if (GetKeyState(VK_SHIFT) & 0x8000) mods |= 1;
@@ -422,11 +452,19 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
     }
 
     case WM_NCHITTEST: {
-        // Frameless window: make entire client area draggable from top
+        // Frameless window: make the top 8px draggable, plus the toolbar drag
+        // band (set via SetDragRegion) so the user can move the window from the
+        // bottom toolbar.
         if (win) {
             POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
             ScreenToClient(hwnd, &pt);
             if (pt.y < 8) {
+                return HTCAPTION;
+            }
+            // Check toolbar drag region (convert DIP to physical pixels).
+            float dragY1Pix = win->dragY1 * win->scale;
+            float dragY2Pix = win->dragY2 * win->scale;
+            if (win->dragY2 > win->dragY1 && pt.y >= (int)dragY1Pix && pt.y <= (int)dragY2Pix) {
                 return HTCAPTION;
             }
         }
@@ -878,6 +916,21 @@ extern "C" void uiWindowGetSize(int32_t windowId, int32_t* outW, int32_t* outH) 
     *outH = win->height;
 }
 
+extern "C" float uiWindowGetDPI(int32_t windowId) {
+    HWND hwnd = (HWND)(intptr_t)windowId;
+    UIWindow* win = FindWindowByHWND(hwnd);
+    if (!win) return 96.0f;
+    return win->dpi;
+}
+
+extern "C" void uiWindowSetDragRegion(int32_t windowId, float y1, float y2) {
+    HWND hwnd = (HWND)(intptr_t)windowId;
+    UIWindow* win = FindWindowByHWND(hwnd);
+    if (!win) return;
+    win->dragY1 = y1;
+    win->dragY2 = y2;
+}
+
 extern "C" void uiWindowDestroy(int32_t windowId) {
     HWND hwnd = (HWND)(intptr_t)windowId;
     UIWindow* win = FindWindowByHWND(hwnd);
@@ -1093,8 +1146,11 @@ static void ExecuteCommands(UIWindow* win, const CDrawCommand* cmds, int32_t cou
             }
 
             D2D1_RECT_F destRect = ToRectF(cmd->x, cmd->y, w, h);
+            // ID2D1DeviceContext::DrawBitmap uses the D2D1_INTERPOLATION_MODE
+            // enum (not the legacy D2D1_BITMAP_INTERPOLATION_MODE). HIGH_QUALITY
+            // applies high-quality filtering for smoother icon scaling.
             win->rt->DrawBitmap(bitmap, destRect, 1.0f,
-                D2D1_BITMAP_INTERPOLATION_MODE_LINEAR, NULL);
+                D2D1_INTERPOLATION_MODE_HIGH_QUALITY, NULL);
 
             if (!bitmapStoredInCache) {
                 bitmap->Release();

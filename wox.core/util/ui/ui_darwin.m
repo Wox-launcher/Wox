@@ -32,6 +32,51 @@ enum {
     kVK_PageDown_v         = 0x79,
 };
 
+// macOS ANSI virtual key codes for A-Z and 0-9.
+// Sourced from HIToolbox/Events.h; inlined to avoid Carbon framework import.
+// KeyA=27..KeyZ=52, Key0=53..Key9=62 per ui_native.h.
+static int32_t mapAnsiLetterToKey(uint16_t keyCode) {
+    switch (keyCode) {
+        case 0x00: return KeyA;
+        case 0x01: return KeyS;
+        case 0x02: return KeyD;
+        case 0x03: return KeyF;
+        case 0x04: return KeyH;
+        case 0x05: return KeyG;
+        case 0x06: return KeyZ;
+        case 0x07: return KeyX;
+        case 0x08: return KeyC;
+        case 0x09: return KeyV;
+        case 0x0B: return KeyB;
+        case 0x0C: return KeyQ;
+        case 0x0D: return KeyW;
+        case 0x0E: return KeyE;
+        case 0x0F: return KeyR;
+        case 0x10: return KeyY;
+        case 0x11: return KeyT;
+        case 0x12: return Key1;
+        case 0x13: return Key2;
+        case 0x14: return Key3;
+        case 0x15: return Key4;
+        case 0x16: return Key6;
+        case 0x17: return Key5;
+        case 0x19: return Key9;
+        case 0x1A: return Key7;
+        case 0x1C: return Key8;
+        case 0x1D: return Key0;
+        case 0x1F: return KeyO;
+        case 0x20: return KeyU;
+        case 0x22: return KeyI;
+        case 0x23: return KeyP;
+        case 0x25: return KeyL;
+        case 0x26: return KeyJ;
+        case 0x28: return KeyK;
+        case 0x2D: return KeyN;
+        case 0x2E: return KeyM;
+        default:   return 0;
+    }
+}
+
 // drawRect: calls into Go to retrieve the latest command list and execute it
 // immediately on the current graphics context.
 extern void uiDarwinOnDraw(int32_t windowId);
@@ -53,6 +98,10 @@ typedef struct UIBitmapCacheEntry {
     bool hasMarked;
     NSRange markedRange;
     NSRange selectedRange;
+    // Toolbar drag region in DIP (y1=top, y2=bottom). mouseDown inside this
+    // band starts a window drag instead of a click callback.
+    float dragY1;
+    float dragY2;
 }
 @end
 
@@ -81,7 +130,14 @@ typedef struct UIBitmapCacheEntry {
         case kVK_End_v:            return KeyEnd;
         case kVK_PageUp_v:         return KeyPageUp;
         case kVK_PageDown_v:       return KeyPageDown;
-        default:                   return 0; // KeyUnknown — let IME handle text input
+        default: {
+            // Check ANSI letter/digit keys. These are only dispatched as
+            // KeyPress when a modifier is held (see keyDown: below); without
+            // modifiers they fall through to interpretKeyEvents: for IME.
+            int32_t ansiKey = mapAnsiLetterToKey(keyCode);
+            if (ansiKey != 0) return ansiKey;
+            return 0;
+        }
     }
 }
 
@@ -98,20 +154,21 @@ typedef struct UIBitmapCacheEntry {
 - (void)keyDown:(NSEvent *)event {
     int32_t key = [self mapKeyCode:event.keyCode];
     int32_t mods = [self currentMods];
-    NSLog(@"[keyDown:] keyCode=%u mappedKey=%d mods=%d chars=%@",
-          event.keyCode, key, mods, event.characters);
+    bool hasModifier = (mods & 2) || (mods & 8) || (mods & 4); // Ctrl/Super/Alt
 
-    // For navigation keys (arrows, escape, enter, backspace, etc.), bypass IME
-    // and dispatch directly. For other keys, let interpretKeyEvents: route to
-    // insertText:/setMarkedText: for IME composition support.
+    // Letter keys (KeyA-KeyZ) only produce KeyPress when a modifier is held
+    // (e.g. Ctrl+A for select-all). Without modifiers they fall through to
+    // interpretKeyEvents: so normal typing and IME composition work normally.
+    if (key >= KeyA && key <= KeyZ && !hasModifier) {
+        key = 0;
+    }
+
     if (key != 0) {
         uiEventCallback(windowId, EventKeyPress, key, mods,
             NULL, 0, NULL, 0, 0, 0, 0, 0, 0, 0);
         return;
     }
 
-    // Let the input method interpret the key. This drives insertText: /
-    // setMarkedText: / unmarkText for CJK input.
     [self interpretKeyEvents:@[event]];
 }
 
@@ -234,6 +291,14 @@ typedef struct UIBitmapCacheEntry {
     CGFloat h = self.bounds.size.height;
     float x = (float)pos.x;
     float y = (float)(h - pos.y);
+
+    // Check if the click is in the toolbar drag region. If so, start a window
+    // drag instead of dispatching a click event.
+    if (dragY2 > dragY1 && y >= dragY1 && y <= dragY2) {
+        [[self window] startDragWithEvent:event];
+        return;
+    }
+
     uiEventCallback(windowId, EventClick, 0, 0,
         NULL, 0, NULL, 0, 0, x, y, 0, 0, 0);
 }
@@ -287,7 +352,7 @@ typedef struct UIBitmapCacheEntry {
 
 // ── WoxWindow: holds the NSPanel and its render view ─────────────────────
 
-typedef struct {
+struct UIWindow {
     int32_t id;             // 1-based window id (matches g_windows index+1)
     NSPanel *panel;
     NSVisualEffectView *effectView;
@@ -300,7 +365,8 @@ typedef struct {
     bool visible;
 
     UIBitmapCacheEntry* bitmapCache;
-} UIWindow;
+};
+typedef struct UIWindow UIWindow;
 
 static UIWindow* g_windows[16];
 static int g_windowCount = 0;
@@ -485,6 +551,9 @@ static void ExecuteCommands(UIWindow* win, CGContextRef ctx, const CDrawCommand*
             CGFloat w = cmd->w > 0 ? cmd->w : CGImageGetWidth(image);
             CGFloat h = cmd->h > 0 ? cmd->h : CGImageGetHeight(image);
             CGRect dest = MakeTopLeftRect(win, cmd->x, cmd->y, w, h);
+            // Use high-quality interpolation for smoother icon scaling,
+            // especially when the source PNG is smaller than the draw rect.
+            CGContextSetInterpolationQuality(ctx, kCGInterpolationHigh);
             CGContextDrawImage(ctx, dest, image);
 
             if (!fromCache) {
@@ -732,6 +801,23 @@ void uiWindowGetSize(int32_t windowId, int32_t* outW, int32_t* outH) {
     }
     *outW = win->width;
     *outH = win->height;
+}
+
+float uiWindowGetDPI(int32_t windowId) {
+    UIWindow* win = FindWindowById(windowId);
+    if (!win || !win->panel) return 96.0f;
+    NSScreen* screen = [win->panel screen];
+    if (!screen) screen = [NSScreen mainScreen];
+    if (!screen) return 96.0f;
+    CGFloat scale = [screen backingScaleFactor];
+    return (float)(scale * 96.0f);
+}
+
+void uiWindowSetDragRegion(int32_t windowId, float y1, float y2) {
+    UIWindow* win = FindWindowById(windowId);
+    if (!win || !win->renderView) return;
+    win->renderView->dragY1 = y1;
+    win->renderView->dragY2 = y2;
 }
 
 void uiWindowDestroy(int32_t windowId) {

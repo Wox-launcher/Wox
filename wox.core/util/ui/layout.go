@@ -91,6 +91,8 @@ func (e *LayoutEngine) layoutWidget(ctx *layoutCtx, w Widget, x, y, w_, h float3
 		// Spacer contributes to flex sizing but draws nothing.
 	case PreviewPanel:
 		e.layoutPreviewPanel(ctx, widget, x, y, w_, h)
+	case Toolbar:
+		e.layoutToolbar(ctx, widget, x, y, w_, h)
 	}
 }
 
@@ -195,7 +197,10 @@ func (e *LayoutEngine) layoutText(ctx *layoutCtx, t Text, x, y, w, h float32) {
 	ctx.commands.DrawText(x, y, w, h, c.R, c.G, c.B, c.A, t.Content, t.FontSize, t.FontFamily)
 }
 
-// layoutTextBox draws a text input field with background and cursor.
+// layoutTextBox draws a text input field with background, selection highlight,
+// and a blinking caret. The caret position is driven by tb.CursorPos (byte
+// offset); the selection range (if any) is drawn as a semi-transparent rect
+// behind the text before the caret is painted.
 func (e *LayoutEngine) layoutTextBox(ctx *layoutCtx, tb TextBox, x, y, w, h float32) {
 	bg := tb.BgColor
 	ctx.commands.DrawRoundedRect(x, y, w, h, tb.CornerRadius, bg.R, bg.G, bg.B, bg.A)
@@ -208,17 +213,40 @@ func (e *LayoutEngine) layoutTextBox(ctx *layoutCtx, tb TextBox, x, y, w, h floa
 	if tb.Value == "" && tb.Placeholder != "" {
 		p := e.Theme.TextPlaceholder
 		ctx.commands.DrawText(textX, textY, textW, textH, p.R, p.G, p.B, p.A, tb.Placeholder, tb.FontSize, e.Theme.FontFamily)
-	} else {
-		c := tb.FontColor
-		ctx.commands.DrawText(textX, textY, textW, textH, c.R, c.G, c.B, c.A, tb.Value, tb.FontSize, e.Theme.FontFamily)
+		return
 	}
 
-	// Cursor — simple vertical bar at end of text (or start if empty).
-	if tb.Focused {
+	// Selection highlight: draw a semi-transparent rect over the selected byte
+	// range before painting the text on top.
+	if tb.SelectionStart >= 0 && tb.SelectionEnd > tb.SelectionStart {
+		selStartX := textX
+		if tb.SelectionStart <= len(tb.Value) {
+			tw, _ := e.Measurer.MeasureText(tb.Value[:tb.SelectionStart], tb.FontSize, e.Theme.FontFamily)
+			selStartX = textX + tw
+		}
+		selEndX := textX
+		if tb.SelectionEnd <= len(tb.Value) {
+			tw, _ := e.Measurer.MeasureText(tb.Value[:tb.SelectionEnd], tb.FontSize, e.Theme.FontFamily)
+			selEndX = textX + tw
+		}
+		selW := selEndX - selStartX
+		if selW > 0 {
+			sc := tb.SelectionColor
+			ctx.commands.DrawRect(selStartX, y+6, selW, h-12, sc.R, sc.G, sc.B, sc.A)
+		}
+	}
+
+	// Text
+	c := tb.FontColor
+	ctx.commands.DrawText(textX, textY, textW, textH, c.R, c.G, c.B, c.A, tb.Value, tb.FontSize, e.Theme.FontFamily)
+
+	// Caret — a vertical bar at CursorPos, only drawn when focused and the
+	// blink timer says visible.
+	if tb.Focused && tb.BlinkVisible {
 		cursorX := textX + 2
-		if tb.Value != "" {
-			tw, _ := e.Measurer.MeasureText(tb.Value, tb.FontSize, "")
-			cursorX = textX + tw + 2
+		if tb.CursorPos > 0 && tb.CursorPos <= len(tb.Value) {
+			tw, _ := e.Measurer.MeasureText(tb.Value[:tb.CursorPos], tb.FontSize, e.Theme.FontFamily)
+			cursorX = textX + tw + 1
 		}
 		cc := tb.CursorColor
 		ctx.commands.DrawLine(cursorX, y+8, cursorX, y+h-8, 1.5, cc.R, cc.G, cc.B, cc.A)
@@ -733,6 +761,11 @@ func (e *LayoutEngine) measureWidget(w Widget, avail float32) (width, height flo
 			return widget.Width, e.Theme.ListItemHeight * 8
 		}
 		return 0, e.Theme.ListItemHeight * 8
+	case Toolbar:
+		if !widget.Visible {
+			return 0, 0
+		}
+		return avail, widget.Height
 	case Separator:
 		if widget.Orientation == OrientHorizontal {
 			return avail, widget.Thickness
@@ -747,4 +780,115 @@ func (e *LayoutEngine) measureWidget(w Widget, avail float32) (width, height flo
 // string helper for debugging layout.
 func rectStr(x, y, w, h float32) string {
 	return fmt.Sprintf("(%.0f,%.0f %.0fx%.0f)", x, y, w, h)
+}
+
+// layoutToolbar draws the launcher's bottom toolbar. When Visible is false or
+// Height is zero it draws nothing. Otherwise it renders a background, an
+// optional top border line, a left status area (icon + text + progress bar),
+// and a row of right-aligned action buttons with hotkey hints.
+func (e *LayoutEngine) layoutToolbar(ctx *layoutCtx, tb Toolbar, x, y, w, h float32) {
+	if !tb.Visible || h <= 0 {
+		return
+	}
+
+	// Background fill.
+	bg := tb.BgColor
+	ctx.commands.DrawRect(x, y, w, h, bg.R, bg.G, bg.B, bg.A)
+
+	// Top border separator (shown when results exist above the toolbar).
+	if tb.TopBorder {
+		fc := tb.FontColor
+		ctx.commands.DrawLine(x, y, x+w, y, 1, fc.R, fc.G, fc.B, fc.A*0.1)
+	}
+
+	padL := tb.PaddingLeft
+	padR := tb.PaddingRight
+	contentX := x + padL
+	contentW := w - padL - padR
+
+	// ── Left area: icon + text + progress ──
+	leftX := contentX
+	leftW := contentW * 0.5 // left area gets at most half the width
+
+	if len(tb.LeftIcon) > 0 {
+		iconSize := float32(16)
+		ctx.commands.DrawImageWithKey(leftX, y+(h-iconSize)/2, iconSize, iconSize, tb.LeftIconKey, tb.LeftIcon)
+		leftX += iconSize + 6
+	}
+
+	if tb.LeftText != "" {
+		fc := tb.FontColor
+		textW := leftW - (leftX - contentX)
+		ctx.commands.DrawText(leftX, y, textW, h, fc.R, fc.G, fc.B, fc.A, tb.LeftText, e.Theme.FontSize-3, e.Theme.FontFamily)
+	}
+
+	// Progress bar (determinate) — a thin rounded rect showing percentage.
+	if tb.Progress != nil && !tb.Indeterminate {
+		p := *tb.Progress
+		if p < 0 {
+			p = 0
+		}
+		if p > 100 {
+			p = 100
+		}
+		barW := float32(80)
+		barH := float32(4)
+		barX := leftX
+		barY := y + (h-barH)/2
+		// Track
+		ctx.commands.DrawRoundedRect(barX, barY, barW, barH, 2, 1, 1, 1, 0.1)
+		// Fill
+		fillW := barW * float32(p) / 100
+		if fillW > 0 {
+			fc := tb.FontColor
+			ctx.commands.DrawRoundedRect(barX, barY, fillW, barH, 2, fc.R, fc.G, fc.B, fc.A*0.6)
+		}
+	}
+
+	// ── Right area: action buttons ──
+	// Lay out actions from right to left. Each action is [Label  Hotkey].
+	rightX := x + w - padR
+	actionFontSize := e.Theme.FontSize - 4
+	hotkeyFontSize := e.Theme.FontSize - 5
+
+	for i := len(tb.Actions) - 1; i >= 0; i-- {
+		a := tb.Actions[i]
+		fc := tb.FontColor
+
+		// Measure hotkey and label widths
+		hotkeyW := float32(0)
+		if a.Hotkey != "" {
+			hotkeyW, _ = e.Measurer.MeasureText(a.Hotkey, hotkeyFontSize, "")
+		}
+		labelW := float32(0)
+		if a.Label != "" {
+			labelW, _ = e.Measurer.MeasureText(a.Label, actionFontSize, "")
+		}
+
+		gap := float32(4)
+		itemW := labelW + hotkeyW
+		if labelW > 0 && hotkeyW > 0 {
+			itemW += gap
+		}
+
+		itemX := rightX - itemW
+		if itemX < contentX+leftW {
+			break // no more space for actions
+		}
+
+		// Draw hotkey (rightmost, dimmer)
+		if a.Hotkey != "" {
+			hotX := itemX + labelW + gap
+			ctx.commands.DrawText(hotX, y+(h-hotkeyFontSize*1.2)/2, hotkeyW, hotkeyFontSize*1.5,
+				fc.R, fc.G, fc.B, fc.A*0.5, a.Hotkey, hotkeyFontSize, e.Theme.FontFamily)
+		}
+
+		// Draw label (left of hotkey)
+		if a.Label != "" {
+			ctx.commands.DrawText(itemX, y+(h-actionFontSize*1.2)/2, labelW, actionFontSize*1.5,
+				fc.R, fc.G, fc.B, fc.A, a.Label, actionFontSize, e.Theme.FontFamily)
+		}
+
+		rightX = itemX - 10 // spacing between actions
+	}
 }

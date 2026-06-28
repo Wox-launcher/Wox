@@ -13,6 +13,7 @@ const (
 	WidgetSeparator
 	WidgetSpacer
 	WidgetPreviewPanel
+	WidgetToolbar
 )
 
 // Widget is the base interface for all DSL elements.
@@ -70,6 +71,24 @@ type TextBox struct {
 	CursorColor  Color
 	Value        string
 	Focused      bool
+
+	// CursorPos is the byte offset of the caret within Value. 0 = before the
+	// first character. The layout engine measures Value[:CursorPos] to position
+	// the caret bar, so callers must keep it in sync after every edit.
+	CursorPos int
+
+	// SelectionStart / SelectionEnd delimit the selected range as byte offsets.
+	// When both are -1 there is no selection. SelectionStart <= SelectionEnd.
+	SelectionStart int
+	SelectionEnd   int
+
+	// SelectionColor fills the selection highlight rectangle behind the text.
+	SelectionColor Color
+
+	// BlinkVisible toggles caret visibility on each blink tick. The caller
+	// drives a timer that flips this flag; layoutTextBox only draws the caret
+	// when both Focused and BlinkVisible are true.
+	BlinkVisible bool
 }
 
 func (w TextBox) Type() WidgetType { return WidgetTextBox }
@@ -179,3 +198,35 @@ type PreviewPanel struct {
 }
 
 func (w PreviewPanel) Type() WidgetType { return WidgetPreviewPanel }
+
+// ToolbarAction describes one clickable action rendered on the toolbar right side.
+// Hotkey is the display text for the shortcut (e.g. "Ctrl+U"). Action is the
+// Go-side callback invoked on click; nil means the action is display-only.
+type ToolbarAction struct {
+	Label  string
+	Hotkey string
+	Action func()
+}
+
+// Toolbar renders the launcher's bottom toolbar: a left status/message area
+// (icon + text + optional progress) and a row of right-aligned action buttons
+// with hotkey hints. When Visible is false the toolbar contributes zero height
+// and draws nothing, so the root VBox collapses cleanly.
+type Toolbar struct {
+	ID            string
+	Height        float32
+	Visible       bool
+	LeftIcon      []byte // optional PNG icon on the left
+	LeftIconKey   string
+	LeftText      string
+	Progress      *int // 0-100, nil means no progress bar
+	Indeterminate bool // indeterminate spinner instead of percentage
+	Actions       []ToolbarAction
+	BgColor       Color
+	FontColor     Color
+	PaddingLeft   float32
+	PaddingRight  float32
+	TopBorder     bool // draw a 1px top separator line (shown when results exist)
+}
+
+func (w Toolbar) Type() WidgetType { return WidgetToolbar }

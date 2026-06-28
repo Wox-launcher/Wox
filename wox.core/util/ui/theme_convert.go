@@ -126,5 +126,19 @@ func ThemeFromWoxTheme(woxTheme common.Theme) Theme {
 		t.PreviewPropertyContent = ParseColor(woxTheme.PreviewPropertyContentColor)
 	}
 
+	// Toolbar colors.
+	if woxTheme.ToolbarFontColor != "" {
+		t.ToolbarFontColor = ParseColor(woxTheme.ToolbarFontColor)
+	}
+	if woxTheme.ToolbarBackgroundColor != "" {
+		t.ToolbarBg = ParseColor(woxTheme.ToolbarBackgroundColor)
+	}
+	if woxTheme.ToolbarPaddingLeft > 0 {
+		t.ToolbarPaddingLeft = float32(woxTheme.ToolbarPaddingLeft)
+	}
+	if woxTheme.ToolbarPaddingRight > 0 {
+		t.ToolbarPaddingRight = float32(woxTheme.ToolbarPaddingRight)
+	}
+
 	return t
 }

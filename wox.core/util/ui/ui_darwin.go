@@ -180,6 +180,10 @@ func (r *MacRenderer) GetSize() (int, int) {
 	return int(w), int(h)
 }
 
+func (r *MacRenderer) GetDPI() float32 {
+	return float32(C.uiWindowGetDPI(C.int32_t(r.windowID)))
+}
+
 func (r *MacRenderer) SetDarkMode(dark bool) {
 	C.uiWindowSetDarkMode(C.int32_t(r.windowID), C.bool(dark))
 }
@@ -194,6 +198,12 @@ func (r *MacRenderer) ReleaseMemory() {
 // RequestRepaint triggers a native repaint via setNeedsDisplay:.
 func (r *MacRenderer) RequestRepaint() {
 	C.uiWindowInvalidate(C.int32_t(r.windowID))
+}
+
+// SetDragRegion defines the toolbar drag band so the frameless window can be
+// moved by dragging the toolbar area.
+func (r *MacRenderer) SetDragRegion(y1, y2 float32) {
+	C.uiWindowSetDragRegion(C.int32_t(r.windowID), C.float(y1), C.float(y2))
 }
 
 // StartEventLoop on macOS is a no-op: the Cocoa event loop ([NSApp run]) is

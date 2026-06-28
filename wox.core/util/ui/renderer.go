@@ -66,6 +66,11 @@ type NativeRenderer interface {
 	// GetSize returns the current logical (DIP) window dimensions.
 	GetSize() (int, int)
 
+	// GetDPI returns the window's current DPI scale factor (96 = 100%,
+	// 144 = 150%). Used by the Go side to rasterize icons at the correct
+	// physical pixel size so the native layer doesn't need to upscale.
+	GetDPI() float32
+
 	// SetDarkMode switches the native system backdrop tone so the vibrancy /
 	// Mica material matches the active theme.
 	SetDarkMode(dark bool)
@@ -76,6 +81,13 @@ type NativeRenderer interface {
 
 	// RequestRepaint triggers a native repaint of the window surface.
 	RequestRepaint()
+
+	// SetDragRegion defines a vertical band of the window that acts as a
+	// window drag handle (for frameless windows). The toolbar area uses this
+	// so the user can drag the window from the bottom toolbar. y1/y2 are
+	// in DIP relative to the window client area. An empty range (y1 >= y2)
+	// clears the drag region.
+	SetDragRegion(y1, y2 float32)
 
 	// StartEventLoop begins the platform's native event loop and registers
 	// an onRender callback for frame production.

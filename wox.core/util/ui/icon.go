@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"sync"
 
+	"golang.org/x/image/draw"
+
 	"wox/common"
 )
 
@@ -113,16 +115,12 @@ func ClearIconCache() {
 	iconCache.mu.Unlock()
 }
 
-// scaleImage resizes an image to the given square size using nearest-neighbor.
+// scaleImage resizes an image to the given square size using high-quality
+// CatmullRom interpolation. This replaces the previous nearest-neighbor
+// implementation that produced blocky, aliased icons at small sizes.
 func scaleImage(src image.Image, size int) image.Image {
 	bounds := src.Bounds()
 	dst := image.NewRGBA(image.Rect(0, 0, size, size))
-	for y := 0; y < size; y++ {
-		sy := y * bounds.Dy() / size
-		for x := 0; x < size; x++ {
-			sx := x * bounds.Dx() / size
-			dst.Set(x, y, src.At(bounds.Min.X+sx, bounds.Min.Y+sy))
-		}
-	}
+	draw.CatmullRom.Scale(dst, dst.Bounds(), src, bounds, draw.Over, nil)
 	return dst
 }

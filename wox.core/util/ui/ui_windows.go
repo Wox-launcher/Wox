@@ -151,6 +151,10 @@ func (r *WindowsRenderer) GetSize() (int, int) {
 	return int(w), int(h)
 }
 
+func (r *WindowsRenderer) GetDPI() float32 {
+	return float32(C.uiWindowGetDPI(C.int32_t(r.windowID)))
+}
+
 // SetDarkMode toggles the DWM immersive dark mode attribute so the Mica
 // backdrop renders in the tone matching the active theme.
 func (r *WindowsRenderer) SetDarkMode(dark bool) {
@@ -167,6 +171,12 @@ func (r *WindowsRenderer) ReleaseMemory() {
 // RequestRepaint triggers a repaint of the window.
 func (r *WindowsRenderer) RequestRepaint() {
 	C.uiInvalidateWindow(C.int32_t(r.windowID))
+}
+
+// SetDragRegion defines the toolbar drag band so the frameless window can be
+// moved by dragging the toolbar area.
+func (r *WindowsRenderer) SetDragRegion(y1, y2 float32) {
+	C.uiWindowSetDragRegion(C.int32_t(r.windowID), C.float(y1), C.float(y2))
 }
 
 // StartEventLoop runs the native Win32 message loop. Blocks until Close()

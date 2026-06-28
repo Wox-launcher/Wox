@@ -17,29 +17,29 @@ func RGBA(r, g, b, a float32) Color {
 
 // Common color helpers for launcher UI.
 var (
-	ColorBackground     = RGB(0.094, 0.094, 0.094) // #181818
-	ColorSurface        = RGB(0.118, 0.118, 0.118) // #1E1E1E
-	ColorBorder         = RGBA(1, 1, 1, 0.08)
-	ColorTextPrimary    = RGBA(1, 1, 1, 0.95)
-	ColorTextSecondary  = RGBA(1, 1, 1, 0.40)
+	ColorBackground      = RGB(0.094, 0.094, 0.094) // #181818
+	ColorSurface         = RGB(0.118, 0.118, 0.118) // #1E1E1E
+	ColorBorder          = RGBA(1, 1, 1, 0.08)
+	ColorTextPrimary     = RGBA(1, 1, 1, 0.95)
+	ColorTextSecondary   = RGBA(1, 1, 1, 0.40)
 	ColorTextPlaceholder = RGBA(1, 1, 1, 0.30)
-	ColorAccent         = RGB(0.2, 0.4, 0.8)
-	ColorSelected       = RGBA(0.2, 0.4, 0.8, 0.3)
-	ColorCursor         = RGBA(1, 1, 1, 0.8)
-	ColorTransparent    = RGBA(0, 0, 0, 0)
+	ColorAccent          = RGB(0.2, 0.4, 0.8)
+	ColorSelected        = RGBA(0.2, 0.4, 0.8, 0.3)
+	ColorCursor          = RGBA(1, 1, 1, 0.8)
+	ColorTransparent     = RGBA(0, 0, 0, 0)
 )
 
 // Theme holds the visual parameters that drive the draw command generation.
 // Loaded from Wox's JSON theme format via ThemeFromWoxTheme().
 type Theme struct {
-	WindowBg        Color
-	WindowRadius    float32
-	WindowPadding   float32
+	WindowBg      Color
+	WindowRadius  float32
+	WindowPadding float32
 
-	QueryBoxBg      Color
-	QueryBoxRadius  float32
-	QueryBoxHeight  float32
-	QueryBoxFontColor Color
+	QueryBoxBg          Color
+	QueryBoxRadius      float32
+	QueryBoxHeight      float32
+	QueryBoxFontColor   Color
 	QueryBoxCursorColor Color
 
 	ListItemHeight     float32
@@ -60,42 +60,58 @@ type Theme struct {
 	// Preview panel colors. PreviewBg fills the preview surface; PreviewSplitLine
 	// is the vertical divider between the result list and the preview; the tag
 	// colors style the metadata chips rendered below preview content.
-	PreviewBg             Color
-	PreviewSplitLineColor Color
-	PreviewFontColor      Color
-	PreviewPropertyTitle  Color
+	PreviewBg              Color
+	PreviewSplitLineColor  Color
+	PreviewFontColor       Color
+	PreviewPropertyTitle   Color
 	PreviewPropertyContent Color
+
+	// Toolbar colors. ToolbarBg fills the toolbar surface; ToolbarFontColor
+	// styles the status text and action labels. ToolbarPaddingLeft/Right set
+	// the inner horizontal padding. ToolbarHeight is the scaled height from
+	// the density system (set by gpuUIImpl, not the theme converter).
+	ToolbarBg           Color
+	ToolbarFontColor    Color
+	ToolbarPaddingLeft  float32
+	ToolbarPaddingRight float32
+	ToolbarHeight       float32
 }
 
 // DefaultTheme returns a dark theme matching the current Wox launcher look.
 func DefaultTheme() Theme {
 	return Theme{
-		WindowBg:          ColorBackground,
-		WindowRadius:      12,
-		WindowPadding:     10,
-		QueryBoxBg:        RGBA(1, 1, 1, 0.06),
-		QueryBoxRadius:    8,
-		QueryBoxHeight:    44,
-		QueryBoxFontColor: ColorTextPrimary,
+		WindowBg:            ColorBackground,
+		WindowRadius:        12,
+		WindowPadding:       10,
+		QueryBoxBg:          RGBA(1, 1, 1, 0.06),
+		QueryBoxRadius:      8,
+		QueryBoxHeight:      44,
+		QueryBoxFontColor:   ColorTextPrimary,
 		QueryBoxCursorColor: ColorCursor,
-		ListItemHeight:    48,
-		ListItemRadius:    4,
-		ListItemPadLeft:   4,
-		ListItemPadTop:    2,
-		SelectedBg:        ColorSelected,
-		SelectedTitleColor: RGB(1, 1, 1),
-		SelectedSubColor:  ColorTextPrimary,
-		TextPrimary:       ColorTextPrimary,
-		TextSecondary:     ColorTextSecondary,
-		TextPlaceholder:   ColorTextPlaceholder,
-		CursorColor:       ColorCursor,
-		FontSize:          16,
-		FontFamily:        "",
+		ListItemHeight:      48,
+		ListItemRadius:      4,
+		ListItemPadLeft:     4,
+		ListItemPadTop:      2,
+		SelectedBg:          ColorSelected,
+		SelectedTitleColor:  RGB(1, 1, 1),
+		SelectedSubColor:    ColorTextPrimary,
+		TextPrimary:         ColorTextPrimary,
+		TextSecondary:       ColorTextSecondary,
+		TextPlaceholder:     ColorTextPlaceholder,
+		CursorColor:         ColorCursor,
+		FontSize:            16,
+		FontFamily:          "",
 
 		PreviewBg:              RGBA(1, 1, 1, 0.04),
 		PreviewSplitLineColor:  RGBA(1, 1, 1, 0.10),
 		PreviewFontColor:       ColorTextPrimary,
 		PreviewPropertyTitle:   RGBA(1, 1, 1, 0.50),
 		PreviewPropertyContent: RGBA(1, 1, 1, 0.75),
+
+		ToolbarBg:           RGBA(1, 1, 1, 0.04),
+		ToolbarFontColor:    ColorTextSecondary,
+		ToolbarPaddingLeft:  12,
+		ToolbarPaddingRight: 12,
+		ToolbarHeight:       40,
 	}
 }
