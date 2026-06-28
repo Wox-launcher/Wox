@@ -998,8 +998,20 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
     }
   }
 
+  // updateLang persists the new language code. The language json and plugin
+  // translation refresh is handled by reloadSetting, which updateConfig invokes
+  // internally after detecting the LangCode change. Calling _applyLangResourcesChange
+  // here as well would duplicate the work, so it is intentionally omitted.
   Future<void> updateLang(String langCode) async {
     await updateConfig("LangCode", langCode);
+  }
+
+  // _applyLangResourcesChange reloads the language json and refreshes plugin
+  // translations. It is shared by the manual language switch (updateLang) and
+  // by reloadSetting when a remote change (e.g. cloud sync bootstrap restore)
+  // updates LangCode without going through updateConfig, so the UI keeps
+  // langMap and plugin translations in sync with the persisted value.
+  Future<void> _applyLangResourcesChange(String langCode) async {
     final traceId = const UuidV4().generate();
     langMap.value = await WoxApi.instance.getLangJson(traceId, langCode);
 
@@ -2861,8 +2873,15 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
   }
 
   Future<void> reloadSetting(String traceId) async {
+    final previousLangCode = woxSetting.value.langCode;
     await WoxSettingUtil.instance.loadSetting(traceId);
     woxSetting.value = WoxSettingUtil.instance.currentSetting;
+    // Cloud sync (e.g. bootstrap restore) and other remote sources can change
+    // LangCode without going through updateLang, so reload the language json
+    // and plugin translations to keep the UI in sync with the persisted value.
+    if (woxSetting.value.langCode != previousLangCode) {
+      await _applyLangResourcesChange(woxSetting.value.langCode);
+    }
     WoxInterfaceSizeUtil.instance.refreshFromDensity(woxSetting.value.uiDensity);
     Logger.instance.setLogLevel(woxSetting.value.logLevel);
     if (Get.isRegistered<WoxLauncherController>()) {
