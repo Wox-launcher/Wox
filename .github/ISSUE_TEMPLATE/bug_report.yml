@@ -18,6 +18,40 @@ body:
     validations:
       required: true
 
+  - type: markdown
+    attributes:
+      value: |
+        ### Linux Environment
+        The following two fields are only required for Linux users.
+        If you are on macOS or Windows, select "N/A".
+
+  - type: dropdown
+    id: desktop_environment
+    attributes:
+      label: Desktop Environment
+      description: Linux only. Select "N/A" if you are not a Linux user.
+      options:
+        - N/A (not a Linux user)
+        - GNOME
+        - KDE Plasma
+        - XFCE
+        - Other (specify in Description)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: display_server
+    attributes:
+      label: Display Server
+      description: Linux only. Select "N/A" if you are not a Linux user.
+      options:
+        - N/A (not a Linux user)
+        - Wayland
+        - X11 (Xorg)
+        - Not sure
+    validations:
+      required: true
+
   - type: input
     id: wox_version
     attributes:
