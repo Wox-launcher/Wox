@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"runtime"
 	"runtime/debug"
 	"strconv"
 	"sync"
@@ -19,16 +20,19 @@ import (
 	"github.com/google/uuid"
 )
 
-// gpuUIImpl implements common.UI using the native Direct2D renderer.
-// Launcher-related methods (ShowApp/HideApp/ChangeQuery/UpdateResult etc.)
-// are handled directly via the native ui package.
-// Settings/onboarding/screenshot methods are forwarded to the existing
-// WebSocket-based uiImpl (which talks to the Flutter settings process).
+// gpuUIImpl implements common.UI using the native renderer (Direct2D on
+// Windows, CoreGraphics on macOS). Launcher-related methods (ShowApp/
+// HideApp/ChangeQuery/UpdateResult etc.) are handled directly via the native
+// ui package. Settings/onboarding/screenshot methods are forwarded to the
+// existing WebSocket-based uiImpl (which talks to the Flutter settings
+// process).
 type gpuUIImpl struct {
 	mu sync.Mutex
 
-	// Native renderer (Direct2D on Windows)
-	renderer *ui.WindowsRenderer
+	// Native renderer — platform-agnostic interface. On Windows this is
+	// backed by *ui.WindowsRenderer (Direct2D/DirectWrite); on macOS by
+	// *ui.MacRenderer (CoreGraphics/CoreText). Both satisfy ui.NativeRenderer.
+	renderer ui.NativeRenderer
 	engine   *ui.LayoutEngine
 	theme    ui.Theme
 
@@ -40,6 +44,12 @@ type gpuUIImpl struct {
 	scrollOffset     float32
 	currentQuery     plugin.Query
 	currentSessionId string
+
+	// composeValue holds the in-progress IME composition text. On macOS this is
+	// populated by EventIMECompose and displayed alongside queryValue until the
+	// input method commits (EventTextInput). Windows never sends
+	// EventIMECompose so composeValue stays empty there.
+	composeValue string
 
 	// dirty is set whenever results, query text, selection, or theme change.
 	// buildAndRender only produces draw commands when dirty is true, avoiding
@@ -90,12 +100,13 @@ type gpuUIImpl struct {
 	previewUnwrapping   bool
 }
 
-// NewGpuUI creates a native launcher UI config. The actual Direct2D window
-// is created lazily in Run() to ensure it happens on the OS main thread.
+// NewGpuUI creates a native launcher UI config. The actual native window
+// (Direct2D on Windows, CoreGraphics on macOS) is created lazily in Run()
+// to ensure it happens on the OS main thread.
 func NewGpuUI(ctx context.Context, wsUI *uiImpl) (*gpuUIImpl, error) {
 	g := &gpuUIImpl{
-		theme:               ui.DefaultTheme(),
-		wsUI:                wsUI,
+		theme:              ui.DefaultTheme(),
+		wsUI:               wsUI,
 		resultPreviewRatio: defaultResultPreviewRatio,
 	}
 	return g, nil
@@ -121,7 +132,7 @@ func (g *gpuUIImpl) Run(ctx context.Context) {
 	theme := g.theme
 
 	// Create the renderer now — this must be on the OS main thread.
-	renderer, err := ui.NewWindowsRenderer(800, 400, theme)
+	renderer, err := ui.NewNativeRenderer(800, 400, theme)
 	if err != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to create native renderer: %s", err.Error()))
 		return
@@ -136,6 +147,7 @@ func (g *gpuUIImpl) Run(ctx context.Context) {
 	ui.SetEventHandler(g.handleEvent)
 
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	logger.Info(ctx, fmt.Sprintf("Run: HideOnStart=%v", woxSetting.HideOnStart.Get()))
 	if !woxSetting.HideOnStart.Get() {
 		g.renderer.Show()
 		g.mu.Lock()
@@ -143,6 +155,8 @@ func (g *gpuUIImpl) Run(ctx context.Context) {
 		g.dirty = true
 		g.mu.Unlock()
 		g.requestRepaint()
+	} else {
+		logger.Info(ctx, "Run: window starts hidden, waiting for hotkey")
 	}
 
 	g.renderer.RunMessageLoop(func() *ui.CommandList {
@@ -153,6 +167,7 @@ func (g *gpuUIImpl) Run(ctx context.Context) {
 // handleEvent processes native input events.
 func (g *gpuUIImpl) handleEvent(ev ui.Event) {
 	ctx := util.NewTraceContext()
+	logger.Info(ctx, fmt.Sprintf("handleEvent: type=%d key=%d text=%q compose=%q", ev.Type, ev.Key, ev.Text, ev.ComposeText))
 
 	switch ev.Type {
 	case ui.EventKeyPress:
@@ -194,11 +209,29 @@ func (g *gpuUIImpl) handleEvent(ev ui.Event) {
 
 	case ui.EventTextInput:
 		g.mu.Lock()
+		// macOS sends IME composition updates via EventIMECompose; when the
+		// input method commits, the final text arrives here. Clear the
+		// composition buffer first so it does not appear twice in the query
+		// box. Windows never sends EventIMECompose, so composeValue is empty
+		// there and this clear is a no-op.
+		g.composeValue = ""
 		g.queryValue += ev.Text
 		g.dirty = true
 		g.mu.Unlock()
 		// Trigger a new query
 		g.triggerQuery(ctx)
+
+	case ui.EventIMECompose:
+		// Update the in-progress IME composition text. Does not modify
+		// queryValue — the composition is appended to it only for display in
+		// buildAndRender (queryValue + composeValue). When the IME commits,
+		// EventTextInput appends to queryValue and resets composeValue.
+		g.mu.Lock()
+		g.composeValue = ev.ComposeText
+		g.dirty = true
+		g.mu.Unlock()
+		// Don't trigger a new query — composition is not committed text yet.
+		g.requestRepaint()
 
 	case ui.EventScroll:
 		g.handleScroll(ctx, ev)
@@ -234,15 +267,24 @@ func (g *gpuUIImpl) buildAndRender(ctx context.Context) *ui.CommandList {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if !g.visible {
+		logger.Info(ctx, "buildAndRender: not visible, skip")
 		return nil
 	}
 	// Only render when something actually changed. Without this gate every
 	// message-loop wakeup would do a full Clear + redraw, making the selected
 	// result background flicker during fast typing.
 	if !g.dirty {
-		return nil
+		if runtime.GOOS != "darwin" {
+			logger.Info(ctx, "buildAndRender: not dirty, skip")
+			return nil
+		}
+		// Cocoa may call drawRect to rebuild an exposed or newly ordered
+		// backing store after an earlier hidden resize consumed the dirty bit.
+		// Return a full frame on macOS so a transparent NSPanel never presents
+		// with only its vibrancy layer visible.
+	} else {
+		g.dirty = false
 	}
-	g.dirty = false
 
 	// Use the real window dimensions so layout matches the native surface.
 	// Falls back to the initial 800x400 before the first WM_SIZE arrives.
@@ -317,6 +359,12 @@ func (g *gpuUIImpl) buildAndRender(ctx context.Context) *ui.CommandList {
 		resultArea = listBox
 	}
 
+	// During IME composition the textbox shows queryValue + composeValue so the
+	// user sees the in-progress composition inline. A full underline/highlight
+	// style is not yet supported by layout.go; this simple concatenation keeps
+	// the composition visible (and is cleared when the IME commits).
+	displayValue := g.queryValue + g.composeValue
+
 	root := ui.VBox{
 		Padding: t.WindowPadding,
 		Gap:     12,
@@ -329,7 +377,7 @@ func (g *gpuUIImpl) buildAndRender(ctx context.Context) *ui.CommandList {
 				BgColor:      t.QueryBoxBg,
 				CornerRadius: t.QueryBoxRadius,
 				CursorColor:  t.QueryBoxCursorColor,
-				Value:        g.queryValue,
+				Value:        displayValue,
 				Focused:      true,
 			},
 			resultArea,
@@ -722,6 +770,11 @@ func (g *gpuUIImpl) releaseHiddenMemory() {
 
 func (g *gpuUIImpl) ShowApp(ctx context.Context, showContext common.ShowContext) {
 	GetUIManager().RefreshActiveWindowSnapshot(ctx)
+
+	if g.renderer == nil {
+		logger.Error(ctx, "ShowApp: renderer is nil!")
+		return
+	}
 
 	// Reset window height to match current result count before showing.
 	g.resizeWindowHeight()

@@ -14,7 +14,7 @@ func main() {
 	runtime.LockOSThread()
 
 	theme := ui.DefaultTheme()
-	renderer, err := ui.NewWindowsRenderer(800, 400, theme)
+	renderer, err := ui.NewNativeRenderer(800, 400, theme)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to create renderer: %v\n", err)
 		os.Exit(1)

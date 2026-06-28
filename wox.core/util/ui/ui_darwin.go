@@ -1,36 +1,34 @@
-//go:build windows && cgo
+//go:build darwin && cgo
 
 package ui
 
 /*
-#cgo CFLAGS: -DUNICODE -D_UNICODE
-#cgo LDFLAGS: -ld2d1 -ldwrite -ldwmapi -lwindowscodecs -lole32 -luuid -luser32 -lgdi32 -lshcore -ld3d11 -ldxgi -ldcomp
+#cgo CFLAGS: -x objective-c
+#cgo LDFLAGS: -framework Cocoa -framework QuartzCore -framework CoreText -framework ApplicationServices -framework Carbon
 
-#include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdlib.h>
 
-// DrawCommand mirrors the Go DrawCommand struct.
-// All coordinates are in DIP (logical pixels).
+// CDrawCommand mirrors the Go DrawCommand struct (same layout as Windows).
 typedef struct {
     int32_t cmd_type;
     float x, y, w, h;
     float r, g, b, a;
     float radius;
     float strokeWidth;
-    const char* text;       // UTF-8, owned by Go (valid during Render call)
+    const char* text;
     int32_t textLen;
     float fontSize;
-    const char* fontFamily;  // UTF-8, owned by Go
+    const char* fontFamily;
     int32_t fontFamilyLen;
-    const uint8_t* imageData; // PNG bytes, owned by Go
+    const uint8_t* imageData;
     int32_t imageLen;
-    const char* imageKey;     // UTF-8 cache key, owned by Go
+    const char* imageKey;
     int32_t imageKeyLen;
     float imageWidth, imageHeight;
 } CDrawCommand;
 
-// WindowConfig controls native window creation.
 typedef struct {
     int32_t width;
     int32_t height;
@@ -40,13 +38,12 @@ typedef struct {
     bool darkMode;
 } CWindowConfig;
 
-// MeasureResult returns text dimensions.
 typedef struct {
     float width;
     float height;
 } CMeasureResult;
 
-// Native functions implemented in ui_windows.c
+// Native functions implemented in ui_darwin.m
 extern int32_t uiWindowCreate(CWindowConfig config);
 extern void uiWindowDestroy(int32_t windowId);
 extern void uiWindowShow(int32_t windowId);
@@ -57,55 +54,61 @@ extern void uiWindowSetSize(int32_t windowId, int32_t w, int32_t h);
 extern bool uiWindowIsVisible(int32_t windowId);
 extern void uiWindowGetSize(int32_t windowId, int32_t* outW, int32_t* outH);
 extern void uiWindowReleaseMemory(int32_t windowId);
+extern void uiWindowInvalidate(int32_t windowId);
 extern void uiWindowRender(int32_t windowId, const CDrawCommand* commands, int32_t count);
 extern CMeasureResult uiMeasureText(const char* text, int32_t textLen, float fontSize, const char* fontFamily, int32_t fontFamilyLen);
 
-// Message loop — returns false when WM_QUIT is received.
-extern bool uiPumpMessages(void);
-extern void uiInvalidateWindow(int32_t windowId);
-
-// Event callback — the C side calls this Go function for input events.
+// Event callback — C calls this Go function for input events.
 extern void uiEventCallback(int32_t windowId, int32_t eventType, int32_t key, int32_t mods,
     char* text, int32_t textLen,
     char* composeText, int32_t composeTextLen, int32_t composeCursor,
     float x, float y, float deltaY,
     int32_t width, int32_t height);
+
+// Triggered by drawRect: to pull a fresh frame from the Go layout engine.
+// This is a re-entrant call (Obj-C → Go → Obj-C) — safe because Go callbacks
+// run on the calling thread (the Cocoa main thread) without spawning goroutines.
+extern void uiDarwinOnDraw(int32_t windowId);
 */
 import "C"
 import (
+	"log"
 	"sync"
 	"unsafe"
 )
 
-// WindowsRenderer implements the Renderer interface using Direct2D/DirectWrite.
-type WindowsRenderer struct {
+// MacRenderer implements NativeRenderer using CoreGraphics + CoreText on macOS.
+// Symmetric to WindowsRenderer: an integer handle references the native window
+// state kept in the Objective-C side.
+type MacRenderer struct {
 	windowID int32
 
 	nativeImageMu   sync.Mutex
 	nativeImageKeys map[string]struct{}
 }
 
-// WindowsTextMeasurer implements TextMeasurer using DirectWrite.
-type WindowsTextMeasurer struct{}
+// MacTextMeasurer implements TextMeasurer using CoreText.
+type MacTextMeasurer struct{}
 
 var (
-	rendererMu       sync.Mutex
-	rendererRegistry = make(map[int32]*WindowsRenderer)
-	eventHandler     EventCallback
+	macEventHandler EventCallback
+
+	renderCallbackMu sync.Mutex
+	renderCallback   func() *CommandList
+
+	// activeRenderers maps windowId → *MacRenderer so the drawRect: Go export
+	// (uiDarwinOnDraw) can find the right renderer without passing Go pointers
+	// through C.
+	activeRenderers sync.Map
 )
 
-// Compile-time interface assertion — guarantees WindowsRenderer satisfies
-// NativeRenderer so platform breakage shows up at build time.
-var _ NativeRenderer = (*WindowsRenderer)(nil)
+// Compile-time interface assertion.
+var _ NativeRenderer = (*MacRenderer)(nil)
 
-// NewNativeRenderer creates a native window and returns a NativeRenderer.
-// The window starts hidden — call Show() to display it.
-// Renamed from NewWindowsRenderer for platform-agnostic naming so gpuUIImpl
-// can call this on both Windows and macOS without build-tag branches.
-func NewNativeRenderer(width, height int, theme Theme) (*WindowsRenderer, error) {
-	// Treat the window as dark when the theme background luminance is low.
-	// This drives DWMWA_USE_IMMERSIVE_DARK_MODE so the Mica/Acrylic backdrop
-	// renders in the tone that matches the theme.
+// NewNativeRenderer creates a native macOS window and returns a NativeRenderer.
+// The window starts hidden — call Show() to display it. Must be called on the
+// main thread (Cocoa requires UI creation on the main thread).
+func NewNativeRenderer(width, height int, theme Theme) (*MacRenderer, error) {
 	bg := theme.WindowBg
 	lum := 0.2126*bg.R + 0.7152*bg.G + 0.0722*bg.B
 	darkMode := lum < 0.5
@@ -125,20 +128,18 @@ func NewNativeRenderer(width, height int, theme Theme) (*WindowsRenderer, error)
 	}
 
 	goID := int32(id)
-	r := &WindowsRenderer{
+	r := &MacRenderer{
 		windowID:        goID,
 		nativeImageKeys: make(map[string]struct{}),
 	}
-	rendererMu.Lock()
-	rendererRegistry[goID] = r
-	rendererMu.Unlock()
+	activeRenderers.Store(goID, r)
 	return r, nil
 }
 
 // SetEventHandler registers the global event callback for native input events.
 // Must be called before Show().
 func SetEventHandler(cb EventCallback) {
-	eventHandler = cb
+	macEventHandler = cb
 }
 
 //export uiEventCallback
@@ -167,25 +168,61 @@ func uiEventCallback(windowID C.int32_t, eventType C.int32_t, key C.int32_t, mod
 		ev.ComposeCursor = int(composeCursor)
 	}
 
-	if eventHandler != nil {
-		eventHandler(ev)
+	if macEventHandler != nil {
+		macEventHandler(ev)
 	}
 }
 
-// Render executes the command list on the native Direct2D surface.
-func (r *WindowsRenderer) Render(commands *CommandList) error {
+//export uiDarwinOnDraw
+func uiDarwinOnDraw(windowID C.int32_t) {
+	val, ok := activeRenderers.Load(int32(windowID))
+	if !ok {
+		log.Printf("[uiDarwinOnDraw] no active renderer for windowId=%d", windowID)
+		return
+	}
+	r, ok := val.(*MacRenderer)
+	if !ok {
+		return
+	}
+	renderCallbackMu.Lock()
+	cb := renderCallback
+	renderCallbackMu.Unlock()
+	if cb == nil {
+		log.Printf("[uiDarwinOnDraw] renderCallback is nil")
+		return
+	}
+	commands := cb()
+	if commands == nil {
+		log.Printf("[uiDarwinOnDraw] commands is nil")
+		return
+	}
 	if len(commands.Commands) == 0 {
+		log.Printf("[uiDarwinOnDraw] commands is empty")
+		return
+	}
+	log.Printf("[uiDarwinOnDraw] executing %d commands", len(commands.Commands))
+	r.flattenAndExecute(commands.Commands)
+}
+
+// Render is a no-op on macOS: rendering is driven by drawRect: (via
+// uiDarwinOnDraw). Kept to satisfy the Renderer interface so callers can
+// invoke it without caring about the platform.
+func (r *MacRenderer) Render(commands *CommandList) error {
+	if commands == nil || len(commands.Commands) == 0 {
 		return nil
 	}
+	r.flattenAndExecute(commands.Commands)
+	return nil
+}
 
-	// Convert Go DrawCommands to C DrawCommands.
-	// Text and image data are copied to C-allocated memory to comply with
-	// CGO's "no Go pointers in C" rule.
-	cCmds := make([]C.CDrawCommand, len(commands.Commands))
-	var cTextPtrs []*C.char // free after Render
+// flattenAndExecute converts Go DrawCommands to C and calls the Objective-C
+// executor. Mirrors WindowsRenderer.Render's conversion logic.
+func (r *MacRenderer) flattenAndExecute(cmds []DrawCommand) {
+	cCmds := make([]C.CDrawCommand, len(cmds))
+	var cTextPtrs []*C.char
 	var cImagePtrs []unsafe.Pointer
 
-	for i, cmd := range commands.Commands {
+	for i, cmd := range cmds {
 		cCmds[i].cmd_type = C.int32_t(cmd.Type)
 		cCmds[i].x = C.float(cmd.X)
 		cCmds[i].y = C.float(cmd.Y)
@@ -236,34 +273,30 @@ func (r *WindowsRenderer) Render(commands *CommandList) error {
 	C.uiWindowRender(C.int32_t(r.windowID), &cCmds[0], C.int32_t(len(cCmds)))
 
 	r.nativeImageMu.Lock()
-	for _, cmd := range commands.Commands {
+	for _, cmd := range cmds {
 		if cmd.ImageKey != "" && len(cmd.ImageData) > 0 {
 			r.nativeImageKeys[cmd.ImageKey] = struct{}{}
 		}
 	}
 	r.nativeImageMu.Unlock()
 
-	// Free C-allocated strings and image data.
 	for _, p := range cTextPtrs {
 		C.free(unsafe.Pointer(p))
 	}
 	for _, p := range cImagePtrs {
 		C.free(p)
 	}
-	return nil
 }
 
-// TextMeasurer returns the DirectWrite-backed text measurer.
-func (r *WindowsRenderer) TextMeasurer() TextMeasurer {
-	return WindowsTextMeasurer{}
+func (r *MacRenderer) TextMeasurer() TextMeasurer {
+	return MacTextMeasurer{}
 }
 
-func (WindowsTextMeasurer) MeasureText(text string, fontSize float32, fontFamily string) (width, height float32) {
+func (MacTextMeasurer) MeasureText(text string, fontSize float32, fontFamily string) (width, height float32) {
 	if len(text) == 0 {
 		return 0, fontSize * 1.2
 	}
 
-	// Copy to C memory to comply with CGO pointer rules.
 	cText := C.CString(text)
 	defer C.free(unsafe.Pointer(cText))
 
@@ -284,90 +317,69 @@ func (WindowsTextMeasurer) MeasureText(text string, fontSize float32, fontFamily
 	return float32(result.width), float32(result.height)
 }
 
-// Show makes the window visible.
-func (r *WindowsRenderer) Show() error {
+func (r *MacRenderer) Show() error {
 	C.uiWindowShow(C.int32_t(r.windowID))
 	return nil
 }
 
-// Hide hides the window.
-func (r *WindowsRenderer) Hide() error {
+func (r *MacRenderer) Hide() error {
 	C.uiWindowHide(C.int32_t(r.windowID))
 	return nil
 }
 
-// SetDarkMode toggles the DWM immersive dark mode attribute so the Mica
-// backdrop renders in the tone matching the active theme.
-func (r *WindowsRenderer) SetDarkMode(dark bool) {
+func (r *MacRenderer) SetDarkMode(dark bool) {
 	C.uiWindowSetDarkMode(C.int32_t(r.windowID), C.bool(dark))
 }
 
-// ReleaseMemory drops native caches that are only useful while the launcher is visible.
-func (r *WindowsRenderer) ReleaseMemory() {
+func (r *MacRenderer) ReleaseMemory() {
 	C.uiWindowReleaseMemory(C.int32_t(r.windowID))
 	r.nativeImageMu.Lock()
 	r.nativeImageKeys = make(map[string]struct{})
 	r.nativeImageMu.Unlock()
 }
 
-// SetPosition moves the window to absolute screen coordinates.
-func (r *WindowsRenderer) SetPosition(x, y int) error {
+func (r *MacRenderer) SetPosition(x, y int) error {
 	C.uiWindowSetPosition(C.int32_t(r.windowID), C.int32_t(x), C.int32_t(y))
 	return nil
 }
 
-// SetSize resizes the window.
-func (r *WindowsRenderer) SetSize(w, h int) error {
+func (r *MacRenderer) SetSize(w, h int) error {
 	C.uiWindowSetSize(C.int32_t(r.windowID), C.int32_t(w), C.int32_t(h))
 	return nil
 }
 
-// Close destroys the window.
-func (r *WindowsRenderer) Close() error {
+func (r *MacRenderer) Close() error {
 	C.uiWindowDestroy(C.int32_t(r.windowID))
-	rendererMu.Lock()
-	delete(rendererRegistry, r.windowID)
-	rendererMu.Unlock()
+	activeRenderers.Delete(r.windowID)
 	return nil
 }
 
-// IsVisible returns whether the window is shown.
-func (r *WindowsRenderer) IsVisible() bool {
+func (r *MacRenderer) IsVisible() bool {
 	return bool(C.uiWindowIsVisible(C.int32_t(r.windowID)))
 }
 
-// GetSize returns the current logical (DIP) window dimensions.
-func (r *WindowsRenderer) GetSize() (int, int) {
+func (r *MacRenderer) GetSize() (int, int) {
 	var w, h C.int32_t
 	C.uiWindowGetSize(C.int32_t(r.windowID), &w, &h)
 	return int(w), int(h)
 }
 
-// RunMessageLoop runs the native Win32 message loop.
-// Blocks until Close() is called or the window is destroyed.
-// The onRender callback is invoked each frame to produce draw commands.
-// onShouldRender returns false when the window is hidden, letting the loop
-// block on GetMessage without busy-rendering an invisible surface.
-func (r *WindowsRenderer) RunMessageLoop(onRender func() *CommandList) {
-	for {
-		// GetMessage blocks until a message arrives, so the loop does not
-		// busy-poll when the window is hidden or idle.
-		if !C.uiPumpMessages() {
-			break // WM_QUIT received
-		}
-
-		// Render a frame after processing messages. The Go onRender callback
-		// decides whether to produce commands (it checks g.visible internally).
-		cmds := onRender()
-		if cmds != nil {
-			r.Render(cmds)
-		}
-	}
+// RunMessageLoop on macOS is a no-op: the Cocoa event loop ([NSApp run]) is
+// already running (started by mainthread_darwin.m os_main). We just store the
+// onRender callback so drawRect: (via uiDarwinOnDraw) can retrieve commands
+// from the Go layout engine on demand. Blocking here would freeze the main
+// thread and prevent dispatch_async blocks (Show/Hide/Resize) from running.
+// The process stays alive because run() falls through to StartWebsocketAndWait
+// after gpuUI.Run returns.
+func (r *MacRenderer) RunMessageLoop(onRender func() *CommandList) {
+	renderCallbackMu.Lock()
+	renderCallback = onRender
+	renderCallbackMu.Unlock()
 }
 
-// RequestRepaint triggers a repaint of the window.
-func (r *WindowsRenderer) RequestRepaint() {
-	C.uiInvalidateWindow(C.int32_t(r.windowID))
+// RequestRepaint triggers a native repaint via setNeedsDisplay:.
+func (r *MacRenderer) RequestRepaint() {
+	C.uiWindowInvalidate(C.int32_t(r.windowID))
 }
 
 // WindowError describes a native window operation failure.

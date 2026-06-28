@@ -109,8 +109,10 @@ func GetUIManager() *Manager {
 		}
 
 		// Create the native GPU UI impl for the launcher.
-		// On non-Windows platforms, NewGpuUI returns an error and we fall
-		// back to the WebSocket-only uiImpl.
+		// On platforms without a native renderer (Linux etc.) NewGpuUI succeeds
+		// but Run → NewNativeRenderer returns an error at start time; we still
+		// register gpuUI here and rely on Run to fall back. NewGpuUI itself
+		// never returns an error — it just constructs the struct.
 		ctx := util.NewTraceContext()
 		gpuUI, err := NewGpuUI(ctx, wsUI)
 		if err != nil {

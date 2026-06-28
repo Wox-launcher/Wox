@@ -44,3 +44,32 @@ type WindowLifecycle interface {
 	// IsVisible returns whether the window is currently shown.
 	IsVisible() bool
 }
+
+// NativeRenderer merges Renderer, WindowLifecycle, and the extra methods the
+// gpuUIImpl needs from the platform backend. Each platform (Windows/macOS)
+// implements this via CGO and asserts conformance at compile time.
+// gpuUIImpl holds a NativeRenderer so it does not need a platform-specific
+// concrete type and can share the same code path across OSes.
+type NativeRenderer interface {
+	Renderer
+	WindowLifecycle
+
+	// GetSize returns the current logical (DIP) window dimensions.
+	GetSize() (int, int)
+
+	// SetDarkMode switches the native system backdrop tone so the vibrancy /
+	// Mica material matches the active theme.
+	SetDarkMode(dark bool)
+
+	// ReleaseMemory drops native caches that are only useful while the
+	// launcher is visible. Called when the window is hidden.
+	ReleaseMemory()
+
+	// RequestRepaint triggers a native repaint of the window surface.
+	RequestRepaint()
+
+	// RunMessageLoop enters the native message loop. On Windows this blocks
+	// until Close/WM_QUIT; on macOS it just stores onRender and returns so
+	// the Cocoa event loop ([NSApp run]) continues driving rendering.
+	RunMessageLoop(onRender func() *CommandList)
+}
