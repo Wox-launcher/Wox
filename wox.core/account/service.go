@@ -448,17 +448,21 @@ func (s *Service) RefreshAccessToken(ctx context.Context) (string, error) {
 
 	refreshToken, err := s.keyring.Get(ctx, refreshTokenKey)
 	if err != nil {
-		s.MarkSessionExpired(ctx)
-		return "", err
+		if errors.Is(err, cloudsync.ErrKeyNotFound) {
+			s.MarkSessionExpired(ctx)
+		}
+		return "", fmt.Errorf("failed to read account refresh token: %w", err)
 	}
 
 	var resp AuthResponse
 	if err := s.post(ctx, "/v1/account/refresh", map[string]string{"refresh_token": refreshToken}, &resp, ""); err != nil {
-		s.MarkSessionExpired(ctx)
+		if errors.Is(err, errAccountUnauthorized) {
+			s.MarkSessionExpired(ctx)
+		}
 		return "", err
 	}
-	if err := s.saveTokens(ctx, resp); err != nil {
-		return "", err
+	if err := s.saveRefreshedTokens(ctx, resp, refreshToken); err != nil {
+		return "", fmt.Errorf("failed to save refreshed account tokens: %w", err)
 	}
 	if err := s.saveState(ctx, resp.User, s.loadState(ctx).SyncEnabled, false); err != nil {
 		return "", err
@@ -477,6 +481,22 @@ func (s *Service) saveTokens(ctx context.Context, resp AuthResponse) error {
 		return err
 	}
 	return s.keyring.Set(ctx, refreshExpiresKey, fmt.Sprintf("%d", resp.RefreshExpiresAt))
+}
+
+// saveRefreshedTokens avoids rewriting stable refresh tokens while still accepting older servers that rotate them.
+func (s *Service) saveRefreshedTokens(ctx context.Context, resp AuthResponse, currentRefreshToken string) error {
+	if err := s.keyring.Set(ctx, accessTokenKey, resp.AccessToken); err != nil {
+		return err
+	}
+	if resp.RefreshToken != "" && resp.RefreshToken != currentRefreshToken {
+		if err := s.keyring.Set(ctx, refreshTokenKey, resp.RefreshToken); err != nil {
+			return err
+		}
+		if err := s.keyring.Set(ctx, refreshExpiresKey, fmt.Sprintf("%d", resp.RefreshExpiresAt)); err != nil {
+			return err
+		}
+	}
+	return s.keyring.Set(ctx, accessExpiresKey, fmt.Sprintf("%d", resp.AccessExpiresAt))
 }
 
 func (s *Service) clearTokens(ctx context.Context) error {
@@ -542,7 +562,13 @@ func (s *Service) post(ctx context.Context, path string, body any, target any, a
 func (s *Service) postAuthenticated(ctx context.Context, path string, body any, target any) error {
 	token, err := s.AccessToken(ctx)
 	if err != nil {
-		return err
+		if !errors.Is(err, cloudsync.ErrKeyNotFound) {
+			return err
+		}
+		token, err = s.RefreshAccessToken(ctx)
+		if err != nil {
+			return err
+		}
 	}
 	err = s.post(ctx, path, body, target, token)
 	if !errors.Is(err, errAccountUnauthorized) {
@@ -550,7 +576,7 @@ func (s *Service) postAuthenticated(ctx context.Context, path string, body any, 
 	}
 	token, refreshErr := s.RefreshAccessToken(ctx)
 	if refreshErr != nil {
-		return err
+		return refreshErr
 	}
 	return s.post(ctx, path, body, target, token)
 }
@@ -574,7 +600,13 @@ func (s *Service) get(ctx context.Context, path string, target any, accessToken 
 func (s *Service) getAuthenticated(ctx context.Context, path string, target any) error {
 	token, err := s.AccessToken(ctx)
 	if err != nil {
-		return err
+		if !errors.Is(err, cloudsync.ErrKeyNotFound) {
+			return err
+		}
+		token, err = s.RefreshAccessToken(ctx)
+		if err != nil {
+			return err
+		}
 	}
 	err = s.get(ctx, path, target, token)
 	if !errors.Is(err, errAccountUnauthorized) {
@@ -582,7 +614,7 @@ func (s *Service) getAuthenticated(ctx context.Context, path string, target any)
 	}
 	token, refreshErr := s.RefreshAccessToken(ctx)
 	if refreshErr != nil {
-		return err
+		return refreshErr
 	}
 	return s.get(ctx, path, target, token)
 }

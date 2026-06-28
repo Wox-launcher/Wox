@@ -324,6 +324,11 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
         statusColor = getThemeSubTextColor();
         statusDetailText = null;
         statusDetailColor = null;
+      } else if (account.sessionExpired) {
+        statusText = controller.tr("ui_cloud_sync_sync_error");
+        statusColor = Colors.red;
+        statusDetailText = controller.tr("ui_cloud_sync_account_session_expired");
+        statusDetailColor = Colors.red;
       } else if (statusError.isNotEmpty) {
         statusText = controller.tr("ui_cloud_sync_sync_error");
         statusColor = Colors.red;
@@ -375,9 +380,9 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
         statusDetailText = "${controller.tr("ui_cloud_sync_last_sync_time")}: $lastSyncTime";
         statusDetailColor = getThemeSubTextColor();
       }
-      final shouldBootstrap = account.loggedIn && account.syncEligible && !isSynced && !isBootstrapInProgress;
-      final syncButtonEnabled = account.loggedIn && account.syncEligible && !isLoading && !isBusy && !isBootstrapInProgress && !isCurrentDeviceRevoked;
-      final joinButtonEnabled = account.loggedIn && account.syncEligible && isCurrentDeviceRevoked && !isLoading && !isBusy;
+      final shouldBootstrap = account.loggedIn && !account.sessionExpired && account.syncEligible && !isSynced && !isBootstrapInProgress;
+      final syncButtonEnabled = account.loggedIn && !account.sessionExpired && account.syncEligible && !isLoading && !isBusy && !isBootstrapInProgress && !isCurrentDeviceRevoked;
+      final joinButtonEnabled = account.loggedIn && !account.sessionExpired && account.syncEligible && isCurrentDeviceRevoked && !isLoading && !isBusy;
       final statusDetailParts = [
         if (statusDetailText != null && statusDetailText.isNotEmpty) statusDetailText,
         if (nextAvailableSyncTime.isNotEmpty) "${controller.tr("ui_cloud_sync_backoff_until")}: $nextAvailableSyncTime",
@@ -426,10 +431,13 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
       final isBillingWaiting = controller.isAccountBillingWaiting.value;
       final billingWaitingMessageKey = controller.accountBillingWaitingMessageKey.value;
       final subscriptionError = controller.accountSubscriptionError.value;
+      final sessionExpired = account.sessionExpired;
       final isPro = account.isPro;
       final billingWaitingText = billingWaitingMessageKey.isNotEmpty ? controller.tr(billingWaitingMessageKey) : controller.tr("ui_cloud_sync_subscription_waiting_payment");
       final subscriptionStatusText =
-          isBillingWaiting
+          sessionExpired
+              ? controller.tr("ui_cloud_sync_account_session_expired")
+              : isBillingWaiting
               ? billingWaitingText
               : subscriptionError.isNotEmpty
               ? normalizeAccountActionError(subscriptionError)
@@ -437,10 +445,10 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
               ? controller.tr("ui_cloud_sync_plan_pro_status")
               : controller.tr("ui_cloud_sync_plan_free_status");
       final subscriptionStatusColor =
-          isBillingWaiting
-              ? getThemeSubTextColor()
-              : subscriptionError.isNotEmpty
+          sessionExpired || subscriptionError.isNotEmpty
               ? Colors.red
+              : isBillingWaiting
+              ? getThemeSubTextColor()
               : null;
       return formSection(
         title: controller.tr("ui_cloud_sync_account"),
@@ -474,7 +482,7 @@ class WoxSettingCloudSyncView extends WoxSettingBaseView {
                       ),
                     ),
                     const SizedBox(width: 6),
-                    buildSubscriptionActionMenu(isPro: isPro, isBusy: isBusy, isBillingWaiting: isBillingWaiting),
+                    buildSubscriptionActionMenu(isPro: isPro, isBusy: isBusy || sessionExpired, isBillingWaiting: isBillingWaiting),
                   ],
                 ),
               ),

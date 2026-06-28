@@ -230,8 +230,7 @@ func (c *CloudSyncHTTPClient) post(ctx context.Context, path string, body any, t
 			if refreshProvider, ok := c.authProvider.(CloudSyncRefreshAuthProvider); ok {
 				token, refreshErr := refreshProvider.RefreshAccessToken(ctx)
 				if refreshErr != nil {
-					refreshProvider.MarkSessionExpired(ctx)
-					return err
+					return refreshErr
 				}
 				return c.postWithToken(ctx, path, payload, target, token)
 			}

@@ -2445,6 +2445,8 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
       accountStatus.value = await WoxApi.instance.accountRefresh(traceId);
       await refreshCloudSyncStatus();
     } catch (e) {
+      await refreshAccountStatus();
+      _updateCloudSyncStatusWaiting();
       accountSubscriptionError.value = e.toString();
       Logger.instance.error(traceId, 'Refresh account subscription status failed: $e');
     } finally {
@@ -2470,6 +2472,8 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
       _updateCloudSyncStatusWaiting();
       Logger.instance.info(traceId, 'Account subscription status refreshed after app resume');
     } catch (e) {
+      await refreshAccountStatus();
+      _updateCloudSyncStatusWaiting();
       Logger.instance.error(traceId, 'Failed to refresh account subscription status after app resume: $e');
     } finally {
       _isRefreshingAccountStatusOnResume = false;
@@ -2601,6 +2605,7 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
     final state = status.state;
     return activeNavPath.value == 'data.cloudsync' &&
         account.loggedIn &&
+        !account.sessionExpired &&
         account.syncEligible &&
         account.syncEnabled &&
         status.keyStatus.available &&
