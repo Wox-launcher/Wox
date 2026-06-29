@@ -91,7 +91,7 @@ class _WoxQueryHotkeyDialogState extends State<WoxQueryHotkeyDialog> {
 
   bool get _showsDisplayFields => _selectedPreset == _QueryHotkeyPreset.webPanel || _selectedPreset == _QueryHotkeyPreset.custom;
 
-  bool get _supportsWindowPositionSetting => !controller.woxSetting.value.isLinuxWaylandSession;
+  bool get _supportsWindowPositionSetting => !controller.woxSetting.value.isLinuxWaylandSession || controller.linuxLayerShellSupported.value;
 
   bool get _showsCustomChromeFields => _selectedPreset == _QueryHotkeyPreset.custom;
 

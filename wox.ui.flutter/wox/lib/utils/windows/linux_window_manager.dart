@@ -35,6 +35,17 @@ class LinuxWindowManager extends BaseWindowManager {
     }
   }
 
+  /// Place the window on a specific output at an exact position using the
+  /// wlr-layer-shell protocol. Only effective when [getBackendInfo] reports
+  /// `supportsLayerShell == true`; otherwise the compositor owns placement.
+  Future<void> applyLayerShellPlacement(Offset position, Size size) async {
+    try {
+      await _channel.invokeMethod('applyLayerShellPlacement', {'x': position.dx, 'y': position.dy, 'width': size.width, 'height': size.height});
+    } catch (e) {
+      Logger.instance.error(const UuidV4().generate(), "Error applying layer-shell placement: $e");
+    }
+  }
+
   @override
   Future<void> setSize(Size size) async {
     try {

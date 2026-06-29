@@ -84,6 +84,8 @@ type Manager struct {
 	isUIReadyHandled     bool
 	isSystemDark         bool
 	exitOnce             sync.Once
+	hyprlandToggleMu    sync.Mutex
+	hyprlandToggleLast  time.Time
 
 	activeWindowSnapshot    common.ActiveWindowSnapshot // cached active window snapshot
 	activeWindowSnapshotMu  sync.RWMutex
@@ -885,6 +887,7 @@ func linuxDesktopDiagnostics() string {
 	for _, key := range keys {
 		parts = append(parts, fmt.Sprintf("%s=%q", key, os.Getenv(key)))
 	}
+	parts = append(parts, fmt.Sprintf("isHyprland=%v", util.IsHyprlandSession()))
 
 	if data, err := os.ReadFile("/etc/os-release"); err == nil {
 		for _, line := range strings.Split(string(data), "\n") {
@@ -2224,6 +2227,19 @@ func (m *Manager) shouldIgnoreHotkeyTrigger(ctx context.Context) bool {
 	return false
 }
 
+// debounceHyprlandToggle prevents rapid repeat toggle requests (from Hyprland
+// key-repeat or fast double-press) from causing the main instance to receive
+// multiple toggles in quick succession, which can shut it down.
+func (m *Manager) debounceHyprlandToggle() bool {
+	m.hyprlandToggleMu.Lock()
+	defer m.hyprlandToggleMu.Unlock()
+	if time.Since(m.hyprlandToggleLast) < 300*time.Millisecond {
+		return false
+	}
+	m.hyprlandToggleLast = time.Now()
+	return true
+}
+
 // recordHotkeyIfRecording forwards Wox-owned global hotkey presses to the active recorder instead of executing them.
 func (m *Manager) recordHotkeyIfRecording(ctx context.Context, hotkeyStr string) bool {
 	if !m.isHotkeyRecordingActive() {
@@ -2300,6 +2316,12 @@ func (m *Manager) ProcessDeeplink(ctx context.Context, deeplink string) {
 	}
 
 	if command == "toggle" {
+		// Debounce rapid toggle requests from Hyprland key-repeat to prevent
+		// the main instance from receiving multiple toggles in quick succession
+		// (show then immediately hide), which can cause it to exit.
+		if !m.debounceHyprlandToggle() {
+			return
+		}
 		m.ui.ToggleApp(ctx, common.ShowContext{
 			SelectAll: true,
 		})
@@ -2314,6 +2336,17 @@ func (m *Manager) ProcessDeeplink(ctx context.Context, deeplink string) {
 		binding := arguments["binding"]
 		if binding != "" {
 			keyboard.InvokeGnomeHotkeyCallback(binding)
+		}
+	}
+
+	// wox://hyprland-hotkey?key=<url-encoded-key>
+	// Invoked when a Hyprland hl.bind fires and the secondary wox process
+	// forwards the deeplink to the already-running instance. The key is the
+	// Hyprland Lua key string (e.g. "CTRL+K"), URL-decoded by ProcessDeeplink.
+	if command == "hyprland-hotkey" {
+		key := arguments["key"]
+		if key != "" {
+			keyboard.InvokeHyprlandHotkeyCallback(key)
 		}
 	}
 

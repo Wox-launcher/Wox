@@ -211,12 +211,8 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
               // On Wayland without evdev access, double-modifier hotkeys (e.g.
               // double Ctrl) and CapsLock combos cannot work. Show a guiding
               // prompt with a link to the help article.
-              if (controller.woxSetting.value.isLinuxWaylandSession &&
-                  !controller.woxSetting.value.isEvdevReadAvailable)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 18),
-                  child: _buildWaylandEvdevHint(),
-                ),
+              if (controller.woxSetting.value.isLinuxWaylandSession && !controller.woxSetting.value.isEvdevReadAvailable)
+                Padding(padding: const EdgeInsets.only(bottom: 18), child: _buildWaylandEvdevHint()),
               if (!controller.woxSetting.value.isLinuxWaylandSession)
                 // Wayland does not expose the active app selection to Wox, so the
                 // selection hotkey cannot produce a selection query there.
@@ -330,7 +326,7 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                             "Type": "select",
                             "Width": 120,
                             "HideInTable": true,
-                            "HideInUpdate": controller.woxSetting.value.isLinuxWaylandSession,
+                            "HideInUpdate": controller.woxSetting.value.isLinuxWaylandSession && !controller.linuxLayerShellSupported.value,
                             "SelectOptions": [
                               {"Label": controller.tr("ui_query_position_system_default"), "Value": "system_default"},
                               {"Label": controller.tr("ui_query_position_top_left"), "Value": "top_left"},
@@ -581,19 +577,12 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
         children: [
           Icon(Icons.warning_amber_rounded, size: 20, color: accentColor),
           const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              controller.tr('ui_hotkey_wayland_evdev_hint'),
-              style: TextStyle(fontSize: 13, color: getThemeTextColor()),
-            ),
-          ),
+          Expanded(child: Text(controller.tr('ui_hotkey_wayland_evdev_hint'), style: TextStyle(fontSize: 13, color: getThemeTextColor()))),
           WoxButton.text(
             text: controller.tr('ui_hotkey_wayland_evdev_learn_more'),
             icon: Icon(Icons.open_in_new, size: 14, color: getThemeTextColor()),
             onPressed: () async {
-              final uri = Uri.parse(
-                'https://wox-launcher.github.io/Wox/guide/faq#wayland-double-modifier-hotkeys',
-              );
+              final uri = Uri.parse('https://wox-launcher.github.io/Wox/guide/faq#wayland-double-modifier-hotkeys');
               if (await canLaunchUrl(uri)) {
                 await launchUrl(uri);
               }

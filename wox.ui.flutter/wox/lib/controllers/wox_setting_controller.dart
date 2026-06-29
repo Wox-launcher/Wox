@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -32,6 +34,7 @@ import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_fuzzy_match_util.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
 import 'package:wox/utils/wox_setting_util.dart';
+import 'package:wox/utils/windows/linux_window_manager.dart';
 
 // WoxThemeEditorDraftSession carries the original active theme, saved baseline, and current unsaved draft.
 class WoxThemeEditorDraftSession {
@@ -115,8 +118,12 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
   final Map<String, GlobalKey> pluginListItemKeys = <String, GlobalKey>{};
   TabController? activePluginTabController;
 
-  // UI state: show loading spinner when refreshing visible plugin list
   final isRefreshingPluginList = false.obs;
+
+  // Whether the active Wayland compositor supports wlr-layer-shell, enabling
+  // precise launcher placement (Hyprland/sway). Populated from the GTK backend
+  // on Linux so the UI settings can re-expose the ShowPosition selector.
+  final linuxLayerShellSupported = false.obs;
 
   //themes
   final themeList = <WoxTheme>[];
@@ -173,6 +180,22 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
     super.onInit();
     WidgetsBinding.instance.addObserver(this);
     ever<String>(activeNavPath, _handleActiveNavPathChanged);
+    if (Platform.isLinux) {
+      _refreshLinuxLayerShellSupported();
+    }
+  }
+
+  Future<void> _refreshLinuxLayerShellSupported() async {
+    if (!Platform.isLinux) {
+      return;
+    }
+    try {
+      final info = await LinuxWindowManager.instance.getBackendInfo();
+      final supported = info["supportsLayerShell"] == true || info["supportsLayerShell"].toString().toLowerCase() == "true";
+      linuxLayerShellSupported.value = supported;
+    } catch (_) {
+      // Keep the default (false); the settings UI will hide ShowPosition.
+    }
   }
 
   @override
@@ -561,7 +584,11 @@ class WoxSettingController extends GetxController with WidgetsBindingObserver {
     if (!woxSetting.value.isLinuxWaylandSession) {
       return true;
     }
-    return definition.settingKey != 'ShowPosition' &&
+    // wlr-layer-shell restores precise window placement (Hyprland/sway), so the
+    // ShowPosition selector stays reachable there. Selection/tray-query capture
+    // and ignored-hotkey-apps remain unavailable on native Wayland regardless.
+    final showPositionAvailable = linuxLayerShellSupported.value;
+    return (definition.settingKey != 'ShowPosition' || showPositionAvailable) &&
         definition.settingKey != 'SelectionHotkey' &&
         definition.settingKey != 'IgnoredHotkeyApps' &&
         definition.settingKey != 'TrayQueries';

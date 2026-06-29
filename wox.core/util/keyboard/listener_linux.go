@@ -14,6 +14,15 @@ func init() {
 
 func RegisterGlobalHotkey(modifiers Modifier, key Key, callback func()) (HotkeyRegistration, error) {
 	if IsWaylandSession() {
+		// On Hyprland, the portal backend cannot deliver key events without
+		// manual compositor-side bind configuration. Use the native Hyprland
+		// Lua bind backend instead, which auto-registers via hyprctl.
+		if isHyprlandSession() {
+			reg, _, err := registerGlobalHotkeysLinuxHyprland([]GlobalHotkeySpec{
+				{Modifiers: modifiers, Key: key, Callback: callback},
+			})
+			return reg, err
+		}
 		reg, err := registerGlobalHotkeyLinuxWayland(modifiers, key, callback)
 		if err == nil {
 			return reg, nil
@@ -35,6 +44,11 @@ func RegisterGlobalHotkey(modifiers Modifier, key Key, callback func()) (HotkeyR
 func registerGlobalHotkeysLinux(specs []GlobalHotkeySpec) (HotkeyRegistration, bool, error) {
 	if !IsWaylandSession() {
 		return nil, false, nil
+	}
+
+	// On Hyprland, prefer the native Lua bind backend over the portal backend.
+	if isHyprlandSession() {
+		return registerGlobalHotkeysLinuxHyprland(specs)
 	}
 
 	registration, err := registerGlobalHotkeysLinuxWayland(specs)

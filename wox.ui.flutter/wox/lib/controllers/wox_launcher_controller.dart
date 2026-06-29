@@ -2002,6 +2002,7 @@ class WoxLauncherController extends GetxController {
     final initialShowResizeToken = resizeRequestToken;
     Map<String, dynamic> linuxBackendInfo = <String, dynamic>{};
     var skipAbsolutePosition = false;
+    var layerShellPlacement = false;
     var initialShowSizeApplied = false;
     if (Platform.isLinux) {
       Logger.instance.info(
@@ -2011,15 +2012,18 @@ class WoxLauncherController extends GetxController {
     }
 
     // Linux native Wayland does not allow reliable absolute top-level placement.
-    // Show first so the compositor can choose the active monitor, then only apply the requested size.
-    // This intentionally trades exact centering for correct monitor switching. Exact centered
-    // placement on Wayland needs compositor support such as layer-shell, a GNOME Shell extension,
-    // or another compositor-specific protocol; a regular GTK client cannot do it portably.
+    // When the compositor supports wlr-layer-shell (Hyprland/sway), apply the
+    // placement before show so the surface is mapped at the right position from
+    // the start. Otherwise show first so the compositor chooses the active
+    // monitor, then only apply the requested size. Exact centered placement on
+    // Wayland without layer-shell needs compositor-specific protocols a regular
+    // GTK client cannot do portably.
     if (Platform.isLinux) {
-      await windowManager.show();
       linuxBackendInfo = await LinuxWindowManager.instance.getBackendInfo();
       skipAbsolutePosition = _isLinuxNativeWaylandBackend(linuxBackendInfo);
-      Logger.instance.info(traceId, "linux-window-bounds dart stage=backend-info $linuxBackendInfo skipAbsolutePosition=$skipAbsolutePosition");
+      final layerShellSupported = linuxBackendInfo["supportsLayerShell"] == true || linuxBackendInfo["supportsLayerShell"].toString().toLowerCase() == "true";
+      layerShellPlacement = skipAbsolutePosition && layerShellSupported;
+      Logger.instance.info(traceId, "linux-window-bounds dart stage=backend-info $linuxBackendInfo skipAbsolutePosition=$skipAbsolutePosition layerShell=$layerShellPlacement");
     }
 
     // Linux Wayland query results can arrive while showApp is still waiting for
@@ -2027,7 +2031,20 @@ class WoxLauncherController extends GetxController {
     // the stale initial show height afterward.
     final initialShowSizeSuperseded = Platform.isLinux && resizeRequestToken != initialShowResizeToken;
     if (!initialShowSizeSuperseded) {
-      if (skipAbsolutePosition) {
+      if (layerShellPlacement) {
+        // wlr-layer-shell lets Wox anchor to the top-left of a chosen output and
+        // set margins, restoring exact launcher placement on Hyprland/sway while
+        // still keeping the window above normal surfaces and out of the taskbar.
+        // Apply placement before show so the compositor maps the surface at the
+        // correct position and monitor from the start, avoiding a visible jump.
+        await LinuxWindowManager.instance.applyLayerShellPlacement(targetPosition, targetSize);
+        initialShowSizeApplied = true;
+        Logger.instance.info(
+          traceId,
+          "linux-window-bounds dart stage=layer-shell-placement positionType=${params.position.type} target=${targetPosition.dx},${targetPosition.dy} ${targetWidth}x$targetHeight",
+        );
+      } else if (skipAbsolutePosition) {
+        await windowManager.show();
         await windowManager.setSize(targetSize);
         initialShowSizeApplied = true;
         final actualSize = await windowManager.getSize();
@@ -2310,10 +2327,15 @@ class WoxLauncherController extends GetxController {
       if (Platform.isLinux) {
         backendInfo = await LinuxWindowManager.instance.getBackendInfo();
         if (_isLinuxNativeWaylandBackend(backendInfo)) {
-          // Native Wayland positions are compositor-owned and gtk_window_get_position may return
-          // synthetic or stale coordinates, so persisting them would poison last_location.
-          Logger.instance.info(traceId, "linux-window-bounds dart stage=skip-save-last-location reason=$reason backendInfo=$backendInfo note=native-wayland-position-unreliable");
-          return;
+          final layerShellSupported = backendInfo["supportsLayerShell"] == true || backendInfo["supportsLayerShell"].toString().toLowerCase() == "true";
+          if (!layerShellSupported) {
+            // Native Wayland positions are compositor-owned and gtk_window_get_position may return
+            // synthetic or stale coordinates, so persisting them would poison last_location.
+            Logger.instance.info(traceId, "linux-window-bounds dart stage=skip-save-last-location reason=$reason backendInfo=$backendInfo note=native-wayland-position-unreliable");
+            return;
+          }
+          // With layer-shell the window is placed via explicit margins, so the
+          // GTK-reported coordinates are meaningful and safe to persist.
         }
       }
 

@@ -17,6 +17,9 @@
 #include <X11/extensions/XTest.h>
 #include <gdk/gdkx.h>
 #endif
+#ifdef GTK_LAYER_SHELL_ENABLED
+#include <gtk-layer-shell.h>
+#endif
 
 #include "flutter/generated_plugin_registrant.h"
 
@@ -69,6 +72,7 @@ struct _MyApplication
   int pending_bounds_y;
   int pending_bounds_width;
   int pending_bounds_height;
+  gboolean layer_shell_enabled;
   std::vector<struct CachedLinuxDisplayCapture> cached_x11_display_captures;
   struct CachedPortalCapture cached_portal_capture;
 };
@@ -202,6 +206,59 @@ static const char *safe_string(const char *value)
   return value != nullptr ? value : "";
 }
 
+#ifdef GTK_LAYER_SHELL_ENABLED
+// gtk_layer_is_supported probes the compositor at runtime; the library can be
+// linked and present but the active compositor may still not implement
+// wlr-layer-shell (e.g. GNOME Shell on Wayland). Used to gate Dart-side fallback.
+static gboolean wox_layer_shell_available()
+{
+  return gtk_layer_is_supported();
+}
+
+// init_layer_shell_for_window turns a realized GtkWindow into a layer-shell
+// surface anchored to the top-left of its output at the OVERLAY layer. This
+// keeps Wox above normal windows and out of the taskbar on wlroots compositors
+// (Hyprland, sway, etc.) while still allowing precise placement via margins.
+// Keyboard interactivity is set to EXCLUSIVE so the launcher receives keyboard
+// input as soon as it is shown; layer-shell surfaces default to NONE and would
+// otherwise ignore all key events.
+static void init_layer_shell_for_window(GtkWindow *window)
+{
+  gtk_layer_init_for_window(window);
+  gtk_layer_set_layer(window, GTK_LAYER_SHELL_LAYER_OVERLAY);
+  gtk_layer_set_keyboard_mode(window, GTK_LAYER_SHELL_KEYBOARD_MODE_EXCLUSIVE);
+  gtk_layer_set_anchor(window, GTK_LAYER_SHELL_EDGE_TOP, TRUE);
+  gtk_layer_set_anchor(window, GTK_LAYER_SHELL_EDGE_LEFT, TRUE);
+  gtk_layer_set_anchor(window, GTK_LAYER_SHELL_EDGE_BOTTOM, FALSE);
+  gtk_layer_set_anchor(window, GTK_LAYER_SHELL_EDGE_RIGHT, FALSE);
+}
+
+// apply_layer_shell_placement sets the output (monitor) and the top/left
+// margins relative to that output so the launcher lands exactly where the
+// backend requested. The size is still driven by the existing resize path.
+static void apply_layer_shell_placement(GtkWindow *window, GdkMonitor *monitor,
+                                        int x, int y)
+{
+  if (monitor != nullptr)
+  {
+    gtk_layer_set_monitor(window, monitor);
+  }
+  gtk_layer_set_margin(window, GTK_LAYER_SHELL_EDGE_LEFT, x);
+  gtk_layer_set_margin(window, GTK_LAYER_SHELL_EDGE_TOP, y);
+}
+#else
+static gboolean wox_layer_shell_available() { return FALSE; }
+static void init_layer_shell_for_window(GtkWindow *window) { (void)window; }
+static void apply_layer_shell_placement(GtkWindow *window, GdkMonitor *monitor,
+                                        int x, int y)
+{
+  (void)window;
+  (void)monitor;
+  (void)x;
+  (void)y;
+}
+#endif
+
 // create_linux_window_backend_info exposes GTK backend details to Dart logs so
 // visual placement bugs can be tied to X11 or Wayland behavior.
 static FlValue *create_linux_window_backend_info(GtkWindow *window)
@@ -246,6 +303,7 @@ static FlValue *create_linux_window_backend_info(GtkWindow *window)
   fl_value_set_string_take(result, "gdkBackendEnv", fl_value_new_string(safe_string(g_getenv("GDK_BACKEND"))));
   fl_value_set_string_take(result, "waylandDisplayEnv", fl_value_new_string(safe_string(g_getenv("WAYLAND_DISPLAY"))));
   fl_value_set_string_take(result, "displayEnv", fl_value_new_string(safe_string(g_getenv("DISPLAY"))));
+  fl_value_set_string_take(result, "supportsLayerShell", fl_value_new_bool(wox_layer_shell_available()));
 
   return result;
 }
@@ -2689,6 +2747,68 @@ static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
           fl_method_success_response_new(fl_value_new_null()));
     }
   }
+  else if (strcmp(method, "applyLayerShellPlacement") == 0)
+  {
+    // Place the launcher on a specific output at an exact position using
+    // wlr-layer-shell margins. x/y are absolute virtual-screen coordinates;
+    // we resolve them to the monitor that contains the target point and then
+    // express the placement as margins relative to that output's origin. Only
+    // meaningful when layer-shell was initialized for this window.
+    if (fl_value_get_type(args) == FL_VALUE_TYPE_MAP)
+    {
+      double x = fl_value_get_float(fl_value_lookup_string(args, "x"));
+      double y = fl_value_get_float(fl_value_lookup_string(args, "y"));
+      double width = fl_value_get_float(fl_value_lookup_string(args, "width"));
+      double height = fl_value_get_float(fl_value_lookup_string(args, "height"));
+      const int target_x = (int)x;
+      const int target_y = (int)y;
+      const int target_width = (int)width;
+      const int target_height = (int)height;
+
+      GdkDisplay *display = gtk_widget_get_display(GTK_WIDGET(window));
+      GdkMonitor *target_monitor = nullptr;
+      if (display != nullptr)
+      {
+        const int n_monitors = gdk_display_get_n_monitors(display);
+        for (int i = 0; i < n_monitors; i++)
+        {
+          GdkMonitor *m = gdk_display_get_monitor(display, i);
+          GdkRectangle geom;
+          gdk_monitor_get_geometry(m, &geom);
+          if (target_x >= geom.x && target_x < geom.x + geom.width &&
+              target_y >= geom.y && target_y < geom.y + geom.height)
+          {
+            target_monitor = m;
+            break;
+          }
+        }
+        if (target_monitor == nullptr && n_monitors > 0)
+        {
+          target_monitor = gdk_display_get_monitor_at_point(display, target_x, target_y);
+        }
+      }
+
+      if (self->layer_shell_enabled && target_monitor != nullptr)
+      {
+        GdkRectangle geom;
+        gdk_monitor_get_geometry(target_monitor, &geom);
+        const int margin_left = target_x - geom.x;
+        const int margin_top = target_y - geom.y;
+        apply_layer_shell_placement(window, target_monitor, margin_left, margin_top);
+        apply_window_size(window, target_width, target_height);
+        log("FLUTTER: applyLayerShellPlacement monitor=%d,%d margins=%d,%d size=%dx%d",
+            geom.x, geom.y, margin_left, margin_top, target_width, target_height);
+      }
+      else
+      {
+        // Without layer-shell this call is a no-op; Dart should not have sent
+        // it, but keep the size request so a stray call still resizes cleanly.
+        apply_window_size(window, target_width, target_height);
+      }
+      response = FL_METHOD_RESPONSE(
+          fl_method_success_response_new(fl_value_new_null()));
+    }
+  }
   else if (strcmp(method, "getPosition") == 0)
   {
     int x, y;
@@ -2718,7 +2838,30 @@ static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
     {
       double x = fl_value_get_float(fl_value_lookup_string(args, "x"));
       double y = fl_value_get_float(fl_value_lookup_string(args, "y"));
-      gtk_window_move(window, (int)x, (int)y);
+      const int target_x = (int)x;
+      const int target_y = (int)y;
+
+      if (self->layer_shell_enabled)
+      {
+        // layer-shell windows ignore gtk_window_move; resolve the monitor at
+        // the target point and use margin-based placement relative to it.
+        GdkDisplay *display = gtk_widget_get_display(GTK_WIDGET(window));
+        GdkMonitor *monitor = nullptr;
+        if (display != nullptr)
+        {
+          monitor = gdk_display_get_monitor_at_point(display, target_x, target_y);
+        }
+        if (monitor != nullptr)
+        {
+          GdkRectangle geom;
+          gdk_monitor_get_geometry(monitor, &geom);
+          apply_layer_shell_placement(window, monitor, target_x - geom.x, target_y - geom.y);
+        }
+      }
+      else
+      {
+        gtk_window_move(window, target_x, target_y);
+      }
       log("FLUTTER: setPosition, x: %f, y: %f", x, y);
       response = FL_METHOD_RESPONSE(
           fl_method_success_response_new(fl_value_new_null()));
@@ -2781,8 +2924,15 @@ static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
 
     log("FLUTTER: center, window to %d,%d on monitor at %d,%d", x, y, workarea.x, workarea.y);
 
-    // 设置窗口位置
-    gtk_window_move(window, x, y);
+    if (self->layer_shell_enabled)
+    {
+      // layer-shell windows ignore gtk_window_move; use margin-based placement.
+      apply_layer_shell_placement(window, monitor, x - workarea.x, y - workarea.y);
+    }
+    else
+    {
+      gtk_window_move(window, x, y);
+    }
 
     response =
         FL_METHOD_RESPONSE(fl_method_success_response_new(fl_value_new_null()));
@@ -2969,6 +3119,17 @@ static void my_application_activate(GApplication *application)
   gtk_window_set_type_hint(window, GDK_WINDOW_TYPE_HINT_UTILITY);
   gtk_window_set_keep_above(window, TRUE);
 
+  // On wlroots-based Wayland compositors (Hyprland, sway, etc.) the
+  // wlr-layer-shell protocol lets Wox place itself precisely on a chosen
+  // output and stay above normal windows. Initialize the layer surface before
+  // realize so GTK composes it as a layer surface from the start. The runtime
+  // availability check guards compositors that do not implement the protocol.
+  if (wox_layer_shell_available())
+  {
+    init_layer_shell_for_window(window);
+    self->layer_shell_enabled = TRUE;
+  }
+
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(
       project, self->dart_entrypoint_arguments);
@@ -3110,6 +3271,7 @@ static void my_application_init(MyApplication *self)
   self->pending_bounds_y = 0;
   self->pending_bounds_width = 0;
   self->pending_bounds_height = 0;
+  self->layer_shell_enabled = FALSE;
 }
 
 MyApplication *my_application_new()

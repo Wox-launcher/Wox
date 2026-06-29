@@ -57,6 +57,13 @@ pkg_check_modules(GLIB REQUIRED IMPORTED_TARGET glib-2.0)
 pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0)
 pkg_check_modules(X11 REQUIRED IMPORTED_TARGET x11)
 pkg_check_modules(XTEST REQUIRED IMPORTED_TARGET xtst)
+# gtk-layer-shell is an optional dependency that enables precise launcher
+# placement on wlroots-based Wayland compositors (Hyprland, sway, etc.).
+# Builds without it simply fall back to compositor-owned placement on Wayland.
+pkg_check_modules(LAYER_SHELL QUIET IMPORTED_TARGET gtk-layer-shell-0)
+if(LAYER_SHELL_FOUND)
+  add_definitions(-DGTK_LAYER_SHELL_ENABLED)
+endif()
 
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
@@ -135,6 +142,9 @@ target_link_libraries(${BINARY_NAME} PRIVATE flutter)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GTK)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GLIB)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GIO)
-# 链接X11库
+# link x11 lib
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::X11)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::XTEST)
+if(LAYER_SHELL_FOUND)
+  target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::LAYER_SHELL)
+endif()
