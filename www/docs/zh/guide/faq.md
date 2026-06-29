@@ -111,3 +111,31 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 设置完成后，单独按下 CapsLock 时正常切换大小写；将 CapsLock 用作组合键前缀时，系统的 CapsLock 切换会被自动撤销。普通组合键热键（如 `ctrl+space`）不受此设置影响，始终通过 `org.freedesktop.portal.GlobalShortcuts` portal 工作。
 
 > **注意：** 此方案不需要 root 权限或系统守护进程。Wox 只是被动读取 evdev 事件，仅在组合键触发后使用 uinput 注入一个 CapsLock 按键事件来恢复大小写状态。
+
+### 如何在 Wayland 下禁用 Wox 窗口动画？ {#wayland-disable-animation}
+
+在 Wayland 下，Wox 的主窗口是 layer-shell 表面（namespace 为 `gtk-layer-shell`），位于 overlay 层，并不是普通的 XDG 顶层窗口。因此，合成器中针对应用窗口（按 app id 或窗口 class 匹配）的动画规则对 Wox 不生效。要去除打开/关闭/调整大小时的过渡动画，需要配置针对 `gtk-layer-shell` namespace 的 layer 规则。
+
+#### Hyprland
+
+在 `~/.config/hypr/hyprland.conf`（或对应的 Lua 配置）中添加 `layer_rule`：
+
+```ini
+layerrule noanim, gtk-layer-shell
+```
+
+使用 Lua 配置（`hyprland.lua`）时：
+
+```lua
+hl.layer_rule({
+    name    = "wox-no-anim",
+    match   = { namespace = "gtk-layer-shell" },
+    no_anim = true,
+})
+```
+
+Hyprland 会热重载配置，修改后立即生效。如果 Wox 当前已显示，切换一次让 layer 表面按新规则重新创建即可。
+
+#### 其他合成器
+
+查阅你所使用的合成器文档中对应的 layer-surface 动画选项，并针对 `gtk-layer-shell` namespace 进行配置。Wox 本身无法从应用内部控制合成器侧的动画。

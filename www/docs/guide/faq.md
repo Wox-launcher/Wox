@@ -111,3 +111,31 @@ Log out and back in, then restart Wox.
 After setup, when CapsLock is pressed alone, it toggles caps lock normally. When CapsLock is used as a combo prefix, the system's caps lock toggle is automatically undone. Regular combination hotkeys (like `ctrl+space`) continue to work via the `org.freedesktop.portal.GlobalShortcuts` portal regardless of this setting.
 
 > **Note:** Wox does NOT require root or a system daemon. It only reads evdev events passively and uses uinput solely to inject a single CapsLock key event when restoring the caps lock state after a combo.
+
+### How do I disable the Wox window animation on Wayland? {#wayland-disable-animation}
+
+On Wayland, Wox renders its main window as a layer-shell surface (namespace `gtk-layer-shell`) on the overlay layer, not as a regular XDG toplevel. As a result, compositor animation rules that target application windows (by app id or window class) do not apply to Wox. To remove the open/close/resize transition animation, configure a layer rule that targets the `gtk-layer-shell` namespace.
+
+#### Hyprland
+
+Add a `layer_rule` to `~/.config/hypr/hyprland.conf` (or the equivalent Lua config):
+
+```ini
+layerrule noanim, gtk-layer-shell
+```
+
+With the Lua config (`hyprland.lua`):
+
+```lua
+hl.layer_rule({
+    name    = "wox-no-anim",
+    match   = { namespace = "gtk-layer-shell" },
+    no_anim = true,
+})
+```
+
+Hyprland hot-reloads the config, so the change takes effect immediately. If Wox was already visible, toggle it once so the layer surface is recreated with the new rule.
+
+#### Other compositors
+
+Look for the equivalent layer-surface animation option in your compositor's documentation and target the `gtk-layer-shell` namespace. Wox does not control compositor-side animations from within the application.
