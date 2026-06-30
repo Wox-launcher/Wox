@@ -404,27 +404,31 @@ class _WoxSettingViewState extends State<WoxSettingView> {
                             color: isSelected ? getThemeActiveBackgroundColor().withValues(alpha: isThemeDark() ? 0.22 : 0.12) : Colors.transparent,
                             borderRadius: BorderRadius.circular(5),
                           ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              _buildSearchResultIcon(result, isSelected),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(result.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: getThemeTextColor(), fontSize: 12.5)),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      '${_searchResultTypeLabel(result.type)} · ${result.subtitle}',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(color: getThemeSubTextColor(), fontSize: 11),
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final showIcon = constraints.maxWidth >= 72;
+                              return Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  if (showIcon) ...[_buildSearchResultIcon(result, isSelected), const SizedBox(width: 8)],
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(result.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: getThemeTextColor(), fontSize: 12.5)),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          '${_searchResultTypeLabel(result.type)} · ${result.subtitle}',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(color: getThemeSubTextColor(), fontSize: 11),
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
-                              ),
-                            ],
+                                  ),
+                                ],
+                              );
+                            },
                           ),
                         ),
                       ),

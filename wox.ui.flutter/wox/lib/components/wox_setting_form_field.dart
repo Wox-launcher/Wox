@@ -32,7 +32,19 @@ class WoxSettingFormField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final labelText = Text(label, style: TextStyle(color: getThemeTextColor(), fontSize: 13, fontWeight: FontWeight.w500), maxLines: 2, overflow: TextOverflow.ellipsis);
-    final labelContent = labelTrailing == null ? labelText : Row(mainAxisSize: MainAxisSize.min, children: [labelText, const SizedBox(width: 5), labelTrailing!]);
+    final labelContent =
+        labelTrailing == null
+            ? labelText
+            : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Settings search can briefly reveal targets while the pane is
+                // very narrow; keep label adornments from forcing a flex overflow.
+                Flexible(child: labelText),
+                const SizedBox(width: 5),
+                labelTrailing!,
+              ],
+            );
     final description = tips == null ? null : Padding(padding: EdgeInsets.only(top: tipsTopSpacing), child: tips!);
 
     if (fullWidth) {
