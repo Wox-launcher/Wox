@@ -694,10 +694,10 @@ func (e *Engine) SyncUserRoots(ctx context.Context, rootPaths []string) error {
 
 // NormalizeUserRootPaths returns the concrete user roots that should participate
 // in indexing. Exact duplicates are redundant, and nested roots are actively
-// harmful because the parent scan already writes the child's paths into the
-// unique entries table. Keeping only the parent root prevents accidental
-// settings like "$HOME" plus "$HOME/Projects" from making full runs fail with
-// duplicate entry paths while preserving the broadest configured coverage.
+// harmful when the parent scan can write the child's paths into the unique
+// entries table. Keeping only the parent root prevents accidental settings like
+// "$HOME" plus "$HOME/Projects" from making full runs fail with duplicate entry
+// paths while preserving explicit child roots that the parent scan prunes.
 func NormalizeUserRootPaths(ctx context.Context, rootPaths []string) []string {
 	candidates := make([]string, 0, len(rootPaths))
 	seen := map[string]struct{}{}
@@ -732,7 +732,7 @@ func NormalizeUserRootPaths(ctx context.Context, rootPaths []string) []string {
 	for _, candidate := range candidates {
 		parent := ""
 		for _, other := range candidates {
-			if other == candidate || !pathWithinScope(other, candidate) {
+			if other == candidate || !parentRootCoversChildRoot(other, candidate) {
 				continue
 			}
 			if parent == "" || len(other) > len(parent) {
@@ -747,6 +747,15 @@ func NormalizeUserRootPaths(ctx context.Context, rootPaths []string) []string {
 	}
 
 	return normalized
+}
+
+// parentRootCoversChildRoot reports whether indexing parentRoot can produce the
+// childRoot entries, so the child root is redundant.
+func parentRootCoversChildRoot(parentRoot string, childRoot string) bool {
+	if !pathWithinScope(parentRoot, childRoot) {
+		return false
+	}
+	return !shouldSkipSystemPathForRoot(RootRecord{Path: parentRoot}, childRoot, true)
 }
 
 func syncUserRootsToDB(ctx context.Context, db *FileSearchDB, scanner *Scanner, rootPaths []string, requestRescan bool) (bool, error) {

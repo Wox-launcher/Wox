@@ -13,6 +13,7 @@ import (
 	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
+	shellplugin "wox/plugin/system/shell"
 	"wox/setting"
 	"wox/setting/definition"
 	"wox/setting/validator"
@@ -316,6 +317,7 @@ func (c *ExplorerPlugin) buildDirectoryEntryResult(query plugin.Query, title str
 					shell.Open(fullPath)
 				},
 			},
+			c.buildExecuteCommandAtLocationAction(fullPath, isDir),
 			{
 				Name:      "i18n:plugin_explorer_reveal_in_explorer",
 				IsDefault: true,
@@ -323,6 +325,46 @@ func (c *ExplorerPlugin) buildDirectoryEntryResult(query plugin.Query, title str
 					c.revealEntry(ctx, query.Env, fullPath, isDir)
 				},
 			},
+		},
+	}
+}
+
+// buildExecuteCommandAtLocationAction opens Shell with the selected location as its working directory.
+func (c *ExplorerPlugin) buildExecuteCommandAtLocationAction(path string, isDir bool) plugin.QueryResultAction {
+	workingDirectory := path
+	if !isDir {
+		workingDirectory = filepath.Dir(path)
+	}
+
+	return plugin.QueryResultAction{
+		Name:                   "i18n:plugin_file_execute_command_here",
+		Icon:                   common.PluginShellIcon,
+		PreventHideAfterAction: true,
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			result, err := c.api.InvokePluginCommand(ctx, plugin.PluginCommandRequest{
+				PluginId: shellplugin.PluginID,
+				Command:  shellplugin.PluginCommandPrepareCommandAtDirectory,
+				Data: common.ContextData{
+					shellplugin.PluginCommandDataWorkingDirectory: workingDirectory,
+				},
+			})
+			if err != nil {
+				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to invoke shell plugin command: %s", err.Error()))
+				c.api.Notify(ctx, err.Error())
+				return
+			}
+			if !result.Handled {
+				message := result.Message
+				if message == "" {
+					message = "shell plugin command was not handled"
+				}
+				c.api.Log(ctx, plugin.LogLevelWarning, message)
+				c.api.Notify(ctx, message)
+				return
+			}
+			if result.Message != "" {
+				c.api.Notify(ctx, result.Message)
+			}
 		},
 	}
 }
@@ -412,6 +454,7 @@ func (c *ExplorerPlugin) buildJumpFolderResult(query plugin.Query, title string,
 					c.jumpToFolder(ctx, query.Env, folderPath)
 				},
 			},
+			c.buildExecuteCommandAtLocationAction(folderPath, true),
 		},
 	}
 }

@@ -21,31 +21,27 @@ class WoxOnboardingStepLayout extends StatelessWidget {
         Align(alignment: Alignment.topLeft, child: content),
         const SizedBox(height: 18),
         Expanded(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 280),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: TweenAnimationBuilder<double>(
-                key: previewKey,
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOutCubic,
-                tween: Tween(begin: 0, end: 1),
-                builder: (context, value, child) {
-                  return Opacity(opacity: value, child: Transform.translate(offset: Offset(0, 8 * (1 - value)), child: child));
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  // Glass-dark refresh: the demo shell now uses the same neutral
-                  // overlay and outline as the settings panels. The older faint
-                  // fill worked on flat themes but disappeared on translucent
-                  // glass, so a shared token keeps previews visibly framed.
-                  decoration: BoxDecoration(
-                    color: WoxOnboardingGlassStyle.surface(0.052),
-                    border: Border.all(color: WoxOnboardingGlassStyle.outline(0.10)),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: demo,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: TweenAnimationBuilder<double>(
+              key: previewKey,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOutCubic,
+              tween: Tween(begin: 0, end: 1),
+              builder: (context, value, child) {
+                return Opacity(opacity: value, child: Transform.translate(offset: Offset(0, 8 * (1 - value)), child: child));
+              },
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                // The preview shares the remaining onboarding height. A fixed
+                // minimum overflows on Windows CI when About reopens onboarding
+                // from the smaller management-view transition state.
+                decoration: BoxDecoration(
+                  color: WoxOnboardingGlassStyle.surface(0.052),
+                  border: Border.all(color: WoxOnboardingGlassStyle.outline(0.10)),
+                  borderRadius: BorderRadius.circular(8),
                 ),
+                child: demo,
               ),
             ),
           ),
