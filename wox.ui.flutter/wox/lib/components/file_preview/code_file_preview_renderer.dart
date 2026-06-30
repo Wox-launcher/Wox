@@ -41,6 +41,7 @@ import 'package:highlight/languages/swift.dart';
 import 'package:highlight/languages/typescript.dart';
 import 'package:highlight/languages/xml.dart';
 import 'package:highlight/languages/yaml.dart';
+import 'package:wox/components/file_preview/file_preview_policy.dart';
 import 'package:wox/components/file_preview/file_preview_renderer.dart';
 import 'package:wox/components/wox_loading_indicator.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
@@ -129,14 +130,14 @@ class CodeFilePreviewRenderer implements WoxFilePreviewRenderer {
       return WoxFilePreviewResult(content: context.buildText(context.tr("ui_file_preview_code_not_found", {"path": context.filePath})));
     }
 
-    final fileSize = file.lengthSync();
-    if (fileSize > 1 * 1024 * 1024) {
-      return WoxFilePreviewResult(content: context.buildText(context.tr("ui_file_preview_too_large", {"size": (fileSize / 1024 / 1024).toInt().toString()})));
-    }
-
-    return WoxFilePreviewResult(
-      content: _CodeFilePreview(file: file, fileExtension: context.fileExtension, scrollController: context.scrollController, tr: context.tr),
-      contentHandlesScrolling: true,
+    return WoxFilePreviewPolicy.buildDeferredPreview(
+      context: context,
+      file: file,
+      manualLoadThresholdBytes: WoxFilePreviewPolicy.textThresholdBytes,
+      icon: Icons.code_rounded,
+      accent: const Color(0xFF8B5CF6),
+      typeLabel: WoxFilePreviewPolicy.extensionTypeLabel(context),
+      previewBuilder: (_) => _CodeFilePreview(file: file, fileExtension: context.fileExtension, scrollController: context.scrollController, tr: context.tr),
     );
   }
 }

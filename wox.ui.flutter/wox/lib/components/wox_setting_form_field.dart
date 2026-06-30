@@ -61,12 +61,13 @@ class WoxSettingFormField extends StatelessWidget {
         builder: (context, constraints) {
           final shouldStack = constraints.maxWidth < labelWidth + labelGap + 260;
           final control = controlMaxWidth == null ? child : ConstrainedBox(constraints: BoxConstraints(maxWidth: controlMaxWidth!), child: child);
+          final stackedControl = ConstrainedBox(constraints: BoxConstraints(maxWidth: constraints.maxWidth), child: control);
 
           if (shouldStack) {
             // Narrow settings panes fall back to a vertical row to prevent controls and descriptions from colliding.
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: [labelContent, if (description != null) description, const SizedBox(height: 8), Align(alignment: Alignment.centerLeft, child: control)],
+              children: [labelContent, if (description != null) description, const SizedBox(height: 8), Align(alignment: Alignment.centerLeft, child: stackedControl)],
             );
           }
 

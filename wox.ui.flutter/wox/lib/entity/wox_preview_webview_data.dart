@@ -5,8 +5,9 @@ class WoxPreviewWebviewData {
   late String html;
   late String injectCss;
   late bool cacheDisabled;
+  late String cacheKey;
 
-  WoxPreviewWebviewData({required this.url, this.html = "", this.injectCss = "", this.cacheDisabled = false});
+  WoxPreviewWebviewData({required this.url, this.html = "", this.injectCss = "", this.cacheDisabled = false, this.cacheKey = ""});
 
   factory WoxPreviewWebviewData.fromJson(Map<String, dynamic> json) {
     return WoxPreviewWebviewData(
@@ -14,6 +15,7 @@ class WoxPreviewWebviewData {
       html: json["html"]?.toString() ?? "",
       injectCss: json["injectCss"]?.toString() ?? "",
       cacheDisabled: json["cacheDisabled"] == true,
+      cacheKey: json["cacheKey"]?.toString() ?? "",
     );
   }
 
@@ -40,6 +42,11 @@ class WoxPreviewWebviewData {
   String get resolvedCacheKey {
     if (cacheDisabled) {
       return "";
+    }
+
+    final trimmedCacheKey = cacheKey.trim();
+    if (trimmedCacheKey.isNotEmpty) {
+      return trimmedCacheKey;
     }
 
     final trimmedUrl = url.trim();
