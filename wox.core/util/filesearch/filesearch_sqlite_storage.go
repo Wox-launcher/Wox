@@ -1711,17 +1711,6 @@ func insertEntriesAsNewFactsTx(ctx context.Context, tx *sql.Tx, operation string
 		return nil
 	}
 
-	stmt, err := tx.PrepareContext(ctx, `
-		INSERT INTO entries (
-			path, root_id, parent_path, name, normalized_name, name_key, normalized_path,
-			pinyin_full, pinyin_initials, extension, is_dir, mtime, size, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`)
-	if err != nil {
-		return fmt.Errorf("prepare direct entry insert for scope %q: %w", scopePath, err)
-	}
-	defer stmt.Close()
-
 	// The staged fast path inserted facts with ORDER BY path ASC. Preserve that
 	// deterministic order when bypassing the temp table so bulk full scans keep
 	// the same entry_id assignment and derived search rows as before.
@@ -1730,27 +1719,8 @@ func insertEntriesAsNewFactsTx(ctx context.Context, tx *sql.Tx, operation string
 		return orderedEntries[left].Path < orderedEntries[right].Path
 	})
 
-	for _, entry := range orderedEntries {
-		row := buildStoredEntryRecord(entry)
-		if _, err := stmt.ExecContext(
-			ctx,
-			row.Path,
-			row.RootID,
-			row.ParentPath,
-			row.Name,
-			row.NormalizedName,
-			row.NameKey,
-			row.NormalizedPath,
-			row.PinyinFull,
-			row.PinyinInitials,
-			row.Extension,
-			boolToInt(row.IsDir),
-			row.Mtime,
-			row.Size,
-			row.UpdatedAt,
-		); err != nil {
-			return fmt.Errorf("insert direct entry %q for scope %q: %w", row.Path, scopePath, err)
-		}
+	if err := insertEntryFactsNoReturningBatchTx(ctx, tx, orderedEntries); err != nil {
+		return fmt.Errorf("insert direct entries for scope %q: %w", scopePath, err)
 	}
 
 	logFilesearchSQLiteMaintenance(ctx, operation, scopePath, util.GetSystemTimestamp()-startedAt, len(orderedEntries))

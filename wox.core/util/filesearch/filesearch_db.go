@@ -622,6 +622,63 @@ func (d *FileSearchDB) ApplyDirectFilesJobStream(ctx context.Context, root RootR
 		return JobApplyStats{}, fmt.Errorf("direct-files job scope path %q is outside root path %q", job.ScopePath, lockedRoot.Path)
 	}
 
+	if d.bulkSyncFullRunRootFresh(root.ID) {
+		// A fresh full-index direct-files scope has no stale facts to diff, so it
+		// can stream facts directly and leave FTS maintenance to EndBulkSync.
+		stats := JobApplyStats{}
+		streamStartedAt := util.GetSystemTimestamp()
+		directoryWriteElapsedMs := int64(0)
+		entryWriteElapsedMs := int64(0)
+		insertedDirectories := 0
+		insertedEntries := 0
+		if err := snapshot.StreamDirectFilesJobBatches(ctx, *lockedRoot, job, func(batch SubtreeSnapshotBatch) error {
+			if err := validateJobSnapshotBatch(job, batch); err != nil {
+				return err
+			}
+
+			directoryStartedAt := util.GetSystemTimestamp()
+			if err := insertDirectoryRecordsBatchTx(ctx, tx, batch.Directories); err != nil {
+				return err
+			}
+			directoryWriteElapsedMs += util.GetSystemTimestamp() - directoryStartedAt
+
+			entryStartedAt := util.GetSystemTimestamp()
+			if err := insertEntryFactsNoReturningBatchTx(ctx, tx, batch.Entries); err != nil {
+				return err
+			}
+			entryWriteElapsedMs += util.GetSystemTimestamp() - entryStartedAt
+			insertedDirectories += len(batch.Directories)
+			insertedEntries += len(batch.Entries)
+			stats.add(jobApplyStatsFromBatch(batch))
+			if onProgress != nil {
+				onProgress(stats)
+			}
+			return nil
+		}); err != nil {
+			return JobApplyStats{}, err
+		}
+		streamElapsedMs := util.GetSystemTimestamp() - streamStartedAt
+
+		commitStartedAt := util.GetSystemTimestamp()
+		if err := tx.Commit(); err != nil {
+			return JobApplyStats{}, err
+		}
+		commitElapsedMs := util.GetSystemTimestamp() - commitStartedAt
+		scanBuildElapsedMs := streamElapsedMs - directoryWriteElapsedMs - entryWriteElapsedMs
+		if scanBuildElapsedMs < 0 {
+			scanBuildElapsedMs = 0
+		}
+		logFilesearchIndexPhase(ctx, "direct_files_stream_fresh", job.ScopePath, streamElapsedMs+commitElapsedMs, map[string]any{
+			"commit_ms":     commitElapsedMs,
+			"directories":   insertedDirectories,
+			"directory_ms":  directoryWriteElapsedMs,
+			"entries":       insertedEntries,
+			"entry_ms":      entryWriteElapsedMs,
+			"scan_build_ms": scanBuildElapsedMs,
+		})
+		return stats, nil
+	}
+
 	directoryStmt, err := prepareDirectoryUpsertStmtTx(ctx, tx)
 	if err != nil {
 		return JobApplyStats{}, err
