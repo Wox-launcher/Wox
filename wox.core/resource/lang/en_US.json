@@ -2290,6 +2290,7 @@
   "ui_hotkey_overview_attention": "Open attention items",
   "ui_hotkey_overview_preview_fullscreen": "Toggle preview fullscreen",
   "ui_hotkey_overview_preview_search": "Search in preview",
+  "ui_hotkey_overview_file_preview_load": "Load full file preview",
   "ui_hotkey_overview_webview_refresh": "Refresh webview preview",
   "ui_hotkey_overview_webview_back": "Go back in webview preview",
   "ui_hotkey_overview_webview_forward": "Go forward in webview preview",

@@ -2104,6 +2104,7 @@
   "ui_hotkey_overview_attention": "Открыть элементы внимания",
   "ui_hotkey_overview_preview_fullscreen": "Переключить полноэкранный предпросмотр",
   "ui_hotkey_overview_preview_search": "Искать в предпросмотре",
+  "ui_hotkey_overview_file_preview_load": "Загрузить полный предпросмотр файла",
   "ui_hotkey_overview_webview_refresh": "Обновить webview-предпросмотр",
   "ui_hotkey_overview_webview_back": "Назад в webview-предпросмотре",
   "ui_hotkey_overview_webview_forward": "Вперед в webview-предпросмотре",

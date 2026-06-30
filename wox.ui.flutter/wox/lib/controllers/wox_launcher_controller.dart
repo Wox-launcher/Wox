@@ -83,6 +83,7 @@ class WoxLauncherController extends GetxController {
   static const String localActionWebViewBackId = "__local_webview_back__";
   static const String localActionWebViewForwardId = "__local_webview_forward__";
   static const String localActionWebViewClearStateId = "__local_webview_clear_state__";
+  static const String localActionLoadFilePreviewId = "__local_load_file_preview__";
 
   int _captureDevLauncherVisibleActivationCost(ShowAppParams params) {
     if (!Env.isDev || params.activationStartedAt <= 0) {
@@ -155,6 +156,9 @@ class WoxLauncherController extends GetxController {
   final isShowPreviewPanel = false.obs;
   final terminalFindTrigger = 0.obs;
   final isPreviewFullscreen = false.obs;
+  final isManualFilePreviewLoadAvailable = false.obs;
+  String _manualFilePreviewLoadAvailabilityKey = "";
+  final _manualFilePreviewLoadRequests = StreamController<String>.broadcast();
   final Map<String, StreamController<Map<String, dynamic>>> terminalChunkControllers = {};
   final Map<String, StreamController<Map<String, dynamic>>> terminalStateControllers = {};
   static const double defaultResultPreviewRatio = 0.4;
@@ -1202,6 +1206,12 @@ class WoxLauncherController extends GetxController {
   String get previewBackHotkey => WoxPlatformHotkeyUtil.primaryHotkey("[");
   String get previewForwardHotkey => WoxPlatformHotkeyUtil.primaryHotkey("]");
 
+  String get filePreviewLoadHotkey => WoxPlatformHotkeyUtil.primaryHotkey("l");
+
+  String get filePreviewLoadHotkeyLabel => WoxPlatformHotkeyUtil.primaryHotkeyLabel("l");
+
+  Stream<String> get manualFilePreviewLoadRequests => _manualFilePreviewLoadRequests.stream;
+
   String get moreActionsHotkey => WoxPlatformHotkeyUtil.primaryHotkey("j");
 
   String get moreActionsHotkeyLabel => WoxPlatformHotkeyUtil.primaryHotkeyLabel("j");
@@ -1587,6 +1597,18 @@ class WoxLauncherController extends GetxController {
       return actions;
     }
 
+    if (currentPreview.value.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_FILE.code && isManualFilePreviewLoadAvailable.value) {
+      actions.add(
+        WoxResultAction.local(
+          id: localActionLoadFilePreviewId,
+          name: tr("ui_file_preview_load_full_preview"),
+          hotkey: filePreviewLoadHotkey,
+          emoji: "👁️",
+          handler: requestManualFilePreviewLoad,
+        ),
+      );
+    }
+
     if (currentPreview.value.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TERMINAL.code) {
       actions.add(
         WoxResultAction.local(
@@ -1770,6 +1792,43 @@ class WoxLauncherController extends GetxController {
     }
 
     return action.runLocalAction(traceId);
+  }
+
+  // Keeps the load-preview toolbar action owned by the currently mounted
+  // deferred preview so stale preview widgets cannot clear a newer action.
+  void updateManualFilePreviewLoadAvailability(String traceId, String previewKey, bool available) {
+    final normalizedKey = previewKey.trim();
+    if (normalizedKey.isEmpty) {
+      return;
+    }
+
+    if (available) {
+      if (isManualFilePreviewLoadAvailable.value && _manualFilePreviewLoadAvailabilityKey == normalizedKey) {
+        return;
+      }
+      _manualFilePreviewLoadAvailabilityKey = normalizedKey;
+      isManualFilePreviewLoadAvailable.value = true;
+      refreshToolbarActionsForCurrentState(traceId);
+      return;
+    }
+
+    if (_manualFilePreviewLoadAvailabilityKey != normalizedKey) {
+      return;
+    }
+
+    _manualFilePreviewLoadAvailabilityKey = "";
+    isManualFilePreviewLoadAvailable.value = false;
+    refreshToolbarActionsForCurrentState(traceId);
+  }
+
+  // Emits a load request back into the visible deferred preview widget.
+  bool requestManualFilePreviewLoad(String traceId) {
+    if (!isManualFilePreviewLoadAvailable.value) {
+      return false;
+    }
+
+    _manualFilePreviewLoadRequests.add(traceId);
+    return true;
   }
 
   List<ToolbarActionInfo> buildToolbarActionsForCurrentState(WoxQueryResult? activeResult) {
@@ -4259,6 +4318,7 @@ class WoxLauncherController extends GetxController {
     }
     terminalChunkControllers.clear();
     terminalStateControllers.clear();
+    _manualFilePreviewLoadRequests.close();
     super.dispose();
   }
 

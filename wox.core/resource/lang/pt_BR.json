@@ -2104,6 +2104,7 @@
   "ui_hotkey_overview_attention": "Abrir itens de atenção",
   "ui_hotkey_overview_preview_fullscreen": "Alternar tela cheia da prévia",
   "ui_hotkey_overview_preview_search": "Pesquisar na prévia",
+  "ui_hotkey_overview_file_preview_load": "Carregar prévia completa do arquivo",
   "ui_hotkey_overview_webview_refresh": "Atualizar prévia webview",
   "ui_hotkey_overview_webview_back": "Voltar na prévia webview",
   "ui_hotkey_overview_webview_forward": "Avançar na prévia webview",

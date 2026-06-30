@@ -2290,6 +2290,7 @@
   "ui_hotkey_overview_attention": "打开关注事项",
   "ui_hotkey_overview_preview_fullscreen": "切换预览全屏",
   "ui_hotkey_overview_preview_search": "在预览中搜索",
+  "ui_hotkey_overview_file_preview_load": "加载完整文件预览",
   "ui_hotkey_overview_webview_refresh": "刷新 Webview 预览",
   "ui_hotkey_overview_webview_back": "Webview 预览后退",
   "ui_hotkey_overview_webview_forward": "Webview 预览前进",

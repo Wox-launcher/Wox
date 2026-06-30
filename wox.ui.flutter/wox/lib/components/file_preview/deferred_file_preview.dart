@@ -1,9 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:uuid/v4.dart';
 import 'package:wox/components/file_preview/file_info_preview.dart';
 import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_loading_indicator.dart';
+import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
 
@@ -49,11 +52,21 @@ class WoxDeferredFilePreview extends StatefulWidget {
 
 class _WoxDeferredFilePreviewState extends State<WoxDeferredFilePreview> {
   Timer? _autoLoadTimer;
+  StreamSubscription<String>? _loadPreviewActionSubscription;
+  WoxLauncherController? _launcherController;
   bool _isPreviewLoaded = false;
 
   @override
   void initState() {
     super.initState();
+    _launcherController = Get.isRegistered<WoxLauncherController>() ? Get.find<WoxLauncherController>() : null;
+    _loadPreviewActionSubscription = _launcherController?.manualFilePreviewLoadRequests.listen((_) {
+      if (!mounted || _isPreviewLoaded || widget.autoLoadDelay != null) {
+        return;
+      }
+      _loadPreview();
+    });
+    _syncManualLoadAvailability();
     _scheduleAutoLoad();
   }
 
@@ -62,7 +75,9 @@ class _WoxDeferredFilePreviewState extends State<WoxDeferredFilePreview> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.previewKey != widget.previewKey || oldWidget.autoLoadDelay != widget.autoLoadDelay) {
       _autoLoadTimer?.cancel();
+      _syncManualLoadAvailability(forceAvailable: false, previewKey: oldWidget.previewKey);
       _isPreviewLoaded = false;
+      _syncManualLoadAvailability();
       _scheduleAutoLoad();
     }
   }
@@ -70,7 +85,27 @@ class _WoxDeferredFilePreviewState extends State<WoxDeferredFilePreview> {
   @override
   void dispose() {
     _autoLoadTimer?.cancel();
+    _syncManualLoadAvailability(forceAvailable: false);
+    unawaited(_loadPreviewActionSubscription?.cancel());
     super.dispose();
+  }
+
+  // Defers toolbar updates until after layout so preview construction does not
+  // mutate launcher chrome while Flutter is still building this subtree.
+  void _syncManualLoadAvailability({bool? forceAvailable, String? previewKey}) {
+    final available = forceAvailable ?? (!_isPreviewLoaded && widget.autoLoadDelay == null);
+    final launcherController = _launcherController;
+    if (launcherController == null) {
+      return;
+    }
+    final actionPreviewKey = previewKey ?? widget.previewKey;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (available && !mounted) {
+        return;
+      }
+      launcherController.updateManualFilePreviewLoadAvailability(const UuidV4().generate(), actionPreviewKey, available);
+    });
   }
 
   void _scheduleAutoLoad() {
@@ -84,6 +119,7 @@ class _WoxDeferredFilePreviewState extends State<WoxDeferredFilePreview> {
         return;
       }
       setState(() => _isPreviewLoaded = true);
+      _syncManualLoadAvailability();
     });
   }
 
@@ -93,6 +129,7 @@ class _WoxDeferredFilePreviewState extends State<WoxDeferredFilePreview> {
       return;
     }
     setState(() => _isPreviewLoaded = true);
+    _syncManualLoadAvailability();
   }
 
   @override
@@ -129,7 +166,7 @@ class _WoxDeferredFilePreviewState extends State<WoxDeferredFilePreview> {
                   Text(widget.message, style: TextStyle(color: getThemeSubTextColor(), fontSize: WoxInterfaceSizeUtil.instance.current.resultSubtitleFontSize, height: 1.4)),
                   SizedBox(height: WoxInterfaceSizeUtil.instance.current.scaledSpacing(12)),
                   WoxButton.primary(
-                    text: widget.actionLabel,
+                    text: _launcherController == null ? widget.actionLabel : "${widget.actionLabel} (${_launcherController!.filePreviewLoadHotkeyLabel})",
                     icon: Icon(Icons.visibility_rounded, size: WoxInterfaceSizeUtil.instance.current.toolbarIconSize),
                     padding: EdgeInsets.symmetric(
                       horizontal: WoxInterfaceSizeUtil.instance.current.scaledSpacing(14),
