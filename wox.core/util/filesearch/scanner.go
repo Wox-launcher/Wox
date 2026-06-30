@@ -27,6 +27,24 @@ const (
 	progressUpdateGap                 = 250 * time.Millisecond
 )
 
+var (
+	woxFileSearchStoragePathOnce sync.Once
+	woxFileSearchStoragePath     string
+)
+
+// cachedWoxFileSearchStoragePath returns Wox's internal filesearch storage path
+// without recomputing the home-relative path for every scanned entry.
+func cachedWoxFileSearchStoragePath() string {
+	woxFileSearchStoragePathOnce.Do(func() {
+		homeDir := cachedUserHomeDir()
+		if homeDir == "" {
+			return
+		}
+		woxFileSearchStoragePath = filepath.Clean(filepath.Join(homeDir, ".wox", "filesearch"))
+	})
+	return woxFileSearchStoragePath
+}
+
 type Scanner struct {
 	db                     *FileSearchDB
 	policy                 *policyState
@@ -2667,26 +2685,18 @@ func shouldSkipSystemPath(fullPath string, isDir bool) bool {
 }
 
 func isWoxFileSearchStoragePath(fullPath string) bool {
-	homeDir, err := os.UserHomeDir()
-	if err != nil || strings.TrimSpace(homeDir) == "" {
+	cleanStoragePath := cachedWoxFileSearchStoragePath()
+	if cleanStoragePath == "" {
 		return false
 	}
 
-	cleanStoragePath := filepath.Clean(filepath.Join(homeDir, ".wox", "filesearch"))
 	cleanPath := filepath.Clean(strings.TrimSpace(fullPath))
 	if cleanPath == "" || cleanPath == "." {
 		return false
 	}
-	if cleanPath == cleanStoragePath {
-		return true
-	}
 
-	relPath, err := filepath.Rel(cleanStoragePath, cleanPath)
-	if err != nil {
-		return false
-	}
 	// Bug fix: Wox's own File Search SQLite files live under ~/.wox/filesearch.
 	// Treat that subtree as an engine-level internal path so full scans and change
 	// feeds both skip the storage before it can enqueue work against itself.
-	return relPath != "." && relPath != ".." && !strings.HasPrefix(relPath, ".."+string(filepath.Separator))
+	return pathWithinScope(cleanStoragePath, cleanPath)
 }
