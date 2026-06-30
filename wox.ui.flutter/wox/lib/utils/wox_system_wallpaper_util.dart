@@ -206,12 +206,9 @@ class WoxSystemWallpaperUtil {
     }
 
     try {
-      final result = await Process.run('osascript', [
-        '-e',
-        'tell application "System Events" to get POSIX path of (picture of desktop 1 as alias)',
-      ]).timeout(const Duration(seconds: 2));
-      final path = result.stdout.toString().trim();
-      if (path.isNotEmpty && await File(path).exists()) {
+      final result = await Process.run('osascript', ['-e', 'tell application "System Events" to get picture of desktop 1']).timeout(const Duration(seconds: 2));
+      final path = _wallpaperPathFromUri(result.stdout.toString().trim());
+      if (path != null && path.isNotEmpty && await File(path).exists()) {
         return path;
       }
     } catch (e) {
