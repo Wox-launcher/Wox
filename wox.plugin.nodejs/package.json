@@ -14,7 +14,7 @@
     "types"
   ],
   "scripts": {
-    "build": "pnpm clean && tsc",
+    "build": "node ./scripts/clean.mjs && tsc",
     "clean": "node ./scripts/clean.mjs",
     "clean:all": "npm run clean && (rm -r ./node_modules || true)",
     "lint": "eslint --ext .ts --fix src/**/*.ts",

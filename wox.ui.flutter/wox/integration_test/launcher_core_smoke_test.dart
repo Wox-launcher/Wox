@@ -441,7 +441,7 @@ void registerLauncherCoreSmokeTests() {
       await tapSettingNavItem(tester, settingController, 'ui');
       expect(find.byType(WoxSettingView), findsOneWidget);
 
-      await tapSettingNavItem(tester, settingController, 'data');
+      await tapSettingNavItem(tester, settingController, 'data.backup');
       expect(find.byType(WoxSettingView), findsOneWidget);
 
       final navScrollPosition = _settingsNavScrollPosition(tester);

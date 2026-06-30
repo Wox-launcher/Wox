@@ -7,7 +7,7 @@
     "url": "https://github.com/Wox-launcher/Wox.git"
   },
   "scripts": {
-    "build": "pnpm clean && ncc build src/index.ts -o dist && babel dist --out-dir dist",
+    "build": "node ./scripts/clean.mjs && ncc build src/index.ts -o dist && babel dist --out-dir dist",
     "clean": "node ./scripts/clean.mjs",
     "clean:all": "npm run clean && (rm -r ./node_modules || true)"
   },

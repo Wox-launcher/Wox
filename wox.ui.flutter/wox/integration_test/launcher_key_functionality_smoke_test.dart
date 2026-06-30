@@ -25,7 +25,7 @@ void registerLauncherKeyFunctionalitySmokeTests() {
       final launcherController = await launchAndShowLauncher(tester);
       final settingController = await openSettings(tester, launcherController, 'general');
 
-      await tapSettingNavItem(tester, settingController, 'data');
+      await tapSettingNavItem(tester, settingController, 'data.backup');
 
       expect(find.byType(WoxSettingView), findsOneWidget);
 
