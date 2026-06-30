@@ -1072,6 +1072,8 @@
   "plugin_file_setting_root_path": "Каталог",
   "plugin_file_setting_skip_hidden_files_label": "Пропускать скрытые файлы",
   "plugin_file_setting_skip_hidden_files_tooltip": "Пропускать файлы и папки, имена которых начинаются с точки, например .git, .cache и .DS_Store.",
+  "plugin_file_setting_show_preview_label": "Показывать предпросмотр",
+  "plugin_file_setting_show_preview_tooltip": "Показывать панель предпросмотра при выборе результатов поиска файлов. Отключите этот параметр, если загрузка предпросмотра замедляет навигацию по результатам.",
   "plugin_file_refinement_type": "Тип",
   "plugin_file_refinement_type_all": "Все",
   "plugin_file_refinement_type_file": "Файлы",

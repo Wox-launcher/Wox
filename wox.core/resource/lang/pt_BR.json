@@ -1072,6 +1072,8 @@
   "plugin_file_setting_root_path": "Diretório",
   "plugin_file_setting_skip_hidden_files_label": "Ignorar arquivos ocultos",
   "plugin_file_setting_skip_hidden_files_tooltip": "Ignora arquivos e pastas cujos nomes começam com ponto, como .git, .cache e .DS_Store.",
+  "plugin_file_setting_show_preview_label": "Mostrar pré-visualização",
+  "plugin_file_setting_show_preview_tooltip": "Mostra o painel de pré-visualização ao selecionar resultados da Busca de Arquivos. Desative esta opção se o carregamento da pré-visualização deixar a navegação mais lenta.",
   "plugin_file_refinement_type": "Tipo",
   "plugin_file_refinement_type_all": "Todos",
   "plugin_file_refinement_type_file": "Arquivos",

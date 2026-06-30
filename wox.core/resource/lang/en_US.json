@@ -1148,6 +1148,8 @@
   "plugin_file_setting_root_path": "Directory",
   "plugin_file_setting_skip_hidden_files_label": "Skip Hidden Files",
   "plugin_file_setting_skip_hidden_files_tooltip": "Skip files and folders whose names start with a dot, such as .git, .cache, and .DS_Store.",
+  "plugin_file_setting_show_preview_label": "Show Preview",
+  "plugin_file_setting_show_preview_tooltip": "Show the file preview panel when selecting File Search results. Turn this off if preview loading slows down result navigation.",
   "plugin_file_setting_ignore_patterns_title": "Ignore Patterns",
   "plugin_file_setting_ignore_patterns_tooltip": "Exclude matching files and folders from the file search index. Wox also respects .gitignore files automatically. Supports glob patterns like node_modules, *.tmp, and **/cache/**.",
   "plugin_file_setting_ignore_pattern": "Pattern",

@@ -1148,6 +1148,8 @@
   "plugin_file_setting_root_path": "目录",
   "plugin_file_setting_skip_hidden_files_label": "跳过隐藏文件",
   "plugin_file_setting_skip_hidden_files_tooltip": "跳过名称以点号开头的文件和文件夹，例如 .git、.cache 和 .DS_Store。",
+  "plugin_file_setting_show_preview_label": "显示预览",
+  "plugin_file_setting_show_preview_tooltip": "选择文件搜索结果时显示文件预览面板。如果预览加载影响结果切换速度，可以关闭此项。",
   "plugin_file_setting_ignore_patterns_title": "忽略规则",
   "plugin_file_setting_ignore_patterns_tooltip": "从文件搜索索引中排除匹配的文件和文件夹。Wox 也会自动遵守各目录中的 .gitignore。支持 node_modules、*.tmp、**/cache/** 这类通配规则。",
   "plugin_file_setting_ignore_pattern": "规则",

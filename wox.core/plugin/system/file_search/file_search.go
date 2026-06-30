@@ -32,6 +32,7 @@ var fileIcon = common.PluginFileIcon
 const fileRootsSettingKey = "roots"
 const fileIgnorePatternsSettingKey = "ignorePatterns"
 const fileSkipHiddenFilesSettingKey = "skipHiddenFiles"
+const fileShowPreviewSettingKey = "showPreview"
 const fileSearchToolbarMsgID = "file-search-status"
 const fileSearchStatusCommand = "status"
 
@@ -143,6 +144,15 @@ func (c *FileSearchPlugin) GetMetadata() plugin.Metadata {
 					Key:          fileSkipHiddenFilesSettingKey,
 					Label:        "i18n:plugin_file_setting_skip_hidden_files_label",
 					Tooltip:      "i18n:plugin_file_setting_skip_hidden_files_tooltip",
+					DefaultValue: "true",
+				},
+			},
+			{
+				Type: definition.PluginSettingDefinitionTypeCheckBox,
+				Value: &definition.PluginSettingValueCheckBox{
+					Key:          fileShowPreviewSettingKey,
+					Label:        "i18n:plugin_file_setting_show_preview_label",
+					Tooltip:      "i18n:plugin_file_setting_show_preview_tooltip",
 					DefaultValue: "true",
 				},
 			},
@@ -295,25 +305,29 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 	// source file path, which turned an 8ms indexed search into a much slower
 	// end-to-end query even though most files only need their shared type icon.
 	fileTypeIcons := map[string]common.WoxImage{}
+	showPreview := c.getConfiguredShowPreview(ctx)
 	queryResults := make([]plugin.QueryResult, 0, len(results))
 	for _, item := range results {
 		icon := resolveFileSearchResultIcon(ctx, item, fileTypeIcons, &diagnostics)
 		actions := c.buildFileSearchResultActions(ctx, item)
 
-		queryResults = append(queryResults, plugin.QueryResult{
+		queryResult := plugin.QueryResult{
 			Title:    item.Name,
 			SubTitle: item.Path,
-			Preview: plugin.WoxPreview{
-				PreviewType: plugin.WoxPreviewTypeFile,
-				PreviewData: item.Path,
-			},
-			Icon:    icon,
-			Actions: actions,
+			Icon:     icon,
+			Actions:  actions,
 			DragData: &plugin.QueryResultDragData{
 				Type:  plugin.QueryResultDragDataTypeFiles,
 				Files: []string{item.Path},
 			},
-		})
+		}
+		if showPreview {
+			queryResult.Preview = plugin.WoxPreview{
+				PreviewType: plugin.WoxPreviewTypeFile,
+				PreviewData: item.Path,
+			}
+		}
+		queryResults = append(queryResults, queryResult)
 	}
 	diagnostics.buildElapsedMs = util.GetSystemTimestamp() - buildStartedAt
 	c.logQueryDiagnostics(ctx, query.Search, diagnostics, len(queryResults), util.GetSystemTimestamp()-queryStartedAt)
@@ -800,6 +814,20 @@ func (c *FileSearchPlugin) getConfiguredSkipHiddenFiles(ctx context.Context) boo
 	enabled, err := strconv.ParseBool(raw)
 	if err != nil {
 		c.api.Log(ctx, plugin.LogLevelWarning, "Failed to parse file search skip hidden files setting: "+err.Error())
+		return true
+	}
+	return enabled
+}
+
+func (c *FileSearchPlugin) getConfiguredShowPreview(ctx context.Context) bool {
+	raw := strings.TrimSpace(c.api.GetSetting(ctx, fileShowPreviewSettingKey))
+	if raw == "" {
+		return true
+	}
+
+	enabled, err := strconv.ParseBool(raw)
+	if err != nil {
+		c.api.Log(ctx, plugin.LogLevelWarning, "Failed to parse file search show preview setting: "+err.Error())
 		return true
 	}
 	return enabled
