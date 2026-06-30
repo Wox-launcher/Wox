@@ -79,6 +79,64 @@ FlutterWindow *g_window_instance = nullptr;
 static std::once_flag g_gdiplus_init_once;
 static ULONG_PTR g_gdiplus_token = 0;
 
+struct MonitorFindData
+{
+  double targetX;
+  double targetY;
+  double targetWidth;
+  double targetHeight;
+  double bestArea;
+  HMONITOR foundMonitor;
+  UINT foundDpi;
+};
+
+// Windows monitor rectangles are physical pixels. Wox core sends positions in
+// its Windows logical space: physical coordinates divided by the scale of the
+// monitor that produced the position. Test each monitor by applying that
+// candidate monitor's scale, then choose the monitor with the largest overlap.
+static BOOL CALLBACK FindMonitorForGoLogicalBounds(HMONITOR hMon, HDC, LPRECT, LPARAM lParam)
+{
+  auto *data = reinterpret_cast<MonitorFindData *>(lParam);
+  MONITORINFO mi = {sizeof(mi)};
+  if (!GetMonitorInfo(hMon, &mi))
+  {
+    return TRUE;
+  }
+
+  UINT dpi = FlutterDesktopGetDpiForMonitor(hMon);
+  if (dpi == 0)
+  {
+    dpi = 96;
+  }
+
+  const double scale = dpi / 96.0;
+  const double width = data->targetWidth > 0 ? data->targetWidth : 1.0;
+  const double height = data->targetHeight > 0 ? data->targetHeight : 1.0;
+  const double physicalLeft = data->targetX * scale;
+  const double physicalTop = data->targetY * scale;
+  const double physicalRight = (data->targetX + width) * scale;
+  const double physicalBottom = (data->targetY + height) * scale;
+
+  // The launcher can be taller than a scaled work area, so a correctly centered
+  // window may have its top-left outside the monitor. Overlap keeps that case
+  // on the intended display instead of falling back to the primary monitor.
+  const double overlapWidth = std::max(
+      0.0,
+      std::min(physicalRight, static_cast<double>(mi.rcMonitor.right)) - std::max(physicalLeft, static_cast<double>(mi.rcMonitor.left)));
+  const double overlapHeight = std::max(
+      0.0,
+      std::min(physicalBottom, static_cast<double>(mi.rcMonitor.bottom)) - std::max(physicalTop, static_cast<double>(mi.rcMonitor.top)));
+  const double area = overlapWidth * overlapHeight;
+  if (area > data->bestArea)
+  {
+    data->foundMonitor = hMon;
+    data->foundDpi = dpi;
+    data->bestArea = area;
+  }
+
+  return TRUE;
+}
+
 // Formats HWND values for focus diagnostics without relying on platform-specific printf width.
 static std::string FormatHwnd(HWND hwnd)
 {
@@ -5278,41 +5336,17 @@ void FlutterWindow::HandleWindowManagerMethodCall(
           double width = std::get<double>(width_it->second);
           double height = std::get<double>(height_it->second);
 
-          struct MonitorFindData
-          {
-            LONG targetX, targetY;
-            HMONITOR foundMonitor;
-            UINT foundDpi;
-          } findData = {static_cast<LONG>(x), static_cast<LONG>(y), nullptr, 96};
-
-          EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR hMon, HDC, LPRECT, LPARAM lParam) -> BOOL
-                              {
-                                auto *data = reinterpret_cast<MonitorFindData *>(lParam);
-                                MONITORINFO mi = {sizeof(mi)};
-                                if (GetMonitorInfo(hMon, &mi))
-                                {
-                                  UINT dpi = FlutterDesktopGetDpiForMonitor(hMon);
-                                  float scale = dpi / 96.0f;
-
-                                  LONG logLeft = static_cast<LONG>(mi.rcMonitor.left / scale);
-                                  LONG logTop = static_cast<LONG>(mi.rcMonitor.top / scale);
-                                  LONG logRight = static_cast<LONG>(mi.rcMonitor.right / scale);
-                                  LONG logBottom = static_cast<LONG>(mi.rcMonitor.bottom / scale);
-
-                                  if (data->targetX >= logLeft && data->targetX < logRight &&
-                                      data->targetY >= logTop && data->targetY < logBottom)
-                                  {
-                                    data->foundMonitor = hMon;
-                                    data->foundDpi = dpi;
-                                    return FALSE;
-                                  }
-                                }
-                                return TRUE; }, reinterpret_cast<LPARAM>(&findData));
+          MonitorFindData findData = {x, y, width, height, 0.0, nullptr, 96};
+          EnumDisplayMonitors(nullptr, nullptr, FindMonitorForGoLogicalBounds, reinterpret_cast<LPARAM>(&findData));
 
           if (findData.foundMonitor == nullptr)
           {
             findData.foundMonitor = MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
             findData.foundDpi = FlutterDesktopGetDpiForMonitor(findData.foundMonitor);
+            if (findData.foundDpi == 0)
+            {
+              findData.foundDpi = 96;
+            }
           }
 
           float dpiScale = findData.foundDpi / 96.0f;
@@ -5392,55 +5426,41 @@ void FlutterWindow::HandleWindowManagerMethodCall(
           double x = std::get<double>(x_it->second);
           double y = std::get<double>(y_it->second);
 
-          // COORDINATE SYSTEM EXPLANATION:
-          // ... (existing logic) ...
-
-          struct MonitorFindData
+          RECT rect;
+          GetWindowRect(hwnd, &rect);
+          float currentDpiScale = GetDpiScale(hwnd);
+          if (currentDpiScale <= 0)
           {
-            LONG targetX, targetY;
-            HMONITOR foundMonitor;
-            UINT foundDpi;
-          } findData = {static_cast<LONG>(x), static_cast<LONG>(y), nullptr, 96};
+            currentDpiScale = 1.0f;
+          }
 
-          // Enumerate all monitors to find which one contains our logical point
-          EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR hMon, HDC, LPRECT, LPARAM lParam) -> BOOL
-                              {
-                                auto *data = reinterpret_cast<MonitorFindData *>(lParam);
-                                MONITORINFO mi = {sizeof(mi)};
-                                if (GetMonitorInfo(hMon, &mi))
-                                {
-                                  UINT dpi = FlutterDesktopGetDpiForMonitor(hMon);
-                                  float scale = dpi / 96.0f;
-
-                                  LONG logLeft = static_cast<LONG>(mi.rcMonitor.left / scale);
-                                  LONG logTop = static_cast<LONG>(mi.rcMonitor.top / scale);
-                                  LONG logRight = static_cast<LONG>(mi.rcMonitor.right / scale);
-                                  LONG logBottom = static_cast<LONG>(mi.rcMonitor.bottom / scale);
-
-                                  if (data->targetX >= logLeft && data->targetX < logRight &&
-                                      data->targetY >= logTop && data->targetY < logBottom)
-                                  {
-                                    data->foundMonitor = hMon;
-                                    data->foundDpi = dpi;
-                                    return FALSE; // Found the correct monitor, stop enumeration
-                                  }
-                                }
-                                return TRUE; // Not this monitor, continue searching
-                              },
-                              reinterpret_cast<LPARAM>(&findData));
+          // setPosition only receives a top-left point. Use the current window
+          // size so monitor selection still uses rectangle overlap, matching
+          // setBounds and avoiding false primary fallbacks on mixed-DPI layouts.
+          MonitorFindData findData = {
+              x,
+              y,
+              static_cast<double>(rect.right - rect.left) / currentDpiScale,
+              static_cast<double>(rect.bottom - rect.top) / currentDpiScale,
+              0.0,
+              nullptr,
+              96};
+          EnumDisplayMonitors(nullptr, nullptr, FindMonitorForGoLogicalBounds, reinterpret_cast<LPARAM>(&findData));
 
           if (findData.foundMonitor == nullptr)
           {
             findData.foundMonitor = MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
             findData.foundDpi = FlutterDesktopGetDpiForMonitor(findData.foundMonitor);
+            if (findData.foundDpi == 0)
+            {
+              findData.foundDpi = 96;
+            }
           }
 
           float dpiScale = findData.foundDpi / 96.0f;
           int scaledX = static_cast<int>(x * dpiScale);
           int scaledY = static_cast<int>(y * dpiScale);
 
-          RECT rect;
-          GetWindowRect(hwnd, &rect);
           int width = rect.right - rect.left;
           int height = rect.bottom - rect.top;
           SetWindowPos(hwnd, nullptr, scaledX, scaledY, width, height, SWP_NOZORDER | SWP_NOSIZE);
