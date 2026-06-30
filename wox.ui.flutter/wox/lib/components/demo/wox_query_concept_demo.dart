@@ -446,7 +446,7 @@ class _ConceptDemoWindow extends StatelessWidget {
         // identical to the real launcher's action-panel overlay.
         final panelWidth = (constraints.maxWidth * 0.42).clamp(250.0, 320.0);
         final actionPanelBottom = footerHeight + 12.0;
-        const actionPanelNaturalHeight = 156.0;
+        const actionPanelNaturalHeight = 176.0;
         // Windows CI can give the welcome demo less vertical room during the
         // reopen-onboarding path; scale the overlay down instead of letting the
         // fixed action rows overflow while the animation is being disposed.

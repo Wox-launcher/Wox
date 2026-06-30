@@ -1,6 +1,24 @@
 # Changelog
 
 
+## v2.3.0-beta.2 -
+
+This beta improves Linux and Wayland reliability while expanding file previews, File Search controls, and selected-folder Shell workflows.
+
+- Improve
+  - [`Linux`] Improve Wayland and Hyprland support with wlroots layer-shell detection, Hyprland hotkeys, KDE image clipboard handling, desktop launch environment fixes, draggable window state handling, screenshot monitor capture, and FAQ guidance for disabling window animation #4458
+  - [`Hotkey`] Expand Linux hotkey support with Double Ctrl, Caps Lock combo keys, Backspace injection, better input permission checks, and clearer doctor diagnostics. Also support backquote and tilde hotkeys across platforms.
+  - [`Preview`] Improve file previews with on-demand loading, macOS Quick Look support, PDF and large-file handling, and a File Search setting to control whether previews are shown #4463
+  - [`File Search`] Improve indexing performance, fresh full-index bulk sync, direct-entry insertion, and user-home path normalization for faster and more reliable searches.
+  - [`Window`] Improve Windows monitor detection, DPI-scaled window positioning, and launcher focus diagnostics #4436
+  - [`Cloud Sync`] Improve account token recovery and expired-session feedback so sync actions handle refresh failures more clearly.
+  - [`Settings`] Improve responsive settings layouts, label handling, and runtime language updates so settings pages stay readable after resizing or switching languages.
+  - [`Doctor`] Improve doctor check severity handling so update and environment checks can distinguish warnings from blocking issues #4459
+  - [`Theme`] Improve macOS wallpaper retrieval and cache handling for wallpaper-aware theme previews.
+
+- Fix
+  - [`Clipboard`] Fix image paste support on KDE Wayland desktop sessions.
+
 ## v2.3.0-beta.1 - 2026-06-20
 
 This beta release introduces Cloud Sync, giving users encrypted backup and restore for settings, installed plugins, and themes across devices.  

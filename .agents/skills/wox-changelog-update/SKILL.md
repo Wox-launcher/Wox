@@ -23,6 +23,7 @@ Update `CHANGELOG.md` from the latest released version to `HEAD` and keep wordin
 - Run `git log --oneline --no-merges <range>`.
 - Open key commits with `git show --stat --oneline <sha>` to classify user-facing impact.
 - Ignore pure build/version bump commits unless they change user-visible behavior.
+- Ignore third-party plugin additions or updates, including plugin store manifest updates and bundled script plugin version bumps. Do not mention them in `CHANGELOG.md`.
 
 3. Classify into changelog buckets.
 
@@ -32,6 +33,7 @@ Update `CHANGELOG.md` from the latest released version to `HEAD` and keep wordin
 - Omit the `Add` section when the release does not contain a substantial new feature. Prefer `Improve` for additions that extend an existing feature area rather than creating a new user workflow.
 - Treat platform-specific implementations, provider additions, runtime dependency checks, searchable metadata, theme overrides, and similar support for existing systems as `Improve` unless the commit introduces a large new user-facing feature.
 - Exclude internal refactors/tests/docs/chore unless directly user-visible.
+- Exclude third-party plugin additions and updates even when they are user-visible in the plugin store; the Wox changelog should cover Wox app/core behavior, not plugin catalog changes.
 - Exclude tiny UI-only polish by default (for example spacing, alignment, minor color/wording tweaks) unless it fixes a functional UX issue or the user explicitly asks to include small UI changes.
 
 4. Write changelog entries in repository style.
