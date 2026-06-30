@@ -200,6 +200,7 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
             children: [
               Expanded(
                 child: WoxDragMoveArea(
+                  debugSource: "launcher-toolbar-right-blank",
                   child: Container(color: Colors.transparent),
                   onDragEnd: () {
                     controller.focusQueryBox();

@@ -8,12 +8,12 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/v4.dart';
+import 'package:wox/components/wox_drag_move_view.dart';
 import 'package:wox/components/wox_loading_indicator.dart';
 import 'package:wox/components/wox_selectable_text.dart';
 import 'package:wox/components/wox_tooltip.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_preview_webview_data.dart';
-import 'package:wox/utils/windows/window_manager.dart';
 import 'package:wox/utils/webview/wox_webview_util.dart';
 import 'package:wox/utils/webview/wox_webview_session.dart';
 import 'package:wox/utils/wox_interface_size_util.dart';
@@ -383,16 +383,7 @@ class _WoxWebViewPreviewState extends State<WoxWebViewPreview> {
   }
 
   Widget _buildToolbarDragHandle() {
-    return MouseRegion(
-      cursor: SystemMouseCursors.move,
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onPanStart: (_) {
-          windowManager.startDragging();
-        },
-        child: SizedBox(height: _scaled(32)),
-      ),
-    );
+    return MouseRegion(cursor: SystemMouseCursors.move, child: WoxDragMoveArea(debugSource: "webview-preview-toolbar", child: SizedBox(height: _scaled(32))));
   }
 
   void _showToolbarTemporarily() {

@@ -84,8 +84,8 @@ class WindowManager implements WindowManagerInterface {
   }
 
   @override
-  Future<void> startDragging() {
-    return _platformImpl.startDragging();
+  Future<void> startDragging({String? traceId, String? source}) {
+    return _platformImpl.startDragging(traceId: traceId, source: source);
   }
 
   @override

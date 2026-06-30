@@ -7,6 +7,7 @@ import 'package:get/get.dart';
 import 'package:protocol_handler/protocol_handler.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_border_drag_move_view.dart';
+import 'package:wox/components/wox_drag_move_state.dart';
 import 'package:wox/controllers/wox_ai_chat_controller.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/controllers/wox_screenshot_controller.dart';
@@ -272,6 +273,11 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
     // other windows opened during the guide.
     if (launcherController.isInSettingView.value || launcherController.isInOnboardingView.value) {
       Logger.instance.debug(traceId, "onWindowBlur ignored: management view is active");
+      return;
+    }
+
+    if (Platform.isLinux && WoxDragMoveState.isActive) {
+      Logger.instance.info(traceId, "linux-window-drag dart stage=blur-during-drag action=ignore ${WoxDragMoveState.debugSummary}");
       return;
     }
 

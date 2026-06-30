@@ -333,6 +333,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
           onDoubleTap: _handleQueryBoxBlankAreaTextSelection,
           child: MouseRegion(
             child: WoxDragMoveArea(
+              debugSource: "query-box-right-blank",
               onDragEnd: () {
                 controller.focusQueryBox();
               },

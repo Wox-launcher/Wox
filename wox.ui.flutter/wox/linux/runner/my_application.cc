@@ -422,6 +422,9 @@ static gboolean on_window_focus_out(GtkWidget *widget, GdkEventFocus *event,
 {
   MyApplication *self = MY_APPLICATION(user_data);
   log("FLUTTER: Window lost focus");
+  log("linux-window-focus native stage=focus-out visible=%d active=%d realized=%d mapped=%d",
+      gtk_widget_get_visible(widget), gtk_window_is_active(GTK_WINDOW(widget)),
+      gtk_widget_get_realized(widget), gtk_widget_get_mapped(widget));
 
   if (self != nullptr && gtk_widget_get_visible(widget))
   {
@@ -3043,17 +3046,65 @@ static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
     // gtk_window_begin_move_drag is the cross-backend GTK3 API for this:
     // it sends a _NET_WM_MOVERESIZE message on X11 and uses the xdg-shell
     // move request on Wayland, so no special-casing is needed here.
-    GdkDisplay *display = gtk_widget_get_display(GTK_WIDGET(window));
-    GdkSeat *seat = gdk_display_get_default_seat(display);
-    GdkDevice *pointer = gdk_seat_get_pointer(seat);
+    const char *trace_id = "";
+    const char *source = "unknown";
+    if (args != nullptr && fl_value_get_type(args) == FL_VALUE_TYPE_MAP)
+    {
+      FlValue *trace_id_value = fl_value_lookup_string(args, "traceId");
+      if (trace_id_value != nullptr && fl_value_get_type(trace_id_value) == FL_VALUE_TYPE_STRING)
+      {
+        trace_id = fl_value_get_string(trace_id_value);
+      }
+      FlValue *source_value = fl_value_lookup_string(args, "source");
+      if (source_value != nullptr && fl_value_get_type(source_value) == FL_VALUE_TYPE_STRING)
+      {
+        source = fl_value_get_string(source_value);
+      }
+    }
 
-    gint root_x = 0, root_y = 0;
-    gdk_device_get_position(pointer, NULL, &root_x, &root_y);
+    GtkWidget *widget = GTK_WIDGET(window);
+    GdkWindow *gdk_window = gtk_widget_get_window(widget);
+    GdkDisplay *display = gtk_widget_get_display(widget);
+    GdkSeat *seat = display != nullptr ? gdk_display_get_default_seat(display) : nullptr;
+    GdkDevice *pointer = seat != nullptr ? gdk_seat_get_pointer(seat) : nullptr;
+    const char *display_name = display != nullptr ? gdk_display_get_name(display) : "none";
+    const char *display_type = display != nullptr ? G_OBJECT_TYPE_NAME(display) : "none";
+    const char *window_type = gdk_window != nullptr ? G_OBJECT_TYPE_NAME(gdk_window) : "none";
+    const char *backend = window_type;
+#ifdef GDK_WINDOWING_X11
+    if (gdk_window != nullptr && GDK_IS_X11_WINDOW(gdk_window))
+    {
+      backend = "x11";
+    }
+#endif
 
-    log("FLUTTER: startDragging at %d,%d", root_x, root_y);
-    gtk_window_begin_move_drag(window, 1, root_x, root_y, GDK_CURRENT_TIME);
-    response =
-        FL_METHOD_RESPONSE(fl_method_success_response_new(fl_value_new_null()));
+    if (pointer == nullptr)
+    {
+      log("linux-window-drag native stage=missing-pointer traceId=%s source=%s backend=%s displayType=%s display=%s windowType=%s visible=%d realized=%d mapped=%d",
+          trace_id, source, backend, display_type, display_name, window_type,
+          gtk_widget_get_visible(widget), gtk_widget_get_realized(widget),
+          gtk_widget_get_mapped(widget));
+      response = FL_METHOD_RESPONSE(fl_method_error_response_new(
+          "POINTER_UNAVAILABLE", "Unable to resolve the current pointer device", nullptr));
+    }
+    else
+    {
+      gint root_x = 0, root_y = 0;
+      gdk_device_get_position(pointer, NULL, &root_x, &root_y);
+
+      log("linux-window-drag native stage=begin traceId=%s source=%s backend=%s displayType=%s display=%s windowType=%s visible=%d active=%d realized=%d mapped=%d root=%d,%d time=%u",
+          trace_id, source, backend, display_type, display_name, window_type,
+          gtk_widget_get_visible(widget), gtk_window_is_active(window),
+          gtk_widget_get_realized(widget), gtk_widget_get_mapped(widget), root_x,
+          root_y, GDK_CURRENT_TIME);
+      gtk_window_begin_move_drag(window, 1, root_x, root_y, GDK_CURRENT_TIME);
+      log("linux-window-drag native stage=after-begin traceId=%s source=%s visible=%d active=%d realized=%d mapped=%d",
+          trace_id, source, gtk_widget_get_visible(widget),
+          gtk_window_is_active(window), gtk_widget_get_realized(widget),
+          gtk_widget_get_mapped(widget));
+      response =
+          FL_METHOD_RESPONSE(fl_method_success_response_new(fl_value_new_null()));
+    }
   }
   else
   {

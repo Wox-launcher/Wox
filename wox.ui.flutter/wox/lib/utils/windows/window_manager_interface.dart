@@ -47,8 +47,8 @@ abstract class WindowManagerInterface {
   /// Wait until the window is ready to show
   Future<void> waitUntilReadyToShow();
 
-  /// Start dragging the window
-  Future<void> startDragging();
+  /// Start dragging the window.
+  Future<void> startDragging({String? traceId, String? source});
 
   /// Add a window event listener
   void addListener(WindowListener listener);
