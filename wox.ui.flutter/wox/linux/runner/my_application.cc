@@ -210,9 +210,60 @@ static const char *safe_string(const char *value)
 // gtk_layer_is_supported probes the compositor at runtime; the library can be
 // linked and present but the active compositor may still not implement
 // wlr-layer-shell (e.g. GNOME Shell on Wayland). Used to gate Dart-side fallback.
+//
+// wox_is_wlroots_compositor further restricts layer-shell usage to compositors
+// where Wox needs it. KWin/Wayland also advertises zwlr_layer_shell_v1 (so
+// gtk_layer_is_supported() returns true), but on KDE the previous flow
+// (show the toplevel and let KWin place it on the active output) already
+// follows the focused monitor. Driving layer-shell placement on KDE would
+// instead anchor Wox to the primary monitor because Wayland hides the global
+// pointer from regular clients, so Wox would open on the wrong screen when
+// the active monitor is not the primary one. We therefore enable layer-shell
+// only on wlroots-based compositors (Hyprland, sway, Wayfire, river, ...),
+// where the portal backend cannot deliver keyboard focus and precise placement
+// via margins is the only workable option.
+static gboolean wox_is_wlroots_compositor()
+{
+  const char *desktops_env = g_getenv("XDG_CURRENT_DESKTOP");
+  if (desktops_env == nullptr || desktops_env[0] == '\0')
+  {
+    desktops_env = g_getenv("XDG_SESSION_DESKTOP");
+  }
+  if (desktops_env == nullptr || desktops_env[0] == '\0')
+  {
+    desktops_env = g_getenv("DESKTOP_SESSION");
+  }
+  if (desktops_env == nullptr)
+  {
+    return FALSE;
+  }
+  // XDG_CURRENT_DESKTOP is a colon-separated list of registered desktop IDs;
+  // XDG_SESSION_DESKTOP / DESKTOP_SESSION are single values. Match any entry
+  // case-insensitively against the known wlroots-based compositors.
+  const char *const known_wlroots[] = {"hyprland", "sway", "wayfire", "river", "wlroots", nullptr};
+  for (const char *cursor = desktops_env; cursor != nullptr && cursor[0] != '\0';)
+  {
+    const char *sep = strchr(cursor, ':');
+    size_t len = sep != nullptr ? (size_t)(sep - cursor) : strlen(cursor);
+    for (const char *const *name = known_wlroots; *name != nullptr; name++)
+    {
+      if (strlen(*name) == len && g_ascii_strncasecmp(cursor, *name, len) == 0)
+      {
+        return TRUE;
+      }
+    }
+    if (sep == nullptr)
+    {
+      break;
+    }
+    cursor = sep + 1;
+  }
+  return FALSE;
+}
+
 static gboolean wox_layer_shell_available()
 {
-  return gtk_layer_is_supported();
+  return gtk_layer_is_supported() && wox_is_wlroots_compositor();
 }
 
 // init_layer_shell_for_window turns a realized GtkWindow into a layer-shell
