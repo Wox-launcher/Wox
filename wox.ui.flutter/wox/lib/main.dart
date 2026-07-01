@@ -187,7 +187,14 @@ class MyApp extends StatelessWidget {
 
       return MaterialApp(
         navigatorKey: Get.key,
-        theme: ThemeData(useMaterial3: true, textTheme: textTheme, fontFamily: appFontFamily.isEmpty ? null : appFontFamily),
+        theme: ThemeData(
+          useMaterial3: true,
+          textTheme: textTheme,
+          fontFamily: appFontFamily.isEmpty ? null : appFontFamily,
+          splashFactory: NoSplash.splashFactory,
+          splashColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+        ),
         debugShowCheckedModeBanner: false,
         home: const WoxApp(),
       );

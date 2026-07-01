@@ -61,7 +61,8 @@ class WoxPreviewScaffold extends StatelessWidget {
   }
 
   Widget _buildContent(BuildContext context) {
-    final themedContent = Theme(data: ThemeData(textSelectionTheme: TextSelectionThemeData(selectionColor: safeFromCssColor(woxTheme.previewTextSelectionColor))), child: child);
+    final selectionTheme = TextSelectionThemeData(selectionColor: safeFromCssColor(woxTheme.previewTextSelectionColor));
+    final themedContent = Theme(data: Theme.of(context).copyWith(textSelectionTheme: selectionTheme), child: child);
 
     if (contentHandlesScrolling) {
       return LayoutBuilder(builder: (context, constraints) => SizedBox(width: constraints.maxWidth, height: constraints.maxHeight, child: themedContent));

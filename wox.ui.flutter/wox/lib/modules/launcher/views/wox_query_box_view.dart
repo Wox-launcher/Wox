@@ -559,9 +559,10 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                     SchedulerBinding.instance.addPostFrameCallback((_) {
                       controller.updateQueryBoxTextWrapWidth(const UuidV4().generate(), (constraints.maxWidth - 8 - rightAccessoryWidth).clamp(0, double.infinity));
                     });
+                    final selectionTheme = TextSelectionThemeData(selectionColor: safeFromCssColor(currentTheme.queryBoxTextSelectionBackgroundColor));
 
                     return Theme(
-                      data: ThemeData(textSelectionTheme: TextSelectionThemeData(selectionColor: safeFromCssColor(currentTheme.queryBoxTextSelectionBackgroundColor))),
+                      data: Theme.of(context).copyWith(textSelectionTheme: selectionTheme),
                       child: Stack(
                         children: [
                           _buildTextField(currentTheme, rightAccessoryWidth),

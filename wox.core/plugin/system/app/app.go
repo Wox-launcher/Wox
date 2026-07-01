@@ -75,7 +75,7 @@ type appCacheFile struct {
 }
 
 // Bump this when cached appInfo fields or preprocessed icon semantics change.
-const appCacheVersion = 11
+const appCacheVersion = 12
 
 const (
 	appCommandReindex   = "reindex"
@@ -357,7 +357,9 @@ func (a *ApplicationPlugin) populateAppMetadata(ctx context.Context, appPath str
 	if strings.TrimSpace(info.Path) == "" {
 		info.Path = appPath
 	}
-	info.Identity = strings.TrimSpace(resolveAppIdentityForPlatform(ctx, *info))
+	if strings.TrimSpace(info.Identity) == "" {
+		info.Identity = strings.TrimSpace(resolveAppIdentityForPlatform(ctx, *info))
+	}
 
 	if fileInfo == nil {
 		stat, err := os.Stat(appPath)
@@ -2132,7 +2134,8 @@ func (a *ApplicationPlugin) getHotkeyAppCandidates(ctx context.Context) []settin
 
 func (a *ApplicationPlugin) rebuildHotkeyAppCandidates(ctx context.Context) {
 	candidates := make([]setting.IgnoredHotkeyApp, 0, len(a.apps))
-	seen := make(map[string]bool)
+	candidateIndexes := make(map[string]int)
+	candidateInfos := make([]appInfo, 0, len(a.apps))
 
 	for _, info := range a.apps {
 		if strings.TrimSpace(info.Identity) == "" {
@@ -2145,11 +2148,29 @@ func (a *ApplicationPlugin) rebuildHotkeyAppCandidates(ctx context.Context) {
 		}
 
 		key := strings.ToLower(strings.TrimSpace(candidate.Identity))
-		if key == "" || seen[key] {
+		if key == "" {
 			continue
 		}
 
-		seen[key] = true
+		if existingIndex, ok := candidateIndexes[key]; ok {
+			existingInfo := candidateInfos[existingIndex]
+			// UWP entries are the real app launcher when they share the same process identity with helper executables.
+			preferCandidate := info.Type == AppTypeUWP && existingInfo.Type != AppTypeUWP
+			if !preferCandidate && existingInfo.Icon.IsEmpty() && !info.Icon.IsEmpty() {
+				preferCandidate = true
+			}
+			if !preferCandidate && existingInfo.IsDefaultIcon && !info.IsDefaultIcon {
+				preferCandidate = true
+			}
+			if preferCandidate {
+				candidateInfos[existingIndex] = info
+				candidates[existingIndex] = candidate
+			}
+			continue
+		}
+
+		candidateIndexes[key] = len(candidates)
+		candidateInfos = append(candidateInfos, info)
 		candidates = append(candidates, candidate)
 	}
 

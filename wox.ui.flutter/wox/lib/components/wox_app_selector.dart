@@ -291,8 +291,6 @@ class _AppSelectorDialogState extends State<_AppSelectorDialog> {
                                     });
                                   },
                                   hoverColor: accentColor.withValues(alpha: 0.06),
-                                  splashColor: accentColor.withValues(alpha: 0.08),
-                                  highlightColor: accentColor.withValues(alpha: 0.04),
                                   child: Padding(
                                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                     child: Row(
