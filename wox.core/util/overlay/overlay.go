@@ -95,6 +95,8 @@ type OverlayOptions struct {
 	// Loading shows a native indeterminate spinner next to the message.
 	// Use it for short-lived progress surfaces where the caller should not keep refreshing text.
 	Loading bool
+	// CenterContent centers the leading icon/spinner and message as a single group inside fixed-size HUD overlays.
+	CenterContent bool
 	// Topmost puts the overlay above Wox's launcher window instead of using the default notification
 	// level. Use it for user-requested pinned/preview surfaces, not transient notifications.
 	Topmost bool

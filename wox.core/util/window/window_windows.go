@@ -746,6 +746,11 @@ func GetProcessIdentity(pid int) string {
 	return strings.ToLower(baseName)
 }
 
+// IsProcessIdentityRunning keeps the existing launch behavior on Windows.
+func IsProcessIdentityRunning(identity string) bool {
+	return false
+}
+
 // GetActiveFileExplorerPath returns the filesystem path of the currently active
 // File Explorer window, or an empty string if the foreground window is not an
 // Explorer folder or the path cannot be determined.

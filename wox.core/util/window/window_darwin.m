@@ -156,6 +156,33 @@ char* getProcessBundleIdentifier(int pid) {
     }
 }
 
+int isProcessIdentityRunning(const char *identity) {
+    @autoreleasepool {
+        if (!identity || identity[0] == '\0') {
+            return 0;
+        }
+
+        NSString *target = [NSString stringWithUTF8String:identity];
+        if (!target || [target length] == 0) {
+            return 0;
+        }
+
+        for (NSRunningApplication *app in [[NSWorkspace sharedWorkspace] runningApplications]) {
+            NSString *identifier = [app bundleIdentifier];
+            if (identifier && [identifier caseInsensitiveCompare:target] == NSOrderedSame) {
+                return 1;
+            }
+
+            NSString *name = [app localizedName];
+            if (name && [name caseInsensitiveCompare:target] == NSOrderedSame) {
+                return 1;
+            }
+        }
+
+        return 0;
+    }
+}
+
 int getActiveWindowPid() {
     @autoreleasepool {
         NSRunningApplication *activeApp = [[NSWorkspace sharedWorkspace] frontmostApplication];
@@ -674,9 +701,13 @@ int listManagedWindowsForManagement(WoxManagedWindowC **outWindows, int *outCoun
         int capacity = 0;
         NSMutableSet<NSNumber *> *seenWindowIds = [NSMutableSet set];
 
-        CFArrayRef visibleWindows = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements, kCGNullWindowID);
-        if (visibleWindows) {
-            NSArray *windowInfos = (__bridge NSArray *)visibleWindows;
+        // Use optionAll instead of optionOnScreenOnly so windows on other macOS Spaces
+        // or dragged offscreen are still discoverable. copyWindowForId filters helper
+        // windows via the Accessibility kAXWindowsAttribute, and fillManagedWindowFromAXWindow
+        // rejects zero-size entries, so non-window CG entries do not pollute the result.
+        CFArrayRef allWindows = CGWindowListCopyWindowInfo(kCGWindowListOptionAll | kCGWindowListExcludeDesktopElements, kCGNullWindowID);
+        if (allWindows) {
+            NSArray *windowInfos = (__bridge NSArray *)allWindows;
             for (NSDictionary *windowInfo in windowInfos) {
                 NSNumber *layer = [windowInfo objectForKey:(__bridge NSString *)kCGWindowLayer];
                 if (layer && [layer intValue] != 0) {
@@ -697,44 +728,12 @@ int listManagedWindowsForManagement(WoxManagedWindowC **outWindows, int *outCoun
                 int appendResult = appendManagedWindowFromAXWindow((pid_t)[ownerPid intValue], window, &windows, &count, &capacity, seenWindowIds);
                 CFRelease(window);
                 if (appendResult < 0) {
-                    CFRelease(visibleWindows);
+                    CFRelease(allWindows);
                     free(windows);
                     return appendResult;
                 }
             }
-            CFRelease(visibleWindows);
-        }
-
-        for (NSRunningApplication *application in [[NSWorkspace sharedWorkspace] runningApplications]) {
-            pid_t pid = [application processIdentifier];
-            if (pid <= 0) {
-                continue;
-            }
-
-            AXUIElementRef app = AXUIElementCreateApplication(pid);
-            if (!app) {
-                continue;
-            }
-
-            CFTypeRef windowsValue = NULL;
-            if (AXUIElementCopyAttributeValue(app, kAXWindowsAttribute, &windowsValue) == kAXErrorSuccess && windowsValue && CFGetTypeID(windowsValue) == CFArrayGetTypeID()) {
-                CFArrayRef axWindows = (CFArrayRef)windowsValue;
-                CFIndex windowCount = CFArrayGetCount(axWindows);
-                for (CFIndex i = 0; i < windowCount; i++) {
-                    AXUIElementRef window = (AXUIElementRef)CFArrayGetValueAtIndex(axWindows, i);
-                    int appendResult = appendManagedWindowFromAXWindow(pid, window, &windows, &count, &capacity, seenWindowIds);
-                    if (appendResult < 0) {
-                        CFRelease(windowsValue);
-                        CFRelease(app);
-                        free(windows);
-                        return appendResult;
-                    }
-                }
-            }
-            if (windowsValue) {
-                CFRelease(windowsValue);
-            }
-            CFRelease(app);
+            CFRelease(allWindows);
         }
 
         *outWindows = windows;

@@ -25,6 +25,7 @@ typedef struct {
     bool closable;
     bool closeOnEscape;
     bool loading;
+    bool centerContent;
     bool topmost;
     bool absolutePosition;
     bool preservePosition;
@@ -1419,6 +1420,26 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         [self.messageView.layoutManager ensureLayoutForTextContainer:tc];
         textSize = [self.messageView.layoutManager usedRectForTextContainer:tc].size;
 
+        CGFloat leadingX = 12;
+        CGFloat messageX = padLeft;
+        if (opts.centerContent) {
+            CGFloat leadingWidth = hasLeadingIcon ? iconSize : 0;
+            CGFloat leadingGap = hasLeadingIcon ? 8 : 0;
+            CGFloat sidePadding = 12;
+            CGFloat maxTextWidth = MAX(1, windowWidth - (sidePadding * 2) - leadingWidth - leadingGap);
+            NSRect naturalTextRect = [msg boundingRectWithSize:NSMakeSize(CGFLOAT_MAX, CGFLOAT_MAX)
+                                                       options:NSStringDrawingUsesLineFragmentOrigin
+                                                    attributes:attrs];
+            CGFloat centeredTextWidth = MIN(MAX(1, ceil(naturalTextRect.size.width)), maxTextWidth);
+            CGFloat groupWidth = leadingWidth + leadingGap + centeredTextWidth;
+            leadingX = MAX(sidePadding, (windowWidth - groupWidth) / 2);
+            messageX = leadingX + leadingWidth + leadingGap;
+            contentWidth = centeredTextWidth;
+            tc.containerSize = NSMakeSize(contentWidth, CGFLOAT_MAX);
+            [self.messageView.layoutManager ensureLayoutForTextContainer:tc];
+            textSize = [self.messageView.layoutManager usedRectForTextContainer:tc].size;
+        }
+
         CGFloat textHeight = textSize.height;
         windowHeight = (opts.height > 0) ? opts.height : (textHeight + padTop + padBottom);
         if (opts.height <= 0 && opts.maxHeight > 0 && windowHeight > opts.maxHeight) {
@@ -1433,16 +1454,16 @@ static NSMutableDictionary<NSString*, OverlayWindow*> *gOverlayWindows = nil;
         CGFloat currentY = textAreaBottom + (textAreaHeight - textHeight) / 2;
         if (currentY < textAreaBottom) currentY = textAreaBottom;
 
-        self.messageView.frame = NSMakeRect(padLeft, currentY, contentWidth, textHeight);
+        self.messageView.frame = NSMakeRect(messageX, currentY, contentWidth, textHeight);
         
         if (hasLeadingIndicator) {
-            self.loadingIndicator.frame = NSMakeRect(12, (windowHeight - iconSize)/2, iconSize, iconSize);
+            self.loadingIndicator.frame = NSMakeRect(leadingX, (windowHeight - iconSize)/2, iconSize, iconSize);
             self.iconView.hidden = YES;
         } else if (!self.iconView.hidden) {
-            self.iconView.frame = NSMakeRect(12, (windowHeight - iconSize)/2, iconSize, iconSize);
+            self.iconView.frame = NSMakeRect(leadingX, (windowHeight - iconSize)/2, iconSize, iconSize);
         }
         if (!self.tooltipIconView.hidden) {
-            CGFloat textRight = padLeft + contentWidth;
+            CGFloat textRight = messageX + contentWidth;
             CGFloat ty = (windowHeight - tooltipIconSize) / 2;
             if (ty < padTop) ty = padTop;
             self.tooltipIconView.frame = NSMakeRect(textRight + tooltipIconGap, ty, tooltipIconSize, tooltipIconSize);

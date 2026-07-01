@@ -60,6 +60,7 @@ typedef struct {
     bool closable;
     bool closeOnEscape;
     bool loading;
+    bool centerContent;
     bool topmost;
     bool absolutePosition;
     bool preservePosition;
@@ -590,6 +591,7 @@ typedef struct OverlayWindow
     BOOL closable;
     BOOL closeOnEscape;
     BOOL loading;
+    BOOL centerContent;
     BOOL topmost;
     BOOL absolutePosition;
     BOOL preservePosition;
@@ -684,6 +686,7 @@ typedef struct OverlayPayload
     BOOL closable;
     BOOL closeOnEscape;
     BOOL loading;
+    BOOL centerContent;
     BOOL topmost;
     BOOL absolutePosition;
     BOOL preservePosition;
@@ -1796,6 +1799,43 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
         ReleaseDC(NULL, hdc);
     }
 
+    int iconLeft = leftPad;
+    int textTop = topPad;
+    if (ow->centerContent)
+    {
+        int sidePadding = MulDiv(PADDING_X_DIP, (int)ow->dpi, 96);
+        int leadingWidth = iconSize;
+        int leadingGap = iconSize > 0 ? iconGap : 0;
+        int centeredMaxTextWidth = width - (sidePadding * 2) - leadingWidth - leadingGap;
+        if (centeredMaxTextWidth < 1)
+            centeredMaxTextWidth = 1;
+
+        int centeredTextWidth = centeredMaxTextWidth;
+        HDC measureHdc = GetDC(NULL);
+        if (measureHdc)
+        {
+            HGDIOBJ oldFont = NULL;
+            if (ow->messageFont)
+                oldFont = SelectObject(measureHdc, ow->messageFont);
+            int measuredTextWidth = MeasureTextNaturalWidthW(measureHdc, ow->message ? ow->message : L"");
+            if (measuredTextWidth < 1)
+                measuredTextWidth = 1;
+            centeredTextWidth = min(measuredTextWidth, centeredMaxTextWidth);
+            textHeight = MeasureTextHeightW(measureHdc, ow->message ? ow->message : L"", centeredTextWidth);
+            if (oldFont)
+                SelectObject(measureHdc, oldFont);
+            ReleaseDC(NULL, measureHdc);
+        }
+
+        int groupWidth = leadingWidth + leadingGap + centeredTextWidth;
+        int groupLeft = (width - groupWidth) / 2;
+        if (groupLeft < sidePadding)
+            groupLeft = sidePadding;
+        iconLeft = groupLeft;
+        textLeft = groupLeft + leadingWidth + leadingGap;
+        textWidth = centeredTextWidth;
+    }
+
     int contentHeight = textHeight;
     if (iconSize > contentHeight)
         contentHeight = iconSize;
@@ -1858,9 +1898,38 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
         if (textBottom < topPad)
             textBottom = topPad;
         int visibleTextHeight = textBottom - topPad;
+        if (ow->centerContent)
+        {
+            int centerAreaBottom = textBottom;
+            int groupHeight = max(textHeight, iconSize);
+            int groupTop = topPad + (centerAreaBottom - topPad - groupHeight) / 2;
+            if (groupTop < topPad)
+                groupTop = topPad;
+            textTop = groupTop + (groupHeight - textHeight) / 2;
+            if (textTop < topPad)
+                textTop = topPad;
+            visibleTextHeight = max(0, centerAreaBottom - textTop);
+        }
+        int iconTop = topPad + (textBottom - topPad - iconSize) / 2;
+        if (ow->centerContent)
+        {
+            int groupHeight = max(textHeight, iconSize);
+            int groupTop = topPad + (textBottom - topPad - groupHeight) / 2;
+            if (groupTop < topPad)
+                groupTop = topPad;
+            iconTop = groupTop + (groupHeight - iconSize) / 2;
+        }
+        if (iconTop < topPad)
+            iconTop = topPad;
+        if (iconTop + iconSize > textBottom)
+            iconTop = textBottom - iconSize;
+        if (iconTop < 0)
+            iconTop = 0;
+        RECT iconLayoutRect = {iconLeft, iconTop, iconLeft + iconSize, iconTop + iconSize};
+        ow->iconRect = iconLayoutRect;
 
         ow->textRect.left = textLeft;
-        ow->textRect.top = topPad;
+        ow->textRect.top = textTop;
         ow->textRect.right = textLeft + textWidth;
         ow->textRect.bottom = textBottom;
         ow->textContentHeight = textHeight;
@@ -1902,7 +1971,7 @@ static void ApplyOverlayLayout(OverlayWindow *ow)
         }
         else
         {
-            RECT r = {0,0,0,0};
+            RECT r = {0, 0, 0, 0};
             ow->tooltipRect = r;
         }
     }
@@ -2121,6 +2190,7 @@ static void ApplyPayloadToOverlay(OverlayWindow *ow, OverlayPayload *payload, BO
     ow->closable = payload->closable;
     ow->closeOnEscape = payload->closeOnEscape;
     ow->loading = payload->loading;
+    ow->centerContent = payload->centerContent;
     ow->topmost = payload->topmost;
     ow->absolutePosition = payload->absolutePosition;
     ow->preservePosition = payload->preservePosition;
@@ -2640,10 +2710,6 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             return 0;
         }
 
-        int leftPad = MulDiv(PADDING_X_DIP, (int)ow->dpi, 96);
-        int topPad = MulDiv(PADDING_Y_DIP, (int)ow->dpi, 96);
-        int bottomPad = MulDiv(PADDING_Y_DIP, (int)ow->dpi, 96);
-
         float iconSizeDip = (ow->iconSize > 0.0f) ? ow->iconSize : DEFAULT_ICON_SIZE_DIP;
         int iconSize = (ow->iconBitmap ? (int)roundf(iconSizeDip * (float)ow->dpi / 96.0f) : 0);
 
@@ -2667,21 +2733,21 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
 
         if (ow->iconBitmap)
         {
-            int iconX = leftPad;
-            int iconY = (height - iconSize) / 2;
-            if (iconY < topPad)
-                iconY = topPad;
-            if (iconY + iconSize > height - bottomPad)
-                iconY = height - bottomPad - iconSize;
-            if (iconY < 0)
-                iconY = 0;
+            int iconX = ow->iconRect.left;
+            int iconY = ow->iconRect.top;
+            int drawWidth = ow->iconRect.right - ow->iconRect.left;
+            int drawHeight = ow->iconRect.bottom - ow->iconRect.top;
+            if (drawWidth <= 0)
+                drawWidth = iconSize;
+            if (drawHeight <= 0)
+                drawHeight = iconSize;
 
             HDC memDC = CreateCompatibleDC(hdc);
             if (memDC)
             {
                 HGDIOBJ oldBmp = SelectObject(memDC, ow->iconBitmap);
                 BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-                AlphaBlend(hdc, iconX, iconY, iconSize, iconSize, memDC, 0, 0, ow->iconWidth, ow->iconHeight, bf);
+                AlphaBlend(hdc, iconX, iconY, drawWidth, drawHeight, memDC, 0, 0, ow->iconWidth, ow->iconHeight, bf);
                 if (oldBmp)
                     SelectObject(memDC, oldBmp);
                 DeleteDC(memDC);
@@ -3503,6 +3569,7 @@ void ShowOverlay(OverlayOptions opts)
     payload->closable = opts.closable ? TRUE : FALSE;
     payload->closeOnEscape = opts.closeOnEscape ? TRUE : FALSE;
     payload->loading = opts.loading ? TRUE : FALSE;
+    payload->centerContent = opts.centerContent ? TRUE : FALSE;
     payload->topmost = opts.topmost ? TRUE : FALSE;
     payload->absolutePosition = opts.absolutePosition ? TRUE : FALSE;
     payload->preservePosition = opts.preservePosition ? TRUE : FALSE;

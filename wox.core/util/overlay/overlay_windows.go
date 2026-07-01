@@ -22,6 +22,7 @@ typedef struct {
     bool closable;
     bool closeOnEscape;
     bool loading;
+    bool centerContent;
     bool topmost;
     bool absolutePosition;
     bool preservePosition;
@@ -138,6 +139,7 @@ func Show(opts OverlayOptions) {
 		closable:                 C.bool(opts.Closable),
 		closeOnEscape:            C.bool(opts.CloseOnEscape),
 		loading:                  C.bool(opts.Loading),
+		centerContent:            C.bool(opts.CenterContent),
 		topmost:                  C.bool(opts.Topmost),
 		absolutePosition:         C.bool(opts.AbsolutePosition),
 		preservePosition:         C.bool(opts.PreservePosition),

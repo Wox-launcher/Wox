@@ -33,6 +33,7 @@ int getWindowIconByPid(int pid, unsigned char **iconData);
 char* getActiveWindowName();
 char* getWindowNameByPid(int pid);
 char* getProcessBundleIdentifier(int pid);
+int isProcessIdentityRunning(const char* identity);
 int getActiveWindowPid();
 char* getActiveWindowIdForManagement();
 int getManagedWindowForManagement(const char* windowId, int pid, WoxManagedWindowC* outWindow);
@@ -146,6 +147,18 @@ func GetProcessIdentity(pid int) string {
 	return strings.TrimSpace(C.GoString(identity))
 }
 
+// IsProcessIdentityRunning checks app process identity without touching Accessibility windows.
+func IsProcessIdentityRunning(identity string) bool {
+	identity = strings.TrimSpace(identity)
+	if identity == "" {
+		return false
+	}
+
+	cIdentity := C.CString(identity)
+	defer C.free(unsafe.Pointer(cIdentity))
+	return int(C.isProcessIdentityRunning(cIdentity)) == 1
+}
+
 func GetActiveWindowPid() int {
 	pid := C.getActiveWindowPid()
 	return int(pid)
@@ -175,7 +188,7 @@ func GetManagedWindow(windowId string, pid int, title string) (ManagedWindow, er
 	return managedWindowFromDarwinWindow(out, title), nil
 }
 
-// ListManagedWindows returns windows that macOS Accessibility can later move.
+// ListManagedWindows returns visible windows that macOS Accessibility can later move.
 func ListManagedWindows() ([]ManagedWindow, error) {
 	var outWindows *C.WoxManagedWindowC
 	var outCount C.int

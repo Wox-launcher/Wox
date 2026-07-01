@@ -12,13 +12,21 @@ import (
 	"wox/i18n"
 	"wox/plugin"
 	"wox/setting"
+	"wox/util"
+	"wox/util/overlay"
 	"wox/util/shell"
 	"wox/util/window"
 )
 
 const (
-	windowGroupLaunchWaitTimeout  = 6 * time.Second
+	windowGroupLaunchWaitTimeout  = 12 * time.Second
 	windowGroupLaunchPollInterval = 250 * time.Millisecond
+)
+
+const (
+	windowGroupLaunchPlaceholderPrefix       = "window_group_launch_"
+	windowGroupLaunchPlaceholderCornerRadius = 8.0
+	windowGroupLaunchPlaceholderFontSize     = 18.0
 )
 
 const (
@@ -78,6 +86,7 @@ type windowGroupApplySummary struct {
 	Moved          int
 	Launched       int
 	MissingApps    []string
+	Unmanageable   []string
 	FailedApps     []string
 	PermissionApps []string
 	LaunchFailures []string
@@ -300,86 +309,253 @@ func (p *WindowManagerPlugin) arrangeWindowGroup(ctx context.Context, group wind
 	if err != nil {
 		return summary, err
 	}
+	p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager group placements built: group=%s placements=%d displays=%d", group.Id, len(placements), len(displays)))
 	if len(placements) == 0 {
 		return summary, nil
 	}
 
+	listStart := time.Now()
 	windows, err := window.ListManagedWindows()
 	if err != nil {
 		return summary, err
 	}
+	p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager listed group windows: group=%s windows=%d placements=%d costMs=%d", group.Id, len(windows), len(placements), time.Since(listStart).Milliseconds()))
 
 	windowsByIdentity := indexManagedWindowsByIdentity(windows)
 	missingBeforeLaunch := missingPlacementIdentities(placements, windowsByIdentity)
+	launchWaitPlacements := []windowGroupPlacement{}
+	launchedIdentities := map[string]bool{}
+	launchPlaceholders := map[string]string{}
+	defer p.closeWindowGroupLaunchPlaceholders(ctx, group, launchPlaceholders)
 	if len(missingBeforeLaunch) > 0 {
+		launchWaitPlacements = make([]windowGroupPlacement, 0, len(missingBeforeLaunch))
 		for _, placement := range placements {
 			if !missingBeforeLaunch[placement.Identity] || strings.TrimSpace(placement.AppPath) == "" {
 				continue
 			}
 
+			messageKey := "plugin_window_manager_group_opening_app"
+			isRunningWithoutWindow := window.IsProcessIdentityRunning(placement.Identity)
+			if isRunningWithoutWindow {
+				messageKey = "plugin_window_manager_group_showing_app"
+				p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager group app already running without manageable window, requesting activation: group=%s app=%s identity=%s path=%s", group.Id, placement.AppName, placement.Identity, placement.AppPath))
+			} else {
+				p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager launching missing group app: group=%s app=%s identity=%s path=%s", group.Id, placement.AppName, placement.Identity, placement.AppPath))
+			}
+
+			launchStart := time.Now()
+			placeholderName := p.showWindowGroupLaunchPlaceholder(ctx, group, placement, messageKey)
 			if err := shell.Open(placement.AppPath); err != nil {
+				if placeholderName != "" {
+					overlay.Close(placeholderName)
+				}
 				summary.LaunchFailures = appendUniqueString(summary.LaunchFailures, placement.AppName)
 				p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager failed to launch app for group: group=%s app=%s identity=%s path=%s err=%s", group.Id, placement.AppName, placement.Identity, placement.AppPath, err.Error()))
 				continue
 			}
-			summary.Launched++
-		}
-
-		if summary.Launched > 0 {
-			windows, err = waitForWindowGroupWindows(placements)
-			if err != nil {
-				return summary, err
+			if placeholderName != "" {
+				launchPlaceholders[placement.Identity] = placeholderName
 			}
-			windowsByIdentity = indexManagedWindowsByIdentity(windows)
+			p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager requested group app open: group=%s app=%s identity=%s alreadyRunning=%t costMs=%d", group.Id, placement.AppName, placement.Identity, isRunningWithoutWindow, time.Since(launchStart).Milliseconds()))
+			if !isRunningWithoutWindow {
+				summary.Launched++
+			}
+			launchedIdentities[placement.Identity] = true
+			launchWaitPlacements = append(launchWaitPlacements, placement)
 		}
 	}
 
 	for _, placement := range placements {
-		candidates := windowsByIdentity[placement.Identity]
-		if len(candidates) == 0 {
-			summary.MissingApps = appendUniqueString(summary.MissingApps, placement.AppName)
+		if launchedIdentities[placement.Identity] && len(windowsByIdentity[placement.Identity]) == 0 {
 			continue
 		}
+		p.applyWindowGroupPlacement(ctx, group, placement, windowsByIdentity, &summary)
+	}
 
-		placement.Window = candidates[0]
-		windowsByIdentity[placement.Identity] = candidates[1:]
-		p.storeRestoreRect(placement.Window, placement.Window.Bounds)
-		if err := window.MoveResizeWindow(placement.Window, placement.Rect); err != nil {
-			if errors.Is(err, window.ErrWindowManagementPermissionDenied) {
-				summary.PermissionApps = appendUniqueString(summary.PermissionApps, placement.AppName)
-			} else {
-				summary.FailedApps = appendUniqueString(summary.FailedApps, placement.AppName)
-			}
-			p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager failed to move group window: group=%s app=%s identity=%s windowId=%s err=%s", group.Id, placement.AppName, placement.Identity, placement.Window.Id, err.Error()))
-			continue
+	if len(launchWaitPlacements) > 0 {
+		if err = p.waitAndApplyLaunchedWindowGroupPlacements(ctx, group, launchWaitPlacements, launchPlaceholders, &summary); err != nil {
+			return summary, err
 		}
-		updatedWindow, err := window.GetManagedWindow(placement.Window.Id, placement.Window.Pid, placement.Window.Title)
-		if err != nil {
-			p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager failed to verify moved group window: group=%s app=%s identity=%s windowId=%s pid=%d err=%s", group.Id, placement.AppName, placement.Identity, placement.Window.Id, placement.Window.Pid, err.Error()))
-		} else {
-			p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager applied group rect: group=%s app=%s identity=%s before=%+v target=%+v after=%+v", group.Id, placement.AppName, placement.Identity, placement.Window.Bounds, placement.Rect, updatedWindow.Bounds))
-			if !windowRectApproximatelyEqual(updatedWindow.Bounds, placement.Rect) {
-				p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager group target mismatch after move: group=%s app=%s identity=%s target=%+v after=%+v", group.Id, placement.AppName, placement.Identity, placement.Rect, updatedWindow.Bounds))
-				// Windows can scale the first cross-DPI move before the window updates its target monitor DPI.
-				if retryErr := window.MoveResizeWindow(updatedWindow, placement.Rect); retryErr != nil {
-					p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager failed to retry group window move: group=%s app=%s identity=%s windowId=%s err=%s", group.Id, placement.AppName, placement.Identity, placement.Window.Id, retryErr.Error()))
-				} else if retriedWindow, retryVerifyErr := window.GetManagedWindow(updatedWindow.Id, updatedWindow.Pid, updatedWindow.Title); retryVerifyErr != nil {
-					p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager failed to verify retried group window move: group=%s app=%s identity=%s windowId=%s pid=%d err=%s", group.Id, placement.AppName, placement.Identity, placement.Window.Id, placement.Window.Pid, retryVerifyErr.Error()))
-				} else {
-					p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager retried group rect: group=%s app=%s identity=%s target=%+v after=%+v", group.Id, placement.AppName, placement.Identity, placement.Rect, retriedWindow.Bounds))
-					if !windowRectApproximatelyEqual(retriedWindow.Bounds, placement.Rect) {
-						p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager group target mismatch after retry: group=%s app=%s identity=%s target=%+v after=%+v", group.Id, placement.AppName, placement.Identity, placement.Rect, retriedWindow.Bounds))
-					}
-				}
-			}
-		}
-		if !window.ActivateWindowByPid(placement.Window.Pid) {
-			p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager failed to activate group window: group=%s app=%s identity=%s windowId=%s pid=%d", group.Id, placement.AppName, placement.Identity, placement.Window.Id, placement.Window.Pid))
-		}
-		summary.Moved++
 	}
 
 	return summary, nil
+}
+
+// showWindowGroupLaunchPlaceholder gives immediate feedback while an app is creating or exposing a manageable window.
+func (p *WindowManagerPlugin) showWindowGroupLaunchPlaceholder(ctx context.Context, group windowManagerWindowGroup, placement windowGroupPlacement, messageKey string) string {
+	if placement.Rect.Width <= 0 || placement.Rect.Height <= 0 {
+		return ""
+	}
+
+	name := windowGroupLaunchPlaceholderName(group.Id, placement.Identity)
+	message := fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, messageKey), placement.AppName)
+	overlay.Show(overlay.OverlayOptions{
+		Name:             name,
+		Message:          message,
+		Loading:          true,
+		CenterContent:    true,
+		Topmost:          true,
+		AbsolutePosition: true,
+		Anchor:           overlay.AnchorTopLeft,
+		OffsetX:          float64(placement.Rect.X),
+		OffsetY:          float64(placement.Rect.Y),
+		Width:            float64(placement.Rect.Width),
+		Height:           float64(placement.Rect.Height),
+		CornerRadius:     windowGroupLaunchPlaceholderCornerRadius,
+		FontSize:         windowGroupLaunchPlaceholderFontSize,
+	})
+	p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager showed launch placeholder: group=%s app=%s identity=%s overlay=%s rect=%+v", group.Id, placement.AppName, placement.Identity, name, placement.Rect))
+	return name
+}
+
+func (p *WindowManagerPlugin) closeWindowGroupLaunchPlaceholder(ctx context.Context, group windowManagerWindowGroup, launchPlaceholders map[string]string, identity string) {
+	name := launchPlaceholders[identity]
+	if name == "" {
+		return
+	}
+
+	overlay.Close(name)
+	delete(launchPlaceholders, identity)
+	p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager closed launch placeholder: group=%s identity=%s overlay=%s", group.Id, identity, name))
+}
+
+func (p *WindowManagerPlugin) closeWindowGroupLaunchPlaceholders(ctx context.Context, group windowManagerWindowGroup, launchPlaceholders map[string]string) {
+	for identity := range launchPlaceholders {
+		p.closeWindowGroupLaunchPlaceholder(ctx, group, launchPlaceholders, identity)
+	}
+}
+
+func windowGroupLaunchPlaceholderName(groupId string, identity string) string {
+	return windowGroupLaunchPlaceholderPrefix + util.Md5([]byte(groupId+":"+identity))
+}
+
+// waitAndApplyLaunchedWindowGroupPlacements applies each cold-started app as soon as its window appears.
+func (p *WindowManagerPlugin) waitAndApplyLaunchedWindowGroupPlacements(ctx context.Context, group windowManagerWindowGroup, placements []windowGroupPlacement, launchPlaceholders map[string]string, summary *windowGroupApplySummary) error {
+	waitStart := time.Now()
+	deadline := waitStart.Add(windowGroupLaunchWaitTimeout)
+	pending := make(map[string]windowGroupPlacement, len(placements))
+	for _, placement := range placements {
+		pending[placement.Identity] = placement
+	}
+
+	var lastWindows []window.ManagedWindow
+	for len(pending) > 0 {
+		windows, err := window.ListManagedWindows()
+		if err != nil {
+			return err
+		}
+		lastWindows = windows
+
+		windowsByIdentity := indexManagedWindowsByIdentity(windows)
+		for _, placement := range placements {
+			if _, ok := pending[placement.Identity]; !ok {
+				continue
+			}
+			if len(windowsByIdentity[placement.Identity]) == 0 {
+				continue
+			}
+
+			p.closeWindowGroupLaunchPlaceholder(ctx, group, launchPlaceholders, placement.Identity)
+			p.applyWindowGroupPlacement(ctx, group, placement, windowsByIdentity, summary)
+			delete(pending, placement.Identity)
+		}
+
+		if len(pending) == 0 || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(windowGroupLaunchPollInterval)
+	}
+
+	missingCount := len(pending)
+	if missingCount > 0 {
+		windowsByIdentity := indexManagedWindowsByIdentity(lastWindows)
+		for _, placement := range placements {
+			if _, ok := pending[placement.Identity]; !ok {
+				continue
+			}
+			p.closeWindowGroupLaunchPlaceholder(ctx, group, launchPlaceholders, placement.Identity)
+			p.applyWindowGroupPlacement(ctx, group, placement, windowsByIdentity, summary)
+			delete(pending, placement.Identity)
+		}
+	}
+
+	p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager waited for launched group windows: group=%s launched=%d windows=%d missing=%d costMs=%d", group.Id, len(placements), len(lastWindows), missingCount, time.Since(waitStart).Milliseconds()))
+	return nil
+}
+
+// applyWindowGroupPlacement moves one matched placement and records any partial failure in the group summary.
+func (p *WindowManagerPlugin) applyWindowGroupPlacement(ctx context.Context, group windowManagerWindowGroup, placement windowGroupPlacement, windowsByIdentity map[string][]window.ManagedWindow, summary *windowGroupApplySummary) {
+	candidates := windowsByIdentity[placement.Identity]
+	if len(candidates) == 0 {
+		if window.IsProcessIdentityRunning(placement.Identity) {
+			summary.Unmanageable = appendUniqueString(summary.Unmanageable, placement.AppName)
+			p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager group app has no manageable window: group=%s app=%s identity=%s", group.Id, placement.AppName, placement.Identity))
+		} else {
+			summary.MissingApps = appendUniqueString(summary.MissingApps, placement.AppName)
+			p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager group app missing from managed windows: group=%s app=%s identity=%s", group.Id, placement.AppName, placement.Identity))
+		}
+		return
+	}
+
+	placement.Window = candidates[0]
+	windowsByIdentity[placement.Identity] = candidates[1:]
+	p.storeRestoreRect(placement.Window, placement.Window.Bounds)
+	movedWindow, err := p.moveResizeWindowGroupPlacement(ctx, group, placement)
+	if err != nil {
+		if errors.Is(err, window.ErrWindowManagementPermissionDenied) {
+			summary.PermissionApps = appendUniqueString(summary.PermissionApps, placement.AppName)
+		} else {
+			summary.FailedApps = appendUniqueString(summary.FailedApps, placement.AppName)
+		}
+		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager failed to move group window: group=%s app=%s identity=%s windowId=%s err=%s", group.Id, placement.AppName, placement.Identity, placement.Window.Id, err.Error()))
+		return
+	}
+	updatedWindow, err := window.GetManagedWindow(movedWindow.Id, movedWindow.Pid, movedWindow.Title)
+	if err != nil {
+		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager failed to verify moved group window: group=%s app=%s identity=%s windowId=%s pid=%d err=%s", group.Id, placement.AppName, placement.Identity, movedWindow.Id, movedWindow.Pid, err.Error()))
+	} else {
+		p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager applied group rect: group=%s app=%s identity=%s before=%+v target=%+v after=%+v", group.Id, placement.AppName, placement.Identity, placement.Window.Bounds, placement.Rect, updatedWindow.Bounds))
+		if !windowRectApproximatelyEqual(updatedWindow.Bounds, placement.Rect) {
+			p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager group target mismatch after move: group=%s app=%s identity=%s target=%+v after=%+v", group.Id, placement.AppName, placement.Identity, placement.Rect, updatedWindow.Bounds))
+			// Windows can scale the first cross-DPI move before the window updates its target monitor DPI.
+			if retryErr := window.MoveResizeWindow(updatedWindow, placement.Rect); retryErr != nil {
+				p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager failed to retry group window move: group=%s app=%s identity=%s windowId=%s err=%s", group.Id, placement.AppName, placement.Identity, placement.Window.Id, retryErr.Error()))
+			} else if retriedWindow, retryVerifyErr := window.GetManagedWindow(updatedWindow.Id, updatedWindow.Pid, updatedWindow.Title); retryVerifyErr != nil {
+				p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager failed to verify retried group window move: group=%s app=%s identity=%s windowId=%s pid=%d err=%s", group.Id, placement.AppName, placement.Identity, placement.Window.Id, placement.Window.Pid, retryVerifyErr.Error()))
+			} else {
+				p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager retried group rect: group=%s app=%s identity=%s target=%+v after=%+v", group.Id, placement.AppName, placement.Identity, placement.Rect, retriedWindow.Bounds))
+				if !windowRectApproximatelyEqual(retriedWindow.Bounds, placement.Rect) {
+					p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager group target mismatch after retry: group=%s app=%s identity=%s target=%+v after=%+v", group.Id, placement.AppName, placement.Identity, placement.Rect, retriedWindow.Bounds))
+				}
+			}
+		}
+	}
+	if !window.ActivateWindowByPid(placement.Window.Pid) {
+		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager failed to activate group window: group=%s app=%s identity=%s windowId=%s pid=%d", group.Id, placement.AppName, placement.Identity, placement.Window.Id, placement.Window.Pid))
+	}
+	summary.Moved++
+}
+
+// moveResizeWindowGroupPlacement falls back to the process window when a saved AX window id becomes stale.
+func (p *WindowManagerPlugin) moveResizeWindowGroupPlacement(ctx context.Context, group windowManagerWindowGroup, placement windowGroupPlacement) (window.ManagedWindow, error) {
+	if err := window.MoveResizeWindow(placement.Window, placement.Rect); err != nil {
+		if errors.Is(err, window.ErrWindowManagementPermissionDenied) {
+			return placement.Window, err
+		}
+
+		fallbackWindow := placement.Window
+		fallbackWindow.Id = ""
+		if fallbackErr := window.MoveResizeWindow(fallbackWindow, placement.Rect); fallbackErr == nil {
+			p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager moved group window with pid fallback: group=%s app=%s identity=%s pid=%d originalWindowId=%s originalErr=%s", group.Id, placement.AppName, placement.Identity, placement.Window.Pid, placement.Window.Id, err.Error()))
+			return fallbackWindow, nil
+		} else {
+			p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager pid fallback failed for group window: group=%s app=%s identity=%s pid=%d originalWindowId=%s originalErr=%s fallbackErr=%s", group.Id, placement.AppName, placement.Identity, placement.Window.Pid, placement.Window.Id, err.Error(), fallbackErr.Error()))
+		}
+
+		return placement.Window, err
+	}
+
+	return placement.Window, nil
 }
 
 // buildWindowGroupPlacements converts configured screen slots into concrete desktop rectangles.
@@ -556,6 +732,9 @@ func (p *WindowManagerPlugin) notifyWindowGroupSummary(ctx context.Context, grou
 	issues := []string{}
 	if len(summary.MissingApps) > 0 {
 		issues = append(issues, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_window_manager_group_missing_apps"), strings.Join(summary.MissingApps, ", ")))
+	}
+	if len(summary.Unmanageable) > 0 {
+		issues = append(issues, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_window_manager_group_unmanageable_apps"), strings.Join(summary.Unmanageable, ", ")))
 	}
 	if len(summary.LaunchFailures) > 0 {
 		issues = append(issues, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_window_manager_group_launch_failed_apps"), strings.Join(summary.LaunchFailures, ", ")))

@@ -69,6 +69,11 @@ func GetProcessIdentity(pid int) string {
 	return ""
 }
 
+// IsProcessIdentityRunning is not implemented on Linux yet.
+func IsProcessIdentityRunning(identity string) bool {
+	return false
+}
+
 func ActivateWindowByPid(pid int) bool {
 	return false
 }
