@@ -234,15 +234,12 @@ class _HotkeyTracker {
       }
 
       if (keyEvent is KeyDownEvent) {
-        // On Linux/Wayland, Flutter's HardwareKeyboard can deliver duplicate
-        // KeyDownEvents for the same physical modifier press. If the key is
-        // already tracked as pressed, skip all processing to avoid
-        // false-positive combo invalidation that would prevent double-tap
-        // detection. This is gated to Linux so Windows/macOS behavior is
-        // unaffected.
-        if (Platform.isLinux &&
-            !keyEvent.synthesized &&
-            _realPressedModifiers.contains(keyEvent.physicalKey)) {
+        // Recorder events can arrive through both HardwareKeyboard.addHandler
+        // and Focus.onKeyEvent, and some platform backends can also repeat a
+        // modifier down while the key is still physically held. Treat the
+        // duplicate as the same press so it does not invalidate double-tap
+        // detection.
+        if (!keyEvent.synthesized && _realPressedModifiers.contains(keyEvent.physicalKey)) {
           return const _HotkeyTrackerResult();
         }
 
