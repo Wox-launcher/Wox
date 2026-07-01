@@ -1,7 +1,7 @@
 # Changelog
 
 
-## v2.3.0-beta.2 -
+## v2.3.0-beta.2 - 2026.07-01
 
 This beta improves Linux and Wayland reliability while expanding file previews, File Search controls, and selected-folder Shell workflows.
 
