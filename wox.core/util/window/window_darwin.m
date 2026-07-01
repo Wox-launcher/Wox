@@ -702,18 +702,14 @@ int listManagedWindowsForManagement(WoxManagedWindowC **outWindows, int *outCoun
         NSMutableSet<NSNumber *> *seenWindowIds = [NSMutableSet set];
 
         // Use optionAll instead of optionOnScreenOnly so windows on other macOS Spaces
-        // or dragged offscreen are still discoverable. copyWindowForId filters helper
-        // windows via the Accessibility kAXWindowsAttribute, and fillManagedWindowFromAXWindow
-        // rejects zero-size entries, so non-window CG entries do not pollute the result.
+        // or dragged offscreen are still discoverable. Skip the CGWindowLayer filter too:
+        // some apps (e.g. Ghostty) place their main window on a non-zero layer, and the
+        // Accessibility kAXWindowsAttribute + zero-size guard below already rejects helper
+        // windows that previously relied on the layer check.
         CFArrayRef allWindows = CGWindowListCopyWindowInfo(kCGWindowListOptionAll | kCGWindowListExcludeDesktopElements, kCGNullWindowID);
         if (allWindows) {
             NSArray *windowInfos = (__bridge NSArray *)allWindows;
             for (NSDictionary *windowInfo in windowInfos) {
-                NSNumber *layer = [windowInfo objectForKey:(__bridge NSString *)kCGWindowLayer];
-                if (layer && [layer intValue] != 0) {
-                    continue;
-                }
-
                 NSNumber *ownerPid = [windowInfo objectForKey:(__bridge NSString *)kCGWindowOwnerPID];
                 NSNumber *windowNumber = [windowInfo objectForKey:(__bridge NSString *)kCGWindowNumber];
                 if (!ownerPid || !windowNumber || [ownerPid intValue] <= 0 || [windowNumber unsignedIntValue] == 0) {

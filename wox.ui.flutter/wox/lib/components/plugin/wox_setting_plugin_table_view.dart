@@ -1232,6 +1232,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
         label: item.title,
         style: item.style,
         tooltip: item.tooltip,
+        labelActions: titleActions,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

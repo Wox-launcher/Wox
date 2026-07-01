@@ -271,9 +271,8 @@ func (p *WindowManagerPlugin) windowGroupResult(ctx context.Context, group windo
 		ScoreKey: "window-group:" + group.Id,
 		Actions: []plugin.QueryResultAction{
 			{
-				Name:                   "i18n:plugin_window_manager_group_action_apply",
-				IsDefault:              true,
-				PreventHideAfterAction: true,
+				Name:      "i18n:plugin_window_manager_group_action_apply",
+				IsDefault: true,
 				Action: func(actionCtx context.Context, actionContext plugin.ActionContext) {
 					p.applyWindowGroup(actionCtx, capturedGroup)
 				},
@@ -285,8 +284,6 @@ func (p *WindowManagerPlugin) windowGroupResult(ctx context.Context, group windo
 // applyWindowGroup launches missing apps when possible, then moves matching windows into configured slots.
 func (p *WindowManagerPlugin) applyWindowGroup(ctx context.Context, group windowManagerWindowGroup) {
 	p.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("window manager apply group: id=%s name=%q screens=%d", group.Id, group.Name, len(group.Screens)))
-	p.api.HideApp(ctx)
-	time.Sleep(120 * time.Millisecond)
 
 	summary, err := p.arrangeWindowGroup(ctx, group)
 	if err != nil {
@@ -314,6 +311,14 @@ func (p *WindowManagerPlugin) arrangeWindowGroup(ctx context.Context, group wind
 		return summary, nil
 	}
 
+	launchPlaceholders := map[string]string{}
+	for _, placement := range placements {
+		if placeholderName := p.showWindowGroupLaunchPlaceholder(ctx, group, placement, "plugin_window_manager_group_arranging_app"); placeholderName != "" {
+			launchPlaceholders[placement.Identity] = placeholderName
+		}
+	}
+	defer p.closeWindowGroupLaunchPlaceholders(ctx, group, launchPlaceholders)
+
 	listStart := time.Now()
 	windows, err := window.ListManagedWindows()
 	if err != nil {
@@ -325,8 +330,6 @@ func (p *WindowManagerPlugin) arrangeWindowGroup(ctx context.Context, group wind
 	missingBeforeLaunch := missingPlacementIdentities(placements, windowsByIdentity)
 	launchWaitPlacements := []windowGroupPlacement{}
 	launchedIdentities := map[string]bool{}
-	launchPlaceholders := map[string]string{}
-	defer p.closeWindowGroupLaunchPlaceholders(ctx, group, launchPlaceholders)
 	if len(missingBeforeLaunch) > 0 {
 		launchWaitPlacements = make([]windowGroupPlacement, 0, len(missingBeforeLaunch))
 		for _, placement := range placements {
@@ -346,9 +349,7 @@ func (p *WindowManagerPlugin) arrangeWindowGroup(ctx context.Context, group wind
 			launchStart := time.Now()
 			placeholderName := p.showWindowGroupLaunchPlaceholder(ctx, group, placement, messageKey)
 			if err := shell.Open(placement.AppPath); err != nil {
-				if placeholderName != "" {
-					overlay.Close(placeholderName)
-				}
+				p.closeWindowGroupLaunchPlaceholder(ctx, group, launchPlaceholders, placement.Identity)
 				summary.LaunchFailures = appendUniqueString(summary.LaunchFailures, placement.AppName)
 				p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("window manager failed to launch app for group: group=%s app=%s identity=%s path=%s err=%s", group.Id, placement.AppName, placement.Identity, placement.AppPath, err.Error()))
 				continue
@@ -370,6 +371,7 @@ func (p *WindowManagerPlugin) arrangeWindowGroup(ctx context.Context, group wind
 			continue
 		}
 		p.applyWindowGroupPlacement(ctx, group, placement, windowsByIdentity, &summary)
+		p.closeWindowGroupLaunchPlaceholder(ctx, group, launchPlaceholders, placement.Identity)
 	}
 
 	if len(launchWaitPlacements) > 0 {
@@ -381,7 +383,7 @@ func (p *WindowManagerPlugin) arrangeWindowGroup(ctx context.Context, group wind
 	return summary, nil
 }
 
-// showWindowGroupLaunchPlaceholder gives immediate feedback while an app is creating or exposing a manageable window.
+// showWindowGroupLaunchPlaceholder gives immediate feedback while a placement is waiting, launching, or exposing a manageable window.
 func (p *WindowManagerPlugin) showWindowGroupLaunchPlaceholder(ctx context.Context, group windowManagerWindowGroup, placement windowGroupPlacement, messageKey string) string {
 	if placement.Rect.Width <= 0 || placement.Rect.Height <= 0 {
 		return ""
@@ -497,8 +499,20 @@ func (p *WindowManagerPlugin) applyWindowGroupPlacement(ctx context.Context, gro
 		return
 	}
 
-	placement.Window = candidates[0]
-	windowsByIdentity[placement.Identity] = candidates[1:]
+	// Prefer the largest window so helper surfaces (e.g. Codex dictation bar) do not
+	// shadow the real app window when both share the same bundle identity.
+	largestIndex := 0
+	largestArea := candidates[0].Bounds.Width * candidates[0].Bounds.Height
+	for i := 1; i < len(candidates); i++ {
+		area := candidates[i].Bounds.Width * candidates[i].Bounds.Height
+		if area > largestArea {
+			largestArea = area
+			largestIndex = i
+		}
+	}
+	placement.Window = candidates[largestIndex]
+	candidates = append(candidates[:largestIndex], candidates[largestIndex+1:]...)
+	windowsByIdentity[placement.Identity] = candidates
 	p.storeRestoreRect(placement.Window, placement.Window.Bounds)
 	movedWindow, err := p.moveResizeWindowGroupPlacement(ctx, group, placement)
 	if err != nil {

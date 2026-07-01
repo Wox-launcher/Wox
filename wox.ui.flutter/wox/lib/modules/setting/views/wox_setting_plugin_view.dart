@@ -52,6 +52,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
   static const String _windowManagerGroupsSettingKey = "windowGroups";
   static const String _selectionPluginId = "d9e557ed-89bd-4b8b-bd64-2a7632cf3483";
   static const String _selectionSpaceQuickLookSettingKey = "enableSpaceQuickLook";
+  static const double _pluginSettingLabelActionWidth = 28.0;
   // Local refreshing state for showing loading spinner on refresh button
   static final RxBool _refreshing = false.obs;
   static final GlobalKey _pluginFilterIconKey = GlobalKey();
@@ -134,16 +135,25 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
         continue;
       }
 
-      final labelActionWidth =
-          plugin.id == _selectionPluginId &&
-                  definition.value is PluginSettingValueCheckBox &&
-                  (definition.value as PluginSettingValueCheckBox).key == _selectionSpaceQuickLookSettingKey
-              ? 28.0
-              : 0.0;
+      final labelActionWidth = _pluginSettingLabelActionWidthFor(plugin: plugin, definition: definition);
       maxLabelWidth = math.max(maxLabelWidth, _measureLabelWidthByText(context, translatedLabel, minWidth: 0) + labelActionWidth);
     }
 
     return maxLabelWidth.clamp(PLUGIN_SETTING_LABEL_MIN_WIDTH, PLUGIN_SETTING_LABEL_MAX_WIDTH).toDouble();
+  }
+
+  double _pluginSettingLabelActionWidthFor({required PluginDetail plugin, required PluginSettingDefinitionItem definition}) {
+    if (plugin.id == _selectionPluginId &&
+        definition.value is PluginSettingValueCheckBox &&
+        (definition.value as PluginSettingValueCheckBox).key == _selectionSpaceQuickLookSettingKey) {
+      return _pluginSettingLabelActionWidth;
+    }
+
+    if (plugin.id == _windowManagerPluginId && definition.value is PluginSettingValueTable && (definition.value as PluginSettingValueTable).key == _windowManagerGroupsSettingKey) {
+      return _pluginSettingLabelActionWidth;
+    }
+
+    return 0;
   }
 
   String _extractStablePluginSettingKey(PluginSettingDefinitionItem definition) {

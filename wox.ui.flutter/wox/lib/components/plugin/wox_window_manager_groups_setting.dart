@@ -1,16 +1,18 @@
-import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
+import 'package:wox/components/demo/wox_demo.dart';
+import 'package:wox/components/plugin/wox_setting_plugin_table_view.dart';
 import 'package:wox/components/wox_app_selector.dart';
 import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_dialog.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_textfield.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
+import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_setting.dart';
 import 'package:wox/entity/wox_window_manager.dart';
 import 'package:wox/utils/colors.dart';
@@ -31,12 +33,9 @@ class _WoxWindowManagerGroupsSettingState extends State<WoxWindowManagerGroupsSe
   static const String _settingKey = 'windowGroups';
 
   late final WoxSettingController controller;
-  late List<_WindowManagerGroup> _groups;
-  late String _lastSavedValue;
 
   List<WindowManagerDisplay> _displays = <WindowManagerDisplay>[];
   bool _isLoadingDisplays = false;
-  bool _isSaving = false;
   String _displayError = '';
 
   String tr(String key) => controller.tr(key);
@@ -45,22 +44,8 @@ class _WoxWindowManagerGroupsSettingState extends State<WoxWindowManagerGroupsSe
   void initState() {
     super.initState();
     controller = Get.find<WoxSettingController>();
-    _groups = _decodeGroups(widget.value);
-    _lastSavedValue = _encodeGroups(_groups);
     _loadDisplays();
   }
-
-  @override
-  void didUpdateWidget(covariant WoxWindowManagerGroupsSetting oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.value == widget.value || _isDirty) {
-      return;
-    }
-    _groups = _decodeGroups(widget.value);
-    _lastSavedValue = _encodeGroups(_groups);
-  }
-
-  bool get _isDirty => _encodeGroups(_groups) != _lastSavedValue;
 
   Future<void> _loadDisplays() async {
     final traceId = const UuidV4().generate();
@@ -90,217 +75,174 @@ class _WoxWindowManagerGroupsSettingState extends State<WoxWindowManagerGroupsSe
     }
   }
 
-  Future<void> _saveGroups() async {
-    if (_isSaving) {
+  Future<void> _ensureDisplaysLoaded() async {
+    while (_isLoadingDisplays && mounted) {
+      await Future.delayed(const Duration(milliseconds: 50));
+    }
+
+    if (_displays.isNotEmpty) {
       return;
     }
 
-    setState(() {
-      _isSaving = true;
-    });
+    await _loadDisplays();
+  }
 
-    final nextValue = _encodeGroups(_groups);
-    try {
-      await widget.onUpdate(_settingKey, nextValue);
-      if (mounted) {
-        setState(() {
-          _lastSavedValue = nextValue;
-          _isSaving = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _isSaving = false;
-        });
-      }
-      rethrow;
+  _WindowManagerGroup _newGroup() {
+    final group = _WindowManagerGroup(id: const UuidV4().generate(), name: '', screens: <_WindowManagerGroupScreen>[]);
+    _populateGroupScreens(group);
+    return group;
+  }
+
+  void _populateGroupScreens(_WindowManagerGroup group) {
+    for (final entry in _displays.asMap().entries) {
+      group.screenFor(entry.value, entry.key);
     }
   }
 
-  Future<void> _openAddGroupDialog() async {
-    final group = _WindowManagerGroup(
-      id: const UuidV4().generate(),
-      name: tr('plugin_window_manager_group_default_name'),
-      screens:
-          _displays
-              .asMap()
-              .entries
-              .map(
-                (entry) =>
-                    _WindowManagerGroupScreen(displayId: entry.value.id, displayIndex: entry.key, layout: _WindowGroupLayouts.full.id, assignments: <_WindowManagerAssignment>[]),
-              )
-              .toList(),
-    );
-
-    final saved = await _showGroupDialog(group);
-    if (!mounted || saved == null) {
+  Future<void> _openCreateGroupDialog(
+    BuildContext dialogContext,
+    Future<String?> Function(Map<String, dynamic> row) saveRow, {
+    Map<String, dynamic> initialRow = const <String, dynamic>{},
+  }) async {
+    await _ensureDisplaysLoaded();
+    if (!dialogContext.mounted) {
       return;
     }
 
-    setState(() {
-      _groups.add(saved);
-    });
-    await _saveGroups();
-  }
+    final group = initialRow.isEmpty ? _newGroup() : _WindowManagerGroup.fromJson(initialRow).copy();
+    if (group.id.trim().isEmpty) {
+      group.id = const UuidV4().generate();
+    }
+    _populateGroupScreens(group);
 
-  Future<void> _openEditGroupDialog(_WindowManagerGroup group) async {
-    final saved = await _showGroupDialog(group.copy());
-    if (!mounted || saved == null) {
+    final saved = await _showGroupDialog(dialogContext, group, isEditing: false);
+    if (saved == null) {
       return;
     }
 
-    setState(() {
-      final index = _groups.indexWhere((item) => item.id == group.id);
-      if (index >= 0) {
-        _groups[index] = saved;
-      }
-    });
-    await _saveGroups();
+    await saveRow(saved.toJson());
   }
 
-  Future<_WindowManagerGroup?> _showGroupDialog(_WindowManagerGroup group) async {
+  Future<void> _openEditGroupDialog(BuildContext dialogContext, Map<String, dynamic> row, Future<String?> Function(Map<String, dynamic> row) saveRow) async {
+    await _ensureDisplaysLoaded();
+    if (!dialogContext.mounted) {
+      return;
+    }
+
+    final group = _WindowManagerGroup.fromJson(row).copy();
+    _populateGroupScreens(group);
+
+    final saved = await _showGroupDialog(dialogContext, group, isEditing: true);
+    if (saved == null) {
+      return;
+    }
+
+    await saveRow(saved.toJson());
+  }
+
+  Future<_WindowManagerGroup?> _showGroupDialog(BuildContext dialogContext, _WindowManagerGroup group, {required bool isEditing}) async {
     return await showDialog<_WindowManagerGroup>(
-      context: context,
+      context: dialogContext,
       barrierColor: getThemePopupBarrierColor(),
-      builder: (context) => _WindowGroupDialog(group: group, displays: _displays, tr: tr),
+      builder: (context) => _WindowGroupDialog(group: group, displays: _displays, tr: tr, isEditing: isEditing),
     );
-  }
-
-  Future<void> _deleteGroup(_WindowManagerGroup group) async {
-    setState(() {
-      _groups.removeWhere((item) => item.id == group.id);
-    });
-
-    await _saveGroups();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: widget.labelWidth,
-          child: Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(tr('plugin_window_manager_setting_groups'), style: TextStyle(color: getThemeTextColor(), fontSize: 13)),
-          ),
+    return WoxSettingPluginTable(
+      value: widget.value,
+      item: _buildTableDefinition(),
+      labelWidth: widget.labelWidth,
+      showCloneAction: false,
+      titleActions: [_buildDemoTitleAction()],
+      trailingActions: _buildTrailingActions(),
+      customCreateDialogBuilder: _openCreateGroupDialog,
+      customEditDialogBuilder: _openEditGroupDialog,
+      customCellBuilder: _buildGroupCell,
+      onUpdate: widget.onUpdate,
+    );
+  }
+
+  Widget _buildDemoTitleAction() {
+    final foreground = getThemeTextColor();
+
+    return WoxDemoPopover(
+      key: const ValueKey('window-manager-layouts-demo-trigger'),
+      popoverKey: const ValueKey('wox-demo-popover-window-manager-layouts'),
+      demo: WoxWindowManagerLayoutsDemo(accent: const Color(0xFF14B8A6), tr: tr),
+      width: 700,
+      height: 460,
+      child: Semantics(
+        label: tr('ui_demo_preview'),
+        button: true,
+        child: MouseRegion(
+          cursor: SystemMouseCursors.help,
+          child: SizedBox(width: 22, height: 22, child: Icon(Icons.play_circle_outline_rounded, color: foreground.withValues(alpha: 0.88), size: 18)),
         ),
-        const SizedBox(width: 16),
-        Expanded(child: _buildContent()),
-      ],
-    );
-  }
-
-  Widget _buildContent() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            WoxButton.secondary(
-              text: tr('plugin_window_manager_group_add'),
-              icon: Icon(Icons.add, size: 14, color: getThemeTextColor()),
-              height: 30,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              onPressed: _isLoadingDisplays ? null : _openAddGroupDialog,
-            ),
-            if (_isDirty)
-              WoxButton.primary(
-                text: _isSaving ? tr('ui_saving') : tr('ui_save'),
-                icon: Icon(Icons.save_outlined, size: 14, color: getThemeActionItemActiveColor()),
-                height: 30,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                onPressed: _isSaving ? null : _saveGroups,
-              ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        if (_isLoadingDisplays) Text(tr('plugin_window_manager_group_loading_displays'), style: TextStyle(color: getThemeSubTextColor(), fontSize: 13)),
-        if (_displayError.isNotEmpty) _buildDisplayError(),
-        if (!_isLoadingDisplays && _displayError.isEmpty && _groups.isEmpty) _buildEmptyState(),
-        if (!_isLoadingDisplays && _displayError.isEmpty && _groups.isNotEmpty) ..._groups.map(_buildGroupRow),
-      ],
-    );
-  }
-
-  Widget _buildDisplayError() {
-    return Row(
-      children: [
-        Expanded(child: Text(_displayError, style: TextStyle(color: getThemeSubTextColor(), fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis)),
-        const SizedBox(width: 8),
-        WoxButton.secondary(text: tr('plugin_window_manager_group_retry'), height: 30, padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), onPressed: _loadDisplays),
-      ],
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(border: Border.all(color: getThemeSubTextColor().withValues(alpha: 0.35)), borderRadius: BorderRadius.circular(6)),
-      child: Text(tr('plugin_window_manager_group_empty_subtitle'), style: TextStyle(color: getThemeSubTextColor(), fontSize: 13)),
-    );
-  }
-
-  Widget _buildGroupRow(_WindowManagerGroup group) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(border: Border.all(color: getThemeSubTextColor().withValues(alpha: 0.35)), borderRadius: BorderRadius.circular(6)),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(group.name.trim().isEmpty ? group.id : group.name, style: TextStyle(color: getThemeTextColor(), fontSize: 13, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 3),
-                Text(
-                  tr('plugin_window_manager_group_subtitle').replaceFirst('%d', '${group.appCount}').replaceFirst('%d', '${group.screens.length}'),
-                  style: TextStyle(color: getThemeSubTextColor(), fontSize: 11),
-                ),
-              ],
-            ),
-          ),
-          WoxButton.secondary(
-            text: tr('plugin_window_manager_group_edit'),
-            icon: Icon(Icons.edit_outlined, size: 14, color: getThemeTextColor()),
-            height: 30,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            onPressed: () => _openEditGroupDialog(group),
-          ),
-          const SizedBox(width: 8),
-          IconButton(
-            tooltip: tr('ui_delete'),
-            icon: Icon(Icons.delete_outline, size: 18, color: getThemeSubTextColor()),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints.tightFor(width: 30, height: 30),
-            onPressed: () => _deleteGroup(group),
-          ),
-        ],
       ),
     );
   }
 
-  List<_WindowManagerGroup> _decodeGroups(String value) {
-    final raw = value.trim().isEmpty ? '[]' : value.trim();
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is! List) {
-        return <_WindowManagerGroup>[];
-      }
-      return decoded.whereType<Map>().map((item) => _WindowManagerGroup.fromJson(Map<String, dynamic>.from(item))).where((group) => group.id.trim().isNotEmpty).toList();
-    } catch (_) {
-      return <_WindowManagerGroup>[];
-    }
+  PluginSettingValueTable _buildTableDefinition() {
+    return PluginSettingValueTable.fromJson(<String, dynamic>{
+      'Key': _settingKey,
+      'Title': tr('plugin_window_manager_setting_groups'),
+      'Tooltip': 'i18n:plugin_window_manager_setting_groups_tooltip',
+      'MaxHeight': 240,
+      'Columns': <Map<String, dynamic>>[
+        {
+          'Key': 'Name',
+          'Label': 'i18n:plugin_window_manager_group_name',
+          'Tooltip': '',
+          'Width': 0,
+          'Type': PluginSettingValueType.pluginSettingValueTableColumnTypeText,
+          'TextMaxLines': 1,
+        },
+        {
+          'Key': 'AppCount',
+          'Label': 'i18n:plugin_window_manager_group_app_count',
+          'Tooltip': '',
+          'Width': 90,
+          'Type': PluginSettingValueType.pluginSettingValueTableColumnTypeText,
+          'TextMaxLines': 1,
+        },
+        {
+          'Key': 'DisplayCount',
+          'Label': 'i18n:plugin_window_manager_group_display_count',
+          'Tooltip': '',
+          'Width': 90,
+          'Type': PluginSettingValueType.pluginSettingValueTableColumnTypeText,
+          'TextMaxLines': 1,
+        },
+      ],
+    });
   }
 
-  String _encodeGroups(List<_WindowManagerGroup> groups) {
-    return jsonEncode(groups.map((group) => group.toJson()).toList());
+  List<Widget> _buildTrailingActions() {
+    if (_isLoadingDisplays) {
+      return [Text(tr('plugin_window_manager_group_loading_displays'), style: TextStyle(color: getThemeSubTextColor(), fontSize: 12))];
+    }
+
+    if (_displayError.isEmpty) {
+      return const <Widget>[];
+    }
+
+    return [
+      WoxButton.secondary(text: tr('plugin_window_manager_group_retry'), height: 30, padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), onPressed: _loadDisplays),
+    ];
+  }
+
+  Widget? _buildGroupCell(PluginSettingValueTableColumn column, Map<String, dynamic> row) {
+    final group = _WindowManagerGroup.fromJson(row);
+    final textStyle = TextStyle(overflow: TextOverflow.ellipsis, color: getThemeTextColor(), fontSize: 13);
+
+    return switch (column.key) {
+      'Name' => Text(group.name.trim().isEmpty ? group.id : group.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: textStyle.copyWith(fontWeight: FontWeight.w600)),
+      'AppCount' => Text('${group.appCount}', maxLines: 1, overflow: TextOverflow.ellipsis, style: textStyle),
+      'DisplayCount' => Text('${group.screens.length}', maxLines: 1, overflow: TextOverflow.ellipsis, style: textStyle),
+      _ => null,
+    };
   }
 }
 
@@ -308,8 +250,9 @@ class _WindowGroupDialog extends StatefulWidget {
   final _WindowManagerGroup group;
   final List<WindowManagerDisplay> displays;
   final String Function(String key) tr;
+  final bool isEditing;
 
-  const _WindowGroupDialog({required this.group, required this.displays, required this.tr});
+  const _WindowGroupDialog({required this.group, required this.displays, required this.tr, required this.isEditing});
 
   @override
   State<_WindowGroupDialog> createState() => _WindowGroupDialogState();
@@ -322,6 +265,7 @@ class _WindowGroupDialogState extends State<_WindowGroupDialog> {
   late _WindowManagerGroup _group;
   int _selectedDisplayIndex = 0;
   List<IgnoredHotkeyApp> _availableApps = <IgnoredHotkeyApp>[];
+  String _nameError = '';
 
   String tr(String key) => widget.tr(key);
 
@@ -329,9 +273,14 @@ class _WindowGroupDialogState extends State<_WindowGroupDialog> {
   void initState() {
     super.initState();
     _group = widget.group.copy();
-    _nameController = TextEditingController(text: _group.name);
+    _nameController = TextEditingController(text: _group.name.trim());
     _nameController.addListener(() {
       _group.name = _nameController.text;
+      if (_nameError.isNotEmpty && _nameController.text.trim().isNotEmpty) {
+        setState(() {
+          _nameError = '';
+        });
+      }
     });
     if (widget.displays.isNotEmpty) {
       _selectedDisplayIndex = 0;
@@ -459,11 +408,27 @@ class _WindowGroupDialogState extends State<_WindowGroupDialog> {
     });
   }
 
+  void _submit() {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      setState(() {
+        _nameError = tr('plugin_window_manager_group_name_required');
+      });
+      return;
+    }
+
+    _group.name = name;
+    Navigator.pop(context, _group);
+  }
+
   @override
   Widget build(BuildContext context) {
     final textColor = getThemeTextColor();
     return WoxDialog(
-      title: Text(tr('plugin_window_manager_group_dialog_title'), style: TextStyle(color: textColor, fontSize: 16)),
+      title: Text(
+        tr(widget.isEditing ? 'plugin_window_manager_group_edit_dialog_title' : 'plugin_window_manager_group_create_dialog_title'),
+        style: TextStyle(color: textColor, fontSize: 16),
+      ),
       titleTextStyle: TextStyle(color: textColor, fontSize: 16),
       insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
       content: SizedBox(
@@ -475,11 +440,17 @@ class _WindowGroupDialogState extends State<_WindowGroupDialog> {
               children: [
                 SizedBox(
                   width: 360,
-                  child: WoxTextField(
-                    controller: _nameController,
-                    hintText: tr('plugin_window_manager_group_name'),
-                    width: double.infinity,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      WoxTextField(
+                        controller: _nameController,
+                        hintText: tr('plugin_window_manager_group_name'),
+                        width: double.infinity,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                      ),
+                      if (_nameError.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Text(_nameError, style: const TextStyle(color: Colors.red, fontSize: 12))),
+                    ],
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -498,7 +469,7 @@ class _WindowGroupDialogState extends State<_WindowGroupDialog> {
       ),
       actions: [
         WoxButton.secondary(text: tr('ui_cancel'), padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12), onPressed: () => Navigator.pop(context)),
-        WoxButton.primary(text: tr('ui_save'), padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12), onPressed: () => Navigator.pop(context, _group)),
+        WoxButton.primary(text: tr('ui_save'), padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12), onPressed: _submit),
       ],
     );
   }
@@ -558,14 +529,14 @@ class _WindowGroupDialogState extends State<_WindowGroupDialog> {
     final layout = selected ? _selectedLayout : _WindowGroupLayouts.byId(_group.screenFor(display, displayIndex).layout);
     final screen = _group.screenFor(display, displayIndex);
 
-    return Material(
-      color: selected ? getThemeActiveBackgroundColor().withValues(alpha: isThemeDark() ? 0.26 : 0.18) : getThemePopupSurfaceColor(),
-      borderRadius: BorderRadius.circular(6),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(6),
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: () => setState(() => _selectedDisplayIndex = displayIndex),
         child: Container(
           decoration: BoxDecoration(
+            color: selected ? getThemeActiveBackgroundColor().withValues(alpha: isThemeDark() ? 0.26 : 0.18) : getThemePopupSurfaceColor(),
             border: Border.all(color: selected ? getThemeActiveBackgroundColor() : getThemeSubTextColor().withValues(alpha: 0.4), width: selected ? 2 : 1),
             borderRadius: BorderRadius.circular(6),
           ),
@@ -590,7 +561,6 @@ class _WindowGroupDialogState extends State<_WindowGroupDialog> {
                   },
                 ),
               ),
-              Positioned(left: 8, top: 6, child: Text('${displayIndex + 1}', style: TextStyle(color: selected ? getThemeTextColor() : getThemeSubTextColor(), fontSize: 11))),
               if (display.isPrimary)
                 Positioned(right: 8, top: 6, child: Text(tr('plugin_window_manager_group_display_primary'), style: TextStyle(color: getThemeSubTextColor(), fontSize: 10))),
             ],
@@ -601,28 +571,58 @@ class _WindowGroupDialogState extends State<_WindowGroupDialog> {
   }
 
   Widget _buildSlotTile(_WindowGroupSlot slot, _WindowManagerAssignment? assignment, bool selectedDisplay, int displayIndex) {
-    final label = assignment?.app.name.trim().isNotEmpty == true ? assignment!.app.name : tr(slot.titleKey);
-    return Material(
-      color: assignment == null ? Colors.transparent : getThemeActiveBackgroundColor().withValues(alpha: isThemeDark() ? 0.28 : 0.2),
-      borderRadius: BorderRadius.circular(4),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(4),
+    final assignedApp = assignment?.app;
+    final hasAssignment = assignedApp != null && assignedApp.identity.trim().isNotEmpty;
+    final appName = hasAssignment && assignedApp.name.trim().isNotEmpty ? assignedApp.name.trim() : '';
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: selectedDisplay ? () => _openSlotAppSelector(slot) : () => setState(() => _selectedDisplayIndex = displayIndex),
         child: Container(
           alignment: Alignment.center,
-          decoration: BoxDecoration(border: Border.all(color: getThemeSubTextColor().withValues(alpha: 0.38)), borderRadius: BorderRadius.circular(4)),
-          padding: const EdgeInsets.symmetric(horizontal: 6),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (assignment != null && assignment.app.icon.imageData.isNotEmpty) ...[
-                ClipRRect(borderRadius: BorderRadius.circular(4), child: WoxImageView(woxImage: assignment.app.icon, width: 16, height: 16)),
-                const SizedBox(width: 5),
-              ],
-              Flexible(child: Text(label, style: TextStyle(color: getThemeTextColor(), fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center)),
-            ],
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            color:
+                hasAssignment
+                    ? getThemeActiveBackgroundColor().withValues(alpha: isThemeDark() ? 0.28 : 0.2)
+                    : getThemeTextColor().withValues(alpha: isThemeDark() ? 0.035 : 0.055),
+            border: Border.all(color: hasAssignment ? getThemeActiveBackgroundColor().withValues(alpha: 0.55) : getThemeSubTextColor().withValues(alpha: 0.38)),
+            borderRadius: BorderRadius.circular(4),
           ),
+          child:
+              hasAssignment
+                  ? Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (assignedApp.icon.imageData.isNotEmpty)
+                        ClipRRect(borderRadius: BorderRadius.circular(4), child: WoxImageView(woxImage: assignedApp.icon, width: 18, height: 18))
+                      else
+                        Icon(Icons.apps_rounded, size: 18, color: getThemeTextColor().withValues(alpha: 0.78)),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(appName, style: TextStyle(color: getThemeTextColor(), fontSize: 12, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ),
+                    ],
+                  )
+                  : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.add_circle_outline_rounded, size: 15, color: getThemeSubTextColor()),
+                      const SizedBox(width: 5),
+                      Flexible(
+                        child: Text(
+                          tr('plugin_window_manager_group_slot_choose_app'),
+                          style: TextStyle(color: getThemeSubTextColor(), fontSize: 11),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
         ),
       ),
     );
@@ -637,7 +637,9 @@ class _WindowGroupDialogState extends State<_WindowGroupDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(tr('plugin_window_manager_group_layouts'), style: TextStyle(color: getThemeTextColor(), fontSize: 13, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 10),
+            const SizedBox(height: 4),
+            Text(tr('plugin_window_manager_group_layouts_description'), style: TextStyle(color: getThemeSubTextColor(), fontSize: 11, height: 1.35)),
+            const SizedBox(height: 12),
             for (final count in _slotCounts) _buildLayoutGroup(count),
           ],
         ),
