@@ -273,6 +273,10 @@ func (p *WindowManagerPlugin) windowGroupResult(ctx context.Context, group windo
 			{
 				Name:      "i18n:plugin_window_manager_group_action_apply",
 				IsDefault: true,
+				ContextData: map[string]string{
+					windowManagerMRUTypeKey:    windowManagerMRUTypeGroup,
+					windowManagerMRUGroupIDKey: group.Id,
+				},
 				Action: func(actionCtx context.Context, actionContext plugin.ActionContext) {
 					p.applyWindowGroup(actionCtx, capturedGroup)
 				},

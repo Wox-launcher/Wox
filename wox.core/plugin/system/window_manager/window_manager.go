@@ -26,6 +26,14 @@ const (
 	windowManagerMoveTolerance = 2
 )
 
+const (
+	windowManagerMRUTypeKey     = "type"
+	windowManagerMRUCommandKey  = "command"
+	windowManagerMRUGroupIDKey  = "groupId"
+	windowManagerMRUTypeCommand = "command"
+	windowManagerMRUTypeGroup   = "group"
+)
+
 type windowOperation string
 
 const (
@@ -154,6 +162,12 @@ func (p *WindowManagerPlugin) GetMetadata() plugin.Metadata {
 		},
 		Features: []plugin.MetadataFeature{
 			{
+				Name: plugin.MetadataFeatureMRU,
+				Params: map[string]any{
+					"HashBy": "scoreKey",
+				},
+			},
+			{
 				Name: plugin.MetadataFeatureQueryEnv,
 				Params: map[string]any{
 					"requireActiveWindowName": true,
@@ -169,6 +183,7 @@ func (p *WindowManagerPlugin) GetMetadata() plugin.Metadata {
 func (p *WindowManagerPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	p.api = initParams.API
 	p.restore = make(map[string]window.WindowRect)
+	p.api.OnMRURestore(ctx, p.handleMRURestore)
 }
 
 // Query lists available window layout commands or returns the explicitly parsed command.
@@ -253,12 +268,17 @@ func (p *WindowManagerPlugin) commandResult(ctx context.Context, query plugin.Qu
 		SubTitle: subtitle,
 		Icon:     windowManagerCommandIcon(command.Op),
 		Score:    score,
+		ScoreKey: "window-command:" + command.Command,
 		Tails:    targetWindowIconTail(query.Env.ActiveWindowIcon),
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:                   "i18n:plugin_window_manager_action_apply",
 				IsDefault:              true,
 				PreventHideAfterAction: true,
+				ContextData: map[string]string{
+					windowManagerMRUTypeKey:    windowManagerMRUTypeCommand,
+					windowManagerMRUCommandKey: command.Command,
+				},
 				Action: func(actionCtx context.Context, actionContext plugin.ActionContext) {
 					p.applyCommand(actionCtx, capturedCommand, capturedEnv)
 				},

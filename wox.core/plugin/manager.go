@@ -4079,6 +4079,11 @@ func (m *Manager) postExecuteAction(ctx context.Context, resultCache *QueryResul
 					hashTitle = resultCache.Query.Search
 					hashSubTitle = ""
 				}
+			case "scorekey":
+				if resultCache.Result.ScoreKey != "" {
+					hashTitle = resultCache.Result.ScoreKey
+					hashSubTitle = ""
+				}
 			default:
 				// "title" or unknown: keep default Title/SubTitle based hash
 			}
@@ -4323,12 +4328,19 @@ func (m *Manager) ExecutePluginDeeplink(ctx context.Context, pluginId string, ar
 }
 
 func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string) []QueryResultUI {
+	activeWindowSnapshot := m.GetUI().GetActiveWindowSnapshot(ctx)
 	query := Query{
 		Id:             queryId,
 		SessionId:      sessionId,
 		Type:           QueryTypeInput,
 		TriggerKeyword: "mru",
 	}
+	query.Env.ActiveWindowTitle = activeWindowSnapshot.Name
+	query.Env.ActiveWindowPid = activeWindowSnapshot.Pid
+	query.Env.ActiveWindowId = activeWindowSnapshot.WindowId
+	query.Env.ActiveWindowIcon = activeWindowSnapshot.Icon
+	query.Env.ActiveWindowIsOpenSaveDialog = activeWindowSnapshot.IsOpenSaveDialog
+	query.Env.ActiveBrowserUrl = m.getActiveBrowserUrl(ctx)
 	m.startSessionQueryCache(query)
 
 	mruItems, err := setting.GetSettingManager().GetMRUItems(ctx, 10)
@@ -4353,7 +4365,8 @@ func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string
 			continue
 		}
 
-		if restored := m.restoreFromMRU(ctx, pluginInstance, item); restored != nil {
+		pluginQuery := m.buildPluginQueryEnv(ctx, pluginInstance, query)
+		if restored := m.restoreFromMRU(ctx, pluginInstance, item, pluginQuery.Env); restored != nil {
 			util.GetLogger().Debug(ctx, fmt.Sprintf("mru item restored: %s", item.Title))
 
 			// Build a stable dedupe key using restored values, which are language-independent for Go plugins
@@ -4406,7 +4419,7 @@ func (m *Manager) getPluginInstance(pluginID string) *Instance {
 }
 
 // restoreFromMRU attempts to restore a QueryResult from MRU data
-func (m *Manager) restoreFromMRU(ctx context.Context, pluginInstance *Instance, item setting.MRUItem) *QueryResult {
+func (m *Manager) restoreFromMRU(ctx context.Context, pluginInstance *Instance, item setting.MRUItem, env QueryEnv) *QueryResult {
 	// For Go plugins, call MRU restore callbacks directly
 	if len(pluginInstance.MRURestoreCallbacks) > 0 {
 		mruData := MRUData{
@@ -4415,6 +4428,7 @@ func (m *Manager) restoreFromMRU(ctx context.Context, pluginInstance *Instance, 
 			SubTitle:    item.SubTitle,
 			Icon:        item.Icon,
 			ContextData: item.ContextData,
+			Env:         env,
 			LastUsed:    item.LastUsed,
 			UseCount:    item.UseCount,
 		}
