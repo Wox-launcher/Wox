@@ -192,6 +192,9 @@ class WoxLauncherController extends GetxController {
   final windowFlickerDetector = WindowFlickerDetector();
   Size? ongoingResizeTargetSize;
   int resizeRequestToken = 0;
+
+  /// True while a fixed-size management window is being staged before its Flutter route mounts.
+  bool isManagementWindowTransitionActive = false;
   bool isShowingPendingResultPlaceholder = false;
   double? pendingResultPlaceholderHeight;
   double? committedWindowHeight;
@@ -3862,9 +3865,10 @@ class WoxLauncherController extends GetxController {
     tracker.setBool("forceDwmRecomposition", forceDwmRecomposition);
     tracker.setBool("hasOverrideTargetHeight", overrideTargetHeight != null);
 
-    // Don't resize when in a management view; settings and onboarding both use
-    // the same fixed 1200x800 window instead of launcher content height.
-    if (isInSettingView.value || isInOnboardingView.value) {
+    // Don't resize when a management view is active or being staged; settings
+    // and onboarding use fixed window geometry instead of launcher content
+    // height, and route mounting is delayed until that geometry is ready.
+    if (isInSettingView.value || isInOnboardingView.value || isManagementWindowTransitionActive) {
       Logger.instance.debug(traceId, "resize skipped: reason=$reason, management view is active");
       tracker.setBool("skippedManagementView", true);
       tracker.setElapsedUs("totalUs", totalStartUs);
@@ -4345,80 +4349,91 @@ class WoxLauncherController extends GetxController {
     settingController.clearSettingSearch();
     settingController.activeNavPath.value = 'general';
     cancelLauncherResizeRequests(traceId, "enter setting view");
-    isInSettingView.value = true;
-    isInOnboardingView.value = false;
+    isManagementWindowTransitionActive = true;
 
-    final stageWindowsSettingOpen = Platform.isWindows && wasWindowVisible;
-    await WoxApi.instance.onSetting(traceId, true);
-    await WoxApi.instance.onOnboarding(traceId, false);
+    try {
+      final stageWindowsSettingOpen = Platform.isWindows && wasWindowVisible;
+      await WoxApi.instance.onSetting(traceId, true);
+      await WoxApi.instance.onOnboarding(traceId, false);
 
-    // Bug fix: keep the route switch responsive by drawing settings from the
-    // cached theme/settings first. The old awaited refresh made Windows stay
-    // hidden while HTTP reloads ran; refreshing in the background keeps data
-    // fresh without delaying the first settings frame.
-    unawaited(() async {
-      try {
-        await Future.wait([WoxThemeUtil.instance.loadTheme(traceId), settingController.reloadSetting(traceId)]);
-      } catch (e) {
-        Logger.instance.error(traceId, "Failed to refresh settings window data in background: $e");
+      // Bug fix: keep the route switch responsive by drawing settings from the
+      // cached theme/settings first. The old awaited refresh made Windows stay
+      // hidden while HTTP reloads ran; refreshing in the background keeps data
+      // fresh without delaying the first settings frame.
+      unawaited(() async {
+        try {
+          await Future.wait([WoxThemeUtil.instance.loadTheme(traceId), settingController.reloadSetting(traceId)]);
+        } catch (e) {
+          Logger.instance.error(traceId, "Failed to refresh settings window data in background: $e");
+        }
+      }());
+
+      if (context.path == "/about") {
+        // The onboarding entry lives on About, so tests and future deep links need
+        // the same openSetting path support that plugin/data pages already have.
+        settingController.activeNavPath.value = 'about';
       }
-    }());
 
-    if (context.path == "/plugin/setting") {
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        await Future.delayed(const Duration(milliseconds: 100));
-        await settingController.switchToPluginList(traceId, false);
-        settingController.focusInstalledPlugin(context.param);
-        settingController.switchToPluginSettingTab();
-      });
-    }
-    if (context.path == "/data") {
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        await Future.delayed(const Duration(milliseconds: 100));
-        await settingController.switchToBackupView(traceId);
-      });
-    }
-    if (context.path == "/about") {
-      // The onboarding entry lives on About, so tests and future deep links need
-      // the same openSetting path support that plugin/data pages already have.
-      settingController.activeNavPath.value = 'about';
-    }
-    if (context.path == "/general" && context.param.trim().isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        settingController.focusGeneralSection(context.param);
-      });
-    }
-
-    const settingWindowPreferredSize = Size(1200, 800);
-    const settingWindowMaxWorkAreaFraction = 0.8;
-    final settingWindowSize =
-        Platform.isWindows
-            ? await WindowsWindowManager.instance.constrainSizeToCursorDisplayWorkArea(settingWindowPreferredSize, maxWorkAreaFraction: settingWindowMaxWorkAreaFraction)
-            : settingWindowPreferredSize;
-    if (stageWindowsSettingOpen) {
-      // Bug fix: Windows paints the native acrylic/Mica background as soon as
-      // the root HWND grows. Hide only the final geometry staging window so the
-      // user sees an immediate settings route switch, then the final 1200x800
-      // settings frame, without watching the backdrop expand first.
-      await windowManager.hide();
-    }
-    await windowManager.setSize(settingWindowSize);
-    if (Platform.isLinux) {
-      // On Linux we need to show first before positioning works reliably
-      await windowManager.show();
-      await windowManager.center(settingWindowSize.width, settingWindowSize.height);
-    } else {
-      await windowManager.center(settingWindowSize.width, settingWindowSize.height);
-      if (Platform.isWindows) {
-        // Bug fix: setSize/center update the native HWND immediately, but the
-        // Flutter surface may still contain the previous launcher-sized frame.
-        // Waiting for one scheduled frame makes the first visible settings
-        // frame match the final native window size instead of exposing the
-        // enlarged Windows backdrop behind stale Flutter pixels.
-        await _waitForNextFlutterFrame(traceId: traceId, reason: "settings window open");
+      const settingWindowPreferredSize = Size(1200, 800);
+      const settingWindowMaxWorkAreaFraction = 0.8;
+      final settingWindowSize =
+          Platform.isWindows
+              ? await WindowsWindowManager.instance.constrainSizeToCursorDisplayWorkArea(settingWindowPreferredSize, maxWorkAreaFraction: settingWindowMaxWorkAreaFraction)
+              : settingWindowPreferredSize;
+      if (stageWindowsSettingOpen) {
+        // Bug fix: Windows paints the native acrylic/Mica background as soon as
+        // the root HWND grows. Hide only the final geometry staging window so the
+        // user sees an immediate settings route switch, then the final 1200x800
+        // settings frame, without watching the backdrop expand first.
+        await windowManager.hide();
       }
-      await windowManager.show();
+      await windowManager.setSize(settingWindowSize);
+      if (Platform.isLinux) {
+        isInSettingView.value = true;
+        isInOnboardingView.value = false;
+        // On Linux we need to show first before positioning works reliably.
+        await windowManager.show();
+        await windowManager.center(settingWindowSize.width, settingWindowSize.height);
+      } else {
+        await windowManager.center(settingWindowSize.width, settingWindowSize.height);
+        if (Platform.isWindows) {
+          // Bug fix: management routes must not mount against the previous
+          // launcher-sized constraints. Stage native geometry first, then wait
+          // one frame after the route swap so smoke tests never observe the
+          // intermediate constrained layout as a RenderFlex overflow.
+          await _waitForNextFlutterFrame(traceId: traceId, reason: "settings window geometry");
+        }
+        isInSettingView.value = true;
+        isInOnboardingView.value = false;
+        if (Platform.isWindows) {
+          await _waitForNextFlutterFrame(traceId: traceId, reason: "settings route switch");
+        }
+        await windowManager.show();
+      }
+
+      if (context.path == "/plugin/setting") {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          await Future.delayed(const Duration(milliseconds: 100));
+          await settingController.switchToPluginList(traceId, false);
+          settingController.focusInstalledPlugin(context.param);
+          settingController.switchToPluginSettingTab();
+        });
+      }
+      if (context.path == "/data") {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          await Future.delayed(const Duration(milliseconds: 100));
+          await settingController.switchToBackupView(traceId);
+        });
+      }
+      if (context.path == "/general" && context.param.trim().isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          settingController.focusGeneralSection(context.param);
+        });
+      }
+    } finally {
+      isManagementWindowTransitionActive = false;
     }
+
     await windowManager.focus();
     await windowManager.setAlwaysOnTop(false);
 
@@ -4502,6 +4517,10 @@ class WoxLauncherController extends GetxController {
 
   Future<void> openOnboarding(String traceId) async {
     final settingController = Get.find<WoxSettingController>();
+    var wasWindowVisible = false;
+    try {
+      wasWindowVisible = await windowManager.isVisible();
+    } catch (_) {}
 
     closeAllDialogsInSetting();
     // Bug fix: onboarding has its own page-level Escape handling, but the
@@ -4511,26 +4530,48 @@ class WoxLauncherController extends GetxController {
     queryBoxFocusNode.unfocus();
     settingController.settingFocusNode.unfocus();
 
-    isInSettingView.value = false;
     cancelLauncherResizeRequests(traceId, "enter onboarding view");
-    isInOnboardingView.value = true;
-    await WoxApi.instance.onSetting(traceId, false);
-    await WoxApi.instance.onOnboarding(traceId, true);
+    isManagementWindowTransitionActive = true;
 
-    await WoxThemeUtil.instance.loadTheme(traceId);
-    await settingController.reloadSetting(traceId);
+    try {
+      await WoxApi.instance.onSetting(traceId, false);
+      await WoxApi.instance.onOnboarding(traceId, true);
 
-    // Feature refinement: onboarding still uses the management-window contract,
-    // but it is narrower than settings so the shared Wox examples read closer
-    // to the real launcher width instead of stretching across a settings page.
-    await windowManager.setSize(_onboardingWindowSize);
-    if (Platform.isLinux) {
-      await windowManager.show();
-      await windowManager.center(_onboardingWindowSize.width, _onboardingWindowSize.height);
-    } else {
-      await windowManager.center(_onboardingWindowSize.width, _onboardingWindowSize.height);
-      await windowManager.show();
+      await WoxThemeUtil.instance.loadTheme(traceId);
+      await settingController.reloadSetting(traceId);
+
+      // Feature refinement: onboarding still uses the management-window contract,
+      // but it is narrower than settings so the shared Wox examples read closer
+      // to the real launcher width instead of stretching across a settings page.
+      if (Platform.isWindows && wasWindowVisible) {
+        await windowManager.hide();
+      }
+      await windowManager.setSize(_onboardingWindowSize);
+      if (!Platform.isLinux) {
+        await windowManager.center(_onboardingWindowSize.width, _onboardingWindowSize.height);
+        if (Platform.isWindows) {
+          // Bug fix: About can reopen onboarding while the shared window still
+          // has settings or launcher constraints. Mounting onboarding only after
+          // native geometry reaches the guide size avoids one-frame overflows.
+          await _waitForNextFlutterFrame(traceId: traceId, reason: "onboarding window geometry");
+        }
+      }
+
+      isInSettingView.value = false;
+      isInOnboardingView.value = true;
+      if (Platform.isWindows) {
+        await _waitForNextFlutterFrame(traceId: traceId, reason: "onboarding route switch");
+      }
+      if (Platform.isLinux) {
+        await windowManager.show();
+        await windowManager.center(_onboardingWindowSize.width, _onboardingWindowSize.height);
+      } else {
+        await windowManager.show();
+      }
+    } finally {
+      isManagementWindowTransitionActive = false;
     }
+
     await windowManager.focus();
     await windowManager.setAlwaysOnTop(false);
   }
