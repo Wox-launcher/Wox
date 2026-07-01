@@ -11,6 +11,20 @@ import 'package:wox/entity/wox_setting.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/log.dart';
 
+// Opens the shared application picker used by settings that store app identities.
+Future<IgnoredHotkeyApp?> showWoxAppSelectorDialog({
+  required BuildContext context,
+  required IgnoredHotkeyApp selectedApp,
+  List<IgnoredHotkeyApp> initialApps = const <IgnoredHotkeyApp>[],
+  required Future<List<IgnoredHotkeyApp>> Function() loadApps,
+}) async {
+  return await showDialog<IgnoredHotkeyApp>(
+    context: context,
+    barrierColor: getThemePopupBarrierColor(),
+    builder: (ctx) => _AppSelectorDialog(initialApps: initialApps, selectedApp: selectedApp, loadApps: loadApps),
+  );
+}
+
 class WoxAppSelector extends StatefulWidget {
   final IgnoredHotkeyApp value;
   final ValueChanged<IgnoredHotkeyApp> onChanged;
@@ -73,11 +87,7 @@ class _WoxAppSelectorState extends State<WoxAppSelector> {
   }
 
   Future<void> _openSelector() async {
-    final selectedApp = await showDialog<IgnoredHotkeyApp>(
-      context: context,
-      barrierColor: getThemePopupBarrierColor(),
-      builder: (ctx) => _AppSelectorDialog(initialApps: _availableApps, selectedApp: widget.value, loadApps: _loadAvailableApps),
-    );
+    final selectedApp = await showWoxAppSelectorDialog(context: context, initialApps: _availableApps, selectedApp: widget.value, loadApps: _loadAvailableApps);
 
     if (selectedApp != null) {
       widget.onChanged(selectedApp);
@@ -287,21 +297,12 @@ class _AppSelectorDialogState extends State<_AppSelectorDialog> {
                                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                     child: Row(
                                       children: [
-                                        Theme(
-                                          data: Theme.of(context).copyWith(
-                                            radioTheme: RadioThemeData(
-                                              fillColor: WidgetStateProperty.resolveWith((states) {
-                                                if (states.contains(WidgetState.selected)) {
-                                                  return accentColor;
-                                                }
-                                                return subTextColor.withValues(alpha: 0.75);
-                                              }),
-                                            ),
-                                          ),
-                                          child: Radio<String>(
-                                            value: identity,
-                                            groupValue: _selectedIdentity,
-                                            onChanged: (value) => setState(() => _selectedIdentity = value ?? ''),
+                                        SizedBox(
+                                          width: 48,
+                                          child: Icon(
+                                            isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                                            color: isSelected ? accentColor : subTextColor.withValues(alpha: 0.75),
+                                            size: 20,
                                           ),
                                         ),
                                         if (app.icon.imageData.isNotEmpty) ...[

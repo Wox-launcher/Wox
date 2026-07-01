@@ -33,6 +33,7 @@ typedef struct
 {
     char id[64];
     int pid;
+    char title[1024];
     WoxWindowRectC bounds;
     WoxDisplayInfoC display;
     int isMinimized;
@@ -292,6 +293,24 @@ static void copyWindowIdForManagement(char *dest, size_t destSize, HWND hwnd)
     dest[destSize - 1] = '\0';
 }
 
+static void copyWindowTitleForManagement(char *dest, size_t destSize, HWND hwnd)
+{
+    if (!dest || destSize == 0)
+    {
+        return;
+    }
+    dest[0] = '\0';
+
+    WCHAR windowTitle[1024];
+    if (!hwnd || GetWindowTextW(hwnd, windowTitle, 1024) == 0)
+    {
+        return;
+    }
+
+    WideCharToMultiByte(CP_UTF8, 0, windowTitle, -1, dest, (int)destSize, NULL, NULL);
+    dest[destSize - 1] = '\0';
+}
+
 static char *formatWindowIdForManagement(HWND hwnd)
 {
     HWND root = rootWindowForManagement(hwnd);
@@ -394,22 +413,11 @@ static int fillDisplayInfoForManagement(HMONITOR monitor, WoxDisplayInfoC *outDi
     return 1;
 }
 
-char *getActiveWindowIdForManagement()
+static int fillManagedWindowForManagement(HWND hwnd, int pid, WoxManagedWindowC *outWindow)
 {
-    return formatWindowIdForManagement(GetForegroundWindow());
-}
-
-int getManagedWindowForManagement(const char *windowId, int pid, WoxManagedWindowC *outWindow)
-{
-    if (!outWindow)
+    if (!hwnd || !outWindow)
     {
         return -1;
-    }
-
-    HWND hwnd = resolveWindowForManagement(windowId, pid);
-    if (!hwnd)
-    {
-        return 0;
     }
 
     RECT rect;
@@ -428,11 +436,123 @@ int getManagedWindowForManagement(const char *windowId, int pid, WoxManagedWindo
 
     ZeroMemory(outWindow, sizeof(*outWindow));
     copyWindowIdForManagement(outWindow->id, sizeof(outWindow->id), hwnd);
+    copyWindowTitleForManagement(outWindow->title, sizeof(outWindow->title), hwnd);
     outWindow->pid = pid > 0 ? pid : (int)getWindowPidForManagement(hwnd);
     outWindow->bounds = rectFromWinRectForManagement(rect);
     outWindow->display = display;
     outWindow->isMinimized = IsIconic(hwnd) ? 1 : 0;
     return 1;
+}
+
+char *getActiveWindowIdForManagement()
+{
+    return formatWindowIdForManagement(GetForegroundWindow());
+}
+
+int getManagedWindowForManagement(const char *windowId, int pid, WoxManagedWindowC *outWindow)
+{
+    if (!outWindow)
+    {
+        return -1;
+    }
+
+    HWND hwnd = resolveWindowForManagement(windowId, pid);
+    if (!hwnd)
+    {
+        return 0;
+    }
+
+    return fillManagedWindowForManagement(hwnd, pid, outWindow);
+}
+
+typedef struct
+{
+    WoxManagedWindowC *windows;
+    int count;
+    int capacity;
+    int failed;
+} ManagedWindowEnumForManagementData;
+
+static int appendManagedWindowForManagement(ManagedWindowEnumForManagementData *data, HWND hwnd)
+{
+    if (!data || !hwnd)
+    {
+        return 1;
+    }
+
+    if (data->count >= data->capacity)
+    {
+        int newCapacity = data->capacity == 0 ? 16 : data->capacity * 2;
+        WoxManagedWindowC *newWindows = (WoxManagedWindowC *)realloc(data->windows, sizeof(WoxManagedWindowC) * (size_t)newCapacity);
+        if (!newWindows)
+        {
+            data->failed = 1;
+            return 0;
+        }
+        data->windows = newWindows;
+        data->capacity = newCapacity;
+    }
+
+    int result = fillManagedWindowForManagement(hwnd, 0, &data->windows[data->count]);
+    if (result == 1 && data->windows[data->count].title[0] != '\0')
+    {
+        data->count++;
+    }
+    return 1;
+}
+
+int listManagedWindowsForManagement(WoxManagedWindowC **outWindows, int *outCount)
+{
+    if (!outWindows || !outCount)
+    {
+        return -1;
+    }
+
+    *outWindows = NULL;
+    *outCount = 0;
+
+    ManagedWindowEnumForManagementData data;
+    ZeroMemory(&data, sizeof(data));
+
+    for (HWND candidate = GetWindow(GetDesktopWindow(), GW_CHILD); candidate != NULL; candidate = GetWindow(candidate, GW_HWNDNEXT))
+    {
+        if (!isManageableWindowForManagement(candidate))
+        {
+            continue;
+        }
+
+        HWND hwnd = rootWindowForManagement(candidate);
+        if (!hwnd || hwnd != candidate)
+        {
+            continue;
+        }
+
+        if (!appendManagedWindowForManagement(&data, hwnd))
+        {
+            break;
+        }
+    }
+
+    if (data.failed)
+    {
+        if (data.windows)
+        {
+            free(data.windows);
+        }
+        return -1;
+    }
+
+    *outWindows = data.windows;
+    *outCount = data.count;
+    return 1;
+}
+
+void freeManagedWindowsForManagement(WoxManagedWindowC *windows)
+{
+    if (windows)
+    {
+        free(windows);
+    }
 }
 
 typedef struct
@@ -548,7 +668,17 @@ int moveResizeWindowForManagement(const char *windowId, int pid, int x, int y, i
         height = 1;
     }
 
-    return SetWindowPos(hwnd, HWND_TOP, x, y, width, height, SWP_SHOWWINDOW) ? 1 : -1;
+    if (SetWindowPos(hwnd, HWND_TOP, x, y, width, height, SWP_SHOWWINDOW))
+    {
+        return 1;
+    }
+
+    DWORD err = GetLastError();
+    if (err > 0 && err < 100000)
+    {
+        return -1000 - (int)err;
+    }
+    return -1;
 }
 
 int maximizeWindowForManagement(const char *windowId, int pid)

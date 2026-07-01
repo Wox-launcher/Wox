@@ -26,6 +26,7 @@ typedef struct {
 typedef struct {
 	char id[64];
 	int pid;
+	char title[1024];
 	WoxWindowRectC bounds;
 	WoxDisplayInfoC display;
 	int isMinimized;
@@ -38,6 +39,8 @@ char* getWindowNameByPid(int pid);
 int getActiveWindowPid();
 char* getActiveWindowIdForManagement();
 int getManagedWindowForManagement(const char* windowId, int pid, WoxManagedWindowC* outWindow);
+int listManagedWindowsForManagement(WoxManagedWindowC** outWindows, int* outCount);
+void freeManagedWindowsForManagement(WoxManagedWindowC* windows);
 int listDisplaysForManagement(WoxDisplayInfoC** outDisplays, int* outCount);
 void freeDisplaysForManagement(WoxDisplayInfoC* displays);
 int moveResizeWindowForManagement(const char* windowId, int pid, int x, int y, int width, int height);
@@ -69,6 +72,8 @@ import (
 	"github.com/go-ole/go-ole/oleutil"
 	"github.com/lxn/win"
 )
+
+const windowManagementWin32ErrorOffset = 1000
 
 var (
 	modkernel32                    = syscall.NewLazyDLL("kernel32.dll")
@@ -206,14 +211,30 @@ func GetManagedWindow(windowId string, pid int, title string) (ManagedWindow, er
 		return ManagedWindow{}, windowManagementErrorFromCode(result)
 	}
 
-	return ManagedWindow{
-		Id:          C.GoString(&out.id[0]),
-		Pid:         int(out.pid),
-		Title:       title,
-		Bounds:      windowRectFromWindowsRect(out.bounds),
-		Display:     displayInfoFromWindowsDisplay(out.display),
-		IsMinimized: int(out.isMinimized) == 1,
-	}, nil
+	return managedWindowFromWindowsWindow(out, title), nil
+}
+
+// ListManagedWindows returns visible top-level windows in native z-order for app-based layouts.
+func ListManagedWindows() ([]ManagedWindow, error) {
+	var outWindows *C.WoxManagedWindowC
+	var outCount C.int
+	result := int(C.listManagedWindowsForManagement(&outWindows, &outCount))
+	if result != 1 {
+		return nil, windowManagementErrorFromCode(result)
+	}
+	defer C.freeManagedWindowsForManagement(outWindows)
+
+	count := int(outCount)
+	if count == 0 {
+		return []ManagedWindow{}, nil
+	}
+
+	rawWindows := unsafe.Slice(outWindows, count)
+	windows := make([]ManagedWindow, 0, count)
+	for _, rawWindow := range rawWindows {
+		windows = append(windows, managedWindowFromWindowsWindow(rawWindow, ""))
+	}
+	return windows, nil
 }
 
 // ListDisplays returns monitor bounds and work areas in desktop coordinates.
@@ -281,9 +302,18 @@ func windowManagementErrorFromCode(code int) error {
 	switch code {
 	case 0:
 		return ErrWindowManagementWindowNotFound
+	case -2:
+		return ErrWindowManagementPermissionDenied
 	case -3:
 		return ErrWindowManagementDisplayNotFound
 	default:
+		if code < -windowManagementWin32ErrorOffset {
+			win32Error := -code - windowManagementWin32ErrorOffset
+			if win32Error == 5 {
+				return fmt.Errorf("%w: win32 error %d", ErrWindowManagementPermissionDenied, win32Error)
+			}
+			return fmt.Errorf("window management failed with code %d (win32 error %d)", code, win32Error)
+		}
 		return fmt.Errorf("window management failed with code %d", code)
 	}
 }
@@ -305,6 +335,25 @@ func displayInfoFromWindowsDisplay(display C.WoxDisplayInfoC) DisplayInfo {
 		Bounds:    windowRectFromWindowsRect(display.bounds),
 		WorkArea:  windowRectFromWindowsRect(display.workArea),
 		IsPrimary: int(display.isPrimary) == 1,
+	}
+}
+
+// managedWindowFromWindowsWindow converts native window data and normalizes process identity.
+func managedWindowFromWindowsWindow(rawWindow C.WoxManagedWindowC, fallbackTitle string) ManagedWindow {
+	pid := int(rawWindow.pid)
+	title := strings.TrimSpace(fallbackTitle)
+	if title == "" {
+		title = C.GoString(&rawWindow.title[0])
+	}
+
+	return ManagedWindow{
+		Id:          C.GoString(&rawWindow.id[0]),
+		Pid:         pid,
+		Title:       title,
+		AppIdentity: strings.TrimSpace(GetProcessIdentity(pid)),
+		Bounds:      windowRectFromWindowsRect(rawWindow.bounds),
+		Display:     displayInfoFromWindowsDisplay(rawWindow.display),
+		IsMinimized: int(rawWindow.isMinimized) == 1,
 	}
 }
 

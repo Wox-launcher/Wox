@@ -15,12 +15,12 @@ import (
 	"wox/setting/definition"
 	"wox/setting/validator"
 	"wox/util/window"
-
-	"github.com/samber/lo"
 )
 
 const (
 	windowManagerSettingGap    = "gap"
+	windowManagerSettingGroups = "windowGroups"
+	windowManagerCommandGroup  = "group"
 	windowManagerDefaultGap    = 0
 	windowManagerMaxGap        = 64
 	windowManagerMoveTolerance = 2
@@ -113,12 +113,7 @@ func (p *WindowManagerPlugin) GetMetadata() plugin.Metadata {
 			"window",
 			"*",
 		},
-		Commands: lo.Map(windowManagerCommands, func(command windowManagerCommand, _ int) plugin.MetadataCommand {
-			return plugin.MetadataCommand{
-				Command:     command.Command,
-				Description: common.I18nString("i18n:" + command.TitleKey),
-			}
-		}),
+		Commands: windowManagerMetadataCommands(),
 		SupportedOS: []string{
 			"Windows",
 			"Macos",
@@ -146,6 +141,16 @@ func (p *WindowManagerPlugin) GetMetadata() plugin.Metadata {
 					},
 				},
 			},
+			{
+				Type:               definition.PluginSettingDefinitionTypeTable,
+				IsPlatformSpecific: true,
+				Value: &definition.PluginSettingValueTable{
+					Key:          windowManagerSettingGroups,
+					Title:        "i18n:plugin_window_manager_setting_groups",
+					Tooltip:      "i18n:plugin_window_manager_setting_groups_tooltip",
+					DefaultValue: "[]",
+				},
+			},
 		},
 		Features: []plugin.MetadataFeature{
 			{
@@ -168,7 +173,19 @@ func (p *WindowManagerPlugin) Init(ctx context.Context, initParams plugin.InitPa
 
 // Query lists available window layout commands or returns the explicitly parsed command.
 func (p *WindowManagerPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
+	if strings.EqualFold(query.Command, windowManagerCommandGroup) {
+		return p.queryWindowGroups(ctx, query)
+	}
+
+	var groupResults []plugin.QueryResult
+	if query.Command == "" {
+		groupResults = p.matchingWindowGroupResults(ctx, query.Search, !query.IsGlobalQuery())
+	}
+
 	if !hasActiveWindow(query.Env) {
+		if len(groupResults) > 0 {
+			return plugin.NewQueryResponse(groupResults)
+		}
 		if p.shouldShowNoActiveWindowResult(ctx, query) {
 			return plugin.NewQueryResponse([]plugin.QueryResult{p.noActiveWindowResult()})
 		}
@@ -189,6 +206,7 @@ func (p *WindowManagerPlugin) Query(ctx context.Context, query plugin.Query) plu
 			results = append(results, p.commandResult(ctx, query, command, score))
 		}
 	}
+	results = append(results, groupResults...)
 	return plugin.NewQueryResponse(results)
 }
 
@@ -238,8 +256,9 @@ func (p *WindowManagerPlugin) commandResult(ctx context.Context, query plugin.Qu
 		Tails:    targetWindowIconTail(query.Env.ActiveWindowIcon),
 		Actions: []plugin.QueryResultAction{
 			{
-				Name:      "i18n:plugin_window_manager_action_apply",
-				IsDefault: true,
+				Name:                   "i18n:plugin_window_manager_action_apply",
+				IsDefault:              true,
+				PreventHideAfterAction: true,
 				Action: func(actionCtx context.Context, actionContext plugin.ActionContext) {
 					p.applyCommand(actionCtx, capturedCommand, capturedEnv)
 				},

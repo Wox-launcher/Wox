@@ -31,6 +31,7 @@ type ManagedWindow struct {
 	Id          string
 	Pid         int
 	Title       string
+	AppIdentity string
 	Bounds      WindowRect
 	Display     DisplayInfo
 	IsMinimized bool

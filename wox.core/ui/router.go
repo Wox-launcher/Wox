@@ -38,6 +38,7 @@ import (
 	utilselection "wox/util/selection"
 	"wox/util/shell"
 	"wox/util/tray"
+	utilwindow "wox/util/window"
 
 	"github.com/google/uuid"
 	"github.com/jinzhu/copier"
@@ -68,6 +69,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/setting/wox":                      handleSettingWox,
 	"/setting/wox/update":               handleSettingWoxUpdate,
 	"/setting/hotkey/apps":              handleHotkeyAppCandidates,
+	"/setting/window-manager/displays":  handleWindowManagerDisplays,
 	"/setting/ui/fonts":                 handleSettingUIFontList,
 	"/setting/plugin/update":            handleSettingPluginUpdate,
 	"/setting/userdata/location":        handleUserDataLocation,
@@ -947,6 +949,15 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 
 func handleHotkeyAppCandidates(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, appplugin.GetHotkeyAppCandidates(getTraceContext(r)))
+}
+
+func handleWindowManagerDisplays(w http.ResponseWriter, r *http.Request) {
+	displays, err := utilwindow.ListDisplays()
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, displays)
 }
 
 func handleUpdateChannelVersions(w http.ResponseWriter, r *http.Request) {

@@ -16,6 +16,7 @@ import 'package:wox/entity/wox_setting.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/entity/wox_update_channel_version.dart';
 import 'package:wox/entity/wox_usage_stats.dart';
+import 'package:wox/entity/wox_window_manager.dart';
 import 'package:wox/models/doctor_check_result.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_http_util.dart';
@@ -45,6 +46,10 @@ class WoxApi {
 
   Future<List<IgnoredHotkeyApp>> getHotkeyAppCandidates(String traceId) async {
     return await WoxHttpUtil.instance.postData<List<IgnoredHotkeyApp>>(traceId, "/setting/hotkey/apps", null);
+  }
+
+  Future<List<WindowManagerDisplay>> getWindowManagerDisplays(String traceId) async {
+    return await WoxHttpUtil.instance.postData<List<WindowManagerDisplay>>(traceId, "/setting/window-manager/displays", null);
   }
 
   Future<List<String>> getSystemFontFamilies(String traceId) async {

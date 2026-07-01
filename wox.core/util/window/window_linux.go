@@ -40,6 +40,11 @@ func GetManagedWindow(windowId string, pid int, title string) (ManagedWindow, er
 	return ManagedWindow{}, ErrWindowManagementUnsupported
 }
 
+// ListManagedWindows is not implemented on Linux yet.
+func ListManagedWindows() ([]ManagedWindow, error) {
+	return nil, ErrWindowManagementUnsupported
+}
+
 // ListDisplays is not implemented on Linux yet.
 func ListDisplays() ([]DisplayInfo, error) {
 	return nil, ErrWindowManagementUnsupported

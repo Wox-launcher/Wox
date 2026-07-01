@@ -13,6 +13,7 @@ import 'package:wox/components/plugin/wox_setting_plugin_newline_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_select_ai_model_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_select_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_table_view.dart';
+import 'package:wox/components/plugin/wox_window_manager_groups_setting.dart';
 import 'package:wox/components/wox_hint_box.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_loading_indicator.dart';
@@ -47,6 +48,8 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
   static const String _triggerKeywordOriginalColumnKey = "_wox_original_trigger_keyword";
   static const String _globalTriggerKeyword = "*";
   static const String _aiCommandPluginId = "c9910664-1c28-47ae-bad6-e7332a02d471";
+  static const String _windowManagerPluginId = "5b7d9f22-4d87-4c0f-a2c1-8e2b50c8bca0";
+  static const String _windowManagerGroupsSettingKey = "windowGroups";
   static const String _selectionPluginId = "d9e557ed-89bd-4b8b-bd64-2a7632cf3483";
   static const String _selectionSpaceQuickLookSettingKey = "enableSpaceQuickLook";
   // Local refreshing state for showing loading spinner on refresh button
@@ -959,6 +962,17 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                 }
                 if (e.type == "table") {
                   final tableValue = e.value as PluginSettingValueTable;
+                  if (plugin.id == _windowManagerPluginId && tableValue.key == _windowManagerGroupsSettingKey) {
+                    settingWidget = WoxWindowManagerGroupsSetting(
+                      value: plugin.setting.settings[tableValue.key] ?? "",
+                      labelWidth: uniformLabelWidth,
+                      onUpdate: (key, value) async {
+                        return controller.updatePluginSetting(plugin.id, key, value);
+                      },
+                    );
+                    return _buildPluginSettingTarget(plugin: plugin, definition: e, child: settingWidget);
+                  }
+
                   final isAICommandCommandsTable = plugin.id == _aiCommandPluginId && tableValue.key == "commands";
                   settingWidget = WoxSettingPluginTable(
                     value: plugin.setting.settings[e.value.key] ?? "",

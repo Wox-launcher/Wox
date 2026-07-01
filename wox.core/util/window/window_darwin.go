@@ -22,6 +22,7 @@ typedef struct {
 typedef struct {
 	char id[64];
 	int pid;
+	char title[1024];
 	WoxWindowRectC bounds;
 	WoxDisplayInfoC display;
 	int isMinimized;
@@ -35,6 +36,8 @@ char* getProcessBundleIdentifier(int pid);
 int getActiveWindowPid();
 char* getActiveWindowIdForManagement();
 int getManagedWindowForManagement(const char* windowId, int pid, WoxManagedWindowC* outWindow);
+int listManagedWindowsForManagement(WoxManagedWindowC** outWindows, int* outCount);
+void freeManagedWindowsForManagement(WoxManagedWindowC* windows);
 int listDisplaysForManagement(WoxDisplayInfoC** outDisplays, int* outCount);
 void freeDisplaysForManagement(WoxDisplayInfoC* displays);
 int moveResizeWindowForManagement(const char* windowId, int pid, int x, int y, int width, int height);
@@ -169,14 +172,30 @@ func GetManagedWindow(windowId string, pid int, title string) (ManagedWindow, er
 		return ManagedWindow{}, windowManagementErrorFromCode(result)
 	}
 
-	return ManagedWindow{
-		Id:          C.GoString(&out.id[0]),
-		Pid:         int(out.pid),
-		Title:       title,
-		Bounds:      windowRectFromDarwinRect(out.bounds),
-		Display:     displayInfoFromDarwinDisplay(out.display),
-		IsMinimized: int(out.isMinimized) == 1,
-	}, nil
+	return managedWindowFromDarwinWindow(out, title), nil
+}
+
+// ListManagedWindows returns windows that macOS Accessibility can later move.
+func ListManagedWindows() ([]ManagedWindow, error) {
+	var outWindows *C.WoxManagedWindowC
+	var outCount C.int
+	result := int(C.listManagedWindowsForManagement(&outWindows, &outCount))
+	if result != 1 {
+		return nil, windowManagementErrorFromCode(result)
+	}
+	defer C.freeManagedWindowsForManagement(outWindows)
+
+	count := int(outCount)
+	if count == 0 {
+		return []ManagedWindow{}, nil
+	}
+
+	rawWindows := unsafe.Slice(outWindows, count)
+	windows := make([]ManagedWindow, 0, count)
+	for _, rawWindow := range rawWindows {
+		windows = append(windows, managedWindowFromDarwinWindow(rawWindow, ""))
+	}
+	return windows, nil
 }
 
 // ListDisplays returns macOS screen bounds and visible frames in top-left desktop coordinates.
@@ -272,6 +291,25 @@ func displayInfoFromDarwinDisplay(display C.WoxDisplayInfoC) DisplayInfo {
 		Bounds:    windowRectFromDarwinRect(display.bounds),
 		WorkArea:  windowRectFromDarwinRect(display.workArea),
 		IsPrimary: int(display.isPrimary) == 1,
+	}
+}
+
+// managedWindowFromDarwinWindow converts Accessibility data and resolves the app identity used by settings.
+func managedWindowFromDarwinWindow(rawWindow C.WoxManagedWindowC, fallbackTitle string) ManagedWindow {
+	pid := int(rawWindow.pid)
+	title := strings.TrimSpace(fallbackTitle)
+	if title == "" {
+		title = C.GoString(&rawWindow.title[0])
+	}
+
+	return ManagedWindow{
+		Id:          C.GoString(&rawWindow.id[0]),
+		Pid:         pid,
+		Title:       title,
+		AppIdentity: strings.TrimSpace(GetProcessIdentity(pid)),
+		Bounds:      windowRectFromDarwinRect(rawWindow.bounds),
+		Display:     displayInfoFromDarwinDisplay(rawWindow.display),
+		IsMinimized: int(rawWindow.isMinimized) == 1,
 	}
 }
 
