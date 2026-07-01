@@ -2760,25 +2760,30 @@ class WoxLauncherController extends GetxController {
     if (action.type == WoxResultActionTypeEnum.WOX_RESULT_ACTION_TYPE_FORM.code) {
       showFormActionPanel(traceId, action, result.id);
       return;
-    } else {
-      await WoxWebsocketMsgUtil.instance.sendMessage(
-        WoxWebsocketMsg(
-          requestId: const UuidV4().generate(),
-          traceId: traceId,
-          type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
-          method: WoxMsgMethodEnum.WOX_MSG_METHOD_ACTION.code,
-          data: {"resultId": result.id, "actionId": action.id, "queryId": result.queryId},
-        ),
-      );
     }
 
-    // clear the search text after action is executed
-    actionListViewController.clearFilter(traceId);
+    final actionResponse = WoxWebsocketMsgUtil.instance.sendMessage(
+      WoxWebsocketMsg(
+        requestId: const UuidV4().generate(),
+        traceId: traceId,
+        type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
+        method: WoxMsgMethodEnum.WOX_MSG_METHOD_ACTION.code,
+        data: {"resultId": result.id, "actionId": action.id, "queryId": result.queryId},
+      ),
+    );
 
+    // if preventHideAfterAction is false, we hide the launcher first to avoid the potential delay caused by some heavy operations in onAction callback
     if (!preventHideAfterAction) {
-      hideApp(traceId);
+      await hideApp(traceId);
+      actionListViewController.clearFilter(traceId);
+      hideActionPanel(traceId);
+      hideFormActionPanel(traceId, reason: "non-form action executed");
+      unawaited(actionResponse.catchError((err, stack) => Logger.instance.error(traceId, "execute action failed after launcher hide: $err")));
+      return;
     }
 
+    await actionResponse;
+    actionListViewController.clearFilter(traceId);
     hideActionPanel(traceId);
     hideFormActionPanel(traceId, reason: "non-form action executed");
   }
