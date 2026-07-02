@@ -4,6 +4,7 @@ import 'setting/wox_plugin_setting_checkbox.dart';
 import 'setting/wox_plugin_setting_head.dart';
 import 'setting/wox_plugin_setting_label.dart';
 import 'setting/wox_plugin_setting_newline.dart';
+import 'setting/wox_plugin_setting_path.dart';
 import 'setting/wox_plugin_setting_select.dart';
 import 'setting/wox_plugin_setting_select_ai_model.dart';
 import 'setting/wox_plugin_setting_textbox.dart';
@@ -37,6 +38,8 @@ class PluginSettingDefinitionItem {
       value = PluginSettingValueSelectAIModel.fromJson(json['Value']);
     } else if (type == "table") {
       value = PluginSettingValueTable.fromJson(json['Value']);
+    } else if (type == "path") {
+      value = PluginSettingValuePath.fromJson(json['Value']);
     } else if (type == "textbox") {
       value = PluginSettingValueTextBox.fromJson(json['Value']);
     } else {
