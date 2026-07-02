@@ -2011,6 +2011,7 @@
   "plugin_cloudsync_history_label_operation": "Operation",
   "plugin_cloudsync_history_label_status": "Status",
   "plugin_cloudsync_history_action_view_details": "View record details",
+  "plugin_cloudsync_history_action_copy_error": "Copy error message",
   "plugin_cloudsync_history_detail_group": "Cloud sync record details",
   "plugin_cloudsync_history_detail_empty": "No record details",
   "plugin_cloudsync_history_detail_not_found": "Record details not found",

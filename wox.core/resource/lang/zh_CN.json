@@ -2012,6 +2012,7 @@
   "plugin_cloudsync_history_label_operation": "操作",
   "plugin_cloudsync_history_label_status": "状态",
   "plugin_cloudsync_history_action_view_details": "查看记录明细",
+  "plugin_cloudsync_history_action_copy_error": "复制错误信息",
   "plugin_cloudsync_history_detail_group": "云同步记录明细",
   "plugin_cloudsync_history_detail_empty": "没有记录明细",
   "plugin_cloudsync_history_detail_not_found": "记录明细不存在",
