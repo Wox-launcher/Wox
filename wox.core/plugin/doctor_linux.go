@@ -6,6 +6,7 @@ import (
 	"context"
 	"os/exec"
 	"strings"
+	"wox/i18n"
 	"wox/setting"
 	"wox/util"
 	"wox/util/browser"
@@ -14,8 +15,18 @@ import (
 )
 
 const gnomeAppIndicatorExtensionURL = "https://extensions.gnome.org/extension/615/appindicator-support/"
-const waylandInputGroupHelpURL = "https://wox-launcher.github.io/Wox/guide/faq#wayland-double-modifier-hotkeys"
-const waylandUinputGroupHelpURL = "https://wox-launcher.github.io/Wox/guide/faq#wayland-double-modifier-hotkeys"
+const waylandHotkeysHelpAnchor = "wayland-double-modifier-hotkeys"
+
+// waylandHotkeysHelpURL returns the localized FAQ URL for the Wayland hotkey
+// permissions guide. The docs site serves English under /guide and Chinese
+// under /zh/guide; other languages fall back to the English page.
+func waylandHotkeysHelpURL() string {
+	base := "https://wox-launcher.github.io/Wox"
+	if i18n.GetI18nManager().GetCurrentLangCode() == i18n.LangCodeZhCn {
+		return base + "/zh/guide/faq#" + waylandHotkeysHelpAnchor
+	}
+	return base + "/guide/faq#" + waylandHotkeysHelpAnchor
+}
 
 // checkGnomeTrayIndicator verifies the AppIndicator host only when Wox runs under GNOME.
 func checkGnomeTrayIndicator(ctx context.Context) (DoctorCheckResult, bool) {
@@ -138,7 +149,7 @@ func checkLinuxInputGroup(ctx context.Context) (DoctorCheckResult, bool) {
 		ActionName:             "i18n:plugin_doctor_linux_input_group_open_help",
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext ActionContext) {
-			_ = browser.OpenURL(waylandInputGroupHelpURL, "")
+			_ = browser.OpenURL(waylandHotkeysHelpURL(), "")
 		},
 	}, true
 }
@@ -180,7 +191,7 @@ func checkLinuxUinputGroup(ctx context.Context) (DoctorCheckResult, bool) {
 			ActionName:             "i18n:plugin_doctor_linux_uinput_group_open_help",
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext ActionContext) {
-				_ = browser.OpenURL(waylandUinputGroupHelpURL, "")
+				_ = browser.OpenURL(waylandHotkeysHelpURL(), "")
 			},
 		}, true
 	default:
@@ -193,7 +204,7 @@ func checkLinuxUinputGroup(ctx context.Context) (DoctorCheckResult, bool) {
 			ActionName:             "i18n:plugin_doctor_linux_uinput_group_open_help",
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext ActionContext) {
-				_ = browser.OpenURL(waylandUinputGroupHelpURL, "")
+				_ = browser.OpenURL(waylandHotkeysHelpURL(), "")
 			},
 		}, true
 	}
