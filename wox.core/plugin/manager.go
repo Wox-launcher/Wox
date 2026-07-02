@@ -2736,6 +2736,11 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 	scoreFeatureTimingStart := time.Now()
 	// ignoreAutoScore is a plugin-context control; global search still needs actioned-result ranking across providers.
 	ignoreAutoScore := !query.IsGlobalQuery() && pluginInstance.Metadata.IsSupportFeature(MetadataFeatureIgnoreAutoScore)
+	isMRUQuery := query.Env.IsMRU
+	if isMRUQuery {
+		// MRU restore owns ranking; plugin/action/favorite scores would leak normal query ranking into the MRU page.
+		ignoreAutoScore = true
+	}
 	ScoreFeatureCost := util.GetSystemTimestamp() - scoreFeatureStart
 	ScoreFeatureCostUs := time.Since(scoreFeatureTimingStart).Microseconds()
 	autoScoreStart := util.GetSystemTimestamp()
@@ -2752,8 +2757,8 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 	favoriteStart := util.GetSystemTimestamp()
 	favoriteTimingStart := time.Now()
 	// check if result is favorite result
-	// favorite result will not be affected by ignoreAutoScore setting, so we add score here
-	isFavorite := setting.GetSettingManager().IsPinedResult(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle)
+	// favorite result will not be affected by ignoreAutoScore setting, except on the MRU page where MRU score owns ranking.
+	isFavorite := !isMRUQuery && setting.GetSettingManager().IsPinedResult(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle)
 	if isFavorite {
 		favScore := int64(100000)
 		logger.Debug(ctx, fmt.Sprintf("<%s> result(%s) is favorite result, add score: %d", pluginInstance.GetName(ctx), result.Title, favScore))
@@ -4340,10 +4345,9 @@ func (m *Manager) ExecutePluginDeeplink(ctx context.Context, pluginId string, ar
 func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string) []QueryResultUI {
 	activeWindowSnapshot := m.GetUI().GetActiveWindowSnapshot(ctx)
 	query := Query{
-		Id:             queryId,
-		SessionId:      sessionId,
-		Type:           QueryTypeInput,
-		TriggerKeyword: "mru",
+		Id:        queryId,
+		SessionId: sessionId,
+		Type:      QueryTypeInput,
 	}
 	query.Env.ActiveWindowTitle = activeWindowSnapshot.Name
 	query.Env.ActiveWindowPid = activeWindowSnapshot.Pid
@@ -4351,6 +4355,7 @@ func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string
 	query.Env.ActiveWindowIcon = activeWindowSnapshot.Icon
 	query.Env.ActiveWindowIsOpenSaveDialog = activeWindowSnapshot.IsOpenSaveDialog
 	query.Env.ActiveBrowserUrl = m.getActiveBrowserUrl(ctx)
+	query.Env.IsMRU = true
 	m.startSessionQueryCache(query)
 
 	mruItems, err := setting.GetSettingManager().GetMRUItems(ctx, 10)
@@ -4404,6 +4409,7 @@ func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string
 
 			// Add the remove action to the result
 			restored.Actions = append(restored.Actions, removeMRUAction)
+			restored.Score = item.Score
 
 			polishedResult := m.PolishResult(ctx, pluginInstance, query, QueryLayout{}, *restored)
 			results = append(results, polishedResult.ToUI())
