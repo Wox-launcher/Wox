@@ -90,27 +90,33 @@ sudo usermod -aG input $USER
 
 重新登录，然后重启 Wox。
 
-#### CapsLock 组合键（如 `capslock+a`）— 需要 `input` 和 `uinput` 两个组
+#### CapsLock 组合键（如 `capslock+a`）— 需要 `input` 组，推荐 `uinput` 组
 
-除了 `input` 组之外，CapsLock 组合键还需要 `uinput` 组。当 CapsLock 被用作组合键前缀时，由于 Wox 在 Wayland 下无法拦截原始事件，系统会切换 CapsLock 状态。Wox 通过 uinput 虚拟键盘注入一个 CapsLock 按键事件来撤销这个切换。如果没有 uinput，每次使用 CapsLock 组合键时大小写灯都会被切换。
+CapsLock 组合键需要 `input` 组（evdev 读取权限）来检测组合键。`uinput` 组**不是**注册或触发热键的必需条件——它仅在组合键触发后用于恢复 CapsLock 状态并删除多打的组合字符。
+
+当 CapsLock 被用作组合键前缀时，由于 Wox 在 Wayland 下无法拦截原始事件，系统会切换 CapsLock 状态。Wox 通过 uinput 虚拟键盘注入一个 CapsLock 按键事件来撤销这个切换。如果没有 uinput，热键仍会触发，但大小写灯可能被切换，并可能在当前输入框里多输入一个字符。
+
+要启用完整的 CapsLock 状态恢复，请将自己加入 `uinput` 组：
 
 ```bash
 sudo groupadd -r uinput 2>/dev/null
 sudo usermod -aG input,uinput $USER
 ```
 
-添加 udev 规则确保 `/dev/uinput` 权限正确：
+然后确保 `/dev/uinput` 对组可写。许多原版发行版将 `/dev/uinput` 设为 `crw------- root:root`，仅加入组还不够——还需要一条 udev 规则：
 
 ```bash
-echo 'KERNEL=="uinput", MODE="0660", GROUP="uinput"' | sudo tee /etc/udev/rules.d/99-uinput.rules
-sudo udevadm control --reload-rules && sudo udevadm trigger
+echo 'KERNEL=="uinput", MODE="0660", GROUP="uinput"' | sudo tee /etc/udev/rules.d/80-uinput.rules
+sudo udevadm control --reload-rules && sudo udevadm trigger /dev/uinput
 ```
 
 重新登录，然后重启 Wox。
 
+> **排障：** 如果 Wox doctor 提示你已经在 `uinput` 组里，但 `/dev/uinput` 仍然不可写，说明设备节点缺少组权限。执行上面的 udev 规则并运行 `sudo udevadm trigger /dev/uinput` 即可——设备节点变更不需要重新登录，但需要重启 Wox。
+
 设置完成后，单独按下 CapsLock 时正常切换大小写；将 CapsLock 用作组合键前缀时，系统的 CapsLock 切换会被自动撤销。普通组合键热键（如 `ctrl+space`）不受此设置影响，始终通过 `org.freedesktop.portal.GlobalShortcuts` portal 工作。
 
-> **注意：** 此方案不需要 root 权限或系统守护进程。Wox 只是被动读取 evdev 事件，仅在组合键触发后使用 uinput 注入一个 CapsLock 按键事件来恢复大小写状态。
+> **注意：** 此方案不需要 root 权限或系统守护进程。Wox 只是被动读取 evdev 事件，仅在组合键触发后使用 uinput 注入一个 CapsLock 按键事件来恢复大小写状态。如果没有 uinput，CapsLock 组合键仍然可用——仅跳过状态恢复（会记录一条警告日志）。
 
 ### 如何在 Wayland 下禁用 Wox 窗口动画？ {#wayland-disable-animation}
 

@@ -382,9 +382,33 @@ func (m *Manager) reregisterWaylandPortalGlobalHotkeys(ctx context.Context, main
 	}
 
 	m.waylandPortalHotkeys = newGroup
-	m.mainHotkeyKey = strings.TrimSpace(mainHotkey)
-	m.selectionHotkeyKey = effectiveSelectionHotkeyForRuntime(selectionHotkey)
-	m.waylandPortalQueries = cloneQueryHotkeys(queryHotkeys)
+	registeredKeys := make(map[string]bool, len(newGroup.RegisteredCombineKeys()))
+	for _, key := range newGroup.RegisteredCombineKeys() {
+		registeredKeys[key] = true
+	}
+	// Reconcile tracked state with what actually registered. Special hotkeys
+	// (CapsLock combos / double-modifier) may have been skipped by RegisterGroup
+	// due to platform limitations (e.g. missing evdev read access on Wayland);
+	// recording them as registered would mislead subsequent re-registrations
+	// and hide the skip from the user.
+	m.mainHotkeyKey = ""
+	if strings.TrimSpace(mainHotkey) != "" && registeredKeys[strings.TrimSpace(mainHotkey)] {
+		m.mainHotkeyKey = strings.TrimSpace(mainHotkey)
+	}
+	effectiveSelection := effectiveSelectionHotkeyForRuntime(selectionHotkey)
+	m.selectionHotkeyKey = ""
+	if effectiveSelection != "" && registeredKeys[effectiveSelection] {
+		m.selectionHotkeyKey = effectiveSelection
+	}
+	m.waylandPortalQueries = nil
+	for _, qh := range queryHotkeys {
+		if qh.Disabled || strings.TrimSpace(qh.Hotkey) == "" {
+			continue
+		}
+		if registeredKeys[strings.TrimSpace(qh.Hotkey)] {
+			m.waylandPortalQueries = append(m.waylandPortalQueries, qh)
+		}
+	}
 	return nil
 }
 

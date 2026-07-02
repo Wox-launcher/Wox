@@ -90,27 +90,33 @@ sudo usermod -aG input $USER
 
 Log out and back in, then restart Wox.
 
-#### CapsLock combo hotkeys (e.g. `capslock+a`) — requires both `input` and `uinput` groups
+#### CapsLock combo hotkeys (e.g. `capslock+a`) — `input` group required, `uinput` group recommended
 
-In addition to the `input` group, CapsLock combos require the `uinput` group. When CapsLock is used as a combo prefix, the system toggles the caps lock state because Wox cannot consume the raw event on Wayland. Wox undoes this toggle by injecting a CapsLock key event through a temporary uinput virtual keyboard. Without uinput, the caps lock LED would toggle every time you use a CapsLock combo.
+CapsLock combos need the `input` group (evdev read access) to detect the combo. The `uinput` group is **not required** to register or trigger the hotkey — it is only used to restore CapsLock state and delete the stray combo character after the combo fires.
+
+When CapsLock is used as a combo prefix, the system toggles the caps lock state because Wox cannot consume the raw event on Wayland. Wox undoes this toggle by injecting a CapsLock key event through a temporary uinput virtual keyboard. Without uinput, the hotkey still fires, but the caps lock LED may be left toggled and an extra character may be typed into the focused field.
+
+To enable full CapsLock restoration, add yourself to the `uinput` group:
 
 ```bash
 sudo groupadd -r uinput 2>/dev/null
 sudo usermod -aG input,uinput $USER
 ```
 
-Ensure `/dev/uinput` has the correct permissions:
+Then ensure `/dev/uinput` is group-writable. Many stock distros ship `/dev/uinput` as `crw------- root:root`, so group membership alone is not enough — you also need a udev rule:
 
 ```bash
-echo 'KERNEL=="uinput", MODE="0660", GROUP="uinput"' | sudo tee /etc/udev/rules.d/99-uinput.rules
-sudo udevadm control --reload-rules && sudo udevadm trigger
+echo 'KERNEL=="uinput", MODE="0660", GROUP="uinput"' | sudo tee /etc/udev/rules.d/80-uinput.rules
+sudo udevadm control --reload-rules && sudo udevadm trigger /dev/uinput
 ```
 
 Log out and back in, then restart Wox.
 
+> **Troubleshooting:** If the Wox doctor check reports you are already in the `uinput` group but `/dev/uinput` is still not writable, the device node is missing group permissions. Apply the udev rule above and run `sudo udevadm trigger /dev/uinput` — re-logging in is not needed for the device-node change, but Wox must be restarted.
+
 After setup, when CapsLock is pressed alone, it toggles caps lock normally. When CapsLock is used as a combo prefix, the system's caps lock toggle is automatically undone. Regular combination hotkeys (like `ctrl+space`) continue to work via the `org.freedesktop.portal.GlobalShortcuts` portal regardless of this setting.
 
-> **Note:** Wox does NOT require root or a system daemon. It only reads evdev events passively and uses uinput solely to inject a single CapsLock key event when restoring the caps lock state after a combo.
+> **Note:** Wox does NOT require root or a system daemon. It only reads evdev events passively and uses uinput solely to inject a single CapsLock key event when restoring the caps lock state after a combo. If uinput is unavailable, CapsLock combos still work — only the state restoration is skipped (a warning is logged).
 
 ### How do I disable the Wox window animation on Wayland? {#wayland-disable-animation}
 

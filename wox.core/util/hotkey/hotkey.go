@@ -49,6 +49,22 @@ type Group struct {
 	hotkeys      []*Hotkey
 }
 
+// RegisteredCombineKeys returns the combine-key strings that this group
+// successfully registered, including both normal (portal/native) hotkeys and
+// special hotkeys (double-modifier / CapsLock combos). Callers can use this to
+// reconcile their tracked state after a RegisterGroup call in which some
+// special hotkeys were skipped due to platform limitations.
+func (g *Group) RegisteredCombineKeys() []string {
+	keys := make([]string, 0, len(g.combineKeys)+len(g.hotkeys))
+	keys = append(keys, g.combineKeys...)
+	for _, hk := range g.hotkeys {
+		if hk.combineKey != "" {
+			keys = append(keys, hk.combineKey)
+		}
+	}
+	return keys
+}
+
 func (h *Hotkey) Register(ctx context.Context, combineKey string, callback func()) error {
 	spec, parseErr := h.parseCombineKey(combineKey)
 	if parseErr != nil {
@@ -89,6 +105,15 @@ func (h *Hotkey) Register(ctx context.Context, combineKey string, callback func(
 // RegisterGroup registers multiple normal hotkeys as one native registration
 // when the platform supports it. It falls back to individual registrations when
 // a shortcut uses a special Wox-only mode such as double modifier keys.
+//
+// Special hotkeys (double-modifier and CapsLock combos) are registered
+// individually and isolated from the rest of the group: if one of them fails to
+// parse, validate, or register (e.g. because evdev read access is unavailable on
+// Wayland), it is skipped with a warning instead of aborting the whole group.
+// This way a single unsupported special hotkey does not take down unrelated
+// portal-registered hotkeys (e.g. alt+space) that share the same Wayland portal
+// session. Normal hotkeys are still registered together and a portal-level
+// failure there aborts the group.
 func RegisterGroup(ctx context.Context, specs []Spec) (*Group, error) {
 	group := &Group{}
 	keyboardSpecs := make([]keyboard.GlobalHotkeySpec, 0, len(specs))
@@ -97,10 +122,18 @@ func RegisterGroup(ctx context.Context, specs []Spec) (*Group, error) {
 	for _, spec := range specs {
 		parsed, parseErr := parser.parseCombineKey(spec.CombineKey)
 		if parseErr != nil {
+			if isSpecialHotkeySpec(spec.CombineKey, parser) {
+				util.GetLogger().Warn(ctx, fmt.Sprintf("skip special hotkey in group, parse failed: %s: %s", spec.CombineKey, parseErr.Error()))
+				continue
+			}
 			group.Unregister(ctx)
 			return nil, parseErr
 		}
 		if validateErr := validateHotkeySpec(parsed); validateErr != nil {
+			if parsed.isDoubleModifier() || parsed.isCapsLockKey() {
+				util.GetLogger().Warn(ctx, fmt.Sprintf("skip special hotkey in group, validation failed: %s: %s", spec.CombineKey, validateErr.Error()))
+				continue
+			}
 			group.Unregister(ctx)
 			return nil, validateErr
 		}
@@ -108,8 +141,8 @@ func RegisterGroup(ctx context.Context, specs []Spec) (*Group, error) {
 		if parsed.isDoubleModifier() || parsed.isCapsLockKey() {
 			hk := &Hotkey{}
 			if err := hk.Register(ctx, spec.CombineKey, spec.Callback); err != nil {
-				group.Unregister(ctx)
-				return nil, err
+				util.GetLogger().Warn(ctx, fmt.Sprintf("skip special hotkey in group, register failed: %s: %s", spec.CombineKey, err.Error()))
+				continue
 			}
 			group.hotkeys = append(group.hotkeys, hk)
 			continue
@@ -136,6 +169,19 @@ func RegisterGroup(ctx context.Context, specs []Spec) (*Group, error) {
 	}
 
 	return group, nil
+}
+
+// isSpecialHotkeySpec reports whether combineKey parses as a double-modifier or
+// CapsLock combo hotkey. Used to decide whether a parse failure should be
+// isolated (special hotkeys) or propagated (normal hotkeys). A parse error
+// means we cannot classify the hotkey, so this falls back to false to keep the
+// historical fail-fast behavior for malformed normal hotkeys.
+func isSpecialHotkeySpec(combineKey string, parser *Hotkey) bool {
+	spec, err := parser.parseCombineKey(combineKey)
+	if err != nil {
+		return false
+	}
+	return spec.isDoubleModifier() || spec.isCapsLockKey()
 }
 
 func (g *Group) Unregister(ctx context.Context) {

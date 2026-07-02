@@ -39,9 +39,6 @@ func validateHotkeySpec(spec hotkeySpec) error {
 		if !keyboard.IsEvdevReadAvailable() {
 			return fmt.Errorf("CapsLock combo hotkeys require evdev access on Wayland; add user to 'input' group")
 		}
-		if !keyboard.IsUinputWriteAvailable() {
-			return fmt.Errorf("CapsLock combo hotkeys require uinput access on Wayland to restore CapsLock state; add user to 'uinput' group")
-		}
 	}
 
 	return nil
