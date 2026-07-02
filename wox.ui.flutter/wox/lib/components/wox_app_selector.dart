@@ -17,11 +17,12 @@ Future<IgnoredHotkeyApp?> showWoxAppSelectorDialog({
   required IgnoredHotkeyApp selectedApp,
   List<IgnoredHotkeyApp> initialApps = const <IgnoredHotkeyApp>[],
   required Future<List<IgnoredHotkeyApp>> Function() loadApps,
+  String titleKey = 'ui_hotkey_ignore_apps_dialog_title',
 }) async {
   return await showDialog<IgnoredHotkeyApp>(
     context: context,
     barrierColor: getThemePopupBarrierColor(),
-    builder: (ctx) => _AppSelectorDialog(initialApps: initialApps, selectedApp: selectedApp, loadApps: loadApps),
+    builder: (ctx) => _AppSelectorDialog(initialApps: initialApps, selectedApp: selectedApp, loadApps: loadApps, titleKey: titleKey),
   );
 }
 
@@ -145,8 +146,9 @@ class _AppSelectorDialog extends StatefulWidget {
   final List<IgnoredHotkeyApp> initialApps;
   final IgnoredHotkeyApp selectedApp;
   final Future<List<IgnoredHotkeyApp>> Function() loadApps;
+  final String titleKey;
 
-  const _AppSelectorDialog({required this.initialApps, required this.selectedApp, required this.loadApps});
+  const _AppSelectorDialog({required this.initialApps, required this.selectedApp, required this.loadApps, required this.titleKey});
 
   @override
   State<_AppSelectorDialog> createState() => _AppSelectorDialogState();
@@ -252,7 +254,7 @@ class _AppSelectorDialogState extends State<_AppSelectorDialog> {
     final accentColor = getThemeActiveBackgroundColor();
 
     return WoxDialog(
-      title: Text(tr('ui_hotkey_ignore_apps_dialog_title'), style: TextStyle(color: textColor, fontSize: 16)),
+      title: Text(tr(widget.titleKey), style: TextStyle(color: textColor, fontSize: 16)),
       titleTextStyle: TextStyle(color: textColor, fontSize: 16),
       content: SizedBox(
         width: 760,

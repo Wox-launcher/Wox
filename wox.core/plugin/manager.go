@@ -984,6 +984,16 @@ func (m *Manager) GetPluginInstanceById(pluginId string) *Instance {
 	return nil
 }
 
+// GetSystemPlugin returns the SystemPlugin implementation for the given plugin ID,
+// or nil if the plugin is not found or not a system plugin.
+func (m *Manager) GetSystemPlugin(pluginId string) SystemPlugin {
+	instance := m.GetPluginInstanceById(pluginId)
+	if instance == nil || !instance.IsSystemPlugin {
+		return nil
+	}
+	return instance.Plugin.(SystemPlugin)
+}
+
 // InvokePluginCommand routes a plugin-to-plugin command to the target plugin.
 func (m *Manager) InvokePluginCommand(ctx context.Context, caller *Instance, request PluginCommandRequest) (PluginCommandResult, error) {
 	if strings.TrimSpace(request.PluginId) == "" {

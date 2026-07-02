@@ -70,6 +70,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/setting/wox/update":               handleSettingWoxUpdate,
 	"/setting/hotkey/apps":              handleHotkeyAppCandidates,
 	"/setting/window-manager/displays":  handleWindowManagerDisplays,
+	"/browser/extension/status":         handleBrowserExtensionStatus,
 	"/setting/ui/fonts":                 handleSettingUIFontList,
 	"/setting/plugin/update":            handleSettingPluginUpdate,
 	"/setting/userdata/location":        handleUserDataLocation,
@@ -958,6 +959,24 @@ func handleWindowManagerDisplays(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeSuccessResponse(w, displays)
+}
+
+func handleBrowserExtensionStatus(w http.ResponseWriter, r *http.Request) {
+	const browserPluginID = "8f68a760-86a0-46a9-b331-58dcaf091daa"
+	sp := plugin.GetPluginManager().GetSystemPlugin(browserPluginID)
+	type extensionStatus struct {
+		Connected bool `json:"connected"`
+	}
+	connected := false
+	if sp != nil {
+		type connector interface {
+			IsExtensionConnected() bool
+		}
+		if c, ok := sp.(connector); ok {
+			connected = c.IsExtensionConnected()
+		}
+	}
+	writeSuccessResponse(w, extensionStatus{Connected: connected})
 }
 
 func handleUpdateChannelVersions(w http.ResponseWriter, r *http.Request) {

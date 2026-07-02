@@ -377,10 +377,10 @@ func evdevReadLoop(fd int, stopCh <-chan struct{}, handler RawKeyHandler) {
 // evdevAvailability caches the result of the first evdev read availability
 // probe so we don't repeatedly open/close devices.
 var (
-	evdevReadOnce     sync.Once
-	evdevRead         bool
-	uinputWriteOnce   sync.Once
-	uinputWrite       bool
+	evdevReadOnce   sync.Once
+	evdevRead       bool
+	uinputWriteOnce sync.Once
+	uinputWrite     bool
 )
 
 // IsEvdevReadAvailable reports whether the current user has read access
@@ -426,17 +426,6 @@ func IsUinputWriteAvailable() bool {
 	})
 	return uinputWrite
 }
-
-// UinputAccessStatus describes why /dev/uinput is not writable, so doctor
-// diagnostics can tell the user the exact remediation step instead of a
-// generic "join the uinput group" message.
-type UinputAccessStatus string
-
-const (
-	UinputAccessOK             UinputAccessStatus = "ok"
-	UinputAccessNotInGroup     UinputAccessStatus = "notInGroup"
-	UinputAccessInGroupNoDevice UinputAccessStatus = "inGroupNoDevicePermission"
-)
 
 // CheckUinputAccess classifies the current user's ability to write to
 // /dev/uinput. It distinguishes three outcomes:

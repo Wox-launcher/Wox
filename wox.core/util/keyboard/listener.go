@@ -325,6 +325,17 @@ type RawKeySubscription interface {
 	Close() error
 }
 
+// UinputAccessStatus describes why /dev/uinput is not writable, so doctor
+// diagnostics can tell the user the exact remediation step instead of a
+// generic "join the uinput group" message.
+type UinputAccessStatus string
+
+const (
+	UinputAccessOK              UinputAccessStatus = "ok"
+	UinputAccessNotInGroup      UinputAccessStatus = "notInGroup"
+	UinputAccessInGroupNoDevice UinputAccessStatus = "inGroupNoDevicePermission"
+)
+
 type HotkeyRegistration interface {
 	Unregister() error
 }
