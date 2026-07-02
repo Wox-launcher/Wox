@@ -17,9 +17,7 @@
 #include <X11/extensions/XTest.h>
 #include <gdk/gdkx.h>
 #endif
-#ifdef GTK_LAYER_SHELL_ENABLED
-#include <gtk-layer-shell.h>
-#endif
+#include <dlfcn.h>
 
 #include "flutter/generated_plugin_registrant.h"
 
@@ -206,7 +204,106 @@ static const char *safe_string(const char *value)
   return value != nullptr ? value : "";
 }
 
-#ifdef GTK_LAYER_SHELL_ENABLED
+// gtk-layer-shell is loaded at runtime via dlopen so the Wox binary no longer
+// hard-depends on libgtk-layer-shell.so.0. On distros where that library is not
+// installed (e.g. stock Ubuntu 24.04 GNOME), the dynamic linker used to reject
+// the whole binary at launch with "cannot open shared object file" and the
+// existing fallback path never had a chance to run. With dlopen, the binary
+// loads without the library, layer-shell is simply reported as unavailable,
+// and Wox falls back to compositor-managed placement. The enum values mirror
+// gtk-layer-shell.h so the dlopen path stays source-compatible with the GTK
+// API without linking against the header.
+typedef enum {
+    WOX_GTK_LAYER_SHELL_LAYER_BACKGROUND = 0,
+    WOX_GTK_LAYER_SHELL_LAYER_BOTTOM = 1,
+    WOX_GTK_LAYER_SHELL_LAYER_TOP = 2,
+    WOX_GTK_LAYER_SHELL_LAYER_OVERLAY = 3,
+} WoxGtkLayerShellLayer;
+
+typedef enum {
+    WOX_GTK_LAYER_SHELL_EDGE_LEFT = 0,
+    WOX_GTK_LAYER_SHELL_EDGE_RIGHT = 1,
+    WOX_GTK_LAYER_SHELL_EDGE_TOP = 2,
+    WOX_GTK_LAYER_SHELL_EDGE_BOTTOM = 3,
+} WoxGtkLayerShellEdge;
+
+typedef enum {
+    WOX_GTK_LAYER_SHELL_KEYBOARD_MODE_NONE = 0,
+    WOX_GTK_LAYER_SHELL_KEYBOARD_MODE_EXCLUSIVE = 1,
+} WoxGtkLayerShellKeyboardMode;
+
+// Function pointer types for the gtk-layer-shell API we use.
+typedef gboolean (*WoxGtkLayerIsSupportedFn)();
+typedef void (*WoxGtkLayerInitForWindowFn)(GtkWindow *);
+typedef void (*WoxGtkLayerSetLayerFn)(GtkWindow *, WoxGtkLayerShellLayer);
+typedef void (*WoxGtkLayerSetKeyboardModeFn)(GtkWindow *, WoxGtkLayerShellKeyboardMode);
+typedef void (*WoxGtkLayerSetAnchorFn)(GtkWindow *, WoxGtkLayerShellEdge, gboolean);
+typedef void (*WoxGtkLayerSetMonitorFn)(GtkWindow *, GdkMonitor *);
+typedef void (*WoxGtkLayerSetMarginFn)(GtkWindow *, WoxGtkLayerShellEdge, int);
+
+// Cached function pointers; populated by wox_ensure_layer_shell_symbols.
+static WoxGtkLayerIsSupportedFn gtk_layer_is_supported_fn = nullptr;
+static WoxGtkLayerInitForWindowFn gtk_layer_init_for_window_fn = nullptr;
+static WoxGtkLayerSetLayerFn gtk_layer_set_layer_fn = nullptr;
+static WoxGtkLayerSetKeyboardModeFn gtk_layer_set_keyboard_mode_fn = nullptr;
+static WoxGtkLayerSetAnchorFn gtk_layer_set_anchor_fn = nullptr;
+static WoxGtkLayerSetMonitorFn gtk_layer_set_monitor_fn = nullptr;
+static WoxGtkLayerSetMarginFn gtk_layer_set_margin_fn = nullptr;
+
+// Resolves and caches all gtk-layer-shell symbols on first call. Subsequent
+// calls return the cached result without touching dlopen. Returns TRUE when
+// the library was loaded and every symbol Wox needs was resolved; FALSE when
+// the library is missing or incomplete, in which case layer-shell is treated
+// as unavailable and Wox falls back to compositor-managed placement.
+static gboolean wox_ensure_layer_shell_symbols()
+{
+  static gboolean checked = FALSE;
+  static gboolean ok = FALSE;
+  static void *handle = nullptr;
+  if (checked)
+  {
+    return ok;
+  }
+  checked = TRUE;
+
+  handle = dlopen("libgtk-layer-shell.so.0", RTLD_LAZY | RTLD_LOCAL);
+  if (handle == nullptr)
+  {
+    return FALSE;
+  }
+
+  ok = TRUE;
+#define WOX_RESOLVE(var, type, name)                                            \
+  do                                                                           \
+  {                                                                            \
+    dlerror();                                                                 \
+    var = reinterpret_cast<type>(dlsym(handle, name));                          \
+    const char *err = dlerror();                                               \
+    if (var == nullptr || err != nullptr)                                     \
+    {                                                                          \
+      ok = FALSE;                                                              \
+    }                                                                          \
+  } while (0)
+
+  WOX_RESOLVE(gtk_layer_is_supported_fn, WoxGtkLayerIsSupportedFn, "gtk_layer_is_supported");
+  WOX_RESOLVE(gtk_layer_init_for_window_fn, WoxGtkLayerInitForWindowFn, "gtk_layer_init_for_window");
+  WOX_RESOLVE(gtk_layer_set_layer_fn, WoxGtkLayerSetLayerFn, "gtk_layer_set_layer");
+  WOX_RESOLVE(gtk_layer_set_keyboard_mode_fn, WoxGtkLayerSetKeyboardModeFn, "gtk_layer_set_keyboard_mode");
+  WOX_RESOLVE(gtk_layer_set_anchor_fn, WoxGtkLayerSetAnchorFn, "gtk_layer_set_anchor");
+  WOX_RESOLVE(gtk_layer_set_monitor_fn, WoxGtkLayerSetMonitorFn, "gtk_layer_set_monitor");
+  WOX_RESOLVE(gtk_layer_set_margin_fn, WoxGtkLayerSetMarginFn, "gtk_layer_set_margin");
+#undef WOX_RESOLVE
+
+  if (!ok)
+  {
+    // A partial library is not useful; drop the handle so we never call
+    // half-resolved symbols.
+    dlclose(handle);
+    handle = nullptr;
+  }
+  return ok;
+}
+
 // gtk_layer_is_supported probes the compositor at runtime; the library can be
 // linked and present but the active compositor may still not implement
 // wlr-layer-shell (e.g. GNOME Shell on Wayland). Used to gate Dart-side fallback.
@@ -263,7 +360,15 @@ static gboolean wox_is_wlroots_compositor()
 
 static gboolean wox_layer_shell_available()
 {
-  return gtk_layer_is_supported() && wox_is_wlroots_compositor();
+  if (!wox_ensure_layer_shell_symbols())
+  {
+    return FALSE;
+  }
+  if (gtk_layer_is_supported_fn == nullptr)
+  {
+    return FALSE;
+  }
+  return gtk_layer_is_supported_fn() && wox_is_wlroots_compositor();
 }
 
 // init_layer_shell_for_window turns a realized GtkWindow into a layer-shell
@@ -275,13 +380,18 @@ static gboolean wox_layer_shell_available()
 // otherwise ignore all key events.
 static void init_layer_shell_for_window(GtkWindow *window)
 {
-  gtk_layer_init_for_window(window);
-  gtk_layer_set_layer(window, GTK_LAYER_SHELL_LAYER_OVERLAY);
-  gtk_layer_set_keyboard_mode(window, GTK_LAYER_SHELL_KEYBOARD_MODE_EXCLUSIVE);
-  gtk_layer_set_anchor(window, GTK_LAYER_SHELL_EDGE_TOP, TRUE);
-  gtk_layer_set_anchor(window, GTK_LAYER_SHELL_EDGE_LEFT, TRUE);
-  gtk_layer_set_anchor(window, GTK_LAYER_SHELL_EDGE_BOTTOM, FALSE);
-  gtk_layer_set_anchor(window, GTK_LAYER_SHELL_EDGE_RIGHT, FALSE);
+  if (gtk_layer_init_for_window_fn == nullptr || gtk_layer_set_layer_fn == nullptr ||
+      gtk_layer_set_keyboard_mode_fn == nullptr || gtk_layer_set_anchor_fn == nullptr)
+  {
+    return;
+  }
+  gtk_layer_init_for_window_fn(window);
+  gtk_layer_set_layer_fn(window, WOX_GTK_LAYER_SHELL_LAYER_OVERLAY);
+  gtk_layer_set_keyboard_mode_fn(window, WOX_GTK_LAYER_SHELL_KEYBOARD_MODE_EXCLUSIVE);
+  gtk_layer_set_anchor_fn(window, WOX_GTK_LAYER_SHELL_EDGE_TOP, TRUE);
+  gtk_layer_set_anchor_fn(window, WOX_GTK_LAYER_SHELL_EDGE_LEFT, TRUE);
+  gtk_layer_set_anchor_fn(window, WOX_GTK_LAYER_SHELL_EDGE_BOTTOM, FALSE);
+  gtk_layer_set_anchor_fn(window, WOX_GTK_LAYER_SHELL_EDGE_RIGHT, FALSE);
 }
 
 // apply_layer_shell_placement sets the output (monitor) and the top/left
@@ -290,25 +400,17 @@ static void init_layer_shell_for_window(GtkWindow *window)
 static void apply_layer_shell_placement(GtkWindow *window, GdkMonitor *monitor,
                                         int x, int y)
 {
+  if (gtk_layer_set_monitor_fn == nullptr || gtk_layer_set_margin_fn == nullptr)
+  {
+    return;
+  }
   if (monitor != nullptr)
   {
-    gtk_layer_set_monitor(window, monitor);
+    gtk_layer_set_monitor_fn(window, monitor);
   }
-  gtk_layer_set_margin(window, GTK_LAYER_SHELL_EDGE_LEFT, x);
-  gtk_layer_set_margin(window, GTK_LAYER_SHELL_EDGE_TOP, y);
+  gtk_layer_set_margin_fn(window, WOX_GTK_LAYER_SHELL_EDGE_LEFT, x);
+  gtk_layer_set_margin_fn(window, WOX_GTK_LAYER_SHELL_EDGE_TOP, y);
 }
-#else
-static gboolean wox_layer_shell_available() { return FALSE; }
-static void init_layer_shell_for_window(GtkWindow *window) { (void)window; }
-static void apply_layer_shell_placement(GtkWindow *window, GdkMonitor *monitor,
-                                        int x, int y)
-{
-  (void)window;
-  (void)monitor;
-  (void)x;
-  (void)y;
-}
-#endif
 
 // create_linux_window_backend_info exposes GTK backend details to Dart logs so
 // visual placement bugs can be tied to X11 or Wayland behavior.
