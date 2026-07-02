@@ -14,6 +14,7 @@ import 'package:wox/controllers/wox_screenshot_controller.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/utils/windows/window_manager.dart';
 import 'package:wox/utils/windows/window_manager_interface.dart';
+import 'package:wox/utils/windows/windows_keydata_compatibility.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/modules/launcher/views/wox_launcher_view.dart';
 import 'package:wox/modules/onboarding/views/wox_onboarding_view.dart';
@@ -99,6 +100,7 @@ Future<void> initialServices(List<String> arguments) async {
   PaintingBinding.instance.imageCache.maximumSizeBytes = 20 * 1024 * 1024;
 
   await Logger.instance.initLogger();
+  WindowsKeyDataCompatibility.install();
   registerFlutterGlobalErrorHandlers(traceId);
   HeartbeatChecker().init();
   await WoxWebsocketMsgUtil.instance.init();
