@@ -425,6 +425,9 @@ class WoxLauncherController extends GetxController {
   /// Reset controller state for integration testing without full disposal.
   /// This clears pending timers, hides panels, and resets query state.
   Future<void> resetForIntegrationTest() async {
+    // Smoke teardown bypasses hideApp(), so invalidate show-time focus retries
+    // before the test unmounts widgets and disposes Flutter's FocusManager.
+    _visibleLauncherFocusToken++;
     hiddenCacheClearTimer?.cancel();
     await Get.find<WoxScreenshotController>().resetForIntegrationTest();
 
@@ -2587,6 +2590,9 @@ class WoxLauncherController extends GetxController {
     final focusToken = ++_visibleLauncherFocusToken;
     final textBeforeFocusSequence = queryBoxTextFieldController.text;
 
+    if (isClosed) {
+      return;
+    }
     if (Platform.isWindows) {
       Logger.instance.debug(traceId, "windows launcher focus sequence start: token=$focusToken, textLength=${textBeforeFocusSequence.length}");
     }
@@ -2594,7 +2600,7 @@ class WoxLauncherController extends GetxController {
       selectAll: selectAll,
       shouldSelectAll: () => _shouldSelectAllForVisibleLauncherFocus(selectAll: selectAll, focusToken: focusToken, textBeforeFocusSequence: textBeforeFocusSequence),
     );
-    if (focusToken != _visibleLauncherFocusToken) {
+    if (isClosed || focusToken != _visibleLauncherFocusToken) {
       return;
     }
 
@@ -2605,7 +2611,7 @@ class WoxLauncherController extends GetxController {
     if (Platform.isWindows) {
       unawaited(
         Future.delayed(const Duration(milliseconds: 100), () async {
-          if (focusToken != _visibleLauncherFocusToken) {
+          if (isClosed || focusToken != _visibleLauncherFocusToken) {
             return;
           }
           Logger.instance.debug(traceId, "windows launcher delayed native focus retry: token=$focusToken");
@@ -4309,6 +4315,7 @@ class WoxLauncherController extends GetxController {
 
   @override
   void dispose() {
+    _visibleLauncherFocusToken++;
     glanceRefreshTimer?.cancel();
     hiddenCacheClearTimer?.cancel();
     cancelPendingResultTransitions();
