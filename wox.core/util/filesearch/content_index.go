@@ -27,6 +27,11 @@ type ContentStats struct {
 // contentCrawlStateKey is the meta key for content crawl state.
 const contentCrawlStateKey = "content_crawl_state"
 
+const (
+	contentIndexSchemaVersionKey     = "content_index_schema_version"
+	currentContentIndexSchemaVersion = "2"
+)
+
 // IndexContent indexes or updates a file's content in the content index.
 // It tokenizes the text, computes a content hash for change detection, and
 // inserts into content_entries + entries_content_fts. If the path already
@@ -170,7 +175,8 @@ func (d *ContentSearchDB) ResetContentIndex(ctx context.Context) error {
 	return tx.Commit()
 }
 
-// SearchContent searches the content index for files matching all query terms.
+// SearchContent searches the content index for files matching all query terms
+// and quoted phrases.
 // Returns results sorted by FTS5 relevance (rank), limited to `limit`.
 // Runs against the standalone content database so large content queries do not
 // share SQLite cache or write pressure with name/path search.
@@ -182,15 +188,10 @@ func (d *ContentSearchDB) SearchContent(ctx context.Context, query string, limit
 		limit = 20
 	}
 
-	// Tokenize the query the same way content is tokenized.
-	tokenized := TokenizeForContentIndex(query)
-	if tokenized == "" {
+	matchExpr := buildContentFTS5MatchExpression(query)
+	if matchExpr == "" {
 		return nil, nil
 	}
-
-	// FTS5 MATCH with space-separated terms is implicit AND by default.
-	// Quote the tokenized string to avoid FTS5 syntax injection.
-	matchExpr := quoteFTS5Match(tokenized)
 
 	rows, err := d.db.QueryContext(ctx, `
 		SELECT ce.path, bm25(entries_content_fts) AS rank
@@ -350,23 +351,29 @@ func (d *FileSearchDB) EntryPathExists(ctx context.Context, path string) (bool, 
 	return true, nil
 }
 
-// quoteFTS5Match wraps a tokenized query string in double quotes for FTS5
-// MATCH, so tokens are treated as literal terms (no FTS5 syntax interpretation).
-// Each token is individually quoted and joined with implicit AND (space).
-func quoteFTS5Match(tokenized string) string {
-	tokens := strings.Fields(tokenized)
-	if len(tokens) == 0 {
-		return `""`
+func buildContentFTS5MatchExpression(query string) string {
+	parsed := parseQuotedSearchQuery(query)
+	parts := make([]string, 0, len(parsed.phrases)+4)
+
+	unquotedTokens := strings.Fields(TokenizeForContentIndex(parsed.unquoted))
+	sort.Strings(unquotedTokens)
+	for _, token := range unquotedTokens {
+		parts = append(parts, quoteContentFTS5Phrase(token))
 	}
-	// Sort tokens for consistent query regardless of input order. FTS5 AND
-	// is order-independent.
-	sort.Strings(tokens)
-	quoted := make([]string, len(tokens))
-	for i, t := range tokens {
-		// Double-quote each token to avoid FTS5 operator interpretation.
-		quoted[i] = `"` + strings.ReplaceAll(t, `"`, `""`) + `"`
+
+	for _, phrase := range parsed.phrases {
+		tokenized := TokenizeForContentIndex(phrase)
+		if tokenized == "" {
+			continue
+		}
+		parts = append(parts, quoteContentFTS5Phrase(tokenized))
 	}
-	return strings.Join(quoted, " ")
+
+	return strings.Join(parts, " ")
+}
+
+func quoteContentFTS5Phrase(tokenized string) string {
+	return `"` + strings.ReplaceAll(tokenized, `"`, `""`) + `"`
 }
 
 // fnv32aContent computes FNV-32a hash of text for content change detection.

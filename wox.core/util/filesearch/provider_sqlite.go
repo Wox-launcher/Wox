@@ -89,6 +89,29 @@ func (p *SQLiteSearchProvider) collectCandidateIDs(ctx context.Context, query Se
 	}
 
 	plan := query.plan
+	if len(plan.exactPhrases) > 0 {
+		exactIDs, err := p.collectExactPhraseCandidateIDs(ctx, plan, limit)
+		if err != nil {
+			return nil, err
+		}
+		if plan.raw == "" && query.wildcard == nil && !plan.extensionOnly {
+			return exactIDs, nil
+		}
+		baseIDs, err := p.collectUnquotedCandidateIDs(ctx, query, limit)
+		if err != nil {
+			return nil, err
+		}
+		return trimCandidateIDs(append(baseIDs, exactIDs...), limit), nil
+	}
+
+	return p.collectUnquotedCandidateIDs(ctx, query, limit)
+}
+
+func (p *SQLiteSearchProvider) collectUnquotedCandidateIDs(ctx context.Context, query SearchQuery, limit int) ([]int64, error) {
+	plan := query.plan
+	if plan == nil {
+		return nil, nil
+	}
 	if plan.extensionOnly {
 		return p.queryIDsByExtension(ctx, plan.extension, limit)
 	}
@@ -105,6 +128,41 @@ func (p *SQLiteSearchProvider) collectCandidateIDs(ctx context.Context, query Se
 	default:
 		return p.collectGeneralCandidateIDs(ctx, query, limit)
 	}
+}
+
+func (p *SQLiteSearchProvider) collectExactPhraseCandidateIDs(ctx context.Context, plan *queryPlan, limit int) ([]int64, error) {
+	if plan == nil || len(plan.exactPhrases) == 0 {
+		return nil, nil
+	}
+
+	ids := make([]int64, 0, limit)
+	for i := range plan.exactPhrases {
+		namePhrase := plan.exactNamePhrases[i]
+		if namePhrase != "" {
+			var nameIDs []int64
+			var err error
+			if utf8LenString(namePhrase) >= 3 {
+				nameIDs, err = p.queryFTSLiteralContainsIDs(ctx, "entries_name_fts", "normalized_name", namePhrase, limit)
+			} else {
+				nameIDs, err = p.queryNameFallbackIDs(ctx, namePhrase, limit)
+			}
+			if err != nil {
+				return nil, err
+			}
+			ids = append(ids, nameIDs...)
+		}
+
+		pathPhrase := plan.exactPathPhrases[i]
+		if pathPhrase != "" {
+			pathIDs, err := p.queryPathFallbackIDs(ctx, pathPhrase, limit)
+			if err != nil {
+				return nil, err
+			}
+			ids = append(ids, pathIDs...)
+		}
+	}
+
+	return trimCandidateIDs(ids, limit), nil
 }
 
 func (p *SQLiteSearchProvider) collectOneCharacterCandidateIDs(ctx context.Context, query SearchQuery, limit int) ([]int64, error) {
@@ -232,11 +290,11 @@ func (p *SQLiteSearchProvider) collectWildcardCandidateIDs(ctx context.Context, 
 
 	targetTable := "entries_name_fts"
 	targetColumn := "normalized_name"
-	literal := wildcardRecallLiteral(query.Raw, false)
+	literal := wildcardRecallLiteral(plan.raw, false)
 	if plan.pathLike {
 		targetTable = "entries_path_fts"
 		targetColumn = "normalized_path"
-		literal = wildcardRecallLiteral(query.Raw, true)
+		literal = wildcardRecallLiteral(plan.pathQuery, true)
 	}
 
 	if utf8LenString(literal) < 3 {

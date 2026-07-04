@@ -98,11 +98,24 @@ func (d *ContentSearchDB) probeFTS5(ctx context.Context) error {
 }
 
 func (d *ContentSearchDB) ensureTables(ctx context.Context) error {
+	if _, err := d.db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS meta (
+		key TEXT PRIMARY KEY,
+		value TEXT NOT NULL
+	)`); err != nil {
+		return fmt.Errorf("create content search meta table: %w", err)
+	}
+
+	resetSchema, err := d.contentSchemaNeedsReset(ctx)
+	if err != nil {
+		return err
+	}
+	if resetSchema {
+		if err := d.resetContentSchema(ctx); err != nil {
+			return err
+		}
+	}
+
 	statements := []string{
-		`CREATE TABLE IF NOT EXISTS meta (
-			key TEXT PRIMARY KEY,
-			value TEXT NOT NULL
-		)`,
 		`CREATE TABLE IF NOT EXISTS content_entries (
 			rowid INTEGER PRIMARY KEY AUTOINCREMENT,
 			path TEXT NOT NULL UNIQUE,
@@ -115,19 +128,52 @@ func (d *ContentSearchDB) ensureTables(ctx context.Context) error {
 		`CREATE INDEX IF NOT EXISTS idx_content_entries_path ON content_entries(path)`,
 		`CREATE INDEX IF NOT EXISTS idx_content_entries_extension ON content_entries(extension)`,
 		// contentless FTS5: content='' means FTS5 doesn't store or look up
-		// original text. detail='none' skips position/offset storage to keep the
-		// optional content DB compact.
+		// original text. detail='full' keeps token offsets so quoted phrase
+		// queries can be resolved by FTS5 without storing full file contents.
 		`CREATE VIRTUAL TABLE IF NOT EXISTS entries_content_fts USING fts5(
 			content,
 			content='',
 			tokenize='unicode61',
-			detail='none'
+			detail='full'
 		)`,
 	}
 	for _, stmt := range statements {
 		if _, err := d.db.ExecContext(ctx, stmt); err != nil {
 			return fmt.Errorf("create content search table: %w", err)
 		}
+	}
+	if _, err := d.db.ExecContext(ctx, `
+		INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)
+	`, contentIndexSchemaVersionKey, currentContentIndexSchemaVersion); err != nil {
+		return fmt.Errorf("store content search schema version: %w", err)
+	}
+	return nil
+}
+
+func (d *ContentSearchDB) contentSchemaNeedsReset(ctx context.Context) (bool, error) {
+	var version string
+	err := d.db.QueryRowContext(ctx, `SELECT value FROM meta WHERE key = ?`, contentIndexSchemaVersionKey).Scan(&version)
+	if err == sql.ErrNoRows {
+		return true, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("read content search schema version: %w", err)
+	}
+	return version != currentContentIndexSchemaVersion, nil
+}
+
+func (d *ContentSearchDB) resetContentSchema(ctx context.Context) error {
+	statements := []string{
+		`DROP TABLE IF EXISTS entries_content_fts`,
+		`DROP TABLE IF EXISTS content_entries`,
+	}
+	for _, stmt := range statements {
+		if _, err := d.db.ExecContext(ctx, stmt); err != nil {
+			return fmt.Errorf("reset content search schema: %w", err)
+		}
+	}
+	if _, err := d.db.ExecContext(ctx, `DELETE FROM meta WHERE key = ?`, contentCrawlStateKey); err != nil {
+		return fmt.Errorf("clear content crawl state after schema reset: %w", err)
 	}
 	return nil
 }
