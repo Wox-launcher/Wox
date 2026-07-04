@@ -2,6 +2,7 @@ package filesearch
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"sync"
@@ -55,12 +56,16 @@ type ContentIndexHook struct {
 	maxReadBytes int64
 	policy       *policyState
 
-	queue    chan ContentHookNotification
-	dedupe   map[string]ContentHookKind
-	dedupeMu sync.Mutex
-	stopCh   chan struct{}
-	stopped  sync.Once
-	wg       sync.WaitGroup
+	ctx         context.Context
+	cancel      context.CancelFunc
+	queue       chan ContentHookNotification
+	dedupe      map[string]ContentHookKind
+	dedupeMu    sync.Mutex
+	lifecycleMu sync.Mutex
+	closed      bool
+	stopCh      chan struct{}
+	stopped     sync.Once
+	wg          sync.WaitGroup
 }
 
 // NewContentIndexHook creates a running content hook. Call Close to stop the
@@ -68,18 +73,21 @@ type ContentIndexHook struct {
 // scanner does, so content indexing respects ignore rules and hidden-file
 // settings without re-implementing them.
 func NewContentIndexHook(contentDB *ContentSearchDB, nameDB *FileSearchDB, extensions map[string]bool, maxReadBytes int64, policy *policyState) *ContentIndexHook {
+	hookCtx, cancel := context.WithCancel(context.Background())
 	h := &ContentIndexHook{
 		contentDB:    contentDB,
 		nameDB:       nameDB,
 		extensions:   extensions,
 		maxReadBytes: maxReadBytes,
 		policy:       policy,
+		ctx:          hookCtx,
+		cancel:       cancel,
 		queue:        make(chan ContentHookNotification, 1024),
 		dedupe:       make(map[string]ContentHookKind, 256),
 		stopCh:       make(chan struct{}),
 	}
 	h.wg.Add(1)
-	util.Go(context.Background(), "content index hook worker", h.worker)
+	util.Go(hookCtx, "content index hook worker", h.worker)
 	return h
 }
 
@@ -90,6 +98,11 @@ func NewContentIndexHook(contentDB *ContentSearchDB, nameDB *FileSearchDB, exten
 func (h *ContentIndexHook) Notify(ctx context.Context, notification ContentHookNotification) {
 	if h == nil {
 		return
+	}
+	select {
+	case <-h.done():
+		return
+	default:
 	}
 
 	// Dedupe by path. For the same path, a delete cancels a pending upsert and
@@ -108,6 +121,10 @@ func (h *ContentIndexHook) Notify(ctx context.Context, notification ContentHookN
 	}
 
 	select {
+	case <-h.done():
+		return
+	case <-h.stopCh:
+		return
 	case h.queue <- notification:
 	default:
 		// Queue full — drop the notification. The periodic full crawl will
@@ -122,7 +139,13 @@ func (h *ContentIndexHook) Close() {
 		return
 	}
 	h.stopped.Do(func() {
+		h.lifecycleMu.Lock()
+		h.closed = true
+		if h.cancel != nil {
+			h.cancel()
+		}
 		close(h.stopCh)
+		h.lifecycleMu.Unlock()
 	})
 	h.wg.Wait()
 }
@@ -131,6 +154,8 @@ func (h *ContentIndexHook) worker() {
 	defer h.wg.Done()
 	for {
 		select {
+		case <-h.done():
+			return
 		case <-h.stopCh:
 			return
 		case notification := <-h.queue:
@@ -140,7 +165,10 @@ func (h *ContentIndexHook) worker() {
 }
 
 func (h *ContentIndexHook) process(notification ContentHookNotification) {
-	ctx := util.NewTraceContext()
+	ctx := h.hookContext()
+	if ctx.Err() != nil {
+		return
+	}
 
 	switch notification.Kind {
 	case ContentHookKindUpsert:
@@ -187,11 +215,8 @@ func (h *ContentIndexHook) processUpsert(ctx context.Context, path string) {
 		}
 	}
 
-	readBytes := h.maxReadBytes
-	if info.Size() < readBytes {
-		readBytes = info.Size()
-	}
-	text, err := readContentFile(path, readBytes)
+	readBytes := contentExtractionMaxBytes(path, info.Size(), h.maxReadBytes)
+	text, err := extractContentText(path, readBytes)
 	if err != nil {
 		return
 	}
@@ -214,13 +239,20 @@ func (h *ContentIndexHook) processScopeReplaced(ctx context.Context, rootID, sco
 	if h.contentDB == nil || h.nameDB == nil || scopePath == "" {
 		return
 	}
+	reconcileCtx := h.hookContext()
+	if reconcileCtx.Err() != nil {
+		return
+	}
 
 	// Reconcile in a background goroutine to avoid blocking the hook worker
 	// for large scopes. This is the only notification kind that spawns
 	// additional work, because scope replacements are relatively rare (full
 	// scans, dynamic root promotions) and can cover thousands of files.
-	util.Go(ctx, "content index scope reconcile", func() {
-		reconcileCtx := util.NewTraceContext()
+	if !h.startBackgroundWork() {
+		return
+	}
+	util.Go(reconcileCtx, "content index scope reconcile", func() {
+		defer h.wg.Done()
 		h.reconcileScope(reconcileCtx, rootID, scopePath)
 	})
 }
@@ -236,14 +268,26 @@ func (h *ContentIndexHook) reconcileScope(ctx context.Context, rootID, scopePath
 
 	contentPaths, err := h.contentDB.ListContentEntryPathsUnderScope(ctx, scopePath)
 	if err != nil {
+		if ctx.Err() != nil || errors.Is(err, context.Canceled) {
+			return
+		}
 		util.GetLogger().Warn(ctx, "content hook reconcile: failed to list content paths under "+scopePath+": "+err.Error())
+		return
+	}
+	if ctx.Err() != nil {
 		return
 	}
 
 	// Delete content entries for paths no longer in the name index.
 	for _, p := range contentPaths {
+		if ctx.Err() != nil {
+			return
+		}
 		exists, err := h.nameDB.EntryPathExists(ctx, p)
 		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
 			continue
 		}
 		if !exists {
@@ -291,4 +335,28 @@ func (h *ContentIndexHook) reconcileScope(ctx context.Context, rootID, scopePath
 		})
 		return nil
 	})
+}
+
+func (h *ContentIndexHook) done() <-chan struct{} {
+	if h == nil || h.ctx == nil {
+		return nil
+	}
+	return h.ctx.Done()
+}
+
+func (h *ContentIndexHook) hookContext() context.Context {
+	if h == nil || h.ctx == nil {
+		return context.Background()
+	}
+	return h.ctx
+}
+
+func (h *ContentIndexHook) startBackgroundWork() bool {
+	h.lifecycleMu.Lock()
+	defer h.lifecycleMu.Unlock()
+	if h.closed {
+		return false
+	}
+	h.wg.Add(1)
+	return true
 }

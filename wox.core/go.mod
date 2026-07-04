@@ -15,6 +15,7 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/gotk3/gotk3 v0.6.5-0.20240618185848-ff349ae13f56
 	github.com/jinzhu/copier v0.4.0
+	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
 	github.com/lxn/win v0.0.0-20210218163916-a377121e959e
 	github.com/mat/besticon v0.0.0-20231103204413-ee089084f347
 	github.com/mattn/go-sqlite3 v1.14.32
