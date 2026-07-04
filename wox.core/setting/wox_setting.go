@@ -33,6 +33,8 @@ type WoxSetting struct {
 	StartPage          *WoxSettingValue[StartPage]
 	ShowPosition       *WoxSettingValue[PositionType]
 	AIProviders        *WoxSettingValue[[]AIProvider]
+	AIMCPServers       *WoxSettingValue[[]common.AIChatMCPServerConfig]
+	AISkills           *WoxSettingValue[[]common.Skill]
 	EnableAutoBackup   *WoxSettingValue[bool]
 	EnableAutoUpdate   *WoxSettingValue[bool]
 	ReleaseChannel     *WoxSettingValue[ReleaseChannel]
@@ -344,6 +346,8 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 		QueryShortcuts:                     NewWoxSettingValue(store, "QueryShortcuts", []QueryShortcut{}),
 		TrayQueries:                        NewWoxSettingValue(store, "TrayQueries", []TrayQuery{}),
 		AIProviders:                        NewWoxSettingValue(store, "AIProviders", []AIProvider{}),
+		AIMCPServers:                       NewWoxSettingValue(store, "AIMCPServers", []common.AIChatMCPServerConfig{}),
+		AISkills:                           NewWoxSettingValue(store, "AISkills", []common.Skill{}),
 		QueryHistories:                     NewWoxSettingValue(store, "QueryHistories", []QueryHistory{}),
 		QueryCompletionFeedbacks:           NewWoxSettingValue(store, "QueryCompletionFeedback", []QueryCompletionFeedback{}),
 		PinedResults:                       NewWoxSettingValue(store, "PinedResults", util.NewHashMap[ResultHash, bool]()),

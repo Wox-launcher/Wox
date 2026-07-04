@@ -69,6 +69,8 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
   // Store tool list to avoid repeated requests
   List<AIMCPTool> allMCPTools = [];
   bool isLoadingTools = true;
+  List<AISkill> allAISkills = [];
+  bool isLoadingSkills = true;
 
   bool _isTextEditingColumn(PluginSettingValueTableColumn column) {
     return column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeText ||
@@ -100,6 +102,9 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
     if (columns.any((column) => column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeAISelectMCPServerTools)) {
       _loadAllTools();
     }
+    if (columns.any((column) => column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeAISelectSkills)) {
+      _loadAllSkills();
+    }
 
     widget.row.forEach((key, value) {
       values[key] = value;
@@ -108,6 +113,9 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
     if (values.isEmpty) {
       for (var column in columns) {
         if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeTextList) {
+          values[column.key] = [];
+        } else if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeAISelectMCPServerTools ||
+            column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeAISelectSkills) {
           values[column.key] = [];
         } else if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeCheckbox) {
           values[column.key] = false;
@@ -404,6 +412,24 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
       if (mounted) {
         setState(() {
           isLoadingTools = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadAllSkills() async {
+    try {
+      final skills = await WoxApi.instance.findAISkills(const UuidV4().generate());
+      if (mounted) {
+        setState(() {
+          allAISkills = skills;
+          isLoadingSkills = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          isLoadingSkills = false;
         });
       }
     }
@@ -714,6 +740,59 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                             });
                           },
                           title: tool.name,
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        );
+      case PluginSettingValueType.pluginSettingValueTableColumnTypeAISelectSkills:
+        return Expanded(
+          child: Builder(
+            builder: (context) {
+              if (isLoadingSkills) {
+                return const Center(child: WoxLoadingIndicator(size: 16));
+              }
+
+              final selectedSkills = getValue(column.key) is List ? getValue(column.key) : [];
+              final enabledSkills = allAISkills.where((skill) => skill.enabled).toList();
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("${selectedSkills.length} skills selected", style: TextStyle(color: getThemeTextColor())),
+                  const SizedBox(height: 8),
+                  Container(
+                    height: 200,
+                    width: double.infinity,
+                    decoration: BoxDecoration(border: Border.all(color: getThemeSubTextColor()), borderRadius: BorderRadius.circular(4)),
+                    child: ListView.builder(
+                      itemCount: enabledSkills.length,
+                      itemBuilder: (context, index) {
+                        final skill = enabledSkills[index];
+                        final isSelected = selectedSkills.contains(skill.id);
+                        final sourceName = skill.sourceName.isEmpty ? skill.source : skill.sourceName;
+                        final title = sourceName.isEmpty ? skill.name : "${skill.name} - $sourceName";
+
+                        return WoxCheckboxTile(
+                          value: isSelected,
+                          onChanged: (value) {
+                            setState(() {
+                              if (value) {
+                                if (!selectedSkills.contains(skill.id)) {
+                                  selectedSkills.add(skill.id);
+                                }
+                              } else {
+                                selectedSkills.remove(skill.id);
+                              }
+                              updateValue(column.key, selectedSkills);
+                              setFieldValidationError(column.key, validateValue(selectedSkills, column));
+                            });
+                          },
+                          title: title,
                         );
                       },
                     ),

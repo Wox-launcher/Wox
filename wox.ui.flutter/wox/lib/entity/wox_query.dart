@@ -541,7 +541,6 @@ class ShowAppParams {
   late List<QueryHistory> queryHistories;
   late String launchMode;
   late String startPage;
-  late bool isQueryFocus;
   late bool hideQueryBox;
   late bool hideToolbar;
   late bool queryBoxAtBottom;
@@ -558,7 +557,6 @@ class ShowAppParams {
     required this.queryHistories,
     required this.launchMode,
     required this.startPage,
-    this.isQueryFocus = false,
     this.hideQueryBox = false,
     this.hideToolbar = false,
     this.queryBoxAtBottom = false,
@@ -585,7 +583,6 @@ class ShowAppParams {
     }
     launchMode = json['LaunchMode'] ?? 'continue';
     startPage = json['StartPage'] ?? 'mru';
-    isQueryFocus = json['IsQueryFocus'] ?? false;
     hideQueryBox = json['HideQueryBox'] ?? false;
     hideToolbar = json['HideToolbar'] ?? false;
     queryBoxAtBottom = json['QueryBoxAtBottom'] ?? false;
@@ -734,8 +731,9 @@ class QueryLayout {
   late double? resultPreviewWidthRatio;
   late bool isGridLayout;
   late GridLayoutParams gridLayoutParams;
+  late bool chatMode;
 
-  QueryLayout({required this.icon, required this.resultPreviewWidthRatio, required this.isGridLayout, required this.gridLayoutParams});
+  QueryLayout({required this.icon, required this.resultPreviewWidthRatio, required this.isGridLayout, required this.gridLayoutParams, this.chatMode = false});
 
   QueryLayout.fromJson(Map<String, dynamic> json) {
     final iconJson = json['Icon'];
@@ -760,6 +758,8 @@ class QueryLayout {
     } else {
       gridLayoutParams = GridLayoutParams.empty();
     }
+
+    chatMode = json['ChatMode'] == true;
   }
 
   QueryLayout.empty() {
@@ -767,10 +767,11 @@ class QueryLayout {
     resultPreviewWidthRatio = null;
     isGridLayout = false;
     gridLayoutParams = GridLayoutParams.empty();
+    chatMode = false;
   }
 
   bool get isEmpty {
-    return icon.imageData.isEmpty && resultPreviewWidthRatio == null && !isGridLayout;
+    return icon.imageData.isEmpty && resultPreviewWidthRatio == null && !isGridLayout && !chatMode;
   }
 }
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -18,7 +20,9 @@ import 'package:wox/utils/wox_theme_util.dart';
 
 class WoxAIChatController extends GetxController {
   final Rx<WoxAIChatData> aiChatData = WoxAIChatData.empty().obs;
+  final RxList<WoxAIChatData> chats = <WoxAIChatData>[].obs;
   late final WoxListController<ChatSelectItem> chatSelectListController;
+  String _loadedPreviewPayload = "";
 
   String tr(String key) {
     return Get.find<WoxSettingController>().tr(key);
@@ -36,19 +40,18 @@ class WoxAIChatController extends GetxController {
 
   // Controllers and focus nodes
   final TextEditingController textController = TextEditingController();
+  final TextEditingController aiQuestionAnswerController = TextEditingController();
   final WoxLauncherController launcherController = Get.find<WoxLauncherController>();
   final FocusNode aiChatFocusNode = FocusNode();
+  final FocusNode aiQuestionPanelFocusNode = FocusNode();
+  final FocusNode aiQuestionAnswerFocusNode = FocusNode();
   final ScrollController aiChatScrollController = ScrollController();
   final RxList<AIModel> aiModels = <AIModel>[].obs;
+  final Rxn<AIQuestion> pendingAIQuestion = Rxn<AIQuestion>();
 
   // State for chat select panel
   final RxBool isShowChatSelectPanel = false.obs;
-  final RxString currentChatSelectCategory = "".obs; // models, tools or empty
-
-  // State for tool usage
-  final RxSet<String> selectedTools = <String>{}.obs;
-  final RxList<AIMCPTool> availableTools = <AIMCPTool>[].obs;
-  final RxBool isLoadingTools = false.obs;
+  final RxString currentChatSelectCategory = "".obs; // models, agents or empty
 
   // State for agents
   final RxList<AIAgent> availableAgents = <AIAgent>[].obs;
@@ -80,17 +83,100 @@ class WoxAIChatController extends GetxController {
     );
   }
 
+  // Loads the preview bootstrap payload once per query result. Runtime chat
+  // updates arrive through SendChatResponse and must not be overwritten by
+  // repeated preview rebuilds using the original payload.
+  void loadPreviewData(String payload, WoxAIChatPreviewData data) {
+    if (_loadedPreviewPayload == payload && aiChatData.value.id.isNotEmpty) {
+      return;
+    }
+
+    _loadedPreviewPayload = payload;
+    chats.assignAll(data.chats.map((chat) => chat.clone()));
+    _sortChats();
+    aiChatData.value = data.activeChat.clone();
+    toolCallExpandedStates.clear();
+  }
+
+  WoxAIChatData _createDraftChat() {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final currentModel = aiChatData.value.model.value;
+    final model = currentModel.name.isEmpty ? AIModel.empty() : AIModel(name: currentModel.name, provider: currentModel.provider, providerAlias: currentModel.providerAlias);
+    return WoxAIChatData(id: const UuidV4().generate(), title: "", conversations: RxList<WoxAIChatConversation>.from([]), model: model.obs, createdAt: now, updatedAt: now);
+  }
+
+  void startNewChat() {
+    aiChatData.value = _createDraftChat();
+    toolCallExpandedStates.clear();
+    if (aiChatData.value.model.value.name.isEmpty) {
+      _setDefaultModel(const UuidV4().generate());
+    }
+    focusChatInput(const UuidV4().generate());
+  }
+
+  void selectChat(WoxAIChatData chat) {
+    aiChatData.value = chat.clone();
+    toolCallExpandedStates.clear();
+    textController.clear();
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      scrollToBottomOfAiChat();
+    });
+    focusChatInput(const UuidV4().generate());
+  }
+
+  // Delete the chat through the preview-owned chat channel and update the local sidebar.
+  Future<void> deleteChat(WoxAIChatData chat) async {
+    final traceId = const UuidV4().generate();
+    try {
+      await WoxApi.instance.deleteAIChat(traceId, chat.id);
+      chats.removeWhere((item) => item.id == chat.id);
+      if (aiChatData.value.id == chat.id) {
+        startNewChat();
+      }
+    } catch (error, stackTrace) {
+      Logger.instance.error(traceId, "AI: failed to delete chat: $error $stackTrace");
+      launcherController.showToolbarMsg(traceId, ToolbarMsg(text: error.toString(), displaySeconds: 3));
+    }
+  }
+
+  // Ask the backend to refresh the title; the final title arrives via SendChatResponse.
+  Future<void> summarizeChat(WoxAIChatData chat) async {
+    final traceId = const UuidV4().generate();
+    try {
+      await WoxApi.instance.summarizeAIChat(traceId, chat.id);
+    } catch (error, stackTrace) {
+      Logger.instance.error(traceId, "AI: failed to summarize chat: $error $stackTrace");
+      launcherController.showToolbarMsg(traceId, ToolbarMsg(text: error.toString(), displaySeconds: 3));
+    }
+  }
+
+  void _upsertChat(WoxAIChatData data) {
+    if (data.conversations.isEmpty) {
+      return;
+    }
+
+    final snapshot = data.clone();
+    final index = chats.indexWhere((chat) => chat.id == snapshot.id);
+    if (index >= 0) {
+      chats[index] = snapshot;
+    } else {
+      chats.add(snapshot);
+    }
+    _sortChats();
+  }
+
+  void _sortChats() {
+    chats.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  }
+
   void reloadChatResources(String traceId, {String resourceName = "all"}) {
     Logger.instance.debug(traceId, "start reloading AI chat resources");
     if (resourceName == "models") {
       reloadAIModels(traceId);
-    } else if (resourceName == "tools") {
-      fetchAvailableTools(traceId);
     } else if (resourceName == "agents") {
       fetchAvailableAgents(traceId);
     } else if (resourceName == "all") {
       reloadAIModels(traceId);
-      fetchAvailableTools(traceId);
       fetchAvailableAgents(traceId);
     }
   }
@@ -123,13 +209,6 @@ class WoxAIChatController extends GetxController {
       return;
     }
     reloadAIModels(traceId);
-  }
-
-  void ensureToolsLoaded(String traceId) {
-    if (availableTools.isNotEmpty || isLoadingTools.value) {
-      return;
-    }
-    fetchAvailableTools(traceId);
   }
 
   void ensureAgentsLoaded(String traceId) {
@@ -191,29 +270,6 @@ class WoxAIChatController extends GetxController {
             children: [],
             onExecute: (String traceId) {
               currentChatSelectCategory.value = "models";
-              chatSelectListController.clearFilter(traceId);
-              updateChatSelectItems();
-            },
-          ),
-        ),
-      );
-
-      items.add(
-        WoxListItem<ChatSelectItem>(
-          id: "tools",
-          icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🔧"),
-          title: tr("ui_ai_chat_configure_tools"),
-          subTitle: "",
-          tails: [],
-          isGroup: false,
-          data: ChatSelectItem(
-            id: "tools",
-            name: tr("ui_ai_chat_configure_tools"),
-            icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🔧"),
-            isCategory: true,
-            children: [],
-            onExecute: (String traceId) {
-              currentChatSelectCategory.value = "tools";
               chatSelectListController.clearFilter(traceId);
               updateChatSelectItems();
             },
@@ -290,39 +346,6 @@ class WoxAIChatController extends GetxController {
             ),
           );
         }
-      }
-    } else if (currentChatSelectCategory.value == "tools") {
-      // Show tools
-      for (final tool in availableTools) {
-        // Check if this tool is selected to determine if we should show the checkmark
-        final bool isSelected = selectedTools.contains(tool.name);
-
-        items.add(
-          WoxListItem<ChatSelectItem>(
-            id: tool.name,
-            icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🔧"),
-            title: tool.name,
-            subTitle: "",
-            tails: isSelected ? [WoxListItemTail.image(WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "✅"))] : [],
-            isGroup: false,
-            data: ChatSelectItem(
-              id: tool.name,
-              name: tool.name,
-              icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🔧"),
-              isCategory: false,
-              children: [],
-              onExecute: (String traceId) {
-                if (selectedTools.contains(tool.name)) {
-                  selectedTools.remove(tool.name);
-                } else {
-                  selectedTools.add(tool.name);
-                }
-                // Update the items to reflect the change in selection status
-                updateChatSelectItems();
-              },
-            ),
-          ),
-        );
       }
     } else if (currentChatSelectCategory.value == "agents") {
       // Add "Cancel Selection" option at the top
@@ -402,14 +425,6 @@ class WoxAIChatController extends GetxController {
     updateChatSelectItems();
   }
 
-  // Show tools panel directly
-  void showToolsPanel() {
-    ensureToolsLoaded(const UuidV4().generate());
-    showChatSelectPanel();
-    currentChatSelectCategory.value = "tools";
-    updateChatSelectItems();
-  }
-
   // Show agents panel directly
   void showAgentsPanel() {
     ensureAgentsLoaded(const UuidV4().generate());
@@ -422,7 +437,7 @@ class WoxAIChatController extends GetxController {
   void hideChatSelectPanel() {
     isShowChatSelectPanel.value = false;
     chatSelectListController.clearFilter(const UuidV4().generate());
-    focusToChatInput(const UuidV4().generate());
+    focusChatInput(const UuidV4().generate());
   }
 
   // Scroll to bottom of AI chat
@@ -432,38 +447,12 @@ class WoxAIChatController extends GetxController {
     }
   }
 
-  // Focus to chat input
-  void focusToChatInput(String traceId) {
+  // Focus the chat input field after the chat preview is visible.
+  void focusChatInput(String traceId) {
     Logger.instance.info(traceId, "focus to chat input");
     SchedulerBinding.instance.addPostFrameCallback((_) {
       aiChatFocusNode.requestFocus();
     });
-  }
-
-  // Method to fetch available tools based on the current model
-  Future<void> fetchAvailableTools(String traceId) async {
-    Logger.instance.info(traceId, "start fetching AI tools");
-
-    if (isLoadingTools.value) return;
-    isLoadingTools.value = true;
-
-    try {
-      final tools = await WoxApi.instance.findAIMCPServerToolsAll(traceId);
-      availableTools.assignAll(tools);
-      // Default select all tools
-      selectedTools.assignAll(tools.map((tool) => tool.name).toSet());
-
-      Logger.instance.debug(traceId, "AI: loaded ${tools.length} tools");
-      if (isShowChatSelectPanel.value && currentChatSelectCategory.value == "tools") {
-        updateChatSelectItems();
-      }
-    } catch (e, s) {
-      Logger.instance.error(traceId, 'Error fetching AI tools: $e $s');
-      availableTools.clear();
-      selectedTools.clear();
-    } finally {
-      isLoadingTools.value = false;
-    }
   }
 
   // Method to fetch available agents
@@ -505,9 +494,8 @@ class WoxAIChatController extends GetxController {
       bool agentFound = false;
       for (var agent in availableAgents) {
         if (agent.name == agentName) {
-          Logger.instance.debug(const UuidV4().generate(), "AI: Found agent: ${agent.name}, setting model to ${agent.model.name} and tools to ${agent.tools.length} tools");
+          Logger.instance.debug(const UuidV4().generate(), "AI: Found agent: ${agent.name}, setting model to ${agent.model.name}");
           aiChatData.value.model.value = agent.model;
-          aiChatData.value.tools = agent.tools;
           agentFound = true;
           break;
         }
@@ -516,14 +504,9 @@ class WoxAIChatController extends GetxController {
         Logger.instance.error(const UuidV4().generate(), "AI: Agent with name $agentName not found in available agents");
       }
     } else {
-      Logger.instance.debug(const UuidV4().generate(), "AI: No agent selected (empty agentName), setting default model and all tools");
+      Logger.instance.debug(const UuidV4().generate(), "AI: No agent selected (empty agentName), setting default model");
 
       _setDefaultModel(const UuidV4().generate());
-
-      // Select all available tools
-      selectedTools.clear();
-      selectedTools.addAll(availableTools.map((tool) => tool.name).toSet());
-      aiChatData.value.tools = selectedTools.toList();
     }
   }
 
@@ -573,14 +556,13 @@ class WoxAIChatController extends GetxController {
       ),
     );
     aiChatData.value.updatedAt = DateTime.now().millisecondsSinceEpoch;
+    _upsertChat(aiChatData.value);
 
     textController.clear();
 
     SchedulerBinding.instance.addPostFrameCallback((_) {
       scrollToBottomOfAiChat();
     });
-
-    aiChatData.value.tools = selectedTools.toList();
 
     WoxApi.instance.sendChatRequest(const UuidV4().generate(), aiChatData.value);
   }
@@ -591,8 +573,12 @@ class WoxAIChatController extends GetxController {
   }
 
   void handleChatResponse(String traceId, WoxAIChatData data) {
+    _upsertChat(data);
+
     // Update the chat data with the response
     if (data.id == aiChatData.value.id) {
+      final shouldStickToBottom = !aiChatScrollController.hasClients || aiChatScrollController.position.maxScrollExtent - aiChatScrollController.position.pixels <= 64;
+
       aiChatData.value.title = data.title;
       aiChatData.value.conversations.assignAll(data.conversations);
       aiChatData.value.updatedAt = data.updatedAt;
@@ -601,14 +587,73 @@ class WoxAIChatController extends GetxController {
         aiChatData.value.agentName = data.agentName;
       }
 
-      // if the scrollbar is already at the bottom, scroll to bottom, otherwise, do nothing
-      if (aiChatScrollController.hasClients && aiChatScrollController.position.pixels == aiChatScrollController.position.maxScrollExtent) {
+      // Keep streaming pinned to the bottom while the user is already reading
+      // the latest message, but preserve manual scrollback once they move away.
+      if (shouldStickToBottom) {
         // Scroll to bottom after a short delay to ensure the new message is rendered
         SchedulerBinding.instance.addPostFrameCallback((_) {
           scrollToBottomOfAiChat();
         });
       }
     }
+  }
+
+  // Handles ask_user inside the chat preview surface; the launcher only routes the websocket event here.
+  void handleAIQuestionRequest(String traceId, dynamic data) {
+    String questionId = "";
+    try {
+      final rawQuestion = data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
+      final question = AIQuestion.fromJson(rawQuestion);
+      questionId = question.questionId;
+      if (questionId.isEmpty) {
+        Logger.instance.warn(traceId, "AIQuestion request missing questionId");
+        return;
+      }
+
+      final currentQuestion = pendingAIQuestion.value;
+      if (currentQuestion != null && currentQuestion.questionId != question.questionId) {
+        unawaited(WoxApi.instance.answerAIQuestion(traceId, currentQuestion.questionId, "User cancelled"));
+      }
+
+      aiQuestionAnswerController.clear();
+      pendingAIQuestion.value = question;
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (!isClosed && pendingAIQuestion.value?.questionId == question.questionId) {
+          if (question.options.isEmpty) {
+            aiQuestionAnswerFocusNode.requestFocus();
+          } else {
+            aiQuestionPanelFocusNode.requestFocus();
+          }
+        }
+      });
+    } catch (e, s) {
+      Logger.instance.error(traceId, "AIQuestion request failed: $e $s");
+      if (questionId.isNotEmpty) {
+        unawaited(WoxApi.instance.answerAIQuestion(traceId, questionId, "Failed to show question UI: $e"));
+      }
+    }
+  }
+
+  void submitPendingAIQuestionAnswer() {
+    final answer = aiQuestionAnswerController.text.trim();
+    answerPendingAIQuestion(answer.isEmpty ? "User cancelled" : answer);
+  }
+
+  void cancelPendingAIQuestion() {
+    answerPendingAIQuestion("User cancelled");
+  }
+
+  // Resolves the current ask_user request through the chat HTTP channel.
+  void answerPendingAIQuestion(String answer) {
+    final question = pendingAIQuestion.value;
+    if (question == null) {
+      return;
+    }
+
+    pendingAIQuestion.value = null;
+    aiQuestionAnswerController.clear();
+    unawaited(WoxApi.instance.answerAIQuestion(const UuidV4().generate(), question.questionId, answer));
+    focusChatInput(const UuidV4().generate());
   }
 
   // Copy message content to clipboard
@@ -646,8 +691,6 @@ class WoxAIChatController extends GetxController {
       aiChatData.value.conversations.removeRange(userMessageIndex + 1, aiChatData.value.conversations.length);
     }
 
-    // Send the chat request to regenerate the response
-    aiChatData.value.tools = selectedTools.toList();
     WoxApi.instance.sendChatRequest(const UuidV4().generate(), aiChatData.value);
   }
 
@@ -671,23 +714,23 @@ class WoxAIChatController extends GetxController {
       aiChatData.value.conversations.removeLast();
     }
 
-    focusToChatInput(const UuidV4().generate());
+    focusChatInput(const UuidV4().generate());
   }
 
   @override
   void onClose() {
     textController.dispose();
+    aiQuestionAnswerController.dispose();
     chatSelectListController.dispose();
     aiChatFocusNode.dispose();
+    aiQuestionPanelFocusNode.dispose();
+    aiQuestionAnswerFocusNode.dispose();
     aiChatScrollController.dispose();
     super.onClose();
   }
 
-  /// Drop reference lists (models, agents) so hidden window memory is released.
-  /// availableTools is intentionally kept because reloading it resets
-  /// selectedTools, which would silently change the user's tool selection.
-  /// Both lists are lazily reloaded via ensure*Loaded when the chat select
-  /// panel is opened again.
+  /// Drop reference lists so hidden window memory is released. Lists are lazily
+  /// reloaded when the chat select panel is opened again.
   void clearReferenceDataCache() {
     aiModels.clear();
     availableAgents.clear();

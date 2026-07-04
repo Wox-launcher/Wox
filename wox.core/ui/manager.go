@@ -84,8 +84,8 @@ type Manager struct {
 	isUIReadyHandled     bool
 	isSystemDark         bool
 	exitOnce             sync.Once
-	hyprlandToggleMu    sync.Mutex
-	hyprlandToggleLast  time.Time
+	hyprlandToggleMu     sync.Mutex
+	hyprlandToggleLast   time.Time
 
 	activeWindowSnapshot    common.ActiveWindowSnapshot // cached active window snapshot
 	activeWindowSnapshotMu  sync.RWMutex
@@ -564,18 +564,10 @@ func (m *Manager) triggerQueryHotkey(ctx context.Context, queryHotkey setting.Qu
 		return nil
 	}
 
-	isQueryFocus := false
-	if plugin.GetPluginManager().IsTriggerKeywordAIChat(ctx, q.TriggerKeyword) {
-		if plugin.GetPluginManager().GetAIChatPluginChater(ctx).IsAutoFocusToChatInputWhenOpenWithQueryHotkey(ctx) {
-			isQueryFocus = true
-		}
-	}
-
 	m.ui.ChangeQuery(queryCtx, plainQuery)
 
 	showContext := common.ShowContext{
 		SelectAll:      false,
-		IsQueryFocus:   isQueryFocus,
 		HideQueryBox:   queryHotkey.HideQueryBox,
 		HideToolbar:    queryHotkey.HideToolbar,
 		WindowWidth:    normalizedWindowWidth(queryHotkey.Width),
@@ -1589,6 +1581,16 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value strin
 		updater.CheckForUpdatesWithCallback(ctx, nil)
 	case "AIProviders":
 		plugin.GetPluginManager().GetUI().ReloadChatResources(ctx, "models")
+	case "AIMCPServers":
+		if chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx); chater != nil {
+			chater.ReloadMCPServers(ctx, true)
+		}
+	case "AISkills":
+		if chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx); chater != nil {
+			if err := chater.ReloadSkills(ctx); err != nil {
+				logger.Error(ctx, fmt.Sprintf("failed to reload AI skills: %s", err.Error()))
+			}
+		}
 	}
 }
 
@@ -1658,17 +1660,10 @@ func (m *Manager) executeTrayQuery(ctx context.Context, trayQuery setting.TrayQu
 	// Tray queries create and execute a plugin query in this call stack, so they
 	// need the fully-populated snapshot instead of the launcher fast path.
 	m.RefreshActiveWindowSnapshotBlocking(queryCtx)
-	q, _, err := plugin.GetPluginManager().NewQuery(queryCtx, plainQuery)
+	_, _, err := plugin.GetPluginManager().NewQuery(queryCtx, plainQuery)
 	if err != nil {
 		logger.Error(queryCtx, fmt.Sprintf("failed to create tray query: %s", err.Error()))
 		return
-	}
-
-	isQueryFocus := false
-	if plugin.GetPluginManager().IsTriggerKeywordAIChat(queryCtx, q.TriggerKeyword) {
-		if plugin.GetPluginManager().GetAIChatPluginChater(queryCtx).IsAutoFocusToChatInputWhenOpenWithQueryHotkey(queryCtx) {
-			isQueryFocus = true
-		}
 	}
 
 	windowWidth := m.getTrayQueryWindowWidth(queryCtx, trayQuery)
@@ -1693,7 +1688,6 @@ func (m *Manager) executeTrayQuery(ctx context.Context, trayQuery setting.TrayQu
 	m.ui.ChangeQuery(queryCtx, plainQuery)
 	m.ui.ShowApp(queryCtx, common.ShowContext{
 		SelectAll:        false,
-		IsQueryFocus:     isQueryFocus,
 		HideQueryBox:     trayQuery.HideQueryBox,
 		HideToolbar:      trayQuery.HideToolbar,
 		QueryBoxAtBottom: runtime.GOOS == "windows",

@@ -41,26 +41,73 @@ class AIMCPTool {
   }
 }
 
+class AIQuestionOption {
+  late String value;
+  late String title;
+  late String subTitle;
+  late bool recommended;
+  late Map<String, String> extra;
+
+  AIQuestionOption({required this.value, required this.title, required this.subTitle, required this.recommended, required this.extra});
+
+  AIQuestionOption.fromJson(Map<String, dynamic> json) {
+    value = json['Value'] ?? json['value'] ?? "";
+    title = json['Title'] ?? json['title'] ?? value;
+    subTitle = json['SubTitle'] ?? json['subTitle'] ?? json['Subtitle'] ?? json['subtitle'] ?? "";
+    recommended = json['Recommended'] ?? json['recommended'] ?? false;
+    final rawExtra = json['Extra'] ?? json['extra'];
+    extra = rawExtra is Map ? rawExtra.map((key, value) => MapEntry(key.toString(), value.toString())) : <String, String>{};
+    if (value.isEmpty) {
+      value = title;
+    }
+    if (title.isEmpty) {
+      title = value;
+    }
+  }
+}
+
+class AIQuestion {
+  late String questionId;
+  late String question;
+  late List<AIQuestionOption> options;
+
+  AIQuestion({required this.questionId, required this.question, required this.options});
+
+  AIQuestion.fromJson(Map<String, dynamic> json) {
+    questionId = json['QuestionId'] ?? json['questionId'] ?? "";
+    question = json['Question'] ?? json['question'] ?? "";
+    final rawOptions = json['Options'] ?? json['options'];
+    options =
+        rawOptions is List
+            ? rawOptions
+                .map((option) {
+                  if (option is String) {
+                    return AIQuestionOption(value: option, title: option, subTitle: "", recommended: false, extra: <String, String>{});
+                  }
+                  if (option is Map) {
+                    return AIQuestionOption.fromJson(Map<String, dynamic>.from(option));
+                  }
+                  return null;
+                })
+                .whereType<AIQuestionOption>()
+                .where((option) => option.title.isNotEmpty)
+                .toList()
+            : <AIQuestionOption>[];
+  }
+}
+
 class AIAgent {
   late String name;
   late String prompt;
   late AIModel model;
-  late List<String> tools;
   late WoxImage icon;
 
-  AIAgent({
-    required this.name,
-    required this.prompt,
-    required this.model,
-    required this.tools,
-    WoxImage? icon,
-  }) : icon = icon ?? WoxImage(imageType: "emoji", imageData: "🤖");
+  AIAgent({required this.name, required this.prompt, required this.model, WoxImage? icon}) : icon = icon ?? WoxImage(imageType: "emoji", imageData: "🤖");
 
   AIAgent.fromJson(Map<String, dynamic> json) {
     name = json['Name'] ?? "";
     prompt = json['Prompt'] ?? "";
     model = json['Model'] != null ? AIModel.fromJson(json['Model']) : AIModel(name: "", provider: "", providerAlias: "");
-    tools = json['Tools'] != null ? List<String>.from(json['Tools']) : [];
     icon = json['Icon'] != null ? WoxImage.fromJson(json['Icon']) : WoxImage(imageType: "emoji", imageData: "🤖");
   }
 
@@ -69,19 +116,12 @@ class AIAgent {
     data['Name'] = name;
     data['Prompt'] = prompt;
     data['Model'] = model.toJson();
-    data['Tools'] = tools;
     data['Icon'] = icon.toJson();
     return data;
   }
 
   static AIAgent empty() {
-    return AIAgent(
-      name: "",
-      prompt: "",
-      model: AIModel(name: "", provider: "", providerAlias: ""),
-      tools: [],
-      icon: WoxImage(imageType: "emoji", imageData: "🤖"),
-    );
+    return AIAgent(name: "", prompt: "", model: AIModel(name: "", provider: "", providerAlias: ""), icon: WoxImage(imageType: "emoji", imageData: "🤖"));
   }
 }
 
@@ -93,14 +133,7 @@ class ChatSelectItem {
   final List<ChatSelectItem> children;
   Function(String traceId)? onExecute;
 
-  ChatSelectItem({
-    required this.id,
-    required this.name,
-    required this.icon,
-    required this.isCategory,
-    required this.children,
-    this.onExecute,
-  });
+  ChatSelectItem({required this.id, required this.name, required this.icon, required this.isCategory, required this.children, this.onExecute});
 }
 
 // should be same as AIChatData in the ai chat plugin
@@ -111,19 +144,9 @@ class WoxAIChatData {
   late Rx<AIModel> model;
   late int createdAt;
   late int updatedAt;
-  List<String>? tools;
   String? agentName;
 
-  WoxAIChatData({
-    required this.id,
-    required this.title,
-    required this.conversations,
-    required this.model,
-    required this.createdAt,
-    required this.updatedAt,
-    this.tools,
-    this.agentName,
-  });
+  WoxAIChatData({required this.id, required this.title, required this.conversations, required this.model, required this.createdAt, required this.updatedAt, this.agentName});
 
   static WoxAIChatData fromJson(Map<String, dynamic> json) {
     List<WoxAIChatConversation> conversations = [];
@@ -154,17 +177,16 @@ class WoxAIChatData {
       'UpdatedAt': updatedAt,
     };
 
-    // Add selected tools to JSON if available
-    if (tools != null && tools!.isNotEmpty) {
-      json['Tools'] = tools;
-    }
-
     // Add agent name if available
     if (agentName != null && agentName!.isNotEmpty) {
       json['AgentName'] = agentName;
     }
 
     return json;
+  }
+
+  WoxAIChatData clone() {
+    return WoxAIChatData.fromJson(toJson());
   }
 
   static WoxAIChatData empty() {
@@ -175,9 +197,21 @@ class WoxAIChatData {
       model: AIModel(name: "", provider: "", providerAlias: "").obs,
       createdAt: 0,
       updatedAt: 0,
-      tools: null,
       agentName: null,
     );
+  }
+}
+
+class WoxAIChatPreviewData {
+  late WoxAIChatData activeChat;
+  late List<WoxAIChatData> chats;
+
+  WoxAIChatPreviewData({required this.activeChat, required this.chats});
+
+  WoxAIChatPreviewData.fromJson(Map<String, dynamic> json) {
+    activeChat = json['ActiveChat'] != null ? WoxAIChatData.fromJson(json['ActiveChat']) : WoxAIChatData.empty();
+    final rawChats = json['Chats'];
+    chats = rawChats is List ? rawChats.whereType<Map<String, dynamic>>().map(WoxAIChatData.fromJson).toList() : <WoxAIChatData>[];
   }
 }
 
@@ -193,10 +227,7 @@ enum ToolCallStatus {
 
   static ToolCallStatus fromString(String? value) {
     if (value == null) return ToolCallStatus.pending;
-    return ToolCallStatus.values.firstWhere(
-      (e) => e.value == value,
-      orElse: () => ToolCallStatus.pending,
-    );
+    return ToolCallStatus.values.firstWhere((e) => e.value == value, orElse: () => ToolCallStatus.pending);
   }
 }
 
@@ -214,9 +245,10 @@ class ToolCallInfo {
 
   bool isExpanded = false;
 
-  int get duration => (status == ToolCallStatus.streaming || status == ToolCallStatus.pending || status == ToolCallStatus.running)
-      ? DateTime.now().millisecondsSinceEpoch - startTimestamp
-      : endTimestamp - startTimestamp;
+  int get duration =>
+      (status == ToolCallStatus.streaming || status == ToolCallStatus.pending || status == ToolCallStatus.running)
+          ? DateTime.now().millisecondsSinceEpoch - startTimestamp
+          : endTimestamp - startTimestamp;
 
   ToolCallInfo({
     required this.id,
@@ -254,16 +286,7 @@ class ToolCallInfo {
   }
 
   static ToolCallInfo empty() {
-    return ToolCallInfo(
-      id: "",
-      name: "",
-      arguments: {},
-      response: "",
-      delta: "",
-      status: ToolCallStatus.pending,
-      startTimestamp: 0,
-      endTimestamp: 0,
-    );
+    return ToolCallInfo(id: "", name: "", arguments: {}, response: "", delta: "", status: ToolCallStatus.pending, startTimestamp: 0, endTimestamp: 0);
   }
 }
 

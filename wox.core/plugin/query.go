@@ -161,6 +161,8 @@ type QueryLayout struct {
 	Icon                    *common.WoxImage                 `json:"Icon,omitempty"`
 	ResultPreviewWidthRatio *float64                         `json:"ResultPreviewWidthRatio,omitempty"`
 	GridLayout              *MetadataFeatureParamsGridLayout `json:"GridLayout,omitempty"`
+	// ChatMode is an internal UI hint used by the built-in chat plugin.
+	ChatMode bool `json:"ChatMode,omitempty"`
 }
 
 // QueryContext carries the backend's canonical classification for a query.

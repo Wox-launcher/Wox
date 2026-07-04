@@ -240,10 +240,6 @@ func (u *uiImpl) IsInManagementView() bool {
 	return u.isInSettingView || u.isInOnboardingView
 }
 
-func (u *uiImpl) FocusToChatInput(ctx context.Context) {
-	u.invokeWebsocketMethod(ctx, "FocusToChatInput", nil)
-}
-
 func (u *uiImpl) GetActiveWindowSnapshot(ctx context.Context) common.ActiveWindowSnapshot {
 	return GetUIManager().GetActiveWindowSnapshot(ctx)
 }
@@ -254,6 +250,16 @@ func (u *uiImpl) SendChatResponse(ctx context.Context, aiChatData common.AIChatD
 
 func (u *uiImpl) ReloadChatResources(ctx context.Context, resouceName string) {
 	u.invokeWebsocketMethod(ctx, "ReloadChatResources", resouceName)
+}
+
+// SendAIQuestion pushes a question to the UI. The answer comes back via the
+// /ai/question/answer HTTP route, which resolves the pending ask_user channel.
+func (u *uiImpl) SendAIQuestion(ctx context.Context, questionId string, question string, options []common.AIQuestionOption) {
+	u.invokeWebsocketMethod(ctx, "AIQuestion", map[string]any{
+		"QuestionId": questionId,
+		"Question":   question,
+		"Options":    options,
+	})
 }
 
 func (u *uiImpl) ReloadSettingPlugins(ctx context.Context) {
@@ -429,6 +435,10 @@ func getWebsocketMethodTimeout(method string) time.Duration {
 		return 180 * time.Second
 	case "WriteClipboardImageFile":
 		return 10 * time.Second
+	case "AIQuestion":
+		// The ask_user tool blocks on user input with no fixed bound; rely on
+		// the loop-level context cancellation to terminate a stale question.
+		return 30 * time.Minute
 	default:
 		return 2 * time.Second
 	}
@@ -492,7 +502,6 @@ func getShowAppParams(ctx context.Context, showContext common.ShowContext) map[s
 
 	params := map[string]any{
 		"SelectAll":            showContext.SelectAll,
-		"IsQueryFocus":         showContext.IsQueryFocus,
 		"HideQueryBox":         showContext.HideQueryBox,
 		"HideToolbar":          hideToolbar,
 		"QueryBoxAtBottom":     showContext.QueryBoxAtBottom,

@@ -54,6 +54,7 @@ class EntityFactory {
     'List<AIMCPTool>': (json) => _createList<AIMCPTool>(json, (e) => AIMCPTool.fromJson(e)),
     'List<AIProviderInfo>': (json) => _createList<AIProviderInfo>(json, (e) => AIProviderInfo.fromJson(e)),
     'List<AIAgent>': (json) => _createList<AIAgent>(json, (e) => AIAgent.fromJson(e)),
+    'List<AISkill>': (json) => _createList<AISkill>(json, (e) => AISkill.fromJson(e)),
     'List<AICommandTemplate>': (json) => _createList<AICommandTemplate>(json, (e) => AICommandTemplate.fromJson(e)),
     'List<DoctorCheckResult>': (json) => _createList<DoctorCheckResult>(json, (e) => DoctorCheckResult.fromJson(e)),
     'List<WoxRuntimeStatus>': (json) => _createList<WoxRuntimeStatus>(json, (e) => WoxRuntimeStatus.fromJson(e)),

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/tmc/langchaingo/jsonschema"
 )
@@ -147,8 +148,8 @@ type AIAgent struct {
 	Name   string
 	Prompt string
 	Model  Model
-	Tools  []string
 	Icon   WoxImage
+	Skills []string // Skill Ids this agent can reference during chat
 }
 
 type AIChatData struct {
@@ -156,26 +157,41 @@ type AIChatData struct {
 	Title         string
 	Conversations []Conversation
 	Model         Model
-	Tools         []string
 	AgentName     string
 
 	CreatedAt int64
 	UpdatedAt int64
 }
 
+// AIChatPreviewData bootstraps the chat preview app with an active draft and the saved chat list.
+type AIChatPreviewData struct {
+	ActiveChat AIChatData
+	Chats      []AIChatData
+}
+
 type AIChater interface {
 	Chat(ctx context.Context, aiChatData AIChatData, chatLoopCount int)
+	DeleteChat(ctx context.Context, chatId string) bool
+	SummarizeChat(ctx context.Context, chatId string) bool
 	GetAllTools(ctx context.Context) []MCPTool
 	GetAllAgents(ctx context.Context) []AIAgent
+	GetAllSkills(ctx context.Context) []Skill
+	ReloadMCPServers(ctx context.Context, notifyUI bool)
+	ReloadSkills(ctx context.Context) error
 	GetDefaultModel(ctx context.Context) Model
-	IsAutoFocusToChatInputWhenOpenWithQueryHotkey(ctx context.Context) bool
 }
 
 var EmptyChatOptions = ChatOptions{}
 
 type ChatOptions struct {
-	Tools        []MCPTool
-	ThinkingMode ChatThinkingMode
+	Tools         []Tool
+	ThinkingMode  ChatThinkingMode
+	LoopPolicy    LoopPolicy
+	ContextPolicy ContextPolicy
+	// OnSummarize, when set, is invoked at the top of each loop iteration to
+	// optionally summarize old conversations. Returns the (possibly shortened)
+	// conversation list.
+	OnSummarize func(ctx context.Context, conversations []Conversation, policy ContextPolicy) []Conversation
 }
 
 type MCPTool struct {
@@ -189,6 +205,102 @@ type MCPTool struct {
 
 func (t *MCPTool) Key() string {
 	return fmt.Sprintf("%s:%s", t.ServerConfig.Name, t.Name)
+}
+
+// ToolSource identifies where a tool was registered.
+type ToolSource string
+
+const (
+	ToolSourceMCP     ToolSource = "mcp"
+	ToolSourceBuiltin ToolSource = "builtin"
+)
+
+// Tool is the unified representation that the AI consumes for any callable tool.
+// MCPTool is kept for backward compatibility; MCP tools are wrapped into Tool
+// at the registry layer. Builtin tools use this type directly.
+type Tool struct {
+	Name         string
+	Description  string
+	Parameters   jsonschema.Definition
+	Callback     func(ctx context.Context, args map[string]any) (ToolResult, error)
+	Source       ToolSource
+	ServerConfig *AIChatMCPServerConfig // nil for builtin tools
+}
+
+// ToolResult replaces the legacy (Conversation, error) tool callback return.
+// Tools return plain text (and optional images); callers wrap this into a
+// Conversation when needed.
+type ToolResult struct {
+	Text   string
+	Images []WoxImage
+}
+
+// AIQuestionOption describes one selectable answer for the ask_user tool.
+// Value is returned to the model; Title/SubTitle are UI presentation hints.
+type AIQuestionOption struct {
+	Value       string
+	Title       string
+	SubTitle    string
+	Recommended bool
+	Extra       map[string]string
+}
+
+// ToTool bridges an MCPTool into the unified Tool type. The MCP callback's
+// Conversation result is unwrapped into ToolResult so callers can use a single
+// callback shape regardless of tool source.
+func (m *MCPTool) ToTool() Tool {
+	return Tool{
+		Name:        m.Name,
+		Description: m.Description,
+		Parameters:  m.Parameters,
+		Callback: func(ctx context.Context, args map[string]any) (ToolResult, error) {
+			conv, err := m.Callback(ctx, args)
+			if err != nil {
+				return ToolResult{}, err
+			}
+			return ToolResult{Text: conv.Text, Images: conv.Images}, nil
+		},
+		Source:       ToolSourceMCP,
+		ServerConfig: m.ServerConfig,
+	}
+}
+
+// LoopPolicy controls the agent-style chat loop in AIChatStream.
+type LoopPolicy struct {
+	MaxIterations  int           // 0 means default (25); -1 means unlimited
+	RetryOnFailure bool          // when true, tool errors are fed back to the model instead of aborting
+	MaxRetries     int           // per-iteration retry cap for a single failing tool call; 0 means default (3)
+	Timeout        time.Duration // 0 means no per-loop timeout
+}
+
+// ContextPolicy controls when long conversations get summarized to avoid token overflow.
+type ContextPolicy struct {
+	MaxConversations int // threshold to trigger summarization; 0 disables
+	SummarizeToCount int // target conversation count after summarization
+	Enabled          bool
+}
+
+// Skill describes a discovered SKILL.md bundle that an agent can reference.
+type Skill struct {
+	Id           string
+	Name         string
+	Description  string
+	Path         string
+	ManifestPath string
+	Source       string
+	SourceName   string
+	Builtin      bool
+	ReadOnly     bool
+	Error        string
+	Enabled      bool
+
+	// Deprecated: legacy manually configured skills used inline instructions.
+	// Keep these fields for settings compatibility while discovered skills
+	// become the runtime source of truth.
+	Instructions string
+	Tools        []string
+	Templates    map[string]string
+	Icon         WoxImage
 }
 
 type AIChatMCPServerConfig struct {

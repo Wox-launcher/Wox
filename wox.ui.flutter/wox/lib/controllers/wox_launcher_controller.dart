@@ -66,7 +66,6 @@ import 'package:wox/utils/webview/wox_webview_util.dart';
 
 import 'package:wox/utils/wox_websocket_msg_util.dart';
 import 'package:wox/enums/wox_preview_type_enum.dart';
-import 'package:wox/enums/wox_preview_scroll_position_enum.dart';
 import 'package:wox/utils/window_flicker_detector.dart';
 import 'package:wox/utils/color_util.dart';
 
@@ -74,6 +73,7 @@ class WoxLauncherController extends GetxController {
   static const int _slowLauncherActivationWarningThresholdMs = 50;
   static const String _onReceivedTailTooltip = "onReceivedQueryResults elapsed since Flutter query request";
   static const String _queryActionIconRefType = "iconref";
+  static const String internalActionEnterChatModeId = "__wox_internal_enter_chat_mode__";
   static const String localActionTogglePreviewFullscreenId = "__local_toggle_preview_fullscreen__";
   static const String localActionPreviewSearchId = "__local_preview_search__";
   static const String localActionOpenUpdateId = "__local_open_update__";
@@ -218,6 +218,7 @@ class WoxLauncherController extends GetxController {
   // UI Control Flags
   final isQueryBoxAtBottom = false.obs;
   final isQueryBoxVisible = true.obs;
+  final isChatModeActive = false.obs;
   final isToolbarHiddenForce = false.obs;
   double forceWindowWidth = 0;
   int forceMaxResultCount = 0;
@@ -1117,7 +1118,7 @@ class WoxLauncherController extends GetxController {
 
   bool get isShowToolbar => activeResultViewController.items.isNotEmpty || isShowDoctorCheckInfo || hasVisibleToolbarMsg || hasBugAwareToolbarIndicator;
 
-  bool get isToolbarVisible => isShowToolbar && !isToolbarHiddenForce.value;
+  bool get isToolbarVisible => isShowToolbar && !isToolbarHiddenForce.value && !isChatModeActive.value;
 
   bool get isToolbarShowedWithoutResults => isToolbarVisible && activeResultViewController.items.isEmpty;
 
@@ -1697,10 +1698,14 @@ class WoxLauncherController extends GetxController {
     }
 
     if (supportsPreviewFullscreen(currentPreview.value)) {
+      final actionName =
+          currentPreview.value.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code
+              ? tr("ui_action_toggle_sidebar")
+              : (isPreviewFullscreen.value ? tr("ui_action_exit_fullscreen") : tr("ui_action_toggle_fullscreen"));
       actions.add(
         WoxResultAction.local(
           id: localActionTogglePreviewFullscreenId,
-          name: isPreviewFullscreen.value ? tr("ui_action_exit_fullscreen") : tr("ui_action_toggle_fullscreen"),
+          name: actionName,
           hotkey: previewFullscreenHotkey,
           emoji: isPreviewFullscreen.value ? "🗗" : "🗖",
           handler: (traceId) => togglePreviewFullscreen(traceId),
@@ -1798,6 +1803,10 @@ class WoxLauncherController extends GetxController {
     }
 
     return action.runLocalAction(traceId);
+  }
+
+  bool isEnterChatModeAction(WoxResultAction action) {
+    return action.id == internalActionEnterChatModeId;
   }
 
   // Keeps the load-preview toolbar action owned by the currently mounted
@@ -2168,15 +2177,6 @@ class WoxLauncherController extends GetxController {
     unawaited(_focusQueryBoxAfterLauncherShow(traceId: traceId, selectAll: params.selectAll));
     unawaited(_showDevLauncherActivationWarningIfSlow(traceId, visibleActivationCost));
 
-    if (params.isQueryFocus) {
-      Logger.instance.debug(traceId, "need to auto focus to chat input on show app (query focus)");
-      if (isShowPreviewPanel.value && currentPreview.value.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code) {
-        final chatController = Get.find<WoxAIChatController>();
-        chatController.focusToChatInput(traceId);
-        enterPreviewFullscreen(traceId);
-      }
-    }
-
     WoxApi.instance.onShow(traceId);
     unawaited(refreshGlance(traceId, "windowShown"));
   }
@@ -2184,6 +2184,7 @@ class WoxLauncherController extends GetxController {
   void resetLayoutState(String traceId) {
     isQueryBoxAtBottom.value = false;
     isQueryBoxVisible.value = true;
+    isChatModeActive.value = false;
     isToolbarHiddenForce.value = false;
     forceWindowWidth = 0;
     forceMaxResultCount = 0;
@@ -2453,8 +2454,8 @@ class WoxLauncherController extends GetxController {
     final wasShowActionPanel = isShowActionPanel.value;
     isShowActionPanel.value = false;
     actionListViewController.clearFilter(traceId);
-    focusQueryBox();
     if (wasShowActionPanel) {
+      unawaited(focusQueryBox());
       resizeHeight(traceId: traceId, reason: "hide action panel");
     }
   }
@@ -2486,8 +2487,8 @@ class WoxLauncherController extends GetxController {
     activeFormResultId.value = "";
     formActionValues.clear();
     isShowFormActionPanel.value = false;
-    focusQueryBox();
     if (wasShowFormActionPanel) {
+      unawaited(focusQueryBox());
       resizeHeight(traceId: traceId, reason: "hide form action panel: $reason");
     }
   }
@@ -2741,6 +2742,14 @@ class WoxLauncherController extends GetxController {
 
     var preventHideAfterAction = action.preventHideAfterAction;
     Logger.instance.debug(traceId, "execute action: ${action.name}, prevent hide after action: $preventHideAfterAction");
+
+    if (isEnterChatModeAction(action)) {
+      actionListViewController.clearFilter(traceId);
+      hideActionPanel(traceId);
+      hideFormActionPanel(traceId, reason: "enter chat mode action");
+      await enterChatMode(traceId, reason: "result action");
+      return;
+    }
 
     if (action.type == WoxResultActionTypeEnum.WOX_RESULT_ACTION_TYPE_LOCAL.code) {
       final executed = action.runLocalAction(traceId);
@@ -3249,14 +3258,14 @@ class WoxLauncherController extends GetxController {
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "GetCurrentQuery") {
       responseWoxWebsocketRequest(msg, true, currentQuery.value.toJson());
-    } else if (msg.method == "FocusToChatInput") {
-      Get.find<WoxAIChatController>().focusToChatInput(msg.traceId);
-      responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "SendChatResponse") {
       handleChatResponse(msg.traceId, WoxAIChatData.fromJson(msg.data));
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "ReloadChatResources") {
       Get.find<WoxAIChatController>().reloadChatResources(msg.traceId, resourceName: msg.data as String);
+      responseWoxWebsocketRequest(msg, true, null);
+    } else if (msg.method == "AIQuestion") {
+      Get.find<WoxAIChatController>().handleAIQuestionRequest(msg.traceId, msg.data);
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "ReloadSettingPlugins") {
       Get.find<WoxSettingController>().reloadPlugins(msg.traceId);
@@ -3376,13 +3385,16 @@ class WoxLauncherController extends GetxController {
         applyQueryContextForQueryId(msg.traceId, queryId, QueryContext.fromJson(Map<String, dynamic>.from(contextData)));
         applyTracker.setElapsedUs("contextApplyUs", contextStartUs);
       }
+      QueryLayout? responseLayout;
       final layoutData = queryResponse['Layout'];
       if (layoutData is Map && layoutData.isNotEmpty) {
         // QueryResponse layout replaces the old /query/metadata side request.
         // Apply it before results so list/grid switches happen under the same
         // query id and stale rows cannot be rendered with the new layout.
         final layoutStartUs = applyTracker.checkpointUs();
-        applyQueryLayoutForQueryId(msg.traceId, queryId, QueryLayout.fromJson(Map<String, dynamic>.from(layoutData)));
+        responseLayout = QueryLayout.fromJson(Map<String, dynamic>.from(layoutData));
+        applyQueryLayoutForQueryId(msg.traceId, queryId, responseLayout);
+        applyTracker.setBool("chatMode", responseLayout.chatMode);
         applyTracker.setElapsedUs("layoutApplyUs", layoutStartUs);
       }
       if (queryResponse.containsKey('Refinements')) {
@@ -3418,6 +3430,10 @@ class WoxLauncherController extends GetxController {
         applyTracker.log();
         queryStartTimeMap.remove(msg.traceId);
         return;
+      }
+
+      if (responseLayout?.chatMode == true && queryId == currentQuery.value.queryId) {
+        await enterChatMode(msg.traceId, reason: "query response");
       }
 
       // If this is the final final response, we must stop loading animation explicitly
@@ -3691,6 +3707,46 @@ class WoxLauncherController extends GetxController {
     return togglePreviewFullscreen(traceId);
   }
 
+  // Enters chat mode without taking over preview ownership; the query response already owns preview data.
+  Future<void> enterChatMode(String traceId, {required String reason}) async {
+    isShowPreviewPanel.value = true;
+    if (!isPreviewFullscreen.value) {
+      final restoreRatio = resultPreviewRatio.value > 0 ? resultPreviewRatio.value : getPreferredResultPreviewRatio();
+      lastResultPreviewRatioBeforePreviewFullscreen = restoreRatio;
+    }
+    resultPreviewRatio.value = 0;
+    isPreviewFullscreen.value = true;
+
+    queryBoxFocusNode.unfocus();
+    isQueryBoxVisible.value = false;
+    isChatModeActive.value = true;
+    Logger.instance.debug(traceId, "chat mode entered: reason=$reason");
+
+    await resizeHeight(traceId: traceId, reason: "enter chat mode: $reason");
+    Get.find<WoxAIChatController>().focusChatInput(traceId);
+  }
+
+  // Exits chat mode and returns keyboard focus to the launcher query box.
+  void exitChatInputMode(String traceId) {
+    if (isQueryBoxVisible.value) {
+      isChatModeActive.value = false;
+      unawaited(focusQueryBox(selectAll: true));
+      return;
+    }
+
+    isChatModeActive.value = false;
+    isQueryBoxVisible.value = true;
+    Logger.instance.debug(traceId, "chat input mode exited");
+    unawaited(resizeHeight(traceId: traceId, reason: "exit chat mode"));
+
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (isClosed || !isQueryBoxVisible.value) {
+        return;
+      }
+      unawaited(focusQueryBox(selectAll: true));
+    });
+  }
+
   void syncPreviewFullscreenState() {
     final isFullscreenPreviewVisible = isShowPreviewPanel.value && supportsPreviewFullscreen(currentPreview.value);
     if (isFullscreenPreviewVisible) {
@@ -3756,7 +3812,7 @@ class WoxLauncherController extends GetxController {
     // Only add toolbar height when toolbar is actually shown in UI.
     // Use local hasItems instead of the isShowToolbar getter so that
     // overrideItemCount is respected.
-    final showToolbar = (hasItems || isShowDoctorCheckInfo || hasVisibleToolbarMsg || hasBugAwareToolbarIndicator) && !isToolbarHiddenForce.value;
+    final showToolbar = (hasItems || isShowDoctorCheckInfo || hasVisibleToolbarMsg || hasBugAwareToolbarIndicator) && !isToolbarHiddenForce.value && !isChatModeActive.value;
     if (showToolbar) {
       resultHeight += WoxThemeUtil.instance.getToolbarHeight();
     }
@@ -4685,30 +4741,8 @@ class WoxLauncherController extends GetxController {
   }
 
   void handleChatResponse(String traceId, WoxAIChatData data) {
-    for (var result in activeResultViewController.items) {
-      if (result.value.data.preview.previewType != WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code) {
-        continue;
-      }
-
-      try {
-        var previewData = jsonDecode(result.value.data.preview.previewData);
-        if (previewData['Id'] != data.id) {
-          continue;
-        }
-      } catch (_) {
-        continue;
-      }
-
-      // update preview in result list view item
-      // otherwise, the preview will lost when user switch to other result and back
-      result.value.data.preview = WoxPreview(
-        previewType: WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code,
-        previewData: jsonEncode(data.toJson()),
-        scrollPosition: WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code,
-      );
-
-      Get.find<WoxAIChatController>().handleChatResponse(traceId, data);
-    }
+    final chatController = Get.find<WoxAIChatController>();
+    chatController.handleChatResponse(traceId, data);
   }
 
   void moveQueryBoxCursorToStart() {
@@ -4977,6 +5011,16 @@ class WoxLauncherController extends GetxController {
       return;
     }
     if (isGlobalInputQuery(query)) {
+      preferredResultPreviewRatio = nextRatio;
+      if (isPreviewFullscreen.value) {
+        lastResultPreviewRatioBeforePreviewFullscreen = nextRatio;
+      } else {
+        resultPreviewRatio.value = nextRatio;
+      }
+      return;
+    }
+    if (queryLayout.chatMode) {
+      nextRatio = 0;
       preferredResultPreviewRatio = nextRatio;
       if (isPreviewFullscreen.value) {
         lastResultPreviewRatioBeforePreviewFullscreen = nextRatio;

@@ -1,6 +1,7 @@
 package dto
 
 import (
+	"wox/common"
 	"wox/i18n"
 	"wox/setting"
 )
@@ -27,6 +28,8 @@ type WoxSettingDto struct {
 	LaunchMode            setting.LaunchMode
 	StartPage             setting.StartPage
 	AIProviders           []setting.AIProvider
+	AIMCPServers          []common.AIChatMCPServerConfig
+	AISkills              []common.Skill
 	HttpProxyEnabled      bool
 	HttpProxyUrl          string
 	ShowPosition          setting.PositionType
@@ -34,15 +37,15 @@ type WoxSettingDto struct {
 	// IsEvdevReadAvailable reports whether evdev keyboard devices are readable
 	// (user is in the 'input' group). Flutter uses this to decide whether to
 	// show the Wayland double-modifier hotkey guidance prompt.
-	IsEvdevReadAvailable bool
-	EnableAutoBackup            bool
-	EnableAutoUpdate            bool
-	ReleaseChannel              setting.ReleaseChannel
-	EnableAnonymousUsageStats   bool
-	CustomPythonPath            string
-	CustomNodejsPath            string
-	CloudSyncServerUrl          string
-	CloudSyncDisabledPlugins    []string
+	IsEvdevReadAvailable      bool
+	EnableAutoBackup          bool
+	EnableAutoUpdate          bool
+	ReleaseChannel            setting.ReleaseChannel
+	EnableAnonymousUsageStats bool
+	CustomPythonPath          string
+	CustomNodejsPath          string
+	CloudSyncServerUrl        string
+	CloudSyncDisabledPlugins  []string
 
 	// UI related
 	AppWidth       int

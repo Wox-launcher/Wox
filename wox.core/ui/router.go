@@ -122,15 +122,19 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/lang/json":      handleLangJson,
 
 	// ai
-	"/ai/providers":      handleAIProviders,
-	"/ai/commands/store": handleAICommandStore,
-	"/ai/models":         handleAIModels,
-	"/ai/model/default":  handleAIDefaultModel,
-	"/ai/ping":           handleAIPing,
-	"/ai/chat":           handleAIChat,
-	"/ai/mcp/tools":      handleAIMCPServerTools,
-	"/ai/mcp/tools/all":  handleAIMCPServerToolsAll,
-	"/ai/agents":         handleAIAgents,
+	"/ai/providers":       handleAIProviders,
+	"/ai/commands/store":  handleAICommandStore,
+	"/ai/models":          handleAIModels,
+	"/ai/model/default":   handleAIDefaultModel,
+	"/ai/ping":            handleAIPing,
+	"/ai/chat":            handleAIChat,
+	"/ai/chat/delete":     handleAIChatDelete,
+	"/ai/chat/summarize":  handleAIChatSummarize,
+	"/ai/mcp/tools":       handleAIMCPServerTools,
+	"/ai/mcp/tools/all":   handleAIMCPServerToolsAll,
+	"/ai/agents":          handleAIAgents,
+	"/ai/skills":          handleAISkills,
+	"/ai/question/answer": handleAIQuestionAnswer,
 
 	// doctor
 	"/doctor/check":                  handleDoctorCheck,
@@ -914,6 +918,11 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 	settingDto.LaunchMode = woxSetting.LaunchMode.Get()
 	settingDto.StartPage = woxSetting.StartPage.Get()
 	settingDto.AIProviders = woxSetting.AIProviders.Get()
+	settingDto.AIMCPServers = woxSetting.AIMCPServers.Get()
+	settingDto.AISkills = woxSetting.AISkills.Get()
+	if chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx); chater != nil {
+		settingDto.AISkills = chater.GetAllSkills(ctx)
+	}
 	settingDto.HttpProxyEnabled = woxSetting.HttpProxyEnabled.Get()
 	settingDto.HttpProxyUrl = woxSetting.HttpProxyUrl.Get()
 	settingDto.ShowPosition = woxSetting.ShowPosition.Get()
@@ -1179,6 +1188,20 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		woxSetting.AIProviders.Set(aiProviders)
+	case "AIMCPServers":
+		var mcpServers []common.AIChatMCPServerConfig
+		if err := json.Unmarshal([]byte(vs), &mcpServers); err != nil {
+			writeErrorResponse(w, err.Error())
+			return
+		}
+		woxSetting.AIMCPServers.Set(mcpServers)
+	case "AISkills":
+		var skills []common.Skill
+		if err := json.Unmarshal([]byte(vs), &skills); err != nil {
+			writeErrorResponse(w, err.Error())
+			return
+		}
+		woxSetting.AISkills.Set(skills)
 	case "EnableAutoBackup":
 		woxSetting.EnableAutoBackup.Set(vb)
 	case "EnableAutoUpdate":
@@ -3126,6 +3149,56 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, "")
 }
 
+// handleAIChatDelete lets the chat preview manage its own sidebar state.
+func handleAIChatDelete(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+
+	body, _ := io.ReadAll(r.Body)
+	chatId := gjson.GetBytes(body, "chatId").String()
+	if chatId == "" {
+		writeErrorResponse(w, "chatId is empty")
+		return
+	}
+
+	chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx)
+	if chater == nil {
+		writeErrorResponse(w, "ai chat plugin not found")
+		return
+	}
+
+	if !chater.DeleteChat(ctx, chatId) {
+		writeErrorResponse(w, "chat not found")
+		return
+	}
+
+	writeSuccessResponse(w, true)
+}
+
+// handleAIChatSummarize starts a title refresh without going through result actions.
+func handleAIChatSummarize(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+
+	body, _ := io.ReadAll(r.Body)
+	chatId := gjson.GetBytes(body, "chatId").String()
+	if chatId == "" {
+		writeErrorResponse(w, "chatId is empty")
+		return
+	}
+
+	chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx)
+	if chater == nil {
+		writeErrorResponse(w, "ai chat plugin not found")
+		return
+	}
+
+	if !chater.SummarizeChat(ctx, chatId) {
+		writeErrorResponse(w, "chat not found")
+		return
+	}
+
+	writeSuccessResponse(w, true)
+}
+
 func handleAIMCPServerToolsAll(w http.ResponseWriter, r *http.Request) {
 	ctx := getTraceContext(r)
 
@@ -3158,6 +3231,36 @@ func handleAIAgents(w http.ResponseWriter, r *http.Request) {
 
 	agents := chater.GetAllAgents(ctx)
 	writeSuccessResponse(w, agents)
+}
+
+func handleAISkills(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+
+	chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx)
+	if chater == nil {
+		writeErrorResponse(w, "ai chat plugin not found")
+		return
+	}
+
+	skills := chater.GetAllSkills(ctx)
+	writeSuccessResponse(w, skills)
+}
+
+func handleAIQuestionAnswer(w http.ResponseWriter, r *http.Request) {
+	ctx := getTraceContext(r)
+
+	body, _ := io.ReadAll(r.Body)
+	parsed := gjson.ParseBytes(body)
+	questionId := parsed.Get("questionId").String()
+	answer := parsed.Get("answer").String()
+	if questionId == "" {
+		writeErrorResponse(w, "questionId is required")
+		return
+	}
+
+	util.GetLogger().Info(ctx, fmt.Sprintf("AI: resolving question answer for questionId=%s", questionId))
+	ai.ResolveAIQuestionAnswer(questionId, answer)
+	writeSuccessResponse(w, "")
 }
 
 func handleAIDefaultModel(w http.ResponseWriter, r *http.Request) {

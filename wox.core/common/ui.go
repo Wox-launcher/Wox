@@ -103,9 +103,9 @@ type UI interface {
 	IsVisible(ctx context.Context) bool
 
 	// AI chat plugin related methods
-	FocusToChatInput(ctx context.Context)
 	SendChatResponse(ctx context.Context, chatData AIChatData)
 	ReloadChatResources(ctx context.Context, resouceName string)
+	SendAIQuestion(ctx context.Context, questionId string, question string, options []AIQuestionOption)
 
 	// ReloadSettingPlugins asks the UI to refresh plugin lists.
 	ReloadSettingPlugins(ctx context.Context)
@@ -137,7 +137,6 @@ type ActiveWindowSnapshot struct {
 
 type ShowContext struct {
 	SelectAll        bool
-	IsQueryFocus     bool // auto focus chat input on next ui update
 	HideQueryBox     bool
 	HideToolbar      bool
 	QueryBoxAtBottom bool

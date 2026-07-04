@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
+	"sync"
 	"wox/ai"
 	"wox/common"
 	"wox/plugin"
+	"wox/setting"
 	"wox/setting/definition"
 	"wox/setting/validator"
 	"wox/util"
@@ -23,17 +24,18 @@ import (
 var aiChatIcon = common.PluginAIChatIcon
 var aiChatsSettingKey = "ai_chats"
 
+const aiChatEnterChatModeActionId = "__wox_internal_enter_chat_mode__"
+
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &AIChatPlugin{})
 }
 
 type AIChatPlugin struct {
-	chats           []common.AIChatData
-	agents          []common.AIAgent
-	resultChatIdMap *util.HashMap[string /*chat id*/, string /*result id*/] // map of result id and chat id, used to update the chat title
-	mcpServers      []common.AIChatMCPServerConfig
-	mcpToolsMap     []common.MCPTool
-	api             plugin.API
+	chats       []common.AIChatData
+	agents      []common.AIAgent
+	mcpServers  []common.AIChatMCPServerConfig
+	mcpToolsMap []common.MCPTool
+	api         plugin.API
 }
 
 func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
@@ -57,15 +59,6 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 					DefaultValue: "true",
 					Label:        "i18n:plugin_ai_chat_enable_fallback_search",
 					Tooltip:      "i18n:plugin_ai_chat_enable_fallback_search_tooltip",
-				},
-			},
-			{
-				Type: definition.PluginSettingDefinitionTypeCheckBox,
-				Value: &definition.PluginSettingValueCheckBox{
-					Key:          "enable_auto_focus_to_chat_input",
-					DefaultValue: "true",
-					Label:        "i18n:plugin_ai_chat_query_focus",
-					Tooltip:      "i18n:plugin_ai_chat_query_focus_tooltip",
 				},
 			},
 			{
@@ -121,93 +114,11 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 							Tooltip: "i18n:plugin_ai_chat_agent_model_tooltip",
 						},
 						{
-							Key:     "tools",
-							Label:   "i18n:plugin_ai_chat_agent_tools",
-							Type:    definition.PluginSettingValueTableColumnTypeAISelectMCPServerTools,
+							Key:     "skills",
+							Label:   "i18n:plugin_ai_chat_agent_skills",
+							Type:    definition.PluginSettingValueTableColumnTypeAISelectSkills,
 							Width:   100,
-							Tooltip: "i18n:plugin_ai_chat_agent_tools_tooltip",
-						},
-					},
-				},
-			},
-			{
-				Type: definition.PluginSettingDefinitionTypeTable,
-				Value: &definition.PluginSettingValueTable{
-					Key:     "mcp_servers",
-					Title:   "i18n:plugin_ai_chat_mcp_servers",
-					Tooltip: "i18n:plugin_ai_chat_mcp_servers_tooltip",
-					Columns: []definition.PluginSettingValueTableColumn{
-						{
-							Key:     "name",
-							Label:   "i18n:plugin_ai_chat_mcp_server_name",
-							Type:    definition.PluginSettingValueTableColumnTypeText,
-							Width:   100,
-							Tooltip: "i18n:plugin_ai_chat_mcp_server_name_tooltip",
-							Validators: []validator.PluginSettingValidator{
-								{
-									Type:  validator.PluginSettingValidatorTypeNotEmpty,
-									Value: &validator.PluginSettingValidatorNotEmpty{},
-								},
-							},
-						},
-						{
-							Key:          "tools",
-							Label:        "i18n:plugin_ai_chat_mcp_server_tools",
-							Tooltip:      "i18n:plugin_ai_chat_mcp_server_tools_tooltip",
-							Type:         definition.PluginSettingValueTableColumnTypeAIMCPServerTools,
-							Width:        50,
-							HideInUpdate: true,
-						},
-						{
-							Key:   "disabled",
-							Label: "i18n:plugin_ai_chat_mcp_server_disabled",
-							Type:  definition.PluginSettingValueTableColumnTypeCheckbox,
-							Width: 80,
-						},
-						{
-							Key:     "type",
-							Label:   "i18n:plugin_ai_chat_mcp_server_type",
-							Type:    definition.PluginSettingValueTableColumnTypeSelect,
-							Width:   60,
-							Tooltip: "i18n:plugin_ai_chat_mcp_server_type_tooltip",
-							SelectOptions: []definition.PluginSettingValueSelectOption{
-								{
-									Label: "STDIO",
-									Value: string(common.AIChatMCPServerTypeSTDIO),
-								},
-								{
-									Label: "Streamable HTTP",
-									Value: string(common.AIChatMCPServerTypeStreamableHTTP),
-								},
-							},
-							Validators: []validator.PluginSettingValidator{
-								{
-									Type:  validator.PluginSettingValidatorTypeNotEmpty,
-									Value: &validator.PluginSettingValidatorNotEmpty{},
-								},
-							},
-						},
-						{
-							Key:     "command",
-							Label:   "i18n:plugin_ai_chat_mcp_server_command",
-							Type:    definition.PluginSettingValueTableColumnTypeText,
-							Width:   80,
-							Tooltip: "i18n:plugin_ai_chat_mcp_server_command_tooltip",
-						},
-						{
-							Key:     "environmentVariables",
-							Label:   "i18n:plugin_ai_chat_mcp_server_environment_variables",
-							Type:    definition.PluginSettingValueTableColumnTypeTextList,
-							Width:   160,
-							Tooltip: "i18n:plugin_ai_chat_mcp_server_environment_variables_tooltip",
-						},
-						{
-							Key:          "url",
-							Label:        "i18n:plugin_ai_chat_mcp_server_url",
-							Type:         definition.PluginSettingValueTableColumnTypeText,
-							TextMaxLines: 10,
-							Width:        80,
-							Tooltip:      "i18n:plugin_ai_chat_mcp_server_url_tooltip",
+							Tooltip: "i18n:plugin_ai_chat_agent_skills_tooltip",
 						},
 					},
 				},
@@ -231,9 +142,12 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 }
 
 func (r *AIChatPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
-	r.resultChatIdMap = util.NewHashMap[string, string]()
 	r.api = initParams.API
 	r.mcpServers = []common.AIChatMCPServerConfig{}
+
+	// Register builtin tools that need the plugin manager (test_query, ask_user
+	// UI hook) before MCP servers load so the registry is ready at startup.
+	registerPluginBuiltinTools(ctx)
 
 	chats, err := r.loadChats(ctx)
 	if err != nil {
@@ -251,6 +165,10 @@ func (r *AIChatPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 		r.agents = agents
 	}
 
+	if err := r.reloadSkills(ctx, false); err != nil {
+		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("AI: Failed to load skills: %s", err.Error()))
+	}
+
 	r.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, value string) {
 		if key == "agents" {
 			agents, err := r.loadAgents(callbackCtx)
@@ -264,20 +182,12 @@ func (r *AIChatPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 			plugin.GetPluginManager().GetUI().ReloadChatResources(callbackCtx, "agents")
 		}
 
-		if key == "mcp_servers" {
-			r.reloadMCPServers(callbackCtx, true)
-		}
 	})
 
 	util.Go(ctx, "reload MCP servers", func() {
 		// Startup only warms the core MCP tool cache; Flutter loads chat resources lazily after it is ready.
-		r.reloadMCPServers(util.NewTraceContext(), false)
+		r.ReloadMCPServers(util.NewTraceContext(), false)
 	})
-}
-
-func (r *AIChatPlugin) IsAutoFocusToChatInputWhenOpenWithQueryHotkey(ctx context.Context) bool {
-	enableAutoFocusToChatInput := r.api.GetSetting(ctx, "enable_auto_focus_to_chat_input")
-	return enableAutoFocusToChatInput == "true"
 }
 
 func (r *AIChatPlugin) QueryFallback(ctx context.Context, query plugin.Query) []plugin.QueryResult {
@@ -311,10 +221,6 @@ func (r *AIChatPlugin) QueryFallback(ctx context.Context, query plugin.Query) []
 									Timestamp: util.GetSystemTimestamp(),
 								},
 							},
-							//TODO: let user customize the default tools, just like model
-							Tools: lo.Map(r.GetAllTools(ctx), func(tool common.MCPTool, _ int) string {
-								return tool.Name
-							}),
 							CreatedAt: util.GetSystemTimestamp(),
 							UpdatedAt: util.GetSystemTimestamp(),
 						}, 0)
@@ -323,11 +229,6 @@ func (r *AIChatPlugin) QueryFallback(ctx context.Context, query plugin.Query) []
 							QueryType:      plugin.QueryTypeInput,
 							QueryText:      "chat " + query.RawQuery,
 							QuerySelection: selection.Selection{},
-						})
-
-						util.Go(ctx, "focus to chat input", func() {
-							time.Sleep(time.Millisecond * 300)
-							plugin.GetPluginManager().GetUI().FocusToChatInput(ctx)
 						})
 					},
 				},
@@ -361,7 +262,8 @@ func (r *AIChatPlugin) GetDefaultModel(ctx context.Context) common.Model {
 	return common.Model{}
 }
 
-func (r *AIChatPlugin) reloadMCPServers(ctx context.Context, notifyUI bool) {
+// ReloadMCPServers reloads global MCP server settings into the active tool registry.
+func (r *AIChatPlugin) ReloadMCPServers(ctx context.Context, notifyUI bool) {
 	r.api.Log(ctx, plugin.LogLevelInfo, "AI: Reloading MCP servers")
 
 	mcpServers, err := r.loadMCPServers(ctx)
@@ -391,6 +293,12 @@ func (r *AIChatPlugin) reloadMCPServers(ctx context.Context, notifyUI bool) {
 		}
 	}
 
+	tools := lo.Map(mcpTools, func(mcpTool common.MCPTool, _ int) common.Tool {
+		return mcpTool.ToTool()
+	})
+	// Replace all MCP tools so removed or disabled servers stop exposing stale
+	// tool definitions. Builtin tools remain registered independently.
+	ai.GetToolRegistry().ReplaceSource(common.ToolSourceMCP, tools)
 	r.mcpToolsMap = mcpTools
 
 	if notifyUI {
@@ -399,18 +307,7 @@ func (r *AIChatPlugin) reloadMCPServers(ctx context.Context, notifyUI bool) {
 }
 
 func (r *AIChatPlugin) loadMCPServers(ctx context.Context) ([]common.AIChatMCPServerConfig, error) {
-	mcpServersJson := r.api.GetSetting(ctx, "mcp_servers")
-	if mcpServersJson == "" {
-		return []common.AIChatMCPServerConfig{}, nil
-	}
-
-	var mcpServers []common.AIChatMCPServerConfig
-	err := json.Unmarshal([]byte(mcpServersJson), &mcpServers)
-	if err != nil {
-		return []common.AIChatMCPServerConfig{}, err
-	}
-
-	return mcpServers, nil
+	return setting.GetSettingManager().GetWoxSetting(ctx).AIMCPServers.Get(), nil
 }
 
 func (r *AIChatPlugin) loadChats(ctx context.Context) ([]common.AIChatData, error) {
@@ -480,8 +377,8 @@ func (r *AIChatPlugin) loadAgents(ctx context.Context) ([]common.AIAgent, error)
 				Provider:      common.ProviderName(modelProvider),
 				ProviderAlias: modelProviderAlias,
 			},
-			Tools: lo.Map(agent.Get("tools").Array(), func(tool gjson.Result, _ int) string {
-				return tool.String()
+			Skills: lo.Map(agent.Get("skills").Array(), func(skill gjson.Result, _ int) string {
+				return skill.String()
 			}),
 			Icon: icon,
 		})
@@ -492,19 +389,47 @@ func (r *AIChatPlugin) loadAgents(ctx context.Context) ([]common.AIAgent, error)
 }
 
 func (r *AIChatPlugin) GetAllTools(ctx context.Context) []common.MCPTool {
-	return r.mcpToolsMap
+	// Keep returning MCPTool shape for UI compatibility: the UI only reads
+	// Name/Description/Parameters. The registry is the source of truth now.
+	tools := ai.GetToolRegistry().List()
+	return lo.Map(tools, func(t common.Tool, _ int) common.MCPTool {
+		return common.MCPTool{
+			Name:         t.Name,
+			Description:  t.Description,
+			Parameters:   t.Parameters,
+			ServerConfig: t.ServerConfig,
+		}
+	})
 }
 
 func (r *AIChatPlugin) GetAllAgents(ctx context.Context) []common.AIAgent {
 	return r.agents
 }
 
+// ReloadSkills reloads discovered skills into the active skill registry.
+func (r *AIChatPlugin) ReloadSkills(ctx context.Context) error {
+	return r.reloadSkills(ctx, true)
+}
+
+func (r *AIChatPlugin) reloadSkills(ctx context.Context, notifyUI bool) error {
+	skills, discoverErr := ai.DiscoverSkills(ctx)
+	ai.GetSkillRegistry().ReplaceAll(skills)
+	r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: Loaded %d skills", len(skills)))
+	if discoverErr != nil {
+		r.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("AI: skill discovery completed with warnings: %s", discoverErr.Error()))
+	}
+	if notifyUI {
+		plugin.GetPluginManager().GetUI().ReloadChatResources(ctx, "skills")
+	}
+	return nil
+}
+
+func (r *AIChatPlugin) GetAllSkills(ctx context.Context) []common.Skill {
+	return ai.GetSkillRegistry().List()
+}
+
 func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, chatLoopCount int) {
 	r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: Starting chat with ID: %s, loop: %d, title: %s, model: %s, conversations: %d", aiChatData.Id, chatLoopCount, aiChatData.Title, aiChatData.Model.Name, len(aiChatData.Conversations)))
-
-	if len(aiChatData.Tools) > 0 {
-		r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: Selected tools: %v", aiChatData.Tools))
-	}
 
 	if aiChatData.AgentName != "" && chatLoopCount == 0 {
 		for _, agent := range r.agents {
@@ -526,8 +451,26 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 					aiChatData.Model = agent.Model
 				}
 
-				if len(agent.Tools) > 0 {
-					aiChatData.Tools = agent.Tools
+				// Selected skills are discovered bundles. Pass metadata and the
+				// manifest path as user context so the model can inspect SKILL.md
+				// when the task calls for it.
+				for _, skillId := range agent.Skills {
+					skill, ok := ai.GetSkillRegistry().Get(skillId)
+					if !ok {
+						r.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("AI: skill not found: %s", skillId))
+						continue
+					}
+					if !skill.Enabled {
+						continue
+					}
+					if skill.ManifestPath != "" {
+						aiChatData.Conversations = append(aiChatData.Conversations, common.Conversation{
+							Id:        uuid.NewString(),
+							Role:      common.ConversationRoleUser,
+							Text:      formatSkillReferencePrompt(skill),
+							Timestamp: util.GetSystemTimestamp(),
+						})
+					}
 				}
 
 				break
@@ -538,20 +481,42 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 	r.appendOrUpdateChatData(aiChatData)
 	r.saveChats(ctx)
 
-	var tools []common.MCPTool
-	if len(aiChatData.Tools) > 0 {
-		tools = lo.Filter(r.mcpToolsMap, func(tool common.MCPTool, _ int) bool {
-			return lo.Contains(aiChatData.Tools, tool.Name)
-		})
+	const chatStreamUIUpdateMinIntervalMs int64 = 120
+	var chatDataMu sync.Mutex
+	var lastChatResponseAt int64
+	var responseId = uuid.NewString()
+
+	snapshotChatData := func(force bool) (common.AIChatData, bool) {
+		now := util.GetSystemTimestamp()
+		if !force && lastChatResponseAt > 0 && now-lastChatResponseAt < chatStreamUIUpdateMinIntervalMs {
+			return common.AIChatData{}, false
+		}
+
+		lastChatResponseAt = now
+		return cloneAIChatDataForUI(aiChatData), true
 	}
 
-	var responseId = uuid.NewString()
+	// Plain chat intentionally does not expose the global tool registry yet;
+	// short prompts should not fan out into every MCP/builtin tool without an
+	// explicit tool policy.
 	chatErr := r.api.AIChatStream(ctx, aiChatData.Model, aiChatData.Conversations, common.ChatOptions{
-		Tools: tools,
+		LoopPolicy: common.LoopPolicy{MaxIterations: 25, RetryOnFailure: true, MaxRetries: 3},
+		ContextPolicy: common.ContextPolicy{
+			MaxConversations: 50,
+			SummarizeToCount: 20,
+			Enabled:          true,
+		},
+		OnSummarize: r.maybeSummarizeConversations,
 	}, func(streamResult common.ChatStreamData) {
 		r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: chat stream receiving data, status: %s, data: %s", streamResult.Status, streamResult.Data))
 
-		// update conversations and sync to UI
+		var snapshot common.AIChatData
+		var shouldSendSnapshot bool
+		var finishedSnapshot common.AIChatData
+		var isFinished bool
+
+		chatDataMu.Lock()
+		// Update conversations and sync to UI.
 		if streamResult.Data != "" || streamResult.Reasoning != "" {
 			r.appendOrUpdateConversation(&aiChatData, common.Conversation{
 				Id:        responseId,
@@ -562,34 +527,46 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 			})
 		}
 		if len(streamResult.ToolCalls) > 0 {
-			for _, toolCall := range streamResult.ToolCalls {
+			for i, toolCall := range streamResult.ToolCalls {
+				reasoning := ""
+				if i == 0 {
+					reasoning = streamResult.Reasoning
+				}
 				r.appendOrUpdateConversation(&aiChatData, common.Conversation{
 					Id:           toolCall.Id,
 					Role:         common.ConversationRoleTool,
 					Text:         toolCall.Delta,
+					Reasoning:    reasoning,
 					ToolCallInfo: toolCall,
 					Timestamp:    toolCall.StartTimestamp,
 				})
 			}
 		}
-		plugin.GetPluginManager().GetUI().SendChatResponse(ctx, aiChatData)
+
+		forceSend := streamResult.Status != common.ChatStreamStatusStreaming
+		snapshot, shouldSendSnapshot = snapshotChatData(forceSend)
 
 		if streamResult.Status == common.ChatStreamStatusFinished {
+			isFinished = true
+			finishedSnapshot = snapshot
+		}
+		chatDataMu.Unlock()
+
+		if shouldSendSnapshot {
+			plugin.GetPluginManager().GetUI().SendChatResponse(ctx, snapshot)
+		}
+
+		if isFinished {
 			r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: chat stream finished: %s", streamResult.Data))
-			r.appendOrUpdateChatData(aiChatData)
+			r.appendOrUpdateChatData(finishedSnapshot)
 			r.saveChats(ctx)
 
-			// only summarize the chat title if there is no tool call
-			// if there is any toolcall, we need to wait for the tool call to finish
+			// Only summarize the chat title if there is no tool call. If any
+			// tool calls are present, the agent loop has more context to add.
 			if len(streamResult.ToolCalls) == 0 {
-				r.summaryTitleIfNecessary(ctx, aiChatData)
+				r.summaryTitleIfNecessary(ctx, finishedSnapshot)
 			}
-
-			if streamResult.IsAllToolCallsSucceeded() {
-				// recursively call the chat to continue
-				r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: recursively calling the chat to continue, loop: %d", chatLoopCount+1))
-				r.Chat(ctx, aiChatData, chatLoopCount+1)
-			}
+			// The loop now continues inside AIChatStream; Chat() is only invoked once.
 		}
 	})
 
@@ -606,6 +583,28 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 		r.saveChats(ctx)
 		r.api.Notify(ctx, r.api.GetTranslation(ctx, "ui_ai_chat_failed_to_chat"))
 	}
+}
+
+// cloneAIChatDataForUI copies mutable slices before websocket serialization so
+// concurrent stream callbacks cannot mutate the payload while it is sent.
+func cloneAIChatDataForUI(aiChatData common.AIChatData) common.AIChatData {
+	snapshot := aiChatData
+	snapshot.Conversations = append([]common.Conversation(nil), aiChatData.Conversations...)
+	return snapshot
+}
+
+func formatSkillReferencePrompt(skill common.Skill) string {
+	var builder strings.Builder
+	builder.WriteString("The following local skill is available when relevant. Read its SKILL.md before using it.\n")
+	builder.WriteString("Name: ")
+	builder.WriteString(skill.Name)
+	builder.WriteString("\nDescription: ")
+	builder.WriteString(skill.Description)
+	builder.WriteString("\nManifest path: ")
+	builder.WriteString(skill.ManifestPath)
+	builder.WriteString("\nBundle path: ")
+	builder.WriteString(skill.Path)
+	return builder.String()
 }
 
 func (r *AIChatPlugin) summaryTitleIfNecessary(ctx context.Context, aiChatData common.AIChatData) {
@@ -637,6 +636,9 @@ func (r *AIChatPlugin) appendOrUpdateChatData(aiChatData common.AIChatData) {
 	for i := range r.chats {
 		if r.chats[i].Id == aiChatData.Id {
 			r.chats[i] = aiChatData
+			sort.Slice(r.chats, func(i, j int) bool {
+				return r.chats[i].UpdatedAt > r.chats[j].UpdatedAt
+			})
 			return
 		}
 	}
@@ -647,7 +649,35 @@ func (r *AIChatPlugin) appendOrUpdateChatData(aiChatData common.AIChatData) {
 	})
 }
 
-func (r *AIChatPlugin) getNewChatPreviewData(ctx context.Context) plugin.QueryResult {
+// DeleteChat removes a persisted chat by id and reports whether it existed.
+func (r *AIChatPlugin) DeleteChat(ctx context.Context, chatId string) bool {
+	for i := range r.chats {
+		if r.chats[i].Id == chatId {
+			r.chats = append(r.chats[:i], r.chats[i+1:]...)
+			r.saveChats(ctx)
+			return true
+		}
+	}
+
+	return false
+}
+
+// SummarizeChat starts an asynchronous title refresh for a persisted chat.
+func (r *AIChatPlugin) SummarizeChat(ctx context.Context, chatId string) bool {
+	for i := range r.chats {
+		if r.chats[i].Id == chatId {
+			chat := r.chats[i]
+			util.Go(ctx, "summarize chat", func() {
+				r.summarizeChat(ctx, chat)
+			})
+			return true
+		}
+	}
+
+	return false
+}
+
+func (r *AIChatPlugin) newChatData(ctx context.Context) common.AIChatData {
 	var chatData common.AIChatData
 	chatData.Id = uuid.NewString()
 	chatData.Title = ""
@@ -655,35 +685,41 @@ func (r *AIChatPlugin) getNewChatPreviewData(ctx context.Context) plugin.QueryRe
 	chatData.UpdatedAt = util.GetSystemTimestamp()
 	chatData.Conversations = []common.Conversation{}
 	chatData.Model = r.GetDefaultModel(ctx)
+	return chatData
+}
 
-	previewData, err := json.Marshal(chatData)
+func (r *AIChatPlugin) getChatPreviewData(ctx context.Context) plugin.QueryResult {
+	previewData, err := json.Marshal(common.AIChatPreviewData{
+		ActiveChat: r.newChatData(ctx),
+		Chats:      r.chats,
+	})
 	if err != nil {
 		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("AI: Failed to marshal chat preview data: %s", err.Error()))
 		return plugin.QueryResult{}
 	}
 
 	resultId := uuid.NewString()
-	r.resultChatIdMap.Store(chatData.Id, resultId)
-
 	return plugin.QueryResult{
 		Id:       resultId,
 		Title:    "i18n:ui_ai_chat_new_chat",
 		SubTitle: "i18n:ui_ai_chat_create_new_chat",
 		Icon:     aiChatIcon,
+		Actions: []plugin.QueryResultAction{
+			{
+				Id:                     aiChatEnterChatModeActionId,
+				Name:                   "i18n:ui_ai_chat_start_chat",
+				Icon:                   aiChatIcon,
+				IsDefault:              true,
+				PreventHideAfterAction: true,
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					// Flutter handles this internal action locally because entering chat mode is UI-only state.
+				},
+			},
+		},
 		Preview: plugin.WoxPreview{
 			PreviewType:    plugin.WoxPreviewTypeChat,
 			PreviewData:    string(previewData),
 			ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
-		},
-		Actions: []plugin.QueryResultAction{
-			{
-				Name:                   "i18n:ui_ai_chat_start_chat",
-				PreventHideAfterAction: true,
-				ContextData:            common.ContextData{"chatId": chatData.Id},
-				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					plugin.GetPluginManager().GetUI().FocusToChatInput(ctx)
-				},
-			},
 		},
 		Group:      "i18n:ui_ai_chat_new_chat",
 		GroupScore: 1000,
@@ -691,105 +727,9 @@ func (r *AIChatPlugin) getNewChatPreviewData(ctx context.Context) plugin.QueryRe
 }
 
 func (r *AIChatPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
-	var results []plugin.QueryResult
-	r.resultChatIdMap.Clear()
-
-	if query.Search == "" {
-		// add the new chat result for user to create a new chat if there is no search
-		results = append(results, r.getNewChatPreviewData(ctx))
-	}
-
-	for i, chat := range r.chats {
-		previewData, err := json.Marshal(chat)
-		if err != nil {
-			r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to marshal chat preview data: %s", err.Error()))
-			continue
-		}
-
-		// filter chat by query
-		if query.Search != "" && !strings.Contains(chat.Title, query.Search) {
-			continue
-		}
-
-		resultId := uuid.NewString()
-		r.resultChatIdMap.Store(chat.Id, resultId)
-
-		continueChatText := "i18n:ui_ai_chat_continue_chat"
-		if len(chat.Conversations) == 0 {
-			continueChatText = "i18n:ui_ai_chat_start_chat"
-		}
-
-		// use agent icon
-		resultIcon := aiChatIcon
-		if chat.AgentName != "" {
-			for _, agent := range r.agents {
-				if agent.Name == chat.AgentName {
-					resultIcon = agent.Icon
-					break
-				}
-			}
-		}
-
-		group, groupScore := r.getResultGroup(ctx, chat)
-		results = append(results, plugin.QueryResult{
-			Id:    resultId,
-			Title: chat.Title,
-			Icon:  resultIcon,
-			Preview: plugin.WoxPreview{
-				PreviewType:    plugin.WoxPreviewTypeChat,
-				PreviewData:    string(previewData),
-				ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
-			},
-			Actions: []plugin.QueryResultAction{
-				{
-					Name:                   continueChatText,
-					PreventHideAfterAction: true,
-					ContextData:            common.ContextData{"chatId": chat.Id},
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						// focus to chat input
-						plugin.GetPluginManager().GetUI().FocusToChatInput(ctx)
-					},
-				},
-				{
-					Name:                   "i18n:ui_ai_chat_delete_chat",
-					Icon:                   common.TrashIcon,
-					PreventHideAfterAction: true,
-					ContextData:            common.ContextData{"chatId": chat.Id},
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						// delete chat
-						r.chats = append(r.chats[:i], r.chats[i+1:]...)
-						r.saveChats(ctx)
-
-						// refresh the query results
-						r.api.ChangeQuery(ctx, common.PlainQuery{
-							QueryType:      plugin.QueryTypeInput,
-							QueryText:      query.RawQuery,
-							QuerySelection: selection.Selection{},
-						})
-					},
-				},
-				{
-					Name:                   "i18n:ui_ai_chat_summarize_chat",
-					Icon:                   common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M5 5.5C5 6.33 5.67 7 6.5 7h4v10.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5V7h4c.83 0 1.5-.67 1.5-1.5S18.33 4 17.5 4h-11C5.67 4 5 4.67 5 5.5"/></svg>`),
-					PreventHideAfterAction: true,
-					ContextData:            common.ContextData{"chatId": chat.Id},
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						chatId := actionContext.ContextData["chatId"]
-						for _, chat := range r.chats {
-							if chat.Id == chatId {
-								r.summarizeChat(ctx, chat)
-								break
-							}
-						}
-					},
-				},
-			},
-			Group:      group,
-			GroupScore: groupScore,
-		})
-	}
-
-	return plugin.NewQueryResponse(results)
+	response := plugin.NewQueryResponse([]plugin.QueryResult{r.getChatPreviewData(ctx)})
+	response.Layout = plugin.QueryLayout{ChatMode: true}
+	return response
 }
 
 func (r *AIChatPlugin) summarizeChat(ctx context.Context, chat common.AIChatData) {
@@ -823,22 +763,101 @@ func (r *AIChatPlugin) summarizeChat(ctx context.Context, chat common.AIChatData
 			r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: Summarized chat title: %s", title))
 
 			// update the chat title
+			updatedChat := chat
+			updatedChat.Title = title
 			for i := range r.chats {
 				if r.chats[i].Id == chat.Id {
 					r.chats[i].Title = title
+					updatedChat = r.chats[i]
 					break
 				}
 			}
 			r.saveChats(ctx)
-
-			if resultId, ok := r.resultChatIdMap.Load(chat.Id); ok {
-				plugin.GetPluginManager().GetUI().UpdateResult(ctx, plugin.UpdatableResult{
-					Id:    resultId,
-					Title: &title,
-				})
-			}
+			plugin.GetPluginManager().GetUI().SendChatResponse(ctx, updatedChat)
 		}
 	})
+}
+
+// maybeSummarizeConversations compacts a conversation list when it exceeds the
+// policy threshold to avoid token overflow in long agent loops. The first
+// (system) message and a tail of recent messages are preserved; the middle is
+// summarized into a single system message. On any summarization failure the
+// original list is returned unchanged so the chat continues rather than aborts.
+func (r *AIChatPlugin) maybeSummarizeConversations(ctx context.Context, conversations []common.Conversation, policy common.ContextPolicy) []common.Conversation {
+	if !policy.Enabled || policy.MaxConversations <= 0 || len(conversations) <= policy.MaxConversations {
+		return conversations
+	}
+
+	keepCount := policy.SummarizeToCount
+	if keepCount <= 0 || keepCount >= len(conversations) {
+		return conversations
+	}
+
+	headCount := 1 // preserve the leading system prompt
+	if headCount >= len(conversations) {
+		return conversations
+	}
+	tailStart := len(conversations) - keepCount
+	if tailStart <= headCount {
+		return conversations
+	}
+
+	toSummarize := conversations[headCount:tailStart]
+	summaryText, summarizeErr := r.summarizeConversationsSection(ctx, conversations[0].Id, toSummarize)
+	if summarizeErr != nil {
+		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("AI: failed to summarize conversations: %s", summarizeErr.Error()))
+		return conversations
+	}
+
+	summaryConv := common.Conversation{
+		Id:        uuid.NewString(),
+		Role:      common.ConversationRoleSystem,
+		Text:      "Summary of previous conversation:\n" + summaryText,
+		Timestamp: util.GetSystemTimestamp(),
+	}
+
+	result := make([]common.Conversation, 0, headCount+1+keepCount)
+	result = append(result, conversations[:headCount]...)
+	result = append(result, summaryConv)
+	result = append(result, conversations[tailStart:]...)
+	return result
+}
+
+// summarizeConversationsSection asks the model to summarize a slice of the
+// conversation. It blocks the caller because it runs in the loop iteration
+// before the next model request.
+func (r *AIChatPlugin) summarizeConversationsSection(ctx context.Context, _ string, section []common.Conversation) (string, error) {
+	promptConversations := lo.Filter(section, func(c common.Conversation, _ int) bool {
+		return c.Role != common.ConversationRoleTool
+	})
+	promptConversations = append(promptConversations, common.Conversation{
+		Id:   uuid.NewString(),
+		Role: common.ConversationRoleUser,
+		Text: "Summarize the conversation above into a concise set of facts and decisions an assistant would need to continue. Keep tool results and key context. Do not add anything new.",
+	})
+
+	var sb strings.Builder
+	var done = make(chan struct{})
+	streamErr := r.api.AIChatStream(ctx, r.GetDefaultModel(ctx), promptConversations, common.EmptyChatOptions, func(streamResult common.ChatStreamData) {
+		if streamResult.Status == common.ChatStreamStatusFinished {
+			sb.WriteString(streamResult.Data)
+			close(done)
+		}
+		if streamResult.Status == common.ChatStreamStatusError {
+			sb.WriteString(streamResult.Data)
+			close(done)
+		}
+	})
+	if streamErr != nil {
+		return "", streamErr
+	}
+
+	select {
+	case <-done:
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
+	return sb.String(), nil
 }
 
 func (c *AIChatPlugin) getResultGroup(ctx context.Context, chat common.AIChatData) (string, int64) {
