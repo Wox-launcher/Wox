@@ -55,6 +55,7 @@
   "ui_file_preview_large_file_title": "Предпросмотр большого файла",
   "ui_file_preview_large_file_message": "Размер этого файла: {size}. Полный предпросмотр может занять некоторое время, поэтому Wox сначала показывает сведения о файле.",
   "ui_file_preview_load_full_preview": "Загрузить предпросмотр",
+  "ui_file_preview_code_preview_limited": "Показаны первые {lines} строк. Подсветка синтаксиса отключена для больших файлов кода, чтобы Wox оставался отзывчивым.",
   "ui_file_preview_property_type": "Тип",
   "ui_file_preview_property_size": "Размер",
   "ui_file_preview_property_modified": "Изменен",

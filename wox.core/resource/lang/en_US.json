@@ -56,6 +56,7 @@
   "ui_file_preview_large_file_title": "Large file preview",
   "ui_file_preview_large_file_message": "This file is {size}. Full preview can take a while, so Wox is showing file details first.",
   "ui_file_preview_load_full_preview": "Load preview",
+  "ui_file_preview_code_preview_limited": "Showing the first {lines} lines. Syntax highlighting is skipped for large code files to keep Wox responsive.",
   "ui_file_preview_property_type": "Type",
   "ui_file_preview_property_size": "Size",
   "ui_file_preview_property_modified": "Modified",
