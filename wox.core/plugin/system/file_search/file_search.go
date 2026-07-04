@@ -36,6 +36,12 @@ const fileShowPreviewSettingKey = "showPreview"
 const fileSearchToolbarMsgID = "file-search-status"
 const fileSearchStatusCommand = "status"
 
+// Content search setting keys.
+const contentSearchEnabledKey = "contentSearchEnabled"
+const contentSearchExtensionsKey = "contentSearchExtensions"
+
+const contentSearchToolbarMsgID = "file-search-content-status"
+
 const (
 	slowFileSearchQueryThresholdMs   int64 = 40
 	slowFileSearchStageThresholdMs   int64 = 15
@@ -180,6 +186,38 @@ func (c *FileSearchPlugin) GetMetadata() plugin.Metadata {
 					},
 				},
 			},
+			// Content search settings.
+			{
+				Type: definition.PluginSettingDefinitionTypeCheckBox,
+				Value: &definition.PluginSettingValueCheckBox{
+					Key:          contentSearchEnabledKey,
+					Label:        "i18n:plugin_file_setting_content_search_enabled",
+					Tooltip:      "i18n:plugin_file_setting_content_search_enabled_tooltip",
+					DefaultValue: "false",
+				},
+			},
+			{
+				Type: definition.PluginSettingDefinitionTypeTable,
+				Value: &definition.PluginSettingValueTable{
+					Key:          contentSearchExtensionsKey,
+					DefaultValue: defaultContentSearchExtensionsJSON(),
+					Title:        "i18n:plugin_file_setting_content_extensions",
+					Tooltip:      "i18n:plugin_file_setting_content_extensions_tooltip",
+					Columns: []definition.PluginSettingValueTableColumn{
+						{
+							Key:   "Extension",
+							Label: "i18n:plugin_file_setting_content_extension",
+							Type:  definition.PluginSettingValueTableColumnTypeText,
+							Validators: []validator.PluginSettingValidator{
+								{
+									Type:  validator.PluginSettingValidatorTypeNotEmpty,
+									Value: &validator.PluginSettingValidatorNotEmpty{},
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 	}
 }
@@ -229,17 +267,43 @@ func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParam
 
 	c.syncUserRoots(ctx)
 
+	// Initialize content index if enabled. The hook provides incremental
+	// updates after the initial crawl completes; starting both here lets file
+	// changes flow to the content index as soon as the scanner picks them up.
+	if c.isContentSearchEnabled(ctx) {
+		c.startContentCrawl(ctx)
+		c.startContentHook(ctx)
+	}
+
 	c.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, value string) {
 		if key == fileRootsSettingKey {
 			c.syncUserRoots(callbackCtx)
+			c.onFileSearchPolicyChanged(callbackCtx)
 			return
 		}
 		if key == fileIgnorePatternsSettingKey {
 			c.syncIgnorePatterns(callbackCtx)
+			c.onFileSearchPolicyChanged(callbackCtx)
 			return
 		}
 		if key == fileSkipHiddenFilesSettingKey {
 			c.syncSkipHiddenFiles(callbackCtx)
+			c.onFileSearchPolicyChanged(callbackCtx)
+			return
+		}
+		if key == contentSearchEnabledKey {
+			if value == "true" {
+				c.startContentCrawl(callbackCtx)
+				c.startContentHook(callbackCtx)
+			} else {
+				c.engine.StopContentHook()
+				c.engine.ResetContentIndex(callbackCtx)
+				c.api.ClearToolbarMsg(callbackCtx, contentSearchToolbarMsgID)
+			}
+			return
+		}
+		if key == contentSearchExtensionsKey {
+			c.onContentPolicyChanged(callbackCtx)
 			return
 		}
 	})
@@ -252,7 +316,153 @@ func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParam
 		if c.engine != nil {
 			_ = c.engine.Close()
 		}
+		c.api.ClearToolbarMsg(ctx, contentSearchToolbarMsgID)
 	})
+}
+
+// isContentSearchEnabled returns whether content search is toggled on in settings.
+func (c *FileSearchPlugin) isContentSearchEnabled(ctx context.Context) bool {
+	return c.api.GetSetting(ctx, contentSearchEnabledKey) == "true"
+}
+
+// startContentCrawl launches a content crawl in a background goroutine after
+// waiting for filesearch to finish its own indexing. The crawl populates
+// content_entries + entries_content_fts in the shared filesearch.db.
+func (c *FileSearchPlugin) startContentCrawl(ctx context.Context) {
+	if c.engine == nil {
+		return
+	}
+
+	util.Go(ctx, "content crawl wait-and-run", func() {
+		// Wait for filesearch to finish indexing before starting content crawl.
+		c.waitForFileSearchIdle(ctx)
+
+		crawlState, _ := c.engine.GetContentCrawlState(ctx)
+		stats, _ := c.engine.ContentStats(ctx)
+		if crawlState == "complete" && stats.DocCount > 0 {
+			c.api.Log(ctx, plugin.LogLevelInfo, "Content index already complete, skipping crawl")
+			return
+		}
+
+		c.api.Log(ctx, plugin.LogLevelInfo, "Content index: starting full crawl")
+		roots := c.getContentSearchRootRecords(ctx)
+		fsPolicy := c.indexPolicy.toFilesearchPolicy()
+		exts := filesearch.ContentExtensionsFromList(filesearch.ContentExtensionListFromSetting(c.api.GetSetting(ctx, contentSearchExtensionsKey)))
+		c.engine.StartContentCrawl(ctx, roots, fsPolicy, exts, filesearch.ContentDefaultMaxReadBytes, func(progress filesearch.ContentCrawlProgress) {
+			c.handleContentCrawlProgress(ctx, progress)
+		})
+	})
+}
+
+// startContentHook installs the incremental content index hook so file changes
+// detected by the scanner's change feed are applied to the content FTS index
+// without waiting for the next full crawl. The hook reuses the same extension
+// whitelist and read-byte cap as the full crawler.
+func (c *FileSearchPlugin) startContentHook(ctx context.Context) {
+	if c.engine == nil {
+		return
+	}
+	exts := filesearch.ContentExtensionsFromList(filesearch.ContentExtensionListFromSetting(c.api.GetSetting(ctx, contentSearchExtensionsKey)))
+	c.engine.StartContentHook(ctx, exts, filesearch.ContentDefaultMaxReadBytes)
+}
+
+// waitForFileSearchIdle polls the filesearch engine status until it finishes
+// indexing AND search artifact rebuild. The content crawl is deferred until
+// both are done so the DB is not locked when content crawl tries to write.
+func (c *FileSearchPlugin) waitForFileSearchIdle(ctx context.Context) {
+	if c.engine == nil {
+		return
+	}
+	for {
+		status, err := c.engine.GetStatus(ctx)
+		if err != nil || !status.IsIndexing {
+			// Also check if FTS rebuild is still in progress — the DB is locked
+			// during rebuild and content crawl writes would fail.
+			if !c.engine.NeedsSearchArtifactRebuild() {
+				return
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(3 * time.Second):
+		}
+	}
+}
+
+// handleContentCrawlProgress shows or clears the content crawl toolbar message.
+func (c *FileSearchPlugin) handleContentCrawlProgress(ctx context.Context, progress filesearch.ContentCrawlProgress) {
+	if progress.Complete {
+		c.api.ShowToolbarMsg(ctx, plugin.ToolbarMsg{
+			Id:    contentSearchToolbarMsgID,
+			Title: fmt.Sprintf("Content index ready: %d files indexed", progress.FilesIndexed),
+		})
+		time.AfterFunc(5*time.Second, func() {
+			c.api.ClearToolbarMsg(ctx, contentSearchToolbarMsgID)
+		})
+		return
+	}
+
+	rootInfo := ""
+	if progress.RootTotal > 0 {
+		rootInfo = fmt.Sprintf("root %d/%d: %s, ", progress.RootIndex+1, progress.RootTotal, truncatePath(progress.CurrentRoot, 40))
+	}
+	msg := fmt.Sprintf("Indexing content... %s%d files indexed", rootInfo, progress.FilesIndexed)
+	c.api.ShowToolbarMsg(ctx, plugin.ToolbarMsg{
+		Id:            contentSearchToolbarMsgID,
+		Title:         msg,
+		Indeterminate: true,
+	})
+}
+
+// truncatePath shortens a path for display in the toolbar.
+func truncatePath(path string, maxLen int) string {
+	if len(path) <= maxLen {
+		return path
+	}
+	return "..." + path[len(path)-maxLen+3:]
+}
+
+// onFileSearchPolicyChanged handles roots/ignore/hidden setting changes by
+// resetting the content index and recrawling with the new policy. The content
+// hook is restarted so future incremental updates use the new policy.
+func (c *FileSearchPlugin) onFileSearchPolicyChanged(ctx context.Context) {
+	if !c.isContentSearchEnabled(ctx) {
+		return
+	}
+	c.engine.StopContentHook()
+	c.engine.ResetContentIndex(ctx)
+	c.startContentCrawl(ctx)
+	c.startContentHook(ctx)
+}
+
+// onContentPolicyChanged handles extension whitelist changes by resetting
+// the content index, recrawling, and restarting the hook with the new
+// extension set.
+func (c *FileSearchPlugin) onContentPolicyChanged(ctx context.Context) {
+	if !c.isContentSearchEnabled(ctx) {
+		return
+	}
+	c.engine.StopContentHook()
+	c.engine.ResetContentIndex(ctx)
+	c.startContentCrawl(ctx)
+	c.startContentHook(ctx)
+}
+
+// getContentSearchRootRecords builds []filesearch.RootRecord from the
+// configured file search roots.
+func (c *FileSearchPlugin) getContentSearchRootRecords(ctx context.Context) []filesearch.RootRecord {
+	paths := c.getEffectiveRootPaths(ctx)
+	roots := make([]filesearch.RootRecord, 0, len(paths))
+	for i, p := range paths {
+		roots = append(roots, filesearch.RootRecord{
+			ID:     fmt.Sprintf("content-root-%d", i),
+			Path:   p,
+			Kind:   filesearch.RootKindDefault,
+			Status: filesearch.RootStatusIdle,
+		})
+	}
+	return roots
 }
 
 func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
@@ -330,11 +540,76 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 		queryResults = append(queryResults, queryResult)
 	}
 	diagnostics.buildElapsedMs = util.GetSystemTimestamp() - buildStartedAt
+
+	// Content search: if enabled, search the content index and append results
+	// after name/path results, de-duplicated by path (name/path results win).
+	contentResults := c.searchContent(ctx, query.Search, queryResults)
+	queryResults = append(queryResults, contentResults...)
+
 	c.logQueryDiagnostics(ctx, query.Search, diagnostics, len(queryResults), util.GetSystemTimestamp()-queryStartedAt)
 
 	response := plugin.NewQueryResponse(queryResults)
 	response.Refinements = c.buildFileSearchRefinements()
 	return response
+}
+
+// searchContent queries the content index and returns QueryResults for files
+// whose contents match the query, excluding paths already in nameResults.
+// Returns nil if content search is disabled or the crawl is still in progress.
+func (c *FileSearchPlugin) searchContent(ctx context.Context, queryText string, nameResults []plugin.QueryResult) []plugin.QueryResult {
+	if !c.isContentSearchEnabled(ctx) {
+		return nil
+	}
+
+	contentHits, err := c.engine.SearchContent(ctx, queryText, 20)
+	if err != nil || len(contentHits) == 0 {
+		return nil
+	}
+
+	// Build a set of paths already in nameResults for de-duplication.
+	existingPaths := make(map[string]bool, len(nameResults))
+	for _, r := range nameResults {
+		existingPaths[r.SubTitle] = true // SubTitle is the file path
+	}
+
+	fileTypeIcons := map[string]common.WoxImage{}
+	showPreview := c.getConfiguredShowPreview(ctx)
+	var diagnostics fileSearchQueryDiagnostics // for icon resolution, not logged
+
+	results := make([]plugin.QueryResult, 0, len(contentHits))
+	for _, hit := range contentHits {
+		if existingPaths[hit.Path] {
+			continue
+		}
+
+		name := filepath.Base(hit.Path)
+		item := filesearch.SearchResult{
+			Path: hit.Path,
+			Name: name,
+		}
+		icon := resolveFileSearchResultIcon(ctx, item, fileTypeIcons, &diagnostics)
+		actions := c.buildFileSearchResultActions(ctx, item)
+
+		queryResult := plugin.QueryResult{
+			Title:    name,
+			SubTitle: hit.Path,
+			Icon:     icon,
+			Actions:  actions,
+			DragData: &plugin.QueryResultDragData{
+				Type:  plugin.QueryResultDragDataTypeFiles,
+				Files: []string{hit.Path},
+			},
+		}
+		if showPreview {
+			queryResult.Preview = plugin.WoxPreview{
+				PreviewType: plugin.WoxPreviewTypeFile,
+				PreviewData: hit.Path,
+			}
+		}
+		results = append(results, queryResult)
+	}
+
+	return results
 }
 
 // buildFileSearchResultActions keeps folder navigation integrated with the path-browse plugin.
@@ -481,18 +756,35 @@ func (c *FileSearchPlugin) indexFilesFromScratch(ctx context.Context) {
 		return
 	}
 
-	util.Go(ctx, "filesearch reset index", func() {
-		// Feature addition: the visible action now rebuilds the filesearch storage
-		// directory instead of only clearing tables inside the open database. Roots
-		// are then synced from the current plugin settings so the action always
-		// indexes the user's latest configured/default search locations.
-		if err := c.engine.RebuildIndex(ctx); err != nil {
-			c.api.Log(ctx, plugin.LogLevelError, "Failed to reset file search index: "+err.Error())
-			c.api.Notify(ctx, "i18n:plugin_file_index_files_failed")
+	// Use a fresh trace context instead of the action ctx — the action ctx is
+	// tied to the query session and may be cancelled before the rebuild
+	// finishes, which would abort waitForFileSearchIdle and skip the content
+	// crawl restart.
+	rebuildCtx := util.NewTraceContext()
+	util.Go(rebuildCtx, "filesearch reset index", func() {
+		// RebuildIndex deletes the entire filesearch.db directory and recreates
+		// it. The content tables live in the same DB, so they get wiped and
+		// recreated automatically. After filesearch finishes indexing, we just
+		// restart the content crawl if content search is enabled.
+		if err := c.engine.RebuildIndex(rebuildCtx); err != nil {
+			c.api.Log(rebuildCtx, plugin.LogLevelError, "Failed to reset file search index: "+err.Error())
+			c.api.Notify(rebuildCtx, "i18n:plugin_file_index_files_failed")
 			return
 		}
-		c.syncUserRoots(ctx)
-		c.syncToolbarMsg(ctx, true)
+		c.syncUserRoots(rebuildCtx)
+		c.syncToolbarMsg(rebuildCtx, true)
+
+		// Wait for filesearch to finish indexing before starting content crawl.
+		c.waitForFileSearchIdle(rebuildCtx)
+
+		// Restart content crawl and hook if enabled. The content tables were
+		// recreated empty by RebuildIndex, so this will do a fresh full crawl.
+		// The hook is also reinstalled so incremental updates resume once the
+		// scanner starts processing change feed signals against the new DB.
+		if c.isContentSearchEnabled(rebuildCtx) {
+			c.startContentCrawl(rebuildCtx)
+			c.startContentHook(rebuildCtx)
+		}
 	})
 }
 
@@ -889,6 +1181,31 @@ func defaultFileSearchIgnorePatternsJSON() string {
 		return "[]"
 	}
 	return string(data)
+}
+
+// contentSearchExtensionSetting is the JSON row shape for the
+// contentSearchExtensions table setting: [{"Extension":"txt"},...].
+type contentSearchExtensionSetting struct {
+	Extension string `json:"Extension"`
+}
+
+func defaultContentSearchExtensionsJSON() string {
+	exts := filesearch.ContentDefaultExtensions()
+	rows := make([]contentSearchExtensionSetting, 0, len(exts))
+	for _, ext := range exts {
+		rows = append(rows, contentSearchExtensionSetting{Extension: ext})
+	}
+	data, err := json.Marshal(rows)
+	if err != nil {
+		return "[]"
+	}
+	return string(data)
+}
+
+// getConfiguredContentExtensions reads the contentSearchExtensions table
+// setting and returns the extension list. Falls back to defaults on parse error.
+func (c *FileSearchPlugin) getConfiguredContentExtensions(ctx context.Context) []string {
+	return filesearch.ContentExtensionListFromSetting(c.api.GetSetting(ctx, contentSearchExtensionsKey))
 }
 
 func (c *FileSearchPlugin) syncToolbarMsg(ctx context.Context, includeReady bool) {

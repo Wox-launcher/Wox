@@ -22,6 +22,7 @@ type Engine struct {
 	scanner         *Scanner
 	policy          *policyState
 	statusListeners *util.HashMap[string, func(StatusSnapshot)]
+	contentHook     ContentHook
 }
 
 func NewEngine(ctx context.Context) (*Engine, error) {
@@ -203,6 +204,10 @@ func (e *Engine) RebuildIndex(ctx context.Context) error {
 	e.db = nil
 	e.searchProvider = nil
 	e.scanner = nil
+	if e.contentHook != nil {
+		e.contentHook.Close()
+		e.contentHook = nil
+	}
 	if oldDB != nil {
 		if err := oldDB.Close(); err != nil {
 			e.mu.Unlock()
@@ -258,6 +263,10 @@ func (e *Engine) Close() error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.closed = true
+	if e.contentHook != nil {
+		e.contentHook.Close()
+		e.contentHook = nil
+	}
 	if e.db != nil {
 		err := e.db.Close()
 		e.db = nil
@@ -886,4 +895,154 @@ func (e *Engine) IndexTopRootsSummary() string {
 		return ""
 	}
 	return formatSQLiteIndexTopRoots("manual", snapshot)
+}
+
+// SearchContent queries the content index for files matching the query terms.
+// Returns results sorted by FTS5 relevance. Only returns results when the
+// content crawl is complete (avoids slow queries during indexing).
+// This method does NOT take the engine RLock to avoid contending with the
+// filesearch scanner — the content tables are independent and SQLite handles
+// concurrent reads via WAL.
+func (e *Engine) SearchContent(ctx context.Context, query string, limit int) ([]ContentSearchResult, error) {
+	if e == nil {
+		return nil, nil
+	}
+	e.mu.RLock()
+	if e.closed || e.db == nil {
+		e.mu.RUnlock()
+		return nil, nil
+	}
+	db := e.db
+	e.mu.RUnlock()
+
+	// Skip content search if crawl is not complete.
+	crawlState, _ := db.GetContentCrawlState(ctx)
+	if crawlState != "complete" {
+		return nil, nil
+	}
+
+	return db.SearchContent(ctx, query, limit)
+}
+
+// ContentStats returns statistics about the content index.
+func (e *Engine) ContentStats(ctx context.Context) (ContentStats, error) {
+	if e == nil {
+		return ContentStats{}, nil
+	}
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if e.closed || e.db == nil {
+		return ContentStats{}, nil
+	}
+	return e.db.ContentStats(ctx)
+}
+
+// ResetContentIndex deletes all content index data.
+func (e *Engine) ResetContentIndex(ctx context.Context) error {
+	if e == nil {
+		return nil
+	}
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if e.closed || e.db == nil {
+		return fmt.Errorf("filesearch engine closed")
+	}
+	return e.db.ResetContentIndex(ctx)
+}
+
+// StartContentCrawl launches a content crawl in a background goroutine.
+func (e *Engine) StartContentCrawl(ctx context.Context, roots []RootRecord, policy Policy, extensions map[string]bool, maxReadBytes int64, progressCB func(ContentCrawlProgress)) {
+	if e == nil {
+		return
+	}
+	e.mu.RLock()
+	db := e.db
+	e.mu.RUnlock()
+	if db == nil {
+		return
+	}
+
+	crawler := NewContentCrawler(db, roots, policy, extensions, maxReadBytes, progressCB)
+	go func() {
+		if err := crawler.Run(util.NewTraceContext()); err != nil {
+			util.GetLogger().Error(context.Background(), fmt.Sprintf("content crawl failed: %v", err))
+		}
+	}()
+}
+
+// StartContentHook installs the incremental content index hook on the scanner.
+// After this call, file changes detected by the scanner's change feed (USN on
+// Windows, FSEvents on macOS, fsnotify elsewhere) will incrementally update
+// the content FTS index without waiting for the next full crawl. The hook
+// reuses the same extension whitelist and max-read-bytes as the full crawler.
+// Call StopContentHook before installing a new hook or when content search is
+// disabled.
+func (e *Engine) StartContentHook(ctx context.Context, extensions map[string]bool, maxReadBytes int64) {
+	if e == nil {
+		return
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.closed || e.db == nil {
+		return
+	}
+
+	// Stop any existing hook before installing a new one so extension changes
+	// take effect cleanly.
+	if e.contentHook != nil {
+		e.contentHook.Close()
+		e.contentHook = nil
+	}
+
+	hook := NewContentIndexHook(e.db, extensions, maxReadBytes, e.policy)
+	e.contentHook = hook
+
+	scanner := e.scanner
+	if scanner != nil {
+		scanner.SetContentHook(hook)
+	}
+}
+
+// StopContentHook removes the incremental content index hook and stops its
+// background worker. Called when content search is disabled or the engine is
+// being rebuilt.
+func (e *Engine) StopContentHook() {
+	if e == nil {
+		return
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.contentHook != nil {
+		e.contentHook.Close()
+		e.contentHook = nil
+	}
+	scanner := e.scanner
+	if scanner != nil {
+		scanner.SetContentHook(nil)
+	}
+}
+
+// NeedsSearchArtifactRebuild reports whether the FTS search artifacts are
+// still being rebuilt. The content crawl waits for this to return false
+// before starting, to avoid "database is locked" errors.
+func (e *Engine) NeedsSearchArtifactRebuild() bool {
+	if e == nil {
+		return false
+	}
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.db != nil && e.db.NeedsSearchArtifactRebuild()
+}
+
+// GetContentCrawlState returns the content crawl state from the DB meta table.
+func (e *Engine) GetContentCrawlState(ctx context.Context) (string, error) {
+	if e == nil {
+		return "", nil
+	}
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if e.closed || e.db == nil {
+		return "", nil
+	}
+	return e.db.GetContentCrawlState(ctx)
 }

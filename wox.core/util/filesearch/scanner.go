@@ -77,6 +77,10 @@ type Scanner struct {
 	transientSyncState  *TransientSyncState
 	dirtyBackpressureMu sync.Mutex
 	lastDirtyRunElapsed time.Duration
+	// Content index hook receives incremental file change notifications after
+	// the name index has been updated, so the content FTS index stays in sync
+	// without waiting for the next full crawl.
+	contentHook ContentHook
 	// Tests override the preparation budget so run-based smoke coverage can force
 	// job splitting without manufacturing thousands of files just to cross the
 	// production thresholds.
@@ -135,6 +139,12 @@ func newScannerWithPolicyState(db *FileSearchDB, policy *policyState) *Scanner {
 
 func (s *Scanner) SetStateChangeHandler(handler func(ctx context.Context)) {
 	s.onStateChange = handler
+}
+
+// SetContentHook installs the content index hook. The hook is notified after
+// name index mutations so the content FTS index receives incremental updates.
+func (s *Scanner) SetContentHook(hook ContentHook) {
+	s.contentHook = hook
 }
 
 func (s *Scanner) Start(ctx context.Context) {
@@ -606,6 +616,14 @@ func (s *Scanner) emitCompletedFullRunSummary(ctx context.Context, plan RunPlan,
 }
 
 func (s *Scanner) applyRunJob(ctx context.Context, kind RunKind, root RootRecord, job Job, batch *SubtreeSnapshotBatch) error {
+	if err := s.applyRunJobInternal(ctx, kind, root, job, batch); err != nil {
+		return err
+	}
+	s.notifyContentHook(ctx, root, job, batch)
+	return nil
+}
+
+func (s *Scanner) applyRunJobInternal(ctx context.Context, kind RunKind, root RootRecord, job Job, batch *SubtreeSnapshotBatch) error {
 	switch job.Kind {
 	case JobKindDirectDelta:
 		return s.db.ApplyDirectDeltaJob(ctx, root, job, s.policy)
@@ -643,6 +661,57 @@ func (s *Scanner) applyRunJob(ctx context.Context, kind RunKind, root RootRecord
 		return nil
 	default:
 		return fmt.Errorf("unsupported run job kind %q", job.Kind)
+	}
+}
+
+// notifyContentHook delivers incremental content index updates after the name
+// index has been mutated. Direct-delta jobs produce per-file notifications,
+// while scope-replacing jobs (direct-files, subtree, finalize-root for full
+// runs) trigger a scope reconcile so stale content entries are pruned and new
+// searchable files are queued.
+func (s *Scanner) notifyContentHook(ctx context.Context, root RootRecord, job Job, batch *SubtreeSnapshotBatch) {
+	if s.contentHook == nil {
+		return
+	}
+	switch job.Kind {
+	case JobKindDirectDelta:
+		for _, delta := range job.DirectDeltas {
+			if delta.PathIsDir {
+				continue
+			}
+			if isDeleteOnlyDelta(delta.SemanticKind) {
+				s.contentHook.Notify(ctx, ContentHookNotification{
+					Kind: ContentHookKindDelete,
+					Path: delta.Path,
+				})
+			} else {
+				s.contentHook.Notify(ctx, ContentHookNotification{
+					Kind: ContentHookKindUpsert,
+					Path: delta.Path,
+				})
+			}
+		}
+	case JobKindDirectFiles, JobKindSubtree:
+		// Scope replacement: queue individual file upserts from the batch and
+		// trigger a reconcile to prune stale content entries. Per-file upserts
+		// are preferred over a blind scope walk because the batch already has
+		// the exact set of files the scanner observed.
+		if batch != nil {
+			for _, entry := range batch.Entries {
+				if entry.IsDir {
+					continue
+				}
+				s.contentHook.Notify(ctx, ContentHookNotification{
+					Kind: ContentHookKindUpsert,
+					Path: entry.Path,
+				})
+			}
+		}
+		s.contentHook.Notify(ctx, ContentHookNotification{
+			Kind:      ContentHookKindScopeReplaced,
+			ScopePath: job.ScopePath,
+			RootID:    job.RootID,
+		})
 	}
 }
 

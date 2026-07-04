@@ -53,17 +53,32 @@ func (c *FileSearchPlugin) queryStatus(ctx context.Context) plugin.QueryResponse
 		}
 	}
 
-	return c.buildStatusQueryResponse(diagnostics)
+	// Collect content index stats from the DB if content search is enabled.
+	var contentStats *filesearch.ContentStats
+	if c.isContentSearchEnabled(ctx) {
+		stats, err := c.engine.ContentStats(ctx)
+		if err == nil {
+			contentStats = &stats
+		}
+	}
+
+	return c.buildStatusQueryResponse(diagnostics, contentStats)
 }
 
-func (c *FileSearchPlugin) buildStatusQueryResponse(diagnostics filesearch.DiagnosticSnapshot) plugin.QueryResponse {
-	report := formatFileSearchStatusMarkdown(diagnostics)
+func (c *FileSearchPlugin) buildStatusQueryResponse(diagnostics filesearch.DiagnosticSnapshot, contentStats *filesearch.ContentStats) plugin.QueryResponse {
+	report := formatFileSearchStatusMarkdown(diagnostics, contentStats)
 	widthRatio := 0.0
+	subtitle := fileSearchStatusSubtitle(diagnostics)
+	if contentStats != nil {
+		subtitle += fmt.Sprintf(" | content: %s", formatContentSearchStatusSubtitle(contentStats))
+	} else {
+		subtitle += " | content: disabled"
+	}
 	return plugin.QueryResponse{
 		Results: []plugin.QueryResult{
 			{
 				Title:    "File Search Status",
-				SubTitle: fileSearchStatusSubtitle(diagnostics),
+				SubTitle: subtitle,
 				Icon:     fileIcon,
 				Preview: plugin.WoxPreview{
 					PreviewType: plugin.WoxPreviewTypeMarkdown,
@@ -105,7 +120,7 @@ func fileSearchStatusSubtitle(diagnostics filesearch.DiagnosticSnapshot) string 
 	)
 }
 
-func formatFileSearchStatusMarkdown(diagnostics filesearch.DiagnosticSnapshot) string {
+func formatFileSearchStatusMarkdown(diagnostics filesearch.DiagnosticSnapshot, contentStats *filesearch.ContentStats) string {
 	var builder strings.Builder
 	builder.WriteString("# File Search Status\n\n")
 	builder.WriteString(fmt.Sprintf("- captured_at: `%s`\n", diagnostics.CapturedAt.Format(time.RFC3339)))
@@ -179,6 +194,8 @@ func formatFileSearchStatusMarkdown(diagnostics filesearch.DiagnosticSnapshot) s
 		}
 	}
 	builder.WriteString("\n")
+
+	builder.WriteString(formatContentSearchStatusSection(contentStats))
 
 	builder.WriteString("## Roots\n\n")
 	writeFileSearchRootTable(&builder, diagnostics.Roots)
@@ -325,4 +342,40 @@ func emptyStatusValue(value string) string {
 		return "-"
 	}
 	return value
+}
+
+// formatContentSearchStatusSection returns the markdown section for content
+// index diagnostics.
+func formatContentSearchStatusSection(stats *filesearch.ContentStats) string {
+	if stats == nil {
+		return "## Content Search\n\n- status: `disabled`\n\n"
+	}
+
+	var builder strings.Builder
+	builder.WriteString("## Content Search\n\n")
+	crawlState := "in_progress"
+	if stats.CrawlComplete {
+		crawlState = "complete"
+	}
+	builder.WriteString(fmt.Sprintf("- crawl_state: `%s`\n", crawlState))
+	builder.WriteString(fmt.Sprintf("- docs: %s\n", formatFileSearchCount(int64(stats.DocCount))))
+	builder.WriteString(fmt.Sprintf("- indexed_bytes: %s\n", formatFileSearchCount(stats.IndexedTextBytes)))
+	builder.WriteString("\n")
+	return builder.String()
+}
+
+// formatContentSearchStatusSubtitle returns a short content status string for
+// the result subtitle.
+func formatContentSearchStatusSubtitle(stats *filesearch.ContentStats) string {
+	if stats == nil {
+		return "disabled"
+	}
+	crawlState := "in_progress"
+	if stats.CrawlComplete {
+		crawlState = "complete"
+	}
+	return fmt.Sprintf("crawl=%s, docs=%s",
+		crawlState,
+		formatFileSearchCount(int64(stats.DocCount)),
+	)
 }
