@@ -1,5 +1,36 @@
 # Changelog
 
+## v2.3.0 - 2026-07-04
+
+This stable release brings Cloud Sync to Wox and adds workspace layouts, while rolling up the Linux, preview, file search, hotkey, settings, and stability improvements from the v2.3.0 betas.
+
+![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/cloud_sync.png)
+
+![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/windows_workspace.png)
+
+- Add
+  - [`Cloud Sync`] Add encrypted cloud sync for settings, installed plugins, and themes, with recovery-code setup, local snapshots, sync history, account plan and device management, device join and revoke flows, legal agreement checks, auto-sync, partial-success history, and clearer server error feedback.
+  - [`Window Manager`] Add workspace layouts so users can save apps across displays, restore them from launcher commands or query hotkeys, launch missing apps, place windows into saved layouts, and open browser URLs with duplicate-tab handling.
+
+- Improve
+  - [`Linux`] Improve Wayland and Hyprland support with wlroots layer-shell detection, Hyprland hotkeys, KDE image clipboard handling, desktop launch environment fixes, draggable window state handling, screenshot monitor capture, uinput doctor checks for Caps Lock combo hotkeys, localized Wayland hotkey help, and FAQ guidance for disabling window animation #4458
+  - [`Hotkey`] Expand Linux hotkey support with Double Ctrl, Caps Lock combo keys, Backspace injection, better input permission checks, and clearer doctor diagnostics. Also support backquote and tilde hotkeys across platforms.
+  - [`Preview`] Improve file previews with on-demand loading, macOS Quick Look support, PDF and large-file handling, and a File Search setting to control whether previews are shown #4463
+  - [`File Search`] Improve indexing performance, fresh full-index bulk sync, direct-entry insertion, and user-home path normalization for faster and more reliable searches.
+  - [`Shell`] Improve selected-folder workflows by letting shell commands run at the selected location and normalizing user-home paths.
+  - [`Window`] Improve Windows monitor detection, DPI-scaled window positioning, launcher focus diagnostics, and settings/onboarding transitions #4436
+  - [`App`] Improve Windows app search with richer UWP metadata retrieval and icon handling.
+  - [`MRU`] Improve query ranking with per-command and context-aware scoring so repeated actions and saved layouts surface more predictably.
+  - [`Settings`] Improve responsive settings layouts, label handling, runtime language updates, platform-specific setting sync behavior, and Cloud Sync configuration notes so settings pages stay readable and clearer after resizing, switching languages, or syncing.
+  - [`Doctor`] Improve doctor check severity handling so update and environment checks can distinguish warnings from blocking issues #4459
+  - [`Theme`] Improve macOS wallpaper retrieval and cache handling for wallpaper-aware theme previews.
+
+- Fix
+  - [`Linux`] Fix startup on systems without `gtk-layer-shell` by loading it dynamically instead of requiring the library at launch.
+  - [`Clipboard`] Fix image paste support on KDE Wayland desktop sessions and improve Windows clipboard history key compatibility #4467
+  - [`Hotkey`] Fix duplicate modifier presses from triggering false-positive hotkey events #4465
+  - [`Calculator`] Fix expression ranking so calculator results prioritize the intended expression matches #4469
+  - [`Launcher`] Fix focus and action handling during launcher lifecycle transitions.
 
 ## v2.3.0-beta.2 - 2026.07-01
 
