@@ -8,7 +8,7 @@ import (
 )
 
 func TestContentIndexBasicFlow(t *testing.T) {
-	db := newTestFileSearchDB(t)
+	db := newTestContentSearchDB(t)
 	defer db.Close()
 	ctx := context.Background()
 
@@ -47,7 +47,7 @@ func TestContentIndexBasicFlow(t *testing.T) {
 }
 
 func TestContentIndexSameHashSkips(t *testing.T) {
-	db := newTestFileSearchDB(t)
+	db := newTestContentSearchDB(t)
 	defer db.Close()
 	ctx := context.Background()
 
@@ -68,7 +68,7 @@ func TestContentIndexSameHashSkips(t *testing.T) {
 }
 
 func TestContentIndexModifyReplaces(t *testing.T) {
-	db := newTestFileSearchDB(t)
+	db := newTestContentSearchDB(t)
 	defer db.Close()
 	ctx := context.Background()
 
@@ -112,7 +112,7 @@ func TestContentIndexModifyReplaces(t *testing.T) {
 }
 
 func TestContentIndexDelete(t *testing.T) {
-	db := newTestFileSearchDB(t)
+	db := newTestContentSearchDB(t)
 	defer db.Close()
 	ctx := context.Background()
 
@@ -142,7 +142,7 @@ func TestContentIndexDelete(t *testing.T) {
 }
 
 func TestContentIndexReset(t *testing.T) {
-	db := newTestFileSearchDB(t)
+	db := newTestContentSearchDB(t)
 	defer db.Close()
 	ctx := context.Background()
 
@@ -178,7 +178,7 @@ func TestContentIndexReset(t *testing.T) {
 }
 
 func TestContentIndexCJK(t *testing.T) {
-	db := newTestFileSearchDB(t)
+	db := newTestContentSearchDB(t)
 	defer db.Close()
 	ctx := context.Background()
 
@@ -201,7 +201,7 @@ func TestContentIndexCJK(t *testing.T) {
 }
 
 func TestContentIndexCamelCase(t *testing.T) {
-	db := newTestFileSearchDB(t)
+	db := newTestContentSearchDB(t)
 	defer db.Close()
 	ctx := context.Background()
 
@@ -221,7 +221,7 @@ func TestContentIndexCamelCase(t *testing.T) {
 }
 
 func TestContentIndexStats(t *testing.T) {
-	db := newTestFileSearchDB(t)
+	db := newTestContentSearchDB(t)
 	defer db.Close()
 	ctx := context.Background()
 
@@ -241,7 +241,7 @@ func TestContentIndexStats(t *testing.T) {
 }
 
 func TestContentCrawlState(t *testing.T) {
-	db := newTestFileSearchDB(t)
+	db := newTestContentSearchDB(t)
 	defer db.Close()
 	ctx := context.Background()
 
@@ -274,7 +274,7 @@ func TestContentCrawlState(t *testing.T) {
 }
 
 func TestContentIndexNonExistentDelete(t *testing.T) {
-	db := newTestFileSearchDB(t)
+	db := newTestContentSearchDB(t)
 	defer db.Close()
 	ctx := context.Background()
 
@@ -285,7 +285,7 @@ func TestContentIndexNonExistentDelete(t *testing.T) {
 }
 
 func TestContentIndexListPaths(t *testing.T) {
-	db := newTestFileSearchDB(t)
+	db := newTestContentSearchDB(t)
 	defer db.Close()
 	ctx := context.Background()
 
@@ -305,8 +305,8 @@ func TestContentIndexListPaths(t *testing.T) {
 	}
 }
 
-// newTestFileSearchDB creates a fresh FileSearchDB in a temp directory for testing.
-func newTestFileSearchDB(t *testing.T) *FileSearchDB {
+// newTestContentSearchDB creates a fresh ContentSearchDB in a temp directory for testing.
+func newTestContentSearchDB(t *testing.T) *ContentSearchDB {
 	t.Helper()
 	dir := t.TempDir()
 	dbPath := dir + string(rune(filepath.Separator)) + "test.db"
@@ -315,7 +315,7 @@ func newTestFileSearchDB(t *testing.T) *FileSearchDB {
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
-	db := &FileSearchDB{db: sqlDB, dbPath: dbPath}
+	db := &ContentSearchDB{db: sqlDB, dbPath: dbPath}
 	if err := db.initTables(context.Background()); err != nil {
 		t.Fatalf("initTables: %v", err)
 	}

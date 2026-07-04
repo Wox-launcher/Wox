@@ -35,16 +35,16 @@ type ContentCrawlProgress struct {
 // background goroutine, yielding frequently to avoid competing with the
 // filesearch scanner or UI.
 type ContentCrawler struct {
-	db              *FileSearchDB
-	extensions      map[string]bool
-	maxReadBytes    int64
-	roots           []RootRecord
-	policy          Policy
-	progressCB      func(ContentCrawlProgress)
+	db           *ContentSearchDB
+	extensions   map[string]bool
+	maxReadBytes int64
+	roots        []RootRecord
+	policy       Policy
+	progressCB   func(ContentCrawlProgress)
 }
 
 // NewContentCrawler creates a crawler for the given DB, roots, and policy.
-func NewContentCrawler(db *FileSearchDB, roots []RootRecord, policy Policy, extensions map[string]bool, maxReadBytes int64, progressCB func(ContentCrawlProgress)) *ContentCrawler {
+func NewContentCrawler(db *ContentSearchDB, roots []RootRecord, policy Policy, extensions map[string]bool, maxReadBytes int64, progressCB func(ContentCrawlProgress)) *ContentCrawler {
 	return &ContentCrawler{
 		db:           db,
 		extensions:   extensions,

@@ -60,8 +60,6 @@ class CodeFilePreviewRenderer implements WoxFilePreviewRenderer {
   // Keep this list explicit so code preview does not load highlight's full
   // language catalog during launcher startup.
   static final allCodeLanguages = <String, Mode>{
-    "txt": plaintext,
-    "text": plaintext,
     "log": plaintext,
     "conf": plaintext,
     "config": plaintext,

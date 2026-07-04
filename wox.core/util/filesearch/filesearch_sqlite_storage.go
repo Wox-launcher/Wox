@@ -232,16 +232,9 @@ func (d *FileSearchDB) ensureSQLiteSearchSchema(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := createContentTables(ctx, tx); err != nil {
-		return err
-	}
-
-	// Content tables (content_entries + entries_content_fts) are independent of
-	// the name/path FTS search artifacts. Adding them in schema version 3 should
-	// NOT trigger a full FTS rebuild of existing name/path tables — that would
-	// make every query 20x slower during the rebuild. Only rebuild if the version
-	// is below 2 (the entries table schema version) or search artifacts were
-	// actually created fresh.
+	// Content search now owns a standalone contentsearch.db. The filename schema
+	// version stays compatible with existing filesearch.db files that may still
+	// contain retired content tables from earlier releases.
 	const entriesSchemaVersion = 2
 	shouldRebuildArtifacts := currentVersion < entriesSchemaVersion || entriesRebuilt || searchArtifactsCreated
 	if shouldRebuildArtifacts {
@@ -561,44 +554,6 @@ func createSearchTables(ctx context.Context, tx *sql.Tx) (bool, error) {
 		}
 	}
 	return searchArtifactsCreated, nil
-}
-
-// createContentTables creates the content index tables used for full-text content
-// search. These tables are always created (empty tables cost nothing) and only
-// populated when the user enables content search. entries_content_fts is a
-// contentless FTS5 table — it stores only the inverted index, not the original
-// text, keeping disk usage proportional to unique terms rather than file sizes.
-func createContentTables(ctx context.Context, tx *sql.Tx) error {
-	statements := []string{
-		`CREATE TABLE IF NOT EXISTS content_entries (
-			rowid INTEGER PRIMARY KEY AUTOINCREMENT,
-			path TEXT NOT NULL UNIQUE,
-			mtime INTEGER NOT NULL,
-			size INTEGER NOT NULL,
-			content_hash INTEGER NOT NULL DEFAULT 0,
-			extension TEXT NOT NULL DEFAULT '',
-			indexed_text_bytes INTEGER NOT NULL DEFAULT 0
-		)`,
-		`CREATE INDEX IF NOT EXISTS idx_content_entries_path ON content_entries(path)`,
-		`CREATE INDEX IF NOT EXISTS idx_content_entries_extension ON content_entries(extension)`,
-		// contentless FTS5: content='' means FTS5 doesn't store or look up
-		// original text — the caller must provide the text on insert and handle
-		// deletes manually. detail='none' skips position/offset storage,
-		// minimizing index size. tokenize='unicode61' does word-level splitting;
-		// CJK is pre-tokenized into space-separated bigrams before insertion.
-		`CREATE VIRTUAL TABLE IF NOT EXISTS entries_content_fts USING fts5(
-			content,
-			content='',
-			tokenize='unicode61',
-			detail='none'
-		)`,
-	}
-	for _, stmt := range statements {
-		if _, err := tx.ExecContext(ctx, stmt); err != nil {
-			return fmt.Errorf("create content table: %w", err)
-		}
-	}
-	return nil
 }
 
 func rebuildAllSearchArtifactsTx(ctx context.Context, tx *sql.Tx) error {

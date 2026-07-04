@@ -16,6 +16,7 @@ import 'package:wox/components/file_preview/office_file_preview_renderer.dart';
 import 'package:wox/components/file_preview/pdf_file_preview_renderer.dart';
 import 'package:wox/components/file_preview/rdp_file_preview_renderer.dart';
 import 'package:wox/components/file_preview/shortcut_file_preview_renderer.dart';
+import 'package:wox/components/file_preview/text_file_preview_renderer.dart';
 import 'package:wox/components/file_preview/video_file_preview_renderer.dart';
 import 'package:wox/components/file_preview/zip_file_preview_renderer.dart';
 import 'package:wox/entity/wox_preview.dart';
@@ -79,6 +80,7 @@ final defaultWoxFilePreviewRegistry = WoxFilePreviewRegistry(
     FontFilePreviewRenderer(),
     CalendarContactFilePreviewRenderer(),
     DelimitedFilePreviewRenderer(),
+    TextFilePreviewRenderer(),
     CodeFilePreviewRenderer(),
   ],
 );
