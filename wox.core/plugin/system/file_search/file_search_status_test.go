@@ -22,7 +22,7 @@ func (a *fileSearchStatusCopyAPI) Copy(ctx context.Context, params plugin.CopyPa
 
 func TestFileSearchStatusMarkdownIncludesDiagnosticFields(t *testing.T) {
 	diagnostics := testFileSearchDiagnosticSnapshot()
-	markdown := formatFileSearchStatusMarkdown(diagnostics)
+	markdown := formatFileSearchStatusMarkdown(diagnostics, nil)
 	for _, expected := range []string{
 		"File Search Status",
 		"dynamic=1",
@@ -31,6 +31,8 @@ func TestFileSearchStatusMarkdownIncludesDiagnosticFields(t *testing.T) {
 		"qianlifeng8.png",
 		"entries=10 files=8",
 		"/Users/qianlifeng/Desktop",
+		"Content Search",
+		"disabled",
 	} {
 		if !strings.Contains(markdown, expected) {
 			t.Fatalf("expected markdown to contain %q, got:\n%s", expected, markdown)
@@ -42,9 +44,9 @@ func TestFileSearchStatusResponseUsesFullscreenPreviewAndCopyAction(t *testing.T
 	api := &fileSearchStatusCopyAPI{}
 	fileSearchPlugin := &FileSearchPlugin{api: api}
 	diagnostics := testFileSearchDiagnosticSnapshot()
-	report := formatFileSearchStatusMarkdown(diagnostics)
+	report := formatFileSearchStatusMarkdown(diagnostics, nil)
 
-	response := fileSearchPlugin.buildStatusQueryResponse(diagnostics)
+	response := fileSearchPlugin.buildStatusQueryResponse(diagnostics, nil)
 	if response.Layout.ResultPreviewWidthRatio == nil {
 		t.Fatal("expected status response to set preview ratio")
 	}
@@ -64,6 +66,28 @@ func TestFileSearchStatusResponseUsesFullscreenPreviewAndCopyAction(t *testing.T
 	response.Results[0].Actions[0].Action(context.Background(), plugin.ActionContext{})
 	if api.copiedText != report {
 		t.Fatal("expected copy action to copy full status report")
+	}
+}
+
+func TestFileSearchStatusMarkdownWithContentStats(t *testing.T) {
+	diagnostics := testFileSearchDiagnosticSnapshot()
+	stats := &filesearch.ContentStats{
+		DocCount:         1500,
+		IndexedTextBytes: 1024 * 1024 * 50,
+		CrawlComplete:    true,
+	}
+	markdown := formatFileSearchStatusMarkdown(diagnostics, stats)
+	for _, expected := range []string{
+		"Content Search",
+		"crawl_state: `complete`",
+		"docs: 1,500",
+	} {
+		if !strings.Contains(markdown, expected) {
+			t.Fatalf("expected markdown to contain %q, got:\n%s", expected, markdown)
+		}
+	}
+	if strings.Contains(markdown, "status: `disabled`") {
+		t.Fatalf("markdown should not show 'disabled' when contentStats is non-nil")
 	}
 }
 
